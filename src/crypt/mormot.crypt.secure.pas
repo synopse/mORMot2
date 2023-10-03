@@ -2568,7 +2568,7 @@ function DerToPem(const der: TCertDer; kind: TPemKind): TCertPem; overload;
 
 /// convert a single-instance PEM text file into a binary DER
 // - if the supplied buffer doesn't start with '-----BEGIN .... -----'
-// trailer, will expect the input to be plain DER binary and return it
+// trailer, will expect the input to be plain DER binary and directly return it
 function PemToDer(const pem: TCertPem; kind: PPemKind = nil): TCertDer;
 
 /// parse a multi-PEM text input and return the next PEM content
@@ -6097,6 +6097,7 @@ begin // inherited classes should override at least one of those Generate*()
     pempriv := pemPrivateKey;
   pub := DerToPem(pointer(derpub), length(derpub), pempub);
   priv := DerToPem(pointer(derpriv), length(derpriv), pempriv);
+  FillZero(derpriv); // anti-forensic
 end;
 
 procedure TCryptAsym.GenerateDer(out pub, priv: RawByteString; const privpwd: RawUtf8);
@@ -6106,6 +6107,7 @@ begin // inherited classes should override at least one of those Generate*()
   GeneratePem(pempub, pempriv, privpwd);
   pub := PemToDer(pempub);
   priv := PemToDer(pempriv);
+  FillZero(pempriv); // anti-forensic
 end;
 
 function TCryptAsym.Sign(const msg, priv: RawByteString; out sig: RawByteString;

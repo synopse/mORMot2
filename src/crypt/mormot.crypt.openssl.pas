@@ -2168,23 +2168,23 @@ var
   der: RawByteString;
 begin
   result := nil; // invalid supplied CSR
-  if Csr = '' then
-    exit;
-  if IsPem(Csr) then
-    der := PemToDer(Csr)
-  else
-    der := Csr; // support DER input
-  req := LoadCertificateRequest(der);
-  if req <> nil then
+  if Csr <> '' then
   try
-    if req.VerifySelf then
-    begin
-      fGenerateCsr := req;
-      result := Generate([], '', Authority, ExpireDays, ValidDays, nil);
+    der := PemToDer(Csr); // support PEM or DER input
+    req := LoadCertificateRequest(der);
+    if req <> nil then
+    try
+      if req.VerifySelf then
+      begin
+        fGenerateCsr := req;
+        result := Generate([], '', Authority, ExpireDays, ValidDays, nil);
+      end;
+    finally
+      fGenerateCsr := nil;
+      req.Free;
     end;
   finally
-    fGenerateCsr := nil;
-    req.Free;
+    FillZero(der);
   end;
 end;
 
@@ -2343,7 +2343,7 @@ begin
       begin
         // input include the X509 certificate and its associated private key
         if IsPem(Saved) then
-        begin
+        try
           // PEM certificate and PEM private key were concatenated
           P := pointer(Saved);
           repeat
@@ -2357,6 +2357,7 @@ begin
                 cert := PemToDer(pem)
             else
               priv := pem; // private key may be with several TPemKind markers
+            FillZero(pem);
           until false;
           if (cert = '') or
              (priv = '') then
@@ -2365,6 +2366,9 @@ begin
           if fX509 = nil then
             exit;
           fPrivKey := LoadPrivateKey(priv, PrivatePassword);
+        finally
+          FillZero(priv);
+          FillZero(pem);
         end
         else
         begin

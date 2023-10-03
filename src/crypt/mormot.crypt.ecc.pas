@@ -2074,14 +2074,15 @@ function PemDerRawToEcc(const pem: RawUtf8; out priv: TEccPrivateKey): boolean; 
 var
   der: RawByteString;
 begin
-  result := false;
   der := PemToDer(pem); // return input if not PEM (assume was DER)
-  if not DerToEcc(pointer(der), length(der), priv) then
+  result := DerToEcc(pointer(der), length(der), priv);
+  if not result then
     if length(der) = SizeOf(priv) then
-      priv := PEccPrivateKey(der)^
-    else
-      exit; // accept key in raw, PEM or DER format
-  result := true;
+    begin
+      priv := PEccPrivateKey(der)^; // accept key in raw, PEM or DER format
+      result := true;
+    end;
+  FillZero(der); // anti-forensic protection of the private key
 end;
 
 function PemDerRawToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; overload;
@@ -2110,7 +2111,7 @@ begin
     if length(der) = SizeOf(sig) then
       sig := PEccSignature(der)^
     else
-      exit; // accept key in raw, PEM or DER format
+      exit; // accept signature in raw, PEM or DER format
   result := true;
 end;
 
@@ -5520,50 +5521,54 @@ var
   bin: RawByteString;
   k: TPemKind;
 begin
-  if content <> cccPrivateKeyOnly then
-  begin
-    FreeAndNil(fEcc);
-    FillZero(fPrivateKeyOnly);
-  end;
-  if IsPem(Saved) then
-  begin
-    bin := PemToDer(Saved, @k);
-    if not (k in PEM_SYNECC) then
-      bin := '';
-  end
-  else
-    bin := Saved;
-  result := false;
-  if bin = '' then
-    exit;
-  case Content of
-    cccCertOnly:
-      begin
-        fEcc := TEccCertificate.CreateVersion(fMaxVersion);
-        result := fEcc.LoadFromBinary(bin); // plain public key only
-      end;
-    cccPrivateKeyOnly:
-      begin
-        // PEM/DER input encoded with our encrypted TEccPrivateKey binary
-        bin := EccPrivateKeyDecrypt(bin, PrivatePassword);
-        if fEcc <> nil then
-          result := SetPrivateKey(bin)
-        else if length(bin) = SizeOf(fPrivateKeyOnly) then
+  try
+    if content <> cccPrivateKeyOnly then
+    begin
+      FreeAndNil(fEcc);
+      FillZero(fPrivateKeyOnly);
+    end;
+    if IsPem(Saved) then
+    begin
+      bin := PemToDer(Saved, @k);
+      if not (k in PEM_SYNECC) then
+        bin := '';
+    end
+    else
+      bin := Saved;
+    result := false;
+    if bin = '' then
+      exit;
+    case Content of
+      cccCertOnly:
         begin
-          fPrivateKeyOnly := PEccPrivateKey(bin)^;
-          result := true;
+          fEcc := TEccCertificate.CreateVersion(fMaxVersion);
+          result := fEcc.LoadFromBinary(bin); // plain public key only
         end;
-        exit; // don't free the main fEcc instance below
-      end;
-    cccCertWithPrivateKey:
-      begin
-        fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
-        result := TEccCertificateSecret(fEcc). // encrypted and with private key
-          LoadFromSecureBinary(bin, PrivatePassword);
-      end;
+      cccPrivateKeyOnly:
+        begin
+          // PEM/DER input encoded with our encrypted TEccPrivateKey binary
+          bin := EccPrivateKeyDecrypt(bin, PrivatePassword);
+          if fEcc <> nil then
+            result := SetPrivateKey(bin)
+          else if length(bin) = SizeOf(fPrivateKeyOnly) then
+          begin
+            fPrivateKeyOnly := PEccPrivateKey(bin)^;
+            result := true;
+          end;
+          exit; // don't free the main fEcc instance below
+        end;
+      cccCertWithPrivateKey:
+        begin
+          fEcc := TEccCertificateSecret.CreateVersion(fMaxVersion);
+          result := TEccCertificateSecret(fEcc). // encrypted and with private key
+            LoadFromSecureBinary(bin, PrivatePassword);
+        end;
+    end;
+    if not result then
+      FreeAndNil(fEcc);
+  finally
+    FillZero(bin);
   end;
-  if not result then
-    FreeAndNil(fEcc);
 end;
 
 function TCryptCertInternal.HasPrivateSecret: boolean;
