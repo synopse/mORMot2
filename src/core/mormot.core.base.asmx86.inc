@@ -241,7 +241,7 @@ asm
         movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
         neg     ecx
-        and     edx,  -16                    // 16-byte align writes
+        and     edx, -16                     // 16-byte align writes
         lea     ecx, [ecx + edx + 16]
         pop     edx
         cmp     ecx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
@@ -2068,7 +2068,7 @@ asm
         fild    qword ptr [eax]
         push    edx
         neg     edx
-        and     esi,  -8
+        and     esi, -8
         lea     edx, [edx + esi + 8]
         pop     esi
 @lrgnxt:fild    qword ptr [eax + edx]
@@ -2102,7 +2102,7 @@ asm
         movups  xmm1, dqword ptr [eax]
         push    edx
         neg     edx
-        and     esi,  -16
+        and     esi, -16
         lea     edx, [edx + esi + 16]
         pop     esi
 @lrgnxt:movups  xmm0, dqword ptr [eax + edx]

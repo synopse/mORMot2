@@ -2675,7 +2675,7 @@ function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Adds r8/rdx=Carry
         xor    eax, eax
-        mov    r9,  qword ptr [Adds]
+        mov    r9, qword ptr [Adds]
         add    r9, Carry
         mov    r8 , qword ptr [Adds + 8]
         mov    r10, qword ptr [Adds + 8 * 2]
@@ -2765,49 +2765,49 @@ function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif WIN64ABI}
         xor    r10, r10
         mov    r11, Factor
-        mov    rax,  qword ptr [rdi]
+        mov    rax, qword ptr [rdi]
         mul    r11         // rax:rdx = [Src] * Factor
         add    rax, rcx
         adc    rdx, r10    // rax:rdx = ([Src] * Factor) + Carry
         mov    qword ptr [rsi], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 1]
+        mov    rax, qword ptr [rdi + 8 * 1]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 1], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 2]
+        mov    rax, qword ptr [rdi + 8 * 2]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 2], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 3]
+        mov    rax, qword ptr [rdi + 8 * 3]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 3], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 4]
+        mov    rax, qword ptr [rdi + 8 * 4]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 4], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 5]
+        mov    rax, qword ptr [rdi + 8 * 5]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 5], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 6]
+        mov    rax, qword ptr [rdi + 8 * 6]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 6], rax
         mov    rcx, rdx
-        mov    rax,  qword ptr [rdi + 8 * 7]
+        mov    rax, qword ptr [rdi + 8 * 7]
         mul    r11
         add    rax, rcx
         adc    rdx, r10
@@ -4318,7 +4318,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm12, dqword ptr [aes + 16 * 11]
         movups  xmm13, dqword ptr [aes + 16 * 12]
         movups  xmm14, dqword ptr [aes + 16 * 13]
-        add     aes,  16 * 14  // aes = last key
+        add     aes, 16 * 14  // aes = last key
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     movups  xmm15, dqword ptr [aes]
         pxor    xmm7, xmm0

@@ -2970,9 +2970,9 @@ begin
       // https://www.mongodb.com/docs/manual/reference/command/getMore
       msg := TMongoMsg.Create(
         Client, Request.DatabaseName, Request.CollectionName,
-        BsonVariant(['getMore',    reply.CursorID,
-                     'collection',  Request.CollectionName,
-                     'batchSize',  Client.GetMoreBatchSize]),
+        BsonVariant(['getMore', reply.CursorID,
+                     'collection', Request.CollectionName,
+                     'batchSize', Client.GetMoreBatchSize]),
         [], Request.NumberToReturn);
       try
         SendAndGetCursor(msg, reply);
@@ -3769,11 +3769,11 @@ begin
                      '{',
                          'application',
                          '{',
-                             'name',    Executable.ProgramName,
+                             'name', Executable.ProgramName,
                          '}',
                          'driver',
                          '{',
-                             'name',    SYNOPSE_FRAMEWORK_NAME,
+                             'name', SYNOPSE_FRAMEWORK_NAME,
                              'version', SYNOPSE_FRAMEWORK_VERSION,
                          '}',
                          'os',
@@ -4541,7 +4541,7 @@ end;
 function OneMongoDelete(const Query: variant;
   Flags: TMongoDeleteFlags): variant;
 begin
-  result := _ObjFast(['q',     Query,
+  result := _ObjFast(['q', Query,
                       'limit', ord(mdfSingleRemove in Flags)]);
 end;
 

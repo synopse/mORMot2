@@ -228,12 +228,12 @@ function TSqlDBNexusDBConnectionProperties.ColumnTypeNativeToDB(const aNativeTyp
   aScale: integer): TSqlDBFieldType;
 const
   CONV_TABLE: array[TnxFieldType] of TSqlDBFieldType  = (
-    mormot.db.core.ftInt64, mormot.db.core.ftUtf8,  mormot.db.core.ftUtf8,
+    mormot.db.core.ftInt64, mormot.db.core.ftUtf8, mormot.db.core.ftUtf8,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftDouble,
     mormot.db.core.ftDouble, mormot.db.core.ftDouble, mormot.db.core.ftCurrency,
-    mormot.db.core.ftDate,  mormot.db.core.ftDate, mormot.db.core.ftDate,
+    mormot.db.core.ftDate, mormot.db.core.ftDate, mormot.db.core.ftDate,
     mormot.db.core.ftInt64, mormot.db.core.ftBlob, mormot.db.core.ftUtf8,
     mormot.db.core.ftBlob, mormot.db.core.ftBlob, mormot.db.core.ftUtf8,
     mormot.db.core.ftUtf8, mormot.db.core.ftUtf8, mormot.db.core.ftInt64,

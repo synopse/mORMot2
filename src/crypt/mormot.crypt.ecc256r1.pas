@@ -1726,7 +1726,7 @@ begin
   // EccID(128-bit hexa) can't be stored as V1 because EccText() is then wrong
   // try to store as Baudot - #13/#10 are Baudot-friendly so replace ','/'.'
   truncated := EccIssuer(StringReplaceChars(StringReplaceChars(TrimControlChars(
-    sub), ',', #13),  '.', #10), iss, @baudot);
+    sub), ',', #13), '.', #10), iss, @baudot);
   if Head.Version = 1 then
     if truncated and
        (maxversion >= 2) then

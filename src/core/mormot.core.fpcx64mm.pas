@@ -1538,7 +1538,7 @@ asm
         unsupported
         {$endif WINDOWS}
         {$endif LINUX}
-        mul     edx
+        mul     edx     // 1 cycle on modern CPUs
         shr     eax, 32 - NumTinyBlockArenasPO2 // high bits hash truncate
         jz      @Aren0  // Arena 0 = TSmallBlockInfo.Small[]
         shl     eax, NumTinyBlockTypesPO2 + SmallBlockTypePO2 // TTinyBlockTypes

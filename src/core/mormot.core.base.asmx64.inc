@@ -169,7 +169,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         lea     rax, [rax + dst - 16]
         mov     r10, rax
         neg     rax
-        and     dst,  -16                    // 16-byte aligned writes
+        and     dst, -16                     // 16-byte aligned writes
         lea     rax, [rax + dst + 16]
         cmp     r8, r11
         jb      @fwd                         // bypass cache for cnt>512KB
@@ -206,7 +206,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         vmovups ymm1, yword ptr [src]        // last 32
         neg     rax
         add     rax, dst
-        and     rax,  -32                    // 32-byte aligned writes
+        and     rax, -32                     // 32-byte aligned writes
         sub     rax, dst
         add     rax, 64
         cmp     r8, r11
@@ -1631,7 +1631,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         sub     r9, qword ptr [rdx - _STRLEN]   // r9 = length(A)-length(B)
         {$else}
         .align 16
-@s:     mov     r9d,  dword ptr [rax - _STRLEN] // TStrLen=integer on Delphi
+@s:     mov     r9d, dword ptr [rax - _STRLEN]  // TStrLen=integer on Delphi
         mov     r8, r9
         mov     r10d, dword ptr [rdx - _STRLEN]
         sub     r9, r10                         // r9 = length(A)-length(B)

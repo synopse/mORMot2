@@ -27,7 +27,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         push    esi
         push    edi
         push    ebp
-        add     esp,  - 24
+        add     esp, - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
         movzx   eax, byte ptr [eax].TAesContext.Rounds
@@ -202,7 +202,7 @@ asm
         push    esi
         push    edi
         push    ebp
-        add     esp,  - 20
+        add     esp, - 20
         mov     [esp], ecx
         movzx   ecx, byte ptr [eax].taescontext.rounds
         lea     esi, [4 * ecx]
@@ -1059,7 +1059,7 @@ asm     // Value=eax Adds=edx Carry=ecx
         push   ebx
         push   esi
         push   edi
-        mov    ebx,  dword ptr [edx]
+        mov    ebx, dword ptr [edx]
         add    ebx, ecx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
@@ -1068,7 +1068,7 @@ asm     // Value=eax Adds=edx Carry=ecx
         adc    dword ptr [eax + 4], esi
         adc    dword ptr [eax + 4 * 2], edi
         adc    dword ptr [eax + 4 * 3], ecx
-        mov    ebx,  dword ptr [edx + 4 * 4]
+        mov    ebx, dword ptr [edx + 4 * 4]
         mov    esi, dword ptr [edx + 4 * 5]
         mov    edi, dword ptr [edx + 4 * 6]
         mov    ecx, dword ptr [edx + 4 * 7]
@@ -1076,7 +1076,7 @@ asm     // Value=eax Adds=edx Carry=ecx
         adc    dword ptr [eax + 4 * 5], esi
         adc    dword ptr [eax + 4 * 6], edi
         adc    dword ptr [eax + 4 * 7], ecx
-        mov    ebx,  dword ptr [edx + 4 * 8]
+        mov    ebx, dword ptr [edx + 4 * 8]
         mov    esi, dword ptr [edx + 4 * 9]
         mov    edi, dword ptr [edx + 4 * 10]
         mov    ecx, dword ptr [edx + 4 * 11]
@@ -1084,7 +1084,7 @@ asm     // Value=eax Adds=edx Carry=ecx
         adc    dword ptr [eax + 4 * 9], esi
         adc    dword ptr [eax + 4 * 10], edi
         adc    dword ptr [eax + 4 * 11], ecx
-        mov    ebx,  dword ptr [edx + 4 * 12]
+        mov    ebx, dword ptr [edx + 4 * 12]
         mov    esi, dword ptr [edx + 4 * 13]
         mov    edi, dword ptr [edx + 4 * 14]
         mov    ecx, dword ptr [edx + 4 * 15]
@@ -1106,7 +1106,7 @@ asm     // Value=eax Subs=edx Carry=ecx
         push   ebx
         push   esi
         push   edi
-        mov    ebx,  dword ptr [edx]
+        mov    ebx, dword ptr [edx]
         add    ebx, ecx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
@@ -1115,7 +1115,7 @@ asm     // Value=eax Subs=edx Carry=ecx
         sbb    dword ptr [eax + 4], esi
         sbb    dword ptr [eax + 4 * 2], edi
         sbb    dword ptr [eax + 4 * 3], ecx
-        mov    ebx,  dword ptr [edx + 4 * 4]
+        mov    ebx, dword ptr [edx + 4 * 4]
         mov    esi, dword ptr [edx + 4 * 5]
         mov    edi, dword ptr [edx + 4 * 6]
         mov    ecx, dword ptr [edx + 4 * 7]
@@ -1123,7 +1123,7 @@ asm     // Value=eax Subs=edx Carry=ecx
         sbb    dword ptr [eax + 4 * 5], esi
         sbb    dword ptr [eax + 4 * 6], edi
         sbb    dword ptr [eax + 4 * 7], ecx
-        mov    ebx,  dword ptr [edx + 4 * 8]
+        mov    ebx, dword ptr [edx + 4 * 8]
         mov    esi, dword ptr [edx + 4 * 9]
         mov    edi, dword ptr [edx + 4 * 10]
         mov    ecx, dword ptr [edx + 4 * 11]
@@ -1131,7 +1131,7 @@ asm     // Value=eax Subs=edx Carry=ecx
         sbb    dword ptr [eax + 4 * 9], esi
         sbb    dword ptr [eax + 4 * 10], edi
         sbb    dword ptr [eax + 4 * 11], ecx
-        mov    ebx,  dword ptr [edx + 4 * 12]
+        mov    ebx, dword ptr [edx + 4 * 12]
         mov    esi, dword ptr [edx + 4 * 13]
         mov    edi, dword ptr [edx + 4 * 14]
         mov    ecx, dword ptr [edx + 4 * 15]
