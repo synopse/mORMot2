@@ -511,9 +511,9 @@ type
     function MatchKey(RsaPublicKey: TRsa): boolean;
     /// compute a genuine RSA public/private key pair of a given bit size
     // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
-    // today's norm is 2048-bit, but you may consider 3072-bit for security
+    // today's minimal is 2048-bit, but you may consider 3072-bit for security
     // beyond 2030, and 4096-bit have a much higher computational cost and
-    // 7680-bit is highly impractical (and generation can be more than 30 secs)
+    // 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
     // - since our generator is not yet officially validated by any agency,
     // anything above default 2048 would not make much sense
     // - searching for proper random primes may take a lot of time on low-end
@@ -531,6 +531,7 @@ type
     /// load a public key from PKCS#1 DER format
     function LoadFromPublicKeyDer(const Der: TCertDer): boolean;
     /// load a public key from PKCS#1 PEM format
+    // - will also accept and try to load from the DER format if PEM failed
     function LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
     /// load a public key from an hexadecimal E and M fields concatenation
     procedure LoadFromPublicKeyHexa(const Hexa: RawUtf8);
@@ -2209,7 +2210,7 @@ begin
   if HasPublicKey or
      HasPrivateKey or
      ((Bits <> 512) and    // broken with average CPU power
-      (Bits <> 1024) and   // considered weak, and rejected by browsers
+      (Bits <> 1024) and   // considered weak, and rejected by browsers and NIST
       (Bits <> 2048) and   // 112-bit of security: actual norm
       (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
       (Bits <> 4096) and   // not worth it
@@ -2386,7 +2387,7 @@ var
   der: TCertDer;
 begin
   try
-    der := PemToDer(Pem);
+    der := PemToDer(Pem); // returns input if was not PEM
     result := LoadFromPrivateKeyDer(der);
   finally
     FillZero(RawByteString(der));
@@ -2757,7 +2758,7 @@ begin
     exit; // invalid or unsupported
   rsa := TRsa.Create;
   try
-    if not rsa.LoadFromPublicKeyDer(PemToDer(pub)) then
+    if not rsa.LoadFromPublicKeyPem(pub) then // handle PEM or DER
       exit;
     FillZero(digest.b);
     diglen := hasher.Full(msg, msglen, digest);

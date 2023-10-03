@@ -606,7 +606,7 @@ type
   public
     /// initialize the JWT processing instance calling SetAlgorithm abstract method
     // - should supply one RSA key, eigher private or public, in PEM or raw DER
-    // binary format, of at least 1024 bits
+    // binary format, of at least 2048 bits (as required by NIST SP800-131A)
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
@@ -1472,36 +1472,29 @@ constructor TJwtRsa.Create(const aKey: RawByteString; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
-var
-  der: TCertDer;
 begin
   SetAlgorithm;
   fHashOid := ASN1_OID_HASH[fHash];
+  fRsa := TRsa.Create;
   try
-    fRsa := TRsa.Create;
-    try
-      der := PemToDer(aKey);
-      if der <> '' then
-        // try as private key, then as public key
-        if fRsa.LoadFromPrivateKeyDer(der) then
-        begin
-          if (fRsa.ModulusBits < 1024) or
-             not fRsa.CheckPrivateKey then
-          raise ERsaException.CreateUtf8('%.Create: invalid %-bit private key',
-            [self, fRsa.ModulusBits]);
-        end
-        else if fRsa.LoadFromPublicKeyDer(der) then
-          if fRsa.ModulusBits < 1024 then
-            raise ERsaException.CreateUtf8(
-              '%.Create: invalid %-bit public key', [self, fRsa.ModulusBits]);
-      if not fRsa.HasPublicKey then
-        raise ERsaException.CreateUtf8('%.Create: invalid key', [self]);
-    except
-      FreeAndNil(fRsa);
-      raise;
-    end;
-  finally
-    FillZero(RawByteString(der));
+    if aKey <> '' then
+      // try as private key, then as public key
+      if fRsa.LoadFromPrivateKeyPem(aKey) then // handle PEM or DER
+      begin
+        if (fRsa.ModulusBits < 2048) or
+           not fRsa.CheckPrivateKey then
+        raise ERsaException.CreateUtf8('%.Create: invalid %-bit private key',
+          [self, fRsa.ModulusBits]);
+      end
+      else if fRsa.LoadFromPublicKeyPem(aKey) then // PEM or DER
+        if fRsa.ModulusBits < 2048 then
+          raise ERsaException.CreateUtf8(
+            '%.Create: invalid %-bit public key', [self, fRsa.ModulusBits]);
+    if not fRsa.HasPublicKey then
+      raise ERsaException.CreateUtf8('%.Create: invalid key', [self]);
+  except
+    FreeAndNil(fRsa);
+    raise;
   end;
   inherited Create(fAlgorithm, aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
