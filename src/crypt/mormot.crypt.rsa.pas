@@ -440,6 +440,7 @@ type
     /// serialize this public key as binary PKCS#1 DER format
     function ToDer: TCertDer;
     /// unserialize a public key from binary PKCS#1 DER format
+    // - will try and fallback to a ASN1_SEQ, as stored in a X509 certificate
     function FromDer(const der: TCertDer): boolean;
   end;
 
@@ -533,6 +534,7 @@ type
     procedure LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
       ModulusSize, ExponentSize: PtrInt);
     /// load a public key from PKCS#1 DER format
+    // - will try and fallback to a ASN1_SEQ, as stored in a X509 certificate
     function LoadFromPublicKeyDer(const Der: TCertDer): boolean;
     /// load a public key from PKCS#1 PEM format
     // - will also accept and try to load from the DER format if PEM failed
@@ -2034,13 +2036,22 @@ begin
 end;
 
 function TRsaPublicKey.FromDer(const der: TCertDer): boolean;
+var
+  pos: integer;
 begin
   if (Modulus <> '') or
      (Exponent <> '') then
     raise ERsaException.Create('TRsaPublicKey.FromDer over an existing key');
+  // first try PKCS#1 format
   result := DerToRsa(der, ASN1_BITSTR, nil, [
               @Modulus,
               @Exponent]);
+  pos := 1;
+  // try a simple ASN1_SEQ with two ASN1_INT, as stored in a X509 certificate
+  result := result or
+            (AsnNext(pos, der) = ASN1_SEQ) and
+            (AsnNextRaw(pos, der, Modulus) = ASN1_INT) and
+            (AsnNextRaw(pos, der, Exponent) = ASN1_INT);
 end;
 
 
