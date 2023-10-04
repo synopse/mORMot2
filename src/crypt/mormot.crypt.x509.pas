@@ -90,15 +90,16 @@ type
     xeNetscapeComment);
 
   /// X509 Certificate Key Usage - see RFC 5280 Section 4.2.1.3
+  // - bit order is inverted to the RFC due to BITSTRING encoding
   TXKeyUsage = (
-    kuDigitalsignature,
-    kuNonRepudiation,
-    kuKeyEncipherment,
-    kuDataEncipherment,
-    kuKeyAgreement,
-    kuKeyCertSign,
-    kuCrlSign,
     kuEncipherOnly,
+    kuCrlSign,
+    kuKeyCertSign,
+    kuKeyAgreement,
+    kuDataEncipherment,
+    kuKeyEncipherment,
+    kuNonRepudiation,
+    kuDigitalsignature,
     kuDecipherOnly);
   /// set of X509 Certificate Key Usages - see RFC 5280 Section 4.2.1.3
   TXKeyUsages = set of TXKeyUsage;
@@ -307,6 +308,10 @@ type
     ExtendedKeyUsages: TXExtendedKeyUsages;
     /// check Extension[xeBasicConstraints]
     function IsCertificateAuthority: boolean;
+    /// compute the mormot.crypt.secure set of Key Usages of this Certificate
+    function GetUsages: TCryptCertUsages;
+    /// check one mormot.crypt.secure Key Usage on this Certificate
+    function HasUsage(u: TCryptCertUsage): boolean;
     /// hexadecimal of a positive integer assigned by the CA to each certificate
     // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
     function SerialNumberHex: RawUtf8;
@@ -643,6 +648,61 @@ begin
   result := Extension[xeBasicConstraints] = 'CA';
 end;
 
+const
+  KU: array[cuEncipherOnly .. cuDecipherOnly] of TXKeyUsage = (
+    kuEncipherOnly,
+    kuCrlSign,
+    kuKeyCertSign,
+    kuKeyAgreement,
+    kuDataEncipherment,
+    kuKeyEncipherment,
+    kuNonRepudiation,
+    kuDigitalsignature,
+    kuDecipherOnly);
+
+  XU: array[cuTlsServer .. cuTimestamp] of TXExtendedKeyUsage = (
+    xkuServerAuth,
+    xkuClientAuth,
+    xkuEmailProtection,
+    xkuCodeSigning,
+    xkuOcspSigning,
+    xkuTimeStamping);
+
+function TX509Content.GetUsages: TCryptCertUsages;
+var
+  r: TCryptCertUsage;
+  u: TXKeyUsages;
+  x: TXExtendedKeyUsages;
+begin
+  result := [];
+  if IsCertificateAuthority then
+    include(result, cuCA);
+  u := KeyUsages;
+  if u <> [] then
+    for r := low(KU) to high(KU) do
+      if KU[r] in u then
+        include(result, r);
+  x := ExtendedKeyUsages;
+  if x <> [] then
+    for r := low(XU) to high(XU) do
+      if XU[r] in x then
+        include(result, r);
+end;
+
+function TX509Content.HasUsage(u: TCryptCertUsage): boolean;
+begin
+  case u of
+    cuCA:
+      result := IsCertificateAuthority;
+    low(KU) .. high(KU):
+      result := KU[u] in KeyUsages;
+    low(XU) .. high(XU):
+      result := XU[u] in ExtendedKeyUsages;
+  else
+    result := false;
+  end;
+end;
+
 function TX509Content.SerialNumberHex: RawUtf8;
 begin
   ToHumanHex(result, pointer(SerialNumber), length(SerialNumber));
@@ -765,11 +825,13 @@ begin
               w := 0;
               case length(v) of
                 1:
-                  w := PByte(v)^ shl 8;
+                  w := PByte(v)^;
                 2:
                   w := PWord(v)^
               end;
-              PWord(@KeyUsages)^ := swap(w);
+              KeyUsages := TXKeyUsages(w and $ff);
+              if w and $8000 <> 0 then
+                include(KeyUsages, kuDecipherOnly);
             end;
           xeExtendedKeyUsage:          // RFC 5280 #4.2.1.12
             if AsnNext(extpos, ext) = ASN1_SEQ then
