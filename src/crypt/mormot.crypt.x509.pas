@@ -341,8 +341,14 @@ type
     fCachedDer: RawByteString;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TX509SignatureAlgorithm;
+    fRsa: TRsa;
+    fEcc: TEccPublicKey; // TEccPublicKeyUncompressed is not worth it
     procedure ComputeAsn;
     function ComputeDigest(Algo: TX509SignatureAlgorithm): TSha256Digest;
+    /// verify some buffer with the stored Signed.SubjectPublicKey
+    // - will maintain an internal RSA or ECC256 public key instance
+    function RawVerify(const Data, Signature: RawByteString;
+      Hash: THashAlgo): boolean;
   public
     /// actual to-be-signed Certificate content
     Signed: TX509Content;
@@ -353,6 +359,9 @@ type
     /// raw binary digital signature computed upon Signed.ToDer
     property SignatureValue: RawByteString
       read fSignatureValue;
+  public
+    /// finalize this instance
+    destructor Destroy; override;
     /// reset all internal context
     procedure Clear;
     /// generate the SignatureAlgorithm/SignatureValue using a RSA private key
@@ -363,6 +372,12 @@ type
     function VerifyRsa(RsaAuthority: TRsa): boolean;
     /// generate the SignatureAlgorithm/SignatureValue using a ECC256 public key
     function VerifyEcc(const EccKey: TEccPublicKey): boolean;
+    /// verify the digital signature of this Certificate using a X509 Authority
+    // - depending on the engine, some errors can be ignored, e.g.
+    // cvWrongUsage or cvDeprecatedAuthority
+    // - certificate expiration date can be specified instead of current time
+    function Verify(Authority: TX509 = nil; IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity;
     /// serialize those fields into ASN.1 DER binary
     // - following RFC 5280 #4.1.1 encoding
     function ToDer: TCertDer;
@@ -390,6 +405,12 @@ const
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
   ASN1_OID_X962_ECDSA_P256 = '1.2.840.10045.3.1.7';
 
+  XSA_TO_XKA: array[TX509SignatureAlgorithm] of TX509PublicKeyAlgorithm = (
+    xkaNone,     // xsaNone
+    xkaRsa,      // xsaSha256Rsa
+    xkaRsa,      // xsaSha384Rsa
+    xkaRsa,      // xsaSha512Rsa
+    xkaEcc256);  // xsaSha256Ecc256
 
 implementation
 
@@ -740,7 +761,8 @@ begin
   fCachedDer := der;
   // read main X509 tbsCertificate fields
   pos := 1;
-  if AsnNext(pos, der) <> ASN1_CTC0 then
+  if (AsnNext(pos, der) <> ASN1_SEQ) or
+     (AsnNext(pos, der) <> ASN1_CTC0) then
     exit;
   Version := AsnNextInteger(pos, der, vt) + 1;
   if (vt <> ASN1_INT) or
@@ -865,6 +887,12 @@ end;
 
 { TX509 }
 
+destructor TX509.Destroy;
+begin
+  inherited Destroy;
+  fRsa.Free;
+end;
+
 procedure TX509.Clear;
 begin
   fCachedDer := '';
@@ -932,6 +960,98 @@ begin
             Ecc256r1Verify(EccKey, Sha256Digest(Signed.ToDer), sig);
 end;
 
+const
+  DEPRECATION_THRESHOLD = 0.5; // allow a half day margin
+
+function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
+  ignored: TCryptCertValidities; timeutc: TDateTime): TCryptCertValidity;
+var
+  na, nb: TDateTime;
+begin
+  if auth = nil then
+    result := cvUnknownAuthority
+  else if (not (cvWrongUsage in ignored)) and
+          (not (selfsigned or auth.Signed.HasUsage(usage))) then
+    result := cvWrongUsage
+  else
+  begin
+    result := cvValidSigned;
+    if cvDeprecatedAuthority in ignored then
+      exit;
+    if timeutc = 0 then
+      timeutc := NowUtc;
+    na := auth.Signed.NotAfter; // 0 if was not specified in X509 cert
+    nb := auth.Signed.NotBefore;
+    if ((na <> 0) and
+        (timeutc > na + DEPRECATION_THRESHOLD)) or
+       ((nb <> 0) and
+        (timeutc < nb - DEPRECATION_THRESHOLD)) then
+      result := cvDeprecatedAuthority;
+  end;
+end;
+
+function TX509.Verify(Authority: TX509; IgnoreError: TCryptCertValidities;
+  TimeUtc: TDateTime): TCryptCertValidity;
+begin
+   result := cvBadParameter;
+   if self = nil then
+     exit;
+   if Signed.IsSelfSigned then
+     Authority := self
+   else if Authority <> nil then
+   begin
+     result := cvInvalidSignature;
+     if (SignatureAlgorithm = xsaNone) or
+        (Authority.Signed.SubjectPublicKeyAlgorithm <>
+           XSA_TO_XKA[SignatureAlgorithm]) then
+       exit;
+     result := cvUnknownAuthority;
+     if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
+          Signed.Extension[xeAuthorityKeyIdentifier]) or
+        (Authority.Signed.SubjectPublicKey = '') then
+       exit;
+   end;
+   result := CanVerify(
+     Authority, cuKeyCertSign, Authority = self, IgnoreError, TimeUtc);
+   if result = cvValidSigned then
+     if not RawVerify(Signed.ToDer, SignatureValue, XSA_TO_HF[SignatureAlgorithm]) then
+       result := cvInvalidSignature
+     else if Authority = self then
+       result := cvValidSelfSigned;
+end;
+
+function TX509.RawVerify(const Data, Signature: RawByteString;
+  Hash: THashAlgo): boolean;
+var
+  eccsig: TEccSignature;
+begin
+  result := false;
+  if Signed.SubjectPublicKey <> '' then
+    case Signed.SubjectPublicKeyAlgorithm of
+      xkaRsa:
+        begin
+          if fRsa = nil then
+          begin
+            fRsa := TRsa.Create;
+            if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
+            begin
+              FreeAndNil(fRsa);
+              exit;
+            end;
+          end;
+
+        end;
+      xkaEcc256:
+        if DerToEcc(pointer(Signature), length(Signature), eccsig) then
+        begin
+          if IsZero(fEcc) then
+            if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, fEcc) then
+              exit;
+          result := Ecc256r1Verify(fEcc, Sha256Digest(Data), eccsig);
+        end;
+    end;
+end;
+
 function TX509.ToDer: TCertDer;
 begin
   if fCachedDer = '' then
@@ -976,7 +1096,7 @@ begin
   pos := 1;
   result := (der <> '') and
             (AsnNext(pos, der) = ASN1_SEQ) and
-            (AsnNextRaw(pos, der, tbs) = ASN1_SEQ) and
+            (AsnNextRaw(pos, der, tbs, {includeheader=}true) = ASN1_SEQ) and
             Signed.FromDer(tbs) and
             AsnNextAlgoOid(pos, der, oid, nil) and
             OidToXsa(oid, fSignatureAlgorithm) and
