@@ -55,7 +55,7 @@ type
   TEccPublicKey = array[0..ECC_BYTES] of byte;
 
   /// store a public key for ECC secp256r1 cryptography
-  // - use ecc_uncompress_key_pas() to compute such a key from a TEccPublicKey
+  // - use Ecc256r1Uncompress() to compute such a key from a TEccPublicKey
   // - stored in uncompressed form, consuming 64 bytes of memory
   TEccPublicKeyUncompressed = array[0..(ECC_BYTES * 2) - 1] of byte;
 

@@ -7853,16 +7853,14 @@ end;
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
   out Value: RawByteString; IncludeHeader: boolean): integer;
 var
-  headpos, asnsize, unused: integer;
+  headpos, asnsize: integer;
 begin
   result := ASN1_NULL;
   headpos := Pos;
   if AsnDecHeader(Pos, Buffer, result, asnsize) then
   begin
-    unused := 0;
     if result = ASN1_BITSTR then
     begin
-      unused := ord(Buffer[Pos]);
       inc(Pos); // ignore bit length
       dec(asnsize);
     end;
@@ -7871,8 +7869,6 @@ begin
     else
       Value := copy(Buffer, Pos, asnsize);
     inc(Pos, asnsize);
-    if unused <> 0 then
-      Value[asnSize] := AnsiChar(ord(Value[asnsize]) shr unused);
   end;
 end;
 
