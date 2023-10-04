@@ -2650,6 +2650,8 @@ const
   ASN1_UTF8STRING  = $0c;
   ASN1_PRINTSTRING = $13;
   ASN1_IA5STRING   = $16;
+  ASN1_UTCTIME     = $17;
+  ASN1_GENTIME     = $18;
   // base ASN1_CL_CTR types
   ASN1_SEQ         = $30;
   ASN1_SETOF       = $31;
@@ -2752,6 +2754,13 @@ function AsnOid(OidText: PUtf8Char): TAsnObject;
 /// create an ASN.1 PrintableString or UTF8String from some UTF-8 text
 function AsnText(const Text: RawUtf8): TAsnObject;
 
+/// create an ASN.1 block from some date/time value
+// - according to X509 profile, use UTCTime up to 2049 then GeneralizedTime
+// - dt = 0 will be converted as '99991231235959Z' GeneralizedTime - could be
+// used e.g. with X509 NotAfter field when no good expiration date can be
+// assigned (see RFC 5280 #4.1.2.5)
+function AsnTime(dt: TDateTime): TAsnObject;
+
 /// raw append some binary to an ASN.1 object buffer
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
   overload; {$ifdef HASINLINE} inline; {$endif}
@@ -2791,6 +2800,10 @@ function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
 /// parse the next ASN1_INT value as raw Big Integer binary
 function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
   out Value: RawByteString): boolean;
+
+/// parse the next ASN1_UTCTIME ASN1_GENTIME value as TDateTime
+function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
+  out Value: TDateTime): boolean;
 
 /// initialize a set of AsnNext() Pos[] with its 1 default position
 procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
@@ -7700,6 +7713,37 @@ begin
   result := Asn(AsnTypeText(pointer(Text)), [Text]);
 end;
 
+function AsnTime(dt: TDateTime): TAsnObject;
+var
+  t: TSynSystemTime;
+begin
+  if dt = 0 then
+  begin
+    result := Asn(ASN1_GENTIME, ['99991231235959Z']);
+    exit;
+  end;
+  t.FromDateTime(dt);
+  if t.Year > 1900 then
+    if t.Year >= 2050 then
+      result := Asn(ASN1_GENTIME, [FormatUtf8('%%%%%%Z', [
+        UInt4DigitsToShort(t.Year),
+        UInt2DigitsToShortFast(t.Month),
+        UInt2DigitsToShortFast(t.Day),
+        UInt2DigitsToShortFast(t.Hour),
+        UInt2DigitsToShortFast(t.Minute),
+        UInt2DigitsToShortFast(t.Second)])])
+    else
+      result := Asn(ASN1_UTCTIME, [FormatUtf8('%%%%%%Z', [
+        UInt2DigitsToShort(t.Year),
+        UInt2DigitsToShortFast(t.Month),
+        UInt2DigitsToShortFast(t.Day),
+        UInt2DigitsToShortFast(t.Hour),
+        UInt2DigitsToShortFast(t.Minute),
+        UInt2DigitsToShortFast(t.Second)])])
+  else
+    raise ECrypt.CreateUtf8('Invalid AsnTime(%)', [dt]);
+end;
+
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
 begin
   Append(Data, Buffer);
@@ -7745,6 +7789,33 @@ begin
     exit; // avoid overflow
   AsnType := t;
   result := true;
+end;
+
+function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
+  out Value: TDateTime): boolean;
+var
+  vt: integer;
+  raw: RawByteString;
+begin
+  vt := AsnNextRaw(pos, Buffer, raw);
+  result := false;
+  if length(raw) < 12 then
+    exit;
+  case vt of
+    ASN1_UTCTIME:
+      Prepend(raw, '20'); // YY -> YYYY
+    ASN1_GENTIME:
+      if raw = '99991231235959Z' then
+      begin
+        Value := 0; // special value for unspecified NotAfter
+        result := true;
+      end
+  else
+    exit;
+  end;
+  insert('T', raw, 9); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
+  Iso8601ToDateTimePUtf8CharVar(pointer(raw), length(raw), Value);
+  result := Value <> 0;
 end;
 
 function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
