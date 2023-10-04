@@ -2783,6 +2783,9 @@ function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
 /// decode an OID ASN.1 value into human-readable text
 function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 
+/// decode an OID ASN.1 IP Address buffer into human-readable text
+function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+
 /// parse the next ASN.1 value as text
 // - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
@@ -2795,7 +2798,7 @@ function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
 /// parse the next ASN.1 value as raw buffer
 // - returns the ASN.1 value type, and the ASN.1 raw value blob itself
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
-  out Value: RawByteString): integer;
+  out Value: RawByteString; IncludeHeader: boolean = false): integer;
 
 /// parse the next ASN1_INT value as raw Big Integer binary
 function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
@@ -7692,19 +7695,20 @@ function AsnTypeText(p: PUtf8Char): integer;
 begin
   // allow A..Z, a..z, 0..9, ' = ( ) + , - . / : ? but excluding @ & _
   result := ASN1_PRINTSTRING;
-  if p <> nil then
-    while true do
-      case p^ of
-        #0:
-          exit; // whole string was printable
-        'A'..'Z',
-        'a'..'z',
-        '0'..'9',
-        '''', '=', '(', ')', '+', ',', '-', '.', '/', ':', '?':
-          inc(p);
-      else
-        break;
-      end;
+  if p = nil then
+    exit;
+  while true do
+    case p^ of
+      #0:
+        exit; // whole string was printable
+      'A'..'Z',
+      'a'..'z',
+      '0'..'9',
+      '''', '=', '(', ')', '+', ',', '-', '.', '/', ':', '?':
+        inc(p);
+    else
+      break;
+    end;
   result := ASN1_UTF8STRING;
 end;
 
@@ -7773,6 +7777,18 @@ begin
   end;
 end;
 
+function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+begin
+  case len of
+    4:
+      with PDWordRec(p)^ do
+        FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], result);
+   {16: // not true IPv6 content (no mormot.net.sock dependency) }
+  else
+    BinToHexLower(p, len, result);
+  end;
+end;
+
 function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
   out AsnType, AsnSize: integer): boolean;
 var
@@ -7809,7 +7825,8 @@ begin
       begin
         Value := 0; // special value for unspecified NotAfter
         result := true;
-      end
+        exit;
+      end;
   else
     exit;
   end;
@@ -7834,20 +7851,28 @@ begin
 end;
 
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
-  out Value: RawByteString): integer;
+  out Value: RawByteString; IncludeHeader: boolean): integer;
 var
-  asnsize: integer;
+  headpos, asnsize, unused: integer;
 begin
   result := ASN1_NULL;
+  headpos := Pos;
   if AsnDecHeader(Pos, Buffer, result, asnsize) then
   begin
+    unused := 0;
     if result = ASN1_BITSTR then
     begin
+      unused := ord(Buffer[Pos]);
       inc(Pos); // ignore bit length
       dec(asnsize);
     end;
-    Value := copy(Buffer, Pos, asnsize);
+    if IncludeHeader then
+      Value := copy(Buffer, headpos, asnsize + Pos - headpos)
+    else
+      Value := copy(Buffer, Pos, asnsize);
     inc(Pos, asnsize);
+    if unused <> 0 then
+      Value[asnSize] := AnsiChar(ord(Value[asnsize]) shr unused);
   end;
 end;
 
@@ -7914,14 +7939,7 @@ begin
         end;
       ASN1_IPADDR:
         begin
-          case asnsize of
-            4:
-              with PDWordRec(@Buffer[Pos])^ do
-                FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], RawUtf8(Value^));
-           {16: // not true IPv6 content (no mormot.net.sock dependency) }
-          else
-            BinToHexLower(@Buffer[Pos], asnsize, RawUtf8(Value^));
-          end;
+          Value^ := AsnDecIp(@Buffer[Pos], asnsize);
           inc(Pos, asnsize);
         end;
       ASN1_NULL:
