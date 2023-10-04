@@ -124,7 +124,7 @@ type
       Value: RawUtf8;
     end;
     /// the raw ASN1_SEQ encoded value of this name
-    function Binary: RawByteString;
+    function ToBinary: RawByteString;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
@@ -136,7 +136,7 @@ type
   end;
 
 const
-  /// the OID of all known attributes, as defined in RFC 3780 Appendix A.1
+  /// the OID of all known attributes, as defined in RFC 5280 Appendix A.1
   XA_OID: array[TXAttr] of PUtf8Char = (
     '',                           // xaNone
     '0.9.2342.19200300.100.1.25', // xaDC  domainComponent
@@ -230,8 +230,12 @@ type
     Signature: TX509SignatureAlgorithm;
     /// identifies the entity that has signed and issued the certificate
     Issuer: TX501Name;
-    ///
-    NotBefore: TUnixTime;
+    /// date on which the certificate validity period begins
+    NotBefore: TDateTime;
+    /// date on which the certificate validity period ends
+    // - may equal 0 if '99991231235959Z' was stored as "unspecified end date"
+    // (see RFC 5280 #4.1.2.5)
+    NotAfter: TDateTime;
     /// hexadecimal of a positive integer assigned by the CA to each certificate
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function SerialNumberHex: RawUtf8;
@@ -331,11 +335,19 @@ begin
   result := false;
 end;
 
-
-{ TX509Name }
-
 var
   XA_OID_ASN: array[TXAttr] of TAsnObject; // filled from XA_OID[]
+
+function OidToXa(const oid: RawByteString): TXAttr;
+begin
+  for result := succ(low(result)) to high(result) do
+    if oid = XA_OID_ASN[result] then
+      exit;
+  result := xaNone;
+end;
+
+
+{ TX509Name }
 
 procedure TX501Name.ComputeAsn;
 var
@@ -372,7 +384,7 @@ begin
   fCachedAsn := Asn(ASN1_SEQ, [tmp]);
 end;
 
-function TX501Name.Binary: RawByteString;
+function TX501Name.ToBinary: RawByteString;
 begin
   if fCachedAsn = '' then
     ComputeAsn;
@@ -382,11 +394,11 @@ end;
 function TX501Name.FromAsn(const seq: TAsnObject): boolean;
 var
   posseq, posone, o: integer;
-  a, xa: TXAttr;
+  xa: TXAttr;
   one, oid, v: RawByteString;
 begin
   result := false;
-  AfterUpdate;
+  fCachedAsn := seq; // store exact binary since used for comparison
   o := 0;
   posseq := 1;
   while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
@@ -394,17 +406,13 @@ begin
     posone := 1;
     while AsnNext(posone, one) = ASN1_SEQ do
       if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
-         not (AsnNext(posone, one, @v) in ASN1_TEXT) then
+         (oid = '') or
+         not (AsnNext(posone, one, @v) in ASN1_TEXT) or
+         not IsValidUtf8(v) then
         exit
       else
       begin
-        xa := xaNone;
-        for a := succ(low(a)) to high(a) do
-          if oid = XA_OID_ASN[a] then
-          begin
-            xa := a;
-            break;
-          end;
+        xa := OidToXa(oid);
         if xa = xaNone then
         begin
           // unsupported OID
@@ -415,11 +423,9 @@ begin
             Value := v;
           end;
         end
-        else if IsValidUtf8(v) then
-          // known attribute
-          AddToCsv(v, Names[xa])
         else
-          exit; // incorrect encoding or corrupted input
+          // known attribute
+          AddToCsv(v, Names[xa]);
       end;
   end;
   result := true;
@@ -440,7 +446,7 @@ end;
 
 function TX501Name.ToDigest(algo: THashAlgo): RawUtf8;
 begin
-  result := HashFull(algo, Binary);
+  result := HashFull(algo, ToBinary);
 end;
 
 
@@ -453,7 +459,12 @@ begin
   fCachedDer := Asn(ASN1_SEQ, [
                   Asn(Version),
                   Asn(ASN1_INT, SerialNumber),
-                  XsaToSeq(Signature)
+                  XsaToSeq(Signature),
+                  Issuer.ToBinary,
+                  Asn(ASN1_SEQ, [
+                    AsnTime(NotBefore),
+                    AsnTime(NotAfter)
+                  ])
                 ]);
 end;
 
@@ -486,7 +497,10 @@ begin
      not (vt in [2..3]) or
      (AsnNextRaw(pos, der, SerialNumber) <> ASN1_INT) or
      not AsnNextSeqToXsa(pos, der, Signature) or
-     not Issuer.FromAsnNext(pos, der) then
+     not Issuer.FromAsnNext(pos, der) or
+     (AsnNext(pos, der) <> ASN1_SEQ) or
+     not AsnNextTime(pos, der, NotBefore) or
+     not AsnNextTime(pos, der, NotAfter) then
     exit;
 
   result := true;
