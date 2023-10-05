@@ -2961,9 +2961,12 @@ end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 begin
-  Init(aAlgo);
-  Update(aBuffer, aLen);
-  Final(result);
+  result := '';
+  if Init(aAlgo) then
+  begin
+    Update(aBuffer, aLen);
+    Final(result);
+  end;
 end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8;

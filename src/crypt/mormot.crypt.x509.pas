@@ -259,6 +259,7 @@ type
   private
     fCachedDer: RawByteString; // for ToDer
     procedure ComputeCachedDer;
+    procedure AddNextExtensions(pos: integer; const der: TAsnObject);
   public
     /// describes the version of the encoded certificate
     // - equals usually 3, once extensions are used
@@ -636,6 +637,99 @@ begin
                 ]);
 end;
 
+procedure TX509Content.AddNextExtensions(pos: integer; const der: TAsnObject);
+var
+  ext, oid, v: RawByteString;
+  decoded: RawUtf8;
+  vt, extpos: integer;
+  xe: TXExtension;
+  xku: TXExtendedKeyUsage;
+  critical: boolean;
+  w: word;
+begin
+  while (AsnNext(pos, der) = ASN1_SEQ) and
+        (AsnNextRaw(pos, der, oid) = ASN1_OBJID) do
+  begin
+    // loop for each extension
+    critical := false;
+    vt := AsnNextRaw(pos, der, ext);
+    if vt = ASN1_BOOL then // optional Critical flag
+    begin
+      critical := ext = #$ff;
+      vt := AsnNextRaw(pos, der, ext);
+    end;
+    if vt <> ASN1_OCTSTR then // extnValue
+      exit;
+    xe := OidToXe(oid);
+    if xe = xeNone then
+      // unsupported OID are stored as raw binary values
+      AddOther(ExtensionOther, oid, ext)
+    else
+    begin
+      // decode most common extensions as RawUtf8
+      ExtensionCritical[xe] := critical;
+      ExtensionRaw[xe] := ext;
+      decoded := '';
+      extpos := 1;
+      case xe of
+        xeAuthorityKeyIdentifier:    // RFC 5280 #4.2.1.1
+          if (AsnNext(extpos, ext) = ASN1_SEQ) and
+             (AsnNextRaw(extpos, ext, v) <> ASN1_NULL) then
+            ToHumanHex(decoded, pointer(v), length(v));
+        xeSubjectKeyIdentifier:       // RFC 5280 #4.2.1.2
+          if AsnNextRaw(extpos, ext, v) = ASN1_OCTSTR then
+            ToHumanHex(decoded, pointer(v), length(v));
+        xeSubjectAlternativeName,    // RFC 5280 #4.2.1.6
+        xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
+          if AsnNext(extpos, ext) = ASN1_SEQ then
+            repeat
+              case AsnNextRaw(extpos, ext, v) of
+                ASN1_NULL:
+                  break;
+                ASN1_CTX1, // rfc8722Name
+                ASN1_CTX2, // dnsName
+                ASN1_CTX6: // uri
+                  EnsureRawUtf8(v); // was stored as IA5String
+                ASN1_CTX7: // ip
+                  v := AsnDecIp(pointer(v), length(v));
+                ASN1_CTX8: // registeredID
+                  v := AsnDecOid(1, 1 + length(v), v);
+              else
+                continue;  // unsupported value type
+              end;
+              if v <> '' then
+                AddToCsv(v, decoded);
+            until false;
+        xeBasicConstraints:          // RFC 5280 #4.2.1.9
+          if (AsnNext(extpos, ext) = ASN1_SEQ) and
+             (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
+             (v = #$ff) then
+            decoded := 'CA'; // as expected by IsCertificateAuthority
+        xeKeyUsage:                  // RFC 5280 #4.2.1.3
+          if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
+             (v <> '') and
+             (length(v) <= 2) then
+          begin
+            w := PWord(v)^; // length=1 ends with a #0
+            KeyUsages := TXKeyUsages(w and $ff);
+            if w and $8000 <> 0 then
+              include(KeyUsages, kuDecipherOnly);
+          end;
+        xeExtendedKeyUsage:          // RFC 5280 #4.2.1.12
+          if AsnNext(extpos, ext) = ASN1_SEQ then
+            while AsnNextRaw(extpos, ext, oid) = ASN1_OBJID do
+            begin
+              xku := OidToXku(oid);
+              if xku <> xkuNone then
+                include(ExtendedKeyUsages, xku);
+            end;
+      end;
+      if decoded <> '' then
+        Extension[xe] := decoded;
+    end;
+  end;
+end;
+
 function TX509Content.IsCertificateAuthority: boolean;
 begin
   result := Extension[xeBasicConstraints] = 'CA';
@@ -720,13 +814,8 @@ end;
 
 function TX509Content.FromDer(const der: TCertDer): boolean;
 var
-  pos, vt, extpos: integer;
-  oid, oid2, ext, v: RawByteString;
-  decoded: RawUtf8;
-  xe: TXExtension;
-  xku: TXExtendedKeyUsage;
-  critical: boolean;
-  w: word;
+  pos, vt: integer;
+  oid, oid2: RawByteString;
 begin
   result := false;
   Clear;
@@ -755,87 +844,7 @@ begin
   if (Version = 3) and
      (AsnNext(pos, der) = ASN1_CTC3) and
      (AsnNext(pos, der) = ASN1_SEQ) then
-    // read extensions
-    while (AsnNext(pos, der) = ASN1_SEQ) and
-          (AsnNextRaw(pos, der, oid) = ASN1_OBJID) do // extnID
-    begin
-      critical := false;
-      vt := AsnNextRaw(pos, der, ext);
-      if vt = ASN1_BOOL then // optional Critical flag
-      begin
-        critical := ext = #$ff;
-        vt := AsnNextRaw(pos, der, ext);
-      end;
-      if vt <> ASN1_OCTSTR then // extnValue
-        continue;
-      xe := OidToXe(oid);
-      if xe = xeNone then
-        // unsupported OID are stored as raw binary values
-        AddOther(ExtensionOther, oid, ext)
-      else
-      begin
-        // decode most common extensions as RawUtf8
-        ExtensionCritical[xe] := critical;
-        ExtensionRaw[xe] := ext;
-        decoded := '';
-        extpos := 1;
-        case xe of
-          xeAuthorityKeyIdentifier:    // RFC 5280 #4.2.1.1
-            if (AsnNext(extpos, ext) = ASN1_SEQ) and
-               (AsnNextRaw(extpos, ext, v) <> ASN1_NULL) then
-              ToHumanHex(decoded, pointer(v), length(v));
-          xeSubjectKeyIdentifier:       // RFC 5280 #4.2.1.2
-            if AsnNextRaw(extpos, ext, v) = ASN1_OCTSTR then
-              ToHumanHex(decoded, pointer(v), length(v));
-          xeSubjectAlternativeName,    // RFC 5280 #4.2.1.6
-          xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
-            if AsnNext(extpos, ext) = ASN1_SEQ then
-              repeat
-                case AsnNextRaw(extpos, ext, v) of
-                  ASN1_NULL:
-                    break;
-                  ASN1_CTX1, // rfc8722Name
-                  ASN1_CTX2, // dnsName
-                  ASN1_CTX6: // uri
-                    EnsureRawUtf8(v); // was stored as IA5String
-                  ASN1_CTX7: // ip
-                    v := AsnDecIp(pointer(v), length(v));
-                  ASN1_CTX8: // registeredID
-                    v := AsnDecOid(1, 1 + length(v), v);
-                else
-                  v := '';
-                end;
-                if v <> '' then
-                  AddToCsv(v, decoded);
-              until false;
-          xeBasicConstraints:          // RFC 5280 #4.2.1.9
-            if (AsnNext(extpos, ext) = ASN1_SEQ) and
-               (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
-               (v = #$ff) then
-              decoded := 'CA'; // as expected by IsCertificateAuthority
-          xeKeyUsage:                  // RFC 5280 #4.2.1.3
-            if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
-               (v <> '') and
-               (length(v) <= 2) then
-            begin
-              w := PWord(v)^; // length=1 ends with a #0 
-              KeyUsages := TXKeyUsages(w and $ff);
-              if w and $8000 <> 0 then
-                include(KeyUsages, kuDecipherOnly);
-            end;
-          xeExtendedKeyUsage:          // RFC 5280 #4.2.1.12
-            if AsnNext(extpos, ext) = ASN1_SEQ then
-              while AsnNextRaw(extpos, ext, oid) = ASN1_OBJID do
-              begin
-                xku := OidToXku(oid);
-                if xku <> xkuNone then
-                  include(ExtendedKeyUsages, xku);
-              end;
-        end;
-        if decoded <> '' then
-          Extension[xe] := decoded;
-      end;
-    end;
+    AddNextExtensions(pos, der);
   result := true;
 end;
 
@@ -966,56 +975,58 @@ var
 begin
   result := false;
   diglen := hasher.Full(Hash, pointer(Data), length(Data), dig);
-  if Signed.SubjectPublicKey <> '' then
-    case Signed.SubjectPublicKeyAlgorithm of
-      xkaRsa:
+  if (diglen = 0) or
+     (Signed.SubjectPublicKey = '') then
+    exit;
+  case Signed.SubjectPublicKeyAlgorithm of
+    xkaRsa:
+      begin
+        if fRsa = nil then
         begin
-          if fRsa = nil then
-          begin
-            fSafe.Lock;
-            try
-              if fRsa = nil then
+          fSafe.Lock;
+          try
+            if fRsa = nil then
+            begin
+              // load the public key into a local fRsa reusable instance
+              fRsa := TRsa.Create;
+              if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
               begin
-                // load the public key into a local fRsa reusable instance
-                fRsa := TRsa.Create;
-                if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
-                begin
-                  FreeAndNil(fRsa);
-                  exit;
-                end;
+                FreeAndNil(fRsa);
+                exit;
               end;
-            finally
-              fSafe.UnLock;
             end;
+          finally
+            fSafe.UnLock;
           end;
-          // RSA digital signature verification
-          bin := fRsa.Verify(Signature, @oid);
-          result := (length(bin) = diglen) and
-                    CompareMem(pointer(bin), @dig, diglen) and
-                    (oid = ASN1_OID_HASH[Hash]);
         end;
-      xkaEcc256:
-        if DerToEcc(pointer(Signature), length(Signature), eccsig) then
+        // RSA digital signature verification
+        bin := fRsa.Verify(Signature, @oid);
+        result := (length(bin) = diglen) and
+                  CompareMem(pointer(bin), @dig, diglen) and
+                  (oid = ASN1_OID_HASH[Hash]);
+      end;
+    xkaEcc256:
+      if DerToEcc(pointer(Signature), length(Signature), eccsig) then
+      begin
+        if fEcc = nil then
         begin
-          if fEcc = nil then
-          begin
-            fSafe.Lock;
-            try
-              // load the public key into a local fEcc reusable instance
-              if fEcc = nil then
-              begin
-                if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
-                  exit;
-                fEcc := TEcc256r1Verify.Create(eccpub);
-              end;
-            finally
-              fSafe.UnLock;
+          fSafe.Lock;
+          try
+            // load the public key into a local fEcc reusable instance
+            if fEcc = nil then
+            begin
+              if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
+                exit;
+              fEcc := TEcc256r1Verify.Create(eccpub);
             end;
+          finally
+            fSafe.UnLock;
           end;
-          // secp256r1 digital signature verification
-          result := fEcc.Verify(dig.Lo, eccsig);
         end;
-    end;
+        // secp256r1 digital signature verification
+        result := fEcc.Verify(dig.Lo, eccsig);
+      end;
+  end;
 end;
 
 function TX509.ToDer: TCertDer;
