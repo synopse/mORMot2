@@ -2716,7 +2716,7 @@ const
 function AsnEncInt(Value: Int64): TAsnObject;
 
 /// encode a 64-bit unsigned OID integer value into ASN.1 binary
-function AsnEncOidItem(Value: Int64): TAsnObject;
+function AsnEncOidItem(Value: PtrUInt): TAsnObject;
 
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
@@ -7455,7 +7455,7 @@ end;
 
 { **************** Basic ASN.1 Support }
 
-function AsnEncOidItem(Value: Int64): TAsnObject;
+function AsnEncOidItem(Value: PtrUInt): TAsnObject;
 var
   tmp: array[0..15] of byte;
   r: PByte;
@@ -7474,20 +7474,20 @@ end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
 var
-  x: QWord;
+  x: PtrUInt;
 begin
   result := '';
   // first byte = two first numbers modulo 40
-  x := GetNextItemQWord(OidText, '.') * 40;
+  x := GetNextItemCardinal(OidText, '.') * 40;
   while OidText <> nil do
   begin
-    inc(x, GetNextItemQWord(OidText, '.'));
+    inc(x, GetNextItemCardinal(OidText, '.'));
     Append(result, AsnEncOidItem(x));
     x := 0;
   end;
 end;
 
-function AsnDecOidItem(var Pos: integer; const Buffer: TAsnObject): integer;
+function AsnDecOidItem(var Pos: integer; const Buffer: TAsnObject): cardinal;
 var
   x: byte;
 begin
@@ -7763,7 +7763,7 @@ end;
 
 function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 var
-  x, y: integer;
+  x, y: cardinal;
 begin
   result := '';
   y := 0;
