@@ -165,14 +165,21 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fCachedAsn: RawByteString;
+    fCachedText: RawUtf8;
     procedure ComputeAsn;
+    procedure ComputeText;
   public
     /// CSV of the values of each kind of known attributes
     Name: TXAttrNames;
     /// values which are not part of the known attributes
     Other: TXOthers;
+    /// convert Name[a] from CSV to an array of RawUtf8
+    function NameArray(a: TXAttr): TRawUtf8DynArray;
     /// the raw ASN1_SEQ encoded value of this name
     function ToBinary: RawByteString;
+    /// return the values as a single line Distinguished Name text
+    // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    function AsDNText: RawUtf8;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
@@ -182,6 +189,14 @@ type
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
   end;
+
+function ToText(a: TXAttr): PShortString; overload;
+function ToText(e: TXExtension): PShortString; overload;
+function ToText(u: TXKeyUsage): PShortString; overload;
+function ToText(x: TXExtendedKeyUsage): PShortString; overload;
+function ToText(a: TXSignatureAlgorithm): PShortString; overload;
+function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
+
 
 const
   /// internal lookup table from X.509 Signature to Public Key Algorithms
@@ -207,6 +222,20 @@ const
     caaRS384,    // xsaSha384Rsa
     caaRS512,    // xsaSha512Rsa
     caaES256);   // xsaSha256Ecc256
+
+  /// internal lookup table from X.509 Signature Algorithm as text
+  XSA_TXT: array[TXSignatureAlgorithm] of RawUtf8 = (
+    '',                              // xsaNone
+    'SHA256 with RSA encryption',    // xsaSha256Rsa
+    'SHA384 with RSA encryption',    // xsaSha384Rsa
+    'SHA512 with RSA encryption',    // xsaSha512Rsa
+    'SHA256 with prime256v1 ECDSA'); // xsaSha256Ecc256
+
+  /// internal lookup table from X.509 Public Key Algorithm as text
+  XKA_TXT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
+    '',                   // xkaNone
+    'RSA encryption',     // xkaRsa
+    'prime256v1 ECDSA');  // xkaEcc256
 
   /// the OID of all known TX509Name attributes, as defined in RFC 5280 A.1
   XA_OID: array[TXAttr] of PUtf8Char = (
@@ -313,6 +342,8 @@ type
     Subject: TXName;
     /// decoded AlgorithmIdentifier structure of the stored public key
     SubjectPublicKeyAlgorithm: TXPublicKeyAlgorithm;
+    /// decoded number of bits of the stored public key
+    SubjectPublicKeyBits: integer;
     /// public key raw binary
     SubjectPublicKey: RawByteString;
     /// decoded extensions as defined for X.509 v3 certificates
@@ -339,6 +370,8 @@ type
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
+    /// convert Extension[x] from CSV to an array of RawUtf8
+    function ExtensionArray(x: TXExtension): TRawUtf8DynArray;
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -359,19 +392,27 @@ type
   protected
     fCachedDer: RawByteString;
     fCachedSha1: RawUtf8;
+    fCachedPeerInfo: RawUtf8;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fRsa: TRsa;
     fEcc: TEcc256r1VerifyAbstract;
     fSafe: TLightLock;
     procedure ComputeCachedDer;
+    procedure ComputeCachedPeerInfo;
     function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
     function GetSerialNumber: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
+    function GetIssuerDN: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetSubjectDN: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetSubjectPublicKeyAlgorithm: RawUtf8;
     /// verify some buffer with the stored Signed.SubjectPublicKey
     // - will maintain an internal RSA or ECC256 public key instance
     function RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
       Hash: THashAlgo): boolean;
+    procedure ToInfo(out Info: TX509Parsed);
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
@@ -410,6 +451,12 @@ type
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
     /// check if the Certificate Issuer is also its Subject
     function IsSelfSigned: boolean;
+    /// an array of (DNS) Subject names covered by this Certificate
+    // - convert the Extension[xeSubjectAlternativeName] CSV as a RawUtf8 array
+    function SubjectAlternativeNames: TRawUtf8DynArray;
+    /// return some multi-line text of the main information of this Certificate
+    // - in a layout similar to X509_print() OpenSSL usual formatting
+    function PeerInfo: RawUtf8;
     /// main properties of the entity associated with the public key stored
     // in this certificate
     // - e.g. for an Internet certificate, Subject[xaCN] is 'synopse.info'
@@ -421,17 +468,20 @@ type
       read Signed.Issuer.Name;
     /// main extensions as defined for X.509 v3 certificates
     // - will contain the ready-to-use UTF-8 CSV text of each value
-    // - e.g. for an Internet certificate, Extension[xeSubjectAlternativeName]
-    // is 'synopse.info,www.synopse.info'
     // - Extension[xeSubjectKeyIdentifier] and Extension[xeAuthorityKeyIdentifier]
     // are also useful to validate a full PKI certification paths and trust
+    // - see also the SubjectAlternativeName property
     property Extension: TXExtensions
       read Signed.Extension;
   published
-    /// the cryptographic algorithm used by the CA over the Signed field
-    // - match Signed.Signature internal field
-    property SignatureAlgorithm: TXSignatureAlgorithm
-      read fSignatureAlgorithm;
+    /// hexadecimal of a positive integer assigned by the CA to each certificate
+    // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
+    property SerialNumber: RawUtf8
+      read GetSerialNumber;
+    /// issuer entity of this Certificate as Distinguished Name text
+    // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    property IssuerDN: RawUtf8
+      read GetIssuerDN;
     /// date on which the certificate validity period begins
     property NotBefore: TDateTime
       read Signed.NotBefore;
@@ -445,10 +495,21 @@ type
     // ! [cuDigitalSignature, cuKeyEncipherment, cuTlsServer, cuTlsClient]
     property Usages: TCryptCertUsages
       read Signed.CertUsages;
-    /// hexadecimal of a positive integer assigned by the CA to each certificate
-    // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
-    property SerialNumber: RawUtf8
-      read GetSerialNumber;
+    /// subject entity of this Certificate as Distinguished Name text
+    // - e.g. 'CN=synopse.info'
+    property SubjectDN: RawUtf8
+      read GetSubjectDN;
+    /// Subject names covered by this Certificate, as CSV
+    // - e.g. for an Internet certificate is 'synopse.info,www.synopse.info'
+    property SubjectAlternativeName: RawUtf8
+      read Signed.Extension[xeSubjectAlternativeName];
+    /// the cryptographic algorithm used by the stored public key
+    property SubjectPublicKeyAlgorithm: RawUtf8
+      read GetSubjectPublicKeyAlgorithm;
+    /// the cryptographic algorithm used by the CA over the Signed field
+    // - match Signed.Signature internal field
+    property SignatureAlgorithm: TXSignatureAlgorithm
+      read fSignatureAlgorithm;
   end;
 
 
@@ -564,6 +625,20 @@ begin
   result := xkuNone;
 end;
 
+procedure AddOther(var others: TXOthers; const o, v: RawByteString);
+var
+  n: PtrInt;
+begin
+  n := length(others);
+  SetLength(others, n + 1);
+  with others[n] do
+  begin
+    Oid := o;
+    Value := v;
+  end;
+end;
+
+
 
 { TX509Name }
 
@@ -609,17 +684,55 @@ begin
   result := fCachedAsn;
 end;
 
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
+procedure TXName.ComputeText;
 var
-  n: PtrInt;
+  tmp: TTextWriterStackBuffer;
+  a: TXAttr;
+  first: boolean;
+  p: PUtf8Char;
+  n, v: shortstring;
 begin
-  n := length(others);
-  SetLength(others, n + 1);
-  with others[n] do
-  begin
-    Oid := o;
-    Value := v;
+  with TTextWriter.CreateOwnedStream(tmp) do
+  try
+    first := true;
+    for a := succ(low(a)) to high(a) do
+    begin
+      p := pointer(Name[a]);
+      if p <> nil then
+      begin
+        TrimLeftLowerCaseToShort(ToText(a), n);
+        repeat
+          GetNextItemShortString(p, @v);
+          if v[0] <> #0 then
+          begin
+            if first then
+              first := false
+            else
+              Add(',', ' ');
+            AddShort(n);
+            Add('=');
+            AddShort(v);
+          end;
+        until p = nil;
+      end;
+    end;
+    SetText(fCachedText);
+  finally
+    Free;
   end;
+end;
+
+function TXName.NameArray(a: TXAttr): TRawUtf8DynArray;
+begin
+  result := nil;
+  CsvToRawUtf8DynArray(pointer(Name[a]), result);
+end;
+
+function TXName.AsDNText: RawUtf8;
+begin
+  if fCachedText = '' then
+    ComputeText;
+  result := fCachedText;
 end;
 
 function TXName.FromAsn(const seq: TAsnObject): boolean;
@@ -630,6 +743,7 @@ var
 begin
   result := false;
   fCachedAsn := seq; // store exact binary since used for comparison
+  fCachedText := '';
   posseq := 1;
   while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
   begin
@@ -665,12 +779,45 @@ end;
 procedure TXName.AfterModified;
 begin
   fCachedAsn := '';
+  fCachedText := '';
 end;
 
 function TXName.ToDigest(algo: THashAlgo): RawUtf8;
 begin
   result := HashFull(algo, ToBinary);
 end;
+
+
+function ToText(a: TXAttr): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXAttr), ord(a));
+end;
+
+function ToText(e: TXExtension): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXExtension), ord(e));
+end;
+
+function ToText(u: TXKeyUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXKeyUsage), ord(u));
+end;
+
+function ToText(x: TXExtendedKeyUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXExtendedKeyUsage), ord(x));
+end;
+
+function ToText(a: TXSignatureAlgorithm): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXSignatureAlgorithm), ord(a));
+end;
+
+function ToText(a: TXPublicKeyAlgorithm): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXPublicKeyAlgorithm), ord(a));
+end;
+
 
 
 { **************** X.509 Certificates }
@@ -851,6 +998,12 @@ begin
   result := BigIntToText(SerialNumber);
 end;
 
+function TXTbsCertificate.ExtensionArray(x: TXExtension): TRawUtf8DynArray;
+begin
+  result := nil;
+  CsvToRawUtf8DynArray(pointer(Extension[x]), result);
+end;
+
 function TXTbsCertificate.ToDer: TAsnObject;
 begin
   if fCachedDer = '' then
@@ -887,6 +1040,7 @@ begin
      not OidToXka(oid, oid2, SubjectPublicKeyAlgorithm) or
      (AsnNextRaw(pos, der, SubjectPublicKey) <> ASN1_BITSTR) then
     exit;
+  SubjectPublicKeyBits := X509PubKeyBits(SubjectPublicKey);
   if (Version = 3) and
      (AsnNext(pos, der) = ASN1_CTC3) and
      (AsnNext(pos, der) = ASN1_SEQ) then
@@ -921,6 +1075,7 @@ procedure TX509.Clear;
 begin
   fCachedDer := '';
   fCachedSha1 := '';
+  fCachedPeerInfo := '';
   Signed.Clear;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
@@ -1076,6 +1231,24 @@ begin
   end;
 end;
 
+procedure TX509.ToInfo(out Info: TX509Parsed);
+begin
+  Info.Serial := Signed.SerialNumberHex;
+  Info.SubjectDN := SubjectDN;
+  Info.IssuerDN := IssuerDN;
+  Info.SubjectID := Extension[xeSubjectKeyIdentifier];
+  Info.IssuerID := Extension[xeAuthorityKeyIdentifier];
+  Info.SubjectAltNames := StringReplaceAll(
+    Extension[xeSubjectAlternativeName], ',', ', ');
+  Info.SigAlg := XSA_TXT[SignatureAlgorithm];
+  Info.PubAlg := GetSubjectPublicKeyAlgorithm;
+  Info.Usage := Usages;
+  Info.NotBefore := NotBefore;
+  Info.NotAfter := NotAfter;
+  Info.PubKey := Signed.SubjectPublicKey;
+  Info.PeerInfo := ToText(Info); // should be the last
+end;
+
 function TX509.SaveToDer: TCertDer;
 begin
   if fCachedDer = '' then
@@ -1105,17 +1278,42 @@ begin
   result := Signed.SerialNumberHex;
 end;
 
+function TX509.GetIssuerDN: RawUtf8;
+begin
+  result := Signed.Issuer.AsDNText;
+end;
+
+function TX509.GetSubjectDN: RawUtf8;
+begin
+  result := Signed.Subject.AsDNText;
+end;
+
+function TX509.GetSubjectPublicKeyAlgorithm: RawUtf8;
+begin
+  FormatUtf8('%-bit %', [Signed.SubjectPublicKeyBits,
+    XKA_TXT[Signed.SubjectPublicKeyAlgorithm]], result);
+end;
+
 procedure TX509.ComputeCachedDer;
 begin
   if (SignatureAlgorithm = xsaNone) or
      (SignatureValue = '') then
     raise EX509.Create('TX509.ToDer with no previous Sign() call');
   fCachedSha1 := '';
+  fCachedPeerInfo := '';
   fCachedDer := Asn(ASN1_SEQ, [
                   Signed.ToDer,
                   XsaToSeq(SignatureAlgorithm),
                   Asn(ASN1_BITSTR, SignatureValue)
                 ]);
+end;
+
+procedure TX509.ComputeCachedPeerInfo;
+var
+  info: TX509Parsed;
+begin
+  ToInfo(info);
+  fCachedPeerInfo := info.PeerInfo;
 end;
 
 function TX509.LoadFromDer(const der: TCertDer): boolean;
@@ -1159,10 +1357,23 @@ begin
   result := Signed.Issuer.ToBinary = Signed.Subject.ToBinary;
 end;
 
+function TX509.SubjectAlternativeNames: TRawUtf8DynArray;
+begin
+  result := Signed.ExtensionArray(xeSubjectAlternativeName);
+end;
+
+function TX509.PeerInfo: RawUtf8;
+begin
+  if fCachedPeerInfo = '' then
+    ComputeCachedPeerInfo;
+  result := fCachedPeerInfo;
+end;
+
 procedure TX509.AfterModified;
 begin
   fCachedDer := '';
   fCachedSha1 := '';
+  fCachedPeerInfo := '';
   fSignatureValue := '';
   Signed.AfterModified;
 end;
