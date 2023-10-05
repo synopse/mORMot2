@@ -2050,8 +2050,8 @@ begin
   // try a simple ASN1_SEQ with two ASN1_INT, as stored in a X509 certificate
   result := result or
             (AsnNext(pos, der) = ASN1_SEQ) and
-            (AsnNextRaw(pos, der, Modulus) = ASN1_INT) and
-            (AsnNextRaw(pos, der, Exponent) = ASN1_INT);
+            AsnNextBigInt(pos, der, Modulus) and
+            AsnNextBigInt(pos, der, Exponent);
 end;
 
 
