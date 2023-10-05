@@ -417,6 +417,7 @@ type
     function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
     procedure SignRsa(RsaAuthority: TRsa);
     procedure SignEcc(const EccKey: TEccPrivateKey);
+    function LoadRsaEccInstance: boolean;
     /// verify some buffer with the stored Signed.SubjectPublicKey
     // - will maintain an internal RSA or ECC256 public key instance
     function RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
@@ -1226,11 +1227,62 @@ begin
        result := cvValidSelfSigned;
 end;
 
+function TX509.LoadRsaEccInstance: boolean;
+var
+  eccpub: TEccPublicKey;
+begin
+  result := false;
+  if (self <> nil) and
+     (Signed.SubjectPublicKey <> '') then
+    case Signed.SubjectPublicKeyAlgorithm of
+      xkaRsa:
+        begin
+          if fRsa = nil then
+          begin
+            fSafe.Lock;
+            try
+              if fRsa = nil then
+              begin
+                // load the public key into a local fRsa reusable instance
+                fRsa := TRsa.Create;
+                if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
+                begin
+                  FreeAndNil(fRsa);
+                  exit;
+                end;
+              end;
+            finally
+              fSafe.UnLock;
+            end;
+          end;
+          result := true;
+        end;
+      xkaEcc256:
+        begin
+          if fEcc = nil then
+          begin
+            fSafe.Lock;
+            try
+              // load the public key into a local fEcc reusable instance
+              if fEcc = nil then
+              begin
+                if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
+                  exit;
+                fEcc := TEcc256r1Verify.Create(eccpub);
+              end;
+            finally
+              fSafe.UnLock;
+            end;
+          end;
+          result := true;
+        end;
+    end;
+end;
+
 function TX509.RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
   Hash: THashAlgo): boolean;
 var
   hasher: TSynHasher;
-  eccpub: TEccPublicKey absolute hasher;
   eccsig: TEccSignature;
   dig: THash512Rec;
   diglen: PtrInt;
@@ -1240,29 +1292,11 @@ begin
   result := false;
   diglen := hasher.Full(Hash, pointer(Data), length(Data), dig);
   if (diglen = 0) or
-     (Signed.SubjectPublicKey = '') then
+     not LoadRsaEccInstance then
     exit;
   case Signed.SubjectPublicKeyAlgorithm of
     xkaRsa:
       begin
-        if fRsa = nil then
-        begin
-          fSafe.Lock;
-          try
-            if fRsa = nil then
-            begin
-              // load the public key into a local fRsa reusable instance
-              fRsa := TRsa.Create;
-              if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
-              begin
-                FreeAndNil(fRsa);
-                exit;
-              end;
-            end;
-          finally
-            fSafe.UnLock;
-          end;
-        end;
         // RSA digital signature verification
         bin := fRsa.Verify(Signature, @oid);
         result := (length(bin) = diglen) and
@@ -1271,25 +1305,8 @@ begin
       end;
     xkaEcc256:
       if DerToEcc(pointer(Signature), length(Signature), eccsig) then
-      begin
-        if fEcc = nil then
-        begin
-          fSafe.Lock;
-          try
-            // load the public key into a local fEcc reusable instance
-            if fEcc = nil then
-            begin
-              if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
-                exit;
-              fEcc := TEcc256r1Verify.Create(eccpub);
-            end;
-          finally
-            fSafe.UnLock;
-          end;
-        end;
         // secp256r1 digital signature verification
         result := fEcc.Verify(dig.Lo, eccsig);
-      end;
   end;
 end;
 
