@@ -2602,11 +2602,18 @@ function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 type
   /// output of the X509Parse() function
   TX509Parsed = record
-    Serial, SubjectDN, IssuerDN, SubjectID, IssuerID, SigAlg, PubAlg, PeerInfo: RawUtf8;
+    Serial, SubjectDN, IssuerDN, SubjectID, IssuerID,
+    SigAlg, PubAlg, SubjectAltNames, PeerInfo: RawUtf8;
     Usage: TCryptCertUsages;
     NotBefore, NotAfter: TDateTime;
     PubKey: RawByteString;
   end;
+
+/// return the number of bits of a X509 certificate SubjectPublicKey ASN1_BITSTR
+// - will recognize RSA ASN1_SEQ and ECC uncompressed keys
+// - can optionally format the key as its hexa members for ToText(TX509Parsed)
+function X509PubKeyBits(const PubKey: RawByteString;
+  PubText: PRawUtf8 = nil): integer;
 
 /// return some multi-line text of the main TX509Parsed fields
 // - in a layout similar to X509_print() OpenSSL formatting
@@ -7356,10 +7363,57 @@ begin
     end;
 end;
 
+function X509PubKeyBits(const PubKey: RawByteString;
+  PubText: PRawUtf8): integer;
+var
+  pub: PByte;
+  pos, publen: integer;
+  modulo, exp: RawByteString;
+  name, bits: RawUtf8;
+begin
+  pub := pointer(PubKey);
+  publen := length(PubKey);
+  result := publen;
+  if result <> 0 then
+    case PubKey[1] of
+      #$04:
+        begin
+          // ECC uncompressed key
+          inc(pub);
+          dec(publen);
+          result := publen shr 1;
+          if PubText <> nil then
+            name := 'ECC ';
+        end;
+      #$30:
+        begin
+          // RSA sequence
+          pos := 1;
+          if (AsnNext(pos, PubKey) = ASN1_SEQ) and
+             AsnNextBigInt(pos, PubKey, modulo) and
+             AsnNextBigInt(pos, PubKey, exp) then
+          begin
+            result := length(modulo);
+            if PubText <> nil then
+            begin
+              name := 'RSA ';
+              bits := '      Modulus' + bits + ':'#13#10 +
+                BinToHumanHex(pointer(modulo), length(modulo), 16, 8) +
+                '      Exponent: 0x' + BinToHex(exp) + #13#10 ;
+            end;
+          end;
+        end;
+    end;
+  result := result shl 3; // from bytes to bits
+  if PubText = nil then
+    exit;
+  if bits = '' then
+    bits := BinToHumanHex(pub, publen, 16, 6);
+  FormatUtf8('    %Public Key: (% bit)'#13#10'%',
+    [name, result, bits], PubText^);
+end;
 
 function ToText(const c: TX509Parsed): RawUtf8;
-var
-  pub: RawUtf8;
 
   procedure KeyUsage(l, h: TCryptCertUsage; const ext: RawUtf8);
   var
@@ -7378,10 +7432,21 @@ var
                            '      ' + usage + #13#10;
   end;
 
+var
+  bits: RawUtf8;
+  version: integer;
 begin
   // roughly follow X509_print() OpenSSL formatting
-  ToHumanHex(pub, pointer(c.PubKey), length(c.PubKey));
+  if (c.Usage <> []) or
+     (c.SubjectID <> '') or
+     (c.IssuerID <> '') then
+    version := 2
+  else
+    version := 1;
+  X509PubKeyBits(c.PubKey, @bits);
   result := 'Certificate:'#13#10 +
+            '  Version: ' + SmallUInt32Utf8[version + 1] +
+                   ' (0x' + SmallUInt32Utf8[version] + ')'#13#10 +
             '  Serial Number:'#13#10 +
             '    ' + c.Serial + #13#10 +
             '  Signature Algorithm: ' + c.SigAlg + #13#10 +
@@ -7392,25 +7457,25 @@ begin
             '  Subject: ' + c.SubjectDN + #13#10 +
             '  Subject Public Key Info:'#13#10 +
             '    Public Key Algorithm: ' + c.PubAlg + #13#10 +
-            '    Public Key:'#13#10 +
-            '      ' + pub + #13#10;
-  if (c.Usage <> []) or
-     (c.SubjectID <> '') or
-     (c.IssuerID <> '') then
+            bits;
+  if version = 2 then
   begin
-    // append the known extensions
+    // append the X509 v3 known extensions
     result := result + '  X509v3 extensions:'#13#10;
+    KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
+    KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
     if cuCA in c.Usage then
       result := result + '    X509v3 Basic Constraints: critical'#13#10 +
                          '      CA:TRUE'#13#10;
+    if c.SubjectAltNames <> '' then
+      result := result + '    X509v3 Subject Alternative Name:'#13#10 +
+                         '      ' + c.SubjectAltNames + #13#10;
     if c.SubjectID <> '' then
       result := result + '    X509v3 Subject Key Identifier:'#13#10 +
                          '      ' + c.SubjectID + #13#10;
     if c.IssuerID <> '' then
       result := result + '    X509v3 Authority Key Identifier:'#13#10 +
                          '      ' + c.IssuerID + #13#10;
-    KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
-    KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
   end;
 end;
 
@@ -7421,6 +7486,7 @@ begin
   Info.Serial := c.Serial;
   Info.SubjectDN := c.SubjectName;
   Info.IssuerDN := c.IssuerName;
+  Info.SubjectAltNames := ''; // not yet part of TwinCertInfo
   Info.SubjectID := c.SubjectID;
   Info.IssuerID := c.IssuerID;
   Info.SigAlg := c.AlgorithmName;
@@ -8022,7 +8088,7 @@ begin
       at := AsnNext(i, Value, @s);
       w.AddChars(' ', indent);
       w.Add('$');
-      w.AddByteToHex(at);
+      w.AddByteToHexLower(at);
       if (at and ASN1_CL_CTR) <> 0 then
       begin
         w.Add(' ');
