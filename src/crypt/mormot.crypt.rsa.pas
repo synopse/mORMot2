@@ -585,16 +585,16 @@ type
     /// RSA Public key Modulus as m = p*q
     property M: PBigInt
       read fM;
-    /// RSA Public key exponent (typically 65537)
+    /// RSA Public key Exponent (typically 65537)
     property E: PBigInt
       read fE;
-    /// RSA key Private exponent
+    /// RSA key Private Exponent
     property D: PBigInt
       read fD;
-    /// RSA Private key first prime as p in m = p*q
+    /// RSA Private key first Prime as p in m = p*q
     property P: PBigInt
       read fP;
-    /// RSA Private key second prime as q in m = p*q
+    /// RSA Private key second Prime as q in m = p*q
     property Q: PBigInt
       read fQ;
     /// RSA Private key CRT exponent satisfying e * DP == 1 (mod (p-1))

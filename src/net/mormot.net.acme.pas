@@ -526,18 +526,13 @@ begin
     if fCert.PrivateKeyHandle = nil then
       raise EJwsHttp.Create('No private key');
     // No key identifier, need to provide JSON Web Key
-    if fCert.AsymAlgo in CAA_ECC then
-    begin
-      PEVP_PKEY(fCert.PrivateKeyHandle).EccGetPubKeyUncompressed(x, y);
-      jwk := FormatJson('{"crv":?,"kty":"EC","x":?,"y":?}',
-        [], [CAA_CRV[fCert.AsymAlgo], BinToBase64uri(x), BinToBase64uri(y)]);
-    end
-    else
-    begin
-      PEVP_PKEY(fCert.PrivateKeyHandle).RsaGetPubKey(x, y);
-      jwk := FormatJson('{"e":?,"kty":"RSA","n":?}',
-        [], [BinToBase64uri(x), BinToBase64uri(y)]);
-    end;
+    if fCert.GetPrivateKeyParams(x, y) then
+      if fCert.AsymAlgo in CAA_ECC then
+        jwk := FormatJson('{"crv":?,"kty":"EC","x":?,"y":?}',
+          [], [CAA_CRV[fCert.AsymAlgo], BinToBase64uri(x), BinToBase64uri(y)])
+      else
+        jwk := FormatJson('{"e":?,"kty":"RSA","n":?}',
+          [], [BinToBase64uri(x), BinToBase64uri(y)]);
     // the thumbprint of a JWK is computed with no whitespace or line breaks
     // before or after any syntaxic elements and with the required members
     // ordered lexicographically, using SHA-256 hashing

@@ -3725,6 +3725,7 @@ begin
 end;
 
 const
+  // synopse.info official website current certificate
   _synopseinfo_pem =
     '-----BEGIN CERTIFICATE-----'#13#10 +
     'MIIE+DCCA+CgAwIBAgISA8yDqq/5weIc+vqAr+ZnbidMMA0GCSqGSIb3DQEBCwUA'#13#10 +

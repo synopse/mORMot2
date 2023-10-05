@@ -1920,6 +1920,7 @@ type
     function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override;           // a PX509 instance
     function PrivateKeyHandle: pointer; override; // a PEVP_PKEY instance
+    function GetPrivateKeyParams(out x, y: RawByteString): boolean; override;
   end;
 
   /// 'x509-store' ICryptStore algorithm
@@ -2611,6 +2612,17 @@ end;
 function TCryptCertOpenSsl.PrivateKeyHandle: pointer;
 begin
   result := fPrivKey; // a PEVP_PKEY instance
+end;
+
+function TCryptCertOpenSsl.GetPrivateKeyParams(out x, y: RawByteString): boolean;
+begin
+  result := true;
+  if AsymAlgo in CAA_ECC then
+    fPrivKey.EccGetPubKeyUncompressed(x, y)
+  else if AsymAlgo in CAA_RSA then
+    fPrivKey.RsaGetPubKey(x, y)
+  else
+    result := false;
 end;
 
 

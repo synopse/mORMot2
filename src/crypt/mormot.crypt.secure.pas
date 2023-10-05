@@ -1942,6 +1942,11 @@ type
     // - e.g. PEVP_PKEY for OpenSsl, or PEccPrivateKey for mormot.crypt.ecc
     // - equals nil if there is no associated private key
     function PrivateKeyHandle: pointer;
+    /// access to the low-level BigInt of the associated private key, as binary
+    // - for ECC, returns the x,y coordinates
+    // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
+    // - return false if there is no compliant key information in the provider
+    function GetPrivateKeyParams(out x, y: RawByteString): boolean;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
@@ -2014,7 +2019,8 @@ type
     function CertAlgo: TCryptCertAlgo;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
-    function PrivateKeyHandle: pointer; virtual; abstract;
+    function PrivateKeyHandle: pointer; virtual;
+    function GetPrivateKeyParams(out x, y: RawByteString): boolean; virtual;
   end;
 
   /// meta-class of the abstract parent to implement ICryptCert interface
@@ -6455,6 +6461,16 @@ end;
 function TCryptCert.Instance: TCryptCert;
 begin
   result := self;
+end;
+
+function TCryptCert.PrivateKeyHandle: pointer;
+begin
+  result := nil; // unsupported
+end;
+
+function TCryptCert.GetPrivateKeyParams(out x, y: RawByteString): boolean;
+begin
+  result := false; // unsupported
 end;
 
 
