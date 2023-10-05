@@ -414,7 +414,6 @@ type
     function GetSubjectDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
-    procedure ToInfo(out Info: TX509Parsed);
     function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
     procedure SignRsa(RsaAuthority: TRsa);
     procedure SignEcc(const EccKey: TEccPrivateKey);
@@ -463,6 +462,8 @@ type
     // - in a layout similar to X509_print() OpenSSL usual formatting
     // - is cached internally for efficiency
     function PeerInfo: RawUtf8;
+    /// return the main information of this Certificate into
+    procedure ToParsedInfo(out Info: TX509Parsed);
     /// main properties of the entity associated with the public key stored
     // in this certificate
     // - e.g. for an Internet certificate, Subject[xaCN] is 'synopse.info'
@@ -1292,7 +1293,7 @@ begin
   end;
 end;
 
-procedure TX509.ToInfo(out Info: TX509Parsed);
+procedure TX509.ToParsedInfo(out Info: TX509Parsed);
 begin
   Info.Serial := Signed.SerialNumberHex;
   Info.SubjectDN := SubjectDN;
@@ -1373,7 +1374,7 @@ procedure TX509.ComputeCachedPeerInfo;
 var
   info: TX509Parsed;
 begin
-  ToInfo(info);
+  ToParsedInfo(info);
   fCachedPeerInfo := info.PeerInfo;
 end;
 
@@ -1440,6 +1441,21 @@ begin
 end;
 
 
+function _X509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+var
+  x: TX509;
+begin
+  x := TX509.Create;
+  try
+    result := x.LoadFromPem(Cert);
+    if result then
+      x.ToParsedInfo(Info);
+  finally
+    x.Free;
+  end;
+end;
+
+
 procedure InitializeUnit;
 var
   a: TXAttr;
@@ -1452,6 +1468,8 @@ begin
     XE_OID_ASN[o] := AsnEncOid(XE_OID[o]);
   for k := succ(low(k)) to high(k) do
     XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
+  // use our class for X.509 parsing
+  X509Parse := @_X509Parse;
 end;
 
 
