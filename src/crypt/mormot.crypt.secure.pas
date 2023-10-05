@@ -2723,7 +2723,8 @@ const
 function AsnEncInt(Value: Int64): TAsnObject;
 
 /// encode a 64-bit unsigned OID integer value into ASN.1 binary
-function AsnEncOidItem(Value: PtrUInt): TAsnObject;
+// - append the encoded value into the Result shortstring existing content
+procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
 
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
@@ -7409,8 +7410,7 @@ begin
     exit;
   if bits = '' then
     bits := BinToHumanHex(pub, publen, 16, 6);
-  FormatUtf8('    %Public Key: (% bit)'#13#10'%',
-    [name, result, bits], PubText^);
+  FormatUtf8('    %Public Key: (% bit)'#13#10'%', [name, result, bits], PubText^);
 end;
 
 function ToText(const c: TX509Parsed): RawUtf8;
@@ -7521,9 +7521,10 @@ end;
 
 { **************** Basic ASN.1 Support }
 
-function AsnEncOidItem(Value: PtrUInt): TAsnObject;
+procedure AsnEncOidItem(Value: PtrUInt; var Result: shortstring);
 var
-  tmp: array[0..15] of byte;
+  tmp: array[0..15] of byte; // written in reverse order (big endian)
+  vl, rl: PtrInt;
   r: PByte;
 begin
   r := @tmp[14];
@@ -7535,22 +7536,27 @@ begin
     r^ := byte(Value) or $80;
     Value := Value shr 7;
   end;
-  FastSetRawByteString(result, r, PAnsiChar(@tmp[15]) - pointer(r));
+  rl := ord(Result[0]);
+  vl := PAnsiChar(@tmp[15]) - pointer(r);
+  inc(Result[0], vl);
+  MoveFast(r^, Result[rl + 1], vl);
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
 var
   x: PtrUInt;
+  tmp: ShortString; // no temporary memory allocation
 begin
-  result := '';
+  tmp[0] := #0;
   // first byte = two first numbers modulo 40
   x := GetNextItemCardinal(OidText, '.') * 40;
   while OidText <> nil do
   begin
     inc(x, GetNextItemCardinal(OidText, '.'));
-    Append(result, AsnEncOidItem(x));
+    AsnEncOidItem(x, tmp);
     x := 0;
   end;
+  FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
 end;
 
 function AsnDecOidItem(var Pos: integer; const Buffer: TAsnObject): cardinal;
