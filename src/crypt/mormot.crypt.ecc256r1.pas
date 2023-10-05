@@ -161,13 +161,21 @@ var
 procedure Ecc256r1Compress(const Uncompressed: TEccPublicKeyUncompressed;
   out Compressed: TEccPublicKey);
 
-/// compress an ASN-1 public key for ECC secp256r1 cryptography
-// - input is likely to have a $04 initial byte for ASN-1 uncompressed key
+/// decode an uncompressed ASN-1 public key for ECC secp256r1 cryptography
+// - input is likely to have a $04 initial byte for ASN-1 uncompressed key,
+// as stored in a X509 Certificate SubjectPublicKey field
+function Ecc256r1ExtractAsn1(const Asn1: RawByteString;
+  out Uncompressed: TEccPublicKeyUncompressed): boolean;
+
+/// compress an uncompressed ASN-1 public key for ECC secp256r1 cryptography
+// - input is likely to have a $04 initial byte for ASN-1 uncompressed key,
+// as stored in a X509 Certificate SubjectPublicKey field
 function Ecc256r1CompressAsn1(const Uncompressed: RawByteString;
   out Compressed: TEccPublicKey): boolean;
 
-/// compress an ECC secp256r1 cryptography public key as expected by ASN-1
+/// save an ECC secp256r1 cryptography public key as expected by ASN-1
 // - include a $04 initial byte as uncompressed key, and change endianness
+// - as stored in a X509 Certificate SubjectPublicKey field
 function Ecc256r1UncompressAsn1(const Compressed: TEccPublicKey): RawByteString;
 
 /// just a wrapper around Ecc256r1Verify/Ecc256r1VerifyUncomp depending on pubunc
@@ -1216,17 +1224,17 @@ begin
   _bswap256(@Compressed[1], @TEccPoint(Uncompressed).x);
 end;
 
-function Ecc256r1CompressAsn1(const Uncompressed: RawByteString;
-  out Compressed: TEccPublicKey): boolean;
+function Ecc256r1ExtractAsn1(const Asn1: RawByteString;
+  out Uncompressed: TEccPublicKeyUncompressed): boolean;
 var
   len: integer;
   p: PHash512Rec;
-  u: THash512Rec;
+  u: THash512Rec absolute Uncompressed;
 begin
   result := false;
-  FillCharFast(Compressed, SizeOf(Compressed), 0);
-  len := length(Uncompressed);
-  p := pointer(Uncompressed);
+  FillCharFast(Uncompressed, SizeOf(Uncompressed), 0);
+  len := length(Asn1);
+  p := pointer(Asn1);
   if (len = SizeOf(TEccPublicKeyUncompressed) + 1) and
      (p.b[0] = 4) then
   begin
@@ -1237,8 +1245,17 @@ begin
     exit;
   _bswap256(@u.l, @p.l); // change endianness
   _bswap256(@u.h, @p.h);
-  Ecc256r1Compress(TEccPublicKeyUncompressed(u), Compressed);
   result := true;
+end;
+
+function Ecc256r1CompressAsn1(const Uncompressed: RawByteString;
+  out Compressed: TEccPublicKey): boolean;
+var
+  u: TEccPublicKeyUncompressed;
+begin
+  result := Ecc256r1ExtractAsn1(Uncompressed, u);
+  if result then
+    Ecc256r1Compress(u, Compressed);
 end;
 
 function Ecc256r1UncompressAsn1(const Compressed: TEccPublicKey): RawByteString;

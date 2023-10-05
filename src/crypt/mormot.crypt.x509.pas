@@ -334,7 +334,7 @@ type
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TX509SignatureAlgorithm;
     fRsa: TRsa;
-    fEcc: TEccPublicKey;
+    fEcc: TEcc256r1VerifyAbstract;
     fSafe: TLightLock;
     procedure ComputeAsn;
     function ComputeDigest(Algo: TX509SignatureAlgorithm): TSha256Digest;
@@ -859,6 +859,7 @@ destructor TX509.Destroy;
 begin
   inherited Destroy;
   fRsa.Free;
+  fEcc.Free;
 end;
 
 procedure TX509.Clear;
@@ -868,7 +869,7 @@ begin
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
   FreeAndNil(fRsa);
-  FillCharFast(fEcc, SizeOf(fEcc), 0);
+  FreeAndNil(fEcc);
 end;
 
 procedure TX509.SignRsa(RsaAuthority: TRsa);
@@ -955,8 +956,9 @@ end;
 function TX509.RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
   Hash: THashAlgo): boolean;
 var
-  eccsig: TEccSignature;
   hasher: TSynHasher;
+  eccpub: TEccPublicKey absolute hasher;
+  eccsig: TEccSignature;
   dig: THash512Rec;
   diglen: PtrInt;
   oid: RawUtf8;
@@ -995,20 +997,23 @@ begin
       xkaEcc256:
         if DerToEcc(pointer(Signature), length(Signature), eccsig) then
         begin
-          if PPtrInt(@fEcc)^ = 0 then
+          if fEcc = nil then
           begin
             fSafe.Lock;
             try
               // load the public key into a local fEcc reusable instance
-              if IsZero(fEcc) then
-                if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, fEcc) then
+              if fEcc = nil then
+              begin
+                if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
                   exit;
+                fEcc := TEcc256r1Verify.Create(eccpub);
+              end;
             finally
               fSafe.UnLock;
             end;
           end;
           // secp256r1 digital signature verification
-          result := Ecc256r1Verify(fEcc, dig.Lo, eccsig);
+          result := fEcc.Verify(dig.Lo, eccsig);
         end;
     end;
 end;
