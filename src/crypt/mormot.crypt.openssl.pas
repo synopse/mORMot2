@@ -2961,8 +2961,8 @@ begin
     raise EOpenSslCert.Create('Unexpected X509Algo()');
 end;
 
-function _CreateDummyCertificate(const Stuff: RawUtf8;
-  const CertName: RawUtf8; Marker: cardinal): RawByteString;
+function _CreateDummyCertificate(
+  const Stuff, CertName: RawUtf8; Marker: cardinal): RawByteString;
 const
   EXPIRED_DATE = '20000101000000Z'; // won't be taken into account anyway
 var

@@ -86,6 +86,7 @@ type
     xeAuthorityKeyIdentifier,  // 35
     xePolicyConstraints,       // 36
     xeExtendedKeyUsage,        // 37
+    xeAuthorityInformationAccess,
     xeGoogleSignedCertificateTimestamp,
     xeNetscapeComment);
 
@@ -176,19 +177,24 @@ type
     /// convert Name[a] from CSV to an array of RawUtf8
     function NameArray(a: TXAttr): TRawUtf8DynArray;
     /// the raw ASN1_SEQ encoded value of this name
+    // - is cached internally for efficiency
     function ToBinary: RawByteString;
     /// return the values as a single line Distinguished Name text
     // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    // - is cached internally for efficiency
     function AsDNText: RawUtf8;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
-    /// to be called once any field has been changed to refresh the Binary cache
-    procedure AfterModified;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
+    /// to be called once any field has been changed to refresh internal caches
+    procedure AfterModified;
   end;
+
+/// efficient search of a TXOther.Value from a 'x.x.x.x.x' text OID
+function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
 
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
@@ -276,6 +282,7 @@ const
     '2.5.29.35',                 // xeAuthorityKeyIdentifier
     '2.5.29.36',                 // xePolicyConstraints
     '2.5.29.37',                 // xeExtendedKeyUsage
+    '1.3.6.1.5.5.7.1.1',         // xeAuthorityInformationAccess
     '1.3.6.1.4.1.11129.2.4.2',   // xeGoogleSignedCertificateTimestamp
     '2.16.840.1.113730.1.13');   // xeNetscapeComment
 
@@ -390,6 +397,7 @@ type
   /// a X.509 signed Certificate, as defined in RFC 5280
   TX509 = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fCachedDer: RawByteString;
     fCachedSha1: RawUtf8;
     fCachedPeerInfo: RawUtf8;
@@ -397,10 +405,8 @@ type
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fRsa: TRsa;
     fEcc: TEcc256r1VerifyAbstract;
-    fSafe: TLightLock;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
-    function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
     function GetSerialNumber: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetIssuerDN: RawUtf8;
@@ -408,11 +414,14 @@ type
     function GetSubjectDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
+    procedure ToInfo(out Info: TX509Parsed);
+    function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
+    procedure SignRsa(RsaAuthority: TRsa);
+    procedure SignEcc(const EccKey: TEccPrivateKey);
     /// verify some buffer with the stored Signed.SubjectPublicKey
     // - will maintain an internal RSA or ECC256 public key instance
     function RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
       Hash: THashAlgo): boolean;
-    procedure ToInfo(out Info: TX509Parsed);
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
@@ -424,10 +433,6 @@ type
     destructor Destroy; override;
     /// reset all internal context
     procedure Clear;
-    /// generate the SignatureAlgorithm/SignatureValue using a RSA private key
-    procedure SignRsa(RsaAuthority: TRsa);
-    /// generate the SignatureAlgorithm/SignatureValue using a ECC256 private key
-    procedure SignEcc(const EccKey: TEccPrivateKey);
     /// verify the digital signature of this Certificate using a X.509 Authority
     // - depending on the engine, some errors can be ignored, e.g.
     // cvWrongUsage or cvDeprecatedAuthority
@@ -456,6 +461,7 @@ type
     function SubjectAlternativeNames: TRawUtf8DynArray;
     /// return some multi-line text of the main information of this Certificate
     // - in a layout similar to X509_print() OpenSSL usual formatting
+    // - is cached internally for efficiency
     function PeerInfo: RawUtf8;
     /// main properties of the entity associated with the public key stored
     // in this certificate
@@ -788,6 +794,31 @@ begin
 end;
 
 
+function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
+var
+  n: integer;
+  o: ^TXOther;
+  oid: RawByteString;
+begin
+  result := '';
+  if Other = nil then
+    exit;
+  oid := AsnEncOid(pointer(OidText));
+  if oid = '' then
+    exit;
+  o := pointer(Other);
+  n := length(Other);
+  repeat
+    if o^.Oid = oid then // efficient search
+    begin
+      result := o^.Value;
+      exit;
+    end;
+    inc(o);
+    dec(n);
+  until n = 0;
+end;
+
 function ToText(a: TXAttr): PShortString;
 begin
   result := GetEnumName(TypeInfo(TXAttr), ord(a));
@@ -853,9 +884,9 @@ end;
 
 procedure TXTbsCertificate.AddNextExtensions(pos: integer; const der: TAsnObject);
 var
-  ext, oid, v: RawByteString;
+  ext, oid, seq, v: RawByteString;
   decoded: RawUtf8;
-  vt, extpos: integer;
+  vt, extpos, seqpos: integer;
   xe: TXExtension;
   xku: TXExtendedKeyUsage;
   critical: boolean;
@@ -864,7 +895,7 @@ begin
   while (AsnNext(pos, der) = ASN1_SEQ) and
         (AsnNextRaw(pos, der, oid) = ASN1_OBJID) do
   begin
-    // loop for each extension
+    // loop for each X.509 v3 extension
     critical := false;
     vt := AsnNextRaw(pos, der, ext);
     if vt = ASN1_BOOL then // optional Critical flag
@@ -918,7 +949,7 @@ begin
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
              (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
              (v = #$ff) then
-            decoded := 'CA'; // as expected by IsCertificateAuthority
+            decoded := 'CA'; // as expected by cuCA usage flag
         xeKeyUsage:                  // RFC 5280 #4.2.1.3
           if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
              (v <> '') and
@@ -937,6 +968,35 @@ begin
               if xku <> xkuNone then
                 include(ExtendedKeyUsages, xku);
             end;
+        xeAuthorityInformationAccess: // RFC 5280 #4.2.2.1
+          // e.g. 'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/'
+          if AsnNext(extpos, ext) = ASN1_SEQ then
+            while (AsnNext(extpos, ext) = ASN1_SEQ) and
+                  (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and
+                  (AsnNext(extpos, ext, @v) = ASN1_CTX6) do
+            begin
+              if oid = '1.3.6.1.5.5.7.48.1' then
+                Prepend(v, 'ocsp=')
+              else if oid = '1.3.6.1.5.5.7.48.2' then
+                Prepend(v, 'caIssuers=')
+              else
+                continue;
+              EnsureRawUtf8(v);
+              AddToCsv(v, decoded);
+            end;
+        xeCertificatePolicies:      // RFC 5280 #4.2.1.4
+          if AsnNext(extpos, ext) = ASN1_SEQ then
+          begin
+            while AsnNextRaw(extpos, ext, seq) = ASN1_SEQ do
+            begin
+              seqpos := 1;
+              if AsnNext(seqpos, seq, @oid) = ASN1_OBJID then
+                AddToCsv(oid, decoded);
+            end;
+          end;
+        xeNetscapeComment:
+          if AsnNext(extpos, ext, @v) in ASN1_TEXT then // typically IA5String
+            decoded := v;
       end;
       if decoded <> '' then
         Extension[xe] := decoded;
@@ -1041,6 +1101,7 @@ begin
      (AsnNextRaw(pos, der, SubjectPublicKey) <> ASN1_BITSTR) then
     exit;
   SubjectPublicKeyBits := X509PubKeyBits(SubjectPublicKey);
+  // handle X.509 v3 extensions
   if (Version = 3) and
      (AsnNext(pos, der) = ASN1_CTC3) and
      (AsnNext(pos, der) = ASN1_SEQ) then

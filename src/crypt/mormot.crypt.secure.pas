@@ -2834,7 +2834,8 @@ var
   /// low-level function used by StuffExeCertificate()
   // - properly implemented by mormot.crypt.openssl.pas, but this unit
   // has a stand-alone version using a pre-generated fixed certificate
-  CreateDummyCertificate: function(const Stuff: RawUtf8; const CertName: RawUtf8;
+  // - warning: the Marker should have no 0 byte within
+  CreateDummyCertificate: function(const Stuff, CertName: RawUtf8;
     Marker: cardinal): RawByteString;
 
 /// create a NewFile executable from adding some text to MainFile digital signature
@@ -8019,7 +8020,7 @@ begin
       // ASN1_UTF8STRING, ASN1_OCTSTR, ASN1_OPAQUE or unknown
       begin
         Value^ := copy(Buffer, Pos, asnsize); // return as raw binary
-        DetectRawUtf8(Value^); // detect and mark as CP_UTF8 for FPC RTL bug
+        DetectRawUtf8(Value^); // detect and mark CP_UTF8 to please the FPC RTL
         inc(Pos, asnsize);
       end;
     end;
