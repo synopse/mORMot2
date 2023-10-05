@@ -1977,6 +1977,15 @@ function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
 function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteString;
   PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
+/// generate some 'xx:xx:xx:xx' output buffer with left and right margins
+// - used e.g. by ToText(TX509Parsed) to output X509 public key content
+function BinToHumanHex(Data: PByte; Len: integer; PerLine: integer = 16;
+  LeftTab: integer = 0; SepChar: AnsiChar = ':'): RawUtf8; overload;
+
+/// generate some 'xx:xx:xx:xx' output buffer with left and right margins
+procedure BinToHumanHex(W: TTextWriter; Data: PByte; Len: integer;
+  PerLine: integer = 16; LeftTab: integer = 0; SepChar: AnsiChar = ':'); overload;
+
 
 { *************************** TStreamRedirect and other Hash process }
 
@@ -9167,7 +9176,7 @@ begin
     for i := 1 to line do
     begin
       Dest.Add(' ', '$');
-      Dest.AddByteToHex(P^);
+      Dest.AddByteToHexLower(P^);
       inc(P);
       Dest.AddComma;
     end;
@@ -9176,6 +9185,46 @@ begin
   Dest.CancelLastComma;
   Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
 end;
+
+function BinToHumanHex(Data: PByte; Len, PerLine, LeftTab: integer;
+  SepChar: AnsiChar): RawUtf8;
+var
+  w: TTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  w := TTextWriter.CreateOwnedStream(temp);
+  try
+    BinToHumanHex(w, Data, Len, PerLine, LeftTab, SepChar);
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+procedure BinToHumanHex(W: TTextWriter; Data: PByte;
+  Len, PerLine, LeftTab: integer; SepChar: AnsiChar);
+var
+  n: integer;
+begin
+  if Data <> nil then
+    while Len > 0 do
+    begin
+      W.AddChars(' ', LeftTab);
+      n := PerLine;
+      repeat
+        W.AddByteToHexLower(Data^);
+        inc(Data);
+        W.Add(SepChar);
+        dec(Len);
+        if Len = 0 then
+          break;
+        dec(n);
+      until n = 0;
+      W.CancelLastChar;
+      W.AddCR;
+    end;
+end;
+
 
 { *************************** TStreamRedirect and other Hash process }
 

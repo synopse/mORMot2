@@ -807,6 +807,10 @@ type
     procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
     /// write a byte as two hexa chars
     procedure AddByteToHex(Value: PtrUInt);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// write a byte as two hexa chars
+    procedure AddByteToHexLower(Value: PtrUInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// write a Int18 value (0..262143) as 3 chars
     // - this encoding is faster than Base64, and has spaces on the left side
     // - use function Chars3ToInt18() to decode the textual content
@@ -4549,6 +4553,14 @@ begin
   if B >= BEnd then
     FlushToStream;
   PWord(B + 1)^ := TwoDigitsHexWB[Value];
+  inc(B, 2);
+end;
+
+procedure TTextWriter.AddByteToHexLower(Value: PtrUInt);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  PWord(B + 1)^ := TwoDigitsHexWBLower[Value];
   inc(B, 2);
 end;
 
