@@ -1354,17 +1354,26 @@ end;
 
 function TX509.GetSerialNumber: RawUtf8;
 begin
-  result := Signed.SerialNumberHex;
+  if self = nil then
+    result := ''
+  else
+    result := Signed.SerialNumberHex;
 end;
 
 function TX509.GetIssuerDN: RawUtf8;
 begin
-  result := Signed.Issuer.AsDNText;
+  if self = nil then
+    result := ''
+  else
+    result := Signed.Issuer.AsDNText;
 end;
 
 function TX509.GetSubjectDN: RawUtf8;
 begin
-  result := Signed.Subject.AsDNText;
+  if self = nil then
+    result := ''
+  else
+    result := Signed.Subject.AsDNText;
 end;
 
 function TX509.GetSubjectPublicKeyAlgorithm: RawUtf8;
@@ -1433,16 +1442,25 @@ end;
 
 function TX509.IsSelfSigned: boolean;
 begin
-  result := Signed.Issuer.ToBinary = Signed.Subject.ToBinary;
+  result := (self <> nil) and
+            (Signed.Issuer.ToBinary = Signed.Subject.ToBinary);
 end;
 
 function TX509.SubjectAlternativeNames: TRawUtf8DynArray;
 begin
-  result := Signed.ExtensionArray(xeSubjectAlternativeName);
+  if self = nil then
+    result := nil
+  else
+    result := Signed.ExtensionArray(xeSubjectAlternativeName);
 end;
 
 function TX509.PeerInfo: RawUtf8;
 begin
+  if self = nil then
+  begin
+    result := '';
+    exit;
+  end;
   if fCachedPeerInfo = '' then
     ComputeCachedPeerInfo;
   result := fCachedPeerInfo;
