@@ -3602,8 +3602,7 @@ function GetDiskPartitions: TDiskPartitions;
 /// call several Operating System APIs to gather 512-bit of entropy information
 procedure XorOSEntropy(var e: THash512Rec);
 
-/// low-level function returning some random binary from then available
-// Operating System pseudorandom source
+/// low-level function returning some random binary from the Operating System
 // - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
 // on Windows then return TRUE, or fallback to mormot.core.base gsl_rng_taus2
 // generator and return FALSE if the system API failed

@@ -2580,6 +2580,8 @@ var
   rd, dev: integer;
 begin
   result := false;
+  if Len <= 0 then
+    exit;
   dev := FileOpenSequentialRead('/dev/urandom');  // non blocking on Linux + BSD
   if (dev <= 0) and
      AllowBlocking then

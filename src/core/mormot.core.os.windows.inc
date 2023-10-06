@@ -1940,6 +1940,8 @@ var
   prov: HCRYPTPROV;
 begin
   result := false;
+  if Len <= 0 then
+    exit;
   // warning: on some Windows versions, this could take up to 30 ms!
   if CryptoApi.Available then
     if CryptoApi.AcquireContextA(prov, nil, nil,
