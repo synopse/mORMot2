@@ -1365,12 +1365,10 @@ procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
   StrType: cardinal);
 var
   len: PtrInt;
-  tmp: TSynTempBuffer;
+  tmp: array[0..4095] of WideChar;
 begin
-  len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, nil, 0);
-  len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, tmp.Init(len), len);
-  Win32PWideCharToUtf8(tmp.buf, len - 1, Text);
-  tmp.Done;
+  len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, @tmp, SizeOf(tmp));
+  Win32PWideCharToUtf8(@tmp, len - 1, Text);
 end;
 
 function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;

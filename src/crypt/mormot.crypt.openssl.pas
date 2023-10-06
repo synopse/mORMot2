@@ -3008,7 +3008,7 @@ var
   x: PX509;
 begin
   result := false;
-  x := LoadCertificate(Cert);
+  x := LoadCertificate(PemToDer(Cert));
   if x <> nil then
     try
       Info.Serial := x.SerialNumber;
@@ -3023,6 +3023,8 @@ begin
       TX509Usages(Info.Usage) := x.GetUsage; // match TX509Usages 16-bit
       Info.NotBefore := x.NotBefore;
       Info.NotAfter := x.NotAfter;
+      Info.SubjectAltNames :=
+        RawUtf8ArrayToCsv(x.SubjectAlternativeNames, ', ');
       result := true;
     finally
       x.Free;

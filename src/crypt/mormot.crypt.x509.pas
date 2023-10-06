@@ -523,8 +523,14 @@ type
   end;
 
 
-implementation
+{ **************** Registration of our X.509 Engine to the TCryptCert Factory }
 
+/// high-level function to decode X509 certificate main properties using TX509
+// - assigned to mormot.core.secure X509Parse() redirection by this unit
+function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+
+
+implementation
 
 
 { **************** X.509 Encoding Decoding}
@@ -1478,7 +1484,9 @@ begin
 end;
 
 
-function _X509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+{ **************** Registration of our X.509 Engine to the TCryptCert Factory }
+
+function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 var
   x: TX509;
 begin
@@ -1506,8 +1514,9 @@ begin
   for k := succ(low(k)) to high(k) do
     XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
   // use our class for X.509 parsing
-  X509Parse := @_X509Parse;
+  X509Parse := @TX509Parse;
 end;
+
 
 
 initialization

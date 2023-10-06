@@ -2636,6 +2636,10 @@ function ToText(const c: TX509Parsed): RawUtf8; overload;
 var
   X509Parse: function(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
+{$ifdef OSWINDOWS}
+/// the raw mormot.lib.sspi parser - published for testing
+function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+{$endif OSWINDOWS}
 
 
 { **************** Basic ASN.1 Support }
@@ -7518,17 +7522,20 @@ begin
     KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
     KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
     if cuCA in c.Usage then
-      result := result + '    X509v3 Basic Constraints: critical'#13#10 +
-                         '      CA:TRUE'#13#10;
-    if c.SubjectAltNames <> '' then
-      result := result + '    X509v3 Subject Alternative Name:'#13#10 +
-                         '      ' + c.SubjectAltNames + #13#10;
+      bits := 'TRUE'
+    else
+      bits := 'FALSE';
+    result := result + '    X509v3 Basic Constraints: critical'#13#10 +
+                       '      CA:' + bits + #13#10;
     if c.SubjectID <> '' then
       result := result + '    X509v3 Subject Key Identifier:'#13#10 +
                          '      ' + c.SubjectID + #13#10;
     if c.IssuerID <> '' then
       result := result + '    X509v3 Authority Key Identifier:'#13#10 +
                          '      ' + c.IssuerID + #13#10;
+    if c.SubjectAltNames <> '' then
+      result := result + '    X509v3 Subject Alternative Name:'#13#10 +
+                         '      ' + c.SubjectAltNames + #13#10;
   end;
 end;
 
@@ -7555,7 +7562,7 @@ function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean
 var
   c: TWinCertInfo;
 begin
-  result := WinCertDecode(Cert, c);
+  result := WinCertDecode(PemToDer(Cert), c);
   if result then
     WinInfoToParse(c, Info);
 end;
