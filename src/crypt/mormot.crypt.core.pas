@@ -1594,6 +1594,9 @@ type
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUtf8;
+    /// xor a binary buffer with some pseudorandom data
+    // - call FillRandom then xor the supplied buffer content
+    procedure XorRandom(Buffer: pointer; Len: integer);
     /// returns a 32-bit unsigned random number
     // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
     // is cryptographic secure
@@ -3242,6 +3245,7 @@ const
 begin
   // no need to XOR with P.Hi since P input is from an AES permutation algorithm
   result := (P.Lo and $7fffffffffffffff) * COEFF64;
+  P.Lo := 0;
 end;
 
 function Hash128ToDouble(P: PHash128Rec): double;
@@ -3250,6 +3254,7 @@ const
 begin
   // no need to XOR with P.Lo since P input is from an AES permutation algorithm
   result := (P.Hi and $7fffffffffffffff) * COEFF64;
+  P.Hi := 0;
 end;
 
 function Hash128ToSingle(P: PHash128Rec): single;
@@ -3258,6 +3263,7 @@ const
 begin
   // no need to XOR with P.Hi since P input is from an AES permutation algorithm
   result := (P.Lo and $7fffffffffffffff) * COEFF64;
+  P.Lo := 0;
 end;
 
 function Adler32Pas(Adler: cardinal; p: pointer; Count: integer): cardinal;
@@ -7486,20 +7492,35 @@ begin
   BinToHexLower(bin, pointer(result), Len);
 end;
 
+procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: integer);
+var
+  tmp: array[0..4095] of byte;
+  n: integer;
+begin
+  while Len > 0 do
+  begin
+    n := SizeOf(tmp);
+    if n > Len then
+      n := Len;
+    FillRandom(@tmp, n);
+    XorMemory(Buffer, @tmp, n);
+    dec(Len, n);
+  end;
+  FillCharFast(tmp, SizeOf(tmp), 0); // avoid leaking the secret on the stack
+end;
+
 function TAesPrngAbstract.Random32: cardinal;
 var
   block: THash128Rec;
 begin
   FillRandom(block.b);
   result := block.c0; // no need to XOR with c1, c2, c3 for a permutation algo
+  block.L := 0;
 end;
 
 function TAesPrngAbstract.Random32(max: cardinal): cardinal;
-var
-  block: THash128Rec;
 begin
-  FillRandom(block.b);
-  result := (QWord(block.c0) * max) shr 32; // no need to XOR with block.H
+  result := (QWord(Random32) * max) shr 32;
 end;
 
 function TAesPrngAbstract.Random64: QWord;
@@ -7508,6 +7529,7 @@ var
 begin
   FillRandom(block.b);
   result := block.L; // no need to XOR with block.H
+  block.L := 0;
 end;
 
 function TAesPrngAbstract.RandomExt: TSynExtended;
