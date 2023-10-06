@@ -2317,6 +2317,10 @@ const
     'OCSP Signing',                  // cuOcspSign
     'Time Stamping');                // cuTimestamp
 
+/// compute the number of security bits of a digital signature
+// - e.g. 112 for RSA-2048, 128 for ECC-256
+function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
+
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
@@ -6677,6 +6681,37 @@ begin
 end;
 
 
+function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
+begin
+  result := 0;
+  len := len shl 3; // into bits
+  if len > 128 then
+    case a of
+      // ECC security size is half its X,Y coordinates storage size
+      caaES256,
+      caaES256K,
+      caaEdDSA:
+        result := 128;
+      caaES384:
+        result := 192;
+      caaES512:
+        result := 256;
+      // RSA security depends on the signature size, not the hash size
+      caaRS256 .. caaPS512:
+        if len < 1024 then
+          result := 30
+        else if len < 2048 then
+          result := 80
+        else if len < 3072 then
+          result := 112
+        else if len < 7680 then
+          result := 128
+        else if len < 15360 then
+          result := 192
+        else
+          result := 256;
+    end;
+end;
 
 function ToText(r: TCryptCertRevocationReason): PShortString;
 begin

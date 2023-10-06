@@ -455,6 +455,9 @@ type
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
     /// check if the Certificate Issuer is also its Subject
     function IsSelfSigned: boolean;
+    /// compute the number of security bits of the digital signature
+    // - e.g. 112 for RSA-2048, 128 for ECC-256
+    function SignatureSecurityBits: integer;
     /// an array of (DNS) Subject names covered by this Certificate
     // - convert the Extension[xeSubjectAlternativeName] CSV as a RawUtf8 array
     function SubjectAlternativeNames: TRawUtf8DynArray;
@@ -1433,6 +1436,16 @@ function TX509.IsSelfSigned: boolean;
 begin
   result := (self <> nil) and
             (Signed.Issuer.ToBinary = Signed.Subject.ToBinary);
+end;
+
+function TX509.SignatureSecurityBits: integer;
+begin
+  if (self <> nil) and
+     (SignatureAlgorithm <> xsaNone) then
+    result := GetSignatureSecurityBits(
+      XSA_TO_AA[SignatureAlgorithm], length(SignatureValue))
+  else
+    result := 0;
 end;
 
 function TX509.SubjectAlternativeNames: TRawUtf8DynArray;
