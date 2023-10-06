@@ -417,9 +417,8 @@ type
     function ComputeDigest(Algo: TXSignatureAlgorithm): TSha256Digest;
     procedure SignRsa(RsaAuthority: TRsa);
     procedure SignEcc(const EccKey: TEccPrivateKey);
+    // maintain fRsa/fEcc instances from stored Signed.SubjectPublicKey
     function LoadRsaEccInstance: boolean;
-    /// verify some buffer with the stored Signed.SubjectPublicKey
-    // - will maintain an internal RSA or ECC256 public key instance
     function RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
       Hash: THashAlgo): boolean;
   public
@@ -1232,27 +1231,22 @@ var
   eccpub: TEccPublicKey;
 begin
   result := false;
-  if (self <> nil) and
-     (Signed.SubjectPublicKey <> '') then
+  if (self = nil) or
+     (Signed.SubjectPublicKey = '') then
+    exit;
+  fSafe.Lock;
+  try
     case Signed.SubjectPublicKeyAlgorithm of
       xkaRsa:
         begin
           if fRsa = nil then
           begin
-            fSafe.Lock;
-            try
-              if fRsa = nil then
-              begin
-                // load the public key into a local fRsa reusable instance
-                fRsa := TRsa.Create;
-                if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
-                begin
-                  FreeAndNil(fRsa);
-                  exit;
-                end;
-              end;
-            finally
-              fSafe.UnLock;
+            // load the public key into a local fRsa reusable instance
+            fRsa := TRsa.Create;
+            if not fRsa.LoadFromPublicKeyDer(Signed.SubjectPublicKey) then
+            begin
+              FreeAndNil(fRsa);
+              exit;
             end;
           end;
           result := true;
@@ -1261,22 +1255,17 @@ begin
         begin
           if fEcc = nil then
           begin
-            fSafe.Lock;
-            try
-              // load the public key into a local fEcc reusable instance
-              if fEcc = nil then
-              begin
-                if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
-                  exit;
-                fEcc := TEcc256r1Verify.Create(eccpub);
-              end;
-            finally
-              fSafe.UnLock;
-            end;
+            // load the public key into a local fEcc reusable instance
+            if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
+              exit;
+            fEcc := TEcc256r1Verify.Create(eccpub);
           end;
           result := true;
         end;
     end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TX509.RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
