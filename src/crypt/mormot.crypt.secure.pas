@@ -2318,6 +2318,8 @@ const
     'Time Stamping');                // cuTimestamp
 
 /// compute the number of security bits of a digital signature
+// - ECC security size is half of its X,Y coordinates storage size
+// - RSA security depends on the signature size, not the hash size
 // - e.g. 112 for RSA-2048, 128 for ECC-256
 function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
 
@@ -2511,7 +2513,8 @@ type
     pemSynopseSignature,
     pemSynopseCertificate,
     pemSynopseUnencryptedPrivateKey,
-    pemSynopseEncryptedPrivateKey,
+    pemSynopseEccEncryptedPrivateKey,
+    pemSynopseRsaEncryptedPrivateKey,
     pemSynopsePrivateKeyAndCertificate);
   PPemKind = ^TPemKind;
 
@@ -2538,6 +2541,7 @@ const
     '-----BEGIN SYNECC CERTIFICATE-----'#13#10,
     '-----BEGIN SYNECC PRIVATE KEY-----'#13#10,
     '-----BEGIN SYNECC ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----BEGIN SYNRSA ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
   /// the supported ending markers of a PEM text instance
@@ -2561,6 +2565,7 @@ const
     '-----END SYNECC CERTIFICATE-----'#13#10,
     '-----END SYNECC PRIVATE KEY-----'#13#10,
     '-----END SYNECC ENCRYPTED PRIVATE KEY-----'#13#10,
+    '-----END SYNRSA ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
   /// our proprietary SYNECC TPemKind formats
@@ -2568,7 +2573,7 @@ const
                  pemSynopseCertificate,
                  pemSynopseUnencryptedPrivateKey,
                  pemSynopsePrivateKeyAndCertificate,
-                 pemSynopseEncryptedPrivateKey];
+                 pemSynopseEccEncryptedPrivateKey];
 
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem; overload;
@@ -2747,6 +2752,12 @@ const
   /// encode a boolean value into ASN.1 binary
   ASN1_BOOLEAN_VALUE: array[boolean] of TAsnObject = (
     RawByteString(#$01#$01#$00),
+    RawByteString(#$01#$01#$ff));
+
+  /// encode a boolean value into nothing or true as ASN.1 binary
+  // - as used e.g. in X.509 v3 extensions optional fields
+  ASN1_BOOLEAN_NONE: array[boolean] of TAsnObject = (
+    '',
     RawByteString(#$01#$01#$ff));
 
   /// encode a 0 value into ASN.1 binary
@@ -6712,7 +6723,7 @@ begin
   len := len shl 3; // into bits
   if len > 128 then
     case a of
-      // ECC security size is half its X,Y coordinates storage size
+      // ECC security size is half of its X,Y coordinates storage size
       caaES256,
       caaES256K,
       caaEdDSA:
@@ -6724,17 +6735,17 @@ begin
       // RSA security depends on the signature size, not the hash size
       caaRS256 .. caaPS512:
         if len < 1024 then
-          result := 30
+          result := 30           // 512-bit
         else if len < 2048 then
-          result := 80
+          result := 80           // 1024-bit
         else if len < 3072 then
-          result := 112
+          result := 112          // 2048-bit
         else if len < 7680 then
-          result := 128
+          result := 128          // 3072-bit
         else if len < 15360 then
-          result := 192
+          result := 192          // 7680-bit: very unlikely since very slow
         else
-          result := 256;
+          result := 256; // the lower RS256 hash has 256-bit of security anyway
     end;
 end;
 
