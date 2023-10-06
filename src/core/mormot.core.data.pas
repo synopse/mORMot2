@@ -7672,7 +7672,7 @@ procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJsonFormat);
 begin
   SaveToJson(result, TEXTWRITEROPTIONS_ENUMASTEXT[EnumSetsAsText],
-    TEXTWRITEROBJECTOPTIONS_ENUMASTEXT[EnumSetsAsText]);
+    TEXTWRITEROBJECTOPTIONS_ENUMASTEXT[EnumSetsAsText], reformat);
 end;
 
 procedure TDynArray.SaveToJson(out result: RawUtf8; Options: TTextWriterOptions;
