@@ -1383,6 +1383,7 @@ function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
 var
   n, min: integer;
+  last32: PCardinal;
 begin
   n := Size;
   result := n > 2;
@@ -1412,20 +1413,45 @@ begin
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 §B.3.3 steps 4.4, 5.5
-  min := 1024;
+  min := 16;
+  last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
+  // since randomness may be a weak point, start from several trusted sources
+  FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but audited
+  {$ifdef CPUINTEL}
+  RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU
+  {$endif CPUINTEL}
   repeat
-    TAesPrng.Fill(Value, n * HALF_BYTES); // our cryptographic PRNG
+    // xor the original trusted sources with our CSPRNG
+    TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
+    if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
+    begin
+      // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
+      // with our TAesPrng, it did never occur after 1000000000 trials
+      dec(min);
+      if min = 0 then
+        exit; // too weak PNRG for sure
+      continue;
+    end;
+    // should be a big enough odd number
     Value[0] := Value[0] or 1; // set lower bit to ensure is an odd number
-    Value[n - 1] := Value[n - 1] or (RSA_RADIX shr 1); // exact bit size
-    dec(min);
-    if min = 0 then
-      exit; // too weak PNRG for sure
-  until PCardinal(@Value[n - 1 {$ifdef CPU32} - 1 {$endif}])^ >= FIPS_MIN;
+    if last32^ < FIPS_MIN then
+      last32^ := last32^ or $b5050000; // let's grow up
+    if (Value[n - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
+       (last32^ >= FIPS_MIN) then
+      break;
+    raise ERsaException.Create('TBigInt.FillPrime FIPS_MIN'); // paranoid
+  until false;
   // search for the next prime starting at this point
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
     IntAdd(2); // incremental search - see HAC 4.51
+    while last32^ < FIPS_MIN do
+    begin
+      // handle IntAdd overflow - paranoid
+      TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
+      Value[0] := Value[0] or 1;
+    end;
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
   result := false; // timed out
 end;
