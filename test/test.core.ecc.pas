@@ -131,6 +131,8 @@ begin
   FillZero(s3);
   Check(ecdh_shared_secret_pas(pu2, pr1, s3));
   Check(IsEqual(s1, s3));
+  Check(Ecc256r1MatchKeys(pr1, pu1), 'prpu1');
+  Check(Ecc256r1MatchKeys(pr2, pu2), 'prpu1');
 end;
 
 procedure TTestCoreEcc.ECC;
@@ -142,6 +144,7 @@ var
   c1, c2: TEccPublicKey;
 begin
   Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
+  Check(Ecc256r1MatchKeys(priv[0], pub[0]), 'match0');
   timer.Start;
   for i := 1 to ECC_COUNT - 1 do
     Check(Ecc256r1MakeKey(pub[i], priv[i])); // may be OpenSSL
@@ -153,6 +156,7 @@ begin
   NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   for i := 1 to ECC_COUNT - 1 do
   begin
+    Check(Ecc256r1MatchKeys(priv[i], pub[i]), 'match');
     Ecc256r1Compress(pubunc[i], c1); // fast enough, but ensure accurate
     Check(CompareMem(@c1, @pub[i], SizeOf(c1)), 'Ecc256r1Compress');
     Ecc256r1CompressAsn1(Ecc256r1UncompressAsn1(c1), c2);
