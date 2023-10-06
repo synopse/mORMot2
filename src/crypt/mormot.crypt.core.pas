@@ -7494,9 +7494,12 @@ end;
 
 procedure TAesPrngAbstract.XorRandom(Buffer: pointer; Len: integer);
 var
-  tmp: array[0..4095] of byte;
-  n: integer;
+  tmp: array[0 .. 8191] of byte;
+  n, wipe: integer;
 begin
+  wipe := SizeOf(tmp);
+  if wipe > Len then
+    wipe := Len;
   while Len > 0 do
   begin
     n := SizeOf(tmp);
@@ -7506,7 +7509,7 @@ begin
     XorMemory(Buffer, @tmp, n);
     dec(Len, n);
   end;
-  FillCharFast(tmp, SizeOf(tmp), 0); // avoid leaking the secret on the stack
+  FillCharFast(tmp, wipe, 0); // avoid leaking the secret on the stack
 end;
 
 function TAesPrngAbstract.Random32: cardinal;
@@ -7729,9 +7732,12 @@ var
   data: THash512Rec;
   sha3: TSha3;
 begin
+  if Len <= 0 then
+    result := ''
+  else
   try
     // retrieve some initial entropy from OS (but for gesUserOnly)
-    SetLength(fromos, Len);
+    FastSetRawByteString(fromos, nil, Len);
     if Source <> gesUserOnly then
       FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
     if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
