@@ -7473,7 +7473,7 @@ begin
       if i = 0 then
       begin
         if DestPtr[result] <> nil then
-          FastSetString(DestPtr[result]^, P, length(Str) - j);
+          FastSetString(DestPtr[result]^, P, length(Str) - j + 1);
         inc(result);
         break;
       end;

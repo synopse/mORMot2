@@ -4657,7 +4657,7 @@ var
   SU, SU2: SynUnicode;
   str: string;
   up4: RawUcs4;
-  U, U2, res, Up, Up2, json, json1, json2: RawUtf8;
+  U, U2, res, Up, Up2, json, json1, json2, s1, s2, s3: RawUtf8;
   arr: TRawUtf8DynArray;
   P: PUtf8Char;
   PB: PByte;
@@ -4839,6 +4839,26 @@ begin
   Check(split(res, '*') = res);
   Check(split(res, ',', 5) = 'two');
   Check(split(res, '*', 6) = 'wo,three');
+  CheckEqual(Split('titi-tata-toto', ['-'], [@s1, @s2, @s3]), 3, 'split3');
+  CheckEqual(s1, 'titi', 'split3a');
+  CheckEqual(s2, 'tata', 'split3b');
+  CheckEqual(s3, 'toto', 'split3c');
+  CheckEqual(Split('--', ['-'], [@s1, @s2, @s3]), 3, 'split0');
+  CheckEqual(s1, '', 'split0a');
+  CheckEqual(s2, '', 'split0b');
+  CheckEqual(s3, '', 'split0c');
+  CheckEqual(Split('a-b-c', ['-'], [@s1, @s2, @s3]), 3, 'split1');
+  CheckEqual(s1, 'a', 'split1a');
+  CheckEqual(s2, 'b', 'split1b');
+  CheckEqual(s3, 'c', 'split1c');
+  CheckEqual(Split('-b-c', ['-'], [@s1, @s2, @s3]), 3, 'split2');
+  CheckEqual(s1, '', 'split2a');
+  CheckEqual(s2, 'b', 'split2b');
+  CheckEqual(s3, 'c', 'split2c');
+  CheckEqual(Split('a-b-', ['-'], [@s1, @s2, @s3]), 3, 'split4');
+  CheckEqual(s1, 'a', 'split4a');
+  CheckEqual(s2, 'b', 'split4b');
+  CheckEqual(s3, '', 'split4c');
   Check(mormot.core.base.StrLen(nil) = 0);
   for i := length(res) + 1 downto 1 do
     Check(mormot.core.base.StrLen(Pointer(@res[i])) = length(res) - i + 1);
