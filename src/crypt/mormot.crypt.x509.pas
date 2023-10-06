@@ -141,7 +141,7 @@ type
     /// the OID of this value, in raw binary form
     Oid: RawByteString;
     /// the associated value
-    // - as RawUtf8 for TXname.Others[]
+    // - as RawUtf8 for TXname.Other[]
     // - as ASN1_OCTSTR raw content for TXTbsCertificate.ExtensionOther[]
     Value: RawByteString;
   end;
@@ -324,7 +324,9 @@ type
     fCachedDer: RawByteString; // for ToDer
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
+    procedure SetFromCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
+    function ComputeExtensions: TAsnObject;
   public
     /// describes the version of the encoded X.509 Certificate
     // - equals usually 3, once extensions are used
@@ -350,6 +352,7 @@ type
     /// decoded AlgorithmIdentifier structure of the stored public key
     SubjectPublicKeyAlgorithm: TXPublicKeyAlgorithm;
     /// decoded number of bits of the stored public key
+    // - typically 2048 for RSA, or 256 for ECC
     SubjectPublicKeyBits: integer;
     /// public key raw binary
     SubjectPublicKey: RawByteString;
@@ -534,7 +537,7 @@ type
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
 
-/// high-level function to decode X509 certificate main properties using TX509
+/// high-level function to decode X.509 certificate main properties using TX509
 // - assigned to mormot.core.secure X509Parse() redirection by this unit
 function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
@@ -648,6 +651,26 @@ begin
     if oid = XKU_OID_ASN[result] then
       exit;
   result := xkuNone;
+end;
+
+function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
+var
+  xku: TXExtendedKeyUsage;
+begin
+  result := '';
+  for xku := succ(low(xku)) to high(xku) do
+    if xku in usages then
+      Append(result, Asn(ASN1_OBJID, [XKU_OID_ASN[xku]]));
+end;
+
+function KuToBitStr(usages: TXKeyUsages): RawByteString;
+begin
+  // return expected ASN1_BITSTR value for xeKeyUsage
+  FastSetRawByteString(result, @usages, 2);
+  if xuDecipherOnly in usages then
+    result[2] := #$80
+  else
+    FakeLength(result, 1);
 end;
 
 procedure AddOther(var others: TXOthers; const o, v: RawByteString);
@@ -874,18 +897,83 @@ end;
 
 { TXTbsCertificate }
 
+function HumanHexToBin(const hex: RawUtf8): RawByteString;
+begin
+  // reverse ToHumanHex() layout
+  result := HexToBin(StringReplaceAll(hex, ':', '')); // fast enough
+end;
+
+function CsvToDns(p: PUtf8Char): RawByteString;
+begin
+  result := '';
+  while p <> nil do
+    Append(result, Asn(ASN1_CTX2, [TrimU(GetNextItem(p))]));
+end;
+
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean = false);
+begin
+  Append(result, Asn(ASN1_SEQ, [
+                   Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
+                   ASN1_BOOLEAN_NONE[critical],
+                   Asn(ASN1_OCTSTR, [value])
+                 ]));
+end;
+
+function TXTbsCertificate.ComputeExtensions: TAsnObject;
+begin
+  // high-level CertUsages values are converted into Usages and KeyUsages
+  SetFromCertUsages;
+  // RFC 5280 #4.2.1.9
+  AddExt(result, xeBasicConstraints,
+    Asn(ASN1_SEQ, [ASN1_BOOLEAN_NONE[cuCA in CertUsages]]), {critical=}true);
+  // RFC 5280 #4.2.1.3
+  if KeyUsages <> [] then
+    AddExt(result, xeKeyUsage,
+      Asn(ASN1_BITSTR, [KuToBitStr(KeyUsages)]), {critical=}true);
+  // RFC 5280 #4.2.1.12
+  if ExtendedKeyUsages <> [] then
+    AddExt(result, xeExtendedKeyUsage,
+      Asn(ASN1_SEQ, [XkuToOids(ExtendedKeyUsages)]));
+  // Extension[] RawUtf8 are used as source
+  // - ExtensionOther[] and ExtensionRaw[] are ignored
+  // RFC 5280 #4.2.1.2
+  if Extension[xeSubjectKeyIdentifier] <> '' then
+    AddExt(result, xeSubjectKeyIdentifier,
+      Asn(ASN1_OCTSTR, [HumanHexToBin(Extension[xeSubjectKeyIdentifier])]));
+  // RFC 5280 #4.2.1.1
+  if Extension[xeAuthorityKeyIdentifier] <> '' then
+    AddExt(result, xeAuthorityKeyIdentifier,
+      Asn(ASN1_SEQ, [
+        Asn(ASN1_CTX0, [HumanHexToBin(Extension[xeAuthorityKeyIdentifier])])
+      ]));
+  // RFC 5280 #4.2.1.6
+  if Extension[xeSubjectAlternativeName] <> '' then
+    AddExt(result, xeSubjectAlternativeName,
+      Asn(ASN1_SEQ, [CsvToDns(pointer(Extension[xeSubjectAlternativeName]))]));
+  // RFC 5280 #4.2.1.7
+  if Extension[xeIssuerAlternativeName] <> '' then
+    AddExt(result, xeIssuerAlternativeName,
+      Asn(ASN1_SEQ, [CsvToDns(pointer(Extension[xeIssuerAlternativeName]))]));
+  // non-standard extension - but still used e.g. for certificate stuffing
+  if Extension[xeNetscapeComment] <> '' then
+    AddExt(result, xeNetscapeComment,
+      Asn(ASN1_IA5STRING, [Extension[xeNetscapeComment]]));
+  // xeAuthorityInformationAccess and xeCertificatePolicies not yet persisted
+end;
+
 procedure TXTbsCertificate.ComputeCachedDer;
 var
   ext: RawByteString;
 begin
   if Version >= 3 then
-  begin
-
-    ext := Asn(ASN1_CTC3, [ext]);
-  end;
+    // compute the X.509 v3 extensions block
+    ext := Asn(ASN1_CTC3, [
+             Asn(ASN1_SEQ, [ComputeExtensions])
+           ]);
   fCachedDer := Asn(ASN1_SEQ, [
                   {%H-}Asn(Version - 1),
-                  Asn(ASN1_INT, SerialNumber),
+                  Asn(ASN1_INT, HumanHexToBin(SerialNumber)),
                   XsaToSeq(Signature),
                   Issuer.ToBinary,
                   Asn(ASN1_SEQ, [
@@ -1065,6 +1153,21 @@ begin
       if XU[r] in x then
         include(c, r);
   CertUsages := c;
+end;
+
+procedure TXTbsCertificate.SetFromCertUsages;
+var
+  r: TCryptCertUsage;
+begin
+  // compute KeyUsages and ExtendedKeyUsages from CertUsages
+  KeyUsages := [];
+  for r := low(KU) to high(KU) do
+    if r in CertUsages then
+      include(KeyUsages, KU[r]);
+  ExtendedKeyUsages := [];
+  for r := low(XU) to high(XU) do
+    if r in CertUsages then
+      include(ExtendedKeyUsages, XU[r]);
 end;
 
 function TXTbsCertificate.SerialNumberHex: RawUtf8;
