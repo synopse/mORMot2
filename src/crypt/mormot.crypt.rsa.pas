@@ -574,7 +574,12 @@ type
     // - returns the decoded binary OCTSTR Digest or '' if signature failed
     // - this method is thread-safe but blocking from several threads
     function Verify(const Signature: RawByteString;
-      AlgorithmOid: PRawUtf8 = nil): RawByteString;
+      AlgorithmOid: PRawUtf8 = nil): RawByteString; overload;
+    /// verification of a RSA binary signature with the current Public Key
+    // - returns the decoded binary OCTSTR Digest or '' if signature failed
+    // - this method is thread-safe but blocking from several threads
+    function Verify(Sign: pointer; SignLen: integer;
+      AlgorithmOid: PRawUtf8 = nil): RawByteString; overload;
     /// compute a RSA binary signature with the current Private Key
     // - returns the encoded signature or '' on error
     // - this method is thread-safe but blocking from several threads
@@ -2648,15 +2653,21 @@ end;
 
 function TRsa.Verify(const Signature: RawByteString;
   AlgorithmOid: PRawUtf8): RawByteString;
+begin
+  result := Verify(pointer(Signature), length(Signature), AlgorithmOid);
+end;
+
+function TRsa.Verify(Sign: pointer; SignLen: integer;
+  AlgorithmOid: PRawUtf8): RawByteString;
 var
   verif, digest: RawByteString;
   p: integer;
 begin
   // decode the supplied value using the stored public key
   result := '';
-  if length(Signature) <> fModulusLen then
+  if SignLen <> fModulusLen then
     exit; // the signature is a RSA BigInt by definition
-  verif := BufferDecryptVerify(pointer(Signature), {verify=}true);
+  verif := BufferDecryptVerify(Sign, {verify=}true);
   if verif = '' then
     exit; // invalid signature or no public key
   // parse the ASN.1 sequence to extract the stored hash and its algo oid

@@ -420,7 +420,9 @@ type
     // maintain fRsa/fEcc instances from stored Signed.SubjectPublicKey
     function LoadRsaEccInstance: boolean;
     function RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
-      Hash: THashAlgo): boolean;
+      Hash: THashAlgo): boolean; overload;
+    function RawSubjectPublicKeyVerify(Sign, Data: pointer;
+      SignLen, DataLen: integer; Hash: THashAlgo): boolean; overload;
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
@@ -433,12 +435,19 @@ type
     /// reset all internal context
     procedure Clear;
     /// verify the digital signature of this Certificate using a X.509 Authority
-    // - depending on the engine, some errors can be ignored, e.g.
-    // cvWrongUsage or cvDeprecatedAuthority
+    // - some errors can be ignored, e.g. cvWrongUsage or cvDeprecatedAuthority
     // - certificate expiration date can be specified instead of current time
     // - this method is thread-safe
     function Verify(Authority: TX509 = nil; IgnoreError: TCryptCertValidities = [];
-      TimeUtc: TDateTime = 0): TCryptCertValidity;
+      TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
+    /// verify the digital signature of a memory buffer using the SubjectPublicKey
+    // of this Certificate
+    // - some errors can be ignored, e.g. cvWrongUsage or cvDeprecatedAuthority
+    // - certificate expiration date can be specified instead of current time
+    // - this method is thread-safe
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+      IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
     /// to be called once any field has been changed to refresh the Binary cache
     procedure AfterModified;
     /// serialize those fields into ASN.1 DER binary
@@ -1235,6 +1244,25 @@ begin
        result := cvValidSelfSigned;
 end;
 
+function TX509.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+begin
+  result := cvBadParameter;
+  if (self = nil) or
+     (SignLen <= 0) or
+     (DataLen <= 0) or
+     (Signed.SubjectPublicKey = '') or
+     (Signed.SubjectPublicKeyAlgorithm = xkaNone) then
+    exit;
+  result := CanVerify(self, cuDigitalSignature, false, IgnoreError, TimeUtc);
+  if result = cvValidSigned then
+    if RawSubjectPublicKeyVerify(
+         Sign, Data, SignLen, DataLen, XSA_TO_HF[SignatureAlgorithm]) then
+      result := cvValidSigned
+    else
+      result := cvInvalidSignature;
+end;
+
 function TX509.LoadRsaEccInstance: boolean;
 var
   eccpub: TEccPublicKey;
@@ -1267,7 +1295,7 @@ begin
             // load the public key into a local fEcc reusable instance
             if not Ecc256r1CompressAsn1(Signed.SubjectPublicKey, eccpub) then
               exit;
-            fEcc := TEcc256r1Verify.Create(eccpub);
+            fEcc := TEcc256r1Verify.Create(eccpub); // OpenSSL or mormot.crypt
           end;
           result := true;
         end;
@@ -1279,6 +1307,13 @@ end;
 
 function TX509.RawSubjectPublicKeyVerify(const Data, Signature: RawByteString;
   Hash: THashAlgo): boolean;
+begin
+  result := RawSubjectPublicKeyVerify(pointer(Signature), pointer(Data),
+    length(Signature), length(Data), Hash);
+end;
+
+function TX509.RawSubjectPublicKeyVerify(Sign, Data: pointer;
+  SignLen, DataLen: integer; Hash: THashAlgo): boolean;
 var
   hasher: TSynHasher;
   eccsig: TEccSignature;
@@ -1288,22 +1323,22 @@ var
   bin: RawByteString;
 begin
   result := false;
-  diglen := hasher.Full(Hash, pointer(Data), length(Data), dig);
+  diglen := hasher.Full(Hash, Data, DataLen, dig);
   if (diglen <> 0) and
      LoadRsaEccInstance then
     case Signed.SubjectPublicKeyAlgorithm of
       xkaRsa:
         begin
           // RSA digital signature verification
-          bin := fRsa.Verify(Signature, @oid);
+          bin := fRsa.Verify(Sign, SignLen, @oid); // thread-safe but blocking
           result := (length(bin) = diglen) and
                     CompareMem(pointer(bin), @dig, diglen) and
                     (oid = ASN1_OID_HASH[Hash]);
         end;
       xkaEcc256:
-        if DerToEcc(pointer(Signature), length(Signature), eccsig) then
+        if DerToEcc(Sign, SignLen, eccsig) then
           // secp256r1 digital signature verification
-          result := fEcc.Verify(dig.Lo, eccsig);
+          result := fEcc.Verify(dig.Lo, eccsig); // thread-safe
     end;
 end;
 
