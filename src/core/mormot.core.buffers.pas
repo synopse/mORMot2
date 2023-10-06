@@ -1978,7 +1978,7 @@ function BinToSource(const ConstName, Comment: RawUtf8; const Data: RawByteStrin
   PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
 /// generate some 'xx:xx:xx:xx' output buffer with left and right margins
-// - used e.g. by ToText(TX509Parsed) to output X509 public key content
+// - used e.g. by ParsedToText() to output X509 public key content in PeerInfo
 function BinToHumanHex(Data: PByte; Len: integer; PerLine: integer = 16;
   LeftTab: integer = 0; SepChar: AnsiChar = ':'): RawUtf8; overload;
 

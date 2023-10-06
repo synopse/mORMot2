@@ -1289,28 +1289,27 @@ var
 begin
   result := false;
   diglen := hasher.Full(Hash, pointer(Data), length(Data), dig);
-  if (diglen = 0) or
-     not LoadRsaEccInstance then
-    exit;
-  case Signed.SubjectPublicKeyAlgorithm of
-    xkaRsa:
-      begin
-        // RSA digital signature verification
-        bin := fRsa.Verify(Signature, @oid);
-        result := (length(bin) = diglen) and
-                  CompareMem(pointer(bin), @dig, diglen) and
-                  (oid = ASN1_OID_HASH[Hash]);
-      end;
-    xkaEcc256:
-      if DerToEcc(pointer(Signature), length(Signature), eccsig) then
-        // secp256r1 digital signature verification
-        result := fEcc.Verify(dig.Lo, eccsig);
-  end;
+  if (diglen <> 0) and
+     LoadRsaEccInstance then
+    case Signed.SubjectPublicKeyAlgorithm of
+      xkaRsa:
+        begin
+          // RSA digital signature verification
+          bin := fRsa.Verify(Signature, @oid);
+          result := (length(bin) = diglen) and
+                    CompareMem(pointer(bin), @dig, diglen) and
+                    (oid = ASN1_OID_HASH[Hash]);
+        end;
+      xkaEcc256:
+        if DerToEcc(pointer(Signature), length(Signature), eccsig) then
+          // secp256r1 digital signature verification
+          result := fEcc.Verify(dig.Lo, eccsig);
+    end;
 end;
 
 procedure TX509.ToParsedInfo(out Info: TX509Parsed);
 begin
-  Info.Serial := Signed.SerialNumberHex;
+  Info.Serial := SerialNumber;
   Info.SubjectDN := SubjectDN;
   Info.IssuerDN := IssuerDN;
   Info.SubjectID := Extension[xeSubjectKeyIdentifier];
@@ -1323,7 +1322,7 @@ begin
   Info.NotBefore := NotBefore;
   Info.NotAfter := NotAfter;
   Info.PubKey := Signed.SubjectPublicKey;
-  Info.PeerInfo := ToText(Info); // should be the last
+  Info.PeerInfo := ParsedToText(Info); // should be the last
 end;
 
 function TX509.SaveToDer: TCertDer;
@@ -1492,7 +1491,7 @@ var
 begin
   x := TX509.Create;
   try
-    result := x.LoadFromPem(Cert);
+    result := x.LoadFromPem(Cert); // support PEM or DER input
     if result then
       x.ToParsedInfo(Info);
   finally

@@ -2602,7 +2602,7 @@ function IsPem(const pem: RawUtf8): boolean;
 // - won't decode the Base64 encoded binary, so may return some false negative
 function IsPemEncrypted(const pem: TCertPem): boolean;
 
-/// low-level binary-to-DER encoder
+/// low-level binary-to-DER encoder of small buf with buflen < 127
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
 
 /// low-level DER sequence to binary decoding
@@ -2621,14 +2621,15 @@ type
   end;
 
 /// return the number of bits of a X.509 certificate SubjectPublicKey ASN1_BITSTR
-// - will recognize RSA ASN1_SEQ and ECC uncompressed keys
-// - can optionally format the key as its hexa members for ToText(TX509Parsed)
+// - will recognize RSA ASN1_SEQ and ECC uncompressed keys as stored in X.509
+// - can format the key as its hexa members for ParsedToText(TX509Parsed)
 function X509PubKeyBits(const PubKey: RawByteString;
   PubText: PRawUtf8 = nil): integer;
 
 /// return some multi-line text of the main TX509Parsed fields
 // - in a layout similar to X509_print() OpenSSL formatting
-function ToText(const c: TX509Parsed): RawUtf8; overload;
+// - is used by its own TX509Parsed.PeerInfo field
+function ParsedToText(const c: TX509Parsed): RawUtf8;
 
 /// high-level function to decode X.509 Certificate main properties
 // - properly implemented by mormot.crypt.openssl or mormot.crypt.x509, but
@@ -7470,7 +7471,7 @@ begin
   FormatUtf8('    %Public Key: (% bit)'#13#10'%', [name, result, bits], PubText^);
 end;
 
-function ToText(const c: TX509Parsed): RawUtf8;
+function ParsedToText(const c: TX509Parsed): RawUtf8;
 
   procedure KeyUsage(l, h: TCryptCertUsage; const ext: RawUtf8);
   var
@@ -7493,7 +7494,7 @@ var
   bits: RawUtf8;
   version: integer;
 begin
-  // roughly follow X509_print() OpenSSL formatting
+  // follow X509_print() OpenSSL formatting
   if (c.Usage <> []) or
      (c.SubjectID <> '') or
      (c.IssuerID <> '') then
@@ -7555,7 +7556,7 @@ begin
   Info.NotBefore := c.NotBefore;
   Info.NotAfter := c.NotAfter;
   Info.PubKey := c.PublicKeyContent;
-  Info.PeerInfo := ToText(Info); // should be the last
+  Info.PeerInfo := ParsedToText(Info); // should be the last
 end;
 
 function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
