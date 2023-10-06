@@ -439,6 +439,8 @@ type
     Exponent: RawByteString;
     /// serialize this public key as binary PKCS#1 DER format
     function ToDer: TCertDer;
+    /// serialize this public key as ASN1_SEQ, as stored in a X509 certificate
+    function ToSubjectPublicKey: RawByteString;
     /// unserialize a public key from binary PKCS#1 DER format
     // - will try and fallback to a ASN1_SEQ, as stored in a X509 certificate
     function FromDer(const der: TCertDer): boolean;
@@ -1416,6 +1418,7 @@ begin
   min := 16;
   last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
   // since randomness may be a weak point, start from several trusted sources
+  // see https://ieeexplore.ieee.org/document/9014350
   FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but audited
   {$ifdef CPUINTEL}
   RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU
@@ -1426,7 +1429,7 @@ begin
     if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
     begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
-      // with our TAesPrng, it did never occur after 1000000000 trials
+      // with our TAesPrng, it never occurred after 1,000,000,000 trials
       dec(min);
       if min = 0 then
         exit; // too weak PNRG for sure
@@ -2063,6 +2066,18 @@ begin
                     AsnBigInt(Exponent) // typically 65537
                   ])
                 ])
+              ]);
+end;
+
+function TRsaPublicKey.ToSubjectPublicKey: RawByteString;
+begin
+  if (Modulus = '') or
+     (Exponent = '') then
+    result := ''
+  else
+    result := Asn(ASN1_SEQ, [
+                AsnBigInt(Modulus),
+                AsnBigInt(Exponent) // typically 65537
               ]);
 end;
 
