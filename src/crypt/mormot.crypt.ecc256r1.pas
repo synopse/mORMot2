@@ -238,12 +238,17 @@ type
   // the cryptographic library, which may be this unit pascal or OpenSSL
   // - it is therefore slightly faster than Ecc256r1Verify()
   TEcc256r1VerifyAbstract = class
+  protected
+    fPublicKey: TEccPublicKey;
   public
     /// initialize the verifier with a given ECC compressed public key
-    constructor Create(const pub: TEccPublicKey); virtual; abstract;
+    constructor Create(const pub: TEccPublicKey); virtual;
     /// validate a signature against a hash using ECC
     function Verify(const hash: TEccHash; const sign: TEccSignature): boolean;
       virtual; abstract;
+    /// the public key as specified to the class constructor
+    property PublicKey: TEccPublicKey
+      read fPublicKey;
   end;
 
   /// meta-clas of ECDSA signature verification class
@@ -1514,10 +1519,19 @@ begin
 end;
 
 
+{ TEcc256r1VerifyAbstract }
+
+constructor TEcc256r1VerifyAbstract.Create(const pub: TEccPublicKey);
+begin
+  fPublicKey := pub;
+end;
+
+
 { TEcc256r1VerifyPas }
 
 constructor TEcc256r1VerifyPas.Create(const pub: TEccPublicKey);
 begin
+  inherited Create(pub);
   EccPointDecompress(TEccPoint(fPub), pub);
 end;
 

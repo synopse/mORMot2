@@ -462,7 +462,8 @@ type
       const Serial, PassWord: RawUtf8; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
       Aes: TAesAbstractClass = nil); overload;
     /// create a certificate with its private secret key from an existing
-    // plain TEccCertificate and an optional private key binary
+    // plain TEccCertificate information and an optional private key binary
+    // - raise EEccException if EccPrivateKey does not match the Cert public key
     // - FreeCert=true would call Cert.Free once done, e.g. to replace it
     constructor CreateFrom(Cert: TEccCertificate; EccPrivateKey: PEccPrivateKey;
       FreeCert: boolean = false);
@@ -2686,7 +2687,11 @@ begin
   fUncompressed := Cert.fUncompressed;
   fUncompressedP := Cert.fUncompressedP;
   if EccPrivateKey <> nil then
-    fPrivateKey := EccPrivateKey^;
+    if Ecc256r1MatchKeys(EccPrivateKey^, fContent.Head.Signed.PublicKey) then
+      fPrivateKey := EccPrivateKey^
+    else
+      raise EEccException.CreateUtf8(
+        '%.CreateFrom: public and private keys do not match ', [self]);
   if FreeCert then
     Cert.Free;
 end;

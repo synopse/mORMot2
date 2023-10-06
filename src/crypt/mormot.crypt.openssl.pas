@@ -1552,6 +1552,7 @@ end;
 
 constructor TEcc256r1VerifyOsl.Create(const pub: TEccPublicKey);
 begin
+  inherited Create(pub);
   EOpenSslAsymmetric.CheckAvailable(PClass(self)^, 'Create');
   if not NewPrime256v1Key(fKey) or
      not PublicKeyToPoint(pub, fPoint) or
