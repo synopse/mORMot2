@@ -2346,7 +2346,11 @@ var
 begin
   result := key.FromDer(Der);
   if result then
-    LoadFromPublicKey(key);
+    try
+      LoadFromPublicKey(key);
+    except
+      result := false;
+    end;
 end;
 
 function TRsa.LoadFromPublicKeyPem(const Pem: TCertPem): boolean;
@@ -2405,7 +2409,11 @@ begin
   try
     result := key.FromDer(Der);
     if result then
-      LoadFromPrivateKey(key);
+      try
+        LoadFromPrivateKey(key);
+      except
+        result := false;
+      end;
   finally
     key.Done;
   end;
