@@ -640,7 +640,7 @@ type
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
-/// guess the asymmetric algorithm of this OpenSSL X509 certificate
+/// guess the asymmetric algorithm of this OpenSSL X.509 certificate
 // - returns nil if x is nil
 // - raise an EOpenSslCert if x has an unsupported algorithm
 // - warning: caaES256K can not be distinguished from caaES256
@@ -652,7 +652,7 @@ function ToText(u: TX509Usage): RawUtf8; overload;
 function ToText(u: TX509Usages): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// high-level function to decode X509 certificate main properties using OpenSSL
+/// high-level function to decode X.509 certificate main properties using OpenSSL
 // - assigned to mormot.core.secure X509Parse() redirection by RegisterOpenSsl
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
@@ -1855,7 +1855,7 @@ end;
 type
   EOpenSslCert = class(EOpenSsl);
 
-  /// ICryptCert factory using OpenSSL X509
+  /// ICryptCert factory using OpenSSL X.509
   TCryptCertAlgoOpenSsl = class(TCryptCertAlgo)
   protected
     fHash: PEVP_MD;
@@ -1871,7 +1871,7 @@ type
       Usages: TCryptCertUsages = []; Fields: PCryptCertFields = nil): RawUtf8; override;
   end;
 
-  /// class implementing ICryptCert using OpenSSL X509
+  /// class implementing ICryptCert using OpenSSL X.509
   // - will store a certificate as PX509 and/or a PEVP_PKEY private key
   TCryptCertOpenSsl = class(TCryptCert)
   protected
@@ -1998,7 +1998,7 @@ var
 begin
   result := '';
   if Subjects <> nil then
-    cn := Subjects[0] // first subject is the X509 Common Name
+    cn := Subjects[0] // first subject is the X.509 Common Name
   else if (Fields = nil) or
           (Fields^.CommonName = '') then
     raise ECryptCert.Create('Missing Subject/CommonName');
@@ -2100,7 +2100,7 @@ var
 begin
   if fX509 <> nil then
     RaiseErrorGenerate('duplicated call');
-  // prepare a new X509 OpenSSL certificate instance
+  // prepare a new X.509 OpenSSL certificate instance
   if fCryptAlgo = nil then
     RaiseErrorGenerate('after CreateFrom');
   x := NewCertificate;
@@ -2274,7 +2274,7 @@ begin
     cccCertOnly:
       if fX509 <> nil then
       begin
-        // include the X509 certificate (but not any private key) as DER or PEM
+        // include the X.509 certificate (but not any private key) as DER or PEM
         result := fX509.ToBinary;
         if Format = ccfPem then
         begin
@@ -2296,7 +2296,7 @@ begin
           FillZero(pem);
         end
         else
-          // ccfBinary will use the PKCS12 binary encoding
+          // ccfBinary will use the PKCS#12 binary encoding
           result := fX509.ToPkcs12(fPrivKey, PrivatePassword);
     cccPrivateKeyOnly:
       if fPrivKey = nil then
@@ -2311,9 +2311,7 @@ end;
 function TCryptCertOpenSsl.Load(const Saved: RawByteString;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 var
-  P: PUtf8Char;
-  k: TPemKind;
-  pem, cert, priv: RawByteString;
+  cert, priv: RawByteString;
   pkcs12: PPKCS12;
 begin
   result := false;
@@ -2332,14 +2330,14 @@ begin
         fPrivKey.Free;
         fPrivKey := nil;
       end;
-    exit; // don't clear the main X509 certificate
+    exit; // don't clear the main X.509 certificate
   end;
   Clear;
   if Saved = '' then
     exit;
   case Content of
     cccCertOnly:
-      // input only include the X509 certificate as PEM, DER or PKCS#12
+      // input only include the X.509 certificate as PEM, DER or PKCS#12
       if IsPem(Saved) then
         fX509 := LoadCertificate(PemToDer(Saved)) // PEM
       else
@@ -2347,33 +2345,18 @@ begin
         fX509 := LoadCertificate(Saved); // DER
         if not Assigned(fX509) then
         begin
-          pkcs12 := LoadPkcs12(Saved); // need first PKCS12 certificate
+          pkcs12 := LoadPkcs12(Saved); // try PKCS#12 certificate
           pkcs12.Extract(PrivatePassword, nil, @fX509, nil); // ignore key
           pkcs12.Free;
         end;
       end;
     cccCertWithPrivateKey:
       begin
-        // input include the X509 certificate and its associated private key
+        // input include the X.509 certificate and its associated private key
         if IsPem(Saved) then
         try
           // PEM certificate and PEM private key were concatenated
-          P := pointer(Saved);
-          repeat
-            pem := NextPem(P, @k);
-            if pem = '' then
-              break;
-            if k = pemCertificate then
-              if cert <> '' then
-                exit // should contain a single Certificate
-              else
-                cert := PemToDer(pem)
-            else
-              priv := pem; // private key may be with several TPemKind markers
-            FillZero(pem);
-          until false;
-          if (cert = '') or
-             (priv = '') then
+          if not PemToCertAndPrivKey(Saved, cert, priv) then
             exit;
           fX509 := LoadCertificate(cert);
           if fX509 = nil then
@@ -2381,11 +2364,10 @@ begin
           fPrivKey := LoadPrivateKey(priv, PrivatePassword);
         finally
           FillZero(priv);
-          FillZero(pem);
         end
         else
         begin
-          // input should be some PKCS12 binary with certificate and private key
+          // input should be PKCS#12 binary with certificate and private key
           pkcs12 := LoadPkcs12(Saved);
           if not pkcs12.Extract(PrivatePassword, @fPrivKey, @fX509, nil) then
             Clear;
@@ -2784,7 +2766,7 @@ begin
   begin
     P := pointer(Content);
     repeat
-      // parse each incoming PEM entry into X509 certificates or CRLs
+      // parse each incoming PEM entry into X.509 certificates or CRLs
       pem  := NextPem(P, @k);
       if pem = '' then
         break;
@@ -2798,7 +2780,7 @@ begin
   end
   else
   begin
-    // try binary DER serialization of a single X509 certificate or CRL
+    // try binary DER serialization of a single X.509 certificate or CRL
     serial := fStore.AddFromBinary(Content);
     if serial <> '' then
       AddRawUtf8(result, serial);
@@ -3084,7 +3066,7 @@ begin
   CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;
-  // and also for X509 parsing
+  // and also for X.509 parsing
   X509Parse := @OpenSslX509Parse;
 end;
 
