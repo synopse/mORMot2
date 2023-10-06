@@ -5430,33 +5430,22 @@ end;
 function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;
   const PrivatePassword: SpiUtf8): RawByteString;
 var
-  pk, pks: RawByteString;
+  pk: RawByteString;
 begin
   FastSetRawByteString(pk{%H-}, @Input, SizeOf(Input));
   if PrivatePassword = '' then
     result := pk
   else
   begin
-    pks := MainAesPrng.AFSplit(pk, 31);
+    result := PrivateKeyEncrypt(pk, 'synecc', PrivatePassword, 31, 1000);
     FillZero(pk);
-    result := AesPkcs7(pks, {encrypt=}true, PrivatePassword, 'synecc', 1000);
-    FillZero(pks);
   end;
 end;
 
 function EccPrivateKeyDecrypt(const Input: RawByteString;
   const PrivatePassword: SpiUtf8): RawByteString;
-var
-  pks: RawByteString;
 begin
-  if PrivatePassword = '' then
-    result := Input
-  else
-  begin
-    pks := AesPkcs7(Input, {encrypt=}false, PrivatePassword, 'synecc', 1000);
-    result := TAesPrng.AFUnSplit(pks, 31);
-    FillZero(pks);
-  end;
+  result := PrivateKeyDecrypt(Input, 'synecc', PrivatePassword, 31, 1000);
 end;
 
 function TCryptCertInternal.GetEccPrivateKey(checkZero: boolean): PEccPrivateKey;
@@ -5484,6 +5473,7 @@ begin
     // hexa or base64 encoding of the ccfBinary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
   else
+  // we implement ccfPem and ccfBinary here
   case Content of
     cccCertOnly:
       if fEcc <> nil then
@@ -5525,7 +5515,7 @@ begin
          if Format = ccfPem then
          begin
            der := result;
-           result := DerToPem(der, pemSynopseEncryptedPrivateKey);
+           result := DerToPem(der, pemSynopseEccEncryptedPrivateKey);
            FillZero(der);
          end;
         end;
