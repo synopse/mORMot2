@@ -1692,21 +1692,34 @@ type
     cvInvalidSignature,
     cvRevoked,
     cvWrongUsage);
+
   /// a set of Digital Signature results
   TCryptCertValidities = set of TCryptCertValidity;
 
-  /// convenient wrapper of X.509 Certificate subject name fields
+  /// convenient wrapper of X.509 Certificate subject name X.501 fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
+  // - as defined in RFC 5280 Appendix A.1
   TCryptCertFields = record
-    Country,
-    State,
-    Locality,
-    Organization,
-    OrgUnit,
-    CommonName,
-    EmailAddress,
-    SurName,
+    /// countryName field (OID 2.5.4.6)
+    Country: RawUtf8;
+    /// stateOrProvinceName field (OID 2.5.4.8)
+    State: RawUtf8;
+    /// localityName field (OID 2.5.4.7)
+    Locality: RawUtf8;
+    /// organizationName field (OID 2.5.4.10)
+    Organization: RawUtf8;
+    /// organizationalUnitName field (OID 2.5.4.11)
+    OrgUnit: RawUtf8;
+    /// commonName field (OID 2.5.4.3)
+    CommonName: RawUtf8;
+    /// email field (OID 1.2.840.113549.1.9.1)
+    EmailAddress: RawUtf8;
+    /// surname field (OID 2.5.4.4)
+    SurName: RawUtf8;
+    /// givenName field (OID 2.5.4.42)
     GivenName: RawUtf8;
+    /// netscapeComment extension (not a field - OID 2.16.840.1.113730.1.13)
+    Comment: RawUtf8;
   end;
   PCryptCertFields = ^TCryptCertFields;
 

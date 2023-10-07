@@ -1773,6 +1773,7 @@ type
     /// returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
     // or '128 ED25519'
     // - the first number being the actual security bits of the algorithm
+    // as retrieved by X509_get_signature_info()
     function GetSignatureAlgo: RawUtf8;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
     function GetUsage: TX509Usages;

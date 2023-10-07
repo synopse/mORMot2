@@ -12,6 +12,9 @@ unit mormot.crypt.x509;
     - Registration of our X.509 Engine to the TCryptCert Factory
 
   *****************************************************************************
+
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface
@@ -187,6 +190,8 @@ type
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
+    /// fill Name[] attributes with TCryptCertFields information
+    procedure FromFields(const fields: TCryptCertFields);
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
     /// to be called once any field has been changed to refresh internal caches
@@ -824,6 +829,19 @@ begin
             FromAsn(seq);
 end;
 
+procedure TXName.FromFields(const fields: TCryptCertFields);
+begin
+  Name[xaC]  := fields.Country;
+  Name[xaST] := fields.State;
+  Name[xaL]  := fields.Locality;
+  Name[xaO]  := fields.Organization;
+  Name[xaOU] := fields.OrgUnit;
+  Name[xaCN] := fields.CommonName;
+  Name[xaE]  := fields.EmailAddress;
+  Name[xaS]  := fields.SurName;
+  Name[xaG]  := fields.GivenName;
+end;
+
 procedure TXName.AfterModified;
 begin
   fCachedAsn := '';
@@ -955,7 +973,7 @@ begin
   if Extension[xeIssuerAlternativeName] <> '' then
     AddExt(result, xeIssuerAlternativeName,
       Asn(ASN1_SEQ, [CsvToDns(pointer(Extension[xeIssuerAlternativeName]))]));
-  // non-standard extension - but still used e.g. for certificate stuffing
+  // non-standard extension - but defined as TCryptCertFields.Comment
   if Extension[xeNetscapeComment] <> '' then
     AddExt(result, xeNetscapeComment,
       Asn(ASN1_IA5STRING, [Extension[xeNetscapeComment]]));

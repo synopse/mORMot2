@@ -2051,6 +2051,9 @@ begin
       X509_REQ_get_subject_name(req), Usages, Fields, dns);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
+    if (Fields <> nil) and
+       (Fields^.Comment <> '') then
+       req^.AddExtension(NID_netscape_comment, Fields^.Comment);
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
     if req.Sign(key, fHash) = 0 then // returns signature size in bytes
       RaiseError('SelfSign');

@@ -5298,6 +5298,7 @@ begin
   // note: only Fields^.CommonName is supported if no Subjects is set (yet)
   if fEcc <> nil then
     RaiseErrorGenerate('duplicated call');
+  // ValidDays and ExpireDays are relative to the current time
   if ValidDays = 0 then
     start := 0
   else

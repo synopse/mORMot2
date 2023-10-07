@@ -13,8 +13,8 @@ unit mormot.crypt.rsa;
 
   *****************************************************************************
 
-  Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
-  to any restriction about the use of cryptographic software in your country.
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface
@@ -2774,7 +2774,7 @@ end;
 
 constructor TCryptAsymRsa.Create(const name, hasher: RawUtf8);
 begin
-  fDefaultHasher := mormot.crypt.secure.Hasher(hasher);
+  fDefaultHasher := mormot.crypt.secure.Hasher(hasher); // set before Create()
   if fDefaultHasher = nil then
     raise ECrypt.CreateUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);
