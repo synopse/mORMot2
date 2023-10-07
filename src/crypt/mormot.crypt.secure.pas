@@ -2832,6 +2832,11 @@ function AsnBigInt(const BigInt: RawByteString;
 
 /// create an ASN.1 SEQuence from some raw data
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 binary ASN1_SEQ from the aggregation of several binaries
+function AsnSeq(const Content: array of TAsnObject): TAsnObject; overload;
+  {$ifdef FPC} inline; {$endif}
 
 /// create an ASN.1 ObjectID from 'x.x.x.x.x' text
 function AsnOid(OidText: PUtf8Char): TAsnObject;
@@ -7936,6 +7941,11 @@ end;
 function AsnSeq(const Data: TAsnObject): TAsnObject;
 begin
   result := Asn(ASN1_SEQ, [Data]);
+end;
+
+function AsnSeq(const Content: array of TAsnObject): TAsnObject;
+begin
+  result := Asn(ASN1_SEQ, Content);
 end;
 
 function AsnOid(OidText: PUtf8Char): TAsnObject;

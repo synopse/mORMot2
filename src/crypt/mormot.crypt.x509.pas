@@ -556,12 +556,12 @@ function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
   case xsa of
     xsaSha256Rsa .. xsaSha512Rsa:
-      result := Asn(ASN1_SEQ, [
+      result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
                   ASN1_NULL_VALUE // optional
                 ]);
     xsaSha256Ecc256:
-      result := Asn(ASN1_SEQ, [
+      result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
                 ]);
   else
@@ -573,12 +573,12 @@ function XkaToSeq(xka: TXPublicKeyAlgorithm): RawByteString;
 begin
   case xka of
     xkaRsa:
-      result := Asn(ASN1_SEQ, [
+      result := AsnSeq([
                   AsnOid(ASN1_OID_PKCS1_RSA),
                   ASN1_NULL_VALUE // optional
                 ]);
     xkaEcc256:
-      result := Asn(ASN1_SEQ, [
+      result := AsnSeq([
                   AsnOid(ASN1_OID_X962_PUBLICKEY),
                   AsnOid(ASN1_OID_X962_ECDSA_P256)
                 ]);
@@ -711,7 +711,7 @@ begin
       one := '';
       repeat
         GetNextItemTrimed(p, ',', v);
-        Append(one, Asn(ASN1_SEQ, [
+        Append(one, AsnSeq([
                       XA_OID_ASN[a],
                       AsnText(v)
                     ]));
@@ -722,12 +722,12 @@ begin
   for o := 0 to high(Other) do
     with Other[o] do
       Append(tmp, Asn(ASN1_SETOF, [
-                    Asn(ASN1_SEQ, [
+                    AsnSeq([
                       Asn(ASN1_OBJID, [Oid]),
                       AsnText(Value)
                     ])
                   ]));
-  fCachedAsn := Asn(ASN1_SEQ, [tmp]);
+  fCachedAsn := AsnSeq(tmp);
 end;
 
 function TXName.ToBinary: RawByteString;
@@ -931,7 +931,7 @@ end;
 procedure AddExt(var result: TAsnObject; xe: TXExtension;
   const value: RawByteString; critical: boolean = false);
 begin
-  Append(result, Asn(ASN1_SEQ, [
+  Append(result, AsnSeq([
                    Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
                    ASN1_BOOLEAN_NONE[critical],
                    Asn(ASN1_OCTSTR, [value])
@@ -944,7 +944,7 @@ begin
   SetFromCertUsages;
   // RFC 5280 #4.2.1.9
   AddExt(result, xeBasicConstraints,
-    Asn(ASN1_SEQ, [ASN1_BOOLEAN_NONE[cuCA in CertUsages]]), {critical=}true);
+    AsnSeq(ASN1_BOOLEAN_NONE[cuCA in CertUsages]), {critical=}true);
   // RFC 5280 #4.2.1.3
   if KeyUsages <> [] then
     AddExt(result, xeKeyUsage,
@@ -952,7 +952,7 @@ begin
   // RFC 5280 #4.2.1.12
   if ExtendedKeyUsages <> [] then
     AddExt(result, xeExtendedKeyUsage,
-      Asn(ASN1_SEQ, [XkuToOids(ExtendedKeyUsages)]));
+      AsnSeq(XkuToOids(ExtendedKeyUsages)));
   // Extension[] RawUtf8 are used as source
   // - ExtensionOther[] and ExtensionRaw[] are ignored
   // RFC 5280 #4.2.1.2
@@ -962,17 +962,15 @@ begin
   // RFC 5280 #4.2.1.1
   if Extension[xeAuthorityKeyIdentifier] <> '' then
     AddExt(result, xeAuthorityKeyIdentifier,
-      Asn(ASN1_SEQ, [
-        Asn(ASN1_CTX0, [HumanHexToBin(Extension[xeAuthorityKeyIdentifier])])
-      ]));
+      AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(Extension[xeAuthorityKeyIdentifier])])));
   // RFC 5280 #4.2.1.6
   if Extension[xeSubjectAlternativeName] <> '' then
     AddExt(result, xeSubjectAlternativeName,
-      Asn(ASN1_SEQ, [CsvToDns(pointer(Extension[xeSubjectAlternativeName]))]));
+      AsnSeq(CsvToDns(pointer(Extension[xeSubjectAlternativeName]))));
   // RFC 5280 #4.2.1.7
   if Extension[xeIssuerAlternativeName] <> '' then
     AddExt(result, xeIssuerAlternativeName,
-      Asn(ASN1_SEQ, [CsvToDns(pointer(Extension[xeIssuerAlternativeName]))]));
+      AsnSeq(CsvToDns(pointer(Extension[xeIssuerAlternativeName]))));
   // non-standard extension - but defined as TCryptCertFields.Comment
   if Extension[xeNetscapeComment] <> '' then
     AddExt(result, xeNetscapeComment,
@@ -987,19 +985,19 @@ begin
   if Version >= 3 then
     // compute the X.509 v3 extensions block
     ext := Asn(ASN1_CTC3, [
-             Asn(ASN1_SEQ, [ComputeExtensions])
+             AsnSeq(ComputeExtensions)
            ]);
-  fCachedDer := Asn(ASN1_SEQ, [
+  fCachedDer := AsnSeq([
                   {%H-}Asn(Version - 1),
-                  Asn(ASN1_INT, HumanHexToBin(SerialNumber)),
+                  Asn(ASN1_INT, [HumanHexToBin(SerialNumber)]),
                   XsaToSeq(Signature),
                   Issuer.ToBinary,
-                  Asn(ASN1_SEQ, [
+                  AsnSeq([
                     AsnTime(NotBefore),
                     AsnTime(NotAfter)
                   ]),
                   Subject.ToBinary,
-                  Asn(ASN1_SEQ, [
+                  AsnSeq([
                     XkaToSeq(SubjectPublicKeyAlgorithm),
                     SubjectPublicKey
                   ]),
@@ -1542,7 +1540,7 @@ begin
     raise EX509.Create('TX509.ToDer with no previous Sign() call');
   fCachedSha1 := '';
   fCachedPeerInfo := '';
-  fCachedDer := Asn(ASN1_SEQ, [
+  fCachedDer := AsnSeq([
                   Signed.ToDer,
                   XsaToSeq(SignatureAlgorithm),
                   Asn(ASN1_BITSTR, SignatureValue)

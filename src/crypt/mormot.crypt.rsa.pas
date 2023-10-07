@@ -2058,13 +2058,13 @@ begin
     result := ''
   else
     // see "A.1.1. RSA Public Key Syntax" of RFC 8017
-    result := Asn(ASN1_SEQ, [
-                Asn(ASN1_SEQ, [
+    result := AsnSeq([
+                AsnSeq([
                   AsnOid(ASN1_OID_RSAPUB),
                   ASN1_NULL_VALUE // optional
                 ]),
                 Asn(ASN1_BITSTR, [
-                  Asn(ASN1_SEQ, [
+                  AsnSeq([
                     AsnBigInt(Modulus),
                     AsnBigInt(Exponent) // typically 65537
                   ])
@@ -2078,7 +2078,7 @@ begin
      (Exponent = '') then
     result := ''
   else
-    result := Asn(ASN1_SEQ, [
+    result := AsnSeq([
                 AsnBigInt(Modulus),
                 AsnBigInt(Exponent) // typically 65537
               ]);
@@ -2113,14 +2113,14 @@ begin
     result := ''
   else
     // PKCS#8 format (default as with openssl)
-    result := Asn(ASN1_SEQ, [
+    result := AsnSeq([
                 Asn(Version),
-                Asn(ASN1_SEQ, [
+                AsnSeq([
                   AsnOid(ASN1_OID_RSAPUB),
                   ASN1_NULL_VALUE // optional
                 ]),
                 Asn(ASN1_OCTSTR, [
-                  Asn(ASN1_SEQ, [
+                  AsnSeq([
                     Asn(Version),
                     AsnBigInt(Modulus),
                     AsnBigInt(PublicExponent), // typically 65537
@@ -2735,8 +2735,8 @@ var
 begin
   // create the ASN.1 sequence of the hash to be encoded
   FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
-  seq := Asn(ASN1_SEQ, [
-           Asn(ASN1_SEQ, [
+  seq := AsnSeq([
+           AsnSeq([
              AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
              ASN1_NULL_VALUE
            ]),

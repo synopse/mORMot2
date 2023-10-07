@@ -1997,9 +1997,10 @@ begin
   try
     id := Random31;
     FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [LdapEscapeName(DomainName), NTVER], filter);
-    req := Asn(ASN1_SEQ, [
+    req := AsnSeq([
              Asn(id),
-             RawLdapSearch('', false, filter, ['NetLogon'])]);
+             RawLdapSearch('', false, filter, ['NetLogon'])
+           ]);
     sock.SetReceiveTimeout(TimeOutMS);
     if sock.SendTo(pointer(req), length(req), addr) <> nrOK then
       exit;
@@ -2123,11 +2124,12 @@ begin
   try
     sock.SetBroadcast(true);
     id := Random31;
-    req := Asn(ASN1_SEQ, [
+    req := AsnSeq([
              Asn(id),
              //Asn(''), // the RFC 1798 requires user, but MS AD does not :(
              RawLdapSearch('', false, '*', ['dnsHostName',
-               'defaultNamingContext', 'ldapServiceName', 'vendorName'])]);
+               'defaultNamingContext', 'ldapServiceName', 'vendorName'])
+           ]);
     sock.SetReceiveTimeout(TimeOutMS);
     QueryPerformanceMicroSeconds(start);
     if sock.SendTo(pointer(req), length(req), addr) <> nrOK then
@@ -2195,9 +2197,10 @@ begin
       if sock[i] = nil then
         continue;
       sock[i].SetReceiveTimeout(1);
-      req := Asn(ASN1_SEQ, [
+      req := AsnSeq([
                Asn(777 + i),
-               RawLdapSearch('', false, '*', ['dnsHostName'])]);
+               RawLdapSearch('', false, '*', ['dnsHostName'])
+             ]);
       if sock[i].SendTo(pointer(req), length(req), addr) = nrOk then
         poll.Subscribe(sock[i], [pseRead], i)
       else
@@ -3025,9 +3028,10 @@ end;
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
 begin
   inc(fSeq);
-  result := Asn(ASN1_SEQ, [
-    Asn(fSeq),
-    Asn1Data]);
+  result := AsnSeq([
+              Asn(fSeq),
+              Asn1Data
+            ]);
   if not fSecContextEncrypt then
     exit;
   result := SecEncrypt(fSecContext, result);
@@ -3523,12 +3527,15 @@ begin
     AsnAdd(query, Asn(Value.List[i]));
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
                    Asn(obj),
-                   Asn(ASN1_SEQ, [
-                     Asn(ASN1_SEQ, [
+                   AsnSeq(
+                     AsnSeq([
                        Asn(ord(Op), ASN1_ENUM),
-                       Asn(ASN1_SEQ, [
+                       AsnSeq([
                          Asn(Value.AttributeName),
-                         Asn(query, ASN1_SETOF)])])])]));
+                         Asn(query, ASN1_SETOF)
+                       ])
+                     ]))
+                 ]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -3550,9 +3557,10 @@ begin
     for j := 0 to attr.Count - 1 do
       AsnAdd(sub, Asn(attr.List[j]));
     Append(query,
-      Asn(ASN1_SEQ, [
+      AsnSeq([
         Asn(attr.AttributeName),
-        Asn(ASN1_SETOF, [sub])]));
+        Asn(ASN1_SETOF, [sub])
+      ]));
   end;
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
                    Asn(obj),
@@ -3687,9 +3695,11 @@ begin
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),
-                   Asn(ASN1_SEQ, [
+                   AsnSeq([
                      Asn(TrimU(SeparateLeft(AttributeValue, '='))),
-                     Asn(TrimU(SeparateRight(AttributeValue, '=')))])]));
+                     Asn(TrimU(SeparateRight(AttributeValue, '=')))
+                   ])
+                 ]));
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
 end;
 
@@ -3716,12 +3726,14 @@ begin
     fSearchAliases, fSearchSizeLimit, fSearchTimeLimit);
   if fSearchPageSize > 0 then
     Append(s, Asn(
-        Asn(ASN1_SEQ, [
+        AsnSeq([
            Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
            ASN1_BOOLEAN_VALUE[false],     // criticality: false
-           Asn(Asn(ASN1_SEQ, [
-             Asn(fSearchPageSize),
-             Asn(fSearchCookie)]))]), LDAP_ASN1_CONTROLS));
+           Asn(AsnSeq([
+                 Asn(fSearchPageSize),
+                 Asn(fSearchCookie)
+               ]))
+        ]), LDAP_ASN1_CONTROLS));
   SendPacket(s);
   x := 1;
   repeat
