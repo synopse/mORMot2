@@ -1261,7 +1261,7 @@ begin
   len := length(uri) - ACME_CHALLENGE_PATH_LEN;
   if (fClient = nil) or
      (len <= 0) or
-     not CompareMem(P, @_ACME_CHALLENGE_PATH, ACME_CHALLENGE_PATH_LEN) then
+     not CompareMem(P, _ACME_CHALLENGE_PATH, ACME_CHALLENGE_PATH_LEN) then
     exit;
   client := GetClientLocked(domain);
   if client <> nil then
