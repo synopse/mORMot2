@@ -472,17 +472,17 @@ const
     EVP_PKEY_ED25519);    // caaEdDSA
 
   CAA_BITSORCURVE: array[TCryptAsymAlgo] of integer = (
-    NID_X9_62_prime256v1, // caaES256
-    NID_secp384r1,        // caaES384
-    NID_secp521r1,        // caaES512
-    NID_secp256k1,        // caaES256K
-    2048,                 // caaRS256
-    2048,                 // caaRS384
-    2048,                 // caaRS512
-    2048,                 // caaPS256
-    2048,                 // caaPS384
-    2048,                 // caaPS512
-    0);                   // caaEdDSA
+    NID_X9_62_prime256v1,        // caaES256
+    NID_secp384r1,               // caaES384
+    NID_secp521r1,               // caaES512
+    NID_secp256k1,               // caaES256K
+    RSA_DEFAULT_GENERATION_BITS, // caaRS256
+    RSA_DEFAULT_GENERATION_BITS, // caaRS384
+    RSA_DEFAULT_GENERATION_BITS, // caaRS512
+    RSA_DEFAULT_GENERATION_BITS, // caaPS256
+    RSA_DEFAULT_GENERATION_BITS, // caaPS384
+    RSA_DEFAULT_GENERATION_BITS, // caaPS512
+    0);                          // caaEdDSA
 
 
 { ************** JWT Implementation using any OpenSSL Algorithm }
@@ -557,8 +557,10 @@ type
       aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
       reintroduce;
     /// generate a private/public keys pair for this algorithm in PEM text format
+    // - the new key will have RSA_DEFAULT_GENERATION_BITS, i.e. 2048-bit
     class procedure GenerateKeys(out PrivateKey, PublicKey: RawUtf8);
     /// generate a private/public keys pair for this algorithm in raw DER format
+    // - the new key will have RSA_DEFAULT_GENERATION_BITS, i.e. 2048-bit
     class procedure GenerateBinaryKeys(out PrivateKey, PublicKey: RawByteString);
     /// wrapper around OpenSslSupports() function
     class function IsAvailable: boolean; override;
@@ -595,37 +597,37 @@ type
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'RS256' RSA 2048-bit algorithm over SHA-256 using OpenSSL
+  /// implements 'RS256' RSA algorithm over SHA-256 using OpenSSL
   TJwtRS256Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'RS384' RSA 2048-bit algorithm over SHA-384 using OpenSSL
+  /// implements 'RS384' RSA algorithm over SHA-384 using OpenSSL
   TJwtRS384Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'RS512' RSA 2048-bit algorithm over SHA-512 using OpenSSL
+  /// implements 'RS512' RSA algorithm over SHA-512 using OpenSSL
   TJwtRS512Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'PS256' RSA-PSS 2048-bit algorithm over SHA-256 using OpenSSL
+  /// implements 'PS256' RSA-PSS algorithm over SHA-256 using OpenSSL
   TJwtPS256Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'PS384' RSA-PSS 2048-bit algorithm over SHA-384 using OpenSSL
+  /// implements 'PS384' RSA-PSS algorithm over SHA-384 using OpenSSL
   TJwtPS384Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
   end;
 
-  /// implements 'PS512' RSA-PSS 2048-bit algorithm over SHA-512 using OpenSSL
+  /// implements 'PS512' RSA-PSS algorithm over SHA-512 using OpenSSL
   TJwtPS512Osl = class(TJwtAbstractOsl)
   protected
     class function GetAlgorithm: TCryptAsymAlgo; override;
@@ -2132,6 +2134,9 @@ begin
         RaiseErrorGenerate('SetBasic');
       if not x.SetUsage(TX509Usages(Usages - [cuCA])) then
         RaiseErrorGenerate('SetUsage');
+      if (Fields <> nil) and
+         (Fields^.Comment <> '') then
+         x.SetExtension(NID_netscape_comment, Fields^.Comment);
     end;
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');

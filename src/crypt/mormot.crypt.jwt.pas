@@ -606,7 +606,8 @@ type
   public
     /// initialize the JWT processing instance calling SetAlgorithm abstract method
     // - should supply one RSA key, eigher private or public, in PEM or raw DER
-    // binary format, of at least 2048 bits (as required by NIST SP800-131A)
+    // binary format, of at least 2048-bit (as required by NIST SP800-131A) but
+    // it could be 3072-bit for support up to 2030
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
@@ -627,21 +628,21 @@ type
   /// meta-class of TJwtRsa classes
   TJwtRsaClass = class of TJwtRsa;
 
-  /// implements 'RS256' RSA 2048-bit algorithm over SHA-256
+  /// implements 'RS256' RSA algorithm over SHA-256
   // - you may consider faster TJwtRS256Osl from mormot.crypt.openssl instead
   TJwtRS256 = class(TJwtRsa)
   protected
     procedure SetAlgorithm; override;
   end;
 
-  /// implements 'RS384' RSA 2048-bit algorithm over SHA-384
+  /// implements 'RS384' RSA algorithm over SHA-384
   // - you may consider faster TJwtRS384Osl from mormot.crypt.openssl instead
   TJwtRS384 = class(TJwtRsa)
   protected
     procedure SetAlgorithm; override;
   end;
 
-  /// implements 'RS512' RSA 2048-bit algorithm over SHA-512
+  /// implements 'RS512' RSA algorithm over SHA-512
   // - you may consider faster TJwtRS512Osl from mormot.crypt.openssl instead
   TJwtRS512 = class(TJwtRsa)
   protected

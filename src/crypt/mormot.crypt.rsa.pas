@@ -45,6 +45,7 @@ uses
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
   - will register as Asym 'RS256','RS384','RS512' algorithms (if not overriden
     by mormot.crypt.openssl), keeping simple and efficient 'RSA2048SHA256'
+  - used by mormot.crypt.x509 to handle X.509 Certificates RSA signatures
 }
 
 {.$define USEBARRET}
@@ -526,9 +527,10 @@ type
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
-    // - on a very slow CPU or with huge Bits, you can increase TimeOutMS
-    function Generate(Bits: integer = 2048; Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 20; TimeOutMS: integer = 10000): boolean;
+    // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
+    function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
+      Extend: TBigIntSimplePrime = bspMost; Iterations: integer = 20;
+      TimeOutMS: integer = 10000): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -1848,7 +1850,8 @@ begin
 end;
 
 const
-  RSA_DEFAULT_ALLOCATE = 2048 shr HALF_SHR; // fair enough overallocation
+  // fair enough overallocation
+  RSA_DEFAULT_ALLOCATE = RSA_DEFAULT_GENERATION_BITS shr HALF_SHR;
 
 function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
 begin
@@ -2094,10 +2097,10 @@ begin
               @Exponent]);
   pos := 1;
   // try a simple ASN1_SEQ with two ASN1_INT, as stored in a X509 certificate
-  result := result or
-            (AsnNext(pos, der) = ASN1_SEQ) and
-            AsnNextBigInt(pos, der, Modulus) and
-            AsnNextBigInt(pos, der, Exponent);
+  if not result then
+    result := (AsnNext(pos, der) = ASN1_SEQ) and
+              AsnNextBigInt(pos, der, Modulus) and
+              AsnNextBigInt(pos, der, Exponent);
 end;
 
 
@@ -2286,7 +2289,7 @@ begin
      HasPrivateKey or
      ((Bits <> 512) and    // broken with average CPU power
       (Bits <> 1024) and   // considered weak, and rejected by browsers and NIST
-      (Bits <> 2048) and   // 112-bit of security: actual norm
+      (Bits <> 2048) and   // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
       (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
       (Bits <> 4096) and   // not worth it
       (Bits <> 7680)) then // REALLY slow for only 192-bit of security
@@ -2789,7 +2792,7 @@ begin
     raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
   rsa := TRsa.Create;
   try
-    if not rsa.Generate(2048, bspMost, 4, 10000) then
+    if not rsa.Generate(RSA_DEFAULT_GENERATION_BITS, bspMost, 4, 10000) then
       exit; // timed out
     pub := rsa.SavePublicKeyDer;
     priv := rsa.SavePrivateKeyDer;
@@ -2865,7 +2868,7 @@ begin
   // register this unit methods to our high-level cryptographic catalog
   TCryptAsymRsa.Implements('RS256,RSA2048SHA256');
   TCryptAsymRsa.Create('RS384', 'sha384');
-  TCryptAsymRsa.Create('RS512', 'sha384');
+  TCryptAsymRsa.Create('RS512', 'sha512');
   // RS256 RS384 RS512 may be overriden by faster mormot.crypt.openssl
   // but RSA2048SHA256 will stil be available to use this unit if needed
 end;

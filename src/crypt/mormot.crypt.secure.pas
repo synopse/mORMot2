@@ -1606,21 +1606,26 @@ type
   /// exception class raised by our High-Level Certificates Process
   ECryptCert = class(ESynException);
 
-  /// the known asymmetric algorithms, e.g. as published by OpenSSL
+  /// the supported asymmetric algorithms, e.g. as published by OpenSSL
   // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
   // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
   // accessible via CryptAsymOpenSsl[] and CryptCertAlgoOpenSsl[] factories
-  // - caaES256 is our mormot.crypt.ecc256r1 prime256v1/NISTP-256 ECC Curve
+  // - mormot.crypt.ecc unit implements only caaES256
+  // - mormot.crypt.x509 unit implements caaES256/caaRS256/caaRS384/caaRS512
+  // - mormot.crypt.openssl unit implements them all
   // - caaES256, caaES384 and caaES512 match OpenSSL EVP_PKEY_EC with
   // prime256v1, NID_secp384r1 and NID_secp512r1 curves
   // - caaRS256, caaRS384 and caaRS512 match OpenSSL EVP_PKEY_RSA with
-  // 2048 bits from SHA-256, SHA-384 and SHA-512 digest method
+  // 2048-bit from SHA-256, SHA-384 and SHA-512 digest method
   // - caaPS256, caaPS384 and caaPS512 match OpenSSL EVP_PKEY_RSA_PSS with
-  // 2048 bits from SHA-256, SHA-384 and SHA-512 digest method
+  // 2048-bit from SHA-256, SHA-384 and SHA-512 digest method
   // - caaEdDSA match OpenSSL EVP_PKEY_ED25519 curve
   // - note that caaES256K is NID_secp256k1 which was defined for completeness,
   // but should appear for special needs only: caaES256 is to be preferred,
   // and is also significantly faster
+  // - our RSA algorithms generates RSA_DEFAULT_GENERATION_BITS = 2048-bit,
+  // but our units can read and manage any other size of existing certificates
+  // generated e.g. by OpenSSL or our mormot.crypt.rsa unit
   TCryptAsymAlgo = (
     caaES256,
     caaES384,
@@ -1633,6 +1638,9 @@ type
     caaPS384,
     caaPS512,
     caaEdDSA);
+
+  /// set of supported asymmetric algorithms
+  TCryptAsymAlgos = set of TCryptAsymAlgo;
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
@@ -2256,6 +2264,15 @@ type
   end;
 
 const
+  /// our units generate RSA keypairs with 2048-bit by default
+  // - anything lower than 2048-bit is unsafe and should not be used
+  // - 2048-bit is today's norm, creating 112-bit of security
+  // - 3072-bit is supposed to be supported up to 2030, with 128-bit of security
+  // - 4096-bit has no security advantage, just slower process
+  // - 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
+  // and offers only 256-bit of security, so other algorithms may be preferred
+  RSA_DEFAULT_GENERATION_BITS = 2048;
+
   /// the JWT algorithm names according to our known asymmetric algorithms
   // - as implemented e.g. by TJwtAbstractOsl
   CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
