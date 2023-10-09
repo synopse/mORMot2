@@ -778,7 +778,7 @@ begin
       repeat
         GetNextItemTrimed(p, ',', v);
         Append(one, AsnSeq([
-                      XA_OID_ASN[a],
+                      Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
                       AsnText(v)
                     ]));
       until p = nil;
@@ -897,15 +897,15 @@ end;
 
 procedure TXName.FromFields(const fields: TCryptCertFields);
 begin
-  Name[xaC]  := fields.Country;
-  Name[xaST] := fields.State;
-  Name[xaL]  := fields.Locality;
-  Name[xaO]  := fields.Organization;
-  Name[xaOU] := fields.OrgUnit;
-  Name[xaCN] := fields.CommonName;
-  Name[xaE]  := fields.EmailAddress;
-  Name[xaS]  := fields.SurName;
-  Name[xaG]  := fields.GivenName;
+  Name[xaC]  := TrimU(fields.Country);
+  Name[xaST] := TrimU(fields.State);
+  Name[xaL]  := TrimU(fields.Locality);
+  Name[xaO]  := TrimU(fields.Organization);
+  Name[xaOU] := TrimU(fields.OrgUnit);
+  Name[xaCN] := TrimU(fields.CommonName);
+  Name[xaE]  := TrimU(fields.EmailAddress);
+  Name[xaS]  := TrimU(fields.SurName);
+  Name[xaG]  := TrimU(fields.GivenName);
 end;
 
 procedure TXName.AfterModified;
@@ -1146,7 +1146,7 @@ begin
     xkaRsa:
       if fRsa = nil then
       begin
-        fRsa := fRsa.Create;
+        fRsa := TRsa.Create;
         if fRsa.Generate(RSA_DEFAULT_GENERATION_BITS) then
           result := fRsa.SavePublicKey.ToSubjectPublicKey;
       end;
@@ -1372,7 +1372,7 @@ begin
              AsnSeq(ComputeExtensions)
            ]);
   fCachedDer := AsnSeq([
-                  {%H-}Asn(Version - 1),
+                  Asn(ASN1_CTC0, [{%H-}Asn(Version - 1)]),
                   Asn(ASN1_INT, [HumanHexToBin(SerialNumber)]),
                   XsaToSeq(Signature),
                   Issuer.ToBinary,
@@ -1737,7 +1737,10 @@ begin
   result := CanVerify(self, cuDigitalSignature, false, IgnoreError, TimeUtc);
   if result = cvValidSigned then
     if fPublicKey.Verify(SignatureAlgorithm, Data, Sig, DataLen, SigLen) then
-      result := cvValidSigned
+      if IsSelfSigned then
+        result := cvValidSelfSigned
+      else
+        result := cvValidSigned
     else
       result := cvInvalidSignature;
 end;
@@ -1834,7 +1837,7 @@ begin
   fCachedDer := AsnSeq([
                   Signed.ToDer,
                   XsaToSeq(SignatureAlgorithm),
-                  Asn(ASN1_BITSTR, SignatureValue)
+                  Asn(ASN1_BITSTR, [SignatureValue])
                 ]);
 end;
 
