@@ -223,6 +223,9 @@ type
     // - includes some optional precision argument
     function CheckSame(const Value1, Value2: double;
       const Precision: double = DOUBLE_SAME; const msg: string = ''): boolean;
+    /// used by the published methods to run a test assertion about two TDateTime values
+    // - allows an error of up to 1 second between the values
+    function CheckSameTime(const Value1, Value2: TDateTime; const msg: string = ''): boolean;
     /// used by the published methods to perform a string comparison with several values
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
@@ -741,6 +744,12 @@ function TSynTestCase.CheckSame(const Value1, Value2: double; const Precision: d
 begin
   result := SameValue(Value1, Value2, Precision);
   CheckUtf8(result, EQUAL_MSG, [Value1, Value2, msg]);
+end;
+
+function TSynTestCase.CheckSameTime(const Value1, Value2: TDateTime;
+  const msg: string): boolean;
+begin
+  result := CheckSame(Value1, Value2, 1 / SecsPerDay);
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
