@@ -1383,7 +1383,7 @@ begin
                   Subject.ToBinary,
                   AsnSeq([
                     XkaToSeq(SubjectPublicKeyAlgorithm),
-                    SubjectPublicKey
+                    Asn(ASN1_BITSTR, [SubjectPublicKey])
                   ]),
                   ext
                 ]);
