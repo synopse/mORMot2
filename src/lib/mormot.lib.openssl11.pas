@@ -7537,47 +7537,59 @@ begin
     EVP_PKEY_free(@self);
 end;
 
+type
+  // extra header for IV and plain text / key size storage
+  // see also OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
+  // should match same record definition in TRsa.Seal/Open from mormot.crypt.rsa
+  TRsaSealHeader = packed record
+    iv: THash128;
+    plainlen: integer;
+    encryptedkeylen: word; // typically 256 bytes for RSA-2048
+    // followed by the encrypted key then the encrypted message
+  end;
+  PRsaSealHeader = ^TRsaSealHeader;
+
 function EVP_PKEY.RsaSeal(Cipher: PEVP_CIPHER;
   const Msg: RawByteString): RawByteString;
 var
   ctx: PEVP_CIPHER_CTX;
   pubk: PEVP_PKEY;
   ek: RawByteString;
-  ekl, l, lu, lf: integer;
-  p: PByte;
-  iv: THash128;
+  ekl, lu, lf, msgpos: integer;
+  p: PAnsiChar;
+  head: TRsaSealHeader;
 begin
   // expects @self to be a public key
   // must be RSA because it is the only OpenSSL algorithm featuring key transport
   result := '';
-  l := length(Msg);
+  head.plainlen := length(Msg);
   if (@self = nil) or
-     (l = 0) or
-     (l > 128 shl 20) or // fair limitation for in-memory encryption
+     (head.plainlen = 0) or
+     (head.plainlen > 128 shl 20) or // fair limitation for in-memory encryption
      (Cipher = nil) then
     exit;
+  // generate the ephemeral secret key and IV within the corresponding header
+  // and encrypt this ephemeral secret using the current RSA public key
   ctx := EVP_CIPHER_CTX_new;
   if ctx = nil then
     exit;
   pubk := @self;
   SetLength(ek, EVP_PKEY_size(@self));
-  if EVP_SealInit(ctx, Cipher, @ek, @ekl, @iv, @pubk, 1) = OPENSSLSUCCESS then
+  if EVP_SealInit(ctx, Cipher, @ek, @ekl, @head.iv, @pubk, 1) = OPENSSLSUCCESS then
   begin
-    FastSetRawByteString(result, nil, ekl + l + (SizeOf(iv) + 4 + 2 + 16));
-    p := pointer(result);
-    PHash128(p)^ := iv;
-    inc(PHash128(p));
-    PCardinal(p)^ := l;
-    inc(PCardinal(p));
-    PWord(p)^ := ekl;
-    inc(PWord(p));
-    MoveFast(pointer(ek)^, p^, ekl);
-    inc(p, ekl);
-    if EVP_EncryptUpdate(ctx, p, @lu, pointer(Msg), l) = OPENSSLSUCCESS then
+    head.encryptedkeylen := ekl;
+    msgpos := SizeOf(head) + ekl;
+    FastSetRawByteString(result, nil, msgpos + head.plainlen + 16);
+    // encrypt the message
+    if EVP_EncryptUpdate(ctx, @PByteArray(result)[msgpos], @lu,
+         pointer(Msg), head.plainlen) = OPENSSLSUCCESS then
     begin
-      inc(p, lu);
-      if EVP_SealFinal(ctx, p, @lf) = OPENSSLSUCCESS then
-        FakeLength(result, PAnsiChar(p) + lf - pointer(result))
+      // concatenate the header, encrypted key and message
+      PRsaSealHeader(result)^ := head;
+      MoveFast(pointer(ek)^, PByteArray(result)[SizeOf(head)], ekl);
+      p := @PByteArray(result)[msgpos + lu];
+      if EVP_SealFinal(ctx, pointer(p), @lf) = OPENSSLSUCCESS then
+        FakeLength(result, p + lf - pointer(result))
       else
         result := '';
     end
@@ -7591,34 +7603,36 @@ function EVP_PKEY.RsaOpen(Cipher: PEVP_CIPHER;
   const Msg: RawByteString; CodePage: integer): RawByteString;
 var
   ctx: PEVP_CIPHER_CTX;
-  p: PByte;
-  ekl, l, lu, lf: integer;
+  msgpos, lu, lf, lm: integer;
+  head: PRsaSealHeader absolute Msg;
+  input: PByteArray absolute Msg;
 begin
   // expects @self to be a private key
   result := '';
+  // decode and validate the header
+  lm := length(Msg);
   if (@self = nil) or
-     (Msg = '') or
-     (Cipher = nil) then
+     (Cipher = nil) or
+     (lm < SizeOf(head^)) or
+     (head^.plainlen <= 0) or
+     (head^.plainlen > 128 shl 20) then
     exit;
+  msgpos := SizeOf(head^) + head^.encryptedkeylen;
+  if lm < msgpos + head^.plainlen then
+    exit; // avoid buffer overflow on malformatted/forged input
+  // decrypt the ephemeral key, then the message
   ctx := EVP_CIPHER_CTX_new;
   if ctx = nil then
     exit;
-  p := pointer(Msg);
-  inc(PHash128(p));
-  l := PCardinal(p)^;
-  inc(PCardinal(p));
-  if l > 128 shl 20 then
-    exit; // support up to 128 MB of content
-  ekl := PWord(p)^;
-  inc(PWord(p));
-  if EVP_OpenInit(ctx, Cipher, p, ekl, pointer(Msg), @self) = OPENSSLSUCCESS then
+  if EVP_OpenInit(ctx, Cipher, @input[SizeOf(head^)],
+       head.encryptedkeylen, @head.iv, @self) = OPENSSLSUCCESS then
   begin
-    inc(p, ekl);
-    FastSetStringCP(result, nil, l, CodePage);
-    l := length(Msg) - (PAnsiChar(p) - pointer(Msg));
-    if (EVP_DecryptUpdate(ctx, pointer(result), @lu, p, l) <> OPENSSLSUCCESS) or
-       (EVP_OpenFinal(ctx, @PByteArray(result)[{%H-}lu], @lf) <> OPENSSLSUCCESS) or
-       (lu + {%H-}lf <> length(result)) then
+    FastSetStringCP(result, nil, head^.plainlen, CodePage);
+    if (EVP_DecryptUpdate(ctx,
+         pointer(result), @lu, @input[msgpos], lm - msgpos) <> OPENSSLSUCCESS) or
+       (EVP_OpenFinal(ctx,
+         @PByteArray(result)[{%H-}lu], @lf) <> OPENSSLSUCCESS) or
+       (lu + {%H-}lf <> head^.plainlen) then
       result:= '';
   end;
   EVP_CIPHER_CTX_free(ctx);
