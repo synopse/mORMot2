@@ -7539,8 +7539,8 @@ end;
 
 type
   // extra header for IV and plain text / key size storage
-  // see also OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
-  // should match same record definition in TRsa.Seal/Open from mormot.crypt.rsa
+  // - should match the very same record definition in TRsa.Seal/Open
+  // from mormot.crypt.rsa
   TRsaSealHeader = packed record
     iv: THash128;
     plainlen: integer;
@@ -7562,6 +7562,7 @@ begin
   // expects @self to be a public key
   // must be RSA because it is the only OpenSSL algorithm featuring key transport
   result := '';
+  // validate input parameters
   head.plainlen := length(Msg);
   if (@self = nil) or
      (head.plainlen = 0) or

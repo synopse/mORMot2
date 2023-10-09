@@ -603,6 +603,20 @@ type
     // - returns the encoded signature or '' on error
     // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
+    /// encrypt a message using the given Cipher and the stored public key
+    // - follow the EVP_SealInit/EVP_SealFinal encoding from OpenSSL
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString; overload;
+    /// encrypt a message using the given Cipher and the stored public key
+    function Seal(Cipher: TAesAbstractClass; AesBits: integer;
+      const Message: RawByteString): RawByteString; overload;
+    /// decrypt a message using the given Cipher and the stored private key
+    // - follow the EVP_OpenInit/EVP_OpenFinal encoding from OpenSSL
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString; overload;
+    /// decrypt a message using the given Cipher and the stored private key
+    function Open(Cipher: TAesAbstractClass; AesBits: integer;
+      const Message: RawByteString): RawByteString; overload;
     /// RSA modulus size in bytes
     property ModulusLen: integer
       read fModulusLen;
@@ -2795,6 +2809,130 @@ begin
          ]);
   // sign it using the stored private key
   result := BufferSign(pointer(seq), length(seq));
+end;
+
+function TRsa.Seal(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+var
+  mode: TAesMode;
+  bits: integer;
+begin
+  if AesAlgoNameDecode(pointer(Cipher), mode, bits) then
+    result := Seal(TAesFast[mode], bits, Message)
+  else
+    result := '';
+end;
+
+function TRsa.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+var
+  mode: TAesMode;
+  bits: integer;
+begin
+  if AesAlgoNameDecode(pointer(Cipher), mode, bits) then
+    result := Open(TAesFast[mode], bits, Message)
+  else
+    result := '';
+end;
+
+type
+  // extra header for IV and plain text / key size storage
+  // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
+  // from mormot.lib.openssl11
+  TRsaSealHeader = packed record
+    iv: TAesBlock;
+    plainlen: integer;
+    encryptedkeylen: word; // typically 256 bytes for RSA-2048
+    // followed by the encrypted key then the encrypted message
+  end;
+  PRsaSealHeader = ^TRsaSealHeader;
+
+// this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
+// algorithm, so that the Message encoding should stay compatible
+
+function TRsa.Seal(Cipher: TAesAbstractClass; AesBits: integer;
+  const Message: RawByteString): RawByteString;
+var
+  msgpos: PtrInt;
+  a: TAesAbstract;
+  key: THash256;
+  head: TRsaSealHeader;
+  enckey, encmsg: RawByteString;
+begin
+  result := '';
+  // validate input parameters
+  head.plainlen := length(Message);
+  if (head.plainlen = 0) or
+     (head.plainlen > 128 shl 20) or // fair limitation for in-memory encryption
+     (Cipher = nil) or
+     not HasPublicKey then
+    exit;
+  // generate the ephemeral secret key and IV within the corresponding header
+  TAesPrng.Main.FillRandom(head.iv);
+  try
+    TAesPrng.Main.FillRandom(key);
+    // encrypt the ephemeral secret using the current RSA public key
+    enckey := BufferEncrypt(@key, AesBits shr 3);
+    head.encryptedkeylen := length(enckey);
+    // encrypt the message
+    a := Cipher.Create(key, AesBits);
+    try
+      a.IV := head.iv;
+      encmsg := a.EncryptPkcs7(Message, {ivatbeg=}false);
+    finally
+      a.Free;
+    end;
+    // concatenate the header, encrypted key and message
+    msgpos := SizeOf(head) + length(enckey);
+    FastSetRawByteString(result, nil, msgpos + length(encmsg));
+    PRsaSealHeader(result)^ := head;
+    MoveFast(pointer(enckey)^, PByteArray(result)[SizeOf(head)], length(enckey));
+    MoveFast(pointer(encmsg)^, PByteArray(result)[msgpos], length(encmsg));
+  finally
+    FillZero(key);
+  end;
+end;
+
+function TRsa.Open(Cipher: TAesAbstractClass; AesBits: integer;
+  const Message: RawByteString): RawByteString;
+var
+  msgpos, msglen: PtrInt;
+  a: TAesAbstract;
+  key: RawByteString;
+  head: PRsaSealHeader absolute Message;
+  input: PByteArray absolute Message;
+begin
+  result := '';
+  // decode and validate the header
+  msglen := length(Message);
+  if not HasPrivateKey or
+     (Cipher = nil) or
+     (msglen < SizeOf(head^)) or
+     (head^.plainlen <= 0) or
+     (head^.plainlen > 128 shl 20) or
+     (head^.encryptedkeylen <> fModulusLen) then
+    exit;
+  msgpos := SizeOf(head^) + head^.encryptedkeylen;
+  if msglen < msgpos + head^.plainlen then
+    exit; // avoid buffer overflow on malformatted/forged input
+  // decrypt the ephemeral key, then the message
+  key := BufferDecrypt(@input[SizeOf(head^)]);
+  if key <> '' then
+    try
+      if length(key) = AesBits shr 3 then
+      begin
+        a := Cipher.Create(pointer(key)^, AesBits);
+        try
+          a.IV := head^.iv;
+          result := a.DecryptPkcs7Buffer(@input[msgpos], msglen - msgpos,
+            {ivatbeg=}false, {raiseerror=}false);
+        finally
+          a.Free;
+        end;
+      end;
+    finally
+      FillZero(key);
+    end;
 end;
 
 

@@ -3249,7 +3249,7 @@ var
   rnd: HalfUInt; // truncated to 16-bit or 32-bit value
   a, b, s, d, e, m, v: PBigInt;
   cu, pem, txt, oid: RawUtf8;
-  bin, hash, signed: RawByteString;
+  bin, hash, signed, encrypted: RawByteString;
   pub1, pub2: TRsaPublicKey;
   pri1, pri2: TRsaPrivateKey;
   timer: TPrecisionTimer;
@@ -3673,7 +3673,8 @@ begin
     c := TRsa.Create;
     try
       timer.Start;
-      check(c.Generate(2048, bspMost, 20, 60000), 'TimeOut');
+      check(c.Generate(2048, bspMost, 20, RSA_DEFAULT_GENERATION_TIMEOUTMS),
+        'TimeOut');
       NotifyTestSpeed('RS256 generate', -1, 0, @timer);
       CheckEqual(c.ModulusBits, 2048);
       CheckEqual(c.ModulusLen, 256);
@@ -3711,13 +3712,15 @@ begin
       Check(c.SavePrivateKeyDer = bin, 'gensaveload');
       CheckEqual(length(hash), SizeOf(TSha256Digest));
       CheckHash(hash, $401CD1EB);
-      bin := c.Sign(pointer(hash), hfSHA256);
-      Check(bin = signed);
+      Check(c.Sign(pointer(hash), hfSHA256) = signed);
       oid := '';
       hash := c.Verify(signed, @oid);
       CheckEqual(length(hash), SizeOf(TSha256Digest));
       CheckHash(hash, $401CD1EB);
       CheckEqual(oid, ASN1_OID_HASH[hfSHA256]);
+      encrypted := c.Seal(bin); // bin is typically > 1KB long
+      Check(encrypted <> '', 'Seal');
+      Check(c.Open(encrypted) = bin, 'Open');
     finally
       c.Free;
     end;
