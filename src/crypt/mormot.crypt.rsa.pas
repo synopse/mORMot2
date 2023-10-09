@@ -424,6 +424,14 @@ function CompareBI(A, B: HalfUInt): integer;
 
 { **************** RSA Low-Level Cryptography Functions }
 
+const
+  {$ifdef CPUARM}
+  // we have seen some weak Raspberry PI timeout
+  RSA_DEFAULT_GENERATION_TIMEOUTMS = 30000;
+  {$else}
+  RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
+  {$endif CPUARM}
+
 type
   /// store a RSA public key
   // - with DER (therefore PEM) serialization support
@@ -530,7 +538,7 @@ type
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
     function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
       Extend: TBigIntSimplePrime = bspMost; Iterations: integer = 20;
-      TimeOutMS: integer = 10000): boolean;
+      TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
     /// load a public key from raw binary buffers
@@ -2792,7 +2800,8 @@ begin
     raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
   rsa := TRsa.Create;
   try
-    if not rsa.Generate(RSA_DEFAULT_GENERATION_BITS, bspMost, 4, 10000) then
+    if not rsa.Generate(RSA_DEFAULT_GENERATION_BITS, bspMost, 4,
+             RSA_DEFAULT_GENERATION_TIMEOUTMS) then
       exit; // timed out
     pub := rsa.SavePublicKeyDer;
     priv := rsa.SavePrivateKeyDer;
