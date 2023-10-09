@@ -357,12 +357,15 @@ type
     // - will also ensure the private key do match the associated public key
     function Load(AssociatedKey: TXPublicKey;
       const PrivateKeySaved: RawByteString): boolean;
-    /// create a new private key, and returning an associated public key binary
+    /// create a new private / public key pair
+    // - returns the associated public key binary in SubjectPublicKey format
     function Generate(Algorithm: TXPublicKeyAlgorithm): RawByteString;
     /// finalize this instance
     destructor Destroy; override;
     /// return the private key as raw binary
-    function Save: RawByteString;
+    function ToDer: RawByteString;
+    /// return the private key in the TCryptCertX509.Save expected format
+    function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
     /// sign a memory buffer digest with RSA or ECC using the stored private key
     // - storing the DigAlgo Hash algorithm OID for RSA
     function Sign(const Dig: THash512Rec; DigLen: integer;
@@ -1139,7 +1142,7 @@ begin
   fRsa.Free;
 end;
 
-function TXPrivateKey.Save: RawByteString;
+function TXPrivateKey.ToDer: RawByteString;
 begin
   if self = nil then
     result := ''
@@ -1147,6 +1150,56 @@ begin
     result := fRsa.SavePrivateKeyDer
   else
     result := EccToDer(fEcc); // does IsZero()
+end;
+
+const
+  // those values match EccPrivateKeyEncrypt/EccPrivateKeyDecrypt for xkaEcc256
+  XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
+    '', 'synrsa', 'synecc');
+  XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
+    0, 3, 31);
+
+function TXPrivateKey.Save(Format: TCryptCertFormat;
+  const Password: SpiUtf8): RawByteString;
+var
+  der, bin: RawByteString;
+  k: TPemKind;
+begin
+  if self = nil then
+    result := ''
+  else
+  try
+    der := ToDer;
+    if Password = '' then
+      // save as plain unencrypted PEM/DER
+      if Format = ccfPem then
+        if fAlgo = xkaRsa then
+          k := pemRsaPrivateKey
+        else
+          k := pemEcPrivateKey
+      else
+        k := pemUnspecified // save as ccfBinary
+    else
+    begin
+      // use mormot.core.secure encryption, not standard PKCS#8
+      bin := der; // for FillZero()
+      der := PrivateKeyEncrypt(bin, XKA_SALT[fAlgo], Password, XKA_ROUNDS[fAlgo]);
+      if Format = ccfPem then
+        if fAlgo = xkaRsa then
+          k := pemSynopseRsaEncryptedPrivateKey
+        else
+          k := pemSynopseEccEncryptedPrivateKey
+        else
+          k := pemUnspecified;
+    end;
+    if k = pemUnspecified then
+      result := der
+    else
+      result := DerToPem(der, k);
+  finally
+    FillZero(der);
+    FillZero(bin);
+  end;
 end;
 
 function TXPrivateKey.Sign(const Dig: THash512Rec; DigLen: integer;
