@@ -344,6 +344,9 @@ type
       const Data, Sig: RawByteString): boolean; overload;
     /// as used by TCryptCertX509.GetPrivateKeyParams
     function GetParams(out x, y: RawByteString): boolean;
+    /// use EciesSeal or RSA sealing, i.e. encryption with this public key
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString;
   end;
 
   /// store a RSA or ECC private key for TX509
@@ -376,6 +379,12 @@ type
     /// sign a memory buffer with RSA or ECC using the stored private key
     function Sign(DigAlgo: TXSignatureAlgorithm;
       const Data: RawByteString): RawByteString; overload;
+    /// use EciesSeal or RSA un-sealing, i.e. decryption with this private key
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString;
+    /// compute the shared-secret with another public key
+    // - by design, ECDHE is only available for ECC
+    function SharedSecret(pub: TXPublicKey): RawByteString;
   end;
 
 
@@ -1079,6 +1088,19 @@ begin
     end;
 end;
 
+function TXPublicKey.Seal(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  result  := '';
+  if self <> nil then
+    case fAlgo of
+      xkaRsa:
+        result := fRsa.Seal(Cipher, Message);
+      xkaEcc256:
+        result := EciesSeal(Cipher, fEcc.PublicKey, Message);
+    end;
+end;
+
 
 { TXPrivateKey }
 
@@ -1236,6 +1258,40 @@ function TXPrivateKey.Sign(DigAlgo: TXSignatureAlgorithm;
   const Data: RawByteString): RawByteString;
 begin
   result := Sign(DigAlgo, pointer(Data), length(Data));
+end;
+
+function TXPrivateKey.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  result := '';
+  if self <> nil then
+    case fAlgo of
+      xkaRsa:
+        result := fRsa.Open(Cipher, Message);
+      xkaEcc256:
+        result := EciesOpen(Cipher, fEcc, Message);
+    end;
+end;
+
+function TXPrivateKey.SharedSecret(pub: TXPublicKey): RawByteString;
+var
+  sec: TEccSecretKey;
+begin
+  result := '';
+  if (self <> nil) and
+     (pub <> nil) and
+     (pub.fAlgo = fAlgo) then
+    case fAlgo of
+      xkaRsa:
+        ; // not possible by definition
+      xkaEcc256:
+        try
+          if Ecc256r1SharedSecret(pub.fEccPub, fEcc, sec) then
+            FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
+        finally
+          FillZero(sec);
+        end;
+    end;
 end;
 
 

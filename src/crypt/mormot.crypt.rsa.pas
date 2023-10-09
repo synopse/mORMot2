@@ -604,14 +604,16 @@ type
     // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
     /// encrypt a message using the given Cipher and the stored public key
-    // - follow the EVP_SealInit/EVP_SealFinal encoding from OpenSSL
+    // - follow the EVP_SealInit/EVP_SealFinal encoding from OpenSSL and its
+    // EVP_PKEY.RsaSeal() wrapper from mormot.lib.openssl11
     function Seal(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString; overload;
     /// encrypt a message using the given Cipher and the stored public key
     function Seal(Cipher: TAesAbstractClass; AesBits: integer;
       const Message: RawByteString): RawByteString; overload;
     /// decrypt a message using the given Cipher and the stored private key
-    // - follow the EVP_OpenInit/EVP_OpenFinal encoding from OpenSSL
+    // - follow the EVP_OpenInit/EVP_OpenFinal encoding from OpenSSL and its
+    // EVP_PKEY.RsaOpen() wrapper from mormot.lib.openssl11
     function Open(const Message: RawByteString;
       const Cipher: RawUtf8 = 'aes-128-ctr'): RawByteString; overload;
     /// decrypt a message using the given Cipher and the stored private key
@@ -3052,6 +3054,7 @@ begin
     FillZero(digest.b);
   end;
 end;
+
 
 procedure InitializeUnit;
 begin
