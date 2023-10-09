@@ -2808,8 +2808,8 @@ begin
       CheckEqual(c2.GetIssuerName, c1.GetIssuerName);
       CheckEqual(c2.GetSubjectKey, c1.GetSubjectKey);
       CheckEqual(c2.GetDigest, c1.GetDigest);
-      CheckSame(c2.GetNotAfter, c1.GetNotAfter);
-      CheckSame(c2.GetNotBefore, c1.GetNotBefore);
+      CheckSameTime(c2.GetNotAfter, c1.GetNotAfter);
+      CheckSameTime(c2.GetNotBefore, c1.GetNotBefore);
       Check(c2.IsValidDate);
       CheckEqual(word(c2.GetUsage), word(c1.GetUsage));
       CheckEqual(c2.GetPeerInfo, c1.GetPeerInfo);
@@ -2832,8 +2832,8 @@ begin
       CheckEqual(c3.GetSubject, c1.GetSubject);
       CheckEqual(c3.GetIssuerName, c1.GetIssuerName);
       CheckEqual(c3.GetSubjectKey, c1.GetSubjectKey);
-      CheckSame(c3.GetNotAfter, c1.GetNotAfter);
-      CheckSame(c3.GetNotBefore, c1.GetNotBefore);
+      CheckSameTime(c3.GetNotAfter, c1.GetNotAfter);
+      CheckSameTime(c3.GetNotBefore, c1.GetNotBefore);
       CheckEqual(c3.GetDigest, c1.GetDigest);
       CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
       if fmt = ccfPem then // PKCS12 seems to add some information to X509 :(
