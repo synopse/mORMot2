@@ -358,7 +358,7 @@ type
   public
     /// unserialized the private key from DER binary or PEM text
     // - will also ensure the private key do match the associated public key
-    function Load(AssociatedKey: TXPublicKey;
+    function Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
       const PrivateKeySaved: RawByteString): boolean;
     /// create a new private / public key pair
     // - returns the associated public key binary in SubjectPublicKey format
@@ -1104,29 +1104,31 @@ end;
 
 { TXPrivateKey }
 
-function TXPrivateKey.Load(AssociatedKey: TXPublicKey;
+function TXPrivateKey.Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
   const PrivateKeySaved: RawByteString): boolean;
 begin
   result := false;
   if (self = nil) or
      (fAlgo <> xkaNone) or
-     (AssociatedKey = nil) or
+     (Algorithm = xkaNone) or
      (PrivateKeySaved = '') then
     exit;
-  fAlgo := AssociatedKey.fAlgo;
+  fAlgo := Algorithm;
   case fAlgo of
     xkaRsa:
       begin
         fRsa := TRsa.Create;
         if fRsa.LoadFromPrivateKeyPem(PrivateKeySaved) and
-           fRsa.MatchKey(AssociatedKey.fRsa) then
+           ((AssociatedKey = nil) or
+            fRsa.MatchKey(AssociatedKey.fRsa)) then
           result := true
         else
           FreeAndNil(fRsa);
       end;
     xkaEcc256:
       if PemDerRawToEcc(PrivateKeySaved, fEcc) and
-         Ecc256r1MatchKeys(fEcc, AssociatedKey.fEcc.PublicKey) then
+         ((AssociatedKey = nil) or
+          Ecc256r1MatchKeys(fEcc, AssociatedKey.fEcc.PublicKey)) then
         result := true
       else
         FillZero(fEcc);
@@ -1373,7 +1375,7 @@ begin
            ]);
   fCachedDer := AsnSeq([
                   Asn(ASN1_CTC0, [{%H-}Asn(Version - 1)]),
-                  Asn(ASN1_INT, [HumanHexToBin(SerialNumber)]),
+                  Asn(ASN1_INT, [SerialNumber]),
                   XsaToSeq(Signature),
                   Issuer.ToBinary,
                   AsnSeq([
