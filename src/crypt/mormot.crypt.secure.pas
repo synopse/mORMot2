@@ -2270,7 +2270,7 @@ const
   // - 3072-bit is supposed to be supported up to 2030, with 128-bit of security
   // - 4096-bit has no security advantage, just slower process
   // - 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
-  // and offers only 256-bit of security, so other algorithms may be preferred
+  // and offers only 192-bit of security, so other algorithms may be preferred
   RSA_DEFAULT_GENERATION_BITS = 2048;
 
   /// the JWT algorithm names according to our known asymmetric algorithms
@@ -2825,6 +2825,7 @@ function AsnArr(const Data: array of RawUtf8;
 function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
 
 /// create an ASN.1 binary from an unsigned Big Integer raw buffer
+// - the raw buffer is likely to come from mormot.crypt.rsa TBigInt.Save result
 // - will trim unneeded leading zeros, and ensure will be stored as unsigned
 // even if starts with a $80 byte
 function AsnBigInt(const BigInt: RawByteString;
@@ -2834,7 +2835,7 @@ function AsnBigInt(const BigInt: RawByteString;
 function AsnSeq(const Data: TAsnObject): TAsnObject; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// create an ASN.1 binary ASN1_SEQ from the aggregation of several binaries
+/// create an ASN.1 SEQuence from the aggregation of several binaries
 function AsnSeq(const Content: array of TAsnObject): TAsnObject; overload;
   {$ifdef FPC} inline; {$endif}
 
@@ -2842,6 +2843,7 @@ function AsnSeq(const Content: array of TAsnObject): TAsnObject; overload;
 function AsnOid(OidText: PUtf8Char): TAsnObject;
 
 /// create an ASN.1 PrintableString or UTF8String from some UTF-8 text
+// - will prefer ASN1_PRINTSTRING if the charset of the supplied text do suffice
 function AsnText(const Text: RawUtf8): TAsnObject;
 
 /// create an ASN.1 block from some date/time value
