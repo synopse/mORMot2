@@ -42,12 +42,14 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.lib.openssl11,
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
-  mormot.crypt.ecc,
   mormot.crypt.secure,
   mormot.crypt.jwt,
-  mormot.lib.openssl11;
+  // those two units defined here to override their slower implementation
+  mormot.crypt.ecc,
+  mormot.crypt.rsa;
 
 
 { ************** OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG) }
