@@ -2780,7 +2780,7 @@ begin
     exit; // the signature is a RSA BigInt by definition
   verif := BufferVerify(Sign);
   if verif = '' then
-    exit; // invalid signature or no public key
+    exit; // invalid decrypted signature or no public key
   // parse the ASN.1 sequence to extract the stored hash and its algo oid
   p := 1;
   if (AsnNext(p, verif) = ASN1_SEQ) and  // DigestInfo
@@ -2807,7 +2807,7 @@ begin
              AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
              ASN1_NULL_VALUE
            ]),
-           Asn(h)
+           Asn(ASN1_OCTSTR, [h])
          ]);
   // sign it using the stored private key
   result := BufferSign(pointer(seq), length(seq));
