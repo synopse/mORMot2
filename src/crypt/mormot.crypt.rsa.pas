@@ -573,15 +573,22 @@ type
     function SavePrivateKeyDer: TCertDer;
     /// save the stored private key in PKCS#1 PEM format
     function SavePrivateKeyPem: TCertPem;
-    /// low-level thread-safe PKCS#1.5 buffer Decryption or Verification
+    /// low-level thread-safe PKCS#1.5 buffer Decryption
     // - Input should have ModulusLen bytes of data
     // - returns decrypted buffer without PKCS#1.5 padding, '' on error
-    function BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
-    /// low-level thread-safe PKCS#1.5 buffer Encryption or Signature
-    // - Input should have up to ModulusLen-11 bytes of data
+    function BufferDecrypt(Input: pointer): RawByteString;
+    /// low-level thread-safe PKCS#1.5 buffer Verification
+    // - Input should have ModulusLen bytes of data
+    // - returns decrypted signature without PKCS#1.5 padding, '' on error
+    function BufferVerify(Input: pointer): RawByteString;
+    /// low-level thread-safe PKCS#1.5 buffer Encryption
+    // - InputLen should be < to ModulusLen - 11 bytes for proper padding
     // - returns encrypted buffer with PKCS#1.5 padding, '' on error
-    function BufferEncryptSign(Input: pointer; InputLen: integer;
-      Sign: boolean): RawByteString;
+    function BufferEncrypt(Input: pointer; InputLen: integer): RawByteString;
+    /// low-level thread-safe PKCS#1.5 buffer Signature
+    // - InputLen should be < to ModulusLen - 11 bytes for proper padding
+    // - returns the encrypted signature with PKCS#1.5 padding, '' on error
+    function BufferSign(Input: pointer; InputLen: integer): RawByteString;
     /// verification of a RSA binary signature with the current Public Key
     // - returns the decoded binary OCTSTR Digest or '' if signature failed
     // - this method is thread-safe but blocking from several threads
@@ -1050,8 +1057,13 @@ end;
 
 function TBigInt.Save(andrelease: boolean): RawByteString;
 begin
-  FastSetRawByteString(result, nil, Size * HALF_BYTES);
-  Save(pointer(result), length(result), andrelease);
+  if @self = nil then
+    result := ''
+  else
+  begin
+    FastSetRawByteString(result, nil, Size * HALF_BYTES);
+    Save(pointer(result), length(result), andrelease);
+  end;
 end;
 
 function TBigInt.Add(b: PBigInt): PBigInt;
@@ -2632,7 +2644,7 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    RandomBytes(@r[2], padding); // Lecuyer is enough
+    RandomBytes(@r[2], padding); // Lecuyer is enough for padding
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
@@ -2642,7 +2654,31 @@ begin
   MoveFast(p^, r[padding + 1], n);
 end;
 
-function TRsa.BufferDecryptVerify(Input: pointer; Verify: boolean): RawByteString;
+function TRsa.BufferDecrypt(Input: pointer): RawByteString;
+var
+  enc, dec: PBigInt;
+  exp: RawByteString;
+begin
+  result := '';
+  if (Input = nil) or
+     not HasPrivateKey then
+    exit;
+  // decrypt with the RSA Private Key
+  fSafe.Lock;
+  try
+    enc := Load(Input, fModulusLen);
+    dec := ChineseRemainderTheorem(enc);
+    if dec = nil then
+      exit;
+    exp := dec.Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
+  end;
+  // decode the result following proper padding (PKCS#1.5 with TRsa class)
+  result := DoUnPad(pointer(exp), {verify=}false);
+end;
+
+function TRsa.BufferVerify(Input: pointer): RawByteString;
 var
   enc, dec: PBigInt;
   exp: RawByteString;
@@ -2651,53 +2687,60 @@ begin
   if (Input = nil) or
      not HasPublicKey then
     exit;
+  // verify by decrypting the signature with the RSA Public Key
   fSafe.Lock;
   try
     enc := Load(Input, fModulusLen);
-    // perform the RSA calculation
-    if Verify then
-    begin
-      // verify with Public Key
-      CurrentModulo := rmM; // for ModPower()
-      dec := ModPower(enc, fE, nil); // calls enc.Release
-    end
-    else
-      // decrypt with Private Key
-      dec := ChineseRemainderTheorem(enc);
+    CurrentModulo := rmM; // for ModPower()
+    dec := ModPower(enc, fE, nil); // calls enc.Release
     if dec = nil then
       exit;
-    // decode result following proper padding (PKCS#1.5 with TRsa class)
     exp := dec.Save({andrelease=}true);
   finally
     fSafe.UnLock;
   end;
-  result := DoUnPad(pointer(exp), Verify);
+  // decode the result following proper padding (PKCS#1.5 with TRsa class)
+  result := DoUnPad(pointer(exp), {verify=}true);
 end;
 
-function TRsa.BufferEncryptSign(Input: pointer; InputLen: integer;
-  Sign: boolean): RawByteString;
+function TRsa.BufferEncrypt(Input: pointer; InputLen: integer): RawByteString;
 var
-  enc, dec: PBigInt;
+  dec: PBigInt;
   exp: RawByteString;
 begin
   result := '';
+  if (Input = nil) or
+     not HasPublicKey then
+    exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
-  exp := DoPad(Input, InputLen, Sign);
+  exp := DoPad(Input, InputLen, {sign=}false);
+  // encrypt with the RSA public key
   fSafe.Lock;
   try
     dec := Load(pointer(exp), fModulusLen);
-    // perform the RSA calculation
-    if Sign then
-      // sign with private key
-      enc := ChineseRemainderTheorem(dec)
-    else
-    begin
-      // encrypt with public key
-      CurrentModulo := rmM; // for ModPower()
-      enc := ModPower(dec, fE, nil); // calls dec.Release
-    end;
-    if enc <> nil then // missing key ?
-      result := enc.Save({andrelease=}true);
+    CurrentModulo := rmM; // for ModPower()
+    result := ModPower(dec, fE, nil).Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRsa.BufferSign(Input: pointer; InputLen: integer): RawByteString;
+var
+  dec: PBigInt;
+  exp: RawByteString;
+begin
+  result := '';
+  if (Input = nil) or
+     not HasPrivateKey then
+    exit;
+  // encode input using proper padding (PKCS#1.5 with TRsa class)
+  exp := DoPad(Input, InputLen, {sign=}true);
+  // encrypt the signature with the RSA Private Key
+  fSafe.Lock;
+  try
+    dec := Load(pointer(exp), fModulusLen);
+    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
   finally
     fSafe.UnLock;
   end;
@@ -2719,7 +2762,7 @@ begin
   result := '';
   if SignLen <> fModulusLen then
     exit; // the signature is a RSA BigInt by definition
-  verif := BufferDecryptVerify(Sign, {verify=}true);
+  verif := BufferVerify(Sign);
   if verif = '' then
     exit; // invalid signature or no public key
   // parse the ASN.1 sequence to extract the stored hash and its algo oid
@@ -2751,7 +2794,7 @@ begin
            Asn(h)
          ]);
   // sign it using the stored private key
-  result := BufferEncryptSign(pointer(seq), length(seq), {sign=}true);
+  result := BufferSign(pointer(seq), length(seq));
 end;
 
 
