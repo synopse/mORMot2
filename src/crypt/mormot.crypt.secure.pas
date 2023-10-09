@@ -1772,7 +1772,8 @@ type
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is -1 by default to avoid most clock synch issues
     // - additional information can be passed into Fields (e.g. common name)
-    // - return self to be used as a fluent interface
+    // - return self to be used as a fluent interface, e.g. calling
+    // Save(cccPrivateKeyOnly) to persist the newly created private key
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8 = '';
       const Authority: ICryptCert = nil; ExpireDays: integer = 365;
       ValidDays: integer = -1; Fields: PCryptCertFields = nil): ICryptCert;
@@ -1842,16 +1843,15 @@ type
       Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = ''): boolean;
     /// serialize the Certificate as reusable content
-    // - after Generate, will contain the public and private key, so
-    // cccCertWithPrivateKey and cccPrivateKeyOnly content could be used, with
-    // an optional PrivatePassword
-    // - will use binary by default, but you can export to another formats,
-    // depending on the underlying TCryptCertAlgo
+    // - after Generate, this ICryptCert instance will contain both the public
+    // and private key, so  cccCertWithPrivateKey and cccPrivateKeyOnly content
+    // could be used, with an optional PrivatePassword, to save the private key
+    // - will use binary by default, but you can set e.g. ccfPem if needed
     function Save(Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = '';
       Format: TCryptCertFormat = ccfBinary): RawByteString;
     /// serialize the Certificate as reusable file content
-    // - just a wrapper around the Save() method
+    // - just a wrapper around the Save() method into a file
     procedure SaveToFile(const Dest: TFileName;
       Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = '';
@@ -7992,7 +7992,8 @@ begin
   end;
   t.FromDateTime(dt);
   if t.Year > 1900 then
-    if t.Year >= 2050 then
+    if (t.Year <= 2000) or
+       (t.Year >= 2050) then
       result := Asn(ASN1_GENTIME, [FormatUtf8('%%%%%%Z', [
         UInt4DigitsToShort(t.Year),
         UInt2DigitsToShortFast(t.Month),
@@ -8002,7 +8003,7 @@ begin
         UInt2DigitsToShortFast(t.Second)])])
     else
       result := Asn(ASN1_UTCTIME, [FormatUtf8('%%%%%%Z', [
-        UInt2DigitsToShort(t.Year),
+        UInt2DigitsToShortFast(t.Year - 2000),
         UInt2DigitsToShortFast(t.Month),
         UInt2DigitsToShortFast(t.Day),
         UInt2DigitsToShortFast(t.Hour),
