@@ -171,6 +171,7 @@ type
   TXName = object
   {$endif USERECORDWITHMETHODS}
   private
+    fSafe: TLightLock;
     fCachedAsn: RawByteString;
     fCachedText: RawUtf8;
     procedure ComputeAsn;
@@ -411,6 +412,7 @@ type
   TXTbsCertificate = object
   {$endif USERECORDWITHMETHODS}
   private
+    fSafe: TLightLock;
     fCachedDer: RawByteString; // for ToDer
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
@@ -780,31 +782,39 @@ var
   v: RawUtf8;
   tmp, one: RawByteString;
 begin
-  for a := succ(low(a)) to high(a) do
-  begin
-    p := pointer(Name[a]);
-    if p <> nil then
+  fSafe.Lock;
+  try
+    if fCachedAsn = '' then
     begin
-      one := '';
-      repeat
-        GetNextItemTrimed(p, ',', v);
-        Append(one, AsnSeq([
-                      Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
-                      AsnText(v)
-                    ]));
-      until p = nil;
-      Append(tmp, Asn(ASN1_SETOF, [one]));
+      for a := succ(low(a)) to high(a) do
+      begin
+        p := pointer(Name[a]);
+        if p <> nil then
+        begin
+          one := '';
+          repeat
+            GetNextItemTrimed(p, ',', v);
+            Append(one, AsnSeq([
+                          Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
+                          AsnText(v)
+                        ]));
+          until p = nil;
+          Append(tmp, Asn(ASN1_SETOF, [one]));
+        end;
+      end;
+      for o := 0 to high(Other) do
+        with Other[o] do
+          Append(tmp, Asn(ASN1_SETOF, [
+                        AsnSeq([
+                          Asn(ASN1_OBJID, [Oid]),
+                          AsnText(Value)
+                        ])
+                      ]));
+      fCachedAsn := AsnSeq(tmp);
     end;
+  finally
+    fSafe.UnLock;
   end;
-  for o := 0 to high(Other) do
-    with Other[o] do
-      Append(tmp, Asn(ASN1_SETOF, [
-                    AsnSeq([
-                      Asn(ASN1_OBJID, [Oid]),
-                      AsnText(Value)
-                    ])
-                  ]));
-  fCachedAsn := AsnSeq(tmp);
 end;
 
 function TXName.ToBinary: RawByteString;
@@ -822,33 +832,39 @@ var
   p: PUtf8Char;
   n, v: shortstring;
 begin
-  with TTextWriter.CreateOwnedStream(tmp) do
+  fSafe.Lock;
   try
-    first := true;
-    for a := succ(low(a)) to high(a) do
-    begin
-      p := pointer(Name[a]);
-      if p <> nil then
-      begin
-        TrimLeftLowerCaseToShort(ToText(a), n);
-        repeat
-          GetNextItemShortString(p, @v);
-          if v[0] <> #0 then
+    if fCachedText = '' then
+      with TTextWriter.CreateOwnedStream(tmp) do
+      try
+        first := true;
+        for a := succ(low(a)) to high(a) do
+        begin
+          p := pointer(Name[a]);
+          if p <> nil then
           begin
-            if first then
-              first := false
-            else
-              Add(',', ' ');
-            AddShort(n);
-            Add('=');
-            AddShort(v);
+            TrimLeftLowerCaseToShort(ToText(a), n);
+            repeat
+              GetNextItemShortString(p, @v);
+              if v[0] <> #0 then
+              begin
+                if first then
+                  first := false
+                else
+                  Add(',', ' ');
+                AddShort(n);
+                Add('=');
+                AddShort(v);
+              end;
+            until p = nil;
           end;
-        until p = nil;
+        end;
+        SetText(fCachedText);
+      finally
+        Free;
       end;
-    end;
-    SetText(fCachedText);
   finally
-    Free;
+    fSafe.UnLock;
   end;
 end;
 
@@ -935,8 +951,13 @@ end;
 
 procedure TXName.AfterModified;
 begin
-  fCachedAsn := '';
-  fCachedText := '';
+  fSafe.Lock;
+  try
+    fCachedAsn := '';
+    fCachedText := '';
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TXName.ToDigest(algo: THashAlgo): RawUtf8;
@@ -1404,27 +1425,35 @@ procedure TXTbsCertificate.ComputeCachedDer;
 var
   ext: RawByteString;
 begin
-  if Version >= 3 then
-    // compute the X.509 v3 extensions block
-    ext := Asn(ASN1_CTC3, [
-             AsnSeq(ComputeExtensions)
-           ]);
-  fCachedDer := AsnSeq([
-                  Asn(ASN1_CTC0, [{%H-}Asn(Version - 1)]),
-                  Asn(ASN1_INT, [SerialNumber]),
-                  XsaToSeq(Signature),
-                  Issuer.ToBinary,
-                  AsnSeq([
-                    AsnTime(NotBefore),
-                    AsnTime(NotAfter)
-                  ]),
-                  Subject.ToBinary,
-                  AsnSeq([
-                    XkaToSeq(SubjectPublicKeyAlgorithm),
-                    Asn(ASN1_BITSTR, [SubjectPublicKey])
-                  ]),
-                  ext
-                ]);
+  fSafe.Lock;
+  try
+    if fCachedDer = '' then
+    begin
+      if Version >= 3 then
+        // compute the X.509 v3 extensions block
+        ext := Asn(ASN1_CTC3, [
+                 AsnSeq(ComputeExtensions)
+               ]);
+      fCachedDer := AsnSeq([
+                      Asn(ASN1_CTC0, [{%H-}Asn(Version - 1)]),
+                      Asn(ASN1_INT, [SerialNumber]),
+                      XsaToSeq(Signature),
+                      Issuer.ToBinary,
+                      AsnSeq([
+                        AsnTime(NotBefore),
+                        AsnTime(NotAfter)
+                      ]),
+                      Subject.ToBinary,
+                      AsnSeq([
+                        XkaToSeq(SubjectPublicKeyAlgorithm),
+                        Asn(ASN1_BITSTR, [SubjectPublicKey])
+                      ]),
+                      ext
+                    ]);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TXTbsCertificate.AddNextExtensions(pos: integer; const der: TAsnObject);
@@ -1677,7 +1706,12 @@ end;
 
 procedure TXTbsCertificate.AfterModified;
 begin
-  fCachedDer := ''; // reset the cache
+  fSafe.Lock;
+  try
+    fCachedDer := ''; // reset the cache
+  finally
+    fSafe.UnLock;
+  end;
   Subject.AfterModified;
   Issuer.AfterModified;
 end;
@@ -1870,13 +1904,21 @@ begin
   if (SignatureAlgorithm = xsaNone) or
      (SignatureValue = '') then
     raise EX509.Create('TX509.ToDer with no previous Sign() call');
-  fCachedSha1 := '';
-  fCachedPeerInfo := '';
-  fCachedDer := AsnSeq([
-                  Signed.ToDer,
-                  XsaToSeq(SignatureAlgorithm),
-                  Asn(ASN1_BITSTR, [SignatureValue])
-                ]);
+  fSafe.Lock;
+  try
+    if fCachedDer = '' then
+    begin
+      fCachedSha1 := '';
+      fCachedPeerInfo := '';
+      fCachedDer := AsnSeq([
+                      Signed.ToDer,
+                      XsaToSeq(SignatureAlgorithm),
+                      Asn(ASN1_BITSTR, [SignatureValue])
+                    ]);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TX509.ComputeCachedPeerInfo;
@@ -1920,7 +1962,14 @@ begin
   end;
   result := HashFull(algo, SaveToDer);
   if algo = hfSHA1 then
-    fCachedSha1 := result;
+  begin
+    fSafe.Lock;
+    try
+      fCachedSha1 := result;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
 end;
 
 function TX509.IsSelfSigned: boolean;
@@ -1961,10 +2010,15 @@ end;
 
 procedure TX509.AfterModified;
 begin
-  fCachedDer := '';
-  fCachedSha1 := '';
-  fCachedPeerInfo := '';
-  fSignatureValue := '';
+  fSafe.Lock;
+  try
+    fCachedDer := '';
+    fCachedSha1 := '';
+    fCachedPeerInfo := '';
+    fSignatureValue := '';
+  finally
+    fSafe.Lock;
+  end;
   Signed.AfterModified;
 end;
 
