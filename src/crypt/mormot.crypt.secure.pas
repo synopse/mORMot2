@@ -1864,26 +1864,32 @@ type
     /// load a Certificate from a Save() content
     // - use Content to specify the extent of the loaded value
     // - PrivatePassword is used for cccCertWithPrivateKey and cccPrivateKeyOnly
+    // - warning: don't forget FillZero() once done with any sensitive input
     function Load(const Saved: RawByteString;
       Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = ''): boolean;
     /// load a Certificate from a SaveToFile() content
     // - just a wrapper around the Load() method, reading a file from disk
+    // and setting the GetFileName method result value
     function LoadFromFile(const Source: TFileName;
       Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = ''): boolean;
+    /// the last Source file name of LoadFromFile()
+    function GetFileName: TFileName;
     /// serialize the Certificate as reusable content
     // - use Content to specify the extent of the returned value; e.g. after
     // Generate, this ICryptCert instance will contain both the public and
     // private key, so cccCertWithPrivateKey and cccPrivateKeyOnly content could
     // be used, with an optional PrivatePassword, to save the private key
     // - will use binary by default, but you can set e.g. ccfPem if needed
+    // - warning: don't forget FillZero() once done with any sensitive result
     function Save(Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = '';
       Format: TCryptCertFormat = ccfBinary): RawByteString;
     /// serialize the Certificate as reusable file content
     // - just a wrapper to store the Save() method result as a file
-    procedure SaveToFile(const Dest: TFileName;
+    // - if Dest is '' then GetFileName value from last LoadFromFile() is used
+    procedure SaveToFile(const Dest: TFileName = '';
       Content: TCryptCertContent = cccCertOnly;
       const PrivatePassword: SpiUtf8 = '';
       Format: TCryptCertFormat = ccfBinary);
@@ -1974,11 +1980,13 @@ type
     /// retrieve the private key as raw binary, or '' if none
     // - actual format depend on the TCryptCert class and algorithm involved,
     // but is usually using a DER format
+    // - warning: don't forget FillZero() once done with this sensitive result
     function GetPrivateKey: RawByteString;
     /// include the raw private key as saved by GetPrivateKey
     // - the private key should match with the public key of the Certificate
     // - any previously stored private key will first be erased, therefore
     // SetPrivateKey('') will wipe any private key currently stored in memory
+    // - warning: don't forget FillZero() once done with this sensitive input
     function SetPrivateKey(const saved: RawByteString): boolean;
     /// compare two Certificates, which should share the same algorithm
     // - will compare the internal properties and the public key, not the
@@ -2015,6 +2023,7 @@ type
   // - type is only defined here to be inherited with the actual provider units
   TCryptCert = class(TCryptInstance, ICryptCert)
   protected
+    fLastLoadFromFileName: TFileName;
     procedure RaiseError(const Msg: shortstring); overload;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
@@ -2046,7 +2055,8 @@ type
       const PrivatePassword: SpiUtf8): boolean; virtual; abstract;
     function LoadFromFile(const Source: TFileName; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean;
-    function Save(Content: TCryptCertContent;
+    function GetFileName: TFileName; virtual;
+     function Save(Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; virtual;
     procedure SaveToFile(const Dest: TFileName; Content: TCryptCertContent;
@@ -6414,7 +6424,13 @@ end;
 function TCryptCert.LoadFromFile(const Source: TFileName;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 begin
+  fLastLoadFromFileName := Source;
   result := Load(StringFromFile(Source), Content, PrivatePassword);
+end;
+
+function TCryptCert.GetFileName: TFileName;
+begin
+  result := fLastLoadFromFileName;
 end;
 
 function TCryptCert.Save(Content: TCryptCertContent;
@@ -6438,9 +6454,13 @@ procedure TCryptCert.SaveToFile(const Dest: TFileName; Content: TCryptCertConten
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat);
 var
   s: RawByteString;
+  fn: TFileName;
 begin
+  fn := Dest;
+  if fn = '' then
+    fn := fLastLoadFromFileName;
   s := Save(Content, PrivatePassword, Format);
-  FileFromString(s, Dest);
+  FileFromString(s, fn);
   FillZero(s); // may be a private key with no password :(
 end;
 
