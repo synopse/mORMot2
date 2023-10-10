@@ -1,4 +1,4 @@
-/// Framework Core ASN.1 / X.509 Support
+/// Framework Core X.509 Certificates Support
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.crypt.x509;
@@ -198,7 +198,7 @@ type
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
-    /// return Name[] by RDN or ToDigest() by hash name or by FindOid()
+    /// return Name[] by RDN, or ToDigest() by hash name, or by FindOid()
     function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
@@ -225,6 +225,7 @@ function ToText(x: TXExtendedKeyUsage): PShortString; overload;
 function ToText(a: TXSignatureAlgorithm): PShortString; overload;
 function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 
+/// identifies the known RDN text e.g. 'CN' as xaCN or 'OU' as xaOU
 function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
 
 const

@@ -70,6 +70,14 @@ Rivest-Shamir-Adleman (RSA) Public-Key Cryptography
 - RSA Low-Level Cryptography Functions
 - Registration of our RSA Engine to the `TCryptAsym` Factory
 
+### mormot.crypt.x509
+
+X.509 Certificates Implementation - see RFC 5280
+- X.509 Fields Logic
+- RSA and ECC Public/Private Key support for X.509
+- X.509 Certificates
+- Registration of our X.509 Engine to the `TCryptCert` Factory
+
 ### mormot.crypt.jwt
 
 JSON Web Tokens (JWT) Implementation - see RFC 7797
@@ -89,11 +97,10 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
 - Register *OpenSSL* to our General Cryptography Catalog
 
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
-For `ECC`, our `mormot.crypt.ecc256r1` unit is noticeably slower than *OpenSSL*.
+For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*.
 
 ### mormot.crypt.pkcs11
 
 Access Hardware Security Modules (HSM) via PKCS#11
 - High-Level *PKCS#11* Integration with the Framework Types
 - Registration of the *PKCS#11* Engine to the `TCryptAsym`/`TCryptCert` Factories
-

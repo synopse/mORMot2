@@ -45,7 +45,7 @@ uses
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
   - will register as Asym 'RS256','RS384','RS512' algorithms (if not overriden
     by mormot.crypt.openssl), keeping simple and efficient 'RSA2048SHA256'
-  - used by mormot.crypt.x509 to handle X.509 Certificates RSA signatures
+  - used by mormot.crypt.x509 to handle RSA signatures of its X.509 Certificates
 }
 
 {.$define USEBARRET}
