@@ -52,6 +52,8 @@ type
 
   /// known X.501 Type Names, as stored in X.509 Certificates attributes
   // - as defined in RFC 5280 appendix A, and available via TX501Name.Names[]
+  // - corresponding Relative Distinguished Name (RDN) text is extracted via
+  // RTTI, e.g. 'CN' for xaCN or 'OU' for xaOU - as in TextToXa()
   TXAttr = (
     xaNone,
     xaDC,   // domainComponent
@@ -207,6 +209,9 @@ type
     procedure AfterModified;
   end;
 
+/// append a new entry to a dynamic array of TXOther
+procedure AddOther(var others: TXOthers; const o, v: RawByteString);
+
 /// efficient search of a TXOther.Value from a 'x.x.x.x.x' text OID
 function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
 
@@ -220,6 +225,7 @@ function ToText(x: TXExtendedKeyUsage): PShortString; overload;
 function ToText(a: TXSignatureAlgorithm): PShortString; overload;
 function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 
+function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
 
 const
   /// internal lookup table from X.509 Signature to Public Key Algorithms
@@ -325,6 +331,15 @@ const
   ASN1_OID_PKCS1_RSA       = '1.2.840.113549.1.1.1';
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
   ASN1_OID_X962_ECDSA_P256 = '1.2.840.10045.3.1.7';
+
+function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
+function XkaToSeq(xka: TXPublicKeyAlgorithm): RawByteString;
+function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
+function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
+function OidToXa(const oid: RawByteString): TXAttr;
+function OidToXe(const oid: RawByteString): TXExtension;
+function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
+function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
 
 
 { **************** RSA and ECC Public/Private Key support for X.509 }
@@ -632,6 +647,86 @@ implementation
 
 { **************** X.509 Fields Logic}
 
+procedure AddOther(var others: TXOthers; const o, v: RawByteString);
+var
+  n: PtrInt;
+begin
+  n := length(others);
+  SetLength(others, n + 1);
+  with others[n] do
+  begin
+    Oid := o;
+    Value := v;
+  end;
+end;
+
+function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
+begin
+  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(pointer(OidText)));
+end;
+
+function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
+begin
+  result := '';
+  if (o <> nil) and
+     (n > 0) and
+     (OidBinary <> '') then
+    repeat
+      if o^.Oid = OidBinary then // efficient search
+      begin
+        result := o^.Value;
+        exit;
+      end;
+      inc(o);
+      dec(n);
+    until n = 0;
+end;
+
+function ToText(a: TXAttr): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXAttr), ord(a));
+end;
+
+function ToText(e: TXExtension): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXExtension), ord(e));
+end;
+
+function ToText(u: TXKeyUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXKeyUsage), ord(u));
+end;
+
+function ToText(x: TXExtendedKeyUsage): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXExtendedKeyUsage), ord(x));
+end;
+
+function ToText(a: TXSignatureAlgorithm): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXSignatureAlgorithm), ord(a));
+end;
+
+function ToText(a: TXPublicKeyAlgorithm): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TXPublicKeyAlgorithm), ord(a));
+end;
+
+function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
+var
+  i: integer;
+begin
+  i := GetEnumNameValueTrimmed(TypeInfo(TXAttr), pointer(Rdn), length(Rdn));
+  if i <= 0 then
+    result := false
+  else
+  begin
+    result := true;
+    Xa := TXAttr(i);
+  end;
+end;
+
+
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
   case xsa of
@@ -756,19 +851,6 @@ begin
     result[2] := #$80
   else
     FakeLength(result, 1);
-end;
-
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
-var
-  n: PtrInt;
-begin
-  n := length(others);
-  SetLength(others, n + 1);
-  with others[n] do
-  begin
-    Oid := o;
-    Value := v;
-  end;
 end;
 
 
@@ -937,12 +1019,11 @@ end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;
 var
-  i: integer;
+  xa: TXAttr;
   h: THashAlgo;
 begin
-  i := GetEnumNameValueTrimmed(TypeInfo(TXAttr), pointer(Rdn), length(Rdn));
-  if i > 0 then
-    result := Name[TXAttr(i)]
+  if TextToXa(Rdn, xa) then
+    result := Name[xa]
   else if TextToHashAlgo(Rdn, h) then
     result := ToDigest(h)
   else
@@ -977,59 +1058,6 @@ begin
   xa := OidToXa(o);
   if xa <> xaNone then
     result := Name[xa];
-end;
-
-
-function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
-begin
-  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(pointer(OidText)));
-end;
-
-function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
-begin
-  result := '';
-  if (o <> nil) and
-     (n > 0) and
-     (OidBinary <> '') then
-    repeat
-      if o^.Oid = OidBinary then // efficient search
-      begin
-        result := o^.Value;
-        exit;
-      end;
-      inc(o);
-      dec(n);
-    until n = 0;
-end;
-
-function ToText(a: TXAttr): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXAttr), ord(a));
-end;
-
-function ToText(e: TXExtension): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXExtension), ord(e));
-end;
-
-function ToText(u: TXKeyUsage): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXKeyUsage), ord(u));
-end;
-
-function ToText(x: TXExtendedKeyUsage): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXExtendedKeyUsage), ord(x));
-end;
-
-function ToText(a: TXSignatureAlgorithm): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXSignatureAlgorithm), ord(a));
-end;
-
-function ToText(a: TXPublicKeyAlgorithm): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXPublicKeyAlgorithm), ord(a));
 end;
 
 
@@ -2017,7 +2045,7 @@ begin
     fCachedPeerInfo := '';
     fSignatureValue := '';
   finally
-    fSafe.Lock;
+    fSafe.UnLock;
   end;
   Signed.AfterModified;
 end;
@@ -2054,7 +2082,7 @@ type
   end;
 
   /// class implementing ICryptCert using our TX509 class
-  // - will store a certificate as TX509 and/or a PEVP_PKEY private key
+  // - will store a certificate as TX509 and/or a TXPrivateKey private key
   TCryptCertX509 = class(TCryptCert)
   protected
     fX509: TX509;
@@ -2132,7 +2160,8 @@ function TCryptCertAlgoX509.FromHandle(Handle: pointer): ICryptCert;
 var
   instance: TCryptCertX509;
 begin
-  if Handle = nil then
+  if (Handle = nil) or
+     not TObject(Handle).InheritsFrom(TX509) then
     instance := nil
   else
   begin
@@ -2488,7 +2517,7 @@ begin
     fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
        auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
     // compute the digital signature
-    fX509.fCachedDer := '';
+    fX509.AfterModified;
     fX509.Signed.Signature := Xsa;
     fX509.fSignatureValue := auth.fPrivateKey.Sign(Xsa, fX509.Signed.ToDer);
     fX509.fSignatureAlgorithm := Xsa;
@@ -2590,7 +2619,7 @@ begin
   TCryptCertAlgoX509.Create(xsaSha256Rsa,    {suffix=}'-int');
   TCryptCertAlgoX509.Create(xsaSha256Ecc256, {suffix=}'-int');
   // 'x509-rs256' 'x509-rs384' 'x509-rs512' and 'x509-es256' certificates
-  // - may be overriden if the faster mormot.crypt.openssl is included
+  // - may be overriden by the faster mormot.crypt.openssl is included
   for xsa := succ(low(xsa)) to high(xsa) do
     TCryptCertAlgoX509.Create(xsa, {suffix=}'');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
