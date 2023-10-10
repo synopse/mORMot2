@@ -43,7 +43,7 @@ Authentication and Security types shared by all framework units.
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `TBinaryCookieGenerator` Simple Cookie Generator
-- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym` High-Level Algorithms Factories
+- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
 - Basic ASN.1 Support
 - Windows Executable Digital Signature Stuffing
@@ -97,7 +97,7 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
 - Register *OpenSSL* to our General Cryptography Catalog
 
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
-For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*.
+For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*, but fully stand-alone.
 
 ### mormot.crypt.pkcs11
 

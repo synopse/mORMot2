@@ -1512,76 +1512,6 @@ begin
 end;
 
 
-{$ifdef ASNUNTESTED} // untested code from Lukas Gebauer: use with caution
-
-// not used nor fully tested
-function IntMibToStr(const Value: RawByteString): RawUtf8;
-var
-  i, y: integer;
-begin
-  y := 0;
-  for i := 1 to length(Value) - 1 do
-    y := (y shl 8) + ord(Value[i]);
-  UInt32ToUtf8(y, result);
-end;
-
-function MibToId(Mib: RawUtf8): RawByteString;
-var
-  x: integer;
-
-  function WalkInt(var s: RawUtf8): integer;
-  var
-    x: integer;
-    t: RawByteString;
-  begin
-    x := PosExChar('.', s);
-    if x < 1 then
-    begin
-      t := s;
-      s := '';
-    end
-    else
-    begin
-      t := copy(s, 1, x - 1);
-      s := copy(s, x + 1, length(s) - x);
-    end;
-    result := Utf8ToInteger(t, 0);
-  end;
-
-begin
-  result := '';
-  x := WalkInt(Mib);
-  x := x * 40 + WalkInt(Mib);
-  result := AsnEncOidItem(x);
-  while Mib <> '' do
-  begin
-    x := WalkInt(Mib);
-    Append(result, AsnEncOidItem(x));
-  end;
-end;
-
-function AsnEncUInt(Value: integer): RawByteString;
-var
-  x, y: integer;
-  neg: boolean;
-begin
-  neg := Value < 0;
-  x := Value;
-  if neg then
-    x := x and $7FFFFFFF;
-  result := '';
-  repeat
-    y := x and $ff;
-    x := x shr 8;
-    Prepend(result, [AnsiChar(y)]);
-  until x = 0;
-  if neg then
-    result[1] := AnsiChar(ord(result[1]) or $80);
-end;
-
-{$endif ASNUNTESTED}
-
-
 { **************** LDAP Protocol Definitions }
 
 function DNToCN(const DN: RawUtf8): RawUtf8;
@@ -2114,7 +2044,7 @@ var
   sock: TNetSocket;
   len: PtrInt;
   v: TCldapServer;
-  tmp: array[0..1999] of byte; // big enough for a UDP frame
+  tmp: array[0..1999] of byte; // big enough for any UDP frame
 begin
   result := 0;
   if addr.SetFrom(Address, Port, nlUdp) <> nrOk then

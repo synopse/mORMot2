@@ -22,6 +22,9 @@ unit mormot.crypt.secure;
    Uses optimized mormot.crypt.core.pas for its actual cryptographic process.
 
   *****************************************************************************
+
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface
