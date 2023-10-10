@@ -9432,10 +9432,16 @@ begin
 end;
 
 function X509.AuthorityKeyIdentifier: RawUtf8;
+var
+  i: PtrInt;
 begin
   result := ExtensionText(NID_authority_key_identifier);
   if NetStartWith(pointer(result), 'KEYID:') then
     delete(result, 1, 6);
+  i := PosExChar(#10, result);
+  if i > 0 then // some certificates have e.g.
+    // 'KEYID:F2:97:...:99'#$0A'DirName:/CN=SERMO/C=FR/ST=LA'#$0A'serial:...'
+    FakeLength(result, i - 1);
 end;
 
 function X509.SubjectAlternativeNames(dns: boolean): TRawUtf8DynArray;
