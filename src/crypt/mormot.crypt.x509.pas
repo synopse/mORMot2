@@ -51,7 +51,7 @@ type
   EX509 = class(ESynException);
 
   /// known X.501 Type Names, as stored in X.509 Certificates attributes
-  // - as defined in RFC 5280 appendix A, and available via TX501Name.Names[]
+  // - as defined in RFC 5280 appendix A, and available via TXName.Names[]
   // - corresponding Relative Distinguished Name (RDN) text is extracted via
   // RTTI, e.g. 'CN' for xaCN or 'OU' for xaOU - as in TextToXa()
   TXAttr = (
@@ -330,6 +330,7 @@ const
      '1.2.840.10045.4.3.2');  // xsaSha256Ecc256
 
   ASN1_OID_PKCS1_RSA       = '1.2.840.113549.1.1.1';
+  ASN1_OID_PKCS9_EXTREQ    = '1.2.840.113549.1.9.14';
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
   ASN1_OID_X962_ECDSA_P256 = '1.2.840.10045.3.1.7';
 
@@ -387,14 +388,21 @@ type
     /// unserialized the private key from DER binary or PEM text
     // - will also ensure the private key do match the associated public key
     function Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
-      const PrivateKeySaved: RawByteString): boolean;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
     /// create a new private / public key pair
     // - returns the associated public key binary in SubjectPublicKey format
     function Generate(Algorithm: TXPublicKeyAlgorithm): RawByteString;
+    /// compute a self-signed Certificate Signing Request as PEM
+    // - generate a new private / public key pair if none is already available
+    function ComputeSelfSignedCsr(Algorithm: TXSignatureAlgorithm;
+      const Subjects: RawUtf8; Usages: TCryptCertUsages;
+      Fields: PCryptCertFields): RawUtf8;
     /// finalize this instance
     destructor Destroy; override;
     /// return the private key as raw binary
     function ToDer: RawByteString;
+    /// return the associated public key as stored in a X509 certificate
+    function ToSubjectPublicKey: RawByteString;
     /// return the private key in the TCryptCertX509.Save expected format
     function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
     /// sign a memory buffer digest with RSA or ECC using the stored private key
@@ -432,7 +440,6 @@ type
     fCachedDer: RawByteString; // for ToDer
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
-    procedure SetFromCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
     function ComputeExtensions: TAsnObject;
   public
@@ -1065,6 +1072,124 @@ begin
 end;
 
 
+// some internal functions shared with X.509 Certificate and CSR
+
+procedure CertInfoPrepare(var Subject: TXName; var Extension: TXExtensions;
+  const Subjects: RawUtf8; Fields: PCryptCertFields);
+var
+  subs: TRawUtf8DynArray;
+  sub: RawUtf8;
+begin
+  CsvToRawUtf8DynArray(pointer(Subjects), subs, ',', {trim=}true);
+  if (subs = nil) and
+     (Fields <> nil) then
+    sub := TrimU(Fields^.CommonName) // like TCryptCertOpenSsl.Generate()
+  else
+    sub := RawUtf8ArrayToCsv(subs); // normalized
+  Extension[xeSubjectAlternativeName] := sub;
+  Subject.Name[xaCN] := GetCsvItem(pointer(sub), 0);
+  if Fields <> nil then
+  begin
+    Subject.FromFields(Fields^);
+    Extension[xeNetscapeComment] := Fields^.Comment;
+  end;
+end;
+
+function HumanHexToBin(const hex: RawUtf8): RawByteString;
+begin
+  // reverse ToHumanHex() layout
+  result := HexToBin(StringReplaceAll(hex, ':', '')); // fast enough
+end;
+
+function CsvToDns(p: PUtf8Char): RawByteString;
+begin
+  result := '';
+  while p <> nil do
+    Append(result, Asn(ASN1_CTX2, [TrimU(GetNextItem(p))]));
+end;
+
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean = false);
+begin
+  Append(result, AsnSeq([
+                   Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
+                   ASN1_BOOLEAN_NONE[critical],
+                   Asn(ASN1_OCTSTR, [value])
+                 ]));
+end;
+
+const
+  KU: array[cuEncipherOnly .. cuDecipherOnly] of TXKeyUsage = (
+    xuEncipherOnly,
+    xuCrlSign,
+    xuKeyCertSign,
+    xuKeyAgreement,
+    xuDataEncipherment,
+    xuKeyEncipherment,
+    xuNonRepudiation,
+    xuDigitalsignature,
+    xuDecipherOnly);
+
+  XU: array[cuTlsServer .. cuTimestamp] of TXExtendedKeyUsage = (
+    xkuServerAuth,
+    xkuClientAuth,
+    xkuEmailProtection,
+    xkuCodeSigning,
+    xkuOcspSigning,
+    xkuTimeStamping);
+
+function CertInfoCompute(usages: TCryptCertUsages; const ext: TXExtensions;
+  out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages): TAsnObject;
+var
+  r: TCryptCertUsage;
+begin
+  result := '';
+  // high-level usages values are converted into usages and xku
+  xku := [];
+  for r := low(KU) to high(KU) do
+    if r in usages then
+      include(xku, KU[r]);
+  xeku := [];
+  for r := low(XU) to high(XU) do
+    if r in usages then
+      include(xeku, XU[r]);
+  // RFC 5280 #4.2.1.9
+  AddExt(result, xeBasicConstraints,
+    AsnSeq(ASN1_BOOLEAN_NONE[cuCA in usages]), {critical=}true);
+  // RFC 5280 #4.2.1.3
+  if xku <> [] then
+    AddExt(result, xeKeyUsage,
+      Asn(ASN1_BITSTR, [KuToBitStr(xku)]), {critical=}true);
+  // RFC 5280 #4.2.1.12
+  if xeku <> [] then
+    AddExt(result, xeExtendedKeyUsage,
+      AsnSeq(XkuToOids(xeku)));
+  // ext[] RawUtf8 are used as source
+  // - ExtensionOther[] and ExtensionRaw[] are ignored
+  // RFC 5280 #4.2.1.2
+  if ext[xeSubjectKeyIdentifier] <> '' then
+    AddExt(result, xeSubjectKeyIdentifier,
+      Asn(ASN1_OCTSTR, [HumanHexToBin(ext[xeSubjectKeyIdentifier])]));
+  // RFC 5280 #4.2.1.1
+  if ext[xeAuthorityKeyIdentifier] <> '' then
+    AddExt(result, xeAuthorityKeyIdentifier,
+      AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(ext[xeAuthorityKeyIdentifier])])));
+  // RFC 5280 #4.2.1.6
+  if ext[xeSubjectAlternativeName] <> '' then
+    AddExt(result, xeSubjectAlternativeName,
+      AsnSeq(CsvToDns(pointer(ext[xeSubjectAlternativeName]))));
+  // RFC 5280 #4.2.1.7
+  if ext[xeIssuerAlternativeName] <> '' then
+    AddExt(result, xeIssuerAlternativeName,
+      AsnSeq(CsvToDns(pointer(ext[xeIssuerAlternativeName]))));
+  // non-standard ext - but defined as TCryptCertFields.Comment
+  if ext[xeNetscapeComment] <> '' then
+    AddExt(result, xeNetscapeComment,
+      Asn(ASN1_IA5STRING, [ext[xeNetscapeComment]]));
+  // xeAuthorityInformationAccess and xeCertificatePolicies not yet persisted
+end;
+
+
 { **************** RSA and ECC Public/Private Key support for X.509 }
 
 { TXPublicKey }
@@ -1193,8 +1318,17 @@ end;
 
 { TXPrivateKey }
 
+const
+  // those values match EccPrivateKeyEncrypt/EccPrivateKeyDecrypt for xkaEcc256
+  XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
+    '', 'synrsa', 'synecc');
+  XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
+    0, 3, 31);
+
 function TXPrivateKey.Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
-  const PrivateKeySaved: RawByteString): boolean;
+  const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
+var
+  saved, der: RawByteString;
 begin
   result := false;
   if (self = nil) or
@@ -1202,25 +1336,40 @@ begin
      (Algorithm = xkaNone) or
      (PrivateKeySaved = '') then
     exit;
-  fAlgo := Algorithm;
-  case fAlgo of
-    xkaRsa:
-      begin
-        fRsa := TRsa.Create;
-        if fRsa.LoadFromPrivateKeyPem(PrivateKeySaved) and
+  try
+    saved := PrivateKeySaved;
+    if Password <> '' then
+    begin
+      // use mormot.core.secure encryption, not standard PKCS#8
+      der := PemToDer(saved); // see also TCryptCertX509.Load
+      saved := PrivateKeyDecrypt(
+        der, XKA_SALT[Algorithm], Password, XKA_ROUNDS[Algorithm]);
+      if saved = '' then
+        exit;
+    end;
+    fAlgo := Algorithm;
+    case fAlgo of
+      xkaRsa:
+        begin
+          fRsa := TRsa.Create;
+          if fRsa.LoadFromPrivateKeyPem(saved) and
+             ((AssociatedKey = nil) or
+              fRsa.MatchKey(AssociatedKey.fRsa)) then
+            result := true
+          else
+            FreeAndNil(fRsa);
+        end;
+      xkaEcc256:
+        if PemDerRawToEcc(saved, fEcc) and
            ((AssociatedKey = nil) or
-            fRsa.MatchKey(AssociatedKey.fRsa)) then
+            Ecc256r1MatchKeys(fEcc, AssociatedKey.fEcc.PublicKey)) then
           result := true
         else
-          FreeAndNil(fRsa);
-      end;
-    xkaEcc256:
-      if PemDerRawToEcc(PrivateKeySaved, fEcc) and
-         ((AssociatedKey = nil) or
-          Ecc256r1MatchKeys(fEcc, AssociatedKey.fEcc.PublicKey)) then
-        result := true
-      else
-        FillZero(fEcc);
+          FillZero(fEcc);
+    end;
+  finally
+    FillZero(saved);
+    FillZero(der);
   end;
 end;
 
@@ -1248,6 +1397,58 @@ begin
   end;
 end;
 
+function TXPrivateKey.ComputeSelfSignedCsr(
+  Algorithm: TXSignatureAlgorithm; const Subjects: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+var
+  pub, extreq, der: RawByteString;
+  sub: TXName;
+  ext: TXExtensions;
+  xu: TXKeyUsages;
+  xku: TXExtendedKeyUsages;
+begin
+  result := '';
+  if self = nil then
+    exit;
+  // create a new key pair if needed
+  if fAlgo <> xkaNone then
+    pub := ToSubjectPublicKey
+  else
+    pub := Generate(XSA_TO_XKA[Algorithm]);
+  if pub = '' then
+    exit;
+  // setup the CSR fields
+  FillCharFast(sub, SizeOf(sub), 0);
+  CertInfoPrepare(sub, ext, Subjects, Fields);
+  extreq := CertInfoCompute(Usages, ext, xu, xku);
+  if extreq <> '' then
+    // extensionRequest (PKCS #9 via CRMF)
+    extreq := Asn(ASN1_CTC0, [
+                AsnSeq([
+                  AsnOid(ASN1_OID_PKCS9_EXTREQ),
+                  Asn(ASN1_SETOF, [
+                    AsnSeq(extreq)
+                  ])
+                ])
+              ]);
+  // compute the main CSR body
+  der := AsnSeq([
+           Asn(0), // version
+           sub.ToBinary,
+           AsnSeq([
+             XkaToSeq(fAlgo),
+             Asn(ASN1_BITSTR, [pub])
+           ]),
+           extreq
+         ]);
+  // sign and return the whole CSR
+  result := DerToPem(AsnSeq([
+                      der,
+                      XsaToSeq(Algorithm),
+                      Asn(ASN1_BITSTR, [Sign(Algorithm, der)])
+                    ]), pemCertificateRequest);
+end;
+
 destructor TXPrivateKey.Destroy;
 begin
   inherited Destroy;
@@ -1265,12 +1466,20 @@ begin
     result := EccToDer(fEcc); // does IsZero()
 end;
 
-const
-  // those values match EccPrivateKeyEncrypt/EccPrivateKeyDecrypt for xkaEcc256
-  XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
-    '', 'synrsa', 'synecc');
-  XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
-    0, 3, 31);
+function TXPrivateKey.ToSubjectPublicKey: RawByteString;
+var
+  eccpub: TEccPublicKey;
+begin
+  result := '';
+  if self <> nil then
+    if fRsa <> nil then
+      result := fRsa.SavePublicKey.ToSubjectPublicKey
+    else if not IsZero(fEcc) then
+    begin
+      Ecc256r1PublicFromPrivate(fEcc, eccpub);
+      result := Ecc256r1UncompressAsn1(eccpub);
+    end;
+end;
 
 function TXPrivateKey.Save(Format: TCryptCertFormat;
   const Password: SpiUtf8): RawByteString;
@@ -1390,67 +1599,9 @@ end;
 
 { TXTbsCertificate }
 
-function HumanHexToBin(const hex: RawUtf8): RawByteString;
-begin
-  // reverse ToHumanHex() layout
-  result := HexToBin(StringReplaceAll(hex, ':', '')); // fast enough
-end;
-
-function CsvToDns(p: PUtf8Char): RawByteString;
-begin
-  result := '';
-  while p <> nil do
-    Append(result, Asn(ASN1_CTX2, [TrimU(GetNextItem(p))]));
-end;
-
-procedure AddExt(var result: TAsnObject; xe: TXExtension;
-  const value: RawByteString; critical: boolean = false);
-begin
-  Append(result, AsnSeq([
-                   Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
-                   ASN1_BOOLEAN_NONE[critical],
-                   Asn(ASN1_OCTSTR, [value])
-                 ]));
-end;
-
 function TXTbsCertificate.ComputeExtensions: TAsnObject;
 begin
-  // high-level CertUsages values are converted into Usages and KeyUsages
-  SetFromCertUsages;
-  // RFC 5280 #4.2.1.9
-  AddExt(result, xeBasicConstraints,
-    AsnSeq(ASN1_BOOLEAN_NONE[cuCA in CertUsages]), {critical=}true);
-  // RFC 5280 #4.2.1.3
-  if KeyUsages <> [] then
-    AddExt(result, xeKeyUsage,
-      Asn(ASN1_BITSTR, [KuToBitStr(KeyUsages)]), {critical=}true);
-  // RFC 5280 #4.2.1.12
-  if ExtendedKeyUsages <> [] then
-    AddExt(result, xeExtendedKeyUsage,
-      AsnSeq(XkuToOids(ExtendedKeyUsages)));
-  // Extension[] RawUtf8 are used as source
-  // - ExtensionOther[] and ExtensionRaw[] are ignored
-  // RFC 5280 #4.2.1.2
-  if Extension[xeSubjectKeyIdentifier] <> '' then
-    AddExt(result, xeSubjectKeyIdentifier,
-      Asn(ASN1_OCTSTR, [HumanHexToBin(Extension[xeSubjectKeyIdentifier])]));
-  // RFC 5280 #4.2.1.1
-  if Extension[xeAuthorityKeyIdentifier] <> '' then
-    AddExt(result, xeAuthorityKeyIdentifier,
-      AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(Extension[xeAuthorityKeyIdentifier])])));
-  // RFC 5280 #4.2.1.6
-  if Extension[xeSubjectAlternativeName] <> '' then
-    AddExt(result, xeSubjectAlternativeName,
-      AsnSeq(CsvToDns(pointer(Extension[xeSubjectAlternativeName]))));
-  // RFC 5280 #4.2.1.7
-  if Extension[xeIssuerAlternativeName] <> '' then
-    AddExt(result, xeIssuerAlternativeName,
-      AsnSeq(CsvToDns(pointer(Extension[xeIssuerAlternativeName]))));
-  // non-standard extension - but defined as TCryptCertFields.Comment
-  if Extension[xeNetscapeComment] <> '' then
-    AddExt(result, xeNetscapeComment,
-      Asn(ASN1_IA5STRING, [Extension[xeNetscapeComment]]));
-  // xeAuthorityInformationAccess and xeCertificatePolicies not yet persisted
+  result := CertInfoCompute(CertUsages, Extension, KeyUsages, ExtendedKeyUsages);
 end;
 
 procedure TXTbsCertificate.ComputeCachedDer;
@@ -1611,26 +1762,6 @@ begin
   ComputeCertUsages;
 end;
 
-const
-  KU: array[cuEncipherOnly .. cuDecipherOnly] of TXKeyUsage = (
-    xuEncipherOnly,
-    xuCrlSign,
-    xuKeyCertSign,
-    xuKeyAgreement,
-    xuDataEncipherment,
-    xuKeyEncipherment,
-    xuNonRepudiation,
-    xuDigitalsignature,
-    xuDecipherOnly);
-
-  XU: array[cuTlsServer .. cuTimestamp] of TXExtendedKeyUsage = (
-    xkuServerAuth,
-    xkuClientAuth,
-    xkuEmailProtection,
-    xkuCodeSigning,
-    xkuOcspSigning,
-    xkuTimeStamping);
-
 procedure TXTbsCertificate.ComputeCertUsages;
 var
   c: TCryptCertUsages;
@@ -1652,21 +1783,6 @@ begin
       if XU[r] in x then
         include(c, r);
   CertUsages := c;
-end;
-
-procedure TXTbsCertificate.SetFromCertUsages;
-var
-  r: TCryptCertUsage;
-begin
-  // compute KeyUsages and ExtendedKeyUsages from CertUsages
-  KeyUsages := [];
-  for r := low(KU) to high(KU) do
-    if r in CertUsages then
-      include(KeyUsages, KU[r]);
-  ExtendedKeyUsages := [];
-  for r := low(XU) to high(XU) do
-    if r in CertUsages then
-      include(ExtendedKeyUsages, XU[r]);
 end;
 
 function TXTbsCertificate.SerialNumberHex: RawUtf8;
@@ -2078,6 +2194,7 @@ type
   TCryptCertAlgoX509 = class(TCryptCertAlgo)
   protected
     fXsa: TXSignatureAlgorithm;
+    fXka: TXPublicKeyAlgorithm;
   public
     constructor Create(xsa: TXSignatureAlgorithm;
       const suffix: RawUtf8); reintroduce; overload;
@@ -2151,6 +2268,7 @@ begin
   if xsa = xsaNone then
     raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
   fXsa := xsa;
+  fXka := XSA_TO_XKA[xsa];
   fOsa := XSA_TO_AA[xsa];
   inherited Create('x509-' + LowerCase(CAA_JWT[fOsa]) + suffix);
 end;
@@ -2198,7 +2316,7 @@ end;
 
 function TCryptCertX509.Xka: TXPublicKeyAlgorithm;
 begin
-  result := XSA_TO_XKA[TCryptCertAlgoX509(fCryptAlgo).fXsa];
+  result := TCryptCertAlgoX509(fCryptAlgo).fXka;
 end;
 
 function HumanRandomID: RawUtf8;
@@ -2216,8 +2334,6 @@ function TCryptCertX509.Generate(Usages: TCryptCertUsages;
 var
   auth: TCryptCertX509;
   start: TDateTime;
-  subs: TRawUtf8DynArray;
-  sub: RawUtf8;
 begin
   result := nil;
   if (fX509 <> nil) or
@@ -2251,19 +2367,8 @@ begin
     // fill the supplied certificate fields
     fX509.Signed.SerialNumber := HumanHexToBin(HumanRandomID);
     fX509.Signed.CertUsages := Usages; // see SetFromCertUsages
-    CsvToRawUtf8DynArray(pointer(Subjects), subs, ',', {trim=}true);
-    if (subs = nil) and
-       (Fields <> nil) then
-      sub := TrimU(Fields^.CommonName) // like TCryptCertOpenSsl.Generate()
-    else
-      sub := RawUtf8ArrayToCsv(subs); // normalized
-    fX509.Signed.Extension[xeSubjectAlternativeName] := sub;
-    fX509.Signed.Subject.Name[xaCN] := GetCsvItem(pointer(sub), 0);
-    if Fields <> nil then
-    begin
-      fX509.Signed.Subject.FromFields(Fields^);
-      fX509.Signed.Extension[xeNetscapeComment] := Fields^.Comment;
-    end;
+    CertInfoPrepare(fX509.Signed.Subject, fX509.Signed.Extension,
+      Subjects, Fields);
     fX509.Signed.Extension[xeSubjectKeyIdentifier] := HumanRandomID;
     // (self-)sign this certificate
     Sign(auth);
@@ -2388,7 +2493,7 @@ begin
       cccPrivateKeyOnly:
         begin
           // use mormot.core.secure encryption, not standard PKCS#8
-          der := PemToDer(Saved);
+          der := PemToDer(Saved); // see also TXPrivateKey.Load
           bin := PrivateKeyDecrypt(
             der, XKA_SALT[Xka], PrivatePassword, XKA_ROUNDS[Xka]);
           result := SetPrivateKey(bin);
@@ -2485,7 +2590,7 @@ begin
     if fX509 <> nil then
       pub := fX509.PublicKey;
     fPrivateKey := TXPrivateKey.Create;
-    if fPrivateKey.Load(Xka, pub, saved) then
+    if fPrivateKey.Load(Xka, pub, saved, '') then
       result := true
     else
       FreeAndNil(fPrivateKey);

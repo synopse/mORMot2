@@ -1872,7 +1872,7 @@ type
     function FromHandle(Handle: pointer): ICryptCert; override;
     function CreateSelfSignedCsr(const Subjects: RawUtf8;
       const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-      Usages: TCryptCertUsages = []; Fields: PCryptCertFields = nil): RawUtf8; override;
+      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
   end;
 
   /// class implementing ICryptCert using OpenSSL X.509
@@ -2046,12 +2046,14 @@ begin
     RaiseError('NewCertificateRequest');
   key := nil;
   try
+    // load or generate a public/private key pair
     if PrivateKeyPem <> '' then
       key := LoadPrivateKey(PrivateKeyPem, PrivateKeyPassword)
     else
       key := NewPrivateKey; // ephemeral key for self-signature
     if key = nil then
       RaiseError('PrivateKeyPem');
+    // setup the CSR fields
     CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
     altnames := SetupNameAndAltNames(
       X509_REQ_get_subject_name(req), Usages, Fields, dns);
@@ -2060,10 +2062,12 @@ begin
     if (Fields <> nil) and
        (Fields^.Comment <> '') then
        req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+    // self-sign the CSR and return it as PEM
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
     if req.Sign(key, fHash) = 0 then // returns signature size in bytes
       RaiseError('SelfSign');
     result := req^.ToPem;
+    // save the generated private key (if was not previously loaded)
     if (result <> '') and
        (PrivateKeyPem = '') then
       PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
