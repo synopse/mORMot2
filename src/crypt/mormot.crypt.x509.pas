@@ -149,6 +149,7 @@ type
     // - as ASN1_OCTSTR raw content for TXTbsCertificate.ExtensionOther[]
     Value: RawByteString;
   end;
+  PXOther = ^TXOther;
 
   /// used to store the unknown attributes or extensions
   // - in TXname.Other or TXTbsCertificate.ExtensionOther
@@ -193,14 +194,22 @@ type
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
+    /// return Name[] by RDN or ToDigest() by hash name or by FindOid()
+    function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
+    /// return the UTF-8 text value of a given text OID
+    // - search in Other[] then Name[]
+    function FindOid(const oid: RawUtf8): RawUtf8;
     /// to be called once any field has been changed to refresh internal caches
     procedure AfterModified;
   end;
 
 /// efficient search of a TXOther.Value from a 'x.x.x.x.x' text OID
 function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
+
+/// low-level search of a TXOther.Value from a binary OID
+function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
 
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
@@ -908,6 +917,20 @@ begin
   Name[xaG]  := TrimU(fields.GivenName);
 end;
 
+function TXName.Get(const Rdn: RawUtf8): RawUtf8;
+var
+  i: integer;
+  h: THashAlgo;
+begin
+  i := GetEnumNameValueTrimmed(TypeInfo(TXAttr), pointer(Rdn), length(Rdn));
+  if i > 0 then
+    result := Name[TXAttr(i)]
+  else if TextToHashAlgo(Rdn, h) then
+    result := ToDigest(h)
+  else
+    result := FindOid(Rdn);
+end;
+
 procedure TXName.AfterModified;
 begin
   fCachedAsn := '';
@@ -919,30 +942,41 @@ begin
   result := HashFull(algo, ToBinary);
 end;
 
+function TXName.FindOid(const oid: RawUtf8): RawUtf8;
+var
+  o: TAsnObject;
+  xa: TXAttr;
+begin
+  o := AsnEncOid(pointer(Oid));
+  result := FindOtherAsn(pointer(Other), length(Other), o);
+  if result <> '' then
+    exit;
+  xa := OidToXa(o);
+  if xa <> xaNone then
+    result := Name[xa];
+end;
+
 
 function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
-var
-  n: integer;
-  o: ^TXOther;
-  oid: RawByteString;
+begin
+  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(pointer(OidText)));
+end;
+
+function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
 begin
   result := '';
-  if Other = nil then
-    exit;
-  oid := AsnEncOid(pointer(OidText));
-  if oid = '' then
-    exit;
-  o := pointer(Other);
-  n := length(Other);
-  repeat
-    if o^.Oid = oid then // efficient search
-    begin
-      result := o^.Value;
-      exit;
-    end;
-    inc(o);
-    dec(n);
-  until n = 0;
+  if (o <> nil) and
+     (n > 0) and
+     (OidBinary <> '') then
+    repeat
+      if o^.Oid = OidBinary then // efficient search
+      begin
+        result := o^.Value;
+        exit;
+      end;
+      inc(o);
+      dec(n);
+    until n = 0;
 end;
 
 function ToText(a: TXAttr): PShortString;
@@ -1981,9 +2015,11 @@ type
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields): ICryptCert; override;
     function GetSerial: RawUtf8; override;
-    function GetSubject: RawUtf8; override;
+    function GetSubjectName: RawUtf8; override;
+    function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
+    function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
@@ -2153,14 +2189,18 @@ begin
   result := fX509.GetSerialNumber;
 end;
 
-function TCryptCertX509.GetSubject: RawUtf8;
+function TCryptCertX509.GetSubjectName: RawUtf8;
+begin
+  result := fX509.GetSubjectDN;
+end;
+
+function TCryptCertX509.GetSubject(const Rdn: RawUtf8): RawUtf8;
 var
   subs: TRawUtf8DynArray;
 begin
   result := '';
-  if fX509 = nil then
-    exit;
-  result := fX509.Subject[xaCN];
+  if fX509 <> nil then
+    result := fX509.Signed.Subject.Get(Rdn); // RDN or hash
   if result <> '' then
     exit;
   subs := fX509.SubjectAlternativeNames;
@@ -2176,6 +2216,14 @@ end;
 function TCryptCertX509.GetIssuerName: RawUtf8;
 begin
   result := fX509.GetIssuerDN;
+end;
+
+function TCryptCertX509.GetIssuer(const Rdn: RawUtf8): RawUtf8;
+begin
+  if fX509 = nil then
+    result := ''
+  else
+    result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash
 end;
 
 function TCryptCertX509.GetSubjectKey: RawUtf8;

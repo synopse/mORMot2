@@ -749,6 +749,9 @@ function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
 function ToText(algo: TCrc32Algo): PShortString; overload;
 
+/// recognize a THashAlgo from a text, e.g. 'SHA1' or 'SHA3_256'
+function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
@@ -810,6 +813,17 @@ const
     SizeOf(THash256),      // hfSHA512_256
     SizeOf(THash256),      // hfSHA3_256
     SizeOf(THash512));     // hfSHA3_512
+
+  /// map the file extension text of any THashAlgo digest
+  HASH_EXT: array[THashAlgo] of RawUtf8 = (
+    '.md5',        // hfMD5
+    '.sha1',       // hfSHA1
+    '.sha256',     // hfSHA256
+    '.sha384',     // hfSHA384
+    '.sha512',     // hfSHA512
+    '.sha512-256', // hfSHA512_256
+    '.sha3-256',   // hfSHA3_256
+    '.sha3-512');  // hfSHA3_512
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -1790,15 +1804,31 @@ type
     /// the Certificate Genuine Serial Number
     // - e.g. '04:f9:25:39:39:f8:ce:79:1a:a4:0e:b3:fa:72:e3:bc:9e:d6'
     function GetSerial: RawUtf8;
+    /// the High-Level Certificate Subject
+    // - actual text output depend on the provider used; for instance
+    // '/C=US/O=Let''s Encrypt/CN=R3' with OpenSSL, 'CN=R3, C=US, O=Let''s Encrypt'
+    // with mormot.crypt.x509 or some Baudot-encoded text with mormot.crypt.ecc
+    function GetSubjectName: RawUtf8;
     /// the Low-Level Certificate Main Subject
-    // - e.g. 'synopse.info' from OpenSSL X.509 CN= subject field
-    function GetSubject: RawUtf8;
+    // - returns by default the CommonName, e.g. 'synopse.info' from a X.509
+    // CN= subject field
+    // - can search another Relative Distinguished Name (RDN) e.g. 'O' or 'OU'
+    // - if Rdn is a hash, e.g. 'SHA1'/'SHA256', will return the subject digest
+    function GetSubject(const Rdn: RawUtf8 = 'CN'): RawUtf8;
     /// an array of all Subject names covered by this Certificate
     // - e.g. ['synopse.info', 'www.synopse.info']
+    // - e.g. read from X.509 v3 Subject Alternative Names extension
     function GetSubjects: TRawUtf8DynArray;
     /// the High-Level Certificate Issuer
-    // - e.g. '/C=US/O=Let''s Encrypt/CN=R3' or some Baudot-encoded text
+    // - actual text output depend on the provider used; for instance
+    // '/C=US/O=Let''s Encrypt/CN=R3' with OpenSSL, 'CN=R3, C=US, O=Let''s Encrypt'
+    // with mormot.crypt.x509 or some Baudot-encoded text with mormot.crypt.ecc
     function GetIssuerName: RawUtf8;
+    /// the Low-Level Certificate Main Issuer
+    // - returns by default the CommonName, e.g. 'R3' from a X.509 CN= subject field
+    // - can search another Relative Distinguished Name (RDN) e.g. 'O' or 'OU'
+    // - if Rdn is a hash, e.g. 'SHA1'/'SHA256', will return the issuer digest
+    function GetIssuer(const Rdn: RawUtf8 = 'CN'): RawUtf8;
     /// the Subject Issuer Key Identifier (SKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
     // - match the SKID on X.509, or the serial number for syn-es256
@@ -1996,9 +2026,11 @@ type
     function GenerateFromCsr(const Csr: RawByteString;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; virtual;
     function GetSerial: RawUtf8; virtual; abstract;
-    function GetSubject: RawUtf8; virtual; abstract;
+    function GetSubjectName: RawUtf8; virtual; abstract;
+    function GetSubject(const Rdn: RawUtf8): RawUtf8; virtual; abstract;
     function GetSubjects: TRawUtf8DynArray; virtual; abstract;
     function GetIssuerName: RawUtf8; virtual; abstract;
+    function GetIssuer(const Rdn: RawUtf8): RawUtf8; virtual; abstract;
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
     function IsSelfSigned: boolean; virtual; abstract;
@@ -3116,17 +3148,6 @@ begin
   fHash.Final(result);
 end;
 
-const
-  HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5',        // hfMD5
-    '.sha1',       // hfSHA1
-    '.sha256',     // hfSHA256
-    '.sha384',     // hfSHA384
-    '.sha512',     // hfSHA512
-    '.sha512-256', // hfSHA512_256
-    '.sha3-256',   // hfSHA3_256
-    '.sha3-512');  // hfSHA3_512
-
 class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
 begin
   result := HASH_EXT[GetAlgo];
@@ -3309,17 +3330,6 @@ begin
     result := h[0];
 end;
 
-const
-  ALGO_EXT: array[THashAlgo] of string[10] = (
-    'md5',          // hfMD5
-    'sha1',         // hfSHA1
-    'sha256',       // hfSHA256
-    'sha384',       // hfSHA384
-    'sha512',       // hfSHA512
-    'sha512_256',   // hfSHA512_256
-    'sha3_256',     // hfSHA3_256
-    'sha3_512');    // hfSHA3_512
-
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
 var
   h: TRawUtf8DynArray;
@@ -3335,7 +3345,7 @@ begin
   for a := low(a) to high(a) do
     if a in aAlgos then
     begin
-      fn := FormatString('%.%', [efn, ALGO_EXT[a]]);
+      fn := FormatString('%%', [efn, HASH_EXT[a]]);
       FileFromString(FormatUtf8('% *%', [h[n], efn]), fn);
       inc(n);
     end;
@@ -3639,6 +3649,18 @@ end;
 function ToText(algo: TCrc32Algo): PShortString;
 begin
   result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
+end;
+
+function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+var
+  i: integer;
+begin
+  i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), pointer(Text), length(Text));
+  result := false;
+  if i < 0 then
+    exit;
+  Algo := THashAlgo(i);
+  result := true;
 end;
 
 

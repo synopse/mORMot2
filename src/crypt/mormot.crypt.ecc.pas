@@ -5196,9 +5196,11 @@ type
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields): ICryptCert; override;
     function GetSerial: RawUtf8; override;
-    function GetSubject: RawUtf8; override;
+    function GetSubjectName: RawUtf8; override;
+    function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
+    function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
@@ -5333,12 +5335,24 @@ begin
     result := '';
 end;
 
-function TCryptCertInternal.GetSubject: RawUtf8;
+function TCryptCertInternal.GetSubjectName: RawUtf8;
 begin
-  if fEcc = nil then
-    result := ''
+  if fEcc <> nil then
+    result := fEcc.Content.GetSubject
   else
-    result := GetCsvItem(pointer(fEcc.Content.GetSubject), 0);
+    result := '';
+end;
+
+function TCryptCertInternal.GetSubject(const Rdn: RawUtf8): RawUtf8;
+var
+  h: THashAlgo;
+begin
+  result := '';
+  if fEcc <> nil then
+    if IdemPropNameU(Rdn, 'CN') then
+      result := GetCsvItem(pointer(fEcc.Content.GetSubject), 0)
+    else if TextToHashAlgo(Rdn, h) then
+      result := HashFull(h, @fEcc.Signed.Serial, SizeOf(fEcc.Signed.Serial));
 end;
 
 function TCryptCertInternal.GetSubjects: TRawUtf8DynArray;
@@ -5354,6 +5368,19 @@ begin
     result := fEcc.AuthorityIssuer
   else
     result := '';
+end;
+
+function TCryptCertInternal.GetIssuer(const Rdn: RawUtf8): RawUtf8;
+var
+  h: THashAlgo;
+begin
+  result := '';
+  if fEcc <> nil then
+    if IdemPropNameU(Rdn, 'CN') then
+      result := GetCsvItem(pointer(fEcc.AuthorityIssuer), 0)
+    else if TextToHashAlgo(Rdn, h) then
+      result := HashFull(h,
+        @fEcc.Signed.AuthoritySerial, SizeOf(fEcc.Signed.AuthoritySerial));
 end;
 
 function TCryptCertInternal.GetSubjectKey: RawUtf8;

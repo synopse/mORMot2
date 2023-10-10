@@ -1737,6 +1737,7 @@ type
     function SubjectName: RawUtf8;
     /// extract a given part of the Certificate Main Subject
     // - e.g. 'synopse.info' from SubjectName = 'CN=synopse.info'
+    // - id could also be a hash name to get the GetSubjectName.ToDigest() value
     function GetSubject(const id: RawUtf8 = 'CN'): RawUtf8;
     /// an array of (DNS) Subject names covered by this Certificate
     // - will search and remove the 'DNS:' trailer by default (dns=true)
@@ -1747,6 +1748,7 @@ type
     function IssuerName: RawUtf8;
     /// extract a given part of the Certificate Main Subject
     // - e.g. 'R3' from IssuerName = '/C=US/O=Let''s Encrypt/CN=R3'
+    // - id could also be a hash name to get the GetIssuerName.ToDigest() value
     function GetIssuer(const id: RawUtf8 = 'CN'): RawUtf8;
     /// the minimum Validity timestamp of this Certificate
     function NotBefore: TDateTime;
@@ -9236,7 +9238,7 @@ begin // see GetNextItemTrimed() from mormot.core.text
 end;
 
 // note: PX509_Name.GetEntry() is not MBSTRING ready so we favor manual parsing
-function GetPair(p: PUtf8Char; const id: RawUtf8): RawUtf8;
+function GetPair(p: PUtf8Char; const rdn: RawUtf8): RawUtf8;
 var
   nam: RawUtf8;
 begin
@@ -9246,20 +9248,34 @@ begin
     if p = nil then
       break;
     GetNext(p, ',', '/', result);
-    if nam = id then
+    if nam = rdn then
       exit;
   end;
   result := ''; // id not found
 end;
 
 function X509.GetSubject(const id: RawUtf8): RawUtf8;
+var
+  md: PEVP_MD;
 begin
   result := GetPair(pointer(SubjectName), id);
+  if result <> '' then
+    exit;
+  md := EVP_get_digestbyname(pointer(id));
+  if md <> nil then
+    result := GetSubjectName.ToDigest(md);
 end;
 
 function X509.GetIssuer(const id: RawUtf8): RawUtf8;
+var
+  md: PEVP_MD;
 begin
   result := GetPair(pointer(IssuerName), id);
+  if result <> '' then
+    exit;
+  md := EVP_get_digestbyname(pointer(id));
+  if md <> nil then
+    result := GetIssuerName.ToDigest(md);
 end;
 
 function X509.PeerInfo: RawUtf8;

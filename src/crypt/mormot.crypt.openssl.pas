@@ -1893,9 +1893,11 @@ type
     function GenerateFromCsr(const Csr: RawByteString;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; override;
     function GetSerial: RawUtf8; override;
-    function GetSubject: RawUtf8; override;
+    function GetSubjectName: RawUtf8; override;
+    function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
+    function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
@@ -2205,12 +2207,13 @@ begin
   result := fX509.SerialNumber;
 end;
 
-function TCryptCertOpenSsl.GetSubject: RawUtf8;
+function TCryptCertOpenSsl.GetSubject(const Rdn: RawUtf8): RawUtf8;
 var
   subs: TRawUtf8DynArray;
 begin
-  result := fX509.GetSubject('CN');
-  if result <> '' then
+  result := fX509.GetSubject(Rdn);
+  if (result <> '') or
+     not IdemPropNameU(Rdn, 'CN') then
     exit;
   subs := fX509.SubjectAlternativeNames;
   if subs <> nil then
@@ -2222,9 +2225,19 @@ begin
   result := fX509.SubjectAlternativeNames;
 end;
 
+function TCryptCertOpenSsl.GetSubjectName: RawUtf8;
+begin
+  result := fX509.SubjectName;
+end;
+
 function TCryptCertOpenSsl.GetIssuerName: RawUtf8;
 begin
   result := fX509.IssuerName;
+end;
+
+function TCryptCertOpenSsl.GetIssuer(const Rdn: RawUtf8): RawUtf8;
+begin
+  result := fX509.GetIssuer(Rdn);
 end;
 
 function TCryptCertOpenSsl.GetSubjectKey: RawUtf8;

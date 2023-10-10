@@ -332,14 +332,14 @@ type
     ValidityStart: TEccDate;
     /// certificate valid not after
     ValidityEnd: TEccDate;
-    /// a genuine identifier for this certificate
+    /// a 128-bit genuine identifier for this certificate
     // - is used later on to validate other certificates in chain
     Serial: TEccCertificateID;
     /// identify the certificate issuer
     // - is either geniune random bytes, or some Baudot-encoded text
     // - blank in V2, contains the (may be truncated) "subject" in V1 format
     Issuer: TEccCertificateIssuer;
-    /// genuine identifier of the authority certificate used for signing
+    /// 128-bit genuine identifier of the authority certificate used for signing
     // - should be used to retrieve the associated PublicKey used to compute
     // the Signature field
     // - may equal Serial, if was self-signed
