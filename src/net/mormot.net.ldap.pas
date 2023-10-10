@@ -3784,7 +3784,6 @@ begin
   until false;
   n := 1;
   if AsnNext(n, resp) = LDAP_ASN1_CONTROLS then
-  begin
     if AsnNext(n, resp) = ASN1_SEQ then
     begin
       AsnNext(n, resp, @s);
@@ -3801,7 +3800,6 @@ begin
         end;
       end;
     end;
-  end;
   fSearchResult.AfterAdd; // allow "for res in ldap.SearchResult.Items do"
   result := fResultCode = LDAP_RES_SUCCESS;
   QueryPerformanceMicroSeconds(stop);
@@ -3985,7 +3983,7 @@ var
   attr: TRawUtf8DynArray;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapUser));
-  attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR + 'userPrincipalName,' +
+  attr := CsvToRawUtf8DynArray(LDAPOBJECT_ATTR + ',userPrincipalName,' +
     'displayName,mail,pwdLastSet,lastLogon,userAccountControl,primaryGroupID');
   if WithMemberOf then
     AddRawUtf8(attr, 'memberOf');
