@@ -2158,7 +2158,7 @@ begin
   begin
     Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
     // load any extensionRequest (PKCS #9 via CRMF)
-    if (AsnNext(posnfo, nfo) = ASN1_CTC0) and
+    if (AsnNext(posnfo, nfo) = ASN1_CTC0) and // optional attributes sequence
        (AsnNext(posnfo, nfo) = ASN1_SEQ) and
        (AsnNext(posnfo, nfo, @oid) = ASN1_OBJID) and
        (oid = ASN1_OID_PKCS9_EXTREQ) and
