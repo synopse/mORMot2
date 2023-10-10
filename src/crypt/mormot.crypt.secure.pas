@@ -7782,18 +7782,25 @@ end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
 var
-  x: PtrUInt;
+  x, y: PtrUInt;
   tmp: ShortString; // no temporary memory allocation
 begin
   tmp[0] := #0;
   // first byte = two first numbers modulo 40
   x := GetNextItemCardinal(OidText, '.') * 40;
+  y := 0;
   while OidText <> nil do
   begin
-    inc(x, GetNextItemCardinal(OidText, '.'));
+    y := GetNextItemCardinal(OidText, '.');
+    if y = 0 then
+      break;
+    inc(x, y);
     AsnEncOidItem(x, tmp);
     x := 0;
   end;
+  if (y = 0) or
+     (tmp[0] < #3) then
+    tmp[0] := #0; // clearly invalid input
   FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
 end;
 

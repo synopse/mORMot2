@@ -6,7 +6,7 @@ unit mormot.crypt.x509;
 {
   *****************************************************************************
 
-   ASN.1 Encoding and X.509 Certificates Implementation 
+   X.509 Certificates Implementation - see RFC 5280
     - X.509 Fields Logic
     - RSA and ECC Public/Private Key support for X.509
     - X.509 Certificates
@@ -1052,7 +1052,10 @@ var
   o: TAsnObject;
   xa: TXAttr;
 begin
+  result := '';
   o := AsnEncOid(pointer(Oid));
+  if o = '' then
+    exit;
   result := FindOtherAsn(pointer(Other), length(Other), o);
   if result <> '' then
     exit;
