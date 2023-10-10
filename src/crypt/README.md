@@ -75,7 +75,7 @@ Rivest-Shamir-Adleman (RSA) Public-Key Cryptography
 X.509 Certificates Implementation - see RFC 5280
 - X.509 Fields Logic
 - RSA and ECC Public/Private Key support for X.509
-- X.509 Certificates
+- X.509 Certificates and CSR
 - Registration of our X.509 Engine to the `TCryptCert` Factory
 
 ### mormot.crypt.jwt

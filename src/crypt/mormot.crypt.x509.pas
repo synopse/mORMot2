@@ -9,7 +9,7 @@ unit mormot.crypt.x509;
    X.509 Certificates Implementation - see RFC 5280
     - X.509 Fields Logic
     - RSA and ECC Public/Private Key support for X.509
-    - X.509 Certificates
+    - X.509 Certificates and CSR
     - Registration of our X.509 Engine to the TCryptCert Factory
 
   *****************************************************************************
@@ -424,7 +424,7 @@ type
   end;
 
 
-{ **************** X.509 Certificates }
+{ **************** X.509 Certificates and CSR }
 
 type
   /// X.509 Certificate fields, as defined in RFC 5280 #4.1.2 and in TX509.Signed
@@ -442,6 +442,7 @@ type
     procedure ComputeCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
     function ComputeExtensions: TAsnObject;
+    procedure Generate(ExpireDays, ValidDays: integer);
   public
     /// describes the version of the encoded X.509 Certificate
     // - equals usually 3, once extensions are used
@@ -560,6 +561,7 @@ type
     procedure AfterModified;
     /// serialize those fields into ASN.1 DER binary
     // - following RFC 5280 #4.1.1 encoding
+    // - value is cached internally after LoadFromDer() or re-computation
     function SaveToDer: TCertDer;
     /// unserialize those fields from ASN.1 DER binary
     // - following RFC 5280 #4.1.1 encoding
@@ -567,6 +569,8 @@ type
     /// unserialize those fields from a PEM content
     // - will fallback and try as ASN.1 DER binary if content is not PEM
     function LoadFromPem(const pem: TCertPem): boolean;
+    /// fill those fields from a Certificate Signing Request PEM or DER content
+    function LoadFromCsr(const Csr: RawByteString): boolean;
     /// the lowercase hexa hash of the normalized Binary of this Certificate
     // - default hfSha1 value is cached internally so is efficient for lookup
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
@@ -1095,6 +1099,15 @@ begin
   end;
 end;
 
+function HumanRandomID: RawUtf8;
+var
+  rnd: THash256;
+begin
+  TAesPrng.Main.FillRandom(rnd);
+  rnd[0] := rnd[0] and $7f;     // ensure > 0
+  ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
+end;
+
 function HumanHexToBin(const hex: RawUtf8): RawByteString;
 begin
   // reverse ToHumanHex() layout
@@ -1441,7 +1454,7 @@ begin
            ]),
            extreq
          ]);
-  // sign and return the whole CSR
+  // sign and return the whole CSR as PEM
   result := DerToPem(AsnSeq([
                       der,
                       XsaToSeq(Algorithm),
@@ -1595,7 +1608,7 @@ begin
 end;
 
 
-{ **************** X.509 Certificates }
+{ **************** X.509 Certificates and CSR }
 
 { TXTbsCertificate }
 
@@ -1783,6 +1796,20 @@ begin
       if XU[r] in x then
         include(c, r);
   CertUsages := c;
+end;
+
+procedure TXTbsCertificate.Generate(ExpireDays, ValidDays: integer);
+var
+  start: TDateTime;
+begin
+  // fill the main certificate fields
+  Version := 3;
+  SerialNumber := HumanHexToBin(HumanRandomID);
+  Extension[xeSubjectKeyIdentifier] := HumanRandomID;
+  // ValidDays and ExpireDays are relative to the current time
+  start := NowUtc;
+  NotBefore := start + ValidDays;
+  NotAfter := start + ExpireDays;
 end;
 
 function TXTbsCertificate.SerialNumberHex: RawUtf8;
@@ -2100,22 +2127,69 @@ begin
   result := LoadFromDer(PemToDer(pem));
 end;
 
+function TX509.LoadFromCsr(const Csr: RawByteString): boolean;
+var
+  pos, posnfo: integer;
+  xsa: TXSignatureAlgorithm;
+  der, nfo, version, oid, oid2, sig: RawByteString;
+begin
+  result := false;
+  if (self = nil) or
+     (Csr = '') then
+    exit;
+  der := PemToDer(Csr);
+  // parse supplied Certificate Signing Request content
+  pos := 1;
+  posnfo := 1;
+  if (AsnNext(pos, der) = ASN1_SEQ) and
+     (AsnNextRaw(pos, der, nfo, {includeheader=}true) = ASN1_SEQ) and
+     (AsnNext(posnfo, nfo) = ASN1_SEQ) and
+     (AsnNext(posnfo, nfo, @version) = ASN1_INT) and
+     (version = '0') and
+     Signed.Subject.FromAsnNext(posnfo, nfo) and
+     (AsnNext(posnfo, nfo) = ASN1_SEQ) and // subjectPublicKeyInfo
+     AsnNextAlgoOid(posnfo, nfo, oid, @oid2) and
+     OidToXka(oid, oid2, Signed.SubjectPublicKeyAlgorithm) and
+     (AsnNextRaw(posnfo, nfo, Signed.SubjectPublicKey) = ASN1_BITSTR) and
+     AsnNextAlgoOid(pos, der, oid, nil) and
+     OidToXsa(oid, xsa) and
+     (AsnNextRaw(pos, der, sig) = ASN1_BITSTR) and
+     PublicKey.Verify(xsa, nfo, sig) then // check self-signature
+  begin
+    Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
+    // load any extensionRequest (PKCS #9 via CRMF)
+    if (AsnNext(posnfo, nfo) = ASN1_CTC0) and
+       (AsnNext(posnfo, nfo) = ASN1_SEQ) and
+       (AsnNext(posnfo, nfo, @oid) = ASN1_OBJID) and
+       (oid = ASN1_OID_PKCS9_EXTREQ) and
+       (AsnNext(posnfo, nfo) = ASN1_SETOF) and
+       (AsnNext(posnfo, nfo) = ASN1_SEQ) then
+      Signed.AddNextExtensions(posnfo, nfo);
+    result := true;
+  end;
+end;
+
 function TX509.FingerPrint(algo: THashAlgo): RawUtf8;
 begin
-  if algo = hfSHA1 then
+  if self = nil then
+    result := ''
+  else
   begin
-    result := fCachedSha1;
-    if result <> '' then
-      exit;
-  end;
-  result := HashFull(algo, SaveToDer);
-  if algo = hfSHA1 then
-  begin
-    fSafe.Lock;
-    try
-      fCachedSha1 := result;
-    finally
-      fSafe.UnLock;
+    if algo = hfSHA1 then
+    begin
+      result := fCachedSha1;
+      if result <> '' then
+        exit;
+    end;
+    result := HashFull(algo, SaveToDer);
+    if algo = hfSHA1 then
+    begin
+      fSafe.Lock;
+      try
+        fCachedSha1 := result;
+      finally
+        fSafe.UnLock;
+      end;
     end;
   end;
 end;
@@ -2147,13 +2221,13 @@ end;
 function TX509.PeerInfo: RawUtf8;
 begin
   if self = nil then
+    result := ''
+  else
   begin
-    result := '';
-    exit;
+    if fCachedPeerInfo = '' then
+      ComputeCachedPeerInfo;
+    result := fCachedPeerInfo;
   end;
-  if fCachedPeerInfo = '' then
-    ComputeCachedPeerInfo;
-  result := fCachedPeerInfo;
 end;
 
 procedure TX509.AfterModified;
@@ -2169,6 +2243,7 @@ begin
   end;
   Signed.AfterModified;
 end;
+
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
@@ -2200,6 +2275,9 @@ type
       const suffix: RawUtf8); reintroduce; overload;
     function New: ICryptCert; override; // = TCryptCertX509.Create(self)
     function FromHandle(Handle: pointer): ICryptCert; override;
+    function CreateSelfSignedCsr(const Subjects: RawUtf8;
+      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
   end;
 
   /// class implementing ICryptCert using our TX509 class
@@ -2212,6 +2290,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function Xka: TXPublicKeyAlgorithm;
       {$ifdef HASINLINE} inline; {$endif}
+    function VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
+    procedure GeneratePrivateKey;
   public
     destructor Destroy; override;
     procedure Clear;
@@ -2219,6 +2299,8 @@ type
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
       Fields: PCryptCertFields): ICryptCert; override;
+    function GenerateFromCsr(const Csr: RawByteString;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; override;
     function GetSerial: RawUtf8; override;
     function GetSubjectName: RawUtf8; override;
     function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
@@ -2233,6 +2315,7 @@ type
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
+    function GetDigest(Algo: THashAlgo): RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; override;
     function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
@@ -2293,6 +2376,37 @@ begin
   result := instance;
 end;
 
+function TCryptCertAlgoX509.CreateSelfSignedCsr(const Subjects: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+
+  procedure RaiseError(const msg: shortstring);
+  begin
+    raise ECryptCertX509.CreateUtf8(
+      '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
+  end;
+
+var
+  key: TXPrivateKey;
+begin
+  if Subjects = '' then
+    RaiseError('no Subjects');
+  key := TXPrivateKey.Create;
+  try
+    // load or generate a public/private key pair
+    if PrivateKeyPem <> '' then
+      if not key.Load(fXka, nil, PrivateKeyPem, PrivateKeyPassword) then
+        RaiseError('PrivateKeyPem');
+    // setup the CSR fields, self-sign the CSR and return it as PEM
+    result := key.ComputeSelfSignedCsr(fXsa, Subjects, Usages, Fields);
+    // save the generated private key (if was not previously loaded)
+    if (result <> '') and
+       (PrivateKeyPem = '') then
+      PrivateKeyPem := key.Save(ccfPem, PrivateKeyPassword);
+  finally
+    key.Free;
+  end;
+end;
 
 
 { TCryptCertX509 }
@@ -2319,13 +2433,33 @@ begin
   result := TCryptCertAlgoX509(fCryptAlgo).fXka;
 end;
 
-function HumanRandomID: RawUtf8;
-var
-  rnd: THash256;
+function TCryptCertX509.VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
 begin
-  TAesPrng.Main.FillRandom(rnd);
-  rnd[0] := rnd[0] and $7f;     // ensure > 0
-  ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
+  if (fX509 <> nil) or
+     HasPrivateSecret then
+    RaiseErrorGenerate('duplicated call');
+  result := self; // self-signed
+  if Authority <> nil then
+    if Authority.HasPrivateSecret then
+      if Authority.Instance.InheritsFrom(TCryptCertX509) then
+        result := TCryptCertX509(Authority.Instance)
+      else
+        RaiseErrorGenerate('Authority is not a TCryptCertX509')
+    else
+      RaiseErrorGenerate('Authority has no private key to sign');
+end;
+
+procedure TCryptCertX509.GeneratePrivateKey;
+begin
+  if HasPrivateSecret then
+    RaiseErrorGenerate('duplicated GeneratePrivateKey');
+  fPrivateKey := TXPrivateKey.Create;
+  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(xka);
+  if fX509.Signed.SubjectPublicKey = '' then
+    RaiseErrorGenerate('GeneratePrivateKey failed');
+  fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
+  fX509.Signed.SubjectPublicKeyBits :=
+    X509PubKeyBits(fX509.Signed.SubjectPublicKey);
 end;
 
 function TCryptCertX509.Generate(Usages: TCryptCertUsages;
@@ -2333,44 +2467,41 @@ function TCryptCertX509.Generate(Usages: TCryptCertUsages;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
   auth: TCryptCertX509;
-  start: TDateTime;
 begin
-  result := nil;
-  if (fX509 <> nil) or
-     HasPrivateSecret then
-    RaiseErrorGenerate('duplicated call');
-  // verify the supplied Authority
-  auth := self; // self-signed
-  if Authority <> nil then
-    if Authority.HasPrivateSecret then
-      if Authority.Instance.InheritsFrom(TCryptCertX509) then
-        auth := TCryptCertX509(Authority.Instance)
-      else
-        RaiseErrorGenerate('Authority is not a TCryptCertX509')
-    else
-      RaiseErrorGenerate('Authority has no private key to sign');
+  auth := VerifyAuthority(Authority);
   fX509 := TX509.Create;
   try
-    // generate a new public/private key pair to store with this instance
-    fX509.Signed.Version := 3;
-    fPrivateKey := TXPrivateKey.Create;
-    fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(xka);
-    if fX509.Signed.SubjectPublicKey = '' then
-      RaiseErrorGenerate('Generate failed');
-    fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
-    fX509.Signed.SubjectPublicKeyBits :=
-      X509PubKeyBits(fX509.Signed.SubjectPublicKey);
-    // ValidDays and ExpireDays are relative to the current time
-    start := NowUtc;
-    fX509.Signed.NotBefore := start + ValidDays;
-    fX509.Signed.NotAfter := start + ExpireDays;
     // fill the supplied certificate fields
-    fX509.Signed.SerialNumber := HumanHexToBin(HumanRandomID);
-    fX509.Signed.CertUsages := Usages; // see SetFromCertUsages
+    fX509.Signed.CertUsages := Usages; // used by SetFromCertUsages
     CertInfoPrepare(fX509.Signed.Subject, fX509.Signed.Extension,
       Subjects, Fields);
-    fX509.Signed.Extension[xeSubjectKeyIdentifier] := HumanRandomID;
+    fX509.Signed.Generate(ExpireDays, ValidDays);
+    // generate a new public/private key pair to store with this instance
+    GeneratePrivateKey;
     // (self-)sign this certificate
+    Sign(auth);
+    result := self;
+  except
+    Clear;
+  end;
+end;
+
+function TCryptCertX509.GenerateFromCsr(const Csr: RawByteString;
+  const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert;
+var
+  auth: TCryptCertX509;
+begin
+  auth := VerifyAuthority(Authority);
+  fX509 := TX509.Create;
+  try
+    // fill the certificate fields from the supplied CSR information
+    if not fX509.LoadFromCsr(Csr) then
+      RaiseErrorGenerate('LoadFromCsr');
+    fX509.Signed.Generate(ExpireDays, ValidDays);
+    // (self-)sign this certificate
+    if auth = self then
+      // the CSR has only a public key: generate a new key pair
+      GeneratePrivateKey;
     Sign(auth);
     result := self;
   except
@@ -2479,6 +2610,11 @@ begin
     result := ''
   else
     FormatUtf8('% %', [bits, XSA_TXT[fX509.SignatureAlgorithm]], result);
+end;
+
+function TCryptCertX509.GetDigest(Algo: THashAlgo): RawUtf8;
+begin
+  result := fX509.FingerPrint(Algo);
 end;
 
 function TCryptCertX509.Load(const Saved: RawByteString;

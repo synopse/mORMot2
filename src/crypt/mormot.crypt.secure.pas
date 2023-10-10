@@ -6389,7 +6389,8 @@ function TCryptCert.GenerateFromCsr(const Csr: RawByteString;
 var
   x: ICryptCert;
 begin
-  // by default, CreateSelfSignedCsr generates a self-side certificate as CSR
+  // by default, CreateSelfSignedCsr generates a self-signed certificate as CSR
+  // - mormot.crypt.openssl and mormot.crypt.x509 will generate a proper CSR
   result := nil;
   if Csr = '' then
     exit;

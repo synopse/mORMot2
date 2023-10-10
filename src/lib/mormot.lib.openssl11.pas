@@ -1463,6 +1463,7 @@ type
   X509_REQ = object
   public
     function GetName: PX509_NAME;
+    function GetPublicKey: PEVP_PKEY;
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
     procedure AddExtension(nid: integer; const value: RawUtf8);
@@ -7988,6 +7989,14 @@ begin
     result := 0
   else
     result := X509_REQ_sign(@self, pkey, md);
+end;
+
+function X509_REQ.GetPublicKey: PEVP_PKEY;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := X509_REQ_get_pubkey(@self);
 end;
 
 function X509_REQ.Verify(pkey: PEVP_PKEY): boolean;
