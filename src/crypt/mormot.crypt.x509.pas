@@ -55,8 +55,9 @@ type
   TXAttr = (
     xaNone,
     xaDC,   // domainComponent
+    xeUID,  // userID
     xaCN,   // commonName (3)
-    xaSN,   // serialNumber (5)
+    xaSER,  // serialNumber (5)
     xaC,    // countryName (6)
     xaL,    // localityName (7)
     xaST,   // stateOrProvinceName (8)
@@ -65,11 +66,11 @@ type
     xaT,    // title (12)
     xaTN,   // telephoneNumber (20)
     xaN,    // name (41)
-    xaS,    // surname (4)
-    xaG,    // givenName (42)
+    xaSN,   // surname (4)
+    xaGN,   // givenName (42)
     xaI,    // initials (43)
     xaGQ,   // generationQualifier (44)
-    xaQ,    // qualifier (46)
+    xaQ,    // distinguishedNameQualifier (46)
     xaP,    // pseudonym (65)
     xaE);   // email
 
@@ -262,8 +263,9 @@ const
   XA_OID: array[TXAttr] of PUtf8Char = (
     '',                           // xaNone
     '0.9.2342.19200300.100.1.25', // xaDC  domainComponent
+    '0.9.2342.19200300.100.1.1',  // xeUID userID
     '2.5.4.3',                    // xaCN  commonName (3)
-    '2.5.4.5',                    // xaSN  serialNumber (5)
+    '2.5.4.5',                    // xaSER serialNumber (5)
     '2.5.4.6',                    // xaC   countryName (6)
     '2.5.4.7',                    // xaL   localityName (7)
     '2.5.4.8',                    // xaST  stateOrProvinceName (8)
@@ -272,11 +274,11 @@ const
     '2.5.4.12',                   // xaT   title (12)
     '2.5.4.20',                   // xaTN  telephoneNumber (20)
     '2.5.4.41',                   // xaN   name (41)
-    '2.5.4.4',                    // xaS   surname (4)
-    '2.5.4.42',                   // xaG   givenName (42)
+    '2.5.4.4',                    // xaSN  surname (4)
+    '2.5.4.42',                   // xaGN  givenName (42)
     '2.5.4.43',                   // xaI   initials (43)
     '2.5.4.44',                   // xaGQ  generationQualifier (44)
-    '2.5.4.46',                   // xaQ   qualifier (46)
+    '2.5.4.46',                   // xaQ   distinguishedNameQualifier (46)
     '2.5.4.65',                   // xaP   pseudonym (65)
     '1.2.840.113549.1.9.1');      // xaE   email
 
@@ -913,8 +915,8 @@ begin
   Name[xaOU] := TrimU(fields.OrgUnit);
   Name[xaCN] := TrimU(fields.CommonName);
   Name[xaE]  := TrimU(fields.EmailAddress);
-  Name[xaS]  := TrimU(fields.SurName);
-  Name[xaG]  := TrimU(fields.GivenName);
+  Name[xaSN]  := TrimU(fields.SurName);
+  Name[xaGN]  := TrimU(fields.GivenName);
 end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;
