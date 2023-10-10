@@ -2121,11 +2121,15 @@ begin
     RaiseErrorGenerate('NewCertificate');
   key := nil;
   try
-    key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
-    if key = nil then
-      RaiseErrorGenerate('NewPrivateKey');
     if fGenerateCsr <> nil then
     begin
+      // GenerateFromCsr() requires a new key pair only if self-signed
+      if Authority = nil then
+      begin
+        key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
+        if key = nil then
+          RaiseErrorGenerate('NewPrivateKey');
+      end;
       // as called by GenerateFromCsr: retrieve information from supplied CSR
       EOpenSslCert.Check(X509_set_subject_name(
         x, X509_REQ_get_subject_name(fGenerateCsr)));
@@ -2134,6 +2138,10 @@ begin
     end
     else
     begin
+      // Generate() requires a new key pair
+      key := (fCryptAlgo as TCryptCertAlgoOpenSsl).NewPrivateKey;
+      if key = nil then
+        RaiseErrorGenerate('NewPrivateKey');
       // add specified subject(s) and needed extensions
       name := X509_get_subject_name(x);
       CsvToRawUtf8DynArray(pointer(Subjects), dns, ',', {trim=}true);
@@ -2148,7 +2156,10 @@ begin
     end;
     if not x.SetValidity(ValidDays, ExpireDays) then
       RaiseErrorGenerate('SetValidity');
-    EOpenSslCert.Check(X509_set_pubkey(x, key));
+    if key <> nil then
+      EOpenSslCert.Check(X509_set_pubkey(x, key)) // just generated key pair
+    else
+      EOpenSslCert.Check(X509_set_pubkey(x, fGenerateCsr.GetPublicKey));
     if not x.SetExtension(NID_subject_key_identifier, 'hash') then
       RaiseErrorGenerate('SKID');
     if Authority = nil then
@@ -2462,7 +2473,8 @@ begin
   begin
     auth := Authority.Instance as TCryptCertOpenSsl;
     a := auth.fX509;
-    if not a.HasUsage(kuKeyCertSign) then
+    if (a <> fX509) and
+       not a.HasUsage(kuKeyCertSign) then
       RaiseError('Sign: no kuKeyCertSign');
     EOpenSslCert.Check(X509_set_issuer_name(fX509, X509_get_subject_name(a)));
     if not fX509.SetExtension(NID_authority_key_identifier, 'keyid:always', a) then
