@@ -25,7 +25,8 @@ uses
   mormot.lib.openssl11,
   mormot.crypt.jwt,
   mormot.crypt.ecc,
-  mormot.crypt.rsa;
+  mormot.crypt.rsa,
+  mormot.crypt.x509;
 
 type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features
@@ -53,10 +54,12 @@ type
     procedure _AES_GCM;
     /// RC4 encryption function
     procedure _RC4;
-    /// pure pascal RSA tests
-    procedure _RSA;
     /// 32-bit, 64-bit and 128-bit hashing functions including AesNiHash variants
     procedure Hashes;
+    /// pure pascal RSA tests
+    procedure _RSA;
+    /// X509 Certificates
+    procedure _X509;
     /// stream-oriented cryptography
     procedure Streams;
     /// Base64/Base58/Base32 encoding/decoding functions
@@ -2586,6 +2589,7 @@ var
   u: TCryptCertUsage;
   namelen: integer;
   names: RawUtf8;
+  timer: TPrecisionTimer;
 
   procedure AddAlgName;
   begin
@@ -2732,6 +2736,7 @@ begin
   alg := TCryptCertAlgo.Instances;
   for a := 0 to high(alg) do
   begin
+    timer.Start;
     crt := alg[a] as TCryptCertAlgo;
     AddAlgName;
     check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
@@ -3038,6 +3043,7 @@ begin
       check(not c2.IsSelfSigned, 'csr self2');
       CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey, 'csr auth2');
     end;
+    //NotifyTestSpeed(Utf8ToString(crt.AlgoName), 1, 0, @timer);
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
@@ -3759,6 +3765,212 @@ const
     'V0wo7BzlVzPR+M/5FYCoVRDtJS0jVLtiKDL1HKnk0vifiCa9VDtmetdI23obh10K'#13#10 +
     '7rF4458RkO9sisEdNgHz0LNeGSYcrPjsD9ySSw=='#13#10 +
     '-----END CERTIFICATE-----'#13#10;
+  // the Let's Encrypt certificate used as authority to sign _synopseinfo_pem
+  _synopseauth_pem =
+    '-----BEGIN CERTIFICATE-----'#13#10 +
+    'MIIFFjCCAv6gAwIBAgIRAJErCErPDBinU/bWLiWnX1owDQYJKoZIhvcNAQELBQAw'#13#10 +
+    'TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh'#13#10 +
+    'cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjAwOTA0MDAwMDAw'#13#10 +
+    'WhcNMjUwOTE1MTYwMDAwWjAyMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg'#13#10 +
+    'RW5jcnlwdDELMAkGA1UEAxMCUjMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK'#13#10 +
+    'AoIBAQC7AhUozPaglNMPEuyNVZLD+ILxmaZ6QoinXSaqtSu5xUyxr45r+XXIo9cP'#13#10 +
+    'R5QUVTVXjJ6oojkZ9YI8QqlObvU7wy7bjcCwXPNZOOftz2nwWgsbvsCUJCWH+jdx'#13#10 +
+    'sxPnHKzhm+/b5DtFUkWWqcFTzjTIUu61ru2P3mBw4qVUq7ZtDpelQDRrK9O8Zutm'#13#10 +
+    'NHz6a4uPVymZ+DAXXbpyb/uBxa3Shlg9F8fnCbvxK/eG3MHacV3URuPMrSXBiLxg'#13#10 +
+    'Z3Vms/EY96Jc5lP/Ooi2R6X/ExjqmAl3P51T+c8B5fWmcBcUr2Ok/5mzk53cU6cG'#13#10 +
+    '/kiFHaFpriV1uxPMUgP17VGhi9sVAgMBAAGjggEIMIIBBDAOBgNVHQ8BAf8EBAMC'#13#10 +
+    'AYYwHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMBIGA1UdEwEB/wQIMAYB'#13#10 +
+    'Af8CAQAwHQYDVR0OBBYEFBQusxe3WFbLrlAJQOYfr52LFMLGMB8GA1UdIwQYMBaA'#13#10 +
+    'FHm0WeZ7tuXkAXOACIjIGlj26ZtuMDIGCCsGAQUFBwEBBCYwJDAiBggrBgEFBQcw'#13#10 +
+    'AoYWaHR0cDovL3gxLmkubGVuY3Iub3JnLzAnBgNVHR8EIDAeMBygGqAYhhZodHRw'#13#10 +
+    'Oi8veDEuYy5sZW5jci5vcmcvMCIGA1UdIAQbMBkwCAYGZ4EMAQIBMA0GCysGAQQB'#13#10 +
+    'gt8TAQEBMA0GCSqGSIb3DQEBCwUAA4ICAQCFyk5HPqP3hUSFvNVneLKYY611TR6W'#13#10 +
+    'PTNlclQtgaDqw+34IL9fzLdwALduO/ZelN7kIJ+m74uyA+eitRY8kc607TkC53wl'#13#10 +
+    'ikfmZW4/RvTZ8M6UK+5UzhK8jCdLuMGYL6KvzXGRSgi3yLgjewQtCPkIVz6D2QQz'#13#10 +
+    'CkcheAmCJ8MqyJu5zlzyZMjAvnnAT45tRAxekrsu94sQ4egdRCnbWSDtY7kh+BIm'#13#10 +
+    'lJNXoB1lBMEKIq4QDUOXoRgffuDghje1WrG9ML+Hbisq/yFOGwXD9RiX8F6sw6W4'#13#10 +
+    'avAuvDszue5L3sz85K+EC4Y/wFVDNvZo4TYXao6Z0f+lQKc0t8DQYzk1OXVu8rp2'#13#10 +
+    'yJMC6alLbBfODALZvYH7n7do1AZls4I9d1P4jnkDrQoxB3UqQ9hVl3LEKQ73xF1O'#13#10 +
+    'yK5GhDDX8oVfGKF5u+decIsH4YaTw7mP3GFxJSqv3+0lUFJoi5Lc5da149p90Ids'#13#10 +
+    'hCExroL1+7mryIkXPeFM5TgO9r0rvZaBFOvV2z0gp35Z0+L4WPlbuEjN/lxPFin+'#13#10 +
+    'HlUjr8gRsI3qfJOQFy/9rKIJR0Y/8Omwt/8oTWgy1mdeHmmjk7j1nYsvC9JSQ6Zv'#13#10 +
+    'MldlTTKB3zhThV1+XWYp6rjd5JW1zbVWEkLNxE7GJThEUG3szgBVGP7pSWTUTsqX'#13#10 +
+    'nLRbwHOoq7hHwg=='#13#10 +
+    '-----END CERTIFICATE-----'#13#10;
+  // so that tests below will continue to work after 2023/11/11
+  _synopse_date = 45203;
+
+  // openssl req -new -x509 -days 36524 -key "ecdsa.key" -sha256 -out ecdsa.crt
+  _selfsigned_pem =
+    '-----BEGIN CERTIFICATE-----'#13#10 +
+    'MIICKTCCAc+gAwIBAgIUWXUw/wRkokMf9BvR/WUrUylq+Y4wCgYIKoZIzj0EAwIw'#13#10 +
+    'aTELMAkGA1UEBhMCRlIxEzARBgNVBAgMClNvbWUtU3RhdGUxFTATBgNVBAoMDFN5'#13#10 +
+    'bm9wc2UgSW5mbzEXMBUGA1UECwwOQWRtaW5pc3RyYXRpb24xFTATBgNVBAMMDHN5'#13#10 +
+    'bm9wc2UuaW5mbzAgFw0yMzEwMDMxMzMzNTBaGA8yMTIzMTAwMzEzMzM1MFowaTEL'#13#10 +
+    'MAkGA1UEBhMCRlIxEzARBgNVBAgMClNvbWUtU3RhdGUxFTATBgNVBAoMDFN5bm9w'#13#10 +
+    'c2UgSW5mbzEXMBUGA1UECwwOQWRtaW5pc3RyYXRpb24xFTATBgNVBAMMDHN5bm9w'#13#10 +
+    'c2UuaW5mbzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF8MFUarr+ZmjZX58Lu2'#13#10 +
+    'EPcnii0AKAQbIifHG/oaSUpx+VjqQZqGNEDQi2Onv3P/i/ZUfV4oJKW2cusnLHhc'#13#10 +
+    'IJSjUzBRMB0GA1UdDgQWBBRR47U5GlhtqxVg6O/fdQGxLlgaqTAfBgNVHSMEGDAW'#13#10 +
+    'gBRR47U5GlhtqxVg6O/fdQGxLlgaqTAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49'#13#10 +
+    'BAMCA0gAMEUCIHJbTCZPNEvNhQ4vDmAJd5Vj8FDEjx/JBlRKvVxAr+yVAiEA4GaI'#13#10 +
+    'siC94x9I5sQUdpYL9Py/IxiRxJzKSD2WlOsytKc='#13#10 +
+    '-----END CERTIFICATE-----'#13#10;
+
+procedure TTestCoreCrypto._X509;
+var
+  bin: RawByteString;
+  x, a: TX509;
+  i: integer;
+  nfo: TX509Parsed;
+  timer: TPrecisionTimer;
+begin
+  {$ifdef OSWINDOWS}
+  Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
+  {$else}
+  Check(X509Parse(_synopseinfo_pem, nfo)); // likely to be the OpenSSL parser
+  {$endif OSWINDOWS}
+  // validate with the synopse.info RSA certificate from Let's Encrypt
+  x := TX509.Create;
+  try
+    CheckEqual(x.SerialNumber, '');
+    CheckEqual(x.Signed.SerialNumber, '');
+    Check(x.LoadFromPem(_synopseinfo_pem), 'synopse.info pem');
+    Check(x.SignatureAlgorithm = xsaSha256Rsa);
+    Check(x.Signed.SerialNumber <> '');
+    CheckEqual(x.SerialNumber,
+      '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c');
+    CheckEqual(x.SerialNumber, nfo.Serial, 'nfo sn');
+    CheckEqual(x.Signed.SerialNumberText,
+      '330929475774275458452528262248458246563660');
+    CheckEqual(x.Subject[xaCN], 'synopse.info');
+    CheckEqual(x.Issuer[xaCN],  'R3');
+    CheckEqual(x.Issuer[xaO],   'Let''s Encrypt');
+    CheckEqual(x.Issuer[xaC],   'US');
+    CheckEqual(x.SubjectDN,     'CN=synopse.info');
+    CheckEqual(x.SubjectDN, nfo.SubjectDN);
+    CheckEqual(x.IssuerDN,      'CN=R3, C=US, O=Let''s Encrypt');
+    Check(x.Usages =
+      [cuDigitalSignature, cuKeyEncipherment, cuTlsServer, cuTlsClient]);
+    Check(x.Usages = nfo.Usage, 'nfo u');
+    CheckEqual(x.Extension[xeSubjectAlternativeName],
+      'synopse.info,www.synopse.info');
+    CheckEqual(RawUtf8ArrayToCsv(x.SubjectAlternativeNames),
+      'synopse.info,www.synopse.info');
+    CheckEqual(x.Extension[xeSubjectKeyIdentifier],
+      '0d:90:9b:69:67:d5:49:87:9e:ea:9a:40:aa:e3:33:eb:48:ba:40:12');
+    CheckEqual(x.Extension[xeAuthorityKeyIdentifier],
+      '14:2e:b3:17:b7:58:56:cb:ae:50:09:40:e6:1f:af:9d:8b:14:c2:c6');
+    CheckEqual(x.Extension[xeAuthorityInformationAccess],
+      'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/');
+    CheckSameTime(nfo.NotBefore, x.NotBefore, 'nfo nb');
+    CheckSameTime(nfo.NotAfter, x.NotAfter, 'nfo na');
+    Check(FindOther(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
+    Check(x.Signed.ExtensionOther = nil);
+    CheckEqual(x.Extension[xeCertificatePolicies], '2.23.140.1.2.1');
+    CheckEqual(x.Extension[xeGoogleSignedCertificateTimestamp], '');
+    Check(x.Signed.ExtensionRaw[xeGoogleSignedCertificateTimestamp] <> '');
+    Check(not x.IsSelfSigned);
+    Check(not (cuCa in x.Usages), 'ca1');
+    Check(x.Signed.SubjectPublicKeyAlgorithm = xkaRsa);
+    CheckEqual(x.SignatureSecurityBits, 112, '2048=112');
+    CheckEqual(x.FingerPrint,
+      'd71ab49d1d5eab337c6e570b81b60ec6224fb26e');
+    CheckEqual(x.FingerPrint(hfSHA256),
+      'ea0f4f07abb685f2aaf864a28d9f275ac1e9bb29e82d6a8dc9111cd9162da4e7');
+    CheckEqual(x.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
+    //writeln(x.PeerInfo);
+    CheckHash(x.PeerInfo, $DF9578B9, 'peerinfo1a');
+    Check(TX509Parse(_synopseinfo_pem, nfo), 'TX509Parse');
+    CheckHash(nfo.PeerInfo, $DF9578B9, 'peerinfo1b'); // very same parser
+    a := TX509.Create;
+    try
+      // check synopse.info against Let's Encrypt authority certificate
+      Check(a.LoadFromPem(_synopseauth_pem), 'synopse auth');
+      CheckEqual(a.Signed.SerialNumberText,
+        '192961496339968674994309121183282847578');
+      CheckEqual(a.Subject[xaCN], 'R3');
+      CheckEqual(a.SubjectDN, 'CN=R3, C=US, O=Let''s Encrypt');
+      CheckEqual(a.SubjectDN, x.IssuerDN);
+      CheckEqual(a.IssuerDN,
+        'CN=ISRG Root X1, C=US, O=Internet Security Research Group');
+      CheckEqual(a.Extension[xeSubjectKeyIdentifier],
+                 x.Extension[xeAuthorityKeyIdentifier]);
+      Check(cuCa in a.Usages, 'ca2');
+      Check(a.Usages = [cuCA, cuDigitalSignature, cuKeyCertSign,
+        cuCrlSign, cuTlsServer, cuTlsClient]);
+      Check(a.Signed.ExtensionOther = nil);
+      CheckEqual(a.Extension[xeAuthorityInformationAccess],
+        'caIssuers=http://x1.i.lencr.org/');
+      CheckEqual(a.Extension[xeCertificatePolicies],
+        '2.23.140.1.2.1,1.3.6.1.4.1.44947.1.1.1');
+      timer.Start;
+      for i := 1 to 100 do
+        Check(x.Verify(a, [], _synopse_date) = cvValidSigned, 'verify syn');
+      NotifyTestSpeed('RSA2048 verify', 100, 0, @timer);
+      bin := x.Signed.ToDer;
+      Check(a.Verify(pointer(x.SignatureValue), pointer(bin),
+        length(x.SignatureValue), length(bin), [], _synopse_date) =
+          cvValidSigned, 'verbuf syn');
+      CheckEqual(a.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
+      CheckHash(a.PeerInfo, $FFE7466C, 'peerinfo2');
+      CheckHash(ObjectToJson(a), $F7A82903);
+      CheckHash(ObjectToJson(x), $7C73C7E0);
+      CheckEqual(x.SignatureSecurityBits, 112, '2048=112');
+    finally
+      a.Free;
+    end;
+  finally
+    x.Free;
+  end;
+  // validate with an OpenSSL generated ECC256 self-signed certificate
+  x := TX509.Create;
+  try
+    Check(x.LoadFromPem(_selfsigned_pem), 'selfsigned pem');
+    Check(x.SignatureAlgorithm = xsaSha256Ecc256);
+    Check(x.Signed.SerialNumber <> '');
+    CheckEqual(x.SerialNumber,
+      '59:75:30:ff:04:64:a2:43:1f:f4:1b:d1:fd:65:2b:53:29:6a:f9:8e');
+    CheckEqual(x.Signed.SerialNumberText,
+      '510713633959117522632981676132379983048564472206');
+    CheckEqual(x.Subject[xaCN], 'synopse.info');
+    CheckEqual(x.Subject[xaO],  'Synopse Info');
+    CheckEqual(x.Subject[xaC],  'FR');
+    CheckEqual(x.Issuer[xaCN],  'synopse.info');
+    CheckEqual(x.Issuer[xaO],   'Synopse Info');
+    CheckEqual(x.Issuer[xaC],   'FR');
+    CheckEqual(x.IssuerDN,
+      'CN=synopse.info, C=FR, ST=Some-State, O=Synopse Info, OU=Administration');
+    CheckEqual(x.Extension[xeSubjectAlternativeName], '');
+    Check(x.SubjectAlternativeNames = nil);
+    CheckEqual(x.Extension[xeSubjectKeyIdentifier],
+      '51:e3:b5:39:1a:58:6d:ab:15:60:e8:ef:df:75:01:b1:2e:58:1a:a9');
+    CheckEqual(x.Extension[xeAuthorityKeyIdentifier],
+      '51:e3:b5:39:1a:58:6d:ab:15:60:e8:ef:df:75:01:b1:2e:58:1a:a9');
+    Check(x.Usages = [cuCA]);
+    Check(x.IsSelfSigned);
+    Check(cuCa in x.Usages, 'ca3');
+    Check(x.Signed.SubjectPublicKeyAlgorithm = xkaEcc256);
+    CheckEqual(x.SignatureSecurityBits, 128, '256=128');
+    CheckEqual(x.FingerPrint,
+      'd5ae8d642967b01f806cd5c7c1af8b47ff7337bc');
+    CheckEqual(x.FingerPrint(hfSHA256),
+      'b75b01ca2d59f3283a6843b76d777ebe5b5d752f11c686879cf45248564cffa4');
+    timer.Start;
+    for i := 1 to 100 do
+      Check(x.Verify = cvValidSelfSigned, 'verify self');
+    NotifyTestSpeed('ECC256 verify', 100, 0, @timer);
+    bin := x.Signed.ToDer;
+    Check(x.Verify(pointer(x.SignatureValue), pointer(bin),
+      length(x.SignatureValue), length(bin), [cvWrongUsage]) =
+        cvValidSelfSigned, 'verbuf self');
+    CheckEqual(x.SubjectPublicKeyAlgorithm, '256-bit prime256v1 ECDSA');
+    CheckHash(x.PeerInfo, $BCB82372, 'peerinfo3');
+    CheckHash(ObjectToJson(x), $BCCBCFEB);
+  finally
+    x.Free;
+  end;
+end;
 
 
 end.
