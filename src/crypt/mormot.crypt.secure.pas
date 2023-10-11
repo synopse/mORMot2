@@ -2019,7 +2019,8 @@ type
     // or a TXPrivateKey class for mormot.crypt.x509
     // - equals nil if there is no associated private key
     function PrivateKeyHandle: pointer;
-    /// access to the low-level BigInt of the associated private key, as binary
+    /// return the public BigInt values associated to the stored private key
+    // - as BigInt binaries, ready e.g. for JWS / JSON Web Key responses
     // - for ECC, returns the x,y coordinates
     // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
     // - return false if there is no compliant key information in the provider

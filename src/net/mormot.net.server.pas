@@ -1702,19 +1702,19 @@ begin
   result := false;
   if Text = '' then
     exit;
-  case PCardinal(Text)^ of
+  case PCardinal(Text)^ of // case-sensitive test in occurence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Method := urmGet;
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
       Method := urmPost;
     ord('P') + ord('U') shl 8 + ord('T') shl 16:
       Method := urmPut;
+    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+      Method := urmHead;
     ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
       Method := urmDelete;
     ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
       Method := urmOptions;
-    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
-      Method := urmHead;
   else
     exit;
   end;
@@ -3544,7 +3544,7 @@ begin
     begin
       // allow THttpServer.OnHeaderParsed low-level callback
       if Assigned(fServer.fOnHeaderParsed) and
-        fServer.fOnHeaderParsed(self) then
+         fServer.fOnHeaderParsed(self) then
       begin
         result := grRejected; // the callback made its own SockSend() response
         exit;

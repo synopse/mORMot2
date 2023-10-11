@@ -119,7 +119,13 @@ function HttpMethodWithNoBody(const method: RawUtf8): boolean;
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
 /// quick check for case-sensitive 'GET' HTTP method name
+// - see also HttpMethodWithNoBody()
 function IsGet(const method: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// quick check for case-sensitive 'HEAD' HTTP method name
+// - see also HttpMethodWithNoBody()
+function IsHead(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// quick check for case-sensitive 'POST' HTTP method name
@@ -980,6 +986,13 @@ begin
   result := PCardinal(method)^ =
     ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24;
 end;
+
+function IsHead(const method: RawUtf8): boolean;
+begin
+  result := PCardinal(method)^ =
+    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
+end;
+
 
 function IsUrlFavIcon(P: PUtf8Char): boolean;
 begin
