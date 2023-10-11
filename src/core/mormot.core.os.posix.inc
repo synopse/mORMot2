@@ -2274,8 +2274,6 @@ end;
 {$else} // Linux-specific code
 
 const
-  // function DirectoryFileNames(const Folder: TFileName): TFileNameDynArray; ?
-  // function DirectoryFolderNames(const Folder: TFileName): TFileNameDynArray; ?
   DT_UNKNOWN  = 0; // need to call fpstat() if returned this
   DT_FIFO     = 1;
   DT_CHR      = 2;
@@ -2285,6 +2283,71 @@ const
   DT_LNK      = 10;
   DT_SOCK     = 12;
   DT_WHT      = 14;
+
+function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
+var
+  n: PtrInt;
+  root: TFileName;
+
+  procedure DoFolder(const subpath: TFileName);
+  var
+    d: pDir;
+    e: pDirent;
+    pl, l: PtrInt;
+    fn: RawUtf8;
+  begin
+    d := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
+    if d = nil then
+      exit;
+    pl := length(subpath);
+    if pl <> 0 then
+      inc(pl);
+    repeat
+      e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
+      if e = nil then
+        break;
+      // fn := [subpath + '/'] + e^.d_name
+      l := StrLen(@e^.d_name);
+      FastSetString(fn, nil, pl + l);
+      if pl <> 0 then
+      begin
+        MoveFast(pointer(subpath)^, pointer(fn)^, pl - 1);
+        PByteArray(fn)[pl - 1] := ord('/');
+      end;
+      MoveFast(e^.d_name, PByteArray(fn)[pl], l);
+      // handle file
+      case e.d_type of
+        DT_DIR:
+          if Recursive and
+             (e^.d_name[0] <> '.')  then
+            DoFolder(fn)
+          else
+            continue;
+        DT_UNKNOWN,
+        // assume modern FS, so DT_UNKNOWN would disable Recursive and return
+        // some false positives (like nested directories or symbolic links)
+        DT_REG:
+          begin
+            if n = 0 then
+              SetLength(result, 128)
+            else if n = length(result) then
+              SetLength(result, NextGrow(n));
+            result[n] := fn;
+            inc(n);
+          end;
+      end;
+    until false;
+    FpClosedir(d^);
+  end;
+
+begin
+  result := nil;
+  n := 0;
+  root := IncludeTrailingPathDelimiter(Folder);
+  DoFolder('');
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
 
 function IsValidPid(pid: cardinal): boolean;
 var

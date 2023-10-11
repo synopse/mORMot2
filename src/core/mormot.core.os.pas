@@ -3705,6 +3705,13 @@ function PosixParseHex32(p: PAnsiChar): integer;
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
 function WaitReadPending(fd, timeout: integer): boolean;
 
+/// POSIX-only function using directly FpOpendir/FpReaddir syscalls
+// - could be used when FindFirst/FindNext are an overkill, e.g. to quickly
+// cache all file names of a folder in memory, maybe with its sub-folders
+// - warning: the FileSystem does have to support d_type (e.g. btrfs, ext2-ext4)
+// so that Recursive is handled and only DT_REG files are retrieved
+function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
+
 {$endif OSWINDOWS}
 
 /// internal function to avoid linking mormot.core.buffers.pas
