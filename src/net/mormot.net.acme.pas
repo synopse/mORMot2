@@ -868,8 +868,8 @@ var
 begin
   try
     // Generate a new PKCS#10 Certificate Signing Request
-    csr := fHttpClient.fCert.CertAlgo.CreateSelfSignedCsr(
-      fSubjects, aPrivateKeyPassword, pk);
+    csr := PemToDer(fHttpClient.fCert.CertAlgo.CreateSelfSignedCsr(
+      fSubjects, aPrivateKeyPassword, pk));
     // Before sending a POST request to the server, an ACME client needs to
     // have a fresh anti-replay nonce to put in the "nonce" header of the JWS
     fHttpClient.Head(fNewNonce);
