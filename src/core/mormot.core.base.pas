@@ -2977,7 +2977,7 @@ function RandomDouble: double;
 
 /// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
 // - will actually XOR the Dest buffer with Lecuyer numbers
-// - consider the cryptographic-level TAesPrng.Main.FillRandom() method
+// - consider also the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure RandomBytes(Dest: PByte; Count: integer);
 
@@ -8759,7 +8759,7 @@ begin
     rs2 := 8;
   if rs3 < 16 then
     rs3 := 16;
-  seedcount := 1; // will reseet after 16GB, i.e. 2^32 of output data
+  seedcount := 1; // will reseet after 16 GB, i.e. 2^32 of output data
 end;
 
 function TLecuyer.RawNext: cardinal;
@@ -8807,10 +8807,10 @@ begin
   if bytes <= 0 then
     exit;
   c := seedcount;
-  inc(seedcount, cardinal(bytes));
-  if (c = 0) or
-     (c > seedcount) then // check for 32-bit overflow
-    Seed(nil, 0); // seed at startup, and after 2^32 of output data = 16 GB
+  inc(seedcount, cardinal(bytes) shr 2);
+  if (c = 0) or           // first use = seed at startup
+     (c > seedcount) then // check for 32-bit overflow, i.e. after 16 GB
+    Seed(nil, 0);
   repeat
     if bytes < 4 then
       break;
