@@ -2246,7 +2246,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           xor     eax, r9d               // not ax
           jnz     @diff                  // difference found
           add     L, 16
-          jz      @eq                     // finished, equal
+          jz      @eq                    // finished, equal
           cmp     L, -16
           jna     @by16                  // next 16 bytes
 @sml:     // less than 16 bytes left

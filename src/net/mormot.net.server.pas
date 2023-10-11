@@ -1766,7 +1766,7 @@ begin
     req.fUrlParamPos := Pos; // for faster req.UrlParam()
     exit;
   end;
-  req.fRouteName := pointer(Names); // fast assign as pointer reference
+  req.fRouteName := pointer(Names); // fast assignment as pointer reference
   n := length(Names) * 2; // length(Names[]) = current parameter index
   if length(req.fRouteValuePosLen) < n then
     SetLength(req.fRouteValuePosLen, n + 24); // alloc once by 12 params
@@ -1790,13 +1790,13 @@ begin
   // compute length of the new URI with injected values
   t := pointer(Data.ToUriPosLen); // [pos1,len1,valndx1,...] trio rules
   n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
-  v := pointer(THttpServerRequest(Ctxt).fRouteValuePosLen);
+  v := pointer(THttpServerRequest(Ctxt).fRouteValuePosLen); // [pos,len] pairs
   if v = nil then
      exit; // paranoid
   len := Data.ToUriStaticLen;
   repeat
-    if t[2] >= 0 then
-      inc(len, v[t[2] * 2 + 1]); // value length
+    if t[2] >= 0 then            // t[2]=valndx in v=fRouteValuePosLen[]
+      inc(len, v[t[2] * 2 + 1]); // add value length
     t := @t[3];
     dec(n, 3)
   until n = 0;
@@ -1806,12 +1806,12 @@ begin
   n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
   p := new; // write new URI
   repeat
-    if t[1] <> 0 then
+    if t[1] <> 0 then    // t[1]=len
     begin
       MoveFast(PByteArray(Data.ToUri)[t[0]], p^, t[1]); // static
       inc(p, t[1]);
     end;
-    if t[2] >= 0 then
+    if t[2] >= 0 then    // t[2]=valndx in fRouteValuePosLen[]
     begin
       v := @THttpServerRequest(Ctxt).fRouteValuePosLen[t[2] * 2];
       MoveFast(PByteArray(Ctxt.Url)[v[0]], p^, v[1]); // value [pos,len] pair

@@ -2864,7 +2864,7 @@ begin
   TCryptCertAlgoX509.Create(xsaSha256Rsa,    {suffix=}'-int');
   TCryptCertAlgoX509.Create(xsaSha256Ecc256, {suffix=}'-int');
   // 'x509-rs256' 'x509-rs384' 'x509-rs512' and 'x509-es256' certificates
-  // - may be overriden by the faster mormot.crypt.openssl is included
+  // - may be overriden by the faster mormot.crypt.openssl if included
   for xsa := succ(low(xsa)) to high(xsa) do
     TCryptCertAlgoX509.Create(xsa, {suffix=}'');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included

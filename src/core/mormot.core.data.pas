@@ -3117,7 +3117,7 @@ type
   /// implement an abstract Radix Tree static or <param> node
   TRadixTreeNodeParams = class(TRadixTreeNode)
   protected
-    /// is called for each <param> as Pos/Len pair//
+    /// is called for each <param> as Pos/Len pair
     // - called eventually with Pos^='?' and Len=-1 for the inlined parameters
     // - should return true on success, false to abort
     function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean;
