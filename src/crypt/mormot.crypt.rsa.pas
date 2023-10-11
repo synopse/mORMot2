@@ -2660,7 +2660,7 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    RandomBytes(@r[2], padding); // Lecuyer is enough for padding
+    RandomBytes(@r[2], padding); // Lecuyer is enough for public padding
     inc(padding, 2);
     for i := 2 to padding - 1 do
       if r[i] = 0 then
@@ -2870,9 +2870,9 @@ begin
      not HasPublicKey then
     exit;
   // generate the ephemeral secret key and IV within the corresponding header
-  TAesPrng.Main.FillRandom(head.iv);
+  RandomBytes(@head.iv, SizeOf(head.iv)); // use Lecuyer for public random
   try
-    TAesPrng.Main.FillRandom(key);
+    TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
     enckey := BufferEncrypt(@key, AesBits shr 3);
     head.encryptedkeylen := length(enckey);

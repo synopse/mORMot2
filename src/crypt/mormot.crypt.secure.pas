@@ -5314,7 +5314,7 @@ begin
       'Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
   CrcAlgo := SignAlgo;
   Padding := 0;
-  // 256 bytes of cryptographic randomness
+  // 256 bytes of strong cryptographic randomness (public values use Lecuyer)
   MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt));
 end;
 

@@ -1103,7 +1103,7 @@ function HumanRandomID: RawUtf8;
 var
   rnd: THash256;
 begin
-  TAesPrng.Main.FillRandom(rnd);
+  RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
   rnd[0] := rnd[0] and $7f;     // ensure > 0
   ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
 end;

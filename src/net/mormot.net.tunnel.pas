@@ -610,7 +610,8 @@ begin
       begin
         // optional ECDHE ephemeral encryption
         FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
-        MainAesPrng.FillRandom(PTunnelEcdhFrame(frame)^.rnd);
+        with PTunnelEcdhFrame(frame)^ do
+          RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
         if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
           if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
             raise ETunnel.CreateUtf8('%.Open: no ECC engine available', [self]);

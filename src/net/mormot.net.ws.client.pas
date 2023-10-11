@@ -458,7 +458,7 @@ begin
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       // send initial upgrade request
       RequestSendHeader(aWebSocketsURI, 'GET');
-      TAesPrng.Main.FillRandom(key);
+      RandomBytes(@key, SizeOf(key)); // Lecuyer is enough for public random
       bin1 := BinToBase64(@key, SizeOf(key));
       SockSend(['Content-Length: 0'#13#10 +
                 'Connection: Upgrade'#13#10 +

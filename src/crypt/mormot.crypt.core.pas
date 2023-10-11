@@ -5347,7 +5347,7 @@ begin
   end;
   if IVAtBeginning then
   begin
-    TAesPrng.Main.FillRandom(fIV); // cryptographic PRNG as seed for uniqueness
+    RandomBytes(@fIV, SizeOf(fIV)); // Lecuyer is enough for public random
     PAesBlock(Output)^ := fIV;
     inc(PAesBlock(Output));
   end;
@@ -5580,7 +5580,7 @@ begin
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
-    TAesPrng.Main.FillRandom(nonce);
+    RandomBytes(@nonce, SizeOf(nonce)); // Lecuyer is enough for public random
     if not MacSetNonce({encrypt=}true, nonce, Associated) then
       // leave ASAP if this class doesn't support AEAD process
       exit;
@@ -5960,7 +5960,7 @@ begin
   p := pointer(result);
   if IVAtBeginning then
   begin
-    TAesPrng.Main.FillRandom(fIV); // cryptographic PRNG as seed for uniqueness
+    RandomBytes(@fIV, SizeOf(fIV)); // Lecuyer is enough for public random
     p^ := fIV;
     inc(p);
   end;
@@ -6116,8 +6116,8 @@ begin
   FillCharFast(fMac, SizeOf(fMac), 0);
 end;
 
-function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
-  const Associated: RawByteString): boolean;
+function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean;
+  const RandomNonce: THash256; const Associated: RawByteString): boolean;
 begin
   // safe seed for plain text crc, before AES encryption
   // from TEcdheProtocol.SetKey, RandomNonce uniqueness will avoid replay attacks
@@ -8090,7 +8090,7 @@ begin
       if FileExists(fn) then
         // allow rewrite of an invalid local file
         FileSetHidden(fn, {ReadOnly=}false);
-      TAesPrng.Main.FillRandom(_h.k);
+      TAesPrng.Main.FillRandom(_h.k); // from strong CSPRNG random
       key := TAesPrng.Main.AFSplit(_h.k, SizeOf(_h.k), 126);
       {$ifdef OSWINDOWS}
       // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
