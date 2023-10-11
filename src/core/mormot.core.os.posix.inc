@@ -2093,6 +2093,78 @@ begin
             (fpgeterrno <> ESysEFAULT);
 end;
 
+const
+  DT_UNKNOWN  = 0; // need to call fpstat() if this is returned (depends on FS)
+  DT_FIFO     = 1;
+  DT_CHR      = 2;
+  DT_DIR      = 4;
+  DT_BLK      = 6;
+  DT_REG      = 8;
+  DT_LNK      = 10;
+  DT_SOCK     = 12;
+  DT_WHT      = 14;
+
+function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
+var
+  n: PtrInt;
+  root: TFileName;
+
+  procedure DoFolder(const subpath: TFileName);
+  var
+    d: pDir;
+    e: pDirent;
+    pl, el: PtrInt;
+    fn: RawUtf8;
+  begin
+    d := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
+    if d = nil then
+      exit;
+    pl := length(subpath);
+    if pl <> 0 then
+      inc(pl);
+    repeat
+      e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
+      if e = nil then
+        break;
+      // fn := [subpath + '/'] + e^.d_name
+      el := StrLen(@e^.d_name);
+      FastSetString(fn, nil, pl + el);
+      if pl <> 0 then
+      begin
+        MoveFast(pointer(subpath)^, pointer(fn)^, pl - 1);
+        PByteArray(fn)[pl - 1] := ord('/');
+      end;
+      MoveFast(e^.d_name, PByteArray(fn)[pl], el);
+      // handle this entry
+      case e.d_type of
+        DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
+        DT_REG:
+          begin
+            if n = 0 then
+              SetLength(result, 128)
+            else if n = length(result) then
+              SetLength(result, NextGrow(n));
+            result[n] := fn;
+            inc(n);
+          end;
+        DT_DIR:
+          if Recursive and
+             (e^.d_name[0] <> '.')  then
+            DoFolder(fn);
+      end;
+    until false;
+    FpClosedir(d^);
+  end;
+
+begin
+  result := nil;
+  n := 0;
+  root := IncludeTrailingPathDelimiter(Folder);
+  DoFolder('');
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
+
 {$ifdef OSBSDDARWIN}
 
 function IsValidPid(pid: cardinal): boolean;
@@ -2100,7 +2172,7 @@ begin
   result := pid <> 0;
 end;
 
-function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
+function EnumAllProcesses: TCardinalDynArray;
 begin
   result := nil; // not implemented yet on BSD/Darwin
   // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
@@ -2273,82 +2345,6 @@ end;
 
 {$else} // Linux-specific code
 
-const
-  DT_UNKNOWN  = 0; // need to call fpstat() if returned this
-  DT_FIFO     = 1;
-  DT_CHR      = 2;
-  DT_DIR      = 4;
-  DT_BLK      = 6;
-  DT_REG      = 8;
-  DT_LNK      = 10;
-  DT_SOCK     = 12;
-  DT_WHT      = 14;
-
-function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
-var
-  n: PtrInt;
-  root: TFileName;
-
-  procedure DoFolder(const subpath: TFileName);
-  var
-    d: pDir;
-    e: pDirent;
-    pl, l: PtrInt;
-    fn: RawUtf8;
-  begin
-    d := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
-    if d = nil then
-      exit;
-    pl := length(subpath);
-    if pl <> 0 then
-      inc(pl);
-    repeat
-      e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
-      if e = nil then
-        break;
-      // fn := [subpath + '/'] + e^.d_name
-      l := StrLen(@e^.d_name);
-      FastSetString(fn, nil, pl + l);
-      if pl <> 0 then
-      begin
-        MoveFast(pointer(subpath)^, pointer(fn)^, pl - 1);
-        PByteArray(fn)[pl - 1] := ord('/');
-      end;
-      MoveFast(e^.d_name, PByteArray(fn)[pl], l);
-      // handle file
-      case e.d_type of
-        DT_DIR:
-          if Recursive and
-             (e^.d_name[0] <> '.')  then
-            DoFolder(fn)
-          else
-            continue;
-        DT_UNKNOWN,
-        // assume modern FS, so DT_UNKNOWN would disable Recursive and return
-        // some false positives (like nested directories or symbolic links)
-        DT_REG:
-          begin
-            if n = 0 then
-              SetLength(result, 128)
-            else if n = length(result) then
-              SetLength(result, NextGrow(n));
-            result[n] := fn;
-            inc(n);
-          end;
-      end;
-    until false;
-    FpClosedir(d^);
-  end;
-
-begin
-  result := nil;
-  n := 0;
-  root := IncludeTrailingPathDelimiter(Folder);
-  DoFolder('');
-  if n <> 0 then
-    DynArrayFakeLength(result, n);
-end;
-
 function IsValidPid(pid: cardinal): boolean;
 var
   status, tgid: RawUtf8;
@@ -2377,11 +2373,10 @@ begin
   n := 0;
   SetLength(result, 128);
   repeat
-    e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
+    e := FpReaddir(d^); // FPC RTL uses direct getdents syscall on Linux/BSD :)
     if e = nil then
       break;
-    if ((e.d_type = DT_UNKNOWN) or
-        (e.d_type = DT_DIR)) and
+    if (e.d_type in [DT_UNKNOWN, DT_DIR]) and
        (e.d_name[0] in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
