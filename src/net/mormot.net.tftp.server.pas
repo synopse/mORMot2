@@ -88,6 +88,8 @@ type
   // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
   // - ttoDropPriviledges on POSIX would impersonate the process as 'nobody'
   // - ttoChangeRoot on POSIX would make the FileFolder the root folder
+  // - ttoCaseInsensitiveFileName on POSIX would make file names case-insensitive
+  // as they are on Windows (using an in-memory cache, refreshed every minute)
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
@@ -98,7 +100,8 @@ type
     ttoAllowSubFolders,
     ttoLowLevelLog,
     ttoDropPriviledges,
-    ttoChangeRoot);
+    ttoChangeRoot,
+    ttoCaseInsensitiveFileName);
 
   TTftpThreadOptions = set of TTftpThreadOption;
 
@@ -139,6 +142,12 @@ type
     fAsNobody: boolean;
     fRangeLow, fRangeHigh: word;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
+    {$ifdef OSPOSIX}
+    // file names cache for ttoCaseInsensitiveFileName
+    fFileNamesSafe: TLightLock;
+    fFileNames: TRawUtf8DynArray;
+    fFileNamesTix: cardinal; // flush cache every minute
+    {$endif OSPOSIX}
     function GetConnectionCount: integer;
     function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
@@ -153,7 +162,7 @@ type
     procedure NotifyShutdown;
   public
     /// initialize and bind the server instance, in non-suspended state
-    // - will cache served file content for 15 minutes by default, but you could
+    // - will cache small file content for 15 minutes by default, but you could
     // set CacheTimeoutSecs=0 to disable any file caching
     constructor Create(const SourceFolder: TFileName;
       Options: TTftpThreadOptions; LogClass: TSynLogClass;
@@ -532,19 +541,52 @@ end;
 
 procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
 begin
-  if fFileFolder <> Value then
-    fFileFolder := IncludeTrailingPathDelimiter(Value);
+  if fFileFolder = Value then
+    exit;
+  fFileFolder := IncludeTrailingPathDelimiter(Value);
+  {$ifdef OSPOSIX}
+  fFileNames := nil;
+  {$endif OSPOSIX}
 end;
 
 function TTftpServerThread.GetFileName(const FileName: RawUtf8): TFileName;
+var
+  fn: TFileName;
+  {$ifdef OSPOSIX}
+  i: PtrInt;
+  n: RawUtf8;
+  {$endif OSPOSIX}
 begin
-  result := NormalizeFileName(Utf8ToString(FileName));
-  if SafeFileName(result) and
+  result := '';
+  fn := NormalizeFileName(Utf8ToString(FileName));
+  if SafeFileName(fn) and
      ((ttoAllowSubFolders in fOptions) or
       (Pos(PathDelim, result) = 0)) then
-    result := fFileFolder + result
-  else
-    result := '';
+  begin
+    {$ifdef OSPOSIX}
+    if ttoCaseInsensitiveFileName in fOptions then
+    begin
+      fFileNamesSafe.Lock;
+      try
+        if fFileNames = nil then
+        begin
+          // use direct FpOpendir syscalls instead of slower FindFirst
+          fFileNames := PosixFileNames(fFileFolder, ttoAllowSubFolders in fOptions);
+          QuickSortRawUtf8(fFileNames, length(fFileNames), nil, @StrIComp);
+        end;
+        n := StringReplaceChars(FileName, InvertedPathDelim, PathDelim);
+        i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
+          pointer(fFileNames), high(fFileNames), pointer(n),@StrIComp);
+        if i < 0 then
+          exit; // file does not exist
+        Utf8ToFileName(fFileNames[i], fn); // use exact file name case from OS
+      finally
+        fFileNamesSafe.UnLock;
+      end;
+    end;
+    {$endif OSPOSIX}
+    result := fFileFolder + fn;
+  end;
 end;
 
 const
@@ -716,6 +758,19 @@ end;
 procedure TTftpServerThread.OnIdle(tix64: Int64);
 begin
   fFileCache.DeleteDeprecated(tix64);
+  {$ifdef OSPOSIX}
+  // refresh the fFileNames[] cache from disk every minute
+  if fFileNames = nil then
+    exit;
+  tix64 := tix64 shr 16; // changes every 65,536 seconds
+  if tix64 <> fFileNamesTix then
+  begin
+    fFileNamesTix := tix64;
+    fFileNamesSafe.Lock;
+    fFileNames := nil;
+    fFileNamesSafe.UnLock;
+  end;
+  {$endif OSPOSIX}
 end;
 
 
