@@ -1784,29 +1784,30 @@ end;
 var
   PsapiDll: THandle;
 
-function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
-var n: cardinal;
+function EnumAllProcesses: TCardinalDynArray;
+var
+  n, count: cardinal;
 begin
   result := nil;
   if not DelayedProc(EnumProcesses, PsapiDll, 'Psapi.dll', 'EnumProcesses') then
     exit;
-  n := 2048;
+  count := 0;
+  n := 2048; // retrieve 2KB of IDs, i.e. 512 processes, by default
   repeat
     SetLength(result, n);
-    if EnumProcesses(pointer(result), n * 4, Count) then
-      // Count=n if buffer is too small
-      Count := Count shr 2
+    if EnumProcesses(pointer(result), n * 4, count) then
+      count := count shr 2 // from bytes to count
     else
-      // error
-      Count := 0;
-    if Count < n then
-    begin
-      if Count = 0 then
-        result := nil;
-      exit;
-    end;
-    inc(n, 1024); // (very unlikely) too small buffer
+      count := 0; // error
+    if count < n then
+      break;
+    // count=n if buffer was too small
+    inc(n, 1024);
   until n > 8192;
+  if count = 0 then
+    result := nil // on error
+  else
+    DynArrayFakeLength(result, count); // no resize
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;

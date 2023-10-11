@@ -2300,7 +2300,7 @@ begin
   result := GetCardinal(pointer(tgid)) = pid;
 end;
 
-function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
+function EnumAllProcesses: TCardinalDynArray;
 var
   d: pDir;
   e: pDirent;

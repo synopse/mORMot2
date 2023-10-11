@@ -3552,7 +3552,7 @@ function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 /// return the PIDs of all running processes
 // - under Windows, is a wrapper around EnumProcesses() PsAPI call
 // - on Linux, will enumerate /proc/* pseudo-files
-function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
+function EnumAllProcesses: TCardinalDynArray;
 
 /// return the process name of a given PID
 // - under Windows, is a wrapper around
