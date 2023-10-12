@@ -590,15 +590,13 @@ type
     // - returns the encrypted signature with PKCS#1.5 padding, '' on error
     function BufferSign(Input: pointer; InputLen: integer): RawByteString;
     /// verification of a RSA binary signature with the current Public Key
-    // - returns the decoded binary OCTSTR Digest or '' if signature failed
     // - this method is thread-safe but blocking from several threads
-    function Verify(const Signature: RawByteString;
-      AlgorithmOid: PRawUtf8 = nil): RawByteString; overload;
+    function Verify(Dig: pointer; DigAlgo: THashAlgo;
+      const Signature: RawByteString): boolean; overload;
     /// verification of a RSA binary signature with the current Public Key
-    // - returns the decoded binary OCTSTR Digest or '' if signature failed
     // - this method is thread-safe but blocking from several threads
-    function Verify(Sign: pointer; SignLen: integer;
-      AlgorithmOid: PRawUtf8 = nil): RawByteString; overload;
+    function Verify(Dig, Sign: pointer; DigLen, SignLen: integer;
+      AlgorithmOid: PRawUtf8 = nil): boolean; overload; virtual;
     /// compute a RSA binary signature with the current Private Key
     // - returns the encoded signature or '' on error
     // - this method is thread-safe but blocking from several threads
@@ -2600,7 +2598,7 @@ function TRsa.DoUnPad(p: PByteArray; verify: boolean): RawByteString;
 var
   count, padding: integer;
 begin
-  // virtual method following PKCS#1.5 RSA padding
+  // virtual method following RSASSA-PKCS1-v1_5 padding
   result := ''; // error
   if p[0] <> 0 then
     exit; // leading zero
@@ -2642,7 +2640,7 @@ var
   i: PtrInt;
   r: PByteArray absolute result;
 begin
-  // virtual method following PKCS#1.5 RSA padding
+  // virtual method following RSASSA-PKCS1-v1_5 padding
   result := '';
   padding := fModulusLen - n - 3;
   if (p = nil) or
@@ -2762,20 +2760,24 @@ begin
   end;
 end;
 
-function TRsa.Verify(const Signature: RawByteString;
-  AlgorithmOid: PRawUtf8): RawByteString;
+function TRsa.Verify(Dig: pointer; DigAlgo: THashAlgo;
+  const Signature: RawByteString): boolean;
+var
+  oid: RawUtf8;
 begin
-  result := Verify(pointer(Signature), length(Signature), AlgorithmOid);
+  result := Verify(Dig, pointer(Signature),
+                   HASH_SIZE[DigAlgo], length(Signature), @oid) and
+            (oid = ASN1_OID_HASH[DigAlgo]);
 end;
 
-function TRsa.Verify(Sign: pointer; SignLen: integer;
-  AlgorithmOid: PRawUtf8): RawByteString;
+function TRsa.Verify(Dig, Sign: pointer; DigLen, SignLen: integer;
+  AlgorithmOid: PRawUtf8): boolean;
 var
   verif, digest: RawByteString;
   p: integer;
 begin
   // decode the supplied value using the stored public key
-  result := '';
+  result := false;
   if SignLen <> fModulusLen then
     exit; // the signature is a RSA BigInt by definition
   verif := BufferVerify(Sign);
@@ -2788,10 +2790,10 @@ begin
      (AsnNext(p, verif, pointer(AlgorithmOid)) = ASN1_OBJID) then
     case AsnNextRaw(p, verif, digest) of
       ASN1_NULL: // optional Algorithm Parameters
-        if AsnNextRaw(p, verif, digest) = ASN1_OCTSTR then
-          result := digest;
+        result := (AsnNextRaw(p, verif, digest) = ASN1_OCTSTR) and
+                  CompareBuf(digest, Dig, DigLen);
       ASN1_OCTSTR:
-        result := digest;
+        result := CompareBuf(digest, Dig, DigLen);
     end;
 end;
 
@@ -3027,10 +3029,7 @@ function TCryptAsymRsa.Verify(hasher: TCryptHasher; msg: pointer;
   msglen: PtrInt; const pub, sig: RawByteString): boolean;
 var
   digest: THash512Rec;
-  diglen: PtrInt;
   algo: THashAlgo;
-  oid: RawUtf8;
-  hash: RawByteString;
   rsa: TRsa;
 begin
   result := false;
@@ -3045,10 +3044,8 @@ begin
     if not rsa.LoadFromPublicKeyPem(pub) then // handle PEM or DER
       exit;
     FillZero(digest.b);
-    diglen := hasher.Full(msg, msglen, digest);
-    hash := rsa.Verify(sig, @oid);
-    result := (length(hash) = diglen) and
-              CompareMem(pointer(hash), @digest, diglen);
+    hasher.Full(msg, msglen, digest);
+    result := rsa.Verify(@digest, algo, sig);
   finally
     rsa.Free;
     FillZero(digest.b);

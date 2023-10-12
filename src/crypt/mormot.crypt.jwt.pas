@@ -598,7 +598,6 @@ type
   protected
     fRsa: TRsa;
     fHash: THashAlgo;
-    fHashOid: RawUtf8;
     procedure SetAlgorithm; virtual; abstract;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
@@ -1475,7 +1474,6 @@ constructor TJwtRsa.Create(const aKey: RawByteString; aClaims: TJwtClaims;
   aIDObfuscationKeyNewKdf: integer);
 begin
   SetAlgorithm;
-  fHashOid := ASN1_OID_HASH[fHash];
   fRsa := TRsa.Create;
   try
     if aKey <> '' then
@@ -1529,9 +1527,6 @@ procedure TJwtRsa.CheckSignature(const headpayload: RawUtf8;
 var
   h: TSynHasher;
   dig: THash512Rec;
-  hash: RawByteString;
-  oid: RawUtf8;
-  diglen: PtrInt;
 begin
   if fRsa = nil then
     raise ERsaException.CreateUtf8(
@@ -1539,11 +1534,8 @@ begin
   jwt.result := jwtInvalidSignature;
   if length(signature) <> fRsa.ModulusLen then
     exit;
-  diglen := h.Full(fHash, pointer(headpayload), length(headpayload), dig);
-  hash := fRsa.Verify(signature, @oid); // verify = decrypt with public key
-  if (length(hash) = diglen) and
-     CompareMem(pointer(hash), @dig, diglen) and
-     (oid = fHashOid) then
+  h.Full(fHash, pointer(headpayload), length(headpayload), dig);
+  if fRsa.Verify(@dig, fHash, signature) then // = decrypt with public key
     jwt.result := jwtValid;
 end;
 

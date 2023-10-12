@@ -3254,7 +3254,7 @@ var
   i, j, k: integer;
   rnd: HalfUInt; // truncated to 16-bit or 32-bit value
   a, b, s, d, e, m, v: PBigInt;
-  cu, pem, txt, oid: RawUtf8;
+  cu, pem, txt: RawUtf8;
   bin, hash, signed, encrypted: RawByteString;
   pub1, pub2: TRsaPublicKey;
   pri1, pri2: TRsaPrivateKey;
@@ -3601,11 +3601,8 @@ begin
     Check(c.HasPublicKey);
     Check(not c.HasPrivateKey);
     bin := HexToBin(_signature);
-    oid := '';
-    hash := c.Verify(bin, @oid);
-    CheckEqual(length(hash), SizeOf(TSha256Digest));
-    CheckEqual(BinToHexLower(hash), _hash);
-    CheckEqual(oid, ASN1_OID_HASH[hfSHA256]);
+    hash := HexToBin(_hash);
+    Check(c.Verify(pointer(hash), hfSHA256, bin), 'verif1');
   finally
     c.Free;
   end;
@@ -3661,13 +3658,7 @@ begin
     Check(c.SavePrivateKeyDer = '');
     timer.Start;
     for i := 1 to 100 do
-    begin
-      oid := '';
-      hash := c.Verify(bin, @oid);
-      CheckEqual(length(hash), SizeOf(TSha256Digest));
-      CheckHash(hash, $401CD1EB);
-      CheckEqual(oid, ASN1_OID_HASH[hfSHA256]);
-    end;
+      Check(c.Verify(pointer(hash), hfSHA256, bin), 'verifloop');
     NotifyTestSpeed('RS256 verify', 100, 0, @timer);
     CheckEqual(BinToHexLower(hash), _hash);
   finally
@@ -3697,12 +3688,8 @@ begin
       // have been pasted and verified with Wolfram Alpha "isprime" command and
       // http://www.javascripter.net/math/calculators/100digitbigintcalculator.htm
       signed := c.Sign(pointer(hash), hfSHA256);
-      oid := '';
-      hash := c.Verify(signed, @oid);
-      CheckEqual(length(hash), SizeOf(TSha256Digest));
-      CheckHash(hash, $401CD1EB);
+      Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif2');
       bin := c.SavePrivateKeyDer;
-      CheckEqual(oid, ASN1_OID_HASH[hfSHA256]);
     finally
       c.Free;
     end;
@@ -3719,11 +3706,7 @@ begin
       CheckEqual(length(hash), SizeOf(TSha256Digest));
       CheckHash(hash, $401CD1EB);
       Check(c.Sign(pointer(hash), hfSHA256) = signed);
-      oid := '';
-      hash := c.Verify(signed, @oid);
-      CheckEqual(length(hash), SizeOf(TSha256Digest));
-      CheckHash(hash, $401CD1EB);
-      CheckEqual(oid, ASN1_OID_HASH[hfSHA256]);
+      Check(c.Verify(pointer(hash), hfSHA256, signed), 'verif3');
       encrypted := c.Seal(bin); // bin is typically > 1KB long
       Check(encrypted <> '', 'Seal');
       Check(c.Open(encrypted) = bin, 'Open');

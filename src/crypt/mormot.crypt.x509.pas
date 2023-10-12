@@ -1248,20 +1248,15 @@ function TXPublicKey.Verify(Sig: pointer; Dig: THash512Rec;
 var
   eccsig: TEccSignature;
   oid: RawUtf8;
-  bin: RawByteString;
 begin
   result := false;
   if (self <> nil) and
      (DigLen <> 0) then
     case fAlgo of
       xkaRsa:
-        begin
-          // RSA digital signature verification
-          bin := fRsa.Verify(Sig, SigLen, @oid); // thread-safe but blocking
-          result := (length(bin) = diglen) and
-                    CompareMem(pointer(bin), @dig, diglen) and
-                    (oid = ASN1_OID_HASH[Hash]);
-        end;
+        // RSA digital signature verification (thread-safe but blocking)
+        result := fRsa.Verify(@Dig, Sig, DigLen, SigLen, @oid) and
+                  (oid = ASN1_OID_HASH[Hash]);
       xkaEcc256:
         if DerToEcc(Sig, SigLen, eccsig) then
           // secp256r1 digital signature verification
