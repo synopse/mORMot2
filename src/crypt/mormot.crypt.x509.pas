@@ -127,19 +127,23 @@ type
   TXExtendedKeyUsages = set of TXExtendedKeyUsage;
 
   /// supported X.509 Signature Algorithms
-  // - implement RSA and ECC-256 asymmetric algorithms using our own units
+  // - implement RSA, RSA-PSS and ECC-256 asymmetric algorithms using our units
   // - for safety, any unsafe algorithms (e.g. MD5 or SHA-1) are not defined
   TXSignatureAlgorithm = (
     xsaNone,
     xsaSha256Rsa,
     xsaSha384Rsa,
     xsaSha512Rsa,
+    xsaSha256RsaPss,
+    xsaSha384RsaPss,
+    xsaSha512RsaPss,
     xsaSha256Ecc256);
 
   /// supported TX509.SubjectPublicKeyAlgorithm values
   TXPublicKeyAlgorithm = (
     xkaNone,
     xkaRsa,
+    xkaRsaPss,
     xkaEcc256);
 
   /// used to store one unknown/unsupported attribute or extension
@@ -229,12 +233,18 @@ function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
 
 const
+  /// set of the Public Key Algorithms using RSA cryptography
+  xkaRsas = [xkaRsa, xkaRsaPss];
+
   /// internal lookup table from X.509 Signature to Public Key Algorithms
   XSA_TO_XKA: array[TXSignatureAlgorithm] of TXPublicKeyAlgorithm = (
     xkaNone,     // xsaNone
     xkaRsa,      // xsaSha256Rsa
     xkaRsa,      // xsaSha384Rsa
     xkaRsa,      // xsaSha512Rsa
+    xkaRsaPss,   // xsaSha256RsaPss
+    xkaRsaPss,   // xsaSha384RsaPss
+    xkaRsaPss,   // xsaSha512RsaPss
     xkaEcc256);  // xsaSha256Ecc256
 
   /// internal lookup table from X.509 Signature to Hash Algorithms
@@ -243,6 +253,9 @@ const
     hfSha256,    // xsaSha256Rsa
     hfSha384,    // xsaSha384Rsa
     hfSha512,    // xsaSha512Rsa
+    hfSha256,    // xsaSha256RsaPss
+    hfSha384,    // xsaSha384RsaPss
+    hfSha512,    // xsaSha512RsaPss
     hfSha256);   // xsaSha256Ecc256
 
   /// internal lookup table from X.509 Signature to ICryptCert Algorithms
@@ -251,21 +264,28 @@ const
     caaRS256,    // xsaSha256Rsa
     caaRS384,    // xsaSha384Rsa
     caaRS512,    // xsaSha512Rsa
+    caaPS256,    // xsaSha256RsaPss
+    caaPS384,    // xsaSha384RsaPss
+    caaPS512,    // xsaSha512RsaPss
     caaES256);   // xsaSha256Ecc256
 
   /// internal lookup table from X.509 Signature Algorithm as text
   XSA_TXT: array[TXSignatureAlgorithm] of RawUtf8 = (
-    '',                              // xsaNone
-    'SHA256 with RSA encryption',    // xsaSha256Rsa
-    'SHA384 with RSA encryption',    // xsaSha384Rsa
-    'SHA512 with RSA encryption',    // xsaSha512Rsa
-    'SHA256 with prime256v1 ECDSA'); // xsaSha256Ecc256
+    '',                               // xsaNone
+    'SHA256 with RSA encryption',     // xsaSha256Rsa
+    'SHA384 with RSA encryption',     // xsaSha384Rsa
+    'SHA512 with RSA encryption',     // xsaSha512Rsa
+    'SHA256 with RSA-PSS encryption', // xsaSha256RsaPss
+    'SHA384 with RSA-PSS encryption', // xsaSha384RsaPss
+    'SHA512 with RSA-PSS encryption', // xsaSha512RsaPss
+    'SHA256 with prime256v1 ECDSA');  // xsaSha256Ecc256
 
   /// internal lookup table from X.509 Public Key Algorithm as text
   XKA_TXT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
-    '',                   // xkaNone
-    'RSA encryption',     // xkaRsa
-    'prime256v1 ECDSA');  // xkaEcc256
+    '',                    // xkaNone
+    'RSA encryption',      // xkaRsa
+    'RSA-PSS encryption',  // xkaRsaPss
+    'prime256v1 ECDSA');   // xkaEcc256
 
   /// the OID of all known TX509Name attributes, as defined in RFC 5280 A.1
   XA_OID: array[TXAttr] of PUtf8Char = (
@@ -322,14 +342,20 @@ const
     '1.3.6.1.5.5.7.3.9');  // xkuOcspSigning
 
   /// the OID of all known X.509 Signature Algorithms
+  // - RSA-PSS store ASN1_OID_PKCS1_RSA_PSS with the THashAlgo as parameters
   ASN1_OID_SIGNATURE: array[TXSignatureAlgorithm] of RawUtf8 = (
      '',
-     '1.2.840.113549.1.1.11', // xsaSha256Rsa
-     '1.2.840.113549.1.1.12', // xsaSha384Rsa
-     '1.2.840.113549.1.1.13', // xsaSha512Rsa
-     '1.2.840.10045.4.3.2');  // xsaSha256Ecc256
+     '1.2.840.113549.1.1.11',  // xsaSha256Rsa
+     '1.2.840.113549.1.1.12',  // xsaSha384Rsa
+     '1.2.840.113549.1.1.13',  // xsaSha512Rsa
+     '2.16.840.1.101.3.4.2.1', // xsaSha256RsaPss = ASN1_OID_HASH[hfSHA256]
+     '2.16.840.1.101.3.4.2.2', // xsaSha384RsaPss = ASN1_OID_HASH[hfSHA384]
+     '2.16.840.1.101.3.4.2.3', // xsaSha512RsaPss = ASN1_OID_HASH[hfSHA256]
+     '1.2.840.10045.4.3.2');   // xsaSha256Ecc256
 
   ASN1_OID_PKCS1_RSA       = '1.2.840.113549.1.1.1';
+  ASN1_OID_PKCS1_MGF       = '1.2.840.113549.1.1.8';
+  ASN1_OID_PKCS1_RSA_PSS   = '1.2.840.113549.1.1.10';
   ASN1_OID_PKCS9_EXTREQ    = '1.2.840.113549.1.9.14';
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
   ASN1_OID_X962_ECDSA_P256 = '1.2.840.10045.3.1.7';
@@ -745,8 +771,30 @@ begin
     xsaSha256Rsa .. xsaSha512Rsa:
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
-                  ASN1_NULL_VALUE // optional
+                  ASN1_NULL_VALUE // optional parameters
                 ]);
+    xsaSha256RsaPss .. xsaSha512RsaPss:
+      // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
+      result :=
+        AsnSeq([
+          AsnOid(ASN1_OID_PKCS1_RSA_PSS),
+          AsnSeq([ // RSASSA-PSS-params - see RFC 8017 A.2.3
+            Asn(ASN1_CTC0, [AsnSeq([ // HashAlgorithm
+                              AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
+                              ASN1_NULL_VALUE
+                              ])
+                           ]),
+            Asn(ASN1_CTC1, [AsnSeq([ // MaskGenAlgorithm
+                              AsnOid(ASN1_OID_PKCS1_MGF),
+                              AsnSeq([
+                                AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
+                                ASN1_NULL_VALUE
+                              ])
+                            ])
+                           ]),
+            Asn(ASN1_CTC2, [Asn(HASH_SIZE[XSA_TO_HF[xsa]])]) // saltLength
+          ])
+        ]);
     xsaSha256Ecc256:
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
@@ -764,6 +812,11 @@ begin
                   AsnOid(ASN1_OID_PKCS1_RSA),
                   ASN1_NULL_VALUE // optional
                 ]);
+    xkaRsaPss:
+      result := AsnSeq([
+                  AsnOid(ASN1_OID_PKCS1_RSA_PSS),
+                  ASN1_NULL_VALUE
+                ]);
     xkaEcc256:
       result := AsnSeq([
                   AsnOid(ASN1_OID_X962_PUBLICKEY),
@@ -775,7 +828,7 @@ begin
 end;
 
 function AsnNextAlgoOid(var pos: integer; const der: TAsnObject;
-  out oid: RawByteString; oid2: PRawByteString): boolean;
+  out oid, oid2: RawByteString): boolean;
 var
   seq: RawByteString;
   p: integer;
@@ -784,9 +837,23 @@ begin
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
             (AsnNext(p, seq, @oid) = ASN1_OBJID) and // decode OID as text
             ({%H-}oid <> '');
-  if result and
-     (oid2 <> nil) then
-    AsnNext(p, seq, oid2);
+  if result then
+    case AsnNext(p, seq, @oid2) of
+      ASN1_OBJID:
+        ; // e.g. for xkaEcc256 or xsaSha256Ecc256
+      ASN1_SEQ:
+        // e.g. for xsaSha256RsaPss
+        if (AsnNext(p, seq) <> ASN1_CTC0) or
+           (AsnNext(p, seq) <> ASN1_SEQ) or
+           (AsnNext(p, seq, @oid2) <> ASN1_OBJID) then
+          oid2 := ''
+        else
+          // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
+          oid := oid2;
+      // TODO: support non-standard saltLength as generated by OpenSSL :(
+    else
+      oid2 := ''; // e.g. ASN1_NULL for xkaRsa/xkaRsaPss or xsaSha256Rsa
+    end;
 end;
 
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
@@ -808,6 +875,8 @@ begin
   result := true;
   if oid = ASN1_OID_PKCS1_RSA then
     xka := xkaRsa
+  else if oid = ASN1_OID_PKCS1_RSA_PSS then
+    xka := xkaRsaPss
   else if (oid = ASN1_OID_X962_PUBLICKEY) and
           (oid2 = ASN1_OID_X962_ECDSA_P256) then
     xka := xkaEcc256
@@ -1207,6 +1276,13 @@ end;
 
 { TXPublicKey }
 
+const
+  XKA_RSA: array[TXPublicKeyAlgorithm] of TRsaClass = (
+    nil,      // xkaNone
+    TRsa,     // xkaRsa
+    TRsaPss,  // xkaRsaPss
+    nil  );   // xkaEcc256
+
 function TXPublicKey.Load(Algorithm: TXPublicKeyAlgorithm;
   const SubjectPublicKey: RawByteString): boolean;
 begin
@@ -1216,9 +1292,10 @@ begin
     exit;
   fAlgo := Algorithm;
   case Algorithm of
-    xkaRsa:
+    xkaRsa,
+    xkaRsaPss:
       begin
-        fRsa := TRsa.Create;
+        fRsa := XKA_RSA[Algorithm].Create;
         if fRsa.LoadFromPublicKeyDer(SubjectPublicKey) then
           result := true
         else
@@ -1252,7 +1329,8 @@ begin
   if (self <> nil) and
      (DigLen <> 0) then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         // RSA digital signature verification (thread-safe but blocking)
         result := fRsa.Verify(@Dig, Sig, Hash, SigLen);
       xkaEcc256:
@@ -1287,7 +1365,8 @@ begin
   result := false;
   if self <> nil then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         begin
           // for RSA, x is set to the Exponent (e), and y to the Modulus (n)
           x := fRsa.E^.Save;
@@ -1314,7 +1393,8 @@ begin
   result  := '';
   if self <> nil then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         result := fRsa.Seal(Cipher, Message);
       xkaEcc256:
         result := EciesSeal(Cipher, fEcc.PublicKey, Message);
@@ -1326,10 +1406,11 @@ end;
 
 const
   // those values match EccPrivateKeyEncrypt/EccPrivateKeyDecrypt for xkaEcc256
+  // xkaRsa and xkaRsaPss share the same public/private key files by definition
   XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
-    '', 'synrsa', 'synecc');
+    '', 'synrsa', 'synrsa', 'synecc');
   XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
-    0, 3, 31);
+    0, 3, 3, 31);
 
 function TXPrivateKey.Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
   const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
@@ -1355,9 +1436,10 @@ begin
     end;
     fAlgo := Algorithm;
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         begin
-          fRsa := TRsa.Create;
+          fRsa := XKA_RSA[fAlgo].Create;
           if fRsa.LoadFromPrivateKeyPem(saved) and
              ((AssociatedKey = nil) or
               fRsa.MatchKey(AssociatedKey.fRsa)) then
@@ -1389,10 +1471,11 @@ begin
     exit;
   fAlgo := Algorithm;
   case fAlgo of
-    xkaRsa:
+    xkaRsa,
+    xkaRsaPss:
       if fRsa = nil then
       begin
-        fRsa := TRsa.Create;
+        fRsa := XKA_RSA[fAlgo].Create;
         if fRsa.Generate(RSA_DEFAULT_GENERATION_BITS) then
           result := fRsa.SavePublicKey.ToSubjectPublicKey;
       end;
@@ -1501,7 +1584,7 @@ begin
     if Password = '' then
       // save as plain unencrypted PEM/DER
       if Format = ccfPem then
-        if fAlgo = xkaRsa then
+        if fAlgo in xkaRsas then
           k := pemRsaPrivateKey
         else
           k := pemEcPrivateKey
@@ -1513,7 +1596,7 @@ begin
       bin := der; // for FillZero()
       der := PrivateKeyEncrypt(bin, XKA_SALT[fAlgo], Password, XKA_ROUNDS[fAlgo]);
       if Format = ccfPem then
-        if fAlgo = xkaRsa then
+        if fAlgo in xkaRsas then
           k := pemSynopseRsaEncryptedPrivateKey
         else
           k := pemSynopseEccEncryptedPrivateKey
@@ -1540,7 +1623,8 @@ begin
      (XSA_TO_XKA[DigAlgo] = fAlgo) and
      (HASH_SIZE[XSA_TO_HF[DigAlgo]] = DigLen) then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         if fRsa <> nil then
           result := fRsa.Sign(@Dig.b, XSA_TO_HF[DigAlgo]); // thread-safe
       xkaEcc256:
@@ -1572,7 +1656,8 @@ begin
   result := '';
   if self <> nil then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         result := fRsa.Open(Cipher, Message);
       xkaEcc256:
         result := EciesOpen(Cipher, fEcc, Message);
@@ -1588,7 +1673,8 @@ begin
      (pub <> nil) and
      (pub.fAlgo = fAlgo) then
     case fAlgo of
-      xkaRsa:
+      xkaRsa,
+      xkaRsaPss:
         ; // not possible by definition
       xkaEcc256:
         try
@@ -1845,7 +1931,7 @@ begin
   if (vt <> ASN1_INT) or
      not (Version in [2..3]) or
      (AsnNextRaw(pos, der, SerialNumber) <> ASN1_INT) or
-     not AsnNextAlgoOid(pos, der, oid, nil) or
+     not AsnNextAlgoOid(pos, der, oid, oid2) or
      not OidToXsa(oid, Signature) or
      not Issuer.FromAsnNext(pos, der) or
      (AsnNext(pos, der) <> ASN1_SEQ) or // validity
@@ -1853,7 +1939,7 @@ begin
      not AsnNextTime(pos, der, NotAfter) or
      not Subject.FromAsnNext(pos, der) or
      (AsnNext(pos, der) <> ASN1_SEQ) or // subjectPublicKeyInfo
-     not AsnNextAlgoOid(pos, der, oid, @oid2) or
+     not AsnNextAlgoOid(pos, der, oid, oid2) or
      not OidToXka(oid, oid2, SubjectPublicKeyAlgorithm) or
      (AsnNextRaw(pos, der, SubjectPublicKey) <> ASN1_BITSTR) then
     exit;
@@ -2100,7 +2186,7 @@ end;
 function TX509.LoadFromDer(const der: TCertDer): boolean;
 var
   pos: integer;
-  tbs, oid: RawByteString;
+  tbs, oid, oid2: RawByteString;
 begin
   Clear;
   fCachedDer := der;
@@ -2109,7 +2195,7 @@ begin
             (AsnNext(pos, der) = ASN1_SEQ) and
             (AsnNextRaw(pos, der, tbs, {includeheader=}true) = ASN1_SEQ) and
             Signed.FromDer(tbs) and
-            AsnNextAlgoOid(pos, der, oid, nil) and
+            AsnNextAlgoOid(pos, der, oid, oid2) and
             OidToXsa(oid, fSignatureAlgorithm) and
             (AsnNextRaw(pos, der, fSignatureValue) = ASN1_BITSTR) and
             (fSignatureAlgorithm = Signed.Signature);
@@ -2141,10 +2227,10 @@ begin
      (version = '0') and
      Signed.Subject.FromAsnNext(posnfo, nfo) and
      (AsnNext(posnfo, nfo) = ASN1_SEQ) and // subjectPublicKeyInfo
-     AsnNextAlgoOid(posnfo, nfo, oid, @oid2) and
+     AsnNextAlgoOid(posnfo, nfo, oid, oid2) and
      OidToXka(oid, oid2, Signed.SubjectPublicKeyAlgorithm) and
      (AsnNextRaw(posnfo, nfo, Signed.SubjectPublicKey) = ASN1_BITSTR) and
-     AsnNextAlgoOid(pos, der, oid, nil) and
+     AsnNextAlgoOid(pos, der, oid, oid2) and
      OidToXsa(oid, xsa) and
      (AsnNextRaw(pos, der, sig) = ASN1_BITSTR) and
      PublicKey.Verify(xsa, nfo, sig) then // check self-signature
@@ -2852,11 +2938,13 @@ begin
   for k := succ(low(k)) to high(k) do
     XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
   // register TX509 to our high-level cryptographic catalog
-  // - 'x509-rs256-int' and 'x509-es256-int' will always be available
-  // - 'x509-rs384/512-int' methods seem superfluous
+  // - 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
+  // - 'x509-rs/ps384/512-int' methods seem superfluous
   TCryptCertAlgoX509.Create(xsaSha256Rsa,    {suffix=}'-int');
+  TCryptCertAlgoX509.Create(xsaSha256RsaPss, {suffix=}'-int');
   TCryptCertAlgoX509.Create(xsaSha256Ecc256, {suffix=}'-int');
-  // 'x509-rs256' 'x509-rs384' 'x509-rs512' and 'x509-es256' certificates
+  // register 'x509-rs256' 'x509-rs384' 'x509-rs512' 'x509-ps256' 'x509-ps384'
+  // 'x509-ps512' and 'x509-es256' certificates
   // - may be overriden by the faster mormot.crypt.openssl if included
   for xsa := succ(low(xsa)) to high(xsa) do
     TCryptCertAlgoX509.Create(xsa, {suffix=}'');

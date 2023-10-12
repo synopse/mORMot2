@@ -3993,7 +3993,7 @@ begin
         cvValidSelfSigned, 'verbuf self');
     CheckEqual(x.SubjectPublicKeyAlgorithm, '256-bit prime256v1 ECDSA');
     CheckHash(x.PeerInfo, $BCB82372, 'peerinfo3');
-    CheckHash(ObjectToJson(x), $BCCBCFEB);
+    CheckHash(ObjectToJson(x), $BBCBCFEB);
   finally
     x.Free;
   end;
