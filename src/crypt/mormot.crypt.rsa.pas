@@ -82,6 +82,7 @@ type
   // - bspMost will search for known primes < 2000 - e.g. 2048-bit at 45K/s and
   // is in practice sufficient to detect most primes (Mbed TLS check < 1000)
   // - bspAll will search for known primes < 18000 - e.g. 2048-bit at 6.5K/s
+  // - see RSA_DEFAULT_GENERATION_KNOWNPRIME = bspMost constant below
   TBigIntSimplePrime = (
     bspFast,
     bspMost,
@@ -233,16 +234,16 @@ type
     function ModInverse(m: PBigInt): PBigInt;
     /// check if this value is divisable by a small prime
     // - detection coverage can be customized from default primes < 2000
-    function MatchKnownPrime(Extend: TBigIntSimplePrime = bspMost): boolean;
+    function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 20): boolean;
+      Iterations: integer = 10): boolean;
     /// guess a random prime number of the exact current size
     // - loop over TAesPrng.Fill and IsPrime method within a timeout period
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
-    function FillPrime(Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 20; EndTix: Int64 = 0): boolean;
+    function FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
+      EndTix: Int64): boolean;
     /// return the crc32c hash of this Big Integer value binary
     function ToHash: cardinal;
     /// return the Big Integer value as hexadecimal
@@ -322,6 +323,24 @@ type
   end;
 
 const
+  /// generates RSA keypairs checking all known primes < 2000
+  // - bspMost seems the best compromise between performance and safety, since
+  // even Mbed TLS only try for primes < 1000
+  // - in practice bspFast is only slightly faster, and bspAll seems overkill
+  // - when profiling, the Miller-Rabin test takes 150 more time than bspMost
+  RSA_DEFAULT_GENERATION_KNOWNPRIME = bspMost;
+
+  /// generates RSA keypairs using FIPS 4.48 2^-100 error probability
+  // - TBigInt.FillPrime will ensure FIPS 4.48 minimum iteration is always used
+  RSA_DEFAULT_GENERATION_ITERATIONS = 0;
+
+  {$ifdef CPUARM}
+  // we have seen some weak Raspberry PI timeout
+  RSA_DEFAULT_GENERATION_TIMEOUTMS = 30000;
+  {$else}
+  RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
+  {$endif CPUARM}
+
   /// 2KB table of iterative differences of all known prime numbers < 18,000
   // - as used by TBigInt.MatchKnownPrime
   // - published in interface section for TTestCoreCrypto._RSA validation
@@ -423,14 +442,6 @@ function CompareBI(A, B: HalfUInt): integer;
 
 
 { **************** RSA Low-Level Cryptography Functions }
-
-const
-  {$ifdef CPUARM}
-  // we have seen some weak Raspberry PI timeout
-  RSA_DEFAULT_GENERATION_TIMEOUTMS = 30000;
-  {$else}
-  RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
-  {$endif CPUARM}
 
 type
   /// store a RSA public key
@@ -537,7 +548,8 @@ type
     // - if Iterations value is too low, the FIPS recommendation will be forced
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
     function Generate(Bits: integer = RSA_DEFAULT_GENERATION_BITS;
-      Extend: TBigIntSimplePrime = bspMost; Iterations: integer = 20;
+      Extend: TBigIntSimplePrime = RSA_DEFAULT_GENERATION_KNOWNPRIME;
+      Iterations: integer = RSA_DEFAULT_GENERATION_ITERATIONS;
       TimeOutMS: integer = RSA_DEFAULT_GENERATION_TIMEOUTMS): boolean;
     /// load a public key from a decoded TRsaPublicKey record
     procedure LoadFromPublicKey(const PublicKey: TRsaPublicKey);
@@ -1338,6 +1350,8 @@ const
     53,                         // bspFast < 256
     302,                        // bspMost < 2000
     high(BIGINT_PRIMES_DELTA)); // bspAll  < 18000
+
+// profiling shows that Miller-Rabin takes 150 times more time than bspMost
 
 function TBigInt.MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
 var

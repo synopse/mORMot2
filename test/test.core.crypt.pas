@@ -3686,10 +3686,9 @@ begin
     c := TRsa.Create;
     try
       timer.Start;
-      check(c.Generate(2048, bspMost, 20, RSA_DEFAULT_GENERATION_TIMEOUTMS),
-        'TimeOut');
+      check(c.Generate, 'TimeOut'); // with RSA_DEFAULT_GENERATION_* values
       NotifyTestSpeed('RS256 generate', -1, 0, @timer);
-      CheckEqual(c.ModulusBits, 2048);
+      CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
       CheckEqual(c.ModulusLen, 256);
       CheckEqual(c.E^.ToText, '65537');
       Check(c.HasPublicKey);
@@ -3713,7 +3712,7 @@ begin
     c := TRsa.Create;
     try
       Check(c.LoadFromPrivateKeyDer(bin));
-      CheckEqual(c.ModulusBits, 2048);
+      CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
       CheckEqual(c.ModulusLen, 256);
       Check(c.HasPublicKey);
       Check(c.HasPrivateKey);
@@ -3734,7 +3733,7 @@ begin
   c := TRsaPss.Create;
   try
     Check(c.LoadFromPrivateKeyDer(bin)); // just reuse previous RSA keys
-    CheckEqual(c.ModulusBits, 2048);
+    CheckEqual(c.ModulusBits, RSA_DEFAULT_GENERATION_BITS);
     CheckEqual(c.ModulusLen, 256);
     Check(c.HasPublicKey);
     Check(c.HasPrivateKey);
