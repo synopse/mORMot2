@@ -274,7 +274,7 @@ var
   /// fastest available class to be used to verify a ECDSA signature
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
   // - direct low-level access to our pascal/asm version, or OpenSSL wrappers
-  // - as used e.g. by TJwtES256 high-level JWT processing class
+  // - as used e.g. by TJwtEs256 high-level JWT processing class
   TEcc256r1Verify: TEcc256r1VerifyClass = TEcc256r1VerifyPas;
 
 

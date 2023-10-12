@@ -656,6 +656,28 @@ type
     class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
+  /// implements 'PS256' PSA algorithm over SHA-256
+  // - you may consider faster TJwtPs256Osl from mormot.crypt.openssl instead
+  TJwtPs256 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
+  end;
+
+  /// implements 'PS384' PSA algorithm over SHA-384
+  // - you may consider faster TJwtPs384Osl from mormot.crypt.openssl instead
+  TJwtPs384 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
+  end;
+
+  /// implements 'PS512' PSA algorithm over SHA-512
+  // - you may consider faster TJwtPs512Osl from mormot.crypt.openssl instead
+  TJwtPs512 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
+  end;
+
+
 
 implementation
 
@@ -1493,6 +1515,8 @@ begin
   case a of
     caaRS256 .. caaRS512:
       fRsa := TRsa.Create;
+    caaPS256 .. caaPS512:
+      fRsa := TRsaPss.Create;
   else
     raise EJwtException.CreateUtf8('%.Create with %', [self, ToText(a)^]);
   end;
@@ -1574,6 +1598,21 @@ end;
 class function TJwtRs512.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaRS512;
+end;
+
+class function TJwtPs256.GetAsymAlgo: TCryptAsymAlgo;
+begin
+  result := caaPS256;
+end;
+
+class function TJwtPs384.GetAsymAlgo: TCryptAsymAlgo;
+begin
+  result := caaPS384;
+end;
+
+class function TJwtPs512.GetAsymAlgo: TCryptAsymAlgo;
+begin
+  result := caaPS512;
 end;
 
 
