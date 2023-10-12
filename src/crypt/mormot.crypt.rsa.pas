@@ -44,7 +44,7 @@ uses
   - references: https://github.com/Mbed-TLS/mbedtls and the Handbook of Applied
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
   - will register as Asym 'RS256','RS384','RS512' algorithms (if not overriden
-    by mormot.crypt.openssl), keeping simple and efficient 'RSA2048SHA256'
+    by mormot.crypt.openssl), keeping 'RS256-int' and 'PS256-int' for this unit
   - used by mormot.crypt.x509 to handle RSA signatures of its X.509 Certificates
 }
 
@@ -513,6 +513,7 @@ type
   // - holds all its PBigInt values in its parent TRsaContext
   // - uses regular RSASSA-PKCS1-v1_5 encoding - see TRsaPss for RSASSA-PSS
   // - note that only Verify() and Sign() methods are thread-safe
+  // - this implementation follows RFC 8017 specifications
   TRsa = class(TRsaContext)
   protected
     fSafe: TOSLightLock; // for Verify() and Sign()
@@ -664,16 +665,22 @@ type
       read fModulusBits;
   end;
 
+  /// meta-class of the RSA processing classes
+  // - mainly TRsa or TRsaPss
+  TRsaClass = class of TRsa;
+
   /// RSA processing class using Probabilistic Signature Scheme (PSS) signatures
   // - the RSASSA-PSS signature scheme is more secure than RSASSA-PKCS1-v1_5
   // - PSS encoding, originally invented by Bellare and Rogaway, is randomized
   // thereby producing a different value of signature each time
+  // - this implementation follows RFC 8017 specifications
+  // - note: Open/Seal won't use RSAES-OAEP but regular RSAES-PKCS1-v1_5
   TRsaPss = class(TRsa)
   public
     /// verification of a RSA binary signature with the current Public Key
     // - overriden method using the RSASSA-PSS signature scheme
     // - our implementation uses the same THashAlgo for its internal encoding,
-    // e.g. its MGF1 function, as recommended by RFC 3447 8.1 to prevent
+    // e.g. its MGF1 function, as recommended by RFC 8017 8.1 to prevent
     // hash function substitution
     // - this method is thread-safe but blocking from several threads
     function Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
@@ -3042,7 +3049,7 @@ begin
   end;
   if exp = '' then
     exit;
-  // RFC 3447 9.1.2 verification operation
+  // RFC 8017 9.1.2 verification operation
   e := pointer(exp);
   bits := fModulusBits - 1;
   if (bits and 7) = 0 then
@@ -3090,7 +3097,7 @@ begin
     raise ERsaException.CreateUtf8('%.DoPad: m=p*q is weak', [self]);
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
-  // RFC 3447 9.1.1 encoding operation with saltlen = hashlen
+  // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
   RandomBytes(@salt, hlen); // Lecuyer is good enough for public salt
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
@@ -3114,80 +3121,13 @@ begin
 end;
 
 
-{
-function TRsaPss.UnPad(p: PByteArray; verify: boolean): RawByteString;
-var
-  bits, len: integer;
-  h: PHash256;
-begin
-  // virtual method following RSASSA-PSS padding over SHA-256
-  result := '';
-  if p = nil then
-    exit;
-  bits := fModulusBits - 1;
-  if (bits and 7) = 0 then
-    if PByte(p)^ = 0 then
-      inc(PByte(p)) // just ignore leading 0
-    else
-      exit;
-  len := (bits + 7) shr 3;
-  if (len < SizeOf(h^) + 2) or
-     (p[len - 1] <> $bc) then
-    exit;
-  // RFC 3447 9.1.1 decoding operation
-  h := @p[len - (SizeOf(h^) + 1)];
-
-
-end;
-
-function TRsaPss.DoPad(p: pointer; n: integer; sign: boolean): RawByteString;
-var
-  bits, len, pslen, dblen: integer;
-  m: TPssMac;
-  h: THash256;
-  sha: TSha256;
-  dbmask: RawByteString;
-  res: PByteArray absolute result;
-begin
-  // virtual method following RSASSA-PSS padding over SHA-256
-  result := '';
-  if (p = nil) or
-     (fModulusLen < SizeOf(h) + 6) or
-     not HasPublicKey then
-    exit;
-  if (ModulusBits + 7) shr 3 <> ModulusLen then
-    raise ERsaException.CreateUtf8('%.DoPad: m=p*q is weak', [self]);
-  bits := ModulusBits - 1;
-  len := (bits + 7) shr 3; // could be one less than ModulusLen
-  // RFC 3447 9.1.1 encoding operation
-  m.Zeros := 0;
-  sha.Full(p, n, m.Hash);
-  RandomBytes(@m.Salt, SizeOf(m.Salt)); // Lecuyer is good as public salt
-  sha.Full(@m, SizeOf(m), h);
-  pslen := len - (SizeOf(m.Salt) + SizeOf(h) + 2);
-  dblen := pslen + (SizeOf(h) + 1);
-  if pslen < 0 then
-    exit;
-  SetLength(result, len);
-  FillCharFast(res[0], pslen, 0);
-  res[pslen] := 1;
-  PHash256(@res[pslen + 1])^ := m.Salt;
-  dbmask := mgf1sha256(h, dblen);
-  XorMemory(res, pointer(dbmask), dblen);
-  bits := bits and 7;
-  if bits <> 0 then
-    res[0] := res[0] and ($ff shr (8 - bits)); // reset leftmost bit
-  PHash256(@res[dblen])^ := h;
-  res[len - 1] := $bc;
-end;
-}
-
 { *********** Registration of our RSA Engine to the TCryptAsym Factory }
 
 type
   TCryptAsymRsa = class(TCryptAsym)
   protected
     fDefaultHasher: TCryptHasher;
+    fRsaClass: TRsaClass;
   public
     constructor Create(const name: RawUtf8); overload; override;
     constructor Create(const name, hasher: RawUtf8); reintroduce; overload;
@@ -3203,6 +3143,14 @@ type
 
 constructor TCryptAsymRsa.Create(const name: RawUtf8);
 begin
+  case PWord(name)^ of
+    ord('R') + ord('S') shl 8:
+      fRsaClass := TRsa;
+    ord('P') + ord('S') shl 8:
+      fRsaClass := TRsaPss;
+  else
+    raise ECrypt.CreateUtf8('%.Create: unsupported name=%', [self, name]);
+  end;
   inherited Create(name);
   if fDefaultHasher = nil then
     fDefaultHasher := Hasher('sha256');
@@ -3225,10 +3173,9 @@ var
 begin
   if privpwd <> '' then
     raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
-  rsa := TRsa.Create;
+  rsa := fRsaClass.Create;
   try
-    if not rsa.Generate(RSA_DEFAULT_GENERATION_BITS, bspMost, 4,
-             RSA_DEFAULT_GENERATION_TIMEOUTMS) then
+    if not rsa.Generate then
       exit; // timed out
     pub := rsa.SavePublicKeyDer;
     priv := rsa.SavePrivateKeyDer;
@@ -3253,7 +3200,7 @@ begin
      (privpwd <> '') or
      not hasher.HashAlgo(algo) then
     exit; // invalid or unsupported
-  rsa := TRsa.Create;
+  rsa := fRsaClass.Create;
   try
     if not rsa.LoadFromPrivateKeyPem(priv) then // handle PEM or DER
       exit;
@@ -3281,7 +3228,7 @@ begin
      (pub = '') or
      not hasher.HashAlgo(algo) then
     exit; // invalid or unsupported
-  rsa := TRsa.Create;
+  rsa := fRsaClass.Create;
   try
     if not rsa.LoadFromPublicKeyPem(pub) then // handle PEM or DER
       exit;
@@ -3298,14 +3245,18 @@ end;
 procedure InitializeUnit;
 begin
   // register this unit methods to our high-level cryptographic catalog
-  TCryptAsymRsa.Implements('RS256,RSA2048SHA256');
+  TCryptAsymRsa.Implements('RS256,RS256-int');
   TCryptAsymRsa.Create('RS384', 'sha384');
   TCryptAsymRsa.Create('RS512', 'sha512');
+  TCryptAsymRsa.Implements('PS256,PS256-int');
+  TCryptAsymRsa.Create('PS384', 'sha384');
+  TCryptAsymRsa.Create('PS512', 'sha512');
   // RS256 RS384 RS512 may be overriden by faster mormot.crypt.openssl
-  // but RSA2048SHA256 will stil be available to use this unit if needed
+  // but RS256-int PS256-int will stil be available to use this unit if needed
 end;
 
 initialization
   InitializeUnit;
+
 
 end.

@@ -3743,9 +3743,15 @@ begin
     Check(c.CheckPrivateKey);
     CheckEqual(length(hash), SizeOf(TSha256Digest));
     CheckHash(hash, $401CD1EB);
-    signed := c.Sign(pointer(hash), hfSHA256);
+    timer.Start;
+    for i := 1 to 10 do
+      signed := c.Sign(pointer(hash), hfSHA256);
+    NotifyTestSpeed('PS256 sign', 10, 0, @timer);
     CheckEqual(length(signed), c.ModulusLen, 'signpss');
-    Check(c.Verify(pointer(hash), hfSHA256, signed), 'verifpps');
+    timer.Start;
+    for i := 1 to 100 do
+      Check(c.Verify(pointer(hash), hfSHA256, signed), 'verifpps');
+    NotifyTestSpeed('PS256 verify', 100, 0, @timer);
     encrypted := c.Seal(bin); // bin is typically > 1KB long
     Check(encrypted <> '', 'Seal');
     Check(c.Open(encrypted) = bin, 'Open');
