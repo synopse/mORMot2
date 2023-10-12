@@ -814,8 +814,7 @@ begin
                 ]);
     xkaRsaPss:
       result := AsnSeq([
-                  AsnOid(ASN1_OID_PKCS1_RSA_PSS),
-                  ASN1_NULL_VALUE
+                  AsnOid(ASN1_OID_PKCS1_RSA_PSS)
                 ]);
     xkaEcc256:
       result := AsnSeq([
@@ -840,7 +839,7 @@ begin
   if result then
     case AsnNext(p, seq, @oid2) of
       ASN1_OBJID:
-        ; // e.g. for xkaEcc256 or xsaSha256Ecc256
+        ; // e.g. xkaEcc256 or xsaSha256Ecc256 will check oid2 = ECDSA_P256
       ASN1_SEQ:
         // e.g. for xsaSha256RsaPss
         if (AsnNext(p, seq) <> ASN1_CTC0) or
@@ -1094,8 +1093,8 @@ begin
   Name[xaOU] := TrimU(fields.OrgUnit);
   Name[xaCN] := TrimU(fields.CommonName);
   Name[xaE]  := TrimU(fields.EmailAddress);
-  Name[xaSN]  := TrimU(fields.SurName);
-  Name[xaGN]  := TrimU(fields.GivenName);
+  Name[xaSN] := TrimU(fields.SurName);
+  Name[xaGN] := TrimU(fields.GivenName);
 end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;
