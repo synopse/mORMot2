@@ -1403,6 +1403,7 @@ var
   unalign: PtrInt;
   exp321, exp322, exp323, exp324: cardinal;
   exp641, exp642: QWord;
+  hasher: TSynHasher;
 begin
   Check(Adler32SelfTest);
   SetLength(buf, HASHESMAX + HASHALIGN);
@@ -1429,6 +1430,21 @@ begin
     if Assigned(AesNiHash128) then
       Check(Hash128Test(P, @AesNiHash128, msg), msg);
   end;
+  // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
+  msg := 'foo';
+  CheckEqual(BinToHexLower(hasher.Mgf1(hfSHA1, pointer(msg), length(msg), 3)),
+    '1ac907');
+  CheckEqual(BinToHexLower(hasher.Mgf1(hfSHA1, pointer(msg), length(msg), 5)),
+    '1ac9075cd4');
+  msg := 'bar';
+  CheckEqual(BinToHexLower(hasher.Mgf1(hfSHA1, pointer(msg), length(msg), 5)),
+    'bc0c655e01');
+  CheckEqual(BinToHexLower(hasher.Mgf1(hfSHA1, pointer(msg), length(msg), 50)),
+    'bc0c655e016bc2931d85a2e675181adcef7f581f76df2739da74' +
+    'faac41627be2f7f415c89e983fd0ce80ced9878641cb4876');
+  CheckEqual(BinToHexLower(hasher.Mgf1(hfSHA256, pointer(msg), length(msg), 50)),
+    '382576a7841021cc28fc4c0948753fb8312090cea942ea4c4e73' +
+    '5d10dc724b155f9f6069f289d61daca0cb814502ef04eae1');
   {$ifdef USE_OPENSSL}
   CheckEqual(BigNumHexFromDecimal('0'), '');
   CheckEqual(BigNumHexFromDecimal('1'), '01');

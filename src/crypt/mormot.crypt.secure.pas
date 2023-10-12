@@ -657,8 +657,12 @@ type
     procedure Full(aAlgo: THashAlgo; const aBuffer: array of RawByteString;
       var aResult: RawUtf8); overload;
     /// one-step hash computation of a buffer as a binary buffer
+    // - returns the written aDigest size in bytes
     function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
       out aDigest: THash512Rec): integer; overload;
+    /// fill a buffer with the MGF1 seed deriviation, following RFC 2437
+    // - a Mask Generation Function expands aSeed/aSeedLen into aDestLen buffer
+    function Mgf1(aAlgo: THashAlgo; aSeed: pointer; aSeedLen, aDestLen: PtrUInt): RawByteString;
     /// returns the number of bytes of the hash of the current Algo
     function HashSize: integer;
     /// the hash algorithm used by this instance
@@ -3147,6 +3151,34 @@ begin
   Update(aBuffer, aLen);
   result := Final(aDigest);
 end;
+
+function TSynHasher.Mgf1(aAlgo: THashAlgo;
+  aSeed: pointer; aSeedLen, aDestLen: PtrUInt): RawByteString;
+var
+  dig: PHash512Rec;
+  diglen, counter: cardinal;
+begin
+  result := '';
+  if (aSeed = nil) or
+     (aSeedLen <= 0) or
+     (aDestLen <= 0) then
+    exit;
+  diglen := HASH_SIZE[aAlgo];
+  SetLength(result, ((aDestLen div diglen) + 1) * diglen);
+  dig := pointer(result);
+  counter := 0;
+  repeat
+    Init(aAlgo);
+    Update(aSeed, aSeedLen);
+    counter := bswap32(counter);
+    Update(@counter, SizeOf(counter));
+    counter := bswap32(counter);
+    inc(PByte(dig), Final(dig^));
+    inc(counter);
+  until PtrUInt(dig) - PtrUInt(result) >= aDestLen;
+  FakeLength(result, aDestLen);
+end;
+
 
 
 { TStreamRedirectSynHasher }
