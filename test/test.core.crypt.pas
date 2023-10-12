@@ -885,23 +885,26 @@ procedure TTestCoreCrypto._JWT;
   end;
 
 const
-  OSSL_RSA: array[0..2] of TJwtRsaClass = (
-    TJwtRS256,
-    TJwtRS384,
-    TJwtRS512);
+  JWT_RSA: array[0..5] of TJwtRsaClass = (
+    TJwtRs256,
+    TJwtRs384,
+    TJwtRs512,
+    TJwtPs256,
+    TJwtPs384,
+    TJwtPs512);
 {$ifdef USE_OPENSSL}
   OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
-    TJwtRS256Osl,
-    TJwtRS384Osl,
-    TJwtRS512Osl,
-    TJwtPS256Osl,
-    TJwtPS384Osl,
-    TJwtPS512Osl,
-    TJwtES256Osl,
-    TJwtES384Osl,
-    TJwtES512Osl,
-    TJwtES256KOsl,
-    TJwtEdDSAOsl);
+    TJwtRs256Osl,
+    TJwtRs384Osl,
+    TJwtRs512Osl,
+    TJwtPs256Osl,
+    TJwtPs384Osl,
+    TJwtPs512Osl,
+    TJwtEs256Osl,
+    TJwtEs384Osl,
+    TJwtEs512Osl,
+    TJwtEs256KOsl,
+    TJwtEddsaOsl);
 var
   priv, pub: RawUtf8;
 {$endif USE_OPENSSL}
@@ -953,11 +956,11 @@ begin
   for i := 1 to 10 do
   begin
     secret := TEccCertificateSecret.CreateNew(nil); // self-signed certificate
-    test(TJwtES256.Create(secret,
+    test(TJwtEs256.Create(secret,
       [jrcIssuer, jrcExpirationTime], [], 60));
-    test(TJwtES256.Create(secret,
+    test(TJwtEs256.Create(secret,
       [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-    test(TJwtES256.Create(secret,
+    test(TJwtEs256.Create(secret,
       [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
     secret.Free;
   end;
@@ -966,14 +969,14 @@ begin
       'secret', 0, [jrcIssuer, jrcExpirationTime], []));
   secret := TEccCertificateSecret.CreateNew(nil);
   try
-    Benchmark(TJwtES256.Create(
+    Benchmark(TJwtEs256.Create(
       secret, [jrcIssuer, jrcExpirationTime], [], 60), 100);
   finally
     secret.Free;
   end;
-  for i := 0 to high(OSSL_RSA) do
+  for i := 0 to high(JWT_RSA) do
   begin
-    j := OSSL_RSA[i].Create(_rsapriv, [jrcIssuer, jrcExpirationTime], [], 60);
+    j := JWT_RSA[i].Create(_rsapriv, [jrcIssuer, jrcExpirationTime], [], 60);
     {$ifdef USE_OPENSSL}
     test(j, {nofree=}false);
     {$else}

@@ -447,7 +447,7 @@ type
   end;
 
 const
-  CAA_HASH: array[TCryptAsymAlgo] of RawUtf8 = (
+  CAA_EVPMD: array[TCryptAsymAlgo] of RawUtf8 = (
     '',       // caaES256 will recognize '' as SHA-256 hash
     'SHA384', // caaES384
     'SHA512', // caaES512
@@ -491,7 +491,7 @@ const
 
 type
   /// abstract parent for OpenSSL JWT algorithms - never use this plain class!
-  TJwtOpenSsl = class(TJwtAbstract)
+  TJwtOpenSsl = class(TJwtAsym)
   protected
     fPrivateKey, fPublicKey: RawByteString;
     fPrivateKeyPassword, fPublicKeyPassword: SpiUtf8;
@@ -539,10 +539,8 @@ type
   // $ 100 EdDSA in 11.55ms i.e. 8.4K/s, aver. 115us
   TJwtAbstractOsl = class(TJwtOpenSsl)
   protected
-    fAsym: TCryptAsymAlgo;
-    procedure SetAlgorithms; virtual; // set fAsym+fHashAlgo+fHashAlgorithm
-    // should be properly overriden by non-abstract child - used to set fAsym
-    class function GetAlgorithm: TCryptAsymAlgo; virtual; abstract;
+    // fAlgorithm+fHashAlgorithm+fGenEvpType+fGenBitsOrCurve from GetAsymAlgo
+    procedure SetAlgorithms; virtual;
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
     // - the supplied key(s) could be in PEM or raw DER binary format
@@ -572,73 +570,73 @@ type
   TJwtAbstractOslClass = class of TJwtAbstractOsl;
 
   /// implements 'ES256' secp256r1 ECC algorithm over SHA-256 using OpenSSL
-  // - note that our TJwtES256 class is slightly faster on Linux x86_64:
-  // $ TJwtES256 pascal:   100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
-  // $ TJwtES256 OpenSSL:  100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
-  // $ TJwtES256Osl:       100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
-  TJwtES256Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  // - note that our TJwtEs256 class is slightly faster on Linux x86_64:
+  // $ TJwtEs256 pascal:   100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
+  // $ TJwtEs256 OpenSSL:  100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  // $ TJwtEs256Osl:       100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
+  TJwtEs256Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'ES384' secp384r1 ECC algorithm over SHA-384 using OpenSSL
-  TJwtES384Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtEs384Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'ES512' ecp521r1 ECC algorithm over SHA-512 using OpenSSL
-  TJwtES512Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtEs512Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'ES256K' secp256k1 ECC algorithm using OpenSSL
-  TJwtES256KOsl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtEs256KOsl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'RS256' RSA algorithm over SHA-256 using OpenSSL
-  TJwtRS256Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtRs256Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'RS384' RSA algorithm over SHA-384 using OpenSSL
-  TJwtRS384Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtRs384Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'RS512' RSA algorithm over SHA-512 using OpenSSL
-  TJwtRS512Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtRs512Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'PS256' RSA-PSS algorithm over SHA-256 using OpenSSL
-  TJwtPS256Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtPs256Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'PS384' RSA-PSS algorithm over SHA-384 using OpenSSL
-  TJwtPS384Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtPs384Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'PS512' RSA-PSS algorithm over SHA-512 using OpenSSL
-  TJwtPS512Osl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtPs512Osl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'EdDSA' Ed25519 algorithm using OpenSSL
-  TJwtEdDSAOsl = class(TJwtAbstractOsl)
-  protected
-    class function GetAlgorithm: TCryptAsymAlgo; override;
+  TJwtEddsaOsl = class(TJwtAbstractOsl)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
 
@@ -1656,16 +1654,18 @@ end;
 
 class function TJwtAbstractOsl.IsAvailable: boolean;
 begin
-  result := OpenSslSupports(GetAlgorithm);
+  result := OpenSslSupports(GetAsymAlgo);
 end;
 
 procedure TJwtAbstractOsl.SetAlgorithms;
+var
+  caa: TCryptAsymAlgo;
 begin
-  fAsym := GetAlgorithm; // virtual method
-  fAlgorithm := CAA_JWT[fAsym];
-  fHashAlgorithm := CAA_HASH[fAsym];
-  fGenEvpType := CAA_EVPTYPE[fAsym];
-  fGenBitsOrCurve := CAA_BITSORCURVE[fAsym];
+  caa := GetAsymAlgo; // call overriden method
+  fAlgorithm := CAA_JWT[caa];
+  fHashAlgorithm := CAA_EVPMD[caa];
+  fGenEvpType := CAA_EVPTYPE[caa];
+  fGenBitsOrCurve := CAA_BITSORCURVE[caa];
 end;
 
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
@@ -1706,80 +1706,57 @@ begin
 end;
 
 
-
-{ TJwtES256Osl }
-
-class function TJwtES256Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtEs256Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaES256;
 end;
 
-{ TJwtES384Osl }
-
-class function TJwtES384Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtEs384Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaES384;
 end;
 
-{ TJwtES512Osl }
-
-class function TJwtES512Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtEs512Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaES512;
 end;
 
-{ TJwtES256KOsl }
-
-class function TJwtES256KOsl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtEs256KOsl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaES256K;
 end;
 
-{ TJwtRS256Osl }
-
-class function TJwtRS256Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtRs256Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaRS256;
 end;
 
-{ TJwtRS384Osl }
-
-class function TJwtRS384Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtRs384Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaRS384;
 end;
 
-{ TJwtRS512Osl }
-
-class function TJwtRS512Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtRs512Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaRS512;
 end;
 
-{ TJwtPS256Osl }
-
-class function TJwtPS256Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtPs256Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaPS256;
 end;
 
-{ TJwtPS384Osl }
-
-class function TJwtPS384Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtPs384Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaPS384;
 end;
 
-{ TJwtPS512Osl }
-
-class function TJwtPS512Osl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtPs512Osl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaPS512;
 end;
 
-{ TJwtEdDSAOsl }
-
-class function TJwtEdDSAOsl.GetAlgorithm: TCryptAsymAlgo;
+class function TJwtEddsaOsl.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaEdDSA;
 end;
@@ -1821,7 +1798,7 @@ constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
   if not OpenSslSupports(fOsa) then
     raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, name]);
-  fDefaultHashAlgorithm := CAA_HASH[fOsa];
+  fDefaultHashAlgorithm := CAA_EVPMD[fOsa];
   fEvpType := CAA_EVPTYPE[fOsa];
   fBitsOrCurve := CAA_BITSORCURVE[fOsa];
   inherited Create(name); // also register it to GlobalCryptAlgo main list
@@ -1967,7 +1944,7 @@ type
 constructor TCryptCertAlgoOpenSsl.Create(osa: TCryptAsymAlgo);
 begin
   fOsa := osa;
-  fHash := OpenSslGetMd(CAA_HASH[osa], 'TCryptCertAlgoOpenSsl.Create');
+  fHash := OpenSslGetMd(CAA_EVPMD[osa], 'TCryptCertAlgoOpenSsl.Create');
   fEvpType := CAA_EVPTYPE[osa];
   fBitsOrCurve := CAA_BITSORCURVE[osa];
   Create('x509-' + LowerCase(CAA_JWT[osa]));

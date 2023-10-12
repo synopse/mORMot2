@@ -2343,17 +2343,31 @@ const
   /// the JWT algorithm names according to our known asymmetric algorithms
   // - as implemented e.g. by TJwtAbstractOsl
   CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
-    'ES256',  // caaES256
-    'ES384',  // caaES384
-    'ES512',  // caaES512
-    'ES256K', // caaES256K
-    'RS256',  // caaRS256
-    'RS384',  // caaRS384
-    'RS512',  // caaRS512
-    'PS256',  // caaPS256
-    'PS384',  // caaPS384
-    'PS512',  // caaPS512
-    'EdDSA'); // caaEdDSA
+    'ES256',      // caaES256
+    'ES384',      // caaES384
+    'ES512',      // caaES512
+    'ES256K',     // caaES256K
+    'RS256',      // caaRS256
+    'RS384',      // caaRS384
+    'RS512',      // caaRS512
+    'PS256',      // caaPS256
+    'PS384',      // caaPS384
+    'PS512',      // caaPS512
+    'EdDSA');     // caaEdDSA
+
+  /// the THashAlgo according to our known asymmetric algorithms
+  CAA_HF: array[TCryptAsymAlgo] of THashAlgo = (
+    hfSHA256,     // caaES256
+    hfSHA384,     // caaES384
+    hfSHA512,     // caaES512
+    hfSHA256,     // caaES256K
+    hfSHA256,     // caaRS256
+    hfSHA384,     // caaRS384
+    hfSHA512,     // caaRS512
+    hfSHA256,     // caaPS256
+    hfSHA384,     // caaPS384
+    hfSHA512,     // caaPS512
+    hfSHA512);    // caaEdDSA - SHA-512 is included in the algorithm
 
   /// the known asymmetric algorithms which implement ECC cryptography
   CAA_ECC = [caaES256, caaES384, caaES512, caaES256K, caaEdDSA];
@@ -2420,6 +2434,7 @@ const
 // - e.g. 112 for RSA-2048, 128 for ECC-256
 function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
 
+function ToText(a: TCryptAsymAlgo): PShortString; overload;
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
@@ -6880,6 +6895,11 @@ begin
         else
           result := 256; // the lower RS256 hash has 256-bit of security anyway
     end;
+end;
+
+function ToText(a: TCryptAsymAlgo): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TCryptAsymAlgo), ord(a));
 end;
 
 function ToText(r: TCryptCertRevocationReason): PShortString;

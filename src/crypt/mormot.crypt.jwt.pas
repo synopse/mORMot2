@@ -151,7 +151,7 @@ type
   // - to represent claims securely between two parties, as defined in industry
   // standard @http://tools.ietf.org/html/rfc7519
   // - you should never use this abstract class directly, but e.g. TJwtHS256,
-  // TJwtHS384, TJwtHS512 or TJwtES256 inherited classes
+  // TJwtHS384, TJwtHS512 or TJwtEs256 inherited classes
   // - for security reasons, one inherited class is implementing a single
   // algorithm, as is very likely to be the case on production: you pickup one
   // "alg", then you stick to it; if your server needs more than one algorithm
@@ -293,7 +293,7 @@ type
     /// delay of optional in-memory cache of Verify() TJwtContent
     // - equals 0 by default, i.e. cache is disabled
     // - may be useful if the signature process is very resource consumming
-    // (e.g. for TJwtES256 or even HMAC-SHA-256) - see also CacheResults
+    // (e.g. for TJwtEs256 or even HMAC-SHA-256) - see also CacheResults
     // - each time this property is assigned, internal cache content is flushed
     property CacheTimeoutSeconds: integer
       read fCacheTimeoutSeconds write SetCacheTimeoutSeconds;
@@ -310,6 +310,13 @@ type
 
   /// class-reference type (metaclass) of a JWT algorithm process
   TJwtAbstractClass = class of TJwtAbstract;
+
+   /// abstract parent class for implementing JWT with asymmetric cryptography
+  TJwtAsym = class(TJwtAbstract)
+  public
+    /// returns the algorithm used for compute the JWT digital signature
+    class function GetAsymAlgo: TCryptAsymAlgo; virtual; abstract;
+  end;
 
   /// implements JSON Web Tokens using 'none' algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.6
@@ -548,11 +555,11 @@ type
   // under x86) you may enable CacheTimeoutSeconds
   // - will use the OpenSSL library if available - about 5 times faster than
   // our pascal/asm code - here are some numbers on x86_64:
-  // $ TJwtES256 pascal:  100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
-  // $ TJwtES256 OpenSSL: 100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
-  // - our direct OpenSSL access is even slightly faster than TJwtES256Osl:
-  // $ TJwtES256Osl:      100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
-  TJwtES256 = class(TJwtAbstract)
+  // $ TJwtEs256 pascal:  100 ES256 in 33.57ms i.e. 2.9K/s, aver. 335us
+  // $ TJwtEs256 OpenSSL: 100 ES256 in 6.90ms i.e. 14.1K/s, aver. 69us
+  // - our direct OpenSSL access is even slightly faster than TJwtEs256Osl:
+  // $ TJwtEs256Osl:      100 ES256 in 8.64ms i.e. 11.3K/s, aver. 86us
+  TJwtEs256 = class(TJwtAsym)
   protected
     fCertificate: TEccCertificate;
     fVerify: TEcc256r1VerifyAbstract; // includes pre-computed public key
@@ -578,6 +585,8 @@ type
       aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
+    /// overriden to return caaES256
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
     /// access to the associated TEccCertificate instance
     // - which may be a TEccCertificateSecret for Compute() private key
     property Certificate: TEccCertificate
@@ -592,13 +601,12 @@ type
 
 type
   /// abstract parent for JSON Web Tokens using our mormot.crypt.rsa unit
-  // - inherited TJwtRS256/TJwtRS384/TJwtRS512 classes implement proper
+  // - inherited TJwtRs256/TJwtRs384/TJwtRs512 classes implement proper
   // RS256/RS384/RS512 algorithms as defined in https://jwt.io
-  TJwtRsa = class(TJwtAbstract)
+  TJwtRsa = class(TJwtAsym)
   protected
     fRsa: TRsa;
     fHash: THashAlgo;
-    procedure SetAlgorithm; virtual; abstract;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
       var jwt: TJwtContent); override;
@@ -628,26 +636,25 @@ type
   TJwtRsaClass = class of TJwtRsa;
 
   /// implements 'RS256' RSA algorithm over SHA-256
-  // - you may consider faster TJwtRS256Osl from mormot.crypt.openssl instead
-  TJwtRS256 = class(TJwtRsa)
-  protected
-    procedure SetAlgorithm; override;
+  // - you may consider faster TJwtRs256Osl from mormot.crypt.openssl instead
+  TJwtRs256 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'RS384' RSA algorithm over SHA-384
-  // - you may consider faster TJwtRS384Osl from mormot.crypt.openssl instead
-  TJwtRS384 = class(TJwtRsa)
-  protected
-    procedure SetAlgorithm; override;
+  // - you may consider faster TJwtRs384Osl from mormot.crypt.openssl instead
+  TJwtRs384 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
   /// implements 'RS512' RSA algorithm over SHA-512
-  // - you may consider faster TJwtRS512Osl from mormot.crypt.openssl instead
-  TJwtRS512 = class(TJwtRsa)
-  protected
-    procedure SetAlgorithm; override;
+  // - you may consider faster TJwtRs512Osl from mormot.crypt.openssl instead
+  TJwtRs512 = class(TJwtRsa)
+  public
+    class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
-
 
 
 implementation
@@ -1410,9 +1417,9 @@ end;
 
 { ************** JWT Implementation of ES256 Algorithm }
 
-{ TJwtES256 }
+{ TJwtEs256 }
 
-constructor TJwtES256.Create(aCertificate: TEccCertificate; aClaims: TJwtClaims;
+constructor TJwtEs256.Create(aCertificate: TEccCertificate; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
@@ -1425,7 +1432,7 @@ begin
   fVerify := TEcc256r1Verify.Create(fCertificate.Content.Head.Signed.PublicKey);
 end;
 
-destructor TJwtES256.Destroy;
+destructor TJwtEs256.Destroy;
 begin
   if fOwnCertificate then
     fCertificate.Free;
@@ -1433,7 +1440,7 @@ begin
   inherited;
 end;
 
-procedure TJwtES256.CheckSignature(const headpayload: RawUtf8;
+procedure TJwtEs256.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var jwt: TJwtContent);
 var
   sha: TSha256;
@@ -1447,7 +1454,12 @@ begin
     jwt.result := jwtValid;
 end;
 
-function TJwtES256.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+class function TJwtEs256.GetAsymAlgo: TCryptAsymAlgo;
+begin
+  result := caaES256;
+end;
+
+function TJwtEs256.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
   sha: TSha256;
   hash: TSha256Digest;
@@ -1472,9 +1484,18 @@ constructor TJwtRsa.Create(const aKey: RawByteString; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aIDObfuscationKeyNewKdf: integer);
+var
+  a: TCryptAsymAlgo;
 begin
-  SetAlgorithm;
-  fRsa := TRsa.Create;
+  a := GetAsymAlgo;
+  fAlgorithm := CAA_JWT[a];
+  fHash := CAA_HF[a];
+  case a of
+    caaRS256 .. caaRS512:
+      fRsa := TRsa.Create;
+  else
+    raise EJwtException.CreateUtf8('%.Create with %', [self, ToText(a)^]);
+  end;
   try
     if aKey <> '' then
       // try as private key, then as public key
@@ -1515,7 +1536,7 @@ begin
     raise ERsaException.CreateUtf8(
       '%.ComputeSignature expects to hold a private key', [self]);
   h.Full(fHash, pointer(headpayload), length(headpayload), dig);
-  sig := fRsa.Sign(@dig.b, fHash); // sign = encrypt with private key
+  sig := fRsa.Sign(@dig.b, fHash); // = encrypt with private key
   if sig = '' then
     raise ERsaException.CreateUtf8(
       '%.ComputeSignature: %.Sign failed', [self, fRsa]);
@@ -1540,30 +1561,19 @@ begin
 end;
 
 
-{ TJwtRs256 }
-
-procedure TJwtRS256.SetAlgorithm;
+class function TJwtRs256.GetAsymAlgo: TCryptAsymAlgo;
 begin
-  fHash := hfSHA256;
-  fAlgorithm := 'RS256';
+  result := caaRS256;
 end;
 
-
-{ TJwtRs384 }
-
-procedure TJwtRS384.SetAlgorithm;
+class function TJwtRs384.GetAsymAlgo: TCryptAsymAlgo;
 begin
-  fHash := hfSHA384;
-  fAlgorithm := 'RS384';
+  result := caaRS384;
 end;
 
-
-{ TJwtRs512 }
-
-procedure TJwtRS512.SetAlgorithm;
+class function TJwtRs512.GetAsymAlgo: TCryptAsymAlgo;
 begin
-  fHash := hfSHA512;
-  fAlgorithm := 'RS512';
+  result := caaRS512;
 end;
 
 
