@@ -3730,6 +3730,26 @@ begin
       c.Free;
     end;
   end;
+  // validate RSA-PSS padding
+  c := TRsaPss.Create;
+  try
+    Check(c.LoadFromPrivateKeyDer(bin)); // just reuse previous RSA keys
+    CheckEqual(c.ModulusBits, 2048);
+    CheckEqual(c.ModulusLen, 256);
+    Check(c.HasPublicKey);
+    Check(c.HasPrivateKey);
+    Check(c.CheckPrivateKey);
+    CheckEqual(length(hash), SizeOf(TSha256Digest));
+    CheckHash(hash, $401CD1EB);
+    signed := c.Sign(pointer(hash), hfSHA256);
+    CheckEqual(length(signed), c.ModulusLen, 'signpss');
+    Check(c.Verify(pointer(hash), hfSHA256, signed), 'verifpps');
+    encrypted := c.Seal(bin); // bin is typically > 1KB long
+    Check(encrypted <> '', 'Seal');
+    Check(c.Open(encrypted) = bin, 'Open');
+  finally
+    c.Free;
+  end;
 end;
 
 const

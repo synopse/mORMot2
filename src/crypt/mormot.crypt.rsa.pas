@@ -500,6 +500,7 @@ type
   /// main RSA processing class for both public or private key
   // - supports PEM/DER persistence, and can Generate a new key pair
   // - holds all its PBigInt values in its parent TRsaContext
+  // - uses regular RSASSA-PKCS1-v1_5 encoding - see TRsaPss for RSASSA-PSS
   // - note that only Verify() and Sign() methods are thread-safe
   TRsa = class(TRsaContext)
   protected
@@ -508,9 +509,8 @@ type
     fModulusLen, fModulusBits: integer;
     /// compute the Chinese Remainder Theorem (CRT) for RSA sign/decrypt
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
-    // two virtual methods implementing default PKCS#1.5 RSA padding
-    function DoUnPad(p: PByteArray; verify: boolean): RawByteString; virtual;
-    function DoPad(p: pointer; n: integer; sign: boolean): RawByteString; virtual;
+    function Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
+    function Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
   public
     /// intitialize the RSA key context
     constructor Create; override;
@@ -576,31 +576,33 @@ type
     /// low-level thread-safe PKCS#1.5 buffer Decryption
     // - Input should have ModulusLen bytes of data
     // - returns decrypted buffer without PKCS#1.5 padding, '' on error
-    function BufferDecrypt(Input: pointer): RawByteString;
+    function Pkcs1Decrypt(Input: pointer): RawByteString;
     /// low-level thread-safe PKCS#1.5 buffer Verification
     // - Input should have ModulusLen bytes of data
     // - returns decrypted signature without PKCS#1.5 padding, '' on error
-    function BufferVerify(Input: pointer): RawByteString;
+    function Pkcs1Verify(Input: pointer): RawByteString;
     /// low-level thread-safe PKCS#1.5 buffer Encryption
     // - InputLen should be < to ModulusLen - 11 bytes for proper padding
     // - returns encrypted buffer with PKCS#1.5 padding, '' on error
-    function BufferEncrypt(Input: pointer; InputLen: integer): RawByteString;
+    function Pkcs1Encrypt(Input: pointer; InputLen: integer): RawByteString;
     /// low-level thread-safe PKCS#1.5 buffer Signature
     // - InputLen should be < to ModulusLen - 11 bytes for proper padding
     // - returns the encrypted signature with PKCS#1.5 padding, '' on error
-    function BufferSign(Input: pointer; InputLen: integer): RawByteString;
+    function Pkcs1Sign(Input: pointer; InputLen: integer): RawByteString;
     /// verification of a RSA binary signature with the current Public Key
     // - this method is thread-safe but blocking from several threads
-    function Verify(Dig: pointer; DigAlgo: THashAlgo;
+    function Verify(Hash: pointer; HashAlgo: THashAlgo;
       const Signature: RawByteString): boolean; overload;
     /// verification of a RSA binary signature with the current Public Key
     // - this method is thread-safe but blocking from several threads
-    function Verify(Dig, Sign: pointer; DigLen, SignLen: integer;
-      AlgorithmOid: PRawUtf8 = nil): boolean; overload; virtual;
+    // - virtual method which may be overriden e.g. in TRsaPss inherited class
+    function Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
+      SigLen: integer): boolean; overload; virtual;
     /// compute a RSA binary signature with the current Private Key
     // - returns the encoded signature or '' on error
     // - this method is thread-safe but blocking from several threads
-    function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
+    // - virtual method which may be overriden e.g. in TRsaPss inherited class
+    function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; virtual;
     /// encrypt a message using the given Cipher and the stored public key
     // - follow the EVP_SealInit/EVP_SealFinal encoding from OpenSSL and its
     // EVP_PKEY.RsaSeal() wrapper from mormot.lib.openssl11
@@ -649,6 +651,29 @@ type
     property ModulusBits: integer
       read fModulusBits;
   end;
+
+  /// RSA processing class using Probabilistic Signature Scheme (PSS) signatures
+  // - the RSASSA-PSS signature scheme is more secure than RSASSA-PKCS1-v1_5
+  // - PSS encoding, originally invented by Bellare and Rogaway, is randomized
+  // thereby producing a different value of signature each time
+  TRsaPss = class(TRsa)
+  public
+    /// verification of a RSA binary signature with the current Public Key
+    // - overriden method using the RSASSA-PSS signature scheme
+    // - our implementation uses the same THashAlgo for its internal encoding,
+    // e.g. its MGF1 function, as recommended by RFC 3447 8.1 to prevent
+    // hash function substitution
+    // - this method is thread-safe but blocking from several threads
+    function Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
+      SigLen: integer): boolean; override;
+    /// compute a RSA binary signature with the current Private Key
+    // - overriden method using the RSASSA-PSS signature scheme
+    // - returns the encoded signature or '' on error
+    // - our implementation uses the same THashAlgo for its internal encoding
+    // - this method is thread-safe but blocking from several threads
+    function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; override;
+  end;
+
 
 const
   /// the OID of a RSA encryption public key (PKCS#1)
@@ -2594,7 +2619,7 @@ begin
   WipeReleased; // anti-forensic measure
 end;
 
-function TRsa.DoUnPad(p: PByteArray; verify: boolean): RawByteString;
+function TRsa.Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
 var
   count, padding: integer;
 begin
@@ -2634,7 +2659,7 @@ begin
   FastSetRawByteString(result, @p[count], fModulusLen - count);
 end;
 
-function TRsa.DoPad(p: pointer; n: integer; sign: boolean): RawByteString;
+function TRsa.Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
 var
   padding: integer;
   i: PtrInt;
@@ -2668,7 +2693,7 @@ begin
   MoveFast(p^, r[padding + 1], n);
 end;
 
-function TRsa.BufferDecrypt(Input: pointer): RawByteString;
+function TRsa.Pkcs1Decrypt(Input: pointer): RawByteString;
 var
   enc, dec: PBigInt;
   exp: RawByteString;
@@ -2689,10 +2714,10 @@ begin
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := DoUnPad(pointer(exp), {verify=}false);
+  result := Pkcs1UnPad(pointer(exp), {verify=}false);
 end;
 
-function TRsa.BufferVerify(Input: pointer): RawByteString;
+function TRsa.Pkcs1Verify(Input: pointer): RawByteString;
 var
   enc, dec: PBigInt;
   exp: RawByteString;
@@ -2714,10 +2739,10 @@ begin
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := DoUnPad(pointer(exp), {verify=}true);
+  result := Pkcs1UnPad(pointer(exp), {verify=}true);
 end;
 
-function TRsa.BufferEncrypt(Input: pointer; InputLen: integer): RawByteString;
+function TRsa.Pkcs1Encrypt(Input: pointer; InputLen: integer): RawByteString;
 var
   dec: PBigInt;
   exp: RawByteString;
@@ -2727,7 +2752,7 @@ begin
      not HasPublicKey then
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
-  exp := DoPad(Input, InputLen, {sign=}false);
+  exp := Pkcs1Pad(Input, InputLen, {sign=}false);
   // encrypt with the RSA public key
   fSafe.Lock;
   try
@@ -2739,7 +2764,7 @@ begin
   end;
 end;
 
-function TRsa.BufferSign(Input: pointer; InputLen: integer): RawByteString;
+function TRsa.Pkcs1Sign(Input: pointer; InputLen: integer): RawByteString;
 var
   dec: PBigInt;
   exp: RawByteString;
@@ -2749,7 +2774,7 @@ begin
      not HasPrivateKey then
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
-  exp := DoPad(Input, InputLen, {sign=}true);
+  exp := Pkcs1Pad(Input, InputLen, {sign=}true);
   // encrypt the signature with the RSA Private Key
   fSafe.Lock;
   try
@@ -2760,41 +2785,43 @@ begin
   end;
 end;
 
-function TRsa.Verify(Dig: pointer; DigAlgo: THashAlgo;
+function TRsa.Verify(Hash: pointer; HashAlgo: THashAlgo;
   const Signature: RawByteString): boolean;
-var
-  oid: RawUtf8;
 begin
-  result := Verify(Dig, pointer(Signature),
-                   HASH_SIZE[DigAlgo], length(Signature), @oid) and
-            (oid = ASN1_OID_HASH[DigAlgo]);
+  result := Verify(Hash, pointer(Signature), HashAlgo, length(Signature));
 end;
 
-function TRsa.Verify(Dig, Sign: pointer; DigLen, SignLen: integer;
-  AlgorithmOid: PRawUtf8): boolean;
+function TRsa.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
+  SigLen: integer): boolean;
 var
-  verif, digest: RawByteString;
+  verif, digest, oid: RawByteString;
   p: integer;
 begin
-  // decode the supplied value using the stored public key
+  // this virtual method implements RSASSA-PKCS1-v1_5 signature scheme
+  // 1. decode the supplied value using the stored public key
   result := false;
-  if SignLen <> fModulusLen then
+  if SigLen <> fModulusLen then
     exit; // the signature is a RSA BigInt by definition
-  verif := BufferVerify(Sign);
+  verif := Pkcs1Verify(Sig);
   if verif = '' then
     exit; // invalid decrypted signature or no public key
-  // parse the ASN.1 sequence to extract the stored hash and its algo oid
+  // 2. parse the ASN.1 sequence to extract the stored hash and its algo oid
   p := 1;
-  if (AsnNext(p, verif) = ASN1_SEQ) and  // DigestInfo
-     (AsnNext(p, verif) = ASN1_SEQ) and  // AlgorithmIdentifier
-     (AsnNext(p, verif, pointer(AlgorithmOid)) = ASN1_OBJID) then
-    case AsnNextRaw(p, verif, digest) of
-      ASN1_NULL: // optional Algorithm Parameters
-        result := (AsnNextRaw(p, verif, digest) = ASN1_OCTSTR) and
-                  CompareBuf(digest, Dig, DigLen);
-      ASN1_OCTSTR:
-        result := CompareBuf(digest, Dig, DigLen);
-    end;
+  if (AsnNext(p, verif) <> ASN1_SEQ) or  // DigestInfo
+     (AsnNext(p, verif) <> ASN1_SEQ) or  // AlgorithmIdentifier
+     (AsnNext(p, verif, @oid) <> ASN1_OBJID) or
+     (oid <> ASN1_OID_HASH[HashAlgo]) then
+    exit;
+  case AsnNextRaw(p, verif, digest) of
+    ASN1_NULL: // optional Algorithm Parameters
+      if AsnNextRaw(p, verif, digest) <> ASN1_OCTSTR then
+        exit;
+    ASN1_OCTSTR:
+      ;
+  else
+    exit;
+  end;
+  result := CompareBuf(digest, Hash, HASH_SIZE[HashAlgo]);
 end;
 
 function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
@@ -2802,7 +2829,8 @@ var
   seq: TAsnObject;
   h: RawByteString;
 begin
-  // create the ASN.1 sequence of the hash to be encoded
+  // this virtual method implements RSASSA-PKCS1-v1_5 signature scheme
+  // 1. create the ASN.1 sequence of the hash to be encoded
   FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
   seq := AsnSeq([
            AsnSeq([
@@ -2811,8 +2839,8 @@ begin
            ]),
            Asn(ASN1_OCTSTR, [h])
          ]);
-  // sign it using the stored private key
-  result := BufferSign(pointer(seq), length(seq));
+  // 2. sign it using the stored private key
+  result := Pkcs1Sign(pointer(seq), length(seq));
 end;
 
 function TRsa.Seal(const Message: RawByteString;
@@ -2876,7 +2904,7 @@ begin
   try
     TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
-    enckey := BufferEncrypt(@key, AesBits shr 3);
+    enckey := Pkcs1Encrypt(@key, AesBits shr 3);
     head.encryptedkeylen := length(enckey);
     // encrypt the message
     a := Cipher.Create(key, AesBits);
@@ -2920,7 +2948,7 @@ begin
   if msglen < msgpos + head^.plainlen then
     exit; // avoid buffer overflow on malformatted/forged input
   // decrypt the ephemeral key, then the message
-  key := BufferDecrypt(@input[SizeOf(head^)]);
+  key := Pkcs1Decrypt(@input[SizeOf(head^)]);
   if key <> '' then
     try
       if length(key) = AesBits shr 3 then
@@ -2939,6 +2967,206 @@ begin
     end;
 end;
 
+
+{ TRsaPss }
+
+procedure RsaPssComputeSaltedHash(mHash, Salt: pointer; HashAlgo: THashAlgo;
+  HashLen: integer; out Dest: THash512Rec);
+var
+  hasher: TSynHasher;
+  zero: Int64;
+begin
+  // compute Hash( (0x)00 00 00 00 00 00 00 00 || mHash || salt )
+  hasher.Init(HashAlgo);
+  zero := 0;
+  hasher.Update(@zero, SizeOf(zero));
+  hasher.Update(mHash, HashLen);
+  hasher.Update(Salt, HashLen);
+  hasher.Final(Dest);
+end;
+
+procedure RsaPssComputeMask(Hash, Db: PByteArray; HashAlgo: THashAlgo;
+  HashLen, DbLen, Bits: integer);
+var
+  dbmask: RawByteString;
+  hasher: TSynHasher;
+begin
+  dbmask := hasher.Mgf1(HashAlgo, Hash, HashLen, DbLen);
+  XorMemory(Db, pointer(dbmask), DbLen);
+  Bits := Bits and 7;
+  if Bits <> 0 then
+    Db[0] := Db[0] and ($ff shr (8 - Bits)); // reset leftmost bit
+end;
+
+function TRsaPss.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo; SigLen: integer): boolean;
+var
+  hlen, bits, len, dblen, padding: integer;
+  encoded, decoded: PBigInt;
+  exp: RawByteString;
+  e, h: PByteArray;
+  h2: THash512Rec;
+begin
+  // overriden method following RSASSA-PSS padding using HashAlgo
+  result := false;
+  hlen := HASH_SIZE[HashAlgo];
+  if (Hash = nil) or
+     (fModulusLen < hlen + 6) or
+     (cardinal(fModulusLen - SigLen) > 1) or
+     not HasPublicKey then
+    exit;
+  // decrypt the signature with the RSA Public Key
+  fSafe.Lock;
+  try
+    encoded := Load(Sig, fModulusLen);
+    CurrentModulo := rmM; // for ModPower()
+    decoded := ModPower(encoded, fE, nil); // calls encoded.Release
+    if decoded = nil then
+      exit;
+    exp := decoded.Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
+  end;
+  if exp = '' then
+    exit;
+  // RFC 3447 9.1.2 verification operation
+  e := pointer(exp);
+  bits := fModulusBits - 1;
+  if (bits and 7) = 0 then
+    if e[0] = 0 then
+      inc(PByte(e)) // just ignore leading 0
+    else
+      exit;
+  len := (bits + 7) shr 3;
+  if (len < hlen + 2) or
+     (e[len - 1] <> $bc) or
+     (e[0] and ($ff shl (bits and 7)) <> 0) then
+    exit;
+  dblen := len - hlen - 1;
+  h := @e[dblen];
+  RsaPssComputeMask(h, e, HashAlgo, hlen, dblen, bits);
+  padding := 0;
+  while e[padding] = 0 do
+  begin
+    inc(padding);
+    if padding = dblen then
+      exit;
+  end;
+  if e[padding] <> 1 then
+    exit;
+  RsaPssComputeSaltedHash(Hash, {salt=}@e[padding + 1], HashAlgo, hlen, h2);
+  result := CompareMem(@h2, h, hlen);
+end;
+
+function TRsaPss.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
+var
+  bits, len, hlen, pslen, dblen: integer;
+  salt: THash512;
+  encoded: TBytes;
+  dec: PBigInt;
+  h: THash512Rec;
+begin
+  // overriden method following RSASSA-PSS padding using HashAlgo
+  result := '';
+  hlen := HASH_SIZE[HashAlgo];
+  if (Hash = nil) or
+     (fModulusLen < hlen + 6) or
+     not HasPrivateKey then
+    exit;
+  if (ModulusBits + 7) shr 3 <> ModulusLen then
+    raise ERsaException.CreateUtf8('%.DoPad: m=p*q is weak', [self]);
+  bits := ModulusBits - 1;
+  len := (bits + 7) shr 3; // could be one less than ModulusLen
+  // RFC 3447 9.1.1 encoding operation with saltlen = hashlen
+  RandomBytes(@salt, hlen); // Lecuyer is good enough for public salt
+  RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
+  pslen := len - (hlen * 2 + 2);
+  if pslen < 0 then
+    exit;
+  dblen := pslen + hlen + 1;
+  SetLength(encoded, len); // fills with 0
+  encoded[pslen] := 1;
+  MoveFast(salt, encoded[pslen + 1], hlen);
+  RsaPssComputeMask(@h, pointer(encoded), HashAlgo, hlen, dblen, bits);
+  MoveFast(h, encoded[dblen], hlen);
+  encoded[len - 1] := $bc;
+  // encrypt the signature with the RSA Private Key
+  fSafe.Lock;
+  try
+    dec := Load(pointer(encoded), len);
+    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{
+function TRsaPss.UnPad(p: PByteArray; verify: boolean): RawByteString;
+var
+  bits, len: integer;
+  h: PHash256;
+begin
+  // virtual method following RSASSA-PSS padding over SHA-256
+  result := '';
+  if p = nil then
+    exit;
+  bits := fModulusBits - 1;
+  if (bits and 7) = 0 then
+    if PByte(p)^ = 0 then
+      inc(PByte(p)) // just ignore leading 0
+    else
+      exit;
+  len := (bits + 7) shr 3;
+  if (len < SizeOf(h^) + 2) or
+     (p[len - 1] <> $bc) then
+    exit;
+  // RFC 3447 9.1.1 decoding operation
+  h := @p[len - (SizeOf(h^) + 1)];
+
+
+end;
+
+function TRsaPss.DoPad(p: pointer; n: integer; sign: boolean): RawByteString;
+var
+  bits, len, pslen, dblen: integer;
+  m: TPssMac;
+  h: THash256;
+  sha: TSha256;
+  dbmask: RawByteString;
+  res: PByteArray absolute result;
+begin
+  // virtual method following RSASSA-PSS padding over SHA-256
+  result := '';
+  if (p = nil) or
+     (fModulusLen < SizeOf(h) + 6) or
+     not HasPublicKey then
+    exit;
+  if (ModulusBits + 7) shr 3 <> ModulusLen then
+    raise ERsaException.CreateUtf8('%.DoPad: m=p*q is weak', [self]);
+  bits := ModulusBits - 1;
+  len := (bits + 7) shr 3; // could be one less than ModulusLen
+  // RFC 3447 9.1.1 encoding operation
+  m.Zeros := 0;
+  sha.Full(p, n, m.Hash);
+  RandomBytes(@m.Salt, SizeOf(m.Salt)); // Lecuyer is good as public salt
+  sha.Full(@m, SizeOf(m), h);
+  pslen := len - (SizeOf(m.Salt) + SizeOf(h) + 2);
+  dblen := pslen + (SizeOf(h) + 1);
+  if pslen < 0 then
+    exit;
+  SetLength(result, len);
+  FillCharFast(res[0], pslen, 0);
+  res[pslen] := 1;
+  PHash256(@res[pslen + 1])^ := m.Salt;
+  dbmask := mgf1sha256(h, dblen);
+  XorMemory(res, pointer(dbmask), dblen);
+  bits := bits and 7;
+  if bits <> 0 then
+    res[0] := res[0] and ($ff shr (8 - bits)); // reset leftmost bit
+  PHash256(@res[dblen])^ := h;
+  res[len - 1] := $bc;
+end;
+}
 
 { *********** Registration of our RSA Engine to the TCryptAsym Factory }
 

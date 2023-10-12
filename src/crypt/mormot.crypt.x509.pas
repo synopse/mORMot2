@@ -1247,7 +1247,6 @@ function TXPublicKey.Verify(Sig: pointer; Dig: THash512Rec;
   SigLen, DigLen: integer; Hash: THashAlgo): boolean;
 var
   eccsig: TEccSignature;
-  oid: RawUtf8;
 begin
   result := false;
   if (self <> nil) and
@@ -1255,12 +1254,11 @@ begin
     case fAlgo of
       xkaRsa:
         // RSA digital signature verification (thread-safe but blocking)
-        result := fRsa.Verify(@Dig, Sig, DigLen, SigLen, @oid) and
-                  (oid = ASN1_OID_HASH[Hash]);
+        result := fRsa.Verify(@Dig, Sig, Hash, SigLen);
       xkaEcc256:
         if DerToEcc(Sig, SigLen, eccsig) then
           // secp256r1 digital signature verification
-          result := fEcc.Verify(dig.Lo, eccsig); // thread-safe
+          result := fEcc.Verify(Dig.Lo, eccsig); // thread-safe
     end;
 end;
 
