@@ -2359,7 +2359,7 @@ function THttpServerRequestAbstract.RouteInt64(const Name: RawUtf8;
 var
   v: PIntegerArray;
 begin
-  v := GetRouteValuePosLen(Name);
+  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
   if v <> nil then
   begin
     SetInt64(PUtf8Char(pointer(Url)) + v[0], Value{%H-}); // will end at #0 or &
@@ -2374,7 +2374,7 @@ function THttpServerRequestAbstract.RouteUtf8(const Name: RawUtf8;
 var
   v: PIntegerArray;
 begin
-  v := GetRouteValuePosLen(Name);
+  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
   if v <> nil then
   begin
     if v[1] <> 0 then
@@ -2390,10 +2390,9 @@ function THttpServerRequestAbstract.RouteEquals(
 var
   v: PIntegerArray;
 begin
-  v := GetRouteValuePosLen(Name);
+  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
   if v <> nil then
-    result := (v[1] = length(ExpectedValue)) and
-      CompareMemFixed(pointer(ExpectedValue), @PByteArray(Url)[v[0]], v[1])
+    result := CompareBuf(ExpectedValue, @PByteArray(Url)[v[0]], v[1])
   else
     result := false;
 end;

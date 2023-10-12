@@ -709,8 +709,7 @@ end;
 
 function TSynTestCase.CheckEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
-  result := (length(a) = length(b)) and
-            CompareMem(pointer(a), pointer(b), length(a));
+  result := CompareBuf(a, b);
   CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
@@ -728,8 +727,7 @@ end;
 
 function TSynTestCase.CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
-  result := (length(a) <> length(b)) or
-            not CompareMem(pointer(a), pointer(b), length(a));
+  result := not CompareBuf(a, b);
   CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 

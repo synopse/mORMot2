@@ -1807,7 +1807,7 @@ begin
   if count = 0 then
     result := nil // on error
   else
-    DynArrayFakeLength(result, count); // no resize
+    DynArrayFakeLength(result, count); // no realloc
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;

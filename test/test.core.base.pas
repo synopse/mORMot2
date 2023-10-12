@@ -4638,7 +4638,7 @@ procedure TTestCoreBase._UTF8;
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
-    CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
+    CheckUtf8(CompareBuf(W, A), 'CP%', [CP]);
   end;
 
   procedure CheckTrimCopy(const S: RawUtf8; start, count: PtrInt);
@@ -5120,7 +5120,7 @@ begin
     SU := Utf8ToSynUnicode(U);
     Check(length(SU) = length(Unic) shr 1);
     if SU <> '' then
-      Check(CompareMem(pointer(SU), pointer(Unic), length(SU)));
+      Check(CompareMem(pointer(SU), pointer(Unic), length(Unic)), 'Utf8ToSU');
     WA := IsWinAnsi(pointer(Unic));
     Check(IsWinAnsi(pointer(Unic), length(Unic) shr 1) = WA);
     Check(IsWinAnsiU(pointer(U)) = WA);
@@ -5170,7 +5170,7 @@ begin
     Check(L <= length(U));
     CheckEqual(ConvertCaseUtf8(Pointer(Up2), NormToUpperByte), L);
     if Up <> '' then
-      Check(CompareMem(Pointer(Up), pointer(Up2), L));
+      Check(CompareBuf(Up, Up2));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then
        // initial text above is WinAnsiString (CP 1252)
       CheckEqual(StringToUtf8(Utf8ToString(U)), U, '1252');

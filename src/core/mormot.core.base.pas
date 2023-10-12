@@ -2746,7 +2746,7 @@ procedure FillZeroSmall(P: pointer; Length: PtrInt);
 /// binary comparison of buffers, returning <0, 0 or >0 results
 // - caller should ensure that P1<>nil, P2<>nil and L>0
 // - on x86_64, will use a fast SSE2 asm version of the C function memcmp()
-// (which is also used by CompareMem)
+// (which is also used by CompareMem and CompareBuf)
 // - on other platforms, run a simple but efficient per-byte comparison
 function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
   {$ifndef CPUX64} {$ifdef HASINLINE} inline; {$endif} {$endif}
@@ -2755,6 +2755,15 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 // - tuned asm for x86, call MemCmpSse2 for x64, or fallback to tuned pascal
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
+
+/// overload wrapper of CompareMem() to compare a RawByteString vs a memory buffer
+function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// overload wrapper of CompareMem() to compare two RawByteString variables
+// - won't involve any code page - so may be safer e.g. on FPC
+function CompareBuf(const P1, P2: RawByteString): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef HASINLINE}
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
@@ -10858,7 +10867,7 @@ function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
 begin
-  // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
+  // this awfull code compiles well under FPC and Delphi on 32-bit and 64-bit
   Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt) * 2]); // = 2*PtrInt end
   if Length >= PtrInt(PtrUInt(P1)) then
   begin
@@ -10963,6 +10972,22 @@ begin
 end;
 
 {$endif ASMX86}
+
+function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): boolean;
+begin
+  result := (length(P1) = P2Len) and
+            CompareMem(pointer(P1), P2, P2Len);
+end;
+
+function CompareBuf(const P1, P2: RawByteString): boolean;
+var
+  l: PtrInt;
+begin
+  l := length(P1);
+  result := (pointer(P1) = pointer(P2)) or
+            ((l = length(P2)) and
+             CompareMem(pointer(P1), pointer(P2), l));
+end;
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 var

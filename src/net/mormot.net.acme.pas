@@ -660,8 +660,7 @@ begin
   if aUriLen > 0 then
     for i := 1 to length(fChallenges) do
     begin
-      if (aUriLen = length(c^.Token)) and
-        mormot.core.base.CompareMem(pointer(c^.Token), aUri, aUriLen) then
+      if CompareBuf(c^.Token, aUri, aUriLen) then
       begin
         if Assigned(fLog) then
           fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.Token], self);

@@ -2205,7 +2205,7 @@ var
     check(info.EndOfObject = eof);
     check(info.Json^ = next);
     check(info.ValueLen = length(v));
-    check(CompareMem(info.Value, pointer(v), info.ValueLen));
+    check(CompareBuf(v, info.Value, info.ValueLen));
   end;
 
 begin
@@ -2478,17 +2478,17 @@ begin
     check(PInteger(J)^ and $00ffffff = JSON_BASE64_MAGIC_C);
     RB := BlobToRawBlob(pointer(J));
     check(length(RB) = length(U)); // RB=U is buggy under FPC :(
-    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    check(CompareBuf(RB, U));
     Base64MagicToBlob(@J[4], K);
     RB := BlobToRawBlob(pointer(K));
     check(length(RB) = length(U));
-    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    check(CompareBuf(RB, U));
     BlobToRawBlob(pointer(K), RB, length(K));
     check(length(RB) = length(U));
-    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    check(CompareBuf(RB, U));
     RB := BlobToRawBlob(K);
     check(length(RB) = length(U));
-    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    check(CompareBuf(RB, U));
 {    J := TRestServer.JsonEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JsonDecode(J)),err),r)); }
     with TJsonWriter.CreateOwnedStream do
