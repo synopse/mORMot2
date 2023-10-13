@@ -555,10 +555,15 @@ var
   {$ifdef OSPOSIX}
   i: PtrInt;
   n: RawUtf8;
+  start, stop: Int64;
   {$endif OSPOSIX}
 begin
   result := '';
   fn := NormalizeFileName(Utf8ToString(FileName));
+  if fn = '' then
+    exit;
+  while fn[1] in ['/', '\'] do
+    delete(fn, 1, 1); // trim any leading root (we start from fFileFolder anyway)
   if SafeFileName(fn) and
      ((ttoAllowSubFolders in fOptions) or
       (Pos(PathDelim, result) = 0)) then
@@ -571,10 +576,16 @@ begin
         if fFileNames = nil then
         begin
           // use direct FpOpendir syscalls instead of slower FindFirst
+          QueryPerformanceMicroSeconds(start);
           fFileNames := PosixFileNames(fFileFolder, ttoAllowSubFolders in fOptions);
           QuickSortRawUtf8(fFileNames, length(fFileNames), nil, @StrIComp);
+          QueryPerformanceMicroSeconds(stop);;
+          if ttoLowLevelLog in fOptions then
+            fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
+              [length(fFileNames), fFileFolder, MicroSecToString(stop - start)],
+              self);
         end;
-        n := StringReplaceChars(FileName, InvertedPathDelim, PathDelim);
+        StringToUtf8(fn, n);
         i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
           pointer(fFileNames), high(fFileNames), pointer(n),@StrIComp);
         if i < 0 then
