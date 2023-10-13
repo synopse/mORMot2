@@ -356,13 +356,15 @@ begin
   fContext.Sock.SetReceiveTimeout(1000); // check fTerminated every second
   repeat
     // try to receive a frame on this UDP/IP link
+    PInteger(fContext.Frame)^ := 0;
     len := fContext.Sock.RecvFrom(fContext.Frame, fFrameMaxSize, fContext.Remote);
+    if len > 0 then
+      PByteArray(fContext.Frame)^[len] := 0; // 0 ended for StrLen() safety
     if Terminated then
       break;
     if ttoLowLevelLog in fOwner.fOptions then
-      fLog.Log(sllTrace, 'DoExecute recv % %/%',
-        [ToText(fContext.Frame^, fContext.FrameLen),
-         fContext.CurrentSize, fFileSize], self);
+      fLog.Log(LOG_TRACEWARNING[len <= 0], 'DoExecute recv % %/%',
+        [ToText(fContext.Frame^, len), fContext.CurrentSize, fFileSize], self);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
@@ -372,7 +374,7 @@ begin
       nr := NetLastError;
       if nr <> nrRetry then
       begin
-        fLog.Log(sllTrace, 'DoExecute recvfrom failed: %', [ToText(nr)^], self);
+        fLog.Log(sllError, 'DoExecute recvfrom failed: %', [ToText(nr)^], self);
         break;
       end;
       if mormot.core.os.GetTickCount64 < fContext.TimeoutTix then
@@ -380,10 +382,14 @@ begin
         continue;
       // retry after timeout
       if fContext.RetryCount = 0 then
+      begin
+        fLog.Log(sllError, 'DoExecute retried %: abort',
+          [Plural('time', fOwner.MaxRetry)], self);
         break;
+      end;
       dec(fContext.RetryCount);
       // will send again the previous ACK/DAT frame
-      fLog.Log(sllTrace, 'DoExecute timeout: resend %/%',
+      fLog.Log(sllWarning, 'DoExecute timeout: resend %/%',
         [fContext.CurrentSize, fFileSize], self);
       MoveFast(fLastSent^, fContext.Frame^, fLastSentLen); // restore frame
       fContext.FrameLen := fLastSentLen;
@@ -403,6 +409,7 @@ begin
       end;
       MoveFast(fContext.Frame^, fLastSent^, fContext.FrameLen); // backup
       fLastSentLen := fContext.FrameLen;
+      fContext.RetryCount := fOwner.MaxRetry; // reset RetryCount on next block
     end;
     // send next ACK or DAT block(s)
     if ttoLowLevelLog in fOwner.fOptions then
@@ -416,7 +423,6 @@ begin
         [ToText(nr)^, ToText(fContext.Frame^)], self);
       break;
     end;
-    fContext.RetryCount := fOwner.MaxRetry;
   until Terminated;
   // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
@@ -685,6 +691,7 @@ begin
   if len < 4 then
     exit;
   // validate incoming frame
+  fFrame^[len] := 0; // ensure always 0 ended for StrLen() safety
   fLog.Log(sllTrace, 'OnFrameReceived: % %',
     [remote.IPShort, ToText(PTftpFrame(fFrame)^, len)], self);
   op := ToOpCode(PTftpFrame(fFrame)^);

@@ -310,6 +310,20 @@ var
   c: TTftpOpcode;
   seq: integer;
 begin
+  if len <= 0 then
+  begin
+    if len < 0 then
+      result := 'error'     // -1
+    else
+      result := 'shutdown'; // 0
+    exit;
+  end;
+  dec(len, SizeOf(Frame.Opcode));
+  if len < 0 then
+  begin
+    result := 'no opcode';
+    exit;
+  end;
   c := ToOpcode(frame);
   result := TFTP_OPCODE[c];
   if c = toUndefined then
@@ -317,7 +331,6 @@ begin
     AppendShortCardinal(frame.Opcode, result);
     exit;
   end;
-  dec(len, SizeOf(Frame.Opcode));
   seq := swap(frame.Sequence);
   case c of
     toRrq,
@@ -336,7 +349,8 @@ begin
     toDat,
     toAck:
       begin
-        /// 'DAT 123,len' / 'ACK 123'
+        /// 'DAT #123,len' / 'ACK #123'
+        AppendShortChar('#', result);
         AppendShortCardinal(seq, result);
         dec(len, SizeOf(Frame.Sequence));
         if (len >= 0) and
