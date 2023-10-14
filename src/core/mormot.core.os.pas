@@ -3705,7 +3705,7 @@ function PosixParseHex32(p: PAnsiChar): integer;
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
 function WaitReadPending(fd, timeout: integer): boolean;
 
-/// POSIX-only function calling directly getdents64 syscall
+/// POSIX-only function calling directly getdents/getdents64 syscall
 // - could be used when FindFirst/FindNext are an overkill, e.g. to quickly
 // cache all file names of a folder in memory, optionally with its sub-folders
 // - warning: the file system has to support d_type (e.g. btrfs, ext2-ext4) so

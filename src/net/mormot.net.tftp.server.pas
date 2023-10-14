@@ -581,7 +581,7 @@ begin
       try
         if fFileNames = nil then
         begin
-          // use direct FpOpendir syscalls instead of slower FindFirst
+          // use direct getdents aggregated syscalls instead of slower FindFirst
           QueryPerformanceMicroSeconds(start);
           fFileNames := PosixFileNames(fFileFolder, ttoAllowSubFolders in fOptions);
           QuickSortRawUtf8(fFileNames, length(fFileNames), nil, @StrIComp);
@@ -589,7 +589,7 @@ begin
           if ttoLowLevelLog in fOptions then
             fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
               [length(fFileNames), fFileFolder, MicroSecToString(stop - start)],
-              self);
+              self); // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
         end;
         StringToUtf8(fn, n);
         i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
