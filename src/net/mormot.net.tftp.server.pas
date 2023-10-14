@@ -568,7 +568,8 @@ begin
   fn := NormalizeFileName(Utf8ToString(FileName));
   if fn = '' then
     exit;
-  while fn[1] in ['/', '\'] do
+  while (fn[1] = '/') or
+        (fn[1] = '\') do
     delete(fn, 1, 1); // trim any leading root (we start from fFileFolder anyway)
   if SafeFileName(fn) and
      ((ttoAllowSubFolders in fOptions) or
