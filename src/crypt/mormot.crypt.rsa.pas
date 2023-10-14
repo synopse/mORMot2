@@ -264,6 +264,15 @@ type
   /// store Normal, P and Q pre-computed modulos as PBigInt
   TRsaModulos = array[TRsaModulo] of PBigInt;
 
+  /// how TRsaContext.Allocate should create the new allocated block
+  // - memory block is filled with 0 as by default raZeroed is defined
+  // - by default, a capacity overhead is allowed to the returned memory buffer,
+  // to avoid heap reallocation during computation - you can set raExactSize if
+  // you know the buffer size won't change (e.g. from TRsaContext.LoadPermanent)
+  TRsaAllocate = set of (
+    raZeroed,
+    raExactSize);
+
   /// store one Big Integer computation context for RSA
   // - will maintain its own set of reference-counted Big Integer values,
   // for fast thread-local reuse and automated safe anti-forensic wipe
@@ -294,7 +303,7 @@ type
     destructor Destroy; override;
     /// allocate a new zeroed Big Integer value of the specified precision
     // - n is the number of TBitInt.Value[] items to initialize
-    function Allocate(n: integer; nozero: boolean = false): PBigint;
+    function Allocate(n: integer; opt: TRsaAllocate = [raZeroed]): PBigint;
     /// allocate a new Big Integer value from a 16/32-bit unsigned integer
     function AllocateFrom(v: HalfUInt): PBigInt;
     /// allocate a new Big Integer value from a ToHexa dump
@@ -304,9 +313,10 @@ type
     /// fill all released values with zero as anti-forensic safety measure
     procedure WipeReleased;
     /// allocate and import a Big Integer value from a big-endian binary buffer
-    function Load(data: PByteArray; bytes: integer): PBigInt; overload;
+    function Load(data: PByteArray; bytes: integer;
+      opt: TRsaAllocate = []): PBigInt; overload;
     /// allocate and import a Big Integer value from a big-endian binary buffer
-    function Load(const data: RawByteString): PBigInt; overload;
+    function LoadPermanent(const data: RawByteString): PBigInt; overload;
     /// pre-compute some of the internal constant slots for a given modulo
     procedure SetModulo(b: PBigInt; modulo: TRsaModulo);
     /// release the internal constant slots for a given modulo
@@ -433,7 +443,7 @@ const
     6, 2,16,20,10, 2,12,12,18,10,12, 6, 2,10, 2, 6,10,18, 2,12, 6, 4, 6, 2);
 
 /// compute the base-10 decimal text from a Big Integer binary buffer
-// - wrap PBigInt.ToText from Load(der) in a temporary TRsaContext
+// - wrap PBigInt.ToText from LoadPermanent(der) in a temporary TRsaContext
 function BigIntToText(const der: TCertDer): RawUtf8;
 
 /// branchless comparison of two Big Integer values
@@ -744,9 +754,9 @@ var
 begin
   with TRsaContext.Create do
     try
-      b := Load(der);
+      b := LoadPermanent(der);
       result := b.ToText({noclone=}true);
-      b.Release;
+      b.ResetPermanentAndRelease;
     finally
       Free;
     end;
@@ -758,23 +768,29 @@ begin
   result := (bytes + (HALF_BYTES - 1)) div HALF_BYTES;
 end;
 
-procedure ValuesSwap(value: PHalfUIntArray; data: PByteArray; bytes: integer);
+procedure ValuesSwap(value: PHalfUInt; data: PByte; bytes: integer);
 var
-  i, o: PtrInt;
-  j: byte;
+  v, j: cardinal;
 begin
   j := 0;
-  o := 0;
-  for i := bytes - 1 downto 0 do
-  begin
-    inc(Value[o], HalfUInt(data[i]) shl j);
-    inc(j, 8);
-    if j = HALF_BITS then
-    begin
-      j := 0;
-      inc(o);
-    end;
-  end;
+  v := 0;
+  inc(data, bytes);
+  if bytes > 0 then
+    repeat
+      dec(data);
+      inc(v, cardinal(data^) shl j);
+      inc(j, 8);
+      if j = HALF_BITS then
+      begin
+        j := 0;
+        value^ := v;
+        inc(value);
+        v := 0;
+      end;
+      dec(bytes);
+    until bytes = 0;
+  if j <> 0 then
+    value^ := v;
 end;
 
 
@@ -1085,30 +1101,33 @@ end;
 
 function TBigInt.Clone: PBigInt;
 begin
-  result := Owner.Allocate(Size, {nozero=}true);
+  result := Owner.Allocate(Size, []);
   MoveFast(Value[0], result^.Value[0], Size * HALF_BYTES);
 end;
 
 procedure TBigInt.Save(data: PByteArray; bytes: integer; andrelease: boolean);
 var
   i, k: PtrInt;
-  c: cardinal;
-  j: byte;
+  c, j: cardinal;
 begin
   FillCharFast(data^, bytes, 0);
   k := bytes - 1;
   for i := 0 to Size - 1 do
-  begin
-    c := Value[i];
-    if k >= 0 then
-      for j := 0 to HALF_BYTES - 1 do
-      begin
-        data[k] := c shr (j * 8);
+    if k < 0 then
+      break
+    else
+    begin
+      c := Value[i];
+      j := HALF_BYTES;
+      repeat
+        data[k] := c;
+        c := c shr 8;
         dec(k);
         if k < 0 then
           break;
-      end;
-  end;
+        dec(j);
+      until j = 0;
+    end;
   if andrelease then
     Release;
 end;
@@ -1209,7 +1228,7 @@ var
   v: PtrUInt;
   n: integer;
 begin
-  result := Owner.Allocate(Size + 1, {nozero=}true);
+  result := Owner.Allocate(Size + 1, []);
   a := pointer(Value);
   r := pointer(result^.Value);
   v := 0;
@@ -1398,7 +1417,7 @@ begin
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value-1
   r := w.Clone;
-  a := Owner.Allocate(Size, {nozero=}true);
+  a := Owner.Allocate(Size, []);
   try
     // compute s = lsb(w) and r = w shr s
     s := r.FindMinBit;
@@ -1657,7 +1676,7 @@ begin
   n := v^.Size + 1;
   orgsiz := Size;
   quo := Owner.Allocate(m + 1);
-  tmp := Owner.Allocate(n, {nozero=}true);
+  tmp := Owner.Allocate(n, []);
   v.Trim;
   d := RSA_RADIX div (PtrUInt(v^.Value[v^.Size - 1]) + 1);
   u := Clone;
@@ -1915,7 +1934,7 @@ end;
 
 function TRsaContext.AllocateFrom(v: HalfUInt): PBigInt;
 begin
-  result := Allocate(1, {nozero=}true);
+  result := Allocate(1, []);
   result^.Value[0] := v;
 end;
 
@@ -1924,7 +1943,7 @@ var
   n: cardinal;
 begin
   n := length(hex) shr 1;
-  result := Allocate(n div HALF_BYTES, {nozero=}true);
+  result := Allocate(n div HALF_BYTES, []);
   if not HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
     Release([@result]);
 end;
@@ -1933,7 +1952,7 @@ const
   // fair enough overallocation
   RSA_DEFAULT_ALLOCATE = RSA_DEFAULT_GENERATION_BITS shr HALF_SHR;
 
-function TRsaContext.Allocate(n: integer; nozero: boolean): PBigint;
+function TRsaContext.Allocate(n: integer; opt: TRsaAllocate): PBigint;
 begin
   if self = nil then
     raise ERsaException.CreateUtf8('TRsa.Allocate(%): Owner=nil', [n]);
@@ -1962,25 +1981,30 @@ begin
   result^.Size := n;
   if result^.Value = nil then
   begin
-    result^.Capacity := NextGrow(Max(RSA_DEFAULT_ALLOCATE, n)); // over-alloc
+    if raExactSize in opt then
+      result^.Capacity := n // e.g. from LoadPermanent()
+    else
+      result^.Capacity := NextGrow(Max(RSA_DEFAULT_ALLOCATE, n)); // over-alloc
     GetMem(result^.Value, result^.Capacity * HALF_BYTES);
   end;
   result^.RefCnt := 1;
   result^.fNextFree := nil;
-  if not nozero then
+  if raZeroed in opt then
     FillCharFast(result^.Value[0], n * HALF_BYTES, 0); // zeroed
   inc(ActiveCount);
 end;
 
-function TRsaContext.Load(data: PByteArray; bytes: integer): PBigInt;
+function TRsaContext.Load(data: PByteArray; bytes: integer;
+  opt: TRsaAllocate): PBigInt;
 begin
-  result := Allocate(ValuesSize(bytes));
-  ValuesSwap(result.Value, data, bytes);
+  result := Allocate(ValuesSize(bytes), opt - [raZeroed]);
+  ValuesSwap(pointer(result.Value), pointer(data), bytes);
 end;
 
-function TRsaContext.Load(const data: RawByteString): PBigInt;
+function TRsaContext.LoadPermanent(const data: RawByteString): PBigInt;
 begin
-  result := Load(pointer(data), length(data));
+  result := Load(pointer(data), length(data), [raExactSize]);
+  result.RefCnt := -1;
 end;
 
 procedure TRsaContext.SetModulo(b: PBigInt; modulo: TRsaModulo);
@@ -2381,7 +2405,7 @@ begin
   // setup local variables
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
-  _e := Load(BIGINT_65537_BIN).SetPermanent; // most common exponent = 65537
+  _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
   _p := Allocate(ValuesSize(ModulusLen shr 1));
   _q := Allocate(_p.Size);
   _d := nil;
@@ -2463,10 +2487,10 @@ begin
       '%.LoadFromPublicKey: unexpected ModulusSize=% ExponentSize=%',
       [self, ModulusSize, ExponentSize]);
   fModulusLen := ModulusSize;
-  fM := Load(Modulus, ModulusSize).SetPermanent;
+  fM := Load(Modulus, ModulusSize, [raExactSize]).SetPermanent;
   fModulusBits := fM.BitCount;
   SetModulo(fM, rmM);
-  fE := Load(Exponent, ExponentSize).SetPermanent;
+  fE := Load(Exponent, ExponentSize, [raExactSize]).SetPermanent;
 end;
 
 function TRsa.LoadFromPublicKeyDer(const Der: TCertDer): boolean;
@@ -2521,12 +2545,12 @@ begin
   LoadFromPublicKeyBinary(
     pointer(PrivateKey.Modulus), pointer(PrivateKey.PublicExponent),
     length(PrivateKey.Modulus),  length(PrivateKey.PublicExponent));
-  fD := Load(PrivateKey.PrivateExponent).SetPermanent;
-  fP := Load(PrivateKey.Prime1).SetPermanent;
-  fQ := Load(PrivateKey.Prime2).SetPermanent;
-  fDP := Load(PrivateKey.Exponent1).SetPermanent;
-  fDQ := Load(PrivateKey.Exponent2).SetPermanent;
-  fQInv := Load(PrivateKey.Coefficient).SetPermanent;
+  fD := LoadPermanent(PrivateKey.PrivateExponent);
+  fP := LoadPermanent(PrivateKey.Prime1);
+  fQ := LoadPermanent(PrivateKey.Prime2);
+  fDP := LoadPermanent(PrivateKey.Exponent1);
+  fDQ := LoadPermanent(PrivateKey.Exponent2);
+  fQInv := LoadPermanent(PrivateKey.Coefficient);
   SetModulo(fP, rmP);
   SetModulo(fQ, rmQ);
 end;
