@@ -768,31 +768,6 @@ begin
   result := (bytes + (HALF_BYTES - 1)) div HALF_BYTES;
 end;
 
-procedure ValuesSwap(value: PHalfUInt; data: PByte; bytes: integer);
-var
-  v, j: cardinal;
-begin
-  j := 0;
-  v := 0;
-  inc(data, bytes);
-  if bytes > 0 then
-    repeat
-      dec(data);
-      inc(v, cardinal(data^) shl j);
-      inc(j, 8);
-      if j = HALF_BITS then
-      begin
-        j := 0;
-        value^ := v;
-        inc(value);
-        v := 0;
-      end;
-      dec(bytes);
-    until bytes = 0;
-  if j <> 0 then
-    value^ := v;
-end;
-
 
 { TBigInt }
 
@@ -1106,28 +1081,8 @@ begin
 end;
 
 procedure TBigInt.Save(data: PByteArray; bytes: integer; andrelease: boolean);
-var
-  i, k: PtrInt;
-  c, j: cardinal;
 begin
-  FillCharFast(data^, bytes, 0);
-  k := bytes - 1;
-  for i := 0 to Size - 1 do
-    if k < 0 then
-      break
-    else
-    begin
-      c := Value[i];
-      j := HALF_BYTES;
-      repeat
-        data[k] := c;
-        c := c shr 8;
-        dec(k);
-        if k < 0 then
-          break;
-        dec(j);
-      until j = 0;
-    end;
+  MoveSwap(pointer(data), pointer(Value), bytes);
   if andrelease then
     Release;
 end;
@@ -1997,8 +1952,8 @@ end;
 function TRsaContext.Load(data: PByteArray; bytes: integer;
   opt: TRsaAllocate): PBigInt;
 begin
-  result := Allocate(ValuesSize(bytes), opt - [raZeroed]);
-  ValuesSwap(pointer(result.Value), pointer(data), bytes);
+  result := Allocate(ValuesSize(bytes), opt + [raZeroed]); // raZeroed needed
+  MoveSwap(pointer(result.Value), pointer(data), bytes);
 end;
 
 function TRsaContext.LoadPermanent(const data: RawByteString): PBigInt;

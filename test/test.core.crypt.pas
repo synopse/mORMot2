@@ -3302,9 +3302,9 @@ begin
       txt := b^.ToText;
       CheckEqual(txt, UInt32ToUtf8(rnd));
       bin := b^.Save;
-      s := c.Load(bin);
+      s := c.LoadPermanent(bin);
       CheckEqual(txt, s.ToText);
-      s.Release;
+      s.ResetPermanentAndRelease;
       CheckEqual(b^.IntMod(rnd), 0);
       for j := 1 to 10000 do
         CheckEqual(b^.IntMod(j), rnd mod HalfUInt(j));
