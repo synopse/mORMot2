@@ -586,7 +586,7 @@ begin
           QueryPerformanceMicroSeconds(start);
           fFileNames := PosixFileNames(fFileFolder, ttoAllowSubFolders in fOptions);
           QuickSortRawUtf8(fFileNames, length(fFileNames), nil, @StrIComp);
-          QueryPerformanceMicroSeconds(stop);;
+          QueryPerformanceMicroSeconds(stop);
           if ttoLowLevelLog in fOptions then
             fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
               [length(fFileNames), fFileFolder, MicroSecToString(stop - start)],
