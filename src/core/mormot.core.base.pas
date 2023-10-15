@@ -3038,8 +3038,8 @@ procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 
 /// copy one memory buffer to another, swapping the bytes order
 // - used e.g. by TBigInt.Load/Save to follow DER big-endian encoding
-// - warning: s and d should not overlap
-procedure MoveSwap(d, s: PByte; n: PtrInt);
+// - warning: src and dst should not overlap
+procedure MoveSwap(dst, src: PByte; n: PtrInt);
 
 /// low-level wrapper to add a callback to a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -8730,15 +8730,15 @@ begin
   crc128c(@e, SizeOf(e), _EntropyGlobal.b); // simple diffusion to move forward
 end;
 
-procedure MoveSwap(d, s: PByte; n: PtrInt);
+procedure MoveSwap(dst, src: PByte; n: PtrInt);
 begin
   if n <= 0 then
     exit;
-  inc(d, n);
+  inc(dst, n);
   repeat
-    dec(d);
-    d^ := s^;
-    inc(s);
+    dec(dst);
+    dst^ := src^;
+    inc(src);
     dec(n);
   until n = 0;
 end;

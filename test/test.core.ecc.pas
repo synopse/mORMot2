@@ -304,7 +304,7 @@ begin
     check(chain.AddSelfSigned(secret) >= 0);
     check(chain.IsValidRaw(secret.Content, true) = ecvValidSelfSigned);
     check(secret.Serial <> cert.Serial);
-    check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
+    checkEqual(secret.Serial, '29E3D71DC26C134A093BA1C22CFA2582');
     json1 := ObjectToJson(secret);
     check(json1 <> json2);
     json2 := PUBPRIVJSON + copy(PUBPRIV64, 1,
@@ -337,9 +337,11 @@ begin
     secret.Free;
     secret := TEccCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
       MYPRIVKEY_LEN, MYPRIVKEY_PASS, MYPRIVKEY_ROUNDS);
-    check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
-    check(chain.IsValidRaw(secret.Content, true, false) = ecvDeprecatedAuthority);
-    check(chain.IsValidRaw(secret.Content, true, true) = ecvValidSelfSigned);
+    checkHash(secret.ToJson, $ECCE6E1C);
+    checkEqual(secret.Serial, '29E3D71DC26C134A093BA1C22CFA2582');
+    // "ValidityStart":"2016-08-11","ValidityEnd":"2016-08-21"
+    check(chain.IsValidRaw(secret.Content, {igndate=}false) = ecvInvalidDate);
+    check(chain.IsValidRaw(secret.Content, {igndate=}true) = ecvValidSelfSigned);
     json2 := ObjectToJson(secret);
     check(json1 = json2);
     secret.Free;

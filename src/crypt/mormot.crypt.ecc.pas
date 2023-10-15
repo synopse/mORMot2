@@ -860,7 +860,8 @@ type
     fMaxVersion: byte;
     fIsValidCached: boolean;
     fIsValidCacheCount: integer;
-    fIsValidCache: THash128DynArray; // valid TEccCertificateContent.ComputeCrc128
+    fIsValidCacheSalt: RawByteString; // avoid flooding on forged input
+    fIsValidCache: THash128DynArray;  // low TEccCertificateContent.ComputeHash
     function GetCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlCount: integer;
@@ -903,7 +904,7 @@ type
     // - this method is thread-safe, since it makes a private copy of the key
     function GetKeyBySerial(const Serial: TEccCertificateID; Usage: TCryptCertUsages;
       out PublicKey: TEccPublicKey; Valid: TEccValidity = ecvUnknown;
-      TimeUtc: TDateTime = 0): TEccValidity;
+      TimeUtc: TDateTime = 0; IgnoreDate: boolean = false): TEccValidity;
     /// quickly check if a given certificate ID is part of the CRL
     // - will check the internal Certificate Revocation List and the current date
     // - returns crrNotRevoked is the serial is not known as part of the CRL
@@ -934,10 +935,12 @@ type
     // unless ignoreDate=TRUE), and validate the stored ECDSA signature
     // according to the public key of the associated signing authority (which
     // should be valid, and stored in Items[])
+    // - self-signed certificates should be registered with AddSelfSigned() or
+    // allowPlainSelfSigned will allow them even without AddSelfSigned()
     // - consider setting IsValidCached property to TRUE to reduce resource use
     // - this method is thread-safe, and not blocking
     function IsValidRaw(const content: TEccCertificateContent;
-      ignoreDate: boolean = false; allowSelfSigned: boolean = false;
+      ignoreDate: boolean = false; allowPlainSelfSigned: boolean = false;
       TimeUtc: TDateTime = 0): TEccValidity;
     /// check all stored certificates and their authorization chain
     // - returns nil if all items were valid
@@ -1136,9 +1139,9 @@ type
     property MaxVersion: byte
       read fMaxVersion write fMaxVersion;
     /// if the IsValid() calls should maintain a cache of all valid certificates
-    // - will use a naive but very efficient crc64c hashing of previous contents
-    // - since Ecc256r1Verify() is very demanding, such a cache may have a huge
-    // speed benefit if the certificates are about to be supplied several times
+    // - will store the low 128-bit of the SHA-256 hashing of verified contents
+    // - since Ecc256r1Verify() is demanding, such a cache may have a huge speed
+    // benefit if the certificates are about to be supplied several times
     // - is disabled by default, for paranoid safety
     property IsValidCached: boolean
       read fIsValidCached write SetIsValidCached;
@@ -3510,7 +3513,8 @@ end;
 
 constructor TEccCertificateChain.Create;
 begin
-  CreateVersion(2)
+  CreateVersion(2);
+  fIsValidCacheSalt := ToUtf8(RandomGuid); // avoid flooding on forged input
 end;
 
 constructor TEccCertificateChain.CreateFromJson(
@@ -3541,15 +3545,16 @@ begin
      (cert = nil) then
     result := ecvBadParameter
   else
-    result := IsValidRaw(cert.Content);
+    result := IsValidRaw(
+                cert.Content, {ignoredate=}false, {allowselfnotaddedyet=}false);
 end;
 
 function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
-  ignoreDate: boolean; allowSelfSigned: boolean; TimeUtc: TDateTime): TEccValidity;
+  ignoreDate, allowPlainSelfSigned: boolean; TimeUtc: TDateTime): TEccValidity;
 var
-  auth: TEccPublicKey;
+  authoritypublickey: TEccPublicKey;
   hash: THash256Rec;
-  crc: THash128Rec; // storing crc.Lo 128-bit of SHA-256 is enough
+  cached: THash128;
 begin
   result := ecvCorrupted;
   if not content.Check then
@@ -3564,30 +3569,32 @@ begin
     result := ecvValidSelfSigned
   else
     result := ecvValidSigned;
-  content.ComputeHash(hash.b); // sha-256 cryptographic hash
-  crc.b := hash.Lo;
+  content.ComputeHash(hash.b); // sha-256 of the certificate content
   if fIsValidCached then
   begin
-    crc.i0 := crc.i0 xor PtrInt(self); // to avoid flooding on forged input
+    cached := hash.Lo; // apply fIsValidCacheSalt and maybe AesNiHash128
+    DefaultHasher128(@cached, pointer(fIsValidCacheSalt), length(fIsValidCacheSalt));
     fSafe.ReadLock;
     try
-      if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @crc) >= 0 then
+      if Hash128Index(pointer(fIsValidCache), fIsValidCacheCount, @cached) >= 0 then
         exit; // 128-bit lower part of sha-256 is very unlikely to collide
     finally
       fSafe.ReadUnlock;
     end;
   end;
-  if allowSelfSigned and
+  if allowPlainSelfSigned and // = from AddSelfSigned() call
      (result = ecvValidSelfSigned) then
-    auth := content.Head.Signed.PublicKey
+    authoritypublickey := content.Head.Signed.PublicKey
   else
   begin
     result := GetKeyBySerial(content.Head.Signed.AuthoritySerial,
-                [cuCA, cuDigitalSignature], auth, result);
+                [cuCA, cuDigitalSignature], authoritypublickey, result,
+                EccToDateTime(content.Head.Signed.IssueDate));
     if not (result in ECC_VALIDSIGN) then
       exit; // ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked
   end;
-  if Ecc256r1Verify(auth, hash.b, content.Head.Signature) then
+  // if we reached here, the context and authority are correct -> check signature
+  if Ecc256r1Verify(authoritypublickey, hash.b, content.Head.Signature) then
   begin
     if fIsValidCached then
     begin
@@ -3595,7 +3602,7 @@ begin
       try
         if fIsValidCacheCount > 1024 then
           fIsValidCacheCount := 0; // time to flush the cache once reached 16KB
-        AddHash128(fIsValidCache, crc.b, fIsValidCacheCount);
+        AddHash128(fIsValidCache, cached, fIsValidCacheCount);
       finally
         fSafe.WriteUnlock;
       end;
@@ -3759,7 +3766,7 @@ end;
 
 function TEccCertificateChain.GetKeyBySerial(const Serial: TEccCertificateID;
   Usage: TCryptCertUsages; out PublicKey: TEccPublicKey; Valid: TEccValidity;
-  TimeUtc: TDateTime): TEccValidity;
+  TimeUtc: TDateTime; IgnoreDate: boolean): TEccValidity;
 var
   cert: TEccCertificate;
   now: TEccDate;
@@ -3771,7 +3778,8 @@ begin
       result := ecvUnknownAuthority
     else if Usage * cert.GetUsage = [] then
       result := ecvWrongUsage
-    else if not cert.fContent.CheckDate(@now, TimeUtc) then
+    else if not IgnoreDate and
+            not cert.fContent.CheckDate(@now, TimeUtc) then
       result := ecvDeprecatedAuthority
     else if (fCrl <> nil) and
             (FindRevoked(pointer(fCrl), length(fCrl), @Serial, now) <> crrNotRevoked) then
@@ -3815,8 +3823,8 @@ begin
   if (self = nil) or
      (cert = nil) or
      (cert.GetUsage * [cuCA, cuKeyCertSign, cuDigitalSignature] = []) or
-     (IsValidRaw(cert.fContent, {igndate=}true,
-                 {allowself=}expected = ecvValidSelfSigned) <> expected) then
+     (IsValidRaw(cert.fContent, {ignoredate=}true, // dates are checked per use
+        {allowselfnotaddedyet=}expected = ecvValidSelfSigned) <> expected) then
     exit;
   fSafe.WriteLock;
   try
@@ -4103,7 +4111,8 @@ begin
     result := ecvBadParameter
   else
   begin
-    result := GetKeyBySerial(sign.AuthoritySerial, [cuDigitalSignature], authkey);
+    result := GetKeyBySerial(sign.AuthoritySerial, [cuDigitalSignature],
+      authkey, ecvUnknown, EccToDateTime(sign.Date));
     if result in ECC_VALIDSIGN then
       result := sign.Verify(hash, authkey, result, TimeUtc);
   end;

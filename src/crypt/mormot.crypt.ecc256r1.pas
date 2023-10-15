@@ -435,7 +435,7 @@ type
     // - as stored in Head.CRC
     function ComputeCrc32: cardinal;
     /// compute the SHA-256 digest of the whole signed content
-    procedure ComputeHash(out hash: TSha256Digest);
+    procedure ComputeHash(out hash: TSha256Digest; const salt: RawByteString = '');
     /// serialize this certificate content as binary stream
     function SaveToStream(s: TStream): boolean;
     /// unserialize this certificate content from a binary stream
@@ -1884,11 +1884,13 @@ begin
     result := fnv32(result, @Info, Info.DataLen + 4);
 end;
 
-procedure TEccCertificateContent.ComputeHash(out hash: TSha256Digest);
+procedure TEccCertificateContent.ComputeHash(out hash: TSha256Digest;
+  const salt: RawByteString);
 var
   sha: TSha256;
 begin
   sha.Init;
+  sha.Update(salt);
   sha.Update(@Head.Signed, SizeOf(Head.Signed));
   if Head.Version > 1 then
     // include Info content to the SHA-2 digest
