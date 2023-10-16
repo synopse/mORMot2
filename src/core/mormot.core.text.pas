@@ -8871,7 +8871,7 @@ begin
   h := pointer(hex);
   tab := @ConvertHexToBin;
   repeat
-    if not HexaToByte(h, PByte(p)^, tab) then
+    if not HexaToByte(pointer(h), PByte(p)^, tab) then
       break; // invalid 'xx' pair - may be len < 2
     inc(p);
     inc(h, 2);
