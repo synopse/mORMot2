@@ -17844,12 +17844,6 @@ function X509_get0_trust_objects(x: PX509): Pstack_st_ASN1_OBJECT; cdecl;
 function X509_get0_reject_objects(x: PX509): Pstack_st_ASN1_OBJECT; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get0_reject_objects';
 
-function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED; cdecl;
-  external LIB_CRYPTO name _PU + 'd2i_X509_REVOKED';
-
-function i2d_X509_REVOKED(a: PX509_REVOKED; _out: PPByte): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'i2d_X509_REVOKED';
-
 function X509_REVOKED_it(): PASN1_ITEM; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_it';
 
