@@ -2651,9 +2651,7 @@ function TCryptStoreOpenSsl.Save: RawByteString;
 var
   x: PX509DynArray;
   crl: Pstack_st_X509_CRL;
-  rev: Pstack_st_X509_REVOKED;
-  r: PX509_REVOKED;
-  i, j: PtrInt;
+  i: PtrInt;
   tmp: TTextWriterStackBuffer;
 begin
   // since DER has no simple binary array format, use PEM serialization
@@ -2668,14 +2666,8 @@ begin
     crl := fStore.StackX509_CRL;
     for i := 0 to crl.Count - 1 do
     begin
-      rev := PX509_CRL(crl.Items[i]).Revoked;
-      for j := 0 to rev.Count - 1 do
-      begin
-        r := rev.Items[j];
-        //AddString(DerToPem(r.ToBinary, pemUnspecified)); raise EOpenSsl
-        AddShorter(CRLF);
-      end;
-      rev.Free;
+      AddString(PX509_CRL(crl.Items[i]).ToPem); // raise EOpenSsl (not signed)
+      AddShorter(CRLF);
     end;
     crl.Free;
     SetText(RawUtf8(result));
