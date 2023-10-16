@@ -1178,12 +1178,6 @@ begin
   ToHumanHex(result, @rnd, 20); // 20 bytes = 160-bit as a common size
 end;
 
-function HumanHexToBin(const hex: RawUtf8): RawByteString;
-begin
-  // reverse ToHumanHex() layout
-  result := HexToBin(StringReplaceAll(hex, ':', '')); // fast enough
-end;
-
 function CsvToDns(p: PUtf8Char): RawByteString;
 begin
   result := '';

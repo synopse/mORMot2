@@ -1998,6 +1998,13 @@ function HexToBin(const Hex: RawUtf8): RawByteString; overload;
 function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
   var Bin: RawByteString): boolean; overload;
 
+/// fast conversion from ToHumanHex() hexa chars into binary data
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean; overload;
+
+/// fast conversion from ToHumanHex() hexa chars into binary data
+function HumanHexToBin(const hex: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast conversion from binary data into hexa chars
 function BinToHex(const Bin: RawByteString): RawUtf8; overload;
 
@@ -8823,6 +8830,68 @@ begin
     Bin := '';
 end;
 
+function HexaToByte(P: PUtf8Char; var Dest: byte; tab: PByteArray): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var
+  b, c: byte;
+begin
+  b := tab[Ord(P[0]) + 256]; // + 256 for shl 4
+  if b <> 255 then
+  begin
+    c := tab[Ord(P[1])];
+    if c <> 255 then
+    begin
+      inc(b, c);
+      Dest := b;
+      result := true;
+      exit;
+    end;
+  end;
+  result := false; // mark error
+end;
+
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean;
+var
+  len: PtrInt;
+  h, p: PAnsiChar;
+  tab: PByteArray;
+begin
+  Bin := '';
+  result := false;
+  len := length(hex);
+  if len = 0 then
+    exit;
+  p := FastNewString(len shr 1, CP_RAWBYTESTRING); // maximum length
+  pointer(Bin) := p;
+  h := pointer(hex);
+  tab := @ConvertHexToBin;
+  repeat
+    if not HexaToByte(h, PByte(p)^, tab) then
+      break;
+    inc(p);
+    inc(h, 2);
+    dec(len, 2);
+    if len <= 0 then
+    begin
+      result := len = 0;
+      break;
+    end;
+    if h^ <> ':' then
+      continue;
+    inc(h);
+    dec(len);
+  until len = 0;
+  if result then
+    FakeLength(bin, p - pointer(bin))
+  else
+    Bin := '';
+end;
+
+function HumanHexToBin(const hex: RawUtf8): RawByteString;
+begin
+  HumanHexToBin(hex, result);
+end;
+
 function HexToBin(const Hex: RawUtf8): RawByteString;
 begin
   HexToBin(pointer(Hex), length(Hex), result);
@@ -9430,26 +9499,6 @@ begin
   result := GuidToRawUtf8(guid);
 end;
 {$endif UNICODE}
-
-function HexaToByte(P: PUtf8Char; var Dest: byte; tab: PByteArray): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-var
-  b, c: byte;
-begin
-  b := tab[Ord(P[0]) + 256]; // + 256 for shl 4
-  if b <> 255 then
-  begin
-    c := tab[Ord(P[1])];
-    if c <> 255 then
-    begin
-      inc(b, c);
-      Dest := b;
-      result := true;
-      exit;
-    end;
-  end;
-  result := false; // mark error
-end;
 
 function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
