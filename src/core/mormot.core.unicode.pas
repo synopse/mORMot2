@@ -1729,6 +1729,9 @@ procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
 // - specify a custom char set to be excluded, e.g. as [#0 .. ' ']
 function TrimChar(const text: RawUtf8; const exclude: TSynAnsicharSet): RawUtf8;
 
+/// returns the supplied text content, without one specified char
+function TrimOneChar(const text: RawUtf8; exclude: AnsiChar): RawUtf8;
+
 /// returns the supplied text content, without any other char than specified
 // - specify a custom char set to be included, e.g. as ['A'..'Z']
 function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
@@ -7550,6 +7553,35 @@ begin
       exit;
     end;
   result := text; // no exclude char found
+end;
+
+function TrimOneChar(const text: RawUtf8; exclude: AnsiChar): RawUtf8;
+var
+  first, len, i: PtrInt;
+  c: AnsiChar;
+  P: PAnsiChar;
+begin
+  len := length(text);
+  first := ByteScanIndex(pointer(text), len, ord(exclude));
+  if first < 0 then
+  begin
+    result := text; // no exclude char found
+    exit;
+  end;
+  FastSetString(result, nil, len - 1);
+  P := pointer(result);
+  MoveFast(pointer(text)^, P^, first);
+  inc(P, first);
+  for i := first + 1 to len do
+  begin
+    c := text[i];
+    if c <> exclude then
+    begin
+      P^ := c;
+      inc(P);
+    end;
+  end;
+  FakeSetLength(result, P - pointer(result));
 end;
 
 function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
