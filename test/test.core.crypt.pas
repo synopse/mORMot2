@@ -3143,12 +3143,17 @@ begin
       Check(st2.Verify(s, pointer(r), length(r)) = cvInvalidSignature, 's2b');
       inc(r[1]);
       Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
-      // validate CRL
+      // validate CRL on buffers (not OpenSSL)
       Check(st2.Revoke(c3, 0, crrWithdrawn));
       Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
       Check(st2.Revoke(c3, 0, crrNotRevoked));
       Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
     end;
+    // validate CRL on certificates
+    Check(st2.Revoke(c3, 0, crrWithdrawn));
+    Check(st2.IsRevoked(c3.GetSerial) = crrWithdrawn);
+    Check(st2.IsRevoked(c3) = crrWithdrawn);
+    // note: st2.Save fails with OpenSSL because the CRL is not signed
     // ensure new certs are not recognized by previous stores
     if st3 <> nil then
     begin

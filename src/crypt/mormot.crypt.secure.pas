@@ -2195,7 +2195,8 @@ type
     /// register a certificate in the internal certificate chain
     // - returns false e.g. if the certificate was not valid, or its serial was
     // already part of the internal list, or not of a compatible class
-    // - self-signed certificate could be included - but add them with caution
+    // - self-signed certificates could be included - but add them with caution
+    // because they will become root CA, or "trust anchors" in X.509 terminology
     // - the Certificate should have one of cuCA, cuDigitalSignature usages
     function Add(const cert: ICryptCert): boolean;
     /// load a register a certificate or certificate chain from a memory buffer
@@ -7733,7 +7734,7 @@ var
   bits: RawUtf8;
   version: integer;
 begin
-  // follow X509_print() OpenSSL formatting
+  // somewhat follows X509_print() OpenSSL formatting
   if (c.Usage <> []) or
      (c.SubjectID <> '') or
      (c.IssuerID <> '') then

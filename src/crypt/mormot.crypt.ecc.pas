@@ -1031,6 +1031,7 @@ type
     /// register a self-signed certificate in the internal certificate chain
     // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
     // fields matching Serial/Issuer, and should be used as "root" certificates
+    // (aka as "trust anchors" in X.509 terminology)
     // - returns -1 on error, e.g. if the certificate was not valid, if it has
     // no cuCA/cuDigitalSignature in its Usage, or its serial was already part
     // of the internal list
@@ -3694,6 +3695,7 @@ begin
     n := length(fCrl);
     if Reason = crrNotRevoked then
     begin
+      // remove from CRL list
       c := pointer(fCrl);
       dec(n);
       for i := 0 to n do
@@ -3710,6 +3712,7 @@ begin
     end
     else
     begin
+      // add to CRL list
       SetLength(fCrl, n + 1);
       if fCrl[n].From(Serial, RevocationDate, ord(Reason)) then
         result := true
