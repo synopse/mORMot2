@@ -15,6 +15,7 @@ uses
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.rtti,
+  mormot.core.datetime,
   mormot.crypt.core,
   mormot.crypt.openssl,
   mormot.crypt.secure,
@@ -3849,12 +3850,25 @@ const
     'siC94x9I5sQUdpYL9Py/IxiRxJzKSD2WlOsytKc='#13#10 +
     '-----END CERTIFICATE-----'#13#10;
 
+  _crl_pem = // from http://crl3.digicert.com/CloudflareIncECCCA-3.crl
+    '-----BEGIN X509 CRL-----'#13#10 +
+    'MIIBTDCB8wIBATAKBggqhkjOPQQDAjBKMQswCQYDVQQGEwJVUzEZMBcGA1UEChMQ'#13#10 +
+    'Q2xvdWRmbGFyZSwgSW5jLjEgMB4GA1UEAxMXQ2xvdWRmbGFyZSBJbmMgRUNDIENB'#13#10 +
+    'LTMXDTIzMTAxNjA0MDAyMFoXDTIzMTAyMzA0MDAyMFowRjAhAhALvx7d/AXWY+kC'#13#10 +
+    'OhO32r3mFw0yMzA2MjAyMjA4MjlaMCECEAjvt5OCw8Z/b6We0DwiL+wXDTIzMDYy'#13#10 +
+    'MDIyMTcwM1qgMDAuMB8GA1UdIwQYMBaAFKXON+rrsHUOlGeItEX62SQQh5YfMAsG'#13#10 +
+    'A1UdFAQEAgIFSDAKBggqhkjOPQQDAgNIADBFAiEA86qhZ80IYV7PqU79mz8T9Afp'#13#10 +
+    'b+30K8FXr3J7GyoEQDMCIH+7vnTK09Ryqvdp+p0OqLjLGen3So7Wy981pObr8FRE'#13#10 +
+    '-----END X509 CRL-----'#13#10;
+
 procedure TTestCoreCrypto._X509;
 var
   bin: RawByteString;
+  pem: RawUtf8;
   x, a: TX509;
   i: integer;
   nfo: TX509Parsed;
+  crl: TX509Crl;
   timer: TPrecisionTimer;
 begin
   {$ifdef OSWINDOWS}
@@ -4001,6 +4015,45 @@ begin
     CheckHash(ObjectToJson(x), $BBCBCFEB);
   finally
     x.Free;
+  end;
+  // validate our X.509 CRL class
+  crl := TX509Crl.Create;
+  try
+    Check(crl.SignatureAlgorithm = xsaNone);
+    Check(crl.LoadFromPem(_crl_pem));
+    Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
+    CheckEqual(DateTimeToIso8601Text(crl.ThisUpdate), '2023-10-16T04:00:20');
+    CheckEqual(DateTimeToIso8601Text(crl.NextUpdate), '2023-10-23T04:00:20');
+    CheckEqual(crl.CrlNumber, 1352);
+    CheckEqual(crl.AuthorityKeyIdentifier,
+      'a5:ce:37:ea:eb:b0:75:0e:94:67:88:b4:45:fa:d9:24:10:87:96:1f');
+    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked),
+      '0b:bf:1e:dd:fc:05:d6:63:e9:02:3a:13:b7:da:bd:e6,' +
+      '08:ef:b7:93:82:c3:c6:7f:6f:a5:9e:d0:3c:22:2f:ec');
+    CheckEqual(crl.IssuerDN,
+      'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
+    pem := DerToPem(crl.SaveToDer, pemCrl);
+    CheckEqual(pem, _crl_pem);
+    crl.AfterModified; // force regenerate DER
+    pem := DerToPem(crl.SaveToDer, pemCrl);
+    CheckEqual(pem, _crl_pem);
+  finally
+    crl.Free;
+  end;
+  crl := TX509Crl.Create;
+  try
+    Check(crl.LoadFromPem(pem));
+    Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
+    CheckEqual(DateTimeToIso8601Text(crl.ThisUpdate), '2023-10-16T04:00:20');
+    CheckEqual(DateTimeToIso8601Text(crl.NextUpdate), '2023-10-23T04:00:20');
+    CheckEqual(crl.CrlNumber, 1352);
+    CheckEqual(crl.AuthorityKeyIdentifier,
+      'a5:ce:37:ea:eb:b0:75:0e:94:67:88:b4:45:fa:d9:24:10:87:96:1f');
+    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked),
+      '0b:bf:1e:dd:fc:05:d6:63:e9:02:3a:13:b7:da:bd:e6,' +
+      '08:ef:b7:93:82:c3:c6:7f:6f:a5:9e:d0:3c:22:2f:ec');
+  finally
+    crl.Free;
   end;
 end;
 
