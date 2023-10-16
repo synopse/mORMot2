@@ -99,6 +99,10 @@ const
   // - but TFTP_BLKSIZE_MTU is recommended, to avoid IP fragmentation
   TFTP_BLKSIZE_MAX = 65464;
 
+  /// maximum allowed TTftpContext.TransferSize value, if 'tsize" option value
+  // - 1 GB of data seems fair enough over TFTP
+  TFTP_TSIZE_MAX = 1 shl 30;
+
   /// default TTftpContext.TransferSize value, if no "tsize" option was defined
   TFTP_TSIZE_UNKNOWN = cardinal(-1);
 
@@ -501,7 +505,7 @@ begin
           if not GetNextCardinal(8, TFTP_BLKSIZE_MAX, BlockSize) then
             exit;
         tcoTsize:
-          if not GetNextCardinal(0, 1 shl 30, TransferSize) then // up to 1GB
+          if not GetNextCardinal(0, TFTP_TSIZE_MAX, TransferSize) then
             exit
           else if OpCode = toRrq then
           begin
@@ -563,8 +567,8 @@ begin
      (FileStream = nil) then
     exit;
   Frame^.Sequence := swap(Frame^.Sequence);
-  CurrentSize := // compute position from sequence to allow retry from other side
-    ((LastReceivedSequenceHi + Frame^.Sequence) * BlockSize);
+  CurrentSize := // compute position from seq to allow retry from other side
+    (LastReceivedSequenceHi + Frame^.Sequence) * BlockSize;
   case op of
     toDat: // during WRQ request
       begin

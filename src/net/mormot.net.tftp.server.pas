@@ -347,11 +347,13 @@ var
   res: TTftpError;
   nr: TNetResult;
   tix: Int64;
+  fn: RawUtf8;
 begin
   tix := mormot.core.os.GetTickCount64;
   fLog.Log(sllDebug, 'DoExecute % % %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName], self);
+  StringToUtf8(ExtractFileName(Utf8ToString(fContext.FileName)), fn);
   fContext.RetryCount := fOwner.MaxRetry;
   fContext.Sock.SetReceiveTimeout(1000); // check fTerminated every second
   repeat
@@ -363,9 +365,9 @@ begin
     if Terminated then
       break;
     if ttoLowLevelLog in fOwner.fOptions then
-      fLog.Log(LOG_TRACEWARNING[len <= 0], 'DoExecute recv % %/%',
-        [ToText(fContext.Frame^, len), CardinalToHexShort(fContext.CurrentSize),
-         CardinalToHexShort(fFileSize)], self);
+      fLog.Log(LOG_TRACEWARNING[len <= 0], '% recv % %/%',
+        [fn, ToText(fContext.Frame^, len),
+         CardinalToHexShort(fContext.CurrentSize), CardinalToHexShort(fFileSize)]);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
@@ -375,7 +377,8 @@ begin
       nr := NetLastError;
       if nr <> nrRetry then
       begin
-        fLog.Log(sllError, 'DoExecute recvfrom failed: %', [ToText(nr)^], self);
+        fLog.Log(sllError, 'DoExecute % recvfrom failed: %',
+          [fn, ToText(nr)^], self);
         break;
       end;
       if mormot.core.os.GetTickCount64 < fContext.TimeoutTix then
@@ -384,14 +387,15 @@ begin
       // retry after timeout
       if fContext.RetryCount = 0 then
       begin
-        fLog.Log(sllError, 'DoExecute retried %: abort',
-          [Plural('time', fOwner.MaxRetry)], self);
+        fLog.Log(sllError, 'DoExecute % retried %: abort',
+          [fn, Plural('time', fOwner.MaxRetry)], self);
         break;
       end;
       dec(fContext.RetryCount);
       // will send again the previous ACK/DAT frame
-      fLog.Log(sllWarning, 'DoExecute timeout: resend %/%',
-        [fContext.CurrentSize, fFileSize], self);
+      fLog.Log(sllWarning, 'DoExecute % timeout: resend %/%',
+        [fn, CardinalToHexShort(fContext.CurrentSize),
+         CardinalToHexShort(fFileSize)], self);
       MoveFast(fLastSent^, fContext.Frame^, fLastSentLen); // restore frame
       fContext.FrameLen := fLastSentLen;
     end
@@ -414,21 +418,21 @@ begin
     end;
     // send next ACK or DAT block(s)
     if ttoLowLevelLog in fOwner.fOptions then
-      fLog.Log(sllTrace, 'DoExecute send % %/%',
-        [ToText(fContext.Frame^, fContext.FrameLen),
-         fContext.CurrentSize, fFileSize], self);
+      fLog.Log(sllTrace, '% send % %/%',
+        [fn, ToText(fContext.Frame^, fContext.FrameLen),
+         CardinalToHexShort(fContext.CurrentSize), CardinalToHexShort(fFileSize)]);
     nr := fContext.SendFrame;
     if nr <> nrOk then
     begin
-      fLog.Log(sllDebug, 'DoExecute: % abort sending %',
-        [ToText(nr)^, ToText(fContext.Frame^)], self);
+      fLog.Log(sllDebug, 'DoExecute %: % abort sending %',
+        [fn, ToText(nr)^, ToText(fContext.Frame^)], self);
       break;
     end;
   until Terminated;
   // Destroy will call fContext.Shutdown and remove the connection
   tix := mormot.core.os.GetTickCount64 - tix;
   if tix <> 0 then
-    fLog.Log(sllTrace, 'DoExecute: % finished at %/s - connections=%/%',
+    fLog.Log(sllDebug, 'DoExecute: % finished at %/s - connections=%/%',
       [fContext.FileName, KB((fFileSize * 1000) div tix),
        fOwner.ConnectionCount, fOwner.ConnectionTotal], self);
 end;
@@ -694,7 +698,7 @@ begin
     exit;
   // validate incoming frame
   fFrame^[len] := 0; // ensure always 0 ended for StrLen() safety
-  fLog.Log(sllTrace, 'OnFrameReceived: % %',
+  fLog.Log(sllDebug, 'OnFrameReceived: % %',
     [remote.IPShort, ToText(PTftpFrame(fFrame)^, len)], self);
   op := ToOpCode(PTftpFrame(fFrame)^);
   if not (op in [toRrq, toWrq]) then
@@ -702,7 +706,7 @@ begin
   if fConnection.Count >= fMaxConnections then
   begin
     // this request will be ignored with no ERR sent -> client will retry later
-    fLog.Log(sllDebug, 'OnFrameReceived: Too Many Connections = %',
+    fLog.Log(sllWarning, 'OnFrameReceived: Too Many Connections = %',
       [fConnection.Count], self);
     exit;
   end;
@@ -711,7 +715,7 @@ begin
   c.Sock := remote.NewSocket(nlUdp);
   if c.Sock = nil then
   begin
-    fLog.Log(sllWarning, 'OnFrameReceived: NewSocket failed as %',
+    fLog.Log(sllError, 'OnFrameReceived: NewSocket failed as %',
       [NetLastErrorMsg], self);
     exit;
   end;
