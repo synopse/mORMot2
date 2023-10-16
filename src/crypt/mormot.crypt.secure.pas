@@ -1693,34 +1693,34 @@ type
   // - used for each item in a Certificate Revocation List (CRL)
   // - crrNotRevoked (item 7) is not used in the RFC, and used internally here
   TCryptCertRevocationReason = (
-    crrUnspecified,
-    crrCompromised,
-    crrAuthorityCompromised,
-    crrUnAffiliated,
-    crrSuperseded,
-    crrReplaced,
-    crrTempHold,
-    crrNotRevoked,
-    crrRemoved,
-    crrWithdrawn,
-    crrServerCompromised);
+    crrUnspecified,            // (0)
+    crrCompromised,            // (1)
+    crrAuthorityCompromised,   // (2)
+    crrUnAffiliated,           // (3)
+    crrSuperseded,             // (4)
+    crrReplaced,               // (5)
+    crrTempHold,               // (6)
+    crrNotRevoked,             // (7) - not used in the RFC, but used internally
+    crrRemoved,                // (8)
+    crrWithdrawn,              // (9)
+    crrServerCompromised);     // (10)
 
   /// the Digital Signature results for a given Certificate
   // - is an exact match of TEccValidity enumerate in mormot.crypt.ecc256r1.pas
   // - see CV_VALIDSIGN constant for verification success
   TCryptCertValidity = (
-    cvUnknown,
-    cvValidSigned,
-    cvValidSelfSigned,
-    cvNotSupported,
-    cvBadParameter,
-    cvCorrupted,
-    cvInvalidDate,
-    cvUnknownAuthority,
-    cvDeprecatedAuthority,
-    cvInvalidSignature,
-    cvRevoked,
-    cvWrongUsage);
+    cvUnknown,                // (0)
+    cvValidSigned,            // (1)
+    cvValidSelfSigned,        // (2)
+    cvNotSupported,           // (3)
+    cvBadParameter,           // (4)
+    cvCorrupted,              // (5)
+    cvInvalidDate,            // (6)
+    cvUnknownAuthority,       // (7)
+    cvDeprecatedAuthority,    // (8)
+    cvInvalidSignature,       // (9)
+    cvRevoked,                // (10)
+    cvWrongUsage);            // (11)
 
   /// a set of Digital Signature results
   TCryptCertValidities = set of TCryptCertValidity;
@@ -2966,9 +2966,16 @@ function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString = nil; CtrEndPos: PInteger = nil): integer;
 
-/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as integer
+/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as 64-bit integer
 function AsnNextInteger(var Pos: integer; const Buffer: TAsnObject;
   out ValueType: integer): Int64;
+
+/// parse the next ASN1_INT ASN1_ENUM ASN1_BOOL value as 32-bit integer
+// - warning: parameters do NOT match AsnNextInteger() signature
+// - returns the ASN.1 value type, and optionally the ASN.1 value blob itself
+function AsnNextInt32(var Pos: integer; const Buffer: TAsnObject;
+  out Value: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// parse the next ASN.1 value as raw buffer
 // - returns the ASN.1 value type, and the ASN.1 raw value blob itself
@@ -7975,7 +7982,7 @@ var
 begin
   result := 0;
   if (AsnSize <= 0) or
-     (Start + AsnSize > length(Buffer)) then
+     (Start - 1 + AsnSize > length(Buffer)) then
     exit;
   neg := ord(Buffer[Start]) > $7f;
   while AsnSize > 0 do
@@ -8181,18 +8188,18 @@ end;
 function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
   out AsnType, AsnSize: integer): boolean;
 var
-  t, l: integer;
+  vtype, len: integer;
 begin
   result := false;
-  l := length(Buffer);
-  if Pos > l then
+  len := length(Buffer);
+  if Pos > len then
     exit;
-  t := ord(Buffer[Pos]);
+  vtype := ord(Buffer[Pos]);
   inc(Pos);
   AsnSize := AsnDecLen(Pos, Buffer);
-  if (Pos + AsnSize - 1) > l then
+  if (Pos + AsnSize - 1) > len then
     exit; // avoid overflow
-  AsnType := t;
+  AsnType := vtype;
   result := true;
 end;
 
@@ -8237,6 +8244,12 @@ begin
     ValueType := ASN1_NULL;
     result := -1;
   end;
+end;
+
+function AsnNextInt32(var Pos: integer; const Buffer: TAsnObject;
+  out Value: integer): integer;
+begin
+  Value := AsnNextInteger(Pos, Buffer, result);
 end;
 
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;

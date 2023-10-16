@@ -2084,17 +2084,13 @@ var
   vt, i: integer;
 begin
   AsnNextInit(pos, 3);
-  result := (der <> '') and
-            (AsnNext(pos[0], der) = ASN1_SEQ);
-  if not result then
+  result := false;
+  if (der = '') or
+     (AsnNext(pos[0], der) <> ASN1_SEQ) or
+     ((version <> nil) and
+      (AsnNextInt32(pos[0], der, version^) <> ASN1_INT)) then
     exit;
-  if version <> nil then
-  begin
-    version^ := AsnNextInteger(pos[0], der, vt);
-    result := vt = ASN1_INT;
-  end;
-  result := result and
-            (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
+  result := (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
               (AsnNextRaw(pos[1], seq, oid) = ASN1_OBJID) and
                 (oid = AsnEncOid(ASN1_OID_RSAPUB)) and
             (AsnNextRaw(pos[0], der, str) = seqtype) and
@@ -2196,7 +2192,7 @@ end;
 
 function TRsaPrivateKey.FromDer(const der: TCertDer): boolean;
 var
-  n, vt: integer;
+  pos: integer;
 begin
   if (Modulus <> '') or
      (PublicExponent <> '') then
@@ -2215,20 +2211,18 @@ begin
   if result then
     exit;
   // also try PKCS#1 from RFC 8017
-  n := 1;
-  if (der = '') or
-     (AsnNext(n, der) <> ASN1_SEQ) then
-    exit;
-  Version := AsnNextInteger(n, der, vt);
-  result := (vt = ASN1_INT) and
-            AsnNextBigInt(n, der, Modulus) and
-            AsnNextBigInt(n, der, PublicExponent) and
-            AsnNextBigInt(n, der, PrivateExponent) and
-            AsnNextBigInt(n, der, Prime1) and
-            AsnNextBigInt(n, der, Prime2) and
-            AsnNextBigInt(n, der, Exponent1) and
-            AsnNextBigInt(n, der, Exponent2) and
-            AsnNextBigInt(n, der, Coefficient);
+  pos := 1;
+  result := (der <> '') and
+            (AsnNext(pos, der) = ASN1_SEQ) and
+            (AsnNextInt32(pos, der, Version) = ASN1_INT) and
+            AsnNextBigInt(pos, der, Modulus) and
+            AsnNextBigInt(pos, der, PublicExponent) and
+            AsnNextBigInt(pos, der, PrivateExponent) and
+            AsnNextBigInt(pos, der, Prime1) and
+            AsnNextBigInt(pos, der, Prime2) and
+            AsnNextBigInt(pos, der, Exponent1) and
+            AsnNextBigInt(pos, der, Exponent2) and
+            AsnNextBigInt(pos, der, Coefficient);
 end;
 
 function TRsaPrivateKey.Match(const Pub: TRsaPublicKey): boolean;
