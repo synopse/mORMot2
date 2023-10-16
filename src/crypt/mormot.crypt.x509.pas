@@ -9,7 +9,7 @@ unit mormot.crypt.x509;
    X.509 Certificates Implementation - see RFC 5280
     - X.509 Fields Logic
     - RSA and ECC Public/Private Key support for X.509
-    - X.509 Certificates and CSR
+    - X.509 Certificates and Certificate Signing Request (CSR)
     - Registration of our X.509 Engine to the TCryptCert Factory
 
   *****************************************************************************
@@ -450,7 +450,7 @@ type
   end;
 
 
-{ **************** X.509 Certificates and CSR }
+{ **************** X.509 Certificates and Certificate Signing Request (CSR) }
 
 type
   /// X.509 Certificate fields, as defined in RFC 5280 #4.1.2 and in TX509.Signed
@@ -710,7 +710,7 @@ begin
      (n > 0) and
      (OidBinary <> '') then
     repeat
-      if o^.Oid = OidBinary then // efficient search
+      if CompareBuf(o^.Oid, OidBinary) then // efficient O(n) search
       begin
         result := o^.Value;
         exit;
@@ -862,7 +862,7 @@ var
   x: TXSignatureAlgorithm;
 begin
   for x := succ(low(x)) to high(x) do
-    if oid = ASN1_OID_SIGNATURE[x] then
+    if CompareBuf(oid, ASN1_OID_SIGNATURE[x]) then
     begin
       xsa := x;
       result := true;
@@ -894,7 +894,7 @@ var
 function OidToXa(const oid: RawByteString): TXAttr;
 begin
   for result := succ(low(result)) to high(result) do
-    if oid = XA_OID_ASN[result] then
+    if CompareBuf(oid, XA_OID_ASN[result]) then
       exit;
   result := xaNone;
 end;
@@ -902,7 +902,7 @@ end;
 function OidToXe(const oid: RawByteString): TXExtension;
 begin
   for result := succ(low(result)) to high(result) do
-    if oid = XE_OID_ASN[result] then
+    if CompareBuf(oid, XE_OID_ASN[result]) then
       exit;
   result := xeNone;
 end;
@@ -910,7 +910,7 @@ end;
 function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
 begin
   for result := succ(low(result)) to high(result) do
-    if oid = XKU_OID_ASN[result] then
+    if CompareBuf(oid, XKU_OID_ASN[result]) then
       exit;
   result := xkuNone;
 end;
@@ -1055,6 +1055,8 @@ begin
   fCachedAsn := seq; // store exact binary since used for comparison
   fCachedText := '';
   posseq := 1;
+  if AsnNext(posseq, seq) <> ASN1_SEQ then
+    exit;
   while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
   begin
     posone := 1;
@@ -1082,7 +1084,7 @@ function TXName.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
 var
   seq: RawByteString;
 begin
-  result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
+  result := (AsnNextRaw(pos, der, seq, {includeheader=}true) = ASN1_SEQ) and
             FromAsn(seq);
 end;
 
