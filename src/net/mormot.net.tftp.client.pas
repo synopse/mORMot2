@@ -563,8 +563,8 @@ begin
      (FileStream = nil) then
     exit;
   Frame^.Sequence := swap(Frame^.Sequence);
-  CurrentSize := (cardinal(Frame^.Sequence) * BlockSize) +
-                   LastReceivedSequenceHi; // allow retry from other side
+  CurrentSize := // compute position from sequence to allow retry from other side
+    ((LastReceivedSequenceHi + Frame^.Sequence) * BlockSize);
   case op of
     toDat: // during WRQ request
       begin
@@ -650,7 +650,7 @@ begin
   //     ----------------------------------
   inc(LastReceivedSequence);
   if LastReceivedSequence = 0 then
-    inc(LastReceivedSequenceHi, 1 shl 16);
+    inc(LastReceivedSequenceHi, 1 shl 16); // handle 16-bit sequence overflow
   Frame^.Opcode := swap(word(TFTP_DAT));
   Frame^.Sequence := swap(LastReceivedSequence);
   if CurrentSize <> FileStream.Position then

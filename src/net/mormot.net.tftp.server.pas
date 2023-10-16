@@ -364,7 +364,8 @@ begin
       break;
     if ttoLowLevelLog in fOwner.fOptions then
       fLog.Log(LOG_TRACEWARNING[len <= 0], 'DoExecute recv % %/%',
-        [ToText(fContext.Frame^, len), fContext.CurrentSize, fFileSize], self);
+        [ToText(fContext.Frame^, len), CardinalToHexShort(fContext.CurrentSize),
+         CardinalToHexShort(fFileSize)], self);
     if Terminated or
        (len = 0) then // -1=error, 0=shutdown
       break;
