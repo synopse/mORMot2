@@ -8830,6 +8830,11 @@ begin
     Bin := '';
 end;
 
+function HexToBin(const Hex: RawUtf8): RawByteString;
+begin
+  HexToBin(pointer(Hex), length(Hex), result);
+end;
+
 function HexaToByte(P: PUtf8Char; var Dest: byte; tab: PByteArray): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
@@ -8861,28 +8866,30 @@ begin
   len := length(hex);
   if len = 0 then
     exit;
-  p := FastNewString(len shr 1, CP_RAWBYTESTRING); // maximum length
+  p := FastNewString(len shr 1, CP_RAWBYTESTRING); // shr 1 = maximum length
   pointer(Bin) := p;
   h := pointer(hex);
   tab := @ConvertHexToBin;
   repeat
     if not HexaToByte(h, PByte(p)^, tab) then
-      break;
+      break; // invalid 'xx' pair - may be len < 2
     inc(p);
     inc(h, 2);
     dec(len, 2);
-    if len <= 0 then
+    if len = 0 then
     begin
-      result := len = 0;
+      result := true; // properly ended with 'xx' last hexa byte
       break;
     end;
     if h^ <> ':' then
       continue;
-    inc(h);
     dec(len);
-  until len = 0;
+    if len = 0 then
+      break; // should not end with ':'
+    inc(h);
+  until false;
   if result then
-    FakeLength(bin, p - pointer(bin))
+    FakeLength(Bin, p - pointer(Bin))
   else
     Bin := '';
 end;
@@ -8890,11 +8897,6 @@ end;
 function HumanHexToBin(const hex: RawUtf8): RawByteString;
 begin
   HumanHexToBin(hex, result);
-end;
-
-function HexToBin(const Hex: RawUtf8): RawByteString;
-begin
-  HexToBin(pointer(Hex), length(Hex), result);
 end;
 
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
