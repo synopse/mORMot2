@@ -5062,7 +5062,8 @@ begin
           if obj = nil then
             raise ESynException.CreateUtf8(
               '%.AddOrReplaceObject with no object at [%]', [self, aText]);
-          FreeAndNil(fObjects[result]);
+          if fObjectsOwned in fFlags then
+            FreeAndNil(fObjects[result]);
           fObjects[result] := aObject;
         end
         else
