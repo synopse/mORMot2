@@ -1791,13 +1791,33 @@ begin
 end;
 
 function TXPrivateKey.ToDer: RawByteString;
+var
+  rawecc, oct: RawByteString;
 begin
   if self = nil then
     result := ''
   else if fRsa <> nil then
     result := fRsa.SavePrivateKeyDer
+  else if IsZero(fEcc) then
+    result := ''
   else
-    result := EccToDer(fEcc); // does IsZero()
+  begin
+    // EccToDer() raw encoding is not standard as PEM -> use PKCS#8 format
+    FastSetRawByteString(rawecc, @fEcc, SizeOf(fEcc));
+    oct := AsnSafeOct([Asn(1),
+                       Asn(ASN1_OCTSTR, [rawecc])]);
+    FillZero(rawecc);
+    // see PemDerRawToEcc() prime256v1 PKCS#8 PrivateKeyInfo
+    result := AsnSeq([
+                Asn(0), // version
+                AsnSeq([
+                  AsnOid(ASN1_OID_X962_PUBLICKEY),
+                  AsnOid(ASN1_OID_X962_ECDSA_P256)
+                ]),
+                oct
+              ]);
+    FillZero(oct);
+  end;
 end;
 
 function TXPrivateKey.ToSubjectPublicKey: RawByteString;
