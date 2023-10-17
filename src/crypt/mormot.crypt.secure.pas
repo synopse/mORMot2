@@ -2923,6 +2923,8 @@ function Asn(Value: Int64; AsnType: integer = ASN1_INT): TAsnObject; overload;
 // - the raw buffer is likely to come from mormot.crypt.rsa TBigInt.Save result
 // - will trim unneeded leading zeros, and ensure will be stored as unsigned
 // even if starts with a $80 byte
+// - any temporary string will be zeroed during the process for anti-forensic,
+// since a BigInt may be sensitive information (e.g. a RSA secret prime)
 function AsnBigInt(const BigInt: RawByteString;
   AsnType: integer = ASN1_INT): TAsnObject;
 
@@ -2947,6 +2949,10 @@ function AsnText(const Text: RawUtf8): TAsnObject;
 // used e.g. with X.509 NotAfter field when no good expiration date can be
 // assigned (see RFC 5280 #4.1.2.5)
 function AsnTime(dt: TDateTime): TAsnObject;
+
+/// internal function used to wipe any temporary string for anti-forensic
+// - warning: all Content[] will be filled with zeroes even if marked as  "const"
+function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
 
 /// raw append some binary to an ASN.1 object buffer
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
@@ -8062,7 +8068,7 @@ end;
 function AsnBigInt(const BigInt: RawByteString; AsnType: integer): TAsnObject;
 var
   i, l: PtrInt;
-  v: TAsnObject;
+  v: RawByteString;
 begin
   l := length(BigInt);
   i := 1;
@@ -8073,15 +8079,13 @@ begin
     v := ASN1_ZERO_VALUE
   else
   begin
-    if i = 1 then
-      v := BigInt
-    else
-      v := copy(BigInt, i, l);
+    v := copy(BigInt, i, l); // always make a new string for FillZero() below
     if (v <> '') and
        (ord(v[1]) and $80 <> 0) then
       Prepend(v, #0); // prepend 0 to ensure not parsed as negative number
   end;
   result := Asn(AsnType, [v]);
+  FillZero(v); // anti-forensic
 end;
 
 function AsnSeq(const Data: TAsnObject): TAsnObject;
@@ -8155,6 +8159,18 @@ begin
         UInt2DigitsToShortFast(t.Second)])])
   else
     raise ECrypt.CreateUtf8('Invalid AsnTime(%)', [dt]);
+end;
+
+function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
+var
+  i: PtrInt;
+  seq: RawByteString;
+begin
+  seq := AsnSeq(Content);
+  result := Asn(ASN1_OCTSTR, [seq]);
+  FillZero(seq);
+  for i := 0 to high(Content) do // wipe temporary "const" memory buffers
+    FillCharFast(pointer(Content[i])^, length(Content[i]), 0);
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);

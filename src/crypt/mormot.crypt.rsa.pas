@@ -2162,32 +2162,34 @@ end;
 { TRsaPrivateKey }
 
 function TRsaPrivateKey.ToDer: TCertDer;
+var
+  oct: RawByteString;
 begin
+  result := '';
   if (Modulus = '') or
      (PublicExponent = '') then
-    result := ''
-  else
-    // PKCS#8 format (default as with openssl)
-    result := AsnSeq([
-                Asn(Version),
-                AsnSeq([
-                  AsnOid(ASN1_OID_RSAPUB),
-                  ASN1_NULL_VALUE // optional
-                ]),
-                Asn(ASN1_OCTSTR, [
-                  AsnSeq([
-                    Asn(Version),
-                    AsnBigInt(Modulus),
-                    AsnBigInt(PublicExponent), // typically 65537
-                    AsnBigInt(PrivateExponent),
-                    AsnBigInt(Prime1),
-                    AsnBigInt(Prime2),
-                    AsnBigInt(Exponent1),
-                    AsnBigInt(Exponent2),
-                    AsnBigInt(Coefficient)
-                  ])
-                ])
-              ]);
+    exit;
+  // PKCS#8 format (default as with openssl)
+  oct := AsnSafeOct([
+           Asn(Version),
+           AsnBigInt(Modulus),
+           AsnBigInt(PublicExponent), // typically 65537
+           AsnBigInt(PrivateExponent),
+           AsnBigInt(Prime1),
+           AsnBigInt(Prime2),
+           AsnBigInt(Exponent1),
+           AsnBigInt(Exponent2),
+           AsnBigInt(Coefficient)
+         ]);
+  result := AsnSeq([
+              Asn(Version),
+              AsnSeq([
+                AsnOid(ASN1_OID_RSAPUB),
+                ASN1_NULL_VALUE // optional
+              ]),
+              oct
+            ]);
+  FillZero(oct);
 end;
 
 function TRsaPrivateKey.FromDer(const der: TCertDer): boolean;
