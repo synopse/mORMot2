@@ -2896,6 +2896,8 @@ begin
       CheckEqual(c3.GetSubject, s3);
     Check(c3.HasPrivateSecret);
     CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
+    Check(c3.IsAuthorizedBy(c1), 'isauthby1');
+    Check(not c3.IsAuthorizedBy(c3), 'isauthby2');
     Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
     Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned1');
     Check(c3.Verify(c2) = cvValidSigned, 'cvValidSigned2');
@@ -2914,6 +2916,7 @@ begin
     fields.CommonName := s2;
     c2.Generate([cuDigitalSignature, cuKeyAgreement], '', nil, 30, -1, @fields);
     Check(c2.IsSelfSigned);
+    Check(not c3.IsAuthorizedBy(c2), 'isauthby3');
     if crt.AlgoName <> 'syn-es256-v1' then
       CheckEqual(c2.GetSubject, s2);
     if c2.GetAuthorityKey <> c2.GetSubjectKey then
@@ -4034,6 +4037,7 @@ begin
       '0b:bf:1e:dd:fc:05:d6:63:e9:02:3a:13:b7:da:bd:e6,' +
       '08:ef:b7:93:82:c3:c6:7f:6f:a5:9e:d0:3c:22:2f:ec');
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222fec') = crrUnspecified);
+    Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222feb') = crrNotRevoked);
     CheckEqual(crl.IssuerDN,
       'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
     pem := DerToPem(crl.SaveToDer, pemCrl);

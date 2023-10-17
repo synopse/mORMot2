@@ -1852,6 +1852,10 @@ type
     function GetAuthorityKey: RawUtf8;
     /// check if this certificate has been self-signed
     function IsSelfSigned: boolean;
+    /// check if this certificate has been issued by the specified certificate
+    // - e.g. on X.509 will efficiently check the certificate AKID with the
+    // Authority SKID
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean;
     /// the minimum Validity timestamp of this Certificate
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -2056,6 +2060,7 @@ type
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
     function IsSelfSigned: boolean; virtual; abstract;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; virtual;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate(date: TDateTime): boolean; virtual;
@@ -2278,10 +2283,11 @@ type
   end;
 
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
-  // - could be seen as a certificates store of the poor (tm)
+  // - could be seen as a basic certificates store or "PKI of the poor" (tm)
   // - per usage lookup is in O(1) so faster than iterative ICryptCert.GetUsage
   // - also features simple PEM / binary serialization methods
-  // - should be initialized by Clear at startup, or set as a class field
+  // - no CRL nor complex intermediate certificates lookup are available
+  // - should be initialized by Clear at startup, or zeroed as a class field
   {$ifdef USERECORDWITHMETHODS}
   TCryptCertPerUsage = record
   {$else}
@@ -2745,14 +2751,16 @@ function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 
 /// cipher any private key buffer into safe binary
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
-// - as used by pemSynopseEncryptedPrivateKey format and EccPrivateKeyEncrypt()
+// - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyEncrypt()
+// or TXPrivateKey.Save and TCryptCertX509.Save
 function PrivateKeyEncrypt(const Input, Salt: RawByteString;
   const PrivatePassword: SpiUtf8; AfSplitRounds: integer = 31;
   Pbkdf2Rounds: integer = 1000): RawByteString;
 
 /// uncipher some binary into a raw private key buffer
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
-// - as used by pemSynopseEncryptedPrivateKey format and EccPrivateKeyDecrypt()
+// - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyDecrypt()
+// or TXPrivateKey.Load and TCryptCertX509.Load
 function PrivateKeyDecrypt(const Input, Salt: RawByteString;
   const PrivatePassword: SpiUtf8; AfSplitRounds: integer = 31;
   Pbkdf2Rounds: integer = 1000): RawByteString;
@@ -6480,6 +6488,12 @@ begin
     result := Generate(x.GetUsage, RawUtf8ArrayToCsv(x.GetSubjects),
       Authority, ExpireDays, ValidDays, {Fields=}nil);
     // note: Fields=nil since TCryptCertInternal does not support them
+end;
+
+function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+begin
+  result := (Authority <> nil) and
+            IdemPropNameU(GetAuthorityKey, Authority.GetSubjectKey);
 end;
 
 function TCryptCert.IsValidDate(date: TDateTime): boolean;

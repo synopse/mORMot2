@@ -1225,13 +1225,13 @@ function PemDerRawToEcc(const pem: RawUtf8; out pub: TEccPublicKey): boolean; ov
 
 /// cipher a raw ECC secp256r1 private key buffer into some binary
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
-// - as used by pemSynopseEncryptedPrivateKey format and EccPrivateKeyDecrypt()
+// - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyDecrypt()
 function EccPrivateKeyEncrypt(const Input: TEccPrivateKey;
   const PrivatePassword: SpiUtf8): RawByteString;
 
 /// uncipher some binary into a raw ECC secp256r1 private key buffer
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
-// - as used by pemSynopseEncryptedPrivateKey format and EccPrivateKeyEncrypt()
+// - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyEncrypt()
 function EccPrivateKeyDecrypt(const Input: RawByteString;
   const PrivatePassword: SpiUtf8): RawByteString;
 
@@ -5243,6 +5243,7 @@ type
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function IsValidDate(date: TDateTime): boolean; override;
@@ -5441,6 +5442,23 @@ end;
 function TCryptCertInternal.IsSelfSigned: boolean;
 begin
   result := fEcc.IsSelfSigned;
+end;
+
+function TCryptCertInternal.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertInternal;
+begin
+  result := false;
+  if (fEcc = nil) or
+     (Authority = nil) then
+    exit;
+  a := pointer(Authority.Instance);
+  if (PClass(a)^ = PClass(self)^) and
+     (a.fEcc <> nil) and
+     // fast binary comparison with no memory allocation
+     mormot.crypt.ecc256r1.IsEqual(fEcc.fContent.Head.Signed.AuthoritySerial,
+                                   a.fEcc.fContent.Head.Signed.Serial) then
+    result := true;
 end;
 
 function TCryptCertInternal.GetNotBefore: TDateTime;

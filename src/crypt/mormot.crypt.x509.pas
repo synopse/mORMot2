@@ -423,7 +423,7 @@ type
       const Cipher: RawUtf8): RawByteString;
   end;
 
-  /// store a RSA or ECC private key for TX509
+  /// store a RSA or prime256v1 private key for TX509
   TXPrivateKey = class
   protected
     fRsa: TRsa;
@@ -432,6 +432,7 @@ type
   public
     /// unserialized the private key from DER binary or PEM text
     // - will also ensure the private key do match the associated public key
+    // - decode PKCS#8 PrivateKeyInfo for RSA and prime256v1
     function Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
       const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
     /// create a new private / public key pair
@@ -445,10 +446,12 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// return the private key as raw binary
+    // - follow PKCS#8 PrivateKeyInfo encoding for RSA and prime256v1
     function ToDer: RawByteString;
     /// return the associated public key as stored in a X509 certificate
     function ToSubjectPublicKey: RawByteString;
     /// return the private key in the TCryptCertX509.Save expected format
+    // - wrap ToDer with PEM and/or PrivateKeyEncrypt() encoding
     function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
     /// sign a memory buffer digest with RSA or ECC using the stored private key
     // - storing the DigAlgo Hash algorithm OID for RSA
@@ -623,6 +626,9 @@ type
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
     /// check if the Certificate Issuer is also its Subject
     function IsSelfSigned: boolean;
+    /// check if this certificate has been issued by the specified certificate
+    function IsAuthorizedBy(Authority: TX509): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the associated Public Key instance
     // - initialize it from stored Signed.SubjectPublicKey, if needed
     function PublicKey: TXPublicKey;
@@ -653,6 +659,7 @@ type
     // - will contain the ready-to-use UTF-8 CSV text of each value
     // - Extension[xeSubjectKeyIdentifier] and Extension[xeAuthorityKeyIdentifier]
     // are also useful to validate a full PKI certification paths and trust
+    // (as used by function IsAuthorizedBy() method)
     // - see also the SubjectAlternativeName property
     property Extension: TXExtensions
       read Signed.Extension;
@@ -1650,8 +1657,9 @@ end;
 { TXPrivateKey }
 
 const
-  // those values match EccPrivateKeyEncrypt/EccPrivateKeyDecrypt for xkaEcc256
-  // xkaRsa and xkaRsaPss share the same public/private key files by definition
+  // per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt salt and AF-32 rounds
+  // - xkaRsa/xkaRsaPss share the same public/private key files by definition
+  // - xkaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
   XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
     '', 'synrsa', 'synrsa', 'synecc');
   XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
@@ -2550,6 +2558,14 @@ begin
             (Signed.Issuer.ToBinary = Signed.Subject.ToBinary);
 end;
 
+function TX509.IsAuthorizedBy(Authority: TX509): boolean;
+begin
+  result := (self <> nil) and
+            (Authority <> nil) and
+            CsvContains(Signed.Extension[xeAuthorityKeyIdentifier],
+                        Authority.Signed.Extension[xeSubjectKeyIdentifier]);
+end;
+
 function TX509.SignatureSecurityBits: integer;
 begin
   if (self <> nil) and
@@ -3051,6 +3067,7 @@ type
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -3262,16 +3279,20 @@ end;
 
 function TCryptCertX509.GetSubject(const Rdn: RawUtf8): RawUtf8;
 var
-  subs: TRawUtf8DynArray;
+  i: PtrInt;
 begin
   result := '';
-  if fX509 <> nil then
-    result := fX509.Signed.Subject.Get(Rdn); // RDN or hash
-  if result <> '' then
+  if fX509 = nil then
     exit;
-  subs := fX509.SubjectAlternativeNames;
-  if subs <> nil then
-    result := subs[0];  // return the first DNS: as with mormot.crypt.ecc
+  result := fX509.Signed.Subject.Get(Rdn); // RDN or hash or OID
+  if (result <> '') or
+     not IdemPropNameU(Rdn, 'CN') then
+    exit;
+  // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
+  result := fX509.Extension[xeSubjectAlternativeName];
+  i := PosExChar(',', result);
+  if i <> 0 then
+    SetLength(result, i - 1);
 end;
 
 function TCryptCertX509.GetSubjects: TRawUtf8DynArray;
@@ -3289,7 +3310,7 @@ begin
   if fX509 = nil then
     result := ''
   else
-    result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash
+    result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
 end;
 
 function TCryptCertX509.GetSubjectKey: RawUtf8;
@@ -3297,7 +3318,7 @@ begin
   if fX509 = nil then
     result := ''
   else
-    result := fX509.Extension[xeSubjectKeyIdentifier];
+    result := fX509.Signed.Extension[xeSubjectKeyIdentifier];
 end;
 
 function TCryptCertX509.GetAuthorityKey: RawUtf8;
@@ -3305,7 +3326,7 @@ begin
   if fX509 = nil then
     result := ''
   else
-    result := fX509.Extension[xeAuthorityKeyIdentifier];
+    result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
 end;
 
 function TCryptCertX509.IsSelfSigned: boolean;
@@ -3313,12 +3334,26 @@ begin
   result := fX509.IsSelfSigned;
 end;
 
+function TCryptCertX509.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertX509;
+begin
+  if Assigned(Authority) then
+  begin
+    a := pointer(Authority.Instance);
+    result := (PClass(a)^ = PClass(self)^) and
+              fX509.IsAuthorizedBy(a.fX509);
+  end
+  else
+    result := false;
+end;
+
 function TCryptCertX509.GetNotBefore: TDateTime;
 begin
   if fX509 = nil then
     result := 0
   else
-    result := fX509.NotBefore;
+    result := fX509.Signed.NotBefore;
 end;
 
 function TCryptCertX509.GetNotAfter: TDateTime;
@@ -3326,7 +3361,7 @@ begin
   if fX509 = nil then
     result := 0
   else
-    result := fX509.NotAfter;
+    result := fX509.Signed.NotAfter;
 end;
 
 function TCryptCertX509.GetUsage: TCryptCertUsages;
@@ -3334,7 +3369,7 @@ begin
   if fX509 = nil then
     result := []
   else
-    result := fX509.Usages;
+    result := fX509.Signed.CertUsages;
 end;
 
 function TCryptCertX509.GetPeerInfo: RawUtf8;
@@ -3632,8 +3667,8 @@ begin
     // retrieve a compatible authority instance
     auth := ToCryptCertX509(Authority, cccCertWithPrivateKey, temp);
     if auth = nil then
-      raise EX509.CreateUtf8('%.Sign: unsupported Authority %',
-        [self, ToText(Authority.AsymAlgo)^]);
+      raise EX509.CreateUtf8('%.Sign: unsupported Authority % %',
+        [self, Authority.Instance, ToText(Authority.AsymAlgo)^]);
     if auth.fX509 = nil then
       raise EX509.CreateUtf8('%.Sign: authority has no public key', [self]);
     // validate usage
@@ -3665,7 +3700,8 @@ var
 begin
   result := cvBadParameter;
   if (self <> nil) and
-     Assigned(Authority) then
+     Assigned(Authority) and
+     (Authority.Handle <> nil) then
   begin
     // use a compatible authority instance for digitial signature verification
     auth := ToCryptCertX509(Authority, cccCertOnly, temp);
@@ -3700,8 +3736,9 @@ begin
   // register 'x509-rs256' 'x509-rs384' 'x509-rs512' 'x509-ps256' 'x509-ps384'
   // 'x509-ps512' and 'x509-es256' certificates
   // - may be overriden by the faster mormot.crypt.openssl if included
+  // - but still accessible from CryptCertAlgoX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
-    CryptCertAlgoX509[XSA_TO_AA[xsa]] := TCryptCertAlgoX509.Create(xsa, {suffix=}'');
+    CryptCertAlgoX509[XSA_TO_AA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
   X509Parse := @TX509Parse;
 end;
