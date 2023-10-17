@@ -652,14 +652,12 @@ begin
   if (rdp <> nil) and
      ({%H-}rd.fd_count = 1) and
      (rd.fd_array[0] = sock) then
-  begin
     if ioctlsocket(sock, FIONREAD, @pending) <> NO_ERROR then
       include(result, neError)
     else 
+      // FIONREAD is not enough on Windows for graceful disconnection
+      // -> return neRead and not neClosed if pending=0
       include(result, neRead);
-    // FIONREAD is not enough on Windows for graceful disconnection
-    // -> return neRead and not neClosed if pending=0
-  end;
   if (wrp <> nil) and
      ({%H-}wr.fd_count = 1) and
      (wr.fd_array[0] = sock) then
@@ -944,14 +942,15 @@ end;
 
 procedure FD_CLR(Socket: TNetSocket; var FDSet: TFDSet);
 var
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   i := PtrUIntScanIndex(@FDSet.fd_array, FDSet.fd_count, PtrUInt(Socket));
   if i < 0 then
     exit;
   dec(FDSet.fd_count);
-  if i < FDSet.fd_count then
-    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * SizeOf(TSocket));
+  n := FDSet.fd_count - i;
+  if n > 0 then
+    MoveFast(FDSet.fd_array[i + 1], FDSet.fd_array[i], n * SizeOf(TSocket));
 end;
 
 procedure FD_SET(Socket: TNetSocket; var FDSet: TFDSet);
