@@ -10993,7 +10993,8 @@ end;
 function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): boolean;
 begin
   result := (length(P1) = P2Len) and
-            CompareMem(pointer(P1), P2, P2Len);
+            {$ifdef CPUX64} (MemCmp(pointer(P1), P2, P2Len) = 0); {$else}
+            CompareMem(pointer(P1), P2, P2Len); {$endif CPUX64}
 end;
 
 function CompareBuf(const P1, P2: RawByteString): boolean;
@@ -11003,7 +11004,8 @@ begin
   l := length(P1);
   result := (pointer(P1) = pointer(P2)) or
             ((l = length(P2)) and
-             CompareMem(pointer(P1), pointer(P2), l));
+             {$ifdef CPUX64} (MemCmp(pointer(P1), pointer(P2), l) = 0)); {$else}
+             CompareMem(pointer(P1), pointer(P2), l)); {$endif CPUX64}
 end;
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);

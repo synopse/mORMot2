@@ -5516,7 +5516,7 @@ begin
       if length(DOM) > 63 then
         break; // exceeded 63-character limit of a DNS name
       if (ForbiddenDomains <> '') and
-         (FindCsvIndex(pointer(ForbiddenDomains), DOM) >= 0) then
+         CsvContains(ForbiddenDomains, DOM) then
         break;
       i := length(value);
       while (i > 0) and
@@ -5524,10 +5524,10 @@ begin
         dec(i);
       TLD := lowercase(copy(value, i + 1, 100));
       if (AllowedTLD <> '') and
-         (FindCsvIndex(pointer(AllowedTLD), TLD) < 0) then
+         not CsvContains(AllowedTLD, TLD) then
         break;
       if (ForbiddenTLD <> '') and
-         (FindCsvIndex(pointer(ForbiddenTLD), TLD) >= 0) then
+         CsvContains(ForbiddenTLD, TLD) then
         break;
       if not fAnyTLD then
         if FastFindPUtf8CharSorted(@TopLevelTLD, high(TopLevelTLD), pointer(TLD)) < 0 then

@@ -193,6 +193,9 @@ function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// quickly check if Value is in Csv with no temporary memory allocation
+function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar = ','): boolean;
+
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
 // - return -1 if specified Value was not found in CSV items
@@ -2979,6 +2982,43 @@ begin
       result := GetNextItemString(P, Sep);
 end;
 
+function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar): boolean;
+var
+  i, l: PtrInt;
+  p, s: PUtf8Char;
+begin
+  if (Csv = '') or
+     (Value = '') then
+  begin
+    result := false;
+    exit;
+  end;
+  i := PosExChar(Sep, Csv);
+  if i = 0 then
+    result := CompareBuf(Csv, Value)
+  else
+  begin
+    result := true;
+    l := length(Value);
+    p := pointer(Csv);
+    s := p + i - 1;
+    repeat
+      if (s - p = l) and
+         (MemCmp(pointer(p), pointer(Value), l) = 0) then
+        exit;
+      p := s + 1;
+      s := PosChar(p, Sep); // use fast SSE2 asm on i386 and x86_64
+      if s <> nil then
+        continue;
+      if (StrLen(p) = l) and
+         (MemCmp(pointer(p), pointer(Value), l) = 0) then
+        exit;
+      break;
+    until false;
+    result := false;
+  end;
+end;
+
 function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar;
   CaseSensitive, TrimValue: boolean): integer;
 var
@@ -2992,7 +3032,7 @@ begin
       TrimSelf(s);
     if CaseSensitive then
     begin
-      if s = Value then
+      if CompareBuf(s, Value) then
         exit;
     end
     else if SameTextU(s, Value) then
