@@ -9384,6 +9384,7 @@ end;
 function X509.IsSelfSigned: boolean;
 begin
   // X509 usually does not compare serial numbers nor SKID/AKID but the names
+  // in practice, OpenSSL self-signed certificates have SKID set but no AKID
   result := (@self <> nil) and
       (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
 end;

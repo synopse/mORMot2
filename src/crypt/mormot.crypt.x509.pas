@@ -2525,6 +2525,7 @@ end;
 
 function TX509.IsSelfSigned: boolean;
 begin
+  // check Issuer/Subject names, but not SKID/AKID since self-signed has no AKID
   result := (self <> nil) and
             (Signed.Issuer.ToBinary = Signed.Subject.ToBinary);
 end;
@@ -3479,7 +3480,7 @@ begin
       RaiseError('Sign: no cuKeyCertSign');
     // assign the Issuer information
     fX509.Signed.Issuer := auth.fX509.Signed.Subject; // may be self
-    if auth <> self then // same as OpenSSL for self-signed certificates
+    if auth <> self then // same as OpenSSL for self-signed certs: no AKID
       fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
          auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
     // compute the digital signature

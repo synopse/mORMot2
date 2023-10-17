@@ -3869,6 +3869,8 @@ var
   i: integer;
   nfo: TX509Parsed;
   crl: TX509Crl;
+  num: QWord;
+  auth: ICryptCert;
   timer: TPrecisionTimer;
 begin
   {$ifdef OSWINDOWS}
@@ -4020,6 +4022,7 @@ begin
   crl := TX509Crl.Create;
   try
     Check(crl.SignatureAlgorithm = xsaNone);
+    Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222fec') = crrNotRevoked);
     Check(crl.LoadFromPem(_crl_pem));
     Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
     CheckEqual(DateTimeToIso8601Text(crl.ThisUpdate), '2023-10-16T04:00:20');
@@ -4030,11 +4033,12 @@ begin
     CheckEqual(RawUtf8ArrayToCsv(crl.Revoked),
       '0b:bf:1e:dd:fc:05:d6:63:e9:02:3a:13:b7:da:bd:e6,' +
       '08:ef:b7:93:82:c3:c6:7f:6f:a5:9e:d0:3c:22:2f:ec');
+    Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222fec') = crrUnspecified);
     CheckEqual(crl.IssuerDN,
       'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
     pem := DerToPem(crl.SaveToDer, pemCrl);
     CheckEqual(pem, _crl_pem);
-    crl.AfterModified; // force regenerate DER
+    crl.AfterModified; // force regenerate DER/PEM
     pem := DerToPem(crl.SaveToDer, pemCrl);
     CheckEqual(pem, _crl_pem);
   finally
@@ -4052,6 +4056,59 @@ begin
     CheckEqual(RawUtf8ArrayToCsv(crl.Revoked),
       '0b:bf:1e:dd:fc:05:d6:63:e9:02:3a:13:b7:da:bd:e6,' +
       '08:ef:b7:93:82:c3:c6:7f:6f:a5:9e:d0:3c:22:2f:ec');
+    crl.Clear;
+    Check(crl.SignatureAlgorithm = xsaNone);
+    CheckEqual(crl.CrlNumber, 0);
+    CheckEqual(crl.AuthorityKeyIdentifier, '');
+  finally
+    crl.Free;
+  end;
+  // validate a X.509 CRL generation and signature with a temporay authority
+  auth := Cert('x509-es256-int').Generate([cuCA, cuCrlSign], 'trust anchor');
+  crl := TX509Crl.Create;
+  try
+    CheckEqual(crl.CrlNumber, 0);
+    Check(crl.IsRevoked('abcd') = crrNotRevoked);
+    Check(crl.AddRevocation('ab:cd', crrCompromised));
+    Check(crl.IsRevoked('abcd') = crrCompromised);
+    Check(crl.IsRevoked('abce') = crrNotRevoked);
+    Check(crl.AddRevocation('ef:01', crrReplaced));
+    Check(crl.IsRevoked('EF:01') = crrReplaced);
+    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01');
+    Check(crl.SignatureAlgorithm = xsaNone);
+    Check(crl.VerifyCryptCert(auth) = cvInvalidSignature);
+    CheckEqual(crl.AuthorityKeyIdentifier, '');
+    num := Random64 shr 1;
+    crl.SignCryptCert(auth, num);
+    CheckEqual(crl.Issuer[xaCN], 'trust anchor');
+    Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
+    CheckEqual(crl.AuthorityKeyIdentifier, auth.GetSubjectKey);
+    Check(crl.VerifyCryptCert(auth) = cvValidSigned);
+    bin := crl.SaveToDer;
+    pem := crl.SaveToPem;
+    Check(pem <> '');
+    Check(PemToDer(pem) = bin);
+    CheckEqual(crl.CrlNumber, num);
+  finally
+    crl.Free;
+  end;
+  crl := TX509Crl.Create;
+  try
+    CheckEqual(crl.Issuer[xaCN], '');
+    Check(crl.LoadFromDer(bin));
+    CheckEqual(crl.CrlNumber, num);
+    Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
+    CheckEqual(crl.AuthorityKeyIdentifier, auth.GetSubjectKey);
+    CheckEqual(crl.Issuer[xaCN], 'trust anchor');
+    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01');
+    Check(crl.VerifyCryptCert(auth) = cvValidSigned);
+    Check(crl.Verify(auth.Handle) = cvValidSigned);
+    Check(crl.IsRevoked('abce') = crrNotRevoked);
+    Check(crl.IsRevoked('ab:CD') = crrCompromised);
+    Check(crl.IsRevoked('ef01') = crrReplaced);
+    CheckEqual(crl.SaveToPem, pem);
+    crl.AfterModified; // force regenerate DER/PEM
+    CheckEqual(crl.SaveToPem, pem);
   finally
     crl.Free;
   end;
