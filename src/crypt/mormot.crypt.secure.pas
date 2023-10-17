@@ -2447,6 +2447,10 @@ function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
 function ToText(v: TCryptCertValidity): PShortString; overload;
 
+/// fast case-insensitive check of the 'CN' Relative Distinguished Name identifier
+function IsCN(const Rdn: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// main resolver of the randomness generators
 // - the shared TCryptRandom of this algorithm is returned: caller should NOT free it
 // - e.g. Rnd.GetBytes(100) to get 100 random bytes from 'rnd-default' engine
@@ -6973,6 +6977,11 @@ begin
   result := GetEnumName(TypeInfo(TCryptCertValidity), ord(v));
 end;
 
+function IsCN(const Rdn: RawUtf8): boolean;
+begin
+  result := (length(Rdn) = 2) and
+            (PWord(Rdn)^ and $dfdf = ord('C') + ord('N') shl 8);
+end;
 
 
 { Register mormot.crypt.core and mormot.crypt.secure Algorithms }

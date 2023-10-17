@@ -2203,9 +2203,15 @@ function TCryptCertOpenSsl.GetSubject(const Rdn: RawUtf8): RawUtf8;
 var
   subs: TRawUtf8DynArray;
 begin
+  if (Rdn = '') or
+     (fX509 = nil) then
+  begin
+    result := '';
+    exit;
+  end;
   result := fX509.GetSubject(Rdn); // RDN or hash
   if (result <> '') or
-     not IdemPropNameU(Rdn, 'CN') then
+     not IsCN(Rdn) then
     exit;
   // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.x509
   subs := fX509.SubjectAlternativeNames;

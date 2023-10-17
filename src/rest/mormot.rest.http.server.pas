@@ -1378,14 +1378,9 @@ end;
 
 procedure TRestHttpServer.ComputeHostUrl(
   Ctxt: THttpServerRequestAbstract; var HostUrl: RawUtf8);
-var
-  i: PtrInt;
 begin
   // caller ensured fHosts.Count > 0
-  HostUrl := Ctxt.Host;
-  i := PosExChar(':', HostUrl);
-  if i > 0 then
-    SetLength(HostUrl, i - 1); // trim any port
+  HostUrl := GetFirstCsvItem(Ctxt.Host, ':'); // trim any port
   if HostUrl <> '' then
     // e.g. 'Host: project1.com' -> 'root1'
     HostUrl := fHosts.Value(HostUrl);

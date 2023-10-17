@@ -4905,6 +4905,8 @@ begin
   Check(GetUnQuoteCsvItem('"""one,""","two "', 1, ',', '"') = 'two ');
   Check(GetUnQuoteCsvItem('''''''one,''''''', 0) = '''one,''');
   Check(GetUnQuoteCsvItem('"""one,', 0, ',', '"') = '');
+  Check(not CsvContains('', 'b'));
+  Check(not CsvContains('a', ''));
   Check(CsvContains('a', 'a'));
   Check(CsvContains('ab', 'ab'));
   Check(not CsvContains('a', 'b'));
@@ -4923,6 +4925,8 @@ begin
   CheckEqual(GetFirstCsvItem('ab,'), 'ab');
   CheckEqual(GetFirstCsvItem('ab,c'), 'ab');
   CheckEqual(GetFirstCsvItem('ab,c,de,fg'), 'ab');
+  CheckEqual(GetFirstCsvItem(','), '');
+  CheckEqual(GetFirstCsvItem(',a'), '');
   Check(FormatSql('abcd', [U], [{%H-}WS]) = 'abcd');
   Check(MakePath([]) = '');
   Check(MakePath([], true) = '');

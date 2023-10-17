@@ -1307,17 +1307,6 @@ implementation
 
 {****** Support procedures and functions }
 
-function SeparateLeft(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-var
-  x: PtrInt;
-begin
-  x := PosExChar(Delimiter, Value);
-  if x = 0 then
-    result := Value
-  else
-    result := copy(Value, 1, x - 1);
-end;
-
 function SeparateRight(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
 var
   x: PtrInt;
@@ -1497,7 +1486,7 @@ function FetchBin(var Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
 var
   s: RawUtf8;
 begin
-  result := SeparateLeft(Value, Delimiter);
+  result := GetFirstCsvItem(Value, Delimiter);
   s := SeparateRight(Value, Delimiter);
   if s = Value then
     Value := ''
@@ -1692,7 +1681,7 @@ begin
       end;
     else
       begin
-        l := TrimU(SeparateLeft(s, '='));
+        l := TrimU(GetFirstCsvItem(s, '='));
         r := SeparateRight(s, '=');
         if l <> '' then
         begin
@@ -1710,7 +1699,7 @@ begin
                   dn := true;
                   l := StringReplaceAll(l, ':dn', '');
                 end;
-                attr := TrimU(SeparateLeft(l, ':'));
+                attr := TrimU(GetFirstCsvItem(l, ':'));
                 rule := TrimU(SeparateRight(l, ':'));
                 if rule = l then
                   rule := '';
@@ -3626,7 +3615,7 @@ begin
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),
                    AsnSeq([
-                     Asn(TrimU(SeparateLeft(AttributeValue, '='))),
+                     Asn(TrimU(GetFirstCsvItem(AttributeValue, '='))),
                      Asn(TrimU(SeparateRight(AttributeValue, '=')))
                    ])
                  ]));

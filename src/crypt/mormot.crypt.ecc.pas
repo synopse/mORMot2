@@ -5388,8 +5388,9 @@ var
   h: THashAlgo;
 begin
   result := '';
-  if fEcc <> nil then
-    if IdemPropNameU(Rdn, 'CN') then
+  if (Rdn <> '') and
+     (fEcc <> nil) then
+    if IsCN(Rdn) then // only 'CN' and hash are supported with syn-ecc
       result := GetFirstCsvItem(fEcc.Content.GetSubject)
     else if TextToHashAlgo(Rdn, h) then
       result := HashFull(h, @fEcc.Signed.Serial, SizeOf(fEcc.Signed.Serial));
@@ -5415,8 +5416,9 @@ var
   h: THashAlgo;
 begin
   result := '';
-  if fEcc <> nil then
-    if IdemPropNameU(Rdn, 'CN') then
+  if (Rdn <> '') and
+     (fEcc <> nil) then
+    if IsCN(Rdn) then
       result := GetFirstCsvItem(fEcc.AuthorityIssuer)
     else if TextToHashAlgo(Rdn, h) then
       result := HashFull(h,

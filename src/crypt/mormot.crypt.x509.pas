@@ -3282,11 +3282,12 @@ end;
 function TCryptCertX509.GetSubject(const Rdn: RawUtf8): RawUtf8;
 begin
   result := '';
-  if fX509 = nil then
+  if (Rdn = '') or
+     (fX509 = nil) then
     exit;
   result := fX509.Signed.Subject.Get(Rdn); // RDN or hash or OID
   if (result = '') and
-     IdemPropNameU(Rdn, 'CN') then
+     IsCN(Rdn) then
     // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
     result := GetFirstCsvItem(fX509.Extension[xeSubjectAlternativeName]);
 end;
