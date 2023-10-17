@@ -4917,6 +4917,12 @@ begin
   Check(CsvContains('aa,bb,cc', 'cc'));
   Check(not CsvContains('aa,bb,cc', 'cb'));
   Check(not CsvContains('aa,bb,cc', 'a'));
+  CheckEqual(GetFirstCsvItem(''), '');
+  CheckEqual(GetFirstCsvItem('a'), 'a');
+  CheckEqual(GetFirstCsvItem('ab'), 'ab');
+  CheckEqual(GetFirstCsvItem('ab,'), 'ab');
+  CheckEqual(GetFirstCsvItem('ab,c'), 'ab');
+  CheckEqual(GetFirstCsvItem('ab,c,de,fg'), 'ab');
   Check(FormatSql('abcd', [U], [{%H-}WS]) = 'abcd');
   Check(MakePath([]) = '');
   Check(MakePath([], true) = '');

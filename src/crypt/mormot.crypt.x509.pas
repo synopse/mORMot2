@@ -1419,7 +1419,7 @@ begin
   else
     sub := RawUtf8ArrayToCsv(subs); // normalized
   Extension[xeSubjectAlternativeName] := sub;
-  Subject.Name[xaCN] := GetCsvItem(pointer(sub), 0);
+  Subject.Name[xaCN] := GetFirstCsvItem(sub);
   if Fields <> nil then
   begin
     Subject.FromFields(Fields^);
@@ -2563,6 +2563,7 @@ function TX509.IsAuthorizedBy(Authority: TX509): boolean;
 begin
   result := (self <> nil) and
             (Authority <> nil) and
+            // fast search with no memory allocation
             CsvContains(Signed.Extension[xeAuthorityKeyIdentifier],
                         Authority.Signed.Extension[xeSubjectKeyIdentifier]);
 end;
@@ -3279,21 +3280,15 @@ begin
 end;
 
 function TCryptCertX509.GetSubject(const Rdn: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
 begin
   result := '';
   if fX509 = nil then
     exit;
   result := fX509.Signed.Subject.Get(Rdn); // RDN or hash or OID
-  if (result <> '') or
-     not IdemPropNameU(Rdn, 'CN') then
-    exit;
-  // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
-  result := fX509.Extension[xeSubjectAlternativeName];
-  i := PosExChar(',', result);
-  if i <> 0 then
-    SetLength(result, i - 1);
+  if (result = '') and
+     IdemPropNameU(Rdn, 'CN') then
+    // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
+    result := GetFirstCsvItem(fX509.Extension[xeSubjectAlternativeName]);
 end;
 
 function TCryptCertX509.GetSubjects: TRawUtf8DynArray;

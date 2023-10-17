@@ -5390,7 +5390,7 @@ begin
   result := '';
   if fEcc <> nil then
     if IdemPropNameU(Rdn, 'CN') then
-      result := GetCsvItem(pointer(fEcc.Content.GetSubject), 0)
+      result := GetFirstCsvItem(fEcc.Content.GetSubject)
     else if TextToHashAlgo(Rdn, h) then
       result := HashFull(h, @fEcc.Signed.Serial, SizeOf(fEcc.Signed.Serial));
 end;
@@ -5417,7 +5417,7 @@ begin
   result := '';
   if fEcc <> nil then
     if IdemPropNameU(Rdn, 'CN') then
-      result := GetCsvItem(pointer(fEcc.AuthorityIssuer), 0)
+      result := GetFirstCsvItem(fEcc.AuthorityIssuer)
     else if TextToHashAlgo(Rdn, h) then
       result := HashFull(h,
         @fEcc.Signed.AuthoritySerial, SizeOf(fEcc.Signed.AuthoritySerial));

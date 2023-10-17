@@ -2699,7 +2699,7 @@ const
     '-----END SYNRSA ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END SYNECC BOUNDED CERTIFICATE-----'#13#10);
 
-  /// our proprietary SYNECC TPemKind formats
+  /// our proprietary SYNECC TPemKind supported formats
   PEM_SYNECC =  [pemSynopseSignature,
                  pemSynopseCertificate,
                  pemSynopseUnencryptedPrivateKey,

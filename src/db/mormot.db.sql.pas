@@ -5172,7 +5172,7 @@ begin
   GetIndexes(aTableName, indexes);
   for i := 0 to high(indexes) do
   begin
-    colname := TrimU(GetCsvItem(pointer(indexes[i].KeyColumns), 0));
+    colname := TrimU(GetFirstCsvItem(indexes[i].KeyColumns));
     if colname <> '' then
       for j := 0 to high(Fields) do
         if PropNameEquals(Fields[j].ColumnName, colname) then

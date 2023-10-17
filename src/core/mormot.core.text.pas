@@ -189,6 +189,10 @@ function GetUnQuoteCsvItem(P: PUtf8Char; Index: PtrUInt; Sep: AnsiChar = ',';
 // therefore can be used with ready to be displayed text (i.e. the VCL)
 function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
 
+/// return first CSV string in the supplied UTF-8 content
+function GetFirstCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// return last CSV string in the supplied UTF-8 content
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
@@ -2964,6 +2968,17 @@ begin
   else
     for i := 0 to Index do
       GetNextItem(P, Sep, Quote, result);
+end;
+
+function GetFirstCsvItem(const Csv: RawUtf8; Sep: AnsiChar): RawUtf8;
+var
+  i: PtrInt;
+begin
+  i := PosExChar(Sep, Csv);
+  if i = 0 then
+    result := Csv
+  else
+    FastSetString(result, pointer(Csv), i - 1);
 end;
 
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar): RawUtf8;
