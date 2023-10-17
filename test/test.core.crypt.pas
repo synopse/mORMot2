@@ -4064,7 +4064,7 @@ begin
     crl.Free;
   end;
   // validate a X.509 CRL generation and signature with a temporay authority
-  auth := Cert('x509-es256-int').Generate([cuCA, cuCrlSign], 'trust anchor');
+  auth := CryptCertAlgoX509[caaES256].Generate([cuCA, cuCrlSign], 'trust anchor');
   crl := TX509Crl.Create;
   try
     CheckEqual(crl.CrlNumber, 0);
@@ -4082,7 +4082,7 @@ begin
     crl.SignCryptCert(auth, num);
     CheckEqual(crl.Issuer[xaCN], 'trust anchor');
     Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
-    CheckEqual(crl.AuthorityKeyIdentifier, auth.GetSubjectKey);
+    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, auth.GetSubjectKey));
     Check(crl.VerifyCryptCert(auth) = cvValidSigned);
     bin := crl.SaveToDer;
     pem := crl.SaveToPem;
@@ -4098,7 +4098,7 @@ begin
     Check(crl.LoadFromDer(bin));
     CheckEqual(crl.CrlNumber, num);
     Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
-    CheckEqual(crl.AuthorityKeyIdentifier, auth.GetSubjectKey);
+    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, auth.GetSubjectKey));
     CheckEqual(crl.Issuer[xaCN], 'trust anchor');
     CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01');
     Check(crl.VerifyCryptCert(auth) = cvValidSigned);
