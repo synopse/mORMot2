@@ -3127,6 +3127,7 @@ begin
   inherited Create(name);
   if fDefaultHasher = nil then
     fDefaultHasher := Hasher('sha256');
+  // RSASSA and RSASSA-PSS share the very same key file format
   fPemPrivate := ord(pemRsaPrivateKey);
   fPemPublic := ord(pemRsaPublicKey);
 end;
@@ -3218,12 +3219,12 @@ end;
 procedure InitializeUnit;
 begin
   // register this unit methods to our high-level cryptographic catalog
-  TCryptAsymRsa.Implements('RS256,RS256-int');
-  TCryptAsymRsa.Create('RS384', 'sha384');
-  TCryptAsymRsa.Create('RS512', 'sha512');
-  TCryptAsymRsa.Implements('PS256,PS256-int');
-  TCryptAsymRsa.Create('PS384', 'sha384');
-  TCryptAsymRsa.Create('PS512', 'sha512');
+  CryptAsym[caaRS256] := TCryptAsymRsa.Implements(['RS256', 'RS256-int']);
+  CryptAsym[caaRS384] := TCryptAsymRsa.Create('RS384', 'sha384');
+  CryptAsym[caaRS512] := TCryptAsymRsa.Create('RS512', 'sha512');
+  CryptAsym[caaPS256] := TCryptAsymRsa.Implements(['PS256', 'PS256-int']);
+  CryptAsym[caaPS384] := TCryptAsymRsa.Create('PS384', 'sha384');
+  CryptAsym[caaPS512] := TCryptAsymRsa.Create('PS512', 'sha512');
   // RS256 RS384 RS512 may be overriden by faster mormot.crypt.openssl
   // but RS256-int PS256-int will stil be available to use this unit if needed
 end;

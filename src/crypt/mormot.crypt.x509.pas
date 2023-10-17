@@ -505,7 +505,7 @@ type
     SubjectPublicKey: RawByteString;
     /// decoded extensions as defined for X.509 v3 certificates
     // - will contain the ready-to-use UTF-8 text of the value
-    // - some types are not fully decoded, so you may need to use ExtensionRaw[]
+    // - some types are not yet decoded, so you may need to use ExtensionRaw[]
     Extension: TXExtensions;
     /// if a decoded extension was marked as Critical
     ExtensionCritical: array[TXExtension] of boolean;
@@ -3407,7 +3407,7 @@ begin
   // 'x509-ps512' and 'x509-es256' certificates
   // - may be overriden by the faster mormot.crypt.openssl if included
   for xsa := succ(low(xsa)) to high(xsa) do
-    TCryptCertAlgoX509.Create(xsa, {suffix=}'');
+    CryptCertAlgoX509[XSA_TO_AA[xsa]] := TCryptCertAlgoX509.Create(xsa, {suffix=}'');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
   X509Parse := @TX509Parse;
 end;

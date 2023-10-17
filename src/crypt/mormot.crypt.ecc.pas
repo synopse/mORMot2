@@ -5963,10 +5963,11 @@ begin
   assert(ord(High(TCryptCertValidity)) = ord(High(TEccValidity)));
   assert(ord(cvRevoked) = ord(ecvRevoked));
   // register this unit methods to our high-level cryptographic catalog
-  TCryptAsymInternal.Implements('ES256,secp256r1,NISTP-256,prime256v1');
-  TCryptCertAlgoInternal.Implements('syn-es256,syn-es256-v1');
+  CryptAsym[caaES256] := TCryptAsymInternal.Implements([
+    'ES256', 'secp256r1', 'NISTP-256', 'prime256v1']);
+  CryptCertAlgoSyn := TCryptCertAlgoInternal.Implements([
+    'syn-es256-v1', 'syn-es256']);
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
-  CryptCertAlgoSyn := CertAlgo('syn-es256');
   CryptStoreAlgoSyn := StoreAlgo('syn-store');
   CryptStoreAlgoSynNoCache := StoreAlgo('syn-store-nocache');
 end;

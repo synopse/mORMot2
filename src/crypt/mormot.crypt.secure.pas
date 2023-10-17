@@ -2568,6 +2568,18 @@ var
   // - may be nil if this unit was not included
   CryptStoreAlgoSynNoCache: TCryptStoreAlgo;
 
+  /// direct access to the internal TCryptAsym factories
+  // - may be nil if mormot.crypt.ecc.pas or mormot.crypt.rsa.pas units
+  // were not included
+  // - you may use rather CryptAsymOpenSsl[] if OpenSSL is available
+  CryptAsym: array[TCryptAsymAlgo] of TCryptAsym;
+
+  /// direct access to the mormot.crypt.x509.pas ICryptCert factories
+  // - may be nil if this unit was not included
+  // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
+  // $ CryptCertAlgoX509[caaRS256].New
+  CryptCertAlgoX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
   /// direct access to the mormot.crypt.openssl.pas 'x509-store' algorithm
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - is currently nil because TCryptStoreOpenSsl is not stable yet
@@ -5506,6 +5518,7 @@ begin
   if name = '' then
     raise ECrypt.CreateUtf8('Unexpected %.Create('''')', [self]);
   fName := LowerCase(name);
+  RegisterGlobalShutdownRelease(self);
   GlobalCryptAlgo.AddOrReplaceObject(fName, self);
 end;
 
@@ -6956,7 +6969,7 @@ begin
     if GlobalCryptAlgo <> nil then
       exit;
     GlobalCryptAlgo := RegisterGlobalShutdownRelease(
-      TRawUtf8List.CreateEx([fObjectsOwned, fNoDuplicate, fThreadSafe]));
+      TRawUtf8List.CreateEx([fNoDuplicate, fThreadSafe])); // no fObjectsOwned
     // register mormot.crypt.core engines into our factories
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
