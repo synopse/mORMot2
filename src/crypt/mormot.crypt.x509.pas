@@ -594,6 +594,8 @@ type
     // - following RFC 5280 #4.1.1 encoding
     // - value is cached internally after LoadFromDer() or re-computation
     function SaveToDer: TCertDer;
+    /// serialize those fields into ASN.1 PEM text
+    function SaveToPem: TCertPem;
     /// unserialize those fields from ASN.1 DER binary
     // - following RFC 5280 #4.1.1 encoding
     function LoadFromDer(const der: TCertDer): boolean;
@@ -625,10 +627,12 @@ type
     /// main properties of the entity associated with the public key stored
     // in this certificate
     // - e.g. for an Internet certificate, Subject[xaCN] is 'synopse.info'
+    // - see SubjectDN to retrieve the full Distinguished Name of the Subject
     property Subject: TXAttrNames
       read Signed.Subject.Name;
     /// main properties of the entity that has signed and issued the certificate
     // - e.g. for an Internet certificate, Issuer[xaO] may be 'Let''s Encrypt'
+    // - see IssuerDN to retrieve the full Distinguished Name of the Issuer
     property Issuer: TXAttrNames
       read Signed.Issuer.Name;
     /// main extensions as defined for X.509 v3 certificates
@@ -645,6 +649,7 @@ type
       read GetSerialNumber;
     /// issuer entity of this Certificate as Distinguished Name text
     // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    // - see Issuer[] property to retrieve one specific field of the DN
     property IssuerDN: RawUtf8
       read GetIssuerDN;
     /// date on which the certificate validity period begins
@@ -662,6 +667,7 @@ type
       read Signed.CertUsages;
     /// subject entity of this Certificate as Distinguished Name text
     // - e.g. 'CN=synopse.info'
+    // - see Subject[] property to retrieve one specific field of the DN
     property SubjectDN: RawUtf8
       read GetSubjectDN;
     /// Subject names covered by this Certificate, as CSV
@@ -733,7 +739,7 @@ type
   /// the revoked certificates as stored in TXTbsCertList.Revoked[]
   TXCrlRevokedCerts = array of TXCrlRevokedCert;
 
-  /// X.509 CRL fields, as defined in RFC 5280 and in TX509Crl.Signed
+  /// the X.509 CRL fields, as defined in RFC 5280 and in TX509Crl.Signed
   // - contains information associated with the subject of the certificate
   // and the CA that issued it
   {$ifdef USERECORDWITHMETHODS}
@@ -758,13 +764,18 @@ type
     NextUpdate: TDateTime;
     /// list of revoked certificates
     Revoked: TXCrlRevokedCerts;
-    /// known X.509 CRL v2 extensions as defined in RFC 5280 5.2
+    /// decoded known X.509 CRL v2 extensions as defined in RFC 5280 5.2
+    // - will contain the ready-to-use UTF-8 text of the value
+    // - only xceAuthorityKeyIdentifier, xceIssuerAlternativeName and xceCrlNumber
+    // are decoded yet, so you may need to use ExtensionRaw[] for other values
     Extension: TXCrlExtensions;
+    /// raw ASN1_OCTSTR of decoded Extension[] after FromDer()
+    ExtensionRaw: array[TXCrlExtension] of RawByteString;
     /// reset all internal context
     procedure Clear;
     /// return the index in Revoked[] from the supplied binary Serial Number
     // - returns -1 if the serial is not found in the internal list
-    function IsRevoked(const SerialNumber: RawByteString): PtrInt;
+    function FindRevoked(const SerialNumber: RawByteString): PtrInt;
     /// serialize those fields into ASN.1 DER binary
     function ToDer: TAsnObject;
     /// unserialize those fields from ASN.1 DER binary
@@ -772,6 +783,9 @@ type
     function FromDer(const der: TCertDer): boolean;
   end;
 
+  ECryptCertX509Crl = class(ECryptCert);
+
+  /// a X.509 signed Certificate Revocation List (CRL), as defined in RFC 5280
   TX509Crl = class(TSynPersistent)
   protected
     fCachedDer: RawByteString;
@@ -780,6 +794,7 @@ type
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlNumber: QWord;
+    procedure SetCrlNumber(Value: QWord);
   public
     /// actual to-be-signed revoked Certificate List content
     Signed: TXTbsCertList;
@@ -789,10 +804,18 @@ type
   public
     /// reset all internal context
     procedure Clear;
+    /// append a revoked certificate to the internal list
+    // - will initialize the internal fields, if possible
+    // - caller should eventually call Sign() with the corresponding CA
+    function AddRevocation(const Serial: RawUtf8;
+      Reason: TCryptCertRevocationReason; ValidDays: integer = 0;
+      Date: TDateTime = 0; CertIssuerDN: RawUtf8 = ''): boolean;
     /// serialize those fields into ASN.1 DER binary
     // - following RFC 5280 #5.1.1 encoding
     // - value is not cached internally
     function SaveToDer: TCertDer;
+    /// serialize those fields into ASN.1 PEM text
+    function SaveToPem: TCertPem;
     /// unserialize those fields from ASN.1 DER binary
     // - following RFC 5280 #5.1.1 encoding
     function LoadFromDer(const der: TCertDer): boolean;
@@ -801,6 +824,10 @@ type
     function LoadFromPem(const pem: TCertPem): boolean;
     /// to be called once any field has been changed to refresh internal caches
     procedure AfterModified;
+    /// check if an hexadecimal Serial Number is part of Signed.Revoked[]
+    // - returns crrNotRevoked if this Serial Number was not found, or
+    // the notified revocation reason
+    function IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
     /// return Signed.Revoked[].SerialNumber values as hexadecimal
     function Revoked: TRawUtf8DynArray;
   published
@@ -810,6 +837,7 @@ type
       read fSignatureAlgorithm;
     /// issuer entity of this Certificate as Distinguished Name text
     // - e.g. 'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.'
+    // - see Issuer[] property to retrieve one specific field of the DN
     property IssuerDN: RawUtf8
       read GetIssuerDN;
     /// date on which the CRL validity period begins
@@ -826,8 +854,9 @@ type
       read Signed.Extension[xceAuthorityKeyIdentifier];
     /// monotonically increasing sequence number for a given CRL scope and
     // CRL issuer as defined in RFC 5280 5.2.3
+    // - any number > 63-bit should use Signed.ExtensionRaw[xceCrlNumber]
     property CrlNumber: QWord
-      read GetCrlNumber;
+      read GetCrlNumber write SetCrlNumber;
   end;
 
 
@@ -2302,6 +2331,11 @@ begin
   result := fCachedDer;
 end;
 
+function TX509.SaveToPem: TCertPem;
+begin
+  result := DerToPem(SaveToDer, pemCertificate);
+end;
+
 function TX509.GetSerialNumber: RawUtf8;
 begin
   if self = nil then
@@ -2579,7 +2613,7 @@ begin
   FillCharFast(self, SizeOf(self), 0);
 end;
 
-function TXTbsCertList.IsRevoked(const SerialNumber: RawByteString): PtrInt;
+function TXTbsCertList.FindRevoked(const SerialNumber: RawByteString): PtrInt;
 begin
   for result := 0 to length(Revoked) - 1 do
     if CompareBuf(Revoked[result].SerialNumber, SerialNumber) then
@@ -2601,10 +2635,13 @@ var
   nextup, rev, ext: RawByteString;
   i: PtrInt;
 begin
+  // optional nextUpdate time
   if NextUpdate <> 0 then
-    nextup := AsnTime(NextUpdate); // optional
+    nextup := AsnTime(NextUpdate);
+  // compute the revoked certificate(s) sequence content
   for i := 0 to length(Revoked) - 1 do
     Append(rev, Revoked[i].ToDer);
+  // export known extensions - no ExtensionRaw[] support yet
   if Extension[xceAuthorityKeyIdentifier] <> '' then
     AddCrlExt(ext, xceAuthorityKeyIdentifier,
       AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(Extension[xceAuthorityKeyIdentifier])])));
@@ -2616,6 +2653,7 @@ begin
       Asn(GetInt64(pointer(Extension[xceCrlNumber])))); // 63-bit resolution
   if ext <> '' then
     ext := Asn(ASN1_CTC0, [AsnSeq(ext)]);
+  // generate the whole CRL DER content
   result := AsnSeq([
               Asn(1),  // write X.509 CRL version 2, including extensions
               XsaToSeq(Signature),
@@ -2634,8 +2672,10 @@ var
   pos, posv, vt, nrev: integer;
   v64: QWord;
   oid, oid2, v, rev, ext: RawByteString;
+  xce: TXCrlExtension;
 begin
   result := false;
+  // decode main CRL fields
   pos := 1;
   if AsnNext(pos, der) <> ASN1_SEQ then
     exit;
@@ -2653,6 +2693,7 @@ begin
     exit;
   if v <> '' then
   begin
+    // retrieve the revoked certificates list
     SetLength(Revoked, 8);
     nrev := 0;
     posv := 1;
@@ -2668,7 +2709,9 @@ begin
     else
       DynArrayFakeLength(Revoked, nrev);
   end;
-  if AsnNext(pos, der) = ASN1_CTC0 then
+  // parse X.509 CRL version 2 extensions
+  if (Version >= 2) and
+     (AsnNext(pos, der) = ASN1_CTC0) then
     if AsnNext(pos, der) <> ASN1_SEQ then
       exit
     else
@@ -2676,8 +2719,12 @@ begin
             (AsnNextRaw(pos, der, oid) = ASN1_OBJID) and
             (AsnNextRaw(pos, der, v) = ASN1_OCTSTR) do
       begin
+        xce := OidToXce(oid);
+        if xce = xceNone then
+          continue;
+        ExtensionRaw[xce] := v;
         posv := 1;
-        case OidToXce(oid) of
+        case xce of
           xceAuthorityKeyIdentifier:
             if (AsnNext(posv, v) = ASN1_SEQ) and
                (AsnNextRaw(posv, v, ext) <> ASN1_NULL) then
@@ -2702,6 +2749,7 @@ begin
               v64 := AsnNextInteger(posv, v, vt);
               if vt = ASN1_INT then
                 UInt64ToUtf8(v64, Extension[xceCrlNumber]);
+              // any number > 63-bit should use ExtensionRaw[xceCrlNumber]
             end;
         end;
       end;
@@ -2721,13 +2769,63 @@ end;
 
 function TX509Crl.GetCrlNumber: QWord;
 begin
-  result := GetInt64(pointer(Signed.Extension[xceCrlNumber]));
+  if self = nil then
+    result := 0
+  else
+    result := GetInt64(pointer(Signed.Extension[xceCrlNumber]));
+end;
+
+procedure TX509Crl.SetCrlNumber(Value: QWord);
+begin
+  if self <> nil  then
+    UInt64ToUtf8(Value, Signed.Extension[xceCrlNumber]);
 end;
 
 procedure TX509Crl.Clear;
 begin
   Signed.Clear;
   fCachedDer := '';
+  fSignatureAlgorithm := xsaNone;
+  fSignatureValue := '';
+end;
+
+function TX509Crl.AddRevocation(const Serial: RawUtf8;
+  Reason: TCryptCertRevocationReason; ValidDays: integer;
+  Date: TDateTime; CertIssuerDN: RawUtf8): boolean;
+var
+  n: PtrInt;
+  next: TDateTime;
+  sn: RawByteString;
+begin
+  result := false;
+  if (self = nil) or
+     (Reason = crrNotRevoked) or
+     not HumanHexToBin(Serial, sn) then
+    exit;
+  AfterModified;
+  if Date = 0 then
+    Date := NowUtc;
+  Signed.Version := 2;
+  if Signed.ThisUpdate = 0 then
+    Signed.ThisUpdate := Date;
+  if ValidDays > 0 then
+  begin
+    next := Date + ValidDays;
+    if (Signed.NextUpdate = 0) or
+       (Signed.NextUpdate > next) then
+      Signed.NextUpdate := next;
+  end;
+  n := length(Signed.Revoked);
+  SetLength(Signed.Revoked, n + 1);
+  with Signed.Revoked[n] do
+  begin
+    SerialNumber := sn;
+    RevocationDate := Date;
+    ReasonCode := Reason;
+    InvalidityDate := Date;
+    CertificateIssuerDN := CertIssuerDN;
+  end;
+  result := true;
 end;
 
 function TX509Crl.SaveToDer: TCertDer;
@@ -2739,6 +2837,11 @@ begin
                     Asn(ASN1_BITSTR, [SignatureValue])
                   ]);
   result := fCachedDer;
+end;
+
+function TX509Crl.SaveToPem: TCertPem;
+begin
+  result := DerToPem(SaveToDer, pemCrl);
 end;
 
 function TX509Crl.LoadFromDer(const der: TCertDer): boolean;
@@ -2769,11 +2872,29 @@ begin
   fCachedDer := '';
 end;
 
+function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
+var
+  bin: RawByteString;
+  ndx: PtrInt;
+begin
+  result := crrNotRevoked;
+  if (self = nil) or
+     (Signed.Revoked = nil) or
+     not HumanHexToBin(SerialNumber, bin) then
+    exit;
+  ndx := Signed.FindRevoked(bin);
+  if ndx >= 0 then
+    result := Signed.Revoked[ndx].ReasonCode;
+end;
+
 function TX509Crl.Revoked: TRawUtf8DynArray;
 var
   i, n: PtrInt;
 begin
-  n := length(Signed.Revoked);
+  if self = nil then
+    n := 0
+  else
+    n := length(Signed.Revoked);
   SetLength(result, n);
   for i := 0 to n - 1 do
     with Signed.Revoked[i] do
@@ -2822,9 +2943,9 @@ type
   protected
     fX509: TX509;
     fPrivateKey: TXPrivateKey;
-    function Xsa: TXSignatureAlgorithm;
+    function Xsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
-    function Xka: TXPublicKeyAlgorithm;
+    function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
     function VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
     procedure GeneratePrivateKey;
