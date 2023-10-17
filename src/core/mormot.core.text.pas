@@ -1676,6 +1676,9 @@ procedure Append(var Text: RawByteString; Added: pointer; AddedLen: PtrInt); ove
 /// prepend some text to a RawByteString variable with no code page conversion
 procedure Prepend(var Text: RawByteString; const Added: RawByteString); overload;
 
+/// prepend one char to a RawByteString variable with no code page conversion
+procedure Prepend(var Text: RawByteString; Added: AnsiChar); overload;
+
 /// prepend some text items at the beginning of a RawUtf8 variable
 procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
 
@@ -8367,6 +8370,16 @@ begin
       MoveFast(PByteArray(Added)[0], new[0], a);
       FastAssignNew(Text, new);
     end;
+end;
+
+procedure Prepend(var Text: RawByteString; Added: AnsiChar);
+var
+  t: PtrInt;
+begin
+  t := length(Text);
+  SetLength(Text, t + 1); // is likely to avoid any reallocmem
+  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], t);
+  PByteArray(Text)[0] := ord(Added);
 end;
 
 procedure Prepend(var Text: RawByteString; const Args: array of const);
