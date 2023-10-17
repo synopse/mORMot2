@@ -270,6 +270,20 @@ const
     caaPS512,    // xsaSha512RsaPss
     caaES256);   // xsaSha256Ecc256
 
+  /// internal lookup table from ICryptCert Algorithms to X.509 Signature
+  AA_TO_XSA: array[TCryptAsymAlgo] of TXSignatureAlgorithm = (
+    xsaSha256Ecc256,  // caaES256
+    xsaNone,          // caaES384
+    xsaNone,          // caaES512
+    xsaNone,          // caaES256K
+    xsaSha256Rsa,     // caaRS256
+    xsaSha384Rsa,     // caaRS384
+    xsaSha512Rsa,     // caaRS512
+    xsaSha256RsaPss,  // caaPS256
+    xsaSha384RsaPss,  // caaPS384
+    xsaSha512RsaPss,  // caaPS512
+    xsaNone);         // caaEdDSA
+
   /// internal lookup table from X.509 Signature Algorithm as text
   XSA_TXT: array[TXSignatureAlgorithm] of RawUtf8 = (
     '',                               // xsaNone
@@ -830,6 +844,29 @@ type
     function IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
     /// return Signed.Revoked[].SerialNumber values as hexadecimal
     function Revoked: TRawUtf8DynArray;
+    /// verify the digital signature of this CRL using a X.509 Authority
+    // - the supplied authority should have the cuCrlSign usage
+    // - some errors can be ignored, e.g. cvWrongUsage or cvDeprecatedAuthority
+    // - detection / revocation date can be specified instead of the current time
+    // - this method is thread-safe
+    function Verify(Authority: TX509 = nil; IgnoreError: TCryptCertValidities = [];
+      TimeUtc: TDateTime = 0): TCryptCertValidity;
+    /// let a X.509 authority verify the digital signature of this CRL
+    // - accept TCryptCertX509 or TCryptCertOpenSsl kind of authorities
+    // - the supplied authority should have the cuCrlSign usage
+    // - will use internally a TCryptCertX509 instance for the computation
+    function VerifyCryptCert(const Authority: ICryptCert;
+      IgnoreError: TCryptCertValidities = []; TimeUtc: TDateTime = 0): TCryptCertValidity;
+    /// let a X.509 authority compute the digital signature of this CRL
+    // - accept TCryptCertX509 or TCryptCertOpenSsl kind of authorities
+    // - the supplied authority should have the cuCrlSign usage
+    // - will use internally a TCryptCertX509 instance for the computation
+    procedure SignCryptCert(const Authority: ICryptCert;
+      AuthorityCrlNumber: QWord);
+    /// main properties of the entity that has signed and issued the CRL
+    // - e.g. for an Internet certificate, Issuer[xaO] may be 'Cloudflare'
+    property Issuer: TXAttrNames
+      read Signed.Issuer.Name;
   published
     /// the cryptographic algorithm used by the CA over the Signed field
     // - match Signed.Signature internal field
@@ -2901,6 +2938,32 @@ begin
       ToHumanHex(result[i], pointer(SerialNumber), length(SerialNumber));
 end;
 
+function TX509Crl.Verify(Authority: TX509; IgnoreError: TCryptCertValidities;
+  TimeUtc: TDateTime): TCryptCertValidity;
+begin
+   result := cvBadParameter;
+   if (self = nil) or
+      (Authority = nil) or
+      not Authority.InheritsFrom(TX509) then
+     exit;
+   result := cvInvalidSignature;
+   if (SignatureAlgorithm = xsaNone) or
+      (Authority.Signed.SubjectPublicKeyAlgorithm <>
+         XSA_TO_XKA[SignatureAlgorithm]) then
+     exit;
+   result := cvUnknownAuthority;
+   if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
+        Signed.Extension[xceAuthorityKeyIdentifier]) or
+      (Authority.Signed.SubjectPublicKey = '') then
+     exit;
+   result := CanVerify(
+     Authority, cuCrlSign, {selfsigned=}false, IgnoreError, TimeUtc);
+   if result = cvValidSigned then
+     if not Authority.PublicKey.Verify(
+              SignatureAlgorithm, Signed.ToDer, SignatureValue) then
+       result := cvInvalidSignature;
+end;
+
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
@@ -3416,8 +3479,9 @@ begin
       RaiseError('Sign: no cuKeyCertSign');
     // assign the Issuer information
     fX509.Signed.Issuer := auth.fX509.Signed.Subject; // may be self
-    fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
-       auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+    if auth <> self then // same as OpenSSL for self-signed certificates
+      fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
+         auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
     // compute the digital signature
     fX509.AfterModified;
     fX509.Signed.Signature := Xsa;
@@ -3499,6 +3563,94 @@ end;
 function TCryptCertX509.GetPrivateKeyParams(out x, y: RawByteString): boolean;
 begin
   result := fX509.PublicKey.GetParams(x, y);
+end;
+
+
+{ those methods are defined here for proper TCryptCertX509 knowledge }
+
+// retrieve a TCryptCertX509 compatible authority instance
+function ToCryptCertX509(const Authority: ICryptCert; Content: TCryptCertContent;
+  var TempCryptCert: ICryptCert): TCryptCertX509;
+var
+  xsa: TXSignatureAlgorithm;
+  auth: TCryptCertX509;
+  pem: RawUtf8; // TCryptCertX509.Load(cccCertWithPrivateKey) only supports PEM
+begin
+  result := nil;
+  xsa := AA_TO_XSA[Authority.AsymAlgo];
+  if xsa = xsaNone then
+    exit;
+  auth := pointer(Authority.Instance);
+  if auth.InheritsFrom(TCryptCertX509) then
+    result := auth
+  else
+  try
+    pem := Authority.Save(Content, '', ccfPem); // e.g. a TCryptCertAlgoOpenSsl
+    if pem = '' then
+      exit;
+    TempCryptCert := CryptCertAlgoX509[Authority.AsymAlgo].New;
+    if TempCryptCert.Load(pem, Content, '') then
+      result := TempCryptCert.Instance as TCryptCertX509
+    else
+      FreeAndnil(TempCryptCert);
+  finally
+    FillZero(pem);
+  end;
+end;
+
+procedure TX509Crl.SignCryptCert(const Authority: ICryptCert;
+  AuthorityCrlNumber: QWord);
+var
+  auth: TCryptCertX509;
+  temp: ICryptCert;
+begin
+  if (self <> nil) and
+     Assigned(Authority) and
+     Authority.HasPrivateSecret then
+  begin
+    // retrieve a compatible authority instance
+    auth := ToCryptCertX509(Authority, cccCertWithPrivateKey, temp);
+    if auth = nil then
+      raise EX509.CreateUtf8('%.Sign: unsupported Authority %',
+        [self, ToText(Authority.AsymAlgo)^]);
+    if auth.fX509 = nil then
+      raise EX509.CreateUtf8('%.Sign: authority has no public key', [self]);
+    // validate usage
+    if not (cuCrlSign in auth.fX509.Usages) then
+      EX509.CreateUtf8('%.Sign: authority has no cuCrlSign', [self]);
+    // assign the Issuer information
+    Signed.Issuer := auth.fX509.Signed.Subject;
+    Signed.Extension[xceAuthorityKeyIdentifier] :=
+      auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+    if AuthorityCrlNumber = 0 then
+      // we need some increasing value for conformity
+      AuthorityCrlNumber := UnixTimeMinimalUtc; // increase every second
+    SetCrlNumber(AuthorityCrlNumber);
+    // compute the digital signature
+    AfterModified;
+    Signed.Signature := auth.Xsa;
+    fSignatureValue := auth.fPrivateKey.Sign(auth.Xsa, Signed.ToDer);
+    fSignatureAlgorithm := auth.Xsa;
+  end
+  else
+    raise EX509.CreateUtf8('%.Sign: not a CA', [self]);
+end;
+
+function TX509Crl.VerifyCryptCert(const Authority: ICryptCert;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+var
+  auth: TCryptCertX509;
+  temp: ICryptCert;
+begin
+  result := cvBadParameter;
+  if (self <> nil) and
+     Assigned(Authority) then
+  begin
+    // use a compatible authority instance for digitial signature verification
+    auth := ToCryptCertX509(Authority, cccCertOnly, temp);
+    if auth <> nil then
+      result := Verify(auth.fX509, IgnoreError, TimeUtc);
+  end;
 end;
 
 
