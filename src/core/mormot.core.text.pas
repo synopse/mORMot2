@@ -3010,7 +3010,7 @@ begin
       s := PosChar(p, Sep); // use fast SSE2 asm on i386 and x86_64
       if s <> nil then
         continue;
-      if (StrLen(p) = l) and
+      if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
          (MemCmp(pointer(p), pointer(Value), l) = 0) then
         exit;
       break;
