@@ -3647,9 +3647,7 @@ begin
       exit;
     TempCryptCert := CryptCertAlgoX509[Authority.AsymAlgo].New;
     if TempCryptCert.Load(pem, Content, '') then
-      result := TempCryptCert.Instance as TCryptCertX509
-    else
-      FreeAndnil(TempCryptCert);
+      result := TempCryptCert.Instance as TCryptCertX509;
   finally
     FillZero(pem);
   end;
