@@ -2603,9 +2603,39 @@ function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
 function Store(const name: RawUtf8): ICryptStore;
 
 var
+  /// direct access to the internal TCryptAsym factories
+  // - may be nil if mormot.crypt.ecc.pas or mormot.crypt.rsa.pas units
+  // were not included
+  // - you may use rather CryptAsymOpenSsl[] if OpenSSL is available
+  CryptAsym: array[TCryptAsymAlgo] of TCryptAsym;
+
+  /// direct access to the mormot.crypt.openssl.pas TCryptAsym factories
+  // - may be nil if this unit was not included or if OpenSSL is not available
+  // - call RegisterOpenSsl once to initialize this lookup table
+  CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
+
+  /// the prefered/default algorithm to be used wth X.509 certificates
+  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
+  // still be used for compatiblity with legacy systems
+  // - used e.g. by 'x509-store' or 'x509-pki' for its DefaultCertAlgo method
+  CryptCertAlgoDefault: TCryptAsymAlgo = caaES256;
+
   /// direct access to the mormot.crypt.ecc.pas 'syn-ecc' algorithm
   // - may be nil if this unit was not included
   CryptCertAlgoSyn: TCryptCertAlgo;
+
+  /// direct access to the mormot.crypt.x509.pas ICryptCert factories
+  // - may be nil if this unit was not included
+  // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
+  // $ CryptCertAlgoX509[caaRS256].New
+  CryptCertAlgoX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
+  /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
+  // - may be nil if this unit was not included or if OpenSSL is not available
+  // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
+  // $ CryptCertAlgoOpenSsl[caaRS256].New
+  // - call RegisterOpenSsl once to initialize this lookup table
+  CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
   /// direct access to the mormot.crypt.ecc.pas 'syn-store' algorithm
   // - may be nil if this unit was not included
@@ -2615,41 +2645,11 @@ var
   // - may be nil if this unit was not included
   CryptStoreAlgoSynNoCache: TCryptStoreAlgo;
 
-  /// direct access to the internal TCryptAsym factories
-  // - may be nil if mormot.crypt.ecc.pas or mormot.crypt.rsa.pas units
-  // were not included
-  // - you may use rather CryptAsymOpenSsl[] if OpenSSL is available
-  CryptAsym: array[TCryptAsymAlgo] of TCryptAsym;
-
-  /// direct access to the mormot.crypt.x509.pas ICryptCert factories
-  // - may be nil if this unit was not included
-  // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
-  // $ CryptCertAlgoX509[caaRS256].New
-  CryptCertAlgoX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
-
   /// direct access to the mormot.crypt.openssl.pas 'x509-store' algorithm
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - is currently nil because TCryptStoreOpenSsl is not stable yet
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptStoreAlgoOpenSsl: TCryptStoreAlgo;
-
-  /// direct access to the mormot.crypt.openssl.pas TCryptAsym factories
-  // - may be nil if this unit was not included or if OpenSSL is not available
-  // - call RegisterOpenSsl once to initialize this lookup table
-  CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
-
-  /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
-  // - may be nil if this unit was not included or if OpenSSL is not available
-  // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
-  // $ CryptCertAlgoOpenSsl[caaRS256].New
-  // - call RegisterOpenSsl once to initialize this lookup table
-  CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
-
-  /// the prefered/default algorithm to be used wth OpenSsl X.509 certificates
-  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
-  // still be used for compatiblity with legacy systems
-  // - as returned e.g. by 'x509-store' for its DefaultCertAlgo method
-  CryptCertAlgoOpenSslDefault: TCryptAsymAlgo = caaES256;
 
 
 

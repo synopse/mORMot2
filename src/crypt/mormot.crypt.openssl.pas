@@ -2818,7 +2818,7 @@ end;
 
 function TCryptStoreOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
 begin
-  result := CryptCertAlgoOpenSsl[CryptCertAlgoOpenSslDefault];
+  result := CryptCertAlgoOpenSsl[CryptCertAlgoDefault];
 end;
 
 function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;
