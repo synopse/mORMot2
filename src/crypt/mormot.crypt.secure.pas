@@ -1958,6 +1958,7 @@ type
     /// verify another certificate signature with this certificate public key
     // (if self-signed), or a supplied Authority reference
     // - Authority certificate should have the cuKeyCertSign usage
+    // - mormot.crypt.x509 will cache the last valid Authority for fast process
     function Verify(const Authority: ICryptCert;
       IgnoreError: TCryptCertValidities = [];
       TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
@@ -2143,7 +2144,7 @@ type
   /// abstract parent class for ICryptCert factories
   TCryptCertAlgo = class(TCryptAlgo)
   protected
-    fOsa: TCryptAsymAlgo; // should be set by the overwritten constructor
+    fOsa: TCryptAsymAlgo; // should be set by the overriden constructor
   public
     /// main factory to create a new Certificate instance with this algorithm
     // - return a new void instance, ready to call e.g. ICryptCert.Load
@@ -2299,6 +2300,7 @@ type
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
+
 /// append a ICryptCert to a certificates chain
 procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
   {$ifdef HASINLINE} inline; {$endif}
@@ -2307,6 +2309,10 @@ procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
 // - will search for the ICryptCert instance itself, or by TCryptCertComparer
 function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
   comparer: TCryptCertComparer = ccmInstance): PtrInt;
+
+/// sort a certificate chain by mutual authentication
+// - returns the certificates in IsAuthorizedBy() order
+function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 
 
 type
@@ -3009,6 +3015,9 @@ function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
 /// decode the header of a ASN.1 binary item
 function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
   out AsnType, AsnSize: integer): boolean;
+
+/// check if a DER memory buffer is a full block, e.g. a full ASN1_SEQ
+function AsnDecChunk(const der: RawByteString; exptyp: integer = ASN1_SEQ): boolean;
 
 /// decode an ASN1_INT ASN1_ENUM ASN1_BOOL value
 function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
@@ -6855,6 +6864,46 @@ begin
   end;
 end;
 
+function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
+var
+  ref: ICryptCertChain;
+  n: PtrInt;
+
+  procedure RecursiveCompute(var one: ICryptCert);
+  var
+    i: PtrInt;
+    r: ^ICryptCert;
+  begin
+    result[n] := one;
+    inc(n);
+    if n = length(result) then
+      exit; // paranoid
+    r := @ref[1];
+    for i := 1 to length(ref) - 1 do
+      if (r^ <> nil) and
+         one.IsAuthorizedBy(r^) then
+      begin
+        one := nil; // faster and avoid endless loop on circular references
+        RecursiveCompute(r^);
+        break;
+      end
+      else
+        inc(r);
+  end;
+
+begin
+  result := nil;
+  if (chain = nil) or
+     (chain[0] = nil) or
+     (length(chain) > 128) then // a typical chain has 2 or 3 certificates
+    exit;
+  n := 0;
+  SetLength(result, length(chain));
+  ref := copy(chain); // local chain copy for one := nil above
+  RecursiveCompute(ref[0]); // fill result[0..n-1] in auth order
+  DynArrayFakeLength(result, n);
+end;
+
 
 { TCryptCertPerUsage }
 
@@ -8334,6 +8383,17 @@ begin
     exit; // avoid overflow
   AsnType := vtype;
   result := true;
+end;
+
+function AsnDecChunk(const der: RawByteString; exptyp: integer): boolean;
+var
+  pos, typ, siz: integer;
+begin
+  pos := 1;
+  result := (der <> '') and
+            AsnDecHeader(pos, der, typ, siz) and
+            (typ = exptyp) and
+            (pos + siz = length(der) + 1);
 end;
 
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
