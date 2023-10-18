@@ -3051,7 +3051,7 @@ begin
       TrimSelf(s);
     if CaseSensitive then
     begin
-      if CompareBuf(s, Value) then
+      if SortDynArrayRawByteString(s, Value) = 0 then
         exit;
     end
     else if SameTextU(s, Value) then

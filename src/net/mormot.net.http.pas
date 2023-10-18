@@ -2392,7 +2392,7 @@ var
 begin
   v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
   if v <> nil then
-    result := CompareBuf(ExpectedValue, @PByteArray(Url)[v[0]], v[1])
+    result := CompareBuf(ExpectedValue, @PByteArray(Url)[v[0]], v[1]) = 0
   else
     result := false;
 end;

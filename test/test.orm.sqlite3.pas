@@ -1638,7 +1638,7 @@ begin
         begin
           check(Client.Orm.RetrieveBlob(TOrmPeople, IntArray[i], 'Data', Data));
           check(Length(Data) = sizeof(BlobDali));
-          check(CompareBuf(Data, @BlobDali, sizeof(BlobDali)));
+          check(CompareBuf(Data, @BlobDali, sizeof(BlobDali)) = 0);
           check(Client.Orm.RetrieveBlob(TOrmPeople, IntArray[i], 'Data', DataS));
           check((DataS.Size = 4) and
                 (PCardinal(DataS.Memory)^ = $E7E0E961));

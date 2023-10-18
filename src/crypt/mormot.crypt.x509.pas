@@ -957,7 +957,7 @@ begin
      (n > 0) and
      (OidBinary <> '') then
     repeat
-      if CompareBuf(o^.Oid, OidBinary) then // efficient O(n) search
+      if SortDynArrayRawByteString(o^.Oid, OidBinary) = 0 then // O(n) search
       begin
         result := o^.Value;
         exit;
@@ -1109,7 +1109,7 @@ var
   x: TXSignatureAlgorithm;
 begin
   for x := succ(low(x)) to high(x) do
-    if CompareBuf(oid, ASN1_OID_SIGNATURE[x]) then
+    if SortDynArrayRawByteString(oid, ASN1_OID_SIGNATURE[x]) = 0 then
     begin
       xsa := x;
       result := true;
@@ -1142,7 +1142,7 @@ var
 function OidToXa(const oid: RawByteString): TXAttr;
 begin
   for result := succ(low(result)) to high(result) do
-    if CompareBuf(oid, XA_OID_ASN[result]) then
+    if SortDynArrayRawByteString(oid, XA_OID_ASN[result]) = 0 then
       exit;
   result := xaNone;
 end;
@@ -1150,7 +1150,7 @@ end;
 function OidToXe(const oid: RawByteString): TXExtension;
 begin
   for result := succ(low(result)) to high(result) do
-    if CompareBuf(oid, XE_OID_ASN[result]) then
+    if SortDynArrayRawByteString(oid, XE_OID_ASN[result]) = 0 then
       exit;
   result := xeNone;
 end;
@@ -1158,7 +1158,7 @@ end;
 function OidToXce(const oid: RawByteString): TXCrlExtension;
 begin
   for result := succ(low(result)) to high(result) do
-    if CompareBuf(oid, XCE_OID_ASN[result]) then
+    if SortDynArrayRawByteString(oid, XCE_OID_ASN[result]) = 0 then
       exit;
   result := xceNone;
 end;
@@ -1166,7 +1166,7 @@ end;
 function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
 begin
   for result := succ(low(result)) to high(result) do
-    if CompareBuf(oid, XKU_OID_ASN[result]) then
+    if SortDynArrayRawByteString(oid, XKU_OID_ASN[result]) = 0 then
       exit;
   result := xkuNone;
 end;
@@ -2691,7 +2691,7 @@ end;
 function TXTbsCertList.FindRevoked(const SerialNumber: RawByteString): PtrInt;
 begin
   for result := 0 to length(Revoked) - 1 do
-    if CompareBuf(Revoked[result].SerialNumber, SerialNumber) then
+    if SortDynArrayRawByteString(Revoked[result].SerialNumber, SerialNumber) = 0 then
       exit;
   result := -1;
 end;

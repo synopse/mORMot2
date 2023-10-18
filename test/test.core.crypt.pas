@@ -1682,7 +1682,7 @@ begin
   b32 := BinToBase32(tmp);
   tmp2 := Base32ToBin(b32);
   CheckEqual(length(tmp2), length(tmp));
-  Check(CompareBuf(tmp, tmp2), 'tmp=tmp2'); // tmp = tmp2 fails on FPC :(
+  Check(EqualBuf(tmp, tmp2), 'tmp=tmp2'); // tmp = tmp2 fails on FPC :(
   tmp2 := Zeroed(UnZeroed(tmp));
   {$ifdef FPC}
   SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug

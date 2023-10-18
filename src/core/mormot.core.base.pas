@@ -2756,13 +2756,18 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
 
-/// overload wrapper of CompareMem() to compare a RawByteString vs a memory buffer
-function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): boolean;
+/// overload wrapper of MemCmp() to compare a RawByteString vs a memory buffer
+function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): integer;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
-/// overload wrapper of CompareMem() to compare two RawByteString variables
+/// overload wrapper to SortDynArrayRawByteString(P1, P2)
 // - won't involve any code page - so may be safer e.g. on FPC
-function CompareBuf(const P1, P2: RawByteString): boolean;
+function CompareBuf(const P1, P2: RawByteString): integer;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// overload wrapper to SortDynArrayRawByteString(P1, P2) = 0
+// - won't involve any code page - so may be safer e.g. on FPC
+function EqualBuf(const P1, P2: RawByteString): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef HASINLINE}
@@ -8186,7 +8191,6 @@ begin
           inc(Str2);
         until false;
         result := PWord(Str1)^ - PWord(Str2)^;
-        exit;
       end
       else
         inc(result) // Str2=''
@@ -10990,22 +10994,21 @@ end;
 
 {$endif ASMX86}
 
-function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): boolean;
+function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): integer;
 begin
-  result := (length(P1) = P2Len) and
-            {$ifdef CPUX64} (MemCmp(pointer(P1), P2, P2Len) = 0); {$else}
-            CompareMem(pointer(P1), P2, P2Len); {$endif CPUX64}
+  result := ComparePtrInt(length(P1), P2Len);
+  if result = 0 then
+    result := MemCmp(pointer(P1), P2, P2Len);
 end;
 
-function CompareBuf(const P1, P2: RawByteString): boolean;
-var
-  l: PtrInt;
+function CompareBuf(const P1, P2: RawByteString): integer;
 begin
-  l := length(P1);
-  result := (pointer(P1) = pointer(P2)) or
-            ((l = length(P2)) and
-             {$ifdef CPUX64} (MemCmp(pointer(P1), pointer(P2), l) = 0)); {$else}
-             CompareMem(pointer(P1), pointer(P2), l)); {$endif CPUX64}
+  result := SortDynArrayRawByteString(P1, P2);
+end;
+
+function EqualBuf(const P1, P2: RawByteString): boolean;
+begin
+  result := SortDynArrayRawByteString(P1, P2) = 0;
 end;
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);

@@ -2817,7 +2817,7 @@ begin
   else
     exit;
   end;
-  result := CompareBuf(digest, Hash, HASH_SIZE[HashAlgo]);
+  result := CompareBuf(digest, Hash, HASH_SIZE[HashAlgo]) = 0;
 end;
 
 function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
