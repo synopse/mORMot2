@@ -2299,6 +2299,16 @@ type
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
+/// append a ICryptCert to a certificates chain
+procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// search for a ICryptCert to a certificates chain
+// - will search for the ICryptCert instance itself, or by TCryptCertComparer
+function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
+  comparer: TCryptCertComparer = ccmInstance): PtrInt;
+
+
 type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
   // - could be seen as a basic certificates store or "PKI of the poor" (tm)
@@ -6823,6 +6833,26 @@ begin
   result := New;
   if not result.Load(Binary) then
     result := nil;
+end;
+
+
+procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
+begin
+  InterfaceArrayAdd(chain, cert);
+end;
+
+function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
+  comparer: TCryptCertComparer): PtrInt;
+begin
+  if comparer = ccmInstance then
+    result := InterfaceArrayFind(chain, cert)
+  else
+  begin
+    for result := 0 to length(chain) - 1 do
+      if cert.Compare(chain[result], comparer) = 0 then
+        exit;
+    result := -1;
+  end;
 end;
 
 
