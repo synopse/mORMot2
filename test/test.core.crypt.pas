@@ -3865,7 +3865,7 @@ const
 
 procedure TTestCoreCrypto._X509;
 var
-  bin: RawByteString;
+  bin, der: RawByteString;
   pem: RawUtf8;
   x, a: TX509;
   i: integer;
@@ -3873,7 +3873,6 @@ var
   crl: TX509Crl;
   num: QWord;
   auth: ICryptCert;
-  timer: TPrecisionTimer;
 begin
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
@@ -3954,10 +3953,8 @@ begin
         'caIssuers=http://x1.i.lencr.org/');
       CheckEqual(a.Extension[xeCertificatePolicies],
         '2.23.140.1.2.1,1.3.6.1.4.1.44947.1.1.1');
-      timer.Start;
-      for i := 1 to 100 do
-        Check(x.Verify(a, [], _synopse_date) = cvValidSigned, 'verify syn');
-      NotifyTestSpeed('RSA2048 verify', 100, 0, @timer);
+      for i := 1 to 1000 do // will use TX509.fLastVerifyAuthPublicKey cache
+        Check(x.Verify(a, [], _synopse_date) = cvValidSigned, 'verify 1000');
       bin := x.Signed.ToDer;
       Check(a.Verify(pointer(x.SignatureValue), pointer(bin),
         length(x.SignatureValue), length(bin), [], _synopse_date) =
@@ -4006,10 +4003,8 @@ begin
       'd5ae8d642967b01f806cd5c7c1af8b47ff7337bc');
     CheckEqual(x.FingerPrint(hfSHA256),
       'b75b01ca2d59f3283a6843b76d777ebe5b5d752f11c686879cf45248564cffa4');
-    timer.Start;
-    for i := 1 to 100 do
+    for i := 1 to 1000 do // will use TX509.fLastVerifyAuthPublicKey cache
       Check(x.Verify = cvValidSelfSigned, 'verify self');
-    NotifyTestSpeed('ECC256 verify', 100, 0, @timer);
     bin := x.Signed.ToDer;
     Check(x.Verify(pointer(x.SignatureValue), pointer(bin),
       length(x.SignatureValue), length(bin), [cvWrongUsage]) =
@@ -4017,6 +4012,7 @@ begin
     CheckEqual(x.SubjectPublicKeyAlgorithm, '256-bit prime256v1 ECDSA');
     CheckHash(x.PeerInfo, $BCB82372, 'peerinfo3');
     CheckHash(ObjectToJson(x), $BBCBCFEB);
+    Check(AsnDecChunk(x.SaveToDer), 'x.SaveToDer');
   finally
     x.Free;
   end;
@@ -4039,7 +4035,9 @@ begin
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222feb') = crrNotRevoked);
     CheckEqual(crl.IssuerDN,
       'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
-    pem := DerToPem(crl.SaveToDer, pemCrl);
+    der := crl.SaveToDer;
+    Check(AsnDecChunk(der), 'crl.SaveToDer');
+    pem := DerToPem(der, pemCrl);
     CheckEqual(pem, _crl_pem);
     crl.AfterModified; // force regenerate DER/PEM
     pem := DerToPem(crl.SaveToDer, pemCrl);
