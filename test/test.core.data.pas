@@ -5524,6 +5524,17 @@ begin
   CheckEqual(UrlEncodeName('ab0c'), 'ab0c');
   CheckEqual(UrlEncodeName('ab c'), 'ab%20c');
   CheckEqual(UrlEncodeName('ab+c'), 'ab%2Bc');
+  CheckEqual(UnescapeHex(''), '');
+  CheckEqual(UnescapeHex('\'), '');
+  CheckEqual(UnescapeHex('\3'), '3');
+  CheckEqual(UnescapeHex('\31'), '1');
+  CheckEqual(UnescapeHex('\3123456'), '123456');
+  CheckEqual(UnescapeHex('123\3456'), '123456');
+  CheckEqual(UnescapeHex('123\\56'), '123\56');
+  CheckEqual(UnescapeHex('12345\36'), '123456');
+  CheckEqual(UnescapeHex('12345\6'), '123456');
+  CheckEqual(UnescapeHex('123\'#10'456'), '123456');
+  CheckEqual(UnescapeHex('12\'#13#10#13#10'3456'), '123456');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);

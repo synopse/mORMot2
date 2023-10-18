@@ -992,10 +992,12 @@ function EscapeHex(const src: RawUtf8;
   const toescape: TSynAnsicharSet; escape: AnsiChar = '\'): RawUtf8;
 
 /// un-escape \xx or \c encoded chars from a pre-allocated buffer
+// - any CR/LF after \ will also be ignored
 // - dest^ should have at least the same length than src^
 function UnescapeHexBuffer(src, dest: PUtf8Char; escape: AnsiChar = '\'): PUtf8Char;
 
 /// un-escape \xx or \c encoded chars into a new RawUtf8 string
+// - any CR/LF after \ will also be ignored
 function UnescapeHex(const src: RawUtf8; escape: AnsiChar = '\'): RawUtf8;
 
 /// escape as \char pair some chars from a set into a pre-allocated buffer
@@ -5262,7 +5264,14 @@ begin
       if src^ = escape then
       begin
         inc(src);
-        if HexToChar(PAnsiChar(src), @c) then // \xx
+        if src^ in [#10, #13] then // \CRLF or \LF
+        begin
+          repeat
+            inc(src);
+          until not (src^ in [#10, #13]);
+          continue;
+        end
+        else if HexToChar(PAnsiChar(src), @c) then // \xx
         begin
           result^ := c;
           inc(src, 2);
