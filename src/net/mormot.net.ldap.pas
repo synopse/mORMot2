@@ -1369,88 +1369,9 @@ begin
   result := copy(s, 1, len);
 end;
 
-function DecodeTriplet(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
-var
-  x, l, lv: integer;
-  c: AnsiChar;
-  b: byte;
-  bad: boolean;
-begin
-  lv := length(Value);
-  SetLength(result, lv);
-  x := 1;
-  l := 1;
-  while x <= lv do
-  begin
-    c := Value[x];
-    inc(x);
-    if c <> Delimiter then
-    begin
-      result[l] := c;
-      inc(l);
-    end
-    else
-      if x < lv then
-      begin
-        case Value[x] of
-          #13:
-            if Value[x + 1] = #10 then
-              inc(x, 2)
-            else
-              inc(x);
-          #10:
-            if Value[x + 1] = #13 then
-              inc(x, 2)
-            else
-              inc(x);
-        else
-          begin
-            bad := false;
-            case Value[x] of
-              '0'..'9':
-                b := (byte(Value[x]) - 48) shl 4;
-              'a'..'f',
-              'A'..'F':
-                b := ((byte(Value[x]) and 7) + 9) shl 4;
-            else
-              begin
-                b := 0;
-                bad := true;
-              end;
-            end;
-            case Value[x + 1] of
-              '0'..'9':
-                b := b or (byte(Value[x + 1]) - 48);
-              'a'..'f',
-              'A'..'F':
-                b := b or ((byte(Value[x + 1]) and 7) + 9);
-            else
-              bad := true;
-            end;
-            if bad then
-            begin
-              result[l] := c;
-              inc(l);
-            end
-            else
-            begin
-              inc(x, 2);
-              result[l] := AnsiChar(b);
-              inc(l);
-            end;
-          end;
-        end;
-      end
-      else
-        break;
-  end;
-  dec(l);
-  SetLength(result, l);
-end;
-
 function TrimSPLeft(const S: RawUtf8): RawUtf8;
 var
-  i, l: integer;
+  i, l: PtrInt;
 begin
   result := '';
   if S = '' then
@@ -1465,7 +1386,7 @@ end;
 
 function TrimSPRight(const S: RawUtf8): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := '';
   if S = '' then
@@ -1707,7 +1628,7 @@ begin
                   result := Asn(rule, ASN1_CTX1);
                 if attr <> '' then
                   AsnAdd(result, attr, ASN1_CTX2);
-                AsnAdd(result, DecodeTriplet(r, '\'), ASN1_CTX3);
+                AsnAdd(result, UnescapeHex(r), ASN1_CTX3);
                 if dn then // default is FALSE
                   AsnAdd(result, RawByteString(#$01#$ff), ASN1_CTX4);
                 result := Asn(result, ASN1_CTC9);
@@ -1718,7 +1639,7 @@ begin
                 System.Delete(l, length(l), 1);
                 result := Asn(ASN1_CTC8, [
                   Asn(l),
-                  Asn(DecodeTriplet(r, '\'))]);
+                  Asn(UnescapeHex(r))]);
               end;
             '>':
               // Greater or equal match
@@ -1726,7 +1647,7 @@ begin
                 System.Delete(l, length(l), 1);
                 result := Asn(ASN1_CTC5, [
                    Asn(l),
-                   Asn(DecodeTriplet(r, '\'))]);
+                   Asn(UnescapeHex(r))]);
               end;
             '<':
               // Less or equal match
@@ -1734,7 +1655,7 @@ begin
                 System.Delete(l, length(l), 1);
                 result := Asn(ASN1_CTC6, [
                    Asn(l),
-                   Asn(DecodeTriplet(r, '\'))]);
+                   Asn(UnescapeHex(r))]);
               end;
           else
             // present
@@ -1746,16 +1667,16 @@ begin
               begin
                 s := Fetch(r, '*');
                 if s <> '' then
-                  result := Asn(DecodeTriplet(s, '\'), ASN1_CTX0);
+                  result := Asn(UnescapeHex(s), ASN1_CTX0);
                 while r <> '' do
                 begin
                   if PosExChar('*', r) <= 0 then
                     break;
                   s := Fetch(r, '*');
-                  AsnAdd(result, DecodeTriplet(s, '\'), ASN1_CTX1);
+                  AsnAdd(result, UnescapeHex(s), ASN1_CTX1);
                 end;
                 if r <> '' then
-                  AsnAdd(result, DecodeTriplet(r, '\'), ASN1_CTX2);
+                  AsnAdd(result, UnescapeHex(r), ASN1_CTX2);
                 result := Asn(ASN1_CTC4, [
                    Asn(l),
                    AsnSeq(result)]);
@@ -1765,7 +1686,7 @@ begin
                 // Equality match
                 result := Asn(ASN1_CTC3, [
                    Asn(l),
-                   Asn(DecodeTriplet(r, '\'))]);
+                   Asn(UnescapeHex(r))]);
               end;
           end;
         end;
