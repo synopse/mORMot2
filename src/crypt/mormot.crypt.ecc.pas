@@ -929,7 +929,8 @@ type
     // the associated signing authority (which should be stored in Items[])
     // - consider setting IsValidCached property to TRUE to reduce resource use
     // - this method is thread-safe, and not blocking
-    function IsValid(cert: TEccCertificate): TEccValidity; overload;
+    function IsValid(cert: TEccCertificate;
+      TimeUtc: TDateTime = 0): TEccValidity; overload;
     /// check if the raw certificate is valid, against known certificates chain
     // - will check internal properties of the certificate (e.g. validity dates,
     // unless ignoreDate=TRUE), and validate the stored ECDSA signature
@@ -3567,14 +3568,15 @@ begin
   inherited;
 end;
 
-function TEccCertificateChain.IsValid(cert: TEccCertificate): TEccValidity;
+function TEccCertificateChain.IsValid(cert: TEccCertificate;
+  TimeUtc: TDateTime): TEccValidity;
 begin
   if (self = nil) or
      (cert = nil) then
     result := ecvBadParameter
   else
-    result := IsValidRaw(
-                cert.Content, {ignoredate=}false, {allowselfnotaddedyet=}false);
+    result := IsValidRaw(cert.Content, {ignoredate=}false,
+      {allowselfnotaddedyet=}false, TimeUtc);
 end;
 
 function TEccCertificateChain.IsValidRaw(const content: TEccCertificateContent;
@@ -3584,6 +3586,7 @@ var
   hash: THash256Rec;
   cached: THash128;
 begin
+  // check certificate coherency and date before checking the cache
   result := ecvCorrupted;
   if not content.Check then
     exit;
@@ -3593,13 +3596,16 @@ begin
     if not content.CheckDate(nil, TimeUtc) then
       exit;
   end;
+  // guess which result is to be returned on proper verification
   if content.IsSelfSigned then
     result := ecvValidSelfSigned
   else
     result := ecvValidSigned;
-  content.ComputeHash(hash.b); // sha-256 of the certificate content
+  // compute the sha-256 of this certificate
+  content.ComputeHash(hash.b);
   if fIsValidCached then
   begin
+    // try to recognize a previous valid certificate in the hash cache
     cached := hash.Lo; // apply fIsValidCacheSalt and maybe AesNiHash128
     DefaultHasher128(@cached, pointer(fIsValidCacheSalt), length(fIsValidCacheSalt));
     fSafe.ReadLock;
@@ -3615,8 +3621,9 @@ begin
     authoritypublickey := content.Head.Signed.PublicKey
   else
   begin
+    // search for the associated authority in the chain
     result := GetKeyBySerial(content.Head.Signed.AuthoritySerial,
-                [cuCA, cuDigitalSignature], authoritypublickey, result,
+                [cuCA, cuKeyCertSign], authoritypublickey, result,
                 EccToDateTime(content.Head.Signed.IssueDate));
     if not (result in ECC_VALIDSIGN) then
       exit; // ecvUnknownAuthority/ecvDeprecatedAuthority/ecvRevoked
@@ -3626,6 +3633,7 @@ begin
   begin
     if fIsValidCached then
     begin
+      // store the hash of this valid certificate for quick recognition
       fSafe.WriteLock;
       try
         if fIsValidCacheCount > 1024 then
@@ -5858,12 +5866,13 @@ type
     function Load(const Saved: RawByteString): boolean; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
-    function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
+    function IsValid(const cert: ICryptCert;
+      date: TDateTime): TCryptCertValidity; override;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
@@ -5908,9 +5917,12 @@ begin
 end;
 
 function TCryptStoreInternal.IsRevoked(
-  const Serial: RawUtf8): TCryptCertRevocationReason;
+  const cert: ICryptCert): TCryptCertRevocationReason;
 begin
-  result := fEcc.IsRevoked(Serial);
+  if Assigned(cert) then
+    result := fEcc.IsRevoked(cert.GetSerial) // global CRL with no issuer link
+  else
+    result := crrNotRevoked;
 end;
 
 function TCryptStoreInternal.Add(const cert: ICryptCert): boolean;
@@ -5941,13 +5953,14 @@ begin
             fEcc.Revoke(Cert.GetSerial, RevocationDate, Reason);
 end;
 
-function TCryptStoreInternal.IsValid(const cert: ICryptCert): TCryptCertValidity;
+function TCryptStoreInternal.IsValid(const cert: ICryptCert;
+  date: TDateTime): TCryptCertValidity;
 begin
   if cert = nil then
     result := cvBadParameter
   else if cert.Instance.InheritsFrom(TCryptCertInternal) then
     result := TCryptCertValidity(fEcc.IsValid(
-                TCryptCertInternal(cert.Instance).fEcc))
+                TCryptCertInternal(cert.Instance).fEcc, date))
   else
     result := cvUnknownAuthority;
 end;

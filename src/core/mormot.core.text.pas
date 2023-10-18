@@ -3008,21 +3008,23 @@ begin
     result := false;
     exit;
   end;
+  // note: all search sub-functions do use fast SSE2 asm on i386 and x86_64
   i := PosExChar(Sep, Csv);
+  p := pointer(Csv);
+  l := PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^;
   if i = 0 then
-    result := CompareBuf(Csv, Value)
+    result := (l = PStrLen(p - _STRLEN)^) and
+              (MemCmp(pointer(p), pointer(Value), l) = 0)
   else
   begin
     result := true;
-    l := length(Value);
-    p := pointer(Csv);
     s := p + i - 1;
     repeat
       if (s - p = l) and
          (MemCmp(pointer(p), pointer(Value), l) = 0) then
         exit;
       p := s + 1;
-      s := PosChar(p, Sep); // use fast SSE2 asm on i386 and x86_64
+      s := PosChar(p, Sep);
       if s <> nil then
         continue;
       if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and

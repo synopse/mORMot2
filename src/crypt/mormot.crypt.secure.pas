@@ -2189,14 +2189,10 @@ type
     function Save: RawByteString;
     /// search for a certificate from its (hexadecimal) identifier
     function GetBySerial(const Serial: RawUtf8): ICryptCert;
-    /// quickly check if a given certificate ID is part of the CRL
-    // - returns crrNotRevoked if the serial is not known as part of the CRL
-    // - returns the reason why this certificate has been revoked otherwise
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; overload;
-    /// quickly check if a given certificate is part of the CRL
+    /// quickly check if a given certificate is part of the internal CRL
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
-    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
     /// register a certificate in the internal certificate chain
     // - returns false e.g. if the certificate was not valid, or its serial was
     // already part of the internal list, or not of a compatible class
@@ -2216,7 +2212,7 @@ type
     // - the Certificate(s) should have one of cuCA, cuDigitalSignature usages
     function AddFromFolder(const Folder: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = false): TRawUtf8DynArray;
-    /// add a new Serial number to the internal Certificate Revocation List
+    /// add a new Serial number to the global Certificate Revocation List
     // - on some engines (our internal ECC, but not OpenSSL), Reason=crrNotRevoked
     // could be used to unregister a certificate revocation
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
@@ -2225,7 +2221,8 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored digital signature according to the public key of
     // the associated signing authority, as found within the store
-    function IsValid(const cert: ICryptCert): TCryptCertValidity;
+    function IsValid(const cert: ICryptCert;
+      date: TDateTime = 0): TCryptCertValidity; overload;
     /// verify the digital signature of a given memory buffer
     // - this signature should have come from a previous ICryptCert.Sign() call
     // - will check internal properties of the certificate (e.g. validity dates),
@@ -2251,9 +2248,7 @@ type
     function Load(const Saved: RawByteString): boolean; virtual; abstract;
     function Save: RawByteString; virtual; abstract;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
-      overload; virtual; abstract;
-    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload; virtual;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
     function Add(const cert: ICryptCert): boolean; virtual; abstract;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; virtual; abstract;
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
@@ -2261,7 +2256,8 @@ type
        Recursive: boolean): TRawUtf8DynArray; virtual;
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
-    function IsValid(const cert: ICryptCert): TCryptCertValidity; virtual; abstract;
+    function IsValid(const cert: ICryptCert;
+      date: TDateTime): TCryptCertValidity; overload; virtual; abstract;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         virtual; abstract;
@@ -2282,6 +2278,7 @@ type
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
+type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
   // - could be seen as a basic certificates store or "PKI of the poor" (tm)
   // - per usage lookup is in O(1) so faster than iterative ICryptCert.GetUsage

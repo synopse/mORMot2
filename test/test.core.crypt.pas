@@ -3155,7 +3155,6 @@ begin
     end;
     // validate CRL on certificates
     Check(st2.Revoke(c3, 0, crrWithdrawn));
-    Check(st2.IsRevoked(c3.GetSerial) = crrWithdrawn);
     Check(st2.IsRevoked(c3) = crrWithdrawn);
     // note: st2.Save fails with OpenSSL because the CRL is not signed
     // ensure new certs are not recognized by previous stores

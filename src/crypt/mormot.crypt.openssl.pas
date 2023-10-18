@@ -1924,13 +1924,13 @@ type
     function Load(const Saved: RawByteString): boolean; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
-    function IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; override;
-    function IsValid(const cert: ICryptCert): TCryptCertValidity; override;
+    function IsValid(const cert: ICryptCert;
+      date: TDateTime): TCryptCertValidity; override;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
     function Count: integer; override;
@@ -2758,11 +2758,6 @@ begin
   end;
 end;
 
-function TCryptStoreOpenSsl.IsRevoked(const Serial: RawUtf8): TCryptCertRevocationReason;
-begin
-  result := ToReason(fStore.IsRevoked(Serial));
-end;
-
 function TCryptStoreOpenSsl.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
 begin
   if cert = nil then
@@ -2890,11 +2885,13 @@ begin
   end;
 end;
 
-function TCryptStoreOpenSsl.IsValid(const cert: ICryptCert): TCryptCertValidity;
+function TCryptStoreOpenSsl.IsValid(const cert: ICryptCert;
+  date: TDateTime): TCryptCertValidity;
 var
   x: PX509;
   res: integer;
 begin
+  // TODO: support date in TCryptStoreOpenSsl.IsValid
   result := cvBadParameter;
   if cert = nil then
     exit;
