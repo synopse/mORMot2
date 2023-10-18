@@ -2249,6 +2249,14 @@ type
     // the associated signing authority, as found within the store
     function IsValid(const cert: ICryptCert;
       date: TDateTime = 0): TCryptCertValidity;
+    /// check a certificate against its supplied chain and known certificates
+    // - with a large PKI as on the Internet, a certificates chain is usually
+    // supplied for authentication with only some "trust anchors" certificates
+    // - this overloaded method accept a chain as input, so that the first
+    // item is to be validated against the other members of the chain, then
+    // eventually searching the store for the root entry
+    function IsValidChain(const chain: ICryptCertChain;
+      date: TDateTime = 0): TCryptCertValidity;
     /// verify the digital signature of a given memory buffer
     // - this signature should have come from a previous ICryptCert.Sign() call
     // - will check internal properties of the certificate (e.g. validity dates),
@@ -2284,6 +2292,8 @@ type
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; virtual; abstract;
+    function IsValidChain(const chain: ICryptCertChain;
+      date: TDateTime): TCryptCertValidity; virtual;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         virtual; abstract;
@@ -6786,6 +6796,57 @@ end;
 
 
 { TCryptStore }
+
+function TCryptStore.IsValidChain(const chain: ICryptCertChain;
+  date: TDateTime): TCryptCertValidity;
+var
+  i: PtrInt;
+  c: ICryptCertChain;
+begin
+  // we need something to validate
+  result := cvBadParameter;
+  if (chain = nil) or
+     (chain[0] = nil) then
+    exit;
+  // ensure main certificate is not deprecated
+  result := cvInvalidDate;
+  if not chain[0].IsValidDate(date) then
+    exit;
+  // compute the exact authority sequence (if not supplied in proper order)
+  result := cvUnknownAuthority;
+  c := ChainConsolidate(chain);
+  if (c = nil) or
+     ((length(c) = 1) and
+      not c[0].IsSelfSigned) then
+    exit;
+  // check the usages of all intermediate certificates
+  result := cvWrongUsage;
+  for i := 1 to length(c) - 1 do
+    if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
+      exit;
+  // ensure no certificate in the sequence has been explicitly revoked
+  result := cvRevoked;
+  for i := 0 to length(c) - 1 do
+    if IsRevoked(c[i]) <> crrNotRevoked then
+      exit;
+  // check the cascaded dates (before any digital signature verification)
+  result := cvDeprecatedAuthority;
+  for i := 1 to length(c) - 1 do
+    if not c[i].IsValidDate(c[i - 1].GetNotBefore) then
+      exit;
+  // check the cascaded digital signatures
+  for i := 0 to length(c) - 2 do
+  begin
+    result := c[i].Verify(c[i + 1], [cvWrongUsage, cvDeprecatedAuthority]);
+    // note: TCryptCertX509.Verify has a per-authority cache so is very fast
+    if result <> cvValidSigned then
+      exit;
+  end;
+  // eventually check the trusted anchor of the chain
+  if length(c) > 1 then
+    date := c[length(c) - 2].GetNotBefore; // anchor is not main: adjust date
+  result := IsValid(c[length(c) - 1], date);
+end;
 
 function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
 var
