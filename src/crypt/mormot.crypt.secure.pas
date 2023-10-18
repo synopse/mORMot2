@@ -1778,6 +1778,19 @@ type
     cccCertWithPrivateKey,
     cccPrivateKeyOnly);
 
+  /// how ICryptCert.Compare() should compare two certificates
+  TCryptCertComparer = (
+    ccmInstance,
+    ccmSerialNumber,
+    ccmSubjectName,
+    ccmIssuerName,
+    ccmSubjectCN,
+    ccmIssuerCN,
+    ccmSubjectKey,
+    ccmAuthorityKey,
+    ccmUsage,
+    ccmBinary);
+
   TCryptCert = class;
   TCryptCertAlgo = class;
 
@@ -1856,6 +1869,8 @@ type
     // - e.g. on X.509 will efficiently check the certificate AKID with the
     // Authority SKID
     function IsAuthorizedBy(const Authority: ICryptCert): boolean;
+    /// compare one Certificate instance with another
+    function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer;
     /// the minimum Validity timestamp of this Certificate
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -2035,6 +2050,11 @@ type
     function GetPrivateKeyParams(out x, y: RawByteString): boolean;
   end;
 
+  /// a dynamic array of Certificate instances
+  ICryptCerts = array of ICryptCert;
+  /// holds a Certificate chain, the first being the main certificate
+  ICryptCertChain = ICryptCerts;
+
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
   // - you should never use this class, but the ICryptCert instances
   // - type is only defined here to be inherited with the actual provider units
@@ -2061,6 +2081,7 @@ type
     function GetAuthorityKey: RawUtf8; virtual; abstract;
     function IsSelfSigned: boolean; virtual; abstract;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; virtual;
+    function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; virtual;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate(date: TDateTime): boolean; virtual;
@@ -2292,7 +2313,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// the stored ICryptCert Instances
-    List: array of ICryptCert;
+    List: ICryptCerts;
     /// all usages currently stored in this list
     Usages: TCryptCertUsages;
     /// lookup table used by GetUsage()/PerUsage()
@@ -2333,6 +2354,7 @@ type
     // - returns the duplicated usages found during adding certificates
     function FromBinary(algo: TCryptCertAlgo; const bin: RawByteString): TCryptCertUsages;
   end;
+
 
 const
   /// our units generate RSA keypairs with 2048-bit by default
@@ -6495,6 +6517,38 @@ function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
 begin
   result := (Authority <> nil) and
             IdemPropNameU(GetAuthorityKey, Authority.GetSubjectKey);
+end;
+
+function TCryptCert.Compare(const Another: ICryptCert;
+  Method: TCryptCertComparer): integer;
+begin
+  if Assigned(Another) and
+     (Another.Handle <> nil) then
+    case Method of
+      ccmSerialNumber:
+        result := HumanHexCompare(GetSerial, Another.GetSerial);
+      ccmSubjectName:
+        result := CompareBuf(GetSubjectName, Another.GetSubjectName);
+      ccmIssuerName:
+        result := CompareBuf(GetIssuerName, Another.GetIssuerName);
+      ccmSubjectCN:
+        result := CompareBuf(GetSubject('CN'), Another.GetSubject('CN'));
+      ccmIssuerCN:
+        result := CompareBuf(GetIssuer('CN'), Another.GetIssuer('CN'));
+      ccmSubjectKey:
+        result := HumanHexCompare(GetSubjectKey, Another.GetSubjectKey);
+      ccmAuthorityKey:
+        result := HumanHexCompare(GetAuthorityKey, Another.GetAuthorityKey);
+      ccmUsage:
+        result := word(GetUsage) - word(Another.GetUsage);
+      ccmBinary:
+        result := CompareBuf(Save(cccCertOnly, '', ccfBinary),
+                             Another.Save(cccCertOnly, '', ccfBinary));
+    else // e.g. ccmInstance
+      result := ComparePointer(pointer(self), pointer(Another));
+    end
+  else
+    result := 1;
 end;
 
 function TCryptCert.IsValidDate(date: TDateTime): boolean;

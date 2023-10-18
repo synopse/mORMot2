@@ -207,6 +207,8 @@ type
     function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
+    /// compare the ToBinary content of two X.501 names
+    function Compare(var Another: TXName): integer;
     /// return the UTF-8 text value of a given text OID
     // - search in Other[] then Name[]
     function FindOid(const oid: RawUtf8): RawUtf8;
@@ -630,6 +632,8 @@ type
     /// check if this certificate has been issued by the specified certificate
     function IsAuthorizedBy(Authority: TX509): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// compare two certificates
+    function Compare(Another: TX509; Method: TCryptCertComparer = ccmBinary): integer;
     /// return the associated Public Key instance
     // - initialize it from stored Signed.SubjectPublicKey, if needed
     function PublicKey: TXPublicKey;
@@ -1286,6 +1290,16 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TXName.Compare(var Another: TXName): integer;
+begin
+  // update cache manually to avoid temporary strings with ToBinary calls
+  if fCachedAsn = '' then
+    ComputeAsn;
+  if Another.fCachedAsn = '' then
+    Another.ComputeAsn;
+  result := SortDynArrayRawByteString(fCachedAsn, Another.fCachedAsn);
 end;
 
 function TXName.NameArray(a: TXAttr): TRawUtf8DynArray;
@@ -2553,8 +2567,17 @@ end;
 function TX509.IsSelfSigned: boolean;
 begin
   // check Issuer/Subject names, but not SKID/AKID since self-signed has no AKID
-  result := (self <> nil) and
-            (Signed.Issuer.ToBinary = Signed.Subject.ToBinary);
+  if self <> nil then
+  begin
+    if Signed.Issuer.fCachedAsn = '' then
+      Signed.Issuer.ComputeAsn;
+    if Signed.Subject.fCachedAsn = '' then
+      Signed.Subject.ComputeAsn;
+    result := SortDynArrayRawByteString(
+      Signed.Issuer.fCachedAsn, Signed.Subject.fCachedAsn) = 0;
+  end
+  else
+    result := false;
 end;
 
 function TX509.IsAuthorizedBy(Authority: TX509): boolean;
@@ -2565,6 +2588,49 @@ begin
             // fast search with no memory allocation
             CsvContains(Signed.Extension[xeAuthorityKeyIdentifier],
                         Authority.Signed.Extension[xeSubjectKeyIdentifier]);
+end;
+
+function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
+begin
+  if Assigned(Another) then
+    case Method of
+      ccmSerialNumber:
+        result := SortDynArrayRawByteString(
+                    Signed.SerialNumber, Another.Signed.SerialNumber);
+      ccmSubjectName:
+        result := Signed.Subject.Compare(Another.Signed.Subject);
+      ccmIssuerName:
+        result := Signed.Issuer.Compare(Another.Signed.Issuer);
+      ccmSubjectCN:
+        result := SortDynArrayAnsiString(
+                    Signed.Subject.Name[xaCN], Another.Signed.Subject.Name[xaCN]);
+      ccmIssuerCN:
+        result := SortDynArrayAnsiString(
+                    Signed.Issuer.Name[xaCN], Another.Signed.Issuer.Name[xaCN]);
+      ccmSubjectKey:
+        result := SortDynArrayRawByteString(
+                    Signed.ExtensionRaw[xeSubjectKeyIdentifier],
+                    Another.Signed.ExtensionRaw[xeSubjectKeyIdentifier]);
+      ccmAuthorityKey:
+        result := SortDynArrayRawByteString(
+                    Signed.ExtensionRaw[xeAuthorityKeyIdentifier],
+                    Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
+      ccmUsage:
+        result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
+      ccmBinary:
+        begin
+          // update cache manually to avoid temporary strings with ToDer calls
+          if fCachedDer = '' then
+            ComputeCachedDer;
+          if Another.fCachedDer = '' then
+            Another.ComputeCachedDer;
+          result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
+        end;
+    else
+      result := ComparePointer(self, Another); // e.g. ccmInstance
+    end
+  else
+    result := 1;
 end;
 
 function TX509.SignatureSecurityBits: integer;
@@ -3069,6 +3135,7 @@ type
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
+    function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -3343,6 +3410,22 @@ begin
   end
   else
     result := false;
+end;
+
+function TCryptCertX509.Compare(const Another: ICryptCert;
+  Method: TCryptCertComparer): integer;
+var
+  a: TCryptCertX509;
+begin
+  if Assigned(Another) then
+  begin
+    a := pointer(Another.Instance);
+    result := PPtrInt(a)^ - PPtrInt(self)^;
+    if result = 0 then // both are TCryptCertX509
+      result := fX509.Compare(a.fX509, Method);
+  end
+  else
+    result := 1;
 end;
 
 function TCryptCertX509.GetNotBefore: TDateTime;
