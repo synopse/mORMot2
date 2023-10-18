@@ -2460,8 +2460,8 @@ end;
 
 procedure TTestCoreBase._GUID;
 var
-  i: integer;
-  s: RawUtf8;
+  i, j: integer;
+  s, x, x2: RawUtf8;
   st, st2: string;
   g, g2: TGuid;
   h, h2: THash512Rec;
@@ -2483,9 +2483,39 @@ begin
   CheckEqual(MacTextFromHex('123'), '');
   CheckEqual(MacTextFromHex('1234'), '12:34');
   CheckEqual(MacTextFromHex('12345'), '');
-  CheckEqual(MacTextFromHex(s), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
-  CheckEqual(MacTextFromHex(UpperCase(s)), 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33');
+  x := 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33';
+  CheckEqual(MacTextFromHex(s), x);
+  CheckEqual(MacTextFromHex(UpperCase(s)), x);
+  CheckEqual(HumanHexCompare(x, x), 0);
+  CheckEqual(HumanHexCompare(x, MacTextFromHex(s)), 0);
+  for i := 1 to 100 do
+  begin
+    x2 := x;
+    delete(x2, Random32(length(x2)) + 1, 2);
+    Check(x <> x2);
+    Check(HumanHexCompare(x, x2) <> 0);
+    HumanHexCompare(x, x2);
+  end;
+  for i := 1 to 100 do
+  begin
+    x2 := x;
+    j := Random32(length(x2)) + 1;
+    delete(x2, j, 1);
+    Check(x <> x2);
+    Check((HumanHexCompare(x, x2) = 0) = (x[j] = ':'));
+  end;
+  x2 := x;
+  repeat
+    i := PosExChar(':', x2);
+    if i = 0 then
+      break;
+    delete(x2, i, 1);
+    CheckEqual(HumanHexCompare(x, x2), 0);
+  until false;
+  delete(x2, 10, 2);
+  Check(HumanHexCompare(x, x2) <> 0);
   s := s + s; // validates also our patched RTL
+  CheckEqual(HumanHexCompare(s, s), 0);
   repeat
     i := Random32(length(s)) + 1;
     delete(s, i, 1);
@@ -4910,10 +4940,13 @@ begin
   Check(CsvContains('a', 'a'));
   Check(CsvContains('ab', 'ab'));
   Check(not CsvContains('a', 'b'));
+  Check(not CsvContains('a', 'ab'));
+  Check(not CsvContains('ab', 'a'));
   Check(CsvContains('a,b,c', 'a'));
   Check(CsvContains('a,b,c', 'b'));
   Check(CsvContains('a,b,c', 'c'));
   Check(not CsvContains('a,b,c', 'A'));
+  Check(not CsvContains('a,b,c', ''));
   Check(CsvContains('aa,bb,cc', 'aa'));
   Check(CsvContains('aa,bb,cc', 'bb'));
   Check(CsvContains('aa,bb,cc', 'cc'));
