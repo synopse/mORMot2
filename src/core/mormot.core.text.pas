@@ -2017,6 +2017,13 @@ function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean; ove
 function HumanHexToBin(const hex: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast comparison between two ToHumanHex() hexa values
+function HumanHexCompare(const a, b: RawUtf8): integer; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast comparison between two ToHumanHex() hexa values
+function HumanHexCompare(a, b: PUtf8Char): integer; overload;
+
 /// fast conversion from binary data into hexa chars
 function BinToHex(const Bin: RawByteString): RawUtf8; overload;
 
@@ -3011,29 +3018,32 @@ begin
     exit;
   end;
   // note: all search sub-functions do use fast SSE2 asm on i386 and x86_64
-  i := PosExChar(Sep, Csv);
   p := pointer(Csv);
   l := PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^;
-  if i = 0 then
+  if l >= PStrLen(p - _STRLEN)^ then
     result := (l = PStrLen(p - _STRLEN)^) and
               (MemCmp(pointer(p), pointer(Value), l) = 0)
   else
   begin
-    result := true;
-    s := p + i - 1;
-    repeat
-      if (s - p = l) and
-         (MemCmp(pointer(p), pointer(Value), l) = 0) then
-        exit;
-      p := s + 1;
-      s := PosChar(p, Sep);
-      if s <> nil then
-        continue;
-      if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
-         (MemCmp(pointer(p), pointer(Value), l) = 0) then
-        exit;
-      break;
-    until false;
+    i := PosExChar(Sep, Csv);
+    if i <> 0 then
+    begin
+      result := true;
+      s := p + i - 1;
+      repeat
+        if (s - p = l) and
+           (MemCmp(pointer(p), pointer(Value), l) = 0) then
+          exit;
+        p := s + 1;
+        s := PosChar(p, Sep);
+        if s <> nil then
+          continue;
+        if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
+           (MemCmp(pointer(p), pointer(Value), l) = 0) then
+          exit;
+        break;
+      until false;
+    end;
     result := false;
   end;
 end;
@@ -8950,6 +8960,8 @@ begin
   h := pointer(hex);
   tab := @ConvertHexToBin;
   repeat
+    while h^ = ' ' do
+      inc(h);
     if not HexaToByte(pointer(h), PByte(p)^, tab) then
       break; // invalid 'xx' pair - may be len < 2
     inc(p);
@@ -8960,6 +8972,8 @@ begin
       result := true; // properly ended with 'xx' last hexa byte
       break;
     end;
+    while h^ = ' ' do
+      inc(h);
     if h^ <> ':' then
       continue;
     dec(len);
@@ -8971,6 +8985,69 @@ begin
     FakeLength(Bin, p - pointer(Bin))
   else
     Bin := '';
+end;
+
+function HumanHexCompare(a, b: PUtf8Char): integer;
+var
+  ca, cb: byte;
+  tab: PByteArray;
+begin
+  result := 0;
+  if a <> b then
+    if a <> nil then
+      if b <> nil then
+      begin
+        tab := @ConvertHexToBin;
+        repeat
+          while a^ = ' ' do
+            inc(a);
+          while b^ = ' ' do
+            inc(b);
+          if not HexaToByte(pointer(a), ca{%H-}, tab) or
+             not HexaToByte(pointer(b), cb{%H-}, tab) then
+          begin
+            result := ComparePointer(a, b); // consistent but not zero
+            break;
+          end;
+          result := ca - cb;
+          if result <> 0 then
+            break;
+          inc(a, 2);
+          inc(b, 2);
+          while a^ = ' ' do
+            inc(a);
+          while b^ = ' ' do
+            inc(b);
+          case a^ of
+            #0:
+              begin
+                if b^ <> #0 then
+                  dec(result);
+                break;
+              end;
+            ':':
+              inc(a);
+          end;
+          case b^ of
+            #0:
+              begin
+                inc(result); // we know a^<>#0
+                break;
+              end;
+            ':':
+              inc(b);
+          end;
+        until false;
+      end
+      else
+        inc(result)
+    else
+      dec(result);
+end;
+
+function HumanHexCompare(const a, b: RawUtf8): integer;
+begin
+  result := HumanHexCompare(pointer(a), pointer(b));
 end;
 
 function HumanHexToBin(const hex: RawUtf8): RawByteString;
