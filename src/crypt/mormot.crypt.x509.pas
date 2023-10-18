@@ -2310,9 +2310,7 @@ begin
            XSA_TO_XKA[SignatureAlgorithm]) then
        exit;
      result := cvUnknownAuthority;
-     if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
-          Signed.Extension[xeAuthorityKeyIdentifier]) or
-        (Authority.Signed.SubjectPublicKey = '') then
+     if not IsAuthorizedBy(Authority) then
        exit;
    end;
    result := CanVerify(
@@ -2563,6 +2561,7 @@ function TX509.IsAuthorizedBy(Authority: TX509): boolean;
 begin
   result := (self <> nil) and
             (Authority <> nil) and
+            (Authority.Signed.SubjectPublicKey <> '') and
             // fast search with no memory allocation
             CsvContains(Signed.Extension[xeAuthorityKeyIdentifier],
                         Authority.Signed.Extension[xeSubjectKeyIdentifier]);
@@ -3304,7 +3303,8 @@ end;
 
 function TCryptCertX509.GetIssuer(const Rdn: RawUtf8): RawUtf8;
 begin
-  if fX509 = nil then
+  if (Rdn = '') or
+     (fX509 = nil) then
     result := ''
   else
     result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
