@@ -200,7 +200,7 @@ type
     lsaAlways
   );
 
-/// translate a LDAP_RES_* result code into some human-readable text
+/// translate a LDAP_RES_* integer result code into some human-readable text
 function RawLdapErrorString(ErrorCode: integer): RawUtf8;
 
 /// encode a LDAP search filter text into an ASN.1 binary
@@ -1312,7 +1312,10 @@ var
   x: PtrInt;
 begin
   x := PosExChar(Delimiter, Value);
-  result := copy(Value, x + 1, length(Value) - x);
+  if x = 0 then
+    result := Value
+  else
+    result := copy(Value, x + 1, length(Value) - x);
 end;
 
 function SeparateRightU(const Value, Delimiter: RawUtf8): RawUtf8;
@@ -1320,7 +1323,10 @@ var
   x: PtrInt;
 begin
   x := mormot.core.base.PosEx(Delimiter, Value);
-  result := copy(Value, x + length(Delimiter), MaxInt); // no TrimCopy()
+  if x = 0 then
+    result := Value
+  else
+    result := copy(Value, x + length(Delimiter), MaxInt); // no TrimCopy()
 end;
 
 function GetBetween(PairBegin, PairEnd: AnsiChar; const Value: RawUtf8): RawUtf8;
@@ -1636,7 +1642,7 @@ begin
             '~':
               // Approx match
               begin
-                System.Delete(l, length(l), 1);
+                SetLength(l, length(l) - 1);
                 result := Asn(ASN1_CTC8, [
                   Asn(l),
                   Asn(UnescapeHex(r))]);
@@ -1644,7 +1650,7 @@ begin
             '>':
               // Greater or equal match
               begin
-                System.Delete(l, length(l), 1);
+                SetLength(l, length(l) - 1);
                 result := Asn(ASN1_CTC5, [
                    Asn(l),
                    Asn(UnescapeHex(r))]);
@@ -1652,7 +1658,7 @@ begin
             '<':
               // Less or equal match
               begin
-                System.Delete(l, length(l), 1);
+                SetLength(l, length(l) - 1);
                 result := Asn(ASN1_CTC6, [
                    Asn(l),
                    Asn(UnescapeHex(r))]);
