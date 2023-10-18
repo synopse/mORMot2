@@ -262,7 +262,7 @@ const
     hfSha256);   // xsaSha256Ecc256
 
   /// internal lookup table from X.509 Signature to ICryptCert Algorithms
-  XSA_TO_AA: array[TXSignatureAlgorithm] of TCryptAsymAlgo = (
+  XSA_TO_CAA: array[TXSignatureAlgorithm] of TCryptAsymAlgo = (
     caaES256K,   // xsaNone
     caaRS256,    // xsaSha256Rsa
     caaRS384,    // xsaSha384Rsa
@@ -932,6 +932,12 @@ function OidToXce(const oid: RawByteString): TXCrlExtension;
 /// high-level function to decode X.509 certificate main properties using TX509
 // - assigned to mormot.core.secure X509Parse() redirection by this unit
 function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
+
+/// compute a enw ICryptCert instance from DER or PEM input
+// - returns nil if the input is not correct or not supported
+// - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
+function X509Load(const Cert: RawByteString): ICryptCert;
+
 
 
 implementation
@@ -2658,7 +2664,7 @@ begin
   if (self <> nil) and
      (SignatureAlgorithm <> xsaNone) then
     result := GetSignatureSecurityBits(
-      XSA_TO_AA[SignatureAlgorithm], length(SignatureValue))
+      XSA_TO_CAA[SignatureAlgorithm], length(SignatureValue))
   else
     result := 0;
 end;
@@ -3107,6 +3113,30 @@ begin
   end;
 end;
 
+function X509Load(const Cert: RawByteString): ICryptCert;
+var
+  x: TX509;
+  der: RawByteString;
+begin
+  result := nil;
+  der := PemToDer(Cert);
+  if not AsnDecChunk(der) then // basic input validation
+    exit;
+  x := TX509.Create;
+  try
+    if x.LoadFromDer(der) and
+       (x.SignatureAlgorithm <> xsaNone) then // support PEM or DER input
+    begin
+      result := CryptCertAlgoX509[XSA_TO_CAA[x.SignatureAlgorithm]].FromHandle(x);
+      if result <> nil then
+        x := nil;
+    end;
+  finally
+    x.Free;
+  end;
+end;
+
+
 type
   ECryptCertX509 = class(ECryptCert);
 
@@ -3199,7 +3229,7 @@ begin
     raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
   fXsa := xsa;
   fXka := XSA_TO_XKA[xsa];
-  fOsa := XSA_TO_AA[xsa];
+  fOsa := XSA_TO_CAA[xsa];
   inherited Create('x509-' + LowerCase(CAA_JWT[fOsa]) + suffix);
 end;
 
@@ -3637,7 +3667,7 @@ begin
       RaiseError('Sign: no cuKeyCertSign');
     // assign the Issuer information
     fX509.Signed.Issuer := auth.fX509.Signed.Subject; // may be self
-    if auth <> self then // same as OpenSSL for self-signed certs: no AKID
+    if auth <> self then // same as OpenSSL: no AKID for for self-signed certs
       fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
          auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
     // compute the digital signature
@@ -3839,7 +3869,7 @@ begin
   // - may be overriden by the faster mormot.crypt.openssl if included
   // - but still accessible from CryptCertAlgoX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
-    CryptCertAlgoX509[XSA_TO_AA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
+    CryptCertAlgoX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
   X509Parse := @TX509Parse;
 end;

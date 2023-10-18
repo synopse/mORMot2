@@ -1907,7 +1907,7 @@ type
 {$endif CPU32DELPHI}
 
 // use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
-// - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
+// - and Delphi Win32 is not efficient at 64-bit multiplication, anyway
 {$define DYNARRAYHASH_PO2}
 
 // use 16-bit Hash table when indexes fit in a word (array Capacity < 65535)
