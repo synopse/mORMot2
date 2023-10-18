@@ -506,8 +506,8 @@ type
     /// the cryptographic algorithm used by the CA over the TX509.Signed field
     // - match TX509.SignatureAlgorithm field
     Signature: TXSignatureAlgorithm;
-    /// identifies the entity that has signed and issued the certificate
-    Issuer: TXName;
+    /// decoded AlgorithmIdentifier structure of the stored public key
+    SubjectPublicKeyAlgorithm: TXPublicKeyAlgorithm;
     /// date on which the certificate validity period begins
     NotBefore: TDateTime;
     /// date on which the certificate validity period ends
@@ -517,8 +517,8 @@ type
     /// identifies the entity associated with the public key stored in the
     // subject public key field of this certificate
     Subject: TXName;
-    /// decoded AlgorithmIdentifier structure of the stored public key
-    SubjectPublicKeyAlgorithm: TXPublicKeyAlgorithm;
+    /// identifies the entity that has signed and issued the certificate
+    Issuer: TXName;
     /// decoded number of bits of the stored public key
     // - typically 2048 for RSA, or 256 for ECC
     SubjectPublicKeyBits: integer;
@@ -567,15 +567,18 @@ type
 
   /// a X.509 signed Certificate, as defined in RFC 5280
   TX509 = class(TSynPersistent)
+  public
+    /// actual to-be-signed Certificate content
+    Signed: TXTbsCertificate;
   protected
     fSafe: TLightLock;
+    fSignatureValue: RawByteString;
+    fSignatureAlgorithm: TXSignatureAlgorithm;
+    fPublicKey: TXPublicKey;
     fCachedDer: RawByteString;
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
     fLastVerifyAuthPublicKey: RawByteString;
-    fSignatureValue: RawByteString;
-    fSignatureAlgorithm: TXSignatureAlgorithm;
-    fPublicKey: TXPublicKey;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
     procedure ComputeCachedHash(algo: THashAlgo);
@@ -586,12 +589,6 @@ type
     function GetSubjectDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
-  public
-    /// actual to-be-signed Certificate content
-    Signed: TXTbsCertificate;
-    /// raw binary digital signature computed upon Signed.ToDer
-    property SignatureValue: RawByteString
-      read fSignatureValue;
   public
     /// finalize this instance
     destructor Destroy; override;
@@ -683,6 +680,9 @@ type
     // - see also the SubjectAlternativeName property
     property Extension: TXExtensions
       read Signed.Extension;
+    /// raw binary digital signature computed upon Signed.ToDer
+    property SignatureValue: RawByteString
+      read fSignatureValue;
   published
     /// hexadecimal of a positive integer assigned by the CA to each certificate
     // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
