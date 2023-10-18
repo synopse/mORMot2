@@ -571,6 +571,7 @@ type
     fCachedDer: RawByteString;
     fCachedHash: array[hfSHA1 .. hfSHA512] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
+    fLastVerifyAuthPublicKey: RawByteString;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fPublicKey: TXPublicKey;
@@ -597,6 +598,7 @@ type
     /// verify the digital signature of this Certificate using a X.509 Authority
     // - some errors can be ignored, e.g. cvWrongUsage or cvDeprecatedAuthority
     // - certificate expiration date can be specified instead of current time
+    // - use a cache so the next calls with the same Authority will be immediate
     // - this method is thread-safe
     function Verify(Authority: TX509 = nil; IgnoreError: TCryptCertValidities = [];
       TimeUtc: TDateTime = 0): TCryptCertValidity; overload;
@@ -630,6 +632,7 @@ type
     /// check if the Certificate Issuer is also its Subject
     function IsSelfSigned: boolean;
     /// check if this certificate has been issued by the specified certificate
+    // - ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
     function IsAuthorizedBy(Authority: TX509): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// compare two certificates
@@ -2272,6 +2275,7 @@ begin
   fCachedDer := '';
   Finalize(fCachedHash);
   fCachedPeerInfo := '';
+  fLastVerifyAuthPublicKey := '';
   Signed.Clear;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
@@ -2314,27 +2318,43 @@ begin
    result := cvBadParameter;
    if self = nil then
      exit;
+   // check the supplied Authority
    if IsSelfSigned then
      Authority := self
    else if Authority <> nil then
    begin
      result := cvInvalidSignature;
      if (SignatureAlgorithm = xsaNone) or
+        (Authority.Signed.SubjectPublicKey = '') or
         (Authority.Signed.SubjectPublicKeyAlgorithm <>
-           XSA_TO_XKA[SignatureAlgorithm]) then
+          XSA_TO_XKA[SignatureAlgorithm]) then
        exit;
      result := cvUnknownAuthority;
      if not IsAuthorizedBy(Authority) then
-       exit;
+       exit; // Auth xeSubjectKeyIdentifier is not in xeAuthorityKeyIdentifier
    end;
+   // check the verification context (e.g. date, usage)
    result := CanVerify(
      Authority, cuKeyCertSign, Authority = self, IgnoreError, TimeUtc);
-   if result = cvValidSigned then
+   if result <> cvValidSigned then
+     exit;
+   // verify the digital signature
+   result := cvInvalidSignature;
+   if (fLastVerifyAuthPublicKey = '') or
+      (SortDynArrayRawByteString(fLastVerifyAuthPublicKey,
+        Authority.Signed.SubjectPublicKey) <> 0) then
+     // check signature with asymmetric RSA or ECC cryptography
      if not Authority.PublicKey.Verify(
               SignatureAlgorithm, Signed.ToDer, SignatureValue) then
-       result := cvInvalidSignature
-     else if Authority = self then
-       result := cvValidSelfSigned;
+        exit
+     else
+       // don't call slow PublicKey.Verify() the next time with this authority
+       fLastVerifyAuthPublicKey := Authority.Signed.SubjectPublicKey;
+   // if we reached here, this certificate content has been verified
+   if Authority = self then
+     result := cvValidSelfSigned
+   else
+     result := cvValidSigned;
 end;
 
 function TX509.Verify(Sig, Data: pointer; SigLen, DataLen: integer;
@@ -2363,9 +2383,8 @@ begin
   if self = nil then
     exit;
   result := fPublicKey;
-  if result <> nil then
-    exit;
-  if (Signed.SubjectPublicKey = '') or
+  if (result <> nil) or
+     (Signed.SubjectPublicKey = '') or
      (Signed.SubjectPublicKeyAlgorithm = xkaNone) then
     exit;
   fSafe.Lock;
@@ -2455,6 +2474,7 @@ begin
     begin
       Finalize(fCachedHash);
       fCachedPeerInfo := '';
+      fLastVerifyAuthPublicKey := '';
       fCachedDer := AsnSeq([
                       Signed.ToDer,
                       XsaToSeq(SignatureAlgorithm),
@@ -2670,6 +2690,7 @@ begin
     fCachedDer := '';
     Finalize(fCachedHash);
     fCachedPeerInfo := '';
+    fLastVerifyAuthPublicKey := '';
     fSignatureValue := '';
   finally
     fSafe.UnLock;
@@ -3406,7 +3427,8 @@ begin
   begin
     a := pointer(Authority.Instance);
     result := (PClass(a)^ = PClass(self)^) and
-              fX509.IsAuthorizedBy(a.fX509);
+      // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
+      fX509.IsAuthorizedBy(a.fX509);
   end
   else
     result := false;
@@ -3648,6 +3670,7 @@ begin
       auth := Authority.Handle
     else
       exit;
+  // TX509 has a cache so the next calls with the same auth will be immediate
   result := fX509.Verify(auth, IgnoreError, TimeUtc);
 end;
 
