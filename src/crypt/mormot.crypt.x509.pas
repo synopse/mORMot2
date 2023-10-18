@@ -570,7 +570,7 @@ type
   protected
     fSafe: TLightLock;
     fCachedDer: RawByteString;
-    fCachedHash: array[hfSHA1 .. hfSHA512] of RawUtf8;
+    fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
     fLastVerifyAuthPublicKey: RawByteString;
     fSignatureValue: RawByteString;
@@ -578,6 +578,7 @@ type
     fPublicKey: TXPublicKey;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
+    procedure ComputeCachedHash(algo: THashAlgo);
     function GetSerialNumber: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetIssuerDN: RawUtf8;
@@ -630,6 +631,16 @@ type
     /// the lowercase hexa hash of the normalized Binary of this Certificate
     // - default hfSha1 value is cached internally so is efficient for lookup
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
+    /// check if a FingerPrint() hexa hash match a supplied value
+    // - will inline the hash computation to avoid temporary string allocation
+    function FingerPrintCompare(const Value: RawUtf8;
+      Algo: THashAlgo = hfSha1): integer; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// check if a FingerPrint() hexa hash match the hash of another certificate
+    // - will inline the hash computation to avoid temporary string allocation
+    function FingerPrintCompare(Another: TX509;
+      Algo: THashAlgo = hfSha1): integer; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// check if the Certificate Issuer is also its Subject
     function IsSelfSigned: boolean;
     /// check if this certificate has been issued by the specified certificate
@@ -971,6 +982,7 @@ type
     property Count: integer
       read GetCount;
   end;
+
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
@@ -2546,6 +2558,19 @@ begin
   fCachedPeerInfo := info.PeerInfo;
 end;
 
+procedure TX509.ComputeCachedHash(algo: THashAlgo);
+var
+  tmp: RawUtf8;
+begin
+  tmp := HashFull(algo, SaveToDer); // SaveToDer should be done outside the lock
+  fSafe.Lock;
+  try
+    fCachedHash[algo] := tmp;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 function TX509.LoadFromDer(const der: TCertDer): boolean;
 var
   pos: integer;
@@ -2617,23 +2642,31 @@ begin
     result := ''
   else
   begin
-    if algo in [low(fCachedHash) .. high(fCachedHash)] then
-    begin
-      result := fCachedHash[algo];
-      if result <> '' then
-        exit;
-    end;
-    result := HashFull(algo, SaveToDer);
-    if algo in [low(fCachedHash) .. high(fCachedHash)] then
-    begin
-      fSafe.Lock;
-      try
-        fCachedHash[algo] := result;
-      finally
-        fSafe.UnLock;
-      end;
-    end;
+    result := fCachedHash[algo];
+    if result <> '' then
+      exit;
+    ComputeCachedHash(algo);
+    result := fCachedHash[algo];
   end;
+end;
+
+function TX509.FingerPrintCompare(const Value: RawUtf8; Algo: THashAlgo): integer;
+begin
+  if fCachedHash[Algo] = '' then
+    ComputeCachedHash(Algo);
+  result := SortDynArrayAnsiString(fCachedHash[Algo], Value);
+end;
+
+function TX509.FingerPrintCompare(Another: TX509; Algo: THashAlgo): integer;
+begin
+  if Another <> nil then
+  begin
+    if Another.fCachedHash[Algo] = '' then
+      Another.ComputeCachedHash(Algo);
+    result := FingerPrintCompare(Another.fCachedHash[algo], Algo);
+  end
+  else
+    result := 1;
 end;
 
 function TX509.IsSelfSigned: boolean;
@@ -2698,6 +2731,10 @@ begin
             Another.ComputeCachedDer;
           result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
         end;
+      ccmSha1:
+        result := FingerPrintCompare(Another, hfSHA1);
+      ccmSha256:
+        result := FingerPrintCompare(Another, hfSHA256);
     else
       result := ComparePointer(self, Another); // e.g. ccmInstance
     end
@@ -3157,7 +3194,7 @@ var
     Chain[res] := Cert^;
     inc(res);
     dec(MaxCount);
-    result := MaxCount = 0;
+    result := MaxCount = 0; // true = break loop
   end;
 
 var
@@ -3178,7 +3215,7 @@ begin
   // O(n) efficient search loop with no temporary memory allocation
   res := 0;
   repeat
-    with TX509(Cert^.Handle).Signed do
+    with TX509(Cert^.Handle) do
       case Method of
         ccmSerialNumber:
           if (SortDynArrayRawByteString(SerialNumber, bin) = 0) and
@@ -3186,36 +3223,46 @@ begin
             break;
         // ccm*Name expect Value to be TXName.ToBinary raw DER content
         ccmSubjectName:
-          if (SortDynArrayRawByteString(Subject.fCachedAsn, Value) = 0) and
+          if (SortDynArrayRawByteString(Signed.Subject.fCachedAsn, Value) = 0) and
              FoundOne then
             break;
         ccmIssuerName:
-          if (SortDynArrayRawByteString(Issuer.fCachedAsn, Value) = 0) and
+          if (SortDynArrayRawByteString(Signed.Issuer.fCachedAsn, Value) = 0) and
              FoundOne then
             break;
         ccmSubjectCN:
-          if (SortDynArrayAnsiString(Subject.Name[xaCN], Value) = 0) and
+          if (SortDynArrayAnsiString(Signed.Subject.Name[xaCN], Value) = 0) and
              FoundOne then
             break;
         ccmIssuerCN:
-          if (SortDynArrayAnsiString(Issuer.Name[xaCN], Value) = 0) and
+          if (SortDynArrayAnsiString(Signed.Issuer.Name[xaCN], Value) = 0) and
              FoundOne then
             break;
         ccmSubjectKey:
           if (SortDynArrayRawByteString(
-               ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0) and
+               Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0) and
              FoundOne then
             break;
         ccmAuthorityKey:
-          if CsvContains(Extension[xeAuthorityKeyIdentifier], Value) and
+          if CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value) and
+             FoundOne then
+            break;
+        ccmSha1:
+          if (FingerPrintCompare(Value, hfSHA1) = 0) and
+             FoundOne then
+            break;
+        ccmSha256:
+          if (FingerPrintCompare(Value, hfSHA256) = 0) and
              FoundOne then
             break;
       else
         break; // unsupported search method
       end;
-    inc(Cert);
     dec(Count);
-  until Count = 0;
+    if Count = 0 then
+      break;
+    inc(Cert);
+  until false;
   if res <> length({%H-}Chain) then
     DynArrayFakeLength(Chain, res);
 end;

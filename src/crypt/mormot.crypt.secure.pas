@@ -1789,7 +1789,9 @@ type
     ccmSubjectKey,
     ccmAuthorityKey,
     ccmUsage,
-    ccmBinary);
+    ccmBinary,
+    ccmSha1,
+    ccmSha256);
 
   TCryptCert = class;
   TCryptCertAlgo = class;
@@ -6565,6 +6567,10 @@ begin
       ccmBinary:
         result := CompareBuf(Save(cccCertOnly, '', ccfBinary),
                              Another.Save(cccCertOnly, '', ccfBinary));
+      ccmSha1:
+        result := CompareBuf(GetDigest(hfSHA1), Another.GetDigest(hfSHA1));
+      ccmSha256:
+        result := CompareBuf(GetDigest(hfSHA256), Another.GetDigest(hfSHA256));
     else // e.g. ccmInstance
       result := ComparePointer(pointer(self), pointer(Another));
     end
