@@ -569,7 +569,7 @@ type
   protected
     fSafe: TLightLock;
     fCachedDer: RawByteString;
-    fCachedSha1: RawUtf8;
+    fCachedHash: array[hfSHA1 .. hfSHA512] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
@@ -2270,7 +2270,7 @@ end;
 procedure TX509.Clear;
 begin
   fCachedDer := '';
-  fCachedSha1 := '';
+  Finalize(fCachedHash);
   fCachedPeerInfo := '';
   Signed.Clear;
   fSignatureAlgorithm := xsaNone;
@@ -2453,7 +2453,7 @@ begin
   try
     if fCachedDer = '' then
     begin
-      fCachedSha1 := '';
+      Finalize(fCachedHash);
       fCachedPeerInfo := '';
       fCachedDer := AsnSeq([
                       Signed.ToDer,
@@ -2545,18 +2545,18 @@ begin
     result := ''
   else
   begin
-    if algo = hfSHA1 then
+    if algo in [low(fCachedHash) .. high(fCachedHash)] then
     begin
-      result := fCachedSha1;
+      result := fCachedHash[algo];
       if result <> '' then
         exit;
     end;
     result := HashFull(algo, SaveToDer);
-    if algo = hfSHA1 then
+    if algo in [low(fCachedHash) .. high(fCachedHash)] then
     begin
       fSafe.Lock;
       try
-        fCachedSha1 := result;
+        fCachedHash[algo] := result;
       finally
         fSafe.UnLock;
       end;
@@ -2668,7 +2668,7 @@ begin
   fSafe.Lock;
   try
     fCachedDer := '';
-    fCachedSha1 := '';
+    Finalize(fCachedHash);
     fCachedPeerInfo := '';
     fSignatureValue := '';
   finally
