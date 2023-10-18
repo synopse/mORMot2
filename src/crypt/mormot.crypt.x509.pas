@@ -11,6 +11,7 @@ unit mormot.crypt.x509;
     - RSA and ECC Public/Private Key support for X.509
     - X.509 Certificates and Certificate Signing Request (CSR)
     - X.509 Certificate Revocation List (CRL)
+    - X.509 Private Key Infrastructure (PKI)
     - Registration of our X.509 Engine to the TCryptCert Factory
 
   *****************************************************************************
@@ -925,6 +926,41 @@ const
     '1.3.6.1.5.5.7.1.1');   // xceAuthorityInformationAccess
 
 function OidToXce(const oid: RawByteString): TXCrlExtension;
+
+
+{ **************** X.509 Private Key Infrastructure (PKI) }
+
+type
+  /// maintain a cache of X.509 ICryptCert instances, from their DER/binary
+  // - to speed up typical PKI process, no DER parsing would be necessary
+  // and ECC/RSA digital signature verifications will be cached at TX509 level
+  // - this class is thread-safe and will flush its oldest entries automatically
+  TCryptCertCache = class(TSynPersistent)
+  protected
+    fCache: TSynDictionary; // RawByteString/ICryptCert thread-safe cache
+    function GetCount: integer;
+    function OnDelete(const aKey, aValue; aIndex: integer): boolean;
+  public
+    /// instantiate a cache
+    // - you can have several TCryptCertCache, dedicated to each bounded context
+    constructor Create(TimeOutSeconds: integer); reintroduce;
+    /// retrieve a potentially shared ICryptCert instance from DER or PEM input
+    // - returns nil if the input is not correct or not supported
+    // - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
+    function Load(const Cert: RawByteString): ICryptCert; overload;
+    /// retrieve a chain of ICryptCert instances from an array of DER input
+    // - any invalid Cert[] will just be ignored and not part of the result
+    function Load(const Cert: array of RawByteString): ICryptCertChain; overload;
+    /// retrieve a chain of ICryptCert instances from a PEM input
+    // - any invalid chunk in the PEM will be ignored and not part of the result
+    function LoadPem(const Pem: RawUtf8): ICryptCertChain;
+    /// finalize the cache
+    destructor Destroy; override;
+  published
+    /// how many ICryptCert are currently in the cache
+    property Count: integer
+      read GetCount;
+  end;
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
@@ -3093,6 +3129,101 @@ begin
      if not Authority.PublicKey.Verify(
               SignatureAlgorithm, Signed.ToDer, SignatureValue) then
        result := cvInvalidSignature;
+end;
+
+
+{ **************** X.509 Private Key Infrastructure (PKI) }
+
+{ TCryptCertCache }
+
+function TCryptCertCache.GetCount: integer;
+begin
+  result := fCache.Count;
+end;
+
+function TCryptCertCache.OnDelete(const aKey, aValue; aIndex: integer): boolean;
+begin
+  // return true to delete the deprecated item - only if not currently in use
+  result := ICryptCert(aValue).Instance.RefCount = 1;
+end;
+
+constructor TCryptCertCache.Create(TimeOutSeconds: integer);
+begin
+  fCache := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray),
+    TypeInfo(ICryptCerts), {caseins=}false, TimeOutSeconds);
+  fCache.OnCanDeleteDeprecated := OnDelete;
+  fCache.ThreadUse := uRWLock; // non-blocking Load()
+end;
+
+function TCryptCertCache.Load(const Cert: RawByteString): ICryptCert;
+var
+  der: RawByteString;
+begin
+  result := nil;
+  // normalize and validate input
+  if AsnDecChunk(Cert) then
+    der := Cert
+  else
+  begin
+    der := PemToDer(Cert);
+    if not AsnDecChunk(der) then
+      exit;
+  end;
+  // try to retrieve and share an existing instance
+  if fCache.FindAndCopy(der, result) then
+    exit;
+  // we need to create a new TX509 instance
+  result := X509Load(der);
+  if result = nil then
+    exit;
+  // add this new instance to the internal cache
+  if fCache.Count > 128 then
+    fCache.DeleteDeprecated; // make some room (once a second and if RefCount=1)
+  fCache.Add(der, result);   // der key will be shared with TX509.fCachedDer
+end;
+
+function TCryptCertCache.Load(const Cert: array of RawByteString): ICryptCertChain;
+var
+  i, n: PtrInt;
+begin
+  result := nil;
+  SetLength(result, length(Cert));
+  n := 0;
+  for i := 0 to high(Cert) do
+  begin
+    result[n] := Load(Cert[i]);
+    if Assigned(result[n]) then
+      inc(n);
+  end;
+  SetLength(result, n);
+end;
+
+function TCryptCertCache.LoadPem(const Pem: RawUtf8): ICryptCertChain;
+var
+  p: PUtf8Char;
+  k: TPemKind;
+  der: TCertDer;
+  c: ICryptCert;
+begin
+  result := nil;
+  p := pointer(Pem);
+  if p <> nil then
+    repeat
+      der := NextPemToDer(p, @k);
+      if der = '' then
+        break;
+      if not (k in [pemUnspecified, pemCertificate]) then
+        continue; // no need to try loading something which is not a X.509 cert
+      c := Load(der);
+      if c <> nil then
+        ChainAdd(result, c);
+    until false;
+end;
+
+destructor TCryptCertCache.Destroy;
+begin
+  fCache.Free;
+  inherited Destroy;
 end;
 
 
