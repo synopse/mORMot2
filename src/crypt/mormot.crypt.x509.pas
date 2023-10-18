@@ -954,6 +954,16 @@ type
     /// retrieve a chain of ICryptCert instances from a PEM input
     // - any invalid chunk in the PEM will be ignored and not part of the result
     function LoadPem(const Pem: RawUtf8): ICryptCertChain;
+    /// search the internal list for a given attribute
+    // - return all the certificates matching a given value
+    // - will use a fast-enough O(n) search algorithm with lockfree multi-read
+    function Find(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber;
+      MaxCount: integer = 0): ICryptCertChain;
+    /// search the internal list for a given attribute
+    // - return the first certificate matching a given value
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
     /// finalize the cache
     destructor Destroy; override;
   published
@@ -3134,6 +3144,83 @@ end;
 
 { **************** X.509 Private Key Infrastructure (PKI) }
 
+// search function reused with TCryptCertCache and our PKI
+procedure RawCertSearch(Cert: PICryptCert; const Value: RawByteString;
+  Method: TCryptCertComparer; Count, MaxCount: integer; out Chain: ICryptCertChain);
+var
+  res: PtrInt;
+
+  function FoundOne: boolean;
+  begin
+    if res = length(Chain) then
+      SetLength(Chain, NextGrow(res));
+    Chain[res] := Cert^;
+    inc(res);
+    dec(MaxCount);
+    result := MaxCount = 0;
+  end;
+
+var
+  bin: RawByteString;
+begin
+  // prepare the search
+  if (Count = 0) or
+     (Value = '') then
+    exit;
+  case Method of
+    ccmSerialNumber,
+    ccmSubjectKey:
+      if not HumanHexToBin(Value, bin) then
+        bin := Value; // allow Value to be in hexadecimal or raw binary
+  end;
+  if MaxCount <= 0 then
+    MaxCount := MaxInt;
+  // O(n) efficient search loop with no temporary memory allocation
+  res := 0;
+  repeat
+    with TX509(Cert^.Handle).Signed do
+      case Method of
+        ccmSerialNumber:
+          if (SortDynArrayRawByteString(SerialNumber, bin) = 0) and
+             FoundOne then
+            break;
+        // ccm*Name expect Value to be TXName.ToBinary raw DER content
+        ccmSubjectName:
+          if (SortDynArrayRawByteString(Subject.fCachedAsn, Value) = 0) and
+             FoundOne then
+            break;
+        ccmIssuerName:
+          if (SortDynArrayRawByteString(Issuer.fCachedAsn, Value) = 0) and
+             FoundOne then
+            break;
+        ccmSubjectCN:
+          if (SortDynArrayAnsiString(Subject.Name[xaCN], Value) = 0) and
+             FoundOne then
+            break;
+        ccmIssuerCN:
+          if (SortDynArrayAnsiString(Issuer.Name[xaCN], Value) = 0) and
+             FoundOne then
+            break;
+        ccmSubjectKey:
+          if (SortDynArrayRawByteString(
+               ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0) and
+             FoundOne then
+            break;
+        ccmAuthorityKey:
+          if CsvContains(Extension[xeAuthorityKeyIdentifier], Value) and
+             FoundOne then
+            break;
+      else
+        break; // unsupported search method
+      end;
+    inc(Cert);
+    dec(Count);
+  until Count = 0;
+  if res <> length({%H-}Chain) then
+    DynArrayFakeLength(Chain, res);
+end;
+
+
 { TCryptCertCache }
 
 function TCryptCertCache.GetCount: integer;
@@ -3218,6 +3305,36 @@ begin
       if c <> nil then
         ChainAdd(result, c);
     until false;
+end;
+
+function TCryptCertCache.Find(const Value: RawByteString;
+  Method: TCryptCertComparer; MaxCount: integer): ICryptCertChain;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCache.Count = 0) or
+     (Value = '') then
+    exit;
+  // non-blocking O(n) search within the stored certificates
+  fCache.Safe^.ReadLock;
+  try
+    RawCertSearch(
+      fCache.Values.Value^, Value, Method, fCache.Count, MaxCount, result);
+  finally
+    fCache.Safe^.ReadUnLock;
+  end;
+end;
+
+function TCryptCertCache.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCert;
+var
+  res: ICryptCertChain;
+begin
+  res := Find(Value, Method, 1);
+  if res = nil then
+    result := nil
+  else
+    result := res[0];
 end;
 
 destructor TCryptCertCache.Destroy;

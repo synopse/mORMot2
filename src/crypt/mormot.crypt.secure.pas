@@ -2051,10 +2051,12 @@ type
     function GetPrivateKeyParams(out x, y: RawByteString): boolean;
   end;
 
-  /// a dynamic array of Certificate instances
+  /// a dynamic array of Certificate interface instances
   ICryptCerts = array of ICryptCert;
   /// holds a Certificate chain, the first being the main certificate
   ICryptCertChain = ICryptCerts;
+  /// a pointer to a Certificate interface instance
+  PICryptCert = ^ICryptCert;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
   // - you should never use this class, but the ICryptCert instances
@@ -2244,7 +2246,7 @@ type
     // and validate the stored digital signature according to the public key of
     // the associated signing authority, as found within the store
     function IsValid(const cert: ICryptCert;
-      date: TDateTime = 0): TCryptCertValidity; overload;
+      date: TDateTime = 0): TCryptCertValidity;
     /// verify the digital signature of a given memory buffer
     // - this signature should have come from a previous ICryptCert.Sign() call
     // - will check internal properties of the certificate (e.g. validity dates),
@@ -2279,7 +2281,7 @@ type
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
       Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert;
-      date: TDateTime): TCryptCertValidity; overload; virtual; abstract;
+      date: TDateTime): TCryptCertValidity; virtual; abstract;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         virtual; abstract;
@@ -6779,14 +6781,6 @@ end;
 
 { TCryptStore }
 
-function TCryptStore.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
-begin
-  if Assigned(cert) then
-    result := IsRevoked(cert.GetSerial)
-  else
-    result := crrNotRevoked;
-end;
-
 function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
 var
   tmp: RawByteString;
@@ -6872,7 +6866,7 @@ var
   procedure RecursiveCompute(var one: ICryptCert);
   var
     i: PtrInt;
-    r: ^ICryptCert;
+    r: PICryptCert;
   begin
     result[n] := one;
     inc(n);
