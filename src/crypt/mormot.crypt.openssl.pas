@@ -1925,6 +1925,7 @@ type
     procedure Clear; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
+    function GetBySubjectKey(const Key: RawUtf8): ICryptCert; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
@@ -2692,18 +2693,29 @@ end;
 procedure TCryptStoreOpenSsl.Clear;
 begin
   fStore.Free;
-  fStore := NewCertificateStore;         // clear (with proper ref counting)
+  fStore := NewCertificateStore; // clear (with proper ref counting)
 end;
 
 function TCryptStoreOpenSsl.GetBySerial(const Serial: RawUtf8): ICryptCert;
 var
   x: PX509;
 begin
-  x := fStore.BySerial(Serial);     // makes x.Acquire
+  x := fStore.BySerial(Serial); // makes x.Acquire
   if x = nil then
     result := nil
   else
     // guess the type because the PX509 item has no ICryptCert.AsymAlgo any more
+    result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
+end;
+
+function TCryptStoreOpenSsl.GetBySubjectKey(const Key: RawUtf8): ICryptCert;
+var
+  x: PX509;
+begin
+  x := fStore.BySkid(Key); // makes x.Acquire
+  if x = nil then
+    result := nil
+  else
     result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 

@@ -1861,7 +1861,7 @@ type
     /// an array of all Subject names covered by the issuer of this Certificate
     // - e.g. read from X.509 v3 Issuer Alternative Names extension
     function GetIssuers: TRawUtf8DynArray;
-    /// the Subject Issuer Key Identifier (SKID) of this Certificate
+    /// the Subject Key Identifier (SKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
     // - match the SKID on X.509, or the serial number for syn-es256
     function GetSubjectKey: RawUtf8;
@@ -1878,6 +1878,11 @@ type
     function IsAuthorizedBy(const Authority: ICryptCert): boolean;
     /// compare one Certificate instance with another
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer;
+    /// compare two Certificates, which should share the same algorithm
+    // - will compare the internal properties and the public key, not the
+    // private key: you could e.g. use it to verify that a ICryptCert with
+    // HasPrivateSecret=false matches another with HasPrivateSecret=true
+    function IsEqual(const Another: ICryptCert): boolean;
     /// the minimum Validity timestamp of this Certificate
     function GetNotBefore: TDateTime;
     /// the maximum Validity timestamp of this Certificate
@@ -2027,11 +2032,6 @@ type
     // SetPrivateKey('') will wipe any private key currently stored in memory
     // - warning: don't forget FillZero() once done with this sensitive input
     function SetPrivateKey(const saved: RawByteString): boolean;
-    /// compare two Certificates, which should share the same algorithm
-    // - will compare the internal properties and the public key, not the
-    // private key: you could e.g. use it to verify that a ICryptCert with
-    // HasPrivateSecret=false matches another with HasPrivateSecret=true
-    function IsEqual(const another: ICryptCert): boolean;
     /// the high-level asymmetric algorithm used for this certificate
     function AsymAlgo: TCryptAsymAlgo;
     /// the high-level asymmetric algorithm class used for this certificate
@@ -2093,6 +2093,7 @@ type
     function IsSelfSigned: boolean; virtual; abstract;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; virtual;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; virtual;
+    function IsEqual(const Another: ICryptCert): boolean; virtual;
     function GetNotBefore: TDateTime; virtual; abstract;
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate(date: TDateTime): boolean; virtual;
@@ -2115,7 +2116,6 @@ type
     function GetPublicKey: RawByteString; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
     function SetPrivateKey(const saved: RawByteString): boolean; virtual; abstract;
-    function IsEqual(const another: ICryptCert): boolean; virtual;
     function Sign(Data: pointer; Len: integer): RawByteString;
       overload; virtual; abstract;
     function Sign(const Data: RawByteString): RawByteString; overload; virtual;
@@ -2222,7 +2222,13 @@ type
     // X.509 Certificates and CRLs in PEM text format
     function Save: RawByteString;
     /// search for a certificate from its (hexadecimal) identifier
+    // - note that in the X.509 context, serial may be duplicated, so
+    // it is safer to use GetBySubjectKey()
     function GetBySerial(const Serial: RawUtf8): ICryptCert;
+    /// search for a certificate from its (hexadecimal) Subject Key Identifier
+    // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
+    // - search the SKID on X.509, or the serial number for syn-es256
+    function GetBySubjectKey(const Key: RawUtf8): ICryptCert;
     /// quickly check if a given certificate is part of the internal CRL
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
@@ -2291,6 +2297,7 @@ type
     function Load(const Saved: RawByteString): boolean; virtual;
     function Save: RawByteString; virtual; abstract;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
+    function GetBySubjectKey(const Key: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
     function Add(const cert: ICryptCert): boolean; virtual; abstract;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; virtual; abstract;
@@ -6663,6 +6670,11 @@ begin
     result := 1;
 end;
 
+function TCryptCert.IsEqual(const Another: ICryptCert): boolean;
+begin
+  result := Compare(Another, ccmBinary) = 0;
+end;
+
 function TCryptCert.IsValidDate(date: TDateTime): boolean;
 var
   na, nb: TDateTime;
@@ -6727,14 +6739,6 @@ begin
   s := Save(Content, PrivatePassword, Format);
   FileFromString(s, fn);
   FillZero(s); // may be a private key with no password :(
-end;
-
-function TCryptCert.IsEqual(const another: ICryptCert): boolean;
-begin
-  // HasPrivateKey is not part of the comparison
-  result := Assigned(another) and
-            (Save(cccCertOnly, '', ccfBinary) =
-             another.Save(cccCertOnly, '', ccfBinary));
 end;
 
 function TCryptCert.Sign(const Data: RawByteString): RawByteString;
@@ -8323,21 +8327,24 @@ var
   tmp: ShortString; // no temporary memory allocation
 begin
   tmp[0] := #0;
-  // first byte = two first numbers modulo 40
-  x := GetNextItemCardinal(OidText, '.') * 40;
-  y := 0;
-  while OidText <> nil do
+  if OidText <> nil then
   begin
-    y := GetNextItemCardinal(OidText, '.');
-    if y = 0 then
-      break;
-    inc(x, y);
-    AsnEncOidItem(x, tmp);
-    x := 0;
+    // first byte = two first numbers modulo 40
+    x := GetNextItemCardinal(OidText, '.') * 40;
+    y := 0;
+    while OidText <> nil do
+    begin
+      y := GetNextItemCardinal(OidText, '.');
+      if y = 0 then
+        break;
+      inc(x, y);
+      AsnEncOidItem(x, tmp);
+      x := 0;
+    end;
+    if (y = 0) or
+       (tmp[0] < #3) then
+      tmp[0] := #0; // clearly invalid input
   end;
-  if (y = 0) or
-     (tmp[0] < #3) then
-    tmp[0] := #0; // clearly invalid input
   FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
 end;
 

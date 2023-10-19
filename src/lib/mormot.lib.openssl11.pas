@@ -1659,6 +1659,7 @@ type
     function StackX509_CRL(addref: boolean = true): Pstack_st_X509_CRL;
     // caller should make result.Free once done (to decrease refcount)
     function BySerial(const serial: RawUtf8): PX509;
+    function BySkid(const id: RawUtf8): PX509;
     function HasSerial(serial: PASN1_INTEGER): boolean;
     // returns the revocation reason
     function IsRevoked(const serial: RawUtf8): integer; overload;
@@ -8813,6 +8814,22 @@ begin
   c := Certificates;
   for i := 0 to length(c) - 1 do
     if c[i].SerialNumber = serial then
+    begin
+      result := c[i];
+      result.Acquire;
+      exit;
+    end;
+  result := nil;
+end;
+
+function X509_STORE.BySkid(const id: RawUtf8): PX509;
+var
+  i: PtrInt;
+  c: PX509DynArray;
+begin
+  c := Certificates;
+  for i := 0 to length(c) - 1 do
+    if c[i].SubjectKeyIdentifier = id then
     begin
       result := c[i];
       result.Acquire;
