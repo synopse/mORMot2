@@ -2241,7 +2241,10 @@ type
     // - self-signed certificates could be included - but add them with caution
     // because they will become root CA, or "trust anchors" in X.509 terminology
     // - the Certificate should have cuCA or cuKeyCertSign typical usages
-    function Add(const cert: ICryptCert): boolean;
+    function Add(const cert: ICryptCert): boolean; overload;
+    /// register several certificates in the internal certificate chain
+    // - returns the serials of added certificate(s)
+    function Add(const cert: array of ICryptCert): TRawUtf8DynArray; overload;
     /// load and register a certificate or certificate chain from a memory buffer
     // - returns the serials of added certificate(s)
     // - if there are any valid CRL, they will also be loaded to the store
@@ -2306,7 +2309,8 @@ type
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
-    function Add(const cert: ICryptCert): boolean; virtual; abstract;
+    function Add(const cert: ICryptCert): boolean; overload; virtual; abstract;
+    function Add(const cert: array of ICryptCert): TRawUtf8DynArray; overload; virtual;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; virtual; abstract;
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
     function AddFromFolder(const Folder, Mask: TFileName;
@@ -6951,6 +6955,16 @@ function TCryptStore.Load(const Saved: RawByteString): boolean;
 begin
   Clear;
   result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
+end;
+
+function TCryptStore.Add(const cert: array of ICryptCert): TRawUtf8DynArray;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  for i := 0 to high(cert) do
+    if Add(cert[i]) then
+      AddRawUtf8(result, cert[i].GetSerial);
 end;
 
 function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
