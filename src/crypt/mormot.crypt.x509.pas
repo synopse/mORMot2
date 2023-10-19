@@ -4694,8 +4694,7 @@ begin
           begin
             cert := fCache.Load(der);
             if cert <> nil then
-              if fTrust.Add(cert) then
-                ChainAdd(new, cert);
+              ChainAdd(new, cert);
           end;
         pemCrl:
           begin
@@ -4726,25 +4725,37 @@ end;
 
 function TCryptStoreX509.Revoke(const Cert: ICryptCert;
   RevocationDate: TDateTime; Reason: TCryptCertRevocationReason): boolean;
+var
+  akid: RawUtf8;
 begin
-  result := (Cert <> nil) and
-            fUnsignedCrl.AddRevocation(Cert.GetAuthorityKey, Cert.GetSerial,
-              Reason, 0, RevocationDate);
+  result := false;
+  if Cert = nil then
+    exit;
+  akid := Cert.GetAuthorityKey;
+  if akid = '' then
+    akid := Cert.GetSubjectKey; // self-signed certificate
+  result := fUnsignedCrl.AddRevocation(
+              akid, Cert.GetSerial, Reason, 0, RevocationDate);
 end;
 
 function TCryptStoreX509.IsValid(const cert: ICryptCert;
   date: TDateTime): TCryptCertValidity;
 var
-  skid, akid: RawUtf8;
+  c: TCryptCert;
   x: TX509;
   a, f: ICryptCert;
+  skid, akid: RawUtf8;
   level: integer;
 begin
   // validate this certificate context
-  result := cvBadParameter;
+  result := cvUnknownAuthority;
   if not Assigned(cert) then
     exit;
-  x := (cert.Instance as TCryptCertX509).fX509;
+  c := cert.Instance;
+  if (c = nil) or
+     not c.InheritsFrom(TCryptCertX509) then
+    exit;
+  x := TCryptCertX509(c).fX509;
   if x = nil then
     exit;
   result := cvInvalidDate;
@@ -4753,9 +4764,6 @@ begin
   result := cvCorrupted;
   skid := x.Signed.Extension[xeSubjectKeyIdentifier];
   if skid = '' then
-    exit;
-  result := cvRevoked;
-  if IsRevokedAny(skid, x.SerialNumber) <> crrNotRevoked then
     exit;
   // search within our database of known certificates
   f := fTrust.FindBySubjectKey(skid);
@@ -4770,8 +4778,12 @@ begin
     exit;
   if x.IsSelfSigned then
   begin
-    if f <> nil then // self-signed certs should be known
-      result := x.Verify(x, [], x.NotBefore); // verify its self signature
+    if f = nil then
+      exit; // self-signed certs should be known
+    result := cvRevoked;
+    if IsRevokedAny(skid, x.SerialNumber) = crrNotRevoked then
+      // verify the self signature of this trusted cert
+      result := x.Verify(x, [], x.NotBefore);
     exit;
   end;
   // check all known issuers until we reach ValidDepth or a root anchor
@@ -4864,6 +4876,8 @@ begin
   // - but still accessible from CryptCertAlgoX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
     CryptCertAlgoX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
+  // register 'x509-pki' store to our catalog
+  CryptStoreX509 := TCryptStoreAlgoX509.Create('x509-pki');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
   X509Parse := @TX509Parse;
 end;
