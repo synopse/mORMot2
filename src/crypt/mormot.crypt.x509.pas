@@ -550,6 +550,8 @@ type
     function SerialNumberText: RawUtf8;
     /// convert Extension[x] from CSV to an array of RawUtf8
     function ExtensionArray(x: TXExtension): TRawUtf8DynArray;
+    /// check a date/time coherency with NotBefore/NotAfter
+    function IsValidDate(timeutc: TDateTime = 0): boolean;
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -869,7 +871,7 @@ type
     /// to be called once any field has been changed to refresh internal caches
     procedure AfterModified;
     /// quickly check if a date is compatible with ThisUpdate/NextUpdate values
-    function ValidDate(TimeUtc: TDateTime): boolean;
+    function IsValidDate(TimeUtc: TDateTime): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if an hexadecimal Serial Number is part of Signed.Revoked[]
     // - returns crrNotRevoked if this Serial Number was not found, or
@@ -2267,6 +2269,16 @@ begin
   CsvToRawUtf8DynArray(pointer(Extension[x]), result);
 end;
 
+function TXTbsCertificate.IsValidDate(timeutc: TDateTime): boolean;
+begin
+  if timeutc = 0 then
+    timeutc := NowUtc;
+  result := ((NotAfter = 0) or
+             (timeutc < NotAfter + CERT_DEPRECATION_THRESHOLD)) and
+            ((NotBefore = 0) or
+             (timeutc + CERT_DEPRECATION_THRESHOLD > NotBefore));
+end;
+
 function TXTbsCertificate.ToDer: TAsnObject;
 begin
   if fCachedDer = '' then
@@ -2351,34 +2363,19 @@ begin
   FreeAndNil(fPublicKey);
 end;
 
-const
-  DEPRECATION_THRESHOLD = 0.5; // allow a half day margin
-
 function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
   ignored: TCryptCertValidities; timeutc: TDateTime): TCryptCertValidity;
-var
-  na, nb: TDateTime;
 begin
   if auth = nil then
     result := cvUnknownAuthority
   else if (not (cvWrongUsage in ignored)) and
           (not (selfsigned or (usage in auth.Signed.CertUsages))) then
     result := cvWrongUsage
+  else if (cvDeprecatedAuthority in ignored) or
+     auth.Signed.IsValidDate(timeutc) then
+    result := cvValidSigned
   else
-  begin
-    result := cvValidSigned;
-    if cvDeprecatedAuthority in ignored then
-      exit;
-    if timeutc = 0 then
-      timeutc := NowUtc;
-    na := auth.Signed.NotAfter; // 0 if was not specified in X.509 cert
-    nb := auth.Signed.NotBefore;
-    if ((na <> 0) and
-        (timeutc > na + DEPRECATION_THRESHOLD)) or
-       ((nb <> 0) and
-        (timeutc < nb - DEPRECATION_THRESHOLD)) then
-      result := cvDeprecatedAuthority;
-  end;
+    result := cvDeprecatedAuthority;
 end;
 
 function TX509.Verify(Authority: TX509; IgnoreError: TCryptCertValidities;
@@ -3146,11 +3143,11 @@ begin
   fCachedDer := '';
 end;
 
-function TX509Crl.ValidDate(TimeUtc: TDateTime): boolean;
+function TX509Crl.IsValidDate(TimeUtc: TDateTime): boolean;
 begin
-  result := (TimeUtc + DEPRECATION_THRESHOLD >= Signed.ThisUpdate) and
+  result := (TimeUtc + CERT_DEPRECATION_THRESHOLD > Signed.ThisUpdate) and
             ((Signed.NextUpdate = 0) or
-             (Signed.NextUpdate <= TimeUtc - DEPRECATION_THRESHOLD));
+             (Signed.NextUpdate + CERT_DEPRECATION_THRESHOLD < TimeUtc));
 end;
 
 function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
@@ -3477,6 +3474,7 @@ type
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
+    function IsValidDate(date: TDateTime): boolean; override;
     function GetUsage: TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
@@ -3787,6 +3785,12 @@ begin
     result := 0
   else
     result := fX509.Signed.NotAfter;
+end;
+
+function TCryptCertX509.IsValidDate(date: TDateTime): boolean;
+begin
+  result := (fX509 <> nil) and
+            fX509.Signed.IsValidDate(date);
 end;
 
 function TCryptCertX509.GetUsage: TCryptCertUsages;

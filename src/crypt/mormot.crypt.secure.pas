@@ -2460,6 +2460,9 @@ type
 
 
 const
+  /// allow half a day margin when checking a Certificate date validity
+  CERT_DEPRECATION_THRESHOLD = 0.5;
+
   /// our units generate RSA keypairs with 2048-bit by default
   // - anything lower than 2048-bit is unsafe and should not be used
   // - 2048-bit is today's norm, creating 112-bit of security
@@ -6684,8 +6687,8 @@ begin
   na := GetNotAfter;
   nb := GetNotBefore;
   result := (not IsVoid) and
-            ((na <= 0) or (na > date)) and
-            ((nb <= 0) or (nb <= date));
+            ((na <= 0) or (na + CERT_DEPRECATION_THRESHOLD > date)) and
+            ((nb <= 0) or (nb < date + CERT_DEPRECATION_THRESHOLD));
 end;
 
 function TCryptCert.IsVoid: boolean;

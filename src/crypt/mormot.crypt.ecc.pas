@@ -5869,9 +5869,11 @@ type
     constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
+    procedure Clear; override;
     function Load(const Saved: RawByteString): boolean; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
+    function GetBySubjectKey(const Key: RawUtf8): ICryptCert; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
@@ -5901,6 +5903,11 @@ begin
   fEcc.Free;
 end;
 
+procedure TCryptStoreInternal.Clear;
+begin
+  fEcc.Clear;
+end;
+
 function TCryptStoreInternal.Load(const Saved: RawByteString): boolean;
 begin
   result := fEcc.LoadFromBinary(Saved);
@@ -5920,6 +5927,11 @@ begin
     result := nil
   else
     result := TCryptCertInternal.CreateFrom(c);
+end;
+
+function TCryptStoreInternal.GetBySubjectKey(const Key: RawUtf8): ICryptCert;
+begin
+  result := GetBySerial(Key); // no SKID with syn-ecc
 end;
 
 function TCryptStoreInternal.IsRevoked(
