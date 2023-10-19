@@ -970,6 +970,25 @@ type
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
   end;
 
+  /// store several X.509 ICryptCert instances
+  // - those instances are likely to come from a TCryptCertCacheX509 holder
+  // - this inherited class offers some TX509 specific search methods
+  TCryptCertListX509 = class(TCryptCertList)
+  public
+    /// search the internal list for a given attribute
+    // - return all the certificates matching a given value
+    // - will use a fast-enough O(n) search algorithm with lockfree multi-read
+    // - caller should NOT free the returned items
+    function Find(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber;
+      MaxCount: integer = 0): ICryptCerts;
+    /// search the internal list for a given attribute
+    // - return the first certificate matching a given value
+    // - caller should NOT free the returned item
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
+  end;
+
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
 
@@ -3192,7 +3211,7 @@ end;
 
 { **************** X.509 Private Key Infrastructure (PKI) }
 
-// function shared e.g. by TCryptCertCacheX509 and TCryptCertList
+// function shared e.g. by TCryptCertCacheX509 and TCryptCertListX509
 procedure RawCertSearch(Cert: PICryptCert; const Value: RawByteString;
   Method: TCryptCertComparer; Count, MaxCount: integer; out Chain: ICryptCerts);
 var
@@ -3292,6 +3311,75 @@ begin
   until false;
   if res <> length({%H-}Chain) then
     DynArrayFakeLength(Chain, res);
+end;
+
+
+{ TCryptCertListX509 }
+
+function TCryptCertListX509.Find(const Value: RawByteString;
+  Method: TCryptCertComparer; MaxCount: integer): ICryptCerts;
+begin
+  result := nil;
+  if (self = nil) or
+     (fList = nil) or
+     (Value = '') then
+    exit;
+  fSafe.ReadLock;
+  try
+    RawCertSearch(pointer(fList), Value, Method, length(fList), MaxCount, result);
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TCryptCertListX509.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCert;
+var
+  res: ICryptCerts;
+begin
+  res := Find(Value, Method, 1);
+  if res = nil then
+    result := nil
+  else
+    result := res[0];
+end;
+
+
+{ TCryptCertCacheX509 }
+
+function TCryptCertCacheX509.InternalLoad(const Cert: RawByteString): ICryptCert;
+begin
+  result := X509Load(Cert);
+end;
+
+function TCryptCertCacheX509.Find(const Value: RawByteString;
+  Method: TCryptCertComparer; MaxCount: integer): ICryptCerts;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCache.Count = 0) or
+     (Value = '') then
+    exit;
+  // non-blocking O(n) search within the stored certificates
+  fCache.Safe^.ReadLock;
+  try
+    RawCertSearch(
+      fCache.Values.Value^, Value, Method, fCache.Count, MaxCount, result);
+  finally
+    fCache.Safe^.ReadUnLock;
+  end;
+end;
+
+function TCryptCertCacheX509.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCert;
+var
+  res: ICryptCerts;
+begin
+  res := Find(Value, Method, 1);
+  if res = nil then
+    result := nil
+  else
+    result := res[0];
 end;
 
 
