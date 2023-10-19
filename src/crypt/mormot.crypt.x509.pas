@@ -3319,17 +3319,28 @@ end;
 
 function TCryptCertListX509.Find(const Value: RawByteString;
   Method: TCryptCertComparer; MaxCount: integer): ICryptCerts;
+var
+  one: ICryptCert;
 begin
   result := nil;
   if (self = nil) or
      (fList = nil) or
      (Value = '') then
     exit;
-  fSafe.ReadLock;
-  try
-    RawCertSearch(pointer(fList), Value, Method, length(fList), MaxCount, result);
-  finally
-    fSafe.ReadUnLock;
+  if Method = ccmSubjectKey then
+  begin
+    one := FindBySubjectKey(Value); // use the TSynDictionary hash table
+    if one <> nil then
+      ChainAdd(result, one);
+  end
+  else
+  begin
+    fList.Safe.ReadLock;
+    try
+      RawCertSearch(fList.Values.Value^, Value, Method, fList.Count, MaxCount, result);
+    finally
+      fList.Safe.ReadUnLock;
+    end;
   end;
 end;
 
@@ -3338,11 +3349,16 @@ function TCryptCertListX509.FindOne(const Value: RawByteString;
 var
   res: ICryptCerts;
 begin
-  res := Find(Value, Method, 1);
-  if res = nil then
-    result := nil
+  if Method = ccmSubjectKey then
+    result := FindBySubjectKey(Value) // use the TSynDictionary hash table
   else
-    result := res[0];
+  begin
+    res := Find(Value, Method, 1);
+    if res = nil then
+      result := nil
+    else
+      result := res[0];
+  end;
 end;
 
 

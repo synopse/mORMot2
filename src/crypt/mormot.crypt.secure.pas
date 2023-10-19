@@ -2370,23 +2370,33 @@ type
 
   /// store several ICryptCert instances
   // - those instances are likely to come from a TCryptCertCache holder
+  // - maintain a hashed index of ICryptCert.GetSubjectKey values
   TCryptCertList = class(TSynPersistent)
   protected
-    fSafe: TRWLightLock;
-    fList: ICryptCerts;
+    fList: TSynDictionary; // RawByteString(SKID)/ICryptCert thread-safe
     function GetCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
   public
-    /// include a X.509 Certificate instance to the internal list
+    /// initialize the ICryptCert list
+    constructor Create; override;
+    // finalize the ICryptCert list
+    destructor Destroy; override;
+    /// include once a X.509 Certificate instance to the internal list
+    // - return false if its GetSubjectKey was already present
     // - from now on, it will be owned by this TCryptCertList class
-    // - return true if the certificate was not already present
     function Add(const Cert: ICryptCert): boolean;
+    /// search the list for a ICryptCert.GetSubjectKey using a hashed index
+    // - i.e. the Subject Key Identifier (SKID) of a X.509 Certificate or
+    // the serial number for syn-ecc
+    function FindBySubjectKey(const Key: RawUtf8): ICryptCert;
+    /// remove a ICryptCert from the list using its indexed GetSubjectKey
+    function DeleteBySubjectKey(const Key: RawUtf8): boolean;
     /// return a copy of the internal list items
-    // - caller should NOT free the returned items
     function List: ICryptCerts;
     /// persist all stored Certificate in PEM format
     procedure SaveToPem(W: TTextWriter; WithExplanatoryText: boolean = false);
   published
+    /// how many instances are currently stored in this list
     property Count: integer
       read GetCount;
   end;
@@ -7096,58 +7106,75 @@ end;
 
 function TCryptCertList.GetCount: integer;
 begin
-  result := length(fList);
+  result := fList.Count;
+end;
+
+constructor TCryptCertList.Create;
+begin
+  inherited Create;
+  fList := TSynDictionary.Create(
+    TypeInfo(TRawByteStringDynArray), TypeInfo(ICryptCerts));
+  fList.ThreadUse := uRWLock; // non-blocking Find()
+end;
+
+destructor TCryptCertList.Destroy;
+begin
+  inherited Destroy;
+  fList.Free;
 end;
 
 function TCryptCertList.Add(const Cert: ICryptCert): boolean;
 var
-  i: PtrInt;
+  bin: RawByteString;
 begin
-  result := false;
-  if not Assigned(Cert) then
-    exit;
-  fSafe.WriteLock;
-  try
-    for i := 0 to length(fList) - 1 do
-       if Cert.Compare(fList[i], ccmBinary) = 0 then
-         exit; // already existing
-    result := true;
-    ChainAdd(fList, Cert);
-  finally
-    fSafe.WriteUnLock;
-  end;
+  result := Assigned(Cert) and
+            HumanHexToBin(Cert.GetSubjectKey, bin) and
+            (fList.Add(bin, Cert) >= 0);
+end;
+
+function TCryptCertList.FindBySubjectKey(const Key: RawUtf8): ICryptCert;
+var
+  bin: RawByteString;
+begin
+  result := nil;
+  if HumanHexToBin(Key, bin) then
+    fList.FindAndCopy(bin, result);
+end;
+
+function TCryptCertList.DeleteBySubjectKey(const Key: RawUtf8): boolean;
+var
+  bin: RawByteString;
+begin
+  result := HumanHexToBin(Key, bin) and
+            (fList.Delete(Key) >= 0);
 end;
 
 function TCryptCertList.List: ICryptCerts;
 begin
-  fSafe.ReadLock;
-  try
-    result := copy(fList);
-  finally
-    fSafe.ReadUnLock;
-  end;
+  fList.CopyValues(result);
 end;
 
 procedure TCryptCertList.SaveToPem(W: TTextWriter; WithExplanatoryText: boolean);
 var
   i: PtrInt;
-  c: ICryptCert;
+  c: ^ICryptCert;
 begin
-  fSafe.ReadLock;
+  fList.Safe.ReadLock;
   try
-    for i := 0 to length(fList) - 1 do
+    c := fList.Values.Value^;
+    for i := 1 to fList.Count do
     begin
-      c := fList[i];
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
         W.Add('Subject: %'#13#10'Issuer: %'#13#10'Validity: from % to %'#13#10,
-         [c.GetSubjectName, c.GetIssuerName, DateTimeToFileShort(c.GetNotBefore),
-          DateTimeToFileShort(c.GetNotAfter)]);
-      W.AddString(c.Save(cccCertOnly, '', ccfPem));
+         [c^.GetSubjectName, c^.GetIssuerName, DateTimeToFileShort(
+            c^.GetNotBefore), DateTimeToFileShort(c^.GetNotAfter)]);
+      W.AddString(c^.Save(cccCertOnly, '', ccfPem));
       W.AddCR;
+      inc(c);
     end;
   finally
-    fSafe.ReadUnLock;
+    fList.Safe.ReadUnLock;
   end;
 end;
 
