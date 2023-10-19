@@ -490,6 +490,7 @@ type
   private
     fSafe: TLightLock;
     fCachedDer: RawByteString; // for ToDer
+    fSerialNumberHex: RawUtf8;
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
@@ -2400,7 +2401,9 @@ end;
 
 function TXTbsCertificate.SerialNumberHex: RawUtf8;
 begin
-  ToHumanHex(result, pointer(SerialNumber), length(SerialNumber));
+  if fSerialNumberHex = '' then
+    ToHumanHex(fSerialNumberHex, pointer(SerialNumber), length(SerialNumber));
+  result := fSerialNumberHex;
 end;
 
 function TXTbsCertificate.SerialNumberText: RawUtf8;
