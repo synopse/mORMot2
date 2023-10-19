@@ -4550,6 +4550,287 @@ begin
 end;
 
 
+{ TCryptStoreAlgoX509 }
+
+function TCryptStoreAlgoX509.New: ICryptStore;
+begin
+  result := TCryptStoreX509.Create(self);
+end;
+
+
+{ TCryptStoreX509 }
+
+function TCryptStoreX509.GetCacheCount: integer;
+begin
+  result := fCache.Count;
+end;
+
+function TCryptStoreX509.GetRevoked: integer;
+begin
+  result := fSignedCrl.Revoked + fUnsignedCrl.Revoked;
+end;
+
+function TCryptStoreX509.GetCACount: integer;
+begin
+  result := fCA.Count;
+end;
+
+constructor TCryptStoreX509.Create(algo: TCryptAlgo);
+begin
+  inherited Create(algo);
+  fValidDepth := 5;
+  fCache := TCryptCertCacheX509.Create(10 * 60); // clean up cache after 10 min
+  fTrust := TCryptCertListX509.Create;
+  fCA := TCryptCertListX509.Create;
+  fSignedCrl := TX509CrlList.Create;
+  fUnsignedCrl := TX509CrlList.Create;
+end;
+
+destructor TCryptStoreX509.Destroy;
+begin
+  inherited Destroy;
+  fUnsignedCrl.Free;
+  fSignedCrl.Free;
+  fCA.Free;
+  fTrust.Free;
+  fCache.Free;
+end;
+
+procedure TCryptStoreX509.Clear;
+begin
+  // keep fCache intact, just re-create all nested storage classes
+  fUnsignedCrl.Free;
+  fSignedCrl.Free;
+  fCA.Free;
+  fTrust.Free;
+  fTrust := TCryptCertListX509.Create;
+  fCA := TCryptCertListX509.Create;
+  fSignedCrl := TX509CrlList.Create;
+  fUnsignedCrl := TX509CrlList.Create;
+end;
+
+function TCryptStoreX509.Save: RawByteString;
+var
+  tmp: TTextWriterStackBuffer;
+  w: TTextWriter;
+begin
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    fTrust.SaveToPem(W, {WithExplanatoryText=}true);
+    W.AddCR;
+    fSignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
+    W.AddCR;
+    fUnsignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
+  finally
+    w.Free;
+  end;
+end;
+
+function TCryptStoreX509.GetBySerial(const Serial: RawUtf8): ICryptCert;
+begin
+  result := fTrust.FindOne(Serial, ccmSerialNumber);
+end;
+
+function TCryptStoreX509.GetBySubjectKey(const Key: RawUtf8): ICryptCert;
+begin
+  result := fTrust.FindBySubjectKey(Key);
+end;
+
+function TCryptStoreX509.IsRevoked(const AuthorityKeyIdentifiers,
+  SerialNumber: RawUtf8): TCryptCertRevocationReason;
+begin
+  result := crrNotRevoked;
+  if (self = nil) or
+     (AuthorityKeyIdentifiers = '') or
+     (SerialNumber = '') then
+    exit;
+  result := fSignedCrl.IsRevoked(AuthorityKeyIdentifiers, SerialNumber);
+  if result = crrNotRevoked then
+    result := fUnsignedCrl.IsRevoked(AuthorityKeyIdentifiers, SerialNumber);
+end;
+
+function TCryptStoreX509.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
+begin
+  if Assigned(cert) then
+    result := IsRevoked(cert.GetAuthorityKey, cert.GetSerial)
+  else
+    result := crrNotRevoked;
+end;
+
+function TCryptStoreX509.Add(const cert: ICryptCert): boolean;
+begin
+  result := (cert <> nil) and
+            cert.Instance.InheritsFrom(TCryptCertX509) and
+            fTrust.Add(cert);
+end;
+
+function TCryptStoreX509.AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray;
+var
+  k: TPemKind;
+  p: PUtf8Char;
+  der: TCertDer;
+  crl: TX509Crl;
+  cert: ICryptCert;
+  new: ICryptCerts;
+  i: PtrInt;
+begin
+  result := nil;
+  if IsPem(Content) then
+  begin
+    // expect certificate(s) and/or CRL(s) stored as concatenated PEM text
+    p := pointer(Content);
+    repeat
+      der := NextPemToDer(p, @k);
+      if der = '' then
+        break;
+      case k of
+        pemUnspecified,
+        pemCertificate:
+          begin
+            cert := fCache.Load(der);
+            if cert <> nil then
+              if fTrust.Add(cert) then
+                ChainAdd(new, cert);
+          end;
+        pemCrl:
+          begin
+            crl := TX509Crl.Create;
+            try
+              if crl.LoadFromDer(der) then
+              begin
+                if crl.SignatureValue = '' then
+                  fUnsignedCrl.Add(crl)   // unsigned: from AddRevocation()
+                else
+                  fSignedCrl.Add(crl);    // signed by a CA
+                crl := nil; // owned by one of the two lists
+              end;
+            finally
+              crl.Free;
+            end;
+          end;
+      end;
+    until false;
+  end
+  else
+    // a single DER file should be a certificate
+    new := fCache.Load([Content]);
+  for i := 0 to high(new) do
+    if Add(new[i]) then
+      AddRawUtf8(result, new[i].GetSerial);
+end;
+
+function TCryptStoreX509.Revoke(const Cert: ICryptCert;
+  RevocationDate: TDateTime; Reason: TCryptCertRevocationReason): boolean;
+begin
+  result := (Cert <> nil) and
+            fUnsignedCrl.AddRevocation(Cert.GetAuthorityKey, Cert.GetSerial,
+              Reason, 0, RevocationDate);
+end;
+
+function TCryptStoreX509.IsValid(const cert: ICryptCert;
+  date: TDateTime): TCryptCertValidity;
+var
+  skid, akid: RawUtf8;
+  x: TX509;
+  a, f: ICryptCert;
+  level: integer;
+begin
+  // validate this certificate context
+  result := cvBadParameter;
+  if not Assigned(cert) then
+    exit;
+  x := (cert.Instance as TCryptCertX509).fX509;
+  if x = nil then
+    exit;
+  result := cvInvalidDate;
+  if not x.Signed.IsValidDate(date) then
+    exit;
+  result := cvCorrupted;
+  skid := x.Signed.Extension[xeSubjectKeyIdentifier];
+  if skid = '' then
+    exit;
+  result := cvRevoked;
+  if IsRevoked(skid, x.SerialNumber) <> crrNotRevoked then
+    exit;
+  // search within our database of known certificates
+  f := fTrust.FindBySubjectKey(skid);
+  if f <> nil then
+  begin
+    result := cvCorrupted;
+    if x.Compare(f.Handle, ccmBinary) <> 0 then
+      exit; // this certificate was forged
+  end;
+  result := cvUnknownAuthority;
+  if fTrust.Count = 0 then
+    exit;
+  if x.IsSelfSigned then
+  begin
+    if f <> nil then // self-signed certs should be known
+      result := x.Verify(x, [], x.NotBefore); // verify its self signature
+    exit;
+  end;
+  // check all known issuers until we reach ValidDepth or a root anchor
+  for level := 0 to ValidDepth do
+  begin
+    result := cvCorrupted;
+    akid := x.Signed.Extension[xeAuthorityKeyIdentifier];
+    if akid = '' then
+      if x.IsSelfSigned then
+        akid := skid // typical on X.509
+      else
+        exit; // missing field
+    result := cvUnknownAuthority;
+    a := fTrust.FindBySubjectKey(akid);
+    if a = nil then
+      exit;
+    result := cvRevoked;
+    if IsRevoked(akid, x.SerialNumber) <> crrNotRevoked then
+      exit;
+    // verify the cert digital signature with the issuer public key
+    result := x.Verify(a.Handle, [], x.NotBefore); // has a TX509 cache
+    if result = cvValidSelfSigned then
+    begin
+      // we reached a root anchor: success
+      if not cert.IsSelfSigned then
+        result := cvValidSigned;
+      exit;
+    end else if result <> cvValidSigned then
+      exit;
+    // continue to the next level
+    skid := akid;
+    x := a.Handle;
+  end;
+  // if we reached as many level as requested, consider it done
+  if cert.IsSelfSigned then
+    result := cvValidSelfSigned
+  else
+    result := cvValidSigned;
+end;
+
+function TCryptStoreX509.Verify(const Signature: RawByteString;
+  Data: pointer; Len: integer; IgnoreError: TCryptCertValidities;
+  TimeUtc: TDateTime): TCryptCertValidity;
+begin
+  result := cvNotSupported; // we don't know which signing authority to use
+end;
+
+function TCryptStoreX509.Count: integer;
+begin
+  result := fTrust.Count;
+end;
+
+function TCryptStoreX509.CrlCount: integer;
+begin
+  result := fSignedCrl.Count + fUnsignedCrl.Count;
+end;
+
+function TCryptStoreX509.DefaultCertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertAlgoX509[CryptCertAlgoDefault];
+end;
+
+
+
 procedure InitializeUnit;
 var
   a: TXAttr;
