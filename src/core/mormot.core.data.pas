@@ -8025,7 +8025,7 @@ begin
       Index := 0; // more efficient code if we use Index and not a local var
       repeat
         i := (Index + n) shr 1;
-        cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
+        cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
         if cmp = 0 then
         begin
           // returns true + index of existing Item
@@ -8033,7 +8033,7 @@ begin
           result := True;
           exit;
         end
-        else if cmp < 0 then
+        else if cmp > 0 then
           Index := i + 1
         else
           n := i - 1;
