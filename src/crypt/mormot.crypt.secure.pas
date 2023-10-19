@@ -1426,6 +1426,7 @@ type
     function Final: RawUtf8; overload;
   end;
 
+  {$M+}
   /// abstract class implemented e.g. by TCryptHash/TCryptCipher/TCryptKey
   TCryptInstance = class(TInterfacedObject)
   protected
@@ -1439,6 +1440,7 @@ type
     property CryptAlgo: TCryptAlgo
       read fCryptAlgo;
   end;
+  {$M-}
 
   /// randomness generator parent class, as resolved by Rnd()
   TCryptRandom = class(TCryptAlgo)

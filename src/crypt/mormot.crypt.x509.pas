@@ -1074,15 +1074,15 @@ type
     /// finalize this ICryptStore instance
     destructor Destroy; override;
     /// check both signed CRL list (for CA) and unsigned CRL list (manual Revoke)
-    // - for a GetAuthorityKey AKID and a Serial
-    function IsRevoked(const AuthorityKeyIdentifiers,
-      SerialNumber: RawUtf8): TCryptCertRevocationReason; overload;
+    // - for a GetAuthorityKey AKID (which may be a CSV) and a Serial
+    function IsRevokedAny(const AuthorityKeyIdentifiers,
+      SerialNumber: RawUtf8): TCryptCertRevocationReason;
     // ICryptStore methods
     procedure Clear; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert; override;
-    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload; override;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
@@ -3422,6 +3422,7 @@ function TX509CrlList.AddFromDer(const Der: TCertDer): boolean;
 var
   crl: TX509Crl;
 begin
+  result := false;
   crl := TX509Crl.Create;
   try
     if not crl.LoadFromDer(Der) then
@@ -3431,6 +3432,7 @@ begin
   finally
     crl.Free;
   end;
+  result := true;
 end;
 
 function TX509CrlList.AddRevocation(const AuthorityKeyIdentifier,
@@ -4636,7 +4638,7 @@ begin
   result := fTrust.FindBySubjectKey(Key);
 end;
 
-function TCryptStoreX509.IsRevoked(const AuthorityKeyIdentifiers,
+function TCryptStoreX509.IsRevokedAny(const AuthorityKeyIdentifiers,
   SerialNumber: RawUtf8): TCryptCertRevocationReason;
 begin
   result := crrNotRevoked;
@@ -4652,7 +4654,7 @@ end;
 function TCryptStoreX509.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
 begin
   if Assigned(cert) then
-    result := IsRevoked(cert.GetAuthorityKey, cert.GetSerial)
+    result := IsRevokedAny(cert.GetAuthorityKey, cert.GetSerial)
   else
     result := crrNotRevoked;
 end;
@@ -4750,7 +4752,7 @@ begin
   if skid = '' then
     exit;
   result := cvRevoked;
-  if IsRevoked(skid, x.SerialNumber) <> crrNotRevoked then
+  if IsRevokedAny(skid, x.SerialNumber) <> crrNotRevoked then
     exit;
   // search within our database of known certificates
   f := fTrust.FindBySubjectKey(skid);
@@ -4784,7 +4786,7 @@ begin
     if a = nil then
       exit;
     result := cvRevoked;
-    if IsRevoked(akid, x.SerialNumber) <> crrNotRevoked then
+    if IsRevokedAny(akid, x.SerialNumber) <> crrNotRevoked then
       exit;
     // verify the cert digital signature with the issuer public key
     result := x.Verify(a.Handle, [], x.NotBefore); // has a TX509 cache
