@@ -2238,21 +2238,24 @@ type
     // already part of the internal list, or not of a compatible class
     // - self-signed certificates could be included - but add them with caution
     // because they will become root CA, or "trust anchors" in X.509 terminology
-    // - the Certificate should have one of cuCA, cuDigitalSignature usages
+    // - the Certificate should have cuCA or cuKeyCertSign typical usages
     function Add(const cert: ICryptCert): boolean;
-    /// load a register a certificate or certificate chain from a memory buffer
+    /// load and register a certificate or certificate chain from a memory buffer
     // - returns the serials of added certificate(s)
+    // - if there are any valid CRL, they will also be loaded to the store
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray;
-    /// load a register a certificate file or file chain
+    /// load and register a certificate file or file chain
     // - returns the serials of added certificate(s)
-    // - the Certificate should have one of cuCA, cuDigitalSignature usages
+    // - the Certificate(s) should have cuCA or cuKeyCertSign typical usages
+    // - if there are any valid CRL, they will also be loaded to the store
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
     /// search and register all certificate files from a given folder
     // - returns the serials of added certificate(s)
-    // - the Certificate(s) should have one of cuCA, cuDigitalSignature usages
+    // - the Certificate(s) should have cuCA or cuKeyCertSign typical usages
+    // - if there are any valid CRL, they will also be loaded to the store
     function AddFromFolder(const Folder: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = false): TRawUtf8DynArray;
-    /// add a new Serial number to the global Certificate Revocation List
+    /// add a Certificate information to the global Certificate Revocation List
     // - on some engines (our internal ECC, but not OpenSSL), Reason=crrNotRevoked
     // could be used to unregister a certificate revocation
     function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
@@ -2260,15 +2263,17 @@ type
     /// check if the certificate is valid, against known certificates chain
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored digital signature according to the public key of
-    // the associated signing authority, as found within the store
+    // the associated signing authority, as found within the store, for as
+    // many level as needed until a self-signed "root anchor" is reached
     function IsValid(const cert: ICryptCert;
       date: TDateTime = 0): TCryptCertValidity;
     /// check a certificate against its supplied chain and known certificates
     // - with a large PKI as on the Internet, a certificates chain is usually
     // supplied for authentication with only some "trust anchors" certificates
     // - this overloaded method accept a chain as input, so that the first
-    // item is to be validated against the other members of the chain, then
-    // eventually searching the store for the root entry
+    // item is to be validated against the other members of the chain as
+    // intermediates (not part of the store), then eventually validating the
+    // last items of the chain with the store trusted certificates
     function IsValidChain(const chain: ICryptCertChain;
       date: TDateTime = 0): TCryptCertValidity;
     /// verify the digital signature of a given memory buffer
@@ -2280,7 +2285,7 @@ type
     // has no way to lookup the X.509 certificate which actually signed the buffer
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities = []; TimeUtc: TDateTime = 0): TCryptCertValidity;
-    /// how many certificates are currently stored
+    /// how many trusted certificates are currently stored
     function Count: integer;
     /// how many CRLs are currently stored
     function CrlCount: integer;
@@ -2336,7 +2341,7 @@ type
   // - this class is thread-safe and will flush its oldest entries automatically
   TCryptCertCache = class(TSynPersistent)
   protected
-    fCache: TSynDictionary; // RawByteString/ICryptCert thread-safe cache
+    fCache: TSynDictionary; // RawByteString(DER)/ICryptCert thread-safe cache
     function GetCount: integer;
     function OnDelete(const aKey, aValue; aIndex: integer): boolean;
     // this abstract method should be properly overriden
