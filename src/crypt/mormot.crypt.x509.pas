@@ -1093,6 +1093,8 @@ end;
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
   case xsa of
+    xsaNone:
+      result := AsnSeq([Asn(ASN1_OBJID, [])]); // e.g. for fUnsignedCrl
     xsaSha256Rsa .. xsaSha512Rsa:
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
@@ -1124,8 +1126,6 @@ begin
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
                 ]);
-  else
-    raise EX509.CreateUtf8('Unexpected XsaToSeq(%)', [ord(xsa)]);
   end;
 end;
 
@@ -1159,8 +1159,7 @@ var
 begin
   p := 1;
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
-            (AsnNext(p, seq, @oid) = ASN1_OBJID) and // decode OID as text
-            ({%H-}oid <> '');
+            (AsnNext(p, seq, @oid) = ASN1_OBJID); // decode OID as text
   if result then
     case AsnNext(p, seq, @oid2) of
       ASN1_OBJID:
@@ -2682,6 +2681,8 @@ begin
       Signed.Subject.ComputeAsn;
     result := SortDynArrayRawByteString(
       Signed.Issuer.fCachedAsn, Signed.Subject.fCachedAsn) = 0;
+    if result then
+      Signed.Issuer.fCachedAsn := Signed.Subject.fCachedAsn; // same pointer()
   end
   else
     result := false;
@@ -2952,7 +2953,8 @@ begin
   if (vt <> ASN1_INT) or
      not (Version in [1..2]) or
      not AsnNextAlgoOid(pos, der, oid, oid2) or
-     not OidToXsa(oid, Signature) or
+     ((oid <> '') and // allow fUnsignedCrl
+      not OidToXsa(oid, Signature)) or
      not Issuer.FromAsnNext(pos, der) or
      not AsnNextTime(pos, der, ThisUpdate) or
      (pos > length(der)) or
@@ -3058,6 +3060,7 @@ begin
   fCachedDer := '';
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
+  fCrlNumber := 0;
 end;
 
 function TX509Crl.AddRevocation(const Serial: RawUtf8;
@@ -3128,7 +3131,8 @@ begin
             (AsnNextRaw(pos, der, tbs, {includeheader=}true) = ASN1_SEQ) and
             Signed.FromDer(tbs) and
             AsnNextAlgoOid(pos, der, oid, oid2) and
-            OidToXsa(oid, fSignatureAlgorithm) and
+            ((oid = '') or // allow fUnsignedCrl
+             OidToXsa(oid, fSignatureAlgorithm)) and
             (AsnNextRaw(pos, der, fSignatureValue) = ASN1_BITSTR) and
             (fSignatureAlgorithm = Signed.Signature);
 end;
