@@ -2091,10 +2091,10 @@ begin
       (AsnNextInt32(pos[0], der, version^) <> ASN1_INT)) then
     exit;
   result := (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
-              (AsnNextRaw(pos[1], seq, oid) = ASN1_OBJID) and
-                (oid = AsnEncOid(ASN1_OID_RSAPUB)) and
+            (AsnNext(pos[1], seq, @oid) = ASN1_OBJID) and
+            (oid = ASN1_OID_RSAPUB) and
             (AsnNextRaw(pos[0], der, str) = seqtype) and
-              (AsnNext(pos[2], str) = ASN1_SEQ);
+            (AsnNext(pos[2], str) = ASN1_SEQ);
   if result and
      (version <> nil) then
     result := AsnNextInteger(pos[2], str, vt) = version^;
