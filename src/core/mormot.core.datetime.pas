@@ -142,9 +142,13 @@ function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar 
   WithMS: boolean = false; QuotedChar: AnsiChar = #0): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// raw basic Date/Time conversion into ISO-8601
+/// raw basic Date/Time conversion into ISO-8601 RawUtf8
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
   FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
+
+/// raw basic Date/Time conversion into ISO-8601 shortstring
+function DateTimeToIso8601Short(D: TDateTime; Expanded, WithMS: boolean;
+  FirstChar, QuotedChar: AnsiChar): TShort31;
 
 /// basic Date/Time conversion into ISO-8601
 // - use 'YYYYMMDDThhmmss' format if not Expanded
@@ -1347,6 +1351,16 @@ begin
   // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,
     DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar));
+end;
+
+function DateTimeToIso8601Short(D: TDateTime; Expanded, WithMS: boolean;
+  FirstChar, QuotedChar: AnsiChar): TShort31;
+begin
+  if D = 0 then
+    result[0] := #0
+  else
+    result[0] := AnsiChar(DateTimeToIso8601(
+                @result[1], D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
 
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;

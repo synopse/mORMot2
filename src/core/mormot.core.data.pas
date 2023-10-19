@@ -2312,7 +2312,8 @@ procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
 function DynArraySortOne(Kind: TRttiParserType; CaseInsensitive: boolean): TDynArraySortCompare;
 
 /// sort any TObjArray with a given comparison function
-procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare);
+procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare;
+  CountPointer: PInteger = nil);
 
 
 { *************** Integer Arrays Extended Process }
@@ -7055,9 +7056,10 @@ begin
   result := PT_SORT[CaseInsensitive, Kind];
 end;
 
-procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare);
+procedure ObjArraySort(var aValue; Compare: TDynArraySortCompare;
+  CountPointer: PInteger);
 begin
-  DynArray(TypeInfo(TObjectDynArray), aValue).Sort(Compare);
+  DynArray(TypeInfo(TObjectDynArray), aValue, CountPointer).Sort(Compare);
 end;
 
 
