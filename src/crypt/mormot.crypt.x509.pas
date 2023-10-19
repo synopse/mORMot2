@@ -289,7 +289,7 @@ const
 
   /// internal lookup table from X.509 Signature Algorithm as text
   XSA_TXT: array[TXSignatureAlgorithm] of RawUtf8 = (
-    '',                               // xsaNone
+    'none',                           // xsaNone
     'SHA256 with RSA encryption',     // xsaSha256Rsa
     'SHA384 with RSA encryption',     // xsaSha384Rsa
     'SHA512 with RSA encryption',     // xsaSha512Rsa
@@ -952,43 +952,22 @@ type
   // - to speed up typical PKI process, no DER parsing would be necessary
   // and ECC/RSA digital signature verifications will be cached at TX509 level
   // - this class is thread-safe and will flush its oldest entries automatically
-  TCryptCertCache = class(TSynPersistent)
+  TCryptCertCacheX509 = class(TCryptCertCache)
   protected
-    fCache: TSynDictionary; // RawByteString/ICryptCert thread-safe cache
-    function GetCount: integer;
-    function OnDelete(const aKey, aValue; aIndex: integer): boolean;
+    // properly overidden to call X509Load() and return a TCryptCertX509
+    function InternalLoad(const Cert: RawByteString): ICryptCert; override;
   public
-    /// instantiate a cache
-    // - you can have several TCryptCertCache, dedicated to each bounded context
-    constructor Create(TimeOutSeconds: integer); reintroduce;
-    /// retrieve a potentially shared ICryptCert instance from DER or PEM input
-    // - returns nil if the input is not correct or not supported
-    // - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
-    function Load(const Cert: RawByteString): ICryptCert; overload;
-    /// retrieve a chain of ICryptCert instances from an array of DER input
-    // - any invalid Cert[] will just be ignored and not part of the result
-    function Load(const Cert: array of RawByteString): ICryptCertChain; overload;
-    /// retrieve a chain of ICryptCert instances from a PEM input
-    // - any invalid chunk in the PEM will be ignored and not part of the result
-    function LoadPem(const Pem: RawUtf8): ICryptCertChain;
     /// search the internal list for a given attribute
     // - return all the certificates matching a given value
     // - will use a fast-enough O(n) search algorithm with lockfree multi-read
     function Find(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber;
-      MaxCount: integer = 0): ICryptCertChain;
+      MaxCount: integer = 0): ICryptCerts;
     /// search the internal list for a given attribute
     // - return the first certificate matching a given value
     function FindOne(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
-    /// finalize the cache
-    destructor Destroy; override;
-  published
-    /// how many ICryptCert are currently in the cache
-    property Count: integer
-      read GetCount;
   end;
-
 
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
@@ -3042,14 +3021,9 @@ end;
 
 function TX509Crl.GetCrlNumber: QWord;
 begin
-  if self = nil then
-    result := 0
-  else
-  begin
-    if fCrlNumber = 0 then // simple cache
-      SetQWord(pointer(Signed.Extension[xceCrlNumber]), fCrlNumber);
-    result := fCrlNumber;
-  end;
+  if fCrlNumber = 0 then // simple cache
+    SetQWord(pointer(Signed.Extension[xceCrlNumber]), fCrlNumber);
+  result := fCrlNumber;
 end;
 
 procedure TX509Crl.SetCrlNumber(Value: QWord);
@@ -3217,9 +3191,9 @@ end;
 
 { **************** X.509 Private Key Infrastructure (PKI) }
 
-// search function reused with TCryptCertCache and our PKI
+// function shared e.g. by TCryptCertCacheX509 and TCryptCertList
 procedure RawCertSearch(Cert: PICryptCert; const Value: RawByteString;
-  Method: TCryptCertComparer; Count, MaxCount: integer; out Chain: ICryptCertChain);
+  Method: TCryptCertComparer; Count, MaxCount: integer; out Chain: ICryptCerts);
 var
   res: PtrInt;
 
@@ -3251,7 +3225,7 @@ begin
   // O(n) efficient search loop with no temporary memory allocation
   res := 0;
   repeat
-    with TX509(Cert^.Handle) do
+    with TX509(Cert^.Handle) do // retrieve the TX509 in a single method call
       case Method of
         ccmSerialNumber:
           if (SortDynArrayRawByteString(SerialNumber, bin) = 0) and
@@ -3291,6 +3265,14 @@ begin
           if CsvContains(Signed.Extension[xeIssuerAlternativeName], Value) and
              FoundOne then
             break;
+        ccmBinary:
+          begin
+            if fCachedDer = '' then
+              ComputeCachedDer;
+            if (SortDynArrayAnsiString(fCachedDer, Value) = 0) and
+               FoundOne then
+              break;
+          end;
         ccmSha1:
           if (FingerPrintCompare(Value, hfSHA1) = 0) and
              FoundOne then
@@ -3309,129 +3291,6 @@ begin
   until false;
   if res <> length({%H-}Chain) then
     DynArrayFakeLength(Chain, res);
-end;
-
-
-{ TCryptCertCache }
-
-function TCryptCertCache.GetCount: integer;
-begin
-  result := fCache.Count;
-end;
-
-function TCryptCertCache.OnDelete(const aKey, aValue; aIndex: integer): boolean;
-begin
-  // return true to delete the deprecated item - only if not currently in use
-  result := ICryptCert(aValue).Instance.RefCount = 1;
-end;
-
-constructor TCryptCertCache.Create(TimeOutSeconds: integer);
-begin
-  fCache := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray),
-    TypeInfo(ICryptCerts), {caseins=}false, TimeOutSeconds);
-  fCache.OnCanDeleteDeprecated := OnDelete;
-  fCache.ThreadUse := uRWLock; // non-blocking Load()
-end;
-
-function TCryptCertCache.Load(const Cert: RawByteString): ICryptCert;
-var
-  der: RawByteString;
-begin
-  result := nil;
-  // normalize and validate input
-  if AsnDecChunk(Cert) then
-    der := Cert
-  else
-  begin
-    der := PemToDer(Cert);
-    if not AsnDecChunk(der) then
-      exit;
-  end;
-  // try to retrieve and share an existing instance
-  if fCache.FindAndCopy(der, result) then
-    exit;
-  // we need to create a new TX509 instance
-  result := X509Load(der);
-  if result = nil then
-    exit;
-  // add this new instance to the internal cache
-  if fCache.Count > 128 then
-    fCache.DeleteDeprecated; // make some room (once a second and if RefCount=1)
-  fCache.Add(der, result);   // der key will be shared with TX509.fCachedDer
-end;
-
-function TCryptCertCache.Load(const Cert: array of RawByteString): ICryptCertChain;
-var
-  i, n: PtrInt;
-begin
-  result := nil;
-  SetLength(result, length(Cert));
-  n := 0;
-  for i := 0 to high(Cert) do
-  begin
-    result[n] := Load(Cert[i]);
-    if Assigned(result[n]) then
-      inc(n);
-  end;
-  SetLength(result, n);
-end;
-
-function TCryptCertCache.LoadPem(const Pem: RawUtf8): ICryptCertChain;
-var
-  p: PUtf8Char;
-  k: TPemKind;
-  der: TCertDer;
-  c: ICryptCert;
-begin
-  result := nil;
-  p := pointer(Pem);
-  if p <> nil then
-    repeat
-      der := NextPemToDer(p, @k);
-      if der = '' then
-        break;
-      if not (k in [pemUnspecified, pemCertificate]) then
-        continue; // no need to try loading something which is not a X.509 cert
-      c := Load(der);
-      if c <> nil then
-        ChainAdd(result, c);
-    until false;
-end;
-
-function TCryptCertCache.Find(const Value: RawByteString;
-  Method: TCryptCertComparer; MaxCount: integer): ICryptCertChain;
-begin
-  result := nil;
-  if (self = nil) or
-     (fCache.Count = 0) or
-     (Value = '') then
-    exit;
-  // non-blocking O(n) search within the stored certificates
-  fCache.Safe^.ReadLock;
-  try
-    RawCertSearch(
-      fCache.Values.Value^, Value, Method, fCache.Count, MaxCount, result);
-  finally
-    fCache.Safe^.ReadUnLock;
-  end;
-end;
-
-function TCryptCertCache.FindOne(const Value: RawByteString;
-  Method: TCryptCertComparer): ICryptCert;
-var
-  res: ICryptCertChain;
-begin
-  res := Find(Value, Method, 1);
-  if res = nil then
-    result := nil
-  else
-    result := res[0];
-end;
-
-destructor TCryptCertCache.Destroy;
-begin
-  fCache.Free;
-  inherited Destroy;
 end;
 
 

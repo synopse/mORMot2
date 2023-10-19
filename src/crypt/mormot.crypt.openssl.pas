@@ -1922,7 +1922,7 @@ type
     constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
-    function Load(const Saved: RawByteString): boolean; override;
+    procedure Clear; override;
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
@@ -2689,11 +2689,10 @@ begin
   end;
 end;
 
-function TCryptStoreOpenSsl.Load(const Saved: RawByteString): boolean;
+procedure TCryptStoreOpenSsl.Clear;
 begin
   fStore.Free;
   fStore := NewCertificateStore;         // clear (with proper ref counting)
-  result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
 end;
 
 function TCryptStoreOpenSsl.GetBySerial(const Serial: RawUtf8): ICryptCert;

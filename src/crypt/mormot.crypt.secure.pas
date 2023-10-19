@@ -2213,6 +2213,8 @@ type
   /// abstract interface to a Certificates Store, as returned by Store() factory
   // - may be X.509 or not, OpenSSL implemented or not
   ICryptStore = interface
+    /// delete all stored Certificates or CRL information
+    procedure Clear;
     /// load a Certificates Store from a ICryptStore.Save memory buffer content
     function Load(const Saved: RawByteString): boolean;
     /// serialize the Certificates Store into a memory buffer
@@ -2285,7 +2287,8 @@ type
   TCryptStore = class(TCryptInstance, ICryptStore)
   public
     // ICryptStore methods
-    function Load(const Saved: RawByteString): boolean; virtual; abstract;
+    procedure Clear; virtual; abstract;
+    function Load(const Saved: RawByteString): boolean; virtual;
     function Save: RawByteString; virtual; abstract;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
@@ -6861,6 +6864,12 @@ begin
   if length(c) > 1 then
     date := c[length(c) - 2].GetNotBefore; // anchor is not main: adjust date
   result := IsValid(c[length(c) - 1], date);
+end;
+
+function TCryptStore.Load(const Saved: RawByteString): boolean;
+begin
+  Clear;
+  result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
 end;
 
 function TCryptStore.AddFromFile(const FileName: TFileName): TRawUtf8DynArray;
