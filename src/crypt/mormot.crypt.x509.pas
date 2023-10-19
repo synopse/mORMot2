@@ -991,6 +991,97 @@ type
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
   end;
 
+  /// 'x509-pki' ICryptStore algorithm using TX509 and TX509Crl for its process
+  TCryptStoreAlgoX509 = class(TCryptStoreAlgo)
+  public
+    function New: ICryptStore; override; // = TCryptStoreX509.Create(self)
+  end;
+
+  /// 'x509-pki' ICryptStore using TX509 and TX509Crl as a full featured PKI
+  // - published here to make it expandable if needed by proper inheritance
+  // - will maintain a cache of ICryptCert instances, a list of trusted
+  // certificates, a list of signed CRL (received from a CA) and a list
+  // of unsigned CRL (manually registered via the Revoke method)
+  TCryptStoreX509 = class(TCryptStore)
+  protected
+    fCache: TCryptCertCacheX509;
+    fTrust: TCryptCertListX509;
+    fCA: TCryptCertListX509;
+    fSignedCrl: TX509CrlList;   // from a CA
+    fUnsignedCrl: TX509CrlList; // from manual Revoke()
+    fValidDepth: integer;
+    function GetRevoked: integer;
+    function GetCacheCount: integer;
+    function GetCACount: integer;
+  public
+    /// initialize a 'x509-pki' ICryptStore
+    constructor Create(algo: TCryptAlgo); override;
+    /// finalize this ICryptStore instance
+    destructor Destroy; override;
+    /// check both signed CRL list (for CA) and unsigned CRL list (manual Revoke)
+    // - for a GetAuthorityKey AKID and a Serial
+    function IsRevoked(const AuthorityKeyIdentifiers,
+      SerialNumber: RawUtf8): TCryptCertRevocationReason; overload;
+    // ICryptStore methods
+    procedure Clear; override;
+    function Save: RawByteString; override;
+    function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
+    function GetBySubjectKey(const Key: RawUtf8): ICryptCert; override;
+    function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; overload; override;
+    function Add(const cert: ICryptCert): boolean; override;
+    function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
+    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
+      Reason: TCryptCertRevocationReason): boolean; override;
+    function IsValid(const cert: ICryptCert;
+      date: TDateTime): TCryptCertValidity; override;
+    function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
+    function Count: integer; override;
+    function CrlCount: integer; override;
+    function DefaultCertAlgo: TCryptCertAlgo; override;
+  public
+    /// how many levels IsValid() should iterate over the trusted certificates
+    // before finding a self-signed "root anchor"
+    // - equals 5 by default which is more than enough for most PKI
+    // - 0 would mean that IsValid() checks for a single issuer in the known
+    // Trust[] list, and consider it successfull even if the "root anchor" was
+    // not reached
+    property ValidDepth: integer
+      read fValidDepth write fValidDepth;
+    /// access to the internal trusted ICryptCert list of this PKI
+    // - i.e. all trusted certificates, some being self-signed "root anchors",
+    // others being intermediate certificates
+    // - you usually should not need to access this list, but call ICryptStore
+    // IsValid() and IsRevoked() convenient methods
+    property Trust: TCryptCertListX509
+      read fTrust;
+    /// access to the internal list of CRL signed by some root CA
+    property SignedCrl: TX509CrlList
+      read fSignedCrl;
+    /// access to the internal list of unsigned CRL, set by Revoke() calls
+    // - will be persisted as PEM with no signature, which is mORMot-specific
+    property UnsignedCrl: TX509CrlList
+      read fUnsignedCrl;
+    /// access to the internal ICryptCert instance cache
+    // - warning: not all of the instances of this cache are trusted!
+    // - use Cache.Load() if you want to work with certificates which may be
+    // within the context of this PKI
+    property Cache: TCryptCertCacheX509
+      read fCache;
+  published
+    /// how many trusted certificates are actually stored
+    property Trusted: integer
+      read Count;
+    /// how many certificates are currently revoked
+    // - in both SignedCrl and UnsignedCrl lists
+    property Revoked: integer
+      read GetRevoked;
+    /// how many ICryptCert instances are actually cached
+    property Cached: integer
+      read GetCacheCount;
+  end;
+
+
 
 { **************** Registration of our X.509 Engine to the TCryptCert Factory }
 
@@ -2700,57 +2791,62 @@ end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
 begin
-  if Assigned(Another) then
-    case Method of
-      ccmSerialNumber:
-        result := SortDynArrayRawByteString(
-                    Signed.SerialNumber, Another.Signed.SerialNumber);
-      ccmSubjectName:
-        result := Signed.Subject.Compare(Another.Signed.Subject);
-      ccmIssuerName:
-        result := Signed.Issuer.Compare(Another.Signed.Issuer);
-      ccmSubjectCN:
-        result := SortDynArrayAnsiString(
-                    Signed.Subject.Name[xaCN], Another.Signed.Subject.Name[xaCN]);
-      ccmIssuerCN:
-        result := SortDynArrayAnsiString(
-                    Signed.Issuer.Name[xaCN], Another.Signed.Issuer.Name[xaCN]);
-      ccmSubjectKey:
-        result := SortDynArrayRawByteString(
-                    Signed.ExtensionRaw[xeSubjectKeyIdentifier],
-                    Another.Signed.ExtensionRaw[xeSubjectKeyIdentifier]);
-      ccmAuthorityKey:
-        result := SortDynArrayRawByteString(
-                    Signed.ExtensionRaw[xeAuthorityKeyIdentifier],
-                    Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
-      ccmSubjectAltName:
-        result := SortDynArrayAnsiString(
-          Signed.Extension[xeSubjectAlternativeName],
-          Another.Signed.Extension[xeSubjectAlternativeName]);
-      ccmIssuerAltName:
-        result := SortDynArrayAnsiString(
-          Signed.Extension[xeIssuerAlternativeName],
-          Another.Signed.Extension[xeIssuerAlternativeName]);
-      ccmUsage:
-        result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
-      ccmBinary:
-        begin
-          // update cache manually to avoid temporary strings with ToDer calls
-          if fCachedDer = '' then
-            ComputeCachedDer;
-          if Another.fCachedDer = '' then
-            Another.ComputeCachedDer;
-          result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
-        end;
-      ccmSha1:
-        result := FingerPrintCompare(Another, hfSHA1);
-      ccmSha256:
-        result := FingerPrintCompare(Another, hfSHA256);
+  if self <> nil then
+    if Another <> nil then
+      case Method of
+        ccmSerialNumber:
+          result := SortDynArrayRawByteString(
+                      Signed.SerialNumber, Another.Signed.SerialNumber);
+        ccmSubjectName:
+          result := Signed.Subject.Compare(Another.Signed.Subject);
+        ccmIssuerName:
+          result := Signed.Issuer.Compare(Another.Signed.Issuer);
+        ccmSubjectCN:
+          result := SortDynArrayAnsiString(
+                      Signed.Subject.Name[xaCN], Another.Signed.Subject.Name[xaCN]);
+        ccmIssuerCN:
+          result := SortDynArrayAnsiString(
+                      Signed.Issuer.Name[xaCN], Another.Signed.Issuer.Name[xaCN]);
+        ccmSubjectKey:
+          result := SortDynArrayRawByteString(
+                      Signed.ExtensionRaw[xeSubjectKeyIdentifier],
+                      Another.Signed.ExtensionRaw[xeSubjectKeyIdentifier]);
+        ccmAuthorityKey:
+          result := SortDynArrayRawByteString(
+                      Signed.ExtensionRaw[xeAuthorityKeyIdentifier],
+                      Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
+        ccmSubjectAltName:
+          result := SortDynArrayAnsiString(
+            Signed.Extension[xeSubjectAlternativeName],
+            Another.Signed.Extension[xeSubjectAlternativeName]);
+        ccmIssuerAltName:
+          result := SortDynArrayAnsiString(
+            Signed.Extension[xeIssuerAlternativeName],
+            Another.Signed.Extension[xeIssuerAlternativeName]);
+        ccmUsage:
+          result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
+        ccmBinary:
+          begin
+            // update cache manually to avoid temporary strings with ToDer calls
+            if fCachedDer = '' then
+              ComputeCachedDer;
+            if Another.fCachedDer = '' then
+              Another.ComputeCachedDer;
+            result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
+          end;
+        ccmSha1:
+          result := FingerPrintCompare(Another, hfSHA1);
+        ccmSha256:
+          result := FingerPrintCompare(Another, hfSHA256);
+      else
+        result := ComparePointer(self, Another); // e.g. ccmInstance
+      end
     else
-      result := ComparePointer(self, Another); // e.g. ccmInstance
-    end
+      result := 1
+  else if Another = nil then
+    result := 0
   else
-    result := 1;
+    result := -1;
 end;
 
 function TX509.SignatureSecurityBits: integer;
