@@ -1788,6 +1788,8 @@ type
     ccmIssuerCN,
     ccmSubjectKey,
     ccmAuthorityKey,
+    ccmSubjectAltName,
+    ccmIssuerAltName,
     ccmUsage,
     ccmBinary,
     ccmSha1,
@@ -2645,6 +2647,9 @@ var
   // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
   // $ CryptCertAlgoX509[caaRS256].New
   CryptCertAlgoX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
+  /// direct access to the mormot.crypt.x509.pas ICryptStore factory
+  CryptStoreX509: TCryptStoreAlgo;
 
   /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
   // - may be nil if this unit was not included or if OpenSSL is not available
@@ -6576,6 +6581,12 @@ begin
         result := HumanHexCompare(GetSubjectKey, Another.GetSubjectKey);
       ccmAuthorityKey:
         result := HumanHexCompare(GetAuthorityKey, Another.GetAuthorityKey);
+      ccmSubjectAltName:
+        result := CompareBuf(RawUtf8ArrayToCsv(GetSubjects),
+                    RawUtf8ArrayToCsv(Another.GetSubjects));
+      ccmIssuerAltName:
+        result := CompareBuf(RawUtf8ArrayToCsv(GetIssuers),
+                    RawUtf8ArrayToCsv(Another.GetIssuers));
       ccmUsage:
         result := word(GetUsage) - word(Another.GetUsage);
       ccmBinary:

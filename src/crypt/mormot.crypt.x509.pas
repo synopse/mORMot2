@@ -799,13 +799,13 @@ type
     /// the cryptographic algorithm used by the CA over the TX509Crl.Signed field
     // - match TX509Crl.SignatureAlgorithm field
     Signature: TXSignatureAlgorithm;
-    /// identifies the entity that has signed and issued this CRL
-    Issuer: TXName;
     /// date on which the CRL validity period begins
     ThisUpdate: TDateTime;
     /// date on which the CRL validity period ends
     // - may equal 0 if the "nextUpdate" Time optional field was not present
     NextUpdate: TDateTime;
+    /// identifies the entity that has signed and issued this CRL
+    Issuer: TXName;
     /// list of revoked certificates
     Revoked: TXCrlRevokedCerts;
     /// decoded known X.509 CRL v2 extensions as defined in RFC 5280 5.2
@@ -2721,6 +2721,14 @@ begin
         result := SortDynArrayRawByteString(
                     Signed.ExtensionRaw[xeAuthorityKeyIdentifier],
                     Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
+      ccmSubjectAltName:
+        result := SortDynArrayAnsiString(
+          Signed.Extension[xeSubjectAlternativeName],
+          Another.Signed.Extension[xeSubjectAlternativeName]);
+      ccmIssuerAltName:
+        result := SortDynArrayAnsiString(
+          Signed.Extension[xeIssuerAlternativeName],
+          Another.Signed.Extension[xeIssuerAlternativeName]);
       ccmUsage:
         result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
       ccmBinary:
@@ -3254,6 +3262,14 @@ begin
             break;
         ccmAuthorityKey:
           if CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value) and
+             FoundOne then
+            break;
+        ccmSubjectAltName:
+          if CsvContains(Signed.Extension[xeSubjectAlternativeName], Value) and
+             FoundOne then
+            break;
+        ccmIssuerAltName:
+          if CsvContains(Signed.Extension[xeIssuerAlternativeName], Value) and
              FoundOne then
             break;
         ccmSha1:
