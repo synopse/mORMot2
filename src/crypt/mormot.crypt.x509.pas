@@ -931,6 +931,61 @@ type
       read GetCrlNumber write SetCrlNumber;
   end;
 
+  /// a dynamic array of TX509Crl instances
+  TX509CrlObjArray = array of TX509Crl;
+
+  /// store several TX509Crl instances
+  TX509CrlList = class(TSynPersistent)
+  protected
+    fSafe: TRWLightLock;
+    fList: TX509CrlObjArray;
+    fCount: integer;
+    fDA: TDynArray;
+    function GetRevoked: integer;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// finalize this list
+    destructor Destroy; override;
+    /// include a X.509 CRL instance to the internal list
+    // - from now on, it will be owned by this TX509CrlList class
+    // - will replace any existing CRL with its SKID, if older
+    procedure Add(Crl: TX509Crl);
+    /// include a X.509 CRL from its DER binary representation to the list
+    function AddFromDer(const Der: TCertDer): boolean;
+    /// append a revoked certificate to the corresponding CRL in the list
+    // - will add a new TX509Crl item, if needed
+    // - caller should eventually call Sign() with the corresponding CA
+    function AddRevocation(const AuthorityKeyIdentifier, Serial: RawUtf8;
+      Reason: TCryptCertRevocationReason; ValidDays: integer = 0;
+      Date: TDateTime = 0; CertIssuerDN: RawUtf8 = ''): boolean;
+    /// search the most recent X.509 CRL of a given authority from its own SKID
+    function FindByKeyIssuer(const AuthorityKeyIdentifier: RawUtf8): TX509Crl;
+    /// search the most recent X.509 CRL of a given authority from a DNS name
+    function FindByAlternativeName(const DnsName: RawUtf8;
+      TimeUtc: TDateTime = 0): TX509CrlObjArray;
+    /// quickly check if a given certificate was part of one known CRL
+    // - the proper CRL(s) will be first checked with AuthorityKeyIdentifiers,
+    // then the method will search if the Serial Number is part of it
+    // - returns crrNotRevoked is the serial is not known as part of the CRL
+    // - returns the reason why this certificate has been revoked otherwise
+    function IsRevoked(const AuthorityKeyIdentifiers,
+      SerialNumber: RawUtf8): TCryptCertRevocationReason;
+    /// return a copy of the internal list items
+    // - the list is sorted by AuthorityKeyIdentifier and CrlNumber
+    // - caller should NOT free the returned items
+    function List: TX509CrlObjArray;
+    /// persist all stored CRL in PEM format
+    procedure SaveToPem(W: TTextWriter; WithExplanatoryText: boolean = false);
+  published
+    /// how many CRL are currently in the list
+    property Count: integer
+      read fCount;
+    /// how many certificates are currently revoked
+    property Revoked: integer
+      read GetRevoked;
+  end;
+
 
 const
   /// the OID of all known X.509 CRL v2 extensions, as in RFC 5280 5.2
@@ -3306,6 +3361,246 @@ begin
 end;
 
 
+{ TX509CrlList }
+
+function TX509CrlCompareWithAkid(const A, B): integer;
+begin
+  // FastLocateSorted() calls fCompare(Item, P[n * fInfo.Cache.ItemSize])
+  result := SortDynArrayRawByteString(RawByteString(A),
+              TX509Crl(B).Signed.ExtensionRaw[xceAuthorityKeyIdentifier]);
+end;
+
+constructor TX509CrlList.Create;
+begin
+  inherited Create;
+  fDA.Init(TypeInfo(TX509CrlObjArray), fList, @fCount);
+  fDA.Compare := TX509CrlCompareWithAkid; // FastLocateSorted() search by AKID
+end;
+
+destructor TX509CrlList.Destroy;
+begin
+  inherited Destroy;
+  ObjArrayClear(fList, fCount);
+end;
+
+procedure TX509CrlList.Add(Crl: TX509Crl);
+var
+  i: integer;
+  key: RawByteString;
+begin
+  if Crl = nil then
+    exit;
+  key := Crl.Signed.ExtensionRaw[xceAuthorityKeyIdentifier];
+  if key = '' then
+  begin
+    Crl.Free; // avoid memory leak
+    exit;
+  end;
+  fSafe.WriteLock;
+  try
+    // use fast O(log(n)) binary search of this SKID
+    if fDA.FastLocateSorted(key, i) then
+      // there is already a CRL with this SKID
+      if fList[i].CrlNumber < Crl.CrlNumber then
+      begin
+        fList[i].Free; // replace existing CRL
+        fList[i] := Crl;
+      end
+      else
+        Crl.Free // this supplied CRL is older than the existing -> ignore
+    else if i >= 0 then
+      // add this CRL with this new SKID at the expected sorted position
+      fDA.FastAddSorted(i, Crl)
+    else
+      raise EX509.CreateUtf8('Inconsistent %.Add order', [self]); // paranoid
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TX509CrlList.AddFromDer(const Der: TCertDer): boolean;
+var
+  crl: TX509Crl;
+begin
+  crl := TX509Crl.Create;
+  try
+    if not crl.LoadFromDer(Der) then
+      exit;
+    Add(crl);
+    crl := nil; // will be owned by fList from now on
+  finally
+    crl.Free;
+  end;
+end;
+
+function TX509CrlList.AddRevocation(const AuthorityKeyIdentifier,
+  Serial: RawUtf8; Reason: TCryptCertRevocationReason; ValidDays: integer;
+  Date: TDateTime; CertIssuerDN: RawUtf8): boolean;
+var
+  i: integer;
+  key: RawByteString;
+  crl: TX509Crl;
+begin
+  result := false;
+  if (self = nil) or
+     (Serial = '') or
+     (Reason = crrNotRevoked) or
+     not HumanHexToBin(AuthorityKeyIdentifier, key) then
+    exit;
+  fSafe.WriteLock;
+  try
+    if fDA.FastLocateSorted(key, i) then
+      crl := fList[i]
+    else if i >= 0 then
+    begin
+      crl := TX509Crl.Create;
+      crl.Signed.ExtensionRaw[xceAuthorityKeyIdentifier] := key;
+      crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
+      fDA.FastAddSorted(i, crl);
+    end
+    else
+      raise EX509.CreateUtf8('Inconsistent % order', [self]); // paranoid
+    result := crl.AddRevocation(Serial, Reason, ValidDays, Date, CertIssuerDN);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TX509CrlList.GetRevoked: integer;
+var
+  i: integer;
+begin
+  result := 0;
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  fSafe.ReadLock;
+  try
+    for i := 0 to fCount - 1 do
+      inc(result, length(fList[i].Signed.Revoked));
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TX509CrlList.FindByKeyIssuer(const AuthorityKeyIdentifier: RawUtf8): TX509Crl;
+var
+  bin: RawByteString;
+  i: integer;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) or
+     not HumanHexToBin(AuthorityKeyIdentifier, bin) then
+    exit;
+  fSafe.ReadLock;
+  try
+    // efficient O(log(n)) binary search
+    if fDA.FastLocateSorted(bin, i) then
+      result := fList[i];
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TX509CrlList.FindByAlternativeName(const DnsName: RawUtf8;
+  TimeUtc: TDateTime): TX509CrlObjArray;
+var
+  p: ^TX509Crl;
+  i: integer;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) or
+     (DnsName = '') then
+    exit;
+  if TimeUtc = 0 then
+    TimeUtc := NowUtc;
+  fSafe.ReadLock;
+  try
+    // brute force O(n) linear search
+    p := pointer(fList);
+    for i := 1 to fCount do
+      if CsvContains(p^.Signed.Extension[xceIssuerAlternativeName], DnsName) and
+         p^.IsValidDate(TimeUtc) then
+        ObjArrayAdd(result, p^)
+      else
+        inc(p);
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TX509CrlList.IsRevoked(const AuthorityKeyIdentifiers,
+  SerialNumber: RawUtf8): TCryptCertRevocationReason;
+var
+  sn: RawByteString;
+  p: PUtf8Char;
+  akid: RawUtf8;
+  crl: TX509Crl;
+  ndx: PtrInt;
+begin
+  result := crrNotRevoked;
+  if (self = nil) or
+     (fCount = 0) or
+     (AuthorityKeyIdentifiers = '') or
+     not HumanHexToBin(SerialNumber, sn) then
+    exit;
+  fSafe.ReadLock; // reentrant multi-read lock
+  try
+    p := pointer(AuthorityKeyIdentifiers); // may be a CSV
+    repeat
+      GetNextItem(p, ',', akid);
+      crl := FindByKeyIssuer(akid); // O(log(n)) binary search
+      if crl = nil then
+        continue;
+      ndx := crl.Signed.FindRevoked(sn);
+      if ndx < 0 then
+        continue;
+      result := crl.Signed.Revoked[ndx].ReasonCode;
+      break;
+    until p = nil;
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TX509CrlList.List: TX509CrlObjArray;
+begin
+  fSafe.ReadLock;
+  try
+    SetLength(result, fCount);
+    MoveFast(pointer(fList)^, pointer(result)^, fCount * SizeOf(TX509Crl));
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+procedure TX509CrlList.SaveToPem(W: TTextWriter; WithExplanatoryText: boolean);
+var
+  i: PtrInt;
+  c: TX509Crl;
+begin
+  fSafe.ReadLock;
+  try
+    for i := 0 to fCount - 1 do
+    begin
+      c := fList[i];
+      if WithExplanatoryText then
+        // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
+        W.Add('Issuer: %'#13#10'Validity: from % to %'#13#10'Signature: %'#13#10,
+         [c.IssuerDN, DateTimeToFileShort(c.ThisUpdate),
+          DateTimeToFileShort(c.NextUpdate), XSA_TXT[c.SignatureAlgorithm]]);
+      W.AddString(c.SaveToPem);
+      W.AddCR;
+    end;
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+
+
 { **************** X.509 Private Key Infrastructure (PKI) }
 
 // function shared e.g. by TCryptCertCacheX509 and TCryptCertListX509
@@ -3345,7 +3640,7 @@ begin
     with TX509(Cert^.Handle) do // retrieve the TX509 in a single method call
       case Method of
         ccmSerialNumber:
-          if (SortDynArrayRawByteString(SerialNumber, bin) = 0) and
+          if (SortDynArrayRawByteString(Signed.SerialNumber, bin) = 0) and
              FoundOne then
             break;
         // ccm*Name expect Value to be TXName.ToBinary raw DER content
