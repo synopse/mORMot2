@@ -3369,8 +3369,8 @@ end;
 function TX509CrlCompareWithAkid(const A, B): integer;
 begin
   // FastLocateSorted() calls fCompare(Item, P[n * fInfo.Cache.ItemSize])
-  result := SortDynArrayRawByteString(RawByteString(A),
-              TX509Crl(B).Signed.ExtensionRaw[xceAuthorityKeyIdentifier]);
+  result := SortDynArrayAnsiString(A,
+              TX509Crl(B).Signed.Extension[xceAuthorityKeyIdentifier]);
 end;
 
 constructor TX509CrlList.Create;
@@ -3389,12 +3389,12 @@ end;
 procedure TX509CrlList.Add(Crl: TX509Crl);
 var
   i: integer;
-  key: RawByteString;
+  akid: RawUtf8;
 begin
   if Crl = nil then
     exit;
-  key := Crl.Signed.ExtensionRaw[xceAuthorityKeyIdentifier];
-  if key = '' then
+  akid := Crl.Signed.Extension[xceAuthorityKeyIdentifier];
+  if akid = '' then
   begin
     Crl.Free; // avoid memory leak
     exit;
@@ -3402,7 +3402,7 @@ begin
   fSafe.WriteLock;
   try
     // use fast O(log(n)) binary search of this SKID
-    if fDA.FastLocateSorted(key, i) then
+    if fDA.FastLocateSorted(akid, i) then
       // there is already a CRL with this SKID
       if fList[i].CrlNumber < Crl.CrlNumber then
       begin
@@ -3412,7 +3412,7 @@ begin
       else
         Crl.Free // this supplied CRL is older than the existing -> ignore
     else if i >= 0 then
-      // add this CRL with this new SKID at the expected sorted position
+      // add this CRL with its unknown SKID at the expected sorted position
       fDA.FastAddSorted(i, Crl)
     else
       raise EX509.CreateUtf8('Inconsistent %.Add order', [self]); // paranoid
@@ -3443,29 +3443,29 @@ function TX509CrlList.AddRevocation(const AuthorityKeyIdentifier,
   Date: TDateTime; CertIssuerDN: RawUtf8): boolean;
 var
   i: integer;
-  key: RawByteString;
   crl: TX509Crl;
 begin
   result := false;
   if (self = nil) or
      (Serial = '') or
      (Reason = crrNotRevoked) or
-     not HumanHexToBin(AuthorityKeyIdentifier, key) then
+     (AuthorityKeyIdentifier = '') then
     exit;
   fSafe.WriteLock;
   try
-    if fDA.FastLocateSorted(key, i) then
+    if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
       crl := fList[i]
     else if i >= 0 then
     begin
       crl := TX509Crl.Create;
-      crl.Signed.ExtensionRaw[xceAuthorityKeyIdentifier] := key;
       crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
       fDA.FastAddSorted(i, crl);
     end
     else
       raise EX509.CreateUtf8('Inconsistent % order', [self]); // paranoid
     result := crl.AddRevocation(Serial, Reason, ValidDays, Date, CertIssuerDN);
+    if result then
+      crl.CrlNumber := crl.CrlNumber + 1; // ensure in increasing sequence
   finally
     fSafe.WriteUnLock;
   end;
@@ -3490,18 +3490,17 @@ end;
 
 function TX509CrlList.FindByKeyIssuer(const AuthorityKeyIdentifier: RawUtf8): TX509Crl;
 var
-  bin: RawByteString;
   i: integer;
 begin
   result := nil;
   if (self = nil) or
      (fCount = 0) or
-     not HumanHexToBin(AuthorityKeyIdentifier, bin) then
+     (AuthorityKeyIdentifier = '') then
     exit;
   fSafe.ReadLock;
   try
     // efficient O(log(n)) binary search
-    if fDA.FastLocateSorted(bin, i) then
+    if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
       result := fList[i];
   finally
     fSafe.ReadUnLock;
