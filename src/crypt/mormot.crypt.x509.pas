@@ -833,9 +833,11 @@ type
     fCachedDer: RawByteString;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
+    fCrlNumber: QWord;
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlNumber: QWord;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetCrlNumber(Value: QWord);
   public
     /// actual to-be-signed revoked Certificate List content
@@ -866,6 +868,9 @@ type
     function LoadFromPem(const pem: TCertPem): boolean;
     /// to be called once any field has been changed to refresh internal caches
     procedure AfterModified;
+    /// quickly check if a date is compatible with ThisUpdate/NextUpdate values
+    function ValidDate(TimeUtc: TDateTime): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// check if an hexadecimal Serial Number is part of Signed.Revoked[]
     // - returns crrNotRevoked if this Serial Number was not found, or
     // the notified revocation reason
@@ -3040,13 +3045,20 @@ begin
   if self = nil then
     result := 0
   else
-    result := GetInt64(pointer(Signed.Extension[xceCrlNumber]));
+  begin
+    if fCrlNumber = 0 then // simple cache
+      SetQWord(pointer(Signed.Extension[xceCrlNumber]), fCrlNumber);
+    result := fCrlNumber;
+  end;
 end;
 
 procedure TX509Crl.SetCrlNumber(Value: QWord);
 begin
-  if self <> nil  then
-    UInt64ToUtf8(Value, Signed.Extension[xceCrlNumber]);
+  if (self = nil) and
+     (Value <> fCrlNumber) then
+     exit;
+  fCrlNumber := Value;
+  UInt64ToUtf8(Value, Signed.Extension[xceCrlNumber]);
 end;
 
 procedure TX509Crl.Clear;
@@ -3138,6 +3150,13 @@ end;
 procedure TX509Crl.AfterModified;
 begin
   fCachedDer := '';
+end;
+
+function TX509Crl.ValidDate(TimeUtc: TDateTime): boolean;
+begin
+  result := (TimeUtc + DEPRECATION_THRESHOLD >= Signed.ThisUpdate) and
+            ((Signed.NextUpdate = 0) or
+             (Signed.NextUpdate <= TimeUtc - DEPRECATION_THRESHOLD));
 end;
 
 function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
