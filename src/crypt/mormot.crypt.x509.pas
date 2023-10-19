@@ -238,7 +238,7 @@ function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
 
 const
   /// set of the Public Key Algorithms using RSA cryptography
-  xkaRsas = [xkaRsa, xkaRsaPss];
+  xkaRsaAny = [xkaRsa, xkaRsaPss];
 
   /// internal lookup table from X.509 Signature to Public Key Algorithms
   XSA_TO_XKA: array[TXSignatureAlgorithm] of TXPublicKeyAlgorithm = (
@@ -2091,7 +2091,7 @@ begin
     if Password = '' then
       // save as plain unencrypted PEM/DER
       if Format = ccfPem then
-        if fAlgo in xkaRsas then
+        if fAlgo in xkaRsaAny then
           k := pemRsaPrivateKey
         else
           k := pemEcPrivateKey
@@ -2103,7 +2103,7 @@ begin
       bin := der; // for FillZero()
       der := PrivateKeyEncrypt(bin, XKA_SALT[fAlgo], Password, XKA_ROUNDS[fAlgo]);
       if Format = ccfPem then
-        if fAlgo in xkaRsas then
+        if fAlgo in xkaRsaAny then
           k := pemSynopseRsaEncryptedPrivateKey
         else
           k := pemSynopseEccEncryptedPrivateKey
@@ -3591,8 +3591,8 @@ begin
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
         W.Add('Issuer: %'#13#10'Validity: from % to %'#13#10'Signature: %'#13#10,
-         [c.IssuerDN, DateTimeToFileShort(c.ThisUpdate),
-          DateTimeToFileShort(c.NextUpdate), XSA_TXT[c.SignatureAlgorithm]]);
+         [c.IssuerDN, DateTimeToIso8601Short(c.ThisUpdate),
+          DateTimeToIso8601Short(c.NextUpdate), XSA_TXT[c.SignatureAlgorithm]]);
       W.AddString(c.SaveToPem);
       W.AddCR;
     end;
@@ -4623,6 +4623,7 @@ begin
     fSignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
     W.AddCR;
     fUnsignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
+    W.SetText(RawUtf8(result));
   finally
     w.Free;
   end;

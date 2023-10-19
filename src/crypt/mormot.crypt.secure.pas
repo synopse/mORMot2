@@ -7169,8 +7169,8 @@ begin
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
         W.Add('Subject: %'#13#10'Issuer: %'#13#10'Validity: from % to %'#13#10,
-         [c^.GetSubjectName, c^.GetIssuerName, DateTimeToFileShort(
-            c^.GetNotBefore), DateTimeToFileShort(c^.GetNotAfter)]);
+         [c^.GetSubjectName, c^.GetIssuerName, DateTimeToIso8601Short(
+            c^.GetNotBefore), DateTimeToIso8601Short(c^.GetNotAfter)]);
       W.AddString(c^.Save(cccCertOnly, '', ccfPem));
       W.AddCR;
       inc(c);

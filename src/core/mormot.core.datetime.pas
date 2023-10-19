@@ -147,8 +147,9 @@ procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
   FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
 
 /// raw basic Date/Time conversion into ISO-8601 shortstring
-function DateTimeToIso8601Short(D: TDateTime; Expanded, WithMS: boolean;
-  FirstChar, QuotedChar: AnsiChar): TShort31;
+function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
+  WithMS: boolean = false; FirstChar: AnsiChar = 'T';
+  QuotedChar: AnsiChar = #0): TShort31;
 
 /// basic Date/Time conversion into ISO-8601
 // - use 'YYYYMMDDThhmmss' format if not Expanded
