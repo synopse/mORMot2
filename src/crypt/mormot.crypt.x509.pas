@@ -952,6 +952,7 @@ type
   // - to speed up typical PKI process, no DER parsing would be necessary
   // and ECC/RSA digital signature verifications will be cached at TX509 level
   // - this class is thread-safe and will flush its oldest entries automatically
+  // - this inherited class offers some TX509 specific search methods
   TCryptCertCacheX509 = class(TCryptCertCache)
   protected
     // properly overidden to call X509Load() and return a TCryptCertX509

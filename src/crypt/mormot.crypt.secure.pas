@@ -2323,6 +2323,63 @@ type
     function NewFrom(const Binary: RawByteString): ICryptStore; virtual;
   end;
 
+  /// abstract class to cache ICryptCert instances, from their DER/binary
+  // - should be overriden to let its InternalLoad() method be implemented
+  // - to speed up typical PKI process
+  // - this class is thread-safe and will flush its oldest entries automatically
+  TCryptCertCache = class(TSynPersistent)
+  protected
+    fCache: TSynDictionary; // RawByteString/ICryptCert thread-safe cache
+    function GetCount: integer;
+    function OnDelete(const aKey, aValue; aIndex: integer): boolean;
+    // this abstract method should be properly overriden
+    function InternalLoad(const Cert: RawByteString): ICryptCert; virtual; abstract;
+  public
+    /// instantiate a cache
+    // - you can have several TCryptCertCache, dedicated to each bounded context
+    constructor Create(TimeOutSeconds: integer); reintroduce;
+    /// retrieve a potentially shared ICryptCert instance from DER or PEM input
+    // - returns nil if the input is not correct or not supported
+    // - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
+    function Load(const Cert: RawByteString): ICryptCert; overload;
+    /// retrieve a chain of ICryptCert instances from an array of DER input
+    // - any invalid Cert[] will just be ignored and not part of the result
+    function Load(const Cert: array of RawByteString): ICryptCerts; overload;
+    /// retrieve a chain of ICryptCert instances from a PEM input
+    // - any invalid chunk in the PEM will be ignored and not part of the result
+    function LoadPem(const Pem: RawUtf8): ICryptCerts;
+    /// finalize the cache
+    destructor Destroy; override;
+  published
+    /// how many ICryptCert are currently in the cache
+    property Count: integer
+      read GetCount;
+  end;
+
+  /// store several ICryptCert instances
+  // - those instances are likely to come from a TCryptCertCache holder
+  TCryptCertList = class(TSynPersistent)
+  protected
+    fSafe: TRWLightLock;
+    fList: ICryptCerts;
+    function GetCount: integer;
+      {$ifdef HASINLINE} inline; {$endif}
+  public
+    /// include a X.509 Certificate instance to the internal list
+    // - from now on, it will be owned by this TCryptCertList class
+    // - return true if the certificate was not already present
+    function Add(const Cert: ICryptCert): boolean;
+    /// return a copy of the internal list items
+    // - caller should NOT free the returned items
+    function List: ICryptCerts;
+    /// persist all stored Certificate in PEM format
+    procedure SaveToPem(W: TTextWriter; WithExplanatoryText: boolean = false);
+  published
+    property Count: integer
+      read GetCount;
+  end;
+
+
 
 /// append a ICryptCert to a certificates chain
 procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
@@ -6927,6 +6984,159 @@ begin
   result := New;
   if not result.Load(Binary) then
     result := nil;
+end;
+
+
+{ TCryptCertCache }
+
+function TCryptCertCache.GetCount: integer;
+begin
+  result := fCache.Count;
+end;
+
+function TCryptCertCache.OnDelete(const aKey, aValue; aIndex: integer): boolean;
+begin
+  // return true to delete the deprecated item - only if not currently in use
+  result := ICryptCert(aValue).Instance.RefCount = 1;
+end;
+
+constructor TCryptCertCache.Create(TimeOutSeconds: integer);
+begin
+  fCache := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray),
+    TypeInfo(ICryptCerts), {caseins=}false, TimeOutSeconds);
+  fCache.OnCanDeleteDeprecated := OnDelete;
+  fCache.ThreadUse := uRWLock; // non-blocking Load()
+end;
+
+destructor TCryptCertCache.Destroy;
+begin
+  fCache.Free;
+  inherited Destroy;
+end;
+
+function TCryptCertCache.Load(const Cert: RawByteString): ICryptCert;
+var
+  der: RawByteString;
+begin
+  result := nil;
+  // normalize and validate input
+  if AsnDecChunk(Cert) then
+    der := Cert
+  else
+  begin
+    der := PemToDer(Cert);
+    if not AsnDecChunk(der) then
+      exit;
+  end;
+  // try to retrieve and share an existing instance
+  if fCache.FindAndCopy(der, result) then
+    exit;
+  // we need to create a new TX509 instance
+  result := InternalLoad(der);
+  if result = nil then
+    exit;
+  // add this new instance to the internal cache
+  if fCache.Count > 128 then
+    fCache.DeleteDeprecated; // make some room (once a second and if RefCount=1)
+  fCache.Add(der, result);   // der key will be shared with TX509.fCachedDer
+end;
+
+function TCryptCertCache.Load(const Cert: array of RawByteString): ICryptCerts;
+var
+  i, n: PtrInt;
+begin
+  result := nil;
+  SetLength(result, length(Cert));
+  n := 0;
+  for i := 0 to high(Cert) do
+  begin
+    result[n] := Load(Cert[i]);
+    if Assigned(result[n]) then
+      inc(n);
+  end;
+  SetLength(result, n);
+end;
+
+function TCryptCertCache.LoadPem(const Pem: RawUtf8): ICryptCerts;
+var
+  p: PUtf8Char;
+  k: TPemKind;
+  der: TCertDer;
+  c: ICryptCert;
+begin
+  result := nil;
+  p := pointer(Pem);
+  if p <> nil then
+    repeat
+      der := NextPemToDer(p, @k);
+      if der = '' then
+        break;
+      if not (k in [pemUnspecified, pemCertificate]) then
+        continue; // no need to try loading something which is not a X.509 cert
+      c := Load(der);
+      if c <> nil then
+        ChainAdd(result, c);
+    until false;
+end;
+
+
+{ TCryptCertList }
+
+function TCryptCertList.GetCount: integer;
+begin
+  result := length(fList);
+end;
+
+function TCryptCertList.Add(const Cert: ICryptCert): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if not Assigned(Cert) then
+    exit;
+  fSafe.WriteLock;
+  try
+    for i := 0 to length(fList) - 1 do
+       if Cert.Compare(fList[i], ccmBinary) = 0 then
+         exit; // already existing
+    result := true;
+    ChainAdd(fList, Cert);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TCryptCertList.List: ICryptCerts;
+begin
+  fSafe.ReadLock;
+  try
+    result := copy(fList);
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+procedure TCryptCertList.SaveToPem(W: TTextWriter; WithExplanatoryText: boolean);
+var
+  i: PtrInt;
+  c: ICryptCert;
+begin
+  fSafe.ReadLock;
+  try
+    for i := 0 to length(fList) - 1 do
+    begin
+      c := fList[i];
+      if WithExplanatoryText then
+        // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
+        W.Add('Subject: %'#13#10'Issuer: %'#13#10'Validity: from % to %'#13#10,
+         [c.GetSubjectName, c.GetIssuerName, DateTimeToFileShort(c.GetNotBefore),
+          DateTimeToFileShort(c.GetNotAfter)]);
+      W.AddString(c.Save(cccCertOnly, '', ccfPem));
+      W.AddCR;
+    end;
+  finally
+    fSafe.ReadUnLock;
+  end;
 end;
 
 
