@@ -2186,10 +2186,8 @@ const
   NID_private_key_usage_period = 84;
   SN_subject_alt_name = 'subjectAltName';
   LN_subject_alt_name = 'X509v3 Subject Alternative Name';
-  NID_subject_alt_name = 85;
   SN_issuer_alt_name = 'issuerAltName';
   LN_issuer_alt_name = 'X509v3 Issuer Alternative Name';
-  NID_issuer_alt_name = 86;
   SN_basic_constraints = 'basicConstraints';
   LN_basic_constraints = 'X509v3 Basic Constraints';
   NID_basic_constraints = 87;

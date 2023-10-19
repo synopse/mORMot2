@@ -1875,6 +1875,7 @@ type
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
     function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
+    function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
@@ -2237,6 +2238,11 @@ end;
 function TCryptCertOpenSsl.GetIssuer(const Rdn: RawUtf8): RawUtf8;
 begin
   result := fX509.GetIssuer(Rdn);
+end;
+
+function TCryptCertOpenSsl.GetIssuers: TRawUtf8DynArray;
+begin
+  result := fX509.IssuerAlternativeNames;
 end;
 
 function TCryptCertOpenSsl.GetSubjectKey: RawUtf8;

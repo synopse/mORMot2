@@ -655,6 +655,9 @@ type
     /// an array of (DNS) Subject names covered by this Certificate
     // - convert the Extension[xeSubjectAlternativeName] CSV as a RawUtf8 array
     function SubjectAlternativeNames: TRawUtf8DynArray;
+    /// an array of (DNS) Subject names covered by the Issuer of this Certificate
+    // - convert the Extension[xeIssuerAlternativeName] CSV as a RawUtf8 array
+    function IssuerAlternativeNames: TRawUtf8DynArray;
     /// return some multi-line text of the main information of this Certificate
     // - in a layout similar to X509_print() OpenSSL usual formatting
     // - is cached internally for efficiency
@@ -823,8 +826,6 @@ type
     // - following RFC 5280 #5.1.2 encoding
     function FromDer(const der: TCertDer): boolean;
   end;
-
-  ECryptCertX509Crl = class(ECryptCert);
 
   /// a X.509 signed Certificate Revocation List (CRL), as defined in RFC 5280
   TX509Crl = class(TSynPersistent)
@@ -2760,6 +2761,14 @@ begin
     result := Signed.ExtensionArray(xeSubjectAlternativeName);
 end;
 
+function TX509.IssuerAlternativeNames: TRawUtf8DynArray;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := Signed.ExtensionArray(xeIssuerAlternativeName);
+end;
+
 function TX509.PeerInfo: RawUtf8;
 begin
   if self = nil then
@@ -3477,6 +3486,7 @@ type
     function GetSubjects: TRawUtf8DynArray; override;
     function GetIssuerName: RawUtf8; override;
     function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
+    function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function IsSelfSigned: boolean; override;
@@ -3721,6 +3731,11 @@ begin
     result := ''
   else
     result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
+end;
+
+function TCryptCertX509.GetIssuers: TRawUtf8DynArray;
+begin
+  result := fX509.IssuerAlternativeNames;
 end;
 
 function TCryptCertX509.GetSubjectKey: RawUtf8;

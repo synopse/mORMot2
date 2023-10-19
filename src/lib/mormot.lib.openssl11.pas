@@ -745,6 +745,7 @@ const
   NID_subject_key_identifier = 82;
   NID_key_usage = 83;
   NID_subject_alt_name = 85;
+  NID_issuer_alt_name = 86;
   NID_basic_constraints = 87;
   NID_authority_key_identifier = 90;
   NID_ext_key_usage = 126;
@@ -1744,6 +1745,8 @@ type
     // - will search and remove the 'DNS:' trailer by default (dns=true)
     // - e.g. ['synopse.info', 'www.synopse.info']
     function SubjectAlternativeNames(dns: boolean = true): TRawUtf8DynArray;
+    /// an array of (DNS) Subject names covered by the Issuer of this Certificate
+    function IssuerAlternativeNames(dns: boolean = true): TRawUtf8DynArray;
     /// the High-Level Certificate Issuer
     // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
     function IssuerName: RawUtf8;
@@ -9503,17 +9506,12 @@ begin
     FakeLength(result, i - 1);
 end;
 
-function X509.SubjectAlternativeNames(dns: boolean): TRawUtf8DynArray;
+function AlternativeNames(p: PUtf8Char; dns: boolean): TRawUtf8DynArray;
 var
-  alt: RawUtf8;
-  p, s: PUtf8Char;
+  s: PUtf8Char;
   n: PtrInt;
 begin
   result := nil;
-  if @self = nil then
-    exit;
-  alt := ExtensionText(NID_subject_alt_name);
-  p := pointer(alt);
   if p = nil then
     exit;
   n := 0;
@@ -9541,6 +9539,22 @@ begin
       inc(n);
     end;
   until P^ = #0;
+end;
+
+function X509.SubjectAlternativeNames(dns: boolean): TRawUtf8DynArray;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := AlternativeNames(pointer(ExtensionText(NID_subject_alt_name)), dns);
+end;
+
+function X509.IssuerAlternativeNames(dns: boolean): TRawUtf8DynArray;
+begin
+  if @self = nil then
+    result := nil
+  else
+    result := AlternativeNames(pointer(ExtensionText(NID_issuer_alt_name)), dns);
 end;
 
 function X509.NotBefore: TDateTime;

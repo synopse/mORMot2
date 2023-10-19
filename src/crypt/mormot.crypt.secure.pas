@@ -1856,6 +1856,9 @@ type
     // - can search another Relative Distinguished Name (RDN) e.g. 'O' or 'OU'
     // - if Rdn is a hash, e.g. 'SHA1'/'SHA256', will return the issuer digest
     function GetIssuer(const Rdn: RawUtf8 = 'CN'): RawUtf8;
+    /// an array of all Subject names covered by the issuer of this Certificate
+    // - e.g. read from X.509 v3 Issuer Alternative Names extension
+    function GetIssuers: TRawUtf8DynArray;
     /// the Subject Issuer Key Identifier (SKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
     // - match the SKID on X.509, or the serial number for syn-es256
@@ -2082,6 +2085,7 @@ type
     function GetSubjects: TRawUtf8DynArray; virtual; abstract;
     function GetIssuerName: RawUtf8; virtual; abstract;
     function GetIssuer(const Rdn: RawUtf8): RawUtf8; virtual; abstract;
+    function GetIssuers: TRawUtf8DynArray; virtual; abstract;
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
     function IsSelfSigned: boolean; virtual; abstract;
@@ -2686,8 +2690,8 @@ type
     pemPublicKey,
     pemRsaPrivateKey,
     pemRsaPublicKey,
-    pemEcPublicKey,
     pemEcPrivateKey,
+    pemEcPublicKey,
     pemEncryptedPrivateKey,
     pemCertificateRequest,
     pemDhParameters,
@@ -2713,8 +2717,8 @@ const
     '-----BEGIN PUBLIC KEY-----'#13#10,
     '-----BEGIN RSA PRIVATE KEY-----'#13#10,
     '-----BEGIN RSA PUBLIC KEY-----'#13#10,
-    '-----BEGIN EC PUBLIC KEY-----'#13#10,
     '-----BEGIN EC PRIVATE KEY-----'#13#10,
+    '-----BEGIN EC PUBLIC KEY-----'#13#10,
     '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----BEGIN CERTIFICATE REQUEST-----'#13#10,
     '-----BEGIN DH PARAMETERS-----'#13#10,
@@ -2737,8 +2741,8 @@ const
     '-----END PUBLIC KEY-----'#13#10,
     '-----END RSA PRIVATE KEY-----'#13#10,
     '-----END RSA PUBLIC KEY-----'#13#10,
-    '-----END EC PUBLIC KEY-----'#13#10,
     '-----END EC PRIVATE KEY-----'#13#10,
+    '-----END EC PUBLIC KEY-----'#13#10,
     '-----END ENCRYPTED PRIVATE KEY-----'#13#10,
     '-----END CERTIFICATE REQUEST-----'#13#10,
     '-----END DH PARAMETERS-----'#13#10,
