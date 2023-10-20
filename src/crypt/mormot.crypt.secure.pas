@@ -2212,6 +2212,8 @@ type
       read fOsa;
   end;
 
+  TCryptCertCache = class;
+
   /// abstract interface to a Certificates Store, as returned by Store() factory
   // - may be X.509 or not, OpenSSL implemented or not
   ICryptStore = interface
@@ -2223,6 +2225,9 @@ type
     // - may be our TEccCertificateChain proprietary binary, or a chain of
     // X.509 Certificates and CRLs in PEM text format
     function Save: RawByteString;
+    /// get the associated ICryptCert instances cache
+    // - use Cache.Load() to retrieve a ICryptCert from its DER/PEM content
+    function Cache: TCryptCertCache;
     /// search for a certificate from its (hexadecimal) identifier
     // - note that in the X.509 context, serial may be duplicated, so
     // it is safer to use GetBySubjectKey()
@@ -2301,11 +2306,14 @@ type
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
   TCryptStore = class(TCryptInstance, ICryptStore)
+  protected
+    fCache: TCryptCertCache;
   public
     // ICryptStore methods
     procedure Clear; virtual; abstract;
     function Load(const Saved: RawByteString): boolean; virtual;
     function Save: RawByteString; virtual; abstract;
+    function Cache: TCryptCertCache; virtual;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert; virtual; abstract;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
@@ -2345,17 +2353,20 @@ type
   // - should be overriden to let its InternalLoad() method be implemented
   // - to speed up typical PKI process
   // - this class is thread-safe and will flush its oldest entries automatically
+  // - use TCryptCertCacheX509 or TCryptCertCacheOpenSsl, not this abstract class
   TCryptCertCache = class(TSynPersistent)
   protected
     fCache: TSynDictionary; // RawByteString(DER)/ICryptCert thread-safe cache
     function GetCount: integer;
     function OnDelete(const aKey, aValue; aIndex: integer): boolean;
-    // this abstract method should be properly overriden
+    // this abstract method should be properly overriden to load a DER buffer
     function InternalLoad(const Cert: RawByteString): ICryptCert; virtual; abstract;
   public
-    /// instantiate a cache
+    /// instantiate a ICryptCert instances cache
     // - you can have several TCryptCertCache, dedicated to each bounded context
-    constructor Create(TimeOutSeconds: integer); reintroduce;
+    // - by default, internal cache will clean up instances with RefCnt = 1
+    // after 10 min of inactivity
+    constructor Create(TimeOutSeconds: integer = 10 * 6); reintroduce;
     /// retrieve a potentially shared ICryptCert instance from DER or PEM input
     // - returns nil if the input is not correct or not supported
     // - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
@@ -6964,6 +6975,11 @@ function TCryptStore.Load(const Saved: RawByteString): boolean;
 begin
   Clear;
   result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
+end;
+
+function TCryptStore.Cache: TCryptCertCache;
+begin
+  result := fCache;
 end;
 
 function TCryptStore.Add(const cert: array of ICryptCert): TRawUtf8DynArray;

@@ -1686,6 +1686,24 @@ const
     macDuringEF);   // efAesCtc256
 
 
+{ ********* Registration of our ECC Engine to the TCryptAsym/TCryptCert Factories }
+
+/// compute a new 'syn-es256' ICryptCert instance from DER or PEM input
+// - returns nil if the input is not correct or not supported
+// - or returns a TCryptCertInternal instance from function TX509.LoadFromDer()
+// - called e.g. by TCryptCertCacheInternal
+function SynEccLoad(const Cert: RawByteString): ICryptCert;
+
+{
+  NOTICE:
+  - the algorithms of this unit are available as 'syn-es256-v1', 'syn-es256',
+    'syn-store', 'syn-store-nocache'
+  - mormot.crypt.secure also exposes CryptCertSyn and CryptStoreSyn globals
+  - they use our proprietary TEccCertificate/TEccCertificateSecret format,
+    so are NOT compatible with X.509 certificates
+  - to work with standards, the mormot.crypt.x509 engine may be preferred
+}
+
 
 
 implementation
@@ -5888,6 +5906,13 @@ type
     function DefaultCertAlgo: TCryptCertAlgo; override;
   end;
 
+  /// maintain a cache of ICryptCert instances, from their DER/binary
+  TCryptCertCacheInternal = class(TCryptCertCache)
+  protected
+    // overidden to call EccDerLoad() and return a TCryptCertInternal
+    function InternalLoad(const Cert: RawByteString): ICryptCert; override;
+  end;
+
 
 { TCryptStoreInternal }
 
@@ -5895,6 +5920,7 @@ constructor TCryptStoreInternal.Create(algo: TCryptAlgo);
 begin
   inherited Create(algo);
   fEcc := TEccCertificateChain.Create;
+  fCache := TCryptCertCacheInternal.Create;
 end;
 
 destructor TCryptStoreInternal.Destroy;
@@ -6022,6 +6048,22 @@ begin
   a := TCryptStoreInternal.Create(self);
   a.fEcc.IsValidCached := AlgoName <> 'syn-store-nocache';
   result := a;
+end;
+
+
+{ TCryptCertCacheInternal }
+
+function TCryptCertCacheInternal.InternalLoad(const Cert: RawByteString): ICryptCert;
+begin
+  result := SynEccLoad(Cert);
+end;
+
+
+function SynEccLoad(const Cert: RawByteString): ICryptCert;
+begin
+  result := CryptCertSyn.New; // we have a single algorithm and class
+  if not result.Load(Cert) then
+    result := nil;
 end;
 
 

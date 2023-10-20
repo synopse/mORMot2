@@ -12,7 +12,7 @@ unit mormot.crypt.x509;
     - X.509 Certificates and Certificate Signing Request (CSR)
     - X.509 Certificate Revocation List (CRL)
     - X.509 Private Key Infrastructure (PKI)
-    - Registration of our X.509 Engine to the TCryptCert Factory
+    - Registration of our X.509 Engine to the TCryptCert/TCryptStore Factory
 
   *****************************************************************************
 
@@ -1062,7 +1062,6 @@ type
   // - published here to make it expandable if needed by proper inheritance
   TCryptStoreX509 = class(TCryptStore)
   protected
-    fCache: TCryptCertCacheX509;
     fTrust: TCryptCertListX509;
     fCA: TCryptCertListX509;
     fSignedCrl: TX509CrlList;   // from a CA
@@ -1124,8 +1123,8 @@ type
     // - warning: not all of the instances of this cache are trusted!
     // - use Cache.Load() if you want to work with certificates which may be
     // within the context of this PKI
-    property Cache: TCryptCertCacheX509
-      read fCache;
+    function CacheX509: TCryptCertCacheX509;
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// how many trusted certificates are actually stored
     property Trusted: integer
@@ -1154,6 +1153,16 @@ function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 // - called e.g. by TCryptCertCacheX509 which is the preferred factory
 function X509Load(const Cert: RawByteString): ICryptCert;
 
+{
+  NOTICE:
+  - the algorithms of this unit are available as 'x509-es256' and 'x509-rs256'
+    to 'x509-ps256', and 'x509-pki'
+  - mormot.crypt.secure also exposes CryptCertX509[] and CryptStoreX509 globals
+  - if OpenSSL is loaded, the 'x509-*' algorithms will be overriden but you can
+    still have access to 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int'
+  - they are fully compatible with X.509 certificates, and the 'x509-pki' store
+    from TCryptStoreX509 is the only fully compliant with RFC recommendations
+}
 
 
 implementation
@@ -4642,6 +4651,11 @@ begin
   finally
     w.Free;
   end;
+end;
+
+function TCryptStoreX509.CacheX509: TCryptCertCacheX509;
+begin
+  result := TCryptCertCacheX509(fCache);
 end;
 
 function TCryptStoreX509.GetBySerial(const Serial: RawUtf8): ICryptCert;

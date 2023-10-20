@@ -650,6 +650,13 @@ type
 // which does not fit in the low-level mormot.lib.openssl.pas unit
 function X509Algo(x: PX509): TCryptAsymAlgo;
 
+/// compute a new ICryptCert OpenSSL instance from DER or PEM input
+// - returns nil if the input is not correct or not supported
+// - or returns a TCryptCertOpenSsl instance from function LoadCertificate()
+// - will guess the proper TCryptCertAlgoOpenSsl to use for the ICryptCert
+// - called e.g. by TCryptCertCacheOpenSsl
+function OpenSslLoad(const Cert: RawByteString): ICryptCert;
+
 function ToText(u: TX509Usage): RawUtf8; overload;
 function ToText(u: TX509Usages): ShortString; overload;
   {$ifdef HASINLINE} inline; {$endif}
@@ -667,6 +674,24 @@ function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boo
 // TCryptAsymOsl class)
 procedure RegisterOpenSsl;
 
+type
+  /// maintain a cache of OpenSSL X.509 ICryptCert instances, from their DER/binary
+  TCryptCertCacheOpenSsl = class(TCryptCertCache)
+  protected
+    // overidden to call OpenSslLoad() and return a TCryptCertOpenSsl
+    function InternalLoad(const Cert: RawByteString): ICryptCert; override;
+  end;
+
+{
+  NOTICE:
+  - the algorithms of this unit are available as 'x509-es256' to 'x509-ps256',
+    and 'x509-store'
+  - mormot.crypt.secure exposes CryptCertOpenSsl[] and CryptStoreOpenSsl globals
+  - will override the 'x509-*' algorithms from mormot.crypt.x509
+  - the 'x509-store' is not fully compliant with RFC recommendations, due to
+    restrictions on the OpenSSL store internals, so 'x509-pki' store from
+    mormot.crypt.x509 is likely to be preferred
+}
 
 
 implementation
@@ -2930,6 +2955,14 @@ begin
 end;
 
 
+{ TCryptCertCacheOpenSsl }
+
+function TCryptCertCacheOpenSsl.InternalLoad(const Cert: RawByteString): ICryptCert;
+begin
+  result := OpenSslLoad(Cert);
+end;
+
+
 function ToText(u: TX509Usage): RawUtf8;
 begin
   result := GetEnumNameTrimed(TypeInfo(TX509Usage), ord(u));
@@ -2989,6 +3022,20 @@ begin
   end;
   if result = caaES256K then
     raise EOpenSslCert.Create('Unexpected X509Algo()');
+end;
+
+function OpenSslLoad(const Cert: RawByteString): ICryptCert;
+var
+  x: PX509;
+  der: RawByteString;
+begin
+  result := nil;
+  der := PemToDer(Cert);
+  if not AsnDecChunk(der) then // basic input validation
+    exit;
+  x := LoadCertificate(Cert);
+  if x <> nil then
+    result := CryptCertOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
 function _CreateDummyCertificate(
