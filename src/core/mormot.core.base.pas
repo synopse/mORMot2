@@ -1946,6 +1946,10 @@ procedure InterfacesNilSafe(const aInterfaces: array of pointer);
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 
+/// wrapper to add an item to a T*InterfaceArray dynamic array storage
+function InterfaceArrayAddCount(var aInterfaceArray; var aCount: integer;
+  const aItem: IUnknown): PtrInt;
+
 /// wrapper to add once an item to a T*InterfaceArray dynamic array storage
 procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
 
@@ -7572,6 +7576,18 @@ begin
   result := length(a);
   SetLength(a, result + 1);
   a[result] := aItem;
+end;
+
+function InterfaceArrayAddCount(var aInterfaceArray; var aCount: integer;
+  const aItem: IUnknown): PtrInt;
+var
+  a: TInterfaceDynArray absolute aInterfaceArray;
+begin
+  result := aCount;
+  if result = length(a) then
+    SetLength(a, NextGrow(result));
+  a[result] := aItem;
+  inc(aCount);
 end;
 
 procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
