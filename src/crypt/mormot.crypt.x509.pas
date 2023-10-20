@@ -490,7 +490,6 @@ type
   private
     fSafe: TLightLock;
     fCachedDer: RawByteString; // for ToDer
-    fSerialNumberHex: RawUtf8;
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
@@ -504,6 +503,9 @@ type
     // - maps PBigInt.Save binary serialization
     // - use SerialNumberHex/SerialNumberText functions for human readable text
     SerialNumber: RawByteString;
+    /// hexadecimal text of the integer assigned by the CA to each certificate
+    // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
+    SerialNumberHex: RawUtf8;
     /// the cryptographic algorithm used by the CA over the TX509.Signed field
     // - match TX509.SignatureAlgorithm field
     Signature: TXSignatureAlgorithm;
@@ -543,9 +545,6 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
-    /// hexadecimal of a positive integer assigned by the CA to each certificate
-    // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
-    function SerialNumberHex: RawUtf8;
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
@@ -583,11 +582,13 @@ type
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
     fLastVerifyAuthPublicKey: RawByteString;
+    fRawSubjectKeyIdentifier: RawByteString;
+    fRawAuthorityKeyIdentifier: TRawByteStringDynArray;
+    fIsSelfSigned: boolean;
+    procedure AfterLoaded;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
     procedure ComputeCachedHash(algo: THashAlgo);
-    function GetSerialNumber: RawUtf8;
-      {$ifdef HASINLINE} inline; {$endif}
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectDN: RawUtf8;
@@ -642,8 +643,6 @@ type
     function FingerPrintCompare(Another: TX509;
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// check if the Certificate Issuer is also its Subject
-    function IsSelfSigned: boolean;
     /// check if this certificate has been issued by the specified certificate
     // - ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
     function IsAuthorizedBy(Authority: TX509): boolean;
@@ -668,6 +667,9 @@ type
     function PeerInfo: RawUtf8;
     /// return the main information of this Certificate into
     procedure ToParsedInfo(out Info: TX509Parsed);
+    /// true if the Certificate Issuer is also its Subject
+    property IsSelfSigned: boolean
+      read fIsSelfSigned;
     /// main properties of the entity associated with the public key stored
     // in this certificate
     // - e.g. for an Internet certificate, Subject[xaCN] is 'synopse.info'
@@ -694,7 +696,7 @@ type
     /// hexadecimal of a positive integer assigned by the CA to each certificate
     // - e.g. '03:cc:83:aa:af:f9:c1:e2:1c:fa:fa:80:af:e6:67:6e:27:4c'
     property SerialNumber: RawUtf8
-      read GetSerialNumber;
+      read Signed.SerialNumberHex;
     /// issuer entity of this Certificate as Distinguished Name text
     // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
     // - see Issuer[] property to retrieve one specific field of the DN
@@ -784,6 +786,9 @@ type
     function FromDer(const der: TCertDer): boolean;
   end;
 
+  // a pointer to one revoked certificate as stored in TXTbsCertList.Revoked[]
+  PXCrlRevokedCert = ^TXCrlRevokedCert;
+
   /// the revoked certificates as stored in TXTbsCertList.Revoked[]
   TXCrlRevokedCerts = array of TXCrlRevokedCert;
 
@@ -821,9 +826,9 @@ type
     ExtensionRaw: array[TXCrlExtension] of RawByteString;
     /// reset all internal context
     procedure Clear;
-    /// return the index in Revoked[] from the supplied binary Serial Number
-    // - returns -1 if the serial is not found in the internal list
-    function FindRevoked(const SerialNumber: RawByteString): PtrInt;
+    /// return the entry in Revoked[] from the supplied binary Serial Number
+    // - returns nil if the serial is not found in the internal list
+    function FindRevoked(const RawSerialNumber: RawByteString): PXCrlRevokedCert;
     /// serialize those fields into ASN.1 DER binary
     function ToDer: TAsnObject;
     /// unserialize those fields from ASN.1 DER binary
@@ -838,6 +843,7 @@ type
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fCrlNumber: QWord;
+    fRawAuthorityKeyIdentifier: RawByteString; // for TX509CrlList search
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlNumber: QWord;
@@ -951,7 +957,7 @@ type
     destructor Destroy; override;
     /// include a X.509 CRL instance to the internal list
     // - from now on, it will be owned by this TX509CrlList class
-    // - will replace any existing CRL with its SKID, if older
+    // - will replace any existing CRL with its AKID, if older
     procedure Add(Crl: TX509Crl);
     /// include a X.509 CRL from its DER binary representation to the list
     function AddFromDer(const Der: TCertDer): boolean;
@@ -961,8 +967,10 @@ type
     function AddRevocation(const AuthorityKeyIdentifier, Serial: RawUtf8;
       Reason: TCryptCertRevocationReason; ValidDays: integer = 0;
       Date: TDateTime = 0; CertIssuerDN: RawUtf8 = ''): boolean;
-    /// search the most recent X.509 CRL of a given authority from its own SKID
+    /// search the most recent X.509 CRL of a given authority from its own AKID
     function FindByKeyIssuer(const AuthorityKeyIdentifier: RawUtf8): TX509Crl;
+    /// search the most recent X.509 CRL of a given authority from its own AKID
+    function FindByKeyIssuerRaw(const AuthorityKeyIdentifier: RawByteString): TX509Crl;
     /// search the most recent X.509 CRL of a given authority from a DNS name
     function FindByAlternativeName(const DnsName: RawUtf8;
       TimeUtc: TDateTime = 0): TX509CrlObjArray;
@@ -973,6 +981,10 @@ type
     // - returns the reason why this certificate has been revoked otherwise
     function IsRevoked(const AuthorityKeyIdentifiers,
       SerialNumber: RawUtf8): TCryptCertRevocationReason;
+    /// quickly check if a given certificate was part of one known CRL
+    // - internal method directly working on binary buffers
+    function IsRevokedRaw(akid: PRawByteString; n: integer;
+      const sn: RawByteString): TCryptCertRevocationReason;
     /// return a copy of the internal list items
     // - the list is sorted by AuthorityKeyIdentifier and CrlNumber
     // - caller should NOT free the returned items
@@ -1076,9 +1088,8 @@ type
     /// finalize this ICryptStore instance
     destructor Destroy; override;
     /// check both signed CRL list (for CA) and unsigned CRL list (manual Revoke)
-    // - for a GetAuthorityKey AKID (which may be a CSV) and a Serial
-    function IsRevokedAny(const AuthorityKeyIdentifiers,
-      SerialNumber: RawUtf8): TCryptCertRevocationReason; virtual;
+    // - for a TX509 xeAuthorityKeyIdentifier (which may be a CSV) and a Serial
+    function IsRevokedX509(cert: TX509): TCryptCertRevocationReason; virtual;
     // ICryptStore methods
     procedure Clear; override;
     function Save: RawByteString; override;
@@ -2404,19 +2415,13 @@ var
 begin
   // fill the main certificate fields
   Version := 3;
-  SerialNumber := HumanHexToBin(HumanRandomID);
+  SerialNumberHex := HumanRandomID;
+  SerialNumber := HumanHexToBin(SerialNumberHex);
   Extension[xeSubjectKeyIdentifier] := HumanRandomID;
   // ValidDays and ExpireDays are relative to the current time
   start := NowUtc;
   NotBefore := start + ValidDays;
   NotAfter := start + ExpireDays;
-end;
-
-function TXTbsCertificate.SerialNumberHex: RawUtf8;
-begin
-  if fSerialNumberHex = '' then
-    ToHumanHex(fSerialNumberHex, pointer(SerialNumber), length(SerialNumber));
-  result := fSerialNumberHex;
 end;
 
 function TXTbsCertificate.SerialNumberText: RawUtf8;
@@ -2476,7 +2481,6 @@ begin
      not OidToXka(oid, oid2, SubjectPublicKeyAlgorithm) or
      (AsnNextRaw(pos, der, SubjectPublicKey) <> ASN1_BITSTR) then
     exit;
-  SubjectPublicKeyBits := X509PubKeyBits(SubjectPublicKey);
   // handle X.509 v3 extensions
   if (Version = 3) and
      (AsnNext(pos, der) = ASN1_CTC3) and
@@ -2514,11 +2518,13 @@ end;
 
 procedure TX509.Clear;
 begin
+  Signed.Clear;
   fCachedDer := '';
   Finalize(fCachedHash);
   fCachedPeerInfo := '';
   fLastVerifyAuthPublicKey := '';
-  Signed.Clear;
+  fRawSubjectKeyIdentifier := '';
+  fRawAuthorityKeyIdentifier := nil;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
   FreeAndNil(fPublicKey);
@@ -2663,14 +2669,6 @@ begin
   result := DerToPem(SaveToDer, pemCertificate);
 end;
 
-function TX509.GetSerialNumber: RawUtf8;
-begin
-  if self = nil then
-    result := ''
-  else
-    result := Signed.SerialNumberHex;
-end;
-
 function TX509.GetIssuerDN: RawUtf8;
 begin
   if self = nil then
@@ -2693,6 +2691,29 @@ begin
     XKA_TXT[Signed.SubjectPublicKeyAlgorithm]], result);
 end;
 
+procedure TX509.AfterLoaded;
+var
+  akid: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  ToHumanHex(Signed.SerialNumberHex, pointer(Signed.SerialNumber), length(Signed.SerialNumber));
+  Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
+  if (fCachedDer = '') and
+     (SignatureValue <> '') then // not possible yet (e.g. after LoadFromCsr)
+    ComputeCachedDer;
+  if Signed.Issuer.fCachedAsn = '' then
+    Signed.Issuer.ComputeAsn;
+  if Signed.Subject.fCachedAsn = '' then
+    Signed.Subject.ComputeAsn;
+  fIsSelfSigned := Signed.Issuer.fCachedAsn = Signed.Subject.fCachedAsn;
+  HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], fRawSubjectKeyIdentifier);
+  CsvToRawUtf8DynArray(pointer(Signed.Extension[xeAuthorityKeyIdentifier]), akid);
+  SetLength(fRawAuthorityKeyIdentifier, length(akid));
+  for i := 0 to length(akid) - 1 do
+    HumanHexToBin(akid[i], fRawAuthorityKeyIdentifier[i]);
+  fLastVerifyAuthPublicKey := '';
+end;
+
 procedure TX509.ComputeCachedDer;
 begin
   if (SignatureAlgorithm = xsaNone) or
@@ -2704,13 +2725,13 @@ begin
     begin
       Finalize(fCachedHash);
       fCachedPeerInfo := '';
-      fLastVerifyAuthPublicKey := '';
       fCachedDer := AsnSeq([
                       Signed.ToDer,
                       XsaToSeq(SignatureAlgorithm),
                       Asn(ASN1_BITSTR, [SignatureValue])
                     ]);
     end;
+    AfterLoaded;
   finally
     fSafe.UnLock;
   end;
@@ -2753,6 +2774,7 @@ begin
             OidToXsa(oid, fSignatureAlgorithm) and
             (AsnNextRaw(pos, der, fSignatureValue) = ASN1_BITSTR) and
             (fSignatureAlgorithm = Signed.Signature);
+  AfterLoaded;
 end;
 
 function TX509.LoadFromPem(const pem: TCertPem): boolean;
@@ -2789,7 +2811,6 @@ begin
      (AsnNextRaw(pos, der, sig) = ASN1_BITSTR) and
      PublicKey.Verify(xsa, nfo, sig) then // check self-signature
   begin
-    Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
     // load any extensionRequest (PKCS #9 via CRMF)
     if (AsnNext(posnfo, nfo) = ASN1_CTC0) and // optional attributes sequence
        (AsnNext(posnfo, nfo) = ASN1_SEQ) and
@@ -2798,6 +2819,7 @@ begin
        (AsnNext(posnfo, nfo) = ASN1_SETOF) and
        (AsnNext(posnfo, nfo) = ASN1_SEQ) then
       Signed.AddNextExtensions(posnfo, nfo);
+    AfterLoaded;
     result := true;
   end;
 end;
@@ -2835,32 +2857,37 @@ begin
     result := 1;
 end;
 
-function TX509.IsSelfSigned: boolean;
-begin
-  // check Issuer/Subject names, but not SKID/AKID since self-signed has no AKID
-  if self <> nil then
-  begin
-    if Signed.Issuer.fCachedAsn = '' then
-      Signed.Issuer.ComputeAsn;
-    if Signed.Subject.fCachedAsn = '' then
-      Signed.Subject.ComputeAsn;
-    result := SortDynArrayRawByteString(
-      Signed.Issuer.fCachedAsn, Signed.Subject.fCachedAsn) = 0;
-    if result then
-      Signed.Issuer.fCachedAsn := Signed.Subject.fCachedAsn; // same pointer()
-  end
-  else
-    result := false;
-end;
-
 function TX509.IsAuthorizedBy(Authority: TX509): boolean;
+var
+  n: integer;
+  s, a: PRawByteString;
 begin
-  result := (self <> nil) and
-            (Authority <> nil) and
-            (Authority.Signed.SubjectPublicKey <> '') and
-            // fast search with no memory allocation
-            CsvContains(Signed.Extension[xeAuthorityKeyIdentifier],
-                        Authority.Signed.Extension[xeSubjectKeyIdentifier]);
+  if (self <> nil) and
+     (Authority <> nil) and
+     (Authority.Signed.SubjectPublicKey <> '') then
+  begin
+    // fast search with no memory allocation
+    result := true;
+    s := @Authority.fRawSubjectKeyIdentifier;
+    a := pointer(fRawAuthorityKeyIdentifier);
+    if a <> nil then
+    begin
+      n := PDALen(PAnsiChar(pointer(a)) - _DALEN)^ + _DAOFF;
+      repeat
+        if SortDynArrayRawByteString(a^, s^) = 0 then
+        begin
+          if PPointer(a)^ <> PPointer(s)^ then
+            a^ := s^; // for a faster pointer comparison next time
+          exit;
+        end;
+        dec(n);
+        if n = 0 then
+          break;
+        inc(a);
+      until false;
+    end;
+  end;
+  result := false;
 end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
@@ -2899,15 +2926,8 @@ begin
             Another.Signed.Extension[xeIssuerAlternativeName]);
         ccmUsage:
           result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
-        ccmBinary:
-          begin
-            // update cache manually to avoid temporary strings with ToDer calls
-            if fCachedDer = '' then
-              ComputeCachedDer;
-            if Another.fCachedDer = '' then
-              Another.ComputeCachedDer;
-            result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
-          end;
+        ccmBinary: // fCachedDer should have been set by AfterLoaded
+          result := SortDynArrayRawByteString(fCachedDer, Another.fCachedDer);
         ccmSha1:
           result := FingerPrintCompare(Another, hfSHA1);
         ccmSha256:
@@ -3053,12 +3073,23 @@ begin
   FillCharFast(self, SizeOf(self), 0);
 end;
 
-function TXTbsCertList.FindRevoked(const SerialNumber: RawByteString): PtrInt;
+function TXTbsCertList.FindRevoked(const RawSerialNumber: RawByteString): PXCrlRevokedCert;
+var
+  n: integer;
 begin
-  for result := 0 to length(Revoked) - 1 do
-    if SortDynArrayRawByteString(Revoked[result].SerialNumber, SerialNumber) = 0 then
+  result := pointer(Revoked);
+  if result = nil then
+    exit;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  repeat
+    if SortDynArrayRawByteString(result^.SerialNumber, RawSerialNumber) = 0 then
       exit;
-  result := -1;
+    dec(n);
+    if n = 0 then
+      break;
+    inc(result);
+  until false;
+  result := nil;
 end;
 
 procedure AddCrlExt(var result: TAsnObject; xce: TXCrlExtension;
@@ -3327,16 +3358,16 @@ end;
 function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
 var
   bin: RawByteString;
-  ndx: PtrInt;
+  res: PXCrlRevokedCert;
 begin
   result := crrNotRevoked;
   if (self = nil) or
      (Signed.Revoked = nil) or
      not HumanHexToBin(SerialNumber, bin) then
     exit;
-  ndx := Signed.FindRevoked(bin);
-  if ndx >= 0 then
-    result := Signed.Revoked[ndx].ReasonCode;
+  res := Signed.FindRevoked(bin);
+  if res <> nil then
+    result := res^.ReasonCode;
 end;
 
 function TX509Crl.Revoked: TRawUtf8DynArray;
@@ -3368,7 +3399,7 @@ begin
      exit;
    result := cvUnknownAuthority;
    if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
-        Signed.Extension[xceAuthorityKeyIdentifier]) or
+        Signed.Extension[xceAuthorityKeyIdentifier]) or // no CsvContains() need
       (Authority.Signed.SubjectPublicKey = '') then
      exit;
    result := CanVerify(
@@ -3385,8 +3416,7 @@ end;
 function TX509CrlCompareWithAkid(const A, B): integer;
 begin
   // FastLocateSorted() calls fCompare(Item, P[n * fInfo.Cache.ItemSize])
-  result := SortDynArrayAnsiString(A,
-              TX509Crl(B).Signed.Extension[xceAuthorityKeyIdentifier]);
+  result := SortDynArrayAnsiString(A, TX509Crl(B).fRawAuthorityKeyIdentifier);
 end;
 
 constructor TX509CrlList.Create;
@@ -3405,21 +3435,20 @@ end;
 procedure TX509CrlList.Add(Crl: TX509Crl);
 var
   i: integer;
-  akid: RawUtf8;
+  akid: RawByteString;
 begin
-  if Crl = nil then
-    exit;
-  akid := Crl.Signed.Extension[xceAuthorityKeyIdentifier];
-  if akid = '' then
+  if (Crl = nil) or
+     not HumanHexToBin(Crl.Signed.Extension[xceAuthorityKeyIdentifier], akid) then
   begin
     Crl.Free; // avoid memory leak
     exit;
   end;
+  Crl.fRawAuthorityKeyIdentifier := akid; // as expected by FastLocateSorted()
   fSafe.WriteLock;
   try
-    // use fast O(log(n)) binary search of this SKID
+    // use fast O(log(n)) binary search of this AKID
     if fDA.FastLocateSorted(akid, i) then
-      // there is already a CRL with this SKID
+      // there is already a CRL with this AKID
       if fList[i].CrlNumber < Crl.CrlNumber then
       begin
         fList[i].Free; // replace existing CRL
@@ -3460,21 +3489,23 @@ function TX509CrlList.AddRevocation(const AuthorityKeyIdentifier,
 var
   i: integer;
   crl: TX509Crl;
+  akid: RawByteString;
 begin
   result := false;
   if (self = nil) or
      (Serial = '') or
      (Reason = crrNotRevoked) or
-     (AuthorityKeyIdentifier = '') then
+     not HumanHexToBin(AuthorityKeyIdentifier, akid) then
     exit;
   fSafe.WriteLock;
   try
-    if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
+    if fDA.FastLocateSorted(akid, i) then
       crl := fList[i]
     else if i >= 0 then
     begin
       crl := TX509Crl.Create;
       crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
+      crl.fRawAuthorityKeyIdentifier := akid; // for internal search
       fDA.FastAddSorted(i, crl);
     end
     else
@@ -3506,18 +3537,28 @@ end;
 
 function TX509CrlList.FindByKeyIssuer(const AuthorityKeyIdentifier: RawUtf8): TX509Crl;
 var
+  akid: RawByteString;
+begin
+  if HumanHexToBin(AuthorityKeyIdentifier, akid) then
+    result := FindByKeyIssuerRaw(akid)
+  else
+    result := nil;
+end;
+
+function TX509CrlList.FindByKeyIssuerRaw(
+  const AuthorityKeyIdentifier: RawByteString): TX509Crl;
+var
   i: integer;
 begin
   result := nil;
   if (self = nil) or
-     (fCount = 0) or
-     (AuthorityKeyIdentifier = '') then
+     (fCount = 0) then
     exit;
   fSafe.ReadLock;
   try
     // efficient O(log(n)) binary search
     if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
-      result := fList[i];
+      result := fList[i]; // Add() should have made this unique per AKID
   finally
     fSafe.ReadUnLock;
   end;
@@ -3541,7 +3582,8 @@ begin
     // brute force O(n) linear search
     p := pointer(fList);
     for i := 1 to fCount do
-      if CsvContains(p^.Signed.Extension[xceIssuerAlternativeName], DnsName) and
+      if CsvContains(
+           p^.Signed.Extension[xceIssuerAlternativeName], DnsName) and
          p^.IsValidDate(TimeUtc) then
         ObjArrayAdd(result, p^)
       else
@@ -3558,7 +3600,7 @@ var
   sn: RawByteString;
   p: PUtf8Char;
   crl: TX509Crl;
-  ndx: PtrInt;
+  res: PXCrlRevokedCert;
 begin
   result := crrNotRevoked;
   if (self = nil) or
@@ -3576,17 +3618,51 @@ begin
       if p <> nil then
         GetNextItem(p, ',', akid);
       crl := FindByKeyIssuer(akid); // O(log(n)) binary search
-      if crl = nil then
+      if (crl = nil) or
+         not HumanHexToBin(SerialNumber, sn)  then
         continue;
-      if (sn = '') and
-         not HumanHexToBin(SerialNumber, sn) then
-        exit;
-      ndx := crl.Signed.FindRevoked(sn);
-      if ndx < 0 then
+      res := crl.Signed.FindRevoked(sn); // few items O(n) search
+      if res = nil then
         continue;
-      result := crl.Signed.Revoked[ndx].ReasonCode;
+      result := res^.ReasonCode;
       break;
     until p = nil;
+  finally
+    fSafe.ReadUnLock;
+  end;
+end;
+
+function TX509CrlList.IsRevokedRaw(akid: PRawByteString; n: integer;
+  const sn: RawByteString): TCryptCertRevocationReason;
+var
+  i: integer;
+  res: PXCrlRevokedCert;
+begin
+  result := crrNotRevoked;
+  if (self = nil) or
+     (fCount = 0) or
+     (akid = nil) or
+     (n = 0) or
+     (sn = '') then
+    exit;
+  fSafe.ReadLock; // reentrant multi-read lock
+  try
+    repeat
+      if fDA.FastLocateSorted(akid^, i) then // inlined FindByKeyIssuerRaw()
+        with fList[i].Signed do
+        begin
+          res := FindRevoked(sn); // few items O(n) search
+          if res <> nil then
+          begin
+            result := res^.ReasonCode;
+            exit;
+          end;
+        end;
+      dec(n);
+      if n = 0 then
+        break;
+      inc(akid);
+    until false;
   finally
     fSafe.ReadUnLock;
   end;
@@ -3704,14 +3780,10 @@ begin
           if CsvContains(Signed.Extension[xeIssuerAlternativeName], Value) and
              FoundOne then
             break;
-        ccmBinary:
-          begin
-            if fCachedDer = '' then
-              ComputeCachedDer;
-            if (SortDynArrayAnsiString(fCachedDer, Value) = 0) and
-               FoundOne then
-              break;
-          end;
+        ccmBinary: // fCachedDer should have been set by AfterLoaded
+          if (SortDynArrayAnsiString(fCachedDer, Value) = 0) and
+             FoundOne then
+            break;
         ccmSha1:
           if (FingerPrintCompare(Value, hfSHA1) = 0) and
              FoundOne then
@@ -4081,6 +4153,11 @@ begin
     GeneratePrivateKey;
     // (self-)sign this certificate
     Sign(auth);
+    // ensure all TX509 DER/raw binary fields are properly set
+    fX509.LoadFromDer(fX509.SaveToDer);
+    if fPrivateKey.ToSubjectPublicKey <> fX509.Signed.SubjectPublicKey then
+      RaiseErrorGenerate('inconsistent DER generation');
+    // we successully generated a new signed X.509 certificate
     result := self;
   except
     Clear;
@@ -4112,7 +4189,10 @@ end;
 
 function TCryptCertX509.GetSerial: RawUtf8;
 begin
-  result := fX509.GetSerialNumber;
+  if fX509 <> nil then
+    result := fX509.Signed.SerialNumberHex
+  else
+    result := '';
 end;
 
 function TCryptCertX509.GetSubjectName: RawUtf8;
@@ -4410,6 +4490,7 @@ begin
     fX509.Signed.Signature := Xsa;
     fX509.fSignatureValue := auth.fPrivateKey.Sign(Xsa, fX509.Signed.ToDer);
     fX509.fSignatureAlgorithm := Xsa;
+    fX509.ComputeCachedDer;
   end
   else
     RaiseError('Sign: not a CA');
@@ -4605,8 +4686,8 @@ end;
 constructor TCryptStoreX509.Create(algo: TCryptAlgo);
 begin
   inherited Create(algo);
-  fValidDepth := 5;
   fCache := TCryptCertCacheX509.Create;
+  fValidDepth := 5;
   fTrust := TCryptCertListX509.Create;
   fCA := TCryptCertListX509.Create;
   fSignedCrl := TX509CrlList.Create;
@@ -4668,24 +4749,38 @@ begin
   result := fTrust.FindBySubjectKey(Key);
 end;
 
-function TCryptStoreX509.IsRevokedAny(const AuthorityKeyIdentifiers,
-  SerialNumber: RawUtf8): TCryptCertRevocationReason;
+function TCryptStoreX509.IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
+var
+  id: PRawByteString;
+  idcount: integer;
 begin
   result := crrNotRevoked;
-  if (AuthorityKeyIdentifiers = '') or
-     (SerialNumber = '') then
+  if (cert = nil) or
+     (cert.Signed.SerialNumber = '') then
     exit;
-  result := fSignedCrl.IsRevoked(AuthorityKeyIdentifiers, SerialNumber);
+  id := pointer(cert.fRawAuthorityKeyIdentifier);
+  if id = nil then
+  begin
+    id := @cert.fRawSubjectKeyIdentifier; // self-signed
+    idcount := 1;
+  end
+  else
+    idcount := PDALen(PAnsiChar(pointer(id)) - _DALEN)^ + _DAOFF;
+  result := fSignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
   if result = crrNotRevoked then
-    result := fUnsignedCrl.IsRevoked(AuthorityKeyIdentifiers, SerialNumber);
+    result := fUnsignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
 end;
 
 function TCryptStoreX509.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
+var
+  x: TCryptCert;
 begin
-  if Assigned(cert) then
-    result := IsRevokedAny(cert.GetAuthorityKey, cert.GetSerial)
-  else
-    result := crrNotRevoked;
+  result := crrNotRevoked;
+  if not Assigned(cert) then
+    exit;
+  x := cert.Instance;
+  if PClass(x)^ = TCryptCertX509 then
+    result := IsRevokedX509(TCryptCertX509(x).fX509);
 end;
 
 function TCryptStoreX509.Add(const cert: ICryptCert): boolean;
@@ -4770,7 +4865,7 @@ var
   c: TCryptCert;
   x: TX509;
   a, f: ICryptCert;
-  skid, akid: RawUtf8;
+  skid, akid: PRawByteString;
   level: integer;
 begin
   // validate this certificate context
@@ -4787,18 +4882,15 @@ begin
   result := cvInvalidDate;
   if not x.Signed.IsValidDate(date) then
     exit;
-  result := cvCorrupted;
-  skid := x.Signed.Extension[xeSubjectKeyIdentifier];
-  if skid = '' then
-    exit;
   // search within our database of known certificates
-  f := fTrust.FindBySubjectKey(skid);
-  if f <> nil then
-  begin
-    result := cvCorrupted;
-    if x.Compare(f.Handle, ccmBinary) <> 0 then
-      exit; // this certificate was forged
-  end;
+  result := cvCorrupted;
+  skid := @x.fRawSubjectKeyIdentifier;
+  if skid^ = '' then
+    exit;
+  f := fTrust.FindBySubjectKeyRaw(skid^);
+  if (f <> nil) and
+     (x.Compare(f.Handle, ccmBinary) <> 0) then
+    exit; // this certificate was forged
   result := cvUnknownAuthority;
   if fTrust.Count = 0 then
     exit;
@@ -4807,7 +4899,7 @@ begin
     if f = nil then
       exit; // self-signed certs should be known
     result := cvRevoked;
-    if IsRevokedAny(skid, x.SerialNumber) = crrNotRevoked then
+    if IsRevokedX509(x) = crrNotRevoked then
       // verify the self signature of this trusted cert
       result := x.Verify(x, [], x.NotBefore);
     exit;
@@ -4816,18 +4908,18 @@ begin
   for level := 0 to ValidDepth do
   begin
     result := cvCorrupted;
-    akid := x.Signed.Extension[xeAuthorityKeyIdentifier];
-    if akid = '' then
+    akid := pointer(x.fRawAuthorityKeyIdentifier); // check only first auth
+    if akid = nil then
       if x.IsSelfSigned then
         akid := skid // typical on X.509
       else
         exit; // missing field
     result := cvUnknownAuthority;
-    a := fTrust.FindBySubjectKey(akid);
+    a := fTrust.FindBySubjectKeyRaw(akid^);
     if a = nil then
       exit;
     result := cvRevoked;
-    if IsRevokedAny(akid, x.SerialNumber) <> crrNotRevoked then
+    if IsRevokedX509(x) <> crrNotRevoked then
       exit;
     // verify the cert digital signature with the issuer public key
     result := x.Verify(a.Handle, [], x.NotBefore); // has a TX509 cache
