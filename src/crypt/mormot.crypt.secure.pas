@@ -2268,8 +2268,8 @@ type
     /// add a Certificate information to the global Certificate Revocation List
     // - on some engines (our internal ECC, but not OpenSSL), Reason=crrNotRevoked
     // could be used to unregister a certificate revocation
-    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
-      Reason: TCryptCertRevocationReason): boolean;
+    function Revoke(const Cert: ICryptCert; Reason: TCryptCertRevocationReason;
+      RevocationDate: TDateTime = 0): boolean;
     /// check if the certificate is valid, against known certificates chain
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored digital signature according to the public key of
@@ -2324,8 +2324,8 @@ type
     function AddFromFile(const FileName: TFileName): TRawUtf8DynArray; virtual;
     function AddFromFolder(const Folder, Mask: TFileName;
        Recursive: boolean): TRawUtf8DynArray; virtual;
-    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
-      Reason: TCryptCertRevocationReason): boolean; virtual; abstract;
+    function Revoke(const Cert: ICryptCert; Reason: TCryptCertRevocationReason;
+       RevocationDate: TDateTime): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; virtual; abstract;
     function IsValidChain(const chain: ICryptCertChain;

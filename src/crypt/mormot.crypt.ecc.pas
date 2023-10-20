@@ -5895,8 +5895,8 @@ type
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
-    function Revoke(const Cert: ICryptCert; RevocationDate: TDateTime;
-      Reason: TCryptCertRevocationReason): boolean; override;
+    function Revoke(const Cert: ICryptCert; Reason: TCryptCertRevocationReason;
+       RevocationDate: TDateTime): boolean; override;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; override;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
@@ -5991,7 +5991,7 @@ begin
 end;
 
 function TCryptStoreInternal.Revoke(const Cert: ICryptCert;
-  RevocationDate: TDateTime; Reason: TCryptCertRevocationReason): boolean;
+  Reason: TCryptCertRevocationReason; RevocationDate: TDateTime): boolean;
 begin
   result := (Cert <> nil) and
             fEcc.Revoke(Cert.GetSerial, RevocationDate, Reason);
