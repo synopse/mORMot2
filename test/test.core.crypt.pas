@@ -2929,6 +2929,7 @@ begin
     CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
     c2.Sign(c1); // change signature
     CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
+    Check(not c2.IsSelfSigned);
     Check(c2.Verify(c1) = cvValidSigned, 'self3');
     Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
     if crt.AlgoName = 'syn-es256-v1' then
@@ -3148,13 +3149,13 @@ begin
       inc(r[1]);
       Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2c');
       // validate CRL on buffers (not OpenSSL)
-      Check(st2.Revoke(c3, 0, crrWithdrawn));
+      Check(st2.Revoke(c3, crrWithdrawn));
       Check(st2.Verify(s, pointer(r), length(r)) = cvRevoked, 's2d');
-      Check(st2.Revoke(c3, 0, crrNotRevoked));
+      Check(st2.Revoke(c3, crrNotRevoked));
       Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
     end;
     // validate CRL on certificates
-    Check(st2.Revoke(c3, 0, crrWithdrawn));
+    Check(st2.Revoke(c3, crrWithdrawn));
     Check(st2.IsRevoked(c3) = crrWithdrawn);
     // note: st2.Save fails with OpenSSL because the CRL is not signed
     // ensure new certs are not recognized by previous stores
@@ -3866,13 +3867,20 @@ const
 procedure TTestCoreCrypto._X509;
 var
   bin, der: RawByteString;
-  pem: RawUtf8;
+  pem, sav, sn: RawUtf8;
   x, a: TX509;
   i: integer;
   nfo: TX509Parsed;
   crl: TX509Crl;
   num: QWord;
-  auth: ICryptCert;
+  ca, cint, cc: ICryptCert;
+  st: ICryptStore;
+  c: array[cuKeyAgreement .. cuTlsClient] of ICryptCert;
+  chain: ICryptCertChain;
+  cu: TCryptCertUsage;
+  cus: TCryptCertUsages;
+  utc: TDateTime;
+  timer: TPrecisionTimer;
 begin
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
@@ -4064,8 +4072,25 @@ begin
   finally
     crl.Free;
   end;
+  // create some prime256v1 certificates for PKI testing
+  ca := CryptCertX509[caaES256].Generate(
+    [cuCA, cuCrlSign, cuKeyCertSign], 'trust anchor');
+  cint := ca.CertAlgo.Generate([cuCrlSign, cuKeyCertSign], 'intermediate', ca);
+  Check(ca.Verify(nil) = cvValidSelfSigned);
+  Check(cint.Verify(ca) = cvValidSigned);
+  for cu := low(c) to high(c) do
+  begin
+    cus := [];
+    include(cus, cu);
+    c[cu] := ca.CertAlgo.Generate(cus, ShortStringToUtf8(ToText(cu)^), cint);
+    Check(c[cu].Verify(ca) = cvUnknownAuthority);
+    Check(c[cu].Verify(cint) = cvValidSigned);
+  end;
+  SetLength(chain, 3); // create an unordered chain - should be consolidated
+  chain[1] := ca.CertAlgo.Generate([cuKeyCertSign], 'cint1', cint);
+  chain[2] := ca.CertAlgo.Generate([cuKeyCertSign], 'cint2', chain[1]);
+  chain[0] := ca.CertAlgo.Generate([cuTlsClient], 'www.toto.com', chain[2]);
   // validate a X.509 CRL generation and signature with a temporay authority
-  auth := CryptCertX509[caaES256].Generate([cuCA, cuCrlSign], 'trust anchor');
   crl := TX509Crl.Create;
   try
     CheckEqual(crl.CrlNumber, 0);
@@ -4077,14 +4102,18 @@ begin
     Check(crl.IsRevoked('EF:01') = crrReplaced);
     CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01');
     Check(crl.SignatureAlgorithm = xsaNone);
-    Check(crl.VerifyCryptCert(auth) = cvInvalidSignature);
+    Check(crl.VerifyCryptCert(ca) = cvInvalidSignature);
+    Check(crl.VerifyCryptCert(cint) = cvInvalidSignature);
     CheckEqual(crl.AuthorityKeyIdentifier, '');
+    sn := c[cuNonRepudiation].GetSerial;
+    Check(crl.AddRevocation(sn, crrCompromised));
     num := Random64 shr 1;
-    crl.SignCryptCert(auth, num);
-    CheckEqual(crl.Issuer[xaCN], 'trust anchor');
+    crl.SignCryptCert(cint, num);
+    CheckEqual(crl.Issuer[xaCN], 'intermediate');
     Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
-    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, auth.GetSubjectKey));
-    Check(crl.VerifyCryptCert(auth) = cvValidSigned);
+    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, cint.GetSubjectKey));
+    Check(crl.VerifyCryptCert(ca) = cvUnknownAuthority);
+    Check(crl.VerifyCryptCert(cint) = cvValidSigned);
     bin := crl.SaveToDer;
     pem := crl.SaveToPem;
     Check(pem <> '');
@@ -4099,20 +4128,152 @@ begin
     Check(crl.LoadFromDer(bin));
     CheckEqual(crl.CrlNumber, num);
     Check(crl.SignatureAlgorithm = xsaSha256Ecc256);
-    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, auth.GetSubjectKey));
-    CheckEqual(crl.Issuer[xaCN], 'trust anchor');
-    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01');
-    Check(crl.VerifyCryptCert(auth) = cvValidSigned);
-    Check(crl.Verify(auth.Handle) = cvValidSigned);
+    Check(IdemPropNameU(crl.AuthorityKeyIdentifier, cint.GetSubjectKey));
+    CheckEqual(crl.Issuer[xaCN], 'intermediate');
+    CheckEqual(RawUtf8ArrayToCsv(crl.Revoked), 'ab:cd,ef:01,' + sn);
+    Check(crl.VerifyCryptCert(cint) = cvValidSigned);
+    Check(crl.Verify(cint.Handle) = cvValidSigned);
     Check(crl.IsRevoked('abce') = crrNotRevoked);
     Check(crl.IsRevoked('ab:CD') = crrCompromised);
     Check(crl.IsRevoked('ef01') = crrReplaced);
+    Check(crl.IsRevoked(sn) = crrCompromised);
     CheckEqual(crl.SaveToPem, pem);
     crl.AfterModified; // force regenerate DER/PEM
     CheckEqual(crl.SaveToPem, pem);
   finally
     crl.Free;
   end;
+  // validate our PKI
+  Check(cint.Verify(ca) = cvValidSigned);
+  for cu := low(c) to high(c) do
+    Check(c[cu].Verify(cint) = cvValidSigned);
+  st := CryptStoreX509.New;
+  CheckEqual(st.Count, 0);
+  CheckEqual(st.CrlCount, 0);
+  CheckEqual(length(st.Add([ca, cint])), 2);
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 0);
+  Check(st.IsValid(ca) = cvValidSelfSigned);
+  Check(st.IsValid(cint) = cvValidSigned);
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu]) = cvValidSigned);
+  Check(st.IsValidChain(chain) = cvValidSigned, 'chain consolidate');
+  sav := st.Save;
+  // try store certificate persistence as PEM
+  st := CryptStoreX509.NewFrom(sav);
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 0);
+  Check(st.IsValid(cint) = cvValidSigned);
+  Check(st.IsValid(ca) = cvValidSelfSigned);
+  Check(st.IsValidChain(chain) = cvValidSigned);
+  CheckEqual(st.Save, sav);
+  for cu := low(c) to high(c) do
+  begin
+    Check(st.IsRevoked(c[cu]) = crrNotRevoked);
+    Check(st.IsValid(c[cu]) = cvValidSigned);
+  end;
+  // ensure dates are taken into account
+  utc := NowUtc; // is likely to be cached on server side
+  utc := utc - 100;
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu], utc) = cvInvalidDate);
+  utc := utc + 100;
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu], utc) = cvValidSigned);
+  utc := utc + 1000;
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu], utc) = cvInvalidDate);
+  utc := utc - 900;
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu], utc) = cvValidSigned);
+  // add a signed CRL generated by the CA
+  Check(st.AddFromBuffer(pem) = nil, 'add crl');
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 1);
+  for i := 1 to 5 do
+    for cu := low(c) to high(c) do
+      if cu <> cuNonRepudiation then
+      begin
+        Check(st.IsRevoked(c[cu]) = crrNotRevoked, 'r1');
+        Check(st.IsValid(c[cu]) = cvValidSigned, 'r2');
+      end
+      else
+      begin
+        Check(st.IsRevoked(c[cu]) = crrCompromised, 'r3');
+        Check(st.IsValid(c[cu]) = cvRevoked, 'r4');
+      end;
+  // benchmark a typical load DER + validate chain for a certificate
+  bin := c[cuTlsClient].Save; // as retrieved e.g. from a TLS handshake
+  timer.Start;
+  for i := 1 to 10000 do
+  begin
+    cc := st.Cache.Load(bin);
+    Check(cc <> nil, 'cc load');
+    Check(st.IsValid(cc, utc) = cvValidSigned, 'cc valid');
+  end;
+  NotifyTestSpeed('x509-pki Load+IsValid', 10000, 0, @timer);
+  // revoke a certificate (in the midddle of the chain)
+  Check(st.IsValidChain(chain) = cvValidSigned);
+  Check(st.IsValid(chain[0]) = cvUnknownAuthority);
+  Check(st.IsValid(chain[2]) = cvUnknownAuthority);
+  Check(st.IsValid(chain[1]) = cvValidSigned);
+  st.Revoke(chain[2], crrServerCompromised);
+  Check(st.IsValidChain(chain) = cvRevoked);
+  Check(st.IsValid(chain[0]) = cvUnknownAuthority);
+  Check(st.IsValid(chain[2]) = cvRevoked);
+  Check(st.IsValid(chain[1]) = cvValidSigned);
+  Check(st.IsRevoked(chain[0]) = crrNotRevoked);
+  Check(st.IsRevoked(chain[1]) = crrNotRevoked);
+  Check(st.IsRevoked(chain[2]) = crrServerCompromised);
+  // ensure non-CA Revoke() as properly persistence as unsigned PEM CRL
+  sav := st.Save;
+  st := CryptStoreX509.NewFrom(sav);
+  Check(PosEx('Signature: none', sav) <> 0, 'unsigned CRL');
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 2);
+  Check(st.IsValid(cint) = cvValidSigned);
+  Check(st.IsValid(ca) = cvValidSelfSigned);
+  Check(st.IsValidChain(chain) = cvRevoked);
+  Check(st.IsValid(chain[0]) = cvUnknownAuthority);
+  Check(st.IsValid(chain[2]) = cvRevoked);
+  Check(st.IsValid(chain[1]) = cvValidSigned);
+  CheckEqual(st.Save, sav);
+  // revoke the head of our chain
+  st.Revoke(chain[0], crrCompromised);
+  Check(st.IsValidChain(chain) = cvRevoked);
+  Check(st.IsValid(chain[0]) = cvRevoked);
+  Check(st.IsValid(chain[2]) = cvRevoked);
+  Check(st.IsValid(chain[1]) = cvValidSigned);
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 3);
+  Check(st.IsRevoked(chain[0]) = crrCompromised);
+  Check(st.IsRevoked(chain[1]) = crrNotRevoked);
+  Check(st.IsRevoked(chain[2]) = crrServerCompromised);
+  sav := st.Save;
+  // validate store persistence once again
+  st := CryptStoreX509.NewFrom(sav);
+  CheckEqual(st.Count, 2);
+  CheckEqual(st.CrlCount, 3);
+  CheckEqual(st.Save, sav);
+  Check(st.IsValidChain(chain) = cvRevoked);
+  Check(st.IsValid(chain[0]) = cvRevoked);
+  Check(st.IsValid(chain[2]) = cvRevoked);
+  Check(st.IsValid(chain[1]) = cvValidSigned);
+  Check(st.IsRevoked(chain[0]) = crrCompromised);
+  Check(st.IsRevoked(chain[1]) = crrNotRevoked);
+  Check(st.IsRevoked(chain[2]) = crrServerCompromised);
+  // revoke the CA, and observe the whole pyramid collapse
+  Check(st.Revoke(ca, crrAuthorityCompromised));
+  Check(st.IsValidChain(chain) = cvRevoked);
+  Check(st.IsValid(chain[0]) = cvRevoked);
+  Check(st.IsValid(chain[2]) = cvRevoked);
+  Check(st.IsValid(chain[1]) = cvRevoked);
+  for cu := low(c) to high(c) do
+    Check(st.IsValid(c[cu]) = cvRevoked);
+  // but individual certificates revocation state was not affected
+  Check(st.IsRevoked(chain[0]) = crrCompromised);
+  Check(st.IsRevoked(chain[1]) = crrNotRevoked);
+  Check(st.IsRevoked(chain[2]) = crrServerCompromised);
 end;
 
 
