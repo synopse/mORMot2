@@ -2309,6 +2309,7 @@ type
   protected
     fCache: TCryptCertCache;
   public
+    destructor Destroy; override;
     // ICryptStore methods
     procedure Clear; virtual; abstract;
     function Load(const Saved: RawByteString): boolean; virtual;
@@ -6920,55 +6921,10 @@ end;
 
 { TCryptStore }
 
-function TCryptStore.IsValidChain(const chain: ICryptCertChain;
-  date: TDateTime): TCryptCertValidity;
-var
-  i: PtrInt;
-  c: ICryptCertChain;
+destructor TCryptStore.Destroy;
 begin
-  // we need something to validate
-  result := cvBadParameter;
-  if (chain = nil) or
-     (chain[0] = nil) then
-    exit;
-  // ensure main certificate is not deprecated
-  result := cvInvalidDate;
-  if not chain[0].IsValidDate(date) then
-    exit;
-  // compute the exact authority sequence (if not supplied in proper order)
-  result := cvUnknownAuthority;
-  c := ChainConsolidate(chain);
-  if (c = nil) or
-     ((length(c) = 1) and
-      not c[0].IsSelfSigned) then
-    exit;
-  // check the usages of all intermediate certificates
-  result := cvWrongUsage;
-  for i := 1 to length(c) - 1 do
-    if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
-      exit;
-  // ensure no certificate in the sequence has been explicitly revoked
-  result := cvRevoked;
-  for i := 0 to length(c) - 1 do
-    if IsRevoked(c[i]) <> crrNotRevoked then
-      exit;
-  // check the cascaded dates (before any digital signature verification)
-  result := cvDeprecatedAuthority;
-  for i := 1 to length(c) - 1 do
-    if not c[i].IsValidDate(c[i - 1].GetNotBefore) then
-      exit;
-  // check the cascaded digital signatures
-  for i := 0 to length(c) - 2 do
-  begin
-    result := c[i].Verify(c[i + 1], [cvWrongUsage, cvDeprecatedAuthority]);
-    // note: TCryptCertX509.Verify has a per-authority cache so is very fast
-    if result <> cvValidSigned then
-      exit;
-  end;
-  // eventually check the trusted anchor of the chain
-  if length(c) > 1 then
-    date := c[length(c) - 2].GetNotBefore; // anchor is not main: adjust date
-  result := IsValid(c[length(c) - 1], date);
+  inherited Destroy;
+  fCache.Free;
 end;
 
 function TCryptStore.Load(const Saved: RawByteString): boolean;
@@ -7036,6 +6992,57 @@ begin
   n := 0;
   SearchFolder(IncludeTrailingPathDelimiter(Folder));
   SetLength(result, n);
+end;
+
+function TCryptStore.IsValidChain(const chain: ICryptCertChain;
+  date: TDateTime): TCryptCertValidity;
+var
+  i: PtrInt;
+  c: ICryptCertChain;
+begin
+  // we need something to validate
+  result := cvBadParameter;
+  if (chain = nil) or
+     (chain[0] = nil) then
+    exit;
+  // ensure main certificate is not deprecated
+  result := cvInvalidDate;
+  if not chain[0].IsValidDate(date) then
+    exit;
+  // compute the exact authority sequence (if not supplied in proper order)
+  result := cvUnknownAuthority;
+  c := ChainConsolidate(chain);
+  if (c = nil) or
+     ((length(c) = 1) and
+      not c[0].IsSelfSigned) then
+    exit;
+  // check the usages of all intermediate certificates
+  result := cvWrongUsage;
+  for i := 1 to length(c) - 1 do
+    if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
+      exit;
+  // ensure no certificate in the sequence has been explicitly revoked
+  result := cvRevoked;
+  for i := 0 to length(c) - 1 do
+    if IsRevoked(c[i]) <> crrNotRevoked then
+      exit;
+  // check the cascaded dates (before any digital signature verification)
+  result := cvDeprecatedAuthority;
+  for i := 1 to length(c) - 1 do
+    if not c[i].IsValidDate(c[i - 1].GetNotBefore) then
+      exit;
+  // check the cascaded digital signatures
+  for i := 0 to length(c) - 2 do
+  begin
+    result := c[i].Verify(c[i + 1], [cvWrongUsage, cvDeprecatedAuthority]);
+    // note: TCryptCertX509.Verify has a per-authority cache so is very fast
+    if result <> cvValidSigned then
+      exit;
+  end;
+  // eventually check the trusted anchor of the chain
+  if length(c) > 1 then
+    date := c[length(c) - 2].GetNotBefore; // anchor is not main: adjust date
+  result := IsValid(c[length(c) - 1], date);
 end;
 
 
