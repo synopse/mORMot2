@@ -7446,22 +7446,22 @@ end;
 
 function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 var
-  ref: ICryptCertChain;
-  n: PtrInt;
+  ref: array[0..127] of pointer; // weak references of ICryptCert
+  count, n: PtrInt;
 
-  procedure RecursiveCompute(var one: ICryptCert);
+  procedure RecursiveCompute(var one: pointer);
   var
     i: PtrInt;
-    r: PICryptCert;
+    r: PPointer;
   begin
-    result[n] := one;
+    result[n] := ICryptCert(one);
     inc(n);
-    if n = length(result) then
+    if n = count then
       exit; // paranoid
     r := @ref[1];
-    for i := 1 to length(ref) - 1 do
+    for i := 1 to count - 1 do
       if (r^ <> nil) and
-         one.IsAuthorizedBy(r^) then
+         ICryptCert(one).IsAuthorizedBy(ICryptCert(r^)) then
       begin
         one := nil; // faster and avoid endless loop on circular references
         RecursiveCompute(r^);
@@ -7473,13 +7473,14 @@ var
 
 begin
   result := nil;
+  count := length(chain);
   if (chain = nil) or
      (chain[0] = nil) or
-     (length(chain) > 128) then // a typical chain has 2 or 3 certificates
+     (count >= high(ref)) then // a typical chain has 2 or 3 certificates
     exit;
   n := 0;
-  SetLength(result, length(chain));
-  ref := copy(chain); // local chain copy for one := nil above
+  SetLength(result, count);
+  MoveFast(pointer(chain)^, ref[0], count * SizeOf(ref[0]));
   RecursiveCompute(ref[0]); // fill result[0..n-1] in auth order
   DynArrayFakeLength(result, n);
 end;

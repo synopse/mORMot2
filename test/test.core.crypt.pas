@@ -3876,7 +3876,7 @@ var
   ca, cint, cc: ICryptCert;
   st: ICryptStore;
   c: array[cuKeyAgreement .. cuTlsClient] of ICryptCert;
-  chain: ICryptCertChain;
+  chain, chain2: ICryptCertChain;
   cu: TCryptCertUsage;
   cus: TCryptCertUsages;
   utc: TDateTime;
@@ -4158,6 +4158,9 @@ begin
   for cu := low(c) to high(c) do
     Check(st.IsValid(c[cu]) = cvValidSigned);
   Check(st.IsValidChain(chain) = cvValidSigned, 'chain consolidate');
+  chain2 := chain;
+  ChainAdd(chain2, c[cuNonRepudiation]);
+  Check(st.IsValidChain(chain2) = cvValidSigned, 'chain ignore irrelevant');
   sav := st.Save;
   // try store certificate persistence as PEM
   st := CryptStoreX509.NewFrom(sav);
@@ -4202,6 +4205,12 @@ begin
         Check(st.IsRevoked(c[cu]) = crrCompromised, 'r3');
         Check(st.IsValid(c[cu]) = cvRevoked, 'r4');
       end;
+  // should not affect the chain
+  Check(st.IsValidChain(chain) = cvValidSigned);
+  chain2 := chain;
+  for cu := low(c) to high(c) do
+    ChainAdd(chain2, c[cu]);
+  Check(st.IsValidChain(chain2) = cvValidSigned, 'chain irrelevants');
   // benchmark a typical load DER + validate chain for a certificate
   bin := c[cuTlsClient].Save; // as retrieved e.g. from a TLS handshake
   timer.Start;

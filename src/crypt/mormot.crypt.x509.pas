@@ -1073,10 +1073,11 @@ type
   public
     /// how many levels IsValid() should iterate over the trusted certificates
     // before finding a self-signed "root anchor"
-    // - equals 5 by default which is more than enough for most PKI
+    // - equals 32 by default which is more than enough for most PKI, and don't
+    // affect performance because most context is cached during the process
     // - 0 would mean that IsValid() checks for a single issuer in the known
     // Trust[] list, and consider it successfull even if the "root anchor" was
-    // not reached
+    // not reached - but may be unsafe if the "root anchor" has been revoked
     property ValidDepth: integer
       read fValidDepth write fValidDepth;
     /// access to the internal trusted ICryptCert list of this PKI
@@ -4528,7 +4529,7 @@ begin
   fIsRevokedTag := Random32 shr 10; // to force ComputeIsRevoked between stores
   fCache := TCryptCertCacheX509.Create;
   TCryptCertCacheX509(fCache).SetCryptCertClass(TCryptCertX509);
-  fValidDepth := 5;
+  fValidDepth := 32;
   fTrust := fCache.NewList;
   fCA := fCache.NewList;
   fSignedCrl := TX509CrlList.Create;
