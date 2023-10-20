@@ -4782,11 +4782,10 @@ begin
   if err <> 0 then
     // we allow a value stated as text
     if fOrmFieldType = oftBoolean then
-      i := ord(PropNameEquals(Value, 'TRUE') or
-               PropNameEquals(Value, 'YES'))
+      i := GetTrue(pointer(Value)) // true/yes
     else
       i := fEnumType^.GetEnumNameValue(pointer(Value), length(Value))
-  else if fOrmFieldType = oftBoolean then // normalize boolean values range to 0,1
+  else if fOrmFieldType = oftBoolean then // normalize boolean values to 0,1
     if i <> 0 then
       i := 1;
   if cardinal(i) > cardinal(fEnumType^.MaxValue) then
@@ -4810,14 +4809,13 @@ begin
     begin
       // we allow a value stated as text
       if fOrmFieldType = oftBoolean then
-        i := ord(IdemPropName('TRUE', Value, ValueLen) or
-                 IdemPropName('YES', Value, ValueLen))
+        i := GetTrue(Value)
       else
         i := fEnumType^.GetEnumNameValue(Value); // -> convert into integer
       if cardinal(i) > cardinal(fEnumType^.MaxValue) then
         i := 0;  // only set a valid text value
     end
-    else if fOrmFieldType = oftBoolean then // normalize boolean values range to 0,1
+    else if fOrmFieldType = oftBoolean then // normalize boolean values to 0,1
       if i <> 0 then
         i := 1;
   end;
@@ -10998,7 +10996,9 @@ var
 begin
   // set col names
   nf := Length(W.Fields);
-  n := ord(W.withID);
+  n := 0;
+  if W.WithID then
+    inc(n);
   SetLength(W.ColNames, nf + n);
   if W.withID then
     W.ColNames[0] := ROWID_TXT; // works for both normal and FTS3 records

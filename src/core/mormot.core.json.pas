@@ -8609,7 +8609,7 @@ function TValuePUtf8Char.ToBoolean: boolean;
 begin
   result := (Text <> nil) and
             ((PWord(Text)^ = ord('1')) or
-             (PCardinal(Text)^ = TRUE_LOW));
+             (GetTrue(Text) = 1));
 end;
 
 procedure JsonDecode(var Json: RawUtf8; const Names: array of RawUtf8;

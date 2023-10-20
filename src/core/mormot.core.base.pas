@@ -1199,6 +1199,10 @@ function GetInt64(P: PUtf8Char): Int64; overload;
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetInt64Def(P: PUtf8Char; const Default: Int64): Int64;
 
+/// return 1 if 'TRUE' or 'YES', or 0 otherwise
+function GetTrue(P: PUtf8Char): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get the 64-bit integer value from P^, recognizing true/false/yes/no input
 // - return true on correct parsing, false if P is no number or boolean
 function GetInt64Bool(P: PUtf8Char; out V: Int64): boolean;
@@ -5160,6 +5164,16 @@ end;
 function GetBoolean(const value: RawUtf8): boolean;
 begin
   result := GetBoolean(pointer(value));
+end;
+
+function GetTrue(P: PUtf8Char): integer;
+begin
+  result := PInteger(P)^ and $dfdfdfdf;
+  if (result = ord('T') + ord('R') shl 8 + ord('U') shl 16 + ord('E') shl 24) or
+     (result = ord('Y') + ord('E') shl 8 + ord('S') shl 16) then
+    result := 1
+  else
+    result := 0;
 end;
 
 function GetInt64Bool(P: PUtf8Char; out V: Int64): boolean;

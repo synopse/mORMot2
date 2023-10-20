@@ -4607,7 +4607,7 @@ begin
     result := fUnsignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
   // cache the result into cert.fIsRevokedTag
   if result = crrNotRevoked then
-    cert.fIsRevokedTag := ownertag // no need to test until new revocations
+    cert.fIsRevokedTag := ownertag // no need to test until next revocation
   else
     cert.fIsRevokedTag := -(integer(result) + 1); // -1..-11 to mark as revoked
     // as a nice side effect: once revoked, always revoked
