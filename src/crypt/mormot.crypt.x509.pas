@@ -1022,43 +1022,31 @@ function OidToXce(const oid: RawByteString): TXCrlExtension;
 type
   /// maintain a cache of X.509 ICryptCert instances, from their DER/binary
   // - to speed up typical PKI process, no DER parsing would be necessary
-  // and ECC/RSA digital signature verifications will be cached at TX509 level
+  // and ECC/RSA digital signature verifications and certificate revocation
+  // state will be cached at TX509 level, in this bounded context
   // - this class is thread-safe and will flush its oldest entries automatically
-  // - this inherited class offers some TX509 specific search methods
   TCryptCertCacheX509 = class(TCryptCertCache)
   protected
+    // overriden to use a faster search with no temporary memory allocation
+    procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
+      Method: TCryptCertComparer; Count, MaxCount: integer;
+      out Chain: ICryptCerts); override;
     // properly overidden to call X509Load() and return a TCryptCertX509
     function InternalLoad(const Cert: RawByteString): ICryptCert; override;
   public
-    /// search the internal list for a given attribute
-    // - return all the certificates matching a given value
-    // - will use a fast-enough O(n) search algorithm with lockfree multi-read
-    function Find(const Value: RawByteString;
-      Method: TCryptCertComparer = ccmSerialNumber;
-      MaxCount: integer = 0): ICryptCerts;
-    /// search the internal list for a given attribute
-    // - return the first certificate matching a given value
-    function FindOne(const Value: RawByteString;
-      Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
+    /// allocate a new TCryptCertListX509 instance in the context of this cache
+    function NewList: TCryptCertList; overload; override;
   end;
 
   /// store several X.509 ICryptCert instances
   // - those instances are likely to come from a TCryptCertCacheX509 holder
-  // - this inherited class offers some TX509 specific search methods
+  // - inherited class with slightly faster Find() search process
   TCryptCertListX509 = class(TCryptCertList)
-  public
-    /// search the internal list for a given attribute
-    // - return all the certificates matching a given value
-    // - will use a fast-enough O(n) search algorithm with lockfree multi-read
-    // - caller should NOT free the returned items
-    function Find(const Value: RawByteString;
-      Method: TCryptCertComparer = ccmSerialNumber;
-      MaxCount: integer = 0): ICryptCerts;
-    /// search the internal list for a given attribute
-    // - return the first certificate matching a given value
-    // - caller should NOT free the returned item
-    function FindOne(const Value: RawByteString;
-      Method: TCryptCertComparer = ccmSerialNumber): ICryptCert;
+  protected
+    // overriden to use a faster search with no temporary memory allocation
+    procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
+      Method: TCryptCertComparer; Count, MaxCount: integer;
+      out Chain: ICryptCerts); override;
   end;
 
   /// 'x509-pki' ICryptStore algorithm using TX509 and TX509Crl for its process
@@ -1075,8 +1063,8 @@ type
   // - published here to make it expandable if needed by proper inheritance
   TCryptStoreX509 = class(TCryptStore)
   protected
-    fTrust: TCryptCertListX509;
-    fCA: TCryptCertListX509;
+    fTrust: TCryptCertList;
+    fCA: TCryptCertList;
     fSignedCrl: TX509CrlList;   // from a CA
     fUnsignedCrl: TX509CrlList; // from manual Revoke()
     fValidDepth: integer;
@@ -1125,21 +1113,17 @@ type
     // others being intermediate certificates
     // - you usually should not need to access this list, but call ICryptStore
     // IsValid() and IsRevoked() convenient methods
-    property Trust: TCryptCertListX509
+    property Trust: TCryptCertList
       read fTrust;
     /// access to the internal list of CRL signed by some root CA
+    // - never change directly, but in the context of its CA owner
     property SignedCrl: TX509CrlList
       read fSignedCrl;
     /// access to the internal list of unsigned CRL, set by Revoke() calls
     // - will be persisted as PEM with no signature, which is mORMot-specific
+    // - never change directly, e.g. don't call UnSignedCrl.AddRevocation()
     property UnsignedCrl: TX509CrlList
       read fUnsignedCrl;
-    /// access to the internal ICryptCert instance cache
-    // - warning: not all of the instances of this cache are trusted!
-    // - use Cache.Load() if you want to work with certificates which may be
-    // within the context of this PKI
-    function CacheX509: TCryptCertCacheX509;
-      {$ifdef HASINLINE} inline; {$endif}
   published
     /// how many trusted certificates are actually stored
     property Trusted: integer
@@ -3510,6 +3494,7 @@ begin
     else if i >= 0 then
     begin
       crl := TX509Crl.Create;
+      crl.Signed.Issuer.Name[xaCN] := Executable.Host;
       crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
       crl.fRawAuthorityKeyIdentifier := akid; // for internal search
       fDA.FastAddSorted(i, crl);
@@ -3712,29 +3697,15 @@ end;
 
 { **************** X.509 Private Key Infrastructure (PKI) }
 
-// function shared e.g. by TCryptCertCacheX509 and TCryptCertListX509
-procedure RawCertSearch(Cert: PICryptCert; const Value: RawByteString;
-  Method: TCryptCertComparer; Count, MaxCount: integer; out Chain: ICryptCerts);
+// function shared by TCryptCertCacheX509.Find and TCryptCertListX509.Find
+procedure X509InternalFind(Cert: PICryptCert; const Value: RawByteString;
+  Method: TCryptCertComparer; Count, MaxCount: integer; var Chain: ICryptCerts);
 var
-  res: PtrInt;
-
-  function FoundOne: boolean;
-  begin
-    if res = length(Chain) then
-      SetLength(Chain, NextGrow(res));
-    Chain[res] := Cert^;
-    inc(res);
-    dec(MaxCount);
-    result := MaxCount = 0; // true = break loop
-  end;
-
-var
+  found: boolean;
+  res: integer;
   bin: RawByteString;
 begin
   // prepare the search
-  if (Count = 0) or
-     (Value = '') then
-    exit;
   case Method of
     ccmSerialNumber,
     ccmSubjectKey:
@@ -3745,67 +3716,58 @@ begin
     MaxCount := MaxInt;
   // O(n) efficient search loop with no temporary memory allocation
   res := 0;
-  repeat
+  while Count <> 0 do
+  begin
     with TX509(Cert^.Handle) do // retrieve the TX509 in a single method call
       case Method of
         ccmSerialNumber:
-          if (SortDynArrayRawByteString(Signed.SerialNumber, bin) = 0) and
-             FoundOne then
-            break;
-        // ccm*Name expect Value to be TXName.ToBinary raw DER content
+          found := SortDynArrayRawByteString(Signed.SerialNumber, bin) = 0;
         ccmSubjectName:
-          if (SortDynArrayRawByteString(Signed.Subject.fCachedAsn, Value) = 0) and
-             FoundOne then
-            break;
+          with Signed.Subject do
+          begin
+            if fCachedText = '' then
+              ComputeText;
+            found := SortDynArrayAnsiString(fCachedText, Value) = 0;
+          end;
         ccmIssuerName:
-          if (SortDynArrayRawByteString(Signed.Issuer.fCachedAsn, Value) = 0) and
-             FoundOne then
-            break;
+          with Signed.Issuer do
+          begin
+            if fCachedText = '' then
+              ComputeText;
+            found := SortDynArrayAnsiString(fCachedText, Value) = 0;
+          end;
         ccmSubjectCN:
-          if (SortDynArrayAnsiString(Signed.Subject.Name[xaCN], Value) = 0) and
-             FoundOne then
-            break;
+          found := SortDynArrayAnsiString(Signed.Subject.Name[xaCN], Value) = 0;
         ccmIssuerCN:
-          if (SortDynArrayAnsiString(Signed.Issuer.Name[xaCN], Value) = 0) and
-             FoundOne then
-            break;
+          found := SortDynArrayAnsiString(Signed.Issuer.Name[xaCN], Value) = 0;
         ccmSubjectKey:
-          if (SortDynArrayRawByteString(
-               Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0) and
-             FoundOne then
-            break;
+          found := SortDynArrayRawByteString(
+               Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0;
         ccmAuthorityKey:
-          if CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value) and
-             FoundOne then
-            break;
+          found := CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value);
         ccmSubjectAltName:
-          if CsvContains(Signed.Extension[xeSubjectAlternativeName], Value) and
-             FoundOne then
-            break;
+          found := CsvContains(Signed.Extension[xeSubjectAlternativeName], Value);
         ccmIssuerAltName:
-          if CsvContains(Signed.Extension[xeIssuerAlternativeName], Value) and
-             FoundOne then
-            break;
-        ccmBinary: // fCachedDer should have been set by AfterLoaded
-          if (SortDynArrayAnsiString(fCachedDer, Value) = 0) and
-             FoundOne then
-            break;
+          found := CsvContains(Signed.Extension[xeIssuerAlternativeName], Value);
+        ccmBinary: // fCachedDer has been set by AfterLoaded
+          found := SortDynArrayRawByteString(fCachedDer, Value) = 0;
         ccmSha1:
-          if (FingerPrintCompare(Value, hfSHA1) = 0) and
-             FoundOne then
-            break;
+          found := FingerPrintCompare(Value, hfSHA1) = 0;
         ccmSha256:
-          if (FingerPrintCompare(Value, hfSHA256) = 0) and
-             FoundOne then
-            break;
+          found := FingerPrintCompare(Value, hfSHA256) = 0;
       else
-        break; // unsupported search method
+        break; // unsupported search method (e.g. ccmUsage)
       end;
-    dec(Count);
-    if Count = 0 then
-      break;
+    if found then
+    begin
+      InterfaceArrayAddCount(Chain, res, Cert^);
+      dec(MaxCount);
+      if MaxCount = 0 then
+        break;
+    end;
     inc(Cert);
-  until false;
+    dec(Count);
+  end;
   if res <> length({%H-}Chain) then
     DynArrayFakeLength(Chain, res);
 end;
@@ -3813,86 +3775,31 @@ end;
 
 { TCryptCertListX509 }
 
-function TCryptCertListX509.Find(const Value: RawByteString;
-  Method: TCryptCertComparer; MaxCount: integer): ICryptCerts;
-var
-  one: ICryptCert;
+procedure TCryptCertListX509.InternalFind(Cert: PICryptCert;
+  const Value: RawByteString; Method: TCryptCertComparer; Count,
+  MaxCount: integer; out Chain: ICryptCerts);
 begin
-  result := nil;
-  if (self = nil) or
-     (fList = nil) or
-     (Value = '') then
-    exit;
-  if Method = ccmSubjectKey then
-  begin
-    one := FindBySubjectKey(Value); // use the TSynDictionary hash table
-    if one <> nil then
-      ChainAdd(result, one);
-  end
-  else
-  begin
-    fList.Safe.ReadLock;
-    try
-      RawCertSearch(fList.Values.Value^, Value, Method, fList.Count, MaxCount, result);
-    finally
-      fList.Safe.ReadUnLock;
-    end;
-  end;
-end;
-
-function TCryptCertListX509.FindOne(const Value: RawByteString;
-  Method: TCryptCertComparer): ICryptCert;
-var
-  res: ICryptCerts;
-begin
-  if Method = ccmSubjectKey then
-    result := FindBySubjectKey(Value) // use the TSynDictionary hash table
-  else
-  begin
-    res := Find(Value, Method, 1);
-    if res = nil then
-      result := nil
-    else
-      result := res[0];
-  end;
+  X509InternalFind(Cert, Value, Method, Count, MaxCount, Chain);
 end;
 
 
 { TCryptCertCacheX509 }
+
+procedure TCryptCertCacheX509.InternalFind(Cert: PICryptCert;
+  const Value: RawByteString; Method: TCryptCertComparer; Count,
+  MaxCount: integer; out Chain: ICryptCerts);
+begin
+  X509InternalFind(Cert, Value, Method, Count, MaxCount, Chain);
+end;
 
 function TCryptCertCacheX509.InternalLoad(const Cert: RawByteString): ICryptCert;
 begin
   result := X509Load(Cert);
 end;
 
-function TCryptCertCacheX509.Find(const Value: RawByteString;
-  Method: TCryptCertComparer; MaxCount: integer): ICryptCerts;
+function TCryptCertCacheX509.NewList: TCryptCertList;
 begin
-  result := nil;
-  if (self = nil) or
-     (fCache.Count = 0) or
-     (Value = '') then
-    exit;
-  // non-blocking O(n) search within the stored certificates
-  fCache.Safe^.ReadLock;
-  try
-    RawCertSearch(
-      fCache.Values.Value^, Value, Method, fCache.Count, MaxCount, result);
-  finally
-    fCache.Safe^.ReadUnLock;
-  end;
-end;
-
-function TCryptCertCacheX509.FindOne(const Value: RawByteString;
-  Method: TCryptCertComparer): ICryptCert;
-var
-  res: ICryptCerts;
-begin
-  res := Find(Value, Method, 1);
-  if res = nil then
-    result := nil
-  else
-    result := res[0];
+  result := TCryptCertListX509.Create;
 end;
 
 
@@ -4699,8 +4606,8 @@ begin
   fIsRevokedTag := Random32 shr 10; // to force ComputeIsRevoked between stores
   fCache := TCryptCertCacheX509.Create;
   fValidDepth := 5;
-  fTrust := TCryptCertListX509.Create;
-  fCA := TCryptCertListX509.Create;
+  fTrust := fCache.NewList;
+  fCA := fCache.NewList;
   fSignedCrl := TX509CrlList.Create;
   fUnsignedCrl := TX509CrlList.Create;
 end;
@@ -4721,8 +4628,8 @@ begin
   fSignedCrl.Free;
   fCA.Free;
   fTrust.Free;
-  fTrust := TCryptCertListX509.Create;
-  fCA := TCryptCertListX509.Create;
+  fTrust := fCache.NewList;
+  fCA := fCache.NewList;
   fSignedCrl := TX509CrlList.Create;
   fUnsignedCrl := TX509CrlList.Create;
 end;
@@ -4743,11 +4650,6 @@ begin
   finally
     w.Free;
   end;
-end;
-
-function TCryptStoreX509.CacheX509: TCryptCertCacheX509;
-begin
-  result := TCryptCertCacheX509(fCache);
 end;
 
 function TCryptStoreX509.GetBySerial(const Serial: RawUtf8): ICryptCert;
