@@ -12,7 +12,7 @@ unit mormot.crypt.x509;
     - X.509 Certificates and Certificate Signing Request (CSR)
     - X.509 Certificate Revocation List (CRL)
     - X.509 Private Key Infrastructure (PKI)
-    - Registration of our X.509 Engine to the TCryptCert/TCryptStore Factory
+    - Registration of our X.509 Engine to the TCryptCert/TCryptStore Factories
 
   *****************************************************************************
 
@@ -585,6 +585,7 @@ type
     fRawSubjectKeyIdentifier: RawByteString;
     fRawAuthorityKeyIdentifier: TRawByteStringDynArray;
     fIsSelfSigned: boolean;
+    fIsRevokedTag: integer; // <0 if revoked, or should = TCryptStoreX509 tag
     procedure AfterLoaded;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
@@ -1079,17 +1080,20 @@ type
     fSignedCrl: TX509CrlList;   // from a CA
     fUnsignedCrl: TX509CrlList; // from manual Revoke()
     fValidDepth: integer;
+    fIsRevokedTag: integer; // always >= 0 - to store in TX509.fIsRevokedTag
     function GetRevoked: integer;
     function GetCacheCount: integer;
     function GetCACount: integer;
+    function ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;
   public
     /// initialize a 'x509-pki' ICryptStore
     constructor Create(algo: TCryptAlgo); override;
     /// finalize this ICryptStore instance
     destructor Destroy; override;
     /// check both signed CRL list (for CA) and unsigned CRL list (manual Revoke)
-    // - for a TX509 xeAuthorityKeyIdentifier (which may be a CSV) and a Serial
-    function IsRevokedX509(cert: TX509): TCryptCertRevocationReason; virtual;
+    // - use TX509.fIsRevokedTag instance cache if possible
+    function IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
+      {$ifdef HASINLINE} inline; {$endif}
     // ICryptStore methods
     procedure Clear; override;
     function Save: RawByteString; override;
@@ -1151,7 +1155,7 @@ type
 
 
 
-{ ******** Registration of our X.509 Engine to the TCryptCert/TCryptStore Factory }
+{ ******** Registration of our X.509 Engine to the TCryptCert/TCryptStore Factories }
 
 /// high-level function to decode X.509 certificate main properties using TX509
 // - assigned to mormot.core.secure X509Parse() redirection by this unit
@@ -2711,6 +2715,7 @@ begin
   SetLength(fRawAuthorityKeyIdentifier, length(akid));
   for i := 0 to length(akid) - 1 do
     HumanHexToBin(akid[i], fRawAuthorityKeyIdentifier[i]);
+  fIsRevokedTag := 0;
   fLastVerifyAuthPublicKey := '';
 end;
 
@@ -2892,6 +2897,7 @@ end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
 begin
+  // no memory allocation occurs during this comparison
   if self <> nil then
     if Another <> nil then
       case Method of
@@ -4181,6 +4187,9 @@ begin
       // the CSR has only a public key: generate a new key pair
       GeneratePrivateKey;
     Sign(auth);
+    // ensure all TX509 DER/raw binary fields are properly set
+    fX509.LoadFromDer(fX509.SaveToDer);
+    // we successully generated a new signed X.509 certificate from this CSR
     result := self;
   except
     Clear;
@@ -4255,7 +4264,8 @@ end;
 
 function TCryptCertX509.IsSelfSigned: boolean;
 begin
-  result := fX509.IsSelfSigned;
+  result := (fX509 <> nil) and
+            fX509.IsSelfSigned;
 end;
 
 function TCryptCertX509.IsAuthorizedBy(const Authority: ICryptCert): boolean;
@@ -4686,6 +4696,7 @@ end;
 constructor TCryptStoreX509.Create(algo: TCryptAlgo);
 begin
   inherited Create(algo);
+  fIsRevokedTag := Random32 shr 10; // to force ComputeIsRevoked between stores
   fCache := TCryptCertCacheX509.Create;
   fValidDepth := 5;
   fTrust := TCryptCertListX509.Create;
@@ -4749,26 +4760,47 @@ begin
   result := fTrust.FindBySubjectKey(Key);
 end;
 
-function TCryptStoreX509.IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
+function TCryptStoreX509.ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;
 var
   id: PRawByteString;
-  idcount: integer;
+  idcount, ownertag: integer;
 begin
-  result := crrNotRevoked;
-  if (cert = nil) or
-     (cert.Signed.SerialNumber = '') then
-    exit;
+  ownertag := fIsRevokedTag; // multi-thread safety: get sequence before searches
+  // retrieve the AKID of this certificate (maybe SKID if self-signed)
   id := pointer(cert.fRawAuthorityKeyIdentifier);
   if id = nil then
   begin
-    id := @cert.fRawSubjectKeyIdentifier; // self-signed
+    id := @cert.fRawSubjectKeyIdentifier;
     idcount := 1;
   end
   else
     idcount := PDALen(PAnsiChar(pointer(id)) - _DALEN)^ + _DAOFF;
+  // ask the fSignedCrl and fUnsignedCrl lists
   result := fSignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
   if result = crrNotRevoked then
     result := fUnsignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
+  // cache the result into cert.fIsRevokedTag
+  if result = crrNotRevoked then
+    cert.fIsRevokedTag := ownertag // no need to test until new revocations
+  else
+    cert.fIsRevokedTag := -(integer(result) + 1); // -1..-11 to mark as revoked
+    // as a nice side effect: once revoked, always revoked
+end;
+
+function TCryptStoreX509.IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
+var
+  flags: integer;
+begin
+  // very quick resolution using the per-TX509 instance cache tag
+  result := crrNotRevoked;
+  if cert = nil then
+    exit;
+  flags := cert.fIsRevokedTag;
+  if flags <> fIsRevokedTag then // are we in sync with the store?
+    if flags < 0 then
+      result := TCryptCertRevocationReason(-(flags + 1)) // revoked
+    else
+      result := ComputeIsRevoked(cert); // ask both TX509CrlList
 end;
 
 function TCryptStoreX509.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;
@@ -4827,6 +4859,7 @@ begin
                   fUnsignedCrl.Add(crl)   // unsigned: from AddRevocation()
                 else
                   fSignedCrl.Add(crl);    // signed by a CA
+                inc(fIsRevokedTag);
                 crl := nil; // owned by one of the two lists
               end;
             finally
@@ -4842,6 +4875,8 @@ begin
   for i := 0 to high(new) do
     if Add(new[i]) then
       AddRawUtf8(result, new[i].GetSerial);
+  if fIsRevokedTag < 0 then
+    fIsRevokedTag := 0; // paranoid 31-bit overflow
 end;
 
 function TCryptStoreX509.Revoke(const Cert: ICryptCert;
@@ -4857,13 +4892,18 @@ begin
     akid := Cert.GetSubjectKey; // self-signed certificate
   result := fUnsignedCrl.AddRevocation(
               akid, Cert.GetSerial, Reason, 0, RevocationDate);
+  if not result then
+    exit;
+  inc(fIsRevokedTag);
+  if fIsRevokedTag < 0 then
+    fIsRevokedTag := 0; // paranoid 31-bit overflow
 end;
 
 function TCryptStoreX509.IsValid(const cert: ICryptCert;
   date: TDateTime): TCryptCertValidity;
 var
   c: TCryptCert;
-  x: TX509;
+  x, xa: TX509;
   a, f: ICryptCert;
   skid, akid: PRawByteString;
   level: integer;
@@ -4882,6 +4922,9 @@ begin
   result := cvInvalidDate;
   if not x.Signed.IsValidDate(date) then
     exit;
+  result := cvRevoked;
+  if IsRevokedX509(x) <> crrNotRevoked then // has a TX509 cache
+    exit;
   // search within our database of known certificates
   result := cvCorrupted;
   skid := @x.fRawSubjectKeyIdentifier;
@@ -4896,10 +4939,7 @@ begin
     exit;
   if x.IsSelfSigned then
   begin
-    if f = nil then
-      exit; // self-signed certs should be known
-    result := cvRevoked;
-    if IsRevokedX509(x) = crrNotRevoked then
+    if f <> nil then // self-signed certs should be known
       // verify the self signature of this trusted cert
       result := x.Verify(x, [], x.NotBefore);
     exit;
@@ -4918,11 +4958,9 @@ begin
     a := fTrust.FindBySubjectKeyRaw(akid^);
     if a = nil then
       exit;
-    result := cvRevoked;
-    if IsRevokedX509(x) <> crrNotRevoked then
-      exit;
     // verify the cert digital signature with the issuer public key
-    result := x.Verify(a.Handle, [], x.NotBefore); // has a TX509 cache
+    xa := a.Handle;
+    result := x.Verify(xa, [], x.NotBefore); // has a TX509 cache
     if result = cvValidSelfSigned then
     begin
       // we reached a root anchor: success
@@ -4933,7 +4971,10 @@ begin
       exit;
     // continue to the next level
     skid := akid;
-    x := a.Handle;
+    x := xa;
+    result := cvRevoked;
+    if IsRevokedX509(x) <> crrNotRevoked then
+      exit;
   end;
   // if we reached as many level as requested, consider it done
   if cert.IsSelfSigned then
