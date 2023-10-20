@@ -1632,7 +1632,7 @@ type
   /// the supported asymmetric algorithms, e.g. as published by OpenSSL
   // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
   // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
-  // accessible via CryptAsymOpenSsl[] and CryptCertAlgoOpenSsl[] factories
+  // accessible via CryptAsymOpenSsl[] and CryptCertOpenSsl[] factories
   // - mormot.crypt.ecc unit implements only caaES256
   // - mormot.crypt.x509 unit implements caaES256/caaRS256/caaRS384/caaRS512
   // - mormot.crypt.openssl unit implements them all
@@ -2712,6 +2712,15 @@ function StoreAlgo(const name: RawUtf8): TCryptStoreAlgo;
 function Store(const name: RawUtf8): ICryptStore;
 
 var
+  /// the prefered/default algorithm to be used wth X.509 certificates
+  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
+  // still be used for compatiblity with legacy systems
+  // - used e.g. by 'x509-store' or 'x509-pki' for its DefaultCertAlgo method
+  CryptAlgoDefault: TCryptAsymAlgo = caaES256;
+
+
+  (* TCryptAsym factories *)
+
   /// direct access to the internal TCryptAsym factories
   // - may be nil if mormot.crypt.ecc.pas or mormot.crypt.rsa.pas units
   // were not included
@@ -2723,45 +2732,45 @@ var
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
 
-  /// the prefered/default algorithm to be used wth X.509 certificates
-  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
-  // still be used for compatiblity with legacy systems
-  // - used e.g. by 'x509-store' or 'x509-pki' for its DefaultCertAlgo method
-  CryptCertAlgoDefault: TCryptAsymAlgo = caaES256;
+
+  (* ICryptCert factories *)
 
   /// direct access to the mormot.crypt.ecc.pas 'syn-ecc' algorithm
   // - may be nil if this unit was not included
-  CryptCertAlgoSyn: TCryptCertAlgo;
+  CryptCertSyn: TCryptCertAlgo;
 
   /// direct access to the mormot.crypt.x509.pas ICryptCert factories
   // - may be nil if this unit was not included
   // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
-  // $ CryptCertAlgoX509[caaRS256].New
-  CryptCertAlgoX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
-
-  /// direct access to the mormot.crypt.x509.pas ICryptStore factory
-  CryptStoreX509: TCryptStoreAlgo;
+  // $ CryptCertX509[caaRS256].New
+  CryptCertX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
   /// direct access to the mormot.crypt.openssl.pas ICryptCert factories
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - to return a ICryptCert instance using OpenSSL RSA 2048 key, use e.g.
-  // $ CryptCertAlgoOpenSsl[caaRS256].New
+  // $ CryptCertOpenSsl[caaRS256].New
   // - call RegisterOpenSsl once to initialize this lookup table
-  CryptCertAlgoOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
+  CryptCertOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
+
+  (* ICryptStore factories *)
 
   /// direct access to the mormot.crypt.ecc.pas 'syn-store' algorithm
   // - may be nil if this unit was not included
-  CryptStoreAlgoSyn: TCryptStoreAlgo;
+  CryptStoreSyn: TCryptStoreAlgo;
 
   /// direct access to the mormot.crypt.ecc.pas 'syn-store-nocache' algorithm
   // - may be nil if this unit was not included
-  CryptStoreAlgoSynNoCache: TCryptStoreAlgo;
+  CryptStoreSynNoCache: TCryptStoreAlgo;
+
+  /// direct access to the mormot.crypt.x509.pas ICryptStore factory
+  CryptStoreX509: TCryptStoreAlgo;
 
   /// direct access to the mormot.crypt.openssl.pas 'x509-store' algorithm
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - is currently nil because TCryptStoreOpenSsl is not stable yet
   // - call RegisterOpenSsl once to initialize this lookup table
-  CryptStoreAlgoOpenSsl: TCryptStoreAlgo;
+  CryptStoreOpenSsl: TCryptStoreAlgo;
 
 
 

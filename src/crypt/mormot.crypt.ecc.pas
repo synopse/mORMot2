@@ -5325,8 +5325,8 @@ constructor TCryptCertInternal.CreateFrom(aEcc: TEccCertificate);
 begin
   fEcc := aEcc;
   fEccByRef := true;
-  fMaxVersion := (CryptCertAlgoSyn as TCryptCertAlgoInternal).fMaxVersion;
-  Create(CryptCertAlgoSyn);
+  fMaxVersion := (CryptCertSyn as TCryptCertAlgoInternal).fMaxVersion;
+  Create(CryptCertSyn);
 end;
 
 destructor TCryptCertInternal.Destroy;
@@ -6009,7 +6009,7 @@ end;
 
 function TCryptStoreInternal.DefaultCertAlgo: TCryptCertAlgo;
 begin
-  result := CryptCertAlgoSyn;
+  result := CryptCertSyn;
 end;
 
 
@@ -6043,12 +6043,13 @@ begin
   // register this unit methods to our high-level cryptographic catalog
   CryptAsym[caaES256] := TCryptAsymInternal.Implements([
     'ES256', 'secp256r1', 'NISTP-256', 'prime256v1']);
-  CryptCertAlgoSyn := TCryptCertAlgoInternal.Implements([
+  CryptCertSyn := TCryptCertAlgoInternal.Implements([
     'syn-es256-v1', 'syn-es256']);
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
-  CryptStoreAlgoSyn := StoreAlgo('syn-store');
-  CryptStoreAlgoSynNoCache := StoreAlgo('syn-store-nocache');
+  CryptStoreSyn := StoreAlgo('syn-store');
+  CryptStoreSynNoCache := StoreAlgo('syn-store-nocache');
 end;
+
 
 
 initialization

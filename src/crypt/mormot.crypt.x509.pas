@@ -553,6 +553,7 @@ type
     function ExtensionArray(x: TXExtension): TRawUtf8DynArray;
     /// check a date/time coherency with NotBefore/NotAfter
     function IsValidDate(timeutc: TDateTime = 0): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -1054,10 +1055,11 @@ type
   end;
 
   /// 'x509-pki' ICryptStore using TX509 and TX509Crl as a full featured PKI
-  // - published here to make it expandable if needed by proper inheritance
   // - will maintain a cache of ICryptCert instances, a list of trusted
   // certificates, a list of signed CRL (received from a CA) and a list
   // of unsigned CRL (manually registered via the Revoke method)
+  // - Certification Path Validation follows RFC 5280 section 6 requirements
+  // - published here to make it expandable if needed by proper inheritance
   TCryptStoreX509 = class(TCryptStore)
   protected
     fCache: TCryptCertCacheX509;
@@ -1077,7 +1079,7 @@ type
     /// check both signed CRL list (for CA) and unsigned CRL list (manual Revoke)
     // - for a GetAuthorityKey AKID (which may be a CSV) and a Serial
     function IsRevokedAny(const AuthorityKeyIdentifiers,
-      SerialNumber: RawUtf8): TCryptCertRevocationReason;
+      SerialNumber: RawUtf8): TCryptCertRevocationReason; virtual;
     // ICryptStore methods
     procedure Clear; override;
     function Save: RawByteString; override;
@@ -1139,15 +1141,17 @@ type
 
 
 
-{ **************** Registration of our X.509 Engine to the TCryptCert Factory }
+{ ******** Registration of our X.509 Engine to the TCryptCert/TCryptStore Factory }
 
 /// high-level function to decode X.509 certificate main properties using TX509
 // - assigned to mormot.core.secure X509Parse() redirection by this unit
 function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
-/// compute a enw ICryptCert instance from DER or PEM input
+/// compute a new ICryptCert instance from DER or PEM input
 // - returns nil if the input is not correct or not supported
+// - or returns a TCryptCertX509 instance from function TX509.LoadFromDer()
 // - will guess the proper TCryptCertAlgoX509 to use for the ICryptCert
+// - called e.g. by TCryptCertCacheX509 which is the preferred factory
 function X509Load(const Cert: RawByteString): ICryptCert;
 
 
@@ -2557,13 +2561,16 @@ begin
    if (fLastVerifyAuthPublicKey = '') or
       (SortDynArrayRawByteString(fLastVerifyAuthPublicKey,
         Authority.Signed.SubjectPublicKey) <> 0) then
+   begin
      // check signature with asymmetric RSA or ECC cryptography
+     if Signed.fCachedDer = '' then
+       Signed.ComputeCachedDer;
      if not Authority.PublicKey.Verify(
-              SignatureAlgorithm, Signed.ToDer, SignatureValue) then
-        exit
-     else
-       // don't call slow PublicKey.Verify() the next time with this authority
-       fLastVerifyAuthPublicKey := Authority.Signed.SubjectPublicKey;
+              SignatureAlgorithm, Signed.fCachedDer, SignatureValue) then
+        exit;
+     // don't call slow PublicKey.Verify() the next time with this authority
+     fLastVerifyAuthPublicKey := Authority.Signed.SubjectPublicKey;
+   end;
    // if we reached here, this certificate content has been verified
    if Authority = self then
      result := cvValidSelfSigned
@@ -3538,9 +3545,9 @@ end;
 function TX509CrlList.IsRevoked(const AuthorityKeyIdentifiers,
   SerialNumber: RawUtf8): TCryptCertRevocationReason;
 var
+  akid: RawUtf8;
   sn: RawByteString;
   p: PUtf8Char;
-  akid: RawUtf8;
   crl: TX509Crl;
   ndx: PtrInt;
 begin
@@ -3548,16 +3555,23 @@ begin
   if (self = nil) or
      (fCount = 0) or
      (AuthorityKeyIdentifiers = '') or
-     not HumanHexToBin(SerialNumber, sn) then
+     (SerialNumber = '') then
     exit;
+  p := nil;
+  akid := AuthorityKeyIdentifiers;
+  if PosExChar(',', akid) <> 0 then
+    p := pointer(akid); // needs specific CSV process
   fSafe.ReadLock; // reentrant multi-read lock
   try
-    p := pointer(AuthorityKeyIdentifiers); // may be a CSV
     repeat
-      GetNextItem(p, ',', akid);
+      if p <> nil then
+        GetNextItem(p, ',', akid);
       crl := FindByKeyIssuer(akid); // O(log(n)) binary search
       if crl = nil then
         continue;
+      if (sn = '') and
+         not HumanHexToBin(SerialNumber, sn) then
+        exit;
       ndx := crl.Signed.FindRevoked(sn);
       if ndx < 0 then
         continue;
@@ -3826,7 +3840,7 @@ begin
     if x.LoadFromDer(der) and
        (x.SignatureAlgorithm <> xsaNone) then // support PEM or DER input
     begin
-      result := CryptCertAlgoX509[XSA_TO_CAA[x.SignatureAlgorithm]].FromHandle(x);
+      result := CryptCertX509[XSA_TO_CAA[x.SignatureAlgorithm]].FromHandle(x);
       if result <> nil then
         x := nil;
     end;
@@ -4489,7 +4503,7 @@ begin
     pem := Authority.Save(Content, '', ccfPem); // e.g. a TCryptCertAlgoOpenSsl
     if pem = '' then
       exit;
-    TempCryptCert := CryptCertAlgoX509[Authority.AsymAlgo].New;
+    TempCryptCert := CryptCertX509[Authority.AsymAlgo].New;
     if TempCryptCert.Load(pem, Content, '') then
       result := TempCryptCert.Instance as TCryptCertX509;
   finally
@@ -4583,7 +4597,7 @@ constructor TCryptStoreX509.Create(algo: TCryptAlgo);
 begin
   inherited Create(algo);
   fValidDepth := 5;
-  fCache := TCryptCertCacheX509.Create(10 * 60); // clean up cache after 10 min
+  fCache := TCryptCertCacheX509.Create;
   fTrust := TCryptCertListX509.Create;
   fCA := TCryptCertListX509.Create;
   fSignedCrl := TX509CrlList.Create;
@@ -4597,7 +4611,6 @@ begin
   fSignedCrl.Free;
   fCA.Free;
   fTrust.Free;
-  fCache.Free;
 end;
 
 procedure TCryptStoreX509.Clear;
@@ -4645,8 +4658,7 @@ function TCryptStoreX509.IsRevokedAny(const AuthorityKeyIdentifiers,
   SerialNumber: RawUtf8): TCryptCertRevocationReason;
 begin
   result := crrNotRevoked;
-  if (self = nil) or
-     (AuthorityKeyIdentifiers = '') or
+  if (AuthorityKeyIdentifiers = '') or
      (SerialNumber = '') then
     exit;
   result := fSignedCrl.IsRevoked(AuthorityKeyIdentifiers, SerialNumber);
@@ -4753,7 +4765,7 @@ begin
     exit;
   c := cert.Instance;
   if (c = nil) or
-     not c.InheritsFrom(TCryptCertX509) then
+     (PClass(c)^ <> TCryptCertX509) then
     exit;
   x := TCryptCertX509(c).fX509;
   if x = nil then
@@ -4843,7 +4855,7 @@ end;
 
 function TCryptStoreX509.DefaultCertAlgo: TCryptCertAlgo;
 begin
-  result := CryptCertAlgoX509[CryptCertAlgoDefault];
+  result := CryptCertX509[CryptAlgoDefault];
 end;
 
 
@@ -4873,9 +4885,9 @@ begin
   // register 'x509-rs256' 'x509-rs384' 'x509-rs512' 'x509-ps256' 'x509-ps384'
   // 'x509-ps512' and 'x509-es256' certificates
   // - may be overriden by the faster mormot.crypt.openssl if included
-  // - but still accessible from CryptCertAlgoX509[] global factories
+  // - but still accessible from CryptCertX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
-    CryptCertAlgoX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
+    CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
   // register 'x509-pki' store to our catalog
   CryptStoreX509 := TCryptStoreAlgoX509.Create('x509-pki');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included

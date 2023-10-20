@@ -645,7 +645,7 @@ const
     [hsrConnectionUpgrade]);
 
 
-/// some pre-computed CryptCertAlgoOpenSsl[caaRS256].New key for Windows
+/// some pre-computed CryptCertOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
 // - as used e.g. by secTLSSelfSigned with the SChannel API on server side
 function PrivKeyCertPfx: RawByteString;
@@ -2723,7 +2723,7 @@ var
   keypass: RawUtf8;
 begin
   certfile := TemporaryFileName;
-  if CryptCertAlgoOpenSsl[Algo] = nil then
+  if CryptCertOpenSsl[Algo] = nil then
   begin
     FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
     keypass := 'pass';
@@ -2732,7 +2732,7 @@ begin
   begin
     keyfile := TemporaryFileName;
     keypass := CardinalToHexLower(Random32);
-    cert := CryptCertAlgoOpenSsl[Algo].
+    cert := CryptCertOpenSsl[Algo].
               Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650);
     cert.SaveToFile(certfile, cccCertOnly, '', ccfPem);
     cert.SaveToFile(keyfile, cccPrivateKeyOnly, keypass, ccfPem);

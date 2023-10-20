@@ -3135,8 +3135,8 @@ begin
       CheckUtf8(cv = cvValidSigned, 's1=%', [ToText(cv)^]);
     // persist the Store
     st2 := str.NewFrom(st1.Save);
-    CheckEqual(st2.Count, 3);
     Check(st2 <> nil);
+    CheckEqual(st2.Count, 3);
     Check(st2.IsValid(c1) = cvValidSelfSigned, '2c1');
     Check(st2.IsValid(c2) = cvValidSigned, '2c2');
     Check(st2.IsValid(c3) = cvValidSigned, '2c3');
@@ -4065,7 +4065,7 @@ begin
     crl.Free;
   end;
   // validate a X.509 CRL generation and signature with a temporay authority
-  auth := CryptCertAlgoX509[caaES256].Generate([cuCA, cuCrlSign], 'trust anchor');
+  auth := CryptCertX509[caaES256].Generate([cuCA, cuCrlSign], 'trust anchor');
   crl := TX509Crl.Create;
   try
     CheckEqual(crl.CrlNumber, 0);

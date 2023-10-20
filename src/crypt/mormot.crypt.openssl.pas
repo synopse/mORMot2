@@ -2702,7 +2702,7 @@ begin
     result := nil
   else
     // guess the type because the PX509 item has no ICryptCert.AsymAlgo any more
-    result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
+    result := CryptCertOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
 function TCryptStoreOpenSsl.GetBySubjectKey(const Key: RawUtf8): ICryptCert;
@@ -2713,7 +2713,7 @@ begin
   if x = nil then
     result := nil
   else
-    result := CryptCertAlgoOpenSsl[X509Algo(x)].FromHandle(x);
+    result := CryptCertOpenSsl[X509Algo(x)].FromHandle(x);
 end;
 
 function ToReason(r: integer): TCryptCertRevocationReason;
@@ -2832,7 +2832,7 @@ end;
 
 function TCryptStoreOpenSsl.DefaultCertAlgo: TCryptCertAlgo;
 begin
-  result := CryptCertAlgoOpenSsl[CryptCertAlgoDefault];
+  result := CryptCertOpenSsl[CryptAlgoDefault];
 end;
 
 function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;
@@ -3096,9 +3096,9 @@ begin
     if OpenSslSupports(osa) then
     begin
       CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
-      CryptCertAlgoOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
+      CryptCertOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
     end;
-  CryptStoreAlgoOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
+  CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;
   // and also for X.509 parsing
