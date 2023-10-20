@@ -2407,6 +2407,11 @@ type
     // - i.e. the Subject Key Identifier (SKID) of a X.509 Certificate or
     // the serial number for syn-ecc
     function FindBySubjectKey(const Key: RawUtf8): ICryptCert;
+    /// search the list for binary ICryptCert.GetSubjectKey using a hashed index
+    // - could be used instead of FindBySubjectKey() if the key is already
+    // decoded into its HumanHexToBin() raw binary format
+    function FindBySubjectKeyRaw(const Key: RawByteString): ICryptCert;
+      {$ifdef HASINLINE} inline; {$endif}
     /// remove a ICryptCert from the list using its indexed GetSubjectKey
     function DeleteBySubjectKey(const Key: RawUtf8): boolean;
     /// return a copy of the internal list items
@@ -7187,6 +7192,11 @@ begin
   result := nil;
   if HumanHexToBin(Key, bin) then
     fList.FindAndCopy(bin, result);
+end;
+
+function TCryptCertList.FindBySubjectKeyRaw(const Key: RawByteString): ICryptCert;
+begin
+  fList.FindAndCopy(Key, result);
 end;
 
 function TCryptCertList.DeleteBySubjectKey(const Key: RawUtf8): boolean;
