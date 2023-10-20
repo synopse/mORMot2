@@ -2675,6 +2675,7 @@ constructor TCryptStoreOpenSsl.Create(algo: TCryptAlgo);
 begin
   inherited Create(algo);
   fCache := TCryptCertCacheOpenSsl.Create;
+  TCryptCertCacheOpenSsl(fCache).SetCryptCertClass(TCryptCertOpenSsl);
   fStore := NewCertificateStore;
 end;
 

@@ -2076,6 +2076,10 @@ type
     procedure RaiseError(const Msg: shortstring); overload;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
+    // used by TCryptCertList.Find and TCryptCertCache.Find
+    class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
+      Method: TCryptCertComparer; Count, MaxCount: integer;
+      out Chain: ICryptCerts); virtual;
   public
     // ICryptCert methods
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
@@ -2354,11 +2358,10 @@ type
   TCryptCertAbstractList = class(TSynPersistent)
   protected
     fList: TSynDictionary; // thread-safe RawByteString(SKID/DER)/ICryptCert
+    fCryptCertClass: TCryptCertClass;
+    procedure SetCryptCertClass(c: TCryptCertClass); // from TCryptStore.Create
     function GetCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
-      Method: TCryptCertComparer; Count, MaxCount: integer;
-      out Chain: ICryptCerts); virtual;
   public
     // finalize the ICryptCert storage
     destructor Destroy; override;
@@ -2376,7 +2379,18 @@ type
     function List: ICryptCerts;
     /// persist all stored Certificates in PEM format
     procedure SaveToPem(W: TTextWriter; WithExplanatoryText: boolean = false);
+    /// direct low-level to the internal raw dictionary
+    // - store a hash table of ICryptCert values
+    // - for TCryptCertCache, RawByteString keys are DER certificates content
+    // - for TCryptCertList, RawByteString keys are SKID/GetSubjectKey binary
+    // - use rather the List function if you just want to access the stored values
+    property RawList: TSynDictionary
+      read fList;
   published
+    /// the class of TCryptCert currently stored in this list
+    // - is either set in the overriden constructor, or retrieved at runtime
+    property CryptCertClass: TCryptCertClass
+      read fCryptCertClass;
     /// how many instances are currently stored in this instance
     property Count: integer
       read GetCount;
@@ -6680,6 +6694,59 @@ begin
   RaiseError('Generate: % error', [api]); // raise ECryptCert
 end;
 
+class procedure TCryptCert.InternalFind(Cert: PICryptCert;
+  const Value: RawByteString; Method: TCryptCertComparer;
+  Count, MaxCount: integer; out Chain: ICryptCerts);
+var
+  found: boolean;
+  res: integer;
+begin
+  // O(n) efficient search loop with some temporary memory allocation
+  res := 0;
+  while Count <> 0 do
+  begin
+    case Method of
+      ccmSerialNumber:
+        found := HumanHexCompare(Cert^.GetSerial, Value) = 0;
+      ccmSubjectName:
+        found := EqualBuf(Cert^.GetSubjectName, Value);
+      ccmIssuerName:
+        found := EqualBuf(Cert^.GetIssuerName, Value);
+      ccmSubjectCN:
+        found := EqualBuf(Cert^.GetSubject('CN'), Value);
+      ccmIssuerCN:
+        found := EqualBuf(Cert^.GetIssuer('CN'), Value);
+      ccmSubjectKey:
+        found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
+      ccmAuthorityKey:
+        found := CsvContains(Cert^.GetAuthorityKey, Value);
+      ccmSubjectAltName:
+        found := FindRawUtf8(Cert^.GetSubjects, Value) >= 0;
+      ccmIssuerAltName:
+        found := FindRawUtf8(Cert^.GetIssuers, Value) >= 0;
+      ccmBinary:
+        found := EqualBuf(Cert^.Save, Value);
+      ccmSha1:
+        found := IdemPropNameU(Cert^.GetDigest(hfSha1), Value);
+      ccmSha256:
+        found := IdemPropNameU(Cert^.GetDigest(hfSha256), Value);
+    else
+      found := false; // unsupported search method (e.g. ccmUsage)
+    end;
+    if found then
+    begin
+      InterfaceArrayAddCount(Chain, res, Cert^);
+      dec(MaxCount);
+      if MaxCount = 0 then
+        break;
+    end;
+    inc(Cert);
+    dec(Count);
+  end;
+  if res <> length({%H-}Chain) then
+    DynArrayFakeLength(Chain, res);
+end;
+
 function TCryptCert.GenerateFromCsr(const Csr: RawByteString;
   const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert;
 var
@@ -7091,62 +7158,14 @@ end;
 
 { TCryptCertAbstractList }
 
+procedure TCryptCertAbstractList.SetCryptCertClass(c: TCryptCertClass);
+begin
+  fCryptCertClass := c;
+end;
+
 function TCryptCertAbstractList.GetCount: integer;
 begin
   result := fList.Count;
-end;
-
-procedure TCryptCertAbstractList.InternalFind(Cert: PICryptCert;
-  const Value: RawByteString; Method: TCryptCertComparer; Count,
-  MaxCount: integer; out Chain: ICryptCerts);
-var
-  found: boolean;
-  res: integer;
-begin
-  // O(n) efficient search loop with some temporary memory allocation
-  res := 0;
-  while Count <> 0 do
-  begin
-    case Method of
-      ccmSerialNumber:
-        found := HumanHexCompare(Cert^.GetSerial, Value) = 0;
-      ccmSubjectName:
-        found := EqualBuf(Cert^.GetSubjectName, Value);
-      ccmIssuerName:
-        found := EqualBuf(Cert^.GetIssuerName, Value);
-      ccmSubjectCN:
-        found := EqualBuf(Cert^.GetSubject('CN'), Value);
-      ccmIssuerCN:
-        found := EqualBuf(Cert^.GetIssuer('CN'), Value);
-      ccmSubjectKey:
-        found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
-      ccmAuthorityKey:
-        found := CsvContains(Cert^.GetAuthorityKey, Value);
-      ccmSubjectAltName:
-        found := FindRawUtf8(Cert^.GetSubjects, Value) >= 0;
-      ccmIssuerAltName:
-        found := FindRawUtf8(Cert^.GetIssuers, Value) >= 0;
-      ccmBinary:
-        found := EqualBuf(Cert^.Save, Value);
-      ccmSha1:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha1), Value);
-      ccmSha256:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha256), Value);
-    else
-      break; // unsupported search method (e.g. ccmUsage)
-    end;
-    if found then
-    begin
-      InterfaceArrayAddCount(Chain, res, Cert^);
-      dec(MaxCount);
-      if MaxCount = 0 then
-        break;
-    end;
-    inc(Cert);
-    dec(Count);
-  end;
-  if res <> length({%H-}Chain) then
-    DynArrayFakeLength(Chain, res);
 end;
 
 destructor TCryptCertAbstractList.Destroy;
@@ -7166,7 +7185,9 @@ begin
   fList.Safe^.ReadLock;
   try
     // non-blocking O(n) search with some temporary memory allocations
-    InternalFind(fList.Values.Value^, Value, Method, fList.Count, MaxCount, result);
+    if fCryptCertClass <> nil then
+      fCryptCertClass.InternalFind(
+        fList.Values.Value^, Value, Method, fList.Count, MaxCount, result);
   finally
     fList.Safe^.ReadUnLock;
   end;
@@ -7234,6 +7255,7 @@ end;
 function TCryptCertCache.Load(const Cert: RawByteString): ICryptCert;
 var
   der: RawByteString;
+  inst: TCryptCert;
 begin
   result := nil;
   // normalize and validate input
@@ -7248,10 +7270,17 @@ begin
   // try to retrieve and share an existing instance
   if fList.FindAndCopy(der, result) then
     exit;
-  // we need to create a new TX509 instance
+  // we need to create a new TCryptCert instance
   result := InternalLoad(der);
   if result = nil then
     exit;
+  // ensure it has a coherent implementation class
+  inst := result.Instance;
+  if pointer(fCryptCertClass) <> PPointer(inst)^ then
+    if fCryptCertClass <> nil then
+      exit // return the instance, but don't cache it
+    else
+      fCryptCertClass := PPointer(inst)^;
   // add this new instance to the internal cache
   if fList.Count > 128 then
     fList.DeleteDeprecated; // make some room (once a second and if RefCount=1)
@@ -7312,6 +7341,7 @@ end;
 function TCryptCertCache.NewList: TCryptCertList;
 begin
   result := TCryptCertList.Create;
+  result.fCryptCertClass := fCryptCertClass; // propagate the class
 end;
 
 function TCryptCertCache.NewList(const Pem: RawUtf8): TCryptCertList;
@@ -7334,9 +7364,19 @@ end;
 function TCryptCertList.Add(const Cert: ICryptCert): boolean;
 var
   bin: RawByteString;
+  inst: TCryptCert;
 begin
-  result := Assigned(Cert) and
-            HumanHexToBin(Cert.GetSubjectKey, bin) and
+  result := false;
+  if not Assigned(Cert) then
+    exit;
+  inst := Cert.Instance;
+  if pointer(fCryptCertClass) <> PPointer(inst)^ then
+    if fCryptCertClass = nil then
+      fCryptCertClass := PPointer(inst)^
+    else
+      raise ECryptCert.CreateUtf8('%.Add(%) but we already store %',
+        [self, inst, fCryptCertClass]);
+  result := HumanHexToBin(inst.GetSubjectKey, bin) and
             (fList.Add(bin, Cert) >= 0);
 end;
 

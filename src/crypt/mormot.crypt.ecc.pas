@@ -5921,6 +5921,7 @@ begin
   inherited Create(algo);
   fEcc := TEccCertificateChain.Create;
   fCache := TCryptCertCacheInternal.Create;
+  TCryptCertCacheInternal(fCache).SetCryptCertClass(TCryptCertInternal);
 end;
 
 destructor TCryptStoreInternal.Destroy;
