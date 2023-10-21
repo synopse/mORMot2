@@ -3555,12 +3555,13 @@ begin
     // brute force O(n) linear search
     p := pointer(fList);
     for i := 1 to fCount do
+    begin
       if CsvContains(
            p^.Signed.Extension[xceIssuerAlternativeName], DnsName) and
          p^.IsValidDate(TimeUtc) then
-        ObjArrayAdd(result, p^)
-      else
-        inc(p);
+        ObjArrayAdd(result, p^);
+      inc(p);
+    end;
   finally
     fSafe.ReadUnLock;
   end;
@@ -4596,7 +4597,7 @@ begin
   id := pointer(cert.fRawAuthorityKeyIdentifier);
   if id = nil then
   begin
-    id := @cert.fRawSubjectKeyIdentifier;
+    id := @cert.fRawSubjectKeyIdentifier; // self-signed
     idcount := 1;
   end
   else
@@ -4618,7 +4619,7 @@ var
   flags: integer;
 begin
   // very quick resolution using the per-TX509 instance cache tag
-  result := crrNotRevoked;
+  result := crrNotRevoked; // most common case is "known as not revoked"
   if cert = nil then
     exit;
   flags := cert.fIsRevokedTag;
