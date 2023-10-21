@@ -2073,9 +2073,11 @@ type
   TCryptCert = class(TCryptInstance, ICryptCert)
   protected
     fLastLoadFromFileName: TFileName;
+    fIndexer: TObject; // a TCryptCertAbstractList owner for EnsureCanWrite
     procedure RaiseError(const Msg: shortstring); overload;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
+    procedure EnsureCanWrite(const Context: shortstring); virtual;
     // used by TCryptCertList.Find and TCryptCertCache.Find
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
       Method: TCryptCertComparer; Count, MaxCount: integer;
@@ -6694,6 +6696,13 @@ begin
   RaiseError('Generate: % error', [api]); // raise ECryptCert
 end;
 
+procedure TCryptCert.EnsureCanWrite(const Context: shortstring);
+begin
+  if (fIndexer <> nil) and
+     not IsVoid then
+    RaiseError('% not allowed: currently indexed by a %', [Context, fIndexer]);
+end;
+
 class procedure TCryptCert.InternalFind(Cert: PICryptCert;
   const Value: RawByteString; Method: TCryptCertComparer;
   Count, MaxCount: integer; out Chain: ICryptCerts);
@@ -6752,6 +6761,7 @@ function TCryptCert.GenerateFromCsr(const Csr: RawByteString;
 var
   x: ICryptCert;
 begin
+  EnsureCanWrite('GenerateFromCsr');
   // by default, CreateSelfSignedCsr generates a self-signed certificate as CSR
   // - mormot.crypt.openssl and mormot.crypt.x509 will generate a proper CSR
   result := nil;
@@ -6844,6 +6854,7 @@ end;
 function TCryptCert.LoadFromFile(const Source: TFileName;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 begin
+  EnsureCanWrite('LoadFromFile');
   fLastLoadFromFileName := Source;
   result := Load(StringFromFile(Source), Content, PrivatePassword);
 end;
@@ -7184,7 +7195,7 @@ begin
     exit;
   fList.Safe^.ReadLock;
   try
-    // non-blocking O(n) search with some temporary memory allocations
+    // non-blocking O(n) search - overriden in TCryptCertX509 for performance
     if fCryptCertClass <> nil then
       fCryptCertClass.InternalFind(
         fList.Values.Value^, Value, Method, fList.Count, MaxCount, result);
@@ -7281,6 +7292,7 @@ begin
       exit // return the instance, but don't cache it
     else
       fCryptCertClass := PPointer(inst)^;
+  inst.fIndexer := self; // don't touch once indexed
   // add this new instance to the internal cache
   if fList.Count > 128 then
     fList.DeleteDeprecated; // make some room (once a second and if RefCount=1)
@@ -7376,6 +7388,7 @@ begin
     else
       raise ECryptCert.CreateUtf8('%.Add(%) but we already store %',
         [self, inst, fCryptCertClass]);
+  inst.fIndexer := self; // don't touch once indexed
   result := HumanHexToBin(inst.GetSubjectKey, bin) and
             (fList.Add(bin, Cert) >= 0);
 end;

@@ -3970,6 +3970,8 @@ function TCryptCertX509.Generate(Usages: TCryptCertUsages;
 var
   auth: TCryptCertX509;
 begin
+  if fX509 <> nil then
+    RaiseErrorGenerate('duplicated call');
   auth := VerifyAuthority(Authority);
   fX509 := TX509.Create;
   try
@@ -3998,6 +4000,8 @@ function TCryptCertX509.GenerateFromCsr(const Csr: RawByteString;
 var
   auth: TCryptCertX509;
 begin
+  if fX509 <> nil then
+    RaiseErrorGenerate('(FromCsr) duplicated call');
   auth := VerifyAuthority(Authority);
   fX509 := TX509.Create;
   try
@@ -4192,6 +4196,7 @@ begin
         end;
       cccCertOnly:
         begin
+          EnsureCanWrite('Load');
           Clear;
           fX509 := TX509.Create;
           //FileFromString(Saved, '/home/ab/Downloads/generated.der');
@@ -4303,6 +4308,7 @@ procedure TCryptCertX509.Sign(const Authority: ICryptCert);
 var
   auth: TCryptCertX509;
 begin
+  EnsureCanWrite('Sign');
   if Assigned(Authority) and
     Authority.HasPrivateSecret then
   begin

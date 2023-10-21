@@ -2386,6 +2386,7 @@ begin
       end;
     exit; // don't clear the main X.509 certificate
   end;
+  EnsureCanWrite('Load');
   Clear;
   if Saved = '' then
     exit;
@@ -2487,6 +2488,7 @@ begin
   if Assigned(Authority) and
      Authority.HasPrivateSecret then
   begin
+    EnsureCanWrite('Sign');
     auth := Authority.Instance as TCryptCertOpenSsl;
     a := auth.fX509;
     if (a <> fX509) and

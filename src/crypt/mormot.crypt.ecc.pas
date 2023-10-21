@@ -5651,6 +5651,7 @@ begin
   try
     if content <> cccPrivateKeyOnly then
     begin
+      EnsureCanWrite('Load');
       FreeAndNil(fEcc);
       FillZero(fPrivateKeyOnly);
     end;
@@ -5770,12 +5771,13 @@ end;
 
 procedure TCryptCertInternal.Sign(const Authority: ICryptCert);
 begin
+  EnsureCanWrite('Sign');
   if (fEcc <> nil) and
      Authority.Instance.InheritsFrom(TCryptCertInternal) and
      Authority.HasPrivateSecret then
     TEccCertificateSecret(Authority.Handle).SignCertificate(fEcc)
   else
-    RaiseError('Sign: CA');
+    RaiseError('Sign: invalid CA');
 end;
 
 function TCryptCertInternal.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
