@@ -1662,23 +1662,9 @@ type
   /// set of supported asymmetric algorithms
   TCryptAsymAlgos = set of TCryptAsymAlgo;
 
-  /// ICryptCert.Save possible output formats
-  // - 'syn-es256' from mormot.crypt.ecc certificate will use its own proprietary
-  // format, i.e. SaveToBinary/SaveToSecureBinary for ccfBinary, or non-standard
-  // '-----BEGIN/END SYNECC CERTIFICATE-----' headers for ccfPem
-  // - 'x509-rs256'..'x509-es256' from mormot.crypt.openssl will use the standard
-  // x509 format, as DER (or PKCS12 if PrivatePassword is set) for ccfBinary,
-  // or PEM for ccfPEM (concatenating the private key if PrivatePassword is set)
-  // - ccfHexa, ccfBase64 and ccfBase64Uri will use the ccfBinary output, then
-  // encode it as Hexadecimal or Base-64 (URI)
-  TCryptCertFormat = (
-    ccfBinary,
-    ccfPem,
-    ccfHexa,
-    ccfBase64,
-    ccfBase64Uri);
-
   /// the algorithms supported by a ICryptPublicKey/ICryptPrivateKey
+  // - does not match TCryptAsymAlgo because ckaRsa/ckaRsaPss do not define the
+  // hash algorithm needed, so dedicated caaRSxxx/caaPSxxx items are needed
   TCryptKeyAlgo = (
     ckaNone,
     ckaRsa,
@@ -1732,7 +1718,7 @@ type
     function ToSubjectPublicKey: RawByteString;
     /// return the private key in the TCryptCertX509.Save expected format
     // - wrap ToDer with PEM and/or PrivateKeyEncrypt() encoding
-    function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
+    function Save(AsPem: boolean; const Password: SpiUtf8): RawByteString;
     /// sign a memory buffer with RSA or ECC using the stored private key
     function Sign(Algorithm: TCryptAsymAlgo;
       Data: pointer; DataLen: integer): RawByteString; overload;
@@ -1797,8 +1783,7 @@ type
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; virtual; abstract;
     function ToDer: RawByteString; virtual; abstract;
     function ToSubjectPublicKey: RawByteString; virtual; abstract;
-    function Save(Format: TCryptCertFormat;
-      const Password: SpiUtf8): RawByteString; virtual;
+    function Save(AsPem: boolean; const Password: SpiUtf8): RawByteString; virtual;
     function Sign(Algorithm: TCryptAsymAlgo;
       Data: pointer; DataLen: integer): RawByteString; overload; virtual;
     function Sign(Algorithm: TCryptAsymAlgo;
@@ -1876,6 +1861,22 @@ type
 
   /// a set of Digital Signature results
   TCryptCertValidities = set of TCryptCertValidity;
+
+  /// ICryptCert.Save possible output formats
+  // - 'syn-es256' from mormot.crypt.ecc certificate will use its own proprietary
+  // format, i.e. SaveToBinary/SaveToSecureBinary for ccfBinary, or non-standard
+  // '-----BEGIN/END SYNECC CERTIFICATE-----' headers for ccfPem
+  // - 'x509-rs256'..'x509-es256' from mormot.crypt.openssl will use the standard
+  // x509 format, as DER (or PKCS12 if PrivatePassword is set) for ccfBinary,
+  // or PEM for ccfPEM (concatenating the private key if PrivatePassword is set)
+  // - ccfHexa, ccfBase64 and ccfBase64Uri will use the ccfBinary output, then
+  // encode it as Hexadecimal or Base-64 (URI)
+  TCryptCertFormat = (
+    ccfBinary,
+    ccfPem,
+    ccfHexa,
+    ccfBase64,
+    ccfBase64Uri);
 
   /// convenient wrapper of X.509 Certificate subject name X.501 fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
@@ -2296,7 +2297,7 @@ type
   /// abstract parent class for ICryptCert factories
   TCryptCertAlgo = class(TCryptAlgo)
   protected
-    fOsa: TCryptAsymAlgo; // should be set by the overriden constructor
+    fCaa: TCryptAsymAlgo; // should be set by the overriden constructor
   public
     /// main factory to create a new Certificate instance with this algorithm
     // - return a new void instance, ready to call e.g. ICryptCert.Load
@@ -2349,7 +2350,7 @@ type
   published
     /// the asymmetric algorithm used for these certificates
     property AsymAlgo: TCryptAsymAlgo
-      read fOsa;
+      read fCaa;
   end;
 
   TCryptCertCache = class;
@@ -2970,7 +2971,9 @@ var
   (* ICryptPublicKey / ICryptPrivateKey factories *)
 
   /// RSA/ECC public key factory
-  // - implemented e.g. by mormot.crypt.x509 with TCryptPublicKeyX509
+  // - implemented e.g. by mormot.crypt.ecc with TCryptPublicKeyEcc,
+  // mormot.crypt.rsa with TCryptPublicKeyRsa or mormot.crypt.opensssl with
+  // with TCryptPublicKeyOpenSsl
   // - use as such:
   // $ var key: ICryptPublicKey;
   // $ ...
@@ -2979,7 +2982,9 @@ var
   CryptPublicKey: array[TCryptKeyAlgo] of TCryptPublicKeyClass;
 
   /// RSA/ECC private key factory
-  // - implemented e.g. by mormot.crypt.x509 with TCryptPrivateKeyX509
+  // - implemented e.g. by mormot.crypt.ecc with TCryptPrivateKeyEcc,
+  // mormot.crypt.rsa with TCryptPrivateKeyRsa or mormot.crypt.opensssl with
+  // with TCryptPrivateKeyOpenSsl
   // - use as such:
   // $ var key: ICryptPrivateKey;
   // $ ...
@@ -6920,7 +6925,7 @@ end;
 
 { TCryptPrivateKey }
 
-function TCryptPrivateKey.Save(Format: TCryptCertFormat;
+function TCryptPrivateKey.Save(AsPem: boolean;
   const Password: SpiUtf8): RawByteString;
 var
   der, bin: RawByteString;
@@ -6936,7 +6941,7 @@ begin
     der := ToDer;
     if Password = '' then
       // save as plain unencrypted PEM/DER
-      if Format = ccfPem then
+      if AsPem then
         if fKeyAlgo in CKA_RSA then
           k := pemRsaPrivateKey
         else
@@ -6948,7 +6953,7 @@ begin
       bin := der; // for FillZero()
       der := PrivateKeyEncrypt(
                bin, CKA_SALT[fKeyAlgo], Password, CKA_ROUNDS[fKeyAlgo]);
-      if Format = ccfPem then
+      if AsPem then
         if fKeyAlgo in CKA_RSA then
           k := pemSynopseRsaEncryptedPrivateKey
         else
@@ -7041,7 +7046,7 @@ end;
 
 function TCryptCertAlgo.JwtName: RawUtf8;
 begin
-  result := CAA_JWT[fOsa];
+  result := CAA_JWT[fCaa];
 end;
 
 
@@ -8836,7 +8841,7 @@ begin
   derlen := length(signature);
   der := pointer(signature);
   if (derlen < 50) or
-     (der[0] <> ord(ASN1_SEQ)) or
+     (der[0] <> ASN1_SEQ) or
      (der[1] > derlen - 2) then
     exit;
   eccbytes := CAA_SIZE[algo];
@@ -8918,7 +8923,6 @@ var
   algoseq: RawByteString; // algorithm OID(s) as encoded by CkaToSeq()
 begin
   pos := 1;
-  writeln(AsnDump(PkcsDer));
   if (AsnNext(pos, PkcsDer) <> ASN1_SEQ) or
      (AsnNextRaw(pos, PkcsDer, algoseq) <> ASN1_SEQ) or
      (AsnNextRaw(pos, PkcsDer, result) <> ASN1_BITSTR) then

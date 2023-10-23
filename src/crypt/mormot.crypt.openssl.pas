@@ -18,7 +18,7 @@ unit mormot.crypt.openssl;
 
   TL;DR: On x86_64, our mormot.crypt.core.pas asm is stand-alone and faster
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
-         For ECC/RSA, mormot.crypt.ecc256r1/rsa are slower than OpenSSL so this
+         For ECC/RSA, mormot.crypt.ecc/rsa are slower than OpenSSL so this
          unit will override their implementation during its initialization.
 
    Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
@@ -652,7 +652,7 @@ function X509Algo(x: PX509): TCryptAsymAlgo;
 
 /// compute a new ICryptCert OpenSSL instance from DER or PEM input
 // - returns nil if the input is not correct or not supported
-// - or returns a TCryptCertOpenSsl instance from function LoadCertificate()
+// - returns non-nil TCryptCertOpenSsl instance from function LoadCertificate()
 // - will guess the proper TCryptCertAlgoOpenSsl to use for the ICryptCert
 // - called e.g. by TCryptCertCacheOpenSsl
 function OpenSslLoad(const Cert: RawByteString): ICryptCert;
@@ -670,8 +670,8 @@ function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boo
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
 // faster than our stand-alone C/pascal version
-// - register OpenSSL for our Asym() high-level factory (via an hidden
-// TCryptAsymOsl class)
+// - register OpenSSL for our Asym() and Cert() high-level factory (via hidden
+// TCryptAsymOsl and TCryptCertAlgoOpenSsl class)
 procedure RegisterOpenSsl;
 
 type
@@ -700,8 +700,7 @@ type
     destructor Destroy; override;
     function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
       const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; override;
-    function Save(Format: TCryptCertFormat;
-      const Password: SpiUtf8): RawByteString; override;
+    function Save(AsPem: boolean; const Password: SpiUtf8): RawByteString; override;
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
     function Sign(Algorithm: TCryptAsymAlgo;
       Data: pointer; DataLen: integer): RawByteString; overload; override;
@@ -1831,14 +1830,14 @@ end;
 type
   TCryptAsymOsl = class(TCryptAsym)
   protected
-    fOsa: TCryptAsymAlgo;
+    fCaa: TCryptAsymAlgo;
     fDefaultHashAlgorithm: RawUtf8;
     fEvpType: integer;
     fBitsOrCurve: integer;
     function Algo(hasher: TCryptHasher): RawUtf8;
   public
     constructor Create(const name: RawUtf8); overload; override;
-    constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
+    constructor Create(caa: TCryptAsymAlgo); reintroduce; overload;
     procedure GeneratePem(out pub, priv: RawUtf8; const privpwd: RawUtf8); override;
     function Sign(hasher: TCryptHasher; msg: pointer; msglen: PtrInt;
       const priv: RawByteString; out sig: RawByteString;
@@ -1860,18 +1859,18 @@ end;
 
 constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
-  if not OpenSslSupports(fOsa) then
+  if not OpenSslSupports(fCaa) then
     raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, name]);
-  fDefaultHashAlgorithm := CAA_EVPMD[fOsa];
-  fEvpType := CAA_EVPTYPE[fOsa];
-  fBitsOrCurve := CAA_BITSORCURVE[fOsa];
+  fDefaultHashAlgorithm := CAA_EVPMD[fCaa];
+  fEvpType := CAA_EVPTYPE[fCaa];
+  fBitsOrCurve := CAA_BITSORCURVE[fCaa];
   inherited Create(name); // also register it to GlobalCryptAlgo main list
 end;
 
-constructor TCryptAsymOsl.Create(osa: TCryptAsymAlgo);
+constructor TCryptAsymOsl.Create(caa: TCryptAsymAlgo);
 begin
-  fOsa := osa;
-  Create(CAA_JWT[osa]);
+  fCaa := caa;
+  Create(CAA_JWT[caa]);
 end;
 
 procedure TCryptAsymOsl.GeneratePem(out pub, priv: RawUtf8;
@@ -1993,13 +1992,13 @@ begin
     fKeyAlgo := Algorithm;
 end;
 
-function TCryptPrivateKeyOpenSsl.Save(Format: TCryptCertFormat;
+function TCryptPrivateKeyOpenSsl.Save(AsPem: boolean;
   const Password: SpiUtf8): RawByteString;
 begin
   if (self = nil) or
      (fPrivKey = nil) then
     result := ''
-  else if Format = ccfPem then
+  else if AsPem then
     result := fPrivKey.PrivateToPem(Password)
   else
     result := fPrivKey.PrivateToDer(Password);
@@ -2108,7 +2107,7 @@ type
     fEvpType: integer;
     fBitsOrCurve: integer;
   public
-    constructor Create(osa: TCryptAsymAlgo); reintroduce; overload;
+    constructor Create(caa: TCryptAsymAlgo); reintroduce; overload;
     function NewPrivateKey: PEVP_PKEY;
     function New: ICryptCert; override; // = TCryptCertOpenSsl.Create(self)
     function FromHandle(Handle: pointer): ICryptCert; override;
@@ -2208,13 +2207,13 @@ type
 
 { TCryptCertAlgoOpenSsl }
 
-constructor TCryptCertAlgoOpenSsl.Create(osa: TCryptAsymAlgo);
+constructor TCryptCertAlgoOpenSsl.Create(caa: TCryptAsymAlgo);
 begin
-  fOsa := osa;
-  fHash := OpenSslGetMd(CAA_EVPMD[osa], 'TCryptCertAlgoOpenSsl.Create');
-  fEvpType := CAA_EVPTYPE[osa];
-  fBitsOrCurve := CAA_BITSORCURVE[osa];
-  Create('x509-' + LowerCase(CAA_JWT[osa]));
+  fCaa := caa;
+  fHash := OpenSslGetMd(CAA_EVPMD[caa], 'TCryptCertAlgoOpenSsl.Create');
+  fEvpType := CAA_EVPTYPE[caa];
+  fBitsOrCurve := CAA_BITSORCURVE[caa];
+  Create('x509-' + LowerCase(CAA_JWT[caa]));
 end;
 
 function TCryptCertAlgoOpenSsl.NewPrivateKey: PEVP_PKEY;

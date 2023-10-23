@@ -5599,7 +5599,7 @@ type
 
 constructor TCryptCertAlgoInternal.Create(const name: RawUtf8);
 begin
-  fOsa := caaES256;
+  fCaa := caaES256;
   inherited Create(name);
   if name = 'syn-es256-v1' then
     fMaxVersion := 1
