@@ -86,7 +86,7 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 - JWT Implementation of `HS*` and `S3*` Symmetric Algorithms
 - JWT Implementation of `ES256` Asymmetric Algorithm
 - JWT Implementation of `RS256`/`RS384`/`RS512` Asymmetric Algorithms
-- JWT Implementation via `ICryptPublicKey`/`ICryptPrivateKey` Factories
+- `TJwtCrypt` Implementation via `ICryptPublicKey`/`ICryptPrivateKey` Factories
 
 ### mormot.crypt.openssl
 

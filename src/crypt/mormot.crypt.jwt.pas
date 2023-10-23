@@ -11,10 +11,11 @@ unit mormot.crypt.jwt;
     - JWT Implementation of HS* and S3* Symmetric Algorithms
     - JWT Implementation of ES256 Asymmetric Algorithm
     - JWT Implementation of RS256/RS384/RS512 Asymmetric Algorithms
-    - JWT Implementation via ICryptPublicKey/ICryptPrivateKey Factories
+    - TJwtCrypt Implementation via ICryptPublicKey/ICryptPrivateKey
 
    Uses optimized mormot.crypt.core.pas and mormot.crypt.ecc for its process.
-   See mormot.crypt.openssl.pas to support all other JWT algorithms.
+   Include mormot.crypt.openssl.pas to support all other JWT algorithms.
+   The TJwtCrypt class is the way to go to support JWT in your projects.
 
   *****************************************************************************
 }
@@ -686,7 +687,7 @@ type
   // - this may be the easiest way to work with JWT in our framework
   // - you may try the other dedicated classes, from this unit (TJwtEs256 ..
   // TJwtPs512) or from mormot.crypt.openssl (the TJwt*Osl classes) but this
-  // class seems to be the fastest, and with the less overhead
+  // class seems to be the fastest, cleanest, and with the less overhead
   TJwtCrypt = class(TJwtAbstract)
   protected
     fAsymAlgo: TCryptAsymAlgo;
@@ -697,6 +698,9 @@ type
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
       var jwt: TJwtContent); override;
   public
+    /// check if a given algorithm is supported by this class
+    // - just a wrapper to check that CryptPublicKey[aAlgo] factory do exist
+    class function Supports(aAlgo: TCryptAsymAlgo): boolean;
     /// initialize this JWT instance from a supplied public key and algorithm
     // - if no aPublicKey is supplied, it will generate a new key pair and the
     // PublicKey/PrivateKey properties could be used for proper persistence
@@ -717,9 +721,6 @@ type
     // supplied to the constructor
     function LoadPrivateKey(const aPrivateKey: RawByteString;
       const aPassword: SpiUtf8 = ''): boolean;
-    /// check if a given algorithm is supported by this class
-    // - just a wrapper to check that CryptPublicKey[aAlgo] factory do exist
-    class function Supports(aAlgo: TCryptAsymAlgo): boolean;
     /// the asymmetric algorithm with hashing, as supplied to the constructor
     property AsymAlgo: TCryptAsymAlgo
       read fAsymAlgo;
@@ -1733,7 +1734,7 @@ begin
   if not Assigned(fPrivateKey) then
     raise EJwtException.CreateUtf8(
       '%.ComputeSignature requires a private key', [self]);
-  sig := fPrivateKey.Sign(fAsymAlgo, headpayload); // =encrypt with private key
+  sig := fPrivateKey.Sign(fAsymAlgo, headpayload); // = encrypt with private key
   if sig = '' then
     raise EJwtException.CreateUtf8(
       '%.ComputeSignature: % Sign failed', [self, fAlgorithm]);
@@ -1745,8 +1746,8 @@ procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
 begin
   if not Assigned(fPublicKey) then
     raise EJwtException.CreateUtf8(
-      '%.ComputeSignature requires a public key', [self]);
-  if fPublicKey.Verify(fAsymAlgo, headpayload, signature) then
+      '%.CheckSignature requires a public key', [self]);
+  if fPublicKey.Verify(fAsymAlgo, headpayload, signature) then // = decrypt
     jwt.result := jwtValid
   else
     jwt.result := jwtInvalidSignature;
