@@ -3390,6 +3390,9 @@ begin
     begin
       CryptAsymOpenSsl[caa] := TCryptAsymOsl.Create(caa);
       CryptCertOpenSsl[caa] := TCryptCertAlgoOpenSsl.Create(caa);
+      if caa = caaES256 then
+        // mormot.crypt.ecc has less overhead (at least than OpenSSL 3.0)
+        continue;
       CryptPublicKey[CAA_CKA[caa]] := TCryptPublicKeyOpenSsl;
       CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
     end;
