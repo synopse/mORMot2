@@ -1626,24 +1626,21 @@ type
       const hashername: RawUtf8 = ''): boolean; overload;
   end;
 
-  /// the supported asymmetric algorithms, e.g. as published by OpenSSL
-  // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
-  // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
-  // accessible via CryptAsymOpenSsl[] and CryptCertOpenSsl[] factories
-  // - mormot.crypt.ecc unit implements only caaES256
-  // - mormot.crypt.x509 unit implements caaES256/caaRS256/caaRS384/caaRS512
-  // - mormot.crypt.openssl unit implements them all
+  /// the supported asymmetric algorithms, following the JWT high-level naming
   // - caaES256, caaES384 and caaES512 match OpenSSL EVP_PKEY_EC with
   // prime256v1, NID_secp384r1 and NID_secp512r1 curves
   // - caaRS256, caaRS384 and caaRS512 match OpenSSL EVP_PKEY_RSA with
-  // 2048-bit from SHA-256, SHA-384 and SHA-512 digest method
+  // SHA-256, SHA-384 and SHA-512 digest method
   // - caaPS256, caaPS384 and caaPS512 match OpenSSL EVP_PKEY_RSA_PSS with
-  // 2048-bit from SHA-256, SHA-384 and SHA-512 digest method
+  // SHA-256, SHA-384 and SHA-512 digest method
   // - caaEdDSA match OpenSSL EVP_PKEY_ED25519 curve
   // - note that caaES256K is NID_secp256k1 which was defined for completeness,
   // but should appear for special needs only: caaES256 is to be preferred,
   // and is also significantly faster
-  // - our RSA algorithms generates RSA_DEFAULT_GENERATION_BITS = 2048-bit,
+  // - mormot.crypt.ecc unit implements caaES256 with native pascal
+  // - mormot.crypt.rsa unit implements all caaRS256 .. caaPS512 algorithms
+  // - mormot.crypt.openssl unit implements all those algorithms
+  // - our RSA wrappers generate with RSA_DEFAULT_GENERATION_BITS = 2048-bit,
   // but our units can read and manage any other size of existing certificates
   // generated e.g. by OpenSSL or our mormot.crypt.rsa unit
   TCryptAsymAlgo = (

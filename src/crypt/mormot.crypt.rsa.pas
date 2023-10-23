@@ -3281,7 +3281,7 @@ begin
     ckaRsaPss:
       begin
         fRsa := CKA_TO_RSA[Algorithm].Create;
-        if fRsa.LoadFromPublicKeyDer(PublicKeySaved) then
+        if fRsa.LoadFromPublicKeyPem(PublicKeySaved) then
         begin
           fKeyAlgo := Algorithm;
           result := true;

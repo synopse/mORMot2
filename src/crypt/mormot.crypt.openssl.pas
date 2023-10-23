@@ -2435,7 +2435,6 @@ begin
       except
         fX509 := nil; // on error, rollback (and call x.Free)
       end;
-    //writeln('IsSelfSigned=',x.IsSelfSigned);
     // the certificate was generated so can be stored within this instance
     fX509 := x;
     fPrivKey := key;
