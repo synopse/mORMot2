@@ -897,6 +897,8 @@ type
   public
     // the client verion numbers
     major_version, minor_version, update_num, patch_num, port_update_num: sword;
+    /// Maximum supported varchar string length
+    MaxVarCharLength: Integer;
     /// if OCI handles directly Int64 bound parameters (revision >= 11.2)
     SupportsInt64Params: boolean;
     /// OCI will call OCILobGetChunkSize when retrieving BLOB/CLOB content
@@ -1693,6 +1695,10 @@ begin
   SupportsInt64Params := (major_version > 11) or
                          ((major_version = 11) and
                           (minor_version > 1));
+  if major_version > 7 then
+    MaxVarCharLength := 4000
+  else
+    MaxVarCharLength := 2000;
   UseLobChunks := true; // by default
 end;
 

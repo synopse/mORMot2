@@ -110,6 +110,9 @@ const
   /// use rather CP_LATIN1 with mORMot 2
   CODEPAGE_LATIN1 = CP_LATIN1;
 
+  /// Maximum bytes for single UTF-8 char.
+  UTF8_CHAR_MAX_BYTES = 4;
+
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
 
 type

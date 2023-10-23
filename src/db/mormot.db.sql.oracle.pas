@@ -1637,11 +1637,19 @@ begin
                       begin
 txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT_LVC fails)
                         oLength := Length(VData) + 1; // include #0
+                        L := OCI.MaxVarCharLength * UTF8_CHAR_MAX_BYTES;
+                          // input text pre-allocation for OUT param
+                        if (VInOut in [paramOut, paramInOut]) and (oLength < L) then
+                        begin
+                          SetLength(VData, L);
+                          if VInOut = paramInOut then
+                            VData[oLength] := #0;
+                          oLength := L + 1;
+                        end;
                         if oLength = 1 then // '' will just map one #0
                           oData := @VData
                         else
                           oData := pointer(VData);
-                        // for OUT param, input text shall be pre-allocated
                       end;
                     ftBlob:
                       if VInOut <> paramIn then
