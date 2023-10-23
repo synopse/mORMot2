@@ -325,12 +325,16 @@ type
 
 /// retrieve a low-level PEVP_MD digest from its algorithm name
 // - raise an EOpenSslHash if this algorithm is not found
-function OpenSslGetMd(const Algorithm: RawUtf8; const Caller: shortstring): PEVP_MD; overload;
+function OpenSslGetMdByName(const Algorithm: RawUtf8;
+  const Caller: shortstring): PEVP_MD; overload;
 
-/// retrieve a low-level PEVP_MD digest from mORMot THashAlgo algorithm enum
+/// retrieve a low-level PEVP_MD digest from mORMot THashAlgo enum
 // - returns nil if not found, e.g. if OpenSsl is not available
 function OpenSslGetMd(Algorithm: THashAlgo): PEVP_MD; overload;
 
+/// retrieve a low-level PEVP_MD digest from mORMot TCryptAsymAlgo enum
+// - returns nil if not found, e.g. if OpenSsl is not available
+function OpenSslGetMd(Algorithm: TCryptAsymAlgo): PEVP_MD; overload;
 
 
 { ************** OpenSSL Asymmetric Cryptography }
@@ -447,19 +451,6 @@ type
   end;
 
 const
-  CAA_EVPMD: array[TCryptAsymAlgo] of RawUtf8 = (
-    '',       // caaES256 will recognize '' as SHA-256 hash
-    'SHA384', // caaES384
-    'SHA512', // caaES512
-    '',       // caaES256K
-    '',       // caaRS256
-    'SHA384', // caaRS384
-    'SHA512', // caaRS512
-    '',       // caaPS256
-    'SHA384', // caaPS384
-    'SHA512', // caaPS512
-    'null');  // caaEdDSA Ed25519 includes its own SHA-512
-
   CAA_EVPTYPE: array[TCryptAsymAlgo] of integer = (
     EVP_PKEY_EC,          // caaES256
     EVP_PKEY_EC,          // caaES384
@@ -1201,7 +1192,8 @@ begin
 end;
 
 
-function OpenSslGetMd(const Algorithm: RawUtf8; const Caller: shortstring): PEVP_MD;
+function OpenSslGetMdByName(const Algorithm: RawUtf8;
+  const Caller: shortstring): PEVP_MD;
 begin
   EOpenSslHash.CheckAvailable(nil, Caller);
   if Algorithm = 'null' then
@@ -1220,9 +1212,10 @@ end;
 
 var
   _HashAlgoMd: array[THashAlgo] of PEVP_MD;
+  _AsymAlgoMd: array[TCryptAsymAlgo] of PEVP_MD;
 
 const
-  _HASHALGONAME: array[THashAlgo] of PUtf8Char = (
+  HF_MD: array[THashAlgo] of PUtf8Char = (
     'md5',        // hfMD5
     'sha1',       // hfSHA1
     'sha256',     // hfSHA256
@@ -1232,6 +1225,19 @@ const
     'sha3-256',   // hfSHA3_256
     'sha3-512');  // hfSHA3_512
 
+  CAA_MD: array[TCryptAsymAlgo] of RawUtf8 = (
+    'SHA256', // caaES256
+    'SHA384', // caaES384
+    'SHA512', // caaES512
+    'SHA256', // caaES256K
+    'SHA256', // caaRS256
+    'SHA384', // caaRS384
+    'SHA512', // caaRS512
+    'SHA256', // caaPS256
+    'SHA384', // caaPS384
+    'SHA512', // caaPS512
+    'null');  // caaEdDSA Ed25519 includes its own SHA-512
+
 function OpenSslGetMd(Algorithm: THashAlgo): PEVP_MD;
 var
   h: THashAlgo;
@@ -1239,9 +1245,21 @@ begin
   if (_HashAlgoMd[hfSHA256] = nil) and
      OpenSslIsAvailable then
     for h := low(h) to high(h) do
-      _HashAlgoMd[h] := EVP_get_digestbyname(_HASHALGONAME[h]);
+      _HashAlgoMd[h] := EVP_get_digestbyname(HF_MD[h]);
   result := _HashAlgoMd[Algorithm];
 end;
+
+function OpenSslGetMd(Algorithm: TCryptAsymAlgo): PEVP_MD;
+var
+  caa: TCryptAsymAlgo;
+begin
+  if (_AsymAlgoMd[caaES256] = nil) and
+     OpenSslIsAvailable then
+    for caa := low(caa) to high(caa) do
+      _AsymAlgoMd[caa] := EVP_get_digestbyname(pointer(CAA_MD[caa]));
+  result := _AsymAlgoMd[Algorithm];
+end;
+
 
 
 { ************** OpenSSL Asymmetric Cryptography }
@@ -1255,7 +1273,7 @@ begin
   pkey := LoadPrivateKey(PrivateKey, PrivateKeyLen, PrivateKeyPassword);
   try
     Signature := pkey^.Sign(
-      OpenSslGetMd(Algorithm, 'OpenSslSign'), Message, MessageLen);
+      OpenSslGetMdByName(Algorithm, 'OpenSslSign'), Message, MessageLen);
     result := length(Signature);
   finally
     if pkey <> nil then
@@ -1270,7 +1288,7 @@ var
   md: PEVP_MD;
   pkey: PEVP_PKEY;
 begin
-  md := OpenSslGetMd(Algorithm, 'OpenSslVerify');
+  md := OpenSslGetMdByName(Algorithm, 'OpenSslVerify');
   pkey := LoadPublicKey(PublicKey, PublicKeyLen, PublicKeyPassword);
   if (pkey = nil) or
      (SignatureLen <= 0)  then
@@ -1659,7 +1677,7 @@ begin
   if not OpenSslSupports(aGenEvpType) then
     raise EOpenSsl.CreateFmt('%s.Create: unsupported %s',
       [ClassNameShort(self)^, aJwtAlgorithm]);
-  fAlgoMd := OpenSslGetMd(aHashAlgorithm, 'TJwtOpenSsl.Create');
+  fAlgoMd := OpenSslGetMdByName(aHashAlgorithm, 'TJwtOpenSsl.Create');
   fHashAlgorithm := aHashAlgorithm;
   fGenEvpType := aGenEvpType;
   fGenBitsOrCurve := aGenBitsOrCurve;
@@ -1726,7 +1744,7 @@ var
 begin
   caa := GetAsymAlgo; // call overriden method
   fAlgorithm := CAA_JWT[caa];
-  fHashAlgorithm := CAA_EVPMD[caa];
+  fHashAlgorithm := CAA_MD[caa];
   fGenEvpType := CAA_EVPTYPE[caa];
   fGenBitsOrCurve := CAA_BITSORCURVE[caa];
 end;
@@ -1861,7 +1879,7 @@ constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
   if not OpenSslSupports(fCaa) then
     raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, name]);
-  fDefaultHashAlgorithm := CAA_EVPMD[fCaa];
+  fDefaultHashAlgorithm := CAA_MD[fCaa];
   fEvpType := CAA_EVPTYPE[fCaa];
   fBitsOrCurve := CAA_BITSORCURVE[fCaa];
   inherited Create(name); // also register it to GlobalCryptAlgo main list
@@ -1926,9 +1944,7 @@ function TCryptPublicKeyOpenSsl.Verify(Algorithm: TCryptAsymAlgo;
   Data, Sig: pointer; DataLen, SigLen: integer): boolean;
 begin
   // we don't check "if fPubKey=nil" because may be called without EVP_PKEY
-  result := fPubKey.Verify(
-              OpenSslGetMd(CAA_EVPMD[Algorithm], 'ICryptPublicKey.Verify'),
-              Sig, Data, SigLen, DataLen);
+  result := fPubKey.Verify(OpenSslGetMd(Algorithm), Sig, Data, SigLen, DataLen);
 end;
 
 function TCryptPublicKeyOpenSsl.GetParams(out x, y: RawByteString): boolean;
@@ -2033,8 +2049,7 @@ begin
   if (self <> nil) and
      (CAA_CKA[Algorithm] = fKeyAlgo) and
      (fPrivKey <> nil) then
-    result := fPrivKey.Sign(
-      OpenSslGetMd(CAA_EVPMD[Algorithm], 'ICryptPrivateKey.Sign'), Data, DataLen);
+    result := fPrivKey.Sign(OpenSslGetMd(Algorithm), Data, DataLen);
 end;
 
 function TCryptPrivateKeyOpenSsl.ToDer: RawByteString;
@@ -2210,7 +2225,7 @@ type
 constructor TCryptCertAlgoOpenSsl.Create(caa: TCryptAsymAlgo);
 begin
   fCaa := caa;
-  fHash := OpenSslGetMd(CAA_EVPMD[caa], 'TCryptCertAlgoOpenSsl.Create');
+  fHash := OpenSslGetMd(caa);
   fEvpType := CAA_EVPTYPE[caa];
   fBitsOrCurve := CAA_BITSORCURVE[caa];
   Create('x509-' + LowerCase(CAA_JWT[caa]));
@@ -3383,7 +3398,7 @@ begin
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   // register OpenSSL methods to our high-level cryptographic catalog
-  // may override existing mormot.crypt.ecc256r1/rsa implementations
+  // may override existing mormot.crypt.ecc/mormot.crypt.rsa implementations
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for caa := low(caa) to high(caa) do
     if OpenSslSupports(caa) then
@@ -3391,7 +3406,7 @@ begin
       CryptAsymOpenSsl[caa] := TCryptAsymOsl.Create(caa);
       CryptCertOpenSsl[caa] := TCryptCertAlgoOpenSsl.Create(caa);
       if caa = caaES256 then
-        // mormot.crypt.ecc has less overhead (at least than OpenSSL 3.0)
+        // mormot.crypt.ecc has less overhead (at least with OpenSSL 3.0)
         continue;
       CryptPublicKey[CAA_CKA[caa]] := TCryptPublicKeyOpenSsl;
       CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
