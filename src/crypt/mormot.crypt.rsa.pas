@@ -731,9 +731,9 @@ type
   public
     /// finalize this instance
     destructor Destroy; override;
-    /// unserialized the public key from raw binary stored in a X.509 certificate
+    /// unserialized the public key from most known formats
     function Load(Algorithm: TCryptKeyAlgo;
-      const SubjectPublicKey: RawByteString): boolean; override;
+      const PublicKeySaved: RawByteString): boolean; override;
     /// as used by ICryptCert.GetKeyParams
     function GetParams(out x, y: RawByteString): boolean; override;
     /// use RSA sealing, i.e. encryption with this public key
@@ -3270,18 +3270,18 @@ begin
 end;
 
 function TCryptPublicKeyRsa.Load(Algorithm: TCryptKeyAlgo;
-  const SubjectPublicKey: RawByteString): boolean;
+  const PublicKeySaved: RawByteString): boolean;
 begin
   result := false;
   if (fKeyAlgo <> ckaNone) or
-     (SubjectPublicKey = '') then
+     (PublicKeySaved = '') then
     exit;
   case Algorithm of
     ckaRsa,
     ckaRsaPss:
       begin
         fRsa := CKA_TO_RSA[Algorithm].Create;
-        if fRsa.LoadFromPublicKeyDer(SubjectPublicKey) then
+        if fRsa.LoadFromPublicKeyDer(PublicKeySaved) then
         begin
           fKeyAlgo := Algorithm;
           result := true;

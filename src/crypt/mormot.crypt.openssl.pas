@@ -674,7 +674,7 @@ type
   public
     destructor Destroy; override;
     function Load(Algorithm: TCryptKeyAlgo;
-      const SubjectPublicKey: RawByteString): boolean; override;
+      const PublicKeySaved: RawByteString): boolean; override;
     function Verify(Algorithm: TCryptAsymAlgo;
       Data, Sig: pointer; DataLen, SigLen: integer): boolean; overload; override;
     function GetParams(out x, y: RawByteString): boolean; override;
@@ -1923,17 +1923,17 @@ begin
 end;
 
 function TCryptPublicKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
-  const SubjectPublicKey: RawByteString): boolean;
+  const PublicKeySaved: RawByteString): boolean;
 begin
   result := false;
   if (fKeyAlgo <> ckaNone) or
      (Algorithm = ckaNone) or
-     (SubjectPublicKey = '') or
+     (PublicKeySaved = '') or
      (fPubKey <> nil) then
     exit;
-  fPubKey := LoadPublicKey(X509PubKeyToDer(Algorithm, SubjectPublicKey));
+  fPubKey := LoadPublicKey(X509PubKeyToDer(Algorithm, PublicKeySaved));
   if fPubKey = nil then
-    fPubKey := LoadPublicKey(SubjectPublicKey); // try full PKCS format
+    fPubKey := LoadPublicKey(PublicKeySaved); // try full PKCS format
   if fPubKey = nil then
     exit;
   fKeyAlgo := Algorithm;

@@ -1679,9 +1679,12 @@ type
 
   /// abstract interface to a Public Key, as returned by CryptPublicKey[] factory
   ICryptPublicKey = interface
-    /// unserialize a X.509 SubjectPublicKey raw binary
+    /// unserialize a public key content
+    // - this instance should be void, i.e. just created with no prior Load
+    // - will first try from X.509 SubjectPublicKey raw binary, then the main
+    // known PEM or DER usual serialization formats
     function Load(Algorithm: TCryptKeyAlgo;
-      const SubjectPublicKey: RawByteString): boolean;
+      const PublicKeySaved: RawByteString): boolean;
     /// verify the RSA or ECC signature of a memory buffer
     function Verify(Algorithm: TCryptAsymAlgo;
       Data, Sig: pointer; DataLen, SigLen: integer): boolean; overload;
@@ -1707,7 +1710,8 @@ type
     /// unserialized the private key from DER binary or PEM text
     // - this instance should be void, i.e. just created with no prior Load
     // - will also ensure the private key do match the associated public key
-    // - decode PKCS#8 PrivateKeyInfo for RSA and prime256v1
+    // - is able to decode and potentially decrypt a serialized key, with a
+    // PKCS#8 Password for OpenSSL, and our proprietary PrivateKeyDecrypt()
     function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
       const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
     /// create a new private / public key pair
@@ -1720,7 +1724,8 @@ type
     /// return the associated public key as stored in a X509 certificate
     function ToSubjectPublicKey: RawByteString;
     /// return the private key in the TCryptCertX509.Save expected format
-    // - wrap ToDer with PEM and/or PrivateKeyEncrypt() encoding
+    // - is able to encode and potentially encrypt a serialized key, with a
+    // PKCS#8 Password for OpenSSL, and our proprietary PrivateKeyEncrypt()
     function Save(AsPem: boolean; const Password: SpiUtf8): RawByteString;
     /// sign a memory buffer with RSA or ECC using the stored private key
     function Sign(Algorithm: TCryptAsymAlgo;
@@ -1759,7 +1764,7 @@ type
   public
     // ICryptPublicKey methods
     function Load(Algorithm: TCryptKeyAlgo;
-      const SubjectPublicKey: RawByteString): boolean; virtual; abstract;
+      const PublicKeySaved: RawByteString): boolean; virtual; abstract;
     function Verify(Algorithm: TCryptAsymAlgo; Data, Sig: pointer;
       DataLen, SigLen: integer): boolean; overload; virtual;
     function Verify(Algorithm: TCryptAsymAlgo;
@@ -2703,7 +2708,7 @@ const
   RSA_DEFAULT_GENERATION_BITS = 2048;
 
   /// the JWT algorithm names according to our known asymmetric algorithms
-  // - as implemented e.g. by TJwtAbstractOsl
+  // - as implemented e.g. by mormot.crypt.jwt
   CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
     'ES256',      // caaES256
     'ES384',      // caaES384

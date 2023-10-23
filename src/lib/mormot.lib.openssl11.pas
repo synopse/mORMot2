@@ -7868,7 +7868,10 @@ end;
 function LoadPrivateKey(const Saved: RawByteString;
   const Password: SpiUtf8): PEVP_PKEY;
 begin
-  result := LoadPrivateKey(pointer(Saved), length(Saved), Password);
+  if Saved <> '' then
+    result := LoadPrivateKey(pointer(Saved), length(Saved), Password)
+  else
+    result := nil;
 end;
 
 function LoadPublicKey(PublicKey: pointer; PublicKeyLen: integer;
@@ -7899,7 +7902,10 @@ end;
 function LoadPublicKey(const Saved: RawByteString;
   const Password: SpiUtf8): PEVP_PKEY;
 begin
-  result := LoadPublicKey(pointer(Saved), length(Saved), Password);
+  if Saved <> '' then
+    result := LoadPublicKey(pointer(Saved), length(Saved), Password)
+  else
+    result := nil;
 end;
 
 

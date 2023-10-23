@@ -443,9 +443,9 @@ begin
   end
   else
   begin
+    // no key identifier, need to provide JSON Web Key
     if not fCert.HasPrivateSecret then
       raise EJwsHttp.Create('No private key');
-    // No key identifier, need to provide JSON Web Key
     jwk := fCert.JwkCompute;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
     // before or after any syntaxic elements and with the required members
