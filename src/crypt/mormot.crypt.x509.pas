@@ -8,7 +8,6 @@ unit mormot.crypt.x509;
 
    X.509 Certificates Implementation - see RFC 5280
     - X.509 Fields Logic
-    - RSA and ECC Public/Private Key support for X.509
     - X.509 Certificates and Certificate Signing Request (CSR)
     - X.509 Certificate Revocation List (CRL)
     - X.509 Private Key Infrastructure (PKI)
@@ -237,9 +236,6 @@ function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
 
 const
-  /// set of the Public Key Algorithms using RSA cryptography
-  xkaRsaAny = [xkaRsa, xkaRsaPss];
-
   /// internal lookup table from X.509 Signature to Public Key Algorithms
   XSA_TO_XKA: array[TXSignatureAlgorithm] of TXPublicKeyAlgorithm = (
     xkaNone,     // xsaNone
@@ -274,7 +270,7 @@ const
     caaES256);   // xsaSha256Ecc256
 
   /// internal lookup table from ICryptCert Algorithms to X.509 Signature
-  AA_TO_XSA: array[TCryptAsymAlgo] of TXSignatureAlgorithm = (
+  CAA_TO_XSA: array[TCryptAsymAlgo] of TXSignatureAlgorithm = (
     xsaSha256Ecc256,  // caaES256
     xsaNone,          // caaES384
     xsaNone,          // caaES512
@@ -304,6 +300,33 @@ const
     'RSA encryption',      // xkaRsa
     'RSA-PSS encryption',  // xkaRsaPss
     'prime256v1 ECDSA');   // xkaEcc256
+
+  /// internal lookup table from X.509 Public Key Algorithm to our key algorithm
+  XKA_TO_CKA: array[TXPublicKeyAlgorithm] of TCryptKeyAlgo = (
+    ckaNone,      // xkaNone
+    ckaRsa,       // xkaRsa
+    ckaRsaPss,    // xkaRsaPss
+    ckaEcc256);   // xkaEcc256
+
+  /// internal lookup table from our key algorithm to X.509 Public Key Algorithm
+  // - this unit does not support all key types yet
+  CKA_TO_XKA: array[TCryptKeyAlgo] of TXPublicKeyAlgorithm = (
+    xkaNone,      // ckaNone
+    xkaRsa,       // ckaRsa
+    xkaRsaPss,    // ckaRsaPss
+    xkaEcc256,    // ckaEcc256
+    xkaNone,      // ckaEcc384
+    xkaNone,      // ckaEcc512
+    xkaNone,      // ckaEcc256k
+    xkaNone);     // ckaEdDSA
+
+  /// internal lookup table from X.509 Public Key Algorithm to our key algorithm
+  // - this unit does not support all key types yet
+  XKA_TO_CAA: array[TXPublicKeyAlgorithm] of TCryptAsymAlgo = (
+    caaES256,  // xkaNone
+    caaRS256,  // xkaRsa
+    caaPS256,  // xkaRsaPss
+    caaES256); // xkaEcc256
 
   /// the OID of all known TX509Name attributes, as defined in RFC 5280 A.1
   XA_OID: array[TXAttr] of PUtf8Char = (
@@ -379,96 +402,12 @@ const
   ASN1_OID_X509_CRL_ISSUER  = '2.5.29.29';
 
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
-function XkaToSeq(xka: TXPublicKeyAlgorithm): RawByteString;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
 function OidToXa(const oid: RawByteString): TXAttr;
 function OidToXe(const oid: RawByteString): TXExtension;
 function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
 function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
-
-
-{ **************** RSA and ECC Public/Private Key support for X.509 }
-
-type
-  /// store a RSA or ECC public key for TX509
-  TXPublicKey = class
-  protected
-    fRsa: TRsa;
-    fEcc: TEcc256r1VerifyAbstract;
-    fEccPub: TEccPublicKey;
-    fSubjectPublicKey: RawByteString;
-    fAlgo: TXPublicKeyAlgorithm;
-  public
-    /// unserialized the public key from raw binary stored in a X.509 certificate
-    function Load(Algorithm: TXPublicKeyAlgorithm;
-      const SubjectPublicKey: RawByteString): boolean;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// verify the RSA or ECC signature of a given hash
-    // - also checking the store OID for RSA so that it do match the Hash algorithm
-    function Verify(Sig: pointer; Dig: THash512Rec; SigLen, DigLen: integer;
-      Hash: THashAlgo): boolean; overload;
-    /// verify the RSA or ECC signature of a memory buffer
-    function Verify(DigAlgo: TXSignatureAlgorithm;
-      Data, Sig: pointer; DataLen, SigLen: integer): boolean; overload;
-    /// verify the RSA or ECC signature of a memory buffer
-    function Verify(DigAlgo: TXSignatureAlgorithm;
-      const Data, Sig: RawByteString): boolean; overload;
-    /// as used by TCryptCertX509.GetPrivateKeyParams
-    function GetParams(out x, y: RawByteString): boolean;
-    /// use EciesSeal or RSA sealing, i.e. encryption with this public key
-    function Seal(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString;
-  end;
-
-  /// store a RSA or prime256v1 private key for TX509
-  TXPrivateKey = class
-  protected
-    fRsa: TRsa;
-    fEcc: TEccPrivateKey;
-    fAlgo: TXPublicKeyAlgorithm;
-  public
-    /// unserialized the private key from DER binary or PEM text
-    // - will also ensure the private key do match the associated public key
-    // - decode PKCS#8 PrivateKeyInfo for RSA and prime256v1
-    function Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
-      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
-    /// create a new private / public key pair
-    // - returns the associated public key binary in SubjectPublicKey format
-    function Generate(Algorithm: TXPublicKeyAlgorithm): RawByteString;
-    /// compute a self-signed Certificate Signing Request as PEM
-    // - generate a new private / public key pair if none is already available
-    function ComputeSelfSignedCsr(Algorithm: TXSignatureAlgorithm;
-      const Subjects: RawUtf8; Usages: TCryptCertUsages;
-      Fields: PCryptCertFields): RawUtf8;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// return the private key as raw binary
-    // - follow PKCS#8 PrivateKeyInfo encoding for RSA and prime256v1
-    function ToDer: RawByteString;
-    /// return the associated public key as stored in a X509 certificate
-    function ToSubjectPublicKey: RawByteString;
-    /// return the private key in the TCryptCertX509.Save expected format
-    // - wrap ToDer with PEM and/or PrivateKeyEncrypt() encoding
-    function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
-    /// sign a memory buffer digest with RSA or ECC using the stored private key
-    // - storing the DigAlgo Hash algorithm OID for RSA
-    function Sign(const Dig: THash512Rec; DigLen: integer;
-      DigAlgo: TXSignatureAlgorithm): RawByteString; overload;
-    /// sign a memory buffer with RSA or ECC using the stored private key
-    function Sign(DigAlgo: TXSignatureAlgorithm;
-      Data: pointer; DataLen: integer): RawByteString; overload;
-    /// sign a memory buffer with RSA or ECC using the stored private key
-    function Sign(DigAlgo: TXSignatureAlgorithm;
-      const Data: RawByteString): RawByteString; overload;
-    /// use EciesSeal or RSA un-sealing, i.e. decryption with this private key
-    function Open(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString;
-    /// compute the shared-secret with another public key
-    // - by design, ECDHE is only available for ECC
-    function SharedSecret(pub: TXPublicKey): RawByteString;
-  end;
 
 
 { **************** X.509 Certificates and Certificate Signing Request (CSR) }
@@ -572,7 +511,7 @@ type
     fSafe: TLightLock;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
-    fPublicKey: TXPublicKey;
+    fPublicKey: ICryptPublicKey;
     fCachedDer: RawByteString;
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
@@ -591,8 +530,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
   public
-    /// finalize this instance
-    destructor Destroy; override;
     /// reset all internal context
     procedure Clear;
     /// verify the digital signature of this Certificate using a X.509 Authority
@@ -647,7 +584,8 @@ type
     function Compare(Another: TX509; Method: TCryptCertComparer = ccmBinary): integer;
     /// return the associated Public Key instance
     // - initialize it from stored Signed.SubjectPublicKey, if needed
-    function PublicKey: TXPublicKey;
+    // - may be a faster TCryptPublicKeyOpenSsl, if available
+    function PublicKey: ICryptPublicKey;
     /// compute the number of security bits of the digital signature
     // - e.g. 112 for RSA-2048, 128 for ECC-256
     function SignatureSecurityBits: integer;
@@ -1718,442 +1656,6 @@ begin
 end;
 
 
-{ **************** RSA and ECC Public/Private Key support for X.509 }
-
-{ TXPublicKey }
-
-const
-  XKA_RSA: array[TXPublicKeyAlgorithm] of TRsaClass = (
-    nil,      // xkaNone
-    TRsa,     // xkaRsa
-    TRsaPss,  // xkaRsaPss
-    nil  );   // xkaEcc256
-
-function TXPublicKey.Load(Algorithm: TXPublicKeyAlgorithm;
-  const SubjectPublicKey: RawByteString): boolean;
-begin
-  result := false;
-  if (fAlgo <> xkaNone) or
-     (SubjectPublicKey = '') then
-    exit;
-  fAlgo := Algorithm;
-  case Algorithm of
-    xkaRsa,
-    xkaRsaPss:
-      begin
-        fRsa := XKA_RSA[Algorithm].Create;
-        if fRsa.LoadFromPublicKeyDer(SubjectPublicKey) then
-          result := true
-        else
-          FreeAndNil(fRsa);
-      end;
-    xkaEcc256:
-      if Ecc256r1CompressAsn1(SubjectPublicKey, fEccPub) then
-      begin
-        fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or mormot.crypt
-        fSubjectPublicKey := SubjectPublicKey;
-        result := true;
-      end;
-  else
-    raise EX509.CreateUtf8('%.Create: unsupported %', [self, ToText(fAlgo)^]);
-  end;
-end;
-
-destructor TXPublicKey.Destroy;
-begin
-  inherited Destroy;
-  fRsa.Free;
-  fEcc.Free;
-end;
-
-function TXPublicKey.Verify(Sig: pointer; Dig: THash512Rec;
-  SigLen, DigLen: integer; Hash: THashAlgo): boolean;
-var
-  eccsig: TEccSignature;
-begin
-  result := false;
-  if (self <> nil) and
-     (DigLen <> 0) then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        // RSA digital signature verification (thread-safe but blocking)
-        result := fRsa.Verify(@Dig, Sig, Hash, SigLen);
-      xkaEcc256:
-        if DerToEcc(Sig, SigLen, eccsig) then
-          // secp256r1 digital signature verification
-          result := fEcc.Verify(Dig.Lo, eccsig); // thread-safe
-    end;
-end;
-
-function TXPublicKey.Verify(DigAlgo: TXSignatureAlgorithm; Data, Sig: pointer;
-  DataLen, SigLen: integer): boolean;
-var
-  hasher: TSynHasher;
-  dig: THash512Rec;
-  diglen: PtrInt;
-begin
-  diglen := hasher.Full(XSA_TO_HF[DigAlgo], Data, DataLen, dig);
-  result := (diglen <> 0) and
-            Verify(Sig, dig, SigLen, diglen, XSA_TO_HF[DigAlgo]);
-end;
-
-function TXPublicKey.Verify(DigAlgo: TXSignatureAlgorithm;
-  const Data, Sig: RawByteString): boolean;
-begin
-  result := Verify(DigAlgo, pointer(Data), pointer(Sig), length(Data), length(Sig));
-end;
-
-function TXPublicKey.GetParams(out x, y: RawByteString): boolean;
-var
-  k: TEccPublicKeyUncompressed;
-begin
-  result := false;
-  if self <> nil then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        begin
-          // for RSA, x is set to the Exponent (e), and y to the Modulus (n)
-          x := fRsa.E^.Save;
-          y := fRsa.M^.Save;
-          result := (x <> '') and
-                    (y <> '');
-        end;
-      xkaEcc256:
-        // for ECC, returns the x,y uncompressed coordinates from stored ASN.1
-        if Ecc256r1ExtractAsn1(fSubjectPublicKey, k) then
-        begin
-          FastSetRawByteString(x, nil, ECC_BYTES);;
-          FastSetRawByteString(y, nil, ECC_BYTES);;
-          bswap256(@PHash512Rec(@k)^.Lo, pointer(x));
-          bswap256(@PHash512Rec(@k)^.Hi, pointer(y));
-          result := true;
-        end;
-    end;
-end;
-
-function TXPublicKey.Seal(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-  result  := '';
-  if self <> nil then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        result := fRsa.Seal(Cipher, Message);
-      xkaEcc256:
-        result := EciesSeal(Cipher, fEcc.PublicKey, Message);
-    end;
-end;
-
-
-{ TXPrivateKey }
-
-const
-  // per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt salt and AF-32 rounds
-  // - xkaRsa/xkaRsaPss share the same public/private key files by definition
-  // - xkaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
-  XKA_SALT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
-    '', 'synrsa', 'synrsa', 'synecc');
-  XKA_ROUNDS: array[TXPublicKeyAlgorithm] of byte = (
-    0, 3, 3, 31);
-
-function TXPrivateKey.Load(Algorithm: TXPublicKeyAlgorithm; AssociatedKey: TXPublicKey;
-  const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
-var
-  saved, der: RawByteString;
-begin
-  result := false;
-  if (self = nil) or
-     (fAlgo <> xkaNone) or
-     (Algorithm = xkaNone) or
-     (PrivateKeySaved = '') then
-    exit;
-  try
-    saved := PrivateKeySaved;
-    if Password <> '' then
-    begin
-      // use mormot.core.secure encryption, not standard PKCS#8
-      der := PemToDer(saved); // see also TCryptCertX509.Load
-      saved := PrivateKeyDecrypt(
-        der, XKA_SALT[Algorithm], Password, XKA_ROUNDS[Algorithm]);
-      if saved = '' then
-        exit;
-    end;
-    fAlgo := Algorithm;
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        begin
-          fRsa := XKA_RSA[fAlgo].Create;
-          if fRsa.LoadFromPrivateKeyPem(saved) and
-             ((AssociatedKey = nil) or
-              fRsa.MatchKey(AssociatedKey.fRsa)) then
-            result := true
-          else
-            FreeAndNil(fRsa);
-        end;
-      xkaEcc256:
-        if PemDerRawToEcc(saved, fEcc) and
-           ((AssociatedKey = nil) or
-            Ecc256r1MatchKeys(fEcc, AssociatedKey.fEcc.PublicKey)) then
-          result := true
-        else
-          FillZero(fEcc);
-    end;
-  finally
-    FillZero(saved);
-    FillZero(der);
-  end;
-end;
-
-function TXPrivateKey.Generate(Algorithm: TXPublicKeyAlgorithm): RawByteString;
-var
-  eccpub: TEccPublicKey;
-begin
-  result := '';
-  if (self = nil) or
-     (fAlgo <> xkaNone) then
-    exit;
-  fAlgo := Algorithm;
-  case fAlgo of
-    xkaRsa,
-    xkaRsaPss:
-      if fRsa = nil then
-      begin
-        fRsa := XKA_RSA[fAlgo].Create;
-        if fRsa.Generate(RSA_DEFAULT_GENERATION_BITS) then
-          result := fRsa.SavePublicKey.ToSubjectPublicKey;
-      end;
-    xkaEcc256:
-      if IsZero(fEcc) and
-         Ecc256r1MakeKey(eccpub, fEcc) then
-        result := Ecc256r1UncompressAsn1(eccpub);
-  end;
-end;
-
-function TXPrivateKey.ComputeSelfSignedCsr(
-  Algorithm: TXSignatureAlgorithm; const Subjects: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
-var
-  pub, extreq, der: RawByteString;
-  sub: TXName;
-  ext: TXExtensions;
-  xu: TXKeyUsages;
-  xku: TXExtendedKeyUsages;
-begin
-  result := '';
-  if self = nil then
-    exit;
-  // create a new key pair if needed
-  if fAlgo <> xkaNone then
-    pub := ToSubjectPublicKey
-  else
-    pub := Generate(XSA_TO_XKA[Algorithm]);
-  if pub = '' then
-    exit;
-  // setup the CSR fields
-  FillCharFast(sub, SizeOf(sub), 0);
-  CertInfoPrepare(sub, ext, Subjects, Fields);
-  extreq := CertInfoCompute(Usages, ext, xu, xku);
-  if extreq <> '' then
-    // extensionRequest (PKCS #9 via CRMF)
-    extreq := Asn(ASN1_CTC0, [
-                AsnSeq([
-                  AsnOid(ASN1_OID_PKCS9_EXTREQ),
-                  Asn(ASN1_SETOF, [
-                    AsnSeq(extreq)
-                  ])
-                ])
-              ]);
-  // compute the main CSR body
-  der := AsnSeq([
-           Asn(0), // version
-           sub.ToBinary,
-           AsnSeq([
-             XkaToSeq(fAlgo),
-             Asn(ASN1_BITSTR, [pub])
-           ]),
-           extreq
-         ]);
-  // sign and return the whole CSR as PEM
-  result := DerToPem(AsnSeq([
-                      der,
-                      XsaToSeq(Algorithm),
-                      Asn(ASN1_BITSTR, [Sign(Algorithm, der)])
-                    ]), pemCertificateRequest);
-end;
-
-destructor TXPrivateKey.Destroy;
-begin
-  inherited Destroy;
-  FillZero(fEcc);
-  fRsa.Free;
-end;
-
-function TXPrivateKey.ToDer: RawByteString;
-var
-  rawecc, oct: RawByteString;
-begin
-  if self = nil then
-    result := ''
-  else if fRsa <> nil then
-    result := fRsa.SavePrivateKeyDer
-  else if IsZero(fEcc) then
-    result := ''
-  else
-  begin
-    // EccToDer() raw encoding is not standard as PEM -> use PKCS#8 format
-    FastSetRawByteString(rawecc, @fEcc, SizeOf(fEcc));
-    oct := AsnSafeOct([Asn(1),
-                       Asn(ASN1_OCTSTR, [rawecc])]);
-    FillZero(rawecc);
-    // see PemDerRawToEcc() prime256v1 PKCS#8 PrivateKeyInfo
-    result := AsnSeq([
-                Asn(0), // version
-                AsnSeq([
-                  AsnOid(ASN1_OID_X962_PUBLICKEY),
-                  AsnOid(ASN1_OID_X962_ECDSA_P256)
-                ]),
-                oct
-              ]);
-    FillZero(oct);
-  end;
-end;
-
-function TXPrivateKey.ToSubjectPublicKey: RawByteString;
-var
-  eccpub: TEccPublicKey;
-begin
-  result := '';
-  if self <> nil then
-    if fRsa <> nil then
-      result := fRsa.SavePublicKey.ToSubjectPublicKey
-    else if not IsZero(fEcc) then
-    begin
-      Ecc256r1PublicFromPrivate(fEcc, eccpub);
-      result := Ecc256r1UncompressAsn1(eccpub);
-    end;
-end;
-
-function TXPrivateKey.Save(Format: TCryptCertFormat;
-  const Password: SpiUtf8): RawByteString;
-var
-  der, bin: RawByteString;
-  k: TPemKind;
-begin
-  if self = nil then
-    result := ''
-  else
-  try
-    der := ToDer;
-    if Password = '' then
-      // save as plain unencrypted PEM/DER
-      if Format = ccfPem then
-        if fAlgo in xkaRsaAny then
-          k := pemRsaPrivateKey
-        else
-          k := pemEcPrivateKey
-      else
-        k := pemUnspecified // save as ccfBinary
-    else
-    begin
-      // use mormot.core.secure encryption, not standard PKCS#8
-      bin := der; // for FillZero()
-      der := PrivateKeyEncrypt(bin, XKA_SALT[fAlgo], Password, XKA_ROUNDS[fAlgo]);
-      if Format = ccfPem then
-        if fAlgo in xkaRsaAny then
-          k := pemSynopseRsaEncryptedPrivateKey
-        else
-          k := pemSynopseEccEncryptedPrivateKey
-        else
-          k := pemUnspecified;
-    end;
-    if k = pemUnspecified then
-      result := der
-    else
-      result := DerToPem(der, k);
-  finally
-    FillZero(der);
-    FillZero(bin);
-  end;
-end;
-
-function TXPrivateKey.Sign(const Dig: THash512Rec; DigLen: integer;
-  DigAlgo: TXSignatureAlgorithm): RawByteString;
-var
-  eccsig: TEccSignature;
-begin
-  result := '';
-  if (self <> nil) and
-     (XSA_TO_XKA[DigAlgo] = fAlgo) and
-     (HASH_SIZE[XSA_TO_HF[DigAlgo]] = DigLen) then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        if fRsa <> nil then
-          result := fRsa.Sign(@Dig.b, XSA_TO_HF[DigAlgo]); // thread-safe
-      xkaEcc256:
-        if Ecc256r1Sign(fEcc, Dig.Lo, eccsig) then // thread-safe
-          result := EccToDer(eccsig);
-    end;
-end;
-
-function TXPrivateKey.Sign(DigAlgo: TXSignatureAlgorithm; Data: pointer;
-  DataLen: integer): RawByteString;
-var
-  hasher: TSynHasher;
-  dig: THash512Rec;
-  diglen: PtrInt;
-begin
-  diglen := hasher.Full(XSA_TO_HF[DigAlgo], Data, DataLen, dig);
-  result := Sign(dig, diglen, DigAlgo);
-end;
-
-function TXPrivateKey.Sign(DigAlgo: TXSignatureAlgorithm;
-  const Data: RawByteString): RawByteString;
-begin
-  result := Sign(DigAlgo, pointer(Data), length(Data));
-end;
-
-function TXPrivateKey.Open(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-  result := '';
-  if self <> nil then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        result := fRsa.Open(Cipher, Message);
-      xkaEcc256:
-        result := EciesOpen(Cipher, fEcc, Message);
-    end;
-end;
-
-function TXPrivateKey.SharedSecret(pub: TXPublicKey): RawByteString;
-var
-  sec: TEccSecretKey;
-begin
-  result := '';
-  if (self <> nil) and
-     (pub <> nil) and
-     (pub.fAlgo = fAlgo) then
-    case fAlgo of
-      xkaRsa,
-      xkaRsaPss:
-        ; // not possible by definition
-      xkaEcc256:
-        try
-          if Ecc256r1SharedSecret(pub.fEccPub, fEcc, sec) then
-            FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
-        finally
-          FillZero(sec);
-        end;
-    end;
-end;
-
-
 { **************** X.509 Certificates and Certificate Signing Request (CSR) }
 
 { TXTbsCertificate }
@@ -2443,12 +1945,6 @@ end;
 
 { TX509 }
 
-destructor TX509.Destroy;
-begin
-  inherited Destroy;
-  fPublicKey.Free;
-end;
-
 procedure TX509.Clear;
 begin
   Signed.Clear;
@@ -2460,7 +1956,7 @@ begin
   fRawAuthorityKeyIdentifier := nil;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
-  FreeAndNil(fPublicKey);
+  fPublicKey := nil;
 end;
 
 function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
@@ -2513,8 +2009,9 @@ begin
      // check signature with asymmetric RSA or ECC cryptography
      if Signed.fCachedDer = '' then
        Signed.ComputeCachedDer;
-     if not Authority.PublicKey.Verify(
-              SignatureAlgorithm, Signed.fCachedDer, SignatureValue) then
+     if (Authority.PublicKey = nil) or
+        not Authority.fPublicKey.Verify(XSA_TO_CAA[SignatureAlgorithm],
+              Signed.fCachedDer, SignatureValue) then
         exit;
      // don't call slow PublicKey.Verify() the next time with this authority
      fLastVerifyAuthPublicKey := Authority.Signed.SubjectPublicKey;
@@ -2537,7 +2034,8 @@ begin
     exit;
   result := CanVerify(self, cuDigitalSignature, false, IgnoreError, TimeUtc);
   if result = cvValidSigned then
-    if fPublicKey.Verify(SignatureAlgorithm, Data, Sig, DataLen, SigLen) then
+    if fPublicKey.Verify(
+         XSA_TO_CAA[SignatureAlgorithm], Data, Sig, DataLen, SigLen) then
       if IsSelfSigned then
         result := cvValidSelfSigned
       else
@@ -2546,7 +2044,9 @@ begin
       result := cvInvalidSignature;
 end;
 
-function TX509.PublicKey: TXPublicKey;
+function TX509.PublicKey: ICryptPublicKey;
+var
+  cka: TCryptKeyAlgo;
 begin
   result := nil;
   if self = nil then
@@ -2560,12 +2060,12 @@ begin
   try
     if fPublicKey = nil then
     begin
-      fPublicKey := TXPublicKey.Create;
-      if fPublicKey.Load(Signed.SubjectPublicKeyAlgorithm,
-          Signed.SubjectPublicKey) then
+      cka := XKA_TO_CKA[Signed.SubjectPublicKeyAlgorithm];
+      fPublicKey := CryptPublicKey[cka].Create;
+      if fPublicKey.Load(cka, Signed.SubjectPublicKey) then
         result := fPublicKey
       else
-        FreeAndNil(fPublicKey);
+        fPublicKey := nil;
     end;
   finally
     fSafe.UnLock;
@@ -2743,7 +2243,7 @@ begin
      AsnNextAlgoOid(pos, der, oid, oid2) and
      OidToXsa(oid, xsa) and
      (AsnNextRaw(pos, der, sig) = ASN1_BITSTR) and
-     PublicKey.Verify(xsa, nfo, sig) then // check self-signature
+     PublicKey.Verify(XSA_TO_CAA[xsa], nfo, sig) then // check self-signature
   begin
     // load any extensionRequest (PKCS #9 via CRMF)
     if (AsnNext(posnfo, nfo) = ASN1_CTC0) and // optional attributes sequence
@@ -3340,8 +2840,8 @@ begin
    result := CanVerify(
      Authority, cuCrlSign, {selfsigned=}false, IgnoreError, TimeUtc);
    if result = cvValidSigned then
-     if not Authority.PublicKey.Verify(
-              SignatureAlgorithm, Signed.ToDer, SignatureValue) then
+     if not Authority.PublicKey.Verify(XSA_TO_CAA[SignatureAlgorithm],
+              Signed.ToDer, SignatureValue) then
        result := cvInvalidSignature;
 end;
 
@@ -3643,6 +3143,56 @@ end;
 
 { **************** X.509 Private Key Infrastructure (PKI) }
 
+function ComputeSelfSignedCsr(const PrivateKey: ICryptPrivateKey;
+  Algorithm: TXSignatureAlgorithm; const Subjects: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+var
+  pub, extreq, der: RawByteString;
+  caa: TCryptAsymAlgo;
+  sub: TXName;
+  ext: TXExtensions;
+  xu: TXKeyUsages;
+  xku: TXExtendedKeyUsages;
+begin
+  result := '';
+  if PrivateKey = nil then
+    exit;
+  // create a new key pair if not supplied
+  caa := XSA_TO_CAA[Algorithm];
+  if PrivateKey.KeyAlgo <> ckaNone then
+    pub := PrivateKey.ToSubjectPublicKey
+  else
+    pub := PrivateKey.Generate(caa);
+  if pub = '' then
+    exit;
+  // setup the CSR fields
+  FillCharFast(sub, SizeOf(sub), 0);
+  CertInfoPrepare(sub, ext, Subjects, Fields);
+  extreq := CertInfoCompute(Usages, ext, xu, xku);
+  if extreq <> '' then
+    // extensionRequest (PKCS #9 via CRMF)
+    extreq := Asn(ASN1_CTC0, [
+                AsnSeq([
+                  AsnOid(ASN1_OID_PKCS9_EXTREQ),
+                  Asn(ASN1_SETOF, [
+                    AsnSeq(extreq)
+                  ])
+                ])
+              ]);
+  // compute the main CSR body
+  der := AsnSeq([
+           Asn(0), // version
+           sub.ToBinary,
+           X509PubKeyToDer(PrivateKey.KeyAlgo, pub),
+           extreq
+         ]);
+  // sign and return the whole CSR as PEM
+  result := DerToPem(AsnSeq([
+                      der,
+                      XsaToSeq(Algorithm),
+                      Asn(ASN1_BITSTR, [PrivateKey.Sign(caa, der)])
+                    ]), pemCertificateRequest);
+end;
 
 type
   ECryptCertX509 = class(ECryptCert);
@@ -3663,11 +3213,11 @@ type
   end;
 
   /// class implementing ICryptCert using our TX509 class
-  // - will store a certificate as TX509 and/or a TXPrivateKey private key
+  // - will store a certificate as TX509 and/or a ICryptPrivateKey instance
   TCryptCertX509 = class(TCryptCert)
   protected
     fX509: TX509;
-    fPrivateKey: TXPrivateKey;
+    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
     function Xsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
     function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
@@ -3742,8 +3292,8 @@ begin
     raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
   fXsa := xsa;
   fXka := XSA_TO_XKA[xsa];
-  fOsa := XSA_TO_CAA[xsa];
-  inherited Create('x509-' + LowerCase(CAA_JWT[fOsa]) + suffix);
+  fCaa := XSA_TO_CAA[xsa];
+  inherited Create('x509-' + LowerCase(CAA_JWT[fCaa]) + suffix);
 end;
 
 function TCryptCertAlgoX509.New: ICryptCert;
@@ -3777,25 +3327,23 @@ function TCryptCertAlgoX509.CreateSelfSignedCsr(const Subjects: RawUtf8;
   end;
 
 var
-  key: TXPrivateKey;
+  cka: TCryptKeyAlgo;
+  key: ICryptPrivateKey;
 begin
   if Subjects = '' then
     RaiseError('no Subjects');
-  key := TXPrivateKey.Create;
-  try
-    // load or generate a public/private key pair
-    if PrivateKeyPem <> '' then
-      if not key.Load(fXka, nil, PrivateKeyPem, PrivateKeyPassword) then
-        RaiseError('PrivateKeyPem');
-    // setup the CSR fields, self-sign the CSR and return it as PEM
-    result := key.ComputeSelfSignedCsr(fXsa, Subjects, Usages, Fields);
-    // save the generated private key (if was not previously loaded)
-    if (result <> '') and
-       (PrivateKeyPem = '') then
-      PrivateKeyPem := key.Save(ccfPem, PrivateKeyPassword);
-  finally
-    key.Free;
-  end;
+  cka := XKA_TO_CKA[fXka];
+  key := CryptPrivateKey[cka].Create;
+  // load or generate a public/private key pair
+  if PrivateKeyPem <> '' then
+    if not key.Load(cka, nil, PrivateKeyPem, PrivateKeyPassword) then
+      RaiseError('PrivateKeyPem');
+  // setup the CSR fields, self-sign the CSR and return it as PEM
+  result := ComputeSelfSignedCsr(key, fXsa, Subjects, Usages, Fields);
+  // save the generated private key (if was not previously loaded)
+  if (result <> '') and
+     (PrivateKeyPem = '') then
+    PrivateKeyPem := key.Save({aspem=}true, PrivateKeyPassword);
 end;
 
 
@@ -3810,7 +3358,7 @@ end;
 procedure TCryptCertX509.Clear;
 begin
   FreeAndNil(fX509);
-  FreeAndnil(fPrivateKey);
+  fPrivateKey := nil;
 end;
 
 function TCryptCertX509.Xsa: TXSignatureAlgorithm;
@@ -3843,8 +3391,8 @@ procedure TCryptCertX509.GeneratePrivateKey;
 begin
   if HasPrivateSecret then
     RaiseErrorGenerate('duplicated GeneratePrivateKey');
-  fPrivateKey := TXPrivateKey.Create;
-  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(xka);
+  fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
+  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[Xka]);
   if fX509.Signed.SubjectPublicKey = '' then
     RaiseErrorGenerate('GeneratePrivateKey failed');
   fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
@@ -4152,10 +3700,13 @@ begin
       cccPrivateKeyOnly:
         begin
           // use mormot.core.secure encryption, not standard PKCS#8
-          der := PemToDer(Saved); // see also TXPrivateKey.Load
-          bin := PrivateKeyDecrypt(
-            der, XKA_SALT[Xka], PrivatePassword, XKA_ROUNDS[Xka]);
-          result := SetPrivateKey(bin);
+          der := PemToDer(Saved); // see also TCryptPrivateKey.Load
+          fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create; // replace
+          if fPrivateKey.Load(
+               XKA_TO_CKA[Xka], fX509.PublicKey, der, PrivatePassword) then
+            result := true
+          else
+            fPrivateKey := nil;
         end;
       cccCertOnly:
         begin
@@ -4214,7 +3765,7 @@ begin
             RaiseError('Save(cccCertWithPrivateKey) with no Private Key');
       cccPrivateKeyOnly:
         if HasPrivateSecret then
-          result := fPrivateKey.Save(Format, PrivatePassword)
+          result := fPrivateKey.Save(Format = ccfPem, PrivatePassword)
         else
           RaiseError('Save(cccPrivateKeyOnly) with no Private Key');
     end;
@@ -4235,25 +3786,24 @@ end;
 
 function TCryptCertX509.GetPrivateKey: RawByteString;
 begin
-  result := fPrivateKey.ToDer;
+  if fPrivateKey = nil then
+    result := ''
+  else
+    result := fPrivateKey.ToDer;
 end;
 
 function TCryptCertX509.SetPrivateKey(const saved: RawByteString): boolean;
-var
-  pub: TXPublicKey;
 begin
   result := false;
-  FreeAndNil(fPrivateKey); // always release - SetPrivateKey('') is "wipe out"
+  fPrivateKey := nil; // always release - SetPrivateKey('') is "wipe out"
   if saved <> '' then
   begin
-    pub := nil; // SetPrivateKey() may be called without a public key yet
-    if fX509 <> nil then
-      pub := fX509.PublicKey;
-    fPrivateKey := TXPrivateKey.Create;
-    if fPrivateKey.Load(Xka, pub, saved, '') then
+    // note: SetPrivateKey() may be called without a public key yet
+    fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
+    if fPrivateKey.Load(XKA_TO_CKA[Xka], fX509.PublicKey, saved, '') then
       result := true
     else
-      FreeAndNil(fPrivateKey);
+      fPrivateKey := nil;
   end;
 end;
 
@@ -4262,7 +3812,7 @@ begin
   if HasPrivateSecret and
      (fX509 <> nil) and
      (cuDigitalSignature in fX509.Usages) then
-    result := fPrivateKey.Sign(Xsa, Data, Len)
+    result := fPrivateKey.Sign(XSA_TO_CAA[Xsa], Data, Len)
   else
     result := '';
 end;
@@ -4290,7 +3840,8 @@ begin
     // compute the digital signature
     fX509.AfterModified;
     fX509.Signed.Signature := Xsa;
-    fX509.fSignatureValue := auth.fPrivateKey.Sign(Xsa, fX509.Signed.ToDer);
+    fX509.fSignatureValue := auth.fPrivateKey.Sign(
+                               XSA_TO_CAA[Xsa], fX509.Signed.ToDer);
     fX509.fSignatureAlgorithm := Xsa;
     fX509.ComputeCachedDer;
   end
@@ -4364,7 +3915,7 @@ end;
 
 function TCryptCertX509.PrivateKeyHandle: pointer;
 begin
-  result := fPrivateKey;
+  result := pointer(fPrivateKey);
 end;
 
 function TCryptCertX509.GetPrivateKeyParams(out x, y: RawByteString): boolean;
@@ -4434,7 +3985,8 @@ begin
     // compute the digital signature
     AfterModified;
     Signed.Signature := auth.Xsa;
-    fSignatureValue := auth.fPrivateKey.Sign(auth.Xsa, Signed.ToDer);
+    fSignatureValue := auth.fPrivateKey.Sign(
+                         XSA_TO_CAA[auth.Xsa], Signed.ToDer);
     fSignatureAlgorithm := auth.Xsa;
   end
   else
