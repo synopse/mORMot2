@@ -1515,7 +1515,7 @@ type
     function NewPbkdf2(const secret, salt: RawUtf8; rounds: integer): ICryptHash;
   end;
 
-  /// interface as implemented e.g. by TCryptCipher
+  /// interface as implemented e.g. by TCryptCipher from TCryptCipherAlgo.New
   ICryptCipher = interface
     /// quickly generate a cipher with the same algorithm, direction and key
     function Clone: ICryptCipher;
@@ -1664,6 +1664,17 @@ type
 
   /// set of supported asymmetric algorithms
   TCryptAsymAlgos = set of TCryptAsymAlgo;
+
+  /// the algorithms supported by a ICryptPublicKey/ICryptPrivateKey
+  TCryptKeyAlgo = (
+    ckaNone,
+    ckaRsa,
+    ckaRsaPss,
+    ckaEcc256,
+    ckaEcc384,
+    ckaEcc512,
+    ckaEcc256k,
+    ckaEdDSA);
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
@@ -2581,11 +2592,57 @@ const
     hfSHA512,     // caaPS512
     hfSHA512);    // caaEdDSA - SHA-512 is included in the algorithm
 
+  /// the TCryptKeyAlgo according to our known asymmetric algorithms
+  CAA_CKA: array[TCryptAsymAlgo] of TCryptKeyAlgo = (
+    ckaEcc256,    // caaES256
+    ckaEcc384,    // caaES384
+    ckaEcc512,    // caaES512
+    ckaEcc256K,   // caaES256K
+    ckaRsa,       // caaRS256
+    ckaRsa,       // caaRS384
+    ckaRsa,       // caaRS512
+    ckaRsaPss,    // caaPS256
+    ckaRsaPss,    // caaPS384
+    ckaRsaPss,    // caaPS512
+    ckaEdDSA);    // caaEdDSA
+
   /// the known asymmetric algorithms which implement ECC cryptography
   CAA_ECC = [caaES256, caaES384, caaES512, caaES256K, caaEdDSA];
 
   /// the known asymmetric algorithms which implement RSA cryptography
   CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
+
+  /// the known key algorithms which implement ECC cryptography
+  CKA_ECC = [ckaEcc256, ckaEcc384, ckaEcc512, ckaEcc256k, ckaEdDSA];
+
+  /// the known key algorithms which implement RSA cryptography
+  CKA_RSA = [ckaRsa, ckaRsaPss];
+
+  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt salt
+  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
+  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
+  CKA_SALT: array[TCryptKeyAlgo] of RawUtf8 = (
+    '',           // ckaNone
+    'synrsa',     // ckaRsa
+    'synrsa',     // ckaRsaPss
+    'synecc',     // ckaEcc256
+    'syne384',    // ckaEcc384
+    'syne512',    // ckaEcc512
+    'synecck',    // ckaEcc256k
+    'syneddsa');  // ckaEdDSA
+
+  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt AF-32 rounds
+  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
+  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
+  CKA_ROUNDS: array[TCryptKeyAlgo] of byte = (
+    0,    // ckaNone
+    3,    // ckaRsa
+    3,    // ckaRsaPss
+    31,    // ckaEcc256
+    23,    // ckaEcc384
+    15,    // ckaEcc512
+    31,    // ckaEcc256k
+    31);   // ckaEdDSA
 
   /// such a Certificate could be used for anything
   CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
@@ -2640,13 +2697,8 @@ const
     'OCSP Signing',                  // cuOcspSign
     'Time Stamping');                // cuTimestamp
 
-/// compute the number of security bits of a digital signature
-// - ECC security size is half of its X,Y coordinates storage size
-// - RSA security depends on the signature size, not the hash size
-// - e.g. 112 for RSA-2048, 128 for ECC-256
-function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
-
 function ToText(a: TCryptAsymAlgo): PShortString; overload;
+function ToText(a: TCryptKeyAlgo): PShortString; overload;
 function ToText(r: TCryptCertRevocationReason): PShortString; overload;
 function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
@@ -2927,6 +2979,33 @@ const
                  pemSynopsePrivateKeyAndCertificate,
                  pemSynopseEccEncryptedPrivateKey];
 
+  /// the OID of the supported hash algorithms, decoded as text
+  ASN1_OID_HASH: array[THashAlgo] of RawUtf8 = (
+    '1.2.840.113549.2.5',       // hfMD5
+    '1.3.14.3.2.26',            // hfSHA1
+    '2.16.840.1.101.3.4.2.1',   // hfSHA256
+    '2.16.840.1.101.3.4.2.2',   // hfSHA384
+    '2.16.840.1.101.3.4.2.3',   // hfSHA512
+    '2.16.840.1.101.3.4.2.6',   // hfSHA512_256
+    '2.16.840.1.101.3.4.2.8',   // hfSHA3_256
+    '2.16.840.1.101.3.4.2.10'); // hfSHA3_512
+
+  /// the OID of all ECC public keys (X962)
+  // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
+  ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
+
+  /// the OID of all supported ICryptPublicKey/ICryptPrivateKey algorithms
+  CKA_OID: array[TCryptKeyAlgo] of RawUtf8 = (
+    '',                       // ckaNone
+    '1.2.840.113549.1.1.1',   // ckaRsa
+    '1.2.840.113549.1.1.10',  // ckaRsaPss
+    '1.2.840.10045.3.1.7',    // ckaEcc256  (with ASN1_OID_X962_PUBLICKEY)
+    '1.3.132.0.34',           // ckaEcc384  (with ASN1_OID_X962_PUBLICKEY)
+    '1.3.132.0.35',           // ckaEcc512  (with ASN1_OID_X962_PUBLICKEY)
+    '1.3.132.0.10',           // ckaEcc256k (with ASN1_OID_X962_PUBLICKEY)
+    '1.3.101.112');           // ckaEdDSA
+
+
 /// convert a binary DER content into a single-instance PEM text
 function DerToPem(der: pointer; len: PtrInt; kind: TPemKind): TCertPem; overload;
 
@@ -2987,6 +3066,34 @@ function PrivateKeyDecrypt(const Input, Salt: RawByteString;
   Pbkdf2Rounds: integer = 1000): RawByteString;
 
 
+/// compute the number of security bits of a digital signature
+// - ECC security size is half of its X,Y coordinates storage size
+// - RSA security depends on the signature size, not the hash size
+// - e.g. 112 for RSA-2048, 128 for ECC-256
+function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
+
+/// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
+function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
+
+/// raw function to generation a public key ASN1_SEQ definition with its OID(s)
+function CkaToSeq(cka: TCryptKeyAlgo): RawByteString;
+
+/// compute the public key ASN.1 from a raw binary as stored in X.509 certificate
+// - see e.g. "A.1.1. RSA Public Key Syntax" of RFC 8017
+function X509PubKeyToDer(Algorithm: TCryptKeyAlgo;
+  const SubjectPublicKey: RawByteString): RawByteString;
+
+/// compute the raw binary as stored in X.509 certificate from a ASN.1 public key
+// - i.e. extract the ASN1_BITSTR raw section as encoded by X509PubKeyToDer()
+function X509PubKeyFromDer(const PkcsDer: RawByteString): RawByteString;
+
+/// return the number of bits of a X.509 certificate SubjectPublicKey ASN1_BITSTR
+// - will recognize RSA ASN1_SEQ and ECC uncompressed keys as stored in X.509
+// - returns typically 2048 for RSA, or 256 for ecc256r1
+// - can format the key as its hexa members for ParsedToText(TX509Parsed)
+function X509PubKeyBits(const SubjectPublicKey: RawByteString;
+  PubText: PRawUtf8 = nil): integer;
+
 type
   /// output of the X509Parse() function
   // - contains X.509 certificate main properties and binary public key
@@ -2997,13 +3104,6 @@ type
     NotBefore, NotAfter: TDateTime;
     PubKey: RawByteString;
   end;
-
-/// return the number of bits of a X.509 certificate SubjectPublicKey ASN1_BITSTR
-// - will recognize RSA ASN1_SEQ and ECC uncompressed keys as stored in X.509
-// - returns typically 2048 for RSA, or 256 for ecc256r1
-// - can format the key as its hexa members for ParsedToText(TX509Parsed)
-function X509PubKeyBits(const PubKey: RawByteString;
-  PubText: PRawUtf8 = nil): integer;
 
 /// return some multi-line text of the main TX509Parsed fields
 // - in a layout similar to X509_print() OpenSSL formatting
@@ -7634,41 +7734,14 @@ begin
 end;
 
 
-function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
-begin
-  result := 0;
-  len := len shl 3; // into bits
-  if len > 128 then
-    case a of
-      // ECC security size is half of its X,Y coordinates storage size
-      caaES256,
-      caaES256K,
-      caaEdDSA:
-        result := 128;
-      caaES384:
-        result := 192;
-      caaES512:
-        result := 256;
-      // RSA security depends on the signature size, not the hash size
-      caaRS256 .. caaPS512:
-        if len < 1024 then
-          result := 30           // 512-bit
-        else if len < 2048 then
-          result := 80           // 1024-bit
-        else if len < 3072 then
-          result := 112          // 2048-bit
-        else if len < 7680 then
-          result := 128          // 3072-bit
-        else if len < 15360 then
-          result := 192          // 7680-bit: very unlikely since very slow
-        else
-          result := 256; // the lower RS256 hash has 256-bit of security anyway
-    end;
-end;
-
 function ToText(a: TCryptAsymAlgo): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TCryptAsymAlgo), ord(a));
+end;
+
+function ToText(a: TCryptKeyAlgo): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TCryptKeyAlgo), ord(a));
 end;
 
 function ToText(r: TCryptCertRevocationReason): PShortString;
@@ -8435,7 +8508,105 @@ begin
     end;
 end;
 
-function X509PubKeyBits(const PubKey: RawByteString;
+function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
+begin
+  result := 0;
+  len := len shl 3; // into bits
+  if len > 128 then
+    case a of
+      // ECC security size is half of its X,Y coordinates storage size
+      caaES256,
+      caaES256K,
+      caaEdDSA:
+        result := 128;
+      caaES384:
+        result := 192;
+      caaES512:
+        result := 256;
+      // RSA security depends on the signature size, not the hash size
+      caaRS256 .. caaPS512:
+        if len < 1024 then
+          result := 30           // 512-bit
+        else if len < 2048 then
+          result := 80           // 1024-bit
+        else if len < 3072 then
+          result := 112          // 2048-bit
+        else if len < 7680 then
+          result := 128          // 3072-bit
+        else if len < 15360 then
+          result := 192          // 7680-bit: very unlikely since very slow
+        else
+          result := 256; // the lower RS256 hash has 256-bit of security anyway
+    end;
+end;
+
+function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
+begin
+  if oid = CKA_OID[ckaRsa] then
+    result := ckaRsa
+  else if oid = CKA_OID[ckaRsaPss] then
+    result := ckaRsaPss
+  else if oid = ASN1_OID_X962_PUBLICKEY then
+  begin
+    for result := ckaEcc256 to ckaEcc256k do
+      if oid2 = CKA_OID[result] then
+        exit;
+    result := ckaNone;
+  end
+  else if oid = CKA_OID[ckaEdDSA] then
+    result := ckaEdDSA
+  else
+    result := ckaNone;
+end;
+
+function CkaToSeq(cka: TCryptKeyAlgo): RawByteString;
+begin
+  case cka of
+    ckaRsa:
+      result := AsnSeq([
+                  AsnOid(pointer(CKA_OID[ckaRsa])),
+                  ASN1_NULL_VALUE // optional
+                ]);
+    ckaRsaPss,
+    ckaEdDSA:
+      result := AsnSeq([
+                  AsnOid(pointer(CKA_OID[cka]))
+                ]);
+    ckaEcc256 .. ckaEcc256k:
+      result := AsnSeq([
+                  AsnOid(ASN1_OID_X962_PUBLICKEY),
+                  AsnOid(pointer(CKA_OID[cka]))
+                ]);
+  else
+    raise ECrypt.CreateUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
+  end;
+end;
+
+function X509PubKeyToDer(Algorithm: TCryptKeyAlgo;
+  const SubjectPublicKey: RawByteString): RawByteString;
+begin
+  result := AsnSeq([
+              CkaToSeq(Algorithm),
+              Asn(ASN1_BITSTR, [
+                SubjectPublicKey
+              ])
+            ]);
+end;
+
+function X509PubKeyFromDer(const PkcsDer: RawByteString): RawByteString;
+var
+  pos: integer;
+  algoseq: RawByteString; // algorithm OID(s) as encoded by CkaToSeq()
+begin
+  pos := 1;
+  writeln(AsnDump(PkcsDer));
+  if (AsnNext(pos, PkcsDer) <> ASN1_SEQ) or
+     (AsnNextRaw(pos, PkcsDer, algoseq) <> ASN1_SEQ) or
+     (AsnNextRaw(pos, PkcsDer, result) <> ASN1_BITSTR) then
+    result := '';
+end;
+
+function X509PubKeyBits(const SubjectPublicKey: RawByteString;
   PubText: PRawUtf8): integer;
 var
   pub: PByte;
@@ -8443,11 +8614,11 @@ var
   modulo, exp: RawByteString;
   name, bits: RawUtf8;
 begin
-  pub := pointer(PubKey);
-  publen := length(PubKey);
+  pub := pointer(SubjectPublicKey);
+  publen := length(SubjectPublicKey);
   result := publen;
   if result <> 0 then
-    case PubKey[1] of
+    case SubjectPublicKey[1] of
       #$04:
         begin
           // ECC uncompressed key
@@ -8461,9 +8632,9 @@ begin
         begin
           // RSA sequence
           pos := 1;
-          if (AsnNext(pos, PubKey) = ASN1_SEQ) and
-             AsnNextBigInt(pos, PubKey, modulo) and
-             AsnNextBigInt(pos, PubKey, exp) then
+          if (AsnNext(pos, SubjectPublicKey) = ASN1_SEQ) and
+             AsnNextBigInt(pos, SubjectPublicKey, modulo) and
+             AsnNextBigInt(pos, SubjectPublicKey, exp) then
           begin
             result := length(modulo);
             if PubText <> nil then
