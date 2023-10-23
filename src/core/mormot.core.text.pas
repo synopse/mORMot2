@@ -1495,12 +1495,14 @@ function UInt2DigitsToShortFast(Value: byte): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - result is in little endian order, not network order: 1.2.3.4 become $04030201
 // - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
 // - returns FALSE on parsing error, also setting aValue=0
 // - '' or '127.0.0.1' will also return false
 function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean; overload;
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - result is in little endian order, not network order: 1.2.3.4 become $04030201
 // - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
 // - returns FALSE on parsing error, also setting aValue=0
 // - '' or '127.0.0.1' will also return false
@@ -1508,6 +1510,7 @@ function IPToCardinal(const aIP: RawUtf8; out aValue: cardinal): boolean; overlo
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
+// - result is in little endian order, not network order: 1.2.3.4 become $04030201
 // - returns <> 0 value if the text was a valid IPv4 text, 0 on parsing error
 // - '' or '127.0.0.1' will also return 0
 function IPToCardinal(const aIP: RawUtf8): cardinal; overload;
