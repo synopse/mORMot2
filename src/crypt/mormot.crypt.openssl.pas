@@ -675,7 +675,46 @@ function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boo
 procedure RegisterOpenSsl;
 
 type
+  /// store an OpenSSL public key in ICryptPublicKey format
+  // - set to mormot.crypt.secure CryptPublicKey[] factories by RegisterOpenSsl
+  TCryptPublicKeyOpenSsl = class(TCryptPublicKey)
+  protected
+    fPubKey: PEVP_PKEY;
+  public
+    destructor Destroy; override;
+    function Load(Algorithm: TCryptKeyAlgo;
+      const SubjectPublicKey: RawByteString): boolean; override;
+    function Verify(Algorithm: TCryptAsymAlgo;
+      Data, Sig: pointer; DataLen, SigLen: integer): boolean; overload; override;
+    function GetParams(out x, y: RawByteString): boolean; override;
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+  end;
+
+  /// store an OpenSSL private key in ICryptPrivateKey format
+  // - set to mormot.crypt.secure CryptPrivateKey[] factories by RegisterOpenSsl
+  TCryptPrivateKeyOpenSsl = class(TCryptPrivateKey)
+  protected
+    fPrivKey: PEVP_PKEY;
+  public
+    destructor Destroy; override;
+    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; override;
+    function Save(Format: TCryptCertFormat;
+      const Password: SpiUtf8): RawByteString; override;
+    function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
+    function Sign(Algorithm: TCryptAsymAlgo;
+      Data: pointer; DataLen: integer): RawByteString; overload; override;
+    function ToDer: RawByteString; override;
+    function ToSubjectPublicKey: RawByteString; override;
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const PeerKey: ICryptPublicKey): RawByteString;
+      override;
+  end;
+
   /// maintain a cache of OpenSSL X.509 ICryptCert instances, from their DER/binary
+  // - defined here so that you could use OpenSSL for your certificates process
   TCryptCertCacheOpenSsl = class(TCryptCertCache)
   protected
     // overidden to call OpenSslLoad() and return a TCryptCertOpenSsl
@@ -1858,6 +1897,207 @@ begin
 end;
 
 
+{ TCryptPublicKeyOpenSsl }
+
+destructor TCryptPublicKeyOpenSsl.Destroy;
+begin
+  inherited Destroy;
+  fPubKey.Free;
+end;
+
+function TCryptPublicKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
+  const SubjectPublicKey: RawByteString): boolean;
+begin
+  result := false;
+  if (fKeyAlgo <> ckaNone) or
+     (Algorithm = ckaNone) or
+     (SubjectPublicKey = '') or
+     (fPubKey <> nil) then
+    exit;
+  fPubKey := LoadPublicKey(X509PubKeyToDer(Algorithm, SubjectPublicKey));
+  if fPubKey = nil then
+    fPubKey := LoadPublicKey(SubjectPublicKey); // try full PKCS format
+  if fPubKey = nil then
+    exit;
+  fKeyAlgo := Algorithm;
+  result := true;
+end;
+
+function TCryptPublicKeyOpenSsl.Verify(Algorithm: TCryptAsymAlgo;
+  Data, Sig: pointer; DataLen, SigLen: integer): boolean;
+begin
+  // we don't check "if fPubKey=nil" because may be called without EVP_PKEY
+  result := fPubKey.Verify(
+              OpenSslGetMd(CAA_EVPMD[Algorithm], 'ICryptPublicKey.Verify'),
+              Sig, Data, SigLen, DataLen);
+end;
+
+function TCryptPublicKeyOpenSsl.GetParams(out x, y: RawByteString): boolean;
+begin
+  result := true;
+  if fKeyAlgo in CKA_ECC then
+    fPubKey.EccGetPubKeyUncompressed(x, y)
+  else if fKeyAlgo in CKA_RSA then
+    fPubKey.RsaGetPubKey(x, y)
+  else
+    result := false;
+end;
+
+function TCryptPublicKeyOpenSsl.Seal(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if fPubKey <> nil then
+    if fKeyAlgo in CKA_RSA then
+      result := fPubKey.RsaSeal(EVP_get_cipherbyname(pointer(Cipher)), Message)
+    else if fKeyAlgo = ckaEcc256 then
+      result := EciesSeal(Cipher, GetEs256Public(fPubKey), Message)
+  else
+    result := '';
+end;
+
+
+{ TCryptPrivateKeyOpenSsl }
+
+destructor TCryptPrivateKeyOpenSsl.Destroy;
+begin
+  inherited Destroy;
+  fPrivKey.Free;
+end;
+
+function TCryptPrivateKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
+  const AssociatedKey: ICryptPublicKey; const PrivateKeySaved: RawByteString;
+  const Password: SpiUtf8): boolean;
+begin
+  result := false;
+  if (self = nil) or
+     (fKeyAlgo <> ckaNone) or
+     (fPrivKey <> nil) or
+     (Algorithm = ckaNone) or
+     (PrivateKeySaved = '') then
+    exit;
+  fPrivKey := LoadPrivateKey(PrivateKeySaved, Password);
+  if fPrivKey <> nil then
+    if Assigned(AssociatedKey) then
+      if (PClass(AssociatedKey.Instance)^ = TCryptPublicKeyOpenSsl) and
+         (fPrivKey.PublicToDer = TCryptPublicKeyOpenSsl(AssociatedKey.Instance).
+                                   fPubKey.PublicToDer) then
+        result := true // associated public key matches this private key
+      else
+      begin
+        fPrivKey.Free;
+        fPrivKey := nil; // no match
+      end
+    else
+      result := true; // stand-alone private key with nothing to match
+  if result then
+    fKeyAlgo := Algorithm;
+end;
+
+function TCryptPrivateKeyOpenSsl.Save(Format: TCryptCertFormat;
+  const Password: SpiUtf8): RawByteString;
+begin
+  if (self = nil) or
+     (fPrivKey = nil) then
+    result := ''
+  else if Format = ccfPem then
+    result := fPrivKey.PrivateToPem(Password)
+  else
+    result := fPrivKey.PrivateToDer(Password);
+end;
+
+function TCryptPrivateKeyOpenSsl.Generate(
+  Algorithm: TCryptAsymAlgo): RawByteString;
+begin
+  result := '';
+  if (self = nil) or
+     (fKeyAlgo <> ckaNone) or
+     (fPrivKey <> nil) then
+    exit;
+  fPrivKey := OpenSslGenerateKeys(
+                CAA_EVPTYPE[Algorithm], CAA_BITSORCURVE[Algorithm]);
+  if fPrivKey = nil then
+    exit;
+  result := ToSubjectPublicKey;
+  if result <> '' then
+  begin
+    fKeyAlgo := CAA_CKA[Algorithm];
+    exit;
+  end;
+  fPrivKey.Free;
+  fPrivKey := nil;
+end;
+
+function TCryptPrivateKeyOpenSsl.Sign(Algorithm: TCryptAsymAlgo;
+  Data: pointer; DataLen: integer): RawByteString;
+begin
+  result := '';
+  if (self <> nil) and
+     (CAA_CKA[Algorithm] = fKeyAlgo) and
+     (fPrivKey <> nil) then
+    result := fPrivKey.Sign(
+      OpenSslGetMd(CAA_EVPMD[Algorithm], 'ICryptPrivateKey.Sign'), Data, DataLen);
+end;
+
+function TCryptPrivateKeyOpenSsl.ToDer: RawByteString;
+begin
+  result := fPrivKey.PrivateToDer({password=}'');
+end;
+
+function TCryptPrivateKeyOpenSsl.ToSubjectPublicKey: RawByteString;
+begin
+  result := X509PubKeyFromDer(fPrivKey.PublicToDer);
+end;
+
+function TCryptPrivateKeyOpenSsl.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+var
+  priv: TEccPrivateKey;
+begin
+  result := '';
+  if (self <> nil) and
+     (fPrivKey <> nil) then
+    case fKeyAlgo of
+      ckaRsa,
+      ckaRsaPss:
+        result := fPrivKey.RsaOpen(
+                    EVP_get_cipherbyname(pointer(Cipher)), Message);
+      ckaEcc256:
+        if GetEs256Private(fPrivKey, priv) then
+        try
+          result := EciesOpen(Cipher, priv, Message);
+        finally
+          FillZero(priv);
+        end;
+    end;
+end;
+
+function TCryptPrivateKeyOpenSsl.SharedSecret(const PeerKey: ICryptPublicKey): RawByteString;
+var
+  priv: TEccPrivateKey;
+  sec: TEccSecretKey;
+begin
+  result := '';
+  if (self <> nil) and
+     Assigned(PeerKey) and
+     (PClass(PeerKey.Instance)^ = TCryptPublicKeyOpenSsl) and
+     (fPrivKey <> nil) then
+    case fKeyAlgo of
+      ckaEcc256:
+        try
+          if GetEs256Private(fPrivKey, priv) and
+             Ecc256r1SharedSecret(
+               GetEs256Public(
+                 TCryptPublicKeyOpenSsl(PeerKey.Instance).fPubKey), priv, sec) then
+            FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
+        finally
+          FillZero(priv);
+          FillZero(sec);
+        end;
+    end;
+end;
+
+
+
 type
   EOpenSslCert = class(EOpenSsl);
 
@@ -2622,22 +2862,25 @@ var
   sec: TEccSecretKey;
 begin
   result := '';
-  try
-    if (fPrivKey <> nil) and
-       Assigned(pub) and
-       pub.Instance.InheritsFrom(TCryptCertOpenSsl) and
-       (pub.Handle <> nil) and
-       PX509(pub.Handle).HasUsage(kuKeyAgreement) and
-       ((fX509 = nil) or
-        fX509.HasUsage(kuKeyAgreement)) then
-      if AsymAlgo = caaES256 then
+  if (fPrivKey = nil) or
+     not Assigned(pub) or
+     (PClass(pub.Instance)^ <> TCryptCertOpenSsl) or
+     (pub.Handle = nil) or
+     not PX509(pub.Handle).HasUsage(kuKeyAgreement) or
+     ((fX509 <> nil) and
+      not fX509.HasUsage(kuKeyAgreement)) then
+    exit;
+  case AsymAlgo of
+    caaES256:
+      try
         if GetEs256Private(fPrivKey, priv) and
            Ecc256r1SharedSecret(
              GetEs256Public(PX509(pub.Handle).GetPublicKey), priv, sec) then
           FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
-  finally
-    FillZero(priv);
-    FillZero(sec);
+      finally
+        FillZero(priv);
+        FillZero(sec);
+      end;
   end;
 end;
 
@@ -3104,7 +3347,7 @@ end;
 
 procedure RegisterOpenSsl;
 var
-  osa: TCryptAsymAlgo;
+  caa: TCryptAsymAlgo;
 begin
   if HasOpenSsl or
      not OpenSslIsAvailable then
@@ -3143,11 +3386,13 @@ begin
   // register OpenSSL methods to our high-level cryptographic catalog
   // may override existing mormot.crypt.ecc256r1/rsa implementations
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
-  for osa := low(osa) to high(osa) do
-    if OpenSslSupports(osa) then
+  for caa := low(caa) to high(caa) do
+    if OpenSslSupports(caa) then
     begin
-      CryptAsymOpenSsl[osa] := TCryptAsymOsl.Create(osa);
-      CryptCertOpenSsl[osa] := TCryptCertAlgoOpenSsl.Create(osa);
+      CryptAsymOpenSsl[caa] := TCryptAsymOsl.Create(caa);
+      CryptCertOpenSsl[caa] := TCryptCertAlgoOpenSsl.Create(caa);
+      CryptPublicKey[CAA_CKA[caa]] := TCryptPublicKeyOpenSsl;
+      CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
     end;
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
