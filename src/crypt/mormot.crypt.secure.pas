@@ -1626,9 +1626,6 @@ type
       const hashername: RawUtf8 = ''): boolean; overload;
   end;
 
-  /// exception class raised by our High-Level Certificates Process
-  ECryptCert = class(ESynException);
-
   /// the supported asymmetric algorithms, e.g. as published by OpenSSL
   // - as implemented e.g. by TJwtAbstractOsl inherited classes, or
   // TCryptAsymOsl/TCryptCertAlgoOpenSsl implementing TCryptAsym/ICryptCert,
@@ -1665,6 +1662,22 @@ type
   /// set of supported asymmetric algorithms
   TCryptAsymAlgos = set of TCryptAsymAlgo;
 
+  /// ICryptCert.Save possible output formats
+  // - 'syn-es256' from mormot.crypt.ecc certificate will use its own proprietary
+  // format, i.e. SaveToBinary/SaveToSecureBinary for ccfBinary, or non-standard
+  // '-----BEGIN/END SYNECC CERTIFICATE-----' headers for ccfPem
+  // - 'x509-rs256'..'x509-es256' from mormot.crypt.openssl will use the standard
+  // x509 format, as DER (or PKCS12 if PrivatePassword is set) for ccfBinary,
+  // or PEM for ccfPEM (concatenating the private key if PrivatePassword is set)
+  // - ccfHexa, ccfBase64 and ccfBase64Uri will use the ccfBinary output, then
+  // encode it as Hexadecimal or Base-64 (URI)
+  TCryptCertFormat = (
+    ccfBinary,
+    ccfPem,
+    ccfHexa,
+    ccfBase64,
+    ccfBase64Uri);
+
   /// the algorithms supported by a ICryptPublicKey/ICryptPrivateKey
   TCryptKeyAlgo = (
     ckaNone,
@@ -1675,6 +1688,132 @@ type
     ckaEcc512,
     ckaEcc256k,
     ckaEdDSA);
+
+  TCryptAbstractKey = class;
+
+  /// abstract interface to a Public Key, as returned by CryptPublicKey[] factory
+  ICryptPublicKey = interface
+    /// unserialize a X.509 SubjectPublicKey raw binary
+    function Load(Algorithm: TCryptKeyAlgo;
+      const SubjectPublicKey: RawByteString): boolean;
+    /// verify the RSA or ECC signature of a memory buffer
+    function Verify(Algorithm: TCryptAsymAlgo;
+      Data, Sig: pointer; DataLen, SigLen: integer): boolean; overload;
+    /// verify the RSA or ECC signature of a memory buffer
+    function Verify(Algorithm: TCryptAsymAlgo;
+      const Data, Sig: RawByteString): boolean; overload;
+    /// as used by TCryptCert.GetPrivateKeyParams
+    function GetParams(out x, y: RawByteString): boolean;
+    /// use EciesSeal or RSA sealing, i.e. encryption with this public key
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString;
+    /// the high-level asymmetric algorithm used for this public key
+    function KeyAlgo: TCryptKeyAlgo;
+    /// direct access to the class instance implementing this interface
+    function Instance: TCryptAbstractKey;
+  end;
+
+  /// abstract interface to a Private Key, as returned by CryptPrivateKey[] factory
+  ICryptPrivateKey = interface
+    /// unserialized the private key from DER binary or PEM text
+    // - this instance should be void, i.e. just created with no prior Load
+    // - will also ensure the private key do match the associated public key
+    // - decode PKCS#8 PrivateKeyInfo for RSA and prime256v1
+    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
+    /// create a new private / public key pair
+    // - this instance should be void, i.e. just created with no prior Load
+    // - returns the associated public key binary in X.509 SubjectPublicKey format
+    function Generate(Algorithm: TCryptAsymAlgo): RawByteString;
+    /// return the private key as raw binary
+    // - follow PKCS#8 PrivateKeyInfo encoding for RSA and prime256v1
+    function ToDer: RawByteString;
+    /// return the associated public key as stored in a X509 certificate
+    function ToSubjectPublicKey: RawByteString;
+    /// return the private key in the TCryptCertX509.Save expected format
+    // - wrap ToDer with PEM and/or PrivateKeyEncrypt() encoding
+    function Save(Format: TCryptCertFormat; const Password: SpiUtf8): RawByteString;
+    /// sign a memory buffer with RSA or ECC using the stored private key
+    function Sign(Algorithm: TCryptAsymAlgo;
+      Data: pointer; DataLen: integer): RawByteString; overload;
+    /// sign a memory buffer with RSA or ECC using the stored private key
+    function Sign(Algorithm: TCryptAsymAlgo;
+      const Data: RawByteString): RawByteString; overload;
+    /// use EciesSeal or RSA un-sealing, i.e. decryption with this private key
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString;
+    /// compute the shared-secret with another public key
+    // - by design, ECDHE is only available for ECC
+    function SharedSecret(const PeerKey: ICryptPublicKey): RawByteString;
+    /// the high-level asymmetric algorithm used for this private key
+    function KeyAlgo: TCryptKeyAlgo;
+    /// direct access to the class instance implementing this interface
+    function Instance: TCryptAbstractKey;
+  end;
+
+  /// abstract parent class to TCryptPublicKey and TCryptPrivateKey
+  TCryptAbstractKey = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fKeyAlgo: TCryptKeyAlgo;
+  public
+    // ICryptPublicKey methods
+    function KeyAlgo: TCryptKeyAlgo;
+    function Instance: TCryptAbstractKey;
+  end;
+
+  /// abstract public key parent class, as returned by CryptPublicKey[] factory
+  TCryptPublicKey = class(TCryptAbstractKey, ICryptPublicKey)
+  protected
+    /// verify the signature of a given hash using this public key
+    function VerifyDigest(Sig: pointer; Dig: THash512Rec; SigLen, DigLen: integer;
+      Hash: THashAlgo): boolean; virtual;
+  public
+    // ICryptPublicKey methods
+    function Load(Algorithm: TCryptKeyAlgo;
+      const SubjectPublicKey: RawByteString): boolean; virtual; abstract;
+    function Verify(Algorithm: TCryptAsymAlgo; Data, Sig: pointer;
+      DataLen, SigLen: integer): boolean; overload; virtual;
+    function Verify(Algorithm: TCryptAsymAlgo;
+      const Data, Sig: RawByteString): boolean; overload;
+    function GetParams(out x, y: RawByteString): boolean; virtual; abstract;
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; virtual; abstract;
+  end;
+
+  /// abstract public key metaclass, as stored by the CryptPublicKey[] factory
+  TCryptPublicKeyClass = class of TCryptPublicKey;
+
+  /// abstract private key parent class, as returned by the CryptPrivateKey[] factory
+  TCryptPrivateKey = class(TCryptAbstractKey, ICryptPrivateKey)
+  protected
+    /// sign a memory buffer digest with the stored private key
+    function SignDigest(const Dig: THash512Rec; DigLen: integer;
+      DigAlgo: TCryptAsymAlgo): RawByteString; virtual;
+  public
+    // ICryptPrivateKey methods
+    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
+        virtual; abstract;
+    function Generate(Algorithm: TCryptAsymAlgo): RawByteString; virtual; abstract;
+    function ToDer: RawByteString; virtual; abstract;
+    function ToSubjectPublicKey: RawByteString; virtual; abstract;
+    function Save(Format: TCryptCertFormat;
+      const Password: SpiUtf8): RawByteString; virtual;
+    function Sign(Algorithm: TCryptAsymAlgo;
+      Data: pointer; DataLen: integer): RawByteString; overload; virtual;
+    function Sign(Algorithm: TCryptAsymAlgo;
+      const Data: RawByteString): RawByteString; overload;
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; virtual; abstract;
+    function SharedSecret(
+      const PeerKey: ICryptPublicKey): RawByteString; virtual;
+  end;
+
+  /// abstract public key metaclass class, as stored by the CryptPrivateKey factory
+  TCryptPrivateKeyClass = class of TCryptPrivateKey;
+
+  /// exception class raised by our High-Level Certificates Process
+  ECryptCert = class(ESynException);
 
   /// the known Key Usages for a given Certificate
   // - is an exact match of TX509Usage enumerate in mormot.lib.openssl11.pas
@@ -1764,22 +1903,6 @@ type
     Comment: RawUtf8;
   end;
   PCryptCertFields = ^TCryptCertFields;
-
-  /// ICryptCert.Save possible output formats
-  // - 'syn-es256' from mormot.crypt.ecc certificate will use its own proprietary
-  // format, i.e. SaveToBinary/SaveToSecureBinary for ccfBinary, or non-standard
-  // '-----BEGIN/END SYNECC CERTIFICATE-----' headers for ccfPem
-  // - 'x509-rs256'..'x509-es256' from mormot.crypt.openssl will use the standard
-  // x509 format, as DER (or PKCS12 if PrivatePassword is set) for ccfBinary,
-  // or PEM for ccfPEM (concatenating the private key if PrivatePassword is set)
-  // - ccfHexa, ccfBase64 and ccfBase64Uri will use the ccfBinary output, then
-  // encode it as Hexadecimal or Base-64 (URI)
-  TCryptCertFormat = (
-    ccfBinary,
-    ccfPem,
-    ccfHexa,
-    ccfBase64,
-    ccfBase64Uri);
 
   /// the ICryptCert.Load/Save content
   // - cccCertOnly will store the certificate as PEM or DER with its public key
@@ -2842,6 +2965,27 @@ var
   // - may be nil if this unit was not included or if OpenSSL is not available
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptAsymOpenSsl: array[TCryptAsymAlgo] of TCryptAsym;
+
+
+  (* ICryptPublicKey / ICryptPrivateKey factories *)
+
+  /// RSA/ECC public key factory
+  // - implemented e.g. by mormot.crypt.x509 with TCryptPublicKeyX509
+  // - use as such:
+  // $ var key: ICryptPublicKey;
+  // $ ...
+  // $   key := CryptPublicKey[ckaEcc].Create;
+  // $   if key.Load(...) then ...
+  CryptPublicKey: array[TCryptKeyAlgo] of TCryptPublicKeyClass;
+
+  /// RSA/ECC private key factory
+  // - implemented e.g. by mormot.crypt.x509 with TCryptPrivateKeyX509
+  // - use as such:
+  // $ var key: ICryptPrivateKey;
+  // $ ...
+  // $   key := CryptPrivateKey[ckaEcc].Create;
+  // $   if key.Load(...) then ...
+  CryptPrivateKey: array[TCryptKeyAlgo] of TCryptPrivateKeyClass;
 
 
   (* ICryptCert factories *)
@@ -6725,6 +6869,124 @@ begin
   BytesToRawByteString(sig, s);
   result := Verify(Hasher(hashername), pointer(msg), length(msg), p, s);
 end;
+
+
+{ TCryptAbstractKey }
+
+function TCryptAbstractKey.KeyAlgo: TCryptKeyAlgo;
+begin
+  result := fKeyAlgo;
+end;
+
+function TCryptAbstractKey.Instance: TCryptAbstractKey;
+begin
+  result := self;
+end;
+
+{ TCryptPublicKey }
+
+function TCryptPublicKey.VerifyDigest(Sig: pointer; Dig: THash512Rec; SigLen,
+  DigLen: integer; Hash: THashAlgo): boolean;
+begin
+  result := false; // to be overriden if needed (not for OpenSSL)
+end;
+
+function TCryptPublicKey.Verify(Algorithm: TCryptAsymAlgo; Data, Sig: pointer;
+  DataLen, SigLen: integer): boolean;
+var
+  hasher: TSynHasher;
+  dig: THash512Rec;
+  diglen: PtrInt;
+begin
+  diglen := hasher.Full(CAA_HF[Algorithm], Data, DataLen, dig);
+  result := (diglen <> 0) and
+            VerifyDigest(Sig, dig, SigLen, diglen, CAA_HF[Algorithm]);
+end;
+
+function TCryptPublicKey.Verify(Algorithm: TCryptAsymAlgo;
+  const Data, Sig: RawByteString): boolean;
+begin
+  result := Verify(Algorithm, pointer(Data), pointer(Sig), length(Data), length(Sig));
+end;
+
+
+{ TCryptPrivateKey }
+
+function TCryptPrivateKey.Save(Format: TCryptCertFormat;
+  const Password: SpiUtf8): RawByteString;
+var
+  der, bin: RawByteString;
+  k: TPemKind;
+begin
+  // called from ToDer for TCryptPrivateKeyEcc and TCryptPrivateKeyRsa
+  // - with mormot.core.secure encryption, not standard PKCS#8
+  // - overriden in mormot.crypt.openssl to use PEVP_PKEY standard serialization
+  if self = nil then
+    result := ''
+  else
+  try
+    der := ToDer;
+    if Password = '' then
+      // save as plain unencrypted PEM/DER
+      if Format = ccfPem then
+        if fKeyAlgo in CKA_RSA then
+          k := pemRsaPrivateKey
+        else
+          k := pemEcPrivateKey
+      else
+        k := pemUnspecified // save as ccfBinary
+    else
+    begin
+      bin := der; // for FillZero()
+      der := PrivateKeyEncrypt(
+               bin, CKA_SALT[fKeyAlgo], Password, CKA_ROUNDS[fKeyAlgo]);
+      if Format = ccfPem then
+        if fKeyAlgo in CKA_RSA then
+          k := pemSynopseRsaEncryptedPrivateKey
+        else
+          k := pemSynopseEccEncryptedPrivateKey
+        else
+          k := pemUnspecified;
+    end;
+    if k = pemUnspecified then
+      result := der
+    else
+      result := DerToPem(der, k);
+  finally
+    FillZero(der);
+    FillZero(bin);
+  end;
+end;
+
+function TCryptPrivateKey.SignDigest(const Dig: THash512Rec; DigLen: integer;
+  DigAlgo: TCryptAsymAlgo): RawByteString;
+begin
+  result := ''; // to be overriden if needed (not for OpenSSL)
+end;
+
+function TCryptPrivateKey.Sign(Algorithm: TCryptAsymAlgo;
+  Data: pointer; DataLen: integer): RawByteString;
+var
+  hasher: TSynHasher;
+  dig: THash512Rec;
+  diglen: PtrInt;
+begin
+  diglen := hasher.Full(CAA_HF[Algorithm], Data, DataLen, dig);
+  result := SignDigest(dig, diglen, Algorithm);
+end;
+
+function TCryptPrivateKey.Sign(Algorithm: TCryptAsymAlgo;
+  const Data: RawByteString): RawByteString;
+begin
+  result := Sign(Algorithm, pointer(Data), length(Data));
+end;
+
+function TCryptPrivateKey.SharedSecret(
+  const PeerKey: ICryptPublicKey): RawByteString;
+begin
+  result := ''; // unsupported by this algorithm (only ECC by now)
+end;
+
 
 
 { TCryptCertAlgo }
