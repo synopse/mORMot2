@@ -3211,10 +3211,18 @@ function PrivateKeyDecrypt(const Input, Salt: RawByteString;
 
 
 /// compute the number of security bits of a digital signature
-// - ECC security size is half of its X,Y coordinates storage size
 // - RSA security depends on the signature size, not the hash size
+// - ECC security size is half of its X,Y coordinates storage size
 // - e.g. 112 for RSA-2048, 128 for ECC-256
 function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
+
+/// extract the raw binary of a ASN.1/DER digital signature
+// - input comes e.g. from ICryptCert.Sign or ICryptPrivateKey.Sign content
+// - resulting raw binary can be used e.g. for JSON Web Signature (JWS) content
+// - RSA and EdDSA signatures are not encoded, so are returnde directly
+// - ECC are decoded from their ASN1_SEQ into their raw xy coordinates concatenation
+function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
+  const signature: RawByteString): RawUtf8;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
@@ -8770,36 +8778,85 @@ begin
     end;
 end;
 
+const
+  CAA_SIZE: array[TCryptAsymAlgo] of Integer = (
+    32,  // caaES256
+    48,  // caaES384
+    66,  // caaES512
+    32,  // caaES256K
+    0,   // caaRS256
+    0,   // caaRS384
+    0,   // caaRS512
+    0,   // caaPS256
+    0,   // caaPS384
+    0,   // caaPS512
+    32); // caaEdDSA
+
 function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
 begin
   result := 0;
   len := len shl 3; // into bits
-  if len > 128 then
-    case a of
-      // ECC security size is half of its X,Y coordinates storage size
-      caaES256,
-      caaES256K,
-      caaEdDSA:
-        result := 128;
-      caaES384:
-        result := 192;
-      caaES512:
-        result := 256;
-      // RSA security depends on the signature size, not the hash size
-      caaRS256 .. caaPS512:
-        if len < 1024 then
-          result := 30           // 512-bit
-        else if len < 2048 then
-          result := 80           // 1024-bit
-        else if len < 3072 then
-          result := 112          // 2048-bit
-        else if len < 7680 then
-          result := 128          // 3072-bit
-        else if len < 15360 then
-          result := 192          // 7680-bit: very unlikely since very slow
-        else
-          result := 256; // the lower RS256 hash has 256-bit of security anyway
-    end;
+  if len < 128 then
+    exit;
+  result := CAA_SIZE[a];
+  if result <> 0 then
+    // ECC security size is half of its X,Y coordinates storage size
+    result := result shl 2
+  else
+    // RSA security depends on the signature size, not the hash size
+    if len < 1024 then
+      result := 30           // 512-bit
+    else if len < 2048 then
+      result := 80           // 1024-bit
+    else if len < 3072 then
+      result := 112          // 2048-bit
+    else if len < 7680 then
+      result := 128          // 3072-bit
+    else if len < 15360 then
+      result := 192          // 7680-bit: very unlikely since very slow
+    else
+      result := 256; // the lower RS256 hash has 256-bit of security anyway
+end;
+
+function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
+  const signature: RawByteString): RawUtf8;
+var
+  derlen: cardinal;
+  der: PByteArray;
+  eccbytes, len: integer;
+  buf: array [0..131] of AnsiChar;
+begin
+  if algo in (CAA_RSA + [caaEdDSA]) then
+  begin
+    // no need to be decoded, since RSA and EdDSA have no SEQ
+    result := BinToBase64uri(pointer(signature), length(signature));
+    exit;
+  end;
+  result := '';
+  derlen := length(signature);
+  der := pointer(signature);
+  if (derlen < 50) or
+     (der[0] <> ord(ASN1_SEQ)) or
+     (der[1] > derlen - 2) then
+    exit;
+  eccbytes := CAA_SIZE[algo];
+  if der[1] and $80 <> 0 then
+  begin
+    // 2-byte length
+    assert((der[1] and $7f) = 1);
+    len := der[2];
+    if DerParse(DerParse(@der[3], @buf[0], eccbytes),
+        @buf[eccbytes], eccbytes) <> PAnsiChar(@der[len + 3]) then
+      exit;
+  end
+  else
+  begin
+    len := der[1];
+    if DerParse(DerParse(@der[2], @buf[0], eccbytes),
+        @buf[eccbytes], eccbytes) <> PAnsiChar(@der[len + 2]) then
+      exit;
+  end;
+  result := BinToBase64uri(@buf[0], eccbytes * 2);
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
@@ -9597,7 +9654,7 @@ begin
         else
           // consider null-terminated strings as non-binary, but truncate
           SetLength(Value, n - 1);
-      1..8, // consider TAB char as text
+      1..8, // consider TAB (#9) char as text
       10..31:
         exit;
     end;
