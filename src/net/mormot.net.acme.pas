@@ -79,22 +79,6 @@ type
       read fJwkThumbprint;
   end;
 
-const
-  /// the JWS ECC curve names according to our known asymmetric algorithms
-  // - see https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
-  CAA_CRV: array[TCryptAsymAlgo] of PUtf8Char = (
-    'P-256',     // caaES256
-    'P-384',     // caaES384
-    'P-521',     // caaES512, note that P-521 is not a typo ;)
-    'secp256k1', // caaES256K
-    '',          // caaRS256
-    '',          // caaRS384
-    '',          // caaRS512
-    '',          // caaPS256
-    '',          // caaPS384
-    '',          // caaPS512
-    'Ed25519');  // caaEdDSA
-
 
 { **************** ACME client implementation }
 
@@ -445,7 +429,6 @@ end;
 
 function TJwsHttpClient.Post(const aUrl: RawUtf8; const aJson: RawJson): RawJson;
 var
-  x, y: RawByteString;
   jwk, header: RawUtf8;
   thumb: TSha256Digest;
   header_enc, json_enc, body_enc: RawUtf8;
@@ -460,16 +443,10 @@ begin
   end
   else
   begin
-    if fCert.PrivateKeyHandle = nil then
+    if not fCert.HasPrivateSecret then
       raise EJwsHttp.Create('No private key');
     // No key identifier, need to provide JSON Web Key
-    if fCert.GetPrivateKeyParams(x, y) then
-      if fCert.AsymAlgo in CAA_ECC then
-        jwk := FormatJson('{"crv":?,"kty":"EC","x":?,"y":?}',
-          [], [CAA_CRV[fCert.AsymAlgo], BinToBase64uri(x), BinToBase64uri(y)])
-      else
-        jwk := FormatJson('{"e":?,"kty":"RSA","n":?}',
-          [], [BinToBase64uri(x), BinToBase64uri(y)]);
+    jwk := fCert.JwkCompute;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
     // before or after any syntaxic elements and with the required members
     // ordered lexicographically, using SHA-256 hashing

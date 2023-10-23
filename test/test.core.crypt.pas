@@ -2863,6 +2863,7 @@ begin
       CheckEqual(word(c3.GetUsage), word(c1.GetUsage));
       if fmt = ccfPem then // PKCS12 seems to add some information to X509 :(
         CheckEqual(c3.GetPeerInfo, c1.GetPeerInfo);
+      checkEqual(c3.GetPublicKey, c1.GetPublicKey);
       s := c1.Save;
       check(c2.load(s));
       checkEqual(c2.GetPrivateKey, '');

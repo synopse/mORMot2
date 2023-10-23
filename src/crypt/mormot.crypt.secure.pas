@@ -1688,7 +1688,10 @@ type
     /// verify the RSA or ECC signature of a memory buffer
     function Verify(Algorithm: TCryptAsymAlgo;
       const Data, Sig: RawByteString): boolean; overload;
-    /// as used by TCryptCert.GetPrivateKeyParams
+    /// as used by TCryptCert.GetKeyParams
+    // - for ECC, returns the x,y coordinates
+    // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
+    // - return false if there is no compliant key information in the provider
     function GetParams(out x, y: RawByteString): boolean;
     /// use EciesSeal or RSA sealing, i.e. encryption with this public key
     function Seal(const Message: RawByteString;
@@ -2127,6 +2130,15 @@ type
       Payload: PDocVariantData = nil; Signature: PRawByteString = nil;
       IgnoreError: TCryptCertValidities = [];
       TimeUtc: TDateTime = 0): TCryptCertValidity;
+    /// returns the JSON Web Key (JWT) corresponding to the public key of this
+    // certificate
+    // - the returned JWK is computed with no whitespace or line breaks before
+    // or after any syntaxic elements, and the required members are ordered
+    // lexicographically, as expected for a direct thumbprint
+    // - typical pattern is '{"crv":..,"kty":"EC","x":..,"y":.. }' for ECC
+    // or '{"e":..,"kty":"RSA","n":..}' for RSA
+    // - is implemented by default as a wrapper to GetKeyParams() results
+    function JwkCompute: RawUtf8;
     /// encrypt a message using the public key of this certificate
     // - only RSA and ES256 algorithms do support this method by now
     // - 'x509-rs*' and 'x509-ps*' RSA algorithms use an OpenSSL Envelope key
@@ -2192,7 +2204,7 @@ type
     // - for ECC, returns the x,y coordinates
     // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
     // - return false if there is no compliant key information in the provider
-    function GetPrivateKeyParams(out x, y: RawByteString): boolean;
+    function GetKeyParams(out x, y: RawByteString): boolean;
   end;
 
   /// a dynamic array of Certificate interface instances
@@ -2278,6 +2290,7 @@ type
     function JwtVerify(const Jwt: RawUtf8; Issuer, Subject, Audience: PRawUtf8;
       Payload: PDocVariantData; Signature: PRawByteString;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; virtual;
+    function JwkCompute: RawUtf8; virtual;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function Decrypt(const Message: RawByteString;
@@ -2288,7 +2301,7 @@ type
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
     function PrivateKeyHandle: pointer; virtual;
-    function GetPrivateKeyParams(out x, y: RawByteString): boolean; virtual;
+    function GetKeyParams(out x, y: RawByteString): boolean; virtual;
   end;
 
   /// meta-class of the abstract parent to implement ICryptCert interface
@@ -2702,6 +2715,21 @@ const
     'PS512',      // caaPS512
     'EdDSA');     // caaEdDSA
 
+  /// the JWS ECC curve names according to our known asymmetric algorithms
+  // - see https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
+  CAA_CRV: array[TCryptAsymAlgo] of RawUtf8 = (
+    'P-256',     // caaES256
+    'P-384',     // caaES384
+    'P-521',     // caaES512, note that P-521 is not a typo ;)
+    'secp256k1', // caaES256K
+    '',          // caaRS256
+    '',          // caaRS384
+    '',          // caaRS512
+    '',          // caaPS256
+    '',          // caaPS384
+    '',          // caaPS512
+    'Ed25519');  // caaEdDSA
+
   /// the THashAlgo according to our known asymmetric algorithms
   CAA_HF: array[TCryptAsymAlgo] of THashAlgo = (
     hfSHA256,     // caaES256
@@ -2741,32 +2769,6 @@ const
 
   /// the known key algorithms which implement RSA cryptography
   CKA_RSA = [ckaRsa, ckaRsaPss];
-
-  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt salt
-  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
-  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
-  CKA_SALT: array[TCryptKeyAlgo] of RawUtf8 = (
-    '',           // ckaNone
-    'synrsa',     // ckaRsa
-    'synrsa',     // ckaRsaPss
-    'synecc',     // ckaEcc256
-    'syne384',    // ckaEcc384
-    'syne512',    // ckaEcc512
-    'synecck',    // ckaEcc256k
-    'syneddsa');  // ckaEdDSA
-
-  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt AF-32 rounds
-  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
-  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
-  CKA_ROUNDS: array[TCryptKeyAlgo] of byte = (
-    0,    // ckaNone
-    3,    // ckaRsa
-    3,    // ckaRsaPss
-    31,    // ckaEcc256
-    23,    // ckaEcc384
-    15,    // ckaEcc512
-    31,    // ckaEcc256k
-    31);   // ckaEdDSA
 
   /// such a Certificate could be used for anything
   CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
@@ -6884,6 +6886,33 @@ begin
 end;
 
 
+const
+  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt salt
+  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
+  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
+  CKA_SALT: array[TCryptKeyAlgo] of RawUtf8 = (
+    '',           // ckaNone
+    'synrsa',     // ckaRsa
+    'synrsa',     // ckaRsaPss
+    'synecc',     // ckaEcc256
+    'syne384',    // ckaEcc384
+    'syne512',    // ckaEcc512
+    'synecck',    // ckaEcc256k
+    'syneddsa');  // ckaEdDSA
+
+  /// per algorithm PrivateKeyEncrypt/PrivateKeyDecrypt AF-32 rounds
+  // - ckaRsa/ckaRsaPss share the same public/private key files by definition
+  // - ckaEcc256 matches EccPrivateKeyEncrypt/EccPrivateKeyDecrypt encoding
+  CKA_ROUNDS: array[TCryptKeyAlgo] of byte = (
+    0,    // ckaNone
+    3,    // ckaRsa
+    3,    // ckaRsaPss
+    31,    // ckaEcc256
+    23,    // ckaEcc384
+    15,    // ckaEcc512
+    31,    // ckaEcc256k
+    31);   // ckaEdDSA
+
 { TCryptAbstractKey }
 
 function TCryptAbstractKey.KeyAlgo: TCryptKeyAlgo;
@@ -6895,6 +6924,7 @@ function TCryptAbstractKey.Instance: TCryptAbstractKey;
 begin
   result := self;
 end;
+
 
 { TCryptPublicKey }
 
@@ -7372,6 +7402,25 @@ begin
   if Payload <> nil then
     Payload^ := pl;
 end;
+
+function TCryptCert.JwkCompute: RawUtf8;
+var
+  x, y: RawByteString;
+  bx, by: RawUtf8;
+begin
+  result := '';
+  if not GetKeyParams(x, y) then
+    exit;
+  bx := BinToBase64uri(x);
+  by := BinToBase64uri(y);
+  // parameters are ordered lexicographically, as expected for thumbprints
+  if AsymAlgo in CAA_ECC then
+    FormatUtf8('{"crv":"%","kty":"EC","x":"%","y":"%"}',
+      [CAA_CRV[AsymAlgo], bx, by], result)
+  else
+    FormatUtf8('{"e":"%","kty":"RSA","n":"%"}', [bx, by], result);
+end;
+
 function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
 begin
   result := ''; // unsupported by default
@@ -7397,7 +7446,7 @@ begin
   result := nil; // unsupported
 end;
 
-function TCryptCert.GetPrivateKeyParams(out x, y: RawByteString): boolean;
+function TCryptCert.GetKeyParams(out x, y: RawByteString): boolean;
 begin
   result := false; // unsupported
 end;

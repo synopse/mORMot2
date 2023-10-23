@@ -3277,7 +3277,7 @@ type
     function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override; // a TX509 instance
     function PrivateKeyHandle: pointer; override;
-    function GetPrivateKeyParams(out x, y: RawByteString): boolean; override;
+    function GetKeyParams(out x, y: RawByteString): boolean; override;
     property X509: TX509
       read fX509;
   end;
@@ -3713,7 +3713,6 @@ begin
           EnsureCanWrite('Load');
           Clear;
           fX509 := TX509.Create;
-          //FileFromString(Saved, '/home/ab/Downloads/generated.der');
           if fX509.LoadFromPem(Saved) then
             result := true
           else
@@ -3918,7 +3917,7 @@ begin
   result := pointer(fPrivateKey);
 end;
 
-function TCryptCertX509.GetPrivateKeyParams(out x, y: RawByteString): boolean;
+function TCryptCertX509.GetKeyParams(out x, y: RawByteString): boolean;
 begin
   result := fX509.PublicKey.GetParams(x, y);
 end;

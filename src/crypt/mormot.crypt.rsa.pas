@@ -734,7 +734,7 @@ type
     /// unserialized the public key from raw binary stored in a X.509 certificate
     function Load(Algorithm: TCryptKeyAlgo;
       const SubjectPublicKey: RawByteString): boolean; override;
-    /// as used by ICryptCert.GetPrivateKeyParams
+    /// as used by ICryptCert.GetKeyParams
     function GetParams(out x, y: RawByteString): boolean; override;
     /// use RSA sealing, i.e. encryption with this public key
     function Seal(const Message: RawByteString;

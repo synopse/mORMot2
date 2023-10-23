@@ -7502,7 +7502,7 @@ function EVP_PKEY.Verify(Algo: PEVP_MD; Sig, Msg: pointer;
 var
   ctx: PEVP_MD_CTX;
 begin
-  // expects @self to be a public key
+  // expects @self to be a public (or private) key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
   // we don't check "Algo = nil" because algo may have its built-in hashing
   ctx := EVP_MD_CTX_new;
