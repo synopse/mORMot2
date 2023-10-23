@@ -780,6 +780,16 @@ const
     'ZHhnT2RzGDGHrq115yC+T8SwTo7/h5p/2AuO4fXWP6MWXMJcXUGs6MshY5vgH4QY'#13#10 +
     'BPyNxBYuEhvuYUZ3nJXJZZ0='#13#10 +
     '-----END PRIVATE KEY-----'#13#10;
+  _rsapub = // see _rsapriv defined above
+    '-----BEGIN PUBLIC KEY-----'#13#10 +
+    'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQ4/dhzEXlDpj71dwF3T'#13#10 +
+    't1Sx/COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0ORcGKse+wYLG+BV8rIT2zRPbrI'#13#10 +
+    'XfEJmnjlnsQ635n9bMpfhFIyr9pE4w5y5ZUAzJStwYmudykFAfA7/1BWqD+uE3z5'#13#10 +
+    'PqfnmZHEbYNHeBGt0vIRSfQQXXxj+wnpaQ+/GTYQr5OHynyJS8esD9dpKfsExc7r'#13#10 +
+    'Bx4VH1tCx1SH9yVAMHts0674HjnnyFyveoXOajN1gxn4/iN1lfWZzzoWqyVvKWZ5'#13#10 +
+    'XitCD/FEdhbjFbWKibrku9c/P7HNz7oqMx2QkhGa+asefQNnwFv+Nqac9rTCP7ld'#13#10 +
+    'ewIDAQAB'#13#10 +
+    '-----END PUBLIC KEY-----'#13#10;
 
 procedure TTestCoreCrypto._JWT;
 
@@ -857,7 +867,7 @@ procedure TTestCoreCrypto._JWT;
       one.Free;
   end;
 
-  procedure Benchmark(J: TJwtAbstract; N: integer = 1000);
+  procedure Benchmark(J: TJwtAbstract; ctx: PUtf8Char; N: integer = 1000);
   var
     i: integer;
     tok: RawUtf8;
@@ -879,7 +889,7 @@ procedure TTestCoreCrypto._JWT;
       jwt.result := jwtNoToken;
       J.Verify(tok, jwt);
       check(jwt.result in [jwtInvalidSignature, jwtWrongFormat], 'detection');
-      NotifyTestSpeed('%', [J.Algorithm], N, 0, @tim);
+      NotifyTestSpeed('% %', [ctx, J.Algorithm], N, 0, @tim);
     finally
       J.Free;
     end;
@@ -895,27 +905,26 @@ const
     TJwtPs512);
 {$ifdef USE_OPENSSL}
   OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
+    TJwtEs256Osl,
+    TJwtEs384Osl,
+    TJwtEs512Osl,
+    TJwtEs256KOsl,
     TJwtRs256Osl,
     TJwtRs384Osl,
     TJwtRs512Osl,
     TJwtPs256Osl,
     TJwtPs384Osl,
     TJwtPs512Osl,
-    TJwtEs256Osl,
-    TJwtEs384Osl,
-    TJwtEs512Osl,
-    TJwtEs256KOsl,
     TJwtEddsaOsl);
-var
-  priv, pub: RawUtf8;
 {$endif USE_OPENSSL}
 var
   i: integer;
   j: TJwtAbstract;
   jwt: TJwtContent;
   secret: TEccCertificateSecret;
-  tok: RawUtf8;
+  tok, priv, pub: RawUtf8;
   a: TSignAlgo;
+  caa: TCryptAsymAlgo;
 begin
   test(TJwtNone.Create(
     [jrcIssuer, jrcExpirationTime], [], 60));
@@ -967,32 +976,50 @@ begin
   end;
   for a := saSha256 to high(a) do
     Benchmark(JWT_CLASS[a].Create(
-      'secret', 0, [jrcIssuer, jrcExpirationTime], []));
+      'secret', 0, [jrcIssuer, jrcExpirationTime], []), 'mORMot');
   secret := TEccCertificateSecret.CreateNew(nil);
   try
     Benchmark(TJwtEs256.Create(
-      secret, [jrcIssuer, jrcExpirationTime], [], 60), 100);
+      secret, [jrcIssuer, jrcExpirationTime], [], 60), 'mORMot', 100);
   finally
     secret.Free;
   end;
   for i := 0 to high(JWT_RSA) do
   begin
     j := JWT_RSA[i].Create(_rsapriv, [jrcIssuer, jrcExpirationTime], [], 60);
-    {$ifdef USE_OPENSSL}
-    test(j, {nofree=}false);
-    {$else}
     test(j, {nofree=}true);
-    Benchmark(j, 100);
-    {$endif USE_OPENSSL}
+    Benchmark(j, 'mORMot', 100);
   end;
+  for caa := low(caa) to high(caa) do
+    if TJwtCrypt.Supports(caa) then
+    begin
+      // RSA is very slow at key computing and signing, but fast to verify
+      if caa in CAA_RSA then
+      begin
+        priv := _rsapriv; // pre-computed RSA key pair
+        pub := _rsapub;
+      end
+      else
+        pub := ''; // ECC algorithms are fast enough to generate a new key
+      j := TJwtCrypt.Create(caa, pub, [jrcIssuer, jrcExpirationTime], [], 60);
+      if pub <> '' then
+        Check(TJwtCrypt(j).LoadPrivateKey(priv));
+      test(j, {nofree=}true);
+      Benchmark(j, 'TJwtCrypt', 100);
+    end;
   {$ifdef USE_OPENSSL}
   for i := 0 to high(OSSL_JWT) do
     if OSSL_JWT[i].IsAvailable then
     begin
-      // RSA is very slow at key computing and signing, but fast to verify
-      OSSL_JWT[i].GenerateKeys(priv, pub);
-      Benchmark(OSSL_JWT[i].Create(
-        priv, pub, '', '', [jrcIssuer, jrcExpirationTime], [], 60), 100);
+      if OSSL_JWT[i].GetAsymAlgo in CAA_RSA then
+      begin
+        priv := _rsapriv; // pre-computed RSA key pair
+        pub := _rsapub;
+      end
+      else
+        OSSL_JWT[i].GenerateKeys(priv, pub);
+      Benchmark(OSSL_JWT[i].Create(priv, pub, '', '',
+        [jrcIssuer, jrcExpirationTime], [], 60), 'OpenSSL', 100);
     end;
   {$endif USE_OPENSSL}
 end;
@@ -3244,17 +3271,6 @@ begin
 end;
 
 const
-  _rsapub = // "openssl rsa -in priv.pem -outform PEM -pubout -out pub.pem"
-    // see _rsapriv defined above (used for TJwtRs* validation)
-    '-----BEGIN PUBLIC KEY-----'#13#10 +
-    'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQ4/dhzEXlDpj71dwF3T'#13#10 +
-    't1Sx/COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0ORcGKse+wYLG+BV8rIT2zRPbrI'#13#10 +
-    'XfEJmnjlnsQ635n9bMpfhFIyr9pE4w5y5ZUAzJStwYmudykFAfA7/1BWqD+uE3z5'#13#10 +
-    'PqfnmZHEbYNHeBGt0vIRSfQQXXxj+wnpaQ+/GTYQr5OHynyJS8esD9dpKfsExc7r'#13#10 +
-    'Bx4VH1tCx1SH9yVAMHts0674HjnnyFyveoXOajN1gxn4/iN1lfWZzzoWqyVvKWZ5'#13#10 +
-    'XitCD/FEdhbjFbWKibrku9c/P7HNz7oqMx2QkhGa+asefQNnwFv+Nqac9rTCP7ld'#13#10 +
-    'ewIDAQAB'#13#10 +
-    '-----END PUBLIC KEY-----'#13#10;
   // from FPC RTL
   _modulus =
     'bb32b4d0d89e9a9e8c79294c2ba8ef5c43d4933b9478ff3054c71bc8e52f1b99cd108d' +
