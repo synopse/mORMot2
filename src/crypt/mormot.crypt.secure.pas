@@ -1775,14 +1775,16 @@ type
   /// abstract private key parent class, as returned by the CryptPrivateKey[] factory
   TCryptPrivateKey = class(TCryptAbstractKey, ICryptPrivateKey)
   protected
+    /// default Load() will call PrivateKeyDecrypt() then FromDer()
+    function FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
+      pub: TCryptPublicKey): boolean; virtual;
     /// sign a memory buffer digest with the stored private key
     function SignDigest(const Dig: THash512Rec; DigLen: integer;
       DigAlgo: TCryptAsymAlgo): RawByteString; virtual;
   public
     // ICryptPrivateKey methods
     function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
-      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
-        virtual; abstract;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; virtual;
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; virtual; abstract;
     function ToDer: RawByteString; virtual; abstract;
     function ToSubjectPublicKey: RawByteString; virtual; abstract;
@@ -6961,14 +6963,15 @@ var
   der, bin: RawByteString;
   k: TPemKind;
 begin
-  // called from ToDer for TCryptPrivateKeyEcc and TCryptPrivateKeyRsa
-  // - with mormot.core.secure encryption, not standard PKCS#8
+  // use our proprietary mormot.core.secure encryption, not standard PKCS#8
   // - overriden in mormot.crypt.openssl to use PEVP_PKEY standard serialization
   if self = nil then
     result := ''
   else
   try
+    // call overriden TCryptPrivateKeyEcc.ToDer and TCryptPrivateKeyRsa.ToDer
     der := ToDer;
+    // persist in the expected (may be encrypted) format
     if Password = '' then
       // save as plain unencrypted PEM/DER
       if AsPem then
@@ -7001,10 +7004,57 @@ begin
   end;
 end;
 
+function TCryptPrivateKey.FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
+  pub: TCryptPublicKey): boolean;
+begin
+  result := false; // to be overriden if needed (not for OpenSSL)
+end;
+
 function TCryptPrivateKey.SignDigest(const Dig: THash512Rec; DigLen: integer;
   DigAlgo: TCryptAsymAlgo): RawByteString;
 begin
   result := ''; // to be overriden if needed (not for OpenSSL)
+end;
+
+function TCryptPrivateKey.Load(Algorithm: TCryptKeyAlgo;
+  const AssociatedKey: ICryptPublicKey; const PrivateKeySaved: RawByteString;
+  const Password: SpiUtf8): boolean;
+var
+  saved, der: RawByteString;
+  pub: TCryptPublicKey;
+begin
+  // use our proprietary mormot.core.secure encryption, not standard PKCS#8
+  // - overriden in mormot.crypt.openssl to use PEVP_PKEY standard serialization
+  result := false;
+  if (self = nil) or
+     (fKeyAlgo <> ckaNone) or
+     (Algorithm = ckaNone) or
+     (PrivateKeySaved = '') then
+    exit;
+  try
+    // compute the raw DER content (may be decrypt)
+    saved := PrivateKeySaved;
+    if Password <> '' then
+    begin
+      der := PemToDer(saved); // see also TCryptCertX509.Load
+      saved := PrivateKeyDecrypt(
+        der, CKA_SALT[Algorithm], Password, CKA_ROUNDS[Algorithm]);
+      if saved = '' then
+        exit;
+    end;
+    if Assigned(AssociatedKey) then
+      pub := AssociatedKey.Instance as TCryptPublicKey
+    else
+      pub := nil;
+    // call overriden TCryptPrivateKeyEcc.FromDer and TCryptPrivateKeyRsa.FromDer
+    if not FromDer(Algorithm, saved, pub) then
+      exit;
+    fKeyAlgo := Algorithm;
+    result := true;
+  finally
+    FillZero(saved);
+    FillZero(der);
+  end;
 end;
 
 function TCryptPrivateKey.Sign(Algorithm: TCryptAsymAlgo;

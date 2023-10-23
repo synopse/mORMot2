@@ -746,17 +746,15 @@ type
   TCryptPrivateKeyRsa = class(TCryptPrivateKey)
   protected
     fRsa: TRsa;
+    // decode the RSA private key ASN.1 and check for any associated public key
+    function FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
+      pub: TCryptPublicKey): boolean; override;
     // TCryptPrivateKey.Sign overloads will call this overriden method
     function SignDigest(const Dig: THash512Rec; DigLen: integer;
       DigAlgo: TCryptAsymAlgo): RawByteString; override;
   public
     /// finalize this instance
     destructor Destroy; override;
-    /// unserialized the private key from DER binary or PEM text
-    // - will also ensure the private key do match the associated public key
-    // - decode PKCS#8 PrivateKeyInfo for RSA
-    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
-      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; override;
     /// create a new private / public key pair
     // - returns the associated public key binary in SubjectPublicKey format
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
@@ -3343,53 +3341,24 @@ end;
 
 { TCryptPrivateKeyRsa }
 
-function TCryptPrivateKeyRsa.Load(Algorithm: TCryptKeyAlgo;
-  const AssociatedKey: ICryptPublicKey;
-  const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
-var
-  saved, der: RawByteString;
-  pubkey: TCryptPublicKeyRsa;
+function TCryptPrivateKeyRsa.FromDer(algo: TCryptKeyAlgo;
+  const der: RawByteString; pub: TCryptPublicKey): boolean;
 begin
   result := false;
-  if (self = nil) or
-     (fKeyAlgo <> ckaNone) or
-     (Algorithm = ckaNone) or
-     (PrivateKeySaved = '') or
-     (fRsa <> nil) then
-    exit;
-  try
-    saved := PrivateKeySaved;
-    if Password <> '' then
-    begin
-      // use mormot.core.secure encryption, not standard PKCS#8
-      der := PemToDer(saved); // see also TCryptCertX509.Load
-      saved := PrivateKeyDecrypt(
-        der, CKA_SALT[Algorithm], Password, CKA_ROUNDS[Algorithm]);
-      if saved = '' then
-        exit;
-    end;
-    if Assigned(AssociatedKey) then
-      pubkey := AssociatedKey.Instance as TCryptPublicKeyRsa
-    else
-      pubkey := nil;
-    fKeyAlgo := Algorithm;
-    case fKeyAlgo of
+  if fRsa = nil then
+    case algo of
       ckaRsa,
       ckaRsaPss:
         begin
-          fRsa := CKA_TO_RSA[fKeyAlgo].Create;
-          if fRsa.LoadFromPrivateKeyPem(saved) and
-             ((pubkey = nil) or
-              fRsa.MatchKey(pubkey.fRsa)) then
+          fRsa := CKA_TO_RSA[algo].Create;
+          if fRsa.LoadFromPrivateKeyPem(der) and
+             ((pub = nil) or
+              fRsa.MatchKey((pub as TCryptPublicKeyRsa).fRsa)) then
             result := true
           else
             FreeAndNil(fRsa);
         end;
     end;
-  finally
-    FillZero(saved);
-    FillZero(der);
-  end;
 end;
 
 function TCryptPrivateKeyRsa.Generate(Algorithm: TCryptAsymAlgo): RawByteString;

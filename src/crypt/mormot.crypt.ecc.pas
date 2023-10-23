@@ -1734,17 +1734,15 @@ type
   TCryptPrivateKeyEcc = class(TCryptPrivateKey)
   protected
     fEcc: TEccPrivateKey;
+    // decode the ECC private key ASN.1 and check for any associated public key
+    function FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
+      pub: TCryptPublicKey): boolean; override;
     /// sign a memory buffer digest with ECC using the stored private key
     function SignDigest(const Dig: THash512Rec; DigLen: integer;
       DigAlgo: TCryptAsymAlgo): RawByteString; override;
   public
     /// finalize this instance
     destructor Destroy; override;
-    /// unserialized the private key from DER binary or PEM text
-    // - will also ensure the private key do match the associated public key
-    // - decode PKCS#8 PrivateKeyInfo for secp256r1/prime256v1
-    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
-      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; override;
     /// create a new private / public key pair
     // - returns the associated public key binary in SubjectPublicKey format
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
@@ -5310,7 +5308,7 @@ begin
       // we only support secp256r1/prime256v1 kind of elliptic curve by now
       if Ecc256r1CompressAsn1(SubjectPublicKey, fEccPub) then
       begin
-        fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or mormot.crypt
+        fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or our pascal code
         fKeyAlgo := Algorithm;
         fSubjectPublicKey := SubjectPublicKey;
         result := true;
@@ -5370,49 +5368,22 @@ end;
 
 { TCryptPrivateKeyEcc }
 
-function TCryptPrivateKeyEcc.Load(Algorithm: TCryptKeyAlgo;
-  const AssociatedKey: ICryptPublicKey;
-  const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
-var
-  saved, der: RawByteString;
-  pubkey: TCryptPublicKeyEcc;
+function TCryptPrivateKeyEcc.FromDer(algo: TCryptKeyAlgo;
+  const der: RawByteString; pub: TCryptPublicKey): boolean;
 begin
   result := false;
-  if (self = nil) or
-     (fKeyAlgo <> ckaNone) or
-     (Algorithm = ckaNone) or
-     (PrivateKeySaved = '') then
-    exit;
-  try
-    saved := PrivateKeySaved;
-    if Password <> '' then
-    begin
-      // use mormot.core.secure encryption, not standard PKCS#8
-      der := PemToDer(saved); // see also TCryptCertX509.Load
-      saved := PrivateKeyDecrypt(
-        der, CKA_SALT[Algorithm], Password, CKA_ROUNDS[Algorithm]);
-      if saved = '' then
-        exit;
-    end;
-    if Assigned(AssociatedKey) then
-      pubkey := AssociatedKey.Instance as TCryptPublicKeyEcc
-    else
-      pubkey := nil;
-    fKeyAlgo := Algorithm;
-    case fKeyAlgo of
+  if IsZero(fEcc) then
+    case algo of
       ckaEcc256:
-        // we only support secp256r1/prime256v1 kind of elliptic curve by now
-        if PemDerRawToEcc(saved, fEcc) and
-           ((pubkey = nil) or
-            Ecc256r1MatchKeys(fEcc, pubkey.fEcc.PublicKey)) then
+        // this unit supports only secp256r1/prime256v1 kind of elliptic curve
+        if PemDerRawToEcc(der, fEcc) and
+           ((pub = nil) or
+            Ecc256r1MatchKeys(fEcc,
+              (pub as TCryptPublicKeyEcc).fEcc.PublicKey)) then
           result := true
         else
           FillZero(fEcc);
     end;
-  finally
-    FillZero(saved);
-    FillZero(der);
-  end;
 end;
 
 function TCryptPrivateKeyEcc.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
