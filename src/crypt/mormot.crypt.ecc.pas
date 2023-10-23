@@ -1704,6 +1704,63 @@ function SynEccLoad(const Cert: RawByteString): ICryptCert;
   - to work with standards, the mormot.crypt.x509 engine may be preferred
 }
 
+type
+  /// store a ECC public key in ICryptPublicKey format
+  // - using our pure pascal mormot.crypt.ecc256r1 unit
+  // - registered in mormot.crypt.secure CryptPublicKey[ckaEcc] factory
+  TCryptPublicKeyEcc = class(TCryptPublicKey)
+  protected
+    fEcc: TEcc256r1VerifyAbstract;
+    fEccPub: TEccPublicKey;
+    fSubjectPublicKey: RawByteString;
+    function VerifyDigest(Sig: pointer; Dig: THash512Rec;
+      SigLen, DigLen: integer; Hash: THashAlgo): boolean; override;
+  public
+    /// finalize this instance
+    destructor Destroy; override;
+    /// unserialized the public key from raw binary stored in a X.509 certificate
+    function Load(Algorithm: TCryptKeyAlgo;
+      const SubjectPublicKey: RawByteString): boolean; override;
+    /// as used by ICryptCert.GetPrivateKeyParams
+    function GetParams(out x, y: RawByteString): boolean; override;
+    /// use EciesSeal, i.e. encryption with this public key
+    function Seal(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+  end;
+
+  /// store a secp256r1/prime256v1 private key in ICryptPrivateKey format
+  // - using our pure pascal mormot.crypt.ecc256r1 unit
+  // - registered in mormot.crypt.secure CryptPrivateKey[ckaEcc] factory
+  TCryptPrivateKeyEcc = class(TCryptPrivateKey)
+  protected
+    fEcc: TEccPrivateKey;
+    /// sign a memory buffer digest with ECC using the stored private key
+    function SignDigest(const Dig: THash512Rec; DigLen: integer;
+      DigAlgo: TCryptAsymAlgo): RawByteString; override;
+  public
+    /// finalize this instance
+    destructor Destroy; override;
+    /// unserialized the private key from DER binary or PEM text
+    // - will also ensure the private key do match the associated public key
+    // - decode PKCS#8 PrivateKeyInfo for secp256r1/prime256v1
+    function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
+      const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean; override;
+    /// create a new private / public key pair
+    // - returns the associated public key binary in SubjectPublicKey format
+    function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
+    /// return the private key as raw binary
+    // - follow PKCS#8 PrivateKeyInfo encoding for secp256r1/prime256v1
+    function ToDer: RawByteString; override;
+    /// return the associated public key as stored in a X509 certificate
+    function ToSubjectPublicKey: RawByteString; override;
+    /// use EciesSeal, i.e. decryption with this private key
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    /// compute the shared-secret with another public key
+    // - by design, ECDHE is only available for ECC
+    function SharedSecret(const PeerKey: ICryptPublicKey): RawByteString;
+      override;
+  end;
 
 
 implementation
@@ -5233,6 +5290,238 @@ begin
 end;
 
 
+{ TCryptPublicKeyEcc }
+
+destructor TCryptPublicKeyEcc.Destroy;
+begin
+  inherited Destroy;
+  fEcc.Free;
+end;
+
+function TCryptPublicKeyEcc.Load(Algorithm: TCryptKeyAlgo;
+  const SubjectPublicKey: RawByteString): boolean;
+begin
+  result := false;
+  if (fKeyAlgo <> ckaNone) or
+     (SubjectPublicKey = '') then
+    exit;
+  case Algorithm of
+    ckaEcc256:
+      // we only support secp256r1/prime256v1 kind of elliptic curve by now
+      if Ecc256r1CompressAsn1(SubjectPublicKey, fEccPub) then
+      begin
+        fEcc := TEcc256r1Verify.Create(fEccPub); // OpenSSL or mormot.crypt
+        fKeyAlgo := Algorithm;
+        fSubjectPublicKey := SubjectPublicKey;
+        result := true;
+      end;
+  else
+    raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, ToText(fKeyAlgo)^]);
+  end;
+end;
+
+function TCryptPublicKeyEcc.VerifyDigest(Sig: pointer; Dig: THash512Rec;
+  SigLen, DigLen: integer; Hash: THashAlgo): boolean;
+var
+  eccsig: TEccSignature;
+begin
+  result := false;
+  if (self <> nil) and
+     (DigLen <> 0) then
+    case fKeyAlgo of
+      ckaEcc256:
+        if DerToEcc(Sig, SigLen, eccsig) then
+          // secp256r1 digital signature verification
+          result := fEcc.Verify(Dig.Lo, eccsig); // thread-safe
+    end;
+end;
+
+function TCryptPublicKeyEcc.GetParams(out x, y: RawByteString): boolean;
+var
+  k: TEccPublicKeyUncompressed;
+begin
+  result := false;
+  if self <> nil then
+    case fKeyAlgo of
+      ckaEcc256:
+        // for ECC, returns the x,y uncompressed coordinates from stored ASN.1
+        if Ecc256r1ExtractAsn1(fSubjectPublicKey, k) then
+        begin
+          FastSetRawByteString(x, nil, ECC_BYTES);;
+          FastSetRawByteString(y, nil, ECC_BYTES);;
+          bswap256(@PHash512Rec(@k)^.Lo, pointer(x));
+          bswap256(@PHash512Rec(@k)^.Hi, pointer(y));
+          result := true;
+        end;
+    end;
+end;
+
+function TCryptPublicKeyEcc.Seal(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  result  := '';
+  if self <> nil then
+    case fKeyAlgo of
+      ckaEcc256:
+        result := EciesSeal(Cipher, fEcc.PublicKey, Message);
+    end;
+end;
+
+
+{ TCryptPrivateKeyEcc }
+
+function TCryptPrivateKeyEcc.Load(Algorithm: TCryptKeyAlgo;
+  const AssociatedKey: ICryptPublicKey;
+  const PrivateKeySaved: RawByteString; const Password: SpiUtf8): boolean;
+var
+  saved, der: RawByteString;
+  pubkey: TCryptPublicKeyEcc;
+begin
+  result := false;
+  if (self = nil) or
+     (fKeyAlgo <> ckaNone) or
+     (Algorithm = ckaNone) or
+     (PrivateKeySaved = '') then
+    exit;
+  try
+    saved := PrivateKeySaved;
+    if Password <> '' then
+    begin
+      // use mormot.core.secure encryption, not standard PKCS#8
+      der := PemToDer(saved); // see also TCryptCertX509.Load
+      saved := PrivateKeyDecrypt(
+        der, CKA_SALT[Algorithm], Password, CKA_ROUNDS[Algorithm]);
+      if saved = '' then
+        exit;
+    end;
+    if Assigned(AssociatedKey) then
+      pubkey := AssociatedKey.Instance as TCryptPublicKeyEcc
+    else
+      pubkey := nil;
+    fKeyAlgo := Algorithm;
+    case fKeyAlgo of
+      ckaEcc256:
+        // we only support secp256r1/prime256v1 kind of elliptic curve by now
+        if PemDerRawToEcc(saved, fEcc) and
+           ((pubkey = nil) or
+            Ecc256r1MatchKeys(fEcc, pubkey.fEcc.PublicKey)) then
+          result := true
+        else
+          FillZero(fEcc);
+    end;
+  finally
+    FillZero(saved);
+    FillZero(der);
+  end;
+end;
+
+function TCryptPrivateKeyEcc.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
+var
+  eccpub: TEccPublicKey;
+begin
+  result := '';
+  if (self = nil) or
+     (fKeyAlgo <> ckaNone) then
+    exit;
+  fKeyAlgo := CAA_CKA[Algorithm];
+  if Algorithm = caaES256 then
+    if IsZero(fEcc) and
+       Ecc256r1MakeKey(eccpub, fEcc) then
+      result := Ecc256r1UncompressAsn1(eccpub);
+end;
+
+destructor TCryptPrivateKeyEcc.Destroy;
+begin
+  inherited Destroy;
+  FillZero(fEcc);
+end;
+
+function TCryptPrivateKeyEcc.ToDer: RawByteString;
+var
+  rawecc, oct: RawByteString;
+begin
+  if self = nil then
+    result := ''
+  else if IsZero(fEcc) then
+    result := ''
+  else
+  begin
+    // EccToDer() raw encoding is not standard as PEM -> use PKCS#8 format
+    FastSetRawByteString(rawecc, @fEcc, SizeOf(fEcc));
+    oct := AsnSafeOct([Asn(1),
+                       Asn(ASN1_OCTSTR, [rawecc])]);
+    FillZero(rawecc);
+    // see PemDerRawToEcc() secp256r1/prime256v1 PKCS#8 PrivateKeyInfo
+    result := AsnSeq([
+                Asn(0), // version
+                CkaToSeq(ckaEcc256),
+                oct
+              ]);
+    FillZero(oct);
+  end;
+end;
+
+function TCryptPrivateKeyEcc.ToSubjectPublicKey: RawByteString;
+var
+  eccpub: TEccPublicKey;
+begin
+  result := '';
+  if self <> nil then
+    if not IsZero(fEcc) then
+    begin
+      Ecc256r1PublicFromPrivate(fEcc, eccpub);
+      result := Ecc256r1UncompressAsn1(eccpub);
+    end;
+end;
+
+function TCryptPrivateKeyEcc.SignDigest(const Dig: THash512Rec; DigLen: integer;
+  DigAlgo: TCryptAsymAlgo): RawByteString;
+var
+  eccsig: TEccSignature;
+begin
+  result := '';
+  if (self <> nil) and
+     (CAA_CKA[DigAlgo] = fKeyAlgo) and
+     (HASH_SIZE[CAA_HF[DigAlgo]] = DigLen) then
+    case fKeyAlgo of
+      ckaEcc256:
+        if Ecc256r1Sign(fEcc, Dig.Lo, eccsig) then // thread-safe
+          result := EccToDer(eccsig);
+    end;
+end;
+function TCryptPrivateKeyEcc.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  result := '';
+  if (self <> nil) and
+     (fKeyAlgo = ckaEcc256) then
+    result := EciesOpen(Cipher, fEcc, Message);
+end;
+
+function TCryptPrivateKeyEcc.SharedSecret(
+  const PeerKey: ICryptPublicKey): RawByteString;
+var
+  sec: TEccSecretKey;
+  pub: TCryptPublicKeyEcc;
+begin
+  result := '';
+  if PeerKey = nil then
+    exit;
+  pub := PeerKey.Instance as TCryptPublicKeyEcc;
+  if (self <> nil) and
+     (pub.fKeyAlgo = fKeyAlgo) then
+    case fKeyAlgo of
+      ckaEcc256:
+        try
+          if Ecc256r1SharedSecret(pub.fEccPub, fEcc, sec) then
+            FastSetRawByteString(result{%H-}, @sec, SizeOf(sec));
+        finally
+          FillZero(sec);
+        end;
+    end;
+end;
+
+
 type
   /// 'syn-es256' ICryptCert algorithm
   TCryptCertAlgoInternal = class(TCryptCertAlgo)
@@ -6088,6 +6377,8 @@ begin
   // register this unit methods to our high-level cryptographic catalog
   CryptAsym[caaES256] := TCryptAsymInternal.Implements([
     'ES256', 'secp256r1', 'NISTP-256', 'prime256v1']);
+  CryptPublicKey[ckaEcc256]  := TCryptPublicKeyEcc;
+  CryptPrivateKey[ckaEcc256] := TCryptPrivateKeyEcc;
   CryptCertSyn := TCryptCertAlgoInternal.Implements([
     'syn-es256-v1', 'syn-es256']);
   TCryptStoreAlgoInternal.Implements('syn-store,syn-store-nocache');
