@@ -1601,6 +1601,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns true if Value is either '1' or 'true'
     function ToBoolean: boolean;
+    /// convert the value into a floating point number
+    function ToDouble: double;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert the ISO-8601 text value as TDateTime
     // - could have been written e.g. by DateTimeToIso8601Text()
     function Iso8601ToDateTime: TDateTime;
@@ -8591,6 +8594,11 @@ end;
 function TValuePUtf8Char.ToInt64: Int64;
 begin
   SetInt64(Text, result{%H-});
+end;
+
+function TValuePUtf8Char.ToDouble: double;
+begin
+  result := GetExtended(Text);
 end;
 
 function TValuePUtf8Char.Iso8601ToDateTime: TDateTime;
