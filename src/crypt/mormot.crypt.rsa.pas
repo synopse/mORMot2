@@ -675,8 +675,8 @@ type
       read fModulusBits;
   end;
 
-  /// meta-class of the RSA processing classes
-  // - mainly TRsa or TRsaPss
+  /// meta-class of the RSA processing classes, mainly TRsa or TRsaPss
+  // - see e.g. CKA_TO_RSA[] global constant as a potential factory
   TRsaClass = class of TRsa;
 
   /// RSA processing class using Probabilistic Signature Scheme (PSS) signatures
@@ -703,21 +703,6 @@ type
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; override;
   end;
 
-
-const
-  /// the OID of a RSA encryption public key (PKCS#1)
-  ASN1_OID_RSAPUB = '1.2.840.113549.1.1.1';
-
-  /// the OID of the supported hash algorithms, decoded as text
-  ASN1_OID_HASH: array[THashAlgo] of RawUtf8 = (
-    '1.2.840.113549.2.5',       // hfMD5
-    '1.3.14.3.2.26',            // hfSHA1
-    '2.16.840.1.101.3.4.2.1',   // hfSHA256
-    '2.16.840.1.101.3.4.2.2',   // hfSHA384
-    '2.16.840.1.101.3.4.2.3',   // hfSHA512
-    '2.16.840.1.101.3.4.2.6',   // hfSHA512_256
-    '2.16.840.1.101.3.4.2.8',   // hfSHA3_256
-    '2.16.840.1.101.3.4.2.10'); // hfSHA3_512
 
 
 implementation
@@ -2092,7 +2077,7 @@ begin
     exit;
   result := (AsnNextRaw(pos[0], der, seq) = ASN1_SEQ) and
             (AsnNext(pos[1], seq, @oid) = ASN1_OBJID) and
-            (oid = ASN1_OID_RSAPUB) and
+            (oid = CKA_OID[ckaRsa]) and
             (AsnNextRaw(pos[0], der, str) = seqtype) and
             (AsnNext(pos[2], str) = ASN1_SEQ);
   if result and
@@ -2114,10 +2099,7 @@ begin
   else
     // see "A.1.1. RSA Public Key Syntax" of RFC 8017
     result := AsnSeq([
-                AsnSeq([
-                  AsnOid(ASN1_OID_RSAPUB),
-                  ASN1_NULL_VALUE // optional
-                ]),
+                CkaToSeq(ckaRsa),
                 Asn(ASN1_BITSTR, [
                   AsnSeq([
                     AsnBigInt(Modulus),
@@ -2183,10 +2165,7 @@ begin
          ]);
   result := AsnSeq([
               Asn(Version),
-              AsnSeq([
-                AsnOid(ASN1_OID_RSAPUB),
-                ASN1_NULL_VALUE // optional
-              ]),
+              CkaToSeq(ckaRsa),
               oct
             ]);
   FillZero(oct);

@@ -1799,6 +1799,7 @@ type
     function SubjectKeyIdentifier: RawUtf8;
     /// the X509v3 Authority Key Identifier (AKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
+    // - if there are several AKID, only returns the first
     function AuthorityKeyIdentifier: RawUtf8;
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays

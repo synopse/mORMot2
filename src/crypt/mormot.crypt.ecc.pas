@@ -2118,9 +2118,9 @@ begin
          (vt = ASN1_INT) and
          (AsnNext(pos, der) = ASN1_SEQ) and            // privateKeyAlgorithm
          (AsnNext(pos, der, @oid) = ASN1_OBJID) and
-         (oid = '1.2.840.10045.2.1') and               // ecPublicKey
+         (oid = ASN1_OID_X962_PUBLICKEY) and           // ecPublicKey
          (AsnNext(pos, der, @oid) = ASN1_OBJID) and
-         (oid =  '1.2.840.10045.3.1.7') and            // prime256v1
+         (oid =  CKA_OID[ckaEcc256]) and               // prime256v1
          (AsnNextRaw(pos, der, oct) = ASN1_OCTSTR) and // privateKey
          (AsnNext(posoct, oct) = ASN1_SEQ) and
          (AsnNext(posoct, oct) = ASN1_INT) and

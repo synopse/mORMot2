@@ -360,7 +360,7 @@ const
     '1.3.6.1.5.5.7.3.9');  // xkuOcspSigning
 
   /// the OID of all known X.509 Signature Algorithms
-  // - RSA-PSS store ASN1_OID_PKCS1_RSA_PSS with the THashAlgo as parameters
+  // - RSA-PSS store CKA_OID[ckaRsaPss] with the THashAlgo as parameters
   ASN1_OID_SIGNATURE: array[TXSignatureAlgorithm] of RawUtf8 = (
      '',
      '1.2.840.113549.1.1.11',  // xsaSha256Rsa
@@ -369,15 +369,10 @@ const
      '2.16.840.1.101.3.4.2.1', // xsaSha256RsaPss = ASN1_OID_HASH[hfSHA256]
      '2.16.840.1.101.3.4.2.2', // xsaSha384RsaPss = ASN1_OID_HASH[hfSHA384]
      '2.16.840.1.101.3.4.2.3', // xsaSha512RsaPss = ASN1_OID_HASH[hfSHA256]
-     '1.2.840.10045.4.3.2');   // xsaSha256Ecc256
+     '1.2.840.10045.4.3.2');   // xsaSha256Ecc256 = sha256ECDSA
 
-  ASN1_OID_PKCS1_RSA       = '1.2.840.113549.1.1.1';
   ASN1_OID_PKCS1_MGF       = '1.2.840.113549.1.1.8';
-  ASN1_OID_PKCS1_RSA_PSS   = '1.2.840.113549.1.1.10';
   ASN1_OID_PKCS9_EXTREQ    = '1.2.840.113549.1.9.14';
-
-  ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
-  ASN1_OID_X962_ECDSA_P256 = '1.2.840.10045.3.1.7';
 
   ASN1_OID_X509_CRL_REASON  = '2.5.29.21';
   ASN1_OID_X509_CRL_INVDATE = '2.5.29.24';
@@ -1245,7 +1240,7 @@ begin
       // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
       result :=
         AsnSeq([
-          AsnOid(ASN1_OID_PKCS1_RSA_PSS),
+          AsnOid(pointer(CKA_OID[ckaRsaPss])),
           AsnSeq([ // RSASSA-PSS-params - see RFC 8017 A.2.3
             Asn(ASN1_CTC0, [AsnSeq([ // HashAlgorithm
                               AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
@@ -1267,28 +1262,6 @@ begin
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
                 ]);
-  end;
-end;
-
-function XkaToSeq(xka: TXPublicKeyAlgorithm): RawByteString;
-begin
-  case xka of
-    xkaRsa:
-      result := AsnSeq([
-                  AsnOid(ASN1_OID_PKCS1_RSA),
-                  ASN1_NULL_VALUE // optional
-                ]);
-    xkaRsaPss:
-      result := AsnSeq([
-                  AsnOid(ASN1_OID_PKCS1_RSA_PSS)
-                ]);
-    xkaEcc256:
-      result := AsnSeq([
-                  AsnOid(ASN1_OID_X962_PUBLICKEY),
-                  AsnOid(ASN1_OID_X962_ECDSA_P256)
-                ]);
-  else
-    raise EX509.CreateUtf8('Unexpected XkaToSeq(%)', [ord(xka)]);
   end;
 end;
 
@@ -1338,16 +1311,8 @@ end;
 
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
 begin
-  result := true;
-  if oid = ASN1_OID_PKCS1_RSA then
-    xka := xkaRsa
-  else if oid = ASN1_OID_PKCS1_RSA_PSS then
-    xka := xkaRsaPss
-  else if (oid = ASN1_OID_X962_PUBLICKEY) and
-          (oid2 = ASN1_OID_X962_ECDSA_P256) then
-    xka := xkaEcc256
-  else
-    result := false;
+  xka := CKA_TO_XKA[OidToCka(oid, oid2)];
+  result := xka <> xkaNone;
 end;
 
 var
@@ -2221,10 +2186,8 @@ begin
                         AsnTime(NotAfter)
                       ]),
                       Subject.ToBinary,
-                      AsnSeq([
-                        XkaToSeq(SubjectPublicKeyAlgorithm),
-                        Asn(ASN1_BITSTR, [SubjectPublicKey])
-                      ]),
+                      X509PubKeyToDer(XKA_TO_CKA[SubjectPublicKeyAlgorithm],
+                        SubjectPublicKey),
                       ext
                     ]);
     end;
@@ -4206,7 +4169,7 @@ begin
             FreeAndNil(fX509);
         end;
       cccCertWithPrivateKey:
-        // concatenate certificate PEM and private key PEM - no PKCS#12 yet
+        // unconcatenate certificate PEM and private key PEM - no PKCS#12 yet
         result := PemToCertAndPrivKey(Saved, der, bin) and
                   Load(der, cccCertOnly, '') and
                   Load(bin, cccPrivateKeyOnly, PrivatePassword)
@@ -4421,7 +4384,7 @@ var
   pem: RawUtf8; // TCryptCertX509.Load(cccCertWithPrivateKey) only supports PEM
 begin
   result := nil;
-  xsa := AA_TO_XSA[Authority.AsymAlgo];
+  xsa := CAA_TO_XSA[Authority.AsymAlgo];
   if xsa = xsaNone then
     exit;
   auth := pointer(Authority.Instance);
@@ -4896,9 +4859,9 @@ begin
     XCE_OID_ASN[c] := AsnEncOid(XCE_OID[c]);
   for k := succ(low(k)) to high(k) do
     XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
-  // register TX509 to our high-level cryptographic catalog
-  // - 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
-  // - 'x509-rs/ps384/512-int' methods seem superfluous
+  // register this unit to our high-level cryptographic catalog
+  // 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
+  // ('x509-rs/ps384/512-int' methods seem superfluous so are not defined)
   TCryptCertAlgoX509.Create(xsaSha256Rsa,    {suffix=}'-int');
   TCryptCertAlgoX509.Create(xsaSha256RsaPss, {suffix=}'-int');
   TCryptCertAlgoX509.Create(xsaSha256Ecc256, {suffix=}'-int');
