@@ -11,6 +11,7 @@ unit mormot.crypt.jwt;
     - JWT Implementation of HS* and S3* Symmetric Algorithms
     - JWT Implementation of ES256 Asymmetric Algorithm
     - JWT Implementation of RS256/RS384/RS512 Asymmetric Algorithms
+    - JWT Implementation via ICryptPublicKey/ICryptPrivateKey Factories
 
    Uses optimized mormot.crypt.core.pas and mormot.crypt.ecc for its process.
    See mormot.crypt.openssl.pas to support all other JWT algorithms.
@@ -314,7 +315,7 @@ type
    /// abstract parent class for implementing JWT with asymmetric cryptography
   TJwtAsym = class(TJwtAbstract)
   public
-    /// returns the algorithm used for compute the JWT digital signature
+    /// returns the algorithm used to compute the JWT digital signature
     class function GetAsymAlgo: TCryptAsymAlgo; virtual; abstract;
   end;
 
@@ -677,6 +678,64 @@ type
     class function GetAsymAlgo: TCryptAsymAlgo; override;
   end;
 
+
+{ *********** JWT Implementation via ICryptPublicKey/ICryptPrivateKey Factories }
+
+type
+  /// implements JSON Web Tokens using ICryptPublicKey/ICryptPrivateKey wrappers
+  // - this may be the easiest way to work with JWT in our framework
+  // - you may try the other dedicated classes, from this unit (TJwtEs256 ..
+  // TJwtPs512) or from mormot.crypt.openssl (the TJwt*Osl classes) but this
+  // class seems to be the fastest, and with the less overhead
+  TJwtCrypt = class(TJwtAbstract)
+  protected
+    fAsymAlgo: TCryptAsymAlgo;
+    fKeyAlgo: TCryptKeyAlgo;
+    fPublicKey: ICryptPublicKey;
+    fPrivateKey: ICryptPrivateKey;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
+      var jwt: TJwtContent); override;
+  public
+    /// initialize this JWT instance from a supplied public key and algorithm
+    // - if no aPublicKey is supplied, it will generate a new key pair and the
+    // PublicKey/PrivateKey properties could be used for proper persistence
+    // (warning: generating a key pair could be very slow with RSA/RSAPSS)
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(aAlgo: TCryptAsymAlgo; const aPublicKey: RawByteString;
+      aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
+      reintroduce;
+    /// add a private key to this instance execution context
+    // - so that the Compute() method could be used
+    // - will check that the supplied private key do match aPublicKey as
+    // supplied to the constructor
+    function LoadPrivateKey(const aPrivateKey: RawByteString;
+      const aPassword: SpiUtf8 = ''): boolean;
+    /// check if a given algorithm is supported by this class
+    // - just a wrapper to check that CryptPublicKey[aAlgo] factory do exist
+    class function Supports(aAlgo: TCryptAsymAlgo): boolean;
+    /// the asymmetric algorithm with hashing, as supplied to the constructor
+    property AsymAlgo: TCryptAsymAlgo
+      read fAsymAlgo;
+    /// the asymmetric key algorithm of this instance
+    property KeyAlgo: TCryptKeyAlgo
+      read fKeyAlgo;
+    /// low-level access to the associated public key, as supplied to Create()
+    property PublicKey: ICryptPublicKey
+      read fPublicKey;
+    /// low-level access to an associated private key
+    // - if you want the Compute method to be able to sign a new JWT, you should
+    // either call LoadPrivateKey() or initialize and assign to this property
+    // a ICryptPrivateKey instance
+    property PrivateKey: ICryptPrivateKey
+      read fPrivateKey write fPrivateKey;
+  end;
 
 
 implementation
@@ -1558,7 +1617,7 @@ var
 begin
   if not fRsa.HasPrivateKey then
     raise ERsaException.CreateUtf8(
-      '%.ComputeSignature expects to hold a private key', [self]);
+      '%.ComputeSignature requires a private key', [self]);
   h.Full(fHash, pointer(headpayload), length(headpayload), dig);
   sig := fRsa.Sign(@dig.b, fHash); // = encrypt with private key
   if sig = '' then
@@ -1575,7 +1634,7 @@ var
 begin
   if fRsa = nil then
     raise ERsaException.CreateUtf8(
-      '%.CheckSignature expects to hold a public key', [self]);
+      '%.CheckSignature requires a public key', [self]);
   jwt.result := jwtInvalidSignature;
   if length(signature) <> fRsa.ModulusLen then
     exit;
@@ -1614,6 +1673,85 @@ class function TJwtPs512.GetAsymAlgo: TCryptAsymAlgo;
 begin
   result := caaPS512;
 end;
+
+
+{ *********** JWT Implementation via ICryptPublicKey/ICryptPrivateKey Factories }
+
+{ TJwtCrypt }
+
+constructor TJwtCrypt.Create(aAlgo: TCryptAsymAlgo;
+  const aPublicKey: RawByteString; aClaims: TJwtClaims;
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
+begin
+  fAsymAlgo := aAlgo;
+  fAlgorithm := CAA_JWT[aAlgo];
+  fKeyAlgo := CAA_CKA[aAlgo];;
+  if CryptPublicKey[fKeyAlgo] = nil then
+    raise EJwtException.CreateUtf8('%.Create with unsupported %',
+            [self, ToText(aAlgo)^]);
+  fPublicKey := CryptPublicKey[fKeyAlgo].Create;
+  if aPublicKey = '' then
+  begin
+    // no public key supplied: generate a new key pair
+    fPrivateKey := CryptPrivateKey[fKeyAlgo].Create;
+    if not fPublicKey.Load(fKeyAlgo, fPrivateKey.Generate(fAsymAlgo)) then
+      raise EJwtException.CreateUtf8('%.Create: impossible to generate a % key',
+              [self, ToText(fKeyAlgo)^]);
+  end
+  else if not fPublicKey.Load(fKeyAlgo, aPublicKey) then
+    raise EJwtException.CreateUtf8('%.Create: impossible to load this % key',
+            [self, ToText(fKeyAlgo)^]);
+  inherited Create(fAlgorithm, aClaims, aAudience, aExpirationMinutes,
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
+end;
+
+function TJwtCrypt.LoadPrivateKey(const aPrivateKey: RawByteString;
+  const aPassword: SpiUtf8): boolean;
+begin
+  result := false;
+  if (self = nil) or
+     Assigned(fPrivateKey) then
+    exit;
+  fPrivateKey := CryptPrivateKey[fKeyAlgo].Create;
+  if fPrivateKey.Load(fKeyAlgo, fPublicKey, aPrivateKey, aPassword) then
+    result := true
+  else
+    fPrivateKey := nil;
+end;
+
+class function TJwtCrypt.Supports(aAlgo: TCryptAsymAlgo): boolean;
+begin
+  result := CryptPublicKey[CAA_CKA[aAlgo]] <> nil;
+end;
+
+function TJwtCrypt.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+var
+  sig: RawByteString;
+begin
+  if not Assigned(fPrivateKey) then
+    raise EJwtException.CreateUtf8(
+      '%.ComputeSignature requires a private key', [self]);
+  sig := fPrivateKey.Sign(fAsymAlgo, headpayload); // =encrypt with private key
+  if sig = '' then
+    raise EJwtException.CreateUtf8(
+      '%.ComputeSignature: % Sign failed', [self, fAlgorithm]);
+  result := BinToBase64Uri(pointer(sig), length(sig));
+end;
+
+procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
+  const signature: RawByteString; var jwt: TJwtContent);
+begin
+  if not Assigned(fPublicKey) then
+    raise EJwtException.CreateUtf8(
+      '%.ComputeSignature requires a public key', [self]);
+  if fPublicKey.Verify(fAsymAlgo, headpayload, signature) then
+    jwt.result := jwtValid
+  else
+    jwt.result := jwtInvalidSignature;
+end;
+
 
 
 

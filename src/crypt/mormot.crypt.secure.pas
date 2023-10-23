@@ -1627,16 +1627,13 @@ type
   end;
 
   /// the supported asymmetric algorithms, following the JWT high-level naming
-  // - caaES256, caaES384 and caaES512 match OpenSSL EVP_PKEY_EC with
-  // prime256v1, NID_secp384r1 and NID_secp512r1 curves
+  // - caaES256, caaES384, caaES512 and caaES256K match OpenSSL EVP_PKEY_EC with
+  // prime256v1, NID_secp384r1, NID_secp512r1 and NID_secp256k1 curves
   // - caaRS256, caaRS384 and caaRS512 match OpenSSL EVP_PKEY_RSA with
   // SHA-256, SHA-384 and SHA-512 digest method
   // - caaPS256, caaPS384 and caaPS512 match OpenSSL EVP_PKEY_RSA_PSS with
   // SHA-256, SHA-384 and SHA-512 digest method
   // - caaEdDSA match OpenSSL EVP_PKEY_ED25519 curve
-  // - note that caaES256K is NID_secp256k1 which was defined for completeness,
-  // but should appear for special needs only: caaES256 is to be preferred,
-  // and is also significantly faster
   // - mormot.crypt.ecc unit implements caaES256 with native pascal
   // - mormot.crypt.rsa unit implements all caaRS256 .. caaPS512 algorithms
   // - mormot.crypt.openssl unit implements all those algorithms
