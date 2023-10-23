@@ -9227,9 +9227,7 @@ begin
     y := 0;
     while OidText <> nil do
     begin
-      y := GetNextItemCardinal(OidText, '.');
-      if y = 0 then
-        break;
+      y := GetNextItemCardinal(OidText, '.'); // warning: y=0 is a valid value
       inc(x, y);
       AsnEncOidItem(x, tmp);
       x := 0;
