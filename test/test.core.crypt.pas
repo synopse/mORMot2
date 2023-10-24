@@ -1169,17 +1169,34 @@ begin
           bRC4:
             RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
           {$ifdef USE_OPENSSL}
-          bAES128CFBO, bAES128OFBO, bAES128CTRO,
-          bAES256CFBO, bAES256OFBO, bAES256CTRO,
+          bAES128CFBO,
+          bAES128OFBO,
+          bAES128CTRO,
+          bAES256CFBO,
+          bAES256OFBO,
+          bAES256CTRO,
           {$endif USE_OPENSSL}
-          bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
-          bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR:
+          bAES128CFB,
+          bAES128OFB,
+          bAES128C64,
+          bAES128CTR,
+          bAES256CFB,
+          bAES256OFB,
+          bAES256C64,
+          bAES256CTR:
             AES[b].EncryptPkcs7(data, {encrypt=}true);
           {$ifdef USE_OPENSSL}
-          bAES128GCMO, bAES256GCMO,
+          bAES128GCMO,
+          bAES256GCMO,
           {$endif USE_OPENSSL}
-          bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
-          bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM:
+          bAES128CFC,
+          bAES128OFC,
+          bAES128CTC,
+          bAES128GCM,
+          bAES256CFC,
+          bAES256OFC,
+          bAES256CTC,
+          bAES256GCM:
             AES[b].MacAndCrypt(data, {encrypt=}true, {ivatbeg=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
@@ -2639,18 +2656,25 @@ var
   timer: TPrecisionTimer;
 
   procedure AddAlgName;
+  var
+    one: integer;
   begin
-    inc(namelen, length(alg[a].AlgoName) + 1);
+    one := length(alg[a].AlgoName) + 1;
+    inc(namelen, one);
     if namelen > 73 then
     begin
       names := names + CRLF + '     ';
-      namelen := length(alg[a].AlgoName) + 1;
+      namelen := one;
+      fOwner.DoText(CRLF + '     ');
     end;
     names := names + ' ' + alg[a].AlgoName;
+    fOwner.DoText([' ', alg[a].AlgoName]);
   end;
 
 begin
   namelen := 0;
+  fOwner.DoColor(ccGreen);
+  fOwner.DoText('     ');
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
   for k := 0 to 2 do
@@ -2764,20 +2788,22 @@ begin
     asy := alg[a] as TCryptAsym;
     AddAlgName;
     Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+    timer.STart;
     asy.GeneratePem(pub, priv, '');
     Check(pub <> '');
     Check(priv <> '');
+    asy.GeneratePem(pub2, priv2, '');
+    NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
+    Check(pub2 <> '');
+    Check(priv2 <> '');
+    Check(pub <> pub2);
+    Check(priv <> priv2);
     CheckUtf8(asy.Sign(n, priv, s), asy.AlgoName);
     Check(s <> '');
     Check(asy.Verify(n, pub, s));
     inc(n[1]);
     Check(not asy.Verify(n, pub, s));
     dec(n[1]);
-    asy.GeneratePem(pub2, priv2, '');
-    Check(pub2 <> '');
-    Check(priv2 <> '');
-    Check(pub <> pub2);
-    Check(priv <> priv2);
   end;
   // validate Cert High-Level Algorithms Factory
   alg := TCryptCertAlgo.Instances;
@@ -3095,7 +3121,7 @@ begin
       check(not c2.IsSelfSigned, 'csr self2');
       CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey, 'csr auth2');
     end;
-    //NotifyTestSpeed(Utf8ToString(crt.AlgoName), 1, 0, @timer);
+    NotifyTestSpeed('% %', [c2.Instance, crt.AlgoName], 1, 0, @timer, {onlylog=}true);
   end;
   // validate Store High-Level Algorithms Factory
   r := RandomAnsi7(100);
@@ -3105,6 +3131,7 @@ begin
     str := alg[a] as TCryptStoreAlgo;
     AddAlgName;
     //writeln(str.AlgoName);
+    timer.Start;
     st1 := str.New;
     CheckEqual(st1.Count, 0);
     // set c1 as self-signed root certificate (in v1 format)
@@ -3197,8 +3224,10 @@ begin
         Check(st3.Verify(s, pointer(r), length(r)) = cvUnknownAuthority, 's3');
     end;
     st3 := st2;
+    NotifyTestSpeed('%', [str.AlgoName], 1, 0, @timer, {onlylog=}true);
   end;
-  AddConsole(Utf8ToString(names));
+  fOwner.DoLog(sllMonitoring, '% %', [ClassType, names]);
+  fOwner.DoText(CRLF);
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
