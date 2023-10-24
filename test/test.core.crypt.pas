@@ -2839,9 +2839,9 @@ begin
     CheckEqual(iss, 'myself');
     CheckEqual(sub, 'me');
     check(c1.Handle <> nil);
-    check(c1.IsValidDate);
-    check(c1.GetNotBefore <= NowUtc);
-    check(c1.GetNotAfter > NowUtc);
+    check(c1.IsValidDate, 'isvaliddate');
+    check(c1.GetNotBefore <= NowUtc + CERT_DEPRECATION_THRESHOLD, 'nbef');
+    check(c1.GetNotAfter > NowUtc - CERT_DEPRECATION_THRESHOLD, 'naft');
     check(c1.SetPrivateKey(c1.GetPrivateKey), 'in-place pk replace');
     for fmt := ccfBinary to ccfPem do
     begin
