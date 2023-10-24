@@ -7471,32 +7471,35 @@ begin
     exit;
   // first check if could be retrieved from cache
   cachedsql := aSql;
+  stmt := nil;
   fCacheSafe.Lock; // protect fCache (never lock on per-thread connection)
   try
-    stmt := nil;
     if fCache <> nil then
-    begin
-      // fast lookup of the requested SQL in cache
-      if (fCacheLast = cachedsql) and
-         (fCache.Strings[fCacheLastIndex] = cachedsql) then
-        ndx := fCacheLastIndex // no need to use the hash lookup
-      else
-        ndx := fCache.IndexOf(cachedsql); // O(1) hash lookup from fNoDuplicate
-      if ndx >= 0 then
+      if not fProperties.ReconnectAfterConnectionError or
+         not AllowReconnect or
+         IsConnected then // don't reuse a statement on a broken connection
       begin
-        stmt := fCache.Objects[ndx];
-        if stmt.RefCount = 1 then
+        // fast lookup of the requested SQL in cache
+        if (fCacheLast = cachedsql) and
+           (fCache.Strings[fCacheLastIndex] = cachedsql) then
+          ndx := fCacheLastIndex // no need to use the hash lookup
+        else
+          ndx := fCache.IndexOf(cachedsql); // O(1) hash lookup from fNoDuplicate
+        if ndx >= 0 then
         begin
-          // this statement is not currently in use and can be returned
-          if ndx <> fCacheLastIndex then
+          stmt := fCache.Objects[ndx];
+          if stmt.RefCount = 1 then
           begin
-            fCacheLastIndex := ndx;
-            fCacheLast := cachedsql;
-          end;
-          result := stmt; // acquire the statement
-        end
+            // this statement is not currently in use and can be returned
+            if ndx <> fCacheLastIndex then
+            begin
+              fCacheLastIndex := ndx;
+              fCacheLast := cachedsql;
+            end;
+            result := stmt; // acquire the statement
+          end
+        end;
       end;
-    end;
     // full cache support
     if result = nil then
     begin
