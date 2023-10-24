@@ -222,24 +222,24 @@ var
   end;
 
 begin
-  check(ReplaceParamsByNumbers('', s) = 0);
-  check(s = '');
-  check(ReplaceParamsByNumbers('toto titi', s) = 0);
-  check(s = 'toto titi');
-  check(ReplaceParamsByNumbers('toto=? titi', s) = 1);
-  check(s = 'toto=$1 titi');
-  check(ReplaceParamsByNumbers('toto=? titi=?', s) = 2);
-  check(s = 'toto=$1 titi=$2');
-  check(ReplaceParamsByNumbers('toto=? titi=? and a=''''', s) = 2);
-  check(s = 'toto=$1 titi=$2 and a=''''');
-  check(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''', s) = 2);
-  check(s = 'toto=$1 titi=$2 and a=''dd''');
-  check(ReplaceParamsByNumbers('toto=? titi=? and a=''d''''d''', s) = 2);
-  check(s = 'toto=$1 titi=$2 and a=''d''''d''');
-  check(ReplaceParamsByNumbers('toto=? titi=? and a=''d?d''', s) = 2);
-  check(s = 'toto=$1 titi=$2 and a=''d?d''');
-  check(ReplaceParamsByNumbers('1?2?3?4?5?6?7?8?9?10?11?12? x', s) = 12);
-  check(s = '1$12$23$34$45$56$67$78$89$910$1011$1112$12 x');
+  CheckEqual(ReplaceParamsByNumbers('', s), 0);
+  CheckEqual(s, '');
+  CheckEqual(ReplaceParamsByNumbers('toto titi', s), 0);
+  CheckEqual(s, 'toto titi');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi', s), 1);
+  CheckEqual(s, 'toto=$1 titi');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=?', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''''', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''''');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''dd''');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''d''''d''', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''d''''d''');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''d?d''', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''d?d''');
+  CheckEqual(ReplaceParamsByNumbers('1?2?3?4?5?6?7?8?9?10?11?12? x', s), 12);
+  CheckEqual(s, '1$12$23$34$45$56$67$78$89$910$1011$1112$12 x');
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom([])), '');
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['1'])), '{1}');
   checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1'''])), '{"1"}');
@@ -266,15 +266,15 @@ begin
   Check(JsonArrayToBoundArray(UniqueRawUtf8(s), ftUtf8, ' ', false, v));
   CheckEqual(RawUtf8ArrayToCsv(v), '''a'','''''''',''c''');
 
-  check(TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'SELEct'));
-  check(not TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'toto'));
-  check(TSqlDBConnectionProperties.IsSQLKeyword(dOracle, 'SELEct'));
-  check(not TSqlDBConnectionProperties.IsSQLKeyword(dOracle, 'toto'));
-  check(TSqlDBConnectionProperties.IsSQLKeyword(dOracle, ' auDIT '));
-  check(not TSqlDBConnectionProperties.IsSQLKeyword(dMySQL, ' auDIT '));
-  check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'SELEct'));
-  check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'clustER'));
-  check(not TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'value'));
+  Check(TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'SELEct'));
+  Check(not TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'toto'));
+  Check(TSqlDBConnectionProperties.IsSQLKeyword(dOracle, 'SELEct'));
+  Check(not TSqlDBConnectionProperties.IsSQLKeyword(dOracle, 'toto'));
+  Check(TSqlDBConnectionProperties.IsSQLKeyword(dOracle, ' auDIT '));
+  Check(not TSqlDBConnectionProperties.IsSQLKeyword(dMySQL, ' auDIT '));
+  Check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'SELEct'));
+  Check(TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'clustER'));
+  Check(not TSqlDBConnectionProperties.IsSQLKeyword(dSQLite, 'value'));
 
   Server := TRestServerFullMemory.Create(fExternalModel);
   try
@@ -886,7 +886,7 @@ begin
         {$ifndef NOSQLITE3STATIC}
 
         // now read it after uncypher
-        check(ChangeSqlEncryptTablePassWord('testpass.db3', password, ''));
+        Check(ChangeSqlEncryptTablePassWord('testpass.db3', password, ''));
         Check(IsSQLite3File('testpass.db3'));
         Check(not IsSQLite3FileEncrypted('testpass.db3'), 'encrypt3');
 
@@ -1035,7 +1035,7 @@ begin
     Check(aExternalClient.Server.Server.
       CreateSqlMultiIndex(TOrmPeopleExt, ['FirstName', 'LastName'], false));
     InternalTestMany(self, aExternalClient.OrmInstance as TRestOrmClientUri);
-    assert(fPeopleData <> nil);
+    Check(fPeopleData <> nil);
     RInt := TOrmPeople.Create;
     RInt1 := TOrmPeople.Create;
     try
@@ -1043,9 +1043,9 @@ begin
       Check(RInt.FillTable <> nil);
       Check(RInt.FillTable.RowCount > 0);
       Check(not aExternalClient.Orm.TableHasRows(TOrmPeopleExt));
-      Check(aExternalClient.Orm.TableRowCount(TOrmPeopleExt) = 0);
+      CheckEqual(aExternalClient.Orm.TableRowCount(TOrmPeopleExt), 0);
       Check(not aExternalClient.Server.Orm.TableHasRows(TOrmPeopleExt));
-      Check(aExternalClient.Server.Orm.TableRowCount(TOrmPeopleExt) = 0);
+      CheckEqual(aExternalClient.Server.Orm.TableRowCount(TOrmPeopleExt), 0);
       RExt := TOrmPeopleExt.Create;
       try
         n := 0;
@@ -1074,17 +1074,17 @@ begin
             Check(RExt.LastChange >= Start);
             Check(RExt.CreatedAt >= Start);
             RExt.ClearProperties;
-            Check(RExt.YearOfBirth = 0);
-            Check(RExt.FirstName = '');
-            Check(RExt.Value = nil);
+            CheckEqual(RExt.YearOfBirth, 0);
+            CheckEqual(RExt.FirstName, '');
+            CheckEqual(pointer(RExt.Value), nil);
             Check(aExternalClient.Orm.Retrieve(aID, RExt));
-            Check(RExt.FirstName = RInt.FirstName);
-            Check(RExt.LastName = RInt.LastName);
-            Check(RExt.YearOfBirth = RInt.YearOfBirth);
-            Check(RExt.YearOfDeath = RInt.YearOfDeath);
+            CheckEqual(RExt.FirstName, RInt.FirstName);
+            CheckEqual(RExt.LastName, RInt.LastName);
+            CheckEqual(RExt.YearOfBirth, RInt.YearOfBirth);
+            CheckEqual(RExt.YearOfDeath, RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             json := FormatUtf8('["text",%]', [RInt.YearOfDeath]);
-            Check(VariantDynArrayToJson(RExt.Value) = json);
+            CheckEqual(VariantDynArrayToJson(RExt.Value), json);
           end;
           inc(n);
         end;
@@ -1094,12 +1094,12 @@ begin
         CheckEqual(aExternalClient.Client.BatchSend(BatchID), HTTP_SUCCESS, 'bs');
         CheckEqual(length(BatchID), n - 99, 'bsn');
         Check(aExternalClient.Orm.TableHasRows(TOrmPeopleExt));
-        Check(aExternalClient.Orm.TableMaxID(TOrmPeopleExt) = n);
-        Check(aExternalClient.Orm.TableRowCount(TOrmPeopleExt) = n);
+        CheckEqual(aExternalClient.Orm.TableMaxID(TOrmPeopleExt), n);
+        CheckEqual(aExternalClient.Orm.TableRowCount(TOrmPeopleExt), n);
         Check(aExternalClient.Orm.MemberExists(TOrmPeopleExt, 1));
         Check(aExternalClient.Server.Orm.TableHasRows(TOrmPeopleExt));
-        Check(aExternalClient.Server.Orm.TableMaxID(TOrmPeopleExt) = n);
-        Check(aExternalClient.Server.Orm.TableRowCount(TOrmPeopleExt) = n);
+        CheckEqual(aExternalClient.Server.Orm.TableMaxID(TOrmPeopleExt), n);
+        CheckEqual(aExternalClient.Server.Orm.TableRowCount(TOrmPeopleExt), n);
         Check(aExternalClient.Server.Orm.MemberExists(TOrmPeopleExt, 1));
         Check(RInt.FillRewind);
         while RInt.FillOne do
@@ -1108,10 +1108,10 @@ begin
             [RInt.FirstName, RInt.LastName]); // query will use index -> fast :)
           while RExt.FillOne do
           begin
-            Check(RExt.FirstName = RInt.FirstName);
-            Check(RExt.LastName = RInt.LastName);
-            Check(RExt.YearOfBirth = RInt.YearOfBirth);
-            Check(RExt.YearOfDeath = RInt.YearOfDeath);
+            CheckEqual(RExt.FirstName, RInt.FirstName);
+            CheckEqual(RExt.LastName, RInt.LastName);
+            CheckEqual(RExt.YearOfBirth, RInt.YearOfBirth);
+            CheckEqual(RExt.YearOfDeath, RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             CheckEqual(VariantDynArrayToJson(RExt.Value),
               FormatUtf8('["text",%]', [RInt.YearOfDeath]));
@@ -1144,12 +1144,12 @@ begin
               Check(aExternalClient.Client.UnLock(RExt));
               Check(RExt.LastChange >= Updated);
               RExt.ClearProperties;
-              Check(RExt.Value = nil);
-              Check(RExt.YearOfDeath = 0);
-              Check(RExt.YearOfBirth = 0);
-              Check(RExt.CreatedAt = 0);
+              CheckEqual(pointer(RExt.Value), nil);
+              CheckEqual(RExt.YearOfDeath, 0);
+              CheckEqual(RExt.YearOfBirth, 0);
+              CheckEqual(RExt.CreatedAt, 0);
               Check(aExternalClient.Client.Retrieve(i, RExt), 'after update');
-              Check(RExt.YearOfBirth = RExt.YearOfDeath);
+              CheckEqual(RExt.YearOfBirth, RExt.YearOfDeath);
               Check(RExt.CreatedAt >= Start);
               Check(RExt.CreatedAt <= Updated);
               Check(RExt.LastChange >= Updated);
@@ -1171,13 +1171,13 @@ begin
             else
               Check(aExternalClient.Client.Delete(TOrmPeopleExt, i),
                 'Delete 1/128 rows');
-        Check(aExternalClient.Client.BatchSend(BatchIDUpdate) = HTTP_SUCCESS);
+        CheckEqual(aExternalClient.Client.BatchSend(BatchIDUpdate), HTTP_SUCCESS);
         Check(length(BatchIDUpdate) = 55);
         n := aExternalClient.Client.TableRowCount(TOrmPeople);
         Check(aExternalClient.Server.Server.
           TableRowCount(TOrmPeopleExt) = 10925);
         Orm := aExternalClient.Server.OrmInstance as TRestOrmServer;
-        Check(Orm.GetVirtualStorage(TOrmPeople) = nil);
+        CheckEqual(Orm.GetVirtualStorage(TOrmPeople), nil);
         Check(Orm.GetVirtualStorage(TOrmPeopleExt) <> nil);
         Check(Orm.GetVirtualStorage(TOrmOnlyBlob) <> nil);
         for i := 1 to BatchID[high(BatchID)] do
@@ -1195,7 +1195,7 @@ begin
             Check(RExt.CreatedAt <= Updated);
             if i mod 100 = 0 then
             begin
-              Check(RExt.YearOfBirth = RExt.YearOfDeath, 'Update1');
+              CheckEqual(RExt.YearOfBirth, RExt.YearOfDeath, 'Update1');
               CheckUtf8(RExt.LastChange >= Updated, 'LastChange1 %>=%',
                 [RExt.LastChange, Updated]);
             end
@@ -1209,14 +1209,14 @@ begin
           end;
         end;
         aExternalClient.Client.Retrieve(400, RExt);
-        Check(RExt.IDValue = 400);
-        Check(RExt.FirstName = 'Franz36');
-        Check(RExt.YearOfBirth = 1828);
+        CheckEqual(RExt.IDValue, 400);
+        CheckEqual(RExt.FirstName, 'Franz36');
+        CheckEqual(RExt.YearOfBirth, 1828);
         aExternalClient.Client.UpdateField(
           TOrmPeopleExt, 400, 'YearOfBirth', [1515]);
         RInt1.ClearProperties;
         Check(aExternalClient.Client.Retrieve(1, RInt1));
-        Check(RInt1.IDValue = 1);
+        CheckEqual(RInt1.IDValue, 1);
         for i := 0 to high(ids) do
         begin
           RExt.YearOfBirth := i;
@@ -1225,15 +1225,15 @@ begin
         for i := 0 to high(ids) do
         begin
           Check(aExternalClient.Orm.Retrieve(ids[i], RExt));
-          Check(RExt.YearOfBirth = i);
+          CheckEqual(RExt.YearOfBirth, i);
         end;
         for i := 0 to high(ids) do
         begin
           aExternalClient.Client.BatchStart(TOrmPeopleExt, {autotrans=}0);
           aExternalClient.Client.BatchDelete(ids[i]);
-          Check(aExternalClient.Client.BatchSend(BatchID) = HTTP_SUCCESS);
-          Check(length(BatchID) = 1);
-          Check(BatchID[0] = HTTP_SUCCESS);
+          CheckEqual(aExternalClient.Client.BatchSend(BatchID), HTTP_SUCCESS);
+          CheckEqual(length(BatchID), 1);
+          CheckEqual(BatchID[0], HTTP_SUCCESS);
         end;
         for i := 0 to high(ids) do
           Check(not aExternalClient.Orm.Retrieve(ids[i], RExt));
@@ -1256,17 +1256,17 @@ begin
             RJoin.People := TOrmPeopleExt(i);
             aExternalClient.Client.BatchAdd(RJoin, true);
           end;
-        Check(aExternalClient.Client.BatchSend(BatchIDJoined) = HTTP_SUCCESS);
-        Check(length(BatchIDJoined) = 993);
+        CheckEqual(aExternalClient.Client.BatchSend(BatchIDJoined), HTTP_SUCCESS);
+        CheckEqual(length(BatchIDJoined), 993);
         RJoin.FillPrepare(aExternalClient.Orm);
-        Check(RJoin.FillTable.RowCount = 993);
+        CheckEqual(RJoin.FillTable.RowCount, 993);
         i := 1;
         while RJoin.FillOne do
         begin
           if i and 127 = 0 then
             inc(i); // deleted item
-          Check(GetInteger(pointer(RJoin.Name)) = i);
-          Check(RJoin.People.ID = i, 'retrieve ID from pointer');
+          CheckEqual(GetInteger(pointer(RJoin.Name)), i);
+          CheckEqual(RJoin.People.ID, i, 'retrieve ID from pointer');
           inc(i);
         end;
       finally
@@ -1278,21 +1278,21 @@ begin
         try
           Check(RJoin.FillTable.FieldType(0) = oftInteger);
           Check(RJoin.FillTable.FieldType(3) = oftUTF8Text);
-          Check(RJoin.ID = BatchIDJoined[i]);
+          CheckEqual(RJoin.ID, BatchIDJoined[i]);
           Check(PtrUInt(RJoin.People) > 1000);
-          Check(GetInteger(pointer(RJoin.Name)) = RJoin.People.ID);
-          Check(length(RJoin.People.Value) = 2);
+          CheckEqual(GetInteger(pointer(RJoin.Name)), RJoin.People.ID);
+          CheckEqual(length(RJoin.People.Value), 2);
           Check(RJoin.People.Value[0] = 'text');
           Check(RJoin.People.Value[1] = RJoin.People.YearOfDeath);
           RJoin.ClearProperties;
-          Check(RJoin.ID = 0);
-          Check(RJoin.People.ID = 0);
+          CheckEqual(RJoin.ID, 0);
+          CheckEqual(RJoin.People.ID, 0);
         finally
           RJoin.Free;
         end;
       end;
       Check(not aExternalClient.Server.Orm.TableHasRows(TOrmOnlyBlob));
-      Check(aExternalClient.Server.Orm.TableRowCount(TOrmOnlyBlob) = 0);
+      CheckEqual(aExternalClient.Server.Orm.TableRowCount(TOrmOnlyBlob), 0);
       RBlob := TOrmOnlyBlob.Create;
       try
         aExternalClient.Client.ForceBlobTransfertTable[TOrmOnlyBlob] := true;
@@ -1300,14 +1300,14 @@ begin
         for i := 1 to BLOB_MAX do
         begin
           RBlob.Data := Int32ToUtf8(i);
-          Check(aExternalClient.Orm.Add(RBlob, true) = i);
-          Check(RBlob.ID = i);
+          CheckEqual(aExternalClient.Orm.Add(RBlob, true), i);
+          CheckEqual(RBlob.ID, i);
         end;
         aExternalClient.Orm.Commit;
         for i := 1 to BLOB_MAX do
         begin
           Check(aExternalClient.Orm.Retrieve(i, RBlob));
-          Check(GetInteger(pointer(RBlob.Data)) = i);
+          CheckEqual(GetInteger(pointer(RBlob.Data)), i);
         end;
         aExternalClient.Orm.TransactionBegin(TOrmOnlyBlob);
         for i := BLOB_MAX downto 1 do
@@ -1320,33 +1320,33 @@ begin
         for i := 1 to BLOB_MAX do
         begin
           Check(aExternalClient.Orm.Retrieve(i, RBlob));
-          Check(GetInteger(pointer(RBlob.Data)) = i * 2);
+          CheckEqual(GetInteger(pointer(RBlob.Data)), i * 2);
         end;
         aExternalClient.Client.ForceBlobTransfertTable[TOrmOnlyBlob] := false;
         RBlob.ClearProperties;
         for i := 1 to BLOB_MAX do
         begin
           Check(aExternalClient.Orm.Retrieve(i, RBlob));
-          Check(RBlob.Data = '');
+          CheckEqual(RBlob.Data, '');
         end;
       finally
         RBlob.Free;
       end;
       Check(aExternalClient.Orm.TableHasRows(TOrmOnlyBlob));
-      Check(aExternalClient.Orm.TableRowCount(TOrmOnlyBlob) = 1000);
-      Check(aExternalClient.Orm.TableRowCount(TOrmPeople) = n);
+      CheckEqual(aExternalClient.Orm.TableRowCount(TOrmOnlyBlob), 1000);
+      CheckEqual(aExternalClient.Orm.TableRowCount(TOrmPeople), n);
       RInt1.ClearProperties;
       Orm := aExternalClient.Server.OrmInstance as TRestOrmServer;
       Check(Orm.GetVirtualStorage(TOrmPeople) = nil);
       Check(Orm.GetVirtualStorage(TOrmPeopleExt) <> nil);
       Check(Orm.GetVirtualStorage(TOrmOnlyBlob) <> nil);
       Check(aExternalClient.Orm.TableHasRows(TOrmPeople));
-      Check(aExternalClient.Orm.TableRowCount(TOrmPeople) = n);
+      CheckEqual(aExternalClient.Orm.TableRowCount(TOrmPeople), n);
       RInt1.ClearProperties;
       aExternalClient.Orm.Retrieve(1, RInt1);
-      Check(RInt1.IDValue = 1);
-      Check(RInt1.FirstName = 'Salvador1');
-      Check(RInt1.YearOfBirth = 1904);
+      CheckEqual(RInt1.IDValue, 1);
+      CheckEqual(RInt1.FirstName, 'Salvador1');
+      CheckEqual(RInt1.YearOfBirth, 1904);
     finally
       RInt.Free;
       RInt1.Free;

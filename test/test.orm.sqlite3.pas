@@ -6,6 +6,7 @@ unit test.orm.sqlite3;
 interface
 
 {$I ..\src\mormot.defines.inc}
+{.$undef ORMGENERICS}
 
 uses
   sysutils,
@@ -1127,20 +1128,21 @@ var
   a, b: double;
   BackupFN: TFileName;
 
-  procedure checks(Leonard: boolean; Client: TRestClientUri; const msg: string);
+  procedure checks(Leonard: boolean; Client: TRestClientUri;
+    const msg: RawUtf8);
   var
     ID: integer;
   begin
     ID := V.ID; // ClearProperties do ID := 0;
     V.ClearProperties; // reset values
-    check(Client.Client.Retrieve(ID, V), msg); // internally call URL()
+    check(Client.Client.Retrieve(ID, V), 'checks url'); // internally call URL()
     if Leonard then
-      check(V.FirstName = 'Leonard')
+      CheckEqual(V.FirstName, 'Leonard')
     else
-      check(V.FirstName = 'Leonardo1', msg);
-    check(V.LastName = DaVinci, msg);
-    check(V.YearOfBirth = 1452, msg);
-    check(V.YearOfDeath = 1519, msg);
+      CheckEqual(V.FirstName, 'Leonardo1', msg);
+    CheckEqual(V.LastName, DaVinci, msg);
+    CheckEqual(V.YearOfBirth, 1452, msg);
+    CheckEqual(V.YearOfDeath, 1519, msg);
   end;
 
   procedure TestDynArray(aClient: TRestClientUri);
@@ -1152,47 +1154,47 @@ var
     for i := 1 to n do
     begin
       aClient.Orm.Retrieve(i, VA);
-      check(VA.ID = i);
-      check(VA.LastName = 'Dali');
-      check(length(VA.Ints) = i shr 5);
-      check(length(VA.Currency) = i shr 5);
-      check(length(VA.FileVersion) = i shr 5);
+      CheckEqual(VA.ID, i);
+      CheckEqual(VA.LastName, 'Dali');
+      CheckEqual(length(VA.Ints), i shr 5);
+      CheckEqual(length(VA.Currency), i shr 5);
+      CheckEqual(length(VA.FileVersion), i shr 5);
       if i and 31 = 0 then
       begin
-        check(VA.U = '');
+        CheckEqual(VA.U, '');
         for j := 0 to high(VA.Ints) do
-          check(VA.Ints[j] = (j + 1) shl 5);
+          CheckEqual(VA.Ints[j], (j + 1) shl 5);
         for j := 0 to high(VA.Currency) do
-          check(PInt64(@VA.Currency[j])^ = (j + 1) * 3200);
+          CheckEqual(PInt64(@VA.Currency[j])^, (j + 1) * 3200);
         for j := 0 to high(VA.FileVersion) do
           with VA.FileVersion[j] do
           begin
             k := (j + 1) shl 5;
-            check(Major = k);
-            check(Minor = k + 2000);
-            check(Release = k + 3000);
-            check(Build = k + 4000);
+            CheckEqual(Major, k);
+            CheckEqual(Minor, k + 2000);
+            CheckEqual(Release, k + 3000);
+            CheckEqual(Build, k + 4000);
             check(Main = IntToStr(k));
             check(Detailed = IntToStr(k + 1000));
           end;
       end
       else
       begin
-        check(GetInteger(pointer(VA.U)) = i);
+        CheckEqual(GetInteger(pointer(VA.U)), i);
         for j := 0 to high(VA.FileVersion) do
           with VA.FileVersion[j] do
           begin
             k := (j + 1) shl 5;
-            check(Major = k);
-            check(Minor = k + 2000);
-            check(Release = k + 3000);
-            check(Build = k + 4000);
+            CheckEqual(Major, k);
+            CheckEqual(Minor, k + 2000);
+            CheckEqual(Release, k + 3000);
+            CheckEqual(Build, k + 4000);
           end;
       end;
 {$ifdef PUBLISHRECORD}
-      check(VA.fRec.nPhrase = i);
-      check(VA.fRec.nCol = i * 2);
-      check(VA.fRec.hits[2].docs_with_hits = i * 3);
+      CheckEqual(VA.fRec.nPhrase, i);
+      CheckEqual(VA.fRec.nCol, i * 2);
+      CheckEqual(VA.fRec.hits[2].docs_with_hits, i * 3);
 {$endif PUBLISHRECORD}
     end;
     for i := 1 to n shr 5 do
@@ -1201,20 +1203,20 @@ var
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
         FormatSql('IntegerDynArrayContains(Ints,?)', [], [k]), IDs);
       l := n + 1 - 32 * i;
-      check(length(IDs) = l);
+      CheckEqual(length(IDs), l);
       for j := 0 to high(IDs) do
-        check(IDs[j] = k + j);
+        CheckEqual(IDs[j], k + j);
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
        FormatSql('CardinalDynArrayContains(Ints,?)', [], [k]), IDs);
-      check(length(IDs) = l);
+      CheckEqual(length(IDs), l);
       for j := 0 to high(IDs) do
-        check(IDs[j] = k + j);
+        CheckEqual(IDs[j], k + j);
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
         FormatUtf8('MyIntegerDynArrayContains(Ints,:("%"):)',
           [BinToBase64WithMagic(@k, sizeof(k))]), IDs);
-      check(length(IDs) = l);
+      CheckEqual(length(IDs), l);
       for j := 0 to high(IDs) do
-        check(IDs[j] = k + j);
+        CheckEqual(IDs[j], k + j);
     end;
   end;
 
@@ -1226,22 +1228,22 @@ var
     begin
       VO.ClearProperties;
       aClient.Orm.Retrieve(i, VO);
-      check(VO.ID = i);
-      check(VO.LastName = 'Morse');
-      check(VO.U.Count = i shr 5);
+      CheckEqual(VO.ID, i);
+      CheckEqual(VO.LastName, 'Morse');
+      CheckEqual(VO.U.Count, i shr 5);
       for j := 0 to VO.U.Count - 1 do
-        check(GetInteger(pointer(VO.U[j])) = (j + 1) shl 5);
-      check(VO.Persistent.One.Length = i);
-      check(VO.Persistent.One.Color = i + 100);
-      check(GetInteger(pointer(VO.Persistent.One.Name)) = i);
-      check(VO.Persistent.Coll.Count = i shr 5);
+        CheckEqual(GetInteger(pointer(VO.U[j])), (j + 1) shl 5);
+      CheckEqual(VO.Persistent.One.Length, i);
+      CheckEqual(VO.Persistent.One.Color, i + 100);
+      CheckEqual(GetInteger(pointer(VO.Persistent.One.Name)), i);
+      CheckEqual(VO.Persistent.Coll.Count, i shr 5);
       for j := 0 to VO.Persistent.Coll.Count - 1 do
         with VO.Persistent.Coll[j] do
         begin
           k := (j + 1) shl 5;
-          check(Color = k + 1000);
-          check(Length = k * 2);
-          check(GetInteger(pointer(Name)) = k * 3);
+          CheckEqual(Color, k + 1000);
+          CheckEqual(Length, k * 2);
+          CheckEqual(GetInteger(pointer(Name)), k * 3);
         end;
     end;
   end;
@@ -1282,7 +1284,7 @@ var
         FTS.Subject := '';
         FTS.Body := '';
         check(aClient.Orm.Retrieve(IntArray[i], FTS));
-        check(FTS.DocID = IntArray[i]);
+        CheckEqual(FTS.DocID, IntArray[i]);
         check(IdemPChar(pointer(FTS.Subject), 'SALVADOR'));
         check(PosEx(Int32ToUtf8(FTS.DocID), FTS.Body, 1) > 0);
       end;
@@ -1312,7 +1314,7 @@ var
           TOrmFtsTest, 'body' + cu + '*', IntResult, [1, 0.5]), 'rank');
         check(length(IntResult) > 0);
         for i := 0 to high(IntResult) do
-          check(UInt32ToUtf8(IntResult[i])[1] = AnsiChar(c + 48));
+          CheckEqual(UInt32ToUtf8(IntResult[i])[1], AnsiChar(c + 48));
       end;
     finally
       FTS.Free;
@@ -1349,19 +1351,19 @@ var
           CheckUtf8(added = n, '% Add %<>%', [Msg, added, n]);
         end;
         // update some items in the file
-        check(aClient.Client.TableRowCount(aClass) = 1001, 'check SQL Count(*)');
+        CheckEqual(aClient.Client.TableRowCount(aClass), 1001, 'check SQL Count(*)');
         for i := 1 to n do
         begin
           VD.ClearProperties;
-          check(VD.ID = 0);
-          check(VD.FirstName = '');
-          check(VD.YearOfBirth = 0);
-          check(VD.YearOfDeath = 0);
+          CheckEqual(VD.ID, 0);
+          CheckEqual(VD.FirstName, '');
+          CheckEqual(VD.YearOfBirth, 0);
+          CheckEqual(VD.YearOfDeath, 0);
           check(aClient.Client.Retrieve(i, VD), Msg);
-          check(VD.ID = i);
+          CheckEqual(VD.ID, i);
           check(IdemPChar(pointer(VD.FirstName), 'SALVADOR'));
-          check(VD.YearOfBirth = 1904);
-          check(VD.YearOfDeath = 1989);
+          CheckEqual(VD.YearOfBirth, 1904);
+          CheckEqual(VD.YearOfDeath, 1989);
           VD.YearOfBirth := VD.YearOfBirth + i;
           VD.YearOfDeath := VD.YearOfDeath + i;
           check(aClient.Orm.Update(VD), Msg);
@@ -1370,14 +1372,14 @@ var
         for i := 1 to n do
         begin
           VD.ClearProperties;
-          check(VD.ID = 0);
-          check(VD.FirstName = '');
-          check(VD.YearOfBirth = 0);
-          check(VD.YearOfDeath = 0);
+          CheckEqual(VD.ID, 0);
+          CheckEqual(VD.FirstName, '');
+          CheckEqual(VD.YearOfBirth, 0);
+          CheckEqual(VD.YearOfDeath, 0);
           CheckUtf8(aClient.Orm.Retrieve(i, VD), '% Retrieve', [Msg]);
           check(IdemPChar(pointer(VD.FirstName), 'SALVADOR'));
-          check(VD.YearOfBirth = 1904 + i);
-          check(VD.YearOfDeath = 1989 + i);
+          CheckEqual(VD.YearOfBirth, 1904 + i);
+          CheckEqual(VD.YearOfDeath, 1989 + i);
         end;
         CheckUtf8(aClient.Orm.TableRowCount(aClass) = 1001, '% RowCount', [Msg]);
         Orm := Client.Server.OrmInstance as TRestOrmServer;
@@ -1397,7 +1399,7 @@ var
           stor := TRestStorageInMemoryExternal.Create(
             aClass, nil, fn, {bin=}aClass = TOrmDali2);
           try
-            check(stor.Count = n);
+            CheckEqual(stor.Count, n);
             for i := 1 to n do
             begin
               ndx := stor.IDToIndex(i);
@@ -1406,10 +1408,10 @@ var
               VD2 := stor.Items[ndx] as TOrmDali1;
               if CheckFailed(VD2 <> nil) then
                 continue;
-              check(VD2.ID = i);
+              CheckEqual(VD2.ID, i);
               check(IdemPChar(pointer(VD2.FirstName), 'SALVADOR'));
-              check(VD2.YearOfBirth = 1904 + i);
-              check(VD2.YearOfDeath = 1989 + i);
+              CheckEqual(VD2.YearOfBirth, 1904 + i);
+              CheckEqual(VD2.YearOfDeath, 1989 + i);
             end;
           finally
             stor.Free;
@@ -1477,7 +1479,7 @@ var
         check((length(Data) = 4) and
               (PInteger(pointer(Data))^ = IntArray[i]));
         V2.IDValue := IntArray[i]; // debug use - do NOT set ID in your programs!
-        check(V2.DataAsHex(ClientDist) = BinToHex(Data));
+        CheckEqual(V2.DataAsHex(ClientDist), BinToHex(Data));
         a := RandomDouble;
         b := RandomDouble;
         CheckSame(TOrmPeople.Sum(Client, a, b, false), a + b);
@@ -1497,15 +1499,15 @@ var
       for i := 0 to high(ids) do
       begin
         check(ClientDist.Orm.Retrieve(ids[i], V2));
-        check(V2.YearOfBirth = i);
+        CheckEqual(V2.YearOfBirth, i);
       end;
       for i := 0 to high(ids) do
       begin
         ClientDist.Client.BatchStart(TOrmPeople, {autotrans=}0);
         ClientDist.Client.BatchDelete(ids[i]);
-        check(ClientDist.Client.BatchSend(res) = HTTP_SUCCESS);
-        check(length(res) = 1);
-        check(res[0] = HTTP_SUCCESS);
+        CheckEqual(ClientDist.Client.BatchSend(res), HTTP_SUCCESS);
+        CheckEqual(length(res), 1);
+        CheckEqual(res[0], HTTP_SUCCESS);
       end;
       for i := 0 to high(ids) do
         check(not ClientDist.Client.Retrieve(ids[i], V2));
@@ -1572,12 +1574,12 @@ begin
         check(Client.SetUser('User', 'synopse')); // use default user
         DaVinci := 'da Vin' + _uE7 + 'i';
         check(Client.Orm.Retrieve('LastName=''' + DaVinci + '''', V));
-        check(V.FirstName = 'Leonardo1');
-        check(V.LastName = DaVinci);
-        check(V.YearOfBirth = 1452);
-        check(V.YearOfDeath = 1519);
+        CheckEqual(V.FirstName, 'Leonardo1');
+        CheckEqual(V.LastName, DaVinci);
+        CheckEqual(V.YearOfBirth, 1452);
+        CheckEqual(V.YearOfDeath, 1519);
         checks(false, Client, 'Retrieve');
-        check(V.ID = 6, 'check RETRIEVE/GET');
+        CheckEqual(V.ID, 6, 'check RETRIEVE/GET');
         check(Client.Orm.Delete(TOrmPeople, V.ID), 'check DELETE');
         check(not Client.Orm.Retrieve(V.ID, V), 'now this record must not be available');
         check(Client.Orm.Add(V, true) > 0, 'check ADD/PUT');
@@ -1598,7 +1600,7 @@ begin
           check(Client.Orm.Execute('VACUUM;'), 'check direct Execute()')
         else
           check(Client.Server.Orm.Execute('VACUUM;'));
-        check(V2.FirstName = 'Leonardo1');
+        CheckEqual(V2.FirstName, 'Leonardo1');
         check(not V2.SameValues(V), 'V and V2 must differ');
         check(Client.Client.UpdateFromServer([V2], Refreshed));
         check(Refreshed, 'V2 value will be synchronized with V');
@@ -1614,20 +1616,20 @@ begin
         check(TestTable(J), 'incorrect TOrmTableJson');
         check(Client.Orm.OneFieldValues(TOrmPeople, 'ID', 'LastName=:("Dali"):',
           IntArray));
-        check(length(IntArray) = 1001);
+        CheckEqual(length(IntArray), 1001);
         for i := 0 to high(IntArray) do
-          check(Client.Orm.OneFieldValue(TOrmPeople, 'LastName', IntArray[i]) = 'Dali');
+          CheckEqual(Client.Orm.OneFieldValue(TOrmPeople, 'LastName', IntArray[i]), 'Dali');
         List := Client.Orm.RetrieveList(TOrmPeople, 'Lastname=?', ['Dali'],
           'ID,LastName');
         if not CheckFailed(List <> nil) then
         begin
-          check(List.Count = Length(IntArray));
+          CheckEqual(List.Count, Length(IntArray));
           for i := 0 to List.Count - 1 do
             with TOrmPeople(List.List[i]) do
             begin
-              check(id = IntArray[i]);
-              check(LastName = 'Dali');
-              check(FirstName = '');
+              CheckEqual(id, IntArray[i]);
+              CheckEqual(LastName, 'Dali');
+              CheckEqual(FirstName, '');
             end;
           List.Free;
         end;
@@ -1637,8 +1639,8 @@ begin
         for i := 0 to high(IntArray) do
         begin
           check(Client.Orm.RetrieveBlob(TOrmPeople, IntArray[i], 'Data', Data));
-          check(Length(Data) = sizeof(BlobDali));
-          check(CompareBuf(Data, @BlobDali, sizeof(BlobDali)) = 0);
+          CheckEqual(Length(Data), sizeof(BlobDali));
+          CheckEqual(CompareBuf(Data, @BlobDali, sizeof(BlobDali)), 0);
           check(Client.Orm.RetrieveBlob(TOrmPeople, IntArray[i], 'Data', DataS));
           check((DataS.Size = 4) and
                 (PCardinal(DataS.Memory)^ = $E7E0E961));

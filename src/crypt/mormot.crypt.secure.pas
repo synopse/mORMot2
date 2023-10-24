@@ -8491,7 +8491,7 @@ begin
     if pem = '' then
       break;
     if k = pemCertificate then
-      if Cert <> '' then
+      if {%H-}Cert <> '' then
         exit // should contain a single Certificate
       else
         Cert := PemToDer(pem)

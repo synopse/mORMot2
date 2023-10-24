@@ -85,11 +85,16 @@ type
     fYearOfBirth: integer;
     fYearOfDeath: word;
   published
-    property FirstName: RawUtf8 read fFirstName write fFirstName;
-    property LastName: RawUtf8 read fLastName write fLastName;
-    property Data: RawBlob read fData write fData;
-    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
-    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+    property FirstName: RawUtf8
+      read fFirstName write fFirstName;
+    property LastName: RawUtf8
+      read fLastName write fLastName;
+    property Data: RawBlob
+      read fData write fData;
+    property YearOfBirth: integer
+      read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word
+      read fYearOfDeath write fYearOfDeath;
   public
     /// method used to test the Client-Side
     // ModelRoot/TableName/ID/MethodName RESTful request, i.e.

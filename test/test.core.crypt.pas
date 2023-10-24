@@ -2651,30 +2651,8 @@ var
   fmt: TCryptCertFormat;
   cv: TCryptCertValidity;
   u: TCryptCertUsage;
-  namelen: integer;
-  names: RawUtf8;
   timer: TPrecisionTimer;
-
-  procedure AddAlgName;
-  var
-    one: integer;
-  begin
-    one := length(alg[a].AlgoName) + 1;
-    inc(namelen, one);
-    if namelen > 73 then
-    begin
-      names := names + CRLF + '     ';
-      namelen := one;
-      fOwner.DoText(CRLF + '     ');
-    end;
-    names := names + ' ' + alg[a].AlgoName;
-    fOwner.DoText([' ', alg[a].AlgoName]);
-  end;
-
 begin
-  namelen := 0;
-  fOwner.DoColor(ccGreen);
-  fOwner.DoText('     ');
   // validate AesAlgoNameEncode / TAesMode
   FillZero(key);
   for k := 0 to 2 do
@@ -2701,7 +2679,7 @@ begin
   for a := 0 to high(alg) do
   begin
     rnd := alg[a] as TCryptRandom;
-    AddAlgName;
+    NotifyProgress([rnd.AlgoName]);
     Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
     cprev := 0;
     dprev := 0;
@@ -2724,7 +2702,7 @@ begin
   for a := 0 to high(alg) do
   begin
     hsh := alg[a] as TCryptHasher;
-    AddAlgName;
+    NotifyProgress([hsh.AlgoName]);
     Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
@@ -2740,7 +2718,7 @@ begin
   for a := 0 to high(alg) do
   begin
     sig := alg[a] as TCryptSigner;
-    AddAlgName;
+    NotifyProgress([sig.AlgoName]);
     Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
@@ -2763,7 +2741,7 @@ begin
   for a := 0 to high(alg) do
   begin
     cip := alg[a] as TCryptCipherAlgo;
-    AddAlgName;
+    NotifyProgress([cip.AlgoName]);
     Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
@@ -2786,7 +2764,7 @@ begin
   for a := 0 to high(alg) do
   begin
     asy := alg[a] as TCryptAsym;
-    AddAlgName;
+    NotifyProgress([asy.AlgoName]);
     Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
     timer.STart;
     asy.GeneratePem(pub, priv, '');
@@ -2811,7 +2789,7 @@ begin
   begin
     timer.Start;
     crt := alg[a] as TCryptCertAlgo;
-    AddAlgName;
+    NotifyProgress([crt.AlgoName]);
     check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
     c1 := crt.New;
     check(c1.AsymAlgo = crt.AsymAlgo);
@@ -3129,7 +3107,7 @@ begin
   for a := 0 to high(alg) do
   begin
     str := alg[a] as TCryptStoreAlgo;
-    AddAlgName;
+    NotifyProgress([str.AlgoName]);
     //writeln(str.AlgoName);
     timer.Start;
     st1 := str.New;
@@ -3226,8 +3204,6 @@ begin
     st3 := st2;
     NotifyTestSpeed('%', [str.AlgoName], 1, 0, @timer, {onlylog=}true);
   end;
-  fOwner.DoLog(sllMonitoring, '% %', [ClassType, names]);
-  fOwner.DoText(CRLF);
 end;
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
