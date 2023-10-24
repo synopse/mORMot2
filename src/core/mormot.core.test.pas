@@ -302,6 +302,10 @@ type
     /// append some text to the current console
     procedure AddConsole(const Fmt: RawUtf8; const Args: array of const;
       OnlyLog: boolean = false); overload;
+    /// append some text to the current console in real time, on the same line
+    // - the information is flushed to the console immediately, whereas
+    // AddConsole() append it into a buffer to be written once
+    procedure NotifyProgress(const Args: array of const);
     /// the test suit which owns this test case
     property Owner: TSynTests
       read fOwner;
@@ -353,9 +357,22 @@ type
     fSafe: TSynLocker;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
+    fNotifyProgressLineLen: integer;
+    fNotifyProgress: RawUtf8;
     function GetFailedCount: integer;
     function GetFailed(Index: integer): TSynTestFailed;
     procedure CreateSaveToFile; virtual;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoText(const value: RawUtf8); overload; virtual;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoText(const values: array of const); overload;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoTextLn(const values: array of const); overload;
+    /// low-level set the console text color - use TSynTestCase.AddConsole instead
+    procedure DoColor(aColor: TConsoleColor);
+    /// low-level output on the console with automatic formatting
+    // - use TSynTestCase.NotifyProgress() instead
+    procedure DoNotifyProgress(const value: RawUtf8);
     /// called when a test case failed: default is to add item to fFailed[]
     procedure AddFailed(const msg: string); virtual;
     /// this method is called before every run
@@ -438,14 +455,6 @@ type
     // !   result := inherited Run;
     // ! end;
     function Run: boolean; virtual;
-    /// low-level output on the console - use TSynTestCase.AddConsole instead
-    procedure DoText(const value: RawUtf8); overload; virtual;
-    /// low-level output on the console - use TSynTestCase.AddConsole instead
-    procedure DoText(const values: array of const); overload;
-    /// low-level output on the console - use TSynTestCase.AddConsole instead
-    procedure DoTextLn(const values: array of const); overload;
-    /// low-level set the console text color - use TSynTestCase.AddConsole instead
-    procedure DoColor(aColor: TConsoleColor);
     /// could be overriden to redirect the content to proper TSynLog.Log()
     procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const); virtual;
@@ -1019,7 +1028,7 @@ end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);
 begin
-  fOwner.DoLog(sllMonitoring, '% %', [ClassType, msg]);
+  fOwner.DoLog(sllMonitoring, '% %', [self, msg]);
   if OnlyLog then
     exit;
   fOwner.fSafe.Lock;
@@ -1079,6 +1088,15 @@ var
 begin
   FormatString(ItemNameFmt, ItemNameArgs, str);
   result := NotifyTestSpeed(str, ItemCount, SizeInBytes, Timer, OnlyLog);
+end;
+
+procedure TSynTestCase.NotifyProgress(const Args: array of const);
+var
+  msg: RawUtf8;
+begin
+  msg := ' ';
+  Append(msg, Args);
+  fOwner.DoNotifyProgress(msg);
 end;
 
 
@@ -1148,6 +1166,29 @@ procedure TSynTests.DoTextLn(const values: array of const);
 begin
   DoText(values);
   DoText(#13#10);
+end;
+
+procedure TSynTests.DoNotifyProgress(const value: RawUtf8);
+var
+  len: integer;
+begin
+  if fNotifyProgress = '' then
+  begin
+    DoColor(ccGreen);
+    DoTextLn(['  - ', fCurrentMethodInfo^.TestName, ':']);
+    DoText('     ');
+    fNotifyProgressLineLen := 0;
+  end;
+  len := length(value);
+  inc(fNotifyProgressLineLen, len);
+  if (fNotifyProgress <> '') and
+     (fNotifyProgressLineLen > 73) then
+  begin
+    DoText([CRLF + '     ']);
+    fNotifyProgressLineLen := len;
+  end;
+  Append(fNotifyProgress, value);
+  DoText(value);
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -1363,10 +1404,20 @@ begin
   C := fCurrentMethodInfo^.Test as TSynTestCase;
   Run := C.Assertions - C.fAssertionsBeforeRun;
   Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
+  if fNotifyProgress <> '' then
+  begin
+    DoLog(sllMonitoring, '% %', [C, fNotifyProgress]);
+    DoText(CRLF);
+  end;
   if Failed = 0 then
   begin
-    DoColor(ccGreen);
-    DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
+    if fNotifyProgress <> '' then
+      DoText('        ')
+    else
+    begin
+      DoColor(ccGreen);
+      DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
+    end;
     if Run = 0 then
       DoText('no assertion')
     else if Run = 1 then
@@ -1380,6 +1431,7 @@ begin
     DoText(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
+  fNotifyProgress := '';
   DoText(['  ', TestTimer.Stop]);
   if C.fRunConsoleOccurenceNumber > 0 then
     DoText(['  ', IntToThousandString(TestTimer.PerSec(
