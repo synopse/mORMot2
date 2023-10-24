@@ -305,7 +305,8 @@ type
     /// append some text to the current console in real time, on the same line
     // - the information is flushed to the console immediately, whereas
     // AddConsole() append it into a buffer to be written once
-    procedure NotifyProgress(const Args: array of const);
+    procedure NotifyProgress(const Args: array of const;
+      Color: TConsoleColor = ccGreen);
     /// the test suit which owns this test case
     property Owner: TSynTests
       read fOwner;
@@ -372,7 +373,7 @@ type
     procedure DoColor(aColor: TConsoleColor);
     /// low-level output on the console with automatic formatting
     // - use TSynTestCase.NotifyProgress() instead
-    procedure DoNotifyProgress(const value: RawUtf8);
+    procedure DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
     /// called when a test case failed: default is to add item to fFailed[]
     procedure AddFailed(const msg: string); virtual;
     /// this method is called before every run
@@ -1090,13 +1091,14 @@ begin
   result := NotifyTestSpeed(str, ItemCount, SizeInBytes, Timer, OnlyLog);
 end;
 
-procedure TSynTestCase.NotifyProgress(const Args: array of const);
+procedure TSynTestCase.NotifyProgress(const Args: array of const;
+  Color: TConsoleColor);
 var
   msg: RawUtf8;
 begin
   msg := ' ';
   Append(msg, Args);
-  fOwner.DoNotifyProgress(msg);
+  fOwner.DoNotifyProgress(msg, Color);
 end;
 
 
@@ -1168,7 +1170,7 @@ begin
   DoText(#13#10);
 end;
 
-procedure TSynTests.DoNotifyProgress(const value: RawUtf8);
+procedure TSynTests.DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
 var
   len: integer;
 begin
@@ -1188,7 +1190,9 @@ begin
     fNotifyProgressLineLen := len;
   end;
   Append(fNotifyProgress, value);
+  DoColor(cc);
   DoText(value);
+  DoColor(ccLightGray);
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -1411,13 +1415,11 @@ begin
   end;
   if Failed = 0 then
   begin
+    DoColor(ccGreen);
     if fNotifyProgress <> '' then
       DoText('        ')
     else
-    begin
-      DoColor(ccGreen);
       DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
-    end;
     if Run = 0 then
       DoText('no assertion')
     else if Run = 1 then
