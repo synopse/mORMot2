@@ -356,13 +356,6 @@ type
     function GetFailedCount: integer;
     function GetFailed(Index: integer): TSynTestFailed;
     procedure CreateSaveToFile; virtual;
-    procedure Color(aColor: TConsoleColor);
-    procedure Text(const value: RawUtf8); overload; virtual;
-    procedure Text(const values: array of const); overload;
-    procedure TextLn(const values: array of const); overload;
-    /// could be overriden to redirect the content to proper TSynLog.Log()
-    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
-      const TextArgs: array of const); virtual;
     /// called when a test case failed: default is to add item to fFailed[]
     procedure AddFailed(const msg: string); virtual;
     /// this method is called before every run
@@ -445,6 +438,17 @@ type
     // !   result := inherited Run;
     // ! end;
     function Run: boolean; virtual;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoText(const value: RawUtf8); overload; virtual;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoText(const values: array of const); overload;
+    /// low-level output on the console - use TSynTestCase.AddConsole instead
+    procedure DoTextLn(const values: array of const); overload;
+    /// low-level set the console text color - use TSynTestCase.AddConsole instead
+    procedure DoColor(aColor: TConsoleColor);
+    /// could be overriden to redirect the content to proper TSynLog.Log()
+    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+      const TextArgs: array of const); virtual;
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer
       read GetFailedCount;
@@ -1114,21 +1118,21 @@ end;
 
 {$I-}
 
-procedure TSynTests.Color(aColor: TConsoleColor);
+procedure TSynTests.DoColor(aColor: TConsoleColor);
 begin
   if (StdOut <> 0) and
      (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
     TextColor(aColor);
 end;
 
-procedure TSynTests.Text(const value: RawUtf8);
+procedure TSynTests.DoText(const value: RawUtf8);
 begin
   write(fSaveToFile, value);
   if Assigned(CustomOutput) then
     CustomOutput(value);
 end;
 
-procedure TSynTests.Text(const values: array of const);
+procedure TSynTests.DoText(const values: array of const);
 var
   i: PtrInt;
   s: RawUtf8;
@@ -1136,14 +1140,14 @@ begin
   for i := 0 to high(values) do
   begin
     VarRecToUtf8(values[i], s);
-    Text(s);
+    DoText(s);
   end;
 end;
 
-procedure TSynTests.TextLn(const values: array of const);
+procedure TSynTests.DoTextLn(const values: array of const);
 begin
-  Text(values);
-  Text(#13#10);
+  DoText(values);
+  DoText(#13#10);
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -1210,8 +1214,8 @@ var
 begin
   if TTextRec(fSaveToFile).Handle = 0 then
     CreateSaveToFile;
-  Color(ccLightCyan);
-  TextLn([#13#10'   ', Ident, #13#10'  ', RawUtf8OfChar('-', length(Ident) + 2)]);
+  DoColor(ccLightCyan);
+  DoTextLn([#13#10'   ', Ident, #13#10'  ', RawUtf8OfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
   Randomize;
   fFailed := nil;
@@ -1220,9 +1224,9 @@ begin
   dir := GetCurrentDir;
   for m := 0 to Count - 1 do
   try
-    Color(ccWhite);
-    TextLn([#13#10#13#10, m + 1, '. ', fTests[m].TestName]);
-    Color(ccLightGray);
+    DoColor(ccWhite);
+    DoTextLn([#13#10#13#10, m + 1, '. ', fTests[m].TestName]);
+    DoColor(ccLightGray);
     fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
     try
       for i := 0 to high(fTestCaseClass) do
@@ -1250,9 +1254,9 @@ begin
               SetCurrentDir(fWorkDir);
               TotalTimer.Start;
               C.Setup;
-              Color(ccWhite);
-              TextLn([#13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
-              Color(ccLightGray);
+              DoColor(ccWhite);
+              DoTextLn([#13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
+              DoColor(ccLightGray);
               started := true;
             end;
             C.fAssertionsBeforeRun := C.fAssertions;
@@ -1271,35 +1275,35 @@ begin
           except
             on E: Exception do
             begin
-              Color(ccLightRed);
+              DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              Text(['! ', fCurrentMethodInfo^.IdentTestName]);
+              DoText(['! ', fCurrentMethodInfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
-              TextLn([#13#10'! ', GetLastExceptionText]); // with extended info
-              Color(ccLightGray);
+              DoTextLn([#13#10'! ', GetLastExceptionText]); // with extended info
+              DoColor(ccLightGray);
             end;
           end;
           if not started then
             continue;
           C.CleanUp; // should be done before Destroy call
           if C.AssertionsFailed = 0 then
-            Color(ccLightGreen)
+            DoColor(ccLightGreen)
           else
-            Color(ccLightRed);
+            DoColor(ccLightRed);
           if C.fRunConsole <> '' then
           begin
-            TextLn(['   ', C.fRunConsole]);
+            DoTextLn(['   ', C.fRunConsole]);
             C.fRunConsole := '';
           end;
-          Text(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
+          DoText(['  Total failed: ', IntToThousandString(C.AssertionsFailed),
             ' / ', IntToThousandString(C.Assertions), '  - ', C.Ident]);
           if C.AssertionsFailed = 0 then
-            Text(' PASSED')
+            DoText(' PASSED')
           else
-            Text(' FAILED');
-          TextLn(['  ', TotalTimer.Stop]);
-          Color(ccLightGray);
+            DoText(' FAILED');
+          DoTextLn(['  ', TotalTimer.Stop]);
+          DoColor(ccLightGray);
           inc(fAssertions, C.fAssertions); // compute global assertions count
           inc(fAssertionsFailed, C.fAssertionsFailed);
         finally
@@ -1314,39 +1318,39 @@ begin
     on E: Exception do
     begin
       // assume any exception not intercepted above is a failure
-      Color(ccLightRed);
+      DoColor(ccLightRed);
       err := E.ClassName + ': ' + E.Message;
       AddFailed(err);
-      Text(['! ', err]);
+      DoText(['! ', err]);
     end;
   end;
   SetCurrentDir(dir);
-  Color(ccLightCyan);
+  DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
     Version := FormatUtf8(#13#10'Software version tested: % (%)',
       [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
   FormatUtf8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
-  TextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
+  DoTextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
     COMPILER_VERSION, ' ' + OS_TEXT + ' compiler', Elapsed]);
   if result then
-    Color(ccWhite)
+    DoColor(ccWhite)
   else
-    Color(ccLightRed);
-  Text([#13#10'Total assertions failed for all test suits:  ',
+    DoColor(ccLightRed);
+  DoText([#13#10'Total assertions failed for all test suits:  ',
     IntToThousandString(AssertionsFailed), ' / ', IntToThousandString(Assertions)]);
   if result then
   begin
-    Color(ccLightGreen);
-    TextLn([#13#10'! All tests passed successfully.']);
+    DoColor(ccLightGreen);
+    DoTextLn([#13#10'! All tests passed successfully.']);
   end
   else
   begin
-    TextLn([#13#10'! Some tests FAILED: please correct the code.']);
+    DoTextLn([#13#10'! Some tests FAILED: please correct the code.']);
     ExitCode := 1;
   end;
-  Color(ccLightGray);
+  DoColor(ccLightGray);
 end;
 
 procedure TSynTests.AfterOneRun;
@@ -1361,37 +1365,37 @@ begin
   Failed := C.AssertionsFailed - C.fAssertionsFailedBeforeRun;
   if Failed = 0 then
   begin
-    Color(ccGreen);
-    Text(['  - ', fCurrentMethodInfo^.TestName, ': ']);
+    DoColor(ccGreen);
+    DoText(['  - ', fCurrentMethodInfo^.TestName, ': ']);
     if Run = 0 then
-      Text('no assertion')
+      DoText('no assertion')
     else if Run = 1 then
-      Text('1 assertion passed')
+      DoText('1 assertion passed')
     else
-      Text([IntToThousandString(Run), ' assertions passed']);
+      DoText([IntToThousandString(Run), ' assertions passed']);
   end
   else
   begin
-    Color(ccLightRed);   // ! to highlight the line
-    Text(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
+    DoColor(ccLightRed);   // ! to highlight the line
+    DoText(['!  - ', fCurrentMethodInfo^.TestName, ': ', IntToThousandString(
       Failed), ' / ', IntToThousandString(Run), ' FAILED']);
   end;
-  Text(['  ', TestTimer.Stop]);
+  DoText(['  ', TestTimer.Stop]);
   if C.fRunConsoleOccurenceNumber > 0 then
-    Text(['  ', IntToThousandString(TestTimer.PerSec(
+    DoText(['  ', IntToThousandString(TestTimer.PerSec(
       C.fRunConsoleOccurenceNumber)), '/s']);
   if C.fRunConsoleMemoryUsed > 0 then
   begin
-    Text(['  ', KB(C.fRunConsoleMemoryUsed)]);
+    DoText(['  ', KB(C.fRunConsoleMemoryUsed)]);
     C.fRunConsoleMemoryUsed := 0; // display only once
   end;
-  TextLn([]);
+  DoTextLn([]);
   if C.fRunConsole <> '' then
   begin
-    TextLn(['     ', C.fRunConsole]);
+    DoTextLn(['     ', C.fRunConsole]);
     C.fRunConsole := '';
   end;
-  Color(ccLightGray);
+  DoColor(ccLightGray);
 end;
 
 class procedure TSynTests.DescribeCommandLine;
