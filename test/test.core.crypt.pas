@@ -7,6 +7,10 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+{.$define CATALOGALLGENERATE}
+// by default, we don't validate the very slow RSA keypair generation
+// - define this conditional for slower but full coverage of the tests
+
 uses
   sysutils,
   mormot.core.base,
@@ -2641,6 +2645,7 @@ var
   cip: TCryptCipherAlgo;
   asy: TCryptAsym;
   en, de: ICryptCipher;
+  caa: TCryptAsymAlgo;
   crt: TCryptCertAlgo;
   c1, c2, c3, c4: ICryptCert;
   fields: TCryptCertFields;
@@ -2766,16 +2771,27 @@ begin
     asy := alg[a] as TCryptAsym;
     NotifyProgress([asy.AlgoName]);
     Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
-    timer.STart;
-    asy.GeneratePem(pub, priv, '');
-    Check(pub <> '');
-    Check(priv <> '');
-    asy.GeneratePem(pub2, priv2, '');
-    NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
-    Check(pub2 <> '');
-    Check(priv2 <> '');
-    Check(pub <> pub2);
-    Check(priv <> priv2);
+    {$ifndef CATALOGALLGENERATE}
+    if (asy.AlgoName[2] = 's') and
+       (asy.AlgoName[1] in ['p', 'r']) then
+    begin
+      pub := _rsapub; // don't validate the very slow RSA keypair generation
+      priv := _rsapriv;
+    end
+    else
+    {$endif CATALOGALLGENERATE}
+    begin
+      timer.Start;
+      asy.GeneratePem(pub, priv, '');
+      Check(pub <> '');
+      Check(priv <> '');
+      asy.GeneratePem(pub2, priv2, '');
+      NotifyTestSpeed('%.Generate', [asy], 2, 0, @timer, {onlylog=}true);
+      Check(pub2 <> '');
+      Check(priv2 <> '');
+      Check(pub <> pub2);
+      Check(priv <> priv2);
+    end;
     CheckUtf8(asy.Sign(n, priv, s), asy.AlgoName);
     Check(s <> '');
     Check(asy.Verify(n, pub, s));
@@ -2792,7 +2808,8 @@ begin
     NotifyProgress([crt.AlgoName]);
     check(PosEx(UpperCase(CAA_JWT[crt.AsymAlgo]), UpperCase(crt.AlgoName)) > 0);
     c1 := crt.New;
-    check(c1.AsymAlgo = crt.AsymAlgo);
+    caa := c1.AsymAlgo;
+    check(caa = crt.AsymAlgo);
     Check(c1.GetSerial = '');
     Check(not c1.HasPrivateSecret);
     Check(c1.IsVoid);
@@ -2811,6 +2828,7 @@ begin
       // X509 and TEccCertificate V2 have proper Usage and Subjects support
       c1.Generate([cuCA, cuDigitalSignature, cuKeyCertSign],
         ' synopse.info, www.synopse.info ', nil);
+      Check(c1.AsymAlgo = caa, 'c1 caa');
       CheckEqual(RawUtf8ArrayToCsv(c1.GetSubjects),
         'synopse.info,www.synopse.info');
       check(c1.GetUsage = [cuCA, cuDigitalSignature, cuKeyCertSign]);
@@ -2973,7 +2991,7 @@ begin
     end;
     s := c2.SharedSecret(c3);
     check(c3.SharedSecret(c2) = s, 'sharedsecret');
-    check( (s <> '') = (crt.AsymAlgo = caaES256), 'caaES256=sharedsecret');
+    check( (s <> '') = (caa = caaES256), 'caaES256=sharedsecret');
     // c1 has [cuCA, cuDigitalSignature, cuKeyCertSign]
     // c2 has [cuDigitalSignature, cuKeyAgreement]
     // c3 has [cuDataEncipherment, cuKeyAgreement]
