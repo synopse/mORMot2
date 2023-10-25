@@ -390,7 +390,7 @@ type
   public
     /// you can put here some text to be displayed at the end of the messages
     // - some internal versions, e.g.
-    // - every line of text must explicitly BEGIN with #13#10
+    // - every line of text must explicitly BEGIN with CRLF
     CustomVersions: string;
     /// allow redirection to any kind of output
     // - will be called in addition to default console write()
@@ -450,8 +450,8 @@ type
     // information, e.g.
     // ! function TMySynTests.Run: boolean;
     // ! begin // need mormot.db.raw.sqlite3 unit in the uses clause
-    // !   CustomVersions := format(#13#10#13#10'%s'#13#10'    %s'#13#10 +
-    // !     'Using mORMot %s'#13#10'    %s %s', [OSVersionText, CpuInfoText,
+    // !   CustomVersions := format(CRLF + CRLF + '%s' + CRLF + '    %s' + CRLF +
+    // !     'Using mORMot %s' + CRLF + '    %s %s', [OSVersionText, CpuInfoText,
     // !      SYNOPSE_FRAMEWORK_FULLVERSION, sqlite3.ClassName, sqlite3.Version]);
     // !   result := inherited Run;
     // ! end;
@@ -1035,7 +1035,7 @@ begin
   fOwner.fSafe.Lock;
   try
     if fRunConsole <> '' then
-      fRunConsole := fRunConsole + #13#10'     ' + msg
+      fRunConsole := fRunConsole + (CRLF + '     ') + msg
     else
       fRunConsole := fRunConsole + msg;
   finally
@@ -1167,7 +1167,7 @@ end;
 procedure TSynTests.DoTextLn(const values: array of const);
 begin
   DoText(values);
-  DoText(#13#10);
+  DoText(CRLF);
 end;
 
 procedure TSynTests.DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
@@ -1208,9 +1208,6 @@ procedure TSynTests.CreateSaveToFile;
 begin
   System.Assign(fSaveToFile, '');
   Rewrite(fSaveToFile);
-  {$ifdef OSPOSIX}
-  TTextRec(fSaveToFile).LineEnd := #13#10;
-  {$endif OSPOSIX}
   StdOut := TTextRec(fSaveToFile).Handle;
 end;
 
@@ -1260,7 +1257,8 @@ begin
   if TTextRec(fSaveToFile).Handle = 0 then
     CreateSaveToFile;
   DoColor(ccLightCyan);
-  DoTextLn([#13#10'   ', Ident, #13#10'  ', RawUtf8OfChar('-', length(Ident) + 2)]);
+  DoTextLn([CRLF + '   ', Ident,
+            CRLF + '  ', RawUtf8OfChar('-', length(Ident) + 2)]);
   RunTimer.Start;
   Randomize;
   fFailed := nil;
@@ -1270,7 +1268,7 @@ begin
   for m := 0 to Count - 1 do
   try
     DoColor(ccWhite);
-    DoTextLn([#13#10#13#10, m + 1, '. ', fTests[m].TestName]);
+    DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
     DoColor(ccLightGray);
     fTests[m].Method(); // call AddCase() to add instances into fTestCaseClass
     try
@@ -1300,7 +1298,7 @@ begin
               TotalTimer.Start;
               C.Setup;
               DoColor(ccWhite);
-              DoTextLn([#13#10' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
+              DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', C.Ident, ': ']);
               DoColor(ccLightGray);
               started := true;
             end;
@@ -1325,7 +1323,7 @@ begin
               DoText(['! ', fCurrentMethodInfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
-              DoTextLn([#13#10'! ', GetLastExceptionText]); // with extended info
+              DoTextLn([CRLF + '! ', GetLastExceptionText]); // with extended info
               DoColor(ccLightGray);
             end;
           end;
@@ -1373,26 +1371,27 @@ begin
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
-    Version := FormatUtf8(#13#10'Software version tested: % (%)',
+    Version := FormatUtf8(CRLF +'Software version tested: % (%)',
       [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
-  FormatUtf8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
+  FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
+    'Performed % by % on %',
     [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
-  DoTextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
+  DoTextLn([CRLF, Version, CustomVersions, CRLF +'Generated with: ',
     COMPILER_VERSION, ' ' + OS_TEXT + ' compiler', Elapsed]);
   if result then
     DoColor(ccWhite)
   else
     DoColor(ccLightRed);
-  DoText([#13#10'Total assertions failed for all test suits:  ',
+  DoText([CRLF + 'Total assertions failed for all test suits:  ',
     IntToThousandString(AssertionsFailed), ' / ', IntToThousandString(Assertions)]);
   if result then
   begin
     DoColor(ccLightGreen);
-    DoTextLn([#13#10'! All tests passed successfully.']);
+    DoTextLn([CRLF + '! All tests passed successfully.']);
   end
   else
   begin
-    DoTextLn([#13#10'! Some tests FAILED: please correct the code.']);
+    DoTextLn([CRLF + '! Some tests FAILED: please correct the code.']);
     ExitCode := 1;
   end;
   DoColor(ccLightGray);
@@ -1545,7 +1544,7 @@ begin
     begin
       tests.SaveToFile(redirect); // export to file if named on command line
       {$I-} // minimal console output during blind regression tests
-      Writeln(tests.Ident, #13#10#13#10' Running tests... please wait');
+      Writeln(tests.Ident, CRLF + CRLF + ' Running tests... please wait');
       {$I+}
     end;
     tests.Run;
@@ -1556,8 +1555,8 @@ begin
   if ParamCount = 0 then
   begin
     // direct exit if an external file was generated
-    WriteLn(#13#10'Done - Press ENTER to Exit');
-    ReadLn;
+    WriteLn(CRLF + 'Done - Press ENTER to Exit');
+    ConsoleWaitForEnterKey;
   end;
   {$endif OSPOSIX}
 end;
