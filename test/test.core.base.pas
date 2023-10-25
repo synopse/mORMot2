@@ -3410,7 +3410,7 @@ var
     crc: cardinal;
   end;
   totallen: Cardinal;
-  s2: RawByteString;
+  s2, msg: RawByteString;
 
   procedure Test(hash: THasher; const name: string);
   var
@@ -3434,7 +3434,7 @@ var
     for i := 0 to High(crc) do
       with crc[i] do
         Check(hash(0, pointer(S), length(S)) = crc);
-    fRunConsole := format('%s %s %s/s', [fRunConsole, name, KB(Timer.PerSec(totallen))]);
+    msg := FormatUtf8('% %:%/s', [msg, name, KBNoSpace(Timer.PerSec(totallen))]);
   end;
 
   procedure test16(const text: RawUtf8; expected: cardinal);
@@ -3573,6 +3573,7 @@ begin
   if @crc32c <> @crc32cfast then
     Test(crc32c, 'armv8');
   {$endif CPUINTEL}
+  AddConsole('%', [msg]);
 end;
 
 procedure TTestCoreBase.intadd(const Sender; Value: integer);
@@ -4523,13 +4524,11 @@ begin
   Timer.Start;
   for i := 0 to 99999 do
     SysUtils.IntToStr(Int64(7777) * Random32);
-  fRunConsole := format('%s SysUtils.IntToStr %s %s/s', [fRunConsole, Timer.Stop,
-    IntToThousandString(Timer.PerSec(100000))]);
+  NotifyTestSpeed('SysUtils.IntToStr', 100000, 0, @Timer);
   Timer.Start;
   for i := 0 to 99999 do
     StrInt64(@varint[31], Int64(7777) * Random32);
-  fRunConsole := format('%s StrInt64 %s %s/s', [fRunConsole, Timer.Stop,
-    IntToThousandString(Timer.PerSec(100000))]);
+  NotifyTestSpeed('StrInt64', 100000, 0, @Timer);
 end;
 
 function LowerCaseAscii7(const S: RawByteString): RawByteString;

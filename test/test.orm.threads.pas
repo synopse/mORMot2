@@ -496,6 +496,7 @@ var
   allFinished: boolean;
   Thread: TTestMultiThreadProcessThread;
   longstandingclient: TRest;
+  msg: RawUtf8;
   {$ifdef HAS_MESSAGES}
   aMsg: TMsg;
   {$endif HAS_MESSAGES}
@@ -594,8 +595,8 @@ begin
     until allFinished;
     fTimer.Stop;
     //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
-    fRunConsole := FormatString('%%=%/s  ',
-      [fRunConsole, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
+    msg := FormatUtf8('% %=%/s',
+      [msg, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
     if longstandingclient <> nil then
       Check(longstandingclient.Orm.MemberExists(TOrmPeople,
         TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 2');
@@ -639,6 +640,7 @@ begin
       fRunningThreadCount := fRunningThreadCount + 20;
   until fRunningThreadCount > fMaxThreads;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
+  AddConsole('%', [msg]);
   DatabaseClose;
   Check(fDatabase = nil);
   if longstandingclient <> nil then

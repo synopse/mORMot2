@@ -245,6 +245,7 @@ const
   LOOP = 1000;
 var
   Timer: ILocalPrecisionTimer;
+  TimeText: RawUtf8;
 {$else}
   LOOP = 100;
 {$endif WTIME}
@@ -292,7 +293,7 @@ begin
   CheckEqual(onelen, 4818);
   Resp.Free;
 {$ifdef WTIME}
-  fRunConsole := format('%s%s, first %s, ', [fRunConsole, KB(onelen), Timer.Stop]);
+  FormatUtf8('%, first %, ', [KBNoSpace(onelen), Timer.Stop], TimeText);
 {$endif WTIME}
   // test global connection speed and caching (both client and server sides)
   Rec2 := TOrmPeople.Create;
@@ -360,7 +361,7 @@ begin
   Resp.Free;
 {$ifdef WTIME}
   Timer.Start;
-{$endif}
+{$endif WTIME}
   for i := 1 to LOOP do
   begin
     Resp := Client.Client.List([TOrmPeople], '*', CLIENTTEST_WHERECLAUSE);
@@ -376,9 +377,9 @@ begin
     end;
   end;
 {$ifdef WTIME}
-  fRunConsole := format('%sdone %s i.e. %d/s, aver. %s, %s/s', [fRunConsole,
-    Timer.Stop, Timer.PerSec(LOOP), Timer.ByCount(LOOP),
-      KB(Timer.PerSec(onelen * (LOOP + 1)))]);
+  AddConsole('%done % i.e. %/s, aver. %, %/s',
+    [TimeText, Timer.Stop, Timer.PerSec(LOOP), Timer.ByCount(LOOP),
+     KBNoSpace(Timer.PerSec(onelen * (LOOP + 1)))]);
 {$endif WTIME}
 end;
 
@@ -583,10 +584,6 @@ begin
         DataBase := Instance[i].DataBase;
         try
           ClientTest;
-          {$ifdef WTIME}
-          if i < high(Instance) then
-            fRunConsole := fRunConsole + #13#10 + '     ';
-          {$endif WTIME}
         finally
           Client := nil;
           DataBase := nil;

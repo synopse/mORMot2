@@ -2095,8 +2095,8 @@ begin
     {$ifdef CPUINTEL}
     if noaesni then
     begin
-      fRunConsole := format('%s cypher with AES-NI: %s, without: %s',
-        [fRunConsole, Timer[false].Stop, Timer[true].Stop]);
+      AddConsole('cypher with AES-NI: %, without: %',
+        [Timer[false].Stop, Timer[true].Stop]);
       Include(CpuFeatures, cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAesni then
