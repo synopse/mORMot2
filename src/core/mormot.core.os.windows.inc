@@ -1847,7 +1847,7 @@ type
     th32ModuleID:DWORD;            // associated exe
     cntThreads: DWORD;
     th32ParentProcessID: DWORD;    // this process's parent process
-    pcPriClassBase: LONG;          // Base priority of process's threads
+    pcPriClassBase: integer;          // Base priority of process's threads
     dwFlags: DWORD;
     szExeFile: array [0..MAX_PATH - 1] of WideChar;   // Path
   end;
@@ -1885,7 +1885,7 @@ function PostThreadMessage(idThread: DWord; Msg: UINT; wParam: WPARAM;
     lParam: LPARAM): BOOL;
   stdcall; external user32 name 'PostThreadMessageW';
 
-function GetProcessInfo(pid: cardinal; var e: TProcessEntry32): boolean;
+function _GetProcessInfo(pid: cardinal; var e: TProcessEntry32): boolean;
 var
   snap: THandle;
 begin
@@ -1911,7 +1911,7 @@ function GetParentProcess(PID: cardinal): cardinal;
 var
   e: TProcessEntry32;
 begin
-  if GetProcessInfo(PID, e) then
+  if _GetProcessInfo(PID, e) then
     result := e.th32ParentProcessID
   else
     result := 0;
@@ -3444,8 +3444,7 @@ begin
   end;
 end;
 
-procedure GetProcessInfo(aPid: cardinal;
-  out aInfo: TWinProcessInfo);
+procedure GetProcessInfo(aPid: cardinal; out aInfo: TWinProcessInfo);
 var
   privileges: TSynWindowsPrivileges;
 begin

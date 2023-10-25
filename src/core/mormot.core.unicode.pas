@@ -1227,10 +1227,9 @@ function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolea
 type
   TIdemPropNameUSameLen = function(P1, P2: pointer; P1P2Len: PtrInt): boolean;
 
-const
+var
   /// case (in)sensitive comparison of ASCII 7-bit identifiers of same length
-  IdemPropNameUSameLen: array[{casesensitive=}boolean] of TIdemPropNameUSameLen = (
-    @IdemPropNameUSameLenNotNull, mormot.core.base.CompareMem);
+  IdemPropNameUSameLen: array[{casesensitive=}boolean] of TIdemPropNameUSameLen;
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -10139,6 +10138,9 @@ begin
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayRawByteString;
   {$endif CPUINTEL}
   SortDynArrayAnsiStringByCase[true] := @SortDynArrayAnsiStringI;
+  IdemPropNameUSameLen[false] := @IdemPropNameUSameLenNotNull;
+  IdemPropNameUSameLen[true] := @mormot.core.base.CompareMem;
+
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
   CurrentAnsiConvert   := NewEngine(Unicode_CodePage);

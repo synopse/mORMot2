@@ -1987,8 +1987,7 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
 
 /// retrieve low-level process information, from the Windows API
-procedure GetProcessInfo(aPid: cardinal;
-  out aInfo: TWinProcessInfo); overload;
+procedure GetProcessInfo(aPid: cardinal; out aInfo: TWinProcessInfo); overload;
 
 /// retrieve low-level process(es) information, from the Windows API
 procedure GetProcessInfo(const aPidList: TCardinalDynArray;
