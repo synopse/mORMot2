@@ -2180,7 +2180,13 @@ end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 begin
-  result := '';
+  result := ''; // not implemented yet on BSD/Darwin
+end;
+
+function _IsDebuggerPresent: boolean;
+begin
+  // rough detection for FPC on BSD
+  result := PosEx('lazarus', LowerCase(EnumProcessName(FpGetppid))) <> 0;
 end;
 
 function GetParentProcess(PID: cardinal): cardinal;
@@ -2440,6 +2446,15 @@ begin
   end;
 end;
 
+function _IsDebuggerPresent: boolean;
+var
+  status, tracerpid: RawUtf8;
+begin
+  status := StringFromFile('/proc/self/status', {nosize=}true);
+  FindNameValue(status, 'TRACERPID:', tracerpid);
+  result := (tracerpid <> '0');
+end;
+
 function RetrieveLoadAvg: RawUtf8;
 begin
   // the libc parses this file anyway :)
@@ -2563,6 +2578,19 @@ end;
 {$endif OSANDROID}
 
 {$endif OSBSDDARWIN}
+
+var
+  __IsDebuggerPresent: (idpUntested, idpNone, idpPresent);
+
+function IsDebuggerPresent: boolean;
+begin
+  if __IsDebuggerPresent = idpUntested then
+    if _IsDebuggerPresent then
+      __IsDebuggerPresent := idpPresent
+    else
+      __IsDebuggerPresent := idpNone;
+  result := __IsDebuggerPresent = idpPresent;
+end;
 
 {$ifndef OSDARWIN}
 // on POSIX systems, /dev/mem may be available from root
