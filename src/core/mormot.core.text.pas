@@ -198,7 +198,8 @@ function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// quickly check if Value is in Csv with no temporary memory allocation
-function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar = ','): boolean;
+function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar = ',';
+  CaseSensitive: boolean = true): boolean;
 
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
@@ -3009,10 +3010,12 @@ begin
       result := GetNextItemString(P, Sep);
 end;
 
-function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar): boolean;
+function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar;
+  CaseSensitive: boolean): boolean;
 var
   i, l: PtrInt;
   p, s: PUtf8Char;
+  match: TIdemPropNameUSameLen;
 begin
   if (Csv = '') or
      (Value = '') then
@@ -3021,11 +3024,12 @@ begin
     exit;
   end;
   // note: all search sub-functions do use fast SSE2 asm on i386 and x86_64
+  match := IdemPropNameUSameLen[CaseSensitive];
   p := pointer(Csv);
   l := PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^;
   if l >= PStrLen(p - _STRLEN)^ then
     result := (l = PStrLen(p - _STRLEN)^) and
-              (MemCmp(pointer(p), pointer(Value), l) = 0)
+              match(p, pointer(Value), l)
   else
   begin
     i := PosExChar(Sep, Csv);
@@ -3035,14 +3039,14 @@ begin
       s := p + i - 1;
       repeat
         if (s - p = l) and
-           (MemCmp(pointer(p), pointer(Value), l) = 0) then
+           match(p, pointer(Value), l) then
           exit;
         p := s + 1;
         s := PosChar(p, Sep);
         if s <> nil then
           continue;
         if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
-           (MemCmp(pointer(p), pointer(Value), l) = 0) then
+           match(p, pointer(Value), l) then
           exit;
         break;
       until false;
