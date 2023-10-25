@@ -1920,6 +1920,8 @@ type
     cccPrivateKeyOnly);
 
   /// how ICryptCert.Compare() should compare two certificates
+  // - ccmSubjectCN/ccmIssuerCN/ccmSubjectAltName/ccmIssuerAltName lookup is
+  // case-insensitive
   TCryptCertComparer = (
     ccmInstance,
     ccmSerialNumber,
@@ -7176,17 +7178,17 @@ begin
       ccmIssuerName:
         found := EqualBuf(Cert^.GetIssuerName, Value);
       ccmSubjectCN:
-        found := EqualBuf(Cert^.GetSubject('CN'), Value);
+        found := IdemPropNameU(Cert^.GetSubject('CN'), Value);
       ccmIssuerCN:
-        found := EqualBuf(Cert^.GetIssuer('CN'), Value);
+        found := IdemPropNameU(Cert^.GetIssuer('CN'), Value);
       ccmSubjectKey:
         found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
       ccmAuthorityKey:
         found := CsvContains(Cert^.GetAuthorityKey, Value);
       ccmSubjectAltName:
-        found := FindRawUtf8(Cert^.GetSubjects, Value) >= 0;
+        found := FindRawUtf8(Cert^.GetSubjects, Value, {casesens=}false) >= 0;
       ccmIssuerAltName:
-        found := FindRawUtf8(Cert^.GetIssuers, Value) >= 0;
+        found := FindRawUtf8(Cert^.GetIssuers, Value, {casesens=}false) >= 0;
       ccmBinary:
         found := EqualBuf(Cert^.Save, Value);
       ccmSha1:

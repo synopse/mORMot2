@@ -906,6 +906,7 @@ type
     /// search the most recent X.509 CRL of a given authority from its own AKID
     function FindByKeyIssuerRaw(const AuthorityKeyIdentifier: RawByteString): TX509Crl;
     /// search the most recent X.509 CRL of a given authority from a DNS name
+    // - the DNS name value search is case-insensitive
     function FindByAlternativeName(const DnsName: RawUtf8;
       TimeUtc: TDateTime = 0): TX509CrlObjArray;
     /// quickly check if a given certificate was part of one known CRL
@@ -3019,8 +3020,8 @@ begin
     p := pointer(fList);
     for i := 1 to fCount do
     begin
-      if CsvContains(
-           p^.Signed.Extension[xceIssuerAlternativeName], DnsName) and
+      if CsvContains(p^.Signed.Extension[xceIssuerAlternativeName],
+           DnsName, ',', {casesensitive=}false) and
          p^.IsValidDate(TimeUtc) then
         ObjArrayAdd(result, p^);
       inc(p);
@@ -3440,18 +3441,20 @@ begin
             found := SortDynArrayAnsiString(fCachedText, Value) = 0;
           end;
         ccmSubjectCN:
-          found := SortDynArrayAnsiString(Signed.Subject.Name[xaCN], Value) = 0;
+          found := IdemPropNameU(Signed.Subject.Name[xaCN], Value);
         ccmIssuerCN:
-          found := SortDynArrayAnsiString(Signed.Issuer.Name[xaCN], Value) = 0;
+          found := IdemPropNameU(Signed.Issuer.Name[xaCN], Value);
         ccmSubjectKey:
           found := SortDynArrayRawByteString(
                Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0;
         ccmAuthorityKey:
           found := CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value);
         ccmSubjectAltName:
-          found := CsvContains(Signed.Extension[xeSubjectAlternativeName], Value);
+          found := CsvContains(Signed.Extension[xeSubjectAlternativeName],
+                     Value, ',', {casesensitive=}false);
         ccmIssuerAltName:
-          found := CsvContains(Signed.Extension[xeIssuerAlternativeName], Value);
+          found := CsvContains(Signed.Extension[xeIssuerAlternativeName],
+                     Value, ',', {casesensitive=}false);
         ccmBinary: // fCachedDer has been set by AfterLoaded
           found := SortDynArrayRawByteString(fCachedDer, Value) = 0;
         ccmSha1:
