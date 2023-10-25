@@ -1222,7 +1222,15 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
 function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifdef FPC}inline;{$endif} // Delphi does not like to inline labels/goto
+  {$ifdef FPC}inline;{$endif} // Delphi does not like to inline goto
+
+type
+  TIdemPropNameUSameLen = function(P1, P2: pointer; P1P2Len: PtrInt): boolean;
+
+const
+  /// case (in)sensitive comparison of ASCII 7-bit identifiers of same length
+  IdemPropNameUSameLen: array[{casesensitive=}boolean] of TIdemPropNameUSameLen = (
+    @IdemPropNameUSameLenNotNull, mormot.core.base.CompareMem);
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -5325,8 +5333,8 @@ end;
 function IdemPropName(P1, P2: PUtf8Char; P1Len, P2Len: PtrInt): boolean;
 begin
   result := (P1Len = P2Len) and
-            ((P2Len = 0) or
-             IdemPropNameUSameLenNotNull(P1, P2, P2Len));
+            ((P1Len = 0) or
+             IdemPropNameUSameLenNotNull(P1, P2, P1Len));
 end;
 
 function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean;
