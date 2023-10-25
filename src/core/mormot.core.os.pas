@@ -3560,6 +3560,11 @@ function EnumAllProcesses: TCardinalDynArray;
 // - on Linux, will query /proc/[pid]/exe or /proc/[pid]/cmdline pseudo-file
 function EnumProcessName(PID: cardinal): RawUtf8;
 
+/// return the process ID of the parent of a given PID
+// - by default (PID = 0), will search for the parent of the current process
+// - returns 0 if the PID was not found
+function GetParentProcess(PID: cardinal = 0): cardinal;
+
 /// return the system-wide time usage information
 // - under Windows, is a wrapper around GetSystemTimes() kernel API call
 // - return false on POSIX system - call RetrieveLoadAvg() instead

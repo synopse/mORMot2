@@ -1837,6 +1837,86 @@ begin
     end;
 end;
 
+// some definitions missing on Delphi and/or FPC
+type
+  TProcessEntry32 = record
+    dwSize: DWORD;
+    cntUsage: DWORD;
+    th32ProcessID: DWORD;          // this process
+    th32DefaultHeapID: ULONG_PTR;
+    th32ModuleID:DWORD;            // associated exe
+    cntThreads: DWORD;
+    th32ParentProcessID: DWORD;    // this process's parent process
+    pcPriClassBase: LONG;          // Base priority of process's threads
+    dwFlags: DWORD;
+    szExeFile: array [0..MAX_PATH - 1] of WideChar;   // Path
+  end;
+
+  TThreadEntry32 = record
+    dwSize: DWord;
+    cntUsage: DWord;
+    th32ThreadID: DWord;       // this thread
+    th32OwnerProcessID: DWord; // Process this thread is associated with
+    tpBasePri: integer;
+    tpDeltaPri: integer;
+    dwFlags: DWord;
+  end;
+
+const
+  TH32CS_SNAPPROCESS  = $00000002;
+  TH32CS_SNAPTHREAD = $00000004;
+
+function AttachConsole(pid: cardinal): BOOL;
+  stdcall; external kernel32;
+function GetConsoleWindow: HWND;
+  stdcall; external kernel32;
+function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWord): THandle;
+  stdcall; external kernel32;
+function Process32FirstW(hSnapshot: THandle; var lppe: TProcessEntry32): BOOL;
+  stdcall; external kernel32;
+function Process32NextW(hSnapshot: THandle; var lppe: TProcessEntry32): BOOL;
+  stdcall; external kernel32;
+function Thread32First(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
+  stdcall; external kernel32;
+function Thread32Next(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
+  stdcall; external kernel32;
+
+function PostThreadMessage(idThread: DWord; Msg: UINT; wParam: WPARAM;
+    lParam: LPARAM): BOOL;
+  stdcall; external user32 name 'PostThreadMessageW';
+
+function GetProcessInfo(pid: cardinal; var e: TProcessEntry32): boolean;
+var
+  snap: THandle;
+begin
+  result := false;
+  if integer(pid) <= 0 then
+    pid := GetCurrentProcessId;
+  snap := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if snap <= 0 then
+    exit;
+  FillCharFast(e, SizeOf(e), 0);
+  e.dwSize := SizeOf(e);
+  result := true;
+  if Process32FirstW(snap, e) then // loop over all processes of the system
+    repeat
+      if e.th32ProcessID = pid then
+        exit;
+    until not Process32NextW(snap, e);
+  CloseHandle(snap);
+  result := false;
+end;
+
+function GetParentProcess(PID: cardinal): cardinal;
+var
+  e: TProcessEntry32;
+begin
+  if GetProcessInfo(PID, e) then
+    result := e.th32ParentProcessID
+  else
+    result := 0;
+end;
+
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
   ftidl, ftkrn, ftusr: TFileTime;
@@ -4392,35 +4472,6 @@ begin
   result := WaitForSingleObject(ph, waitseconds * 1000) = WAIT_OBJECT_0;
   CloseHandle(ph);
 end;
-
-// some definitions missing on Delphi and/or FPC
-type
-  TThreadEntry32 = record
-    dwSize: DWord;
-    cntUsage: DWord;
-    th32ThreadID: DWord;       // this thread
-    th32OwnerProcessID: DWord; // Process this thread is associated with
-    tpBasePri: integer;
-    tpDeltaPri: integer;
-    dwFlags: DWord;
-  end;
-
-const
-  TH32CS_SNAPTHREAD = $00000004;
-
-function AttachConsole(pid: cardinal): BOOL;
-  stdcall; external kernel32;
-function GetConsoleWindow: HWND;
-  stdcall; external kernel32;
-function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWord): THandle;
-  stdcall; external kernel32;
-function Thread32First(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
-  stdcall; external kernel32;
-function Thread32Next(hSnapshot: THandle; var lpte: TThreadEntry32): BOOL;
-  stdcall; external kernel32;
-function PostThreadMessage(idThread: DWord; Msg: UINT; wParam: WPARAM;
-    lParam: LPARAM): BOOL;
-  stdcall; external user32 name 'PostThreadMessageW';
 
 function CancelProcess(pid: cardinal; waitseconds: integer): boolean;
 begin

@@ -2183,6 +2183,14 @@ begin
   result := '';
 end;
 
+function GetParentProcess(PID: cardinal): cardinal;
+begin
+  if PID = 0 then
+    result := FpGetppid // we have a system call for the currrent process :)
+  else
+    result := 0; // not implemented yet on BSD/Darwin
+end;
+
 function fpsysctlhwint(hwid: cint): Int64;
 var
   mib: array[0..1] of cint;
@@ -2413,6 +2421,23 @@ begin
   FastSetString(result, pointer(cmdline), StrLen(pointer(cmdline)));
   if result <> '' then
     tryprocexe := false; // no need to try again next time
+end;
+
+function GetParentProcess(PID: cardinal): cardinal;
+var
+  status, ppid: RawUtf8;
+begin
+  if PID = 0 then
+    result := FpGetppid // we have a system call for the current process :)
+  else
+  begin
+    result := 0;
+    status := StringFromFile('/proc/' + IntToStr(PID) + '/status', {nosize=}true);
+    if status = '' then
+      exit; // no such process
+    FindNameValue(status, 'PPID:', ppid);
+    result := GetCardinal(pointer(ppid));
+  end;
 end;
 
 function RetrieveLoadAvg: RawUtf8;
