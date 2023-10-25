@@ -3748,7 +3748,8 @@ var
   {$endif OSDARWIN}
 begin
   // retrieve Kernel and Hardware information
-  StdOutIsTTY := (IsATTY(StdOutputHandle) = 1) and
+  StdOutIsTTY := not IsDebuggerPresent and
+                 (IsATTY(StdOutputHandle) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
