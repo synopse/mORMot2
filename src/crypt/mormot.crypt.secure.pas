@@ -2385,14 +2385,19 @@ type
     /// get the associated ICryptCert instances cache
     // - use Cache.Load() to retrieve a ICryptCert from its DER/PEM content
     function Cache: TCryptCertCache;
-    /// search for a certificate from its (hexadecimal) identifier
+    /// search for a trusted certificate from its (hexadecimal) identifier
     // - note that in the X.509 context, serial may be duplicated, so
     // it is safer to use GetBySubjectKey()
     function GetBySerial(const Serial: RawUtf8): ICryptCert;
-    /// search for a certificate from its (hexadecimal) Subject Key Identifier
+    /// search for a trusted certificate from its (hexadecimal) Subject Key Identifier
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
     // - search the SKID on X.509, or the serial number for syn-es256
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert;
+    /// search for a trusted certificate from a given attribute
+    // - return the first certificate matching a given value
+    // - warning: some engines don't support this advanced search feature
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer): ICryptCert;
     /// quickly check if a given certificate is part of the internal CRL
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
@@ -2474,6 +2479,8 @@ type
     function Cache: TCryptCertCache; virtual;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; virtual; abstract;
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert; virtual; abstract;
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer): ICryptCert; virtual;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; virtual; abstract;
     function Add(const cert: ICryptCert): boolean; overload; virtual; abstract;
     function Add(const cert: array of ICryptCert): TRawUtf8DynArray; overload; virtual;
@@ -7520,6 +7527,19 @@ end;
 function TCryptStore.Cache: TCryptCertCache;
 begin
   result := fCache;
+end;
+
+function TCryptStore.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCert;
+begin
+  case Method of
+    ccmSerialNumber:
+      result := GetBySerial(Value);
+    ccmSubjectKey:
+      result := GetBySubjectKey(Value);
+  else
+    result := nil; // other methods are unsupported by default
+  end;
 end;
 
 function TCryptStore.Add(const cert: array of ICryptCert): TRawUtf8DynArray;

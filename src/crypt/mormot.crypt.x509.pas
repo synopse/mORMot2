@@ -992,6 +992,8 @@ type
     function Save: RawByteString; override;
     function GetBySerial(const Serial: RawUtf8): ICryptCert; override;
     function GetBySubjectKey(const Key: RawUtf8): ICryptCert; override;
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer): ICryptCert; override;
     function IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason; override;
     function Add(const cert: ICryptCert): boolean; override;
     function AddFromBuffer(const Content: RawByteString): TRawUtf8DynArray; override;
@@ -4108,6 +4110,12 @@ end;
 function TCryptStoreX509.GetBySubjectKey(const Key: RawUtf8): ICryptCert;
 begin
   result := fTrust.FindBySubjectKey(Key);
+end;
+
+function TCryptStoreX509.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCert;
+begin
+  result := fTrust.FindOne(Value, Method);
 end;
 
 function TCryptStoreX509.ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;

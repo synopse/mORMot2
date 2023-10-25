@@ -4183,6 +4183,12 @@ begin
   chain2 := chain;
   ChainAdd(chain2, c[cuNonRepudiation]);
   Check(st.IsValidChain(chain2) = cvValidSigned, 'chain ignore irrelevant');
+  Check(st.FindOne('IntermediatE', ccmSubjectCN) = cint);
+  Check(st.FindOne('Trust Anchor', ccmSubjectCN) = ca);
+  Check(st.FindOne('TRUST Anchor', ccmIssuerCN) = ca);
+  Check(st.Cache.FindOne('IntermediatE', ccmSubjectCN) = nil);
+  Check(st.Cache.FindOne('Trust Anchor', ccmSubjectCN) = nil);
+  Check(st.Cache.FindOne('TRUST Anchor', ccmIssuerCN) = nil);
   sav := st.Save;
   // try store certificate persistence as PEM
   st := CryptStoreX509.NewFrom(sav);
@@ -4243,6 +4249,7 @@ begin
     Check(st.IsValid(cc, utc) = cvValidSigned, 'cc valid');
   end;
   NotifyTestSpeed('x509-pki Load+IsValid', 10000, 0, @timer);
+  Check(st.Cache.FindOne('Intermediate', ccmIssuerCN) = cc);
   // revoke a certificate (in the midddle of the chain)
   Check(st.IsValidChain(chain) = cvValidSigned);
   Check(st.IsValid(chain[0]) = cvUnknownAuthority);
