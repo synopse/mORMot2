@@ -1885,7 +1885,7 @@ function PostThreadMessage(idThread: DWord; Msg: UINT; wParam: WPARAM;
     lParam: LPARAM): BOOL;
   stdcall; external user32 name 'PostThreadMessageW';
 
-function _GetProcessInfo(pid: cardinal; var e: TProcessEntry32): boolean;
+function RawProcessInfo(pid: cardinal; var e: TProcessEntry32): boolean;
 var
   snap: THandle;
 begin
@@ -1911,7 +1911,7 @@ function GetParentProcess(PID: cardinal): cardinal;
 var
   e: TProcessEntry32;
 begin
-  if _GetProcessInfo(PID, e) then
+  if RawProcessInfo(PID, e) then
     result := e.th32ParentProcessID
   else
     result := 0;

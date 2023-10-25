@@ -129,6 +129,7 @@ type
 
   /// supported X.509 Signature Algorithms
   // - implement RSA, RSA-PSS and ECC-256 asymmetric algorithms using our units
+  // - ECC-384, ECC-512 and EdDSA are available if mormot.crypt.openssl is set
   // - for safety, any unsafe algorithms (e.g. MD5 or SHA-1) are not defined
   TXSignatureAlgorithm = (
     xsaNone,
@@ -138,14 +139,20 @@ type
     xsaSha256RsaPss,
     xsaSha384RsaPss,
     xsaSha512RsaPss,
-    xsaSha256Ecc256);
+    xsaSha256Ecc256,
+    xsaSha384Ecc384,
+    xsaSha512Ecc512,
+    xsaSha512EdDSA);
 
   /// supported TX509.SubjectPublicKeyAlgorithm values
   TXPublicKeyAlgorithm = (
     xkaNone,
     xkaRsa,
     xkaRsaPss,
-    xkaEcc256);
+    xkaEcc256,
+    xkaEcc384,
+    xkaEcc512,
+    xkaEdDSA);
 
   /// used to store one unknown/unsupported attribute or extension
   // - in TXname.Other or TXTbsCertificate.ExtensionOther
@@ -245,7 +252,10 @@ const
     xkaRsaPss,   // xsaSha256RsaPss
     xkaRsaPss,   // xsaSha384RsaPss
     xkaRsaPss,   // xsaSha512RsaPss
-    xkaEcc256);  // xsaSha256Ecc256
+    xkaEcc256,   // xsaSha256Ecc256
+    xkaEcc384,   // xsaSha384Ecc384
+    xkaEcc512,   // xsaSha512Ecc512
+    xkaEdDSA);   // xsaSha512EdDSA
 
   /// internal lookup table from X.509 Signature to Hash Algorithms
   XSA_TO_HF: array[TXSignatureAlgorithm] of THashAlgo = (
@@ -256,7 +266,10 @@ const
     hfSha256,    // xsaSha256RsaPss
     hfSha384,    // xsaSha384RsaPss
     hfSha512,    // xsaSha512RsaPss
-    hfSha256);   // xsaSha256Ecc256
+    hfSha256,    // xsaSha256Ecc256
+    hfSha384,    // xsaSha384Ecc384
+    hfSha512,    // xsaSha512Ecc512
+    hfSha512);   // xsaSha512EdDSA - the hash is embedded with OpenSSL
 
   /// internal lookup table from X.509 Signature to ICryptCert Algorithms
   XSA_TO_CAA: array[TXSignatureAlgorithm] of TCryptAsymAlgo = (
@@ -267,13 +280,16 @@ const
     caaPS256,    // xsaSha256RsaPss
     caaPS384,    // xsaSha384RsaPss
     caaPS512,    // xsaSha512RsaPss
-    caaES256);   // xsaSha256Ecc256
+    caaES256,    // xsaSha256Ecc256
+    caaES384,    // xsaSha256Ecc384
+    caaES512,    // xsaSha256Ecc512
+    caaEdDSA);   // xsaSha512EdDSA
 
   /// internal lookup table from ICryptCert Algorithms to X.509 Signature
   CAA_TO_XSA: array[TCryptAsymAlgo] of TXSignatureAlgorithm = (
     xsaSha256Ecc256,  // caaES256
-    xsaNone,          // caaES384
-    xsaNone,          // caaES512
+    xsaSha384Ecc384,  // caaES384
+    xsaSha512Ecc512,  // caaES512
     xsaNone,          // caaES256K
     xsaSha256Rsa,     // caaRS256
     xsaSha384Rsa,     // caaRS384
@@ -292,21 +308,31 @@ const
     'SHA256 with RSA-PSS encryption', // xsaSha256RsaPss
     'SHA384 with RSA-PSS encryption', // xsaSha384RsaPss
     'SHA512 with RSA-PSS encryption', // xsaSha512RsaPss
-    'SHA256 with prime256v1 ECDSA');  // xsaSha256Ecc256
+    'SHA256 with prime256v1 ECDSA',   // xsaSha256Ecc256
+    'SHA384 with secp384r1 ECDSA',    // xsaSha384Ecc384
+    'SHA512 with secp521r1 ECDSA' ,   // xsaSha512Ecc512
+    'SHA512 with Ed25519 ECDSA');     // xsaSha512EdDSA
+
 
   /// internal lookup table from X.509 Public Key Algorithm as text
   XKA_TXT: array[TXPublicKeyAlgorithm] of RawUtf8 = (
     '',                    // xkaNone
     'RSA encryption',      // xkaRsa
     'RSA-PSS encryption',  // xkaRsaPss
-    'prime256v1 ECDSA');   // xkaEcc256
+    'prime256v1 ECDSA',    // xkaEcc256
+    'secp384r1 ECDSA',     // xkaEcc384
+    'secp521r1 ECDSA',     // xkaEcc512
+    'Ed25519 ECDSA');      // xkaEdDSA
 
   /// internal lookup table from X.509 Public Key Algorithm to our key algorithm
   XKA_TO_CKA: array[TXPublicKeyAlgorithm] of TCryptKeyAlgo = (
     ckaNone,      // xkaNone
     ckaRsa,       // xkaRsa
     ckaRsaPss,    // xkaRsaPss
-    ckaEcc256);   // xkaEcc256
+    ckaEcc256,    // xkaEcc256
+    ckaEcc384,    // xkaEcc384
+    ckaEcc512,    // xkaEcc512
+    ckaEdDSA);    // xkaEdDSA
 
   /// internal lookup table from our key algorithm to X.509 Public Key Algorithm
   // - this unit does not support all key types yet
@@ -315,10 +341,10 @@ const
     xkaRsa,       // ckaRsa
     xkaRsaPss,    // ckaRsaPss
     xkaEcc256,    // ckaEcc256
-    xkaNone,      // ckaEcc384
-    xkaNone,      // ckaEcc512
+    xkaEcc384,    // ckaEcc384
+    xkaEcc512,    // ckaEcc512
     xkaNone,      // ckaEcc256k
-    xkaNone);     // ckaEdDSA
+    xkaEdDSA);    // ckaEdDSA
 
   /// internal lookup table from X.509 Public Key Algorithm to our key algorithm
   // - this unit does not support all key types yet
@@ -326,7 +352,10 @@ const
     caaES256,  // xkaNone
     caaRS256,  // xkaRsa
     caaPS256,  // xkaRsaPss
-    caaES256); // xkaEcc256
+    caaES256,  // xkaEcc256
+    caaES384,  // xkaEcc384
+    caaES512,  // xkaEcc512
+    caaEdDSA); // xkaEdDSA
 
   /// the OID of all known TX509Name attributes, as defined in RFC 5280 A.1
   XA_OID: array[TXAttr] of PUtf8Char = (
@@ -392,7 +421,11 @@ const
      '2.16.840.1.101.3.4.2.1', // xsaSha256RsaPss = ASN1_OID_HASH[hfSHA256]
      '2.16.840.1.101.3.4.2.2', // xsaSha384RsaPss = ASN1_OID_HASH[hfSHA384]
      '2.16.840.1.101.3.4.2.3', // xsaSha512RsaPss = ASN1_OID_HASH[hfSHA256]
-     '1.2.840.10045.4.3.2');   // xsaSha256Ecc256 = sha256ECDSA
+     '1.2.840.10045.4.3.2',    // xsaSha256Ecc256 = sha256ECDSA
+     '1.2.840.10045.4.3.3',    // xsaSha384Ecc384 = sha384ECDSA
+     '1.2.840.10045.4.3.4',    // xsaSha512Ecc512 = sha512ECDSA
+     '1.3.101.110');           // xsaSha512EdDSA
+
 
   ASN1_OID_PKCS1_MGF       = '1.2.840.113549.1.1.8';
   ASN1_OID_PKCS9_EXTREQ    = '1.2.840.113549.1.9.14';
@@ -1070,6 +1103,14 @@ function TX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 // - called e.g. by TCryptCertCacheX509 which is the preferred factory
 function X509Load(const Cert: RawByteString): ICryptCert;
 
+/// could be called once additional CryptPublicKey[] / CryptPrivateKey[]
+// factories have been defined
+// - is called once in this unit initialization section to register the already
+// known algorithms, i.e. ckaRsa, ckaRsaPss and ckaEcc256
+// - can be called after RegisterOpenSsl from mormot.crypt.openssl to register
+// TCryptCertAlgoX509 with the ckaEcc384, ckaEcc512 and ckaEdDSA algorithms
+procedure RegisterX509;
+
 {
   NOTICE:
   - the algorithms of this unit are available as 'x509-es256' and 'x509-rs256'
@@ -1077,6 +1118,8 @@ function X509Load(const Cert: RawByteString): ICryptCert;
   - mormot.crypt.secure also exposes CryptCertX509[] and CryptStoreX509 globals
   - if OpenSSL is loaded, the 'x509-*' algorithms will be overriden but you can
     still have access to 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int'
+  - if OpenSSL is loaded, this unit will use it for faster RSA and ECC-256
+    key work, so it is likely to be faster and more complete than OpenSSL certs
   - they are fully compatible with X.509 certificates, and the 'x509-pki' store
     from TCryptStoreX509 is the only fully compliant with RFC recommendations
 }
@@ -1199,7 +1242,7 @@ begin
             Asn(ASN1_CTC2, [Asn(HASH_SIZE[XSA_TO_HF[xsa]])]) // saltLength
           ])
         ]);
-    xsaSha256Ecc256:
+    xsaSha256Ecc256 .. xsaSha512EdDSA:
       result := AsnSeq([
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
                 ]);
@@ -4404,6 +4447,15 @@ begin
   end;
 end;
 
+procedure RegisterX509;
+var
+  xsa: TXSignatureAlgorithm;
+begin
+  for xsa := succ(low(xsa)) to high(xsa) do
+    if (CryptCertX509[XSA_TO_CAA[xsa]] = nil) and
+       (CryptPublicKey[XKA_TO_CKA[XSA_TO_XKA[xsa]]] <> nil) then
+      CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '-int');
+end;
 
 procedure InitializeUnit;
 var
@@ -4432,7 +4484,8 @@ begin
   // - may be overriden by the faster mormot.crypt.openssl if included
   // - but still accessible from CryptCertX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
-    CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
+    if CryptPublicKey[XKA_TO_CKA[XSA_TO_XKA[xsa]]] <> nil then
+      CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
   // register 'x509-pki' store to our catalog
   CryptStoreX509 := TCryptStoreAlgoX509.Create('x509-pki');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included

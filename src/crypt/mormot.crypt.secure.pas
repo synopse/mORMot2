@@ -1628,7 +1628,7 @@ type
 
   /// the supported asymmetric algorithms, following the JWT high-level naming
   // - caaES256, caaES384, caaES512 and caaES256K match OpenSSL EVP_PKEY_EC with
-  // prime256v1, NID_secp384r1, NID_secp512r1 and NID_secp256k1 curves
+  // prime256v1, NID_secp384r1, NID_secp521r1 and NID_secp256k1 curves
   // - caaRS256, caaRS384 and caaRS512 match OpenSSL EVP_PKEY_RSA with
   // SHA-256, SHA-384 and SHA-512 digest method
   // - caaPS256, caaPS384 and caaPS512 match OpenSSL EVP_PKEY_RSA_PSS with
@@ -2960,8 +2960,10 @@ function Store(const name: RawUtf8): ICryptStore;
 
 var
   /// the prefered/default algorithm to be used wth X.509 certificates
-  // - NISTP-256 seems the new default, even if RSA-2048 (i.e. caaRS256) may
-  // still be used for compatiblity with legacy systems
+  // - caaES256 (aka prime256v1 or NISTP-256) seems the new default (faster
+  // and with 128-bit of security), even if RSA-2048 (i.e. caaRS256) may still
+  // be used for compatiblity with legacy systems (but much slower signing and
+  // generation, with only 112-bit of security)
   // - used e.g. by 'x509-store' or 'x509-pki' for its DefaultCertAlgo method
   CryptAlgoDefault: TCryptAsymAlgo = caaES256;
 

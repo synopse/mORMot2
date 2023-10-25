@@ -47,7 +47,7 @@ uses
   mormot.crypt.ecc256r1,
   mormot.crypt.secure,
   mormot.crypt.jwt,
-  // those two units defined here to override their slower implementation
+  // those two units are defined here to complete their implementation
   mormot.crypt.ecc,
   mormot.crypt.rsa;
 
