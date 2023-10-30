@@ -4892,7 +4892,8 @@ type
     /// wrapper around CreateNewService() to install the current executable as service
     class function Install(const Name, DisplayName, Description: RawUtf8;
       AutoStart: boolean; ExeName: TFileName = '';
-      const Dependencies: RawUtf8 = ''): TServiceState;
+      const Dependencies: RawUtf8 = ''; const UserName: RawUtf8 = '';
+      const Password: RawUtf8 = ''): TServiceState;
     /// wrapper around CreateOpenService(SERVICE_QUERY_STATUS) and GetState
     class function CurrentState(const Name: RawUtf8): TServiceState;
     /// open an existing service, in order to control it or its configuration
