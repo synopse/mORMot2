@@ -4003,7 +4003,7 @@ end;
 
 class function TServiceController.Install(
   const Name, DisplayName, Description: RawUtf8; AutoStart: boolean;
-  ExeName: TFileName; const Dependencies: RawUtf8;const Username: RawUtf8; const Password: RawUtf8): TServiceState;
+  ExeName: TFileName; const Dependencies, Username, Password: RawUtf8): TServiceState;
 var
   ctrl: TServiceController;
   start: cardinal;
