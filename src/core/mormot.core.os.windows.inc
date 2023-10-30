@@ -4003,7 +4003,7 @@ end;
 
 class function TServiceController.Install(
   const Name, DisplayName, Description: RawUtf8; AutoStart: boolean;
-  ExeName: TFileName; const Dependencies: RawUtf8): TServiceState;
+  ExeName: TFileName; const Dependencies: RawUtf8;const Username: RawUtf8; const Password: RawUtf8): TServiceState;
 var
   ctrl: TServiceController;
   start: cardinal;
@@ -4015,7 +4015,7 @@ begin
   if ExeName = '' then
     ExeName := Executable.ProgramFileName;
   ctrl := TServiceController.CreateNewService(
-    '', '', Name, DisplayName, ExeName, '', Dependencies, '', '',
+    '', '', Name, DisplayName, ExeName, '', Dependencies, UserName, Password,
     SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, start);
   try
     result := ctrl.State;
