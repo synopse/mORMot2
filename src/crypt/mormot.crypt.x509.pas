@@ -3915,19 +3915,26 @@ end;
 function TCryptCertX509.Verify(const Authority: ICryptCert;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
-  auth: TX509;
+  auth, tempauth: TX509;
 begin
   result := cvBadParameter;
   if fX509 = nil then
     exit;
   auth := nil;
+  tempauth := nil;
   if Authority <> nil then
     if PClass(Authority.Instance)^ = PClass(self)^ then
       auth := Authority.Handle
     else
-      exit;
+    begin
+      // create a temp TX509 for the verification (slow, but working)
+      tempauth := TX509.Create;
+      if tempauth.LoadFromDer(Authority.Save) then
+        auth := tempauth;
+    end;
   // TX509 has a cache so the next calls with the same auth will be immediate
   result := fX509.Verify(auth, IgnoreError, TimeUtc);
+  tempauth.Free;
 end;
 
 function TCryptCertX509.Encrypt(const Message: RawByteString;
