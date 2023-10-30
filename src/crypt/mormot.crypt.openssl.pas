@@ -2171,7 +2171,8 @@ type
     function GetPublicKey: RawByteString; override;
     function GetPrivateKey: RawByteString; override;
     function SetPrivateKey(const saved: RawByteString): boolean; override;
-    function Sign(Data: pointer; Len: integer): RawByteString; override;
+    function Sign(Data: pointer; Len: integer;
+      Usage: TCryptCertUsage): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
@@ -2723,11 +2724,12 @@ begin
   end;
 end;
 
-function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer): RawByteString;
+function TCryptCertOpenSsl.Sign(Data: pointer; Len: integer;
+  Usage: TCryptCertUsage): RawByteString;
 begin
   if HasPrivateSecret and
      ((fX509 = nil) or
-      fX509.HasUsage(kuDigitalSignature)) then
+      fX509.HasUsage(TX509Usage(Usage))) then
     result := fPrivKey.Sign(GetMD, Data, Len)
   else
     result := '';

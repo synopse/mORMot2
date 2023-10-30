@@ -2089,11 +2089,13 @@ type
     // - this certificate should have the cuDigitalSignature usage
     // - returns '' on failure, e.g. if this Certificate has no private key
     // - returns the binary signature of the Data buffer on success
-    function Sign(Data: pointer; Len: integer): RawByteString; overload;
+    function Sign(Data: pointer; Len: integer;
+      Usage: TCryptCertUsage = cuDigitalSignature): RawByteString; overload;
     /// compute a digital signature of some digital content
     // - will use the private key of this certificate
     // - just a wrapper around the overloaded Sign() function
-    function Sign(const Data: RawByteString): RawByteString; overload;
+    function Sign(const Data: RawByteString;
+      Usage: TCryptCertUsage = cuDigitalSignature): RawByteString; overload;
     /// sign this certificate with the private key of one CA
     // - Authority certificate should have the cuKeyCertSign usage
     procedure Sign(const Authority: ICryptCert); overload;
@@ -2276,9 +2278,11 @@ type
     function GetPublicKey: RawByteString; virtual; abstract;
     function GetPrivateKey: RawByteString; virtual; abstract;
     function SetPrivateKey(const saved: RawByteString): boolean; virtual; abstract;
-    function Sign(Data: pointer; Len: integer): RawByteString;
+    function Sign(Data: pointer; Len: integer; Usage: TCryptCertUsage): RawByteString;
       overload; virtual; abstract;
-    function Sign(const Data: RawByteString): RawByteString; overload; virtual;
+    function Sign(const Data: RawByteString;
+      Usage: TCryptCertUsage = cuDigitalSignature): RawByteString;
+      overload; virtual;
     procedure Sign(const Authority: ICryptCert); overload; virtual; abstract;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
@@ -7366,9 +7370,10 @@ begin
   FillZero(s); // may be a private key with no password :(
 end;
 
-function TCryptCert.Sign(const Data: RawByteString): RawByteString;
+function TCryptCert.Sign(const Data: RawByteString;
+  Usage: TCryptCertUsage): RawByteString;
 begin
-  result := Sign(pointer(Data), length(Data));
+  result := Sign(pointer(Data), length(Data), Usage);
 end;
 
 function TCryptCert.Verify(const Signature, Data: RawByteString;

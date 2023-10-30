@@ -5550,7 +5550,8 @@ type
     function GetPrivateKey: RawByteString; override;
     function SetPrivateKey(const saved: RawByteString): boolean; override;
     function IsEqual(const another: ICryptCert): boolean; override;
-    function Sign(Data: pointer; Len: integer): RawByteString; override;
+    function Sign(Data: pointer; Len: integer;
+      Usage: TCryptCertUsage): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
@@ -6024,7 +6025,8 @@ begin
     result := fEcc.IsEqual(TCryptCertInternal(a).fEcc);
 end;
 
-function TCryptCertInternal.Sign(Data: pointer; Len: integer): RawByteString;
+function TCryptCertInternal.Sign(Data: pointer; Len: integer;
+  Usage: TCryptCertUsage): RawByteString;
 begin
   if HasPrivateSecret then
     result := TEccCertificateSecret(fEcc).SignToBinary(Data, Len)
