@@ -40,6 +40,9 @@
 // if defined, SetThreadName() would not raise the exception used to set the
 // thread name: to be defined if you have issues when debugging your application
 
+{.$define NODIRECTTHREADMANAGER}
+// on POSIX, omit direct GetThreadManager() API calls and just use RTL functions
+
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted nor logged
 

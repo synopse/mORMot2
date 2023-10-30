@@ -560,6 +560,31 @@ begin
   result := 0; // fixed result on a window-abstracted system
 end;
 
+
+{$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
+
+function GetCurrentThreadId: TThreadID;
+begin
+  result := system.GetCurrentThreadID();
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := system.TryEnterCriticalSection(cs);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.EnterCriticalSection(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.LeaveCriticalSection(cs);
+end;
+
+{$endif NODIRECTTHREADMANAGER}
+
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   HoursPerDay = 24;
   MinsPerHour = 60;
@@ -693,28 +718,6 @@ begin
   fpgettimeofday(@tz, nil);
   EpochToSystemTime(tz.tv_sec, result);
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
-end;
-
-// try to stabilize MacOS pthreads API calls
-
-function GetCurrentThreadId: TThreadID;
-begin
-  result := system.GetCurrentThreadID();
-end;
-
-function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
-begin
-  result := system.TryEnterCriticalSection(cs);
-end;
-
-procedure EnterCriticalSection(var cs: TRTLCriticalSection);
-begin
-  system.EnterCriticalSection(cs);
-end;
-
-procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
-begin
-  system.LeaveCriticalSection(cs);
 end;
 
 {$else}
@@ -3743,9 +3746,9 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
-  {$ifndef OSDARWIN}
+  {$ifndef NODIRECTTHREADMANAGER}
   tm: TThreadManager;
-  {$endif OSDARWIN}
+  {$endif NODIRECTTHREADMANAGER}
 begin
   // retrieve Kernel and Hardware information
   StdOutIsTTY := not IsDebuggerPresent and
@@ -3975,18 +3978,20 @@ begin
       [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  {$ifdef OSDARWIN}
-  mach_timebase_info(mach_timeinfo);
-  mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
-  mach_timenanosecond := (mach_timeinfo.Numer = 1) and
-                         (mach_timeinfo.Denom = 1);
-  {$else}
+  {$ifndef NODIRECTTHREADMANAGER}
   // for inlined RTL calls (avoid one level of redirection)
   GetThreadManager(tm);
   @GetCurrentThreadId      := @tm.GetCurrentThreadId;
   @TryEnterCriticalSection := @tm.TryEnterCriticalSection;
   @EnterCriticalSection    := @tm.EnterCriticalSection;
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
+  {$endif NODIRECTTHREADMANAGER}
+  {$ifdef OSDARWIN}
+  mach_timebase_info(mach_timeinfo);
+  mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
+  mach_timenanosecond := (mach_timeinfo.Numer = 1) and
+                         (mach_timeinfo.Denom = 1);
+  {$else}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;

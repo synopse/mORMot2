@@ -2723,7 +2723,11 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 
 {$ifdef OSPOSIX}
 
-{$ifdef OSDARWIN} // try to stabilize MacOS pthreads API calls
+{$ifndef OSLINUX} // try to stabilize MacOS/BSD pthreads API calls
+  {$define NODIRECTTHREADMANAGER}
+{$endif OSLINUX}
+
+{$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
 function GetCurrentThreadId: TThreadID; inline;
 function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; inline;
 procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
@@ -2747,7 +2751,7 @@ var LeaveCriticalSection: procedure(var cs: TRTLCriticalSection);
 // - defined in mormot.core.os for inlined FpcCurrentThreadManager call
 var TryEnterCriticalSection: function(var cs: TRTLCriticalSection): integer;
 
-{$endif OSDARWIN}
+{$endif NODIRECTTHREADMANAGER}
 
 {$endif OSPOSIX}
 
