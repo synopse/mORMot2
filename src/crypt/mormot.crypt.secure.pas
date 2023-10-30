@@ -1986,6 +1986,7 @@ type
     // CN= subject field
     // - can search another Relative Distinguished Name (RDN) e.g. 'O' or 'OU'
     // - if Rdn is a hash, e.g. 'SHA1'/'SHA256', will return the subject digest
+    // - if Rdn is 'DER', will return the raw DER issuer value of this certificate
     function GetSubject(const Rdn: RawUtf8 = 'CN'): RawUtf8;
     /// an array of all Subject names covered by this Certificate
     // - e.g. ['synopse.info', 'www.synopse.info']
@@ -2000,6 +2001,7 @@ type
     // - returns by default the CommonName, e.g. 'R3' from a X.509 CN= subject field
     // - can search another Relative Distinguished Name (RDN) e.g. 'O' or 'OU'
     // - if Rdn is a hash, e.g. 'SHA1'/'SHA256', will return the issuer digest
+    // - if Rdn is 'DER', will return the raw DER issuer value of this certificate
     function GetIssuer(const Rdn: RawUtf8 = 'CN'): RawUtf8;
     /// an array of all Subject names covered by the issuer of this Certificate
     // - e.g. read from X.509 v3 Issuer Alternative Names extension
@@ -2842,6 +2844,10 @@ function ToText(v: TCryptCertValidity): PShortString; overload;
 
 /// fast case-insensitive check of the 'CN' Relative Distinguished Name identifier
 function IsCN(const Rdn: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// fast case-insensitive check of the 'DER' fake RDNidentifier
+function IsDer(const Rdn: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// main resolver of the randomness generators
@@ -8175,6 +8181,13 @@ function IsCN(const Rdn: RawUtf8): boolean;
 begin
   result := (length(Rdn) = 2) and
             (PWord(Rdn)^ and $dfdf = ord('C') + ord('N') shl 8);
+end;
+
+function IsDer(const Rdn: RawUtf8): boolean;
+begin
+  result := (length(Rdn) = 3) and
+            (PCardinal(Rdn)^ and $dfdfdf =
+               ord('D') + ord('E') shl 8 + ord('R') shl 16);
 end;
 
 

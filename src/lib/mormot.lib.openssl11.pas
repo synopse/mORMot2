@@ -1086,6 +1086,8 @@ type
   // - kuEncipherOnly .. kuDecipherOnly match NID_key_usage values
   // - kuTlsServer .. kuAnyeku match NID_ext_key_usage values
   // - see https://omvs.de/2019/11/13/key-usage-extensions-at-x-509-certificates
+  // - is an exact match of TCryptCertUsage enumerate in mormot.crypt.secure.pas
+  // and TWinCertUsage in mormot.lib.sspi
   TX509Usage = (
     kuCA,
     kuEncipherOnly,
@@ -1106,7 +1108,7 @@ type
 
   /// X509v3 Key and Extended Key Usage Flags
   // - is a convenient way to get or set a Certificate extensions
-  // - an exact match of TCryptCertUsages enumerate in mormot.lcrypt.secure.pas
+  // - an exact match of TCryptCertUsages enumerate in mormot.crypt.secure.pas
   // and TWinCertUsages in mormot.lib.sspi
   TX509Usages = set of TX509Usage;
 
@@ -9343,7 +9345,10 @@ function X509.GetSubject(const id: RawUtf8): RawUtf8;
 var
   md: PEVP_MD;
 begin
-  result := GetPair(pointer(SubjectName), id);
+  if id = 'DER' then
+    result := GetSubjectName.ToBinary
+  else
+    result := GetPair(pointer(SubjectName), id);
   if result <> '' then
     exit;
   md := EVP_get_digestbyname(pointer(id));
@@ -9355,7 +9360,10 @@ function X509.GetIssuer(const id: RawUtf8): RawUtf8;
 var
   md: PEVP_MD;
 begin
-  result := GetPair(pointer(IssuerName), id);
+  if id = 'DER' then
+    result := GetIssuerName.ToBinary
+  else
+    result := GetPair(pointer(IssuerName), id);
   if result <> '' then
     exit;
   md := EVP_get_digestbyname(pointer(id));

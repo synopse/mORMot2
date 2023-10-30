@@ -1118,8 +1118,10 @@ procedure RegisterX509;
   - mormot.crypt.secure also exposes CryptCertX509[] and CryptStoreX509 globals
   - if OpenSSL is loaded, the 'x509-*' algorithms will be overriden but you can
     still have access to 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int'
-  - if OpenSSL is loaded, this unit will use it for faster RSA and ECC-256
-    key work, so it is likely to be faster and more complete than OpenSSL certs
+  - if OpenSSL is loaded and RegisterX509 is called, all algorithms would be
+    available from this unit
+  - if OpenSSL is loaded, this unit will use it RSA and ECC-256 key work, so it
+    is likely to be faster and more complete than OpenSSL certs
   - they are fully compatible with X.509 certificates, and the 'x509-pki' store
     from TCryptStoreX509 is the only fully compliant with RFC recommendations
 }
@@ -1539,8 +1541,12 @@ var
   xa: TXAttr;
   h: THashAlgo;
 begin
-  if TextToXa(Rdn, xa) then
+  if Rdn = '' then
+    result := ''
+  else if TextToXa(Rdn, xa) then
     result := Name[xa]
+  else if IsDer(Rdn) then
+    result := ToBinary
   else if TextToHashAlgo(Rdn, h) then
     result := ToDigest(h)
   else
