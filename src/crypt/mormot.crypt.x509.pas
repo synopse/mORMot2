@@ -3874,34 +3874,36 @@ end;
 
 procedure TCryptCertX509.Sign(const Authority: ICryptCert);
 var
-  auth: TCryptCertX509;
+  a: TCryptCert;
+  u: TCryptCertUsage;
 begin
   EnsureCanWrite('Sign');
   if Assigned(Authority) and
     Authority.HasPrivateSecret then
   begin
     // validate usage
-    auth := Authority.Instance as TCryptCertX509;
-    if auth.fX509 = nil then
-      RaiseError('Sign: no public key');
-    if (auth <> self) and
-       not (cuKeyCertSign in auth.fX509.Usages) then
-      RaiseError('Sign: no cuKeyCertSign');
+    a := Authority.Instance; // may be self
+    u := cuKeyCertSign;
+    if a = self then
+      u := GetFirstUsage(GetUsage) // anyone would let Sign() pass below
+    else if not (cuKeyCertSign in a.GetUsage) then
+      RaiseError('Sign: % has no cuKeyCertSign', [a]);
     // assign the Issuer information
-    fX509.Signed.Issuer := auth.fX509.Signed.Subject; // may be self
-    if auth <> self then // same as OpenSSL: no AKID for for self-signed certs
-      fX509.Signed.Extension[xeAuthorityKeyIdentifier] :=
-         auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+    if not fX509.Signed.Issuer.FromAsn(a.GetSubject('DER')) then
+      RaiseError('Sign: invalid % Authority DER', [a]);
+    if a <> self then // same as OpenSSL: no AKID for for self-signed certs
+      fX509.Signed.Extension[xeAuthorityKeyIdentifier] := a.GetSubjectKey;
     // compute the digital signature
     fX509.AfterModified;
     fX509.Signed.Signature := Xsa;
-    fX509.fSignatureValue := auth.fPrivateKey.Sign(
-                               XSA_TO_CAA[Xsa], fX509.Signed.ToDer);
+    fX509.fSignatureValue := a.Sign(fX509.Signed.ToDer, u);
+    if fX509.fSignatureValue = '' then
+      RaiseError('Sign: % authority failed its digital signature', [a]);
     fX509.fSignatureAlgorithm := Xsa;
     fX509.ComputeCachedDer;
   end
   else
-    RaiseError('Sign: not a CA');
+    RaiseError('Sign: Authority is not a CA');
 end;
 
 function TCryptCertX509.Verify(Sign, Data: pointer; SignLen, DataLen: integer;

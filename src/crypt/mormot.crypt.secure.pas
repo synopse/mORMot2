@@ -2846,6 +2846,9 @@ function ToText(u: TCryptCertUsage): PShortString; overload;
 function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
 function ToText(v: TCryptCertValidity): PShortString; overload;
 
+/// return the first usage set, or cuKeyCertSign if [] was supplied
+function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
+
 /// fast case-insensitive check of the 'CN' Relative Distinguished Name identifier
 function IsCN(const Rdn: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -8180,6 +8183,14 @@ end;
 function ToText(v: TCryptCertValidity): PShortString;
 begin
   result := GetEnumName(TypeInfo(TCryptCertValidity), ord(v));
+end;
+
+function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
+begin
+  for result := low(result) to high(result) do
+    if result in u then
+      exit;
+  result := cuKeyCertSign;
 end;
 
 function IsCN(const Rdn: RawUtf8): boolean;
