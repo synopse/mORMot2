@@ -1791,7 +1791,7 @@ type
   EPkcs11 = class(ESynException);
 
   /// map CK_SLOT_ID but with a fixed 32-bit size
-  // - 32-bit is enough, and raw CK_SLOT_ID may be 64-bit
+  // - 32-bit is enough, but raw/in-memory slots CK_SLOT_ID may be 64-bit
   TPkcs11SlotID = cardinal;
 
   /// map several CK_SLOT_ID but with a fixed 32-bit size
@@ -1969,10 +1969,11 @@ type
 
   /// a callback called during session long-process
   // - return false to continue, or true to abort the process
-  TOnPkcs11Notify = function(Sender: TPkcs11; Slot: TPkcs11SlotID): boolean;
+  TOnPkcs11Notify =
+    function(Sender: TPkcs11; Slot: TPkcs11SlotID): boolean of object;
 
   /// can load and use a PKCS#11 library
-  // - need to explicitely call Safe.Lock/UnLock if you need in a multi-thread usage
+  // - need to explicitely call Safe.Lock/UnLock in a multi-thread context
   TPkcs11 = class(TSynLocked)
   protected
     fC: CK_FUNCTION_LIST_PTR;
