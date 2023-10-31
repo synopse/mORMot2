@@ -2628,6 +2628,7 @@ type
     Count: integer;
     /// a global lock shared for high-level RTTI registration process
     // - is used e.g. to protect DoRegister() or TRttiCustom.PrivateSlot
+    // - should be a reentrant lock, even if seldom called
     RegisterSafe: TOSLock;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
@@ -8358,8 +8359,8 @@ end;
 constructor TRttiCustomList.Create;
 begin
   SetLength(fHashTable, RK_TOSLOT_MAX + 1); // 6-12KB zeroed allocation
-  RegisterSafe.Init;
   fGlobalClass := TRttiCustom;
+  RegisterSafe.Init;
 end;
 
 destructor TRttiCustomList.Destroy;
@@ -8368,8 +8369,8 @@ var
 begin
   for i := Count - 1 downto 0 do
     fInstances[i].Free;
-  RegisterSafe.Done;
   inherited Destroy;
+  RegisterSafe.Done;
 end;
 
 function LockedFind(Pairs, PEnd: PPointerArray; Info: PRttiInfo): TRttiCustom;
@@ -8932,10 +8933,9 @@ begin
   if (DynArrayOrRecord = nil) or
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
     raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
-  result := RegisterType(DynArrayOrRecord);
-  // usually done once at startup from main thread, so RegisterSafe is safe
   RegisterSafe.Lock;
   try
+    result := RegisterType(DynArrayOrRecord);
     if result.Kind = rkDynArray then
       if result.ArrayRtti = nil then
       begin

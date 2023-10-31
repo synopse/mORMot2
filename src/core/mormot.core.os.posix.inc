@@ -879,7 +879,7 @@ end;
 
 procedure TOSLightLock.Init;
 begin
-  FillCharFast(fMutex, SizeOf(fMutex), 0); // may be bigger than pthread struct
+  FillCharFast(self, SizeOf(self), 0); // may be bigger than pthread struct
   {$ifdef OSPTHREADSLIB}
   if not Assigned(pthread_mutex_init) then
     EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
