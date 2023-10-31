@@ -469,8 +469,8 @@ function ToText(kt: CK_KEY_TYPE): PShortString; overload;
 
 type
   ///  identifies a certificate type
-// - stored as a CK_ULONG field - and CKC_VENDOR_DEFINED as $80000000 - use
-// ToULONG/CERTIFICATE_TYPE() function wrappers for any conversion
+  // - stored as a CK_ULONG field - and CKC_VENDOR_DEFINED as $80000000 - use
+  // ToULONG/CERTIFICATE_TYPE() function wrappers for any conversion
   CK_CERTIFICATE_TYPE = (
     CKC_X_509,
     CKC_X_509_ATTR_CERT,
@@ -1603,7 +1603,7 @@ type
     DigestFinal: function(hSession: CK_SESSION_HANDLE;
       pDigest: PByte; var pulDigestLen: CK_ULONG): CK_RVULONG; cdecl;
     /// initializes a signature (private key encryption operation)
-    // -  where the signature is (will be) an appendix to the data;
+    // - where the signature is (will be) an appendix to the data;
     // - and plaintext cannot be recovered from the signature
     SignInit: function(hSession: CK_SESSION_HANDLE;
       var pMechanism: CK_MECHANISM;  hKey: CK_OBJECT_HANDLE): CK_RVULONG; cdecl;
@@ -2862,7 +2862,7 @@ begin
   result := CKM_VENDOR_DEFINED;
   if uu > $ffff then
     exit;
-  i := FastFindWordSorted(@CKM_WORD, length(CKM_WORD), uu); // O(log(n)) search
+  i := FastFindWordSorted(@CKM_WORD, length(CKM_WORD) - 1, uu); // O(log(n))
   if i >= 0 then
     result := CK_MECHANISM_TYPE(i);
 end;
@@ -3118,7 +3118,7 @@ begin
   result := CKR_VENDOR_DEFINED;
   if uu > $ffff then
     exit;
-  i := FastFindWordSorted(@CKR_WORD, length(CKR_WORD), uu); // O(log(n)) search
+  i := FastFindWordSorted(@CKR_WORD, length(CKR_WORD) - 1, uu); // O(log(n))
   if i >= 0 then
     result := CK_RV(i);
 end;
@@ -3276,7 +3276,7 @@ end;
 
 procedure CK_ATTRIBUTES.Add(aMech: CK_MECHANISM_TYPE);
 begin
-  Add(CKA_CERTIFICATE_TYPE, ToULONG(aMech));
+  Add(CKA_MECHANISM_TYPE, ToULONG(aMech));
 end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE;
