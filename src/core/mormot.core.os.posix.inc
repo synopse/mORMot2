@@ -847,20 +847,32 @@ var
 {$endif OSPTHREADSLIB}
 
 {$ifdef OSPTHREADSSTATIC}
+  // note: pthread_setname_np() has no consistent API across POSIX systems
   {$define OSPTHREADS}
-// note: pthread_setname_np() has no single API across POSIX systems
+
+{$ifdef OSDARWIN}
+// we specify link to clib='c' as in rtl/darwin/pthread.inc
 function pthread_cancel(thread: pointer): integer;
-  cdecl external clib name 'pthread_cancel';
+  cdecl; external clib name 'pthread_cancel';
 function pthread_mutex_init(mutex, attr: pointer): integer;
-  cdecl external clib name 'pthread_mutex_init';
+  cdecl; external clib name 'pthread_mutex_init';
 function pthread_mutex_destroy(mutex: pointer): integer;
-  cdecl external clib name 'pthread_mutex_destroy';
+  cdecl; external clib name 'pthread_mutex_destroy';
 function pthread_mutex_lock(mutex: pointer): integer;
-  cdecl external clib name 'pthread_mutex_lock';
+  cdecl; external clib name 'pthread_mutex_lock';
 function pthread_mutex_trylock(mutex: pointer): integer;
-  cdecl external clib name 'pthread_mutex_trylock';
+  cdecl; external clib name 'pthread_mutex_trylock';
 function pthread_mutex_unlock(mutex: pointer): integer;
-  cdecl external clib name 'pthread_mutex_unlock';
+  cdecl; external clib name 'pthread_mutex_unlock';
+{$else}
+// just "external" without clib='c' as in rtl/*bsd/pthread.inc
+function pthread_cancel(thread: pointer): integer;  cdecl; external;
+function pthread_mutex_init(mutex, attr: pointer): integer;  cdecl; external;
+function pthread_mutex_destroy(mutex: pointer): integer;  cdecl; external;
+function pthread_mutex_lock(mutex: pointer): integer;  cdecl; external;
+function pthread_mutex_trylock(mutex: pointer): integer;  cdecl; external;
+function pthread_mutex_unlock(mutex: pointer): integer;  cdecl; external;
+{$endif OSDARWIN}
 {$endif OSPTHREADSSTATIC}
 
 
