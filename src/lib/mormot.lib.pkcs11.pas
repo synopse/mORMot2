@@ -37,7 +37,7 @@ uses
   - we manually translated latest PKCS#11 v3.0 specs
     https://docs.oasis-open.org/pkcs11/pkcs11-base/v3.0/pkcs11-base-v3.0.html
   - we wrote struct fields as CK_ULONG, but defined the proper enums/sets with
-    associated ToULONG/ENUMTYPE wrapper functions, to leverage types and RTTI
+    associated ToULONG/ToCK? wrapper functions, to leverage types and RTTI
   - POSIX OpenSC does not follow the OASIS definitions as implemented on Windows
     e.g. Visual C++ makes sizeof(unsigned long int) = 4 so maps cardinal/integer
      but x86_64 gcc makes sizeof(unsigned long int) = 8 so maps PtrInt/PtrUInt
@@ -328,7 +328,7 @@ type
   // - The type is specified on an object through the CKA_CLASS attribute of
   // the object.
   // - stored as a CK_ULONG field - and CKO_VENDOR_DEFINED as $80000000 - use
-  // ToULONG/OBJECT_CLASS() function wrappers for any conversion
+  // ToULONG/ToCKO() function wrappers for any conversion
   // - CKO_DATA hold information defined by an application, with CKA_APPLICATION
   // CKA_OBJECT_ID and CKA_VALUE attributes
   // - CKO_CERTIFICATE hold public-key or attribute certificates, with
@@ -362,17 +362,17 @@ const
   /// the CKO_VENDOR_DEFINED value stored as CK_ULONG
   CKO_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(oc: CK_OBJECT_CLASS): CK_ULONG; overload;
+function ToULONG(cko: CK_OBJECT_CLASS): CK_ULONG; overload;
   {$ifdef HASINLINE} inline; {$endif}
-function OBJECT_CLASS(uu: CK_ULONG): CK_OBJECT_CLASS;
+function ToCKO(uu: CK_ULONG): CK_OBJECT_CLASS;
   {$ifdef HASINLINE} inline; {$endif}
-function ToText(oc: CK_OBJECT_CLASS): PShortString; overload;
+function ToText(cko: CK_OBJECT_CLASS): PShortString; overload;
 
 type
   /// identifies the hardware feature type of an object with CK_OBJECT_CLASS equal
   // to CKO_HW_FEATURE
   // - stored as a CK_ULONG field - and CKH_VENDOR_DEFINED as $80000000 - use
-  // ToULONG/HW_FEATURE_TYPE() function wrappers for any conversion
+  // ToULONG/ToCKH() function wrappers for any conversion
   CK_HW_FEATURE_TYPE = (
     CKH_0,
     CKH_MONOTONIC_COUNTER,
@@ -384,16 +384,17 @@ const
   /// the CKH_VENDOR_DEFINED value stored as CK_ULONG
   CKH_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(hw: CK_HW_FEATURE_TYPE): CK_ULONG; overload;
+function ToULONG(ckh: CK_HW_FEATURE_TYPE): CK_ULONG; overload;
   {$ifdef HASINLINE} inline; {$endif}
-function HW_FEATURE_TYPE(uu: CK_ULONG): CK_HW_FEATURE_TYPE;
+function ToCKH(uu: CK_ULONG): CK_HW_FEATURE_TYPE;
   {$ifdef HASINLINE} inline; {$endif}
-function ToText(hw: CK_HW_FEATURE_TYPE): PShortString; overload;
+function ToText(ckh: CK_HW_FEATURE_TYPE): PShortString; overload;
 
 type
   /// identifies a key type
   // - stored as a CK_ULONG field - and CKK_VENDOR_DEFINED as $80000000 - use
-  // ToULONG/KEY_TYPE() function wrappers for any conversion
+  // ToULONG/ToCKK() function wrappers for any conversion
+  // - first CKK_none is used internally if the key type is not specified
   CK_KEY_TYPE = (
     CKK_none,
     CKK_RSA,
@@ -463,16 +464,16 @@ const
   /// the CKH_VENDOR_DEFINED value stored as CK_ULONG
   CKK_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(kt: CK_KEY_TYPE): CK_ULONG; overload;
-  {$ifdef HASINLINE2} inline; {$endif}
-function KEY_TYPE(uu: CK_ULONG): CK_KEY_TYPE;
-  {$ifdef HASINLINE2} inline; {$endif}
-function ToText(kt: CK_KEY_TYPE): PShortString; overload;
+function ToULONG(ckk: CK_KEY_TYPE): CK_ULONG; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+function ToCKK(uu: CK_ULONG): CK_KEY_TYPE;
+  {$ifdef HASINLINE} inline; {$endif}
+function ToText(ckk: CK_KEY_TYPE): PShortString; overload;
 
 type
   ///  identifies a certificate type
   // - stored as a CK_ULONG field - and CKC_VENDOR_DEFINED as $80000000 - use
-  // ToULONG/CERTIFICATE_TYPE() function wrappers for any conversion
+  // ToULONG/ToCKC() function wrappers for any conversion
   CK_CERTIFICATE_TYPE = (
     CKC_X_509,
     CKC_X_509_ATTR_CERT,
@@ -483,11 +484,11 @@ const
   /// the CKC_VENDOR_DEFINED value stored as CK_ULONG
   CKC_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(ct: CK_CERTIFICATE_TYPE): CK_ULONG; overload;
+function ToULONG(ckc: CK_CERTIFICATE_TYPE): CK_ULONG; overload;
   {$ifdef HASINLINE} inline; {$endif}
-function CERTIFICATE_TYPE(uu: CK_ULONG): CK_CERTIFICATE_TYPE;
+function ToCKC(uu: CK_ULONG): CK_CERTIFICATE_TYPE;
   {$ifdef HASINLINE} inline; {$endif}
-function ToText(ct: CK_CERTIFICATE_TYPE): PShortString; overload;
+function ToText(ckc: CK_CERTIFICATE_TYPE): PShortString; overload;
 
 type
   /// identifies a certificate category
@@ -501,7 +502,7 @@ type
 type
   /// identifies an attribute type
   // - stored as a CK_ULONG field but NOT FOLLOWING ord(CK_ATTRIBUTE_TYPE) - use
-  // ToULONG/ATTRIBUTE_TYPE() function wrappers for any conversion
+  // ToULONG/ToCKA() function wrappers for any conversion
   CK_ATTRIBUTE_TYPE = (
     CKA_CLASS,
     CKA_TOKEN,
@@ -633,10 +634,10 @@ type
 const
   CKF_ARRAY_ATTRIBUTE = $40000000;
 
-function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG; overload;
+function ToULONG(cka: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG; overload;
   {$ifdef FPC} inline; {$endif}
-function ATTRIBUTE_TYPE(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
-function ToText(at: CK_ATTRIBUTE_TYPE): PShortString; overload;
+function ToCKA(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
+function ToText(cka: CK_ATTRIBUTE_TYPE): PShortString; overload;
 
 type
   /// structure that includes the type, value, and length of an attribute
@@ -675,7 +676,8 @@ type
 type
   /// identifies a mechanism type
   // - stored as a CK_ULONG field but NOT FOLLOWING ord(CK_MECHANISM_TYPE) - use
-  // ToULONG/MECHANISM_TYPE() function wrappers for any conversion
+  // ToULONG/ToCKM() function wrappers for any conversion
+// - first CKM_none is used internally if the key type is not specified
   CK_MECHANISM_TYPE = (
     CKM_none,
     CKM_RSA_PKCS_KEY_PAIR_GEN,
@@ -1104,10 +1106,10 @@ type
 const
   CKM_VENDOR_DEFINED_ULONG = $80000000;
 
-function ToULONG(mt: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG; overload;
+function ToULONG(ckm: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG; overload;
   {$ifdef FPC} inline; {$endif}
-function MECHANISM_TYPE(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
-function ToText(mt: CK_MECHANISM_TYPE): PShortString; overload;
+function ToCKM(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
+function ToText(ckm: CK_MECHANISM_TYPE): PShortString; overload;
 
 /// the default CK_MECHANISM_TYPE used for most known key types generation
 // - returns false if not known enough, or true and set uu with the mechanism type
@@ -1306,7 +1308,7 @@ type
 
   /// identifies the return value of a Cryptoki function
   // - returned as a CK_RVULONG value but NOT FOLLOWING ord(CK_RV) - use
-  // ToULONG/RV() function wrappers for any conversion
+  // ToULONG/ToCKR() function wrappers for any conversion
   CK_RV = (
     CKR_OK,
     CKR_CANCEL,
@@ -1417,10 +1419,10 @@ const
   CKR_BUFFER_TOOSMALL = $0150;      // = ToULONG(CKR_BUFFER_TOO_SMALL)
   CKR_VENDORDEFINED   = $80000000;  // = ToULONG(CKR_VENDOR_DEFINED)
 
-function ToULONG(rv: CK_RV): CK_RVULONG; overload;
+function ToULONG(ckr: CK_RV): CK_RVULONG; overload;
   {$ifdef FPC} inline; {$endif}
-function RV(uu: CK_RVULONG): CK_RV;
-function ToText(rv: CK_RV): PShortString; overload;
+function ToCKR(uu: CK_RVULONG): CK_RV;
+function ToText(ckr: CK_RV): PShortString; overload;
 
 type
   /// types of notifications that Cryptoki provides to an application
@@ -2195,20 +2197,20 @@ begin
   GetSetNameShort(TypeInfo(CKT_FLAGS), f, result);
 end;
 
-function ToText(oc: CK_OBJECT_CLASS): PShortString;
+function ToText(cko: CK_OBJECT_CLASS): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_OBJECT_CLASS), ord(oc));
+  result := GetEnumName(TypeInfo(CK_OBJECT_CLASS), ord(cko));
 end;
 
-function ToULONG(oc: CK_OBJECT_CLASS): CK_ULONG;
+function ToULONG(cko: CK_OBJECT_CLASS): CK_ULONG;
 begin
-  if oc = CKO_VENDOR_DEFINED then
+  if cko = CKO_VENDOR_DEFINED then
     result := CKO_VENDOR_DEFINED_ULONG
   else
-    result := ord(oc);
+    result := ord(cko);
 end;
 
-function OBJECT_CLASS(uu: CK_ULONG): CK_OBJECT_CLASS;
+function ToCKO(uu: CK_ULONG): CK_OBJECT_CLASS;
 begin
   if uu >= CK_ULONG(CKO_VENDOR_DEFINED) then
     result := CKO_VENDOR_DEFINED
@@ -2216,20 +2218,20 @@ begin
     result := CK_OBJECT_CLASS(uu);
 end;
 
-function ToText(hw: CK_HW_FEATURE_TYPE): PShortString;
+function ToText(ckh: CK_HW_FEATURE_TYPE): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_HW_FEATURE_TYPE), ord(hw));
+  result := GetEnumName(TypeInfo(CK_HW_FEATURE_TYPE), ord(ckh));
 end;
 
-function ToULONG(hw: CK_HW_FEATURE_TYPE): CK_ULONG;
+function ToULONG(ckh: CK_HW_FEATURE_TYPE): CK_ULONG;
 begin
-  if hw = CKH_VENDOR_DEFINED then
+  if ckh = CKH_VENDOR_DEFINED then
     result := CKH_VENDOR_DEFINED_ULONG
   else
-    result := ord(hw);
+    result := ord(ckh);
 end;
 
-function HW_FEATURE_TYPE(uu: CK_ULONG): CK_HW_FEATURE_TYPE;
+function ToCKH(uu: CK_ULONG): CK_HW_FEATURE_TYPE;
 begin
   if uu >= CK_ULONG(CKH_VENDOR_DEFINED) then
     result := CKH_VENDOR_DEFINED
@@ -2237,21 +2239,21 @@ begin
     result := CK_HW_FEATURE_TYPE(uu);
 end;
 
-function ToText(kt: CK_KEY_TYPE): PShortString;
+function ToText(ckk: CK_KEY_TYPE): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_KEY_TYPE), ord(kt));
+  result := GetEnumName(TypeInfo(CK_KEY_TYPE), ord(ckk));
 end;
 
-function ToULONG(kt: CK_KEY_TYPE): CK_ULONG;
+function ToULONG(ckk: CK_KEY_TYPE): CK_ULONG;
 begin
-  if (kt = CKK_none) or
-     (kt = CKK_VENDOR_DEFINED) then
+  if (ckk = CKK_none) or
+     (ckk = CKK_VENDOR_DEFINED) then
     result := CKK_VENDOR_DEFINED_ULONG
   else
-    result := ord(kt) - 1;
+    result := ord(ckk) - 1;
 end;
 
-function KEY_TYPE(uu: CK_ULONG): CK_KEY_TYPE;
+function ToCKK(uu: CK_ULONG): CK_KEY_TYPE;
 begin
   inc(uu);
   if uu >= CK_ULONG(CKK_VENDOR_DEFINED) then
@@ -2260,20 +2262,20 @@ begin
     result := CK_KEY_TYPE(uu);
 end;
 
-function ToText(ct: CK_CERTIFICATE_TYPE): PShortString;
+function ToText(ckc: CK_CERTIFICATE_TYPE): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_CERTIFICATE_TYPE), ord(ct));
+  result := GetEnumName(TypeInfo(CK_CERTIFICATE_TYPE), ord(ckc));
 end;
 
-function ToULONG(ct: CK_CERTIFICATE_TYPE): CK_ULONG;
+function ToULONG(ckc: CK_CERTIFICATE_TYPE): CK_ULONG;
 begin
-  if ct = CKC_VENDOR_DEFINED then
+  if ckc = CKC_VENDOR_DEFINED then
     result := CKC_VENDOR_DEFINED_ULONG
   else
-    result := ord(ct);
+    result := ord(ckc);
 end;
 
-function CERTIFICATE_TYPE(uu: CK_ULONG): CK_CERTIFICATE_TYPE;
+function ToCKC(uu: CK_ULONG): CK_CERTIFICATE_TYPE;
 begin
   if uu >= CK_ULONG(CKC_VENDOR_DEFINED) then
     result := CKC_VENDOR_DEFINED
@@ -2281,9 +2283,9 @@ begin
     result := CK_CERTIFICATE_TYPE(uu);
 end;
 
-function ToText(at: CK_ATTRIBUTE_TYPE): PShortString;
+function ToText(cka: CK_ATTRIBUTE_TYPE): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_ATTRIBUTE_TYPE), ord(at));
+  result := GetEnumName(TypeInfo(CK_ATTRIBUTE_TYPE), ord(cka));
 end;
 
 const
@@ -2412,12 +2414,12 @@ const
    $00000612,                         // CKA_X2RATCHET_RK
    $80000000);                        // CKA_VENDOR_DEFINED
 
-function ToULONG(at: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG;
+function ToULONG(cka: CK_ATTRIBUTE_TYPE): CK_ATTRIBUTE_TYPE_ULONG;
 begin
-  result := CKA_ULONG[at];
+  result := CKA_ULONG[cka];
 end;
 
-function ATTRIBUTE_TYPE(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
+function ToCKA(uu: CK_ATTRIBUTE_TYPE_ULONG): CK_ATTRIBUTE_TYPE;
 var
   i: PtrInt;
 begin
@@ -2428,9 +2430,9 @@ begin
     result := CKA_VENDOR_DEFINED;
 end;
 
-function ToText(mt: CK_MECHANISM_TYPE): PShortString;
+function ToText(ckm: CK_MECHANISM_TYPE): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_MECHANISM_TYPE), ord(mt));
+  result := GetEnumName(TypeInfo(CK_MECHANISM_TYPE), ord(ckm));
 end;
 
 const
@@ -2857,16 +2859,16 @@ const
     $402D); // CKM_SALSA20_KEY_GEN
     // exclude CKM_VENDOR_DEFINED = $80000000 > 16-bit word
 
-function ToULONG(mt: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG;
+function ToULONG(ckm: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG;
 begin
-  if (mt = CKM_NONE) or
-     (mt = CKM_VENDOR_DEFINED) then
+  if (ckm = CKM_NONE) or
+     (ckm = CKM_VENDOR_DEFINED) then
     result := CKM_VENDOR_DEFINED_ULONG // = $80000000
   else
-    result := CKM_WORD[mt];
+    result := CKM_WORD[ckm];
 end;
 
-function MECHANISM_TYPE(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
+function ToCKM(uu: CK_MECHANISM_TYPE_ULONG): CK_MECHANISM_TYPE;
 var
   i: PtrInt;
 begin
@@ -2878,9 +2880,9 @@ begin
     result := CK_MECHANISM_TYPE(i + 1); // + 1 for CKM_none
 end;
 
-function ToText(rv: CK_RV): PShortString;
+function ToText(ckr: CK_RV): PShortString;
 begin
-  result := GetEnumName(TypeInfo(CK_RV), ord(rv));
+  result := GetEnumName(TypeInfo(CK_RV), ord(ckr));
 end;
 
 function DefaultGenerateMechanism(kt: CK_KEY_TYPE;
@@ -3013,7 +3015,7 @@ end;
 
 const
   // warning: RV() expects this array to be sorted
-  CKR_WORD: array[CK_RV] of word = (
+  CKR_WORD: array[low(CK_RV) .. pred(high(CK_RV))] of word = (
     $0000, // CKR_OK
     $0001, // CKR_CANCEL
     $0002, // CKR_HOST_MEMORY
@@ -3110,19 +3112,19 @@ const
     $01B9, // CKR_PUBLIC_KEY_INVALID
     $0200, // CKR_FUNCTION_REJECTED
     $0201, // CKR_TOKEN_RESOURCE_EXCEEDED
-    $0202, // CKR_OPERATION_CANCEL_FAILED
-    $ffff);// CKR_VENDOR_DEFINED
+    $0202); // CKR_OPERATION_CANCEL_FAILED
+    // exclude CKR_VENDOR_DEFINED
 
 
-function ToULONG(rv: CK_RV): CK_RVULONG;
+function ToULONG(ckr: CK_RV): CK_RVULONG;
 begin
-  if rv = CKR_VENDOR_DEFINED then
+  if ckr = CKR_VENDOR_DEFINED then
     result := CKR_VENDORDEFINED // = $80000000
   else
-    result := CKR_WORD[rv];
+    result := CKR_WORD[ckr];
 end;
 
-function RV(uu: CK_RVULONG): CK_RV;
+function ToCKR(uu: CK_RVULONG): CK_RV;
 var
   i: PtrInt;
 begin
@@ -3584,7 +3586,7 @@ begin
   if unlock then
     Safe.UnLock;
   raise EPkcs11.CreateUtf8(
-    '%.%: failed as % (%)', [self, ctxt, ToText(RV(res))^, res]);
+    '%.%: failed as % (%)', [self, ctxt, ToText(ToCKR(res))^, res]);
 end;
 
 procedure TPkcs11.CheckAttr(res: CK_RVULONG);
@@ -4012,7 +4014,7 @@ begin
       if arr.Find(CKA_CLASS, u) then
         with result[count] do
         begin
-          ObjClass := OBJECT_CLASS(u);
+          ObjClass := ToCKO(u);
           for s := low(POS2CKA) to high(POS2CKA) do
             if arr.Find(POS2CKA[s], b) and b then
               include(StorageFlags, s);
@@ -4023,7 +4025,7 @@ begin
           arr.Find(CKA_SUBJECT, Subject);
           if arr.Find(CKA_CERTIFICATE_TYPE, u) then
           begin
-            case CERTIFICATE_TYPE(u) of
+            case ToCKC(u) of
               CKC_X_509:
                 include(StorageFlags, posX509);
               CKC_X_509_ATTR_CERT:
@@ -4042,9 +4044,9 @@ begin
           arr.Find(CKA_END_DATE, Stop);
           if arr.Find(CKA_KEY_TYPE, u) then
           begin
-            KeyType := KEY_TYPE(u);
+            KeyType := ToCKK(u);
             if arr.Find(CKA_KEY_GEN_MECHANISM, u) then
-              KeyGen := MECHANISM_TYPE(u);
+              KeyGen := ToCKM(u);
             if arr.Find(CKA_MODULUS_BITS, u) then // for RSA
               KeyBits := u
             else if not EccBitsFromPointLen(arr.FindLen(CKA_EC_POINT), KeyBits) then
