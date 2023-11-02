@@ -1938,6 +1938,10 @@ type
     MinPin: integer;
     /// maximum length of the PIN
     MaxPin: integer;
+    /// version number of the token's hardware
+    Hardware: CK_VERSION;
+    /// version number of the token's firmware
+    Firmware: CK_VERSION;
   end;
   PPkcs11Token = ^TPkcs11Token;
 
@@ -3460,6 +3464,8 @@ begin
   Token.MaxSessions := Raw.ulMaxSessionCount;
   Token.MinPin := Raw.ulMinPinLen;
   Token.MaxPin := Raw.ulMaxPinLen;
+  Token.Hardware := Raw.hardwareVersion;
+  Token.Firmware := Raw.firmwareVersion;
 end;
 
 procedure FillSlot(ID: CK_SLOT_ID; const Raw: CK_SLOT_INFO;
@@ -4279,7 +4285,7 @@ initialization
       ' start,end:TDateTime app:RawUtf8 sub,sn,iss,uid:RawByteString hdl:cardinal',
     TypeInfo(TPkcs11Token),
       'slot:cardinal name,manufacturer,model,serial,time:RawUtf8 flags:CKT_FLAGS' +
-      ' sessions,maxsessions,minpin,maxpin: integer'
+      ' sessions,maxsessions,minpin,maxpin:integer hwmaj,hwmin,fwmaj,fwmin:byte'
     ]);
 
 
