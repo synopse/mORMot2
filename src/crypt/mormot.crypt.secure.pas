@@ -9601,7 +9601,9 @@ begin
     4:
       with PDWordRec(p)^ do
         FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], result);
-   {16: // not true IPv6 content (no mormot.net.sock dependency) }
+   16:
+     // expanded IPv6 xx:xx:xx:...:xx content (no mormot.net.sock dependency)
+     ToHumanHex(result, pointer(p), len);
   else
     BinToHexLower(p, len, result);
   end;

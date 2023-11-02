@@ -526,7 +526,7 @@ type
   // - this implementation follows RFC 8017 specifications
   TRsa = class(TRsaContext)
   protected
-    fSafe: TOSLightLock; // for Verify() and Sign()
+    fSafe: TOSLightLock; // for Verify() and Sign() - not reentrant lock
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
     /// compute the Chinese Remainder Theorem (CRT) for RSA sign/decrypt
