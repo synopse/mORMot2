@@ -1045,7 +1045,10 @@ const
         {$if declared(RTLVersion112)} + '.2' {$else}
         {$if declared(RTLVersion111)} + '.1' {$ifend} {$ifend} {$ifend}
                                 + ' Alexandria'
-      {$elseif defined(VER360)} + ' 12 Next'
+      {$elseif defined(VER360)} + ' 12'
+        {$if declared(RTLVersion121)} + '.1' {$ifend}
+                                + ' Yukon'
+      {$elseif defined(VER370)} + ' 13 Next'
       {$ifend}
     {$endif CONDITIONALEXPRESSIONS}
   {$endif FPC}
