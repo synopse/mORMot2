@@ -108,17 +108,16 @@ type
   ECryptCertPkcs11 = class(ECryptCert);
 
   /// class implementing ICryptCert using PCKS#11 certificate
-  TCryptCertPkcs11 = class(TCryptCert)
+  TCryptCertPkcs11 = class(TCryptCertX509Only)
   protected
     fEngine: TPkcs11;
     fSlot: TPkcs11Slot;
     fToken: TPkcs11Token;
     fContent: TPkcs11ObjectDynArray;
+    fCaa:  TCryptAsymAlgo;
   public
-    // caller use TPkcs11.SlotByID/SlotByTokenName to retrieve the slot
+    /// caller use TPkcs11.SlotByID/SlotByTokenName to retrieve the slot
     constructor Create(aEngine: TPkcs11; aSlotID: TPkcs11SlotID); reintroduce;
-    // ICryptCert methods
-    function GetSerial: RawUtf8; override;
     /// the associated PKCS#11 instance
     property Engine: TPkcs11
       read fEngine;
@@ -133,6 +132,9 @@ type
 
     property Content: TPkcs11ObjectDynArray
       read fContent;
+    // ICryptCert methods
+    function AsymAlgo: TCryptAsymAlgo; override;
+    function CertAlgo: TCryptCertAlgo; override;
   end;
 
 
@@ -157,9 +159,14 @@ begin
   fToken := tok^;
 end;
 
-function TCryptCertPkcs11.GetSerial: RawUtf8;
+function TCryptCertPkcs11.AsymAlgo: TCryptAsymAlgo;
 begin
-  ToHumanHex(result, pointer(fToken.Serial), Length(fToken.Serial));
+  result := fCaa;
+end;
+
+function TCryptCertPkcs11.CertAlgo: TCryptCertAlgo;
+begin
+  result := CryptCertX509[fCaa];
 end;
 
 
