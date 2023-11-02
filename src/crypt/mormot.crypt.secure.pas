@@ -2306,7 +2306,7 @@ type
       const Cipher: RawUtf8): RawByteString; virtual; abstract;
     function SharedSecret(const pub: ICryptCert): RawByteString; virtual;
     function AsymAlgo: TCryptAsymAlgo; virtual;
-    function CertAlgo: TCryptCertAlgo;
+    function CertAlgo: TCryptCertAlgo; virtual;
     function Instance: TCryptCert;
     function Handle: pointer; virtual; abstract;
     function PrivateKeyHandle: pointer; virtual;
@@ -7514,7 +7514,10 @@ end;
 
 function TCryptCert.CertAlgo: TCryptCertAlgo;
 begin
-  result := fCryptAlgo as TCryptCertAlgo;
+  if fCryptAlgo = nil then
+    result := nil
+  else
+    result := fCryptAlgo as TCryptCertAlgo;
 end;
 
 function TCryptCert.Instance: TCryptCert;
