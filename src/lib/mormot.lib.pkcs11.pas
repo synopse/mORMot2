@@ -35,6 +35,7 @@ uses
 {
   Notes:
   - we manually translated latest PKCS#11 v3.0 specs
+    https://docs.oasis-open.org/pkcs11/pkcs11-base/v3.0/pkcs11-base-v3.0.html
   - we wrote struct fields as CK_ULONG, but defined the proper enums/sets with
     associated ToULONG/ENUMTYPE wrapper functions, to leverage types and RTTI
   - POSIX OpenSC does not follow the OASIS definitions as implemented on Windows
@@ -3825,6 +3826,8 @@ begin
         SetLength(m, mn);
       res := fC^.GetMechanismList(SlotID, pointer(m), mn);
     until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
+    if res = CKR_WORD[CKR_TOKEN_NOT_PRESENT] then
+      exit; // CKF_TOKEN_PRESENT may be set on a void or unsupported device
     Check(res, 'GetMechanismList');
     SetLength(s^.Mechanism, mn);
     for i := 0 to CK_LONG(mn) - 1 do
