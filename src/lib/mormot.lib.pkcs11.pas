@@ -1992,6 +1992,7 @@ type
     fSession: CK_SESSION_HANDLE;
     fSessionSlot: TPkcs11SlotID;
     fSessionFlags: set of (sfRW, sfLogIn);
+    fRetrieveConfigIncludeMechanisms: boolean;
     fOnNotify: TOnPkcs11Notify;
     procedure EnsureLoaded(const ctxt: ShortString);
     procedure EnsureSession(const ctxt: ShortString);
@@ -2022,7 +2023,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
 
     /// get information about this instance in Slots[] and Tokens[] properties
-    procedure RetrieveConfig(IncludeVoidSlots: boolean = false);
+    procedure RetrieveConfig(IncludeVoidSlots: boolean = false;
+      IncludeMechanisms: boolean = false);
     /// retrieve the list of Void slots
     function RetrieveVoidSlots: TPkcs11SlotIDDynArray;
     /// update information in Slots[] and Tokens[] about a single slot
@@ -3758,13 +3760,14 @@ begin
     result[i] := s[i]; // from CK_SLOT_ID to TPkcs11SlotID
 end;
 
-procedure TPkcs11.RetrieveConfig(IncludeVoidSlots: boolean);
+procedure TPkcs11.RetrieveConfig(IncludeVoidSlots, IncludeMechanisms: boolean);
 var
   i: PtrInt;
 begin
   EnsureLoaded('RetrieveConfig');
   fSafe.Lock;
   try
+    fRetrieveConfigIncludeMechanisms := IncludeMechanisms;
     fSlots := nil;
     fTokens := nil;
     fSlotIDs := DoGetSlotList(not IncludeVoidSlots);
@@ -3831,25 +3834,28 @@ begin
         end;
       exit;
     end;
-    mn := 64;
-    repeat
-      if length(m) < CK_LONG(mn) then
-        SetLength(m, mn);
-      res := fC^.GetMechanismList(SlotID, pointer(m), mn);
-    until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
-    if res = CKR_WORD[CKR_TOKEN_NOT_PRESENT] then
-      exit; // CKF_TOKEN_PRESENT may be set on a void or unsupported device
-    Check(res, 'GetMechanismList');
-    SetLength(s^.Mechanism, mn);
-    for i := 0 to CK_LONG(mn) - 1 do
+    if fRetrieveConfigIncludeMechanisms then
     begin
-      Check(fC^.GetMechanismInfo(SlotID, m[i], mecnfo), 'GetMechanismInfo');
-      with s^.Mechanism[i] do
+      mn := 64;
+      repeat
+        if length(m) < CK_LONG(mn) then
+          SetLength(m, mn);
+        res := fC^.GetMechanismList(SlotID, pointer(m), mn);
+      until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
+      if res = CKR_WORD[CKR_TOKEN_NOT_PRESENT] then
+        exit; // CKF_TOKEN_PRESENT may be set on a void or unsupported device
+      Check(res, 'GetMechanismList');
+      SetLength(s^.Mechanism, mn);
+      for i := 0 to CK_LONG(mn) - 1 do
       begin
-        Kind := MECHANISM_TYPE(m[i]);
-        MinKey := mecnfo.ulMinKeySize;
-        MaxKey := mecnfo.ulMaxKeySize;
-        Flags := CKM_FLAGS(cardinal(mecnfo.flags));
+        Check(fC^.GetMechanismInfo(SlotID, m[i], mecnfo), 'GetMechanismInfo');
+        with s^.Mechanism[i] do
+        begin
+          Kind := ToCKM(m[i]);
+          MinKey := mecnfo.ulMinKeySize;
+          MaxKey := mecnfo.ulMaxKeySize;
+          Flags := CKM_FLAGS(cardinal(mecnfo.flags));
+        end;
       end;
     end;
     Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
@@ -3876,7 +3882,7 @@ begin
     if res = CKR_NOEVENT then
       exit;
     Check(res, 'WaitForSlotEvent');
-    UpdateConfig(slotid);
+    UpdateConfig(slotid); // reload
     result := slotid;
   finally
     fSafe.UnLock;
