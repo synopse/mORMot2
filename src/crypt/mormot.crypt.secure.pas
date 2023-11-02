@@ -2267,7 +2267,7 @@ type
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; virtual; abstract;
     function LoadFromFile(const Source: TFileName; Content: TCryptCertContent;
-      const PrivatePassword: SpiUtf8): boolean;
+      const PrivatePassword: SpiUtf8): boolean; virtual;
     function GetFileName: TFileName; virtual;
      function Save(Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8;
@@ -7332,10 +7332,14 @@ end;
 
 function TCryptCert.LoadFromFile(const Source: TFileName;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
+var
+  s: RawByteString;
 begin
   EnsureCanWrite('LoadFromFile');
   fLastLoadFromFileName := Source;
-  result := Load(StringFromFile(Source), Content, PrivatePassword);
+  s := StringFromFile(Source);
+  result := Load(s, Content, PrivatePassword);
+  FillZero(s); // may be a private key with no password :(
 end;
 
 function TCryptCert.GetFileName: TFileName;
