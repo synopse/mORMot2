@@ -47,6 +47,11 @@ uses
 /// fill a PKCS#11 Mechanism structure with the parameters for a given algorithm
 procedure Pkcs11SetMechanism(Algo: TCryptAsymAlgo; out Mech: CK_MECHANISM);
 
+/// guess the TX509.SubjectPublicKeyAlgorithm of a given PKCS#11 Object
+// - supports only CKO_PUBLIC_KEY and CKO_PRIVATE_KEY kind of objects
+// - CKO_CERTIFICATE should be parsed and inspected directly
+function Pkcs11KeyAlgorithm(const obj: TPkcs11Object): TXPublicKeyAlgorithm;
+
 
 { ***************** Registration of the PKCS#11 Engine to our Factories }
 
@@ -98,8 +103,26 @@ begin
   // EC type is set as CKA_EC_PARAMS attribute
 end;
 
-
-
+function Pkcs11KeyAlgorithm(const obj: TPkcs11Object): TXPublicKeyAlgorithm;
+begin
+  result := xkaNone;
+  if obj.ObjClass in [CKO_PUBLIC_KEY, CKO_PRIVATE_KEY] then
+    case obj.KeyType of
+      CKK_RSA:
+        result := xkaRsa;
+      CKK_EC:
+        case obj.KeyBits of // wild guess for the most common curves
+          256:
+            result := xkaEcc256;
+          384:
+            result := xkaEcc384;
+          512:
+            result := xkaEcc512;
+        end;
+      CKK_EC_EDWARDS:
+        result := xkaEdDSA;
+    end;
+end;
 
 
 { ***************** Registration of the PKCS#11 Engine to our Factories }

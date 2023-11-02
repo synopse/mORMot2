@@ -1827,11 +1827,13 @@ type
     Manufacturer: RawUtf8;
     /// Slot Information Flags
     Flags: CKSL_FLAGS;
-    /// the Mechanism supported by this Slot
+    /// the Mechanism(s) supported by this Slot
     Mechanism: TPkcs11Mechanisms;
     /// version number of the slot's hardware
+    // - may be 0.0 but then TPkcs11Token.Hardware is likely to be defined
     Hardware: CK_VERSION;
     /// version number of the slot's firmware
+    // - may be 0.0 but then TPkcs11Token.Firmware is likely to be defined
     Firmware: CK_VERSION;
   end;
   /// pointer to high-level information about a PKCS#11 Slot
@@ -1870,13 +1872,16 @@ type
   // - see AddToAttributes() wrapper function to convert them to attributes
   TPkcs11ObjectStorages = set of TPkcs11ObjectStorage;
 
+  /// the identifier of a Storage Object (from CKA_ID), as hexadecimal
+  TPkcs11ObjectID = RawUtf8;
+
   /// high-level information about one PKCS#11 Object
   // - can be (un) serialized as binary or JSON if needed
   TPkcs11Object = packed record
     /// the class of the object (from CKA_CLASS)
     ObjClass: CK_OBJECT_CLASS;
     /// the identifier of this Storage Object (from CKA_ID), as hexadecimal
-    StorageID: RawUtf8;
+    StorageID: TPkcs11ObjectID;
     /// the description of this Storage Object (from CKA_LABEL value)
     StorageLabel: RawUtf8;
     /// the flags of a Storage Object (from various CKA_* values)
@@ -1906,6 +1911,7 @@ type
     UniqueID: RawByteString;
     /// the low-level CK_OBJECT_HANDLE, which lifetime would match the session
     // - not defined as CK_OBJECT_HANDLE because this type is not cross-platform
+    // so couldn't be uniformly serialized
     SessionHandle: cardinal;
   end;
   /// high-level information about several PKCS#11 Objects
