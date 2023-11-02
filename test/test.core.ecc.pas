@@ -600,6 +600,7 @@ var
 
 var
   key: THash256;
+  ccu: TCryptCertUsages;
   a: TEcdheAuth;
   ef: TEcdheEF;
   c: TEcdheProtocolClient;
@@ -626,6 +627,13 @@ var
   end;
 
 begin
+  CheckEqual(SizeOf(TEciesHeader), 228);
+  CheckEqual(SizeOf(TEcdheFrameClient), 290);
+  CheckEqual(SizeOf(TEcdheFrameServer), 306);
+  ccu := CU_ALL;
+  CheckEqual(word(ccu), ECCV1_USAGE_ALL);
+  CheckEqual(ord(High(TCryptCertValidity)), ord(High(TEccValidity)));
+  CheckEqual(ord(cvRevoked), ord(ecvRevoked));
   SetLength(str, MAX + 1);
   for i := 0 to MAX do
     str[i] := RandomUtf8(i * 191 + 1);
