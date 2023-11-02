@@ -7243,7 +7243,8 @@ begin
   // by default, CreateSelfSignedCsr generates a self-signed certificate as CSR
   // - mormot.crypt.openssl and mormot.crypt.x509 will generate a proper CSR
   result := nil;
-  if Csr = '' then
+  if (Csr = '') or
+     (fCryptAlgo = nil) then
     exit;
   x := (fCryptAlgo as TCryptCertAlgo).Load(Csr);
   if (x <> nil) and
@@ -7481,6 +7482,7 @@ function TCryptCert.JwkCompute: RawUtf8;
 var
   x, y: RawByteString;
   bx, by: RawUtf8;
+  caa: TCryptAsymAlgo;
 begin
   result := '';
   if not GetKeyParams(x, y) then
@@ -7488,9 +7490,10 @@ begin
   bx := BinToBase64uri(x);
   by := BinToBase64uri(y);
   // parameters are ordered lexicographically, as expected for thumbprints
-  if AsymAlgo in CAA_ECC then
+  caa := AsymAlgo;
+  if caa in CAA_ECC then
     FormatUtf8('{"crv":"%","kty":"EC","x":"%","y":"%"}',
-      [CAA_CRV[AsymAlgo], bx, by], result)
+                  [CAA_CRV[caa], bx, by], result)
   else
     FormatUtf8('{"e":"%","kty":"RSA","n":"%"}', [bx, by], result);
 end;

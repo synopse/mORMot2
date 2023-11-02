@@ -1131,6 +1131,54 @@ procedure RegisterX509;
     from TCryptStoreX509 is the only fully compliant with RFC recommendations
 }
 
+type
+  /// abstract parent class implementing ICryptCert using our TX509 class
+  // - will store a certificate as TX509 but no private key
+  // - is the parent of both TCryptCertX509 in this unit and TCryptCertPkcs11
+  // in mormot.crypt.pkcs11.pas
+  TCryptCertX509Only = class(TCryptCert)
+  protected
+    fX509: TX509;
+    // overriden to use a faster search with no temporary memory allocation
+    class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
+      Method: TCryptCertComparer; Count, MaxCount: integer;
+      out Chain: ICryptCerts); override;
+  public
+    destructor Destroy; override;
+    procedure Clear; virtual;
+    // ICryptCert methods - redirected to the internal TX509 instance
+    function GetSerial: RawUtf8; override;
+    function GetSubjectName: RawUtf8; override;
+    function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
+    function GetSubjects: TRawUtf8DynArray; override;
+    function GetIssuerName: RawUtf8; override;
+    function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
+    function GetIssuers: TRawUtf8DynArray; override;
+    function GetSubjectKey: RawUtf8; override;
+    function GetAuthorityKey: RawUtf8; override;
+    function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
+    function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
+    function GetNotBefore: TDateTime; override;
+    function GetNotAfter: TDateTime; override;
+    function IsValidDate(date: TDateTime): boolean; override;
+    function GetUsage: TCryptCertUsages; override;
+    function GetPeerInfo: RawUtf8; override;
+    function GetSignatureInfo: RawUtf8; override;
+    function GetDigest(Algo: THashAlgo): RawUtf8; override;
+    function GetPublicKey: RawByteString; override;
+    function Handle: pointer; override; // a TX509 instance
+    function GetKeyParams(out x, y: RawByteString): boolean; override;
+    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
+    function Verify(const Authority: ICryptCert; IgnoreError: TCryptCertValidities;
+      TimeUtc: TDateTime): TCryptCertValidity; override;
+    function Encrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    property X509: TX509
+      read fX509;
+  end;
+
 
 implementation
 
@@ -3268,214 +3316,21 @@ begin
                     ]), pemCertificateRequest);
 end;
 
-type
-  ECryptCertX509 = class(ECryptCert);
 
-  /// ICryptCert factory using our TX509 class
-  TCryptCertAlgoX509 = class(TCryptCertAlgo)
-  protected
-    fXsa: TXSignatureAlgorithm;
-    fXka: TXPublicKeyAlgorithm;
-  public
-    constructor Create(xsa: TXSignatureAlgorithm;
-      const suffix: RawUtf8); reintroduce; overload;
-    function New: ICryptCert; override; // = TCryptCertX509.Create(self)
-    function FromHandle(Handle: pointer): ICryptCert; override;
-    function CreateSelfSignedCsr(const Subjects: RawUtf8;
-      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
-  end;
+{ TCryptCertX509Only }
 
-  /// class implementing ICryptCert using our TX509 class
-  // - will store a certificate as TX509 and/or a ICryptPrivateKey instance
-  TCryptCertX509 = class(TCryptCert)
-  protected
-    fX509: TX509;
-    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
-    function Xsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
-      {$ifdef HASINLINE} inline; {$endif}
-    function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
-      {$ifdef HASINLINE} inline; {$endif}
-    function VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
-    procedure GeneratePrivateKey;
-    // overriden to use a faster search with no temporary memory allocation
-    class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
-      Method: TCryptCertComparer; Count, MaxCount: integer;
-      out Chain: ICryptCerts); override;
-  public
-    destructor Destroy; override;
-    procedure Clear;
-    // ICryptCert methods
-    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
-      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
-      Fields: PCryptCertFields): ICryptCert; override;
-    function GenerateFromCsr(const Csr: RawByteString;
-      const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; override;
-    function GetSerial: RawUtf8; override;
-    function GetSubjectName: RawUtf8; override;
-    function GetSubject(const Rdn: RawUtf8): RawUtf8; override;
-    function GetSubjects: TRawUtf8DynArray; override;
-    function GetIssuerName: RawUtf8; override;
-    function GetIssuer(const Rdn: RawUtf8): RawUtf8; override;
-    function GetIssuers: TRawUtf8DynArray; override;
-    function GetSubjectKey: RawUtf8; override;
-    function GetAuthorityKey: RawUtf8; override;
-    function IsSelfSigned: boolean; override;
-    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
-    function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
-    function GetNotBefore: TDateTime; override;
-    function GetNotAfter: TDateTime; override;
-    function IsValidDate(date: TDateTime): boolean; override;
-    function GetUsage: TCryptCertUsages; override;
-    function GetPeerInfo: RawUtf8; override;
-    function GetSignatureInfo: RawUtf8; override;
-    function GetDigest(Algo: THashAlgo): RawUtf8; override;
-    function Load(const Saved: RawByteString; Content: TCryptCertContent;
-      const PrivatePassword: SpiUtf8): boolean; override;
-    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
-      Format: TCryptCertFormat): RawByteString; override;
-    function HasPrivateSecret: boolean; override;
-    function GetPublicKey: RawByteString; override;
-    function GetPrivateKey: RawByteString; override;
-    function SetPrivateKey(const saved: RawByteString): boolean; override;
-    function Sign(Data: pointer; Len: integer;
-      Usage: TCryptCertUsage): RawByteString; override;
-    procedure Sign(const Authority: ICryptCert); override;
-    function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-      IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity; override;
-    function Verify(const Authority: ICryptCert; IgnoreError: TCryptCertValidities;
-      TimeUtc: TDateTime): TCryptCertValidity; override;
-    function Encrypt(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString; override;
-    function Decrypt(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString; override;
-    function SharedSecret(const pub: ICryptCert): RawByteString; override;
-    function Handle: pointer; override; // a TX509 instance
-    function PrivateKeyHandle: pointer; override;
-    function GetKeyParams(out x, y: RawByteString): boolean; override;
-    property X509: TX509
-      read fX509;
-  end;
-
-
-{ TCryptCertAlgoX509 }
-
-constructor TCryptCertAlgoX509.Create(xsa: TXSignatureAlgorithm;
-  const suffix: RawUtf8);
-begin
-  if xsa = xsaNone then
-    raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
-  fXsa := xsa;
-  fXka := XSA_TO_XKA[xsa];
-  fCaa := XSA_TO_CAA[xsa];
-  inherited Create('x509-' + LowerCase(CAA_JWT[fCaa]) + suffix);
-end;
-
-function TCryptCertAlgoX509.New: ICryptCert;
-begin
-  result := TCryptCertX509.Create(self);
-end;
-
-function TCryptCertAlgoX509.FromHandle(Handle: pointer): ICryptCert;
-var
-  instance: TCryptCertX509;
-begin
-  if (Handle = nil) or
-     not TObject(Handle).InheritsFrom(TX509) then
-    instance := nil
-  else
-  begin
-    instance := TCryptCertX509.Create(self);
-    instance.fX509 := Handle;
-  end;
-  result := instance;
-end;
-
-function TCryptCertAlgoX509.CreateSelfSignedCsr(const Subjects: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
-
-  procedure RaiseError(const msg: shortstring);
-  begin
-    raise ECryptCertX509.CreateUtf8(
-      '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
-  end;
-
-var
-  cka: TCryptKeyAlgo;
-  key: ICryptPrivateKey;
-begin
-  if Subjects = '' then
-    RaiseError('no Subjects');
-  cka := XKA_TO_CKA[fXka];
-  key := CryptPrivateKey[cka].Create;
-  // load or generate a public/private key pair
-  if PrivateKeyPem <> '' then
-    if not key.Load(cka, nil, PrivateKeyPem, PrivateKeyPassword) then
-      RaiseError('PrivateKeyPem');
-  // setup the CSR fields, self-sign the CSR and return it as PEM
-  result := ComputeSelfSignedCsr(key, fXsa, Subjects, Usages, Fields);
-  // save the generated private key (if was not previously loaded)
-  if (result <> '') and
-     (PrivateKeyPem = '') then
-    PrivateKeyPem := key.Save({aspem=}true, PrivateKeyPassword);
-end;
-
-
-{ TCryptCertX509 }
-
-destructor TCryptCertX509.Destroy;
+destructor TCryptCertX509Only.Destroy;
 begin
   inherited Destroy;
   Clear;
 end;
 
-procedure TCryptCertX509.Clear;
+procedure TCryptCertX509Only.Clear;
 begin
   FreeAndNil(fX509);
-  fPrivateKey := nil;
 end;
 
-function TCryptCertX509.Xsa: TXSignatureAlgorithm;
-begin
-  result := TCryptCertAlgoX509(fCryptAlgo).fXsa;
-end;
-
-function TCryptCertX509.Xka: TXPublicKeyAlgorithm;
-begin
-  result := TCryptCertAlgoX509(fCryptAlgo).fXka;
-end;
-
-function TCryptCertX509.VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
-begin
-  if (fX509 <> nil) or
-     HasPrivateSecret then
-    RaiseErrorGenerate('duplicated call');
-  result := self; // self-signed
-  if Authority <> nil then
-    if Authority.HasPrivateSecret then
-      if PClass(Authority.Instance)^ = PClass(self)^ then
-        result := TCryptCertX509(Authority.Instance)
-      else
-        RaiseErrorGenerate('Authority is not a TCryptCertX509')
-    else
-      RaiseErrorGenerate('Authority has no private key to sign');
-end;
-
-procedure TCryptCertX509.GeneratePrivateKey;
-begin
-  if HasPrivateSecret then
-    RaiseErrorGenerate('duplicated GeneratePrivateKey');
-  fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
-  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[Xka]);
-  if fX509.Signed.SubjectPublicKey = '' then
-    RaiseErrorGenerate('GeneratePrivateKey failed');
-  fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
-  fX509.Signed.SubjectPublicKeyBits :=
-    X509PubKeyBits(fX509.Signed.SubjectPublicKey);
-end;
-
-class procedure TCryptCertX509.InternalFind(Cert: PICryptCert;
+class procedure TCryptCertX509Only.InternalFind(Cert: PICryptCert;
   const Value: RawByteString; Method: TCryptCertComparer;
   Count, MaxCount: integer; out Chain: ICryptCerts);
 var
@@ -3552,6 +3407,386 @@ begin
     DynArrayFakeLength(Chain, res);
 end;
 
+function TCryptCertX509Only.GetSerial: RawUtf8;
+begin
+  if fX509 <> nil then
+    result := fX509.Signed.SerialNumberHex
+  else
+    result := '';
+end;
+
+function TCryptCertX509Only.GetSubjectName: RawUtf8;
+begin
+  result := fX509.GetSubjectDN;
+end;
+
+function TCryptCertX509Only.GetSubject(const Rdn: RawUtf8): RawUtf8;
+begin
+  result := '';
+  if (Rdn = '') or
+     (fX509 = nil) then
+    exit;
+  result := fX509.Signed.Subject.Get(Rdn); // RDN or hash or OID
+  if (result = '') and
+     IsCN(Rdn) then
+    // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
+    result := GetFirstCsvItem(fX509.Extension[xeSubjectAlternativeName]);
+end;
+
+function TCryptCertX509Only.GetSubjects: TRawUtf8DynArray;
+begin
+  result := fX509.SubjectAlternativeNames;
+end;
+
+function TCryptCertX509Only.GetIssuerName: RawUtf8;
+begin
+  result := fX509.GetIssuerDN;
+end;
+
+function TCryptCertX509Only.GetIssuer(const Rdn: RawUtf8): RawUtf8;
+begin
+  if (Rdn = '') or
+     (fX509 = nil) then
+    result := ''
+  else
+    result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
+end;
+
+function TCryptCertX509Only.GetIssuers: TRawUtf8DynArray;
+begin
+  result := fX509.IssuerAlternativeNames;
+end;
+
+function TCryptCertX509Only.GetSubjectKey: RawUtf8;
+begin
+  if fX509 = nil then
+    result := ''
+  else
+    result := fX509.Signed.Extension[xeSubjectKeyIdentifier];
+end;
+
+function TCryptCertX509Only.GetAuthorityKey: RawUtf8;
+begin
+  if fX509 = nil then
+    result := ''
+  else
+    result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
+end;
+
+function TCryptCertX509Only.IsSelfSigned: boolean;
+begin
+  result := (fX509 <> nil) and
+            fX509.IsSelfSigned;
+end;
+
+function TCryptCertX509Only.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertX509Only;
+begin
+  if Assigned(Authority) then
+  begin
+    a := pointer(Authority.Instance);
+    result := PClass(a)^.InheritsFrom(TCryptCertX509Only) and
+      // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
+      fX509.IsAuthorizedBy(a.fX509);
+  end
+  else
+    result := false;
+end;
+
+function TCryptCertX509Only.Compare(const Another: ICryptCert;
+  Method: TCryptCertComparer): integer;
+var
+  a: TCryptCertX509Only;
+begin
+  if Assigned(Another) then
+  begin
+    a := pointer(Another.Instance);
+    if PClass(a)^.InheritsFrom(TCryptCertX509Only) then
+      result := fX509.Compare(a.fX509, Method)
+    else
+      result := 1
+  end
+  else
+    result := 1;
+end;
+
+function TCryptCertX509Only.GetNotBefore: TDateTime;
+begin
+  if fX509 = nil then
+    result := 0
+  else
+    result := fX509.Signed.NotBefore;
+end;
+
+function TCryptCertX509Only.GetNotAfter: TDateTime;
+begin
+  if fX509 = nil then
+    result := 0
+  else
+    result := fX509.Signed.NotAfter;
+end;
+
+function TCryptCertX509Only.IsValidDate(date: TDateTime): boolean;
+begin
+  result := (fX509 <> nil) and
+            fX509.Signed.IsValidDate(date);
+end;
+
+function TCryptCertX509Only.GetUsage: TCryptCertUsages;
+begin
+  if fX509 = nil then
+    result := []
+  else
+    result := fX509.Signed.CertUsages;
+end;
+
+function TCryptCertX509Only.GetPeerInfo: RawUtf8;
+begin
+  result := fX509.PeerInfo;
+end;
+
+function TCryptCertX509Only.GetSignatureInfo: RawUtf8;
+var
+  bits: integer;
+begin
+  bits := fX509.SignatureSecurityBits;
+  if bits = 0 then
+    result := ''
+  else
+    FormatUtf8('% %', [bits, XSA_TXT[fX509.SignatureAlgorithm]], result);
+end;
+
+function TCryptCertX509Only.GetDigest(Algo: THashAlgo): RawUtf8;
+begin
+  result := fX509.FingerPrint(Algo);
+end;
+
+function TCryptCertX509Only.GetPublicKey: RawByteString;
+begin
+  if fX509 = nil then
+    result := ''
+  else
+    result := fX509.Signed.SubjectPublicKey;
+end;
+
+function TCryptCertX509Only.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+begin
+  result := fX509.Verify(Sign, Data, SignLen, DataLen, IgnoreError, TimeUtc);
+end;
+
+function TCryptCertX509Only.Verify(const Authority: ICryptCert;
+  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
+var
+  auth, tempauth: TX509;
+begin
+  result := cvBadParameter;
+  if fX509 = nil then
+    exit;
+  auth := nil;
+  tempauth := nil;
+  if Authority <> nil then
+    if PClass(Authority.Instance)^.InheritsFrom(TCryptCertX509Only) then
+      auth := Authority.Handle
+    else
+    begin
+      // create a temp TX509 for the verification (slow, but working)
+      tempauth := TX509.Create;
+      if tempauth.LoadFromDer(Authority.Save) then
+        auth := tempauth;
+    end;
+  // TX509 has a cache so the next calls with the same auth will be immediate
+  result := fX509.Verify(auth, IgnoreError, TimeUtc);
+  tempauth.Free;
+end;
+
+function TCryptCertX509Only.Encrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if (fX509 <> nil) and
+     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+    result := fX509.PublicKey.Seal(Message, Cipher)
+  else
+    result := '';
+end;
+
+function TCryptCertX509Only.Handle: pointer;
+begin
+  result := fX509;
+end;
+
+function TCryptCertX509Only.GetKeyParams(out x, y: RawByteString): boolean;
+begin
+  result := fX509.PublicKey.GetParams(x, y);
+end;
+
+
+type
+  ECryptCertX509 = class(ECryptCert);
+
+  /// ICryptCert factory using our TX509 class
+  TCryptCertAlgoX509 = class(TCryptCertAlgo)
+  protected
+    fXsa: TXSignatureAlgorithm;
+    fXka: TXPublicKeyAlgorithm;
+  public
+    constructor Create(xsa: TXSignatureAlgorithm;
+      const suffix: RawUtf8); reintroduce; overload;
+    function New: ICryptCert; override; // = TCryptCertX509.Create(self)
+    function FromHandle(Handle: pointer): ICryptCert; override;
+    function CreateSelfSignedCsr(const Subjects: RawUtf8;
+      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
+  end;
+
+  /// class implementing ICryptCert using our TX509 class
+  // - will store a certificate as TX509 and/or a ICryptPrivateKey instance
+  TCryptCertX509 = class(TCryptCertX509Only)
+  protected
+    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
+    function Xsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
+      {$ifdef HASINLINE} inline; {$endif}
+    function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
+      {$ifdef HASINLINE} inline; {$endif}
+    function VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
+    procedure GeneratePrivateKey;
+  public
+    procedure Clear; override;
+    // ICryptCert methods - relative to fPrivateKey process
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+      Fields: PCryptCertFields): ICryptCert; override;
+    function GenerateFromCsr(const Csr: RawByteString;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert; override;
+    function Load(const Saved: RawByteString; Content: TCryptCertContent;
+      const PrivatePassword: SpiUtf8): boolean; override;
+    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
+      Format: TCryptCertFormat): RawByteString; override;
+    function HasPrivateSecret: boolean; override;
+    function GetPrivateKey: RawByteString; override;
+    function SetPrivateKey(const saved: RawByteString): boolean; override;
+    function Sign(Data: pointer; Len: integer;
+      Usage: TCryptCertUsage): RawByteString; override;
+    procedure Sign(const Authority: ICryptCert); override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const pub: ICryptCert): RawByteString; override;
+    function PrivateKeyHandle: pointer; override;
+  end;
+
+
+{ TCryptCertAlgoX509 }
+
+constructor TCryptCertAlgoX509.Create(xsa: TXSignatureAlgorithm;
+  const suffix: RawUtf8);
+begin
+  if xsa = xsaNone then
+    raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
+  fXsa := xsa;
+  fXka := XSA_TO_XKA[xsa];
+  fCaa := XSA_TO_CAA[xsa];
+  inherited Create('x509-' + LowerCase(CAA_JWT[fCaa]) + suffix);
+end;
+
+function TCryptCertAlgoX509.New: ICryptCert;
+begin
+  result := TCryptCertX509.Create(self);
+end;
+
+function TCryptCertAlgoX509.FromHandle(Handle: pointer): ICryptCert;
+var
+  instance: TCryptCertX509;
+begin
+  if (Handle = nil) or
+     not TObject(Handle).InheritsFrom(TX509) then
+    instance := nil
+  else
+  begin
+    instance := TCryptCertX509.Create(self);
+    instance.fX509 := Handle;
+  end;
+  result := instance;
+end;
+
+function TCryptCertAlgoX509.CreateSelfSignedCsr(const Subjects: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+
+  procedure RaiseError(const msg: shortstring);
+  begin
+    raise ECryptCertX509.CreateUtf8(
+      '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
+  end;
+
+var
+  cka: TCryptKeyAlgo;
+  key: ICryptPrivateKey;
+begin
+  if Subjects = '' then
+    RaiseError('no Subjects');
+  cka := XKA_TO_CKA[fXka];
+  key := CryptPrivateKey[cka].Create;
+  // load or generate a public/private key pair
+  if PrivateKeyPem <> '' then
+    if not key.Load(cka, nil, PrivateKeyPem, PrivateKeyPassword) then
+      RaiseError('PrivateKeyPem');
+  // setup the CSR fields, self-sign the CSR and return it as PEM
+  result := ComputeSelfSignedCsr(key, fXsa, Subjects, Usages, Fields);
+  // save the generated private key (if was not previously loaded)
+  if (result <> '') and
+     (PrivateKeyPem = '') then
+    PrivateKeyPem := key.Save({aspem=}true, PrivateKeyPassword);
+end;
+
+
+{ TCryptCertX509 }
+
+procedure TCryptCertX509.Clear;
+begin
+  inherited Clear; // = FreeAndNil(fX509);
+  fPrivateKey := nil;
+end;
+
+function TCryptCertX509.Xsa: TXSignatureAlgorithm;
+begin
+  result := TCryptCertAlgoX509(fCryptAlgo).fXsa;
+end;
+
+function TCryptCertX509.Xka: TXPublicKeyAlgorithm;
+begin
+  result := TCryptCertAlgoX509(fCryptAlgo).fXka;
+end;
+
+function TCryptCertX509.VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
+begin
+  if (fX509 <> nil) or
+     HasPrivateSecret then
+    RaiseErrorGenerate('duplicated call');
+  result := self; // self-signed
+  if Authority <> nil then
+    if Authority.HasPrivateSecret then
+      if PClass(Authority.Instance)^ = PClass(self)^ then
+        result := TCryptCertX509(Authority.Instance)
+      else
+        RaiseErrorGenerate('Authority is not a TCryptCertX509')
+    else
+      RaiseErrorGenerate('Authority has no private key to sign');
+end;
+
+procedure TCryptCertX509.GeneratePrivateKey;
+begin
+  if HasPrivateSecret then
+    RaiseErrorGenerate('duplicated GeneratePrivateKey');
+  fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
+  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[Xka]);
+  if fX509.Signed.SubjectPublicKey = '' then
+    RaiseErrorGenerate('GeneratePrivateKey failed');
+  fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
+  fX509.Signed.SubjectPublicKeyBits :=
+    X509PubKeyBits(fX509.Signed.SubjectPublicKey);
+end;
+
 function TCryptCertX509.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
@@ -3588,6 +3823,7 @@ function TCryptCertX509.GenerateFromCsr(const Csr: RawByteString;
 var
   auth: TCryptCertX509;
 begin
+  result := nil;
   if fX509 <> nil then
     RaiseErrorGenerate('(FromCsr) duplicated call');
   auth := VerifyAuthority(Authority);
@@ -3609,160 +3845,6 @@ begin
   except
     Clear;
   end;
-end;
-
-function TCryptCertX509.GetSerial: RawUtf8;
-begin
-  if fX509 <> nil then
-    result := fX509.Signed.SerialNumberHex
-  else
-    result := '';
-end;
-
-function TCryptCertX509.GetSubjectName: RawUtf8;
-begin
-  result := fX509.GetSubjectDN;
-end;
-
-function TCryptCertX509.GetSubject(const Rdn: RawUtf8): RawUtf8;
-begin
-  result := '';
-  if (Rdn = '') or
-     (fX509 = nil) then
-    exit;
-  result := fX509.Signed.Subject.Get(Rdn); // RDN or hash or OID
-  if (result = '') and
-     IsCN(Rdn) then
-    // CN fallback to first DNS: as with mormot.crypt.ecc and mormot.crypt.openssl
-    result := GetFirstCsvItem(fX509.Extension[xeSubjectAlternativeName]);
-end;
-
-function TCryptCertX509.GetSubjects: TRawUtf8DynArray;
-begin
-  result := fX509.SubjectAlternativeNames;
-end;
-
-function TCryptCertX509.GetIssuerName: RawUtf8;
-begin
-  result := fX509.GetIssuerDN;
-end;
-
-function TCryptCertX509.GetIssuer(const Rdn: RawUtf8): RawUtf8;
-begin
-  if (Rdn = '') or
-     (fX509 = nil) then
-    result := ''
-  else
-    result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
-end;
-
-function TCryptCertX509.GetIssuers: TRawUtf8DynArray;
-begin
-  result := fX509.IssuerAlternativeNames;
-end;
-
-function TCryptCertX509.GetSubjectKey: RawUtf8;
-begin
-  if fX509 = nil then
-    result := ''
-  else
-    result := fX509.Signed.Extension[xeSubjectKeyIdentifier];
-end;
-
-function TCryptCertX509.GetAuthorityKey: RawUtf8;
-begin
-  if fX509 = nil then
-    result := ''
-  else
-    result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
-end;
-
-function TCryptCertX509.IsSelfSigned: boolean;
-begin
-  result := (fX509 <> nil) and
-            fX509.IsSelfSigned;
-end;
-
-function TCryptCertX509.IsAuthorizedBy(const Authority: ICryptCert): boolean;
-var
-  a: TCryptCertX509;
-begin
-  if Assigned(Authority) then
-  begin
-    a := pointer(Authority.Instance);
-    result := (PClass(a)^ = PClass(self)^) and
-      // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
-      fX509.IsAuthorizedBy(a.fX509);
-  end
-  else
-    result := false;
-end;
-
-function TCryptCertX509.Compare(const Another: ICryptCert;
-  Method: TCryptCertComparer): integer;
-var
-  a: TCryptCertX509;
-begin
-  if Assigned(Another) then
-  begin
-    a := pointer(Another.Instance);
-    result := PPtrInt(a)^ - PPtrInt(self)^;
-    if result = 0 then // both are TCryptCertX509
-      result := fX509.Compare(a.fX509, Method);
-  end
-  else
-    result := 1;
-end;
-
-function TCryptCertX509.GetNotBefore: TDateTime;
-begin
-  if fX509 = nil then
-    result := 0
-  else
-    result := fX509.Signed.NotBefore;
-end;
-
-function TCryptCertX509.GetNotAfter: TDateTime;
-begin
-  if fX509 = nil then
-    result := 0
-  else
-    result := fX509.Signed.NotAfter;
-end;
-
-function TCryptCertX509.IsValidDate(date: TDateTime): boolean;
-begin
-  result := (fX509 <> nil) and
-            fX509.Signed.IsValidDate(date);
-end;
-
-function TCryptCertX509.GetUsage: TCryptCertUsages;
-begin
-  if fX509 = nil then
-    result := []
-  else
-    result := fX509.Signed.CertUsages;
-end;
-
-function TCryptCertX509.GetPeerInfo: RawUtf8;
-begin
-  result := fX509.PeerInfo;
-end;
-
-function TCryptCertX509.GetSignatureInfo: RawUtf8;
-var
-  bits: integer;
-begin
-  bits := fX509.SignatureSecurityBits;
-  if bits = 0 then
-    result := ''
-  else
-    FormatUtf8('% %', [bits, XSA_TXT[fX509.SignatureAlgorithm]], result);
-end;
-
-function TCryptCertX509.GetDigest(Algo: THashAlgo): RawUtf8;
-begin
-  result := fX509.FingerPrint(Algo);
 end;
 
 function TCryptCertX509.Load(const Saved: RawByteString;
@@ -3852,14 +3934,6 @@ begin
   result := fPrivateKey <> nil;
 end;
 
-function TCryptCertX509.GetPublicKey: RawByteString;
-begin
-  if fX509 = nil then
-    result := ''
-  else
-    result := fX509.Signed.SubjectPublicKey;
-end;
-
 function TCryptCertX509.GetPrivateKey: RawByteString;
 begin
   if fPrivateKey = nil then
@@ -3928,47 +4002,6 @@ begin
     RaiseError('Sign: Authority is not a CA');
 end;
 
-function TCryptCertX509.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
-  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
-begin
-  result := fX509.Verify(Sign, Data, SignLen, DataLen, IgnoreError, TimeUtc);
-end;
-
-function TCryptCertX509.Verify(const Authority: ICryptCert;
-  IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
-var
-  auth, tempauth: TX509;
-begin
-  result := cvBadParameter;
-  if fX509 = nil then
-    exit;
-  auth := nil;
-  tempauth := nil;
-  if Authority <> nil then
-    if PClass(Authority.Instance)^ = PClass(self)^ then
-      auth := Authority.Handle
-    else
-    begin
-      // create a temp TX509 for the verification (slow, but working)
-      tempauth := TX509.Create;
-      if tempauth.LoadFromDer(Authority.Save) then
-        auth := tempauth;
-    end;
-  // TX509 has a cache so the next calls with the same auth will be immediate
-  result := fX509.Verify(auth, IgnoreError, TimeUtc);
-  tempauth.Free;
-end;
-
-function TCryptCertX509.Encrypt(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-  if (fX509 <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
-    result := fX509.PublicKey.Seal(Message, Cipher)
-  else
-    result := '';
-end;
-
 function TCryptCertX509.Decrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
@@ -3994,19 +4027,9 @@ begin
     result := '';
 end;
 
-function TCryptCertX509.Handle: pointer;
-begin
-  result := fX509;
-end;
-
 function TCryptCertX509.PrivateKeyHandle: pointer;
 begin
   result := pointer(fPrivateKey);
-end;
-
-function TCryptCertX509.GetKeyParams(out x, y: RawByteString): boolean;
-begin
-  result := fX509.PublicKey.GetParams(x, y);
 end;
 
 
