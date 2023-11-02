@@ -69,28 +69,33 @@ const
     CKM_RSA_PKCS_PSS, // caaPS256
     CKM_RSA_PKCS_PSS, // caaPS384
     CKM_RSA_PKCS_PSS, // caaPS512
-    CKM_ECDSA);       // caaEdDSA
+    CKM_EDDSA);       // caaEdDSA
 
   /// the DER hexadecimal OID for ECDSA high-level Framework curves
   // - see e.g. openssl ecparam -name prime256v1 -outform DER | hexdump -C
   // and CKA_OID[] from mormot.crypt.secure
-  CAA_TO_DER: array[TCryptAsymAlgo] of RawUtf8 = (
-    '06082a8648ce3d030107',    // caaES256  '1.2.840.10045.3.1.7'
-    '06052b81040022',          // caaES384  '1.3.132.0.34'
-    '06052b81040023',          // caaES512  '1.3.132.0.35'
-    '06052b8104000a',          // caaES256K '1.3.132.0.10'
+  CAA_TO_DER: array[TCryptAsymAlgo] of RawByteString = (
+    #$06#$08#$2a#$86#$48#$ce#$3d#$03#$01#$07, // caaES256  '1.2.840.10045.3.1.7'
+    #$06#$05#$2b#$81#$04#$00#$22,             // caaES384  '1.3.132.0.34'
+    #$06#$05#$2b#$81#$04#$00#$23,             // caaES512  '1.3.132.0.35'
+    #$06#$05#$2b#$81#$04#$00#$0a,             // caaES256K '1.3.132.0.10'
     '',                        // caaRS256
     '',                        // caaRS384
     '',                        // caaRS512
     '',                        // caaPS256
     '',                        // caaPS384
     '',                        // caaPS512
-    '06092B06010401DA470F01'); // caaEdDSA
+    #$06#$09#$2B#$06#$01#$04#$01#$DA#$47#$0F#$01);
+    // caaEdDSA '1.3.6.1.4.1.11591.15.1' - but optional
 
 
 procedure Pkcs11SetMechanism(Algo: TCryptAsymAlgo; out Mech: CK_MECHANISM);
 begin
-
+  Mech.mechanism := ToULONG(CAA_TO_CKM[Algo]);
+  Mech.pParameter := nil;
+  Mech.ulParameterLen := 0;
+  // RSA details are set as CKA_MODULUS_BITS/CKA_PUBLIC_EXPONENT attributes
+  // EC type is set as CKA_EC_PARAMS attribute
 end;
 
 
