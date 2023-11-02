@@ -1907,8 +1907,8 @@ type
   ptime_t = ^time_t;
 
   timeval = record
-    tv_sec: Longint;
-    tv_usec: Longint;
+    tv_sec: integer;
+    tv_usec: integer;
   end;
   PTimeVal = ^timeval;
 

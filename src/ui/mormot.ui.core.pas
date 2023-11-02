@@ -215,13 +215,13 @@ type
   TEMRTransparentBLT = packed record
     emr: TEMR;
     rclBounds: TRect;
-    xDest: Longint;
-    yDest: Longint;
-    cxDest: Longint;
-    cyDest: Longint;
+    xDest: integer;
+    yDest: integer;
+    cxDest: integer;
+    cyDest: integer;
     dwRop: DWORD;
-    xSrc: Longint;
-    ySrc: Longint;
+    xSrc: integer;
+    ySrc: integer;
     xformSrc: XFORM;         { Source DC transform}
     crBkColorSrc: COLORREF;  { Source DC BkColor in RGB}
     iUsageSrc: DWORD;        { Source bitmap info color table usage}
@@ -229,8 +229,8 @@ type
     cbBmiSrc: DWORD;         { Size of the source TBitmapInfo structure}
     offBitsSrc: DWORD;       { Offset to the source bitmap bits}
     cbBitsSrc: DWORD;        { Size of the source bitmap bits}
-    cxSrc: Longint;
-    cySrc: Longint;
+    cxSrc: integer;
+    cySrc: integer;
   end;
 
   PEMGradientFill = ^TEMGradientFill;
@@ -299,8 +299,8 @@ procedure ClearTypeEnable;
 {$else}
 
 /// some LCL compatibility function
-function ExtTextOutW(DC: HDC; X, Y: integer; Options: LongInt; Rect: PRect;
-  Str: PWideChar; Count: LongInt; Dx: ObjPas.PInteger): boolean;
+function ExtTextOutW(DC: HDC; X, Y, Options: integer; Rect: PRect;
+  Str: PWideChar; Count: integer; Dx: ObjPas.PInteger): boolean;
 
 {$endif OSWINDOWS}
 
@@ -704,8 +704,8 @@ const
 
 {$else}
 
-function ExtTextOutW(DC: HDC; X, Y: integer; Options: LongInt; Rect: PRect;
-  Str: PWideChar; Count: LongInt; Dx: ObjPas.PInteger): boolean;
+function ExtTextOutW(DC: HDC; X, Y, Options: integer; Rect: PRect;
+  Str: PWideChar; Count: integer; Dx: ObjPas.PInteger): boolean;
 var
   temp: Utf8String;
   L: integer; // no need to resize temp buffer, just get size

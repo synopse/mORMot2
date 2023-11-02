@@ -526,13 +526,13 @@ type
 
   /// cross-compiler type used for string reference counter
   // - FPC and Delphi don't always use the same type
-  TStrCnt = {$ifdef STRCNT32} longint {$else} SizeInt {$endif};
+  TStrCnt = {$ifdef STRCNT32} integer {$else} SizeInt {$endif};
   /// pointer to cross-compiler type used for string reference counter
   PStrCnt = ^TStrCnt;
 
   /// cross-compiler type used for dynarray reference counter
   // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
-  TDACnt = {$ifdef DACNT32} longint {$else} SizeInt {$endif};
+  TDACnt = {$ifdef DACNT32} integer {$else} SizeInt {$endif};
   /// pointer to cross-compiler type used for dynarray reference counter
   PDACnt = ^TDACnt;
 
@@ -3966,7 +3966,7 @@ type
   end;
 
 /// raise a EStreamError exception - e.g. from TSynMemoryStream.Write
-function RaiseStreamError(Caller: TObject; const Context: shortstring): Longint;
+function RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
 
 
 { ************ Raw Shared Constants / Types Definitions }
@@ -11953,7 +11953,7 @@ begin
 end;
 
 
-function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): Longint;
+function {%H-}RaiseStreamError(Caller: TObject; const Context: shortstring): PtrInt;
 begin
   raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
 end;

@@ -659,7 +659,7 @@ end;
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 
 function _InterlockedCompareExchange(
-  var Dest: integer; New, Comp: integer): longint; stdcall;
+  var Dest: integer; New, Comp: integer): integer; stdcall;
   public alias: '_InterlockedCompareExchange@12';
 begin
   result := InterlockedCompareExchange(Dest, New, Comp);

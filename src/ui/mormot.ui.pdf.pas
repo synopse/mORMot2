@@ -2395,7 +2395,7 @@ type
   // characters are written horizontally, that is, either left to right or
   // right to left
   TCmapHHEA = packed record
-    version: longint;
+    version: integer;
     ascent: word;
     descent: word;
     lineGap: word;
@@ -2413,8 +2413,8 @@ type
 
   /// The 'head' table contains global information about the font
   TCmapHEAD = packed record
-    version: longint;
-    fontRevision: longint;
+    version: integer;
+    fontRevision: integer;
     checkSumAdjustment: cardinal;
     magicNumber: cardinal;
     flags: word;
@@ -11242,8 +11242,8 @@ procedure TPdfEnum.GradientFill(data: PEMGradientFill);
 type
   PTriVertex = ^TTriVertex;
   TTriVertex = packed record // circumvent some bug in older Delphi
-    x: Longint;
-    Y: Longint;
+    x: integer;
+    Y: integer;
     Red: word; // COLOR16 wrongly defined in Delphi 6/7 e.g.
     Green: word;
     Blue: word;

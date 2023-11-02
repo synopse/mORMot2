@@ -2101,7 +2101,7 @@ type
     procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
     procedure SetExpectedSize(Value: Int64);
-    procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
+    procedure ReadWriteHash(const Buffer; Count: integer); virtual;
     procedure ReadWriteReport(const Caller: ShortString); virtual;
   public
     /// initialize the internal structure, and start the timing
@@ -9515,7 +9515,7 @@ begin
   fTerminated := true;
 end;
 
-procedure TStreamRedirect.ReadWriteHash(const Buffer; Count: Longint);
+procedure TStreamRedirect.ReadWriteHash(const Buffer; Count: integer);
 begin
   DoHash(@Buffer, Count);
   inc(fInfo.CurrentSize, Count);
@@ -9741,7 +9741,7 @@ function TNestedStreamReader.Read(var Buffer; Count: Longint): Longint;
 var
   s, m: ^TNestedStream;
   P: PByte;
-  rd: LongInt;
+  rd: PtrInt;
 begin
   result := 0;
   s := pointer(fContentRead);

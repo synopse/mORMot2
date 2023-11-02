@@ -866,12 +866,12 @@ function pthread_mutex_unlock(mutex: pointer): integer;
   cdecl; external clib name 'pthread_mutex_unlock';
 {$else}
 // just "external" without clib='c' as in rtl/*bsd/pthread.inc
-function pthread_cancel(thread: pointer): integer;  cdecl; external;
+function pthread_cancel(thread: pointer): integer;           cdecl; external;
 function pthread_mutex_init(mutex, attr: pointer): integer;  cdecl; external;
-function pthread_mutex_destroy(mutex: pointer): integer;  cdecl; external;
-function pthread_mutex_lock(mutex: pointer): integer;  cdecl; external;
-function pthread_mutex_trylock(mutex: pointer): integer;  cdecl; external;
-function pthread_mutex_unlock(mutex: pointer): integer;  cdecl; external;
+function pthread_mutex_destroy(mutex: pointer): integer;     cdecl; external;
+function pthread_mutex_lock(mutex: pointer): integer;        cdecl; external;
+function pthread_mutex_trylock(mutex: pointer): integer;     cdecl; external;
+function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSDARWIN}
 {$endif OSPTHREADSSTATIC}
 

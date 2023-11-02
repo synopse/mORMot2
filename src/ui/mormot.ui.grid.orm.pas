@@ -204,7 +204,7 @@ type
     // - the cell is drawn using direct Win32 Unicode API
     // - the first row (fixed) is drawn as field name (centered bold text with
     //  sorting order displayed with a triangular arrow)
-    procedure DrawCell(Sender: TObject; ACol, ARow: Longint; Rect: TRect;
+    procedure DrawCell(Sender: TObject; ACol, ARow: integer; Rect: TRect;
       State: TGridDrawState);
     /// called by the owner TDrawGrid when a Cell is selected
     procedure DrawGridSelectCell(Sender: TObject; ACol, ARow: Integer;
@@ -506,7 +506,7 @@ begin
   result := nil;
 end;
 
-procedure TOrmTableToGrid.DrawCell(Sender: TObject; ACol, ARow: Integer;
+procedure TOrmTableToGrid.DrawCell(Sender: TObject; ACol, ARow: integer;
   Rect: TRect; State: TGridDrawState);
 var
   c: TCanvas;
