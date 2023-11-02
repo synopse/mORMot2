@@ -204,6 +204,8 @@ type
     // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
     // - is cached internally for efficiency
     function AsDNText: RawUtf8;
+    /// fill the whole record with zeros
+    procedure Clear;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
@@ -222,6 +224,9 @@ type
     /// to be called once any field has been changed to refresh internal caches
     procedure AfterModified;
   end;
+
+/// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
+function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
 /// append a new entry to a dynamic array of TXOther
 procedure AddOther(var others: TXOthers; const o, v: RawByteString);
@@ -1132,6 +1137,17 @@ implementation
 
 { **************** X.509 Fields Logic}
 
+function XNameAsDN(const Der: TAsnObject): RawUtf8;
+var
+  x: TXName;
+begin
+  x.Clear;
+  if x.FromAsn(Der) then
+    result := x.AsDNText
+  else
+    result := '';
+end;
+
 procedure AddOther(var others: TXOthers; const o, v: RawByteString);
 var
   n: PtrInt;
@@ -1478,6 +1494,12 @@ begin
   if fCachedText = '' then
     ComputeText;
   result := fCachedText;
+end;
+
+procedure TXName.Clear;
+begin
+  Finalize(self);
+  FillCharFast(self, SizeOf(self), 0);
 end;
 
 function TXName.FromAsn(const seq: TAsnObject): boolean;
