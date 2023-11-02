@@ -395,6 +395,7 @@ type
   // - stored as a CK_ULONG field - and CKK_VENDOR_DEFINED as $80000000 - use
   // ToULONG/KEY_TYPE() function wrappers for any conversion
   CK_KEY_TYPE = (
+    CKK_none,
     CKK_RSA,
     CKK_DSA,
     CKK_DH,
@@ -463,9 +464,9 @@ const
   CKK_VENDOR_DEFINED_ULONG = $80000000;
 
 function ToULONG(kt: CK_KEY_TYPE): CK_ULONG; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE2} inline; {$endif}
 function KEY_TYPE(uu: CK_ULONG): CK_KEY_TYPE;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE2} inline; {$endif}
 function ToText(kt: CK_KEY_TYPE): PShortString; overload;
 
 type
@@ -676,6 +677,7 @@ type
   // - stored as a CK_ULONG field but NOT FOLLOWING ord(CK_MECHANISM_TYPE) - use
   // ToULONG/MECHANISM_TYPE() function wrappers for any conversion
   CK_MECHANISM_TYPE = (
+    CKM_none,
     CKM_RSA_PKCS_KEY_PAIR_GEN,
     CKM_RSA_PKCS,
     CKM_RSA_9796,
@@ -2053,11 +2055,14 @@ type
 
     /// enter public session by Slot ID, R/O by default
     // - only a single session can be opened at once in a TPkcs11 instance
+    // - session is read-only unless rw is set to true
     // - raise EPkcs11 on error, or set Safe.Lock on success: caller should
     // always use a "Open(...); try ... finally Close end" pattern
     procedure Open(slot: TPkcs11SlotID; rw: boolean = false); overload;
     /// enter user session by Slot ID, R/O and for a non-Supervisor user by default
     // - only a single session can be opened at once in a TPkcs11 instance
+    // - session is read-only unless rw is set to true
+    // - session is for a regular user, unless so is set to true for Supervisor
     // - raise EPkcs11 on error, or set Safe.Lock on success: caller should
     // always use a "Open(...); try ... finally Close end" pattern
     procedure Open(slot: TPkcs11SlotID; const pin: RawUtf8;
@@ -2239,14 +2244,16 @@ end;
 
 function ToULONG(kt: CK_KEY_TYPE): CK_ULONG;
 begin
-  if kt = CKK_VENDOR_DEFINED then
+  if (kt = CKK_none) or
+     (kt = CKK_VENDOR_DEFINED) then
     result := CKK_VENDOR_DEFINED_ULONG
   else
-    result := ord(kt);
+    result := ord(kt) - 1;
 end;
 
 function KEY_TYPE(uu: CK_ULONG): CK_KEY_TYPE;
 begin
+  inc(uu);
   if uu >= CK_ULONG(CKK_VENDOR_DEFINED) then
     result := CKK_VENDOR_DEFINED
   else
@@ -2428,7 +2435,9 @@ end;
 
 const
   // warning: MECHANISM_TYPE() expects this array to be sorted
-  CKM_WORD: array[CK_MECHANISM_TYPE] of word = (
+  // - excude low(CK_MECHANISM_TYPE) = CKM_none and high() = CKM_VENDOR_DEFINED
+  CKM_WORD: array[succ(low(CK_MECHANISM_TYPE)) ..
+                  pred(high(CK_MECHANISM_TYPE))] of word = (
     $0000, // CKM_RSA_PKCS_KEY_PAIR_GEN
     $0001, // CKM_RSA_PKCS
     $0002, // CKM_RSA_9796
@@ -2845,12 +2854,13 @@ const
     $402A, // CKM_HKDF_DERIVE
     $402B, // CKM_HKDF_DATA
     $402C, // CKM_HKDF_KEY_GEN
-    $402D, // CKM_SALSA20_KEY_GEN
-    $FFFF);// CKM_VENDOR_DEFINED = $80000000 > 16-bit word
+    $402D); // CKM_SALSA20_KEY_GEN
+    // exclude CKM_VENDOR_DEFINED = $80000000 > 16-bit word
 
 function ToULONG(mt: CK_MECHANISM_TYPE): CK_MECHANISM_TYPE_ULONG;
 begin
-  if mt = CKM_VENDOR_DEFINED then
+  if (mt = CKM_NONE) or
+     (mt = CKM_VENDOR_DEFINED) then
     result := CKM_VENDOR_DEFINED_ULONG // = $80000000
   else
     result := CKM_WORD[mt];
@@ -2865,7 +2875,7 @@ begin
     exit;
   i := FastFindWordSorted(@CKM_WORD, length(CKM_WORD) - 1, uu); // O(log(n))
   if i >= 0 then
-    result := CK_MECHANISM_TYPE(i);
+    result := CK_MECHANISM_TYPE(i + 1); // + 1 for CKM_none
 end;
 
 function ToText(rv: CK_RV): PShortString;
@@ -3626,8 +3636,7 @@ begin
   end;
 end;
 
-procedure TPkcs11.Open(slot: TPkcs11SlotID; const pin: RawUtf8;
-  rw: boolean; so: boolean);
+procedure TPkcs11.Open(slot: TPkcs11SlotID; const pin: RawUtf8; rw, so: boolean);
 const
   FLAGS: array[boolean] of CK_USER_TYPE = (CKU_USER, CKU_SO);
 begin

@@ -3270,22 +3270,24 @@ var
   t: CK_MECHANISM_TYPE;
   r: CK_RV;
 begin
-  Check(1 shl ord(CKF_ERROR_STATE) = $01000000);
-  Check(ord(CKK_SHA512_T_HMAC) = $00000045);
-  Check(cardinal(1 shl ord(CKF_EXTENSION)) = $80000000);
+  CheckEqual(1 shl ord(CKF_ERROR_STATE), $01000000);
+  CheckEqual(ord(CKK_SHA512_T_HMAC), $00000045 + 1);
+  CheckEqual(cardinal(1 shl ord(CKF_EXTENSION)), $80000000);
   for o := low(o) to high(o) do
     Check(OBJECT_CLASS(ToULONG(o)) = o);
   for h := low(h) to high(h) do
     Check(HW_FEATURE_TYPE(ToULONG(h)) = h);
-  for k := low(k) to high(k) do
+  Check(KEY_TYPE(ToULONG(CKK_none)) = CKK_VENDOR_DEFINED);
+  for k := succ(low(k)) to high(k) do
     Check(KEY_TYPE(ToULONG(k)) = k);
   for c := low(c) to high(c) do
     Check(CERTIFICATE_TYPE(ToULONG(c)) = c);
   for a := low(a) to high(a) do
     Check(ATTRIBUTE_TYPE(ToULONG(a)) = a);
-  for t := low(t) to pred(high(t)) do
+  for t := succ(low(t)) to pred(high(t)) do
     Check(ToULONG(succ(t)) > ToULONG(t));
-  for t := low(t) to high(t) do
+  Check(MECHANISM_TYPE(ToULONG(CKM_none)) = CKM_VENDOR_DEFINED);
+  for t := succ(low(t)) to high(t) do
     Check(MECHANISM_TYPE(ToULONG(t)) = t);
   for r := low(r) to pred(high(r)) do
     Check(ToULONG(succ(r)) > ToULONG(r));
