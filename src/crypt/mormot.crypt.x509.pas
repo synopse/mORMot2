@@ -3486,7 +3486,7 @@ begin
   if Assigned(Authority) then
   begin
     a := pointer(Authority.Instance);
-    result := PClass(a)^.InheritsFrom(TCryptCertX509Only) and
+    result := a.InheritsFrom(TCryptCertX509Only) and
       // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
       fX509.IsAuthorizedBy(a.fX509);
   end
@@ -3502,7 +3502,7 @@ begin
   if Assigned(Another) then
   begin
     a := pointer(Another.Instance);
-    if PClass(a)^.InheritsFrom(TCryptCertX509Only) then
+    if a.InheritsFrom(TCryptCertX509Only) then
       result := fX509.Compare(a.fX509, Method)
     else
       result := 1
@@ -3587,7 +3587,7 @@ begin
   auth := nil;
   tempauth := nil;
   if Authority <> nil then
-    if PClass(Authority.Instance)^.InheritsFrom(TCryptCertX509Only) then
+    if Authority.Instance.InheritsFrom(TCryptCertX509Only) then
       auth := Authority.Handle
     else
     begin
@@ -3649,7 +3649,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
-    function VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
+    function VerifyAuthority(const Authority: ICryptCert): TCryptCert;
     procedure GeneratePrivateKey;
   public
     procedure Clear; override;
@@ -3758,18 +3758,15 @@ begin
   result := TCryptCertAlgoX509(fCryptAlgo).fXka;
 end;
 
-function TCryptCertX509.VerifyAuthority(const Authority: ICryptCert): TCryptCertX509;
+function TCryptCertX509.VerifyAuthority(const Authority: ICryptCert): TCryptCert;
 begin
   if (fX509 <> nil) or
      HasPrivateSecret then
     RaiseErrorGenerate('duplicated call');
-  result := self; // self-signed
+  result := self; // self-signed if no Authority supplied
   if Authority <> nil then
     if Authority.HasPrivateSecret then
-      if PClass(Authority.Instance)^ = PClass(self)^ then
-        result := TCryptCertX509(Authority.Instance)
-      else
-        RaiseErrorGenerate('Authority is not a TCryptCertX509')
+      result := Authority.Instance // any TCryptCert class would do
     else
       RaiseErrorGenerate('Authority has no private key to sign');
 end;
@@ -3791,7 +3788,7 @@ function TCryptCertX509.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 var
-  auth: TCryptCertX509;
+  auth: TCryptCert; // may be self
 begin
   if fX509 <> nil then
     RaiseErrorGenerate('duplicated call');
@@ -3821,7 +3818,7 @@ end;
 function TCryptCertX509.GenerateFromCsr(const Csr: RawByteString;
   const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert;
 var
-  auth: TCryptCertX509;
+  auth: TCryptCert; // may be self
 begin
   result := nil;
   if fX509 <> nil then
@@ -3981,10 +3978,10 @@ begin
     a := Authority.Instance; // may be self
     u := cuKeyCertSign;
     if a = self then
-      u := GetFirstUsage(GetUsage) // anyone would let Sign() pass below
+      u := GetFirstUsage(GetUsage) // any usage to let Sign() pass below
     else if not (cuKeyCertSign in a.GetUsage) then
-      RaiseError('Sign: % has no cuKeyCertSign', [a]);
-    // assign the Issuer information
+      RaiseError('Sign: % Authority has no cuKeyCertSign', [a]);
+    // assign the Issuer information (from any TCryptCert kind of class)
     if not fX509.Signed.Issuer.FromAsn(a.GetSubject('DER')) then
       RaiseError('Sign: invalid % Authority DER', [a]);
     if a <> self then // same as OpenSSL: no AKID for for self-signed certs
@@ -3994,7 +3991,7 @@ begin
     fX509.Signed.Signature := Xsa;
     fX509.fSignatureValue := a.Sign(fX509.Signed.ToDer, u);
     if fX509.fSignatureValue = '' then
-      RaiseError('Sign: % authority failed its digital signature', [a]);
+      RaiseError('Sign: % Authority failed its digital signature', [a]);
     fX509.fSignatureAlgorithm := Xsa;
     fX509.ComputeCachedDer;
   end
@@ -4019,7 +4016,7 @@ begin
      (fPrivateKey <> nil) and
      (cuKeyAgreement in fX509.Usages) and
      Assigned(pub) and
-     (PClass(pub.Instance)^ = PClass(self)^) and
+     pub.Instance.InheritsFrom(TCryptCertX509Only) and
      (pub.Handle <> nil) and
      (cuKeyAgreement in TX509(pub.Handle).Usages) then
     result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
@@ -4035,9 +4032,9 @@ end;
 
 { those methods are defined here for proper TCryptCertX509 knowledge }
 
-// retrieve a TCryptCertX509 compatible authority instance
-function ToCryptCertX509(const Authority: ICryptCert; Content: TCryptCertContent;
-  var TempCryptCert: ICryptCert): TCryptCertX509;
+// retrieve an authority as TCryptCertX509 instance
+function AuthToCryptCertX509(const Authority: ICryptCert;
+  Content: TCryptCertContent; var TempCryptCert: ICryptCert): TCryptCertX509;
 var
   xsa: TXSignatureAlgorithm;
   auth: TCryptCertX509;
@@ -4049,9 +4046,11 @@ begin
     exit;
   auth := pointer(Authority.Instance);
   if auth.InheritsFrom(TCryptCertX509) then
+    // quickly return the ICryptCert Authority of the expected type
     result := auth
   else
   try
+    // create a new temporary TCryptCertX509 instance from this Authority PEM
     pem := Authority.Save(Content, '', ccfPem); // e.g. a TCryptCertAlgoOpenSsl
     if pem = '' then
       exit;
@@ -4074,7 +4073,7 @@ begin
      Authority.HasPrivateSecret then
   begin
     // retrieve a compatible authority instance
-    auth := ToCryptCertX509(Authority, cccCertWithPrivateKey, temp);
+    auth := AuthToCryptCertX509(Authority, cccCertWithPrivateKey, temp);
     if auth = nil then
       raise EX509.CreateUtf8('%.Sign: unsupported Authority % %',
         [self, Authority.Instance, ToText(Authority.AsymAlgo)^]);
@@ -4113,8 +4112,8 @@ begin
      Assigned(Authority) and
      (Authority.Handle <> nil) then
   begin
-    // use a compatible authority instance for digitial signature verification
-    auth := ToCryptCertX509(Authority, cccCertOnly, temp);
+    // use a compatible authority instance for digital signature verification
+    auth := AuthToCryptCertX509(Authority, cccCertOnly, temp);
     if auth <> nil then
       result := Verify(auth.fX509, IgnoreError, TimeUtc);
   end;
@@ -4274,14 +4273,14 @@ begin
   if not Assigned(cert) then
     exit;
   x := cert.Instance;
-  if PClass(x)^ = TCryptCertX509 then
-    result := IsRevokedX509(TCryptCertX509(x).fX509);
+  if x.InheritsFrom(TCryptCertX509Only) then
+    result := IsRevokedX509(TCryptCertX509Only(x).fX509);
 end;
 
 function TCryptStoreX509.Add(const cert: ICryptCert): boolean;
 begin
   result := (cert <> nil) and
-            (PClass(cert.Instance)^ = TCryptCertX509) and
+            cert.Instance.InheritsFrom(TCryptCertX509Only) and
             fTrust.Add(cert);
 end;
 
@@ -4377,9 +4376,9 @@ begin
     exit;
   c := cert.Instance;
   if (c = nil) or
-     (PClass(c)^ <> TCryptCertX509) then
+     not c.InheritsFrom(TCryptCertX509Only) then
     exit;
-  x := TCryptCertX509(c).fX509;
+  x := TCryptCertX509Only(c).fX509;
   if x = nil then
     exit;
   result := cvInvalidDate;
