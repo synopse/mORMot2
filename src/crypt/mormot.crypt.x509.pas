@@ -3634,6 +3634,7 @@ type
   public
     constructor Create(xsa: TXSignatureAlgorithm;
       const suffix: RawUtf8); reintroduce; overload;
+    // TCryptCertAlgo methods
     function New: ICryptCert; override; // = TCryptCertX509.Create(self)
     function FromHandle(Handle: pointer): ICryptCert; override;
     function CreateSelfSignedCsr(const Subjects: RawUtf8;
@@ -3646,9 +3647,9 @@ type
   TCryptCertX509 = class(TCryptCertX509Only)
   protected
     fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
-    function Xsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
+    function AlgoXsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
-    function Xka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
+    function AlgoXka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
     function VerifyAuthority(const Authority: ICryptCert): TCryptCert;
     procedure GeneratePrivateKey;
@@ -3749,12 +3750,12 @@ begin
   fPrivateKey := nil;
 end;
 
-function TCryptCertX509.Xsa: TXSignatureAlgorithm;
+function TCryptCertX509.AlgoXsa: TXSignatureAlgorithm;
 begin
   result := TCryptCertAlgoX509(fCryptAlgo).fXsa;
 end;
 
-function TCryptCertX509.Xka: TXPublicKeyAlgorithm;
+function TCryptCertX509.AlgoXka: TXPublicKeyAlgorithm;
 begin
   result := TCryptCertAlgoX509(fCryptAlgo).fXka;
 end;
@@ -3776,11 +3777,11 @@ procedure TCryptCertX509.GeneratePrivateKey;
 begin
   if HasPrivateSecret then
     RaiseErrorGenerate('duplicated GeneratePrivateKey');
-  fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
-  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[Xka]);
+  fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create;
+  fX509.Signed.SubjectPublicKey := fPrivateKey.Generate(XKA_TO_CAA[AlgoXka]);
   if fX509.Signed.SubjectPublicKey = '' then
     RaiseErrorGenerate('GeneratePrivateKey failed');
-  fX509.Signed.SubjectPublicKeyAlgorithm := Xka;
+  fX509.Signed.SubjectPublicKeyAlgorithm := AlgoXka;
   fX509.Signed.SubjectPublicKeyBits :=
     X509PubKeyBits(fX509.Signed.SubjectPublicKey);
 end;
@@ -3858,9 +3859,9 @@ begin
         begin
           // may use mormot.core.secure encryption, not standard PKCS#8
           der := PemToDer(Saved); // see also TCryptPrivateKey.Load
-          fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create; // replace
+          fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create; // replace
           if fPrivateKey.Load(
-               XKA_TO_CKA[Xka], fX509.PublicKey, der, PrivatePassword) then
+               XKA_TO_CKA[AlgoXka], fX509.PublicKey, der, PrivatePassword) then
             result := true
           else
             fPrivateKey := nil;
@@ -3947,8 +3948,8 @@ begin
   if saved <> '' then
   begin
     // note: SetPrivateKey() may be called without a public key yet
-    fPrivateKey := CryptPrivateKey[XKA_TO_CKA[Xka]].Create;
-    if fPrivateKey.Load(XKA_TO_CKA[Xka], fX509.PublicKey, saved, '') then
+    fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create;
+    if fPrivateKey.Load(XKA_TO_CKA[AlgoXka], fX509.PublicKey, saved, '') then
       result := true
     else
       fPrivateKey := nil;
@@ -3961,7 +3962,7 @@ begin
   if HasPrivateSecret and
      (fX509 <> nil) and
      (Usage in fX509.Usages) then
-    result := fPrivateKey.Sign(XSA_TO_CAA[Xsa], Data, Len)
+    result := fPrivateKey.Sign(XSA_TO_CAA[AlgoXsa], Data, Len)
   else
     result := '';
 end;
@@ -3989,11 +3990,11 @@ begin
       fX509.Signed.Extension[xeAuthorityKeyIdentifier] := a.GetSubjectKey;
     // compute the digital signature
     fX509.AfterModified;
-    fX509.Signed.Signature := Xsa;
+    fX509.Signed.Signature := AlgoXsa;
     fX509.fSignatureValue := a.Sign(fX509.Signed.ToDer, u);
     if fX509.fSignatureValue = '' then
       RaiseError('Sign: % Authority failed its digital signature', [a]);
-    fX509.fSignatureAlgorithm := Xsa;
+    fX509.fSignatureAlgorithm := AlgoXsa;
     fX509.ComputeCachedDer;
   end
   else
@@ -4093,10 +4094,10 @@ begin
     SetCrlNumber(AuthorityCrlNumber);
     // compute the digital signature
     AfterModified;
-    Signed.Signature := auth.Xsa;
+    Signed.Signature := auth.AlgoXsa;
     fSignatureValue := auth.fPrivateKey.Sign(
-                         XSA_TO_CAA[auth.Xsa], Signed.ToDer);
-    fSignatureAlgorithm := auth.Xsa;
+                         XSA_TO_CAA[auth.AlgoXsa], Signed.ToDer);
+    fSignatureAlgorithm := auth.AlgoXsa;
   end
   else
     raise EX509.CreateUtf8('%.Sign: not a CA', [self]);

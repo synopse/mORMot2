@@ -2228,7 +2228,7 @@ type
   protected
     fLastLoadFromFileName: TFileName;
     fIndexer: TObject; // a TCryptCertAbstractList owner for EnsureCanWrite
-    procedure RaiseError(const Msg: shortstring); overload;
+    procedure RaiseError(const Msg: shortstring); overload; virtual;
     procedure RaiseError(const Fmt: RawUtf8; const Args: array of const); overload;
     procedure RaiseErrorGenerate(const api: ShortString);
     procedure EnsureCanWrite(const Context: shortstring); virtual;
@@ -2269,8 +2269,7 @@ type
     function LoadFromFile(const Source: TFileName; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; virtual;
     function GetFileName: TFileName; virtual;
-     function Save(Content: TCryptCertContent;
-      const PrivatePassword: SpiUtf8;
+    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; virtual;
     procedure SaveToFile(const Dest: TFileName; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8; Format: TCryptCertFormat);

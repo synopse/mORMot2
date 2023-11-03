@@ -1799,6 +1799,11 @@ type
   // - 32-bit is enough, but raw/in-memory slots CK_SLOT_ID may be 64-bit
   TPkcs11SlotID = cardinal;
 
+  /// the identifier of a Storage Object (from CKA_ID), as hexadecimal
+  TPkcs11ObjectID = RawUtf8;
+  /// several identifiers of a Storage Object (from CKA_ID), as hexadecimal
+  TPkcs11ObjectIDs = TRawUtf8DynArray;
+
   /// map several CK_SLOT_ID but with a fixed 32-bit size
   TPkcs11SlotIDDynArray = array of TPkcs11SlotID;
 
@@ -1871,9 +1876,6 @@ type
   /// set of flags for PKCS#11 Storage Object
   // - see AddToAttributes() wrapper function to convert them to attributes
   TPkcs11ObjectStorages = set of TPkcs11ObjectStorage;
-
-  /// the identifier of a Storage Object (from CKA_ID), as hexadecimal
-  TPkcs11ObjectID = RawUtf8;
 
   /// high-level information about one PKCS#11 Object
   // - can be (un) serialized as binary or JSON if needed
@@ -2017,14 +2019,10 @@ type
   public
     /// try to load a PKCS#11 library, raising EPkcs11 on failure
     // - is just a wrapper around inherited Create and Load() + raise EPkcs11
-    // - note that Load() could wait several seconds  - use plain Create for
-    // a lazy/quick initialization, then make "if not Loaded then Load(...)"
     constructor Create(const aLibraryName: TFileName); reintroduce; overload;
     /// finalize this instance
     destructor Destroy; override;
     /// try to load a PKCS#11 library, returning true on success
-    // - this method takes several seconds, because it will connect to the
-    // actual peripheral, and communicate with it to retrieve its information
     function Load(const aLibraryName: TFileName): boolean;
     /// unload a PKCS#11 previously loaded library
     procedure UnLoad;
@@ -2033,9 +2031,13 @@ type
       {$ifdef HASINLINE} inline; {$endif}
 
     /// get information about this instance in Slots[] and Tokens[] properties
+    // - this method could take several seconds, because it will connect to the
+    // actual peripheral, and communicate with it to retrieve its information
     procedure RetrieveConfig(IncludeVoidSlots: boolean = false;
       IncludeMechanisms: boolean = false);
     /// retrieve the list of Void slots
+    // - this method could take several seconds, because it will connect to the
+    // actual peripheral, and communicate with it to retrieve its information
     function RetrieveVoidSlots: TPkcs11SlotIDDynArray;
     /// update information in Slots[] and Tokens[] about a single slot
     // - as called e.g. by RetrieveConfig() and also function WaitForSlotEvent()
