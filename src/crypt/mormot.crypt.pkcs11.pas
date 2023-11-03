@@ -71,6 +71,9 @@ type
     // - you can refine the expected hash algorithm used for Verify/Sign
     // - any key algorithm switch (e.g. from RSA to ECC) would fail
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
+    /// set the PIN code to be used to access the private key object
+    // - same as Load('', cccPrivateKeyOnly, PinCode)
+    procedure SetPin(const PinCode: RawUtf8);
     /// true if was filled from a true CKO_CERTIFICATE instance
     function IsX509: boolean;
     /// the associated PKCS#11 library instance
@@ -121,6 +124,8 @@ type
     // - return the first certificate matching a given value
     function FindOne(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCertPkcs11;
+    /// search the internal list per ICryptCertPkcs11.StorageLabel value
+    function FindByLabel(const Value: RawUtf8): ICryptCertPkcs11;
     // TCryptCertAlgo methods are mostly unsupported
     function New: ICryptCert; override;
     function FromHandle(Handle: pointer): ICryptCert; override;
@@ -158,10 +163,12 @@ type
     // - should supply all aObjects[] and aValues[] on this SlotID and
     // a given CKA_ID to filter
     // - if no session is currently opened, no CKO_PRIVATE_KEY may be available:
-    // call later Load('', cccPrivateKeyOnly) and PIN as PrivatePassword
+    // call later SetPin() or Load('', cccPrivateKeyOnly, PIN)
     constructor Create(aOwner: TCryptCertAlgoPkcs11; aSlotID: TPkcs11SlotID;
       const aObjects: TPkcs11ObjectDynArray; const aValues: TRawByteStringDynArray;
       const aStorageID: TPkcs11ObjectID); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
     // ICryptCert methods
     function AsymAlgo: TCryptAsymAlgo; override;
     function CertAlgo: TCryptCertAlgo; override;
@@ -182,6 +189,7 @@ type
       const Cipher: RawUtf8): RawByteString; override;
     // ICryptCertPkcs11 methods
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
+    procedure SetPin(const PinCode: RawUtf8);
     function IsX509: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     function Engine: TPkcs11;
@@ -337,6 +345,21 @@ begin
     result := nil
   else
     result := res[0];
+end;
+
+function TCryptCertAlgoPkcs11.FindByLabel(const Value: RawUtf8): ICryptCertPkcs11;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if not fConfigRetrieved then
+    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+  for i := 0 to high(fCert) do
+    if IdemPropNameU(fCert[i].StorageLabel, Value) then
+    begin
+      result := fCert[i];
+      break;
+    end;
 end;
 
 procedure TCryptCertAlgoPkcs11.BackgroundRetrieveConfig(Sender: TObject);
@@ -521,6 +544,13 @@ begin
   fSecret := ToUtf8(RandomGuid); // anti-forensic temp salt
 end;
 
+destructor TCryptCertPkcs11.Destroy;
+begin
+  FillZero(fSecret);
+  FillZero(fPin); // paranoid
+  inherited Destroy;
+end;
+
 // ICryptCert methods
 
 function TCryptCertPkcs11.AsymAlgo: TCryptAsymAlgo;
@@ -545,12 +575,10 @@ end;
 function TCryptCertPkcs11.Load(const Saved: RawByteString;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 begin
-  result := false;
-  if (Saved <> '') or
-     (Content <> cccPrivateKeyOnly) then
-    exit;
-  fPin := CryptDataForCurrentUser(PrivatePassword, fSecret, true);
-  result := true;
+  result := (Saved = '') and
+            (Content = cccPrivateKeyOnly);
+  if result then
+    SetPin(PrivatePassword);
 end;
 
 function TCryptCertPkcs11.Save(Content: TCryptCertContent;
@@ -577,7 +605,7 @@ end;
 
 function TCryptCertPkcs11.HasPrivateSecret: boolean;
 begin
-  result := fPin <> '';
+  result := fPin <> ''; // SetPin() is enough
 end;
 
 function TCryptCertPkcs11.GetPrivateKey: RawByteString;
@@ -617,6 +645,11 @@ begin
     RaiseError('SetAsymAlgo(%): incompatible with the % public key',
       [ToText(caa)^, ToText(CAA_CKA[fCaa])^]);
   fCaa := caa;
+end;
+
+procedure TCryptCertPkcs11.SetPin(const PinCode: RawUtf8);
+begin
+  fPin := CryptDataForCurrentUser(PinCode, fSecret, {encrypt=}true);
 end;
 
 function TCryptCertPkcs11.IsX509: boolean;
