@@ -3405,8 +3405,7 @@ function TCryptPrivateKeyRsa.SignDigest(const Dig: THash512Rec; DigLen: integer;
   DigAlgo: TCryptAsymAlgo): RawByteString;
 begin
   result := '';
-  if (self <> nil) and
-     (CAA_CKA[DigAlgo] = fKeyAlgo) and
+  if (CAA_CKA[DigAlgo] = fKeyAlgo) and
      (HASH_SIZE[CAA_HF[DigAlgo]] = DigLen) then
     case fKeyAlgo of
       ckaRsa,

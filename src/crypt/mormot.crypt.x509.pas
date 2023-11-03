@@ -1134,12 +1134,13 @@ procedure RegisterX509;
 
 type
   /// abstract parent class implementing ICryptCert using our TX509 class
-  // - will store a certificate as TX509 but no private key
+  // - will store a certificate as TX509 and an abstract ICryptPrivateKey
   // - is the parent of both TCryptCertX509 in this unit and TCryptCertPkcs11
   // in mormot.crypt.pkcs11.pas
-  TCryptCertX509Only = class(TCryptCert)
+  TCryptCertX509Abstract = class(TCryptCert)
   protected
     fX509: TX509;
+    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
     // overriden to use a faster search with no temporary memory allocation
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
       Method: TCryptCertComparer; Count, MaxCount: integer;
@@ -1168,6 +1169,8 @@ type
     function GetSignatureInfo: RawUtf8; override;
     function GetDigest(Algo: THashAlgo): RawUtf8; override;
     function GetPublicKey: RawByteString; override;
+    function HasPrivateSecret: boolean; override;
+    function GetPrivateKey: RawByteString; override;
     function Handle: pointer; override; // a TX509 instance
     function GetKeyParams(out x, y: RawByteString): boolean; override;
     function Verify(Sign, Data: pointer; SignLen, DataLen: integer;
@@ -1176,6 +1179,10 @@ type
       TimeUtc: TDateTime): TCryptCertValidity; override;
     function Encrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    function SharedSecret(const pub: ICryptCert): RawByteString; override;
+    function PrivateKeyHandle: pointer; override;
     property X509: TX509
       read fX509;
   end;
@@ -3318,20 +3325,21 @@ begin
 end;
 
 
-{ TCryptCertX509Only }
+{ TCryptCertX509Abstract }
 
-destructor TCryptCertX509Only.Destroy;
+destructor TCryptCertX509Abstract.Destroy;
 begin
   inherited Destroy;
   Clear;
 end;
 
-procedure TCryptCertX509Only.Clear;
+procedure TCryptCertX509Abstract.Clear;
 begin
   FreeAndNil(fX509);
+  fPrivateKey := nil;
 end;
 
-class procedure TCryptCertX509Only.InternalFind(Cert: PICryptCert;
+class procedure TCryptCertX509Abstract.InternalFind(Cert: PICryptCert;
   const Value: RawByteString; Method: TCryptCertComparer;
   Count, MaxCount: integer; out Chain: ICryptCerts);
 var
@@ -3408,7 +3416,7 @@ begin
     DynArrayFakeLength(Chain, res);
 end;
 
-function TCryptCertX509Only.GetSerial: RawUtf8;
+function TCryptCertX509Abstract.GetSerial: RawUtf8;
 begin
   if fX509 <> nil then
     result := fX509.Signed.SerialNumberHex
@@ -3416,12 +3424,12 @@ begin
     result := '';
 end;
 
-function TCryptCertX509Only.GetSubjectName: RawUtf8;
+function TCryptCertX509Abstract.GetSubjectName: RawUtf8;
 begin
   result := fX509.GetSubjectDN;
 end;
 
-function TCryptCertX509Only.GetSubject(const Rdn: RawUtf8): RawUtf8;
+function TCryptCertX509Abstract.GetSubject(const Rdn: RawUtf8): RawUtf8;
 begin
   result := '';
   if (Rdn = '') or
@@ -3434,17 +3442,17 @@ begin
     result := GetFirstCsvItem(fX509.Extension[xeSubjectAlternativeName]);
 end;
 
-function TCryptCertX509Only.GetSubjects: TRawUtf8DynArray;
+function TCryptCertX509Abstract.GetSubjects: TRawUtf8DynArray;
 begin
   result := fX509.SubjectAlternativeNames;
 end;
 
-function TCryptCertX509Only.GetIssuerName: RawUtf8;
+function TCryptCertX509Abstract.GetIssuerName: RawUtf8;
 begin
   result := fX509.GetIssuerDN;
 end;
 
-function TCryptCertX509Only.GetIssuer(const Rdn: RawUtf8): RawUtf8;
+function TCryptCertX509Abstract.GetIssuer(const Rdn: RawUtf8): RawUtf8;
 begin
   if (Rdn = '') or
      (fX509 = nil) then
@@ -3453,12 +3461,12 @@ begin
     result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
 end;
 
-function TCryptCertX509Only.GetIssuers: TRawUtf8DynArray;
+function TCryptCertX509Abstract.GetIssuers: TRawUtf8DynArray;
 begin
   result := fX509.IssuerAlternativeNames;
 end;
 
-function TCryptCertX509Only.GetSubjectKey: RawUtf8;
+function TCryptCertX509Abstract.GetSubjectKey: RawUtf8;
 begin
   if fX509 = nil then
     result := ''
@@ -3466,7 +3474,7 @@ begin
     result := fX509.Signed.Extension[xeSubjectKeyIdentifier];
 end;
 
-function TCryptCertX509Only.GetAuthorityKey: RawUtf8;
+function TCryptCertX509Abstract.GetAuthorityKey: RawUtf8;
 begin
   if fX509 = nil then
     result := ''
@@ -3474,20 +3482,20 @@ begin
     result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
 end;
 
-function TCryptCertX509Only.IsSelfSigned: boolean;
+function TCryptCertX509Abstract.IsSelfSigned: boolean;
 begin
   result := (fX509 <> nil) and
             fX509.IsSelfSigned;
 end;
 
-function TCryptCertX509Only.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+function TCryptCertX509Abstract.IsAuthorizedBy(const Authority: ICryptCert): boolean;
 var
-  a: TCryptCertX509Only;
+  a: TCryptCertX509Abstract;
 begin
   if Assigned(Authority) then
   begin
     a := pointer(Authority.Instance);
-    result := a.InheritsFrom(TCryptCertX509Only) and
+    result := a.InheritsFrom(TCryptCertX509Abstract) and
       // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
       fX509.IsAuthorizedBy(a.fX509);
   end
@@ -3495,15 +3503,15 @@ begin
     result := false;
 end;
 
-function TCryptCertX509Only.Compare(const Another: ICryptCert;
+function TCryptCertX509Abstract.Compare(const Another: ICryptCert;
   Method: TCryptCertComparer): integer;
 var
-  a: TCryptCertX509Only;
+  a: TCryptCertX509Abstract;
 begin
   if Assigned(Another) then
   begin
     a := pointer(Another.Instance);
-    if a.InheritsFrom(TCryptCertX509Only) then
+    if a.InheritsFrom(TCryptCertX509Abstract) then
       result := fX509.Compare(a.fX509, Method)
     else
       result := 1
@@ -3512,7 +3520,7 @@ begin
     result := 1;
 end;
 
-function TCryptCertX509Only.GetNotBefore: TDateTime;
+function TCryptCertX509Abstract.GetNotBefore: TDateTime;
 begin
   if fX509 = nil then
     result := 0
@@ -3520,7 +3528,7 @@ begin
     result := fX509.Signed.NotBefore;
 end;
 
-function TCryptCertX509Only.GetNotAfter: TDateTime;
+function TCryptCertX509Abstract.GetNotAfter: TDateTime;
 begin
   if fX509 = nil then
     result := 0
@@ -3528,13 +3536,13 @@ begin
     result := fX509.Signed.NotAfter;
 end;
 
-function TCryptCertX509Only.IsValidDate(date: TDateTime): boolean;
+function TCryptCertX509Abstract.IsValidDate(date: TDateTime): boolean;
 begin
   result := (fX509 <> nil) and
             fX509.Signed.IsValidDate(date);
 end;
 
-function TCryptCertX509Only.GetUsage: TCryptCertUsages;
+function TCryptCertX509Abstract.GetUsage: TCryptCertUsages;
 begin
   if fX509 = nil then
     result := []
@@ -3542,12 +3550,12 @@ begin
     result := fX509.Signed.CertUsages;
 end;
 
-function TCryptCertX509Only.GetPeerInfo: RawUtf8;
+function TCryptCertX509Abstract.GetPeerInfo: RawUtf8;
 begin
   result := fX509.PeerInfo;
 end;
 
-function TCryptCertX509Only.GetSignatureInfo: RawUtf8;
+function TCryptCertX509Abstract.GetSignatureInfo: RawUtf8;
 var
   bits: integer;
 begin
@@ -3558,12 +3566,12 @@ begin
     FormatUtf8('% %', [bits, XSA_TXT[fX509.SignatureAlgorithm]], result);
 end;
 
-function TCryptCertX509Only.GetDigest(Algo: THashAlgo): RawUtf8;
+function TCryptCertX509Abstract.GetDigest(Algo: THashAlgo): RawUtf8;
 begin
   result := fX509.FingerPrint(Algo);
 end;
 
-function TCryptCertX509Only.GetPublicKey: RawByteString;
+function TCryptCertX509Abstract.GetPublicKey: RawByteString;
 begin
   if fX509 = nil then
     result := ''
@@ -3571,13 +3579,26 @@ begin
     result := fX509.Signed.SubjectPublicKey;
 end;
 
-function TCryptCertX509Only.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
+function TCryptCertX509Abstract.HasPrivateSecret: boolean;
+begin
+  result := fPrivateKey <> nil;
+end;
+
+function TCryptCertX509Abstract.GetPrivateKey: RawByteString;
+begin
+  if fPrivateKey = nil then
+    result := ''
+  else
+    result := fPrivateKey.ToDer;
+end;
+
+function TCryptCertX509Abstract.Verify(Sign, Data: pointer; SignLen, DataLen: integer;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 begin
   result := fX509.Verify(Sign, Data, SignLen, DataLen, IgnoreError, TimeUtc);
 end;
 
-function TCryptCertX509Only.Verify(const Authority: ICryptCert;
+function TCryptCertX509Abstract.Verify(const Authority: ICryptCert;
   IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
 var
   auth, tempauth: TX509;
@@ -3588,7 +3609,7 @@ begin
   auth := nil;
   tempauth := nil;
   if Authority <> nil then
-    if Authority.Instance.InheritsFrom(TCryptCertX509Only) then
+    if Authority.Instance.InheritsFrom(TCryptCertX509Abstract) then
       auth := Authority.Handle
     else
     begin
@@ -3602,7 +3623,7 @@ begin
   tempauth.Free;
 end;
 
-function TCryptCertX509Only.Encrypt(const Message: RawByteString;
+function TCryptCertX509Abstract.Encrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
   if (fX509 <> nil) and
@@ -3612,12 +3633,42 @@ begin
     result := '';
 end;
 
-function TCryptCertX509Only.Handle: pointer;
+function TCryptCertX509Abstract.Decrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  if (fX509 <> nil) and
+     (fPrivateKey <> nil) and
+     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+    result := fPrivateKey.Open(Message, Cipher)
+  else
+    result := '';
+end;
+
+function TCryptCertX509Abstract.SharedSecret(const pub: ICryptCert): RawByteString;
+begin
+  if (fX509 <> nil) and
+     (fPrivateKey <> nil) and
+     (cuKeyAgreement in fX509.Usages) and
+     Assigned(pub) and
+     pub.Instance.InheritsFrom(TCryptCertX509Abstract) and
+     (pub.Handle <> nil) and
+     (cuKeyAgreement in TX509(pub.Handle).Usages) then
+    result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
+  else
+    result := '';
+end;
+
+function TCryptCertX509Abstract.PrivateKeyHandle: pointer;
+begin
+  result := pointer(fPrivateKey);
+end;
+
+function TCryptCertX509Abstract.Handle: pointer;
 begin
   result := fX509;
 end;
 
-function TCryptCertX509Only.GetKeyParams(out x, y: RawByteString): boolean;
+function TCryptCertX509Abstract.GetKeyParams(out x, y: RawByteString): boolean;
 begin
   result := fX509.PublicKey.GetParams(x, y);
 end;
@@ -3644,9 +3695,8 @@ type
 
   /// class implementing ICryptCert using our TX509 class
   // - will store a certificate as TX509 and/or a ICryptPrivateKey instance
-  TCryptCertX509 = class(TCryptCertX509Only)
+  TCryptCertX509 = class(TCryptCertX509Abstract)
   protected
-    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
     function AlgoXsa: TXSignatureAlgorithm; // from TCryptCertAlgoX509
       {$ifdef HASINLINE} inline; {$endif}
     function AlgoXka: TXPublicKeyAlgorithm; // from TCryptCertAlgoX509
@@ -3654,7 +3704,6 @@ type
     function VerifyAuthority(const Authority: ICryptCert): TCryptCert;
     procedure GeneratePrivateKey;
   public
-    procedure Clear; override;
     // ICryptCert methods - relative to fPrivateKey process
     function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
       const Authority: ICryptCert; ExpireDays, ValidDays: integer;
@@ -3665,16 +3714,10 @@ type
       const PrivatePassword: SpiUtf8): boolean; override;
     function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; override;
-    function HasPrivateSecret: boolean; override;
-    function GetPrivateKey: RawByteString; override;
     function SetPrivateKey(const saved: RawByteString): boolean; override;
     function Sign(Data: pointer; Len: integer;
       Usage: TCryptCertUsage): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
-    function Decrypt(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString; override;
-    function SharedSecret(const pub: ICryptCert): RawByteString; override;
-    function PrivateKeyHandle: pointer; override;
   end;
 
 
@@ -3743,12 +3786,6 @@ end;
 
 
 { TCryptCertX509 }
-
-procedure TCryptCertX509.Clear;
-begin
-  inherited Clear; // = FreeAndNil(fX509);
-  fPrivateKey := nil;
-end;
 
 function TCryptCertX509.AlgoXsa: TXSignatureAlgorithm;
 begin
@@ -3928,19 +3965,6 @@ begin
     end;
 end;
 
-function TCryptCertX509.HasPrivateSecret: boolean;
-begin
-  result := fPrivateKey <> nil;
-end;
-
-function TCryptCertX509.GetPrivateKey: RawByteString;
-begin
-  if fPrivateKey = nil then
-    result := ''
-  else
-    result := fPrivateKey.ToDer;
-end;
-
 function TCryptCertX509.SetPrivateKey(const saved: RawByteString): boolean;
 begin
   result := false;
@@ -3999,36 +4023,6 @@ begin
   end
   else
     RaiseError('Sign: Authority is not a CA');
-end;
-
-function TCryptCertX509.Decrypt(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
-    result := fPrivateKey.Open(Message, Cipher)
-  else
-    result := '';
-end;
-
-function TCryptCertX509.SharedSecret(const pub: ICryptCert): RawByteString;
-begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (cuKeyAgreement in fX509.Usages) and
-     Assigned(pub) and
-     pub.Instance.InheritsFrom(TCryptCertX509Only) and
-     (pub.Handle <> nil) and
-     (cuKeyAgreement in TX509(pub.Handle).Usages) then
-    result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
-  else
-    result := '';
-end;
-
-function TCryptCertX509.PrivateKeyHandle: pointer;
-begin
-  result := pointer(fPrivateKey);
 end;
 
 
@@ -4275,14 +4269,14 @@ begin
   if not Assigned(cert) then
     exit;
   x := cert.Instance;
-  if x.InheritsFrom(TCryptCertX509Only) then
-    result := IsRevokedX509(TCryptCertX509Only(x).fX509);
+  if x.InheritsFrom(TCryptCertX509Abstract) then
+    result := IsRevokedX509(TCryptCertX509Abstract(x).fX509);
 end;
 
 function TCryptStoreX509.Add(const cert: ICryptCert): boolean;
 begin
   result := (cert <> nil) and
-            cert.Instance.InheritsFrom(TCryptCertX509Only) and
+            cert.Instance.InheritsFrom(TCryptCertX509Abstract) and
             fTrust.Add(cert);
 end;
 
@@ -4378,9 +4372,9 @@ begin
     exit;
   c := cert.Instance;
   if (c = nil) or
-     not c.InheritsFrom(TCryptCertX509Only) then
+     not c.InheritsFrom(TCryptCertX509Abstract) then
     exit;
-  x := TCryptCertX509Only(c).fX509;
+  x := TCryptCertX509Abstract(c).fX509;
   if x = nil then
     exit;
   result := cvInvalidDate;
