@@ -91,7 +91,7 @@ type
   end;
 
   /// store several Certificate interfaces with specific PKCS#11 information
-  ICryptCertPkcs11DynArray = array of ICryptCertPkcs11;
+  ICryptCertPkcs11s = array of ICryptCertPkcs11;
 
   /// class loading a PKCS#11 library in the context of ICryptCert
   // - it is the main factory of ICryptCert support of a PKCS#11 library
@@ -100,7 +100,7 @@ type
     fEngine: TPkcs11;
     fLog: TSynLogClass;
     fConfigRetrieved: boolean;
-    fCert: ICryptCertPkcs11DynArray;
+    fCert: ICryptCertPkcs11s;
     procedure BackgroundRetrieveConfig(Sender: TObject);
     procedure EnsureRetrieveConfig;
   public
@@ -111,6 +111,16 @@ type
       aLog: TSynLogClass = nil); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// search the internal ICryptCertPkcs11 list for a given attribute
+    // - return all the certificates matching a given value
+    // - will use brute-force O(n) search algorithm with lockfree multi-read
+    function Find(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber;
+      MaxCount: integer = 0): ICryptCertPkcs11s;
+    /// search the internal list for a given attribute
+    // - return the first certificate matching a given value
+    function FindOne(const Value: RawByteString;
+      Method: TCryptCertComparer = ccmSerialNumber): ICryptCertPkcs11;
     // TCryptCertAlgo methods are mostly unsupported
     function New: ICryptCert; override;
     function FromHandle(Handle: pointer): ICryptCert; override;
@@ -122,7 +132,7 @@ type
       read fEngine;
     /// access to the high-level certificates recognized in this PKCS#11 instance
     // - will wait if background loading of information is not finished
-    function Cert: ICryptCertPkcs11DynArray;
+    function Cert: ICryptCertPkcs11s;
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
@@ -306,6 +316,29 @@ begin
   inherited Destroy;
 end;
 
+function TCryptCertAlgoPkcs11.Find(const Value: RawByteString;
+  Method: TCryptCertComparer; MaxCount: integer): ICryptCertPkcs11s;
+begin
+  result := nil;
+  if not fConfigRetrieved then
+    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+  if fCert <> nil then
+    TCryptCertPkcs11.InternalFind(pointer(fCert), Value, Method, length(fCert),
+                                    MaxCount, ICryptCerts(result));
+end;
+
+function TCryptCertAlgoPkcs11.FindOne(const Value: RawByteString;
+  Method: TCryptCertComparer): ICryptCertPkcs11;
+var
+  res: ICryptCertPkcs11s;
+begin
+  res := Find(Value, Method, 1);
+  if res = nil then
+    result := nil
+  else
+    result := res[0];
+end;
+
 procedure TCryptCertAlgoPkcs11.BackgroundRetrieveConfig(Sender: TObject);
 var
   i, j: PtrInt;
@@ -369,7 +402,7 @@ begin
   result := ''; // unsupported
 end;
 
-function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11DynArray;
+function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
 begin
   if not fConfigRetrieved then
     EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
