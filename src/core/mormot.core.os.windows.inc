@@ -1843,7 +1843,7 @@ type
     dwSize: DWORD;
     cntUsage: DWORD;
     th32ProcessID: DWORD;          // this process
-    th32DefaultHeapID: ULONG_PTR;
+    th32DefaultHeapID: PtrUInt;
     th32ModuleID:DWORD;            // associated exe
     cntThreads: DWORD;
     th32ParentProcessID: DWORD;    // this process's parent process
