@@ -36,8 +36,10 @@ uses
   mormot.core.data,
   mormot.core.datetime,
   mormot.core.variants,
-  mormot.core.json,
   mormot.core.rtti,
+  mormot.core.json,
+  mormot.core.log,
+  mormot.core.threads,
   mormot.lib.pkcs11;
 
 
@@ -59,6 +61,38 @@ function Pkcs11FlagsToCertUsages(pos: TPkcs11ObjectStorages): TCryptCertUsages;
 { ***************** Registration of the PKCS#11 Engine to our Factories }
 
 type
+  /// Certificate interface with specific PKCS#11 information
+  // - inherit from ICryptCert so has all the main Certificates methods
+  // - as implemented by TCryptCertPkcs11 instances
+  // - values are retrieved in the constructor - may have changed on HW in-between
+  ICryptCertPkcs11 = interface(ICryptCert)
+    /// change the high-level asymmetric algorithm used for this certificate
+    // - by default, it is guessed with 256-bit RSA hash via XKA_TO_CAA[] lookup
+    // - you can refine the expected hash algorithm used for Verify/Sign
+    // - any key algorithm switch (e.g. from RSA to ECC) would fail
+    procedure SetAsymAlgo(caa: TCryptAsymAlgo);
+    /// true if was filled from a true CKO_CERTIFICATE instance
+    function IsX509: boolean;
+    /// the associated PKCS#11 library instance
+    function Engine: TPkcs11;
+    /// the associated hexadecimal CKA_ID in the token of this PKCS#11 instance
+    // - all involved TPkcs11Object.StorageID do match in the objects list
+    function StorageID: TPkcs11ObjectID;
+    /// the associated label, as shared by all objects of this StorageID
+    function StorageLabel: RawUtf8;
+    /// the associated Slot ID in the PKCS#11 instance Engine
+    function SlotID: TPkcs11SlotID;
+    /// the associated Token Name in the PKCS#11 instance Engine
+    function TokenName: RawUtf8;
+    /// the associated slot in the PKCS#11 instance Engine
+    function Slot: TPkcs11Slot;
+    /// the associated token in the PKCS#11 instance Engine
+    function Token: TPkcs11Token;
+  end;
+
+  /// store several Certificate interfaces with specific PKCS#11 information
+  ICryptCertPkcs11DynArray = array of ICryptCertPkcs11;
+
   /// class implementing ICryptCert using PCKS#11
   // - CKO_CERTIFICATES will be directly retrieved from their X.509 DER binary
   // - CKO_PUBLIC_KEY will create fake X.509 certificate from their raw binary
