@@ -322,6 +322,9 @@ type
   // convenience, CK_INVALID_HANDLE (=0) identifies a non-valid object handle
   CK_OBJECT_HANDLE = type CK_ULONG;
   CK_OBJECT_HANDLE_PTR = ^CK_OBJECT_HANDLE;
+  CK_OBJECT_HANDLE_DYNARRAY = array of CK_OBJECT_HANDLE;
+  PCK_OBJECT_HANDLE_DYNARRAY = ^CK_OBJECT_HANDLE_DYNARRAY;
+
 
   /// identifies the classes (or types) of objects that Cryptoki recognizes
   // - Object classes are defined with the objects that use them.
@@ -1911,10 +1914,6 @@ type
     Issuer: RawByteString;
     /// the DER unique ID of this Certificate (from CKA_UNIQUE_ID)
     UniqueID: RawByteString;
-    /// the low-level CK_OBJECT_HANDLE, which lifetime would match the session
-    // - not defined as CK_OBJECT_HANDLE because this type is not cross-platform
-    // so couldn't be uniformly serialized
-    SessionHandle: cardinal;
   end;
   /// high-level information about several PKCS#11 Objects
   // - can be (un) serialized as binary or JSON if needed
@@ -2101,6 +2100,7 @@ type
     // - should have called Open() then call Close() once done
     // - can optionally retrieve the whole object Value as RawByteString arrays
     function GetObjects(Filter: PCK_ATTRIBUTES = nil;
+      Handles: PCK_OBJECT_HANDLE_DYNARRAY = nil;
       Values: PRawByteStringDynArray = nil): TPkcs11ObjectDynArray;
     /// retrieve one object by class type and label/ID from current Session
     // - should have called Open() then call Close() once done
@@ -3988,6 +3988,7 @@ begin
 end;
 
 function TPkcs11.GetObjects(Filter: PCK_ATTRIBUTES;
+  Handles: PCK_OBJECT_HANDLE_DYNARRAY;
   Values: PRawByteStringDynArray): TPkcs11ObjectDynArray;
 var
   n, count, u: CK_ULONG;
@@ -4021,6 +4022,8 @@ begin
     if n = 0 then
       break;
     SetLength(result, n + count);
+    if Handles <> nil then
+      SetLength(Handles^, n + count);
     if Values <> nil then
       SetLength(Values^, n + count);
     for i := 0 to CK_LONG(n) - 1 do
@@ -4073,7 +4076,8 @@ begin
               if arr.Find(CKA_VALUE_LEN, u) then // CKK_EC
                 KeyBits := u shl 3; // CKK_AES
           end;
-          SessionHandle := obj[i];
+          if Handles <> nil then
+            Handles^[count] := obj[i];
           if Values <> nil then
             arr.Find(CKA_VALUE, Values^[count]);
           inc(count);
@@ -4086,6 +4090,9 @@ begin
  if (Values <> nil) and
     (count <> CK_ULONG(length(Values^))) then
    SetLength(Values^, count);
+ if (Handles <> nil) and
+    (count <> CK_ULONG(length(Handles^))) then
+   SetLength(Handles^, count);
 end;
 
 function TPkcs11.GetObject(ObjectClass: CK_OBJECT_CLASS; out Info: TPkcs11Object;
@@ -4104,7 +4111,7 @@ begin
     valp := nil
   else
     valp := @val;
-  res := GetObjects(@attr, valp);
+  res := GetObjects(@attr, nil, valp);
   if res = nil then
     exit;
   if Value <> nil then
@@ -4119,13 +4126,15 @@ function TPkcs11.GetObject(ObjectClass: CK_OBJECT_CLASS;
   const StorageLabel, StorageID: RawUtf8): CK_OBJECT_HANDLE;
 var
   attr: CK_ATTRIBUTES;
+  hnd: CK_OBJECT_HANDLE_DYNARRAY;
   res: TPkcs11ObjectDynArray;
 begin
   EnsureSession('GetObject');
   attr.New(ObjectClass, StorageLabel, StorageID);
-  res := GetObjects(@attr);
-  if length(res) = 1 then
-    result := res[0].SessionHandle
+  res := GetObjects(@attr, @hnd, nil);
+  if (length(res) = 1) and
+     (length(hnd) = 1) then
+    result := hnd[0]
   else
     result := CK_INVALID_HANDLE; // return 0 on error
 end;
@@ -4290,7 +4299,7 @@ initialization
     TypeInfo(TPkcs11ObjectDynArray),
       'class:CK_OBJECT_CLASS id,label:RawUtf8 flags:TPkcs11ObjectStorages' +
       ' keytype:CK_KEY_TYPE keygen:CK_MECHANISM_TYPE keybits:cardinal ' +
-      ' start,end:TDateTime app:RawUtf8 sub,sn,iss,uid:RawByteString hdl:cardinal',
+      ' start,end:TDateTime app:RawUtf8 sub,sn,iss,uid:RawByteString',
     TypeInfo(TPkcs11Token),
       'slot:cardinal name,manufacturer,model,serial,time:RawUtf8 flags:CKT_FLAGS' +
       ' sessions,maxsessions,minpin,maxpin:integer hwmaj,hwmin,fwmaj,fwmin:byte'
