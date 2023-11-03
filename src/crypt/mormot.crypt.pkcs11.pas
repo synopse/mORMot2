@@ -160,13 +160,13 @@ type
     fEngine: TPkcs11;
     fStorageID: TPkcs11ObjectID;  // match TPkcs11Object.StorageID
     fStorageLabel: RawUtf8;       // match TPkcs11Object.StorageLabel
+    fLocation: RawUtf8;
     fSecret, fPin: RawByteString; // anti-forensic PIN storage
     fSlotID: TPkcs11SlotID;
     fIsX509: boolean;
     fCaa: TCryptAsymAlgo;
     fSlot: TPkcs11Slot;
     fToken: TPkcs11Token;
-    fIdentifier: RawUtf8;
     procedure RaiseError(const Msg: shortstring); overload; override;
     // if true then caller should make try ... finally fEngine.Close
     function OpenPrivateKey: CK_OBJECT_HANDLE;
@@ -216,8 +216,10 @@ type
     function Slot: TPkcs11Slot;
     function Token: TPkcs11Token;
   published
-    property Identifier: RawUtf8
-      read fIdentifier;
+    property Location: RawUtf8
+      read fLocation;
+    property &Label: RawUtf8
+      read fStorageLabel;
   end;
 
 
@@ -686,7 +688,7 @@ begin
   fSlot := slt^;
   fToken := tok^;
   fSecret := ToUtf8(RandomGuid); // anti-forensic temp salt
-  FormatUtf8('%-% %', [aSlotID, aStorageID, fStorageLabel], fIdentifier);
+  FormatUtf8('%-%', [aSlotID, aStorageID], fLocation);
 end;
 
 destructor TCryptCertPkcs11.Destroy;
