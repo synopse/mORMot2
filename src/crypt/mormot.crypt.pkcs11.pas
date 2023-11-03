@@ -64,17 +64,18 @@ type
   /// Certificate interface with specific PKCS#11 information
   // - inherit from ICryptCert so has all the main Certificates methods
   // - as implemented by TCryptCertPkcs11 instances
-  // - values are retrieved in the constructor - may have changed on HW in-between
+  // - values are retrieved in the constructor - may have changed on HW
   ICryptCertPkcs11 = interface(ICryptCert)
     /// change the high-level asymmetric algorithm used for this certificate
     // - by default, it is guessed with 256-bit RSA hash via XKA_TO_CAA[] lookup
     // - you can refine the expected hash algorithm used for Verify/Sign
-    // - any key algorithm switch (e.g. from RSA to ECC) would fail
+    // - by design, any key algorithm switch (e.g. from RSA to ECC) will fail
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
-    /// set the PIN code to be used to access the private key object
+    /// set the PIN code to be used to access the CKO_PRIVATE_KEY object
     // - same as Load('', cccPrivateKeyOnly, PinCode)
     procedure SetPin(const PinCode: RawUtf8);
-    /// true if was filled from a true CKO_CERTIFICATE instance
+    /// true if was filled from a true CKO_CERTIFICATE object
+    // - false if is a "fake" X.509 certificate, created from a CKO_PUBLIC_KEY
     function IsX509: boolean;
     /// the associated PKCS#11 library instance
     function Engine: TPkcs11;
@@ -96,8 +97,9 @@ type
   /// store several Certificate interfaces with specific PKCS#11 information
   ICryptCertPkcs11s = array of ICryptCertPkcs11;
 
-  /// class loading a PKCS#11 library in the context of ICryptCert
-  // - it is the main factory of ICryptCert support of a PKCS#11 library
+  /// class loading a PKCS#11 library in the context of our high-level
+  // cryptographic catalog
+  // - it is the main factory for ICryptCert support of a PKCS#11 library
   TCryptCertAlgoPkcs11 = class(TCryptCertAlgo)
   protected
     fEngine: TPkcs11;
@@ -105,12 +107,14 @@ type
     fConfigRetrieved: boolean;
     fCert: ICryptCertPkcs11s;
     fLibraryName: TFileName;
+    fLoadingError: string;
     procedure BackgroundLoad(Sender: TObject);
     procedure EnsureRetrieveConfig;
   public
     /// load a PKCS#11 library and asynchronously retrieve its configuration
-    // - raise EPkcs11 if the library can't be loaded into the Engine property
-    // - slow Engine.RetrieveConfig() will then take place in a background thread
+    // - Engine.Load() and RetrieveConfig() will happen in a background thread
+    // - Cert method will wait if needed for the configuration to be loaded
+    // - see LoadingError property for any error during the background process
     constructor Create(const aLibraryName: TFileName;
       aLog: TSynLogClass = nil); reintroduce;
     /// finalize this instance
@@ -133,21 +137,25 @@ type
     function CreateSelfSignedCsr(const Subjects: RawUtf8;
       const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
       Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
-    /// the associated PKCS#11 library instance
-    property Engine: TPkcs11
-      read fEngine;
     /// access to the high-level certificates recognized in this PKCS#11 instance
     // - will wait if background loading of information is not finished
     function Cert: ICryptCertPkcs11s;
       {$ifdef HASINLINE} inline; {$endif}
+    /// the associated PKCS#11 library instance
+    property Engine: TPkcs11
+      read fEngine;
+    /// the exception message if Create() failed to retrieve the PKCS#11 info 
+    property LoadingError: string
+      read fLoadingError;
   end;
 
   /// class implementing ICryptCert using PCKS#11
   // - CKO_CERTIFICATES will be directly retrieved from their X.509 DER binary
   // - CKO_PUBLIC_KEY will create fake X.509 certificate from their raw binary
   // - CKO_PRIVATE_KEY will be used when needed, using a PIN code specified as
-  // PrivatePassword in Load(cccPrivateKeyOnly) - stored encrypted in memory
-  TCryptCertPkcs11 = class(TCryptCertX509Only, ICryptCertPkcs11)
+  // PrivatePassword in SetPin or Load(cccPrivateKeyOnly) - safely stored
+  // encrypted in memory for Engine.Open() delayed call
+  TCryptCertPkcs11 = class(TCryptCertX509Abstract, ICryptCertPkcs11)
   protected
     fEngine: TPkcs11;
     fStorageID: TPkcs11ObjectID;  // match TPkcs11Object.StorageID
@@ -158,7 +166,10 @@ type
     fCaa: TCryptAsymAlgo;
     fSlot: TPkcs11Slot;
     fToken: TPkcs11Token;
+    fIdentifier: RawUtf8;
     procedure RaiseError(const Msg: shortstring); overload; override;
+    // if true then caller should make try ... finally fEngine.Close
+    function OpenPrivateKey: CK_OBJECT_HANDLE;
   public
     /// create a X.509 from the supplied information
     // - should supply all aObjects[] and aValues[] on this SlotID and
@@ -170,6 +181,9 @@ type
       const aStorageID: TPkcs11ObjectID); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// return the TSynLogClass from the associated TCryptCertAlgoPkcs11
+    function Log: TSynLogClass;
+      {$ifdef HASINLINE} inline; {$endif}
     // ICryptCert methods
     function AsymAlgo: TCryptAsymAlgo; override;
     function CertAlgo: TCryptCertAlgo; override;
@@ -180,14 +194,10 @@ type
       const PrivatePassword: SpiUtf8): boolean; override; // PIN cccPrivateKeyOnly
     function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
       Format: TCryptCertFormat): RawByteString; override;
-    function HasPrivateSecret: boolean; override;
-    function GetPrivateKey: RawByteString; override;
     function SetPrivateKey(const saved: RawByteString): boolean; override;
     function Sign(Data: pointer; Len: integer;
       Usage: TCryptCertUsage): RawByteString; override;
     procedure Sign(const Authority: ICryptCert); override;
-    function Decrypt(const Message: RawByteString;
-      const Cipher: RawUtf8): RawByteString; override;
     // ICryptCertPkcs11 methods
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
     procedure SetPin(const PinCode: RawUtf8);
@@ -205,6 +215,9 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function Slot: TPkcs11Slot;
     function Token: TPkcs11Token;
+  published
+    property Identifier: RawUtf8
+      read fIdentifier;
   end;
 
 
@@ -233,17 +246,18 @@ const
   // - see e.g. openssl ecparam -name prime256v1 -outform DER | hexdump -C
   // and CKA_OID[] from mormot.crypt.secure
   CAA_TO_DER: array[TCryptAsymAlgo] of RawByteString = (
-    #$06#$08#$2a#$86#$48#$ce#$3d#$03#$01#$07, // caaES256  '1.2.840.10045.3.1.7'
-    #$06#$05#$2b#$81#$04#$00#$22,             // caaES384  '1.3.132.0.34'
-    #$06#$05#$2b#$81#$04#$00#$23,             // caaES512  '1.3.132.0.35'
-    #$06#$05#$2b#$81#$04#$00#$0a,             // caaES256K '1.3.132.0.10'
+    RawByteString(#$06#$08#$2a#$86#$48#$ce#$3d#$03#$01#$07),
+      // caaES256  '1.2.840.10045.3.1.7'
+    RawByteString(#$06#$05#$2b#$81#$04#$00#$22), // caaES384  '1.3.132.0.34'
+    RawByteString(#$06#$05#$2b#$81#$04#$00#$23), // caaES512  '1.3.132.0.35'
+    RawByteString(#$06#$05#$2b#$81#$04#$00#$0a), // caaES256K '1.3.132.0.10'
     '',                        // caaRS256
     '',                        // caaRS384
     '',                        // caaRS512
     '',                        // caaPS256
     '',                        // caaPS384
     '',                        // caaPS512
-    #$06#$09#$2B#$06#$01#$04#$01#$DA#$47#$0F#$01);
+    RawByteString(#$06#$09#$2B#$06#$01#$04#$01#$DA#$47#$0F#$01));
     // caaEdDSA '1.3.6.1.4.1.11591.15.1' - but optional
 
 
@@ -304,6 +318,96 @@ end;
 type
   ECryptCertPkcs11 = class(ECryptCert);
 
+  /// access a PKCS#11 private key in ICryptPrivateKey format
+  TCryptPrivateKeyPkcs11 = class(TCryptPrivateKey)
+  protected
+    fCert: TCryptCertPkcs11;
+    function FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
+      pub: TCryptPublicKey): boolean; override;
+    function SignDigest(const Dig: THash512Rec; DigLen: integer;
+      DigAlgo: TCryptAsymAlgo): RawByteString; override;
+  public
+    /// initialize this instance
+    constructor Create(aCert: TCryptCertPkcs11); reintroduce;
+    /// create a new private / public key pair
+    // - returns the associated public key binary in SubjectPublicKey format
+    function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
+    /// returns '' by definition since the private key stays in the device
+    function ToDer: RawByteString; override;
+    /// return the associated public key as stored in the associated TX509
+    function ToSubjectPublicKey: RawByteString; override;
+    /// decryption with this private key
+    function Open(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    /// compute the shared-secret with another public key
+    function SharedSecret(const PeerKey: ICryptPublicKey): RawByteString;
+      override;
+  end;
+
+
+{ TCryptPrivateKeyPkcs11 }
+
+constructor TCryptPrivateKeyPkcs11.Create(aCert: TCryptCertPkcs11);
+begin
+  inherited Create;
+  fCert := aCert;
+end;
+
+function TCryptPrivateKeyPkcs11.FromDer(algo: TCryptKeyAlgo;
+  const der: RawByteString; pub: TCryptPublicKey): boolean;
+begin
+  result := false; // unsupported by definition (key stays in the device)
+end;
+
+function TCryptPrivateKeyPkcs11.SignDigest(const Dig: THash512Rec;
+  DigLen: integer; DigAlgo: TCryptAsymAlgo): RawByteString;
+var
+  obj: CK_OBJECT_HANDLE;
+  mech: CK_MECHANISM;
+  log: ISynLog; // seldom called, and better be traced
+begin
+  log := fCert.Log.Enter('SignDigest % %', [ToText(DigAlgo)^, fCert], self);
+  result := '';
+  if HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen then
+    exit; // paranoid
+  obj := fCert.OpenPrivateKey;
+  if obj <> CK_INVALID_HANDLE then
+    try
+      Pkcs11SetMechanism(DigAlgo, mech);
+      result := fCert.fEngine.Sign(@Dig, DigLen, obj, mech);
+      log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
+    finally
+      fCert.fEngine.Close;
+    end;
+end;
+
+function TCryptPrivateKeyPkcs11.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
+begin
+  result := ''; // to be implemented later on
+end;
+
+function TCryptPrivateKeyPkcs11.ToDer: RawByteString;
+begin
+  result := ''; // unsupported by definition (key stays in the device)
+end;
+
+function TCryptPrivateKeyPkcs11.ToSubjectPublicKey: RawByteString;
+begin
+  result := fCert.fX509.Signed.SubjectPublicKey; // from TX509 (fake) instance
+end;
+
+function TCryptPrivateKeyPkcs11.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+  result := ''; // to be implemented later on
+end;
+
+function TCryptPrivateKeyPkcs11.SharedSecret(
+  const PeerKey: ICryptPublicKey): RawByteString;
+begin
+  result := ''; // to be implemented later on?
+end;
+
 
 { TCryptCertAlgoPkcs11 }
 
@@ -325,6 +429,61 @@ destructor TCryptCertAlgoPkcs11.Destroy;
 begin
   fEngine.Free;
   inherited Destroy;
+end;
+
+procedure TCryptCertAlgoPkcs11.BackgroundLoad(Sender: TObject);
+var
+  i, j: PtrInt;
+  val: TRawByteStringDynArray;
+  obj: TPkcs11ObjectDynArray;
+  ids: TPkcs11ObjectIDs;
+  c: ICryptCertPkcs11;
+begin
+  try
+    // this operation could take 10 seconds
+    fEngine.Load(fLibraryName);
+    fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
+    fLog.Add.Log(sllDebug, 'BackgroundLoad %', [fEngine], self);
+    // generate all ICryptCertPkcs11 certificates from the retrieved information
+    for i := 0 to high(fEngine.SlotIDs) do
+    begin
+      fEngine.Open(fEngine.SlotIDs[i]); // anynymous session for certs and pubkey
+      try
+        obj := fEngine.GetObjects(nil, nil, @val); // all objects
+        ids := nil;
+        for j := 0 to high(obj) do
+          if obj[j].ObjClass in [CKO_CERTIFICATE, CKO_PUBLIC_KEY] then
+            AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
+        for j := 0 to high(ids) do
+        begin
+          c := TCryptCertPkcs11.Create(self, fEngine.SlotIDs[i], obj, val, ids[j]);
+          InterfaceArrayAdd(fCert, c);
+        end;
+      finally
+        fEngine.Close; // close session
+      end;
+    end;
+  except
+    on E: Exception do
+    begin
+      fLog.Add.Log(sllTrace, 'BackgroundLoad: aborted due to %', [E], self);
+      fLoadingError := E.Message;
+    end;
+  end;
+  fConfigRetrieved := true;
+end;
+
+procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
+var
+  endtix: Int64;
+begin
+  endtix := GetTickCount64 + 60000; // never wait forever
+  repeat
+    SleepHiRes(100);
+    if fConfigRetrieved then
+      exit;
+  until GetTickCount64 > endtix;
+  raise ECryptCertPkcs11.CreateUtf8('%.EnsureRetrieveConfig timeout', [self]);
 end;
 
 function TCryptCertAlgoPkcs11.Find(const Value: RawByteString;
@@ -365,52 +524,14 @@ begin
     end;
 end;
 
-procedure TCryptCertAlgoPkcs11.BackgroundLoad(Sender: TObject);
-var
-  i, j: PtrInt;
-  val: TRawByteStringDynArray;
-  obj: TPkcs11ObjectDynArray;
-  ids: TPkcs11ObjectIDs;
+function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
 begin
-  // this operation could take 10 seconds
-  fEngine.Load(fLibraryName);
-  fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
-  fLog.Add.Log(sllDebug, 'BackgroundLoad %', [fEngine], self);
-  // generate all ICryptCertPkcs11 certificates from the retrieved information
-  for i := 0 to high(fEngine.SlotIDs) do
-  try
-    fEngine.Open(fEngine.SlotIDs[i]); // anynymous session for certs and pubkey
-    try
-      obj := fEngine.GetObjects(nil, @val); // all objects
-      ids := nil;
-      for j := 0 to high(obj) do
-        AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
-      for j := 0 to high(ids) do
-        InterfaceArrayAdd(fCert,
-          TCryptCertPkcs11.Create(self, fEngine.SlotIDs[i], obj, val, ids[j]));
-    finally
-      fEngine.Close; // close session
-    end;
-  except
-    on E: Exception do
-      fLog.Add.Log(sllTrace, 'BackgroundLoad: slot % raised %',
-        [fEngine.SlotIDs[i], E], self); // log and continue
-  end;
-  fConfigRetrieved := true;
+  if not fConfigRetrieved then
+    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
+  result := fCert;
 end;
 
-procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
-var
-  endtix: Int64;
-begin
-  endtix := GetTickCount64 + 60000; // never wait forever
-  repeat
-    SleepHiRes(100);
-    if fConfigRetrieved then
-      exit;
-  until GetTickCount64 > endtix;
-  raise ECryptCertPkcs11.CreateUtf8('%.EnsureRetrieveConfig timeout', [self]);
-end;
+// TCryptCertAlgo methods are mostly unsupported
 
 function TCryptCertAlgoPkcs11.New: ICryptCert;
 begin
@@ -429,13 +550,6 @@ begin
   result := ''; // unsupported
 end;
 
-function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
-begin
-  if not fConfigRetrieved then
-    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
-  result := fCert;
-end;
-
 
 { TCryptCertPkcs11 }
 
@@ -443,6 +557,33 @@ procedure TCryptCertPkcs11.RaiseError(const Msg: shortstring);
 begin
   raise ECryptCertPkcs11.CreateUtf8('% (slot=#%, CKA_ID=%) %',
     [self, fSlotID, fStorageID, Msg]);
+end;
+
+function TCryptCertPkcs11.OpenPrivateKey: CK_OBJECT_HANDLE;
+var
+  pin: RawUtf8;
+begin
+  result := CK_INVALID_HANDLE;
+  if (self = nil) or
+     (fEngine = nil) or
+     (fX509 = nil) or
+     (fStorageID = '') or
+     (fPin = '') then
+    exit;
+  pin := CryptDataForCurrentUser(fPin, fSecret, {encrypt=}false);
+  try
+    fEngine.Open(fSlotID, pin);
+    try
+      result := fEngine.GetObject(CKO_PRIVATE_KEY, '', fStorageID);
+    finally
+      if result = CK_INVALID_HANDLE then
+        fEngine.Close;
+    end;
+  except
+    on E: Exception do
+      Log.Add.Log(sllTrace, 'OpenPrivateKey failed due to %', [E], self);
+  end;
+  FillZero(pin); // anti-forensic
 end;
 
 constructor TCryptCertPkcs11.Create(aOwner: TCryptCertAlgoPkcs11;
@@ -531,7 +672,6 @@ begin
         fX509.Signed.Issuer.Name[xaOU] := tok^.Model;
         fX509.Signed.Issuer.Name[xaN] := tok^.Name;
         fX509.Signed.Subject := fX509.Signed.Issuer; // emulate self-signed
-        fX509.LoadFromDer(fX509.SaveToDer);
       end
       else if fX509.Signed.SubjectPublicKey <> aValues[pub] then
         RaiseError('Create: CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
@@ -546,6 +686,7 @@ begin
   fSlot := slt^;
   fToken := tok^;
   fSecret := ToUtf8(RandomGuid); // anti-forensic temp salt
+  FormatUtf8('%-% %', [aSlotID, aStorageID, fStorageLabel], fIdentifier);
 end;
 
 destructor TCryptCertPkcs11.Destroy;
@@ -553,6 +694,11 @@ begin
   FillZero(fSecret);
   FillZero(fPin); // paranoid
   inherited Destroy;
+end;
+
+function TCryptCertPkcs11.Log: TSynLogClass;
+begin
+  result := (fCryptAlgo as TCryptCertAlgoPkcs11).fLog;
 end;
 
 // ICryptCert methods
@@ -603,40 +749,29 @@ begin
             result := DerToPem(result, pemCertificate);
         end;
     else
-      RaiseError('Save: only cccCertOnly is supported');
+      RaiseError('Save: only cccCertOnly is supported on a HW token');
     end;
-end;
-
-function TCryptCertPkcs11.HasPrivateSecret: boolean;
-begin
-  result := fPin <> ''; // SetPin() is enough
-end;
-
-function TCryptCertPkcs11.GetPrivateKey: RawByteString;
-begin
-  result := ''; // unsupported
 end;
 
 function TCryptCertPkcs11.SetPrivateKey(const saved: RawByteString): boolean;
 begin
-  result := false; // unsupported
+  result := false; // unsupported by definition (privkey stays in the device)
 end;
 
 function TCryptCertPkcs11.Sign(Data: pointer; Len: integer;
   Usage: TCryptCertUsage): RawByteString;
 begin
-
+  if HasPrivateSecret and
+     (fX509 <> nil) and
+     (Usage in fX509.Usages) then
+    result := fPrivateKey.Sign(fCaa, Data, Len)
+  else
+    result := '';
 end;
 
 procedure TCryptCertPkcs11.Sign(const Authority: ICryptCert);
 begin
-  RaiseError('Sign(Authority) is unsupported');
-end;
-
-function TCryptCertPkcs11.Decrypt(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-
+  RaiseError('Sign(Authority) is not supported - use TCryptCertX509 instead');
 end;
 
 // ICryptCertPkcs11 methods
@@ -653,6 +788,10 @@ end;
 
 procedure TCryptCertPkcs11.SetPin(const PinCode: RawUtf8);
 begin
+  if fPrivateKey = nil then
+    // notify we could try to access the private key from now on
+    fPrivateKey := TCryptPrivateKeyPkcs11.Create(self);
+  // store the PIN code in memory with proper obfuscation
   fPin := CryptDataForCurrentUser(PinCode, fSecret, {encrypt=}true);
 end;
 
