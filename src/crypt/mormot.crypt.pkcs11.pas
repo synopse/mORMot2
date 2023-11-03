@@ -129,46 +129,64 @@ type
   /// class implementing ICryptCert using PCKS#11
   // - CKO_CERTIFICATES will be directly retrieved from their X.509 DER binary
   // - CKO_PUBLIC_KEY will create fake X.509 certificate from their raw binary
-  // - CKO_PRIVATE_KEY will be used when needed, using a safely stored PIN
-  TCryptCertPkcs11 = class(TCryptCertX509Only)
+  // - CKO_PRIVATE_KEY will be used when needed, using a PIN code specified as
+  // PrivatePassword in Load(cccPrivateKeyOnly) - stored encrypted in memory
+  TCryptCertPkcs11 = class(TCryptCertX509Only, ICryptCertPkcs11)
   protected
     fEngine: TPkcs11;
+    fStorageID: TPkcs11ObjectID;  // match TPkcs11Object.StorageID
+    fStorageLabel: RawUtf8;       // match TPkcs11Object.StorageLabel
+    fSecret, fPin: RawByteString; // anti-forensic PIN storage
+    fSlotID: TPkcs11SlotID;
+    fIsX509: boolean;
+    fCaa: TCryptAsymAlgo;
     fSlot: TPkcs11Slot;
     fToken: TPkcs11Token;
-    fStorageID: TPkcs11ObjectID; // match TPkcs11Object.StorageID
-    fSecret, fPin: RawByteString;
-    fCaa: TCryptAsymAlgo;
+    procedure RaiseError(const Msg: shortstring); overload; override;
   public
     /// create a X.509 from the supplied information
     // - should supply all aObjects[] and aValues[] on this SlotID and
     // a given CKA_ID to filter
     // - if no session is currently opened, no CKO_PRIVATE_KEY may be available:
     // call later Load('', cccPrivateKeyOnly) and PIN as PrivatePassword
-    constructor Create(aEngine: TPkcs11; aSlotID: TPkcs11SlotID;
+    constructor Create(aOwner: TCryptCertAlgoPkcs11; aSlotID: TPkcs11SlotID;
       const aObjects: TPkcs11ObjectDynArray; const aValues: TRawByteStringDynArray;
       const aStorageID: TPkcs11ObjectID); reintroduce;
-    /// the associated PKCS#11 instance
-    property Engine: TPkcs11
-      read fEngine;
-    /// the associated slot in the PKCS#11 instance Engine
-    // - retrieved in the constructor - may have changed on HW in-between
-    property Slot: TPkcs11Slot
-      read fSlot;
-    /// the associated slot in the PKCS#11 instance Engine
-    // - retrieved in the constructor - may have changed on HW in-between
-    property Token: TPkcs11Token
-      read fToken;
-    /// the associated hexadecimal CKA_ID in the PKCS#11 instance Engine
-    // - all involved TPkcs11Object.StorageID do match in the objects list
-    property StorageID: TPkcs11ObjectID
-      read fStorageID;
     // ICryptCert methods
     function AsymAlgo: TCryptAsymAlgo; override;
     function CertAlgo: TCryptCertAlgo; override;
+    function Generate(Usages: TCryptCertUsages; const Subjects: RawUtf8;
+      const Authority: ICryptCert; ExpireDays, ValidDays: integer;
+      Fields: PCryptCertFields): ICryptCert; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
       const PrivatePassword: SpiUtf8): boolean; override; // PIN cccPrivateKeyOnly
+    function Save(Content: TCryptCertContent; const PrivatePassword: SpiUtf8;
+      Format: TCryptCertFormat): RawByteString; override;
+    function HasPrivateSecret: boolean; override;
+    function GetPrivateKey: RawByteString; override;
+    function SetPrivateKey(const saved: RawByteString): boolean; override;
+    function Sign(Data: pointer; Len: integer;
+      Usage: TCryptCertUsage): RawByteString; override;
+    procedure Sign(const Authority: ICryptCert); override;
+    function Decrypt(const Message: RawByteString;
+      const Cipher: RawUtf8): RawByteString; override;
+    // ICryptCertPkcs11 methods
+    procedure SetAsymAlgo(caa: TCryptAsymAlgo);
+    function IsX509: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    function Engine: TPkcs11;
+      {$ifdef HASINLINE} inline; {$endif}
+    function StorageID: TPkcs11ObjectID;
+      {$ifdef HASINLINE} inline; {$endif}
+    function StorageLabel: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    function SlotID: TPkcs11SlotID;
+      {$ifdef HASINLINE} inline; {$endif}
+    function TokenName: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    function Slot: TPkcs11Slot;
+    function Token: TPkcs11Token;
   end;
-
 
 
 implementation
@@ -361,35 +379,37 @@ end;
 
 { TCryptCertPkcs11 }
 
-constructor TCryptCertPkcs11.Create(aEngine: TPkcs11; aSlotID: TPkcs11SlotID;
-  const aObjects: TPkcs11ObjectDynArray; const aValues: TRawByteStringDynArray;
-  const aStorageID: TPkcs11ObjectID);
+procedure TCryptCertPkcs11.RaiseError(const Msg: shortstring);
+begin
+  raise ECryptCertPkcs11.CreateUtf8('% (slot=#%, CKA_ID=%) %',
+    [self, fSlotID, fStorageID, Msg]);
+end;
+
+constructor TCryptCertPkcs11.Create(aOwner: TCryptCertAlgoPkcs11;
+  aSlotID: TPkcs11SlotID; const aObjects: TPkcs11ObjectDynArray;
+  const aValues: TRawByteStringDynArray; const aStorageID: TPkcs11ObjectID);
 var
   slt: PPkcs11Slot;
   tok: PPkcs11Token;
   o: ^TPkcs11Object;
   n, i, pub: PtrInt;
   xka, xkaKey: TXPublicKeyAlgorithm;
-
-  procedure RaiseError(const Context: RawUtf8);
-  begin
-    raise ECryptCertPkcs11.CreateUtf8('%.Create(slot=#%, CKA_ID=%): %',
-      [self, aSlotID, aStorageID, Context]);
-  end;
-
 begin
-  if aEngine = nil then
-    RaiseError('aEngine=nil');
+  fStorageID := aStorageID; // set both first for RaiseError()
+  fSlotID := aSlotID;
+  if (aOwner = nil) or
+     (aOwner.Engine = nil) then
+    RaiseError('Create: aOwner=nil');
   inherited Create;
-  slt := aEngine.SlotByID(aSlotID);
+  slt := aOwner.Engine.SlotByID(aSlotID);
   if slt = nil then
-    RaiseError('invalid slot');
-  tok := aEngine.TokenByID(aSlotID);
+    RaiseError('Create: invalid slot');
+  tok := aOwner.Engine.TokenByID(aSlotID);
   if tok = nil then
-    RaiseError('no token');
+    RaiseError('Create: no token');
   n := length(aObjects);
   if n <> length(aValues) then
-    RaiseError('aObjects/aValues mismatch');
+    RaiseError('Create: aObjects/aValues mismatch');
   try
     pub := -1;
     xka := xkaNone;
@@ -398,30 +418,31 @@ begin
     begin
       if o^.StorageID = aStorageID then
       begin
+        fStorageLabel := o^.StorageLabel;
         case o^.ObjClass of
           CKO_PUBLIC_KEY:
             begin
               if pub >= 0 then
-                RaiseError('duplicated public key');
+                RaiseError('Create: duplicated public key');
               xkaKey := Pkcs11KeyAlgorithm(o^); // wild guess
               if xka = xkaNone then
                 if xkaKey = xkaNone then
-                  RaiseError(FormatUtf8('unsupported %-% type',
-                    [ToText(o^.KeyType)^, o^.KeyBits]))
+                  RaiseError('Create: unsupported %-% type',
+                    [ToText(o^.KeyType)^, o^.KeyBits])
                 else
                   xka := xkaKey; // no cert yet
               pub := i;
             end;
           CKO_CERTIFICATE:
             if fX509 <> nil then
-              RaiseError('duplicated certificates')
+              RaiseError('Create: duplicated certificates')
             else
             begin
               fX509 := TX509.Create;
-              if fX509.LoadFromDer(aValues[i]) then
-                xka := fX509.Signed.SubjectPublicKeyAlgorithm // more precise
-              else
-                RaiseError('invalid CKO_CERTIFICATE content')
+              if not fX509.LoadFromDer(aValues[i]) then
+                RaiseError('Create: invalid CKO_CERTIFICATE content');
+              fIsX509 := true;
+              xka := fX509.Signed.SubjectPublicKeyAlgorithm // more precise
             end
           // just ignore unneeded objects - e.g. CKO_PRIVATE_KEY in this context
         end;
@@ -429,7 +450,7 @@ begin
       inc(o);
     end;
     if xka = xkaNone then
-      RaiseError('no matching object');
+      RaiseError('Create: no matching object');
     if pub >= 0 then
       if fX509 = nil then
       begin
@@ -445,36 +466,47 @@ begin
         fX509.Signed.CertUsages := Pkcs11FlagsToCertUsages(o^.StorageFlags);
         FormatUtf8('%-%', [aSlotID, o^.StorageID], fX509.Signed.Issuer.Name[xaDC]);
         fX509.Signed.Issuer.Name[xaCN] := o^.StorageLabel;
-        fX509.Signed.Issuer.Name[xaOU] := tok^.Name;
-        fX509.Signed.Issuer.Name[xaO] := tok^.Manufacturer;
-        fX509.Signed.Issuer.Name[xaN] := tok^.Model;
         fX509.Signed.Issuer.Name[xaSER] := tok^.Serial;
+        fX509.Signed.Issuer.Name[xaO] := tok^.Manufacturer;
+        fX509.Signed.Issuer.Name[xaOU] := tok^.Model;
+        fX509.Signed.Issuer.Name[xaN] := tok^.Name;
         fX509.Signed.Subject := fX509.Signed.Issuer; // emulate self-signed
         fX509.LoadFromDer(fX509.SaveToDer);
       end
       else if fX509.Signed.SubjectPublicKey <> aValues[pub] then
-        RaiseError('CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
+        RaiseError('Create: CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
   except
     FreeAndNil(fX509);
     raise;
   end;
   // we have a new ICryptCert instance with a valid TX509: store parameters
-  fEngine := aEngine;
+  fCryptAlgo := aOwner;
+  fEngine := aOwner.Engine;
+  fCaa := XKA_TO_CAA[xka]; // approximate guess with 256-bit RSA hash
   fSlot := slt^;
   fToken := tok^;
-  fStorageID := aStorageID;
-  fCaa := XKA_TO_CAA[xka]; // approximate guess with 256-bit RSA hash
   fSecret := ToUtf8(RandomGuid); // anti-forensic temp salt
 end;
 
+// ICryptCert methods
+
 function TCryptCertPkcs11.AsymAlgo: TCryptAsymAlgo;
 begin
+  // don't return fCryptAlgo.AsymAlgo which is not relevant here
   result := fCaa;
 end;
 
 function TCryptCertPkcs11.CertAlgo: TCryptCertAlgo;
 begin
+  // don't return fCryptAlgo which is not relevant here
   result := CryptCertX509[fCaa];
+end;
+
+function TCryptCertPkcs11.Generate(Usages: TCryptCertUsages;
+  const Subjects: RawUtf8; const Authority: ICryptCert;
+  ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
+begin
+  result := nil; // unsupported
 end;
 
 function TCryptCertPkcs11.Load(const Saved: RawByteString;
@@ -486,6 +518,112 @@ begin
     exit;
   fPin := CryptDataForCurrentUser(PrivatePassword, fSecret, true);
   result := true;
+end;
+
+function TCryptCertPkcs11.Save(Content: TCryptCertContent;
+  const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
+begin
+  result := '';
+  if not (Format in [ccfBinary, ccfPem]) then
+    // hexa or base64 encoding of the binary output is handled by TCryptCert
+    result := inherited Save(Content, PrivatePassword, Format)
+  else
+    // we implement ccfPem and ccfBinary here for cccCertOnly only
+    case Content of
+      cccCertOnly:
+        if fX509 <> nil then
+        begin
+          result := fX509.SaveToDer;
+          if Format = ccfPem then
+            result := DerToPem(result, pemCertificate);
+        end;
+    else
+      RaiseError('Save: only cccCertOnly is supported');
+    end;
+end;
+
+function TCryptCertPkcs11.HasPrivateSecret: boolean;
+begin
+  result := fPin <> '';
+end;
+
+function TCryptCertPkcs11.GetPrivateKey: RawByteString;
+begin
+  result := ''; // unsupported
+end;
+
+function TCryptCertPkcs11.SetPrivateKey(const saved: RawByteString): boolean;
+begin
+  result := false; // unsupported
+end;
+
+function TCryptCertPkcs11.Sign(Data: pointer; Len: integer;
+  Usage: TCryptCertUsage): RawByteString;
+begin
+
+end;
+
+procedure TCryptCertPkcs11.Sign(const Authority: ICryptCert);
+begin
+  RaiseError('Sign(Authority) is unsupported');
+end;
+
+function TCryptCertPkcs11.Decrypt(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+begin
+
+end;
+
+// ICryptCertPkcs11 methods
+
+procedure TCryptCertPkcs11.SetAsymAlgo(caa: TCryptAsymAlgo);
+begin
+  if caa = fCaa then
+    exit; // nothing to change
+  if CAA_CKA[fCaa] <> CAA_CKA[caa] then
+    RaiseError('SetAsymAlgo(%): incompatible with the % public key',
+      [ToText(caa)^, ToText(CAA_CKA[fCaa])^]);
+  fCaa := caa;
+end;
+
+function TCryptCertPkcs11.IsX509: boolean;
+begin
+  result := fIsX509;
+end;
+
+function TCryptCertPkcs11.Engine: TPkcs11;
+begin
+  result := fEngine;
+end;
+
+function TCryptCertPkcs11.SlotID: TPkcs11SlotID;
+begin
+  result := fSlot.Slot;
+end;
+
+function TCryptCertPkcs11.TokenName: RawUtf8;
+begin
+  result := fToken.Name;
+end;
+
+function TCryptCertPkcs11.StorageID: TPkcs11ObjectID;
+begin
+  result := fStorageID;
+end;
+
+function TCryptCertPkcs11.StorageLabel: RawUtf8;
+begin
+  result := fStorageLabel;
+end;
+
+function TCryptCertPkcs11.Slot: TPkcs11Slot;
+begin
+  result := fSlot;
+end;
+
+function TCryptCertPkcs11.Token: TPkcs11Token;
+begin
+  result := fToken;
 end;
 
 
