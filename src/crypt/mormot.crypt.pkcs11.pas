@@ -93,6 +93,39 @@ type
   /// store several Certificate interfaces with specific PKCS#11 information
   ICryptCertPkcs11DynArray = array of ICryptCertPkcs11;
 
+  /// class loading a PKCS#11 library in the context of ICryptCert
+  // - it is the main factory of ICryptCert support of a PKCS#11 library
+  TCryptCertAlgoPkcs11 = class(TCryptCertAlgo)
+  protected
+    fEngine: TPkcs11;
+    fLog: TSynLogClass;
+    fConfigRetrieved: boolean;
+    fCert: ICryptCertPkcs11DynArray;
+    procedure BackgroundRetrieveConfig(Sender: TObject);
+    procedure EnsureRetrieveConfig;
+  public
+    /// load a PKCS#11 library and asynchronously retrieve its configuration
+    // - raise EPkcs11 if the library can't be loaded into the Engine property
+    // - slow Engine.RetrieveConfig() will then take place in a background thread
+    constructor Create(const aLibraryName: TFileName;
+      aLog: TSynLogClass = nil); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
+    // TCryptCertAlgo methods are mostly unsupported
+    function New: ICryptCert; override;
+    function FromHandle(Handle: pointer): ICryptCert; override;
+    function CreateSelfSignedCsr(const Subjects: RawUtf8;
+      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
+    /// the associated PKCS#11 library instance
+    property Engine: TPkcs11
+      read fEngine;
+    /// access to the high-level certificates recognized in this PKCS#11 instance
+    // - will wait if background loading of information is not finished
+    function Cert: ICryptCertPkcs11DynArray;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
   /// class implementing ICryptCert using PCKS#11
   // - CKO_CERTIFICATES will be directly retrieved from their X.509 DER binary
   // - CKO_PUBLIC_KEY will create fake X.509 certificate from their raw binary
@@ -232,6 +265,98 @@ end;
 
 type
   ECryptCertPkcs11 = class(ECryptCert);
+
+
+{ TCryptCertAlgoPkcs11 }
+
+constructor TCryptCertAlgoPkcs11.Create(const aLibraryName: TFileName;
+  aLog: TSynLogClass);
+begin
+  if aLog = nil then
+    aLog := TSynLog;
+  fLog := aLog;
+  with fLog.Enter('Create %', [aLibraryName], self) do
+  begin
+    fEngine := TPkcs11.Create(aLibraryName); // load the dll/so library
+    TLoggedWorkThread.Create(fLog, 'RetrieveConfig', self, BackgroundRetrieveConfig);
+  end;
+end;
+
+destructor TCryptCertAlgoPkcs11.Destroy;
+begin
+  fEngine.Free;
+  inherited Destroy;
+end;
+
+procedure TCryptCertAlgoPkcs11.BackgroundRetrieveConfig(Sender: TObject);
+var
+  i, j: PtrInt;
+  val: TRawByteStringDynArray;
+  obj: TPkcs11ObjectDynArray;
+  ids: TPkcs11ObjectIDs;
+begin
+  // this operation could take 10 seconds
+  fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
+  fLog.Add.Log(sllDebug, 'BackgroundRetrieveConfig %', [fEngine], self);
+  // generate all ICryptCertPkcs11 certificates from the retrieved information
+  for i := 0 to high(fEngine.SlotIDs) do
+  try
+    fEngine.Open(fEngine.SlotIDs[i]); // anynymous session
+    try
+      obj := fEngine.GetObjects(nil, @val); // all objects
+      ids := nil;
+      for j := 0 to high(obj) do
+        AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
+      for j := 0 to high(ids) do
+        InterfaceArrayAdd(fCert,
+          TCryptCertPkcs11.Create(self, fEngine.SlotIDs[i], obj, val, ids[j]));
+    finally
+      fEngine.Close; // close session
+    end;
+  except
+    on E: Exception do
+      fLog.Add.Log(sllTrace, 'BackgroundRetrieveConfig: slot % raised %',
+        [fEngine.SlotIDs[i], E], self); // log and continue
+  end;
+  fConfigRetrieved := true;
+end;
+
+procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
+var
+  endtix: Int64;
+begin
+  endtix := GetTickCount64 + 60000; // never wait forever
+  repeat
+    SleepHiRes(100);
+    if fConfigRetrieved then
+      exit;
+  until GetTickCount64 > endtix;
+  raise ECryptCertPkcs11.CreateUtf8('%.EnsureRetrieveConfig timeout', [self]);
+end;
+
+function TCryptCertAlgoPkcs11.New: ICryptCert;
+begin
+  result := nil; // unsupported
+end;
+
+function TCryptCertAlgoPkcs11.FromHandle(Handle: pointer): ICryptCert;
+begin
+  result := nil; // unsupported
+end;
+
+function TCryptCertAlgoPkcs11.CreateSelfSignedCsr(const Subjects: RawUtf8;
+  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
+  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
+begin
+  result := ''; // unsupported
+end;
+
+function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11DynArray;
+begin
+  if not fConfigRetrieved then
+    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+  result := fCert;
+end;
 
 
 { TCryptCertPkcs11 }
