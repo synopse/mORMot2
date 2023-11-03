@@ -104,7 +104,8 @@ type
     fLog: TSynLogClass;
     fConfigRetrieved: boolean;
     fCert: ICryptCertPkcs11s;
-    procedure BackgroundRetrieveConfig(Sender: TObject);
+    fLibraryName: TFileName;
+    procedure BackgroundLoad(Sender: TObject);
     procedure EnsureRetrieveConfig;
   public
     /// load a PKCS#11 library and asynchronously retrieve its configuration
@@ -213,6 +214,7 @@ implementation
 
 const
   /// the CK_MECHANISM for each high-level Framework algorithm
+  // - the hash is made on SW side, before calling the PKCS#11 library
   CAA_TO_CKM: array[TCryptAsymAlgo] of CK_MECHANISM_TYPE = (
     CKM_ECDSA,        // caaES256
     CKM_ECDSA,        // caaES384
@@ -313,8 +315,9 @@ begin
   fLog := aLog;
   with fLog.Enter('Create %', [aLibraryName], self) do
   begin
-    fEngine := TPkcs11.Create(aLibraryName); // load the dll/so library
-    TLoggedWorkThread.Create(fLog, 'RetrieveConfig', self, BackgroundRetrieveConfig);
+    fLibraryName := aLibraryName;
+    fEngine := TPkcs11.Create; // the dll/so is loaded in BackgroundLoad
+    TLoggedWorkThread.Create(fLog, 'BackgroundLoad', self, BackgroundLoad);
   end;
 end;
 
@@ -329,7 +332,7 @@ function TCryptCertAlgoPkcs11.Find(const Value: RawByteString;
 begin
   result := nil;
   if not fConfigRetrieved then
-    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   if fCert <> nil then
     TCryptCertPkcs11.InternalFind(pointer(fCert), Value, Method, length(fCert),
                                     MaxCount, ICryptCerts(result));
@@ -353,7 +356,7 @@ var
 begin
   result := nil;
   if not fConfigRetrieved then
-    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   for i := 0 to high(fCert) do
     if IdemPropNameU(fCert[i].StorageLabel, Value) then
     begin
@@ -362,7 +365,7 @@ begin
     end;
 end;
 
-procedure TCryptCertAlgoPkcs11.BackgroundRetrieveConfig(Sender: TObject);
+procedure TCryptCertAlgoPkcs11.BackgroundLoad(Sender: TObject);
 var
   i, j: PtrInt;
   val: TRawByteStringDynArray;
@@ -370,12 +373,13 @@ var
   ids: TPkcs11ObjectIDs;
 begin
   // this operation could take 10 seconds
+  fEngine.Load(fLibraryName);
   fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
-  fLog.Add.Log(sllDebug, 'BackgroundRetrieveConfig %', [fEngine], self);
+  fLog.Add.Log(sllDebug, 'BackgroundLoad %', [fEngine], self);
   // generate all ICryptCertPkcs11 certificates from the retrieved information
   for i := 0 to high(fEngine.SlotIDs) do
   try
-    fEngine.Open(fEngine.SlotIDs[i]); // anynymous session
+    fEngine.Open(fEngine.SlotIDs[i]); // anynymous session for certs and pubkey
     try
       obj := fEngine.GetObjects(nil, @val); // all objects
       ids := nil;
@@ -389,7 +393,7 @@ begin
     end;
   except
     on E: Exception do
-      fLog.Add.Log(sllTrace, 'BackgroundRetrieveConfig: slot % raised %',
+      fLog.Add.Log(sllTrace, 'BackgroundLoad: slot % raised %',
         [fEngine.SlotIDs[i], E], self); // log and continue
   end;
   fConfigRetrieved := true;
@@ -428,7 +432,7 @@ end;
 function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
 begin
   if not fConfigRetrieved then
-    EnsureRetrieveConfig; // wait until BackgroundRetrieveConfig has finished
+    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   result := fCert;
 end;
 
@@ -569,7 +573,7 @@ function TCryptCertPkcs11.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert;
   ExpireDays, ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 begin
-  result := nil; // unsupported
+  result := nil; // unsupported yet
 end;
 
 function TCryptCertPkcs11.Load(const Saved: RawByteString;
