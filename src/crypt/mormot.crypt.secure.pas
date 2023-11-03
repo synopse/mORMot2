@@ -9289,7 +9289,7 @@ begin
       AsnEncOidItem(x, tmp);
       x := 0;
     end;
-    if (y = 0) or
+    if (y = 0) or // y=0 is not a valid last item
        (tmp[0] < #3) then
       tmp[0] := #0; // clearly invalid input
   end;

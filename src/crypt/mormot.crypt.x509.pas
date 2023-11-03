@@ -353,6 +353,7 @@ const
 
   /// internal lookup table from X.509 Public Key Algorithm to our key algorithm
   // - this unit does not support all key types yet
+  // - default to 256-bit hash for RSA and RSA-PSS
   XKA_TO_CAA: array[TXPublicKeyAlgorithm] of TCryptAsymAlgo = (
     caaES256,  // xkaNone
     caaRS256,  // xkaRsa

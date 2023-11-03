@@ -4266,7 +4266,7 @@ end;
 initialization
   // paranoid cross-platform validation
   assert(cardinal(1 shl ord(CKF_ERROR_STATE)) = $01000000);
-  assert(cardinal(CKK_SHA512_T_HMAC) = $00000045);
+  assert(cardinal(CKK_SHA512_T_HMAC) = $00000045 + 1);
   assert(cardinal(1 shl ord(CKF_EXTENSION)) = $80000000);
   assert(SizeOf(CK_DATE) = 8);
   // allow proper JSON serialization of TPkcs11Slot/TPkcs11Token/TPkcs11
