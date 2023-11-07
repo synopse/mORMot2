@@ -345,7 +345,8 @@ type
     // and HeaderFlags fields since HeaderGetValue() would return ''
     // - force HeadersUnFiltered=true to store all headers including the
     // connection-related fields, but increase memory and reduce performance
-    procedure ParseHeader(P: PUtf8Char; HeadersUnFiltered: boolean = false);
+    procedure ParseHeader(P: PUtf8Char; PLen: PtrInt;
+      HeadersUnFiltered: boolean = false);
     /// to be called once all ParseHeader lines have been done to fill Headers
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
@@ -1268,7 +1269,7 @@ end;
 var
   LastHost: RawUtf8;
 
-procedure THttpRequestContext.ParseHeader(P: PUtf8Char;
+procedure THttpRequestContext.ParseHeader(P: PUtf8Char; PLen: PtrInt;
   HeadersUnFiltered: boolean);
 var
   i, len: PtrInt;
@@ -1527,7 +1528,9 @@ begin
       end;
   end;
   // store meaningful headers into WorkBuffer, if not already there
-  Head.Append(P2, StrLen(P2));
+  if PLen < 0 then
+    PLen := StrLen(P2);
+  Head.Append(P2, PLen);
   Head.AppendCRLF;
 end;
 
@@ -1707,7 +1710,7 @@ begin
         if ProcessParseLine(st) then
           if st.LineLen <> 0 then
             // Headers continue as long as text lines appear
-            ParseHeader(st.Line, hroHeadersUnfiltered in Options)
+            ParseHeader(st.Line, st.LineLen, hroHeadersUnfiltered in Options)
           else
             // void line: we reached end of headers
             if hfTransferChunked in HeaderFlags then
@@ -2095,7 +2098,7 @@ begin
       {$I+}
       if line[0] = #0 then
         break; // HTTP headers end with a void line
-      Http.ParseHeader(@line, HeadersUnFiltered);
+      Http.ParseHeader(@line, {linelen=}-1, HeadersUnFiltered);
       if Http.State <> hrsNoStateMachine then
         exit; // error
     until false
@@ -2104,7 +2107,7 @@ begin
       SockRecvLn(s);
       if s = '' then
         break;
-      Http.ParseHeader(pointer(s), HeadersUnFiltered);
+      Http.ParseHeader(pointer(s), length(s), HeadersUnFiltered);
       if Http.State <> hrsNoStateMachine then
         exit; // error
     until false;
