@@ -689,6 +689,7 @@ function TSynMustacheContext.ProcessHelper(const ValueName: RawUtf8;
   OwnValue: PPVarData): TSynMustacheSectionType;
 var
   valnam: RawUtf8;
+  p: PUtf8Char;
   val: TVarData;
   valArr: TDocVariantData absolute val;
   valFree, valFound: boolean;
@@ -723,7 +724,10 @@ begin
           ',':
             begin
               // {{helper value,123,"constant"}}
-              CsvToRawUtf8DynArray(Pointer(valnam), names, ',', true);
+              p := Pointer(valnam);
+              if j = 1 then
+                inc(p); // for {{helper ,"constant1","constant2",123}}
+              CsvToRawUtf8DynArray(p, names, ',', true);
               // TODO: handle 123,"a,b,c"
               valArr.InitFast;
               for k := 0 to High(names) do
