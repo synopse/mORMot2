@@ -2631,7 +2631,8 @@ type
     // - should be a reentrant lock, even if seldom called
     RegisterSafe: TOSLock;
     /// how many TRttiCustom instances have been registered for a given type
-    Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
+    // - we include rkUnknown for safety
+    Counts: array[TRttiKind] of integer;
     /// initialize the RTTI list
     constructor Create;
     /// finalize the RTTI list
