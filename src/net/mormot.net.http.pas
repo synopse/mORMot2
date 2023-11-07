@@ -1254,10 +1254,10 @@ begin
   while (P^ > #0) and
         (P^ <= ' ') do
     inc(P); // trim left
-  if L < 0 then
-    L := StrLen(P)
+  if L >= 0 then
+    dec(L, P - P2)
   else
-    dec(L, P - P2);
+    L := StrLen(P);
   repeat
     if (L = 0) or
        (P[L - 1] > ' ') then
