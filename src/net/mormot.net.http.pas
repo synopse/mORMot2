@@ -261,7 +261,7 @@ type
   private
     ContentLeft: Int64;
     ContentPos: PByte;
-    ContentEncoding, CommandUriInstance: RawUtf8;
+    ContentEncoding, CommandUriInstance, LastHost: RawUtf8;
     CommandUriInstanceLen: PtrInt;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
@@ -1266,9 +1266,6 @@ begin
   SetRawUtf8(result, P, L, nointern);
 end;
 
-var
-  LastHost: RawUtf8;
-
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char; PLen: PtrInt;
   HeadersUnFiltered: boolean);
 var
@@ -1352,13 +1349,14 @@ begin
         while (P^ > #0) and
               (P^ <= ' ') do
           inc(P); // trim left
-        if StrComp(pointer(P), pointer(LastHost)) = 0 then
+        if (LastHost <> '') and
+           (StrComp(pointer(P), pointer(LastHost)) = 0) then
           Host := LastHost // optimistic approach
         else
         begin
           GetTrimmed(P, Host);
           if LastHost = '' then
-            LastHost := Host;
+            LastHost := Host; // thread-safe cache for next reused call
         end;
         // always add to headers - 'host:' sometimes parsed directly
       end;
