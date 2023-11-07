@@ -267,7 +267,7 @@ type
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8;
+    procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
   public
@@ -1248,15 +1248,16 @@ begin
   integer(CompressAcceptHeader) := 0;
 end;
 
-procedure THttpRequestContext.GetTrimmed(P: PUtf8Char; var result: RawUtf8;
-  nointern: boolean);
-var
-  L: PtrInt;
+procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
+  var result: RawUtf8; nointern: boolean);
 begin
   while (P^ > #0) and
         (P^ <= ' ') do
     inc(P); // trim left
-  L := StrLen(P);
+  if L < 0 then
+    L := StrLen(P)
+  else
+    dec(L, P - P2);
   repeat
     if (L = 0) or
        (P[L - 1] > ' ') then
@@ -1312,7 +1313,7 @@ begin
               end
               else
               begin
-                GetTrimmed(P, ContentType);
+                GetTrimmed(P, P2, PLen, ContentType);
                 if ContentType = '' then
                   // 'CONTENT-TYPE:' is searched by HEADER_CONTENT_TYPE_UPPER
                   exit;
@@ -1354,7 +1355,7 @@ begin
           Host := LastHost // optimistic approach
         else
         begin
-          GetTrimmed(P, Host);
+          GetTrimmed(P, P2, PLen, Host);
           if LastHost = '' then
             LastHost := Host; // thread-safe cache for next reused call
         end;
@@ -1415,7 +1416,7 @@ begin
         ord('i') + ord('n') shl 8 + ord('g') shl 16 + ord(':') shl 24) then
         begin
            // 'ACCEPT-ENCODING:'
-          GetTrimmed(P + 17, AcceptEncoding);
+          GetTrimmed(P + 17, P2, PLen, AcceptEncoding);
           if not HeadersUnFiltered then
             exit;
         end;
@@ -1426,7 +1427,7 @@ begin
         ord('n') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) then
       begin
         // 'USER-AGENT:'
-        GetTrimmed(P + 11, UserAgent);
+        GetTrimmed(P + 11, P2, PLen, UserAgent);
         if not HeadersUnFiltered then
           exit;
       end;
@@ -1471,7 +1472,7 @@ begin
           ord('e') + ord('a') shl 8 + ord('r') shl 16 + ord('e') shl 24) and
            (PWord(P + 20)^ or $2020 = ord('r') + ord(' ') shl 8) then
           // 'AUTHORIZATION: BEARER '
-          GetTrimmed(P + 22, BearerToken, {nointern=}true);
+          GetTrimmed(P + 22, P2, PLen, BearerToken, {nointern=}true);
         // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
       end;
     ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
@@ -1512,7 +1513,7 @@ begin
         ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
       begin
         // 'UPGRADE:'
-        GetTrimmed(P + 8, Upgrade);
+        GetTrimmed(P + 8, P2, PLen, Upgrade);
         if not HeadersUnFiltered then
           exit;
       end;
