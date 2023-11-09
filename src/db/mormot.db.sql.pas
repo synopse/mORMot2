@@ -1102,7 +1102,7 @@ type
     // - JSON data is retrieved with UTF-8 encoding
     // - if Expanded is true, JSON output is a standard array of objects, for
     // direct use with any Ajax or .NET client:
-    // & [{"f1":"1v1","f2":1v2},{"f2":"2v1","f2":2v2}...]
+    // & [{"f1":"1v1","f2":1v2},{"f1":"2v1","f2":2v2}...]
     // - if Expanded is false, JSON data is serialized in non-expanded format:
     // & {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
     // resulting in lower space use and faster process - it could be parsed by

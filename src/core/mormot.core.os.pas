@@ -1047,7 +1047,7 @@ const
                                 + ' Alexandria'
       {$elseif defined(VER360)} + ' 12'
         {$if declared(RTLVersion121)} + '.1' {$ifend}
-                                + ' Yukon'
+                                + ' Athens'
       {$elseif defined(VER370)} + ' 13 Next'
       {$ifend}
     {$endif CONDITIONALEXPRESSIONS}
