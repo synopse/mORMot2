@@ -3959,7 +3959,7 @@ var
 
   procedure ShowError(Msg: RawUtf8);
   begin
-    Msg := _fmt('%: "%" failed for %', [ServiceName, Msg, param]);
+    Msg := _fmt('%s: "%s" failed for %s', [ServiceName, Msg, param]);
     TService.DoLog(sllLastError, '%', [Msg], nil);
     ConsoleWrite(Msg, ccLightRed);
   end;
