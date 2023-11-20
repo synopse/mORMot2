@@ -1570,7 +1570,7 @@ begin
           ctxt.InStream.Seek(0, soBeginning);
           SockSendStream(ctxt.InStream);
         end;
-        // retrieve HTTP command line response
+        // wait and retrieve HTTP command line response
         pending := SockReceivePending(Timeout); // wait using select/poll
         if pending <> cspDataAvailable then
         begin

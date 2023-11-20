@@ -241,8 +241,8 @@ const
 function LdapEscape(const Text: RawUtf8; KeepWildChar: boolean = false): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// returns true when no * \ character is part of a non-void name
-// - as called by LdapEscapeName() for sAMAccountName/distinguishedName
+/// returns true when no * \ character is part of a non-void UTF-8 name
+// - as called by LdapEscapeName() for sAMAccountName
 function LdapValidName(const Text: RawUtf8): boolean;
 
 /// calls LdapValidName() then LdapEscape() or return false
@@ -254,6 +254,13 @@ function LdapEscapeName(const Text: RawUtf8; var Safe: RawUtf8): boolean; overlo
 // - in the context of user or group distinguished name, i.e. will raise an
 // ELdap exception if Text is void or contains any unexpected * or \ character
 function LdapEscapeName(const Text: RawUtf8): RawUtf8; overload;
+
+/// returns true when no * character is part of a non-void UTF-8 name
+function LdapIsValidDistinguishedName(const Text: RawUtf8): boolean;
+
+/// returns Text when no * character is part of a non-void UTF-8 name
+// - used e.g. for distinguishedName values - with no escape
+function LdapValidDistinguishedName(const Text: RawUtf8): RawUtf8;
 
 /// decode \xx or \c from a LDAP string value
 // - following e.g. https://www.rfc-editor.org/rfc/rfc4514#section-2.4
@@ -1794,6 +1801,21 @@ function LdapEscapeName(const Text: RawUtf8): RawUtf8;
 begin
   if not LdapEscapeName(Text, result) then
     raise ELdap.CreateUtf8('Invalid input name: %', [Text]);
+end;
+
+function LdapIsValidDistinguishedName(const Text: RawUtf8): boolean;
+begin
+  result := (Text <> '') and
+            (PosExChar('*', Text) = 0) and // but allows \ within DN
+            IsValidUtf8(Text);
+end;
+
+function LdapValidDistinguishedName(const Text: RawUtf8): RawUtf8;
+begin
+  if LdapIsValidDistinguishedName(Text) then
+    result := Text // no escape of the DN value
+  else
+    raise ELdap.CreateUtf8('Invalid distinguishedName: %', [Text]);
 end;
 
 function LdapUnescape(const Text: RawUtf8): RawUtf8;
