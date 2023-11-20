@@ -123,27 +123,27 @@ type
 
 const
   // poll() flag when there is data to read
-  POLLIN       = $001;
+  POLLIN       = $0001;
   // poll() flag when there is urgent data to read
-  POLLPRI      = $002;
+  POLLPRI      = $0002;
   // poll() flag when writing now will not block
-  POLLOUT      = $004;
+  POLLOUT      = $0004;
   // poll() flag error condition (always implicitly polled for)
-  POLLERR      = $008;
+  POLLERR      = $0008;
   // poll() flag hung up (always implicitly polled for)
-  POLLHUP      = $010;
+  POLLHUP      = $0010;
   // poll() flag invalid polling request (always implicitly polled for)
-  POLLNVAL     = $020;
+  POLLNVAL     = $0020;
   // poll() flag when normal data may be read
-  POLLRDNORM   = $040;
+  POLLRDNORM   = $0040;
   // poll() flag when priority data may be read
-  POLLRDBAND   = $080;
+  POLLRDBAND   = $0080;
   // poll() flag when writing now will not block
-  POLLWRNORM   = $100;
+  POLLWRNORM   = $0100;
   // poll() flag when priority data may be written
-  POLLWRBAND   = $200;
+  POLLWRBAND   = $0200;
   // poll() flag extension for Linux
-  POLLMSG      = $400;
+  POLLMSG      = $0400;
 
 type
   /// polling request data structure for poll()
@@ -594,6 +594,8 @@ begin
     p.events := POLLIN or POLLPRI;
   if neWrite in scope then
     p.events := p.events or POLLOUT;
+  if neError in scope then
+    p.events := p.events or POLLERR;
   p.revents := 0;
   res := poll(@p, 1, ms);
   if res < 0 then
@@ -611,6 +613,8 @@ begin
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
     include(result, neWrite);
+  if p.revents and POLLERR <> 0 then
+    include(result, neError);
   if p.revents and POLLHUP <> 0 then
     include(result, neClosed);
 end;

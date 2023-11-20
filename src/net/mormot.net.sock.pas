@@ -2047,6 +2047,7 @@ end;
 function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
 var
   tix: Int64;
+  status: TNetEvents;
 begin
   if ms < 20 then
     tix := 0
@@ -2058,8 +2059,17 @@ begin
   connect(socket.Socket, @Addr, Size); // non-blocking connect() once
   socket.MakeBlocking;
   repeat
-    if socket.WaitFor(20, [neWrite]) = [neWrite] then
+    status := socket.WaitFor(20, [neWrite, neError, neClosed]);
+    result := nrOK;
+    if status = [neWrite] then
       exit;
+    result := nrFatalError;
+    if neError in status then
+      exit;
+    result := nrClosed;
+    if neClosed in status then
+      exit;
+    // typically, status = [] for TRY_AGAIN result
     SleepHiRes(1);
   until (tix = 0) or
         (mormot.core.os.GetTickCount64 > tix);

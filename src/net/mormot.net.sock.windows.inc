@@ -600,11 +600,11 @@ function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: system.PInteger): TNetEvents;
 var
   sock: TSocket;
-  rd, wr: record
+  rd, wr, er: record
     fd_count: integer;
     fd_array: array[0..0] of TSocket; // no need of the 512 entries of TFDSet
   end;
-  rdp, wrp: PFDSet;
+  rdp, wrp, erp: PFDSet;
   tv: TTimeVal;
   ptv: pointer;
   res: integer;
@@ -617,6 +617,7 @@ begin
     exit;
   rdp := nil;
   wrp := nil;
+  erp := nil;
   sock := TSocket(@self);
   if neWrite in scope then
   begin
@@ -624,8 +625,15 @@ begin
     wr.fd_count := 1;
     wrp := @wr;
   end;
+  if neError in scope then
+  begin
+    er.fd_array[0] := sock;
+    er.fd_count := 1;
+    erp := @er;
+  end;
   if (neRead in scope) or
-     not (neWrite in scope) then // a least one is needed
+     ((wrp = nil) and
+      (erp = nil)) then // a least one is needed
   begin
     rd.fd_array[0] := sock;
     rd.fd_count := 1;
@@ -638,7 +646,7 @@ begin
   end
   else
     ptv := nil; // infinite timeout
-  res := select(sock + 1, rdp, wrp, nil, ptv);
+  res := select(sock + 1, rdp, wrp, erp, ptv);
   if res < 0 then
   begin
     if loerr <> nil then
@@ -662,6 +670,10 @@ begin
      ({%H-}wr.fd_count = 1) and
      (wr.fd_array[0] = sock) then
     include(result, neWrite);
+  if (erp <> nil) and
+     ({%H-}er.fd_count = 1) and
+     (er.fd_array[0] = sock) then
+    include(result, neError);
 end;
 
 
