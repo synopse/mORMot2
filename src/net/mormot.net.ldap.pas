@@ -1864,7 +1864,8 @@ begin
   if sock <> nil then
   try
     id := Random31;
-    FormatUtf8('(&(DnsDomain=%)(NtVer=%))', [LdapEscapeName(DomainName), NTVER], filter);
+    FormatUtf8('(&(DnsDomain=%)(NtVer=%))',
+      [LdapEscapeName(DomainName), NTVER], filter);
     req := AsnSeq([
              Asn(id),
              RawLdapSearch('', false, filter, ['NetLogon'])
@@ -2672,17 +2673,20 @@ function InfoFilter(AT: cardinal; const AN, DN, UPN, CustomFilter: RawUtf8): Raw
 begin
   result := '';
   if AN <> '' then
-    FormatUtf8('(sAMAccountName=%)', [LdapEscapeName(AN)], result);
+    FormatUtf8('(sAMAccountName=%)',
+      [LdapEscapeName(AN)], result);
   if DN <> '' then
-    result := FormatUtf8('%(distinguishedName=%)', [result, LdapEscapeName(DN)]);
+    result := FormatUtf8('%(distinguishedName=%)',
+      [result, LdapValidDistinguishedName(DN)]); // no escape
   if UPN <> '' then
-    result := FormatUtf8('%(userPrincipalName=%)', [result, LdapEscapeName(UPN)]);
+    result := FormatUtf8('%(userPrincipalName=%)',
+      [result, LdapEscapeName(UPN)]);
   if result = '' then
   begin
     result := '(cn=)'; // return no answer whatsoever
     exit;
   end;
-  if ord(AN <> '') + ord(DN <> '')+ ord(UPN <> '') > 1 then
+  if ord(AN <> '') + ord(DN <> '') + ord(UPN <> '') > 1 then
     result := FormatUtf8('(|%)', [result]);
   result := FormatUtf8('(&(sAMAccountType=%)%%)', [AT, result, CustomFilter]);
 end;
@@ -3911,10 +3915,10 @@ begin
         exit;
   for i := 0 to high(GroupDN) do
     if GroupDN[i] <> '' then
-      if LdapEscapeName(GroupDN[i], grp) then
+      if LdapIsValidDistinguishedName(GroupDN[i]) then
       begin
-        filter := FormatUtf8('%(distinguishedName=%)', [filter, grp]);
-        inc(n);
+        filter := FormatUtf8('%(distinguishedName=%)', [filter, GroupDN[i]]);
+        inc(n); // no escape of the DN content
       end
       else
         exit;
