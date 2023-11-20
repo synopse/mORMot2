@@ -552,7 +552,7 @@ type
   T7zProgressCallback = function(const sender: I7zArchive;
     current, total: Int64): HRESULT of object;
 
-  /// the parent interface of both I7zRead and I7zWriter
+  /// the parent interface of both I7zReader and I7zWriter
   I7zArchive = interface
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D530}']
     // -- some internal methods used as property getters
@@ -585,11 +585,12 @@ type
     /// supply a password
     procedure SetPassword(const password: RawUtf8);
     /// the number of files in this archive
-    // - used as index in Item*[0..Count-1] properties and
-    // I7zReader.Extract or I7zWriter.SaveToFile methods
+    // - can be used as 0..Count-1 index in
+    // ZipName/FullName/Size/PackSize/IsFolder/Method/Comment/ModDate[ndx]
+    // properties and I7zReader.Extract or I7zWriter.SaveToFile methods
     function Count: integer;
     /// search for a given file name in this archive
-    // - case-insensitive search within ItemZipName[] items
+    // - case-insensitive search within ZipName[] items
     // - returns -1 if not found, or the index in Item*[] properties
     function NameToIndex(const zipname: RawUtf8): integer;
     /// the kpidPath property value of an archived file
@@ -633,6 +634,7 @@ type
   end;
 
   /// reading acccess to an archive content using the 7z.dll
+  // - use inherited I7zArchive methods to access the archive information
   I7zReader = interface(I7zArchive)
     ['{9C0C0C8C-883A-49ED-B608-A6D66D36D53A}']
     // -- main high-level methods
