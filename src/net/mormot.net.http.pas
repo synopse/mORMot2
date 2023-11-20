@@ -411,6 +411,8 @@ const
 
 function ToText(st: THttpRequestState): PShortString; overload;
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
+function ToText(csp: TCrtSocketPending): PShortString; overload;
+function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -2020,6 +2022,17 @@ function ToText(st: THttpRequestState): PShortString;
 begin
   result := GetEnumName(TypeInfo(THttpRequestState), ord(st));
 end;
+
+function ToText(csp: TCrtSocketPending): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCrtSocketPending), ord(csp));
+end;
+
+function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
+  begin
+    result := GetEnumName(TypeInfo(TCrtSocketTlsAfter), ord(tls));
+  end;
+
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
