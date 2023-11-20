@@ -4066,7 +4066,7 @@ begin
   while P^ in [#9, ' '] do
     inc(P);
   if P^ < ' ' then
-    exit; // end of line or end of file
+    exit; // end of line or end of file (buffer)
   S := P;
   repeat
     inc(P);
@@ -5079,11 +5079,11 @@ begin
     if Assigned(fSecure) and
        (fSecure.ReceivePending > 0) then
     begin
-      result := cspDataAvailable; // some data is available in TLS buffers
+      result := cspDataAvailable; // some data is available in the TLS buffers
       exit;
     end;
     // check if something is available at socket level (even for TLS)
-    events := fSock.WaitFor(TimeOutMS, [neRead], loerr);
+    events := fSock.WaitFor(TimeOutMS, [neRead, neError], loerr);
   end
   else
     events := [neError];
