@@ -1574,8 +1574,11 @@ begin
         pending := SockReceivePending(Timeout); // wait using select/poll
         if pending <> cspDataAvailable then
         begin
-          DoRetry(HTTP_TIMEOUT, '% waiting %ms for headers',
-            [GetEnumName(TypeInfo(TCrtSocketPending), ord(pending))^, TimeOut]);
+          if pending = cspNoData then
+            ctxt.status := HTTP_TIMEOUT // no retry on timeout
+          else
+            DoRetry(HTTP_TIMEOUT,
+              '% waiting %ms for headers', [ToText(pending)^, TimeOut]);
           exit;
         end;
         SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
