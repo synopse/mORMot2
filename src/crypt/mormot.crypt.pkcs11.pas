@@ -440,6 +440,12 @@ begin
   inherited Destroy;
 end;
 
+function CertStorageCompare(const A, B): integer;
+begin
+  result := StrComp(pointer(ICryptCertPkcs11(A).Storage),
+                    pointer(ICryptCertPkcs11(B).Storage));
+end;
+
 procedure TCryptCertAlgoPkcs11.BackgroundLoad(Sender: TObject);
 var
   i, j: PtrInt;
@@ -472,6 +478,7 @@ begin
         fEngine.Close; // close session
       end;
     end;
+    ObjArraySort(fCert, CertStorageCompare);
   except
     on E: Exception do
     begin
