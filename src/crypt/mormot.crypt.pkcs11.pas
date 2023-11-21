@@ -82,8 +82,10 @@ type
     function Engine: TPkcs11;
     /// the associated Slot ID in the PKCS#11 instance Engine
     function SlotID: TPkcs11SlotID;
-    /// the associated hexadecimal CKA_ID in the token of this PKCS#11 instance
-    // - all involved TPkcs11Object.StorageID do match in the objects list
+    /// the hexadecimal CKA_ID of the associated token in the PKCS#11 instance
+    // - a single TPkcs11Object.StorageID usually appear in the objects list
+    // to identify a public key (or full X.509 certificate), but is used by
+    // TCryptCertPkcs11.OpenPrivateKey to unlock the associated CKO_PRIVATE_KEY
     function StorageID: TPkcs11ObjectID;
     /// the associated Slot ID and hexa CKA_ID in the PKCS#11 instance Engine
     // - i.e. 'SlotID-StorageID' text
@@ -135,6 +137,9 @@ type
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCertPkcs11;
     /// search the internal list per ICryptCertPkcs11.StorageLabel value
     function FindByLabel(const Value: RawUtf8): ICryptCertPkcs11;
+    /// search the internal list per ICryptCertPkcs11.StorageID value
+    // - i.e. known public certificate matching hexadecimal CKA_ID
+    function FindByID(const Value: TPkcs11ObjectID): ICryptCertPkcs11;
     // TCryptCertAlgo methods are mostly unsupported
     function New: ICryptCert; override;
     function FromHandle(Handle: pointer): ICryptCert; override;
@@ -493,7 +498,7 @@ end;
 procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
 var
   endtix: Int64;
-begin
+begin // caller did "if not fConfigRetrieved then EnsureRetrieveConfig"
   endtix := GetTickCount64 + 60000; // never wait forever
   repeat
     SleepHiRes(100);
@@ -535,6 +540,21 @@ begin
     EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   for i := 0 to high(fCert) do
     if IdemPropNameU(fCert[i].StorageLabel, Value) then
+    begin
+      result := fCert[i];
+      break;
+    end;
+end;
+
+function TCryptCertAlgoPkcs11.FindByID(const Value: TPkcs11ObjectID): ICryptCertPkcs11;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if not fConfigRetrieved then
+    EnsureRetrieveConfig; // wait until BackgroundLoad has finished
+  for i := 0 to high(fCert) do
+    if IdemPropNameU(fCert[i].StorageID, Value) then
     begin
       result := fCert[i];
       break;

@@ -1803,6 +1803,8 @@ type
   TPkcs11SlotID = cardinal;
 
   /// the identifier of a Storage Object (from CKA_ID), as hexadecimal
+  // - i.e. the known hexadecimal CKA_ID, matching a public key certificate
+  // and its associated (pin-protected) private key for a given token
   TPkcs11ObjectID = RawUtf8;
   /// several identifiers of a Storage Object (from CKA_ID), as hexadecimal
   TPkcs11ObjectIDs = TRawUtf8DynArray;
