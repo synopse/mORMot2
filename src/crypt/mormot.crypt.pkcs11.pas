@@ -74,6 +74,7 @@ type
     /// set the PIN code to be used to access the CKO_PRIVATE_KEY object
     // - same as Load('', cccPrivateKeyOnly, PinCode)
     // - return true if the PIN code is correct
+    // - warning: a wrong PinCode may lock your HW device for any further use
     function SetPin(const PinCode: SpiUtf8): boolean;
     /// true if was filled from a true CKO_CERTIFICATE object
     // - false if is a "fake" X.509 certificate, created from a CKO_PUBLIC_KEY
@@ -379,17 +380,22 @@ function TCryptPrivateKeyPkcs11.SignDigest(const Dig: THash512Rec;
 var
   obj: CK_OBJECT_HANDLE;
   mech: CK_MECHANISM;
+  hf: THashAlgo;
+  seq: TAsnObject;
   log: ISynLog; // seldom called, and better be traced (and profiled)
 begin
   log := fCert.Log.Enter('SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   result := '';
-  if HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen then
+  hf := CAA_HF[DigAlgo];
+  if HASH_SIZE[hf] <> DigLen then
     exit; // paranoid
   obj := fCert.OpenPrivateKey;
   if obj <> CK_INVALID_HANDLE then
     try
+      // see https://crypto.stackexchange.com/a/10103/40200
       Pkcs11SetMechanism(DigAlgo, mech);
-      result := fCert.fEngine.Sign(@Dig, DigLen, obj, mech);
+      seq := RsaSignHashToDer(@Dig.b, hf);
+      result := fCert.fEngine.Sign(pointer(seq), length(seq), obj, mech);
       log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
     finally
       fCert.fEngine.Close;
