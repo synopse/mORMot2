@@ -79,13 +79,16 @@ type
     function IsX509: boolean;
     /// the associated PKCS#11 library instance
     function Engine: TPkcs11;
+    /// the associated Slot ID in the PKCS#11 instance Engine
+    function SlotID: TPkcs11SlotID;
     /// the associated hexadecimal CKA_ID in the token of this PKCS#11 instance
     // - all involved TPkcs11Object.StorageID do match in the objects list
     function StorageID: TPkcs11ObjectID;
+    /// the associated Slot ID and hexa CKA_ID in the PKCS#11 instance Engine
+    // - i.e. 'SlotID-StorageID' text
+    function Storage: RawUtf8;
     /// the associated label, as shared by all objects of this StorageID
     function StorageLabel: RawUtf8;
-    /// the associated Slot ID in the PKCS#11 instance Engine
-    function SlotID: TPkcs11SlotID;
     /// the associated Token Name in the PKCS#11 instance Engine
     function TokenName: RawUtf8;
     /// the associated slot in the PKCS#11 instance Engine
@@ -209,6 +212,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function StorageLabel: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
+    function Storage: RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
     function SlotID: TPkcs11SlotID;
       {$ifdef HASINLINE} inline; {$endif}
     function TokenName: RawUtf8;
@@ -216,8 +221,10 @@ type
     function Slot: TPkcs11Slot;
     function Token: TPkcs11Token;
   published
+    /// redirect to ICryptCertPkcs11.Storage value, i.e. 'SlotID-StorageID'
     property Location: RawUtf8
       read fLocation;
+    /// redirect to ICryptCertPkcs11.StorageLabel value
     property &Label: RawUtf8
       read fStorageLabel;
   end;
@@ -825,6 +832,11 @@ end;
 function TCryptCertPkcs11.StorageLabel: RawUtf8;
 begin
   result := fStorageLabel;
+end;
+
+function TCryptCertPkcs11.Storage: RawUtf8;
+begin
+  result := fLocation;
 end;
 
 function TCryptCertPkcs11.Slot: TPkcs11Slot;
