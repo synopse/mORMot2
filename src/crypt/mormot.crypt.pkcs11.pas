@@ -394,7 +394,10 @@ begin
     try
       // see https://crypto.stackexchange.com/a/10103/40200
       Pkcs11SetMechanism(DigAlgo, mech);
-      seq := RsaSignHashToDer(@Dig.b, hf);
+      if fCert.fCaa in CAA_RSA then // CKM_RSA_PKCS or CKM_RSA_PKCS_PSS
+        seq := RsaSignHashToDer(@Dig.b, hf)
+      else
+        FastSetRawByteString(seq, @Dig, DigLen); // CKM_ECDSA (to be validated)
       result := fCert.fEngine.Sign(pointer(seq), length(seq), obj, mech);
       log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
     finally
