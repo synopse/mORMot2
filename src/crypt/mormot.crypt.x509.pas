@@ -1140,7 +1140,9 @@ type
   TCryptCertX509Abstract = class(TCryptCert)
   protected
     fX509: TX509;
-    fPrivateKey: ICryptPrivateKey; // may be a TCryptPrivateKeyOpenSsl
+    // may be nil or a TCryptPrivateKeyRsa, TCryptPrivateKeyEcc,
+    // TCryptPrivateKeyOpenSsl or a TCryptPrivateKeyPkcs11
+    fPrivateKey: ICryptPrivateKey;
     // overriden to use a faster search with no temporary memory allocation
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
       Method: TCryptCertComparer; Count, MaxCount: integer;

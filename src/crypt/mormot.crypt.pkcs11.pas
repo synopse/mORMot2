@@ -379,7 +379,7 @@ function TCryptPrivateKeyPkcs11.SignDigest(const Dig: THash512Rec;
 var
   obj: CK_OBJECT_HANDLE;
   mech: CK_MECHANISM;
-  log: ISynLog; // seldom called, and better be traced
+  log: ISynLog; // seldom called, and better be traced (and profiled)
 begin
   log := fCert.Log.Enter('SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   result := '';
@@ -611,7 +611,7 @@ begin
   try
     fEngine.Open(fSlotID, pin);
     try
-      result := fEngine.GetObject(CKO_PRIVATE_KEY, '', fStorageID);
+      result := fEngine.GetObject(CKO_PRIVATE_KEY, '', HexToBin(fStorageID));
     finally
       if result = CK_INVALID_HANDLE then
         fEngine.Close;
