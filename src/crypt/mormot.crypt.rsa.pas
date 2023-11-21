@@ -703,6 +703,10 @@ type
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; override;
   end;
 
+/// low-level computation of the ASN.1 sequence of a hash signature
+// - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
+// - as used by TRsa.Sign() method and expected by CKM_RSA_PKCS signature
+function RsaSignHashToDer(Hash: PHash512; HashAlgo: THashAlgo): TAsnObject;
 
 
 { *********** Registration of our RSA Engine to the TCryptAsym Factory }
@@ -2152,6 +2156,21 @@ begin
       result := AsnNextBigInt(pos[2], str, values[i]^);
 end;
 
+function RsaSignHashToDer(Hash: PHash512; HashAlgo: THashAlgo): TAsnObject;
+var
+  h: RawByteString;
+begin
+  FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
+  result := AsnSeq([
+              AsnSeq([
+                AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
+                ASN1_NULL_VALUE
+              ]),
+              Asn(ASN1_OCTSTR, [h])
+            ]);
+end;
+
+
 
 { TRsaPublicKey }
 
@@ -2866,18 +2885,10 @@ end;
 function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
 var
   seq: TAsnObject;
-  h: RawByteString;
 begin
   // this virtual method implements RSASSA-PKCS1-v1_5 signature scheme
   // 1. create the ASN.1 sequence of the hash to be encoded
-  FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
-  seq := AsnSeq([
-           AsnSeq([
-             AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
-             ASN1_NULL_VALUE
-           ]),
-           Asn(ASN1_OCTSTR, [h])
-         ]);
+  seq := RsaSignHashToDer(Hash, HashAlgo);
   // 2. sign it using the stored private key
   result := Pkcs1Sign(pointer(seq), length(seq));
 end;
