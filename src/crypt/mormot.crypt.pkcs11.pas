@@ -73,7 +73,8 @@ type
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
     /// set the PIN code to be used to access the CKO_PRIVATE_KEY object
     // - same as Load('', cccPrivateKeyOnly, PinCode)
-    procedure SetPin(const PinCode: RawUtf8);
+    // - return true if the PIN code is correct
+    function SetPin(const PinCode: SpiUtf8): boolean;
     /// true if was filled from a true CKO_CERTIFICATE object
     // - false if is a "fake" X.509 certificate, created from a CKO_PUBLIC_KEY
     function IsX509: boolean;
@@ -203,7 +204,7 @@ type
     procedure Sign(const Authority: ICryptCert); override;
     // ICryptCertPkcs11 methods
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
-    procedure SetPin(const PinCode: RawUtf8);
+    function SetPin(const PinCode: SpiUtf8): boolean;
     function IsX509: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     function Engine: TPkcs11;
@@ -742,9 +743,8 @@ function TCryptCertPkcs11.Load(const Saved: RawByteString;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): boolean;
 begin
   result := (Saved = '') and
-            (Content = cccPrivateKeyOnly);
-  if result then
-    SetPin(PrivatePassword);
+            (Content = cccPrivateKeyOnly) and
+            SetPin(PrivatePassword);
 end;
 
 function TCryptCertPkcs11.Save(Content: TCryptCertContent;
@@ -802,13 +802,22 @@ begin
   fCaa := caa;
 end;
 
-procedure TCryptCertPkcs11.SetPin(const PinCode: RawUtf8);
+function TCryptCertPkcs11.SetPin(const PinCode: SpiUtf8): boolean;
 begin
+  result := false;
+  // store the PIN code in memory with proper obfuscation
+  fPin := CryptDataForCurrentUser(PinCode, fSecret, {encrypt=}true);
+  // validate the supplied PIN code
+  if OpenPrivateKey = CK_INVALID_HANDLE then
+  begin
+    fPin := ''; // incorrect PIN
+    exit;
+  end;
+  fEngine.Close; // no need to use this session yet
+  result := true;
   if fPrivateKey = nil then
     // notify we could try to access the private key from now on
     fPrivateKey := TCryptPrivateKeyPkcs11.Create(self);
-  // store the PIN code in memory with proper obfuscation
-  fPin := CryptDataForCurrentUser(PinCode, fSecret, {encrypt=}true);
 end;
 
 function TCryptCertPkcs11.IsX509: boolean;
