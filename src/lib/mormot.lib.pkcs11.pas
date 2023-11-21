@@ -1210,6 +1210,7 @@ type
 
 type
   /// helper to manage a set of CK_ATTRIBUTE at runtime
+  // - warning: when allocated on stack, you should call New or Clear before Add
   {$ifdef USERECORDWITHMETHODS}
   CK_ATTRIBUTES = record
   {$else}
@@ -1256,6 +1257,7 @@ type
     procedure Add(const aType: array of CK_ATTRIBUTE_TYPE); overload;
 
     /// reset the CK_ATTRIBUTE list
+    // - mandatory when the instance is allocated on stack
     procedure Clear;
     /// reset the CK_ATTRIBUTE.pValue/ulValueLen fields, keeping Attr[]._type
     // - to be used e.g. before first GetAttributeValue() call
@@ -3158,8 +3160,6 @@ end;
 
 function CK_ATTRIBUTES.InternalStore(const aValue: RawByteString): pointer;
 begin
-  if Attrs = nil then
-    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
   if fStoreBinPos = length(fStoreBin) then
     SetLength(fStoreBin, NextGrow(fStoreBinPos));
   fStoreBin[fStoreBinPos] := aValue; // fast ref-count copy for safety
@@ -3169,8 +3169,6 @@ end;
 
 function CK_ATTRIBUTES.InternalStore(aValue: CK_ULONG): CK_ULONG_PTR;
 begin
-  if Attrs = nil then
-    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
   if fStoreUlongPos = high(fStoreUlong) then
     raise EPkcs11.Create('CK_ATTRIBUTES: too many CK_ULONG attributes');
   result := @fStoreUlong[fStoreUlongPos];
@@ -3219,8 +3217,6 @@ end;
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer;
   aLen: CK_ULONG);
 begin
-  if Attrs = nil then
-    Clear; // initialize Count when needed (e.g. CK_ATTRIBUTES on stack)
   if Count = length(Attrs) then
     SetLength(Attrs, NextGrow(Count)); // grow capacity by chunks
   with Attrs[Count] do
