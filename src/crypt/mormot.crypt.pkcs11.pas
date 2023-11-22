@@ -27,6 +27,7 @@ uses
   mormot.core.os,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.ecc256r1,
   mormot.crypt.ecc,
   mormot.crypt.rsa,
   mormot.crypt.x509,
@@ -399,6 +400,11 @@ begin
       else
         FastSetRawByteString(seq, @Dig, DigLen); // CKM_ECDSA (to be validated)
       result := fCert.fEngine.Sign(pointer(seq), length(seq), obj, mech);
+      case fCert.fCaa of
+        caaES256:
+          if length(result) = SizeOf(TEccSignature) then
+            result := EccToDer(PEccSignature(result)^);
+      end;
       log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
     finally
       fCert.fEngine.Close;
@@ -641,6 +647,14 @@ var
   o: ^TPkcs11Object;
   n, i, pub: PtrInt;
   xka, xkaKey: TXPublicKeyAlgorithm;
+
+  function ValuePubToSub: RawByteString;
+  begin
+    result := aValues[pub];
+    if xka in [xkaEcc256 .. xkaEdDSA] then
+      result := AsnDecOctStr(result); // ECC are encoded as ASN1_OCTSTR
+  end;
+
 begin
   fStorageID := aStorageID; // set both first for RaiseError()
   fSlotID := aSlotID;
@@ -706,7 +720,7 @@ begin
         fX509 := TX509.Create;
         fX509.Signed.Version := 3;
         fX509.Signed.SubjectPublicKeyAlgorithm := xka;
-        fX509.Signed.SubjectPublicKey := aValues[pub];
+        fX509.Signed.SubjectPublicKey := ValuePubToSub; // from aValues[pub]
         fX509.Signed.SubjectPublicKeyBits := o^.KeyBits;
         fX509.Signed.SerialNumberHex := Sha1(aValues[pub]); // fake serial
         fX509.Signed.SerialNumber := HexToBin(fX509.Signed.SerialNumberHex);
@@ -719,7 +733,7 @@ begin
         fX509.Signed.Issuer.Name[xaN] := tok^.Name;
         fX509.Signed.Subject := fX509.Signed.Issuer; // emulate self-signed
       end
-      else if fX509.Signed.SubjectPublicKey <> aValues[pub] then
+      else if fX509.Signed.SubjectPublicKey <> ValuePubToSub then
         RaiseError('Create: CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
   except
     FreeAndNil(fX509);
