@@ -3872,16 +3872,19 @@ end;
 {$ifndef CPUX64} // mormot.crypt.core.asmx64.inc has its own shrd-based version
 procedure _rshift1(var V: THash256Rec);
 var
-  temp: PtrUInt;
+  carry, temp: PtrUInt;
 begin
   temp := V.Q[3];
+  carry := temp shl 63;
   V.Q[3] := temp shr 1;
-  temp := (temp shl 32) + V.Q[2];
-  V.Q[2] := temp shr 1;
-  temp := (temp shl 32) + V.Q[1];
-  V.Q[1] := temp shr 1;
-  temp := (temp shl 32) + V.Q[0];
-  V.Q[0] := temp shr 1;
+  temp := V.Q[2];
+  V.Q[2] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[1];
+  V.Q[1] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[0];
+  V.Q[0] := (temp shr 1) or carry;
 end;
 {$endif CPUX64}
 
