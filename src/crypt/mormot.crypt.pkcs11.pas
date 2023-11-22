@@ -155,7 +155,10 @@ type
     /// the associated PKCS#11 library instance
     property Engine: TPkcs11
       read fEngine;
-    /// the exception message if Create() failed to retrieve the PKCS#11 info 
+    /// internal flag used to notify the end of background loading
+    property LoadingConfigRetrieved: boolean
+      read fConfigRetrieved;
+    /// the exception message if Create() failed to retrieve the PKCS#11 info
     property LoadingError: string
       read fLoadingError;
   end;
