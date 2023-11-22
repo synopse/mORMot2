@@ -3491,6 +3491,10 @@ function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
 /// decode an OID ASN.1 value into human-readable text
 function AsnDecOid(Pos, EndPos: integer; const Buffer: TAsnObject): RawUtf8;
 
+/// decode an OCTSTR ASN.1 value into its raw bynary buffer
+// - returns plain input value if was not a valid ASN1_OCTSTR
+function AsnDecOctStr(const input: RawByteString): RawByteString;
+
 /// decode an OID ASN.1 IP Address buffer into human-readable text
 function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
 
@@ -9604,6 +9608,15 @@ begin
     end;
     Append(result, ['.', x]);
   end;
+end;
+
+function AsnDecOctStr(const input: RawByteString): RawByteString;
+var
+  pos: integer;
+begin
+  pos := 1;
+  if AsnNextRaw(pos, input, result) <> ASN1_OCTSTR then
+    result := input;
 end;
 
 function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
