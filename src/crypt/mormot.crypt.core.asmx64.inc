@@ -2467,6 +2467,24 @@ function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUI
         adc    eax, eax
 end;
 
+procedure _rshift1(var V: THash256Rec);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        mov     rax, qword ptr [V + 3 * 8]
+        mov     rdx, qword ptr [V + 2 * 8]
+        mov     r9,  qword ptr [V + 1 * 8]
+        mov     r10, qword ptr [V + 0 * 8]
+        mov     r8, rdx
+        mov     r11, r9
+        shrd    rdx, rax, 1     // 2 3
+        shr     rax, 1          // 3
+        shrd    r9, r8, 1       // 1 2
+        shrd    r10, r11, 1     // 0 1
+        mov     qword ptr [V + 3 * 8], rax
+        mov     qword ptr [V + 2 * 8], rdx
+        mov     qword ptr [V + 1 * 8], r9
+        mov     qword ptr [V + 0 * 8], r10
+end;
+
 {$ifdef FPC} // constref to force passing by reference (as Delphi does)
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
   nostackframe; assembler; asm

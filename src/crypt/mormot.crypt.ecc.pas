@@ -5460,7 +5460,7 @@ begin
     case fKeyAlgo of
       ckaEcc256:
         if Ecc256r1Sign(fEcc, Dig.Lo, eccsig) then // thread-safe
-          result := EccToDer(eccsig);
+          result := EccToDer(eccsig); // standard output as from OpenSSL
     end;
 end;
 function TCryptPrivateKeyEcc.Open(const Message: RawByteString;

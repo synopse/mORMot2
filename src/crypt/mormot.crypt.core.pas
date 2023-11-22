@@ -263,7 +263,7 @@ procedure _bswap256(dest, source: PQWordArray);
 
 /// right shift of 1 bit of a 256-bit value
 procedure _rshift1(var V: THash256Rec);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINE}{$ifndef CPUX64}inline;{$endif}{$endif}
 
 /// left shift of 1 bit of a 256-bit value
 function _lshift1(var V: THash256Rec): PtrUInt;
@@ -3869,28 +3869,29 @@ begin
   result := ord(l > r) - ord(l < r);
 end;
 
+{$ifndef CPUX64} // mormot.crypt.core.asmx64.inc has its own shrd-based version
 procedure _rshift1(var V: THash256Rec);
 var
-  carry, temp: PtrUInt;
+  temp: PtrUInt;
 begin
-  carry := V.Q[3] shl 63;
-  V.Q[3] := V.Q[3] shr 1;
-  temp := V.Q[2];
-  V.Q[2] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := V.Q[1];
-  V.Q[1] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := V.Q[0];
-  V.Q[0] := (temp shr 1) or carry;
+  temp := V.Q[3];
+  V.Q[3] := temp shr 1;
+  temp := (temp shl 32) + V.Q[2];
+  V.Q[2] := temp shr 1;
+  temp := (temp shl 32) + V.Q[1];
+  V.Q[1] := temp shr 1;
+  temp := (temp shl 32) + V.Q[0];
+  V.Q[0] := temp shr 1;
 end;
+{$endif CPUX64}
 
 function _lshift1(var V: THash256Rec): PtrUInt;
 var
   temp: PtrUInt;
 begin
-  result := V.Q[0] shr 63;
-  V.Q[0] := V.Q[0] shl 1;
+  temp := V.Q[0];
+  result := temp shr 63;
+  V.Q[0] := temp shl 1;
   temp := V.Q[1];
   V.Q[1] := (temp shl 1) or result;
   result := temp shr 63;
