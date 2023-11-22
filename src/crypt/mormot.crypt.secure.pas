@@ -9344,14 +9344,13 @@ begin
     exit;
   n := result and $7f; // first byte is number of following bytes + $80
   result := 0;
-  if n <= 3 then // not clearly out-of-range
-    repeat
-      result := (result shl 8) + cardinal(Buffer[Start]);
-      if integer(result) < 0 then
-        exit;
-      inc(Start);
-      dec(n);
-    until n = 0;
+  repeat
+    result := (result shl 8) + cardinal(Buffer[Start]);
+    if integer(result) < 0 then
+      exit; // 31-bit overflow: clearly invalid input
+    inc(Start);
+    dec(n);
+  until n = 0;
 end;
 
 function AsnEncInt(Value: Int64): TAsnObject;
