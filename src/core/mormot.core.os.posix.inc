@@ -1888,58 +1888,43 @@ begin
     User := RawUtf8(GetEnvironmentVariable('USER'));
 end;
 
-var
-  _Path: array[TSystemPath] of TFileName;
-
-procedure SetSystemPath(kind: TSystemPath);
-var
-  s: TFileName;
+function _ComputeSystemPath(kind: TSystemPath): TFileName;
 begin
   case kind of
     spLog:
       if IsDirectoryWritable('/var/log') then
          // may not be writable by not root on POSIX
-        s := '/var/log/'
+        result := '/var/log/'
       else if IsDirectoryWritable(Executable.ProgramFilePath) then
-        s := Executable.ProgramFilePath
+        result := Executable.ProgramFilePath
       else
-        s := GetSystemPath(spUserData);
+        result := EnsureDirectoryExists(GetSystemPath(spUserData) + 'log');
     spUserData:
       begin
         //  ~/.cache/appname
-        s := GetEnvironmentVariable('XDG_CACHE_HOME');
-        if (s = '') or
-           not IsDirectoryWritable(s) then
-          s := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-        s := EnsureDirectoryExists(s + TFileName(Executable.ProgramName));
+        result := GetEnvironmentVariable('XDG_CACHE_HOME');
+        if (result = '') or
+           not IsDirectoryWritable(result) then
+          result := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
+        result := EnsureDirectoryExists(result + TFileName(Executable.ProgramName));
       end;
     spTempFolder:
       begin
-        s := GetEnvironmentVariable('TMPDIR'); // POSIX
-        if s = '' then
-          s := GetEnvironmentVariable('TMP');
-        if (s = '') or
-           not IsDirectoryWritable(s) then
+        result := GetEnvironmentVariable('TMPDIR'); // POSIX
+        if result = '' then
+          result := GetEnvironmentVariable('TMP');
+        if (result = '') or
+           not IsDirectoryWritable(result) then
           if IsDirectoryWritable('/tmp') then
-            s := '/tmp'
+            result := '/tmp/'
           else
-            s := '/var/tmp';
-        s := IncludeTrailingPathDelimiter(s);
+            result := '/var/tmp/';
       end;
   else
     // POSIX requires a value for $HOME
-    s := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
+    result := GetEnvironmentVariable('HOME');
   end;
-  _Path[kind] := s;
-end;
-
-function GetSystemPath(kind: TSystemPath): TFileName;
-begin
-  result := _Path[kind];
-  if result <> '' then
-    exit;
-  SetSystemPath(kind);
-  result := _Path[kind];
+  result := IncludeTrailingPathDelimiter(result);
 end;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;

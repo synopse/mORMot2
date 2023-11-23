@@ -2539,8 +2539,6 @@ begin
 end;
 
 var
-  // ComputeSystemPath() cache
-  _SystemPath: array[TSystemPath] of TFileName;
   SHFolderDll: THandle;
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
@@ -2548,7 +2546,7 @@ var
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
 
-function ComputeSystemPath(kind: TSystemPath): TFileName;
+function _ComputeSystemPath(kind: TSystemPath): TFileName;
 const
   CSIDL_PERSONAL = $0005;
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
@@ -2594,16 +2592,6 @@ begin
     end;
   end;
   result := IncludeTrailingPathDelimiter(result);
-end;
-
-function GetSystemPath(kind: TSystemPath): TFileName;
-begin
-  result := _SystemPath[kind];
-  if result = '' then
-  begin
-    result := ComputeSystemPath(kind);
-    _SystemPath[kind] := result;
-  end;
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;

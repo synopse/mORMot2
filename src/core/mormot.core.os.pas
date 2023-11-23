@@ -1521,6 +1521,10 @@ type
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
+/// force an operating system folder
+// - if the default location is not good enough for your project
+function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
+
 type
   /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
   // - ignored on POSIX systems, in which the main cacert.pem file is used
@@ -8192,6 +8196,25 @@ begin
   result := true;
 end;
 
+var
+  _SystemPath: array[TSystemPath] of TFileName; // GetSystemPath() cache
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  result := _SystemPath[kind];
+  if result = '' then
+  begin
+    result := _ComputeSystemPath(kind);
+    _SystemPath[kind] := result;
+  end;
+end;
+
+function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
+begin
+  result := DirectoryExists(path);
+  if result then
+    _SystemPath[kind] := IncludeTrailingPathDelimiter(ExpandFileName(path));
+end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 var
