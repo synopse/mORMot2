@@ -1556,7 +1556,7 @@ var
 /// retrieve the OS certificates store as PEM text
 // - first search for [Executable.ProgramFilePath+]GetSystemStoreAsPemLocalFile,
 // then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable - unless
-// OnlySystemStore is forced to rrue
+// OnlySystemStore is forced to true
 // - if no such file exists, or if OnlySystemStore is true, will concatenate the
 // supplied CertStores values via individual GetOneSystemStoreAsPem() calls
 // - return CA + ROOT certificates by default, ready to validate a certificate
@@ -2627,6 +2627,9 @@ procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
+
+/// convert a TDateTime to a Win32 64-bit FILETIME value
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
 
 /// convert a Win32 64-bit FILETIME value into an Unix seconds time
 function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;

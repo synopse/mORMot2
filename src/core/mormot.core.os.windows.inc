@@ -313,8 +313,16 @@ function FileTimeToDateTime(const FT: TFileTime): TDateTime;
 begin
   if PInt64(@FT)^ = 0 then
     result := 0
-  else
+  else // inlined UnixTimeToDateTime()
     result := FileTimeToUnixMSTime(FT) / MSecsPerDay + UnixDateDelta;
+end;
+
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
+begin
+  if dt = 0 then
+    PInt64(@FT)^ := 0
+  else // inlined DateTimeToUnixTime()
+    UnixTimeToFileTime(Round((dt - UnixDateDelta) * SecsPerDay), FT);
 end;
 
 function UnixTimeUtc: TUnixTime;
