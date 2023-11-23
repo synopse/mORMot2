@@ -3351,7 +3351,6 @@ begin
         else if seclayers * KLS_EXPECTED = [] then
         begin
           // we only support signing+sealing
-          seclayers := seclayers * KLS_EXPECTED;
           FormatUtf8('Kerberos: Unsupported [%] method(s)',
             [GetSetName(TypeInfo(TKerbSecLayer), seclayers)], fResultString);
           exit;
