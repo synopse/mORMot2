@@ -1544,32 +1544,37 @@ type
   TSystemCertificateStores = set of TSystemCertificateStore;
 
 var
-  /// the file name, relative to Executable.ProgramFilePath, to be searched
-  // by GetSystemStoreAsPem() to override the OS certificates store
-  // - could be set to a proper relative or absolute location, or to '' to
-  // disable this override (for security purposes)
-  GetSystemStoreAsPemLocalFile: TFileName = 'cacert.pem';
+  /// the local PEM file name to be searched by GetSystemStoreAsPem() to
+  // override the OS certificates store
+  // - a relative file name (i.e. with no included path, e.g. 'cacert.pem') will
+  // be searched in the Executable.ProgramFilePath folder
+  // - an absolute file name (e.g. 'C:\path\to\file.pem' or '/posix/path') could
+  // also be specified
+  // - set by default to '' to disable this override (for security purposes)
+  GetSystemStoreAsPemLocalFile: TFileName;
 
-/// retrieve all certificates of given system store(s) as PEM text
+/// retrieve the OS certificates store as PEM text
+// - first search for [Executable.ProgramFilePath+]GetSystemStoreAsPemLocalFile,
+// then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable - unless
+// OnlySystemStore is forced to rrue
+// - if no such file exists, or if OnlySystemStore is true, will concatenate the
+// supplied CertStores values via individual GetOneSystemStoreAsPem() calls
 // - return CA + ROOT certificates by default, ready to validate a certificate
-// - will first search for Executable.ProgramFilePath+GetSystemStoreAsPemLocalFile
-// file, then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable
-// - on Windows, will use the System Crypt API over the supplied stores
-// - on POSIX, scsRoot loads the main CA file of the known system file, and
-// scsCA the additional certificate files which may not be part of the main file
-// - Darwin is not supported yet, and is handled as a BSD system
+// - Darwin specific API is not supported yet, and is handled as a BSD system
 // - an internal cache is refreshed every 4 minutes unless FlushCache is set
 function GetSystemStoreAsPem(
   CertStores: TSystemCertificateStores = [scsCA, scsRoot];
-  FlushCache: boolean = false): RawUtf8; overload;
+  FlushCache: boolean = false; OnlySystemStore: boolean = false): RawUtf8;
 
 /// retrieve all certificates of a given system store as PEM text
-// - will only generate PEM files from the system Registry (Windows), or
-// from the system known folders (POSIX - for scsCA and scsRoot only) - ignoring
-// GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment variable
+// - on Windows, will use the System Crypt API
+// - on POSIX, scsRoot loads the main CA file of the known system file, and
+// scsCA the additional certificate files which may not be part of the main file
+// - GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment
+// variables are ignored: call GetSystemStoreAsPem() instead for the global store
 // - an internal cache is refreshed every 4 minutes unless FlushCache is set
-function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false; now: cardinal = 0): RawUtf8; overload;
+function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean = false; now: cardinal = 0): RawUtf8;
 
 type
   /// the raw SMBIOS information as filled by GetRawSmbios
@@ -8226,79 +8231,99 @@ begin // return the address as hexadecimal - hexstr() is not available on Delphi
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 var
-  _SystemStoreAsPem: array[0..ord(high(TSystemCertificateStore)) + 1] of record
+  _SystemStoreAsPemSafe: TLightLock;
+  _OneSystemStoreAsPem: array[TSystemCertificateStore] of record
     Tix: cardinal;
     Pem: RawUtf8;
   end;
+  _SystemStoreAsPem: record
+    Tix: cardinal;
+    Scope: TSystemCertificateStores;
+    Pem: RawUtf8;
+  end;
 
-function GetSystemStoreAsPem(CertStore: TSystemCertificateStore;
+function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean; now: cardinal): RawUtf8;
 begin
   if now = 0 then
     now := GetTickCount64 shr 18 + 1; // div 262.144 seconds = every 4.4 min
-  with _SystemStoreAsPem[ord(CertStore) + 1] do
-  begin
-    if not FlushCache then
-      if Tix = now then
-      begin
-        result := Pem; // quick retrieved from cache
-        exit;
-      end;
-    // fallback search depending on the POSIX / Windows specific OS
-    result := _GetSystemStoreAsPem(CertStore);
-    Tix := now;
-    Pem := result;
-  end;
-end;
-
-function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
-  FlushCache: boolean): RawUtf8;
-var
-  now: cardinal;
-  s: TSystemCertificateStore;
-  v: RawUtf8;
-label
-  notfound;
-begin
-  result := '';
-  now := GetTickCount64 shr 18 + 1;
-  // first search if bounded within the application
-  with _SystemStoreAsPem[0] do // cached in slot [0]
-  begin
-    if not FlushCache then
-      if Tix = now then
-        if Pem = '' then
-          goto notfound
-        else
+  _SystemStoreAsPemSafe.Lock;
+  try
+    // first search if not already in cache
+    with _OneSystemStoreAsPem[CertStore] do
+    begin
+      if not FlushCache then
+        if Tix = now then
         begin
           result := Pem; // quick retrieved from cache
           exit;
         end;
-    if GetSystemStoreAsPemLocalFile <> '' then
-      {$ifdef OSPOSIX}
-      if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
-      {$else}
-      if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
-      {$endif OSPOSIX}
-        result := StringFromFile(GetSystemStoreAsPemLocalFile)
-      else
-        result := StringFromFile(
-          Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
-    if result = '' then
-      result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
-    Tix := now;
-    Pem := result;
+      // fallback search depending on the POSIX / Windows specific OS
+      result := _GetSystemStoreAsPem(CertStore); // implemented in each .inc
+      Tix := now;
+      Pem := result;
+    end;
+  finally
+    _SystemStoreAsPemSafe.UnLock;
   end;
-notfound:
-  if result = '' then
-    // fallback to search depending on the POSIX / Windows specific OS
-    for s := low(s) to high(s) do
-      if s in CertStores then
+end;
+
+function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
+  FlushCache, OnlySystemStore: boolean): RawUtf8;
+var
+  now: cardinal;
+  s: TSystemCertificateStore;
+  v: RawUtf8;
+begin
+  result := '';
+  now := GetTickCount64 shr 18 + 1;
+  _SystemStoreAsPemSafe.Lock;
+  try
+    // first search if not already in cache
+    if not FlushCache then
+      with _SystemStoreAsPem do
+        if (Tix = now) and
+           (Scope = CertStores) and
+           (Pem <> '') then
+        begin
+          result := Pem; // quick retrieved from cache
+          exit;
+        end;
+    // load from a file, bounded within the application or from env variable
+    if not OnlySystemStore then
+    begin
+      if GetSystemStoreAsPemLocalFile <> '' then
+        {$ifdef OSPOSIX}
+        if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
+        {$else}
+        if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
+        {$endif OSPOSIX}
+          result := StringFromFile(GetSystemStoreAsPemLocalFile)
+        else
+          result := StringFromFile(
+            Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+      if result = '' then
+        result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
+    end;
+    // fallback to search depending on the POSIX / Windows specific OS stores
+    if result = '' then
+      for s := low(s) to high(s) do
+        if s in CertStores then
+        begin
+          v := GetOneSystemStoreAsPem(s, FlushCache, now);
+          if v <> '' then
+            result := result + v + #13#10;
+        end;
+    if result <> '' then
+      with _SystemStoreAsPem do
       begin
-        v := GetSystemStoreAsPem(s, FlushCache, now);
-        if v <> '' then
-          result := result + #13#10 + v;
+        Tix := now;
+        Scope := CertStores;
+        Pem := result;
       end;
+  finally
+    _SystemStoreAsPemSafe.UnLock;
+  end;
 end;
 
 {$ifdef CPUINTEL} // don't mess with raw SMBIOS encoding outside of Intel/AMD
