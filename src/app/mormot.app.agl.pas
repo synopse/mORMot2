@@ -1137,7 +1137,7 @@ begin
   if ident = '' then
     exit;
   // generate human-friendly HTML state file
-  ident := HtmlEscape(ident); // avoid ingestion
+  ident := HtmlEscape(ident); // avoid injection
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
     '<style>table,th,td{border:1px solid;border-collapse:collapse;padding: 10px;}</style>' +
     '<body style="font-family:verdana"><h1>%</h1><hr>' +
