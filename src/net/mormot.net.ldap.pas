@@ -128,6 +128,12 @@ const
   LDAP_RES_ESYNC_REFRESH_REQUIRED         = 4096;
   LDAP_RES_NO_OPERATION                   = 16654;
 
+  LDAP_RES_NOERROR = [
+    LDAP_RES_SUCCESS,
+    LDAP_RES_COMPARE_FALSE,
+    LDAP_RES_COMPARE_TRUE,
+    LDAP_RES_SASL_BIND_IN_PROGRESS];
+
 const
   // LDAP ASN.1 types
   LDAP_ASN1_BIND_REQUEST      = $60;
@@ -3087,6 +3093,7 @@ function TLdapClient.DecodeResponse(
 var
   x, asntype, seqend: integer;
   s, t: TAsnObject;
+  errmsg: RawUtf8;
 begin
   result := '';
   fResultCode := -1;
@@ -3104,9 +3111,14 @@ begin
     fResultCode := AsnNextInteger(pos, Asn1Response, asntype);
     AsnNext(pos, Asn1Response, @fResponseDN);   // matchedDN
     AsnNext(pos, Asn1Response, @fResultString); // diagnosticMessage
-    if (fResultString = '') and
-       (fResultCode <> LDAP_RES_SUCCESS) then
-      fResultString := RawLdapErrorString(fResultCode);
+    if not (fResultCode in LDAP_RES_NOERROR) then
+    begin
+      errmsg := RawLdapErrorString(fResultCode);
+      if fResultString = '' then
+        fResultString := errmsg
+      else
+        fResultString := FormatUtf8('% [%]', [errmsg, fResultString]);
+    end;
     if fResultCode = LDAP_RES_REFERRAL then
       if AsnNext(pos, Asn1Response, @s) = ASN1_CTC3 then
       begin
@@ -3258,9 +3270,13 @@ var
 begin
   result := false;
   if fBound or
-     not Connect or
-     not InitializeDomainAuth then
-     exit;
+     not Connect then
+    exit;
+  if not InitializeDomainAuth then
+  begin
+    fResultString := 'Kerberos: Error initializing the library';
+    exit;
+  end;
   needencrypt := false;
   fSecContextUser := '';
   if (fSettings.KerberosSpn = '') and
@@ -3289,7 +3305,12 @@ begin
         else
           ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
       except
-        exit; // catch SSPI/GSSAPI errors and return false
+        on E: Exception do
+        begin
+          FormatUtf8('Kerberos %: %', [E, E.Message], fResultString);
+          // keep ResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS (14)
+          exit; // catch SSPI/GSSAPI errors and return false
+        end;
       end;
       if dataout = '' then
       begin
@@ -3298,18 +3319,29 @@ begin
           break; // perform if only needed (e.g. not on MS AD)
         t := SendAndReceive(req1);
         if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+        begin
+          if fResultCode = LDAP_RES_SUCCESS then // paranoid
+            fResultString := 'Kerberos: aborted SASL handshake';
           exit;
+        end;
         ParseInput;
         datain := SecDecrypt(fSecContext, datain);
         if length(datain) <> 4 then
+        begin
+          fResultString := 'Kerberos: Unexpected SecLayer response';
           exit; // expected format is #0=SecLayer #1#2#3=MaxMsgSizeInNetOrder
+        end;
         seclayers := TKerbSecLayer(datain[1]);
         secmaxsize := bswap32(PCardinal(datain)^) and $00ffffff;
         if seclayers = [] then
           // the server requires no additional security layer
           if secmaxsize <> 0 then
+          begin
             // invalid answer (as stated by RFC 4752)
-            exit
+            FormatUtf8('Kerberos: Unexpected secmaxsize=%',
+              [secmaxsize], fResultString);
+            exit;
+          end
           else
           begin
             // #0: noseclayer, #1#2#3: maxmsgsize=0
@@ -3317,8 +3349,13 @@ begin
             needencrypt := false; // fSecContextEncrypt = false by default
           end
         else if seclayers * KLS_EXPECTED = [] then
+        begin
           // we only support signing+sealing
-          exit
+          seclayers := seclayers * KLS_EXPECTED;
+          FormatUtf8('Kerberos: Unsupported [%] method(s)',
+            [GetSetName(TypeInfo(TKerbSecLayer), seclayers)], fResultString);
+          exit;
+        end
         else
         // if we reached here, the server asked for signing+sealing
         if needencrypt or             // from MS AD
