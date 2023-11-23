@@ -2838,6 +2838,7 @@ begin
   result := fSock <> nil;
   if result then
     exit; // socket was already connected
+  fResultString := '';
   if fSettings.TargetHost = '' then
   begin
     // try all LDAP servers from OS list
@@ -2861,6 +2862,11 @@ begin
   else
     // try the LDAP server as specified in TLdapClient settings
     AddRawUtf8(dc, NetConcat([fSettings.TargetHost, ':', fSettings.TargetPort]));
+  if dc = nil then
+  begin
+    fResultString := 'Connect: no TargetHost supplied';
+    exit;
+  end;
   fSeq := 0;
   for i := 0 to high(dc) do
     try
@@ -2898,9 +2904,14 @@ begin
         exit;
       end;
     except
-      on E: ENetSock do
+      on E: Exception do
+      begin
         FreeAndNil(fSock); // abort and try next dc[]
+        FormatUtf8('Connect %: %', [E, E.Message], fResultString);
+      end;
     end;
+  if fResultString = '' then
+    fResultString := 'Connect: failed';
 end;
 
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
