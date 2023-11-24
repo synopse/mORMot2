@@ -1534,8 +1534,8 @@ const
 { ********** Low-level JSON Serialization for any kind of Values }
 
 type
-  /// internal stack-allocated structure for nested serialization
-  // - defined here for low-level use of TRttiJsonSave functions
+  /// internal stack-allocated structure for nested JSON serialization
+  // - defined here for low-level use within TRttiJsonSave functions
   {$ifdef USERECORDWITHMETHODS}
   TJsonSaveContext = record
   {$else}
@@ -1545,24 +1545,25 @@ type
     /// the associated stream writer for the JSON output
     W: TJsonWriter;
     /// serialization options as specified for this process
+    // - as used by AddShort/Add64/AddDateTime methods
     Options: TTextWriterWriteObjectOptions;
     /// the RTTI information of the current serialized type
     Info: TRttiCustom;
     /// the RTTI information of the current serialized property
     // - is likely to be nil outside of properties serialization
     Prop: PRttiCustomProp;
-    /// initialize this low-level context
+    /// initialize this low-level JSON serialization context
     procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
       {$ifdef HASINLINE}inline;{$endif}
-    /// some basic functions to append some Int64 JSON value
-    procedure Add64(Value: PInt64; UnSigned: boolean);
-    /// some basic functions to append some shorstring JSON value
+    /// some basic function to append a shorstring JSON value according to Options
     procedure AddShort(PS: PShortString);
-    /// some basic functions to append some "name":boolean JSON value
-    procedure AddShortBoolean(PS: PShortString; Value: boolean);
-    /// some basic functions to append some TDateTime JSON value
+    /// some basic function to append an Int64 JSON value according to Options
+    procedure Add64(Value: PInt64; UnSigned: boolean);
+    /// some basic function to append a TDateTime JSON value according to Options
     procedure AddDateTime(Value: PDateTime; WithMS: boolean);
+    /// some basic function to append a "name":boolean JSON pair value
+    procedure AddShortBoolean(PS: PShortString; Value: boolean);
   end;
 
   /// internal function handler for JSON persistence of any TRttiParserType value
@@ -4990,6 +4991,16 @@ begin
   Prop := nil;
 end;
 
+procedure TJsonSaveContext.AddShort(PS: PShortString);
+begin
+  W.Add('"');
+  if twoTrimLeftEnumSets in W.CustomOptions then
+    W.AddTrimLeftLowerCase(PS)
+  else
+    W.AddShort(PS^);
+  W.Add('"');
+end;
+
 procedure TJsonSaveContext.Add64(Value: PInt64; UnSigned: boolean);
 begin
   if woInt64AsHex in Options then
@@ -5001,23 +5012,6 @@ begin
     W.AddQ(PQWord(Value)^)
   else
     W.Add(Value^);
-end;
-
-procedure TJsonSaveContext.AddShort(PS: PShortString);
-begin
-  W.Add('"');
-  if twoTrimLeftEnumSets in W.CustomOptions then
-    W.AddTrimLeftLowerCase(PS)
-  else
-    W.AddShort(PS^);
-  W.Add('"');
-end;
-
-procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
-begin
-  AddShort(PS);
-  W.Add(':');
-  W.Add(Value);
 end;
 
 procedure TJsonSaveContext.AddDateTime(Value: PDateTime; WithMS: boolean);
@@ -5037,6 +5031,13 @@ begin
       else
         W.Add('Z');
   W.Add('"');
+end;
+
+procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
+begin
+  AddShort(PS);
+  W.Add(':');
+  W.Add(Value);
 end;
 
 
