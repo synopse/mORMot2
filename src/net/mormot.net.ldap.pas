@@ -2493,7 +2493,7 @@ begin
     w.AddShort('results: ');
     w.Add(count);
     w.AddShorter(' in ');
-    w.AddShorter(MicroSecToString(fSearchTimeMicroSec));
+    w.AddShort(MicroSecToString(fSearchTimeMicroSec));
     w.AddCR;
     for i := 0 to Count - 1 do
     begin
@@ -3816,7 +3816,7 @@ begin
     uacname := 'userAccountControl'
   else
     uacname := 'groupType';
-  unUac := unUac and (not Uac); // FilterUac has precedence over UnFilterUac
+  unUac := unUac and (not Uac); // FilterUac has precedence over FilterUnUac
   f := CustomFilter;
   if Uac <> 0 then
     f := FormatUtf8('(%%=%)%', [uacname, AND_FLAG, Uac, f]);
