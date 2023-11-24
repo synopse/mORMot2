@@ -1541,20 +1541,28 @@ type
   {$else}
   TJsonSaveContext = object
   {$endif USERECORDWITHMETHODS}
-  private
-    W: TJsonWriter;
-    Options: TTextWriterWriteObjectOptions;
-    Info: TRttiCustom;
-    Prop: PRttiCustomProp;
-    procedure Add64(Value: PInt64; UnSigned: boolean);
-    procedure AddShort(PS: PShortString);
-    procedure AddShortBoolean(PS: PShortString; Value: boolean);
-    procedure AddDateTime(Value: PDateTime; WithMS: boolean);
   public
+    /// the associated stream writer for the JSON output
+    W: TJsonWriter;
+    /// serialization options as specified for this process
+    Options: TTextWriterWriteObjectOptions;
+    /// the RTTI information of the current serialized type
+    Info: TRttiCustom;
+    /// the RTTI information of the current serialized property
+    // - is likely to be nil outside of properties serialization
+    Prop: PRttiCustomProp;
     /// initialize this low-level context
     procedure Init(WR: TJsonWriter;
       WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
       {$ifdef HASINLINE}inline;{$endif}
+    /// some basic functions to append some Int64 JSON value
+    procedure Add64(Value: PInt64; UnSigned: boolean);
+    /// some basic functions to append some shorstring JSON value
+    procedure AddShort(PS: PShortString);
+    /// some basic functions to append some "name":boolean JSON value
+    procedure AddShortBoolean(PS: PShortString; Value: boolean);
+    /// some basic functions to append some TDateTime JSON value
+    procedure AddDateTime(Value: PDateTime; WithMS: boolean);
   end;
 
   /// internal function handler for JSON persistence of any TRttiParserType value
