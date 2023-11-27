@@ -3832,7 +3832,7 @@ var
   auth: TCryptCert; // may be self
 begin
   if fX509 <> nil then
-    RaiseErrorGenerate('duplicated call');
+    RaiseErrorGenerate('duplicated call - not a void instance');
   auth := VerifyAuthority(Authority);
   fX509 := TX509.Create;
   try

@@ -1299,8 +1299,8 @@ type
     fStoreBin: TRawByteStringDynArray;
     fStoreBinPos, fStoreUlongPos: PtrInt;
     fStoreULong: array[0..31] of CK_ULONG;
-    function InternalStore(const aValue: RawByteString): pointer; overload;
-    function InternalStore(aValue: CK_ULONG): CK_ULONG_PTR; overload;
+    function InternalStoreBin(const aValue: RawByteString): pointer;
+    function InternalStoreULong(aValue: CK_ULONG): CK_ULONG_PTR;
   end;
   PCK_ATTRIBUTES = ^CK_ATTRIBUTES;
 
@@ -3158,7 +3158,7 @@ end;
 
 { CK_ATTRIBUTES }
 
-function CK_ATTRIBUTES.InternalStore(const aValue: RawByteString): pointer;
+function CK_ATTRIBUTES.InternalStoreBin(const aValue: RawByteString): pointer;
 begin
   if fStoreBinPos = length(fStoreBin) then
     SetLength(fStoreBin, NextGrow(fStoreBinPos));
@@ -3167,7 +3167,7 @@ begin
   inc(fStoreBinPos);
 end;
 
-function CK_ATTRIBUTES.InternalStore(aValue: CK_ULONG): CK_ULONG_PTR;
+function CK_ATTRIBUTES.InternalStoreULong(aValue: CK_ULONG): CK_ULONG_PTR;
 begin
   if fStoreUlongPos = high(fStoreUlong) then
     raise EPkcs11.Create('CK_ATTRIBUTES: too many CK_ULONG attributes');
@@ -3209,9 +3209,9 @@ begin
         if ulValueLen = CK_UNAVAILABLE_INFORMATION then
           ulValueLen := 0
         else if ulValueLen <= SizeOf(CK_ULONG) then
-          pValue := InternalStore(0) // from static fStoreULong[]
+          pValue := InternalStoreULong(0) // from static fStoreULong[]
         else
-          pValue := InternalStore(RawUtf8OfChar(' ', ulValueLen)); // alloc
+          pValue := InternalStoreBin(RawUtf8OfChar(' ', ulValueLen)); // alloc
 end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: pointer;
@@ -3243,12 +3243,12 @@ end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: CK_ULONG);
 begin
-  Add(aType, InternalStore(aValue), SizeOf(aValue));
+  Add(aType, InternalStoreULong(aValue), SizeOf(aValue));
 end;
 
 procedure CK_ATTRIBUTES.Add(aType: CK_ATTRIBUTE_TYPE; aValue: boolean);
 begin
-  Add(aType, InternalStore(ord(aValue)), SizeOf(aValue));
+  Add(aType, InternalStoreULong(ord(aValue)), 1); // CK_BBOOL is an unsigned char
 end;
 
 procedure CK_ATTRIBUTES.AddDate(aType: CK_ATTRIBUTE_TYPE; aValue: TDateTime);
@@ -3264,7 +3264,7 @@ begin
   if aValue = '' then
     Add(aType, nil, 0)
   else
-    Add(aType, InternalStore(aValue), length(aValue));
+    Add(aType, InternalStoreBin(aValue), length(aValue));
 end;
 
 procedure CK_ATTRIBUTES.New(aClass: CK_OBJECT_CLASS);
@@ -4226,7 +4226,6 @@ begin
     Close;
   end;
 end;
-
 
 function TPkcs11.SessionGetAttribute(
   obj: CK_OBJECT_HANDLE; attr: CK_ATTRIBUTE_TYPE): RawUtf8;
