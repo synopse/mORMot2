@@ -697,7 +697,7 @@ type
   TRttiCacheFlags = set of TRttiCacheFlag;
 
   /// convenient wrapper about PRttiInfo content and its more precise information
-  // - may be cached between use for more efficient process
+  // - is cached within TRttiCustom instances for more efficient process
   TRttiCache = record
     /// the associated RTTI TypeInfo()
     Info: PRttiInfo;
@@ -3577,6 +3577,7 @@ var
   siz, cnt: PtrInt;
 begin
   // caller ensured Cache is filled with zeros (e.g. TRttiCustom.fCache prop)
+  FillCharFast(Cache, SizeOf(Cache), 0); // paranoid
   Cache.Info := @self;
   Cache.Size := RttiSize;
   Cache.Kind := Kind;
