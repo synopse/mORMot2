@@ -4990,7 +4990,8 @@ type
   /// event triggered to implement the Service functionality
   TServiceEvent = procedure(Sender: TService) of object;
 
-  /// let an executable implement a Windows Service
+  /// abstract class to let an executable implement a Windows Service
+  // - do not use this class directly, but TServiceSingle
   TService = class
   protected
     fServiceName: RawUtf8;
@@ -5024,8 +5025,8 @@ type
       const Args: array of const; Instance: TObject);
     /// Creates the service
     // - the service is added to the internal registered services
-    // - main application must call the global ServicesRun procedure to actually
-    // start the services
+    // - main application must instantiate the TServiceSingle class, then call
+    // the global ServiceSingleRun procedure to actually start the services
     // - caller must free the TService instance when it's no longer used
     constructor Create(const aServiceName, aDisplayName: RawUtf8); reintroduce; virtual;
     /// this method is the main service entrance, from the OS point of view
@@ -5133,6 +5134,9 @@ type
 
   /// inherit from this class if your application has a single Windows Service
   // - note that only this single-service implementation is available by now
+  // - the regular way of executing services is to instantiate a TServiceSingle
+  // instance (which will fill the ServiceSingle variable) and its methods,
+  // then eventually call ServiceSingleRun
   TServiceSingle = class(TService)
   public
     /// will set a global function as service controller
@@ -5142,11 +5146,15 @@ type
   end;
 
 var
-  /// the main TService instance running in the current executable
+  /// the main TServiceSingle instance running in the current executable
+  // - the regular way of executing services is to instantiate a TServiceSingle
+  // instance (which will fill this ServiceSingle variable) and its methods,
+  // then eventually call ServiceSingleRun
   ServiceSingle: TServiceSingle = nil;
 
 /// launch the registered Service execution
-// - ServiceSingle provided by this application is sent to the operating system
+// - ServiceSingle provided by this application (most probably from
+// TServiceSingle.Create) is sent to the operating system
 // - returns TRUE on success
 // - returns FALSE on error (to get extended information, call GetLastError)
 function ServiceSingleRun: boolean;
