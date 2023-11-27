@@ -786,7 +786,7 @@ type
     procedure Copy(Dest, Source: pointer);
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// compute extended information about this RTTI type
-    procedure ComputeCache(out Cache: TRttiCache);
+    procedure ComputeCache(var Cache: TRttiCache);
     /// for ordinal types, get the storage size and sign
     function RttiOrd: TRttiOrd;
       {$ifdef HASSAFEINLINE}inline;{$endif}
@@ -3571,7 +3571,7 @@ var
   // - rkChar,rkWChar,rkSString converted into temporary RawUtf8 as varUnknown
   RTTI_TO_VARTYPE: array[TRttiKind] of word;
 
-procedure TRttiInfo.ComputeCache(out Cache: TRttiCache);
+procedure TRttiInfo.ComputeCache(var Cache: TRttiCache);
 var
   enum: PRttiEnumType;
   siz, cnt: PtrInt;
