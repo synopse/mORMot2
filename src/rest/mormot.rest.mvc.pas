@@ -613,6 +613,7 @@ type
   protected
     fRestServer: TRestServer;
     fPublishOptions: TMvcPublishOptions;
+    fAllowedMethods: TUriMethods;
     fMvcInfoCache: RawUtf8;
     fStaticCache: TSynNameValue;
     fStaticCacheControlMaxAge: integer;
@@ -632,18 +633,26 @@ type
     // template generation
     // - will also create a TMvcSessionWithRestServer for simple cookie sessions
     // - aPublishOptions could be used to specify integration with the server
+    // - aAllowedMethods will render standard GET/POST by default
     constructor Create(aApplication: TMvcApplication;
       aRestServer: TRestServer = nil; const aSubURI: RawUtf8 = '';
       aViews: TMvcViewsAbstract = nil;
       aPublishOptions: TMvcPublishOptions=
-        [low(TMvcPublishOption) .. high(TMvcPublishOption)]); reintroduce;
+        [low(TMvcPublishOption) .. high(TMvcPublishOption)];
+      aAllowedMethods: TUriMethods = [mGET, mPOST]); reintroduce;
     /// define some content for a static file
     // - only used if cacheStatic has been defined
     function AddStaticCache(const aFileName: TFileName;
       const aFileContent: RawByteString): RawByteString;
-    /// current publishing options, as specify to the constructor
+    /// current publishing options, as specified to the constructor
+    // - all options are included by default
     property PublishOptions: TMvcPublishOptions
       read fPublishOptions write fPublishOptions;
+    /// current HTTP methods recognized, as specified to the constructor
+    // - equals [mGET, mPOST] by default, as expected by HTML applications
+    // with standard www-form
+    property AllowedMethods: TUriMethods
+      read fAllowedMethods;
     /// optional "Cache-Control: max-age=###" header value for static content
     property StaticCacheControlMaxAge: integer
       read fStaticCacheControlMaxAge write fStaticCacheControlMaxAge;
@@ -1857,7 +1866,7 @@ end;
 
 constructor TMvcRunOnRestServer.Create(aApplication: TMvcApplication;
   aRestServer: TRestServer; const aSubURI: RawUtf8; aViews: TMvcViewsAbstract;
-  aPublishOptions: TMvcPublishOptions);
+  aPublishOptions: TMvcPublishOptions; aAllowedMethods: TUriMethods);
 var
   m: PtrInt;
   bypass: boolean;
@@ -1875,11 +1884,15 @@ begin
   else
     aViews.fLogClass := fRestServer.LogClass;
   inherited Create(aApplication, aViews);
-  fPublishOptions := aPublishOptions;
+  fPublishOptions := aPublishOptions; // all options by default
+  fAllowedMethods := aAllowedMethods; // [mGET, mPOST] by default
+  if mGET in fAllowedMethods then
+    // mHEAD added for proper browsers pre-requests
+    fAllowedMethods := fAllowedMethods + [mHEAD];
   bypass := bypassAuthentication in fPublishOptions;
   if aSubURI <> '' then
-    fRestServer.ServiceMethodRegister(aSubURI, RunOnRestServerSub, bypass,
-      [mGET, mPOST, mHEAD]) // POST for www-form, HEAD for browsers
+    fRestServer.ServiceMethodRegister(
+      aSubURI, RunOnRestServerSub, bypass, fAllowedMethods)
   else
   begin
     for m := 0 to fApplication.fFactory.MethodsCount - 1 do
@@ -1890,14 +1903,14 @@ begin
         // e.g. IService._Start() -> /service/start
         delete(method, 1, 1);
       fRestServer.ServiceMethodRegister(
-        method, RunOnRestServerRoot, bypass, [mGET, mPOST]);
+        method, RunOnRestServerRoot, bypass, fAllowedMethods);
     end;
     if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        MVCINFO_URI, RunOnRestServerRoot, bypass, [mGET, mHEAD]);
+        MVCINFO_URI, RunOnRestServerRoot, bypass, fAllowedMethods);
     if publishStatic in fPublishOptions then
       fRestServer.ServiceMethodRegister(
-        STATIC_URI, RunOnRestServerRoot, bypass, [mGET, mHEAD]);
+        STATIC_URI, RunOnRestServerRoot, bypass, fAllowedMethods);
   end;
   if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
@@ -2008,7 +2021,7 @@ begin
       rendererClass := TMvcRendererFromViews;
     renderer := rendererClass.Create(self);
     try
-      if Ctxt.Method in [mGET, mPOST] then
+      if Ctxt.Method in fAllowedMethods then
       begin
         methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
         if methodIndex >= 0 then
