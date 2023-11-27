@@ -2017,10 +2017,6 @@ type
       unlock: boolean = false);
     procedure CheckAttr(res: CK_RVULONG);
     function DoGetSlotList(Present: boolean): TPkcs11SlotIDDynArray;
-    // some actions within the current opened session
-    function SessionCreateObject(const a: CK_ATTRIBUTES): RawUtf8;
-    function SessionGetAttribute(obj: CK_OBJECT_HANDLE;
-      attr: CK_ATTRIBUTE_TYPE): RawUtf8;
   public
     /// try to load a PKCS#11 library, raising EPkcs11 on failure
     // - is just a wrapper around inherited Create and Load() + raise EPkcs11
@@ -2129,6 +2125,17 @@ type
     // - return the matching CK_OBJECT_HANDLE, which lifetime is the Session
     function GetObject(ObjectClass: CK_OBJECT_CLASS; const StorageLabel: RawUtf8 = '';
       const StorageID: RawUtf8 = ''): CK_OBJECT_HANDLE; overload;
+    /// retrieve the value of a given object attribute within the current session
+    function SessionGetAttribute(obj: CK_OBJECT_HANDLE;
+      attr: CK_ATTRIBUTE_TYPE): RawUtf8;
+    /// create an object from the given attributes within the current session
+    function SessionCreateObject(const a: CK_ATTRIBUTES): CK_OBJECT_HANDLE;
+    /// destroy a given object within the current session
+    function SessionDestroyObject(obj: CK_OBJECT_HANDLE): boolean;
+    /// enumerate and erase all objects of the current SO session
+    // - warning: this operation is not recoverable
+    // - returns the number of deleted objects
+    function SessionDeleteAll: integer;
     /// retrieve some random bytes using the device opened in the current Session
     function GetRandom(Len: PtrInt): RawByteString;
     /// digitally sign a memory buffer using a supplied Private Key
@@ -4249,19 +4256,44 @@ begin
     result := '';
 end;
 
-function TPkcs11.SessionCreateObject(const a: CK_ATTRIBUTES): RawUtf8;
+function TPkcs11.SessionDestroyObject(obj: CK_OBJECT_HANDLE): boolean;
+begin
+  result := (fSession <> 0) and
+            (obj <> CK_INVALID_HANDLE) and
+            (fC.DestroyObject(fSession, obj) = CKR_SUCCESS);
+end;
+
+function TPkcs11.SessionDeleteAll: integer;
 var
-  obj: CK_OBJECT_HANDLE;
+  obj: array[byte] of CK_OBJECT_HANDLE;
+  i, n: CK_ULONG;
+begin
+  result := 0;
+  EnsureSession('SessionDeleteAll');
+  repeat
+    Check(fC.FindObjectsInit(fSession, nil, 0), 'FindObjectsInit');
+    n := 0;
+    Check(fC.FindObjects(fSession, @obj, length(obj), n), 'FindObjects');
+    Check(fc.FindObjectsFinal(fSession), 'FindObjectsFinal');
+    if n = 0 then
+      exit;
+    for i := 0 to n - 1 do
+      Check(fC.DestroyObject(fSession, obj[i]), 'DestroyObject');
+    inc(result, n);
+  until false;
+end;
+
+function TPkcs11.SessionCreateObject(const a: CK_ATTRIBUTES): CK_OBJECT_HANDLE;
 begin
   Check(fC.CreateObject(
-    fSession, pointer(a.Attrs), a.Count, obj), 'CreateObject');
-  result := SessionGetAttribute(obj, CKA_UNIQUE_ID); // just generated
+    fSession, pointer(a.Attrs), a.Count, result), 'CreateObject');
 end;
 
 function TPkcs11.AddSessionData(const Application, DataLabel: RawUtf8;
   const Data: RawByteString; const DerID: RawByteString): RawUtf8;
 var
   a: CK_ATTRIBUTES;
+  obj: CK_OBJECT_HANDLE;
 begin
   if not (sfRW in fSessionFlags) then
     raise EPkcs11.CreateUtf8('%.AddSessionData requires a R/W session', [self]);
@@ -4271,7 +4303,8 @@ begin
   if DerID <> '' then
     a.Add(CKA_OBJECT_ID, DerID);
   a.Add(CKA_VALUE, Data);
-  result := SessionCreateObject(a);
+  obj := SessionCreateObject(a);
+  result := SessionGetAttribute(obj, CKA_UNIQUE_ID); // just generated
 end;
 
 
