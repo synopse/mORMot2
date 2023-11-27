@@ -58,6 +58,10 @@ function Pkcs11KeyAlgorithm(const obj: TPkcs11Object): TXPublicKeyAlgorithm;
 /// guess the TCryptCert usages from raw PKCS#11 Object storage flags
 function Pkcs11FlagsToCertUsages(pos: TPkcs11ObjectStorages): TCryptCertUsages;
 
+/// guess the raw PKCS#11 Object storage flags from TCryptCert usages
+function CertUsagesToPkcs11Flags(cu: TCryptCertUsages;
+  forpubkey: boolean): TPkcs11ObjectStorages;
+
 
 { ***************** Registration of the PKCS#11 Engine to our Factories }
 
@@ -118,6 +122,9 @@ type
     fLoadingError: string;
     procedure BackgroundLoad(Sender: TObject);
     procedure EnsureRetrieveConfig;
+    procedure CryptCertToPkcs11PrivKeyAttributes(const Cert: ICryptCert;
+     const StoreLabel: RawUtf8; const PrivKeyDer, BinaryID: RawByteString;
+     var Attr: CK_ATTRIBUTES);
   public
     /// load a PKCS#11 library and asynchronously retrieve its configuration
     // - Engine.Load() and RetrieveConfig() will happen in a background thread
@@ -261,11 +268,11 @@ const
     CKM_RSA_PKCS_PSS, // caaPS512
     CKM_EDDSA);       // caaEdDSA
 
-
-  /// the DER hexadecimal OID for ECDSA high-level Framework curves
+  /// the DER encoding of an ANSI X9.62 OID to be supplied as CKA_EC_PARAMS
   // - see e.g. openssl ecparam -name prime256v1 -outform DER | hexdump -C
-  // and CKA_OID[] from mormot.crypt.secure
-  CAA_TO_DER: array[TCryptAsymAlgo] of RawByteString = (
+  // and CKA_OID[] from mormot.crypt.secure; see also as reference
+  // https://github.com/OpenSC/OpenSC/blob/master/src/tools/pkcs11-tool.c#L108
+  CAA_TO_ECPARAMS: array[TCryptAsymAlgo] of RawByteString = (
     RawByteString(#$06#$08#$2a#$86#$48#$ce#$3d#$03#$01#$07),
       // caaES256  '1.2.840.10045.3.1.7'
     RawByteString(#$06#$05#$2b#$81#$04#$00#$22), // caaES384  '1.3.132.0.34'
@@ -277,9 +284,22 @@ const
     '',                        // caaPS256
     '',                        // caaPS384
     '',                        // caaPS512
-    RawByteString(#$06#$09#$2B#$06#$01#$04#$01#$DA#$47#$0F#$01));
-    // caaEdDSA '1.3.6.1.4.1.11591.15.1' - but optional
+    RawByteString(#$13#$0c#$65#$64#$77#$61#$72#$64#$73#$32#$35#$35#$31#$39));
+      // caaEdDSA '1.3.6.1.4.1.11591.15.1' - but optional
 
+  /// the CK_KEY_TYPE for each high-level Framework algorithm
+  CAA_TO_CKK: array[TCryptAsymAlgo] of CK_KEY_TYPE = (
+    CKK_EC,          // caaES256
+    CKK_EC,          // caaES384
+    CKK_EC,          // caaES512
+    CKK_EC,          // caaES256K
+    CKK_RSA,         // caaRS256
+    CKK_RSA,         // caaRS384
+    CKK_RSA,         // caaRS512
+    CKK_RSA,         // caaPS256
+    CKK_RSA,         // caaPS384
+    CKK_RSA,         // caaPS512
+    CKK_EC_EDWARDS); // caaEdDSA
 
 procedure Pkcs11SetMechanism(Algo: TCryptAsymAlgo; out Mech: CK_MECHANISM);
 begin
@@ -328,8 +348,37 @@ begin
   if [posSign, posVerify] * pos <> [] then
     result := result + [cuCrlSign, cuKeyCertSign, cuDigitalSignature,
                         cuNonRepudiation];
-  // cuCodeSign, cuTlsServer and cuTlsClient require a full X.509 certificate
-  // with its issuer/authority fields for proper PKI trust chain verification
+  // cuCodeSign, cuTlsServer and cuTlsClient are not included because they
+  // require a full X.509 certificate with its issuer/authority fields for
+  // proper PKI trust chain verification
+end;
+
+function CertUsagesToPkcs11Flags(cu: TCryptCertUsages;
+  forpubkey: boolean): TPkcs11ObjectStorages;
+begin
+  result := [];
+  if cuDataEncipherment in cu then
+    if forpubkey then
+      include(result, posEncrypt)
+    else
+      include(result, posDecrypt);
+  if cuKeyAgreement in cu then
+    if forpubkey then
+      include(result, posWrap)
+    else
+      include(result, posUnWrap);
+  if (cuEncipherOnly in cu) and
+     forpubkey then
+    include(result, posEncrypt);
+  if (cuDecipherOnly in cu) and
+     not forpubkey then
+    include(result, posDecrypt);
+  if cu * [cuCrlSign, cuKeyCertSign, cuDigitalSignature, cuNonRepudiation,
+           cuCodeSign, cuTlsServer, cuTlsClient] <> [] then
+    if forpubkey then
+      include(result, posVerify)
+    else
+      include(result, posSign);
 end;
 
 
@@ -350,7 +399,8 @@ type
     /// initialize this instance
     constructor Create(aCert: TCryptCertPkcs11); reintroduce;
     /// create a new private / public key pair
-    // - returns the associated public key binary in SubjectPublicKey format
+    // - should return the associated public key binary in SubjectPublicKey format
+    // - currently not implemented
     function Generate(Algorithm: TCryptAsymAlgo): RawByteString; override;
     /// returns '' by definition since the private key stays in the device
     function ToDer: RawByteString; override;
@@ -577,6 +627,52 @@ begin
       result := fCert[i];
       break;
     end;
+end;
+
+procedure TCryptCertAlgoPkcs11.CryptCertToPkcs11PrivKeyAttributes(
+  const Cert: ICryptCert; const StoreLabel: RawUtf8;
+  const PrivKeyDer, BinaryID: RawByteString; var Attr: CK_ATTRIBUTES);
+var
+  caa: TCryptAsymAlgo;
+  rsa: TRsaPrivateKey; // safe decoding of RSA privake key values
+  ecp, ecv: RawByteString;
+begin
+  Attr.New(CKO_PRIVATE_KEY, StoreLabel, BinaryID);
+  AddToAttributes(Attr, [posToken,
+                         posPrivate,
+                         posSensitive,
+                         posSign]);
+  caa := Cert.AsymAlgo;
+  Attr.Add(CKA_KEY_TYPE, ToULONG(CAA_TO_CKK[caa]));
+  if caa in CAA_RSA then
+  begin
+    if not rsa.FromDer(PrivKeyDer) then
+      raise ECryptCertPkcs11.CreateUtf8('%.Import: no RSA Key', [self]);
+    Attr.Add(CKA_MODULUS, rsa.Modulus);
+    Attr.Add(CKA_PUBLIC_EXPONENT, rsa.PublicExponent);
+    Attr.Add(CKA_PRIME_1, rsa.Prime1);
+    Attr.Add(CKA_PRIME_2, rsa.Prime2);
+    Attr.Add(CKA_PRIVATE_EXPONENT, rsa.PrivateExponent);
+    Attr.Add(CKA_EXPONENT_1, rsa.Exponent1);
+    Attr.Add(CKA_EXPONENT_2, rsa.Exponent2);
+    Attr.Add(CKA_COEFFICIENT, rsa.Coefficient);
+    exit;
+    // NO rsa.Done: anti-forensic measure would flush all Attr values
+  end
+  else
+  begin
+    ecp := CAA_TO_ECPARAMS[caa];
+    if ecp = '' then
+      raise ECryptCertPkcs11.CreateUtf8(
+        '%.Import: unsupported %', [self, Cert.CertAlgo.JwtName]);
+    Attr.Add(CKA_EC_PARAMS, ecp);
+    ecv := SeqToEccPrivKey(CAA_CKA[caa], PrivKeyDer);
+    writeln(length(ecv));
+    if ecv = '' then
+      raise ECryptCertPkcs11.CreateUtf8(
+        '%.Import: incorrect % PrivKeyDer', [self, Cert.CertAlgo.JwtName]);
+    Attr.Add(CKA_VALUE, ecv) // stored as raw big number value
+  end;
 end;
 
 function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
