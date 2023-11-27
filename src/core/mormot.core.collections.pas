@@ -43,6 +43,9 @@ interface
 //    TDynArray and TSynDictionary, then specialization helps a little more
 {.$define NOSPECIALIZE}
 
+// you could try to define this conditional to generate even less code, which
+// may be slightly slower - perhaps not really noticeable on production
+{.$define SMALLGENERICS}
 
 uses
   classes,
@@ -591,6 +594,7 @@ type
     function GetValueTypeInfo: PRttiInfo;
     procedure AddOne(key, value: pointer);
     procedure GetDefault(value: pointer);
+    procedure GetDefaultAndUnlock(value: pointer);
     function GetCapacity: integer;
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -654,6 +658,7 @@ type
     function TryAdd(const key: TKey; const value: TValue): boolean;
     /// IKeyValue<> method to search a key and return its associated value
     function TryGetValue(const key: TKey; var value: TValue): boolean;
+      {$ifndef SMALLGENERICS} inline; {$endif}
     /// IKeyValue<> method to search a key or a supplied default
     function GetValueOrDefault(const key: TKey;
       const defaultValue: TValue): TValue;
@@ -1373,6 +1378,14 @@ begin
   if kvoDefaultIfNotFound in fOptions then
     fData.Values.ItemClear(value)
   else
+    raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+end;
+
+procedure TIKeyValueParent.GetDefaultAndUnlock(value: pointer);
+begin
+  if kvoDefaultIfNotFound in fOptions then
+    fData.Values.ItemClear(value)
+  else
   begin
     if fHasLock then
       fData.Safe^.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
@@ -1437,19 +1450,26 @@ end;
 { TIKeyValue<TKey, TValue> }
 
 function TIKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
+{$ifdef SMALLGENERICS}
+begin
+  if not fData.FindAndCopy(key, result, fHasTimeout) then
+    GetDefault(@result)
+end;
+{$else}
 var
-  ndx: PtrInt; // slightly more verbose but faster than FindAndCopy
+  ndx: PtrInt; // slightly more verbose but faster than plain FindAndCopy
 begin
   if fHasLock then
     fData.Safe^.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx < 0 then
-    GetDefault(@result) // may ReadUnLock and raise EIKeyValue
+    GetDefaultAndUnlock(@result) // may ReadUnLock and raise EIKeyValue
   else
     result := TArray<TValue>(fData.Values.Value^)[ndx]; // very efficient
   if fHasLock then
     fData.Safe^.ReadUnLock;
 end;
+{$endif SMALLGENERICS}
 
 function TIKeyValue<TKey, TValue>.GetKey(ndx: PtrInt): TKey;
 begin
@@ -1481,14 +1501,37 @@ end;
 
 function TIKeyValue<TKey, TValue>.TryGetValue(const key: TKey;
   var value: TValue): boolean;
+{$ifdef SMALLGENERICS}
 begin
   result := fData.FindAndCopy(key, value, fHasTimeout);
 end;
+{$else}
+var
+  ndx: PtrInt;
+begin
+  if fHasLock then
+    fData.Safe^.ReadLock;
+  ndx := fData.Find(key, fHasTimeout);
+  if ndx >= 0 then
+  begin
+    value := TArray<TValue>(fData.Values.Value^)[ndx];
+    result := true;
+  end
+  else
+    result := false;
+  if fHasLock then
+    fData.Safe^.ReadUnLock;
+end;
+{$endif SMALLGENERICS}
 
 function TIKeyValue<TKey, TValue>.GetValueOrDefault(const key: TKey;
   const defaultValue: TValue): TValue;
 begin
+  {$ifdef SMALLGENERICS}
   if not fData.FindAndCopy(key, result, fHasTimeout) then
+  {$else}
+  if not TryGetValue(key, result{%H-}) then
+  {$endif SMALLGENERICS}
     result := defaultValue;
 end;
 
