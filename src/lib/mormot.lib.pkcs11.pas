@@ -1857,6 +1857,7 @@ type
 
   /// the flags of PKCS#11 one Storage Object
   // - posToken .. posTrusted map CKA_TOKEN ... CKA_TRUSTED boolean attributes
+  // - posLocal map CKA_LOCAL boolean attribute
   // - posX509 .. posWtls map CKA_CERTIFICATE_TYPE attribute value
   TPkcs11ObjectStorage = (
     posToken,
@@ -1876,6 +1877,7 @@ type
     posUnWrap,
     posDerive,
     posTrusted,
+    posLocal,
     posX509,
     posX509Attr,
     posWtls);
@@ -3487,6 +3489,7 @@ begin
 end;
 
 const
+  // recognized boolean CKA_* attributes
   POS2CKA: array[low(TPkcs11ObjectStorage) .. pred(posX509)] of CK_ATTRIBUTE_TYPE = (
     CKA_TOKEN,           // posToken
     CKA_PRIVATE,         // posPrivate
@@ -3504,7 +3507,8 @@ const
     CKA_WRAP,            // posWrap
     CKA_UNWRAP,          // posUnWrap
     CKA_DERIVE,          // posDerive
-    CKA_TRUSTED);        // posTrusted
+    CKA_TRUSTED,         // posTrusted
+    CKA_LOCAL);          // posLocal
 
 procedure AddToAttributes(var Attr: CK_ATTRIBUTES; Flags: TPkcs11ObjectStorages);
 var
