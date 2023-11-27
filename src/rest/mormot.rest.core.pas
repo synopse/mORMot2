@@ -1274,6 +1274,7 @@ type
     mLOCK,
     mUNLOCK,
     mSTATE,
+    mPATCH,
     mOPTIONS);
 
   /// set of available HTTP methods transmitted between client and server
@@ -3731,7 +3732,7 @@ end;
 { ************ TRestUriContext REST Parent Process on Server Side }
 
 const
-  // sorted by occurence for in-order O(n) search via IdemPPChar()
+  // sorted by occurence for in-order O(n) search via IntegerScanIndex()
   METHODNAME: array[TUriMethod] of RawUtf8 = (
     'GET',
     'POST',
@@ -3744,6 +3745,7 @@ const
     'LOCK',
     'UNLOCK',
     'STATE',
+    'PATCH',
     'OPTIONS',
     '');
 var

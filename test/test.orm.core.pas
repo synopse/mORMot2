@@ -172,6 +172,7 @@ begin
   Check(ToMethod('') = mNone);
   Check(ToMethod('toto') = mNone);
   Check(ToMethod('get') = mGET);
+  Check(ToMethod('Patch') = mPATCH);
   Check(ToMethod('OPTIONS') = mOPTIONS);
   Check(not IsGet('get'));
   Check(IsGet('GET'));
