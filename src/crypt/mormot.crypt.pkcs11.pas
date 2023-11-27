@@ -149,6 +149,10 @@ type
     /// search the internal list per ICryptCertPkcs11.StorageID value
     // - i.e. known public certificate matching hexadecimal CKA_ID
     function FindByID(const Value: TPkcs11ObjectID): ICryptCertPkcs11;
+    /// store a ICryptCert instance with its private key into the token
+    // - call CreateObject() with the certificate and its associated private key
+    function Import(const CertWithPrivKey: ICryptCert; Slot: TPkcs11SlotID;
+      const ID: RawUtf8; const SoPinCode: SpiUtf8): ICryptCertPkcs11;
     // TCryptCertAlgo methods are mostly unsupported
     function New: ICryptCert; override;
     function FromHandle(Handle: pointer): ICryptCert; override;
@@ -672,6 +676,52 @@ begin
       raise ECryptCertPkcs11.CreateUtf8(
         '%.Import: incorrect % PrivKeyDer', [self, Cert.CertAlgo.JwtName]);
     Attr.Add(CKA_VALUE, ecv) // stored as raw big number value
+  end;
+end;
+
+function TCryptCertAlgoPkcs11.Import(const CertWithPrivKey: ICryptCert;
+  Slot: TPkcs11SlotID; const ID: RawUtf8; const SoPinCode: SpiUtf8): ICryptCertPkcs11;
+var
+  der, key, binid: RawByteString;
+  cert, priv: CK_OBJECT_HANDLE;
+  lab: RawUtf8;
+  a: CK_ATTRIBUTES;
+begin
+  result := nil;
+  if not Assigned(CertWithPrivKey) or
+     not CertWithPrivKey.HasPrivateSecret or
+     (SoPinCode = '') or
+     (ID = '') then
+    exit;
+  binid := HexToBin(ID);
+  if binid = '' then
+    exit;
+  der := CertWithPrivKey.Save; // to be stored as CKO_CERTIFICATE
+  if der = '' then
+    exit;
+  lab := CertWithPrivKey.GetSubject; // subject CN
+  cert := CK_INVALID_HANDLE;
+  priv := CK_INVALID_HANDLE;
+  fEngine.Open(Slot, SoPinCode, {rw=}true, {so=}true);
+  try
+    // import the X.509 certificate
+    cert := fEngine.AddSessionCertificate(der, CertWithPrivKey.GetSubject('DER'),
+      binid, CertUsagesToPkcs11Flags(CertWithPrivKey.GetUsage, {pub=}true), lab);
+    // import the associated private key
+    key := CertWithPrivKey.GetPrivateKey; // raw PKCS#8 DER into CKO_PRIVATE_KEY
+    if key = '' then
+      exit;
+    CryptCertToPkcs11PrivKeyAttributes(CertWithPrivKey, lab, key, binid, a);
+    priv := fEngine.SessionCreateObject(a);
+  finally
+    FillZero(key);
+    if result = nil then
+    begin
+      // on failure, delete any transient stored objects
+      fEngine.SessionDestroyObject(cert);
+      fEngine.SessionDestroyObject(priv);
+    end;
+    fEngine.Close;
   end;
 end;
 
