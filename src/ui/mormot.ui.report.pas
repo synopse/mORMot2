@@ -4664,7 +4664,7 @@ begin
            (HasCRLF(StringArray[j]) or
             (TextWidthC(fCanvas, StringArray[j]) > ColRight - ColLeft)) then
         begin
-          // calculate line counts
+          // calculate lines count
           k := WrapText(StringArray[j], ColRight - ColLeft, nil);
           if k > LinesCount then
             LinesCount := k; // calculate maximum line count

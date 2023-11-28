@@ -1131,7 +1131,7 @@ type
       read fServerMaxMessageSizeBytes write fServerMaxMessageSizeBytes;
     /// the maximum number of write operations permitted in a write batch
     // - if a batch exceeds this limit, the client driver should divide the
-    // batch into smaller groups each with counts less than or equal to the
+    // batch into smaller groups each with count less than or equal to the
     // value of this field
     // - default is 100000
     property ServerMaxWriteBatchSize: integer

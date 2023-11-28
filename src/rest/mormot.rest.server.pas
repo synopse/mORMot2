@@ -1357,7 +1357,7 @@ type
     // as content type to let the HTTP server directly serve the file content
     property OutcomingFiles: TSynMonitorCount64
       read fOutcomingFiles;
-    /// number of current declared thread counts
+    /// number of current declared threads count
     // - as registered by BeginCurrentThread/EndCurrentThread
     property CurrentThreadCount: TSynMonitorOneCount
       read fCurrentThreadCount;
@@ -1658,9 +1658,9 @@ type
     // - default value is 'WHERE='
     // - note that any custom value should be uppercase and end with a '=' character
     Where: RawUtf8;
-    /// returned JSON field value of optional total row counts
-    // - default value is nil, i.e. no total row counts field
-    // - computing total row counts can be very expensive, depending on the
+    /// returned JSON field value of optional total rows count
+    // - default value is '', i.e. no total rows count field
+    // - computing total rows count can be very expensive, depending on the
     // database back-end used (especially for external databases)
     // - can be set e.g. to ',"totalRows":%' value (note that the initial "," is
     // expected by the produced JSON content, and % will be set with the value)
