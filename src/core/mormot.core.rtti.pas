@@ -8716,12 +8716,12 @@ var
   k: PRttiCustomListPairs;
 begin
   k := @fHashTable[RK_TOSLOT[Info^.Kind]];
-  k^.Safe.WriteLock; // needed when resizing p^
+  k^.Safe.WriteLock; // needed when resizing k^.HashInfo/HashName[]
   try
     AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX]);
     AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
-    inc(Counts[Instance.Kind]);
+    inc(Counts[Info^.Kind]); // Instance.Kind may not be already available
   finally
     k^.Safe.WriteUnLock;
   end;
