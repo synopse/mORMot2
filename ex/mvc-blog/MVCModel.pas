@@ -564,17 +564,11 @@ var
     urlLen: integer;
 
     procedure GetUrl(H: PUtf8Char);
-    var
-      i: integer;
     begin
       url := GetNextItem(H, '"');
       urlLen := length(url);
       url := UrlDecode(url);
-      i := PosExChar('?', url);
-      if i > 0 then
-        urlnoparam := copy(url, 1, i - 1)
-      else
-        urlnoparam := url;
+      urlnoparam := GetFirstCsvItem(url, '?');
     end;
 
   var
