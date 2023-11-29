@@ -508,43 +508,51 @@ procedure MacIPAddressFlush;
 
 type
   /// interface name/address pairs as returned by GetMacAddresses
-  // - additional IPv4 information is available on most systems
+  // - associated IPv4 information is available on most systems
   TMacAddress = record
     /// short text description of this interface
     // - contains e.g. 'eth0' on Linux
     Name: RawUtf8;
     /// user-friendly name for the adapter
     // - e.g. on Windows: 'Local Area Connection 1.'
+    // - on Linux, returns /sys/class/net/eth0/ifalias content, i.e. the value
+    // fixed by "ip link set eth0 alias somename"
+    // - not available on Android or BSD
     FriendlyName: RawUtf8;
     /// the hardware MAC address of this adapter
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     Address: RawUtf8;
     /// the raw IPv4 address of this interface
+    // - not available on Android
     IP: RawUtf8;
     /// the raw IPv4 network mask of this interface
+    // - not available on Android
     NetMask: RawUtf8;
     /// the raw IPv4 broadcast address of this interface
     Broadcast: RawUtf8;
+    /// the raw IPv4 gateway address of this interface
+    // - not available on Windows XP or BSD
+    Gateway: RawUtf8;
     /// the raw IPv4 address(es) of the associated DNS server(s), as CSV
+    // - not available on POSIX (DNS are part of the routing, not interfaces)
     Dns: RawUtf8;
     /// the optional DNS suffix of this connection, e.g. 'ad.mycorp.com'
+    // - not available on POSIX
     DnsSuffix: RawUtf8;
-    /// the raw IPv4 gateway address of this interface
-    // - not available on Windows XP
-    Gateway: RawUtf8;
     /// the raw IPv4 binary address of the main associated DHCP server
-    // - not available on Windows XP
+    // - not available on Windows XP or POSIX
     Dhcp: RawUtf8;
-    /// the current link speed in bits per second (typically 100 or 1000)
-    // - not available on Windows XP
-    Speed: cardinal;
     /// the current adapter Maximum Transmission Unit size (MTU), in bytes
     // - typically 1500 over an Ethernet network
+    // - not available on BSD
     Mtu: cardinal;
+    /// the current link speed in bits per second (typically 100 or 1000)
+    // - not available on Windows XP or BSD
+    Speed: cardinal;
   end;
   TMacAddressDynArray = array of TMacAddress;
 
-/// enumerate all Mac addresses of the current computer
+/// enumerate all network MAC addresses and their associated IP information
 // - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 
@@ -554,7 +562,7 @@ function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
 
 {$ifdef OSWINDOWS}
-/// remotly get the MAC address of a computer, from its IP Address
+/// remotely get the MAC address of a computer, from its IP Address
 // - only works under Win2K and later, which features a ARP protocol client
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;

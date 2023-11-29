@@ -622,6 +622,11 @@ end;
 
 { ******************** Mac and IP Addresses Support }
 
+const
+  IFF_UP = $1;
+  IFF_BROADCAST = $2;
+  IFF_LOOPBACK = $8;
+
 {$ifndef OSANDROID}
   // on POSIX, use getifaddrs/freeifaddrs from libc
   {$define USE_IFADDRS}
@@ -633,17 +638,60 @@ end;
   // https://android.googlesource.com/platform/bionic/+/master/docs/status.md
 {$endif OSANDROID}
 
+{$ifdef OSLINUX}
+procedure RetrieveEnhancedInfo(var a: TMacAddress);
+var
+  sysfs: RawUtf8;
+  p: PUtf8Char;
+  l: PtrInt;
+  ip: cardinal;
+begin
+  // see https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-net
+  sysfs := NetConcat(['/sys/class/net/', a.Name, '/']);
+  a.FriendlyName := TrimU(StringFromFile(sysfs + 'ifalias', {nosize=}true));
+  a.Speed := GetCardinal(pointer(StringFromFile(sysfs + 'speed', true)));
+  a.Mtu := GetCardinal(pointer(StringFromFile(sysfs + 'mtu', true)));
+  // we retrieve the gateway from /proc/net/route
+  l := length(a.Name);
+  p := pointer(StringFromFile('/proc/net/route', true));
+  while p <> nil do
+  begin
+    if (MemCmp(pointer(p), pointer(a.Name), l) = 0) and
+       (p[l] in [#9, ' ']) then
+    begin
+      inc(p, l + 1);
+      if NetGetNextSpaced(p) = '00000000' then // destination=0.0.0.0
+      begin
+        ip := 0;
+        ParseHex(pointer(NetGetNextSpaced(p)), @ip, 4);
+        ip := bswap32(ip);
+        IP4Text(@ip, a.Gateway);
+        break;
+      end;
+    end;
+    p := GotoNextLine(p);
+  end;
+end;
+{$endif OSLINUX}
+
 {$ifdef USE_IFADDRS}
 
 type
   pifaddrs = ^ifaddrs;
   ifaddrs = record
+    // Next item in list
     ifa_next: pifaddrs;
+    // null-terminated interface name
     ifa_name: PAnsiChar;
+    // mainly IFF_UP, IFF_BROADCAST and IFF_LOOPBACK
     ifa_flags: cardinal;
+    // Address of interface
     ifa_addr: Psockaddr;
+    // netmask associated with ifa_addr (may be nil)
     ifa_netmask: Psockaddr;
-    ifa_dstaddr: Psockaddr;
+    // if IFF_BROADCAST is set, the broadcast address associated with ifa_addr
+    ifa_broadaddr: Psockaddr;
+    // address-family-specific data - e.g. statistics on AF_PACKET
     ifa_data: Pointer;
   end;
 
@@ -671,10 +719,6 @@ type
     sll_addr: array[byte] of byte;
   end;
   {$endif OSBSDDARWIN}
-
-const
-  IFF_UP = $1;
-  IFF_LOOPBACK = $8;
 
 function getifaddrs(var ifap: pifaddrs): Integer; cdecl;
   external clib name 'getifaddrs';
@@ -732,6 +776,7 @@ var
   i, n: PtrInt;
   mac: RawUtf8;
 begin
+  // https://github.com/zeromq/czmq/blob/899f81985961513c7f4e/src/ziflist.c#L210
   result := nil;
   if getifaddrs(list) = NO_ERROR then
   try
@@ -769,14 +814,46 @@ begin
         begin
           if n = length(result) then
             SetLength(result, NextGrow(n));
-          result[n].Name := info^.ifa_name;
+          result[n].Name := info^.ifa_name; // e.g. 'eth0' on Linux
           result[n].Address := mac;
+          {$ifdef OSLINUX}
+          if info^.ifa_flags and IFF_UP <> 0 then
+            RetrieveEnhancedInfo(result[n]);
+          {$endif OSLINUX}
+          // on POSIX, there is no such things as per-interface DNS, and
+          // no standard way of knowing the Gateway
           inc(n);
         end;
       end;
       info := info^.ifa_next;
     until info = nil;
     SetLength(result, n);
+    // retrieve the IP configuration from a second loop
+    info := list;
+    repeat
+      if (info^.ifa_addr <> nil) and
+         (info^.ifa_flags and IFF_LOOPBACK = 0) and
+         (info^.ifa_flags and IFF_UP <> 0) and
+         (info^.ifa_addr^.sa_family = AF_INET) then
+        for i := 0 to n - 1 do
+          with result[i] do
+            if StrComp(pointer(Name), info^.ifa_name) = 0 then
+            begin
+              if IP = '' then // only return the first IPv4
+              begin
+                IP4Text(@info^.ifa_addr^.sin_addr, IP);
+                if (info^.ifa_netmask <> nil) and
+                   (info^.ifa_netmask^.sa_family = AF_INET) then
+                  IP4Text(@info^.ifa_netmask^.sin_addr, NetMask);
+                if (info^.ifa_flags and IFF_BROADCAST <> 0) and
+                   (info^.ifa_broadaddr <> nil) and
+                   (info^.ifa_broadaddr^.sa_family = AF_INET) then
+                  IP4Text(@info^.ifa_broadaddr^.sin_addr, Broadcast);
+              end;
+              break;
+            end;
+      info := info^.ifa_next;
+    until info = nil;
   finally
     freeifaddrs(list);
   end;
@@ -818,6 +895,11 @@ begin
             SetLength(result, n + 1);
             result[n].Name := SR.Name;
             result[n].Address := f;
+            RetrieveEnhancedInfo(result[n]);
+            // sadly, retrieving IP and mask from /proc is very complex
+            // https://stackoverflow.com/a/14725655/458259
+            // a solution may be to use ioctl()
+            // https://github.com/zeromq/czmq/blob/899f81985961513c7f4e/src/ziflist.c#L277
             inc(n);
           end;
         end;
