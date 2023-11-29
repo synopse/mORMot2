@@ -733,24 +733,20 @@ end;
 { ******************** MAC and DNS Addresses Support }
 
 const
-  MAX_ADAPTER_ADDRESS_LENGTH = 8;
-  GAA_FLAG_SKIP_UNICAST = $1;
-  GAA_FLAG_SKIP_ANYCAST = $2;
-  GAA_FLAG_SKIP_MULTICAST = $4;
-  GAA_FLAG_SKIP_DNS_SERVER = $8;
+  GAA_FLAG_SKIP_UNICAST       = $1;
+  GAA_FLAG_SKIP_ANYCAST       = $2;
+  GAA_FLAG_SKIP_MULTICAST     = $4;
+  GAA_FLAG_SKIP_DNS_SERVER    = $8;
   GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
   GAA_FLAG_INCLUDE_ALL_INTERFACES = $100; // Vista+
-  GAA_FLAGS = GAA_FLAG_SKIP_UNICAST or
-              GAA_FLAG_SKIP_ANYCAST or
-              GAA_FLAG_SKIP_MULTICAST or
-              GAA_FLAG_SKIP_DNS_SERVER or
-              GAA_FLAG_SKIP_FRIENDLY_NAME;
-              // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
+  GAA_FLAGS = GAA_FLAG_SKIP_ANYCAST or GAA_FLAG_SKIP_MULTICAST;
   IfOperStatusUp = 1;
+  IF_TYPE_SOFTWARE_LOOPBACK = 24;
 
   MAX_HOSTNAME_LEN = 128;
   MAX_DOMAIN_NAME_LEN = 128;
   MAX_SCOPE_ID_LEN = 256;
+  MAX_ADAPTER_ADDRESS_LEN = 8;
 
 type
   SOCKET_ADDRESS = record
@@ -758,13 +754,53 @@ type
     iSockaddrLength: Integer;
   end;
 
-  PIP_ADAPTER_UNICAST_ADDRESS = pointer;
+  IP_PREFIX_ORIGIN = DWORD;
+  IP_SUFFIX_ORIGIN = DWORD;
+  IP_DAD_STATE = DWORD;
+
+  PIP_ADAPTER_UNICAST_ADDRESS = ^IP_ADAPTER_UNICAST_ADDRESS;
+  IP_ADAPTER_UNICAST_ADDRESS = record
+    Union: record
+      case Integer of
+        0: (
+          Alignment: QWord);
+        1: (
+          Length: ULONG;
+          Flags: DWORD);
+    end;
+    Next: PIP_ADAPTER_UNICAST_ADDRESS;
+    Address: SOCKET_ADDRESS;
+    PrefixOrigin: IP_PREFIX_ORIGIN;
+    SuffixOrigin: IP_SUFFIX_ORIGIN;
+    DadState: IP_DAD_STATE;
+    ValidLifetime: ULONG;
+    PreferredLifetime: ULONG;
+    LeaseLifetime: ULONG;
+    // below fields are only available on Windows Vista and later
+    OnLinkPrefixLength: Byte;
+  end;
+
   PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
   PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
   PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
 
-  PIP_ADAPTER_ADDRESSES = ^_IP_ADAPTER_ADDRESSES;
-  _IP_ADAPTER_ADDRESSES = record
+  PIP_ADAPTER_PREFIX = ^IP_ADAPTER_PREFIX;
+  IP_ADAPTER_PREFIX = record
+    Union: record
+      case Integer of
+        0: (
+          Alignment: QWord);
+        1: (
+          Length: ULONG;
+          Flags: DWORD);
+    end;
+    Next: PIP_ADAPTER_PREFIX;
+    Address: SOCKET_ADDRESS;
+    PrefixLength: ULONG;
+  end;
+
+  PIP_ADAPTER_ADDRESSES = ^IP_ADAPTER_ADDRESSES;
+  IP_ADAPTER_ADDRESSES = record
     Union: record
       case Integer of
         0: (
@@ -782,16 +818,16 @@ type
     DnsSuffix: PWCHAR;
     Description: PWCHAR;
     FriendlyName: PWCHAR;
-    PhysicalAddress: array [0..MAX_ADAPTER_ADDRESS_LENGTH - 1] of BYTE;
+    PhysicalAddress: array [0 .. MAX_ADAPTER_ADDRESS_LEN - 1] of BYTE;
     PhysicalAddressLength: DWORD;
     Flags: DWORD;
     Mtu: DWORD;
     IfType: ULONG;
     OperStatus: DWORD;
     // below fields are only available on Windows XP with SP1 and later
-    Ipv6IfIndex: ULONG;
+    Ipv6IfIndex: DWORD;
     ZoneIndices: array [0..15] of DWORD;
-    FirstPrefix: pointer;
+    FirstPrefix: PIP_ADAPTER_PREFIX;
     // below fields are only available on Windows Vista and later
     TransmitLinkSpeed: Int64;
     ReceiveLinkSpeed: Int64;
@@ -892,16 +928,19 @@ end;
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   n: PtrInt;
-  siz: ULONG;
+  siz, b: ULONG;
   p: PIP_ADAPTER_ADDRESSES;
+  a: PIP_ADAPTER_UNICAST_ADDRESS;
   tmp: RawByteString;
 begin
+  // see https://github.com/zeromq/czmq/blob/899f81985961513c/src/ziflist.c#L340
   result := nil;
   siz := 0;
   if not DelayedProc(GetAdaptersAddresses, iphlpapiDll, 'iphlpapi.dll',
            'GetAdaptersAddresses') or
      (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <>
-       ERROR_BUFFER_OVERFLOW) then
+       ERROR_BUFFER_OVERFLOW) or
+     (siz = 0) then
     exit;
   SetLength(tmp, siz); // around 600 bytes per interface
   p := pointer(tmp);
@@ -910,13 +949,55 @@ begin
   n := 0;
   repeat
     if (p^.Flags <> 0) and
+       (p^.IfType <> IF_TYPE_SOFTWARE_LOOPBACK) and
        (UpAndDown or
         (p^.OperStatus = IfOperStatusUp)) and
        (p^.PhysicalAddressLength = 6) then
     begin
       SetLength(result, n + 1);
-      Win32PWideCharToUtf8(p^.Description, result[n].Name);
-      result[n].Address := MacToText(@p^.PhysicalAddress);
+      with result[n] do
+      begin
+        Win32PWideCharToUtf8(p^.Description, Name);
+        Win32PWideCharToUtf8(p^.FriendlyName, FriendlyName);
+        Win32PWideCharToUtf8(p^.DnsSuffix, DnsSuffix);
+        Address := MacToText(@p^.PhysicalAddress);
+        a := p^.FirstUnicastAddress;
+        while a <> nil do
+        begin
+          case a^.Address.lpSockaddr^.sa_family of
+            AF_INET: // retrieve first IPv4 address and masks
+              begin
+                IP4Text(@a^.Address.lpSockaddr^.sin_addr, IP);
+                if OsVersion >= wVista then
+                  b := a^.OnLinkPrefixLength
+                else if (p^.FirstPrefix <> nil) and
+                        (p^.FirstPrefix^.PrefixLength <= 32) then
+                        b := p^.FirstPrefix^.PrefixLength
+                      else
+                        b := 255; // fallback to IP4Mask()
+                if b <= 32 then
+                  b := bswap32($ffffffff shl (32 - b))
+                else
+                  b := IP4Mask(a^.Address.lpSockaddr^.sin_addr.S_addr);
+                IP4Text(@b, NetMask);
+                b := a^.Address.lpSockaddr^.sin_addr.S_addr or (not b);
+                IP4Text(@b, Broadcast);
+                break; // we found the first IPv4 network information
+              end;
+            AF_INET6: // IPv6 address but no mask
+              IP6Text(@PSockAddrIn6(a^.Address.lpSockaddr)^.sin6_addr, IP);
+          end;
+          a := a^.Next; // IPv4 may be the second
+        end;
+        if OsVersion >= wVista then
+        begin
+          Speed := p^.TransmitLinkSpeed;
+          if p^.ReceiveLinkSpeed < Speed then
+            Speed := p^.ReceiveLinkSpeed; // unlikely
+          if p^.Dhcpv4Server.lpSockaddr <> nil then
+            IP4Text(@p^.Dhcpv4Server.lpSockaddr^.sin_addr, Dhcp);
+        end;
+      end;
       inc(n);
     end;
     p := p^.Next;
