@@ -502,26 +502,46 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
-/// flush the GetIPAddressesText/GetMacAddresses internal cache
+/// flush the GetIPAddressesText/GetMacAddresses internal 65-seconds cache
 // - may be set to force detection after HW configuration change
 procedure MacIPAddressFlush;
 
 type
   /// interface name/address pairs as returned by GetMacAddresses
+  // - additional IPv4 information is available on most systems
   TMacAddress = record
-    /// contains e.g. 'eth0' on Linux
+    /// short text description of this interface
+    // - contains e.g. 'eth0' on Linux
     Name: RawUtf8;
-    /// contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
+    /// user-friendly name for the adapter
+    // - e.g. on Windows: 'Local Area Connection 1.'
+    FriendlyName: RawUtf8;
+    /// the hardware MAC address of this adapter
+    // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     Address: RawUtf8;
+    /// the raw IPv4 address of this interface
+    IP: RawUtf8;
+    /// the raw IPv4 network mask of this interface
+    NetMask: RawUtf8;
+    /// the raw IPv4 broadcast address of this interface
+    Broadcast: RawUtf8;
+    /// the raw IPv4 binary address of the associated DHCP server
+    // - not available on Windows XP
+    Dhcp: RawUtf8;
+    /// the optional DNS suffix of this connection, e.g. 'ad.mycorp.com'
+    DnsSuffix: RawUtf8;
+    /// the current link speed in bits per second (typically 100 or 1000)
+    // - not available on Windows XP
+    Speed: integer;
   end;
   TMacAddressDynArray = array of TMacAddress;
 
 /// enumerate all Mac addresses of the current computer
-// - an internal cache is used, with refresh on explicit MacIPAddressFlush call
+// - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 
 /// enumerate all MAC addresses of the current computer as 'name1=addr1 name2=addr2'
-// - an internal cache is used, with refresh on explicit MacIPAddressFlush call
+// - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
 
@@ -2972,23 +2992,17 @@ var
   // GetMacAddresses / GetMacAddressesText cache
   MacAddresses: array[{UpAndDown=}boolean] of record
     Safe: TLightLock;
-    Searched: boolean; // searched once: no change during process lifetime
+    Tix: integer;
     Addresses: TMacAddressDynArray;
     Text: array[{WithoutName=}boolean] of RawUtf8;
   end;
 
 procedure MacIPAddressFlush;
-var
-  ip: TIPAddress;
 begin
-  for ip := low(ip) to high(ip) do
-   IPAddresses[ip].Tix := 0;
-  MacAddresses[false].Text[false] := '';
-  MacAddresses[false].Text[true] := '';
-  MacAddresses[false].Searched := false;
-  MacAddresses[true].Text[false] := '';
-  MacAddresses[true].Text[true] := '';
-  MacAddresses[true].Searched := false;
+  Finalize(IPAddresses);
+  FillCharFast(IPAddresses, SizeOf(IPAddresses), 0);
+  Finalize(MacAddresses);
+  FillCharFast(MacAddresses, SizeOf(MacAddresses), 0);
 end;
 
 procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
@@ -3035,17 +3049,20 @@ begin
 end;
 
 function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
+var
+  now: integer;
 begin
   with MacAddresses[UpAndDown] do
   begin
-    if not Searched then
+    now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
+    if Tix <> now then
     begin
       Safe.Lock;
       try
-        if not Searched then
+        if Tix <> now then
         begin
           Addresses := RetrieveMacAddresses(UpAndDown);
-          Searched := true;
+          Tix := now
         end;
       finally
         Safe.UnLock;
@@ -3060,14 +3077,16 @@ var
   i: PtrInt;
   addr: TMacAddressDynArray;
   w, wo: RawUtf8;
+  now: integer;
   ok: boolean;
 begin
+  now := mormot.core.os.GetTickCount64 shr 16 + 1; // refresh every 65536 ms
   with MacAddresses[UpAndDown] do
   begin
     Safe.Lock; // to avoid memory leak
     result := Text[WithoutName];
     ok := (result <> '') or
-          Searched;
+          (Tix = now);
     Safe.UnLock; // TLightLock is not rentrant
     if ok then
       exit;
@@ -3080,8 +3099,8 @@ begin
         w := NetConcat([w, Name, '=', Address, ' ']);
         wo := NetConcat([wo, Address, ' ']);
       end;
-    SetLength(w, length(w) - 1);
-    SetLength(wo, length(wo) - 1);
+    FakeLength(w, length(w) - 1); // trim trailing spaces
+    FakeLength(wo, length(wo) - 1);
     Safe.Lock;
     Text[false] := w;
     Text[true] := wo;
