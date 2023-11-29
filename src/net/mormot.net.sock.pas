@@ -525,14 +525,22 @@ type
     NetMask: RawUtf8;
     /// the raw IPv4 broadcast address of this interface
     Broadcast: RawUtf8;
-    /// the raw IPv4 binary address of the associated DHCP server
-    // - not available on Windows XP
-    Dhcp: RawUtf8;
+    /// the raw IPv4 address(es) of the associated DNS server(s), as CSV
+    Dns: RawUtf8;
     /// the optional DNS suffix of this connection, e.g. 'ad.mycorp.com'
     DnsSuffix: RawUtf8;
+    /// the raw IPv4 gateway address of this interface
+    // - not available on Windows XP
+    Gateway: RawUtf8;
+    /// the raw IPv4 binary address of the main associated DHCP server
+    // - not available on Windows XP
+    Dhcp: RawUtf8;
     /// the current link speed in bits per second (typically 100 or 1000)
     // - not available on Windows XP
-    Speed: integer;
+    Speed: cardinal;
+    /// the current adapter Maximum Transmission Unit size (MTU), in bytes
+    // - typically 1500 over an Ethernet network
+    Mtu: cardinal;
   end;
   TMacAddressDynArray = array of TMacAddress;
 
@@ -1201,7 +1209,7 @@ function NetStartWith(p, up: PUtf8Char): boolean;
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
-// - end text parsing at ending #0 or any char <= ' '
+// - end text input parsing at final #0 or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 
 /// parse a text input buffer until the end space or EOL

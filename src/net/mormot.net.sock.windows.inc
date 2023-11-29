@@ -737,10 +737,14 @@ const
   GAA_FLAG_SKIP_ANYCAST       = $2;
   GAA_FLAG_SKIP_MULTICAST     = $4;
   GAA_FLAG_SKIP_DNS_SERVER    = $8;
+  GAA_FLAG_INCLUDE_PREFIX     = $10;
   GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
-  GAA_FLAG_INCLUDE_ALL_INTERFACES = $100; // Vista+
-  GAA_FLAGS = GAA_FLAG_SKIP_ANYCAST or GAA_FLAG_SKIP_MULTICAST;
+  // Vista+
+  GAA_FLAG_INCLUDE_WINS_INFO  = $40;
+  GAA_FLAG_INCLUDE_GATEWAYS   = $80;
+  GAA_FLAG_INCLUDE_ALL_INTERFACES = $100;
   IfOperStatusUp = 1;
+  IfOperStatusDown = 2;
   IF_TYPE_SOFTWARE_LOOPBACK = 24;
 
   MAX_HOSTNAME_LEN = 128;
@@ -758,16 +762,18 @@ type
   IP_SUFFIX_ORIGIN = DWORD;
   IP_DAD_STATE = DWORD;
 
+  IP_ADAPTER_UNION = record
+    case Integer of
+      0: (
+        Alignment: QWord);
+      1: (
+        Length: ULONG;
+        Flags: DWORD);
+  end;
+
   PIP_ADAPTER_UNICAST_ADDRESS = ^IP_ADAPTER_UNICAST_ADDRESS;
   IP_ADAPTER_UNICAST_ADDRESS = record
-    Union: record
-      case Integer of
-        0: (
-          Alignment: QWord);
-        1: (
-          Length: ULONG;
-          Flags: DWORD);
-    end;
+    Union: IP_ADAPTER_UNION;
     Next: PIP_ADAPTER_UNICAST_ADDRESS;
     Address: SOCKET_ADDRESS;
     PrefixOrigin: IP_PREFIX_ORIGIN;
@@ -780,35 +786,26 @@ type
     OnLinkPrefixLength: Byte;
   end;
 
-  PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
-  PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
-  PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
-
-  PIP_ADAPTER_PREFIX = ^IP_ADAPTER_PREFIX;
-  IP_ADAPTER_PREFIX = record
-    Union: record
-      case Integer of
-        0: (
-          Alignment: QWord);
-        1: (
-          Length: ULONG;
-          Flags: DWORD);
-    end;
-    Next: PIP_ADAPTER_PREFIX;
+  PIP_ADAPTER = ^IP_ADAPTER;
+  // used for IP_ADAPTER_PREFIX, IP_ADAPTER_DNS_SERVER_ADDRESS,
+  // IP_ADAPTER_GATEWAY_ADDRESS and IP_ADAPTER_WINS_SERVER_ADDRESS
+  IP_ADAPTER = record
+    Union: IP_ADAPTER_UNION;
+    Next: PIP_ADAPTER;
     Address: SOCKET_ADDRESS;
-    PrefixLength: ULONG;
+    PrefixLength: ULONG; // used for IP_ADAPTER_PREFIX only
   end;
+
+  PIP_ADAPTER_PREFIX = PIP_ADAPTER;
+  PIP_ADAPTER_ANYCAST_ADDRESS = PIP_ADAPTER;
+  PIP_ADAPTER_DNS_SERVER_ADDRESS = PIP_ADAPTER;
+  PIP_ADAPTER_MULTICAST_ADDRESS = PIP_ADAPTER;
+  PIP_ADAPTER_WINS_SERVER_ADDRESS = PIP_ADAPTER;
+  PIP_ADAPTER_GATEWAY_ADDRESS = PIP_ADAPTER;
 
   PIP_ADAPTER_ADDRESSES = ^IP_ADAPTER_ADDRESSES;
   IP_ADAPTER_ADDRESSES = record
-    Union: record
-      case Integer of
-        0: (
-          Alignment: QWord);
-        1: (
-          Length: ULONG;
-          IfIndex: DWORD);
-    end;
+    Union: IP_ADAPTER_UNION;
     Next: PIP_ADAPTER_ADDRESSES;
     AdapterName: PAnsiChar;
     FirstUnicastAddress: PIP_ADAPTER_UNICAST_ADDRESS;
@@ -831,8 +828,8 @@ type
     // below fields are only available on Windows Vista and later
     TransmitLinkSpeed: Int64;
     ReceiveLinkSpeed: Int64;
-    FirstWinsServerAddress: pointer;
-    FirstGatewayAddress: pointer;
+    FirstWinsServerAddress: PIP_ADAPTER_WINS_SERVER_ADDRESS;
+    FirstGatewayAddress: PIP_ADAPTER_GATEWAY_ADDRESS;
     Ipv4Metric: ULONG;
     Ipv6Metric: ULONG;
     Luid: Int64;
@@ -928,28 +925,35 @@ end;
 function RetrieveMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
 var
   n: PtrInt;
-  siz, b: ULONG;
+  siz, b, flags: ULONG;
   p: PIP_ADAPTER_ADDRESSES;
   a: PIP_ADAPTER_UNICAST_ADDRESS;
+  r: PIP_ADAPTER;
   tmp: RawByteString;
+  one: RawUtf8;
 begin
   // see https://github.com/zeromq/czmq/blob/899f81985961513c/src/ziflist.c#L340
   result := nil;
   siz := 0;
+  flags := GAA_FLAG_SKIP_ANYCAST or
+           GAA_FLAG_SKIP_MULTICAST or
+           GAA_FLAG_INCLUDE_PREFIX;
+  if OsVersion >= wVista then
+    flags := flags or GAA_FLAG_INCLUDE_GATEWAYS;
   if not DelayedProc(GetAdaptersAddresses, iphlpapiDll, 'iphlpapi.dll',
            'GetAdaptersAddresses') or
-     (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, nil, @siz) <>
-       ERROR_BUFFER_OVERFLOW) or
+     (GetAdaptersAddresses(AF_INET, flags, nil, nil, @siz) <> ERROR_BUFFER_OVERFLOW) or
      (siz = 0) then
     exit;
   SetLength(tmp, siz); // around 600 bytes per interface
   p := pointer(tmp);
-  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) <> ERROR_SUCCESS then
+  if GetAdaptersAddresses(AF_INET, flags, nil, p, @siz) <> ERROR_SUCCESS then
     exit;
   n := 0;
   repeat
     if (p^.Flags <> 0) and
        (p^.IfType <> IF_TYPE_SOFTWARE_LOOPBACK) and
+       (p^.OperStatus in [IfOperStatusUp, IfOperStatusDown]) and
        (UpAndDown or
         (p^.OperStatus = IfOperStatusUp)) and
        (p^.PhysicalAddressLength = 6) then
@@ -961,6 +965,7 @@ begin
         Win32PWideCharToUtf8(p^.FriendlyName, FriendlyName);
         Win32PWideCharToUtf8(p^.DnsSuffix, DnsSuffix);
         Address := MacToText(@p^.PhysicalAddress);
+        Mtu := p^.Mtu;
         a := p^.FirstUnicastAddress;
         while a <> nil do
         begin
@@ -971,6 +976,7 @@ begin
                 if OsVersion >= wVista then
                   b := a^.OnLinkPrefixLength
                 else if (p^.FirstPrefix <> nil) and
+                        (p^.FirstPrefix^.Address.lpSockaddr^.sin_family = AF_INET) and
                         (p^.FirstPrefix^.PrefixLength <= 32) then
                         b := p^.FirstPrefix^.PrefixLength
                       else
@@ -984,13 +990,36 @@ begin
                 IP4Text(@b, Broadcast);
                 break; // we found the first IPv4 network information
               end;
-            AF_INET6: // IPv6 address but no mask
+            AF_INET6: // IPv6 address but no mask - happen
               IP6Text(@PSockAddrIn6(a^.Address.lpSockaddr)^.sin6_addr, IP);
           end;
           a := a^.Next; // IPv4 may be the second
         end;
+        r := p^.FirstDnsServerAddress;
+        while r <> nil do
+        begin
+          if r.Address.lpSockaddr^.sa_family = AF_INET then
+          begin // retrieve all IPv4 DNS addresses as CSV
+            IP4Text(@r^.Address.lpSockaddr^.sin_addr, one);
+            if Dns = '' then
+              Dns := one
+            else
+              Dns := NetConcat([Dns, ',', one]);
+          end;
+          r := r^.Next;
+        end;
         if OsVersion >= wVista then
         begin
+          // some fields are not available on XP
+          r := p^.FirstGatewayAddress;
+          while r <> nil do
+            if r.Address.lpSockaddr^.sa_family = AF_INET then
+            begin
+              IP4Text(@r^.Address.lpSockaddr^.sin_addr, Gateway);
+              break;
+            end
+            else
+              r := r^.Next;
           Speed := p^.TransmitLinkSpeed;
           if p^.ReceiveLinkSpeed < Speed then
             Speed := p^.ReceiveLinkSpeed; // unlikely
