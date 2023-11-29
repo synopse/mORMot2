@@ -8721,7 +8721,7 @@ begin
     AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX]);
     AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
-    inc(Counts[Info^.Kind]); // Instance.Kind may not be already available
+    inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally
     k^.Safe.WriteUnLock;
   end;

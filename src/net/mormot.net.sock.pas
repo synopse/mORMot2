@@ -443,6 +443,11 @@ function IsPublicIP(ip4: cardinal): boolean;
 // - see tiaIPv4Dhcp, tiaIPv4DhcpPublic and tiaIPv4DhcpPrivate filters
 function IsApipaIP(ip4: cardinal): boolean;
 
+/// detect IANA private IPv4 masks as 32-bit raw values
+// - i.e. 10.x.x.x, 172.16-31.x.x and 192.168.x.x addresses into
+// 255.0.0.0, 255.255.0.0, 255.255.255.0 or 255.255.255.255
+function IP4Mask(ip4: cardinal): cardinal;
+
 /// filter an IPv4 address to a given TIPAddress kind
 // - return true if the supplied address does match the filter
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
@@ -2695,6 +2700,21 @@ function IsApipaIP(ip4: cardinal): boolean;
 begin
   result := (ip4 and $ffff = ord(169) + ord(254) shl 8) and
             (ToByte(ip4 shr 16) < 255);
+end;
+
+function IP4Mask(ip4: cardinal): cardinal;
+begin
+  result := $ffffffff;
+  case ToByte(ip4) of // detect IANA private IP4 address spaces
+    10:
+      result := $000000ff;
+    172:
+      if ToByte(ip4 shr 8) in [16..31] then
+        result := $0000ffff;
+    192:
+      if ToByte(ip4 shr 8) = 168 then
+        result := $00ffffff;
+  end;
 end;
 
 function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
