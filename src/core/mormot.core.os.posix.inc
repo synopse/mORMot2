@@ -2561,8 +2561,6 @@ const
     (id: sbiBoardAssetTag;     fn: 'board_asset_tag')
   );
 
-procedure ParseHex(p: PAnsiChar; b: PByte; n: integer); forward;
-
 procedure _DirectSmbiosInfo(out info: TSmbiosBasicInfos);
 var
   i: PtrInt;
