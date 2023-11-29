@@ -807,7 +807,7 @@ begin
         for i := 0 to n - 1 do
           if result[i].Address = mac then
           begin
-            mac := ''; // may appear several times for each IP
+            mac := ''; // avoid any duplicate (paranoid)
             break;
           end;
         if mac <> '' then

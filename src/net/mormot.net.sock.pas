@@ -3115,7 +3115,7 @@ begin
         w := NetConcat([w, Name, '=', Address, ' ']);
         wo := NetConcat([wo, Address, ' ']);
       end;
-    FakeLength(w, length(w) - 1); // trim trailing spaces
+    FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
     Safe.Lock;
     Text[false] := w;
