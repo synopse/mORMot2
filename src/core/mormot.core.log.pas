@@ -1922,12 +1922,15 @@ begin
     exit;
   new := TDebugFile.Create;
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
-  if ExeInstanceDebugFile = nil then
-    ExeInstanceDebugFile := new
-  else
-    new.Free;
-  result := ExeInstanceDebugFile;
-  mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  try
+    if ExeInstanceDebugFile = nil then
+      ExeInstanceDebugFile := new
+    else
+      new.Free;
+    result := ExeInstanceDebugFile;
+  finally
+    mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
+  end;
 end;
 
 
@@ -3951,7 +3954,8 @@ begin
   result := ExceptionIgnorePerThread;
 end;
 
-procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(aExceptionIgnoreCurrentThread: boolean);
+procedure TSynLogFamily.SetExceptionIgnoreCurrentThread(
+  aExceptionIgnoreCurrentThread: boolean);
 begin
   ExceptionIgnorePerThread := aExceptionIgnoreCurrentThread;
 end;
@@ -4528,9 +4532,13 @@ begin
     exit; // nothing to release
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
+    // reset the current thread context
     Finalize(GetThreadContext^);
     FillcharFast(fThreadContext^, SizeOf(fThreadContext^), 0);
+    fThreadID := 0; // avoid race condition if this TThreadID is reaffected
+    // rebuild internal threads index
     ThreadContextRehash; // fThreadHash[fThreadLastHash] := 0 is not enough
+    // mark this thread context index for quick reuse
     if fThreadIndexReleasedCount >= length(fThreadIndexReleased) then
       SetLength(fThreadIndexReleased, fThreadIndexReleasedCount + 128);
     fThreadIndexReleased[fThreadIndexReleasedCount] := fThreadIndex;
@@ -6100,8 +6108,10 @@ fin:  log.fWriterEcho.AddEndOfLine(log.fCurrentLevel);
       // any nested exception should never be propagated to the OS caller
     end;
   finally
+    {$ifndef NOEXCEPTIONINTERCEPT}
     if log <> nil then
       log.fExceptionIgnoreThreadVar^ := log.fExceptionIgnoredBackup;
+    {$endif NOEXCEPTIONINTERCEPT}
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
