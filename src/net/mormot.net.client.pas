@@ -2496,8 +2496,10 @@ var
   Callback: WINHTTP_STATUS_CALLBACK;
   CallbackRes: PtrInt absolute Callback; // for FPC compatibility
   access, protocols: cardinal;
+  ua, pn, pb: SynUnicode;
 begin
   WinHttpApiInitialize;
+  Utf8ToSynUnicode(fExtendedOptions.UserAgent, ua);
   if fProxyName = '' then
     if (OSVersion >= wEightOne) or
        WinHttpForceProxyDetection then
@@ -2506,11 +2508,20 @@ begin
       access := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
     access := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpApi.Open(
-    pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
-    access,
-    pointer(Utf8ToSynUnicode(fProxyName)),
-    pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
+  Utf8ToSynUnicode(fProxyName, pn);
+  Utf8ToSynUnicode(fProxyByPass, pb);
+  fSession := WinHttpApi.Open(pointer(ua), access, pointer(pn), pointer(pb), 0);
+  if (fSession = nil) and
+     WinHttpForceProxyDetection and
+     (access = WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY) and
+     (OSVersion < wEightOne) then
+  begin
+    // WinHttpForceProxyDetection flag may be too optimistic: try without it
+    access := WINHTTP_ACCESS_TYPE_NO_PROXY;
+    fSession := WinHttpApi.Open(pointer(ua), access, pointer(pn), pointer(pb), 0);
+    if fSession <> nil then
+      WinHttpForceProxyDetection := false; // flag was the culprit
+  end;
   if fSession = nil then
     EWinHttp.RaiseFromLastError;
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
