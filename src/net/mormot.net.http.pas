@@ -270,6 +270,7 @@ type
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
+    function ValidateRange: boolean;
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -1269,6 +1270,25 @@ begin
   SetRawUtf8(result, P, L, nointern);
 end;
 
+function THttpRequestContext.ValidateRange: boolean;
+var
+  tosend: Int64;
+begin
+  if RangeOffset >= ContentLength then
+    result := false // invalid offset: return error or void response
+  else
+  begin
+    tosend := RangeLength;
+    if (tosend < 0) or // -1 for end of file 'Range: 1024-'
+       (RangeOffset + tosend > ContentLength) then
+      tosend := ContentLength - RangeOffset; // truncate
+    RangeLength := ContentLength; // contains size for Content-Range: header
+    ContentLength := tosend;
+    include(ResponseFlags, rfRange);
+    result := true;
+  end;
+end;
+
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char; PLen: PtrInt;
   HeadersUnFiltered: boolean);
 var
@@ -1839,20 +1859,24 @@ begin
      (ContentStream = nil) then // no stream compression (yet)
     CompressContent(CompressAcceptHeader, Compress, ContentType,
       Content, ContentEncoding);
+  // method will return a buffer to be sent
   result := @Head;
+  // handle range in response
   if rfAcceptRange in ResponseFlags then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
-  if ContentEncoding <> '' then
-  begin
-    result^.AppendShort('Content-Encoding: ');
-    result^.Append(ContentEncoding);
-    result^.AppendCRLF;
-  end;
   if ContentStream = nil then
   begin
     ContentPos := pointer(Content);
     ContentLength := length(Content);
-    // ContentLength has been set by ContentFromFile (also for HEAD responses)
+    if (RangeLength >= 0) or
+       (RangeOffset > 0) then
+      // there was a Range: header in the request
+      if not (rfRange in ResponseFlags) then // not already from ContentFromFile
+        if ValidateRange then
+          inc(ContentPos, RangeOffset)
+        else
+          ContentLength := 0; // invalid range: return void response
+    // ContentStream<>nil did set ContentLength/rfRange in ContentFromFile
   end;
   if rfRange in ResponseFlags then
   begin
@@ -1863,6 +1887,13 @@ begin
     result^.Append(RangeOffset + ContentLength - 1);
     result^.Append('/');
     result^.Append(RangeLength); // = FileSize after ContentFromFile()
+    result^.AppendCRLF;
+  end;
+  // finalize headers
+  if ContentEncoding <> '' then
+  begin
+    result^.AppendShort('Content-Encoding: ');
+    result^.Append(ContentEncoding);
     result^.AppendCRLF;
   end;
   result^.AppendShort('Content-Length: ');
@@ -1886,6 +1917,7 @@ begin
     end;
     result^.AppendCRLF; // 'Connection: Keep-Alive' is implicit with HTTP/1.1
   end;
+  // try to send both headers and body in a single socket syscal
   Process.Reset;
   if pointer(CommandMethod) = pointer(_HEADVAR) then
     // return only the headers
@@ -1894,7 +1926,7 @@ begin
     // there is a body to send
     if ContentStream = nil then
       if (ContentLength = 0) or
-         result^.TryAppend(pointer(Content), ContentLength) then
+         result^.TryAppend(ContentPos, ContentLength) then
         // single socket send() is possible (small body appended to headers)
         State := hrsResponseDone
       else
@@ -1904,7 +1936,7 @@ begin
           // single socket send() is possible (body fits in the sending buffer)
           Process.Reserve(Head.Len + ContentLength);
           Process.Append(Head.Buffer, Head.Len);
-          Process.Append(Content);
+          Process.Append(ContentPos, ContentLength);
           Content := ''; // release ASAP
           Head.Reset;
           result := @Process; // DoRequest will use Process
@@ -1915,7 +1947,7 @@ begin
           State := hrsSendBody;
       end
     else
-      // ContentStream requires async body sending
+      // ContentStream <> nil requires async body sending
       State := hrsSendBody; // send the ContentStream out by chunks
 end;
 
@@ -1963,7 +1995,6 @@ function THttpRequestContext.ContentFromFile(
   const FileName: TFileName; CompressGz: integer): boolean;
 var
   gz: TFileName;
-  tosend: Int64;
   hasRange: boolean;
 begin
   Content := '';
@@ -1990,18 +2021,8 @@ begin
   ContentLength := FileSize(FileName);
   result := ContentLength <> 0;
   if result and hasRange then
-    if RangeOffset >= ContentLength then
-      result := false // invalid offset
-    else
-    begin
-      tosend := RangeLength;
-      if (tosend < 0) or // -1 for end of file 'Range: 1024-'
-         (RangeOffset + tosend > ContentLength) then
-        tosend := ContentLength - RangeOffset; // truncate
-      RangeLength := ContentLength; // contains size for Content-Range: header
-      ContentLength := tosend;
-      include(ResponseFlags, rfRange);
-    end;
+    if not ValidateRange then
+      result := false; // invalid offset
   if not result then
     // there is no such file available, or range clearly wrong
     exit;
