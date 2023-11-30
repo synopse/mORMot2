@@ -920,6 +920,26 @@ end;
 
 {$endif USE_IFADDRS}
 
+function GetLocalMacAddress(const IP: RawUtf8; var Mac: TMacAddress): boolean;
+var
+  local: RawUtf8;
+  all: TMacAddressDynArray;
+  i: PtrInt;
+begin
+  result := false;
+  local := GetLocalIpAddress(IP);
+  if local = '' then
+    exit;
+  all := GetMacAddresses;
+  for i := 0 to high(all) do
+    if all[i].IP = local then
+    begin
+      mac := all[i];
+      result := true;
+      break;
+    end;
+end;
+
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;

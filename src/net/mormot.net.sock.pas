@@ -574,13 +574,18 @@ function GetMacAddressesText(WithoutName: boolean = true;
 // on POSIX, implementing ARP sadly requires root rights
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
-
-/// get the local MAC address used to reach a computer, from its IP Address
-// - return the local interface as a TMacAddress, with all its available info
-// - only works under Windows, which features a GetBestInterface() API
-function GetLocalMacAddress(const IP: RawUtf8;
-  var Mac: TMacAddress): boolean;
 {$endif OSWINDOWS}
+
+/// get the local MAC address used to reach a computer, from its IP or Host name
+// - return the local interface as a TMacAddress, with all its available info
+// - under Windows, will call the GetBestInterface() API
+// - on POSIX, calls GetLocalIpAddress() then create and discard a SOCK_DGRAM
+function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolean;
+
+/// get the local IP address used to reach a computer, from its IP Address
+// - will create a SOCK_DGRAM socket over the supplied IP, and check
+// the local socket address created
+function GetLocalIpAddress(const IP: RawUtf8): RawUtf8;
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
 // - on POSIX, return "nameserver" from /etc/resolv.conf unless usePosixEnv is set
@@ -3154,6 +3159,25 @@ begin
       inc(n);
     end;
   SetLength(result, n);
+end;
+
+function GetLocalIpAddress(const IP: RawUtf8): RawUtf8;
+var
+  addr: TNetAddr;
+  sock: TNetSocket;
+begin
+  result := '';
+  if addr.SetFrom(IP, '9', nlUdp) <> nrOk then // discard port
+    exit;
+  sock := addr.NewSocket(nlUdp);
+  if sock <> nil then
+    try
+      if (connect(sock.Socket, @addr, addr.Size) = NO_ERROR) and
+         (sock.GetName(addr) = nrOk) then
+        addr.IP(result);
+    finally
+      sock.Close;
+    end;
 end;
 
 var

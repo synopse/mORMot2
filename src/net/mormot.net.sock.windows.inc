@@ -693,6 +693,7 @@ type
 
 var
   iphlpapiDll: THandle;
+
   // some iphlpapi.dll late-binded API via DelayedProc()
   GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
     var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall;
@@ -736,10 +737,11 @@ const
   GAA_FLAG_SKIP_DNS_SERVER    = $8;
   GAA_FLAG_INCLUDE_PREFIX     = $10;
   GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
-  // Vista+
+  // below flags are only available on Windows Vista and later
   GAA_FLAG_INCLUDE_WINS_INFO  = $40;
   GAA_FLAG_INCLUDE_GATEWAYS   = $80;
   GAA_FLAG_INCLUDE_ALL_INTERFACES = $100;
+
   IfOperStatusUp = 1;
   IfOperStatusDown = 2;
   IF_TYPE_SOFTWARE_LOOPBACK = 24;
@@ -867,18 +869,14 @@ type
   end;
   PFIXED_INFO = ^FIXED_INFO;
 
-
 var
-  // some iphlpapi.dll late-binded APIs via DelayedProc()
+  // some iphlpapi.dll late-binded API via DelayedProc()
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWORD; Reserved: pointer;
-    pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
-
+      pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
   SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
     PhyAddrLen: Pointer): DWORD; stdcall;
-
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
-
   GetBestInterface: function(dwDestAddrIPv4: cardinal;
     var pdwBestIfIndex: DWORD): DWORD; stdcall;
 
@@ -1034,15 +1032,19 @@ begin
   until p = nil;
 end;
 
-function GetLocalMacAddress(const IP: RawUtf8;
+function GetLocalMacAddress(const Remote: RawUtf8;
   var Mac: TMacAddress): boolean;
 var
+  addr: TNetAddr;
   dwRemoteIP, ifIndex: DWORD;
   all: TMacAddressDynArray;
   i: PtrInt;
 begin
   result := false;
-  if NetIsIP4(pointer(IP), @dwRemoteIP) and
+  if not addr.SetFromIP4(Remote, {nolookup=}false) then
+    exit;
+  dwRemoteIP := addr.IP4;
+  if (dwRemoteIP <> 0) and
      DelayedProc(GetBestInterface, iphlpapiDll,
        'iphlpapi.dll', 'GetBestInterface') and
      (GetBestInterface(dwRemoteIP, ifIndex) = NO_ERROR) then
