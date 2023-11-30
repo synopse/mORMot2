@@ -578,14 +578,16 @@ function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
 
 /// get the local MAC address used to reach a computer, from its IP or Host name
 // - return the local interface as a TMacAddress, with all its available info
-// - under Windows, will call the GetBestInterface() API
-// - on POSIX, calls GetLocalIpAddress() then create and discard a SOCK_DGRAM
+// - under Windows, will call the GetBestInterface() API to retrieve a IfIndex
+// - on POSIX, will call GetLocalIpAddress() to retrive a local IP
+// - always eventually makes a lookup to the GetMacAddresses() list per IfIndex
+// (Windows) or IP (POSIX)
 function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolean;
 
 /// get the local IP address used to reach a computer, from its IP Address
 // - will create a SOCK_DGRAM socket over the supplied IP, and check
 // the local socket address created
-function GetLocalIpAddress(const IP: RawUtf8): RawUtf8;
+function GetLocalIpAddress(const Remote: RawUtf8): RawUtf8;
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
 // - on POSIX, return "nameserver" from /etc/resolv.conf unless usePosixEnv is set
@@ -3016,6 +3018,15 @@ begin
   until false;
 end;
 
+procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
+var
+  n: PtrInt;
+begin
+  n := length(Values);
+  SetLength(Values, n + 1);
+  Values[n] := Value;
+end;
+
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
   IPAddresses: array[TIPAddress] of record
@@ -3161,13 +3172,13 @@ begin
   SetLength(result, n);
 end;
 
-function GetLocalIpAddress(const IP: RawUtf8): RawUtf8;
+function GetLocalIpAddress(const Remote: RawUtf8): RawUtf8;
 var
   addr: TNetAddr;
   sock: TNetSocket;
 begin
   result := '';
-  if addr.SetFrom(IP, '9', nlUdp) <> nrOk then // discard port
+  if addr.SetFrom(Remote, '9', nlUdp) <> nrOk then // 9 is discard port
     exit;
   sock := addr.NewSocket(nlUdp);
   if sock <> nil then
@@ -3187,15 +3198,6 @@ var
     Value, Custom: TRawUtf8DynArray;
   end;
 
-procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
-var
-  n: PtrInt;
-begin
-  n := length(Values);
-  SetLength(Values, n + 1);
-  Values[n] := Value;
-end;
-
 function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   tix32: cardinal;
@@ -3210,7 +3212,7 @@ begin
       begin
         Value := _GetDnsAddresses(usePosixEnv, false);
         for i := 0 to length(Custom) - 1 do
-          AddRawUtf8(Value, Custom[i]);
+          NetAddRawUtf8(Value, Custom[i]);
         Tix := tix32;
       end;
       result := Value;
@@ -3226,7 +3228,7 @@ begin
   begin
     Safe.Lock;
     try
-      AddRawUtf8(Custom, DnsResolver);
+      NetAddRawUtf8(Custom, DnsResolver);
       Tix := 0; // flush cache
     finally
       Safe.UnLock;
@@ -3390,28 +3392,33 @@ end;
 {$endif CPU32}
 
 function ToText(ev: TPollSocketEvents): TShort8;
+var
+  L: PtrInt;
+  P: PUtf8Char;
 begin
-  result[0] := #0;
+  L := 0;
+  P := @result;
   if pseRead in ev then
   begin
-    inc(result[0]);
-    result[ord(result[0])] := 'r';
+    inc(L);
+    P[L] := 'r';
   end;
   if pseWrite in ev then
   begin
-    inc(result[0]);
-    result[ord(result[0])] := 'w';
+    inc(L);
+    P[L] := 'w';
   end;
   if pseError in ev then
   begin
-    inc(result[0]);
-    result[ord(result[0])] := 'e';
+    inc(L);
+    P[L] := 'e';
   end;
   if pseClosed in ev then
   begin
-    inc(result[0]);
-    result[ord(result[0])] := 'c';
+    inc(L);
+    P[L] := 'c';
   end;
+  P[0] := AnsiChar(L);
 end;
 
 

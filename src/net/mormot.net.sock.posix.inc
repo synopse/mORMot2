@@ -920,14 +920,14 @@ end;
 
 {$endif USE_IFADDRS}
 
-function GetLocalMacAddress(const IP: RawUtf8; var Mac: TMacAddress): boolean;
+function GetLocalMacAddress(const Remote: RawUtf8; var Mac: TMacAddress): boolean;
 var
   local: RawUtf8;
   all: TMacAddressDynArray;
   i: PtrInt;
 begin
   result := false;
-  local := GetLocalIpAddress(IP);
+  local := GetLocalIpAddress(Remote);
   if local = '' then
     exit;
   all := GetMacAddresses;
@@ -940,11 +940,12 @@ begin
     end;
 end;
 
+procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8); forward;
+
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   resolv, one: RawUtf8;
   p: PUtf8Char;
-  n: PtrInt;
   ok: boolean;
 begin
   result := nil;
@@ -952,9 +953,8 @@ begin
     resolv := StringFromFile(GetEnvironmentVariable('ETC'), true);
   if resolv = '' then
     // all systems are likely to have or generate this file
-    // - the libc seems to read it for its gethostname()
+    // - even the libc seems to read it when implementing gethostname()
     resolv := StringFromFile('/etc/resolv.conf');
-  n := 0;
   p := pointer(resolv);
   while p <> nil do
   begin
@@ -976,9 +976,7 @@ begin
         one := NetGetNextSpaced(p);
         if one = '' then
           break;
-        SetLength(result, n + 1);
-        result[n] := one;
-        inc(n);
+        NetAddRawUtf8(result, one);
       until false;
     end;
     p := GotoNextLine(p);
