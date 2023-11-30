@@ -533,12 +533,14 @@ type
     /// the raw IPv4 gateway address of this interface
     // - not available on Windows XP or BSD
     Gateway: RawUtf8;
+    {$ifdef OSWINDOWS}
     /// the raw IPv4 address(es) of the associated DNS server(s), as CSV
     // - not available on POSIX (DNS are part of the routing, not interfaces)
     Dns: RawUtf8;
     /// the optional DNS suffix of this connection, e.g. 'ad.mycorp.com'
     // - not available on POSIX
     DnsSuffix: RawUtf8;
+    {$endif OSWINDOWS}
     /// the raw IPv4 binary address of the main associated DHCP server
     // - not available on Windows XP or POSIX
     Dhcp: RawUtf8;
@@ -549,6 +551,11 @@ type
     /// the current link speed in bits per second (typically 100 or 1000)
     // - not available on Windows XP or BSD
     Speed: cardinal;
+    {$ifdef OSWINDOWS}
+    /// the Windows interface index
+    // - not available on POSIX
+    IfIndex: cardinal;
+    {$endif OSWINDOWS}
   end;
   TMacAddressDynArray = array of TMacAddress;
 

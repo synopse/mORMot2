@@ -765,7 +765,7 @@ type
         Alignment: QWord);
       1: (
         Length: ULONG;
-        Flags: DWORD);
+        FlagsOrIfIndex: DWORD);
   end;
 
   PIP_ADAPTER_UNICAST_ADDRESS = ^IP_ADAPTER_UNICAST_ADDRESS;
@@ -963,6 +963,7 @@ begin
         Win32PWideCharToUtf8(p^.DnsSuffix, DnsSuffix);
         Address := MacToText(@p^.PhysicalAddress);
         Mtu := p^.Mtu;
+        IfIndex := p^.Union.FlagsOrIfIndex;
         a := p^.FirstUnicastAddress;
         while a <> nil do
         begin
