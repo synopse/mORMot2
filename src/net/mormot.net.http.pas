@@ -1887,33 +1887,35 @@ begin
     result^.AppendCRLF; // 'Connection: Keep-Alive' is implicit with HTTP/1.1
   end;
   Process.Reset;
-  if ContentStream = nil then
-    if (ContentLength = 0) or
-       result^.CanAppend(pointer(Content), ContentLength) then
-      // single socket send() is possible (small body appended to headers)
-      State := hrsResponseDone
-    else
-    begin
-      if ContentLength + Head.Len < MaxSizeAtOnce then
-      begin
-        // single socket send() is possible (body fits in the sending buffer)
-        Process.Reserve(Head.Len + ContentLength);
-        Process.Append(Head.Buffer, Head.Len);
-        Process.Append(Content);
-        Content := ''; // release ASAP
-        Head.Reset;
-        result := @Process; // DoRequest will use Process
-        State := hrsResponseDone;
-      end
-      else
-        // async huge body sent using Write polling
-        State := hrsSendBody;
-    end
+  if pointer(CommandMethod) = pointer(_HEADVAR) then
+    // return only the headers
+    State := hrsResponseDone
   else
-    // ContentStream requires async body sending
-    if pointer(CommandMethod) = pointer(_HEADVAR) then
-      State := hrsResponseDone // need only the headers
+    // there is a body to send
+    if ContentStream = nil then
+      if (ContentLength = 0) or
+         result^.TryAppend(pointer(Content), ContentLength) then
+        // single socket send() is possible (small body appended to headers)
+        State := hrsResponseDone
+      else
+      begin
+        if ContentLength + Head.Len < MaxSizeAtOnce then
+        begin
+          // single socket send() is possible (body fits in the sending buffer)
+          Process.Reserve(Head.Len + ContentLength);
+          Process.Append(Head.Buffer, Head.Len);
+          Process.Append(Content);
+          Content := ''; // release ASAP
+          Head.Reset;
+          result := @Process; // DoRequest will use Process
+          State := hrsResponseDone;
+        end
+        else
+          // async huge body sent using Write polling
+          State := hrsSendBody;
+      end
     else
+      // ContentStream requires async body sending
       State := hrsSendBody; // send the ContentStream out by chunks
 end;
 
