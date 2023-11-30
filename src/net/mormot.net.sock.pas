@@ -570,9 +570,16 @@ function GetMacAddressesText(WithoutName: boolean = true;
 
 {$ifdef OSWINDOWS}
 /// remotely get the MAC address of a computer, from its IP Address
-// - only works under Win2K and later, which features a ARP protocol client
+// - only works under Windows, which features a SendARP() API in user space:
+// on POSIX, implementing ARP sadly requires root rights
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
+
+/// get the local MAC address used to reach a computer, from its IP Address
+// - return the local interface as a TMacAddress, with all its available info
+// - only works under Windows, which features a GetBestInterface() API
+function GetLocalMacAddress(const IP: RawUtf8;
+  var Mac: TMacAddress): boolean;
 {$endif OSWINDOWS}
 
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System

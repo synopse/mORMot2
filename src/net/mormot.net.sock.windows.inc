@@ -879,6 +879,9 @@ var
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
 
+  GetBestInterface: function(dwDestAddrIPv4: cardinal;
+    var pdwBestIfIndex: DWORD): DWORD; stdcall;
+
 function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
 var
   n, l: PtrInt;
@@ -1029,6 +1032,30 @@ begin
     end;
     p := p^.Next;
   until p = nil;
+end;
+
+function GetLocalMacAddress(const IP: RawUtf8;
+  var Mac: TMacAddress): boolean;
+var
+  dwRemoteIP, ifIndex: DWORD;
+  all: TMacAddressDynArray;
+  i: PtrInt;
+begin
+  result := false;
+  if NetIsIP4(pointer(IP), @dwRemoteIP) and
+     DelayedProc(GetBestInterface, iphlpapiDll,
+       'iphlpapi.dll', 'GetBestInterface') and
+     (GetBestInterface(dwRemoteIP, ifIndex) = NO_ERROR) then
+  begin
+    all := GetMacAddresses;
+    for i := 0 to high(all) do
+      if all[i].IfIndex = ifIndex then
+      begin
+        Mac := all[i];
+        result := true;
+        exit;
+      end;
+  end;
 end;
 
 function GetRemoteMacAddress(const IP: RawUtf8): RawUtf8;
