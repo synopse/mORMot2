@@ -1559,7 +1559,7 @@ begin
 end;
 
 var
-  _GETVAR, _POSTVAR: RawUtf8;
+  _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
 
 function THttpRequestContext.ParseCommand: boolean;
 var
@@ -1581,6 +1581,11 @@ begin
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
       begin
         CommandMethod := _POSTVAR;
+        inc(P, 5);
+      end;
+    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+      begin
+        CommandMethod := _HEADVAR; // allow quick 'HEAD' search per pointer
         inc(P, 5);
       end;
   else
@@ -1906,7 +1911,7 @@ begin
     end
   else
     // ContentStream requires async body sending
-    if CommandMethod = 'HEAD' then
+    if pointer(CommandMethod) = pointer(_HEADVAR) then
       State := hrsResponseDone // need only the headers
     else
       State := hrsSendBody; // send the ContentStream out by chunks
@@ -1964,7 +1969,7 @@ begin
               (RangeOffset > 0);
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
-     (CommandMethod <> 'HEAD') and
+     (pointer(CommandMethod) <> pointer(_HEADVAR)) and
      not hasRange then
   begin
     // try locally cached gzipped static content
@@ -2003,7 +2008,7 @@ begin
   if RangeOffset <> 0 then
     ContentStream.Seek(RangeOffset, soBeginning);
   if (ContentLength < 1 shl 20) and
-     (CommandMethod <> 'HEAD') then
+     (pointer(CommandMethod) <> pointer(_HEADVAR)) then
   begin
     // smallest files (up to 1MB) in temp memory (and maybe compress them)
     SetLength(Content, ContentLength);
@@ -2629,6 +2634,7 @@ end;
 initialization
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
+  _HEADVAR := 'HEAD';
 
 finalization
 
