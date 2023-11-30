@@ -935,6 +935,13 @@ type
     destructor Destroy; override;
   end;
 
+var
+  /// global flag to enable HTTP proxy detection at OS level for TWinHttp
+  // - as if Windows 8.1 and newer is detected
+  // - may be useful if {$R Vista.res} manifest is not available in the project,
+  // so only Windows 7 is detected by the executable
+  WinHttpForceProxyDetection: boolean;
+
 {$endif USEWININET}
 
 {$ifdef USELIBCURL}
@@ -2492,7 +2499,8 @@ var
 begin
   WinHttpApiInitialize;
   if fProxyName = '' then
-    if OSVersion >= wEightOne then
+    if (OSVersion >= wEightOne) or
+       WinHttpForceProxyDetection then
       access := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY // Windows 8.1 and newer
     else
       access := WINHTTP_ACCESS_TYPE_NO_PROXY
