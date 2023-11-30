@@ -446,9 +446,6 @@ function getsockname(s: TSocket; name: PSockAddr; var namelen: integer): integer
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
   external ws2 name 'getpeername';
 
-function inet_addr(cp: PAnsiChar): cardinal; stdcall;
-  external ws2 name 'inet_addr';
-
 function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): TSocket;
 var
   len: integer;
@@ -1041,8 +1038,7 @@ var
   pMacAddr: array [0..7] of byte;
 begin
   result := '';
-  dwremoteIP := inet_addr(pointer(IP));
-  if (dwremoteIP <> 0) and
+  if NetIsIP4(pointer(IP), @dwRemoteIP) and
      DelayedProc(SendARP, iphlpapiDll, 'iphlpapi.dll', 'SendARP') then
   begin
     PhyAddrLen := 8;
