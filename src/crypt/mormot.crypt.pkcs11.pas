@@ -247,7 +247,7 @@ type
     property Location: RawUtf8
       read fLocation;
     /// redirect to ICryptCertPkcs11.StorageLabel value
-    property &Label: RawUtf8
+    property StoredLabel: RawUtf8
       read fStorageLabel;
   end;
 

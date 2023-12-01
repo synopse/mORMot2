@@ -3217,7 +3217,7 @@ function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the line length from a size-delimited source array of chars
-// - will use fast assembly on x86-64 CPU
+// - will use fast SSE2 assembly on x86-64 CPU
 // - is likely to read some bytes after the TextEnd buffer, so GetLineSize()
 // from mormot.core.text may be preferred, e.g. on memory mapped files
 // - expects Text and TextEnd to be not nil - see GetLineSize() instead
