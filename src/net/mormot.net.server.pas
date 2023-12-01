@@ -2260,7 +2260,7 @@ begin
   begin
     PEnd := P + length(OutCustomHeaders);
     repeat
-      len := BufferLineLength(P, PEnd);
+      len := BufferLineLength(P, PEnd); // use fast SSE2 assembly on x86-64 CPU
       if len > 0 then // no void line (means headers ending)
       begin
         if (PCardinal(P)^ or $20202020 =
@@ -2278,7 +2278,7 @@ begin
         h^.AppendCRLF;
         inc(P, len);
       end;
-      while P^ in [#10, #13] do
+      while P^ in [#10, #13] do // normalized to CRLF
         inc(P);
     until P^ = #0;
   end;
