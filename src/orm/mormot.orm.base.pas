@@ -2869,7 +2869,7 @@ type
     procedure SetValue(aID: TID; aOrm: TObject);
     /// check if a record specified by its ID is in cache
     function Exists(aID: TID): boolean;
-    /// return the TOrm instance stored in the cache
+    /// return the raw TOrm instance as stored in the cache
     // - warning: not thread-safe - use TOrmCache.Retrieve to get a proper copy
     // - returns nil if not found or SetTimeOut was called
     function Get(aID: TID): pointer;
@@ -10583,19 +10583,19 @@ end;
 function SortFind(const P: TOrmCacheTableValueDynArray; V: TID; R: PtrInt): PtrInt;
 var
   m, L: PtrInt;
-  res: integer;
+  id: TID;
 begin
   // fast O(log(n)) binary search by first ID field = inlined TDynArray.Find()
   dec(R);
   L := 0;
   repeat
     result := (L + R) shr 1;
-    res := CompareInt64(P[result].ID, V);
-    if res = 0 then
+    id := P[result].ID;
+    if id = V then
       exit;
     m := result - 1;
     inc(result);
-    if res > 0 then // compile as cmovnle/cmovle opcodes on FPC x86_64
+    if id > V then // compile as cmovnle/cmovle opcodes on FPC x86_64
       R := m
     else
       L := result;
