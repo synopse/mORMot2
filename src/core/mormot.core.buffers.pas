@@ -1833,8 +1833,8 @@ type
     // - will return '' if aIndex is out of range
     property Lines[aIndex: integer]: RawUtf8
       read GetLine;
-    /// retrieve a line content as generic VCL string type
-    // - a temporary VCL string is created (after conversion for UNICODE Delphi)
+    /// retrieve a line content as RTL string type
+    // - a temporary RTL string is created (after conversion for UNICODE Delphi)
     // - will return '' if aIndex is out of range
     property Strings[aIndex: integer]: string
       read GetString;
@@ -2629,7 +2629,7 @@ type
     procedure Append(Ch: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// add some UTF-8 buffer content to the Buffer, without resizing it
-    function CanAppend(P: pointer; PLen: PtrInt): boolean;
+    function TryAppend(P: pointer; PLen: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// ensure the internal Buffer has at least MaxSize bytes and return it
     // - also reset the internal Len to 0
@@ -10957,7 +10957,7 @@ begin
   Append(@Text[1], length(Text));
 end;
 
-function TRawByteStringBuffer.CanAppend(P: pointer; PLen: PtrInt): boolean;
+function TRawByteStringBuffer.TryAppend(P: pointer; PLen: PtrInt): boolean;
 begin
   if fLen + PLen <= fCapacity then
   begin

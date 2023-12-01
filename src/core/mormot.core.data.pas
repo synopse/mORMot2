@@ -358,7 +358,7 @@ type
 type
   /// our own empowered TPersistent-like parent class
   // - TPersistent has an unexpected speed overhead due a giant lock introduced
-  // to manage property name fixup resolution (which we won't use outside the VCL)
+  // to manage property name fixup resolution (which we won't use outside the UI)
   // - this class has a virtual constructor, so is a preferred alternative
   // to both TPersistent and TPersistentWithCustomCreate classes
   // - features some protected methods to customize its JSON serialization
@@ -1042,7 +1042,7 @@ function RecordEquals(const RecA, RecB; TypeInfo: PRttiInfo;
 // of the string length - note that if you change the type definition, any
 // previously-serialized content will fail, maybe triggering unexpected GPF: you
 // may use TypeInfoToHash() if you share this binary data accross executables
-// - warning: will encode generic string fields as AnsiString (one byte per char)
+// - warning: will encode RTL string fields as AnsiString (one byte per char)
 // prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
 // versions of Delphi, you should use some explicit types like RawUtf8,
@@ -2672,7 +2672,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return a variant containing a RawUtf8 stored within this class
     // - similar to RawUtf8ToVariant(StringToUtf8()), but with string interning
-    // - this method expects the text to be supplied as a VCL string, which will
+    // - this method expects the text to be supplied as a RTL string, which will
     // be converted into a variant containing a RawUtf8 varString instance
     procedure UniqueVariantString(var aResult: variant; const aText: string);
     /// ensure a variant contains only RawUtf8 stored within this class
@@ -2934,7 +2934,7 @@ type
       read fFlags write fFlags;
     /// get or set a RawUtf8 item
     // - returns '' and raise no exception in case of out of range supplied index
-    // - if you want to use it with the VCL, use Utf8ToString() function
+    // - if you want to use it with the UI, use Utf8ToString() function
     // - reading this property is not thread-safe, since content may change
     property Strings[Index: PtrInt]: RawUtf8
       read Get write Put; default;

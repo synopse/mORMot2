@@ -320,7 +320,7 @@ type
     // - raise an EParsingException if the parameter is not found
     property InputUtf8[const ParamName: RawUtf8]: RawUtf8
       read GetInputUtf8;
-    /// retrieve one input parameter from its URI name as a VCL string
+    /// retrieve one input parameter from its URI name as a RTL string
     // - raise an EParsingException if the parameter is not found
     // - prior to Delphi 2009, some Unicode characters may be missing in the
     // returned AnsiString value
@@ -342,7 +342,7 @@ type
     // - returns '' if the parameter is not found
     property InputUtf8OrVoid[const ParamName: RawUtf8]: RawUtf8
       read GetInputUtf8OrVoid;
-    /// retrieve one input parameter from its URI name as a VCL string
+    /// retrieve one input parameter from its URI name as a RTL string
     // - returns '' if the parameter is not found
     // - prior to Delphi 2009, some Unicode characters may be missing in the
     // returned AnsiString value
@@ -373,7 +373,7 @@ type
       read GetInputExists;
     /// retrieve one input parameter from its URI name as variant
     // - if the parameter value is text, it is stored in the variant as
-    // a generic VCL string content: so before Delphi 2009, you may loose
+    // a RTL string content: so before Delphi 2009, you may loose
     // some characters at decoding from UTF-8 input buffer
     // - raise an EParsingException if the parameter is not found
     property Input[const ParamName: RawUtf8]: variant

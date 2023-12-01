@@ -491,9 +491,6 @@ type
   {$M-}
 
 type
-  /// stack-allocated ASCII string, used by GuidToShort() function
-  TGuidShortString = string[38];
-
   /// used e.g. to serialize up to 256-bit as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;
@@ -511,6 +508,9 @@ type
   /// used e.g. for TTextWriter.AddShorter small text constants
   TShort8 = string[8];
   PShort8 = ^TShort8;
+
+  /// stack-allocated ASCII string, used by GuidToShort() function
+  TGuidShortString = string[38];
 
   /// cross-compiler type used for string length
   // - FPC uses PtrInt/SizeInt, Delphi uses longint even on CPU64
@@ -2808,7 +2808,7 @@ function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt = 1): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
-/// our own PosEx() function dedicated to VCL/LCL string process
+/// our own PosEx() function dedicated to RTL string process
 // - Delphi XE or older don't support Pos() with an Offset
 function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
@@ -2830,7 +2830,7 @@ function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char; over
 
 {$ifndef PUREMORMOT2}
 /// fast dedicated RawUtf8 version of Trim()
-// - in the middle of VCL code, consider using TrimU() which won't have name
+// - in the middle of UI code, consider using TrimU() which won't have name
 // collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUtf8): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
@@ -3851,8 +3851,8 @@ function SortDynArrayPUtf8Char(const A, B): integer;
 /// compare two "array of WideString/UnicodeString" elements, with case sensitivity
 function SortDynArrayUnicodeString(const A, B): integer;
 
-/// compare two "array of generic string" elements, with case sensitivity
-// - the expected string type is the generic VCL string
+/// compare two "array of RTL string" elements, with case sensitivity
+// - the expected string type is the RTL string
 function SortDynArrayString(const A, B): integer;
 
 /// compare two "array of variant" elements, with case sensitivity

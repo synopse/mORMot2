@@ -778,7 +778,7 @@ type
     function ColumnCurrency(Col: integer): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; overload;
-    /// return a Column text value as generic VCL string of the current Row, first Col is 0
+    /// return a Column text value as RTL string of the current Row, first Col is 0
     function ColumnString(Col: integer): string; overload;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; overload;
@@ -828,7 +828,7 @@ type
     function ColumnCurrency(const ColName: RawUtf8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUtf8(const ColName: RawUtf8): RawUtf8; overload;
-    /// return a Column text value as generic VCL string of the current Row, from a supplied column name
+    /// return a Column text value as RTL string of the current Row, from a supplied column name
     function ColumnString(const ColName: RawUtf8): string; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlob(const ColName: RawUtf8): RawByteString; overload;
@@ -2462,7 +2462,7 @@ type
     function ColumnCurrency(Col: integer): currency; overload; virtual; abstract;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; overload; virtual; abstract;
-    /// return a Column text value as generic VCL string of the current Row, first Col is 0
+    /// return a Column text value as RTL string of the current Row, first Col is 0
     // - this default implementation will call ColumnUtf8
     function ColumnString(Col: integer): string; overload; virtual;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -2520,7 +2520,7 @@ type
     function ColumnCurrency(const ColName: RawUtf8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
     function ColumnUtf8(const ColName: RawUtf8): RawUtf8; overload;
-    /// return a Column text value as generic VCL string of the current Row, from a supplied column name
+    /// return a Column text value as RTL string of the current Row, from a supplied column name
     function ColumnString(const ColName: RawUtf8): string; overload;
     /// return a Column as a blob value of the current Row, from a supplied column name
     function ColumnBlob(const ColName: RawUtf8): RawByteString; overload;
@@ -2862,7 +2862,7 @@ type
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: integer; Value: PUtf8Char;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
-    /// bind a VCL string to a parameter
+    /// bind a RTL string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindTextS(Param: integer; const Value: string;

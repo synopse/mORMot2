@@ -837,8 +837,8 @@ function ToText(gran: TSynMonitorUsageGranularity): PShortString; overload;
 type
   /// event handler which may be executed by TSystemUse.BackgroundExecute
   // - called just after the measurement of each process CPU and RAM consumption
-  // - run from the background thread, so should not directly make VCL calls,
-  // unless BackgroundExecute is run from a VCL timer
+  // - run from the background thread, so should not directly make UI calls,
+  // unless BackgroundExecute is run from a UI TTimer
   TOnSystemUseMeasured = procedure(ProcessID: integer;
     const Data: TSystemUseData) of object;
 
@@ -870,7 +870,7 @@ type
     fUnsubscribeProcessOnAccessError: boolean;
     function LockedProcessIndex(aProcessID: integer): PtrInt;
   public
-    /// a VCL's TTimer.OnTimer compatible event
+    /// a TTimer.OnTimer compatible event
     // - to be run every few seconds and retrieve the CPU and RAM use:
     // ! tmrSystemUse.Interval := 10000; // every 10 seconds
     // ! tmrSystemUse.OnTimer := TSystemUse.Current.OnTimerExecute;
@@ -880,13 +880,13 @@ type
     // - any aProcessID[]=0 will be replaced by the current process ID
     // - you can specify the number of sample values for the History() method
     // - you should then execute the BackgroundExecute method of this instance
-    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    // in a UI timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(const aProcessID: array of integer;
       aHistoryDepth: integer = 60); reintroduce; overload; virtual;
     /// track the CPU and RAM usage of the current process
     // - you can specify the number of sample values for the History() method
     // - you should then execute the BackgroundExecute method of this instance
-    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    // in a UI timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(aHistoryDepth: integer = 60); reintroduce; overload; virtual;
     /// add a Process ID to the internal tracking list
     procedure Subscribe(aProcessID: integer);

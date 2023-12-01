@@ -780,7 +780,7 @@ var
 
 /// List all ODBC drivers installed, by reading the Windows Registry
 // - aDrivers is the output driver list container, which should be either nil (to
-// create a new TStringList), or any existing TStrings instance (may be from VCL
+// create a new TStringList), or any existing TStrings instance (may be from UI
 // - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
 // in aDrivers (somewhat slower)
 function OdbcInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;

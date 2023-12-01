@@ -269,7 +269,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// search patterns in the supplied UTF-8 text buffer
     function Match(aText: PUtf8Char; aLen: integer): integer; overload;
-    /// search patterns in the supplied VCL/LCL text
+    /// search patterns in the supplied RTL string text
     // - could be used on a TFileName for instance
     // - will avoid any memory allocation if aText is small enough
     function MatchString(const aText: string): integer;
@@ -329,7 +329,7 @@ procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
 function IsMatch(const Pattern, Text: RawUtf8;
   CaseInsensitive: boolean = false): boolean;
 
-/// return TRUE if the supplied content matches a glob pattern, using VCL strings
+/// return TRUE if the supplied content matches a glob pattern, using RTL strings
 // - is a wrapper around IsMatch() with fast UTF-8 conversion
 function IsMatchString(const Pattern, Text: string;
   CaseInsensitive: boolean = false): boolean;
@@ -1477,11 +1477,11 @@ type
     property Zones: TDynArrayHashed
       read fZones;
     /// returns a TStringList of all TzID values
-    // - could be used to fill any VCL component to select the time zone
+    // - could be used to fill any UI component to select the time zone
     // - order in Ids[] array follows the Zone[].id information
     function Ids: TStrings;
     /// returns a TStringList of all Display text values
-    // - could be used to fill any VCL component to select the time zone
+    // - could be used to fill any UI component to select the time zone
     // - order in Displays[] array follows the Zone[].display information
     function Displays: TStrings;
   end;

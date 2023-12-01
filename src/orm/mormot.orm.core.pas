@@ -1936,7 +1936,7 @@ type
     // - it will also check if any UNIQUE field value won't be duplicated
     // - inherited classes may add some custom validation here, if it's not needed
     //  nor mandatory to create a new TSynValidate class type: in this case, the
-    //  function has to return an explicit error message (as a generic VCL string)
+    //  function has to return an explicit error message (as a RTL string)
     //  if the custom validation failed, or '' if the validation was successful:
     //  in this later case, all default registered TSynValidate are processed
     // - the default aFields parameter will process all fields
@@ -2903,11 +2903,11 @@ type
     // by which the results were computed (it will use RTTI for column typing)
     constructor CreateFromTables(const Tables: array of TOrmClass;
       const aSql: RawUtf8);
-    /// read-only access to a particular field value, as VCL text
+    /// read-only access to a particular field value, as RTL text
     // - Model is used to display TRecordReference from the associated TOrmModel
     // - returns the Field Type
-    // - return generic string Text, i.e. UnicodeString for Delphi 2009+, ready
-    // to be displayed to the VCL, for oftEnumerate, oftTimeLog,
+    // - return RTL string Text, i.e. UnicodeString for Delphi 2009+, ready
+    // to be displayed to the UI, for oftEnumerate, oftTimeLog,
     // oftUnixTime/oftUnixMSTime and oftRecord/oftRecordVersion/oftID/oftTID
     // - returns '' as string Text, if text can by displayed directly
     // with Get*() methods above
@@ -2922,7 +2922,7 @@ type
     // oftCreateTime, oftUnixTime, oftUnixMSTime)
     function ExpandAsString(Row, Field: PtrInt; Model: TOrmModel;
       out Text: string; const CustomFormat: string = ''): TOrmFieldType;
-    /// read-only access to a particular field value, as VCL text
+    /// read-only access to a particular field value, as RTL text
     // - this method is just a wrapper around ExpandAsString method, returning
     // the content as a SynUnicode string type (i.e. UnicodeString since Delphi
     // 2009, and WideString for non Unicode versions of Delphi)

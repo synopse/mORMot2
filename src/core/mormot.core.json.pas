@@ -854,7 +854,7 @@ type
     // - if Len is 0, Len is calculated from zero-ended widechar
     // - escapes chars according to the JSON RFC
     procedure AddJsonEscapeW(P: PWord; Len: PtrInt = 0);
-    /// append some UTF-8 encoded chars to the buffer, from a generic string type
+    /// append some UTF-8 encoded chars to the buffer, from a RTL string type
     // - faster than AddJsonEscape(pointer(StringToUtf8(string))
     // - escapes chars according to the JSON RFC
     procedure AddJsonEscapeString(const s: string);
@@ -1593,7 +1593,7 @@ type
     /// convert the value into a UTF-8 string
     function ToUtf8: RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// convert the value into a VCL/generic string
+    /// convert the value into a RTL string
     function ToString: string;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into a signed integer
@@ -1807,7 +1807,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the next JSON value as UTF-8 text
     function ParseUtf8: RawUtf8;
-    /// retrieve the next JSON value as VCL string text
+    /// retrieve the next JSON value as RTL string text
     function ParseString: string;
     /// retrieve the next JSON value as integer
     function ParseInteger: Int64;
@@ -2431,7 +2431,7 @@ type
   // may be freed before
   // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
   // due a giant lock introduced to manage property name fixup resolution
-  // (which we won't use outside the VCL) - this class is definitively faster
+  // (which we won't use outside the UI) - this class is definitively faster
   TSynAutoCreateFields = class(TSynPersistent)
   public
     /// this overriden constructor will instantiate all its nested

@@ -4523,7 +4523,7 @@ type
     // SQLITE_STATIC) if you are sure Value will be valid until the query ends
     procedure BindU(Param: integer; Value: PUtf8Char; ValueLen: PtrInt;
       BindStatic: boolean = false);
-    /// bind a generic VCL string to a parameter
+    /// bind a RTL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
     // Bind(Param: integer; Value: RawUtf8) is the prefered method
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
@@ -4572,7 +4572,7 @@ type
     function FieldDouble(Col: integer): double;
     /// return a field UTF-8 encoded text value, first Col is 0
     function FieldUtf8(Col: integer): RawUtf8;
-    /// return a text value value as generic VCL string, first Col is 0
+    /// return a text value value as RTL string, first Col is 0
     // - note that prior to Delphi 2009, you may loose content during conversion
     function FieldS(Col: integer): string;
     /// return a field as Win-Ansi (i.e. code page 1252) encoded text value, first Col is 0
@@ -4607,7 +4607,7 @@ type
     // - textual type used for CREATE TABLE of the corresponding column, as
     // returned by sqlite3.column_decltype()
     function FieldDeclaredType(Col: integer): RawUtf8;
-    /// return the generic VCL string type of this column, as declared at creation
+    /// return the RTL string type of this column, as declared at creation
     // - textual type used for CREATE TABLE of corresponding column, as
     // returned by sqlite3.column_decltype()
     // - note that prior to Delphi 2009, you may loose content during conversion

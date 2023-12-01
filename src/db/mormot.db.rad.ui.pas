@@ -187,7 +187,7 @@ type
       const ColumnTypes: array of TSqlDBFieldType); reintroduce;
   end;
 
-/// convert a dynamic array of TDocVariant result into a LCL/VCL DataSet
+/// convert a dynamic array of TDocVariant result into a TDataSet
 // - this function is just a wrapper around TDocVariantArrayDataSet.Create()
 // - the TDataSet will be opened once created
 function VariantsToDataSet(aOwner: TComponent;
@@ -195,7 +195,7 @@ function VariantsToDataSet(aOwner: TComponent;
   const ColumnNames: array of RawUtf8;
   const ColumnTypes: array of TSqlDBFieldType): TDocVariantArrayDataSet; overload;
 
-/// convert a dynamic array of TDocVariant result into a LCL/VCL DataSet
+/// convert a dynamic array of TDocVariant result into a TDataSet
 function VariantsToDataSet(aOwner: TComponent;
   const Data: TVariantDynArray): TDocVariantArrayDataSet; overload;
 

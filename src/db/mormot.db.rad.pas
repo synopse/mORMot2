@@ -49,13 +49,14 @@ uses
 
 
 const
-  /// map the LCL/VCL string type, depending on the Delphi compiler version
+  /// map the UI/RTL string type, depending on the actual compiler version
   {$ifdef UNICODE}
   ftDefaultVCLString = ftWideString;
   {$else}
   ftDefaultVCLString = ftString;
   {$endif UNICODE}
-  /// if you prefer LCL/Lazarus
+
+  /// if you prefer LCL/Lazarus naming
   ftDefaultLCLString = ftDefaultVCLString;
 
   /// map the best ft*Memo type available, depending on the Delphi compiler version
@@ -114,7 +115,7 @@ procedure BcdToUtf8(const AValue: TBcd; var result: RawUtf8); overload;
 function BcdToUtf8(const AValue: TBcd): RawUtf8; overload;
   {$ifdef HASINLINE} inline;{$endif}
 
-/// convert a TBcd value into a LCL/VCL string text
+/// convert a TBcd value into a RTL string text
 // - will call fast InternalBcdToBuffer function
 function BcdToString(const AValue: TBcd): string;
 

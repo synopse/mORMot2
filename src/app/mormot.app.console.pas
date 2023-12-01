@@ -44,7 +44,7 @@ type
     // - you can specify a prompt text, when asking for any missing switch
     function AsUtf8(const Switch, Default: RawUtf8;
       const Prompt: string): RawUtf8;
-    /// returns a command line switch value as VCL string text
+    /// returns a command line switch value as RTL string text
     // - you can specify a prompt text, when asking for any missing switch
     function AsString(const Switch: RawUtf8; const Default: string;
       const Prompt: string): string;
@@ -116,7 +116,7 @@ type
     // - you can specify a prompt text, when asking for any missing switch
     function AsUtf8(const Switch, Default: RawUtf8;
       const Prompt: string): RawUtf8;
-    /// returns a command line switch value as VCL string text
+    /// returns a command line switch value as RTL string text
     // - you can specify a prompt text, when asking for any missing switch
     function AsString(const Switch: RawUtf8; const Default: string;
       const Prompt: string): string;

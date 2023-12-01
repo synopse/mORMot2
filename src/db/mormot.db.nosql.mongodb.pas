@@ -1441,7 +1441,7 @@ type
       Flags: TMongoQueryFlags = []); overload;
     /// select documents in a collection and returns a dynamic array of
     // TDocVariant instance containing the selected documents
-    // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
+    // - could be used to fill a UI grid using a TDocVariantArrayDataSet
     // as defined in mormot.ui.rad.pas:
     // ! ds1.DataSet := VariantsToDataSet(self,
     // !   FindDocs('{name:?,age:{$gt:?}}', ['John',21], null));

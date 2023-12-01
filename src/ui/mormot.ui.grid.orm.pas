@@ -104,8 +104,8 @@ type
   TGridActions = set of TGridAction;
 
   /// kind of event used to change some text on the fly for grid display
-  // - expect generic string Text, i.e. UnicodeString for Delphi 2009/2010,
-  // ready to be used with the VCL for all Delphi compiler versions
+  // - expect RTL string Text, i.e. UnicodeString for Delphi 2009/2010,
+  // ready to be used with the UI for all compilers
   // - if the cell at FiieldIndex/RowIndex is to have a custom content,
   // shall set the Text variable content and return TRUE
   // - if returns FALSE, the default content will be displayed
@@ -113,8 +113,8 @@ type
     var Text: string): boolean of object;
 
   /// kind of event used to change some text on the fly for popup hint
-  // - expect generic string Text, i.e. UnicodeString for Delphi 2009/2010,
-  // ready to be used with the VCL for all Delphi compiler versions
+  // - expect RTL string Text, i.e. UnicodeString for Delphi 2009/2010,
+  // ready to be used with the UI for all compilers
   THintTextEvent = function(Sender: TOrmTable; FieldIndex, RowIndex: Integer;
     var Text: string): boolean of object;
 
@@ -230,8 +230,8 @@ type
     // - can be used as TOrmTableToGrid.From(DrawGrid).Resize();
     procedure Resize(Sender: TObject);
     /// display a popup Hint window at a specified Cell position
-    // - expect generic string Text, i.e. UnicodeString for Delphi 2009/2010,
-    // ready to be used with the VCL for all Delphi compiler versions
+    // - expect RTL string Text, i.e. UnicodeString for Delphi 2009/2010,
+    // ready to be used with the UI for all compilers
     procedure ShowHintString(const Text: string; ACol, ARow, Time: integer;
       FontColor: TColor = clBlack);
     /// if the ID column is available, hides it from the grid
@@ -310,9 +310,9 @@ type
     procedure SetMark(aAction: TGridAction);
     /// retrieve the Marked[] bits array
     function GetMarkedBits: pointer;
-    /// read-only access to a particular row values, as VCL text
+    /// read-only access to a particular row values, as UI text
     // - Model is one TOrmModel instance (used to display TRecordReference)
-    // - returns the text as generic string, ready to be displayed via the VCL
+    // - returns the text as RTL string, ready to be displayed via the VCL/LCL
     // after translation, for oftEnumerate, oftTimeLog, oftRecord and all other
     // properties
     // - uses OnValueText property Event if defined by caller
@@ -670,7 +670,7 @@ procedure TOrmTableToGrid.DrawGridMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   c, r: integer;
-  s: string; // generic string type, for VCL
+  s: string; // RTL string type, for UI
 begin
   if NotDefined then // avoid any possible GPF
     exit;
@@ -1359,7 +1359,7 @@ end;
 function TOrmTableToGrid.ExpandRowAsString(Row: PtrInt; Model: TOrmModel): string;
 var
   f, i: PtrInt;
-  s: string; // generic VCL-ready string
+  s: string; // UI-ready string
 begin
   result := '';
   if (self = nil) or

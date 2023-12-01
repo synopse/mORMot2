@@ -477,7 +477,7 @@ type
   // ! property Txt: TNullableUtf8Text index 32 read fTxt write fTxt;
   // - warning: prior to Delphi 2009, since the variant will be stored as
   // RawUtf8 internally, you should not use directly the field value as a
-  // VCL string=AnsiString like string(aField) but use VariantToString(aField)
+  // RTL string=AnsiString like string(aField) but use VariantToString(aField)
   TNullableUtf8Text = type variant;
 
   /// can identify the TNullable* supported variant types

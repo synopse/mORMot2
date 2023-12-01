@@ -1557,7 +1557,7 @@ procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 function GetDisplayNameFromClass(C: TClass): RawUtf8;
 
 /// UnCamelCase and translate the class name, triming any left 'T' 'TSyn' 'TOrm'
-// - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
+// - return RTL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
 /// defined here to avoid circular dependency in mormot.core.os.pas
@@ -9034,7 +9034,7 @@ procedure CopyStrings(Source, Dest: TStrings);
 begin
   if (Source <> nil) and
      (Dest <> nil) then
-    Dest.Assign(Source); // will do the copy VCL-style
+    Dest.Assign(Source); // will do the copy RTL-style
 end;
 
 procedure CopyObject(aFrom, aTo: TObject);
@@ -9055,7 +9055,7 @@ begin
       CopyCollection(TCollection(aFrom), TCollection(aTo))
     else if (cf.ValueRtlClass = vcStrings) and
             PClass(aTo)^.InheritsFrom(TStrings) then
-      // specific process of TStrings items using VCL-style copy
+      // specific process of TStrings items using RTL-style copy
       TStrings(aTo).Assign(TStrings(aFrom))
     else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
       // fast copy from RTTI properties of the common (or same) hierarchy

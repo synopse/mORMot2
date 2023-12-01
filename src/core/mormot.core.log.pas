@@ -265,7 +265,7 @@ const
 
 var
   /// RGB colors corresponding to each logging level
-  // - matches the TColor values, as used by the VCL
+  // - matches the TColor values, as used by the VCL/LCL
   // - first array is for the background, second is for the text (black/white)
   // - is defined as var and not const to allow customization at runtime
   LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
@@ -486,7 +486,7 @@ type
     procedure Log(Level: TSynLogInfo; const Text: RawUtf8;
       Instance: TObject = nil; TextTruncateAtLength: integer = maxInt); overload;
     {$ifdef UNICODE}
-    /// call this method to add some VCL string to the log at a specified level
+    /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
     procedure Log(Level: TSynLogInfo; const Text: string;
       Instance: TObject = nil); overload;
@@ -1214,7 +1214,7 @@ type
       TextTruncateAtLength: integer = maxInt); overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef UNICODE}
-    /// call this method to add some VCL string to the log at a specified level
+    /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
     procedure Log(Level: TSynLogInfo; const Text: string;
       aInstance: TObject = nil); overload;
@@ -1593,7 +1593,7 @@ type
     /// retrieve the date and time of an event
     // - returns 0 in case of an invalid supplied index
     function EventDateTime(aIndex: integer): TDateTime;
-    /// retrieve the description text of an event, as native VCL string
+    /// retrieve the description text of an event, as native RTL string
     // - returns '' if supplied index is out of range
     // - if the text is not truly UTF-8 encoded, would use the current system
     // codepage to create a valid string
@@ -1629,7 +1629,7 @@ type
       read fLevelUsed;
     /// retrieve the description text of an event
     // - returns '' if supplied index is out of range
-    // - see also EventString() function, for direct VCL use
+    // - see also EventString() function, for direct UI display as RTL string
     property EventText[index: integer]: RawUtf8
       read GetEventText;
     /// retrieve all event thread IDs

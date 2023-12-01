@@ -66,7 +66,7 @@ type
   // - should return FALSE if the user pressed cancel or the number of Retry
   // reached a defined limit
   // - here input/output parameters are defined as plain string, to match the
-  // type expected by the client's User Interface, via VCL properties, or
+  // type expected by the client's User Interface, via UI properties, or
   // e.g. from TLoginForm as defined in mORMotUILogin.pas unit
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
@@ -926,11 +926,11 @@ type
     /// set a HWND/WM_* pair to let interface-based services notification
     // callbacks be processed safely in the main UI thread, via Windows messages
     // - by default callbacks are executed in the transmission thread, e.g.
-    // the WebSockets client thread: using VCL Synchronize() method may
+    // the WebSockets client thread: using UI Synchronize() method may
     // trigger some unexpected race conditions, e.g. when asynchronous
     // notifications are received during a blocking REST command - this
     // message-based mechanism will allow safe and easy notification for
-    // any VCL client application
+    // any UI client application
     // - the associated ServiceNotificationMethodExecute() method shall be
     // called in the client HWND TForm for the defined WM_* message
     procedure ServiceNotificationMethodViaMessages(hWnd: HWND; Msg: cardinal);

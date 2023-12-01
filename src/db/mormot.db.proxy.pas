@@ -327,7 +327,7 @@ type
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; override;
-    /// return a Column text value as generic VCL string of the current Row, first Col is 0
+    /// return a Column text value as RTL string of the current Row, first Col is 0
     function ColumnString(Col: integer): string; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;

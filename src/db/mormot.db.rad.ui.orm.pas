@@ -158,7 +158,7 @@ procedure GetDBFieldDef(aTable: TOrmTable; aField: integer;
 procedure GetDBFieldValue(aTable: TOrmTable; aRow: integer; aField: TField;
   aDataSet: TDataSet; const DBFieldDef: TDBFieldDef);
 
-/// convert a JSON result into a VCL DataSet, guessing the field types from JSON
+/// convert a JSON result into a TDataSet, guessing the field types from JSON
 // - this function is just a wrapper around TOrmTableDataSet.CreateFromJson()
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed
@@ -167,7 +167,7 @@ function JsonToDataSet(aOwner: TComponent; const aJson: RawUtf8
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): TOrmTableDataSet;
     overload; {$ifdef HASINLINE} inline;{$endif}
 
-/// convert a JSON ORM result into a VCL DataSet, following TOrm field types
+/// convert a JSON ORM result into a TDataSet, following TOrm field types
 // - this function is just a wrapper around TOrmTableDataSet.CreateFromJson()
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed
@@ -176,7 +176,7 @@ function JsonTableToDataSet(aOwner: TComponent; const aJson: RawUtf8;
   const Tables: array of TOrmClass
   {$ifndef UNICODE}; aForceWideString: boolean = false{$endif}): TOrmTableDataSet;
 
-/// convert a JSON result into a VCL DataSet, with a given set of column types
+/// convert a JSON result into a TDataSet, with a given set of column types
 // - this function is just a wrapper around TOrmTableDataSet.CreateFromJson()
 // - with non-Unicode version of Delphi, you can set aForceWideString to
 // force the use of WideString fields instead of AnsiString, if needed

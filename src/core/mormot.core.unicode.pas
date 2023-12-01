@@ -568,7 +568,7 @@ var
 
   /// global TSynAnsiConvert instance to handle current system encoding
   // - this is the encoding as used by the AnsiString type, so will be used
-  // before Delphi 2009 to speed-up VCL string handling (especially for UTF-8)
+  // before Delphi 2009 to speed-up RTL string handling (especially for UTF-8)
   // - this instance is global and instantied during the whole program life time
   CurrentAnsiConvert: TSynAnsiConvert;
 
@@ -620,7 +620,7 @@ function RawUtf8FromFile(const FileName: TFileName): RawUtf8;
 function AnyTextFileToRawUtf8(const FileName: TFileName;
   AssumeUtf8IfNoBom: boolean = false): RawUtf8;
 
-/// read a File content into a VCL/LCL string, detecting any leading BOM
+/// read a File content into a RTL string, detecting any leading BOM
 // - assume file with no BOM is encoded with the current Ansi code page, not UTF-8
 // - if ForceUtf8 is true, won't detect the BOM but assume whole file is UTF-8
 function AnyTextFileToString(const FileName: TFileName;
@@ -713,7 +713,7 @@ procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
   CodePage: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert an AnsiString (of a given code page) into a generic string
+/// convert an AnsiString (of a given code page) into a RTL string
 // - the destination code page should be supplied
 // - wrapper around TSynAnsiConvert.Engine(CodePage) and string conversion
 function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
@@ -806,7 +806,7 @@ function RawUnicodeToUtf8(const Unicode: RawUnicode): RawUtf8; overload;
 function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into a RawUnicode encoded String
+/// convert any RTL string into a RawUnicode encoded String
 // - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -815,7 +815,7 @@ function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload
 // WideString usage)
 function StringToRawUnicode(const S: string): RawUnicode; overload;
 
-/// convert any generic VCL Text into a RawUnicode encoded String
+/// convert any RTL string into a RawUnicode encoded String
 // - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -824,7 +824,7 @@ function StringToRawUnicode(const S: string): RawUnicode; overload;
 // WideString usage)
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode; overload;
 
-/// convert any RawUnicode encoded string into a generic VCL Text
+/// convert any RawUnicode encoded string into a RTL string
 // - uses StrLenW() and not length(U) to handle case when was used as buffer
 function RawUnicodeToString(const U: RawUnicode): string; overload;
 {$endif PUREMORMOT2}
@@ -858,7 +858,7 @@ function RawUnicodeToSynUnicode(
 /// convert an Unicode buffer into a WinAnsi (code page 1252) string
 procedure UnicodeBufferToWinAnsi(source: PWideChar; out Dest: WinAnsiString);
 
-/// convert an Unicode buffer into a generic VCL string
+/// convert an Unicode buffer into a RTL string
 function UnicodeBufferToString(source: PWideChar): string;
 
 /// convert an Unicode buffer into a UTF-8 string
@@ -918,7 +918,7 @@ function WinAnsiToSynUnicode(WinAnsi: PAnsiChar; WinAnsiLen: PtrInt): SynUnicode
 function WinAnsiToSynUnicode(const WinAnsi: WinAnsiString): SynUnicode;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// convert any generic VCL Text into an UTF-8 encoded String
+/// convert any RTL string into an UTF-8 encoded String
 // - in the VCL context, it's prefered to use TLanguageFile.StringToUtf8()
 //  method from mORMoti18n, which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -928,7 +928,7 @@ function WinAnsiToSynUnicode(const WinAnsi: WinAnsiString): SynUnicode;
 function StringToUtf8(const Text: string): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text buffer into an UTF-8 encoded String
+/// convert any RTL string buffer into an UTF-8 encoded String
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
@@ -936,16 +936,16 @@ function StringToUtf8(const Text: string): RawUtf8; overload;
 procedure StringToUtf8(Text: PChar; TextLen: PtrInt; var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into an UTF-8 encoded String
+/// convert any RTL string into an UTF-8 encoded String
 // - this overloaded function use a faster by-reference parameter for the result
 procedure StringToUtf8(const Text: string; var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into an UTF-8 encoded String
+/// convert any RTL string into an UTF-8 encoded String
 function ToUtf8(const Text: string): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into an UTF-8 encoded TSynTempBuffer
+/// convert any RTL string into an UTF-8 encoded TSynTempBuffer
 // - returns the number of UTF-8 bytes available in Temp.buf
 // - this overloaded function use a TSynTempBuffer for the result to avoid any
 // memory allocation for the shorter content
@@ -964,7 +964,7 @@ function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer;
 function ToUtf8(const Ansi7Text: ShortString): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text buffer into an UTF-8 encoded buffer
+/// convert any RTL string buffer into an UTF-8 encoded buffer
 // - Dest must be able to receive at least SourceChars*3 bytes
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
@@ -973,14 +973,14 @@ function ToUtf8(const Ansi7Text: ShortString): RawUtf8; overload;
 function StringBufferToUtf8(Dest: PUtf8Char;
   Source: PChar; SourceChars: PtrInt): PUtf8Char; overload;
 
-/// convert any generic VCL 0-terminated Text buffer into an UTF-8 string
+/// convert any RTL string 0-terminated Text buffer into an UTF-8 string
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8); overload;
 
-/// convert any generic VCL Text into a SynUnicode encoded String
+/// convert any RTL string into a SynUnicode encoded String
 // - it's prefered to use TLanguageFile.StringToUtf8() method in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -990,22 +990,22 @@ procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8); overload;
 function StringToSynUnicode(const S: string): SynUnicode; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into a SynUnicode encoded String
+/// convert any RTL string into a SynUnicode encoded String
 // - overloaded to avoid a copy to a temporary result string of a function
 procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any UTF-16 encoded buffer into a generic VCL Text
+/// convert any UTF-16 encoded buffer into a RTL string
 function RawUnicodeToString(P: PWideChar; L: integer): string; overload;
 
-/// convert any UTF-16 encoded buffer into a generic VCL Text
+/// convert any UTF-16 encoded buffer into a RTL string
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string); overload;
 
-/// convert any SynUnicode encoded string into a generic VCL Text
+/// convert any SynUnicode encoded string into a RTL string
 function SynUnicodeToString(const U: SynUnicode): string;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any UTF-8 encoded String into a generic VCL Text
+/// convert any UTF-8 encoded String into a RTL string
 // - it's prefered to use TLanguageFile.Utf8ToString() in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -1015,7 +1015,7 @@ function SynUnicodeToString(const U: SynUnicode): string;
 function Utf8ToString(const Text: RawUtf8): string;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any UTF-8 encoded String into a generic VCL Text
+/// convert any UTF-8 encoded String into a RTL string
 procedure Utf8ToStringVar(const Text: RawUtf8; var result: string);
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1023,7 +1023,7 @@ procedure Utf8ToStringVar(const Text: RawUtf8; var result: string);
 procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any UTF-8 encoded buffer into a generic VCL Text
+/// convert any UTF-8 encoded buffer into a RTL string
 // - it's prefered to use TLanguageFile.Utf8ToString() in mORMoti18n,
 // which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
@@ -1033,7 +1033,7 @@ procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
 function Utf8DecodeToString(P: PUtf8Char; L: integer): string; overload;
   {$ifdef UNICODE}inline;{$endif}
 
-/// convert any UTF-8 encoded buffer into a generic VCL Text
+/// convert any UTF-8 encoded buffer into a RTL string
 procedure Utf8DecodeToString(P: PUtf8Char; L: integer; var result: string); overload;
 
 /// convert any UTF-8 encoded String into a generic WideString Text
@@ -1065,26 +1065,26 @@ function Utf8DecodeToUnicode(const Text: RawUtf8; var temp: TSynTempBuffer): Ptr
 /// convert any UTF-8 encoded buffer into an UTF-16 temporary buffer
 function Utf8DecodeToUnicode(Text: PUtf8Char; Len: PtrInt; var temp: TSynTempBuffer): PtrInt; overload;
 
-/// convert any Ansi 7-bit encoded String into a generic VCL Text
+/// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
 function Ansi7ToString(const Text: RawByteString): string; overload;
   {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
-/// convert any Ansi 7-bit encoded String into a generic VCL Text
+/// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any Ansi 7-bit encoded String into a generic VCL Text
+/// convert any Ansi 7-bit encoded String into a RTL string
 // - the Text content must contain only 7-bit pure ASCII characters
 procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string); overload;
 
-/// convert any generic VCL Text into Ansi 7-bit encoded String
+/// convert any RTL string into Ansi 7-bit encoded String
 // - the Text content must contain only 7-bit pure ASCII characters
 function StringToAnsi7(const Text: string): RawByteString;
   {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
-/// convert any generic VCL Text into WinAnsi (Win-1252) 8-bit encoded String
+/// convert any RTL string into WinAnsi (Win-1252) 8-bit encoded String
 function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
@@ -1533,8 +1533,8 @@ function SortDynArrayAnsiStringI(const A, B): integer;
 // - just a wrapper around inlined StrIComp()
 function SortDynArrayPUtf8CharI(const A, B): integer;
 
-/// compare two "array of generic string" elements, with no case sensitivity
-// - the expected string type is the generic VCL string
+/// compare two "array of RTL string" elements, with no case sensitivity
+// - the expected string type is the RTL string
 // - just a wrapper around StrIComp() for AnsiString or AnsiICompW() for UNICODE
 function SortDynArrayStringI(const A, B): integer;
 

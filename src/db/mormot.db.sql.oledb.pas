@@ -365,7 +365,7 @@ type
     // - raise an EOleDBException on any error
     procedure BindTextP(Param: integer; Value: PUtf8Char;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
-    /// bind a VCL string to a parameter
+    /// bind a RTL string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
     procedure BindTextS(Param: integer; const Value: string;
@@ -454,7 +454,7 @@ type
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; override;
-    /// return a Column text generic VCL string value of the current Row, first Col is 0
+    /// return a Column text RTL string value of the current Row, first Col is 0
     function ColumnString(Col: integer): string; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     // - ColumnBlob() will return the binary content of the field is was not ftBlob,

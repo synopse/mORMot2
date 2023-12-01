@@ -128,7 +128,7 @@ function VariantsToArrayOfConst(const V: array of variant): TTVarRecDynArray; ov
 // - RawUtf8 are accessed by reference as vtAnsiString so should remain available
 function RawUtf8DynArrayToArrayOfConst(const V: array of RawUtf8): TTVarRecDynArray;
 
-/// convert any Variant into a VCL string type
+/// convert any Variant into a RTL string type
 // - expects any varString value to be stored as a RawUtf8
 // - prior to Delphi 2009, use VariantToString(aVariant) instead of
 // string(aVariant) to safely retrieve a string=AnsiString value from a variant
@@ -2710,7 +2710,7 @@ function VariantSaveLength(const Value: variant): integer; deprecated;
 // - will return nil in case of an invalid (not handled) Variant type
 // - will use a proprietary binary format, with some variable-length encoding
 // of the string length
-// - warning: will encode generic string fields as within the variant type
+// - warning: will encode RTL string fields as within the variant type
 // itself: using this function between UNICODE and NOT UNICODE
 // versions of Delphi, will propably fail - you have been warned!
 // - deprecated function - use overloaded BinarySave() functions instead
@@ -2723,7 +2723,7 @@ function VariantSave(const Value: variant; Dest: PAnsiChar): PAnsiChar;
 // - will handle standard Variant types and custom types (serialized as JSON)
 // - will return '' in case of an invalid (not handled) Variant type
 // - just a wrapper around VariantSaveLength()+VariantSave()
-// - warning: will encode generic string fields as within the variant type
+// - warning: will encode RTL string fields as within the variant type
 // itself: using this function between UNICODE and NOT UNICODE
 // versions of Delphi, will propably fail - you have been warned!
 // - is a wrapper around BinarySave(rkVariant)

@@ -75,8 +75,8 @@ procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
 procedure GetNextItemTrimedCRLF(var P: PUtf8Char; var result: RawUtf8);
 
 /// return next CSV string from P, nil if no more
-// - this function returns the generic string type of the compiler, and
-// therefore can be used with ready to be displayed text (e.g. for the VCL)
+// - this function returns the RTL string type of the compiler, and
+// therefore can be used with ready to be displayed text (e.g. for the UI)
 function GetNextItemString(var P: PChar; Sep: Char = ','): string;
 
 /// extract a file extension from a file name, then compare with a comma
@@ -185,8 +185,8 @@ function GetUnQuoteCsvItem(P: PUtf8Char; Index: PtrUInt; Sep: AnsiChar = ',';
   Quote: AnsiChar = ''''): RawUtf8; overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
-// - this function return the generic string type of the compiler, and
-// therefore can be used with ready to be displayed text (i.e. the VCL)
+// - this function return the RTL string type of the compiler, and
+// therefore can be used with ready to be displayed text
 function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
 
 /// return first CSV string in the supplied UTF-8 content
@@ -663,7 +663,7 @@ type
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscapeUtf8(const text: RawByteString);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append some UTF-8 encoded chars to the buffer, from a generic string type
+    /// append some UTF-8 encoded chars to the buffer, from a RTL string type
     // - don't escapes chars according to the JSON RFC
     // - if s is a UnicodeString, will convert UTF-16 into UTF-8
     procedure AddNoJsonEscapeString(const s: string);
@@ -692,7 +692,7 @@ type
     /// append some wide chars to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLineW(P: PWord; Len: PtrInt);
-    /// append some VCL/LCL string to the buffer in one line
+    /// append some RTL string to the buffer in one line
     // - will write #0..#31 chars as spaces (so content will stay on the same line)
     procedure AddOnSameLineString(const Text: string);
     /// append an UTF-8 String, with no JSON escaping
@@ -742,7 +742,7 @@ type
     /// append some UTF-16 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeW(Text: PWideChar;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
-    /// append some VCL/LCL chars, escaping all HTML special chars as expected
+    /// append some RTL string chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some UTF-8 chars, escaping all HTML special chars as expected
@@ -976,7 +976,7 @@ function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
 function HtmlEscape(const text: RawUtf8;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
-/// escape some VCL/LCL text into UTF-8 HTML
+/// escape some RTL string text into UTF-8 HTML
 // - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscapeString(const text: string;
@@ -1717,7 +1717,7 @@ function MakeFileName(const Part: array of const; LastIsExt: boolean = true): TF
 function MakeCsv(const Value: array of const; EndWithComma: boolean = false;
   Comma: AnsiChar = ','): RawUtf8;
 
-/// direct conversion of a VCL string into a console OEM-encoded String
+/// direct conversion of a RTL string into a console OEM-encoded String
 // - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console to be defined with UTF-8 encoding
 function StringToConsole(const S: string): RawByteString;
@@ -2245,7 +2245,7 @@ procedure GuidToShort(const
 // $ { "Uid": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function TextToGuid(P: PUtf8Char; Guid: PByteArray): PUtf8Char;
 
-/// convert some VCL text into a TGuid
+/// convert some RTL string text into a TGuid
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGuid

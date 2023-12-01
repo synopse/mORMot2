@@ -2170,7 +2170,7 @@ type
     // - will call GetVariant() on the corresponding field
     // - returns null if the lookup did not have any match
     function GetValue(const aLookupFieldName, aLookupValue, aValueFieldName: RawUtf8): variant;
-    /// read-only access to a particular field value, as VCL string text
+    /// read-only access to a particular field value, as RTL string text
     // - the global Utf8ToString() function will be used for the conversion:
     // for proper i18n handling before Delphi 2009, you should use the
     // overloaded method with aUtf8ToString=Language.Utf8ToString
@@ -2252,8 +2252,8 @@ type
     // - return the result as TTimeLogBits.Text() Iso-8601 encoded text
     function GetTimeLog(Row, Field: PtrInt; Expanded: boolean; FirstTimeChar:
       AnsiChar = 'T'): RawUtf8;
-    /// widechar length (UTF-8 decoded as UTF-16) of a particular field value
-    // - could be used with VCL's UnicodeString, or for Windows API
+    /// UTF-16 widechar count of a particular field value
+    // - could be used with Delphi's UnicodeString, or for Windows API
     function LengthW(Row, Field: PtrInt): integer;
     /// get all values for a specified field into a dynamic RawUtf8 array
     // - don't perform any conversion, but just create an array of raw PUtf8Char data
@@ -2615,12 +2615,12 @@ type
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUtf8(const FieldName: RawUtf8): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// read-only access to a particular field value, as VCL String
+    /// read-only access to a particular field value, as RTL string
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(FieldIndex: PtrInt): string; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// read-only access to a particular field value, as VCL String
+    /// read-only access to a particular field value, as RTL string
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
     function FieldAsString(const FieldName: RawUtf8): string; overload;

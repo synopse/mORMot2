@@ -3323,7 +3323,7 @@ function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
-// - the expected string type is the generic RTL string, i.e. TFileName
+// - the expected string type is the RTL string, i.e. TFileName
 // - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
 

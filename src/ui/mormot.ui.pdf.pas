@@ -910,7 +910,7 @@ type
   end;
 
   /// a PDF object, storing a textual value
-  // - the value is specified as a generic VCL string
+  // - the value is specified as a RTL string
   // - this object is stored as '(escapedValue)'
   // - in case characters with ANSI code higher than 8 Bits, conversion is made
   // into Unicode before writing, and '<FEFFHexUnicodeEncodedValue>'
@@ -1106,7 +1106,7 @@ type
     procedure AddItemTextUtf8(const AKey: PdfString; const AValue: RawUtf8); overload;
       {$ifdef HASINLINE} inline;{$endif}
     /// add a specified Key / Value pair (of type TPdfTextUtf8) to the dictionary
-    // - the value is a generic VCL string: it will be written as
+    // - the value is a RTL string: it will be written as
     // Unicode hexadecimal to the PDF stream, if necessary
     procedure AddItemTextString(const AKey: PdfString; const AValue: string); overload;
       {$ifdef HASINLINE} inline;{$endif}
@@ -1494,7 +1494,7 @@ type
     /// create an Outline entry at a specified position of the current page
     // - the outline tree is created from the specified numerical level (0=root),
     // just after the item added via the previous CreateOutline call
-    // - the title is a generic VCL string, to handle fully Unicode support
+    // - the title is a RTL string, to handle fully Unicode support
     function CreateOutline(const Title: string; Level: integer;
       TopPosition: single): TPdfOutlineEntry;
     /// create a Destination
@@ -1708,7 +1708,7 @@ type
     function GetResources(const AName: PdfString): TPdfDictionary;
       {$ifdef HASINLINE}inline;{$endif}
   public
-    /// create the page with its internal VCL Canvas
+    /// create the page with its internal VCL/LCL Canvas
     constructor Create(ADoc: TPdfDocument); reintroduce; virtual;
     /// calculate width of specified text according to current attributes
     // - this function is compatible with MBCS strings
@@ -2194,7 +2194,7 @@ type
   end;
 
   /// a dictionary wrapper class for the PDF document information fields
-  // - all values use the generic VCL string type, and will be encoded
+  // - all values use the RTL string type, and will be encoded
   // as Unicode if necessary
   TPdfInfo = class(TPdfDictionaryWrapper)
   private
@@ -2677,7 +2677,7 @@ type
     property Dest: TPdfDestination
       read fDest write fDest;
     /// the associated title
-    // - is a generic VCL string, so is Unicode ready
+    // - is a RTL string, so is Unicode ready
     property Title: string
       read fTitle write fTitle;
     /// if the outline must be opened
@@ -2710,7 +2710,7 @@ type
     fPixelWidth: integer;
     fHash: THash128Rec;
   public
-    /// create the image from a supplied VCL TGraphic instance
+    /// create the image from a supplied VCL/LCL TGraphic instance
     // - handle TBitmap and SynGdiPlus picture types, i.e. TJpegImage
     // (stored as jpeg), and TGifImage/TPngImage (stored as bitmap)
     // - use TPdfForm to handle TMetafile in vectorial format
@@ -2837,7 +2837,7 @@ type
   end;
 
   /// class handling PDF document creation using GDI commands
-  // - this class allows using a VCL standard Canvas class
+  // - this class allows using a VCL/LCL standard Canvas class
   // - handles also PDF creation directly from TMetaFile content
   TPdfDocumentGdi = class(TPdfDocument)
   private
@@ -2850,7 +2850,7 @@ type
     function GetVclCanvasSize: TSize;
       {$ifdef HASINLINE}inline;{$endif}
   public
-    /// create the PDF document instance, with a VCL Canvas property
+    /// create the PDF document instance, with a VCL/LCL Canvas property
     // - see TPdfDocument.Create connstructor for the arguments expectations
     constructor Create(AUseOutlines: boolean = false; ACodePage: integer = 0;
       APdfA: TPdfALevel = pdfaNone
@@ -2892,10 +2892,10 @@ type
     // !   end;
     procedure SaveToStreamDirectPageFlush(
       FlushCurrentPageNow: boolean = false); override;
-    /// the VCL Canvas of the current page
+    /// the VCL/LCL Canvas of the current page
     property VclCanvas: TCanvas
       read GetVclCanvas;
-    /// the VCL Canvas size of the current page
+    /// the VCL/LCL Canvas size of the current page
     // - useful to calculate coordinates for the current page
     // - filled with (0,0) before first call to VclCanvas property
     property VclCanvasSize: TSize
@@ -2957,7 +2957,7 @@ implementation
 
 {$ifdef FPC}
 
-{ some FPC/Delphi LCL/VCL compatibility definitions }
+{ some FPC/Delphi LCL/VCL/LCL compatibility definitions }
 
 type
   TEMRExtTextOut = TEMREXTTEXTOUTW;
@@ -10048,7 +10048,7 @@ var
 begin
   // write the file header
   SaveToStreamDirectBegin(AStream, ForceModDate);
-  // then draw the pages VCL Canvas content on the fly (miminal memory use)
+  // then draw the pages VCL/LCL Canvas content on the fly (miminal memory use)
   for i := 0 to fRawPages.Count - 1 do
   begin
     P := fRawPages.List[i];
