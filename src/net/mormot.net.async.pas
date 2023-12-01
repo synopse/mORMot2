@@ -816,12 +816,13 @@ type
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
     fRespStatus: integer;
+    fPipelineEnabled: boolean;
     fPipelinedWrite: boolean;
     fRequestFlags: THttpServerRequestFlags;
-    fAuthSec: word;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fConnectionID: THttpServerConnectionID; // may not be fHandle behind nginx
+    fAuthSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
@@ -3118,6 +3119,8 @@ begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
+    if hsoEnablePipelining in fServer.Options then
+      fPipelineEnabled := true;
   end;
   // inherited AfterCreate; // void parent method
 end;
@@ -3200,8 +3203,10 @@ begin
     fPipelinedWrite := false;
     while fHttp.ProcessRead(st) do
     begin
-      // detect pipelined input
-      if (st.Len <> 0) and // there are still data in the input read buffer
+      // detect pipelined GET input
+      if fPipelineEnabled and
+         (st.Len <> 0) and // there are still data in the input read buffer
+         (not fPipelinedWrite) and
          (fKeepAliveSec > 0) and
          not (hfConnectionClose in fHttp.HeaderFlags) then
         fPipelinedWrite := true; // DoRequest will gather output in fWR
@@ -3333,7 +3338,7 @@ begin
   begin
     if fServer.Authorization(fHttp, fConnectionID) = asrMatch then
       include(fRequestFlags, hsrAuthorized)
-    else if fAuthSec = (fServer.Async.fLastOperationSec shr 2) and $ffff then
+    else if fServer.Async.fLastOperationSec shr 2 = fAuthSec then
     begin
       // 403 HTTP error (and close connection) on wrong attemps within 4 seconds
       result := HTTP_FORBIDDEN;
@@ -3555,7 +3560,8 @@ begin
     // we are in HTTP pipelined mode: input stream had several requests
     if fHttp.State <> hrsResponseDone then
     begin
-      fOwner.DoLog(sllWarning, 'DoRequest: pipelining with streaming', [], self);
+      fOwner.DoLog(sllWarning, 'DoRequest: pipelining with % streaming',
+        [fHttp.CommandUri], self);
       if FlushPipelinedWrite = soContinue then // back to regular process
         fServer.fAsync.fClients.Write(self, output.Buffer, output.Len, 1000)
       else

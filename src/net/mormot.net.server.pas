@@ -365,6 +365,7 @@ type
   // - hsoThreadSmooting will change the TAsyncConnections.ThreadPollingWakeup()
   // algorithm to focus the process on the first threads of the pool - by design,
   // this will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
+  // - hsoEnablePipelining enable HTTP pipelining (unsafe) on THttpAsyncServer
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -378,7 +379,8 @@ type
     hsoThreadCpuAffinity,
     hsoThreadSocketAffinity,
     hsoReusePort,
-    hsoThreadSmooting);
+    hsoThreadSmooting,
+    hsoEnablePipelining);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
