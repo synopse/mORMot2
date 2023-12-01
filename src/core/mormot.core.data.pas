@@ -2725,6 +2725,8 @@ type
     function Get(Index: PtrInt): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     procedure Put(Index: PtrInt; const Value: RawUtf8);
+    function GetS(Index: PtrInt): string;
+    procedure PutS(Index: PtrInt; const Value: string);
     function GetObject(Index: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     procedure PutObject(Index: PtrInt; Value: pointer);
@@ -2938,6 +2940,12 @@ type
     // - reading this property is not thread-safe, since content may change
     property Strings[Index: PtrInt]: RawUtf8
       read Get write Put; default;
+    /// get or set an item as RTL string, ready to be used with the UI
+    // - returns '' and raise no exception in case of out of range supplied index
+    // - wrap Strings[] with Utf8ToString/StringToUtf8 functions
+    // - reading this property is not thread-safe, since content may change
+    property Str[Index: PtrInt]: string
+      read GetS write PutS;
     /// get or set a Object item
     // - returns nil and raise no exception in case of out of range supplied index
     // - reading this property is not thread-safe, since content may change
@@ -5265,6 +5273,15 @@ begin
     result := fValue[Index];
 end;
 
+function TRawUtf8List.GetS(Index: PtrInt): string;
+begin
+  if (self = nil) or
+     (PtrUInt(Index) >= PtrUInt(fCount)) then
+    result := ''
+  else
+    Utf8ToStringVar(fValue[Index], result);
+end;
+
 function TRawUtf8List.GetCapacity: PtrInt;
 begin
   if self = nil then
@@ -5526,6 +5543,11 @@ begin
     if Assigned(fOnChange) then
       Changed;
   end;
+end;
+
+procedure TRawUtf8List.PutS(Index: PtrInt; const Value: string);
+begin
+  Put(Index, StringToUtf8(Value));
 end;
 
 procedure TRawUtf8List.PutObject(Index: PtrInt; Value: pointer);
