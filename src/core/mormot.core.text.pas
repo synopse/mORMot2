@@ -2196,23 +2196,23 @@ function OctToBin(Oct: PAnsiChar; Bin: PByte): PtrInt; overload;
 // - \xxx is converted into a single xxx byte from octal, and \\ into \
 function OctToBin(const Oct: RawUtf8): RawByteString; overload;
 
-/// append a TGuid binary content as text
+/// append a TGuid binary content as 36 chars text
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
 function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 
-/// convert a TGuid into UTF-8 encoded { text }
+/// convert a TGuid into 38 chars encoded { text } as RawUtf8
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUtf8() overloaded function
 function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 
-/// convert a TGuid into UTF-8 encoded text
+/// convert a TGuid into 36 chars encoded text as RawUtf8
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
 function ToUtf8(const guid: TGuid): RawUtf8; overload;
 
-/// convert a TGuid into text
+/// convert a TGuid into into 38 chars encoded { text } as RTL string
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
 function GuidToString(const guid: TGuid): string;
@@ -4031,8 +4031,7 @@ begin
     B^ := QuotedChar;
     inc(B);
   end;
-  GuidToText(B, pointer(Value));
-  inc(B, 36);
+  B := GuidToText(B, pointer(Value));
   if QuotedChar <> #0 then
     B^ := QuotedChar
   else
@@ -9641,22 +9640,16 @@ procedure GuidToShort(const guid: TGuid; out dest: TGuidShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
-  dest[38] := '}';
-  GuidToText(@dest[2], @guid);
+  GuidToText(@dest[2], @guid)^ := '}';
 end;
 
 {$ifdef UNICODE}
 function GuidToString(const guid: TGuid): string;
 var
-  tmp: array[0..35] of AnsiChar;
-  i: integer;
+  tmp: TGuidShortString;
 begin
-  GuidToText(tmp, @guid);
-  SetString(result, nil, 38);
-  PWordArray(result)[0] := ord('{');
-  for i := 1 to 36 do
-    PWordArray(result)[i] := ord(tmp[i - 1]); // no conversion for 7-bit Ansi
-  PWordArray(result)[37] := ord('}');
+  GuidToShort(guid, tmp);
+  Ansi7ToString(@tmp[1], 38, result);
 end;
 {$else}
 function GuidToString(const guid: TGuid): string;
