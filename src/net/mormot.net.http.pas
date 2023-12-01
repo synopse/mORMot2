@@ -228,6 +228,7 @@ type
   // and accessed as one byte - which is faster than word on Intel CPUs
   THttpRequestReponseFlags = set of (
     rfAcceptRange,
+    rfWantRange,
     rfRange,
     rfContentStreamNeedFree,
     rfAsynchronous);
@@ -1503,8 +1504,7 @@ begin
          (PCardinal(P + 8)^ or $20202020 =
         ord('y') + ord('t') shl 8 + ord('e') shl 16 + ord('s') shl 24) and
          (P[12] = '=') then
-        if (RangeLength >= 0) or
-           (RangeOffset <> 0) then
+        if rfWantRange in ResponseFlags then
           State := hrsErrorUnsupportedRange // no multipart range
         else
         begin
@@ -1516,15 +1516,17 @@ begin
             inc(P1);
             if P1^ in ['0'..'9'] then
             begin
-              // "bytes=0-499" -> start=0, len=500
+              // "Range: bytes=0-499" -> start=0, len=500
               RangeLength := Int64(GetNextRange(P1)) - RangeOffset + 1;
               if RangeLength < 0 then
                 RangeLength := 0;
             end;
             // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
             if P1^ = ',' then
-              State := hrsErrorUnsupportedRange; // no multipart range
-          end
+              State := hrsErrorUnsupportedRange // no multipart range
+            else
+              include(ResponseFlags, rfWantRange);
+           end
           else
             State := hrsErrorUnsupportedRange;
           if not HeadersUnFiltered then
@@ -1866,11 +1868,9 @@ begin
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentStream = nil then
   begin
-    ContentPos := pointer(Content);
+    ContentPos := pointer(Content); // for ProcessBody below
     ContentLength := length(Content);
-    if (RangeLength >= 0) or
-       (RangeOffset > 0) then
-      // there was a Range: header in the request
+    if rfWantRange in ResponseFlags then
       if not (rfRange in ResponseFlags) then // not already from ContentFromFile
         if ValidateRange then
           inc(ContentPos, RangeOffset)
@@ -1995,15 +1995,12 @@ function THttpRequestContext.ContentFromFile(
   const FileName: TFileName; CompressGz: integer): boolean;
 var
   gz: TFileName;
-  hasRange: boolean;
 begin
   Content := '';
-  hasRange := (RangeLength >= 0) or
-              (RangeOffset > 0);
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
      (pointer(CommandMethod) <> pointer(_HEADVAR)) and
-     not hasRange then
+     not (rfWantRange in ResponseFlags) then
   begin
     // try locally cached gzipped static content
     gz := FileName + '.gz';
@@ -2020,7 +2017,8 @@ begin
   end;
   ContentLength := FileSize(FileName);
   result := ContentLength <> 0;
-  if result and hasRange then
+  if result and
+     (rfWantRange in ResponseFlags) then
     if not ValidateRange then
       result := false; // invalid offset
   if not result then
@@ -2103,20 +2101,23 @@ const
 function ToText(hf: THttpRequestHeaderFlags): TShort8;
 var
   b: cardinal;
-  P: PAnsiChar;
+  P, R: PAnsiChar;
+  L: PtrInt;
 begin
   b := byte(hf);
-  result[0] := #0;
+  L := 0;
   P := _FLAGS;
+  R := @result;
   repeat
     if b and 1 <> 0 then
     begin
-      inc(result[0]);
-      result[ord(result[0])] := P^;
+      inc(L);
+      R[L] := P^;
     end;
     inc(P);
     b := b shr 1;
   until b = 0;
+  R[0] := AnsiChar(L);
 end;
 
 function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
