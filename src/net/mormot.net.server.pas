@@ -849,7 +849,7 @@ type
     fServerKeepAliveTimeOut: cardinal;
     fServerKeepAliveTimeOutSec: cardinal;
     fHeaderRetrieveAbortDelay: cardinal;
-    fCompressGz: integer;
+    fCompressGz: integer; // >=0 if GZ is activated
     fSockPort: RawUtf8;
     fSock: TCrtSocket;
     fSafe: TLightLock;
@@ -2274,11 +2274,11 @@ begin
            (P[16] = ':') then
           // custom CONTENT-ENCODING: don't compress
           integer(Context.CompressAcceptHeader) := 0;
-        h^.Append(P, len); // normalize CR/LF endings
-        h^.AppendCRLF;
+        h^.Append(P, len);
+        h^.AppendCRLF; // normalize CR/LF endings
         inc(P, len);
       end;
-      while P^ in [#10, #13] do // normalized to CRLF
+      while P^ in [#10, #13] do
         inc(P);
     until P^ = #0;
   end;
@@ -2289,7 +2289,7 @@ begin
   Context.Content := OutContent;
   Context.ContentType := OutContentType;
   OutContent := ''; // dec RefCnt to release body memory ASAP
-  result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // also set State
+  result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // set State
   // now TAsyncConnectionsSockets.Write(result) should be called
 end;
 

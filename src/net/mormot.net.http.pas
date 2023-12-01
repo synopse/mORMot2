@@ -1869,7 +1869,7 @@ begin
       Content, ContentEncoding);
   // method will return a buffer to be sent
   result := @Head;
-  // handle range in response
+  // handle response body with optional range support
   if rfAcceptRange in ResponseFlags then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentStream = nil then
@@ -1879,7 +1879,7 @@ begin
     if rfWantRange in ResponseFlags then
       if not (rfRange in ResponseFlags) then // not already from ContentFromFile
         if ValidateRange then
-          inc(ContentPos, RangeOffset)
+          inc(ContentPos, RangeOffset) // rfRange has just been set
         else
           ContentLength := 0; // invalid range: return void response
     // ContentStream<>nil did set ContentLength/rfRange in ContentFromFile
@@ -1906,7 +1906,7 @@ begin
   result^.Append(ContentLength);
   result^.AppendCRLF;
   if (ContentType <> '') and
-     (ContentType <> STATICFILE_CONTENT_TYPE) then
+     (ContentType[1] <> '!') then
   begin
     result^.AppendShort('Content-Type: ');
     result^.Append(ContentType);
@@ -2093,7 +2093,7 @@ begin
     len := OutStream.Size;
   SockSend(['Content-Length: ', len]); // needed even 0
   if (OutContentType <> '') and
-     (OutContentType <> STATICFILE_CONTENT_TYPE) then
+     (OutContentType[1] <> '!') then
     SockSend(['Content-Type: ', OutContentType]);
 end;
 
