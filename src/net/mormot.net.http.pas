@@ -213,6 +213,9 @@ type
     hroHeadersUnfiltered);
 
   /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
+  // - separated from THttpRequestReponseFlags so that they would both be stored
+  // and accessed as a single byte - which is faster than word on Intel CPUs
+  // - do not modify unless you fix the associated ToText() overloaded function
   THttpRequestHeaderFlags = set of (
     nfHeadersParsed,
     hfTransferChunked,
@@ -225,11 +228,12 @@ type
 
   /// map the output state for THttpRequestContext.ResponseFlags
   // - separated from THttpRequestHeaderFlags so that they would both be stored
-  // and accessed as one byte - which is faster than word on Intel CPUs
+  // and accessed as a single byte - which is faster than word on Intel CPUs
   THttpRequestReponseFlags = set of (
     rfAcceptRange,
     rfWantRange,
     rfRange,
+    rfHttp10,
     rfContentStreamNeedFree,
     rfAsynchronous);
 
@@ -277,9 +281,9 @@ type
     Head, Process: TRawByteStringBuffer;
     /// the current state of this HTTP context
     State: THttpRequestState;
-    /// map the presence of some HTTP headers, but retrieved during ParseHeader
+    /// map the presence of some HTTP headers, retrieved during ParseHeader
     HeaderFlags: THttpRequestHeaderFlags;
-    /// define some flags when sending the response
+    /// some flags used when sending the response
     ResponseFlags: THttpRequestReponseFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
@@ -1643,10 +1647,12 @@ begin
      (PCardinal(P + 5)^ and $ffffff <>
        ord('/') + ord('1') shl 8 + ord('.') shl 16) then
     exit;
+  if P[8] <> '1' then
+    include(ResponseFlags, rfHttp10);
   if not (hfConnectionClose in HeaderFlags) then
-    if not (hfConnectionKeepAlive in HeaderFlags) and
-       (P[8] <> '1') then // HTTP/1.1 is keep-alive by default
-      include(HeaderFlags, hfConnectionClose);
+    if not (hfConnectionKeepAlive in HeaderFlags) and // allow HTTP1.0+keepalive
+       (rfHttp10 in ResponseFlags) then // HTTP/1.1 is keep-alive by default
+      include(HeaderFlags, hfConnectionClose); // standard HTTP/1.0
   result := true;
 end;
 
@@ -1910,12 +1916,14 @@ begin
     result^.AppendShort('Connection: Close'#13#10#13#10) // end with a void line
   else
   begin
+    if rfHttp10 in ResponseFlags then // implicit with HTTP/1.1
+      result^.AppendShort('Connection: Keep-Alive'#13#10);
     if CompressAcceptEncoding <> '' then
     begin
       result^.Append(CompressAcceptEncoding);
       result^.AppendCRLF;
     end;
-    result^.AppendCRLF; // 'Connection: Keep-Alive' is implicit with HTTP/1.1
+    result^.AppendCRLF;
   end;
   // try to send both headers and body in a single socket syscal
   Process.Reset;

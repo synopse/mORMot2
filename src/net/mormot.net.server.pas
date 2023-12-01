@@ -2182,7 +2182,7 @@ const
     'HTTP/1.0 200 OK'#13#10),
    ('HTTP/1.1 206 Partial Content'#13#10,
     'HTTP/1.0 206 Partial Content'#13#10));
-  _CMD_XXX: array[boolean] of string[9] = (
+  _CMD_XXX: array[boolean] of string[15] = (
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
@@ -2244,10 +2244,10 @@ begin
   if fRespStatus = HTTP_SUCCESS then // optimistic approach
     h^.AppendShort(_CMD_200[
       rfWantRange in Context.ResponseFlags, // HTTP_PARTIALCONTENT=206 support
-      hfConnectionClose in Context.HeaderFlags])
+      rfHttp10 in Context.ResponseFlags])   // HTTP/1.0 support
   else
   begin // other less common cases
-    h^.AppendShort(_CMD_XXX[hfConnectionClose in Context.HeaderFlags]);
+    h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
     StatusCodeToReason(fRespStatus, fRespReason);
     h^.Append(fRespStatus);
     h^.Append(' ');
