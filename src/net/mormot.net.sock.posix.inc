@@ -625,7 +625,14 @@ end;
 const
   IFF_UP = $1;
   IFF_BROADCAST = $2;
-  IFF_LOOPBACK = $8;
+  IFF_LOOPBACK  = $8;
+
+  // https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/if_arp.h
+  ARPHRD_ETHER     = 1;
+  ARPHRD_PPP       = 512;
+  ARPHRD_TUNNEL    = 768;
+  ARPHRD_TUNNEL6   = 769;
+  ARPHRD_IEEE80211 = 801;
 
 {$ifndef OSANDROID}
   // on POSIX, use getifaddrs/freeifaddrs from libc
@@ -698,13 +705,13 @@ type
   {$ifdef OSBSDDARWIN} // from bsd/net/if_dl.h
   psockaddr_dl = ^sockaddr_dl;
   sockaddr_dl = record
-    sdl_len: byte;	 // Total length of sockaddr
-    sdl_family: byte;	 // AF_LINK
-    sdl_index: word;	 // if != 0, system given index for interface
-    sdl_type: byte;	 // interface type
-    sdl_nlen: byte;	 // interface name length, no trailing 0 reqd.
-    sdl_alen: byte;	 // link level address length
-    sdl_slen: byte;	 // link layer selector length
+    sdl_len: byte;       // Total length of sockaddr
+    sdl_family: byte;    // AF_LINK
+    sdl_index: word;     // if != 0, system given index for interface
+    sdl_type: byte;      // interface type
+    sdl_nlen: byte;      // interface name length, no trailing 0 required
+    sdl_alen: byte;      // link level address length
+    sdl_slen: byte;      // link layer selector length
     sdl_data: array[byte] of byte; // interface name + link level address
   end;
   {$else}
@@ -795,8 +802,10 @@ begin
         with psockaddr_dl(info^.ifa_addr)^ do
           if sdl_alen = 6 then
             // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
+            {$ifdef OSDARWIN}
             if PCardinal(@sdl_data[sdl_nlen])^ <> 2 then
               // iOS7+ return always 02:00:00:00:00:00 as MAC addresses :(
+            {$endif OSDARWIN}
               mac := MacToText(@sdl_data[sdl_nlen]);
         if mac <> '' then
       {$else}
@@ -814,8 +823,45 @@ begin
         begin
           if n = length(result) then
             SetLength(result, NextGrow(n));
-          result[n].Name := info^.ifa_name; // e.g. 'eth0' on Linux
-          result[n].Address := mac;
+          with result[n] do
+          begin
+            Name := info^.ifa_name; // e.g. 'eth0' on Linux
+            Address := mac;
+            {$ifdef OSBSDDARWIN}
+            // BSD do name the networks from their manufacturer
+            // -> parse net.wlan.devices ?
+            IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
+            {$else}
+            case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
+              ARPHRD_ETHER:
+                begin
+                  Kind := makEthernet;
+                  if Name <> '' then
+                    // set also for some wifi adapters
+                    if PWord(Name)^ = ord('w') + ord('l') shl 8 then
+                      Kind := makWifi; // detect by convention
+                end;
+              ARPHRD_IEEE80211:
+                Kind := makWifi;
+              ARPHRD_TUNNEL,
+              ARPHRD_TUNNEL6:
+                Kind := makTunnel;
+              ARPHRD_PPP:
+                Kind := makPpp;
+            else
+              // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
+              if Name <> '' then
+                case PWord(Name)^ of
+                  ord('e') + ord('t') shl 8,  // 'ethX'
+                  ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
+                    Kind := makEthernet;
+                  ord('w') + ord('l') shl 8:  // 'wlanX' and systemd v197 'wlX'
+                    Kind := makWifi;
+                end;
+            end;
+            IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
+            {$endif OSBSDDARWIN}
+          end;
           {$ifdef OSLINUX}
           if info^.ifa_flags and IFF_UP <> 0 then
             RetrieveEnhancedInfo(result[n]);

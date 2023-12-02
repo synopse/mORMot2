@@ -507,6 +507,15 @@ function GetIPAddressesText(const Sep: RawUtf8 = ' ';
 procedure MacIPAddressFlush;
 
 type
+  /// the network interface type, as stored in TMacAddress.Kind
+  // - we don't define all ARP models, but try to detect most basic types
+  TMacAddressKind= (
+    makUndefined,
+    makEthernet,
+    makWifi,
+    makTunnel,
+    makPpp);
+
   /// interface name/address pairs as returned by GetMacAddresses
   // - associated IPv4 information is available on most systems
   TMacAddress = record
@@ -551,11 +560,13 @@ type
     /// the current link speed in bits per second (typically 100 or 1000)
     // - not available on Windows XP or BSD
     Speed: cardinal;
-    {$ifdef OSWINDOWS}
-    /// the Windows interface index
-    // - not available on POSIX
+    /// the interface index, as internally used by the OS
     IfIndex: cardinal;
-    {$endif OSWINDOWS}
+    /// the hardware model of this network interface
+    // - retrieved from ARP protocol hardware identifiers on Linux, and
+    // IfType field on Windows (accurate since Vista)
+    // - not available on BSD
+    Kind: TMacAddressKind;
   end;
   TMacAddressDynArray = array of TMacAddress;
 

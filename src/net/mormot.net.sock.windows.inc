@@ -744,7 +744,12 @@ const
 
   IfOperStatusUp = 1;
   IfOperStatusDown = 2;
+
+  IF_TYPE_ETHERNET_CSMACD   = 6;
+  IF_TYPE_PPP               = 23;
   IF_TYPE_SOFTWARE_LOOPBACK = 24;
+  IF_TYPE_IEEE80211         = 71; // Vista+
+  IF_TYPE_TUNNEL            = 131;
 
   MAX_HOSTNAME_LEN = 128;
   MAX_DOMAIN_NAME_LEN = 128;
@@ -965,6 +970,16 @@ begin
         Address := MacToText(@p^.PhysicalAddress);
         Mtu := p^.Mtu;
         IfIndex := p^.Union.FlagsOrIfIndex;
+        case p^.IfType of
+          IF_TYPE_ETHERNET_CSMACD:
+            Kind := makEthernet;
+          IF_TYPE_IEEE80211:
+            Kind := makWifi;
+          IF_TYPE_TUNNEL:
+            Kind := makTunnel;
+          IF_TYPE_PPP:
+            Kind := makPpp;
+        end;
         a := p^.FirstUnicastAddress;
         while a <> nil do
         begin
