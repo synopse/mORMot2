@@ -3169,6 +3169,8 @@ var
 begin
   tmp.InitJson(Json, JSON_FAST);
   result := tmp.VValue;
+  if result <> nil then
+    DynArrayFakeLength(result, tmp.Count);
 end;
 
 function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
@@ -3177,6 +3179,8 @@ var
 begin
   tmp.InitArray(items, JSON_FAST);
   result := tmp.VValue;
+  if result <> nil then
+    DynArrayFakeLength(result, tmp.Count);
 end;
 
 
