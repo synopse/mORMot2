@@ -502,10 +502,6 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
-/// flush the GetIPAddressesText/GetMacAddresses internal 65-seconds cache
-// - may be set to force detection after HW configuration change
-procedure MacIPAddressFlush;
-
 type
   /// the network interface type, as stored in TMacAddress.Kind
   // - we don't define all ARP models, but try to detect most basic types
@@ -578,6 +574,11 @@ function GetMacAddresses(UpAndDown: boolean = false): TMacAddressDynArray;
 // - an internal 65-seconds cache is used, with explicit MacIPAddressFlush
 function GetMacAddressesText(WithoutName: boolean = true;
   UpAndDown: boolean = false): RawUtf8;
+
+/// flush the GetIPAddressesText/GetMacAddresses internal caches
+// - may be called to force detection after HW configuration change (e.g. when
+// wifi has been turned on)
+procedure MacIPAddressFlush;
 
 {$ifdef OSWINDOWS}
 /// remotely get the MAC address of a computer, from its IP Address
@@ -5070,7 +5071,7 @@ begin
           SockSend(VAnsiString, Length(RawByteString(VAnsiString)));
         {$ifdef HASVARUSTRING}
         vtUnicodeString:
-          begin
+          begin // truncating to 255 bytes of shortstring is good enough
             Unicode_WideToShort(VUnicodeString, // assume WinAnsi encoding
               length(UnicodeString(VUnicodeString)), CP_WINANSI, tmp);
             SockSend(@tmp[1], Length(tmp));
@@ -5087,7 +5088,8 @@ begin
             Str(VInteger, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
-        vtInt64 {$ifdef FPC}, vtQWord{$endif} :
+        {$ifdef FPC} vtQWord, {$endif}
+        vtInt64: // e.g. for "Content-Length:" or  "Range:" sizes
           begin
             Str(VInt64^, tmp);
             SockSend(@tmp[1], Length(tmp));
