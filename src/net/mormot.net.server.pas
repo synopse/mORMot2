@@ -1120,7 +1120,7 @@ type
     // directly from THttpServerSocket.GetRequest
     property OnHeaderParsed: TOnHttpServerHeaderParsed
       read fOnHeaderParsed write fOnHeaderParsed;
-    /// low-level callback called after 10 seconds of inactive Accept()
+    /// low-level callback called every second of inactive Accept()
     property OnAcceptIdle: TNotifyEvent
       read fOnAcceptIdle write fOnAcceptIdle;
   published
@@ -3241,7 +3241,7 @@ begin
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
-    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
+    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 1000, hsoReusePort in fOptions);
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
@@ -3263,10 +3263,10 @@ begin
         cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down
       end;
-      if res = nrRetry then // every 10 seconds
+      if res = nrRetry then // accept() timeout after 1000 ms
       begin
         if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self);
+          fOnAcceptIdle(self); // called every second
         continue;
       end;
       OnConnect;
