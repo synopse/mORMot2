@@ -2589,7 +2589,7 @@ begin
   result := (self <> nil) and
             NetIsIP4(pointer(ip4), @c) and
              ({%H-}c <> 0) and
-             (c <> cLocalhost32) and
+             (c <> fWhiteIP) and
              BanIP(c);
 end;
 

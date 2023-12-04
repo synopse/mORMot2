@@ -806,7 +806,7 @@ type
     {$endif USE_WINIOCP}
     // here aContext is a THttpServerSocket instance
     procedure Task(aCaller: TSynThreadPoolWorkThread;
-      aContext: Pointer); override;
+      aContext: pointer); override;
     procedure TaskAbort(aContext: Pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
@@ -1121,7 +1121,9 @@ type
     // directly from THttpServerSocket.GetRequest
     property OnHeaderParsed: TOnHttpServerHeaderParsed
       read fOnHeaderParsed write fOnHeaderParsed;
-    /// low-level callback called every second of inactive Accept()
+    /// low-level callback called every few seconds of inactive Accept()
+    // - is called every 5 seconds by default, but could be every 1 second
+    // if hsoBan40xIP option (i.e. the Banned property) has been set
     property OnAcceptIdle: TNotifyEvent
       read fOnAcceptIdle write fOnAcceptIdle;
   published
@@ -3253,7 +3255,7 @@ begin
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
-    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 1000, hsoReusePort in fOptions);
+    fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
@@ -3262,26 +3264,30 @@ begin
     begin
       res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false);
       if not (res in [nrOK, nrRetry]) then
+      begin
         if Terminated then
-          break
-        else
-        begin
-          SleepHiRes(1); // failure (too many clients?) -> wait and retry
-          continue;
-        end;
+          break;
+        SleepHiRes(1); // failure (too many clients?) -> wait and retry
+        continue;
+      end;
       if Terminated or
          (Sock = nil) then
       begin
-        cltsock.ShutdownAndClose({rdwr=}true);
-        break; // don't accept input if server is down
+        if res = nrOk then
+          cltsock.ShutdownAndClose({rdwr=}true);
+        break; // don't accept input if server is down, and end thread now
       end;
       if res = nrRetry then // accept() timeout after 1000 ms
       begin
-        if Assigned(fBanned) and
-           (fBanned.Count <> 0) then
-          fBanned.IdleEverySecond; // update internal THttpAcceptBan lists
+        if Assigned(fBanned) then
+        begin
+          if fBanned.Count <> 0 then
+            fBanned.IdleEverySecond;    // update internal THttpAcceptBan lists
+          fSock.ReceiveTimeout := 1000; // accept() to exit every second
+          fSock.SendTimeout := 1000;
+        end;
         if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self);     // called every second
+          fOnAcceptIdle(self); // called every few seconds (e.g. 5 by default)
         continue;
       end;
       if (fBanned <> nil) and
@@ -3291,7 +3297,7 @@ begin
         banlen := ord(HTTP_BANIP_RESPONSE[0]);
         cltsock.Send(@HTTP_BANIP_RESPONSE[1], banlen); // 418 I'm a teapot
         cltsock.ShutdownAndClose({rdwr=}false);
-        continue;
+        continue; // abort even before TLS or HTTP start
       end;
       OnConnect;
       if fMonoThread then
@@ -3333,8 +3339,7 @@ begin
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
-        if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
-            {waitoncontention=}true) then
+        if not fThreadPool.Push(pointer(cltservsock), {waitoncontention=}true) then
           // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)
       end
@@ -3913,7 +3918,7 @@ end;
 {$endif USE_WINIOCP}
 
 procedure TSynThreadPoolTHttpServer.Task(
-  aCaller: TSynThreadPoolWorkThread; aContext: Pointer);
+  aCaller: TSynThreadPoolWorkThread; aContext: pointer);
 begin
   // process this THttpServerSocket in the thread pool
   if (fServer = nil) or
