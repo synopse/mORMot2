@@ -768,12 +768,16 @@ type
     /// register an IP4 to be rejected
     function BanIP(ip4: cardinal): boolean; overload;
     /// register an IP4 to be rejected
-    procedure BanIP(const ip4: RawUtf8); overload;
+    function BanIP(const ip4: RawUtf8): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// fast check if this IP4 is to be rejected
     // - no RW lock is needed, since is done in the main socket accept() thread
     function IsBanned(const addr: TNetAddr): boolean;
     /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
-    function ShouldBan(status, ip4: cardinal): boolean;
+    function ShouldBan(status, ip4: cardinal): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
+    function ShouldBan(status: cardinal; const ip4: RawUtf8): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// to be called every second to remove deprecated bans from the list
     // - implemented via a round-robin list of per-second banned IPs
@@ -2578,14 +2582,15 @@ begin
   end;
 end;
 
-procedure THttpAcceptBan.BanIP(const ip4: RawUtf8);
+function THttpAcceptBan.BanIP(const ip4: RawUtf8): boolean;
 var
   c: cardinal;
 begin
-  if NetIsIP4(pointer(ip4), @c) and
-     ({%H-}c <> 0) and
-     (c <> $0100007f) then
-    BanIP(c);
+  result := (self <> nil) and
+            NetIsIP4(pointer(ip4), @c) and
+             ({%H-}c <> 0) and
+             (c <> cLocalhost32) and
+             BanIP(c);
 end;
 
 function THttpAcceptBan.IsBanned(const addr: TNetAddr): boolean;
@@ -2599,7 +2604,8 @@ begin
      (fCount = 0) then
     exit;
   ip4 := addr.IP4;
-  if ip4 = 0 then
+  if (ip4 = 0) or
+     (ip4 = fWhiteIP) then
     exit;
   fSafe.Lock; // O(n) process, but from the main accept() thread only
   {$ifdef HASFASTTRYFINALLY}
@@ -2632,7 +2638,15 @@ end;
 function THttpAcceptBan.ShouldBan(status, ip4: cardinal): boolean;
 begin
   result := (self <> nil) and
-            ((status = HTTP_BADREQUEST) or  // disallow 400,402..xxx
+            ((status = HTTP_BADREQUEST) or     // disallow 400,402..xxx
+             (status > HTTP_UNAUTHORIZED)) and // allow 401 response
+            BanIP(ip4)
+end;
+
+function THttpAcceptBan.ShouldBan(status: cardinal; const ip4: RawUtf8): boolean;
+begin
+  result := (self <> nil) and
+            ((status = HTTP_BADREQUEST) or     // disallow 400,402..xxx
              (status > HTTP_UNAUTHORIZED)) and // allow 401 response
             BanIP(ip4)
 end;
