@@ -9476,11 +9476,13 @@ begin
   fMode := mWrite;
   if GetHashFileExt = '' then // DoHash() does nothing
   begin
+    // no hash involved: just move to the end of partial content
     fInfo.CurrentSize := fRedirected.Seek(0, soEnd);
     fPosition := fInfo.CurrentSize;
   end
   else
   begin
+    // compute the hash of the existing partial content
     SetLength(buf, 1 shl 10); // 1MB temporary buffer
     repeat
       read := fRedirected.Read(pointer(buf)^, length(buf));
@@ -9525,7 +9527,7 @@ end;
 
 procedure TStreamRedirect.ReadWriteReport(const Caller: ShortString);
 var
-  tix, tosleep: Int64;
+  tix, tosleep, endsleep: Int64;
 begin
   tix := GetTickCount64;
   fInfo.Elapsed := tix - fInfo.StartTix;
@@ -9547,19 +9549,20 @@ begin
           tosleep := ((fInfo.ProcessedSize * 1000) div fLimitPerSecond) - fInfo.Elapsed;
           if tosleep > 10 then // on Windows, typical resolution is 16ms
           begin
-            while tosleep > 300 do
+            if tosleep > 300 then
             begin
-              SleepHiRes(300); // show progress on very low bandwidth
-              if Assigned(fOnStreamProgress) or
-                 Assigned(fInfo.OnProgress) or
-                 Assigned(fInfo.OnLog) then
-                DoReport(true);
-              dec(tosleep, 300);
-              if fTerminated then
-                raise EStreamRedirect.CreateUtf8('%.%(%) Terminated',
-                  [self, Caller, fInfo.Context]);
+              endsleep := tix + tosleep;
+              repeat
+                SleepHiRes(300); // show progress on very low bandwidth
+                if Assigned(fOnStreamProgress) or
+                   Assigned(fInfo.OnProgress) or
+                   Assigned(fInfo.OnLog) then
+                  DoReport({ReComputeElapsed=}true);
+                tosleep := endsleep - GetTickCount64;
+              until tosleep < 300;
             end;
-            SleepHiRes(tosleep);
+            if tosleep > 10 then
+              SleepHiRes(tosleep);
           end;
         end;
       end;
