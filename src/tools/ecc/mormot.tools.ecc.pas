@@ -25,6 +25,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.variants,
+  mormot.core.search, // EccCommandChainCertificates files search
   mormot.core.rtti,
   mormot.core.json,
   mormot.crypt.secure,
