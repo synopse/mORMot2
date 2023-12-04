@@ -3607,13 +3607,16 @@ end;
 
 procedure THttpAsyncConnections.IdleEverySecond;
 begin
+  {ConsoleWrite('conn=% pending=% awake=%', [
+    fConnectionCount, fClients.fRead.fPending.Count, fThreadPollingAwakeCount]);}
   // GC of connection memory
   inherited IdleEverySecond;
   // high-level THttpAsyncServer process
   if fAsyncServer <> nil then
     fAsyncServer.IdleEverySecond;
   // reset the hsoBan40xIP items of the oldest list
-  if fBanned <> nil then
+  if (fBanned <> nil) and
+     (fBanned.Count <> 0) then
     fBanned.IdleEverySecond;
 end;
 
@@ -3629,8 +3632,8 @@ end;
 
 { THttpAsyncServer }
 
-constructor THttpAsyncServer.Create(const aPort: RawUtf8; const OnStart,
-  OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
+constructor THttpAsyncServer.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer;
   ProcessOptions: THttpServerOptions);
 var

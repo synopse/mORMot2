@@ -949,6 +949,8 @@ function TPublicRelay.OnServerBeforeBody(
 var
   res: TJwtResult;
 begin
+  // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code to reject the request immediately, and close the connection
   if IdemPChar(pointer(aUrl), '/STAT') then
   begin
     result := HTTP_SUCCESS;
