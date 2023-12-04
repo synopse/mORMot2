@@ -156,6 +156,23 @@ const
 
 
 type
+  THttpClientSocket = class;
+
+  PHttpClientSocketWGet = ^THttpClientSocketWGet;
+
+  /// method called by THttpClientSocket.WGet() for alternate download
+  // - implementing e.g. a local peer-to-peer download cache
+  // - as set to THttpClientSocketWGet.OnDownload optional parameter
+  // - should behave the same (including RangeStart/RangeEnd support) as
+  // ! Sender.Request(Url, 'GET', Params^.KeepAlive, Params^.Header, '', '',
+  // !      {retry=}false, {instream=}nil, OutStream)
+  // - OutStream.LimitPerSecond may be overriden during the call, e.g. if
+  // operating on a local network
+  // - could return 0 to fallback to a regular GET (e.g. not cached)
+  TOnWGetDownload = function(Sender: THttpClientSocket;
+    Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
+    OutStream: TStreamRedirect): integer of object;
+
   /// parameters set for THttpClientSocket.WGet() process
   // - some parameters are optional, and you should call Clear by default
   // - you could call redirectly the WGet method after having called Clear
@@ -174,6 +191,12 @@ type
     OnProgress: TOnStreamProgress;
     /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough
     OnStreamCreate: TOnStreamCreate;
+    /// optional callback to allow an alternate download method
+    // - if defined, it will make a HEAD on the server, then will make a direct
+    // GET if the size is below OnDownloadTriggerSize, or will call OnDownload()
+    // to retrieve the content for big files
+    // - can be used for a local peer-to-peer download cache
+    OnDownload: TOnWGetDownload;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
     // confusion in case of process shutdown - you can use this parameter to
@@ -203,6 +226,9 @@ type
     // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout for
     // each packet, whereas this property is about the global time elapsed
     TimeOutSec: integer;
+    /// optional Size in bytes after which OnDownload() is called back
+    // - if not set (i.e. has its default 0 value), then 1 shl 20 (1MB) is used
+    OnDownloadTriggerSize: integer;
     /// initialize the default parameters
     procedure Clear;
     /// after Clear, instantiate and wrap THttpClientSocket.WGet
@@ -222,8 +248,6 @@ type
     OutStreamInitialPos: Int64;
     retry: set of (rMain, rAuth, rAuthProxy);
   end;
-
-  THttpClientSocket = class;
 
   /// callback used by THttpClientSocket.Request on HTTP_UNAUTHORIZED (401)
   // or HTTP_PROXYAUTHREQUIRED (407) errors
@@ -1828,46 +1852,60 @@ var
   resumed: boolean;
   ExpectedSize: Int64;
 
+  function GetExpectedSizeAndRedirection: boolean;
+  begin
+    res := Head(requrl, params.KeepAlive, params.Header);
+    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
+        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
+    ExpectedSize := Http.ContentLength;
+    result := ExpectedSize > 0;
+    if result and
+       (fRedirected <> '') and
+       (fRedirected <> requrl) then
+      requrl := fRedirected; // don't perform 302 twice
+  end;
+
   procedure DoRequestAndFreePartStream;
   var
     modif: TDateTime;
     lastmod: RawUtf8;
   begin
+    // prepare TStreamRedirect context
     partstream.Context := urlfile;
     partstream.OnProgress := params.OnProgress;
     partstream.OnLog := OnLog;
     partstream.TimeOut := params.TimeOutSec * 1000;
     partstream.LimitPerSecond := params.LimitBandwith;
-    res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
-      {retry=}false, {instream=}nil, partstream);
+    // perform the actual request
+    res := 0;
+    if Assigned(params.OnDownload) and
+       ((ExpectedSize <> 0) or
+        GetExpectedSizeAndRedirection) and
+       (ExpectedSize >= params.OnDownloadTriggerSize) then
+      // alternate download (e.g. local peer-to-peer cache)
+      res := params.OnDownload(self, @params, requrl, ExpectedSize, partstream);
+    if res = 0 then
+      // regular direct GET, if not done via OnDownload()
+      res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
+        {retry=}false, {instream=}nil, partstream);
+    // verify (partial) response
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
     begin
       if (res = HTTP_NOTACCEPTABLE) or
-         (res =  HTTP_RANGENOTSATISFIABLE) then
+         (res = HTTP_RANGENOTSATISFIABLE) or
+         (res = HTTP_NOCONTENT) then
         DeleteFile(part); // force delete (maybe) incorrect partial file
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     end;
+    // finalize the successful request
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
     FreeAndNil(partstream);
     lastmod := Http.HeaderGetValue('LAST-MODIFIED');
     if HttpDateToDateTime(lastmod, modif, {local=}true) then
       FileSetDate(part, DateTimeToFileDate(modif));
-  end;
-
-  function GetExpectedTargetSize(out Size: Int64): boolean;
-  begin
-    res := Head(requrl, params.KeepAlive, params.Header);
-    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
-        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
-    Size := Http.ContentLength;
-    result := Size > 0;
-    if result and
-       (fRedirected <> '') and
-       (fRedirected <> requrl) then
-      requrl := fRedirected; // don't perform 302 twice
   end;
 
   procedure NewPartStream(Mode: cardinal);
@@ -1882,6 +1920,7 @@ var
   end;
 
 begin
+  // prepare input parameters and result file name
   result := destfile;
   requrl := url;
   urlfile := SplitRight(url, '/');
@@ -1889,6 +1928,10 @@ begin
     urlfile := 'index';
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
+  ExpectedSize := 0;
+  if params.OnDownloadTriggerSize <= 0 then
+    params.OnDownloadTriggerSize := 1 shl 20; // default OnDownload() if >= 1MB
+  // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
      Assigned(params.Hasher) and
@@ -1906,6 +1949,7 @@ begin
           OnLog(sllTrace, 'WGet: hash from % = %', [parthash, params.Hash], self);
       end;
     end;
+  // try to get from local HashCacheDir
   if (params.HashCacheDir <> '') and
      DirectoryExists(params.HashCacheDir) then
     cached := IncludeTrailingPathDelimiter(params.HashCacheDir) +
@@ -1951,7 +1995,7 @@ begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
     // try to get expected target size with a HEAD request
-    if GetExpectedTargetSize(ExpectedSize) and
+    if GetExpectedSizeAndRedirection and
        (Size < ExpectedSize) then
     begin // seems good enough
       NewPartStream(fmOpenReadWrite);
@@ -1961,7 +2005,7 @@ begin
     else
     begin
       resumed := false;
-      DeleteFile(part); // this .part is too big, so should be avoided
+      DeleteFile(part); // this .part is too big, so should be rejected
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: got Size=% Expected=% -> reset %',
           [url, Size, ExpectedSize, part], self);
@@ -1975,6 +2019,7 @@ begin
       OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
     NewPartStream(fmCreate);
   end;
+  // actual file retrieval
   try
     DoRequestAndFreePartStream;
     if (params.Hash <> '') and
@@ -1998,18 +2043,20 @@ begin
           [self, fServer, fPort, url, parthash, params.Hash]);
       end;
     end;
+    // update local HashCacheDir
     if cached <> '' then
     begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached]);
       CopyFile(part, cached, {failsexist=}false);
     end;
+    // valid .part file can now be converted into the result file
     if not RenameFile(part, result) then
       raise EHttpSocket.CreateUtf8(
         '%.WGet: impossible to rename % as %', [self, part, result]);
     part := '';
   finally
-    partstream.Free;  // close file on unexpected error
+    partstream.Free;  // ensure close file on unexpected error (if not already)
     if (part <> '') and
        not params.Resume then
       DeleteFile(part); // force next attempt from scratch if resume is not set
