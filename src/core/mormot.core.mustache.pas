@@ -25,7 +25,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.search,
+  mormot.core.search, // for TSynMustache.Match helper
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,

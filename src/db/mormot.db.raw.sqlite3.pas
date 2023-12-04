@@ -31,7 +31,7 @@ uses
   mormot.core.perf,
   mormot.core.buffers,
   mormot.core.variants,
-  mormot.core.search,
+  mormot.core.search, // for soundex functions
   mormot.core.log,
   mormot.db.core,
   mormot.lib.static;

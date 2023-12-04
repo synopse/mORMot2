@@ -41,7 +41,7 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.core.perf,
-  mormot.core.search,
+  mormot.core.search, // for TRestStorageShardDB FindFiles()
   mormot.crypt.secure,
   mormot.core.log,
   mormot.orm.base,

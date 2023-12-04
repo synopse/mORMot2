@@ -27,7 +27,6 @@ uses
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.search,
   mormot.crypt.secure,
   mormot.crypt.ecc,
   mormot.crypt.ecc256r1,

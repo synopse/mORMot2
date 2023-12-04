@@ -55,7 +55,7 @@ uses
   {$ifdef ORMGENERICS}
   mormot.core.collections,
   {$endif ORMGENERICS}
-  mormot.core.search,
+  mormot.core.search,  // for TSynFilterOrValidate
   mormot.crypt.secure, // for TSynUniqueIdentifierGenerator
   mormot.db.core,
   mormot.orm.base;

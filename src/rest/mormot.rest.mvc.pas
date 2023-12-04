@@ -38,7 +38,7 @@ uses
   mormot.core.rtti,
   mormot.crypt.core,
   mormot.core.json,
-  mormot.core.search,
+  mormot.core.search, // for FindTemplates()
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,

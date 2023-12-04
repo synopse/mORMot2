@@ -2749,7 +2749,7 @@ begin
 end;
 
 const
-  /// decoded into FavIconBinary function result
+  // RLE-encoded /favicon.ico, as decoded into FavIconBinary function result
   // - using Base64 encoding is the easiest with Delphi and RawByteString :)
   _FAVICON_BINARY: RawUtf8 =
     'aQOi9AjOyJ+H/gMAAAEAAQAYGBAAAQAEAOgBAAAWAAAAKAAAABgAAAAwAAAAAQAEWhEAEFoH' +
