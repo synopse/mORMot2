@@ -2603,7 +2603,7 @@ type
   // - rsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - rsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - rsoBan40xIP will reject any IP for a few seconds after a 4xx error code
-  // is returned (but 401/403) - only implemented by THttpAsyncServer for now
+  // is returned (but 401/403) - only implemented by socket servers for now
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoOnlyValidUtf8,

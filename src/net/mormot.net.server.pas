@@ -355,7 +355,7 @@ type
   // - hsoEnableTls enables TLS support for THttpServer socket server, using
   // Windows SChannel API or OpenSSL - call WaitStarted() to set the certificates
   // - hsoBan40xIP will reject any IP for a few seconds after a 4xx error code
-  // is returned (but 401/403) - only implemented by THttpAsyncServer for now
+  // is returned (but 401/403) - only implemented by socket servers for now
   // - either hsoThreadCpuAffinity or hsoThreadSocketAffinity could be set: to
   // force thread affinity to one CPU logic core, or CPU HW socket; see
   // TNotifiedThread corresponding methods - not available on http.sys
@@ -1089,6 +1089,7 @@ type
     fExecuteState: THttpServerExecuteState;
     fMonoThread: boolean;
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
+    fBanned: THttpAcceptBan; // for hsoBan40xIP
     fOnAcceptIdle: TNotifyEvent;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
@@ -1135,6 +1136,13 @@ type
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
       read fThreadPool;
+  published
+    /// set if hsoBan40xIP has been defined
+    // - indicates e.g. how many accept() have been rejected from their IP
+    // - you can customize its behavior once the server is started by resetting
+    // its Seconds/Max/WhiteIP properties, before any connections are made
+    property Banned: THttpAcceptBan
+      read fBanned;
   end;
 
 
@@ -3149,6 +3157,8 @@ begin
   fServerSendBufferSize := 256 shl 10; // 256KB of buffers seems good enough
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
+  if hsoBan40xIP in ProcessOptions then
+    fBanned := THttpAcceptBan.Create;
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
@@ -3209,6 +3219,7 @@ begin
   finally
     FreeAndNilSafe(fThreadPool); // release all associated threads
     FreeAndNilSafe(fSock);
+    FreeAndNil(fBanned);
     inherited Destroy;       // direct Thread abort, no wait till ended
   end;
 end;
@@ -3234,6 +3245,7 @@ var
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
+  banlen: integer;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -3265,8 +3277,20 @@ begin
       end;
       if res = nrRetry then // accept() timeout after 1000 ms
       begin
+        if Assigned(fBanned) and
+           (fBanned.Count <> 0) then
+          fBanned.IdleEverySecond; // update internal THttpAcceptBan lists
         if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self); // called every second
+          fOnAcceptIdle(self);     // called every second
+        continue;
+      end;
+      if (fBanned <> nil) and
+         (fBanned.Count <> 0) and
+         fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
+      begin
+        banlen := ord(HTTP_BANIP_RESPONSE[0]);
+        cltsock.Send(@HTTP_BANIP_RESPONSE[1], banlen); // 418 I'm a teapot
+        cltsock.ShutdownAndClose({rdwr=}false);
         continue;
       end;
       OnConnect;
@@ -3288,6 +3312,9 @@ begin
                   include(cltservsock.Http.HeaderFlags, hfConnectionClose);
                   Process(cltservsock, 0, self);
                 end;
+            else
+              if fBanned.BanIP(cltaddr.IP4) then
+                IncStat(grBanned);
             end;
             OnDisconnect;
           finally
@@ -3360,6 +3387,8 @@ begin
   finally
     req.Free;
   end;
+  if fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
+    IncStat(grBanned);
   // send back the response
   if Terminated then
     exit;
@@ -3467,7 +3496,9 @@ begin
       begin
         if Assigned(fServer.Sock.OnLog) then
           fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
-              [ToText(aHeaderResult)^, RemoteIP], self);
+              [ToText(aHeaderResult)^, fRemoteIP], self);
+        if fServer.fBanned.BanIP(fRemoteIP) then
+          fServer.IncStat(grBanned);
         break;
       end;
     end;
@@ -3785,6 +3816,8 @@ procedure THttpServerResp.Execute;
                       fServer.Sock.OnLog(sllTrace,
                         'Execute: close after GetRequest=% from %',
                         [ToText(res)^, fServerSock.RemoteIP], self);
+                    if fServer.fBanned.BanIP(fServerSock.RemoteIP) then
+                      fServer.IncStat(grBanned);
                     exit;
                   end;
                 end;
