@@ -1193,6 +1193,185 @@ function GetMacAddress(out Mac: TMacAddress;
 function GetMacAddress(out Mac: TMacAddress;
   const InterfaceName: RawUtf8): boolean; overload;
 
+type
+  /// define how THttpPeerCache handles its process
+  THttpPeerCacheSettings = class(TSynPersistent)
+  protected
+    fPort: TNetPort;
+    fInterfaceFilter: TMacAddressFilter;
+    fLimitMBPerSec: integer;
+    fInterfaceName: RawUtf8;
+  public
+    /// set the default settings
+    // - i.e. Port=8089 and LimitMBPerSec=10
+    constructor Create; override;
+  published
+    /// the local port used for UDP and TCP process
+    // - value should match on all peers for proper discovery
+    // - UDP for discovery, TCP for HTTP content delivery
+    // - is 8089 by default, which is unassigned by IANA
+    property Port: TNetPort
+      read fPort write fPort;
+    /// the local TMacAddress.Name used for UDP and TCP process
+    // - if not set, will fallback to the best local makEthernet/makWifi network
+    // with a GetMacAddress() call
+    // - current TMacAddress.IP will be used with the Port property value to
+    // bind the TCP/HTTP server and broadcast the UDP discovery packets
+    property InterfaceName: RawUtf8
+      read fInterfaceName write fInterfaceName;
+    /// how GetMacAddress() should find the network, if InterfaceName is not set
+    property InterfaceFilter: TMacAddressFilter
+      read fInterfaceFilter write fInterfaceFilter;
+    /// can limit the peer bandwidth used, in data Mega Bytes per second
+    // - will be assigned to each TStreamRedirect.LimitPerSecond instance
+    // - is 10 MB/s of data by default, i.e. aroung 100-125 MBit/s on network
+    // - you may set 0 to disable any bandwidth limitation
+    // - you may set -1 to use the default TStreamRedirect.LimitPerSecond value
+    property LimitMBPerSec: integer
+      read fLimitMBPerSec write fLimitMBPerSec;
+  end;
+
+  /// exception class raised on THttpPeerCache issues
+  EHttpPeerCache = class(ESynException);
+
+  /// the content of a binary THttpPeerCacheMessage
+  // - would eventually be used in the future for frame versioning
+  THttpPeerCacheMessageKind = (
+    pcfPing,
+    pcfPong,
+    pcfRequest,
+    pcfReponseNone,
+    pcfResponseFull,
+    pcfResponsePartial,
+    pcfBearer);
+
+  /// one UDP request frame used during THttpPeerCache discovery
+  // - requests and response have the same binary layout
+  // - some fields may be void or irrelevant, and the structure is padded
+  // with random up to 160 bytes
+  THttpPeerCacheMessage = packed record
+    /// the content of this binary frame
+    Kind: THttpPeerCacheMessageKind;
+    /// 32-bit sequence number
+    Seq: cardinal;
+    /// the UUID of the Sender
+    Uuid: TGuid;
+    /// the local IPv4 which sent this frame
+    IP4: cardinal;
+    /// the local port which sent this frame
+    Port: word;
+    /// the IPv4 network mask of the local network interface
+    NetMaskIP4: cardinal;
+    /// the IPv4 broadcast address the local network interface
+    BroadcastIP4: cardinal;
+    /// the link speed in bits per second of the local network interface
+    Speed: cardinal;
+    /// the hardware model of this network interface
+    Hardware: TMacAddressKind;
+    /// the local UnixTimeMinimalUtc value
+    Timestamp: cardinal;
+    /// the algorithm used for Hash
+    Hasher: THashAlgo;
+    /// the Hash (via Hasher algo) of the requested file content
+    Hash: THash256;
+    /// the Range offset of the requested file content
+    RangeStart: QWord;
+    /// the Range ending position to retrieve (included)
+    RangeEnd: QWord;
+    /// some random padding up to 160 bytes, used for future content version
+    // - e.g. for a TEccPublicKey (ECDHE) and additional fields
+    Padding: array[0 .. 66] of byte;
+  end;
+
+  /// implement a local peer-to-peer download cache via UDP and TCP
+  // - UDP broadcasting is used for local peers discovery
+  // - TCP is bound to a local THttpServer content delivery
+  // - the main method is THttpPeerCache.OnDownload, to be used from WGet
+  THttpPeerCache = class(TSynPersistent)
+  protected
+    fSafe: TOSLightLock;
+    fSettings: THttpPeerCacheSettings;
+    fHttpServer: THttpServerGeneric;
+    fSettingsOwned: boolean;
+    fMac: TMacAddress;
+    fSharedMagic, fFrameSeqLow, fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
+    fFrameSeq: integer;
+    fSharedSecret: TAesAbstract;
+    fUuid: TGuid;
+    procedure SelectNetworkInterface; virtual;
+    procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
+      aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
+    function OnBeforeBody(var aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+      aFlags: THttpServerRequestFlags): cardinal;
+    // all frames should start with a 32-bit aSharedMagic as supplied to
+    // THttpPeeerCache, followed by AES-GCM encrypted and signed data
+    procedure FrameInit(aKind: THttpPeerCacheMessageKind;
+      out aMsg: THttpPeerCacheMessage);
+    function FrameEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+    function FrameDecode(const aFrame: RawByteString;
+      out aMsg: THttpPeerCacheMessage): boolean;
+  public
+    /// initialize this peer-to-peer cache instance
+    // - any supplied aSettings should be owned by the caller (e.g from a main
+    // settings class instance)
+    // - aSharedMagic is expected to appear at the beginning of each UDP frame
+    // - aSharedSecret will be owned and used to cipher and authenticate each
+    // UDP frame, and comes typically from TAesFast[mGCM].Create()
+    // - if aSettings = nil, default values will be used by this instance
+    // - you can supply THttpAsyncServer class to replace default THttpServer
+    // - may raise some exceptions if the HTTP server cannot be started
+    constructor Create(aSettings: THttpPeerCacheSettings;
+      aSharedMagic: cardinal; aSharedSecret: TAesAbstract;
+      aHttpServerClass: THttpServerSocketGenericClass = nil;
+      aHttpServerThreadCount: integer = 2); reintroduce;
+    /// finalize this peer-to-peer cache instance
+    destructor Destroy; override;
+    /// main processing method, to be assigned to THttpClientSocketWGet.OnDownload
+    // - will transfer Sender.Server/Port/RangeStart/RangeEnd into OutStream
+    // - OutStream.LimitPerSecond will be overriden during the call
+    // - could return 0 to fallback to a regular GET (e.g. not cached)
+    function OnDowload(Sender: THttpClientSocket;
+      Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
+      OutStream: TStreamRedirect): integer;
+    /// the network interface used for UDP and TCP process
+    property Mac: TMacAddress
+      read fMac;
+    /// the UUID used to identify this node
+    // - is filled by GetComputerUuid() from SMBios by default
+    // - could be customized if necessary
+    property Uuid: TGuid
+      read fUuid write fUuid;
+  published
+    /// define how this instance handles its process
+    property Settings: THttpPeerCacheSettings
+      read fSettings;
+    /// which network interface is used for UDP and TCP process
+    property NetworkInterface: RawUtf8
+      read fMac.Name;
+    /// the IP used for UDP and TCP process broadcast
+    property NetworkBroadcast: RawUtf8
+      read fMac.Broadcast;
+    /// the associated HTTP server delivering cached context
+    property HttpServer: THttpServerGeneric
+      read fHttpServer;
+  end;
+
+  /// one THttpPeerCache.OnDownload instance
+  THttpPeerCacheProcess = class(TSynPersistent)
+  protected
+    fOwner: THttpPeerCache;
+  public
+  published
+    property Owner: THttpPeerCache
+      read fOwner;
+  end;
+
+const
+  PCF_RESPONSE = [
+    pcfReponseNone,
+    pcfResponseFull,
+    pcfResponsePartial];
 
 {$ifdef USEWININET}
 
@@ -4075,6 +4254,189 @@ begin
 end;
 
 
+{ THttpPeerCacheSettings }
+
+constructor THttpPeerCacheSettings.Create;
+begin
+  inherited Create;
+  fPort := 8089;
+  fLimitMBPerSec := 10;
+end;
+
+
+{ THttpPeerCache }
+
+constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
+  aSharedMagic: cardinal; aSharedSecret: TAesAbstract;
+  aHttpServerClass: THttpServerSocketGenericClass;
+  aHttpServerThreadCount: integer);
+var
+  log: ISynLog;
+  ip: RawUtf8;
+begin
+  log := TSynLog.Enter(self, 'Create');
+  fSafe.Init;
+  if aSharedSecret = nil then
+    raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
+  inherited Create;
+  if aSettings = nil then
+  begin
+    fSettings := THttpPeerCacheSettings.Create;
+    fSettingsOwned := true;
+  end
+  else
+    fSettings := aSettings;
+  SelectNetworkInterface;
+  FormatUtf8('%:%', [fMac.IP, fSettings.Port], ip);
+  if Assigned(log) then
+    log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
+      [fMac.Name, ip, fMac.Broadcast]);
+  IPToCardinal(fMac.IP, fIP4);
+  IPToCardinal(fMac.NetMask, fNetMaskIP4);
+  IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+  StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
+  fHttpServer.ServerName := FormatUtf8('%PeerCache', [Executable.ProgramName]);
+  fHttpServer.OnBeforeBody := OnBeforeBody;
+  if Assigned(log) then
+    log.Log(sllDebug, 'Create: started %', [fHttpServer]);
+  fSharedMagic := aSharedMagic;
+  fSharedSecret := aSharedSecret;
+  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
+  fFrameSeq := fFrameSeqLow;
+  GetComputerUuid(fUuid);
+end;
+
+procedure THttpPeerCache.SelectNetworkInterface;
+begin
+  if fSettings.InterfaceName <> '' then
+    if not GetMacAddress(fMac, fSettings.InterfaceName) then
+      raise EHttpPeerCache.CreateUtf8(
+        '%.Create: impossible to find the [%] network interface',
+        [self, fSettings.InterfaceName]);
+  if not GetMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
+    raise EHttpPeerCache.CreateUtf8(
+      '%.Create: impossible to find a local network interface', [self]);
+end;
+
+procedure THttpPeerCache.StartHttpServer(
+  aHttpServerClass: THttpServerSocketGenericClass;
+  aHttpServerThreadCount: integer; const aIP: RawUtf8);
+begin
+  if aHttpServerClass = nil then
+    aHttpServerClass := THttpServer; // may be THttpAsyncServer
+  fHttpServer := aHttpServerClass.Create(
+    aIP, nil, TSynLog.Family.OnThreadEnded, 'peercache',
+    aHttpServerThreadCount, 30000, [hsoBan40xIP, hsoNoXPoweredHeader]);
+end;
+
+destructor THttpPeerCache.Destroy;
+begin
+  inherited Destroy;
+  if fSettingsOwned then
+    fSettings.Free;
+  fSettings := nil; // paranoid for async OnDownload call
+  FreeAndNil(fHttpServer);
+  FreeAndNil(fSharedSecret);
+  fSharedMagic := 0;
+  fSafe.Done;
+end;
+
+function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
+  aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+  aFlags: THttpServerRequestFlags): cardinal;
+var
+  tok: RawByteString;
+  msg: THttpPeerCacheMessage;
+  ip4: cardinal;
+begin
+  // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code to reject the request immediately, and close the connection
+  result := HTTP_FORBIDDEN;
+  if (aBearerToken = '') or
+     not IsGet(aMethod) or
+     not Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) or
+     not FrameDecode(tok, msg) or
+     (msg.Kind <> pcfBearer) or
+     not IPToCardinal(aRemoteIP, ip4) or
+     (msg.IP4 <> ip4) then
+    exit;
+
+  result := HTTP_SUCCESS;
+end;
+
+procedure THttpPeerCache.FrameInit(aKind: THttpPeerCacheMessageKind;
+  out aMsg: THttpPeerCacheMessage);
+begin
+  FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
+  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
+  if aKind = pcfRequest then
+    aMsg.Seq := InterlockedIncrement(fFrameSeq);
+  aMsg.Kind := aKind;
+  aMsg.Uuid := fUuid;
+  aMsg.IP4 := fIP4;
+  aMsg.NetMaskIP4 := fNetMaskIP4;
+  aMsg.BroadcastIP4 := fBroadcastIP4;
+  aMsg.Speed := fMac.Speed;
+  aMsg.Hardware := fMac.Kind;
+  aMsg.Timestamp := UnixTimeMinimalUtc;
+end;
+
+function THttpPeerCache.FrameEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+var
+  tmp: RawByteString;
+begin
+  FastSetRawByteString(tmp, @aMsg, SizeOf(aMsg));
+  result := NetConcat(['xxxx',
+              fSharedSecret.MacAndCrypt(tmp, {encrypt=}true, {ivatbeg=}true)]);
+  PCardinal(result)^ := fSharedMagic;
+end;
+
+function THttpPeerCache.FrameDecode(const aFrame: RawByteString;
+  out aMsg: THttpPeerCacheMessage): boolean;
+var
+  tmp: RawByteString;
+begin
+  result := false;
+  if (length(aFrame) < SizeOf(aMsg) + SizeOf(THash128) * 2 + SizeOf(cardinal)) or
+     (PCardinal(aFrame)^ <> fSharedMagic) then
+    exit;
+  tmp := fSharedSecret.MacAndCrypt(
+           copy(aFrame, 5, 1000), {encrypt=}false, {ivatbeg=}true);
+  if length(tmp) <> SizeOf(aMsg) then
+    exit;
+  MoveFast(pointer(tmp)^, aMsg, SizeOf(aMsg));
+  if aMsg.Kind in PCF_RESPONSE then
+    if (aMsg.Seq < fFrameSeqLow) or
+       (aMsg.Seq > cardinal(fFrameSeq)) then
+      exit;
+  result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
+            (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
+            (ord(aMsg.Hasher) <= ord(high(aMsg.Hasher))) and
+            (aMsg.RangeEnd >= aMsg.RangeStart);
+end;
+
+function THttpPeerCache.OnDowload(Sender: THttpClientSocket;
+  Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
+  OutStream: TStreamRedirect): integer;
+begin
+  result := 0;
+  if (self = nil) or
+     (fSettings = nil) or
+     (fHttpServer = nil) or
+     (Sender = nil) or
+     (Params = nil) or
+     (Url = '') or
+     (OutStream = nil) then
+    exit;
+  if fSettings.LimitMBPerSec >= 0 then
+    if fSettings.LimitMBPerSec = 0 then
+      OutStream.LimitPerSecond := 0 // no bandwidth limitation
+    else
+      OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+
+end;
+
+
 {$ifdef USEWININET}
 
 { **************** THttpApiServer HTTP/1.1 Server Over Windows http.sys Module }
@@ -6066,6 +6428,10 @@ end;
 
 {$endif USEWININET}
 
+
+begin
+  //writeln(SizeOf(THttpPeerCacheMessage));
+  assert(SizeOf(THttpPeerCacheMessage) = 160);
 
 end.
 
