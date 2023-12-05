@@ -1234,8 +1234,8 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 /// fast conversion from Base64-URI encoded text into binary data
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt;
-  var result: RawByteString); overload;
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt;
+  var bin: RawByteString): boolean; overload;
 
 /// fast conversion from Base64-URI encoded text into binary data
 // - caller should always execute temp.Done when finished with the data
@@ -6661,35 +6661,29 @@ function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): b
 var
   resultLen: PtrInt;
 begin
+  result := false;
   resultLen := Base64LengthAdjust(sp, len);
   if resultLen <> 0 then
   begin
     FastSetRawByteString(data, nil, resultLen);
     result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
-    if not result then
-      data := '';
-  end
-  else
-  begin
-    result := false;
-    data := '';
   end;
+  if not result then
+    data := '';
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; out data: TBytes): boolean;
 var
   resultLen: PtrInt;
 begin
+  result := false;
   resultLen := Base64LengthAdjust(sp, len);
-  if resultLen <> 0 then
-  begin
-    SetLength(data, resultLen);
-    result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
-    if not result then
-      data := nil;
-  end
-  else
-    result := false;
+  if resultLen = 0 then
+    exit;
+  SetLength(data, resultLen);
+  result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
+  if not result then
+    data := nil;
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
@@ -6839,18 +6833,19 @@ begin
   Base64uriToBin(pointer(s), length(s), result{%H-});
 end;
 
-procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var bin: RawByteString): boolean;
 var
   resultLen: PtrInt;
 begin
+  result := false;
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
   begin
-    FastSetRawByteString(result, nil, resultLen);
-    if Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(result), len) then
-      exit;
+    FastSetRawByteString(bin, nil, resultLen);
+    result := Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(bin), len);
   end;
-  result := '';
+  if not result then
+    bin := '';
 end;
 
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): boolean;
