@@ -511,6 +511,8 @@ type
     makWifi,
     makTunnel,
     makPpp);
+  /// a set of network interface types
+  TMacAddressKinds = set of TMacAddressKind;
 
   /// interface name/address pairs as returned by GetMacAddresses
   // - associated IPv4 information is available on most systems
@@ -543,24 +545,25 @@ type
     // - not available on POSIX (DNS are part of the routing, not interfaces)
     Dns: RawUtf8;
     /// the optional DNS suffix of this connection, e.g. 'ad.mycorp.com'
-    // - not available on POSIX
+    // - not available on POSIX (DNS are part of the routing, not interfaces)
     DnsSuffix: RawUtf8;
-    {$endif OSWINDOWS}
     /// the raw IPv4 binary address of the main associated DHCP server
     // - not available on Windows XP or POSIX
     Dhcp: RawUtf8;
+    {$endif OSWINDOWS}
     /// the current adapter Maximum Transmission Unit size (MTU), in bytes
     // - typically 1500 over an Ethernet network
     // - not available on BSD
     Mtu: cardinal;
     /// the current link speed in bits per second (typically 100 or 1000)
     // - not available on Windows XP or BSD
+    // - some interfaces (e.g. makWifi on Linux) may set 0
     Speed: cardinal;
     /// the interface index, as internally used by the OS
     IfIndex: cardinal;
     /// the hardware model of this network interface
     // - retrieved from ARP protocol hardware identifiers on Linux, and
-    // IfType field on Windows (accurate since Vista)
+    // IfType field on Windows (seems accurate since Vista)
     // - not available on BSD
     Kind: TMacAddressKind;
   end;
