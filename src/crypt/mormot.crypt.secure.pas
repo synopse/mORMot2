@@ -675,59 +675,59 @@ type
   TStreamRedirectSynHasher = class(TStreamRedirect)
   protected
     fHash: TSynHasher;
-    class function GetAlgo: THashAlgo; virtual; abstract;
     procedure DoHash(data: pointer; len: integer); override;
   public
     constructor Create(aDestination: TStream; aRead: boolean = false); override;
     function GetHash: RawUtf8; override;
+    class function GetAlgo: THashAlgo; virtual; abstract;
     class function GetHashFileExt: RawUtf8; override;
   end;
 
   /// TStreamRedirect with MD5 cryptographic hashing
   TStreamRedirectMd5 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-1 cryptographic hashing
   TStreamRedirectSha1 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-256 cryptographic hashing
   TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-384 cryptographic hashing
   TStreamRedirectSha384 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-512 cryptographic hashing
   TStreamRedirectSha512 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-512/256 cryptographic hashing
   TStreamRedirectSha512_256 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-3-256 cryptographic hashing
   TStreamRedirectSha3_256 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
   /// TStreamRedirect with SHA-3-512 cryptographic hashing
   TStreamRedirectSha3_512 = class(TStreamRedirectSynHasher)
-  protected
+  public
     class function GetAlgo: THashAlgo; override;
   end;
 
