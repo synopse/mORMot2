@@ -9,6 +9,7 @@ unit mormot.net.server;
    HTTP Server Classes
    - Custom URI Routing using an efficient Radix Tree
    - Shared Server-Side HTTP Process
+   - THttpPeerCache Local Peer-to-peer Cache
    - THttpServerSocket/THttpServer HTTP/1.1 Server
    - THttpApiServer HTTP/1.1 Server Over Windows http.sys Module
    - THttpApiWebSocketServer Over Windows http.sys Module
@@ -664,6 +665,29 @@ procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
 
 /// used by THttpServerGeneric.SetFavIcon to return a nice /favicon.ico
 function FavIconBinary: RawByteString;
+
+
+{ ******************** THttpPeerCache Local Peer-to-peer Cache }
+
+type
+  /// define how GetMacAddress() makes its sorting choices
+  // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
+  // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
+  // - mafLocalOnly will only select makEthernet or makWifi
+  // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
+  // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
+  TMacAddressFilter = set of (
+    mafEthernetOnly,
+    mafLocalOnly,
+    mafIgnoreGateway,
+    mafIgnoreKind,
+    mafIgnoreSpeed);
+
+/// pickup the most suitable network according to some preferences
+// - will sort GetMacAddresses() results according to its Kind and Speed
+// to select the most suitable local interface e.g. for THttpPeerCache
+function GetMacAddress(out Mac: TMacAddress;
+  Filter: TMacAddressFilter = []): boolean;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -2780,6 +2804,85 @@ begin
   if _FavIconBinary = '' then
     _FavIconBinary := AlgoRle.Decompress(Base64ToBin(_FAVICON_BINARY));
   result := _FavIconBinary;
+end;
+
+
+{ ******************** THttpPeerCache Local Peer-to-peer Cache }
+
+var
+  GetMacAddressSafe: TLightLock; // to protect the filter global variable
+  GetMacAddressFilter: TMacAddressFilter;
+
+const
+  _P: array[TMacAddressKind] of byte = ( // convert Kind to sort priority
+    2,  // makUndefined
+    0,  // makEthernet
+    1,  // makWifi
+    4,  // makTunnel
+    3); // makPpp
+
+function SortByFilter(const A, B): integer;
+var
+  ma: TMacAddress absolute A;
+  mb: TMacAddress absolute B;
+begin
+  // sort by kind
+  if not (mafIgnoreKind in GetMacAddressFilter) then
+  begin
+    result := CompareCardinal(_P[ma.Kind], _P[mb.Kind]);
+    if result <> 0 then
+      exit;
+  end;
+  // sort with gateway first
+  if not (mafIgnoreGateway in GetMacAddressFilter) then
+  begin
+    result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
+    if result <> 0 then
+      exit;
+  end;
+  // sort by speed within this kind and gateway
+  if not (mafIgnoreSpeed in GetMacAddressFilter) then
+  begin
+    result := CompareCardinal(mb.Speed, ma.Speed);
+    if result <> 0 then
+      exit;
+  end;
+  // fallback to sort by IfIndex
+  result := CompareCardinal(ma.IfIndex, mb.IfIndex);
+end;
+
+function GetMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+var
+  allowed: TMacAddressKinds;
+  all: TMacAddressDynArray;
+  arr: TDynArray;
+  i: PtrInt;
+begin
+  result := false;
+  all := copy(GetMacAddresses({upanddown=}false));
+  if all = nil then
+    exit;
+  arr.Init(TypeInfo(TMacAddressDynArray), all);
+  allowed := [];
+  if mafLocalOnly in Filter then
+    allowed := [makEthernet, makWifi]
+  else if mafEthernetOnly in Filter then
+    include(allowed, makEthernet);
+  if allowed <> [] then
+    for i := high(all) downto 0 do
+      if not (all[i].Kind in allowed) then
+        arr.Delete(i);
+  if all = nil then
+    exit;
+  GetMacAddressSafe.Lock;
+  try
+    GetMacAddressFilter := Filter;
+    arr.Sort(SortByFilter);
+  finally
+    GetMacAddressSafe.UnLock;
+  end;
+  Mac := all[0];
+  result := true;
 end;
 
 
