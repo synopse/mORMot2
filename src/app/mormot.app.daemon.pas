@@ -117,11 +117,9 @@ type
     // - default is none '', so the executable name (with full path) will be used
     property ServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
-    property Log: TSynLogInfos
-      read fLog write fLog;
+    property Log;
     /// allow to customize where the logs should be written
-    property LogPath: TFileName
-      read fLogPath write fLogPath;
+    property LogPath;
     /// how many files will be rotated (default is 2)
     property LogRotateFileCount;
   end;
@@ -298,7 +296,7 @@ begin
   if aWorkFolder = '' then
     fWorkFolderName := Executable.ProgramFilePath
   else
-    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, true);
+    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, {raiseexc=}true);
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;

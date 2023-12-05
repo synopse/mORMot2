@@ -311,6 +311,7 @@ type
 
   /// meta-class of TSynAngelizeService
   // - so that base TSynAngelizeService class could be inherited and completed
+  // with custom properties, ready to be retrieved as %...% placeholders
   TSynAngelizeServiceClass = class of TSynAngelizeService;
 
 
@@ -338,8 +339,8 @@ type
     // - default is 200
     property HttpTimeoutMS: integer
       read fHttpTimeoutMS write fHttpTimeoutMS;
-    /// the local file used to communicate the current sub-process files
-    // from running daemon to the state
+    /// the local file used to communicate the current (sub-)process state
+    // from the background running daemon to the command line /list command
     // - default is a TemporaryFileName instance
     property StateFile: TFileName
       read fStateFile write fStateFile;
@@ -396,7 +397,7 @@ type
   TSynAngelize = class(TSynDaemon)
   protected
     fAdditionalParams: TFileName;
-    fSettingsClass: TSynAngelizeServiceClass;
+    fServiceClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
     fHasWatchs: boolean;
     fServiceStarted: boolean;
@@ -423,14 +424,14 @@ type
     procedure StopWatching;
     // sub-service support
     function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
-    function ComputeServicesStateFiles: integer;
+    procedure ComputeServicesStateFiles;
     procedure ComputeServicesHtmlFile;
     function DoExpand(aService: TSynAngelizeService;
       const aInput: TSynAngelizeAction): TSynAngelizeAction; virtual;
-    procedure DoOne(Log: TSynLog; Service: TSynAngelizeService;
-      Ctxt: TAglContext; const Action: TSynAngelizeAction);
     procedure DoExpandLookup(aInstance: TObject;
       var aProp: RawUtf8; const aID: RawUtf8); virtual;
+    procedure DoOne(Log: TSynLog; Service: TSynAngelizeService;
+      Ctxt: TAglContext; const Action: TSynAngelizeAction);
     procedure DoWatch(aLog: TSynLog; aService: TSynAngelizeService;
       const aAction: TSynAngelizeAction); virtual;
     function DoHttpGet(const aUri: RawUtf8): integer;
@@ -439,8 +440,12 @@ type
   public
     /// initialize the main daemon/server redirection instance
     // - main TSynAngelizeSettings is loaded
-    constructor Create(aSettingsClass: TSynAngelizeServiceClass = nil;
-      aLog: TSynLogClass = nil; const aSectionName: RawUtf8 = 'Main'); reintroduce;
+    constructor Create(aServiceClass: TSynAngelizeServiceClass = nil;
+      aLog: TSynLogClass = nil; const aSectionName: RawUtf8 = 'Main';
+      const aWorkFolder: TFileName = ''; const aSettingsFolder: TFileName = '';
+      const aLogFolder: TFileName = ''; const aSettingsExt: TFileName = '.settings';
+      const aSettingsName: TFileName = '';
+      aSettingsOptions: TSynJsonFileSettingsOptions = []); reintroduce;
     /// finalize the stored information
     destructor Destroy; override;
     /// read and parse all *.service definitions from Settings.Folder
@@ -461,6 +466,8 @@ type
     // e.g. %run% is the main executable or service name as defined in "Run": "...."
     function Expand(aService: TSynAngelizeService; const aAction: TSynAngelizeAction;
       aUnQuote: boolean): TSynAngelizeAction;
+    /// compute a TFileName value, replacing %abc% place holders
+    function FileNameExpand(const aName: TFileName): TFileName;
     /// overriden for proper sub-process starting
     procedure Start; override;
     /// overriden for proper sub-process stoping
@@ -958,28 +965,47 @@ begin
   fHttpTimeoutMS := 200;
   fFolder := IncludeTrailingPathDelimiter(Executable.ProgramFilePath + 'services');
   fExt := '.service';
-  fStateFile := TemporaryFileName;
 end;
 
 
 { TSynAngelize }
 
-constructor TSynAngelize.Create(aSettingsClass: TSynAngelizeServiceClass;
-  aLog: TSynLogClass; const aSectionName: RawUtf8);
+constructor TSynAngelize.Create(aServiceClass: TSynAngelizeServiceClass;
+  aLog: TSynLogClass; const aSectionName: RawUtf8;
+  const aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName: TFileName;
+  aSettingsOptions: TSynJsonFileSettingsOptions);
 begin
-  if aSettingsClass = nil then
-    aSettingsClass := TSynAngelizeService;
-  fSettingsClass := aSettingsClass;
-  inherited Create(TSynAngelizeSettings, Executable.ProgramFilePath,
-    Executable.ProgramFilePath,  Executable.ProgramFilePath + 'log');
+  if aServiceClass = nil then
+    aServiceClass := TSynAngelizeService;
+  fServiceClass := aServiceClass;
+  inherited Create(TSynAngelizeSettings,
+    aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName,
+    aSettingsOptions, aSectionName);
   fShowExceptionWaitEnter := false; // allow silent mode
   {$ifdef OSWINDOWS}
   WindowsServiceLog := fSettings.LogClass.DoLog;
   {$endif OSWINDOWS}
   with fSettings as TSynAngelizeSettings do
-    if fHtmlStateFileIdentifier = '' then // some default text
+  begin
+    // allow %agl.xxx% in the initial Folder setting
+    if PosExString('%', fFolder) <> 0 then
+      fFolder := FileNameExpand(fFolder); // is likely to be persisted back
+    // validate state file name used for /list display
+    if fStateFile = '' then
+      // if no StateFile supplied, set something
+      if fsoDisableSaveIfNeeded in fSettingsOptions then
+        // this random file name will be persisted in the settings
+        fStateFile := TemporaryFileName
+      else
+        // if no name can be persisted, use something consistent between calls
+        fStateFile := FormatString('%%-state', [fWorkFolderName, fServiceName])
+    else
+      fStateFile := ExpandFileName(FileNameExpand(fStateFile)); // with %agl.xx%
+    // default title for HTML content
+    if fHtmlStateFileIdentifier = '' then
       FormatUtf8('% Current State',
-        [UpperCaseU(fSettings.ServiceName)], fHtmlStateFileIdentifier);
+        [UpperCaseU(fServiceName)], fHtmlStateFileIdentifier);
+  end;
 end;
 
 destructor TSynAngelize.Destroy;
@@ -1091,7 +1117,7 @@ begin
     repeat
       if SearchRecValidFile(r) then
       begin
-        s := fSettingsClass.Create;
+        s := fServiceClass.Create;
         s.fOwner := self;
         s.SettingsOptions := sas.SettingsOptions; // share ini/json format
         fn := sas.Folder + r.Name;
@@ -1132,9 +1158,11 @@ var
   ident, html: RawUtf8;
   sas: TSynAngelizeSettings;
 begin
+  // ensure we need to generate some HTML
   sas := fSettings as TSynAngelizeSettings;
   ident := sas.HtmlStateFileIdentifier;
-  if ident = '' then
+  if (ident = '') or
+     (sas.StateFile = '') then
     exit;
   // generate human-friendly HTML state file
   ident := HtmlEscape(ident); // avoid injection
@@ -1156,7 +1184,7 @@ begin
   FileFromString(html, sas.StateFile + '.html');
 end;
 
-function TSynAngelize.ComputeServicesStateFiles: integer;
+procedure TSynAngelize.ComputeServicesStateFiles;
 var
   s: TSynAngelizeService;
   state: TSynAngelizeState;
@@ -1164,10 +1192,13 @@ var
   bin: RawByteString;
   i: PtrInt;
 begin
-  result := length(fService);
+  // ensure not disabled
+  sas := fSettings as TSynAngelizeSettings;
+  if sas.StateFile = '' then
+    exit;
   // compute main binary state file
-  SetLength(state.Service, result);
-  for i := 0 to result - 1 do
+  SetLength(state.Service, length(fService));
+  for i := 0 to high(fService) do
   begin
     s := fService[i];
     state.Service[i].Name := s.Name;
@@ -1179,7 +1210,6 @@ begin
   if bin <> fLastGetServicesStateFile then
   begin
     // current state did change: persist on disk
-    sas := fSettings as TSynAngelizeSettings;
     FileFromString(bin, sas.StateFile);
     fLastGetServicesStateFile := bin;
     ComputeServicesHtmlFile;
@@ -1208,6 +1238,7 @@ begin
   result := aInput;
   o := 1;
   repeat
+    // extract next %...% token
     i := PosEx('%', result, o);
     if i = 0 then
       exit;
@@ -1224,11 +1255,13 @@ begin
     id := copy(result, i + 1, j);
     delete(result, i, j + 2);
     o := i;
-    i := GetEnumNameValue(TypeInfo(TSystemPath), id, true);
+    // detect e.g. %CommonData% from known TSystemPath
+    i := GetEnumNameValue(TypeInfo(TSystemPath), id, {trimlowercase=}true);
     if i >= 0 then
       StringToUtf8(GetSystemPath(TSystemPath(i)), v)
     else
     begin
+      // decode %agl.xxx% codes
       v := id;
       if IdemPChar(pointer(id), 'AGL.') then
       begin
@@ -1250,6 +1283,7 @@ begin
       else
         // %toto% for the "toto": property value in the .service settings
         DoExpandLookup(aService, v, id);
+      // recursive process of other %...% values
       if fExpandLevel = 50 then
         raise ESynAngelize.CreateUtf8(
           'Expand: infinite recursion within %%%', ['%', id, '%']);
@@ -1259,6 +1293,7 @@ begin
     end;
     if v = '' then
       continue;
+    // replace %...% with the value found
     insert(v, result, o);
     inc(o, length(v));
     v := '';
@@ -1280,6 +1315,11 @@ begin
     end;
   end;
   raise ESynAngelize.CreateUtf8('Expand: unknown %%%', ['%', aID, '%']);
+end;
+
+function TSynAngelize.FileNameExpand(const aName: TFileName): TFileName;
+begin
+  Utf8ToFileName(DoExpand(nil, StringToUtf8(aName)), result);
 end;
 
 type
@@ -1588,27 +1628,29 @@ var
   bin: RawByteString;
   sas: TSynAngelizeSettings;
 begin
+  // called by Start when the main Service/Daemon is launched
   sas := fSettings as TSynAngelizeSettings;
+  if sas.StateFile = '' then
+    exit; // disabled
   // remove any previous local state file
   bin := StringFromFile(sas.StateFile);
-  if (bin <> '') and
-     (PCardinal(bin)^ <> _STATEMAGIC) then
-  begin
-    // this existing file is clearly invalid: store a new safe one in settings
-    sas.StateFile := TemporaryFileName;
-    // avoid deleting of a non valid file (may be used by malicious tools)
-    raise ESynAngelize.CreateUtf8(
-      'Invalid StateFile=% content', [sas.StateFile]);
-  end;
-  DeleteFile(sas.StateFile); // from now on, StateFile is meant to be valid
+  if bin <> '' then
+    if (PCardinal(bin)^ <> _STATEMAGIC) or // tampered?
+       not DeleteFile(sas.StateFile) then  // write-only?
+      sas.StateFile := ''; // on doubt, disable the whole state persistence
 end;
 
 function TSynAngelize.LoadServicesState(out state: TSynAngelizeState): boolean;
 var
   bin: RawByteString;
+  sas: TSynAngelizeSettings;
 begin
+  // called e.g. from ListServices
   result := false;
-  bin := StringFromFile(TSynAngelizeSettings(fSettings).StateFile);
+  sas := fSettings as TSynAngelizeSettings;
+  if sas.StateFile = '' then
+    exit; // disabled
+  bin := StringFromFile(sas.StateFile);
   if (bin = '') or
      (PCardinal(bin)^ <> _STATEMAGIC) then
     exit;
@@ -1621,6 +1663,7 @@ var
   state: TSynAngelizeState;
   i: PtrInt;
 begin
+  // implement command line /list operation
   WriteCopyright;
   if LoadServicesState(state) and
      ({%H-}state.Service <> nil) then
@@ -1684,7 +1727,7 @@ begin
     end;
   if fService = nil then
     sas.fServiceName := sn; // name the main service from the first added
-  new := fSettingsClass.Create;
+  new := fServiceClass.Create;
   try
     new.SettingsOptions := sas.SettingsOptions; // share ini/json format
     new.FileName := fn;
@@ -1781,7 +1824,6 @@ procedure TSynAngelize.StopServices;
 var
   l, i: PtrInt;
   s: TSynAngelizeService;
-  sf: TFileName;
   sas: TSynAngelizeSettings;
   log: ISynLog;
   one: TSynLog;
@@ -1801,13 +1843,11 @@ begin
         s.DoStop(one);
     end;
   // finalize state files
-  ComputeServicesHtmlFile;
-  sf := sas.StateFile;
-  if sf <> '' then
-  begin
-    one.Log(sllTrace, 'StopServices: Delete %', [sf], self);
-    DeleteFile(sf); // delete binary, but not .html (marked all stopped)
-  end;
+  if sas.StateFile = '' then
+    exit;
+  ComputeServicesHtmlFile;   // .html shows all services stopped in final state
+  one.Log(sllTrace, 'StopServices: Delete %', [sas.StateFile], self);
+  DeleteFile(sas.StateFile); // delete binary, but not .html
 end;
 
 procedure TSynAngelize.StartWatching;
