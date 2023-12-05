@@ -557,7 +557,7 @@ type
     Mtu: cardinal;
     /// the current link speed in bits per second (typically 100 or 1000)
     // - not available on Windows XP or BSD
-    // - some interfaces (e.g. makWifi on Linux) may set 0
+    // - some interfaces (e.g. makWifi on Linux) may have a 0 value
     Speed: cardinal;
     /// the interface index, as internally used by the OS
     IfIndex: cardinal;
