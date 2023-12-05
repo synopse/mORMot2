@@ -2112,6 +2112,7 @@ end;
 initialization
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
+{$IfNDef NOLIBCSTATIC}
   // manual fill of our raw mingw import table
   beginthreadex := @libc_beginthreadex;
   endthreadex := @libc_endthreadex;
@@ -2120,6 +2121,7 @@ initialization
   {$else}
   imp_localtime64 := @localtime64;
   {$endif CPU32}
+{$EndIf}
 {$endif OSWINDOWS}
 {$ifdef OSLINUXX64}
   _pthread_load;
