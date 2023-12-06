@@ -877,7 +877,8 @@ function FileSize(const FileName: TFileName): Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  if GetFileAttributesInternal(FileName, FA) then
+  if (FileName <> '') and
+     GetFileAttributesInternal(FileName, FA) then
   begin
     PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
     PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;

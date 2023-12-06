@@ -1156,7 +1156,8 @@ function FileSize(const FileName: TFileName): Int64;
 var
   st: TStat;
 begin
-  if fpStat(pointer(FileName), st) <> 0 then
+  if (FileName = '') or
+     (fpStat(pointer(FileName), st) <> 0) then
     result := 0
   else
     result := st.st_size;
