@@ -1847,6 +1847,7 @@ var
   size: Int64;
   cached, part: TFileName;
   requrl, parthash, urlfile: RawUtf8;
+  partmodif: TDateTime;
   res: integer;
   partstream: TStreamRedirect;
   resumed: boolean;
@@ -1868,7 +1869,6 @@ var
 
   procedure DoRequestAndFreePartStream;
   var
-    modif: TDateTime;
     lastmod: RawUtf8;
   begin
     // prepare TStreamRedirect context
@@ -1904,8 +1904,10 @@ var
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
     FreeAndNil(partstream);
     lastmod := Http.HeaderGetValue('LAST-MODIFIED');
-    if HttpDateToDateTime(lastmod, modif, {local=}true) then
-      FileSetDate(part, DateTimeToFileDate(modif));
+    if HttpDateToDateTime(lastmod, partmodif, {local=}true) then
+      FileSetDate(part, DateTimeToFileDate(partmodif))
+    else
+      partmodif := 0;
   end;
 
   procedure NewPartStream(Mode: cardinal);
