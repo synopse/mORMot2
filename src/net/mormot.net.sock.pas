@@ -459,8 +459,12 @@ function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
 
 /// convert an IPv4 raw value into a RawUtf8 text
-// - zero '0.0.0.0' address  (i.e. bound to any host) is returned as ''
+// - zero 0.0.0.0 address  (i.e. bound to any host) is returned as ''
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
+
+/// convert an IPv4 raw value into a RawUtf8 text
+function IP4ToText(ip4addr: PByteArray): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an IPv6 raw value into a ShortString text
 // - will shorten the address using the regular 0 removal scheme, e.g.
@@ -510,7 +514,8 @@ type
     makEthernet,
     makWifi,
     makTunnel,
-    makPpp);
+    makPpp,
+    makSoftware);
   /// a set of network interface types
   TMacAddressKinds = set of TMacAddressKind;
 
@@ -528,6 +533,7 @@ type
     FriendlyName: RawUtf8;
     /// the hardware MAC address of this adapter
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
+    // - may equal '00:00:00:00:00:00' for a non-physical interface (makSoftware)
     Address: RawUtf8;
     /// the raw IPv4 address of this interface
     // - not available on Android
@@ -560,7 +566,8 @@ type
     // - some interfaces (e.g. makWifi on Linux) may have a 0 value
     Speed: cardinal;
     /// the interface index, as internally used by the OS
-    IfIndex: cardinal;
+    // - may equal -1 for a non-physical interface (makSoftware)
+    IfIndex: integer;
     /// the hardware model of this network interface
     // - retrieved from ARP protocol hardware identifiers on Linux, and
     // IfType field on Windows (seems accurate since Vista)
@@ -2846,6 +2853,11 @@ begin
   end;
 end;
 
+function IP4ToText(ip4addr: PByteArray): RawUtf8;
+begin
+  IP4Text(ip4addr, result);
+end;
+
 procedure IP6Short(ip6addr: PByteArray; var s: ShortString);
 // this code is faster than any other inet_ntop6() I could find around
 var
@@ -3156,10 +3168,12 @@ begin
       exit;
     for i := 0 to high(addr) do
       with addr[i] do
-      begin
-        w := NetConcat([w, Name, '=', Address, ' ']);
-        wo := NetConcat([wo, Address, ' ']);
-      end;
+        if Address <> '' then
+        begin
+          w := NetConcat([w, Name, '=', Address, ' ']);
+          if Kind <> makSoftware then
+            wo := NetConcat([wo, Address, ' ']);
+        end;
     FakeLength(w, length(w) - 1); // trim ending spaces
     FakeLength(wo, length(wo) - 1);
     Safe.Lock;
@@ -3179,11 +3193,14 @@ begin
   SetLength(result, length(addr));
   n := 0;
   for i := 0 to length(addr) - 1 do
-    if not NetStartWith(pointer(addr[i].Name), 'DOCKER') then
-    begin
-      result[n] := addr[i].Address;
-      inc(n);
-    end;
+    with addr[i] do
+      if (Address <> '') and
+         (Kind <> makSoftware) and
+         not NetStartWith(pointer(Name), 'DOCKER') then
+      begin
+        result[n] := Address;
+        inc(n);
+      end;
   SetLength(result, n);
 end;
 

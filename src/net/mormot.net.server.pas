@@ -4177,7 +4177,8 @@ const
     0,  // makEthernet
     1,  // makWifi
     4,  // makTunnel
-    3); // makPpp
+    3,  // makPpp
+    5); // makSoftware
 
 function SortByFilter(const A, B): integer;
 var

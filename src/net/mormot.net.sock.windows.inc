@@ -1066,7 +1066,7 @@ begin
   begin
     all := GetMacAddresses;
     for i := 0 to high(all) do
-      if all[i].IfIndex = ifIndex then
+      if DWORD(all[i].IfIndex) = ifIndex then
       begin
         Mac := all[i];
         result := true;

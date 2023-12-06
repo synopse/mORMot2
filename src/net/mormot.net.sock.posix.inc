@@ -790,35 +790,40 @@ begin
     n := 0;
     info := list;
     repeat
-      if (info^.ifa_addr <> nil) and
+      mac := '';
+      if (info^.ifa_name <> nil) and
          (info^.ifa_flags and IFF_LOOPBACK = 0) and
          (UpAndDown or
           (info^.ifa_flags and IFF_UP <> 0)) and
+         ((info^.ifa_addr = nil) or
       // see https://stackoverflow.com/a/51218583/458259
       {$ifdef OSBSDDARWIN}
-         (info^.ifa_addr^.sa_family = AF_LINK) then
+          (info^.ifa_addr^.sa_family = AF_LINK)) then
       begin
-        mac := '';
-        with psockaddr_dl(info^.ifa_addr)^ do
-          if sdl_alen = 6 then
-            // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
-            {$ifdef OSDARWIN}
-            if PCardinal(@sdl_data[sdl_nlen])^ <> 2 then
-              // iOS7+ return always 02:00:00:00:00:00 as MAC addresses :(
-            {$endif OSDARWIN}
-              mac := MacToText(@sdl_data[sdl_nlen]);
-        if mac <> '' then
+        if info^.ifa_addr <> nil then
+          with psockaddr_dl(info^.ifa_addr)^ do
+            if sdl_alen = 6 then
+              // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
+              {$ifdef OSDARWIN}
+              if PCardinal(@sdl_data[sdl_nlen])^ <> 2 then
+                // iOS7+ return always 02:00:00:00:00:00 as MAC addresses :(
+              {$endif OSDARWIN}
+                mac := MacToText(@sdl_data[sdl_nlen]);
       {$else}
-         (info^.ifa_addr^.sa_family = AF_PACKET) then
+          (info^.ifa_addr^.sa_family = AF_PACKET)) then
       begin
-        mac := MacToText(@psockaddr_ll(info^.ifa_addr)^.sll_addr);
+        if info^.ifa_addr <> nil then
+          mac := MacToText(@psockaddr_ll(info^.ifa_addr)^.sll_addr);
       {$endif OSBSDDARWIN}
-        for i := 0 to n - 1 do
-          if result[i].Address = mac then
-          begin
-            mac := ''; // avoid any duplicate (paranoid)
-            break;
-          end;
+        if mac = '' then
+          mac := '00:00:00:00:00:00' // for makSoftware (e.g. tunnel)
+        else
+          for i := 0 to n - 1 do
+            if result[i].Address = mac then
+            begin
+              mac := ''; // avoid any duplicate (paranoid)
+              break;
+            end;
         if mac <> '' then
         begin
           if n = length(result) then
@@ -827,40 +832,48 @@ begin
           begin
             Name := info^.ifa_name; // e.g. 'eth0' on Linux
             Address := mac;
-            {$ifdef OSBSDDARWIN}
-            // BSD do name the networks from their manufacturer
-            // -> parse net.wlan.devices ?
-            IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
-            {$else}
-            case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
-              ARPHRD_ETHER:
-                begin
-                  Kind := makEthernet;
-                  if Name <> '' then
-                    // set also for some wifi adapters
-                    if PWord(Name)^ = ord('w') + ord('l') shl 8 then
-                      Kind := makWifi; // detect by convention
-                end;
-              ARPHRD_IEEE80211:
-                Kind := makWifi;
-              ARPHRD_TUNNEL,
-              ARPHRD_TUNNEL6:
-                Kind := makTunnel;
-              ARPHRD_PPP:
-                Kind := makPpp;
-            else
-              // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
-              if Name <> '' then
-                case PWord(Name)^ of
-                  ord('e') + ord('t') shl 8,  // 'ethX'
-                  ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
+            if info^.ifa_addr <> nil then
+            begin
+              {$ifdef OSBSDDARWIN}
+              // BSD do name the networks from their manufacturer
+              // -> parse net.wlan.devices ?
+              IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
+              {$else}
+              case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
+                ARPHRD_ETHER:
+                  begin
                     Kind := makEthernet;
-                  ord('w') + ord('l') shl 8:  // 'wlanX' and systemd v197 'wlX'
-                    Kind := makWifi;
-                end;
-            end;
-            IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
+                    if Name <> '' then
+                      // set also for some wifi adapters
+                      if PWord(Name)^ = ord('w') + ord('l') shl 8 then
+                        Kind := makWifi; // detect by convention
+                  end;
+                ARPHRD_IEEE80211:
+                  Kind := makWifi;
+                ARPHRD_TUNNEL,
+                ARPHRD_TUNNEL6:
+                  Kind := makTunnel;
+                ARPHRD_PPP:
+                  Kind := makPpp;
+              else
+                // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
+                if Name <> '' then
+                  case PWord(Name)^ of
+                    ord('e') + ord('t') shl 8,  // 'ethX'
+                    ord('e') + ord('n') shl 8:  // systemd v197 'enpXsX'
+                      Kind := makEthernet;
+                    ord('w') + ord('l') shl 8:  // 'wlanX' and systemd v197 'wlX'
+                      Kind := makWifi;
+                  end;
+              end;
+              IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
             {$endif OSBSDDARWIN}
+            end
+            else
+            begin
+              IfIndex := -1; // non physical interface
+              Kind := makSoftware;
+            end
           end;
           {$ifdef OSLINUX}
           if info^.ifa_flags and IFF_UP <> 0 then
