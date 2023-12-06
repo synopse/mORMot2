@@ -907,6 +907,7 @@ const
     TJwtPs256,
     TJwtPs384,
     TJwtPs512);
+
 {$ifdef USE_OPENSSL}
   OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
     TJwtEs256Osl,
@@ -921,6 +922,7 @@ const
     TJwtPs512Osl,
     TJwtEddsaOsl);
 {$endif USE_OPENSSL}
+
 var
   i: integer;
   j: TJwtAbstract;
@@ -1052,14 +1054,18 @@ type
 procedure TTestCoreCrypto.Benchmark;
 const
   bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMO {$else} bAES256GCM {$endif};
+
   bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBO .. bAES256GCMO {$endif} ];
+
   SIZ: array[0..4] of integer = (
     8,
     50,
     100,
     1000,
     10000);
+
   COUNT = 500;
+
   AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
     TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm,
     TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm
@@ -1067,6 +1073,7 @@ const
     TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl,
     TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl
   {$endif USE_OPENSSL});
+
   AESBITS: array[bAES128CFB..bAESLAST] of integer = (
     128, 128, 128, 128, 128, 128, 128, 128,
     256, 256, 256, 256, 256, 256, 256, 256
