@@ -101,6 +101,9 @@ function FileNames(const Path: array of const; const Mask: TFileName = FILES_ALL
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
 
+/// sort a FindFiles() result list by its TFindFiles[].Timestamp field
+procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
+
 type
   /// one optional feature of SynchFolders()
   // - process recursively nested folders if sfoSubFolder is included
@@ -1649,6 +1652,16 @@ begin
   SetLength(result, n);
   for i := 0 to n - 1 do
     result[i] := Files[i].Name;
+end;
+
+function SortFindFileTimestamp(const A, B): integer;
+begin
+  result := CompareFloat(TFindFiles(A).Timestamp, TFindFiles(B).Timestamp);
+end;
+
+procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
+begin
+  DynArray(TypeInfo(TFindFilesDynArray), Files).Sort(SortFindFileTimestamp);
 end;
 
 function SynchFolders(const Reference, Dest: TFileName;
