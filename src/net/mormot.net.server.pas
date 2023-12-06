@@ -1191,12 +1191,12 @@ type
 /// pickup the most suitable network according to some preferences
 // - will sort GetMacAddresses() results according to its Kind and Speed
 // to select the most suitable local interface e.g. for THttpPeerCache
-function GetMacAddress(out Mac: TMacAddress;
+function GetMainMacAddress(out Mac: TMacAddress;
   Filter: TMacAddressFilter = []): boolean; overload;
 
 /// get a network interface from its TMacAddress.Name value
 // - search is case insensitive
-function GetMacAddress(out Mac: TMacAddress;
+function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceName: RawUtf8): boolean; overload;
 
 type
@@ -4210,7 +4210,7 @@ begin
   result := CompareCardinal(ma.IfIndex, mb.IfIndex);
 end;
 
-function GetMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
 var
   allowed: TMacAddressKinds;
   all: TMacAddressDynArray;
@@ -4248,7 +4248,7 @@ begin
   result := true;
 end;
 
-function GetMacAddress(out Mac: TMacAddress; const InterfaceName: RawUtf8): boolean;
+function GetMainMacAddress(out Mac: TMacAddress; const InterfaceName: RawUtf8): boolean;
 var
   i: PtrInt;
   all: TMacAddressDynArray;
