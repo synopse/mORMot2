@@ -1312,22 +1312,30 @@ type
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
     fSettingsOwned: boolean;
-    fMac: TMacAddress;
     fSharedMagic, fFrameSeqLow, fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
     fFrameSeq: integer;
     fSharedSecret: TAesAbstract;
+    fLog: TSynLogClass;
+    fMac: TMacAddress;
     fUuid: TGuid;
+    fFiles: TSynDictionary; // THttpPeerCacheHash/TFileName
+    // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
-    function OnBeforeBody(var aUrl, aMethod, aInHeaders,
-      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
-      aFlags: THttpServerRequestFlags): cardinal;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind;
       out aMsg: THttpPeerCacheMessage); virtual;
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(const aFrame: RawByteString;
       out aMsg: THttpPeerCacheMessage): boolean;
+    function MessageBroadcast(const aReq: THttpPeerCacheMessage;
+      aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
+    function ComputeFileName(const aBearer: THttpPeerCacheMessage;
+      const aServer, aUri: RawUtf8): TFileName; virtual;
+    function OnBeforeBody(var aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+      aFlags: THttpServerRequestFlags): cardinal; virtual;
+    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -4298,7 +4306,8 @@ var
   log: ISynLog;
   ip: RawUtf8;
 begin
-  log := TSynLog.Enter(self, 'Create');
+  fLog := TSynLog;
+  log := fLog.Enter(self, 'Create');
   fSafe.Init;
   if aSharedSecret = nil then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
@@ -4328,6 +4337,8 @@ begin
   fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   GetComputerUuid(fUuid);
+  fFiles := TSynDictionary.Create(
+    TypeInfo(THttpPeerCacheHashs), TypeInfo(TFileNameDynArray));
 end;
 
 procedure THttpPeerCache.SelectNetworkInterface;
@@ -4349,7 +4360,7 @@ begin
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // may be THttpAsyncServer
   fHttpServer := aHttpServerClass.Create(
-    aIP, nil, TSynLog.Family.OnThreadEnded, 'peercache',
+    aIP, nil, fLog.Family.OnThreadEnded, 'peercache',
     aHttpServerThreadCount, 30000, [hsoBan40xIP, hsoNoXPoweredHeader]);
 end;
 
@@ -4361,6 +4372,7 @@ begin
   fSettings := nil; // paranoid for async OnDownload call
   FreeAndNil(fHttpServer);
   FreeAndNil(fSharedSecret);
+  FreeAndNil(fFiles);
   fSharedMagic := 0;
   fSafe.Done;
 end;
@@ -4427,27 +4439,148 @@ begin
             not IsZero(@aMsg.Padding, SizeOf(aMsg.Padding));
 end;
 
+function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
+  aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean;
+begin
+
+end;
+
 function THttpPeerCache.OnDowload(Sender: THttpClientSocket;
   Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
   OutStream: TStreamRedirect): integer;
+var
+  req, resp: THttpPeerCacheMessage;
+  client: THttpClientSocket;
+  head, ip, u: RawUtf8;
+  log: ISynLog;
+  l: TSynLog;
+  len: PtrInt;
 begin
+  // validate WGet caller context
   result := 0;
   if (self = nil) or
      (fSettings = nil) or
      (fHttpServer = nil) or
      (Sender = nil) or
      (Params = nil) or
+     (Params^.Hash = '') or
+     not Params^.Hasher.InheritsFrom(TStreamRedirectSynHasher) or
      (Url = '') or
      (OutStream = nil) then
     exit;
-  if fSettings.LimitMBPerSec >= 0 then
-    if fSettings.LimitMBPerSec = 0 then
-      OutStream.LimitPerSecond := 0 // no bandwidth limitation
-    else
-      OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
-
+  // compute and broadcast a request
+  l := nil;
+  log := fLog.Enter('OnDownload %', [Url], self);
+  if Assigned(log) then
+    l := log.Instance;
+  MessageInit(pcfRequest, req);
+  len := length(Params^.Hash) shr 1;
+  if (len = 0) or
+     (len > SizeOf(req.Hash.Hash)) then
+    exit;
+  req.Hash.Algo := TStreamRedirectSynHasher(Params^.Hasher).GetAlgo;
+  if not mormot.core.text.HexToBin(pointer(Params^.Hash), @req.Hash.Hash, len) then
+  begin
+    l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params^.Hash], self);
+    exit;
+  end;
+  req.Size := ExpectedFullSize;
+  req.RangeStart := Sender.RangeStart;
+  req.RangeEnd := Sender.RangeEnd;
+  if MessageBroadcast(req, l, resp) then
+  try
+    // make a local HTTP request of the needed content on the best response
+    IP4Text(@resp.IP4, ip);
+    FormatUtf8('%/%', [Sender.Server, Url], u);
+    l.Log(sllDebug, 'OnDownload: request %:% %', [ip, resp.Port, u], self);
+    client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp.Port));
+    try
+      client.RangeStart := req.RangeStart;
+      client.RangeEnd := req.RangeEnd;
+      resp.Kind := pcfBearer; // authorize OnBeforeBody with response message
+      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp)));
+      if fSettings.LimitMBPerSec >= 0 then
+        if fSettings.LimitMBPerSec = 0 then
+          OutStream.LimitPerSecond := 0 // no bandwidth limitation
+        else
+          OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+      result := client.Request(
+        u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
+      l.Log(sllDebug, 'OnDownload: Request=%', [result], self);
+    finally
+      client.Free;
+    end;
+  except
+    result := 0;
+  end;
 end;
 
+function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
+  aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+  aFlags: THttpServerRequestFlags): cardinal;
+var
+  tok: RawByteString;
+  msg: THttpPeerCacheMessage;
+  ip4: cardinal;
+begin
+  // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code to reject the request immediately, and close the connection
+  result := HTTP_FORBIDDEN;
+  if (aBearerToken = '') or
+     not IsGet(aMethod) or
+     (aUrl = '') or
+     (PosEx('/', aUrl, 2) = 0) or // called as 'server/url'
+     not Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) or
+     not MessageDecode(tok, msg) or
+     (msg.Kind <> pcfBearer) or
+     not IPToCardinal(aRemoteIP, ip4) or
+     (msg.IP4 <> ip4) or
+     not IsEqualGuid(msg.Uuid, fUuid) then
+    exit;
+  fLog.Add.Log(sllTrace, 'OnBeforeBody: % from %', [aUrl, aRemoteIP], self);
+  result := HTTP_SUCCESS;
+end;
+
+function THttpPeerCache.ComputeFileName(const aBearer: THttpPeerCacheMessage;
+  const aServer, aUri: RawUtf8): TFileName;
+begin
+  if not fFiles.FindAndCopy(aBearer.Hash, result) then
+    result := '';
+end;
+
+function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  msg: THttpPeerCacheMessage;
+  u, server, url: RawUtf8;
+  s: RawByteString;
+  fn: TFileName;
+begin
+  // retrieve context - already checked by OnBeforeBody
+  result := HTTP_BADREQUEST;
+  if not Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), s) or
+     not MessageDecode(s, msg) then
+    exit;
+  try
+    // get filename from 'server/url' URI and decoded bearer
+    result := HTTP_NOTFOUND;
+    u := Ctxt.Url;
+    if u = '' then
+      exit;
+    if u[1] = '/' then
+      delete(u, 1, 1); // paranoid
+    if not Split(u, '/', server, url) then
+      exit;
+    fn := ComputeFileName(msg, server, url); // is likely to use msg.Hash
+    if fn = '' then
+      exit; // not existing file
+    // return the file as requested
+    Ctxt.OutContent := StringToUtf8(fn);
+    Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
+  finally
+    fLog.Add.Log(sllTrace, 'OnRequest=% from %/% as %',
+      [result, server, url, fn], self);
+  end;
+end;
 
 {$ifdef USEWININET}
 
@@ -5177,6 +5310,11 @@ begin
     EHttpApiServer.RaiseOnError(hSetRequestQueueProperty,
       Http.SetRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
         @aValue, SizeOf(aValue), 0, nil));
+end;
+
+function THttpApiServer.GetConnectionsActive: cardinal;
+begin
+  result := 0; // unsupported
 end;
 
 function THttpApiServer.GetRegisteredUrl: SynUnicode;
