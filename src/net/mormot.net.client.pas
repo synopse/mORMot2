@@ -225,6 +225,7 @@ type
     /// will raise ESynException after TimeOutSec seconds are elapsed
     // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout for
     // each packet, whereas this property is about the global time elapsed
+    // during the whole download process
     TimeOutSec: integer;
     /// optional Size in bytes after which OnDownload() is called back
     // - if not set (i.e. has its default 0 value), then 1 shl 20 (1MB) is used
@@ -1880,6 +1881,7 @@ var
     // perform the actual request
     res := 0;
     if Assigned(params.OnDownload) and
+       (params.Hash <> '') and
        ((ExpectedSize <> 0) or
         GetExpectedSizeAndRedirection) and
        (ExpectedSize >= params.OnDownloadTriggerSize) then

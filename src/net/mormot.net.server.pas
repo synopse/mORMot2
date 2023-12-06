@@ -37,6 +37,7 @@ uses
   mormot.core.datetime,
   mormot.core.zip,
   mormot.core.log,
+  mormot.core.search,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}
@@ -1205,11 +1206,13 @@ type
   protected
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
-    fLimitMBPerSec: integer;
+    fLimitMBPerSec, fFilesCacheMaxMB, fFilesCacheMaxMin: integer;
     fInterfaceName: RawUtf8;
+    fFilesCachePath: TFileName;
   public
     /// set the default settings
-    // - i.e. Port=8089 and LimitMBPerSec=10
+    // - i.e. Port=8089, LimitMBPerSec=10, FilesCacheMaxMB=1000 and
+    // FilesCacheMaxMin=15
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1228,13 +1231,27 @@ type
     /// how GetMacAddress() should find the network, if InterfaceName is not set
     property InterfaceFilter: TMacAddressFilter
       read fInterfaceFilter write fInterfaceFilter;
-    /// can limit the peer bandwidth used, in data Mega Bytes per second
+    /// can limit the peer bandwidth used, in data MegaBytes per second
     // - will be assigned to each TStreamRedirect.LimitPerSecond instance
-    // - is 10 MB/s of data by default, i.e. aroung 100-125 MBit/s on network
+    // - default is 10 MB/s of data, i.e. aroung 100-125 MBit/s on network
     // - you may set 0 to disable any bandwidth limitation
     // - you may set -1 to use the default TStreamRedirect.LimitPerSecond value
     property LimitMBPerSec: integer
       read fLimitMBPerSec write fLimitMBPerSec;
+    /// location of the cached files, available for remote requests
+    // - the files are cached using their THttpPeerCacheHash values as filename
+    property FilesCachePath: TFileName
+      read fFilesCachePath write fFilesCachePath;
+    /// after how many MB in FilesCachePath the folder should be cleaned
+    // - default is 1000, i.e. just below 1 GB
+    // - THttpPeerCache.Create will ensure that this value won't take more than
+    // 25% of the FilesCachePath folder available space
+    property FilesCacheMaxMB: integer
+      read fFilesCacheMaxMB write fFilesCacheMaxMB;
+    /// after how many minutes files in FilesCachePath could be cleaned
+    // - default is 15
+    property FilesCacheMaxMin: integer
+      read fFilesCacheMaxMin write fFilesCacheMaxMin;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -1305,10 +1322,10 @@ type
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
-  // - the main method is THttpPeerCache.OnDownload, to be used from WGet
+  // - will maintain its own local folder of cached files, stored by hash
+  // - main methods are THttpPeerCache.OnDownload/OnDownloaded, from WGet
   THttpPeerCache = class(TSynPersistent)
   protected
-    fSafe: TOSLightLock;
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
     fSettingsOwned: boolean;
@@ -1316,9 +1333,12 @@ type
     fFrameSeq: integer;
     fSharedSecret: TAesAbstract;
     fLog: TSynLogClass;
+    fBroadcastSafe: TOSLightLock; // non-rentrant
     fMac: TMacAddress;
     fUuid: TGuid;
-    fFiles: TSynDictionary; // THttpPeerCacheHash/TFileName
+    fFilesPath: TFileName;
+    fFilesMaxSize: Int64; // from Settings.FilesCacheMaxMB
+    fFilesDeleteDeprecatedTix: cardinal;
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1330,8 +1350,7 @@ type
       out aMsg: THttpPeerCacheMessage): boolean;
     function MessageBroadcast(const aReq: THttpPeerCacheMessage;
       aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
-    function ComputeFileName(const aBearer: THttpPeerCacheMessage;
-      const aServer, aUri: RawUtf8): TFileName; virtual;
+    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
       aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
       aFlags: THttpServerRequestFlags): cardinal; virtual;
@@ -1352,13 +1371,24 @@ type
       aHttpServerThreadCount: integer = 2); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
-    /// main processing method, to be assigned to THttpClientSocketWGet.OnDownload
+    /// main processing method, as assigned to THttpClientSocketWGet.OnDownload
     // - will transfer Sender.Server/Port/RangeStart/RangeEnd into OutStream
     // - OutStream.LimitPerSecond will be overriden during the call
     // - could return 0 to fallback to a regular GET (e.g. not cached)
     function OnDowload(Sender: THttpClientSocket;
-      Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
-      OutStream: TStreamRedirect): integer;
+      Params: PHttpClientSocketWGet; const Url: RawUtf8;
+      ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
+    /// main processing method, as assigned to THttpClientSocketWGet.OnDownloaded
+    // - if a file has been downloaded from the main repository, this method
+    // should be called to copy the content into this instance FilesCachePath
+    // - calling with Params=nil will trigger FilesDeleteDeprecated
+    procedure OnDowloaded(Params: PHttpClientSocketWGet;
+      const Source: TFileName);
+    /// could be called on a regular basis to purge the cache from oldest files
+    // - i.e. to implement optional FilesCacheMaxMin disk space release
+    // - is also called from OnDownloaded()
+    // - will actually read and search the FilesCachePath folder every minute
+    procedure FilesDeleteDeprecated;
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
       read fMac;
@@ -1397,6 +1427,8 @@ const
     pcfReponseNone,
     pcfResponseFull,
     pcfResponsePartial];
+
+  PEER_CACHE_PATTERN = '*.cache';
 
 {$ifdef USEWININET}
 
@@ -4293,6 +4325,8 @@ begin
   inherited Create;
   fPort := 8089;
   fLimitMBPerSec := 10;
+  fFilesCacheMaxMB := 1000;
+  fFilesCacheMaxMin := 15;
 end;
 
 
@@ -4305,10 +4339,11 @@ constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
 var
   log: ISynLog;
   ip: RawUtf8;
+  avail, existing: Int64;
 begin
   fLog := TSynLog;
   log := fLog.Enter(self, 'Create');
-  fSafe.Init;
+  fBroadcastSafe.Init;
   if aSharedSecret = nil then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
   inherited Create;
@@ -4319,26 +4354,48 @@ begin
   end
   else
     fSettings := aSettings;
+  // check the files cache folder and its maximum allowed size
+  if fSettings.FilesCachePath = '' then
+    fSettings.FilesCachePath := TemporaryFileName;
+  fFilesPath := EnsureDirectoryExists(fSettings.FilesCachePath, {except=}true);
+  FilesDeleteDeprecated; // initial clean-up
+  fFilesMaxSize := Int64(fSettings.FilesCacheMaxMB) shl 20;
+  avail := GetDiskAvailable(fFilesPath);
+  existing := DirectorySize(fFilesPath, false, PEER_CACHE_PATTERN);
+  if Assigned(log) then
+    log.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
+      [fFilesPath, KB(avail), KB(existing)], self);
+  if avail <> 0 then
+  begin
+    avail := (avail + existing) shr 2; // allow up to 25% of the folder capacity
+    if fFilesMaxSize > avail then
+    begin
+      fFilesMaxSize := avail;
+      if Assigned(log) then
+        log.Log(sllDebug, 'Create: set FilesCacheMaxMB=%', [avail shr 20], self);
+    end;
+  end;
+  // retrieve the local network interface to be used
   SelectNetworkInterface;
-  FormatUtf8('%:%', [fMac.IP, fSettings.Port], ip);
+  FormatUtf8('%:%', [fMac.IP, fSettings.Port], ip); // bound to this network
   if Assigned(log) then
     log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
       [fMac.Name, ip, fMac.Broadcast]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fNetMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+  // start the local HTTP server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
   fHttpServer.ServerName := FormatUtf8('%PeerCache', [Executable.ProgramName]);
   fHttpServer.OnBeforeBody := OnBeforeBody;
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
+  // setup internal parameters
   fSharedMagic := aSharedMagic;
   fSharedSecret := aSharedSecret;
   fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   GetComputerUuid(fUuid);
-  fFiles := TSynDictionary.Create(
-    TypeInfo(THttpPeerCacheHashs), TypeInfo(TFileNameDynArray));
 end;
 
 procedure THttpPeerCache.SelectNetworkInterface;
@@ -4372,9 +4429,8 @@ begin
   fSettings := nil; // paranoid for async OnDownload call
   FreeAndNil(fHttpServer);
   FreeAndNil(fSharedSecret);
-  FreeAndNil(fFiles);
   fSharedMagic := 0;
-  fSafe.Done;
+  fBroadcastSafe.Done;
 end;
 
 procedure THttpPeerCache.MessageInit(aKind: THttpPeerCacheMessageKind;
@@ -4401,7 +4457,7 @@ begin
   aMsg.CurrentDownloads := n;
 end;
 
-// all frames start with a 32-bit aSharedMagic as supplied to
+// UDP frames start with a 32-bit aSharedMagic marker as supplied to
 // THttpPeeerCache.Create, followed by AES-GCM encrypted and signed message
 
 function THttpPeerCache.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
@@ -4442,7 +4498,19 @@ end;
 function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
   aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean;
 begin
+  result := false; // work in progress
+end;
 
+function WGetToHash(const Params: THttpClientSocketWGet;
+  out Hash: THttpPeerCacheHash): boolean;
+begin
+  result := false;
+  if (Params.Hash = '') or
+     not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
+    exit; // no valid hash for sure
+  Hash.Algo := TStreamRedirectSynHasher(Params.Hasher).GetAlgo;
+  result := mormot.core.text.HexToBin(
+    pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
 end;
 
 function THttpPeerCache.OnDowload(Sender: THttpClientSocket;
@@ -4454,7 +4522,6 @@ var
   head, ip, u: RawUtf8;
   log: ISynLog;
   l: TSynLog;
-  len: PtrInt;
 begin
   // validate WGet caller context
   result := 0;
@@ -4462,9 +4529,8 @@ begin
      (fSettings = nil) or
      (fHttpServer = nil) or
      (Sender = nil) or
-     (Params = nil) or
-     (Params^.Hash = '') or
-     not Params^.Hasher.InheritsFrom(TStreamRedirectSynHasher) or
+     (Params.Hash = '') or
+     not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) or
      (Url = '') or
      (OutStream = nil) then
     exit;
@@ -4474,14 +4540,9 @@ begin
   if Assigned(log) then
     l := log.Instance;
   MessageInit(pcfRequest, req);
-  len := length(Params^.Hash) shr 1;
-  if (len = 0) or
-     (len > SizeOf(req.Hash.Hash)) then
-    exit;
-  req.Hash.Algo := TStreamRedirectSynHasher(Params^.Hasher).GetAlgo;
-  if not mormot.core.text.HexToBin(pointer(Params^.Hash), @req.Hash.Hash, len) then
+  if not WGetToHash(Params^, req.Hash) then
   begin
-    l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params^.Hash], self);
+    l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params.Hash], self);
     exit;
   end;
   req.Size := ExpectedFullSize;
@@ -4491,7 +4552,7 @@ begin
   try
     // make a local HTTP request of the needed content on the best response
     IP4Text(@resp.IP4, ip);
-    FormatUtf8('%/%', [Sender.Server, Url], u);
+    FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
     l.Log(sllDebug, 'OnDownload: request %:% %', [ip, resp.Port, u], self);
     client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp.Port));
     try
@@ -4499,11 +4560,8 @@ begin
       client.RangeEnd := req.RangeEnd;
       resp.Kind := pcfBearer; // authorize OnBeforeBody with response message
       head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp)));
-      if fSettings.LimitMBPerSec >= 0 then
-        if fSettings.LimitMBPerSec = 0 then
-          OutStream.LimitPerSecond := 0 // no bandwidth limitation
-        else
-          OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+      if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
+        OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
       result := client.Request(
         u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
       l.Log(sllDebug, 'OnDownload: Request=%', [result], self);
@@ -4528,8 +4586,7 @@ begin
   result := HTTP_FORBIDDEN;
   if (aBearerToken = '') or
      not IsGet(aMethod) or
-     (aUrl = '') or
-     (PosEx('/', aUrl, 2) = 0) or // called as 'server/url'
+     (aUrl = '') or // URI is just ignored
      not Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) or
      not MessageDecode(tok, msg) or
      (msg.Kind <> pcfBearer) or
@@ -4541,44 +4598,141 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-function THttpPeerCache.ComputeFileName(const aBearer: THttpPeerCacheMessage;
-  const aServer, aUri: RawUtf8): TFileName;
+procedure THttpPeerCache.FilesDeleteDeprecated;
+var
+  tix, size: Int64;
 begin
-  if not fFiles.FindAndCopy(aBearer.Hash, result) then
-    result := '';
+  if fSettings.fFilesCacheMaxMin <= 0 then
+    exit;
+  tix := (GetTickCount64 shr 6) + 1; // only check every minute
+  if fFilesDeleteDeprecatedTix = tix then
+    exit;
+  fFilesDeleteDeprecatedTix := tix;
+  if DirectoryDeleteOlderFiles(
+       fFilesPath, fSettings.FilesCacheMaxMin / MinsPerDay,
+       PEER_CACHE_PATTERN, false, @size) then
+    fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+end;
+
+function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
+begin
+  // filename is binary algo + hash encoded as hexadecimal, for easier debug
+  result := FormatString('%%.cache', [fFilesPath,
+    BinToHexDisplayLowerShort(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+end;
+
+procedure THttpPeerCache.OnDowloaded(Params: PHttpClientSocketWGet;
+  const Source: TFileName);
+var
+  local: TFileName;
+  hash: THttpPeerCacheHash;
+  localsize, sourcesize, tot, start, stop, deleted: Int64;
+  ok: boolean;
+  i: PtrInt;
+  dir: TFindFilesDynArray;
+begin
+  // first do some clean-up of oldest cached files (maybe with Params = nil)
+  FilesDeleteDeprecated;
+  if Params = nil then
+    exit;
+  // validate the supplied downloaded source file
+  sourcesize := FileSize(Source);
+  if sourcesize = 0 then
+  begin
+    fLog.Add.Log(sllWarning, 'OnDowloaded: no % file', [Source], self);
+    exit;
+  end;
+  // compute the local cache file name from the known file hash
+  if not WGetToHash(Params^, hash) then
+  begin
+    fLog.Add.Log(sllWarning, 'OnDowloaded: no hash specified', self);
+    exit;
+  end;
+  local := ComputeFileName(hash);
+  // check if this file was not already in the cache folder
+  localsize := FileSize(local);
+  if localsize <> 0 then // this hash is already cached
+  begin
+    if localsize = sourcesize then
+      fLog.Add.Log(sllTrace, 'OnDowloaded: % already in cache', [Source], self)
+    else
+    begin
+      fLog.Add.Log(sllWarning, 'OnDowloaded: % hash/size mismatch -> delete %',
+        [Source, local], self);
+      DeleteFile(local); // better safe than sorry on (unlikely) hash collision
+    end;
+    exit;
+  end;
+  // ensure adding this file won't trigger the maximum cache size limit
+  if fFilesMaxSize > 0 then
+  begin
+    if sourcesize >= fFilesMaxSize then
+      tot := sourcesize // this file is oversized for sure
+    else
+    begin
+      // compute the current folder cache size
+      dir := FindFiles(fFilesPath, PEER_CACHE_PATTERN);
+      tot := sourcesize; // simulate adding this file
+      for i := 0 to high(dir) do
+        inc(tot, dir[i].Size);
+      if tot >= fFilesMaxSize then
+      begin
+        // delete oldest files in cache up to FilesCacheMaxMB
+        FindFilesSortByTimestamp(dir);
+        deleted := 0;
+        for i := 0 to high(dir) do
+          if DeleteFile(dir[i].Name) then // if not currently downloading
+          begin
+            dec(tot, dir[i].Size);
+            inc(deleted, dir[i].Size);
+            if tot < fFilesMaxSize then
+              break; // we have deleted enough old files
+          end;
+        fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+      end;
+    end;
+    if tot >= fFilesMaxSize then
+    begin
+      fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
+        [Source, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
+      exit;
+    end;
+  end;
+  // actually copy the source file into the local cache folder
+  QueryPerformanceMicroSeconds(start);
+  ok := CopyFile(Source, local, {failsifexists=}false);
+  if ok then
+    FileSetDate(local, DateTimeToFileDate(Now)); // force timestamp = now
+  QueryPerformanceMicroSeconds(stop);
+  fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
+      [Source, local, MicroSecToString(stop - start)], self);
 end;
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
-  u, server, url: RawUtf8;
   s: RawByteString;
   fn: TFileName;
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
-  if not Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), s) or
-     not MessageDecode(s, msg) then
-    exit;
+  if Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), s) and
+     MessageDecode(s, msg) then
   try
-    // get filename from 'server/url' URI and decoded bearer
+    // get local filename from decoded bearer hash
     result := HTTP_NOTFOUND;
-    u := Ctxt.Url;
-    if u = '' then
-      exit;
-    if u[1] = '/' then
-      delete(u, 1, 1); // paranoid
-    if not Split(u, '/', server, url) then
-      exit;
-    fn := ComputeFileName(msg, server, url); // is likely to use msg.Hash
+    fn := ComputeFileName(msg.Hash);
     if fn = '' then
-      exit; // not existing file
+      exit; // not existing
+    result := HTTP_NOTACCEPTABLE;
+    if FileSize(fn) <> msg.Size then
+      exit; // invalid file
     // return the file as requested
+    result := HTTP_SUCCESS;
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
   finally
-    fLog.Add.Log(sllTrace, 'OnRequest=% from %/% as %',
-      [result, server, url, fn], self);
+    fLog.Add.Log(sllTrace, 'OnRequest=% % as %', [result, Ctxt.Url, fn], self);
   end;
 end;
 
