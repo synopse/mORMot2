@@ -2219,7 +2219,13 @@ type
     procedure Flush;
     /// case-insensitive search for a given TFileName in the folder
     // - returns '' if not found, or the exact file name in the POSIX folder
+    // - is thred-safe and non blocking during its lookup
+    // - can optionally return MicroSec spent for actual filenames read on disk
     function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
+    /// how many file entries are currently in the internal list
+    function Count: PtrInt;
+    /// make a dynamic array copy of the internal file names, sorted by StrIComp
+    function Files: TRawUtf8DynArray;
     /// allow to change the monitored folder at runtime
     property Folder: TFileName
       read fFolder write SetFolder;
@@ -9197,6 +9203,8 @@ end;
 
 procedure TPosixFileCaseInsensitive.SetFolder(const aFolder: TFileName);
 begin
+  if self = nil then
+    exit;
   fSafe.WriteLock;
   try
     fFiles := nil; // force list refresh
@@ -9209,7 +9217,8 @@ end;
 
 procedure TPosixFileCaseInsensitive.SetSubFolders(aSubFolders: boolean);
 begin
-  if fSubFolders = aSubFolders then
+  if (self = nil) or
+     (fSubFolders = aSubFolders) then
     exit;
   fSubFolders := aSubFolders;
   Flush;
@@ -9224,6 +9233,9 @@ end;
 
 procedure TPosixFileCaseInsensitive.OnIdle(tix64: Int64);
 begin
+  if (self = nil) or
+     (fFiles = nil) then
+    exit;
   if tix64 = 0 then
     tix64 := GetTickCount64;
   tix64 := (tix64 shr 16) + 1; // changes every 65,536 seconds
@@ -9248,14 +9260,13 @@ function TPosixFileCaseInsensitive.Find(const aSearched: TFileName;
 var
   start, stop: Int64;
   i: PtrInt;
-  n: RawUtf8;
+  fn: RawUtf8;
 begin
   result := '';
   if (self = nil) or
      (fFolder = '') or
      (aSearched = '') then
     exit;
-  StringToUtf8(aSearched, n);
   start := 0;
   stop := 0;
   if fFiles = nil then // need to refresh the cache
@@ -9266,7 +9277,7 @@ begin
       begin
         if aReadMs <> nil then
           QueryPerformanceMicroSeconds(start);
-        fFiles := PosixFileNames(fFolder, fSubFolders);
+        fFiles := PosixFileNames(fFolder, fSubFolders); // fast syscall
         QuickSortRawUtf8(fFiles, length(fFiles), nil, @StrIComp);
         if aReadMs <> nil then
           QueryPerformanceMicroSeconds(stop);
@@ -9276,17 +9287,40 @@ begin
       fSafe.WriteUnLock;
     end;
   end;
-  fSafe.ReadLock;
+  StringToUtf8(aSearched, fn);
+  fSafe.ReadLock; // non-blocking lookup
   try
     i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
-      pointer(fFiles), high(fFiles), pointer(n), @StrIComp);
+      pointer(fFiles), high(fFiles), pointer(fn), @StrIComp);
     if i >= 0 then
       Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
   finally
     fSafe.ReadUnLock;
   end;
   if aReadMs <> nil then
-    aReadMs^ := stop - start;
+    aReadMs^ := stop - start; // may be 0 if read only from internal cache
+end;
+
+function TPosixFileCaseInsensitive.Count: PtrInt;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := length(fFiles);
+end;
+
+function TPosixFileCaseInsensitive.Files: TRawUtf8DynArray;
+begin
+  result := nil;
+  if (self = nil) or
+     (fFiles = nil) then
+    exit;
+  fSafe.ReadLock;
+  try
+    result := copy(fFiles); // make a copy for thread safety
+  finally
+    fSafe.ReadUnLock;
+  end;
 end;
 
 {$endif OSPOSIX}
