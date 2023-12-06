@@ -1241,7 +1241,7 @@ type
   EHttpPeerCache = class(ESynException);
 
   /// the content of a binary THttpPeerCacheMessage
-  // - would eventually be used in the future for frame versioning
+  // - would eventually be extended in the future for frame versioning
   THttpPeerCacheMessageKind = (
     pcfPing,
     pcfPong,
@@ -1251,10 +1251,19 @@ type
     pcfResponsePartial,
     pcfBearer);
 
+  /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
+  THttpPeerCacheHash = packed record
+    /// the algorithm used for Hash
+    Algo: THashAlgo;
+    /// up to 512-bit of raw binary hash, according to Algo
+    Hash: THash512Rec;
+  end;
+  THttpPeerCacheHashs = array of THttpPeerCacheHash;
+
   /// one UDP request frame used during THttpPeerCache discovery
-  // - requests and response have the same binary layout
+  // - requests and responses have the same binary layout
   // - some fields may be void or irrelevant, and the structure is padded
-  // with random up to 160 bytes
+  // with random up to 192 bytes
   THttpPeerCacheMessage = packed record
     /// the content of this binary frame
     Kind: THttpPeerCacheMessageKind;
@@ -1276,17 +1285,21 @@ type
     Hardware: TMacAddressKind;
     /// the local UnixTimeMinimalUtc value
     Timestamp: cardinal;
-    /// the algorithm used for Hash
-    Hasher: THashAlgo;
-    /// the Hash (via Hasher algo) of the requested file content
-    Hash: THash256;
+    /// number of background download currently on this server
+    CurrentDownloads: word;
+    /// the binary Hash (and algo) of the requested file content
+    Hash: THttpPeerCacheHash;
+    /// the known full size of this file
+    Size: Int64;
     /// the Range offset of the requested file content
-    RangeStart: QWord;
-    /// the Range ending position to retrieve (included)
-    RangeEnd: QWord;
-    /// some random padding up to 160 bytes, used for future content version
+    RangeStart: Int64;
+    /// the Range ending position of the file content (included)
+    RangeEnd: Int64;
+    /// some internal state representation, e.g. sent back as pcfBearer
+    Opaque: QWord;
+    /// some random padding up to 192 bytes, used for future content revisions
     // - e.g. for a TEccPublicKey (ECDHE) and additional fields
-    Padding: array[0 .. 66] of byte;
+    Padding: array[0 .. 48] of byte;
   end;
 
   /// implement a local peer-to-peer download cache via UDP and TCP
@@ -1310,12 +1323,10 @@ type
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
       aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
       aFlags: THttpServerRequestFlags): cardinal;
-    // all frames should start with a 32-bit aSharedMagic as supplied to
-    // THttpPeeerCache, followed by AES-GCM encrypted and signed data
-    procedure FrameInit(aKind: THttpPeerCacheMessageKind;
-      out aMsg: THttpPeerCacheMessage);
-    function FrameEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-    function FrameDecode(const aFrame: RawByteString;
+    procedure MessageInit(aKind: THttpPeerCacheMessageKind;
+      out aMsg: THttpPeerCacheMessage); virtual;
+    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+    function MessageDecode(const aFrame: RawByteString;
       out aMsg: THttpPeerCacheMessage): boolean;
   public
     /// initialize this peer-to-peer cache instance
@@ -4322,11 +4333,11 @@ end;
 procedure THttpPeerCache.SelectNetworkInterface;
 begin
   if fSettings.InterfaceName <> '' then
-    if not GetMacAddress(fMac, fSettings.InterfaceName) then
+    if not GetMainMacAddress(fMac, fSettings.InterfaceName) then
       raise EHttpPeerCache.CreateUtf8(
         '%.Create: impossible to find the [%] network interface',
         [self, fSettings.InterfaceName]);
-  if not GetMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
+  if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
     raise EHttpPeerCache.CreateUtf8(
       '%.Create: impossible to find a local network interface', [self]);
 end;
@@ -4354,31 +4365,10 @@ begin
   fSafe.Done;
 end;
 
-function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
-  aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
-  aFlags: THttpServerRequestFlags): cardinal;
-var
-  tok: RawByteString;
-  msg: THttpPeerCacheMessage;
-  ip4: cardinal;
-begin
-  // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-  // error code to reject the request immediately, and close the connection
-  result := HTTP_FORBIDDEN;
-  if (aBearerToken = '') or
-     not IsGet(aMethod) or
-     not Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) or
-     not FrameDecode(tok, msg) or
-     (msg.Kind <> pcfBearer) or
-     not IPToCardinal(aRemoteIP, ip4) or
-     (msg.IP4 <> ip4) then
-    exit;
-
-  result := HTTP_SUCCESS;
-end;
-
-procedure THttpPeerCache.FrameInit(aKind: THttpPeerCacheMessageKind;
+procedure THttpPeerCache.MessageInit(aKind: THttpPeerCacheMessageKind;
   out aMsg: THttpPeerCacheMessage);
+var
+  n: cardinal;
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
   RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
@@ -4387,14 +4377,22 @@ begin
   aMsg.Kind := aKind;
   aMsg.Uuid := fUuid;
   aMsg.IP4 := fIP4;
+  aMsg.Port := fSettings.Port;
   aMsg.NetMaskIP4 := fNetMaskIP4;
   aMsg.BroadcastIP4 := fBroadcastIP4;
   aMsg.Speed := fMac.Speed;
   aMsg.Hardware := fMac.Kind;
   aMsg.Timestamp := UnixTimeMinimalUtc;
+  n := fHttpServer.ConnectionsActive;
+  if n > 65535 then
+    n := 65535;
+  aMsg.CurrentDownloads := n;
 end;
 
-function THttpPeerCache.FrameEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+// all frames start with a 32-bit aSharedMagic as supplied to
+// THttpPeeerCache.Create, followed by AES-GCM encrypted and signed message
+
+function THttpPeerCache.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
 var
   tmp: RawByteString;
 begin
@@ -4404,7 +4402,7 @@ begin
   PCardinal(result)^ := fSharedMagic;
 end;
 
-function THttpPeerCache.FrameDecode(const aFrame: RawByteString;
+function THttpPeerCache.MessageDecode(const aFrame: RawByteString;
   out aMsg: THttpPeerCacheMessage): boolean;
 var
   tmp: RawByteString;
@@ -4424,8 +4422,9 @@ begin
       exit;
   result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
             (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-            (ord(aMsg.Hasher) <= ord(high(aMsg.Hasher))) and
-            (aMsg.RangeEnd >= aMsg.RangeStart);
+            (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
+            (aMsg.RangeEnd >= aMsg.RangeStart) and
+            not IsZero(@aMsg.Padding, SizeOf(aMsg.Padding));
 end;
 
 function THttpPeerCache.OnDowload(Sender: THttpClientSocket;
@@ -6443,8 +6442,8 @@ end;
 
 
 begin
-  //writeln(SizeOf(THttpPeerCacheMessage));
-  assert(SizeOf(THttpPeerCacheMessage) = 160);
+  //  writeln(SizeOf(THttpPeerCacheMessage));
+  assert(SizeOf(THttpPeerCacheMessage) = 192);
 
 end.
 
