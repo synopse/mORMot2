@@ -3618,12 +3618,18 @@ function GetMemoryInfoText: RawUtf8;
 
 /// retrieve low-level information about a given disk partition
 // - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - aDriveFolderOrFile is a directory on disk (no need to specify a raw drive
+// name like 'c:\' on Windows)
 // - warning: aDriveFolderOrFile may be modified at input
 // - only under Windows the Quotas are applied separately to aAvailableBytes
 // in respect to global aFreeBytes
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
   {$ifdef OSWINDOWS}; aVolumeName: PSynUnicode = nil{$endif}): boolean;
+
+/// retrieve how many bytes are currently available on a given folder
+// - returns 0 if the function fails
+function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
 
 /// retrieve low-level information about all mounted disk partitions of the system
 // - returned partitions array is sorted by "mounted" ascending order
@@ -7376,6 +7382,14 @@ begin
       _oskb(info.memtotal), info.percent, '%'], result)
   else
     result := '';
+end;
+
+function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
+var
+  free, total: QWord; // dummy values
+begin
+  if not GetDiskInfo(aDriveFolderOrFile, result, free, total) then
+    result := 0;
 end;
 
 function ConsoleReadBody: RawByteString;
