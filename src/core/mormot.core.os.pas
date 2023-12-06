@@ -3146,7 +3146,8 @@ function FileIsExecutable(const FileName: TFileName): boolean;
 /// compute the size of a directory's files, optionally with nested folders
 // - basic implementation using FindFirst/FindNext so won't be the fastest
 // available, nor fully accurate when files are actually (hard) links
-function DirectorySize(const FileName: TFileName; Recursive: boolean = false): Int64;
+function DirectorySize(const FileName: TFileName; Recursive: boolean = false;
+  const Mask: TFileName = FILES_ALL): Int64;
 
 /// copy one file to another, similar to the Windows API
 function CopyFile(const Source, Target: TFileName;
@@ -6402,14 +6403,15 @@ begin
   result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
 end;
 
-function DirectorySize(const FileName: TFileName; Recursive: boolean): Int64;
+function DirectorySize(const FileName: TFileName; Recursive: boolean;
+  const Mask: TFileName): Int64;
 var
   SR: TSearchRec;
   dir: TFileName;
 begin
   result := 0;
   dir := IncludeTrailingPathDelimiter(FileName);
-  if FindFirst(dir + FILES_ALL, faAnyFile, SR) <> 0 then
+  if FindFirst(dir + Mask, faAnyFile, SR) <> 0 then
     exit;
   repeat
    if SearchRecValidFile(SR) then
