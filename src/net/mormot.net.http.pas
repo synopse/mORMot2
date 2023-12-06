@@ -678,6 +678,9 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// set the OutContent and OutContentType fields with the supplied JSON
     procedure SetOutJson(const Fmt: RawUtf8; const Args: array of const); overload;
+    /// set the OutContent and OutContentType fields with the supplied text
+    procedure SetOutText(const Fmt: RawUtf8; const Args: array of const;
+      const ContentType: RawUtf8 = TEXT_CONTENT_TYPE);
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -2488,6 +2491,13 @@ procedure THttpServerRequestAbstract.SetOutJson(const Fmt: RawUtf8;
 begin
   FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+end;
+
+procedure THttpServerRequestAbstract.SetOutText(
+  const Fmt: RawUtf8; const Args: array of const; const ContentType: RawUtf8);
+begin
+  FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
+  fOutContentType := ContentType;
 end;
 
 
