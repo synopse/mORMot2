@@ -4535,7 +4535,7 @@ begin
     // reset the current thread context
     Finalize(GetThreadContext^);
     FillcharFast(fThreadContext^, SizeOf(fThreadContext^), 0);
-    fThreadID := 0; // avoid race condition if this TThreadID is reaffected
+    fThreadID := TThreadID(0); // avoid race condition if this ID is reaffected
     // rebuild internal threads index
     ThreadContextRehash; // fThreadHash[fThreadLastHash] := 0 is not enough
     // mark this thread context index for quick reuse
