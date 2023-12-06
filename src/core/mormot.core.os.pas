@@ -3741,6 +3741,7 @@ function WaitReadPending(fd, timeout: integer): boolean;
 /// POSIX-only function calling directly getdents/getdents64 syscall
 // - could be used when FindFirst/FindNext are an overkill, e.g. to quickly
 // cache all file names of a folder in memory, optionally with its sub-folders
+// - used e.g. by TPosixFileCaseInsensitive from mormot.core.unicode
 // - warning: the file system has to support d_type (e.g. btrfs, ext2-ext4) so
 // that Recursive is handled and only DT_REG files are retrieved; non-compliant
 // file systems (or Linux Kernel older than 2.6.4) won't support the Recursive

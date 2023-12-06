@@ -2195,6 +2195,39 @@ procedure QuickSortRawUtf8(var Values: TRawUtf8DynArray; ValuesCount: integer;
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
   caseInsensitive: boolean = false); overload;
 
+{$ifdef OSPOSIX}
+type
+  /// monitor a POSIX folder for all its file names, and allow efficient
+  // case-insensitive search, as it would on a Windows file system
+  // - will use our fast PosixFileNames() low-level API to read the names
+  TPosixFileCaseInsensitive = class
+  protected
+    fSafe: TRWLightLock;
+    fFiles: TRawUtf8DynArray;
+    fFolder: TFileName;
+    fLastTix: integer;
+    fSubFolders: boolean;
+    procedure SetFolder(const aFolder: TFileName);
+    procedure SetSubFolders(aSubFolders: boolean);
+  public
+    /// initialize the file names lookup
+    constructor Create(const aFolder: TFileName; aSubFolders: boolean); reintroduce;
+    /// should be called on a regular pace (e.g. every second) to force
+    // reload of the files every minute
+    procedure OnIdle(tix64: Int64);
+    /// clear the internal list to force full reload of the directory
+    procedure Flush;
+    /// case-insensitive search for a given TFileName in the folder
+    // - returns '' if not found, or the exact file name in the POSIX folder
+    function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
+    /// allow to change the monitored folder at runtime
+    property Folder: TFileName
+      read fFolder write SetFolder;
+    /// define if sub-folders should also be included to the internal list
+    property SubFolders: boolean
+      read fSubFolders write SetSubFolders;
+  end;
+{$endif OSPOSIX}
 
 
 { ************** Operating-System Independent Unicode Process }
@@ -9158,6 +9191,105 @@ begin
   end;
 end;
 
+{$ifdef OSPOSIX}
+
+{ TPosixFileCaseInsensitive }
+
+procedure TPosixFileCaseInsensitive.SetFolder(const aFolder: TFileName);
+begin
+  fSafe.WriteLock;
+  try
+    fFiles := nil; // force list refresh
+    fLastTix := 0;
+    fFolder := aFolder;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TPosixFileCaseInsensitive.SetSubFolders(aSubFolders: boolean);
+begin
+  if fSubFolders = aSubFolders then
+    exit;
+  fSubFolders := aSubFolders;
+  Flush;
+end;
+
+constructor TPosixFileCaseInsensitive.Create(
+  const aFolder: TFileName; aSubFolders: boolean);
+begin
+  fFolder := aFolder;
+  fSubFolders := aSubFolders;
+end;
+
+procedure TPosixFileCaseInsensitive.OnIdle(tix64: Int64);
+begin
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  tix64 := (tix64 shr 16) + 1; // changes every 65,536 seconds
+  if tix64 = fLastTix then
+    exit;
+  fSafe.WriteLock;
+  try
+    fFiles := nil; // force list refresh
+    fLastTix := tix64;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TPosixFileCaseInsensitive.Flush;
+begin
+  SetFolder(fFolder);
+end;
+
+function TPosixFileCaseInsensitive.Find(const aSearched: TFileName;
+  aReadMs: PInteger): TFileName;
+var
+  start, stop: Int64;
+  i: PtrInt;
+  n: RawUtf8;
+begin
+  result := '';
+  if (self = nil) or
+     (fFolder = '') or
+     (aSearched = '') then
+    exit;
+  StringToUtf8(aSearched, n);
+  start := 0;
+  stop := 0;
+  if fFiles = nil then // need to refresh the cache
+  begin
+    fSafe.WriteLock;
+    try
+      if fFiles = nil then
+      begin
+        if aReadMs <> nil then
+          QueryPerformanceMicroSeconds(start);
+        fFiles := PosixFileNames(fFolder, fSubFolders);
+        QuickSortRawUtf8(fFiles, length(fFiles), nil, @StrIComp);
+        if aReadMs <> nil then
+          QueryPerformanceMicroSeconds(stop);
+        // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
+      end;
+    finally
+      fSafe.WriteUnLock;
+    end;
+  end;
+  fSafe.ReadLock;
+  try
+    i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
+      pointer(fFiles), high(fFiles), pointer(n), @StrIComp);
+    if i >= 0 then
+      Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
+  finally
+    fSafe.ReadUnLock;
+  end;
+  if aReadMs <> nil then
+    aReadMs^ := stop - start;
+end;
+
+{$endif OSPOSIX}
 
 
 { ************** Operating-System Independent Unicode Process }
