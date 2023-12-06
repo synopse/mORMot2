@@ -426,6 +426,7 @@ type
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); virtual;
     function GetHttpQueueLength: cardinal; virtual; abstract;
     procedure SetHttpQueueLength(aValue: cardinal); virtual; abstract;
+    function GetConnectionsActive: cardinal; virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
@@ -594,6 +595,10 @@ type
     // see https://synopse.info/forum/viewtopic.php?pid=28174#p28174
     property HttpQueueLength: cardinal
       read GetHttpQueueLength write SetHttpQueueLength;
+    /// returns the number of current HTTP connections
+    // - may not include HTTP/1.0 short-living connections
+    property ConnectionsActive: cardinal
+      read GetConnectionsActive;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer/TWebSocketAsyncServer have this ability by now
     function CanNotifyCallback: boolean;
@@ -1097,6 +1102,7 @@ type
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
+    function GetConnectionsActive: cardinal; override;
     /// server main loop - don't change directly
     procedure Execute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -1414,6 +1420,7 @@ type
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
     function GetHttpQueueLength: cardinal; override;
+    function GetConnectionsActive: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetMaxBandwidth: cardinal;
     procedure SetMaxBandwidth(aValue: cardinal);
@@ -3450,6 +3457,11 @@ end;
 procedure THttpServer.SetHttpQueueLength(aValue: cardinal);
 begin
   fHttpQueueLength := aValue;
+end;
+
+function THttpServer.GetConnectionsActive: cardinal;
+begin
+  result := fServerConnectionActive;
 end;
 
 procedure THttpServer.Execute;

@@ -881,6 +881,7 @@ type
     fHttpDateNowUtc: string[39]; // consume 37 chars, aligned to 40 bytes
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
+    function GetConnectionsActive: cardinal; override;
     function GetExecuteState: THttpServerExecuteState; override;
     procedure IdleEverySecond; virtual;
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
@@ -3755,6 +3756,11 @@ end;
 procedure THttpAsyncServer.SetHttpQueueLength(aValue: cardinal);
 begin
   fAsync.fMaxPending := aValue;
+end;
+
+function THttpAsyncServer.GetConnectionsActive: cardinal;
+begin
+  result := fAsync.ConnectionCount;
 end;
 
 procedure THttpAsyncServer.Execute;
