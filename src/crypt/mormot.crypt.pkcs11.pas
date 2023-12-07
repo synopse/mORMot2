@@ -519,9 +519,12 @@ begin
 end;
 
 function CertStorageCompare(const A, B): integer;
+var
+  sa, sb: RawUtf8;
 begin
-  result := StrComp(pointer(ICryptCertPkcs11(A).Storage),
-                    pointer(ICryptCertPkcs11(B).Storage));
+  sa := ICryptCertPkcs11(A).Storage;
+  sb := ICryptCertPkcs11(B).Storage;
+  result := StrComp(pointer(sa), pointer(sb));
 end;
 
 procedure TCryptCertAlgoPkcs11.BackgroundLoad(Sender: TObject);
