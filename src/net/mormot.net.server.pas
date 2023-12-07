@@ -1323,8 +1323,7 @@ type
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
   // - will maintain its own local folder of cached files, stored by hash
-  // - main methods are THttpPeerCache.OnDownload/OnDownloaded, from WGet
-  THttpPeerCache = class(TSynPersistent)
+  THttpPeerCache = class(TInterfacedObject, IWGetAlternate)
   protected
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
@@ -1372,18 +1371,19 @@ type
       aHttpServerThreadCount: integer = 2); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
-    /// main processing method, as assigned to THttpClientSocketWGet.OnDownload
+    /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - will transfer Sender.Server/Port/RangeStart/RangeEnd into OutStream
     // - OutStream.LimitPerSecond will be overriden during the call
     // - could return 0 to fallback to a regular GET (e.g. not cached)
-    function OnDowload(Sender: THttpClientSocket;
-      Params: PHttpClientSocketWGet; const Url: RawUtf8;
+    function OnDownload(Sender: THttpClientSocket;
+      const Params: THttpClientSocketWGet; const Url: RawUtf8;
       ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
-    /// main processing method, as assigned to THttpClientSocketWGet.OnDownloaded
+    /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
-    // should be called to copy the content into this instance FilesCachePath
-    // - calling with Params=nil will trigger FilesDeleteDeprecated
-    procedure OnDowloaded(Params: PHttpClientSocketWGet;
+    // should be called to copy the content into this instance files cache
+    // - calling with Source='' will trigger FilesDeleteDeprecated
+    // - PermanentCache=true will
+    procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName);
     /// could be called on a regular basis to purge the cache from oldest files
     // - i.e. to implement optional FilesCacheMaxMin disk space release
@@ -4513,6 +4513,7 @@ function WGetToHash(const Params: THttpClientSocketWGet;
 begin
   result := false;
   if (Params.Hash = '') or
+     (Params.Hasher = nil) or
      not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
     exit; // no valid hash for sure
   Hash.Algo := TStreamRedirectSynHasher(Params.Hasher).GetAlgo;
@@ -4520,9 +4521,9 @@ begin
     pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
 end;
 
-function THttpPeerCache.OnDowload(Sender: THttpClientSocket;
-  Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
-  OutStream: TStreamRedirect): integer;
+function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
+  const Params: THttpClientSocketWGet; const Url: RawUtf8;
+  ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
 var
   req, resp: THttpPeerCacheMessage;
   client: THttpClientSocket;
@@ -4547,7 +4548,7 @@ begin
   if Assigned(log) then
     l := log.Instance;
   MessageInit(pcfRequest, req);
-  if not WGetToHash(Params^, req.Hash) then
+  if not WGetToHash(Params, req.Hash) then
   begin
     l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params.Hash], self);
     exit;
@@ -4632,7 +4633,7 @@ begin
     BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
 end;
 
-procedure THttpPeerCache.OnDowloaded(Params: PHttpClientSocketWGet;
+procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
   const Source: TFileName);
 var
   local: TFileName;
@@ -4642,9 +4643,9 @@ var
   i: PtrInt;
   dir: TFindFilesDynArray;
 begin
-  // first do some clean-up of oldest cached files (maybe with Params = nil)
+  // first do some clean-up of oldest cached files (maybe with Source = '')
   FilesDeleteDeprecated;
-  if Params = nil then
+  if Source = '' then
     exit;
   // validate the supplied downloaded source file
   sourcesize := FileSize(Source);
@@ -4654,7 +4655,7 @@ begin
     exit;
   end;
   // compute the local cache file name from the known file hash
-  if not WGetToHash(Params^, hash) then
+  if not WGetToHash(Params, hash) then
   begin
     fLog.Add.Log(sllWarning, 'OnDowloaded: no hash specified', self);
     exit;
@@ -4662,6 +4663,7 @@ begin
   local := ComputeFileName(hash);
   // check if this file was not already in the cache folder
   localsize := FileSize(local);
+  // check if this file was not already in the cache folder
   if localsize <> 0 then // this hash is already cached
   begin
     if localsize = sourcesize then

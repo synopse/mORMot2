@@ -157,21 +157,15 @@ const
 
 type
   THttpClientSocket = class;
+  IWGetAlternate = interface;
 
-  PHttpClientSocketWGet = ^THttpClientSocketWGet;
-
-  /// method called by THttpClientSocket.WGet() for alternate download
-  // - implementing e.g. a local peer-to-peer download cache
-  // - as set to THttpClientSocketWGet.OnDownload optional parameter
-  // - should behave the same (including RangeStart/RangeEnd support) as
-  // ! Sender.Request(Url, 'GET', Params^.KeepAlive, Params^.Header, '', '',
-  // !      {retry=}false, {instream=}nil, OutStream)
-  // - OutStream.LimitPerSecond may be overriden during the call, e.g. if
-  // operating on a local network
-  // - could return 0 to fallback to a regular GET (e.g. not cached)
-  TOnWGetDownload = function(Sender: THttpClientSocket;
-    Params: PHttpClientSocketWGet; const Url: RawUtf8; ExpectedFullSize: Int64;
-    OutStream: TStreamRedirect): integer of object;
+  /// available THttpClientSocketWGet.Alternate file operations
+  // - by default, cached file is temporary but could be kept forever on disk
+  // if waoPermanentCache is defined
+  TWGetAlternateOption = (
+    waoPermanentCache);
+  /// define how THttpClientSocketWGet.Alternate should operate this file
+  TWGetAlternateOptions = set of TWGetAlternateOption;
 
   /// parameters set for THttpClientSocket.WGet() process
   // - some parameters are optional, and you should call Clear by default
@@ -182,10 +176,7 @@ type
   {$else}
   THttpClientSocketWGet = object
   {$endif USERECORDWITHMETHODS}
-    /// how much time this connection should be kept alive
-    // - as redirected to the internal Request() parameter
-    KeepAlive: cardinal;
-    /// callback event called during download process
+    /// optional callback event called during download process
     // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
     // - note that by default, THttpClientSocket.OnLog will always be called
     OnProgress: TOnStreamProgress;
@@ -197,7 +188,12 @@ type
     // exist (and that the client has the right to access it), then try to call
     // OnDownload() to get it from THttpPeerCache instances in the vicinity,
     // with a fallback to a plain GET if this file is not known by the peers
-    OnDownload: TOnWGetDownload;
+    Alternate: IWGetAlternate;
+    /// how Alternate should operate this file
+    AlternateOptions: TWGetAlternateOptions;
+    /// how much time this connection should be kept alive
+    // - as redirected to the internal Request() parameter
+    KeepAlive: cardinal;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
     // confusion in case of process shutdown - you can use this parameter to
@@ -234,6 +230,30 @@ type
     function WGet(const url: RawUtf8; const destfile: TFileName;
       const tunnel: RawUtf8 = ''; tls: PNetTlsContext = nil;
       sockettimeout: cardinal = 10000; redirectmax: integer = 0): TFileName;
+  end;
+
+  /// interface called by THttpClientSocket.WGet() for alternate download
+  // - THttpPeerCache implements e.g. a local peer-to-peer download cache
+  // - as set to THttpClientSocketWGet.Alternate optional parameter
+  IWGetAlternate = interface
+    /// try to download a resource from the alternative source
+    // - this method is called after a HEAD on the server to retrieve the file
+    // size and ensure the client is authorized to get the resource
+    // - Params.Hasher/Hash are expected to be populated
+    // - should behave the same (including RangeStart/RangeEnd support) as
+    // ! Sender.Request(Url, 'GET', Params^.KeepAlive, Params^.Header, '', '',
+    // !      {retry=}false, {instream=}nil, OutStream)
+    // - OutStream.LimitPerSecond may be overriden during the call, e.g. if
+    // operating on a local network
+    // - could return 0 to fallback to a regular GET (e.g. not cached)
+    function OnDownload(Sender: THttpClientSocket;
+      const Params: THttpClientSocketWGet; const Url: RawUtf8;
+      ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
+    /// put a downloaded file into the alternative source cache
+    // - this method is called after the file has been successfully downloaded
+    // - Params.Hasher/Hash are expected to be populated
+    procedure OnDowloaded(const Params: THttpClientSocketWGet;
+      const Source: TFileName);
   end;
 
   /// THttpClientSocket.Request low-level execution context
@@ -1878,12 +1898,14 @@ var
     partstream.LimitPerSecond := params.LimitBandwith;
     // perform the actual request
     res := 0;
-    if Assigned(params.OnDownload) and
+    if Assigned(params.Alternate) and
+       (params.Hasher <> nil) and
        (params.Hash <> '') and
        ((ExpectedSize <> 0) or // ensure we made the HEAD once for auth and size
         GetExpectedSizeAndRedirection) then
       // alternate download (e.g. local peer-to-peer cache) from file hash
-      res := params.OnDownload(self, @params, requrl, ExpectedSize, partstream);
+      res := params.Alternate.OnDownload(
+               self, params, requrl, ExpectedSize, partstream);
     if res = 0 then
       // regular direct GET, if not done via OnDownload()
       res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
