@@ -696,8 +696,9 @@ type
     // - TAesCfc/TAesOfc will store a header with its own CRC, so detection
     // of most invalid formats (e.g. from fuzzing input) will occur before any
     // AES/MAC process - for TAesGcm, authentication requires decryption
+    // - EndingSize can be used if some custom info is stored at the end of Data
     function MacAndCrypt(const Data: RawByteString; Encrypt, IVAtBeginning: boolean;
-      const Associated: RawByteString = ''): RawByteString;
+      const Associated: RawByteString = ''; EndingSize: PtrInt = 0): RawByteString;
 
     {$ifndef PUREMORMOT2}
     /// deprecated wrapper able to cypher/decypher any in-memory content
@@ -5539,11 +5540,12 @@ begin
 end;
 
 function TAesAbstract.MacAndCrypt(const Data: RawByteString;
-  Encrypt, IVAtBeginning: boolean; const Associated: RawByteString): RawByteString;
+  Encrypt, IVAtBeginning: boolean; const Associated: RawByteString;
+  EndingSize: PtrInt): RawByteString;
 const
-  VERSION = 1;
-  CRCSIZ = SizeOf(THash256) * 2; // nonce+mac hashes
-  SIZ = CRCSIZ + SizeOf(cardinal);
+  VERSION = 1;                     // prepared for any change in our format
+  CRCSIZ = SizeOf(THash256) * 2;   // nonce + mac blocks as in TMacAndCryptData
+  SIZ = CRCSIZ + SizeOf(cardinal); // TMacAndCryptData header before data
 var
   len, enclen: cardinal;
   pcd: PMacAndCryptData absolute Data;
@@ -5562,14 +5564,14 @@ begin
     begin
       len := length(Data);
       enclen := EncryptPkcs7Length(len, IVAtBeginning);
-      SetLength(result, enclen + SizeOf(TAesBlock));
+      SetLength(result, enclen + SizeOf(TAesBlock) + EndingSize);
       P := pointer(result);
       if not EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) then
         result := '';
     end
     else
     begin
-      enclen := length(Data);
+      enclen := length(Data) - EndingSize;
       if enclen < SizeOf(TAesBlock) * 2 then
         exit;
       dec(enclen, SizeOf(TAesBlock));
@@ -5591,7 +5593,7 @@ begin
     // inlined EncryptPkcs7() + RecordSave()
     len := length(Data);
     enclen := EncryptPkcs7Length(len, IVAtBeginning);
-    SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen);
+    SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen + EndingSize);
     P := pointer(ToVarUInt32(enclen, @rcd^.data));
     if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) and
        MacEncryptGetTag(rcd.mac) then
@@ -5605,7 +5607,7 @@ begin
   else
   begin
     // decrypt: validate header
-    enclen := length(Data);
+    enclen := length(Data) - EndingSize;
     if (enclen <= SIZ) or
        (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
       exit;
