@@ -1504,6 +1504,16 @@ var
 
 type
   /// identify an operating system folder for GetSystemPath()
+  // - on Windows, spCommonData maps e.g. 'C:\ProgramData',
+  // spUserData points to 'C:\Users\<user>\AppData\Local',
+  // spLog either to '<exepath>\log' or 'C:\Users\<user>\AppData\Local',
+  // spCommonDocuments to 'C:\Users\Public\Documents',
+  // spUserDocuments to 'C:\Documents and Settings\<user>\My Documents',
+  // and spTempFolder will use the TEMP environment variable
+  // - on POSIX, spTempFolder will use $TMPDIR/$TMP environment variables,
+  // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
+  // spUserData maps '$XDG_CACHE_HOME/<exename>' or '~/.cache/<exename>',
+  // and spLog (if writable) to '/var/log' or '<exepath>' or '~/log'
   TSystemPath = (
     spCommonData,
     spUserData,
@@ -6903,13 +6913,21 @@ end;
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean): TFileName;
 begin
-  result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
-  if not DirectoryExists(result) then
-    if not ForceDirectories(result) then
-      if not RaiseExceptionOnCreationFailure then
-        result := ''
-      else
-        raise Exception.CreateFmt('Impossible to create folder %s', [result]);
+  if Directory = '' then
+    if RaiseExceptionOnCreationFailure then
+      raise Exception.Create('Unexpected EnsureDirectoryExists('''')')
+    else
+      result := ''
+  else
+  begin
+    result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
+    if not DirectoryExists(result) then
+      if not ForceDirectories(result) then
+        if RaiseExceptionOnCreationFailure then
+          raise Exception.CreateFmt('Impossible to create folder %s', [result])
+        else
+          result := '';
+  end;
 end;
 
 function NormalizeDirectoryExists(const Directory: TFileName;

@@ -2562,12 +2562,12 @@ const
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
   CSIDL: array[TSystemPath] of integer = (
-    CSIDL_COMMON_APPDATA,   // spCommonData
-    CSIDL_LOCAL_APPDATA,    // spUserData
-    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
-    CSIDL_PERSONAL,         // spUserDocuments
+    CSIDL_COMMON_APPDATA,   // spCommonData      C:\ProgramData
+    CSIDL_LOCAL_APPDATA,    // spUserData        C:\Users\<user>\AppData\Local
+    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments C:\Users\Public\Documents
+    CSIDL_PERSONAL,         // spUserDocuments   C:\Documents and Settings\<user>\My Documents
     0,                      // spTempFolder
-    CSIDL_LOCAL_APPDATA);   // spLog
+    CSIDL_LOCAL_APPDATA);   // spLog             C:\Users\<user>\AppData\Local
   ENV: array[TSystemPath] of TFileName = (
     'ALLUSERSAPPDATA',      // spCommonData
     'LOCALAPPDATA',         // spUserData
