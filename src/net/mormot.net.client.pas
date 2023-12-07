@@ -192,10 +192,11 @@ type
     /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough
     OnStreamCreate: TOnStreamCreate;
     /// optional callback to allow an alternate download method
-    // - if defined, it will make a HEAD on the server, then will make a direct
-    // GET if the size is below OnDownloadTriggerSize, or will call OnDownload()
-    // to retrieve the content for big files
-    // - can be used for a local peer-to-peer download cache
+    // - can be used for a local peer-to-peer download cache via THttpPeerCache
+    // - if defined, it will make a HEAD on the server to ensure the file still
+    // exist (and that the client has the right to access it), then try to call
+    // OnDownload() to get it from THttpPeerCache instances in the vicinity,
+    // with a fallback to a plain GET if this file is not known by the peers
     OnDownload: TOnWGetDownload;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
@@ -227,9 +228,6 @@ type
     // each packet, whereas this property is about the global time elapsed
     // during the whole download process
     TimeOutSec: integer;
-    /// optional Size in bytes after which OnDownload() is called back
-    // - if not set (i.e. has its default 0 value), then 1 shl 20 (1MB) is used
-    OnDownloadTriggerSize: integer;
     /// initialize the default parameters
     procedure Clear;
     /// after Clear, instantiate and wrap THttpClientSocket.WGet
@@ -1882,10 +1880,9 @@ var
     res := 0;
     if Assigned(params.OnDownload) and
        (params.Hash <> '') and
-       ((ExpectedSize <> 0) or
-        GetExpectedSizeAndRedirection) and
-       (ExpectedSize >= params.OnDownloadTriggerSize) then
-      // alternate download (e.g. local peer-to-peer cache)
+       ((ExpectedSize <> 0) or // ensure we made the HEAD once for auth and size
+        GetExpectedSizeAndRedirection) then
+      // alternate download (e.g. local peer-to-peer cache) from file hash
       res := params.OnDownload(self, @params, requrl, ExpectedSize, partstream);
     if res = 0 then
       // regular direct GET, if not done via OnDownload()
@@ -1933,8 +1930,6 @@ begin
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
   ExpectedSize := 0;
-  if params.OnDownloadTriggerSize <= 0 then
-    params.OnDownloadTriggerSize := 1 shl 20; // default OnDownload() if >= 1MB
   // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
