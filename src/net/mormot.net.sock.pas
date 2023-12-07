@@ -160,6 +160,9 @@ type
     // NewSocketIP4Lookup (mormot.net.dns)
     // - as called by SetFrom() high-level method
     function SetFromIP4(const address: RawUtf8; noNewSocketIP4Lookup: boolean): boolean;
+    /// initialize this address from a standard IPv4
+    // - set a given 32-bit IPv4 address and its network port (0..65535)
+    function SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
     /// returns the network family of this address
     function Family: TNetFamily;
     /// compare two IPv4/IPv6  network addresses
@@ -185,8 +188,6 @@ type
     function Port: TNetPort;
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
-    /// set a given 32-bit IPv4 address and its network port (0..65535)
-    function SetIP4Port(ipv4: cardinal; netport: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
@@ -459,7 +460,7 @@ function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 procedure IP4Short(ip4addr: PByteArray; var s: ShortString); 
 
 /// convert an IPv4 raw value into a ShortString text
-function IP4ToShort(ip4addr: PByteArray): ShortString;
+function IP4ToShort(ip4addr: PByteArray): TShort16;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an IPv4 raw value into a RawUtf8 text
@@ -2840,7 +2841,7 @@ begin
   PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
 end;
 
-function IP4ToShort(ip4addr: PByteArray): ShortString;
+function IP4ToShort(ip4addr: PByteArray): TShort16;
 begin
   IP4Short(ip4addr, result);
 end;
