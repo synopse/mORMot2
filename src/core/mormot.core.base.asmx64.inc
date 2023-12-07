@@ -671,10 +671,11 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     rcx, rdi
         mov     rdx, rsi
         mov     rax, rsi
+        cmp     rsi, 10
         {$else}
         mov     rax, rdx
-        {$endif SYSVABI}
         cmp     rdx, 10
+        {$endif SYSVABI}
         jb      @1  // direct process of common val<10
         lea     r8, [rip + TwoDigitLookup]
 @s:     lea     rcx, [rcx - 2]
