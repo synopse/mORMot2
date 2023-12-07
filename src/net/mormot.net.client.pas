@@ -169,6 +169,7 @@ type
     waoPermanentCache,
     waoNoHeadFirst,
     waoNoMinimalSize);
+
   /// define how THttpClientSocketWGet.Alternate should operate this file
   TWGetAlternateOptions = set of TWGetAlternateOption;
 

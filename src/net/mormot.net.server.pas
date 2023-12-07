@@ -4627,7 +4627,7 @@ begin
   if size = 0 then
     exit; // not existing
   result := HTTP_NOTACCEPTABLE;
-  if (aMessage.Size <> 0) and // ExpectedSize may be 0
+  if (aMessage.Size <> 0) and // ExpectedSize may be 0 if waoNoHeadFirst was set
      (size <> aMessage.Size) then
     exit; // invalid file
   result := HTTP_SUCCESS;
@@ -4661,8 +4661,8 @@ var
   log: ISynLog;
   l: TSynLog;
 begin
-  // validate WGet caller context
   result := 0;
+  // validate WGet caller context
   if (self = nil) or
      (fSettings = nil) or
      (fHttpServer = nil) or
@@ -4717,11 +4717,11 @@ begin
       minsize := fSettings.CacheTempMinBytes;
     if ExpectedFullSize < minsize then
     begin
-      l.Log(sllTrace, 'OnDownload: size < minsize=%', [minsize], self);
+      l.Log(sllTrace, 'OnDownload: size < minsize=%', [KB(minsize)], self);
       exit; // you are too small, buddy
     end;
   end;
-  // we need to braodcast a request
+  // broadcast the request over UDP
   if MessageBroadcast(req, l, resp) then
   try
     // make a local HTTP request of the needed content on the best response
@@ -4739,6 +4739,8 @@ begin
       result := client.Request(
         u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
       l.Log(sllTrace, 'OnDownload: Request=%', [result], self);
+      if not (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+        result := 0; // unexpected error when downloading from local peer
     finally
       client.Free;
     end;
@@ -4746,7 +4748,7 @@ begin
     on E: Exception do
     begin
       l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
-      result := 0;
+      result := 0; // will fallback to regular GET on the main repository
     end;
   end;
 end;
@@ -4844,18 +4846,19 @@ begin
     local := fTempFilesPath + local;
     istemp := true;
   end;
+  // check if this file was not already in the cache folder
+  // - outside fFilesSafe.Lock because happens after OnDownload from cache
+  localsize := FileSize(local);
+  if localsize <> 0 then
+  begin
+    fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
+      'OnDowloaded: % already in cache', [Source], self);
+    // size mismatch may happen on race conditional (unlikely hash collision)
+    exit;
+  end;
   QueryPerformanceMicroSeconds(start);
   fFilesSafe.Lock; // disable any concurrent file access
   try
-    // check if this file was not already in the cache folder
-    localsize := FileSize(local);
-    if localsize <> 0 then
-    begin
-      fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
-        'OnDowloaded: % already in cache', [Source], self);
-      // size mismatch may happen on race conditional (unlikely hash collision)
-      exit;
-    end;
     // ensure adding this file won't trigger the maximum cache size limit
     if (fTempFilesMaxSize > 0) and
        istemp then
