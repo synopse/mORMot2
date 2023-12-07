@@ -3834,7 +3834,10 @@ var
   md5: TMd5;
   dig: THash128Rec;
 begin
-  md5.Full(buffer, len, dig.b);
+  md5.Init;
+  md5.Update(crc, SizeOf(crc));
+  md5.Update(buffer^, len);
+  md5.Final(dig.b);
   result := dig.c0 xor dig.c1 xor dig.c2 xor dig.c3;
 end;
 
@@ -3843,7 +3846,10 @@ var
   sha: TSha1;
   dig: THash256Rec;
 begin
-  sha.Full(buffer, len, dig.sha1);
+  sha.Init;
+  sha.Update(@crc, SizeOf(crc));
+  sha.Update(buffer, len);
+  sha.Final(dig.sha1);
   result := dig.c[0] xor dig.c[1] xor dig.c[2] xor dig.c[3] xor dig.c[4];
 end;
 
