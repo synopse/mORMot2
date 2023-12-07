@@ -162,8 +162,11 @@ type
   /// available THttpClientSocketWGet.Alternate file operations
   // - by default, cached file is temporary but could be kept forever on disk
   // if waoPermanentCache is defined
+  // - waoNoHeadFirst will call OnDownload() first then fallback to GET so
+  // may be preferred e.g. if the main server has a huge latency
   TWGetAlternateOption = (
-    waoPermanentCache);
+    waoPermanentCache,
+    waoNoHeadFirst);
   /// define how THttpClientSocketWGet.Alternate should operate this file
   TWGetAlternateOptions = set of TWGetAlternateOption;
 
@@ -1902,7 +1905,8 @@ var
     if Assigned(params.Alternate) and
        (params.Hasher <> nil) and
        (params.Hash <> '') and
-       ((ExpectedSize <> 0) or // ensure we made the HEAD once for auth and size
+       ((waoNoHeadFirst in params.AlternateOptions) or
+        (ExpectedSize <> 0) or // ensure we made HEAD once for auth and size
         GetExpectedSizeAndRedirection) then
       // alternate download (e.g. local peer-to-peer cache) from file hash
       res := params.Alternate.OnDownload(

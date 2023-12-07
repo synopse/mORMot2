@@ -1361,7 +1361,7 @@ type
     function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName): TFileName; virtual;
     function LocalFileName(const aMessage: THttpPeerCacheMessage;
-      out aFileName: TFileName): integer;
+      out aFileName: TFileName; aSize: PInt64): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
   public
@@ -1389,8 +1389,7 @@ type
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
-    // - calling with Source='' will trigger FilesDeleteDeprecated
-    // - PermanentCache=true will
+    // - calling with Source='' will just trigger FilesDeleteDeprecated
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName); virtual;
     /// method called by the HttpServer before any request is processed
@@ -4486,7 +4485,7 @@ var
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
   RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
-  if aKind = pcfRequest then
+  if aKind in [pcfRequest, pcfPing] then
     aMsg.Seq := InterlockedIncrement(fFrameSeq);
   aMsg.Kind := aKind;
   aMsg.Uuid := fUuid;
@@ -4565,6 +4564,64 @@ function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
   aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean;
 begin
   result := false; // work in progress
+  fBroadcastSafe.Lock;
+  try
+
+  finally
+    fBroadcastSafe.UnLock;
+  end;
+end;
+
+function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
+begin
+  // filename is binary algo + hash encoded as hexadecimal, for easier debug
+  result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+end;
+
+function THttpPeerCache.PermFileName(const aFileName: TFileName): TFileName;
+begin
+  // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
+  // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
+  result := EnsureDirectoryExists(fPermFilesPath +
+              sysutils.lowercase(copy(aFileName, 3, 1))) + aFileName;
+end;
+
+function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
+  out aFileName: TFileName; aSize: PInt64): integer;
+var
+  name: TFileName;
+  size: Int64;
+begin
+  name := ComputeFileName(aMessage.Hash);
+  size := 0;
+  fFilesSafe.Lock; // disable any concurrent file access
+  try
+    if fPermFilesPath <> '' then
+    begin
+      aFileName := PermFileName(name); // with proper sub-folder
+      size := FileSize(aFileName);
+    end;
+    if (size = 0) and
+       (fTempFilesPath <> '') then
+    begin
+      aFileName := fTempFilesPath + name;
+      size := FileSize(aFileName);
+      if size <> 0 then // mark this temporary cached file as just used
+        FileSetDate(aFileName, DateTimeToFileDate(Now));
+    end;
+  finally
+    fFilesSafe.UnLock;
+  end;
+  result := HTTP_NOTFOUND;
+  if size = 0 then
+    exit; // not existing
+  result := HTTP_NOTACCEPTABLE;
+  if (aMessage.Size <> 0) and // ExpectedSize may be 0
+     (size <> aMessage.Size) then
+    exit; // invalid file
+  result := HTTP_SUCCESS;
+  if aSize <> nil then
+    aSize^ := size;
 end;
 
 function WGetToHash(const Params: THttpClientSocketWGet;
@@ -4589,6 +4646,7 @@ var
   head, ip, u: RawUtf8;
   fn: TFileName;
   local: TFileStreamEx;
+  minsize: Int64;
   log: ISynLog;
   l: TSynLog;
 begin
@@ -4614,11 +4672,11 @@ begin
     l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params.Hash], self);
     exit;
   end;
-  req.Size := ExpectedFullSize;
+  req.Size := ExpectedFullSize; // may be 0 if waoNoHeadFirst
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
-  // check if we don't already have this file cached locally
-  if LocalFileName(req, fn) = HTTP_SUCCESS then
+  // always check if we don't already have this file cached locally
+  if LocalFileName(req, fn, @req.Size) = HTTP_SUCCESS then
   begin
     l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
@@ -4720,20 +4778,6 @@ begin
   end;
 end;
 
-function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
-begin
-  // filename is binary algo + hash encoded as hexadecimal, for easier debug
-  result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
-end;
-
-function THttpPeerCache.PermFileName(const aFileName: TFileName): TFileName;
-begin
-  // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
-  // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
-  result := EnsureDirectoryExists(fPermFilesPath +
-              sysutils.lowercase(copy(aFileName, 3, 1))) + aFileName;
-end;
-
 procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
   const Source: TFileName);
 var
@@ -4777,8 +4821,8 @@ begin
   QueryPerformanceMicroSeconds(start);
   fFilesSafe.Lock; // disable any concurrent file access
   try
-    localsize := FileSize(local);
     // check if this file was not already in the cache folder
+    localsize := FileSize(local);
     if localsize <> 0 then
     begin
       fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
@@ -4835,41 +4879,6 @@ begin
       [Source, local, MicroSecToString(stop - start)], self);
 end;
 
-function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
-  out aFileName: TFileName): integer;
-var
-  name: TFileName;
-  size: Int64;
-begin
-  name := ComputeFileName(aMessage.Hash);
-  size := 0;
-  fFilesSafe.Lock; // disable any concurrent file access
-  try
-    if fPermFilesPath <> '' then
-    begin
-      aFileName := PermFileName(name); // with proper sub-folder
-      size := FileSize(aFileName);
-    end;
-    if (size = 0) and
-       (fTempFilesPath <> '') then
-    begin
-      aFileName := fTempFilesPath + name;
-      size := FileSize(aFileName);
-      if size <> 0 then // mark this temporary cached file as just used
-        FileSetDate(aFileName, DateTimeToFileDate(Now));
-    end;
-  finally
-    fFilesSafe.UnLock;
-  end;
-  result := HTTP_NOTFOUND;
-  if size = 0 then
-    exit; // not existing
-  result := HTTP_NOTACCEPTABLE;
-  if size <> aMessage.Size then
-    exit; // invalid file
-  result := HTTP_SUCCESS;
-end;
-
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
@@ -4880,7 +4889,7 @@ begin
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
-    result := LocalFileName(msg, fn);
+    result := LocalFileName(msg, fn, nil);
     if result <> HTTP_SUCCESS then
       exit;
     // just return the file as requested
