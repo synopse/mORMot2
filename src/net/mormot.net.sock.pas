@@ -456,7 +456,11 @@ function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
-procedure IP4Short(ip4addr: PByteArray; var s: ShortString);
+procedure IP4Short(ip4addr: PByteArray; var s: ShortString); overload;
+
+/// convert an IPv4 raw value into a ShortString text
+function IP4Short(ip4addr: PByteArray): ShortString; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an IPv4 raw value into a RawUtf8 text
 // - zero 0.0.0.0 address  (i.e. bound to any host) is returned as ''
@@ -509,7 +513,7 @@ function GetIPAddressesText(const Sep: RawUtf8 = ' ';
 type
   /// the network interface type, as stored in TMacAddress.Kind
   // - we don't define all ARP models, but try to detect most basic types
-  TMacAddressKind= (
+  TMacAddressKind = (
     makUndefined,
     makEthernet,
     makWifi,
@@ -2834,6 +2838,11 @@ begin
   s[ord(s[0])] := '.';
   AppendShortCardinal(ip4addr[3], s);
   PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
+end;
+
+function IP4Short(ip4addr: PByteArray): ShortString;
+begin
+  IP4Short(ip4addr, result);
 end;
 
 procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);

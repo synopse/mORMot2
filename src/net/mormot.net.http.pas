@@ -419,6 +419,7 @@ function ToText(st: THttpRequestState): PShortString; overload;
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
 function ToText(csp: TCrtSocketPending): PShortString; overload;
 function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
+function ToText(mak: TMacAddressKind): PShortString; overload;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -2069,11 +2070,15 @@ begin
   result := GetEnumName(TypeInfo(TCrtSocketPending), ord(csp));
 end;
 
-function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
-  begin
-    result := GetEnumName(TypeInfo(TCrtSocketTlsAfter), ord(tls));
-  end;
+function ToText(tls: TCrtSocketTlsAfter): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCrtSocketTlsAfter), ord(tls));
+end;
 
+function ToText(mak: TMacAddressKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TMacAddressKind), ord(mak));
+end;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }

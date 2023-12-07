@@ -1431,6 +1431,11 @@ const
 
   PEER_CACHE_PATTERN = '*.cache';
 
+function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
+
+function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
+
+
 {$ifdef USEWININET}
 
 { **************** THttpApiServer HTTP/1.1 Server Over Windows http.sys Module }
@@ -4417,9 +4422,10 @@ procedure THttpPeerCache.StartHttpServer(
 begin
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // may be THttpAsyncServer
-  fHttpServer := aHttpServerClass.Create(
-    aIP, nil, fLog.Family.OnThreadEnded, 'peercache',
-    aHttpServerThreadCount, 30000, [hsoBan40xIP, hsoNoXPoweredHeader]);
+  fHttpServer := aHttpServerClass.Create(aIP, nil,
+    fLog.Family.OnThreadEnded, 'peercache', aHttpServerThreadCount, 30000,
+    [hsoBan40xIP,
+     hsoNoXPoweredHeader]);
 end;
 
 destructor THttpPeerCache.Destroy;
@@ -4623,7 +4629,7 @@ function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileN
 begin
   // filename is binary algo + hash encoded as hexadecimal, for easier debug
   result := FormatString('%%.cache', [fFilesPath,
-    BinToHexDisplayLowerShort(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+    BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
 end;
 
 procedure THttpPeerCache.OnDowloaded(Params: PHttpClientSocketWGet;
@@ -4744,6 +4750,21 @@ begin
   finally
     fLog.Add.Log(sllTrace, 'OnRequest=% % as %', [result, Ctxt.Url, fn], self);
   end;
+end;
+
+
+function ToText(pcf: THttpPeerCacheMessageKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpPeerCacheMessageKind), ord(pcf));
+end;
+
+function ToText(const msg: THttpPeerCacheMessage): shortstring;
+begin
+  with msg do
+    FormatShort('% from % % msk=% bct=% %b/s % %',
+      [ToText(Kind)^, GuidToShort(Uuid), IP4Short(@IP4), IP4Short(@NetMaskIP4),
+       IP4Short(@BroadcastIP4), Speed, ToText(Hardware)^,
+       ComputeFileName(msg.Hash), Size], result);
 end;
 
 {$ifdef USEWININET}
