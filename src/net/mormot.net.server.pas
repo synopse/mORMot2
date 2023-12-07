@@ -1207,12 +1207,13 @@ type
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
     fLimitMBPerSec, fCacheTempMaxMB, fCacheTempMaxMin: integer;
+    fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
     // - i.e. Port=8089, LimitMBPerSec=10, CacheTempMaxMB=1000 and
-    // CacheTempMaxMin=15
+    // CacheTempMaxMin=15, CacheTempMinBytes=CachePermMinBytes=2048
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1243,11 +1244,10 @@ type
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
     property CacheTempPath: TFileName
       read fCacheTempPath write fCacheTempPath;
-    /// location of the permanent cached files, available for remote requests
-    // - the files are cached using their THttpPeerCacheHash values as filename
-    // - this folder won't be purged
-    property CachePermPath: TFileName
-      read fCachePermPath write fCachePermPath;
+    /// above how many bytes the peer network should be asked for a temporary file
+    // - there is no size limitation if the file is already in the temporary cache
+    property CacheTempMinBytes: integer
+      read fCacheTempMinBytes  write fCacheTempMinBytes;
     /// after how many MB in CacheTempPath the folder should be cleaned
     // - default is 1000, i.e. just below 1 GB
     // - THttpPeerCache.Create will ensure that this value won't take more than
@@ -1258,6 +1258,15 @@ type
     // - default is 15
     property CacheTempMaxMin: integer
       read fCacheTempMaxMin write fCacheTempMaxMin;
+    /// location of the permanent cached files, available for remote requests
+    // - the files are cached using their THttpPeerCacheHash values as filename
+    // - this folder won't be purged
+    property CachePermPath: TFileName
+      read fCachePermPath write fCachePermPath;
+    /// above how many bytes the peer network should be asked for a permanent file
+    // - there is no size limitation if the file is already in the permanent cache
+    property CachePermMinBytes: integer
+      read fCachePermMinBytes  write fCachePermMinBytes;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -4346,10 +4355,12 @@ begin
   inherited Create;
   fPort := 8089;
   fLimitMBPerSec := 10;
+  fCacheTempPath := '*';
+  fCacheTempMinBytes := 2048;
   fCacheTempMaxMB := 1000;
   fCacheTempMaxMin := 15;
   fCachePermPath := '*';
-  fCacheTempPath := '*';
+  fCachePermMinBytes := 2048
 end;
 
 
@@ -4694,6 +4705,20 @@ begin
     end;
     result := HTTP_SUCCESS;
     exit;
+  end;
+  // ensure the file is big enough for broadcasting
+  if (ExpectedFullSize <> 0) then
+  begin
+    if (waoPermanentCache in Params.AlternateOptions) and
+       (fPermFilesPath <> '') then
+      minsize := fSettings.CachePermMinBytes
+    else
+      minsize := fSettings.CacheTempMinBytes;
+    if ExpectedFullSize < minsize then
+    begin
+      l.Log(sllTrace, 'OnDownload: size < minsize=%', [minsize], self);
+      exit; // you are too small, buddy
+    end;
   end;
   // we need to braodcast a request
   if MessageBroadcast(req, l, resp) then
