@@ -1206,13 +1206,13 @@ type
   protected
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
-    fLimitMBPerSec, fFilesCacheMaxMB, fFilesCacheMaxMin: integer;
+    fLimitMBPerSec, fCacheTempMaxMB, fCacheTempMaxMin: integer;
     fInterfaceName: RawUtf8;
-    fFilesCachePath: TFileName;
+    fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
-    // - i.e. Port=8089, LimitMBPerSec=10, FilesCacheMaxMB=1000 and
-    // FilesCacheMaxMin=15
+    // - i.e. Port=8089, LimitMBPerSec=10, CacheTempMaxMB=1000 and
+    // CacheTempMaxMin=15
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1238,20 +1238,26 @@ type
     // - you may set -1 to use the default TStreamRedirect.LimitPerSecond value
     property LimitMBPerSec: integer
       read fLimitMBPerSec write fLimitMBPerSec;
-    /// location of the cached files, available for remote requests
+    /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
-    property FilesCachePath: TFileName
-      read fFilesCachePath write fFilesCachePath;
-    /// after how many MB in FilesCachePath the folder should be cleaned
+    // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
+    property CacheTempPath: TFileName
+      read fCacheTempPath write fCacheTempPath;
+    /// location of the permanent cached files, available for remote requests
+    // - the files are cached using their THttpPeerCacheHash values as filename
+    // - this folder won't be purged
+    property CachePermPath: TFileName
+      read fCachePermPath write fCachePermPath;
+    /// after how many MB in CacheTempPath the folder should be cleaned
     // - default is 1000, i.e. just below 1 GB
     // - THttpPeerCache.Create will ensure that this value won't take more than
-    // 25% of the FilesCachePath folder available space
-    property FilesCacheMaxMB: integer
-      read fFilesCacheMaxMB write fFilesCacheMaxMB;
-    /// after how many minutes files in FilesCachePath could be cleaned
+    // 25% of the CacheTempPath folder available space
+    property CacheTempMaxMB: integer
+      read fCacheTempMaxMB write fCacheTempMaxMB;
+    /// after how many minutes files in CacheTempPath could be cleaned
     // - default is 15
-    property FilesCacheMaxMin: integer
-      read fFilesCacheMaxMin write fFilesCacheMaxMin;
+    property CacheTempMaxMin: integer
+      read fCacheTempMaxMin write fCacheTempMaxMin;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -1335,10 +1341,11 @@ type
     fBroadcastSafe: TOSLightLock; // non-rentrant
     fMac: TMacAddress;
     fUuid: TGuid;
-    fFilesLock: TLightLock; // for concurrent fFilesPath access
-    fFilesPath: TFileName;
-    fFilesMaxSize: Int64; // from Settings.FilesCacheMaxMB
-    fFilesDeleteDeprecatedTix: cardinal;
+    fPermFilesPath: TFileName;
+    fTempFilesSafe: TLightLock; // for concurrent fTempFilesPath access
+    fTempFilesPath: TFileName;
+    fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
+    fTempFilesDeleteDeprecatedTix: cardinal;
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1359,9 +1366,7 @@ type
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
     // settings class instance)
-    // - aSharedMagic is expected to appear at the beginning of each UDP frame
-    // - aSharedSecret will be owned and used to cipher and authenticate each
-    // UDP frame, and comes typically from TAesFast[mGCM].Create()
+    // - aSharedSecret is used to cipher and authenticate each UDP frame
     // - if aSettings = nil, default values will be used by this instance
     // - you can supply THttpAsyncServer class to replace default THttpServer
     // - may raise some exceptions if the HTTP server cannot be started
@@ -1386,9 +1391,9 @@ type
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName);
     /// could be called on a regular basis to purge the cache from oldest files
-    // - i.e. to implement optional FilesCacheMaxMin disk space release
+    // - i.e. to implement optional CacheTempMaxMin disk space release
     // - is also called from OnDownloaded()
-    // - will actually read and search the FilesCachePath folder every minute
+    // - will actually read and search the CacheTempPath folder every minute
     procedure FilesDeleteDeprecated;
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
@@ -4331,8 +4336,10 @@ begin
   inherited Create;
   fPort := 8089;
   fLimitMBPerSec := 10;
-  fFilesCacheMaxMB := 1000;
-  fFilesCacheMaxMin := 15;
+  fCacheTempMaxMB := 1000;
+  fCacheTempMaxMin := 15;
+  fCachePermPath := '*';
+  fCacheTempPath := '*';
 end;
 
 
@@ -4360,27 +4367,38 @@ begin
   end
   else
     fSettings := aSettings;
-  // check the files cache folder and its maximum allowed size
-  if fSettings.FilesCachePath = '' then
-    fSettings.FilesCachePath := TemporaryFileName;
-  fFilesPath := EnsureDirectoryExists(fSettings.FilesCachePath, {except=}true);
-  FilesDeleteDeprecated; // initial clean-up
-  fFilesMaxSize := Int64(fSettings.FilesCacheMaxMB) shl 20;
-  avail := GetDiskAvailable(fFilesPath);
-  existing := DirectorySize(fFilesPath, false, PEER_CACHE_PATTERN);
-  if Assigned(log) then
-    log.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
-      [fFilesPath, KB(avail), KB(existing)], self);
-  if avail <> 0 then
+  // check the temporary files cache folder and its maximum allowed size
+  if fSettings.CacheTempPath = '*' then // not customized
+    fSettings.CacheTempPath := TemporaryFileName;
+  fTempFilesPath := EnsureDirectoryExists(fSettings.CacheTempPath);
+  if fTempFilesPath <> '' then
   begin
-    avail := (avail + existing) shr 2; // allow up to 25% of the folder capacity
-    if fFilesMaxSize > avail then
+    FilesDeleteDeprecated; // initial clean-up
+    fTempFilesMaxSize := Int64(fSettings.CacheTempMaxMB) shl 20;
+    avail := GetDiskAvailable(fTempFilesPath);
+    existing := DirectorySize(fTempFilesPath, false, PEER_CACHE_PATTERN);
+    if Assigned(log) then
+      log.Log(sllDebug, 'Create: % folder has % available, with % existing cache',
+        [fTempFilesPath, KB(avail), KB(existing)], self);
+    if avail <> 0 then
     begin
-      fFilesMaxSize := avail;
-      if Assigned(log) then
-        log.Log(sllDebug, 'Create: set FilesCacheMaxMB=%', [avail shr 20], self);
+      avail := (avail + existing) shr 2; // allow up to 25% of the folder capacity
+      if fTempFilesMaxSize > avail then
+      begin
+        fTempFilesMaxSize := avail;
+        if Assigned(log) then
+          log.Log(sllDebug, 'Create: set CacheTempMaxMB=%', [avail shr 20], self);
+      end;
     end;
   end;
+  // ensure we have somewhere to cache
+  if fSettings.CachePermPath = '*' then // not customized
+    fSettings.CachePermPath := MakePath(
+      [GetSystemPath(spCommonData), Executable.ProgramName, 'permcache']);
+  fPermFilesPath := EnsureDirectoryExists(fSettings.CachePermPath);
+  if (fTempFilesPath = '') and
+     (fPermFilesPath = '') then
+    raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
   // retrieve the local network interface to be used
   SelectNetworkInterface;
   FormatUtf8('%:%', [fMac.IP, fSettings.Port], ip); // bound to this network
@@ -4610,27 +4628,27 @@ procedure THttpPeerCache.FilesDeleteDeprecated;
 var
   tix, size: Int64;
 begin
-  if fSettings.fFilesCacheMaxMin <= 0 then
+  if (fSettings.fCacheTempMaxMin <= 0) or
+     (fTempFilesPath = '') then
     exit;
   tix := (GetTickCount64 shr 16) + 1; // only check every minute
-  if (fFilesDeleteDeprecatedTix <> tix) and
-     fFilesLock.TryLock then
+  if (fTempFilesDeleteDeprecatedTix <> tix) and
+     fTempFilesSafe.TryLock then
   try
-    fFilesDeleteDeprecatedTix := tix;
+    fTempFilesDeleteDeprecatedTix := tix;
     if DirectoryDeleteOlderFiles(
-         fFilesPath, fSettings.FilesCacheMaxMin / MinsPerDay,
+         fTempFilesPath, fSettings.CacheTempMaxMin / MinsPerDay,
          PEER_CACHE_PATTERN, false, @size) then
       fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
   finally
-    fFilesLock.UnLock;
+    fTempFilesSafe.UnLock;
   end;
 end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
 begin
   // filename is binary algo + hash encoded as hexadecimal, for easier debug
-  result := FormatString('%%.cache', [fFilesPath,
-    BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+  result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
 end;
 
 procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
@@ -4661,7 +4679,11 @@ begin
     exit;
   end;
   local := ComputeFileName(hash);
-  // check if this file was not already in the cache folder
+  if (waoPermanentCache in Params.AlternateOptions) and
+     (fPermFilesPath <> '') then
+    local := fPermFilesPath + local
+  else
+    local := fTempFilesPath + local;
   localsize := FileSize(local);
   // check if this file was not already in the cache folder
   if localsize <> 0 then // this hash is already cached
@@ -4677,23 +4699,27 @@ begin
     exit;
   end;
   // ensure adding this file won't trigger the maximum cache size limit
+  if (fTempFilesPath = '') or
+     ((waoPermanentCache in Params.AlternateOptions) and
+      (fPermFilesPath <> '')) then
+    exit; // nothing to manage
   QueryPerformanceMicroSeconds(start);
-  fFilesLock.Lock; // disable any background FilesDeleteDeprecated access
+  fTempFilesSafe.Lock; // disable any background FilesDeleteDeprecated access
   try
-    if fFilesMaxSize > 0 then
+    if fTempFilesMaxSize > 0 then
     begin
-      if sourcesize >= fFilesMaxSize then
+      if sourcesize >= fTempFilesMaxSize then
         tot := sourcesize // this file is oversized for sure
       else
       begin
         // compute the current folder cache size
-        dir := FindFiles(fFilesPath, PEER_CACHE_PATTERN);
+        dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
         tot := sourcesize; // simulate adding this file
         for i := 0 to high(dir) do
           inc(tot, dir[i].Size);
-        if tot >= fFilesMaxSize then
+        if tot >= fTempFilesMaxSize then
         begin
-          // delete oldest files in cache up to FilesCacheMaxMB
+          // delete oldest files in cache up to CacheTempMaxMB
           FindFilesSortByTimestamp(dir);
           deleted := 0;
           for i := 0 to high(dir) do
@@ -4701,13 +4727,13 @@ begin
             begin
               dec(tot, dir[i].Size);
               inc(deleted, dir[i].Size);
-              if tot < fFilesMaxSize then
+              if tot < fTempFilesMaxSize then
                 break; // we have deleted enough old files
             end;
           fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
         end;
       end;
-      if tot >= fFilesMaxSize then
+      if tot >= fTempFilesMaxSize then
       begin
         fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
           [Source, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
@@ -4719,7 +4745,7 @@ begin
     if ok then
       FileSetDate(local, DateTimeToFileDate(Now)); // force timestamp = now
   finally
-    fFilesLock.UnLock;
+    fTempFilesSafe.UnLock;
   end;
   QueryPerformanceMicroSeconds(stop);
   fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
@@ -4729,8 +4755,8 @@ end;
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
-  tok: RawByteString;
-  fn: TFileName;
+  name, fn: TFileName;
+  size: Int64;
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
@@ -4738,12 +4764,24 @@ begin
      MessageDecode(tok, msg) then
   try
     // get local filename from decoded bearer hash
+    name := ComputeFileName(msg.Hash);
+    size := 0;
+    if fTempFilesPath <> '' then
+    begin
+      fn := fTempFilesPath + name;
+      size := FileSize(fn);
+    end;
+    if (size = 0) and
+       (fPermFilesPath <> '') then
+    begin
+      fn := fPermFilesPath + name;
+      size := FileSize(fn);
+    end;
     result := HTTP_NOTFOUND;
-    fn := ComputeFileName(msg.Hash);
-    if fn = '' then
+    if size = 0 then
       exit; // not existing
     result := HTTP_NOTACCEPTABLE;
-    if FileSize(fn) <> msg.Size then
+    if size <> msg.Size then
       exit; // invalid file
     // just return the file as requested
     result := HTTP_SUCCESS;
@@ -4763,10 +4801,10 @@ end;
 function ToText(const msg: THttpPeerCacheMessage): shortstring;
 begin
   with msg do
-    FormatShort('% from % % msk=% bct=% %b/s % %',
+    FormatShort('% from % % msk=% bst=% %b/s % siz=%',
       [ToText(Kind)^, GuidToShort(Uuid), IP4Short(@IP4), IP4Short(@NetMaskIP4),
        IP4Short(@BroadcastIP4), Speed, ToText(Hardware)^,
-       ComputeFileName(msg.Hash), Size], result);
+       BinToHexLower(@msg.Hash, HASH_SIZE[msg.Hash.Algo] + 1), Size], result);
 end;
 
 {$ifdef USEWININET}
@@ -6764,7 +6802,6 @@ begin
 end;
 
 {$endif USEWININET}
-
 
 begin
   //  writeln(SizeOf(THttpPeerCacheMessage));
