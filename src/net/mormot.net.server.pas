@@ -1360,6 +1360,7 @@ type
     function MessageBroadcast(const aReq: THttpPeerCacheMessage;
       aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
     function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
+    function PermFileName(const aFileName: TFileName): TFileName; virtual;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -4691,6 +4692,14 @@ begin
   result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
 end;
 
+function THttpPeerCache.PermFileName(const aFileName: TFileName): TFileName;
+begin
+  // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
+  // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
+  result := EnsureDirectoryExists(fPermFilesPath +
+              lowercase(copy(aFileName, 3, 1))) + aFileName;
+end;
+
 procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
   const Source: TFileName);
 var
@@ -4721,7 +4730,7 @@ begin
   local := ComputeFileName(hash);
   if (waoPermanentCache in Params.AlternateOptions) and
      (fPermFilesPath <> '') then
-    local := fPermFilesPath + local
+    local := PermFileName(local) // with proper sub-folder
   else
     local := fTempFilesPath + local;
   localsize := FileSize(local);
@@ -4813,7 +4822,7 @@ begin
     if (size = 0) and
        (fPermFilesPath <> '') then
     begin
-      fn := fPermFilesPath + name;
+      fn := PermFileName(name); // with proper sub-folder
       size := FileSize(fn);
     end;
     result := HTTP_NOTFOUND;
