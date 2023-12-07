@@ -4707,7 +4707,8 @@ begin
     exit;
   end;
   // ensure the file is big enough for broadcasting
-  if (ExpectedFullSize <> 0) then
+  if (ExpectedFullSize <> 0) and
+     not (waoNoMinimalSize in Params.AlternateOptions) then
   begin
     if (waoPermanentCache in Params.AlternateOptions) and
        (fPermFilesPath <> '') then
