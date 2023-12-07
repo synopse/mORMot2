@@ -1333,19 +1333,21 @@ type
   protected
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
-    fSettingsOwned: boolean;
     fSharedMagic, fFrameSeqLow, fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
     fFrameSeq: integer;
-    fSharedSecret: TAesAbstract;
     fLog: TSynLogClass;
     fBroadcastSafe: TOSLightLock; // non-rentrant
     fMac: TMacAddress;
     fUuid: TGuid;
+    fAesSafe: TLightLock;
+    fAesEnc, fAesDec: TAesGcmAbstract;
+    fSharedMagicHasher: THasher;
     fPermFilesPath: TFileName;
     fTempFilesSafe: TLightLock; // for concurrent fTempFilesPath access
     fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempFilesDeleteDeprecatedTix: cardinal;
+    fSettingsOwned: boolean;
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1357,7 +1359,9 @@ type
       out aMsg: THttpPeerCacheMessage): boolean;
     function MessageBroadcast(const aReq: THttpPeerCacheMessage;
       aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
-    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
+    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
+    function BearerDecode(const aBearerToken: RawUtf8;
+      out aMsg: THttpPeerCacheMessage): boolean; virtual;
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
       aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
       aFlags: THttpServerRequestFlags): cardinal; virtual;
@@ -1371,9 +1375,10 @@ type
     // - you can supply THttpAsyncServer class to replace default THttpServer
     // - may raise some exceptions if the HTTP server cannot be started
     constructor Create(aSettings: THttpPeerCacheSettings;
-      aSharedMagic: cardinal; aSharedSecret: TAesAbstract;
+      const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2); reintroduce;
+      aHttpServerThreadCount: integer = 2;
+      aSharedMagicAlgo: TCrc32Algo = caCrc32c); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -4346,18 +4351,19 @@ end;
 { THttpPeerCache }
 
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
-  aSharedMagic: cardinal; aSharedSecret: TAesAbstract;
+  const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer);
+  aHttpServerThreadCount: integer; aSharedMagicAlgo: TCrc32Algo);
 var
   log: ISynLog;
   ip: RawUtf8;
   avail, existing: Int64;
+  key: THash256Rec;
 begin
   fLog := TSynLog;
   log := fLog.Enter(self, 'Create');
   fBroadcastSafe.Init;
-  if aSharedSecret = nil then
+  if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
   inherited Create;
   if aSettings = nil then
@@ -4414,9 +4420,15 @@ begin
   fHttpServer.OnBeforeBody := OnBeforeBody;
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
-  // setup internal parameters
-  fSharedMagic := aSharedMagic;
-  fSharedSecret := aSharedSecret;
+  // setup internal processing status
+  fSharedMagic := xxHash32Mixup(crc32cHash(aSharedSecret));
+  if aSharedMagicAlgo = caDefault then
+    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
+  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
+  HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
+  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // AES-GCM-128
+  fAesDec := fAesEnc.Clone as TAesGcmAbstract;
+  FillZero(key.b);
   fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   GetComputerUuid(fUuid);
@@ -4453,7 +4465,8 @@ begin
     fSettings.Free;
   fSettings := nil; // paranoid for async OnDownload call
   FreeAndNil(fHttpServer);
-  FreeAndNil(fSharedSecret);
+  FreeAndNil(fAesEnc);
+  FreeAndNil(fAesDec);
   fSharedMagic := 0;
   fBroadcastSafe.Done;
 end;
@@ -4482,30 +4495,50 @@ begin
   aMsg.CurrentDownloads := n;
 end;
 
-// UDP frames start with a 32-bit aSharedMagic marker as supplied to
-// THttpPeeerCache.Create, followed by AES-GCM encrypted and signed message
+// UDP frames are AES-GCM encrypted and signed messages, ending with 32-bit crc
 
 function THttpPeerCache.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
 var
   tmp: RawByteString;
+  p: PAnsiChar;
+  l: PtrInt;
 begin
+  // AES-GCM-128 encoding and authentication
   FastSetRawByteString(tmp, @aMsg, SizeOf(aMsg));
-  result := NetConcat(['xxxx',
-              fSharedSecret.MacAndCrypt(tmp, {encrypt=}true, {ivatbeg=}true)]);
-  PCardinal(result)^ := fSharedMagic;
+  fAesSafe.Lock;
+  try
+    result := fAesEnc.MacAndCrypt(tmp, {enc=}true, {iv=}true, '', {endsize=}4);
+  finally
+    fAesSafe.UnLock;
+  end;
+  // append checksum to quickly reject any fuzzing attempt
+  p := pointer(result);
+  l := length(result) - 4;
+  PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
 end;
 
 function THttpPeerCache.MessageDecode(const aFrame: RawByteString;
   out aMsg: THttpPeerCacheMessage): boolean;
 var
   tmp: RawByteString;
+  p: PAnsiChar;
+  l: PtrInt;
 begin
   result := false;
-  if (length(aFrame) < SizeOf(aMsg) + SizeOf(THash128) * 2 + SizeOf(cardinal)) or
-     (PCardinal(aFrame)^ <> fSharedMagic) then
+  // quickly reject any fuzzing attempt
+  p := pointer(aFrame);
+  l := length(aFrame) - 4;
+  if (l < SizeOf(aMsg) + SizeOf(THash128) * 2 {iv+padding}) or
+     (PCardinal(p + l)^ <> fSharedMagicHasher(fSharedMagic, p, l)) then
     exit;
-  tmp := fSharedSecret.MacAndCrypt(
-           copy(aFrame, 5, 1000), {encrypt=}false, {ivatbeg=}true);
+  // AES-GCM-128 decoding and authentication
+  fAesSafe.Lock;
+  try
+    tmp := fAesDec.MacAndCrypt(aFrame, {enc=}false, {iv=}true, '', {endsize=}4);
+  finally
+    fAesSafe.UnLock;
+  end;
+  // check consistency of the decoded THttpPeerCacheMessage value
   if length(tmp) <> SizeOf(aMsg) then
     exit;
   MoveFast(pointer(tmp)^, aMsg, SizeOf(aMsg));
@@ -4599,11 +4632,20 @@ begin
   end;
 end;
 
+function THttpPeerCache.BearerDecode(const aBearerToken: RawUtf8;
+  out aMsg: THttpPeerCacheMessage): boolean;
+var
+  tok: RawByteString;
+begin
+  result := Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) and
+            MessageDecode(tok, aMsg) and
+            (aMsg.Kind = pcfBearer);
+end;
+
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
   aFlags: THttpServerRequestFlags): cardinal;
 var
-  tok: RawByteString;
   msg: THttpPeerCacheMessage;
   ip4: cardinal;
 begin
@@ -4613,9 +4655,7 @@ begin
   if (aBearerToken = '') or
      not IsGet(aMethod) or
      (aUrl = '') or // URI is just ignored
-     not Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) or
-     not MessageDecode(tok, msg) or
-     (msg.Kind <> pcfBearer) or
+     not BearerDecode(aBearerToken, msg) or
      not IPToCardinal(aRemoteIP, ip4) or
      (msg.IP4 <> ip4) or
      not IsEqualGuid(msg.Uuid, fUuid) then
@@ -4760,8 +4800,7 @@ var
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
-  if Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), tok) and
-     MessageDecode(tok, msg) then
+  if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
     name := ComputeFileName(msg.Hash);
