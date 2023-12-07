@@ -1336,6 +1336,7 @@ type
     fBroadcastSafe: TOSLightLock; // non-rentrant
     fMac: TMacAddress;
     fUuid: TGuid;
+    fFilesLock: TLightLock; // for concurrent fFilesPath access
     fFilesPath: TFileName;
     fFilesMaxSize: Int64; // from Settings.FilesCacheMaxMB
     fFilesDeleteDeprecatedTix: cardinal;
@@ -4604,14 +4605,18 @@ var
 begin
   if fSettings.fFilesCacheMaxMin <= 0 then
     exit;
-  tix := (GetTickCount64 shr 6) + 1; // only check every minute
-  if fFilesDeleteDeprecatedTix = tix then
-    exit;
-  fFilesDeleteDeprecatedTix := tix;
-  if DirectoryDeleteOlderFiles(
-       fFilesPath, fSettings.FilesCacheMaxMin / MinsPerDay,
-       PEER_CACHE_PATTERN, false, @size) then
-    fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+  tix := (GetTickCount64 shr 16) + 1; // only check every minute
+  if (fFilesDeleteDeprecatedTix <> tix) and
+     fFilesLock.TryLock then
+  try
+    fFilesDeleteDeprecatedTix := tix;
+    if DirectoryDeleteOlderFiles(
+         fFilesPath, fSettings.FilesCacheMaxMin / MinsPerDay,
+         PEER_CACHE_PATTERN, false, @size) then
+      fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+  finally
+    fFilesLock.UnLock;
+  end;
 end;
 
 function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
@@ -4664,45 +4669,50 @@ begin
     exit;
   end;
   // ensure adding this file won't trigger the maximum cache size limit
-  if fFilesMaxSize > 0 then
-  begin
-    if sourcesize >= fFilesMaxSize then
-      tot := sourcesize // this file is oversized for sure
-    else
+  QueryPerformanceMicroSeconds(start);
+  fFilesLock.Lock; // disable any background FilesDeleteDeprecated access
+  try
+    if fFilesMaxSize > 0 then
     begin
-      // compute the current folder cache size
-      dir := FindFiles(fFilesPath, PEER_CACHE_PATTERN);
-      tot := sourcesize; // simulate adding this file
-      for i := 0 to high(dir) do
-        inc(tot, dir[i].Size);
+      if sourcesize >= fFilesMaxSize then
+        tot := sourcesize // this file is oversized for sure
+      else
+      begin
+        // compute the current folder cache size
+        dir := FindFiles(fFilesPath, PEER_CACHE_PATTERN);
+        tot := sourcesize; // simulate adding this file
+        for i := 0 to high(dir) do
+          inc(tot, dir[i].Size);
+        if tot >= fFilesMaxSize then
+        begin
+          // delete oldest files in cache up to FilesCacheMaxMB
+          FindFilesSortByTimestamp(dir);
+          deleted := 0;
+          for i := 0 to high(dir) do
+            if DeleteFile(dir[i].Name) then // if not currently downloading
+            begin
+              dec(tot, dir[i].Size);
+              inc(deleted, dir[i].Size);
+              if tot < fFilesMaxSize then
+                break; // we have deleted enough old files
+            end;
+          fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+        end;
+      end;
       if tot >= fFilesMaxSize then
       begin
-        // delete oldest files in cache up to FilesCacheMaxMB
-        FindFilesSortByTimestamp(dir);
-        deleted := 0;
-        for i := 0 to high(dir) do
-          if DeleteFile(dir[i].Name) then // if not currently downloading
-          begin
-            dec(tot, dir[i].Size);
-            inc(deleted, dir[i].Size);
-            if tot < fFilesMaxSize then
-              break; // we have deleted enough old files
-          end;
-        fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+        fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
+          [Source, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
+        exit;
       end;
     end;
-    if tot >= fFilesMaxSize then
-    begin
-      fLog.Add.Log(sllDebug, 'OnDowloaded: % is too big (%) for tot=%',
-        [Source, KBNoSpace(sourcesize), KBNoSpace(tot)], self);
-      exit;
-    end;
+    // actually copy the source file into the local cache folder
+    ok := CopyFile(Source, local, {failsifexists=}false);
+    if ok then
+      FileSetDate(local, DateTimeToFileDate(Now)); // force timestamp = now
+  finally
+    fFilesLock.UnLock;
   end;
-  // actually copy the source file into the local cache folder
-  QueryPerformanceMicroSeconds(start);
-  ok := CopyFile(Source, local, {failsifexists=}false);
-  if ok then
-    FileSetDate(local, DateTimeToFileDate(Now)); // force timestamp = now
   QueryPerformanceMicroSeconds(stop);
   fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
       [Source, local, MicroSecToString(stop - start)], self);
@@ -4711,13 +4721,13 @@ end;
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
-  s: RawByteString;
+  tok: RawByteString;
   fn: TFileName;
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
-  if Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), s) and
-     MessageDecode(s, msg) then
+  if Base64uriToBin(pointer(Ctxt.AuthBearer), length(Ctxt.AuthBearer), tok) and
+     MessageDecode(tok, msg) then
   try
     // get local filename from decoded bearer hash
     result := HTTP_NOTFOUND;
@@ -4727,7 +4737,7 @@ begin
     result := HTTP_NOTACCEPTABLE;
     if FileSize(fn) <> msg.Size then
       exit; // invalid file
-    // return the file as requested
+    // just return the file as requested
     result := HTTP_SUCCESS;
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
