@@ -456,10 +456,10 @@ function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
 /// convert an IPv4 raw value into a ShortString text
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
-procedure IP4Short(ip4addr: PByteArray; var s: ShortString); overload;
+procedure IP4Short(ip4addr: PByteArray; var s: ShortString); 
 
 /// convert an IPv4 raw value into a ShortString text
-function IP4Short(ip4addr: PByteArray): ShortString; overload;
+function IP4ToShort(ip4addr: PByteArray): ShortString;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an IPv4 raw value into a RawUtf8 text
@@ -2840,7 +2840,7 @@ begin
   PAnsiChar(@s)[ord(s[0]) + 1] := #0; // make #0 terminated (won't hurt)
 end;
 
-function IP4Short(ip4addr: PByteArray): ShortString;
+function IP4ToShort(ip4addr: PByteArray): ShortString;
 begin
   IP4Short(ip4addr, result);
 end;

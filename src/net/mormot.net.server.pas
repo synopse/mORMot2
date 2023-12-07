@@ -4897,8 +4897,8 @@ function ToText(const msg: THttpPeerCacheMessage): shortstring;
 begin
   with msg do
     FormatShort('% from % % msk=% bst=% %b/s % siz=%',
-      [ToText(Kind)^, GuidToShort(Uuid), IP4Short(@IP4), IP4Short(@NetMaskIP4),
-       IP4Short(@BroadcastIP4), Speed, ToText(Hardware)^,
+      [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), IP4ToShort(@NetMaskIP4),
+       IP4ToShort(@BroadcastIP4), Speed, ToText(Hardware)^,
        BinToHexLower(@msg.Hash, HASH_SIZE[msg.Hash.Algo] + 1), Size], result);
 end;
 
