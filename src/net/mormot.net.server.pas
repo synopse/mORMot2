@@ -1364,10 +1364,6 @@ type
       out aFileName: TFileName): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
-    function OnBeforeBody(var aUrl, aMethod, aInHeaders,
-      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
-      aFlags: THttpServerRequestFlags): cardinal; virtual;
-    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -1389,14 +1385,22 @@ type
     // - could return 0 to fallback to a regular GET (e.g. not cached)
     function OnDownload(Sender: THttpClientSocket;
       const Params: THttpClientSocketWGet; const Url: RawUtf8;
-      ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
+      ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer; virtual;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
     // - calling with Source='' will trigger FilesDeleteDeprecated
     // - PermanentCache=true will
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
-      const Source: TFileName);
+      const Source: TFileName); virtual;
+    /// method called by the HttpServer before any request is processed
+    // - will reject anything but a GET with a proper bearer, from the right IP
+    function OnBeforeBody(var aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
+      aFlags: THttpServerRequestFlags): cardinal; virtual;
+    /// method called by the HttpServer to process a request
+    // - statically serve a local file from decoded bearer hash
+    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// could be called on a regular basis to purge the cache from oldest files
     // - i.e. to implement optional CacheTempMaxMin disk space release
     // - is also called from OnDownloaded()
@@ -4685,7 +4689,7 @@ begin
   result := HTTP_FORBIDDEN;
   if (aBearerToken = '') or
      not IsGet(aMethod) or
-     (aUrl = '') or // URI is just ignored
+     (aUrl = '') or // URI is just ignored but may be specified
      not BearerDecode(aBearerToken, msg) or
      not IPToCardinal(aRemoteIP, ip4) or
      (msg.IP4 <> ip4) or
@@ -4741,7 +4745,7 @@ var
   dir: TFindFilesDynArray;
 begin
   // first do some clean-up of oldest cached files (maybe with Source = '')
-  FilesDeleteDeprecated;
+  FilesDeleteDeprecated; // do nothing but once every minute
   if Source = '' then
     exit;
   // validate the supplied downloaded source file

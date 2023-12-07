@@ -188,6 +188,7 @@ type
     // exist (and that the client has the right to access it), then try to call
     // OnDownload() to get it from THttpPeerCache instances in the vicinity,
     // with a fallback to a plain GET if this file is not known by the peers
+    // - OnDownloaded() will be called once a file has been received
     Alternate: IWGetAlternate;
     /// how Alternate should operate this file
     AlternateOptions: TWGetAlternateOptions;
@@ -2076,6 +2077,17 @@ begin
       raise EHttpSocket.CreateUtf8(
         '%.WGet: impossible to rename % as %', [self, part, result]);
     part := '';
+    // notify e.g. THttpPeerCache of the newly downloaded file
+    if Assigned(params.Alternate) and
+       (params.Hasher <> nil) and
+       (params.Hash <> '') then
+    try
+      params.Alternate.OnDowloaded(params, result);
+    except
+      on E: Exception do // intercept any fatal error
+        if Assigned(OnLog) then
+          OnLog(sllTrace, 'WGet %: OnDownloaded(%) raised %', [url, result, E]);
+    end;
   finally
     partstream.Free;  // ensure close file on unexpected error (if not already)
     if (part <> '') and
