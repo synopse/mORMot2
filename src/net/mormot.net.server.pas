@@ -1342,9 +1342,8 @@ type
     fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fSharedMagicHasher: THasher;
-    fPermFilesPath: TFileName;
-    fTempFilesSafe: TLightLock; // for concurrent fTempFilesPath access
-    fTempFilesPath: TFileName;
+    fFilesSafe: TOSLock; // concurrent cached files access
+    fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempFilesDeleteDeprecatedTix: cardinal;
     fSettingsOwned: boolean;
@@ -1361,6 +1360,8 @@ type
       aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
     function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName): TFileName; virtual;
+    function LocalFileName(const aMessage: THttpPeerCacheMessage;
+      out aFileName: TFileName): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -4363,6 +4364,7 @@ var
 begin
   fLog := TSynLog;
   log := fLog.Enter(self, 'Create');
+  fFilesSafe.Init;
   fBroadcastSafe.Init;
   if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
@@ -4470,6 +4472,7 @@ begin
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
   fBroadcastSafe.Done;
+  fFilesSafe.Done;
 end;
 
 procedure THttpPeerCache.MessageInit(aKind: THttpPeerCacheMessageKind;
@@ -4580,6 +4583,8 @@ var
   req, resp: THttpPeerCacheMessage;
   client: THttpClientSocket;
   head, ip, u: RawUtf8;
+  fn: TFileName;
+  local: TFileStreamEx;
   log: ISynLog;
   l: TSynLog;
 begin
@@ -4594,9 +4599,9 @@ begin
      (Url = '') or
      (OutStream = nil) then
     exit;
-  // compute and broadcast a request
+  // prepare a request frame
   l := nil;
-  log := fLog.Enter('OnDownload %', [Url], self);
+  log := fLog.Enter('OnDownload % %', [KBNoSpace(ExpectedFullSize), Url], self);
   if Assigned(log) then
     l := log.Instance;
   MessageInit(pcfRequest, req);
@@ -4608,12 +4613,33 @@ begin
   req.Size := ExpectedFullSize;
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
+  // check if we don't already have this file cached locally
+  if LocalFileName(req, fn) = HTTP_SUCCESS then
+  begin
+    l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
+    local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
+    try
+      if req.RangeStart > 0 then
+        req.RangeStart := local.Seek(req.RangeStart, soFromBeginning);
+      if (req.RangeEnd <= 0) or
+         (req.RangeEnd >= req.Size) then
+        req.RangeEnd := req.Size - 1;
+      req.Size := req.RangeEnd - req.RangeStart + 1;
+      if req.Size > 0 then
+        OutStream.CopyFrom(local, req.Size);
+    finally
+      local.Free;
+    end;
+    result := HTTP_SUCCESS;
+    exit;
+  end;
+  // we need to braodcast a request
   if MessageBroadcast(req, l, resp) then
   try
     // make a local HTTP request of the needed content on the best response
     IP4Text(@resp.IP4, ip);
     FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
-    l.Log(sllDebug, 'OnDownload: request %:% %', [ip, resp.Port, u], self);
+    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, resp.Port, u], self);
     client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp.Port));
     try
       client.RangeStart := req.RangeStart;
@@ -4624,12 +4650,16 @@ begin
         OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
       result := client.Request(
         u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
-      l.Log(sllDebug, 'OnDownload: Request=%', [result], self);
+      l.Log(sllTrace, 'OnDownload: Request=%', [result], self);
     finally
       client.Free;
     end;
   except
-    result := 0;
+    on E: Exception do
+    begin
+      l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
+      result := 0;
+    end;
   end;
 end;
 
@@ -4672,9 +4702,9 @@ begin
   if (fSettings.fCacheTempMaxMin <= 0) or
      (fTempFilesPath = '') then
     exit;
-  tix := (GetTickCount64 shr 16) + 1; // only check every minute
+  tix := (GetTickCount64 shr 16) + 1; // check every minute (65,536 seconds)
   if (fTempFilesDeleteDeprecatedTix <> tix) and
-     fTempFilesSafe.TryLock then
+     fFilesSafe.TryLock then
   try
     fTempFilesDeleteDeprecatedTix := tix;
     if DirectoryDeleteOlderFiles(
@@ -4682,7 +4712,7 @@ begin
          PEER_CACHE_PATTERN, false, @size) then
       fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
   finally
-    fTempFilesSafe.UnLock;
+    fFilesSafe.UnLock; // re-allow background file access
   end;
 end;
 
@@ -4706,7 +4736,7 @@ var
   local: TFileName;
   hash: THttpPeerCacheHash;
   localsize, sourcesize, tot, start, stop, deleted: Int64;
-  ok: boolean;
+  ok, istemp: boolean;
   i: PtrInt;
   dir: TFindFilesDynArray;
 begin
@@ -4724,38 +4754,37 @@ begin
   // compute the local cache file name from the known file hash
   if not WGetToHash(Params, hash) then
   begin
-    fLog.Add.Log(sllWarning, 'OnDowloaded: no hash specified', self);
+    fLog.Add.Log(sllWarning,
+      'OnDowloaded: no hash specified for %', [Source], self);
     exit;
   end;
   local := ComputeFileName(hash);
   if (waoPermanentCache in Params.AlternateOptions) and
      (fPermFilesPath <> '') then
-    local := PermFileName(local) // with proper sub-folder
-  else
-    local := fTempFilesPath + local;
-  localsize := FileSize(local);
-  // check if this file was not already in the cache folder
-  if localsize <> 0 then // this hash is already cached
   begin
-    if localsize = sourcesize then
-      fLog.Add.Log(sllTrace, 'OnDowloaded: % already in cache', [Source], self)
-    else
-    begin
-      fLog.Add.Log(sllWarning, 'OnDowloaded: % hash/size mismatch -> delete %',
-        [Source, local], self);
-      DeleteFile(local); // better safe than sorry on (unlikely) hash collision
-    end;
-    exit;
+    local := PermFileName(local); // with proper sub-folder
+    istemp := false;
+  end
+  else
+  begin
+    local := fTempFilesPath + local;
+    istemp := true;
   end;
-  // ensure adding this file won't trigger the maximum cache size limit
-  if (fTempFilesPath = '') or
-     ((waoPermanentCache in Params.AlternateOptions) and
-      (fPermFilesPath <> '')) then
-    exit; // nothing to manage
   QueryPerformanceMicroSeconds(start);
-  fTempFilesSafe.Lock; // disable any background FilesDeleteDeprecated access
+  fFilesSafe.Lock; // disable any concurrent file access
   try
-    if fTempFilesMaxSize > 0 then
+    localsize := FileSize(local);
+    // check if this file was not already in the cache folder
+    if localsize <> 0 then
+    begin
+      fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
+        'OnDowloaded: % already in cache', [Source], self);
+      // size mismatch may happen on race conditional (unlikely hash collision)
+      exit;
+    end;
+    // ensure adding this file won't trigger the maximum cache size limit
+    if (fTempFilesMaxSize > 0) and
+       istemp then
     begin
       if sourcesize >= fTempFilesMaxSize then
         tot := sourcesize // this file is oversized for sure
@@ -4791,48 +4820,66 @@ begin
     end;
     // actually copy the source file into the local cache folder
     ok := CopyFile(Source, local, {failsifexists=}false);
-    if ok then
+    if ok and
+       istemp then
       FileSetDate(local, DateTimeToFileDate(Now)); // force timestamp = now
   finally
-    fTempFilesSafe.UnLock;
+    fFilesSafe.UnLock;
   end;
   QueryPerformanceMicroSeconds(stop);
   fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
       [Source, local, MicroSecToString(stop - start)], self);
 end;
 
+function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
+  out aFileName: TFileName): integer;
+var
+  name: TFileName;
+  size: Int64;
+begin
+  name := ComputeFileName(aMessage.Hash);
+  size := 0;
+  fFilesSafe.Lock; // disable any concurrent file access
+  try
+    if fPermFilesPath <> '' then
+    begin
+      aFileName := PermFileName(name); // with proper sub-folder
+      size := FileSize(aFileName);
+    end;
+    if (size = 0) and
+       (fTempFilesPath <> '') then
+    begin
+      aFileName := fTempFilesPath + name;
+      size := FileSize(aFileName);
+      if size <> 0 then // mark this temporary cached file as just used
+        FileSetDate(aFileName, DateTimeToFileDate(Now));
+    end;
+  finally
+    fFilesSafe.UnLock;
+  end;
+  result := HTTP_NOTFOUND;
+  if size = 0 then
+    exit; // not existing
+  result := HTTP_NOTACCEPTABLE;
+  if size <> aMessage.Size then
+    exit; // invalid file
+  result := HTTP_SUCCESS;
+end;
+
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
-  name, fn: TFileName;
-  size: Int64;
+  fn: TFileName;
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
-    name := ComputeFileName(msg.Hash);
-    size := 0;
-    if fTempFilesPath <> '' then
-    begin
-      fn := fTempFilesPath + name;
-      size := FileSize(fn);
-    end;
-    if (size = 0) and
-       (fPermFilesPath <> '') then
-    begin
-      fn := PermFileName(name); // with proper sub-folder
-      size := FileSize(fn);
-    end;
-    result := HTTP_NOTFOUND;
-    if size = 0 then
-      exit; // not existing
-    result := HTTP_NOTACCEPTABLE;
-    if size <> msg.Size then
-      exit; // invalid file
+    result := LocalFileName(msg, fn);
+    if result <> HTTP_SUCCESS then
+      exit;
     // just return the file as requested
-    result := HTTP_SUCCESS;
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
   finally
