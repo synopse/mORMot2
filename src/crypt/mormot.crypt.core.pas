@@ -698,7 +698,7 @@ type
     // AES/MAC process - for TAesGcm, authentication requires decryption
     // - EndingSize can be used if some custom info is stored at the end of Data
     function MacAndCrypt(const Data: RawByteString; Encrypt, IVAtBeginning: boolean;
-      const Associated: RawByteString = ''; EndingSize: PtrInt = 0): RawByteString;
+      const Associated: RawByteString = ''; EndingSize: cardinal = 0): RawByteString;
 
     {$ifndef PUREMORMOT2}
     /// deprecated wrapper able to cypher/decypher any in-memory content
@@ -5541,7 +5541,7 @@ end;
 
 function TAesAbstract.MacAndCrypt(const Data: RawByteString;
   Encrypt, IVAtBeginning: boolean; const Associated: RawByteString;
-  EndingSize: PtrInt): RawByteString;
+  EndingSize: cardinal): RawByteString;
 const
   VERSION = 1;                     // prepared for any change in our format
   CRCSIZ = SizeOf(THash256) * 2;   // nonce + mac blocks as in TMacAndCryptData
@@ -5571,7 +5571,7 @@ begin
     end
     else
     begin
-      enclen := length(Data) - EndingSize;
+      enclen := cardinal(length(Data)) - EndingSize;
       if enclen < SizeOf(TAesBlock) * 2 then
         exit;
       dec(enclen, SizeOf(TAesBlock));
@@ -5607,7 +5607,7 @@ begin
   else
   begin
     // decrypt: validate header
-    enclen := length(Data) - EndingSize;
+    enclen := cardinal(length(Data)) - EndingSize;
     if (enclen <= SIZ) or
        (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
       exit;

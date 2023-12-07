@@ -74,7 +74,7 @@ type
     // - Release=false will call TInterfacedObject._AddRef
     // - could be used to emulate proper reference counting of the instance
     // via interfaces variables, but still storing plain class instances
-    // (e.g. in a global list of instances)
+    // (e.g. in a global list of instances) - warning: use with extreme caution!
     procedure RefCountUpdate(Release: boolean); virtual;
   end;
   {$M-}

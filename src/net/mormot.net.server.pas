@@ -1329,7 +1329,7 @@ type
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
   // - will maintain its own local folder of cached files, stored by hash
-  THttpPeerCache = class(TInterfacedObject, IWGetAlternate)
+  THttpPeerCache = class(TInterfacedObjectWithCustomCreate, IWGetAlternate)
   protected
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
@@ -4727,7 +4727,7 @@ begin
   // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
   // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
   result := EnsureDirectoryExists(fPermFilesPath +
-              lowercase(copy(aFileName, 3, 1))) + aFileName;
+              sysutils.lowercase(copy(aFileName, 3, 1))) + aFileName;
 end;
 
 procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
