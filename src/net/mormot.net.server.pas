@@ -2073,8 +2073,23 @@ begin
 end;
 
 destructor TUdpServerThread.Destroy;
+var
+  sock: TNetSocket;
 begin
   fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName], self);
+  if fProcessing and
+     (fSock <> nil) then
+  begin // try to release fSock.WaitFor(1000) in DoExecute
+    sock := fSockAddr.NewSocket(nlUdp);
+    if sock <> nil then
+    begin
+      Terminate;
+      fLogClass.Add.Log(sllTrace, 'Destroy: send final packet', self);
+      sock.SetSendTimeout(10);
+      sock.SendTo(@fSockAddr, SizeOf(fSockAddr), fSockAddr); // touch and go
+      sock.ShutdownAndClose(false);
+    end;
+  end;
   TerminateAndWaitFinished;
   inherited Destroy;
   if fSock <> nil then
