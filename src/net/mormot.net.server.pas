@@ -1399,7 +1399,7 @@ type
     procedure MessageInit(aKind: THttpPeerCacheMessageKind;
       out aMsg: THttpPeerCacheMessage); virtual;
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-    function MessageDecode(const aFrame: RawByteString;
+    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): boolean;
     function MessageBroadcast(const aReq: THttpPeerCacheMessage;
       aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
@@ -4684,31 +4684,30 @@ begin
   PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
 end;
 
-function THttpPeerCache.MessageDecode(const aFrame: RawByteString;
+function THttpPeerCache.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
   out aMsg: THttpPeerCacheMessage): boolean;
 var
-  tmp: RawByteString;
-  p: PAnsiChar;
-  l: PtrInt;
+  encoded, plain: RawByteString;
 begin
   result := false;
   // quickly reject any fuzzing attempt
-  p := pointer(aFrame);
-  l := length(aFrame) - 4;
-  if (l < SizeOf(aMsg) + SizeOf(THash128) * 2 {iv+padding}) or
-     (PCardinal(p + l)^ <> fSharedMagicHasher(fSharedMagic, p, l)) then
+  dec(aFrameLen, 4);
+  if (aFrameLen < SizeOf(aMsg) + SizeOf(THash128) * 2 {iv+padding}) or
+     (PCardinal(aFrame + aFrameLen)^ <>
+       fSharedMagicHasher(fSharedMagic, aFrame, aFrameLen)) then
     exit;
   // AES-GCM-128 decoding and authentication
+  FastSetRawByteString(encoded, aFrame, aFrameLen);
   fAesSafe.Lock;
   try
-    tmp := fAesDec.MacAndCrypt(aFrame, {enc=}false, {iv=}true, '', {endsize=}4);
+    plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
   finally
     fAesSafe.UnLock;
   end;
   // check consistency of the decoded THttpPeerCacheMessage value
-  if length(tmp) <> SizeOf(aMsg) then
+  if length(plain) <> SizeOf(aMsg) then
     exit;
-  MoveFast(pointer(tmp)^, aMsg, SizeOf(aMsg));
+  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
   if aMsg.Kind in PCF_RESPONSE then
     if (aMsg.Seq < fFrameSeqLow) or
        (aMsg.Seq > cardinal(fFrameSeq)) then
@@ -4716,8 +4715,7 @@ begin
   result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
             (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
             (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
-            (aMsg.RangeEnd >= aMsg.RangeStart) and
-            not IsZero(@aMsg.Padding, SizeOf(aMsg.Padding));
+            (aMsg.RangeEnd >= aMsg.RangeStart);
 end;
 
 function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
@@ -4905,10 +4903,15 @@ end;
 function THttpPeerCache.BearerDecode(const aBearerToken: RawUtf8;
   out aMsg: THttpPeerCacheMessage): boolean;
 var
-  tok: RawByteString;
+  tok: array[0.. 511] of AnsiChar; // no memory allocation
+  bearerlen, toklen: PtrInt;
 begin
-  result := Base64uriToBin(pointer(aBearerToken), length(aBearerToken), tok) and
-            MessageDecode(tok, aMsg) and
+  bearerlen := length(aBearerToken);
+  toklen := Base64uriToBinLength(bearerlen);
+  result := (toklen > SizeOf(aMsg)) and
+            (toklen < SizeOf(tok)) and
+            Base64uriToBin(pointer(aBearerToken), @tok, bearerlen, toklen) and
+            MessageDecode(@tok, toklen, aMsg) and
             (aMsg.Kind = pcfBearer);
 end;
 
