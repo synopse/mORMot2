@@ -5254,7 +5254,7 @@ end;
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean): boolean;
 var
-  expected, read: integer;
+  expected, read, pending: integer;
   events: TNetEvents;
   res: TNetResult;
 begin
@@ -5293,6 +5293,9 @@ begin
          (Length = expected) then
         break; // good enough for now
       inc(PByte(Buffer), read);
+      if (fSock.RecvPending(pending) = nrOk) and
+         (pending > 0) then
+        continue; // no need to call WaitFor()
       events := fSock.WaitFor(TimeOut, [neRead]);
       if neError in events then
       begin
