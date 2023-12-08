@@ -1410,12 +1410,25 @@ type
   protected
     fOwner: THttpPeerCache;
     fMsg: THttpPeerCacheMessage;
+    fSent: integer;
+    fRespSafe: TLightLock;
+    fResp: THttpPeerCacheMessageDynArray;
+    fRespCount: integer;
+    fCurrentSeq: cardinal;
+    fAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
     procedure OnShutdown; override; // = Destroy
+    function Broadcast(const aFrame: RawByteString; aSingleRep: boolean;
+      const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+    procedure AddReponse(const aMessage: THttpPeerCacheMessage);
+    function GetResponses(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize the background UDP server thread
     constructor Create(Owner: THttpPeerCache); reintroduce;
+  published
+    property Sent: integer
+      read fSent;
   end;
 
   /// implement a local peer-to-peer download cache via UDP and TCP
@@ -1431,6 +1444,7 @@ type
     fFrameSeq: integer;
     fLog: TSynLogClass;
     fUdpServer: THttpPeerCacheThread;
+    //fClient: THttpClientSocket;
     fMac: TMacAddress;
     fUuid: TGuid;
     fPort: RawUtf8;
@@ -1440,17 +1454,11 @@ type
     fFilesSafe: TOSLock; // concurrent cached files access
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
+    fTempCurrentSize: Int64;
     fTempFilesDeleteDeprecatedTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
-    fBroadcast: record
-      Safe: TOSLightLock; // non-rentrant
-      Event: TSynEvent;   // <> nil if the first response is used
-      Addr: TNetAddr;
-      RespSafe: TLightLock;
-      Resp: THttpPeerCacheMessageDynArray;
-      RespCount: integer;
-      CurrentSeq: cardinal;
-    end;
+    fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
+    fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1468,8 +1476,6 @@ type
       aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
-    procedure BroadcastAdd(const aMessage: THttpPeerCacheMessage);
-    function BroadcastGet(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -1497,6 +1503,8 @@ type
     // should be called to copy the content into this instance files cache
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName); virtual;
+    /// broadcast a pcfPing on the network interface and return the responses
+    function Ping: THttpPeerCacheMessageDynArray;
     /// method called by the HttpServer before any request is processed
     // - will reject anything but a GET with a proper bearer, from the right IP
     function OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -1545,6 +1553,7 @@ type
 
 const
   PCF_RESPONSE = [
+    pcfPong,
     pcfResponseNone,
     pcfResponseFull];
 
@@ -4479,7 +4488,7 @@ const
     3,  // makPpp
     5); // makSoftware
 
-function SortByFilter(const A, B): integer;
+function SortByMacAddressFilter(const A, B): integer;
 var
   ma: TMacAddress absolute A;
   mb: TMacAddress absolute B;
@@ -4539,7 +4548,7 @@ begin
   GetMacAddressSafe.Lock;
   try
     GetMacAddressFilter := Filter;
-    arr.Sort(SortByFilter);
+    arr.Sort(SortByMacAddressFilter);
   finally
     GetMacAddressSafe.UnLock;
   end;
@@ -4589,9 +4598,13 @@ end;
 constructor THttpPeerCacheThread.Create(Owner: THttpPeerCache);
 begin
   fOwner := Owner;
+  fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   inherited Create(
     fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udppeerserver', 100);
 end;
+
+const
+  _LATE: array[boolean] of string[7] = ('', 'late ');
 
 procedure THttpPeerCacheThread.OnFrameReceived(len: integer;
   var remote: TNetAddr);
@@ -4617,21 +4630,25 @@ var
     frame := fOwner.MessageEncode(resp);
     sock := remote.NewSocket(nlUdp);
     sock.SendTo(pointer(frame), length(frame), remote);
+    sock.Close;
+    inc(fSent);
   end;
 
 var
-  ok: boolean;
+  ok, late: boolean;
 begin
   ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
+  late := fMsg.Seq <> fCurrentSeq;
   if fOwner.fVerboseLog then
     if ok then
-      DoLog('%', [ToText(fMsg)])
+      DoLog('%%', [_LATE[late], ToText(fMsg)])
     else
       DoLog('unexpected len=% [%]', [len, EscapeToShort(pointer(fFrame), len)]);
   if ok then
     case fMsg.Kind of
       pcfPing:
+        if not late then
         begin
           fOwner.MessageInit(pcfPong, fMsg.Seq, resp);
           DoSend;
@@ -4646,21 +4663,100 @@ begin
           DoSend;
         end;
       pcfPong:
-        if fMsg.Seq = fOwner.fBroadcast.CurrentSeq then
-          fOwner.BroadcastAdd(fMsg);
+        if not late then
+          AddReponse(fMsg);
       pcfResponseFull:
-        if fMsg.Seq = fOwner.fBroadcast.CurrentSeq then
+        if not late then
         begin
-          fOwner.BroadcastAdd(fMsg);
-          with fOwner.fBroadCast do
-            if Event <> nil then // pcoUseFirstResponse
-            begin
-              CurrentSeq := 0;   // next responses will be ignored
-              Event.SetEvent;    // notify THttpPeerCache.MessageBroadcast
-            end;
+          AddReponse(fMsg);
+          if fOwner.fBroadcastEvent <> nil then // pcoUseFirstResponse
+          begin
+            fCurrentSeq := 0;                    // ignore next responses
+            fOwner.fBroadcastEvent.SetEvent;    // notify MessageBroadcast
+          end;
         end;
       // pcfResponseNone are just ignored
     end;
+end;
+
+function THttpPeerCacheThread.Broadcast(const aFrame: RawByteString;
+  aSingleRep: boolean; const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+var
+  sock: TNetSocket;
+begin
+  result := nil;
+  // setup this broadcasting sequence
+  fCurrentSeq := aReq.Seq; // ignore any other responses
+  if aSingleRep then
+    fOwner.fBroadcastEvent.ResetEvent;
+  // broadcast request over the UDP sub-net of the selected network interface
+  sock := fAddr.NewSocket(nlUdp);
+  if sock = nil then
+    exit;
+  try
+    sock.SetBroadcast(true);
+    if sock.SendTo(pointer(aFrame), length(aFrame), fAddr) <> nrOk then
+      exit;
+  finally
+    sock.Close;
+  end;
+  // wait for the (first) response(s)
+  if aSingleRep then
+    fOwner.fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS)
+  else
+    SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
+  result := GetResponses(aReq.Seq);
+end;
+
+procedure THttpPeerCacheThread.AddReponse(
+  const aMessage: THttpPeerCacheMessage);
+begin
+  if fRespCount < fOwner.Settings.BroadcastMaxResponses then
+  begin
+    fRespSafe.Lock;
+    try
+      if fRespCount = length(fResp) then
+        SetLength(fResp, NextGrow(fRespCount));
+      fResp[fRespCount] := aMessage;
+      inc(fRespCount);
+    finally
+      fRespSafe.UnLock;
+    end;
+  end;
+end;
+
+function THttpPeerCacheThread.GetResponses(
+  aSeq: cardinal): THttpPeerCacheMessageDynArray;
+var
+  i, c, n: PtrInt;
+begin
+  result := nil;
+  // retrieve the pending responses
+  fCurrentSeq := 0; // no more reponse from now on
+  fRespSafe.Lock;
+  try
+    if fRespCount = 0 then
+      exit;
+    pointer(result) := pointer(fResp); // assign with no refcount
+    pointer(fResp) := nil;
+    c := fRespCount;
+    fRespCount := 0;
+  finally
+    fRespSafe.UnLock;
+  end;
+  // filter the responses matching aSeq (paranoid)
+  n := 0;
+  for i := 0 to c - 1 do
+    if result[i].Seq = aSeq then
+    begin
+      if i <> n then
+        result[n] := result[i];
+      inc(n);
+    end;
+  if n = 0 then
+    result := nil
+  else
+    DynArrayFakeLength(result, n);
 end;
 
 procedure THttpPeerCacheThread.OnIdle(tix64: Int64);
@@ -4688,7 +4784,7 @@ begin
   fLog := TSynLog;
   log := fLog.Enter(self, 'Create');
   fFilesSafe.Init;
-  fBroadcast.Safe.Init;
+  fBroadcastSafe.Init;
   if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
   inherited Create;
@@ -4702,8 +4798,6 @@ begin
     fSettings := aSettings;
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
                  (sllTrace in fLog.Family.Level);
-  if pcoUseFirstResponse in fSettings.Options then
-    fBroadcast.Event := TSynEvent.Create;
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -4746,7 +4840,8 @@ begin
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fNetMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
-  fBroadcast.Addr.SetIP4Port(fBroadcastIP4, fSettings.Port);
+  if pcoUseFirstResponse in fSettings.Options then
+    fBroadcastEvent := TSynEvent.Create;
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
@@ -4805,9 +4900,9 @@ begin
   FreeAndNil(fUdpServer);
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
-  FreeAndNil(fBroadcast.Event);
+  FreeAndNil(fBroadcastEvent);
   fSharedMagic := 0;
-  fBroadcast.Safe.Done;
+  fBroadcastSafe.Done;
   fFilesSafe.Done;
 end;
 
@@ -4892,112 +4987,16 @@ begin
             (aMsg.RangeEnd >= aMsg.RangeStart);
 end;
 
-procedure THttpPeerCache.BroadcastAdd(const aMessage: THttpPeerCacheMessage);
-begin
-  with fBroadcast do
-    if RespCount < fSettings.BroadcastMaxResponses then
-    begin
-      RespSafe.Lock;
-      try
-        if RespCount = length(Resp) then
-          SetLength(Resp, NextGrow(RespCount));
-        Resp[RespCount] := aMessage;
-        inc(RespCount);
-      finally
-        RespSafe.UnLock;
-      end;
-    end;
-end;
-
-function THttpPeerCache.BroadcastGet(aSeq: cardinal): THttpPeerCacheMessageDynArray;
-var
-  i, c, n: PtrInt;
-begin
-  result := nil;
-  // retrieve the pending responses
-  with fBroadcast do
-  begin
-    CurrentSeq := 0; // no more reponse from now on
-    RespSafe.Lock;
-    try
-      if RespCount = 0 then
-        exit;
-      pointer(result) := pointer(Resp); // assign with no refcount
-      pointer(Resp) := nil;
-      c := RespCount;
-      RespCount := 0;
-    finally
-      RespSafe.UnLock;
-    end;
-  end;
-  // filter the responses matching aSeq (paranoid)
-  n := 0;
-  for i := 0 to c - 1 do
-    if result[i].Seq = aSeq then
-    begin
-      if i <> n then
-        result[n] := result[i];
-      inc(n);
-    end;
-  if n = 0 then
-    result := nil
-  else
-    DynArrayFakeLength(result, n);
-end;
-
-function SortMessagePerPriority(const VA, VB): integer;
-var
-  a: THttpPeerCacheMessage absolute VA;
-  b: THttpPeerCacheMessage absolute VB;
-begin
-  result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
-  if result <> 0 then // ethernet first
-    exit;
-  result := CompareCardinal(b.Speed, a.Speed);
-  if result <> 0 then // highest speed first
-    exit;
-  result := CompareCardinal(a.Connections, b.Connections);
-  if result <> 0 then // less active
-    exit;
-  result := ComparePointer(@a, @b); // by pointer = received first
-end;
-
 function THttpPeerCache.MessageBroadcast(
   const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
-var
-  frame: RawByteString;
-  sock: TNetSocket;
-  singleresp: boolean;
 begin
-  result := nil;
-  singleresp := (aReq.Kind = pcfRequest) and
-                (fBroadcast.Event <> nil); // pcoUseFirstResponse
-  frame := MessageEncode(aReq);
-  fBroadcast.Safe.Lock;
+  fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
-    fBroadcast.CurrentSeq := aReq.Seq; // ignore any late response
-    if singleresp then
-      fBroadcast.Event.ResetEvent;
-    // broadcast request over UDP sub-net
-    sock := fBroadcast.Addr.NewSocket(nlUdp);
-    if sock = nil then
-      exit;
-    try
-      sock.SetBroadcast(true);
-      if sock.SendTo(pointer(frame), length(frame), fBroadcast.Addr) <> nrOk then
-        exit;
-    finally
-      sock.Close;
-    end;
-    // wait for the (first) response(s)
-    if singleresp then
-      fBroadcast.Event.WaitFor(fSettings.BroadcastTimeoutMS)
-    else
-      SleepHiRes(fSettings.BroadcastTimeoutMS);
-    result := BroadcastGet(aReq.Seq);
+    result := fUdpServer.Broadcast(MessageEncode(aReq),
+      {singlerep=}(aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil), aReq);
   finally
-    fBroadcast.CurrentSeq := 0;
-    fBroadcast.Safe.UnLock;
+    fUdpServer.fCurrentSeq := 0; // ignore any late responses
+    fBroadcastSafe.UnLock;
   end;
 end;
 
@@ -5018,26 +5017,29 @@ end;
 function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
   aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
 var
-  name, fn: TFileName;
+  perm, temp, name, fn: TFileName;
   size: Int64;
 begin
   name := ComputeFileName(aMessage.Hash);
+  if fPermFilesPath <> '' then
+    perm := PermFileName(name); // with proper sub-folder
+  if fTempFilesPath <> '' then
+    temp := fTempFilesPath + name;
   size := 0;
   fFilesSafe.Lock; // disable any concurrent file access
   try
-    if fPermFilesPath <> '' then
+    size := FileSize(perm); // fast syscall on all platforms
+    if size <> 0 then
+      fn := perm            // found in permanent cache folder
+    else
     begin
-      fn := PermFileName(name); // with proper sub-folder
-      size := FileSize(fn);
-    end;
-    if (size = 0) and
-       (fTempFilesPath <> '') then
-    begin
-      fn := fTempFilesPath + name;
-      size := FileSize(fn);
-      if aSetDate and
-         (size <> 0) then // mark this temporary cached file as just used
-        FileSetDate(fn, DateTimeToFileDate(Now));
+      size := FileSize(temp);
+      if size <> 0 then
+      begin
+        fn := temp;      // found in temporary cache folder
+        if aSetDate then
+          FileSetDate(temp, DateTimeToFileDate(Now)); // mark as just used
+      end;
     end;
   finally
     fFilesSafe.UnLock;
@@ -5067,6 +5069,23 @@ begin
   Hash.Algo := TStreamRedirectSynHasher(Params.Hasher).GetAlgo;
   result := mormot.core.text.HexToBin(
     pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
+end;
+
+function SortMessagePerPriority(const VA, VB): integer;
+var
+  a: THttpPeerCacheMessage absolute VA;
+  b: THttpPeerCacheMessage absolute VB;
+begin
+  result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
+  if result <> 0 then // ethernet first
+    exit;
+  result := CompareCardinal(b.Speed, a.Speed);
+  if result <> 0 then // highest speed first
+    exit;
+  result := CompareCardinal(a.Connections, b.Connections);
+  if result <> 0 then // less active
+    exit;
+  result := ComparePointer(@a, @b); // by pointer = received first
 end;
 
 function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
@@ -5188,6 +5207,14 @@ begin
   end;
 end;
 
+function THttpPeerCache.Ping: THttpPeerCacheMessageDynArray;
+var
+  req: THttpPeerCacheMessage;
+begin
+  MessageInit(pcfPing, 0, req);
+  result := MessageBroadcast(req);
+end;
+
 function THttpPeerCache.BearerDecode(const aBearerToken: RawUtf8;
   out aMsg: THttpPeerCacheMessage): boolean;
 var
@@ -5240,10 +5267,12 @@ begin
      fFilesSafe.TryLock then
   try
     fTempFilesDeleteDeprecatedTix := tix;
-    if DirectoryDeleteOlderFiles(
-         fTempFilesPath, fSettings.CacheTempMaxMin / MinsPerDay,
-         PEER_CACHE_PATTERN, false, @size) then
-      fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+    DirectoryDeleteOlderFiles(fTempFilesPath,
+      fSettings.CacheTempMaxMin / MinsPerDay, PEER_CACHE_PATTERN, false, @size);
+    if size = 0 then
+      exit; // nothing changed on disk
+    fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+    fTempCurrentSize := 0; // we need to call FindFiles()
   finally
     fFilesSafe.UnLock; // re-allow background file access
   end;
@@ -5286,13 +5315,13 @@ begin
     istemp := true;
   end;
   // check if this file was not already in the cache folder
-  // - outside fFilesSafe.Lock because happens after OnDownload from cache
+  // - outside fFilesSafe.Lock because happens just after OnDownload from cache
   localsize := FileSize(local);
   if localsize <> 0 then
   begin
     fLog.Add.Log(LOG_TRACEWARNING[localsize <> sourcesize],
       'OnDowloaded: % already in cache', [Source], self);
-    // size mismatch may happen on race conditional (unlikely hash collision)
+    // size mismatch may happen on race condition (unlikely on hash collision)
     exit;
   end;
   QueryPerformanceMicroSeconds(start);
@@ -5307,13 +5336,19 @@ begin
       else
       begin
         // compute the current folder cache size
-        dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
-        tot := sourcesize; // simulate adding this file
-        for i := 0 to high(dir) do
-          inc(tot, dir[i].Size);
+        tot := fTempCurrentSize;
+        if tot = 0 then // first time, or after FilesDeleteDeprecated
+        begin
+          dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
+          for i := 0 to high(dir) do
+            inc(tot, dir[i].Size);
+        end;
+        inc(tot, sourcesize); // simulate adding this file
         if tot >= fTempFilesMaxSize then
         begin
           // delete oldest files in cache up to CacheTempMaxMB
+          if dir = nil then
+            dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
           FindFilesSortByTimestamp(dir);
           deleted := 0;
           for i := 0 to high(dir) do
@@ -5326,6 +5361,7 @@ begin
             end;
           fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
         end;
+        fTempCurrentSize := tot - sourcesize;
       end;
       if tot >= fTempFilesMaxSize then
       begin
