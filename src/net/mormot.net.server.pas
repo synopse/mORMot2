@@ -6,7 +6,7 @@ unit mormot.net.server;
 {
   *****************************************************************************
 
-   HTTP Server Classes
+   HTTP/UDP Server Classes
    - Abstract UDP Server
    - Custom URI Routing using an efficient Radix Tree
    - Shared Server-Side HTTP Process
@@ -67,6 +67,8 @@ type
     fSockAddr: TNetAddr;
     fExecuteMessage: RawUtf8;
     fFrame: PUdpFrame;
+    fReceived: integer;
+    function GetIPWithPort: RawUtf8;
     procedure AfterBind; virtual;
     /// will loop for any pending UDP frame, and execute FrameReceived method
     procedure DoExecute; override;
@@ -81,6 +83,11 @@ type
       TimeoutMS: integer); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
+  published
+    property IPWithPort: RawUtf8
+      read GetIPWithPort;
+    property Received: integer
+      read fReceived;
   end;
 
 
@@ -2097,6 +2104,11 @@ begin
   FreeMem(fFrame);
 end;
 
+function TUdpServerThread.GetIPWithPort: RawUtf8;
+begin
+  result := fSockAddr.IPWithPort;
+end;
+
 procedure TUdpServerThread.AfterBind;
 begin
   // do nothing by default
@@ -2134,8 +2146,13 @@ begin
           if Terminated then
             break;
           if len >= 0 then // -1=error, 0=shutdown
+          begin
+            inc(fReceived);
             OnFrameReceived(len, remote);
-        end;
+          end;
+        end
+        else if res <> nrRetry then
+          SleepHiRes(100); // don't loop with 100% cpu on failure
       end;
       tix64 := mormot.core.os.GetTickCount64;
       tix := tix64 shr 9; // div 512
@@ -3604,7 +3621,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
-  fServerSendBufferSize := 256 shl 10; // 256KB of buffers seems good enough
+  fServerSendBufferSize := 256 shl 10; // 256KB of is fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
   if hsoBan40xIP in ProcessOptions then
@@ -4402,7 +4419,7 @@ var
   GetMacAddressFilter: TMacAddressFilter;
 
 const
-  _P: array[TMacAddressKind] of byte = ( // convert Kind to sort priority
+  NETHW_ORDER: array[TMacAddressKind] of byte = ( // Kind to sort priority
     2,  // makUndefined
     0,  // makEthernet
     1,  // makWifi
@@ -4418,7 +4435,7 @@ begin
   // sort by kind
   if not (mafIgnoreKind in GetMacAddressFilter) then
   begin
-    result := CompareCardinal(_P[ma.Kind], _P[mb.Kind]);
+    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
     if result <> 0 then
       exit;
   end;
