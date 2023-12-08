@@ -1166,9 +1166,9 @@ begin
     // get sending buffer size from OS (if not already retrieved)
     if fSendBufferSize = 0 then
       {$ifdef OSWINDOWS}
-      // on Windows, default buffer is 8KB and we upgrade it to 64KB
-      // but for normal process, this could be a bit low -> force 256KB
-      fSendBufferSize := 256 shl 10;
+      // on Windows, default buffer is reported as 8KB by fSocket.SendBufferSize
+      // but the actual value is much bigger and modified at runtime
+      fSendBufferSize := 256 shl 10; // just assume optimal 256KB on Windows
       // if direct Write() doesn't succeed, it will subscribe to ProcessWrite
       {$else}
       // on Linux/POSIX, typical values are 2MB for TCP, 200KB on Unix Sockets

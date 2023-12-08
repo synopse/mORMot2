@@ -1975,7 +1975,7 @@ begin
   // THttpAsyncConnection.DoRequest did send the headers: now send body chunks
   if State <> hrsSendBody then
     exit;
-  // send the body in the background, using polling up to socket.SendBufferSize
+  // send in the background, using polling up to MaxSize (256KB typical)
   if ContentLength < MaxSize then
     MaxSize := ContentLength;
   if MaxSize > 0 then
@@ -2265,7 +2265,7 @@ begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
     // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
-    if SockIn <> nil then // client loop for compatibility with old servers
+    if SockIn <> nil then // client loop for compatibility with oldest servers
       while not eof(SockIn^) do
       begin
         readln(SockIn^, line);

@@ -308,9 +308,13 @@ type
     function Socket: PtrInt;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// change the OS sending buffer size of this socket, in bytes
+    // - do not use on Windows, because those values are indicative only and
+    // are not working as documented by the standard for SO_SNDBUF
     property SendBufferSize: integer
       read GetSendBufferSize write SetSendBufferSize;
     /// change the OS receiving buffer size of this socket, in bytes
+    // - do not use on Windows, because those values are indicative only and
+    // are not working as documented by the standard for SO_RCVBUF
     property RecvBufferSize: integer
       read GetRecvBufferSize write SetRecvBufferSize;
   end;
@@ -2334,21 +2338,16 @@ begin
     exit;
   end;
   // bind or connect to this Socket
-  {$ifdef OSWINDOWS}
-  if (layer <> nlUdp) and
-     not dobind then
-  begin // on Windows, default buffers are of 8KB :(
-    sock.SetRecvBufferSize(65536);
-    sock.SetSendBufferSize(65536);
-  end; // to be done before the actual connect() for proper TCP negotiation
-  {$endif OSWINDOWS}
-  // open non-blocking Client connection if a timeout was specified
+  // - note: no sock.SetRecvBufferSize/SetSendBufferSize call on Windows,
+  // because the OS is already guessing the best values at runtime
   if (connecttimeout > 0) and
+     // non-blocking connect() if a timeout was specified
      not dobind then
     // SetReceiveTimeout/SetSendTimeout don't apply to connect() -> async
     result := addr.SocketConnect(sock, connecttimeout)
   else
   repeat
+    // bind, or no timeout specified: just call the OS bind() or connect()
     if dobind then
     begin
       // bound Socket should remain open for 5 seconds after a closesocket()
@@ -2444,25 +2443,29 @@ end;
 procedure TNetSocketWrap.SetSendBufferSize(bytes: integer);
 begin
   SetOpt(SOL_SOCKET, SO_SNDBUF, @bytes, SizeOf(bytes));
+  // no value should be set on Windows, because it is better adjusted at runtime
 end;
 
 procedure TNetSocketWrap.SetRecvBufferSize(bytes: integer);
 begin
   SetOpt(SOL_SOCKET, SO_RCVBUF, @bytes, SizeOf(bytes));
+  // no value should be set on Windows, because it is better adjusted at runtime
 end;
 
 function TNetSocketWrap.GetSendBufferSize: integer;
 begin
   result := GetOptInt(SOL_SOCKET, SO_SNDBUF);
-  // typical value on Linux is 2626560 bytes for TCP (16384 for accept),
-  // 212992 for Unix socket - on Windows, default is 8192
+  // on Linux , typical value is 2626560 bytes for TCP (16384 for accept),
+  //   and 212992 for Unix socket
+  // on Windows, default is 8192 but it is only an initial informative value,
+  //   and do not reflect any future runtime adjustment
 end;
 
 function TNetSocketWrap.GetRecvBufferSize: integer;
 begin
   result := GetOptInt(SOL_SOCKET, SO_RCVBUF);
-  // typical value on Linux is 131072 bytes for TCP, 212992 for Unix socket
-  // - on Windows, default is 8192
+  // on Linux, typical value is 131072 bytes for TCP, 212992 for Unix socket
+  // on Windows, default is 8192 but it is only an initial informative value
 end;
 
 procedure TNetSocketWrap.SetBroadcast(broadcast: boolean);
@@ -2508,11 +2511,8 @@ begin
     else
     begin
       clientsocket := TNetSocket(sock);
-      {$ifdef OSWINDOWS}
-      // on Windows, default buffers are of 8KB :(
-      clientsocket.SetRecvBufferSize(65536);
-      clientsocket.SetSendBufferSize(65536);
-      {$endif OSWINDOWS}
+      // note: no sock.SetRecvBufferSize/SetSendBufferSize call on Windows,
+      // because the OS is already guessing the best values at runtime
       if async then // doaccept() may have set async=false with accept4()
         result := clientsocket.MakeAsync
       else
