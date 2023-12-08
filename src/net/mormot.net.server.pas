@@ -1441,7 +1441,16 @@ type
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempFilesDeleteDeprecatedTix: cardinal;
-    fSettingsOwned: boolean;
+    fSettingsOwned, fVerboseLog: boolean;
+    fBroadcast: record
+      Safe: TOSLightLock; // non-rentrant
+      Event: TSynEvent;   // <> nil if the first response is used
+      Addr: TNetAddr;
+      RespSafe: TLightLock;
+      Resp: THttpPeerCacheMessageDynArray;
+      RespCount: integer;
+      CurrentSeq: cardinal;
+    end;
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1459,6 +1468,8 @@ type
       aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
+    procedure BroadcastAdd(const aMessage: THttpPeerCacheMessage);
+    function BroadcastGet(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -4677,7 +4688,7 @@ begin
   fLog := TSynLog;
   log := fLog.Enter(self, 'Create');
   fFilesSafe.Init;
-  fBroadcastSafe.Init;
+  fBroadcast.Safe.Init;
   if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
   inherited Create;
@@ -4794,8 +4805,9 @@ begin
   FreeAndNil(fUdpServer);
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
+  FreeAndNil(fBroadcast.Event);
   fSharedMagic := 0;
-  fBroadcastSafe.Done;
+  fBroadcast.Safe.Done;
   fFilesSafe.Done;
 end;
 
@@ -4880,15 +4892,112 @@ begin
             (aMsg.RangeEnd >= aMsg.RangeStart);
 end;
 
-function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
-  aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean;
+procedure THttpPeerCache.BroadcastAdd(const aMessage: THttpPeerCacheMessage);
 begin
-  result := false; // work in progress
-  fBroadcastSafe.Lock;
-  try
+  with fBroadcast do
+    if RespCount < fSettings.BroadcastMaxResponses then
+    begin
+      RespSafe.Lock;
+      try
+        if RespCount = length(Resp) then
+          SetLength(Resp, NextGrow(RespCount));
+        Resp[RespCount] := aMessage;
+        inc(RespCount);
+      finally
+        RespSafe.UnLock;
+      end;
+    end;
+end;
 
+function THttpPeerCache.BroadcastGet(aSeq: cardinal): THttpPeerCacheMessageDynArray;
+var
+  i, c, n: PtrInt;
+begin
+  result := nil;
+  // retrieve the pending responses
+  with fBroadcast do
+  begin
+    CurrentSeq := 0; // no more reponse from now on
+    RespSafe.Lock;
+    try
+      if RespCount = 0 then
+        exit;
+      pointer(result) := pointer(Resp); // assign with no refcount
+      pointer(Resp) := nil;
+      c := RespCount;
+      RespCount := 0;
+    finally
+      RespSafe.UnLock;
+    end;
+  end;
+  // filter the responses matching aSeq (paranoid)
+  n := 0;
+  for i := 0 to c - 1 do
+    if result[i].Seq = aSeq then
+    begin
+      if i <> n then
+        result[n] := result[i];
+      inc(n);
+    end;
+  if n = 0 then
+    result := nil
+  else
+    DynArrayFakeLength(result, n);
+end;
+
+function SortMessagePerPriority(const VA, VB): integer;
+var
+  a: THttpPeerCacheMessage absolute VA;
+  b: THttpPeerCacheMessage absolute VB;
+begin
+  result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
+  if result <> 0 then // ethernet first
+    exit;
+  result := CompareCardinal(b.Speed, a.Speed);
+  if result <> 0 then // highest speed first
+    exit;
+  result := CompareCardinal(a.Connections, b.Connections);
+  if result <> 0 then // less active
+    exit;
+  result := ComparePointer(@a, @b); // by pointer = received first
+end;
+
+function THttpPeerCache.MessageBroadcast(
+  const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+var
+  frame: RawByteString;
+  sock: TNetSocket;
+  singleresp: boolean;
+begin
+  result := nil;
+  singleresp := (aReq.Kind = pcfRequest) and
+                (fBroadcast.Event <> nil); // pcoUseFirstResponse
+  frame := MessageEncode(aReq);
+  fBroadcast.Safe.Lock;
+  try
+    fBroadcast.CurrentSeq := aReq.Seq; // ignore any late response
+    if singleresp then
+      fBroadcast.Event.ResetEvent;
+    // broadcast request over UDP sub-net
+    sock := fBroadcast.Addr.NewSocket(nlUdp);
+    if sock = nil then
+      exit;
+    try
+      sock.SetBroadcast(true);
+      if sock.SendTo(pointer(frame), length(frame), fBroadcast.Addr) <> nrOk then
+        exit;
+    finally
+      sock.Close;
+    end;
+    // wait for the (first) response(s)
+    if singleresp then
+      fBroadcast.Event.WaitFor(fSettings.BroadcastTimeoutMS)
+    else
+      SleepHiRes(fSettings.BroadcastTimeoutMS);
+    result := BroadcastGet(aReq.Seq);
   finally
-    fBroadcastSafe.UnLock;
+    fBroadcast.CurrentSeq := 0;
+    fBroadcast.Safe.UnLock;
   end;
 end;
 
@@ -4964,7 +5073,8 @@ function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
   const Params: THttpClientSocketWGet; const Url: RawUtf8;
   ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
 var
-  req, resp: THttpPeerCacheMessage;
+  req: THttpPeerCacheMessage;
+  resp : THttpPeerCacheMessageDynArray;
   client: THttpClientSocket;
   head, ip, u: RawUtf8;
   fn: TFileName;
@@ -5033,19 +5143,32 @@ begin
       exit; // you are too small, buddy
     end;
   end;
+  // try first the current HTTP client (if any)
+
   // broadcast the request over UDP
-  if MessageBroadcast(req, l, resp) then
+  resp := MessageBroadcast(req);
+  if resp = nil then
+    exit;
+  // pickup the best response
+  if length(resp) <> 1 then
+  begin
+    if length(resp) > 10 then
+      DynArrayFakeLength(resp, 10); // sort the first 10 responses received
+    DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).Sort(
+      SortMessagePerPriority);
+  end;
   try
     // make a local HTTP request of the needed content on the best response
-    IP4Text(@resp.IP4, ip);
+    IP4Text(@resp[0].IP4, ip);
     FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
-    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, resp.Port, u], self);
-    client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp.Port));
+    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, resp[0].Port, u], self);
+    client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp[0].Port));
     try
+      { TODO: maintain the THttpClientSocket connection open for a few moments }
       client.RangeStart := req.RangeStart;
       client.RangeEnd := req.RangeEnd;
-      resp.Kind := pcfBearer; // authorize OnBeforeBody with response message
-      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp)));
+      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
+      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
       if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
         OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
       result := client.Request(
