@@ -8354,24 +8354,31 @@ begin
       if result = '' then
         result := StringFromFile(GetEnvironmentVariable('SSL_CA_CERT_FILE'));
     end;
-    // fallback to search depending on the POSIX / Windows specific OS stores
-    if result = '' then
-      for s := low(s) to high(s) do
-        if s in CertStores then
-        begin
-          v := GetOneSystemStoreAsPem(s, FlushCache, now);
-          if v <> '' then
-            result := result + v + #13#10;
-        end;
-    if result <> '' then
+  finally
+    _SystemStoreAsPemSafe.UnLock; // GetOneSystemStoreAsPem() blocks
+  end;
+  // fallback to search depending on the POSIX / Windows specific OS stores
+  if result = '' then
+    for s := low(s) to high(s) do
+      if s in CertStores then
+      begin
+        v := GetOneSystemStoreAsPem(s, FlushCache, now);
+        if v <> '' then
+          result := result + v + #13#10;
+      end;
+  if result <> '' then
+  begin
+    _SystemStoreAsPemSafe.Lock;
+    try
       with _SystemStoreAsPem do
       begin
         Tix := now;
         Scope := CertStores;
         Pem := result;
       end;
-  finally
-    _SystemStoreAsPemSafe.UnLock;
+    finally
+      _SystemStoreAsPemSafe.UnLock;
+    end;
   end;
 end;
 
