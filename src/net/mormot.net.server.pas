@@ -1337,6 +1337,8 @@ type
       read fBroadcastMaxResponses write fBroadcastMaxResponses;
   end;
 
+  THttpPeerCache = class;
+
   /// exception class raised on THttpPeerCache issues
   EHttpPeerCache = class(ESynException);
 
@@ -1346,9 +1348,8 @@ type
     pcfPing,
     pcfPong,
     pcfRequest,
-    pcfReponseNone,
+    pcfResponseNone,
     pcfResponseFull,
-    pcfResponsePartial,
     pcfBearer);
 
   /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
@@ -1385,8 +1386,8 @@ type
     Hardware: TMacAddressKind;
     /// the local UnixTimeMinimalUtc value
     Timestamp: cardinal;
-    /// number of background download currently on this server
-    CurrentDownloads: word;
+    /// number of background download connections currently on this server
+    Connections: word;
     /// the binary Hash (and algo) of the requested file content
     Hash: THttpPeerCacheHash;
     /// the known full size of this file
@@ -1410,12 +1411,14 @@ type
   protected
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
-    fSharedMagic, fFrameSeqLow, fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
+    fSharedMagic, fFrameSeqLow: cardinal;
+    fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
     fFrameSeq: integer;
     fLog: TSynLogClass;
     fBroadcastSafe: TOSLightLock; // non-rentrant
     fMac: TMacAddress;
     fUuid: TGuid;
+    fPort: RawUtf8;
     fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fSharedMagicHasher: THasher;
@@ -1428,17 +1431,17 @@ type
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
-    procedure MessageInit(aKind: THttpPeerCacheMessageKind;
+    procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
       out aMsg: THttpPeerCacheMessage); virtual;
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): boolean;
-    function MessageBroadcast(const aReq: THttpPeerCacheMessage;
-      aLog: TSynLog; out aResp: THttpPeerCacheMessage): boolean; virtual;
+    function MessageBroadcast(
+      const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray; virtual;
     function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName): TFileName; virtual;
     function LocalFileName(const aMessage: THttpPeerCacheMessage;
-      out aFileName: TFileName; aSize: PInt64): integer;
+      aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
   public
@@ -1466,7 +1469,6 @@ type
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
-    // - calling with Source='' will just trigger FilesDeleteDeprecated
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName); virtual;
     /// method called by the HttpServer before any request is processed
@@ -1517,9 +1519,8 @@ type
 
 const
   PCF_RESPONSE = [
-    pcfReponseNone,
-    pcfResponseFull,
-    pcfResponsePartial];
+    pcfResponseNone,
+    pcfResponseFull];
 
   PEER_CACHE_PATTERN = '*.cache';
 
@@ -4551,7 +4552,9 @@ begin
   fCacheTempMaxMB := 1000;
   fCacheTempMaxMin := 15;
   fCachePermPath := '*';
-  fCachePermMinBytes := 2048
+  fCachePermMinBytes := 2048;
+  fBroadcastTimeoutMS := 10;
+  fBroadcastMaxResponses := 24;
 end;
 
 
@@ -4620,7 +4623,8 @@ begin
     raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
   // retrieve the local network interface to be used
   SelectNetworkInterface;
-  FormatUtf8('%:%', [fMac.IP, fSettings.Port], ip); // bound to this network
+  UInt32ToUtf8(fSettings.Port, fPort);
+  FormatUtf8('%:%', [fMac.IP, fPort], ip); // bound to this network
   if Assigned(log) then
     log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
       [fMac.Name, ip, fMac.Broadcast]);
@@ -4686,14 +4690,15 @@ begin
 end;
 
 procedure THttpPeerCache.MessageInit(aKind: THttpPeerCacheMessageKind;
-  out aMsg: THttpPeerCacheMessage);
+  aSeq: cardinal; out aMsg: THttpPeerCacheMessage);
 var
   n: cardinal;
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
   RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
-  if aKind in [pcfRequest, pcfPing] then
-    aMsg.Seq := InterlockedIncrement(fFrameSeq);
+  if aSeq = 0 then
+    aSeq := InterlockedIncrement(fFrameSeq);
+  aMsg.Seq := aSeq;
   aMsg.Kind := aKind;
   aMsg.Uuid := fUuid;
   aMsg.IP4 := fIP4;
@@ -4706,7 +4711,7 @@ begin
   n := fHttpServer.ConnectionsActive;
   if n > 65535 then
     n := 65535;
-  aMsg.CurrentDownloads := n;
+  aMsg.Connections := n;
 end;
 
 // UDP frames are AES-GCM encrypted and signed messages, ending with 32-bit crc
@@ -4725,7 +4730,7 @@ begin
   finally
     fAesSafe.UnLock;
   end;
-  // append checksum to quickly reject any fuzzing attempt
+  // append salted checksum to quickly reject any fuzzing attempt
   p := pointer(result);
   l := length(result) - 4;
   PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
@@ -4739,7 +4744,7 @@ begin
   result := false;
   // quickly reject any fuzzing attempt
   dec(aFrameLen, 4);
-  if (aFrameLen < SizeOf(aMsg) + SizeOf(THash128) * 2 {iv+padding}) or
+  if (aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) or
      (PCardinal(aFrame + aFrameLen)^ <>
        fSharedMagicHasher(fSharedMagic, aFrame, aFrameLen)) then
     exit;
@@ -4792,9 +4797,9 @@ begin
 end;
 
 function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
-  out aFileName: TFileName; aSize: PInt64): integer;
+  aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
 var
-  name: TFileName;
+  name, fn: TFileName;
   size: Int64;
 begin
   name := ComputeFileName(aMessage.Hash);
@@ -4803,16 +4808,17 @@ begin
   try
     if fPermFilesPath <> '' then
     begin
-      aFileName := PermFileName(name); // with proper sub-folder
-      size := FileSize(aFileName);
+      fn := PermFileName(name); // with proper sub-folder
+      size := FileSize(fn);
     end;
     if (size = 0) and
        (fTempFilesPath <> '') then
     begin
-      aFileName := fTempFilesPath + name;
-      size := FileSize(aFileName);
-      if size <> 0 then // mark this temporary cached file as just used
-        FileSetDate(aFileName, DateTimeToFileDate(Now));
+      fn := fTempFilesPath + name;
+      size := FileSize(fn);
+      if aSetDate and
+         (size <> 0) then // mark this temporary cached file as just used
+        FileSetDate(fn, DateTimeToFileDate(Now));
     end;
   finally
     fFilesSafe.UnLock;
@@ -4825,6 +4831,8 @@ begin
      (size <> aMessage.Size) then
     exit; // invalid file
   result := HTTP_SUCCESS;
+  if aFileName <> nil then
+    aFileName^ := fn;
   if aSize <> nil then
     aSize^ := size;
 end;
@@ -4871,7 +4879,7 @@ begin
   log := fLog.Enter('OnDownload % %', [KBNoSpace(ExpectedFullSize), Url], self);
   if Assigned(log) then
     l := log.Instance;
-  MessageInit(pcfRequest, req);
+  MessageInit(pcfRequest, 0, req);
   if not WGetToHash(Params, req.Hash) then
   begin
     l.Log(sllWarning, 'OnDownload: invalid hash=%', [Params.Hash], self);
@@ -4881,7 +4889,7 @@ begin
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
   // always check if we don't already have this file cached locally
-  if LocalFileName(req, fn, @req.Size) = HTTP_SUCCESS then
+  if LocalFileName(req, true, @fn, @req.Size) = HTTP_SUCCESS then
   begin
     l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
@@ -5117,7 +5125,7 @@ begin
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
-    result := LocalFileName(msg, fn, nil);
+    result := LocalFileName(msg, true, @fn, nil);
     if result <> HTTP_SUCCESS then
       exit;
     // just return the file as requested
