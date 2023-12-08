@@ -1244,19 +1244,33 @@ function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceName: RawUtf8): boolean; overload;
 
 type
+  /// each THttpPeerCacheSettings.Options item
+  // - by default, wait BroadcastTimeoutMS for all responses to be received,
+  // unless pcoUseFirstResponse is defined
+  // - pcoVerboseLog will log all details, e.g. raw UDP frames
+  THttpPeerCacheOption = (
+    pcoUseFirstResponse,
+    pcoVerboseLog);
+
+  /// THttpPeerCacheSettings.Options values
+  THttpPeerCacheOptions = set of THttpPeerCacheOption;
+
   /// define how THttpPeerCache handles its process
   THttpPeerCacheSettings = class(TSynPersistent)
   protected
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
-    fLimitMBPerSec, fCacheTempMaxMB, fCacheTempMaxMin: integer;
+    fOptions: THttpPeerCacheOptions;
+    fLimitMBPerSec, fBroadcastTimeoutMS, fBroadcastMaxResponses,
+    fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
-    // - i.e. Port=8089, LimitMBPerSec=10, CacheTempMaxMB=1000 and
-    // CacheTempMaxMin=15, CacheTempMinBytes=CachePermMinBytes=2048
+    // - i.e. Port=8089, LimitMBPerSec=10, CacheTempMaxMB=1000,
+    // CacheTempMaxMin=15, CacheTempMinBytes=CachePermMinBytes=2048,
+    // BroadcastTimeoutMS=10 and BroadcastMaxResponses=24
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1265,6 +1279,9 @@ type
     // - is 8089 by default, which is unassigned by IANA
     property Port: TNetPort
       read fPort write fPort;
+    /// allow to customize the process
+    property Options: THttpPeerCacheOptions
+      read fOptions write fOptions;
     /// the local TMacAddress.Name used for UDP and TCP process
     // - if not set, will fallback to the best local makEthernet/makWifi network
     // with a GetMacAddress() call
@@ -1310,6 +1327,14 @@ type
     // - there is no size limitation if the file is already in the permanent cache
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
+    /// how many milliseconds UDP broadcast should wait for a response
+    // - default is 10 ms
+    property BroadcastTimeoutMS: integer
+      read fBroadcastTimeoutMS write fBroadcastTimeoutMS;
+    /// how many responses UDP broadcast should take into account
+    // - default is 24
+    property BroadcastMaxResponses: integer
+      read fBroadcastMaxResponses write fBroadcastMaxResponses;
   end;
 
   /// exception class raised on THttpPeerCache issues
@@ -4549,6 +4574,7 @@ begin
   if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
   inherited Create;
+  // setup the processing options
   if aSettings = nil then
   begin
     fSettings := THttpPeerCacheSettings.Create;
@@ -4556,6 +4582,10 @@ begin
   end
   else
     fSettings := aSettings;
+  fVerboseLog := (pcoVerboseLog in fSettings.Options) and
+                 (sllTrace in fLog.Family.Level);
+  if pcoUseFirstResponse in fSettings.Options then
+    fBroadcast.Event := TSynEvent.Create;
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -4599,7 +4629,7 @@ begin
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
   // start the local HTTP server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
-  fHttpServer.ServerName := FormatUtf8('%PeerCache', [Executable.ProgramName]);
+  fHttpServer.ServerName := Executable.ProgramName;
   fHttpServer.OnBeforeBody := OnBeforeBody;
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
