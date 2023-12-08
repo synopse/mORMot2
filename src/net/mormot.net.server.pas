@@ -1403,6 +1403,21 @@ type
     Padding: array[0 .. 48] of byte;
   end;
 
+  THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
+
+  /// background UDP server thread, associated to a THttpPeerCache instance
+  THttpPeerCacheThread = class(TUdpServerThread)
+  protected
+    fOwner: THttpPeerCache;
+    fMsg: THttpPeerCacheMessage;
+    procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
+    procedure OnIdle(tix64: Int64); override;
+    procedure OnShutdown; override; // = Destroy
+  public
+    /// initialize the background UDP server thread
+    constructor Create(Owner: THttpPeerCache); reintroduce;
+  end;
+
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
@@ -1415,7 +1430,7 @@ type
     fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
     fFrameSeq: integer;
     fLog: TSynLogClass;
-    fBroadcastSafe: TOSLightLock; // non-rentrant
+    fUdpServer: THttpPeerCacheThread;
     fMac: TMacAddress;
     fUuid: TGuid;
     fPort: RawUtf8;
@@ -1481,9 +1496,9 @@ type
     function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// could be called on a regular basis to purge the cache from oldest files
     // - i.e. to implement optional CacheTempMaxMin disk space release
-    // - is also called from OnDownloaded()
+    // - is called from THttpPeerCacheThread.OnIdle
     // - will actually read and search the CacheTempPath folder every minute
-    procedure FilesDeleteDeprecated;
+    procedure FilesDeleteDeprecated(tix64: Int64);
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
       read fMac;
@@ -4558,6 +4573,95 @@ begin
 end;
 
 
+{ THttpPeerCacheThread }
+
+constructor THttpPeerCacheThread.Create(Owner: THttpPeerCache);
+begin
+  fOwner := Owner;
+  inherited Create(
+    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udppeerserver', 100);
+end;
+
+procedure THttpPeerCacheThread.OnFrameReceived(len: integer;
+  var remote: TNetAddr);
+var
+  resp: THttpPeerCacheMessage;
+
+  procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
+  var
+    ip, msg: shortstring;
+  begin
+    remote.IPShort(ip, {port=}true);
+    FormatShort(Fmt, Args, msg);
+    fOwner.fLog.Add.Log(sllTrace, 'OnFrameReceived: % %', [ip, msg], self)
+  end;
+
+  procedure DoSend;
+  var
+    sock: TNetSocket;
+    frame: RawByteString;
+  begin
+    if fOwner.fVerboseLog then
+      DoLog('sending back %', [ToText(resp)]);
+    frame := fOwner.MessageEncode(resp);
+    sock := remote.NewSocket(nlUdp);
+    sock.SendTo(pointer(frame), length(frame), remote);
+  end;
+
+var
+  ok: boolean;
+begin
+  ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
+        fOwner.MessageDecode(pointer(fFrame), len, fMsg);
+  if fOwner.fVerboseLog then
+    if ok then
+      DoLog('%', [ToText(fMsg)])
+    else
+      DoLog('unexpected len=% [%]', [len, EscapeToShort(pointer(fFrame), len)]);
+  if ok then
+    case fMsg.Kind of
+      pcfPing:
+        begin
+          fOwner.MessageInit(pcfPong, fMsg.Seq, resp);
+          DoSend;
+        end;
+      pcfRequest:
+        begin
+          fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
+          resp.Hash := fMsg.Hash;
+          if fOwner.LocalFileName(
+               fMsg, {setdate=}false, {fn=}nil, @resp.Size) = HTTP_SUCCESS then
+            resp.Kind := pcfResponseFull;
+          DoSend;
+        end;
+      pcfPong:
+        if fMsg.Seq = fOwner.fBroadcast.CurrentSeq then
+          fOwner.BroadcastAdd(fMsg);
+      pcfResponseFull:
+        if fMsg.Seq = fOwner.fBroadcast.CurrentSeq then
+        begin
+          fOwner.BroadcastAdd(fMsg);
+          with fOwner.fBroadCast do
+            if Event <> nil then // pcoUseFirstResponse
+            begin
+              CurrentSeq := 0;   // next responses will be ignored
+              Event.SetEvent;    // notify THttpPeerCache.MessageBroadcast
+            end;
+        end;
+      // pcfResponseNone are just ignored
+    end;
+end;
+
+procedure THttpPeerCacheThread.OnIdle(tix64: Int64);
+begin
+  fOwner.FilesDeleteDeprecated(tix64); // do nothing but once every minute
+end;
+
+procedure THttpPeerCacheThread.OnShutdown;
+begin
+end;
+
+
 { THttpPeerCache }
 
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
@@ -4595,7 +4699,7 @@ begin
   fTempFilesPath := EnsureDirectoryExists(fSettings.CacheTempPath);
   if fTempFilesPath <> '' then
   begin
-    FilesDeleteDeprecated; // initial clean-up
+    FilesDeleteDeprecated(0); // initial clean-up
     fTempFilesMaxSize := Int64(fSettings.CacheTempMaxMB) shl 20;
     avail := GetDiskAvailable(fTempFilesPath);
     existing := DirectorySize(fTempFilesPath, false, PEER_CACHE_PATTERN);
@@ -4631,6 +4735,11 @@ begin
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fNetMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+  fBroadcast.Addr.SetIP4Port(fBroadcastIP4, fSettings.Port);
+  // start the local UDP server on this interface
+  fUdpServer := THttpPeerCacheThread.Create(self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'Create: started %', [fUdpServer]);
   // start the local HTTP server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
   fHttpServer.ServerName := Executable.ProgramName;
@@ -4682,6 +4791,7 @@ begin
     fSettings.Free;
   fSettings := nil; // paranoid for async OnDownload call
   FreeAndNil(fHttpServer);
+  FreeAndNil(fUdpServer);
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
@@ -4992,14 +5102,17 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-procedure THttpPeerCache.FilesDeleteDeprecated;
+procedure THttpPeerCache.FilesDeleteDeprecated(tix64: Int64);
 var
-  tix, size: Int64;
+  tix: cardinal;
+  size: Int64;
 begin
   if (fSettings.fCacheTempMaxMin <= 0) or
      (fTempFilesPath = '') then
     exit;
-  tix := (GetTickCount64 shr 16) + 1; // check every minute (65,536 seconds)
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  tix := (tix64 shr 16) + 1; // check every minute (65,536 seconds)
   if (fTempFilesDeleteDeprecatedTix <> tix) and
      fFilesSafe.TryLock then
   try
@@ -5023,10 +5136,6 @@ var
   i: PtrInt;
   dir: TFindFilesDynArray;
 begin
-  // first do some clean-up of oldest cached files (maybe with Source = '')
-  FilesDeleteDeprecated; // do nothing but once every minute
-  if Source = '' then
-    exit;
   // validate the supplied downloaded source file
   sourcesize := FileSize(Source);
   if sourcesize = 0 then
