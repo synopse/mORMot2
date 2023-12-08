@@ -44,7 +44,8 @@ HTTP Client Classes
 
 ### mormot.net.server
 
-HTTP Server Classes
+HTTP/UDP Server Classes
+- Abstract UDP Server
 - Custom URI Routing using an efficient Radix Tree
 - Shared Server-Side HTTP Process
 - `THttpServerSocket`/`THttpServer` HTTP/1.1 Server
@@ -110,7 +111,6 @@ Current limitation: no Client code is defined yet - only the raw TFTP protocol.
 ### mormot.net.tftp.server
 
 TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
-- Abstract UDP Server
 - TFTP Connection Thread and State Machine
 - `TTftpServerThread` Server Class
 

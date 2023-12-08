@@ -3206,6 +3206,8 @@ begin
   if TimeOutMs < 0 then
     TimeOutMs := 10; // avoid integer -> cardinal sign overflow
   SleepHiRes(TimeOutMs, fProcessing, {terminated=}false);
+  fLogClass.Add.Log(sllTrace,
+    'TerminateAndWaitFinished(%): processing=%', [TimeOutMS, fProcessing], self);
 end;
 
 

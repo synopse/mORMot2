@@ -7,7 +7,6 @@ unit mormot.net.tftp.server;
   *****************************************************************************
 
     TFTP Server Processing with RFC 1350/2347/2348/2349/7440 Support
-    - Abstract UDP Server
     - TFTP Connection Thread and State Machine
     - TTftpServerThread Server Class
 
@@ -35,42 +34,10 @@ uses
   mormot.core.buffers,
   mormot.core.json,
   mormot.net.sock,
+  mormot.net.server, // for TUdpServerThread
   mormot.net.tftp.client;
 
 
-
-{ ******************** Abstract UDP Server }
-
-type
-  EUdpServer = class(ENetSock);
-
-  /// work memory buffer of the maximum size of UDP frame (64KB)
-  TUdpFrame = array[word] of byte;
-
-  /// pointer to a memory buffer of the maximum size of UDP frame
-  PUdpFrame = ^TUdpFrame;
-
-  /// abstract UDP server thread
-  TUdpServerThread = class(TLoggedThread)
-  protected
-    fSock: TNetSocket;
-    fSockAddr: TNetAddr;
-    fExecuteMessage: RawUtf8;
-    fFrame: PUdpFrame;
-    procedure AfterBind; virtual;
-    /// will loop for any pending UDP frame, and execute FrameReceived method
-    procedure DoExecute; override;
-    // this is the main processing method for all incoming frames
-    procedure OnFrameReceived(len: integer; var remote: TNetAddr); virtual; abstract;
-    procedure OnIdle(tix64: Int64); virtual; // called every 512 ms at most
-    procedure OnShutdown; virtual; abstract;
-  public
-    /// initialize and bind the server instance, in non-suspended state
-    constructor Create(LogClass: TSynLogClass;
-      const BindAddress, BindPort, ProcessName: RawUtf8); reintroduce;
-    /// finalize the processing thread
-    destructor Destroy; override;
-  end;
 
 
 { ******************** TFTP Connection Thread and State Machine }
@@ -202,101 +169,6 @@ type
 
 
 implementation
-
-
-{ ******************** Abstract UDP Server }
-
-{ TUdpServerThread }
-
-procedure TUdpServerThread.OnIdle(tix64: Int64);
-begin
-  // do nothing by default
-end;
-
-constructor TUdpServerThread.Create(LogClass: TSynLogClass;
-  const BindAddress, BindPort, ProcessName: RawUtf8);
-var
-  ident: RawUtf8;
-  res: TNetResult;
-begin
-  GetMem(fFrame, SizeOf(fFrame^));
-  ident := ProcessName;
-  if ident = '' then
-    FormatUtf8('udp%srv', [BindPort], ident);
-  if LogClass <> nil then
-     LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
-       [BindAddress, BindPort, ident], self);
-  res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
-    5000, 5000, 5000, 10, fSock, @fSockAddr);
-  if res <> nrOk then
-    // on binding error, raise exception before the thread is actually created
-    raise EUdpServer.Create('%s.Create binding error on %s:%s',
-      [ClassNameShort(self)^, BindAddress, BindPort], res);
-  AfterBind;
-  inherited Create({suspended=}false, LogClass, ident);
-end;
-
-destructor TUdpServerThread.Destroy;
-begin
-  fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName]);
-  TerminateAndWaitFinished;
-  inherited Destroy;
-  if fSock <> nil then
-    fSock.ShutdownAndClose({rdwr=}true);
-  FreeMem(fFrame);
-end;
-
-procedure TUdpServerThread.AfterBind;
-begin
-  // do nothing by default
-end;
-
-procedure TUdpServerThread.DoExecute;
-var
-  len: integer;
-  tix64: Int64;
-  tix, lasttix: cardinal;
-  remote: TNetAddr;
-  res: TNetResult;
-begin
-  fProcessing := true;
-  lasttix := 0;
-  // main server process loop
-  try
-    if fSock = nil then // paranoid check
-      raise EUdpServer.CreateFmt('%s.Execute: Bind failed', [ClassNameShort(self)^]);
-    while not Terminated do
-    begin
-      if fSock.WaitFor(1000, [neRead]) <> [] then
-      begin
-        if Terminated then
-          break;
-        res := fSock.RecvPending(len);
-        if (res = nrOk) and
-           (len >= 4) then
-        begin
-          PInteger(fFrame)^ := 0;
-          len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
-          if len >= 0 then // -1=error, 0=shutdown
-            OnFrameReceived(len, remote);
-        end;
-      end;
-      tix64 := mormot.core.os.GetTickCount64;
-      tix := tix64 shr 9;
-      if tix <> lasttix then
-      begin
-        lasttix := tix;
-        OnIdle(tix64); // called every 512 ms at most
-      end;
-    end;
-    OnShutdown; // should close all connections
-  except
-    on E: Exception do
-      // any exception would break and release the thread
-      FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
-  end;
-  fProcessing := false;
-end;
 
 
 { ******************** TFTP Connection Thread and State Machine }
@@ -458,7 +330,7 @@ begin
   fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
   fMaxRetry := 2;
   fOptions := Options;
-  inherited Create(LogClass, BindAddress, BindPort, ProcessName); // bind port
+  inherited Create(LogClass, BindAddress, BindPort, ProcessName, 5000); // bind
   {$ifdef OSPOSIX}
   if ttoDropPriviledges in fOptions then
   begin

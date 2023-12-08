@@ -7,6 +7,7 @@ unit mormot.net.server;
   *****************************************************************************
 
    HTTP Server Classes
+   - Abstract UDP Server
    - Custom URI Routing using an efficient Radix Tree
    - Shared Server-Side HTTP Process
    - THttpServerSocket/THttpServer HTTP/1.1 Server
@@ -46,6 +47,41 @@ uses
   mormot.net.client,
   mormot.crypt.core,
   mormot.crypt.secure;
+
+
+{ ******************** Abstract UDP Server }
+
+type
+  EUdpServer = class(ENetSock);
+
+  /// work memory buffer of the maximum size of UDP frame (64KB)
+  TUdpFrame = array[word] of byte;
+
+  /// pointer to a memory buffer of the maximum size of UDP frame
+  PUdpFrame = ^TUdpFrame;
+
+  /// abstract UDP server thread
+  TUdpServerThread = class(TLoggedThread)
+  protected
+    fSock: TNetSocket;
+    fSockAddr: TNetAddr;
+    fExecuteMessage: RawUtf8;
+    fFrame: PUdpFrame;
+    procedure AfterBind; virtual;
+    /// will loop for any pending UDP frame, and execute FrameReceived method
+    procedure DoExecute; override;
+    // this is the main processing method for all incoming frames
+    procedure OnFrameReceived(len: integer; var remote: TNetAddr); virtual; abstract;
+    procedure OnIdle(tix64: Int64); virtual; // called every 512 ms at most
+    procedure OnShutdown; virtual; abstract;
+  public
+    /// initialize and bind the server instance, in non-suspended state
+    constructor Create(LogClass: TSynLogClass;
+      const BindAddress, BindPort, ProcessName: RawUtf8;
+      TimeoutMS: integer); reintroduce;
+    /// finalize the processing thread
+    destructor Destroy; override;
+  end;
 
 
 { ******************** Custom URI Routing using an efficient Radix Tree }
@@ -553,7 +589,7 @@ type
     // wrapper, so it won't fit our purpose
     // - to be used e.g. to call CoUnInitialize from thread in which CoInitialize
     // was made, for instance via a method defined as such:
-    // ! procedure TMyServer.OnHttpThreadTerminate(Sender: TObject);
+    // ! procedure TMyServer.OnHttpThreadTerminate(Sender: TThread);
     // ! begin // TSqlDBConnectionPropertiesThreadSafe
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
@@ -2004,6 +2040,104 @@ type
 
 implementation
 
+
+{ ******************** Abstract UDP Server }
+
+{ TUdpServerThread }
+
+procedure TUdpServerThread.OnIdle(tix64: Int64);
+begin
+  // do nothing by default
+end;
+
+constructor TUdpServerThread.Create(LogClass: TSynLogClass;
+  const BindAddress, BindPort, ProcessName: RawUtf8; TimeoutMS: integer);
+var
+  ident: RawUtf8;
+  res: TNetResult;
+begin
+  GetMem(fFrame, SizeOf(fFrame^));
+  ident := ProcessName;
+  if ident = '' then
+    FormatUtf8('udp%srv', [BindPort], ident);
+   LogClass.Add.Log(sllTrace, 'Create: bind %:% for input requests on %',
+     [BindAddress, BindPort, ident], self);
+  res := NewSocket(BindAddress, BindPort, nlUdp, {bind=}true,
+    TimeoutMS, TimeoutMS, TimeoutMS, 10, fSock, @fSockAddr);
+  if res <> nrOk then
+    // on binding error, raise exception before the thread is actually created
+    raise EUdpServer.Create('%s.Create binding error on %s:%s',
+      [ClassNameShort(self)^, BindAddress, BindPort], res);
+  AfterBind;
+  inherited Create({suspended=}false, LogClass, ident);
+end;
+
+destructor TUdpServerThread.Destroy;
+begin
+  fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName], self);
+  TerminateAndWaitFinished;
+  inherited Destroy;
+  if fSock <> nil then
+    fSock.ShutdownAndClose({rdwr=}true);
+  FreeMem(fFrame);
+end;
+
+procedure TUdpServerThread.AfterBind;
+begin
+  // do nothing by default
+end;
+
+procedure TUdpServerThread.DoExecute;
+var
+  len: integer;
+  tix64: Int64;
+  tix, lasttix: cardinal;
+  remote: TNetAddr;
+  res: TNetResult;
+begin
+  fProcessing := true;
+  lasttix := 0;
+  // main server process loop
+  try
+    if fSock = nil then // paranoid check
+      raise EUdpServer.CreateFmt('%s.Execute: Bind failed', [ClassNameShort(self)^]);
+    while not Terminated do
+    begin
+      if fSock.WaitFor(1000, [neRead]) <> [] then
+      begin
+        if Terminated then
+        begin
+          fLogClass.Add.Log(sllDebug, 'DoExecute: Terminated', self);
+          break;
+        end;
+        res := fSock.RecvPending(len);
+        if (res = nrOk) and
+           (len >= 4) then
+        begin
+          PInteger(fFrame)^ := 0;
+          len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+          if Terminated then
+            break;
+          if len >= 0 then // -1=error, 0=shutdown
+            OnFrameReceived(len, remote);
+        end;
+      end;
+      tix64 := mormot.core.os.GetTickCount64;
+      tix := tix64 shr 9; // div 512
+      if tix <> lasttix then
+      begin
+        lasttix := tix;
+        OnIdle(tix64); // called every 512 ms at most
+      end;
+    end;
+    OnShutdown; // should close all connections
+  except
+    on E: Exception do
+      // any exception would break and release the thread
+      FormatUtf8('% [%]', [E, E.Message], fExecuteMessage);
+  end;
+  fProcessing := false;
+end;
 
 
 { ******************** Custom URI Routing using an efficient Radix Tree }
