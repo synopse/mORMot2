@@ -1431,6 +1431,8 @@ type
       read fSent;
   end;
 
+  THttpPeerCacheLocalFileName = set of (lfnSetDate, lfnEnsureDirectoryExists);
+
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
@@ -1471,9 +1473,11 @@ type
     function MessageBroadcast(
       const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray; virtual;
     function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
-    function PermFileName(const aFileName: TFileName): TFileName; virtual;
-    function LocalFileName(const aMessage: THttpPeerCacheMessage;
-      aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
+    function PermFileName(const aFileName: TFileName;
+      aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
+    function LocalFileName(
+      const aMessage: THttpPeerCacheMessage; aFlags: THttpPeerCacheLocalFileName;
+      aFileName: PFileName; aSize: PInt64): integer;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
   public
@@ -4657,8 +4661,7 @@ begin
         begin
           fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
           resp.Hash := fMsg.Hash;
-          if fOwner.LocalFileName(
-               fMsg, {setdate=}false, {fn=}nil, @resp.Size) = HTTP_SUCCESS then
+          if fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
             resp.Kind := pcfResponseFull;
           DoSend;
         end;
@@ -5006,23 +5009,31 @@ begin
   result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
 end;
 
-function THttpPeerCache.PermFileName(const aFileName: TFileName): TFileName;
+function THttpPeerCache.PermFileName(const aFileName: TFileName;
+  aFlags: THttpPeerCacheLocalFileName): TFileName;
+var
+  path: TFileName;
 begin
   // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
   // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
-  result := EnsureDirectoryExists(fPermFilesPath +
-              sysutils.lowercase(copy(aFileName, 3, 1))) + aFileName;
+  path := fPermFilesPath + sysutils.lowercase(copy(aFileName, 3, 1));
+  if lfnEnsureDirectoryExists in aFlags then
+    path := EnsureDirectoryExists(path)
+  else
+    path := path + PathDelim;
+  result := path + aFileName;
 end;
 
 function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
-  aSetDate: boolean; aFileName: PFileName; aSize: PInt64): integer;
+  aFlags: THttpPeerCacheLocalFileName; aFileName: PFileName;
+  aSize: PInt64): integer;
 var
   perm, temp, name, fn: TFileName;
   size: Int64;
 begin
   name := ComputeFileName(aMessage.Hash);
   if fPermFilesPath <> '' then
-    perm := PermFileName(name); // with proper sub-folder
+    perm := PermFileName(name, aFlags); // with proper sub-folder
   if fTempFilesPath <> '' then
     temp := fTempFilesPath + name;
   size := 0;
@@ -5037,7 +5048,7 @@ begin
       if size <> 0 then
       begin
         fn := temp;      // found in temporary cache folder
-        if aSetDate then
+        if lfnSetDate in aFlags then
           FileSetDate(temp, DateTimeToFileDate(Now)); // mark as just used
       end;
     end;
@@ -5128,7 +5139,7 @@ begin
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
   // always check if we don't already have this file cached locally
-  if LocalFileName(req, true, @fn, @req.Size) = HTTP_SUCCESS then
+  if LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS then
   begin
     l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
@@ -5306,7 +5317,7 @@ begin
   if (waoPermanentCache in Params.AlternateOptions) and
      (fPermFilesPath <> '') then
   begin
-    local := PermFileName(local); // with proper sub-folder
+    local := PermFileName(local, [lfnEnsureDirectoryExists]); // with sub-folder
     istemp := false;
   end
   else
@@ -5342,6 +5353,7 @@ begin
           dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
           for i := 0 to high(dir) do
             inc(tot, dir[i].Size);
+          fTempCurrentSize := tot;
         end;
         inc(tot, sourcesize); // simulate adding this file
         if tot >= fTempFilesMaxSize then
@@ -5360,8 +5372,8 @@ begin
                 break; // we have deleted enough old files
             end;
           fLog.Add.Log(sllTrace, 'OnDowloaded: deleted %', [KB(deleted)], self);
+          dec(fTempCurrentSize, deleted);
         end;
-        fTempCurrentSize := tot - sourcesize;
       end;
       if tot >= fTempFilesMaxSize then
       begin
@@ -5393,7 +5405,7 @@ begin
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
-    result := LocalFileName(msg, true, @fn, nil);
+    result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if result <> HTTP_SUCCESS then
       exit;
     // just return the file as requested

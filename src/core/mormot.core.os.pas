@@ -3368,6 +3368,7 @@ function DirectoryDelete(const Directory: TFileName;
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function, unless Recursive is TRUE
 // - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
+// - return false if any deprecated DeleteFile() did fail during the process
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
   Recursive: boolean = false; TotalSize: PInt64 = nil): boolean;
