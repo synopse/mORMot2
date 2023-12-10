@@ -36,10 +36,12 @@ uses
 {
   Implementation notes:
   - new pure pascal OOP design of BigInt computation optimized for RSA process
+  - garbage collection of BigInt instances, with proper anti-forensic wiping
   - use half-registers (HalfUInt) for efficient computation on all CPUs
   - dedicated x86_64/i386 asm for core computation routines (noticeable speedup)
   - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - includes FIPS-level RSA keypair validation and generation
+  - features both RSASSA-PKCS1-v1_5 and RSASSA-PSS signature schemes
   - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
   - references: https://github.com/Mbed-TLS/mbedtls and the Handbook of Applied
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
@@ -1490,6 +1492,29 @@ const
   // ensure generated number is at least (nbits - 1) + 0.5 bits
   FIPS_MIN = $b504f334;
 
+function FipsMinIterations(size: integer): integer;
+begin
+  // FIPS 4.48: 2^-100 error probability, number of rounds computed based on HAC
+  if size >= 1450 shr HALF_SHR then
+    result := 4
+  else if size >= 1150 shr HALF_SHR then
+    result := 5
+  else if size >= 1000 shr HALF_SHR then
+    result := 6
+  else if size >= 850 shr HALF_SHR then
+    result := 7
+  else if size >= 750 shr HALF_SHR then
+    result := 8
+  else if size >= 500 shr HALF_SHR then
+    result := 13
+  else if size >= 250 shr HALF_SHR then
+    result := 28
+  else if size >= 150 shr HALF_SHR then
+    result := 40
+  else
+    result := 51;
+end;
+
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
 var
@@ -1503,24 +1528,7 @@ begin
   if EndTix <= 0 then
     EndTix := GetTickCount64 + 60000; // never wait forever - 1 min seems enough
   // FIPS 4.48: 2^-100 error probability, number of rounds computed based on HAC
-  if n >= 1450 shr HALF_SHR then
-    min := 4
-  else if n >= 1150 shr HALF_SHR then
-    min := 5
-  else if n >= 1000 shr HALF_SHR then
-    min := 6
-  else if n >= 850 shr HALF_SHR then
-    min := 7
-  else if n >= 750 shr HALF_SHR then
-    min := 8
-  else if n >= 500 shr HALF_SHR then
-    min := 13
-  else if n >= 250 shr HALF_SHR then
-    min := 28
-  else if n >= 150 shr HALF_SHR then
-    min := 40
-  else
-    min := 51;
+  min := FipsMinIterations(n);
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 §B.3.3 steps 4.4, 5.5
@@ -1540,12 +1548,12 @@ begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
       // with our TAesPrng, it never occurred after 1,000,000,000 trials
       dec(min);
-      if min = 0 then
-        exit; // too weak PNRG for sure
+      if min = 0 then // paranoid
+        raise ERsaException.Create('TBigInt.FillPrime: weak TAesPrng');
       continue;
     end;
     // should be a big enough odd number
-    Value[0] := Value[0] or 1; // set lower bit to ensure is an odd number
+    Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
     if last32^ < FIPS_MIN then
       last32^ := last32^ or $b5050000; // let's grow up
     if (Value[n - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
