@@ -8870,9 +8870,12 @@ var
 begin
   if NewFile = MainFile then
     raise EStuffExe.CreateUtf8('MainFile=NewFile=%', [MainFile]);
-  if (Stuff = '') or
-     (length(Stuff) > 32000) or
-     (StrLen(pointer(Stuff)) <> length(Stuff)) then
+  if Stuff = '' then
+    raise EStuffExe.CreateUtf8('Nothing to Stuff in %', [MainFile]);
+  if length(Stuff) > 32000 then
+    raise EStuffExe.CreateUtf8('Too much data (%) to Stuff within %',
+      [KB(Stuff), MainFile]);
+  if StrLen(pointer(Stuff)) <> length(Stuff) then
     raise EStuffExe.CreateUtf8('Stuff should be pure Text for %', [MainFile]);
   certoffs := 0;
   certlenoffs := 0;
