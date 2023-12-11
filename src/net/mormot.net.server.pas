@@ -4863,14 +4863,14 @@ begin
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
   // setup internal processing status
-  fSharedMagic := xxHash32Mixup(crc32cHash(aSharedSecret));
-  if aSharedMagicAlgo = caDefault then
-    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
-  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
   fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // AES-GCM-128
   fAesDec := fAesEnc.Clone as TAesGcmAbstract;
+  fSharedMagic := key.h.c3; // use upper 32-bit for anti-fuzzing checksum
   FillZero(key.b);
+  if aSharedMagicAlgo = caDefault then
+    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
+  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
   fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   GetComputerUuid(fUuid);
