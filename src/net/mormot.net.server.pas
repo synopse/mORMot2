@@ -1302,6 +1302,7 @@ type
     /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
+    // - if this value is '', temporary caching would be disabled
     property CacheTempPath: TFileName
       read fCacheTempPath write fCacheTempPath;
     /// above how many bytes the peer network should be asked for a temporary file
@@ -1319,8 +1320,9 @@ type
     property CacheTempMaxMin: integer
       read fCacheTempMaxMin write fCacheTempMaxMin;
     /// location of the permanent cached files, available for remote requests
+    // - in respect to CacheTempPath, this folder won't be purged
     // - the files are cached using their THttpPeerCacheHash values as filename
-    // - this folder won't be purged
+    // - if this value is '', permanent caching would be disabled
     property CachePermPath: TFileName
       read fCachePermPath write fCachePermPath;
     /// above how many bytes the peer network should be asked for a permanent file
@@ -1365,6 +1367,8 @@ type
   // - requests and responses have the same binary layout
   // - some fields may be void or irrelevant, and the structure is padded
   // with random up to 192 bytes
+  // - over the wire, packets are encrypted and authenticated via AES-GCM-128
+  // with an ending salted checksum for quick anti-fuzzing
   THttpPeerCacheMessage = packed record
     /// the content of this binary frame
     Kind: THttpPeerCacheMessageKind;
@@ -1436,7 +1440,7 @@ type
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
-  // - will maintain its own local folder of cached files, stored by hash
+  // - will maintain its own local folders of cached files, stored by hash
   THttpPeerCache = class(TInterfacedObjectWithCustomCreate, IWGetAlternate)
   protected
     fSettings: THttpPeerCacheSettings;

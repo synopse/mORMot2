@@ -2921,7 +2921,7 @@ type
   // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
   // - SeedGenerator() makes it a sequence generator - or encryptor via Fill()
   // - when used as random generator (default when initialized with 0), Seed()
-  // will gather and hash some system entropy
+  // will gather and hash some system entropy to initialize the internal state
   {$ifdef USERECORDWITHMETHODS}
   TLecuyer = record
   {$else}
