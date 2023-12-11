@@ -8887,6 +8887,9 @@ begin
       sig := FindExeCertificate(MainFile, O, wc, @certlenoffs, @certoffs);
       if length(sig) < 4000 then
         raise EStuffExe.CreateUtf8('No signature found in %', [MainFile]);
+      if length(Stuff) + length(sig) > 64000 then // avoid ASN.1 overflow
+        raise EStuffExe.CreateUtf8('Too much data (%) to Stuff within %',
+          [KB(Stuff), MainFile]);
       if PosEx(_CERTNAME_, sig) <> 0 then
         raise EStuffExe.CreateUtf8('% is already stuffed', [MainFile]);
       // parse the original PKCS#7 signed data
