@@ -1245,10 +1245,13 @@ function GetMainMacAddress(out Mac: TMacAddress;
 
 type
   /// each THttpPeerCacheSettings.Options item
+  // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
+  // hash nibble) within CacheTempPath to reduce folder fragmentation
   // - by default, wait BroadcastTimeoutMS for all responses to be received,
   // unless pcoUseFirstResponse is defined
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
+    pcoCacheTempSubFolders,
     pcoUseFirstResponse,
     pcoVerboseLog);
 
@@ -4678,7 +4681,7 @@ begin
           AddReponse(fMsg);
           if fOwner.fBroadcastEvent <> nil then // pcoUseFirstResponse
           begin
-            fCurrentSeq := 0;                    // ignore next responses
+            fCurrentSeq := 0;                   // ignore next responses
             fOwner.fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
@@ -5015,17 +5018,18 @@ end;
 
 function THttpPeerCache.PermFileName(const aFileName: TFileName;
   aFlags: THttpPeerCacheLocalFileName): TFileName;
-var
-  path: TFileName;
 begin
-  // sub-folders are created using the first nibble (0..9/a..z) of the hash, in
-  // a way similar to git - aFileName[1..2] is the algorithm, hash starts at [3]
-  path := fPermFilesPath + sysutils.lowercase(copy(aFileName, 3, 1));
-  if lfnEnsureDirectoryExists in aFlags then
-    path := EnsureDirectoryExists(path)
+  if pcoCacheTempSubFolders in fSettings.Options then
+  begin
+    // create sub-folders using the first hash nibble (0..9/a..z), in a way
+    // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
+    result := FormatString('%%' + PathDelim, [fPermFilesPath, aFileName[3]]);
+    if lfnEnsureDirectoryExists in aFlags then
+      result := EnsureDirectoryExists(result);
+    result := result + aFileName;
+  end
   else
-    path := path + PathDelim;
-  result := path + aFileName;
+    result := fPermFilesPath + aFileName;
 end;
 
 function THttpPeerCache.LocalFileName(const aMessage: THttpPeerCacheMessage;
