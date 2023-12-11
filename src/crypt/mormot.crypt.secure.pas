@@ -3558,12 +3558,13 @@ var
     Marker: cardinal): RawByteString;
 
 /// create a NewFile executable from adding some text to MainFile digital signature
-// - the text will be stuffed within a dummy certificate inside the existing
-// digital signature, so you don't need to sign the executable again
-// - FileAppend() method of mormot.core.zip has been disallowed in latest Windows
-// versions, so this method is the right way for adding some information to
-// a Windows signed executable
-// - raise EStuffExe if MainFile has no supported signature, or is already stuffed
+// - up to 60KB of text will be stuffed within a dummy certificate inside the
+// existing digital signature, so you don't need to sign the executable again
+// - FileAppend() method of mormot.core.zip has been disallowed in latest
+// Windows versions, so this method is the right way for adding some custom
+// information at runtime to an already-signed Windows executable
+// - raise EStuffExe if MainFile has no supported signature, is already stuffed,
+// or the stuffed data is too big
 // - this function does not require mormot.crypt.openssl but may use it if
 // available to generate a genuine dummy certificate - if UseInternalCertificate
 // is true, or OpenSSL is not available, it will use a fixed constant certificate
@@ -8872,7 +8873,7 @@ begin
     raise EStuffExe.CreateUtf8('MainFile=NewFile=%', [MainFile]);
   if Stuff = '' then
     raise EStuffExe.CreateUtf8('Nothing to Stuff in %', [MainFile]);
-  if length(Stuff) > 32000 then
+  if length(Stuff) > 60000 then // encoded as 16-bit hexa (and ASN1_SEQ)
     raise EStuffExe.CreateUtf8('Too much data (%) to Stuff within %',
       [KB(Stuff), MainFile]);
   if StrLen(pointer(Stuff)) <> length(Stuff) then
@@ -8893,14 +8894,14 @@ begin
       fixme[0] := p;
       if Asn1Next(p, ASN1_SEQ, {moveafter=}false, 'SEQ') + 4 > length(sig) then
         raise EStuffExe.CreateUtf8('Truncated signature in %', [MainFile]);
-      Asn1Next(p, ASN1_OBJID, true,  'OID');
+      Asn1Next(p, ASN1_OBJID, true, 'OID');
       fixme[1] := p;
       Asn1Next(p, ASN1_CTC0, false, 'ARR');
       fixme[2] := p;
-      Asn1Next(p, ASN1_SEQ, false, 'PKCS#7');
-      Asn1Next(p, ASN1_INT, true,  'Version');
-      Asn1Next(p, ASN1_SETOF, true,  'Digest');
-      Asn1Next(p, ASN1_SEQ, true,  'Context');
+      Asn1Next(p, ASN1_SEQ, false,  'PKCS#7');
+      Asn1Next(p, ASN1_INT, true,   'Version');
+      Asn1Next(p, ASN1_SETOF, true, 'Digest');
+      Asn1Next(p, ASN1_SEQ, true,   'Context');
       fixme[3] := p;
       certslen := Asn1Next(p, ASN1_CTC0, false, 'Certs');
       inc(p, certslen);
