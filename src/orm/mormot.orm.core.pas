@@ -727,13 +727,20 @@ type
     function RTreeMatch(DataTable: TOrmClass;
       const DataTableBlobFieldName: RawUtf8; RTreeTable: TOrmRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
-    /// Execute directly a SQL statement, expecting a list of results
+    /// Execute directly a SQL statement, returning a TOrmTableJson resultset
+    // - you should not have to use this method, but the ORM versions instead;
+    // it may give expected results only with our direct SQLite3 or our in-memory
+    // engines; with external databases, it may involve SQlite3 virtual tables,
+    // and fields name re-mapping, so the TOrmTable result may be unexpected
     // - return a result table on success, nil on failure
-    // - will call EngineList() abstract method to retrieve its JSON content
+    // - will actually fill a TOrmTableJson from ExecuteJson() results
     function ExecuteList(const Tables: array of TOrmClass;
       const SQL: RawUtf8): TOrmTable;
-    /// Execute directly a SQL statement, expecting a list of results
-    // - you should not have to use this method, but the ORM versions instead
+    /// Execute directly a SQL statement, returning its results as JSON
+    // - you should not have to use this method, but the ORM versions instead;
+    // it may give expected results only with our direct SQLite3 or our in-memory
+    // engines; with external databases, it may involve SQlite3 virtual tables,
+    // and fields renaming, so the JSON result may not be what you would expect
     // - return a result set as JSON on success, '' on failure
     // - will call EngineList() abstract method to retrieve its JSON content
     function ExecuteJson(const Tables: array of TOrmClass;
