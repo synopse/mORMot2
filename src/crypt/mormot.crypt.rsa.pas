@@ -342,14 +342,17 @@ const
   // - when profiling, the Miller-Rabin test takes 150 more time than bspMost
   RSA_DEFAULT_GENERATION_KNOWNPRIME = bspMost;
 
-  /// generates RSA keypairs using FIPS 4.48 2^-100 error probability
-  // - TBigInt.FillPrime will ensure FIPS 4.48 minimum iteration is always used
+  /// generates RSA keypairs using a proven 2^-112 error probability from
+  // Miller-Rabin iterations
+  // - TBigInt.FillPrime will ensure FIPS 186-5 minimum iteration is always used
   RSA_DEFAULT_GENERATION_ITERATIONS = 0;
 
+  /// generates RSA keypairs in a time-coherent fashion
   {$ifdef CPUARM}
-  // we have seen some weak Raspberry PI timeout
+  // - we have seen some weak Raspberry PI timeout so 30 seconds seems fair
   RSA_DEFAULT_GENERATION_TIMEOUTMS = 30000;
   {$else}
+  // - allow 10 seconds: typical time is around (or less) 1 second on Intel/AMD
   RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
   {$endif CPUARM}
 
@@ -448,7 +451,7 @@ const
 // - wrap PBigInt.ToText from LoadPermanent(der) in a temporary TRsaContext
 function BigIntToText(const der: TCertDer): RawUtf8;
 
-/// branchless comparison of two Big Integer values
+/// branchless comparison of two Big Integer internal buffer values
 function CompareBI(A, B: HalfUInt): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -1492,27 +1495,17 @@ const
   // ensure generated number is at least (nbits - 1) + 0.5 bits
   FIPS_MIN = $b504f334;
 
-function FipsMinIterations(size: integer): integer;
+function FipsMinIterations(bits: integer): integer;
 begin
-  // FIPS 4.48: 2^-100 error probability, number of rounds computed based on HAC
-  if size >= 1450 shr HALF_SHR then
+  // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
+  if bits >= 1536  then
     result := 4
-  else if size >= 1150 shr HALF_SHR then
+  else if bits >= 1024 shr HALF_SHR then
     result := 5
-  else if size >= 1000 shr HALF_SHR then
-    result := 6
-  else if size >= 850 shr HALF_SHR then
-    result := 7
-  else if size >= 750 shr HALF_SHR then
-    result := 8
-  else if size >= 500 shr HALF_SHR then
-    result := 13
-  else if size >= 250 shr HALF_SHR then
-    result := 28
-  else if size >= 150 shr HALF_SHR then
-    result := 40
+  else if bits >= 512 shr HALF_SHR then
+    result := 15  // not allowed by FIPS anyway
   else
-    result := 51;
+    result := 51; // never used in practice for RSA
 end;
 
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
@@ -1521,24 +1514,25 @@ var
   n, min: integer;
   last32: PCardinal;
 begin
+  // ensure it is worth searching (paranoid)
   n := Size;
-  result := n > 2;
-  if not result then
-    exit;
+  if n <= 2 then
+    raise ERsaException.Create('TBigInt.FillPrime: unsupported size');
+  // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
   if EndTix <= 0 then
-    EndTix := GetTickCount64 + 60000; // never wait forever - 1 min seems enough
-  // FIPS 4.48: 2^-100 error probability, number of rounds computed based on HAC
-  min := FipsMinIterations(n);
+    EndTix := GetTickCount64 + 60000; // worst time on Intel is around 1 sec
+  // compute number of Miller-Rabin rounds for 2^-112 error probability
+  min := FipsMinIterations(n shl HALF_SHR);
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
-  // compute a random number following FIPS 186-4 §B.3.3 steps 4.4, 5.5
+  // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
   min := 16;
   last32 := @Value[n - 1 {$ifdef CPU32} - 1 {$endif}];
-  // since randomness may be a weak point, start from several trusted sources
+  // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
-  FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but audited
-  {$ifdef CPUINTEL}
-  RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU
+  FillSystemRandom(pointer(Value), n * HALF_BYTES, false); // slow but approved
+  {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
+  RdRand32(pointer(Value), (n * HALF_BYTES) shr 2); // xor with HW CPU prng
   {$endif CPUINTEL}
   repeat
     // xor the original trusted sources with our CSPRNG
@@ -1549,7 +1543,7 @@ begin
       // with our TAesPrng, it never occurred after 1,000,000,000 trials
       dec(min);
       if min = 0 then // paranoid
-        raise ERsaException.Create('TBigInt.FillPrime: weak TAesPrng');
+        raise ERsaException.Create('TBigInt.FillPrime: weak CSPRNG');
       continue;
     end;
     // should be a big enough odd number
@@ -1562,16 +1556,26 @@ begin
     raise ERsaException.Create('TBigInt.FillPrime FIPS_MIN'); // paranoid
   until false;
   // search for the next prime starting at this point
+  result := true; 
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
     IntAdd(2); // incremental search - see HAC 4.51
     while last32^ < FIPS_MIN do
     begin
-      // handle IntAdd overflow - paranoid
+      // handle IntAdd overflow - paranoid but safe
       TAesPrng.Main.XorRandom(Value, n * HALF_BYTES);
       Value[0] := Value[0] or 1;
     end;
+    // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
+    // prime", but it seems not used by mbedtls nor OpenSSL
+    // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes,
+    // but it seems not necessary for RSA because ECM algo negates its benefits
+    // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
+    // especially because having multiple rounds of Miller-Rabin is plenty with
+    // keysize of 2048-bit or larger (FIPC 186-4 appendix B.3.1 item A)
+    // - see https://security.stackexchange.com/a/176396/155098
+    //   and https://crypto.stackexchange.com/a/15761/40200
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
   result := false; // timed out
 end;
@@ -2397,6 +2401,7 @@ begin
 end;
 
 const
+  // we force exponent = 65537 - FIPS 5.4 (e)
   BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
 
 // see https://www.di-mgt.com.au/rsa_alg.html as reference
@@ -2433,7 +2438,7 @@ begin
   try
     // compute two p and q random primes
     repeat
-      // FIPS 186-4 §B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
       repeat
         if not _p.FillPrime(Extend, Iterations, endtix) then
           exit; // timed out
@@ -2447,13 +2452,13 @@ begin
         exit // random generator is clearly wrong if p=q
       else if comp < 0 then
         ExchgPointer(@_p, @_q); // ensure p>q for ChineseRemainderTheorem
-      // FIPS 186-4 §B.3.3 step 5.4: ensure enough bits are set in difference
+      // FIPS 186-4 B.3.3 step 5.4: ensure enough bits are set in difference
       _tmp := _p.Clone.Substract(_q.Copy);
       comp := _tmp.BitCount;
       _tmp.Release;
       if comp <= (Bits shr 1) - 99 then
         continue;
-      // FIPS 186-4 §B.3.1 criterion 2: ensure gcd( e, (p-1)*(q-1) ) = 1
+      // FIPS 186-4 B.3.1 criterion 2: ensure gcd( e, (p-1)*(q-1) ) = 1
       _p.IntSub(1);
       _q.IntSub(1);
       _h := _p.Copy.Multiply(_q.Copy); // h = (p-1)*(q-1)
@@ -2465,7 +2470,7 @@ begin
       // compute smallest possible d = e^-1 mod LCM(p-1,q-1)
       _d := _e.ModInverse(_h.Divide(_p.GreatestCommonDivisor(_q)));
       _h.Release;
-      // FIPS 186-4 §B.3.1 criterion 3: ensure enough bits in d
+      // FIPS 186-4 B.3.1 criterion 3: ensure enough bits in d
       comp := _d.BitCount;
       if comp > (Bits + 1) shr 1 then
         break;
