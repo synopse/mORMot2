@@ -1560,7 +1560,7 @@ begin
   repeat
     if IsPrime(Extend, Iterations) then
       exit; // we got lucky
-    IntAdd(2); // incremental search - see HAC 4.51
+    IntAdd(2); // incremental search of odd number - see HAC 4.51
     while last32^ < FIPS_MIN do
     begin
       // handle IntAdd overflow - paranoid but safe
@@ -1568,12 +1568,12 @@ begin
       Value[0] := Value[0] or 1;
     end;
     // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
-    // prime", but it seems not used by mbedtls nor OpenSSL
-    // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes,
-    // but it seems not necessary for RSA because ECM algo negates its benefits
+    //      prime", but it seems not used by mbedtls nor OpenSSL
+    // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes, but
+    //      it seems not necessary for RSA because ECM algo negates its benefits
     // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
-    // especially because having multiple rounds of Miller-Rabin is plenty with
-    // keysize of 2048-bit or larger (FIPC 186-4 appendix B.3.1 item A)
+    //      especially because having multiple rounds of Miller-Rabin is plenty
+    //      with keysize >= 2048-bit (FIPC 186-4 appendix B.3.1 item A)
     // - see https://security.stackexchange.com/a/176396/155098
     //   and https://crypto.stackexchange.com/a/15761/40200
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
@@ -3376,6 +3376,7 @@ begin
         begin
           fRsa := CKA_TO_RSA[algo].Create;
           if fRsa.LoadFromPrivateKeyPem(der) and
+             fRsa.CheckPrivateKey and
              ((pub = nil) or
               fRsa.MatchKey((pub as TCryptPublicKeyRsa).fRsa)) then
             result := true
