@@ -1279,15 +1279,17 @@ type
     fPort: TNetPort;
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
-    fLimitMBPerSec, fBroadcastTimeoutMS, fBroadcastMaxResponses,
+    fLimitMBPerSec, fLimitClientCount,
+    fBroadcastTimeoutMS, fBroadcastMaxResponses,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
-    // - i.e. Port=8089, LimitMBPerSec=10, CacheTempMaxMB=1000,
-    // CacheTempMaxMin=15, CacheTempMinBytes=CachePermMinBytes=2048,
+    // - i.e. Port=8089, LimitMBPerSec=10, LimitClientCount=32,
+    // CacheTempMaxMB=1000, CacheTempMaxMin=60,
+    // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 and BroadcastMaxResponses=24
     constructor Create; override;
   published
@@ -1317,6 +1319,11 @@ type
     // - you may set -1 to use the default TStreamRedirect.LimitPerSecond value
     property LimitMBPerSec: integer
       read fLimitMBPerSec write fLimitMBPerSec;
+    /// can limit how many peer clients can be served content at the same time
+    // - would prevent any overload, to avoid Denial of Service
+    // - default is 32, which means 32 threads with the default THttpServer
+    property LimitClientCount: integer
+      read fLimitClientCount write fLimitClientCount;
     /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
@@ -1334,7 +1341,8 @@ type
     property CacheTempMaxMB: integer
       read fCacheTempMaxMB write fCacheTempMaxMB;
     /// after how many minutes files in CacheTempPath could be cleaned
-    // - default is 15
+    // - i.e. the Time-To-Live (TTL) of temporary files
+    // - default is 60 minutes, i.e. 1 hour
     property CacheTempMaxMin: integer
       read fCacheTempMaxMin write fCacheTempMaxMin;
     /// location of the permanent cached files, available for remote requests
@@ -4625,6 +4633,7 @@ begin
   inherited Create;
   fPort := 8089;
   fLimitMBPerSec := 10;
+  fLimitClientCount := 32;
   fCacheTempPath := '*';
   fCacheTempMinBytes := 2048;
   fCacheTempMaxMB := 1000;
@@ -4700,7 +4709,9 @@ begin
         begin
           fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
           resp.Hash := fMsg.Hash;
-          if fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
+          if (integer(fOwner.fHttpServer.ConnectionsActive) <=
+                      fOwner.Settings.LimitClientCount) and
+             (fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS) then
             resp.Kind := pcfResponseFull;
           DoSend;
         end;
