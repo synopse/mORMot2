@@ -785,6 +785,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// to be called every second to remove deprecated bans from the list
     // - implemented via a round-robin list of per-second banned IPs
+    // - if you call it at another pace (e.g. every minute), then the list
+    // Time-To-Live will follow this unit of time instead of seconds
     procedure IdleEverySecond;
     /// a 32-bit IP4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default

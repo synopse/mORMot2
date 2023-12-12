@@ -1255,8 +1255,6 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
   Security Notes:
   - A global shared secret key is used to cipher and authenticate UDP frames and
     HTTP requests among all peers. This key should be strong enough and private.
-  - HTTP content is not encrypted on the wire by default, because it sounds not
-    mandatory on a local network, but pcoSelfSignedHttps can enable HTTPS.
   - Tampering is avoided by using cryptographic hashes for the requests, the
     local storage and eventually in WGet, which would discard any invalid data.
   - The client caches only the content that it has requested itself, to reduce
@@ -1264,35 +1262,13 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
   - Local cache folders should have the proper ACL file permissions defined.
   - Local cached files are not encrypted, so if data leakage is a concern,
     consider enabling file systems encryption (e.g. BitLocker or Luks).
-  - Resulting security is similar to what Microsoft BranchCache offers.
+  - UDP frames are quickly signed with a salted crc before AES-GCM-128 encoding.
+  - Peers which did send invalid requests over UDP or TCP will have their IP
+    banished for a few minutes, to avoid fuzzing or denial of service attacks.
+  - HTTP content is not encrypted on the wire by default, because it sounds not
+    mandatory on a local network, but pcoSelfSignedHttps can enable HTTPS.
+  - Resulting safety is similar to what Microsoft BranchCache offers.
 *)
-
-type
-  /// define how GetMacAddress() makes its sorting choices
-  // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
-  // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
-  // - mafLocalOnly will only select makEthernet or makWifi adapters
-  // - mafRequireBroadcast won't return any TMacAddress with Broadcast = ''
-  // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
-  // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
-  TMacAddressFilter = set of (
-    mafEthernetOnly,
-    mafLocalOnly,
-    mafRequireBroadcast,
-    mafIgnoreGateway,
-    mafIgnoreKind,
-    mafIgnoreSpeed);
-
-/// pickup the most suitable network according to some preferences
-// - will sort GetMacAddresses() results according to its Kind and Speed
-// to select the most suitable local interface e.g. for THttpPeerCache
-function GetMainMacAddress(out Mac: TMacAddress;
-  Filter: TMacAddressFilter = []): boolean; overload;
-
-/// get a network interface from its TMacAddress.Name value
-// - search is case insensitive
-function GetMainMacAddress(out Mac: TMacAddress;
-  const InterfaceName: RawUtf8): boolean; overload;
 
 type
   /// each THttpPeerCacheSettings.Options item
@@ -1323,7 +1299,7 @@ type
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
     fLimitMBPerSec, fLimitClientCount,
-    fBroadcastTimeoutMS, fBroadcastMaxResponses,
+    fBroadcastTimeoutMS, fBroadcastMaxResponses, fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
@@ -1367,6 +1343,12 @@ type
     // - default is 32, which means 32 threads with the default THttpServer
     property LimitClientCount: integer
       read fLimitClientCount write fLimitClientCount;
+    /// RejectInstablePeersMin will set a delay (in minutes) to ignore any peer
+    // which sent invalid UDP frames or HTTP/HTTPS requests
+    // - default is 5, for a 4-5 minutes time-to-live of IP banishments
+    // - you may set 0 to disable the whole safety mechanism
+    property RejectInstablePeersMin: integer
+      read fRejectInstablePeersMin write fRejectInstablePeersMin;
     /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
@@ -1528,8 +1510,9 @@ type
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
-    fTempFilesDeleteDeprecatedTix: cardinal;
+    fTempFilesDeleteDeprecatedTix, fBannedTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
+    fBanned: THttpAcceptBan;
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     fFilesSafe: TOSLock; // concurrent cached files access
@@ -4679,6 +4662,7 @@ begin
   fPort := 8089;
   fLimitMBPerSec := 10;
   fLimitClientCount := 32;
+  fRejectInstablePeersMin := 5;
   fCacheTempPath := '*';
   fCacheTempMinBytes := 2048;
   fCacheTempMaxMB := 1000;
@@ -4774,7 +4758,9 @@ begin
           end;
         end;
       // pcfResponseNone are just ignored
-    end;
+    end
+  else if fOwner.fBanned <> nil then // RejectInstablePeersMin
+    fOwner.fBanned.BanIP(remote.IP4);
 end;
 
 function THttpPeerCacheThread.Broadcast(const aFrame: RawByteString;
@@ -4897,6 +4883,8 @@ begin
     fSettings := aSettings;
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
                  (sllTrace in fLog.Family.Level);
+  if fSettings.RejectInstablePeersMin > 0 then
+    fBanned := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -5010,6 +4998,7 @@ begin
   FreeAndNil(fAesDec);
   FreeAndNil(fBroadcastEvent);
   FreeAndNilSafe(fClient);
+  FreeAndNil(fBanned);
   fSharedMagic := 0;
   fBroadcastSafe.Done;
   fFilesSafe.Done;
@@ -5221,8 +5210,11 @@ var
   log: ISynLog;
   l: TSynLog;
 
-  procedure SendRespToClientFailed;
+  procedure SendRespToClientFailed(retry: boolean);
   begin
+    if (fBanned <> nil) and
+       not retry then // RejectInstablePeersMin
+      fBanned.BanIP(resp[0].IP4);
     FreeAndNil(fClient);
     fClientIP4 := 0;
     result := 0; // will fallback to regular GET on the main repository
@@ -5258,12 +5250,12 @@ var
       if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
         fClientIP4 := resp[0].IP4 // success or not found (HTTP_NOCONTENT)
       else
-        SendRespToClientFailed; // error downloading from local peer
+        SendRespToClientFailed(retry); // error downloading from local peer
     except
       on E: Exception do
       begin
         l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
-        SendRespToClientFailed;
+        SendRespToClientFailed(retry);
       end;
     end;
   end;
@@ -5423,12 +5415,21 @@ var
   tix: cardinal;
   size: Int64;
 begin
+  // check state every minute (65,536 seconds)
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  tix := (tix64 shr 16) + 1; 
+  // renew banned peer IPs TTL to implement RejectInstablePeersMin
+  if (fBanned <> nil) and
+     (fBannedTix <> tix) then
+  begin
+    fBannedTix := tix;
+    fBanned.IdleEverySecond; // every minute in fact
+  end;
+  // handle temporary cache file deprecation
   if (fSettings.fCacheTempMaxMin <= 0) or
      (fTempFilesPath = '') then
     exit;
-  if tix64 = 0 then
-    tix64 := GetTickCount64;
-  tix := (tix64 shr 16) + 1; // check every minute (65,536 seconds)
   if (fTempFilesDeleteDeprecatedTix <> tix) and
      fFilesSafe.TryLock then
   try
