@@ -4509,11 +4509,17 @@ end;
 procedure RegisterX509;
 var
   xsa: TXSignatureAlgorithm;
+  caa: TCryptAsymAlgo;
 begin
   for xsa := succ(low(xsa)) to high(xsa) do
     if (CryptCertX509[XSA_TO_CAA[xsa]] = nil) and
        (CryptPublicKey[XKA_TO_CKA[XSA_TO_XKA[xsa]]] <> nil) then
-      CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '-int');
+    begin
+      caa := XSA_TO_CAA[xsa];
+      CryptCertX509[caa] := TCryptCertAlgoX509.Create(xsa, '-int');
+      if CryptCert[caa] = nil then
+        CryptCert[caa] := CryptCertX509[caa];
+    end;
 end;
 
 procedure InitializeUnit;
@@ -4523,6 +4529,7 @@ var
   c: TXCrlExtension;
   k: TXExtendedKeyUsage;
   xsa: TXSignatureAlgorithm;
+  caa: TCryptAsymAlgo;
 begin
   for a := succ(low(a)) to high(a) do
     XA_OID_ASN[a] := AsnEncOid(XA_OID[a]);
@@ -4544,7 +4551,12 @@ begin
   // - but still accessible from CryptCertX509[] global factories
   for xsa := succ(low(xsa)) to high(xsa) do
     if CryptPublicKey[XKA_TO_CKA[XSA_TO_XKA[xsa]]] <> nil then
-      CryptCertX509[XSA_TO_CAA[xsa]] := TCryptCertAlgoX509.Create(xsa, '');
+    begin
+      caa := XSA_TO_CAA[xsa];
+      CryptCertX509[caa] := TCryptCertAlgoX509.Create(xsa, '');
+      if CryptCert[caa] = nil then
+        CryptCert[caa] := CryptCertX509[caa];
+    end;
   // register 'x509-pki' store to our catalog
   CryptStoreX509 := TCryptStoreAlgoX509.Create('x509-pki');
   // use our class for X.509 parsing - unless mormot.crypt.openssl is included
