@@ -753,7 +753,6 @@ var
   i, j: PtrInt;
   hso: THttpServerOptions;
   ErrMsg: RawUtf8;
-  net: TNetTlsContext;
   log: ISynLog;
 begin
   // prepare the running parameters
@@ -872,19 +871,9 @@ begin
       raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
         [self, fRestServerNames, ToText(aUse)^]);
     if aSecurity = secTLSSelfSigned then
-    begin
-      InitNetTlsContextSelfSignedServer(net {, caaES256}); // RSA is more common
-      TLS := @net;
-    end;
-    try
+      THttpServerSocketGeneric(fHttpServer).WaitStartedHttps({sec=}30)
+    else
       THttpServerSocketGeneric(fHttpServer).WaitStarted({sec=}30, TLS);
-    finally
-      if aSecurity = secTLSSelfSigned then
-      begin
-        DeleteFile(Utf8ToString(net.CertificateFile));
-        DeleteFile(Utf8ToString(net.PrivateKeyFile));
-      end;
-    end;
   end;
   // setup the newly created HTTP server instance
   fHttpServer.OnRequest := Request; // main TRestServer(s) processing callback

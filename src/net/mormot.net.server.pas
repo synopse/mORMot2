@@ -701,18 +701,19 @@ const
 
 /// some pre-computed CryptCertOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
-// - as used e.g. by secTLSSelfSigned with the SChannel API on server side
+// - as used e.g. by THttpServerSocketGeneric.WaitStartedHttps
 function PrivKeyCertPfx: RawByteString;
 
 /// initialize a server-side TLS structure with a self-signed algorithm
-// - as used e.g. by secTLSSelfSigned with the SChannel API on server side
-// - if OpenSSL is available, will generate a temporary pair of key files via
+// - as used e.g. by THttpServerSocketGeneric.WaitStartedHttps
+// - if OpenSSL is available and UsePreComputed is false, will
+// generate a temporary pair of key files via
 // Generate(CU_TLS_SERVER, '127.0.0.1', nil, 3650) with a random password
-// - on pure SChannel, will use the PrivKeyCertPfx pre-computed constant
+// - if UsePreComputed=true or on pure SChannel, will use the PrivKeyCertPfx pre-computed constant
 // - you should eventually call DeleteFile(Utf8ToString(TLS.CertificateFile))
 // and DeleteFile(Utf8ToString(TLS.PrivateKeyFile)) to delete the two temp files
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
-  Algo: TCryptAsymAlgo = caaRS256);
+  Algo: TCryptAsymAlgo = caaRS256; UsePreComputed: boolean = false);
 
 /// used by THttpServerGeneric.SetFavIcon to return a nice /favicon.ico
 function FavIconBinary: RawByteString;
@@ -988,6 +989,12 @@ type
     // could not bind the port within the supplied time
     procedure WaitStarted(Seconds: integer = 30; TLS: PNetTlsContext = nil);
       overload;
+    /// ensure the server thread is bound as self-signed HTTPS server
+    // - wrap InitNetTlsContextSelfSignedServer() and WaitStarted() with
+    // some temporary key files, which are deleted once started
+    // - as used e.g. by TRestHttpServer for secTLSSelfSigned
+    procedure WaitStartedHttps(Seconds: integer = 30;
+      UsePreComputed: boolean = false);
     /// could be called after WaitStarted(seconds,'','','') to setup TLS
     // - validate Sock.TLS.CertificateFile/PrivateKeyFile/PrivatePassword
     // - otherwise TLS is initialized at first incoming connection, which
@@ -3274,14 +3281,16 @@ begin
 end;
 
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
-  Algo: TCryptAsymAlgo);
+  Algo: TCryptAsymAlgo; UsePreComputed: boolean);
 var
   cert: ICryptCert;
   certfile, keyfile: TFileName;
   keypass: RawUtf8;
 begin
   certfile := TemporaryFileName;
-  if CryptCertOpenSsl[Algo] = nil then
+  if UsePreComputed or
+     (CryptCertOpenSsl[Algo] = nil) then
+     // we can't use CryptCertX509[] because SSPI requires PFX binary format
   begin
     FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
     keypass := 'pass';
@@ -3418,6 +3427,20 @@ begin
       InitializeTlsAfterBind; // validate TLS certificate(s) now
       Sleep(1); // let some warmup happen
     end;
+  end;
+end;
+
+procedure THttpServerSocketGeneric.WaitStartedHttps(Seconds: integer;
+  UsePreComputed: boolean);
+var
+  net: TNetTlsContext;
+begin
+  InitNetTlsContextSelfSignedServer(net, caaRS256, UsePreComputed);
+  try
+    WaitStarted(Seconds, @net);
+  finally
+    DeleteFile(Utf8ToString(net.CertificateFile));
+    DeleteFile(Utf8ToString(net.PrivateKeyFile));
   end;
 end;
 
