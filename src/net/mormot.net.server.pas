@@ -1214,6 +1214,7 @@ const
 
 function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
+
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
 
 type
@@ -1458,13 +1459,10 @@ type
     fUdpServer: THttpPeerCacheThread;
     fClientSafe: TLightLock;
     fClient: THttpClientSocket;
-    fMac: TMacAddress;
-    fUuid: TGuid;
     fPort: RawUtf8;
     fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fSharedMagicHasher: THasher;
-    fFilesSafe: TOSLock; // concurrent cached files access
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
@@ -1472,6 +1470,9 @@ type
     fSettingsOwned, fVerboseLog: boolean;
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
+    fFilesSafe: TOSLock; // concurrent cached files access
+    fMac: TMacAddress;
+    fUuid: TGuid;
     // most of these internal methods are virtual for proper customization
     procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -1483,7 +1484,7 @@ type
       out aMsg: THttpPeerCacheMessage): boolean;
     function MessageBroadcast(
       const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray; virtual;
-    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
+    function ComputeFileName(aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName;
       aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
     function LocalFileName(
@@ -1576,7 +1577,7 @@ const
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
 
-function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
+function ToText(const msg: THttpPeerCacheMessage): RawUtf8; overload;
 
 
 {$ifdef USEWININET}
@@ -4868,9 +4869,9 @@ begin
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
   // setup internal processing status
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
-  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // AES-GCM-128
-  fAesDec := fAesEnc.Clone as TAesGcmAbstract;
-  fSharedMagic := key.h.c3; // use upper 32-bit for anti-fuzzing checksum
+  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
+  fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
+  fSharedMagic := key.h.c3; // upmost 32-bit for anti-fuzzing checksum
   FillZero(key.b);
   if aSharedMagicAlgo = caDefault then
     aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
@@ -5015,10 +5016,13 @@ begin
   end;
 end;
 
-function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
+function THttpPeerCache.ComputeFileName(aHash: THttpPeerCacheHash): TFileName;
 begin
-  // filename is binary algo + hash encoded as hexadecimal, for easier debug
-  result := FormatString('%.cache', [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+  // filename is binary algo + hash encoded as hexadecimal
+  result := FormatString('%.cache',
+    [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
+  // note: it does not make sense to obfuscate the file name because we can
+  // recompute the hash from its actual content
 end;
 
 function THttpPeerCache.PermFileName(const aFileName: TFileName;
@@ -5479,12 +5483,13 @@ begin
   result := GetEnumName(TypeInfo(THttpPeerCacheMessageKind), ord(pcf));
 end;
 
-function ToText(const msg: THttpPeerCacheMessage): shortstring;
+function ToText(const msg: THttpPeerCacheMessage): RawUtf8;
 begin
   with msg do
-    FormatShort('% from % % msk=% bst=% %b/s % siz=%',
-      [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), IP4ToShort(@NetMaskIP4),
-       IP4ToShort(@BroadcastIP4), Speed, ToText(Hardware)^,
+    FormatUtf8('% from % % % % msk=% bst=% %b/s % siz=%',
+      [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), ToText(Hardware)^,
+       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
+       IP4ToShort(@NetMaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        BinToHexLower(@msg.Hash, HASH_SIZE[msg.Hash.Algo] + 1), Size], result);
 end;
 
