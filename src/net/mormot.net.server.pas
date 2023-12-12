@@ -1255,10 +1255,11 @@ type
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
   // hash nibble) within CacheTempPath to reduce folder fragmentation
-  // - by default, wait BroadcastTimeoutMS for all responses to be received,
-  // unless pcoUseFirstResponse is defined
+  // - pcoUseFirstResponse will accept the first positive response, and don't
+  // wait for the BroadcastTimeoutMS delay for all responses to be received
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
-  // making any broadcast - to be used if the files are likely to come in batch
+  // making any broadcast - to be used if the files are likely to come in batch;
+  // can be forced by TWGetAlternateOptions from a given WGet() call
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
   // (warning: this option should be set on all peers)
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
@@ -1328,8 +1329,8 @@ type
       read fCacheTempMinBytes  write fCacheTempMinBytes;
     /// after how many MB in CacheTempPath the folder should be cleaned
     // - default is 1000, i.e. just below 1 GB
-    // - THttpPeerCache.Create will ensure that this value won't take more than
-    // 25% of the CacheTempPath folder available space
+    // - THttpPeerCache.Create will also always ensure that this value won't
+    // take more than 25% of the CacheTempPath folder available space
     property CacheTempMaxMB: integer
       read fCacheTempMaxMB write fCacheTempMaxMB;
     /// after how many minutes files in CacheTempPath could be cleaned
@@ -5278,7 +5279,8 @@ begin
   FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
   if (fClient <> nil) and
      (fClientIP4 <> 0) and
-     (pcoTryLastPeer in fSettings.Options) and
+     ((pcoTryLastPeer in fSettings.Options) or
+      (waoTryLastPeer in Params.AlternateOptions)) and
      fClientSafe.TryLock then
     try
       SetLength(resp, 1); // create a "fake" response to reuse this connection

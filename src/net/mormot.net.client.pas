@@ -165,10 +165,12 @@ type
   // - waoNoHeadFirst will call OnDownload() first then fallback to GET so
   // may be preferred e.g. if the main server has a huge latency
   // - waoNoMinimalSize should let OnDownload() accept even the smallest files
+  // - waoTryLastPeer will force homonymous pcoTryLastPeer THttpPeerCacheOption
   TWGetAlternateOption = (
     waoPermanentCache,
     waoNoHeadFirst,
-    waoNoMinimalSize);
+    waoNoMinimalSize,
+    waoTryLastPeer);
 
   /// define how THttpClientSocketWGet.Alternate should operate this file
   TWGetAlternateOptions = set of TWGetAlternateOption;
