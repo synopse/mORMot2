@@ -1224,6 +1224,22 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
 
+(*
+  Security Notes:
+  - A global shared secret key is used to cipher and authenticate UDP frames and
+    HTTP requests among all peers. This key should be strong enough and private.
+  - HTTP content is not encrypted on the wire by default, because it sounds not
+    mandatory on a local network, but pcoSelfSignedHttps can enable HTTPS.
+  - Tampering is avoided by using cryptographic hashes for the requests, the
+    local storage and eventually in WGet, which would discard any invalid data.
+  - The client caches only the content that it has requested itself, to reduce
+    any information disclosure.
+  - Local cache folders should have the proper ACL file permissions defined.
+  - Local cached files are not encrypted, so if data leakage is a concern,
+    consider enabling file systems encryption (e.g. BitLocker or Luks).
+  - Resulting security is similar to what Microsoft BranchCache offers.
+*)
+
 type
   /// define how GetMacAddress() makes its sorting choices
   // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
@@ -1515,7 +1531,8 @@ type
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
     // settings class instance)
-    // - aSharedSecret is used to cipher and authenticate each UDP frame
+    // - aSharedSecret is used to cipher and authenticate each UDP frame between
+    // all peer nodes, and also generate HTTP authentication bearers
     // - if aSettings = nil, default values will be used by this instance
     // - you can supply THttpAsyncServer class to replace default THttpServer
     // - may raise some exceptions if the HTTP server cannot be started
@@ -1558,7 +1575,7 @@ type
       read fMac;
     /// the UUID used to identify this node
     // - is filled by GetComputerUuid() from SMBios by default
-    // - could be customized if necessary
+    // - could be customized if necessary after Create()
     property Uuid: TGuid
       read fUuid write fUuid;
   published
@@ -4835,7 +4852,8 @@ var
   key: THash256Rec;
 begin
   fLog := TSynLog;
-  log := fLog.Enter(self, 'Create');
+  log := fLog.Enter('Create % threads=% checksum=%',
+    [aSettings, aHttpServerThreadCount, ToText(aSharedMagicAlgo)^], self);
   fFilesSafe.Init;
   fBroadcastSafe.Init;
   if aSharedSecret = '' then
