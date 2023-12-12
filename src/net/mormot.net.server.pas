@@ -718,6 +718,33 @@ procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
 /// used by THttpServerGeneric.SetFavIcon to return a nice /favicon.ico
 function FavIconBinary: RawByteString;
 
+type
+  /// define how GetMacAddress() makes its sorting choices
+  // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
+  // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
+  // - mafLocalOnly will only select makEthernet or makWifi adapters
+  // - mafRequireBroadcast won't return any TMacAddress with Broadcast = ''
+  // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
+  // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
+  TMacAddressFilter = set of (
+    mafEthernetOnly,
+    mafLocalOnly,
+    mafRequireBroadcast,
+    mafIgnoreGateway,
+    mafIgnoreKind,
+    mafIgnoreSpeed);
+
+/// pickup the most suitable network according to some preferences
+// - will sort GetMacAddresses() results according to its Kind and Speed
+// to select the most suitable local interface e.g. for THttpPeerCache
+function GetMainMacAddress(out Mac: TMacAddress;
+  Filter: TMacAddressFilter = []): boolean; overload;
+
+/// get a network interface from its TMacAddress.Name value
+// - search is case insensitive
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceName: RawUtf8): boolean; overload;
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -1612,7 +1639,6 @@ const
   PEER_CACHE_PATTERN = '*.cache';
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
-
 function ToText(const msg: THttpPeerCacheMessage): RawUtf8; overload;
 
 
@@ -3362,6 +3388,108 @@ begin
   result := _FavIconBinary;
 end;
 
+var
+  GetMacAddressSafe: TLightLock; // to protect the filter global variable
+  GetMacAddressFilter: TMacAddressFilter;
+
+const
+  NETHW_ORDER: array[TMacAddressKind] of byte = ( // Kind to sort priority
+    2,  // makUndefined
+    0,  // makEthernet
+    1,  // makWifi
+    4,  // makTunnel
+    3,  // makPpp
+    5); // makSoftware
+
+function SortByMacAddressFilter(const A, B): integer;
+var
+  ma: TMacAddress absolute A;
+  mb: TMacAddress absolute B;
+begin
+  // sort by kind
+  if not (mafIgnoreKind in GetMacAddressFilter) then
+  begin
+    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
+    if result <> 0 then
+      exit;
+  end;
+  // sort with gateway first
+  if not (mafIgnoreGateway in GetMacAddressFilter) then
+  begin
+    result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
+    if result <> 0 then
+      exit;
+  end;
+  // sort by speed within this kind and gateway
+  if not (mafIgnoreSpeed in GetMacAddressFilter) then
+  begin
+    result := CompareCardinal(mb.Speed, ma.Speed);
+    if result <> 0 then
+      exit;
+  end;
+  // fallback to sort by IfIndex
+  result := CompareCardinal(ma.IfIndex, mb.IfIndex);
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+var
+  allowed: TMacAddressKinds;
+  all: TMacAddressDynArray;
+  arr: TDynArray;
+  i: PtrInt;
+begin
+  result := false;
+  all := copy(GetMacAddresses({upanddown=}false));
+  if all = nil then
+    exit;
+  arr.Init(TypeInfo(TMacAddressDynArray), all);
+  allowed := [];
+  if mafLocalOnly in Filter then
+    allowed := [makEthernet, makWifi]
+  else if mafEthernetOnly in Filter then
+    include(allowed, makEthernet);
+  if allowed <> [] then
+    for i := high(all) downto 0 do
+      if not (all[i].Kind in allowed) then
+        arr.Delete(i);
+  if mafRequireBroadcast in Filter then
+    for i := high(all) downto 0 do
+      if all[i].Broadcast = '' then
+        arr.Delete(i);
+  if all = nil then
+    exit;
+  if length(all) > 1 then
+  begin
+    GetMacAddressSafe.Lock;
+    try
+      GetMacAddressFilter := Filter;
+      arr.Sort(SortByMacAddressFilter);
+    finally
+      GetMacAddressSafe.UnLock;
+    end;
+  end;
+  Mac := all[0];
+  result := true;
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress; const InterfaceName: RawUtf8): boolean;
+var
+  i: PtrInt;
+  all: TMacAddressDynArray;
+begin
+  result := false;
+  if InterfaceName = '' then
+    exit;
+  all := GetMacAddresses({upandown=}false);
+  for i := 0 to high(all) do
+    if IdemPropNameU(all[i].Name, InterfaceName) then
+    begin
+      Mac := all[i];
+      result := true;
+      exit;
+    end;
+end;
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -4542,106 +4670,6 @@ end;
 
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
-
-var
-  GetMacAddressSafe: TLightLock; // to protect the filter global variable
-  GetMacAddressFilter: TMacAddressFilter;
-
-const
-  NETHW_ORDER: array[TMacAddressKind] of byte = ( // Kind to sort priority
-    2,  // makUndefined
-    0,  // makEthernet
-    1,  // makWifi
-    4,  // makTunnel
-    3,  // makPpp
-    5); // makSoftware
-
-function SortByMacAddressFilter(const A, B): integer;
-var
-  ma: TMacAddress absolute A;
-  mb: TMacAddress absolute B;
-begin
-  // sort by kind
-  if not (mafIgnoreKind in GetMacAddressFilter) then
-  begin
-    result := CompareCardinal(NETHW_ORDER[ma.Kind], NETHW_ORDER[mb.Kind]);
-    if result <> 0 then
-      exit;
-  end;
-  // sort with gateway first
-  if not (mafIgnoreGateway in GetMacAddressFilter) then
-  begin
-    result := ord(ma.Gateway = '') - ord(mb.Gateway = '');
-    if result <> 0 then
-      exit;
-  end;
-  // sort by speed within this kind and gateway
-  if not (mafIgnoreSpeed in GetMacAddressFilter) then
-  begin
-    result := CompareCardinal(mb.Speed, ma.Speed);
-    if result <> 0 then
-      exit;
-  end;
-  // fallback to sort by IfIndex
-  result := CompareCardinal(ma.IfIndex, mb.IfIndex);
-end;
-
-function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
-var
-  allowed: TMacAddressKinds;
-  all: TMacAddressDynArray;
-  arr: TDynArray;
-  i: PtrInt;
-begin
-  result := false;
-  all := copy(GetMacAddresses({upanddown=}false));
-  if all = nil then
-    exit;
-  arr.Init(TypeInfo(TMacAddressDynArray), all);
-  allowed := [];
-  if mafLocalOnly in Filter then
-    allowed := [makEthernet, makWifi]
-  else if mafEthernetOnly in Filter then
-    include(allowed, makEthernet);
-  if allowed <> [] then
-    for i := high(all) downto 0 do
-      if not (all[i].Kind in allowed) then
-        arr.Delete(i);
-  if mafRequireBroadcast in Filter then
-    for i := high(all) downto 0 do
-      if all[i].Broadcast = '' then
-        arr.Delete(i);
-  if all = nil then
-    exit;
-  GetMacAddressSafe.Lock;
-  try
-    GetMacAddressFilter := Filter;
-    arr.Sort(SortByMacAddressFilter);
-  finally
-    GetMacAddressSafe.UnLock;
-  end;
-  Mac := all[0];
-  result := true;
-end;
-
-function GetMainMacAddress(out Mac: TMacAddress; const InterfaceName: RawUtf8): boolean;
-var
-  i: PtrInt;
-  all: TMacAddressDynArray;
-begin
-  result := false;
-  if InterfaceName = '' then
-    exit;
-  all := GetMacAddresses({upandown=}false);
-  for i := 0 to high(all) do
-    if IdemPropNameU(all[i].Name, InterfaceName) then
-    begin
-      Mac := all[i];
-      result := true;
-      exit;
-    end;
-end;
-
 
 { THttpPeerCacheSettings }
 
