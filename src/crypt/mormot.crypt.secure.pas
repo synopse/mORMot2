@@ -6011,9 +6011,9 @@ begin
        (crc(Secret, @cc.head.session, len - 8) = cc.head.crc) then
     begin
       if PExpires <> nil then
-        PExpires^ := cc.head.expires + UNIXTIME_MINIMAL;
+        PExpires^ := QWord(cc.head.expires) + UNIXTIME_MINIMAL;
       if PIssued <> nil then
-        PIssued^ := cc.head.issued + UNIXTIME_MINIMAL;
+        PIssued^ := QWord(cc.head.issued) + UNIXTIME_MINIMAL;
       now := UnixTimeMinimalUtc;
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) then
