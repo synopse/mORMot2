@@ -1877,6 +1877,19 @@ begin
   backup := CpuFeatures;
   {$endif CPUINTEL}
   Check(AesTablesTest, 'Internal Tables');
+  CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
+  CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
+  CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
+  Check(AES_CONTEXT_SIZE <= 300); // see mormot.db.raw.sqlite3.static KEYLENGTH
+  {$ifndef PUREMORMOT2}
+  CheckEqual(SizeOf(TAesFullHeader), SizeOf(TAesBlock));
+  {$endif PUREMORMOT2}
+  CheckEqual(SizeOf(TSha1), SHA_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha256), SHA_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha256), SizeOf(TSha1));
+  Check(SizeOf(TSha512) > SizeOf(TSha256));
+  Check(SizeOf(TSha3) > SizeOf(TSha512));
+  Check(SizeOf(TSha3) > SizeOf(THmacSha512));
   SetLength(orig, MAX);
   SetLength(crypted, MAX + 256);
   st := '1234essai';
