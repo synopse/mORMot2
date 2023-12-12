@@ -1449,11 +1449,12 @@ type
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
     fSharedMagic, fFrameSeqLow: cardinal;
-    fIP4, fNetMaskIP4, fBroadcastIP4: cardinal;
+    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
     fFrameSeq: integer;
     fLog: TSynLogClass;
     fUdpServer: THttpPeerCacheThread;
-    //fClient: THttpClientSocket;
+    fClientSafe: TLightLock;
+    fClient: THttpClientSocket;
     fMac: TMacAddress;
     fUuid: TGuid;
     fPort: RawUtf8;
@@ -4911,6 +4912,7 @@ begin
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
   FreeAndNil(fBroadcastEvent);
+  FreeAndNilSafe(fClient);
   fSharedMagic := 0;
   fBroadcastSafe.Done;
   fFilesSafe.Done;
@@ -5113,13 +5115,47 @@ function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
 var
   req: THttpPeerCacheMessage;
   resp : THttpPeerCacheMessageDynArray;
-  client: THttpClientSocket;
-  head, ip, u: RawUtf8;
+  head, ip, u, p: RawUtf8;
   fn: TFileName;
   local: TFileStreamEx;
   minsize: Int64;
   log: ISynLog;
   l: TSynLog;
+
+  procedure SendRespToClient;
+  begin
+    IP4Text(@resp[0].IP4, ip);
+    UInt32ToUtf8(resp[0].Port, p);
+    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, p, u], self);
+    try
+      if (fClient <> nil) and
+         (fClientIP4 <> resp[0].IP4) then
+        FreeAndNil(fClient);
+      if fClient = nil then
+        fClient := THttpClientSocket.Open(ip, p);
+      fClient.RangeStart := req.RangeStart;
+      fClient.RangeEnd := req.RangeEnd;
+      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
+      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
+      if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
+        OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+      result := fClient.Request(
+        u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
+      l.Log(sllTrace, 'OnDownload: request=%', [result], self);
+      if not (result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT]) then
+        result := 0; // unexpected error when downloading from local peer
+    except
+      on E: Exception do
+      begin
+        l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
+        FreeAndNil(fClient);
+        result := 0; // will fallback to regular GET on the main repository
+      end;
+    end;
+    if fClient = nil then
+      fClientIP4 := 0;
+  end;
+
 begin
   result := 0;
   // validate WGet caller context
@@ -5195,34 +5231,11 @@ begin
     DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).Sort(
       SortMessagePerPriority);
   end;
+  fClientSafe.Lock;
   try
-    // make a local HTTP request of the needed content on the best response
-    IP4Text(@resp[0].IP4, ip);
-    FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
-    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, resp[0].Port, u], self);
-    client := THttpClientSocket.Open(ip, UInt32ToUtf8(resp[0].Port));
-    try
-      { TODO: maintain the THttpClientSocket connection open for a few moments }
-      client.RangeStart := req.RangeStart;
-      client.RangeEnd := req.RangeEnd;
-      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
-      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
-      if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
-        OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
-      result := client.Request(
-        u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
-      l.Log(sllTrace, 'OnDownload: Request=%', [result], self);
-      if not (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-        result := 0; // unexpected error when downloading from local peer
-    finally
-      client.Free;
-    end;
-  except
-    on E: Exception do
-    begin
-      l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
-      result := 0; // will fallback to regular GET on the main repository
-    end;
+    SendRespToClient;
+  finally
+    fClientSafe.UnLock;
   end;
 end;
 
