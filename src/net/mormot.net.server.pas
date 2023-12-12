@@ -1249,10 +1249,13 @@ type
   // hash nibble) within CacheTempPath to reduce folder fragmentation
   // - by default, wait BroadcastTimeoutMS for all responses to be received,
   // unless pcoUseFirstResponse is defined
+  // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
+  // making any broadcast
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
+    pcoTryLastPeer,
     pcoVerboseLog);
 
   /// THttpPeerCacheSettings.Options values
@@ -5122,38 +5125,46 @@ var
   log: ISynLog;
   l: TSynLog;
 
-  procedure SendRespToClient;
+  procedure SendRespToClientFailed;
   begin
-    IP4Text(@resp[0].IP4, ip);
-    UInt32ToUtf8(resp[0].Port, p);
-    l.Log(sllTrace, 'OnDownload: request %:% %', [ip, p, u], self);
+    FreeAndNil(fClient);
+    fClientIP4 := 0;
+    result := 0; // will fallback to regular GET on the main repository
+  end;
+
+  procedure SendRespToClient(retry: boolean);
+  begin
     try
+      // compute the call parameters
+      IP4Text(@resp[0].IP4, ip);
+      UInt32ToUtf8(resp[0].Port, p);
+      l.Log(sllTrace, 'OnDownload: request %:% %', [ip, p, u], self);
+      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
+      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
+      // ensure we have the expected HTTP connection
       if (fClient <> nil) and
          (fClientIP4 <> resp[0].IP4) then
         FreeAndNil(fClient);
       if fClient = nil then
         fClient := THttpClientSocket.Open(ip, p);
+      // makes the GET request
       fClient.RangeStart := req.RangeStart;
       fClient.RangeEnd := req.RangeEnd;
-      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
-      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
       if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
         OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
-      result := fClient.Request(
-        u, 'GET', 30000, head, '',  '', {retry=}false, nil, OutStream);
+      result := fClient.Request(u, 'GET', 30000, head, '',  '', retry, nil, OutStream);
       l.Log(sllTrace, 'OnDownload: request=%', [result], self);
-      if not (result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT]) then
-        result := 0; // unexpected error when downloading from local peer
+      if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
+        fClientIP4 := resp[0].IP4 // success or not found (HTTP_NOCONTENT)
+      else
+        SendRespToClientFailed; // error downloading from local peer
     except
       on E: Exception do
       begin
         l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
-        FreeAndNil(fClient);
-        result := 0; // will fallback to regular GET on the main repository
+        SendRespToClientFailed;
       end;
     end;
-    if fClient = nil then
-      fClientIP4 := 0;
   end;
 
 begin
@@ -5199,7 +5210,10 @@ begin
     finally
       local.Free;
     end;
-    result := HTTP_SUCCESS;
+    if req.RangeStart > 0 then
+      result := HTTP_PARTIALCONTENT
+    else
+      result := HTTP_SUCCESS;
     exit;
   end;
   // ensure the file is big enough for broadcasting
@@ -5217,23 +5231,40 @@ begin
       exit; // you are too small, buddy
     end;
   end;
-  // try first the current HTTP client (if any)
-
+  // try first the current/last HTTP client (if any)
+  FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
+  if (fClient <> nil) and
+     (fClientIP4 <> 0) and
+     (pcoTryLastPeer in fSettings.Options) and
+     fClientSafe.TryLock then
+    try
+      SetLength(resp, 1); // create a "fake" response to reuse this connection
+      resp[0] := req;
+      resp[0].IP4 := fClientIP4;
+      FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
+      SendRespToClient({asretry=}true);
+      if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+        exit; // successfull direct downloading from last peer
+      result := 0; // may be HTTP_NOCONTENT if not found on this peer
+    finally
+      fClientSafe.UnLock;
+    end;
   // broadcast the request over UDP
   resp := MessageBroadcast(req);
   if resp = nil then
-    exit;
+    exit; // no match
   // pickup the best response
   if length(resp) <> 1 then
   begin
     if length(resp) > 10 then
       DynArrayFakeLength(resp, 10); // sort the first 10 responses received
-    DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).Sort(
-      SortMessagePerPriority);
+    DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).
+      Sort(SortMessagePerPriority);
   end;
+  // make the HTTP request corresponding to this response
   fClientSafe.Lock;
   try
-    SendRespToClient;
+    SendRespToClient({retry=}false);
   finally
     fClientSafe.UnLock;
   end;
@@ -5278,7 +5309,8 @@ begin
      not BearerDecode(aBearerToken, msg) or
      not IPToCardinal(aRemoteIP, ip4) or
      (msg.IP4 <> ip4) or
-     not IsEqualGuid(msg.Uuid, fUuid) then
+     (not IsZero(THash128(msg.Uuid)) and // IsZero for "fake" response bearer
+      not IsEqualGuid(msg.Uuid, fUuid)) then
     exit;
   fLog.Add.Log(sllTrace, 'OnBeforeBody: % from %', [aUrl, aRemoteIP], self);
   result := HTTP_SUCCESS;
@@ -5428,7 +5460,11 @@ begin
     // get local filename from decoded bearer hash
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if result <> HTTP_SUCCESS then
+    begin
+      if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
+        result := HTTP_NOCONTENT;        // OnDownload should make a broadcast
       exit;
+    end;
     // just return the file as requested
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
