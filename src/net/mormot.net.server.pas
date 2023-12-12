@@ -1258,12 +1258,15 @@ type
   // - by default, wait BroadcastTimeoutMS for all responses to be received,
   // unless pcoUseFirstResponse is defined
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
-  // making any broadcast
+  // making any broadcast - to be used if the files are likely to come in batch
+  // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
+  // (warning: this option should be set on all peers)
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
     pcoTryLastPeer,
+    pcoSelfSignedHttps,
     pcoVerboseLog);
 
   /// THttpPeerCacheSettings.Options values
@@ -1289,7 +1292,7 @@ type
   published
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
-    // - UDP for discovery, TCP for HTTP content delivery
+    // - UDP for discovery, TCP for HTTP/HTTPS content delivery
     // - is 8089 by default, which is unassigned by IANA
     property Port: TNetPort
       read fPort write fPort;
@@ -1559,7 +1562,7 @@ type
     /// the IP used for UDP and TCP process broadcast
     property NetworkBroadcast: RawUtf8
       read fMac.Broadcast;
-    /// the associated HTTP server delivering cached context
+    /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
       read fHttpServer;
   end;
@@ -4884,10 +4887,11 @@ begin
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fUdpServer]);
-  // start the local HTTP server on this interface
+  // start the local HTTP/HTTPS server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
   fHttpServer.ServerName := Executable.ProgramName;
   fHttpServer.OnBeforeBody := OnBeforeBody;
+  fHttpServer.OnRequest := OnRequest;
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer]);
   // setup internal processing status
@@ -4926,6 +4930,14 @@ begin
     fLog.Family.OnThreadEnded, 'peercache', aHttpServerThreadCount, 30000,
     [hsoBan40xIP,
      hsoNoXPoweredHeader]);
+  if aHttpServerClass.InheritsFrom(THttpServerSocketGeneric) then
+    if pcoSelfSignedHttps in fSettings.Options then
+    begin
+      fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
+      THttpServerSocketGeneric(fHttpServer).WaitStartedHttps(10);
+    end
+    else
+      THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
 end;
 
 destructor THttpPeerCache.Destroy;
@@ -5073,10 +5085,9 @@ var
 begin
   name := ComputeFileName(aMessage.Hash);
   if fPermFilesPath <> '' then
-    perm := PermFileName(name, aFlags); // with proper sub-folder
+    perm := PermFileName(name, aFlags); // with pcoCacheTempSubFolders support
   if fTempFilesPath <> '' then
     temp := fTempFilesPath + name;
-  size := 0;
   fFilesSafe.Lock; // disable any concurrent file access
   try
     size := FileSize(perm); // fast syscall on all platforms
@@ -5089,7 +5100,7 @@ begin
       begin
         fn := temp;      // found in temporary cache folder
         if lfnSetDate in aFlags then
-          FileSetDate(temp, DateTimeToFileDate(Now)); // mark as just used
+          FileSetDate(temp, DateTimeToFileDate(Now)); // renew TTL
       end;
     end;
   finally
@@ -5162,19 +5173,24 @@ var
   procedure SendRespToClient(retry: boolean);
   begin
     try
-      // compute the call parameters
+      // compute the call parameters and the request bearer
       IP4Text(@resp[0].IP4, ip);
       UInt32ToUtf8(resp[0].Port, p);
       l.Log(sllTrace, 'OnDownload: request %:% %', [ip, p, u], self);
       resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
       head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
-      // ensure we have the expected HTTP connection
+      // ensure we have the expected HTTP/HTTPS connection on the right peer
       if (fClient <> nil) and
          (fClientIP4 <> resp[0].IP4) then
         FreeAndNil(fClient);
       if fClient = nil then
-        fClient := THttpClientSocket.Open(ip, p);
-      // makes the GET request
+      begin
+        fClient := THttpClientSocket.Create;
+        fClient.TLS.IgnoreCertificateErrors := true; // for a self-signed server
+        fClient.OpenBind(
+          ip, p, {bind=}false, pcoSelfSignedHttps in fSettings.Options);
+      end;
+      // makes the GET request, optionally with the needed range bytes
       fClient.RangeStart := req.RangeStart;
       fClient.RangeEnd := req.RangeEnd;
       if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
@@ -5267,7 +5283,7 @@ begin
     try
       SetLength(resp, 1); // create a "fake" response to reuse this connection
       resp[0] := req;
-      resp[0].IP4 := fClientIP4;
+      resp[0].IP4 := fClientIP4; // as expected by OnBeforeBody()
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
       SendRespToClient({asretry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
@@ -5288,7 +5304,7 @@ begin
     DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).
       Sort(SortMessagePerPriority);
   end;
-  // make the HTTP request corresponding to this response
+  // make the HTTP/HTTPS request corresponding to this response
   fClientSafe.Lock;
   try
     SendRespToClient({retry=}false);
