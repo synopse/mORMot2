@@ -3406,6 +3406,7 @@ begin
     begin
       CryptAsymOpenSsl[caa] := TCryptAsymOsl.Create(caa);
       CryptCertOpenSsl[caa] := TCryptCertAlgoOpenSsl.Create(caa);
+      CryptCert[caa] := CryptCertOpenSsl[caa]; // favor OpenSSL for X.509 work
       if caa = caaES256 then
         // mormot.crypt.ecc has less overhead (at least with OpenSSL 3.0)
         continue;

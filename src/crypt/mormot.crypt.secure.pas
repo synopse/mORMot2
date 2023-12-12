@@ -3038,6 +3038,11 @@ var
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptCertOpenSsl: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
+  /// direct access to best known X.509 ICryptCert factories
+  // - may map to CryptCertX509[] if only mormot.crypt.x509.pas is included
+  // - but more standard CryptCertOpenSsl[] will be stored here if available
+  CryptCert: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
 
   (* ICryptStore factories *)
 
