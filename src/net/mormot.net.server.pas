@@ -1578,10 +1578,11 @@ type
     /// method called by the HttpServer to process a request
     // - statically serve a local file from decoded bearer hash
     function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
-    /// could be called on a regular basis to purge the cache from oldest files
-    // - i.e. to implement optional CacheTempMaxMin disk space release
+    /// is called on a regular basis for background regular process
     // - is called from THttpPeerCacheThread.OnIdle
-    // - will actually read and search the CacheTempPath folder every minute
+    // - e.g. to implement optional CacheTempMaxMin disk space release,
+    // actually reading and purging the CacheTempPath folder every minute
+    // - could call Instable.DoRotate every minute to refresh IP banishments
     procedure OnIdle(tix64: Int64);
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
@@ -4722,7 +4723,7 @@ var
     frame: RawByteString;
   begin
     if fOwner.fVerboseLog then
-      DoLog('sending back %', [ToText(resp)]);
+      DoLog('send %', [ToText(resp)]);
     frame := fOwner.MessageEncode(resp);
     sock := remote.NewSocket(nlUdp);
     sock.SendTo(pointer(frame), length(frame), remote);
@@ -4733,6 +4734,11 @@ var
 var
   ok, late: boolean;
 begin
+  // void random GPF at shutdown
+  if (fOwner = nil) or
+     (fOwner.fSettings = nil) or
+     (remote.IP4 = fOwner.fIP4) then // Windows broadcasts to self :)
+    exit;
   // first validate the input frame IP (RejectInstablePeersMin option)
   if fOwner.fInstable.IsBanned(remote) then
   begin
@@ -4743,7 +4749,8 @@ begin
   // validate the input frame content
   ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
-  late := fMsg.Seq <> fCurrentSeq;
+  late := (fMsg.Kind in PCF_RESPONSE) and
+          (fMsg.Seq <> fCurrentSeq);
   if fOwner.fVerboseLog then
     if ok then
       DoLog('%%', [_LATE[late], ToText(fMsg)])
@@ -4753,7 +4760,6 @@ begin
   if ok then
     case fMsg.Kind of
       pcfPing:
-        if not late then
         begin
           fOwner.MessageInit(pcfPong, fMsg.Seq, resp);
           DoSend;
@@ -5021,7 +5027,7 @@ begin
   inherited Destroy;
   if fSettingsOwned then
     fSettings.Free;
-  fSettings := nil; // paranoid for async OnDownload call
+  fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
   FreeAndNil(fUdpServer);
   FreeAndNil(fHttpServer);
   FreeAndNil(fAesEnc);
@@ -5448,6 +5454,9 @@ var
   tix: cardinal;
   size: Int64;
 begin
+  // avoid GPF at shutdown
+  if fSettings = nil then
+    exit;
   // check state every minute (65,536 seconds)
   if tix64 = 0 then
     tix64 := GetTickCount64;
@@ -5620,13 +5629,25 @@ begin
 end;
 
 function ToText(const msg: THttpPeerCacheMessage): shortstring;
+var
+  l: PtrInt;
+  algo: PUtf8Char;
+  hex: string[SizeOf(msg.Hash.Hash.b) * 2];
 begin
+  algo := nil;
+  l := HASH_SIZE[msg.Hash.Algo];
+  if IsZero(msg.Hash.Hash.b) then
+    l := 0
+  else
+    algo := pointer(HASH_EXT[msg.Hash.Algo]);
+  hex[0] := AnsiChar(l * 2);
+  BinToHexLower(@msg.Hash.Hash, @hex[1], l);
   with msg do
-    FormatShort('% from % % % % msk=% bst=% %b/s % siz=%',
+    FormatShort('% % % % % msk=% bst=% %b/s %% siz=%',
       [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        IP4ToShort(@NetMaskIP4), IP4ToShort(@BroadcastIP4), Speed,
-       BinToHexLower(@msg.Hash, HASH_SIZE[msg.Hash.Algo] + 1), Size], result);
+       hex, algo, Size], result);
 end;
 
 {$ifdef USEWININET}

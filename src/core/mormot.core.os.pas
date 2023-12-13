@@ -277,10 +277,10 @@ const
   NORESPONSE_CONTENT_TYPE = '!NORESPONSE';
 
   /// HTTP body following RFC 2324 standard e.g. for banned IP
-  HTTP_BANIP_RESPONSE: string[216] =
+  HTTP_BANIP_RESPONSE: string[201] =
     'HTTP/1.0 418 I''m a teapot'#13#10 +
     'Content-Length: 125'#13#10 +
-    TEXT_CONTENT_TYPE_HEADER + #13#10#13#10 +
+    'Content-Type: text/plain'#13#10#13#10 +
     'Server refuses to brew coffee because it is currently a teapot.'#13#10 +
     'Do not mess with it and retry from this IP in a few seconds.';
 
