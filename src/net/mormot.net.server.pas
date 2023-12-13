@@ -740,7 +740,7 @@ type
 function GetMainMacAddress(out Mac: TMacAddress;
   Filter: TMacAddressFilter = []): boolean; overload;
 
-/// get a network interface from its TMacAddress.Name value
+/// get a network interface from its TMacAddress.Name text
 // - search is case insensitive
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceName: RawUtf8): boolean; overload;
@@ -1307,7 +1307,7 @@ type
   public
     /// set the default settings
     // - i.e. Port=8089, LimitMBPerSec=10, LimitClientCount=32,
-    // CacheTempMaxMB=1000, CacheTempMaxMin=60,
+    // RejectInstablePeersMin=4, CacheTempMaxMB=1000, CacheTempMaxMin=60,
     // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 and BroadcastMaxResponses=24
     constructor Create; override;
@@ -1345,8 +1345,9 @@ type
       read fLimitClientCount write fLimitClientCount;
     /// RejectInstablePeersMin will set a delay (in minutes) to ignore any peer
     // which sent invalid UDP frames or HTTP/HTTPS requests
-    // - default is 5, for a 4-5 minutes time-to-live of IP banishments
+    // - default is 4, for a 4 minutes time-to-live of IP banishments
     // - you may set 0 to disable the whole safety mechanism
+    // - should be a positive small power of two, e.g. 2, 4, 8, 16, 32, 64, 128
     property RejectInstablePeersMin: integer
       read fRejectInstablePeersMin write fRejectInstablePeersMin;
     /// location of the temporary cached files, available for remote requests
@@ -4662,7 +4663,7 @@ begin
   fPort := 8089;
   fLimitMBPerSec := 10;
   fLimitClientCount := 32;
-  fRejectInstablePeersMin := 5;
+  fRejectInstablePeersMin := 4;
   fCacheTempPath := '*';
   fCacheTempMinBytes := 2048;
   fCacheTempMaxMB := 1000;

@@ -750,7 +750,8 @@ type
 
   /// store a list of IPv4 which should be rejected at connection
   // - more tuned than TIPBan for checking just after accept()
-  // - used e.g. to implement hsoBan40xIP
+  // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
+  // peers list (with a per-minute resolution)
   THttpAcceptBan = class(TSynPersistent)
   protected
     fSafe: TOSLightLock; // almost never on contention, no R/W needed
@@ -758,6 +759,7 @@ type
     fIP: array of TCardinalDynArray; // one [0..fMax] IP array per second
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
+    function IsBannedRaw(ip4: cardinal): boolean;
     procedure SetMax(const Value: cardinal);
     procedure SetSeconds(const Value: cardinal);
     procedure SetIP;
@@ -775,8 +777,11 @@ type
     function BanIP(const ip4: RawUtf8): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// fast check if this IP4 is to be rejected
-    // - no RW lock is needed, since is done in the main socket accept() thread
-    function IsBanned(const addr: TNetAddr): boolean;
+    function IsBanned(const addr: TNetAddr): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// fast check if this IP4 is to be rejected
+    function IsBanned(ip4: cardinal): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// register an IP4 if status in >= 400 (but not 401 HTTP_UNAUTHORIZED)
     function ShouldBan(status, ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -787,21 +792,11 @@ type
     // - implemented via a round-robin list of per-second banned IPs
     // - if you call it at another pace (e.g. every minute), then the list
     // Time-To-Live will follow this unit of time instead of seconds
-    procedure IdleEverySecond;
+    procedure OnIdle;
     /// a 32-bit IP4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
-  published
-    /// total number of accept() rejected by IsBanned()
-    property Rejected: Int64
-      read fRejected;
-    /// total number of banned IP4 since the beginning
-    property Total: Int64
-      read fTotal;
-    /// current number of banned IP4
-    property Count: integer
-      read fCount;
     /// how many seconds a banned IP4 should be rejected
     // - should be a power of two, up to 128, with a default of 4
     // - if set, any previous banned IP will be flushed
@@ -814,6 +809,16 @@ type
     // - if set, any previous banned IP will be flushed
     property Max: cardinal
       read fMax write SetMax;
+  published
+    /// total number of accept() rejected by IsBanned()
+    property Rejected: Int64
+      read fRejected;
+    /// total number of banned IP4 since the beginning
+    property Total: Int64
+      read fTotal;
+    /// current number of banned IP4
+    property Count: integer
+      read fCount;
   end;
 
 
@@ -2612,9 +2617,7 @@ end;
 
 function THttpAcceptBan.IsBanned(const addr: TNetAddr): boolean;
 var
-  s: ^PCardinalArray;
-  P: PCardinalArray;
-  ip4, n: cardinal;
+  ip4: cardinal;
 begin
   result := false;
   if (self = nil) or
@@ -2624,6 +2627,25 @@ begin
   if (ip4 = 0) or
      (ip4 = fWhiteIP) then
     exit;
+  result := IsBannedRaw(ip4);
+end;
+
+function THttpAcceptBan.IsBanned(ip4: cardinal): boolean;
+begin
+  result := (self <> nil) and
+            (fCount <> 0) and
+            (ip4 <> 0) and
+            (ip4 <> fWhiteIP) and
+            IsBannedRaw(ip4);
+end;
+
+function THttpAcceptBan.IsBannedRaw(ip4: cardinal): boolean;
+var
+  s: ^PCardinalArray;
+  P: PCardinalArray;
+  n: cardinal;
+  count: PtrInt;
+begin
   fSafe.Lock; // O(n) process, but from the main accept() thread only
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -2636,8 +2658,9 @@ begin
       repeat
         P := s^;
         inc(s);
-        if (P[0] <> 0) and // count
-           IntegerScanExists(@P[1], P[0], ip4) then // O(n) SSE2 asm on Intel
+        count := P[0];
+        if (count <> 0) and
+           IntegerScanExists(@P[1], count, ip4) then // O(n) SSE2 asm on Intel
         begin
           inc(fRejected);
           result := true;
@@ -2668,7 +2691,7 @@ begin
             BanIP(ip4)
 end;
 
-procedure THttpAcceptBan.IdleEverySecond;
+procedure THttpAcceptBan.OnIdle;
 var
   n: PtrInt;
   p: PCardinal;
@@ -2680,7 +2703,7 @@ begin
   try
     if fCount <> 0 then
     begin
-      n := fSeconds - 1; // power of two bitmask
+      n := fSeconds - 1;         // power of two bitmask
       n := (fLastSec + 1) and n; // per-second round robin
       fLastSec := n;
       p := @fIP[n][0]; // fIP[secs,0]=count fIP[secs,1..fMax]=ips
