@@ -72,6 +72,8 @@ type
     procedure RTSPOverHTTPBufferedWrite;
     /// validate mormot.net.tunnel
     procedure _TTunnelLocal;
+    /// validate THttpPeerCache process
+    procedure _THttpPeerCache;
   end;
 
 
@@ -592,6 +594,7 @@ var
   utc1, utc2: TDateTime;
   ntp, usr, pwd, main, txt: RawUtf8;
 begin
+  CheckEqual(1 shl ord(uacPartialSecretsRodc), $04000000, 'uacHigh');
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
@@ -916,6 +919,51 @@ begin
   // ECDHE encrypted tunnelling with mutual authentication
   options := [toEcdhe];
   TunnelTest(c, s);
+end;
+
+type
+  THttpPeerCacheHook = class(THttpPeerCache); // to test protected methods
+
+procedure TNetworkProtocols._THttpPeerCache;
+var
+  hpc: THttpPeerCacheHook;
+  hps: THttpPeerCacheSettings;
+  msg, msg2: THttpPeerCacheMessage;
+  i, n: integer;
+  tmp: RawByteString;
+  timer: TPrecisionTimer;
+begin
+  hps := THttpPeerCacheSettings.Create;
+  try
+    hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
+    hps.CachePermPath := Executable.ProgramFilePath + 'peercacheperm';
+    try
+      hpc := THttpPeerCacheHook.Create(hps, 'secret');
+      try
+        timer.Start;
+        hpc.MessageInit(pcfBearer, 0, msg);
+        n := 1000;
+        for i := 1 to n do
+        begin
+          msg.Size := i;
+          tmp := hpc.MessageEncode(msg);
+          Check(tmp <> '');
+          Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
+          CheckEqual(msg2.Size, i);
+          Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+        end;
+        NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
+        Check(ToText(msg) = ToText(msg2));
+      finally
+        hpc.Free;
+      end;
+    except
+      // is likely to be port 8089 already used
+      exit;
+    end;
+  finally
+    hps.Free;
+  end;
 end;
 
 end.
