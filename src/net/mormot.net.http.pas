@@ -2550,7 +2550,7 @@ begin
   v := 128; // don't consume too much memory
   while (Value < v) and
         (v > 1) do
-    v := v shl 1; // find closest power of two
+    v := v shr 1; // find closest power of two
   fSafe.Lock;
   try
     fSeconds := v;
