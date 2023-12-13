@@ -929,23 +929,27 @@ var
   hpc: THttpPeerCacheHook;
   hps: THttpPeerCacheSettings;
   msg, msg2: THttpPeerCacheMessage;
-  i, n: integer;
+  i, n, alter: integer;
   tmp: RawByteString;
   timer: TPrecisionTimer;
+  resp: THttpPeerCacheMessageDynArray;
 begin
   hps := THttpPeerCacheSettings.Create;
   try
     hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
     hps.CachePermPath := Executable.ProgramFilePath + 'peercacheperm';
+    hps.Options := [pcoVerboseLog {,pcoSelfSignedHttps}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');
       try
         timer.Start;
         hpc.MessageInit(pcfBearer, 0, msg);
+        msg.Hash.Algo := hfSHA256;
         n := 1000;
         for i := 1 to n do
         begin
           msg.Size := i;
+          msg.Hash.Hash.i0 := i;
           tmp := hpc.MessageEncode(msg);
           Check(tmp <> '');
           Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
@@ -954,6 +958,19 @@ begin
         end;
         NotifyTestSpeed('messages', n * 2, n * 2 * SizeOf(msg), @timer);
         Check(ToText(msg) = ToText(msg2));
+        timer.Start;
+        n := 10000;
+        for i := 1 to n do
+        begin
+          alter := Random32(length(tmp));
+          inc(PByteArray(tmp)[alter]); // should be detected at crc level
+          Check(not hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
+          dec(PByteArray(tmp)[alter]);
+        end;
+        NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
+        Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
+        resp := hpc.Ping;
+        //ConsoleWaitForEnterKey;
       finally
         hpc.Free;
       end;
