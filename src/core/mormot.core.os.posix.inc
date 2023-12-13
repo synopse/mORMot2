@@ -2175,18 +2175,28 @@ end;
 
 function EnumAllProcesses: TCardinalDynArray;
 begin
-  result := nil; // not implemented yet on BSD/Darwin
-  // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
+  result := nil;
+  // not implemented yet on BSD/Darwin
+  // - fpsysctl with CTL_KERN + KERN_PROC + KERN_PROC_ALL is highly OS dependent
+  // and headers are over-complicated so almost impossible to safely use in FPC:
+  // https://github.com/apple-opensource/xnu/blob/master/bsd/sys/sysctl.h#L975
+  // https://stackoverflow.com/a/6945542/458259
+  // - kvm_openfiles / kvm_getprocs may be a good option:
+  // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c
 end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 begin
   result := ''; // not implemented yet on BSD/Darwin
+  // use fpsysctl with CTL_KERN + KERN_PROC + KERN_PROC_PID
+  //  https://man.openbsd.org/sysctl.2#KERN_PROC_PID
+  // the trouble with is the name is likely to be truncated to 16 chars
+  // because it is defined p_comm[MAXCOMLEN + 1] in the very complex headers
 end;
 
 function _IsDebuggerPresent: boolean;
 begin
-  // rough detection for FPC on BSD
+  // rough detection for FPC on BSD (not yet working because of EnumProcessName)
   result := PosEx('lazarus', LowerCase(EnumProcessName(FpGetppid))) <> 0;
 end;
 
