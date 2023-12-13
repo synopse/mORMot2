@@ -4696,7 +4696,7 @@ begin
   fOwner := Owner;
   fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   inherited Create(
-    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udppeerserver', 100);
+    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udpPeerServer', 100);
 end;
 
 const
@@ -4737,7 +4737,7 @@ begin
   if fOwner.fInstable.IsBanned(remote) then
   begin
     if fOwner.fVerboseLog then
-      DoLog('banned', []);
+      DoLog('banned /%', [fOwner.fInstable.Count]);
     exit;
   end;
   // validate the input frame content
@@ -4890,8 +4890,8 @@ var
   key: THash256Rec;
 begin
   fLog := TSynLog;
-  log := fLog.Enter('Create % threads=% checksum=%',
-    [aSettings, aHttpServerThreadCount, ToText(aSharedMagicAlgo)^], self);
+  log := fLog.Enter('Create threads=% checksum=% secretlen=%',
+    [aHttpServerThreadCount, ToText(aSharedMagicAlgo)^, length(aSharedSecret)], self);
   fFilesSafe.Init;
   fBroadcastSafe.Init;
   if aSharedSecret = '' then
@@ -4941,13 +4941,16 @@ begin
   if (fTempFilesPath = '') and
      (fPermFilesPath = '') then
     raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
+  // log current settings
+  if Assigned(log) then
+    log.Log(sllTrace, 'Create: with %', [fSettings], self);
   // retrieve the local network interface to be used
   SelectNetworkInterface;
   UInt32ToUtf8(fSettings.Port, fPort);
   FormatUtf8('%:%', [fMac.IP, fPort], ip); // bound to this network
   if Assigned(log) then
     log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
-      [fMac.Name, ip, fMac.Broadcast]);
+      [fMac.Name, ip, fMac.Broadcast], self);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fNetMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
@@ -4956,14 +4959,14 @@ begin
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
-    log.Log(sllDebug, 'Create: started %', [fUdpServer]);
+    log.Log(sllDebug, 'Create: started %', [fUdpServer], self);
   // start the local HTTP/HTTPS server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
   fHttpServer.ServerName := Executable.ProgramName;
   fHttpServer.OnBeforeBody := OnBeforeBody;
   fHttpServer.OnRequest := OnRequest;
   if Assigned(log) then
-    log.Log(sllDebug, 'Create: started %', [fHttpServer]);
+    log.Log(sllDebug, 'Create: started %', [fHttpServer], self);
   // setup internal processing status
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
   fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
@@ -5419,20 +5422,22 @@ var
   ip4: cardinal;
 begin
   // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-  // error code to reject the request immediately, and close the connection
+  // error code to reject the request immediately as a "TeaPot", close the
+  // socket and ban this IP for a few seconds at accept() level
   result := HTTP_FORBIDDEN;
-  if (length(aBearerToken) < (SizeOf(msg) div 3) * 4) or
-     not IsGet(aMethod) or
-     (aUrl = '') or // URI is just ignored but something should be specified
-     not IPToCardinal(aRemoteIP, ip4) or
-     fInstable.IsBanned(ip4) or
-     not BearerDecode(aBearerToken, msg) or
-     (msg.IP4 <> ip4) or
-     (not IsZero(THash128(msg.Uuid)) and // IsZero for "fake" response bearer
-      not IsEqualGuid(msg.Uuid, fUuid)) then
+  if (length(aBearerToken) > (SizeOf(msg) div 3) * 4) and // base64uri length
+     IsGet(aMethod) and
+     (aUrl <> '') and // URI is just ignored but something should be specified
+     IPToCardinal(aRemoteIP, ip4) and
+     not fInstable.IsBanned(ip4) and // banned for RejectInstablePeersMin
+     BearerDecode(aBearerToken, msg) and
+     (msg.IP4 = ip4) and
+     (IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
+      IsEqualGuid(msg.Uuid, fUuid)) then
+    result := HTTP_SUCCESS
+  else if not fVerboseLog then
     exit;
-  fLog.Add.Log(sllTrace, 'OnBeforeBody: % from %', [aUrl, aRemoteIP], self);
-  result := HTTP_SUCCESS;
+  fLog.Add.Log(sllTrace, 'OnBeforeBody: % from %', [result, aRemoteIP], self);
 end;
 
 procedure THttpPeerCache.OnIdle(tix64: Int64);
