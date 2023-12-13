@@ -2650,6 +2650,7 @@ var
   n: cardinal;
   cnt: PtrInt;
 begin
+  result := false;
   fSafe.Lock; // O(n) process, but from the main accept() thread only
   {$ifdef HASFASTTRYFINALLY}
   try

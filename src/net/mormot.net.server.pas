@@ -1627,7 +1627,7 @@ const
   PEER_CACHE_PATTERN = '*.cache';
 
 function ToText(pcf: THttpPeerCacheMessageKind): PShortString; overload;
-function ToText(const msg: THttpPeerCacheMessage): RawUtf8; overload;
+function ToText(const msg: THttpPeerCacheMessage): shortstring; overload;
 
 
 {$ifdef USEWININET}
@@ -5603,10 +5603,10 @@ begin
   result := GetEnumName(TypeInfo(THttpPeerCacheMessageKind), ord(pcf));
 end;
 
-function ToText(const msg: THttpPeerCacheMessage): RawUtf8;
+function ToText(const msg: THttpPeerCacheMessage): shortstring;
 begin
   with msg do
-    FormatUtf8('% from % % % % msk=% bst=% %b/s % siz=%',
+    FormatShort('% from % % % % msk=% bst=% %b/s % siz=%',
       [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        IP4ToShort(@NetMaskIP4), IP4ToShort(@BroadcastIP4), Speed,
