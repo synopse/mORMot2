@@ -4996,13 +4996,16 @@ end;
 procedure THttpPeerCache.StartHttpServer(
   aHttpServerClass: THttpServerSocketGenericClass;
   aHttpServerThreadCount: integer; const aIP: RawUtf8);
+var
+  opt: THttpServerOptions;
 begin
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // may be THttpAsyncServer
+  opt := [hsoBan40xIP, hsoNoXPoweredHeader];
+  if pcoSelfSignedHttps in fSettings.Options then
+    include(opt, hsoEnableTls);
   fHttpServer := aHttpServerClass.Create(aIP, nil,
-    fLog.Family.OnThreadEnded, 'peercache', aHttpServerThreadCount, 30000,
-    [hsoBan40xIP,
-     hsoNoXPoweredHeader]);
+    fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
   if aHttpServerClass.InheritsFrom(THttpServerSocketGeneric) then
     if pcoSelfSignedHttps in fSettings.Options then
     begin
@@ -5019,8 +5022,8 @@ begin
   if fSettingsOwned then
     fSettings.Free;
   fSettings := nil; // paranoid for async OnDownload call
-  FreeAndNil(fHttpServer);
   FreeAndNil(fUdpServer);
+  FreeAndNil(fHttpServer);
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
   FreeAndNil(fBroadcastEvent);
