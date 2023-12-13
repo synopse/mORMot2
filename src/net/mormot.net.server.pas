@@ -1211,6 +1211,8 @@ type
     /// low-level callback called every few seconds of inactive Accept()
     // - is called every 5 seconds by default, but could be every second
     // if hsoBan40xIP option (i.e. the Banned property) has been set
+    // - on Windows, requires some requests to trigger the event, because it
+    // seems that accept() has timeout only on POSIX systems
     property OnAcceptIdle: TNotifyEvent
       read fOnAcceptIdle write fOnAcceptIdle;
   published
@@ -3993,18 +3995,24 @@ begin
           cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down, and end thread now
       end;
+      if Assigned(fBanned) and
+         {$ifdef OSPOSIX}
+         (res = nrRetry) and // Windows does not implement timeout on accept()
+         {$endif OSPOSIX}
+         (fBanned.Count <> 0) then
+      begin
+        tix := GetTickCount64 div 1000; // call DoRotate exactly every second
+        {$ifdef OSPOSIX} // Windows would required some activity - not an issue
+        if bantix = 0 then
+          fSock.ReceiveTimeout := 1000 // accept() to exit after one second
+        else
+        {$endif OSPOSIX}
+        if bantix <> tix then
+          fBanned.DoRotate; // update internal THttpAcceptBan lists
+        bantix := tix;
+      end;
       if res = nrRetry then // accept() timeout after 5000/1000 ms
       begin
-        if Assigned(fBanned) and
-           (fBanned.Count <> 0) then
-        begin
-          tix := GetTickCount64 div 1000; // call DoRotate exactly every second
-          if bantix = 0 then
-            fSock.ReceiveTimeout := 1000 // accept() to exit after one second
-          else if bantix <> tix then
-            fBanned.DoRotate; // update internal THttpAcceptBan lists
-          bantix := tix;
-        end;
         if Assigned(fOnAcceptIdle) then
           fOnAcceptIdle(self); // called every few seconds (e.g. 5 by default)
         continue;

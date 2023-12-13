@@ -265,7 +265,9 @@ type
     /// set the SO_REUSEPORT option, to allow several servers to bind on a port
     // - calls SetReuseAddrPort on Windows
     procedure ReusePort;
-    /// accept an incoming socket, optionally asynchronous, with accept4() support
+    /// accept an incoming socket, optionally asynchronous
+    // - async=true will force clientsocket to be defined as asynchronous;
+    // supporting accept4() syscall on Linux
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
       async: boolean): TNetResult;
     /// retrieve the current address associated on this connected socket
