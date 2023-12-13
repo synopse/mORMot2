@@ -9522,7 +9522,7 @@ const
     334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
     1337987929, 1685759167, 2123923447);
 
-// as used internally by TDynArrayHasher.ReHash()
+// as used internally by TDynArrayHasher.ForceReHash()
 function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 var
   i: PtrInt;

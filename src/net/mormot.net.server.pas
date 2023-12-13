@@ -1209,7 +1209,7 @@ type
     property OnHeaderParsed: TOnHttpServerHeaderParsed
       read fOnHeaderParsed write fOnHeaderParsed;
     /// low-level callback called every few seconds of inactive Accept()
-    // - is called every 5 seconds by default, but could be every 1 second
+    // - is called every 5 seconds by default, but could be every second
     // if hsoBan40xIP option (i.e. the Banned property) has been set
     property OnAcceptIdle: TNotifyEvent
       read fOnAcceptIdle write fOnAcceptIdle;
@@ -1345,9 +1345,9 @@ type
       read fLimitClientCount write fLimitClientCount;
     /// RejectInstablePeersMin will set a delay (in minutes) to ignore any peer
     // which sent invalid UDP frames or HTTP/HTTPS requests
+    // - should be a positive small power of two <= 128
     // - default is 4, for a 4 minutes time-to-live of IP banishments
     // - you may set 0 to disable the whole safety mechanism
-    // - should be a positive small power of two, e.g. 2, 4, 8, 16, 32, 64, 128
     property RejectInstablePeersMin: integer
       read fRejectInstablePeersMin write fRejectInstablePeersMin;
     /// location of the temporary cached files, available for remote requests
@@ -1511,9 +1511,9 @@ type
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
-    fTempFilesDeleteDeprecatedTix, fBannedTix: cardinal;
+    fTempFilesDeleteDeprecatedTix, fInstableTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
-    fBanned: THttpAcceptBan;
+    fInstable: THttpAcceptBan;    // from Settings.RejectInstablePeersMin
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     fFilesSafe: TOSLock; // concurrent cached files access
@@ -1580,7 +1580,7 @@ type
     // - i.e. to implement optional CacheTempMaxMin disk space release
     // - is called from THttpPeerCacheThread.OnIdle
     // - will actually read and search the CacheTempPath folder every minute
-    procedure FilesDeleteDeprecated(tix64: Int64);
+    procedure OnIdle(tix64: Int64);
     /// the network interface used for UDP and TCP process
     property Mac: TMacAddress
       read fMac;
@@ -1602,6 +1602,10 @@ type
     /// the associated HTTP/HTTPS server delivering cached context
     property HttpServer: THttpServerGeneric
       read fHttpServer;
+    /// the current state of banned IP from incorrect UDP/HTTP requests
+    // - follow RejectInstablePeersMin settings
+    property Instable: THttpAcceptBan
+      read fInstable;
   end;
 
   /// one THttpPeerCache.OnDownload instance
@@ -3958,11 +3962,12 @@ var
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  banlen: integer;
+  banlen, tix, bantix: integer;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
   NotifyThreadStart(self);
+  bantix := 0;
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
@@ -3988,22 +3993,23 @@ begin
           cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down, and end thread now
       end;
-      if res = nrRetry then // accept() timeout after 1000 ms
+      if res = nrRetry then // accept() timeout after 5000/1000 ms
       begin
-        if Assigned(fBanned) then
+        if Assigned(fBanned) and
+           (fBanned.Count <> 0) then
         begin
-          if fBanned.Count <> 0 then
-            fBanned.IdleEverySecond;    // update internal THttpAcceptBan lists
-          fSock.ReceiveTimeout := 1000; // accept() to exit every second
-          fSock.SendTimeout := 1000;
+          tix := GetTickCount64 div 1000; // call DoRotate exactly every second
+          if bantix = 0 then
+            fSock.ReceiveTimeout := 1000 // accept() to exit after one second
+          else if bantix <> tix then
+            fBanned.DoRotate; // update internal THttpAcceptBan lists
+          bantix := tix;
         end;
         if Assigned(fOnAcceptIdle) then
           fOnAcceptIdle(self); // called every few seconds (e.g. 5 by default)
         continue;
       end;
-      if (fBanned <> nil) and
-         (fBanned.Count <> 0) and
-         fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
+      if fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
       begin
         banlen := ord(HTTP_BANIP_RESPONSE[0]);
         cltsock.Send(@HTTP_BANIP_RESPONSE[1], banlen); // 418 I'm a teapot
@@ -4719,6 +4725,14 @@ var
 var
   ok, late: boolean;
 begin
+  // first validate the input frame IP (RejectInstablePeersMin option)
+  if fOwner.fInstable.IsBanned(remote) then
+  begin
+    if fOwner.fVerboseLog then
+      DoLog('banned', []);
+    exit;
+  end;
+  // validate the input frame content
   ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
   late := fMsg.Seq <> fCurrentSeq;
@@ -4727,6 +4741,7 @@ begin
       DoLog('%%', [_LATE[late], ToText(fMsg)])
     else
       DoLog('unexpected len=% [%]', [len, EscapeToShort(pointer(fFrame), len)]);
+  // process the frame message
   if ok then
     case fMsg.Kind of
       pcfPing:
@@ -4760,8 +4775,8 @@ begin
         end;
       // pcfResponseNone are just ignored
     end
-  else if fOwner.fBanned <> nil then // RejectInstablePeersMin
-    fOwner.fBanned.BanIP(remote.IP4);
+  else if fOwner.fInstable<> nil then // RejectInstablePeersMin
+    fOwner.fInstable.BanIP(remote.IP4);
 end;
 
 function THttpPeerCacheThread.Broadcast(const aFrame: RawByteString;
@@ -4846,7 +4861,7 @@ end;
 
 procedure THttpPeerCacheThread.OnIdle(tix64: Int64);
 begin
-  fOwner.FilesDeleteDeprecated(tix64); // do nothing but once every minute
+  fOwner.OnIdle(tix64); // do nothing but once every minute
 end;
 
 procedure THttpPeerCacheThread.OnShutdown;
@@ -4885,14 +4900,14 @@ begin
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
                  (sllTrace in fLog.Family.Level);
   if fSettings.RejectInstablePeersMin > 0 then
-    fBanned := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
+    fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
   fTempFilesPath := EnsureDirectoryExists(fSettings.CacheTempPath);
   if fTempFilesPath <> '' then
   begin
-    FilesDeleteDeprecated(0); // initial clean-up
+    OnIdle(0); // initial clean-up
     fTempFilesMaxSize := Int64(fSettings.CacheTempMaxMB) shl 20;
     avail := GetDiskAvailable(fTempFilesPath);
     existing := DirectorySize(fTempFilesPath, false, PEER_CACHE_PATTERN);
@@ -4999,7 +5014,7 @@ begin
   FreeAndNil(fAesDec);
   FreeAndNil(fBroadcastEvent);
   FreeAndNilSafe(fClient);
-  FreeAndNil(fBanned);
+  FreeAndNil(fInstable);
   fSharedMagic := 0;
   fBroadcastSafe.Done;
   fFilesSafe.Done;
@@ -5213,9 +5228,9 @@ var
 
   procedure SendRespToClientFailed(retry: boolean);
   begin
-    if (fBanned <> nil) and
-       not retry then // RejectInstablePeersMin
-      fBanned.BanIP(resp[0].IP4);
+    if (fInstable <> nil) and // RejectInstablePeersMin
+       not retry then         // not from partial request before broadcast
+      fInstable.BanIP(resp[0].IP4);
     FreeAndNil(fClient);
     fClientIP4 := 0;
     result := 0; // will fallback to regular GET on the main repository
@@ -5398,11 +5413,12 @@ begin
   // should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code to reject the request immediately, and close the connection
   result := HTTP_FORBIDDEN;
-  if (aBearerToken = '') or
+  if (length(aBearerToken) < (SizeOf(msg) div 3) * 4) or
      not IsGet(aMethod) or
-     (aUrl = '') or // URI is just ignored but may be specified
-     not BearerDecode(aBearerToken, msg) or
+     (aUrl = '') or // URI is just ignored but something should be specified
      not IPToCardinal(aRemoteIP, ip4) or
+     fInstable.IsBanned(ip4) or
+     not BearerDecode(aBearerToken, msg) or
      (msg.IP4 <> ip4) or
      (not IsZero(THash128(msg.Uuid)) and // IsZero for "fake" response bearer
       not IsEqualGuid(msg.Uuid, fUuid)) then
@@ -5411,7 +5427,7 @@ begin
   result := HTTP_SUCCESS;
 end;
 
-procedure THttpPeerCache.FilesDeleteDeprecated(tix64: Int64);
+procedure THttpPeerCache.OnIdle(tix64: Int64);
 var
   tix: cardinal;
   size: Int64;
@@ -5421,14 +5437,18 @@ begin
     tix64 := GetTickCount64;
   tix := (tix64 shr 16) + 1; 
   // renew banned peer IPs TTL to implement RejectInstablePeersMin
-  if (fBanned <> nil) and
-     (fBannedTix <> tix) then
+  if (fInstable <> nil) and
+     (fInstableTix <> tix) then
   begin
-    fBannedTix := tix;
-    fBanned.IdleEverySecond; // every minute in fact
+    fInstableTix := tix;
+    if fInstable.Count <> 0 then
+    begin
+      fInstable.DoRotate;
+      fLog.Add.Log(sllTrace, 'OnIdle: %', [fInstable], self);
+    end;
   end;
-  // handle temporary cache file deprecation
-  if (fSettings.fCacheTempMaxMin <= 0) or
+  // handle temporary cache folder deprecation
+  if (fSettings.CacheTempMaxMin <= 0) or
      (fTempFilesPath = '') then
     exit;
   if (fTempFilesDeleteDeprecatedTix <> tix) and
@@ -5439,7 +5459,7 @@ begin
       fSettings.CacheTempMaxMin / MinsPerDay, PEER_CACHE_PATTERN, false, @size);
     if size = 0 then
       exit; // nothing changed on disk
-    fLog.Add.Log(sllTrace, 'FilesDeleteDeprecated: %', [KBNoSpace(size)], self);
+    fLog.Add.Log(sllTrace, 'OnIdle: deleted %', [KBNoSpace(size)], self);
     fTempCurrentSize := 0; // we need to call FindFiles()
   finally
     fFilesSafe.UnLock; // re-allow background file access
@@ -5505,7 +5525,7 @@ begin
       begin
         // compute the current folder cache size
         tot := fTempCurrentSize;
-        if tot = 0 then // first time, or after FilesDeleteDeprecated
+        if tot = 0 then // first time, or after OnIdle
         begin
           dir := FindFiles(fTempFilesPath, PEER_CACHE_PATTERN);
           for i := 0 to high(dir) do

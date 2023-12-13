@@ -752,6 +752,7 @@ type
   // - more tuned than TIPBan for checking just after accept()
   // - used e.g. to implement hsoBan40xIP or THttpPeerCache instable
   // peers list (with a per-minute resolution)
+  // - the DoRotate method should be called every second
   THttpAcceptBan = class(TSynPersistent)
   protected
     fSafe: TOSLightLock; // almost never on contention, no R/W needed
@@ -760,8 +761,8 @@ type
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
     function IsBannedRaw(ip4: cardinal): boolean;
-    procedure SetMax(const Value: cardinal);
-    procedure SetSeconds(const Value: cardinal);
+    procedure SetMax(Value: cardinal);
+    procedure SetSeconds(Value: cardinal);
     procedure SetIP;
   public
     /// initialize the thread-safe storage process
@@ -792,13 +793,14 @@ type
     // - implemented via a round-robin list of per-second banned IPs
     // - if you call it at another pace (e.g. every minute), then the list
     // Time-To-Live will follow this unit of time instead of seconds
-    procedure OnIdle;
+    procedure DoRotate;
     /// a 32-bit IP4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default
     property WhiteIP: cardinal
       read fWhiteIP write fWhiteIP;
     /// how many seconds a banned IP4 should be rejected
-    // - should be a power of two, up to 128, with a default of 4
+    // - should be a power of two, up to 128, with a default of 4 - the closed
+    // power of two is selected if the Value is not an exact match
     // - if set, any previous banned IP will be flushed
     property Seconds: cardinal
       read fSeconds write SetSeconds;
@@ -2530,7 +2532,7 @@ begin
   fSafe.Done;
 end;
 
-procedure THttpAcceptBan.SetMax(const Value: cardinal);
+procedure THttpAcceptBan.SetMax(Value: cardinal);
 begin
   fSafe.Lock;
   try
@@ -2541,15 +2543,17 @@ begin
   end;
 end;
 
-procedure THttpAcceptBan.SetSeconds(const Value: cardinal);
+procedure THttpAcceptBan.SetSeconds(Value: cardinal);
+var
+  v: cardinal;
 begin
-  if not (Value in [1, 2, 4, 8, 16, 32, 64, 128]) then
-    raise EHttpSocket.CreateFmt(
-      'Invalid %s.SetSeconds(%d): should be a small power of two',
-      [ClassNameShort(self)^, Value]);
+  v := 128; // don't consume too much memory
+  while (Value < v) and
+        (v > 1) do
+    v := v shl 1; // find closest power of two
   fSafe.Lock;
   try
-    fSeconds := Value;
+    fSeconds := v;
     SetIP;
   finally
     fSafe.UnLock;
@@ -2644,7 +2648,7 @@ var
   s: ^PCardinalArray;
   P: PCardinalArray;
   n: cardinal;
-  count: PtrInt;
+  cnt: PtrInt;
 begin
   fSafe.Lock; // O(n) process, but from the main accept() thread only
   {$ifdef HASFASTTRYFINALLY}
@@ -2658,9 +2662,9 @@ begin
       repeat
         P := s^;
         inc(s);
-        count := P[0];
-        if (count <> 0) and
-           IntegerScanExists(@P[1], count, ip4) then // O(n) SSE2 asm on Intel
+        cnt := P[0];
+        if (cnt <> 0) and
+           IntegerScanExists(@P[1], cnt, ip4) then // O(n) SSE2 asm on Intel
         begin
           inc(fRejected);
           result := true;
@@ -2691,7 +2695,7 @@ begin
             BanIP(ip4)
 end;
 
-procedure THttpAcceptBan.OnIdle;
+procedure THttpAcceptBan.DoRotate;
 var
   n: PtrInt;
   p: PCardinal;

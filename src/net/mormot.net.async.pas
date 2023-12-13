@@ -3618,7 +3618,7 @@ begin
   // reset the hsoBan40xIP items of the oldest list
   if (fBanned <> nil) and
      (fBanned.Count <> 0) then
-    fBanned.OnIdle;
+    fBanned.DoRotate;
 end;
 
 procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
