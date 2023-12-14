@@ -165,12 +165,14 @@ type
   // - waoNoHeadFirst will call OnDownload() first then fallback to GET so
   // may be preferred e.g. if the main server has a huge latency
   // - waoNoMinimalSize should let OnDownload() accept even the smallest files
-  // - waoTryLastPeer will force homonymous pcoTryLastPeer THttpPeerCacheOption
+  // - waoTryLastPeer/waoBroadcastNotAlone will force homonymous
+  // pcoTryLastPeer/pcoBroadcastNotAlone THttpPeerCacheOption
   TWGetAlternateOption = (
     waoPermanentCache,
     waoNoHeadFirst,
     waoNoMinimalSize,
-    waoTryLastPeer);
+    waoTryLastPeer,
+    waoBroadcastNotAlone);
 
   /// define how THttpClientSocketWGet.Alternate should operate this file
   TWGetAlternateOptions = set of TWGetAlternateOption;
@@ -278,8 +280,8 @@ type
     status, redirected: integer;
     InStream, OutStream: TStream;
     KeepAlive: cardinal;
-    OutStreamInitialPos: Int64;
     retry: set of (rMain, rAuth, rAuthProxy);
+    OutStreamInitialPos: Int64;
   end;
 
   /// callback used by THttpClientSocket.Request on HTTP_UNAUTHORIZED (401)

@@ -1281,6 +1281,8 @@ type
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
   // making any broadcast - to be used if the files are likely to come in batch;
   // can be forced by TWGetAlternateOptions from a given WGet() call
+  // - pcoBroadcastNotAlone will disable broadcasting for up to one second if
+  // no response at all was received within BroadcastTimeoutMS delay
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
   // (warning: this option should be set on all peers)
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
@@ -1288,6 +1290,7 @@ type
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
     pcoTryLastPeer,
+    pcoBroadcastNotAlone,
     pcoSelfSignedHttps,
     pcoVerboseLog);
 
@@ -1389,6 +1392,7 @@ type
       read fCachePermMinBytes  write fCachePermMinBytes;
     /// how many milliseconds UDP broadcast should wait for a response
     // - default is 10 ms
+    // - on Windows, this value is indicative, likely to have 15ms resolution
     property BroadcastTimeoutMS: integer
       read fBroadcastTimeoutMS write fBroadcastTimeoutMS;
     /// how many responses UDP broadcast should take into account
@@ -1472,7 +1476,7 @@ type
   protected
     fOwner: THttpPeerCache;
     fMsg: THttpPeerCacheMessage;
-    fSent: integer;
+    fSent, fResponses: integer;
     fRespSafe: TLightLock;
     fResp: THttpPeerCacheMessageDynArray;
     fRespCount: integer;
@@ -1483,7 +1487,7 @@ type
     procedure OnShutdown; override; // = Destroy
     function Broadcast(aSingleRep: boolean;
       const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
-    procedure AddReponse(const aMessage: THttpPeerCacheMessage);
+    procedure AddResponse(const aMessage: THttpPeerCacheMessage);
     function GetResponses(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize the background UDP server thread
@@ -1517,7 +1521,7 @@ type
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
-    fTempFilesDeleteDeprecatedTix, fInstableTix: cardinal;
+    fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
     fInstable: THttpAcceptBan;    // from Settings.RejectInstablePeersMin
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
@@ -1534,8 +1538,8 @@ type
     function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
     function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
       out aMsg: THttpPeerCacheMessage): boolean;
-    function MessageBroadcast(
-      const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray; virtual;
+    function MessageBroadcast(const aReq: THttpPeerCacheMessage;
+      out aAlone: boolean): THttpPeerCacheMessageDynArray; virtual;
     function ComputeFileName(aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName;
       aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
@@ -4789,18 +4793,21 @@ begin
         end;
       pcfPong:
         if not late then
-          AddReponse(fMsg);
+          AddResponse(fMsg);
       pcfResponseFull:
         if not late then
         begin
-          AddReponse(fMsg);
+          inc(fResponses);
+          AddResponse(fMsg);
           if fOwner.fBroadcastEvent <> nil then // pcoUseFirstResponse
           begin
             fCurrentSeq := 0;                   // ignore next responses
             fOwner.fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
-      // pcfResponseNone are just ignored
+      pcfResponseNone:
+        if not late then
+          inc(fResponses);
     end
   else if fOwner.fInstable<> nil then // RejectInstablePeersMin
     fOwner.fInstable.BanIP(remote.IP4);
@@ -4817,6 +4824,7 @@ begin
   // setup this broadcasting sequence
   frame := fOwner.MessageEncode(aReq);
   fCurrentSeq := aReq.Seq; // ignore any other responses
+  fResponses := 0; // reset counter for this fCurrentSeq (not late)
   if aSingleRep then
     fOwner.fBroadcastEvent.ResetEvent;
   // broadcast request over the UDP sub-net of the selected network interface
@@ -4839,10 +4847,11 @@ begin
   else
     SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
   result := GetResponses(aReq.Seq);
-  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: responses=%', [length(result)], self);
+  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: responses=%/%',
+    [length(result), fResponses], self);
 end;
 
-procedure THttpPeerCacheThread.AddReponse(
+procedure THttpPeerCacheThread.AddResponse(
   const aMessage: THttpPeerCacheMessage);
 begin
   if fRespCount < fOwner.Settings.BroadcastMaxResponses then
@@ -5141,8 +5150,8 @@ begin
             (aMsg.RangeEnd >= aMsg.RangeStart);
 end;
 
-function THttpPeerCache.MessageBroadcast(
-  const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
+  out aAlone: boolean): THttpPeerCacheMessageDynArray;
 begin
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
@@ -5150,6 +5159,7 @@ begin
       {singlerep=}(aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil), aReq);
   finally
     fUdpServer.fCurrentSeq := 0; // ignore any late responses
+    aAlone := (fUdpServer.fResponses = 0);
     fBroadcastSafe.UnLock;
   end;
 end;
@@ -5302,7 +5312,8 @@ var
   head, ip, u, p: RawUtf8;
   fn: TFileName;
   local: TFileStreamEx;
-  minsize: Int64;
+  tix: cardinal;
+  brdcst, alone: boolean;
   log: ISynLog;
   l: TSynLog;
 
@@ -5388,14 +5399,19 @@ begin
     l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
     try
+      // range support
       if req.RangeStart > 0 then
         req.RangeStart := local.Seek(req.RangeStart, soFromBeginning);
       if (req.RangeEnd <= 0) or
          (req.RangeEnd >= req.Size) then
         req.RangeEnd := req.Size - 1;
       req.Size := req.RangeEnd - req.RangeStart + 1;
+      // fetch the data
       if req.Size > 0 then
+      begin
+        OutStream.LimitPerSecond := 0; // not relevant within the same process
         OutStream.CopyFrom(local, req.Size);
+      end;
     finally
       local.Free;
     end;
@@ -5429,10 +5445,27 @@ begin
       fClientSafe.UnLock;
     end;
   // broadcast the request over UDP
-  resp := MessageBroadcast(req);
-  if resp = nil then
-    exit; // no match
-  // pickup the best response
+  tix := 0;
+  brdcst := true;
+  if (pcoBroadcastNotAlone in fSettings.Options) or
+     (waoBroadcastNotAlone in Params.AlternateOptions) then
+  begin
+    tix := (GetTickCount64 shr 10) + 1; // 1024 ms resolution
+    brdcst := (fBroadcastTix <> tix);   // reenable broadcasting after delay
+  end;
+  if brdcst then
+  begin
+    resp := MessageBroadcast(req, alone);
+    if resp = nil then
+    begin
+      if (tix <> 0) and // pcoBroadcastNotAlone
+         alone then
+        fBroadcastTix := tix; // no broadcast within the next second
+      exit; // no match
+    end;
+    fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
+  end;
+  // select the best response
   if length(resp) <> 1 then
   begin
     if length(resp) > 10 then
@@ -5452,9 +5485,10 @@ end;
 function THttpPeerCache.Ping: THttpPeerCacheMessageDynArray;
 var
   req: THttpPeerCacheMessage;
+  alone: boolean;
 begin
   MessageInit(pcfPing, 0, req);
-  result := MessageBroadcast(req);
+  result := MessageBroadcast(req, alone);
 end;
 
 function THttpPeerCache.BearerDecode(const aBearerToken: RawUtf8;
