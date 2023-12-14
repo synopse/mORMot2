@@ -1274,6 +1274,98 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 *)
 
 type
+  /// the content of a binary THttpPeerCacheMessage
+  // - would eventually be extended in the future for frame versioning
+  THttpPeerCacheMessageKind = (
+    pcfPing,
+    pcfPong,
+    pcfRequest,
+    pcfResponseNone,
+    pcfResponseFull,
+    pcfBearer);
+
+  /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
+  THttpPeerCacheHash = packed record
+    /// the algorithm used for Hash
+    Algo: THashAlgo;
+    /// up to 512-bit of raw binary hash, according to Algo
+    Hash: THash512Rec;
+  end;
+  THttpPeerCacheHashs = array of THttpPeerCacheHash;
+
+  /// one UDP request frame used during THttpPeerCache discovery
+  // - requests and responses have the same binary layout
+  // - some fields may be void or irrelevant, and the structure is padded
+  // with random up to 192 bytes
+  // - over the wire, packets are encrypted and authenticated via AES-GCM-128
+  // with an ending salted checksum for quick anti-fuzzing
+  THttpPeerCacheMessage = packed record
+    /// the content of this binary frame
+    Kind: THttpPeerCacheMessageKind;
+    /// 32-bit sequence number
+    Seq: cardinal;
+    /// the UUID of the Sender
+    Uuid: TGuid;
+    /// the local IPv4 which sent this frame
+    IP4: cardinal;
+    /// the IPv4 network mask of the local network interface
+    NetMaskIP4: cardinal;
+    /// the IPv4 broadcast address the local network interface
+    BroadcastIP4: cardinal;
+    /// the link speed in bits per second of the local network interface
+    Speed: cardinal;
+    /// the hardware model of this network interface
+    Hardware: TMacAddressKind;
+    /// the local UnixTimeMinimalUtc value
+    Timestamp: cardinal;
+    /// number of background download connections currently on this server
+    Connections: word;
+    /// the binary Hash (and algo) of the requested file content
+    Hash: THttpPeerCacheHash;
+    /// the known full size of this file
+    Size: Int64;
+    /// the Range offset of the requested file content
+    RangeStart: Int64;
+    /// the Range ending position of the file content (included)
+    RangeEnd: Int64;
+    /// some internal state representation, e.g. sent back as pcfBearer
+    Opaque: QWord;
+    /// some random padding up to 192 bytes, used for future content revisions
+    // - e.g. for a TEccPublicKey (ECDHE) and additional fields
+    Padding: array[0 .. 50] of byte;
+  end;
+  THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
+
+  /// abstract parent to THttpPeerCache for its cryptographic core
+  THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fSharedMagic, fFrameSeqLow: cardinal;
+    fFrameSeq: integer;
+    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fAesSafe: TLightLock;
+    fAesEnc, fAesDec: TAesGcmAbstract;
+    fSharedMagicHasher: THasher;
+    fLog: TSynLogClass;
+    fMac: TMacAddress;
+    fUuid: TGuid;
+    procedure SelectNetworkInterface(const aInterfaceName: RawUtf8); virtual;
+    function CurrentConnections: integer; virtual;
+    procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
+      out aMsg: THttpPeerCacheMessage); virtual;
+    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
+      out aMsg: THttpPeerCacheMessage): boolean;
+    function BearerDecode(const aBearerToken: RawUtf8;
+      out aMsg: THttpPeerCacheMessage): boolean; virtual;
+  public
+    /// initialize the cryptography of this peer-to-peer node instance
+    // - warning: inherited class should also call SelectNetworkInterface()
+    constructor Create(const aSharedSecret: RawByteString;
+      aSharedMagicAlgo: TCrc32Algo); reintroduce;
+    /// finalize this class instance
+    destructor Destroy; override;
+  end;
+
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
   // hash nibble) within CacheTempPath to reduce folder fragmentation
@@ -1407,71 +1499,6 @@ type
   /// exception class raised on THttpPeerCache issues
   EHttpPeerCache = class(ESynException);
 
-  /// the content of a binary THttpPeerCacheMessage
-  // - would eventually be extended in the future for frame versioning
-  THttpPeerCacheMessageKind = (
-    pcfPing,
-    pcfPong,
-    pcfRequest,
-    pcfResponseNone,
-    pcfResponseFull,
-    pcfBearer);
-
-  /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
-  THttpPeerCacheHash = packed record
-    /// the algorithm used for Hash
-    Algo: THashAlgo;
-    /// up to 512-bit of raw binary hash, according to Algo
-    Hash: THash512Rec;
-  end;
-  THttpPeerCacheHashs = array of THttpPeerCacheHash;
-
-  /// one UDP request frame used during THttpPeerCache discovery
-  // - requests and responses have the same binary layout
-  // - some fields may be void or irrelevant, and the structure is padded
-  // with random up to 192 bytes
-  // - over the wire, packets are encrypted and authenticated via AES-GCM-128
-  // with an ending salted checksum for quick anti-fuzzing
-  THttpPeerCacheMessage = packed record
-    /// the content of this binary frame
-    Kind: THttpPeerCacheMessageKind;
-    /// 32-bit sequence number
-    Seq: cardinal;
-    /// the UUID of the Sender
-    Uuid: TGuid;
-    /// the local IPv4 which sent this frame
-    IP4: cardinal;
-    /// the local port which sent this frame
-    Port: word;
-    /// the IPv4 network mask of the local network interface
-    NetMaskIP4: cardinal;
-    /// the IPv4 broadcast address the local network interface
-    BroadcastIP4: cardinal;
-    /// the link speed in bits per second of the local network interface
-    Speed: cardinal;
-    /// the hardware model of this network interface
-    Hardware: TMacAddressKind;
-    /// the local UnixTimeMinimalUtc value
-    Timestamp: cardinal;
-    /// number of background download connections currently on this server
-    Connections: word;
-    /// the binary Hash (and algo) of the requested file content
-    Hash: THttpPeerCacheHash;
-    /// the known full size of this file
-    Size: Int64;
-    /// the Range offset of the requested file content
-    RangeStart: Int64;
-    /// the Range ending position of the file content (included)
-    RangeEnd: Int64;
-    /// some internal state representation, e.g. sent back as pcfBearer
-    Opaque: QWord;
-    /// some random padding up to 192 bytes, used for future content revisions
-    // - e.g. for a TEccPublicKey (ECDHE) and additional fields
-    Padding: array[0 .. 48] of byte;
-  end;
-
-  THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
-
   /// background UDP server thread, associated to a THttpPeerCache instance
   THttpPeerCacheThread = class(TUdpServerThread)
   protected
@@ -1504,21 +1531,14 @@ type
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
   // - will maintain its own local folders of cached files, stored by hash
-  THttpPeerCache = class(TInterfacedObjectWithCustomCreate, IWGetAlternate)
+  THttpPeerCache = class(THttpPeerCrypt, IWGetAlternate)
   protected
     fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
-    fSharedMagic, fFrameSeqLow: cardinal;
-    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
-    fFrameSeq: integer;
-    fLog: TSynLogClass;
     fUdpServer: THttpPeerCacheThread;
     fClientSafe: TLightLock;
     fClient: THttpClientSocket;
     fPort: RawUtf8;
-    fAesSafe: TLightLock;
-    fAesEnc, fAesDec: TAesGcmAbstract;
-    fSharedMagicHasher: THasher;
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
@@ -1528,17 +1548,10 @@ type
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     fFilesSafe: TOSLock; // concurrent cached files access
-    fMac: TMacAddress;
-    fUuid: TGuid;
     // most of these internal methods are virtual for proper customization
-    procedure SelectNetworkInterface; virtual;
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
-    procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
-      out aMsg: THttpPeerCacheMessage); virtual;
-    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
-      out aMsg: THttpPeerCacheMessage): boolean;
+    function CurrentConnections: integer; override;
     function MessageBroadcast(const aReq: THttpPeerCacheMessage;
       out aAlone: boolean): THttpPeerCacheMessageDynArray; virtual;
     function ComputeFileName(aHash: THttpPeerCacheHash): TFileName; virtual;
@@ -1552,8 +1565,6 @@ type
       out aLocal: TFileName; out isTemp: boolean): boolean;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
-    function BearerDecode(const aBearerToken: RawUtf8;
-      out aMsg: THttpPeerCacheMessage): boolean; virtual;
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -4695,6 +4706,153 @@ end;
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
 
+{ THttpPeerCrypt }
+
+procedure THttpPeerCrypt.SelectNetworkInterface(const aInterfaceName: RawUtf8);
+begin
+  if aInterfaceName <> '' then
+    if not GetMainMacAddress(fMac, aInterfaceName) then
+      raise EHttpPeerCache.CreateUtf8(
+        '%.Create: impossible to find the [%] network interface',
+        [self, aInterfaceName]);
+  if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
+    raise EHttpPeerCache.CreateUtf8(
+      '%.Create: impossible to find a local network interface', [self]);
+  IPToCardinal(fMac.IP, fIP4);
+  IPToCardinal(fMac.NetMask, fNetMaskIP4);
+  IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+end;
+
+function THttpPeerCrypt.CurrentConnections: integer;
+begin
+  result := 0; // to be properly overriden with the HTTP server information
+end;
+
+procedure THttpPeerCrypt.MessageInit(aKind: THttpPeerCacheMessageKind;
+  aSeq: cardinal; out aMsg: THttpPeerCacheMessage);
+var
+  n: cardinal;
+begin
+  FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
+  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
+  if aSeq = 0 then
+    aSeq := InterlockedIncrement(fFrameSeq);
+  aMsg.Seq := aSeq;
+  aMsg.Kind := aKind;
+  aMsg.Uuid := fUuid;
+  aMsg.IP4 := fIP4;
+  aMsg.NetMaskIP4 := fNetMaskIP4;
+  aMsg.BroadcastIP4 := fBroadcastIP4;
+  aMsg.Speed := fMac.Speed;
+  aMsg.Hardware := fMac.Kind;
+  aMsg.Timestamp := UnixTimeMinimalUtc;
+  n := CurrentConnections; // virtual method
+  if n > 65535 then
+    n := 65535;
+  aMsg.Connections := n;
+end;
+
+// UDP frames are AES-GCM encrypted and signed messages, ending with 32-bit crc
+
+function THttpPeerCrypt.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+var
+  tmp: RawByteString;
+  p: PAnsiChar;
+  l: PtrInt;
+begin
+  // AES-GCM-128 encoding and authentication
+  FastSetRawByteString(tmp, @aMsg, SizeOf(aMsg));
+  fAesSafe.Lock;
+  try
+    result := fAesEnc.MacAndCrypt(tmp, {enc=}true, {iv=}true, '', {endsize=}4);
+  finally
+    fAesSafe.UnLock;
+  end;
+  // append salted checksum to quickly reject any fuzzing attempt
+  p := pointer(result);
+  l := length(result) - 4;
+  PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
+end;
+
+function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
+  out aMsg: THttpPeerCacheMessage): boolean;
+var
+  encoded, plain: RawByteString;
+begin
+  result := false;
+  // quickly reject any fuzzing attempt
+  dec(aFrameLen, 4);
+  if (aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) or
+     (PCardinal(aFrame + aFrameLen)^ <>
+       fSharedMagicHasher(fSharedMagic, aFrame, aFrameLen)) then
+    exit;
+  // AES-GCM-128 decoding and authentication
+  FastSetRawByteString(encoded, aFrame, aFrameLen);
+  fAesSafe.Lock;
+  try
+    plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
+  finally
+    fAesSafe.UnLock;
+  end;
+  // check consistency of the decoded THttpPeerCacheMessage value
+  if length(plain) <> SizeOf(aMsg) then
+    exit;
+  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
+  if aMsg.Kind in PCF_RESPONSE then
+    if (aMsg.Seq < fFrameSeqLow) or
+       (aMsg.Seq > cardinal(fFrameSeq)) then
+      exit;
+  result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
+            (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
+            (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
+            (aMsg.RangeEnd >= aMsg.RangeStart);
+end;
+
+function THttpPeerCrypt.BearerDecode(const aBearerToken: RawUtf8;
+  out aMsg: THttpPeerCacheMessage): boolean;
+var
+  tok: array[0.. 511] of AnsiChar; // no memory allocation
+  bearerlen, toklen: PtrInt;
+begin
+  bearerlen := length(aBearerToken);
+  toklen := Base64uriToBinLength(bearerlen);
+  result := (toklen > SizeOf(aMsg)) and
+            (toklen < SizeOf(tok)) and
+            Base64uriToBin(pointer(aBearerToken), @tok, bearerlen, toklen) and
+            MessageDecode(@tok, toklen, aMsg) and
+            (aMsg.Kind = pcfBearer);
+end;
+
+constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString;
+  aSharedMagicAlgo: TCrc32Algo);
+var
+  key: THash256Rec;
+begin
+  if aSharedSecret = '' then
+    raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
+  // setup internal processing status
+  HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
+  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
+  fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
+  fSharedMagic := key.h.c3; // upmost 32-bit for anti-fuzzing checksum
+  FillZero(key.b);
+  if aSharedMagicAlgo = caDefault then
+    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
+  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
+  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
+  fFrameSeq := fFrameSeqLow;
+  GetComputerUuid(fUuid);
+end;
+
+destructor THttpPeerCrypt.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fAesEnc);
+  FreeAndNil(fAesDec);
+  fSharedMagic := 0;
+end;
+
+
 { THttpPeerCacheSettings }
 
 constructor THttpPeerCacheSettings.Create;
@@ -4930,16 +5088,14 @@ var
   log: ISynLog;
   ip: RawUtf8;
   avail, existing: Int64;
-  key: THash256Rec;
 begin
   fLog := TSynLog;
   log := fLog.Enter('Create threads=% checksum=% secretlen=%',
     [aHttpServerThreadCount, ToText(aSharedMagicAlgo)^, length(aSharedSecret)], self);
   fFilesSafe.Init;
   fBroadcastSafe.Init;
-  if aSharedSecret = '' then
-    raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
-  inherited Create;
+  // intializz the cryptographic state in inherited THttpPeerCrypt.Create
+  inherited Create(aSharedSecret, aSharedMagicAlgo);
   // setup the processing options
   if aSettings = nil then
   begin
@@ -4988,15 +5144,14 @@ begin
   if Assigned(log) then
     log.Log(sllTrace, 'Create: with %', [fSettings], self);
   // retrieve the local network interface to be used
-  SelectNetworkInterface;
+  SelectNetworkInterface(fSettings.InterfaceName);
   UInt32ToUtf8(fSettings.Port, fPort);
   FormatUtf8('%:%', [fMac.IP, fPort], ip); // bound to this network
   if Assigned(log) then
     log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
       [fMac.Name, ip, fMac.Broadcast], self);
-  IPToCardinal(fMac.IP, fIP4);
-  IPToCardinal(fMac.NetMask, fNetMaskIP4);
-  IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+  if fInstable <> nil then
+    fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
   if pcoUseFirstResponse in fSettings.Options then
     fBroadcastEvent := TSynEvent.Create;
   // start the local UDP server on this interface
@@ -5010,30 +5165,6 @@ begin
   fHttpServer.OnRequest := OnRequest;
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fHttpServer], self);
-  // setup internal processing status
-  HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
-  fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
-  fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
-  fSharedMagic := key.h.c3; // upmost 32-bit for anti-fuzzing checksum
-  FillZero(key.b);
-  if aSharedMagicAlgo = caDefault then
-    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
-  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
-  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
-  fFrameSeq := fFrameSeqLow;
-  GetComputerUuid(fUuid);
-end;
-
-procedure THttpPeerCache.SelectNetworkInterface;
-begin
-  if fSettings.InterfaceName <> '' then
-    if not GetMainMacAddress(fMac, fSettings.InterfaceName) then
-      raise EHttpPeerCache.CreateUtf8(
-        '%.Create: impossible to find the [%] network interface',
-        [self, fSettings.InterfaceName]);
-  if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
-    raise EHttpPeerCache.CreateUtf8(
-      '%.Create: impossible to find a local network interface', [self]);
 end;
 
 procedure THttpPeerCache.StartHttpServer(
@@ -5045,6 +5176,8 @@ begin
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer; // may be THttpAsyncServer
   opt := [hsoBan40xIP, hsoNoXPoweredHeader];
+  if fVerboseLog then
+    include(opt, hsoLogVerbose);
   if pcoSelfSignedHttps in fSettings.Options then
     include(opt, hsoEnableTls);
   fHttpServer := aHttpServerClass.Create(aIP, nil,
@@ -5059,103 +5192,24 @@ begin
       THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
 end;
 
+function THttpPeerCache.CurrentConnections: integer;
+begin
+  result := fHttpServer.ConnectionsActive;
+end;
+
 destructor THttpPeerCache.Destroy;
 begin
-  inherited Destroy;
   if fSettingsOwned then
     fSettings.Free;
   fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
   FreeAndNil(fUdpServer);
   FreeAndNil(fHttpServer);
-  FreeAndNil(fAesEnc);
-  FreeAndNil(fAesDec);
   FreeAndNil(fBroadcastEvent);
   FreeAndNilSafe(fClient);
   FreeAndNil(fInstable);
-  fSharedMagic := 0;
   fBroadcastSafe.Done;
   fFilesSafe.Done;
-end;
-
-procedure THttpPeerCache.MessageInit(aKind: THttpPeerCacheMessageKind;
-  aSeq: cardinal; out aMsg: THttpPeerCacheMessage);
-var
-  n: cardinal;
-begin
-  FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
-  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
-  if aSeq = 0 then
-    aSeq := InterlockedIncrement(fFrameSeq);
-  aMsg.Seq := aSeq;
-  aMsg.Kind := aKind;
-  aMsg.Uuid := fUuid;
-  aMsg.IP4 := fIP4;
-  aMsg.Port := fSettings.Port;
-  aMsg.NetMaskIP4 := fNetMaskIP4;
-  aMsg.BroadcastIP4 := fBroadcastIP4;
-  aMsg.Speed := fMac.Speed;
-  aMsg.Hardware := fMac.Kind;
-  aMsg.Timestamp := UnixTimeMinimalUtc;
-  n := fHttpServer.ConnectionsActive;
-  if n > 65535 then
-    n := 65535;
-  aMsg.Connections := n;
-end;
-
-// UDP frames are AES-GCM encrypted and signed messages, ending with 32-bit crc
-
-function THttpPeerCache.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-var
-  tmp: RawByteString;
-  p: PAnsiChar;
-  l: PtrInt;
-begin
-  // AES-GCM-128 encoding and authentication
-  FastSetRawByteString(tmp, @aMsg, SizeOf(aMsg));
-  fAesSafe.Lock;
-  try
-    result := fAesEnc.MacAndCrypt(tmp, {enc=}true, {iv=}true, '', {endsize=}4);
-  finally
-    fAesSafe.UnLock;
-  end;
-  // append salted checksum to quickly reject any fuzzing attempt
-  p := pointer(result);
-  l := length(result) - 4;
-  PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
-end;
-
-function THttpPeerCache.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
-  out aMsg: THttpPeerCacheMessage): boolean;
-var
-  encoded, plain: RawByteString;
-begin
-  result := false;
-  // quickly reject any fuzzing attempt
-  dec(aFrameLen, 4);
-  if (aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) or
-     (PCardinal(aFrame + aFrameLen)^ <>
-       fSharedMagicHasher(fSharedMagic, aFrame, aFrameLen)) then
-    exit;
-  // AES-GCM-128 decoding and authentication
-  FastSetRawByteString(encoded, aFrame, aFrameLen);
-  fAesSafe.Lock;
-  try
-    plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
-  finally
-    fAesSafe.UnLock;
-  end;
-  // check consistency of the decoded THttpPeerCacheMessage value
-  if length(plain) <> SizeOf(aMsg) then
-    exit;
-  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
-  if aMsg.Kind in PCF_RESPONSE then
-    if (aMsg.Seq < fFrameSeqLow) or
-       (aMsg.Seq > cardinal(fFrameSeq)) then
-      exit;
-  result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
-            (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-            (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
-            (aMsg.RangeEnd >= aMsg.RangeStart);
+  inherited Destroy;
 end;
 
 function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
@@ -5317,7 +5371,7 @@ function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
 var
   req: THttpPeerCacheMessage;
   resp : THttpPeerCacheMessageDynArray;
-  head, ip, u, p: RawUtf8;
+  head, ip, u: RawUtf8;
   fn: TFileName;
   local: TFileStreamEx;
   tix: cardinal;
@@ -5340,8 +5394,7 @@ var
     try
       // compute the call parameters and the request bearer
       IP4Text(@resp[0].IP4, ip);
-      UInt32ToUtf8(resp[0].Port, p);
-      l.Log(sllTrace, 'OnDownload: request %:% %', [ip, p, u], self);
+      l.Log(sllTrace, 'OnDownload: request %:% %', [ip, fPort, u], self);
       resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
       head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
       // ensure we have the expected HTTP/HTTPS connection on the right peer
@@ -5353,7 +5406,7 @@ var
         fClient := THttpClientSocket.Create;
         fClient.TLS.IgnoreCertificateErrors := true; // for a self-signed server
         fClient.OpenBind(
-          ip, p, {bind=}false, pcoSelfSignedHttps in fSettings.Options);
+          ip, fPort, {bind=}false, pcoSelfSignedHttps in fSettings.Options);
       end;
       // makes the GET request, optionally with the needed range bytes
       fClient.RangeStart := req.RangeStart;
@@ -5497,21 +5550,6 @@ var
 begin
   MessageInit(pcfPing, 0, req);
   result := MessageBroadcast(req, alone);
-end;
-
-function THttpPeerCache.BearerDecode(const aBearerToken: RawUtf8;
-  out aMsg: THttpPeerCacheMessage): boolean;
-var
-  tok: array[0.. 511] of AnsiChar; // no memory allocation
-  bearerlen, toklen: PtrInt;
-begin
-  bearerlen := length(aBearerToken);
-  toklen := Base64uriToBinLength(bearerlen);
-  result := (toklen > SizeOf(aMsg)) and
-            (toklen < SizeOf(tok)) and
-            Base64uriToBin(pointer(aBearerToken), @tok, bearerlen, toklen) and
-            MessageDecode(@tok, toklen, aMsg) and
-            (aMsg.Kind = pcfBearer);
 end;
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
@@ -7740,7 +7778,7 @@ end;
 {$endif USEWININET}
 
 begin
-  //  writeln(SizeOf(THttpPeerCacheMessage));
+  //writeln(SizeOf(THttpPeerCacheMessage));
   assert(SizeOf(THttpPeerCacheMessage) = 192);
 
 end.
