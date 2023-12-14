@@ -1477,7 +1477,7 @@ type
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
     procedure OnShutdown; override; // = Destroy
-    function Broadcast(const aFrame: RawByteString; aSingleRep: boolean;
+    function Broadcast(aSingleRep: boolean;
       const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
     procedure AddReponse(const aMessage: THttpPeerCacheMessage);
     function GetResponses(aSeq: cardinal): THttpPeerCacheMessageDynArray;
@@ -4793,13 +4793,16 @@ begin
     fOwner.fInstable.BanIP(remote.IP4);
 end;
 
-function THttpPeerCacheThread.Broadcast(const aFrame: RawByteString;
-  aSingleRep: boolean; const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+function THttpPeerCacheThread.Broadcast(aSingleRep: boolean;
+  const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
 var
   sock: TNetSocket;
+  res: TNetResult;
+  frame: RawByteString;
 begin
   result := nil;
   // setup this broadcasting sequence
+  frame := fOwner.MessageEncode(aReq);
   fCurrentSeq := aReq.Seq; // ignore any other responses
   if aSingleRep then
     fOwner.fBroadcastEvent.ResetEvent;
@@ -4809,7 +4812,10 @@ begin
     exit;
   try
     sock.SetBroadcast(true);
-    if sock.SendTo(pointer(aFrame), length(aFrame), fAddr) <> nrOk then
+    res := sock.SendTo(pointer(frame), length(frame), fAddr);
+    fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
+      [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
+    if res <> nrOk then
       exit;
   finally
     sock.Close;
@@ -4820,6 +4826,7 @@ begin
   else
     SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
   result := GetResponses(aReq.Seq);
+  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: responses=%', [length(result)], self);
 end;
 
 procedure THttpPeerCacheThread.AddReponse(
@@ -5126,7 +5133,7 @@ function THttpPeerCache.MessageBroadcast(
 begin
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
-    result := fUdpServer.Broadcast(MessageEncode(aReq),
+    result := fUdpServer.Broadcast(
       {singlerep=}(aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil), aReq);
   finally
     fUdpServer.fCurrentSeq := 0; // ignore any late responses
@@ -5634,17 +5641,19 @@ var
   algo: PUtf8Char;
   hex: string[SizeOf(msg.Hash.Hash.b) * 2];
 begin
+  l := 0;
   algo := nil;
-  l := HASH_SIZE[msg.Hash.Algo];
-  if IsZero(msg.Hash.Hash.b) then
-    l := 0
-  else
+  if not IsZero(msg.Hash.Hash.b) then
+  begin
     algo := pointer(HASH_EXT[msg.Hash.Algo]);
+    l := HASH_SIZE[msg.Hash.Algo];
+    BinToHexLower(@msg.Hash.Hash, @hex[1], l);
+  end;
   hex[0] := AnsiChar(l * 2);
-  BinToHexLower(@msg.Hash.Hash, @hex[1], l);
   with msg do
-    FormatShort('% % % % % msk=% bst=% %b/s %% siz=%',
-      [ToText(Kind)^, GuidToShort(Uuid), IP4ToShort(@IP4), ToText(Hardware)^,
+    FormatShort('% #% % % % % msk=% bst=% %b/s %% siz=%',
+      [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid),
+       IP4ToShort(@IP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        IP4ToShort(@NetMaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        hex, algo, Size], result);
