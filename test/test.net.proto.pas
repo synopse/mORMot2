@@ -932,8 +932,8 @@ var
   i, n, alter: integer;
   tmp: RawByteString;
   timer: TPrecisionTimer;
-  resp: THttpPeerCacheMessageDynArray;
 begin
+  // for further tests, use the dedicated "mORMot GET" (mget) sample
   hps := THttpPeerCacheSettings.Create;
   try
     hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
@@ -969,8 +969,7 @@ begin
         end;
         NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
         Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
-        resp := hpc.Ping;
-        //ConsoleWaitForEnterKey;
+        Check(CompareMem(@msg, @msg2, SizeOf(msg)));
       finally
         hpc.Free;
       end;
