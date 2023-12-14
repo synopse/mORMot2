@@ -740,10 +740,11 @@ type
 function GetMainMacAddress(out Mac: TMacAddress;
   Filter: TMacAddressFilter = []): boolean; overload;
 
-/// get a network interface from its TMacAddress.Name text
-// - search is case insensitive
+/// get a network interface from its TMacAddress main fields
+// - search is case insensitive for TMacAddress.Name and Address fields, and
+// will also search for the IP
 function GetMainMacAddress(out Mac: TMacAddress;
-  const InterfaceName: RawUtf8): boolean; overload;
+  const InterfaceNameAddressOrIP: RawUtf8): boolean; overload;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -3480,22 +3481,29 @@ begin
   result := true;
 end;
 
-function GetMainMacAddress(out Mac: TMacAddress; const InterfaceName: RawUtf8): boolean;
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8): boolean;
 var
   i: PtrInt;
   all: TMacAddressDynArray;
+  m: ^TMacAddress;
 begin
   result := false;
-  if InterfaceName = '' then
+  if InterfaceNameAddressOrIP = '' then
     exit;
   all := GetMacAddresses({upandown=}false);
-  for i := 0 to high(all) do
-    if IdemPropNameU(all[i].Name, InterfaceName) then
+  m := pointer(all);
+  for i := 1 to length(all) do
+    if IdemPropNameU(m^.Name, InterfaceNameAddressOrIP) or
+       IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) or
+       (m^.IP = InterfaceNameAddressOrIP) then
     begin
-      Mac := all[i];
+      Mac := m^;
       result := true;
       exit;
-    end;
+    end
+    else
+      inc(m);
 end;
 
 

@@ -974,8 +974,7 @@ begin
         hpc.Free;
       end;
     except
-      // is likely to be port 8089 already used
-      exit;
+      // exception here is likely to be port 8089 already used -> continue
     end;
   finally
     hps.Free;
