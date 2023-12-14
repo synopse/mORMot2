@@ -263,6 +263,11 @@ type
     // - Params.Hasher/Hash are expected to be populated
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName);
+    /// notify the alternate download implementation that the data supplied
+    // by OnDownload() was incorrect
+    // - mainly if the resulting hash does not match
+    // - e.g. THttpPeerCache is likely to delete this file from its cache
+    procedure OnDownloadFailed(const Params: THttpClientSocketWGet);
   end;
 
   /// THttpClientSocket.Request low-level execution context
@@ -1878,8 +1883,8 @@ var
   partmodif: TDateTime;
   res: integer;
   partstream: TStreamRedirect;
-  resumed: boolean;
-  ExpectedSize: Int64;
+  resumed, alternate: boolean;
+  expectedsize: Int64;
 
   function GetExpectedSizeAndRedirection: boolean;
   begin
@@ -1887,8 +1892,8 @@ var
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
-    ExpectedSize := Http.ContentLength;
-    result := ExpectedSize > 0;
+    expectedsize := Http.ContentLength;
+    result := expectedsize > 0;
     if result and
        (fRedirected <> '') and
        (fRedirected <> requrl) then
@@ -1911,25 +1916,22 @@ var
        (params.Hasher <> nil) and
        (params.Hash <> '') and
        ((waoNoHeadFirst in params.AlternateOptions) or
-        (ExpectedSize <> 0) or // ensure we made HEAD once for auth and size
+        (expectedsize <> 0) or // ensure we made HEAD once for auth and size
         GetExpectedSizeAndRedirection) then
+    begin
       // alternate download (e.g. local peer-to-peer cache) from file hash
       res := params.Alternate.OnDownload(
-               self, params, requrl, ExpectedSize, partstream);
+               self, params, requrl, expectedsize, partstream);
+      alternate := alternate or (res <> 0); // to notify OnDownloadFailed
+    end;
     if res = 0 then
       // regular direct GET, if not done via OnDownload()
       res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
         {retry=}false, {instream=}nil, partstream);
     // verify (partial) response
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-    begin
-      if (res = HTTP_NOTACCEPTABLE) or
-         (res = HTTP_RANGENOTSATISFIABLE) or
-         (res = HTTP_NOCONTENT) then
-        DeleteFile(part); // force delete (maybe) incorrect partial file
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
-    end;
     // finalize the successful request
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
@@ -1961,7 +1963,8 @@ begin
     urlfile := 'index';
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
-  ExpectedSize := 0;
+  alternate := false;
+  expectedsize := 0;
   // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
@@ -2027,7 +2030,7 @@ begin
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
     // try to get expected target size with a HEAD request
     if GetExpectedSizeAndRedirection and
-       (Size < ExpectedSize) then
+       (Size < expectedsize) then
     begin // seems good enough
       NewPartStream(fmOpenReadWrite);
       partstream.Append; // hash partial content
@@ -2039,7 +2042,7 @@ begin
       DeleteFile(part); // this .part is too big, so should be rejected
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: got Size=% Expected=% -> reset %',
-          [url, Size, ExpectedSize, part], self);
+          [url, Size, expectedsize, part], self);
       NewPartStream(fmCreate);
     end;
   end
@@ -2056,19 +2059,26 @@ begin
     if (params.Hash <> '') and
        (parthash <> '') then
     begin
-      // check the hash
+      // check the hash after resume
       if resumed and
          not PropNameEquals(parthash, params.Hash) then
       begin
         if Assigned(OnLog) then
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
-        NewPartStream(fmCreate);
-        requrl := url; // try again including initial redirection steps
-        DoRequestAndFreePartStream;
+        NewPartStream(fmCreate);    // get rid of wrong file
+        requrl := url;
+        DoRequestAndFreePartStream; // try again without any resume
       end;
+      // now the hash should be correct
       if not PropNameEquals(parthash, params.Hash) then
       begin
+        if alternate then // something went wrong with OnDownload()
+        try
+          params.Alternate.OnDownloadFailed(params); // notify
+        except
+          // intercept any fatal error
+        end;
         DeleteFile(part); // this .part was clearly incorrect
         raise EHttpSocket.CreateUtf8('%.WGet: %:%/% hash failure (% vs %)',
           [self, fServer, fPort, url, parthash, params.Hash]);
@@ -2087,15 +2097,13 @@ begin
         '%.WGet: impossible to rename % as %', [self, part, result]);
     part := '';
     // notify e.g. THttpPeerCache of the newly downloaded file
-    if Assigned(params.Alternate) and
+    if Assigned(params.Alternate) and // alternate is not relevant here
        (params.Hasher <> nil) and
        (params.Hash <> '') then
     try
       params.Alternate.OnDowloaded(params, result);
     except
-      on E: Exception do // intercept any fatal error
-        if Assigned(OnLog) then
-          OnLog(sllTrace, 'WGet %: OnDownloaded(%) raised %', [url, result, E]);
+      // intercept any fatal error
     end;
   finally
     partstream.Free;  // ensure close file on unexpected error (if not already)

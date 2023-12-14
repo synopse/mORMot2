@@ -1577,6 +1577,10 @@ type
     // should be called to copy the content into this instance files cache
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
       const Source: TFileName); virtual;
+    /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
+    // - OnDownload() may have returned corrupted data: local cache file is
+    // likely to be deleted, for safety
+    procedure OnDownloadFailed(const Params: THttpClientSocketWGet);
     /// broadcast a pcfPing on the network interface and return the responses
     function Ping: THttpPeerCacheMessageDynArray;
     /// method called by the HttpServer before any request is processed
@@ -5625,6 +5629,21 @@ begin
   QueryPerformanceMicroSeconds(stop);
   fLog.Add.Log(LOG_TRACEWARNING[not ok], 'OnDowloaded: copy % into % in %',
       [Source, local, MicroSecToString(stop - start)], self);
+end;
+
+procedure THttpPeerCache.OnDownloadFailed(const Params: THttpClientSocketWGet);
+var
+  local: TFileName;
+  istemp: boolean;
+begin
+  // compute the local cache file name from the known file hash
+  if not CachedFileName(Params, [lfnEnsureDirectoryExists], local, istemp) then
+    fLog.Add.Log(sllWarning, 'OnDowloadFailed: missing hash', self)
+  // actually delete the local (may be corrupted) file
+  else if DeleteFile(local) then
+    fLog.Add.Log(sllTrace, 'OnDowloadFailed: deleted %', [local], self)
+  else
+    fLog.Add.Log(sllLastError, 'OnDowloadFailed: error deleting %', [local], self);
 end;
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
