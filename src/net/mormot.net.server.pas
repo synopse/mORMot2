@@ -1359,7 +1359,9 @@ type
     property CacheTempPath: TFileName
       read fCacheTempPath write fCacheTempPath;
     /// above how many bytes the peer network should be asked for a temporary file
-    // - there is no size limitation if the file is already in the temporary cache
+    // - there is no size limitation if the file is already in the temporary
+    // cache, or if the waoNoMinimalSize option is specified by WGet()
+    // - default is 2048 bytes, i.e. 2KB
     property CacheTempMinBytes: integer
       read fCacheTempMinBytes  write fCacheTempMinBytes;
     /// after how many MB in CacheTempPath the folder should be cleaned
@@ -1380,7 +1382,9 @@ type
     property CachePermPath: TFileName
       read fCachePermPath write fCachePermPath;
     /// above how many bytes the peer network should be asked for a permanent file
-    // - there is no size limitation if the file is already in the permanent cache
+    // - there is no size limitation if the file is already in the permanent
+    // cache, or if the waoNoMinimalSize option is specified by WGet()
+    // - default is 2048 bytes, i.e. 2KB
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
     /// how many milliseconds UDP broadcast should wait for a response
@@ -1538,6 +1542,11 @@ type
     function LocalFileName(
       const aMessage: THttpPeerCacheMessage; aFlags: THttpPeerCacheLocalFileName;
       aFileName: PFileName; aSize: PInt64): integer;
+    function CachedFileName(const aParams: THttpClientSocketWGet;
+      aFlags: THttpPeerCacheLocalFileName;
+      out aLocal: TFileName; out isTemp: boolean): boolean;
+    function TooSmallFile(const aParams: THttpClientSocketWGet;
+      aSize: Int64; const aCaller: shortstring): boolean;
     function BearerDecode(const aBearerToken: RawUtf8;
       out aMsg: THttpPeerCacheMessage): boolean; virtual;
   public
@@ -5223,6 +5232,46 @@ begin
     pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
 end;
 
+function THttpPeerCache.CachedFileName(const aParams: THttpClientSocketWGet;
+  aFlags: THttpPeerCacheLocalFileName;
+  out aLocal: TFileName; out isTemp: boolean): boolean;
+var
+  hash: THttpPeerCacheHash;
+begin
+  if not WGetToHash(aParams, hash) then
+  begin
+    result := false;
+    exit;
+  end;
+  aLocal := ComputeFileName(hash);
+  isTemp := (fPermFilesPath = '') or
+            not (waoPermanentCache in aParams.AlternateOptions);
+  if isTemp then
+    aLocal := fTempFilesPath + aLocal
+  else
+    aLocal := PermFileName(aLocal, aFlags); // with sub-folder
+  result := true;
+end;
+
+function THttpPeerCache.TooSmallFile(const aParams: THttpClientSocketWGet;
+  aSize: Int64; const aCaller: shortstring): boolean;
+var
+  minsize: Int64;
+begin
+  result := false; // continue
+  if waoNoMinimalSize in aParams.AlternateOptions then
+    exit;
+  if (waoPermanentCache in aParams.AlternateOptions) and
+     (fPermFilesPath <> '') then
+    minsize := fSettings.CachePermMinBytes
+  else
+    minsize := fSettings.CacheTempMinBytes;
+  if aSize >= minsize then
+    exit; // big enough
+  fLog.Add.Log(sllTrace, '%: size < minsize=%', [aCaller, KB(minsize)], self);
+  result := true; // too small
+end;
+
 function SortMessagePerPriority(const VA, VB): integer;
 var
   a: THttpPeerCacheMessage absolute VA;
@@ -5354,19 +5403,8 @@ begin
   end;
   // ensure the file is big enough for broadcasting
   if (ExpectedFullSize <> 0) and
-     not (waoNoMinimalSize in Params.AlternateOptions) then
-  begin
-    if (waoPermanentCache in Params.AlternateOptions) and
-       (fPermFilesPath <> '') then
-      minsize := fSettings.CachePermMinBytes
-    else
-      minsize := fSettings.CacheTempMinBytes;
-    if ExpectedFullSize < minsize then
-    begin
-      l.Log(sllTrace, 'OnDownload: size < minsize=%', [KB(minsize)], self);
-      exit; // you are too small, buddy
-    end;
-  end;
+     TooSmallFile(Params, ExpectedFullSize, 'OnDownload') then
+    exit; // you are too small, buddy
   // try first the current/last HTTP client (if any)
   FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
   if (fClient <> nil) and
@@ -5502,37 +5540,22 @@ procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
   const Source: TFileName);
 var
   local: TFileName;
-  hash: THttpPeerCacheHash;
   localsize, sourcesize, tot, start, stop, deleted: Int64;
   ok, istemp: boolean;
   i: PtrInt;
   dir: TFindFilesDynArray;
 begin
-  // validate the supplied downloaded source file
+  // the supplied downloaded source file should be big enough
   sourcesize := FileSize(Source);
-  if sourcesize = 0 then
-  begin
-    fLog.Add.Log(sllWarning, 'OnDowloaded: no % file', [Source], self);
+  if (sourcesize = 0) or // paranoid
+     TooSmallFile(Params, sourcesize, 'OnDownloaded') then
     exit;
-  end;
   // compute the local cache file name from the known file hash
-  if not WGetToHash(Params, hash) then
+  if not CachedFileName(Params, [lfnEnsureDirectoryExists], local, istemp) then
   begin
     fLog.Add.Log(sllWarning,
       'OnDowloaded: no hash specified for %', [Source], self);
     exit;
-  end;
-  local := ComputeFileName(hash);
-  if (waoPermanentCache in Params.AlternateOptions) and
-     (fPermFilesPath <> '') then
-  begin
-    local := PermFileName(local, [lfnEnsureDirectoryExists]); // with sub-folder
-    istemp := false;
-  end
-  else
-  begin
-    local := fTempFilesPath + local;
-    istemp := true;
   end;
   // check if this file was not already in the cache folder
   // - outside fFilesSafe.Lock because happens just after OnDownload from cache
