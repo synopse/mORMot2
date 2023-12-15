@@ -1492,7 +1492,6 @@ type
     fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
     fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
-    fSharedMagicHasher: THasher;
     fLog: TSynLogClass;
     fPort, fIpPort: RawUtf8;
     fClientSafe: TLightLock;
@@ -1500,7 +1499,7 @@ type
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
     fUuid: TGuid;
-    procedure SelectNetworkInterface; virtual;
+    procedure AfterSettings; virtual;
     function CurrentConnections: integer; virtual;
     procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
       out aMsg: THttpPeerCacheMessage); virtual;
@@ -1514,10 +1513,9 @@ type
       aOutStream: TStreamRedirect; aRetry: boolean): integer;
   public
     /// initialize the cryptography of this peer-to-peer node instance
-    // - warning: inherited class should also call SelectNetworkInterface once
+    // - warning: inherited class should also call AfterSettings once
     // fSettings is defined
-    constructor Create(const aSharedSecret: RawByteString;
-      aSharedMagicAlgo: TCrc32Algo); reintroduce;
+    constructor Create(const aSharedSecret: RawByteString); reintroduce;
     /// finalize this class instance
     destructor Destroy; override;
   end;
@@ -1598,8 +1596,7 @@ type
     constructor Create(aSettings: THttpPeerCacheSettings;
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2;
-      aSharedMagicAlgo: TCrc32Algo = caCrc32c); reintroduce;
+      aHttpServerThreadCount: integer = 2); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -4752,10 +4749,10 @@ end;
 
 { THttpPeerCrypt }
 
-procedure THttpPeerCrypt.SelectNetworkInterface;
+procedure THttpPeerCrypt.AfterSettings;
 begin
   if fSettings = nil then
-    raise EHttpPeerCache.CreateUtf8('%.SelectNetworkInterface(nil)', [self]);
+    raise EHttpPeerCache.CreateUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
   if fSettings.InterfaceName <> '' then
     if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
@@ -4808,7 +4805,11 @@ begin
   aMsg.Connections := n;
 end;
 
-// UDP frames are AES-GCM encrypted and signed messages, ending with 32-bit crc
+// UDP frames are AES-GCM encrypted and signed, ending with a 32-bit crc, fixed
+// to crc32c(): caMD5/caSha1 are almost as slow as AES-GCM-128 itself ;)
+// - on x86_64 THttpPeerCache: 14,003 assertions passed  17.39ms
+//   2000 messages in 413us i.e. 4.6M/s, aver. 206ns, 886.7 MB/s  = AES-GCM-128
+//   10000 altered in 205us i.e. 46.5M/s, aver. 20ns, 8.7 GB/s    = crc32c()
 
 function THttpPeerCrypt.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
 var
@@ -4827,7 +4828,7 @@ begin
   // append salted checksum to quickly reject any fuzzing attempt
   p := pointer(result);
   l := length(result) - 4;
-  PCardinal(p + l)^ := fSharedMagicHasher(fSharedMagic, p, l);
+  PCardinal(p + l)^ := crc32c(fSharedMagic, p, l);
 end;
 
 function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
@@ -4840,7 +4841,7 @@ begin
   dec(aFrameLen, 4);
   if (aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) or
      (PCardinal(aFrame + aFrameLen)^ <>
-       fSharedMagicHasher(fSharedMagic, aFrame, aFrameLen)) then
+       crc32c(fSharedMagic, aFrame, aFrameLen)) then
     exit;
   // AES-GCM-128 decoding and authentication
   FastSetRawByteString(encoded, aFrame, aFrameLen);
@@ -4937,25 +4938,25 @@ begin
   end;
 end;
 
-constructor THttpPeerCrypt.Create(
-  const aSharedSecret: RawByteString; aSharedMagicAlgo: TCrc32Algo);
+constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString);
 var
   key: THash256Rec;
 begin
+  // setup internal processing status
+  GetComputerUuid(fUuid);
+  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
+  fFrameSeq := fFrameSeqLow;
+  // setup internal cryptography
   if aSharedSecret = '' then
     raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
-  // setup internal processing status
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
   fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
-  fSharedMagic := key.h.c3; // upmost 32-bit for anti-fuzzing checksum
+  HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
+  fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
+  TSynLog.Add.Log(sllTrace, 'Create: Code=%, Seq=%',
+    [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
   FillZero(key.b);
-  if aSharedMagicAlgo = caDefault then
-    aSharedMagicAlgo := caCrc32c; // AesNiHash32 not unique between processes
-  fSharedMagicHasher := CryptCrc32(aSharedMagicAlgo);
-  fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
-  fFrameSeq := fFrameSeqLow;
-  GetComputerUuid(fUuid);
 end;
 
 destructor THttpPeerCrypt.Destroy;
@@ -5222,17 +5223,16 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer; aSharedMagicAlgo: TCrc32Algo);
+  aHttpServerThreadCount: integer);
 var
   log: ISynLog;
   avail, existing: Int64;
 begin
   fLog := TSynLog;
-  log := fLog.Enter('Create threads=% checksum=% secretlen=%',
-    [aHttpServerThreadCount, ToText(aSharedMagicAlgo)^, length(aSharedSecret)], self);
+  log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
-  inherited Create(aSharedSecret, aSharedMagicAlgo);
+  inherited Create(aSharedSecret);
   // setup the processing options
   if aSettings = nil then
   begin
@@ -5263,7 +5263,7 @@ begin
       begin
         fTempFilesMaxSize := avail;
         if Assigned(log) then
-          log.Log(sllDebug, 'Create: set CacheTempMaxMB=%', [avail shr 20], self);
+          log.Log(sllDebug, 'Create: use CacheTempMax=%', [KB(avail)], self);
       end;
     end;
   end;
@@ -5276,7 +5276,7 @@ begin
      (fPermFilesPath = '') then
     raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
   // retrieve the local network interface (in inherited THttpPeerCrypt)
-  SelectNetworkInterface; // fSettings should have been defined
+  AfterSettings; // fSettings should have been defined
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
