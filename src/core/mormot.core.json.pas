@@ -4457,6 +4457,7 @@ function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   info: TGetJsonField;
+  tmp: shortstring;
 begin
   result := 0;
   if (P = nil) or
@@ -4468,7 +4469,7 @@ begin
         (P^ <> #0) do
     inc(P);
   if P^ = '[' then
-  begin
+  begin // stored as JSON array
     repeat
       inc(P)
     until (P^ > ' ') or
@@ -4501,7 +4502,14 @@ begin
     info.Json := P;
     info.GetJsonField;
     P := info.Json;
-    SetQWord(info.Value, result);
+    if info.WasString then // stored as CSV text (e.g. from a .INI file)
+      while info.Value <> nil do
+      begin
+        GetNextItemShortString(info.Value, @tmp);
+        SetNamesValue(Names, MinValue, MaxValue, @tmp[1], ord(tmp[0]), result);
+      end
+    else // stored as a 64-bit unsigned integer
+      SetQWord(info.Value, result);
     EndOfObject := info.EndOfObject;
   end;
 end;
