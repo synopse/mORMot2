@@ -1403,7 +1403,8 @@ type
     fInterfaceFilter: TMacAddressFilter;
     fOptions: THttpPeerCacheOptions;
     fLimitMBPerSec, fLimitClientCount,
-    fBroadcastTimeoutMS, fBroadcastMaxResponses, fRejectInstablePeersMin,
+    fBroadcastTimeoutMS, fBroadcastMaxResponses, fHttpTimeoutMS,
+    fRejectInstablePeersMin,
     fCacheTempMaxMB, fCacheTempMaxMin,
     fCacheTempMinBytes, fCachePermMinBytes: integer;
     fInterfaceName: RawUtf8;
@@ -1413,7 +1414,7 @@ type
     // - i.e. Port=8089, LimitMBPerSec=10, LimitClientCount=32,
     // RejectInstablePeersMin=4, CacheTempMaxMB=1000, CacheTempMaxMin=60,
     // CacheTempMinBytes=CachePermMinBytes=2048,
-    // BroadcastTimeoutMS=10 and BroadcastMaxResponses=24
+    // BroadcastTimeoutMS=10 HttpTimeoutMS=50 and BroadcastMaxResponses=24
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1499,6 +1500,10 @@ type
     // - default is 24
     property BroadcastMaxResponses: integer
       read fBroadcastMaxResponses write fBroadcastMaxResponses;
+    /// the socket level timeout for HTTP requests
+    // - default to very low 50 ms because should be local
+    property HttpTimeoutMS: integer
+      read fHttpTimeoutMS write fHttpTimeoutMS;
   end;
 
   THttpPeerCache = class;
@@ -4901,6 +4906,7 @@ begin
   fCachePermMinBytes := 2048;
   fBroadcastTimeoutMS := 10;
   fBroadcastMaxResponses := 24;
+  fHttpTimeoutMS := 50;
 end;
 
 
@@ -5402,8 +5408,8 @@ function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
 var
   req: THttpPeerCacheMessage;
   resp : THttpPeerCacheMessageDynArray;
-  head, ip, u: RawUtf8;
   fn: TFileName;
+  u: RawUtf8;
   local: TFileStreamEx;
   tix: cardinal;
   brdcst, alone: boolean;
@@ -5421,6 +5427,9 @@ var
   end;
 
   procedure SendRespToClient(retry: boolean);
+  var
+    tls: boolean;
+    head, ip: RawUtf8;
   begin
     try
       // compute the call parameters and the request bearer
@@ -5434,10 +5443,11 @@ var
         FreeAndNil(fClient);
       if fClient = nil then
       begin
-        fClient := THttpClientSocket.Create;
-        fClient.TLS.IgnoreCertificateErrors := true; // for a self-signed server
-        fClient.OpenBind(
-          ip, fPort, {bind=}false, pcoSelfSignedHttps in fSettings.Options);
+        tls := pcoSelfSignedHttps in fSettings.Options;
+        fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
+        fClient.TLS.IgnoreCertificateErrors := tls;
+        fClient.OpenBind(ip, fPort, {bind=}false, tls);
+        fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
       end;
       // makes the GET request, optionally with the needed range bytes
       fClient.RangeStart := req.RangeStart;
