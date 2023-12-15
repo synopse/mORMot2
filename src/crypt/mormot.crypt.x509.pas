@@ -1004,7 +1004,7 @@ type
   // certificates, a list of signed CRL (received from a CA) and a list
   // of unsigned CRL (manually registered via the Revoke method)
   // - Certification Path Validation follows RFC 5280 section 6 requirements
-  // - published here to make it expandable if needed by proper inheritance
+  // - published here to make it expandable if needed (by inheritance)
   TCryptStoreX509 = class(TCryptStore)
   protected
     fTrust: TCryptCertList;
@@ -4225,7 +4225,8 @@ var
   id: PRawByteString;
   idcount, ownertag: integer;
 begin
-  ownertag := fIsRevokedTag; // multi-thread safety: get sequence before searches
+  // multi-thread safety: get tag sequence number before searches
+  ownertag := fIsRevokedTag;
   // retrieve the AKID of this certificate (maybe SKID if self-signed)
   id := pointer(cert.fRawAuthorityKeyIdentifier);
   if id = nil then
@@ -4260,7 +4261,7 @@ begin
     if flags < 0 then
       result := TCryptCertRevocationReason(-(flags + 1)) // revoked
     else
-      result := ComputeIsRevoked(cert); // ask both TX509CrlList
+      result := ComputeIsRevoked(cert); // ask once both TX509CrlList
 end;
 
 function TCryptStoreX509.IsRevoked(const cert: ICryptCert): TCryptCertRevocationReason;

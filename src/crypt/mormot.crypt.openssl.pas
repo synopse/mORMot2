@@ -660,9 +660,11 @@ function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boo
 // - to be typically called after function OpenSslInitialize() by your project
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.crypt.ecc256r1 functions to use OpenSSL which is much
-// faster than our stand-alone C/pascal version
-// - register OpenSSL for our Asym() and Cert() high-level factory (via hidden
-// TCryptAsymOsl and TCryptCertAlgoOpenSsl class)
+// faster than our stand-alone pure pascal version
+// - register OpenSSL for our Asym() and Cert() high-level factory, and
+// also for CryptPublicKey[] and CryptPrivateKey[]
+// - RegisterX509 from mormot.crypt.x509.pas can be called after this procedure,
+// to register TCryptCertAlgoX509 with ckaEcc384, ckaEcc512 and ckaEdDSA
 procedure RegisterOpenSsl;
 
 type
@@ -3410,7 +3412,7 @@ begin
       if caa = caaES256 then
         // mormot.crypt.ecc has less overhead (at least with OpenSSL 3.0)
         continue;
-      CryptPublicKey[CAA_CKA[caa]] := TCryptPublicKeyOpenSsl;
+      CryptPublicKey[CAA_CKA[caa]]  := TCryptPublicKeyOpenSsl;
       CryptPrivateKey[CAA_CKA[caa]] := TCryptPrivateKeyOpenSsl;
     end;
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
