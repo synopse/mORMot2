@@ -1342,36 +1342,6 @@ type
   end;
   THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
 
-  /// abstract parent to THttpPeerCache for its cryptographic core
-  THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
-  protected
-    fSharedMagic, fFrameSeqLow: cardinal;
-    fFrameSeq: integer;
-    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
-    fAesSafe: TLightLock;
-    fAesEnc, fAesDec: TAesGcmAbstract;
-    fSharedMagicHasher: THasher;
-    fLog: TSynLogClass;
-    fMac: TMacAddress;
-    fUuid: TGuid;
-    procedure SelectNetworkInterface(const aInterfaceName: RawUtf8); virtual;
-    function CurrentConnections: integer; virtual;
-    procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
-      out aMsg: THttpPeerCacheMessage); virtual;
-    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
-    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
-      out aMsg: THttpPeerCacheMessage): boolean;
-    function BearerDecode(const aBearerToken: RawUtf8;
-      out aMsg: THttpPeerCacheMessage): boolean; virtual;
-  public
-    /// initialize the cryptography of this peer-to-peer node instance
-    // - warning: inherited class should also call SelectNetworkInterface()
-    constructor Create(const aSharedSecret: RawByteString;
-      aSharedMagicAlgo: TCrc32Algo); reintroduce;
-    /// finalize this class instance
-    destructor Destroy; override;
-  end;
-
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
   // hash nibble) within CacheTempPath to reduce folder fragmentation
@@ -1508,6 +1478,45 @@ type
 
   THttpPeerCache = class;
 
+  /// abstract parent to THttpPeerCache for its cryptographic core
+  THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
+  protected
+    fSettings: THttpPeerCacheSettings;
+    fSharedMagic, fFrameSeqLow: cardinal;
+    fFrameSeq: integer;
+    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fAesSafe: TLightLock;
+    fAesEnc, fAesDec: TAesGcmAbstract;
+    fSharedMagicHasher: THasher;
+    fLog: TSynLogClass;
+    fPort, fIpPort: RawUtf8;
+    fClientSafe: TLightLock;
+    fClient: THttpClientSocket;
+    fInstable: THttpAcceptBan;    // from Settings.RejectInstablePeersMin
+    fMac: TMacAddress;
+    fUuid: TGuid;
+    procedure SelectNetworkInterface; virtual;
+    function CurrentConnections: integer; virtual;
+    procedure MessageInit(aKind: THttpPeerCacheMessageKind; aSeq: cardinal;
+      out aMsg: THttpPeerCacheMessage); virtual;
+    function MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
+    function MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
+      out aMsg: THttpPeerCacheMessage): boolean;
+    function BearerDecode(const aBearerToken: RawUtf8;
+      out aMsg: THttpPeerCacheMessage): boolean; virtual;
+    function SendRespToClient(const aRequest: THttpPeerCacheMessage;
+      var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
+      aOutStream: TStreamRedirect; aRetry: boolean): integer;
+  public
+    /// initialize the cryptography of this peer-to-peer node instance
+    // - warning: inherited class should also call SelectNetworkInterface once
+    // fSettings is defined
+    constructor Create(const aSharedSecret: RawByteString;
+      aSharedMagicAlgo: TCrc32Algo); reintroduce;
+    /// finalize this class instance
+    destructor Destroy; override;
+  end;
+
   /// exception class raised on THttpPeerCache issues
   EHttpPeerCache = class(ESynException);
 
@@ -1521,17 +1530,21 @@ type
     fResp: THttpPeerCacheMessageDynArray;
     fRespCount: integer;
     fCurrentSeq: cardinal;
+    fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     fAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
+    fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
     procedure OnShutdown; override; // = Destroy
-    function Broadcast(aSingleRep: boolean;
-      const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+    function Broadcast(const aReq: THttpPeerCacheMessage;
+      out aAlone: boolean): THttpPeerCacheMessageDynArray;
     procedure AddResponse(const aMessage: THttpPeerCacheMessage);
     function GetResponses(aSeq: cardinal): THttpPeerCacheMessageDynArray;
   public
     /// initialize the background UDP server thread
     constructor Create(Owner: THttpPeerCache); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
   published
     property Sent: integer
       read fSent;
@@ -1545,27 +1558,18 @@ type
   // - will maintain its own local folders of cached files, stored by hash
   THttpPeerCache = class(THttpPeerCrypt, IWGetAlternate)
   protected
-    fSettings: THttpPeerCacheSettings;
     fHttpServer: THttpServerGeneric;
     fUdpServer: THttpPeerCacheThread;
-    fClientSafe: TLightLock;
-    fClient: THttpClientSocket;
-    fPort: RawUtf8;
     fPermFilesPath, fTempFilesPath: TFileName;
     fTempFilesMaxSize: Int64; // from Settings.CacheTempMaxMB
     fTempCurrentSize: Int64;
     fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
-    fInstable: THttpAcceptBan;    // from Settings.RejectInstablePeersMin
-    fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize MessageBroadcast
-    fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
     fFilesSafe: TOSLock; // concurrent cached files access
     // most of these internal methods are virtual for proper customization
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
     function CurrentConnections: integer; override;
-    function MessageBroadcast(const aReq: THttpPeerCacheMessage;
-      out aAlone: boolean): THttpPeerCacheMessageDynArray; virtual;
     function ComputeFileName(aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName;
       aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
@@ -4743,20 +4747,31 @@ end;
 
 { THttpPeerCrypt }
 
-procedure THttpPeerCrypt.SelectNetworkInterface(const aInterfaceName: RawUtf8);
+procedure THttpPeerCrypt.SelectNetworkInterface;
 begin
-  if aInterfaceName <> '' then
-    if not GetMainMacAddress(fMac, aInterfaceName, {UpAndDown=}true) then
+  if fSettings = nil then
+    raise EHttpPeerCache.CreateUtf8('%.SelectNetworkInterface(nil)', [self]);
+  fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
+  if fSettings.InterfaceName <> '' then
+    if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
       // allow to pickup "down" interfaces if name is explicit
       raise EHttpPeerCache.CreateUtf8(
         '%.Create: impossible to find the [%] network interface',
-        [self, aInterfaceName]);
+        [self, fSettings.InterfaceName]);
   if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
     raise EHttpPeerCache.CreateUtf8(
       '%.Create: impossible to find a local network interface', [self]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fNetMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
+  UInt32ToUtf8(fSettings.Port, fPort);
+  FormatUtf8('%:%', [fMac.IP, fPort], fIpPort); // UDP/TCP bound to this network
+  if fSettings.RejectInstablePeersMin > 0 then
+    fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
+  if fInstable <> nil then
+    fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
+  fLog.Add.Log(sllDebug, 'Create: SelectNetworkInterface=% as % (broadcast=%)',
+    [fMac.Name, fIpPort, fMac.Broadcast], self);
 end;
 
 function THttpPeerCrypt.CurrentConnections: integer;
@@ -4859,8 +4874,66 @@ begin
             (aMsg.Kind = pcfBearer);
 end;
 
-constructor THttpPeerCrypt.Create(const aSharedSecret: RawByteString;
-  aSharedMagicAlgo: TCrc32Algo);
+function THttpPeerCrypt.SendRespToClient(const aRequest: THttpPeerCacheMessage;
+  var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
+  aOutStream: TStreamRedirect; aRetry: boolean): integer;
+
+  procedure SendRespToClientFailed;
+  begin
+    if (fInstable <> nil) and // RejectInstablePeersMin
+       not aRetry then         // not from partial request before broadcast
+      fInstable.BanIP(aResp.IP4);
+    FreeAndNil(fClient);
+    fClientIP4 := 0;
+    result := 0; // will fallback to regular GET on the main repository
+  end;
+
+var
+  tls: boolean;
+  head, ip: RawUtf8;
+begin
+  try
+    // compute the call parameters and the request bearer
+    IP4Text(@aResp.IP4, ip);
+    fLog.Add.Log(sllTrace, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
+    aResp.Kind := pcfBearer; // authorize OnBeforeBody with response message
+    head := AuthorizationBearer(BinToBase64uri(MessageEncode(aResp)));
+    // ensure we have the expected HTTP/HTTPS connection on the right peer
+    if (fClient <> nil) and
+       (fClientIP4 <> aResp.IP4) then
+      FreeAndNil(fClient);
+    if fClient = nil then
+    begin
+      tls := pcoSelfSignedHttps in fSettings.Options;
+      fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
+      fClient.TLS.IgnoreCertificateErrors := tls;
+      fClient.OpenBind(ip, fPort, {bind=}false, tls);
+      fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
+    end;
+    // makes the GET request, optionally with the needed range bytes
+    fClient.RangeStart := aRequest.RangeStart;
+    fClient.RangeEnd := aRequest.RangeEnd;
+    if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
+      aOutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
+    result := fClient.Request(
+      aUrl, 'GET', 30000, head, '',  '', aRetry, nil, aOutStream);
+    fLog.Add.Log(sllTrace, 'OnDownload: request=%', [result], self);
+    if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
+      fClientIP4 := aResp.IP4 // success or not found (HTTP_NOCONTENT)
+    else
+      SendRespToClientFailed; // error downloading from local peer
+  except
+    on E: Exception do
+    begin
+      fLog.Add.Log(sllWarning, 'OnDownload: % failed as %',
+        [aUrl, E.ClassType], self);
+      SendRespToClientFailed;
+    end;
+  end;
+end;
+
+constructor THttpPeerCrypt.Create(
+  const aSharedSecret: RawByteString; aSharedMagicAlgo: TCrc32Algo);
 var
   key: THash256Rec;
 begin
@@ -4882,10 +4955,12 @@ end;
 
 destructor THttpPeerCrypt.Destroy;
 begin
-  inherited Destroy;
+  FreeAndNilSafe(fClient);
+  FreeAndNil(fInstable);
   FreeAndNil(fAesEnc);
   FreeAndNil(fAesDec);
   fSharedMagic := 0;
+  inherited Destroy;
 end;
 
 
@@ -4914,10 +4989,20 @@ end;
 
 constructor THttpPeerCacheThread.Create(Owner: THttpPeerCache);
 begin
+  fBroadcastSafe.Init;
   fOwner := Owner;
   fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
+  if pcoUseFirstResponse in fOwner.Settings.Options then
+    fBroadcastEvent := TSynEvent.Create;
   inherited Create(
     fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udpPeerServer', 100);
+end;
+
+destructor THttpPeerCacheThread.Destroy;
+begin
+  inherited Destroy;
+  FreeAndNil(fBroadcastEvent);
+  fBroadcastSafe.Done;
 end;
 
 const
@@ -5002,10 +5087,10 @@ begin
         begin
           inc(fResponses);
           AddResponse(fMsg);
-          if fOwner.fBroadcastEvent <> nil then // pcoUseFirstResponse
+          if fBroadcastEvent <> nil then // pcoUseFirstResponse
           begin
             fCurrentSeq := 0;                   // ignore next responses
-            fOwner.fBroadcastEvent.SetEvent;    // notify MessageBroadcast
+            fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
       pcfResponseNone:
@@ -5016,40 +5101,51 @@ begin
     fOwner.fInstable.BanIP(remote.IP4);
 end;
 
-function THttpPeerCacheThread.Broadcast(aSingleRep: boolean;
-  const aReq: THttpPeerCacheMessage): THttpPeerCacheMessageDynArray;
+function THttpPeerCacheThread.Broadcast(const aReq: THttpPeerCacheMessage;
+  out aAlone: boolean): THttpPeerCacheMessageDynArray;
 var
   sock: TNetSocket;
   res: TNetResult;
+  singlerep: boolean;
   frame: RawByteString;
 begin
   result := nil;
-  // setup this broadcasting sequence
-  frame := fOwner.MessageEncode(aReq);
-  fCurrentSeq := aReq.Seq; // ignore any other responses
-  fResponses := 0; // reset counter for this fCurrentSeq (not late)
-  if aSingleRep then
-    fOwner.fBroadcastEvent.ResetEvent;
-  // broadcast request over the UDP sub-net of the selected network interface
-  sock := fAddr.NewSocket(nlUdp);
-  if sock = nil then
+  if self = nil then
     exit;
+  frame := fOwner.MessageEncode(aReq);
+  fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
-    sock.SetBroadcast(true);
-    res := sock.SendTo(pointer(frame), length(frame), fAddr);
-    fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
-      [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
-    if res <> nrOk then
+    // setup this broadcasting sequence
+    fCurrentSeq := aReq.Seq; // ignore any other responses
+    singlerep := (aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil);
+    if singlerep then
+      fBroadcastEvent.ResetEvent;
+    fResponses := 0; // reset counter for this fCurrentSeq (not late)
+    // broadcast request over the UDP sub-net of the selected network interface
+    sock := fAddr.NewSocket(nlUdp);
+    if sock = nil then
       exit;
+    try
+      sock.SetBroadcast(true);
+      res := sock.SendTo(pointer(frame), length(frame), fAddr);
+      fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
+        [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
+      if res <> nrOk then
+        exit;
+    finally
+      sock.Close;
+    end;
+    // wait for the (first) response(s)
+    if singlerep then
+      fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS)
+    else
+      SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
+    result := GetResponses(aReq.Seq);
   finally
-    sock.Close;
+    fCurrentSeq := 0; // ignore any late responses
+    aAlone := (fResponses = 0);
+    fBroadcastSafe.UnLock;
   end;
-  // wait for the (first) response(s)
-  if aSingleRep then
-    fOwner.fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS)
-  else
-    SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
-  result := GetResponses(aReq.Seq);
   fOwner.fLog.Add.Log(sllTrace, 'Broadcast: responses=%/%',
     [length(result), fResponses], self);
 end;
@@ -5112,6 +5208,7 @@ end;
 
 procedure THttpPeerCacheThread.OnShutdown;
 begin
+  // nothing to be done in our case
 end;
 
 
@@ -5123,15 +5220,13 @@ constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   aHttpServerThreadCount: integer; aSharedMagicAlgo: TCrc32Algo);
 var
   log: ISynLog;
-  ip: RawUtf8;
   avail, existing: Int64;
 begin
   fLog := TSynLog;
   log := fLog.Enter('Create threads=% checksum=% secretlen=%',
     [aHttpServerThreadCount, ToText(aSharedMagicAlgo)^, length(aSharedSecret)], self);
   fFilesSafe.Init;
-  fBroadcastSafe.Init;
-  // intializz the cryptographic state in inherited THttpPeerCrypt.Create
+  // intialize the cryptographic state in inherited THttpPeerCrypt.Create
   inherited Create(aSharedSecret, aSharedMagicAlgo);
   // setup the processing options
   if aSettings = nil then
@@ -5143,8 +5238,6 @@ begin
     fSettings := aSettings;
   fVerboseLog := (pcoVerboseLog in fSettings.Options) and
                  (sllTrace in fLog.Family.Level);
-  if fSettings.RejectInstablePeersMin > 0 then
-    fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
   // check the temporary files cache folder and its maximum allowed size
   if fSettings.CacheTempPath = '*' then // not customized
     fSettings.CacheTempPath := TemporaryFileName;
@@ -5177,26 +5270,14 @@ begin
   if (fTempFilesPath = '') and
      (fPermFilesPath = '') then
     raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
-  // log current settings
-  if Assigned(log) then
-    log.Log(sllTrace, 'Create: with %', [fSettings], self);
-  // retrieve the local network interface to be used
-  SelectNetworkInterface(fSettings.InterfaceName);
-  UInt32ToUtf8(fSettings.Port, fPort);
-  FormatUtf8('%:%', [fMac.IP, fPort], ip); // bound to this network
-  if Assigned(log) then
-    log.Log(sllDebug, 'Create: SelectNetworkInterface = % as % (broadcast = %)',
-      [fMac.Name, ip, fMac.Broadcast], self);
-  if fInstable <> nil then
-    fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
-  if pcoUseFirstResponse in fSettings.Options then
-    fBroadcastEvent := TSynEvent.Create;
+  // retrieve the local network interface (in inherited THttpPeerCrypt)
+  SelectNetworkInterface; // fSettings should have been defined
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
     log.Log(sllDebug, 'Create: started %', [fUdpServer], self);
   // start the local HTTP/HTTPS server on this interface
-  StartHttpServer(aHttpServerClass, aHttpServerThreadCount, ip);
+  StartHttpServer(aHttpServerClass, aHttpServerThreadCount, fIpPort);
   fHttpServer.ServerName := Executable.ProgramName;
   fHttpServer.OnBeforeBody := OnBeforeBody;
   fHttpServer.OnRequest := OnRequest;
@@ -5241,26 +5322,8 @@ begin
   fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
   FreeAndNil(fUdpServer);
   FreeAndNil(fHttpServer);
-  FreeAndNil(fBroadcastEvent);
-  FreeAndNilSafe(fClient);
-  FreeAndNil(fInstable);
-  fBroadcastSafe.Done;
   fFilesSafe.Done;
   inherited Destroy;
-end;
-
-function THttpPeerCache.MessageBroadcast(const aReq: THttpPeerCacheMessage;
-  out aAlone: boolean): THttpPeerCacheMessageDynArray;
-begin
-  fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
-  try
-    result := fUdpServer.Broadcast(
-      {singlerep=}(aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil), aReq);
-  finally
-    fUdpServer.fCurrentSeq := 0; // ignore any late responses
-    aAlone := (fUdpServer.fResponses = 0);
-    fBroadcastSafe.UnLock;
-  end;
 end;
 
 function THttpPeerCache.ComputeFileName(aHash: THttpPeerCacheHash): TFileName;
@@ -5405,6 +5468,7 @@ end;
 function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
   const Params: THttpClientSocketWGet; const Url: RawUtf8;
   ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
+
 var
   req: THttpPeerCacheMessage;
   resp : THttpPeerCacheMessageDynArray;
@@ -5415,60 +5479,6 @@ var
   brdcst, alone: boolean;
   log: ISynLog;
   l: TSynLog;
-
-  procedure SendRespToClientFailed(retry: boolean);
-  begin
-    if (fInstable <> nil) and // RejectInstablePeersMin
-       not retry then         // not from partial request before broadcast
-      fInstable.BanIP(resp[0].IP4);
-    FreeAndNil(fClient);
-    fClientIP4 := 0;
-    result := 0; // will fallback to regular GET on the main repository
-  end;
-
-  procedure SendRespToClient(retry: boolean);
-  var
-    tls: boolean;
-    head, ip: RawUtf8;
-  begin
-    try
-      // compute the call parameters and the request bearer
-      IP4Text(@resp[0].IP4, ip);
-      l.Log(sllTrace, 'OnDownload: request %:% %', [ip, fPort, u], self);
-      resp[0].Kind := pcfBearer; // authorize OnBeforeBody with response message
-      head := AuthorizationBearer(BinToBase64uri(MessageEncode(resp[0])));
-      // ensure we have the expected HTTP/HTTPS connection on the right peer
-      if (fClient <> nil) and
-         (fClientIP4 <> resp[0].IP4) then
-        FreeAndNil(fClient);
-      if fClient = nil then
-      begin
-        tls := pcoSelfSignedHttps in fSettings.Options;
-        fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-        fClient.TLS.IgnoreCertificateErrors := tls;
-        fClient.OpenBind(ip, fPort, {bind=}false, tls);
-        fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
-      end;
-      // makes the GET request, optionally with the needed range bytes
-      fClient.RangeStart := req.RangeStart;
-      fClient.RangeEnd := req.RangeEnd;
-      if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
-        OutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
-      result := fClient.Request(u, 'GET', 30000, head, '',  '', retry, nil, OutStream);
-      l.Log(sllTrace, 'OnDownload: request=%', [result], self);
-      if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
-        fClientIP4 := resp[0].IP4 // success or not found (HTTP_NOCONTENT)
-      else
-        SendRespToClientFailed(retry); // error downloading from local peer
-    except
-      on E: Exception do
-      begin
-        l.Log(sllWarning, 'OnDownload: % failed as %', [Url, E.ClassType], self);
-        SendRespToClientFailed(retry);
-      end;
-    end;
-  end;
-
 begin
   result := 0;
   // validate WGet caller context
@@ -5528,7 +5538,7 @@ begin
      TooSmallFile(Params, ExpectedFullSize, 'OnDownload') then
     exit; // you are too small, buddy
   // try first the current/last HTTP client (if any)
-  FormatUtf8('%/%', [Sender.Server, Url], u); // url only used for convenience
+  FormatUtf8('%/%', [Sender.Server, Url], u); // url used only for log/debugging
   if (fClient <> nil) and
      (fClientIP4 <> 0) and
      ((pcoTryLastPeer in fSettings.Options) or
@@ -5539,7 +5549,7 @@ begin
       resp[0] := req;
       resp[0].IP4 := fClientIP4; // as expected by OnBeforeBody()
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
-      SendRespToClient({asretry=}true);
+      result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
         exit; // successfull direct downloading from last peer
       result := 0; // may be HTTP_NOCONTENT if not found on this peer
@@ -5557,7 +5567,7 @@ begin
   end;
   if brdcst then
   begin
-    resp := MessageBroadcast(req, alone);
+    resp := fUdpServer.Broadcast(req, alone);
     if resp = nil then
     begin
       if (tix <> 0) and // pcoBroadcastNotAlone
@@ -5578,7 +5588,7 @@ begin
   // make the HTTP/HTTPS request corresponding to this response
   fClientSafe.Lock;
   try
-    SendRespToClient({retry=}false);
+    result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}false);
   finally
     fClientSafe.UnLock;
   end;
@@ -5590,7 +5600,7 @@ var
   alone: boolean;
 begin
   MessageInit(pcfPing, 0, req);
-  result := MessageBroadcast(req, alone);
+  result := fUdpServer.Broadcast(req, alone);
 end;
 
 function THttpPeerCache.OnBeforeBody(var aUrl, aMethod, aInHeaders,
