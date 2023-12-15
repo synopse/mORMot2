@@ -7966,6 +7966,7 @@ end;
 { ************ low-level functions manipulating bits }
 
 // naive code gives the best performance - bts [Bits] has an overhead
+// we tried with PPtrIntArray but PIntegerArray seems to generate better code
 
 function GetBit(const Bits; aIndex: PtrInt): boolean;
 begin

@@ -2171,7 +2171,7 @@ type
     /// number of bytes processed per second, since initialization of this instance
     property PerSecond: PtrInt
       read fInfo.PerSecond;
-    /// can limit the Read/Write bandwidth used, if not 0
+    /// can limit the Read/Write bytes-per-second bandwidth used, if not 0
     // - sleep so that PerSecond will keep close to this LimitPerSecond value
     property LimitPerSecond: PtrInt
       read fLimitPerSecond write fLimitPerSecond;

@@ -2551,14 +2551,14 @@ begin
         break;
       if c <> #0 then
       begin
-        if len < 254 then
+        if len < 254 then // avoid buffer overflow
         begin
           inc(len);
           D[len] := c;
         end;
         continue;
       end;
-      S := nil; // end of input
+      S := nil; // reached #0: end of input
       break;
     until false;
     while (len <> 0) and
