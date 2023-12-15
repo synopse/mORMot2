@@ -4772,8 +4772,8 @@ begin
     fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
   if fInstable <> nil then
     fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
-  fLog.Add.Log(sllDebug, 'Create: network=% as % (broadcast=%)',
-    [fMac.Name, fIpPort, fMac.Broadcast], self);
+  fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
+    [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
 end;
 
 function THttpPeerCrypt.CurrentConnections: integer;
@@ -4959,7 +4959,7 @@ begin
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
-  TSynLog.Add.Log(sllTrace, 'Create: Code=%, Seq=%',
+  TSynLog.Add.Log(sllTrace, 'Create: Code=%, Seq=#%',
     [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
   FillZero(key.b);
 end;
@@ -5286,7 +5286,7 @@ begin
   // start the local UDP server on this interface
   fUdpServer := THttpPeerCacheThread.Create(self);
   if Assigned(log) then
-    log.Log(sllDebug, 'Create: started %', [fUdpServer], self);
+    log.Log(sllTrace, 'Create: started %', [fUdpServer], self);
   // start the local HTTP/HTTPS server on this interface
   StartHttpServer(aHttpServerClass, aHttpServerThreadCount, fIpPort);
   fHttpServer.ServerName := Executable.ProgramName;
