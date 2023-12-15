@@ -1171,7 +1171,9 @@ type
     // - to be called when a setter is involved - not very fast, but safe
     function SetValue(Instance: TObject; const Value: variant): boolean;
     /// set a property value from a text value
-    // - handle simple kind of fields, e.g. converting from text into ordinal or floats
+    // - handle simple kind of fields, e.g. converting from text into ordinals
+    // or floats, and also enumerates or sets; but won't support complex types
+    // like class instances, dynamic arrays or variants
     function SetValueText(Instance: TObject; const Value: RawUtf8): boolean;
   end;
 
@@ -2200,6 +2202,7 @@ type
     /// set a field value from its UTF-8 text
     // - will convert the Text into proper ordinal or float if needed
     // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
+    // - use Prop^.SetValueText() if you want to support enumerates and sets
     function SetValueText(Data: pointer; const Text: RawUtf8): boolean;
     /// check if the Value equals the default property set in source code
     // - caller should have checked that PropDefault <> NO_DEFAULT
@@ -3948,19 +3951,21 @@ begin
     exit;
   k := TypeInfo^.Kind;
   if k in rkOrdinalTypes then
-    if ToInt64(Value, v) or
+    if ToInt64(Value, v) or // ordinal field from number
        (TypeInfo^.IsBoolean and
-        GetInt64Bool(pointer(Value), v)) then
+        GetInt64Bool(pointer(Value), v)) then // boolean from true/false/yes/no
       SetInt64Value(Instance, v)
     else if Value = '' then
       exit
-    else if k = rkEnumeration then
+    else if k = rkEnumeration then // enumertate field from text
     begin
       v := GetEnumNameValue(TypeInfo, Value, {trimlowcase=}true);
       if v < 0 then
         exit; // not a text enum
       SetOrdProp(Instance, v);
     end
+    else if k = rkSet then // set field from CSV text
+      SetOrdProp(Instance, GetSetCsvValue(TypeInfo, pointer(Value)))
     else
       exit
   else if k in rkStringTypes then
