@@ -1431,6 +1431,19 @@ type
     // - you may set 0 to disable the whole safety mechanism
     property RejectInstablePeersMin: integer
       read fRejectInstablePeersMin write fRejectInstablePeersMin;
+    /// how many milliseconds UDP broadcast should wait for a response
+    // - default is 10 ms which seems enough on a local network
+    // - on Windows, this value is indicative, likely to have 15ms resolution
+    property BroadcastTimeoutMS: integer
+      read fBroadcastTimeoutMS write fBroadcastTimeoutMS;
+    /// how many responses UDP broadcast should take into account
+    // - default is 24
+    property BroadcastMaxResponses: integer
+      read fBroadcastMaxResponses write fBroadcastMaxResponses;
+    /// the socket level timeout for HTTP requests
+    // - default to very low 50 ms because should be local
+    property HttpTimeoutMS: integer
+      read fHttpTimeoutMS write fHttpTimeoutMS;
     /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
@@ -1466,19 +1479,6 @@ type
     // - default is 2048 bytes, i.e. 2KB
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
-    /// how many milliseconds UDP broadcast should wait for a response
-    // - default is 10 ms
-    // - on Windows, this value is indicative, likely to have 15ms resolution
-    property BroadcastTimeoutMS: integer
-      read fBroadcastTimeoutMS write fBroadcastTimeoutMS;
-    /// how many responses UDP broadcast should take into account
-    // - default is 24
-    property BroadcastMaxResponses: integer
-      read fBroadcastMaxResponses write fBroadcastMaxResponses;
-    /// the socket level timeout for HTTP requests
-    // - default to very low 50 ms because should be local
-    property HttpTimeoutMS: integer
-      read fHttpTimeoutMS write fHttpTimeoutMS;
   end;
 
   THttpPeerCache = class;
@@ -5090,9 +5090,7 @@ begin
             resp.Kind := pcfResponseFull;
           DoSend;
         end;
-      pcfPong:
-        if not late then
-          AddResponse(fMsg);
+      pcfPong,
       pcfResponseFull:
         if not late then
         begin
@@ -5100,7 +5098,7 @@ begin
           AddResponse(fMsg);
           if fBroadcastEvent <> nil then // pcoUseFirstResponse
           begin
-            fCurrentSeq := 0;                   // ignore next responses
+            fCurrentSeq := 0;            // ignore next responses
             fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
@@ -5117,21 +5115,21 @@ function THttpPeerCacheThread.Broadcast(const aReq: THttpPeerCacheMessage;
 var
   sock: TNetSocket;
   res: TNetResult;
-  singlerep: boolean;
   frame: RawByteString;
+  start, stop: Int64;
 begin
   result := nil;
   if self = nil then
     exit;
+  QueryPerformanceMicroSeconds(start);
   frame := fOwner.MessageEncode(aReq);
   fBroadcastSafe.Lock; // serialize OnDownload() or Ping() calls
   try
     // setup this broadcasting sequence
+    if fBroadcastEvent <> nil then
+      fBroadcastEvent.ResetEvent; // pcoUseFirstResponse
     fCurrentSeq := aReq.Seq; // ignore any other responses
-    singlerep := (aReq.Kind = pcfRequest) and (fBroadcastEvent <> nil);
-    if singlerep then
-      fBroadcastEvent.ResetEvent;
-    fResponses := 0; // reset counter for this fCurrentSeq (not late)
+    fResponses := 0;         // reset counter for this fCurrentSeq (not late)
     // broadcast request over the UDP sub-net of the selected network interface
     sock := fAddr.NewSocket(nlUdp);
     if sock = nil then
@@ -5139,16 +5137,17 @@ begin
     try
       sock.SetBroadcast(true);
       res := sock.SendTo(pointer(frame), length(frame), fAddr);
-      fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
-        [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
+      if fOwner.fVerboseLog then
+        fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
+          [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
       if res <> nrOk then
         exit;
     finally
       sock.Close;
     end;
     // wait for the (first) response(s)
-    if singlerep then
-      fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS)
+    if fBroadcastEvent <> nil then
+      fBroadcastEvent.WaitFor(fOwner.Settings.BroadcastTimeoutMS) // first
     else
       SleepHiRes(fOwner.Settings.BroadcastTimeoutMS);
     result := GetResponses(aReq.Seq);
@@ -5157,8 +5156,10 @@ begin
     aAlone := (fResponses = 0);
     fBroadcastSafe.UnLock;
   end;
-  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: responses=%/%',
-    [length(result), fResponses], self);
+  QueryPerformanceMicroSeconds(stop);
+  fOwner.fLog.Add.Log(sllTrace, 'Broadcast: %=%/% in %',
+    [ToText(aReq.Kind)^, length(result), fResponses,
+     MicroSecToString(stop - start)], self);
 end;
 
 procedure THttpPeerCacheThread.AddResponse(
