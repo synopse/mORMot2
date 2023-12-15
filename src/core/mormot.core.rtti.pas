@@ -1539,6 +1539,10 @@ function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value; out result: ShortString;
   trimlowercase: boolean = false);
 
+/// low-level function parsing Value/ValueLen into a set, returned as 64-bit
+procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
+  Value: PUtf8Char; ValueLen: PtrInt; var Result: QWord);
+
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
 procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
@@ -5213,7 +5217,7 @@ begin
       inc(PByte(PS), PByte(PS)^ + 1); // next
     end;
     if result <> '' then
-      SetLength(result, length(result) - 1); // trim last comma
+      FakeLength(result, length(result) - 1); // trim last comma
   end;
 end;
 
@@ -5238,6 +5242,35 @@ begin
     if result[ord(result[0])] = ',' then
       dec(result[0]);
   end;
+end;
+
+procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
+  Value: PUtf8Char; ValueLen: PtrInt; var Result: QWord);
+var
+  i: integer;
+begin
+  if (Value = nil) or
+     (ValueLen = 0) then
+    exit;
+  if Value^ = '*' then
+  begin
+    if MaxValue < 32 then
+      Result := ALLBITS_CARDINAL[MaxValue + 1]
+    else
+      Result := QWord(-1);
+    exit;
+  end;
+  if MaxValue > 63 then
+    MaxValue := 63; // no need to search more than the Result number of bits
+  if Value^ in ['a'..'z'] then
+    i := FindShortStringListExact(SetNames, MaxValue, Value, ValueLen)
+  else
+    i := -1;
+  if i < 0 then
+    i := FindShortStringListTrimLowerCase(SetNames, MaxValue, Value, ValueLen);
+  if i >= MinValue then
+    SetBitPtr(@Result, i);
+  // unknown enum names (i=-1) would just be ignored
 end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);

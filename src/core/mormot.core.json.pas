@@ -4456,7 +4456,6 @@ end;
 function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
-  i: integer;
   info: TGetJsonField;
 begin
   result := 0;
@@ -4487,24 +4486,7 @@ begin
           P := nil; // invalid input (expects a JSON array of strings)
           exit;
         end;
-        if info.Value^ = '*' then
-        begin
-          if MaxValue < 32 then
-            result := ALLBITS_CARDINAL[MaxValue + 1]
-          else
-            result := QWord(-1);
-          break;
-        end;
-        if info.Value^ in ['a'..'z'] then
-          i := FindShortStringListExact(names, MaxValue, info.Value, info.ValueLen)
-        else
-          i := -1;
-        if i < 0 then
-          i := FindShortStringListTrimLowerCase(
-            names, MaxValue, info.Value, info.ValueLen);
-        if i >= MinValue then
-          SetBitPtr(@result, i);
-        // unknown enum names (i=-1) would just be ignored
+        SetNamesValue(Names, MinValue, MaxValue, info.Value, info.ValueLen, result);
       until info.EndOfObject = ']';
       P := info.Json;
       if P = nil then
