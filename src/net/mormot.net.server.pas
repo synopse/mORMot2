@@ -1272,6 +1272,11 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
   - HTTP content is not encrypted on the wire by default, because it sounds not
     mandatory on a local network, but pcoSelfSignedHttps can enable HTTPS.
   - Resulting safety is similar to what Microsoft BranchCache offers.
+  TODO:
+  - Asymmetric security using ECDH shared secret.
+  - Peer push during initial GET from main server (no need of whole content).
+  - Get Peer addresses from a file or central server instead of broadcasting.
+  - Allow binding to several network interfaces? (with runtime adaptation)
 *)
 
 type
@@ -3506,7 +3511,9 @@ begin
   result := false;
   if InterfaceNameAddressOrIP = '' then
     exit;
-  all := GetMacAddresses(UpAndDown);
+  all := GetMacAddresses(UpAndDown); // from cache
+  if all = nil then
+    exit;
   // search for exact Name / Address / IP
   m := pointer(all);
   for i := 1 to length(all) do
@@ -3528,15 +3535,11 @@ begin
   for i := 1 to length(all) do
   begin
     if IPToCardinal(m^.IP, ip4) and
-       (ip4 and mask = ip4) then
-    begin
-      if (fnd = nil) or
-         (CompareCardinal(NETHW_ORDER[fnd^.Kind], NETHW_ORDER[m^.Kind]) < 0) then
-        fnd := m; // pickup the interface with the best hardware (paranoid)
-      exit;
-    end
-    else
-      inc(m);
+       (ip4 and mask = ip4) and
+       ((fnd = nil) or
+        (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
+      fnd := m; // pickup the interface with the best hardware (paranoid)
+    inc(m);
   end;
   if fnd = nil then
     exit;
@@ -4738,7 +4741,8 @@ end;
 procedure THttpPeerCrypt.SelectNetworkInterface(const aInterfaceName: RawUtf8);
 begin
   if aInterfaceName <> '' then
-    if not GetMainMacAddress(fMac, aInterfaceName) then
+    if not GetMainMacAddress(fMac, aInterfaceName, {UpAndDown=}true) then
+      // allow to pickup "down" interfaces if name is explicit
       raise EHttpPeerCache.CreateUtf8(
         '%.Create: impossible to find the [%] network interface',
         [self, aInterfaceName]);
