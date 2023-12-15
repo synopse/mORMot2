@@ -1421,20 +1421,18 @@ var
   P: PShortString;
   name: ShortString;
 begin
-  // instance class translated e.g. THttpClientSocket into 'HCS'
-  P := ClassNameShort(Instance);
+  // instance class name reduced to uppercase e.g. THttpClientSocket into 'HCS'
   name[0] := #0;
+  P := ClassNameShort(Instance);
   for i := 2 to ord(P^[0]) do
     if P^[i] in ['A'..'Z'] then
       {%H-}AppendShortChar(P^[i], name);
-  if name[0] <> #0 then
-    P := @name;
   // note: the framework would identify 'mORMot' pattern in the user-agent
   // header to enable advanced behavior e.g. about JSON transmission
   FormatUtf8(
     'Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/' +
     SYNOPSE_FRAMEWORK_VERSION + ' %/%',
-    [P^, Executable.ProgramName, Executable.Version.Major], result);
+    [name, Executable.ProgramName, Executable.Version.Major], result);
 end;
 
 
