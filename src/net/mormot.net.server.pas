@@ -741,8 +741,8 @@ function GetMainMacAddress(out Mac: TMacAddress;
   Filter: TMacAddressFilter = []): boolean; overload;
 
 /// get a network interface from its TMacAddress main fields
-// - search is case insensitive for TMacAddress.Name and Address fields, and
-// will also search for the exact IP (and eventually for the IP as mask)
+// - search is case insensitive for TMacAddress.Name and Address fields or as
+// exact IP, and eventually as IP bitmask pattern (e.g. 192.168.1.255)
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8;
   UpAndDown: boolean = false): boolean; overload;
@@ -1313,10 +1313,13 @@ type
     /// the UUID of the Sender
     Uuid: TGuid;
     /// the local IPv4 which sent this frame
+    // - e.g. 192.168.1.1
     IP4: cardinal;
     /// the IPv4 network mask of the local network interface
-    NetMaskIP4: cardinal;
+    // - e.g. 255.255.255.0
+    MaskIP4: cardinal;
     /// the IPv4 broadcast address the local network interface
+    // - e.g. 192.168.1.255
     BroadcastIP4: cardinal;
     /// the link speed in bits per second of the local network interface
     Speed: cardinal;
@@ -1396,7 +1399,9 @@ type
     /// allow to customize the process
     property Options: THttpPeerCacheOptions
       read fOptions write fOptions;
-    /// local TMacAddress.Name, Address or (mask) IP to be used for UDP and TCP
+    /// local TMacAddress.Name, Address or IP to be used for UDP and TCP
+    // - Name and Address will be searched case-insensitive
+    // - IP could be exact or eventually a bitmask pattern (e.g. 192.168.1.255)
     // - if not set, will fallback to the best local makEthernet/makWifi network
     // with broadcasting abilities
     // - matching TMacAddress.IP will be used with the Port property value to
@@ -1484,7 +1489,7 @@ type
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
-    fIP4, fNetMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
+    fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
     fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fSharedMagicHasher: THasher;
@@ -1492,7 +1497,7 @@ type
     fPort, fIpPort: RawUtf8;
     fClientSafe: TLightLock;
     fClient: THttpClientSocket;
-    fInstable: THttpAcceptBan;    // from Settings.RejectInstablePeersMin
+    fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
     fUuid: TGuid;
     procedure SelectNetworkInterface; virtual;
@@ -3513,7 +3518,7 @@ function GetMainMacAddress(out Mac: TMacAddress;
 var
   i: PtrInt;
   all: TMacAddressDynArray;
-  mask, ip4: cardinal;
+  pattern, ip4: cardinal;
   m, fnd: ^TMacAddress;
 begin
   // retrieve the current network interfaces
@@ -3536,15 +3541,15 @@ begin
     end
     else
       inc(m);
-  // fallback to search for InterfaceNameAddressOrIP as network mask
-  if not IPToCardinal(InterfaceNameAddressOrIP, mask) then
+  // fallback to search as network bitmask pattern
+  if not IPToCardinal(InterfaceNameAddressOrIP, pattern) then
     exit;
   fnd := nil;
   m := pointer(all);
   for i := 1 to length(all) do
   begin
     if IPToCardinal(m^.IP, ip4) and
-       (ip4 and mask = ip4) and
+       (ip4 and pattern = ip4) and // e.g. 192.168.1.2 and 192.168.1.255
        ((fnd = nil) or
         (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind])) then
       fnd := m; // pickup the interface with the best hardware (paranoid)
@@ -4762,7 +4767,7 @@ begin
     raise EHttpPeerCache.CreateUtf8(
       '%.Create: impossible to find a local network interface', [self]);
   IPToCardinal(fMac.IP, fIP4);
-  IPToCardinal(fMac.NetMask, fNetMaskIP4);
+  IPToCardinal(fMac.NetMask, fMaskIP4);
   IPToCardinal(fMac.Broadcast, fBroadcastIP4);
   UInt32ToUtf8(fSettings.Port, fPort);
   FormatUtf8('%:%', [fMac.IP, fPort], fIpPort); // UDP/TCP bound to this network
@@ -4770,7 +4775,7 @@ begin
     fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
   if fInstable <> nil then
     fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
-  fLog.Add.Log(sllDebug, 'Create: SelectNetworkInterface=% as % (broadcast=%)',
+  fLog.Add.Log(sllDebug, 'Create: network=% as % (broadcast=%)',
     [fMac.Name, fIpPort, fMac.Broadcast], self);
 end;
 
@@ -4792,7 +4797,7 @@ begin
   aMsg.Kind := aKind;
   aMsg.Uuid := fUuid;
   aMsg.IP4 := fIP4;
-  aMsg.NetMaskIP4 := fNetMaskIP4;
+  aMsg.MaskIP4 := fMaskIP4;
   aMsg.BroadcastIP4 := fBroadcastIP4;
   aMsg.Speed := fMac.Speed;
   aMsg.Hardware := fMac.Kind;
@@ -4881,7 +4886,7 @@ function THttpPeerCrypt.SendRespToClient(const aRequest: THttpPeerCacheMessage;
   procedure SendRespToClientFailed;
   begin
     if (fInstable <> nil) and // RejectInstablePeersMin
-       not aRetry then         // not from partial request before broadcast
+       not aRetry then        // not from partial request before broadcast
       fInstable.BanIP(aResp.IP4);
     FreeAndNil(fClient);
     fClientIP4 := 0;
@@ -4995,7 +5000,7 @@ begin
   if pcoUseFirstResponse in fOwner.Settings.Options then
     fBroadcastEvent := TSynEvent.Create;
   inherited Create(
-    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udpPeerServer', 100);
+    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udp-PeerCache', 100);
 end;
 
 destructor THttpPeerCacheThread.Destroy;
@@ -5828,7 +5833,7 @@ begin
       [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid),
        IP4ToShort(@IP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
-       IP4ToShort(@NetMaskIP4), IP4ToShort(@BroadcastIP4), Speed,
+       IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        hex, algo, Size], result);
 end;
 

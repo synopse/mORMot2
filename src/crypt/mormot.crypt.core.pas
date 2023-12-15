@@ -5560,7 +5560,7 @@ begin
   begin
     // for AES-GCM, no nonce needed: use standard encrypted + tag layout
     if not MacSetNonce(encrypt, nonce{%H-}, Associated) then
-      exit; // AEAD data should be assigned to fAssociated before cipher blocks
+      exit; // AEAD data is assigned to fAssociated before cipher blocks
     if Encrypt then
     begin
       len := length(Data);
