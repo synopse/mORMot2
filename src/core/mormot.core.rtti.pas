@@ -1467,6 +1467,12 @@ procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean = false);
 procedure FinalizeObject(Value: TObject);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// fill a class instance properties from command line switches
+// - SwitchPrefix + property name will be searched in CommandLine.Names[]
+// - is typically used to fill a settings class instance
+function SetObjectFromExecutableCommandLine(Value: TObject;
+  const SwitchPrefix: RawUtf8; CommandLine: TExecutableCommandLine = nil): boolean;
+
 
 { *************** Enumerations RTTI }
 
@@ -9250,6 +9256,30 @@ begin
   result := true;
 end;
 
+function SetObjectFromExecutableCommandLine(Value: TObject;
+  const SwitchPrefix: RawUtf8; CommandLine: TExecutableCommandLine): boolean;
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  v: RawUtf8;
+  i: integer;
+begin
+  result := false;
+  if CommandLine = nil then
+    CommandLine := Executable.Command;
+  if (Value = nil) or
+     (CommandLine.Values = nil) then
+    exit;
+  rc := Rtti.RegisterClass(Value.ClassType);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
+  begin
+    if CommandLine.Get([SwitchPrefix + p^.Name], v) and
+       p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
+      result := true;
+    inc(p);
+  end;
+end;
 
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
 
