@@ -1534,7 +1534,7 @@ type
     fRespCount: integer;
     fCurrentSeq: cardinal;
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
-    fAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
+    fAddr: TNetAddr;              // from fBroadcastIP4 + fSettings.Port
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
@@ -4809,7 +4809,7 @@ end;
 // to crc32c(): caMD5/caSha1 are almost as slow as AES-GCM-128 itself ;)
 // - on x86_64 THttpPeerCache: 14,003 assertions passed  17.39ms
 //   2000 messages in 413us i.e. 4.6M/s, aver. 206ns, 886.7 MB/s  = AES-GCM-128
-//   10000 altered in 205us i.e. 46.5M/s, aver. 20ns, 8.7 GB/s    = crc32c()
+//   10000 altered in 135us i.e. 70.6M/s, aver. 13ns, 13.2 GB/s   = crc32c()
 
 function THttpPeerCrypt.MessageEncode(const aMsg: THttpPeerCacheMessage): RawByteString;
 var
@@ -4833,36 +4833,41 @@ end;
 
 function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
   out aMsg: THttpPeerCacheMessage): boolean;
-var
-  encoded, plain: RawByteString;
+
+  procedure DoDecode; // sub-function to avoid any hidden try..finally
+  var
+    encoded, plain: RawByteString;
+  begin
+    // AES-GCM-128 decoding and authentication
+    FastSetRawByteString(encoded, aFrame, aFrameLen);
+    fAesSafe.Lock;
+    try
+      plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
+    finally
+      fAesSafe.UnLock;
+    end;
+    // check consistency of the decoded THttpPeerCacheMessage value
+    if length(plain) <> SizeOf(aMsg) then
+      exit;
+    MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
+    if aMsg.Kind in PCF_RESPONSE then
+      if (aMsg.Seq < fFrameSeqLow) or
+         (aMsg.Seq > cardinal(fFrameSeq)) then
+        exit;
+    result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
+              (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
+              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
+              (aMsg.RangeEnd >= aMsg.RangeStart);
+  end;
+
 begin
   result := false;
   // quickly reject any fuzzing attempt
   dec(aFrameLen, 4);
-  if (aFrameLen < SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) or
-     (PCardinal(aFrame + aFrameLen)^ <>
+  if (aFrameLen >= SizeOf(aMsg) + SizeOf(TAesBlock) * 2 {iv+padding}) and
+     (PCardinal(aFrame + aFrameLen)^ =
        crc32c(fSharedMagic, aFrame, aFrameLen)) then
-    exit;
-  // AES-GCM-128 decoding and authentication
-  FastSetRawByteString(encoded, aFrame, aFrameLen);
-  fAesSafe.Lock;
-  try
-    plain := fAesDec.MacAndCrypt(encoded, {enc=}false, {iv=}true);
-  finally
-    fAesSafe.UnLock;
-  end;
-  // check consistency of the decoded THttpPeerCacheMessage value
-  if length(plain) <> SizeOf(aMsg) then
-    exit;
-  MoveFast(pointer(plain)^, aMsg, SizeOf(aMsg));
-  if aMsg.Kind in PCF_RESPONSE then
-    if (aMsg.Seq < fFrameSeqLow) or
-       (aMsg.Seq > cardinal(fFrameSeq)) then
-      exit;
-  result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
-            (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-            (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
-            (aMsg.RangeEnd >= aMsg.RangeStart);
+    DoDecode;
 end;
 
 function THttpPeerCrypt.BearerDecode(const aBearerToken: RawUtf8;
