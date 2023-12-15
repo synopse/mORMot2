@@ -938,6 +938,7 @@ begin
   try
     hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
     hps.CachePermPath := Executable.ProgramFilePath + 'peercacheperm';
+    hps.Port := 8008; // don't use default 8089
     hps.Options := [pcoVerboseLog {,pcoSelfSignedHttps}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');
@@ -970,6 +971,8 @@ begin
         NotifyTestSpeed('altered', n, n * SizeOf(msg), @timer);
         Check(hpc.MessageDecode(pointer(tmp), length(tmp), msg2));
         Check(CompareMem(@msg, @msg2, SizeOf(msg)));
+        for i := 1 to 10 do
+          Check(hpc.Ping = nil);
       finally
         hpc.Free;
       end;

@@ -5355,18 +5355,14 @@ var
   cc: TComplexClass;
   v: variant;
 begin
-  cc := TComplexClass.Create;
-  try
-    CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');
-    Check(GetValueObject(cc, 'arr', v));
-    CheckEqual(_Safe(v)^.ToJson, '[]');
-    cc.arr := TRawUtf8DynArrayFrom(['win32', 'win64']);
-    CheckEqual(RawUtf8ArrayToCsv(cc.arr), 'win32,win64');
-    Check(GetValueObject(cc, 'arr', v));
-    CheckEqual(_Safe(v)^.ToJson, '["win32","win64"]');
-  finally
-    cc.Free;
-  end;
+  // CSV to set
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'enFirst'), 1, 'TSetMyEnum1');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'entwo'), 2, 'TSetMyEnum2');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'two,first'), 3, 'TSetMyEnum3');
+  checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), '*'), 31, 'TSetMyEnum*');
+  // JSON to set
   ep := [enTwo];
   CheckEqual(byte(ep), 2);
   tmp := '["enTwo"]';
@@ -5374,16 +5370,26 @@ begin
   i := GetSetNameValue(TypeInfo(TSetMyEnum), p, eoo);
   checkEqual(i, 2, 'TSetMyEnum');
   Check(p = nil); // as in mORMot 1
+  // JSON to set with a partial enum (MinValue/MaxValue)
   tmp := '["enTwo"]';
   p := UniqueRawUtf8(tmp);
   i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
-  checkEqual(i, 2, 'TSetMyEnumPart');
+  checkEqual(i, 2, 'TSetMyEnumPart1');
   Check(p = nil);
   tmp := '["enFirst", "entwo"  ]';
   p := UniqueRawUtf8(tmp);
   i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
-  checkEqual(i, 2, 'TSetMyEnumPart');
+  checkEqual(i, 2, 'TSetMyEnumPart2');
   Check(p = nil);
+  tmp := '"five,first,two"';
+  p := UniqueRawUtf8(tmp);
+  i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
+  checkEqual(i, 2, 'TSetMyEnumPart3');
+  tmp := '"four,first,two"';
+  p := UniqueRawUtf8(tmp);
+  i := GetSetNameValue(TypeInfo(TSetMyEnumPart), p, eoo);
+  checkEqual(i, 10, 'TSetMyEnumPart3');
+  // emoji testing
   check(EMOJI_UTF8[eNone] = '');
   checkEqual(BinToHex(EMOJI_UTF8[eGrinning]), 'F09F9880');
   checkEqual(BinToHex(EMOJI_UTF8[ePray]), 'F09F998F');
@@ -5426,6 +5432,7 @@ begin
   inc(P);
   check(EmojiParseDots(P) = eExpressionless);
   check(P^ = #0);
+  // enumerates
   with PRttiInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
     for i := 0 to integer(high(TSynLogInfo)) do
     begin
@@ -5446,6 +5453,7 @@ begin
       Check(mormot.core.rtti.GetEnumNameValue(
         TypeInfo(TSynLogInfo), pointer(tmp), length(tmp)) = i);
     end;
+  // set to JSON
   for astext := false to true do
   begin
     integer(s) := 0;
@@ -5476,6 +5484,7 @@ begin
   end;
   Check(PRttiInfo(TypeInfo(TSynLogInfos))^.SetEnumType =
     PRttiInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
+  // class RTTI
   with PRttiInfo(TypeInfo(TOrmTest))^ do
   begin
     Check(InheritsFrom(TOrmTest));
@@ -5503,6 +5512,18 @@ begin
       '"Value2":{"Real":1.7,"Imaginary":2.7}}');
   finally
     auto.Free;
+  end;
+  cc := TComplexClass.Create;
+  try
+    CheckEqual(RawUtf8ArrayToCsv(cc.arr), '');
+    Check(GetValueObject(cc, 'arr', v));
+    CheckEqual(_Safe(v)^.ToJson, '[]');
+    cc.arr := TRawUtf8DynArrayFrom(['win32', 'win64']);
+    CheckEqual(RawUtf8ArrayToCsv(cc.arr), 'win32,win64');
+    Check(GetValueObject(cc, 'arr', v));
+    CheckEqual(_Safe(v)^.ToJson, '["win32","win64"]');
+  finally
+    cc.Free;
   end;
 end;
 
