@@ -742,9 +742,10 @@ function GetMainMacAddress(out Mac: TMacAddress;
 
 /// get a network interface from its TMacAddress main fields
 // - search is case insensitive for TMacAddress.Name and Address fields, and
-// will also search for the IP
+// will also search for the exact IP (and eventually for the IP as mask)
 function GetMainMacAddress(out Mac: TMacAddress;
-  const InterfaceNameAddressOrIP: RawUtf8): boolean; overload;
+  const InterfaceNameAddressOrIP: RawUtf8;
+  UpAndDown: boolean = false): boolean; overload;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -1419,11 +1420,12 @@ type
     /// allow to customize the process
     property Options: THttpPeerCacheOptions
       read fOptions write fOptions;
-    /// the local TMacAddress.Name used for UDP and TCP process
+    /// local TMacAddress.Name, Address or (mask) IP to be used for UDP and TCP
     // - if not set, will fallback to the best local makEthernet/makWifi network
-    // with a GetMacAddress() call
-    // - current TMacAddress.IP will be used with the Port property value to
-    // bind the TCP/HTTP server and broadcast the UDP discovery packets
+    // with broadcasting abilities
+    // - matching TMacAddress.IP will be used with the Port property value to
+    // bind the TCP/HTTP server and broadcast the UDP discovery packets, so that
+    // only this network interface will be involved to find cache peers
     property InterfaceName: RawUtf8
       read fInterfaceName write fInterfaceName;
     /// how GetMacAddress() should find the network, if InterfaceName is not set
@@ -3493,16 +3495,19 @@ begin
 end;
 
 function GetMainMacAddress(out Mac: TMacAddress;
-  const InterfaceNameAddressOrIP: RawUtf8): boolean;
+  const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
 var
   i: PtrInt;
   all: TMacAddressDynArray;
-  m: ^TMacAddress;
+  mask, ip4: cardinal;
+  m, fnd: ^TMacAddress;
 begin
+  // retrieve the current network interfaces
   result := false;
   if InterfaceNameAddressOrIP = '' then
     exit;
-  all := GetMacAddresses({upandown=}false);
+  all := GetMacAddresses(UpAndDown);
+  // search for exact Name / Address / IP
   m := pointer(all);
   for i := 1 to length(all) do
     if IdemPropNameU(m^.Name, InterfaceNameAddressOrIP) or
@@ -3515,6 +3520,28 @@ begin
     end
     else
       inc(m);
+  // fallback to search for InterfaceNameAddressOrIP as network mask
+  if not IPToCardinal(InterfaceNameAddressOrIP, mask) then
+    exit;
+  fnd := nil;
+  m := pointer(all);
+  for i := 1 to length(all) do
+  begin
+    if IPToCardinal(m^.IP, ip4) and
+       (ip4 and mask = ip4) then
+    begin
+      if (fnd = nil) or
+         (CompareCardinal(NETHW_ORDER[fnd^.Kind], NETHW_ORDER[m^.Kind]) < 0) then
+        fnd := m; // pickup the interface with the best hardware (paranoid)
+      exit;
+    end
+    else
+      inc(m);
+  end;
+  if fnd = nil then
+    exit;
+  Mac := fnd^;
+  result := true;
 end;
 
 
