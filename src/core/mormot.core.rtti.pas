@@ -1543,6 +1543,11 @@ procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value; out result: ShortSt
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
   Value: PUtf8Char; ValueLen: PtrInt; var Result: QWord);
 
+/// helper to parse some CSV values into a set, returned as 64-bit
+// - see also GetSetNameValue() in mormot.core.json.pas for parsing a JSON array
+function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char;
+  Sep: AnsiChar = ','): QWord;
+
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
 procedure GetEnumCaptions(aTypeInfo: PRttiInfo; aDest: PString);
@@ -5271,6 +5276,24 @@ begin
   if i >= MinValue then
     SetBitPtr(@Result, i);
   // unknown enum names (i=-1) would just be ignored
+end;
+
+function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char;
+  Sep: AnsiChar): QWord;
+var
+  v: shortstring;
+  names: PShortString;
+  min, max: integer;
+begin
+  result := 0;
+  if (aTypeInfo <> nil) and
+     (aTypeInfo^.Kind = rkSet) and
+     (aTypeInfo^.SetEnumType(names, min, max) <> nil) then
+    while Csv <> nil do
+    begin
+      GetNextItemShortString(Csv, @v, Sep);
+      SetNamesValue(names, min, max, @v[1], ord(v[0]), result);
+    end;
 end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
