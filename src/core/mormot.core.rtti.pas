@@ -1471,7 +1471,8 @@ procedure FinalizeObject(Value: TObject);
 // - SwitchPrefix + property name will be searched in CommandLine.Names[]
 // - is typically used to fill a settings class instance
 function SetObjectFromExecutableCommandLine(Value: TObject;
-  const SwitchPrefix: RawUtf8; CommandLine: TExecutableCommandLine = nil): boolean;
+  const SwitchPrefix, DescriptionSuffix: RawUtf8;
+  CommandLine: TExecutableCommandLine = nil): boolean;
 
 
 { *************** Enumerations RTTI }
@@ -3280,8 +3281,8 @@ begin
   end;
 end;
 
-procedure TRttiEnumType.GetEnumNameTrimedAll(var result: RawUtf8; const Prefix: RawUtf8;
-  quotedValues: boolean; const Suffix: RawUtf8);
+procedure TRttiEnumType.GetEnumNameTrimedAll(var result: RawUtf8;
+  const Prefix: RawUtf8; quotedValues: boolean; const Suffix: RawUtf8);
 begin
   GetEnumNameAll(result, Prefix, quotedValues, Suffix, {trimed=}true);
 end;
@@ -9259,24 +9260,33 @@ begin
 end;
 
 function SetObjectFromExecutableCommandLine(Value: TObject;
-  const SwitchPrefix: RawUtf8; CommandLine: TExecutableCommandLine): boolean;
+  const SwitchPrefix, DescriptionSuffix: RawUtf8;
+  CommandLine: TExecutableCommandLine): boolean;
 var
   rc: TRttiCustom;
   p: PRttiCustomProp;
-  v: RawUtf8;
+  v, desc, def: RawUtf8;
   i: integer;
 begin
   result := false;
+  if Value = nil then
+    exit;
   if CommandLine = nil then
     CommandLine := Executable.Command;
-  if (Value = nil) or
-     (CommandLine.Values = nil) then
-    exit;
   rc := Rtti.RegisterClass(Value.ClassType);
   p := pointer(rc.Props.List);
   for i := 1 to rc.Props.Count do
   begin
-    if CommandLine.Get([SwitchPrefix + p^.Name], v) and
+    desc := '';
+    if p^.Value.Kind in [rkEnumeration, rkSet] then
+      p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, '; values: ');
+    desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
+    def := p^.Prop^.GetValueText(Value);
+    if (def <> '') and
+       (def <> '0') and
+       (def <> '*') then
+      desc := FormatUtf8('% (default: %)', [desc, def]);
+    if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
        p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
       result := true;
     inc(p);
