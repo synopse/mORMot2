@@ -1251,6 +1251,10 @@ type
     /// compute the root resource Address, without any URI-encoded parameter
     // - e.g. '/category/name/10'
     function Root: RawUtf8;
+    /// comute the root resource Address as a resource "file" name
+    // - e.g. '10' for '/category/name/10?param=1'
+    // - warning: no TFileName nor UrlDecode() conversion is performed
+    function ResourceName: RawUtf8;
     /// returns BinToBase64(User + ':' + Password) encoded value
     // - as used for "Authorization: Basic" and "Proxy-Authorization: Basic"
     function UserPasswordBase64: RawUtf8;
@@ -4418,6 +4422,19 @@ begin
     Root := address
   else
     Root := copy(address, 1, i - 1);
+end;
+
+function TUri.ResourceName: RawUtf8;
+var
+  i: PtrInt;
+begin
+  result := Root;
+  for i := length(result) - 1 downto 1 do // - 1 to process '/url/file/' as 'file'
+    if result[i] = '/' then
+    begin
+      delete(result, 1, i);
+      break;
+    end;
 end;
 
 function TUri.UserPasswordBase64: RawUtf8;

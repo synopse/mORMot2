@@ -560,6 +560,10 @@ function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
 function GetProxyForUri(const uri: RawUtf8;
   fromSystem: boolean = true): RawUtf8;
 
+/// parse a URI into its final resource name
+// - optionally sanitize the output to be filename-compatible
+function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawUtf8;
+
 
 { ******************** THttpRequest Abstract HTTP client class }
 
@@ -1532,6 +1536,20 @@ begin
     result := nil;
 end;
 
+function ExtractResourceName(const uri: RawUtf8; sanitize: boolean): RawUtf8;
+var
+  u: TUri;
+begin
+  result := '';
+  if (uri = '') or
+     not u.From(uri) then
+    exit;
+  result := UrlDecode(u.ResourceName);
+  if sanitize and
+     not SafeFileNameU(result) then
+    result := OnlyChar(result, ['0'..'9', 'A'..'Z', 'a'..'z', '_', '.']);
+end;
+
 
 { THttpClientSocket }
 
@@ -1956,11 +1974,11 @@ var
 
 begin
   // prepare input parameters and result file name
-  result := destfile;
   requrl := url;
-  urlfile := SplitRight(url, '/');
+  urlfile := ExtractResourceName(url); // TUri + UrlDecode() + sanitize filename
   if urlfile = '' then
     urlfile := 'index';
+  result := destfile;
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
   alternate := false;
