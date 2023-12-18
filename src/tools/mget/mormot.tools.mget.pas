@@ -15,6 +15,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.buffers,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
@@ -27,18 +28,22 @@ uses
   mormot.net.server;
 
 
-{ ****************  }
-
 type
   /// state engine for mget processing
+  // - could be reused between the mget command line tool and an eventual GUI
   TMGetProcess = class(TPersistentAutoCreateFields)
   protected
     fPeerSettings: THttpPeerCacheSettings;
   public
-    /// input parameters for the MGet process
-    Verbose, Peer: boolean;
-    Url: RawUtf8;
+    // input parameters (e.g. from command line) for the MGet process
+    Verbose, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
+    CacheFolder, TlsCertFile, DestFile: TFileName;
+    Log: TSynLogClass;
+    HttpTimeoutSec: integer;
+    /// this is the main processing method
+    function Execute(const Url: RawUtf8): TFileName;
   published
+    /// the settings used if Peer is true
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
   end;
@@ -47,6 +52,32 @@ type
 implementation
 
 { TMGetProcess }
+
+function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
+var
+  client: THttpClientSocket;
+  wget: THttpClientSocketWGet;
+begin
+  // set the WGet additional parameters
+  wget.Clear;
+  if Verbose then
+    wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
+  wget.Resume := not NoResume;
+  wget.Hash := 'sha256';
+  if cache then
+    wget.HashCacheDir := CacheFolder;
+  // make the request
+  client := THttpClientSocket.Create(HttpTimeoutSec * 1000);
+  try
+    if Log <> nil then
+      client.OnLog := Log.DoLog;
+    client.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
+    client.TLS.CertificateFile := TlsCertFile;
+    result := client.WGet(Url, DestFile, wget);
+  finally
+    client.Free;
+  end;
+end;
 
 
 initialization

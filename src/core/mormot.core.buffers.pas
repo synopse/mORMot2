@@ -2007,7 +2007,7 @@ type
   /// TStreamHasher.Write optional progression callback
   // - see Sender properties like Context/Size/PerSecond and ExpectedSize
   // (which may be 0 if the download size is unknown)
-  // - see e.g. TStreamRedirect.ProgressToConsole
+  // - see e.g. TStreamRedirect.ProgressStreamToConsole
   TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
 
   /// optional callback as used e.g. by THttpClientSocketWGet.OnStreamCreate
@@ -2197,7 +2197,7 @@ type
     property OnInfoProgress: TOnInfoProgress
       read fInfo.OnProgress write fInfo.OnProgress;
   published
-    /// the current progression as text, as returned by ProgressToConsole
+    /// the current progression as text, as returned by ProgressStreamToConsole
     property Progress: RawUtf8
       read GetProgress;
   end;

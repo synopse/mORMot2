@@ -187,7 +187,7 @@ type
   THttpClientSocketWGet = object
   {$endif USERECORDWITHMETHODS}
     /// optional callback event called during download process
-    // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
+    // - typical usage is to assign e.g. TStreamRedirect.ProgressStreamToConsole
     // - note that by default, THttpClientSocket.OnLog will always be called
     OnProgress: TOnStreamProgress;
     /// optional callback if TFileStreamEx.Create(FileName, Mode) is not good enough

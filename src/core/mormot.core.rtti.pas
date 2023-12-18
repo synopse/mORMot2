@@ -9279,7 +9279,7 @@ begin
   begin
     desc := '';
     if p^.Value.Kind in [rkEnumeration, rkSet] then
-      p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, '; values: ');
+      p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, ' - values: ');
     desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
     def := p^.Prop^.GetValueText(Value);
     if (def <> '') and
