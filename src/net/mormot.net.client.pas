@@ -3582,7 +3582,7 @@ begin
   curl.easy_setopt(fHandle, coPostFields, pointer(aData));
   curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
   curl.easy_setopt(fHandle, coHttpHeader, fIn.Headers);
-  curl.easy_setopt(fHandle, coFile, @fOut.Data);
+  curl.easy_setopt(fHandle, coWriteData, @fOut.Data);
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 

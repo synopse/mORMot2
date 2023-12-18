@@ -42,143 +42,317 @@ type
   /// low-level exception raised during libcurl library access
   ECurl = class(ExceptionWithProps);
 
+const
+  CURLOPTTYPE_LONG          = 0;
+  CURLOPTTYPE_OBJECTPOINT   = 10000;
+  CURLOPTTYPE_FUNCTIONPOINT = 20000;
+  CURLOPTTYPE_OFF_T         = 30000;
+  CURLOPTTYPE_BLOB          = 40000;
+  CURLOPTTYPE_STRINGPOINT   = CURLOPTTYPE_OBJECTPOINT;
+  CURLOPTTYPE_SLISTPOINT    = CURLOPTTYPE_OBJECTPOINT;
+  CURLOPTTYPE_CBPOINT       = CURLOPTTYPE_OBJECTPOINT;
+  CURLOPTTYPE_VALUES        = CURLOPTTYPE_LONG;
+
+type
   /// low-level options for libcurl library API calls
   TCurlOption = (
-    coPort                 = 3,
-    coTimeout              = 13,
-    coInFileSize           = 14,
-    coLowSpeedLimit        = 19,
-    coLowSpeedTime         = 20,
-    coResumeFrom           = 21,
-    coCRLF                 = 27,
-    coSSLVersion           = 32,
-    coTimeCondition        = 33,
-    coTimeValue            = 34,
-    coVerbose              = 41,
-    coHeader               = 42,
-    coNoProgress           = 43,
-    coNoBody               = 44,
-    coFailOnError          = 45,
-    coUpload               = 46,
-    coPost                 = 47,
-    coFTPListOnly          = 48,
-    coFTPAppend            = 50,
-    coNetRC                = 51,
-    coFollowLocation       = 52,
-    coTransferText         = 53,
-    coPut                  = 54,
-    coAutoReferer          = 58,
-    coProxyPort            = 59,
-    coPostFieldSize        = 60,
-    coHttpProxyTunnel      = 61,
-    coSSLVerifyPeer        = 64,
-    coMaxRedirs            = 68,
-    coFileTime             = 69,
-    coMaxConnects          = 71,
-    coClosePolicy          = 72,
-    coFreshConnect         = 74,
-    coForbidResue          = 75,
-    coConnectTimeout       = 78,
-    coHttpGet              = 80,
-    coSSLVerifyHost        = 81,
-    coHttpVersion          = 84,
-    coFTPUseEPSV           = 85,
-    coSSLEngineDefault     = 90,
-    coDNSUseGlobalCache    = 91,
-    coDNSCacheTimeout      = 92,
-    coCookieSession        = 96,
-    coBufferSize           = 98,
-    coNoSignal             = 99,
-    coProxyType            = 101,
-    coUnrestrictedAuth     = 105,
-    coFTPUseEPRT           = 106,
-    coHttpAuth             = 107,
-    coFTPCreateMissingDirs = 110,
-    coProxyAuth            = 111,
-    coFTPResponseTimeout   = 112,
-    coIPResolve            = 113,
-    coMaxFileSize          = 114,
-    coFTPSSL               = 119,
-    coTCPNoDelay           = 121,
-    coFTPSSLAuth           = 129,
-    coIgnoreContentLength  = 136,
-    coFTPSkipPasvIp        = 137,
-    coTimeoutMs            = 155, // since libcurl 7.16.2 - April 11 2007
-    coConnectTimeoutMs     = 156,
-    coFile                 = 10001,
-    coURL                  = 10002,
-    coProxy                = 10004,
-    coUserPwd              = 10005,
-    coProxyUserPwd         = 10006,
-    coRange                = 10007,
-    coInFile               = 10009,
-    coErrorBuffer          = 10010,
-    coPostFields           = 10015,
-    coReferer              = 10016,
-    coFTPPort              = 10017,
-    coUserAgent            = 10018,
-    coCookie               = 10022,
-    coHttpHeader           = 10023,
-    coHttpPost             = 10024,
-    coSSLCert              = 10025,
-    coSSLCertPasswd        = 10026,
-    coQuote                = 10028,
-    coWriteHeader          = 10029,
-    coCookieFile           = 10031,
-    coCustomRequest        = 10036,
-    coStdErr               = 10037,
-    coPostQuote            = 10039,
-    coWriteInfo            = 10040,
-    coProgressData         = 10057,
-    coInterface            = 10062,
-    coKRB4Level            = 10063,
-    coCAInfo               = 10065,
-    coTelnetOptions        = 10070,
-    coRandomFile           = 10076,
-    coEGDSocket            = 10077,
-    coCookieJar            = 10082,
-    coSSLCipherList        = 10083,
-    coSSLCertType          = 10086,
-    coSSLKey               = 10087,
-    coSSLKeyType           = 10088,
-    coSSLEngine            = 10089,
-    coPreQuote             = 10093,
-    coDebugData            = 10095,
-    coCAPath               = 10097,
-    coShare                = 10100,
-    coEncoding             = 10102,
-    coPrivate              = 10103,
-    coHttp200Aliases       = 10104,
-    coSSLCtxData           = 10109,
-    coNetRCFile            = 10118,
-    coSourceUserPwd        = 10123,
-    coSourcePreQuote       = 10127,
-    coSourcePostQuote      = 10128,
-    coIOCTLData            = 10131,
-    coSourceURL            = 10132,
-    coSourceQuote          = 10133,
-    coFTPAccount           = 10134,
-    coCookieList           = 10135,
-    coSSHPublicKeyfile     = 10152,
-    coSSHPrivateKeyfile    = 10153,
-    coUserName             = 10173,
-    coPassword             = 10174,    
-    coMailFrom             = 10186,
-    coMailRcpt             = 10187,
-    coUnixSocketPath       = 10231,
-    coMimePost             = 10269,
-    coWriteFunction        = 20011,
-    coReadFunction         = 20012,
-    coProgressFunction     = 20056,
-    coHeaderFunction       = 20079,
-    coDebugFunction        = 20094,
-    coSSLCtxtFunction      = 20108,
-    coIOCTLFunction        = 20130,
-    coXferInfoFunction     = 20219,
-    coInFileSizeLarge      = 30115,
-    coResumeFromLarge      = 30116,
-    coMaxFileSizeLarge     = 30117,
-    coPostFieldSizeLarge   = 30120
+    coWriteData              = CURLOPTTYPE_CBPOINT + 1,
+    coURL                    = CURLOPTTYPE_STRINGPOINT + 2,
+    coPort                   = CURLOPTTYPE_LONG + 3,
+    coProxy                  = CURLOPTTYPE_STRINGPOINT + 4,
+    coUserPwd                = CURLOPTTYPE_STRINGPOINT + 5,
+    coProxyUserPwd           = CURLOPTTYPE_STRINGPOINT + 6,
+    coRange                  = CURLOPTTYPE_STRINGPOINT + 7,
+    coReadData               = CURLOPTTYPE_CBPOINT + 9,
+    coErrorBuffer            = CURLOPTTYPE_OBJECTPOINT + 10,
+    coWriteFunction          = CURLOPTTYPE_FUNCTIONPOINT + 11,
+    coReadFunction           = CURLOPTTYPE_FUNCTIONPOINT + 12,
+    coTimeout                = CURLOPTTYPE_LONG + 13,
+    coInFileSize             = CURLOPTTYPE_LONG + 14,
+    coPostFields             = CURLOPTTYPE_OBJECTPOINT + 15,
+    coReferer                = CURLOPTTYPE_STRINGPOINT + 16,
+    coFTPPort                = CURLOPTTYPE_STRINGPOINT + 17,
+    coUserAgent              = CURLOPTTYPE_STRINGPOINT + 18,
+    coLowSpeedLimit          = CURLOPTTYPE_LONG + 19,
+    coLowSpeedTime           = CURLOPTTYPE_LONG + 20,
+    coResumeFrom             = CURLOPTTYPE_LONG + 21,
+    coCookie                 = CURLOPTTYPE_STRINGPOINT + 22,
+    coHTTPHeader             = CURLOPTTYPE_SLISTPOINT + 23,
+    coHTTPPost               = CURLOPTTYPE_OBJECTPOINT + 24, // deprecated
+    coSSLCert                = CURLOPTTYPE_STRINGPOINT + 25,
+    coKeyPasswd              = CURLOPTTYPE_STRINGPOINT + 26,
+    coCRLF                   = CURLOPTTYPE_LONG + 27,
+    coQuote                  = CURLOPTTYPE_SLISTPOINT + 28,
+    coHeaderData             = CURLOPTTYPE_CBPOINT + 29,
+    coCookieFile             = CURLOPTTYPE_STRINGPOINT + 31,
+    coSSLVersion             = CURLOPTTYPE_VALUES + 32,
+    coTimeCondition          = CURLOPTTYPE_VALUES + 33,
+    coTimeValue              = CURLOPTTYPE_LONG + 34,
+    coCustomRequest          = CURLOPTTYPE_STRINGPOINT + 36,
+    coStdErr                 = CURLOPTTYPE_OBJECTPOINT + 37,
+    coPostQuote              = CURLOPTTYPE_SLISTPOINT + 39,
+    coObsolete40             = CURLOPTTYPE_OBJECTPOINT + 40,
+    coVerbose                = CURLOPTTYPE_LONG + 41,
+    coHeader                 = CURLOPTTYPE_LONG + 42,
+    coNoProgress             = CURLOPTTYPE_LONG + 43,
+    coNobody                 = CURLOPTTYPE_LONG + 44,
+    coFailOnError            = CURLOPTTYPE_LONG + 45,
+    coUpload                 = CURLOPTTYPE_LONG + 46,
+    coPost                   = CURLOPTTYPE_LONG + 47,
+    coDirListOnly            = CURLOPTTYPE_LONG + 48,
+    coAppend                 = CURLOPTTYPE_LONG + 50,
+    coNetRC                  = CURLOPTTYPE_VALUES + 51,
+    coFollowLocation         = CURLOPTTYPE_LONG + 52,
+    coTransferText           = CURLOPTTYPE_LONG + 53,
+    coPut                    = CURLOPTTYPE_LONG + 54, // deprecated
+    coProgressFunction       = CURLOPTTYPE_FUNCTIONPOINT + 56, // deprecated
+    coXferInfoData           = CURLOPTTYPE_CBPOINT + 57,
+    coAutoReferer            = CURLOPTTYPE_LONG + 58,
+    coProxyPort              = CURLOPTTYPE_LONG + 59,
+    coPostFieldSize          = CURLOPTTYPE_LONG + 60,
+    coHTTPProxyTunnel        = CURLOPTTYPE_LONG + 61,
+    coInterface              = CURLOPTTYPE_STRINGPOINT + 62,
+    coKRBLevel               = CURLOPTTYPE_STRINGPOINT + 63,
+    coSSLVerifyPeer          = CURLOPTTYPE_LONG + 64,
+    coCAInfo                 = CURLOPTTYPE_STRINGPOINT + 65,
+    coMaxRedirs              = CURLOPTTYPE_LONG + 68,
+    coFileTime               = CURLOPTTYPE_LONG + 69,
+    coTelnetOptions          = CURLOPTTYPE_SLISTPOINT + 70,
+    coMaxConnects            = CURLOPTTYPE_LONG + 71,
+    coObsolete72             = CURLOPTTYPE_LONG + 72,
+    coFreshConnect           = CURLOPTTYPE_LONG + 74,
+    coForbidResue            = CURLOPTTYPE_LONG + 75,
+    coRandomFile             = CURLOPTTYPE_STRINGPOINT + 76, // deprecated
+    coEGDSocket              = CURLOPTTYPE_STRINGPOINT + 77, // deprecated
+    coConnectTimeout         = CURLOPTTYPE_LONG + 78,
+    coHeaderFunction         = CURLOPTTYPE_FUNCTIONPOINT + 79,
+    coHTTPGet                = CURLOPTTYPE_LONG + 80,
+    coSSLVerifyHost          = CURLOPTTYPE_LONG + 81,
+    coCookieJar              = CURLOPTTYPE_STRINGPOINT + 82,
+    coSSLCipherList          = CURLOPTTYPE_STRINGPOINT + 83,
+    coHTTPVersion            = CURLOPTTYPE_VALUES + 84,
+    coFTPUseEPSV             = CURLOPTTYPE_LONG + 85,
+    coSSLCertType            = CURLOPTTYPE_STRINGPOINT + 86,
+    coSSLKey                 = CURLOPTTYPE_STRINGPOINT + 87,
+    coSSLKeyType             = CURLOPTTYPE_STRINGPOINT + 88,
+    coSSLEngine              = CURLOPTTYPE_STRINGPOINT + 89,
+    coSSLEngineDefault       = CURLOPTTYPE_LONG + 90,
+    coDNSCacheTimeout        = CURLOPTTYPE_LONG + 92,
+    coPreQuote               = CURLOPTTYPE_SLISTPOINT + 93,
+    coDebugFunction          = CURLOPTTYPE_FUNCTIONPOINT + 94,
+    coDebugData              = CURLOPTTYPE_CBPOINT + 95,
+    coCookieSession          = CURLOPTTYPE_LONG + 96,
+    coCAPath                 = CURLOPTTYPE_STRINGPOINT + 97,
+    coBufferSize             = CURLOPTTYPE_LONG + 98,
+    coNoSignal               = CURLOPTTYPE_LONG + 99,
+    coShare                  = CURLOPTTYPE_OBJECTPOINT + 100,
+    coProxyType              = CURLOPTTYPE_LONG + 101,
+    coAcceptEncoding         = CURLOPTTYPE_STRINGPOINT + 102,
+    coPrivate                = CURLOPTTYPE_OBJECTPOINT + 103,
+    coHTTP200Aliases         = CURLOPTTYPE_SLISTPOINT + 104,
+    coUnrestrictedAuth       = CURLOPTTYPE_LONG + 105,
+    coFTPUseEPRT             = CURLOPTTYPE_LONG + 106,
+    coHTTPAuth               = CURLOPTTYPE_VALUES + 107,
+    coSSLCtxFunction         = CURLOPTTYPE_FUNCTIONPOINT + 108,
+    coSSLCtxData             = CURLOPTTYPE_CBPOINT + 109,
+    coFTPCreateMissingDirs   = CURLOPTTYPE_LONG + 110,
+    coProxyAuth              = CURLOPTTYPE_VALUES + 111,
+    coServerResponseTimeout  = CURLOPTTYPE_LONG + 112,
+    coIPResolve              = CURLOPTTYPE_VALUES + 113,
+    coMaxFileSize            = CURLOPTTYPE_LONG + 114,
+    coInFileSizeLarge        = CURLOPTTYPE_OFF_T + 115,
+    coResumeFromLarge        = CURLOPTTYPE_OFF_T + 116,
+    coMaxFileSizeLarge       = CURLOPTTYPE_OFF_T + 117,
+    coNetRCFile              = CURLOPTTYPE_STRINGPOINT + 118,
+    coUseSSL                 = CURLOPTTYPE_VALUES + 119,
+    coPostFieldSizeLarge     = CURLOPTTYPE_OFF_T + 120,
+    coTCPNoDelay             = CURLOPTTYPE_LONG + 121,
+    coFTPSSLAuth             = CURLOPTTYPE_VALUES + 129,
+    coIOCTLFunction          = CURLOPTTYPE_FUNCTIONPOINT + 130, // deprecated
+    coIOCTLData              = CURLOPTTYPE_CBPOINT + 131, // deprecated
+    coFTPAccount             = CURLOPTTYPE_STRINGPOINT + 134,
+    coCookieList             = CURLOPTTYPE_STRINGPOINT + 135,
+    coIgnoreContentLength    = CURLOPTTYPE_LONG + 136,
+    coFTPSkipPASVIp          = CURLOPTTYPE_LONG + 137,
+    coFTPFileMethod          = CURLOPTTYPE_VALUES + 138,
+    coLocalPort              = CURLOPTTYPE_LONG + 139,
+    coLocalPortRange         = CURLOPTTYPE_LONG + 140,
+    coConnectOnly            = CURLOPTTYPE_LONG + 141,
+    coMaxSendSpeedLarge      = CURLOPTTYPE_OFF_T + 145,
+    coMaxRecvSpeedLarge      = CURLOPTTYPE_OFF_T + 146,
+    coFTPAlternativeToUser   = CURLOPTTYPE_STRINGPOINT + 147,
+    coSockOptFunction        = CURLOPTTYPE_FUNCTIONPOINT + 148,
+    coSockOptData            = CURLOPTTYPE_CBPOINT + 149,
+    coSSLSessionIDCache      = CURLOPTTYPE_LONG + 150,
+    coSSHAuthTypes           = CURLOPTTYPE_VALUES + 151,
+    coSSHPublicKeyfile       = CURLOPTTYPE_STRINGPOINT + 152,
+    coSSHPrivateKeyfile      = CURLOPTTYPE_STRINGPOINT + 153,
+    coFTPSSLCCC              = CURLOPTTYPE_LONG + 154,
+    coTimeoutMs              = CURLOPTTYPE_LONG + 155,
+    coConnectTimeoutMs       = CURLOPTTYPE_LONG + 156,
+    coHTTPTransferDecoding   = CURLOPTTYPE_LONG + 157,
+    coHTTPContentDecoding    = CURLOPTTYPE_LONG + 158,
+    coNewFilePerms           = CURLOPTTYPE_LONG + 159,
+    coNewDirectoryPerms      = CURLOPTTYPE_LONG + 160,
+    coPostRedir              = CURLOPTTYPE_VALUES + 161,
+    coSSHHostPublicKeyMD5    = CURLOPTTYPE_STRINGPOINT + 162,
+    coOpenSocketFunction     = CURLOPTTYPE_FUNCTIONPOINT + 163,
+    coOpenSocketData         = CURLOPTTYPE_CBPOINT + 164,
+    coCopyPostFields         = CURLOPTTYPE_OBJECTPOINT + 165,
+    coProxyTransferMode      = CURLOPTTYPE_LONG + 166,
+    coSeekFunction           = CURLOPTTYPE_FUNCTIONPOINT + 167,
+    coSeekData               = CURLOPTTYPE_CBPOINT + 168,
+    coCRLFile                = CURLOPTTYPE_STRINGPOINT + 169,
+    coIssuerCert             = CURLOPTTYPE_STRINGPOINT + 170,
+    coAddressScope           = CURLOPTTYPE_LONG + 171,
+    coCertInfo               = CURLOPTTYPE_LONG + 172,
+    coUserName               = CURLOPTTYPE_STRINGPOINT + 173,
+    coPassword               = CURLOPTTYPE_STRINGPOINT + 174,
+    coProxyUsername          = CURLOPTTYPE_STRINGPOINT + 175,
+    coProxyPassword          = CURLOPTTYPE_STRINGPOINT + 176,
+    coNoProxy                = CURLOPTTYPE_STRINGPOINT + 177,
+    coTFTPBlkSize            = CURLOPTTYPE_LONG + 178,
+    coSOCKS5GSSAPINEC        = CURLOPTTYPE_LONG + 180,
+    coSSHKnownHosts          = CURLOPTTYPE_STRINGPOINT + 183,
+    coSSHKeyFuntion          = CURLOPTTYPE_FUNCTIONPOINT + 184,
+    coSSHKeyData             = CURLOPTTYPE_CBPOINT + 185,
+    coMailFrom               = CURLOPTTYPE_STRINGPOINT + 186,
+    coMailRcpt               = CURLOPTTYPE_SLISTPOINT + 187,
+    coFTPUsePRET             = CURLOPTTYPE_LONG + 188,
+    coRTSPRequest            = CURLOPTTYPE_VALUES + 189,
+    coRTSPSessionID          = CURLOPTTYPE_STRINGPOINT + 190,
+    coRTSPStreamURI          = CURLOPTTYPE_STRINGPOINT + 191,
+    coRTSPTransport          = CURLOPTTYPE_STRINGPOINT + 192,
+    coRTSPClientCSeq         = CURLOPTTYPE_LONG + 193,
+    coRTSPServerCSeq         = CURLOPTTYPE_LONG + 194,
+    coInterleaveData         = CURLOPTTYPE_CBPOINT + 195,
+    coInterleaveFunction     = CURLOPTTYPE_FUNCTIONPOINT + 196,
+    coWildcardMatch          = CURLOPTTYPE_LONG + 197,
+    coChunkBgnFunction       = CURLOPTTYPE_FUNCTIONPOINT + 198,
+    coChunkEndFunction       = CURLOPTTYPE_FUNCTIONPOINT + 199,
+    coFnMatchFunction        = CURLOPTTYPE_FUNCTIONPOINT + 200,
+    coChunkData              = CURLOPTTYPE_CBPOINT + 201,
+    coFnMatchData            = CURLOPTTYPE_CBPOINT + 202,
+    coResolve                = CURLOPTTYPE_SLISTPOINT + 203,
+    coTLSAuthUsername        = CURLOPTTYPE_STRINGPOINT + 204,
+    coTLSAuthPassword        = CURLOPTTYPE_STRINGPOINT + 205,
+    coTLSAuthType            = CURLOPTTYPE_STRINGPOINT + 206,
+    coTransferEncoding       = CURLOPTTYPE_LONG + 207,
+    coCloseSocketFunction    = CURLOPTTYPE_FUNCTIONPOINT + 208,
+    coCloseSocketData        = CURLOPTTYPE_CBPOINT + 209,
+    coGSSAPIDelegation       = CURLOPTTYPE_VALUES + 210,
+    coDNSServers             = CURLOPTTYPE_STRINGPOINT + 211,
+    coAcceptTimeoutMs        = CURLOPTTYPE_LONG + 212,
+    coTCPKeepalive           = CURLOPTTYPE_LONG + 213,
+    coTCPKeepIdle            = CURLOPTTYPE_LONG + 214,
+    coTCPKeepIntvl           = CURLOPTTYPE_LONG + 215,
+    coSSLOptions             = CURLOPTTYPE_VALUES + 216,
+    coMailAuth               = CURLOPTTYPE_STRINGPOINT + 217,
+    coSASLIR                 = CURLOPTTYPE_LONG + 218,
+    coXferInfoFunction       = CURLOPTTYPE_FUNCTIONPOINT + 219,
+    coXOAuth2Bearer          = CURLOPTTYPE_STRINGPOINT + 220,
+    coDNSInterface           = CURLOPTTYPE_STRINGPOINT + 221,
+    coDNSLocalIP4            = CURLOPTTYPE_STRINGPOINT + 222,
+    coDNSLocalIP6            = CURLOPTTYPE_STRINGPOINT + 223,
+    coLoginOptions           = CURLOPTTYPE_STRINGPOINT + 224,
+    coSSLEnableALPN          = CURLOPTTYPE_LONG + 226,
+    coExpect100TimeoutMs     = CURLOPTTYPE_LONG + 227,
+    coProxyHeader            = CURLOPTTYPE_SLISTPOINT + 228,
+    coHeaderOpt              = CURLOPTTYPE_VALUES + 229,
+    coPinnedPublicKey        = CURLOPTTYPE_STRINGPOINT + 230,
+    coUnixSocketPath         = CURLOPTTYPE_STRINGPOINT + 231,
+    coSSLVerifyStatus        = CURLOPTTYPE_LONG + 232,
+    coSSLFalseStart          = CURLOPTTYPE_LONG + 233,
+    coPathAsIs               = CURLOPTTYPE_LONG + 234,
+    coProxyServiceName       = CURLOPTTYPE_STRINGPOINT + 235,
+    coServiceName            = CURLOPTTYPE_STRINGPOINT + 236,
+    coPipeWait               = CURLOPTTYPE_LONG + 237,
+    coDefaultProtocol        = CURLOPTTYPE_STRINGPOINT + 238,
+    coStreamWeight           = CURLOPTTYPE_LONG + 239,
+    coStreamDepends          = CURLOPTTYPE_OBJECTPOINT + 240,
+    coStreamDependsE         = CURLOPTTYPE_OBJECTPOINT + 241,
+    coTFTPNoOptions          = CURLOPTTYPE_LONG + 242,
+    coConnectTo              = CURLOPTTYPE_SLISTPOINT + 243,
+    coTCPFastOpen            = CURLOPTTYPE_LONG + 244,
+    coKeepSendingOnError     = CURLOPTTYPE_LONG + 245,
+    coProxyCAInfo            = CURLOPTTYPE_STRINGPOINT + 246,
+    coProxyYCAPath           = CURLOPTTYPE_STRINGPOINT + 247,
+    coProxySSLVerifyPeer     = CURLOPTTYPE_LONG + 248,
+    coProxySSLVeryfyHost     = CURLOPTTYPE_LONG + 249,
+    coProxySSLVersion        = CURLOPTTYPE_VALUES + 250,
+    coProxyTLSAuthUsername   = CURLOPTTYPE_STRINGPOINT + 251,
+    coProxyTLSAuthPassword   = CURLOPTTYPE_STRINGPOINT + 252,
+    coProxyTLSAuthType       = CURLOPTTYPE_STRINGPOINT + 253,
+    coProxySSLCert           = CURLOPTTYPE_STRINGPOINT + 254,
+    coProxySSLCertType       = CURLOPTTYPE_STRINGPOINT + 255,
+    coProxySSLKey            = CURLOPTTYPE_STRINGPOINT + 256,
+    coProxySSLKeyType        = CURLOPTTYPE_STRINGPOINT + 257,
+    coProxyKeyPasswd         = CURLOPTTYPE_STRINGPOINT + 258,
+    coProxySSLCipherList     = CURLOPTTYPE_STRINGPOINT + 259,
+    coProxyCRLFile           = CURLOPTTYPE_STRINGPOINT + 260,
+    coProxySSLOptions        = CURLOPTTYPE_LONG + 261,
+    coPreProxy               = CURLOPTTYPE_STRINGPOINT + 262,
+    coProxyPinnedPublicKey   = CURLOPTTYPE_STRINGPOINT + 263,
+    coAbstractUnixSocket     = CURLOPTTYPE_STRINGPOINT + 264,
+    coSupressConnectHeaders  = CURLOPTTYPE_LONG + 265,
+    coRequestTarget          = CURLOPTTYPE_STRINGPOINT + 266,
+    coSOCKS5Auth             = CURLOPTTYPE_LONG + 267,
+    coSSHCompression         = CURLOPTTYPE_LONG + 268,
+    coMimePost               = CURLOPTTYPE_OBJECTPOINT + 269,
+    coTimeValueLarge         = CURLOPTTYPE_OFF_T + 270,
+    coHappyEyeballsTimeoutMs = CURLOPTTYPE_LONG + 271,
+    coResolverStartFunction  = CURLOPTTYPE_FUNCTIONPOINT + 272,
+    coResolverStartData      = CURLOPTTYPE_CBPOINT + 273,
+    coHAProxyProtocol        = CURLOPTTYPE_LONG + 274,
+    coDNSShuffleAddresses    = CURLOPTTYPE_LONG + 275,
+    coTLS13Ciphers           = CURLOPTTYPE_STRINGPOINT + 276,
+    coProxyTLS13Ciphers      = CURLOPTTYPE_STRINGPOINT + 277,
+    coDisallowUsernameInURL  = CURLOPTTYPE_LONG + 278,
+    coDOHUR                  = CURLOPTTYPE_STRINGPOINT + 279,
+    coUploadBufferSize       = CURLOPTTYPE_LONG + 280,
+    coUpkeepIntervalMs       = CURLOPTTYPE_LONG + 281,
+    coCurlLU                 = CURLOPTTYPE_OBJECTPOINT + 282,
+    coTrailerFunction        = CURLOPTTYPE_FUNCTIONPOINT + 283,
+    coTrailerData            = CURLOPTTYPE_CBPOINT + 284,
+    coHTTP09Allowed          = CURLOPTTYPE_LONG + 285,
+    coAltSvcCtrl             = CURLOPTTYPE_LONG + 286,
+    coAltSvc                 = CURLOPTTYPE_STRINGPOINT + 287,
+    coMaxAgeConn             = CURLOPTTYPE_LONG + 288,
+    coSASLAuthZID            = CURLOPTTYPE_STRINGPOINT + 289,
+    coMailRCPTAllowFails     = CURLOPTTYPE_LONG + 290,
+    coSSLCertBlob            = CURLOPTTYPE_BLOB + 291,
+    coSSLKeyBlob             = CURLOPTTYPE_BLOB + 292,
+    coProxySSLCertBlob       = CURLOPTTYPE_BLOB + 293,
+    coProxySSLKeyBlob        = CURLOPTTYPE_BLOB + 294,
+    coIssuerCertBlob         = CURLOPTTYPE_BLOB + 295,
+    coProxyIssuerCert        = CURLOPTTYPE_STRINGPOINT + 296,
+    coProxyIssuerCertBlob    = CURLOPTTYPE_BLOB + 297,
+    coSSLECCurves            = CURLOPTTYPE_STRINGPOINT + 298,
+    coHSTSCtrl               = CURLOPTTYPE_LONG + 299,
+    coHSTS                   = CURLOPTTYPE_STRINGPOINT + 300,
+    coHSTSReadFuction        = CURLOPTTYPE_FUNCTIONPOINT + 301,
+    coHSTSReadData           = CURLOPTTYPE_CBPOINT + 302,
+    coHSTSWriteFunction      = CURLOPTTYPE_FUNCTIONPOINT + 303,
+    coHSTSWriteDate          = CURLOPTTYPE_CBPOINT + 304,
+    coAWSSigV4               = CURLOPTTYPE_STRINGPOINT + 305,
+    coDOHSSLVerifyPeer       = CURLOPTTYPE_LONG + 306,
+    coDOHSSLVerifyHost       = CURLOPTTYPE_LONG + 307,
+    coDOHSSLVerifyStatus     = CURLOPTTYPE_LONG + 308,
+    coCAInfoBlob             = CURLOPTTYPE_BLOB + 309,
+    coProxyCAInfoBlob        = CURLOPTTYPE_BLOB + 310,
+    coSSHHostPublicKeySHA256 = CURLOPTTYPE_STRINGPOINT + 311,
+    coPreReqFunction         = CURLOPTTYPE_FUNCTIONPOINT + 312,
+    coPreReqData             = CURLOPTTYPE_CBPOINT + 313,
+    coMaxLifetimeConn        = CURLOPTTYPE_LONG + 314,
+    coMIMEOptions            = CURLOPTTYPE_LONG + 315,
+    coSSHHostKeyFunction     = CURLOPTTYPE_FUNCTIONPOINT + 316,
+    coSSHHostKeyData         = CURLOPTTYPE_CBPOINT + 317,
+    coProtocolsStr           = CURLOPTTYPE_STRINGPOINT + 318,
+    coRedirProtocolsStr      = CURLOPTTYPE_STRINGPOINT + 319,
+    coWSOptions              = CURLOPTTYPE_LONG + 320,
+    coCACacheTimeout         = CURLOPTTYPE_LONG + 321,
+    coQuickExit              = CURLOPTTYPE_LONG + 322,
+    coHAProxyClientIP        = CURLOPTTYPE_STRINGPOINT + 323
   );
 
   /// low-level result codes for libcurl library API calls
@@ -187,77 +361,103 @@ type
     crUnsupportedProtocol,
     crFailedInit,
     crURLMalformat,
-    crURLMalformatUser,
+    crNotBuiltIn,
     crCouldNotResolveProxy,
     crCouldNotResolveHost,
     crCouldNotConnect,
-    crFTPWeirdServerReply,
-    crFTPAccessDenied,
-    crFTPUserPasswordIncorrect,
-    crFTPWeirdPassReply,
-    crFTPWeirdUserReply,
+    crWeirdServerReply,
+    crRemoteAccessDenied,
+    crFTPAccessFailed,
+    crFTPWeirdPASSReply,
+    crFTPAcceptTimeout,
     crFTPWeirdPASVReply,
     crFTPWeird227Format,
-    crFTPCantGetHost,
-    crFTPCantReconnect,
-    crFTPCouldNotSetBINARY,
+    crFTPCannotGetHost,
+    crHTTP2,
+    crFTPCouldNotSetType,
     crPartialFile,
-    crFTPCouldNotRetrFile,
-    crFTPWriteError,
-    crFTPQuoteError,
+    crFTPCouldNotRETRFile,
+    crObsolete20,
+    crQuoteError,
     crHTTPReturnedError,
     crWriteError,
-    crMalFormatUser,
-    crFTPCouldNotStorFile,
+    crObsolete24,
+    crUploadFailed,
     crReadError,
     crOutOfMemory,
-    crOperationTimeouted,
-    crFTPCouldNotSetASCII,
-    crFTPPortFailed,
+    crOperationTimeout,
+    crObsolete29,
+    crFTPPORTFailed,
     crFTPCouldNotUseREST,
-    crFTPCouldNotGetSize,
-    crHTTPRangeError,
+    crObsolete32,
+    crRangeError,
     crHTTPPostError,
     crSSLConnectError,
     crBadDownloadResume,
     crFileCouldNotReadFile,
     crLDAPCannotBind,
     crLDAPSearchFailed,
-    crLibraryNotFound,
+    crObsolete40,
     crFunctionNotFound,
     crAbortedByCallback,
     crBadFunctionArgument,
-    crBadCallingOrder,
+    crObsolete44,
     crInterfaceFailed,
-    crBadPasswordEntered,
+    crObsolete46,
     crTooManyRedirects,
-    crUnknownTelnetOption,
-    crTelnetOptionSyntax,
-    crObsolete,
-    crSSLPeerCertificate,
+    crUnknownOption,
+    crSetOptOptionSyntax,
+    crObsolete50,
+    crObsolete51,
     crGotNothing,
     crSSLEngineNotFound,
     crSSLEngineSetFailed,
     crSendError,
     crRecvError,
-    crShareInUse,
+    crObsolete57,
     crSSLCertProblem,
     crSSLCipher,
-    crSSLCACert,
+    crPeerFailedVerification,
     crBadContentEncoding,
-    crLDAPInvalidURL,
+    crObsolete62,
     crFileSizeExceeded,
-    crFTPSSLFailed,
+    crUseSSLFailed,
     crSendFailRewind,
     crSSLEngineInitFailed,
     crLoginDenied,
     crTFTPNotFound,
     crTFTPPerm,
-    crTFTPDiskFull,
+    crRemoteDiskFull,
     crTFTPIllegal,
     crTFTPUnknownID,
-    crTFTPExists,
-    crTFTPNoSuchUser);
+    crRemoteFileExists,
+    crTFTPNoSuchUser,
+    crObsolete75,
+    crObsolete76,
+    crSSLCACertBadFile,
+    crRemoteFileNotFound,
+    crSSH,
+    crSSLShutdownFailed,
+    crAgain,
+    crSSLCrlBadFile,
+    crSSLIssuerError,
+    crFTPPRETFailed,
+    crRTSPCSeqError,
+    crRTSPSessionError,
+    crFTPBadFileList,
+    crChunkFailed,
+    crNoConnectionAvailable,
+    crSSLPinnedPubKeyNotMatch,
+    crSSLInvalidCertStatus,
+    crHTTP2Stream,
+    crResursiveAPICall,
+    crAuthError,
+    crHTTP3,
+    crQuicConnectError,
+    crProxy,
+    crSSLClientCert,
+    crUnrecoverablePoll
+  );
 
   /// libcurl share interface result codes
   CURLSHcode = (
@@ -266,8 +466,8 @@ type
     CURLSHE_IN_USE,       // 2
     CURLSHE_INVALID,      // 3
     CURLSHE_NOMEM,        // 4 out of memory
-    CURLSHE_NOT_BUILT_IN, // 5 feature not present in lib
-    CURLSHE_LAST);        // never use
+    CURLSHE_NOT_BUILT_IN  // 5 feature not present in lib
+  );
 
   /// libcurl share interface options
   CURLSHoption = (
@@ -276,64 +476,138 @@ type
     CURLSHOPT_UNSHARE,
     CURLSHOPT_LOCKFUNC,
     CURLSHOPT_UNLOCKFUNC,
-    CURLSHOPT_USERDATA,
-    CURLSHOPT_LAST);
-
-  /// low-level information enumeration for libcurl library API calls
-  TCurlInfo = (
-    ciNone,
-    ciLastOne               = 28,
-    ciEffectiveURL          = 1048577,
-    ciContentType           = 1048594,
-    ciPrivate               = 1048597,
-    ciRedirectURL           = 1048607,
-    ciPrimaryIP             = 1048608,
-    ciLocalIP               = 1048617,
-    ciResponseCode          = 2097154,
-    ciHeaderSize            = 2097163,
-    ciRequestSize           = 2097164,
-    ciSSLVerifyResult       = 2097165,
-    ciFileTime              = 2097166,
-    ciRedirectCount         = 2097172,
-    ciHTTPConnectCode       = 2097174,
-    ciHTTPAuthAvail         = 2097175,
-    ciProxyAuthAvail        = 2097176,
-    ciOS_Errno              = 2097177,
-    ciNumConnects           = 2097178,
-    ciPrimaryPort           = 2097192,
-    ciLocalPort             = 2097194,
-    ciTotalTime             = 3145731,
-    ciNameLookupTime        = 3145732,
-    ciConnectTime           = 3145733,
-    ciPreTRansferTime       = 3145734,
-    ciSizeUpload            = 3145735,
-    ciSizeDownload          = 3145736,
-    ciSpeedDownload         = 3145737,
-    ciSpeedUpload           = 3145738,
-    ciContentLengthDownload = 3145743,
-    ciContentLengthUpload   = 3145744,
-    ciStartTransferTime     = 3145745,
-    ciRedirectTime          = 3145747,
-    ciAppConnectTime        = 3145761,
-    ciSSLEngines            = 4194331,
-    ciCookieList            = 4194332,
-    ciCertInfo              = 4194338,
-    ciSizeDownloadT         = 6291464,
-    ciTotalTimeT            = 6291506, // (6) can be used for calculation "Content download time"
-    ciNameLookupTimeT       = 6291507, // (1) DNS lookup
-    ciConnectTimeT          = 6291508, // (2) connect time
-    ciPreTransferTimeT      = 6291509, // (4)
-    ciStartTransferTimeT    = 6291510, // (5) Time to first byte
-    ciAppConnectTimeT       = 6291512  // (3) TLS handshake
+    CURLSHOPT_USERDATA
   );
 
-  /// low-level parameter for CURL_OPT_USE_SSL
+const
+  CURLINFO_STRING = $100000;
+  CURLINFO_LONG   = $200000;
+  CURLINFO_DOUBLE = $300000;
+  CURLINFO_SLIST  = $400000;
+  CURLINFO_PTR    = $400000; // same as SLIST
+  CURLINFO_SOCKET = $500000;
+  CURLINFO_OFF_T  = $600000;
+
+type
+  TCurlInfo = (
+    ciEffectiveURL           = CURLINFO_STRING + 1,
+    ciResponseCode           = CURLINFO_LONG   + 2,
+    ciTotalTime              = CURLINFO_DOUBLE + 3,
+    ciNameLookupTime         = CURLINFO_DOUBLE + 4,
+    ciConnectTime            = CURLINFO_DOUBLE + 5,
+    ciPreTransferTime        = CURLINFO_DOUBLE + 6,
+    ciSizeUpload             = CURLINFO_DOUBLE + 7,  // deprecated since v7.55.0, use ciSizeUploadT
+    ciSizeUploadT            = CURLINFO_OFF_T  + 7,
+    ciSizeDownload           = CURLINFO_DOUBLE + 8,  // deprecated since v7.55.0, use ciSizeDownloadT
+    ciSizeDownloadT          = CURLINFO_OFF_T  + 8,
+    ciSpeedDownload          = CURLINFO_DOUBLE + 9,  // deprecated since v7.55.0, use ciSpeedDownloadT
+    ciSpeedDownloadT         = CURLINFO_OFF_T  + 9,
+    ciSpeedUpload            = CURLINFO_DOUBLE + 10, // deprecated since v7.55.0, use ciSpeedUploadT
+    ciSpeedUploadT           = CURLINFO_OFF_T  + 10,
+    ciHeaderSize             = CURLINFO_LONG   + 11,
+    ciRequestSize            = CURLINFO_LONG   + 12,
+    ciSSLVerifyResult        = CURLINFO_LONG   + 13,
+    ciFileTime               = CURLINFO_LONG   + 14,
+    ciFileTimeT              = CURLINFO_OFF_T  + 14,
+    ciContentLengthDownload  = CURLINFO_DOUBLE + 15, // deprecated since v7.55.0, use ciContentLengthDownloadT
+    ciContentLengthDownloadT = CURLINFO_OFF_T  + 15,
+    ciContentLengthUpload    = CURLINFO_DOUBLE + 16, // deprecated since v7.55.0, use ciContentLengthUploadT
+    ciContentLengthUploadT   = CURLINFO_OFF_T  + 16,
+    ciStartTransferTime      = CURLINFO_DOUBLE + 17,
+    ciContentType            = CURLINFO_STRING + 18,
+    ciRedirectTime           = CURLINFO_DOUBLE + 19,
+    ciRedirectCount          = CURLINFO_LONG   + 20,
+    ciPrivate                = CURLINFO_STRING + 21,
+    ciHTTPConnectCode        = CURLINFO_LONG   + 22,
+    ciHTTPAuthAvail          = CURLINFO_LONG   + 23,
+    ciProxyAuthAvail         = CURLINFO_LONG   + 24,
+    ciOSErrno                = CURLINFO_LONG   + 25,
+    ciNumConnects            = CURLINFO_LONG   + 26,
+    ciSSLEngines             = CURLINFO_SLIST  + 27,
+    ciCookieList             = CURLINFO_SLIST  + 28,
+    ciLastSocket             = CURLINFO_LONG   + 29, // deprecated since v7.45.0, use ciActiveSocket
+    ciFTPEntryPath           = CURLINFO_STRING + 30,
+    ciRedirectURL            = CURLINFO_STRING + 31,
+    ciPrimaryIP              = CURLINFO_STRING + 32,
+    ciAppConnectTime         = CURLINFO_DOUBLE + 33,
+    ciCertInfo               = CURLINFO_PTR    + 34,
+    ciConditionUnmet         = CURLINFO_LONG   + 35,
+    ciRTSPSessionID          = CURLINFO_STRING + 36,
+    ciRTSPClientCSeq         = CURLINFO_LONG   + 37,
+    ciRTSPServerCSeq         = CURLINFO_LONG   + 38,
+    ciRTSPCSeqRecv           = CURLINFO_LONG   + 39,
+    ciPrimaryPort            = CURLINFO_LONG   + 40,
+    ciLocalIP                = CURLINFO_STRING + 41,
+    ciLocalPort              = CURLINFO_LONG   + 42,
+    ciTLSSession             = CURLINFO_PTR    + 43, // deprecated since v7.48.0, use ciTLSSSLPtr
+    ciActiveSocket           = CURLINFO_SOCKET + 44,
+    ciTLSSSLPtr              = CURLINFO_PTR    + 45,
+    ciHTTPVersion            = CURLINFO_LONG   + 46,
+    ciProxySSLVerifyResult   = CURLINFO_LONG   + 47,
+    ciProtocol               = CURLINFO_LONG   + 48, // deprecated since v7.85.0, use ciScheme
+    ciScheme                 = CURLINFO_STRING + 49,
+    ciTotalTimeT             = CURLINFO_OFF_T  + 50, // can be used for calculation "Content download time"
+    ciNameLookupTimeT        = CURLINFO_OFF_T  + 51,
+    ciConnectTimeT           = CURLINFO_OFF_T  + 52,
+    ciPreTransferTimeT       = CURLINFO_OFF_T  + 53,
+    ciStartTransferTimeT     = CURLINFO_OFF_T  + 54,
+    ciRedirectTimeT          = CURLINFO_OFF_T  + 55,
+    ciAppConnectTimeT        = CURLINFO_OFF_T  + 56, // TLS handshake
+    ciRetryAfter             = CURLINFO_OFF_T  + 57,
+    ciEffectiveMethod        = CURLINFO_STRING + 58,
+    ciProxyError             = CURLINFO_LONG   + 59,
+    ciReferer                = CURLINFO_STRING + 60,
+    ciCAInfo                 = CURLINFO_STRING + 61,
+    ciCAPath                 = CURLINFO_STRING + 62,
+    ciXferID                 = CURLINFO_OFF_T  + 63,
+    ciConnID                 = CURLINFO_OFF_T  + 64
+  );
+
+  /// low-level parameter for coHTTPVersion
+  TCurlHTTPVersion = (
+    chvNone,
+    chv1_0,
+    chv1_1,
+    chv2,
+    chv2TLS,
+    chv2PriorKnowledge,
+    chv3 = 30,
+    chv3Only = 31
+  );
+
+  /// low-level parameter for coHttpAuth
+  TCurlAuth = (
+    cauNone      = 0,
+    cauBasic     = 1 shl 0,
+    cauDigest    = 1 shl 1,
+    cauNegotiate = 1 shl 2,
+    cauNTLM      = 1 shl 3,
+    cauDigest_IE = 1 shl 4,
+    cauNTLM_WB   = 1 shl 5,
+    cauBearer    = 1 shl 6,
+    cauAWS_SigV4 = 1 shl 7,
+    cauOnly      = 1 shl 31,
+    cauAny       = not cauDigest_IE,
+    cauAnySafe   = not cauBasic and not cauDigest_IE
+  );
+
+  /// low-level parameter for coUseSSL
   TCurlUseSSL = (
     cusNone,
     cusTry,
     cusControl,
-    cusAll,
-    cusLast
+    cusAll
+  );
+
+  /// low-level argument to the coDebugFunction callback
+  TCurlDebug = (
+    cuText,
+    cuHeaderIn,
+    cuHeaderOut,
+    cuDataIn,
+    cuDataOut,
+    cuSSLDataIn,
+    cuSSLDataOut
   );
 
   {$ifdef LIBCURLMULTI}
@@ -349,7 +623,11 @@ type
     cmcBadSocket,
     cmcUnknownOption,
     cmcAddedAlready,
-    cmcRecursiveApiCall
+    cmcRecursiveAPICall,
+    cmcWakeupFailure,
+    cmcBadFunctionArgument,
+    cmcAbortedByCallback,
+    cmcUnrecoverablePoll
   );
 
   /// low-level options for libcurl library API calls in "multi" mode
@@ -378,8 +656,15 @@ type
     cvFirst,
     cvSecond,
     cvThird,
-    cvFour,
-    cvLast);
+    cvFourth,
+    cvFifth,
+    cvSixth,
+    cvSeventh,
+    cvEighth,
+    cvNinth,
+    cvTenth,
+    cvEleventh
+  );
 
   /// low-level initialization option for libcurl library API
   // - currently, only giSSL is set, since giWin32 is redundant with WinHttp
@@ -387,12 +672,14 @@ type
     giNone,
     giSSL,
     giWin32,
-    giAll);
+    giAll
+  );
 
   /// low-level message state for libcurl library API
   TCurlMsg = (
     cmNone,
-    cmDone);
+    cmDone
+  );
 
   /// libcurl multipart/formdata HTTP POST result codes
   TCurlFormCode = (
@@ -403,8 +690,8 @@ type
     CURL_FORMADD_UNKNOWN_OPTION,
     CURL_FORMADD_INCOMPLETE,
     CURL_FORMADD_ILLEGAL_ARRAY,
-    CURL_FORMADD_DISABLED,
-    CURL_FORMADD_LAST);
+    CURL_FORMADD_DISABLED
+  );
 
   /// libcurl multipart/formdata HTTP POST options
   TCurlFormOption = (
@@ -428,9 +715,8 @@ type
     CURLFORM_END,
     CURLFORM_OBSOLETE2,
     CURLFORM_STREAM,
-    CURLFORM_CONTENTLEN, // added in 7.46.0, provide a curl_off_t 64-bit size
-    CURLFORM_LASTENTRY
-    );
+    CURLFORM_CONTENTLEN // added in 7.46.0, provide a curl_off_t 64-bit size
+  );
 
   /// low-level version information for libcurl library
   TCurlVersionInfo = record
@@ -442,12 +728,61 @@ type
     ssl_version: PAnsiChar;
     ssl_version_num: PAnsiChar;
     libz_version: PAnsiChar;
-    protocols: ^TPAnsiCharArray;
+    protocols: PPAnsiCharArray;
     ares: PAnsiChar;
     ares_num: integer;
     libidn: PAnsiChar;
+    iconv_ver_num: integer;
+    libssh_version: PAnsiChar;
+    brotli_ver_num: cardinal;
+    brotli_version: PAnsiChar;
+    nghttp2_ver_num: cardinal;
+    nghttp2_version: PAnsiChar;
+    quic_version: PAnsiChar;
+    cainfo: PAnsiChar;
+    capath: PAnsiChar;
+    zstd_ver_num: integer;
+    zstd_version: PAnsiChar;
+    hyper_version: PAnsiChar;
+    gsasl_version: PAnsiChar;
+    feature_names: PPAnsiCharArray;
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
+
+  /// low-level bits for TCurlVersionInfo.features
+  TCurlVersionFeature = (
+    cvfIPv6         = 1 shl 0,
+    cvfKerberos4    = 1 shl 1,
+    cvfSSL          = 1 shl 2,
+    cvfLibz         = 1 shl 3,
+    cvfNTLM         = 1 shl 4,
+    cvfGSSNegotiate = 1 shl 5,
+    cvfDebug        = 1 shl 6,
+    cvfAsynchDNS    = 1 shl 7,
+    cvfSPNEGO       = 1 shl 8,
+    cvfLargefile    = 1 shl 9,
+    cvfIDN          = 1 shl 10,
+    cvfSSPI         = 1 shl 11,
+    cvfConv         = 1 shl 12,
+    cvfCurlDebug    = 1 shl 13,
+    cvfTLSAuthSRP   = 1 shl 14,
+    cvfNTLMWB       = 1 shl 15,
+    cvfHTTP2        = 1 shl 16,
+    cvfGSSAPI       = 1 shl 17,
+    cvfKerberos5    = 1 shl 18,
+    cvfUnixSockets  = 1 shl 19,
+    cvfPSL          = 1 shl 20,
+    cvfHTTPSProxy   = 1 shl 21,
+    cvfMultiSSL     = 1 shl 22,
+    cvfBrotli       = 1 shl 23,
+    cvfAltSvc       = 1 shl 24,
+    cvfHTTP3        = 1 shl 25,
+    cvfZstd         = 1 shl 26,
+    cvfUnicode      = 1 shl 27,
+    cvfHSTS         = 1 shl 28,
+    cvfGSASL        = 1 shl 29,
+    cvfThreadsafe   = 1 shl 30
+  );
 
   /// low-level access to the libcurl library instance
   TCurl = type pointer;
@@ -553,13 +888,14 @@ type
     CURL_LOCK_DATA_SSL_SESSION,
     CURL_LOCK_DATA_CONNECT,
     CURL_LOCK_DATA_PSL,
-    CURL_LOCK_DATA_LAST);
+    CURL_LOCK_DATA_HSTS
+  );
 
   curl_lock_access = (
     CURL_LOCK_ACCESS_NONE = 0,
     CURL_LOCK_ACCESS_SHARED = 1,
-    CURL_LOCK_ACCESS_SINGLE = 2,
-    CURL_LOCK_ACCESS_LAST);
+    CURL_LOCK_ACCESS_SINGLE = 2
+  );
 
   /// lock function signature for CURLSHOPT_LOCKFUNC
   curl_lock_function = procedure (handle: TCurl; data: curl_lock_data;
@@ -571,12 +907,51 @@ type
 {$Z1}
 
 const
-  // some aliases
-  coWriteData = coFile;
-  coReadData = coInFile;
-  coXferInfoData = coProgressData;
-  coAcceptEncoding = coEncoding;
+  // coErrorBuffer must be at least CURL_ERROR_SIZE bytes big
+  CURL_ERROR_SIZE = 256;
 
+  // aliases for removed/repurposed values
+  crURLMalformatUser = crNotBuiltIn;
+  crFTPWeirdServerReply = crWeirdServerReply;
+  crFTPAccessDenied = crRemoteAccessDenied;
+  crFTPUserPasswordIncorrect = crFTPAccessFailed;
+  crFTPWeirdUSERReply = crFTPAcceptTimeout;
+  crFTPCantGetHost = crFTPCannotGetHost;
+  crFTPCantReconnect = crHTTP2;
+  crFTPCouldNotSetBINARY = crFTPCouldNotSetType;
+  crFTPWriteError = crObsolete20;
+  crFTPQuoteError = crQuoteError;
+  crMalFormatUser = crObsolete24;
+  crFTPCouldNotStorFile = crUploadFailed;
+  crFTPCouldNotSetASCII = crObsolete29;
+  crFTPCouldNotGetSize = crObsolete32;
+  crHTTPRangeError = crRangeError;
+  crLibraryNotFound = crObsolete40;
+  crBadCallingOrder = crObsolete44;
+  crBadPasswordEntered = crObsolete46;
+  crUnknownTelnetOption = crUnknownOption;
+  crTelnetOptionSyntax = crSetOptOptionSyntax;
+  crSSLPeerCertificate = crObsolete51;
+  crShareInUse = crObsolete57;
+  crSSLCACert = crPeerFailedVerification;
+  crLDAPInvalidURL = crObsolete62;
+  crFTPSSLFailed = crUseSSLFailed;
+  crTFTPDiskFull = crRemoteDiskFull;
+  crTFTPExists = crRemoteFileExists;
+
+  coFile = coWriteData;
+  coInFile = coReadData;
+  coSSLCertPasswd = coKeyPasswd;
+  coWriteHeader= coHeaderData;
+  coWriteInfo = coObsolete40;
+  coFTPListOnly = coDirListOnly;
+  coFTPAppend = coAppend;
+  coProgressData = coXferInfoData;
+  coKRB4Level = coKRBLevel;
+  coClosePolicy = coObsolete72;
+  coEncoding = coAcceptEncoding;
+  coFTPResponseTimeout = coServerResponseTimeout;
+  coFTPSSL = coUseSSL;
 
 { ************ CURL Functions API }
 
@@ -731,7 +1106,7 @@ function CurlIsAvailable: boolean;
 /// Callback used by libcurl to write data, e.g. when downloading a resource
 // - Usage:
 // ! curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
-// ! curl.easy_setopt(curlHandle, coFile, @curlRespBody);
+// ! curl.easy_setopt(curlHandle, coWriteData, @curlRespBody);
 // where curlRespBody should be a generic AnsiString/RawByteString, i.e.
 // in practice a RawUtf8 or a RawByteString
 function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: integer;
@@ -1109,7 +1484,7 @@ begin
       @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
     if res <> crOK then
         raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
-    curl.info := curl.version_info(cvFour)^;
+    curl.info := curl.version_info(cvEleventh)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info.ssl_version]);
