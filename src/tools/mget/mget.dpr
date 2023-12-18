@@ -64,6 +64,8 @@ begin
     '#filename to be used as output', dest));
   p.Verbose := Executable.Command.Option(['v', 'verbose'],
     'generate verbose output');
+  p.NoResume := Executable.Command.Option(['n', 'noresume'],
+    'disable auto-resume of partial file download after interruption');
   if Executable.Command.Option(['l', 'log'],
     'enable logging in --logFolder') then
     p.Log := TSynLog;
@@ -90,9 +92,9 @@ begin
     if logfolder <> '' then
       p.Log.Family.DestinationPath := logfolder;
   end;
-  // add PeerCache params after all main settings using RTTI
-  SetObjectFromExecutableCommandLine(
-    p.PeerSettings, 'peer', ' for peer Cache');
+  // add Main and PeerCache params after all main settings using RTTI
+  SetObjectFromExecutableCommandLine(p, '', ' for main process');
+  SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
   // validate whole set of arguments
   result := false;
   if Executable.Command.Option(['?', 'help'], 'display this message') or

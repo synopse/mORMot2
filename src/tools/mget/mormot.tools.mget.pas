@@ -34,6 +34,7 @@ type
   TMGetProcess = class(TPersistentAutoCreateFields)
   protected
     fPeerSettings: THttpPeerCacheSettings;
+    fHash: THashAlgo;
   public
     // input parameters (e.g. from command line) for the MGet process
     Verbose, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
@@ -46,6 +47,9 @@ type
     /// the settings used if Peer is true
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
+    /// following properties could be published as command line switches
+    property Hash: THashAlgo
+      read fHash write fHash;
   end;
 
 
@@ -63,7 +67,7 @@ begin
   if Verbose then
     wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   wget.Resume := not NoResume;
-  wget.Hash := 'sha256';
+  wget.Hash := copy(HASH_EXT[fHash], 2, 10);
   if cache then
     wget.HashCacheDir := CacheFolder;
   // make the request
