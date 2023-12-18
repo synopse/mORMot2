@@ -1112,7 +1112,15 @@ var
 
 type
   /// libcurl exception type
-  ECurlHttp = class(ExceptionWithProps);
+  ECurlHttp = class(ExceptionWithProps)
+  protected
+    fError: TCurlResult;
+  public
+    constructor Create(error: TCurlResult; const Msg: string; const Args: array of const); overload;
+  published
+    property Error: TCurlResult
+      read fError;
+  end;
 
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
@@ -3435,6 +3443,12 @@ end;
 
 { TCurlHttp }
 
+constructor ECurlHttp.Create(error: TCurlResult; const Msg: string; const Args: array of const);
+begin
+  inherited CreateFmt(Msg, Args);
+  fError:= error;
+end;
+
 procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
@@ -3443,7 +3457,7 @@ const
     's');
 begin
   if not IsAvailable then
-    raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
+    raise EOSException.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
@@ -3583,7 +3597,7 @@ var
 begin
   res := curl.easy_perform(fHandle);
   if res <> crOK then
-    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s',
+    raise ECurlHttp.Create(res, 'libcurl error %d (%s) on %s %s',
       [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
