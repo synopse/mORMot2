@@ -3064,6 +3064,8 @@ begin
 end;
 
 
+{ TRttiProp }
+
 function TRttiProp.Name: PShortString;
 begin
   result := @PPropInfo(@self)^.Name;
@@ -5225,7 +5227,7 @@ begin
   info := aTypeInfo^.SetEnumType;
   if info <> nil then
   begin
-    PS := info^.NameList;
+    PS := info^.EnumBaseType.NameList;
     for i := 0 to info^.MaxValue do
     begin
       if GetBitPtr(@value, i) then
@@ -5248,7 +5250,7 @@ begin
   info := aTypeInfo^.SetEnumType;
   if info <> nil then
   begin
-    PS := info^.NameList;
+    PS := info^.EnumBaseType.NameList;
     for i := 0 to info^.MaxValue do
     begin
       if GetBitPtr(@value, i) then
