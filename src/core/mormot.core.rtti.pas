@@ -312,8 +312,11 @@ const
      rkSet
     ];
 
+  /// types which are considerated as non-simple values
+  rkComplexTypes = [rkClass, rkDynArray, rkInterface];
+
   /// types which are stored as pointers so are always accessed by reference
-  rkPerReference = rkStringTypes + [rkDynArray, rkInterface, rkClass];
+  rkPerReference = rkStringTypes + rkComplexTypes;
 
   /// maps 1, 8, 16, 32 and 64-bit ordinal in TRttiKind RTTI enumerates
   rkOrdinalTypes =
@@ -327,8 +330,7 @@ const
 
   /// maps values which expect TRttiProp.GetOrdProp/SetOrdProp
   // - includes 32-bit ordinals and pointers
-  rkGetOrdPropTypes =
-     rkHasRttiOrdTypes + [ rkClass, rkDynArray, rkInterface ];
+  rkGetOrdPropTypes = rkHasRttiOrdTypes + rkComplexTypes;
 
   /// maps ordinal values which expect TRttiProp.GetInt64Prop/SetInt64Prop
   // - includes 64-bit ordinals
@@ -1470,6 +1472,7 @@ procedure FinalizeObject(Value: TObject);
 /// fill a class instance properties from command line switches
 // - SwitchPrefix + property name will be searched in CommandLine.Names[]
 // - is typically used to fill a settings class instance
+// - won't include any nested class or dynamic array properties
 function SetObjectFromExecutableCommandLine(Value: TObject;
   const SwitchPrefix, DescriptionSuffix: RawUtf8;
   CommandLine: TExecutableCommandLine = nil): boolean;
@@ -9277,18 +9280,23 @@ begin
   p := pointer(rc.Props.List);
   for i := 1 to rc.Props.Count do
   begin
-    desc := '';
-    if p^.Value.Kind in [rkEnumeration, rkSet] then
-      p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, ' - values: ');
-    desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
-    def := p^.Prop^.GetValueText(Value);
-    if (def <> '') and
-       (def <> '0') and
-       (def <> '*') then
-      desc := FormatUtf8('% (default: %)', [desc, def]);
-    if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
-       p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
-      result := true;
+    if not (p^.Value.Kind in rkComplexTypes) then
+    begin
+      desc := '';
+      if p^.Value.Kind in [rkEnumeration, rkSet] then
+        p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, ' - values: ');
+      desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
+      if not p.ValueIsDefault(Value) then
+      begin
+        def := p^.Prop^.GetValueText(Value);
+        if (def <> '') and
+           (def <> '0') then
+          desc := FormatUtf8('% (default: %)', [desc, def]);
+      end;
+      if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
+         p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
+        result := true;
+    end;
     inc(p);
   end;
 end;
