@@ -7867,7 +7867,7 @@ begin
   if def <> '' then
     def := ' (default ' + def + ')';
   pnames := _fmt('  %0:-20s', [desc + def]);
-  if length(pnames) > 22 then // write description on next line
+  if length(pnames) > 21 then // write description on next line
     fDescDetail[k] := fDescDetail[k] + pnames + fLineFeed +
             '                      ' + d + fLineFeed
   else
