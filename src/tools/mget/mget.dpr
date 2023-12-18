@@ -38,24 +38,55 @@ uses
   mormot.core.variants,
   mormot.core.json,
   mormot.core.log,
+  mormot.net.sock,
   mormot.net.client,
   mormot.net.server,
   mormot.tools.mget;
 
-procedure GetParameters;
+function GetParameters(p: TMGetProcess): boolean;
+var
+  mac: TMacAddress;
 begin
-  with Executable.Command do
-  begin
-    ExeDescription := 'Retrieve files using HTTP(S)';
-    verbose := Option(['v', 'verbose'], 'generate verbose output');
-    Get(['t', 'threads'], threads, '#number of threads to run', 5);
-  end;
+  // use some good enough settings for default --peer process on command line
+  p.PeerSettings.CacheTempPath := Executable.ProgramFilePath + 'cache-temp';
+  p.PeerSettings.CachePermPath := Executable.ProgramFilePath + 'cache-perm';
+  if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
+    p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
+  // define main processing switches
+    Executable.Command.ExeDescription := 'Retrieve files using HTTP(S)';
+    p.Verbose := Executable.Command.Option(['v', 'verbose'],
+      'generate verbose output');
+    p.Peer := Executable.Command.Option(['p', 'peer'],
+      'enable PeerCache process - see --peer* options');
+    //Get(['t', 'threads'], threads, '#number of threads to run', 5);
+  // add PeerCache params after all main settings
+  SetObjectFromExecutableCommandLine(
+    p.PeerSettings, 'peer', ' for PeerCache');
+  // main arguments
+  if Executable.Command.Arg(0, '#http://uri resource address to retrieve') then
+    p.Url := Executable.Command.Args[0];
+  result := false;
+  if Executable.Command.Option(['?', 'help'], 'display this message') or
+    (p.Url = '') then
+    ConsoleWrite(Executable.Command.FullDescription)
+  else if not Executable.Command.ConsoleWriteUnknown then
+    result := true;
 end;
 
+var
+  p: TMGetProcess;
 begin
   try
     // is executed as a service/daemon or as a command line tool
-    GetParameters;
+    p := TMGetProcess.Create;
+    try
+      if GetParameters(p) then
+      begin
+
+      end;
+    finally
+      p.Free;
+    end;
   except
     on E: Exception do
       ConsoleShowFatalException(E, {waitforenterkey=}false);

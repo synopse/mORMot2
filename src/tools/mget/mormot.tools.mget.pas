@@ -19,6 +19,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.log,
+  mormot.core.data,
   mormot.crypt.secure,
   mormot.crypt.core,
   mormot.net.sock,
@@ -28,8 +29,24 @@ uses
 
 { ****************  }
 
+type
+  /// state engine for mget processing
+  TMGetProcess = class(TPersistentAutoCreateFields)
+  protected
+    fPeerSettings: THttpPeerCacheSettings;
+  public
+    /// input parameters for the MGet process
+    Verbose, Peer: boolean;
+    Url: RawUtf8;
+  published
+    property PeerSettings: THttpPeerCacheSettings
+      read fPeerSettings write fPeerSettings;
+  end;
+
 
 implementation
+
+{ TMGetProcess }
 
 
 initialization
