@@ -34,22 +34,39 @@ type
   TMGetProcess = class(TPersistentAutoCreateFields)
   protected
     fPeerSettings: THttpPeerCacheSettings;
-    fHash: THashAlgo;
+    fHashAlgo: THashAlgo;
+    fPeerRequest: TWGetAlternateOptions;
+    fLimitBandwidthMB, fWholeRequestTimeoutSec, fTcpTimeoutSec: integer;
+    fHashValue: RawUtf8;
+    fPeerSecret, fPeerSecretHexa: SpiUtf8;
   public
     // input parameters (e.g. from command line) for the MGet process
-    Verbose, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
+    Verbose, NoResume, TlsIgnoreErrors, Hash, Cache, Peer: boolean;
     CacheFolder, TlsCertFile, DestFile: TFileName;
     Log: TSynLogClass;
-    HttpTimeoutSec: integer;
     /// this is the main processing method
     function Execute(const Url: RawUtf8): TFileName;
   published
     /// the settings used if Peer is true
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
-    /// following properties could be published as command line switches
-    property hash: THashAlgo
-      read fHash write fHash;
+    // following properties will be published as command line switches
+    property hashAlgo: THashAlgo
+      read fHashAlgo write fHashAlgo;
+    property hashValue: RawUtf8
+      read fHashValue write fHashValue;
+    property limitBandwithMB: integer
+      read fLimitBandwidthMB write fLimitBandwidthMB;
+    property tcpTimeoutSec: integer
+      read fTcpTimeoutSec write fTcpTimeoutSec;
+    property wholeRequestTimeoutSec: integer
+      read fWholeRequestTimeoutSec write fWholeRequestTimeoutSec;
+    property peerSecret: SpiUtf8
+      read fPeerSecret write fPeerSecret;
+    property peerSecretHexa: SpiUtf8
+      read fPeerSecretHexa write fPeerSecretHexa;
+    property peerRequest: TWGetAlternateOptions
+      read fPeerRequest write fPeerRequest;
   end;
 
 
@@ -61,23 +78,37 @@ function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
 var
   client: THttpClientSocket;
   wget: THttpClientSocketWGet;
+  u: RawUtf8;
 begin
   // set the WGet additional parameters
   wget.Clear;
   if Verbose then
     wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   wget.Resume := not NoResume;
-  wget.Hash := copy(HASH_EXT[fHash], 2, 10);
-  if cache then
-    wget.HashCacheDir := CacheFolder;
+  wget.HashFromServer := (hashValue = '') and (Hash or Peer);
+  wget.Hasher := HASH_STREAMREDIRECT[fHashAlgo];
+  wget.Hash := hashValue;
+  wget.LimitBandwith := fLimitBandwidthMB shl 20;
+  wget.TimeOutSec := fWholeRequestTimeoutSec;
+  if Cache then
+    wget.HashCacheDir := EnsureDirectoryExists(CacheFolder);
+  if Peer then
+  begin
+    if (fPeerSecret = '') and
+       (fPeerSecretHexa <> '') then
+      fPeerSecret := HexToBin(fPeerSecretHexa);
+    wget.Alternate := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+    wget.AlternateOptions := fPeerRequest;
+  end;
   // make the request
-  client := THttpClientSocket.Create(HttpTimeoutSec * 1000);
+  client := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
   try
     if Log <> nil then
       client.OnLog := Log.DoLog;
     client.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
     client.TLS.CertificateFile := TlsCertFile;
-    result := client.WGet(Url, DestFile, wget);
+    client.OpenUri(Url, u);
+    result := client.WGet(u, DestFile, wget);
   finally
     client.Free;
   end;

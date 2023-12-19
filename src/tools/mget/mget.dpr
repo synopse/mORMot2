@@ -51,41 +51,46 @@ var
   logfolder: TFileName;
   dest: RawUtf8;
 begin
+  // some good enough general default values
+  p.CacheFolder := MakePath([Executable.ProgramFilePath, 'cache'], true);
+  p.tcpTimeoutSec := 10;
+  p.hashAlgo := hfSHA256;
+  logfolder := StringToUtf8(Executable.ProgramFilePath + 'log');
   // use some good enough settings for default --peer process on command line
-  p.PeerSettings.CacheTempPath := Executable.ProgramFilePath + 'cache-temp';
-  p.PeerSettings.CachePermPath := Executable.ProgramFilePath + 'cache-perm';
+  p.peerSecret := 'secret';
+  p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
+  p.PeerSettings.CachePermPath := p.CacheFolder + 'perm';
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
-  Executable.Command.ExeDescription := 'Retrieve files using HTTP(S)';
+  Executable.Command.ExeDescription := 'Retrieve files using HTTP(S) and more';
   if Executable.Command.Arg(0, '#http://uri resource address to retrieve') then
     url := Executable.Command.Args[0];
   dest := ExtractResourceName(url);
   p.DestFile := Utf8ToString(Executable.Command.Param(['o', 'output'],
-    '#filename to be used as output', dest));
+     '#filename to be used as output', dest));
   p.Verbose := Executable.Command.Option(['v', 'verbose'],
-    'generate verbose output');
+     'generate verbose output');
   p.NoResume := Executable.Command.Option(['n', 'noresume'],
-    'disable auto-resume of interrupted partial download');
-  if Executable.Command.Option(['l', 'log'],
-    'enable logging in --logFolder') then
-    p.Log := TSynLog;
+     'disable auto-resume of interrupted partial download');
+  p.Hash := Executable.Command.Option(['h', 'hash'],
+     'enable content hashing using --hashAlgo');
   p.Cache := Executable.Command.Option(['c', 'cache'],
-    'enable local Cache in --cachePath');
+     'enable local Cache in --cachePath');
   p.Peer := Executable.Command.Option(['p', 'peer'],
-    'enable peer Cache process - see --peer* params');
-  p.HttpTimeoutSec := Executable.Command.Param('timeout', 10,
-    'the timeout #seconds to be used for the HTTP request');
+     'enable peer Cache process - see --peer* params');
   p.TlsCertFile := Utf8ToString(Executable.Command.Param(['t', 'tlsCert'],
-    'optional client Certificate #filename'));
+     'optional client Certificate #filename'));
   logfolder := Utf8ToString(Executable.Command.Param(['logFolder'],
-    '#folder to be used for --log output',
-    StringToUtf8(Executable.ProgramFilePath + 'log')));
+     '#folder to be used for --log output', logfolder));
   p.CacheFolder := Utf8ToString(Executable.Command.Param(['cachePath'],
-    '#folder to be used for local (not peer) --cache',
-    StringToUtf8(Executable.ProgramFilePath + 'cache')));
+     '#folder to be used for local (not peer) --cache',
+     StringToUtf8(p.CacheFolder)));
   p.TlsIgnoreErrors  := Executable.Command.Option(['w', 'weakTls'],
-    'ignore TLS certificate errors');
+     'ignore TLS certificate errors');
+  if Executable.Command.Option(['l', 'log'],
+     'enable logging in --logFolder') then
+    p.Log := TSynLog;
   // setting the needed logging information
   if p.Log <> nil then
   begin
@@ -94,7 +99,6 @@ begin
       p.Log.Family.DestinationPath := logfolder;
   end;
   // add Main and PeerCache params after all main settings using RTTI
-  p.hash := hfSHA256;
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
   // validate whole set of arguments
@@ -115,7 +119,9 @@ begin
     p := TMGetProcess.Create;
     try
       if GetParameters(p, url) then
-        p.Execute(url);
+        ConsoleWrite('Loaded %', [p.Execute(url)])
+      else
+        ExitCode := 1; // error
     finally
       p.Free;
     end;
