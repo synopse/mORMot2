@@ -210,7 +210,8 @@ function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar = ',';
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 // - warning: will add the strings, so List := nil may be needed before call
 procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
-  Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
+  Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false;
+  Quote: AnsiChar = #0); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 // - warning: will add the strings, so List := nil may be needed before call
@@ -3083,7 +3084,7 @@ begin
 end;
 
 procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
-  Sep: AnsiChar; TrimItems, AddVoidItems: boolean);
+  Sep: AnsiChar; TrimItems, AddVoidItems: boolean; Quote: AnsiChar);
 var
   s: RawUtf8;
   n: integer;
@@ -3092,7 +3093,13 @@ begin
   while (Csv <> nil) and
         (Csv^ <> #0) do
   begin
-    if TrimItems then
+    if Quote <> #0 then
+    begin
+      GetNextItem(Csv, Sep, Quote, s);
+      if TrimItems then
+        TrimSelf(s);
+    end
+    else if TrimItems then
       GetNextItemTrimed(Csv, Sep, s)
     else
       GetNextItem(Csv, Sep, s);
