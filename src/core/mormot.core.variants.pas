@@ -1063,6 +1063,18 @@ type
     /// initialize a variant array instance from an object Names[]
     procedure InitArrayFromObjectNames(const aObject: variant;
       aOptions: TDocVariantOptions = []; aItemsCopiedByReference: boolean = true);
+    /// initialize a variant instance from some 'a,b,c' CSV one-line content
+    // - is by default separator tolerant, i.e. will detect ',' ';' or #9 in text
+    procedure InitArrayFromCsv(const aCsv: RawUtf8;
+      aOptions: TDocVariantOptions; aSeparator: AnsiChar = #0;
+      aTrimItems: boolean = false; aAddVoidItems: boolean = false;
+      aQuote: AnsiChar = #0);
+    /// initialize a variant instance from a CSV file content with header
+    // - stored objects names will be retrieved from the first CSV line
+    // - is by default separator tolerant, i.e. will detect ',' ';' or #9 in text
+    procedure InitArrayFromCsvFile(const aCsv: RawUtf8;
+      aOptions: TDocVariantOptions; aSeparator: AnsiChar = #0;
+      aQuote: AnsiChar = #0);
     /// initialize a variant instance to store some RawUtf8 array content
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
@@ -1694,10 +1706,10 @@ type
     /// add a value in this document, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
-    // and/or as varDouble is AllowVarDouble is set)
+    // and/or as varDouble is dvoAllowDoubleValue option is set)
     // - if Update=TRUE, will set the property, even if it is existing
     function AddValueFromText(const aName, aValue: RawUtf8;
-      DoUpdate: boolean = false; AllowVarDouble: boolean = false): integer;
+      DoUpdate: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
@@ -1736,12 +1748,12 @@ type
     /// add a value to this document, handled as array, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
-    // unless AllowVarDouble is set)
+    // and/or as varDouble is dvoAllowDoubleValue option is set)
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
     function AddItemFromText(const aValue: RawUtf8;
-      AllowVarDouble: boolean = false; aIndex: integer = -1): integer;
+      aIndex: integer = -1): integer;
     /// add a RawUtf8 value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can specify an optional index in the array where to insert
@@ -5041,6 +5053,74 @@ begin
     TRttiVarData(self).VType := varNull;
 end;
 
+procedure TDocVariantData.InitArrayFromCsv(const aCsv: RawUtf8;
+  aOptions: TDocVariantOptions; aSeparator: AnsiChar;
+  aTrimItems, aAddVoidItems: boolean; aQuote: AnsiChar);
+var
+  tmp: TRawUtf8DynArray;
+begin
+  if aSeparator = #0 then
+    aSeparator := CsvGuessSeparator(aCsv); // separator-tolerant
+  CsvToRawUtf8DynArray(
+    pointer(aCsv), tmp, aSeparator, aTrimItems, aAddVoidItems, aQuote);
+  InitArrayFrom(tmp, aOptions);
+end;
+
+procedure _FromText(opt: TDocVariantOptions; v: PVariant; const t: RawUtf8);
+begin
+  if not GetVariantFromNotStringJson(
+           pointer(t), PVarData(v)^, dvoAllowDoubleValue in opt) then
+    if dvoInternValues in opt then
+      DocVariantType.InternValues.UniqueVariant(v^, t)
+    else
+      RawUtf8ToVariant(t, v^);
+end;
+
+procedure TDocVariantData.InitArrayFromCsvFile(const aCsv: RawUtf8;
+  aOptions: TDocVariantOptions; aSeparator, aQuote: AnsiChar);
+var
+  p: PUtf8Char;
+  names, tmp: TRawUtf8DynArray;
+  v: PDocVariantData;
+  line: RawUtf8;
+  n, i, t: PtrInt;
+begin
+  n := 0;
+  Init(aOptions, dvArray);
+  p := pointer(aCsv);
+  while p <> nil do
+  begin
+    line := GetNextLine(p, p);
+    if line = '' then
+      continue;
+    if (tmp = nil) and
+       (aSeparator = #0) then
+      aSeparator := CsvGuessSeparator(line); // separator-tolerant
+    tmp := nil;
+    CsvToRawUtf8DynArray(pointer(line), tmp, aSeparator, false, true, aQuote);
+    if tmp <> nil then
+      if names = nil then
+      begin
+        names := tmp; // first line are field/column names
+        n := length(names);
+      end
+      else
+      begin
+        i := InternalAdd(''); // new row of data
+        v := @VValue[i];
+        v^.Init(aOptions, dvObject);
+        v^.VName := names;
+        v^.VCount := n;
+        SetLength(v^.VValue, n);
+        t := length(tmp);
+        if t > n then
+          t := n; // allow too many or missing last columns
+        for i := 0 to t - 1 do
+          _FromText(aOptions, @v^.VValue[i], tmp[i]); // recognize numbers
+      end;
+  end;
+end;
+
 function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
   aCount: integer; const aItems): PRttiVarData;
 begin
@@ -6016,7 +6096,7 @@ begin
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
-  DoUpdate, AllowVarDouble: boolean): integer;
+  DoUpdate: boolean): integer;
 var
   v: PVariant;
 begin
@@ -6035,11 +6115,7 @@ begin
     result := InternalAdd(aName);
   v := @VValue[result];
   VarClear(v^);
-  if not GetVariantFromNotStringJson(pointer(aValue), PVarData(v)^, AllowVarDouble) then
-    if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(v^, aValue)
-    else
-      RawUtf8ToVariant(aValue, v^);
+  _FromText(VOptions, v, aValue); // recognize numbers
 end;
 
 procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
@@ -6116,18 +6192,10 @@ begin
   InternalSetValue(result, variant(aValue));
 end;
 
-function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
-  AllowVarDouble: boolean; aIndex: integer): integer;
-var
-  v: PVariant;
+function TDocVariantData.AddItemFromText(const aValue: RawUtf8; aIndex: integer): integer;
 begin
   result := InternalAdd('', aIndex);
-  v := @VValue[result];
-  if not GetVariantFromNotStringJson(pointer(aValue), PVarData(v)^, AllowVarDouble) then
-    if dvoInternValues in VOptions then
-      DocVariantType.InternValues.UniqueVariant(v^, aValue)
-    else
-      RawUtf8ToVariant(aValue, v^);
+  _FromText(VOptions, @VValue[result], aValue); // recognize numbers
 end;
 
 function TDocVariantData.AddItemText(
