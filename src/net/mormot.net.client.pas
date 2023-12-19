@@ -664,6 +664,8 @@ procedure RegisterNetClientProtocol(
 { ******************** THttpRequest Abstract HTTP client class }
 
 type
+  THttpRequest = class;
+
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHttp class yet
   THttpRequestAuthentication = (
@@ -691,6 +693,12 @@ type
     UserAgent: RawUtf8;
   end;
 
+  /// event callback to track up/download progress
+  TOnHttpRequest = procedure(Sender: THttpRequest;
+    Done: Boolean) of object;
+  TOnHttpRequestProgress = procedure(Sender: THttpRequest;
+    Current, Total: Int64) of object;
+
   {$M+} // to have existing RTTI for published properties
   /// abstract class to handle HTTP/1.1 request
   // - never instantiate this class, but inherited TWinHttp, TWinINet or TCurlHttp
@@ -711,6 +719,10 @@ type
     fCompressAcceptHeader: THttpSocketCompressSet;
     fExtendedOptions: THttpRequestExtendedOptions;
     fTag: PtrInt;
+    fOnUpload: TOnHttpRequest;
+    fOnUploadProgress: TOnHttpRequestProgress;
+    fOnDownload: TOnHttpRequest;
+    fOnDownloadProgress: TOnHttpRequestProgress;
     class function InternalREST(const url, method: RawUtf8;
       const data: RawByteString; const header: RawUtf8;
       aIgnoreTlsCertificateErrors: boolean; timeout: integer;
@@ -873,6 +885,15 @@ type
     // constructor
     property ProxyByPass: RawUtf8
       read fProxyByPass;
+
+    property OnUpload: TOnHttpRequest
+      read fOnUpload write fOnUpload;
+    property OnUploadProgress: TOnHttpRequestProgress
+      read fOnUploadProgress write fOnUploadProgress;
+    property OnDownload: TOnHttpRequest
+      read fOnDownload write fOnDownload;
+    property OnDownloadProgress: TOnHttpRequestProgress
+      read fOnDownloadProgress write fOnDownloadProgress;
   end;
   {$M-}
 
@@ -1135,6 +1156,8 @@ type
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
   TCurlHttp = class(THttpRequest)
+  private
+    lastdltotal, lastdlnow, lastultotal, lastulnow: Int64;
   protected
     fHandle: pointer;
     fRootURL: RawUtf8;
@@ -2710,6 +2733,7 @@ var
   aData: RawByteString;
   aDataEncoding, aAcceptEncoding, aUrl: RawUtf8;
   i: integer;
+  upload: boolean;
 begin
   if (url = '') or
      (url[1] <> '/') then
@@ -2734,10 +2758,19 @@ begin
     end;
     if fCompressAcceptEncoding <> '' then
       InternalAddHeader(fCompressAcceptEncoding);
+    upload:= IsPost(method) or IsPut(method);
     // send request to remote server
+    if assigned(fOnUpload) and upload then
+      fOnUpload(self, false)
+    else if assigned(fOnDownload) and not upload then
+      fOnDownload(self, false);
     InternalSendRequest(method, aData);
     // retrieve status and headers
     result := InternalRetrieveAnswer(OutHeader, aDataEncoding, aAcceptEncoding, OutData);
+    if assigned(fOnUpload) and upload then
+      fOnUpload(self, true)
+    else if assigned(fOnDownload) and not upload then
+      fOnDownload(self, true);
     // handle incoming answer compression
     if OutData <> '' then
     begin
@@ -3588,6 +3621,27 @@ end;
 
 function TCurlHttp.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
   RawUtf8; var Data: RawByteString): integer;
+
+  function xfer_info(clientp: pointer; dltotal, dlnow, ultotal, ulnow: Int64): integer; cdecl;
+  var
+    s: TCurlHttp;
+  begin
+    s:= TCurlHttp(clientp);
+    if Assigned(s.OnUploadProgress) and ((ulnow <> s.lastulnow) or (ultotal <> s.lastultotal)) then
+    begin
+      s.OnUploadProgress(s, ulnow, ultotal);
+      s.lastultotal:= ultotal;
+      s.lastulnow:= ulnow;
+    end;
+    if Assigned(s.OnDownloadProgress) and ((dlnow <> s.lastdlnow) or (dltotal <> s.lastdltotal)) then
+    begin
+      s.OnDownloadProgress(s, dlnow, dltotal);
+      s.lastdltotal:= dltotal;
+      s.lastdlnow:= dlnow;
+    end;
+    Result:= 0;
+  end;
+
 var
   res: TCurlResult;
   P: PUtf8Char;
@@ -3595,7 +3649,21 @@ var
   i: integer;
   rc: PtrInt; // needed on Linux x86-64
 begin
+  if Assigned(OnUploadProgress) or Assigned(OnDownloadProgress) then
+  begin
+    lastdltotal:= -1;
+    lastdlnow:= -1;
+    lastultotal:= -1;
+    lastulnow:= -1;
+    curl.easy_setopt(fHandle, coXferInfoData, Self);
+    curl.easy_setopt(fHandle, coXferInfoFunction, @xfer_info);
+    curl.easy_setopt(fHandle, coNoProgress, 0);
+  end else
+    curl.easy_setopt(fHandle, coNoProgress, 1);
   res := curl.easy_perform(fHandle);
+  curl.easy_setopt(fHandle, coNoProgress, 1);
+  curl.easy_setopt(fHandle, coXferInfoFunction, nil);
+  curl.easy_setopt(fHandle, coXferInfoData, nil);
   if res <> crOK then
     raise ECurlHttp.Create(res, 'libcurl error %d (%s) on %s %s',
       [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
