@@ -243,6 +243,10 @@ procedure AddToCsv(const Value: RawUtf8; var Csv: RawUtf8; const Sep: RawUtf8 = 
 function RenameInCsv(const OldValue, NewValue: RawUtf8; var Csv: RawUtf8;
   const Sep: RawUtf8 = ','): boolean;
 
+/// recognize #9 ';' or ',' as separator in a CSV text
+// - to implement a separator-tolerant CSV parser
+function CsvGuessSeparator(const Csv: RawUtf8): AnsiChar;
+
 /// append the strings in the specified CSV text into a dynamic array of integer
 procedure CsvToIntegerDynArray(Csv: PUtf8Char; var List: TIntegerDynArray;
   Sep: AnsiChar = ',');
@@ -3192,6 +3196,18 @@ begin
   delete(Csv, i, length(OldValue));
   insert(NewValue, Csv, i);
   result := true;
+end;
+
+function CsvGuessSeparator(const Csv: RawUtf8): AnsiChar;
+begin
+  if PosExChar(#9, Csv) <> 0 then
+    result := #9
+  else if PosExChar(';', Csv) <> 0 then
+    result := ';'
+  else if PosExChar(',', Csv) <> 0 then
+    result := ','
+  else
+    result := #0;
 end;
 
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
