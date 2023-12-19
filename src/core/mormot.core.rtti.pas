@@ -9269,6 +9269,7 @@ var
   rc: TRttiCustom;
   p: PRttiCustomProp;
   v, desc, def: RawUtf8;
+  dolower: boolean;
   i: integer;
 begin
   result := false;
@@ -9283,15 +9284,33 @@ begin
     if not (p^.Value.Kind in rkComplexTypes) then
     begin
       desc := '';
+      dolower := false;
       if p^.Value.Kind in [rkEnumeration, rkSet] then
-        p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc, ' - values: ');
+      begin
+        p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
+        if UpperCaseU(desc) = desc then
+        begin
+          dolower := true;
+          desc := LowerCaseU(desc);
+        end;
+        desc := ' - values: ' + desc;
+      end;
       desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
       if not p.ValueIsDefault(Value) then
       begin
         def := p^.Prop^.GetValueText(Value);
         if (def <> '') and
            (def <> '0') then
+        begin
+          if p^.Value.Kind = rkEnumeration then
+          begin
+            def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(
+              p^.Prop^.GetFieldAddr(Value)^);
+            if dolower then
+              def := LowerCaseU(def);
+          end;
           desc := FormatUtf8('% (default: %)', [desc, def]);
+        end;
       end;
       if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
          p^.Prop^.SetValueText(Value, v) then // supports also enums and sets

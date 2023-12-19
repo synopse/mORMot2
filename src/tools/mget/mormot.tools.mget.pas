@@ -48,7 +48,7 @@ type
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
     /// following properties could be published as command line switches
-    property Hash: THashAlgo
+    property hash: THashAlgo
       read fHash write fHash;
   end;
 

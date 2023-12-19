@@ -41,6 +41,7 @@ uses
   mormot.net.sock,
   mormot.net.client,
   mormot.net.server,
+  mormot.crypt.secure,
   mormot.tools.mget;
 
 
@@ -65,7 +66,7 @@ begin
   p.Verbose := Executable.Command.Option(['v', 'verbose'],
     'generate verbose output');
   p.NoResume := Executable.Command.Option(['n', 'noresume'],
-    'disable auto-resume of partial file download after interruption');
+    'disable auto-resume of interrupted partial download');
   if Executable.Command.Option(['l', 'log'],
     'enable logging in --logFolder') then
     p.Log := TSynLog;
@@ -93,6 +94,7 @@ begin
       p.Log.Family.DestinationPath := logfolder;
   end;
   // add Main and PeerCache params after all main settings using RTTI
+  p.hash := hfSHA256;
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
   // validate whole set of arguments
