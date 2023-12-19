@@ -1455,6 +1455,10 @@ type
     /// returns true if this is not a true TDocVariant, or Count equals 0
     function IsVoid: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// search if a given Name do exists in this document
+    // - just a wrapper around GetValueIndex(aName) >= 0
+    function Exists(const aName: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item index in this document from its name
     // - search will follow dvoNameCaseSensitive option of this document
     // - lookup the value by name for an object document, or accept an integer
@@ -7058,6 +7062,11 @@ function TDocVariantData.IsVoid: boolean;
 begin
   result := (cardinal(VType) <> DocVariantVType) or
             (VCount = 0);
+end;
+
+function TDocVariantData.Exists(const aName: RawUtf8): boolean;
+begin
+  result := GetValueIndex(Pointer(aName), Length(aName), IsCaseSensitive) >= 0;
 end;
 
 function TDocVariantData.GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
