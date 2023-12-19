@@ -217,7 +217,7 @@ type
     // - if not set, a plain TStreamRedirect with no hashing instance will be
     // used for correct streaming to the destination file
     // - typical classes are TStreamRedirectMd5 or TStreamRedirectSha256 from
-    // mormot.crypt.secure
+    // mormot.crypt.secure - you may use e.g. HASH_STREAMREDIRECT[] constants
     Hasher: TStreamRedirectClass;
     /// the expected hash value, to be compared with Hasher.GetHash return
     // - if supplied, the downloaded content will be checked against this value
@@ -562,6 +562,7 @@ function GetProxyForUri(const uri: RawUtf8;
 
 /// parse a URI into its final resource name
 // - optionally sanitize the output to be filename-compatible
+// - note that it returns an UTF-8 string as resource URI, not TFileName
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawUtf8;
 
 

@@ -731,7 +731,6 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
-
   /// the known 32-bit crc algorithms as returned by CryptCrc32()
   // - ccaCrc32 and ccaAdler32 require mormot.lib.z.pas to be included
   // - caDefault may be AesNiHash32(), therefore not persistable between
@@ -747,6 +746,18 @@ type
     caDefault,
     caMd5,
     caSha1);
+
+const
+  /// convert a THashAlgo into a TStreamRedirectSynHasher class
+  HASH_STREAMREDIRECT: array[THashAlgo] of TStreamRedirectClass = (
+    TStreamRedirectMd5,        // hfMD5
+    TStreamRedirectSha1,       // hfSHA1
+    TStreamRedirectSha256,     // hfSHA256
+    TStreamRedirectSha384,     // hfSHA384
+    TStreamRedirectSha512,     // hfSHA512
+    TStreamRedirectSha512_256, // hfSHA512_256
+    TStreamRedirectSha3_256,   // hfSHA3_256
+    TStreamRedirectSha3_512);  // hfSHA3_512
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
