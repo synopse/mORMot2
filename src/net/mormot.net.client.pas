@@ -672,7 +672,8 @@ type
     wraNone,
     wraBasic,
     wraDigest,
-    wraNegotiate);
+    wraNegotiate,
+    wraBearer);
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
@@ -686,6 +687,7 @@ type
     Auth: record
       UserName: SynUnicode;
       Password: SynUnicode;
+      Token: SpiUtf8;
       Scheme: THttpRequestAuthentication;
     end;
     /// allow to customize the User-Agent header
@@ -848,6 +850,7 @@ type
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme
       write fExtendedOptions.Auth.Scheme;
+    // TODO move uername and password from SynUnicode to SpiUtf8
     /// optional User Name for Authentication
     property AuthUserName: SynUnicode
       read fExtendedOptions.Auth.UserName
@@ -856,6 +859,10 @@ type
     property AuthPassword: SynUnicode
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
+    /// optional Token for Authentication
+    property AuthToken: SpiUtf8
+      read fExtendedOptions.Auth.Token
+      write fExtendedOptions.Auth.Token;
     /// custom HTTP "User Agent:" header value
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent
@@ -3604,7 +3611,39 @@ end;
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
+var
+  username: RawUtf8;
+  password: SpiUtf8;
 begin
+  username:= SynUnicodeToUtf8(AuthUserName);
+  password:= SynUnicodeToUtf8(AuthPassword);
+  if AuthScheme in [wraBasic, wraDigest, wraNegotiate] then
+  begin
+    curl.easy_setopt(fHandle, coUserName, pointer(username));
+    curl.easy_setopt(fHandle, coPassword, pointer(password));
+    curl.easy_setopt(fHandle, coXOAuth2Bearer, nil);
+  end;
+  if AuthScheme in [wraNone, wraBearer] then
+  begin
+    curl.easy_setopt(fHandle, coUserName, nil);
+    curl.easy_setopt(fHandle, coPassword, nil);
+  end;
+  if AuthScheme in [wraBearer] then
+    curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
+  case AuthScheme of
+    wraNone:
+      curl.easy_setopt(fHandle, coHttpAuth, cauNone);
+    wraBasic:
+      curl.easy_setopt(fHandle, coHttpAuth, cauBasic);
+    wraDigest:
+      curl.easy_setopt(fHandle, coHttpAuth, cauDigest);
+    wraNegotiate:
+      curl.easy_setopt(fHandle, coHttpAuth, cauNegotiate);
+    wraBearer:
+      curl.easy_setopt(fHandle, coHttpAuth, cauBearer);
+    else
+      raise Exception.CreateFmt('%: unsupported AuthScheme=%', [self, ord(AuthScheme)]);
+  end;
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if HttpMethodWithNoBody(fIn.Method) then
     // the only verbs which do not expect body in answer are HEAD and OPTIONS
