@@ -3633,7 +3633,7 @@ var
       exit;
     if _Safe(res)^.GetAsPVariant('payload', bin) and
        BsonVariantType.ToBlob({%H-}bin^, payload) then
-      resp.InitCsv(pointer(payload), JSON_FAST, '=', ',')
+      resp.InitFromPairs(pointer(payload), JSON_FAST, '=', ',')
     else
       err := 'missing or invalid returned payload';
   end;
