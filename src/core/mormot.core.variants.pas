@@ -5083,18 +5083,18 @@ end;
 procedure TDocVariantData.InitArrayFromCsvFile(const aCsv: RawUtf8;
   aOptions: TDocVariantOptions; aSeparator, aQuote: AnsiChar);
 var
-  p: PUtf8Char;
-  names, tmp: TRawUtf8DynArray;
+  c: PUtf8Char;
+  nam, tmp: TRawUtf8DynArray;
   v: PDocVariantData;
   line: RawUtf8;
-  n, i, t: PtrInt;
+  n, j, t: PtrInt;
 begin
   n := 0;
   Init(aOptions, dvArray);
-  p := pointer(aCsv);
-  while p <> nil do
+  c := pointer(aCsv);
+  while c <> nil do
   begin
-    line := GetNextLine(p, p);
+    line := GetNextLine(c, c);
     if line = '' then
       continue;
     if (tmp = nil) and
@@ -5103,24 +5103,24 @@ begin
     tmp := nil;
     CsvToRawUtf8DynArray(pointer(line), tmp, aSeparator, false, true, aQuote);
     if tmp <> nil then
-      if names = nil then
+      if nam = nil then
       begin
-        names := tmp; // first line are field/column names
-        n := length(names);
+        nam := tmp; // first line are field/column names
+        n := length(nam);
       end
       else
       begin
-        i := InternalAdd(''); // new row of data
-        v := @VValue[i];
+        j := InternalAdd(''); // new row of data
+        v := @VValue[j];      // in two lines for FPC
         v^.Init(aOptions, dvObject);
-        v^.VName := names;
+        v^.VName := nam;
         v^.VCount := n;
         SetLength(v^.VValue, n);
         t := length(tmp);
         if t > n then
           t := n; // allow too many or missing last columns
-        for i := 0 to t - 1 do
-          _FromText(aOptions, @v^.VValue[i], tmp[i]); // recognize numbers
+        for j := 0 to t - 1 do
+          _FromText(aOptions, @v^.VValue[j], tmp[j]); // recognize numbers
       end;
   end;
 end;
