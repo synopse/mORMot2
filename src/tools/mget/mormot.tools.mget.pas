@@ -29,29 +29,36 @@ uses
 
 
 type
+  TMGetProcessHash = (
+    gphAutoDetect, gphMd5, gphSha1, gphSha256, gphSha384, gphSha512, gphSha3_256);
+
   /// state engine for mget processing
   // - could be reused between the mget command line tool and an eventual GUI
   TMGetProcess = class(TPersistentAutoCreateFields)
   protected
     fPeerSettings: THttpPeerCacheSettings;
-    fHashAlgo: THashAlgo;
+    fHashAlgo: TMGetProcessHash;
     fPeerRequest: TWGetAlternateOptions;
     fLimitBandwidthMB, fWholeRequestTimeoutSec, fTcpTimeoutSec: integer;
     fHashValue: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
+    fClient: THttpClientSocket;
   public
     // input parameters (e.g. from command line) for the MGet process
-    Verbose, NoResume, TlsIgnoreErrors, Hash, Cache, Peer: boolean;
+    Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
     CacheFolder, TlsCertFile, DestFile: TFileName;
     Log: TSynLogClass;
     /// this is the main processing method
     function Execute(const Url: RawUtf8): TFileName;
+    /// finalize this instance
+    destructor Destroy; override;
+    procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
   published
     /// the settings used if Peer is true
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
     // following properties will be published as command line switches
-    property hashAlgo: THashAlgo
+    property hashAlgo: TMGetProcessHash
       read fHashAlgo write fHashAlgo;
     property hashValue: RawUtf8
       read fHashValue write fHashValue;
@@ -74,22 +81,62 @@ implementation
 
 { TMGetProcess }
 
+const
+  HASH_ALGO: array[gphMd5 .. high(TMGetProcessHash)] of THashAlgo = (
+    hfMd5, hfSha1, hfSha256, hfSha384, hfSha512, hfSha3_256);
+
+function GuessAlgo(const Hash: RawUtf8): TMGetProcessHash;
+begin
+  case length(Hash) shr 1 of // from hexa to bytes
+    SizeOf(TMd5Digest):
+      result := gphMd5;
+    SizeOf(TSha1Digest):
+      result := gphSha1;
+    SizeOf(TSha256Digest):
+      result := gphSha256;
+    SizeOf(TSha384Digest):
+      result := gphSha384;
+    SizeOf(TSha512Digest):
+      result := gphSha512;
+  else
+    result := gphAutoDetect;
+  end;
+end;
+
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
 var
-  client: THttpClientSocket;
   wget: THttpClientSocketWGet;
-  u: RawUtf8;
+  u, h: RawUtf8;
+  uri: TUri;
 begin
+  // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
+  if Split(Url, '@', h, u) and
+     (GuessAlgo(h) <> gphAutoDetect) and
+     (HexToBin(h) <> '') then
+    hashValue := h
+  else
+    u := Url;
+  // guess the hash algorithm from its hexadecimal value size
+  if hashAlgo = gphAutoDetect then
+    if hashValue <> '' then
+      hashAlgo := GuessAlgo(hashValue)
+    else if Peer then
+      hashAlgo := gphSha256;
   // set the WGet additional parameters
   wget.Clear;
-  if Verbose then
-    wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   wget.Resume := not NoResume;
-  wget.HashFromServer := (hashValue = '') and (Hash or Peer);
-  wget.Hasher := HASH_STREAMREDIRECT[fHashAlgo];
-  wget.Hash := hashValue;
+  wget.HashFromServer := (hashValue = '') and
+                         (hashAlgo <> gphAutoDetect);
+  if hashAlgo <> gphAutoDetect then
+  begin
+    wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[hashAlgo]];
+    wget.Hash := hashValue;
+    if not Silent then
+      wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
+  end;
   wget.LimitBandwith := fLimitBandwidthMB shl 20;
   wget.TimeOutSec := fWholeRequestTimeoutSec;
+  // (peer) cache support
   if Cache then
     wget.HashCacheDir := EnsureDirectoryExists(CacheFolder);
   if Peer then
@@ -101,17 +148,36 @@ begin
     wget.AlternateOptions := fPeerRequest;
   end;
   // make the request
-  client := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
-  try
+  result := '';
+  if not uri.From(u) then
+    exit;
+  if (fClient <> nil) and
+     ((fClient.Server <> uri.Server) or
+      (fClient.Port <> uri.Port)) then
+    FreeAndNil(fClient); // need a new connection
+  if fClient = nil then  // try to reuse an existing connection
+  begin
+    fClient := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
     if Log <> nil then
-      client.OnLog := Log.DoLog;
-    client.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
-    client.TLS.CertificateFile := TlsCertFile;
-    client.OpenUri(Url, u);
-    result := client.WGet(u, DestFile, wget);
-  finally
-    client.Free;
+      fClient.OnLog := Log.DoLog;
+    fClient.TLS.IgnoreCertificateErrors := TlsIgnoreErrors;
+    fClient.TLS.CertificateFile := TlsCertFile;
+    fClient.OpenBind(uri.Server, uri.Port, {bind=}false, uri.Https);
   end;
+  result := fClient.WGet(uri.Address, DestFile, wget);
+end;
+
+destructor TMGetProcess.Destroy;
+begin
+  inherited Destroy;
+  fClient.Free;
+end;
+
+procedure TMGetProcess.ToConsole(const Fmt: RawUtf8;
+  const Args: array of const);
+begin
+  if not Silent then
+    ConsoleWrite(Fmt, Args);
 end;
 
 

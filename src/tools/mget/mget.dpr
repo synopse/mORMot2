@@ -13,6 +13,9 @@ program mget;
    - Can brodcast and download from a local network peer cache.
 
   *****************************************************************************
+
+  For PeerCache to work, please open port 8089 for TCP+UDP on the computer:
+    sudo ufw allow from 192.168.0.0/24 to any port 8089
 }
 
 {$I ..\..\mormot.defines.inc}
@@ -42,10 +45,14 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.crypt.secure,
+  mormot.lib.openssl11,
   mormot.tools.mget;
 
 
-function GetParameters(p: TMGetProcess; out url: RawUtf8): boolean;
+type
+  TGetParameters = (gpHelp, gpFailed, gpWithUrl, gpPromptMode);
+
+function GetParameters(p: TMGetProcess; out url: RawUtf8): TGetParameters;
 var
   mac: TMacAddress;
   logfolder: TFileName;
@@ -54,9 +61,7 @@ begin
   // some good enough general default values
   p.CacheFolder := MakePath([Executable.ProgramFilePath, 'cache'], true);
   p.tcpTimeoutSec := 10;
-  p.hashAlgo := hfSHA256;
-  logfolder := StringToUtf8(Executable.ProgramFilePath + 'log');
-  // use some good enough settings for default --peer process on command line
+  logfolder := StringToUtf8(Executable.ProgramFilePath);
   p.peerSecret := 'secret';
   p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
   p.PeerSettings.CachePermPath := p.CacheFolder + 'perm';
@@ -64,17 +69,19 @@ begin
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
   Executable.Command.ExeDescription := 'Retrieve files using HTTP(S) and more';
-  if Executable.Command.Arg(0, '#http://uri resource address to retrieve') then
+  if Executable.Command.Arg(0, '[hash@]#http://uri resource address to retrieve') then
     url := Executable.Command.Args[0];
+  result := gpWithUrl;
+  if Executable.Command.Option(['P', 'prompt'],
+      'run in prompt mode (end on void input)') then
+    result := gpPromptMode;
   dest := ExtractResourceName(url);
   p.DestFile := Utf8ToString(Executable.Command.Param(['o', 'output'],
      '#filename to be used as output', dest));
-  p.Verbose := Executable.Command.Option(['v', 'verbose'],
-     'generate verbose output');
+  p.Silent := Executable.Command.Option(['s', 'silent'],
+     'generate no console output');
   p.NoResume := Executable.Command.Option(['n', 'noresume'],
      'disable auto-resume of interrupted partial download');
-  p.Hash := Executable.Command.Option(['h', 'hash'],
-     'enable content hashing using --hashAlgo');
   p.Cache := Executable.Command.Option(['c', 'cache'],
      'enable local Cache in --cachePath');
   p.Peer := Executable.Command.Option(['p', 'peer'],
@@ -93,21 +100,31 @@ begin
     p.Log := TSynLog;
   // setting the needed logging information
   if p.Log <> nil then
-  begin
-    p.Log.Family.Level := LOG_VERBOSE;
-    if logfolder <> '' then
-      p.Log.Family.DestinationPath := logfolder;
-  end;
+  with p.Log.Family do
+    begin
+      Level := LOG_VERBOSE;
+      if logfolder <> '' then
+      begin
+        PerThreadLog := ptIdentifiedInOneFile;
+        FileExistsAction := acAppend;
+        RotateFileCount := 2;
+        RotateFileSizeKB := 2 shl 10;
+        DestinationPath := EnsureDirectoryExists(logfolder);
+      end;
+    end;
   // add Main and PeerCache params after all main settings using RTTI
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
   // validate whole set of arguments
-  result := false;
-  if Executable.Command.Option(['?', 'help'], 'display this message') or
-     (Url = '') then
-    ConsoleWrite(Executable.Command.FullDescription)
-  else if not Executable.Command.ConsoleWriteUnknown then
-    result := true;
+  if Executable.Command.Option(['?', 'help'], 'display this message') then
+    result := gpHelp
+  else if (result = gpWithUrl) and
+          (Url = '') then
+    result := gpFailed;
+  if result in [gpHelp, gpFailed] then
+    p.ToConsole('%', [Executable.Command.FullDescription])
+  else if Executable.Command.ConsoleWriteUnknown then
+    result := gpFailed;
 end;
 
 var
@@ -115,19 +132,42 @@ var
   url: RawUtf8;
 begin
   try
+    // initialize OpenSSL if needed
+    {$ifdef USE_OPENSSL}
+    OpenSslInitialize;
+    {$endif USE_OPENSSL}
     // is executed as a service/daemon or as a command line tool
     p := TMGetProcess.Create;
     try
-      if GetParameters(p, url) then
-        ConsoleWrite('Loaded %', [p.Execute(url)])
-      else
-        ExitCode := 1; // error
+      case GetParameters(p, url) of
+        gpFailed:
+          ExitCode := 1; // error
+        gpWithUrl:
+          p.Execute(url);
+        gpPromptMode:
+          begin
+            p.DestFile := '';
+            repeat
+              p.hashValue := '';
+              if url = '' then
+                readln(url);
+              if (url = '') or
+                 (url = 'exit') then
+                break;
+              p.Execute(url);
+              url := '';
+            until false;
+          end;
+      end;
     finally
       p.Free;
     end;
   except
     on E: Exception do
+    begin
       ConsoleShowFatalException(E, {waitforenterkey=}false);
+      ExitCode := 2; // interrupted
+    end;
   end;
 end.
 
