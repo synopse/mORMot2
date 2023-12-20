@@ -3135,7 +3135,7 @@ begin
   if @self = nil then
     result := 0
   else
-    result := ORDTYPE_SIZE[RttiOrd]; // MaxValue does not work e.g. with WordBool
+    result := ORDTYPE_SIZE[RttiOrd]; // MaxValue is wrong e.g. with WordBool
 end;
 
 function TRttiEnumType.SizeInStorageAsSet: integer;
@@ -3347,17 +3347,21 @@ end;
 procedure TRttiEnumType.GetSetNameCsv(W: TTextWriter; Value: cardinal;
   SepChar: AnsiChar; FullSetsAsStar: boolean);
 var
-  j: integer;
+  j, max: integer;
   PS: PShortString;
 begin
   W.Add('[');
   if FullSetsAsStar and
+     (MinValue = 0) and
      GetAllBits(Value, MaxValue + 1) then
     W.AddShorter('"*"')
   else
   begin
     PS := NameList;
-    for j := MinValue to MaxValue do
+    max := MaxValue;
+    if max >= 32 then
+      max := 31; // avoid buffer overflow on 32-bit cardinal Value
+    for j := MinValue to max do
     begin
       if GetBitPtr(@Value, j) then
       begin
@@ -5158,7 +5162,7 @@ begin
   if info <> nil then
   begin
     p := info^.NameList;
-    for i := 0 to info^.MaxValue do
+    for i := info^.MinValue to info^.MaxValue do
     begin
       aDest^ := p;
       p := @PByteArray(p)^[ord(p^[0]) + 1];
@@ -5177,7 +5181,7 @@ begin
   if info <> nil then
   begin
     p := info^.NameList;
-    for i := 0 to info^.MaxValue do
+    for i := info^.MinValue to info^.MaxValue do
     begin
       aDest^ := TrimLeftLowerCaseShort(p);
       p := @PByteArray(p)^[ord(p^[0]) + 1];
@@ -5236,7 +5240,7 @@ begin
      (@value = nil) then
     exit;
   PS := info^.EnumBaseType.NameList;
-  for i := 0 to info^.MaxValue do
+  for i := info^.MinValue to info^.MaxValue do
   begin
     if GetBitPtr(@value, i) then
       result := FormatUtf8('%%,', [result, PS^]);
@@ -5259,7 +5263,7 @@ begin
      (@value = nil) then
     exit;
   PS := info^.EnumBaseType.NameList;
-  for i := 0 to info^.MaxValue do
+  for i := info^.MinValue to info^.MaxValue do
   begin
     if GetBitPtr(@value, i) then
       AppendShortComma(@PS^[1], PByte(PS)^, result, trimlowercase);
