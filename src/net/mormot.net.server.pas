@@ -5037,13 +5037,15 @@ var
   var
     sock: TNetSocket;
     frame: RawByteString;
+    res: TNetResult;
   begin
-    if fOwner.fVerboseLog then
-      DoLog('send %', [ToText(resp)]);
     frame := fOwner.MessageEncode(resp);
+    remote.SetPort(fAddr.Port); // respond to this IP on the main UDP port
     sock := remote.NewSocket(nlUdp);
-    sock.SendTo(pointer(frame), length(frame), remote);
+    res := sock.SendTo(pointer(frame), length(frame), remote);
     sock.Close;
+    if fOwner.fVerboseLog then
+      DoLog('send=% %', [ToText(res)^, ToText(resp)]);
     inc(fSent);
   end;
 
