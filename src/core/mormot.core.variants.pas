@@ -712,7 +712,7 @@ type
       Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): variant;
       {$ifdef HASINLINE}inline;{$endif}
     /// will return the unique element of a TDocVariant array or a default
-    // - if the value is a dvArray with one single item, it will this value
+    // - if the value is a dvArray with one single item, returns this value
     // - if the value is not a TDocVariant nor a dvArray with one single item,
     // it wil return the default value
     class procedure GetSingleOrDefault(const docVariantArray, default: variant;

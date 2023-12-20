@@ -3160,7 +3160,10 @@ end;
 
 function TRttiEnumType.GetEnumName(const Value): PShortString;
 begin
-  result := GetEnumNameOrd(RTTI_FROM_ORD[RttiOrd](@Value));
+  if @Value = nil then
+    result := @NULCHAR
+  else
+    result := GetEnumNameOrd(RTTI_FROM_ORD[RttiOrd](@Value));
 end;
 
 function TRttiEnumType.GetCaption(const Value): string;
@@ -5229,18 +5232,18 @@ var
 begin
   result := '';
   info := aTypeInfo^.SetEnumType;
-  if info <> nil then
+  if (info = nil) or
+     (@value = nil) then
+    exit;
+  PS := info^.EnumBaseType.NameList;
+  for i := 0 to info^.MaxValue do
   begin
-    PS := info^.EnumBaseType.NameList;
-    for i := 0 to info^.MaxValue do
-    begin
-      if GetBitPtr(@value, i) then
-        result := FormatUtf8('%%,', [result, PS^]);
-      inc(PByte(PS), PByte(PS)^ + 1); // next
-    end;
-    if result <> '' then
-      FakeLength(result, length(result) - 1); // trim last comma
+    if GetBitPtr(@value, i) then
+      result := FormatUtf8('%%,', [result, PS^]);
+    inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
+  if result <> '' then
+    FakeLength(result, length(result) - 1); // trim last comma
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
@@ -5252,18 +5255,18 @@ var
 begin
   result := '';
   info := aTypeInfo^.SetEnumType;
-  if info <> nil then
+  if (info = nil) or
+     (@value = nil) then
+    exit;
+  PS := info^.EnumBaseType.NameList;
+  for i := 0 to info^.MaxValue do
   begin
-    PS := info^.EnumBaseType.NameList;
-    for i := 0 to info^.MaxValue do
-    begin
-      if GetBitPtr(@value, i) then
-        AppendShortComma(@PS^[1], PByte(PS)^, result, trimlowercase);
-      inc(PByte(PS), PByte(PS)^ + 1); // next
-    end;
-    if result[ord(result[0])] = ',' then
-      dec(result[0]);
+    if GetBitPtr(@value, i) then
+      AppendShortComma(@PS^[1], PByte(PS)^, result, trimlowercase);
+    inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
+  if result[0] <> #0 then
+    dec(result[0]);
 end;
 
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
@@ -9291,7 +9294,7 @@ begin
         if UpperCaseU(desc) = desc then
         begin
           dolower := true;
-          desc := LowerCaseU(desc);
+          desc := LowerCaseU(desc); // cosmetic
         end;
         desc := ' - values: ' + desc;
       end;
