@@ -9381,7 +9381,8 @@ end;
 
 class procedure TStreamRedirect.ProgressStreamToConsole(Sender: TStreamRedirect);
 begin
-  if Sender <> nil then
+  if (Sender <> nil) and
+     Sender.InheritsFrom(TStreamRedirect) then
     ProgressInfoToConsole(Sender, @Sender.fInfo);
 end;
 
@@ -9398,7 +9399,9 @@ begin
   eraseline[ord(eraseline[0])] := #13;
   system.write(eraseline);
   msg := Info.GetProgress;
-  Info.ConsoleLen := length(msg); // to properly erase last line
+  if length(msg) > 250 then
+    FakeLength(msg, 250); // paranoid overflow check
+  Info.ConsoleLen := length(msg); // to properly erase previous line
   system.write(msg);
   ioresult;
 end;
