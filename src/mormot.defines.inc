@@ -406,9 +406,9 @@
 
   {$define OSWINDOWS}
 
-  {$IFNDEF CONDITIONALEXPRESSIONS}
+  {$ifndef CONDITIONALEXPRESSIONS}
   'Delphi 2-5 are not supported'
-  {$ENDIF CONDITIONALEXPRESSIONS}
+  {$endif CONDITIONALEXPRESSIONS}
   {$ifdef VER140}
   'Delphi 6 is not supported'
   {$endif VER140}

@@ -253,7 +253,7 @@ procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
   {$ifdef CPUX64}inline;{$endif}
 
-/// returns sign of 256-bit Left - Right
+/// returns sign of 256-bit Left - Right comparison - used by ecc256r1
 function _cmp256(const Left, Right: THash256Rec): integer;
   {$ifdef CPU64}inline;{$endif}
 
@@ -261,11 +261,11 @@ function _cmp256(const Left, Right: THash256Rec): integer;
 // - warning: this code requires dest <> source
 procedure _bswap256(dest, source: PQWordArray);
 
-/// right shift of 1 bit of a 256-bit value
+/// right shift of 1 bit of a 256-bit value - used by ecc256r1
 procedure _rshift1(var V: THash256Rec);
   {$ifdef HASINLINE}{$ifndef CPUX64}inline;{$endif}{$endif}
 
-/// left shift of 1 bit of a 256-bit value
+/// left shift of 1 bit of a 256-bit value - used by ecc256r1
 function _lshift1(var V: THash256Rec): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -273,7 +273,7 @@ function _lshift1(var V: THash256Rec): PtrUInt;
 // - can modify in place (if Output == Input). 0 < Shift < 64
 function _lshift(var Output: THash256Rec; const Input: THash256Rec; Shift: integer): QWord;
 
-/// compute the highest bit set of a 256-bit value
+/// compute the highest bit set of a 256-bit value - used by ecc256r1
 function _numbits256(const V: THash256Rec): integer;
   {$ifdef FPC}inline;{$endif}
 

@@ -1018,40 +1018,38 @@ const
     {$ifdef VER3_4}   + ' 3.4'  {$endif}
   {$else}
     'Delphi'
-    {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-      {$if     defined(VER140)} + ' 6'
-      {$elseif defined(VER150)} + ' 7'
-      {$elseif defined(VER160)} + ' 8'
-      {$elseif defined(VER170)} + ' 2005'
-      {$elseif defined(VER185)} + ' 2007'
-      {$elseif defined(VER180)} + ' 2006'
-      {$elseif defined(VER200)} + ' 2009'
-      {$elseif defined(VER210)} + ' 2010'
-      {$elseif defined(VER220)} + ' XE'
-      {$elseif defined(VER230)} + ' XE2'
-      {$elseif defined(VER240)} + ' XE3'
-      {$elseif defined(VER250)} + ' XE4'
-      {$elseif defined(VER260)} + ' XE5'
-      {$elseif defined(VER265)} + ' AppMethod 1'
-      {$elseif defined(VER270)} + ' XE6'
-      {$elseif defined(VER280)} + ' XE7'
-      {$elseif defined(VER290)} + ' XE8'
-      {$elseif defined(VER300)} + ' 10 Seattle'
-      {$elseif defined(VER310)} + ' 10.1 Berlin'
-      {$elseif defined(VER320)} + ' 10.2 Tokyo'
-      {$elseif defined(VER330)} + ' 10.3 Rio'
-      {$elseif defined(VER340)} + ' 10.4 Sydney'
-      {$elseif defined(VER350)} + ' 11'
-        {$if declared(RTLVersion113)} + '.3' {$else}
-        {$if declared(RTLVersion112)} + '.2' {$else}
-        {$if declared(RTLVersion111)} + '.1' {$ifend} {$ifend} {$ifend}
-                                + ' Alexandria'
-      {$elseif defined(VER360)} + ' 12'
-        {$if declared(RTLVersion121)} + '.1' {$ifend}
-                                + ' Athens'
-      {$elseif defined(VER370)} + ' 13 Next'
-      {$ifend}
-    {$endif CONDITIONALEXPRESSIONS}
+    {$if     defined(VER140)} + ' 6'
+    {$elseif defined(VER150)} + ' 7'
+    {$elseif defined(VER160)} + ' 8'
+    {$elseif defined(VER170)} + ' 2005'
+    {$elseif defined(VER185)} + ' 2007'
+    {$elseif defined(VER180)} + ' 2006'
+    {$elseif defined(VER200)} + ' 2009'
+    {$elseif defined(VER210)} + ' 2010'
+    {$elseif defined(VER220)} + ' XE'
+    {$elseif defined(VER230)} + ' XE2'
+    {$elseif defined(VER240)} + ' XE3'
+    {$elseif defined(VER250)} + ' XE4'
+    {$elseif defined(VER260)} + ' XE5'
+    {$elseif defined(VER265)} + ' AppMethod 1'
+    {$elseif defined(VER270)} + ' XE6'
+    {$elseif defined(VER280)} + ' XE7'
+    {$elseif defined(VER290)} + ' XE8'
+    {$elseif defined(VER300)} + ' 10 Seattle'
+    {$elseif defined(VER310)} + ' 10.1 Berlin'
+    {$elseif defined(VER320)} + ' 10.2 Tokyo'
+    {$elseif defined(VER330)} + ' 10.3 Rio'
+    {$elseif defined(VER340)} + ' 10.4 Sydney'
+    {$elseif defined(VER350)} + ' 11'
+      {$if declared(RTLVersion113)} + '.3' {$else}
+      {$if declared(RTLVersion112)} + '.2' {$else}
+      {$if declared(RTLVersion111)} + '.1' {$ifend} {$ifend} {$ifend}
+                              + ' Alexandria'
+    {$elseif defined(VER360)} + ' 12'
+      {$if declared(RTLVersion121)} + '.1' {$ifend}
+                              + ' Athens'
+    {$elseif defined(VER370)} + ' 13 Next'
+    {$ifend}
   {$endif FPC}
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
 

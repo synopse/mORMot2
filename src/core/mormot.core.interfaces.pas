@@ -770,7 +770,7 @@ type
 
 
 /// returns the interface name of a registered Guid, or its hexadecimal value
-function ToText({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+function ToText({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   aGuid: TGuid): ShortString; overload;
 
 /// low-level function to retrieve the class instance implementing a given interface

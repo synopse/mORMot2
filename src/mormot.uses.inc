@@ -33,17 +33,17 @@
 
 {$else}
 
-  // enable FastMM4 on older versions of Delphi
-  {$IFDEF CONDITIONALEXPRESSIONS}
+  // enable FastMM4 on oldest versions of Delphi
+  {$ifdef CONDITIONALEXPRESSIONS}
     {$if CompilerVersion <= 17} // Delphi 2006 (and up) have FastMM4 integrated
       FastMM4,
     {$ifend}
     {$ifdef UNICODE}
       {$warn DUPLICATE_CTOR_DTOR OFF} // global at .dpr level - see QC 100815
     {$endif UNICODE}
-  {$ELSE}
-    FastMM4, // no conditional expressions -> versions older than Delphi 6
-  {$ENDIF CONDITIONALEXPRESSIONS}
+  {$else}
+    'Delphi 2-5 are not supported'
+  {$endif CONDITIONALEXPRESSIONS}
 
 {$endif FPC}
 
