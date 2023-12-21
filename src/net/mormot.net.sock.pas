@@ -2839,15 +2839,15 @@ end;
 
 function IP4Netmask(prefix: integer): cardinal;
 begin
-  result := bswap32(not(cardinal(-1) shr prefix));
+  result := cardinal(-1);
+  if cardinal(prefix) < 32 then
+    result := bswap32(not(result shr prefix));
 end;
 
 function IP4Prefix(netmask4: cardinal): integer;
 begin
-  result := GetBitsCountPtrInt(netmask4);
-  if (result <> 0) and
-     (result <> 32) and
-     (IP4Netmask(result) <> netmask4) then
+  result := GetBitsCountPtrInt(netmask4); // may use SSE4.2 or optimized asm
+  if IP4Netmask(result) <> netmask4 then
     result := 0; // invalid netmask
 end;
 
