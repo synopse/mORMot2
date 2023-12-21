@@ -1312,9 +1312,15 @@ type
     Seq: cardinal;
     /// the UUID of the Sender
     Uuid: TGuid;
+    /// the Operating System of the Sender
+    Os: TOperatingSystemVersion;
     /// the local IPv4 which sent this frame
     // - e.g. 192.168.1.1
     IP4: cardinal;
+    /// the destination IPv4 of this frame
+    // - contains 0 for a broadcast
+    // - allows to filter response frames when broadcasted on POSIX
+    DestIP4: cardinal;
     /// the IPv4 network mask of the local network interface
     // - e.g. 255.255.255.0
     MaskIP4: cardinal;
@@ -1341,7 +1347,7 @@ type
     Opaque: QWord;
     /// some random padding up to 192 bytes, used for future content revisions
     // - e.g. for a TEccPublicKey (ECDHE) and additional fields
-    Padding: array[0 .. 50] of byte;
+    Padding: array[0 .. 42] of byte;
   end;
   THttpPeerCacheMessageDynArray = array of THttpPeerCacheMessage;
 
@@ -4793,7 +4799,9 @@ begin
   aMsg.Seq := aSeq;
   aMsg.Kind := aKind;
   aMsg.Uuid := fUuid;
+  aMsg.Os := OSVersion32;
   aMsg.IP4 := fIP4;
+  aMsg.DestIP4 := fBroadcastIP4; // overriden in DoSendResponse()
   aMsg.MaskIP4 := fMaskIP4;
   aMsg.BroadcastIP4 := fBroadcastIP4;
   aMsg.Speed := fMac.Speed;
@@ -5039,6 +5047,8 @@ var
     frame: RawByteString;
     res: TNetResult;
   begin
+    // compute PCF_RESPONSE frame
+    resp.DestIP4 := remote.IP4; // notify actual source IP (over broadcast)
     frame := fOwner.MessageEncode(resp);
     remote.SetPort(fAddr.Port); // respond to this IP on the main UDP port
     sock := remote.NewSocket(nlUdp);
@@ -5837,9 +5847,9 @@ begin
   end;
   hex[0] := AnsiChar(l * 2);
   with msg do
-    FormatShort('% #% % % % % msk=% bst=% %b/s %% siz=%',
-      [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid),
-       IP4ToShort(@IP4), ToText(Hardware)^,
+    FormatShort('% #% % % % to % % % msk=% bst=% %b/s %% siz=%',
+      [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid), OS_NAME[Os.os],
+       IP4ToShort(@IP4), IP4ToShort(@DestIP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        hex, algo, Size], result);
