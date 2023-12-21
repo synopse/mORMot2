@@ -1266,7 +1266,6 @@ type
     fCaseSensitiveNames: boolean;
     fSwitch: array[{long=}boolean] of RawUtf8;
     fLineFeed, fExeDescription: RawUtf8;
-    function Full(const v: RawUtf8): RawUtf8;
     procedure Describe(const v: array of RawUtf8;
       k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
     function Find(const v: array of RawUtf8;
@@ -1362,7 +1361,7 @@ type
     // $   -t, --threads <number> (default 5)
     // $                       number of threads to run
     function FullDescription(const customexedescription: RawUtf8 = '';
-      const exename: RawUtf8 = ''): RawUtf8;
+      const exename: RawUtf8 = ''; const onlyusage: RawUtf8 = ''): RawUtf8;
     /// check if the supplied parameters were all registered from previous
     // Arg() Options() and Get/Param() calls
     // - return '' if no unexpected flag has been supplied
@@ -1380,6 +1379,8 @@ type
       const LongSwitch: RawUtf8 = {$ifdef OSWINDOWS} '/' {$else} '--' {$endif}): boolean;
     /// remove all recognized arguments and switches
     procedure Clear;
+    /// internal method returning a switch text from its identifier
+    function SwitchAsText(const v: RawUtf8): RawUtf8;
     /// the ParamStr(1..ParamCount) arguments as RawUtf8, excluding Options[]
     // switches and Params[]/Values[] parameters
     property Args: TRawUtf8DynArray
@@ -1402,6 +1403,9 @@ type
     // - as used by default by FullDescription() and ConsoleWriteUnknown()
     property ExeDescription: RawUtf8
       read fExeDescription write fExeDescription;
+    /// DescriptionLineFeed value from TExecutableCommandLine.Parse()
+    property LineFeed: RawUtf8
+      read fLineFeed write fLineFeed;
     /// map ParamStr(1 .. ParamCount) values, encoded as RawUtf8
     // - may be used e.g. for regression tests instead of ParamStr()
     property RawParams: TRawUtf8DynArray
@@ -7815,7 +7819,7 @@ end;
 
 { TExecutableCommandLine }
 
-function TExecutableCommandLine.Full(const v: RawUtf8): RawUtf8;
+function TExecutableCommandLine.SwitchAsText(const v: RawUtf8): RawUtf8;
 begin
   result := fSwitch[length(v) > 1] + v;
 end;
@@ -7833,11 +7837,11 @@ begin
   begin
     if high(v) < 0 then
       exit;
-    desc := Full(v[0]);
+    desc := SwitchAsText(v[0]);
     if length(v[0]) <> 1 then
       desc := '    ' + desc; // right align --#
     for i := 1 to high(v) do
-      desc := desc + ', ' + Full(v[i]);
+      desc := desc + ', ' + SwitchAsText(v[i]);
   end;
   if k <> clkOption then
   begin
@@ -8128,7 +8132,7 @@ const
     'Options:', 'Params:');
 
 function TExecutableCommandLine.FullDescription(
-  const customexedescription, exename: RawUtf8): RawUtf8;
+  const customexedescription, exename, onlyusage: RawUtf8): RawUtf8;
 var
   clk: TExecutableCommandLineKind;
 begin
@@ -8144,13 +8148,16 @@ begin
     if fDesc[clk] <> '' then
       result := result + CLK_TXT[clk];
   result := result + fLineFeed;
-  for clk := low(fDescDetail) to high(fDescDetail) do
-    if fDescDetail[clk] <> '' then
-    begin
-      if clk in [low(CLK_TXT) .. high(CLK_TXT)] then
-        result := result + fLineFeed + CLK_DESCR[clk];
-      result := result + fLineFeed + fDescDetail[clk];
-    end;
+  if onlyusage <> '' then
+    result := result + onlyusage
+  else
+    for clk := low(fDescDetail) to high(fDescDetail) do
+      if fDescDetail[clk] <> '' then
+      begin
+        if clk in [low(CLK_TXT) .. high(CLK_TXT)] then
+          result := result + fLineFeed + CLK_DESCR[clk];
+        result := result + fLineFeed + fDescDetail[clk];
+      end;
 end;
 
 function TExecutableCommandLine.DetectUnknown: RawUtf8;
@@ -8163,7 +8170,7 @@ begin
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
       begin
-        result := result + 'Unexpected ' + Full(fNames[clk][i]) + ' ';
+        result := result + 'Unexpected ' + SwitchAsText(fNames[clk][i]) + ' ';
         case clk of
           clkArg:
             result := result + 'argument';
