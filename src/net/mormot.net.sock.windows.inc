@@ -996,7 +996,7 @@ begin
                       else
                         b := 255; // fallback to IP4Mask()
                 if b <= 32 then
-                  b := bswap32($ffffffff shl (32 - b))
+                  b := IP4Netmask(b)
                 else
                   b := IP4Mask(a^.Address.lpSockaddr^.sin_addr.S_addr);
                 IP4Text(@b, NetMask);

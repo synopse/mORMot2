@@ -5027,6 +5027,7 @@ begin
   fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   if pcoUseFirstResponse in fOwner.Settings.Options then
     fBroadcastEvent := TSynEvent.Create;
+  // POSIX requires to bind to the broadcast address to receive brodcasted frames
   inherited Create(fOwner.fLog,
     fOwner.fMac.{$ifdef OSPOSIX}Broadcast{$else}IP{$endif}, // OS-specific
     fOwner.fPort, 'udp-PeerCache', 100);
@@ -5081,13 +5082,13 @@ var
 var
   ok, late: boolean;
 begin
-  // quick return if this frame is not worth investigating
+  // quick return if this frame is not worth decoding
   if (fOwner = nil) or
-     (fOwner.fSettings = nil) or   // avoid random GPF at shutdown
+     (fOwner.fSettings = nil) or     // avoid random GPF at shutdown
      (remote.IP4 = 0) or
      (remote.IP4 = fOwner.fIP4) then // Windows broadcasts to self :)
     exit;
-  // first validate the input frame IP (RejectInstablePeersMin option)
+  // RejectInstablePeersMin option: validate the input frame IP
   if fOwner.fInstable.IsBanned(remote) then
   begin
     if fOwner.fVerboseLog then
@@ -5098,8 +5099,8 @@ begin
   ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
   if ok then
-    if (fMsg.Kind in PCF_RESPONSE) and
-       (fMsg.DestIP4 <> fOwner.fIP4) then // responses are broadcasted on POSIX
+    if (fMsg.Kind in PCF_RESPONSE) and    // responses are broadcasted on POSIX
+       (fMsg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
      begin
        if fOwner.fVerboseLog then
          DoLog('ignored', []);

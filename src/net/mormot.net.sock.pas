@@ -2839,9 +2839,7 @@ end;
 
 function IP4Netmask(prefix: integer): cardinal;
 begin
-  result := cardinal(-1);
-  if cardinal(prefix) < 32 then
-    result := bswap32(not(result shr prefix));
+  result := bswap32($ffffffff shl (32 - prefix));
 end;
 
 function IP4Prefix(netmask4: cardinal): integer;

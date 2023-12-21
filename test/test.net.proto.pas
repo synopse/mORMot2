@@ -969,12 +969,12 @@ begin
   Check(mormot.core.text.HexToBin('200100B80A0B12F00000000000000001', PByte(@ip), 16));
   IP6Text(@ip, txt);
   CheckEqual(txt, '2001:b8:a0b:12f0::1');
-  CheckEqual(IP4Netmask(0), $00000000);
   CheckEqual(IP4Netmask(1), $00000080);
   CheckEqual(IP4Netmask(8), $000000ff);
   CheckEqual(IP4Netmask(24), $00ffffff);
   CheckEqual(IP4Netmask(31), $feffffff);
   CheckEqual(IP4Netmask(32), $ffffffff);
+  CheckEqual(IP4Netmask(0), $ffffffff, 'invalid prefix=0');
   CheckEqual(IP4Prefix('128.0.0.0'), 1);
   CheckEqual(IP4Prefix('192.0.0.0'), 2);
   CheckEqual(IP4Prefix('254.0.0.0'), 7);
