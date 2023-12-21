@@ -5027,8 +5027,9 @@ begin
   fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
   if pcoUseFirstResponse in fOwner.Settings.Options then
     fBroadcastEvent := TSynEvent.Create;
-  inherited Create(
-    fOwner.fLog, fOwner.fMac.IP, fOwner.fPort, 'udp-PeerCache', 100);
+  inherited Create(fOwner.fLog,
+    fOwner.fMac.{$ifdef OSPOSIX}Broadcast{$else}IP{$endif}, // OS-specific
+    fOwner.fPort, 'udp-PeerCache', 100);
 end;
 
 destructor THttpPeerCacheThread.Destroy;
@@ -5055,7 +5056,7 @@ var
     fOwner.fLog.Add.Log(sllTrace, 'OnFrameReceived: % %', [ip, msg], self)
   end;
 
-  procedure DoSend;
+  procedure DoSendResponse;
   var
     sock: TNetSocket;
     frame: RawByteString;
@@ -5064,7 +5065,11 @@ var
     // compute PCF_RESPONSE frame
     resp.DestIP4 := remote.IP4; // notify actual source IP (over broadcast)
     frame := fOwner.MessageEncode(resp);
-    remote.SetPort(fAddr.Port); // respond to this IP on the main UDP port
+    // respond on main UDP port and on broadcast (POSIX) or local (Windows) IP
+    if fMsg.Os.os = osWindows then
+      remote.SetPort(fAddr.Port) // local IP is good enough on Windows
+    else
+      remote.SetIP4Port(fOwner.fBroadcastIP4, fAddr.Port); // need to broadcast
     sock := remote.NewSocket(nlUdp);
     res := sock.SendTo(pointer(frame), length(frame), remote);
     sock.Close;
@@ -5076,9 +5081,10 @@ var
 var
   ok, late: boolean;
 begin
-  // void random GPF at shutdown
+  // quick return if this frame is not worth investigating
   if (fOwner = nil) or
-     (fOwner.fSettings = nil) or
+     (fOwner.fSettings = nil) or   // avoid random GPF at shutdown
+     (remote.IP4 = 0) or
      (remote.IP4 = fOwner.fIP4) then // Windows broadcasts to self :)
     exit;
   // first validate the input frame IP (RejectInstablePeersMin option)
@@ -5091,6 +5097,14 @@ begin
   // validate the input frame content
   ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
+  if ok then
+    if (fMsg.Kind in PCF_RESPONSE) and
+       (fMsg.DestIP4 <> fOwner.fIP4) then // responses are broadcasted on POSIX
+     begin
+       if fOwner.fVerboseLog then
+         DoLog('ignored', []);
+       exit;
+     end;
   late := (fMsg.Kind in PCF_RESPONSE) and
           (fMsg.Seq <> fCurrentSeq);
   if fOwner.fVerboseLog then
@@ -5104,7 +5118,7 @@ begin
       pcfPing:
         begin
           fOwner.MessageInit(pcfPong, fMsg.Seq, resp);
-          DoSend;
+          DoSendResponse;
         end;
       pcfRequest:
         begin
@@ -5114,7 +5128,7 @@ begin
                       fOwner.Settings.LimitClientCount) and
              (fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS) then
             resp.Kind := pcfResponseFull;
-          DoSend;
+          DoSendResponse;
         end;
       pcfPong,
       pcfResponseFull:
