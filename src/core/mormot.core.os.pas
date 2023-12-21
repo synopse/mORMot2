@@ -7824,7 +7824,7 @@ procedure TExecutableCommandLine.Describe(const v: array of RawUtf8;
   k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
 var
   i, j: PtrInt;
-  desc, param, pnames: RawUtf8;
+  desc, param, pnames, sp: RawUtf8;
 begin
   if (self = nil) or
      (d = '') then
@@ -7865,11 +7865,35 @@ begin
   if def <> '' then
     def := ' (default ' + def + ')';
   pnames := _fmt('  %0:-20s', [desc + def]);
-  if length(pnames) > 22 then // write description on next line
-    fDescDetail[k] := fDescDetail[k] + pnames + fLineFeed +
-            '                      ' + d + fLineFeed
+  if (length(pnames) > 22) or
+     (length(d) > 80) then
+  begin
+    // write description on next line(s)
+    sp := fLineFeed + '                      ';
+    while length(d) > 57 do
+    begin
+      j := 57;
+      for i := 57 downto 1 do
+        if d[i] = ' ' then
+        begin
+          j := i;
+          break;
+        end;
+      if j = 57 then
+        for i := 57 downto 1 do
+          if d[i] in [',', ';'] then
+          begin
+            j := i;
+            break;
+          end;
+      pnames := pnames + sp + copy(d, 1, j);
+      delete(d, 1, j);
+    end;
+    pnames := pnames + sp + d;
+  end
   else
-    fDescDetail[k] := fDescDetail[k] + pnames + d + fLineFeed;
+    pnames := pnames + d; // we can put everything on the same line
+  fDescDetail[k] := fDescDetail[k] + pnames + fLineFeed;
 end;
 
 function TExecutableCommandLine.Find(const v: array of RawUtf8;
