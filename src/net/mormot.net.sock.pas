@@ -456,6 +456,29 @@ function IsApipaIP(ip4: cardinal): boolean;
 // 255.0.0.0, 255.255.0.0, 255.255.255.0 or 255.255.255.255
 function IP4Mask(ip4: cardinal): cardinal;
 
+/// compute a broadcast address from a IPv4 current address and its known mask
+// - e.g. ip4=172.16.144.160 and mask4=255.255.255.0 returns 172.16.144.255
+function IP4Broadcast(ip4, mask4: cardinal): cardinal;
+
+/// compute the prefix size of a IPv4 prefix from a 32-bit network mask
+// - e.g. returns 8 for 255.0.0.0
+function IP4Prefix(netmask4: cardinal): integer; overload;
+
+/// compute the prefix size of a IPv4 prefix from a text network mask
+// - e.g. IP4Prefix('255.255.255.0') returns 24
+function IP4Prefix(const netmask4: RawUtf8): integer; overload;
+
+/// reverse conversion of IP4Prefix() into a 32-bit network mask
+function IP4Netmask(prefix: integer): cardinal;
+
+/// compute a subnet value from a 32-bit IP4 and its associated NetMask
+// - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
+function IP4Subnet(ip4, netmask4: cardinal): shortstring; overload;
+
+/// compute a subnet value from a 32-bit IP4 and its associated NetMask
+// - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
+function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8; overload;
+
 /// filter an IPv4 address to a given TIPAddress kind
 // - return true if the supplied address does match the filter
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
@@ -2806,6 +2829,61 @@ begin
       if ToByte(ip4 shr 8) = 168 then
         result := $00ffffff;
   end;
+end;
+
+function IP4Broadcast(ip4, mask4: cardinal): cardinal;
+begin
+  // e.g. ip4=172.16.144.160 mask4=255.255.255.0
+  result := (ip4 and mask4) {=172.16.144.0} or (not mask4); {=172.16.144.255}
+end;
+
+function IP4Netmask(prefix: integer): cardinal;
+begin
+  result := bswap32(not(cardinal(-1) shr prefix));
+end;
+
+function IP4Prefix(netmask4: cardinal): integer;
+begin
+  result := GetBitsCountPtrInt(netmask4);
+  if (result <> 0) and
+     (result <> 32) and
+     (IP4Netmask(result) <> netmask4) then
+    result := 0; // invalid netmask
+end;
+
+function IP4Prefix(const netmask4: RawUtf8): integer;
+var
+  mask: cardinal;
+begin
+  if NetIsIP4(pointer(netmask4), @mask) then
+    result := IP4Prefix(mask)
+  else
+    result := 0;
+end;
+
+function IP4Subnet(ip4, netmask4: cardinal): shortstring;
+var
+  w: integer;
+begin
+  result[0] := #0;
+  w := IP4Prefix(netmask4);
+  if w = 0 then
+    exit;
+  ip4 := ip4 and netmask4;
+  IP4Short(@ip4, result);
+  AppendShortChar('/', result);
+  AppendShortCardinal(w, result);
+end;
+
+function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8;
+var
+  ip, mask: cardinal;
+begin
+  if NetIsIP4(pointer(ip4), @ip) and
+     NetIsIP4(pointer(netmask4), @mask) then
+    ShortStringToAnsi7String(IP4Subnet(ip, mask), result)
+  else
+    result := '';
 end;
 
 function IP4Filter(ip4: cardinal; filter: TIPAddress): boolean;
