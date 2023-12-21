@@ -898,7 +898,7 @@ begin
           with result[i] do
             if StrComp(pointer(Name), info^.ifa_name) = 0 then
             begin
-              if IP = '' then // only return the first IPv4
+              if IP = '' then // only return the first IPv4 (paranoid)
               begin
                 IP4Text(@info^.ifa_addr^.sin_addr, IP);
                 if (info^.ifa_netmask <> nil) and
@@ -908,6 +908,8 @@ begin
                    (info^.ifa_broadaddr <> nil) and
                    (info^.ifa_broadaddr^.sa_family = AF_INET) then
                   IP4Text(@info^.ifa_broadaddr^.sin_addr, Broadcast);
+                  // don't use IP4Broadcast() because if the OS says there is
+                  // no broadcast address, then there is no broadcasting enabled
               end;
               break;
             end;

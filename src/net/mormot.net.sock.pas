@@ -347,7 +347,8 @@ function NetLastErrorMsg(AnotherNonFatal: integer = NO_ERROR): ShortString;
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
-  out netsocket: TNetSocket; netaddr: PNetAddr = nil; bindReusePort: boolean = false): TNetResult;
+  out netsocket: TNetSocket; netaddr: PNetAddr = nil;
+  bindReusePort: boolean = false): TNetResult;
 
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache
 procedure NetAddrFlush(const hostname: RawUtf8);

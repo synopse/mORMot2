@@ -5576,7 +5576,7 @@ begin
      (waoBroadcastNotAlone in Params.AlternateOptions) then
   begin
     tix := (GetTickCount64 shr 10) + 1; // 1024 ms resolution
-    brdcst := (fBroadcastTix <> tix);   // reenable broadcasting after delay
+    brdcst := (fBroadcastTix <> tix);   // reenable broadcasting after 1s delay
   end;
   if brdcst then
   begin

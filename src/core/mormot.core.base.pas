@@ -2766,6 +2766,7 @@ function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
 
 /// overload wrapper of MemCmp() to compare a RawByteString vs a memory buffer
+// - will first check length(P1)=P2Len then call MemCmp()
 function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): integer;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
