@@ -69,36 +69,45 @@ begin
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
-  Executable.Command.ExeDescription := 'Retrieve files using HTTP(S) and more';
-  if Executable.Command.Arg(0, '[hash@]#http://uri resource address to retrieve') then
-    url := Executable.Command.Args[0];
-  result := gpWithUrl;
-  if Executable.Command.Option(['P', 'prompt'],
-      'run in prompt mode (end on void input)') then
-    result := gpPromptMode;
-  dest := ExtractResourceName(url);
-  p.DestFile := Utf8ToString(Executable.Command.Param(['o', 'output'],
-     '#filename to be used as output', dest));
-  p.Silent := Executable.Command.Option(['s', 'silent'],
-     'generate no console output');
-  p.NoResume := Executable.Command.Option(['n', 'noresume'],
-     'disable auto-resume of interrupted partial download');
-  p.Cache := Executable.Command.Option(['c', 'cache'],
-     'enable local Cache in --cachePath');
-  p.Peer := Executable.Command.Option(['p', 'peer'],
-     'enable peer Cache process - see --peer* params');
-  p.TlsCertFile := Utf8ToString(Executable.Command.Param(['t', 'tlsCert'],
-     'optional client Certificate #filename'));
-  logfolder := Utf8ToString(Executable.Command.Param(['logFolder'],
-     '#folder to be used for --log output', logfolder));
-  p.CacheFolder := Utf8ToString(Executable.Command.Param(['cachePath'],
-     '#folder to be used for local (not peer) --cache',
-     StringToUtf8(p.CacheFolder)));
-  p.TlsIgnoreErrors  := Executable.Command.Option(['w', 'weakTls'],
-     'ignore TLS certificate errors');
-  if Executable.Command.Option(['l', 'log'],
-     'enable logging in --logFolder') then
-    p.Log := TSynLog;
+  with Executable.Command do
+  begin
+    ExeDescription := FormatUtf8('mget: retrieve files - and more' +
+      '%proudly made with mORMot - synopse.info', [LineFeed]);
+    if Arg(0, '[hash@]#http://uri resource address to retrieve') then
+      url := Args[0];
+    result := gpWithUrl;
+    if Option(['P', 'prompt'],
+        'run in prompt mode (end on void input)') then
+      result := gpPromptMode;
+    dest := ExtractResourceName(url);
+    p.DestFile := Utf8ToString(Param(['o', 'output'],
+       '#filename to be used as output', dest));
+    p.Silent := Option(['s', 'silent'],
+       'generate no console output');
+    p.NoResume := Option(['n', 'noresume'],
+       'disable auto-resume of interrupted partial download');
+    p.Cache := Option(['c', 'cache'],
+       'enable local Cache in --cachePath');
+    p.Peer := Option(['p', 'peer'],
+       'enable peer Cache process - see --peer* params');
+    p.TlsCertFile := Utf8ToString(Param(['t', 'tlsCert'],
+       'optional client Certificate #filename'));
+    logfolder := Utf8ToString(Param(['logFolder'],
+       '#folder to be used for --log output', logfolder));
+    p.CacheFolder := Utf8ToString(Param(['cachePath'],
+       '#folder to be used for local (not peer) --cache',
+       StringToUtf8(p.CacheFolder)));
+    p.TlsIgnoreErrors  := Option(['w', 'weakTls'],
+       'ignore TLS certificate errors');
+    if Option(['l', 'log'],
+       'enable logging in --logFolder') then
+      p.Log := TSynLog;
+    if Option(['?', 'help'], 'display this message') then
+      result := gpHelp
+    else if (result = gpWithUrl) and
+            (Url = '') then
+      result := gpFailed;
+  end;
   // setting the needed logging information
   if p.Log <> nil then
   with p.Log.Family do
@@ -117,32 +126,33 @@ begin
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
   // validate whole set of arguments
-  if Executable.Command.Option(['?', 'help'], 'display this message') then
-    result := gpHelp
-  else if (result = gpWithUrl) and
-          (Url = '') then
-    result := gpFailed;
-  if result in [gpHelp, gpFailed] then
-  begin
-    p.ToConsole('%', [Executable.Command.FullDescription]);
-    port := p.PeerSettings.Port;
-    p.ToConsole('For peer Cache to work, please open TCP+UDP port %.', [port]);
-    {$ifdef OSLINUX}
-    p.ToConsole('    e.g. sudo ufw allow from % to any port %',
-      [IP4Subnet(mac.IP, mac.NetMask), port]);
-    {$endif OSLINUX}
-    {$ifdef OSWINDOWS}
-    if OSVersion >= wVista then
-      p.ToConsole('  netsh advfirewall firewall add rule name="' +
-        'peerCache % tcp" dir=in protocol=tcp localport=% action=allow'#13#10 +
-        '  netsh advfirewall firewall add rule name="peerCache % udp" dir=in' +
-        ' protocol=udp localport=% action=allow', [port, port, port, port])
-    else
-      p.ToConsole('  netsh firewall add portopening all % peerCache', [port]);
-    {$endif OSWINDOWS}
-  end
+  case result of
+    gpHelp:
+      begin
+        p.ToConsole('%', [Executable.Command.FullDescription]);
+        port := p.PeerSettings.Port;
+        p.ToConsole('For peer Cache to work, please open TCP+UDP port %.', [port]);
+        {$ifdef OSLINUX}
+        p.ToConsole('    e.g. sudo ufw allow from % to any port %',
+          [IP4Subnet(mac.IP, mac.NetMask), port]);
+        {$endif OSLINUX}
+        {$ifdef OSWINDOWS}
+        if OSVersion >= wVista then
+          p.ToConsole('  netsh advfirewall firewall add rule name="' +
+            'peerCache % tcp" dir=in protocol=tcp localport=% action=allow'#13#10 +
+            '  netsh advfirewall firewall add rule name="peerCache % udp" dir=in' +
+            ' protocol=udp localport=% action=allow', [port, port, port, port])
+        else
+          p.ToConsole('  netsh firewall add portopening all % peerCache', [port]);
+        {$endif OSWINDOWS}
+      end;
+    gpFailed:
+      with Executable.Command do
+        p.ToConsole('%', [FullDescription('', '', LineFeed + 'mget ' +
+          SwitchAsText('help') + ' to display full usage description')]);
   else if Executable.Command.ConsoleWriteUnknown then
     result := gpFailed;
+  end;
 end;
 
 var
