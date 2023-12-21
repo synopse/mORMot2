@@ -72,6 +72,8 @@ type
     procedure RTSPOverHTTPBufferedWrite;
     /// validate mormot.net.tunnel
     procedure _TTunnelLocal;
+    /// validate IP processing functions
+    procedure IPAddresses;
     /// validate THttpPeerCache process
     procedure _THttpPeerCache;
   end;
@@ -919,6 +921,78 @@ begin
   // ECDHE encrypted tunnelling with mutual authentication
   options := [toEcdhe];
   TunnelTest(c, s);
+end;
+
+procedure TNetworkProtocols.IPAddresses;
+var
+  i: PtrInt;
+  s: shortstring;
+  txt: RawUtf8;
+  ip: THash128Rec;
+begin
+  FillZero(ip.b);
+  Check(IsZero(ip.b));
+  IP4Short(@ip, s);
+  Check(s = '0.0.0.0');
+  IP4Text(@ip, txt);
+  CheckEqual(txt, '');
+  IP6Short(@ip, s);
+  Check(s = '::', '::');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '');
+  ip.b[15] := 1;
+  IP6Short(@ip, s);
+  Check(s = '::1', '::1');
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '127.0.0.1', 'IPv6 loopback');
+  ip.b[0] := 1;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::1');
+  ip.b[15] := 0;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100::');
+  ip.b[6] := $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '100:0:0:7000::');
+  for i := 0 to 7 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607::');
+  for i := 8 to 15 do
+    ip.b[i] := i;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '1:203:405:607:809:a0b:c0d:e0f');
+  for i := 0 to 15 do
+    ip.b[i] := i or $70;
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '7071:7273:7475:7677:7879:7a7b:7c7d:7e7f');
+  Check(mormot.core.text.HexToBin('200100B80A0B12F00000000000000001', PByte(@ip), 16));
+  IP6Text(@ip, txt);
+  CheckEqual(txt, '2001:b8:a0b:12f0::1');
+  CheckEqual(IP4Prefix(''), 0);
+  CheckEqual(IP4Prefix('0.0.0.0'), 0);
+  CheckEqual(IP4Prefix('0.0.0.1'), 0);
+  CheckEqual(IP4Prefix('128.0.0.0'), 1);
+  CheckEqual(IP4Prefix('192.0.0.0'), 2);
+  CheckEqual(IP4Prefix('254.0.0.0'), 7);
+  CheckEqual(IP4Prefix('255.0.0.0'), 8);
+  CheckEqual(IP4Prefix('255.128.0.0'), 9);
+  CheckEqual(IP4Prefix('255.192.0.0'), 10);
+  CheckEqual(IP4Prefix('255.254.0.0'), 15);
+  CheckEqual(IP4Prefix('255.255.0.0'), 16);
+  CheckEqual(IP4Prefix('255.255.128.0'), 17);
+  CheckEqual(IP4Prefix('255.255.192.0'), 18);
+  CheckEqual(IP4Prefix('255.255.254.0'), 23);
+  CheckEqual(IP4Prefix('255.255.255.0'), 24);
+  CheckEqual(IP4Prefix('255.255.255.128'), 25);
+  CheckEqual(IP4Prefix('255.255.255.252'), 30);
+  CheckEqual(IP4Prefix('255.255.255.254'), 31);
+  CheckEqual(IP4Prefix('255.255.255.255'), 32);
+  CheckEqual(IP4Prefix('255.255.255.256'), 0);
+  CheckEqual(IP4Netmask(1), $00000080);
+  CheckEqual(IP4Netmask(8), $000000ff);
+  CheckEqual(IP4Netmask(24), $00ffffff);
+  CheckEqual(IP4Subnet('192.168.1.135', '255.255.255.0'), '192.168.1.0/24');
 end;
 
 type
