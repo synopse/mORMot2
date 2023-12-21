@@ -90,6 +90,10 @@ type
       read fReceived;
   end;
 
+const
+  /// the UDP frame content as sent by TUdpServerThread.Destroy
+  UDP_SHUTDOWN: RawUtf8 = 'shutdown';
+
 
 { ******************** Custom URI Routing using an efficient Radix Tree }
 
@@ -2267,19 +2271,26 @@ var
   sock: TNetSocket;
 begin
   fLogClass.Add.Log(sllDebug, 'Destroy: ending %', [fProcessName], self);
+  // try to release fSock.WaitFor(1000) in DoExecute
+  Terminate;
   if fProcessing and
      (fSock <> nil) then
-  begin // try to release fSock.WaitFor(1000) in DoExecute
+  {$ifdef OSPOSIX} // a broadcast address won't reach DoExecute
+  if (fSockAddr.IP4 and $ff000000) = $ff000000 then // check x.x.x.255
+    fSock.ShutdownAndClose({rdwr=}true) // will release acept() ASAP
+  else
+  {$endif OSPOSIX}
+  begin
     sock := fSockAddr.NewSocket(nlUdp);
     if sock <> nil then
     begin
-      Terminate;
       fLogClass.Add.Log(sllTrace, 'Destroy: send final packet', self);
       sock.SetSendTimeout(10);
-      sock.SendTo(@fSockAddr, SizeOf(fSockAddr), fSockAddr); // touch and go
+      sock.SendTo(pointer(UDP_SHUTDOWN), length(UDP_SHUTDOWN), fSockAddr);
       sock.ShutdownAndClose(false);
     end;
   end;
+  // finalize this thread process
   TerminateAndWaitFinished;
   inherited Destroy;
   if fSock <> nil then
@@ -2328,7 +2339,8 @@ begin
           len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
           if Terminated then
             break;
-          if len >= 0 then // -1=error, 0=shutdown
+          if (len >= 0) and // -1=error, 0=shutdown
+             (CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0) then // paranoid
           begin
             inc(fReceived);
             OnFrameReceived(len, remote);
@@ -2337,6 +2349,8 @@ begin
         else if res <> nrRetry then
           SleepHiRes(100); // don't loop with 100% cpu on failure
       end;
+      if Terminated then
+        break;
       tix64 := mormot.core.os.GetTickCount64;
       tix := tix64 shr 9; // div 512
       if tix <> lasttix then
