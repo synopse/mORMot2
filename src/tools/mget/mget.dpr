@@ -14,7 +14,7 @@ program mget;
 
   *****************************************************************************
 
-  For PeerCache to work, please open port 8089 for TCP+UDP on the computer:
+  For PeerCache to work, please open port 8089 for TCP+UDP on the firewall:
     sudo ufw allow from 192.168.0.0/24 to any port 8089
 }
 
@@ -57,6 +57,7 @@ var
   mac: TMacAddress;
   logfolder: TFileName;
   dest: RawUtf8;
+  port: integer;
 begin
   // some good enough general default values
   p.CacheFolder := MakePath([Executable.ProgramFilePath, 'cache'], true);
@@ -122,7 +123,24 @@ begin
           (Url = '') then
     result := gpFailed;
   if result in [gpHelp, gpFailed] then
-    p.ToConsole('%', [Executable.Command.FullDescription])
+  begin
+    p.ToConsole('%', [Executable.Command.FullDescription]);
+    port := p.PeerSettings.Port;
+    p.ToConsole('For peer Cache to work, please open TCP+UDP port %.', [port]);
+    {$ifdef OSLINUX}
+    p.ToConsole('    e.g. sudo ufw allow from % to any port %',
+      [IP4Subnet(mac.IP, mac.NetMask), port]);
+    {$endif OSLINUX}
+    {$ifdef OSWINDOWS}
+    if OSVersion >= wVista then
+      p.ToConsole('  netsh advfirewall firewall add rule name="' +
+        'peerCache % tcp" dir=in protocol=tcp localport=% action=allow'#13#10 +
+        '  netsh advfirewall firewall add rule name="peerCache % udp" dir=in' +
+        ' protocol=udp localport=% action=allow', [port, port, port, port])
+    else
+      p.ToConsole('  netsh firewall add portopening all % peerCache', [port]);
+    {$endif OSWINDOWS}
+  end
   else if Executable.Command.ConsoleWriteUnknown then
     result := gpFailed;
 end;
