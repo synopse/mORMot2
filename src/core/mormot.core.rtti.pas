@@ -578,6 +578,9 @@ type
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumNameTrimed(const Value): RawUtf8;
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// get the enumeration names corresponding to a set value as CSV
+    function GetSetName(const value; trimmed: boolean = false;
+      const sep: RawUtf8 = ','): RawUtf8;
     /// get the enumeration names corresponding to a set value as JSON array
     function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
@@ -3344,6 +3347,35 @@ begin
   result := TrimLeftLowerCaseShort(GetEnumName(Value));
 end;
 
+function TRttiEnumType.GetSetName(const value; trimmed: boolean;
+  const sep: RawUtf8): RawUtf8;
+var
+  j: PtrInt;
+  PS, v: PShortString;
+  tmp: shortstring;
+begin
+  result := '';
+  if (@self = nil) or
+     (@value = nil) then
+    exit;
+  PS := NameList;
+  for j := MinValue to MaxValue do
+  begin
+    if GetBitPtr(@value, j) then
+    begin
+      v := @tmp;
+      if trimmed then
+        TrimLeftLowerCaseToShort(PS, tmp)
+      else
+        v := PS;
+      Append(result, [v^, sep]);
+    end;
+    inc(PByte(PS), PByte(PS)^ + 1); // next
+  end;
+  if result <> '' then
+    FakeLength(result, length(result) - length(sep)); // trim last separator
+end;
+
 procedure TRttiEnumType.GetSetNameJsonArray(W: TTextWriter; Value: cardinal;
   SepChar: AnsiChar; FullSetsAsStar: boolean);
 var
@@ -5229,25 +5261,8 @@ begin
 end;
 
 function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
-var
-  info: PRttiEnumType;
-  PS: PShortString;
-  i: PtrInt;
 begin
-  result := '';
-  info := aTypeInfo^.SetEnumType;
-  if (info = nil) or
-     (@value = nil) then
-    exit;
-  PS := info^.EnumBaseType.NameList;
-  for i := info^.MinValue to info^.MaxValue do
-  begin
-    if GetBitPtr(@value, i) then
-      result := FormatUtf8('%%,', [result, PS^]);
-    inc(PByte(PS), PByte(PS)^ + 1); // next
-  end;
-  if result <> '' then
-    FakeLength(result, length(result) - 1); // trim last comma
+  result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value);
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
