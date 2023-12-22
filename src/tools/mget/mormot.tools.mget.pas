@@ -48,6 +48,7 @@ type
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
     CacheFolder, TlsCertFile, DestFile: TFileName;
+    Header: RawUtf8;
     Log: TSynLogClass;
     /// could be run once input parameters are set, before Execute() is called
     // - will launch THttpPeerCache background process, for instance
@@ -158,6 +159,7 @@ begin
   wget.Clear;
   wget.KeepAlive := 30000;
   wget.Resume := not NoResume;
+  wget.Header := Header;
   wget.HashFromServer := (hashValue = '') and
                          (hashAlgo <> gphAutoDetect);
   if hashAlgo <> gphAutoDetect then

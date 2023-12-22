@@ -99,6 +99,8 @@ begin
        '#folder to be used for --log output', logfolder);
     p.CacheFolder := ParamS(['cachePath'],
        '#folder to be used for local (not peer) --cache', p.CacheFolder);
+    p.Header := Param(['h', 'header'],
+       'custom HTTP header');
     p.TlsIgnoreErrors  := Option(['w', 'weakTls'],
        'ignore TLS certificate errors');
     if Option(['l', 'log'],
