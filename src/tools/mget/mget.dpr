@@ -83,8 +83,8 @@ begin
         'run in prompt mode (end on void input)') then
       result := gpPromptMode;
     dest := MakePath([GetCurrentDir, ExtractResourceName(url)]);
-    p.DestFile := Utf8ToString(Param(['o', 'output'],
-       '#filename to be used as output', dest));
+    p.DestFile := ParamS(['o', 'output'],
+       '#filename to be used as output', dest);
     p.Silent := Option(['s', 'silent'],
        'generate no console output');
     p.NoResume := Option(['n', 'noresume'],
@@ -93,13 +93,12 @@ begin
        'enable local Cache in --cachePath');
     p.Peer := Option(['p', 'peer'],
        'enable peer Cache process - see --peer* params');
-    p.TlsCertFile := Utf8ToString(Param(['t', 'tlsCert'],
-       'optional client Certificate #filename'));
-    logfolder := Utf8ToString(Param(['logFolder'],
-       '#folder to be used for --log output', logfolder));
-    p.CacheFolder := Utf8ToString(Param(['cachePath'],
-       '#folder to be used for local (not peer) --cache',
-       StringToUtf8(p.CacheFolder)));
+    p.TlsCertFile := ParamS(['t', 'tlsCert'],
+       'optional client Certificate #filename');
+    logfolder := ParamS(['logFolder'],
+       '#folder to be used for --log output', logfolder);
+    p.CacheFolder := ParamS(['cachePath'],
+       '#folder to be used for local (not peer) --cache', p.CacheFolder);
     p.TlsIgnoreErrors  := Option(['w', 'weakTls'],
        'ignore TLS certificate errors');
     if Option(['l', 'log'],

@@ -1328,6 +1328,9 @@ type
     /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
     function Param(const name: RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return '' or its string "parametervalue"
+    function ParamS(const name: array of RawUtf8; const description: RawUtf8 = '';
+      const default: string = ''): string;
     /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
     function Param(const name: array of RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
@@ -8024,8 +8027,11 @@ function TExecutableCommandLine.Get(const name: array of RawUtf8;
 var
   tmp: RawUtf8;
 begin
-  result := Get(name, tmp, description, RawUtf8(default));
-  value := string(tmp);
+  result := Get(name, tmp, description);
+  if result then
+    value := string(tmp)
+  else
+    value := default; // no conversion needed
 end;
 
 function TExecutableCommandLine.Get(const name: RawUtf8;
@@ -8109,6 +8115,12 @@ end;
 
 function TExecutableCommandLine.Param(const name: array of RawUtf8;
   const description, default: RawUtf8): RawUtf8;
+begin
+  Get(name, result, description, default);
+end;
+
+function TExecutableCommandLine.ParamS(const name: array of RawUtf8;
+  const description: RawUtf8; const default: string): string;
 begin
   Get(name, result, description, default);
 end;
