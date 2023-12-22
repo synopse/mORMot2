@@ -460,7 +460,7 @@ end;
 
 { TNetAddr }
 
-function SetWinAddr(const ip, port: RawUtf8; family: cardinal; layer: TNetLayer;
+function SetWinAddr(const host, port: RawUtf8; family: cardinal; layer: TNetLayer;
   out addr): boolean;
 var
   h: TAddrInfo;
@@ -472,7 +472,7 @@ begin
   h.ai_socktype := _ST[layer];
   h.ai_protocol := _IP[layer];
   res := nil;
-  result := getaddrinfo(pointer(ip), pointer(port), @h, res) = NO_ERROR;
+  result := getaddrinfo(pointer(host), pointer(port), @h, res) = NO_ERROR;
   if result then
     MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // return the first result
   if res <> nil then
@@ -484,29 +484,25 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
 var
   p: cardinal;
 begin
+  FillCharFast(Addr, SizeOf(Addr), 0);
+  result := nrNotImplemented;
   if layer = nlUnix then
-    result := nrNotImplemented
-  else
-  begin
-    FillCharFast(Addr, SizeOf(Addr), 0);
-    result := nrNotFound;
-    if address = '' then
-      exit;
-    // check supplied IP port
-    p := GetCardinal(pointer(addrport));
-    if (p = 0) and
-       (addrport <> '0') then // explicit '0' to get ephemeral port
-      exit;
-    PSockAddr(@Addr)^.sin_port := htons(p);
-    // check most simple IPv4 resolution (maybe using mormot.net.dns)
+    exit;
+  result := nrNotFound;
+  if address = '' then
+    exit;
+  // check supplied IP port
+  p := GetCardinal(pointer(addrport));
+  if (p = 0) and
+     (addrport <> '0') then // explicit '0' to get ephemeral port
+    exit;
+  PSockAddr(@Addr)^.sin_port := htons(p);
+  // first check most simple IPv4 resolution (maybe using mormot.net.dns)
+  if SetFromIP4(address, false) or
+     // fallback to OS getaddrinfo() resolution, first try as IP4, then IP6
+     SetWinAddr(address, addrport, AF_INET, layer, Addr) or
+     SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
     result := nrOk;
-    if SetFromIP4(address, false) then
-      exit;
-    // use the OS resolution, first try as IP4, then IP6
-    if not SetWinAddr(address, addrport, AF_INET, layer, Addr) and
-       not SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
-      result := nrNotFound;
-  end;
 end;
 
 
