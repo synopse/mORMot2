@@ -49,6 +49,10 @@ type
     Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
     CacheFolder, TlsCertFile, DestFile: TFileName;
     Log: TSynLogClass;
+    /// could be run once input parameters are set, before Execute() is called
+    // - will launch THttpPeerCache background process, for instance
+    // - do nothing if already already called
+    procedure Start;
     /// this is the main processing method
     function Execute(const Url: RawUtf8): TFileName;
     /// finalize this instance
@@ -110,6 +114,21 @@ begin
   end;
 end;
 
+procedure TMGetProcess.Start;
+var
+  {%H-}l: ISynLog;
+begin
+  if Peer and
+     (fPeerCache = nil) then // reuse THttpPeerCache instance between calls
+  begin
+    l := Log.Enter(self, 'Start');
+    if (fPeerSecret = '') and
+       (fPeerSecretHexa <> '') then
+      fPeerSecret := HexToBin(fPeerSecretHexa);
+    fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+  end;
+end;
+
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
 var
   wget: THttpClientSocketWGet;
@@ -117,7 +136,9 @@ var
   uri: TUri;
   l: ISynLog;
 begin
+  // prepare the process
   l := Log.Enter('Execute %', [Url], self);
+  Start; // start e.g. background THttpPeerCache process
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
   if Split(Url, '@', h, u) and
      (GuessAlgo(h) <> gphAutoDetect) and
@@ -151,14 +172,7 @@ begin
     wget.HashCacheDir := EnsureDirectoryExists(CacheFolder);
   if Peer then
   begin
-    if fPeerCache = nil then // reuse THttpPeerCache instance between calls
-    begin
-      if (fPeerSecret = '') and
-         (fPeerSecretHexa <> '') then
-        fPeerSecret := HexToBin(fPeerSecretHexa);
-      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
-    end;
-    wget.Alternate := fPeerCache;
+    wget.Alternate := fPeerCache; // reuse THttpPeerCache on background
     wget.AlternateOptions := fPeerRequest;
   end;
   // make the request

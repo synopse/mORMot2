@@ -177,6 +177,7 @@ begin
           p.Execute(url);
         gpPromptMode:
           begin
+            p.Start; // launch background THttpPeerCache e.g.
             p.DestFile := '';
             repeat
               p.hashValue := '';
