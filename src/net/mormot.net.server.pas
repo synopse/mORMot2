@@ -5011,7 +5011,7 @@ begin
   fCacheTempPath := '*';
   fCacheTempMinBytes := 2048;
   fCacheTempMaxMB := 1000;
-  fCacheTempMaxMin := 15;
+  fCacheTempMaxMin := 60;
   fCachePermPath := '*';
   fCachePermMinBytes := 2048;
   fBroadcastTimeoutMS := 10;
