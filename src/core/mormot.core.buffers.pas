@@ -2115,6 +2115,10 @@ type
     class procedure ProgressStreamToConsole(Sender: TStreamRedirect);
     /// can be used as TOnInfoProgress callback writing into the console
     class procedure ProgressInfoToConsole(Sender: TObject; Info: PProgressInfo);
+    /// notify a TOnStreamProgress callback that a process ended
+    // - create a fake TStreamRedirect and call Ended with the supplied info
+    class procedure NotifyEnded(const Event: TOnStreamProgress;
+      const Fmt: RawUtf8; const Args: array of const; Size, StartedMs: Int64);
     /// update the hash and redirect the data to the associated TStream
     // - also trigger OnProgress at least every second
     // - will raise an error if Write() (or Append) have been called before
@@ -2138,6 +2142,8 @@ type
     /// current algorithm name as file/url extension, e.g. '.md5' or '.sha256'
     // - by default, will return '' meaning that no hashing algorithm was set
     class function GetHashFileExt: RawUtf8; virtual;
+    /// current algorithm name, from GetHashFileExt, e.g. 'md5' or 'sha256'
+    class function GetHashName: RawUtf8;
     /// apply the internal hash algorithm to the supplied file content
     // - could be used ahead of time to validate a cached file
     class function HashFile(const FileName: TFileName;
@@ -9405,6 +9411,33 @@ begin
   system.write(msg);
   ioresult;
 end;
+
+class procedure TStreamRedirect.NotifyEnded(const Event: TOnStreamProgress;
+  const Fmt: RawUtf8; const Args: array of const; Size, StartedMs: Int64);
+var
+  tmp: TStreamRedirect;
+  stop: Int64;
+begin
+  if not Assigned(Event) then
+    exit;
+  QueryPerformanceMicroSeconds(stop);
+  tmp := TStreamRedirect.Create(nil);
+  try
+    tmp.OnProgress := Event;
+    FormatUtf8(Fmt, Args, tmp.fInfo.Context);
+    tmp.fInfo.ProcessedSize := Size;
+    tmp.fInfo.CurrentSize := Size;
+    if StartedMs <> 0 then
+    begin
+      tmp.fInfo.Elapsed := stop - StartedMs;
+      dec(tmp.fInfo.StartTix, tmp.fInfo.Elapsed shr 10); // fake time
+    end;
+    tmp.Ended;
+  finally
+    tmp.Free;
+  end;
+end;
+
 {$I+}
 
 procedure TStreamRedirect.DoReport(ReComputeElapsed: boolean);
@@ -9432,6 +9465,11 @@ end;
 class function TStreamRedirect.GetHashFileExt: RawUtf8;
 begin
   result := ''; // no associated hasher on this parent class
+end;
+
+class function TStreamRedirect.GetHashName: RawUtf8;
+begin
+  result := copy(GetHashFileExt, 2, 10);
 end;
 
 class function TStreamRedirect.HashFile(const FileName: TFileName;
