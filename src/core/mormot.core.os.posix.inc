@@ -1727,7 +1727,7 @@ end;
 
 procedure TextBackground(Color: TConsoleColor);
 begin
-  // not implemented yet - but not needed either
+  // not implemented yet - but not much needed either
 end;
 
 var

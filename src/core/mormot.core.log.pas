@@ -3688,7 +3688,7 @@ type
   // RRD of last 128 lines to be sent to console (no need of older data)
   TAutoFlushThreadToConsole = record
     Next, Count: integer;
-    Text: array[0..127] of RawUtf8; // must be a power-of-two length
+    Text:  array[0..127] of RawUtf8; // must be a power-of-two length
     Color: array[0..127] of TConsoleColor;
   end;
 
@@ -3761,7 +3761,7 @@ begin
     ConsoleWrite('... (truncated) ...', ccBlue);
     for i := c.Next to high(c.Text) do
       if c.Count <> 0 then
-       begin
+      begin
         ConsoleWrite(c.Text[i], c.Color[i]);
         dec(c.Count);
       end;
