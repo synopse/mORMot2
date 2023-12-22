@@ -8192,8 +8192,9 @@ begin
   result := err <> '';
   if not result then
     exit;
-  ConsoleWrite(err, ccLightRed);
   ConsoleWrite(FullDescription(exedescription));
+  ConsoleWrite(err, ccLightRed);
+  TextColor(ccLightGray);
 end;
 
 procedure TExecutableCommandLine.Clear;
@@ -8211,10 +8212,10 @@ begin
   result := false;
   fLineFeed := DescriptionLineFeed;
   if (ShortSwitch = '') or
-     (LongSwitch = '') then
+     (LongSwitch  = '') then
     exit;
   fSwitch[false] := ShortSwitch;
-  fSwitch[true] := LongSwitch;
+  fSwitch[true]  := LongSwitch;
   if fRawParams = nil then
   begin
     n := ParamCount;
