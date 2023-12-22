@@ -2117,7 +2117,8 @@ type
     class procedure ProgressInfoToConsole(Sender: TObject; Info: PProgressInfo);
     /// notify a TOnStreamProgress callback that a process ended
     // - create a fake TStreamRedirect and call Ended with the supplied info
-    class procedure NotifyEnded(const Event: TOnStreamProgress;
+    class procedure NotifyEnded(
+      const OnStream: TOnStreamProgress; const OnInfo: TOnInfoProgress;
       const Fmt: RawUtf8; const Args: array of const; Size, StartedMs: Int64);
     /// update the hash and redirect the data to the associated TStream
     // - also trigger OnProgress at least every second
@@ -9412,18 +9413,21 @@ begin
   ioresult;
 end;
 
-class procedure TStreamRedirect.NotifyEnded(const Event: TOnStreamProgress;
+class procedure TStreamRedirect.NotifyEnded(
+  const OnStream: TOnStreamProgress; const OnInfo: TOnInfoProgress;
   const Fmt: RawUtf8; const Args: array of const; Size, StartedMs: Int64);
 var
   tmp: TStreamRedirect;
   stop: Int64;
 begin
-  if not Assigned(Event) then
+  if not Assigned(OnStream) and
+     not Assigned(OnInfo) then
     exit;
   QueryPerformanceMicroSeconds(stop);
   tmp := TStreamRedirect.Create(nil);
   try
-    tmp.OnProgress := Event;
+    tmp.OnProgress := OnStream;
+    tmp.OnInfoProgress := OnInfo;
     FormatUtf8(Fmt, Args, tmp.fInfo.Context);
     tmp.fInfo.ProcessedSize := Size;
     tmp.fInfo.CurrentSize := Size;
