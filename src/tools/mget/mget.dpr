@@ -105,26 +105,17 @@ begin
     if Option(['l', 'log'],
        'enable logging in --logFolder') then
       p.Log := TSynLog;
+    if Option('debug') then
+    begin
+      p.Log := TSynLog; // force logging
+      p.Log.Family.EchoToConsole := LOG_VERBOSE; // on the console
+    end;
     if Option(['?', 'help'], 'display this message') then
       result := gpHelp
     else if (result = gpWithUrl) and
             (Url = '') then
       result := gpFailed;
   end;
-  // setting the needed logging information
-  if p.Log <> nil then
-  with p.Log.Family do
-    begin
-      Level := LOG_VERBOSE;
-      if logfolder <> '' then
-      begin
-        PerThreadLog := ptIdentifiedInOneFile;
-        FileExistsAction := acAppend;
-        RotateFileCount := 2;
-        RotateFileSizeKB := 2 shl 10;
-        DestinationPath := EnsureDirectoryExists(logfolder);
-      end;
-    end;
   // add Main and PeerCache params after all main settings using RTTI
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
@@ -156,6 +147,22 @@ begin
   else if Executable.Command.ConsoleWriteUnknown then
     result := gpFailed;
   end;
+  if result = gpFailed then
+    exit;
+  // setting the needed logging information
+  if p.Log <> nil then
+    with p.Log.Family do
+    begin
+      Level := LOG_VERBOSE;
+      if logfolder <> '' then
+      begin
+        PerThreadLog := ptIdentifiedInOneFile;
+        FileExistsAction := acAppend;
+        RotateFileCount := 2;
+        RotateFileSizeKB := 2 shl 10;
+        DestinationPath := EnsureDirectoryExists(logfolder);
+      end;
+    end;
 end;
 
 var
