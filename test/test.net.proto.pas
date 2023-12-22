@@ -974,7 +974,8 @@ begin
   CheckEqual(IP4Netmask(24), $00ffffff);
   CheckEqual(IP4Netmask(31), $feffffff);
   CheckEqual(IP4Netmask(32), $ffffffff);
-  CheckEqual(IP4Netmask(0), $ffffffff, 'invalid prefix=0');
+  CheckEqual(IP4Netmask(0),  0, 'invalid prefix=0');
+  CheckEqual(IP4Netmask(33), 0, 'invalid prefix=33');
   CheckEqual(IP4Prefix('128.0.0.0'), 1);
   CheckEqual(IP4Prefix('192.0.0.0'), 2);
   CheckEqual(IP4Prefix('254.0.0.0'), 7);
