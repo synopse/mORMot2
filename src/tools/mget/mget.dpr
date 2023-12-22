@@ -82,7 +82,7 @@ begin
     if Option(['P', 'prompt'],
         'run in prompt mode (end on void input)') then
       result := gpPromptMode;
-    dest := ExtractResourceName(url);
+    dest := MakePath([GetCurrentDir, ExtractResourceName(url)]);
     p.DestFile := Utf8ToString(Param(['o', 'output'],
        '#filename to be used as output', dest));
     p.Silent := Option(['s', 'silent'],

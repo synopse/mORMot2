@@ -83,7 +83,12 @@ implementation
 
 const
   HASH_ALGO: array[gphMd5 .. high(TMGetProcessHash)] of THashAlgo = (
-    hfMd5, hfSha1, hfSha256, hfSha384, hfSha512, hfSha3_256);
+    hfMd5,
+    hfSha1,
+    hfSha256,
+    hfSha384,
+    hfSha512,
+    hfSha3_256);
 
 function GuessAlgo(const Hash: RawUtf8): TMGetProcessHash;
 begin
@@ -108,12 +113,14 @@ var
   wget: THttpClientSocketWGet;
   u, h: RawUtf8;
   uri: TUri;
+  l: ISynLog;
 begin
+  l := Log.Enter('Execute %', [Url], self);
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
   if Split(Url, '@', h, u) and
      (GuessAlgo(h) <> gphAutoDetect) and
      (HexToBin(h) <> '') then
-    hashValue := h
+    hashValue := h // this is a real hash value
   else
     u := Url;
   // guess the hash algorithm from its hexadecimal value size
@@ -124,6 +131,7 @@ begin
       hashAlgo := gphSha256;
   // set the WGet additional parameters
   wget.Clear;
+  wget.KeepAlive := 30000;
   wget.Resume := not NoResume;
   wget.HashFromServer := (hashValue = '') and
                          (hashAlgo <> gphAutoDetect);
@@ -165,6 +173,8 @@ begin
     fClient.OpenBind(uri.Server, uri.Port, {bind=}false, uri.Https);
   end;
   result := fClient.WGet(uri.Address, DestFile, wget);
+  if Assigned(l) then
+    l.Log(sllTrace, 'Execute: WGet=%', [result], self);
 end;
 
 destructor TMGetProcess.Destroy;
