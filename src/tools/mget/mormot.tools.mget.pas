@@ -43,6 +43,7 @@ type
     fHashValue: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
+    fPeerCache: IWGetAlternate;
   public
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
@@ -52,6 +53,7 @@ type
     function Execute(const Url: RawUtf8): TFileName;
     /// finalize this instance
     destructor Destroy; override;
+    /// write some message to the console, if Silent flag is false
     procedure ToConsole(const Fmt: RawUtf8; const Args: array of const);
   published
     /// the settings used if Peer is true
@@ -149,10 +151,14 @@ begin
     wget.HashCacheDir := EnsureDirectoryExists(CacheFolder);
   if Peer then
   begin
-    if (fPeerSecret = '') and
-       (fPeerSecretHexa <> '') then
-      fPeerSecret := HexToBin(fPeerSecretHexa);
-    wget.Alternate := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+    if fPeerCache = nil then // reuse THttpPeerCache instance between calls
+    begin
+      if (fPeerSecret = '') and
+         (fPeerSecretHexa <> '') then
+        fPeerSecret := HexToBin(fPeerSecretHexa);
+      fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+    end;
+    wget.Alternate := fPeerCache;
     wget.AlternateOptions := fPeerRequest;
   end;
   // make the request
