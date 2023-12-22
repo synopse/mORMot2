@@ -4775,12 +4775,14 @@ begin
     raise EHttpPeerCache.CreateUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
   if fSettings.InterfaceName <> '' then
+  begin
     if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
       // allow to pickup "down" interfaces if name is explicit
       raise EHttpPeerCache.CreateUtf8(
         '%.Create: impossible to find the [%] network interface',
         [self, fSettings.InterfaceName]);
-  if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
+  end
+  else if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
     raise EHttpPeerCache.CreateUtf8(
       '%.Create: impossible to find a local network interface', [self]);
   IPToCardinal(fMac.IP, fIP4);

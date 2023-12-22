@@ -2058,7 +2058,7 @@ begin
     else
     begin
       resumed := false;
-      DeleteFile(part); // this .part is too big, so should be rejected
+      DeleteFile(part); // reject this .part if unknown or too big
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: got Size=% Expected=% -> reset %',
           [url, Size, expectedsize, part], self);
