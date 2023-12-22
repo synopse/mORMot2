@@ -4212,11 +4212,11 @@ begin
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
+    if fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
+      IncStat(grBanned);
   finally
     req.Free;
   end;
-  if fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
-    IncStat(grBanned);
   // send back the response
   if Terminated then
     exit;
