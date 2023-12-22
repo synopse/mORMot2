@@ -2839,7 +2839,10 @@ end;
 
 function IP4Netmask(prefix: integer): cardinal;
 begin
-  result := bswap32($ffffffff shl (32 - prefix));
+  if cardinal(prefix - 1) < 32 then // needed for 32-bit ARM
+    result := bswap32($ffffffff shl (32 - prefix))
+  else
+    result := 0;
 end;
 
 function IP4Prefix(netmask4: cardinal): integer;
