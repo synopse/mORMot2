@@ -9293,6 +9293,7 @@ var
   v, desc, def: RawUtf8;
   dolower: boolean;
   i: integer;
+  v64: QWord;
 begin
   result := false;
   if Value = nil then
@@ -9315,24 +9316,34 @@ begin
           dolower := true;
           desc := LowerCaseU(desc); // cosmetic
         end;
-        desc := ' - values: ' + desc;
+        if p^.Value.Kind = rkSet then
+          desc := ' - values: set of ' + desc
+        else
+          desc := ' - values: ' + desc;
       end;
       desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
       if not p.ValueIsDefault(Value) then
       begin
-        def := p^.Prop^.GetValueText(Value);
-        if (def <> '') and
-           (def <> '0') then
+        def := '';
+        if p^.Value.Kind in rkOrdinalTypes then
         begin
-          if p^.Value.Kind = rkEnumeration then
-          begin
-            def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(
-              p^.Prop^.GetFieldAddr(Value)^);
-            if dolower then
-              def := LowerCaseU(def);
+          v64 := p^.Prop^.GetInt64Value(Value);
+          case p^.Value.Kind of
+            rkEnumeration:
+              def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
+            rkSet:
+              if v64 <> 0 then
+                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true);
+          else
+            UInt64ToUtf8(v64, def);
           end;
+          if dolower then
+            def := LowerCaseU(def);
+        end
+        else
+          def := p^.Prop^.GetValueText(Value);
+        if def <> '' then
           desc := FormatUtf8('% (default: %)', [desc, def]);
-        end;
       end;
       if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
          p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
@@ -9341,6 +9352,7 @@ begin
     inc(p);
   end;
 end;
+
 
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
 
