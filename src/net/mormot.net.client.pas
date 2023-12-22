@@ -1896,7 +1896,7 @@ end;
 function THttpClientSocket.WGet(const url: RawUtf8; const destfile: TFileName;
   var params: THttpClientSocketWGet): TFileName;
 var
-  size: Int64;
+  size, start: Int64;
   cached, part: TFileName;
   requrl, parthash, urlfile: RawUtf8;
   partmodif: TDateTime;
@@ -1975,6 +1975,7 @@ var
 
 begin
   // prepare input parameters and result file name
+  QueryPerformanceMicroSeconds(start); // for NotifyEnded() from cache
   requrl := url;
   urlfile := ExtractResourceName(url); // TUri + UrlDecode() + sanitize filename
   if urlfile = '' then
@@ -1982,8 +1983,8 @@ begin
   result := destfile;
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
-  alternate := false;
   expectedsize := 0;
+  alternate := false;
   // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
@@ -2010,27 +2011,40 @@ begin
   if (destfile <> '') and
      Assigned(params.Hasher) and
      (params.Hash <> '') then
+  begin
     // check if we already got the file from its md5/sha* hash
-    if FileExists(destfile) and
+    size := FileSize(destfile);
+    if (size <> 0) and
        PropNameEquals(params.Hasher.HashFile(result), params.Hash) then
     begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: % already available', [url, result], self);
+      if Assigned(params.OnProgress) then
+        TStreamRedirect.NotifyEnded(params.OnProgress, nil,
+          '% already available - % of',
+          [urlfile, params.Hasher.GetHashName], size, start);
       exit;
     end
     else if cached <> '' then
     begin
       // check from local cache folder
-      if PropNameEquals(params.Hasher.HashFile(cached), params.Hash) then
+      size := FileSize(cached);
+      if (size <> 0) and
+         PropNameEquals(params.Hasher.HashFile(cached), params.Hash) then
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
         if not CopyFile(cached, result, {failexists=}false) then
           raise EHttpSocket.CreateUtf8('%.WGet: copy from % cache failed',
             [self, cached]);
+        if Assigned(params.OnProgress) then
+          TStreamRedirect.NotifyEnded(params.OnProgress, nil,
+            '% from local cache - % and copy of',
+            [urlfile, params.Hasher.GetHashName], size, start);
         exit;
       end;
     end;
+  end;
   // we need to download the file
   if not Assigned(params.Hasher) then
     params.Hasher := TStreamRedirect; // no hash by default
