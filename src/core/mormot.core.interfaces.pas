@@ -2662,7 +2662,7 @@ begin
   WR.AddPropInt64('fpreg', FPRegisterIdent);
   WR.AddPropInt64('stacksize', SizeInStack);
   WR.AddPropName('asm');
-  WR.AddString(GetSetNameCsv(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
+  WR.AddString(GetSetNameJsonArray(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
   WR.Add('}', ',');
 {$else}
   WR.AddShorter('"},');

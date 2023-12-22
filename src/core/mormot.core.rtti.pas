@@ -578,11 +578,11 @@ type
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumNameTrimed(const Value): RawUtf8;
       {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// get the enumeration names corresponding to a set value
-    function GetSetNameCsv(Value: cardinal; SepChar: AnsiChar = ',';
+    /// get the enumeration names corresponding to a set value as JSON array
+    function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
-    /// get the enumeration names corresponding to a set value
-    procedure GetSetNameCsv(W: TTextWriter; Value: cardinal; SepChar: AnsiChar = ',';
+    /// write the enumeration names corresponding to a set value as a JSON array
+    procedure GetSetNameJsonArray(W: TTextWriter; Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
@@ -3344,10 +3344,10 @@ begin
   result := TrimLeftLowerCaseShort(GetEnumName(Value));
 end;
 
-procedure TRttiEnumType.GetSetNameCsv(W: TTextWriter; Value: cardinal;
+procedure TRttiEnumType.GetSetNameJsonArray(W: TTextWriter; Value: cardinal;
   SepChar: AnsiChar; FullSetsAsStar: boolean);
 var
-  j, max: integer;
+  j, max: PtrInt;
   PS: PShortString;
 begin
   W.Add('[');
@@ -3379,7 +3379,7 @@ begin
   W.Add(']');
 end;
 
-function TRttiEnumType.GetSetNameCsv(Value: cardinal; SepChar: AnsiChar;
+function TRttiEnumType.GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar;
   FullSetsAsStar: boolean): RawUtf8;
 var
   W: TTextWriter;
@@ -3387,7 +3387,7 @@ var
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    GetSetNameCsv(W, Value, SepChar, FullSetsAsStar);
+    GetSetNameJsonArray(W, Value, SepChar, FullSetsAsStar);
     W.SetText(result);
   finally
     W.Free;
