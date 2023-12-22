@@ -105,10 +105,10 @@ begin
     if Option(['l', 'log'],
        'enable logging in --logFolder') then
       p.Log := TSynLog;
-    if Option('debug') then
+    if Option('debug', 'raw debugging on the console') then
     begin
-      p.Log := TSynLog; // force logging
-      p.Log.Family.EchoToConsole := LOG_VERBOSE; // on the console
+      p.Log := TSynLog; // force logging even if -l was not specified
+      p.Log.Family.EchoToConsole := LOG_VERBOSE;
     end;
     if Option(['?', 'help'], 'display this message') then
       result := gpHelp

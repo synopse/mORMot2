@@ -115,18 +115,20 @@ begin
 end;
 
 procedure TMGetProcess.Start;
-var
-  {%H-}l: ISynLog;
 begin
   if Peer and
      (fPeerCache = nil) then // reuse THttpPeerCache instance between calls
-  begin
-    l := Log.Enter(self, 'Start');
-    if (fPeerSecret = '') and
-       (fPeerSecretHexa <> '') then
-      fPeerSecret := HexToBin(fPeerSecretHexa);
-    fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
-  end;
+    with Log.Enter(self, 'Start: THttpPeerCache') do
+    begin
+      if (fPeerSecret = '') and
+         (fPeerSecretHexa <> '') then
+        fPeerSecret := HexToBin(fPeerSecretHexa);
+      try
+        fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+      except
+        Peer := false; // disable --peer if something is wrong
+      end;
+    end;
 end;
 
 function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
