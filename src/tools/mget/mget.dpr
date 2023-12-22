@@ -64,6 +64,7 @@ begin
   p.tcpTimeoutSec := 10;
   logfolder := StringToUtf8(Executable.ProgramFilePath);
   p.peerSecret := 'secret';
+  p.PeerSettings.Options := [pcoVerboseLog, pcoTryLastPeer];
   p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
   p.PeerSettings.CachePermPath := p.CacheFolder + 'perm';
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
@@ -71,8 +72,10 @@ begin
   // define main processing switches
   with Executable.Command do
   begin
-    ExeDescription := FormatUtf8('mget: retrieve files - and more' +
-      '%proudly made with mORMot - synopse.info', [LineFeed]);
+    CaseSensitiveNames := true;
+    ExeDescription := FormatUtf8('mget %: retrieve files - and more' +
+      '%proudly made with mORMot - synopse.info',
+      [SYNOPSE_FRAMEWORK_VERSION, LineFeed]);
     if Arg(0, '[hash@]#http://uri resource address to retrieve') then
       url := Args[0];
     result := gpWithUrl;
@@ -178,7 +181,11 @@ begin
             repeat
               p.hashValue := '';
               if url = '' then
+              begin
+                p.ToConsole(
+                  'Enter a [hash@]http://uri value (leave void to quit)', []);
                 readln(url);
+              end;
               if (url = '') or
                  (url = 'exit') then
                 break;
