@@ -1662,7 +1662,7 @@ procedure JsonDecode(var Json: RawJson; const Names: array of RawUtf8;
   Values: PValuePUtf8CharArray;
   HandleValuesAsObjectOrArray: boolean = false); overload;
 
-/// decode the supplied UTF-8 JSON content for the supplied names
+/// decode the supplied UTF-8 JSON object for the supplied field names
 // - data will be set in Values, according to the Names supplied e.g.
 // ! JsonDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
 // - if any supplied name wasn't found its corresponding Values[] will be nil
@@ -1677,14 +1677,14 @@ function JsonDecode(P: PUtf8Char; const Names: array of RawUtf8;
   Values: PValuePUtf8CharArray;
   HandleValuesAsObjectOrArray: boolean = false): PUtf8Char; overload;
 
-/// decode the supplied UTF-8 JSON content for the supplied names
+/// decode the supplied UTF-8 JSON object for the supplied field names
 // - overloaded function expecting the names supplied as a constant array
 // - slightly faster than the one using "const Names: array of RawUtf8"
 function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
   Values: PValuePUtf8CharArray;
   HandleValuesAsObjectOrArray: boolean = false): PUtf8Char; overload;
 
-/// decode the supplied UTF-8 JSON content into an array of name/value pairs
+/// decode the supplied UTF-8 JSON object into an array of name/value pairs
 // - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
 // array is created inside JSON, which is therefore modified: make a private
 // copy first if you want to reuse the JSON content
@@ -1697,7 +1697,7 @@ function JsonDecode(P: PUtf8Char; Names: PPUtf8CharArray; NamesCount: integer;
 function JsonDecode(P: PUtf8Char; out Values: TNameValuePUtf8CharDynArray;
   HandleValuesAsObjectOrArray: boolean = false): PUtf8Char; overload;
 
-/// decode the supplied UTF-8 JSON content for the one supplied name
+/// decode the supplied UTF-8 JSON object for the one supplied field name
 // - this function will decode the JSON content in-memory, so will unescape it
 // in-place: it must be called only once with the same JSON data
 function JsonDecode(var Json: RawUtf8; const aName: RawUtf8 = 'result';
@@ -1705,7 +1705,7 @@ function JsonDecode(var Json: RawUtf8; const aName: RawUtf8 = 'result';
   HandleValuesAsObjectOrArray: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// decode the supplied UTF-8 JSON content for the one supplied name
+  /// decode the supplied UTF-8 JSON object for the one supplied field name
 // - this function will decode and modify the input JSON buffer in-place
 function JsonDecode(Json: PUtf8Char; const aName: RawUtf8;
   WasString: PBoolean; HandleValuesAsObjectOrArray: boolean): RawUtf8; overload;
@@ -8640,7 +8640,8 @@ var
   info: TGetJsonField;
 begin
   result := nil;
-  if Values = nil then
+  if (Values = nil) or
+     (NamesCount <= 0) then
     exit; // avoid GPF
   FillCharFast(Values[0], NamesCount * SizeOf(Values[0]), 0);
   dec(NamesCount);
