@@ -4499,11 +4499,18 @@ begin
     if rn = rnInterfaceClientID then
       nam := nam + '/<int:clientid>';
     // URI sent as /Model/Interface.Method[/ClientDrivenID]
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam,
-      rn, nil, nil, ndx, met^.InterfaceService);
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
+      ndx, met^.InterfaceService);
+    if rn <> rnInterfaceClientID then
+      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
+        ndx, met^.InterfaceService); // /Model/Interface.Method/
     // URI sent as /Model/Interface/Method[/ClientDrivenID]
-    Router.Setup([mGET, mPOST, mPUT, mDELETE], StringReplaceChars(nam, '.', '/'),
-      rn, nil, nil, ndx, met^.InterfaceService);
+    nam := StringReplaceChars(nam, '.', '/');
+    Router.Setup([mGET, mPOST, mPUT, mDELETE], nam, rn, nil, nil,
+      ndx, met^.InterfaceService);
+    if rn <> rnInterfaceClientID then
+      Router.Setup([mGET, mPOST, mPUT, mDELETE], nam + '/', rn, nil, nil,
+        ndx, met^.InterfaceService); // /Model/Interface/Method/
   end;
 end;
 
@@ -4652,9 +4659,9 @@ begin
     JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
     if values[0].Text = nil then // Method name required
       exit;
-    values[0].ToUtf8(method);
-    ServiceParameters := values[1].Text;
-    ServiceInstanceID := values[2].ToCardinal; // retrieve "id":ClientDrivenID
+    values[0].ToUtf8(method);                  // "method":"methodname"
+    ServiceParameters := values[1].Text;       // "params":[....]
+    ServiceInstanceID := values[2].ToCardinal; // "id":ClientDrivenID
     ServiceMethodIndex := Service.ServiceMethodIndex(method);
     if ServiceMethodIndex < 0 then
     begin
@@ -6872,8 +6879,9 @@ begin
         system.delete(n, 1, 1); // e.g. TServer._procedure -> /root/procedure
       if n = '' then
         continue;
-      // ModelRoot/MethodName
+      // ModelRoot/MethodName and ModelRoot/MethodName/
       r.Setup(sm^.Methods, n, rnMethod, nil, nil, j);
+      r.Setup(sm^.Methods, n + '/', rnMethod, nil, nil, j);
       if (j <> fPublishedMethodAuthIndex) and
          (j <> fPublishedMethodStatIndex) and
          (j <> fPublishedMethodBatchIndex) then
