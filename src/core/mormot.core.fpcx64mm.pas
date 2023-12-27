@@ -616,6 +616,8 @@ var
 function AllocMedium(Size: PtrInt): pointer; 
 begin
   result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, AllocMediumflags, -1, 0);
+  if result = MAP_FAILED then
+    result := nil; // as VirtualAlloc()
   {$ifdef FPCMM_MEDIUM32BIT}
   if (result <> nil) or
      (AllocMediumflags and MAP_32BIT = 0) then
@@ -629,6 +631,8 @@ end;
 function AllocLarge(Size: PtrInt): pointer; inline;
 begin
   result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, MAP_LARGE, -1, 0);
+  if result = MAP_FAILED then
+    result := nil; // as VirtualAlloc()
 end;
 
 procedure FreeMediumLarge(ptr: pointer; Size: PtrInt); inline;
@@ -644,11 +648,24 @@ const
   syscall_nr_mremap = 25; // valid on x86_64 Linux and Android
   MREMAP_MAYMOVE = 1;
 
-function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer; inline;
+function RemapLarge(addr: pointer; old_len, new_len: size_t): pointer;
 begin
   // let the Linux Kernel mremap() the memory using its TLB magic
   result := pointer(do_syscall(syscall_nr_mremap, TSysParam(addr),
     TSysParam(old_len), TSysParam(new_len), TSysParam(MREMAP_MAYMOVE)));
+  if result <> MAP_FAILED then
+    exit;
+  // some OS (e.g. Alma Linux 9 with 5.x kernel) seems to fail sometimes :(
+  // https://github.com/ClickHouse/ClickHouse/issues/52955#issuecomment-1664710083
+  // -> it should not, because we use the MREMAP_MAYMOVE flag - but anyway...
+  // -> fallback to safe, simple (and slower) Alloc/Move/Free pattern
+  result := AllocLarge(new_len);
+  if result = nil then
+    exit; // out of memory
+  if new_len > old_len then
+    new_len := old_len; // resize down
+  Move(addr^, result^, new_len); // RTL non-volatile asm or our AVX MoveFast()
+  FreeMediumLarge(addr, old_len);
 end;
 
 {$endif FPCMM_NOMREMAP}
