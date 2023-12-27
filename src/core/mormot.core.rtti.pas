@@ -9349,8 +9349,8 @@ begin
         begin
           def := p^.Prop^.GetValueText(Value);
           if p^.Value.Name = 'TFileName' then
-            if (Pos('Folder', p^.Prop^.Name^) <> 0) or
-               (Pos('Path', p^.Prop^.Name^) <> 0) then
+            if (PosEx('Folder', p^.Prop^.NameUtf8) <> 0) or
+               (PosEx('Path', p^.Prop^.NameUtf8) <> 0) then
             typ := 'folder'
           else
             typ := 'filename'
