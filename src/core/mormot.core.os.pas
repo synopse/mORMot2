@@ -7848,14 +7848,20 @@ begin
   end;
   if k <> clkOption then
   begin
-    i := PosExChar('#', d);
+    i := PosExChar('#', d); // #valuename in description -> <valuename>
     if i > 0 then
     begin
       j := 1;
       while d[i + j] > ' ' do
         inc(j);
       delete(d, i, 1); // remove #
-      param := copy(d, i, j - 1); // extract parameter value name
+      if d[i] <> '#' then
+        param := copy(d, i, j - 1) // extract '<valuename>'
+      else
+      begin
+        param := copy(d, i + 1, j - 2); // ##type
+        delete(d, i, j);                // not included in description
+      end;
     end
     else if k = clkArg then
       if high(v) = 0 then
@@ -7865,10 +7871,47 @@ begin
       else
         param := 'arg'
     else
-      param := 'value';
+    begin
+      i := PosEx(' - values: ', d); // see SetObjectFromExecutableCommandLine()
+      if i > 0 then
+      begin
+        inc(i, 11);
+        j := 1;
+        if copy(d, i, 7) = 'set of ' then
+          inc(j, 7);
+        while d[i + j] > ' ' do
+          inc(j);
+        param := copy(d, i, j);
+        dec(i, 11);
+        delete(d, i, j + 11);
+        if j > 50 then
+        begin
+          j := 50;
+          for i := 50 downto 1 do
+            if param[i] = '|' then
+            begin
+              j := i;
+              break;
+            end;
+          insert(fLineFeed + '         ', param, j + 1);
+        end;
+      end
+      else
+        param := 'value';
+    end;
     desc := desc + ' <' + param + '>';
   end;
   fDesc[k] := fDesc[k] + ' ' + desc;
+  j := 1;
+  if fSwitch[true] <> '--' then
+    repeat
+      i := PosEx('--', d, j); // e.g. '--switch' -> '/switch' on Windows
+      if i = 0 then
+        break;
+      delete(d, i, 2);
+      insert(fSwitch[true], d, i);
+      j := i;
+    until false;
   if def <> '' then
     def := ' (default ' + def + ')';
   pnames := _fmt('  %0:-20s', [desc + def]);
@@ -7888,7 +7931,7 @@ begin
         end;
       if j = 57 then
         for i := 57 downto 1 do
-          if d[i] in [',', ';'] then
+          if d[i] in [',', ';', '|'] then
           begin
             j := i;
             break;
