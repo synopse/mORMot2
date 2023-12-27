@@ -40,7 +40,7 @@ type
     fHashAlgo: TMGetProcessHash;
     fPeerRequest: TWGetAlternateOptions;
     fLimitBandwidthMB, fWholeRequestTimeoutSec, fTcpTimeoutSec: integer;
-    fHashValue: RawUtf8;
+    fHeader, fHashValue: RawUtf8;
     fPeerSecret, fPeerSecretHexa: SpiUtf8;
     fClient: THttpClientSocket;
     fPeerCache: IWGetAlternate;
@@ -48,7 +48,6 @@ type
     // input parameters (e.g. from command line) for the MGet process
     Silent, NoResume, TlsIgnoreErrors, Cache, Peer: boolean;
     CacheFolder, TlsCertFile, DestFile: TFileName;
-    Header: RawUtf8;
     Log: TSynLogClass;
     /// could be run once input parameters are set, before Execute() is called
     // - will launch THttpPeerCache background process, for instance
@@ -65,6 +64,8 @@ type
     property PeerSettings: THttpPeerCacheSettings
       read fPeerSettings write fPeerSettings;
     // following properties will be published as command line switches
+    property customHttpHeader: RawUtf8
+      read fHeader write fHeader;
     property hashAlgo: TMGetProcessHash
       read fHashAlgo write fHashAlgo;
     property hashValue: RawUtf8
@@ -145,7 +146,7 @@ begin
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
   if Split(Url, '@', h, u) and
      (GuessAlgo(h) <> gphAutoDetect) and
-     (HexToBin(h) <> '') then
+     (HexToBin(h) <> '') then // ignore https://user:password@server:port/addr
     hashValue := h // this is a real hash value
   else
     u := Url;
@@ -159,7 +160,7 @@ begin
   wget.Clear;
   wget.KeepAlive := 30000;
   wget.Resume := not NoResume;
-  wget.Header := Header;
+  wget.Header := fHeader;
   wget.HashFromServer := (hashValue = '') and
                          (hashAlgo <> gphAutoDetect);
   if hashAlgo <> gphAutoDetect then

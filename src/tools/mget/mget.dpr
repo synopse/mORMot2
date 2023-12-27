@@ -74,7 +74,7 @@ begin
   begin
     CaseSensitiveNames := true;
     ExeDescription := FormatUtf8('mget %: retrieve files - and more' +
-      '%proudly made with mORMot - synopse.info',
+      '%proudly using mORMot 2 - synopse.info',
       [SYNOPSE_FRAMEWORK_VERSION, LineFeed]);
     if Arg(0, '[hash@]#http://uri resource address to retrieve') then
       url := Args[0];
@@ -99,8 +99,6 @@ begin
        '#folder to be used for --log output', logfolder);
     p.CacheFolder := ParamS(['cachePath'],
        '#folder to be used for local (not peer) --cache', p.CacheFolder);
-    p.Header := Param(['h', 'header'],
-       'custom HTTP header');
     p.TlsIgnoreErrors  := Option(['w', 'weakTls'],
        'ignore TLS certificate errors');
     if Option(['l', 'log'],
