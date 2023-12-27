@@ -9359,7 +9359,7 @@ begin
             typ := 'text';
         end;
         if typ <> '' then
-          desc := FormatUtf8('##% %', [typ, desc]);
+          desc := FormatUtf8('##% %', [typ, desc]); // ##typename to be trimmed
         if def <> '' then
           desc := FormatUtf8('% (default: %)', [desc, def]);
       end;

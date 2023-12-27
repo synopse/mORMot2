@@ -137,6 +137,7 @@ function TMGetProcess.Execute(const Url: RawUtf8): TFileName;
 var
   wget: THttpClientSocketWGet;
   u, h: RawUtf8;
+  algo: TMGetProcessHash; // may change with next Url
   uri: TUri;
   l: ISynLog;
 begin
@@ -144,29 +145,31 @@ begin
   l := Log.Enter('Execute %', [Url], self);
   Start; // start e.g. background THttpPeerCache process
   // identify e.g. 'xxxxxxxxxxxxxxxxxxxx@http://toto.com/res'
-  if Split(Url, '@', h, u) and
-     (GuessAlgo(h) <> gphAutoDetect) and
-     (HexToBin(h) <> '') then // ignore https://user:password@server:port/addr
-    hashValue := h // this is a real hash value
-  else
+  if not Split(Url, '@', h, u) or
+     (GuessAlgo(h) = gphAutoDetect) or
+     (HexToBin(h) = '') then // ignore https://user:password@server:port/addr
+  begin
     u := Url;
+    h := hashValue;
+  end;
   // guess the hash algorithm from its hexadecimal value size
-  if hashAlgo = gphAutoDetect then
-    if hashValue <> '' then
-      hashAlgo := GuessAlgo(hashValue)
+  algo := hashAlgo;
+  if algo = gphAutoDetect then
+    if h <> '' then
+      algo := GuessAlgo(h)
     else if Peer then
-      hashAlgo := gphSha256;
+      algo := gphSha256;
   // set the WGet additional parameters
   wget.Clear;
   wget.KeepAlive := 30000;
   wget.Resume := not NoResume;
   wget.Header := fHeader;
-  wget.HashFromServer := (hashValue = '') and
-                         (hashAlgo <> gphAutoDetect);
-  if hashAlgo <> gphAutoDetect then
+  wget.HashFromServer := (h = '') and
+                         (algo <> gphAutoDetect);
+  if algo <> gphAutoDetect then
   begin
-    wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[hashAlgo]];
-    wget.Hash := hashValue;
+    wget.Hasher := HASH_STREAMREDIRECT[HASH_ALGO[algo]];
+    wget.Hash := h;
     if not Silent then
       wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   end;
@@ -180,14 +183,14 @@ begin
     wget.Alternate := fPeerCache; // reuse THttpPeerCache on background
     wget.AlternateOptions := fPeerRequest;
   end;
-  // make the request
+  // make the actual request
   result := '';
   if not uri.From(u) then
     exit;
   if (fClient <> nil) and
      ((fClient.Server <> uri.Server) or
-      (fClient.Port <> uri.Port)) then
-    FreeAndNil(fClient); // need a new connection
+      (fClient.Port <> uri.Port)) then // need a new connection
+    FreeAndNil(fClient);
   if fClient = nil then  // try to reuse an existing connection
   begin
     fClient := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
