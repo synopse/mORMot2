@@ -9290,7 +9290,7 @@ function SetObjectFromExecutableCommandLine(Value: TObject;
 var
   rc: TRttiCustom;
   p: PRttiCustomProp;
-  v, desc, def: RawUtf8;
+  v, desc, def, typ: RawUtf8;
   dolower: boolean;
   i: integer;
   v64: QWord;
@@ -9311,12 +9311,13 @@ begin
       if p^.Value.Kind in [rkEnumeration, rkSet] then
       begin
         p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
+        desc := StringReplaceChars(desc, ',', '|');
         if UpperCaseU(desc) = desc then
         begin
           dolower := true;
           desc := LowerCaseU(desc); // cosmetic
         end;
-        if p^.Value.Kind = rkSet then
+        if p^.Value.Kind = rkSet then // see TExecutableCommandLine.Describe
           desc := ' - values: set of ' + desc
         else
           desc := ' - values: ' + desc;
@@ -9325,6 +9326,7 @@ begin
       if not p.ValueIsDefault(Value) then
       begin
         def := '';
+        typ := '';
         if p^.Value.Kind in rkOrdinalTypes then
         begin
           v64 := p^.Prop^.GetInt64Value(Value);
@@ -9333,15 +9335,31 @@ begin
               def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
             rkSet:
               if v64 <> 0 then
-                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true);
+                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, '|');
           else
-            UInt64ToUtf8(v64, def);
+            begin
+              UInt64ToUtf8(v64, def);
+              typ := 'integer';
+            end;
           end;
           if dolower then
             def := LowerCaseU(def);
         end
         else
+        begin
           def := p^.Prop^.GetValueText(Value);
+          if p^.Value.Name = 'TFileName' then
+            if (Pos('Folder', p^.Prop^.Name^) <> 0) or
+               (Pos('Path', p^.Prop^.Name^) <> 0) then
+            typ := 'folder'
+          else
+            typ := 'filename'
+          else if (p^.Value.Kind = rkLString) and
+                  (p^.Value.Cache.CodePage <> CP_RAWBYTESTRING) then
+            typ := 'text';
+        end;
+        if typ <> '' then
+          desc := FormatUtf8('##% %', [typ, desc]);
         if def <> '' then
           desc := FormatUtf8('% (default: %)', [desc, def]);
       end;
