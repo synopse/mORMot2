@@ -8979,7 +8979,7 @@ end;
 {$ifdef FPC_ASMX64} // some Delphi version was reported to fail with no clue why
 
 procedure TRWLock.ReadOnlyLock;
-asm     // since we may call SwitchToThread we need to have a stackframe
+asm     // stack frame is required since we may call SwitchToThread
         {$ifdef SYSVABI}
         mov     rcx, rdi      // rcx = self
         {$endif SYSVABI}
@@ -9104,7 +9104,7 @@ procedure TRWLock.WriteUnlock;
 begin
   if LastWriteLockCount <> 0 then
   begin
-    dec(LastWriteLockCount);
+    dec(LastWriteLockCount); // reentrant call
     exit;
   end;
   LastWriteLockThread := TThreadID(0);

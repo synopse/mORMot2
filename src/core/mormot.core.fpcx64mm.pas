@@ -620,7 +620,7 @@ begin
     result := nil; // as VirtualAlloc()
   {$ifdef FPCMM_MEDIUM32BIT}
   if (result <> nil) or
-     (AllocMediumflags and MAP_32BIT = 0) then
+     ((AllocMediumflags and MAP_32BIT) = 0) then
     exit;
   // try with no 2GB limit from now on
   AllocMediumflags := AllocMediumflags and not MAP_32BIT;
