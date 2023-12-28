@@ -386,12 +386,9 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 function HasConsole: boolean;
 begin
   if StdOut = 0 then
-  begin
     StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-    if StdOut = INVALID_HANDLE_VALUE then
-      StdOut := 0;
-  end;
-  result := StdOut <> 0;
+  result := (StdOut <> 0) and
+            (StdOut <> INVALID_HANDLE_VALUE);
 end;
 
 procedure AllocConsole;

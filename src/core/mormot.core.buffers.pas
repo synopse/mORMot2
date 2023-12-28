@@ -6457,7 +6457,7 @@ begin
   begin
     Base64EncodeLoop(p, sp, PERLINE, @b64enc); // better inlining than AVX2 here
     inc(sp, PERLINE);
-    PWord(p + 64)^ := $0a0d; // on all systems for safety
+    PWord(p + 64)^ := $0a0d; // CR + LF on all systems for safety
     inc(p, 66);
     dec(len, PERLINE);
   end;
