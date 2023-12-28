@@ -474,6 +474,7 @@ function IP4Netmask(prefix: integer): cardinal; overload;
 
 /// reverse conversion of IP4Prefix() into a 32-bit network mask
 function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute a subnet value from a 32-bit IP4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
@@ -4424,7 +4425,7 @@ var
 begin
   result := SplitFromRight(subnet, '/', ip, sub) and
             NetIsIP4(pointer(ip), @ip4) and
-            ToCardinal(sub, prefix) and
+            ToCardinal(sub, prefix, 1) and
             IP4Netmask(prefix{%H-}, mask);
 end;
 
