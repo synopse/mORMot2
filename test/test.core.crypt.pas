@@ -1744,10 +1744,7 @@ begin
   CheckEqual(length(tmp2), length(tmp));
   Check(EqualBuf(tmp, tmp2), 'tmp=tmp2'); // tmp = tmp2 fails on FPC :(
   tmp2 := Zeroed(UnZeroed(tmp));
-  {$ifdef FPC}
-  SetCodePage(tmp2, StringCodePage(tmp)); // circumvent FPC inconsistency/bug
-  {$endif FPC}
-  Check(tmp2 = tmp, 'unz1MB');
+  Check(CompareBuf(tmp2, tmp) = 0, 'unz1MB');
   b64 := '';
   tmp2 := '';
   SetLength(b64, BinToBase64Length(length(tmp)));

@@ -1006,6 +1006,7 @@ begin
   Check(not IP4Match('192.168.1', '192.168.1.0/24'), 'match6');
   Check(not IP4Match('192.168.1.135', '192.168.1/24'), 'match7');
   Check(not IP4Match('192.168.1.135', '192.168.1.0/65'), 'match8');
+  Check(not IP4Match('193.168.1.1', '192.168.1.0/24'), 'match9');
 end;
 
 type
