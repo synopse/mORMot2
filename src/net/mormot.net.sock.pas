@@ -1302,6 +1302,10 @@ function NetStartWith(p, up: PUtf8Char): boolean;
 // - end text input parsing at final #0 or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
 
+/// check is the supplied address text is on format '1.2.3.4/8'
+// - will decode 32-bit 1.2.3.4 into ip4 and 255.255.255.0 into mask
+function NetIsIP4Subnet(const subnet: RawUtf8; out ip4, mask: cardinal): boolean;
+
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
@@ -4320,10 +4324,7 @@ begin
   end;
 end;
 
-procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
-const
-  b64: array[0..63] of AnsiChar =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+procedure DoEncode(rp, sp, b64: PAnsiChar; len: cardinal);
 var
   i, c: cardinal;
 begin
@@ -4359,6 +4360,9 @@ end;
 
 function SockBase64Encode(const s: RawUtf8): RawUtf8;
 // to avoid linking mormot.core.buffers for BinToBase64()
+const
+  b64: array[0..63] of AnsiChar =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 var
   len: cardinal;
 begin
@@ -4367,7 +4371,7 @@ begin
   if len = 0 then
     exit;
   SetLength(result, ((len + 2) div 3) * 4);
-  DoEncode(pointer(result), pointer(s), len);
+  DoEncode(pointer(result), pointer(s), @b64, len);
 end;
 
 function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
@@ -4384,6 +4388,17 @@ begin
       exit;
     end;
   result := false;
+end;
+
+function NetIsIP4Subnet(const subnet: RawUtf8; out ip4, mask: cardinal): boolean;
+var
+  ip, sub: RawUtf8;
+  prefix: cardinal;
+begin
+  result := SplitFromRight(subnet, '/', ip, sub) and
+            NetIsIP4(pointer(ip), @ip4) and
+            ToCardinal(sub, prefix) and
+            IP4Netmask(prefix{%H-}, mask);
 end;
 
 
