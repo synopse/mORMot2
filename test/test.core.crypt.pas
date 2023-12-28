@@ -28,6 +28,7 @@ uses
   mormot.core.variants,
   mormot.lib.pkcs11,
   mormot.lib.openssl11,
+  mormot.net.sock, // for NetBinToBase64()
   mormot.crypt.jwt,
   mormot.crypt.ecc,
   mormot.crypt.rsa,
@@ -1658,6 +1659,9 @@ begin
   b64 := BinToBase64(tmp);
   Check(IsBase64(b64));
   Check(Base64ToBin(b64) = tmp);
+  b64 := NetBinToBase64(tmp);
+  Check(IsBase64(b64));
+  Check(Base64ToBin(b64) = tmp);
   CheckEqual(BinToBase58('Hello World!'), '2NEpo7TZRRrLZSi2U', 'b58-1');
   CheckEqual(BinToBase58('The quick brown fox jumps over the lazy dog.'),
     'USm3fpXnKG5EUBx2ndxBDMPVciP5hGey2Jh4NDv6gmeo1LkMeiKrLJUUBk6Z', 'b58-2');
@@ -1691,6 +1695,7 @@ begin
     b64 := BinToBase64(tmp);
     Check((tmp = '') or IsBase64(b64));
     Check(Base64ToBin(b64) = tmp);
+    CheckEqual(NetBinToBase64(tmp), b64);
     if tmp <> '' then
     begin
       L := length(b64);

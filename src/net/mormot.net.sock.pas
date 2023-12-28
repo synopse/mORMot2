@@ -1302,9 +1302,6 @@ const
   DEFAULT_PORT_INT: array[boolean] of TNetPort = (
     80, 443);
 
-/// IdemPChar() like function, to avoid linking mormot.core.text
-function NetStartWith(p, up: PUtf8Char): boolean;
-
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
 // - end text input parsing at final #0 or any char <= ' '
@@ -1319,6 +1316,12 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 
 /// RawUtf8-ready result := v + v + ... concatenation for FPC
 function NetConcat(const v: array of RawUtf8): RawUtf8;
+
+/// IdemPChar() like function, to avoid linking mormot.core.text
+function NetStartWith(p, up: PUtf8Char): boolean;
+
+/// BinToBase64() like function, to avoid linking mormot.core.buffers
+function NetBinToBase64(const s: RawByteString): RawUtf8;
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -4350,11 +4353,12 @@ end;
 
 procedure DoEncode(rp, sp, b64: PAnsiChar; len: cardinal);
 var
-  i, c: cardinal;
+  i, c, by3: cardinal;
 begin
-  for i := 1 to len div 3 do
+  by3 := len div 3;
+  for i := 1 to by3 do
   begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+    c := (ord(sp[0]) shl 16) or (ord(sp[1]) shl 8) or ord(sp[2]);
     rp[0] := b64[(c shr 18) and $3f];
     rp[1] := b64[(c shr 12) and $3f];
     rp[2] := b64[(c shr 6) and $3f];
@@ -4362,7 +4366,7 @@ begin
     inc(rp, 4);
     inc(sp, 3);
   end;
-  case len mod 3 of
+  case len - by3 * 3 of
     1:
       begin
         c := ord(sp[0]) shl 16;
@@ -4373,7 +4377,7 @@ begin
       end;
     2:
       begin
-        c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+        c := (ord(sp[0]) shl 16) or ord(sp[1]) shl 8;
         rp[0] := b64[(c shr 18) and $3f];
         rp[1] := b64[(c shr 12) and $3f];
         rp[2] := b64[(c shr 6) and $3f];
@@ -4382,8 +4386,7 @@ begin
   end;
 end;
 
-function SockBase64Encode(const s: RawUtf8): RawUtf8;
-// to avoid linking mormot.core.buffers for BinToBase64()
+function NetBinToBase64(const s: RawByteString): RawUtf8;
 const
   b64: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -4561,7 +4564,7 @@ begin
   if User = '' then
     result := ''
   else
-    result := SockBase64Encode(NetConcat([User, ':', Password]));
+    result := NetBinToBase64(NetConcat([User, ':', Password]));
 end;
 
 
