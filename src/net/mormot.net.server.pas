@@ -4880,8 +4880,7 @@ function THttpPeerCrypt.MessageDecode(aFrame: PAnsiChar; aFrameLen: PtrInt;
         exit;
     result := (ord(aMsg.Kind) <= ord(high(aMsg.Kind))) and
               (ord(aMsg.Hardware) <= ord(high(aMsg.Hardware))) and
-              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo))) and
-              (aMsg.RangeEnd >= aMsg.RangeStart);
+              (ord(aMsg.Hash.Algo) <= ord(high(aMsg.Hash.Algo)));
   end;
 
 begin
@@ -5098,7 +5097,7 @@ begin
     exit;
   end;
   // validate the input frame content
-  ok := (len > SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
+  ok := (len >= SizeOf(fMsg) + SizeOf(TAesBlock) * 2) and
         fOwner.MessageDecode(pointer(fFrame), len, fMsg);
   if ok then
     if (fMsg.Kind in PCF_RESPONSE) and    // responses are broadcasted on POSIX
@@ -5674,7 +5673,7 @@ begin
      IPToCardinal(aRemoteIP, ip4) and
      not fInstable.IsBanned(ip4) and // banned for RejectInstablePeersMin
      BearerDecode(aBearerToken, msg) and
-     (msg.IP4 = ip4) and
+     (msg.IP4 = fIP4) and
      (IsZero(THash128(msg.Uuid)) or // IsZero for "fake" response bearer
       IsEqualGuid(msg.Uuid, fUuid)) then
     result := HTTP_SUCCESS

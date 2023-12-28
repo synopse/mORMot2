@@ -15,7 +15,9 @@ program mget;
   *****************************************************************************
 
   For PeerCache to work, please open port 8089 for TCP+UDP on the firewall:
-    sudo ufw allow from 192.168.0.0/24 to any port 8089
+    Debian:   sudo ufw allow from 192.168.0.0/24 to any port 8089
+    Windows:  netsh firewall add portopening all 8089 peerCache
+      (see the actual command supplied by "mget /help" response) 
 }
 
 {$I ..\..\mormot.defines.inc}
@@ -67,6 +69,7 @@ begin
   p.PeerSettings.Options := [pcoVerboseLog, pcoTryLastPeer];
   p.PeerSettings.CacheTempPath := p.CacheFolder + 'temp';
   p.PeerSettings.CachePermPath := p.CacheFolder + 'perm';
+  p.PeerSettings.LimitMBPerSec := 0; // no limit by default
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
