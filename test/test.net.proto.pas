@@ -998,6 +998,14 @@ begin
   CheckEqual(IP4Prefix('255.254.1.0'), 0, 'invalid netmask 4');
   CheckEqual(IP4Prefix('255.255.255.256'), 0, 'invalid netmask 5');
   CheckEqual(IP4Subnet('192.168.1.135', '255.255.255.0'), '192.168.1.0/24');
+  Check(IP4Match('192.168.1.1', '192.168.1.0/24'), 'match1');
+  Check(IP4Match('192.168.1.135', '192.168.1.0/24'), 'match2');
+  Check(IP4Match('192.168.1.250', '192.168.1.0/24'), 'match3');
+  Check(not IP4Match('192.168.2.135', '192.168.1.0/24'), 'match4');
+  Check(not IP4Match('191.168.1.250', '192.168.1.0/24'), 'match5');
+  Check(not IP4Match('192.168.1', '192.168.1.0/24'), 'match6');
+  Check(not IP4Match('192.168.1.135', '192.168.1/24'), 'match7');
+  Check(not IP4Match('192.168.1.135', '192.168.1.0/65'), 'match8');
 end;
 
 type
