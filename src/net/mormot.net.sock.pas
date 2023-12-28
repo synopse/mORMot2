@@ -469,15 +469,23 @@ function IP4Prefix(netmask4: cardinal): integer; overload;
 function IP4Prefix(const netmask4: RawUtf8): integer; overload;
 
 /// reverse conversion of IP4Prefix() into a 32-bit network mask
-function IP4Netmask(prefix: integer): cardinal;
+// - e.g. IP4Netmask(24) returns 255.255.255.0
+function IP4Netmask(prefix: integer): cardinal; overload;
+
+/// reverse conversion of IP4Prefix() into a 32-bit network mask
+function IP4Netmask(prefix: integer; out mask: cardinal): boolean; overload;
 
 /// compute a subnet value from a 32-bit IP4 and its associated NetMask
 // - e.g. ip4=192.168.0.16 and mask4=255.255.255.0 returns '192.168.0.0/24'
 function IP4Subnet(ip4, netmask4: cardinal): shortstring; overload;
 
-/// compute a subnet value from a 32-bit IP4 and its associated NetMask
+/// compute a subnet value from an IP4 and its associated NetMask
 // - e.g. ip4='192.168.0.16' and mask4='255.255.255.0' returns '192.168.0.0/24'
 function IP4Subnet(const ip4, netmask4: RawUtf8): RawUtf8; overload;
+
+/// check if an IP4 match a sub-network
+// - e.g. IP4Match('192.168.1.1', '192.168.1.0/24') = true
+function IP4Match(const ip4, subnet: RawUtf8): boolean;
 
 /// filter an IPv4 address to a given TIPAddress kind
 // - return true if the supplied address does match the filter
@@ -2847,6 +2855,22 @@ begin
     result := bswap32($ffffffff shl (32 - prefix))
   else
     result := 0;
+end;
+
+function IP4Netmask(prefix: integer; out mask: cardinal): boolean;
+begin
+  mask := IP4Netmask(prefix);
+  result := (mask <> 0);
+end;
+
+function IP4Match(const ip4, subnet: RawUtf8): boolean;
+var
+  ip, subip, submask: cardinal;
+begin
+  result := NetIsIP4(pointer(ip4), @ip) and
+            NetIsIP4Subnet(subnet, subip, submask) and
+            // e.g. ip=172.16.144.160 subip=172.16.144.0 submask=255.255.255.0
+            (({%H-}ip and submask) = (subip and submask));
 end;
 
 function IP4Prefix(netmask4: cardinal): integer;
