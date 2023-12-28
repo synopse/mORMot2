@@ -5457,7 +5457,7 @@ begin
      (Params.Hasher = nil) or
      not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) then
     exit; // no valid hash for sure
-  Hash.Algo := TStreamRedirectSynHasher(Params.Hasher).GetAlgo;
+  Hash.Algo := TStreamRedirectSynHasherClass(Params.Hasher).GetAlgo;
   result := mormot.core.text.HexToBin(
     pointer(Params.Hash), @Hash.Hash, HASH_SIZE[Hash.Algo]);
 end;

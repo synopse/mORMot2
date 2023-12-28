@@ -683,6 +683,10 @@ type
     class function GetHashFileExt: RawUtf8; override;
   end;
 
+  /// meta-class of TStreamRedirectSynHasher
+  // - to access e.g. GetAlgo/GetHashFileExt class methods
+  TStreamRedirectSynHasherClass = class of TStreamRedirectSynHasher;
+
   /// TStreamRedirect with MD5 cryptographic hashing
   TStreamRedirectMd5 = class(TStreamRedirectSynHasher)
   public

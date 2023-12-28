@@ -1944,7 +1944,7 @@ var
       alternate := alternate or (res <> 0); // to notify OnDownloadFailed
     end;
     if res = 0 then
-      // regular direct GET, if not done via OnDownload()
+      // regular direct GET, if not done via Alternate.OnDownload()
       res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
         {retry=}false, {instream=}nil, partstream);
     // verify (partial) response
