@@ -22,3 +22,28 @@ On corporate networks, one performance and usuability issue is often the need to
 
 Our tool is able to maintain a local cache of already downloaded files (stored by their hash), and ask its peers on its local network if some content is not already in its cache. If the file is found, it will be downloaded locally, without using the main server. Under the hood, a request will be broadcasted over UDP, to discover the presence of a file hash. If nothing is found, the main server will be requested with a GET, as usual. But if some peers do have the requested file, then the best peer will be selected and ask for a local download (over HTTP), with very high performance.
 
+## In Practice
+
+Run `mget` to get the minimal set of information:
+
+```
+ab@dev:~/mget$ ./mget
+mget 2.1.6572: retrieve files - and more
+proudly using mORMot 2 - synopse.info
+
+Usage: mget  <http://uri> [options] [params]
+
+mget --help to display full usage description
+```
+
+Run the `mget /help` (on Windows) or `./mget --help` (on POSIX) command to get the list of all options available as command line switches.
+
+The main typical usages are the following:
+
+- `mget https://someuri/some/file.ext` to retrieve a file from an URI, with optional resume if the download was aborted;
+- `mget 4544b3...68ba7a@http://someuri/some/file.ext` to retrieve a file from an URI, with the specified hash value (md5/sha1/sha256 algo will be guessed from the hexadecimal hash length);
+- `mget https://someuri/some/file.ext /hashAlgo sha256` to retrieve a file from an URI, first retrieving its hash value from `https://someuri/some/file.ext.sha256`;
+- `mget --prompt` to ask for an URI or hash@URI from a prompt - finish with a void entry;
+- `mget --prompt --peer` to ask for an URI or hash@URI from a prompt, with *PeerCache* enabled.
+
+A lot of additional features or options are available, e.g. use a local cache, limit the bandwith usage during the download, define HTTPS certificate validation, or tune all `--peer` settings.
