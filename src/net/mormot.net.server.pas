@@ -5600,7 +5600,6 @@ begin
     try
       SetLength(resp, 1); // create a "fake" response to reuse this connection
       resp[0] := req;
-      resp[0].IP4 := fClientIP4; // as expected by OnBeforeBody()
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
       result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
@@ -5851,7 +5850,7 @@ begin
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
   finally
-    fLog.Add.Log(sllTrace, 'OnRequest=% % as %', [result, Ctxt.Url, fn], self);
+    fLog.Add.Log(sllDebug, 'OnRequest=% % as %', [result, Ctxt.Url, fn], self);
   end;
 end;
 
