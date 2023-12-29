@@ -1982,7 +1982,9 @@ begin
     urlfile := 'index';
   result := destfile;
   if result = '' then
-    result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
+    result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile)
+  else if DirectoryExists(result) then // not a file, but a folder
+    result := result + Utf8ToString(urlfile);
   expectedsize := 0;
   alternate := false;
   // retrieve the .hash of this file
