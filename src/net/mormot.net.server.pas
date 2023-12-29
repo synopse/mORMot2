@@ -1259,29 +1259,15 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
 { ******************** THttpPeerCache Local Peer-to-peer Cache }
 
-(*
-  Security Notes:
-  - A global shared secret key is used to cipher and authenticate UDP frames and
-    HTTP requests among all peers. This key should be strong enough and private.
-  - Tampering is avoided by using cryptographic hashes for the requests, the
-    local storage and eventually in WGet, which would discard any invalid data.
-  - The client caches only the content that it has requested itself, to reduce
-    any information disclosure.
-  - Local cache folders should have the proper ACL file permissions defined.
-  - Local cached files are not encrypted, so if data leakage is a concern,
-    consider enabling file systems encryption (e.g. BitLocker or Luks).
-  - UDP frames are quickly signed with a salted crc before AES-GCM-128 encoding.
-  - Peers which did send invalid requests over UDP or TCP will have their IP
-    banished for a few minutes, to avoid fuzzing or denial of service attacks.
-  - HTTP content is not encrypted on the wire by default, because it sounds not
-    mandatory on a local network, but pcoSelfSignedHttps can enable HTTPS.
-  - Resulting safety is similar to what Microsoft BranchCache offers.
+{
   TODO:
-  - Asymmetric security using ECDH shared secret.
-  - Peer push during initial GET from main server (no need of whole content).
-  - Get Peer addresses from a file or central server instead of broadcasting.
-  - Allow binding to several network interfaces? (with runtime adaptation)
-*)
+  - Peer push during initial GET from a main server (no wait for whole content).
+  - Daemon/Service background mode for the mget tool.
+  - Get Peer addresses from a file or central server instead of broadcasting?
+  - Asymmetric security using ECDH shared secret?
+  - Frame signature using ECDHE with ephemeral keys?
+  - Allow binding to several network interfaces? (e.g. wifi to/from ethernet)
+}
 
 type
   /// the content of a binary THttpPeerCacheMessage
