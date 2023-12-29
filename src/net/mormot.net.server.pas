@@ -1291,6 +1291,7 @@ type
     pcfPong,
     pcfRequest,
     pcfResponseNone,
+    pcfResponseOverloaded,
     pcfResponseFull,
     pcfBearer);
 
@@ -1682,6 +1683,7 @@ const
   PCF_RESPONSE = [
     pcfPong,
     pcfResponseNone,
+    pcfResponseOverloaded,
     pcfResponseFull];
 
   PEER_CACHE_PATTERN = '*.cache';
@@ -5126,9 +5128,10 @@ begin
         begin
           fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
           resp.Hash := fMsg.Hash;
-          if (integer(fOwner.fHttpServer.ConnectionsActive) <=
-                      fOwner.Settings.LimitClientCount) and
-             (fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS) then
+          if integer(fOwner.fHttpServer.ConnectionsActive) >
+                      fOwner.Settings.LimitClientCount then
+            resp.Kind := pcfResponseOverloaded
+          else if fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
             resp.Kind := pcfResponseFull;
           DoSendResponse;
         end;
@@ -5144,7 +5147,8 @@ begin
             fBroadcastEvent.SetEvent;    // notify MessageBroadcast
           end;
         end;
-      pcfResponseNone:
+      pcfResponseNone,
+      pcfResponseOverloaded:
         if not late then
           inc(fResponses);
     end
