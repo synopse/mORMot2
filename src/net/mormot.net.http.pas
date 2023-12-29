@@ -1529,7 +1529,7 @@ begin
           State := hrsErrorUnsupportedRange // no multipart range
         else
         begin
-          // 'RANGE: '
+          // 'RANGE: BYTES='
           P1 := GotoNextNotSpace(P + 13); // use pointer on stack
           RangeOffset := GetNextRange(P1);
           if P1^ = '-' then

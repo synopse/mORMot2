@@ -110,7 +110,7 @@ begin
     if Option('debug', 'raw debugging on the console') then
     begin
       p.Log := TSynLog; // force logging even if -l was not specified
-      p.Log.Family.EchoToConsole := LOG_VERBOSE;
+      p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];
     end;
     if Option(['?', 'help'], 'display this message') then
       result := gpHelp

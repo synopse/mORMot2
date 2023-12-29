@@ -5857,7 +5857,8 @@ begin
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
   finally
-    fLog.Add.Log(sllDebug, 'OnRequest=% % as %', [result, Ctxt.Url, fn], self);
+    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as %',
+      [result, Ctxt.RemoteIP, Ctxt.Url, fn], self);
   end;
 end;
 
