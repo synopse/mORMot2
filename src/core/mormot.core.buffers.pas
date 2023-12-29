@@ -9523,7 +9523,7 @@ begin
   else
   begin
     // compute the hash of the existing partial content
-    SetLength(buf, 1 shl 10); // 1MB temporary buffer
+    SetLength(buf, 1 shl 20); // 1MB temporary buffer
     repeat
       read := fRedirected.Read(pointer(buf)^, length(buf));
       if read <= 0 then
