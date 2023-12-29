@@ -187,11 +187,11 @@ begin
         gpPromptMode:
           begin
             p.Start; // launch background THttpPeerCache e.g.
-            p.DestFile := '';
             repeat
-              p.hashValue := '';
               if url = '' then
               begin
+                p.hashValue := '';
+                p.DestFile := Executable.ProgramFilePath;
                 p.ToConsole(
                   'Enter a [hash@]http://uri value (leave void to quit)', []);
                 readln(url);
