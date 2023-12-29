@@ -87,7 +87,7 @@ begin
       result := gpPromptMode;
     dest := MakePath([GetCurrentDir, ExtractResourceName(url)]);
     p.DestFile := ParamS(['o', 'output'],
-       '#filename to be used as output', dest);
+       'destination #filename or existing foldername', dest);
     p.Silent := Option(['s', 'silent'],
        'generate no console output');
     p.NoResume := Option(['n', 'noresume'],
@@ -191,7 +191,7 @@ begin
               if url = '' then
               begin
                 p.hashValue := '';
-                p.DestFile := Executable.ProgramFilePath;
+                p.DestFile := GetCurrentDir;
                 p.ToConsole(
                   'Enter a [hash@]http://uri value (leave void to quit)', []);
                 readln(url);
