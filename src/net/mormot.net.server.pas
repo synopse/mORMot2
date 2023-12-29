@@ -4931,7 +4931,7 @@ begin
   try
     // compute the call parameters and the request bearer
     IP4Text(@aResp.IP4, ip);
-    fLog.Add.Log(sllTrace, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
+    fLog.Add.Log(sllDebug, 'OnDownload: request %:% %', [ip, fPort, aUrl], self);
     aResp.Kind := pcfBearer; // authorize OnBeforeBody with response message
     head := AuthorizationBearer(BinToBase64uri(MessageEncode(aResp)));
     // ensure we have the expected HTTP/HTTPS connection on the right peer
@@ -5438,6 +5438,9 @@ begin
   finally
     fFilesSafe.UnLock;
   end;
+  if fVerboseLog then
+    fLog.Add.Log(sllTrace, 'LocalFileName: % size=% msg: size=% start=% end=%',
+      [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
   result := HTTP_NOTFOUND;
   if size = 0 then
     exit; // not existing
@@ -5565,7 +5568,7 @@ begin
   // always check if we don't already have this file cached locally
   if LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS then
   begin
-    l.Log(sllTrace, 'OnDownload: from local %', [fn], self);
+    l.Log(sllDebug, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
     try
       // range support

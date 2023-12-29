@@ -1984,7 +1984,7 @@ begin
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile)
   else if DirectoryExists(result) then // not a file, but a folder
-    result := result + Utf8ToString(urlfile);
+    result := MakePath([result, urlfile]);
   expectedsize := 0;
   alternate := false;
   // retrieve the .hash of this file
@@ -2020,7 +2020,8 @@ begin
        PropNameEquals(params.Hasher.HashFile(result), params.Hash) then
     begin
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'WGet %: % already available', [url, result], self);
+        OnLog(sllTrace, 'WGet %: % already available size=%',
+          [url, result, size], self);
       if Assigned(params.OnProgress) then
         TStreamRedirect.NotifyEnded(params.OnProgress, nil,
           '% already available - % of',
