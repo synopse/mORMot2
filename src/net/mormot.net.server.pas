@@ -1570,7 +1570,7 @@ type
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
     function CurrentConnections: integer; override;
-    function ComputeFileName(aHash: THttpPeerCacheHash): TFileName; virtual;
+    function ComputeFileName(const aHash: THttpPeerCacheHash): TFileName; virtual;
     function PermFileName(const aFileName: TFileName;
       aFlags: THttpPeerCacheLocalFileName): TFileName; virtual;
     function LocalFileName(
@@ -4928,7 +4928,7 @@ begin
     begin
       tls := pcoSelfSignedHttps in fSettings.Options;
       fClient := THttpClientSocket.Create(fSettings.HttpTimeoutMS);
-      fClient.TLS.IgnoreCertificateErrors := tls;
+      fClient.TLS.IgnoreCertificateErrors := tls; // self-signed
       fClient.OpenBind(ip, fPort, {bind=}false, tls);
       fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
     end;
@@ -5369,13 +5369,13 @@ begin
   inherited Destroy;
 end;
 
-function THttpPeerCache.ComputeFileName(aHash: THttpPeerCacheHash): TFileName;
+function THttpPeerCache.ComputeFileName(const aHash: THttpPeerCacheHash): TFileName;
 begin
   // filename is binary algo + hash encoded as hexadecimal
   result := FormatString('%.cache',
-    [BinToHexLower(@aHash, HASH_SIZE[aHash.Algo] + 1)]);
-  // note: it does not make sense to obfuscate the file name because we can
-  // recompute the hash from its actual content
+    [BinToHexLower(@aHash, SizeOf(aHash.Algo) + HASH_SIZE[aHash.Algo])]);
+  // note: it does not make sense to obfuscate this file name because we can
+  // recompute the hash from its actual content since it's not encrypted at rest
 end;
 
 function THttpPeerCache.PermFileName(const aFileName: TFileName;
@@ -5385,7 +5385,7 @@ begin
   begin
     // create sub-folders using the first hash nibble (0..9/a..z), in a way
     // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
-    result := FormatString('%%' + PathDelim, [fPermFilesPath, aFileName[3]]);
+    result := MakePath([fPermFilesPath, aFileName[3]]);
     if lfnEnsureDirectoryExists in aFlags then
       result := EnsureDirectoryExists(result);
     result := result + aFileName;

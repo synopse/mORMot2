@@ -8,11 +8,11 @@ Tested on Windows, Linux, and MacOS.
 
 ## Resume Downloads
 
-First of all, if a first download attemp failed (e.g. the network was interrupted), it can resume this aborted download, using `RANGE` headers. So only the remaining data will be retreived, which may be a huge time saver when getting huge files. The partially downloaded file has a `.part` file name extension.
+First of all, if a first download attempt failed (e.g. the network was interrupted), it can resume this aborted download, using `RANGE` headers. So only the remaining data will be retrieved, which may be a real time saver when getting huge files on weak connection. The partially downloaded file has a `.part` file name extension.
 
 ## Hash Verification
 
-A cryptographic hash (typically MD5, SHA1 or SHA256) can be retrieved from the server before getting the file itself, so that it will checked at the end of the download. On 64-bit Intel/AMD, SHA-NI opcodes will be used for fast SHA1 and SHA256 calculation.
+A cryptographic hash (typically MD5, SHA1 or SHA256) can be retrieved from the server before getting the file itself, so that it will checked at the end of the download. On recent 64-bit Intel/AMD, SHA-NI opcodes will be used for fast SHA1 and SHA256 calculation.
 
 You could also supply the hash at the command line level, if you know its value, e.g. from a public web site article.
 
@@ -28,19 +28,19 @@ Under the hood, a request will be broadcasted over UDP, to discover the presence
 
 ### Security Notes
 
-Here are some information about how this *PeerCache* mechasnism has been designed to be secure.
-In a nutshell, its internal process expects a "secret" phrase to match on all peers.
+This *PeerCache* mechasnism has been designed to be as secured as possible, even with its default settings.
+In a nutshell, its internal process expects a "secret" phrase to match on all peers for any communication to happen.
 
 Here are some additional information:
-- A global shared secret key is used to cipher and authenticate UDP frames and HTTP requests among all peers. This key should be strong enough and private. It is derived internally using SHA-256 to generate secrets for AES-GCM encryption/authentication for both UDP and HTTP, and UDP frame checksums.
+- A global shared secret key is used to cipher and authenticate UDP frames and HTTP requests among all peers. This key should be strong enough and private, and can be provided via `--peerSecret` or `--peerSecretHexa`. It is derived internally using SHA-256 to generate secrets for encryption/authentication over both UDP and HTTP.
+- UDP frames are quickly signed with a secret-derivated crc before AES-GCM-128 encoding, so most  attacks would be immediately detected.
+- HTTP requests on the local TCP port are also authenticated with a similar AES-GCM-128 bearer.
+- Peers which did send invalid requests over UDP or TCP will have their IP banished for a few minutes, to avoid fuzzing or denial of service attacks.
+- HTTP content is not encrypted on the wire by default, because it sounds not mandatory on a local network, but the `SelfSignedHttps` option can enable HTTPS if needed.
 - Tampering is avoided by using cryptographic hashes for the requests, the local storage and eventually in WGet, which would discard any invalid data.
 - The client caches only the content that it has requested itself, to reduce any information disclosure.
 - Local cache folders should have the proper ACL file permissions defined.
 - Local cached files are not encrypted, so if data leakage is a concern, consider enabling file systems encryption (e.g. BitLocker or Luks).
-- UDP frames are quickly signed with a salted crc before AES-GCM-128 encoding, so most attacks would be immediately discovered.
-- HTTP requests on the local TCP port are also authenticated with a similar AES-GCM-128 bearer.
-- Peers which did send invalid requests over UDP or TCP will have their IP banished for a few minutes, to avoid fuzzing or denial of service attacks.
-- HTTP content is not encrypted on the wire by default, because it sounds not mandatory on a local network, but the `SelfSignedHttps` option can enable HTTPS if needed.
 - Resulting safety is similar to what Microsoft BranchCache offers, with no need of additional servers.
 
 ## In Practice
