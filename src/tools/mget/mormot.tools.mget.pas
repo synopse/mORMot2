@@ -96,8 +96,6 @@ type
 
 implementation
 
-{ TMGetProcess }
-
 const
   HASH_ALGO: array[gphMd5 .. high(TMGetProcessHash)] of THashAlgo = (
     hfMd5,
@@ -113,11 +111,14 @@ var
   l: integer;
 begin
   l := length(HashHexa) shr 1; // from hexa to bytes
-  for result := low(result) to high(result) do
+  for result := low(HASH_ALGO) to high(HASH_ALGO) do
     if HASH_SIZE[HASH_ALGO[result]] = l then
       exit; // detect first exact matching size (not SHA-3)
   result := gphAutoDetect;
 end;
+
+
+{ TMGetProcess }
 
 procedure TMGetProcess.Start;
 begin
