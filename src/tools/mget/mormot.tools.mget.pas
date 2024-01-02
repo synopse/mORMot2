@@ -30,7 +30,14 @@ uses
 
 type
   TMGetProcessHash = (
-    gphAutoDetect, gphMd5, gphSha1, gphSha256, gphSha384, gphSha512, gphSha3_256);
+    gphAutoDetect,
+    gphMd5,
+    gphSha1,
+    gphSha256,
+    gphSha384,
+    gphSha512,
+    gphSha3_256,
+    gphSha3_512);
 
   /// state engine for mget processing
   // - just a wrapper around THttpClientSocket and THttpPeerCache
@@ -98,24 +105,18 @@ const
     hfSha256,
     hfSha384,
     hfSha512,
-    hfSha3_256);
+    hfSha3_256,
+    hfSha3_512);
 
-function GuessAlgo(const Hash: RawUtf8): TMGetProcessHash;
+function GuessAlgo(const HashHexa: RawUtf8): TMGetProcessHash;
+var
+  l: integer;
 begin
-  case length(Hash) shr 1 of // from hexa to bytes
-    SizeOf(TMd5Digest):
-      result := gphMd5;
-    SizeOf(TSha1Digest):
-      result := gphSha1;
-    SizeOf(TSha256Digest):
-      result := gphSha256;
-    SizeOf(TSha384Digest):
-      result := gphSha384;
-    SizeOf(TSha512Digest):
-      result := gphSha512;
-  else
-    result := gphAutoDetect;
-  end;
+  l := length(HashHexa) shr 1; // from hexa to bytes
+  for result := low(result) to high(result) do
+    if HASH_SIZE[HASH_ALGO[result]] = l then
+      exit; // detect first exact matching size (not SHA-3)
+  result := gphAutoDetect;
 end;
 
 procedure TMGetProcess.Start;
