@@ -12,7 +12,7 @@ First of all, if a first download attempt failed (e.g. the network was interrupt
 
 ## Hash Verification
 
-A cryptographic hash (typically MD5, SHA1 or SHA256) can be retrieved from the server before getting the file itself, so that it will checked at the end of the download. On recent 64-bit Intel/AMD, SHA-NI opcodes will be used for fast SHA1 and SHA256 calculation.
+A cryptographic hash (typically MD5, SHA1 or SHA256) can be retrieved from the server before getting the file itself, to be checked at the end of the download. On recent 64-bit Intel/AMD, SHA-NI opcodes will be used for fast SHA1 and SHA256 calculation.
 
 You could also supply the hash at the command line level, if you know its value, e.g. from a public web site article.
 
@@ -20,7 +20,7 @@ You could also supply the hash at the command line level, if you know its value,
 
 ### Presentation
 
-On corporate networks, one performance and usuability issue is often the need to download content from the main corportate servers, via a VPN, over the Internet. In some countries, or due to some technical limitations, the bandwith to the main servers may be limited, and become a bottleneck.
+On corporate networks, one performance and usability issue is often the need to download content from the main corporate servers, via a VPN, over the Internet. In some countries, or due to some technical limitations, the bandwidth to the main servers may be limited, and become a bottleneck.
 
 Our tool is able to maintain a local cache of already downloaded files (stored by their hash), and ask its peers on the local network if some content is not already in their cache. If the file is found, it will be downloaded locally, without using the main server but for a quick HEAD to ensure the file still exists on the main server (with the expected size).
 
@@ -28,7 +28,7 @@ Under the hood, a request will be broadcasted over UDP, to discover the presence
 
 ### Security Notes
 
-This *PeerCache* mechasnism has been designed to be as secured as possible, even with its default settings.
+This *PeerCache* mechanism has been designed to be as secured as possible, even with its default settings.
 In a nutshell, its internal process expects a "secret" phrase to match on all peers for any communication to happen.
 
 Here are some additional information:
@@ -69,4 +69,4 @@ The main typical usages are the following:
 
 By design, *PeerCache* processing needs some UDP and TCP servers to run on the background. This is the point of the `--prompt` command line kind of process: you can ask for files to downloads, but peers can also ask for your own cached files during the prompt wait.
 
-A lot of additional features or options are available, e.g. use a local cache folder, limit the bandwith usage during the download, define HTTPS certificate validation, or tune any `--peer` setting, like `--peerSecret` or `--peerPort`.
+A lot of additional features or options are available, e.g. use a local cache folder, limit the bandwidth usage during the download, define HTTPS certificate validation, or tune any `--peer` setting, like `--peerSecret` or `--peerPort`.

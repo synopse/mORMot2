@@ -4818,7 +4818,7 @@ begin
 end;
 
 // UDP frames are AES-GCM encrypted and signed, ending with a 32-bit crc, fixed
-// to crc32c(): caMD5/caSha1 are almost as slow as AES-GCM-128 itself ;)
+// to crc32c(): md5/sha (without SHA-NI) are slower than AES-GCM-128 itself ;)
 // - on x86_64 THttpPeerCache: 14,003 assertions passed  17.39ms
 //   2000 messages in 413us i.e. 4.6M/s, aver. 206ns, 886.7 MB/s  = AES-GCM-128
 //   10000 altered in 135us i.e. 70.6M/s, aver. 13ns, 13.2 GB/s   = crc32c()

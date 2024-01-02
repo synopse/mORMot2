@@ -33,6 +33,8 @@ type
     gphAutoDetect, gphMd5, gphSha1, gphSha256, gphSha384, gphSha512, gphSha3_256);
 
   /// state engine for mget processing
+  // - just a wrapper around THttpClientSocket and THttpPeerCache
+  // - published properties will be included as command line switches, using RTTI
   // - could be reused between the mget command line tool and an eventual GUI
   TMGetProcess = class(TPersistentAutoCreateFields)
   protected

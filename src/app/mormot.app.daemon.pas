@@ -317,7 +317,7 @@ begin
     else
       fSettings.LogPath := NormalizeDirectoryExists(aLogFolder);
   fShowExceptionWaitEnter := true; // default/legacy behavior - ignored on POSIX
-  AfterCreate;
+  AfterCreate; // call fSettings.SetLog(TSynLog) by default
 end;
 
 procedure TSynDaemon.AfterCreate;
