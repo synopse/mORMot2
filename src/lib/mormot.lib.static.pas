@@ -78,6 +78,7 @@ function libc_vsnprintf(buf: pointer; nzize: PtrInt; format: PAnsiChar;
 function libc_strcspn(str, reject: PUtf8Char): integer; cdecl;
 function libc_strcat(dest: PAnsiChar; src: PAnsiChar): PAnsiChar; cdecl;
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
+function libc_strspn(p1, p2: PAnsiChar): PAnsiChar; cdecl;
 function libc_strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
 function libc_memchr(s: Pointer; c: Integer; n: PtrInt): Pointer; cdecl;
 function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
@@ -305,6 +306,8 @@ function libc_strcat(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcat';
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcpy';
+function libc_strspn(p1, p2: PAnsiChar): PAnsiChar; cdecl;
+  external _CLIB name 'strspn';
 function libc_strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
   external _CLIB name 'strncmp';
 function libc_memchr(s: Pointer; c: Integer; n: PtrInt): Pointer; cdecl;
@@ -612,6 +615,12 @@ function strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strcpy'; {$else} export; {$endif}
 begin
   result := libc_strcpy(dest, src);
+end;
+
+function strspn(p1, p2: PAnsiChar): PAnsiChar; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'strspn'; {$else} export; {$endif}
+begin
+  result := libc_strspn(p1, p2);
 end;
 
 function strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;

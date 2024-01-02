@@ -9157,7 +9157,7 @@ begin
   // private key raw binary extraction
   posoct := 1;
   if (AsnNextRaw(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
-     (AsnNext(posoct, oct) = ASN1_SEQ) and
+     (AsnNext(posoct, oct{%H-}) = ASN1_SEQ) and
      (AsnNext(posoct, oct) = ASN1_INT) and
      (AsnNextRaw(posoct, oct, key) = ASN1_OCTSTR) then
     result := key;
@@ -9231,9 +9231,9 @@ begin
   result := result shl 3; // from bytes to bits
   if PubText = nil then
     exit;
-  if bits = '' then
+  if {%H-}bits = '' then
     bits := BinToHumanHex(pub, publen, 16, 6);
-  FormatUtf8('    %Public Key: (% bit)'#13#10'%', [name, result, bits], PubText^);
+  FormatUtf8('    %Public Key: (% bit)'#13#10'%', [{%H-}name, result, bits], PubText^);
 end;
 
 function ParsedToText(const c: TX509Parsed): RawUtf8;

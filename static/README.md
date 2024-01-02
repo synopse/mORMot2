@@ -10,16 +10,18 @@ Usually, static files are in synch with [SQlite3 releases](https://www.sqlite.or
 
 Anyway, https://github.com/synopse/mORMot2/releases will maintain a list of official *mORMot 2* releases, including the associated static binaries.
 
+Note that on POSIX systems, you may want to download and decompress `mormot2static.tgz` instead of `mormot2static.7z`, which is smaller, but less native.
+
 
 ## Static Linking
 
-Those .o/.obj files were compiled from optimized C/asm, for the best performance, and reduce dependencies or version problems.
+Those `.o`/`.obj` files were compiled from optimized C/asm, for the best performance, and reduce dependencies or version problems.
 
 Note that such external files are not mandatory to compile the framework source code. There is always a "pure pascal" fallback code available, or use e.g. the official external sqlite3 library.
 
 ## Delphi Setup
 
-The framework source code uses relative paths to include the expected .o/.obj files from the static\delphi sub-folder, so nothing special is needed.
+The framework source code uses relative paths to include the expected `.o`/`.obj` files from the `static\delphi` sub-folder, so nothing special is needed.
 
 
 ## FPC Cross-Platform Setup
@@ -32,7 +34,7 @@ If you don't use the package, e.g. for command-line compilation, ensure that "Li
 
 (replace `..\static` by an absolute/relative path to this folder)
 
-It will ensure that when (cross-)compiling your project, FPC will link the expected .o binary files, depending on the target system.
+It will ensure that when (cross-)compiling your project, FPC will link the expected `.o` binary files, depending on the target system.
 
 ## Keep In Synch
 
