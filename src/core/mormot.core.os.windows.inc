@@ -394,8 +394,11 @@ end;
 procedure AllocConsole;
 begin
   Windows.AllocConsole;
-  if StdOut = 0 then
-    HasConsole; // setup StdOut
+  if HasConsole then
+    exit;
+  // force setup StdOut global variable
+  StdOut := 0;
+  HasConsole;
 end;
 
 {$I-}
