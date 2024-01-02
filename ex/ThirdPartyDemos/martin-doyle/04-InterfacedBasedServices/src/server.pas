@@ -6,6 +6,7 @@ interface
 uses
   SysUtils,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.data,
   mormot.core.unicode,
   mormot.orm.core,
@@ -27,7 +28,7 @@ type
   TSampleServer = class(TRestServerDB)
   public
     constructor Create(aModel: TOrmModel; const aDBFileName: TFileName);
-        overload;
+        reintroduce;  
   end;
 
 implementation
@@ -84,8 +85,8 @@ end;
 {
 ******************************** TSampleServer *********************************
 }
-constructor TSampleServer.Create(aModel: TOrmModel; const aDBFileName:
-    TFileName);
+constructor TSampleServer.Create(aModel: TOrmModel;
+  const aDBFileName: TFileName);
 begin
   inherited Create(AModel, ADBFileName);
   ServiceDefine(TExampleService, [IExample], sicShared);
