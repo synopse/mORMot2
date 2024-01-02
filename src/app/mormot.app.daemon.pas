@@ -156,13 +156,16 @@ type
   /// abstract parent to implements a POSIX Daemon / Windows Service
   // - inherit from this abstract class and override Start and Stop methods
   // - you may consider using TDDDAdministratedDaemon from dddInfraApps
+  // - note if upgrading from mORMot 1: SetLog() is now done in AfterCreate
   TSynDaemon = class(TSynPersistent)
   protected
     fConsoleMode: boolean;
     fShowExceptionWaitEnter: boolean; // ignored on POSIX
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
-    procedure AfterCreate; virtual; // call fSettings.SetLog() if not from tests
+    /// by default, calls fSettings.SetLog() if not running from tests
+    // - could be overriden to change this default behavior
+    procedure AfterCreate; virtual;
     {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
     procedure DoResume(Sender: TService);
@@ -176,6 +179,7 @@ type
     // - TSynDaemonSettings instance will be owned and freed by the daemon
     // - any non supplied folder name will be replaced by a default value
     // (executable folder under Windows, or /etc /var/log on Linux)
+    // - calls AfterCreate to call SetLog() by default
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName;
       const aSettingsExt: TFileName = '.settings';
