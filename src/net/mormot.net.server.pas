@@ -3038,7 +3038,7 @@ begin
   else
     fFavIcon := FavIconContent;
   if fFavIconRouted then
-    exit; // need to register the route once, but allow custom ico
+    exit; // need to register the route once, but allow custom icon
   Route.Get('/favicon.ico', GetFavIcon);
   fFavIconRouted := true;
 end;

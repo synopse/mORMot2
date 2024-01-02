@@ -1294,6 +1294,26 @@ type
   end;
   PUri = ^TUri;
 
+  /// 32-bit binary storage of a IPv4 sub-network for fast comparison
+  {$ifdef USERECORDWITHMETHODS}
+  TIp4SubNet = record
+  {$else}
+  TIp4SubNet = object
+  {$endif USERECORDWITHMETHODS}
+    /// 32-bit masked IP, e.g. 1.2.3.0 for '1.2.3.4/24'
+    ip: cardinal;
+    /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
+    mask: cardinal;
+    /// check is the supplied address text is on format '1.2.3.4/24'
+    // - will decode e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
+    function From(const subnet: RawUtf8): boolean;
+    /// check if an 32-bit IP4 matches a decoded sub-network
+    function Match(ip4: cardinal): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// check if a textual IP4 matches a decoded sub-network
+    function Match(const ip4: RawUtf8): boolean; overload;
+  end;
+
 
 const
   /// the default TCP port as text, as DEFAULT_PORT[Https]
@@ -1307,10 +1327,6 @@ const
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
 // - end text input parsing at final #0 or any char <= ' '
 function NetIsIP4(text: PUtf8Char; value: PByte = nil): boolean;
-
-/// check is the supplied address text is on format '1.2.3.4/8'
-// - will decode 32-bit 1.2.3.4 into ip4 and 255.255.255.0 into mask
-function NetIsIP4Subnet(const subnet: RawUtf8; out ip4, mask: cardinal): boolean;
 
 /// parse a text input buffer until the end space or EOL
 function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
@@ -2867,14 +2883,18 @@ begin
   result := (mask <> 0);
 end;
 
+function TIp4SubNet.Match(ip4: cardinal): boolean;
+begin
+  // e.g. ip4=172.16.144.160 subip=172.16.144.0 submask=255.255.255.0
+  result := (ip4 and mask) = ip;
+end;
+
 function IP4Match(const ip4, subnet: RawUtf8): boolean;
 var
-  ip, subip, submask: cardinal;
+  sub: TIp4SubNet;
 begin
-  result := NetIsIP4(pointer(ip4), @ip) and
-            NetIsIP4Subnet(subnet, subip, submask) and
-            // e.g. ip=172.16.144.160 subip=172.16.144.0 submask=255.255.255.0
-            (({%H-}ip and submask) = (subip and submask));
+  result := sub.From(subnet) and
+            sub.Match(ip4);
 end;
 
 function IP4Prefix(netmask4: cardinal): integer;
@@ -4418,15 +4438,28 @@ begin
   result := false;
 end;
 
-function NetIsIP4Subnet(const subnet: RawUtf8; out ip4, mask: cardinal): boolean;
+
+{ TIp4SubNet }
+
+function TIp4SubNet.From(const subnet: RawUtf8): boolean;
 var
-  ip, sub: RawUtf8;
+  ip4, sub4: RawUtf8;
   prefix: cardinal;
 begin
-  result := SplitFromRight(subnet, '/', ip, sub) and
-            NetIsIP4(pointer(ip), @ip4) and
-            ToCardinal(sub, prefix, 1) and
+  mask := 0;
+  result := SplitFromRight(subnet, '/', ip4, sub4) and
+            NetIsIP4(pointer(ip4), @ip) and
+            ToCardinal(sub4, prefix, 1) and
             IP4Netmask(prefix{%H-}, mask);
+  ip := ip and mask; // normalize
+end;
+
+function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
+var
+  ip32: cardinal;
+begin
+  result := NetIsIP4(pointer(ip4), @ip32) and
+            Match(ip32{%H-});
 end;
 
 

@@ -394,11 +394,10 @@ end;
 procedure AllocConsole;
 begin
   Windows.AllocConsole;
-  if HasConsole then
-    exit;
-  // force setup StdOut global variable
-  StdOut := 0;
-  HasConsole;
+  if (StdOut = 0) or
+     (StdOut = INVALID_HANDLE_VALUE) then
+    // force setup StdOut global variable
+    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
 end;
 
 {$I-}
