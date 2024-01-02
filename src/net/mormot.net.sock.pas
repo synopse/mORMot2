@@ -4444,14 +4444,15 @@ end;
 function TIp4SubNet.From(const subnet: RawUtf8): boolean;
 var
   ip4, sub4: RawUtf8;
-  prefix: cardinal;
+  ip32, prefix: cardinal; // local temporary ip32 is needed on Delphi XE4
 begin
   mask := 0;
+  ip32 := 0;
   result := SplitFromRight(subnet, '/', ip4, sub4) and
-            NetIsIP4(pointer(ip4), @ip) and
+            NetIsIP4(pointer(ip4), @ip32) and
             ToCardinal(sub4, prefix, 1) and
             IP4Netmask(prefix{%H-}, mask);
-  ip := ip and mask; // normalize
+  ip := ip32 and mask; // normalize
 end;
 
 function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
