@@ -52,7 +52,11 @@ uses
 
 
 type
-  TGetParameters = (gpHelp, gpFailed, gpWithUrl, gpPromptMode);
+  TGetParameters = (
+    gpHelp,
+    gpFailed,
+    gpWithUrl,
+    gpPromptMode);
 
 function GetParameters(p: TMGetProcess; out url: RawUtf8): TGetParameters;
 var

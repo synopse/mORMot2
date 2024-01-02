@@ -3,8 +3,18 @@
 All notable changes to the *mORMot Open Source Framework* project will be documented in this file.
 Details are available [on out GitHub repository](https://github.com/synopse/mORMot2/commits/master)
 
+## [2.2.stable] - 2024-01-02
+This is the latest stable release of *mORMot* v2.
+### Added
+- [OpenSSL 3.0/3.1 direct support in addition to 1.1](https://blog.synopse.info/?post/2023/09/08/End-Of-Live-OpenSSL-1.1-vs-Slow-OpenSSL-3.0)
+- [Native X.509, RSA and HSM support](https://blog.synopse.info/?post/2023/12/09/Native-X.509-and-RSA-Support)
+- [`mget` utility with `THttpPeerCache` peer-to-peer caching](https://blog.synopse.info/?post/2024/01/01/Happy-New-Year-2024-and-Welcome-MGET)
+### Changed
+- Upgraded SQLite3 to 3.44.2
+- Lots of bug fixes and enhancements (especially about cryptography and networking)
+- A lot of optimizations, so that we eventually reached [in top 12 ranking of all frameworks tested by TFB](https://blog.synopse.info/?post/2023/10/31/Pascal-in-the-race%3A-TFB-Challenge-Benchmarks)
+
 ## [2.1.stable] - 2023-08-24
-This is the last stable release of *mORMot* v2.
 ### Added
 - (C)LDAP, DNS, (S)NTP clients
 - Command Line Parser

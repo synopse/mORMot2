@@ -4,7 +4,7 @@
 
 ![Happy mORMot](doc/happymormot.png)
 
-(c) 2008-2023 Synopse Informatique - Arnaud Bouchez
+(c) 2008-2024 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
 

@@ -100,9 +100,9 @@ const
   // - to be used if you don't want the latest version of sqlite3, but the very
   // same binaries expected by this unit, in one of its previous version
   // - you could download the static for this exact mORMot source revision e.g. as
-  // https://github.com/synopse/mORMot2/releases/download/2.1.stable/mormot2static.7z
-  // https://github.com/synopse/mORMot2/releases/download/2.1.stable/mormot2static.tgz
-  EXPECTED_RELEASE_TAG = '2.1.stable';
+  // https://github.com/synopse/mORMot2/releases/download/2.2.stable/mormot2static.7z
+  // https://github.com/synopse/mORMot2/releases/download/2.2.stable/mormot2static.tgz
+  EXPECTED_RELEASE_TAG = '2.2.stable';
 
   /// where to download the latest available static binaries, including SQLite3
   {$ifdef OSWINDOWS}
