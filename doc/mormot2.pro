@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:https://gith
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot 2 Framework Documentation}.\line Copyright (C) 2023 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
+{\i Synopse mORMot 2 Framework Documentation}.\line Copyright (C) 2024 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot 2 Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application - see @https://github.com/synopse/mORMot2/blob/master/LICENCE.md
 The {\i Synopse mORMot 2 Framework Documentation} is a free document, released under a GPL 3.0 License.
 {\b Trademark Notice}
@@ -53,7 +53,7 @@ ApprovedBy=
 ; Revision* multiple revision Table: ignored values are taken from current, older below
 RevisionDescription=Current Version
 RevisionDate=
-Revision=2.1
+Revision=2.2
 ; [DILayout] list the global DI outline (lines beginning with : are titles)
 ; [DI-*] details all items
 DefaultPreparedBy=Arnaud Bouchez
@@ -112,7 +112,7 @@ This document is intended to describe the Design Input Product Specifications.
 : Project Concept
 :  Purpose and Scope
 This document focuses on the {\i mORMot 2} library.
-The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.1 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
+The purpose of this @DI@ is to detail the marketing requirements/product specifications for the 2.2 release of the {\i Synopse mORMot Framework library}. The requirements and specifications found in this document are derived from customer market research, regulatory input and industry common practice.
 :  Concept Statement
 It was observed that a true JSON and RESTful oriented Client-Server framework was missing in the {\i Delphi} programing environment.
 Latest versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up) provide a JSON and RESTful mechanism named DataSnap (in the {\i Architect} or {\i Enterprise} editions), but such a feature could be implemented with previous versions of the {\i Delphi} compiler as well, with a more open architecture.

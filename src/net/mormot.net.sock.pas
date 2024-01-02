@@ -1304,13 +1304,13 @@ type
     ip: cardinal;
     /// 32-bit IP mask, e.g. 255.255.255.0 for '1.2.3.4/24'
     mask: cardinal;
-    /// check is the supplied address text is on format '1.2.3.4/24'
-    // - will decode e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
+    /// check and decode the supplied address text from its format '1.2.3.4/24'
+    // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     function From(const subnet: RawUtf8): boolean;
     /// check if an 32-bit IP4 matches a decoded sub-network
     function Match(ip4: cardinal): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// check if a textual IP4 matches a decoded sub-network
+    /// check if a textual IPv4 matches a decoded sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
   end;
 
