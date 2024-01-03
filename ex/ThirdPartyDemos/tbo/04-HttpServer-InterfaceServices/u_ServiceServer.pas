@@ -75,7 +75,8 @@ uses
 procedure TRestServerLog.ComputeFileName;
 begin
   inherited ComputeFileName;
-  FFileName := StringReplace(FFileName, ' ', '_', [rfReplaceAll]);
+  FFileName := MakePath([ExtractFilePath(FFileName),
+    StringReplace(ExtractFileName(FFileName), ' ', '_', [rfReplaceAll])]);
 end;
 
 
