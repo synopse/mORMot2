@@ -29,6 +29,7 @@ uses
   mormot.core.text,
   mormot.core.rtti,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.data,
   mormot.core.zip,
   mormot.net.sock;
@@ -613,7 +614,8 @@ type
     fUrlParamPos: PUtf8Char; // may be set by TUriTreeNode.LookupParam
     fRouteName: pointer; // = pointer(TUriTreeNodeData.Names)
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
-    function GetRouteValuePosLen(const Name: RawUtf8): PIntegerArray;
+    function GetRouteValuePosLen(const Name: RawUtf8;
+      var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
   public
@@ -2402,72 +2404,64 @@ begin
   AppendLine(fOutCustomHeaders, Values);
 end;
 
-function THttpServerRequestAbstract.GetRouteValuePosLen(const Name: RawUtf8): PIntegerArray;
+function THttpServerRequestAbstract.GetRouteValuePosLen(const Name: RawUtf8;
+  var Value: TValuePUtf8Char): boolean;
 var
   i: PtrInt;
+  v: PIntegerArray;
 begin
+  result := false;
+  Value.Text := nil;
+  Value.Len := 0;
   if (self = nil) or
      (Name = '') or
      (fRouteName = nil) then
-    result := nil
-  else
-  begin
-    i := FindNonVoidRawUtf8(fRouteName, pointer(Name), length(Name),
-                            PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
-    if i >= 0 then
-      // result^ is one [pos,len] pair in fUrl
-      result := @fRouteValuePosLen[i * 2]
-    else
-      result := nil;
-  end;
+    exit;
+  i := FindNonVoidRawUtf8(fRouteName, pointer(Name), length(Name),
+                          PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
+  if i < 0 then
+    exit;
+  v := @fRouteValuePosLen[i * 2]; // one [pos,len] pair in fUrl
+  Value.Text := PUtf8Char(pointer(fUrl)) + v[0];
+  Value.Len := v[1];
+  result := true;
 end;
 
 function THttpServerRequestAbstract.GetRouteValue(const Name: RawUtf8): RawUtf8;
+var
+  v: TValuePUtf8Char;
 begin
-  RouteUtf8(Name, result);
+  GetRouteValuePosLen(Name, v);
+  v.ToUtf8(result);
 end;
 
 function THttpServerRequestAbstract.RouteInt64(const Name: RawUtf8;
   out Value: Int64): boolean;
 var
-  v: PIntegerArray;
+  v: TValuePUtf8Char;
 begin
-  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
-  if v <> nil then
-  begin
-    SetInt64(PUtf8Char(pointer(Url)) + v[0], Value{%H-}); // will end at #0 or &
-    result := true;
-  end
-  else
-    result := false;
+  result := GetRouteValuePosLen(Name, v);
+  if result then
+    Value := v.ToInt64;
 end;
 
 function THttpServerRequestAbstract.RouteUtf8(const Name: RawUtf8;
   out Value: RawUtf8): boolean;
 var
-  v: PIntegerArray;
+  v: TValuePUtf8Char;
 begin
-  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
-  if v <> nil then
-  begin
-    if v[1] <> 0 then
-      FastSetString(Value, @PByteArray(Url)[v[0]], v[1]);
-    result := true;
-  end
-  else
-    result := false;
+  result := GetRouteValuePosLen(Name, v);
+  if result then
+    v.ToUtf8(Value);
 end;
 
 function THttpServerRequestAbstract.RouteEquals(
   const Name, ExpectedValue: RawUtf8): boolean;
 var
-  v: PIntegerArray;
+  v: TValuePUtf8Char;
 begin
-  v := GetRouteValuePosLen(Name); // v = [pos,len] pair in fUrl
-  if v <> nil then
-    result := CompareBuf(ExpectedValue, @PByteArray(Url)[v[0]], v[1]) = 0
-  else
-    result := false;
+  result := GetRouteValuePosLen(Name, v) and
+            (CompareBuf(ExpectedValue, v.Text, v.Len) = 0);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
