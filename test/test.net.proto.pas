@@ -595,22 +595,29 @@ var
   one: TLdapClient;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, main, txt: RawUtf8;
+  hasinternet: boolean;
 begin
   CheckEqual(1 shl ord(uacPartialSecretsRodc), $04000000, 'uacHigh');
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
   withntp := not Executable.Command.Option('nontp');
-  utc1 := GetSntpTime(ntp);
-  //writeln(DateTimeMSToString(utc), ' = ', DateTimeMSToString(NowUtc));
-  if utc1 <> 0 then
+  hasinternet := DnsLookups('yahoo.com') <> nil; // avoid waiting for nothing
+  if hasinternet then
   begin
-    utc2 := NowUtc;
-    AddConsole('% : % = %', [ntp, DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
-    // only make a single GetSntpTime call - most servers refuse to scale
-    if withntp then
-      CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
-  end;
+    utc1 := GetSntpTime(ntp);
+    //writeln(DateTimeMSToString(utc), ' = ', DateTimeMSToString(NowUtc));
+    if utc1 <> 0 then
+    begin
+      utc2 := NowUtc;
+      AddConsole('% : % = %', [ntp, DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
+      // only make a single GetSntpTime call - most servers refuse to scale
+      if withntp then
+        CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
+    end;
+  end
+  else
+    AddConsole('no Internet connection');
   // validate some IP releated process
   Check(not NetIsIP4(nil));
   Check(not NetIsIP4('1'));
@@ -638,12 +645,14 @@ begin
   CheckEqual(DnsLookup('LocalHost'), '127.0.0.1');
   CheckEqual(DnsLookup('::1'), '127.0.0.1');
   CheckEqual(DnsLookup('1.2.3.4'), '1.2.3.4');
-  ip := DnsLookup('synopse.info');
-  CheckEqual(ip, '62.210.254.173', 'dns1');
-  ip := DnsLookup('blog.synopse.info');
-  CheckEqual(ip, '62.210.254.173', 'dns2');
-  CheckEqual(DnsReverseLookup(ip), '62-210-254-173.rev.poneytelecom.eu', 'rev');
-  Check(DnsLookups('yahoo.com') <> nil, 'dns3');
+  if hasinternet then
+  begin
+    ip := DnsLookup('synopse.info');
+    CheckEqual(ip, '62.210.254.173', 'dns1');
+    ip := DnsLookup('blog.synopse.info');
+    CheckEqual(ip, '62.210.254.173', 'dns2');
+    CheckEqual(DnsReverseLookup(ip), '62-210-254-173.rev.poneytelecom.eu', 'rev');
+  end;
   // validate LDAP distinguished name conversion (no client)
   CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
     'xyz.local/London/Users/User1');
@@ -737,7 +746,8 @@ begin
       if utc1 <> 0 then
       begin
         utc2 := NowUtc;
-        AddConsole('% : % = %', [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
+        AddConsole('% : % = %',
+          [dns[i], DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
         if withntp then
           CheckSame(utc1, utc2, 1, 'NTP system B'); // allow 1 day diff
       end;
