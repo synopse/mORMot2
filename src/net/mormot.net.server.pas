@@ -965,8 +965,8 @@ type
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function SetRejectInCommandUri(var Http: THttpRequestContext;
       Opaque: Int64; Status: integer): boolean;
-    function Authorization(
-      var Http: THttpRequestContext; Opaque: Int64): TAuthServerResult;
+    function Authorization(var Http: THttpRequestContext;
+      Opaque: Int64): TAuthServerResult;
   public
     /// create a Server Thread, ready to be bound and listening on a port
     // - this constructor will raise a EHttpServer exception if binding failed
@@ -3921,18 +3921,15 @@ function THttpServerSocketGeneric.SetRejectInCommandUri(
 var
   reason, auth, body: RawUtf8;
 begin
-  result := false;
   StatusCodeToReason(status, reason);
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
              '<body style="font-family:verdana"><h1>%</h1>' +
              '<p>Server rejected % request as % %.</body></html>',
     [reason, reason, Http.CommandUri, status, reason], body);
-  if (status = HTTP_UNAUTHORIZED) and
-     (fAuthorize <> hraNone) then
-  begin
+  result := (status = HTTP_UNAUTHORIZED) and
+            (fAuthorize <> hraNone);
+  if result then // don't close the connection but set grWwwAuthenticate
     auth := ComputeWwwAuthenticate(Opaque);
-    result := true; // don't close the connection
-  end;
   FormatUtf8('HTTP/1.% % %'#13#10'%' + HTML_CONTENT_TYPE_HEADER +
     #13#10'Content-Length: %'#13#10#13#10'%',
     [ord(result), status, reason, auth, length(body), body], Http.CommandUri);
