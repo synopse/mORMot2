@@ -12,6 +12,7 @@ unit mormot.core.datetime;
     - TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time
     - TTimeLog efficient 64-bit custom date/time encoding
     - TTextDateWriter supporting date/time ISO-8601 serialization
+    - TValuePUtf8Char text value wrapper record
 
   *****************************************************************************
 }
@@ -883,6 +884,62 @@ type
     procedure AddCurrentNCSALogTime(LocalTime: boolean);
   end;
 
+
+{ ******************* TValuePUtf8Char text value wrapper record }
+
+type
+  /// points to one value of raw UTF-8 content, decoded from a JSON buffer
+  // - used e.g. by JsonDecode() overloaded function to returns names/values
+  {$ifdef USERECORDWITHMETHODS}
+  TValuePUtf8Char = record
+  {$else}
+  TValuePUtf8Char = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// a pointer to the actual UTF-8 text
+    Text: PUtf8Char;
+    /// how many UTF-8 bytes are stored in Value
+    Len: PtrInt;
+    /// convert the value into a UTF-8 string
+    procedure ToUtf8(var Value: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a UTF-8 string
+    function ToUtf8: RawUtf8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a RTL string
+    function ToString: string;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a signed integer
+    function ToInteger: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into an unsigned integer
+    function ToCardinal: PtrUInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into an unsigned integer
+    function ToCardinal(Def: PtrUInt): PtrUInt; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a 64-bit signed integer
+    function ToInt64: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns true if Value is either '1' or 'true'
+    function ToBoolean: boolean;
+    /// convert the value into a floating point number
+    function ToDouble: double;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the ISO-8601 text value as TDateTime
+    // - could have been written e.g. by DateTimeToIso8601Text()
+    function Iso8601ToDateTime: TDateTime;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// will call IdemPropNameU() over the stored text Value
+    function Idem(const Value: RawUtf8): boolean;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
+  end;
+  PValuePUtf8Char = ^TValuePUtf8Char;
+  /// used e.g. by JsonDecode() overloaded function to returns values
+  TValuePUtf8CharArray =
+    array[0 .. maxInt div SizeOf(TValuePUtf8Char) - 1] of TValuePUtf8Char;
+  PValuePUtf8CharArray = ^TValuePUtf8CharArray;
+  TValuePUtf8CharDynArray = array of TValuePUtf8Char;
 
 
 implementation
@@ -3262,6 +3319,70 @@ begin
   if BEnd - B <= 21 then
     FlushToStream;
   inc(B, time.ToNCSAText(B + 1));
+end;
+
+
+{ ******************* TValuePUtf8Char text value wrapper record }
+
+{ TValuePUtf8Char }
+
+procedure TValuePUtf8Char.ToUtf8(var Value: RawUtf8);
+begin
+  FastSetString(Value, Text, Len);
+end;
+
+function TValuePUtf8Char.ToUtf8: RawUtf8;
+begin
+  FastSetString(result, Text, Len);
+end;
+
+function TValuePUtf8Char.ToString: string;
+begin
+  Utf8DecodeToString(Text, Len, result);
+end;
+
+function TValuePUtf8Char.ToInteger: PtrInt;
+begin
+  result := GetInteger(Text);
+end;
+
+function TValuePUtf8Char.ToCardinal: PtrUInt;
+begin
+  result := GetCardinal(Text);
+end;
+
+function TValuePUtf8Char.ToCardinal(Def: PtrUInt): PtrUInt;
+begin
+  result := GetCardinalDef(Text, Def);
+end;
+
+function TValuePUtf8Char.ToInt64: Int64;
+begin
+  SetInt64(Text, result{%H-});
+end;
+
+function TValuePUtf8Char.ToDouble: double;
+begin
+  result := GetExtended(Text);
+end;
+
+function TValuePUtf8Char.Iso8601ToDateTime: TDateTime;
+begin
+  result := Iso8601ToDateTimePUtf8Char(Text, Len);
+end;
+
+function TValuePUtf8Char.Idem(const Value: RawUtf8): boolean;
+begin
+  result := (length(Value) = Len) and
+            ((Len = 0) or
+             IdemPropNameUSameLenNotNull(pointer(Value), Text, Len));
+end;
+
+function TValuePUtf8Char.ToBoolean: boolean;
+begin
+  result := (Text <> nil) and
+            ((PWord(Text)^ = ord('1')) or
+             (GetTrue(Text) = 1));
 end;
 
 
