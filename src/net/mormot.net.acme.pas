@@ -33,6 +33,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,

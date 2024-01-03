@@ -286,7 +286,7 @@ function DnsParseRecord(const Answer: RawByteString; var Pos: PtrInt;
 // - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
 function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
   RR: TDnsResourceRecord = drrA; const NameServers: RawUtf8 = '';
-  TimeOutMS: integer = 2000; QClass: cardinal = QC_INET): boolean;
+  TimeOutMS: integer = 200; QClass: cardinal = QC_INET): boolean;
 
 
 /// retrieve the IPv4 address of a DNS host name - using DnsQuery(drrA)
