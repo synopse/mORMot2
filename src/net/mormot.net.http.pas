@@ -855,9 +855,8 @@ const
 
 function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 var
-  pos: array[byte] of PUtf8Char;
-  len: array[byte] of integer;
-  n, purged, i, tot: PtrInt;
+  pos, len: array[byte] of word;
+  n, purged, i, l, tot: PtrInt;
   P, next: PUtf8Char;
 begin
   n := 0;
@@ -865,27 +864,31 @@ begin
   purged := 0;
   // put all allowed headers in pos[]/len[]
   P := pointer(headers);
-  while P <> nil do
-  begin
-    if P^ = #0 then
-      break;
-    next := GotoNextLine(P);
-    if IdemPPChar(P, @TOBEPURGED) < 0 then
+  if length(headers) shr 16 = 0 then // defined as word
+    while P <> nil do
     begin
-      if n = high(len) then
+      if P^ = #0 then
         break;
-      pos[n] := P;
-      if next <> nil then
-        len[n] := next - P
-      else if purged <> 0 then
-        len[n] := StrLen(P);
-      inc(tot, len[n]);
-      inc(n);
-    end
-    else
-      inc(purged);
-    P := next;
-  end;
+      next := GotoNextLine(P);
+      if IdemPPChar(P, @TOBEPURGED) < 0 then
+      begin
+        if n = high(len) then
+          break;
+        pos[n] := P - pointer(headers);
+        l := next - P;
+        if next = nil then
+          if purged = 0 then
+            break
+          else
+            l := StrLen(P);
+        inc(tot, l);
+        len[n] := l;
+        inc(n);
+      end
+      else
+        inc(purged);
+      P := next;
+    end;
   // recreate an expurgated headers set
   if purged = 0 then
     // nothing to purge
@@ -900,7 +903,7 @@ begin
     P := pointer(result);
     for i := 0 to n - 1 do
     begin
-      MoveFast({%H-}pos[i]^, P^, {%H-}len[i]);
+      MoveFast(PByteArray(headers)[{%H-}pos[i]], P^, {%H-}len[i]);
       inc(P, len[i]);
     end;
     assert(P - pointer(result) = tot);
