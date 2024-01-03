@@ -1697,19 +1697,13 @@ begin
            not HttpMethodWithNoBody(ctxt.method) then
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
-          if ctxt.OutStream <> nil then
-          begin
-            if (Http.ContentLength > 0) and
-               (ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-            begin
-              if ctxt.OutStream.InheritsFrom(TStreamRedirect) then
-                TStreamRedirect(ctxt.OutStream).ExpectedSize :=
-                  fRangeStart + Http.ContentLength;
-              GetBody(ctxt.OutStream)
-            end;
-          end
-          else
-            GetBody(nil);
+          if (ctxt.OutStream <> nil) and
+             (Http.ContentLength > 0) and
+             (ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) and
+             ctxt.OutStream.InheritsFrom(TStreamRedirect) then
+            TStreamRedirect(ctxt.OutStream).ExpectedSize :=
+              fRangeStart + Http.ContentLength; // we know the size
+          GetBody(ctxt.OutStream); // retrieve whole response body
         end;
         // successfully sent -> reset some fields for the next request
         if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
