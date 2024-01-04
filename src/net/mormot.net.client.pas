@@ -720,8 +720,9 @@ type
     // - you can specify a minimal size (in bytes) below which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
     // - the first registered algorithm will be the prefered one for compression
+    // within each priority level (the lower aPriority first)
     function RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer = 1024): boolean;
+      aCompressMinSize: integer = 1024; aPriority: integer = 10): boolean;
 
     /// allows to ignore untrusted TLS certificates
     // - similar to adding a security exception for a domain in the browser
@@ -2499,10 +2500,10 @@ begin
 end;
 
 function THttpRequest.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer): boolean;
+  aCompressMinSize, aPriority: integer): boolean;
 begin
   result := RegisterCompressFunc(fCompress, aFunction,
-    fCompressAcceptEncoding, aCompressMinSize) <> '';
+    fCompressAcceptEncoding, aCompressMinSize, aPriority) <> '';
 end;
 
 

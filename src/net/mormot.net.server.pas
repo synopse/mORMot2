@@ -545,8 +545,9 @@ type
     // - you can specify a minimal size (in bytes) before which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
     // - the first registered algorithm will be the prefered one for compression
+    // within each priority level (the lower aPriority first)
     procedure RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer = 1024); virtual;
+      aCompressMinSize: integer = 1024; aPriority: integer = 10); virtual;
     /// you can call this method to prepare the HTTP server for shutting down
     procedure Shutdown;
     /// main event handler called by the default implementation of the
@@ -1812,7 +1813,7 @@ type
     /// will register a compression algorithm
     // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer = 1024); override;
+      aCompressMinSize: integer = 1024; aPriority: integer = 10); override;
     /// access to the internal THttpApiServer list cloned by this main instance
     // - as created by Clone() method
     property Clones: THttpApiServers
@@ -3062,10 +3063,10 @@ begin
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer);
+  aCompressMinSize, aPriority: integer);
 begin
   RegisterCompressFunc(
-    fCompress, aFunction, fCompressAcceptEncoding, aCompressMinSize);
+    fCompress, aFunction, fCompressAcceptEncoding, aCompressMinSize, aPriority);
 end;
 
 procedure THttpServerGeneric.Shutdown;
@@ -6788,13 +6789,13 @@ begin
 end;
 
 procedure THttpApiServer.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer);
+  aCompressMinSize, aPriority: integer);
 var
   i: PtrInt;
 begin
   inherited;
   for i := 0 to length(fClones) - 1 do
-    fClones[i].RegisterCompress(aFunction, aCompressMinSize);
+    fClones[i].RegisterCompress(aFunction, aCompressMinSize, aPriority);
 end;
 
 procedure THttpApiServer.SetOnTerminate(const Event: TOnNotifyThread);

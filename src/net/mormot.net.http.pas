@@ -57,6 +57,8 @@ type
     // - will be 1024 e.g. for 'zip' or 'deflate'
     // - could be 0 e.g. when encrypting the content, meaning "always compress"
     CompressMinSize: integer;
+    /// a priority on which the compression is applied - highest is favored
+    Priority: integer;
   end;
 
   /// list of known compression algorithms
@@ -89,7 +91,7 @@ procedure CompressContent(Accepted: THttpSocketCompressSet;
 /// enable a give compression function for a HTTP link
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
   CompFunction: THttpSocketCompress; var AcceptEncoding: RawUtf8;
-  CompMinSize: integer): RawUtf8;
+  CompMinSize, CompPriority: integer): RawUtf8;
 
 /// decode 'CONTENT-ENCODING: ' parameter from registered compression list
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
@@ -480,8 +482,9 @@ type
     // - you can specify a minimal size (in bytes) before which the content won't
     // be compressed (1024 by default, corresponding to a MTU of 1500 bytes)
     // - the first registered algorithm will be the prefered one for compression
+    // within each priority level (the lower aPriority first)
     function RegisterCompress(aFunction: THttpSocketCompress;
-      aCompressMinSize: integer = 1024): boolean;
+      aCompressMinSize: integer = 1024; aPriority: integer = 10): boolean;
   end;
 
 
@@ -1037,9 +1040,15 @@ begin
         (P[12] = #0);
 end;
 
+function ByPriority(const A, B): integer;
+begin
+  result := CompareInteger(THttpSocketCompressRec(A).Priority,
+                           THttpSocketCompressRec(B).Priority);
+end;
+
 function RegisterCompressFunc(var Comp: THttpSocketCompressRecDynArray;
   CompFunction: THttpSocketCompress; var AcceptEncoding: RawUtf8;
-  CompMinSize: integer): RawUtf8;
+  CompMinSize, CompPriority: integer): RawUtf8;
 var
   i, n: PtrInt;
   dummy: RawByteString;
@@ -1067,7 +1076,9 @@ begin
     Name := algo;
     @Func := @CompFunction;
     CompressMinSize := CompMinSize;
+    Priority := (CompPriority shl 14) or n; // by CompPriority, then call order
   end;
+  DynArray(TypeInfo(THttpSocketCompressRecDynArray), Comp).Sort(ByPriority);
   if AcceptEncoding = '' then
     AcceptEncoding := 'Accept-Encoding: ' + algo
   else
@@ -2347,10 +2358,10 @@ begin
 end;
 
 function THttpSocket.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize: integer): boolean;
+  aCompressMinSize, aPriority: integer): boolean;
 begin
   result := RegisterCompressFunc(Http.Compress, aFunction,
-    Http.CompressAcceptEncoding, aCompressMinSize) <> '';
+    Http.CompressAcceptEncoding, aCompressMinSize, aPriority) <> '';
 end;
 
 
