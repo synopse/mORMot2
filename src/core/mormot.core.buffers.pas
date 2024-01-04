@@ -1713,7 +1713,10 @@ const
 
 /// retrieve the MIME content type from its file name
 function GetMimeContentTypeFromExt(const FileName: TFileName;
-  FileExt: PRawUtf8 = nil): TMimeType;
+  FileExt: PRawUtf8 = nil): TMimeType; overload;
+
+/// retrieve the MIME content type from its file extension text (without '.')
+function GetMimeContentTypeFromExt(const Ext: RawUtf8): TMimeType; overload;
 
 /// retrieve the MIME content type from a supplied binary buffer
 function GetMimeContentTypeFromMemory(Content: Pointer; Len: PtrInt): TMimeType;
@@ -8551,42 +8554,47 @@ end;
 
 const
   MIME_EXT: array[0..45] of PUtf8Char = ( // for IdemPPChar() start check
-    'PNG',  'GIF',  'TIF',  'JP',  'BMP',  'DOC',  'HTM',
-    'CSS',  'JSON',  'ICO',  'WOF',  'TXT',  'SVG',  'ATOM',  'RDF',  'RSS',
-    'WEBP',  'APPC',  'MANI',  'XML',  'JS',  'WOFF',  'OGG',
-    'OGV',  'MP4',  'M2V',  'M2P',  'MP3',  'H264',  'TEXT',  'LOG',  'GZ',
-    'WEBM',  'MKV',  'RAR',  '7Z',  'BZ2', 'WMA', 'WMV', 'AVI',
-    'PPT', 'XLS', 'PDF', 'SQLITE', 'DB3', nil);
+    'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',
+    'CSS',  'JSON', 'ICO',  'WOF', 'TXT', 'SVG',  'ATOM', 'RDF', 'RSS',
+    'WEBP', 'APPC', 'MANI', 'XML', 'JS',  'WOFF', 'OGG',
+    'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG', 'GZ',
+    'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2', 'WMA',  'WMV',  'AVI',
+    'PPT',  'XLS',  'PDF',  'SQLITE', 'DB3', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
-    mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml,
-    mtCss,  mtJson,  mtXIcon,  mtFont,  mtText,  mtSvg,  mtXml,  mtXml,  mtXml,
-    mtWebp,  mtManifest,  mtManifest,  mtXml,  mtJS,  mtFont,  mtOgg,
-    mtOgg,  mtMp4,  mtMp2,  mtMp2,  mtMpeg,  mtH264,  mtText,  mtText,  mtGzip,
-    mtWebm,  mtWebm,  mtRar,  mt7z,  mtBz2, mtWma, mtWmv, mtAvi,
-    mtPpt,  mtXls, mtPdf, mtSQlite3, mtSQlite3);
+    mtPng,  mtGif,  mtTiff,   mtJpg, mtBmp,  mtDoc,  mtHtml,
+    mtCss,  mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
+    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtFont, mtOgg,
+    mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,  mtGzip,
+    mtWebm, mtWebm, mtRar,   mt7z,   mtBz2,  mtWma,  mtWmv,  mtAvi,
+    mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
 
-function GetMimeContentTypeFromExt(const FileName: TFileName; FileExt: PRawUtf8): TMimeType;
+function GetMimeContentTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
-  ext: RawUtf8;
   i: PtrInt;
 begin
   result := mtUnknown;
-  if FileName <> '' then
-  begin
-    ext := RawUtf8(ExtractFileExt(FileName));
-    delete(ext, 1, 1);
-    if length(ext) = 1 then // IdemPPChar() requires 2 chars len minimum
+  case length(Ext) of
+    0: ;
+    1: // IdemPPChar() requires 2 chars len minimum
       case ext[1] of
         'x', 'X':
           result := mtXcomp;
-      end
-    else
+      end;
+  else
     begin
-      i := IdemPPChar(pointer(ext), @MIME_EXT);
+      i := IdemPPChar(pointer(Ext), @MIME_EXT);
       if i >= 0 then
         result := MIME_EXT_TYPE[i]
     end;
   end;
+end;
+
+function GetMimeContentTypeFromExt(const FileName: TFileName; FileExt: PRawUtf8): TMimeType;
+var
+  ext: RawUtf8;
+begin
+  StringToUtf8(ExtractExt(FileName, {withoutdot=}true), ext);
+  result := GetMimeContentTypeFromExt(ext);
   if FileExt <> nil then
     FileExt^ := {%H-}ext;
 end;

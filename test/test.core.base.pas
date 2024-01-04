@@ -4815,6 +4815,18 @@ begin
   CheckEqual(ExtractPathU('toto.ext'), '');
   CheckEqual(ExtractPathU('/toto.ext'), '/');
   CheckEqual(ExtractPathU('c:toto.ext'), 'c:');
+  Check(ExtractName('/var/toto.ext') = 'toto.ext');
+  Check(ExtractName('c:\var\toto.ext') = 'toto.ext');
+  Check(ExtractName('toto.ext') = 'toto.ext');
+  Check(ExtractName('toto') = 'toto');
+  Check(ExtractName('/toto.ext') = 'toto.ext');
+  Check(ExtractName('c:toto.ext') = 'toto.ext');
+  CheckEqual(ExtractNameU('/var/toto.ext'), 'toto.ext');
+  CheckEqual(ExtractNameU('c:\var\toto.ext'), 'toto.ext');
+  CheckEqual(ExtractNameU('toto.ext'), 'toto.ext');
+  CheckEqual(ExtractNameU('toto'), 'toto');
+  CheckEqual(ExtractNameU('/toto.ext'), 'toto.ext');
+  CheckEqual(ExtractNameU('c:toto.ext'), 'toto.ext');
   Check(GetFileNameWithoutExt('/var/toto.ext') = '/var/toto');
   Check(GetFileNameWithoutExt('c:\var\toto.ext') = 'c:\var\toto');
   Check(ExtractExt('toto.ext') = '.ext');

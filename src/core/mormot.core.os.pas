@@ -3326,6 +3326,14 @@ function ExtractPath(const FileName: TFileName): TFileName;
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
 function ExtractPathU(const FileName: RawUtf8): RawUtf8;
 
+/// extract a name from a file name like ExtractFileName function
+// - but cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractName(const FileName: TFileName): TFileName;
+
+/// extract a name from a file name like ExtractFileName function
+// - but cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractNameU(const FileName: RawUtf8): RawUtf8;
+
 /// extract an extension from a file name like ExtractFileExt function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
 function ExtractExt(const FileName: TFileName; WithoutDot: boolean = false): TFileName;
@@ -6850,12 +6858,11 @@ end;
 function GetLastDelim(const FileName: TFileName; OtherDelim: cardinal): PtrInt;
 var
   {$ifdef UNICODE}
-  p: PWordArray;
+  p: PWordArray absolute FileName;
   {$else}
-  p: PByteArray;
+  p: PByteArray absolute FileName;
   {$endif UNICODE}
 begin
-  p := pointer(FileName);
   result := length(FileName);
   while (result > 0) and
         not (p[result - 1] in [ord('\'), ord('/'), ord(':'), OtherDelim]) do
@@ -6873,6 +6880,16 @@ end;
 function ExtractPath(const FileName: TFileName): TFileName;
 begin
   SetString(result, PChar(pointer(FileName)), GetLastDelim(FileName, 0));
+end;
+
+function ExtractName(const FileName: TFileName): TFileName;
+begin
+  result := copy(FileName, GetLastDelim(FileName, 0) + 1, maxInt);
+end;
+
+function ExtractNameU(const FileName: RawUtf8): RawUtf8;
+begin
+  result := copy(FileName, GetLastDelimU(FileName, #0) + 1, maxInt);
 end;
 
 function ExtractPathU(const FileName: RawUtf8): RawUtf8;
