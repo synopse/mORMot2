@@ -8554,19 +8554,19 @@ end;
 
 const
   MIME_EXT: array[0..45] of PUtf8Char = ( // for IdemPPChar() start check
-    'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',
-    'CSS',  'JSON', 'ICO',  'WOF', 'TXT', 'SVG',  'ATOM', 'RDF', 'RSS',
+    'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',  'CSS',
+    'JSON', 'ICO',  'WOF', 'TXT', 'SVG',  'ATOM', 'RDF', 'RSS',
     'WEBP', 'APPC', 'MANI', 'XML', 'JS',  'WOFF', 'OGG',
-    'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG', 'GZ',
-    'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2', 'WMA',  'WMV',  'AVI',
-    'PPT',  'XLS',  'PDF',  'SQLITE', 'DB3', nil);
+    'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG',
+    'GZ',  'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2', 'WMA',  'WMV',
+    'AVI', 'PPT',  'XLS',  'PDF',  'SQLITE', 'DB3', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
-    mtPng,  mtGif,  mtTiff,   mtJpg, mtBmp,  mtDoc,  mtHtml,
-    mtCss,  mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
+    mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
+    mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtFont, mtOgg,
-    mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,  mtGzip,
-    mtWebm, mtWebm, mtRar,   mt7z,   mtBz2,  mtWma,  mtWmv,  mtAvi,
-    mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
+    mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
+    mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
+    mtAvi,  mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
 
 function GetMimeContentTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
@@ -8669,22 +8669,18 @@ const
     $e011cfd0); // msi = D0 CF 11 E0 A1 B1 1A E1
 
 function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
-var
-  i: PtrInt;
 begin
   // see http://www.garykessler.net/library/file_sigs.html
   result := false;
   if (Content <> nil) and
      (Len > 8) then
-  begin
-    i := IntegerScanIndex(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^);
-    if i >= 0 then
+    if IntegerScanExists(@MIME_COMPRESSED, length(MIME_COMPRESSED), PCardinal(Content)^) then
       result := true
     else
       case PCardinal(Content)^ and $00ffffff of // 24-bit magic
         $088b1f, // 'application/gzip' = 1F 8B 08
         $334449, // mp3 = 49 44 33 [ID3]
-        $492049, // 'image/tiff' = 49 20 49
+w        $492049, // 'image/tiff' = 49 20 49
         $535746, // swf = 46 57 53 [FWS]
         $535743, // swf = 43 57 53 [zlib]
         $53575a, // zws/swf = 5A 57 53 [FWS]
@@ -8699,7 +8695,6 @@ begin
             result := true;
         end;
       end;
-  end;
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
