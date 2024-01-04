@@ -912,13 +912,6 @@ procedure TNetworkProtocols._TTunnelLocal;
 var
   c, s: ICryptCert;
 begin
-  CheckEqual(PurgeHeaders(''), '');
-  CheckEqual(PurgeHeaders('toto'), 'toto');
-  CheckEqual(PurgeHeaders('toto'#13#10), 'toto'#13#10);
-  CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10), 'toto'#13#10);
-  CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10), 'toto'#13#10);
-  CheckEqual(PurgeHeaders('accept: all'#13#10'toto'#13#10'content-length: 10'#13#10), 'toto'#13#10);
-  CheckEqual(PurgeHeaders('accept: all'#13#10'content-length: 10'#13#10'toto'#13#10), 'toto'#13#10);
   c := Cert('syn-es256').Generate([cuDigitalSignature]);
   s := Cert('syn-es256').Generate([cuDigitalSignature]);
   // plain tunnelling

@@ -4805,6 +4805,40 @@ begin
   Check(not SafePathNameU('..\two'));
   Check(not SafePathNameU('/../two'));
   Check(not SafePathNameU('\..\two'));
+  Check(ExtractPath('/var/toto.ext') = '/var/');
+  Check(ExtractPath('c:\var\toto.ext') = 'c:\var\');
+  Check(ExtractPath('toto.ext') = '');
+  Check(ExtractPath('/toto.ext') = '/');
+  Check(ExtractPath('c:toto.ext') = 'c:');
+  CheckEqual(ExtractPathU('/var/toto.ext'), '/var/');
+  CheckEqual(ExtractPathU('c:\var\toto.ext'), 'c:\var\');
+  CheckEqual(ExtractPathU('toto.ext'), '');
+  CheckEqual(ExtractPathU('/toto.ext'), '/');
+  CheckEqual(ExtractPathU('c:toto.ext'), 'c:');
+  Check(GetFileNameWithoutExt('/var/toto.ext') = '/var/toto');
+  Check(GetFileNameWithoutExt('c:\var\toto.ext') = 'c:\var\toto');
+  Check(ExtractExt('toto.ext') = '.ext');
+  Check(ExtractExt('toto.ext', true) = 'ext');
+  Check(ExtractExt('name') = '');
+  Check(ExtractExt('name.') = '.');
+  Check(ExtractExt('.ext') = '');
+  Check(ExtractExt('/var/toto.ext') = '.ext');
+  Check(ExtractExt('/var/toto.ext', true) = 'ext');
+  Check(ExtractExt('c:\var\toto.ext') = '.ext');
+  Check(ExtractExt('c:\var\toto.ext', true) = 'ext');
+  Check(ExtractExt('/var/toto/') = '');
+  Check(ExtractExt('/var/toto') = '');
+  CheckEqual(ExtractExtU('toto.ext'), '.ext');
+  CheckEqual(ExtractExtU('toto.ext', true), 'ext');
+  CheckEqual(ExtractExtU('name'), '');
+  CheckEqual(ExtractExtU('name.'), '.');
+  CheckEqual(ExtractExtU('.ext'), '');
+  CheckEqual(ExtractExtU('/var/toto.ext'), '.ext');
+  CheckEqual(ExtractExtU('/var/toto.ext', true), 'ext');
+  CheckEqual(ExtractExtU('c:\var\toto.ext'), '.ext');
+  CheckEqual(ExtractExtU('c:\var\toto.ext', true), 'ext');
+  CheckEqual(ExtractExtU('/var/toto/'), '');
+  CheckEqual(ExtractExtU('/var/toto'), '');
   CaseFoldingTest;
   for i := 0 to high(ROWIDS) do
     Check(isRowID(ROWIDS[i]) = (i < 8));
@@ -6482,6 +6516,17 @@ var
   end;
 
 begin
+  // some HTTP methods
+  CheckEqual(PurgeHeaders(''), '');
+  CheckEqual(PurgeHeaders('toto'), 'toto');
+  s := 'toto'#13#10;
+  CheckEqual(PurgeHeaders(s), s);
+  CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10), s);
+  CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10), s);
+  CheckEqual(PurgeHeaders(
+    'accept: all'#13#10'toto'#13#10'content-length: 10'#13#10), s);
+  CheckEqual(PurgeHeaders(
+    'accept: all'#13#10'content-length: 10'#13#10'toto'#13#10), s);
   Check(HttpMethodWithNoBody('HEAD'));
   Check(HttpMethodWithNoBody('head'));
   Check(HttpMethodWithNoBody('HEADER'));
@@ -6494,6 +6539,7 @@ begin
   Check(not HttpMethodWithNoBody('GET'));
   Check(not HttpMethodWithNoBody('POST'));
   Check(not HttpMethodWithNoBody('PUT'));
+  Check(not HttpMethodWithNoBody('OPT'));
   // mime content types
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
   CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
