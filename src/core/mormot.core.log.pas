@@ -6494,9 +6494,12 @@ begin
   begin
     P := fLines[aIndex];
     hex2bin := @ConvertHexToBin;
-    if Char4ToWord(P, Y, hex2bin) or Char2ToByte(P + 4, M, hex2bin) or
-       Char2ToByte(P + 6, D, hex2bin) or Char2ToByte(P + 9, HH, hex2bin) or
-       Char2ToByte(P + 11, MM, hex2bin) or Char2ToByte(P + 13, SS, hex2bin) or
+    if Char4ToWord(P, Y, hex2bin) or
+       Char2ToByte(P + 4, M, hex2bin) or
+       Char2ToByte(P + 6, D, hex2bin) or
+       Char2ToByte(P + 9, HH, hex2bin) or
+       Char2ToByte(P + 11, MM, hex2bin) or
+       Char2ToByte(P + 13, SS, hex2bin) or
        Char2ToByte(P + 15, MS, hex2bin) then
       // not exact YYYYMMDD hhmmsszz layout -> try plain ISO-8601
       Iso8601ToDateTimePUtf8CharVar(P, 17, result)

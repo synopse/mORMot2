@@ -294,7 +294,8 @@ begin
     exit;
   end;
   result := Default;
-  if fNoPrompt or (Prompt = '') then
+  if fNoPrompt or
+     (Prompt = '') then
     exit;
   TextColor(ccLightGray);
   {$I-}
