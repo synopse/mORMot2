@@ -2467,7 +2467,7 @@ end;
 function SearchNoPattern(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 begin
   result := (aMatch.PMax + 1 = aTextLen) and
-            CompareMem(aText, aMatch.Pattern, aTextLen);
+            mormot.core.base.CompareMem(aText, aMatch.Pattern, aTextLen);
 end;
 
 function SearchNoPatternU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
@@ -2524,7 +2524,7 @@ end;
 function SearchStartWith(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 begin
   result := (aMatch.PMax < aTextLen) and
-            CompareMem(aText, aMatch.Pattern, aMatch.PMax + 1);
+    mormot.core.base.CompareMem(aText, aMatch.Pattern, aMatch.PMax + 1);
 end;
 
 function SearchStartWithU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
@@ -2537,7 +2537,7 @@ function SearchEndWith(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): bool
 begin
   dec(aTextLen, aMatch.PMax);
   result := (aTextLen >= 0) and
-            CompareMem(aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+    mormot.core.base.CompareMem(aText + aTextLen, aMatch.Pattern, aMatch.PMax);
 end;
 
 function SearchEndWithU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
@@ -2859,7 +2859,7 @@ function TMatch.Equals(const aAnother: TMatch): boolean;
 begin
   result := (pmax = TMatch(aAnother).pmax) and
             (Upper = TMatch(aAnother).Upper) and
-            CompareMem(Pattern, TMatch(aAnother).Pattern, pmax + 1);
+    mormot.core.base.CompareMem(Pattern, TMatch(aAnother).Pattern, pmax + 1);
 end;
 
 function TMatch.PatternLength: integer;
@@ -4847,7 +4847,7 @@ var
 begin
   // 1. special cases
   if (NewSize = OldSize) and
-     CompareMem(Old, New, NewSize) then
+     mormot.core.base.CompareMem(Old, New, NewSize) then
   begin
     Getmem(Delta, 1);
     Delta^ := '=';

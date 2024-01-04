@@ -1628,7 +1628,8 @@ function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 { *********** Basic MIME Content Types Support }
 
 type
-  /// the known mime types
+  /// some of the best-known mime types
+  // - subset of the whole IANA list which can be quite huge (>1500 items)
   TMimeType = (
     mtUnknown,
     mtPng,
@@ -8574,7 +8575,7 @@ begin
   begin
     ext := RawUtf8(ExtractFileExt(FileName));
     delete(ext, 1, 1);
-    if length(ext) = 1 then // IdemPPChar() supports 2 chars len minimum
+    if length(ext) = 1 then // IdemPPChar() requires 2 chars len minimum
       case ext[1] of
         'x', 'X':
           result := mtXcomp;
