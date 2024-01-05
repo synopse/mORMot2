@@ -675,17 +675,17 @@ begin
         ERROR_INVALID_PARAMETER, ERROR_BAD_PATHNAME, ERROR_BAD_NETPATH,
         ERROR_BAD_NET_NAME]) then
     exit;
-  // access denied, or locked file: fallback to slower but accurate API
+  // access denied, or locked file: fallback to slower but regular API
   h := FindFirstFileExW(fn, FindExInfoStandard, @fd, FindExSearchNameMatch);
   if not ValidHandle(h) then
     exit;
   windows.FindClose(h);
   Attr.dwFileAttributes := fd.dwFileAttributes;
-  Attr.ftCreationTime := fd.ftCreationTime;
+  Attr.ftCreationTime   := fd.ftCreationTime;
   Attr.ftLastAccessTime := fd.ftLastAccessTime;
-  Attr.ftLastWriteTime := fd.ftLastWriteTime;
-  Attr.nFileSizeHigh := fd.nFileSizeHigh;
-  Attr.nFileSizeLow := fd.nFileSizeLow;
+  Attr.ftLastWriteTime  := fd.ftLastWriteTime;
+  Attr.nFileSizeHigh    := fd.nFileSizeHigh;
+  Attr.nFileSizeLow     := fd.nFileSizeLow;
   result := true;
 end;
 

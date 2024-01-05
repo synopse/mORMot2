@@ -1163,6 +1163,15 @@ begin
     result := st.st_size;
 end;
 
+function FileExists(const FileName: TFileName): boolean;
+var
+  st: TStat;
+begin
+  result := (FileName <> '') and
+            (fpStat(pointer(FileName), st) = 0) and
+            not FpS_ISDIR(st.st_mode);
+end;
+
 procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
 begin
   time := QWord(st.st_mtime) * MilliSecsPerSec + // no local conversion needed
