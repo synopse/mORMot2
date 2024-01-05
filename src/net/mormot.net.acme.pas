@@ -296,14 +296,14 @@ type
     destructor Destroy; override;
     /// read the certificates from the local storage folder
     procedure LoadFromKeyStoreFolder;
-    /// validate the stored certificates
+    /// validate the stored certificates in a background TLoggedWorkThread
+    procedure CheckCertificatesBackground;
+    /// run by CheckCertificatesBackground to validate the stored certificates
     // - load each one, check their expiration date against RenewBeforeEndDays,
     // and generate or renew them in order
     // - follow RenewWaitForSeconds timeout for each certificate
     // - this blocking process could take some time (several seconds per domain)
     procedure CheckCertificates(Sender: TObject);
-    /// validate the stored certificates in a background thread
-    procedure CheckCertificatesBackground;
     /// TOnNetTlsAcceptServerName event, set to OnNetTlsAcceptServerName
     // global variable of mormot.net.sock
     function OnNetTlsAcceptServerName(Context: PNetTlsContext; TLS: pointer;
@@ -347,11 +347,10 @@ type
   // background, following RenewBeforeEndDays property policy
   TAcmeLetsEncryptServer = class(TAcmeLetsEncrypt)
   protected
-    // a single threaded HTTP server is enough
-    fHttpServer: THttpServer;
+    fHttpServer: THttpServer; // a single threaded HTTP server is enough
     fNextCheckTix: Int64;
     fRedirectHttps: integer;
-    function OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
+    function OnHeaderParsed(ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult;
     procedure OnAcceptIdle(Sender: TObject);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
@@ -949,7 +948,7 @@ function TAcmeLetsEncryptClient.GetServerContext: PSSL_CTX;
 begin
   // client made fSafe.Lock
   result := fCtx;
-  if (result <> nil) or // most of time, quick return from cache
+  if (result <> nil) or // most of time, immediate return from cache
      not FileExists(fSignedCert) or
      not FileExists(fPrivKey) then
     exit;
@@ -977,6 +976,8 @@ begin
   inherited Create;
   fLog := aLog;
   if aAlgo = '' then
+    // Let’s Encrypt accepts RSA keys that are 2048, 3072, or 4096 bits in length
+    // and P-256 or P-384 ECDSA keys - we favor the later for their shortness
     fAlgo := 'x509-es256'
   else
     fAlgo := aAlgo;
@@ -1113,7 +1114,7 @@ begin
         if res = asValid then
           ctx.Free // replace with the new certificate: dispose of the old one
         else
-          c.fCtx := ctx; // restore the old certificate (which may work)
+          c.fCtx := ctx; // restore the old certificate (which still works)
         c.Safe.UnLock; // no need to restart the server :)
       end;
       log.Log(sllTrace, 'CheckCertificates: % = %',
@@ -1214,14 +1215,18 @@ constructor TAcmeLetsEncryptServer.Create(aLog: TSynLogClass;
   const aPrivateKeyPassword: SpiUtf8; aHttpServerThreadCount: integer;
   const aPort: RawUtf8);
 begin
+  // start a basic HTTP server on port 80
   fHttpServer := THttpServer.Create(aPort, nil, nil, 'Acme Server',
-    aHttpServerThreadCount);
+    aHttpServerThreadCount, 30000, [hsoBan40xIP]);
+  // setup the ACME configuration
   inherited Create(aLog, aKeyStoreFolder, aDirectoryUrl, aAlgo,
     aPrivateKeyPassword);
+  // handle requests on port 80 as redirection or ACME challenges
   fHttpServer.OnHeaderParsed := OnHeaderParsed;
-  fHttpServer.OnAcceptIdle := OnAcceptIdle;
-  // we don't set fHeaderRetrieveAbortDelay because we only parse the headers
-  OnAcceptIdle(self); // try to renew (if needed) now in the background
+  // ban an IP for 4 seconds on any DoS attack
+  fHttpServer.HeaderRetrieveAbortDelay := 200; // allow 200ms to send headers
+  // setup certificate renewal in a background TLoggedWorkThread
+  fHttpServer.OnAcceptIdle := OnAcceptIdle; // try now, then every half a day
 end;
 
 destructor TAcmeLetsEncryptServer.Destroy;
@@ -1251,7 +1256,8 @@ begin
     end;
 end;
 
-function TAcmeLetsEncryptServer.OnHeaderParsed(ClientSock: THttpServerSocket): boolean;
+function TAcmeLetsEncryptServer.OnHeaderParsed(
+  ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult;
 var
   client: TAcmeLetsEncryptClient;
 begin
@@ -1304,7 +1310,9 @@ begin
     'Content-Length: ', length(ClientSock.Http.CommandResp), #13#10 +
     'Connection: Close'#13#10]);
   ClientSock.SockSendFlush(ClientSock.Http.CommandResp);
-  result := true; // no regular OnRequest() event, closing the connection
+  // no regular OnRequest() event, just closing the connection
+  result := grIntercepted;
+  // HeaderRetrieveAbortDelay would trigger grTimeOut to ban the IP
 end;
 
 procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject);
@@ -1321,7 +1329,6 @@ begin
   fNextCheckTix := tix + (MSecsPerDay shr 1); // retry every half a day
   CheckCertificatesBackground;
 end;
-
 
 {$else}
 
