@@ -189,7 +189,8 @@ type
     // or OutPrivateKey are not set
     function RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
       const OutSignedCert, OutPrivateKey: TFileName;
-      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
+      const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+      Terminated: PBoolean): TAcmeStatus;
     /// will run StartDomainRegistration and wait until it is completed
     // - ChallengeWwwFolder is a local folder where to store the temporary
     // challenges, to be served by an external web server, e.g. nginx - the
@@ -279,8 +280,9 @@ type
     fLog: TSynLogClass;
     fRenewBeforeEndDays: integer;
     fRenewWaitForSeconds: integer;
-    fOnChallenge: TOnAcmeChallenge;
+    fRenewTerminated: boolean;
     fRenewing: boolean;
+    fOnChallenge: TOnAcmeChallenge;
     function GetClient(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
     function GetClientLocked(const ServerName: RawUtf8): TAcmeLetsEncryptClient;
   public
@@ -321,7 +323,7 @@ type
       read fKeyStoreFolder;
     /// how many days before expiration CheckCertificates() should renew a
     // certificate
-    // - default is 30 days
+    // - default is 30 days, as stated by https://letsencrypt.org/docs/faq
     // - set to <= 0 to disable the whole CheckCertificates() process
     property RenewBeforeEndDays: integer
       read fRenewBeforeEndDays write fRenewBeforeEndDays;
@@ -835,7 +837,8 @@ end;
 
 function TAcmeClient.RegisterAndWait(const OnChallenge: TOnAcmeChallenge;
   const OutSignedCert, OutPrivateKey: TFileName;
-  const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
+  const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer;
+  Terminated: PBoolean): TAcmeStatus;
 var
   endtix: Int64;
   cert, pk: RawUtf8;
@@ -846,7 +849,11 @@ begin
   StartDomainRegistration;
   endtix := GetTickCount64 + WaitForSec * 1000;
   repeat
-    sleep(1000);
+    result := asInvalid;
+    if Terminated = nil then
+      sleep(1000)
+    else if SleepHiRes(1000, Terminated^) then
+      exit;
     result := CheckChallengesStatus;
     if result <> asPending then
       break;
@@ -873,16 +880,16 @@ function TAcmeClient.RegisterAndWaitFolder(
 begin
   if fChallengeWwwFolder <> '' then
     raise EAcmeClient.CreateUtf8(
-      '%.RegisterAndWait: already called as %', [self, fChallengeWwwFolder]);
+      '%.RegisterAndWaitFolder: already called as %', [self, fChallengeWwwFolder]);
   if not DirectoryExists(ChallengeWwwFolder) then
     raise EAcmeClient.CreateUtf8(
-      '%.RegisterAndWait: unknown %', [self, ChallengeWwwFolder]);
+      '%.RegisterAndWaitFolder: unknown %', [self, ChallengeWwwFolder]);
   fChallengeWwwFolder := EnsureDirectoryExists(
     FormatString('%.well-known%acme-challenge',
-    [IncludeTrailingPathDelimiter(ChallengeWwwFolder), PathDelim]), true);
+      [IncludeTrailingPathDelimiter(ChallengeWwwFolder), PathDelim]), true);
   try
     result := RegisterAndWait(OnChallengeWwwFolder,
-      OutSignedCert, OutPrivateKey, aPrivateKeyPassword, WaitForSec);
+      OutSignedCert, OutPrivateKey, aPrivateKeyPassword, WaitForSec, nil);
   finally
     fChallengeWwwFolder := '';
   end;
@@ -992,7 +999,18 @@ begin
 end;
 
 destructor TAcmeLetsEncrypt.Destroy;
+var
+  endtix: Int64;
 begin
+  fRenewTerminated := true; // set flag to abort any background task
+  if fRenewing then
+  begin
+    endtix := GetTickCount64 + 1000; // wait for background task to abort
+    repeat
+      sleep(10);
+    until (GetTickCount64 > endtix) or
+          not fRenewing;
+  end;
   FillZero(fPrivateKeyPassword);
   ObjArrayClear(fClient);
   inherited Destroy;
@@ -1079,6 +1097,8 @@ begin
   try
     for i := 0 to length(needed) - 1 do
     begin
+      if fRenewTerminated then
+        exit;
       c := GetClientLocked(needed[i]); // lookup by subject
       if c = nil then
         continue; // paranoid
@@ -1090,8 +1110,10 @@ begin
       c.fRenewing := true;
       c.Safe.UnLock; // allow e.g. OnNetTlsAcceptChallenge() lookup
       try
-        res := c.RegisterAndWait(nil,
-          c.fSignedCert, c.fPrivKey, fPrivateKeyPassword, fRenewWaitForSeconds);
+        res := c.RegisterAndWait(nil, c.fSignedCert, c.fPrivKey,
+          fPrivateKeyPassword, fRenewWaitForSeconds, @fRenewTerminated);
+        if fRenewTerminated then
+          exit;
         if res = asValid then
           c.ClearCtx;
       except
@@ -1101,20 +1123,20 @@ begin
       if res = asValid then
       begin
         // validate and pre-load this new certificate
-        ctx := nil; // make Delphi compiler happy
+        ctx := nil;  // make Delphi compiler happy
         c.Safe.Lock; // as expected by c.GetServerContext
         try
-          ctx := c.fCtx;
-          c.fCtx := nil;
+          ctx := c.fCtx; // old context backup
+          c.fCtx := nil; // force re-creation
           if c.GetServerContext = nil then
             res := asInvalid;
         except
           res := asInvalid;
         end;
         if res = asValid then
-          ctx.Free // replace with the new certificate: dispose of the old one
+          ctx.Free // replaced with the new certificate: dispose the old one
         else
-          c.fCtx := ctx; // restore the old certificate (which still works)
+          c.fCtx := ctx; // restore the old context (which still works)
         c.Safe.UnLock; // no need to restart the server :)
       end;
       log.Log(sllTrace, 'CheckCertificates: % = %',
@@ -1231,6 +1253,7 @@ end;
 
 destructor TAcmeLetsEncryptServer.Destroy;
 begin
+  fRenewTerminated := true; // abort any background task ASAP
   fHttpServer.Free;
   inherited Destroy;
 end;
@@ -1320,6 +1343,7 @@ var
   tix: Int64;
 begin
   if fRenewing or
+     fRenewTerminated or
      (fClient = nil) or
      (fRenewBeforeEndDays <= 0) then
     exit;
