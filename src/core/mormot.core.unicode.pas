@@ -5421,13 +5421,13 @@ begin
     {$ifndef CPUX86NOTPIC}
     table := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
-    repeat
+    while true do
       if up^ = #0 then
-        break;
-      if table[up[PtrUInt(p)]] <> up^ then
-        exit;
-      inc(up);
-    until false;
+        break
+      else if table[up[PtrUInt(p)]] <> up^ then
+        exit
+      else
+        inc(up);
   end;
   result := true;
 end;
@@ -5440,13 +5440,13 @@ begin
   if up <> nil then
   begin
     dec(PtrUInt(p), PtrUInt(up));
-    repeat
+    while true do
       if up^ = #0 then
-        break;
-      if table[up[PtrUInt(p)]] <> up^ then
-        exit;
-      inc(up);
-    until false;
+        break
+      else if table[up[PtrUInt(p)]] <> up^ then
+        exit
+      else
+        inc(up);
   end;
   result := true;
 end;
@@ -5463,13 +5463,13 @@ begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
-  repeat
+  while true do
     if up^ = #0 then
-      break;
-    if table[up[PtrUInt(p)]] <> up^ then
-      exit;
-    inc(up);
-  until false;
+      break
+    else if table[up[PtrUInt(p)]] <> up^ then
+      exit
+    else
+      inc(up);
   result := true;
 end;
 
@@ -5485,13 +5485,13 @@ begin
   // in this local IdemPChar() version, p and up are expected to be <> nil
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
-  repeat
+  while true do
     if up^ = #0 then
-      break;
-    if table[PtrInt(up[PtrUInt(p)])] <> PByte(up)^ then
-      exit;
-    inc(up);
-  until false;
+      break
+    else if table[PtrInt(up[PtrUInt(p)])] <> PByte(up)^ then
+      exit
+    else
+      inc(up);
   result := true;
 end;
 
