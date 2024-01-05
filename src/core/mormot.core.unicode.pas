@@ -5636,8 +5636,9 @@ function StartWith(const text, upTextStart: RawUtf8): boolean;
 begin
   result := (PtrUInt(text) <> 0) and
             (PtrUInt(upTextStart) <> 0) and
-            (PStrLen(PtrUInt(text) - _STRLEN)^ >= PStrLen(PtrUInt(upTextStart) - _STRLEN)^) and
-            IdemPCharAnsi(@NormToUpperAnsi7, pointer(text), pointer(upTextStart));
+            (PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ >=
+              PStrLen(PAnsiChar(pointer(upTextStart)) - _STRLEN)^) and
+            IdemPChar(pointer(text), pointer(upTextStart));
 end;
 
 function EndWith(const text, upTextEnd: RawUtf8): boolean;
@@ -5646,9 +5647,7 @@ var
 begin
   o := length(text) - length(upTextEnd);
   result := (o >= 0) and
-            (text <> '') and
-            IdemPCharAnsi(@NormToUpperAnsi7,
-              PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
+            IdemPChar(PUtf8Char(pointer(text)) + o, pointer(upTextEnd));
 end;
 
 function EndWithArray(const text: RawUtf8; const upArray: array of RawUtf8): integer;
