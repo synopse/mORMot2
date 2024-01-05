@@ -4888,10 +4888,15 @@ begin
   Check(IdemPCharArrayBy2(pointer(res), 'ONTWTH') = 0);
   Check(IdemPCharArrayBy2(pointer(res), 'TWONTW') = 1);
   Check(IdemPCharArrayBy2(pointer(res), 'TWTHON') = 2);
+  Check(StartWith('three', 'THREE'));
+  for i := 1 to length(res) do
+    Check(StartWith(res, UpperCase(copy(res, 1, i))));
   Check(EndWith('three', 'THREE'));
   Check(EndWith(res, 'E'));
   Check(EndWith(res, 'THREE'));
   Check(EndWith(res, ',THREE'));
+  for i := 1 to length(res) do
+    Check(EndWith(res, UpperCase(copy(res, i, 100))));
   Check(not EndWith(res, ',THREe'));
   Check(not EndWith(res, res));
   Check(not EndWith('t', ',THREe'));
