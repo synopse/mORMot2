@@ -877,11 +877,9 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   if (FileName <> '') and
-     GetFileAttributesInternal(FileName, FA) then
-  begin
-    PInt64Rec(@result)^.Lo := FA.nFileSizeLow;
-    PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
-  end
+     GetFileAttributesInternal(FileName, FA) and
+     (FA.dwFileAttributes and faDirectory = 0) then
+    result := Qword(FA.nFileSizeHigh) shl 32 + FA.nFileSizeLow
   else
     result := 0;
 end;

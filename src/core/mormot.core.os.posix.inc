@@ -1157,7 +1157,8 @@ var
   st: TStat;
 begin
   if (FileName = '') or
-     (fpStat(pointer(FileName), st) <> 0) then
+     (fpStat(pointer(FileName), st) <> 0) or
+     FpS_ISDIR(st.st_mode) then
     result := 0
   else
     result := st.st_size;

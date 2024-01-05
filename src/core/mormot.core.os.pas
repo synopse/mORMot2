@@ -3125,7 +3125,7 @@ procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 procedure FileSetSticky(const FileName: TFileName);
 
 /// get a file size, from its name
-// - returns 0 if file doesn't exist
+// - returns 0 if file doesn't exist, or is a directory
 // - under Windows, will use GetFileAttributesEx fast API
 // - on POSIX, will use efficient fpStat() single call but not FileOpen/FileClose
 function FileSize(const FileName: TFileName): Int64; overload;
