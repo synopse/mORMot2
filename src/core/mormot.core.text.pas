@@ -3295,6 +3295,7 @@ function CsvToInt64DynArray(Csv: PUtf8Char; Sep: AnsiChar): TInt64DynArray;
 var
   n: integer;
 begin
+  result := nil;
   n := 0;
   while (Csv <> nil) and
         (Csv^ <> #0) do
