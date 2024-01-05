@@ -2218,7 +2218,7 @@ type
     function Handle: pointer;
     /// access to the low-level implementation handle of the stored private key
     // - e.g. a PEVP_PKEY for OpenSsl, a PEccPrivateKey for mormot.crypt.ecc,
-    // or a TXPrivateKey class for mormot.crypt.x509
+    // or a ICryptPrivateKey weak instance for mormot.crypt.x509
     // - equals nil if there is no associated private key
     function PrivateKeyHandle: pointer;
     /// return the public BigInt values associated to the stored private key
@@ -3247,7 +3247,7 @@ function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 /// cipher any private key buffer into safe binary
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
 // - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyEncrypt()
-// or TXPrivateKey.Save and TCryptCertX509.Save
+// or TCryptPrivateKey.Save and TCryptCertX509.Save
 function PrivateKeyEncrypt(const Input, Salt: RawByteString;
   const PrivatePassword: SpiUtf8; AfSplitRounds: integer = 31;
   Pbkdf2Rounds: integer = 1000): RawByteString;
@@ -3255,7 +3255,7 @@ function PrivateKeyEncrypt(const Input, Salt: RawByteString;
 /// uncipher some binary into a raw private key buffer
 // - encryption uses safe PBKDF2 HMAC-SHA256 AES-CTR-128 and AF-32 algorithms
 // - as used by pemSynopseEccEncryptedPrivateKey format and EccPrivateKeyDecrypt()
-// or TXPrivateKey.Load and TCryptCertX509.Load
+// or TCryptPrivateKey.Load and TCryptCertX509.Load
 function PrivateKeyDecrypt(const Input, Salt: RawByteString;
   const PrivatePassword: SpiUtf8; AfSplitRounds: integer = 31;
   Pbkdf2Rounds: integer = 1000): RawByteString;

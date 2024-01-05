@@ -5541,7 +5541,7 @@ type
       const Cipher: RawUtf8): RawByteString; override;
     function SharedSecret(const pub: ICryptCert): RawByteString; override;
     function Handle: pointer; override;
-    function PrivateKeyHandle: pointer; override;
+    function PrivateKeyHandle: pointer; override; // nil or a PEccPrivateKey
     /// low-level access to internal TEccCertificate or TEccCertificateSecret
     property Ecc: TEccCertificate
       read fEcc;

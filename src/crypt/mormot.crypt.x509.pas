@@ -1184,7 +1184,7 @@ type
     function Decrypt(const Message: RawByteString;
       const Cipher: RawUtf8): RawByteString; override;
     function SharedSecret(const pub: ICryptCert): RawByteString; override;
-    function PrivateKeyHandle: pointer; override;
+    function PrivateKeyHandle: pointer; override; // a ICryptPrivateKey weak ref
     property X509: TX509
       read fX509;
   end;
