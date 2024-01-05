@@ -9201,6 +9201,13 @@ end;
 
 { TPosixFileCaseInsensitive }
 
+constructor TPosixFileCaseInsensitive.Create(
+  const aFolder: TFileName; aSubFolders: boolean);
+begin
+  fFolder := aFolder;
+  fSubFolders := aSubFolders;
+end;
+
 procedure TPosixFileCaseInsensitive.SetFolder(const aFolder: TFileName);
 begin
   if self = nil then
@@ -9222,13 +9229,6 @@ begin
     exit;
   fSubFolders := aSubFolders;
   Flush;
-end;
-
-constructor TPosixFileCaseInsensitive.Create(
-  const aFolder: TFileName; aSubFolders: boolean);
-begin
-  fFolder := aFolder;
-  fSubFolders := aSubFolders;
 end;
 
 procedure TPosixFileCaseInsensitive.OnIdle(tix64: Int64);

@@ -761,6 +761,7 @@ type
   // if any exception occurred during the process
   // - grOversizedPayload is returned when MaximumAllowedContentLength is reached
   // - grRejected is returned when OnBeforeBody returned not 200
+  // - grIntercepted is returned e.g. from OnHeaderParsed as valid result
   // - grTimeout is returned when HeaderRetrieveAbortDelay is reached
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
   // - grBodyReceived is returned for GetRequest({withbody=}true)
@@ -772,6 +773,7 @@ type
     grException,
     grOversizedPayload,
     grRejected,
+    grIntercepted,
     grTimeout,
     grHeaderReceived,
     grBodyReceived,
@@ -1115,6 +1117,9 @@ type
     /// how many HTTP requests were rejected by the OnBeforeBody event handler
     property StatRejected: integer
       index grRejected read GetStat;
+    /// how many HTTP requests were intercepted by the OnHeaderParser event handler
+    property StatIntercepted: integer
+      index grIntercepted read GetStat;
     /// how many HTTP requests were rejected after HeaderRetrieveAbortDelay timeout
     property StatHeaderTimeout: integer
       index grTimeout read GetStat;
@@ -1143,10 +1148,12 @@ type
   /// called from THttpServerSocket.GetRequest before OnBeforeBody
   // - this THttpServer-specific callback allow quick and dirty action on the
   // raw socket, to bypass the whole THttpServer.Process high-level action
-  // - should return true if the action has been handled, and response has
-  // been sent directly via ClientSock.SockSend/SockSendFlush (as HTTP/1.0)
-  // - should return false to continue as usual with THttpServer.Process
-  TOnHttpServerHeaderParsed = function(ClientSock: THttpServerSocket): boolean of object;
+  // - should return grRejected/grIntercepted if the action has been handled as
+  // error or success, and response has been sent directly via
+  // ClientSock.SockSend/SockSendFlush (as HTTP/1.0) by this handler
+  // - should return grHeaderReceived to continue as usual with THttpServer.Process
+  TOnHttpServerHeaderParsed = function(
+    ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult of object;
 
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
@@ -4086,7 +4093,7 @@ begin
          (fBanned.Count <> 0) then
       begin
         tix := GetTickCount64 div 1000; // call DoRotate exactly every second
-        {$ifdef OSPOSIX} // Windows would required some activity - not an issue
+        {$ifdef OSPOSIX} // Windows would require some activity - not an issue
         if bantix = 0 then
           fSock.ReceiveTimeout := 1000 // accept() to exit after one second
         else
@@ -4113,7 +4120,7 @@ begin
         // ServerThreadPoolCount < 0 would use a single thread to rule them all
         // - may be defined when the server is expected to have very low usage,
         // e.g. for port 80 to 443 redirection or to implement Let's Encrypt
-        // HTTP-01 challenges (also on port 80) using OnHeaderParsed callback
+        // HTTP-01 challenges (on port 80) using OnHeaderParsed callback
         try
           cltservsock := fSocketClass.Create(self);
           try
@@ -4127,6 +4134,8 @@ begin
                   include(cltservsock.Http.HeaderFlags, hfConnectionClose);
                   Process(cltservsock, 0, self);
                 end;
+              grIntercepted:
+                ; // no ban
             else
               if fBanned.BanIP(cltaddr.IP4) then
                 IncStat(grBanned);
@@ -4285,7 +4294,7 @@ begin
             // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
             // -> process in dedicated background thread
             fServer.fThreadRespClass.Create(self, fServer);
-            result := false; // THttpServerResp will own and free srvsock
+            result := false; // freeme=false: THttpServerResp will own self
           end
           else
           begin
@@ -4301,8 +4310,9 @@ begin
             fServer.OnDisconnect;
             // no Shutdown here: will be done client-side
           end;
-          break;
         end;
+      grIntercepted:
+        ; // response was sent by OnHeaderParsed()
       grWwwAuthenticate:
         // return 401 and wait for the "Authorize:" answer in the thread pool
         aHeaderResult := GetRequest(false, fServer.HeaderRetrieveAbortTix);
@@ -4313,10 +4323,9 @@ begin
               [ToText(aHeaderResult)^, fRemoteIP], self);
         if fServer.fBanned.BanIP(fRemoteIP) then
           fServer.IncStat(grBanned);
-        break;
       end;
     end;
-  until false;
+  until aHeaderResult <> grWwwAuthenticate; // continue handshake in this thread
 end;
 
 constructor THttpServerSocket.Create(aServer: THttpServer);
@@ -4394,11 +4403,11 @@ begin
     if fServer <> nil then
     begin
       // allow THttpServer.OnHeaderParsed low-level callback
-      if Assigned(fServer.fOnHeaderParsed) and
-         fServer.fOnHeaderParsed(self) then
+      if Assigned(fServer.fOnHeaderParsed) then
       begin
-        result := grRejected; // the callback made its own SockSend() response
-        exit;
+        result := fServer.fOnHeaderParsed(self);
+        if result <> grHeaderReceived then
+          exit; // the callback made its own SockSend() response
       end;
       // validate allowed PayLoad size
       if (Http.ContentLength > 0) and
