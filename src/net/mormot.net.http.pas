@@ -828,6 +828,434 @@ type
       read fCount;
   end;
 
+type
+  /// most used tuning options for a modern and safe HTTP/HTTPS Server
+  // - over the years, a lot of expectations where added to the basic behavior
+  // of a HTTP server, e.g. for better security or interoperability: we define
+  // a set of well-known behaviors
+  // - flags used e.g. by our TWebServer, or the mORMot 2 Boilerplate project
+  TWebServerBehavior = (
+
+    /// Allow cross-origin requests.
+    // - see https://enable-cors.org https://www.w3.org/TR/cors
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
+    // - Warning: Do not use this without understanding the consequences.
+    // This will permit access from any other website.
+    // Instead of using this file, consider using a specific rule such as
+    // allowing access based on (sub)domain: "subdomain.example.com"
+    wsbAllowCrossOrigin,
+
+    /// Send the CORS header for images when browsers request it
+    // - see
+    // https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image
+    // https://blog.chromium.org/2011/07/using-cross-domain-images-in-webgl-and.html
+    // - use TWebServer.FileTypesImage to specify the actual file types
+    wsbAllowCrossOriginImages,
+
+    /// Allow cross-origin access to web fonts
+    // - see https://developers.google.com/fonts/docs/troubleshooting
+    // - use TWebServer.FileTypesFont to specify file types
+    wsbAllowCrossOriginFonts,
+
+    /// Allow cross-origin access to the timing information for all resources
+    // - If a resource isn't served with a 'Timing-Allow-Origin' header that would
+    // allow its timing information to be shared with the document, some of the
+    // attributes of the 'PerformanceResourceTiming' object will be set to zero.
+    // - see https://www.w3.org/TR/resource-timing/
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Timing-Allow-Origin
+    // https://www.stevesouders.com/blog/2014/08/21/resource-timing-practical-tips/
+    wsbAllowCrossOriginTiming,
+
+    /// Set content for HTTP 400 "Bad Request" response code equals to '/404'
+    wsbDelegateBadRequestTo404,
+
+    /// Set content for HTTP 401 "Unauthorized" response code equals to '/404'
+    wsbDelegateUnauthorizedTo404,
+
+    /// Set content for HTTP 403 "Forbidden" response code equals to '/404'
+    wsbDelegateForbiddenTo404,
+
+    /// Set content for HTTP 404 "Not Found" response code equals to '/404'
+    wsbDelegateNotFoundTo404,
+
+    /// Set content for HTTP 405 "Not Allowed" response code equals to '/404'
+    wsbDelegateNotAllowedTo404,
+
+    /// Set content for HTTP 406 "Not Acceptable" response code equals to '/404'
+    wsbDelegateNotAcceptableTo404,
+
+    /// Set Internet Explorer XUA Document mode
+    // - Force Internet Explorer 8/9/10 to render pages in the highest mode
+    // available in various cases when it may not.
+    // - Warning: since Internet Explorer 11, document modes are deprecated.
+    // If your business still relies on older web apps and services that were
+    // designed for older versions of Internet Explorer, you might want to
+    // consider enabling 'Enterprise Mode' throughout your company.
+    // - see https://hsivonen.fi/doctype/#ie8
+    // https://msdn.microsoft.com/en-us/library/ie/bg182625.aspx#docmode
+    // https://blogs.msdn.microsoft.com/ie/2014/04/02/stay-up-to-date-with-enterprise-mode-for-internet-explorer-11/
+    // https://msdn.microsoft.com/en-us/library/ff955275.aspx
+    wsbSetXuaCompatible,
+
+    // Serve resources with the proper media types (f.k.a. MIME types)
+    // - use TWebServerBehavior.ForceMimeTypes to set the MIME types
+    // - see http://www.iana.org/assignments/media-types
+    // https://svn.apache.org/repos/asf/httpd/httpd/trunk/docs/conf/mime.types
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types
+    wsbForceMimeType,
+
+    // Serve all resources labeled as 'text/html' or 'text/plain'
+    // with the media type 'charset' parameter set to 'UTF-8'
+    wsbForceTextUtf8Charset,
+
+    /// Serve the specified file types with the media type 'charset' parameter
+    // set to 'UTF-8'
+    // - use TWebServer.FileTypesRequiredCharSet to setup file types
+    wsbForceUtf8Charset,
+
+    /// Redirect from 'http://' to the 'https://' version of the URL
+    wsbForceHttps,
+
+    /// Forcing 'https://' in the context of Let's Encrypt (ACME)
+    // - If you're using cPanel AutoSSL or the Let's Encrypt webroot method it
+    // will fail to validate the certificate if validation requests are
+    // redirected to HTTPS. Turn on the condition(s) you need.
+    // - see https://www.iana.org/assignments/well-known-uris/well-known-uris.xhtml
+    //  https://tools.ietf.org/html/draft-ietf-acme-acme-12
+    // $ /.well-known/acme-challenge/
+    // $ /.well-known/cpanel-dcv/[\w-]+$
+    // $ /.well-known/pki-validation/[A-F0-9]{32}\.txt(?:\ Comodo\ DCV)?$
+    // - The next simplified patterns are used:
+    // $ /.well-known/acme-challenge/*
+    // $ /.well-known/cpanel-dcv/*
+    // $ /.well-known/pki-validation/*
+    wsbForceHttpsExceptLetsEncrypt,
+
+    /// Protect website against clickjacking
+    // - The example below sends the 'X-Frame-Options' response header with the
+    // value 'DENY', informing browsers not to display the content of the web
+    // page in any frame.
+    // - This might not be the best setting for everyone. You should read about
+    // the other two possible values the 'X-Frame-Options' header field can
+    // have: 'SAMEORIGIN' and 'ALLOW-FROM'.
+    // https://tools.ietf.org/html/rfc7034#section-2.1.
+    // - Keep in mind that while you could send the 'X-Frame-Options' header for
+    // all of your website's pages, this has the potential downside that it
+    // forbids even non-malicious framing of your content (e.g.: when users
+    // visit your website using a Google Image Search results page).
+    // - Nonetheless, you should ensure that you send the 'X-Frame-Options' header
+    // for all pages that allow a user to make a state-changing operation
+    // (e.g: pages that contain one-click purchase links, checkout or
+    // bank-transfer confirmation pages, pages that make permanent configuration
+    // changes, etc.).
+    // - Sending the 'X-Frame-Options' header can also protect your website
+    // against more than just clickjacking attacks.
+    // - see https://cure53.de/xfo-clickjacking.pdf.
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
+    // https://tools.ietf.org/html/rfc7034
+    // https://blogs.msdn.microsoft.com/ieinternals/2010/03/30/combating-clickjacking-with-x-frame-options/
+    // https://www.owasp.org/index.php/Clickjacking
+    wsbSetXFrameOptions,
+
+    /// Block access to all hidden files and directories except for the
+    // visible content from within the '/.well-known/' hidden directory
+    // - These types of files usually contain user preferences or the preserved
+    // state of a utility, and can include rather private places like, for
+    // example, the '.git' or '.svn' directories.
+    // - The '/.well-known/' directory represents the standard (RFC 5785) path
+    // prefix for "well-known locations" (e.g.: '/.well-known/manifest.json',
+    // '/.well-known/keybase.txt'), and therefore, access to its visible content
+    // should not be blocked.
+    // - see https://www.mnot.net/blog/2010/04/07/well-known
+    // https://tools.ietf.org/html/rfc5785
+    wsbDelegateHidden,
+
+    /// Block access to files that can expose sensitive information
+    // - By default, block access to backup and source files that may be left by
+    // some text editors and can pose a security risk when anyone has access to
+    // them. see https://feross.org/cmsploit/
+    //  - Use TWebServer.FileTypesBlocked to specify file types
+    // that might end up on your production server and can expose sensitive
+    // information about your website. These files may include:
+    // configuration files, files that contain metadata about the project
+    // (e.g.: project dependencies, build scripts, etc.).
+    // - use TWebServer.FileTypesBlocked to specify file types
+    // - this option also blocks any URL paths ended with '~' or '#'
+    wsbDelegateBlocked,
+
+    /// Prevent some browsers from MIME-sniffing the response
+    // - This reduces exposure to drive-by download attacks and cross-origin data
+    // leaks, and should be left uncommented, especially if the server is
+    // serving user-uploaded content or content that could potentially be
+    // treated as executable by the browser.
+    // - see https://mimesniff.spec.whatwg.org/
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
+    // https://blogs.msdn.microsoft.com/ie/2008/07/02/ie8-security-part-v-comprehensive-protection/
+    wsbPreventMimeSniffing,
+
+    /// Protect website reflected Cross-Site Scripting (XSS) attacks
+    // - Try to re-enable the cross-site scripting (XSS) filter built into
+    // most web browsers.
+    // - The filter is usually enabled by default, but in some cases, it may
+    // be disabled by the user. However, in Internet Explorer, for example,
+    // it can be re-enabled just by sending the  'X-XSS-Protection' header
+    // with the value of '1'.
+    // - Prevent web browsers from rendering the web page if a potential
+    // reflected (a.k.a non-persistent) XSS attack is detected by the filter.
+    // - By default, if the filter is enabled and browsers detect a reflected
+    // XSS attack, they will attempt to block the attack by making the
+    // smallest possible modifications to the returned web page.
+    // - Unfortunately, in some browsers (e.g.: Internet Explorer), this
+    // default behavior may allow the XSS filter to be exploited. Therefore,
+    // it's better to inform browsers to prevent the rendering of the page
+    // altogether, instead of attempting to modify it.
+    // - warning: Do not rely on the XSS filter to prevent XSS attacks! Ensure that you
+    // are taking all possible measures to prevent XSS attacks, the most
+    // obvious being: validating and sanitizing your website's inputs.
+    // - see https://hackademix.net/2009/11/21/ies-xss-filter-creates-xss-vulnerabilities
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-XSS-Protection
+    // https://blogs.msdn.microsoft.com/ie/2008/07/02/ie8-security-part-iv-the-xss-filter/
+    // https://blogs.msdn.microsoft.com/ieinternals/2011/01/31/controlling-the-xss-filter/
+    // https://www.owasp.org/index.php/Cross-site_Scripting_%28XSS%29
+    // - use TWebServer.FileTypesAsset to exclude some file types
+    wsbEnableXssFilter,
+
+    /// Set a strict Referrer Policy to mitigate information leakage.
+    // - The 'Referrer-Policy' header is included in responses for resources
+    // that are able to request (or navigate to) other resources.
+    // - This includes the commonly used resource types:
+    // HTML, CSS, XML/SVG, PDF documents, scripts and workers.
+    // - To prevent referrer leakage entirely, specify the 'no-referrer' value
+    // instead. Note that the effect could impact analytics metrics negatively.
+    // - // To check your Referrer Policy, you can use an online service, such as:
+    // https://securityheaders.com/
+    // https://observatory.mozilla.org/
+    // https://scotthelme.co.uk/a-new-security-header-referrer-policy/
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy
+    // - use TWebServer.ReferrerPolicy and TWebServer.ReferrerPolicyContentTypes
+    // properties
+    wsbEnableReferrerPolicy,
+
+    /// Prevent the HTTP Server from responding to 'TRACE' HTTP requests
+    // - The TRACE method, while seemingly harmless, can be successfully leveraged
+    // in some scenarios to steal legitimate users' credentials.
+    // - Modern browsers now prevent TRACE requests being made via JavaScript,
+    // however, other ways of sending TRACE requests with browsers have been
+    // discovered, such as using Java.
+    // - see https://tools.ietf.org/html/rfc7231#section-4.3.8
+    // https://www.owasp.org/index.php/Cross_Site_Tracing
+    // https://www.owasp.org/index.php/Test_HTTP_Methods_(OTG-CONFIG-006)
+    // https://httpd.apache.org/docs/current/mod/core.html#traceenable
+    wsbDisableTraceMethod,
+
+    /// Remove the 'X-Powered-By' response header that:
+    // - is set by some frameworks and server-side languages (e.g.: ASP.NET, PHP),
+    // and its value contains information about them (e.g.: their name, version
+    // number)
+    // - doesn't provide any value to users, contributes to header bloat, and in
+    // some cases, the information it provides can expose vulnerabilities
+    // - If you can, you should disable the 'X-Powered-By' header from the
+    //     language/framework level (e.g.: for PHP, you can do that by setting
+    //     'expose_php = off' in 'php.ini').
+    // - see https://php.net/manual/en/ini.core.php#ini.expose-php
+    wsbDeleteXPoweredBy,
+
+    /// Force compression for mangled 'Accept-Encoding' request headers
+    // - see https://calendar.perfplanet.com/2010/pushing-beyond-gzipping
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+    // - use TWebServer.MangledEncodingHeaders and
+    // TWebServer.MangledEncodingHeaderValues properties
+    wsbFixMangledAcceptEncoding,
+
+    /// Map the specified filename extensions to the GZip encoding type
+    // - to let the HTTP Server serve the file types with the appropriate
+    // 'Content-Encoding' response header (do note that this will NOT make
+    // HTTP Server compress them!).
+    // - If these files types would be served without an appropriate
+    // 'Content-Encoding' response header, client applications (e.g.: browsers)
+    // wouldn't know that they first need to uncompress the response, and thus,
+    // wouldn't be able to understand the content.
+    // - see https://httpd.apache.org/docs/current/mod/mod_mime.html#addencoding
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
+    // - use TWebServer.FileTypesForceGZipHeader to setup file types
+    wsbForceGZipHeader,
+
+    /// Allow static assets to be cached by proxy servers
+    wsbSetCachePublic,
+
+    /// Allow static assets to be cached only by browser,
+    // but not by intermediate proxy servers
+    wsbSetCachePrivate,
+
+    /// disable Content transformation
+    // - Prevent intermediate caches or proxies (such as those used by mobile
+    // network providers) and browsers data-saving features from modifying
+    // the website's content using the 'cache-control: no-transform' directive.
+    // - see https://tools.ietf.org/html/rfc7234#section-5.2.2.4
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
+    // - warning: Carefully consider the impact on your visitors before disabling
+    // content transformation. These transformations are performed to
+    // improve the experience for data- and cost-constrained users
+    // (e.g. users on a 2G connection).
+    // - You can test the effects of content transformation applied by
+    // Google's Lite Mode by visiting:
+    // https://googleweblight.com/i?u=https://www.example.com
+    // https://support.google.com/webmasters/answer/6211428
+    // https://developers.google.com/speed/pagespeed/module/configuration#notransform
+    wsbSetCacheNoTransform,
+
+    /// Allow static assets to be validated with server before return cached copy
+    wsbSetCacheNoCache,
+
+    /// Allow static assets not to be cached
+    wsbSetCacheNoStore,
+
+    /// Allow static assets to be cached strictly following the server rules
+    wsbSetCacheMustRevalidate,
+
+    /// Add 'max-age' value based on content-type/expires mapping
+    // - i.e. serve resources with a far-future expiration date.
+    // - warning: If you don't control versioning with filename-based cache
+    // busting, you should consider lowering the cache times to something like
+    // one week.
+    // - see
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
+    // - use TWebServer.Expires options to control expirations
+    wsbSetCacheMaxAge,
+
+    /// Use ETag / If-None-Match caching
+    // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
+    // https://developer.yahoo.com/performance/rules.html#etags
+    // https://tools.ietf.org/html/rfc7232#section-2.3
+    wsbEnableCacheByETag,
+
+    /// Use Last-Modified/If-Modified-Since caching
+    // - see https://developer.yahoo.com/performance/rules.html#etags
+    // https://tools.ietf.org/html/rfc7232#section-2.3
+    wsbEnableCacheByLastModified,
+
+    /// Serve resources with a far-future expiration date
+    // - If you don't control versioning with filename-based cache busting, you
+    // should consider lowering the cache times to something like one week.
+    // - see https://httpd.apache.org/docs/current/mod/mod_expires.html
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
+    // - use TWebServer.Expires property
+    wsbSetExpires,
+
+    /// Enables filename-based cache busting
+    // - i.e. removes all query path of the URL '/style.css?v231' to '/style.css'
+    wsbEnableCacheBusting,
+
+    /// Filename-based cache busting
+    // - i.e. removes infix query path of the URL '/style.123456.css' to '/style.css'
+    // - if you're not using a build process to manage your filename version
+    // revving, you might want to consider enabling the following directives.
+    // - to understand why this is important and even a better solution than
+    // using something like '*.css?v231', please see:
+    // https://www.stevesouders.com/blog/2008/08/23/revving-filenames-dont-use-querystring/
+    wsbEnableCacheBustingBeforeExt,
+
+    /// Remove 'Server-InternalState' HTTP header
+    wsbDeleteServerInternalState,
+
+    // Delete content generation for '' and '/' URLs to '/index.html'
+    wsbDelegateRootToIndex,
+
+    /// Instead of index.html rendering the inherited "/Default" URL will be called
+    // - allows to inject custom IMVCApplication.Default() interface method
+    wsbDelegateIndexToInheritedDefault,
+
+    /// Instead of 404.html rendering the inherited "/404" URL will be called
+    // - allows to inject custom IMVCApplication._404() interface method
+    wsbDelegate404ToInherited_404,
+
+    /// Add 'Vary: Accept-Encoding' header for assets with GZip/Brotli encoding
+    wsbVaryAcceptEncoding
+  );
+
+  /// set of tuning options for a modern and safe HTTP/HTTPS Web Server
+  // - flags used e.g. by our TWebServer, or the mORMot 2 Boilerplate project
+  TWebServerBehaviors = set of TWebServerBehavior;
+
+  /// Suppressing or forcing the 'www.' host prefix at the beginning of URLs
+  // - The same content should never be available under two different URLs,
+  // especially not with and without 'www.' at the beginning.
+  // This can cause SEO problems (duplicate content), and therefore, you should
+  // choose one of the alternatives and redirect the other one.
+  // - The rule assumes by default that both HTTP and HTTPS environments are
+  // available for redirection. If your SSL certificate could not handle one
+  // of the domains used during redirection, you should turn the condition on.
+  // - wsrOff: won't suppress or force 'www.' at the beginning of URLs
+  // - wsrSuppress: suppress the 'www.' at the beginning of URLs,
+  // redirecting e.g. www.example.com into example.com
+  // - wsrForce: forces the 'www.' at the beginning of URLs,
+  // redirecting e.g. example.com into www.example.com
+  // - Be aware that wsrForce might not be a good idea if you use "real"
+  // subdomains for certain parts of your website
+  TWebServerRewrite = (
+    wsrOff,
+    wsrSuppress,
+    wsrForce);
+
+  /// how to implement HTTP Strict Transport Security (HSTS) redirection
+  // - If a user types 'example.com' in their browser, even if the server redirects
+  // them to the secure version of the website, that still leaves a window of
+  // opportunity (the initial HTTP connection) for an attacker to downgrade or
+  // redirect the request.
+  // - The HSTS header ensures that a browser only connects to your server
+  // via HTTPS, regardless of what the users type in the browser's address bar.
+  // - Be aware that Strict Transport Security is not revokable and you must
+  // ensure being able to serve the site over HTTPS for the duration you've
+  // specified in the 'max-age' directive. When you don't have a valid TLS
+  // connection anymore (e.g. due to an expired TLS certificate) your visitors
+  // will see a nasty error message even when attempting to connect over HTTP.
+  // - wshOff: do not provide any HSTS header
+  // - wshOn: add regular 'max-age=31536000' HSTS header value
+  // - wshIncludeSubDomains: add 'max-age=31536000; includeSubDomains' HSTS header
+  // - wshIncludeSubDomainsPreload: add
+  // 'max-age=31536000; includeSubDomains; preload' HSTS header
+  // - see https://tools.ietf.org/html/rfc6797#section-6.1
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
+  // https://www.html5rocks.com/en/tutorials/security/transport-layer-security/
+  // https://blogs.msdn.microsoft.com/ieinternals/2014/08/18/strict-transport-security/
+  // https://hstspreload.org/
+  TWebServerHsts = (
+    wshOff,
+    wshOn,
+    wshIncludeSubDomains,
+    wshIncludeSubDomainsPreload);
+
+  /// setup DNS Prefetch control
+  // - DNS prefetching is a feature by which browsers proactively perform
+  // domain name resolution on both links that the user may choose to follow
+  // as well as URLs for items referenced by the document, including images,
+  // CSS, JavaScript, and so forth.
+  // - This prefetching is performed in the background, so that the DNS is
+  // likely to have been resolved by the time the referenced items are needed.
+  // This reduces latency when the user clicks a link.
+  // - wsdPrefetchNone: do not add 'X-DNS-Prefetch-Control' header
+  // - wsdPrefetchOff: turn off DNS Prefetch
+  // - wsdPrefetchOn: turn on DNS Prefetch (default)
+  // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-DNS-Prefetch-Control
+  TWebServerDpc = (
+    wsdPrefetchNone,
+    wsdPrefetchOff,
+    wsdPrefetchOn);
+
+  /// the known encoding/compression schemes for a Web Server
+  // - THttpServerGeneric.RegisterCompress can support any kind of compression
+  // using a callback function; but we define here the most used encodings in
+  // current browsers, e.g. to be able to cache content or hashes at runtime
+  // - wseIdentity means no compression
+  // - wseGZip will use the well-known GZip encoding (using libdeflate if available)
+  // - wseBrotli is reserved for future use (e.g. mORMot 2 Boilerplate project)
+  TWebServerEncoding = (
+    wseIdentity,
+    wseGZip,
+    wseBrotli);
+
 
 
 implementation
