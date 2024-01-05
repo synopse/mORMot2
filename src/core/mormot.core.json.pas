@@ -4030,7 +4030,8 @@ begin
     until false;
   if P^ = ']' then
   begin
-    SetLength(Values, n);
+    if n <> 0 then
+      DynArrayFakeLength(Values{%H-}, n);
     result := true;
   end
   else
@@ -8651,7 +8652,8 @@ begin
           (info.EndOfObject = '}');
     P := info.Json;
   end;
-  DynArrayFakeLength(Values, n); // SetLength() would have made a realloc()
+  if n <> 0 then
+    DynArrayFakeLength(Values, n); // SetLength() would have made a realloc()
   if P = nil then // result=nil indicates failure -> points to #0
     result := @NULCHAR
   else
