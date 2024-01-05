@@ -1713,10 +1713,10 @@ const
 
 /// retrieve the MIME content type from its file name
 function GetMimeContentTypeFromExt(const FileName: TFileName;
-  FileExt: PRawUtf8 = nil): TMimeType; overload;
+  FileExt: PRawUtf8 = nil): TMimeType;
 
 /// retrieve the MIME content type from its file extension text (without '.')
-function GetMimeContentTypeFromExt(const Ext: RawUtf8): TMimeType; overload;
+function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 
 /// retrieve the MIME content type from a supplied binary buffer
 function GetMimeContentTypeFromMemory(Content: Pointer; Len: PtrInt): TMimeType;
@@ -8568,7 +8568,7 @@ const
     mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
     mtAvi,  mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
 
-function GetMimeContentTypeFromExt(const Ext: RawUtf8): TMimeType;
+function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
   i: PtrInt;
 begin
@@ -8594,7 +8594,7 @@ var
   ext: RawUtf8;
 begin
   StringToUtf8(ExtractExt(FileName, {withoutdot=}true), ext);
-  result := GetMimeContentTypeFromExt(ext);
+  result := GetMimeTypeFromExt(ext);
   if FileExt <> nil then
     FileExt^ := {%H-}ext;
 end;
@@ -8680,7 +8680,7 @@ begin
       case PCardinal(Content)^ and $00ffffff of // 24-bit magic
         $088b1f, // 'application/gzip' = 1F 8B 08
         $334449, // mp3 = 49 44 33 [ID3]
-w        $492049, // 'image/tiff' = 49 20 49
+        $492049, // 'image/tiff' = 49 20 49
         $535746, // swf = 46 57 53 [FWS]
         $535743, // swf = 43 57 53 [zlib]
         $53575a, // zws/swf = 5A 57 53 [FWS]

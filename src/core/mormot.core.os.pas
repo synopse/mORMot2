@@ -2408,6 +2408,10 @@ function FileSetTime(const FileName: TFileName;
 
 {$else}
 
+/// faster cross-platform alternative to sysutils homonymous function
+// - will directly use fpstat() so is slightly faster than default FPC RTL
+function FileExists(const FileName: TFileName): boolean;
+
 /// returns how many files could be opened at once on this POSIX system
 // - hard=true is for the maximum allowed limit, false for the current process
 // - returns -1 if the getrlimit() API call failed
