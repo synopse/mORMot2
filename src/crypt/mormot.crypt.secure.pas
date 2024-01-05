@@ -1700,7 +1700,7 @@ type
     /// verify the RSA or ECC signature of a memory buffer
     function Verify(Algorithm: TCryptAsymAlgo;
       const Data, Sig: RawByteString): boolean; overload;
-    /// as used by TCryptCert.GetKeyParams
+    /// return raw key information as used by TCryptCert.GetKeyParams
     // - for ECC, returns the x,y coordinates
     // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
     // - return false if there is no compliant key information in the provider
@@ -7524,6 +7524,7 @@ var
   bx, by: RawUtf8;
   caa: TCryptAsymAlgo;
 begin
+  // retrieve raw public key parameters
   result := '';
   if not GetKeyParams(x, y) then
     exit;
@@ -7532,9 +7533,11 @@ begin
   // parameters are ordered lexicographically, as expected for thumbprints
   caa := AsymAlgo;
   if caa in CAA_ECC then
+    // for ECC, GetKeyParams() returned the x,y coordinates
     FormatUtf8('{"crv":"%","kty":"EC","x":"%","y":"%"}',
                   [CAA_CRV[caa], bx, by], result)
   else
+    // for RSA, x was set to the Exponent (e), and y to the Modulus (n)
     FormatUtf8('{"e":"%","kty":"RSA","n":"%"}', [bx, by], result);
 end;
 

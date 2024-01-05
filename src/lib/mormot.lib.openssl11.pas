@@ -7757,8 +7757,7 @@ end;
 
 procedure EVP_PKEY.RsaGetPubKey(out e, n: RawByteString);
 var
-  n_num: PBIGNUM;
-  e_num: PBIGNUM;
+  n_num, e_num: PBIGNUM;
 begin
   if @self = nil then
     exit;

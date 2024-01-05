@@ -4560,7 +4560,7 @@ procedure SleepHiRes(ms: cardinal); overload;
 
 /// similar to Windows sleep() API call, but truly cross-platform and checking
 // the Terminated flag during its wait for quick abort response
-// - returns true if terminated^ was set to true
+// - returns true if terminated^ was set to true (terminatedvalue)
 function SleepHiRes(ms: cardinal; var terminated: boolean;
   terminatedvalue: boolean = true): boolean; overload;
 
