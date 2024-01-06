@@ -833,7 +833,7 @@ type
   // - over the years, a lot of expectations where added to the basic behavior
   // of a HTTP server, e.g. for better security or interoperability: we define
   // a set of well-known behaviors
-  // - flags used e.g. by our TWebServer, or the mORMot 2 Boilerplate project
+  // - flags used e.g. by TWebServerLocal, or mORMot 2 Boilerplate project
   TWebServerBehavior = (
 
     /// Allow cross-origin requests.
@@ -849,12 +849,12 @@ type
     // - see
     // https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image
     // https://blog.chromium.org/2011/07/using-cross-domain-images-in-webgl-and.html
-    // - use TWebServer.FileTypesImage to specify the actual file types
+    // - use TWebServerLocal.FileTypesImage to specify the actual file types
     wsbAllowCrossOriginImages,
 
     /// Allow cross-origin access to web fonts
     // - see https://developers.google.com/fonts/docs/troubleshooting
-    // - use TWebServer.FileTypesFont to specify file types
+    // - use TWebServerLocal.FileTypesFont to specify file types
     wsbAllowCrossOriginFonts,
 
     /// Allow cross-origin access to the timing information for all resources
@@ -898,7 +898,7 @@ type
     wsbSetXuaCompatible,
 
     // Serve resources with the proper media types (f.k.a. MIME types)
-    // - use TWebServerBehavior.ForceMimeTypes to set the MIME types
+    // - use TWebServerGlobal.ForceMimeTypes/ForceMimeTypesExt to set the MIME types
     // - see http://www.iana.org/assignments/media-types
     // https://svn.apache.org/repos/asf/httpd/httpd/trunk/docs/conf/mime.types
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types
@@ -910,7 +910,7 @@ type
 
     /// Serve the specified file types with the media type 'charset' parameter
     // set to 'UTF-8'
-    // - use TWebServer.FileTypesRequiredCharSet to setup file types
+    // - use TWebServerLocal.FileTypesRequiredCharSet to setup file types
     wsbForceUtf8Charset,
 
     /// Redirect from 'http://' to the 'https://' version of the URL
@@ -974,12 +974,12 @@ type
     // - By default, block access to backup and source files that may be left by
     // some text editors and can pose a security risk when anyone has access to
     // them. see https://feross.org/cmsploit/
-    //  - Use TWebServer.FileTypesBlocked to specify file types
+    //  - Use TWebServerLocal.FileTypesBlocked to specify file types
     // that might end up on your production server and can expose sensitive
     // information about your website. These files may include:
     // configuration files, files that contain metadata about the project
     // (e.g.: project dependencies, build scripts, etc.).
-    // - use TWebServer.FileTypesBlocked to specify file types
+    // - use TWebServerLocal.FileTypesBlocked to specify file types
     // - this option also blocks any URL paths ended with '~' or '#'
     wsbDelegateBlocked,
 
@@ -1017,7 +1017,7 @@ type
     // https://blogs.msdn.microsoft.com/ie/2008/07/02/ie8-security-part-iv-the-xss-filter/
     // https://blogs.msdn.microsoft.com/ieinternals/2011/01/31/controlling-the-xss-filter/
     // https://www.owasp.org/index.php/Cross-site_Scripting_%28XSS%29
-    // - use TWebServer.FileTypesAsset to exclude some file types
+    // - use TWebServerLocal.FileTypesAsset to exclude some file types
     wsbEnableXssFilter,
 
     /// Set a strict Referrer Policy to mitigate information leakage.
@@ -1032,8 +1032,8 @@ type
     // https://observatory.mozilla.org/
     // https://scotthelme.co.uk/a-new-security-header-referrer-policy/
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy
-    // - use TWebServer.ReferrerPolicy and TWebServer.ReferrerPolicyContentTypes
-    // properties
+    // - use TWebServerLocal.ReferrerPolicy and
+    // TWebServerLocal.ReferrerPolicyContentTypes properties
     wsbEnableReferrerPolicy,
 
     /// Prevent the HTTP Server from responding to 'TRACE' HTTP requests
@@ -1063,8 +1063,8 @@ type
     /// Force compression for mangled 'Accept-Encoding' request headers
     // - see https://calendar.perfplanet.com/2010/pushing-beyond-gzipping
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
-    // - use TWebServer.MangledEncodingHeaders and
-    // TWebServer.MangledEncodingHeaderValues properties
+    // - use TWebServerLocal.MangledEncodingHeaders and
+    // TWebServerLocal.MangledEncodingHeaderValues properties
     wsbFixMangledAcceptEncoding,
 
     /// Map the specified filename extensions to the GZip encoding type
@@ -1077,7 +1077,7 @@ type
     // wouldn't be able to understand the content.
     // - see https://httpd.apache.org/docs/current/mod/mod_mime.html#addencoding
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
-    // - use TWebServer.FileTypesForceGZipHeader to setup file types
+    // - use TWebServerLocal.FileTypesForceGZipHeader to setup file types
     wsbForceGZipHeader,
 
     /// Allow static assets to be cached by proxy servers
@@ -1118,10 +1118,9 @@ type
     // - warning: If you don't control versioning with filename-based cache
     // busting, you should consider lowering the cache times to something like
     // one week.
-    // - see
+    // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
-    // - use TWebServer.Expires options to control expirations
+    // - use TWebServerLocal.Expires options to control expirations
     wsbSetCacheMaxAge,
 
     /// Use ETag / If-None-Match caching
@@ -1141,7 +1140,7 @@ type
     // - see https://httpd.apache.org/docs/current/mod/mod_expires.html
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
-    // - use TWebServer.Expires property
+    // - use TWebServerLocal.Expires property
     wsbSetExpires,
 
     /// Enables filename-based cache busting
@@ -1176,7 +1175,7 @@ type
   );
 
   /// set of tuning options for a modern and safe HTTP/HTTPS Web Server
-  // - flags used e.g. by our TWebServer, or the mORMot 2 Boilerplate project
+  // - flags used e.g. by TWebServerLocal, or the mORMot 2 Boilerplate project
   TWebServerBehaviors = set of TWebServerBehavior;
 
   /// Suppressing or forcing the 'www.' host prefix at the beginning of URLs
@@ -1227,7 +1226,7 @@ type
     wshIncludeSubDomains,
     wshIncludeSubDomainsPreload);
 
-  /// setup DNS Prefetch control
+  /// how to implement DNS Prefetch Control
   // - DNS prefetching is a feature by which browsers proactively perform
   // domain name resolution on both links that the user may choose to follow
   // as well as URLs for items referenced by the document, including images,
@@ -1249,13 +1248,65 @@ type
   // using a callback function; but we define here the most used encodings in
   // current browsers, e.g. to be able to cache content or hashes at runtime
   // - wseIdentity means no compression
-  // - wseGZip will use the well-known GZip encoding (using libdeflate if available)
+  // - wseGZip will use the well-known GZip encoding (via libdeflate if available)
   // - wseBrotli is reserved for future use (e.g. mORMot 2 Boilerplate project)
   TWebServerEncoding = (
     wseIdentity,
     wseGZip,
     wseBrotli);
+  /// the known encoding/compression schemes for a Web Server
+  TWebServerEncodings = set of TWebServerEncoding;
 
+  /// define the security parameters for a Web Server for a given route
+  // - is defined as a record so that it could be assigned and processed per URI
+  // - values will be assigned by reference, so with minimal memory consumption
+  TWebServerLocal = record
+    /// most used tuning options for a modern and safe HTTP/HTTPS Server
+    Behaviors: TWebServerBehaviors;
+    /// how to handle the 'www.' host prefix at the beginning of URLs
+    Rewrite: TWebServerRewrite;
+    /// how to implement HTTP Strict Transport Security (HSTS) redirection
+    Hsts: TWebServerHsts;
+    /// how to implement DNS Prefetch Control
+    Dpc: TWebServerDpc;
+    /// file extension types for wsbAllowCrossOriginImages behavior
+    FileTypesImage: TRawUtf8DynArray;
+    /// file extension types for wsbAllowCrossOriginFonts behavior
+    FileTypesFont: TRawUtf8DynArray;
+    /// file extension types for wsbForceUtf8Charset behavior
+    FileTypesRequiredCharSet: TRawUtf8DynArray;
+    /// file extension types for wsbDelegateBlocked behavior
+    FileTypesBlocked: TRawUtf8DynArray;
+    /// supported Referrer Policy for wsbEnableReferrerPolicy behavior
+    ReferrerPolicy: RawUtf8;
+    /// content types for wsbEnableReferrerPolicy behavior
+    ReferrerPolicyContentTypes: TRawUtf8DynArray;
+    /// headers for wsbFixMangledAcceptEncoding behavior
+    MangledEncodingHeaders: TRawUtf8DynArray;
+    /// values for wsbFixMangledAcceptEncoding behavior
+    MangledEncodingHeaderValues: TRawUtf8DynArray;
+    /// file extension types for wsbForceGZipHeader behavior
+    FileTypesForceGZipHeader: TRawUtf8DynArray;
+    /// expiration for wsbSetCacheMaxAge and wsbSetExpires behaviors
+    ExpiresDefault: integer;
+    /// headers for wsbSetCacheMaxAge and wsbSetExpires behaviors
+    ExpiresHeaders: TRawUtf8DynArray;
+    /// values for wsbSetCacheMaxAge and wsbSetExpires behaviors
+    ExpiresValues: TCardinalDynArray;
+  end;
+
+  /// define the security parameters common to all Web Servers
+  TWebServerGlobal = class(TSynPersistent)
+  public
+    /// file extensions of supported mime types for wsbForceMimeType behavior
+    // - in uppercase, sorted and excluding the initial '.' character
+    // - see also https://github.com/jshttp/mime-db/blob/master/db.json
+    // - following ForceMimeTypes[] order
+    ForceMimeTypesExt: TRawUtf8DynArray;
+    /// supported mime types for wsbForceMimeType behavior
+    // - following ForceMimeTypesExt[] order
+    ForceMimeTypes: TRawUtf8DynArray;
+  end;
 
 
 implementation
