@@ -306,6 +306,8 @@ type
     UserAgent: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during ParseHeader
     Upgrade: RawUtf8;
+    /// same as HeaderGetValue('REFERER'), but retrieved during ParseHeader
+    Referer: RawUtf8;
     /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
     // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
@@ -1788,6 +1790,7 @@ begin
   Upgrade := '';
   BearerToken := '';
   UserAgent := '';
+  Referer := '';
   RangeOffset := 0;
   RangeLength := -1;
   Content := '';
@@ -2078,11 +2081,20 @@ begin
             exit;
         end;
     ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
-      if PCardinal(P + 4)^ or $20202020 =
+      if PCardinal(P + 4)^ or $00202020 =
         ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
       begin
         // 'UPGRADE:'
         GetTrimmed(P + 8, P2, PLen, Upgrade);
+        if not HeadersUnFiltered then
+          exit;
+      end;
+    ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
+      if PCardinal(P + 4)^ or $00202020 =
+        ord('r') + ord('e') shl 8 + ord('r') shl 16 + ord(':') shl 24 then
+      begin
+        // 'REFERER:'
+        GetTrimmed(P + 8, P2, PLen, Referer, {nointern=}true);
         if not HeadersUnFiltered then
           exit;
       end;
