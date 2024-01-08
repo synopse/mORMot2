@@ -105,6 +105,8 @@ type
     fSecure: INetTls;
     /// the thread currently set by ProcessRead - maybe nil e.g. on write
     fReadThread: TSynThread;
+    // how many bytes have been transmitted via Send() and Recv() methods
+    fBytesRecv, fBytesSend: Int64;
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
@@ -1085,6 +1087,8 @@ begin
     result := fSecure.Send(buf, len)
   else
     result := fSocket.Send(buf, len);
+  if result = nrOK then
+    inc(fBytesSend, len);
 end;
 
 function TPollAsyncConnection.Recv(buf: pointer; var len: integer): TNetResult;
@@ -1093,6 +1097,8 @@ begin
     result := fSecure.Receive(buf, len)
   else
     result := fSocket.Recv(buf, len);
+  if result = nrOK then
+    inc(fBytesRecv, len);
 end;
 
 
@@ -3160,6 +3166,8 @@ begin
     include(fHttp.Options, hroHeadersUnfiltered);
   fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // 2KB by default
   fHeadersSec := 0;
+  fBytesRecv := 0; // reset stats
+  fBytesSend := 0;
 end;
 
 function THttpAsyncConnection.FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
