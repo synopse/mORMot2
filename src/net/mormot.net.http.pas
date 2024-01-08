@@ -242,13 +242,6 @@ type
 
   PHttpRequestContext = ^THttpRequestContext;
 
-  /// optional callback triggered when THttpRequestContext state changes
-  // - i.e. after Command, Headers or Content have been retrieved
-  // - should return the current Sender.State, or an error to interrupt the
-  // process (typically hrsErrorAborted)
-  TOnHttpRequestStateChange = function(Previous: THttpRequestState;
-     Sender: PHttpRequestContext): THttpRequestState of object;
-
   /// raw information used during THttpRequestContext header parsing
   TProcessParseLine = record
     P: PUtf8Char;
@@ -316,6 +309,8 @@ type
     /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
     // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
+    // - if hsrAuthorized is set, THttpServerSocketGeneric.Authorization() will
+    // put the authenticate User name in this field
     BearerToken: RawUtf8;
     /// decoded 'Range: bytes=..' start value - default is 0
     // - e.g. 1024 for 'Range: bytes=1024-1025'
@@ -497,7 +492,8 @@ type
   {$M-}
 
   /// a genuine identifier for a given client connection on server side
-  // - maps http.sys ID, or is a genuine 31-bit value from increasing sequence
+  // - maps e.g. http.sys ID, or a genuine 31-bit sequence increasing counter,
+  // or the 'X-Conn-ID' header value behind a nginx reverse proxy
   THttpServerConnectionID = Int64;
 
   /// a dynamic array of client connection identifiers, e.g. for broadcasting

@@ -122,7 +122,7 @@ type
     ToUriStaticLen: integer;
     /// the URI method to be used after ToUri rewrite
     ToUriMethod: TUriRouterMethod;
-    /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404")
+    /// the HTTP error code for a Rewrite() with an integer ToUri (e.g. '404')
     ToUriErrorStatus: {$ifdef CPU32} word {$else} cardinal {$endif};
     /// the callback registered by Run() for this URI
     Execute: TOnHttpServerRequest;
@@ -573,22 +573,22 @@ type
     // (header preprocessor, body encoding etc...)
     // - if the handler returns > 0 server will send a response immediately,
     // unless return code is HTTP_ACCEPTED (202), then OnRequest will be called
-    // - warning: this handler must be thread-safe (can be called by several
-    // threads simultaneously)
+    // - warning: this handler must be thread-safe (could be called from several
+    // threads), and is NOT called before Route() callbacks execution
     property OnBeforeRequest: TOnHttpServerRequest
       read fOnBeforeRequest write SetOnBeforeRequest;
     /// event handler called after request is processed but before response
     // is sent back to client
     // - main purpose is to apply post-processor, not part of request logic
     // - if handler returns value > 0 it will override the OnRequest response code
-    // - warning: this handler must be thread-safe (can be called by several
-    // threads simultaneously)
+    // - warning: this handler must be thread-safe (could be called from several
+    // threads), and is NOT called after Route() callbacks execution
     property OnAfterRequest: TOnHttpServerRequest
       read fOnAfterRequest write SetOnAfterRequest;
     /// event handler called after response is sent back to client
-    // - main purpose is to apply post-response analysis, logging, etc.
-    // - warning: this handler must be thread-safe (can be called by several
-    // threads simultaneously)
+    // - main purpose is to apply post-response analysis, logging, etc...
+    // - warning: this handler must be thread-safe (could be called from several
+    // threads), and IS called after Route() callbacks execution
     property OnAfterResponse: TOnHttpServerAfterResponse
       read fOnAfterResponse write SetOnAfterResponse;
     /// event handler called after each working Thread is just initiated
@@ -2717,16 +2717,15 @@ end;
 procedure TUriRouter.RunMethods(RouterMethods: TUriRouterMethods;
   Instance: TObject; const Prefix: RawUtf8);
 var
-  methods: TPublishedMethodInfoDynArray;
+  met: TPublishedMethodInfoDynArray;
   m: PtrInt;
 begin
   if (self <> nil) and
      (Instance <> nil) and
      (RouterMethods <> []) then
-    for m := 0 to GetPublishedMethods(Instance, methods) - 1 do
-      with methods[m] do
-        Run(RouterMethods, Prefix + StringReplaceChars(Name, '_', '-'),
-          TOnHttpServerRequest(Method));
+    for m := 0 to GetPublishedMethods(Instance, met) - 1 do
+      Run(RouterMethods, Prefix + StringReplaceChars(met[m].Name, '_', '-'),
+        TOnHttpServerRequest(met[m].Method));
 end;
 
 function TUriRouter.Process(Ctxt: THttpServerRequestAbstract): integer;
@@ -6186,7 +6185,7 @@ var
   outcontenc, outstat: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
-  router: TUriRouter;
+  urirouter: TUriRouter;
   ctxt: THttpServerRequest;
   filehandle: THandle;
   resp: PHTTP_RESPONSE;
@@ -6527,14 +6526,15 @@ begin
               respsent := false;
               outstatcode := 0;
               if fOwner = nil then
-                router := fRoute
+                urirouter := fRoute
               else
-                router := fOwner.fRoute; // field not propagated in clones
-              if router <> nil then // URI rewrite or callback execution
-                outstatcode := router.Process(Ctxt);
+                urirouter := fOwner.fRoute; // field not propagated in clones
+              if urirouter <> nil then
+                // URI rewrite or event callback execution
+                outstatcode := urirouter.Process(Ctxt);
               if outstatcode = 0 then // no router callback was executed
               begin
-                // regular server-side request evaluation
+                // regular server-side OnRequest execution
                 outstatcode := DoBeforeRequest(ctxt);
                 if outstatcode > 0 then
                   if not SendResponse or
