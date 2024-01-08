@@ -464,12 +464,13 @@ type
     procedure AddLogTime(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a TJsonWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    procedure AddNCSAText(WR: TTextWriter);
+    procedure AddNcsaText(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
-    function ToNCSAText(P: PUtf8Char): PtrInt;
-    /// convert the stored date and time to its text in HTTP-like format
+    function ToNcsaText(P: PUtf8Char): PtrInt;
+    /// convert the stored date and time to its text in apache-like format
+    procedure ToNcsaShort(var text: shortstring; const tz: RawUtf8 = 'GMT');
     // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // "Date", "Expires" or "Last-Modified" HTTP header
     // - handle UTC/GMT time zone by default, and allow a 'Date: ' prefix
@@ -881,7 +882,7 @@ type
       // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentNCSALogTime(LocalTime: boolean);
+    procedure AddCurrentNcsaLogTime(LocalTime: boolean);
   end;
 
 
@@ -2238,7 +2239,7 @@ begin
   inc(WR.B, 17);
 end;
 
-function TSynSystemTime.ToNCSAText(P: PUtf8Char): PtrInt;
+function TSynSystemTime.ToNcsaText(P: PUtf8Char): PtrInt;
 var
   y, d100: PtrUInt;
   {$ifdef CPUX86NOTPIC}
@@ -2266,6 +2267,12 @@ begin
   PWord(P + 18)^ := tab[Second];
   P[20] := ' ';
   result := 21;
+end;
+
+procedure TSynSystemTime.ToNcsaShort(var text: shortstring; const tz: RawUtf8);
+begin
+  text[0] := AnsiChar(ToNcsaText(@text[1]));
+  AppendShortAnsi7String(tz, text);
 end;
 
 procedure TSynSystemTime.ToHttpDate(out text: RawUtf8; const tz, prefix: RawUtf8);
@@ -2323,11 +2330,11 @@ begin
     UInt2DigitsToShortFast(Second)], text);
 end;
 
-procedure TSynSystemTime.AddNCSAText(WR: TTextWriter);
+procedure TSynSystemTime.AddNcsaText(WR: TTextWriter);
 begin
   if WR.BEnd - WR.B <= 21 then
     WR.FlushToStream;
-  inc(WR.B, ToNCSAText(WR.B + 1));
+  inc(WR.B, ToNcsaText(WR.B + 1));
 end;
 
 function TSynSystemTime.ToDateTime: TDateTime;
@@ -3311,14 +3318,14 @@ begin
   time.AddLogTime(self);
 end;
 
-procedure TTextDateWriter.AddCurrentNCSALogTime(LocalTime: boolean);
+procedure TTextDateWriter.AddCurrentNcsaLogTime(LocalTime: boolean);
 var
   time: TSynSystemTime;
 begin
   time.FromNow(LocalTime);
   if BEnd - B <= 21 then
     FlushToStream;
-  inc(B, time.ToNCSAText(B + 1));
+  inc(B, time.ToNcsaText(B + 1));
 end;
 
 
