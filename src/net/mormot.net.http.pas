@@ -514,18 +514,6 @@ type
   // - may be nil if unsupported, e.g. by the http.sys servers
   PHttpServerConnectionOpaque = ^THttpServerConnectionOpaque;
 
-  /// event handler used by THttpServerGeneric.OnRequest, OnBeforeRequest and
-  // OnAfterRequest
-  // - Ctxt defines both input and output parameters
-  // - result of the function is the HTTP status/error code (200 if OK, e.g.)
-  TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
-
-  /// event handler used by THttpServerGeneric.OnAfterResponse property
-  // -
-  // - Code defines the HTTP response code the (200 if OK, e.g.)
-  TOnHttpServerAfterResponse = procedure(const Method, Url, RemoteIP: RawUtf8;
-    const Code: cardinal) of object;
-
   /// the server-side available authentication schemes
   // - as used by THttpServerRequest.AuthenticationStatus
   // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
@@ -558,6 +546,19 @@ type
 
   /// the THttpServerRequest connection attributes
   THttpServerRequestFlags = set of THttpServerRequestFlag;
+
+  /// event handler used by THttpServerGeneric.OnRequest, OnBeforeRequest and
+  // OnAfterRequest
+  // - Ctxt defines both input and output parameters
+  // - result of the function is the HTTP status/error code (200 if OK, e.g.)
+  TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
+
+  /// event handler used by THttpServerGeneric.OnAfterResponse property
+  // - main purpose is to apply post-response analysis, logging, etc...
+  // - Code defines the HTTP response status the (200 if OK, e.g.)
+  TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
+    const User, Method, Host, Url, RemoteIP: RawUtf8;
+    Flags: THttpServerRequestFlags; Code: cardinal) of object;
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client

@@ -481,7 +481,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure DoAfterResponse(Ctxt: THttpServerRequest; const Code: cardinal); virtual;
     function NextConnectionID: integer; // 31-bit internal sequence
     procedure ParseRemoteIPConnID(const Headers: RawUtf8;
       var RemoteIP: RawUtf8; var RemoteConnID: THttpServerConnectionID);
@@ -1753,6 +1752,7 @@ type
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
+    procedure DoAfterResponse(Ctxt: THttpServerRequest; Code: cardinal); virtual;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -2143,8 +2143,7 @@ type
     procedure SetOnWSThreadStart(const Value: TOnNotifyThread);
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
-    procedure DoAfterResponse(Ctxt: THttpServerRequest;
-      const Code: cardinal); override;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest; Code: cardinal); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
     procedure DestroyMainThread; override;
   public
@@ -3225,13 +3224,6 @@ begin
     result := 0;
 end;
 
-procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Code: cardinal);
-begin
-  if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, Code);
-end;
-
 procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
 begin
   fMaximumAllowedContentLength := aMax;
@@ -3732,11 +3724,13 @@ var
 begin
   result := false; // error
   try
-    if fRoute <> nil then // URI rewrite or callback execution
+    // first try any URI rewrite or direct callback execution
+    if fRoute <> nil then
     begin
-      Ctxt.RespStatus := fRoute.Process(Ctxt);
-      if Ctxt.RespStatus <> 0 then
+      cod := fRoute.Process(Ctxt);
+      if cod <> 0 then
       begin
+        Ctxt.RespStatus := cod;
         if (Ctxt.OutContent = '') and
            (Ctxt.RespStatus <> HTTP_ASYNCRESPONSE) and
            not StatusCodeIsSuccess(Ctxt.RespStatus) then
@@ -3748,17 +3742,18 @@ begin
         exit;
       end;
     end;
-    Ctxt.RespStatus := DoBeforeRequest(Ctxt);
-    if Ctxt.RespStatus > 0 then
+    // fallback to Request() / OnRequest main processing callback
+    cod := DoBeforeRequest(Ctxt);
+    if cod <> 0 then
     begin
+      Ctxt.RespStatus := cod;
       if Ctxt.OutContent = '' then
         Ctxt.fErrorMessage := 'Rejected request';
       IncStat(grRejected);
     end
     else
     begin
-      // execute the main processing callback
-      Ctxt.RespStatus := Request(Ctxt);
+      Ctxt.RespStatus := Request(Ctxt); // calls OnRequest event handler
       Ctxt.InContent := ''; // release memory ASAP
       cod := DoAfterRequest(Ctxt);
       if cod > 0 then
@@ -4220,44 +4215,59 @@ begin
      Terminated then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
-  // compute the response
+  // compute and send back the response
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
     ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
+    // compute the response
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
     if fBanned.ShouldBan(req.RespStatus, ClientSock.fRemoteIP) then
       IncStat(grBanned);
+    // send back the response
+    if Terminated then
+      exit;
+    if hfConnectionClose in ClientSock.Http.HeaderFlags then
+      ClientSock.fKeepAliveClient := false;
+    if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
+      while not Terminated do
+      begin
+        case ClientSock.Http.State of
+          hrsResponseDone:
+            break; // finished
+          hrsSendBody:
+            begin
+              dest.Clear; // body is retrieved from Content/ContentStream
+              ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
+              if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
+                continue; // send body by fServerSendBufferSize chunks
+            end;
+        end;
+        ClientSock.fKeepAliveClient := false; // socket close on write error
+        break;
+      end
+    else
+      ClientSock.fKeepAliveClient := false;
+    // the response has been sent: handle optional OnAfterResponse event
+    if Assigned(fOnAfterResponse) then
+      try
+        fOnAfterResponse(req.ConnectionID, req.AuthenticatedUser, req.Method,
+          req.Host, req.Url, req.RemoteIP, req.ConnectionFlags, req.RespStatus);
+      except
+        on E: Exception do // paranoid
+        begin
+          fOnAfterResponse := nil; // won't try again
+          if Assigned(ClientSock.OnLog) then
+            ClientSock.OnLog(sllWarning,
+              'Process: OnAfterResponse raised % -> disabled', [E], self);
+        end;
+      end;
   finally
     req.Free;
+    ClientSock.Http.ProcessDone;   // ContentStream.Free
   end;
-  // send back the response
-  if Terminated then
-    exit;
-  if hfConnectionClose in ClientSock.Http.HeaderFlags then
-    ClientSock.fKeepAliveClient := false;
-  if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
-    while not Terminated do
-    begin
-      case ClientSock.Http.State of
-        hrsResponseDone:
-          break; // finished
-        hrsSendBody:
-          begin
-            dest.Clear; // body is retrieved from Content/ContentStream
-            ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
-            if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
-              continue; // send body by fServerSendBufferSize chunks
-          end;
-      end;
-      ClientSock.fKeepAliveClient := false; // force socket close on error
-      break;
-    end
-  else
-    ClientSock.fKeepAliveClient := false;
-  ClientSock.Http.ProcessDone;   // ContentStream.Free
   // add transfert stats to main socket
   if Sock <> nil then
   begin
@@ -7014,6 +7024,14 @@ begin
       fUrlGroupID, HttpServerTimeoutsProperty, @timeout, SizeOf(timeout)));
 end;
 
+procedure THttpApiServer.DoAfterResponse(
+  Ctxt: THttpServerRequest; Code: cardinal);
+begin
+  if Assigned(fOnAfterResponse) then
+    fOnAfterResponse(Ctxt.ConnectionID, Ctxt.AuthenticatedUser, Ctxt.Method,
+      Ctxt.Host, Ctxt.Url, Ctxt.RemoteIP, Ctxt.ConnectionFlags, Code);
+end;
+
 
 
 { ****************** THttpApiWebSocketServer Over Windows http.sys Module }
@@ -7617,8 +7635,8 @@ begin
   inherited;
 end;
 
-procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Code: cardinal);
+procedure THttpApiWebSocketServer.DoAfterResponse(
+  Ctxt: THttpServerRequest; Code: cardinal);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,

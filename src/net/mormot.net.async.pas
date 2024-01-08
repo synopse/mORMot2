@@ -815,13 +815,13 @@ type
     fServer: THttpAsyncServer;
     fKeepAliveSec: TAsyncConnectionSec;
     fHeadersSec: TAsyncConnectionSec;
-    fRespStatus: integer;
     fPipelineEnabled: boolean;
     fPipelinedWrite: boolean;
     fRequestFlags: THttpServerRequestFlags;
+    fRespStatus: cardinal;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
-    fConnectionID: THttpServerConnectionID; // may not be fHandle behind nginx
+    fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
     fAuthSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -838,6 +838,7 @@ type
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
     function DoResponse(res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
+    procedure DoAfterResponse;
     procedure AsyncResponse(Sender: THttpServerRequestAbstract;
       RespStatus: integer);
   public
@@ -3305,16 +3306,7 @@ begin
     fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
       [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
   if Assigned(fServer.fOnAfterResponse) then
-    try
-      fServer.fOnAfterResponse(
-        fHttp.CommandMethod, fHttp.CommandUri, fRemoteIP, fRespStatus);
-    except
-      on E: Exception do
-      begin
-        include(fHttp.HeaderFlags, hfConnectionClose);
-        fOwner.DoLog(sllTrace, 'AfterWrite OnAfterResponse raised %', [E], self);
-      end;
-    end;
+    DoAfterResponse;
   fHttp.ProcessDone;   // ContentStream.Free
   fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
   if hfConnectionClose in fHttp.HeaderFlags then
@@ -3597,6 +3589,24 @@ begin
       // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
+procedure THttpAsyncConnection.DoAfterResponse;
+var
+  user: RawUtf8;
+begin
+  try
+    if hsrAuthorized in fRequestFlags then
+      user := fHttp.BearerToken; // from THttpServerSocketGeneric.Authorization
+    fServer.fOnAfterResponse(fConnectionID, user, fHttp.CommandMethod,
+      fHttp.Host, fHttp.CommandUri, fRemoteIP, fRequestFlags, fRespStatus);
+  except
+    on E: Exception do // paranoid
+    begin
+      fServer.fOnAfterResponse := nil; // won't try again
+      fOwner.DoLog(sllWarning,
+        'AfterWrite: OnAfterResponse raised % -> disabled', [E], self);
+    end;
+  end;
+end;
 
 { THttpAsyncConnections }
 
