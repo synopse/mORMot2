@@ -1747,9 +1747,10 @@ type
   TOnInternalInfo = procedure(Sender: TRestUriContext;
     var Info: TDocVariantData) of object;
 
-  /// a generic REpresentational State Transfer (REST) server
+  /// a generic/abstract REpresentational State Transfer (REST) server
   // - descendent must implement the protected EngineList() Retrieve() Add()
-  // Update() Delete() methods
+  // Update() Delete() methods - so if you want a REST server with no ORM
+  // (e.g. for a pure SOA server), use (or inherit) TRestServerFullMemory
   // - automatic call of this methods by a generic Uri() RESTful function
   // - any published method of descendants must match TOnRestServerCallBack
   // prototype, and is expected to be thread-safe
