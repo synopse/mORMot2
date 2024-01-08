@@ -2704,7 +2704,7 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 
 {$endif ASMX64}
 
-/// our fast version of FillChar()
+/// our fast version of FillChar() on Intel/AMD
 // - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
 // - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
@@ -2712,7 +2712,7 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 
-/// our fast version of move()
+/// our fast version of move() on Intel/AMD
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
 // - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
 // - FPC x86_64 RTL is slower than our SSE2/AVX asm

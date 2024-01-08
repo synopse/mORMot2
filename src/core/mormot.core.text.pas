@@ -7556,7 +7556,11 @@ begin // Res.Len has been set by caller
   end
   else
   begin
-    THash192(Res.Temp) := PHash192(Buf)^; // faster than MoveByOne()
+    {$ifdef CPUX86}
+    MoveFast(Buf^, Res.Temp, Res.Len);    // avoid slow "rep movsd" on FPC i386
+    {$else}
+    THash192(Res.Temp) := PHash192(Buf)^; // faster than MoveByOne/MoveFast
+    {$endif CPUX86}
     Res.Text := @Res.Temp; // no RawUtf8 memory allocation
   end;
 end;
@@ -7836,7 +7840,7 @@ begin
         isString := false;
         QwordToTempUtf8(V.VQWord, Res);
       end;
-      {$endif FPC}
+    {$endif FPC}
     vtCurrency:
       begin
         isString := false;
