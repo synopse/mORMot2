@@ -3342,9 +3342,17 @@ function ExtractNameU(const FileName: RawUtf8): RawUtf8;
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
 function ExtractExt(const FileName: TFileName; WithoutDot: boolean = false): TFileName;
 
+// defined here for proper ExtractExtP() inlining
+function GetLastDelimU(const FileName: RawUtf8; OtherDelim: AnsiChar): PtrInt;
+
 /// extract an extension from a file name like ExtractFileExt function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
 function ExtractExtU(const FileName: RawUtf8; WithoutDot: boolean = false): RawUtf8;
+
+/// extract an extension from a file name like ExtractFileExt function
+// - but cross-platform, i.e. detect both '\' and '/' on all platforms
+function ExtractExtP(const FileName: RawUtf8; WithoutDot: boolean = false): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute the file name, including its path if supplied, but without its extension
 // - e.g. GetFileNameWithoutExt('/var/toto.ext') = '/var/toto'
@@ -6927,6 +6935,21 @@ begin
   if WithoutDot then
     inc(i);
   result := copy(FileName, i, 100);
+end;
+
+function ExtractExtP(const FileName: RawUtf8; WithoutDot: boolean): PUtf8Char;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  i := GetLastDelimU(FileName, '.') - 1;
+  if i <= 0 then
+    exit;
+  result := PUtf8Char(pointer(FileName)) + i;
+  if result^ <> '.' then
+    result := nil
+  else if WithoutDot then
+    inc(result);
 end;
 
 function GetFileNameWithoutExt(const FileName: TFileName; Extension: PFileName): TFileName;
