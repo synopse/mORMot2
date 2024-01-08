@@ -1260,6 +1260,7 @@ type
   /// define the security parameters for a Web Server for a given route
   // - is defined as a record so that it could be assigned and processed per URI
   // - values will be assigned by reference, so with minimal memory consumption
+  // - FileTypes*[] are ordered TWordDynArray indexes to TWebServerGlobal.MimeType[]
   TWebServerLocal = record
     /// most used tuning options for a modern and safe HTTP/HTTPS Server
     Behaviors: TWebServerBehaviors;
@@ -1269,43 +1270,73 @@ type
     Hsts: TWebServerHsts;
     /// how to implement DNS Prefetch Control
     Dpc: TWebServerDpc;
-    /// file extension types for wsbAllowCrossOriginImages behavior
-    FileTypesImage: TRawUtf8DynArray;
-    /// file extension types for wsbAllowCrossOriginFonts behavior
-    FileTypesFont: TRawUtf8DynArray;
-    /// file extension types for wsbForceUtf8Charset behavior
-    FileTypesRequiredCharSet: TRawUtf8DynArray;
-    /// file extension types for wsbDelegateBlocked behavior
-    FileTypesBlocked: TRawUtf8DynArray;
+    /// file extension ordered indexes for wsbAllowCrossOriginImages behavior
+    FileTypesImage: TWordDynArray;
+    /// file extension ordered indexes for wsbAllowCrossOriginFonts behavior
+    FileTypesFont: TWordDynArray;
+    /// file extension ordered indexes for wsbForceUtf8Charset behavior
+    FileTypesRequiredCharSet: TWordDynArray;
+    /// file extension ordered indexes for wsbDelegateBlocked behavior
+    FileTypesBlocked: TWordDynArray;
+    /// file extension ordered indexes for wsbForceGZipHeader behavior
+    FileTypesForceGZipHeader: TWordDynArray;
     /// supported Referrer Policy for wsbEnableReferrerPolicy behavior
     ReferrerPolicy: RawUtf8;
     /// content types for wsbEnableReferrerPolicy behavior
-    ReferrerPolicyContentTypes: TRawUtf8DynArray;
+    ReferrerPolicyContentTypes: TWordDynArray;
     /// headers for wsbFixMangledAcceptEncoding behavior
     MangledEncodingHeaders: TRawUtf8DynArray;
     /// values for wsbFixMangledAcceptEncoding behavior
     MangledEncodingHeaderValues: TRawUtf8DynArray;
-    /// file extension types for wsbForceGZipHeader behavior
-    FileTypesForceGZipHeader: TRawUtf8DynArray;
     /// expiration for wsbSetCacheMaxAge and wsbSetExpires behaviors
     ExpiresDefault: integer;
-    /// headers for wsbSetCacheMaxAge and wsbSetExpires behaviors
-    ExpiresHeaders: TRawUtf8DynArray;
+    /// content-types for wsbSetCacheMaxAge and wsbSetExpires behaviors
+    ExpiresContentTypes: TRawUtf8DynArray;
     /// values for wsbSetCacheMaxAge and wsbSetExpires behaviors
     ExpiresValues: TCardinalDynArray;
   end;
 
+  /// information about a given file extension of a supported mime type
+  // - as stored in TWebServerGlobal.MimeType[]
+  TWebServerMimeType = record
+    /// file extensions of supported mime types, excluding initial '.' character
+    Extension: RawUtf8;
+    /// specific mime type for wsbForceMimeType behavior
+    ForceMimeType: RawUtf8;
+  end;
+  /// information about all known file extensions of supported mime types
+  // - as stored in TWebServerGlobal.MimeType[]
+  TWebServerMimeTypeDynArray = array of TWebServerMimeType;
+
   /// define the security parameters common to all Web Servers
   TWebServerGlobal = class(TSynPersistent)
+  protected
+    fMimeType: TWebServerMimeTypeDynArray;
+    fMimeTypeCount: integer;
+    fMimeTypes: TDynArrayHashed;
   public
+    /// initialize this instance
+    constructor Create; override;
+    /// quickly returns the index of a MimeType[] entry from this file extension
+    function FindMimeType(Extension: PUtf8Char): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// search then add if not existing of a file extension
+    // - returns the index of the matching MimeType[] entry
+    function AddIfNeeded(const Extension: RawUtf8): PtrInt;
+    /// search (or add) a file extension, then insert its index in a
+    // TWordDynArray sorted array
+    // - used e.g. to fill TWebServerLocal behavior-enabled properties
+    function AddToIndexes(var Indexes: TSortedWordArray;
+      const Extension: RawUtf8): PtrInt;
     /// file extensions of supported mime types for wsbForceMimeType behavior
-    // - in uppercase, sorted and excluding the initial '.' character
     // - see also https://github.com/jshttp/mime-db/blob/master/db.json
-    // - following ForceMimeTypes[] order
-    ForceMimeTypesExt: TRawUtf8DynArray;
-    /// supported mime types for wsbForceMimeType behavior
-    // - following ForceMimeTypesExt[] order
-    ForceMimeTypes: TRawUtf8DynArray;
+    // - TWebServerLocal.FileTypes*[] TWordDynArray contains indexes to this
+    // - warning: length(MimeType) is the capacity - use MimeTypeCount
+    property MimeType: TWebServerMimeTypeDynArray
+      read fMimeType;
+    /// how many file extensions are currently known
+    property MimeTypeCount: integer
+      read fMimeTypeCount;
   end;
 
 
@@ -3207,6 +3238,42 @@ begin
   end;
 end;
 
+
+{ TWebServerGlobal }
+
+constructor TWebServerGlobal.Create;
+begin
+  inherited Create;
+  fMimeTypes.InitSpecific(TypeInfo(TWebServerMimeTypeDynArray), fMimeType,
+    ptPUtf8Char, @fMimeTypeCount, {caseinsensitive=}true);
+  // index TWebServerMimeType.Extension as ptPUtf8Char for FindMimeType()
+end;
+
+function TWebServerGlobal.FindMimeType(Extension: PUtf8Char): PtrInt;
+begin
+  result := fMimeTypes.FindHashed(Extension); // search as PUtf8Char
+end;
+
+function TWebServerGlobal.AddIfNeeded(const Extension: RawUtf8): PtrInt;
+var
+  added: boolean;
+begin
+  result := -1;
+  if Extension = '' then
+    exit;
+  result := fMimeTypes.FindHashedForAdding(Extension, added);
+  if added then
+    fMimeType[result].Extension := Extension;
+end;
+
+function TWebServerGlobal.AddToIndexes(var Indexes: TSortedWordArray;
+  const Extension: RawUtf8): PtrInt;
+begin
+  result := AddIfNeeded(Extension);
+  if (result >= 0) and
+     (result <= high(word)) then
+    Indexes.Add(result);
+end;
 
 
 initialization
