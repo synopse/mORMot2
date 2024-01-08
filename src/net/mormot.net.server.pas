@@ -4163,7 +4163,8 @@ begin
         except
           on E: Exception do
             // do not stop thread on TLS or socket error
-            fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
+            if Assigned(fSock.OnLog) then
+              fSock.OnLog(sllTrace, 'Execute: % [%]', [E, E.Message], self);
         end
       else if Assigned(fThreadPool) then
       begin
