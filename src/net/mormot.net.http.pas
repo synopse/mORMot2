@@ -560,7 +560,7 @@ type
   TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
     const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
     Flags: THttpServerRequestFlags; StatusCode: cardinal;
-    ElapsedMicroSec, Received, Sent: Int64) of object;
+    StartMicroSec, Received, Sent: Int64) of object;
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client

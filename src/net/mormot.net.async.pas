@@ -3603,16 +3603,13 @@ end;
 procedure THttpAsyncConnection.DoAfterResponse;
 var
   user: RawUtf8;
-  stop: Int64;
 begin
   try
     if hsrAuthorized in fRequestFlags then
       user := fHttp.BearerToken; // from THttpServerSocketGeneric.Authorization
-    QueryPerformanceMicroSeconds(stop);
-    dec(stop, fAfterResponseStart);
     fServer.fOnAfterResponse(fConnectionID, user, fHttp.CommandMethod,
       fHttp.Host, fHttp.CommandUri, fHttp.Referer, fHttp.UserAgent, fRemoteIP,
-      fRequestFlags, fRespStatus, stop, fBytesRecv, fBytesSend);
+      fRequestFlags, fRespStatus, fAfterResponseStart, fBytesRecv, fBytesSend);
   except
     on E: Exception do // paranoid
     begin

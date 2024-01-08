@@ -1753,7 +1753,7 @@ type
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      Code, Elapsed, Received, Sent: cardinal); virtual;
+      StatusCode: cardinal; Started, Received, Sent: Int64); virtual;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -2145,7 +2145,7 @@ type
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      Code, Elapsed, Received, Sent: cardinal); override;
+      StatusCode: cardinal; Started, Received, Sent: Int64); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
     procedure DestroyMainThread; override;
   public
@@ -4212,7 +4212,7 @@ var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  start, stop: Int64;
+  started: Int64;
 begin
   if (ClientSock = nil) or
      (ClientSock.Http.Headers = '') or
@@ -4221,7 +4221,7 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   // compute and send back the response
   if Assigned(fOnAfterResponse) then
-    QueryPerformanceMicroSeconds(start);
+    QueryPerformanceMicroSeconds(started);
   req := THttpServerRequest.Create(self, ConnectionID, ConnectionThread,
     ClientSock.fRequestFlags, ClientSock.GetConnectionOpaque);
   try
@@ -4259,12 +4259,10 @@ begin
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
       try
-        QueryPerformanceMicroSeconds(stop);
-        dec(stop, start);
         fOnAfterResponse(req.ConnectionID, req.AuthenticatedUser, req.Method,
           req.Host, req.Url, ClientSock.Http.Referer, req.UserAgent,
           req.RemoteIP, req.ConnectionFlags, req.RespStatus,
-          stop, ClientSock.fBytesIn, ClientSock.fBytesOut);
+          started, ClientSock.BytesIn, ClientSock.BytesOut);
       except
         on E: Exception do // paranoid
         begin
@@ -6238,7 +6236,7 @@ var
   datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
-  respstart, respstop: Int64;
+  started: Int64;
   contrange: ShortString;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
@@ -6566,7 +6564,7 @@ begin
                     end;
               end;
             end;
-            QueryPerformanceMicroSeconds(respstart);
+            QueryPerformanceMicroSeconds(started);
             try
               // compute response
               FillcharFast(resp^, SizeOf(resp^), 0);
@@ -6596,10 +6594,8 @@ begin
               if not respsent then
                 if not SendResponse then
                   continue;
-              QueryPerformanceMicroSeconds(respstop);
-              dec(respstop, respstart);
               DoAfterResponse(
-                ctxt, referer, outstatcode, respstop, incontlen, bytessent);
+                ctxt, referer, outstatcode, started, incontlen, bytessent);
             except
               on E: Exception do
                 // handle any exception raised during process: show must go on!
@@ -7043,12 +7039,12 @@ begin
 end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; Code, Elapsed, Received, Sent: cardinal);
+  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
 begin
   if Assigned(fOnAfterResponse) then
     fOnAfterResponse(Ctxt.ConnectionID, Ctxt.AuthenticatedUser, Ctxt.Method,
       Ctxt.Host, Ctxt.Url, Referer, Ctxt.UserAgent, Ctxt.RemoteIP,
-      Ctxt.ConnectionFlags, Code, Elapsed, Received, Sent);
+      Ctxt.ConnectionFlags, StatusCode, Started, Received, Sent);
 end;
 
 
@@ -7655,12 +7651,12 @@ begin
 end;
 
 procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; Code, Elapsed, Received, Sent: cardinal);
+  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
-  inherited DoAfterResponse(Ctxt, Referer, Code, Elapsed, Received, Sent);
+  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Started, Received, Sent);
 end;
 
 function THttpApiWebSocketServer.GetProtocol(index: integer):
