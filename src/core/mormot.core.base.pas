@@ -1718,8 +1718,7 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 
 type
   /// used to store and retrieve Words in a sorted array
-  // - this "object" (i.e. record with methods) should be filled with zeros
-  // before use - e.g. when defined as a private member of a class
+  // - ensure Count=0 before use - if not defined as a private member of a class
   {$ifdef USERECORDWITHMETHODS}
   TSortedWordArray = record
   {$else}
@@ -1737,12 +1736,13 @@ type
     /// return the index if the supplied value in the Values[] array
     // - return -1 if not found
     function IndexOf(aValue: Word): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// save the internal array into a TWordDynArray variable
+    procedure SetArray(out aValues: TWordDynArray);
   end;
   PSortedWordArray = ^TSortedWordArray;
 
   /// used to store and retrieve Integers in a sorted array
-  // - this "object" (i.e. record with methods) should be filled with zeros
-  // before use - e.g. when defined as a private member of a class
+  // - ensure Count=0 before use - if not defined as a private member of a class
   {$ifdef USERECORDWITHMETHODS}
   TSortedIntegerArray = record
   {$else}
@@ -1760,6 +1760,8 @@ type
     /// return the index if the supplied value in the Values[] array
     // - return -1 if not found
     function IndexOf(aValue: integer): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// save the internal array into a TWordDynArray variable
+    procedure SetArray(out aValues: TIntegerDynArray);
   end;
   PSortedIntegerArray = ^TSortedIntegerArray;
 
@@ -7188,6 +7190,14 @@ begin
   result := FastFindWordSorted(pointer(Values), Count - 1, aValue);
 end;
 
+procedure TSortedWordArray.SetArray(out aValues: TWordDynArray);
+begin
+  if Count = 0 then
+    exit;
+  DynArrayFakeLength(Values, Count); // no realloc needed
+  aValues := Values;
+end;
+
 
 { TSortedIntegerArray }
 
@@ -7212,6 +7222,14 @@ end;
 function TSortedIntegerArray.IndexOf(aValue: integer): PtrInt;
 begin
   result := FastFindIntegerSorted(pointer(Values), Count - 1, aValue);
+end;
+
+procedure TSortedIntegerArray.SetArray(out aValues: TIntegerDynArray);
+begin
+  if Count = 0 then
+    exit;
+  DynArrayFakeLength(Values, Count); // no realloc needed
+  aValues := Values;
 end;
 
 
