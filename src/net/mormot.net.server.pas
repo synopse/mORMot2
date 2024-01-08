@@ -143,8 +143,6 @@ type
 
   /// implement a Radix Tree to hold all registered URI for a given HTTP method
   TUriTree = class(TRadixTreeParams)
-  protected
-    procedure SetNodeClass; override;
   public
     /// access to the root node of this tree
     function Root: TUriTreeNode;
@@ -173,12 +171,14 @@ type
     fTree: TUriRouterTree;
     fTreeOptions: TRadixTreeOptions;
     fEntries: array[urmGet .. high(TUriRouterMethod)] of integer;
+    fTreeNodeClass: TRadixTreeNodeClass;
     procedure Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8;
       const aExecute: TOnHttpServerRequest);
   public
     /// initialize this URI routing engine
-    constructor Create(aOptions: TRadixTreeOptions = []); reintroduce;
+    constructor Create(aNodeClass: TRadixTreeNodeClass;
+      aOptions: TRadixTreeOptions = []); reintroduce;
     /// finalize this URI routing engine
     destructor Destroy; override;
 
@@ -461,7 +461,9 @@ type
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
     fOnSendFile: TOnHttpServerSendFile;
     fFavIcon: RawByteString;
+    fRouterClass: TRadixTreeNodeClass;
     function GetApiVersion: RawUtf8; virtual; abstract;
+    procedure SetRouterClass(aRouter: TRadixTreeNodeClass);
     procedure SetServerName(const aName: RawUtf8); virtual;
     procedure SetOptions(opt: THttpServerOptions);
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
@@ -550,6 +552,11 @@ type
       aCompressMinSize: integer = 1024; aPriority: integer = 10); virtual;
     /// you can call this method to prepare the HTTP server for shutting down
     procedure Shutdown;
+    /// allow to customize the Route() implementation Radix Tree node class
+    // - if not set, will use TUriTreeNode as defined in this unit
+    // - raise an Exception if set twice, or after Route() is called
+    property RouterClass: TRadixTreeNodeClass
+      read fRouterClass write SetRouterClass;
     /// main event handler called by the default implementation of the
     // virtual Request method to process a given request
     // - OutCustomHeader will handle Content-Type/Location
@@ -2497,11 +2504,6 @@ end;
 
 { TUriTree }
 
-procedure TUriTree.SetNodeClass;
-begin
-  fDefaultNodeClass := TUriTreeNode;
-end;
-
 function TUriTree.Root: TUriTreeNode;
 begin
   result := fRoot as TUriTreeNode;
@@ -2556,7 +2558,7 @@ begin
   fSafe.WriteLock;
   try
     if fTree[aFrom] = nil then
-      fTree[aFrom] := TUriTree.Create(fTreeOptions);
+      fTree[aFrom] := TUriTree.Create(fTreeNodeClass, fTreeOptions);
     n := fTree[aFrom].Setup(fromU, names) as TUriTreeNode;
     if n = nil then
       exit;
@@ -2625,8 +2627,12 @@ begin
   end;
 end;
 
-constructor TUriRouter.Create(aOptions: TRadixTreeOptions);
+constructor TUriRouter.Create(aNodeClass: TRadixTreeNodeClass;
+  aOptions: TRadixTreeOptions);
 begin
+  if aNodeClass = nil then
+    raise EUriRouter.CreateUtf8('%.Create with aNodeClass=nil', [self]);
+  fTreeNodeClass := aNodeClass;
   fTreeOptions := aOptions;
   inherited Create;
 end;
@@ -2741,6 +2747,7 @@ begin
      not UriMethod(Ctxt.Method, m) then
     exit;
   THttpServerRequest(Ctxt).fRouteName := nil; // paranoid: if called w/o Prepare
+  THttpServerRequest(Ctxt).fRouteNode := nil;
   t := fTree[m];
   if t = nil then
     exit; // this method has no registration yet
@@ -2760,8 +2767,11 @@ begin
   if found <> nil then
     // there is something to react on
     if Assigned(found.Data.Execute) then
+    begin
       // request is implemented via a method
-      result := found.Data.Execute(Ctxt)
+      THttpServerRequest(Ctxt).fRouteNode := found;
+      result := found.Data.Execute(Ctxt);
+    end
     else if found.Data.ToUri <> '' then
     begin
       // request is not implemented here, but the Url should be rewritten
@@ -2840,8 +2850,9 @@ begin
   fAuthenticationStatus := hraNone;
   fAuthenticatedUser := '';
   fErrorMessage := '';
-  fRouteName := nil; // no fRouteValuePosLen := nil (to reuse allocated array)
   fUrlParamPos := nil;
+  fRouteNode := nil;
+  fRouteName := nil; // no fRouteValuePosLen := nil (to reuse allocated array)
   // Prepare() will set the other fields
 end;
 
@@ -3029,7 +3040,11 @@ begin
       GlobalLock; // paranoid thread-safety
       try
         if fRoute = nil then
-          fRoute := TUriRouter.Create;
+        begin
+          if fRouterClass = nil then
+            fRouterClass := TUriTreeNode;
+          fRoute := TUriRouter.Create(fRouterClass);
+        end;
       finally
         GlobalUnLock;
       end;
@@ -3139,6 +3154,13 @@ function THttpServerGeneric.CanNotifyCallback: boolean;
 begin
   result := (self <> nil) and
             (fCallbackSendDelay <> nil);
+end;
+
+procedure THttpServerGeneric.SetRouterClass(aRouter: TRadixTreeNodeClass);
+begin
+  if fRouterClass <> nil then
+    raise EHttpServer.CreateUtf8('%.RouterClass already set', [self]);
+  fRouterClass := aRouter;
 end;
 
 procedure THttpServerGeneric.SetServerName(const aName: RawUtf8);

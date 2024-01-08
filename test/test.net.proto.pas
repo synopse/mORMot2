@@ -376,7 +376,7 @@ var
   end;
 
 begin
-  tree := TUriTree.Create;
+  tree := TUriTree.Create(TUriTreeNode);
   try
     tree.insert('romane');
     tree.insert('romanus');
@@ -391,7 +391,7 @@ begin
   finally
     tree.Free;
   end;
-  tree := TUriTree.Create([rtoCaseInsensitiveUri]);
+  tree := TUriTree.Create(TUriTreeNode, [rtoCaseInsensitiveUri]);
   try
     tree.insert('romanus');
     tree.insert('romane');
@@ -406,7 +406,7 @@ begin
   finally
     tree.Free;
   end;
-  tree := TUriTree.Create;
+  tree := TUriTree.Create(TUriTreeNode);
   try
     tree.insert('/plaintext');
     tree.insert('/');
@@ -416,7 +416,7 @@ begin
   finally
     tree.Free;
   end;
-  tree := TUriTree.Create;
+  tree := TUriTree.Create(TUriTreeNode);
   try
     for i := 0 to high(NODES) do
       CheckEqual(tree.Insert(NODES[i]).FullText, NODES[i]);
@@ -438,7 +438,7 @@ begin
   finally
     tree.Free;
   end;
-  tree := TUriTree.Create;
+  tree := TUriTree.Create(TUriTreeNode);
   try
     for i := 0 to high(rnd) do
       rnd[i] := RandomIdentifier(Random32(24) * 2 + 1);
@@ -452,7 +452,7 @@ begin
     tree.Free;
   end;
   ctxt := THttpServerRequestAbstract.Create;
-  router := TUriRouter.Create;
+  router := TUriRouter.Create(TUriTreeNode);
   try
     Call('/plaintext', '', '', false, -1, 0);
     Call('/', '', '', false, -1, 0);

@@ -3093,10 +3093,10 @@ type
     fDefaultNodeClass: TRadixTreeNodeClass;
     fOptions: TRadixTreeOptions;
     fNormTable: PNormTable; // for efficient rtoCaseInsensitiveUri
-    procedure SetNodeClass; virtual; abstract;
   public
     /// initialize the Radix Tree
-    constructor Create(aOptions: TRadixTreeOptions = []); reintroduce;
+    constructor Create(aNodeClass: TRadixTreeNodeClass;
+      aOptions: TRadixTreeOptions = []); reintroduce;
     /// finalize this Radix Tree
     destructor Destroy; override;
     /// define how TRadixTreeNode.Lookup() will process this node
@@ -11085,9 +11085,12 @@ end;
 
 { TRadixTree }
 
-constructor TRadixTree.Create(aOptions: TRadixTreeOptions);
+constructor TRadixTree.Create(aNodeClass: TRadixTreeNodeClass;
+  aOptions: TRadixTreeOptions);
 begin
-  SetNodeClass;
+  if aNodeClass = nil then
+    raise ERadixTree.CreateUtf8('%.Create with aNodeClass=nil', [self]);
+  fDefaultNodeClass := aNodeClass;
   fOptions := aOptions;
   if rtoCaseInsensitiveUri in aOptions then
     fNormTable := @NormToLower

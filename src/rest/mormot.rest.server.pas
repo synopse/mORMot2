@@ -1501,15 +1501,9 @@ type
   /// exception class raised during TRestTree URI parsing
   ERestTree = class(ERadixTree);
 
-  /// Radix Tree to hold all registered REST URI for a given HTTP method
-  TRestTree = class(TRadixTreeParams)
-  protected
-    procedure SetNodeClass; override; // use TRestTreeNode
-  end;
-
   /// store per-method URI multiplexing Radix Tree in TRestRouter
   // - each HTTP method would have its dedicated TRestTree parser in TRestRouter
-  TRestRouterTree = array[mGET .. high(TUriMethod)] of TRestTree;
+  TRestRouterTree = array[mGET .. high(TUriMethod)] of TRadixTreeParams;
 
   /// efficient server-side URI routing for TRestServer
   TRestRouter = class(TSynPersistent)
@@ -5873,14 +5867,6 @@ begin
 end;
 
 
-{ TRestTree }
-
-procedure TRestTree.SetNodeClass;
-begin
-  fDefaultNodeClass := TRestTreeNode;
-end;
-
-
 { TRestRouter }
 
 constructor TRestRouter.Create(aOwner: TRestServer);
@@ -5908,7 +5894,7 @@ begin
      (aFrom > high(fTree)) then
     raise ERestTree.CreateUtf8('%.Setup(%)?', [self, MethodText(aFrom)]);
   if fTree[aFrom] = nil then
-    fTree[aFrom] := TRestTree.Create([rtoCaseInsensitiveUri]);
+    fTree[aFrom] := TRadixTreeParams.Create(TRestTreeNode, [rtoCaseInsensitiveUri]);
   uri := fOwner.Model.Root;
   if aUri <> '' then
     uri := uri + '/' + aUri;

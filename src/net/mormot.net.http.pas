@@ -611,7 +611,8 @@ type
     fConnectionThread: TThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fUrlParamPos: PUtf8Char; // may be set by TUriTreeNode.LookupParam
-    fRouteName: pointer; // = pointer(TUriTreeNodeData.Names)
+    fRouteNode: TRadixTreeNodeParams; // is a TUriTreeNode
+    fRouteName: pointer; // set by TUriTreeNode.LookupParam
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
     function GetRouteValuePosLen(const Name: RawUtf8;
       var Value: TValuePUtf8Char): boolean;
