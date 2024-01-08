@@ -557,10 +557,10 @@ type
 
   /// event handler used by THttpServerGeneric.OnAfterResponse property
   // - main purpose is to apply post-response analysis, logging, etc...
-  // - Code defines the HTTP response status the (200 if OK, e.g.)
   TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
-    const User, Method, Host, Url, RemoteIP: RawUtf8;
-    Flags: THttpServerRequestFlags; Code: cardinal) of object;
+    const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+    Flags: THttpServerRequestFlags; StatusCode: cardinal;
+    ElapsedMicroSec, Received, Sent: Int64) of object;
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client

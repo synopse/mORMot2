@@ -824,7 +824,8 @@ type
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
-    fAuthSec: cardinal;
+    fAfterResponseStart: Int64;
+    fAuthRejectSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     procedure HttpInit;
@@ -3339,7 +3340,7 @@ begin
   begin
     if fServer.Authorization(fHttp, fConnectionID) = asrMatch then
       include(fRequestFlags, hsrAuthorized)
-    else if fServer.Async.fLastOperationSec shr 2 = fAuthSec then
+    else if fServer.Async.fLastOperationSec shr 2 = fAuthRejectSec then
     begin
       // 403 HTTP error (and close connection) on wrong attemps within 4 seconds
       result := HTTP_FORBIDDEN;
@@ -3348,7 +3349,7 @@ begin
     else
       // 401 HTTP_UNAUTHORIZED to ask for credentials and renew after 4 seconds
       // (ConnectionID may have changed in-between)
-      fAuthSec := fServer.Async.fLastOperationSec shr 2;
+      fAuthRejectSec := fServer.Async.fLastOperationSec shr 2;
   end;
   // by default, continue the request process
   result := HTTP_SUCCESS;
@@ -3494,6 +3495,8 @@ begin
   if fHttp.CompressContentEncoding >= 0 then
     fHttp.UncompressData;
   // prepare the HTTP/REST process reusing the THttpServerRequest instance
+  if Assigned(fServer.OnAfterResponse) then
+    QueryPerformanceMicroSeconds(fAfterResponseStart);
   result := soClose;
   if fRequest = nil then
   begin
@@ -3600,12 +3603,16 @@ end;
 procedure THttpAsyncConnection.DoAfterResponse;
 var
   user: RawUtf8;
+  stop: Int64;
 begin
   try
     if hsrAuthorized in fRequestFlags then
       user := fHttp.BearerToken; // from THttpServerSocketGeneric.Authorization
+    QueryPerformanceMicroSeconds(stop);
+    dec(stop, fAfterResponseStart);
     fServer.fOnAfterResponse(fConnectionID, user, fHttp.CommandMethod,
-      fHttp.Host, fHttp.CommandUri, fRemoteIP, fRequestFlags, fRespStatus);
+      fHttp.Host, fHttp.CommandUri, fHttp.Referer, fHttp.UserAgent, fRemoteIP,
+      fRequestFlags, fRespStatus, stop, fBytesRecv, fBytesSend);
   except
     on E: Exception do // paranoid
     begin
