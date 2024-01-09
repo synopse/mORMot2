@@ -1940,9 +1940,12 @@ type
   ESynExceptionClass = class of ESynException;
 
 /// convert any HTTP_* constant to an integer error code and its English text
-// - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-// - calls StatusCodeToReason() to retrieve the text message
+// - returns e.g. 'HTTP Error 404 - Not Found', calling StatusCodeToReason()
 function StatusCodeToErrorMsg(Code: integer): ShortString;
+
+/// convert any HTTP_* constant to an integer status code and its English text
+// - returns e.g. '200 OK' or '404 Not Found', calling StatusCodeToReason()
+function StatusCodeToShort(Code: integer): ShortString;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
@@ -8952,6 +8955,14 @@ var
 begin
   StatusCodeToReason(Code, msg);
   FormatShort('HTTP Error % - %', [Code, msg], result);
+end;
+
+function StatusCodeToShort(Code: integer): ShortString;
+var
+  msg: RawUtf8;
+begin
+  StatusCodeToReason(Code, msg);
+  FormatShort('% %', [Code, msg], result);
 end;
 
 
