@@ -398,10 +398,6 @@ type
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean = false): boolean;
-    /// a TSynLogArchiveEvent handler which will compress older .log files
-    // using our proprietary FileCompress format for this algorithm
-    function EventArchive(aMagic: cardinal;
-      const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
@@ -542,6 +538,12 @@ var
   // very fast if libdeflate is available (e.g. on FPC x86_64)
   // - note that compression itself is run in the logging background thread
   LogCompressAlgo: TAlgoCompress;
+
+  /// used by TSynLogArchiveEvent handlers to compress and delete older .log
+  // files using our proprietary FileCompress format for a given algorithm
+  // - late binding redirection, implemented in mormot.core.log.pas
+  LogCompressAlgoArchive: function(aAlgo: TAlgoCompress; aMagic: cardinal;
+    const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
@@ -5808,22 +5810,6 @@ begin
   result := true;
 end;
 
-function TAlgoCompress.EventArchive(aMagic: cardinal;
-  const aOldLogFileName, aDestinationPath: TFileName): boolean;
-begin
-  // aDestinationPath = 'ArchivePath\log\YYYYMM\'
-  result := false;
-  if (aOldLogFileName <> '') and
-     FileExists(aOldLogFileName) then
-  try
-    if FileCompress(aOldLogFileName, EnsureDirectoryExists(aDestinationPath) +
-       ExtractFileName(aOldLogFileName) + AlgoFileExt, aMagic, {hash32=}true) then
-      result := DeleteFile(aOldLogFileName);
-  except
-    on Exception do
-      result := false;
-  end;
-end;
 
 
 { TAlgoSynLZ }
@@ -8672,7 +8658,7 @@ const
     $a5a5a5a5, // mORMot 1 .mab file
     $a5a5a55a, // .mab file = MAGIC_MAB in mormot.core.log.pas
     $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
-    LOG_MAGIC, // .log.synlz with SynLZ or Lizard compression = $aba51051
+    LOG_MAGIC, // .log.synlz/.log.synliz compression = $aba51051
     $aba5a5ab, $aba5a5ab + 1, $aba5a5ab + 2, $aba5a5ab + 3, $aba5a5ab + 4,
     $aba5a5ab + 5, $aba5a5ab + 6, $aba5a5ab + 7, // .dbsynlz = SQLITE3_MAGIC
     $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C

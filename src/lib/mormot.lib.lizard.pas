@@ -214,20 +214,25 @@ var
   /// implement Lizard compression in level 17 (LIZARD_DEFAULT_CLEVEL) as AlgoID=4
   // - is set by TSynLizard.Create, so available e.g. if library is statically
   // linked, or once TSynLizardDynamic.Create has been successfully called
+  // - LIZARD_DEFAULT_CLEVEL = 17 is somewhat slow but efficient
   AlgoLizard: TAlgoCompress;
   /// implement Lizard compression in level 10 (LIZARD_MIN_CLEVEL) as AlgoID=5
   // - is set by TSynLizard.Create, so available e.g. if library is statically
   // linked, or once TSynLizardDynamic.Create has been successfully called
+  // - LIZARD_MIN_CLEVEL = 10 is very fast (especially at decompression), but
+  // compresses with basic LZ only so has no high compression ratio
   AlgoLizardFast: TAlgoCompress;
   /// implement Lizard compression in level 41 (LIZARD_HUFFMAN_CLEVEL) as AlgoID=6
   // - is set by TSynLizard.Create, so available e.g. if library is statically
   // linked, or once TSynLizardDynamic.Create has been successfully called
+  // - LIZARD_HUFFMAN_CLEVEL = 41 is slower than LIZARD_MIN_CLEVEL/AlgoLizardFast,
+  // but compress better; it is still faster than LIZARD_DEFAULT_CLEVEL/AlgoLizard
   AlgoLizardHuffman: TAlgoCompress;
 
 
 /// a TSynLogArchiveEvent handler which will archive and compress .log files
 // using our proprietary AlgoLizardFast format
-// - resulting file will have the .synlz extension and will be located
+// - resulting file will have the .synliz extension and will be located
 // in the aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM\'
 // - use UnSynLZ.dpr tool to uncompress it into .log textual file - it will use
 // the TAlgoCompress.AlgoID mechanism to recognize the SynLZ or Lizard format
@@ -534,7 +539,10 @@ end;
 function EventArchiveLizard(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
-  result := AlgoLizardFast.EventArchive(LOG_MAGIC, aOldLogFileName, aDestinationPath);
+  // compress and delete the file
+  result := Assigned(LogCompressAlgoArchive) and // set by mormot.core.log.pas
+            LogCompressAlgoArchive(
+              AlgoLizardFast, LOG_MAGIC, aOldLogFileName, aDestinationPath);
 end;
 
 

@@ -6411,6 +6411,43 @@ begin
 end;
 
 
+function _LogCompressAlgoArchive(aAlgo: TAlgoCompress; aMagic: cardinal;
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+var
+  dest: TFileName;
+  age: TDateTime;
+  i: integer;
+begin
+  result := false;
+  age := FileAgeToUnixTimeUtc(aOldLogFileName);
+  if age <> 0 then
+  try
+    // dest = 'ArchivePath\log\YYYYMM\yyyymmddhhmmss.log.synlz/synliz'
+    i := 100;
+    repeat
+      dest := FormatString('%%.log%', [EnsureDirectoryExists(aDestinationPath),
+        DateTimeToFileShort(age), aAlgo.AlgoFileExt]);
+      if not FileExists(dest) then
+        break;
+      age := age + 1 / SecsPerDay; // ensure unique
+      dec(i);
+      if i = 0 then // paranoid
+        raise ESynLogException.Create('LogCompressAlgoArchive infinite loop');
+    until false;
+    // compress or copy the old file, then delete it
+    if (aAlgo = nil) or // no compression
+       aAlgo.FileIsCompressed(aOldLogFileName, aMagic) then // already compressed
+      result := RenameFile(aOldLogFileName, dest) or
+                (CopyFile(aOldLogFileName, dest, false) and
+                 DeleteFile(aOldLogFileName))
+    else if aAlgo.FileCompress(aOldLogFileName, dest, aMagic, {hash32=}true) then
+      result := DeleteFile(aOldLogFileName);
+  except
+    on Exception do
+      DeleteFile(aOldLogFileName);
+  end;
+end;
+
 function EventArchiveDelete(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
@@ -6420,7 +6457,9 @@ end;
 function EventArchiveSynLZ(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
-  result := AlgoSynLZ.EventArchive(LOG_MAGIC, aOldLogFileName, aDestinationPath);
+  // compress and delete the file
+  result := LogCompressAlgoArchive(
+    AlgoSynLZ, LOG_MAGIC, aOldLogFileName, aDestinationPath);
 end;
 
 
@@ -7797,6 +7836,7 @@ begin
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs
+  LogCompressAlgoArchive := @_LogCompressAlgoArchive;
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
   //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));

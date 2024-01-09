@@ -1101,7 +1101,8 @@ function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUn
 var
   st: TStat;
 begin
-  if (fpStat(pointer(FileName), st) = 0) and
+  if (FileName <> '') and
+     (fpStat(pointer(FileName), st) = 0) and
      (AllowDir or
       (not FpS_ISDIR(st.st_mode))) then
     result := st.st_mtime // as TUnixTime seconds, with no local conversion
