@@ -8081,7 +8081,7 @@ begin
   arrinfo := Ctxt.Info;
   iteminfo := arrinfo.ArrayRtti;
   if (iteminfo = nil) or
-     (iteminfo.Props.Count = 0) then
+     (iteminfo.Props.CountNonVoid = 0) then
     exit; // expect an array of objects (classes or records)
   SetLength(props, fieldcount);
   for f := 0 to fieldcount - 1 do
@@ -8092,8 +8092,8 @@ begin
     prop := nil;
     if Ctxt.ValueLen <> 0 then
     begin
-      prop := FindCustomProp(pointer(iteminfo.props.List),
-        Ctxt.Value, Ctxt.ValueLen, iteminfo.props.Count);
+      prop := FindCustomProp(pointer(iteminfo.Props.List),
+        Ctxt.Value, Ctxt.ValueLen, iteminfo.Props.Count);
       if (prop = nil) and
          (itemInfo.ValueRtlClass = vcObjectWithID) and
          (PInteger(Ctxt.Value)^ and $dfdfdfdf =
@@ -10600,7 +10600,7 @@ begin
             if StrEquAW(@n[1], PPWord(Data)^) then
               exit;
       else
-        if result.Props.Count <> 0 then
+        if result.Props.CountNonVoid <> 0 then
         begin
           // search name in rkRecord/rkObject or rkClass properties
           p := FindCustomProp(

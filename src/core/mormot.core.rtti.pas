@@ -2163,6 +2163,7 @@ type
   TRttiCustomProp = object
   {$endif USERECORDWITHMETHODS}
   private
+    fOrigName: RawUtf8; // as set by InternalAdd()
     function InitFrom(RttiProp: PRttiProp): PtrInt;
     function ValueIsVoidGetter(Data: pointer): boolean;
     procedure GetValueDirect(Data: PByte; out RVD: TRttiVarData);
@@ -6799,6 +6800,7 @@ begin
   else
     OffsetSet := -1;
   Name := ToUtf8(RttiProp^.Name^);
+  fOrigName := Name;
   Prop := RttiProp;
   if rcfHasRttiOrd in Value.Cache.Flags then
     OrdinalDefault := RttiProp.Default
@@ -6814,7 +6816,7 @@ var
 begin // inlined IdemPropNameUSameLenNotNull()
   result := false;
   n := pointer(Name);
-  if (n = nil) or
+  if (n = nil) or // Name='' after NameChange()
      (PStrLen(n - _STRLEN)^ <> Len) then
     exit;
   pointer(Len) := @PUtf8Char(n)[Len - SizeOf(cardinal)];
@@ -7201,8 +7203,9 @@ begin
   p2 := name;
   repeat
     // inlined IdemPropNameUSameLenNotNull(p, name, namelen)
-    p1 := pointer(result^.Name); // Name<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = namelen then
+    p1 := pointer(result^.Name);
+    if (p1 <> nil) and // Name='' after NameChange()
+       (PStrLen(p1 - _STRLEN)^ = namelen) then
     begin
       l := @p1[namelen - SizeOf(cardinal)];
       dec(p2, PtrUInt(p1));
@@ -7292,12 +7295,11 @@ begin
   if high(Old) <> high(New) then
     raise ERttiException.CreateUtf8(
       'NameChanges(%,%) fields count', [high(Old), high(New)]);
-  // first reset the names from RTTI (if available)
+  // first reset the names
   p := pointer(List);
   for i := 1 to Count do
   begin
-    if p^.Prop <> nil then
-      p^.Name := ToUtf8(p^.Prop^.Name^);
+    p^.Name := p^.fOrigName; // back to original
     inc(p);
   end;
   // customize field names
@@ -7328,6 +7330,7 @@ begin
     begin
       MoveFast(List[0], List[1], SizeOf(List[0]) * Count);
       pointer(List[0].Name) := nil; // avoid GPF below
+      pointer(List[0].fOrigName) := nil;
     end;
     NamesAsJsonArray := '"' + PropName + '",' + NamesAsJsonArray;
     n := 0;
@@ -7345,6 +7348,7 @@ begin
     OffsetGet := Offset;
     OffsetSet := Offset;
     Name := PropName;
+    fOrigName := PropName;
     Prop := nil;
     OrdinalDefault := NO_DEFAULT;
     Stored := rpsTrue;
@@ -7361,7 +7365,11 @@ begin
   result := Count;
   inc(Count);
   SetLength(List, Count);
-  List[result].Name := PropName;
+  with List[result] do
+  begin
+    Name := PropName;
+    fOrigName := PropName;
+  end;
 end;
 
 function TRttiCustomProps.AdjustAfterAdded: TRttiCustomFlags;
@@ -7508,6 +7516,7 @@ begin
       OffsetGet := f^.Offset;
       OffsetSet := f^.Offset;
       Name := ToUtf8(f^.Name^);
+      fOrigName := Name;
       OrdinalDefault := NO_DEFAULT;
       Stored := rpsTrue;
       inc(f);
@@ -8093,7 +8102,7 @@ begin
     result := nil;
     if (rc = nil) or
        (Data = nil) or
-       (rc.Props.Count = 0) then
+       (rc.Props.CountNonVoid = 0) then
       exit;
     GetNextItemShortString(FullName, @n, PathDelim);
     if n[0] in [#0, #254] then
@@ -9309,7 +9318,8 @@ begin
   p := pointer(rc.Props.List);
   for i := 1 to rc.Props.Count do
   begin
-    if not (p^.Value.Kind in rkComplexTypes) then
+    if (p^.Name <> '') and
+       not (p^.Value.Kind in rkComplexTypes) then
     begin
       desc := '';
       dolower := false;
