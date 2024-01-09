@@ -730,6 +730,9 @@ type
   TZipWriteToStream = TZipWrite;
 {$endif PUREMORMOT2}
 
+var
+  /// the default compression level to be applied to EventArchiveZip()
+  EventArchiveZipCompressLevel: integer = 6;
 
 /// a TSynLogArchiveEvent handler which will compress older .log files
 // into .zip archive files
@@ -3041,27 +3044,59 @@ end;
 
 
 var
+  EventArchiveZipSafe: TLightLock; // paranoid
   EventArchiveZipWrite: TZipWrite = nil;
 
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var
   n: integer;
+  z, s: TStream;
+  age: TDateTime;
+  zipname: TFileName;
 begin
   result := false;
-  if aOldLogFileName = '' then
-    FreeAndNilSafe(EventArchiveZipWrite) // last call with '' to close .zip
-  else
-  begin
-    if not FileExists(aOldLogFileName) then
-      exit;
-    if EventArchiveZipWrite = nil then // first call
-      EventArchiveZipWrite := TZipWrite.CreateFrom(
-        copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
-    n := EventArchiveZipWrite.Count;
-    EventArchiveZipWrite.AddDeflated(aOldLogFileName, {removepath=}true);
-    if (EventArchiveZipWrite.Count = n + 1) and
-       DeleteFile(aOldLogFileName) then
-      result := true;
+  EventArchiveZipSafe.Lock;
+  try
+    if aOldLogFileName = '' then
+      // last call with '' to eventually close the current .zip
+      FreeAndNilSafe(EventArchiveZipWrite)
+    else
+    begin
+      age := FileAgeToDateTime(aOldLogFileName);
+      if age = 0 then
+        exit; // paranoid
+      if EventArchiveZipWrite = nil then // first call: open the .zip
+        EventArchiveZipWrite := TZipWrite.CreateFrom(
+          copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
+      n := EventArchiveZipWrite.Count;
+      zipname := FormatString('%-%.log', [DateTimeToFileShort(age), n]); // unique
+      if (LogCompressAlgo = nil) or
+         not LogCompressAlgo.FileIsCompressed(aOldLogFileName, LOG_MAGIC) then
+        // old file is a plain text log so can be compressed into .zip directly
+        EventArchiveZipWrite.AddDeflated(
+          aOldLogFileName, false, EventArchiveZipCompressLevel, zipname)
+      else
+      begin
+        // decompress and recompress the .synlz old file into .zip
+        s := FileStreamSequentialRead(aOldLogFileName);
+        try
+          z := EventArchiveZipWrite.AddDeflatedStream(zipname,
+             DateTimeToWindowsFileTime(age), EventArchiveZipCompressLevel);
+          try
+            LogCompressAlgo.StreamUnCompress(s, z, LOG_MAGIC, {hash32=}true);
+          finally
+            z.Free;
+          end;
+        finally
+          s.Free;
+        end;
+      end;
+      if (EventArchiveZipWrite.Count = n + 1) and
+         DeleteFile(aOldLogFileName) then
+        result := true;
+    end;
+  finally
+    EventArchiveZipSafe.UnLock;
   end;
 end;
 
