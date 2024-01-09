@@ -6165,13 +6165,20 @@ var
   end;
 
   procedure Prepare(Z: TZipWrite);
+  var
+    s: TStream;
   begin
     try
       Z.OnProgress := onprog;
       Z.ForceZip64 := zip64;
       Z.AddDeflated('rep1\one.exe', pointer(Data), length(Data));
       Check(Z.Count = 1, 'cnt1');
-      Z.AddDeflated('rep2\ident.gz', M.Memory, M.Position);
+      s := Z.AddDeflatedStream('rep2\ident.gz');
+      try
+        s.Write(M.Memory^, M.Position);
+      finally
+        s.Free;
+      end;
       Check(Z.Count = 2, 'cnt2');
       Z.AddDeflated(DataFile);
       Check(Z.Count = 3, 'cnt3');

@@ -1950,7 +1950,7 @@ begin
             h32.fileInfo.zcrc32 := deflate.CRC;
           end;
           if h32.fileInfo.extraLen = 0 then
-            h32.fileInfo.zzipSize := h64.zzipSize;
+            h32.fileInfo.zzipSize := h64.zzipSize; // Zip64 store ZIP32_MAXSIZE
         finally
           deflate.Free;
         end;
@@ -1987,23 +1987,26 @@ begin
   // set final zip entry state
   with fOwner.Entry[fOwner.Count] do
   begin
-    if (fSizeIn shr 32 <> 0) or
-       (fSizeOut shr 32 <> 0) then
-      raise ESynZip.CreateUtf8(
-        '%.AddDeflatedStream: too much data in % - try ForceZip64=true',
-        [fOwner, intName]);
-    h32.fileInfo.zfullSize := fSizeIn;
-    h32.fileInfo.zzipSize := fSizeOut;
+    if h32.fileInfo.extraLen = 0 then // not Zip64 format
+    begin
+      if (fSizeIn shr 32 <> 0) or
+         (fSizeOut shr 32 <> 0) then
+        raise ESynZip.CreateUtf8(
+          '%.AddDeflatedStream: too much data in % - try ForceZip64=true',
+          [fOwner, intName]);
+      h32.fileInfo.zfullSize := fSizeIn; // Zip64 store ZIP32_MAXSIZE here
+      h32.fileInfo.zzipSize := fSizeOut;
+    end;
     h32.fileInfo.zcrc32 := fCrc;
-    h64.zfullSize := fSizeIn; // h64 is needed for ForceZip64
+    h64.zfullSize := fSizeIn; // h64 is always set
     h64.zzipSize := fSizeOut;
   end;
-  inc(fOwner.fCount);
   // overwrite the local file header with the final values
   newpos := fOwner.fDest.Position;
   fOwner.fDest.Seek(fHeaderPos, soBeginning);
   fOwner.WriteRawHeader;
   fOwner.fDest.Seek(newpos, soBeginning);
+  inc(fOwner.fCount);
 end;
 
 function TZipWrite.AddDeflatedStream(const aZipName: TFileName;
