@@ -242,6 +242,10 @@ type
     // (in mormot.lib.lizard.pas), 7/8 for TAlgoRleLZ/TAlgoRle
     property AlgoID: byte
       read fAlgoID;
+    /// the usual file extension of this algorithm
+    // - e.g. '.synlz' or '.synz' or '.synliz' for SynLZ, Deflate or Lizard
+    property AlgoFileExt: TFileName
+      read fAlgoFileExt;
   public
     /// will register AlgoID in the global list, for Algo() class methods
     // - no need to free this instance, since it will be owned by the global list
@@ -374,7 +378,7 @@ type
     // matching the Magic number as supplied to FileCompress() function
     // - follow the FileIsSynLZ() deprecated function format
     // - expects the compressed data to be at file beginning (not appended)
-    function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
+    class function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
     /// compress a file content using this compression algorithm
     // - source file is split into ChunkBytes blocks (128 MB by default) for
     // fast in-memory compression of any file size, then compressed and
@@ -5674,27 +5678,21 @@ begin
   end;
 end;
 
-function TAlgoCompress.FileIsCompressed(const Name: TFileName;
+class function TAlgoCompress.FileIsCompressed(const Name: TFileName;
   Magic: cardinal): boolean;
 var
-  S: TStream;
-  Head: TAlgoCompressHead;
+  f: THandle;
+  l: integer;
+  h: TAlgoCompressHead;
 begin
   result := false;
-  if FileExists(Name) then
-  try
-    S := TFileStreamEx.Create(Name, fmOpenReadDenyNone);
-    try
-      if S.Read(Head, SizeOf(Head)) = SizeOf(Head) then
-        if Head.Magic = Magic then
-          result := true; // only check magic, since there may be several chunks
-    finally
-      S.Free;
-    end;
-  except
-    on Exception do
-      result := false;
-  end;
+  f := FileOpen(Name, fmOpenReadDenyNone);
+  if not ValidHandle(f) then
+    exit;
+  l := FileRead(f, h, SizeOf(h));
+  FileClose(f);
+  result := (l = SizeOf(h)) and
+            (h.Magic = Magic); // only check the magic of first chunk header
 end;
 
 function TAlgoCompress.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
