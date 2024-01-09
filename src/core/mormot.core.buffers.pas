@@ -531,6 +531,17 @@ var
   // - if RLE has no effect during compression, will fallback to plain store
   AlgoRle: TAlgoCompress;
 
+var
+  /// define how .synlz files are compressed by TSynLog.PerformRotation
+  // - as used within mormot.core.log.pas unit
+  // - assigned to AlgoSynLZ by default which is the fastest for logs
+  // - you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
+  // (default AlgoLizard is much slower and less efficient on logs)
+  // - if you set nil, no compression will take place
+  // - consider AlgoDeflate which gives the best compression ratio and is also
+  // very fast if libdeflate is available (e.g. on FPC x86_64)
+  // - note that compression itself is run in the logging background thread
+  LogCompressAlgo: TAlgoCompress;
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then

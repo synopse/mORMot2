@@ -1473,16 +1473,6 @@ function EventArchiveDelete(
 function EventArchiveSynLZ(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
-var
-  /// define how .synlz files are compressed by TSynLog.PerformRotation
-  // - assigned to AlgoSynLZ by default which is the fastest for logs
-  // - you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
-  // (default AlgoLizard is much slower and less efficient on logs)
-  // - consider AlgoDeflate which gives the best compression ratio and is also
-  // very fast if libdeflate is available (e.g. on FPC x86_64)
-  // - note that compression itself is run in the logging background thread
-  LogCompressAlgo: TAlgoCompress;
-
 
 { ************** Efficient .log File Access via TSynLogFile }
 
@@ -5417,6 +5407,7 @@ var
   currentMaxSynLZ: cardinal;
   i: integer;
   c: PSynLogThreadContext;
+  ext: TFileName;
   FN: array of TFileName;
 begin
   CloseLogFile;
@@ -5426,10 +5417,13 @@ begin
   begin
     if fFamily.fRotateFileCount > 1 then
     begin
+      ext := '.log';
+      if LogCompressAlgo <> nil then
+        ext := LogCompressAlgo.AlgoFileExt;
       SetLength(FN, fFamily.fRotateFileCount - 1);
       for i := fFamily.fRotateFileCount - 1 downto 1 do
       begin
-        FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + '.synlz');
+        FN[i - 1] := ChangeFileExt(fFileName, '.' + IntToStr(i) + ext);
         if (currentMaxSynLZ = 0) and
            FileExists(FN[i - 1]) then
           currentMaxSynLZ := i;
@@ -6426,8 +6420,7 @@ end;
 function EventArchiveSynLZ(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
-  result := AlgoSynLZ.EventArchive(
-    LOG_MAGIC, aOldLogFileName, aDestinationPath, '.synlz');
+  result := AlgoSynLZ.EventArchive(LOG_MAGIC, aOldLogFileName, aDestinationPath);
 end;
 
 
