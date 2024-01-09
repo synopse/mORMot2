@@ -26,6 +26,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.buffers, // for TAlgoCompress
   mormot.lib.z;
 
@@ -49,7 +50,7 @@ type
     fFormat: TSynZipCompressorFormat;
     fDestStream: TStream;
     Z: TZLib;
-    fCRC: cardinal;
+    fCrc: cardinal;
     fSizeIn, fSizeOut: Int64;
     {$ifdef FPC}
     function GetPosition: Int64; override;
@@ -72,8 +73,8 @@ type
     property SizeOut: Int64
       read fSizeOut;
     /// the current crc32 of the read or written data, i.e. the uncompressed CRC
-    property CRC: cardinal
-      read fCRC;
+    property Crc: cardinal
+      read fCrc;
   end;
 
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
@@ -662,6 +663,14 @@ type
     procedure AddDeflated(const aFileName: TFileName;
       RemovePath: boolean = true; CompressLevel: integer = 6;
       ZipName: TFileName = ''); overload;
+    /// compress some data into a new zip entry as a TStream instance
+    // - data will be compressed by one or several calls to result.Write()
+    // - compression will be finalized when result.Free is called
+    // - limited to 4GB of data, unless ForceZip64 is set to true
+    // - currently do not support any OnProgressStep notification, because
+    // we don't know the input size ahead of time
+    function AddDeflatedStream(const aZipName: TFileName;
+      FileAge: integer = 0; CompressLevel: integer = 6): TStream;
     /// add a (huge) file to the zip file, without compression
     // - copy reading 1MB chunks of input, triggerring zip64 format if needed
     // - just a wrapper around AddDeflated() with CompressLevel=-1
@@ -907,7 +916,7 @@ begin
   fFormat := Format;
   if fFormat = szcfGZ then
     fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE);
-  Z.Init(nil, 0, outStream, nil, nil, 0, 128 shl 10);
+  Z.Init(nil, 0, outStream, nil, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.CompressInit(CompressionLevel, fFormat = szcfZip);
 end;
 
@@ -920,7 +929,7 @@ begin
       if fFormat = szcfGZ then
       begin
         // .gz format expected a trailing header
-        fDestStream.WriteBuffer(fCRC, 4); // CRC of the uncompressed data
+        fDestStream.WriteBuffer(fCrc, 4); // CRC of the uncompressed data
         fDestStream.WriteBuffer(Z.Stream.total_in, 4); // truncated to 32-bit
       end;
     except
@@ -945,7 +954,7 @@ begin
   inc(fSizeIn, Count);
   Z.Stream.next_in := pointer(@Buffer);
   Z.Stream.avail_in := Count;
-  fCRC := mormot.lib.z.crc32(fCRC, @Buffer, Count); // manual crc32
+  fCrc := mormot.lib.z.crc32(fCrc, @Buffer, Count); // manual crc32
   while Z.Stream.avail_in > 0 do
   begin
     // compress pending data
@@ -981,7 +990,7 @@ begin
     raise ESynZip.CreateUtf8('%.Create: unsupported szcfGZ', [self]);
   fDestStream := outStream;
   fFormat := Format;
-  Z.Init(nil, 0, outStream, @fCRC, nil, 0, 128 shl 10);
+  Z.Init(nil, 0, outStream, @fCrc, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.UncompressInit(fFormat = szcfZip);
 end;
 
@@ -1706,7 +1715,7 @@ begin
   with Entry[Count] do
   begin
     // caller should have set h64.zzipSize64/zfullSize64
-    // and h32.zzipMethod/zcrc32/zlastMod
+    // and h32.zzipMethod/zcrc32/zlastMod - e.g. with NewEntry()
     h64.offset := QWord(fDest.Position) - fAppendOffset;
     if ForceZip64 or
        (h64.zzipSize >= ZIP32_MAXSIZE) or
@@ -1953,6 +1962,62 @@ begin
     finally
       FileClose(f);
     end;
+end;
+
+type
+  TZipWriteCompressor = class(TSynZipCompressor)
+  protected
+    fHeaderPos: Int64;
+    fOwner: TZipWrite;
+  public
+    destructor Destroy; override;
+  end;
+
+destructor TZipWriteCompressor.Destroy;
+var
+  newpos: Int64;
+begin
+  // flush output compression buffers
+  inherited Destroy;
+  if fOwner = nil then
+    exit; // paranoid: if Create() failed
+  // set final zip entry state
+  with fOwner.Entry[fOwner.Count] do
+  begin
+    if (fSizeIn shr 32 <> 0) or
+       (fSizeOut shr 32 <> 0) then
+      raise ESynZip.CreateUtf8(
+        '%.AddDeflatedStream: too much data in % - try ForceZip64=true',
+        [fOwner, intName]);
+    h32.fileInfo.zfullSize := fSizeIn;
+    h32.fileInfo.zzipSize := fSizeOut;
+    h32.fileInfo.zcrc32 := fCrc;
+    h64.zfullSize := fSizeIn; // h64 is needed for ForceZip64
+    h64.zzipSize := fSizeOut;
+  end;
+  inc(fOwner.fCount);
+  // overwrite the local file header with the final values
+  newpos := fOwner.fDest.Position;
+  fOwner.fDest.Seek(fHeaderPos, soBeginning);
+  fOwner.WriteRawHeader;
+  fOwner.fDest.Seek(newpos, soBeginning);
+end;
+
+function TZipWrite.AddDeflatedStream(const aZipName: TFileName;
+  FileAge, CompressLevel: integer): TStream;
+begin
+  // initialize the compression stream
+  if CompressLevel <= 0 then
+    CompressLevel := 0; // store
+  result := TZipWriteCompressor.Create(fDest, CompressLevel, szcfRaw);
+  TZipWriteCompressor(result).fHeaderPos := fDest.Position;
+  TZipWriteCompressor(result).fOwner := self;
+  // create the new entry
+  if CompressLevel <> 0 then
+    CompressLevel := Z_DEFLATED; // method (if not Z_STORED=0)
+  NewEntry(CompressLevel, 0, FileAge);
+  WriteHeader(aZipName);
+  // caller now calls TZipWriteCompressor.Write then TZipWriteCompressor.Destroy
 end;
 
 function TZipWrite.AddFolder(const FolderName: TFileName;
