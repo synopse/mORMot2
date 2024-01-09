@@ -884,16 +884,28 @@ type
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
-    /// append the current UTC date and time, in our log-friendly format
+    /// append the current UTC date and time, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format with '.sss' optional milliseconds
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method will add the supplied TZD and ignore twoDateTimeWithZ flag
+    procedure AddCurrentIsoDateTime(LocalTime, WithMS: boolean;
+      FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = '');
+    /// append the current UTC date and time, in apache-like format
+     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentNcsaLogTime(LocalTime: boolean; const TZD: RawUtf8 = '+0000');
+    /// append the current UTC date and time, in our HTTP format
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    procedure AddCurrentHttpTime(LocalTime: boolean; const TZD: RawUtf8 = 'GMT');
+    /// append the current UTC date and time, in our TSynLog human-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentLogTime(LocalTime: boolean);
-    /// append the current UTC date and time, in our log-friendly format
-      // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    // - you may set LocalTime=TRUE to write the local date and time instead
-    // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentNcsaLogTime(LocalTime: boolean);
+    /// append a time period as "seconds.milliseconds" content
+    procedure AddSeconds(MilliSeconds: QWord; Quote: AnsiChar = #0);
   end;
 
 
@@ -3344,10 +3356,20 @@ begin
   if Value = 0 then
     exit;
   T.FromDateTime(Value);
-  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(T.Year), UInt2DigitsToShortFast(T.Month),
-    UInt2DigitsToShortFast(T.Day), FirstTimeChar, UInt2DigitsToShortFast(T.Hour),
+  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(T.Year),
+    UInt2DigitsToShortFast(T.Month), UInt2DigitsToShortFast(T.Day),
+    FirstTimeChar, UInt2DigitsToShortFast(T.Hour),
     UInt2DigitsToShortFast(T.Minute), UInt2DigitsToShortFast(T.Second),
     UInt3DigitsToShort(T.MilliSecond), TZD]);
+end;
+
+procedure TTextDateWriter.AddCurrentIsoDateTime(
+  LocalTime, WithMS: boolean; FirstTimeChar: AnsiChar; const TZD: RawUtf8);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  time.AddIsoDateTime(self, WithMS, FirstTimeChar, TZD);
 end;
 
 procedure TTextDateWriter.AddCurrentLogTime(LocalTime: boolean);
@@ -3358,14 +3380,32 @@ begin
   time.AddLogTime(self);
 end;
 
-procedure TTextDateWriter.AddCurrentNcsaLogTime(LocalTime: boolean);
+procedure TTextDateWriter.AddCurrentNcsaLogTime(
+  LocalTime: boolean; const TZD: RawUtf8);
 var
   time: TSynSystemTime;
 begin
   time.FromNow(LocalTime);
-  if BEnd - B <= 21 then
-    FlushToStream;
-  inc(B, time.ToNcsaText(B + 1));
+  time.AddNcsaText(self, TZD);
+end;
+
+procedure TTextDateWriter.AddCurrentHttpTime(LocalTime: boolean;
+  const TZD: RawUtf8);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  time.AddHttpDate(self, TZD);
+end;
+
+procedure TTextDateWriter.AddSeconds(MilliSeconds: QWord; Quote: AnsiChar);
+begin
+  if Quote <> #0 then
+    Add(Quote);
+  MilliSeconds := MilliSeconds * 10; // convert a.bcd to a.bcd0 currency/Curr64
+  AddCurr64(@MilliSeconds);
+  if Quote <> #0 then
+    Add(Quote);
 end;
 
 
