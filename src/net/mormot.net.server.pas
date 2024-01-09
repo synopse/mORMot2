@@ -10,6 +10,7 @@ unit mormot.net.server;
    - Abstract UDP Server
    - Custom URI Routing using an efficient Radix Tree
    - Shared Server-Side HTTP Process
+   - HTTP Server Logging Processors
    - THttpServerSocket/THttpServer HTTP/1.1 Server
    - THttpPeerCache Local Peer-to-peer Cache
    - THttpApiServer HTTP/1.1 Server Over Windows http.sys Module
@@ -761,6 +762,168 @@ function GetMainMacAddress(out Mac: TMacAddress;
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8;
   UpAndDown: boolean = false): boolean; overload;
+
+
+{ ******************** HTTP Server Logging Processors }
+
+const
+  /// THttpLogger.Parse() text matching the nginx predefined "combined" format
+  LOGFORMAT_COMBINED = '$remote_addr - $remote_user [$time_local] ' +
+    '"$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
+type
+  /// HTTP server abstract parent for Logger / Analyzer
+  // - do not use this abstract class but e.g. THttpLogger
+  // - you can merge several THttpLoger instances via the OnContinue property
+  THttpAfterResponse = class(TSynPersistent)
+  protected
+    fSafe: TOSLightLock;
+    fOnContinue: TOnHttpServerAfterResponse;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// process the supplied request information
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(Connection: THttpServerConnectionID;
+      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+      Flags: THttpServerRequestFlags; StatusCode: cardinal;
+      StartMicroSec, Received, Sent: Int64); virtual; abstract;
+    /// the overriden Append() method will call this event with its own process
+    property OnContinue: TOnHttpServerAfterResponse
+      read fOnContinue write fOnContinue;
+  end;
+
+  /// supported THttpLoger place holders
+  // - matches nginx log module naming, with some additional fields
+  // - values are provided as TOnHttpServerAfterResponse event parameters
+  // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
+  // - hlvBytes_Sent is the number of bytes sent to a client
+  // - hlvConnection is the THttpServerConnectionID
+  // - hlvConnection_Flags is the CSV of supplied THttpServerRequestFlags
+  // - hlvConnection_Upgrade is "upgrade" when "connection: upgrade" in headers
+  // - hlvDocument_Uri equals hlvUri value
+  // - hlvElapsed is the request processing time as text (e.g. '1.2s')
+  // - hlvElapsedMSec is the request processing time in milliseconds
+  // - hlvElapsedUSec is the request processing time in microseconds
+  // - hlvHostName is the "Host:" header value
+  // - hlvHttp_Referer is the "Referer:" header value
+  // - hlvHttp_User_Agent is the "User-Agent:" header value
+  // - hlvHttps is "on" if the connection operates in HTTPS mode
+  // - hlvMsec is current time in seconds with milliseconds resolution
+  // - hlvReceived is the request size from the client, as text
+  // - hlvRemote_Addr is the client IP address
+  // - hlvRemote_User is the user name supplied if hsrAuthorized is set
+  // - hlvRequest is the full original request line
+  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and Url values
+  // - hlvRequest_Length is the number of bytes received from the client
+  // (including headers and request body)
+  // - hlvRequest_Method is usually "GET" or "POST"
+  // - hlvRequest_Time is processing time in seconds with milliseconds resolution
+  // - hlvRequest_Uri is the full original request line with arguments
+  // - hlvScheme is either "HTTP" or "HTTPS"
+  // - hlvSent is the response size sent back to the client, as text
+  // - hlvServer_Protocol is either "HTTP/1.0" or "HTTP/1.1"
+  // - hlvStatus is the response status code (e.g. "200" or "404")
+  // - hlvTime_Epoch is the UTC time as seconds since the Unix Epoch
+  // - hlvTime_EpochMSec is the UTC time as milliseconds since the Unix Epoch
+  // - hlvTime_Iso8601 is the UTC (not local) time in the ISO 8601 standard format
+  // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
+  // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
+  // - hlvUri is the normalized current URI
+  THttpLogVariable = (
+    hlvUnknown,
+    hlvBody_Bytes_Sent,
+    hlvBytes_Sent,
+    hlvConnection,
+    hlvConnection_Flags,
+    hlvConnection_Upgrade,
+    hlvDocument_Uri,
+    hlvElapsed,
+    hlvElapsedMSec,
+    hlvElapsedUSec,
+    hlvHostName,
+    hlvHttp_Referer,
+    hlvHttp_User_Agent,
+    hlvHttps,
+    hlvMsec,
+    hlvReceived,
+    hlvRemote_Addr,
+    hlvRemote_User,
+    hlvRequest,
+    hlvRequest_Hash,
+    hlvRequest_Length,
+    hlvRequest_Method,
+    hlvRequest_Time,
+    hlvRequest_Uri,
+    hlvScheme,
+    hlvSent,
+    hlvServer_Protocol,
+    hlvStatus,
+    hlvStatus_Text,
+    hlvTime_Epoch,
+    hlvTime_EpochMSec,
+    hlvTime_Iso8601,
+    hlvTime_Local,
+    hlvTime_Http,
+    hlvUri);
+
+  /// set of supported THttpLoger place holders, matching nginx log module naming
+  THttpLogVariables = set of THttpLogVariable;
+
+  /// store an array of HTTP log variables, ready to be rendered by THttpLoger
+  // - hlvUnknown is used to define a text place holder
+  THttpLogVariableDynArray = array of THttpLogVariable;
+
+  /// HTTP server log format parser and interpreter
+  THttpLogger = class(THttpAfterResponse)
+  protected
+    fWriter: TTextDateWriter;
+    fFormat, fLineFeed: RawUtf8;
+    fVariable: THttpLogVariableDynArray;
+    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
+    fLastFlush: cardinal;
+    fVariables: THttpLogVariables;
+    fFlags: set of (ffOwnWriter);
+    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+  public
+    /// initialize this instance
+    constructor Create(aWriter: TTextDateWriter;
+      const aFormat: RawUtf8 = LOGFORMAT_COMBINED); reintroduce; overload;
+    /// initialize this instance to generate a new log file
+    constructor Create(const aFileName: TFileName;
+      const aFormat: RawUtf8 = LOGFORMAT_COMBINED); reintroduce; overload;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// parse a HTTP server log format string
+    // - returns '' on success, or an error message on invalid input
+    function Parse(const aFormat: RawUtf8): RawUtf8;
+    /// append a request information to the destination log file
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(Connection: THttpServerConnectionID;
+      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+      Flags: THttpServerRequestFlags; StatusCode: cardinal;
+      StartMicroSec, Received, Sent: Int64); override;
+    /// low-level access to the parsed log format state machine
+    property Variable: THttpLogVariableDynArray
+      read fVariable;
+    /// low-level access to the parsed log format used variables
+    property Variables: THttpLogVariables
+      read fVariables;
+    /// low-level access to the destination TTextWriter instance
+    property Writer: TTextDateWriter
+      read fWriter write fWriter;
+    /// customize the log line feed pattern
+    // - matches the operating system value by default (CR or CRLF)
+    property LineFeed: RawUtf8
+      read fLineFeed write fLineFeed;
+  end;
+
+
+
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -3591,6 +3754,265 @@ begin
     exit;
   Mac := fnd^;
   result := true;
+end;
+
+
+{ ******************** HTTP Server Logging Processors }
+
+{ THttpAfterResponse }
+
+constructor THttpAfterResponse.Create;
+begin
+  fSafe.Init;
+end;
+
+destructor THttpAfterResponse.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+
+{ THttpLogger }
+
+constructor THttpLogger.Create(aWriter: TTextDateWriter;
+  const aFormat: RawUtf8);
+var
+  err: RawUtf8;
+begin
+  inherited Create;
+  fWriter := aWriter;
+  fLineFeed := CRLF; // default operating-system dependent Line Feed
+  if aFormat = '' then
+    exit;
+  err := Parse(aFormat);
+  if err <> '' then
+    raise EHttpServer.CreateUtf8('%.Create: %', [self, err]);
+end;
+
+constructor THttpLogger.Create(const aFileName: TFileName;
+  const aFormat: RawUtf8);
+begin
+  fFlags := [ffOwnWriter];
+  Create(TTextDateWriter.CreateOwnedFileStream(aFileName, 65536), aFormat);
+end;
+
+destructor THttpLogger.Destroy;
+begin
+  inherited Destroy;
+  if ffOwnWriter in fFlags then
+    FreeAndNil(fWriter);
+end;
+
+function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
+var
+  p, start: PUtf8Char;
+  v: integer;
+begin
+  result := '';
+  fFormat := aFormat;
+  fVariable := nil;
+  fVariables := [];
+  fUnknownPosLen := nil;
+  p := pointer(aFormat);
+  repeat
+    start := p;
+    while not (p^ in [#0, '$']) do
+      inc(p);
+    if p <> start then
+    begin
+      SetLength(fVariable, length(fVariable) + 1); // append 0 = hlvUnknown
+      AddInteger(fUnknownPosLen, start - pointer(aFormat));  // pos
+      AddInteger(fUnknownPosLen, p - start);                 // len
+    end;
+    if p^ = #0 then
+      break;
+    inc(p); // ignore '$'
+    start := p;
+    while tcIdentifier in TEXT_CHARS[p^] do
+      inc(p);
+    v := GetEnumNameValueTrimmed(TypeInfo(THttpLogVariable), start, p - start);
+    if v <= 0 then
+    begin
+      FormatUtf8('Unknown $% variable', [start], result);
+      exit;
+    end;
+    SetLength(fVariable, length(fVariable) + 1);
+    fVariable[high(fVariable)] := THttpLogVariable(v);
+    include(fVariables, THttpLogVariable(v));
+  until false;
+end;
+
+procedure THttpLogger.Append(Connection: THttpServerConnectionID;
+  const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+  Flags: THttpServerRequestFlags; StatusCode: cardinal;
+  StartMicroSec, Received, Sent: Int64);
+var
+  n: integer;
+  v: ^THttpLogVariable;
+  poslen: PIntegerArray; // pos1,len1, pos2,len2, ... pairs
+  elapsed: Int64;
+const
+  SCHEME: array[boolean] of string[7]  = ('http', 'https');
+  HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
+begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
+      RemoteIP, Flags, StatusCode, StartMicroSec, Received, Sent);
+  // very efficient log generation with no transient memory allocation
+  if (fWriter = nil) or
+     (fVariable = nil) then
+   exit; // nothing to process here
+  elapsed := 0;
+  v := pointer(fVariable);
+  n := length(fVariable);
+  poslen := pointer(fUnknownPosLen);
+  fWriter.OnFlushToStream := OnFlushToStream;
+  fWriter.CustomOptions := fWriter.CustomOptions +
+    [twoNoWriteToStreamException, twoFlushToStreamNoAutoResize];
+  fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+    // code within the loop should not raise exceptions
+  {$endif HASFASTTRYFINALLY}
+    repeat
+      case v^ of // compile as a fast lookup table jump on FPC
+        hlvUnknown: // plain text
+          begin
+            fWriter.AddNoJsonEscape(@PByteArray(fFormat)[poslen^[0]], poslen^[1]);
+            poslen := @poslen^[2]; // next pos,len pair
+          end;
+        hlvBody_Bytes_Sent, // no body size by now
+        hlvBytes_Sent:
+          fWriter.AddQ(Sent);
+        hlvConnection:
+          fWriter.AddQ(Connection); // Connection ID (or Serial)
+        hlvConnection_Flags:
+          PRttiInfo(TypeInfo(THttpServerRequestFlag))^.
+            EnumBaseType^.GetSetNameJsonArray(
+              fWriter, byte(Flags), ',', #0, {fullasstar=}false, {trim=}true);
+        hlvConnection_Upgrade:
+          if hsrConnectionUpgrade in Flags then
+            fWriter.AddShorter('upgrade');
+        hlvDocument_Uri,
+        hlvUri:
+          //TODO: normalize URI
+          fWriter.AddString(Url);
+        hlvElapsed,
+        hlvElapsedMSec,
+        hlvElapsedUSec,
+        hlvRequest_Time: // no socket communication time included by now
+          if StartMicroSec <> 0 then
+          begin
+            if elapsed = 0 then
+            begin
+              QueryPerformanceMicroSeconds(elapsed);
+              dec(elapsed, StartMicroSec);
+            end;
+            if v^ = hlvElapsed then
+              fWriter.AddShort(MicroSecToString(elapsed))
+            else if (elapsed > 0) and
+               (v^ = hlvElapsedUSec) then
+              fWriter.AddQ(elapsed)
+            else if elapsed < 1000 then
+              fWriter.Add('0') // less than 1 ms
+            else
+              fWriter.AddSeconds(elapsed div 1000);
+          end
+          else
+            fWriter.Add('0');
+        hlvHostName:
+          if Host = '' then
+            fWriter.Add('-')
+          else
+            fWriter.AddString(Host);
+        hlvHttp_Referer:
+          if Referer = '' then
+            fWriter.Add('-')
+          else
+            fWriter.AddString(Referer);
+        hlvHttp_User_Agent:
+          if UserAgent = '' then
+            fWriter.Add('-')
+          else
+            fWriter.AddString(UserAgent);
+        hlvHttps:
+          if hsrHttps in Flags then
+            fWriter.AddShorter('on');
+        hlvMsec:
+          fWriter.AddSeconds(UnixMSTimeUtcFast);
+        hlvReceived:
+          fWriter.AddShort(KBNoSpace(Received));
+        hlvRemote_Addr:
+          if RemoteIP = '' then
+            fWriter.AddShort('127.0.0.1')
+          else
+            fWriter.AddString(RemoteIP);
+        hlvRemote_User:
+          if User = '' then
+            fWriter.Add('-')
+          else
+            fWriter.AddString(User);
+        hlvRequest:
+          begin
+            fWriter.AddString(Method);
+            fWriter.Add(' ');
+            fWriter.AddString(Url);
+            fWriter.Add(' ');
+            fWriter.AddShorter(HTTP[hsrHttp10 in Flags]);
+          end;
+        hlvRequest_Hash:
+          fWriter.AddUHex(crc32c(crc32c(crc32c(byte(Flags),
+            pointer(Host), length(Host)),
+            pointer(Method), length(Method)),
+            pointer(Url), length(Url)));
+        hlvRequest_Length:
+          fWriter.AddQ(Received);
+        hlvRequest_Method:
+          fWriter.AddString(Method);
+        hlvRequest_Uri:
+          fWriter.AddString(Url);
+        hlvScheme:
+          fWriter.AddShorter(SCHEME[hsrHttps in Flags]);
+        hlvSent:
+          fWriter.AddShort(KBNoSpace(Sent));
+        hlvServer_Protocol:
+           fWriter.AddShorter(HTTP[hsrHttp10 in Flags]);
+        hlvStatus:
+          fWriter.AddU(StatusCode);
+        hlvStatus_Text:
+          fWriter.AddShort(StatusCodeToShort(StatusCode));
+        hlvTime_Epoch:
+          fWriter.AddQ(UnixTimeUtc);
+        hlvTime_EpochMSec:
+          fWriter.AddQ(UnixMSTimeUtcFast);
+        // dates are all in UTC/GMT as it should be with any safe policy
+        hlvTime_Iso8601:
+          fWriter.AddCurrentIsoDateTime({local=}false, {ms=}false, 'T', 'Z');
+        hlvTime_Local:
+          fWriter.AddCurrentNcsaLogTime({local=}false, '+0000');
+        hlvTime_Http:
+          fWriter.AddCurrentHttpTime({local=}false, 'GMT');
+      end;
+      inc(v);
+      dec(n);
+    until n = 0;
+    fWriter.AddString(fLineFeed);
+    if GetTickCount64 shr 10 <> fLastFlush then
+      fWriter.FlushFinal; // force write to disk at least every second
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+begin
+  fLastFlush := GetTickCount64 shr 10; // no need to flush within this second
 end;
 
 

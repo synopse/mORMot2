@@ -558,7 +558,8 @@ type
   TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
 
   /// event handler used by THttpServerGeneric.OnAfterResponse property
-  // - main purpose is to apply post-response analysis, logging, etc...
+  // - main purpose is to apply post-response e.g. logging or real-time analysis
+  // using THttpAfterResponse or THttpLogger
   TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
     const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
     Flags: THttpServerRequestFlags; StatusCode: cardinal;
