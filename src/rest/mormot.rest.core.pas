@@ -1121,6 +1121,7 @@ type
   // - llfInProcess when run from the same process, i.e. on server side
   // - llfConnectionUpgrade when "connection: upgrade" is within headers
   // - llfAuthorized when a valid "authorization:" header is set
+  // - llfHttp10 if the connection is of old HTTP/1.0 level
   // - should exactly match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
@@ -1128,7 +1129,8 @@ type
     llfWebsockets,
     llfInProcess,
     llfConnectionUpgrade,
-    llfAuthorized);
+    llfAuthorized,
+    llfHttp10);
 
   /// some flags set by the caller to notify low-level context
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;

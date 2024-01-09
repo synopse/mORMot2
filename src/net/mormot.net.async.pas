@@ -3333,7 +3333,8 @@ function THttpAsyncConnection.DecodeHeaders: integer;
 begin
   // compute the flags corresponding to this request
   fRequestFlags := HTTP_TLS_FLAGS[Assigned(fSecure)] +
-                   HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags];
+                   HTTP_UPG_FLAGS[hfConnectionUpgrade in fHttp.HeaderFlags] +
+                   HTTP_10_FLAGS[rfHttp10 in fHttp.ResponseFlags];
   // support optional Basic/Digest authentication
   if (hfHasAuthorization in fHttp.HeaderFlags) and
      (fServer.Authorize <> hraNone) then

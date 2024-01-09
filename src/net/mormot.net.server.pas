@@ -709,6 +709,10 @@ const
     [],
     [hsrConnectionUpgrade]);
 
+  /// used to compute the request ConnectionFlags from HTTP/1.0 command
+  HTTP_10_FLAGS: array[{http10=}boolean] of THttpServerRequestFlags = (
+    [],
+    [hsrHttp10]);
 
 /// some pre-computed CryptCertOpenSsl[caaRS256].New key for Windows
 // - the associated password is 'pass'
@@ -4391,7 +4395,7 @@ function THttpServerSocket.GetRequest(withBody: boolean;
 var
   P: PUtf8Char;
   status, tix32: cardinal;
-  noheaderfilter: boolean;
+  noheaderfilter, http10: boolean;
 begin
   result := grError;
   try
@@ -4415,9 +4419,13 @@ begin
       exit; // broken
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
+    if PCardinal(P)^ <>
+         ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24 then
+      exit;
+    http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or
                          (fServer.ServerKeepAliveTimeOut > 0)) and
-                        IdemPChar(P, 'HTTP/1.1');
+                        not http10;
     Http.Content := '';
     // get and parse HTTP request header
     if not GetHeader(noheaderfilter) then
@@ -4461,7 +4469,8 @@ begin
       end;
       // support optional Basic/Digest authentication
       fRequestFlags := HTTP_TLS_FLAGS[TLS.Enabled] +
-                       HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags];
+                       HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags] +
+                       HTTP_10_FLAGS[http10];
       if (hfHasAuthorization in Http.HeaderFlags) and
          (fServer.fAuthorize <> hraNone) then
       begin
@@ -6439,8 +6448,10 @@ begin
             bytessent := 0;
             ctxt.fHttpApiRequest := req;
             ctxt.Recycle(req^.ConnectionID, self,
+              HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
               // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
-              HTTP_TLS_FLAGS[req^.pSslInfo <> nil],
+              HTTP_10_FLAGS[(req^.Version.MajorVersion = 1) and
+                            (req^.Version.MinorVersion = 0)],
               // ctxt.fConnectionOpaque is not supported by http.sys
               nil);
             FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
