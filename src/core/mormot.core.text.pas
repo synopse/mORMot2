@@ -606,10 +606,13 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: cardinal);
+    /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
+    procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
+      {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
     procedure AddQ(Value: QWord);
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
-    procedure AddQHex(Value: Qword);
+    procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
@@ -653,7 +656,7 @@ type
     /// append an integer Value as a 4 digits text with comma
     procedure Add4(Value: PtrUInt);
     /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
-    procedure AddMicroSec(MS: cardinal);
+    procedure AddMicroSec(MicroSec: cardinal);
     /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer);
     /// append an array of doubles as CSV
@@ -3997,6 +4000,11 @@ begin
   inc(B, Len);
 end;
 
+procedure TTextWriter.AddUHex(Value: cardinal; QuotedChar: AnsiChar);
+begin
+  AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
+end;
+
 procedure TTextWriter.AddQ(Value: QWord);
 var
   tmp: array[0..23] of AnsiChar;
@@ -4021,9 +4029,9 @@ begin
   inc(B, Len);
 end;
 
-procedure TTextWriter.AddQHex(Value: Qword);
+procedure TTextWriter.AddQHex(Value: Qword; QuotedChar: AnsiChar);
 begin
-  AddBinToHexDisplayLower(@Value, SizeOf(Value), '"');
+  AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
 end;
 
 procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
@@ -4184,7 +4192,7 @@ begin
   P^ := AnsiChar(V - result * 10 + 48);
 end;
 
-procedure TTextWriter.AddMicroSec(MS: cardinal);
+procedure TTextWriter.AddMicroSec(MicroSec: cardinal);
 var
   W: PWordArray;
 begin
@@ -4195,12 +4203,12 @@ begin
   B[7] := '.';
   inc(B);
   W := @TwoDigitLookupW;
-  MS := Value3Digits(Value3Digits(MS, B + 7, W), B + 3, W);
-  if MS > 99 then
-    MS := $3939
+  MicroSec := Value3Digits(Value3Digits(MicroSec, B + 7, W), B + 3, W);
+  if MicroSec > 99 then
+    MicroSec := $3939
   else
-    MS := W[MS];
-  PWord(B)^ := MS;
+    MicroSec := W[MicroSec];
+  PWord(B)^ := MicroSec;
   inc(B, 9);
 end;
 
