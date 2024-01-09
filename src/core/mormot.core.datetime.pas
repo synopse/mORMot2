@@ -893,7 +893,6 @@ type
     /// append the current UTC date and time, in apache-like format
      // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - you may set LocalTime=TRUE to write the local date and time instead
-    // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentNcsaLogTime(LocalTime: boolean; const TZD: RawUtf8 = '+0000');
     /// append the current UTC date and time, in our HTTP format
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
@@ -902,7 +901,6 @@ type
     /// append the current UTC date and time, in our TSynLog human-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - you may set LocalTime=TRUE to write the local date and time instead
-    // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentLogTime(LocalTime: boolean);
     /// append a time period as "seconds.milliseconds" content
     procedure AddSeconds(MilliSeconds: QWord; Quote: AnsiChar = #0);
@@ -3403,7 +3401,7 @@ begin
   if Quote <> #0 then
     Add(Quote);
   MilliSeconds := MilliSeconds * 10; // convert a.bcd to a.bcd0 currency/Curr64
-  AddCurr64(@MilliSeconds);
+  AddCurr64(@MilliSeconds); // fast output
   if Quote <> #0 then
     Add(Quote);
 end;

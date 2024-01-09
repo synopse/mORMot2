@@ -10204,7 +10204,7 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
-  ReasonCache[2, 0] := 'OK'; // HTTP_SUCCESS
+  ReasonCache[2, 0] := 'OK'; // HTTP_SUCCESS (optimistic approach)
   // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;

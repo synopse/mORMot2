@@ -535,9 +535,9 @@ type
   // e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithm over WebSockets
   // - hsrWebsockets if communication was made using WebSockets
   // - hsrInProcess when run from the same process, i.e. on server side
-  // - hsrConnectionUpgrade when "connection: upgrade" is within headers
+  // - hsrConnectionUpgrade when "connection: upgrade" appears within headers
   // - hsrAuthorized when a valid "authorization:" header is set
-  // - hsrHttp10 if the connection is of old HTTP/1.0 level
+  // - hsrHttp10 is set if the connection is of old HTTP/1.0 level
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
     hsrHttps,

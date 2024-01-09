@@ -333,6 +333,7 @@ type
   // for array of records or classes, ignoring other formatting options:
   // $ {"fieldCount":2,"values":["f1","f2","1v1",1v2,"2v1",2v2...],"rowCount":20}
   // - twoNoSharedStream will force to create a new stream for each instance
+  // - twoNoWriteToStreamException let TTextWriter.WriteToStream silently fail
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -347,7 +348,8 @@ type
     twoIgnoreDefaultInRecord,
     twoDateTimeWithZ,
     twoNonExpandedArrays,
-    twoNoSharedStream);
+    twoNoSharedStream,
+    twoNoWriteToStreamException);
     
   /// options set for a TTextWriter / TTextWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
@@ -490,10 +492,10 @@ type
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
     fCustomOptions: TTextWriterOptions;
-    procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
+    procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; aBufSize: integer);
       {$ifdef FPC} inline; {$endif}
   public
@@ -3662,11 +3664,26 @@ begin
 end;
 
 procedure TTextWriter.WriteToStream(data: pointer; len: PtrUInt);
+var
+  written: PtrUInt;
 begin
   if Assigned(fOnFlushToStream) then
     fOnFlushToStream(data, len);
-  fStream.WriteBuffer(data^, len);
-  inc(fTotalFileSize, len);
+  if len <> 0 then
+    repeat
+      written := fStream.Write(data^, len);
+      if PtrInt(written) <= 0 then
+        if twoNoWriteToStreamException in fCustomOptions then
+          break // silent failure
+        else
+          raise ESynException.CreateUtf8(
+            '%.WriteToStream failed on %', [self, fStream]);
+      inc(fTotalFileSize, written);
+      dec(len, written);
+      if len = 0 then
+        break;
+      inc(PByte(data), written); // several calls to Write() may be needed
+    until false;
 end;
 
 function TTextWriter.GetTextLength: PtrUInt;

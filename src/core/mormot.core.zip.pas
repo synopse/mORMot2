@@ -1920,7 +1920,7 @@ begin
             begin
               h32.fileInfo.zcrc32 := // manual (libdeflate) crc computation
                 mormot.lib.z.crc32(h32.fileInfo.zcrc32, pointer(tmp), len);
-              fDest.WriteBuffer(pointer(tmp)^, len); // store
+              fDest.WriteBuffer(pointer(tmp)^, len);   // store
             end
             else
               deflate.WriteBuffer(pointer(tmp)^, len); // crc and compress
@@ -2984,12 +2984,12 @@ var
 begin
   result := false;
   if aOldLogFileName = '' then
-    FreeAndNilSafe(EventArchiveZipWrite)
+    FreeAndNilSafe(EventArchiveZipWrite) // last call with '' to close .zip
   else
   begin
     if not FileExists(aOldLogFileName) then
       exit;
-    if EventArchiveZipWrite = nil then
+    if EventArchiveZipWrite = nil then // first call
       EventArchiveZipWrite := TZipWrite.CreateFrom(
         copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
     n := EventArchiveZipWrite.Count;

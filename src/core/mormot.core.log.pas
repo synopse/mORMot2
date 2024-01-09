@@ -4042,7 +4042,7 @@ begin
         until FindNext(SR) <> 0;
       finally
         try
-          OnArchive('', aPath); // mark no more .log file to archive -> close .zip
+          OnArchive('', aPath); // indicates end of archival (e.g. close .zip)
         finally
           FindClose(SR);
         end;
@@ -5707,8 +5707,9 @@ begin
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
-    fWriter.CustomOptions := fWriter.CustomOptions
-      + [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended]
+    fWriter.CustomOptions := fWriter.CustomOptions +
+      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended,
+       twoNoWriteToStreamException]
       - [twoFlushToStreamNoAutoResize]; // follow BufferSize
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
