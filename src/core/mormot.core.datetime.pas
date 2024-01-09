@@ -458,19 +458,28 @@ type
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
       const TZD: RawUtf8 = ''): RawUtf8;
+    /// append a value, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format with '.sss' optional milliseconds
+    procedure AddIsoDateTime(WR: TTextWriter; WithMS: boolean;
+      FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = '');
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TJsonWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
     /// append the stored date and time, in apache-like format, to a TJsonWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
-    procedure AddNcsaText(WR: TTextWriter);
+    procedure AddNcsaText(WR: TTextWriter; const TZD: RawUtf8 = '');
+    /// append the stored date and time, in HTTP-like format, to a TJsonWriter
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    procedure AddHttpDate(WR: TTextWriter; const TZD: RawUtf8 = 'GMT');
     /// append the stored date and time, in apache-like format, to a memory buffer
+    // - e.g. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
     function ToNcsaText(P: PUtf8Char): PtrInt;
     /// convert the stored date and time to its text in apache-like format
     procedure ToNcsaShort(var text: shortstring; const tz: RawUtf8 = 'GMT');
+    /// convert the stored date and time to its text in HTTP-like format
     // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // "Date", "Expires" or "Last-Modified" HTTP header
     // - handle UTC/GMT time zone by default, and allow a 'Date: ' prefix
@@ -480,11 +489,13 @@ type
     procedure ToHttpDateShort(var text: shortstring; const tz: RawUtf8 = 'GMT';
       const prefix: RawUtf8 = '');
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
-    procedure ToIsoDateTime(out text: RawUtf8; const FirstTimeChar: AnsiChar = 'T');
+    procedure ToIsoDateTimeShort(var text: shortstring; FirstTimeChar: AnsiChar = 'T');
+    /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
+    procedure ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date into its Iso-8601 text with no time part
     procedure ToIsoDate(out text: RawUtf8);
     /// convert the stored time into its Iso-8601 text with no date part nor Milliseconds
-    procedure ToIsoTime(out text: RawUtf8; const FirstTimeChar: RawUtf8 = 'T');
+    procedure ToIsoTime(out text: RawUtf8; FirstTimeChar: RawUtf8 = 'T');
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
@@ -2207,36 +2218,64 @@ begin
     Year, Month, Day, Expanded, FirstTimeChar, TZD);
 end;
 
+procedure TSynSystemTime.AddIsoDateTime(WR: TTextWriter;
+  WithMS: boolean; FirstTimeChar: AnsiChar; const TZD: RawUtf8);
+var
+  p: PUtf8Char;
+begin
+  if WR.BEnd - WR.B <= 24 then
+    WR.FlushToStream;
+  p := WR.B + 1;
+  inc(WR.B, TimeToIso8601PChar(DateToIso8601PChar(p, true, Year, Month, Day),
+    true, Hour, Minute, Second, MilliSecond, FirstTimeChar, WithMS) - P);
+  if TZD <> '' then
+    WR.AddString(TZD);
+end;
+
 procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
 var
   d100: TDiv100Rec;
-  P: PUtf8Char;
+  p: PUtf8Char;
   {$ifdef CPUX86NOTPIC}
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
 begin
-  P := WR.B + 1;
-  if WR.BEnd - P <= 4 then
-  begin
+  if WR.BEnd - WR.B <= 18 then
     WR.FlushToStream;
-    P := WR.B + 1;
-  end;
+  p := WR.B + 1;
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitLookupW;
   {$endif CPUX86NOTPIC}
   Div100(Year, d100{%H-});
-  PWord(P)^     := tab[d100.D];
-  PWord(P + 2)^ := tab[d100.M];
-  PWord(P + 4)^ := tab[PtrUInt(Month)];
-  PWord(P + 6)^ := tab[PtrUInt(Day)];
-  P[8] := ' ';
-  PWord(P + 9)^  := tab[PtrUInt(Hour)];
-  PWord(P + 11)^ := tab[PtrUInt(Minute)];
-  PWord(P + 13)^ := tab[PtrUInt(Second)];
-  PWord(P + 15)^ := tab[PtrUInt(Millisecond) shr 4];
+  PWord(p)^     := tab[d100.D];
+  PWord(p + 2)^ := tab[d100.M];
+  PWord(p + 4)^ := tab[PtrUInt(Month)];
+  PWord(p + 6)^ := tab[PtrUInt(Day)];
+  p[8] := ' ';
+  PWord(p + 9)^  := tab[PtrUInt(Hour)];
+  PWord(p + 11)^ := tab[PtrUInt(Minute)];
+  PWord(p + 13)^ := tab[PtrUInt(Second)];
+  PWord(p + 15)^ := tab[PtrUInt(Millisecond) shr 4];
   inc(WR.B, 17);
+end;
+
+procedure TSynSystemTime.AddNcsaText(WR: TTextWriter; const TZD: RawUtf8);
+begin
+  if WR.BEnd - WR.B <= 21 then
+    WR.FlushToStream;
+  inc(WR.B, ToNcsaText(WR.B + 1));
+  if TZD <> '' then
+    WR.AddString(TZD);
+end;
+
+procedure TSynSystemTime.AddHttpDate(WR: TTextWriter; const TZD: RawUtf8);
+var
+  tmp: shortstring;
+begin
+  ToHttpDateShort(tmp, TZD);
+  WR.AddShort(tmp);
 end;
 
 function TSynSystemTime.ToNcsaText(P: PUtf8Char): PtrInt;
@@ -2300,10 +2339,18 @@ begin
     tz], text);
 end;
 
-procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8;
-  const FirstTimeChar: AnsiChar);
+procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar);
+var
+  tmp: shortstring;
 begin
-  FormatUtf8('%-%-%%%:%:%', [
+  ToIsoDateTimeShort(tmp, FirstTimeChar);
+  ShortStringToAnsi7String(tmp, text);
+end;
+
+procedure TSynSystemTime.ToIsoDateTimeShort(var text: shortstring;
+  FirstTimeChar: AnsiChar);
+begin
+  FormatShort('%-%-%%%:%:%', [
     UInt4DigitsToShort(Year),
     UInt2DigitsToShortFast(Month),
     UInt2DigitsToShortFast(Day),
@@ -2321,20 +2368,13 @@ begin
     UInt2DigitsToShortFast(Day)], text);
 end;
 
-procedure TSynSystemTime.ToIsoTime(out text: RawUtf8; const FirstTimeChar: RawUtf8);
+procedure TSynSystemTime.ToIsoTime(out text: RawUtf8; FirstTimeChar: RawUtf8);
 begin
   FormatUtf8('%%:%:%', [
     FirstTimeChar,
     UInt2DigitsToShortFast(Hour),
     UInt2DigitsToShortFast(Minute),
     UInt2DigitsToShortFast(Second)], text);
-end;
-
-procedure TSynSystemTime.AddNcsaText(WR: TTextWriter);
-begin
-  if WR.BEnd - WR.B <= 21 then
-    WR.FlushToStream;
-  inc(WR.B, ToNcsaText(WR.B + 1));
 end;
 
 function TSynSystemTime.ToDateTime: TDateTime;
