@@ -213,6 +213,7 @@ type
   TAlgoCompress = class
   protected
     fAlgoID: byte;
+    fAlgoFileExt: TFileName;
   public
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -396,7 +397,7 @@ type
     /// a TSynLogArchiveEvent handler which will compress older .log files
     // using our proprietary FileCompress format for this algorithm
     function EventArchive(aMagic: cardinal;
-      const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+      const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
@@ -5799,7 +5800,7 @@ begin
 end;
 
 function TAlgoCompress.EventArchive(aMagic: cardinal;
-  const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
   // aDestinationPath = 'ArchivePath\log\YYYYMM\'
   result := false;
@@ -5807,7 +5808,7 @@ begin
      FileExists(aOldLogFileName) then
   try
     if FileCompress(aOldLogFileName, EnsureDirectoryExists(aDestinationPath) +
-       ExtractFileName(aOldLogFileName) + aDestinationExt, aMagic, {hash32=}true) then
+       ExtractFileName(aOldLogFileName) + AlgoFileExt, aMagic, {hash32=}true) then
       result := DeleteFile(aOldLogFileName);
   except
     on Exception do
@@ -5821,6 +5822,7 @@ end;
 constructor TAlgoSynLZ.Create;
 begin
   fAlgoID := COMPRESS_SYNLZ; // =1
+  fAlgoFileExt := '.synlz';
   inherited Create;
 end;
 
@@ -5964,6 +5966,7 @@ end;
 constructor TAlgoRleLZ.Create;
 begin
   fAlgoID := 7;
+  fAlgoFileExt := '.synrlz';
   inherited Create;
 end;
 
@@ -5999,6 +6002,7 @@ end;
 constructor TAlgoRle.Create;
 begin
   fAlgoID := 8;
+  fAlgoFileExt := '.synrle';
   inherited Create;
 end;
 

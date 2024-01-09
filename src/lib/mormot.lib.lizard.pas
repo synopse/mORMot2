@@ -462,6 +462,7 @@ constructor TAlgoLizard.Create;
 begin
   if fAlgoID = 0 then
     fAlgoID := 4;
+  fAlgoFileExt := '.synliz';
   inherited Create;
   fCompressionLevel := LIZARD_DEFAULT_CLEVEL;
 end;
@@ -533,8 +534,7 @@ end;
 function EventArchiveLizard(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 begin
-  result := AlgoLizardFast.EventArchive(
-    LOG_MAGIC, aOldLogFileName, aDestinationPath, '.synlz');
+  result := AlgoLizardFast.EventArchive(LOG_MAGIC, aOldLogFileName, aDestinationPath);
 end;
 
 

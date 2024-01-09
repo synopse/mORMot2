@@ -145,7 +145,7 @@ type
   public
     /// raw zlib Stream information
     Stream: TZStream;
-    /// 64-bit number of bytes written to the output
+    /// 64-bit number of bytes written to the output by DoFlush()
     // - Stream.total_out may be 32-bit on some platforms
     Written: Int64;
     /// reset and prepare the internal Stream structure for two memory buffers
