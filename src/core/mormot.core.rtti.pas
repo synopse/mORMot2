@@ -585,8 +585,9 @@ type
     function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
     /// write the enumeration names corresponding to a set value as a JSON array
-    procedure GetSetNameJsonArray(W: TTextWriter; Value: cardinal; SepChar: AnsiChar = ',';
-      FullSetsAsStar: boolean = false); overload;
+    procedure GetSetNameJsonArray(W: TTextWriter; Value: cardinal;
+      SepChar: AnsiChar = ','; QuoteChar: AnsiChar = #0;
+      FullSetsAsStar: boolean = false; ForceTrim: boolean = false); overload;
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found, or if RTTI's MinValue is not 0
@@ -816,7 +817,7 @@ type
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// for rkEnumeration: get the enumeration type information
     function EnumBaseType: PRttiEnumType; overload;
-      {$ifdef HASSAFEINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif} { on Delphi, inline would require typinfo }
     /// for rkEnumeration: get the enumeration values information
     function EnumBaseType(out NameList: PShortString;
       out Min, Max: integer): PRttiEnumType; overload;
@@ -1551,8 +1552,8 @@ procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
 function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
-procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value; out result: ShortString;
-  trimlowercase: boolean = false);
+procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
+  out result: ShortString; trimlowercase: boolean = false);
 
 /// low-level function parsing Value/ValueLen into a set, returned as 64-bit
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
@@ -3377,7 +3378,7 @@ begin
 end;
 
 procedure TRttiEnumType.GetSetNameJsonArray(W: TTextWriter; Value: cardinal;
-  SepChar: AnsiChar; FullSetsAsStar: boolean);
+  SepChar, QuoteChar: AnsiChar; FullSetsAsStar, ForceTrim: boolean);
 var
   j, max: PtrInt;
   PS: PShortString;
@@ -3397,12 +3398,16 @@ begin
     begin
       if GetBitPtr(@Value, j) then
       begin
-        W.Add('"');
-        if twoTrimLeftEnumSets in W.CustomOptions then
+        if QuoteChar <> #0 then
+          W.Add(QuoteChar);
+        if ForceTrim or
+           (twoTrimLeftEnumSets in W.CustomOptions) then
           W.AddTrimLeftLowerCase(PS)
         else
           W.AddShort(PS^);
-        W.Add('"', SepChar);
+        if QuoteChar <> #0 then
+          W.Add(QuoteChar);
+        W.Add(SepChar);
       end;
       inc(PByte(PS), ord(PS^[0]) + 1); // next item
     end;
@@ -3419,7 +3424,7 @@ var
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    GetSetNameJsonArray(W, Value, SepChar, FullSetsAsStar);
+    GetSetNameJsonArray(W, Value, SepChar, '"', FullSetsAsStar, {forcetrim=}false);
     W.SetText(result);
   finally
     W.Free;
