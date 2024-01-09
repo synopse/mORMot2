@@ -759,7 +759,7 @@ type
     // - see @http://www.w3.org/TR/xml/#syntax
     procedure AddXmlEscape(Text: PUtf8Char);
     /// append a property name, as '"PropName":'
-    // - PropName content should not need to be JSON escaped (e.g. no " within,
+    // - PropName content should not need any JSON escape (e.g. no " within,
     // and only ASCII 7-bit characters)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
@@ -769,7 +769,7 @@ type
     procedure AddProp(PropName: PUtf8Char); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a ShortString property name, as '"PropName":'
-    // - PropName content should not need to be JSON escaped (e.g. no " within,
+    // - PropName content should not need any JSON escape (e.g. no " within,
     // and only ASCII 7-bit characters)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
@@ -780,12 +780,21 @@ type
     procedure AddPropInt64(const PropName: ShortString; Value: Int64;
       WithQuote: AnsiChar = #0);
     /// append a RawUtf8 property name, as '"FieldName":'
-    // - FieldName content should not need to be JSON escaped (e.g. no " within)
+    // - FieldName content should not need any JSON escape (e.g. no " within)
     // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     // - is a wrapper around AddProp()
     procedure AddFieldName(const FieldName: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
+    /// append a RawUtf8 property name, as '"FieldName"
+    // - FieldName content should not need any JSON escape (e.g. no " within)
+    procedure AddQuotedFieldName(const FieldName: RawUtf8;
+      const VoidPlaceHolder: RawUtf8 = ''); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append a RawUtf8 property name, as '"FieldName"
+    // - FieldName content should not need any JSON escape (e.g. no " within)
+    procedure AddQuotedFieldName(FieldName: PUtf8Char; FieldNameLen: PtrInt;
+      const VoidPlaceHolder: RawUtf8 = ''); overload;
     /// append the class name of an Object instance as text
     procedure AddClassName(aClass: TClass);
     /// append an Instance name and pointer, as '"TObjectList(00425E68)"'+SepChar
@@ -4423,6 +4432,27 @@ end;
 procedure TTextWriter.AddFieldName(const FieldName: RawUtf8);
 begin
   AddProp(Pointer(FieldName), length(FieldName));
+end;
+
+procedure TTextWriter.AddQuotedFieldName(const FieldName, VoidPlaceHolder: RawUtf8);
+begin
+  AddQuotedFieldName(pointer(FieldName), length(FieldName), VoidPlaceHolder);
+end;
+
+procedure TTextWriter.AddQuotedFieldName(
+   FieldName: PUtf8Char; FieldNameLen: PtrInt; const VoidPlaceHolder: RawUtf8);
+begin
+  if FieldNameLen = 0 then
+  begin
+    FieldName := pointer(VoidPlaceHolder);
+    FieldNameLen := length(VoidPlaceHolder);
+  end;
+  if BEnd - B <= FieldNameLen then
+    FlushToStream;
+  B[1] := '"';
+  MoveFast(FieldName^, B[2], FieldNameLen);
+  inc(B, FieldNameLen + 2);
+  B^ := '"';
 end;
 
 procedure TTextWriter.AddClassName(aClass: TClass);

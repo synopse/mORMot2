@@ -45,7 +45,7 @@ uses
 
 const
   {$ifdef OSWINDOWS}
-  /// operating-system dependent Line Feed characters
+  /// operating-system dependent Line Feed characters (#13#10 or #10)
   CRLF = #13#10;
   /// operating-system dependent wildchar to match all files in a folder
   FILES_ALL = '*.*';
