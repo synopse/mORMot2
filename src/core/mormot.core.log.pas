@@ -519,14 +519,14 @@ type
   end;
 
   /// this event can be set for a TSynLogFamily to archive any deprecated log
-  // into a custom compressed format
-  // - will be called by TSynLogFamily when TSynLogFamily.Destroy identify
-  // some outdated files
+  // into a custom compressed format, i.e. compress and delete them
+  // - called by TSynLogFamily.Destroy with files older than ArchiveAfterDays,
+  // or by TSynLog.PerformRotation when some rotated files need to be deleted
   // - the aOldLogFileName will contain the .log file with full path
   // - the aDestinationPath parameter will contain 'ArchivePath\log\YYYYMM\'
   // - should return true on success, false on error
   // - example of matching event handler are EventArchiveDelete,
-  // EventArchiveSynLZ, EventArchiveLizard or EventArchiveZip in SynZip.pas
+  // EventArchiveSynLZ, EventArchiveLizard or EventArchiveZip
   // - this event handler will be called one time per .log file to archive,
   // then one last time with aOldLogFileName='' in order to close any pending
   // archive (used e.g. by EventArchiveZip to open the .zip only once)
@@ -660,6 +660,8 @@ type
     procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
+    function ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
+    function GetArchiveDestPath(age: TDateTime): TFileName;
     {$ifndef NOEXCEPTIONINTERCEPT}
     function GetExceptionIgnoreCurrentThread: boolean;
     procedure SetExceptionIgnoreCurrentThread(aExceptionIgnoreCurrentThread: boolean);
@@ -669,8 +671,8 @@ type
     // - add it in the global SynLogFileFamily[] list
     constructor Create(aSynLog: TSynLogClass);
     /// release associated memory
-    // - will archive older DestinationPath\*.log files, according to
-    // ArchiveAfterDays value and ArchivePath
+    // - will also find and archive DestinationPath\*.log files older than
+    // ArchiveAfterDays into ArchivePath
     destructor Destroy; override;
 
     /// retrieve the corresponding log file of this thread and family
@@ -727,16 +729,16 @@ type
     property OnBeforeException: TOnBeforeException
       read fOnBeforeException write fOnBeforeException;
     {$endif NOEXCEPTIONINTERCEPT}
-    /// event called to archive the .log content after a defined delay
-    // - Destroy will parse DestinationPath folder for *.log files matching
-    // ArchiveAfterDays property value
-    // - you can set this property to EventArchiveDelete in order to delete deprecated
-    // files, or EventArchiveSynLZ to compress the .log file into our propertary
-    // SynLZ format: resulting file name will be ArchivePath\log\YYYYMM\*.log.synlz
-    // (use FileUnSynLZ function to uncompress it)
-    // - if you use SynZip.EventArchiveZip, the log files will be archived in
-    // ArchivePath\log\YYYYMM.zip
-    // - the aDestinationPath parameter will contain 'ArchivePath\log\YYYYMM\'
+    /// event called to archive - i.e. compress and delete - .log files
+    // - called by TSynLogFamily.Destroy with files older than ArchiveAfterDays,
+    // or by TSynLog.PerformRotation when some rotated files need to be deleted
+    // - set this property to EventArchiveDelete in order to delete deprecated
+    // files, or EventArchiveSynLZ/EventArchiveLizard to archive the .log files
+    // into our proprietary SynLZ/Lizard format: resulting file name will be
+    // 'ArchivePath\log\YYYYMM\*.log.synlz/synliz' - use AlgoSynLZ.FileUnCompress
+    // or AlgoLizard.FileUnCompress functions to uncompress them
+    // - if you use EventArchiveZip from mormot.core.zip, the log files will be
+    // archived in 'ArchivePath\log\YYYYMM.zip'
     // - this event handler will be called one time per .log file to archive,
     // then one last time with aOldLogFileName='' in order to close any pending
     // archive (used e.g. by EventArchiveZip to open the .zip only once)
@@ -822,6 +824,7 @@ type
       read fCustomFileName write fCustomFileName;
     /// the folder where old log files must be compressed
     // - by default, is in the executable folder, i.e. the same as DestinationPath
+    // - you can use a remote folder (e.g. on a file server) as backup target
     // - the 'log\' sub folder name will always be appended to this value
     // - will then be used by OnArchive event handler to produce, with the
     // current file date year and month, the final path (e.g.
@@ -1460,7 +1463,7 @@ type
   end;
 
 
-/// a TSynLogArchiveEvent handler which will delete older .log files
+/// a TSynLogArchiveEvent handler which will just delete older .log files
 function EventArchiveDelete(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
@@ -3990,19 +3993,58 @@ begin
     AutoFlushThread := TAutoFlushThread.Create;
 end;
 
+function TSynLogFamily.ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
+var
+  age: TDateTime;
+  dest: TFileName;
+begin
+  result := false;
+  age := FileAgeToDateTime(aFileName);
+  if age = 0 then
+    exit; // not found
+  if Assigned(OnArchive) then
+  begin
+    // we can ignore ArchiveAfterDays because the file is about to be deleted
+    dest := GetArchiveDestPath(age);
+    if dest <> '' then // the archive folder has been created
+    try
+      result := OnArchive(aFileName, dest); // archive and delete
+    finally
+      OnArchive('', dest); // always eventually close .zip
+    end;
+  end
+  else
+    result := DeleteFile(aFileName);
+end;
+
+function TSynLogFamily.GetArchiveDestPath(age: TDateTime): TFileName;
+var
+  Y, M, D: word;
+  tmp: array[0..7] of AnsiChar;
+begin
+  // returns 'ArchivePath\log\YYYYMM\'
+  result := EnsureDirectoryExists(ArchivePath + 'log');
+  if result = '' then
+    exit; // impossible to create the archive folder
+  DecodeDate(age, Y, M, D);
+  YearToPChar(Y, @tmp[0]);
+  PWord(@tmp[4])^ := TwoDigitLookupW[M];
+  PWord(@tmp[6])^ := ord(PathDelim);
+  result := result + Ansi7ToString(tmp, 7);
+end;
+
 destructor TSynLogFamily.Destroy;
 var
   SR: TSearchRec;
   oldTime, aTime: TDateTime;
-  Y, M, D: word;
   aOldLogFileName, aPath: TFileName;
-  tmp: array[0..7] of AnsiChar;
 begin
   fDestroying := true;
   EchoRemoteStop;
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
+      // search for logs older than ArchiveAfterDays to trigger OnArchive()
       if FindFirst(fDestinationPath + '*' + fDefaultExtension, faAnyFile, SR) = 0 then
       try
         if ArchiveAfterDays < 0 then
@@ -4018,24 +4060,15 @@ begin
             continue;
           aOldLogFileName := fDestinationPath + SR.Name;
           if {%H-}aPath = '' then
-          begin
-            aPath := EnsureDirectoryExists(ArchivePath + 'log');
-            if aPath = '' then
-              break; // impossible to create the archive folder
-            DecodeDate(aTime, Y, M, D);
-            YearToPChar(Y, @tmp[0]);
-            PWord(@tmp[4])^ := TwoDigitLookupW[M];
-            PWord(@tmp[6])^ := ord(PathDelim);
-            aPath := aPath + Ansi7ToString(tmp, 7);
-          end;
-          OnArchive(aOldLogFileName, aPath);
+            aPath := GetArchiveDestPath(aTime);
+          if aPath = '' then
+            break; // impossible to create the archive folder
+          OnArchive(aOldLogFileName, aPath); // archive and delete
         until FindNext(SR) <> 0;
       finally
-        try
-          OnArchive('', aPath); // indicates end of archival (e.g. close .zip)
-        finally
-          FindClose(SR);
-        end;
+        FindClose(SR);
+        if aPath <> '' then     // if OnArchive() was called
+          OnArchive('', aPath); // always eventually close .zip
       end;
   finally
     inherited Destroy;
@@ -5417,6 +5450,7 @@ begin
   begin
     if fFamily.fRotateFileCount > 1 then
     begin
+      // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
       ext := '.log';
       if LogCompressAlgo <> nil then
         ext := LogCompressAlgo.AlgoFileExt;
@@ -5429,33 +5463,45 @@ begin
           currentMaxSynLZ := i;
       end;
       if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
-        DeleteFile(FN[currentMaxSynLZ - 1]); // delete e.g. '9.synlz'
+        // delete (and archive) xxx.9.synlz
+        fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
       for i := fFamily.fRotateFileCount - 2 downto 1 do
-        RenameFile(FN[i - 1], FN[i]); // e.g. '8.synlz' -> '9.synlz'
-      if (AutoFlushThread <> nil) and
-         (AutoFlushThread.fToCompress = '') and
-         RenameFile(fFileName, FN[0]) then
+        // e.g. xxx.8.synlz -> xxx.9.synlz
+        RenameFile(FN[i - 1], FN[i]);
+      // compress the current .log file into FN[0] = xxx.1.synlz
+      if LogCompressAlgo = nil then
+        // no compression
+        RenameFile(fFileName, FN[0])
+      else if (AutoFlushThread <> nil) and
+              (AutoFlushThread.fToCompress = '') and
+              RenameFile(fFileName, FN[0]) then
       begin
-        AutoFlushThread.fToCompress := FN[0]; // background compression
+        // background compression
+        AutoFlushThread.fToCompress := FN[0];
         AutoFlushThread.fEvent.SetEvent;
       end
       else
-        // blocking compression in the processing thread
+      begin
+        // blocking compression in the main processing thread
         LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
-    end;
-    DeleteFile(fFileName);
+        DeleteFile(fFileName);
+      end;
+    end
+    else
+      fFamily.ArchiveAndDeleteFile(fFileName);
   end;
+  // initialize a brand new log file
   CreateLogWriter;
   LogFileHeader;
   if fFamily.fPerThreadLog = ptIdentifiedInOneFile then
   begin
+    // write the current thread names as TSynLog.LogThreadName lines
     c := pointer(fThreadContexts);
     for i := 1 to fThreadContextCount do
     begin
       if (PtrUInt(c^.ID) <> 0) and
          (c^.ThreadName <> '') then
       begin
-        // generate same output than TSynLog.LogThreadName
         LogCurrentTime;
         fWriter.AddInt18ToChars3(i);
         fWriter.AddShorter(LOG_LEVEL_TEXT[sllInfo]);
