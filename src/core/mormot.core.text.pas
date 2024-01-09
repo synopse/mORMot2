@@ -9357,8 +9357,8 @@ function ToHexShort(P: pointer; Len: PtrInt): TShort64;
 begin
   if Len > 32 then
     Len := 32;
-  Len := DisplayMinChars(p, Len);
-  result[0] := AnsiChar(Len);
+  Len := DisplayMinChars(P, Len);
+  result[0] := AnsiChar(Len * 2);
   BinToHexDisplay(P, @result[1], Len);
 end;
 
