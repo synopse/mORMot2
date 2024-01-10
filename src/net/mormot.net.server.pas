@@ -790,7 +790,7 @@ type
     procedure Append(Connection: THttpServerConnectionID;
       const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
       Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      StartMicroSec, Received, Sent: Int64); virtual; abstract;
+      ElapsedMicroSec, Received, Sent: QWord); virtual; abstract;
     /// the overriden Append() method will call this event with its own process
     property OnContinue: TOnHttpServerAfterResponse
       read fOnContinue write fOnContinue;
@@ -877,7 +877,7 @@ type
   // - hlvUnknown is used to define a text place holder
   THttpLogVariableDynArray = array of THttpLogVariable;
 
-  /// HTTP server log format parser and interpreter
+  /// HTTP server responses log format parser and interpreter
   // - once parsed, log can be emitted by Append() with very high performance
   THttpLogger = class(THttpAfterResponse)
   protected
@@ -907,7 +907,7 @@ type
     procedure Append(Connection: THttpServerConnectionID;
       const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
       Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      StartMicroSec, Received, Sent: Int64); override;
+      ElapsedMicroSec, Received, Sent: QWord); override;
     /// low-level access to the parsed log format state machine
     property Variable: THttpLogVariableDynArray
       read fVariable;
@@ -1921,7 +1921,7 @@ type
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      StatusCode: cardinal; Started, Received, Sent: Int64); virtual;
+      StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -2313,7 +2313,7 @@ type
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      StatusCode: cardinal; Started, Received, Sent: Int64); override;
+      StatusCode: cardinal; Elapsed, Received, Sent: QWord); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
     procedure DestroyMainThread; override;
   public
@@ -3847,12 +3847,11 @@ end;
 procedure THttpLogger.Append(Connection: THttpServerConnectionID;
   const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
   Flags: THttpServerRequestFlags; StatusCode: cardinal;
-  StartMicroSec, Received, Sent: Int64);
+  ElapsedMicroSec, Received, Sent: QWord);
 var
   n: integer;
   v: ^THttpLogVariable;
   poslen: PIntegerArray; // pos1,len1, pos2,len2, ... pairs
-  elapsed: Int64;
 const
   SCHEME: array[boolean] of string[7]  = ('http', 'https');
   HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
@@ -3860,12 +3859,11 @@ begin
   // optionally merge calls
   if Assigned(fOnContinue) then
     fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
-      RemoteIP, Flags, StatusCode, StartMicroSec, Received, Sent);
+      RemoteIP, Flags, StatusCode, ElapsedMicroSec, Received, Sent);
   // very efficient log generation with no transient memory allocation
   if (fWriter = nil) or
      (fVariable = nil) then
    exit; // nothing to process here
-  elapsed := 0;
   v := pointer(fVariable);
   n := length(fVariable);
   poslen := pointer(fUnknownPosLen);
@@ -3902,29 +3900,16 @@ begin
         hlvUri:
           //TODO: normalize URI
           fWriter.AddString(Url);
-        hlvElapsed,
+        hlvElapsed:
+          fWriter.AddShort(MicroSecToString(ElapsedMicroSec));
+        hlvElapsedUSec:
+          fWriter.AddQ(ElapsedMicroSec);
         hlvElapsedMSec,
-        hlvElapsedUSec,
         hlvRequest_Time: // no socket communication time included by now
-          if StartMicroSec <> 0 then
-          begin
-            if elapsed = 0 then
-            begin
-              QueryPerformanceMicroSeconds(elapsed);
-              dec(elapsed, StartMicroSec);
-            end;
-            if v^ = hlvElapsed then
-              fWriter.AddShort(MicroSecToString(elapsed))
-            else if (elapsed > 0) and
-               (v^ = hlvElapsedUSec) then
-              fWriter.AddQ(elapsed)
-            else if elapsed < 1000 then
-              fWriter.Add('0') // less than 1 ms
-            else
-              fWriter.AddSeconds(elapsed div 1000);
-          end
+          if ElapsedMicroSec < 1000 then
+            fWriter.Add('0') // less than 1 ms
           else
-            fWriter.Add('0');
+            fWriter.AddSeconds(ElapsedMicroSec div 1000);
         hlvHostName:
           if Host = '' then
             fWriter.Add('-')
@@ -4639,7 +4624,7 @@ var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  started: Int64;
+  started, elapsed: Int64;
 begin
   if (ClientSock = nil) or
      (ClientSock.Http.Headers = '') or
@@ -4686,10 +4671,12 @@ begin
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
       try
+        QueryPerformanceMicroSeconds(elapsed);
+        dec(elapsed, started);
         fOnAfterResponse(req.ConnectionID, req.AuthenticatedUser, req.Method,
           req.Host, req.Url, ClientSock.Http.Referer, req.UserAgent,
           req.RemoteIP, req.ConnectionFlags, req.RespStatus,
-          started, ClientSock.BytesIn, ClientSock.BytesOut);
+          elapsed, ClientSock.BytesIn, ClientSock.BytesOut);
       except
         on E: Exception do // paranoid
         begin
@@ -6668,7 +6655,7 @@ var
   datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
-  started: Int64;
+  started, elapsed: Int64;
   contrange: ShortString;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
@@ -7028,8 +7015,10 @@ begin
               if not respsent then
                 if not SendResponse then
                   continue;
+              QueryPerformanceMicroSeconds(elapsed);
+              dec(elapsed, started);
               DoAfterResponse(
-                ctxt, referer, outstatcode, started, incontlen, bytessent);
+                ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
             except
               on E: Exception do
                 // handle any exception raised during process: show must go on!
@@ -7473,12 +7462,12 @@ begin
 end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
+  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
 begin
   if Assigned(fOnAfterResponse) then
     fOnAfterResponse(Ctxt.ConnectionID, Ctxt.AuthenticatedUser, Ctxt.Method,
       Ctxt.Host, Ctxt.Url, Referer, Ctxt.UserAgent, Ctxt.RemoteIP,
-      Ctxt.ConnectionFlags, StatusCode, Started, Received, Sent);
+      Ctxt.ConnectionFlags, StatusCode, Elapsed, Received, Sent);
 end;
 
 
@@ -8085,12 +8074,12 @@ begin
 end;
 
 procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
+  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
-  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Started, Received, Sent);
+  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
 end;
 
 function THttpApiWebSocketServer.GetProtocol(index: integer):
