@@ -928,8 +928,158 @@ type
       read fLineFeed write fLineFeed;
   end;
 
+  /// each kind of counters covered by THttpAnalyzer
+  // - i.e. HTTP verbs, HTTP status codes, UserAgent or HTTP scheme or auth
+  // - you can interpolate hasDesktop/hasHttp/hasUnAuthorized-like counters as
+  // ! Diff(state[hasAny], state[hasMobile/hasHttps/hasAuthorized])
+  THttpAnalyzerScope = (
+    hasAny,
+    hasGet,
+    hasHead,
+    hasPost,
+    hasPut,
+    hasDelete,
+    hasOptions,
+    has1xx,
+    has2xx,
+    has3xx,
+    has4xx,
+    has5xx,
+    hasMobile,
+    hasHttps,
+    hasAuthorized);
 
+  /// the kind of counters covered by THttpAnalyzer
+  THttpAnalyzerScopes = set of THttpAnalyzerScope;
 
+  /// count unit for THttpAnalyzer information as 64-bit unsigned integer
+  THttpAnalyzerTotal = type QWord;
+  /// size unit for THttpAnalyzer information in bytes
+  THttpAnalyzerBytes = type QWord;
+  /// time unit for THttpAnalyzer information in micro-seconds
+  THttpAnalyzerMicroSecs = type QWord;
+
+  /// define a THttpAnalyzerScope counter state, may be after consolidation
+  {$ifdef USERECORDWITHMETHODS}
+  THttpAnalyzerState = record
+  {$else}
+  THttpAnalyzerState = object
+  {$endif USERECORDWITHMETHODS}
+    /// how many requests this counter have been performed
+    Count: THttpAnalyzerTotal;
+    /// how many micro-seconds the server has processed this method
+    // - i.e. to compute requests-per-second, make "(Count * 1000000) / Time"
+    Time: THttpAnalyzerMicroSecs;
+    /// the number of bytes received from the client
+    Read: THttpAnalyzerBytes;
+    /// the number of bytes written to the client
+    Write: THttpAnalyzerBytes;
+    /// fill all field values with 0
+    procedure Clear;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// copy all field values from another counter state
+    procedure From(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// add all field values from another counter state
+    procedure Add(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// substract all field values from another counter state
+    procedure Sub(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// substract all field values from two counter states
+    procedure Diff(const A, B: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+  /// pointer to a given counter
+  PHttpAnalyzerState = ^THttpAnalyzerState;
+  /// information about all possible counters
+  THttpAnalyzerStates = array[THttpAnalyzerScope] of THttpAnalyzerState;
+  /// pointer to information about all possible counters
+  PHttpAnalyzerStates = ^THttpAnalyzerStates;
+
+  /// possible time periods used for THttpAnalyzer consolidation
+  THttpAnalyzerPeriod = (
+    hapCurrent,
+    hapLastMinute,
+    hapLastFiveMinutes,
+    hapLastQuarter,
+    hapLastHour,
+    hapLastDay,
+    hapLastMonth,
+    hapAll);
+  /// the time periods used for THttpAnalyzer consolidation
+  THttpAnalyzerPeriods = set of THttpAnalyzerPeriod;
+  THttpAnalyzerPeriodTix = hapLastMinute .. hapLastMonth;
+
+  /// transient in-memory storage of THttpAnalyzer states to be persisted
+  THttpAnalyzerToSave = record
+    Period: THttpAnalyzerPeriod;
+    Scope: THttpAnalyzerScope;
+    State: THttpAnalyzerState;
+  end;
+  /// a dynamic array of THttpAnalyzerToSave
+  THttpAnalyzerToSaveDynArray = array of THttpAnalyzerToSave;
+
+  /// store all consolidated states in a Round-Robin manner
+  THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
+
+  /// event callback signature to persist THttpAnalyzer information
+  TOnHttpAnalyzerSave = procedure(
+    const State: THttpAnalyzerToSaveDynArray) of object;
+
+  /// HTTP server real-time responses consolidation
+  // - will gather at real time the main information about HTTP requests,
+  // then consolidate the data in main time periods
+  // - this does not replace a full log parsing/monitoring solution, but could
+  // give good hints about the current server status, with no third-party tool
+  THttpAnalyzer = class(THttpAfterResponse)
+  protected
+    fTracked, fPersisted: THttpAnalyzerScopes;
+    fOnSave: TOnHttpAnalyzerSave;
+    fState: THttpAnalyzerConsolidated;
+    fToSave: record
+      Safe: TLightLock;
+      Count: integer;
+      State: THttpAnalyzerToSaveDynArray;
+    end;
+    fTix: array[THttpAnalyzerPeriodTix] of cardinal;
+    procedure Consolidate(tixsec: cardinal);
+    procedure Save;
+  public
+    /// initialize this instance
+    constructor Create; reintroduce;
+    /// overriden to consolidate counters
+    procedure OnIdle(tix64: Int64); override;
+    /// append a request information to the internal counters
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(Connection: THttpServerConnectionID;
+      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+      Flags: THttpServerRequestFlags; StatusCode: cardinal;
+      ElapsedMicroSec, Received, Sent: QWord); override;
+    /// event handler used to
+    property OnSave: TOnHttpAnalyzerSave
+      read fOnSave write fOnSave;
+    /// the current state of counters
+    property Current: THttpAnalyzerState
+      read fState[hapCurrent, hasAny];
+    /// state of all counters for all supported time periods
+    property State: THttpAnalyzerConsolidated
+      read fState;
+  published
+    /// define which THttpAnalyzerScopes fields are to be tracked
+    property Tracked: THttpAnalyzerScopes
+      read fTracked write fTracked;
+    /// define which THttpAnalyzerScopes fields are to be sent to OnSave()
+    property Persisted: THttpAnalyzerScopes
+      read fPersisted write fPersisted;
+    /// just a redirection to the number of requests since the beginning
+    property TotalRequests: THttpAnalyzerTotal
+      read fState[hapAll, hasAny].Count;
+    /// just a redirection to the time processing since the beginning
+    property TotalTime: THttpAnalyzerMicroSecs
+      read fState[hapAll, hasAny].Time;
+  end;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
@@ -4022,6 +4172,235 @@ end;
 procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
   fLastTix := GetTickCount64 shr 10; // no need to flush within current second
+end;
+
+
+{ THttpAnalyzerState }
+
+procedure THttpAnalyzerState.Clear;
+begin
+  Count := 0;
+  Time  := 0;
+  Read  := 0;
+  Write := 0;
+end;
+
+procedure THttpAnalyzerState.From(const Another: THttpAnalyzerState);
+begin
+  Count := Another.Count;
+  Time  := Another.Time;
+  Read  := Another.Read;
+  Write := Another.Write;
+end;
+
+procedure THttpAnalyzerState.Add(const Another: THttpAnalyzerState);
+begin
+  inc(Count, Another.Count);
+  inc(Time,  Another.Time);
+  inc(Read,  Another.Read);
+  inc(Write, Another.Write);
+end;
+
+procedure THttpAnalyzerState.Sub(const Another: THttpAnalyzerState);
+begin
+  dec(Count, Another.Count);
+  dec(Time,  Another.Time);
+  dec(Read,  Another.Read);
+  dec(Write, Another.Write);
+end;
+
+procedure THttpAnalyzerState.Diff(const A, B: THttpAnalyzerState);
+begin
+  Count := A.Count - B.Count;
+  Time  := A.Time  - B.Time;
+  Read  := A.Read  - B.Read;
+  Write := A.Write - B.Write;
+end;
+
+
+{ THttpAnalyzer }
+
+const
+  PER_TO_SEC: array[THttpAnalyzerPeriodTix] of cardinal = (
+    60,                 // hapLastMinute
+    60 * 5,             // hapLastFiveMinutes
+    60 * 15,            // hapLastQuarter
+    60 * 60,            // hapLastHour
+    60 * 60 * 24,       // hapLastDay
+    60 * 60 * 24 * 31); // hapLastMonth
+
+constructor THttpAnalyzer.Create;
+var
+  p: THttpAnalyzerPeriod;
+  tix: cardinal;
+begin
+  inherited Create;
+  fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
+  tix := GetTickCount64 div 1000;
+  for p := low(PER_TO_SEC) to high(PER_TO_SEC) do
+    fTix[p] := tix + PER_TO_SEC[p];
+end;
+
+procedure THttpAnalyzer.Consolidate(tixsec: cardinal);
+var
+  p: THttpAnalyzerPeriod;
+  s: THttpAnalyzerScope;
+  tosavelocked: boolean;
+  ps, ns, al: PHttpAnalyzerState;
+  prev, next: PHttpAnalyzerStates;
+begin
+  fLastTix := tixsec;
+  tosavelocked := false;
+  prev := @fState[hapCurrent];
+  next := prev;
+  al := pointer(@fState[hapAll]);
+  for p := low(PER_TO_SEC) to high(PER_TO_SEC) do
+    if fTix[p] > tixsec then
+      break
+    else
+    begin
+      inc(next);
+      ps := pointer(prev);
+      ns := pointer(next);
+      for s := low(s) to high(s) do
+      begin
+        if ps^.Count <> 0 then
+        begin
+          ns^.Add(ps^);
+          if al <> nil then
+            al^.Add(ps^); // hapAll updated with hapLastMinute
+          if Assigned(fOnSave) and
+             (s in fPersisted) then // save before cleaning
+            with fToSave do
+            begin
+              if not tosavelocked then // lock once for the whole method
+              begin
+                Safe.Lock;
+                tosavelocked := true;
+              end;
+              if Count = length(State) then
+                SetLength(State, NextGrow(Count));
+              with State[Count] do
+              begin
+                Period := p;
+                Scope := s;
+                State.From(ps^);
+              end;
+              inc(Count);
+            end;
+          ps^.Clear;
+        end;
+        inc(ns);
+        inc(ps);
+        if al <> nil then
+          inc(al);
+      end;
+      fTix[p] := tixsec + PER_TO_SEC[p];
+      prev := next;
+      al := nil;
+    end;
+  if tosavelocked then
+    fToSave.Safe.UnLock;
+end;
+
+procedure THttpAnalyzer.Save;
+var
+  tmp: THttpAnalyzerToSaveDynArray;
+begin
+  // quick retrieve the pending state to persist
+  if not Assigned(fOnSave) or
+     (fToSave.Count = 0) then
+    exit;
+  with fToSave do
+  begin
+    Safe.Lock;
+    if Count <> 0 then
+    begin
+      pointer(tmp) := pointer(State);
+      pointer(State) := nil;
+      DynArrayFakeLength(tmp, Count);
+      Count := 0;
+    end;
+    Safe.UnLock;
+  end;
+  // execute the actual persistence callback outside of the loop
+  if tmp <> nil then
+    fOnSave(tmp);
+end;
+
+procedure THttpAnalyzer.Append(Connection: THttpServerConnectionID;
+  const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
+  Flags: THttpServerRequestFlags; StatusCode: cardinal;
+  ElapsedMicroSec, Received, Sent: QWord);
+var
+  tix: cardinal;
+  met: TUriRouterMethod;
+  new: THttpAnalyzerState;
+  cur: PHttpAnalyzerStates;
+const
+  _MET: array[TUriRouterMethod] of THttpAnalyzerScope = (
+    hasGet, hasPost, hasPut, hasDelete, hasOptions, hasHead);
+begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
+      RemoteIP, Flags, StatusCode, ElapsedMicroSec, Received, Sent);
+  // prepare the information to be merged
+  if fTracked = [] then
+    exit; // nothing to process here
+  tix := GetTickCount64 div 1000;
+  new.Count := 1;
+  new.Time := ElapsedMicroSec;
+  new.Read := Received;
+  new.Write := Sent;
+  cur := @fState[hapCurrent];
+  fSafe.Lock;
+  try
+    // integrate request information to the current state
+    cur^[hasAny].Add(new);
+    if (fTracked * [hasGet .. hasOptions] <> []) and
+       UriMethod(Method, met) then
+      cur^[_MET[met]].Add(new);
+    if fTracked * [has1xx .. has5xx] <> [] then
+    begin
+      StatusCode := (StatusCode div 100) - 1; // 1xx..5xx -> 0..4
+      if StatusCode < 5 then
+        cur^[THttpAnalyzerScope(ord(has1xx) + StatusCode)].Add(new);
+    end;
+    if (UserAgent <> '') and
+       (hasMobile in fTracked) then
+      // browser/OS detection using the User-Agent is very tricky idea
+      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
+      // we only detect mobile devices, which seems fair enough
+      if PosEx('Mobile', UserAgent) > 0 then
+        cur^[hasMobile].Add(new);
+    if (hsrHttps in Flags) and
+       (hasHttps in fTracked) then
+      cur^[hasHttps].Add(new);
+    if (hsrAuthorized in Flags) and
+       (hasAuthorized in fTracked) then
+      cur^[hasAuthorized].Add(new);
+    // do proper consolidation if needed
+    if tix <> fLastTix then
+      Consolidate(tix);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpAnalyzer.OnIdle(tix64: Int64);
+var
+  tix: cardinal;
+begin
+  tix := tix64 div 1000;
+  if tix = fLastTix then
+    exit;
+  fSafe.Lock;
+  try
+    Consolidate(tix);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 

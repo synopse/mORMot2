@@ -559,7 +559,7 @@ type
 
   /// event handler used by THttpServerGeneric.OnAfterResponse property
   // - main purpose is to apply post-response e.g. logging or real-time analysis
-  // using THttpAfterResponse or THttpLogger
+  // using THttpAfterResponse classes (e.g. THttpLogger or THttpAnalyzer)
   TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
     const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
     Flags: THttpServerRequestFlags; StatusCode: cardinal;
