@@ -637,7 +637,7 @@ const
     6,   // rkLString
     7,   // rkWString
     8,   // rkVariant
-    0,   // rkArray
+    2,   // rkArray
     9,   // rkRecord
     8,   // rkInterface
     10,  // rkClass
