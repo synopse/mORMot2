@@ -878,6 +878,7 @@ type
   THttpLogVariableDynArray = array of THttpLogVariable;
 
   /// HTTP server log format parser and interpreter
+  // - once parsed, log can be emitted by Append() with very high performance
   THttpLogger = class(THttpAfterResponse)
   protected
     fWriter: TTextDateWriter;

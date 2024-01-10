@@ -5482,15 +5482,14 @@ begin
       inc(PByte(S), head.UnCompressedSize); // move ahead to next chunk
     inc(result, SizeOf(head) + head.CompressedSize);
   until count = 0;
-  if WithTrailer then
-  begin
-    inc(result, SizeOf(trail));
-    trail.Magic := Magic;
-    trail.HeaderRelativeOffset := result;        // Int64 into cardinal
-    if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
-      RaiseStreamError(self, 'StreamCompress trail overflow');
-    Dest.WriteBuffer(trail, SizeOf(trail));
-  end;
+  if not WithTrailer then
+    exit;
+  inc(result, SizeOf(trail));
+  trail.Magic := Magic;
+  trail.HeaderRelativeOffset := result;        // Int64 into cardinal
+  if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
+    RaiseStreamError(self, 'StreamCompress trail overflow');
+  Dest.WriteBuffer(trail, SizeOf(trail));
 end;
 
 function TAlgoCompress.StreamCompress(Source: TStream;
@@ -5527,7 +5526,7 @@ var
   stored: boolean;
 
   function MagicSeek: boolean;
-  // Source not positioned as expected -> try from the end
+  // Source not positioned as expected -> try from the TAlgoCompressTrailer end
   var
     t: PAlgoCompressTrailer;
     tmplen: PtrInt;
