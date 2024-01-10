@@ -778,12 +778,16 @@ type
   THttpAfterResponse = class(TSynPersistent)
   protected
     fSafe: TOSLightLock;
+    fLastTix: cardinal;
     fOnContinue: TOnHttpServerAfterResponse;
   public
     /// initialize this instance
     constructor Create; override;
     /// finalize this instance
     destructor Destroy; override;
+    /// to be overriden e.g. to flush the logs to disk or consolidate counters
+    // - this callback is likely to be executed every second
+    procedure OnIdle(tix64: Int64); virtual;
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
@@ -885,7 +889,6 @@ type
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
-    fLastFlush: cardinal;
     fVariables: THttpLogVariables;
     fFlags: set of (ffOwnWriter);
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -898,6 +901,8 @@ type
       const aFormat: RawUtf8 = LOGFORMAT_COMBINED); reintroduce; overload;
     /// finalize this instance
     destructor Destroy; override;
+    /// overriden to flush the logs to disk
+    procedure OnIdle(tix64: Int64); override;
     /// parse a HTTP server log format string
     // - returns '' on success, or an error message on invalid input
     function Parse(const aFormat: RawUtf8): RawUtf8;
@@ -3773,6 +3778,11 @@ begin
   fSafe.Done;
 end;
 
+procedure THttpAfterResponse.OnIdle(tix64: Int64);
+begin
+  // do nothing by default
+end;
+
 
 { THttpLogger }
 
@@ -3794,6 +3804,7 @@ end;
 constructor THttpLogger.Create(const aFileName: TFileName;
   const aFormat: RawUtf8);
 begin
+  inherited Create;
   fFlags := [ffOwnWriter];
   Create(TTextDateWriter.CreateOwnedFileStream(aFileName, 65536), aFormat);
 end;
@@ -3803,6 +3814,18 @@ begin
   inherited Destroy;
   if ffOwnWriter in fFlags then
     FreeAndNil(fWriter);
+end;
+
+procedure THttpLogger.OnIdle(tix64: Int64);
+begin
+  if tix64 shr 10 = fLastTix then
+    exit;
+  fSafe.Lock;
+  try
+    fWriter.FlushFinal; // force write to disk at least every second
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
@@ -3987,7 +4010,7 @@ begin
       dec(n);
     until n = 0;
     fWriter.AddString(fLineFeed);
-    if GetTickCount64 shr 10 <> fLastFlush then
+    if GetTickCount64 shr 10 <> fLastTix then
       fWriter.FlushFinal; // force write to disk at least every second
   {$ifdef HASFASTTRYFINALLY}
   finally
@@ -3998,7 +4021,7 @@ end;
 
 procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
-  fLastFlush := GetTickCount64 shr 10; // no need to flush within this second
+  fLastTix := GetTickCount64 shr 10; // no need to flush within current second
 end;
 
 
