@@ -5551,7 +5551,6 @@ begin
       begin
         IInterface(Obj)._AddRef;
         result := true;
-        exit;
       end;
     end
     else
@@ -5583,6 +5582,10 @@ begin
   end;
 end;
 
+
+{ ************* Efficient Dynamic Arrays and Records Process }
+
+// defined here for proper inlining in code below
 function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
 begin
   if Info <> nil then
@@ -5594,9 +5597,6 @@ begin
   else
     result := nil;
 end;
-
-
-{ ************* Efficient Dynamic Arrays and Records Process }
 
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 begin
