@@ -3238,6 +3238,9 @@ type
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// can use this class from a low-level file OS handle
     constructor CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
+    /// open for writing or create a non-existing file from its name
+    // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
+    constructor CreateWrite(const aFileName: TFileName);
     /// the file name assigned to this class constructor
     property FileName : TFileName
       read fFilename;
@@ -6615,6 +6618,21 @@ begin
   inherited Create(aHandle); // TFileStreamFromHandle constructor which own it 
   fFileName := aFileName;
 end;
+
+constructor TFileStreamEx.CreateWrite(const aFileName: TFileName);
+var
+  h: THandle;
+begin
+  if not FileExists(aFileName) then
+  begin
+    h := FileCreate(aFileName);
+    if ValidHandle(h) then
+      FileClose(h);
+  end;
+  h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyWrite);
+  CreateFromHandle(aFileName, h);
+end;
+
 
 { TFileStreamWithoutWriteError }
 

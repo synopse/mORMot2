@@ -689,9 +689,7 @@ begin
   for i := n - 2 downto 1 do
     RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
   RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
-  TFileStreamEx.Create(fRedirectFileName, fmCreate).Free; // a new void file
-  fRedirect := TFileStreamEx.Create(
-    fRedirectFileName, fmOpenReadWrite or fmShareDenyWrite); // 'xxx'
+  fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
 end;
 
 function TSynAngelizeRunner.OnRedirect(
