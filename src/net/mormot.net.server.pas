@@ -1118,6 +1118,41 @@ type
       read fState[hapAll, hasAny].Time;
   end;
 
+  /// abstract parent class used to persist THttpAnalyzer information in files
+  THttpAnalyzerPersistAbstract = class(TSynPersistent)
+  protected
+    fFileName: TFileName;
+  public
+    /// intitialize this persistence instance
+    constructor Create(const aFileName: TFileName); reintroduce;
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); virtual; abstract;
+  published
+    /// the current persistent file name
+    property FileName: TFileName
+      read fFileName;
+  end;
+
+  /// class allowing to persist THttpAnalyzer information into a CSV file
+  // - output will have Date,Period,Scope,Count,Time,Read,Write columns
+  THttpAnalyzerPersistCsv = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will persist the state items as CSV rows
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); override;
+  end;
+
+  /// class allowing to persist THttpAnalyzer information into a JSON file
+  // - format will be a JSON array of THttpAnalyzerToSave JSON objects as
+  // $ {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  // with "p" and "s" fields being ord(THttpAnalyzerPeriod/THttpAnalyzerScope)
+  THttpAnalyzerPersistJson = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will persist the state items as JSON objects
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); override;
+  end;
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -4578,6 +4613,150 @@ begin
   else
     State.From(fState[Period][Scope]); // hapCurrent/hapAll need no consolidation
   fSafe.UnLock;
+end;
+
+
+{ THttpAnalyzerPersistAbstract }
+
+constructor THttpAnalyzerPersistAbstract.Create(const aFileName: TFileName);
+begin
+  inherited Create;
+  fFileName := ExpandFileName(aFileName);
+end;
+
+
+{ THttpAnalyzerPersistCsv }
+
+var
+  _SCOPE: array[THttpAnalyzerScope] of RawUtf8;
+
+const
+  _PERIOD: array[THttpAnalyzerPeriod] of string[3] = (
+    ',?,', ',m,', ',h,', ',D,', ',M,', ',Y,', ',*,');
+
+procedure THttpAnalyzerPersistCsv.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  p: ^THttpAnalyzerToSave;
+  t: TSynSystemTime;
+  f: TStream;
+  w: TTextDateWriter;
+  tmp: TSynTempBuffer;
+begin
+  if _SCOPE[hasAny] = '' then
+    GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope), @_SCOPE);
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
+      try
+        if f.Seek(0, soEnd) = 0 then // append or write header
+          w.AddShort('Date,Period,Scope,Count,Time,Read,Write'#13#10);
+        n := length(State);
+        p := pointer(State);
+        repeat
+          t.FromDateTime(UnixTimeToDateTime(p^.Date + UNIXTIME_MINIMAL));
+          t.Second := 0; // seconds part is irrelevant
+          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+            t.AddIsoDate(w) // time part is irrelevant
+          else
+            t.AddIsoDateTime(w, {ms=}false, {first=}' ');
+          w.AddShorter(_PERIOD[p^.Period]);
+          w.AddString(_SCOPE[p^.Scope]);
+          w.Add(',');
+          w.AddQ(p^.State.Count);
+          w.Add(',');
+          w.AddQ(p^.State.Time);
+          w.Add(',');
+          w.AddQ(p^.State.Read);
+          w.Add(',');
+          w.AddQ(p^.State.Write);
+          w.AddCR;
+          inc(p);
+          dec(n);
+        until n = 0;
+        w.FlushFinal;
+      finally
+        w.Free;
+      end;
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, and don't retry
+  end;
+end;
+
+
+{ THttpAnalyzerPersistJson }
+
+procedure THttpAnalyzerPersistJson.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  existing: Int64;
+  p: ^THttpAnalyzerToSave;
+  t: TSynSystemTime;
+  f: TStream;
+  w: TTextDateWriter;
+  tmp: TSynTempBuffer;
+begin
+  // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      existing := f.Seek(0, soEnd);
+      if existing <> 0 then
+        f.Seek(existing - 1, soBeginning); // rewind ending ']'
+      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
+      try
+        if existing = 0 then
+          w.Add('[', #10); // open new JSON array
+        n := length(State);
+        p := pointer(State);
+        repeat
+          w.AddShorter('{"d":"');
+          t.FromDateTime(UnixTimeToDateTime(p^.Date + UNIXTIME_MINIMAL));
+          t.Second := 0; // seconds part is irrelevant
+          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+            t.AddIsoDate(w) // time part is irrelevant
+          else
+            t.AddIsoDateTime(w, {ms=}false); // true Iso-8601 date/time
+          w.AddShorter('","p":');
+          w.AddU(ord(p^.Period));
+          w.AddShorter(',"s":');
+          w.AddU(ord(p^.Scope));
+          w.AddShorter(',"c":');
+          w.AddQ(p^.State.Count);
+          w.AddShorter(',"t":');
+          w.AddQ(p^.State.Time);
+          w.AddShorter(',"r":');
+          w.AddQ(p^.State.Read);
+          w.AddShorter(',"w":');
+          w.AddQ(p^.State.Write);
+          w.Add('}');
+          dec(n);
+          if n = 0 then
+            break;
+          w.Add(',', #10);
+          inc(p);
+        until false;
+        w.Add(']'); // close the JSON array
+        w.FlushFinal;
+      finally
+        w.Free;
+      end;
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, and don't retry
+  end;
 end;
 
 
