@@ -2589,7 +2589,7 @@ type
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
+    /// returns the text at a given position in Values[] via RawUtf8ToVariant()
     // - text should be in a single Values[] entry
     // - explicitly returns null if the supplied text was not found
     procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
@@ -2607,6 +2607,7 @@ type
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// pointer reference to a TRawByteStringGroup
@@ -10793,28 +10794,26 @@ function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
 var
   i: integer;
 begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
-  begin
-    result := @Values[LastFind]; // this cache is very efficient in practice
-    if (aPosition >= result^.Position) and
-       (aPosition < result^.Position + length(result^.Value)) then
+  result := nil;
+  if (pointer(Values) = nil) or
+     (cardinal(aPosition) >= cardinal(Position)) then
+    exit;
+  result := @Values[LastFind]; // this cache is very efficient in practice
+  if (aPosition >= result^.Position) and
+     (aPosition < result^.Position + length(result^.Value)) then
+    exit;
+  result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+  for i := 0 to Count - 2 do
+    if result^.Position > aPosition then
+    begin
+      dec(result);
+      LastFind := i;
       exit;
-    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if result^.Position > aPosition then
-      begin
-        dec(result);
-        LastFind := i;
-        exit;
-      end
-      else
-        inc(result);
-    dec(result);
-    LastFind := Count - 1;
-  end
-  else
-    result := nil;
+    end
+    else
+      inc(result);
+  dec(result);
+  LastFind := Count - 1;
 end;
 
 function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
@@ -10824,37 +10823,33 @@ var
 label
   found;
 begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
+  result := nil;
+  if (pointer(Values) = nil) or
+     (cardinal(aPosition) >= cardinal(Position)) then
+    exit;
+  P := @Values[LastFind]; // this cache is very efficient in practice
+  i := aPosition - P^.Position;
+  if (i >= 0) and
+     (i + aLength < length(P^.Value)) then
   begin
-    P := @Values[LastFind]; // this cache is very efficient in practice
-    i := aPosition - P^.Position;
-    if (i >= 0) and
-       (i + aLength < length(P^.Value)) then
+    result := @PByteArray(P^.Value)[i];
+    exit;
+  end;
+  P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+  for i := 0 to Count - 2 do
+    if P^.Position > aPosition then
     begin
-      result := @PByteArray(P^.Value)[i];
-      exit;
-    end;
-    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if P^.Position > aPosition then
-      begin
-        LastFind := i;
+      LastFind := i;
 found:  dec(P);
-        dec(aPosition, P^.Position);
-        if aLength - aPosition <= length(P^.Value) then
-          result := @PByteArray(P^.Value)[aPosition]
-        else
-          result := nil;
-        exit;
-      end
-      else
-        inc(P);
-    LastFind := Count - 1;
-    goto found;
-  end
-  else
-    result := nil;
+      dec(aPosition, P^.Position);
+      if aLength - aPosition <= length(P^.Value) then
+        result := @PByteArray(P^.Value)[aPosition];
+      exit;
+    end
+    else
+      inc(P);
+  LastFind := Count - 1;
+  goto found;
 end;
 
 procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer;
