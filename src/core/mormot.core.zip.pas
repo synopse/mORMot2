@@ -47,6 +47,7 @@ type
   TSynZipStream = class(TStream)
   protected
     fInitialized: boolean;
+    fDestStreamOwned: boolean;
     fFormat: TSynZipCompressorFormat;
     fDestStream: TStream;
     Z: TZLib;
@@ -84,8 +85,12 @@ type
     /// create a compression stream, writting the compressed data into
     // the specified stream (e.g. a file stream)
     constructor Create(outStream: TStream; CompressionLevel: integer;
-      Format: TSynZipCompressorFormat = szcfRaw);
-    /// release memory
+      Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
+    /// create a compression stream, writting the compressed data into
+    // the specified file name
+    constructor Create(const outFile: TFileName; CompressionLevel: integer;
+      Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
+    /// release memory and write the .gz ending packet if needed
     destructor Destroy; override;
     /// update the global CRC and compress some data
     function Write(const Buffer; Count: Longint): Longint; override;
@@ -912,8 +917,8 @@ end;
 
 { TSynZipCompressor }
 
-constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: integer;
-  Format: TSynZipCompressorFormat);
+constructor TSynZipCompressor.Create(outStream: TStream;
+  CompressionLevel: integer; Format: TSynZipCompressorFormat);
 begin
   fDestStream := outStream;
   fFormat := Format;
@@ -921,6 +926,13 @@ begin
     fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE);
   Z.Init(nil, 0, outStream, nil, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.CompressInit(CompressionLevel, fFormat = szcfZip);
+end;
+
+constructor TSynZipCompressor.Create(const outFile: TFileName;
+  CompressionLevel: integer; Format: TSynZipCompressorFormat);
+begin
+  fDestStreamOwned := true;
+  Create(TFileStreamEx.Create(outFile, fmCreate), CompressionLevel, Format);
 end;
 
 destructor TSynZipCompressor.Destroy;
@@ -941,6 +953,8 @@ begin
     Z.CompressEnd;
   end;
   inherited Destroy;
+  if fDestStreamOwned then
+    FreeAndNil(fDestStream);
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
