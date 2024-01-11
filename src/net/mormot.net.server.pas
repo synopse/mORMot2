@@ -1165,6 +1165,44 @@ type
     procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
+  /// class used to read and search persisted THttpAnalyzer information
+  // - all data will be stored in memory, with 40 bytes per row
+  THttpAnalyzerReader = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+    fCount: integer;
+    fState: TRawByteStringGroup; // avoid in-memory fragmentation
+    fDynArray: TDynArray;
+    procedure CreateDynArray;
+    function StateArray: PDynArray;
+      {$ifdef HASINLINE} inline; {$endif}
+  public
+    /// release all stored data
+    procedure Clear;
+    /// read the FileName content in the THttpAnalyzerPersistBinary file format
+    // - content will be appended to the existing data
+    function AddFromBinary(const FileName: TFileName): boolean;
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will add the saved states to the internal in-memory storage
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+    /// direct access to the internal stored data - from Row in [0..Count-1]
+    // - make a thread-safe copy of the data
+    function GetState(Row: integer; out State: THttpAnalyzerToSave): boolean;
+    /// raw thread-unsafe access to the data - to be protected with Safe.Lock
+    function Get(Row: integer): PHttpAnalyzerToSave;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// search for a Period/Scope information for a given time range
+    function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+      Scope: THttpAnalyzerScope): THttpAnalyzerStateDynArray;
+    /// access to the thread-safety NOT reentrant lock
+    property Safe: TLightLock
+      read fSafe write fSafe;
+    /// how many rows are currently in State[] memory buffer
+    property Count: integer
+      read fCount;
+  end;
+
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -4796,6 +4834,169 @@ begin
   end;
 end;
 
+
+{ THttpAnalyzerReader }
+
+function THttpAnalyzerReader.Get(Row: integer): PHttpAnalyzerToSave;
+begin
+  // caller should have made Safe.Lock
+  result := fState.Find(Row * SizeOf(result^), SizeOf(result^));
+end;
+
+procedure THttpAnalyzerReader.CreateDynArray;
+begin
+  // caller should have made Safe.Lock
+  fState.Compact; // ensure everything linear in fState.Values[0].Value
+  fDynArray.InitSpecific(TypeInfo(THttpAnalyzerToSaveDynArray),
+    fState.Values[0].Value, ptCardinal, @fCount);
+  fDynArray.Sorted := true; // ordered by THttpAnalyzerToSave.Date
+end;
+
+function THttpAnalyzerReader.StateArray: PDynArray;
+begin
+  // caller should have made Safe.Lock
+  if fState.Count <> 1 then
+    CreateDynArray;
+  result := @fDynArray;
+end;
+
+procedure THttpAnalyzerReader.Clear;
+begin
+  fCount := 0;
+  fState.Clear;
+end;
+
+function THttpAnalyzerReader.AddFromBinary(const FileName: TFileName): boolean;
+var
+  size, n: cardinal; // 32-bit support only in TRawByteStringGroup
+  unsorted: boolean;
+  tmp: RawByteString;
+begin
+  result := false;
+  size := FileSize(FileName);
+  if size = 0 then
+    exit;
+  n := size div SizeOf(THttpAnalyzerToSave);
+  if n * SizeOf(THttpAnalyzerToSave) <> size then
+    exit;
+  tmp := StringFromFile(FileName);
+  if cardinal(length(tmp)) <> size then
+    exit;
+  fSafe.Lock;
+  try
+    unsorted := (fCount <> 0) and
+                (Get(fCount - 1)^.Date > PHttpAnalyzerToSave(tmp)^.Date);
+    fState.Add(tmp);
+    inc(fCount, n);
+    if unsorted then
+      StateArray^.Sort; // should not happen, but who knows?
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpAnalyzerReader.OnSave(const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  unsorted: boolean;
+begin
+  if State = nil then
+    exit;
+  fSafe.Lock;
+  try
+    n := fCount;
+    unsorted := (n <> 0) and
+                (Get(n - 1)^.Date > State[0].Date);
+    n := length(State);
+    inc(fCount, n);
+    fState.Add(pointer(State), n * SizeOf(State[0]));
+    if unsorted then
+      StateArray^.Sort // very unlikely
+    else if fCount > 256 then
+      fState.Compact; // aggregate blocks to reduce fragmentation
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpAnalyzerReader.GetState(Row: integer;
+  out State: THttpAnalyzerToSave): boolean;
+begin
+  result := false;
+  if cardinal(Row) >= cardinal(fCount) then
+    exit;
+  fSafe.Lock;
+  fState.FindMove(Row * SizeOf(State), SizeOf(State), @State);
+  fSafe.UnLock;
+  result := true;
+end;
+
+function THttpAnalyzerReader.Find(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope): THttpAnalyzerStateDynArray;
+var
+  ndxStart, ndxStop: integer;
+  ndxStartExact: boolean;
+  date: cardinal;
+  n: PtrInt;
+  da: PDynArray;
+  p, s: PHttpAnalyzerToSave;
+
+  procedure Add(p: PHttpAnalyzerToSave);
+  begin
+    if n = length(result) then
+      SetLength(result, NextGrow(n));
+    result[n] := p^.State;
+  end;
+
+begin
+  result := nil;
+  n := 0;
+  fSafe.Lock;
+  try
+    da := StateArray;
+    // retrieve the lower value
+    date := DateTimeToUnixTime(Start) - UNIXTIME_MINIMAL;
+    ndxStartExact := da^.FastLocateSorted(date, ndxStart); // O(log(n))
+    s := da^.ItemPtr(ndxStart);
+    if ndxStartExact then
+      Add(s)
+    else
+    begin
+      // no exact match: search the first previous match
+      //TODO: maintain a set of available Scopes to avoid full search?
+      p := s;
+      while ndxStart >= 0 do
+      begin
+        dec(p);
+        if (p^.Scope = Scope) and
+           (p^.Period = Period) then
+          break;
+        dec(ndxStart);
+      end;
+      if ndxStart >= 0 then
+        Add(p);
+    end;
+    // find the upper boundary
+    date := DateTimeToUnixTime(Stop) - UNIXTIME_MINIMAL;
+    da^.FastLocateSorted(date, ndxStop); // O(log(n))
+    p := da^.ItemPtr(ndxStop);
+    // brute force O(n) search within this time range
+    // this may be a bit slow for the highest periods
+    //TODO: split the data per Scope and Period? or at least two indexes?
+    repeat
+      inc(s);
+      if PtrUInt(s) >= PtrUInt(p) then
+        break;
+      if (s^.Scope = Scope) and
+         (s^.Period = Period) then
+        Add(s);
+    until false;
+  finally
+    fSafe.UnLock;
+  end;
+  if result <> nil then
+    DynArrayFakeLength(result, n);
+end;
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
