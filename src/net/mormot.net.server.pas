@@ -1013,6 +1013,7 @@ type
 
   /// transient in-memory storage of THttpAnalyzer states to be persisted
   THttpAnalyzerToSave = record
+    Date: cardinal; // from UnixTimeMinimalUtc()
     Period: THttpAnalyzerPeriod;
     Scope: THttpAnalyzerScope;
     State: THttpAnalyzerState;
@@ -4245,12 +4246,12 @@ procedure THttpAnalyzer.Consolidate(tixsec: cardinal);
 var
   p: THttpAnalyzerPeriod;
   s: THttpAnalyzerScope;
-  tosavelocked: boolean;
+  now: cardinal;
   ps, ns, al: PHttpAnalyzerState;
   prev, next: PHttpAnalyzerStates;
 begin
   fLastTix := tixsec;
-  tosavelocked := false;
+  now := 0;
   prev := @fState[hapCurrent];
   next := prev;
   al := pointer(@fState[hapAll]);
@@ -4273,15 +4274,16 @@ begin
              (s in fPersisted) then // save before cleaning
             with fToSave do
             begin
-              if not tosavelocked then // lock once for the whole method
+              if now = 0 then // lock once for the whole method
               begin
+                now := UnixTimeMinimalUtc;
                 Safe.Lock;
-                tosavelocked := true;
               end;
               if Count = length(State) then
                 SetLength(State, NextGrow(Count));
               with State[Count] do
               begin
+                Date := now;
                 Period := p;
                 Scope := s;
                 State.From(ps^);
@@ -4299,7 +4301,7 @@ begin
       prev := next;
       al := nil;
     end;
-  if tosavelocked then
+  if now <> 0 then
     fToSave.Safe.UnLock;
 end;
 
