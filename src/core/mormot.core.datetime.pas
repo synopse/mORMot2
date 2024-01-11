@@ -1646,7 +1646,7 @@ begin
        not (P[4] in ['0'..'9']) then
       exit;
     if (P^ = '-') and
-       (PCardinal(P + 1)^ = $30303030) then // '-0000'
+       (PCardinal(P + 1)^ = $30303030) then // '-0000' for current local
       Zone := TimeZoneLocalBias
     else
     begin
@@ -1725,8 +1725,7 @@ begin
 end;
 
 var
-  AppendToTextFileSafe: TOSLightLock; // to make AppendToTextFile() thread-safe
-  AppendToTextFileSafeSet: boolean;
+  AppendToTextFileSafe: TLightLock; // to make AppendToTextFile() thread-safe
 
 function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
@@ -1742,14 +1741,6 @@ begin
   if (aFileName = '') or
      (aLine = '') then
     exit;
-  if not AppendToTextFileSafeSet then
-  begin
-    GlobalLock;
-    if not AppendToTextFileSafeSet then
-      AppendToTextFileSafe.Init;
-    AppendToTextFileSafeSet := true;
-    GlobalUnLock;
-  end;
   AppendToTextFileSafe.Lock;
   try
     f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
