@@ -2940,24 +2940,22 @@ function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
 /// returns the current UTC time
-// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
+// - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows
 function NowUtc: TDateTime;
 
 /// returns the current UTC date/time as a second-based c-encoded time
 // - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
-// - faster than NowUtc or GetTickCount64, on Windows or Unix platforms
-// (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime under Windows)
+// - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
 function UnixTimeUtc: TUnixTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
-// - faster and more accurate than NowUtc or GetTickCount64, on Windows or Unix
 // - will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
-// later being more accurate, but slightly slower than the former, so you may
-// consider using UnixMSTimeUtcFast on Windows if its 16ms accuracy is enough
+// or GetSystemTimePreciseAsFileTime under Windows 8 and later
+// - on Windows, is slightly more accurate, but slower than UnixMSTimeUtcFast
 function UnixMSTimeUtc: TUnixMSTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
@@ -2975,7 +2973,9 @@ const
   UnixFileTimeDelta = 116444736000000000;
 
 /// the number of minutes bias in respect to UTC/GMT date/time
-// - as retrieved via -GetLocalTimeOffset() at startup
+// - as retrieved via -GetLocalTimeOffset() at startup, so may not be accurate
+// after a time shift during the process execution - but any long-running
+// process (like a service) should use UTC timestamps only
 var
   TimeZoneLocalBias: integer;
 
