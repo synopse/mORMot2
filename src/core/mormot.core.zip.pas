@@ -136,11 +136,15 @@ type
     unixmodtime: cardinal;
     fname, fcomment, extra: PAnsiChar;
     /// read and validate the .gz header
-    // - on success, return true and fill complen/uncomplen/crc32c properties
+    // - on success, return true and fill complen/uncomplen32/crc32c properties
     function Init(gz: PAnsiChar; gzLen: PtrInt): boolean;
     /// uncompress the .gz content into a memory buffer
     // - warning: won't work as expected if uncomplen32 was truncated to 2^32
     function ToMem: RawByteString;
+    /// uncompress the .gz content into a memory buffer
+    // - warning: dest should be at least uncomplen32 in size (works only if
+    // was not truncated to 2^32)
+    function ToBuffer(dest: PAnsiChar): boolean;
     /// uncompress the .gz content into a stream
     function ToStream(stream: TStream; tempBufSize: integer = 0): boolean;
     /// uncompress the .gz content into a file
@@ -162,11 +166,21 @@ type
 
 /// uncompress a .gz file content
 // - return '' if the .gz content is invalid (e.g. bad crc)
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString; overload;
+
+/// uncompress a .gz file by name
+// - return '' if the file content is invalid (e.g. bad crc)
+function GZRead(const gzfile: TFileName): RawByteString; overload;
 
 /// compress a file content into a new .gz file
 // - will use TSynZipCompressor for minimal memory use during file compression
-function GZFile(const orig, destgz: TFileName; CompressionLevel: integer = 6): boolean;
+function GZFile(const orig, destgz: TFileName;
+  CompressionLevel: integer = 6): boolean; overload;
+
+/// compress a memory buffer into a new .gz file
+// - will use TSynZipCompressor for minimal memory use during file compression
+function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
+  CompressionLevel: integer = 6): boolean; overload;
 
 
 { ************  .ZIP Archive File Support }
@@ -1146,10 +1160,21 @@ begin
     // 0 length stream
     exit;
   SetLength(result, uncomplen32);
-  if (cardinal(UnCompressMem(
-       comp, pointer(result), complen, uncomplen32)) <> uncomplen32) or
-     (mormot.lib.z.crc32(0, pointer(result), uncomplen32) <> crc32) then
+  if not ToBuffer(pointer(result)) then
     result := ''; // invalid CRC or truncated uncomplen32
+end;
+
+function TGZRead.ToBuffer(dest: PAnsiChar): boolean;
+begin
+  if (comp = nil) or
+     (dest = nil) or
+     ((uncomplen32 = 0) and
+      (crc32 = 0)) then
+    result := false
+  else
+    result := (cardinal(UnCompressMem(
+       comp, dest, complen, uncomplen32)) = uncomplen32) and
+     (mormot.lib.z.crc32(0, dest, uncomplen32) = crc32);
 end;
 
 function TGZRead.ToStream(stream: TStream; tempBufSize: integer): boolean;
@@ -1263,28 +1288,51 @@ begin
     result := '';
 end;
 
+function GZRead(const gzfile: TFileName): RawByteString;
+var
+  tmp: RawByteString;
+begin
+  tmp := StringFromFile(gzFile);
+  result := GZRead(pointer(tmp), length(tmp));
+end;
+
 function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
 var
   gz: TSynZipCompressor;
-  s, d: TStream;
+  s: TStream;
 begin
   try
     s := TFileStreamEx.Create(orig, fmOpenReadDenyNone);
     try
-      d := TFileStreamEx.Create(destgz, fmCreate);
+      gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
       try
-        gz := TSynZipCompressor.Create(d, CompressionLevel, szcfGZ);
-        try
-          StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
-          result := true;
-        finally
-          gz.Free;
-        end;
+        StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
+        result := true;
       finally
-        d.Free;
+        gz.Free;
       end;
     finally
       s.Free;
+    end;
+  except
+    result := false;
+  end;
+end;
+
+function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
+  CompressionLevel: integer): boolean;
+var
+  gz: TSynZipCompressor;
+begin
+  try
+    gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
+    try
+      if (buf <> nil) and
+         (len > 0) then
+        gz.WriteBuffer(buf^, len);
+      result := true;
+    finally
+      gz.Free;
     end;
   except
     result := false;
