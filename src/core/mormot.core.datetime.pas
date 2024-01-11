@@ -1926,7 +1926,7 @@ var
   d: TDateTime;
   i: PtrInt;
 begin
-  if not TryEncodeDate(Year, Month, Day, d) then
+  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, d) then
   begin
     DayOfWeek := 0;
     exit;
@@ -1940,7 +1940,7 @@ end;
 
 function TSynDate.ToDate: TDate;
 begin
-  if not TryEncodeDate(Year, Month, Day, PDateTime(@result)^) then
+  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, PDateTime(@result)^) then
     result := 0;
 end;
 
@@ -1987,14 +1987,14 @@ var
   LStartOfMonth, LDay: integer;
 begin
   // adapted from DateUtils
-  result := TryEncodeDate(AYear, AMonth, 1, AValue);
+  result := mormot.core.datetime.TryEncodeDate(AYear, AMonth, 1, AValue);
   if not result then
     exit;
   LStartOfMonth := (DateTimeToTimestamp(AValue).date - 1) mod 7 + 1;
   if LStartOfMonth <= ADayOfWeek then
     dec(ANthDayOfWeek);
   LDay := (ADayOfWeek - LStartOfMonth + 1) + 7 * ANthDayOfWeek;
-  result := TryEncodeDate(AYear, AMonth, LDay, AValue);
+  result := mormot.core.datetime.TryEncodeDate(AYear, AMonth, LDay, AValue);
 end;
 
 function TSynSystemTime.EncodeForTimeChange(const aYear: word): TDateTime;
@@ -2441,7 +2441,7 @@ function TSynSystemTime.ToDateTime: TDateTime;
 var
   time: TDateTime;
 begin
-  if TryEncodeDate(Year, Month, Day, result) then
+  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
     if TryEncodeTime(Hour, Minute, Second, MilliSecond, time) then
       result := result + time
     else
@@ -3333,7 +3333,7 @@ procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
 var
   T: TSynSystemTime;
 begin
-  if (Value^ = 0) and
+  if (PInt64(Value)^ = 0) and
      (QuoteChar = #0) then
     exit;
   if BEnd - B <= 26 then
@@ -3343,7 +3343,7 @@ begin
     B^ := QuoteChar
   else
     dec(B);
-  if Value^ <> 0 then
+  if PInt64(Value)^ <> 0 then
   begin
     inc(B);
     if AlwaysDateAndTime or
@@ -3514,8 +3514,6 @@ end;
 
 procedure FinalizeUnit;
 begin
-  if AppendToTextFileSafeSet then
-    AppendToTextFileSafe.Done;
 end;
 
 initialization
