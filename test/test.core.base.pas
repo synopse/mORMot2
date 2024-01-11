@@ -5634,7 +5634,66 @@ var
   D: TDateTime;
   tmp: RawUtf8;
   b: TTimeLogBits;
+  st, start: TSynSystemTime;
 begin
+  Check(st.FromText('19821031T142319'));
+  start := st;
+  CheckEqual(st.ToText, '1982-10-31T14:23:19.000');
+  st.Second := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T14:24:00.000', 'next minute');
+  st.Minute := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T15:00:00.000', 'next hour');
+  st.Hour := 24;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'next day');
+  st.Day := st.DaysInMonth + 1; // + 1 to switch to next month
+  CheckEqual(st.Day, 31);
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-12-01T00:00:00.000', 'next month');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1983-01-01T00:00:00.000', 'next year 1');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'next year 2');
+  // reset each time - as THttpAnalyzer.ComputeConsolidateTime
+  st := start;
+  CheckEqual(st.ToText, '1982-10-31T14:23:19.000');
+  st.Second := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T14:24:00.000', 'nextminute');
+  st := start;
+  st.Second := 0;
+  st.Minute := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T15:00:00.000', 'nexthour');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 24;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'nextday');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 0;
+  st.Day := st.DaysInMonth + 1; // + 1 to switch to next month
+  CheckEqual(st.Day, 32);
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'nextmonth');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 0;
+  st.Day := 1;
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1983-01-01T00:00:00.000', 'nextyear 1');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'nextyear 2');
   for i := 1700 to 2500 do
     Check(mormot.core.datetime.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
