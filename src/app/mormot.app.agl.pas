@@ -1446,9 +1446,7 @@ begin
           lf := NormalizeFileName(Utf8ToString(
             Sender.Expand(Service, Service.RedirectLogFile, true)));
           try
-            if not FileExists(lf) then
-              TFileStreamEx.Create(lf, fmCreate).Free; // a new void file
-            ls := TFileStreamEx.Create(lf, fmOpenReadWrite or fmShareDenyWrite);
+            ls := TFileStreamEx.CreateWrite(lf);
             ls.Seek(0, soEnd); // append
             Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
           except
