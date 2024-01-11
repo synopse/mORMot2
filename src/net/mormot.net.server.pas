@@ -1156,6 +1156,15 @@ type
     procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
+  /// class allowing to persist THttpAnalyzer information into a binary file
+  // - output will just be raw THttpAnalyzerToSave memory layout with no
+  // compression involved
+  THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  end;
+
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
@@ -4763,6 +4772,30 @@ begin
     fFileName := ''; // ignore any write error in the callback, and don't retry
   end;
 end;
+
+
+{ THttpAnalyzerPersistBinary }
+
+procedure THttpAnalyzerPersistBinary.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  f: TStream;
+begin
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      f.Seek(0, soEnd); // append
+      f.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, and don't retry
+  end;
+end;
+
 
 
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
