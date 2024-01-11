@@ -775,10 +775,11 @@ type
   /// HTTP server abstract parent for Logger / Analyzer
   // - do not use this abstract class but e.g. THttpLogger
   // - you can merge several THttpLoger instances via the OnContinue property
+  // - OnIdle() should be called every few seconds for background process
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
   THttpAfterResponse = class(TSynPersistent)
   protected
     fSafe: TOSLightLock;
-    fLastTix: cardinal;
     fOnContinue: TOnHttpServerAfterResponse;
   public
     /// initialize this instance
@@ -786,7 +787,7 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// to be overriden e.g. to flush the logs to disk or consolidate counters
-    // - this callback is likely to be executed every second
+    // - this callback is likely to be executed every second from a THttpServer
     procedure OnIdle(tix64: Int64); virtual;
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
@@ -803,6 +804,7 @@ type
   /// supported THttpLoger place holders
   // - matches nginx log module naming, with some additional fields
   // - values are provided as TOnHttpServerAfterResponse event parameters
+  // - variable names in format string uses RTTI e.g. '$uri" for hlvUri
   // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
   // - hlvBytes_Sent is the number of bytes sent to a client
   // - hlvConnection is the THttpServerConnectionID
@@ -883,6 +885,8 @@ type
 
   /// HTTP server responses log format parser and interpreter
   // - once parsed, log can be emitted by Append() with very high performance
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
+  // - OnIdle() should be called every few seconds for background log writing
   THttpLogger = class(THttpAfterResponse)
   protected
     fWriter: TTextDateWriter;
@@ -890,6 +894,7 @@ type
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
     fVariables: THttpLogVariables;
+    fLastTix: cardinal;
     fFlags: set of (ffOwnWriter);
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
   public
@@ -905,6 +910,7 @@ type
     procedure OnIdle(tix64: Int64); override;
     /// parse a HTTP server log format string
     // - returns '' on success, or an error message on invalid input
+    // - recognized $variable names match trimmed THttpLogVariable enumeration
     function Parse(const aFormat: RawUtf8): RawUtf8;
     /// append a request information to the destination log file
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
@@ -997,32 +1003,38 @@ type
   /// pointer to information about all possible counters
   PHttpAnalyzerStates = ^THttpAnalyzerStates;
 
-  /// possible time periods used for THttpAnalyzer consolidation
+  /// possible time periods used for THttpAnalyzer data consolidation
   THttpAnalyzerPeriod = (
     hapCurrent,
-    hapLastMinute,
-    hapLastFiveMinutes,
-    hapLastQuarter,
-    hapLastHour,
-    hapLastDay,
-    hapLastMonth,
+    hapMinute,
+    hapHour,
+    hapDay,
+    hapMonth,
+    hapYear,
     hapAll);
   /// the time periods used for THttpAnalyzer consolidation
   THttpAnalyzerPeriods = set of THttpAnalyzerPeriod;
-  THttpAnalyzerPeriodTix = hapLastMinute .. hapLastMonth;
+
+  /// store all consolidated states in a Round-Robin manner
+  THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
+
+  /// which time periods are actually persisted
+  THttpAnalyzerPeriodSave = hapMinute .. hapAll;
 
   /// transient in-memory storage of THttpAnalyzer states to be persisted
+  // - map all the information to be persisted on disk as CSV, binary or SQL
   THttpAnalyzerToSave = record
-    Date: cardinal; // from UnixTimeMinimalUtc()
+    /// the timetstamp - from UnixTimeMinimalUtc() - of the persistence
+    Date: cardinal;
+    /// the THttpAnalyzerPeriodSave resolution time period (hapMinute..hapAll)
     Period: THttpAnalyzerPeriod;
+    /// the corresponding counter
     Scope: THttpAnalyzerScope;
+    /// the whole information about this counter in this Period at Date
     State: THttpAnalyzerState;
   end;
   /// a dynamic array of THttpAnalyzerToSave
   THttpAnalyzerToSaveDynArray = array of THttpAnalyzerToSave;
-
-  /// store all consolidated states in a Round-Robin manner
-  THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
 
   /// event callback signature to persist THttpAnalyzer information
   TOnHttpAnalyzerSave = procedure(
@@ -1033,23 +1045,38 @@ type
   // then consolidate the data in main time periods
   // - this does not replace a full log parsing/monitoring solution, but could
   // give good hints about the current server status, with no third-party tool
+  // - OnIdle() should be called every few seconds for background process
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
+  // - OnSave() event could be assigned e.g. to a THttpAnalyzerPersistAbstract
   THttpAnalyzer = class(THttpAfterResponse)
   protected
-    fTracked, fPersisted: THttpAnalyzerScopes;
+    fTracked, fSaved: THttpAnalyzerScopes;
+    fModified: boolean; // for UpdateSuspendFile
     fOnSave: TOnHttpAnalyzerSave;
+    fSuspendFile: TFileName;
     fState: THttpAnalyzerConsolidated;
     fToSave: record
       Safe: TLightLock;
       Count: integer;
       State: THttpAnalyzerToSaveDynArray;
     end;
-    fTix: array[THttpAnalyzerPeriodTix] of cardinal;
+    fSuspendFileAutoSaveMinutes: cardinal;
+    fSuspendFileAutoSaveTix, fLastConsolidate: cardinal;
+    fConsolidateNextTime: array[hapMinute .. hapYear] of TDateTime;
+    procedure ComputeConsolidateTime(last: THttpAnalyzerPeriod; ref: TDateTime);
     procedure Consolidate(tixsec: cardinal);
-    procedure Save;
+    procedure DoSave;
   public
-    /// initialize this instance
-    constructor Create; reintroduce;
-    /// overriden to consolidate counters
+    /// initialize this HTTP server analyzer instance
+    // - you can specify an optional file name to persist the current counters
+    // state as compressed binary, which will be read in the constructor
+    // and written in Destroy or via UpdateSuspendFile/SuspendFileSaveMinutes
+    constructor Create(const aSuspendFile: TFileName = '';
+      aSuspendFileSaveMinutes: integer = 1); reintroduce;
+    /// finalize this instance, with proper persistence of the pending counters
+    destructor Destroy; override;
+    /// overriden to consolidate the counters and optionally persist them
+    // - this callback is likely to be executed every second from a THttpServer
     procedure OnIdle(tix64: Int64); override;
     /// append a request information to the internal counters
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
@@ -1058,22 +1085,31 @@ type
       const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
       Flags: THttpServerRequestFlags; StatusCode: cardinal;
       ElapsedMicroSec, Received, Sent: QWord); override;
-    /// event handler used to
+    /// retrieve the current state for a given period and scope
+    // - consolidate hapMinute .. hapYear state values up to the requested Period
+    // - this method is thread-safe
+    procedure Current(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+      out State: THttpAnalyzerState);
+    /// force persistence of the pending counters
+    procedure UpdateSuspendFile;
+    /// the frequency on which OnIdle() calls UpdateSuspendFile
+    // - set to 0 to be disabled
+    property SuspendFileAutoSaveMinutes: cardinal
+      read fSuspendFileAutoSaveMinutes;
+    /// direct access to the current state since the beginning
+    // - this property is not thread-safe: use Current() instead
+    property Total: THttpAnalyzerStates
+      read fState[hapAll];
+    /// event handler used to persist the information
     property OnSave: TOnHttpAnalyzerSave
       read fOnSave write fOnSave;
-    /// the current state of counters
-    property Current: THttpAnalyzerState
-      read fState[hapCurrent, hasAny];
-    /// state of all counters for all supported time periods
-    property State: THttpAnalyzerConsolidated
-      read fState;
   published
     /// define which THttpAnalyzerScopes fields are to be tracked
     property Tracked: THttpAnalyzerScopes
       read fTracked write fTracked;
     /// define which THttpAnalyzerScopes fields are to be sent to OnSave()
-    property Persisted: THttpAnalyzerScopes
-      read fPersisted write fPersisted;
+    property Saved: THttpAnalyzerScopes
+      read fSaved write fSaved;
     /// just a redirection to the number of requests since the beginning
     property TotalRequests: THttpAnalyzerTotal
       read fState[hapAll, hasAny].Count;
@@ -4221,45 +4257,130 @@ end;
 
 { THttpAnalyzer }
 
-const
-  PER_TO_SEC: array[THttpAnalyzerPeriodTix] of cardinal = (
-    60,                 // hapLastMinute
-    60 * 5,             // hapLastFiveMinutes
-    60 * 15,            // hapLastQuarter
-    60 * 60,            // hapLastHour
-    60 * 60 * 24,       // hapLastDay
-    60 * 60 * 24 * 31); // hapLastMonth
-
-constructor THttpAnalyzer.Create;
+constructor THttpAnalyzer.Create(const aSuspendFile: TFileName;
+  aSuspendFileSaveMinutes: integer);
 var
-  p: THttpAnalyzerPeriod;
+  tmp: RawByteString;
+  gz: TGZRead;
+  fromgz: TUnixTime;
   tix: cardinal;
 begin
   inherited Create;
   fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
+  fSaved := fTracked;
+  fSuspendFile := aSuspendFile;
+  fSuspendFileAutoSaveMinutes := aSuspendFileSaveMinutes;
+  fromgz := 0;
+  tmp := StringFromFile(fSuspendFile);
+  if (tmp <> '') and
+     (length(tmp) <= SizeOf(fState)) and
+     gz.Init(pointer(tmp), length(tmp)) and
+     (gz.uncomplen32 = SizeOf(fState)) then
+    if gz.ToBuffer(@fState) then
+      fromgz := FileAgeToUnixTimeUtc(fSuspendFile)
+    else
+      FillcharFast(fState, SizeOf(fState), 0);
+  ComputeConsolidateTime(hapAll, fromgz);
   tix := GetTickCount64 div 1000;
-  for p := low(PER_TO_SEC) to high(PER_TO_SEC) do
-    fTix[p] := tix + PER_TO_SEC[p];
+  if fromgz <> 0 then
+    Consolidate(tix); // consolidate old data
+  if fSuspendFileAutoSaveMinutes <> 0 then
+    fSuspendFileAutoSaveTix := tix + fSuspendFileAutoSaveMinutes * 60;
+end;
+
+destructor THttpAnalyzer.Destroy;
+var
+  p: THttpAnalyzerPeriod;
+  now: TDateTime;
+begin
+  if Assigned(fOnSave) then
+  begin
+    // persist any pending data still currently in memory buffers
+    now := NowUtc;
+    for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
+      fConsolidateNextTime[p] := now; // force consolidation
+    Consolidate(0);
+    DoSave;
+  end;
+  if fModified and
+     (fSuspendFile <> '') then
+    UpdateSuspendFile;
+  inherited Destroy;
+end;
+
+procedure THttpAnalyzer.ComputeConsolidateTime(
+  last: THttpAnalyzerPeriod; ref: TDateTime);
+var
+  now, t: TSynSystemTime;
+begin
+  if last < hapMinute then
+    exit;
+  if ref <> 0 then
+    now.FromDateTime(ref) // from SuspendFile .gz
+  else
+    now.FromNowUtc; // e.g. '2022-10-31T14:23:19.000' is the current time
+  now.MilliSecond := 0;
+  t := now;
+  t.Second := 60;
+  t.Normalize;  // e.g. '2022-10-31T14:24:00.000' = start of next minute
+  fConsolidateNextTime[hapMinute] := t.ToDateTime;
+  if last = hapMinute then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 60;
+  t.Normalize;  // e.g. '2022-10-31T15:00:00.000' = start of next hour
+  fConsolidateNextTime[hapHour] := t.ToDateTime;
+  if last = hapHour then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 24;
+  t.Normalize;  // e.g. '2022-11-01T00:00:00.000' = start of next day
+  fConsolidateNextTime[hapDay] := t.ToDateTime;
+  if last = hapDay then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 0;
+  t.Day := t.DaysInMonth + 1;
+  t.Normalize; // e.g. '2022-11-01T00:00:00.000' = start of next month
+  fConsolidateNextTime[hapMonth] := t.ToDateTime;
+  if last = hapMonth then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 0;
+  t.Day := 1;
+  t.Month := 13;
+  t.Normalize; // e.g. '2023-01-01T00:00:00.000' = start of next year
+  fConsolidateNextTime[hapYear] := t.ToDateTime;
 end;
 
 procedure THttpAnalyzer.Consolidate(tixsec: cardinal);
 var
-  p: THttpAnalyzerPeriod;
+  p, last: THttpAnalyzerPeriod;
   s: THttpAnalyzerScope;
-  now: cardinal;
+  savenow: cardinal;
+  now: TDateTime;
   ps, ns, al: PHttpAnalyzerState;
   prev, next: PHttpAnalyzerStates;
 begin
-  fLastTix := tixsec;
-  now := 0;
+  fLastConsolidate := tixsec;
+  last := pred(hapMinute);
+  now := NowUtc;
+  savenow := 0;
   prev := @fState[hapCurrent];
   next := prev;
   al := pointer(@fState[hapAll]);
-  for p := low(PER_TO_SEC) to high(PER_TO_SEC) do
-    if fTix[p] > tixsec then
-      break
-    else
+  for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
+    if now >= fConsolidateNextTime[p] then
     begin
+      // this is consolidation time for this period
+      last := p;
       inc(next);
       ps := pointer(prev);
       ns := pointer(next);
@@ -4267,29 +4388,33 @@ begin
       begin
         if ps^.Count <> 0 then
         begin
+          // we have some data to aggregate to this counter
+          fModified := true; // for UpdateSuspendFile
           ns^.Add(ps^);
           if al <> nil then
-            al^.Add(ps^); // hapAll updated with hapLastMinute
+            al^.Add(ps^); // hapAll updated with hapMinute
           if Assigned(fOnSave) and
-             (s in fPersisted) then // save before cleaning
+             (s in fSaved) then // save before cleaning ps^
             with fToSave do
             begin
-              if now = 0 then // lock once for the whole method
+              // persistence is done in the background from fToSave.State[]
+              if savenow = 0 then // lock once for the whole method
               begin
-                now := UnixTimeMinimalUtc;
+                savenow := DateTimeToUnixTime(now) - UNIXTIME_MINIMAL;
                 Safe.Lock;
               end;
               if Count = length(State) then
                 SetLength(State, NextGrow(Count));
               with State[Count] do
               begin
-                Date := now;
+                Date := savenow; // as UnixTimeMinimalUtc
                 Period := p;
                 Scope := s;
                 State.From(ps^);
               end;
               inc(Count);
             end;
+          // reset previous level for a new period
           ps^.Clear;
         end;
         inc(ns);
@@ -4297,19 +4422,22 @@ begin
         if al <> nil then
           inc(al);
       end;
-      fTix[p] := tixsec + PER_TO_SEC[p];
       prev := next;
       al := nil;
-    end;
-  if now <> 0 then
+    end
+    else
+      break; // no need to check the bigger periods
+  if savenow <> 0 then
     fToSave.Safe.UnLock;
+  if last >= hapMinute then
+    ComputeConsolidateTime(last, 0);
 end;
 
-procedure THttpAnalyzer.Save;
+procedure THttpAnalyzer.DoSave;
 var
   tmp: THttpAnalyzerToSaveDynArray;
 begin
-  // quick retrieve the pending state to persist
+  // quick retrieve the pending states to persist
   if not Assigned(fOnSave) or
      (fToSave.Count = 0) then
     exit;
@@ -4318,9 +4446,7 @@ begin
     Safe.Lock;
     if Count <> 0 then
     begin
-      pointer(tmp) := pointer(State);
-      pointer(State) := nil;
-      DynArrayFakeLength(tmp, Count);
+      tmp := copy(State, 0, Count);
       Count := 0;
     end;
     Safe.UnLock;
@@ -4329,6 +4455,24 @@ begin
   if tmp <> nil then
     fOnSave(tmp);
 end;
+
+procedure THttpAnalyzer.UpdateSuspendFile;
+begin
+  if (fSuspendFile <> '') and
+     not fModified then
+    exit;
+  fModified := false;
+  fSafe.Lock;
+  try
+    GzFile(@fState, SizeOf(fState), fSuspendFile, 1); // saved as a .gz blob
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+const
+  _MET: array[TUriRouterMethod] of THttpAnalyzerScope = (
+    hasGet, hasPost, hasPut, hasDelete, hasOptions, hasHead);
 
 procedure THttpAnalyzer.Append(Connection: THttpServerConnectionID;
   const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
@@ -4339,9 +4483,6 @@ var
   met: TUriRouterMethod;
   new: THttpAnalyzerState;
   cur: PHttpAnalyzerStates;
-const
-  _MET: array[TUriRouterMethod] of THttpAnalyzerScope = (
-    hasGet, hasPost, hasPut, hasDelete, hasOptions, hasHead);
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -4350,6 +4491,7 @@ begin
   // prepare the information to be merged
   if fTracked = [] then
     exit; // nothing to process here
+  fModified := true; // for UpdateSuspendFile
   tix := GetTickCount64 div 1000;
   new.Count := 1;
   new.Time := ElapsedMicroSec;
@@ -4361,17 +4503,17 @@ begin
     // integrate request information to the current state
     cur^[hasAny].Add(new);
     if (fTracked * [hasGet .. hasOptions] <> []) and
-       UriMethod(Method, met) then
+       UriMethod(Method, met)  then
       cur^[_MET[met]].Add(new);
     if fTracked * [has1xx .. has5xx] <> [] then
     begin
       StatusCode := (StatusCode div 100) - 1; // 1xx..5xx -> 0..4
       if StatusCode < 5 then
-        cur^[THttpAnalyzerScope(ord(has1xx) + StatusCode)].Add(new);
+        cur^[THttpAnalyzerScope(byte(has1xx) + StatusCode)].Add(new);
     end;
     if (UserAgent <> '') and
        (hasMobile in fTracked) then
-      // browser/OS detection using the User-Agent is very tricky idea
+      // browser/OS detection using the User-Agent is a very tricky context
       // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
       // we only detect mobile devices, which seems fair enough
       if PosEx('Mobile', UserAgent) > 0 then
@@ -4383,7 +4525,7 @@ begin
        (hasAuthorized in fTracked) then
       cur^[hasAuthorized].Add(new);
     // do proper consolidation if needed
-    if tix <> fLastTix then
+    if tix <> fLastConsolidate then
       Consolidate(tix);
   finally
     fSafe.UnLock;
@@ -4395,14 +4537,47 @@ var
   tix: cardinal;
 begin
   tix := tix64 div 1000;
-  if tix = fLastTix then
-    exit;
-  fSafe.Lock;
-  try
-    Consolidate(tix);
-  finally
-    fSafe.UnLock;
+  if tix <> fLastConsolidate then
+  begin
+    // data consolidation once a second
+    fSafe.Lock;
+    try
+      if tix <> fLastConsolidate then
+        Consolidate(tix);
+    finally
+      fSafe.UnLock;
+    end;
   end;
+  // background persistence once a hapMinute consolidation did occur
+  if Assigned(fOnSave) and
+     (fToSave.Count <> 0) then
+    DoSave;
+  // background state persistence once SuspendFileAutoSaveMinutes
+  if fModified and
+     (fSuspendFileAutoSaveTix <> 0) and
+     (tix > fSuspendFileAutoSaveTix) then
+  begin
+    fSuspendFileAutoSaveTix := tix + fSuspendFileAutoSaveMinutes * 60;
+    UpdateSuspendFile;
+  end;
+end;
+
+procedure THttpAnalyzer.Current(Period: THttpAnalyzerPeriod;
+  Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
+begin
+  //{%H-}State.Clear;
+  fSafe.Lock;
+  if Period in [low(fConsolidateNextTime) .. high(fConsolidateNextTime)] then
+  repeat
+    //for p := hapCurrent to Period do = Internal Error C1872 on Delphi 2010
+    State.Add(fState[Period][Scope]);
+    if Period = hapCurrent then
+      break;
+    dec(Period);
+  until false
+  else
+    State.From(fState[Period][Scope]); // hapCurrent/hapAll need no consolidation
+  fSafe.UnLock;
 end;
 
 
