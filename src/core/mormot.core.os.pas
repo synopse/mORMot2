@@ -3132,7 +3132,8 @@ function FileSize(const FileName: TFileName): Int64; overload;
 
 /// get a file size, from its handle
 // - returns 0 if file doesn't exist
-// - on POSIX, will use efficient FpFStat() single call and not file seek
+// - under Windows, will use the GetFileSizeEx fast API
+// - on POSIX, will use efficient FpFStat() single call and no file seek
 function FileSize(F: THandle): Int64; overload;
 
 /// FileSeek() overloaded function, working with huge files

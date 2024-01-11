@@ -1002,6 +1002,8 @@ type
   THttpAnalyzerStates = array[THttpAnalyzerScope] of THttpAnalyzerState;
   /// pointer to information about all possible counters
   PHttpAnalyzerStates = ^THttpAnalyzerStates;
+  /// a dynamic array of counters information
+  THttpAnalyzerStateDynArray = array of THttpAnalyzerState;
 
   /// possible time periods used for THttpAnalyzer data consolidation
   THttpAnalyzerPeriod = (
@@ -1023,6 +1025,7 @@ type
 
   /// transient in-memory storage of THttpAnalyzer states to be persisted
   // - map all the information to be persisted on disk as CSV, binary or SQL
+  // - each record consumes 40 bytes of memory on all platforms
   THttpAnalyzerToSave = record
     /// the timetstamp - from UnixTimeMinimalUtc() - of the persistence
     Date: cardinal;
@@ -1033,6 +1036,8 @@ type
     /// the whole information about this counter in this Period at Date
     State: THttpAnalyzerState;
   end;
+  /// a pointer to a THttpAnalyzerToSave memory
+  PHttpAnalyzerToSave = ^THttpAnalyzerToSave;
   /// a dynamic array of THttpAnalyzerToSave
   THttpAnalyzerToSaveDynArray = array of THttpAnalyzerToSave;
 
@@ -1124,9 +1129,7 @@ type
     fFileName: TFileName;
   public
     /// intitialize this persistence instance
-    constructor Create(const aFileName: TFileName); reintroduce;
-    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); virtual; abstract;
+    constructor Create(const aFileName: TFileName); reintroduce; virtual;
   published
     /// the current persistent file name
     property FileName: TFileName
@@ -1139,7 +1142,7 @@ type
   public
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
     // - will persist the state items as CSV rows
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); override;
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
   /// class allowing to persist THttpAnalyzer information into a JSON file
@@ -1150,7 +1153,7 @@ type
   public
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
     // - will persist the state items as JSON objects
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray); override;
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
 
@@ -4600,16 +4603,18 @@ end;
 procedure THttpAnalyzer.Current(Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
 begin
-  //{%H-}State.Clear;
   fSafe.Lock;
   if Period in [low(fConsolidateNextTime) .. high(fConsolidateNextTime)] then
-  repeat
-    //for p := hapCurrent to Period do = Internal Error C1872 on Delphi 2010
-    State.Add(fState[Period][Scope]);
-    if Period = hapCurrent then
-      break;
-    dec(Period);
-  until false
+  begin
+    {%H-}State.Clear;
+    repeat
+      //for p := hapCurrent to Period do = Internal Error C1872 on Delphi 2010
+      State.Add(fState[Period][Scope]);
+      if Period = hapCurrent then
+        break;
+      dec(Period);
+    until false;
+  end
   else
     State.From(fState[Period][Scope]); // hapCurrent/hapAll need no consolidation
   fSafe.UnLock;
@@ -4638,7 +4643,7 @@ procedure THttpAnalyzerPersistCsv.OnSave(
   const State: THttpAnalyzerToSaveDynArray);
 var
   n: integer;
-  p: ^THttpAnalyzerToSave;
+  p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   f: TStream;
   w: TTextDateWriter;
@@ -4698,7 +4703,7 @@ procedure THttpAnalyzerPersistJson.OnSave(
 var
   n: integer;
   existing: Int64;
-  p: ^THttpAnalyzerToSave;
+  p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
   f: TStream;
   w: TTextDateWriter;
@@ -9120,6 +9125,7 @@ end;
 begin
   //writeln(SizeOf(THttpPeerCacheMessage));
   assert(SizeOf(THttpPeerCacheMessage) = 192);
+  assert(SizeOf(THttpAnalyzerToSave) = 40);
 
 end.
 
