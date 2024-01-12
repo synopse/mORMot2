@@ -981,21 +981,34 @@ type
   THttpAnalyzerBytes = type QWord;
 
   /// define a THttpAnalyzerScope counter state, may be after consolidation
+  // - counters are maintained by period and by scope, and are cumulative
+  // - each record consumes 32 bytes of memory on all platforms
   {$ifdef USERECORDWITHMETHODS}
   THttpAnalyzerState = record
   {$else}
   THttpAnalyzerState = object
   {$endif USERECORDWITHMETHODS}
-    /// how many requests this counter have been performed
+    /// number of requests processed for this counter
     Count: THttpAnalyzerTotal;
-    /// resolution-variable time the server has processed this method
-    // - actual unit depends on the Period involved: hapCurrent in microsec,
+    /// resolution-variable time measured for processing this counter
+    // - excludes the incoming request communication, but include actual
+    // computation and response transmission
+    // - actual unit depends on the Period involved: hapCurrent is in microsec,
     // hapMinute/hapHour/hapDay/hapAll in millisec, hapMonth/hapYear in sec
     // - use TimeMicroSec() function to retrieve the actual value
     Time: cardinal;
-    /// the number of bytes received from the client as request
+    /// approximate/relative number of unique IPs concerned by this counter
+    // - only populated if THttpAnalyzer.UniqueIPDepth is set to a hash bitsize
+    // - for hapMinute, this field is computed using a hashtable of IPs,
+    // so should be considered as a somewhat good approximation of the reality
+    // - for periods longer than hapMinute, this field is the sum of numbers
+    // of unique IPs per minute for all nested minutes, so is relevant to compare
+    // values in the same period only (e.g. divided by the number of minutes)
+    // - it should always considered as a relative number, not an absolute number
+    UniqueIP: cardinal;
+    /// number of bytes received from the client for this counter requests
     Read: THttpAnalyzerBytes;
-    /// the number of bytes written back to the client as response
+    /// number of bytes written back to the client for this counter responses
     Write: THttpAnalyzerBytes;
     /// fill all field values with 0
     procedure Clear;
@@ -1010,7 +1023,7 @@ type
     procedure Sub(const Another: THttpAnalyzerState);
       {$ifdef HASINLINE} inline; {$endif}
     /// returns the processing time as MicroSeconds
-    // - 32-bit Time field unit depends on the Period used
+    // - computed from the 32-bit Time field, with the Period unit
     function TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1070,16 +1083,19 @@ type
     fOnSave: TOnHttpAnalyzerSave;
     fSuspendFile: TFileName;
     fState: THttpAnalyzerConsolidated;
+    fUniqueIPDepth: cardinal;
+    fUniqueIP: array[THttpAnalyzerScope] of TByteDynArray;
     fToSave: record
-      Safe: TLightLock;
       Count: integer;
       State: THttpAnalyzerToSaveDynArray;
     end;
     fSuspendFileAutoSaveMinutes: cardinal;
     fSuspendFileAutoSaveTix, fLastConsolidate: cardinal;
     fConsolidateNextTime: array[hapMinute .. hapYear] of TDateTime;
+    procedure SetUniqueIPDepth(value: cardinal);
     procedure ComputeConsolidateTime(last: THttpAnalyzerPeriod; ref: TDateTime);
     procedure Consolidate(tixsec: cardinal);
+    procedure DoAppend(const new: THttpAnalyzerState; s: THttpAnalyzerScope);
     procedure DoSave;
   public
     /// initialize this HTTP server analyzer instance
@@ -1107,6 +1123,11 @@ type
       out State: THttpAnalyzerState);
     /// force persistence of the pending counters
     procedure UpdateSuspendFile;
+    /// a power-of-two bits size in range 2048..65536 for the UniqueIP detection
+    // - will be the bits size of a per-THttpAnalyzerScope hash table
+    // - set to 0 by default, to disable this feature
+    property UniqueIPDepth: cardinal
+      read fUniqueIPDepth write SetUniqueIPDepth;
     /// the frequency on which OnIdle() calls UpdateSuspendFile
     // - set to 0 to be disabled
     property SuspendFileAutoSaveMinutes: cardinal
@@ -4352,34 +4373,38 @@ end;
 
 procedure THttpAnalyzerState.Clear;
 begin
-  Count := 0;
-  Time  := 0;
-  Read  := 0;
-  Write := 0;
+  Count    := 0;
+  Time     := 0;
+  UniqueIP := 0;
+  Read     := 0;
+  Write    := 0;
 end;
 
 procedure THttpAnalyzerState.From(const Another: THttpAnalyzerState);
 begin
-  Count := Another.Count;
-  Time  := Another.Time;
-  Read  := Another.Read;
-  Write := Another.Write;
+  Count    := Another.Count;
+  Time     := Another.Time;
+  UniqueIP := Another.UniqueIP;
+  Read     := Another.Read;
+  Write    := Another.Write;
 end;
 
 procedure THttpAnalyzerState.Add(const Another: THttpAnalyzerState);
 begin
-  inc(Count, Another.Count);
-  inc(Time,  Another.Time);
-  inc(Read,  Another.Read);
-  inc(Write, Another.Write);
+  inc(Count,    Another.Count);
+  inc(Time,     Another.Time);
+  inc(UniqueIP, Another.UniqueIP);
+  inc(Read,     Another.Read);
+  inc(Write,    Another.Write);
 end;
 
 procedure THttpAnalyzerState.Sub(const Another: THttpAnalyzerState);
 begin
-  dec(Count, Another.Count);
-  dec(Time,  Another.Time);
-  dec(Read,  Another.Read);
-  dec(Write, Another.Write);
+  dec(Count,    Another.Count);
+  dec(Time,     Another.Time);
+  dec(UniqueIP, Another.UniqueIP);
+  dec(Read,     Another.Read);
+  dec(Write,    Another.Write);
 end;
 
 function THttpAnalyzerState.TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
@@ -4443,6 +4468,31 @@ begin
   inherited Destroy;
 end;
 
+procedure THttpAnalyzer.SetUniqueIPDepth(value: cardinal);
+var
+  s: THttpAnalyzerScope;
+begin
+  if value <> fUniqueIPDepth then
+    case value of
+      0, 2048, 4096, 8192, 16384, 32768, 65536: // -1 = hash bitmask
+        begin
+          fSafe.Lock;
+          try
+            fUniqueIPDepth := value;
+            Finalize(fUniqueIP);  // release up to 120KB with max value=65536
+            value := value shr 3; // from bits to bytes
+            if value <> 0 then
+              for s := low(fUniqueIP) to high(fUniqueIP) do
+                SetLength(fUniqueIP[s], value);
+          finally
+            fSafe.UnLock;
+          end;
+        end
+    else
+      raise EHttpAnalyzer.CreateUtf8('Invalid %.UniqueDepth=%', [self, value]);
+    end;
+end;
+
 procedure THttpAnalyzer.ComputeConsolidateTime(
   last: THttpAnalyzerPeriod; ref: TDateTime);
 var
@@ -4504,6 +4554,7 @@ var
   ps, ns, al: PHttpAnalyzerState;
   prev, next: PHttpAnalyzerStates;
 begin
+  // called once per second
   fLastConsolidate := tixsec;
   last := pred(hapMinute);
   now := NowUtc;
@@ -4543,10 +4594,7 @@ begin
             begin
               // persistence is done in the background from fToSave.State[]
               if savenow = 0 then // lock once for the whole method
-              begin
                 savenow := DateTimeToUnixTime(now) - UNIXTIME_MINIMAL;
-                Safe.Lock;
-              end;
               if Count = length(State) then
                 SetLength(State, NextGrow(Count));
               with State[Count] do
@@ -4559,6 +4607,9 @@ begin
               inc(Count);
             end;
           // reset previous level for a new period
+          if (al = nil) and
+             (ps^.UniqueIP <> 0) then // clear hapCurrent IP hashtable (max 8KB)
+            FillCharFast(pointer(fUniqueIP[s])^, fUniqueIPDepth shr 3, 0);
           ps^.Clear;
         end;
         inc(ns);
@@ -4570,9 +4621,7 @@ begin
       al := nil;
     end
     else
-      break; // no need to check the bigger periods
-  if savenow <> 0 then
-    fToSave.Safe.UnLock;
+      break; // actual computation is done only once per minute
   if last >= hapMinute then
     ComputeConsolidateTime(last, 0);
 end;
@@ -4585,15 +4634,16 @@ begin
   if not Assigned(fOnSave) or
      (fToSave.Count = 0) then
     exit;
-  with fToSave do
-  begin
-    Safe.Lock;
-    if Count <> 0 then
-    begin
-      tmp := copy(State, 0, Count);
-      Count := 0;
-    end;
-    Safe.UnLock;
+  fSafe.Lock;
+  try
+    with fToSave do
+      if Count <> 0 then
+      begin
+        tmp := copy(State, 0, Count);
+        Count := 0;
+      end;
+  finally
+    fSafe.UnLock;
   end;
   // execute the actual persistence callback outside of the loop
   if tmp <> nil then
@@ -4614,6 +4664,26 @@ begin
   end;
 end;
 
+procedure THttpAnalyzer.DoAppend(const new: THttpAnalyzerState;
+  s: THttpAnalyzerScope);
+var
+  p: pointer;
+  cur: PHttpAnalyzerState;
+begin
+  cur := @fState[hapCurrent][s];
+  inc(cur^.Count, new.Count);
+  inc(cur^.Time,  new.Time);
+  inc(cur^.Read,  new.Read);
+  inc(cur^.Write, new.Write);
+  if new.UniqueIP = 0 then // hash bit index
+    exit; // no valid RemoteIP, or UniqueIPDepth is 0
+  p := pointer(fUniqueIP[s]);
+  if GetBitPtr(p, new.UniqueIP) then // this IP was already included
+    exit;
+  inc(cur^.UniqueIP);         // first time observed in this scope
+  SetBitPtr(p, new.UniqueIP); // mark the bit in the hash table
+end;
+
 const
   _MET: array[TUriRouterMethod] of THttpAnalyzerScope = (
     hasGet, hasPost, hasPut, hasDelete, hasOptions, hasHead);
@@ -4623,11 +4693,10 @@ procedure THttpAnalyzer.Append(Connection: THttpServerConnectionID;
   Flags: THttpServerRequestFlags; StatusCode: cardinal;
   ElapsedMicroSec, Received, Sent: QWord);
 var
-  tix, i: cardinal;
+  tix, crc, i: cardinal;
   met: TUriRouterMethod;
   s: THttpAnalyzerScope;
   new: THttpAnalyzerState;
-  cur: PHttpAnalyzerStates;
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
@@ -4639,20 +4708,29 @@ begin
   fModified := true; // for UpdateSuspendFile
   tix := GetTickCount64 div 1000;
   new.Count := 1;
-  new.Time := ElapsedMicroSec; // Time resolution depends on Period
+  new.Time := ElapsedMicroSec; // Time resolution is microsec for hapCurrent
+  new.UniqueIP := 0;
+  if (RemoteIP <> '') and
+     (fUniqueIPDepth <> 0) then
+  begin
+    crc := DefaultHasher(0, pointer(RemoteIP), length(RemoteIP));
+    crc := crc and (fUniqueIPDepth - 1); // power-of-two modulo
+    if crc = 0 then
+      crc := 1;
+    new.UniqueIP := crc; // store bit index
+  end;
   new.Read := Received;
   new.Write := Sent;
-  cur := @fState[hapCurrent];
   fSafe.Lock;
   try
     // integrate request information to the current state
-    cur^[hasAny].Add(new);
+    DoAppend(new, hasAny);
     if (fTracked * [hasGet .. hasOptions] <> []) and
        UriMethod(Method, met) then
     begin
       s := _MET[met];
       if s in fTracked then
-        cur^[s].Add(new);
+        DoAppend(new, s);
     end;
     if fTracked * [has1xx .. has5xx] <> [] then
     begin
@@ -4661,7 +4739,7 @@ begin
       begin
         s := THttpAnalyzerScope(byte(has1xx) + i);
         if s in fTracked then
-          cur^[s].Add(new);
+          DoAppend(new, s);
       end;
     end;
     if (UserAgent <> '') and
@@ -4670,16 +4748,16 @@ begin
       // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
       // we only detect mobile devices, which seems fair enough
       if PosEx('Mobile', UserAgent) > 0 then
-        cur^[hasMobile].Add(new);
+        DoAppend(new, hasMobile);
     if (hsrHttps in Flags) and
        (hasHttps in fTracked) then
-      cur^[hasHttps].Add(new);
+      DoAppend(new, hasHttps);
     if (hsrAuthorized in Flags) and
        (hasAuthorized in fTracked) then
-      cur^[hasAuthorized].Add(new);
+      DoAppend(new, hasAuthorized);
     // do proper consolidation if needed
     if tix <> fLastConsolidate then
-      Consolidate(tix);
+      Consolidate(tix); // called once per second, compute once per minute
   finally
     fSafe.UnLock;
   end;
@@ -4720,7 +4798,7 @@ procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
 var
   p: THttpAnalyzerPeriod;
 begin
-  // same algorithm than in Consolidate()
+  // same value carry propagation algorithm than in Consolidate()
   fSafe.Lock;
   try
     {%H-}State.From(fState[hapCurrent][Scope]);
