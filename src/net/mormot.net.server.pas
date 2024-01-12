@@ -1040,6 +1040,11 @@ type
   PHttpAnalyzerToSave = ^THttpAnalyzerToSave;
   /// a dynamic array of THttpAnalyzerToSave
   THttpAnalyzerToSaveDynArray = array of THttpAnalyzerToSave;
+  /// a wrapper to THttpAnalyzerToSave items
+  THttpAnalyzerToSaveArray = array[
+    0 .. (MaxInt div SizeOf(THttpAnalyzerToSave)) - 1] of THttpAnalyzerToSave;
+  /// a pointer to THttpAnalyzerToSave items
+  PHttpAnalyzerToSaveArray = ^THttpAnalyzerToSaveArray;
 
   /// event callback signature to persist THttpAnalyzer information
   TOnHttpAnalyzerSave = procedure(
@@ -1172,16 +1177,33 @@ type
   protected
     fSafe: TLightLock;
     fCount: integer;
+    fPeriodLastCount: integer;
     fState: TRawByteStringGroup; // avoid in-memory fragmentation
+    // by design, about 60 of 61 items are actual hapMinute values: no index
+    fPeriod: array[hapHour .. hapYear] of record
+      Index: TIntegerDynArray;
+      Count: PtrInt;
+    end;
     fDynArray: TDynArray;
-    procedure CreateDynArray;
-    function StateArray: PDynArray;
+    fLastRangeToIndex: record // naive but efficient e.g. from a dashboard
+      sta, sto: cardinal;
+      ista, isto: integer;
+    end;
+    function StateArray: PDynArray; // compacted
       {$ifdef HASINLINE} inline; {$endif}
+    procedure CreateDynArray;
+    procedure ResetPeriodIndex;
+    procedure CreatePeriodIndex;
+    function RangeToIndex(start, stop: TDateTime;
+      out istart, istop: integer): PHttpAnalyzerToSaveArray;
+    function RangeToPeriodIndex(period: THttpAnalyzerPeriod;
+      start, stop: integer; out pstart, pstop: PInteger): integer;
   public
     /// release all stored data
     procedure Clear;
-    /// read the FileName content in the THttpAnalyzerPersistBinary file format
-    // - content will be appended to the existing data
+    /// append a memory buffer in the THttpAnalyzerPersistBinary format
+    function AddFromBuffer(const Buffer: RawByteString): boolean;
+    /// append a FileName content in the THttpAnalyzerPersistBinary format
     function AddFromBinary(const FileName: TFileName): boolean;
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
     // - will add the saved states to the internal in-memory storage
@@ -1193,8 +1215,9 @@ type
     function Get(Row: integer): PHttpAnalyzerToSave;
       {$ifdef HASINLINE} inline; {$endif}
     /// search for a Period/Scope information for a given time range
+    // - very fast, using per-Period indexes for hapHour .. hapYear
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
-      Scope: THttpAnalyzerScope): THttpAnalyzerStateDynArray;
+      Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
     /// access to the thread-safety NOT reentrant lock
     property Safe: TLightLock
       read fSafe write fSafe;
@@ -4846,8 +4869,9 @@ begin
   // caller should have made Safe.Lock
   fState.Compact; // ensure everything linear in fState.Values[0].Value
   fDynArray.InitSpecific(TypeInfo(THttpAnalyzerToSaveDynArray),
-    fState.Values[0].Value, ptCardinal, @fCount);
-  fDynArray.Sorted := true; // ordered by THttpAnalyzerToSave.Date
+    fState.Values[0].Value, ptCardinal);
+  fDynArray.UseExternalCount(@fCount); // set after Init() to avoid Count=0
+  fDynArray.Sorted := true; // ordered by THttpAnalyzerToSave.Date (ptCardinal)
 end;
 
 function THttpAnalyzerReader.StateArray: PDynArray;
@@ -4858,63 +4882,168 @@ begin
   result := @fDynArray;
 end;
 
+procedure THttpAnalyzerReader.ResetPeriodIndex;
+var
+  p: THttpAnalyzerPeriod;
+begin
+  fPeriodLastCount := 0;
+  for p := low(fPeriod) to high(fPeriod) do
+    fPeriod[p].Count := 0; // keep Index[] buffer for next CreatePeriodIndex
+end;
+
+procedure THttpAnalyzerReader.CreatePeriodIndex;
+var
+  p: PHttpAnalyzerToSave;
+  i: integer;
+begin
+  // caller should have made Safe.Lock
+  p := StateArray^.ItemPtr(fPeriodLastCount); // compact if needed
+  for i := fPeriodLastCount to fCount - 1 do
+  begin
+    if p^.Period in [low(fPeriod) .. high(fPeriod)] then
+      with fPeriod[p^.Period] do
+      begin
+        if Count = length(Index) then
+          SetLength(Index, NextGrow(Count));
+        Index[Count] := i;
+        inc(Count);
+      end;
+    inc(p);
+  end;
+  fPeriodLastCount := fCount;
+end;
+
+function THttpAnalyzerReader.RangeToIndex(start, stop: TDateTime;
+  out istart, istop: integer): PHttpAnalyzerToSaveArray;
+var
+  da: PDynArray;
+  startdate, stopdate: cardinal;
+begin
+  // caller should have made Safe.Lock
+  da := StateArray; // ensure the data is compacted
+  result := da^.Value^;
+  // convert UTC TDateTime into UnixTimeMinimalUtc timestamps
+  startdate := DateTimeToUnixTime(start) - UNIXTIME_MINIMAL;
+  stopdate := DateTimeToUnixTime(stop) - UNIXTIME_MINIMAL;
+  // just return the last result if possible
+  with fLastRangeToIndex do
+    if (sta <> 0) and
+       (startdate = sta) and
+       (stopdate = sto) then
+    begin
+      istart := ista;
+      istop := isto;
+      exit;
+    end;
+  // retrieve the per-date boundaries using O(log(count)) binary search
+  da^.FastLocateSorted(startdate, istart);
+  da^.FastLocateSorted(stopdate, istop);
+  // save for next request on the same exact time range - e.g. from a DashBoard
+  with fLastRangeToIndex do
+  begin
+    sta := startdate;
+    sto := stopdate;
+    ista := istart;
+    isto := istop;
+  end;
+end;
+
+function THttpAnalyzerReader.RangeToPeriodIndex(period: THttpAnalyzerPeriod;
+  start, stop: integer; out pstart, pstop: PInteger): integer;
+begin
+  // caller should have made Safe.Lock and insured period in hapHour..hapYear
+  if fPeriodLastCount < fCount then
+    CreatePeriodIndex; // refresh indexes if needed
+  with fPeriod[period] do
+  begin
+    start := FastSearchIntegerSorted(pointer(Index), Count - 1, start);
+    pstart := @Index[start];
+    stop := FastSearchIntegerSorted(pointer(Index), Count - 1, stop);
+    pstop := @Index[stop];
+  end;
+  result := stop - start; // returns the number of indexes in pstart..pstop
+end;
+
 procedure THttpAnalyzerReader.Clear;
 begin
-  fCount := 0;
-  fState.Clear;
+  fSafe.Lock;
+  try
+    fCount := 0;
+    fState.Clear;
+    ResetPeriodIndex;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+const
+  // allow up to 400MB of memory for the storage
+  // - our format consummes around 300MB of data per year (61*24*364*15*40)
+  HTTPANALYZER_MAXCOUNT = (400 shl 20) div SizeOf(THttpAnalyzerToSave);
+
+function THttpAnalyzerReader.AddFromBuffer(const Buffer: RawByteString): boolean;
+var
+  unsorted: boolean;
+  n, c: integer;
+begin
+  result := false;
+  n := length(Buffer) div SizeOf(THttpAnalyzerToSave);
+  if (n = 0) or
+     (n * SizeOf(THttpAnalyzerToSave) <> length(Buffer)) then
+    exit;
+  fSafe.Lock;
+  try
+    c := fCount;
+    if n + c > HTTPANALYZER_MAXCOUNT then
+      exit; // too much data
+    unsorted := (c <> 0) and
+                (Get(c - 1)^.Date > PHttpAnalyzerToSave(Buffer)^.Date);
+    fState.Add(Buffer);
+    inc(fCount, n);
+    if unsorted then
+    begin
+      StateArray^.Sort; // should not happen, but better safe than sorry
+      ResetPeriodIndex;
+    end
+    else if fState.Count > 256 then
+      CreateDynArray; // aggregate blocks to reduce fragmentation
+    fLastRangeToIndex.sta := 0; // reset RangeToIndex() last result
+  finally
+    fSafe.UnLock;
+  end;
+  result := true;
 end;
 
 function THttpAnalyzerReader.AddFromBinary(const FileName: TFileName): boolean;
 var
-  size, n: cardinal; // 32-bit support only in TRawByteStringGroup
-  unsorted: boolean;
+  size: Int64;
+  n: integer; // 32-bit support only in TRawByteStringGroup
   tmp: RawByteString;
 begin
   result := false;
   size := FileSize(FileName);
   if size = 0 then
-    exit;
+    exit; // void
   n := size div SizeOf(THttpAnalyzerToSave);
-  if n * SizeOf(THttpAnalyzerToSave) <> size then
-    exit;
+  if (n * SizeOf(THttpAnalyzerToSave) <> size) or
+     (fCount + n > HTTPANALYZER_MAXCOUNT) then
+    exit; // incorrect size or too much data
   tmp := StringFromFile(FileName);
-  if cardinal(length(tmp)) <> size then
-    exit;
-  fSafe.Lock;
-  try
-    unsorted := (fCount <> 0) and
-                (Get(fCount - 1)^.Date > PHttpAnalyzerToSave(tmp)^.Date);
-    fState.Add(tmp);
-    inc(fCount, n);
-    if unsorted then
-      StateArray^.Sort; // should not happen, but who knows?
-  finally
-    fSafe.UnLock;
-  end;
+  if length(tmp) = size then
+    result := AddFromBuffer(tmp);
 end;
 
 procedure THttpAnalyzerReader.OnSave(const State: THttpAnalyzerToSaveDynArray);
 var
   n: integer;
-  unsorted: boolean;
+  tmp: RawByteString;
 begin
-  if State = nil then
-    exit;
-  fSafe.Lock;
-  try
-    n := fCount;
-    unsorted := (n <> 0) and
-                (Get(n - 1)^.Date > State[0].Date);
-    n := length(State);
-    inc(fCount, n);
-    fState.Add(pointer(State), n * SizeOf(State[0]));
-    if unsorted then
-      StateArray^.Sort // very unlikely
-    else if fCount > 256 then
-      fState.Compact; // aggregate blocks to reduce fragmentation
-  finally
-    fSafe.UnLock;
-  end;
+  n := length(State);
+  if (n = 0) or
+     (fCount + n > HTTPANALYZER_MAXCOUNT) then
+    exit; // no data or too much data
+  FastSetRawByteString(tmp, @State, n * SizeOf(State[0]));
+  AddFromBuffer(tmp);
 end;
 
 function THttpAnalyzerReader.GetState(Row: integer;
@@ -4930,70 +5059,72 @@ begin
 end;
 
 function THttpAnalyzerReader.Find(Start, Stop: TDateTime;
-  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope): THttpAnalyzerStateDynArray;
+  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
 var
   ndxStart, ndxStop: integer;
-  ndxStartExact: boolean;
-  date: cardinal;
-  n: PtrInt;
-  da: PDynArray;
+  count, capacity: PtrInt;
+  si, pi: PInteger;
   p, s: PHttpAnalyzerToSave;
+  v: PHttpAnalyzerToSaveArray;
 
-  procedure Add(p: PHttpAnalyzerToSave);
+  procedure ResultGrow;
   begin
-    if n = length(result) then
-      SetLength(result, NextGrow(n));
-    result[n] := p^.State;
+    if count = 0 then
+      capacity := 88 // = generous 3.5 KB of memory at first (avoid realloc)
+    else
+      capacity := NextGrow(capacity);
+    SetLength(result, capacity);
   end;
 
 begin
   result := nil;
-  n := 0;
+  count := 0;
+  capacity := 0;
   fSafe.Lock;
   try
-    da := StateArray;
-    // retrieve the lower value
-    date := DateTimeToUnixTime(Start) - UNIXTIME_MINIMAL;
-    ndxStartExact := da^.FastLocateSorted(date, ndxStart); // O(log(n))
-    s := da^.ItemPtr(ndxStart);
-    if ndxStartExact then
-      Add(s)
+    // retrieve the per-date boundaries
+    v := RangeToIndex(Start, Stop, ndxStart, ndxStop);
+    if ndxStart >= ndxStop then
+      exit;
+    // perform the actual (indexed) search
+    if Period in [low(fPeriod) .. high(fPeriod)] then
+    begin
+      // hapHour..hapYear: search using the index of this Period
+      RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi);
+      while PtrUInt(si) < PtrUInt(pi) do
+      begin
+        s := @v[si^];
+        if s^.Scope = Scope then
+        begin
+          if count = capacity then
+            ResultGrow;
+          result[count] := s^;
+        end;
+        inc(si);
+      end;
+    end
     else
     begin
-      // no exact match: search the first previous match
-      //TODO: maintain a set of available Scopes to avoid full search?
-      p := s;
-      while ndxStart >= 0 do
+      // hapMinute: brute force search within this s <= x < p time range
+      s := @v[ndxStart];
+      p := @v[ndxStop];
+      while PtrUInt(s) < PtrUInt(p) do
       begin
-        dec(p);
-        if (p^.Scope = Scope) and
-           (p^.Period = Period) then
-          break;
-        dec(ndxStart);
+        if (s^.Period = Period) and
+           (s^.Scope = Scope) then
+        begin
+          if count = capacity then
+            ResultGrow;
+          result[count] := s^;
+        end;
+        inc(s);
       end;
-      if ndxStart >= 0 then
-        Add(p);
     end;
-    // find the upper boundary
-    date := DateTimeToUnixTime(Stop) - UNIXTIME_MINIMAL;
-    da^.FastLocateSorted(date, ndxStop); // O(log(n))
-    p := da^.ItemPtr(ndxStop);
-    // brute force O(n) search within this time range
-    // this may be a bit slow for the highest periods
-    //TODO: split the data per Scope and Period? or at least two indexes?
-    repeat
-      inc(s);
-      if PtrUInt(s) >= PtrUInt(p) then
-        break;
-      if (s^.Scope = Scope) and
-         (s^.Period = Period) then
-        Add(s);
-    until false;
   finally
     fSafe.UnLock;
   end;
   if result <> nil then
-    DynArrayFakeLength(result, n);
+    DynArrayFakeLength(result, count);
 end;
 
 
