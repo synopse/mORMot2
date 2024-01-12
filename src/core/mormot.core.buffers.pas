@@ -964,10 +964,18 @@ type
     // - caller should specify the maximum possible number of bytes to be written
     // - then write the data to the returned pointer, and call DirectWriteFlush
     // - if len is bigger than the internal buffer, tmp will be used instead
-    function DirectWritePrepare(len: PtrInt; var tmp: RawByteString): PAnsiChar;
+    function DirectWritePrepare(maxlen: PtrInt; var tmp: RawByteString): PAnsiChar;
     /// finalize a direct write to a memory buffer
     // - by specifying the number of bytes written to the buffer
     procedure DirectWriteFlush(len: PtrInt; const tmp: RawByteString);
+    /// allows to write directly to a memory buffer
+    // - caller should specify the maximum possible number of bytes to be written
+    // - len should be smaller than the internal buffer size (not checked)
+    function DirectWriteReserve(maxlen: PtrInt): PByte;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// flush DirectWriteReserve() content
+    procedure DirectWriteReserved(pos: PByte);
+      {$ifdef HASINLINE}inline;{$endif}
     /// write any pending data in the internal buffer to the stream
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
@@ -4499,16 +4507,16 @@ begin
   Write(pointer(Data), Length(Data));
 end;
 
-function TBufferWriter.DirectWritePrepare(len: PtrInt;
+function TBufferWriter.DirectWritePrepare(maxlen: PtrInt;
   var tmp: RawByteString): PAnsiChar;
 begin
-  if (len <= fBufLen) and
-     (fPos + len > fBufLen) then
+  if (maxlen <= fBufLen) and
+     (fPos + maxlen > fBufLen) then
     InternalFlush;
-  if fPos + len > fBufLen then
+  if fPos + maxlen > fBufLen then
   begin
-    if len > length(tmp) then
-      FastSetRawByteString(tmp, nil, len); // don't reallocate buffer (reuse)
+    if maxlen > length(tmp) then
+      FastSetRawByteString(tmp, nil, maxlen); // don't reallocate buffer (reuse)
     result := pointer(tmp);
   end
   else
@@ -4521,6 +4529,18 @@ begin
     inc(fPos, len)
   else
     Write(pointer(tmp), len);
+end;
+
+function TBufferWriter.DirectWriteReserve(maxlen: PtrInt): PByte;
+begin
+  if fPos + maxlen > fBufLen then
+    InternalFlush;
+  result := @fBuffer^[fPos]; // write directly into the buffer
+end;
+
+procedure TBufferWriter.DirectWriteReserved(pos: PByte);
+begin
+  fPos := PAnsiChar(pos) - pointer(fBuffer);
 end;
 
 procedure TBufferWriter.WriteXor(New, Old: PAnsiChar; Len: PtrInt;
