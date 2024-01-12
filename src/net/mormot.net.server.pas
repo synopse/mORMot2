@@ -1159,6 +1159,7 @@ type
   /// class allowing to persist THttpAnalyzer information into a binary file
   // - output will just be raw THttpAnalyzerToSave memory layout with no
   // compression involved
+  // - raw format consumming around 300MB of data per year (61*24*364*15*40)
   THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
   public
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
@@ -4651,19 +4652,16 @@ procedure THttpAnalyzer.Current(Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
 begin
   fSafe.Lock;
-  if Period in [low(fConsolidateNextTime) .. high(fConsolidateNextTime)] then
-  begin
-    {%H-}State.Clear;
-    repeat
-      //for p := hapCurrent to Period do = Internal Error C1872 on Delphi 2010
-      State.Add(fState[Period][Scope]);
-      if Period = hapCurrent then
-        break;
-      dec(Period);
-    until false;
-  end
-  else
-    State.From(fState[Period][Scope]); // hapCurrent/hapAll need no consolidation
+  {%H-}State.From(fState[hapCurrent][Scope]);
+  case Period of
+    low(fConsolidateNextTime) .. high(fConsolidateNextTime):
+      repeat
+        State.Add(fState[Period][Scope]); // see Consolidate()
+        dec(Period);
+      until Period = hapCurrent;
+    hapAll:
+      State.Add(fState[hapAll][Scope]);
+  end;
   fSafe.UnLock;
 end;
 
@@ -4738,7 +4736,7 @@ begin
       f.Free;
     end;
   except
-    fFileName := ''; // ignore any write error in the callback, and don't retry
+    fFileName := ''; // ignore any write error in the callback, but don't retry
   end;
 end;
 
@@ -4807,7 +4805,7 @@ begin
       f.Free;
     end;
   except
-    fFileName := ''; // ignore any write error in the callback, and don't retry
+    fFileName := ''; // ignore any write error in the callback, but don't retry
   end;
 end;
 
@@ -4830,7 +4828,7 @@ begin
       f.Free;
     end;
   except
-    fFileName := ''; // ignore any write error in the callback, and don't retry
+    fFileName := ''; // ignore any write error in the callback, but don't retry
   end;
 end;
 
