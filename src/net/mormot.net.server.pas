@@ -993,8 +993,8 @@ type
     /// resolution-variable time measured for processing this counter
     // - excludes the incoming request communication, but include actual
     // computation and response transmission
-    // - actual unit depends on the Period involved: hapCurrent is in microsec,
-    // hapMinute/hapHour/hapDay/hapAll in millisec, hapMonth/hapYear in sec
+    // - actual unit depends on the Period involved: hapCurrent as microsec,
+    // hapMinute/hapHour/hapDay/hapAll as millisec, hapMonth/hapYear as sec
     // - use TimeMicroSec() function to retrieve the actual value
     Time: cardinal;
     /// approximate/relative number of unique IPs concerned by this counter
@@ -1003,7 +1003,8 @@ type
     // so should be considered as a somewhat good approximation of the reality
     // - for periods longer than hapMinute, this field is the sum of numbers
     // of unique IPs per minute for all nested minutes, so is relevant to compare
-    // values in the same period only (e.g. divided by the number of minutes)
+    // values in the same period only (e.g. divided by the number of collected
+    // minutes to get the average unique IP count per minute)
     // - it should always considered as a relative number, not an absolute number
     UniqueIP: cardinal;
     /// number of bytes received from the client for this counter requests
@@ -1123,9 +1124,11 @@ type
       out State: THttpAnalyzerState);
     /// force persistence of the pending counters
     procedure UpdateSuspendFile;
-    /// a power-of-two bits size in range 2048..65536 for the UniqueIP detection
-    // - will be the bits size of a per-THttpAnalyzerScope hash table
+    /// a power-of-two bits size in range 2048..65536 for UniqueIP detection
+    // - is the bits size of a per-THttpAnalyzerScope hash table
     // - set to 0 by default, to disable this feature
+    // - should be set to a value bigger than the maximum number of unique IP,
+    // since by design, THttpAnalyzerState.UniqueIP could never exceed this
     property UniqueIPDepth: cardinal
       read fUniqueIPDepth write SetUniqueIPDepth;
     /// the frequency on which OnIdle() calls UpdateSuspendFile
