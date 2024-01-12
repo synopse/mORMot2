@@ -961,12 +961,24 @@ type
   /// the kind of counters covered by THttpAnalyzer
   THttpAnalyzerScopes = set of THttpAnalyzerScope;
 
+  /// possible time periods used for THttpAnalyzer data consolidation
+  // - hapCurrent, hapYear and hapAll are only available in THttpAnalyzer context
+  // - TOnHttpAnalyzerSave and THttpAnalyzerReader use hapMinute..hapMonth only
+  THttpAnalyzerPeriod = (
+    hapCurrent,
+    hapMinute,
+    hapHour,
+    hapDay,
+    hapMonth,
+    hapYear,
+    hapAll);
+  /// the time periods used for THttpAnalyzer consolidation
+  THttpAnalyzerPeriods = set of THttpAnalyzerPeriod;
+
   /// count unit for THttpAnalyzer information as 64-bit unsigned integer
   THttpAnalyzerTotal = type QWord;
   /// size unit for THttpAnalyzer information in bytes
   THttpAnalyzerBytes = type QWord;
-  /// time unit for THttpAnalyzer information in micro-seconds
-  THttpAnalyzerMicroSecs = type QWord;
 
   /// define a THttpAnalyzerScope counter state, may be after consolidation
   {$ifdef USERECORDWITHMETHODS}
@@ -976,9 +988,11 @@ type
   {$endif USERECORDWITHMETHODS}
     /// how many requests this counter have been performed
     Count: THttpAnalyzerTotal;
-    /// how many micro-seconds the server has processed this method
-    // - i.e. to compute requests-per-second, make "(Count * 1000000) / Time"
-    Time: THttpAnalyzerMicroSecs;
+    /// resolution-variable time the server has processed this method
+    // - actual unit depends on the Period involved: hapCurrent in microsec,
+    // hapMinute/hapHour/hapDay/hapAll in millisec, hapMonth/hapYear in sec
+    // - use TimeMicroSec() function to retrieve the actual value
+    Time: cardinal;
     /// the number of bytes received from the client as request
     Read: THttpAnalyzerBytes;
     /// the number of bytes written back to the client as response
@@ -995,7 +1009,12 @@ type
     /// substract all field values from another counter state
     procedure Sub(const Another: THttpAnalyzerState);
       {$ifdef HASINLINE} inline; {$endif}
+    /// returns the processing time as MicroSeconds
+    // - 32-bit Time field unit depends on the Period used
+    function TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
+
   /// pointer to a given counter
   PHttpAnalyzerState = ^THttpAnalyzerState;
   /// information about all possible counters
@@ -1004,18 +1023,6 @@ type
   PHttpAnalyzerStates = ^THttpAnalyzerStates;
   /// a dynamic array of counters information
   THttpAnalyzerStateDynArray = array of THttpAnalyzerState;
-
-  /// possible time periods used for THttpAnalyzer data consolidation
-  THttpAnalyzerPeriod = (
-    hapCurrent,
-    hapMinute,
-    hapHour,
-    hapDay,
-    hapMonth,
-    hapYear,
-    hapAll);
-  /// the time periods used for THttpAnalyzer consolidation
-  THttpAnalyzerPeriods = set of THttpAnalyzerPeriod;
 
   /// store all consolidated states in a Round-Robin manner
   THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
@@ -1044,6 +1051,7 @@ type
   PHttpAnalyzerToSaveArray = ^THttpAnalyzerToSaveArray;
 
   /// event callback signature to persist THttpAnalyzer information
+  // - is called with State.Period in hapMinute..hapMonth range
   TOnHttpAnalyzerSave = procedure(
     const State: THttpAnalyzerToSaveDynArray) of object;
 
@@ -1093,9 +1101,9 @@ type
       Flags: THttpServerRequestFlags; StatusCode: cardinal;
       ElapsedMicroSec, Received, Sent: QWord); override;
     /// retrieve the current state for a given period and scope
-    // - consolidate hapMinute .. hapYear state values up to the requested Period
+    // - consolidate hapMinute..hapYear values up to the requested Period
     // - this method is thread-safe
-    procedure Current(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+    procedure Get(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
       out State: THttpAnalyzerState);
     /// force persistence of the pending counters
     procedure UpdateSuspendFile;
@@ -1104,7 +1112,8 @@ type
     property SuspendFileAutoSaveMinutes: cardinal
       read fSuspendFileAutoSaveMinutes;
     /// direct access to the current state since the beginning
-    // - this property is not thread-safe: use Current() instead
+    // - this property is not thread-safe, and does not include hapCurrent
+    // pending values: use Get() instead
     property Total: THttpAnalyzerStates
       read fState[hapAll];
     /// event handler used to persist the information
@@ -1120,8 +1129,8 @@ type
     /// just a redirection to the number of requests since the beginning
     property TotalRequests: THttpAnalyzerTotal
       read fState[hapAll, hasAny].Count;
-    /// just a redirection to the time processing since the beginning
-    property TotalTime: THttpAnalyzerMicroSecs
+    /// just a redirection to the millisecond time processing since the beginning
+    property TotalTime: cardinal
       read fState[hapAll, hasAny].Time;
   end;
 
@@ -1178,7 +1187,7 @@ type
     fState: TRawByteStringGroup; // avoid in-memory fragmentation
     fDynArray: TDynArray;
     // by design, about 60 of 61 items are actual hapMinute values: no index
-    fPeriod: array[hapHour .. hapYear] of record
+    fPeriod: array[hapHour .. hapMonth] of record
       Index: TIntegerDynArray;
       Count: PtrInt;
     end;
@@ -1229,6 +1238,20 @@ type
     property Count: integer
       read fCount;
   end;
+
+const
+  /// time unit for THttpAnalyzerState.Time values
+  // - hapCurrent are stored as microseconds, hapMinute/hapHour/hapDay/hapAll
+  // as milliseconds, and hapMonth/hapYear as seconds
+  // - as used when inlining the THttpAnalyzerState.TimeMicroSec method
+  HTTPANALYZER_TIMEUNIT: array[THttpAnalyzerPeriod] of cardinal = (
+    1,        // hapCurrent
+    1000,     // hapMinute
+    1000,     // hapHour
+    1000,     // hapDay
+    1000000,  // hapMonth
+    1000000,  // hapYear
+    1000);    // hapAll
 
 
 
@@ -4359,6 +4382,13 @@ begin
   dec(Write, Another.Write);
 end;
 
+function THttpAnalyzerState.TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
+begin
+  result := Time;
+  if Period > hapCurrent then
+    result := result * HTTPANALYZER_TIMEUNIT[Period];
+end;
+
 
 { THttpAnalyzer }
 
@@ -4484,7 +4514,7 @@ begin
   for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
     if now >= fConsolidateNextTime[p] then
     begin
-      // this is consolidation time for this period
+      // this is consolidation time for this hapMinute..hapYear period
       last := p;
       inc(next);
       ps := pointer(prev);
@@ -4495,11 +4525,20 @@ begin
         begin
           // we have some data to aggregate to this counter
           fModified := true; // for UpdateSuspendFile
+          case p of // see HTTPANALYZER_TIMEUNIT[]
+            hapMinute:
+              begin
+                ps^.Time := ps^.Time div 1000; // hapMinute..hapDay in millisec
+                al^.Add(ps^); // hapAll updated during hapMinute, in millisec
+              end;
+            hapMonth:
+              ps^.Time := ps^.Time div 1000; // hapMonth/hapYear in sec
+          end;
           ns^.Add(ps^);
-          if al <> nil then
-            al^.Add(ps^); // hapAll updated with hapMinute
+          // persist previous level before cleaning ps^
           if Assigned(fOnSave) and
-             (s in fSaved) then // save before cleaning ps^
+             (p < hapYear) and  // OnSave() called in hapMinute..hapMonth range
+             (s in fSaved) then
             with fToSave do
             begin
               // persistence is done in the background from fToSave.State[]
@@ -4512,8 +4551,8 @@ begin
                 SetLength(State, NextGrow(Count));
               with State[Count] do
               begin
-                Date := savenow; // as UnixTimeMinimalUtc
-                Period := p;
+                Date := savenow;   // as UnixTimeMinimalUtc
+                Period := p; // store previous level = hapMinute..hapMonth
                 Scope := s;
                 State.From(ps^);
               end;
@@ -4584,8 +4623,9 @@ procedure THttpAnalyzer.Append(Connection: THttpServerConnectionID;
   Flags: THttpServerRequestFlags; StatusCode: cardinal;
   ElapsedMicroSec, Received, Sent: QWord);
 var
-  tix: cardinal;
+  tix, i: cardinal;
   met: TUriRouterMethod;
+  s: THttpAnalyzerScope;
   new: THttpAnalyzerState;
   cur: PHttpAnalyzerStates;
 begin
@@ -4599,7 +4639,7 @@ begin
   fModified := true; // for UpdateSuspendFile
   tix := GetTickCount64 div 1000;
   new.Count := 1;
-  new.Time := ElapsedMicroSec;
+  new.Time := ElapsedMicroSec; // Time resolution depends on Period
   new.Read := Received;
   new.Write := Sent;
   cur := @fState[hapCurrent];
@@ -4608,13 +4648,21 @@ begin
     // integrate request information to the current state
     cur^[hasAny].Add(new);
     if (fTracked * [hasGet .. hasOptions] <> []) and
-       UriMethod(Method, met)  then
-      cur^[_MET[met]].Add(new);
+       UriMethod(Method, met) then
+    begin
+      s := _MET[met];
+      if s in fTracked then
+        cur^[s].Add(new);
+    end;
     if fTracked * [has1xx .. has5xx] <> [] then
     begin
-      StatusCode := (StatusCode div 100) - 1; // 1xx..5xx -> 0..4
-      if StatusCode < 5 then
-        cur^[THttpAnalyzerScope(byte(has1xx) + StatusCode)].Add(new);
+      i := (StatusCode div 100) - 1; // 1xx..5xx -> 0..4
+      if i < 5 then
+      begin
+        s := THttpAnalyzerScope(byte(has1xx) + i);
+        if s in fTracked then
+          cur^[s].Add(new);
+      end;
     end;
     if (UserAgent <> '') and
        (hasMobile in fTracked) then
@@ -4667,21 +4715,30 @@ begin
   end;
 end;
 
-procedure THttpAnalyzer.Current(Period: THttpAnalyzerPeriod;
+procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
+var
+  p: THttpAnalyzerPeriod;
 begin
+  // same algorithm than in Consolidate()
   fSafe.Lock;
-  {%H-}State.From(fState[hapCurrent][Scope]);
-  case Period of
-    low(fConsolidateNextTime) .. high(fConsolidateNextTime):
-      repeat
-        State.Add(fState[Period][Scope]); // see Consolidate()
-        dec(Period);
-      until Period = hapCurrent;
-    hapAll:
-      State.Add(fState[hapAll][Scope]);
+  try
+    {%H-}State.From(fState[hapCurrent][Scope]);
+    if Period = hapCurrent then
+      exit;
+    State.Time := State.Time div 1000; // hapMinute..hapDay/hapAll in millisec
+    if Period = hapAll then
+      State.Add(fState[hapAll][Scope])
+    else
+      for p := hapMinute to Period do // hapMinute..hapYear consolidation
+      begin
+        if p = hapMonth then
+          State.Time := State.Time div 1000; // hapMonth/hapYear in sec
+        State.Add(fState[p][Scope]);
+      end;
+  finally
+    fSafe.UnLock;
   end;
-  fSafe.UnLock;
 end;
 
 
@@ -4905,13 +4962,14 @@ begin
   inc(p, fPeriodLastCount);
   for i := fPeriodLastCount to fCount - 1 do
   begin
-    case p^.Period of
+    case p^.Period of // OnSave() should be in hapMinute..hapMonth range
       hapMinute:
         ; // not indexed
       hapCurrent,
+      hapYear,
       hapAll: // paranoid
         raise EHttpAnalyzer.Create('Unexpected period');
-    else // hapHour .. hapYear
+    else // hapHour .. hapMonth
       with fPeriod[p^.Period] do
       begin
         if Count = length(Index) then
@@ -4961,7 +5019,7 @@ end;
 function THttpAnalyzerReader.RangeToPeriodIndex(period: THttpAnalyzerPeriod;
   start, stop: integer; out pstart, pstop: PInteger): integer;
 begin
-  // caller should have made Safe.Lock and insured period in hapHour..hapYear
+  // caller should have made Safe.Lock and insured period in hapHour..hapMonth
   if fPeriodLastCount < fCount then
     CreatePeriodIndex; // refresh indexes if needed
   with fPeriod[period] do
@@ -5234,8 +5292,8 @@ var
 
 begin
   result := nil;
-  if Period in [hapCurrent, hapAll] then
-    exit;
+  if not (Period in [hapMinute .. hapMonth]) then
+    exit; // OnSave() should be done in this range only
   count := 0;
   capacity := 0;
   fSafe.Lock;
@@ -5267,7 +5325,7 @@ begin
     end
     else
     begin
-      // hapHour..hapYear: search using the index of this Period
+      // hapHour..hapMonth: search using the index of this Period
       RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi);
       while PtrUInt(si) < PtrUInt(pi) do
       begin
