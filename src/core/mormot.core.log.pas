@@ -650,7 +650,7 @@ type
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
-    fRotateFileAtHour: integer;
+    fRotateFileDailyAtHour: integer;
     function CreateSynLog: TSynLog;
     procedure StartAutoFlush;
     procedure SetDestinationPath(const value: TFileName);
@@ -921,10 +921,10 @@ type
     /// fixed hour of the day where logging files rotation should be performed
     // - by default, equals -1, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
-    // specified hour
+    // specified local (not UTC) hour
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileDailyAtHour: integer
-      read fRotateFileAtHour write fRotateFileAtHour;
+      read fRotateFileDailyAtHour write fRotateFileDailyAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 30, maximum is 255 (but API may never reach so high)
@@ -1026,7 +1026,7 @@ type
     fFileName: TFileName;
     fStreamPositionAfterHeader: cardinal;
     fFileRotationSize: cardinal;
-    fFileRotationNextHour: Int64;
+    fFileRotationDailyAtHourTix: Int64;
     fThreadIndexReleased: TIntegerDynArray;
     fThreadIndexReleasedCount: integer;
     fThreadContextCount: integer;
@@ -3743,6 +3743,8 @@ var
   i: PtrInt;
   c: TAutoFlushThreadToConsole;
 begin
+  if fToConsole.Count = 0 then
+    exit;
   fToConsoleSafe.Lock;
   try
     MoveFast(fToConsole, c, SizeOf(c)); // thread-safe local copy
@@ -3827,7 +3829,7 @@ begin
                 Flush({forcediskwrite=}false); // write pending data
       end;
     except
-      // on stability issue, try to identify this thread
+      // on stability issue, start identifying this thread
       if not Terminated then
         try
           SetCurrentThreadName('log autoflush');
@@ -3836,9 +3838,9 @@ begin
         end;
     end;
   until Terminated;
+  // Terminated is set: eventually display delayed console ouput
   try
-    if fToConsole.Count <> 0 then
-      FlushConsole; // always write last pending console rows
+    FlushConsole;
   except
     ; // ignore any exception at shutdown
   end;
@@ -3928,7 +3930,7 @@ begin
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
-  fRotateFileAtHour := -1;
+  fRotateFileDailyAtHour := -1;
   fBufferSize := 4096;
   fStackTraceLevel := 30;
   fWithUnitName := true;
@@ -3970,7 +3972,7 @@ begin
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and
          (fRotateFileSize = 0) and
-         (fRotateFileAtHour < 0) and
+         (fRotateFileDailyAtHour < 0) and
          (fIdent <= MAX_SYNLOGFAMILY) then
         SynLogLookupThreadVar[fIdent] := result
       else
@@ -4087,7 +4089,7 @@ begin
     if (fPerThreadLog = ptOneFilePerThread) and
        (fRotateFileCount = 0) and
        (fRotateFileSize = 0) and
-       (fRotateFileAtHour < 0) and
+       (fRotateFileDailyAtHour < 0) and
        (fIdent <= MAX_SYNLOGFAMILY) then
     begin
       // unrotated ptOneFilePerThread
@@ -4404,11 +4406,11 @@ procedure TSynLog.LogTrailer(Level: TSynLogInfo);
 begin
   if Level in fFamily.fLevelStackTrace then
     AddStackTrace(Level, nil);
-  fWriterEcho.AddEndOfLine(fCurrentLevel);
-  if (fFileRotationNextHour <> 0) and
-     (GetTickCount64 >= fFileRotationNextHour) then
+  fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
+  if (fFileRotationDailyAtHourTix <> 0) and
+     (GetTickCount64 >= fFileRotationDailyAtHourTix) then
   begin
-    inc(fFileRotationNextHour, MSecsPerDay);
+    inc(fFileRotationDailyAtHourTix, MSecsPerDay); // next day, same hour
     PerformRotation;
   end
   else if (fFileRotationSize > 0) and
@@ -5202,7 +5204,7 @@ procedure TSynLog.LogFileInit;
 begin
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if (fFileRotationSize > 0) or
-     (fFileRotationNextHour <> 0) then
+     (fFileRotationDailyAtHourTix <> 0) then
     fFamily.HighResolutionTimestamp := false;
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
   if fFamily.LocalTimestamp then
@@ -5653,18 +5655,19 @@ begin
   begin
     if fFamily.fRotateFileSize > 0 then
       fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
-    if fFamily.fRotateFileAtHour in [0..23] then
+    if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
-      hourRotate := EncodeTime(fFamily.fRotateFileAtHour, 0, 0, 0);
+      hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
       timeNow := Time;
       if hourRotate < timeNow then
-        hourRotate := hourRotate + 1; // trigger will be tomorrow
+        hourRotate := hourRotate + 1; // will happen tomorrow
       timeBeforeRotate := hourRotate - timeNow;
-      fFileRotationNextHour := GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
+      fFileRotationDailyAtHourTix :=
+        GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
     end;
   end;
   if (fFileRotationSize = 0) and
-     (fFileRotationNextHour = 0) then
+     (fFileRotationDailyAtHourTix = 0) then
     fFileName := fFileName + ' ' + Ansi7ToString(NowToString(false));
   {$ifdef OSWINDOWS}
   if IsLibrary and
