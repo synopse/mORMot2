@@ -652,7 +652,7 @@ type
     fRotateFileSize: cardinal;
     fRotateFileDailyAtHour: integer;
     function CreateSynLog: TSynLog;
-    procedure StartAutoFlush;
+    procedure EnsureAutoFlushRunning;
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -3815,7 +3815,7 @@ begin
       end;
       if files <> nil then
       begin
-        tix10 := mormot.core.os.GetTickCount64 shr 10;
+        tix10 := mormot.core.os.GetTickCount64 shr 10; // second resolution
         for i := 0 to high(files) do
           with files[i] do
             if Terminated or
@@ -3987,7 +3987,7 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.StartAutoFlush;
+procedure TSynLogFamily.EnsureAutoFlushRunning;
 begin
   if (AutoFlushThread = nil) and
      not SynLogFileFreeing and
@@ -4701,11 +4701,6 @@ begin
     if ForceDiskWrite and
        fWriterStream.InheritsFrom(THandleStream) then
       diskflush := THandleStream(fWriterStream).Handle;
-    if AutoFlushThread = nil then
-      fFamily.StartAutoFlush;
-    fNextFlushTix10 := fFamily.AutoFlushTimeOut;
-    if fNextFlushTix10 <> 0 then
-      inc(fNextFlushTix10, mormot.core.os.GetTickCount64 shr 10);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -5693,6 +5688,7 @@ var
 begin
   if fWriterStream = nil then
   begin
+    // create fWriterStream instance
     ComputeFileName;
     if fFamily.NoFile then
       fWriterStream := TFakeWriterStream.Create
@@ -5748,6 +5744,7 @@ begin
   if fWriterClass = nil then
     // use TJsonWriter since mormot.core.json.pas is linked
     fWriterClass := TJsonWriter;
+  // create fWriter and fWriterEcho instances
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
@@ -5764,7 +5761,11 @@ begin
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
-  fFamily.StartAutoFlush;
+  // enable background writing
+  fNextFlushTix10 := fFamily.AutoFlushTimeOut;
+  if fNextFlushTix10 <> 0 then
+    inc(fNextFlushTix10, GetTickCount64 shr 10);
+  fFamily.EnsureAutoFlushRunning;
 end;
 
 function TSynLog.GetFileSize: Int64;
