@@ -1021,7 +1021,6 @@ type
     fStartTimestamp: Int64;
     fCurrentTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
-    fWriterClass: TBaseWriterClass;
     fWriterStream: TStream;
     fFileName: TFileName;
     fStreamPositionAfterHeader: cardinal;
@@ -1031,6 +1030,7 @@ type
     fThreadIndexReleasedCount: integer;
     fThreadContextCount: integer;
     fNextFlushTix10: cardinal;
+    fWriterClass: TBaseWriterClass;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -5748,10 +5748,12 @@ begin
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
-    fWriter.CustomOptions := fWriter.CustomOptions +
-      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended,
-       twoNoWriteToStreamException]
-      - [twoFlushToStreamNoAutoResize]; // follow BufferSize
+    fWriter.CustomOptions := fWriter.CustomOptions
+      + [twoEnumSetsAsTextInRecord, // debug-friendly text output
+         twoFullSetsAsStar,
+         twoForceJsonExtended,
+         twoNoWriteToStreamException]
+      - [twoFlushToStreamNoAutoResize]; // stick to BufferSize
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
