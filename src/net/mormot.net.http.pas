@@ -151,6 +151,11 @@ function IsOptions(const method: RawUtf8): boolean;
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// naive detection of most used bots from a HTTP User-Agent string
+// - meant to be fast, with potentially a lot of false negatives: please do not
+// hesitate to send us feedback as pull requests
+function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
+
 /// decode a given parameter from an Url, in any position, into UTF-8 text
 // - P^ should be either nil or point to P^ = '?'
 // - UpperName should follow the UrlDecodeValue() format, e.g. 'NAME='
@@ -1562,6 +1567,45 @@ begin
         (PCardinalArray(P)[2] =
            ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
         (P[12] = #0);
+end;
+
+function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  i := PosEx('.com/', UserAgent);
+  if i = 0 then
+    i := PosEx('.org/', UserAgent);
+  if i <> 0 then
+     case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
+       // Googlebot/2.1 (+http://www.google.com/bot.html)
+       ord('b') + ord('o') shl 8 + ord('t') shl 16,
+       // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
+       ord('b') + ord('i') shl 8 + ord('n') shl 16,
+       // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
+       ord('h') + ord('e') shl 8 + ord('l') shl 16,
+       // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
+       ord('m') + ord('s') shl 8 + ord('n') shl 16,
+       // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
+       ord('a') + ord('b') shl 8 + ord('o') shl 16,
+       // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
+       // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
+       ord('s') + ord('e') shl 8 + ord('a') shl 16,
+       // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
+       ord('d') + ord('u') shl 8 + ord('c') shl 16,
+       // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
+       ord('g') + ord('o') shl 8 + ord('/') shl 16,
+       // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
+       ord('r') + ord('o') shl 8 + ord('b') shl 16:
+         result := true;
+     else
+       case PCardinal(@PByteArray(UserAgent)[i - 4])^ and $00ffffff of
+         // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
+         ord('b') + ord('o') shl 8 + ord('t') shl 16:
+           result := true;
+       end;
+     end;
 end;
 
 function ByPriority(const A, B): integer;
