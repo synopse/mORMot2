@@ -557,13 +557,24 @@ type
   // - result of the function is the HTTP status/error code (200 if OK, e.g.)
   TOnHttpServerRequest = function(Ctxt: THttpServerRequestAbstract): cardinal of object;
 
+  /// raw parameter type of TOnHttpServerAfterResponse
+  // - THttpServerRequest instance has already been reset in mormot.net.async
+  // - we use such a record with PRawUtf8 fields to minimize the stack size
+  // and avoid any ref-count when passing RawUtf8 values between event callbacks
+  TOnHttpServerAfterResponseContext = record
+    User, Method, Host, Url, Referer, UserAgent, RemoteIP: PRawUtf8;
+    Connection: THttpServerConnectionID;
+    Flags: THttpServerRequestFlags;
+    StatusCode: cardinal;
+    ElapsedMicroSec: Int64;
+    Received, Sent: QWord;
+  end;
+
   /// event handler used by THttpServerGeneric.OnAfterResponse property
   // - main purpose is to apply post-response e.g. logging or real-time analysis
   // using THttpAfterResponse classes (e.g. THttpLogger or THttpAnalyzer)
-  TOnHttpServerAfterResponse = procedure(Connection: THttpServerConnectionID;
-    const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-    Flags: THttpServerRequestFlags; StatusCode: cardinal;
-    ElapsedMicroSec, Received, Sent: QWord) of object;
+  TOnHttpServerAfterResponse = procedure(
+    const Context: TOnHttpServerAfterResponseContext) of object;
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client

@@ -3601,19 +3601,32 @@ begin
       // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
+const
+  NO_USER: pointer = nil;
+
 procedure THttpAsyncConnection.DoAfterResponse;
 var
-  user: RawUtf8;
-  elapsed: Int64;
+  ctx: TOnHttpServerAfterResponseContext;
 begin
   try
+    QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+    dec(ctx.ElapsedMicroSec, fAfterResponseStart);
+    ctx.Connection := fConnectionID;
+    ctx.Method := @fHttp.CommandMethod;
+    ctx.Host := @fHttp.Host;
+    ctx.Url := @fHttp.CommandUri;
     if hsrAuthorized in fRequestFlags then
-      user := fHttp.BearerToken; // from THttpServerSocketGeneric.Authorization
-    QueryPerformanceMicroSeconds(elapsed);
-    dec(elapsed, fAfterResponseStart);
-    fServer.fOnAfterResponse(fConnectionID, user, fHttp.CommandMethod,
-      fHttp.Host, fHttp.CommandUri, fHttp.Referer, fHttp.UserAgent, fRemoteIP,
-      fRequestFlags, fRespStatus, elapsed, fBytesRecv, fBytesSend);
+      ctx.User := @fHttp.BearerToken // from THttpServerSocketGeneric.Authorization
+    else
+      ctx.User := @NO_USER;
+    ctx.Referer := @fHttp.Referer;
+    ctx.UserAgent := @fHttp.UserAgent;
+    ctx.RemoteIP := @fRemoteIP;
+    ctx.Flags := fRequestFlags;
+    ctx.StatusCode := fRespStatus;
+    ctx.Received := fBytesRecv;
+    ctx.Sent := fBytesSend;
+    fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
     on E: Exception do // paranoid
     begin

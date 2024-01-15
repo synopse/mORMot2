@@ -792,10 +792,7 @@ type
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(Connection: THttpServerConnectionID;
-      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-      Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      ElapsedMicroSec, Received, Sent: QWord); virtual; abstract;
+    procedure Append(const Context: TOnHttpServerAfterResponseContext);  virtual; abstract;
     /// the overriden Append() method will call this event with its own process
     property OnContinue: TOnHttpServerAfterResponse
       read fOnContinue write fOnContinue;
@@ -984,10 +981,7 @@ type
     /// append a request information to the destination log file
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(Connection: THttpServerConnectionID;
-      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-      Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      ElapsedMicroSec, Received, Sent: QWord); override;
+    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
     /// direct access to the output format
     // - if not supplied in Create() you can assign a format at runtime via this
     // property to call Parse() - raising EHttpLogger on error
@@ -1215,10 +1209,7 @@ type
     /// append a request information to the internal counters
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(Connection: THttpServerConnectionID;
-      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-      Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      ElapsedMicroSec, Received, Sent: QWord); override;
+    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
     /// retrieve the current state for a given period and scope
     // - consolidate hapMinute..hapYear values up to the requested Period
     // - this method is thread-safe
@@ -4602,10 +4593,7 @@ begin
   fUnknownPosLen := nil;
 end;
 
-procedure THttpLogger.Append(Connection: THttpServerConnectionID;
-  const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-  Flags: THttpServerRequestFlags; StatusCode: cardinal;
-  ElapsedMicroSec, Received, Sent: QWord);
+procedure THttpLogger.Append(const Context: TOnHttpServerAfterResponseContext);
 var
   n: integer;
   tix10: cardinal;
@@ -4618,20 +4606,19 @@ const
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
-    fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
-      RemoteIP, Flags, StatusCode, ElapsedMicroSec, Received, Sent);
+    fOnContinue(Context);
   if fVariable = nil then // nothing to process
     exit;
   // retrieve the output stream for the expected .log file
   tix10 := GetTickCount64 shr 10;
-  wr := GetWriter(tix10, Host);
+  wr := GetWriter(tix10, Context.Host^);
   if (wr = nil) or
      (wr.Stream = nil) then
     exit;
   // very efficient log generation with no transient memory allocation
   v := pointer(fVariable);
   n := length(fVariable);
-  poslen := pointer(fUnknownPosLen);
+  poslen := pointer(fUnknownPosLen); // 32-bit array into 16-bit pos,len pairs
   fSafe.Lock;
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -4648,93 +4635,93 @@ begin
           end;
         hlvBody_Bytes_Sent, // no body size by now
         hlvBytes_Sent:
-          wr.AddQ(Sent);
+          wr.AddQ(Context.Sent);
         hlvConnection:
-          wr.AddQ(Connection); // Connection ID (or Serial)
+          wr.AddQ(Context.Connection); // Connection ID (or Serial)
         hlvConnection_Flags:
           PRttiInfo(TypeInfo(THttpServerRequestFlag))^.
             EnumBaseType^.GetSetNameJsonArray(
-              wr, byte(Flags), ',', #0, {fullasstar=}false, {trim=}true);
+              wr, byte(Context.Flags), ',', #0, {fullasstar=}false, {trim=}true);
         hlvConnection_Upgrade:
-          if hsrConnectionUpgrade in Flags then
+          if hsrConnectionUpgrade in Context.Flags then
             wr.AddShorter('upgrade');
         hlvDocument_Uri,
         hlvUri:
           //TODO: normalize URI
-          wr.AddString(Url);
+          wr.AddString(Context.Url^);
         hlvElapsed:
-          wr.AddShort(MicroSecToString(ElapsedMicroSec));
+          wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
         hlvElapsedUSec:
-          wr.AddQ(ElapsedMicroSec);
+          wr.AddQ(Context.ElapsedMicroSec);
         hlvElapsedMSec,
         hlvRequest_Time: // no socket communication time included by now
-          if ElapsedMicroSec < 1000 then
+          if Context.ElapsedMicroSec < 1000 then
             wr.Add('0') // less than 1 ms
           else
-            wr.AddSeconds(ElapsedMicroSec div 1000);
+            wr.AddSeconds(QWord(Context.ElapsedMicroSec) div 1000);
         hlvHostName:
-          if (Host = '') or
+          if (Context.Host^ = '') or
              ((PClass(wr)^ = THttpLoggerWriter) and
               (THttpLoggerWriter(wr).Host <> '')) then
             wr.Add('-') // no need to write $hostname in a per-host log
           else
-            wr.AddString(Host);
+            wr.AddString(Context.Host^);
         hlvHttp_Referer:
-          if Referer = '' then
+          if Context.Referer^ = '' then
             wr.Add('-')
           else
-            wr.AddString(Referer);
+            wr.AddString(Context.Referer^);
         hlvHttp_User_Agent:
-          if UserAgent = '' then
+          if Context.UserAgent^ = '' then
             wr.Add('-')
           else
-            wr.AddString(UserAgent);
+            wr.AddString(Context.UserAgent^);
         hlvHttps:
-          if hsrHttps in Flags then
+          if hsrHttps in Context.Flags then
             wr.AddShorter('on');
         hlvMsec:
           wr.AddSeconds(UnixMSTimeUtcFast);
         hlvReceived:
-          wr.AddShort(KBNoSpace(Received));
+          wr.AddShort(KBNoSpace(Context.Received));
         hlvRemote_Addr:
-          if RemoteIP = '' then
+          if Context.RemoteIP^ = '' then
             wr.AddShort('127.0.0.1')
           else
-            wr.AddString(RemoteIP);
+            wr.AddString(Context.RemoteIP^);
         hlvRemote_User:
-          if User = '' then
+          if Context.User^ = '' then
             wr.Add('-')
           else
-            wr.AddString(User);
+            wr.AddString(Context.User^);
         hlvRequest:
           begin
-            wr.AddString(Method);
+            wr.AddString(Context.Method^);
             wr.Add(' ');
-            wr.AddString(Url);
+            wr.AddString(Context.Url^);
             wr.Add(' ');
-            wr.AddShorter(HTTP[hsrHttp10 in Flags]);
+            wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
         hlvRequest_Hash:
-          wr.AddUHex(crc32c(crc32c(crc32c(byte(Flags),
-            pointer(Host), length(Host)),
-            pointer(Method), length(Method)),
-            pointer(Url), length(Url)));
+            wr.AddUHex(crc32c(crc32c(crc32c(byte(Context.Flags),
+              pointer(Context.Host^), length(Context.Host^)),
+              pointer(Context.Method^), length(Context.Method^)),
+              pointer(Context.Url^), length(Context.Url^)));
         hlvRequest_Length:
-          wr.AddQ(Received);
+          wr.AddQ(Context.Received);
         hlvRequest_Method:
-          wr.AddString(Method);
+          wr.AddString(Context.Method^);
         hlvRequest_Uri:
-          wr.AddString(Url);
+          wr.AddString(Context.Url^);
         hlvScheme:
-          wr.AddShorter(SCHEME[hsrHttps in Flags]);
+          wr.AddShorter(SCHEME[hsrHttps in Context.Flags]);
         hlvSent:
-          wr.AddShort(KBNoSpace(Sent));
+          wr.AddShort(KBNoSpace(Context.Sent));
         hlvServer_Protocol:
-           wr.AddShorter(HTTP[hsrHttp10 in Flags]);
+           wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
         hlvStatus:
-          wr.AddU(StatusCode);
+          wr.AddU(Context.StatusCode);
         hlvStatus_Text:
-          wr.AddShort(StatusCodeToShort(StatusCode));
+          wr.AddShort(StatusCodeToShort(Context.StatusCode));
         hlvTime_Epoch:
           wr.AddQ(UnixTimeUtc);
         hlvTime_EpochMSec:
@@ -5086,10 +5073,7 @@ const
   _MET: array[TUriRouterMethod] of THttpAnalyzerScope = (
     hasGet, hasPost, hasPut, hasDelete, hasOptions, hasHead);
 
-procedure THttpAnalyzer.Append(Connection: THttpServerConnectionID;
-  const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-  Flags: THttpServerRequestFlags; StatusCode: cardinal;
-  ElapsedMicroSec, Received, Sent: QWord);
+procedure THttpAnalyzer.Append(const Context: TOnHttpServerAfterResponseContext);
 var
   tix, crc, i: cardinal;
   met: TUriRouterMethod;
@@ -5098,33 +5082,32 @@ var
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
-    fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
-      RemoteIP, Flags, StatusCode, ElapsedMicroSec, Received, Sent);
+    fOnContinue(Context);
   // prepare the information to be merged
   if fTracked = [] then
     exit; // nothing to process here
   fModified := true; // for UpdateSuspendFile
   tix := GetTickCount64 div 1000;
   new.Count := 1;
-  new.Time := ElapsedMicroSec; // Time resolution is microsec for hapCurrent
+  new.Time := Context.ElapsedMicroSec; // Time unit is microsec for hapCurrent
   new.UniqueIP := 0;
-  if (RemoteIP <> '') and
+  if (Context.RemoteIP^ <> '') and
      (fUniqueIPDepth <> 0) then
   begin
-    crc := DefaultHasher(0, pointer(RemoteIP), length(RemoteIP));
+    crc := DefaultHasher(0, pointer(Context.RemoteIP^), length(Context.RemoteIP^));
     crc := crc and (fUniqueIPDepth - 1); // power-of-two modulo
     if crc = 0 then
       crc := 1;
     new.UniqueIP := crc; // store bit index
   end;
-  new.Read := Received;
-  new.Write := Sent;
+  new.Read := Context.Received;
+  new.Write := Context.Sent;
   fSafe.Lock;
   try
     // integrate request information to the current state
     DoAppend(new, hasAny);
     if (fTracked * [hasGet .. hasOptions] <> []) and
-       UriMethod(Method, met) then
+       UriMethod(Context.Method^, met) then
     begin
       s := _MET[met];
       if s in fTracked then
@@ -5132,7 +5115,7 @@ begin
     end;
     if fTracked * [has1xx .. has5xx] <> [] then
     begin
-      i := (StatusCode div 100) - 1; // 1xx..5xx -> 0..4
+      i := (Context.StatusCode div 100) - 1; // 1xx..5xx -> 0..4
       if i < 5 then
       begin
         s := THttpAnalyzerScope(byte(has1xx) + i);
@@ -5140,17 +5123,17 @@ begin
           DoAppend(new, s);
       end;
     end;
-    if (UserAgent <> '') and
+    if (Context.UserAgent^ <> '') and
        (hasMobile in fTracked) then
       // browser/OS detection using the User-Agent is a very tricky context
       // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
       // we only detect mobile devices, which seems fair enough
-      if PosEx('Mobile', UserAgent) > 0 then
+      if PosEx('Mobile', Context.UserAgent^) > 0 then
         DoAppend(new, hasMobile);
-    if (hsrHttps in Flags) and
+    if (hsrHttps in Context.Flags) and
        (hasHttps in fTracked) then
       DoAppend(new, hasHttps);
-    if (hsrAuthorized in Flags) and
+    if (hsrAuthorized in Context.Flags) and
        (hasAuthorized in fTracked) then
       DoAppend(new, hasAuthorized);
     // do proper consolidation if needed
@@ -6446,7 +6429,8 @@ var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  started, elapsed: Int64;
+  started: Int64;
+  ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
      (ClientSock.Http.Headers = '') or
@@ -6493,12 +6477,21 @@ begin
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
       try
-        QueryPerformanceMicroSeconds(elapsed);
-        dec(elapsed, started);
-        fOnAfterResponse(req.ConnectionID, req.AuthenticatedUser, req.Method,
-          req.Host, req.Url, ClientSock.Http.Referer, req.UserAgent,
-          req.RemoteIP, req.ConnectionFlags, req.RespStatus,
-          elapsed, ClientSock.BytesIn, ClientSock.BytesOut);
+        QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+        dec(ctx.ElapsedMicroSec, started);
+        ctx.Connection := req.ConnectionID;
+        ctx.User := @req.AuthenticatedUser;
+        ctx.Method := @req.Method;
+        ctx.Host := @req.Host;
+        ctx.Url := @req.Url;
+        ctx.Referer := @ClientSock.Http.Referer;
+        ctx.UserAgent := @req.UserAgent;
+        ctx.RemoteIP := @req.RemoteIP;
+        ctx.Flags := req.ConnectionFlags;
+        ctx.StatusCode := req.RespStatus;
+        ctx.Received := ClientSock.BytesIn;
+        ctx.Sent := ClientSock.BytesOut;
+        fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
       except
         on E: Exception do // paranoid
         begin
@@ -9285,11 +9278,25 @@ end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
   const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
+var
+  ctx: TOnHttpServerAfterResponseContext;
 begin
-  if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt.ConnectionID, Ctxt.AuthenticatedUser, Ctxt.Method,
-      Ctxt.Host, Ctxt.Url, Referer, Ctxt.UserAgent, Ctxt.RemoteIP,
-      Ctxt.ConnectionFlags, StatusCode, Elapsed, Received, Sent);
+  if not Assigned(fOnAfterResponse) then
+    exit;
+  ctx.Connection := Ctxt.ConnectionID;
+  ctx.User := @Ctxt.AuthenticatedUser;
+  ctx.Method := @Ctxt.Method;
+  ctx.Host := @Ctxt.Host;
+  ctx.Url := @Ctxt.Url;
+  ctx.Referer := @Referer;
+  ctx.UserAgent := @Ctxt.UserAgent;
+  ctx.RemoteIP := @Ctxt.RemoteIP;
+  ctx.Flags := Ctxt.ConnectionFlags;
+  ctx.StatusCode := StatusCode;
+  ctx.ElapsedMicroSec := Elapsed;
+  ctx.Received := Received;
+  ctx.Sent := Sent;
+  fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
 end;
 
 
