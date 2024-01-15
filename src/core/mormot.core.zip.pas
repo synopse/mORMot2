@@ -172,6 +172,9 @@ function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString; overload;
 // - return '' if the file content is invalid (e.g. bad crc)
 function GZRead(const gzfile: TFileName): RawByteString; overload;
 
+/// compress a memory buffer into a .gz file content
+function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
+
 /// compress a file content into a new .gz file
 // - will use TSynZipCompressor for minimal memory use during file compression
 function GZFile(const orig, destgz: TFileName;
@@ -1294,6 +1297,35 @@ var
 begin
   tmp := StringFromFile(gzFile);
   result := GZRead(pointer(tmp), length(tmp));
+end;
+
+function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
+var
+  max, dest: PtrInt;
+  p: PAnsiChar;
+begin
+  if len <= 0 then
+  begin
+    result := '';
+    exit;
+  end;
+  max := zlibCompressMax(len);
+  FastSetRawByteString(result, nil, max + (GZHEAD_SIZE + 8));
+  p := pointer(result);
+  MoveFast(GZHEAD, p^, GZHEAD_SIZE);
+  inc(p, GZHEAD_SIZE);
+  dest := CompressMem(buf, p, len, max, level, {zlib=}false);
+  if dest <= 0 then // error (maybe from libdeflate_deflate_compress)
+    result := ''
+  else
+  begin
+    inc(p, dest);
+    PCardinal(P)^ := crc32(0, buf, len); // maybe libdeflate_crc32
+    inc(PCardinal(p));
+    PCardinal(p)^ := len;
+    inc(PCardinal(p));
+    FakeLength(result, p - pointer(result)); // no realloc
+  end;
 end;
 
 function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
@@ -3365,35 +3397,11 @@ const
   HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
 
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
-var
-  max, L, C: integer;
-  P: PAnsiChar;
-  tmp: RawByteString;
 begin
-  L := length(Data);
   if Compress then
-  begin
-    max := zlibCompressMax(L);
-    FastSetRawByteString(tmp, nil, max + (GZHEAD_SIZE + 8));
-    P := pointer(tmp);
-    MoveFast(GZHEAD, P^, GZHEAD_SIZE);
-    inc(P, GZHEAD_SIZE);
-    C := CompressMem(pointer(Data), P, L, max, HTTP_LEVEL);
-    if C <= 0 then // error (maybe from libdeflate_deflate_compress)
-      Data := ''
-    else
-    begin
-      inc(P, C);
-      PCardinal(P)^ := crc32(0, pointer(Data), L); // maybe libdeflate_crc32
-      inc(P, 4);
-      PCardinal(P)^ := L;
-      inc(P, 4);
-      FakeLength(tmp, P - pointer(tmp)); // no realloc
-      Data := tmp;
-    end;
-  end
+    Data := GZWrite(pointer(Data), length(Data), HTTP_LEVEL)
   else
-    Data := gzread(pointer(Data), L);
+    Data := GZRead(pointer(Data), length(Data));
   result := 'gzip';
 end;
 
