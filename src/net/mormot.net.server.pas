@@ -1142,7 +1142,8 @@ type
   // - map all the information to be persisted on disk as CSV, binary or SQL
   // - each record consumes 40 bytes of memory on all platforms
   THttpAnalyzerToSave = record
-    /// the timetstamp - from UnixTimeMinimalUtc() - of the persistence
+    /// the timestamp of the data consolidation - from UnixTimeMinimalUtc()
+    // - use UnixTimeToDateTime(Date + UNIXTIME_MINIMAL) to compute its TDateTime
     Date: cardinal;
     /// the resolution time period (hapMinute .. hapAll)
     Period: THttpAnalyzerPeriod;
@@ -1295,6 +1296,20 @@ type
     procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
+  /// metadata as decoded by THttpAnalyzerReader.LoadHeader() class function
+  THttpAnalyzerReaderHeader = record
+    /// how many events are in this file
+    Count: cardinal;
+    /// events counter per time period
+    Period: array[hapMinute .. hapMonth] of cardinal;
+    /// the timestamp of the first event in this file
+    First: TDateTime;
+    /// the timestamp of the last event in this file
+    Last: TDateTime;
+    /// the crc32c of all meaning content - could be used e.g. to compare files
+    Crc: cardinal;
+  end;
+
   /// class used to read and search persisted THttpAnalyzer information
   // - all data will be stored in memory, with 40 bytes per row
   THttpAnalyzerReader = class(TSynPersistent)
@@ -1328,11 +1343,11 @@ type
     function AddFromBinary(const FileName: TFileName): boolean;
     /// append a memory buffer in the THttpAnalyzerPersistBinary format
     function AddFromBuffer(const Buffer: RawByteString): boolean;
-    /// persist all this data into a file in our proprietary binary format
+    /// persist all this data into a file in our optimized binary format
     procedure SaveToFile(const Dest: TFileName);
     /// load the data from SaveToFile() persistence
     function LoadFromFile(const Source: TFileName): boolean;
-    /// persist all this data in our proprietary binary format
+    /// persist all this data in our optimized binary format
     procedure SaveToWriter(Dest: TBufferWriter);
     /// load the data from SaveToWriter() memory content
     function LoadFromReader(var Source: TFastReader): boolean;
@@ -1349,6 +1364,9 @@ type
     // - very fast, using per-Period indexes for hapHour .. hapYear
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
       Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+    /// class function able to retrieve the metadata of our optimized binary format
+    class function LoadHeader(const FileName: TFileName;
+      out Info: THttpAnalyzerReaderHeader): boolean;
     /// access to the thread-safety NOT reentrant lock
     property Safe: TLightLock
       read fSafe write fSafe;
@@ -5622,11 +5640,12 @@ begin
       exit;
     if fPeriodLastCount < fCount then
       CreatePeriodIndex; // refresh indexes count and verify s^.Period range
-    for p := low(fPeriod) to high(fPeriod) do
-      Dest.WriteVarUInt32(fPeriod[p].Count); // avoid realloc in LoadFromReader
+    for p := low(fPeriod) to high(fPeriod) do // hapHour .. hapMonth
+      Dest.WriteVarUInt32(fPeriod[p].Count);  // avoid realloc in LoadFromReader
     s := StateAsCompactArray^.Value^;
     n := fCount;
-    Dest.Write4(crc32c(0, pointer(s), n * SizeOf(s^))); // anti-tampering
+    Dest.Write4(PHttpAnalyzerToSaveArray(s)[n - 1].Date); // last date
+    Dest.Write4(crc32c(0, pointer(s), n * SizeOf(s^)));   // anti-tampering
     // save main data
     prevdate := 0;
     repeat
@@ -5656,7 +5675,7 @@ var
   s: PHttpAnalyzerToSave;
   i, n: integer;
   rd: PByte;
-  prevdate, crc: cardinal;
+  lastdate, prevdate, crc: cardinal;
   tmp: string[23];
 begin
   result := false;
@@ -5675,13 +5694,14 @@ begin
     if n = 0 then
       exit;
     fPeriodLastCount := n;
-    for p := low(fPeriod) to high(fPeriod) do
+    for p := low(fPeriod) to high(fPeriod) do // hapHour .. hapMonth
       with fPeriod[p] do
       begin
         Count := Source.VarUInt32;
         Index := nil;
         SetLength(Index, Count); // pre-allocate all indexes
       end;
+    lastdate := Source.Next4;
     crc := Source.Next4;
     if Source.RemainingLength < PtrUInt(fCount) * 6 then
       exit;
@@ -5713,6 +5733,8 @@ begin
       inc(s);
     until i = fCount;
     // quickly check index consistency
+    if prevdate <> lastdate then
+      exit;
     for p := low(fPeriod) to high(fPeriod) do
       with fPeriod[p] do
         if length(Index) <> Count then
@@ -5724,6 +5746,48 @@ begin
     if not result then
       Clear;
   end;
+end;
+
+class function THttpAnalyzerReader.LoadHeader(const FileName: TFileName;
+  out Info: THttpAnalyzerReaderHeader): boolean;
+var
+  f: THandle;
+  mlen, len: PtrInt;
+  last, first: cardinal;
+  p: THttpAnalyzerPeriod;
+  rd: TFastReader;
+  tmp: array[byte] of byte; // first 256 bytes are enough
+begin
+  FillCharFast(Info, SizeOf(Info), 0);
+  result := false;
+  f := FileOpen(FileName, fmOpenReadDenyNone);
+  if not ValidHandle(f) then
+    exit;
+  len := FileRead(f, tmp, SizeOf(tmp));
+  FileClose(f);
+  mlen := ord(HTTPANALYZER_MAGIC[0]);
+  if len < mlen then
+    exit;
+  {%H-}rd.Init(@tmp, len);
+  if not CompareMem(rd.Next(mlen), @HTTPANALYZER_MAGIC[1], mlen) or
+     not rd.VarUInt32Safe(Info.Count) then
+    exit;
+  if Info.Count <> 0 then
+  begin
+    Info.Period[hapMinute] := Info.Count;
+    for p := hapHour to hapMonth do
+      if rd.VarUInt32Safe(Info.Period[p]) then
+        dec(Info.Period[hapMinute], Info.Period[p]) // adjust
+      else
+        exit;
+    if not rd.CopySafe(@last, SizeOf(last)) or
+       not rd.CopySafe(@Info.Crc, SizeOf(Info.Crc)) or
+       not rd.VarUInt32Safe(first) then // delta decoding of first date
+      exit;
+    Info.First := UnixTimeToDateTime(first + UNIXTIME_MINIMAL);
+    Info.Last  := UnixTimeToDateTime(last + UNIXTIME_MINIMAL);
+  end;
+  result := true;
 end;
 
 function THttpAnalyzerReader.GetState(Row: integer;
