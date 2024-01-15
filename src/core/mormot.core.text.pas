@@ -5149,20 +5149,20 @@ begin
   fWriter := Owner;
   if Assigned(fWriter.OnFlushToStream) then
     raise ESynException.CreateUtf8('Unexpected %.Create', [self]);
-  fWriter.OnFlushToStream := FlushToStream;
+  fWriter.OnFlushToStream := FlushToStream; // register
 end;
 
 destructor TEchoWriter.Destroy;
 begin
   if (fWriter <> nil) and
      (TMethod(fWriter.OnFlushToStream).Data = self) then
-    fWriter.OnFlushToStream := nil;
+    fWriter.OnFlushToStream := nil; // unregister
   inherited Destroy;
 end;
 
 procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
 var
-  e, n: PtrInt;
+  e, n, cap: PtrInt;
 begin
   if twoEndOfLineCRLF in fWriter.CustomOptions then
     fWriter.AddCR
@@ -5174,17 +5174,19 @@ begin
     if fEchoPendingExecuteBackground then
     begin
       fBackSafe.Lock;
-      n := fBack.Count;
-      if length(fBack.Level) = n then
-      begin
-        n := NextGrow(fBack.Count);
-        SetLength(fBack.Level, n);
-        SetLength(fBack.Text, n);
+      try
         n := fBack.Count;
+        if length(fBack.Level) = n then
+        begin
+          cap := NextGrow(n);
+          SetLength(fBack.Level, cap);
+          SetLength(fBack.Text, cap);
+        end;
+        fBack.Level[n] := aLevel;
+        fBack.Text[n] := fEchoBuf;
+      finally
+        fBackSafe.UnLock;
       end;
-      fBack.Level[n] := aLevel;
-      fBack.Text[n] := fEchoBuf;
-      fBackSafe.UnLock;
     end
     else
       for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
@@ -5205,7 +5207,7 @@ begin
   if fBack.Count = 0 then
     exit;
   fBackSafe.Lock;
-  MoveFast(fBack, todo, SizeOf(fBack)); // copy without refcount
+  MoveFast(fBack, todo, SizeOf(fBack)); // fast copy without refcount
   FillCharFast(fBack, SizeOf(fBack), 0);
   fBackSafe.UnLock;
   for i := 0 to todo.Count - 1 do
@@ -5221,11 +5223,10 @@ end;
 
 procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
-  if fEchos <> nil then
-  begin
-    EchoFlush;
-    fEchoStart := 0;
-  end;
+  if fEchos = nil then
+    exit;
+  EchoFlush;
+  fEchoStart := 0;
 end;
 
 procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
