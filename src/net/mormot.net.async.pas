@@ -3608,24 +3608,24 @@ procedure THttpAsyncConnection.DoAfterResponse;
 var
   ctx: TOnHttpServerAfterResponseContext;
 begin
+  QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+  dec(ctx.ElapsedMicroSec, fAfterResponseStart);
+  ctx.Connection := fConnectionID;
+  ctx.Method := @fHttp.CommandMethod;
+  ctx.Host := @fHttp.Host;
+  ctx.Url := @fHttp.CommandUri;
+  if hsrAuthorized in fRequestFlags then
+    ctx.User := @fHttp.BearerToken // from THttpServerSocketGeneric.Authorization
+  else
+    ctx.User := @NO_USER;
+  ctx.Referer := @fHttp.Referer;
+  ctx.UserAgent := @fHttp.UserAgent;
+  ctx.RemoteIP := @fRemoteIP;
+  ctx.Flags := fRequestFlags;
+  ctx.StatusCode := fRespStatus;
+  ctx.Received := fBytesRecv;
+  ctx.Sent := fBytesSend;
   try
-    QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
-    dec(ctx.ElapsedMicroSec, fAfterResponseStart);
-    ctx.Connection := fConnectionID;
-    ctx.Method := @fHttp.CommandMethod;
-    ctx.Host := @fHttp.Host;
-    ctx.Url := @fHttp.CommandUri;
-    if hsrAuthorized in fRequestFlags then
-      ctx.User := @fHttp.BearerToken // from THttpServerSocketGeneric.Authorization
-    else
-      ctx.User := @NO_USER;
-    ctx.Referer := @fHttp.Referer;
-    ctx.UserAgent := @fHttp.UserAgent;
-    ctx.RemoteIP := @fRemoteIP;
-    ctx.Flags := fRequestFlags;
-    ctx.StatusCode := fRespStatus;
-    ctx.Received := fBytesRecv;
-    ctx.Sent := fBytesSend;
     fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
     on E: Exception do // paranoid

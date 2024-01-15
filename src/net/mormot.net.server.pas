@@ -9281,22 +9281,26 @@ procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
 var
   ctx: TOnHttpServerAfterResponseContext;
 begin
-  if not Assigned(fOnAfterResponse) then
-    exit;
-  ctx.Connection := Ctxt.ConnectionID;
-  ctx.User := @Ctxt.AuthenticatedUser;
-  ctx.Method := @Ctxt.Method;
-  ctx.Host := @Ctxt.Host;
-  ctx.Url := @Ctxt.Url;
-  ctx.Referer := @Referer;
-  ctx.UserAgent := @Ctxt.UserAgent;
-  ctx.RemoteIP := @Ctxt.RemoteIP;
-  ctx.Flags := Ctxt.ConnectionFlags;
-  ctx.StatusCode := StatusCode;
-  ctx.ElapsedMicroSec := Elapsed;
-  ctx.Received := Received;
-  ctx.Sent := Sent;
-  fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
+  if Assigned(fOnAfterResponse) then
+  try
+    ctx.Connection := Ctxt.ConnectionID;
+    ctx.User := @Ctxt.AuthenticatedUser;
+    ctx.Method := @Ctxt.Method;
+    ctx.Host := @Ctxt.Host;
+    ctx.Url := @Ctxt.Url;
+    ctx.Referer := @Referer;
+    ctx.UserAgent := @Ctxt.UserAgent;
+    ctx.RemoteIP := @Ctxt.RemoteIP;
+    ctx.Flags := Ctxt.ConnectionFlags;
+    ctx.StatusCode := StatusCode;
+    ctx.ElapsedMicroSec := Elapsed;
+    ctx.Received := Received;
+    ctx.Sent := Sent;
+    fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
+  except
+    on E: Exception do // paranoid
+      fOnAfterResponse := nil; // won't try again
+  end;
 end;
 
 
