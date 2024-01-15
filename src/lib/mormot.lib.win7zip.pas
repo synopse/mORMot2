@@ -2044,7 +2044,7 @@ procedure T7zReader.Extract(item: cardinal; const path: TFileName;
   nosubfolder: boolean);
 begin
   EnsureOpened;
-  fExtractPath := EnsureDirectoryExists(path);
+  fExtractPath := EnsureDirectoryExists(path, E7Zip);
   fExtractPathNoSubFolder := nosubfolder;
   try
     E7Zip.CheckOk(self, 'Extract',
@@ -2233,7 +2233,7 @@ end;
 procedure T7zReader.ExtractAll(const path: TFileName; nosubfolder: boolean);
 begin
   EnsureOpened;
-  fExtractPath := EnsureDirectoryExists(path);
+  fExtractPath := EnsureDirectoryExists(path, E7Zip);
   fExtractPathNoSubFolder := nosubfolder;
   try
     E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(

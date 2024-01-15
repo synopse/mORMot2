@@ -300,7 +300,7 @@ begin
   if aWorkFolder = '' then
     fWorkFolderName := Executable.ProgramFilePath
   else
-    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, {raiseexc=}true);
+    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, EDaemon);
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;

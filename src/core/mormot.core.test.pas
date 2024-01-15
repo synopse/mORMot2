@@ -612,7 +612,7 @@ begin
   if Folder = '' then
     fWorkDir := Executable.ProgramFilePath
   else
-    fWorkDir := EnsureDirectoryExists(Folder, {excfail=}true);
+    fWorkDir := EnsureDirectoryExists(Folder, ESynException);
 end;
 
 

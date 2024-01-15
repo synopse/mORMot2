@@ -886,7 +886,7 @@ begin
       '%.RegisterAndWaitFolder: unknown %', [self, ChallengeWwwFolder]);
   fChallengeWwwFolder := EnsureDirectoryExists(
     FormatString('%.well-known%acme-challenge',
-      [IncludeTrailingPathDelimiter(ChallengeWwwFolder), PathDelim]), true);
+      [IncludeTrailingPathDelimiter(ChallengeWwwFolder), PathDelim]), EAcmeClient);
   try
     result := RegisterAndWait(OnChallengeWwwFolder,
       OutSignedCert, OutPrivateKey, aPrivateKeyPassword, WaitForSec, nil);
@@ -992,7 +992,7 @@ begin
     fDirectoryUrl := ACME_LETSENCRYPT_DEBUG_URL
   else
     fDirectoryUrl := aDirectoryUrl;
-  fKeyStoreFolder := EnsureDirectoryExists(aKeyStoreFolder, {raiseonfail=}true);
+  fKeyStoreFolder := EnsureDirectoryExists(aKeyStoreFolder, EAcmeLetsEncrypt);
   fPrivateKeyPassword := aPrivateKeyPassword;
   fRenewWaitForSeconds := 30;
   fRenewBeforeEndDays := 30;

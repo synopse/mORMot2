@@ -3385,11 +3385,11 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 // - returns the full expanded directory name, including trailing path delimiter
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is true
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
 
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
 function NormalizeDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
@@ -7022,11 +7022,12 @@ begin
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin
   if Directory = '' then
-    if RaiseExceptionOnCreationFailure then
-      raise Exception.Create('Unexpected EnsureDirectoryExists('''')')
+    if RaiseExceptionOnCreationFailure <> nil then
+      raise RaiseExceptionOnCreationFailure.Create(
+        'Unexpected EnsureDirectoryExists('''')')
     else
       result := ''
   else
@@ -7034,15 +7035,16 @@ begin
     result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
     if not DirectoryExists(result) then
       if not ForceDirectories(result) then
-        if RaiseExceptionOnCreationFailure then
-          raise Exception.CreateFmt('Impossible to create folder %s', [result])
+        if RaiseExceptionOnCreationFailure <> nil then
+          raise RaiseExceptionOnCreationFailure.CreateFmt(
+            'Impossible to create folder %s', [result])
         else
           result := '';
   end;
 end;
 
 function NormalizeDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin
   result := EnsureDirectoryExists(NormalizeFileName(Directory),
     RaiseExceptionOnCreationFailure);
@@ -7125,7 +7127,7 @@ begin
   dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
   if FileIsReadOnly(dir) then
-    exit;
+    exit; // the whole folder is read-only
   retry := 20;
   repeat
     fn := Format('%s' + PathDelim + {$ifdef OSPOSIX} '.' + {$endif OSPOSIX}
@@ -7138,9 +7140,9 @@ begin
   until false;
   f := FileCreate(fn);
   if PtrInt(f) < 0 then
-    exit;
+    exit; // a file can't be created
   FileClose(f);
-  result := DeleteFile(fn);
+  result := DeleteFile(fn); // success if the file can be created and deleted
 end;
 
 

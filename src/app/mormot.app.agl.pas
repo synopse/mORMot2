@@ -1708,7 +1708,7 @@ begin
     raise ESynAngelize.CreateUtf8('/new %: missing application "%"', [sn, exe]);
   id := PropNameSanitize(sn, 'service');
   sas := fSettings as TSynAngelizeSettings;
-  dir := EnsureDirectoryExists(sas.Folder);
+  dir := EnsureDirectoryExists(sas.Folder, ESynAngelize);
   fn := dir + Utf8ToString(id) + sas.Ext;
   if FileExists(fn) then
     for i := 1 to 100 do
