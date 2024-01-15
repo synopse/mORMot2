@@ -176,12 +176,14 @@ function GZRead(const gzfile: TFileName): RawByteString; overload;
 function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
 
 /// compress a file content into a new .gz file
-// - will use TSynZipCompressor for minimal memory use during file compression
+// - will use libdeflate if possible, then TSynZipCompressor for minimal memory
+// use during (huge) file compression
 function GZFile(const orig, destgz: TFileName;
   CompressionLevel: integer = 6): boolean; overload;
 
 /// compress a memory buffer into a new .gz file
-// - will use TSynZipCompressor for minimal memory use during file compression
+// - will use libdeflate if possible, then TSynZipCompressor for minimal memory
+// use during (huge) file compression
 function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
   CompressionLevel: integer = 6): boolean; overload;
 
@@ -1332,8 +1334,22 @@ function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boole
 var
   gz: TSynZipCompressor;
   s: TStream;
+  {$ifdef LIBDEFLATESTATIC}
+  src, dst: RawByteString;
+  {$endif LIBDEFLATESTATIC}
 begin
   try
+    {$ifdef LIBDEFLATESTATIC}
+    // libdeflate is much faster than zlib, but its API expects only buffers
+    if FileSize(orig) < LIBDEFLATE_MAXSIZE then
+    begin
+      src := StringFromFile(orig);
+      dst := GZWrite(pointer(src), length(src), CompressionLevel);
+      result := (dst <> '') and
+                FileFromString(dst, destgz);
+      exit;
+    end;
+    {$endif LIBDEFLATESTATIC}
     s := TFileStreamEx.Create(orig, fmOpenReadDenyNone);
     try
       gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
@@ -1355,8 +1371,21 @@ function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
   CompressionLevel: integer): boolean;
 var
   gz: TSynZipCompressor;
+  {$ifdef LIBDEFLATESTATIC}
+  dst: RawByteString;
+  {$endif LIBDEFLATESTATIC}
 begin
   try
+    {$ifdef LIBDEFLATESTATIC}
+    // libdeflate is much faster than zlib, but its API expects only buffers
+    if len < LIBDEFLATE_MAXSIZE then
+    begin
+      dst := GZWrite(buf, len, CompressionLevel);
+      result := (dst <> '') and
+                FileFromString(dst, destgz);
+      exit;
+    end;
+    {$endif LIBDEFLATESTATIC}
     gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
     try
       if (buf <> nil) and
