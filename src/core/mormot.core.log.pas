@@ -1040,6 +1040,7 @@ type
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
+    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
@@ -5764,10 +5765,19 @@ begin
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
   // enable background writing
+  if fFamily.AutoFlushTimeOut <> 0 then
+  begin
+    fWriter.OnFlushToStream := OnFlushToStream;
+    OnFlushToStream(nil, 0);
+    fFamily.EnsureAutoFlushRunning;
+  end;
+end;
+
+procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+begin
   fNextFlushTix10 := fFamily.AutoFlushTimeOut;
   if fNextFlushTix10 <> 0 then
     inc(fNextFlushTix10, GetTickCount64 shr 10);
-  fFamily.EnsureAutoFlushRunning;
 end;
 
 function TSynLog.GetFileSize: Int64;

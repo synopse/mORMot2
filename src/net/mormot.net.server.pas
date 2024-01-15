@@ -4181,10 +4181,12 @@ var
   v: integer;
 begin
   result := '';
+  // reset any previous format
   fFormat := aFormat;
   fVariable := nil;
   fVariables := [];
   fUnknownPosLen := nil;
+  // actually parse the input
   p := pointer(aFormat);
   repeat
     start := p;
@@ -4206,12 +4208,19 @@ begin
     if v <= 0 then
     begin
       FormatUtf8('Unknown $% variable', [start], result);
-      exit;
+      break;
     end;
     SetLength(fVariable, length(fVariable) + 1);
     fVariable[high(fVariable)] := THttpLogVariable(v);
     include(fVariables, THttpLogVariable(v));
   until false;
+  // reset internal state on error parsing
+  if result = '' then
+    exit;
+  fFormat := '';
+  fVariable := nil;
+  fVariables := [];
+  fUnknownPosLen := nil;
 end;
 
 procedure THttpLogger.Append(Connection: THttpServerConnectionID;

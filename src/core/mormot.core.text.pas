@@ -458,12 +458,12 @@ type
   // use it e.g. with AJAX clients, but is would be handled as expected by all
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
-  // property names
+  // property names, which is the smallest data output within mORMot instances
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
-  // but you can use jsonEscapeUnicode to produce compact 7-bit ASCII output,
-  // with \u#### escape of all accents, e.g. as default python json.dumps
-  // - jsonNoEscapeUnicode will process any \u#### pattern and ensure proper
-  // UTF-8 is generated instead
+  // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
+  // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
+  // - jsonNoEscapeUnicode will search for any \u#### pattern and generate pure
+  // UTF-8 output instead
   // - those features are not implemented in this unit, but in mormot.core.json
   TTextWriterJsonFormat = (
     jsonCompact,
@@ -3533,7 +3533,7 @@ begin
       fStream.Free;
   if not (twoBufferIsExternal in fCustomOptions) then
     FreeMem(fTempBuf);
-  inherited;
+  inherited Destroy;
 end;
 
 function TTextWriter.PendingBytes: PtrUInt;
