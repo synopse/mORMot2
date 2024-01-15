@@ -1731,43 +1731,43 @@ begin
   if not DirectoryExists(src) then
     exit;
   dst := EnsureDirectoryExists(Dest);
-  if FindFirst(src + FILES_ALL, faAnyFile, sr) = 0 then
-  begin
-    repeat
-      reffn := src + sr.Name;
-      dstfn := dst + sr.Name;
-      if SearchRecValidFile(sr) then
-      begin
-        if FileInfoByName(dstfn, dsize, dtime) and // fast single syscall
-           (sr.Size = dsize) then
-          if sfoByContent in Options then
-          begin
-            if SameFileContent(reffn, dstfn) then
-              continue;
-          end
-          else if abs(SearchRecToUnixTimeUtc(sr) * 1000 - dtime) < 1000 then
-            continue; // allow error of 1 second timestamp resolution
-        if not CopyFile(reffn, dstfn, {failsifexists=}false) then
-          result := -1;
-      end
-      else if not SearchRecValidFolder(sr) then
-        continue
-      else if sfoSubFolder in Options then
-      begin
-        nested := CopyFolder(reffn, dstfn, Options);
-        if nested < 0 then
-          result := nested
-        else
-          inc(result, nested);
-      end;
-      if result < 0 then
-        break;
-      inc(result);
-      if sfoWriteFileNameToConsole in Options then
-        ConsoleWrite('copied %', [reffn]);
-    until (FindNext(sr) <> 0);
-    FindClose(sr);
-  end;
+  if (dst = '') or
+     (FindFirst(src + FILES_ALL, faAnyFile, sr) <> 0) then
+    exit;
+  repeat
+    reffn := src + sr.Name;
+    dstfn := dst + sr.Name;
+    if SearchRecValidFile(sr) then
+    begin
+      if FileInfoByName(dstfn, dsize, dtime) and // fast single syscall
+         (sr.Size = dsize) then
+        if sfoByContent in Options then
+        begin
+          if SameFileContent(reffn, dstfn) then
+            continue;
+        end
+        else if abs(SearchRecToUnixTimeUtc(sr) * 1000 - dtime) < 1000 then
+          continue; // allow error of 1 second timestamp resolution
+      if not CopyFile(reffn, dstfn, {failsifexists=}false) then
+        result := -1;
+    end
+    else if not SearchRecValidFolder(sr) then
+      continue
+    else if sfoSubFolder in Options then
+    begin
+      nested := CopyFolder(reffn, dstfn, Options);
+      if nested < 0 then
+        result := nested
+      else
+        inc(result, nested);
+    end;
+    if result < 0 then
+      break;
+    inc(result);
+    if sfoWriteFileNameToConsole in Options then
+      ConsoleWrite('copied %', [reffn]);
+  until (FindNext(sr) <> 0);
+  FindClose(sr);
 end;
 
 
