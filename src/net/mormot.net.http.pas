@@ -1573,6 +1573,7 @@ function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
 var
   i: PtrInt;
 begin
+  // we used https://github.com/monperrus/crawler-user-agents as starting reference
   result := false;
   i := PosEx('.com/', UserAgent);
   if i = 0 then

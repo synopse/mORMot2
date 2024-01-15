@@ -1051,6 +1051,7 @@ type
     has4xx,
     has5xx,
     hasMobile,
+    hasBot,
     hasHttps,
     hasAuthorized);
 
@@ -5123,13 +5124,19 @@ begin
           DoAppend(new, s);
       end;
     end;
-    if (Context.UserAgent^ <> '') and
-       (hasMobile in fTracked) then
-      // browser/OS detection using the User-Agent is a very tricky context
-      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
-      // we only detect mobile devices, which seems fair enough
-      if PosEx('Mobile', Context.UserAgent^) > 0 then
-        DoAppend(new, hasMobile);
+    if Context.UserAgent^ <> '' then
+    begin
+      if hasMobile in fTracked then
+        // browser/OS detection using the User-Agent is a very tricky context
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
+        // we only detect mobile devices, which seems fair enough
+        if PosEx('Mobile', Context.UserAgent^) > 0 then
+          DoAppend(new, hasMobile);
+      if hasBot in fTracked then
+        // bots detection is not easier, but naive patterns seem good enough
+        if IsHttpUserAgentBot(Context.UserAgent^) then
+          DoAppend(new, hasBot);
+    end;
     if (hsrHttps in Context.Flags) and
        (hasHttps in fTracked) then
       DoAppend(new, hasHttps);
