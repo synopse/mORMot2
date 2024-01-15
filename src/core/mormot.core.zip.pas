@@ -1322,7 +1322,7 @@ begin
   else
   begin
     inc(p, dest);
-    PCardinal(P)^ := crc32(0, buf, len); // maybe libdeflate_crc32
+    PCardinal(P)^ := crc32(0, buf, len); // may call libdeflate_crc32
     inc(PCardinal(p));
     PCardinal(p)^ := len;
     inc(PCardinal(p));
