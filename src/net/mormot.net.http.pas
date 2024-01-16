@@ -11,6 +11,7 @@ unit mormot.net.http;
    - Reusable HTTP State Machine
    - THttpSocket Implementing HTTP over plain sockets
    - Abstract Server-Side Types used e.g. for Client-Server Protocol
+   - HTTP Server Logging/Monitoring Processors
 
   *****************************************************************************
 
@@ -1347,6 +1348,11 @@ type
     // - used e.g. to fill TWebServerLocal behavior-enabled properties
     function AddToIndexes(var Indexes: TSortedWordArray;
       const Extension: RawUtf8): PtrInt;
+    /// process a request using the specified local parameters
+    // - should return 0 to continue processing, or a result code to stop any
+    // further response computation, and return the current output state
+    function Request(Context: THttpServerRequestAbstract;
+      const Local: TWebServerLocal): cardinal;
     /// file extensions of supported mime types for wsbForceMimeType behavior
     // - see also https://github.com/jshttp/mime-db/blob/master/db.json
     // - TWebServerLocal.FileTypes*[] TWordDynArray contains indexes to this
@@ -1357,6 +1363,696 @@ type
     property MimeTypeCount: integer
       read fMimeTypeCount;
   end;
+
+
+{ ******************** HTTP Server Logging/Monitoring Processors }
+
+const
+  /// THttpLogger.Parse() text matching the nginx predefined "combined" format
+  LOGFORMAT_COMBINED = '$remote_addr - $remote_user [$time_local] ' +
+    '"$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
+type
+  /// HTTP server abstract parent for Logger / Analyzer
+  // - do not use this abstract class but e.g. THttpLogger
+  // - you can merge several THttpLoger instances via the OnContinue property
+  // - OnIdle() should be called every few seconds for background process
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
+  THttpAfterResponse = class(TSynPersistent)
+  protected
+    fSafe: TOSLightLock;
+    fOnContinue: TOnHttpServerAfterResponse;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// to be overriden e.g. to flush the logs to disk or consolidate counters
+    // - this callback is likely to be executed every second from a THttpServer
+    procedure OnIdle(tix64: Int64); virtual;
+    /// process the supplied request information
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(const Context: TOnHttpServerAfterResponseContext);  virtual; abstract;
+    /// the overriden Append() method will call this event with its own process
+    property OnContinue: TOnHttpServerAfterResponse
+      read fOnContinue write fOnContinue;
+  end;
+
+  /// supported THttpLoger place holders
+  // - matches nginx log module naming, with some additional fields
+  // - values are provided as TOnHttpServerAfterResponse event parameters
+  // - variable names in format string uses RTTI e.g. '$uri" for hlvUri
+  // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
+  // - hlvBytes_Sent is the number of bytes sent to a client
+  // - hlvConnection is the THttpServerConnectionID
+  // - hlvConnection_Flags is the CSV of supplied THttpServerRequestFlags
+  // - hlvConnection_Upgrade is "upgrade" when "connection: upgrade" in headers
+  // - hlvDocument_Uri equals hlvUri value
+  // - hlvElapsed is the request processing time as text (e.g. '1.2s')
+  // - hlvElapsedMSec is the request processing time in milliseconds
+  // - hlvElapsedUSec is the request processing time in microseconds
+  // - hlvHostName is the "Host:" header value
+  // - hlvHttp_Referer is the "Referer:" header value
+  // - hlvHttp_User_Agent is the "User-Agent:" header value
+  // - hlvHttps is "on" if the connection operates in HTTPS mode
+  // - hlvMsec is current time in seconds with milliseconds resolution
+  // - hlvReceived is the request size from the client, as text
+  // - hlvRemote_Addr is the client IP address
+  // - hlvRemote_User is the user name supplied if hsrAuthorized is set
+  // - hlvRequest is the full original request line
+  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and Url values
+  // - hlvRequest_Length is the number of bytes received from the client
+  // (including headers and request body)
+  // - hlvRequest_Method is usually "GET" or "POST"
+  // - hlvRequest_Time is processing time in seconds with milliseconds resolution
+  // - hlvRequest_Uri is the full original request line with arguments
+  // - hlvScheme is either "HTTP" or "HTTPS"
+  // - hlvSent is the response size sent back to the client, as text
+  // - hlvServer_Protocol is either "HTTP/1.0" or "HTTP/1.1"
+  // - hlvStatus is the response status code (e.g. "200" or "404")
+  // - hlvTime_Epoch is the UTC time as seconds since the Unix Epoch
+  // - hlvTime_EpochMSec is the UTC time as milliseconds since the Unix Epoch
+  // - hlvTime_Iso8601 is the UTC (not local) time in the ISO 8601 standard format
+  // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
+  // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
+  // - hlvUri is the normalized current URI
+  THttpLogVariable = (
+    hlvUnknown,
+    hlvBody_Bytes_Sent,
+    hlvBytes_Sent,
+    hlvConnection,
+    hlvConnection_Flags,
+    hlvConnection_Upgrade,
+    hlvDocument_Uri,
+    hlvElapsed,
+    hlvElapsedMSec,
+    hlvElapsedUSec,
+    hlvHostName,
+    hlvHttp_Referer,
+    hlvHttp_User_Agent,
+    hlvHttps,
+    hlvMsec,
+    hlvReceived,
+    hlvRemote_Addr,
+    hlvRemote_User,
+    hlvRequest,
+    hlvRequest_Hash,
+    hlvRequest_Length,
+    hlvRequest_Method,
+    hlvRequest_Time,
+    hlvRequest_Uri,
+    hlvScheme,
+    hlvSent,
+    hlvServer_Protocol,
+    hlvStatus,
+    hlvStatus_Text,
+    hlvTime_Epoch,
+    hlvTime_EpochMSec,
+    hlvTime_Iso8601,
+    hlvTime_Local,
+    hlvTime_Http,
+    hlvUri);
+
+  /// set of supported THttpLoger place holders, matching nginx log module naming
+  THttpLogVariables = set of THttpLogVariable;
+
+  /// store an array of HTTP log variables, ready to be rendered by THttpLoger
+  // - hlvUnknown is used to define a text place holder
+  THttpLogVariableDynArray = array of THttpLogVariable;
+
+  /// exception class raised by THttpLogger
+  EHttpLogger = class(ESynException);
+
+  THttpLogger = class;
+
+  /// define how THttpLogger/THttpLoggerWriter do rotate its content
+  THttpLoggerRotate = (
+    hlrUndefined,
+    hlrDaily,
+    hlrWeekly,
+    hlrAfter1MB,
+    hlrAfter10MB,
+    hlrAfter32MB,
+    hlrAfter100MB);
+
+  /// a per-host TTextDateWriter stream class used by THttpLogger
+  THttpLoggerWriter = class(TTextDateWriter)
+  protected
+    fHost: RawUtf8;
+    fOwner: THttpLogger;
+    fFileName: TFileName;
+    fRotating: TLightLock;
+    fRotate: THttpLoggerRotate;
+    fRotateFiles: integer;
+    fRotateTix10: cardinal;
+    fRotateDate: integer; // = next Trunc(NowUtc)
+    procedure TryRotate(Tix10: cardinal);
+    procedure SetRotateDate;
+    procedure DoRotate;
+  public
+    /// initialize a TTextDateWriter instance for THttpLogger
+    constructor Create(aOwner: THttpLogger; const aHost: RawUtf8;
+      aRotate: THttpLoggerRotate; aRotateFiles: integer); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
+    /// the associated lowercased Host name of this writer
+    // - equals '' for the main access.log writer
+    property Host: RawUtf8
+      read fHost;
+    /// the file name of this .log instance
+    property FileName: TFileName
+      read fFileName;
+  end;
+  /// dynamic array used by THttpLogger to store its per-host log writers
+  THttpLoggerWriterDynArray = array of THttpLoggerWriter;
+
+  /// HTTP server responses log format parser and interpreter
+  // - once parsed, log can be emitted by Append() with very high performance
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
+  // - OnIdle() should be called every few seconds for background log writing
+  // - can perform per-host logging, and destination files rotation
+  THttpLogger = class(THttpAfterResponse)
+  protected
+    fWriterSingle: TTextDateWriter;
+    fWriterHost: THttpLoggerWriterDynArray;
+    fFormat, fLineFeed: RawUtf8;
+    fVariable: THttpLogVariableDynArray;
+    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
+    fVariables: THttpLogVariables;
+    fDestFolder: TFileName;
+    fLastTix: cardinal;
+    fFlags: set of (ffOwnWriterSingle);
+    fDefaultRotate: THttpLoggerRotate;
+    fDefaultRotateFiles: integer;
+    fWriterSafe: TLightLock;
+    procedure SetFormat(const aFormat: RawUtf8);
+    procedure SetDestFolder(const aFolder: TFileName);
+    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+    function GetPerHostFileName(const aHost: RawUtf8): TFileName; virtual;
+    function GetWriter(Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
+  public
+    /// initialize this multi-host logging instance
+    // - this is how THttpServerGeneric initializes its own logging system
+    // - caller should next set DestFolder and Format, then optionally DefineHost()
+    constructor Create; override;
+    /// initialize this instance to generate log content into a TTextDateWriter
+    // - mainly used for internal testing purposes
+    constructor CreateWithWriter(aWriter: TTextDateWriter;
+      const aFormat: RawUtf8 = LOGFORMAT_COMBINED);
+    /// initialize this instance to generate a new log file
+    // - if you need basic logging abilities - not used by THttpServerGeneric
+    constructor CreateWithFile(const aFileName: TFileName;
+      const aFormat: RawUtf8 = LOGFORMAT_COMBINED);
+    /// finalize this instance
+    destructor Destroy; override;
+    /// overriden to flush the logs to disk
+    procedure OnIdle(tix64: Int64); override;
+    /// parse a HTTP server log format string
+    // - returns '' on success, or an error message on invalid input
+    // - recognized $variable names match trimmed THttpLogVariable enumeration
+    // - the Format property will call this method and raise EHttpLogger on error
+    function Parse(const aFormat: RawUtf8): RawUtf8; virtual;
+    /// register a HTTP host to process its own log file
+    // - you can customize its rotation process, if needed
+    // - fails if CreateWithWriter or CreateWithFile constructors were used
+    procedure DefineHost(const aHost: RawUtf8;
+      aRotate: THttpLoggerRotate = hlrUndefined;
+      aRotateFiles: integer = -1); virtual;
+    /// append a request information to the destination log file
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
+    /// direct access to the output format
+    // - if not supplied in Create() you can assign a format at runtime via this
+    // property to call Parse() - raising EHttpLogger on error
+    property Format: RawUtf8
+      read fFormat write SetFormat;
+    /// where the log files will be stored, if not supplied in CreateWithFile()
+    // - one main DestFolder + 'access.log' (rotated) file will be maintained
+    // - if not defined, GetSystemPath(spLog) will be used
+    // - DefineHost() could generate additional per Host (rotated) log file
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DestFolder: TFileName
+      read fDestFolder write SetDestFolder;
+    /// define when log file rotation should occur
+    // - default value is hlrAfter10MB
+    // - you can customize this in DefineHost() optional aRotate parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotate: THttpLoggerRotate
+      read fDefaultRotate write fDefaultRotate;
+    /// how many log files are kept by default, including the main file
+    // - default value is 9, i.e. to generate 'xxx.1.gz' up to 'xxx.9.gz'
+    // - setting 0 would disable the whole rotation process
+    // - you can customize this in DefineHost() optional aRotateFiles parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotateFiles: integer
+      read fDefaultRotateFiles write fDefaultRotateFiles;
+    /// customize the log line feed pattern
+    // - matches the operating system value by default (CR or CRLF)
+    property LineFeed: RawUtf8
+      read fLineFeed write fLineFeed;
+    /// low-level access to the parsed log format state machine
+    // - mainly used for internal testing purposes
+    property Variable: THttpLogVariableDynArray
+      read fVariable;
+    /// low-level access to the parsed log format used variables
+    // - mainly used for internal testing purposes
+    property Variables: THttpLogVariables
+      read fVariables;
+    /// low-level access to the main destination TTextWriter instance
+    // - as specified in Create()
+    // - mainly used for internal testing purposes
+    property WriterSingle: TTextDateWriter
+      read fWriterSingle;
+    /// low-level access to the per-host destination TTextWriter instance
+    // - mainly used for internal testing purposes
+    property WriterHost: THttpLoggerWriterDynArray
+      read fWriterHost;
+  end;
+
+  /// exception raised by THttpAnalyzer related classes
+  EHttpAnalyzer = class(ESynException);
+
+  /// each kind of counters covered by THttpAnalyzer / THttpMetrics
+  // - i.e. HTTP verbs, HTTP status codes, UserAgent or HTTP scheme or auth
+  // - you can interpolate hasDesktop/hasHttp/hasUnAuthorized-like counters as
+  // ! Diff(state[hasAny], state[hasMobile/hasHttps/hasAuthorized])
+  THttpAnalyzerScope = (
+    hasAny,
+    hasGet,
+    hasHead,
+    hasPost,
+    hasPut,
+    hasDelete,
+    hasOptions,
+    has1xx,
+    has2xx,
+    has3xx,
+    has4xx,
+    has5xx,
+    hasMobile,
+    hasBot,
+    hasHttps,
+    hasAuthorized);
+
+  /// the kind of counters covered by THttpAnalyzer / THttpMetrics
+  THttpAnalyzerScopes = set of THttpAnalyzerScope;
+
+  /// possible time periods used for THttpAnalyzer data consolidation
+  // - hapCurrent, hapYear and hapAll are only available in THttpAnalyzer context
+  // - TOnHttpAnalyzerSave and THttpMetrics handle hapMinute..hapMonth only
+  THttpAnalyzerPeriod = (
+    hapCurrent,
+    hapMinute,
+    hapHour,
+    hapDay,
+    hapMonth,
+    hapYear,
+    hapAll);
+  /// the time periods used for THttpAnalyzer consolidation
+  THttpAnalyzerPeriods = set of THttpAnalyzerPeriod;
+
+  /// count unit for THttpAnalyzer information as 64-bit unsigned integer
+  THttpAnalyzerTotal = type QWord;
+  /// size unit for THttpAnalyzer information in bytes
+  THttpAnalyzerBytes = type QWord;
+
+  /// define a THttpAnalyzerScope counter state, may be after consolidation
+  // - counters are maintained by period and by scope, and are cumulative
+  // - each record consumes 32 bytes of memory on all platforms
+  {$ifdef USERECORDWITHMETHODS}
+  THttpAnalyzerState = record
+  {$else}
+  THttpAnalyzerState = object
+  {$endif USERECORDWITHMETHODS}
+    /// number of requests processed for this counter
+    Count: THttpAnalyzerTotal;
+    /// resolution-variable time measured for processing this counter
+    // - excludes the incoming request communication, but include actual
+    // computation and response transmission
+    // - actual unit depends on the Period involved: hapCurrent as microsec,
+    // hapMinute/hapHour/hapDay/hapAll as millisec, hapMonth/hapYear as sec
+    // - use TimeMicroSec() function to retrieve the actual value
+    Time: cardinal;
+    /// approximate/relative number of unique IPs concerned by this counter
+    // - only populated if THttpAnalyzer.UniqueIPDepth is set to a hash bitsize
+    // - for hapMinute, this field is computed using a hashtable of IPs,
+    // so should be considered as a somewhat good approximation of the reality
+    // - for periods longer than hapMinute, this field is the sum of numbers
+    // of unique IPs per minute for all nested minutes, so is relevant to compare
+    // values in the same period only (e.g. divided by the number of collected
+    // minutes to get the average unique IP count per minute)
+    // - it should always considered as a relative number, not an absolute number
+    UniqueIP: cardinal;
+    /// number of bytes received from the client for this counter requests
+    Read: THttpAnalyzerBytes;
+    /// number of bytes written back to the client for this counter responses
+    Write: THttpAnalyzerBytes;
+    /// fill all field values with 0
+    procedure Clear;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// copy all field values from another counter state
+    procedure From(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// add all field values from another counter state
+    procedure Add(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// substract all field values from another counter state
+    procedure Sub(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// returns the processing time as MicroSeconds
+    // - computed from the 32-bit Time field, with the Period unit
+    function TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// pointer to a given counter
+  PHttpAnalyzerState = ^THttpAnalyzerState;
+  /// information about all possible counters
+  THttpAnalyzerStates = array[THttpAnalyzerScope] of THttpAnalyzerState;
+  /// pointer to information about all possible counters
+  PHttpAnalyzerStates = ^THttpAnalyzerStates;
+  /// a dynamic array of counters information
+  THttpAnalyzerStateDynArray = array of THttpAnalyzerState;
+
+  /// store all consolidated states in a Round-Robin manner
+  THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
+
+  /// transient in-memory storage of THttpAnalyzer states to be persisted
+  // - map all the information to be persisted on disk as CSV, binary or SQL
+  // - each record consumes 40 bytes of memory on all platforms
+  {$ifdef USERECORDWITHMETHODS}
+  THttpAnalyzerToSave = record
+  {$else}
+  THttpAnalyzerToSave = object
+  {$endif USERECORDWITHMETHODS}
+    /// the timestamp of the data consolidation - from UnixTimeMinimalUtc()
+    // - use the DateTime method to retrieve an usable value
+    Date: cardinal;
+    /// the resolution time period (hapMinute .. hapAll)
+    Period: THttpAnalyzerPeriod;
+    /// the corresponding counter
+    Scope: THttpAnalyzerScope;
+    {$ifndef USERECORDWITHMETHODS}
+    _padding: word; // needed on Delphi 7
+    {$endif USERECORDWITHMETHODS}
+    /// the whole information about this counter in this Period at Date
+    State: THttpAnalyzerState;
+    /// wrap UnixTimeToDateTime(Date + UNIXTIME_MINIMAL) to return a TDateTime
+    function DateTime: TDateTime;
+     {$ifdef HASINLINE} inline; {$endif}
+  end;
+  /// a pointer to a THttpAnalyzerToSave memory
+  PHttpAnalyzerToSave = ^THttpAnalyzerToSave;
+  /// a dynamic array of THttpAnalyzerToSave
+  THttpAnalyzerToSaveDynArray = array of THttpAnalyzerToSave;
+  /// a wrapper to THttpAnalyzerToSave items
+  THttpAnalyzerToSaveArray = array[
+    0 .. (MaxInt div SizeOf(THttpAnalyzerToSave)) - 1] of THttpAnalyzerToSave;
+  /// a pointer to THttpAnalyzerToSave items
+  PHttpAnalyzerToSaveArray = ^THttpAnalyzerToSaveArray;
+
+  /// event callback signature to persist THttpAnalyzer information
+  // - is called with State.Period in hapMinute..hapMonth range
+  TOnHttpAnalyzerSave = procedure(
+    const State: THttpAnalyzerToSaveDynArray) of object;
+
+  /// HTTP server real-time responses consolidation
+  // - will gather at real time the main information about HTTP requests,
+  // then consolidate the data in main time periods
+  // - this does not replace a full log parsing/monitoring solution, but could
+  // give good hints about the current server status, with no third-party tool
+  // - OnIdle() should be called every few seconds for background process
+  // - Append() match TOnHttpServerAfterResponse as real-time source of data
+  // - OnSave() event could be assigned e.g. to a THttpAnalyzerPersistAbstract
+  THttpAnalyzer = class(THttpAfterResponse)
+  protected
+    fTracked, fSaved: THttpAnalyzerScopes;
+    fModified: boolean; // for UpdateSuspendFile
+    fOnSave: TOnHttpAnalyzerSave;
+    fSuspendFile: TFileName;
+    fState: THttpAnalyzerConsolidated;
+    fUniqueIPDepth: cardinal;
+    fUniqueIP: array[THttpAnalyzerScope] of TByteDynArray;
+    fToSave: record
+      Count: integer;
+      State: THttpAnalyzerToSaveDynArray;
+    end;
+    fSuspendFileAutoSaveMinutes: cardinal;
+    fSuspendFileAutoSaveTix, fLastConsolidate: cardinal;
+    fConsolidateNextTime: array[hapMinute .. hapYear] of TDateTime;
+    procedure SetUniqueIPDepth(value: cardinal);
+    procedure ComputeConsolidateTime(last: THttpAnalyzerPeriod; ref: TDateTime);
+    procedure Consolidate(tixsec: cardinal);
+    procedure DoAppend(const new: THttpAnalyzerState; s: THttpAnalyzerScope);
+    procedure DoSave;
+  public
+    /// initialize this HTTP server analyzer instance
+    // - you can specify an optional file name to persist the current counters
+    // state as compressed binary, which will be read in the constructor
+    // and written in Destroy or via UpdateSuspendFile/SuspendFileSaveMinutes
+    constructor Create(const aSuspendFile: TFileName = '';
+      aSuspendFileSaveMinutes: integer = 1); reintroduce;
+    /// finalize this instance, with proper persistence of the pending counters
+    destructor Destroy; override;
+    /// overriden to consolidate the counters and optionally persist them
+    // - this callback is likely to be executed every second from a THttpServer
+    procedure OnIdle(tix64: Int64); override;
+    /// append a request information to the internal counters
+    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
+    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
+    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
+    /// retrieve the current state for a given period and scope
+    // - consolidate hapMinute..hapYear values up to the requested Period
+    // - this method is thread-safe
+    procedure Get(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+      out State: THttpAnalyzerState);
+    /// force persistence of the pending counters
+    procedure UpdateSuspendFile;
+    /// a power-of-two bits size in range 2048..65536 for UniqueIP detection
+    // - is the bits size of a per-THttpAnalyzerScope hash table
+    // - set to 0 by default, to disable this feature
+    // - should be set to a value bigger than the maximum number of unique IP,
+    // since by design, THttpAnalyzerState.UniqueIP could never exceed this
+    property UniqueIPDepth: cardinal
+      read fUniqueIPDepth write SetUniqueIPDepth;
+    /// the frequency on which OnIdle() calls UpdateSuspendFile
+    // - set to 0 to be disabled
+    property SuspendFileAutoSaveMinutes: cardinal
+      read fSuspendFileAutoSaveMinutes;
+    /// direct access to the current state since the beginning
+    // - this property is not thread-safe, and does not include hapCurrent
+    // pending values: use Get() instead
+    property Total: THttpAnalyzerStates
+      read fState[hapAll];
+    /// event handler used to persist the information
+    property OnSave: TOnHttpAnalyzerSave
+      read fOnSave write fOnSave;
+  published
+    /// define which THttpAnalyzerScopes fields are to be tracked
+    property Tracked: THttpAnalyzerScopes
+      read fTracked write fTracked;
+    /// define which THttpAnalyzerScopes fields are to be sent to OnSave()
+    property Saved: THttpAnalyzerScopes
+      read fSaved write fSaved;
+    /// just a redirection to the number of requests since the beginning
+    property TotalRequests: THttpAnalyzerTotal
+      read fState[hapAll, hasAny].Count;
+    /// just a redirection to the millisecond time processing since the beginning
+    property TotalTime: cardinal
+      read fState[hapAll, hasAny].Time;
+  end;
+
+  /// abstract parent class used to persist THttpAnalyzer information in files
+  THttpAnalyzerPersistAbstract = class(TSynPersistent)
+  protected
+    fFileName: TFileName;
+  public
+    /// intitialize this persistence instance
+    constructor Create(const aFileName: TFileName); reintroduce; virtual;
+  published
+    /// the current persistent file name
+    property FileName: TFileName
+      read fFileName;
+  end;
+
+  /// class allowing to persist THttpAnalyzer information into a CSV file
+  // - output will have Date,Period,Scope,Count,Time,Read,Write columns
+  THttpAnalyzerPersistCsv = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will persist the state items as CSV rows
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  end;
+
+  /// class allowing to persist THttpAnalyzer information into a JSON file
+  // - format will be a JSON array of THttpAnalyzerToSave JSON objects as
+  // $ {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  // with "p" and "s" fields being ord(THttpAnalyzerPeriod/THttpAnalyzerScope)
+  THttpAnalyzerPersistJson = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will persist the state items as JSON objects
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  end;
+
+  /// class allowing to persist THttpAnalyzer information into a binary file
+  // - output will just be raw THttpAnalyzerToSave array memory layout with no
+  // encoding nor compression involved
+  // - is likely to be persisted in hapMinute resolution up to one month (28MB)
+  // - to be further aggregated and searched by THttpMetrics.AddFromBinary()
+  THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
+  public
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  end;
+
+  /// metadata as decoded by THttpMetrics.LoadHeader() class function
+  THttpMetricsHeader = record
+    /// how many events are in this file
+    Count: cardinal;
+    /// events counter per time period
+    Period: array[hapMinute .. hapMonth] of cardinal;
+    /// the timestamp of the first event in this file
+    First: TDateTime;
+    /// the timestamp of the last event in this file
+    Last: TDateTime;
+    /// the compression algorithm used with THttpMetrics.SaveToFile()
+    Algo: TAlgoCompress;
+    /// the crc32c of all data rows - could be used e.g. to compare files
+    Crc: cardinal;
+    /// the binary size of the internal format extensions stored with the data
+    // - <> 0 if THttpMetrics.GetExtensions/SetExtensions were overriden
+    ExtensionSize: cardinal;
+    /// some custom text or JSON, as set to THttpMetrics.Metadata field
+    Metadata: RawUtf8;
+  end;
+
+  /// exception class raised during THttpMetrics process
+  EHttpMetrics = class(ESynException);
+
+  /// class used to read/write and search persisted THttpAnalyzer information
+  // - you can aggregate several input files, then persist the metrics using our
+  // optimized .mhm file encoding ("mhm" for "mORMot HTTP Metrics")
+  // - Find() method allows to quickly retrieve any range of information for
+  // a given time period and metric type
+  // - supports up to 10,485,760 metrics per instance (see HTTPMETRICS_MAXCOUNT)
+  THttpMetrics = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+    fCount: integer;
+    fPeriodLastCount: integer;
+    fState: TRawByteStringGroup; // avoid in-memory fragmentation
+    fDynArray: TDynArray;
+    // by design, about 60 of 61 items are actual hapMinute values: no index
+    fPeriod: array[hapHour .. hapMonth] of record
+      Index: TIntegerDynArray;
+      Count: PtrInt;
+    end;
+    fLastRangeToIndex: record // naive but efficient e.g. from a dashboard
+      sta, sto, ista, isto: cardinal;
+    end;
+    fMetadata: RawUtf8;
+    procedure CreateDynArray;
+    procedure GetExtensions(out data: RawByteString); virtual;
+    function SetExtensions(const data: TValueResult): boolean; virtual;
+    function StateAsCompactArray: PDynArray; // compact and set fDynArray
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure ResetPeriodIndex;
+    procedure CreatePeriodIndex;
+    function RangeToIndex(start, stop: TDateTime;
+      out istart, istop: integer): PHttpAnalyzerToSaveArray;
+    function RangeToPeriodIndex(period: THttpAnalyzerPeriod;
+      start, stop: integer; out pstart, pstop: PInteger): integer;
+  public
+    /// release all stored data
+    procedure Clear;
+    /// append a FileName content in the THttpAnalyzerPersistBinary format
+    function AddFromBinary(const FileName: TFileName): boolean;
+    /// append a memory buffer in the THttpAnalyzerPersistBinary format
+    function AddFromBuffer(const Buffer: RawByteString): boolean;
+    {
+    /// append a FileName content in .log or .log.gz format
+    // - instantiate THttpLogger/THttpAnalyzer instances to parse and decode
+    function AddFromLog(const FileName: TFileName;
+      const Format: RawUtf8 = LOGFORMAT_COMBINED): boolean;
+    }
+    /// persist all metrics into a file in our optimized .mhm binary format
+    // - use variable-length integer encoding, then optional compression
+    // - keep default Algo = nil if you don't want to compress the content
+    procedure SaveToFile(const Dest: TFileName; Algo: TAlgoCompress);
+    /// load .mhm file content as generated by SaveToFile() persistence
+    // - will first clear any previous data, then uncompress and decode the file
+    function LoadFromFile(const Source: TFileName): boolean;
+    /// persist all this data in our optimized binary encoding
+    // - i.e. with variable-length integer encoding, but no compression
+    procedure SaveToWriter(Dest: TBufferWriter);
+    /// load the data from SaveToWriter() memory content
+    function LoadFromReader(var Source: TFastReader): boolean;
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    // - will add the saved states to the internal in-memory storage
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+    /// direct access to the internal stored data - from Row in [0..Count-1]
+    // - make a thread-safe copy of the data
+    function GetState(Row: integer; out State: THttpAnalyzerToSave): boolean;
+    /// raw thread-unsafe access to the data - to be protected with Safe.Lock
+    function Get(Row: integer): PHttpAnalyzerToSave;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// search for a Period/Scope information for a given time range
+    // - Period could be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - very fast, using per-Period indexes for hapHour .. hapMonth
+    function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+      Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+    /// class function able to retrieve the metadata of our optimized binary format
+    class function LoadHeader(const FileName: TFileName;
+      out Info: THttpMetricsHeader): boolean;
+    /// some custom text persisted in our SaveToFile/LoadFromFile header
+    // - you can specify here e.g. some human-readable description of the
+    // file content, as plain text or JSON
+    property Metadata: RawUtf8
+      read fMetadata write fMetadata;
+    /// access to the thread-safety NOT reentrant lock
+    property Safe: TLightLock
+      read fSafe write fSafe;
+  published
+    /// how many rows are currently in State[] memory buffer
+    property Count: integer
+      read fCount;
+  end;
+
+const
+  /// time unit for THttpAnalyzerState.Time values
+  // - hapCurrent are stored as microseconds, hapMinute/hapHour/hapDay/hapAll
+  // as milliseconds, and hapMonth/hapYear as seconds
+  // - as used when inlining the THttpAnalyzerState.TimeMicroSec method
+  HTTPANALYZER_TIMEUNIT: array[THttpAnalyzerPeriod] of cardinal = (
+    1,        // hapCurrent
+    1000,     // hapMinute
+    1000,     // hapHour
+    1000,     // hapDay
+    1000000,  // hapMonth
+    1000000,  // hapYear
+    1000);    // hapAll
+
+  /// we support up to 10,485,760 metrics per THttpMetrics instance
+  // - i.e. 400MB of continuous memory buffer for its internal storage
+  // - one year of minute-resolution data uses around 320MB (60*24*365*16*40)
+  // - hapMinute should be better stored per month - i.e. up to 28MB
+  // - allow to maintain two bufers (compressed + uncompressed) even on Win32
+  HTTPMETRICS_MAXCOUNT = (400 shl 20) div SizeOf(THttpAnalyzerToSave);
+
+  /// low level magic marker in THttpMetrics .mhm binary files
+  // - may not be at the beginning of the file, if compression was enabled: use
+  // rather THttpMetrics.LoadHeader if you want to identify .mhm files
+  HTTPMETRICS_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
+
+
+function ToText(s: THttpAnalyzerScope): PShortString; overload;
+function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
+function ToText(v: THttpLogVariable): PShortString; overload;
+function ToText(r: THttpLoggerRotate): PShortString; overload;
+
 
 
 implementation
@@ -3344,8 +4040,1778 @@ begin
     Indexes.Add(result);
 end;
 
+function TWebServerGlobal.Request(Context: THttpServerRequestAbstract;
+  const Local: TWebServerLocal): cardinal;
+begin
+  result := 0; // should continue the process
+
+end;
+
+
+
+{ ******************** HTTP Server Logging/Monitoring Processors }
+
+{ THttpAfterResponse }
+
+constructor THttpAfterResponse.Create;
+begin
+  fSafe.Init;
+end;
+
+destructor THttpAfterResponse.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+procedure THttpAfterResponse.OnIdle(tix64: Int64);
+begin
+  // do nothing by default
+end;
+
+
+{ THttpLoggerWriter }
+
+procedure THttpLoggerWriter.SetRotateDate;
+var
+  dt: TDateTime;
+  day: integer;
+begin
+  dt := NowUtc; // no local date/time because it may go back in time
+  day := Trunc(dt);
+  case fRotate of
+    hlrDaily:
+      // trigger next day just after UTC midnight
+      fRotateDate := day + 1;
+    hlrWeekly:
+      // Sunday is DayOfWeek 1, Saturday is 7
+      fRotateDate := day + 8 - DayOfWeek(dt); // next Sunday after UTC midnight
+  end;
+end;
+
+procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
+var
+  needrotate: boolean;
+  siz: PtrUInt;
+begin
+  // quickly check if we need to rotate this .log file
+  if (fStream = nil) or
+     not fRotating.TryLock then
+    exit; // avoid race condition (paranoid)
+  siz := TextLength;
+  needrotate := siz >= 100 shl 20; // force always above 100MB
+  case fRotate of
+    hlrDaily,
+    hlrWeekly:
+      if Tix10 >= fRotateTix10 then
+      begin
+        fRotateTix10 := Tix10 + 60 * 60; // check fRotateDate every hour
+        if Trunc(NowUtc) >= fRotateDate then
+        begin
+          SetRotateDate; // always prepare next rotation date
+          if siz <> 0 then // something to rotate
+            needrotate := true;
+        end;
+      end;
+    hlrAfter1MB:
+      needrotate := siz >= 1 shl 20;
+    hlrAfter10MB:
+      needrotate := siz >= 10 shl 20;
+    hlrAfter32MB:
+      needrotate := siz >= 32 shl 20;
+  end; // hlrAfter100MB + hlrUndefined = above 100MB
+  if needrotate then
+  try
+    // rotate the file now - in a dedicated method
+    DoRotate;
+  finally
+    fRotating.UnLock; // eventually release
+  end
+  else
+    fRotating.UnLock; // quick execution path if nothing to rotate
+end;
+
+procedure THttpLoggerWriter.DoRotate;
+var
+  fn: array of TFileName;
+  tocompress: TFileName;
+  i, old: PtrInt;
+begin
+  fOwner.fSafe.Lock;
+  try
+    // close this .log file
+    FlushFinal;
+    FreeAndNil(fStream);
+    if fRotateFiles > 0 then
+    begin
+      // perform file rotations similar to the standard logrotate tool
+      SetLength(fn, fRotateFiles); // = 9 by default
+      old := 0;
+      for i := fRotateFiles downto 1 do
+      begin
+        fn[i - 1] := FormatString('%.%.gz', [fFileName, i]);
+        if (old = 0) and
+           FileExists(fn[i - 1]) then
+          old := i;
+      end;
+      if old = fRotateFiles then
+        DeleteFile(fn[old - 1]);         // delete e.g. 'xxx.9.gz'
+      for i := fRotateFiles - 1 downto 1 do
+        RenameFile(fn[i - 1], fn[i]);    // e.g. 'xxx.8.gz' -> 'xxx.9.gz'
+      tocompress := fFileName + '.tmp';
+      RenameFile(fFileName, tocompress); // 'xxx' -> 'xxx.tmp'
+    end;
+    // create a new .log file with the same file name
+    fStream := TFileStreamEx.Create(fFileName, fmCreate or fmShareDenyWrite);
+    CancelAll;
+  finally
+    fOwner.fSafe.UnLock;
+  end;
+  // compress 'xxx.tmp' -> 'xxx.1.gz' outside the main lock
+  if tocompress <> '' then
+    try
+      GZFile(tocompress, fn[0], {level=}1); // may use libdeflate
+    finally
+      DeleteFile(tocompress);
+    end;
+end;
+
+constructor THttpLoggerWriter.Create(aOwner: THttpLogger; const aHost: RawUtf8;
+  aRotate: THttpLoggerRotate; aRotateFiles: integer);
+begin
+  fHost := aHost;
+  fOwner := aOwner;
+  fRotate := aRotate;
+  fFileName := fOwner.GetPerHostFileName(aHost);
+  inherited Create(TFileStreamEx.CreateWrite(fFileName), 65536);
+  fCustomOptions := [twoNoWriteToStreamException,
+                     twoFlushToStreamNoAutoResize,
+                     twoStreamIsOwned];
+  fOnFlushToStream := fOwner.OnFlushToStream;
+  SetRotateDate;
+end;
+
+destructor THttpLoggerWriter.Destroy;
+begin
+  FlushFinal;
+  inherited Destroy;
+end;
+
+
+{ THttpLogger }
+
+constructor THttpLogger.Create;
+begin
+  inherited Create;
+  fLineFeed := CRLF; // default operating-system dependent Line Feed
+  fDefaultRotate := hlrAfter10MB;
+  fDefaultRotateFiles := 9;
+end;
+
+constructor THttpLogger.CreateWithWriter(aWriter: TTextDateWriter;
+  const aFormat: RawUtf8);
+var
+  err: RawUtf8;
+begin
+  Create;
+  fWriterSingle := aWriter;
+  if aFormat = '' then
+    exit; // format will be supplied later
+  err := Parse(aFormat);
+  if err <> '' then
+    raise EHttpLogger.CreateUtf8('%.Create: %', [self, err]);
+end;
+
+constructor THttpLogger.CreateWithFile(const aFileName: TFileName;
+  const aFormat: RawUtf8);
+begin
+  fFlags := [ffOwnWriterSingle];
+  CreateWithWriter(TTextDateWriter.CreateOwnedFileStream(aFileName, 65536), aFormat);
+end;
+
+destructor THttpLogger.Destroy;
+var
+  i: PtrInt;
+begin
+  inherited Destroy;
+  if fWriterSingle <> nil then
+    fWriterSingle.FlushFinal;
+  if ffOwnWriterSingle in fFlags then
+    FreeAndNilSafe(fWriterSingle);
+  for i := 0 to high(fWriterHost) do
+    FreeAndNilSafe(fWriterHost[i]);
+end;
+
+procedure THttpLogger.OnIdle(tix64: Int64);
+var
+  i: PtrInt;
+  tix10: cardinal;
+begin
+  tix10 := tix64 shr 10;
+  if (tix10 = fLastTix) or
+     ((fWriterHost = nil) and
+      (fWriterSingle = nil)) then
+    exit; // nothing to process
+  fSafe.Lock;
+  try
+    // force write to disk and check for any rotation at least every second
+    if fWriterSingle <> nil then
+      fWriterSingle.FlushFinal;
+    for i := 0 to length(fWriterHost) - 1 do
+    begin
+      fWriterHost[i].FlushFinal;
+      fWriterHost[i].TryRotate(tix10); // optional rotation
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpLogger.GetPerHostFileName(const aHost: RawUtf8): TFileName;
+begin
+  if fDestFolder = '' then
+    fDestFolder := GetSystemPath(spLog); // default if not customized
+  result := fDestFolder;
+  if aHost = '' then
+    result := result + 'access.log'
+  else
+    result := FormatString('%%.log', [result, LowerCase(aHost)]);
+end;
+
+function THttpLogger.GetWriter(
+  Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
+var
+  n: integer;
+  p: ^THttpLoggerWriter;
+begin
+  // quickly retrieve the corresponding instance
+  result := fWriterSingle;
+  if result <> nil then
+    exit;
+  fWriterSafe.Lock;
+  p := pointer(fWriterHost);
+  if p = nil then
+    // no previous DefineHost() call: set fWriterHost[0] = access.log instance
+    try
+      result := THttpLoggerWriter.Create(
+                  self, '', fDefaultRotate, fDefaultRotateFiles);
+      ObjArrayAdd(fWriterHost, result);
+    finally
+      fWriterSafe.UnLock;
+    end
+  else
+  begin
+    result := p^; // p^ = fWriterHost[0] = access.log as default
+    if Host <> '' then
+    begin
+      n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+      repeat
+        inc(p);
+        dec(n);
+        if n = 0 then
+          break;
+        if IdemPropNameU(p^.Host, Host) then
+        begin
+          result := p^; // found matching log for this Host name
+          break;
+        end;
+      until false;
+    end;
+    fWriterSafe.UnLock;
+    THttpLoggerWriter(result).TryRotate(Tix10); // outside of main lock
+  end;
+end;
+
+procedure THttpLogger.DefineHost(const aHost: RawUtf8;
+  aRotate: THttpLoggerRotate; aRotateFiles: integer);
+var
+  i: PtrInt;
+  w: THttpLoggerWriter;
+  h: RawUtf8;
+begin
+  h := OnlyChar(LowerCase(aHost), ['a'..'z', '0'..'9', '.', '%']);
+  if (h = '') or
+     (fWriterSingle <> nil) then
+    raise EHttpLogger.CreateUtf8('Unexpected %.DefineHost(%)', [self, aHost]);
+  fWriterSafe.Lock;
+  try
+    if fWriterHost = nil then
+    begin
+      // first call: we need to set fWriterHost[0] = access.log
+      w := THttpLoggerWriter.Create(
+             self, '', fDefaultRotate, fDefaultRotateFiles);
+      ObjArrayAdd(fWriterHost, w);
+    end
+    else
+      // search if we need to update a previous DefineHost()
+      for i := 1 to length(fWriterHost) - 1 do
+      begin
+        w := fWriterHost[i];
+        if IdemPropNameU(w.Host, h) then
+        begin
+          if aRotate <> hlrUndefined then
+            w.fRotate := aRotate;
+          if aRotateFiles >= 0 then
+            w.fRotateFiles := aRotateFiles;
+          w.SetRotateDate;
+          exit;
+        end;
+      end;
+    // add a new definition for this new host
+    if aRotate = hlrUndefined then
+      aRotate := fDefaultRotate;
+    if aRotateFiles < 0 then
+      aRotateFiles := fDefaultRotateFiles;
+    w := THttpLoggerWriter.Create(self, h, aRotate, aRotateFiles);
+    ObjArrayAdd(fWriterHost, w);
+  finally
+    fWriterSafe.UnLock;
+  end;
+end;
+
+procedure THttpLogger.SetFormat(const aFormat: RawUtf8);
+var
+  err: RawUtf8;
+begin
+  err := Parse(aFormat);
+  if err <> '' then
+    raise EHttpLogger.CreateUtf8('%.SetFormat: %', [self, err]);
+end;
+
+procedure THttpLogger.SetDestFolder(const aFolder: TFileName);
+begin
+  fDestFolder := EnsureDirectoryExists(aFolder, EHttpLogger);
+  if not IsDirectoryWritable(fDestFolder) then // better fail ASAP
+    raise EHttpLogger.CreateUtf8('Not writable %.DestFolder = %', [self, aFolder]);
+end;
+
+function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
+var
+  p, start: PUtf8Char;
+  v: integer;
+begin
+  // reset any previous format
+  fVariable := nil;
+  fVariables := [];
+  fUnknownPosLen := nil;
+  // actually parse the input
+  result := 'No Format';
+  if aFormat = '' then
+    exit;
+  result := 'Format is too long';
+  if length(aFormat) shr 16 <> 0 then
+    exit; // fUnknownPosLen[] are encoded as two 16-bit values
+  result := '';
+  fFormat := aFormat;
+  p := pointer(aFormat);
+  repeat
+    start := p;
+    while not (p^ in [#0, '$']) do
+      inc(p);
+    if p <> start then
+    begin
+      SetLength(fVariable, length(fVariable) + 1); // append 0 = hlvUnknown
+      AddInteger(fUnknownPosLen, (start - pointer(aFormat)) +  // 16-bit pos
+                                 ((p - start) shl 16))         // 16-bit len
+    end;
+    if p^ = #0 then
+      break;
+    inc(p); // ignore '$'
+    start := p;
+    while tcIdentifier in TEXT_CHARS[p^] do
+      inc(p);
+    v := GetEnumNameValueTrimmed(TypeInfo(THttpLogVariable), start, p - start);
+    if v <= 0 then
+    begin
+      FormatUtf8('Unknown $% variable', [start], result);
+      break;
+    end;
+    SetLength(fVariable, length(fVariable) + 1);
+    fVariable[high(fVariable)] := THttpLogVariable(v);
+    include(fVariables, THttpLogVariable(v));
+  until false;
+  // reset internal state on error parsing
+  if result = '' then
+    exit;
+  fFormat := '';
+  fVariable := nil;
+  fVariables := [];
+  fUnknownPosLen := nil;
+end;
+
+procedure THttpLogger.Append(const Context: TOnHttpServerAfterResponseContext);
+var
+  n: integer;
+  tix10: cardinal;
+  v: ^THttpLogVariable;
+  poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
+  wr: TTextDateWriter;
+const
+  SCHEME: array[boolean] of string[7]  = ('http', 'https');
+  HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
+begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue(Context);
+  if fVariable = nil then // nothing to process
+    exit;
+  // retrieve the output stream for the expected .log file
+  tix10 := GetTickCount64 shr 10;
+  wr := GetWriter(tix10, RawUtf8(Context.Host));
+  if (wr = nil) or
+     (wr.Stream = nil) then
+    exit;
+  // very efficient log generation with no transient memory allocation
+  v := pointer(fVariable);
+  n := length(fVariable);
+  poslen := pointer(fUnknownPosLen); // 32-bit array into 16-bit pos,len pairs
+  fSafe.Lock;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+    // code within the loop should not raise exceptions
+  {$endif HASFASTTRYFINALLY}
+    repeat
+      case v^ of // compile as a fast lookup table jump on FPC
+        hlvUnknown: // plain text
+          begin
+            wr.AddNoJsonEscape(@PByteArray(fFormat)[poslen^[0]], poslen^[1]);
+            poslen := @poslen^[2]; // next pos,len pair
+          end;
+        hlvBody_Bytes_Sent, // no body size by now
+        hlvBytes_Sent:
+          wr.AddQ(Context.Sent);
+        hlvConnection:
+          wr.AddQ(Context.Connection); // Connection ID (or Serial)
+        hlvConnection_Flags:
+          PRttiInfo(TypeInfo(THttpServerRequestFlag))^.
+            EnumBaseType^.GetSetNameJsonArray(
+              wr, byte(Context.Flags), ',', #0, {fullasstar=}false, {trim=}true);
+        hlvConnection_Upgrade:
+          if hsrConnectionUpgrade in Context.Flags then
+            wr.AddShorter('upgrade');
+        hlvDocument_Uri,
+        hlvUri:
+          //TODO: normalize URI
+          wr.AddString(RawUtf8(Context.Url));
+        hlvElapsed:
+          wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
+        hlvElapsedUSec:
+          wr.AddQ(Context.ElapsedMicroSec);
+        hlvElapsedMSec,
+        hlvRequest_Time: // no socket communication time included by now
+          if Context.ElapsedMicroSec < 1000 then
+            wr.Add('0') // less than 1 ms
+          else
+            wr.AddSeconds(QWord(Context.ElapsedMicroSec) div 1000);
+        hlvHostName:
+          if (Context.Host = nil) or
+             ((PClass(wr)^ = THttpLoggerWriter) and
+              (THttpLoggerWriter(wr).Host <> '')) then
+            wr.Add('-') // no need to write $hostname in a per-host log
+          else
+            wr.AddString(RawUtf8(Context.Host));
+        hlvHttp_Referer:
+          if Context.Referer = nil then
+            wr.Add('-')
+          else
+            wr.AddString(RawUtf8(Context.Referer));
+        hlvHttp_User_Agent:
+          if Context.UserAgent = nil then
+            wr.Add('-')
+          else
+            wr.AddString(RawUtf8(Context.UserAgent));
+        hlvHttps:
+          if hsrHttps in Context.Flags then
+            wr.AddShorter('on');
+        hlvMsec:
+          wr.AddSeconds(UnixMSTimeUtcFast);
+        hlvReceived:
+          wr.AddShort(KBNoSpace(Context.Received));
+        hlvRemote_Addr:
+          if Context.RemoteIP = nil then
+            wr.AddShort('127.0.0.1')
+          else
+            wr.AddString(RawUtf8(Context.RemoteIP));
+        hlvRemote_User:
+          if Context.User = nil then
+            wr.Add('-')
+          else
+            wr.AddString(RawUtf8(Context.User));
+        hlvRequest:
+          begin
+            wr.AddString(RawUtf8(Context.Method));
+            wr.Add(' ');
+            wr.AddString(RawUtf8(Context.Url));
+            wr.Add(' ');
+            wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
+          end;
+        hlvRequest_Hash:
+            wr.AddUHex(crc32c(crc32c(crc32c(byte(Context.Flags),
+              Context.Host, length(RawUtf8(Context.Host))),
+              Context.Method, length(RawUtf8(Context.Method))),
+              Context.Url, length(RawUtf8(Context.Url))));
+        hlvRequest_Length:
+          wr.AddQ(Context.Received);
+        hlvRequest_Method:
+          wr.AddString(RawUtf8(Context.Method));
+        hlvRequest_Uri:
+          wr.AddString(RawUtf8(Context.Url));
+        hlvScheme:
+          wr.AddShorter(SCHEME[hsrHttps in Context.Flags]);
+        hlvSent:
+          wr.AddShort(KBNoSpace(Context.Sent));
+        hlvServer_Protocol:
+           wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
+        hlvStatus:
+          wr.AddU(Context.StatusCode);
+        hlvStatus_Text:
+          wr.AddShort(StatusCodeToShort(Context.StatusCode));
+        hlvTime_Epoch:
+          wr.AddQ(UnixTimeUtc);
+        hlvTime_EpochMSec:
+          wr.AddQ(UnixMSTimeUtcFast);
+        // dates are all in UTC/GMT as it should on any safe server process
+        hlvTime_Iso8601:
+          wr.AddCurrentIsoDateTime({local=}false, {ms=}false, 'T', 'Z');
+        hlvTime_Local:
+          wr.AddCurrentNcsaLogTime({local=}false, '+0000');
+        hlvTime_Http:
+          wr.AddCurrentHttpTime({local=}false, 'GMT');
+      end;
+      inc(v);
+      dec(n);
+    until n = 0;
+    wr.AddString(fLineFeed);
+    if tix10 <> fLastTix then
+      wr.FlushFinal; // force write to disk at least every second
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+begin
+  fLastTix := GetTickCount64 shr 10; // no need to flush within current second
+end;
+
+
+{ THttpAnalyzerState }
+
+procedure THttpAnalyzerState.Clear;
+begin
+  Count    := 0;
+  Time     := 0;
+  UniqueIP := 0;
+  Read     := 0;
+  Write    := 0;
+end;
+
+procedure THttpAnalyzerState.From(const Another: THttpAnalyzerState);
+begin
+  Count    := Another.Count;
+  Time     := Another.Time;
+  UniqueIP := Another.UniqueIP;
+  Read     := Another.Read;
+  Write    := Another.Write;
+end;
+
+procedure THttpAnalyzerState.Add(const Another: THttpAnalyzerState);
+begin
+  inc(Count,    Another.Count);
+  inc(Time,     Another.Time);
+  inc(UniqueIP, Another.UniqueIP);
+  inc(Read,     Another.Read);
+  inc(Write,    Another.Write);
+end;
+
+procedure THttpAnalyzerState.Sub(const Another: THttpAnalyzerState);
+begin
+  dec(Count,    Another.Count);
+  dec(Time,     Another.Time);
+  dec(UniqueIP, Another.UniqueIP);
+  dec(Read,     Another.Read);
+  dec(Write,    Another.Write);
+end;
+
+function THttpAnalyzerState.TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
+begin
+  result := Time;
+  if Period > hapCurrent then
+    result := result * HTTPANALYZER_TIMEUNIT[Period];
+end;
+
+
+{ THttpAnalyzerToSave }
+
+function THttpAnalyzerToSave.DateTime: TDateTime;
+begin
+  result := (Int64(Date) + UNIXTIME_MINIMAL) / SecsPerDay + UnixDateDelta;
+end;
+
+
+{ THttpAnalyzer }
+
+constructor THttpAnalyzer.Create(const aSuspendFile: TFileName;
+  aSuspendFileSaveMinutes: integer);
+var
+  tmp: RawByteString;
+  gz: TGZRead;
+  fromgz: TUnixTime;
+  tix: cardinal;
+begin
+  inherited Create;
+  fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
+  fSaved := fTracked;
+  fSuspendFile := aSuspendFile;
+  fSuspendFileAutoSaveMinutes := aSuspendFileSaveMinutes;
+  fromgz := 0;
+  tmp := StringFromFile(fSuspendFile);
+  if (tmp <> '') and
+     (length(tmp) <= SizeOf(fState)) and
+     gz.Init(pointer(tmp), length(tmp)) and
+     (gz.uncomplen32 = SizeOf(fState)) then
+    if gz.ToBuffer(@fState) then
+      fromgz := FileAgeToUnixTimeUtc(fSuspendFile)
+    else
+      FillcharFast(fState, SizeOf(fState), 0);
+  ComputeConsolidateTime(hapAll, fromgz);
+  tix := GetTickCount64 div 1000;
+  if fromgz <> 0 then
+    Consolidate(tix); // consolidate old data
+  if fSuspendFileAutoSaveMinutes <> 0 then
+    fSuspendFileAutoSaveTix := tix + fSuspendFileAutoSaveMinutes * 60;
+end;
+
+destructor THttpAnalyzer.Destroy;
+var
+  p: THttpAnalyzerPeriod;
+  now: TDateTime;
+begin
+  if Assigned(fOnSave) then
+  begin
+    // persist any pending data still currently in memory buffers
+    now := NowUtc;
+    for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
+      fConsolidateNextTime[p] := now; // force consolidation
+    Consolidate(0);
+    DoSave;
+  end;
+  if fModified and
+     (fSuspendFile <> '') then
+    UpdateSuspendFile;
+  inherited Destroy;
+end;
+
+procedure THttpAnalyzer.SetUniqueIPDepth(value: cardinal);
+var
+  s: THttpAnalyzerScope;
+begin
+  if value <> fUniqueIPDepth then
+    case value of
+      0, 2048, 4096, 8192, 16384, 32768, 65536: // -1 = hash bitmask
+        begin
+          fSafe.Lock;
+          try
+            fUniqueIPDepth := value;
+            Finalize(fUniqueIP);  // release up to 120KB with max value=65536
+            value := value shr 3; // from bits to bytes
+            if value <> 0 then
+              for s := low(fUniqueIP) to high(fUniqueIP) do
+                SetLength(fUniqueIP[s], value);
+          finally
+            fSafe.UnLock;
+          end;
+        end
+    else
+      raise EHttpAnalyzer.CreateUtf8('Invalid %.UniqueDepth=%', [self, value]);
+    end;
+end;
+
+procedure THttpAnalyzer.ComputeConsolidateTime(
+  last: THttpAnalyzerPeriod; ref: TDateTime);
+var
+  now, t: TSynSystemTime;
+begin
+  if last < hapMinute then
+    exit;
+  if ref <> 0 then
+    now.FromDateTime(ref) // from SuspendFile .gz
+  else
+    now.FromNowUtc; // e.g. '2022-10-31T14:23:19.000' is the current time
+  now.MilliSecond := 0;
+  t := now;
+  t.Second := 60;
+  t.Normalize;  // e.g. '2022-10-31T14:24:00.000' = start of next minute
+  fConsolidateNextTime[hapMinute] := t.ToDateTime;
+  if last = hapMinute then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 60;
+  t.Normalize;  // e.g. '2022-10-31T15:00:00.000' = start of next hour
+  fConsolidateNextTime[hapHour] := t.ToDateTime;
+  if last = hapHour then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 24;
+  t.Normalize;  // e.g. '2022-11-01T00:00:00.000' = start of next day
+  fConsolidateNextTime[hapDay] := t.ToDateTime;
+  if last = hapDay then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 0;
+  t.Day := t.DaysInMonth + 1;
+  t.Normalize; // e.g. '2022-11-01T00:00:00.000' = start of next month
+  fConsolidateNextTime[hapMonth] := t.ToDateTime;
+  if last = hapMonth then
+    exit;
+  t := now;
+  t.Second := 0;
+  t.Minute := 0;
+  t.Hour := 0;
+  t.Day := 1;
+  t.Month := 13;
+  t.Normalize; // e.g. '2023-01-01T00:00:00.000' = start of next year
+  fConsolidateNextTime[hapYear] := t.ToDateTime;
+end;
+
+procedure THttpAnalyzer.Consolidate(tixsec: cardinal);
+var
+  p, last: THttpAnalyzerPeriod;
+  s: THttpAnalyzerScope;
+  savenow: cardinal;
+  now: TDateTime;
+  ps, ns, al: PHttpAnalyzerState;
+  prev, next: PHttpAnalyzerStates;
+begin
+  // called once per second
+  fLastConsolidate := tixsec;
+  last := pred(hapMinute);
+  now := NowUtc;
+  savenow := 0;
+  prev := @fState[hapCurrent];
+  next := prev;
+  al := pointer(@fState[hapAll]);
+  for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
+    if now >= fConsolidateNextTime[p] then
+    begin
+      // this is consolidation time for this hapMinute..hapYear period
+      last := p;
+      inc(next);
+      ps := pointer(prev);
+      ns := pointer(next);
+      for s := low(s) to high(s) do
+      begin
+        if ps^.Count <> 0 then
+        begin
+          // we have some data to aggregate to this counter
+          fModified := true; // for UpdateSuspendFile
+          case p of // see HTTPANALYZER_TIMEUNIT[]
+            hapMinute:
+              begin
+                ps^.Time := ps^.Time div 1000; // hapMinute..hapDay in millisec
+                al^.Add(ps^); // hapAll updated during hapMinute, in millisec
+              end;
+            hapMonth:
+              ps^.Time := ps^.Time div 1000; // hapMonth/hapYear in sec
+          end;
+          ns^.Add(ps^);
+          // persist previous level before cleaning ps^
+          if Assigned(fOnSave) and
+             (p < hapYear) and  // OnSave() called in hapMinute..hapMonth range
+             (s in fSaved) then
+            with fToSave do
+            begin
+              // persistence is done in the background from fToSave.State[]
+              if savenow = 0 then // lock once for the whole method
+                savenow := DateTimeToUnixTime(now) - UNIXTIME_MINIMAL;
+              if Count = length(State) then
+                SetLength(State, NextGrow(Count));
+              with State[Count] do
+              begin
+                Date := savenow;   // as UnixTimeMinimalUtc
+                Period := p; // store previous level = hapMinute..hapMonth
+                Scope := s;
+                State.From(ps^);
+              end;
+              inc(Count);
+            end;
+          // reset previous level for a new period
+          if (al = nil) and
+             (ps^.UniqueIP <> 0) then // clear hapCurrent IP hashtable (max 8KB)
+            FillCharFast(pointer(fUniqueIP[s])^, fUniqueIPDepth shr 3, 0);
+          ps^.Clear;
+        end;
+        inc(ns);
+        inc(ps);
+        if al <> nil then
+          inc(al);
+      end;
+      prev := next;
+      al := nil;
+    end
+    else
+      break; // actual computation is done only once per minute
+  if last >= hapMinute then
+    ComputeConsolidateTime(last, 0);
+end;
+
+procedure THttpAnalyzer.DoSave;
+var
+  tmp: THttpAnalyzerToSaveDynArray;
+begin
+  // quick retrieve the pending states to persist
+  if not Assigned(fOnSave) or
+     (fToSave.Count = 0) then
+    exit;
+  fSafe.Lock;
+  try
+    with fToSave do
+      if Count <> 0 then
+      begin
+        tmp := copy(State, 0, Count); // use local copy to release lock ASAP
+        Count := 0;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  // execute the actual persistence callback outside of the lock
+  if tmp <> nil then
+    fOnSave(tmp);
+end;
+
+procedure THttpAnalyzer.UpdateSuspendFile;
+begin
+  if (fSuspendFile <> '') and
+     not fModified then
+    exit;
+  fModified := false;
+  fSafe.Lock;
+  try
+    // just save the current state blob as .gz
+    FileFromString(GZWrite(@fState, SizeOf(fState), {level=}1), fSuspendFile);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpAnalyzer.DoAppend(const new: THttpAnalyzerState;
+  s: THttpAnalyzerScope);
+var
+  p: pointer;
+  cur: PHttpAnalyzerState;
+begin
+  cur := @fState[hapCurrent][s];
+  inc(cur^.Count, new.Count);
+  inc(cur^.Time,  new.Time);
+  inc(cur^.Read,  new.Read);
+  inc(cur^.Write, new.Write);
+  if new.UniqueIP = 0 then // hash bit index
+    exit; // no valid RemoteIP, or UniqueIPDepth is 0
+  p := pointer(fUniqueIP[s]);
+  if GetBitPtr(p, new.UniqueIP) then // this IP was already included
+    exit;
+  inc(cur^.UniqueIP);         // first time observed in this scope
+  SetBitPtr(p, new.UniqueIP); // mark the bit in the hash table
+end;
+
+function ToScope(Text: PUtf8Char; out Scope: THttpAnalyzerScope): boolean;
+begin
+  result := false;
+  case PCardinal(Text)^ of // case-sensitive test in occurence order
+    ord('G') + ord('E') shl 8 + ord('T') shl 16:
+      Scope := hasGet;
+    ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
+      Scope := hasPost;
+    ord('P') + ord('U') shl 8 + ord('T') shl 16:
+      Scope := hasPut;
+    ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24:
+      Scope := hasHead;
+    ord('D') + ord('E') shl 8 + ord('L') shl 16 + ord('E') shl 24:
+      Scope := hasDelete;
+    ord('O') + ord('P') shl 8 + ord('T') shl 16 + ord('I') shl 24:
+      Scope := hasOptions;
+  else
+    exit;
+  end;
+  result := true;
+end;
+
+procedure THttpAnalyzer.Append(const Context: TOnHttpServerAfterResponseContext);
+var
+  tix, crc, i: cardinal;
+  s: THttpAnalyzerScope;
+  new: THttpAnalyzerState;
+begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue(Context);
+  // prepare the information to be merged
+  if fTracked = [] then
+    exit; // nothing to process here
+  fModified := true; // for UpdateSuspendFile
+  tix := GetTickCount64 div 1000;
+  new.Count := 1;
+  new.Time := Context.ElapsedMicroSec; // Time unit is microsec for hapCurrent
+  new.UniqueIP := 0;
+  if (Context.RemoteIP <> nil) and
+     (fUniqueIPDepth <> 0) then
+  begin
+    crc := DefaultHasher(0, Context.RemoteIP, length(RawUtf8(Context.RemoteIP)));
+    crc := crc and (fUniqueIPDepth - 1); // power-of-two modulo
+    if crc = 0 then
+      crc := 1;
+    new.UniqueIP := crc; // store bit index
+  end;
+  new.Read := Context.Received;
+  new.Write := Context.Sent;
+  fSafe.Lock;
+  try
+    // integrate request information to the current state
+    DoAppend(new, hasAny);
+    if (Context.Method <> nil) and
+       (fTracked * [hasGet .. hasOptions] <> []) and
+       ToScope(Context.Method, s) and
+       (s in fTracked) then
+      DoAppend(new, s);
+    if fTracked * [has1xx .. has5xx] <> [] then
+    begin
+      i := (Context.StatusCode div 100) - 1; // 1xx..5xx -> 0..4
+      if i < 5 then
+      begin
+        s := THttpAnalyzerScope(byte(has1xx) + i);
+        if s in fTracked then
+          DoAppend(new, s);
+      end;
+    end;
+    if Context.UserAgent <> nil then
+    begin
+      if hasMobile in fTracked then
+        // browser/OS detection using the User-Agent is a very tricky context
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
+        // we only detect mobile devices, which seems fair enough
+        if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
+          DoAppend(new, hasMobile);
+      if hasBot in fTracked then
+        // bots detection is not easier, but naive patterns seem good enough
+        if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
+          DoAppend(new, hasBot);
+    end;
+    if (hsrHttps in Context.Flags) and
+       (hasHttps in fTracked) then
+      DoAppend(new, hasHttps);
+    if (hsrAuthorized in Context.Flags) and
+       (hasAuthorized in fTracked) then
+      DoAppend(new, hasAuthorized);
+    // do proper consolidation if needed
+    if tix <> fLastConsolidate then
+      Consolidate(tix); // called once per second, compute once per minute
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpAnalyzer.OnIdle(tix64: Int64);
+var
+  tix: cardinal;
+begin
+  tix := tix64 div 1000;
+  if tix <> fLastConsolidate then
+  begin
+    // data consolidation once a second
+    fSafe.Lock;
+    try
+      if tix <> fLastConsolidate then
+        Consolidate(tix);
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+  // background persistence once a hapMinute consolidation did occur
+  if Assigned(fOnSave) and
+     (fToSave.Count <> 0) then
+    DoSave;
+  // background state persistence once SuspendFileAutoSaveMinutes
+  if fModified and
+     (fSuspendFileAutoSaveTix <> 0) and
+     (tix > fSuspendFileAutoSaveTix) then
+  begin
+    fSuspendFileAutoSaveTix := tix + fSuspendFileAutoSaveMinutes * 60;
+    UpdateSuspendFile;
+  end;
+end;
+
+procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
+  Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
+var
+  p: THttpAnalyzerPeriod;
+begin
+  // same value carry propagation algorithm than in Consolidate()
+  fSafe.Lock;
+  try
+    {%H-}State.From(fState[hapCurrent][Scope]);
+    if Period = hapCurrent then
+      exit;
+    State.Time := State.Time div 1000; // hapMinute..hapDay/hapAll in millisec
+    if Period = hapAll then
+      State.Add(fState[hapAll][Scope])
+    else
+      for p := hapMinute to Period do // hapMinute..hapYear consolidation
+      begin
+        if p = hapMonth then
+          State.Time := State.Time div 1000; // hapMonth/hapYear in sec
+        State.Add(fState[p][Scope]);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{ THttpAnalyzerPersistAbstract }
+
+constructor THttpAnalyzerPersistAbstract.Create(const aFileName: TFileName);
+begin
+  inherited Create;
+  fFileName := ExpandFileName(aFileName);
+end;
+
+
+{ THttpAnalyzerPersistCsv }
+
+var
+  _SCOPE: array[THttpAnalyzerScope] of RawUtf8;
+
+const
+  _PERIOD: array[THttpAnalyzerPeriod] of string[3] = (
+    ',?,', ',m,', ',h,', ',D,', ',M,', ',Y,', ',*,');
+
+procedure THttpAnalyzerPersistCsv.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  p: PHttpAnalyzerToSave;
+  t: TSynSystemTime;
+  f: TStream;
+  w: TTextDateWriter;
+  tmp: TSynTempBuffer;
+begin
+  if _SCOPE[hasAny] = '' then
+    GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope), @_SCOPE);
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
+      try
+        if f.Seek(0, soEnd) = 0 then // append or write header
+          w.AddShort('Date,Period,Scope,Count,Time,Read,Write'#13#10);
+        n := length(State);
+        p := pointer(State);
+        repeat
+          t.FromDateTime(p^.DateTime);
+          t.Second := 0; // seconds part is irrelevant
+          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+            t.AddIsoDate(w) // time part is irrelevant
+          else
+            t.AddIsoDateTime(w, {ms=}false, {first=}' ');
+          w.AddShorter(_PERIOD[p^.Period]);
+          w.AddString(_SCOPE[p^.Scope]);
+          w.Add(',');
+          w.AddQ(p^.State.Count);
+          w.Add(',');
+          w.AddQ(p^.State.Time);
+          w.Add(',');
+          w.AddQ(p^.State.Read);
+          w.Add(',');
+          w.AddQ(p^.State.Write);
+          w.AddCR;
+          inc(p);
+          dec(n);
+        until n = 0;
+        w.FlushFinal;
+      finally
+        w.Free;
+      end;
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, but don't retry
+  end;
+end;
+
+
+{ THttpAnalyzerPersistJson }
+
+procedure THttpAnalyzerPersistJson.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  existing: Int64;
+  p: PHttpAnalyzerToSave;
+  t: TSynSystemTime;
+  f: TStream;
+  w: TTextDateWriter;
+  tmp: TSynTempBuffer;
+begin
+  // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      existing := f.Seek(0, soEnd);
+      if existing <> 0 then
+        f.Seek(existing - 1, soBeginning); // rewind ending ']'
+      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
+      try
+        if existing = 0 then
+          w.Add('[', #10); // open new JSON array
+        n := length(State);
+        p := pointer(State);
+        repeat
+          w.AddShorter('{"d":"');
+          t.FromDateTime(p^.DateTime);
+          t.Second := 0; // seconds part is irrelevant
+          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+            t.AddIsoDate(w) // time part is irrelevant
+          else
+            t.AddIsoDateTime(w, {ms=}false); // true Iso-8601 date/time
+          w.AddShorter('","p":');
+          w.AddU(ord(p^.Period));
+          w.AddShorter(',"s":');
+          w.AddU(ord(p^.Scope));
+          w.AddShorter(',"c":');
+          w.AddQ(p^.State.Count);
+          w.AddShorter(',"t":');
+          w.AddQ(p^.State.Time);
+          w.AddShorter(',"r":');
+          w.AddQ(p^.State.Read);
+          w.AddShorter(',"w":');
+          w.AddQ(p^.State.Write);
+          w.Add('}');
+          dec(n);
+          if n = 0 then
+            break;
+          w.Add(',', #10);
+          inc(p);
+        until false;
+        w.Add(']'); // close the JSON array
+        w.FlushFinal;
+      finally
+        w.Free;
+      end;
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, but don't retry
+  end;
+end;
+
+
+{ THttpAnalyzerPersistBinary }
+
+procedure THttpAnalyzerPersistBinary.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  f: TStream;
+begin
+  if (State <> nil) and
+     (fFileName <> '') then
+  try
+    f := TFileStreamEx.CreateWrite(fFileName);
+    try
+      f.Seek(0, soEnd); // just append
+      f.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
+    finally
+      f.Free;
+    end;
+  except
+    fFileName := ''; // ignore any write error in the callback, but don't retry
+  end;
+end;
+
+
+{ THttpMetrics }
+
+function THttpMetrics.Get(Row: integer): PHttpAnalyzerToSave;
+begin
+  // caller should have made Safe.Lock
+  result := fState.Find(Row * SizeOf(result^), SizeOf(result^));
+end;
+
+procedure THttpMetrics.CreateDynArray;
+var
+  p: pointer;
+begin
+  // caller should have made Safe.Lock
+  fState.Compact; // ensure everything linear in fState.Values[0].Value
+  p := nil;
+  if fState.Count <> 0 then
+    p := @fState.Values[0].Value;
+  fDynArray.InitSpecific(TypeInfo(THttpAnalyzerToSaveDynArray), p^, ptCardinal);
+  fDynArray.UseExternalCount(@fCount); // set after Init() to avoid Count=0
+  fDynArray.Sorted := true; // ordered by THttpAnalyzerToSave.Date (ptCardinal)
+end;
+
+function THttpMetrics.StateAsCompactArray: PDynArray;
+begin
+  // caller should have made Safe.Lock
+  if (fState.Count <> 1) or    // need compaction
+     not fDynArray.Sorted then // never initialized
+    CreateDynArray;
+  result := @fDynArray;
+end;
+
+procedure THttpMetrics.ResetPeriodIndex;
+var
+  p: THttpAnalyzerPeriod;
+begin
+  fPeriodLastCount := 0;
+  for p := low(fPeriod) to high(fPeriod) do
+    fPeriod[p].Count := 0;    // keep Index[] buffer for next CreatePeriodIndex
+  fLastRangeToIndex.sta := 0; // reset RangeToIndex() last result
+end;
+
+procedure THttpMetrics.CreatePeriodIndex;
+var
+  p: PHttpAnalyzerToSave;
+  i: integer;
+begin
+  // caller should have made Safe.Lock
+  if fCount = 0 then
+    exit;
+  p := StateAsCompactArray^.Value^;
+  inc(p, fPeriodLastCount);
+  for i := fPeriodLastCount to fCount - 1 do
+  begin
+    case p^.Period of // OnSave() should be in hapMinute..hapMonth range
+      hapMinute:
+        ; // not indexed
+      hapCurrent,
+      hapYear,
+      hapAll: // paranoid
+        raise EHttpMetrics.Create('Unexpected period');
+    else // hapHour .. hapMonth
+      with fPeriod[p^.Period] do
+      begin
+        if Count = length(Index) then
+          SetLength(Index, NextGrow(Count));
+        Index[Count] := i;
+        inc(Count);
+      end;
+    end;
+    inc(p);
+  end;
+  fPeriodLastCount := fCount;
+end;
+
+function THttpMetrics.RangeToIndex(start, stop: TDateTime;
+  out istart, istop: integer): PHttpAnalyzerToSaveArray;
+var
+  startdate, stopdate: cardinal;
+begin
+  // caller should have made Safe.Lock
+  result := StateAsCompactArray^.Value^; // compact if needed
+  // convert UTC TDateTime into UnixTimeMinimalUtc timestamps
+  startdate := DateTimeToUnixTime(start) - UNIXTIME_MINIMAL;
+  stopdate  := DateTimeToUnixTime(stop)  - UNIXTIME_MINIMAL;
+  // just return the last result if possible
+  with fLastRangeToIndex do
+    if (sta <> 0) and
+       (startdate = sta) and
+       (stopdate = sto) then
+    begin
+      istart := ista;
+      istop := isto;
+      exit;
+    end;
+  // retrieve the per-date boundaries using O(log(count)) binary search
+  fDynArray.FastLocateSorted(startdate, istart);
+  fDynArray.FastLocateSorted(stopdate, istop);
+  // save for next request on the same exact time range - e.g. from a DashBoard
+  with fLastRangeToIndex do
+  begin
+    sta := startdate;
+    sto := stopdate;
+    ista := istart;
+    isto := istop;
+  end;
+end;
+
+function THttpMetrics.RangeToPeriodIndex(period: THttpAnalyzerPeriod;
+  start, stop: integer; out pstart, pstop: PInteger): integer;
+begin
+  // caller should have made Safe.Lock and insured period in hapHour..hapMonth
+  if not (period in [hapHour..hapMonth]) then
+    raise EHttpMetrics.CreateUtf8(
+      'Unexpected %. RangeToPeriodIndex(%)', [self, ToText(period)^]);
+  if fPeriodLastCount < fCount then
+    CreatePeriodIndex; // refresh indexes if needed
+  with fPeriod[period] do // hapHour .. hapMonth
+  begin
+    start := FastSearchIntegerSorted(pointer(Index), Count - 1, start);
+    pstart := @Index[start];
+    stop := FastSearchIntegerSorted(pointer(Index), Count - 1, stop);
+    pstop := @Index[stop];
+  end;
+  result := stop - start; // returns the number of indexes in pstart..pstop
+end;
+
+procedure THttpMetrics.Clear;
+begin
+  fSafe.Lock;
+  try
+    fCount := 0;
+    fState.Clear;
+    fDynArray.Sorted := false; // force CreateDynArray
+    ResetPeriodIndex;
+    fMetadata := '';
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpMetrics.AddFromBuffer(const Buffer: RawByteString): boolean;
+var
+  unsorted: boolean;
+  n, c: integer;
+begin
+  result := false;
+  n := length(Buffer) div SizeOf(THttpAnalyzerToSave);
+  if (n = 0) or
+     (n * SizeOf(THttpAnalyzerToSave) <> length(Buffer)) then
+    exit;
+  fSafe.Lock;
+  try
+    c := fCount;
+    if n + c > HTTPMETRICS_MAXCOUNT then
+      exit; // too much data
+    fDynArray.Sorted := false; // force CreateDynArray
+    unsorted := (c <> 0) and
+                (Get(c - 1)^.Date > PHttpAnalyzerToSave(Buffer)^.Date);
+    fState.Add(Buffer);
+    inc(fCount, n);
+    if unsorted then
+    begin
+      StateAsCompactArray^.Sort; // should not happen - better safe than sorry
+      ResetPeriodIndex;
+    end
+    else if fState.Count > 256 then
+      CreateDynArray; // aggregate blocks to reduce fragmentation
+    fLastRangeToIndex.sta := 0; // reset RangeToIndex() last result
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpMetrics.AddFromBinary(const FileName: TFileName): boolean;
+var
+  size: Int64;
+  n: integer; // 32-bit support only in TRawByteStringGroup
+  tmp: RawByteString;
+begin
+  result := false;
+  size := FileSize(FileName);
+  if size = 0 then
+    exit; // void
+  n := size div SizeOf(THttpAnalyzerToSave);
+  if (n * SizeOf(THttpAnalyzerToSave) <> size) or
+     (fCount + n > HTTPMETRICS_MAXCOUNT) then
+    exit; // incorrect size or too much data
+  tmp := StringFromFile(FileName);
+  if length(tmp) = size then
+    result := AddFromBuffer(tmp);
+end;
+
+procedure THttpMetrics.OnSave(const State: THttpAnalyzerToSaveDynArray);
+var
+  n: integer;
+  tmp: RawByteString;
+begin
+  n := length(State);
+  if (n = 0) or
+     (fCount + n > HTTPMETRICS_MAXCOUNT) then
+    exit; // no data or too much data
+  FastSetRawByteString(tmp, pointer(State), n * SizeOf(State[0]));
+  AddFromBuffer(tmp);
+end;
+
+procedure THttpMetrics.SaveToFile(const Dest: TFileName; Algo: TAlgoCompress);
+var
+  w: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  if Algo = nil then
+    w := TBufferWriter.Create(Dest) // direct-to-fly persistence
+  else
+    w := TBufferWriter.Create(tmp); // in-memory persistence before compression
+  try
+    SaveToWriter(w);
+    if Algo <> nil then
+      FileFromString(Algo.Compress(w.FlushTo, {trigger=}2048), Dest);
+  finally
+    w.Free;
+  end;
+end;
+
+function THttpMetrics.LoadFromFile(const Source: TFileName): boolean;
+var
+  tmp: RawByteString;
+  algo: TAlgoCompress;
+  rd: TFastReader;
+begin
+  result := false;
+  tmp := StringFromFile(Source);
+  if length(tmp) < 23 then
+    exit;
+  if PCardinal(tmp)^ <> PCardinal(@HTTPMETRICS_MAGIC[1])^ then
+  begin
+    algo := TAlgoCompress.Algo(tmp);
+    if algo = nil then
+      exit; // unknown algorithm
+    tmp := algo.Decompress(tmp);
+  end;
+  rd.Init(tmp);
+  result := LoadFromReader(rd);
+end;
+
+procedure THttpMetrics.GetExtensions(out data: RawByteString);
+begin
+  // may be overriden with additional data
+end;
+
+function THttpMetrics.SetExtensions(const data: TValueResult): boolean;
+begin
+  result := true; // decoding success
+end;
+
+procedure THttpMetrics.SaveToWriter(Dest: TBufferWriter);
+var
+  p: THttpAnalyzerPeriod;
+  s: PHttpAnalyzerToSave;
+  n, diff: PtrInt;
+  prevdate: cardinal;
+  extensions: RawByteString; // variable data field for backward compatibility
+  w: PByte;
+begin
+  fSafe.Lock;
+  try
+    // save header
+    Dest.Write(@HTTPMETRICS_MAGIC[1], ord(HTTPMETRICS_MAGIC[0]));
+    Dest.WriteVarUInt32(fCount);
+    Dest.Write(fMetadata);
+    if fCount = 0 then
+      exit;
+    if fPeriodLastCount < fCount then
+      CreatePeriodIndex; // refresh indexes count and verify s^.Period range
+    for p := low(fPeriod) to high(fPeriod) do // hapHour .. hapMonth
+      Dest.WriteVarUInt32(fPeriod[p].Count);  // avoid realloc in LoadFromReader
+    s := StateAsCompactArray^.Value^;
+    n := fCount;
+    Dest.Write4(s^.Date);                                 // first date
+    Dest.Write4(PHttpAnalyzerToSaveArray(s)[n - 1].Date); // last date
+    GetExtensions(extensions);
+    Dest.Write4(crc32c(crc32c(0, pointer(extensions), length(extensions)),
+                              pointer(s), n * SizeOf(s^))); // anti-tampering
+    // additional extensions data, included in the crc
+    Dest.Write(extensions);
+    // save main data, encoded from fState
+    prevdate := 0;
+    repeat
+      diff := s^.Date - prevdate; // delta encoding of the increasing Date field
+      if diff < 0 then
+        raise EHttpMetrics.CreateUtf8('%.SaveToWriter: unsorted dates', [self]);
+      w := ToVarUInt32(diff, Dest.DirectWriteReserve(SizeOf(s^) * 2));
+      prevdate := s^.Date;
+      w^ := ord(s^.Period) - 1 + ord(s^.Scope) shl 3; // Period+Scope as 1 byte
+      inc(w);
+      Dest.DirectWriteReserved(ToVarUInt64(s^.State.Write,
+                               ToVarUInt64(s^.State.Read,
+                               ToVarUInt64(s^.State.Time,
+                               ToVarUInt64(s^.State.Count, w)))));
+      inc(s);
+      dec(n)
+    until n = 0;
+    // indexes will be recreated on the fly during data reading
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function THttpMetrics.LoadFromReader(var Source: TFastReader): boolean;
+var
+  p: THttpAnalyzerPeriod;
+  s: PHttpAnalyzerToSave;
+  i, n: integer;
+  rd: PByte;
+  firstdate, lastdate, prevdate, crc: cardinal;
+  peek: PtrUInt;
+  extensions: TValueResult; // variable field for backward compatibility
+  tmp: string[23];
+begin
+  result := false;
+  Clear;
+  // read header
+  tmp[0] := HTTPMETRICS_MAGIC[0];
+  if not Source.CopySafe(@tmp[1], ord(tmp[0])) or
+     (tmp <> HTTPMETRICS_MAGIC) then
+    exit;
+  fSafe.Lock;
+  try
+    n := Source.VarUInt32;
+    if (n > HTTPMETRICS_MAXCOUNT) or
+       not Source.VarUtf8Safe(fMetadata) then
+      exit;
+    if n = 0 then
+      exit;
+    fCount := n;
+    fPeriodLastCount := n;
+    for p := low(fPeriod) to high(fPeriod) do // hapHour .. hapMonth
+      with fPeriod[p] do
+      begin
+        Count := Source.VarUInt32;
+        Index := nil;
+        SetLength(Index, Count); // pre-allocate all indexes
+      end;
+    firstdate := Source.Next4;
+    lastdate  := Source.Next4;
+    crc := Source.Next4;
+    // additional extensions, included in the crc
+    if not Source.VarBlobSafe(extensions) or
+       not SetExtensions(extensions) then // method could be overriden
+      exit;
+    // read and decode main data into fState
+    if (Source.RemainingLength < PtrUInt(fCount) * 6) or
+       not Source.PeekVarUInt32(peek) or
+       (peek <> firstdate) then
+      exit;
+    fState.Add(nil, fCount * SizeOf(s^)); // pre-allocate all data
+    prevdate := 0;
+    s := StateAsCompactArray.Value^;
+    rd := pointer(Source.P); // use a faster PByte within the loop
+    i := 0;
+    repeat
+      inc(prevdate, FromVarUInt32(rd)); // delta decoding
+      s^.Date := prevdate;
+      s^.Period := THttpAnalyzerPeriod((rd^ and 7) + 1); // single byte
+      s^.Scope  := THttpAnalyzerScope(rd^ shr 3);
+      inc(rd);
+      s^.State.Count := FromVarUInt64(rd);
+      s^.State.Time  := FromVarUInt64(rd);
+      s^.State.Read  := FromVarUInt64(rd);
+      s^.State.Write := FromVarUInt64(rd);
+      if s^.Period >= low(fPeriod) then
+        with fPeriod[s^.Period] do
+        begin
+          Index[Count] := i; // decode and index in a single pass
+          inc(Count);
+        end;
+      if PtrUInt(rd) > PtrUInt(Source.Last) then
+        exit; // check read overflow once per row
+      inc(i);
+      inc(s);
+    until i = fCount;
+    // quickly check data consistency
+    if prevdate <> lastdate then
+      exit;
+    for p := low(fPeriod) to high(fPeriod) do
+      with fPeriod[p] do
+        if length(Index) <> Count then
+          exit;
+    // ensure decoded data was not tampered
+    result := crc32c(crc32c(0, extensions.Ptr, extensions.Len),
+                            fDynArray.Value^, fCount * SizeOf(s^)) = crc;
+  finally
+    fSafe.UnLock;
+    if not result then
+      Clear;
+  end;
+end;
+
+class function THttpMetrics.LoadHeader(const FileName: TFileName;
+  out Info: THttpMetricsHeader): boolean;
+var
+  f: THandle;
+  mlen, len: PtrInt;
+  last, first: cardinal;
+  p: THttpAnalyzerPeriod;
+  rd: TFastReader;
+  tmp: array[0..4095] of AnsiChar; // first 4KB should be enough with metadata
+  unc: array[0..6143] of AnsiChar; // partially decompressed content
+begin
+  FastRecordClear(@Info, TypeInfo(THttpMetricsHeader));
+  result := false;
+  // read (and decompress if needed) the first file chunk
+  f := FileOpen(FileName, fmOpenReadDenyNone);
+  if not ValidHandle(f) then
+    exit;
+  len := FileRead(f, tmp, SizeOf(tmp));
+  FileClose(f);
+  mlen := ord(HTTPMETRICS_MAGIC[0]);
+  if len < mlen then
+    exit;
+  if PCardinal(@tmp)^ = PCardinal(@HTTPMETRICS_MAGIC[1])^ then
+    // seems to be non-compressed content
+    {%H-}rd.Init(@tmp, len)
+  else
+  begin
+    // partial decompression of the first 4KB file chunk
+    Info.Algo := TAlgoCompress.Algo(@tmp, len);
+    len := Info.Algo.DecompressPartial(@tmp, @unc, len, SizeOf(tmp), SizeOf(unc));
+    if len < mlen then
+      exit; // decompression failed
+    {%H-}rd.Init(@unc, len);
+  end;
+  // retrieve information from the header
+  if not CompareMem(rd.Next(mlen), @HTTPMETRICS_MAGIC[1], mlen) or
+     not rd.VarUInt32Safe(Info.Count) or
+     (Info.Count > HTTPMETRICS_MAXCOUNT) or
+     not rd.VarUtf8Safe(Info.Metadata) then
+    exit;
+  if Info.Count <> 0 then
+  begin
+    Info.Period[hapMinute] := Info.Count;
+    for p := hapHour to hapMonth do
+      if rd.VarUInt32Safe(Info.Period[p]) then
+        dec(Info.Period[hapMinute], Info.Period[p]) // adjust
+      else
+        exit;
+    if not rd.CopySafe(@first, SizeOf(first)) or
+       not rd.CopySafe(@last,  SizeOf(last)) or
+       not rd.CopySafe(@Info.Crc, SizeOf(Info.Crc)) or
+       not rd.VarUInt32Safe(Info.ExtensionSize) then // get VarBlob() length
+      exit;
+    Info.First := UnixTimeToDateTime(first + UNIXTIME_MINIMAL);
+    Info.Last  := UnixTimeToDateTime(last + UNIXTIME_MINIMAL);
+  end;
+  result := true;
+end;
+
+function THttpMetrics.GetState(Row: integer;
+  out State: THttpAnalyzerToSave): boolean;
+begin
+  result := false;
+  if cardinal(Row) >= cardinal(fCount) then
+    exit;
+  fSafe.Lock;
+  fState.FindMove(Row * SizeOf(State), SizeOf(State), @State);
+  fSafe.UnLock;
+  result := true;
+end;
+
+function THttpMetrics.Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+  Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+var
+  ndxStart, ndxStop: integer;
+  count, capacity: PtrInt;
+  si, pi: PInteger;
+  p, s: PHttpAnalyzerToSave;
+  v: PHttpAnalyzerToSaveArray;
+
+  procedure ResultGrow;
+  begin
+    if count = 0 then
+      capacity := 40 // generous initial allocation (1600 bytes)
+    else
+      capacity := NextGrow(capacity);
+    SetLength(result, capacity);
+  end;
+
+begin
+  result := nil;
+  if not (Period in [hapMinute .. hapMonth]) then
+    exit; // OnSave() has been done in this range only
+  count := 0;
+  capacity := 0;
+  fSafe.Lock;
+  try
+    // retrieve the per-date boundaries
+    if fCount = 0 then
+      exit;
+    v := RangeToIndex(Start, Stop, ndxStart, ndxStop);
+    if ndxStart >= ndxStop then
+      exit;
+    // perform the actual (indexed) search
+    if Period = hapMinute then
+    begin
+      // hapMinute: brute force search within this s <= x < p time range
+      s := @v[ndxStart];
+      p := @v[ndxStop];
+      while PtrUInt(s) < PtrUInt(p) do
+      begin
+        if (s^.Period = Period) and
+           (s^.Scope = Scope) then
+        begin
+          if count = capacity then
+            ResultGrow;
+          result[count] := s^;
+          inc(count);
+        end;
+        inc(s);
+      end;
+    end
+    else
+    begin
+      // hapHour..hapMonth: search using the index of this Period
+      RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi);
+      while PtrUInt(si) < PtrUInt(pi) do
+      begin
+        s := @v[si^];
+        if s^.Scope = Scope then
+        begin
+          if count = capacity then
+            ResultGrow;
+          result[count] := s^;
+          inc(count);
+        end;
+        inc(si);
+      end;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+  if result <> nil then
+    DynArrayFakeLength(result, count);
+end;
+
+
+function ToText(s: THttpAnalyzerScope): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpAnalyzerScope), ord(s));
+end;
+
+function ToText(p: THttpAnalyzerPeriod): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpAnalyzerPeriod), ord(p));
+end;
+
+function ToText(v: THttpLogVariable): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpLogVariable), ord(v));
+end;
+
+function ToText(r: THttpLoggerRotate): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpLoggerRotate), ord(r));
+end;
+
+
 
 initialization
+  assert(SizeOf(THttpAnalyzerToSave) = 40);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
