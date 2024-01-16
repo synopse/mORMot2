@@ -4293,18 +4293,21 @@ begin
   result := fWriterSingle;
   if result <> nil then
     exit;
-  result := fWriterHostLast; // pointer-sized variables are atomic
-  if (result <> nil) and
-     IdemPropNameU(p^.Host, Host) then // naive but efficient cache
+  if Host <> '' then
   begin
-    THttpLoggerWriter(result).TryRotate(Tix10);
-    exit;
+    result := fWriterHostLast; // pointer-sized variables are atomic
+    if (result <> nil) and     // naive but efficient cache
+       IdemPropNameU(THttpLoggerWriter(result).Host, Host) then
+    begin
+      THttpLoggerWriter(result).TryRotate(Tix10);
+      exit;
+    end;
   end;
-  // lookup of this Host in the internal list
+  // lookup of this Host in the internal WriteHost[] list
   fWriterHostSafe.Lock;
   p := pointer(fWriterHost);
   if p = nil then
-    // no previous DefineHost() call: set fWriterHost[0] = access.log instance
+    // no previous DefineHost() call: set WriterHost[0] = access.log instance
     try
       result := THttpLoggerWriter.Create(
                   self, '', fDefaultRotate, fDefaultRotateFiles);
@@ -4315,7 +4318,7 @@ begin
   else
   begin
     // search for any matching THttpLoggerWriter.Host value
-    result := p^; // p^ = fWriterHost[0] = access.log as default
+    result := p^; // p^ = WriterHost[0] = access.log as default
     if Host <> '' then
     begin
       n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -4327,14 +4330,14 @@ begin
         if IdemPropNameU(p^.Host, Host) then
         begin
           result := p^; // found log instance for this Host name
+          fWriterHostLast := result;
           break;
         end;
       until false;
     end;
     fWriterHostSafe.UnLock;
-    THttpLoggerWriter(result).TryRotate(Tix10); // outside of lock
+    THttpLoggerWriter(result).TryRotate(Tix10); // outside the lock
   end;
-  fWriterHostLast := result;
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
@@ -4351,7 +4354,7 @@ begin
   fWriterHostSafe.Lock;
   try
     if fWriterHost = nil then
-      // first call: we need to set fWriterHost[0] = access.log
+      // first call: we need to set WriterHost[0] = access.log
       ObjArrayAdd(fWriterHost, THttpLoggerWriter.Create(
              self, '', fDefaultRotate, fDefaultRotateFiles))
     else
