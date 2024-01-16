@@ -1141,9 +1141,13 @@ type
   /// transient in-memory storage of THttpAnalyzer states to be persisted
   // - map all the information to be persisted on disk as CSV, binary or SQL
   // - each record consumes 40 bytes of memory on all platforms
+  {$ifdef USERECORDWITHMETHODS}
   THttpAnalyzerToSave = record
+  {$else}
+  THttpAnalyzerToSave = object
+  {$endif USERECORDWITHMETHODS}
     /// the timestamp of the data consolidation - from UnixTimeMinimalUtc()
-    // - use UnixTimeToDateTime(Date + UNIXTIME_MINIMAL) to compute its TDateTime
+    // - use the DateTime method to retrieve an usable value
     Date: cardinal;
     /// the resolution time period (hapMinute .. hapAll)
     Period: THttpAnalyzerPeriod;
@@ -1151,6 +1155,9 @@ type
     Scope: THttpAnalyzerScope;
     /// the whole information about this counter in this Period at Date
     State: THttpAnalyzerState;
+    /// wrap UnixTimeToDateTime(Date + UNIXTIME_MINIMAL) to return a TDateTime
+    function DateTime: TDateTime;
+     {$ifdef HASINLINE} inline; {$endif}
   end;
   /// a pointer to a THttpAnalyzerToSave memory
   PHttpAnalyzerToSave = ^THttpAnalyzerToSave;
@@ -1404,6 +1411,11 @@ const
     1000000,  // hapMonth
     1000000,  // hapYear
     1000);    // hapAll
+
+function ToText(s: THttpAnalyzerScope): PShortString; overload;
+function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
+function ToText(v: THttpLogVariable): PShortString; overload;
+function ToText(r: THttpLoggerRotate): PShortString; overload;
 
 
 
@@ -4834,6 +4846,14 @@ begin
 end;
 
 
+{ THttpAnalyzerToSave }
+
+function THttpAnalyzerToSave.DateTime: TDateTime;
+begin
+  result := (Int64(Date) + UNIXTIME_MINIMAL) / SecsPerDay + UnixDateDelta;
+end;
+
+
 { THttpAnalyzer }
 
 constructor THttpAnalyzer.Create(const aSuspendFile: TFileName;
@@ -5284,7 +5304,7 @@ begin
         n := length(State);
         p := pointer(State);
         repeat
-          t.FromDateTime(UnixTimeToDateTime(p^.Date + UNIXTIME_MINIMAL));
+          t.FromDateTime(p^.DateTime);
           t.Second := 0; // seconds part is irrelevant
           if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
             t.AddIsoDate(w) // time part is irrelevant
@@ -5347,7 +5367,7 @@ begin
         p := pointer(State);
         repeat
           w.AddShorter('{"d":"');
-          t.FromDateTime(UnixTimeToDateTime(p^.Date + UNIXTIME_MINIMAL));
+          t.FromDateTime(p^.DateTime);
           t.Second := 0; // seconds part is irrelevant
           if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
             t.AddIsoDate(w) // time part is irrelevant
