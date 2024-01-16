@@ -1033,7 +1033,7 @@ type
   /// exception raised by THttpAnalyzer related classes
   EHttpAnalyzer = class(ESynException);
 
-  /// each kind of counters covered by THttpAnalyzer
+  /// each kind of counters covered by THttpAnalyzer / THttpMetrics
   // - i.e. HTTP verbs, HTTP status codes, UserAgent or HTTP scheme or auth
   // - you can interpolate hasDesktop/hasHttp/hasUnAuthorized-like counters as
   // ! Diff(state[hasAny], state[hasMobile/hasHttps/hasAuthorized])
@@ -1055,12 +1055,12 @@ type
     hasHttps,
     hasAuthorized);
 
-  /// the kind of counters covered by THttpAnalyzer
+  /// the kind of counters covered by THttpAnalyzer / THttpMetrics
   THttpAnalyzerScopes = set of THttpAnalyzerScope;
 
   /// possible time periods used for THttpAnalyzer data consolidation
   // - hapCurrent, hapYear and hapAll are only available in THttpAnalyzer context
-  // - TOnHttpAnalyzerSave and THttpAnalyzerReader use hapMinute..hapMonth only
+  // - TOnHttpAnalyzerSave and THttpMetrics handle hapMinute..hapMonth only
   THttpAnalyzerPeriod = (
     hapCurrent,
     hapMinute,
@@ -1296,15 +1296,16 @@ type
   /// class allowing to persist THttpAnalyzer information into a binary file
   // - output will just be raw THttpAnalyzerToSave memory layout with no
   // compression involved
-  // - raw format consumming around 326MB of data per year (61*24*364*16*40)
+  // - raw format consumming around 326MB of data per year (61*24*365*16*40)
+  // - can be aggregated and search by THttpMetrics.AddFromBinary()
   THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
   public
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
     procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
   end;
 
-  /// metadata as decoded by THttpAnalyzerReader.LoadHeader() class function
-  THttpAnalyzerReaderHeader = record
+  /// metadata as decoded by THttpMetrics.LoadHeader() class function
+  THttpMetricsHeader = record
     /// how many events are in this file
     Count: cardinal;
     /// events counter per time period
@@ -1316,17 +1317,20 @@ type
     /// the crc32c of all data rows - could be used e.g. to compare files
     Crc: cardinal;
     /// the binary size of the internal format extensions stored with the data
-    // - <> 0 if THttpAnalyzerReader.GetExtensions/SetExtensions were overriden
+    // - <> 0 if THttpMetrics.GetExtensions/SetExtensions were overriden
     ExtensionSize: cardinal;
-    /// some custom text or JSON, as set to THttpAnalyzerReader.Metadata field
+    /// some custom text or JSON, as set to THttpMetrics.Metadata field
     Metadata: RawUtf8;
   end;
+
+  /// exception class raised during THttpMetrics process
+  EHttpMetrics = class(ESynException);
 
   /// class used to read and search persisted THttpAnalyzer information
   // - all data will be stored in memory, with 40 bytes per row
   // - you can aggregate several input files, then persist the whole using our
   // optimized binary encoding, for efficient search on the whole dataset
-  THttpAnalyzerReader = class(TSynPersistent)
+  THttpMetrics = class(TSynPersistent)
   protected
     fSafe: TLightLock;
     fCount: integer;
@@ -1360,6 +1364,12 @@ type
     function AddFromBinary(const FileName: TFileName): boolean;
     /// append a memory buffer in the THttpAnalyzerPersistBinary format
     function AddFromBuffer(const Buffer: RawByteString): boolean;
+    {
+    /// append a FileName content in .log or .log.gz format
+    // - instantiate THttpLogger/THttpAnalyzer instances to parse and decode
+    function AddFromLog(const FileName: TFileName;
+      const Format: RawUtf8 = LOGFORMAT_COMBINED): boolean;
+    }
     /// persist all this data into a file in our optimized binary format
     procedure SaveToFile(const Dest: TFileName);
     /// load the data from SaveToFile() persistence
@@ -1384,7 +1394,7 @@ type
       Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
     /// class function able to retrieve the metadata of our optimized binary format
     class function LoadHeader(const FileName: TFileName;
-      out Info: THttpAnalyzerReaderHeader): boolean;
+      out Info: THttpMetricsHeader): boolean;
     /// some custom text persisted in our SaveToFile/LoadFromFile header
     // - you can specify here e.g. some human-readable description of the
     // file content, as plain text or JSON
@@ -5429,15 +5439,15 @@ begin
 end;
 
 
-{ THttpAnalyzerReader }
+{ THttpMetrics }
 
-function THttpAnalyzerReader.Get(Row: integer): PHttpAnalyzerToSave;
+function THttpMetrics.Get(Row: integer): PHttpAnalyzerToSave;
 begin
   // caller should have made Safe.Lock
   result := fState.Find(Row * SizeOf(result^), SizeOf(result^));
 end;
 
-procedure THttpAnalyzerReader.CreateDynArray;
+procedure THttpMetrics.CreateDynArray;
 var
   p: pointer;
 begin
@@ -5451,7 +5461,7 @@ begin
   fDynArray.Sorted := true; // ordered by THttpAnalyzerToSave.Date (ptCardinal)
 end;
 
-function THttpAnalyzerReader.StateAsCompactArray: PDynArray;
+function THttpMetrics.StateAsCompactArray: PDynArray;
 begin
   // caller should have made Safe.Lock
   if (fState.Count <> 1) or    // need compaction
@@ -5460,7 +5470,7 @@ begin
   result := @fDynArray;
 end;
 
-procedure THttpAnalyzerReader.ResetPeriodIndex;
+procedure THttpMetrics.ResetPeriodIndex;
 var
   p: THttpAnalyzerPeriod;
 begin
@@ -5470,7 +5480,7 @@ begin
   fLastRangeToIndex.sta := 0; // reset RangeToIndex() last result
 end;
 
-procedure THttpAnalyzerReader.CreatePeriodIndex;
+procedure THttpMetrics.CreatePeriodIndex;
 var
   p: PHttpAnalyzerToSave;
   i: integer;
@@ -5488,7 +5498,7 @@ begin
       hapCurrent,
       hapYear,
       hapAll: // paranoid
-        raise EHttpAnalyzer.Create('Unexpected period');
+        raise EHttpMetrics.Create('Unexpected period');
     else // hapHour .. hapMonth
       with fPeriod[p^.Period] do
       begin
@@ -5503,7 +5513,7 @@ begin
   fPeriodLastCount := fCount;
 end;
 
-function THttpAnalyzerReader.RangeToIndex(start, stop: TDateTime;
+function THttpMetrics.RangeToIndex(start, stop: TDateTime;
   out istart, istop: integer): PHttpAnalyzerToSaveArray;
 var
   startdate, stopdate: cardinal;
@@ -5512,7 +5522,7 @@ begin
   result := StateAsCompactArray^.Value^; // compact if needed
   // convert UTC TDateTime into UnixTimeMinimalUtc timestamps
   startdate := DateTimeToUnixTime(start) - UNIXTIME_MINIMAL;
-  stopdate := DateTimeToUnixTime(stop) - UNIXTIME_MINIMAL;
+  stopdate  := DateTimeToUnixTime(stop)  - UNIXTIME_MINIMAL;
   // just return the last result if possible
   with fLastRangeToIndex do
     if (sta <> 0) and
@@ -5536,13 +5546,16 @@ begin
   end;
 end;
 
-function THttpAnalyzerReader.RangeToPeriodIndex(period: THttpAnalyzerPeriod;
+function THttpMetrics.RangeToPeriodIndex(period: THttpAnalyzerPeriod;
   start, stop: integer; out pstart, pstop: PInteger): integer;
 begin
   // caller should have made Safe.Lock and insured period in hapHour..hapMonth
+  if not (period in [hapHour..hapMonth]) then
+    raise EHttpMetrics.CreateUtf8(
+      'Unexpected %. RangeToPeriodIndex(%)', [self, ToText(period)^]);
   if fPeriodLastCount < fCount then
     CreatePeriodIndex; // refresh indexes if needed
-  with fPeriod[period] do
+  with fPeriod[period] do // hapHour .. hapMonth
   begin
     start := FastSearchIntegerSorted(pointer(Index), Count - 1, start);
     pstart := @Index[start];
@@ -5552,7 +5565,7 @@ begin
   result := stop - start; // returns the number of indexes in pstart..pstop
 end;
 
-procedure THttpAnalyzerReader.Clear;
+procedure THttpMetrics.Clear;
 begin
   fSafe.Lock;
   try
@@ -5571,7 +5584,7 @@ const
   // - our format consummes around 326MB of data per year (61*24*365*16*40)
   HTTPANALYZER_MAXCOUNT = (400 shl 20) div SizeOf(THttpAnalyzerToSave);
 
-function THttpAnalyzerReader.AddFromBuffer(const Buffer: RawByteString): boolean;
+function THttpMetrics.AddFromBuffer(const Buffer: RawByteString): boolean;
 var
   unsorted: boolean;
   n, c: integer;
@@ -5605,7 +5618,7 @@ begin
   end;
 end;
 
-function THttpAnalyzerReader.AddFromBinary(const FileName: TFileName): boolean;
+function THttpMetrics.AddFromBinary(const FileName: TFileName): boolean;
 var
   size: Int64;
   n: integer; // 32-bit support only in TRawByteStringGroup
@@ -5624,7 +5637,7 @@ begin
     result := AddFromBuffer(tmp);
 end;
 
-procedure THttpAnalyzerReader.OnSave(const State: THttpAnalyzerToSaveDynArray);
+procedure THttpMetrics.OnSave(const State: THttpAnalyzerToSaveDynArray);
 var
   n: integer;
   tmp: RawByteString;
@@ -5637,7 +5650,7 @@ begin
   AddFromBuffer(tmp);
 end;
 
-procedure THttpAnalyzerReader.SaveToFile(const Dest: TFileName);
+procedure THttpMetrics.SaveToFile(const Dest: TFileName);
 var
   w: TBufferWriter;
 begin
@@ -5649,7 +5662,7 @@ begin
   end;
 end;
 
-function THttpAnalyzerReader.LoadFromFile(const Source: TFileName): boolean;
+function THttpMetrics.LoadFromFile(const Source: TFileName): boolean;
 var
   rd: TFastReader;
 begin
@@ -5657,12 +5670,12 @@ begin
   result := LoadFromReader(rd);
 end;
 
-procedure THttpAnalyzerReader.GetExtensions(out data: RawByteString);
+procedure THttpMetrics.GetExtensions(out data: RawByteString);
 begin
   // may be overriden with additional data
 end;
 
-function THttpAnalyzerReader.SetExtensions(const data: TValueResult): boolean;
+function THttpMetrics.SetExtensions(const data: TValueResult): boolean;
 begin
   result := true; // decoding success
 end;
@@ -5670,7 +5683,7 @@ end;
 const
   HTTPANALYZER_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
 
-procedure THttpAnalyzerReader.SaveToWriter(Dest: TBufferWriter);
+procedure THttpMetrics.SaveToWriter(Dest: TBufferWriter);
 var
   p: THttpAnalyzerPeriod;
   s: PHttpAnalyzerToSave;
@@ -5705,7 +5718,7 @@ begin
     repeat
       diff := s^.Date - prevdate; // delta encoding of the increasing Date field
       if diff < 0 then
-        raise EHttpAnalyzer.CreateUtf8('%.SaveToWriter: unsorted dates', [self]);
+        raise EHttpMetrics.CreateUtf8('%.SaveToWriter: unsorted dates', [self]);
       w := ToVarUInt32(diff, Dest.DirectWriteReserve(SizeOf(s^) * 2));
       prevdate := s^.Date;
       w^ := ord(s^.Period) - 1 + ord(s^.Scope) shl 3; // Period+Scope as 1 byte
@@ -5723,7 +5736,7 @@ begin
   end;
 end;
 
-function THttpAnalyzerReader.LoadFromReader(var Source: TFastReader): boolean;
+function THttpMetrics.LoadFromReader(var Source: TFastReader): boolean;
 var
   p: THttpAnalyzerPeriod;
   s: PHttpAnalyzerToSave;
@@ -5813,8 +5826,8 @@ begin
   end;
 end;
 
-class function THttpAnalyzerReader.LoadHeader(const FileName: TFileName;
-  out Info: THttpAnalyzerReaderHeader): boolean;
+class function THttpMetrics.LoadHeader(const FileName: TFileName;
+  out Info: THttpMetricsHeader): boolean;
 var
   f: THandle;
   mlen, len: PtrInt;
@@ -5823,7 +5836,7 @@ var
   rd: TFastReader;
   tmp: array[0..4095] of byte; // first 4KB should be enough with metadata
 begin
-  FastRecordClear(@Info, TypeInfo(THttpAnalyzerReaderHeader));
+  FastRecordClear(@Info, TypeInfo(THttpMetricsHeader));
   result := false;
   f := FileOpen(FileName, fmOpenReadDenyNone);
   if not ValidHandle(f) then
@@ -5858,7 +5871,7 @@ begin
   result := true;
 end;
 
-function THttpAnalyzerReader.GetState(Row: integer;
+function THttpMetrics.GetState(Row: integer;
   out State: THttpAnalyzerToSave): boolean;
 begin
   result := false;
@@ -5870,8 +5883,8 @@ begin
   result := true;
 end;
 
-function THttpAnalyzerReader.Find(Start, Stop: TDateTime;
-  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+function THttpMetrics.Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+  Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
 var
   ndxStart, ndxStop: integer;
   count, capacity: PtrInt;
@@ -5891,7 +5904,7 @@ var
 begin
   result := nil;
   if not (Period in [hapMinute .. hapMonth]) then
-    exit; // OnSave() should be done in this range only
+    exit; // OnSave() has been done in this range only
   count := 0;
   capacity := 0;
   fSafe.Lock;
@@ -5943,6 +5956,27 @@ begin
   end;
   if result <> nil then
     DynArrayFakeLength(result, count);
+end;
+
+
+function ToText(s: THttpAnalyzerScope): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpAnalyzerScope), ord(s));
+end;
+
+function ToText(p: THttpAnalyzerPeriod): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpAnalyzerPeriod), ord(p));
+end;
+
+function ToText(v: THttpLogVariable): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpLogVariable), ord(v));
+end;
+
+function ToText(r: THttpLoggerRotate): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpLoggerRotate), ord(r));
 end;
 
 
