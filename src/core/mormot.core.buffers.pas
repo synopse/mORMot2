@@ -8071,9 +8071,9 @@ begin
         break; // reached end of URI
       '%':
         if not HexToChar(PAnsiChar(U + 1), P) then
-          P^ := U^
+          P^ := U^ // browsers may not follow the RFC (e.g. encode % as % !)
         else
-          inc(U, 2); // browsers may not follow the RFC (e.g. encode % as % !)
+          inc(U, 2);
       '+':
         if name then
           P^ := '+'
@@ -8081,7 +8081,7 @@ begin
           P^ := ' ';
     else
       P^ := U^;
-    end; // case s[i] of
+    end;
     inc(U);
     inc(P);
   until false;

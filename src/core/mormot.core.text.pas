@@ -744,6 +744,8 @@ type
     // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
+    /// append an URI-decoded text, also normalizing dual // into /
+    procedure AddUrlNormalize(U: PUtf8Char; L: PtrInt);
     /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some UTF-8 chars, escaping all HTML special chars as expected
@@ -3443,6 +3445,38 @@ end;
 
 { ************ TTextWriter parent class for Text Generation }
 
+function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean; // for inlining
+var
+  b, c: byte;
+  {$ifdef CPUX86NOTPIC}
+  tab: THexToDualByte absolute ConvertHexToBin;
+  {$else}
+  tab: PByteArray; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if Hex <> nil then
+  begin
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
+    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
+    c := tab[ord(Hex[1])];
+    if (b <> 255) and
+       (c <> 255) then
+    begin
+      if Bin <> nil then
+      begin
+        inc(c, b);
+        Bin^ := AnsiChar(c);
+      end;
+      result := true;
+      exit;
+    end;
+  end;
+  result := false; // return false if any invalid char
+end;
+
+
 { TTextWriter }
 
 var
@@ -4931,6 +4965,43 @@ begin
       AddShorter('...');
   end;
   Add(Quote);
+end;
+
+procedure TTextWriter.AddUrlNormalize(U: PUtf8Char; L: PtrInt);
+begin
+  if L > 0 then
+  repeat
+    if B >= BEnd then
+      FlushToStream; // inlined Add() in the loop
+    inc(B);
+    case U^ of
+      #0:
+        break; // reached end of URI (should not happen if L is accurate)
+      '%':
+        if (L <= 2) or
+           not HexToChar(PAnsiChar(U + 1), B) then
+          B^ := '%' // browsers may not follow the RFC (e.g. encode % as % !)
+        else
+        begin
+          inc(U, 2);
+          dec(L, 2);
+        end;
+      '/':
+         if (U[1] = '/') and // normalize URI
+            (L > 1) then
+         begin
+           inc(U);
+           dec(L);
+         end
+        else
+          B^ := '/';
+    else
+      B^ := U^;
+    end;
+    inc(U);
+    dec(B);
+    dec(L);
+  until L = 0;
 end;
 
 var
@@ -9520,37 +9591,6 @@ function HexToCharValid(Hex: PAnsiChar; HexToBin: PByteArray): boolean;
 begin
   result := (HexToBin[Ord(Hex[0])] <= 15) and
             (HexToBin[Ord(Hex[1])] <= 15);
-end;
-
-function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
-var
-  b, c: byte;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
-begin
-  if Hex <> nil then
-  begin
-    {$ifndef CPUX86NOTPIC}
-    tab := @ConvertHexToBin;
-    {$endif CPUX86NOTPIC}
-    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
-    c := tab[ord(Hex[1])];
-    if (b <> 255) and
-       (c <> 255) then
-    begin
-      if Bin <> nil then
-      begin
-        inc(c, b);
-        Bin^ := AnsiChar(c);
-      end;
-      result := true;
-      exit;
-    end;
-  end;
-  result := false; // return false if any invalid char
 end;
 
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolean;
