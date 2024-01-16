@@ -418,6 +418,7 @@ type
   // algorithm to focus the process on the first threads of the pool - by design,
   // this will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
   // - hsoEnablePipelining enable HTTP pipelining (unsafe) on THttpAsyncServer
+  // - hsoEnableLogging enable an associated THttpServerGeneric.Logger instance
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -432,7 +433,8 @@ type
     hsoThreadSocketAffinity,
     hsoReusePort,
     hsoThreadSmooting,
-    hsoEnablePipelining);
+    hsoEnablePipelining,
+    hsoEnableLogging);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -463,6 +465,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fFavIcon: RawByteString;
     fRouterClass: TRadixTreeNodeClass;
+    fLogger: THttpLogger;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetRouterClass(aRouter: TRadixTreeNodeClass);
     procedure SetServerName(const aName: RawUtf8); virtual;
@@ -674,6 +677,12 @@ type
     //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
+    /// access to the HTTP logger initialized with hsoEnableLogging option
+    // - you can customize the logging process via Logger.Format,
+    // Logger.DestFolder, Logger.DefaultRotate, Logger.DefaultRotateFiles
+    // properties and Logger.DefineHost() method
+    property Logger: THttpLogger
+      read fLogger;
   published
     /// returns the API version used by the inherited implementation
     property ApiVersion: RawUtf8
@@ -1202,7 +1211,7 @@ type
     fMonoThread: boolean;
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
     fBanned: THttpAcceptBan; // for hsoBan40xIP
-    fOnAcceptIdle: TNotifyEvent;
+    fOnAcceptIdle: TOnPollSocketsIdle;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -1239,7 +1248,7 @@ type
     // if hsoBan40xIP option (i.e. the Banned property) has been set
     // - on Windows, requires some requests to trigger the event, because it
     // seems that accept() has timeout only on POSIX systems
-    property OnAcceptIdle: TNotifyEvent
+    property OnAcceptIdle: TOnPollSocketsIdle
       read fOnAcceptIdle write fOnAcceptIdle;
   published
     /// will contain the current number of connections to the server
@@ -3027,6 +3036,12 @@ constructor THttpServerGeneric.Create(const OnStart, OnStop: TOnNotifyThread;
 begin
   fOptions := ProcessOptions; // should be set before SetServerName
   SetServerName('mORMot2 (' + OS_TEXT + ')');
+  if hsoEnableLogging in fOptions then
+  begin
+    fLogger := THttpLogger.Create;
+    fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
+    fOnAfterResponse := fLogger.Append;
+  end;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
@@ -3034,6 +3049,7 @@ destructor THttpServerGeneric.Destroy;
 begin
   inherited Destroy;
   FreeAndNil(fRoute);
+  FreeAndNil(fLogger);
 end;
 
 function THttpServerGeneric.Route: TUriRouter;
@@ -4080,6 +4096,7 @@ var
   cltservsock: THttpServerSocket;
   res: TNetResult;
   banlen, tix, bantix: integer;
+  tix64: QWord;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -4110,13 +4127,16 @@ begin
           cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down, and end thread now
       end;
+      tix64 := 0;
       if Assigned(fBanned) and
          {$ifdef OSPOSIX}
          (res = nrRetry) and // Windows does not implement timeout on accept()
          {$endif OSPOSIX}
          (fBanned.Count <> 0) then
       begin
-        tix := GetTickCount64 div 1000; // call DoRotate exactly every second
+        // call fBanned.DoRotate exactly every second
+        tix64 := mormot.core.os.GetTickCount64;
+        tix := tix64 div 1000;
         {$ifdef OSPOSIX} // Windows would require some activity - not an issue
         if bantix = 0 then
           fSock.ReceiveTimeout := 1000 // accept() to exit after one second
@@ -4126,10 +4146,14 @@ begin
           fBanned.DoRotate; // update internal THttpAcceptBan lists
         bantix := tix;
       end;
-      if res = nrRetry then // accept() timeout after 5000/1000 ms
+      if res = nrRetry then // accept() timeout after 1 or 5 seconds
       begin
+        if tix64 = 0 then
+          tix64 := mormot.core.os.GetTickCount64;
         if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self); // called every few seconds (e.g. 5 by default)
+          fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
+        if Assigned(fLogger) then
+          fLogger.OnIdle(tix64); // flush log file(s) on idle server
         continue;
       end;
       if fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
@@ -4178,7 +4202,7 @@ begin
       begin
         // ServerThreadPoolCount > 0 will use the thread pool to process the
         // request header, and probably its body unless kept-alive or upgraded
-        // - this is the most efficient way of using this server
+        // - this is the most efficient way of using this server class
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
@@ -6131,6 +6155,8 @@ begin
   fOnBeforeBody := From.fOnBeforeBody;
   fOnBeforeRequest := From.fOnBeforeRequest;
   fOnAfterRequest := From.fOnAfterRequest;
+  fOnAfterResponse := From.fOnAfterResponse;
+  fMaximumAllowedContentLength := From.fMaximumAllowedContentLength;
   fCallbackSendDelay := From.fCallbackSendDelay;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;

@@ -3759,6 +3759,9 @@ begin
     T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
     fHttpDateNowUtc := tmp; // (almost) atomic set
   end;
+  // ensure log file(s) are flushed to disk at least once a second
+  if fLogger <> nil then
+    fLogger.OnIdle(mormot.core.os.GetTickCount64);
   // clean interned HTTP headers every 16 secs
   if (fInterning <> nil) and
      (fAsync <> nil) then

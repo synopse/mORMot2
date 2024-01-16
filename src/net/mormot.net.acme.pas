@@ -353,7 +353,7 @@ type
     fNextCheckTix: Int64;
     fRedirectHttps: integer;
     function OnHeaderParsed(ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult;
-    procedure OnAcceptIdle(Sender: TObject);
+    procedure OnAcceptIdle(Sender: TObject; Tix64: Int64);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
     // - if aDirectoryUrl is not '', will use the "staging" environment - you
@@ -1346,20 +1346,16 @@ begin
   // HeaderRetrieveAbortDelay would trigger grTimeOut to ban the IP
 end;
 
-procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject);
-var
-  tix: Int64;
+procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject; Tix64: Int64);
 begin
   if fRenewing or
      fRenewTerminated or
      (fClient = nil) or
-     (fRenewBeforeEndDays <= 0) then
+     (fRenewBeforeEndDays <= 0) or
+     (Tix64 < fNextCheckTix) then
     exit;
-  tix := GetTickCount64;
-  if tix < fNextCheckTix then
-    exit;
-  fNextCheckTix := tix + (MSecsPerDay shr 1); // retry every half a day
-  CheckCertificatesBackground;
+  fNextCheckTix := Tix64 + (MSecsPerDay shr 1); // retry every half a day
+  CheckCertificatesBackground; // launch a dedicated background thread
 end;
 
 {$else}
