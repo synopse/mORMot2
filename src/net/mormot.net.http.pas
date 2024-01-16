@@ -1545,7 +1545,7 @@ type
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
     fVariables: THttpLogVariables;
-    fDestFolder: TFileName;
+    fDestFolder, fDestMainLog: TFileName;
     fFlags: set of (ffOwnWriterSingle);
     fDefaultRotate: THttpLoggerRotate;
     fDefaultRotateFiles: integer;
@@ -1585,31 +1585,8 @@ type
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
     procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
-    /// direct access to the output format
-    // - if not supplied in Create() you can assign a format at runtime via this
-    // property to call Parse() - raising EHttpLogger on error
-    property Format: RawUtf8
-      read fFormat write SetFormat;
-    /// where the log files will be stored, if not supplied in CreateWithFile()
-    // - one main DestFolder + 'access.log' (rotated) file will be maintained
-    // - if not defined, GetSystemPath(spLog) will be used
-    // - DefineHost() could generate additional per Host (rotated) log file
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DestFolder: TFileName
-      read fDestFolder write SetDestFolder;
-    /// define when log file rotation should occur
-    // - default value is hlrAfter10MB
-    // - you can customize this in DefineHost() optional aRotate parameter
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DefaultRotate: THttpLoggerRotate
-      read fDefaultRotate write fDefaultRotate;
-    /// how many log files are kept by default, including the main file
-    // - default value is 9, i.e. to generate 'xxx.1.gz' up to 'xxx.9.gz'
-    // - setting 0 would disable the whole rotation process
-    // - you can customize this in DefineHost() optional aRotateFiles parameter
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DefaultRotateFiles: integer
-      read fDefaultRotateFiles write fDefaultRotateFiles;
+    /// retrieve the main parameters from another THttpLogger instance
+    procedure CopyParams(Another: THttpLogger);
     /// customize the log line feed pattern
     // - matches the operating system value by default (CR or CRLF)
     property LineFeed: RawUtf8
@@ -1631,6 +1608,38 @@ type
     // - mainly used for internal testing purposes
     property WriterHost: THttpLoggerWriterDynArray
       read fWriterHost;
+  published
+    /// direct access to the output format
+    // - if not supplied in Create() you can assign a format at runtime via this
+    // property to call Parse() - raising EHttpLogger on error
+    property Format: RawUtf8
+      read fFormat write SetFormat;
+    /// where the log files will be stored, if not supplied in CreateWithFile()
+    // - one main DestFolder + DestMainLog - 'access.log' by default - (rotated)
+    // file will be maintained
+    // - if not defined, GetSystemPath(spLog) will be used
+    // - DefineHost() could generate additional per Host (rotated) log file
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DestFolder: TFileName
+      read fDestFolder write SetDestFolder;
+    /// the log file name to be used in DestFolder main log
+    // - equals 'access.log' by default, just like nginx
+    // - DefineHost() will use the 'hostname.log' pattern for its own log files
+    property DestMainLog: TFileName
+      read fDestMainLog write fDestMainLog;
+    /// define when log file rotation should occur
+    // - default value is hlrAfter10MB
+    // - you can customize this in DefineHost() optional aRotate parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotate: THttpLoggerRotate
+      read fDefaultRotate write fDefaultRotate;
+    /// how many log files are kept by default, including the main file
+    // - default value is 9, i.e. to generate 'xxx.1.gz' up to 'xxx.9.gz'
+    // - setting 0 would disable the whole rotation process
+    // - you can customize this in DefineHost() optional aRotateFiles parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotateFiles: integer
+      read fDefaultRotateFiles write fDefaultRotateFiles;
   end;
 
   /// exception raised by THttpAnalyzer related classes
@@ -4207,6 +4216,7 @@ begin
   fLineFeed := CRLF; // default operating-system dependent Line Feed
   fDefaultRotate := hlrAfter10MB;
   fDefaultRotateFiles := 9;
+  fDestMainLog := 'access.log';
 end;
 
 constructor THttpLogger.CreateWithWriter(aWriter: TTextDateWriter;
@@ -4278,7 +4288,7 @@ begin
     fDestFolder := GetSystemPath(spLog); // default if not customized
   result := fDestFolder;
   if aHost = '' then
-    result := result + 'access.log'
+    result := result + fDestMainLog
   else
     result := FormatString('%%.log', [result, LowerCase(aHost)]);
 end;
@@ -4617,6 +4627,20 @@ begin
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
+end;
+
+procedure THttpLogger.CopyParams(Another: THttpLogger);
+begin
+  if (self = nil) or
+     (Another = nil) or
+     (fWriterHost <> nil) or // too late
+     (fWriterSingle <> nil) then
+    exit;
+  SetDestFolder(Another.DestFolder);
+  SetFormat(Another.Format);
+  LineFeed := Another.LineFeed;
+  DefaultRotate := Another.DefaultRotate;
+  DefaultRotateFiles := Another.DefaultRotateFiles;
 end;
 
 
