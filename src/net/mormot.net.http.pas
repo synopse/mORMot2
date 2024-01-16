@@ -1622,7 +1622,7 @@ type
     // - not used if CreateWithWriter or CreateWithFile constructors were called
     property DestFolder: TFileName
       read fDestFolder write SetDestFolder;
-    /// the log file name to be used in DestFolder main log
+    /// the log file name to be used in DestFolder for the main log file
     // - equals 'access.log' by default, just like nginx
     // - DefineHost() will use the 'hostname.log' pattern for its own log files
     property DestMainLog: TFileName

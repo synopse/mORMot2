@@ -318,9 +318,20 @@ type
     /// raw access to the internal Client list
     property Client: TAcmeLetsEncryptClientObjArray
       read fClient;
+    /// a callback which may be needed during CheckCertificates() process
+    // - not needed if an internal HTTP server is processed
+    property OnChallenge: TOnAcmeChallenge
+      read fOnChallenge write fOnChallenge;
+  published
+    /// the algorithm used for the certificates
+    property KeyAlgo: RawUtf8
+      read fAlgo;
     /// where the certificates and related information are persisted
     property KeyStoreFolder: TFileName
       read fKeyStoreFolder;
+    /// the URI root folder used for ACME authentication
+    property DirectoryUrl: RawUtf8
+      read fDirectoryUrl;
     /// how many days before expiration CheckCertificates() should renew a
     // certificate
     // - default is 30 days, as stated by https://letsencrypt.org/docs/faq
@@ -331,10 +342,6 @@ type
     // - default is 30 seconds
     property RenewWaitForSeconds: integer
       read fRenewWaitForSeconds write fRenewWaitForSeconds;
-    /// a callback which may be needed during CheckCertificates() process
-    // - not needed if an internal HTTP server is processed
-    property OnChallenge: TOnAcmeChallenge
-      read fOnChallenge write fOnChallenge;
   end;
 
 
@@ -347,12 +354,15 @@ type
   // - will redirect any plain HTTP port 80 request to HTTPS port 443
   // - at startup, then twice a day, will try to renew the certificates in the
   // background, following RenewBeforeEndDays property policy
+  // - is typically associated to a main THttpAsyncServer for the HTTPS requests
   TAcmeLetsEncryptServer = class(TAcmeLetsEncrypt)
   protected
     fHttpServer: THttpServer; // a single threaded HTTP server is enough
+    fHttpsServer: THttpServerGeneric;
     fNextCheckTix: Int64;
     fRedirectHttps: integer;
-    function OnHeaderParsed(ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult;
+    function OnHeaderParsed(
+      Request: THttpServerSocket): THttpServerSocketGetRequestResult;
     procedure OnAcceptIdle(Sender: TObject; Tix64: Int64);
   public
     /// initialize certificates management and HTTP server with Let's Encrypt
@@ -360,20 +370,27 @@ type
     // should specify ACME_LETSENCRYPT_URL on production
     // - if aAlgo is '', will use 'x509-es256' as default
     // - a global aPrivateKeyPassword could be set to protect ##.key.pem files
+    // - you can specify the associated main HTTPS server into aHttpsServer so
+    // that our plain HTTP server will follow its configuration (e.g. logging)
     // - by default, the HTTP server will consume a single thread, but you can
-    // set aHttpServerThreadCount >= 0 to use a thread pool for heavy load
+    // set e.g. aHttpServerThreadCount = 2 on a production server
     // - aPort can be set to something else than 80, e.g. behind a reverse proxy
     // - will raise an exception if port 80 is not available for binding (e.g.
     // if the user is not root on Linux/POSIX)
     constructor Create(aLog: TSynLogClass; const aKeyStoreFolder: TFileName;
       const aDirectoryUrl, aAlgo: RawUtf8; const aPrivateKeyPassword: SpiUtf8;
-      aHttpServerThreadCount: integer = -1; const aPort: RawUtf8 = '80'); reintroduce;
+      aHttpsServer: THttpServerGeneric = nil;
+      aHttpServerThreadCount: integer = -1; const aPort: RawUtf8 = ''); reintroduce;
     /// finalize the certificates management and the associated HTTP server
     destructor Destroy; override;
     /// allow to specify the https URI to redirect from any request on port 80
     // - Redirection should include the full URI, e.g. 'https://blog.synopse.info'
     function Redirect(const Domain, Redirection: RawUtf8): boolean;
-    /// the associated HTTP server running on port 80
+    // the associated HTTPS server as supplied to Create()
+    property HttpsServer: THttpServerGeneric
+      read fHttpsServer;
+  published
+    /// the limited HTTP server launched by this class, running on port 80
     property HttpServer: THttpServer
       read fHttpServer;
   end;
@@ -1242,27 +1259,68 @@ end;
 
 constructor TAcmeLetsEncryptServer.Create(aLog: TSynLogClass;
   const aKeyStoreFolder: TFileName; const aDirectoryUrl, aAlgo: RawUtf8;
-  const aPrivateKeyPassword: SpiUtf8; aHttpServerThreadCount: integer;
-  const aPort: RawUtf8);
+  const aPrivateKeyPassword: SpiUtf8; aHttpsServer: THttpServerGeneric;
+  aHttpServerThreadCount: integer; const aPort: RawUtf8);
+var
+  opt: THttpServerOptions;
+  i: PtrInt;
+  p, hp: RawUtf8;
+  log: ISynLog;
 begin
+  // prepare the needed information for our HTTP server
+  p := aPort;
+  if p = '' then
+    p := '80';
+  opt := [hsoBan40xIP, hsoNoXPoweredHeader];
+  if aHttpsServer <> nil then
+  begin
+    // retrieve some information from the main HTTPS server
+    fHttpsServer := aHttpsServer;
+    // bind to the same interface
+    if fHttpsServer.InheritsFrom(THttpServerSocketGeneric) then
+    begin
+      hp := THttpServerSocketGeneric(fHttpsServer).SockPort;
+      i := PosExChar(':', hp);
+      if (i <> 0) and
+         (PosExChar(':', p) = 0) then
+        p := copy(hp, 1, i) + p; // 'IP:port'
+    end;
+    // enable logging also into an "access80.log" file
+    if hsoEnableLogging in fHttpsServer.Options then
+      include(opt, hsoEnableLogging);
+  end;
   // start a basic HTTP server on port 80
-  fHttpServer := THttpServer.Create(aPort, nil, nil, 'Acme Server',
-    aHttpServerThreadCount, 30000, [hsoBan40xIP]);
+  log := aLog.Enter('Create: start THttpServer on %', [p], self);
+  fHttpServer := THttpServer.Create(p, nil, nil, 'Acme Server',
+    aHttpServerThreadCount, 30000, opt);
+  // retrieve some parameters from the main HTTPS server
+  if fHttpsServer <> nil then
+  begin
+    fHttpServer.ServerName := fHttpsServer.ServerName;
+    if hsoEnableLogging in opt then
+    begin
+      fHttpServer.Logger.CopyParams(fHttpServer.Logger);
+      fHttpServer.Logger.DestMainLog := 'access80.log';
+    end;
+  end;
   // setup the ACME configuration
   inherited Create(aLog, aKeyStoreFolder, aDirectoryUrl, aAlgo,
     aPrivateKeyPassword);
   // handle requests on port 80 as redirection or ACME challenges
   fHttpServer.OnHeaderParsed := OnHeaderParsed;
   // ban an IP for 4 seconds on any DoS attack
-  fHttpServer.HeaderRetrieveAbortDelay := 200; // allow 200ms to send headers
-  // setup certificate renewal in a background TLoggedWorkThread
+  fHttpServer.HeaderRetrieveAbortDelay := 200; // grTimeOut after 200ms headers
+  // automated certificate renewal
   fHttpServer.OnAcceptIdle := OnAcceptIdle; // try now, then every half a day
+  // log the current state
+  if Assigned(log) then
+    log.Log(sllTrace, self);
 end;
 
 destructor TAcmeLetsEncryptServer.Destroy;
 begin
   fRenewTerminated := true; // abort any background task ASAP
-  fHttpServer.Free;
+  FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
 
@@ -1288,62 +1346,63 @@ begin
 end;
 
 function TAcmeLetsEncryptServer.OnHeaderParsed(
-  ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult;
+  Request: THttpServerSocket): THttpServerSocketGetRequestResult;
 var
   client: TAcmeLetsEncryptClient;
 begin
   // quick process of HTTP requests on port 80 into HTTP/1.0 responses
-  if (ClientSock.Http.CommandUri <> '') and
-     (PCardinal(ClientSock.Http.CommandUri)^ =
+  if (Request.Http.CommandUri <> '') and
+     (PCardinal(Request.Http.CommandUri)^ =
             ord('/') + ord('.') shl 8 + ord('w') shl 16 + ord('e') shl 24) then
     // handle Let's Encrypt challenges on /.well-known/* URI
     if fRenewing and
-       OnNetTlsAcceptChallenge(ClientSock.Http.Host,
-         ClientSock.Http.CommandUri, ClientSock.Http.CommandResp) then
+       OnNetTlsAcceptChallenge(Request.Http.Host,
+         Request.Http.CommandUri, Request.Http.CommandResp) then
       // return HTTP-01 challenge content
-      ClientSock.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
+      Request.SockSend('HTTP/1.0 200 OK'#13#10 + BINARY_CONTENT_TYPE_HEADER)
     else
       // no redirection for inactive /.well-known/acme-challenge/<Token> URIs
-      ClientSock.SockSend('HTTP/1.0 404 Not Found')
+      Request.SockSend('HTTP/1.0 404 Not Found')
   else
   begin
     // redirect GET or POST on port 80 to port 443 using 301 or 308 response
-    if HttpMethodWithNoBody(ClientSock.Http.CommandMethod) then
-      ClientSock.SockSend('HTTP/1.0 301 Moved Permanently')
+    if HttpMethodWithNoBody(Request.Http.CommandMethod) then
+      Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
-      ClientSock.SockSend('HTTP/1.0 308 Permanent Redirect');
+      Request.SockSend('HTTP/1.0 308 Permanent Redirect');
     if fRedirectHttps = 0 then
       client := nil // no Redirect() currently active
     else
-      client := GetClientLocked(ClientSock.Http.Host);
+      client := GetClientLocked(Request.Http.Host);
     if client <> nil then
     begin
-      ClientSock.Http.Upgrade := client.fRedirectHttps; // Http.Upgrade as temp
+      Request.Http.Upgrade := client.fRedirectHttps; // Http.Upgrade as temp
       client.Safe.UnLock;
-      if ClientSock.Http.Upgrade = '' then
+      if Request.Http.Upgrade = '' then
         client := nil;
     end;
     if client <> nil then
       // redirect to the customized URI for this host
-      ClientSock.SockSend([
-        'Location: ', ClientSock.Http.Upgrade])
+      Request.SockSend([
+        'Location: ', Request.Http.Upgrade])
     else
       // redirect to the same URI but on HTTPS host
-      ClientSock.SockSend([
-        'Location: https://', ClientSock.Http.Host, ClientSock.Http.CommandUri]);
-    if IsGet(ClientSock.Http.CommandMethod) then
-      ClientSock.Http.CommandResp := 'Back to HTTPS'
+      Request.SockSend([
+        'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
+    if IsGet(Request.Http.CommandMethod) then
+      Request.Http.CommandResp := 'Back to HTTPS'
     else
-      ClientSock.Http.CommandResp := '';
+      Request.Http.CommandResp := '';
   end;
-  ClientSock.SockSend([
+  Request.SockSend([
     'Server: ', fHttpServer.ServerName, #13#10 +
-    'Content-Length: ', length(ClientSock.Http.CommandResp), #13#10 +
+    'Content-Length: ', length(Request.Http.CommandResp), #13#10 +
     'Connection: Close'#13#10]);
-  ClientSock.SockSendFlush(ClientSock.Http.CommandResp);
-  // no regular OnRequest() event, just closing the connection
+  Request.SockSendFlush(Request.Http.CommandResp);
+  // no regular OnRequest() event: we have sent the response
   result := grIntercepted;
-  // HeaderRetrieveAbortDelay would trigger grTimeOut to ban the IP
+  // grIntercepted won't trigger any IP ban, just close the connection
+  // HeaderRetrieveAbortDelay=200 will trigger grTimeOut to ban the IP
 end;
 
 procedure TAcmeLetsEncryptServer.OnAcceptIdle(Sender: TObject; Tix64: Int64);
