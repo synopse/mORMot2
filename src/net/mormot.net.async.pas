@@ -3601,9 +3601,6 @@ begin
       // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 
-const
-  NO_USER: pointer = nil;
-
 procedure THttpAsyncConnection.DoAfterResponse;
 var
   ctx: TOnHttpServerAfterResponseContext;
@@ -3611,16 +3608,15 @@ begin
   QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
   dec(ctx.ElapsedMicroSec, fAfterResponseStart);
   ctx.Connection := fConnectionID;
-  ctx.Method := @fHttp.CommandMethod;
-  ctx.Host := @fHttp.Host;
-  ctx.Url := @fHttp.CommandUri;
-  if hsrAuthorized in fRequestFlags then
-    ctx.User := @fHttp.BearerToken // from THttpServerSocketGeneric.Authorization
-  else
-    ctx.User := @NO_USER;
-  ctx.Referer := @fHttp.Referer;
-  ctx.UserAgent := @fHttp.UserAgent;
-  ctx.RemoteIP := @fRemoteIP;
+  ctx.Method := pointer(fHttp.CommandMethod);
+  ctx.Host := pointer(fHttp.Host);
+  ctx.Url := pointer(fHttp.CommandUri);
+  ctx.User := nil;
+  if hsrAuthorized in fRequestFlags then // from THttpServerSocketGeneric.Authorization
+    ctx.User := pointer(fHttp.BearerToken);
+  ctx.Referer := pointer(fHttp.Referer);
+  ctx.UserAgent := pointer(fHttp.UserAgent);
+  ctx.RemoteIP := pointer(fRemoteIP);
   ctx.Flags := fRequestFlags;
   ctx.StatusCode := fRespStatus;
   ctx.Received := fBytesRecv;

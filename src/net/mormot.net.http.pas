@@ -564,10 +564,10 @@ type
 
   /// raw parameter type of TOnHttpServerAfterResponse
   // - THttpServerRequest instance has already been reset in mormot.net.async
-  // - we use such a record with PRawUtf8 fields to minimize the stack size
+  // - we use such a record with pointer fields to minimize the stack size
   // and avoid any ref-count when passing RawUtf8 values between event callbacks
   TOnHttpServerAfterResponseContext = record
-    User, Method, Host, Url, Referer, UserAgent, RemoteIP: PRawUtf8;
+    User, Method, Host, Url, Referer, UserAgent, RemoteIP: pointer; // = RawUtf8
     Connection: THttpServerConnectionID;
     Flags: THttpServerRequestFlags;
     StatusCode: cardinal;
