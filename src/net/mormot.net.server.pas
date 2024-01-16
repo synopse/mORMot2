@@ -1289,7 +1289,7 @@ type
   /// class allowing to persist THttpAnalyzer information into a binary file
   // - output will just be raw THttpAnalyzerToSave memory layout with no
   // compression involved
-  // - raw format consumming around 300MB of data per year (61*24*364*15*40)
+  // - raw format consumming around 326MB of data per year (61*24*364*16*40)
   THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
   public
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
@@ -1306,12 +1306,19 @@ type
     First: TDateTime;
     /// the timestamp of the last event in this file
     Last: TDateTime;
-    /// the crc32c of all meaning content - could be used e.g. to compare files
+    /// the crc32c of all data rows - could be used e.g. to compare files
     Crc: cardinal;
+    /// the binary size of the internal format extensions stored with the data
+    // - <> 0 if THttpAnalyzerReader.GetExtensions/SetExtensions were overriden
+    ExtensionSize: cardinal;
+    /// some custom text or JSON, as set to THttpAnalyzerReader.Metadata field
+    Metadata: RawUtf8;
   end;
 
   /// class used to read and search persisted THttpAnalyzer information
   // - all data will be stored in memory, with 40 bytes per row
+  // - you can aggregate several input files, then persist the whole using our
+  // optimized binary encoding, for efficient search on the whole dataset
   THttpAnalyzerReader = class(TSynPersistent)
   protected
     fSafe: TLightLock;
@@ -1327,7 +1334,10 @@ type
     fLastRangeToIndex: record // naive but efficient e.g. from a dashboard
       sta, sto, ista, isto: cardinal;
     end;
+    fMetadata: RawUtf8;
     procedure CreateDynArray;
+    procedure GetExtensions(out data: RawByteString); virtual;
+    function SetExtensions(const data: TValueResult): boolean; virtual;
     function StateAsCompactArray: PDynArray; // compact and set fDynArray
       {$ifdef HASINLINE} inline; {$endif}
     procedure ResetPeriodIndex;
@@ -1361,12 +1371,18 @@ type
     function Get(Row: integer): PHttpAnalyzerToSave;
       {$ifdef HASINLINE} inline; {$endif}
     /// search for a Period/Scope information for a given time range
-    // - very fast, using per-Period indexes for hapHour .. hapYear
+    // - Period could be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - very fast, using per-Period indexes for hapHour .. hapMonth
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
       Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
     /// class function able to retrieve the metadata of our optimized binary format
     class function LoadHeader(const FileName: TFileName;
       out Info: THttpAnalyzerReaderHeader): boolean;
+    /// some custom text persisted in our SaveToFile/LoadFromFile header
+    // - you can specify here e.g. some human-readable description of the
+    // file content, as plain text or JSON
+    property Metadata: RawUtf8
+      read fMetadata write fMetadata;
     /// access to the thread-safety NOT reentrant lock
     property Safe: TLightLock
       read fSafe write fSafe;
@@ -5042,13 +5058,13 @@ begin
     with fToSave do
       if Count <> 0 then
       begin
-        tmp := copy(State, 0, Count);
+        tmp := copy(State, 0, Count); // use local copy to release lock ASAP
         Count := 0;
       end;
   finally
     fSafe.UnLock;
   end;
-  // execute the actual persistence callback outside of the loop
+  // execute the actual persistence callback outside of the lock
   if tmp <> nil then
     fOnSave(tmp);
 end;
@@ -5382,7 +5398,7 @@ begin
   try
     f := TFileStreamEx.CreateWrite(fFileName);
     try
-      f.Seek(0, soEnd); // append
+      f.Seek(0, soEnd); // just append
       f.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
     finally
       f.Free;
@@ -5430,7 +5446,7 @@ var
 begin
   fPeriodLastCount := 0;
   for p := low(fPeriod) to high(fPeriod) do
-    fPeriod[p].Count := 0; // keep Index[] buffer for next CreatePeriodIndex
+    fPeriod[p].Count := 0;    // keep Index[] buffer for next CreatePeriodIndex
   fLastRangeToIndex.sta := 0; // reset RangeToIndex() last result
 end;
 
@@ -5524,6 +5540,7 @@ begin
     fState.Clear;
     fDynArray.Sorted := false; // force CreateDynArray
     ResetPeriodIndex;
+    fMetadata := '';
   finally
     fSafe.UnLock;
   end;
@@ -5531,7 +5548,7 @@ end;
 
 const
   // allow up to 400MB of memory for the storage
-  // - our format consummes around 300MB of data per year (61*24*365*15*40)
+  // - our format consummes around 326MB of data per year (61*24*365*16*40)
   HTTPANALYZER_MAXCOUNT = (400 shl 20) div SizeOf(THttpAnalyzerToSave);
 
 function THttpAnalyzerReader.AddFromBuffer(const Buffer: RawByteString): boolean;
@@ -5596,7 +5613,7 @@ begin
   if (n = 0) or
      (fCount + n > HTTPANALYZER_MAXCOUNT) then
     exit; // no data or too much data
-  FastSetRawByteString(tmp, @State, n * SizeOf(State[0]));
+  FastSetRawByteString(tmp, pointer(State), n * SizeOf(State[0]));
   AddFromBuffer(tmp);
 end;
 
@@ -5620,6 +5637,16 @@ begin
   result := LoadFromReader(rd);
 end;
 
+procedure THttpAnalyzerReader.GetExtensions(out data: RawByteString);
+begin
+  // may be overriden with additional data
+end;
+
+function THttpAnalyzerReader.SetExtensions(const data: TValueResult): boolean;
+begin
+  result := true; // decoding success
+end;
+
 const
   HTTPANALYZER_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
 
@@ -5627,8 +5654,9 @@ procedure THttpAnalyzerReader.SaveToWriter(Dest: TBufferWriter);
 var
   p: THttpAnalyzerPeriod;
   s: PHttpAnalyzerToSave;
-  n, diff: integer;
+  n, diff: PtrInt;
   prevdate: cardinal;
+  extensions: RawByteString; // variable data field for backward compatibility
   w: PByte;
 begin
   fSafe.Lock;
@@ -5636,6 +5664,7 @@ begin
     // save header
     Dest.Write(@HTTPANALYZER_MAGIC[1], ord(HTTPANALYZER_MAGIC[0]));
     Dest.WriteVarUInt32(fCount);
+    Dest.Write(fMetadata);
     if fCount = 0 then
       exit;
     if fPeriodLastCount < fCount then
@@ -5644,9 +5673,14 @@ begin
       Dest.WriteVarUInt32(fPeriod[p].Count);  // avoid realloc in LoadFromReader
     s := StateAsCompactArray^.Value^;
     n := fCount;
+    Dest.Write4(s^.Date);                                 // first date
     Dest.Write4(PHttpAnalyzerToSaveArray(s)[n - 1].Date); // last date
-    Dest.Write4(crc32c(0, pointer(s), n * SizeOf(s^)));   // anti-tampering
-    // save main data
+    GetExtensions(extensions);
+    Dest.Write4(crc32c(crc32c(0, pointer(extensions), length(extensions)),
+                              pointer(s), n * SizeOf(s^))); // anti-tampering
+    // additional extensions data, included in the crc
+    Dest.Write(extensions);
+    // save main data, encoded from fState
     prevdate := 0;
     repeat
       diff := s^.Date - prevdate; // delta encoding of the increasing Date field
@@ -5675,7 +5709,9 @@ var
   s: PHttpAnalyzerToSave;
   i, n: integer;
   rd: PByte;
-  lastdate, prevdate, crc: cardinal;
+  firstdate, lastdate, prevdate, crc: cardinal;
+  peek: PtrUInt;
+  extensions: TValueResult; // variable field for backward compatibility
   tmp: string[23];
 begin
   result := false;
@@ -5688,11 +5724,12 @@ begin
   fSafe.Lock;
   try
     n := Source.VarUInt32;
-    if n > HTTPANALYZER_MAXCOUNT then
-      exit; // paranoid
-    fCount := n;
+    if (n > HTTPANALYZER_MAXCOUNT) or
+       not Source.VarUtf8Safe(fMetadata) then
+      exit;
     if n = 0 then
       exit;
+    fCount := n;
     fPeriodLastCount := n;
     for p := low(fPeriod) to high(fPeriod) do // hapHour .. hapMonth
       with fPeriod[p] do
@@ -5701,15 +5738,22 @@ begin
         Index := nil;
         SetLength(Index, Count); // pre-allocate all indexes
       end;
-    lastdate := Source.Next4;
+    firstdate := Source.Next4;
+    lastdate  := Source.Next4;
     crc := Source.Next4;
-    if Source.RemainingLength < PtrUInt(fCount) * 6 then
+    // additional extensions data, included in the crc
+    if not Source.VarBlobSafe(extensions) or
+       not SetExtensions(extensions) then // method could be overriden
       exit;
-    // read main data
+    // read and decode main data into fState
+    if (Source.RemainingLength < PtrUInt(fCount) * 6) or
+       not Source.PeekVarUInt32(peek) or
+       (peek <> firstdate) then
+      exit;
     fState.Add(nil, fCount * SizeOf(s^)); // pre-allocate all data
     prevdate := 0;
     s := StateAsCompactArray.Value^;
-    rd := pointer(Source.P); // use a PByte within the loop
+    rd := pointer(Source.P); // use a faster PByte within the loop
     i := 0;
     repeat
       inc(prevdate, FromVarUInt32(rd)); // delta decoding
@@ -5732,15 +5776,16 @@ begin
       inc(i);
       inc(s);
     until i = fCount;
-    // quickly check index consistency
+    // quickly check data consistency
     if prevdate <> lastdate then
       exit;
     for p := low(fPeriod) to high(fPeriod) do
       with fPeriod[p] do
         if length(Index) <> Count then
           exit;
-    // ensure decoded input was not tampered
-    result := crc32c(0, fDynArray.Value^, fCount * SizeOf(s^)) = crc;
+    // ensure decoded data was not tampered
+    result := crc32c(crc32c(0, extensions.Ptr, extensions.Len),
+                            fDynArray.Value^, fCount * SizeOf(s^)) = crc;
   finally
     fSafe.UnLock;
     if not result then
@@ -5756,9 +5801,9 @@ var
   last, first: cardinal;
   p: THttpAnalyzerPeriod;
   rd: TFastReader;
-  tmp: array[byte] of byte; // first 256 bytes are enough
+  tmp: array[0..4095] of byte; // first 4KB should be enough with metadata
 begin
-  FillCharFast(Info, SizeOf(Info), 0);
+  FastRecordClear(@Info, TypeInfo(THttpAnalyzerReaderHeader));
   result := false;
   f := FileOpen(FileName, fmOpenReadDenyNone);
   if not ValidHandle(f) then
@@ -5770,7 +5815,9 @@ begin
     exit;
   {%H-}rd.Init(@tmp, len);
   if not CompareMem(rd.Next(mlen), @HTTPANALYZER_MAGIC[1], mlen) or
-     not rd.VarUInt32Safe(Info.Count) then
+     not rd.VarUInt32Safe(Info.Count) or
+     (Info.Count > HTTPANALYZER_MAXCOUNT) or
+     not rd.VarUtf8Safe(Info.Metadata) then
     exit;
   if Info.Count <> 0 then
   begin
@@ -5780,9 +5827,10 @@ begin
         dec(Info.Period[hapMinute], Info.Period[p]) // adjust
       else
         exit;
-    if not rd.CopySafe(@last, SizeOf(last)) or
+    if not rd.CopySafe(@first, SizeOf(first)) or
+       not rd.CopySafe(@last,  SizeOf(last)) or
        not rd.CopySafe(@Info.Crc, SizeOf(Info.Crc)) or
-       not rd.VarUInt32Safe(first) then // delta decoding of first date
+       not rd.VarUInt32Safe(Info.ExtensionSize) then
       exit;
     Info.First := UnixTimeToDateTime(first + UNIXTIME_MINIMAL);
     Info.Last  := UnixTimeToDateTime(last + UNIXTIME_MINIMAL);
