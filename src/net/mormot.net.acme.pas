@@ -863,7 +863,8 @@ begin
      (OutPrivateKey = '') then
     exit;
   result := CompleteDomainRegistration(cert, pk, aPrivateKeyPassword);
-  log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'CompleteDomainRegistration=%', [ToText(result)^], self);
   if result = asValid then
     try
       FileFromString(cert, OutSignedCert);
@@ -1034,11 +1035,13 @@ begin
            try
              fn := fKeyStoreFolder + GetFileNameWithoutExt(f.Name);
              ObjArrayAdd(fClient, TAcmeLetsEncryptClient.Create(self, fn));
-             log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %', [fn], self);
+             if Assigned(log) then
+               log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %', [fn], self);
            except
              RenameFile(fn, fn + '.invalid'); // don't try it again
-             log.Log(sllDebug,
-               'LoadFromKeyStoreFolder: renamed as %.invalid', [fn], self);
+             if Assigned(log) then
+               log.Log(sllWarning,
+                 'LoadFromKeyStoreFolder: renamed as %.invalid', [fn], self);
            end;
       until FindNext(f) <> 0;
       FindClose(f);
@@ -1048,8 +1051,9 @@ begin
   end;
   if fClient <> nil then
     mormot.net.sock.OnNetTlsAcceptServerName := OnNetTlsAcceptServerName;
-  log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %',
-    [Plural('domain', length(fClient))], self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'LoadFromKeyStoreFolder: added %',
+      [Plural('domain', length(fClient))], self);
 end;
 
 procedure TAcmeLetsEncrypt.CheckCertificates(Sender: TObject);
@@ -1091,8 +1095,11 @@ begin
     fSafe.UnLock;
   end;
   // renew the needed certificates
-  log.Log(sllDebug, 'CheckCertificates: renew %',
-    [Plural('certificate', length(needed))], self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'CheckCertificates: renew %',
+      [Plural('certificate', length(needed))], self);
+  if needed = nil then
+    exit;
   fRenewing := true;
   try
     for i := 0 to length(needed) - 1 do
@@ -1139,8 +1146,9 @@ begin
           c.fCtx := ctx; // restore the old context (which still works)
         c.Safe.UnLock; // no need to restart the server :)
       end;
-      log.Log(sllTrace, 'CheckCertificates: % = %',
-        [needed[i], ToText(res)^], self);
+      if Assigned(log) then
+        log.Log(sllTrace, 'CheckCertificates: % = %',
+          [needed[i], ToText(res)^], self);
     end;
   finally
     fRenewing := false;
