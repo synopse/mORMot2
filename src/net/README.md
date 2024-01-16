@@ -27,8 +27,10 @@ The Low-Level Sockets API is encapsultated into a single set of functions, and w
 
 HTTP/HTTPS Abstract Process Classes and Definitions
 - Shared HTTP Constants and Functions
+- Reusable HTTP State Machine
 - `THttpSocket` Implementing HTTP over plain sockets
 - Abstract Server-Side Types used e.g. for Client-Server Protocol
+- HTTP Server Logging/Monitoring Processors
 
 ### mormot.net.client
 
@@ -49,6 +51,7 @@ HTTP/UDP Server Classes
 - Custom URI Routing using an efficient Radix Tree
 - Shared Server-Side HTTP Process
 - `THttpServerSocket`/`THttpServer` HTTP/1.1 Server
+- `THttpPeerCache` Local Peer-to-peer Cache
 - `THttpApiServer` HTTP/1.1 Server Over Windows `http.sys` Module
 - `THttpApiWebSocketServer` Over Windows `http.sys` Module
 

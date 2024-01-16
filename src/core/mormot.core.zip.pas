@@ -860,11 +860,11 @@ function HashFileCrc32(const FileName: TFileName): RawUtf8;
 
 var
   /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
-  // - can use faster libdeflate instead of plain zlib if available
+  // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflate: TAlgoCompress;
 
   /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
-  // - can use faster libdeflate instead of plain zlib if available
+  // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflateFast: TAlgoCompress;
 
 
