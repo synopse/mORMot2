@@ -4493,8 +4493,13 @@ begin
             wr.AddShorter('upgrade');
         hlvDocument_Uri,
         hlvUri:
-          //TODO: normalize URI
-          wr.AddString(RawUtf8(Context.Url));
+          begin
+            l := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
+            if l < 0 then
+              l := length(RawUtf8(Context.Url));
+            wr.AddNoJsonEscape(Context.Url, l);
+            // no full URL decoding, nor // into / normalization yet
+          end;
         hlvElapsed:
           wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
         hlvElapsedUSec:
