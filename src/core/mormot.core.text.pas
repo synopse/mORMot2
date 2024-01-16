@@ -4969,7 +4969,8 @@ end;
 
 procedure TTextWriter.AddUrlNormalize(U: PUtf8Char; L: PtrInt);
 begin
-  if L > 0 then
+  if L <= 0 then
+    exit;
   repeat
     if B >= BEnd then
       FlushToStream; // inlined Add() in the loop
@@ -4980,26 +4981,22 @@ begin
       '%':
         if (L <= 2) or
            not HexToChar(PAnsiChar(U + 1), B) then
-          B^ := '%' // browsers may not follow the RFC (e.g. encode % as % !)
+          B^ := '%'  // browsers may not follow the RFC (e.g. encode % as % !)
         else
         begin
-          inc(U, 2);
+          inc(U, 2); // jump %xx
           dec(L, 2);
         end;
       '/':
-         if (U[1] = '/') and // normalize URI
-            (L > 1) then
-         begin
-           inc(U);
-           dec(L);
-         end
-        else
-          B^ := '/';
+         if (L = 1) or
+            (U[1] <> '/') then
+           B^ := '/'
+         else
+           dec(B); // normalize URI by ignoring this first /
     else
       B^ := U^;
     end;
     inc(U);
-    dec(B);
     dec(L);
   until L = 0;
 end;
