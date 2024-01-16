@@ -5495,7 +5495,7 @@ begin
   tmp := StringFromFile(Source);
   if length(tmp) < 23 then
     exit;
-  if PCardinal(tmp)^ <> PCardinal(@HTTPMETRICS_MAGIC[1])^ then
+  if PQWord(tmp)^ <> PQWord(@HTTPMETRICS_MAGIC[1])^ then
   begin
     algo := TAlgoCompress.Algo(tmp);
     if algo = nil then
@@ -5573,19 +5573,19 @@ function THttpMetrics.LoadFromReader(var Source: TFastReader): boolean;
 var
   p: THttpAnalyzerPeriod;
   s: PHttpAnalyzerToSave;
-  i, n: integer;
+  mlen, i, n: integer;
   rd: PByte;
   firstdate, lastdate, prevdate, crc: cardinal;
   peek: PtrUInt;
   extensions: TValueResult; // variable field for backward compatibility
-  tmp: string[23];
 begin
+  // always reset any previous stored data
   result := false;
   Clear;
   // read header
-  tmp[0] := HTTPMETRICS_MAGIC[0];
-  if not Source.CopySafe(@tmp[1], ord(tmp[0])) or
-     (tmp <> HTTPMETRICS_MAGIC) then
+  mlen := ord(HTTPMETRICS_MAGIC[0]);
+  if (Source.RemainingLength <= PtrUInt(mlen)) or
+     not CompareMem(Source.Next(mlen), @HTTPMETRICS_MAGIC[1], mlen) then
     exit;
   fSafe.Lock;
   try
@@ -5667,7 +5667,7 @@ var
   last, first: cardinal;
   p: THttpAnalyzerPeriod;
   rd: TFastReader;
-  tmp: array[0..4095] of AnsiChar; // first 4KB should be enough with metadata
+  tmp: array[0..4095] of AnsiChar; // first 4KB should be enough (with metadata)
   unc: array[0..6143] of AnsiChar; // partially decompressed content
 begin
   FastRecordClear(@Info, TypeInfo(THttpMetricsHeader));
@@ -5679,9 +5679,9 @@ begin
   len := FileRead(f, tmp, SizeOf(tmp));
   FileClose(f);
   mlen := ord(HTTPMETRICS_MAGIC[0]);
-  if len < mlen then
+  if len <= mlen then
     exit;
-  if PCardinal(@tmp)^ = PCardinal(@HTTPMETRICS_MAGIC[1])^ then
+  if PQWord(@tmp)^ = PQWord(@HTTPMETRICS_MAGIC[1])^ then
     // seems to be non-compressed content
     {%H-}rd.Init(@tmp, len)
   else
