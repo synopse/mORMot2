@@ -677,12 +677,6 @@ type
     //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
-    /// access to the HTTP logger initialized with hsoEnableLogging option
-    // - you can customize the logging process via Logger.Format,
-    // Logger.DestFolder, Logger.DefaultRotate, Logger.DefaultRotateFiles
-    // properties and Logger.DefineHost() method
-    property Logger: THttpLogger
-      read fLogger;
   published
     /// returns the API version used by the inherited implementation
     property ApiVersion: RawUtf8
@@ -705,6 +699,13 @@ type
     // - may be nil if Route has never been accessed, i.e. no routing was set
     property Router: TUriRouter
       read fRoute;
+    /// access to the HTTP logger initialized with hsoEnableLogging option
+    // - you can customize the logging process via Logger.Format,
+    // Logger.DestFolder, Logger.DefaultRotate, Logger.DefaultRotateFiles
+    // properties and Logger.DefineHost() method
+    // - equals nil if hsoEnableLogging was not set in the constructor
+    property Logger: THttpLogger
+      read fLogger;
   end;
 
 
@@ -1262,7 +1263,6 @@ type
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
       read fThreadPool;
-  published
     /// set if hsoBan40xIP has been defined
     // - indicates e.g. how many accept() have been rejected from their IP
     // - you can customize its behavior once the server is started by resetting
@@ -3040,7 +3040,7 @@ begin
   begin
     fLogger := THttpLogger.Create;
     fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
-    fOnAfterResponse := fLogger.Append;
+    fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
   end;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
@@ -4183,9 +4183,9 @@ begin
                   Process(cltservsock, 0, self);
                 end;
               grIntercepted:
-                ; // no ban
+                ; // handled by OnHeaderParsed event -> no ban
             else
-              if fBanned.BanIP(cltaddr.IP4) then
+              if fBanned.BanIP(cltaddr.IP4) then // e.g. after grTimeout
                 IncStat(grBanned);
             end;
             OnDisconnect;
