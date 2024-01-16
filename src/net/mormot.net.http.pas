@@ -1389,7 +1389,7 @@ type
     destructor Destroy; override;
     /// to be overriden e.g. to flush the logs to disk or consolidate counters
     // - this callback is likely to be executed every second from a THttpServer
-    procedure OnIdle(tix64: Int64); virtual;
+    procedure OnIdle(tix64: Int64); virtual; abstract;
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
@@ -1507,9 +1507,11 @@ type
     fRotateFiles: integer;
     fRotateTix10: cardinal;
     fRotateDate: integer; // = next Trunc(NowUtc)
+    fLastWriteToStreamTix10: cardinal;
     procedure TryRotate(Tix10: cardinal);
     procedure SetRotateDate;
     procedure DoRotate;
+    procedure WriteToStream(data: pointer; len: PtrUInt); override;
   public
     /// initialize a TTextDateWriter instance for THttpLogger
     constructor Create(aOwner: THttpLogger; const aHost: RawUtf8;
@@ -1528,27 +1530,27 @@ type
   THttpLoggerWriterDynArray = array of THttpLoggerWriter;
 
   /// HTTP server responses log format parser and interpreter
+  // - Format, DestFolder and DefineHost() allow to setup the logging process
   // - once parsed, log can be emitted by Append() with very high performance
   // - Append() match TOnHttpServerAfterResponse as real-time source of data
   // - OnIdle() should be called every few seconds for background log writing
   // - can perform per-host logging, and destination files rotation
   THttpLogger = class(THttpAfterResponse)
   protected
-    fWriterSingle: TTextDateWriter;
-    fWriterHost: THttpLoggerWriterDynArray;
+    fWriterSingle: TTextDateWriter; // from CreateWithWriter/CreateWithFile
+    fWriterHostSafe: TLightLock;
+    fWriterHost: THttpLoggerWriterDynArray; // from Create + DefineHost
+    fWriterHostLast: TTextDateWriter;
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
     fVariables: THttpLogVariables;
     fDestFolder: TFileName;
-    fLastTix: cardinal;
     fFlags: set of (ffOwnWriterSingle);
     fDefaultRotate: THttpLoggerRotate;
     fDefaultRotateFiles: integer;
-    fWriterSafe: TLightLock;
     procedure SetFormat(const aFormat: RawUtf8);
     procedure SetDestFolder(const aFolder: TFileName);
-    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     function GetPerHostFileName(const aHost: RawUtf8): TFileName; virtual;
     function GetWriter(Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
   public
@@ -1621,7 +1623,7 @@ type
     property Variables: THttpLogVariables
       read fVariables;
     /// low-level access to the main destination TTextWriter instance
-    // - as specified in Create()
+    // - as specified in CreateWithWriter/CreateWithFile constructors
     // - mainly used for internal testing purposes
     property WriterSingle: TTextDateWriter
       read fWriterSingle;
@@ -4064,11 +4066,6 @@ begin
   fSafe.Done;
 end;
 
-procedure THttpAfterResponse.OnIdle(tix64: Int64);
-begin
-  // do nothing by default
-end;
-
 
 { THttpLoggerWriter }
 
@@ -4092,14 +4089,12 @@ end;
 procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
 var
   needrotate: boolean;
-  siz: PtrUInt;
 begin
   // quickly check if we need to rotate this .log file
   if (fStream = nil) or
      not fRotating.TryLock then
     exit; // avoid race condition (paranoid)
-  siz := TextLength;
-  needrotate := siz >= 100 shl 20; // force always above 100MB
+  needrotate := fTotalFileSize >= 100 shl 20; // force always above 100MB
   case fRotate of
     hlrDaily,
     hlrWeekly:
@@ -4109,23 +4104,22 @@ begin
         if Trunc(NowUtc) >= fRotateDate then
         begin
           SetRotateDate; // always prepare next rotation date
-          if siz <> 0 then // something to rotate
-            needrotate := true;
+          needrotate := TextLength <> 0; // something to rotate
         end;
       end;
     hlrAfter1MB:
-      needrotate := siz >= 1 shl 20;
+      needrotate := fTotalFileSize >= 1 shl 20;
     hlrAfter10MB:
-      needrotate := siz >= 10 shl 20;
+      needrotate := fTotalFileSize >= 10 shl 20;
     hlrAfter32MB:
-      needrotate := siz >= 32 shl 20;
+      needrotate := fTotalFileSize >= 32 shl 20;
   end; // hlrAfter100MB + hlrUndefined = above 100MB
   if needrotate then
   try
     // rotate the file now - in a dedicated method
     DoRotate;
   finally
-    fRotating.UnLock; // eventually release
+    fRotating.UnLock; // eventual release
   end
   else
     fRotating.UnLock; // quick execution path if nothing to rotate
@@ -4176,6 +4170,14 @@ begin
     end;
 end;
 
+procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
+begin
+  // no need of THttpLogger.OnIdle to flush this log file within this second
+  fLastWriteToStreamTix10 := GetTickCount64 shr 10;
+  // perform the actual flush to disk
+  inherited WriteToStream(data, len);
+end;
+
 constructor THttpLoggerWriter.Create(aOwner: THttpLogger; const aHost: RawUtf8;
   aRotate: THttpLoggerRotate; aRotateFiles: integer);
 begin
@@ -4187,7 +4189,6 @@ begin
   fCustomOptions := [twoNoWriteToStreamException,
                      twoFlushToStreamNoAutoResize,
                      twoStreamIsOwned];
-  fOnFlushToStream := fOwner.OnFlushToStream;
   SetRotateDate;
 end;
 
@@ -4247,21 +4248,25 @@ var
   i: PtrInt;
   tix10: cardinal;
 begin
-  tix10 := tix64 shr 10;
-  if (tix10 = fLastTix) or
-     ((fWriterHost = nil) and
-      (fWriterSingle = nil)) then
+  if (fWriterHost = nil) and
+     (fWriterSingle = nil) then
     exit; // nothing to process
   fSafe.Lock;
   try
-    // force write to disk and check for any rotation at least every second
+    // force write to disk at least every second
     if fWriterSingle <> nil then
       fWriterSingle.FlushFinal;
-    for i := 0 to length(fWriterHost) - 1 do
-    begin
-      fWriterHost[i].FlushFinal;
-      fWriterHost[i].TryRotate(tix10); // optional rotation
-    end;
+    if (fWriterHost <> nil) and
+       fWriterHostSafe.TryLock then
+      try
+        tix10 := tix64 shr 10;
+        for i := 0 to length(fWriterHost) - 1 do
+          with fWriterHost[i] do
+            if fLastWriteToStreamTix10 <> tix10 then
+              FlushFinal; // no TryRotate(tix10) since may be slow
+      finally
+        fWriterHostSafe.UnLock;
+      end;
   finally
     fSafe.UnLock;
   end;
@@ -4288,7 +4293,7 @@ begin
   result := fWriterSingle;
   if result <> nil then
     exit;
-  fWriterSafe.Lock;
+  fWriterHostSafe.Lock;
   p := pointer(fWriterHost);
   if p = nil then
     // no previous DefineHost() call: set fWriterHost[0] = access.log instance
@@ -4297,7 +4302,7 @@ begin
                   self, '', fDefaultRotate, fDefaultRotateFiles);
       ObjArrayAdd(fWriterHost, result);
     finally
-      fWriterSafe.UnLock;
+      fWriterHostSafe.UnLock;
     end
   else
   begin
@@ -4317,8 +4322,8 @@ begin
         end;
       until false;
     end;
-    fWriterSafe.UnLock;
-    THttpLoggerWriter(result).TryRotate(Tix10); // outside of main lock
+    fWriterHostSafe.UnLock;
+    THttpLoggerWriter(result).TryRotate(Tix10); // outside of lock
   end;
 end;
 
@@ -4333,15 +4338,12 @@ begin
   if (h = '') or
      (fWriterSingle <> nil) then
     raise EHttpLogger.CreateUtf8('Unexpected %.DefineHost(%)', [self, aHost]);
-  fWriterSafe.Lock;
+  fWriterHostSafe.Lock;
   try
     if fWriterHost = nil then
-    begin
       // first call: we need to set fWriterHost[0] = access.log
-      w := THttpLoggerWriter.Create(
-             self, '', fDefaultRotate, fDefaultRotateFiles);
-      ObjArrayAdd(fWriterHost, w);
-    end
+      ObjArrayAdd(fWriterHost, THttpLoggerWriter.Create(
+             self, '', fDefaultRotate, fDefaultRotateFiles))
     else
       // search if we need to update a previous DefineHost()
       for i := 1 to length(fWriterHost) - 1 do
@@ -4349,15 +4351,15 @@ begin
         w := fWriterHost[i];
         if IdemPropNameU(w.Host, h) then
         begin
-          if aRotate <> hlrUndefined then
-            w.fRotate := aRotate;
           if aRotateFiles >= 0 then
             w.fRotateFiles := aRotateFiles;
+          if aRotate <> hlrUndefined then
+            w.fRotate := aRotate;
           w.SetRotateDate;
           exit;
         end;
       end;
-    // add a new definition for this new host
+    // add a new definition for this specific host
     if aRotate = hlrUndefined then
       aRotate := fDefaultRotate;
     if aRotateFiles < 0 then
@@ -4365,7 +4367,7 @@ begin
     w := THttpLoggerWriter.Create(self, h, aRotate, aRotateFiles);
     ObjArrayAdd(fWriterHost, w);
   finally
-    fWriterSafe.UnLock;
+    fWriterHostSafe.UnLock;
   end;
 end;
 
@@ -4375,11 +4377,15 @@ var
 begin
   err := Parse(aFormat);
   if err <> '' then
-    raise EHttpLogger.CreateUtf8('%.SetFormat: %', [self, err]);
+    raise EHttpLogger.CreateUtf8('%.SetFormat: % in [%]', [self, err, aFormat]);
 end;
 
 procedure THttpLogger.SetDestFolder(const aFolder: TFileName);
 begin
+  if (fWriterHost <> nil) or
+     (fWriterSingle <> nil) then
+    raise EHttpLogger.CreateUtf8(
+      'Impossible to set %.DestFolder once started', [self]);
   fDestFolder := EnsureDirectoryExists(aFolder, EHttpLogger);
   if not IsDirectoryWritable(fDestFolder) then // better fail ASAP
     raise EHttpLogger.CreateUtf8('Not writable %.DestFolder = %', [self, aFolder]);
@@ -4443,6 +4449,7 @@ procedure THttpLogger.Append(const Context: TOnHttpServerAfterResponseContext);
 var
   n: integer;
   tix10: cardinal;
+  l: PtrInt;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
@@ -4562,7 +4569,7 @@ begin
         hlvRequest_Method:
           wr.AddString(RawUtf8(Context.Method));
         hlvRequest_Uri:
-          wr.AddString(RawUtf8(Context.Url));
+          wr.AddString(RawUtf8(Context.Url)); // include arguments
         hlvScheme:
           wr.AddShorter(SCHEME[hsrHttps in Context.Flags]);
         hlvSent:
@@ -4589,18 +4596,14 @@ begin
       dec(n);
     until n = 0;
     wr.AddString(fLineFeed);
-    if tix10 <> fLastTix then
+    if (PClass(wr)^ = THttpLoggerWriter) and
+       (THttpLoggerWriter(wr).fLastWriteToStreamTix10 <> tix10) then
       wr.FlushFinal; // force write to disk at least every second
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
     fSafe.UnLock;
   end;
-end;
-
-procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-begin
-  fLastTix := GetTickCount64 shr 10; // no need to flush within current second
 end;
 
 
@@ -4901,7 +4904,7 @@ begin
   fModified := false;
   fSafe.Lock;
   try
-    // just save the current state blob as .gz
+    // just save the current state blob as .gz with fastest compression level
     FileFromString(GZWrite(@fState, SizeOf(fState), {level=}1), fSuspendFile);
   finally
     fSafe.UnLock;
