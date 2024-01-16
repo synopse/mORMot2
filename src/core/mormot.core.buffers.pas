@@ -716,6 +716,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// copy the next VarBlob value from the buffer into a TSynTempBuffer
     procedure VarBlob(out Value: TSynTempBuffer); overload;
+    /// read the next pointer and length value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarBlobSafe(out Value: TValueResult): boolean;
     /// read the next ShortString value from the buffer
     function VarShortString: ShortString;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3833,6 +3837,22 @@ begin
   result.Ptr := P;
   result.Len := len;
   inc(P, len);
+end;
+
+function TFastReader.VarBlobSafe(out Value: TValueResult): boolean;
+var
+  len: PtrUInt;
+begin
+  len := VarUInt32;
+  if P + len > Last then
+  begin
+    result := false;
+    exit;
+  end;
+  Value.Ptr := P;
+  Value.Len := len;
+  inc(P, len);
+  result := true;
 end;
 
 procedure TFastReader.VarBlob(out Value: TSynTempBuffer);
