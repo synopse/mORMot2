@@ -4293,6 +4293,14 @@ begin
   result := fWriterSingle;
   if result <> nil then
     exit;
+  result := fWriterHostLast; // pointer-sized variables are atomic
+  if (result <> nil) and
+     IdemPropNameU(p^.Host, Host) then // naive but efficient cache
+  begin
+    THttpLoggerWriter(result).TryRotate(Tix10);
+    exit;
+  end;
+  // lookup of this Host in the internal list
   fWriterHostSafe.Lock;
   p := pointer(fWriterHost);
   if p = nil then
@@ -4306,6 +4314,7 @@ begin
     end
   else
   begin
+    // search for any matching THttpLoggerWriter.Host value
     result := p^; // p^ = fWriterHost[0] = access.log as default
     if Host <> '' then
     begin
@@ -4317,7 +4326,7 @@ begin
           break;
         if IdemPropNameU(p^.Host, Host) then
         begin
-          result := p^; // found matching log for this Host name
+          result := p^; // found log instance for this Host name
           break;
         end;
       until false;
@@ -4325,6 +4334,7 @@ begin
     fWriterHostSafe.UnLock;
     THttpLoggerWriter(result).TryRotate(Tix10); // outside of lock
   end;
+  fWriterHostLast := result;
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
