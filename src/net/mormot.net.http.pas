@@ -1436,7 +1436,7 @@ type
   // - hlvTime_Iso8601 is the UTC (not local) time in the ISO 8601 standard format
   // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
   // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
-  // - hlvUri is the normalized current URI
+  // - hlvUri is the normalized current URI, i.e. without any ?... parameter
   THttpLogVariable = (
     hlvUnknown,
     hlvBody_Bytes_Sent,
@@ -1609,9 +1609,12 @@ type
     property WriterHost: THttpLoggerWriterDynArray
       read fWriterHost;
   published
-    /// direct access to the output format
+    /// direct access to the log output format
     // - if not supplied in Create() you can assign a format at runtime via this
     // property to call Parse() - raising EHttpLogger on error
+    // - recognized $variable names match trimmed THttpLogVariable enumeration,
+    // so will follow most of nginx log module naming convention
+    // - equals by default LOGFORMAT_COMBINED, i.e. the "combined" log format
     property Format: RawUtf8
       read fFormat write SetFormat;
     /// where the log files will be stored, if not supplied in CreateWithFile()
@@ -4523,12 +4526,12 @@ begin
             wr.AddShorter('upgrade');
         hlvDocument_Uri,
         hlvUri:
+          if Context.Url <> nil then
           begin
             l := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
             if l < 0 then
               l := length(RawUtf8(Context.Url));
-            wr.AddNoJsonEscape(Context.Url, l);
-            // no full URL decoding, nor // into / normalization yet
+            wr.AddUrlNormalize(Context.Url, l); // URL decode + // normalize
           end;
         hlvElapsed:
           wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
