@@ -1374,28 +1374,29 @@ const
 
 type
   /// HTTP server abstract parent for Logger / Analyzer
-  // - do not use this abstract class but e.g. THttpLogger
-  // - you can merge several THttpLoger instances via the OnContinue property
+  // - do not use this abstract class but e.g. THttpLogger or THttpAnalyzer
+  // - can merge several THttpAfterResponse instances via the OnContinue property
   // - OnIdle() should be called every few seconds for background process
   // - Append() match TOnHttpServerAfterResponse as real-time source of data
   THttpAfterResponse = class(TSynPersistent)
   protected
     fSafe: TOSLightLock;
-    fOnContinue: TOnHttpServerAfterResponse;
+    fOnContinue: THttpAfterResponse;
   public
     /// initialize this instance
     constructor Create; override;
     /// finalize this instance
     destructor Destroy; override;
     /// to be overriden e.g. to flush the logs to disk or consolidate counters
-    // - this callback is likely to be executed every second from a THttpServer
+    // - likely to be executed every few seconds from a THttpServerGeneric
     procedure OnIdle(tix64: Int64); virtual; abstract;
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
     procedure Append(const Context: TOnHttpServerAfterResponseContext);  virtual; abstract;
-    /// the overriden Append() method will call this event with its own process
-    property OnContinue: TOnHttpServerAfterResponse
+    /// overriden Append() and OnIdle() methods will call this event
+    // - so that you can cascade e.g. both THttpLogger and THttpAnalyzer
+    property OnContinue: THttpAfterResponse
       read fOnContinue write fOnContinue;
   end;
 
@@ -4261,6 +4262,10 @@ var
   i: PtrInt;
   tix10: cardinal;
 begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue.OnIdle(tix64);
+  // flush the log file(s) if needed
   if (fWriterHost = nil) and
      (fWriterSingle = nil) then
     exit; // nothing to process
@@ -4485,7 +4490,7 @@ const
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
-    fOnContinue(Context);
+    fOnContinue.Append(Context);
   if fVariable = nil then // nothing to process
     exit;
   // retrieve the output stream for the expected .log file
@@ -4581,7 +4586,7 @@ begin
           begin
             wr.AddString(RawUtf8(Context.Method));
             wr.Add(' ');
-            wr.AddString(RawUtf8(Context.Url));
+            wr.AddString(RawUtf8(Context.Url)); // full request = not normalized
             wr.Add(' ');
             wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
@@ -5001,7 +5006,7 @@ var
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
-    fOnContinue(Context);
+    fOnContinue.Append(Context);
   // prepare the information to be merged
   if fTracked = [] then
     exit; // nothing to process here
@@ -5071,6 +5076,10 @@ procedure THttpAnalyzer.OnIdle(tix64: Int64);
 var
   tix: cardinal;
 begin
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue.OnIdle(tix64);
+  // THttpAnalyzer specific process
   tix := tix64 div 1000;
   if tix <> fLastConsolidate then
   begin
