@@ -1524,10 +1524,12 @@ function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(const svar: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
@@ -1547,12 +1549,15 @@ function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 function UrlDecode(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
+// - name=false for parameters (after ?), to replace spaces by '+'
 procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
 
 /// decode a specified parameter compatible with URI encoding into its original

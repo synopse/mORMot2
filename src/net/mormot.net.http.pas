@@ -4536,7 +4536,7 @@ begin
             l := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
             if l < 0 then
               l := length(RawUtf8(Context.Url));
-            wr.AddUrlNormalize(Context.Url, l); // URL decode + // normalize
+            wr.AddUrlNameNormalize(Context.Url, l); // URL decode + // normalize
           end;
         hlvElapsed:
           wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));

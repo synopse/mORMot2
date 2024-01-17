@@ -5540,7 +5540,7 @@ var
     res: RawUtf8;
   begin
     w.CancelAll;
-    w.AddUrlNormalize(pointer(value), length(value));
+    w.AddUrlNameNormalize(pointer(value), length(value));
     w.SetText(res);
     CheckEqual(res, expected);
   end;

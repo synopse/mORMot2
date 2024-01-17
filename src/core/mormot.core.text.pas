@@ -744,8 +744,9 @@ type
     // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
-    /// append an URI-decoded text, also normalizing dual // into /
-    procedure AddUrlNormalize(U: PUtf8Char; L: PtrInt);
+    /// append an URI-decoded domain name, also normalizing dual // into /
+    // - only parameters - i.e. after '?' - may have ' ' replaced by '+'
+    procedure AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
     /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some UTF-8 chars, escaping all HTML special chars as expected
@@ -4967,7 +4968,7 @@ begin
   Add(Quote);
 end;
 
-procedure TTextWriter.AddUrlNormalize(U: PUtf8Char; L: PtrInt);
+procedure TTextWriter.AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
 begin
   if L <= 0 then
     exit;
