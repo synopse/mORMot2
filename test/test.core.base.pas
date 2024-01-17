@@ -6038,8 +6038,7 @@ begin
   Check(not IsSystemFolder('c:\program file'));
   Check(not IsSystemFolder('c:\program files other\toto'));
   Check(not IsSystemFolder('c:\windowstorage'));
-  {$ifdef OSWINDOWS32}
-  if OSVersion >= wVista  then // IsUacVirtualizationEnabled has false negatives
+  if IsUacVirtualizationEnabled then
   begin
     Check(IsUacVirtualFolder('c:\program files'));
     Check(IsUacVirtualFolder('c:\program Files\toto'));
@@ -6052,7 +6051,6 @@ begin
     Check(not IsUacVirtualFolder('c:\windowstorage'));
   end
   else
-  {$endif OSWINDOWS32}
     Check(not IsUacVirtualFolder('c:\program files'));
   {$endif OSWINDOWS}
 end;

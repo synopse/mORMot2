@@ -2862,7 +2862,7 @@ begin
         if GetTokenInformation(token, _TokenVirtualizationEnabled,
              @enabled, SizeOf(enabled), len) and
            (enabled = 0) then
-          // in practice, may return enabled=0 even if Virtualization is active
+          // returns enabled=0 if mormot.win.default.manifest.res is included
           IsUacEnabled := iueDisabled;
         CloseHandle(token);
       end;
@@ -2872,8 +2872,9 @@ end;
 
 function IsUacVirtualFolder(const Folder: TFileName): boolean;
 begin
-  // note: IsUacVirtualizationEnabled seems to return false positives -> only OS
+  // note: IsUacVirtualizationEnabled returns false if our manifest is included
   result := (OSVersion >= wVista) and // no UAC on Windows XP
+            IsUacVirtualizationEnabled and
             IsSystemFolder(Folder);
 end;
 

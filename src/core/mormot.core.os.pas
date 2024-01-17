@@ -2004,13 +2004,15 @@ function IsSystemFolder(const Folder: TFileName): boolean;
 // - on Win32 Vista+, detects 'c:\windows' and 'c:\program files' UAC folders
 // - returns always false on Win64
 function IsUacVirtualFolder(const Folder: TFileName): boolean;
+  {$ifdef CPU64} inline; {$endif}
 
-/// check if UAC folder/registry virtualization seems enabled for this process
-// - returns always false on Win64
+/// check if UAC folder/registry virtualization is enabled for this process
+// - returns always false on Win64 - by design
 // - calls GetTokenInformation(TokenVirtualizationEnabled) on Win32
-// - is likely to give false negatives, so you should better consider always
-// true on Vista+ Win32 and false on Win64
+// - if you include {$R src\mormot.win.default.manifest.res} in your project,
+// UAC virtualization is disabled and this function returns false
 function IsUacVirtualizationEnabled: boolean;
+  {$ifdef CPU64} inline; {$endif}
 
 /// retrieve the name and domain of a given SID
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
@@ -5695,7 +5697,7 @@ procedure SidToTextShort(sid: PSid; var result: shortstring);
 var
   a: PSidAuth;
   i: PtrInt;
-begin // faster than ConvertSidToStringSidA()
+begin // faster than ConvertSidToStringSidA(), and cross-platform
   if (sid = nil ) or
      (sid^.Revision <> 1) then
   begin
