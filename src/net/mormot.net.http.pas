@@ -2282,13 +2282,16 @@ end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
 var
-  i: PtrInt;
+  url, i: PtrInt;
 begin
   // we used https://github.com/monperrus/crawler-user-agents as starting reference
   result := false;
-  i := PosEx('.com/', UserAgent);
+  url := PosEx('//', UserAgent);
+  if url = 0 then
+    exit; // a browser usually has no http://... reference within
+  i := PosEx('.com/', UserAgent, url);
   if i = 0 then
-    i := PosEx('.org/', UserAgent);
+    i := PosEx('.org/', UserAgent, url);
   if i <> 0 then
      case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
        // Googlebot/2.1 (+http://www.google.com/bot.html)

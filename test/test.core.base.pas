@@ -6497,6 +6497,16 @@ var
 
 begin
   // user agent bot detection
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like ' +
+    'Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/' +
+    '605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko'));
   Check(IsHttpUserAgentBot(
     'Googlebot/2.1 (+http://www.google.com/bot.html)'));
   Check(IsHttpUserAgentBot(
