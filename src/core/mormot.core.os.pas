@@ -1997,6 +1997,18 @@ function CurrentUserHasGroup(const name, domain, server: RawUtf8;
 /// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
 function CurrentUserIsAdmin: boolean;
 
+/// rough detection sub-function as called from IsDirectoryWritable()
+// - on Win32 Vista+, detects 'c:\windows' and 'c:\program files' UAC folders
+// - returns always false on Win64
+function IsUacVirtual(const Folder: TFileName): boolean;
+
+/// check if UAC folder/registry virtualization seems enabled for this process
+// - returns always false on Win64
+// - calls GetTokenInformation(TokenVirtualizationEnabled) on Win32
+// - is likely to give false negatives, so you should better consider always
+// true on Vista+ Win32 and false on Win64
+function IsUacVirtualizationEnabled: boolean;
+
 /// retrieve the name and domain of a given SID
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
 function LookupSid(sid: PSid; out name, domain: RawUtf8;

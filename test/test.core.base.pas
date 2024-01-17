@@ -6029,6 +6029,22 @@ begin
     else
       CheckUtf8(not CurrentUserHasGroup(s), s);
   end;
+  {$ifdef OSWINDOWS32}
+  if OSVersion >= wVista  then // IsUacVirtualizationEnabled has false negatives
+  begin
+    Check(IsUacVirtual('c:\program files'));
+    Check(IsUacVirtual('c:\program Files\toto'));
+    Check(IsUacVirtual('c:\Program files (x86)'));
+    Check(IsUacVirtual('d:\Program Files (X86)\toto'));
+    Check(IsUacVirtual('c:\windows'));
+    Check(IsUacVirtual('c:\windows\toto'));
+    Check(not IsUacVirtual('c:\program file'));
+    Check(not IsUacVirtual('c:\program files other\toto'));
+    Check(not IsUacVirtual('c:\windowstorage'));
+  end
+  else
+  {$endif OSWINDOWS32}
+    Check(not IsUacVirtual('c:\program files'));
   {$endif OSWINDOWS}
 end;
 

@@ -2781,6 +2781,8 @@ const
     'SeTimeZonePrivilege',             // wspTimeZone
     'SeCreateSymbolicLinkPrivilege');  // wspCreateSymbolicLink
 
+  _TokenVirtualizationEnabled = TTokenInformationClass(24); // for oldest Delphi
+
 type
   TOKEN_PRIVILEGES = packed record
     PrivilegeCount : DWord;
@@ -2820,6 +2822,61 @@ function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWord;
   PreviousState: PTokenPrivileges; ReturnLength: PDWord): BOOL;
     stdcall; external advapi32;
+
+{$ifdef CPU32}
+var
+  IsUacEnabled: (iueUntested, iueDisabled, iueEnabled);
+
+function IsUacVirtualizationEnabled: boolean;
+var
+  token: THandle;
+  enabled, len: DWORD;
+begin
+  if IsUacEnabled = iueUntested then
+    if OSVersion < wVista then
+      IsUacEnabled := iueDisabled // no UAC on Windows XP
+    else
+    begin
+      IsUacEnabled := iueEnabled; // enabled by default
+      if OpenProcessToken(GetCurrentProcess, TOKEN_QUERY, token) then
+      begin
+        enabled := 1;
+        len := 0;
+        if GetTokenInformation(token, _TokenVirtualizationEnabled,
+             @enabled, SizeOf(enabled), len) and
+           (enabled = 0) then
+          IsUacEnabled := iueDisabled;
+        CloseHandle(token);
+      end;
+    end;
+  result := IsUacEnabled = iueEnabled;
+end;
+
+function IsUacVirtual(const Folder: TFileName): boolean;
+begin
+  // note: IsUacVirtualizationEnabled seems to return false positives -> only OS
+  if OSVersion < wVista then
+    result := false // no UAC on Windows XP
+  else if CompareText(copy(Folder, 2,  9), ':\windows') = 0 then
+    result := ord(Folder[11]) in [0, ord('\')]
+  else
+    result := (CompareText(copy(Folder, 2, 15), ':\program files') = 0) and
+              ((ord(Folder[17]) in [0, ord('\')]) or
+               (CompareText(copy(Folder, 17, 6), ' (x86)') = 0))
+end;
+{$else}
+
+function IsUacVirtualizationEnabled: boolean;
+begin
+  result := false; // never enabled on Win64
+end;
+
+function IsUacVirtual(const Folder: TFileName): boolean;
+begin
+  result := false; // UAC never enabled on Win64 -> just a regular folder
+end;
+
+{$endif CPU32}
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
