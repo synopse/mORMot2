@@ -18,11 +18,13 @@ const
   W32_MAX = 2047;
 
 type
-  /// 2KB stack buffer for no heap allocation during UTF-16 encoding or
+  /// 4KB stack buffer for no heap allocation during UTF-16 encoding or
   // switch to extended-length path
   TW32Temp = array[0..W32_MAX] of WideChar;
 
-// W32() get a PWideChar buffer from a TFileName using a temp static buffer
+// W32() gets a PWideChar buffer from a TFileName using TW32Temp static buffer
+// W32Copy() forces a temporary copy - as used by GetFileVersionInfo()
+
 {$ifdef UNICODE}
 
 // UnicodeString may need to be converted to extended-length path
@@ -114,7 +116,7 @@ end;
 
 function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
 begin
-  result := W32(FileName, Temp); // from AnsiString: always converted
+  result := W32(FileName, Temp); // from AnsiString: always copied
 end;
 
 {$endif UNICODE}

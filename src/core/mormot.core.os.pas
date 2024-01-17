@@ -2411,10 +2411,12 @@ function DirectoryExists(const FileName: TFileName;
   FollowLink: boolean = true): boolean; {$ifdef HASINLINE} inline; {$endif}
 
 /// redefined here to avoid warning to include "Windows" in uses clause
+// and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function DeleteFile(const aFileName: TFileName): boolean;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
+// and support FileName longer than MAX_PATH
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 function RenameFile(const OldName, NewName: TFileName): boolean;
 
@@ -3246,7 +3248,8 @@ type
       read fDontReleaseHandle write fDontReleaseHandle;
   end;
 
-  /// a TFileStream replacement which supports FileName longer than MAX_PATH
+  /// a TFileStream replacement which supports FileName longer than MAX_PATH,
+  // and a proper Create(aHandle) constructor in FPC
   TFileStreamEx = class(TFileStreamFromHandle)
   Private
     fFileName : TFileName;
