@@ -2012,10 +2012,6 @@ function IsUacVirtualFolder(const Folder: TFileName): boolean;
 // true on Vista+ Win32 and false on Win64
 function IsUacVirtualizationEnabled: boolean;
 
-var
-  /// global flag to disable IsUacVirtual() check in IsDirectoryWritable()
-  IsDirectoryWritableAllowUacVirtual: boolean = false;
-
 /// retrieve the name and domain of a given SID
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
 function LookupSid(sid: PSid; out name, domain: RawUtf8;
@@ -3430,11 +3426,22 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
   Recursive: boolean = false; TotalSize: PInt64 = nil): boolean;
 
+type
+  /// defines how IsDirectoryWritable() verifies a folder
+  // - on Win32 Vista+, idwExcludeWinUac will check IsUacVirtualFolder()
+  // - on Windows, idwExcludeWinSys will check IsSystemFolder()
+  // - on Windows, idwTryWinExeFile will try to generate a 'xxxxx.exe' file
+  // - idwWriteSomeContent will also try to write some bytes in the file
+  TIsDirectoryWritable = set of (
+    idwExcludeWinUac,
+    idwExcludeWinSys,
+    idwTryWinExeFile,
+    idwWriteSomeContent);
+
 /// check if the directory is writable for the current user
-// - try to write and delete a void file with a random name
-// - on Win32 Vista+, detects and rejects 'c:\windows' and 'c:\program files'
-// UAC virtual folders unless IsDirectoryWritableAllowUacVirtual global is true
-function IsDirectoryWritable(const Directory: TFileName): boolean;
+// - try to write and delete a void file with a random name in this folder
+function IsDirectoryWritable(const Directory: TFileName;
+  Flags: TIsDirectoryWritable = []): boolean;
 
 type
   /// cross-platform memory mapping of a file content
@@ -7139,27 +7146,33 @@ begin
   end;
 end;
 
-function IsDirectoryWritable(const Directory: TFileName): boolean;
+function IsDirectoryWritable(const Directory: TFileName;
+  Flags: TIsDirectoryWritable): boolean;
 var
-  dir, fn: TFileName;
+  dir, fmt, fn: TFileName;
   f: THandle;
   retry: integer;
 begin
   dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
-  {$ifdef OSWINDOWS32}
-  if (not IsDirectoryWritableAllowUacVirtual) and
-     IsUacVirtual(dir) then
-    exit; // 'c:\windows' or 'c:\program files' with UAC virtualization enabled
-  {$endif OSWINDOWS32}
   if FileIsReadOnly(dir) then
-    exit; // the whole folder is read-only
+    exit; // the whole folder is read-only for this user
+  {$ifdef OSWINDOWS}
+  if ((idwExcludeWinUac in Flags) and
+      IsUacVirtualFolder(dir)) or
+     ((idwExcludeWinSys in Flags) and
+      IsSystemFolder(dir)) then
+    exit;
+  if idwTryWinExeFile in Flags then
+    fmt := '%s\%x.exe'  // may trigger the anti-virus heuristic
+  else
+    fmt := '%s\%x.crt'; // may trigger the UAC heuristic
+  {$else}
+  fmt := '%s/.%x.test'; // make the file "invisible"
+  {$endif OSWINDOWS}
   retry := 20;
   repeat
-    fn := Format('%s' + PathDelim +
-      {$ifdef OSPOSIX} '.%x.test' // make the file "invisible"
-      {$else}          '%x.crt'   // try to trigger the UAC heuristic :(
-      {$endif OSPOSIX}, [dir, Random32]);
+    fn := Format(fmt, [dir, Random32]);
     if not FileExists(fn) then
       break;
     dec(retry); // never loop forever
@@ -7167,10 +7180,15 @@ begin
       exit;
   until false;
   f := FileCreate(fn);
-  if PtrInt(f) < 0 then
+  if not ValidHandle(f) then
     exit; // a file can't be created
+  result := true;
+  if (idwWriteSomeContent in flags) and // some pointers and hash
+     (FileWrite(f, Executable, SizeOf(Executable)) <> SizeOf(Executable)) then
+    result := false;
   FileClose(f);
-  result := DeleteFile(fn); // success if the file can be created and deleted
+  if not DeleteFile(fn) then // success if the file can be created and deleted
+    result := false;
 end;
 
 
