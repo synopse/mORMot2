@@ -3959,9 +3959,11 @@ begin
            (url <> http.CommandUri) then
           result := asrRejected;
       end;
+  else
+    exit;
   end;
   if result = asrMatch then
-    Http.BearerToken := user;
+    Http.BearerToken := user; // as expected by end-user code
 end;
 
 function THttpServerSocketGeneric.SetRejectInCommandUri(

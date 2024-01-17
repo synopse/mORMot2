@@ -107,9 +107,11 @@ function CompressIndex(const Compress: THttpSocketCompressRecDynArray;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
+// - as used e.g. during TPublicRelay process from mormot.net.relay
 function PurgeHeaders(const headers: RawUtf8): RawUtf8;
 
 /// search, copy and remove a given HTTP header
+// - FindNameValue() makes search&copy, but this function also REMOVES the header
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
   out res: RawUtf8);
 
@@ -190,7 +192,7 @@ const
 { ******************** Reusable HTTP State Machine }
 
 type
-  /// the states of THttpRequestContext processing
+  /// the machine states of THttpRequestContext processing
   THttpRequestState = (
     hrsNoStateMachine,
     hrsGetCommand,
@@ -318,7 +320,7 @@ type
     // but retrieved during ParseHeader
     // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     // - if hsrAuthorized is set, THttpServerSocketGeneric.Authorization() will
-    // put the authenticate User name in this field
+    // put the authenticated User name in this field
     BearerToken: RawUtf8;
     /// decoded 'Range: bytes=..' start value - default is 0
     // - e.g. 1024 for 'Range: bytes=1024-1025'
@@ -542,7 +544,8 @@ type
   // - hsrWebsockets if communication was made using WebSockets
   // - hsrInProcess when run from the same process, i.e. on server side
   // - hsrConnectionUpgrade when "connection: upgrade" appears within headers
-  // - hsrAuthorized when a valid "authorization:" header is set
+  // - hsrAuthorized when a valid "authorization:" header is set (and
+  // THttpRequestContext.BearerToken is filled with the authorized User)
   // - hsrHttp10 is set if the connection is of old HTTP/1.0 level
   // - should exactly match TRestUriParamsLowLevelFlag in mormot.rest.core
   THttpServerRequestFlag = (
@@ -2182,6 +2185,7 @@ begin
     exit;
   i := 1;
   repeat
+    // find end of current line
     k := length(headers) + 1;
     for j := i to k - 1 do
       if headers[j] < ' ' then
@@ -2189,6 +2193,7 @@ begin
         k := j;
         break;
       end;
+    // check the header name
     if IdemPCharNotVoid(@PByteArray(headers)[i - 1], pointer(upname), @NormToUpper) then
     begin
       j := i;
@@ -2200,9 +2205,10 @@ begin
           break
         else
           inc(k);
-      delete(headers, j, k - j);
+      delete(headers, j, k - j); // and remove
       exit;
     end;
+    // go to next line
     i := k;
     while headers[i] < ' ' do
       if headers[i] = #0 then
@@ -5058,7 +5064,7 @@ begin
         if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
           DoAppend(new, hasMobile);
       if hasBot in fTracked then
-        // bots detection is not easier, but naive patterns seem good enough
+        // bots detection is not easier, but our naive patterns seem good enough
         if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
           DoAppend(new, hasBot);
     end;
