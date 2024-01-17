@@ -27,14 +27,24 @@ type
 
 {$ifdef UNICODE}
 
+function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
+var
+  len: PtrInt;
+begin
+  len := length(FileName) * 2 + 2; // +2 to include ending #0
+  if len > SizeOf(Temp) then
+    Temp[0] := #0 // avoid buffer overflow
+  else
+    MoveFast(pointer(FileName)^, Temp, len);
+  result := @Temp;
+end;
+
 // UnicodeString may need to be converted to extended-length path
 function W32(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
 var
-  len: PtrInt;
   U: pointer; // hold a UnicodeString but with no try..finally
 begin
-  len := length(FileName);
-  if (len > MAX_PATH) and
+  if (length(FileName) > MAX_PATH) and
      (ord(FileName[1]) in [ord('A')..ord('Z'), ord('a')..ord('z')]) and
      (FileName[2] = ':') then
   begin
@@ -42,30 +52,13 @@ begin
     U := nil;
     TFileName(U) := '\\?\' + FileName;
     // move to TW32Temp stack buffer
-    len := length(TFileName(U)) * 2 + 2;  // +2 to include trailing #0
-    if len > SizeOf(Temp) then
-      Temp[0] := #0 // avoid buffer overflow (rejected by Windows anyway)
-    else
-      MoveFast(U^, Temp, len);
+    result := W32Copy(TFileName(U), Temp);
     // release temp memory and return the generated static buffer
     TFileName(U) := '';
-    result := @Temp;
   end
   else
     // no conversion nor allocation needed
     result := pointer(FileName);
-end;
-
-function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
-var
-  len: PtrInt;
-begin
-  len := length(FileName) * 2 + 2;
-  if len > SizeOf(Temp) then
-    Temp[0] := #0 // avoid buffer overflow
-  else
-    MoveFast(pointer(FileName)^, Temp, len);
-  result := @Temp;
 end;
 
 {$else}
@@ -85,7 +78,7 @@ begin
      (FileName[2] = ':') then
     U := '\\?\' + U;
   // move to TW32Temp stack buffer
-  len := length(U) * 2 + 2;  // +2 to include trailing #0
+  len := length(U) * 2 + 2;  // +2 to include ending #0
   if len > SizeOf(Temp) then
     Temp[0] := #0 // avoid buffer overflow (rejected by Windows anyway)
   else
@@ -116,7 +109,7 @@ end;
 
 function W32Copy(const FileName: TFileName; var Temp: TW32Temp): PWideChar;
 begin
-  result := W32(FileName, Temp); // from AnsiString: always copied
+  result := W32(FileName, Temp); // from AnsiString: name is always copied
 end;
 
 {$endif UNICODE}
