@@ -6029,22 +6029,31 @@ begin
     else
       CheckUtf8(not CurrentUserHasGroup(s), s);
   end;
+  Check(IsSystemFolder('c:\program files'));
+  Check(IsSystemFolder('c:\program Files\toto'));
+  Check(IsSystemFolder('c:\Program files (x86)'));
+  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
+  Check(IsSystemFolder('c:\windows'));
+  Check(IsSystemFolder('c:\windows\toto'));
+  Check(not IsSystemFolder('c:\program file'));
+  Check(not IsSystemFolder('c:\program files other\toto'));
+  Check(not IsSystemFolder('c:\windowstorage'));
   {$ifdef OSWINDOWS32}
   if OSVersion >= wVista  then // IsUacVirtualizationEnabled has false negatives
   begin
-    Check(IsUacVirtual('c:\program files'));
-    Check(IsUacVirtual('c:\program Files\toto'));
-    Check(IsUacVirtual('c:\Program files (x86)'));
-    Check(IsUacVirtual('d:\Program Files (X86)\toto'));
-    Check(IsUacVirtual('c:\windows'));
-    Check(IsUacVirtual('c:\windows\toto'));
-    Check(not IsUacVirtual('c:\program file'));
-    Check(not IsUacVirtual('c:\program files other\toto'));
-    Check(not IsUacVirtual('c:\windowstorage'));
+    Check(IsUacVirtualFolder('c:\program files'));
+    Check(IsUacVirtualFolder('c:\program Files\toto'));
+    Check(IsUacVirtualFolder('c:\Program files (x86)'));
+    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
+    Check(IsUacVirtualFolder('c:\windows'));
+    Check(IsUacVirtualFolder('c:\windows\toto'));
+    Check(not IsUacVirtualFolder('c:\program file'));
+    Check(not IsUacVirtualFolder('c:\program files other\toto'));
+    Check(not IsUacVirtualFolder('c:\windowstorage'));
   end
   else
   {$endif OSWINDOWS32}
-    Check(not IsUacVirtual('c:\program files'));
+    Check(not IsUacVirtualFolder('c:\program files'));
   {$endif OSWINDOWS}
 end;
 
