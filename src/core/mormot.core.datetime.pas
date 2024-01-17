@@ -405,13 +405,24 @@ type
   TSynSystemTime = object
   {$endif USERECORDWITHMETHODS}
   public
-    Year,
-    Month,
-    DayOfWeek,
-    Day,
-    Hour,
-    Minute,
-    Second,
+    /// the Year value of this timestamp
+    Year: word;
+    /// the Month value of this timstamp, in range 1..12
+    Month: word;
+    /// which day of week this Date happend
+    // - Sunday is DayOfWeek 1, Saturday is 7
+    // - DayOfWeek field is not handled by its methods by default, but could be
+    // filled on demand via ComputeDayOfWeek
+    DayOfWeek: word;
+    /// the Day value of this timestamp, in range 1..31
+    Day: word;
+    /// the Hour value of this timestamp, in range 0..59
+    Hour: word;
+    /// the Minute value of this timestamp, in range 0..59
+    Minute: word;
+    /// the Second value of this timestamp, in range 0..59
+    Second: word;
+    /// the MilliSecond value of this timestamp, in range 0..999
     MilliSecond: word;
     /// set all fields to 0
     procedure Clear;
@@ -421,9 +432,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields do match
     function IsEqual(const another: TSynSystemTime): boolean;
-    /// returns true if date fields do match (ignoring DayOfWeek)
+    /// returns true if date fields do match (ignoring DayOfWeek and time fields)
     function IsDateEqual(const date: TSynDate): boolean;
-    /// used by TSynTimeZone
+    /// internal method used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
     /// fill fields with the current UTC time, using a 8-16ms thread-safe cache
     procedure FromNowUtc;
@@ -458,6 +469,9 @@ type
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
       const TZD: RawUtf8 = ''): RawUtf8;
+    /// append a value, expanded as Iso-8601 encoded date text
+    // - use 'YYYY-MM-DD' format
+    procedure AddIsoDate(WR: TTextWriter);
     /// append a value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format with '.sss' optional milliseconds
     procedure AddIsoDateTime(WR: TTextWriter; WithMS: boolean;
@@ -510,9 +524,15 @@ type
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek;
       {$ifdef HASINLINE}inline;{$endif}
+    /// compute how many days there are in the current month
+    function DaysInMonth: cardinal;
     /// add some 1..999 milliseconds to the stored time
     // - not to be used for computation, but e.g. for fast AddLogTime generation
     procedure IncrementMS(ms: integer);
+    /// compute all fields so that they are in their natural range
+    // - set e.g. Second := 60 to force the next minute, or Hour := 24 so that
+    // it will be normalized to the next day
+    procedure Normalize;
   end;
 
   /// pointer to our cross-platform and cross-compiler TSystemTime 128-bit structure
@@ -525,6 +545,9 @@ function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
+
+/// compute how many days there are in a given month
+function DaysInMonth(Year, Month: cardinal): cardinal;
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -877,8 +900,9 @@ type
     // - append nothing if Value=0
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
     procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
-    // and Time Zone designator
+    // and a specified Time Zone designator
     // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
     // - twoDateTimeWithZ CustomOption is ignored in favor of TZD parameter
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
@@ -891,15 +915,15 @@ type
     procedure AddCurrentIsoDateTime(LocalTime, WithMS: boolean;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = '');
     /// append the current UTC date and time, in apache-like format
-     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+     // - e.g. append '19/Feb/2019:06:18:55 +0000' - with a space before the TZD
     // - you may set LocalTime=TRUE to write the local date and time instead
     procedure AddCurrentNcsaLogTime(LocalTime: boolean; const TZD: RawUtf8 = '+0000');
     /// append the current UTC date and time, in our HTTP format
-    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - e.g. append '19/Feb/2019:06:18:55 GMT' - with a space before the TZD
     // - you may set LocalTime=TRUE to write the local date and time instead
     procedure AddCurrentHttpTime(LocalTime: boolean; const TZD: RawUtf8 = 'GMT');
     /// append the current UTC date and time, in our TSynLog human-friendly format
-    // - e.g. append '20110325 19241502' - with no trailing space nor tab
+    // - e.g. append '20110325 19241502' - with no trailing space nor TZD
     // - you may set LocalTime=TRUE to write the local date and time instead
     procedure AddCurrentLogTime(LocalTime: boolean);
     /// append a time period as "seconds.milliseconds" content
@@ -1622,7 +1646,7 @@ begin
        not (P[4] in ['0'..'9']) then
       exit;
     if (P^ = '-') and
-       (PCardinal(P + 1)^ = $30303030) then // '-0000'
+       (PCardinal(P + 1)^ = $30303030) then // '-0000' for current local
       Zone := TimeZoneLocalBias
     else
     begin
@@ -1701,8 +1725,7 @@ begin
 end;
 
 var
-  AppendToTextFileSafe: TOSLightLock; // to make AppendToTextFile() thread-safe
-  AppendToTextFileSafeSet: boolean;
+  AppendToTextFileSafe: TLightLock; // to make AppendToTextFile() thread-safe
 
 function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
@@ -1718,14 +1741,6 @@ begin
   if (aFileName = '') or
      (aLine = '') then
     exit;
-  if not AppendToTextFileSafeSet then
-  begin
-    GlobalLock;
-    if not AppendToTextFileSafeSet then
-      AppendToTextFileSafe.Init;
-    AppendToTextFileSafeSet := true;
-    GlobalUnLock;
-  end;
   AppendToTextFileSafe.Lock;
   try
     f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
@@ -1911,7 +1926,7 @@ var
   d: TDateTime;
   i: PtrInt;
 begin
-  if not TryEncodeDate(Year, Month, Day, d) then
+  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, d) then
   begin
     DayOfWeek := 0;
     exit;
@@ -1925,7 +1940,7 @@ end;
 
 function TSynDate.ToDate: TDate;
 begin
-  if not TryEncodeDate(Year, Month, Day, PDateTime(@result)^) then
+  if not mormot.core.datetime.TryEncodeDate(Year, Month, Day, PDateTime(@result)^) then
     result := 0;
 end;
 
@@ -1938,7 +1953,32 @@ begin
 end;
 
 
+function IsLeapYear(Year: cardinal): boolean;
+var
+  d100: TDiv100Rec;
+begin
+  if Year and 3 = 0 then
+  begin
+    Div100(Year, d100{%H-});
+    result := ((d100.M <> 0) or // (Year mod 100 > 0)
+               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
+  end
+  else
+    result := false;
+end;
+
+function DaysInMonth(Year, Month: cardinal): cardinal;
+begin
+  result := MonthDays[IsLeapYear(Year)][Month];
+end;
+
+
 { TSynSystemTime }
+
+function TSynSystemTime.DaysInMonth: cardinal;
+begin
+  result := MonthDays[IsLeapYear(Year)][Month];
+end;
 
 function TryEncodeDayOfWeekInMonth(
   AYear, AMonth, ANthDayOfWeek, ADayOfWeek: integer;
@@ -1947,14 +1987,14 @@ var
   LStartOfMonth, LDay: integer;
 begin
   // adapted from DateUtils
-  result := TryEncodeDate(AYear, AMonth, 1, AValue);
+  result := mormot.core.datetime.TryEncodeDate(AYear, AMonth, 1, AValue);
   if not result then
     exit;
   LStartOfMonth := (DateTimeToTimestamp(AValue).date - 1) mod 7 + 1;
   if LStartOfMonth <= ADayOfWeek then
     dec(ANthDayOfWeek);
   LDay := (ADayOfWeek - LStartOfMonth + 1) + 7 * ANthDayOfWeek;
-  result := TryEncodeDate(AYear, AMonth, LDay, AValue);
+  result := mormot.core.datetime.TryEncodeDate(AYear, AMonth, LDay, AValue);
 end;
 
 function TSynSystemTime.EncodeForTimeChange(const aYear: word): TDateTime;
@@ -2199,7 +2239,7 @@ begin
     Day := 1 // assume first of the month if none supplied
   else
   begin
-    v := MonthDays[IsLeapYear(Year)][Month];
+    v := DaysInMonth;
     if Day > v then
       Day := v; // assume last of the month if too big supplied
   end;
@@ -2228,6 +2268,16 @@ begin
     Year, Month, Day, Expanded, FirstTimeChar, TZD);
 end;
 
+procedure TSynSystemTime.AddIsoDate(WR: TTextWriter);
+var
+  p: PUtf8Char;
+begin
+  if WR.BEnd - WR.B <= 24 then
+    WR.FlushToStream;
+  p := WR.B + 1;
+  inc(WR.B, DateToIso8601PChar(p, {expanded=}true, Year, Month, Day) - p);
+end;
+
 procedure TSynSystemTime.AddIsoDateTime(WR: TTextWriter;
   WithMS: boolean; FirstTimeChar: AnsiChar; const TZD: RawUtf8);
 var
@@ -2237,7 +2287,7 @@ begin
     WR.FlushToStream;
   p := WR.B + 1;
   inc(WR.B, TimeToIso8601PChar(DateToIso8601PChar(p, true, Year, Month, Day),
-    true, Hour, Minute, Second, MilliSecond, FirstTimeChar, WithMS) - P);
+    true, Hour, Minute, Second, MilliSecond, FirstTimeChar, WithMS) - p);
   if TZD <> '' then
     WR.AddString(TZD);
 end;
@@ -2391,7 +2441,7 @@ function TSynSystemTime.ToDateTime: TDateTime;
 var
   time: TDateTime;
 begin
-  if TryEncodeDate(Year, Month, Day, result) then
+  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
     if TryEncodeTime(Hour, Minute, Second, MilliSecond, time) then
       result := result + time
     else
@@ -2442,67 +2492,61 @@ begin
   PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
 end;
 
-function IsLeapYear(Year: cardinal): boolean;
-var
-  d100: TDiv100Rec;
+procedure TSynSystemTime.IncrementMS(ms: integer);
 begin
-  if Year and 3 = 0 then
-  begin
-    Div100(Year, d100{%H-});
-    result := ((d100.M <> 0) or // (Year mod 100 > 0)
-               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
-  end
-  else
-    result := false;
+  inc(MilliSecond, ms);
+  Normalize;
 end;
 
-procedure TSynSystemTime.IncrementMS(ms: integer);
-var
-  s, m, h: integer;
-begin
-  inc(ms, MilliSecond);
-  if ms >= 1000 then
+procedure TSynSystemTime.Normalize;
+
+  procedure NormalizeMonth;
+  var
+    thismonth: cardinal;
+  begin
     repeat
-      dec(ms, 1000);
-      s := Second;
-      if s < 60 then
-        inc(s)
-      else
+      thismonth := DaysInMonth;
+      if Day <= thismonth then
+        break;
+      dec(Day, thismonth);
+      inc(Month);
+      if Month > 12 then
       begin
-        s := 0;
-        m := Minute;
-        if m < 60 then
-          inc(m)
-        else
-        begin
-          m := 0;
-          h := Hour;
-          if h < 24 then
-            inc(h)
-          else
-          begin
-            h := 0;
-            if Day < MonthDays[IsLeapYear(Year)][Month] then
-              inc(Day)
-            else
-            begin
-              Day := 1;
-              if Month < 12 then
-                inc(Month)
-              else
-              begin
-                Month := 1;
-                inc(Year);
-              end;
-            end;
-          end;
-          Hour := h;
-        end;
-        Minute := m;
+        dec(Month, 12);
+        inc(Year);
       end;
-      Second := s;
-    until ms < 1000;
-  MilliSecond := ms;
+    until false;
+  end;
+
+begin
+  DayOfWeek := 0;
+  while MilliSecond >= 1000 do
+  begin
+    dec(MilliSecond, 1000);
+    inc(Second);
+  end;
+  while Second >= 60 do
+  begin
+    dec(Second, 60);
+    inc(Minute);
+  end;
+  while Minute >= 60 do
+  begin
+    dec(Minute, 60);
+    inc(Hour);
+  end;
+  while Hour >= 24 do
+  begin
+    dec(Hour, 24);
+    inc(Day);
+  end;
+  NormalizeMonth;
+  while Month > 12 do
+  begin
+    dec(Month, 12);
+    inc(Year);
+    NormalizeMonth;
+  end;
 end;
 
 function TryEncodeDate(Year, Month, Day: cardinal;
@@ -3289,7 +3333,7 @@ procedure TTextDateWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
 var
   T: TSynSystemTime;
 begin
-  if (Value^ = 0) and
+  if (PInt64(Value)^ = 0) and
      (QuoteChar = #0) then
     exit;
   if BEnd - B <= 26 then
@@ -3299,7 +3343,7 @@ begin
     B^ := QuoteChar
   else
     dec(B);
-  if Value^ <> 0 then
+  if PInt64(Value)^ <> 0 then
   begin
     inc(B);
     if AlwaysDateAndTime or
@@ -3331,19 +3375,7 @@ end;
 
 procedure TTextDateWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
 begin
-  if Value = 0 then
-    exit;
-  if BEnd - B <= 24 then
-    FlushToStream;
-  inc(B);
-  if trunc(Value) <> 0 then
-    B := DateToIso8601PChar(Value, B, true);
-  if frac(Value) <> 0 then
-    B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
-  if twoDateTimeWithZ in fCustomOptions then
-    B^ := 'Z'
-  else
-    dec(B);
+  AddDateTime(@Value, 'T', {quotechar=}#0, WithMS, {always=}false);
 end;
 
 procedure TTextDateWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
@@ -3482,8 +3514,6 @@ end;
 
 procedure FinalizeUnit;
 begin
-  if AppendToTextFileSafeSet then
-    AppendToTextFileSafe.Done;
 end;
 
 initialization

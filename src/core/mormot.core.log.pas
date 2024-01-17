@@ -650,9 +650,9 @@ type
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
-    fRotateFileAtHour: integer;
+    fRotateFileDailyAtHour: integer;
     function CreateSynLog: TSynLog;
-    procedure StartAutoFlush;
+    procedure EnsureAutoFlushRunning;
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -907,9 +907,10 @@ type
     // be restarted from scratch when it reaches RotateFileSizeKB size or when
     // RotateFileDailyAtHour time is reached
     // - if set to a number > 1, some rotated files will be compressed using the
-    // SynLZ algorithm, and will be named e.g. as MainLogFileName.0.synlz ..
-    // MainLogFileName.7.synlz for RotateFileCount=9 (total count = 9, including
-    // 1 main log file and 8 .synlz files)
+    // LogCompressAlgo algorithm (i.e. AlgoSynLZ by default), and will be named
+    // e.g. as MainLogFileName.0.synlz .. MainLogFileName.7.synlz for
+    // RotateFileCount=9 (total count = 9, including 1 main log file and
+    // 8 .synlz files)
     property RotateFileCount: cardinal
       read fRotateFileCount write fRotateFileCount;
     /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)
@@ -920,10 +921,10 @@ type
     /// fixed hour of the day where logging files rotation should be performed
     // - by default, equals -1, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
-    // specified hour
+    // specified local (not UTC) hour
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileDailyAtHour: integer
-      read fRotateFileAtHour write fRotateFileAtHour;
+      read fRotateFileDailyAtHour write fRotateFileDailyAtHour;
     /// the recursive depth of stack trace symbol to write
     // - used only if exceptions are handled, or by sllStackTrace level
     // - default value is 30, maximum is 255 (but API may never reach so high)
@@ -1020,16 +1021,16 @@ type
     fStartTimestamp: Int64;
     fCurrentTimestamp: Int64;
     fStartTimestampDateTime: TDateTime;
-    fWriterClass: TBaseWriterClass;
     fWriterStream: TStream;
     fFileName: TFileName;
     fStreamPositionAfterHeader: cardinal;
     fFileRotationSize: cardinal;
-    fFileRotationNextHour: Int64;
+    fFileRotationDailyAtHourTix: Int64;
     fThreadIndexReleased: TIntegerDynArray;
     fThreadIndexReleasedCount: integer;
     fThreadContextCount: integer;
     fNextFlushTix10: cardinal;
+    fWriterClass: TBaseWriterClass;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       iid: TGuid; out obj): TIntQry;
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -1039,6 +1040,7 @@ type
       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
+    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
@@ -3742,6 +3744,8 @@ var
   i: PtrInt;
   c: TAutoFlushThreadToConsole;
 begin
+  if fToConsole.Count = 0 then
+    exit;
   fToConsoleSafe.Lock;
   try
     MoveFast(fToConsole, c, SizeOf(c)); // thread-safe local copy
@@ -3812,7 +3816,7 @@ begin
       end;
       if files <> nil then
       begin
-        tix10 := mormot.core.os.GetTickCount64 shr 10;
+        tix10 := mormot.core.os.GetTickCount64 shr 10; // second resolution
         for i := 0 to high(files) do
           with files[i] do
             if Terminated or
@@ -3826,7 +3830,7 @@ begin
                 Flush({forcediskwrite=}false); // write pending data
       end;
     except
-      // on stability issue, try to identify this thread
+      // on stability issue, start identifying this thread
       if not Terminated then
         try
           SetCurrentThreadName('log autoflush');
@@ -3835,9 +3839,9 @@ begin
         end;
     end;
   until Terminated;
+  // Terminated is set: eventually display delayed console ouput
   try
-    if fToConsole.Count <> 0 then
-      FlushConsole; // always write last pending console rows
+    FlushConsole;
   except
     ; // ignore any exception at shutdown
   end;
@@ -3927,7 +3931,7 @@ begin
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
-  fRotateFileAtHour := -1;
+  fRotateFileDailyAtHour := -1;
   fBufferSize := 4096;
   fStackTraceLevel := 30;
   fWithUnitName := true;
@@ -3969,7 +3973,7 @@ begin
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and
          (fRotateFileSize = 0) and
-         (fRotateFileAtHour < 0) and
+         (fRotateFileDailyAtHour < 0) and
          (fIdent <= MAX_SYNLOGFAMILY) then
         SynLogLookupThreadVar[fIdent] := result
       else
@@ -3984,7 +3988,7 @@ begin
   end;
 end;
 
-procedure TSynLogFamily.StartAutoFlush;
+procedure TSynLogFamily.EnsureAutoFlushRunning;
 begin
   if (AutoFlushThread = nil) and
      not SynLogFileFreeing and
@@ -4086,7 +4090,7 @@ begin
     if (fPerThreadLog = ptOneFilePerThread) and
        (fRotateFileCount = 0) and
        (fRotateFileSize = 0) and
-       (fRotateFileAtHour < 0) and
+       (fRotateFileDailyAtHour < 0) and
        (fIdent <= MAX_SYNLOGFAMILY) then
     begin
       // unrotated ptOneFilePerThread
@@ -4403,11 +4407,11 @@ procedure TSynLog.LogTrailer(Level: TSynLogInfo);
 begin
   if Level in fFamily.fLevelStackTrace then
     AddStackTrace(Level, nil);
-  fWriterEcho.AddEndOfLine(fCurrentLevel);
-  if (fFileRotationNextHour <> 0) and
-     (GetTickCount64 >= fFileRotationNextHour) then
+  fWriterEcho.AddEndOfLine(fCurrentLevel); // AddCR + any per-line echo suport
+  if (fFileRotationDailyAtHourTix <> 0) and
+     (GetTickCount64 >= fFileRotationDailyAtHourTix) then
   begin
-    inc(fFileRotationNextHour, MSecsPerDay);
+    inc(fFileRotationDailyAtHourTix, MSecsPerDay); // next day, same hour
     PerformRotation;
   end
   else if (fFileRotationSize > 0) and
@@ -4698,11 +4702,6 @@ begin
     if ForceDiskWrite and
        fWriterStream.InheritsFrom(THandleStream) then
       diskflush := THandleStream(fWriterStream).Handle;
-    if AutoFlushThread = nil then
-      fFamily.StartAutoFlush;
-    fNextFlushTix10 := fFamily.AutoFlushTimeOut;
-    if fNextFlushTix10 <> 0 then
-      inc(fNextFlushTix10, mormot.core.os.GetTickCount64 shr 10);
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
   end;
@@ -5201,7 +5200,7 @@ procedure TSynLog.LogFileInit;
 begin
   QueryPerformanceMicroSeconds(fStartTimestamp);
   if (fFileRotationSize > 0) or
-     (fFileRotationNextHour <> 0) then
+     (fFileRotationDailyAtHourTix <> 0) then
     fFamily.HighResolutionTimestamp := false;
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
   if fFamily.LocalTimestamp then
@@ -5652,18 +5651,19 @@ begin
   begin
     if fFamily.fRotateFileSize > 0 then
       fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
-    if fFamily.fRotateFileAtHour in [0..23] then
+    if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
-      hourRotate := EncodeTime(fFamily.fRotateFileAtHour, 0, 0, 0);
+      hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
       timeNow := Time;
       if hourRotate < timeNow then
-        hourRotate := hourRotate + 1; // trigger will be tomorrow
+        hourRotate := hourRotate + 1; // will happen tomorrow
       timeBeforeRotate := hourRotate - timeNow;
-      fFileRotationNextHour := GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
+      fFileRotationDailyAtHourTix :=
+        GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
     end;
   end;
   if (fFileRotationSize = 0) and
-     (fFileRotationNextHour = 0) then
+     (fFileRotationDailyAtHourTix = 0) then
     fFileName := fFileName + ' ' + Ansi7ToString(NowToString(false));
   {$ifdef OSWINDOWS}
   if IsLibrary and
@@ -5689,6 +5689,7 @@ var
 begin
   if fWriterStream = nil then
   begin
+    // create fWriterStream instance
     ComputeFileName;
     if fFamily.NoFile then
       fWriterStream := TFakeWriterStream.Create
@@ -5744,13 +5745,16 @@ begin
   if fWriterClass = nil then
     // use TJsonWriter since mormot.core.json.pas is linked
     fWriterClass := TJsonWriter;
+  // create fWriter and fWriterEcho instances
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
-    fWriter.CustomOptions := fWriter.CustomOptions +
-      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended,
-       twoNoWriteToStreamException]
-      - [twoFlushToStreamNoAutoResize]; // follow BufferSize
+    fWriter.CustomOptions := fWriter.CustomOptions
+      + [twoEnumSetsAsTextInRecord, // debug-friendly text output
+         twoFullSetsAsStar,
+         twoForceJsonExtended,
+         twoNoWriteToStreamException]
+      - [twoFlushToStreamNoAutoResize]; // stick to BufferSize
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
@@ -5760,7 +5764,20 @@ begin
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
   if Assigned(fFamily.fEchoRemoteClient) then
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
-  fFamily.StartAutoFlush;
+  // enable background writing
+  if fFamily.AutoFlushTimeOut <> 0 then
+  begin
+    fWriter.OnFlushToStream := OnFlushToStream;
+    OnFlushToStream(nil, 0);
+    fFamily.EnsureAutoFlushRunning;
+  end;
+end;
+
+procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
+begin
+  fNextFlushTix10 := fFamily.AutoFlushTimeOut;
+  if fNextFlushTix10 <> 0 then
+    inc(fNextFlushTix10, GetTickCount64 shr 10);
 end;
 
 function TSynLog.GetFileSize: Int64;

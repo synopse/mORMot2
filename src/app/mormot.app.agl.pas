@@ -689,9 +689,7 @@ begin
   for i := n - 2 downto 1 do
     RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
   RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
-  TFileStreamEx.Create(fRedirectFileName, fmCreate).Free; // a new void file
-  fRedirect := TFileStreamEx.Create(
-    fRedirectFileName, fmOpenReadWrite or fmShareDenyWrite); // 'xxx'
+  fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
 end;
 
 function TSynAngelizeRunner.OnRedirect(
@@ -1448,9 +1446,7 @@ begin
           lf := NormalizeFileName(Utf8ToString(
             Sender.Expand(Service, Service.RedirectLogFile, true)));
           try
-            if not FileExists(lf) then
-              TFileStreamEx.Create(lf, fmCreate).Free; // a new void file
-            ls := TFileStreamEx.Create(lf, fmOpenReadWrite or fmShareDenyWrite);
+            ls := TFileStreamEx.CreateWrite(lf);
             ls.Seek(0, soEnd); // append
             Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
           except
@@ -1712,7 +1708,7 @@ begin
     raise ESynAngelize.CreateUtf8('/new %: missing application "%"', [sn, exe]);
   id := PropNameSanitize(sn, 'service');
   sas := fSettings as TSynAngelizeSettings;
-  dir := EnsureDirectoryExists(sas.Folder);
+  dir := EnsureDirectoryExists(sas.Folder, ESynAngelize);
   fn := dir + Utf8ToString(id) + sas.Ext;
   if FileExists(fn) then
     for i := 1 to 100 do

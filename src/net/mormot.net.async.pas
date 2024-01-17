@@ -62,7 +62,7 @@ type
   // - fClosed is set by OnClose virtual method
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
-  // - fInList indicates that the connection was Added to the list
+  // - fInList indicates that ConnectionAdd() did register the connection
   // - fReadPending states that there is a pending event for this connection
   // - fFromGC is set when the connection has been recycled from the GC list
   // - note: better keep it as 8 items to fit in a byte (faster access)
@@ -491,7 +491,11 @@ type
     acoThreadSmooting
   );
 
-  /// to implement generational garbage collector of asynchronous connections
+  /// implement generational garbage collector of TAsyncConnection instances
+  // - we define two generations: the first has a TTL of KeepConnectionInstanceMS
+  // (100ms) and are used to avoid GPF or confusion on still active connections;
+  // the second has a TTL of 2 seconds and will be used by ConnectionCreate to
+  // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
   TAsyncConnectionsGC = record
     Safe: TLightLock;
     Count: integer;
@@ -527,10 +531,10 @@ type
     fOptions: TAsyncConnectionsOptions;
     fClientsEpoll: boolean; // = PollSocketClass.FollowEpoll
     fLastOperationSec: TAsyncConnectionSec;
-    fLastOperationMS: cardinal; // stored by AddGC in connection.LastOperation
     fLastOperationReleaseMemorySeconds: cardinal;
     fLastOperationIdleSeconds: cardinal;
     fKeepConnectionInstanceMS: cardinal;
+    fLastOperationMS: Int64; // stored by AddGC in connection.LastOperation
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
       Address, Port: RawUtf8;
@@ -2021,8 +2025,7 @@ begin
   end;
 end;
 
-function OneGC(var gen, dst: TAsyncConnectionsGC;
-  lastop, oldenough: TAsyncConnectionSec): PtrInt;
+function OneGC(var gen, dst: TAsyncConnectionsGC; lastms, oldms: cardinal): PtrInt;
 var
   c: TAsyncConnection;
   i: PtrInt;
@@ -2030,11 +2033,11 @@ begin
   result := 0;
   if gen.Count = 0 then
     exit;
-  oldenough := lastop - oldenough;
+  oldms := lastms - oldms;
   for i := 0 to gen.Count - 1 do
   begin
     c := gen.Items[i];
-    if c.fLastOperation <= oldenough then
+    if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation in ms
     begin
       // release after timeout
       if dst.Count >= length(dst.Items) then
@@ -2044,9 +2047,9 @@ begin
     end
     else
     begin
-      if c.fLastOperation > lastop then
-        // reset time flag after 42 days / 32-bit overflow
-        c.fLastOperation := lastop;
+      if c.fLastOperation > lastms then
+        // need to reset time flag after 42 days / 32-bit overflow
+        c.fLastOperation := lastms;
       gen.Items[result] := c; // keep if not fKeepConnectionInstanceMS old
       inc(result);
     end;
@@ -3603,14 +3606,26 @@ end;
 
 procedure THttpAsyncConnection.DoAfterResponse;
 var
-  user: RawUtf8;
+  ctx: TOnHttpServerAfterResponseContext;
 begin
+  QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+  dec(ctx.ElapsedMicroSec, fAfterResponseStart);
+  ctx.Connection := fConnectionID;
+  ctx.Method := pointer(fHttp.CommandMethod);
+  ctx.Host := pointer(fHttp.Host);
+  ctx.Url := pointer(fHttp.CommandUri);
+  ctx.User := nil;
+  if hsrAuthorized in fRequestFlags then // from THttpServerSocketGeneric.Authorization
+    ctx.User := pointer(fHttp.BearerToken);
+  ctx.Referer := pointer(fHttp.Referer);
+  ctx.UserAgent := pointer(fHttp.UserAgent);
+  ctx.RemoteIP := pointer(fRemoteIP);
+  ctx.Flags := fRequestFlags;
+  ctx.StatusCode := fRespStatus;
+  ctx.Received := fBytesRecv;
+  ctx.Sent := fBytesSend;
   try
-    if hsrAuthorized in fRequestFlags then
-      user := fHttp.BearerToken; // from THttpServerSocketGeneric.Authorization
-    fServer.fOnAfterResponse(fConnectionID, user, fHttp.CommandMethod,
-      fHttp.Host, fHttp.CommandUri, fHttp.Referer, fHttp.UserAgent, fRemoteIP,
-      fRequestFlags, fRespStatus, fAfterResponseStart, fBytesRecv, fBytesSend);
+    fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
     on E: Exception do // paranoid
     begin
@@ -3747,6 +3762,9 @@ begin
     T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
     fHttpDateNowUtc := tmp; // (almost) atomic set
   end;
+  // ensure log file(s) are flushed to disk at least once a second
+  if fLogger <> nil then
+    fLogger.OnIdle(fAsync.fLastOperationMS); // = GetTickCount64
   // clean interned HTTP headers every 16 secs
   if (fInterning <> nil) and
      (fAsync <> nil) then

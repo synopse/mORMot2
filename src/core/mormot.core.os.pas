@@ -2940,24 +2940,22 @@ function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
 /// returns the current UTC time
-// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
+// - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows
 function NowUtc: TDateTime;
 
 /// returns the current UTC date/time as a second-based c-encoded time
 // - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
-// - faster than NowUtc or GetTickCount64, on Windows or Unix platforms
-// (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime under Windows)
+// - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
 function UnixTimeUtc: TUnixTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
-// - faster and more accurate than NowUtc or GetTickCount64, on Windows or Unix
 // - will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
-// later being more accurate, but slightly slower than the former, so you may
-// consider using UnixMSTimeUtcFast on Windows if its 16ms accuracy is enough
+// or GetSystemTimePreciseAsFileTime under Windows 8 and later
+// - on Windows, is slightly more accurate, but slower than UnixMSTimeUtcFast
 function UnixMSTimeUtc: TUnixMSTime;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
@@ -2975,7 +2973,9 @@ const
   UnixFileTimeDelta = 116444736000000000;
 
 /// the number of minutes bias in respect to UTC/GMT date/time
-// - as retrieved via -GetLocalTimeOffset() at startup
+// - as retrieved via -GetLocalTimeOffset() at startup, so may not be accurate
+// after a time shift during the process execution - but any long-running
+// process (like a service) should use UTC timestamps only
 var
   TimeZoneLocalBias: integer;
 
@@ -3132,7 +3132,8 @@ function FileSize(const FileName: TFileName): Int64; overload;
 
 /// get a file size, from its handle
 // - returns 0 if file doesn't exist
-// - on POSIX, will use efficient FpFStat() single call and not file seek
+// - under Windows, will use the GetFileSizeEx fast API
+// - on POSIX, will use efficient FpFStat() single call and no file seek
 function FileSize(F: THandle): Int64; overload;
 
 /// FileSeek() overloaded function, working with huge files
@@ -3238,6 +3239,9 @@ type
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// can use this class from a low-level file OS handle
     constructor CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
+    /// open for writing or create a non-existing file from its name
+    // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
+    constructor CreateWrite(const aFileName: TFileName);
     /// the file name assigned to this class constructor
     property FileName : TFileName
       read fFilename;
@@ -3381,11 +3385,11 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 // - returns the full expanded directory name, including trailing path delimiter
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is true
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
 
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
 function NormalizeDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean = false): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
@@ -6616,6 +6620,21 @@ begin
   fFileName := aFileName;
 end;
 
+constructor TFileStreamEx.CreateWrite(const aFileName: TFileName);
+var
+  h: THandle;
+begin
+  if not FileExists(aFileName) then
+  begin
+    h := FileCreate(aFileName);
+    if ValidHandle(h) then
+      FileClose(h);
+  end;
+  h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyWrite);
+  CreateFromHandle(aFileName, h);
+end;
+
+
 { TFileStreamWithoutWriteError }
 
 function TFileStreamWithoutWriteError.Write(const Buffer; Count: Longint): Longint;
@@ -7003,11 +7022,12 @@ begin
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin
   if Directory = '' then
-    if RaiseExceptionOnCreationFailure then
-      raise Exception.Create('Unexpected EnsureDirectoryExists('''')')
+    if RaiseExceptionOnCreationFailure <> nil then
+      raise RaiseExceptionOnCreationFailure.Create(
+        'Unexpected EnsureDirectoryExists('''')')
     else
       result := ''
   else
@@ -7015,15 +7035,16 @@ begin
     result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
     if not DirectoryExists(result) then
       if not ForceDirectories(result) then
-        if RaiseExceptionOnCreationFailure then
-          raise Exception.CreateFmt('Impossible to create folder %s', [result])
+        if RaiseExceptionOnCreationFailure <> nil then
+          raise RaiseExceptionOnCreationFailure.CreateFmt(
+            'Impossible to create folder %s', [result])
         else
           result := '';
   end;
 end;
 
 function NormalizeDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: boolean): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
 begin
   result := EnsureDirectoryExists(NormalizeFileName(Directory),
     RaiseExceptionOnCreationFailure);
@@ -7106,7 +7127,7 @@ begin
   dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
   if FileIsReadOnly(dir) then
-    exit;
+    exit; // the whole folder is read-only
   retry := 20;
   repeat
     fn := Format('%s' + PathDelim + {$ifdef OSPOSIX} '.' + {$endif OSPOSIX}
@@ -7119,9 +7140,9 @@ begin
   until false;
   f := FileCreate(fn);
   if PtrInt(f) < 0 then
-    exit;
+    exit; // a file can't be created
   FileClose(f);
-  result := DeleteFile(fn);
+  result := DeleteFile(fn); // success if the file can be created and deleted
 end;
 
 

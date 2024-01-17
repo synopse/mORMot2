@@ -629,7 +629,6 @@ begin
        not addr.IPEqual(resp) or
        (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
        not hdr^.IsResponse or
-       not hdr^.RecursionAvailable or
        (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
        (hdr^.AnswerCount = 0) then
        // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough

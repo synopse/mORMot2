@@ -528,12 +528,13 @@ var
   AlgoRle: TAlgoCompress;
 
 var
-  /// define how .synlz files are compressed by TSynLog.PerformRotation
-  // - as used within mormot.core.log.pas unit
-  // - assigned to AlgoSynLZ by default which is the fastest for logs
+  /// define how files are compressed by TSynLog.PerformRotation
+  // - as used within mormot.core.log.pas unit, and defined in this unit to be
+  // available wihout any dependency to it (e.g. in compression units)
+  // - assigned to AlgoSynLZ by default for .synlz which is the fastest for logs
   // - you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
   // (default AlgoLizard is much slower and less efficient on logs)
-  // - if you set nil, no compression will take place
+  // - if you set nil, no compression will take place during rotation
   // - consider AlgoDeflate which gives the best compression ratio and is also
   // very fast if libdeflate is available (e.g. on FPC x86_64)
   // - note that compression itself is run in the logging background thread
@@ -715,6 +716,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// copy the next VarBlob value from the buffer into a TSynTempBuffer
     procedure VarBlob(out Value: TSynTempBuffer); overload;
+    /// read the next pointer and length value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarBlobSafe(out Value: TValueResult): boolean;
     /// read the next ShortString value from the buffer
     function VarShortString: ShortString;
       {$ifdef HASINLINE}inline;{$endif}
@@ -963,10 +968,18 @@ type
     // - caller should specify the maximum possible number of bytes to be written
     // - then write the data to the returned pointer, and call DirectWriteFlush
     // - if len is bigger than the internal buffer, tmp will be used instead
-    function DirectWritePrepare(len: PtrInt; var tmp: RawByteString): PAnsiChar;
+    function DirectWritePrepare(maxlen: PtrInt; var tmp: RawByteString): PAnsiChar;
     /// finalize a direct write to a memory buffer
     // - by specifying the number of bytes written to the buffer
     procedure DirectWriteFlush(len: PtrInt; const tmp: RawByteString);
+    /// allows to write directly to a memory buffer
+    // - caller should specify the maximum possible number of bytes to be written
+    // - len should be smaller than the internal buffer size (not checked)
+    function DirectWriteReserve(maxlen: PtrInt): PByte;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// flush DirectWriteReserve() content
+    procedure DirectWriteReserved(pos: PByte);
+      {$ifdef HASINLINE}inline;{$endif}
     /// write any pending data in the internal buffer to the stream
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
@@ -1511,10 +1524,12 @@ function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(const svar: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
@@ -1534,12 +1549,15 @@ function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 function UrlDecode(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
+// - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
+// - name=false for parameters (after ?), to replace spaces by '+'
 procedure UrlDecodeVar(U: PUtf8Char; L: PtrInt; var result: RawUtf8; name: boolean);
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2588,7 +2606,7 @@ type
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
+    /// returns the text at a given position in Values[] via RawUtf8ToVariant()
     // - text should be in a single Values[] entry
     // - explicitly returns null if the supplied text was not found
     procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
@@ -2606,6 +2624,7 @@ type
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// pointer reference to a TRawByteStringGroup
@@ -3825,6 +3844,22 @@ begin
   inc(P, len);
 end;
 
+function TFastReader.VarBlobSafe(out Value: TValueResult): boolean;
+var
+  len: PtrUInt;
+begin
+  len := VarUInt32;
+  if P + len > Last then
+  begin
+    result := false;
+    exit;
+  end;
+  Value.Ptr := P;
+  Value.Len := len;
+  inc(P, len);
+  result := true;
+end;
+
 procedure TFastReader.VarBlob(out Value: TSynTempBuffer);
 var
   len: PtrUInt;
@@ -4497,16 +4532,16 @@ begin
   Write(pointer(Data), Length(Data));
 end;
 
-function TBufferWriter.DirectWritePrepare(len: PtrInt;
+function TBufferWriter.DirectWritePrepare(maxlen: PtrInt;
   var tmp: RawByteString): PAnsiChar;
 begin
-  if (len <= fBufLen) and
-     (fPos + len > fBufLen) then
+  if (maxlen <= fBufLen) and
+     (fPos + maxlen > fBufLen) then
     InternalFlush;
-  if fPos + len > fBufLen then
+  if fPos + maxlen > fBufLen then
   begin
-    if len > length(tmp) then
-      FastSetRawByteString(tmp, nil, len); // don't reallocate buffer (reuse)
+    if maxlen > length(tmp) then
+      FastSetRawByteString(tmp, nil, maxlen); // don't reallocate buffer (reuse)
     result := pointer(tmp);
   end
   else
@@ -4519,6 +4554,18 @@ begin
     inc(fPos, len)
   else
     Write(pointer(tmp), len);
+end;
+
+function TBufferWriter.DirectWriteReserve(maxlen: PtrInt): PByte;
+begin
+  if fPos + maxlen > fBufLen then
+    InternalFlush;
+  result := @fBuffer^[fPos]; // write directly into the buffer
+end;
+
+procedure TBufferWriter.DirectWriteReserved(pos: PByte);
+begin
+  fPos := PAnsiChar(pos) - pointer(fBuffer);
 end;
 
 procedure TBufferWriter.WriteXor(New, Old: PAnsiChar; Len: PtrInt;
@@ -5482,15 +5529,14 @@ begin
       inc(PByte(S), head.UnCompressedSize); // move ahead to next chunk
     inc(result, SizeOf(head) + head.CompressedSize);
   until count = 0;
-  if WithTrailer then
-  begin
-    inc(result, SizeOf(trail));
-    trail.Magic := Magic;
-    trail.HeaderRelativeOffset := result;        // Int64 into cardinal
-    if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
-      RaiseStreamError(self, 'StreamCompress trail overflow');
-    Dest.WriteBuffer(trail, SizeOf(trail));
-  end;
+  if not WithTrailer then
+    exit;
+  inc(result, SizeOf(trail));
+  trail.Magic := Magic;
+  trail.HeaderRelativeOffset := result;        // Int64 into cardinal
+  if trail.HeaderRelativeOffset <> result then // max 4GB compressed size
+    RaiseStreamError(self, 'StreamCompress trail overflow');
+  Dest.WriteBuffer(trail, SizeOf(trail));
 end;
 
 function TAlgoCompress.StreamCompress(Source: TStream;
@@ -5527,7 +5573,7 @@ var
   stored: boolean;
 
   function MagicSeek: boolean;
-  // Source not positioned as expected -> try from the end
+  // Source not positioned as expected -> try from the TAlgoCompressTrailer end
   var
     t: PAlgoCompressTrailer;
     tmplen: PtrInt;
@@ -8030,9 +8076,9 @@ begin
         break; // reached end of URI
       '%':
         if not HexToChar(PAnsiChar(U + 1), P) then
-          P^ := U^
+          P^ := U^ // browsers may not follow the RFC (e.g. encode % as % !)
         else
-          inc(U, 2); // browsers may not follow the RFC (e.g. encode % as % !)
+          inc(U, 2);
       '+':
         if name then
           P^ := '+'
@@ -8040,7 +8086,7 @@ begin
           P^ := ' ';
     else
       P^ := U^;
-    end; // case s[i] of
+    end;
     inc(U);
     inc(P);
   until false;
@@ -10793,28 +10839,26 @@ function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
 var
   i: integer;
 begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
-  begin
-    result := @Values[LastFind]; // this cache is very efficient in practice
-    if (aPosition >= result^.Position) and
-       (aPosition < result^.Position + length(result^.Value)) then
+  result := nil;
+  if (pointer(Values) = nil) or
+     (cardinal(aPosition) >= cardinal(Position)) then
+    exit;
+  result := @Values[LastFind]; // this cache is very efficient in practice
+  if (aPosition >= result^.Position) and
+     (aPosition < result^.Position + length(result^.Value)) then
+    exit;
+  result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+  for i := 0 to Count - 2 do
+    if result^.Position > aPosition then
+    begin
+      dec(result);
+      LastFind := i;
       exit;
-    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if result^.Position > aPosition then
-      begin
-        dec(result);
-        LastFind := i;
-        exit;
-      end
-      else
-        inc(result);
-    dec(result);
-    LastFind := Count - 1;
-  end
-  else
-    result := nil;
+    end
+    else
+      inc(result);
+  dec(result);
+  LastFind := Count - 1;
 end;
 
 function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
@@ -10824,37 +10868,33 @@ var
 label
   found;
 begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
+  result := nil;
+  if (pointer(Values) = nil) or
+     (cardinal(aPosition) >= cardinal(Position)) then
+    exit;
+  P := @Values[LastFind]; // this cache is very efficient in practice
+  i := aPosition - P^.Position;
+  if (i >= 0) and
+     (i + aLength < length(P^.Value)) then
   begin
-    P := @Values[LastFind]; // this cache is very efficient in practice
-    i := aPosition - P^.Position;
-    if (i >= 0) and
-       (i + aLength < length(P^.Value)) then
+    result := @PByteArray(P^.Value)[i];
+    exit;
+  end;
+  P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+  for i := 0 to Count - 2 do
+    if P^.Position > aPosition then
     begin
-      result := @PByteArray(P^.Value)[i];
-      exit;
-    end;
-    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if P^.Position > aPosition then
-      begin
-        LastFind := i;
+      LastFind := i;
 found:  dec(P);
-        dec(aPosition, P^.Position);
-        if aLength - aPosition <= length(P^.Value) then
-          result := @PByteArray(P^.Value)[aPosition]
-        else
-          result := nil;
-        exit;
-      end
-      else
-        inc(P);
-    LastFind := Count - 1;
-    goto found;
-  end
-  else
-    result := nil;
+      dec(aPosition, P^.Position);
+      if aLength - aPosition <= length(P^.Value) then
+        result := @PByteArray(P^.Value)[aPosition];
+      exit;
+    end
+    else
+      inc(P);
+  LastFind := Count - 1;
+  goto found;
 end;
 
 procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer;

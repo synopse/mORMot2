@@ -2283,16 +2283,15 @@ type
     // A-Z a-z 0-9 and _ characters, up to 63 in length
     // - if New equals '', this published property will be excluded from
     // the JSON serialized object
-    // - the New ShortString should be a local constant, to avoid random GPF
     function NameChange(const Old, New: RawUtf8): PRttiCustomProp;
     /// customize property/field name, specified as old/new pairs
-    // - each Old[] field name will be replaced by the corresponding New[] name
+    // - will first restore all field names from RTTI, then each Old[] field
+    // name will be replaced by the corresponding New[] name
+    // - so setting both Old=New=[] just set back the default names from RTTI
     // - New[] is expected to be only plain pascal identifier, i.e.
     // A-Z a-z 0-9 and _ characters, up to 63 in length
     // - if any New[] equals '', this published property will be excluded from
     // the JSON serialized object
-    // - setting both Old=New=[] will return back to the default names from RTTI
-    // - the New ShortString should be a local constant, to avoid random GPF
     // - Rtti.ByClass[TMyClass].Props.NameChanges() replaces deprecated
     // TJsonSerializer.RegisterCustomSerializerFieldNames(TMyClass, ...)
     procedure NameChanges(const Old, New: array of RawUtf8);
@@ -5552,7 +5551,6 @@ begin
       begin
         IInterface(Obj)._AddRef;
         result := true;
-        exit;
       end;
     end
     else
@@ -5584,6 +5582,10 @@ begin
   end;
 end;
 
+
+{ ************* Efficient Dynamic Arrays and Records Process }
+
+// defined here for proper inlining in code below
 function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
 begin
   if Info <> nil then
@@ -5595,9 +5597,6 @@ begin
   else
     result := nil;
 end;
-
-
-{ ************* Efficient Dynamic Arrays and Records Process }
 
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 begin
@@ -7280,11 +7279,10 @@ end;
 function TRttiCustomProps.NameChange(const Old, New: RawUtf8): PRttiCustomProp;
 begin
   result := Find(Old);
-  if result <> nil then
-  begin
-    result^.Name := New;
-    CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
-  end;
+  if result = nil then
+    exit;
+  result^.Name := New;
+  CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
 end;
 
 procedure TRttiCustomProps.NameChanges(const Old, New: array of RawUtf8);

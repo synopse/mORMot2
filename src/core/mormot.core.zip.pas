@@ -47,6 +47,7 @@ type
   TSynZipStream = class(TStream)
   protected
     fInitialized: boolean;
+    fDestStreamOwned: boolean;
     fFormat: TSynZipCompressorFormat;
     fDestStream: TStream;
     Z: TZLib;
@@ -84,8 +85,12 @@ type
     /// create a compression stream, writing the compressed data into
     // the specified stream (e.g. a file stream)
     constructor Create(outStream: TStream; CompressionLevel: integer;
-      Format: TSynZipCompressorFormat = szcfRaw);
-    /// release memory
+      Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
+    /// create a compression stream, writting the compressed data into
+    // the specified file name
+    constructor Create(const outFile: TFileName; CompressionLevel: integer;
+      Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
+    /// release memory and write the .gz ending packet if needed
     destructor Destroy; override;
     /// update the global CRC and compress some data
     function Write(const Buffer; Count: Longint): Longint; override;
@@ -131,11 +136,15 @@ type
     unixmodtime: cardinal;
     fname, fcomment, extra: PAnsiChar;
     /// read and validate the .gz header
-    // - on success, return true and fill complen/uncomplen/crc32c properties
+    // - on success, return true and fill complen/uncomplen32/crc32c properties
     function Init(gz: PAnsiChar; gzLen: PtrInt): boolean;
     /// uncompress the .gz content into a memory buffer
     // - warning: won't work as expected if uncomplen32 was truncated to 2^32
     function ToMem: RawByteString;
+    /// uncompress the .gz content into a memory buffer
+    // - warning: dest should be at least uncomplen32 in size (works only if
+    // was not truncated to 2^32)
+    function ToBuffer(dest: PAnsiChar): boolean;
     /// uncompress the .gz content into a stream
     function ToStream(stream: TStream; tempBufSize: integer = 0): boolean;
     /// uncompress the .gz content into a file
@@ -157,11 +166,26 @@ type
 
 /// uncompress a .gz file content
 // - return '' if the .gz content is invalid (e.g. bad crc)
-function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString;
+function GZRead(gz: PAnsiChar; gzLen: integer): RawByteString; overload;
+
+/// uncompress a .gz file by name
+// - return '' if the file content is invalid (e.g. bad crc)
+function GZRead(const gzfile: TFileName): RawByteString; overload;
+
+/// compress a memory buffer into a .gz file content
+function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
 
 /// compress a file content into a new .gz file
-// - will use TSynZipCompressor for minimal memory use during file compression
-function GZFile(const orig, destgz: TFileName; CompressionLevel: integer = 6): boolean;
+// - will use libdeflate if possible, then TSynZipCompressor for minimal memory
+// use during (huge) file compression
+function GZFile(const orig, destgz: TFileName;
+  CompressionLevel: integer = 6): boolean; overload;
+
+/// compress a memory buffer into a new .gz file
+// - will use libdeflate if possible, then TSynZipCompressor for minimal memory
+// use during (huge) file compression
+function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
+  CompressionLevel: integer = 6): boolean; overload;
 
 
 { ************  .ZIP Archive File Support }
@@ -836,11 +860,11 @@ function HashFileCrc32(const FileName: TFileName): RawUtf8;
 
 var
   /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
-  // - can use faster libdeflate instead of plain zlib if available
+  // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflate: TAlgoCompress;
 
   /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
-  // - can use faster libdeflate instead of plain zlib if available
+  // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflateFast: TAlgoCompress;
 
 
@@ -912,8 +936,8 @@ end;
 
 { TSynZipCompressor }
 
-constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: integer;
-  Format: TSynZipCompressorFormat);
+constructor TSynZipCompressor.Create(outStream: TStream;
+  CompressionLevel: integer; Format: TSynZipCompressorFormat);
 begin
   fDestStream := outStream;
   fFormat := Format;
@@ -921,6 +945,13 @@ begin
     fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE);
   Z.Init(nil, 0, outStream, nil, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.CompressInit(CompressionLevel, fFormat = szcfZip);
+end;
+
+constructor TSynZipCompressor.Create(const outFile: TFileName;
+  CompressionLevel: integer; Format: TSynZipCompressorFormat);
+begin
+  fDestStreamOwned := true;
+  Create(TFileStreamEx.Create(outFile, fmCreate), CompressionLevel, Format);
 end;
 
 destructor TSynZipCompressor.Destroy;
@@ -941,6 +972,8 @@ begin
     Z.CompressEnd;
   end;
   inherited Destroy;
+  if fDestStreamOwned then
+    FreeAndNil(fDestStream);
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
@@ -1132,10 +1165,21 @@ begin
     // 0 length stream
     exit;
   SetLength(result, uncomplen32);
-  if (cardinal(UnCompressMem(
-       comp, pointer(result), complen, uncomplen32)) <> uncomplen32) or
-     (mormot.lib.z.crc32(0, pointer(result), uncomplen32) <> crc32) then
+  if not ToBuffer(pointer(result)) then
     result := ''; // invalid CRC or truncated uncomplen32
+end;
+
+function TGZRead.ToBuffer(dest: PAnsiChar): boolean;
+begin
+  if (comp = nil) or
+     (dest = nil) or
+     ((uncomplen32 = 0) and
+      (crc32 = 0)) then
+    result := false
+  else
+    result := (cardinal(UnCompressMem(
+       comp, dest, complen, uncomplen32)) = uncomplen32) and
+     (mormot.lib.z.crc32(0, dest, uncomplen32) = crc32);
 end;
 
 function TGZRead.ToStream(stream: TStream; tempBufSize: integer): boolean;
@@ -1249,28 +1293,107 @@ begin
     result := '';
 end;
 
+function GZRead(const gzfile: TFileName): RawByteString;
+var
+  tmp: RawByteString;
+begin
+  tmp := StringFromFile(gzFile);
+  result := GZRead(pointer(tmp), length(tmp));
+end;
+
+function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
+var
+  max, dest: PtrInt;
+  p: PAnsiChar;
+begin
+  if len <= 0 then
+  begin
+    result := '';
+    exit;
+  end;
+  max := zlibCompressMax(len);
+  FastSetRawByteString(result, nil, max + (GZHEAD_SIZE + 8));
+  p := pointer(result);
+  MoveFast(GZHEAD, p^, GZHEAD_SIZE);
+  inc(p, GZHEAD_SIZE);
+  dest := CompressMem(buf, p, len, max, level, {zlib=}false);
+  if dest <= 0 then // error (maybe from libdeflate_deflate_compress)
+    result := ''
+  else
+  begin
+    inc(p, dest);
+    PCardinal(P)^ := crc32(0, buf, len); // may call libdeflate_crc32
+    inc(PCardinal(p));
+    PCardinal(p)^ := len;
+    inc(PCardinal(p));
+    FakeLength(result, p - pointer(result)); // no realloc
+  end;
+end;
+
 function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
 var
   gz: TSynZipCompressor;
-  s, d: TStream;
+  s: TStream;
+  {$ifdef LIBDEFLATESTATIC}
+  src, dst: RawByteString;
+  {$endif LIBDEFLATESTATIC}
 begin
   try
+    {$ifdef LIBDEFLATESTATIC}
+    // libdeflate is much faster than zlib, but its API expects only buffers
+    if FileSize(orig) < LIBDEFLATE_MAXSIZE then
+    begin
+      src := StringFromFile(orig);
+      dst := GZWrite(pointer(src), length(src), CompressionLevel);
+      result := (dst <> '') and
+                FileFromString(dst, destgz);
+      exit;
+    end;
+    {$endif LIBDEFLATESTATIC}
     s := TFileStreamEx.Create(orig, fmOpenReadDenyNone);
     try
-      d := TFileStreamEx.Create(destgz, fmCreate);
+      gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
       try
-        gz := TSynZipCompressor.Create(d, CompressionLevel, szcfGZ);
-        try
-          StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
-          result := true;
-        finally
-          gz.Free;
-        end;
+        StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
+        result := true;
       finally
-        d.Free;
+        gz.Free;
       end;
     finally
       s.Free;
+    end;
+  except
+    result := false;
+  end;
+end;
+
+function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
+  CompressionLevel: integer): boolean;
+var
+  gz: TSynZipCompressor;
+  {$ifdef LIBDEFLATESTATIC}
+  dst: RawByteString;
+  {$endif LIBDEFLATESTATIC}
+begin
+  try
+    {$ifdef LIBDEFLATESTATIC}
+    // libdeflate is much faster than zlib, but its API expects only buffers
+    if len < LIBDEFLATE_MAXSIZE then
+    begin
+      dst := GZWrite(buf, len, CompressionLevel);
+      result := (dst <> '') and
+                FileFromString(dst, destgz);
+      exit;
+    end;
+    {$endif LIBDEFLATESTATIC}
+    gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
+    try
+      if (buf <> nil) and
+         (len > 0) then
+        gz.WriteBuffer(buf^, len);
+      result := true;
+    finally
+      gz.Free;
     end;
   except
     result := false;
@@ -2977,9 +3100,10 @@ begin
     if not SafeFileName(LocalZipName) then
       raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
-    Dest := EnsureDirectoryExists(EnsureDirectoryExists(DestDir) + ExtractFilePath(LocalZipName));
+    Dest := EnsureDirectoryExists(
+              EnsureDirectoryExists(DestDir) + ExtractFilePath(LocalZipName));
     if Dest = '' then
-      exit;
+      exit; // impossible to write in this folder
     Dest := Dest + ExtractFileName(LocalZipName);
   end;
   if IsFolder(Entry[aIndex].zipName) then
@@ -2998,7 +3122,7 @@ end;
 
 function TZipRead.UnZipAll(DestDir: TFileName): integer;
 begin
-  DestDir := EnsureDirectoryExists(DestDir);
+  DestDir := EnsureDirectoryExists(DestDir, ESynZip);
   for result := 0 to Count - 1 do
     if not UnZip(result, DestDir) then
       exit;
@@ -3303,35 +3427,11 @@ const
   HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
 
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
-var
-  max, L, C: integer;
-  P: PAnsiChar;
-  tmp: RawByteString;
 begin
-  L := length(Data);
   if Compress then
-  begin
-    max := zlibCompressMax(L);
-    FastSetRawByteString(tmp, nil, max + (GZHEAD_SIZE + 8));
-    P := pointer(tmp);
-    MoveFast(GZHEAD, P^, GZHEAD_SIZE);
-    inc(P, GZHEAD_SIZE);
-    C := CompressMem(pointer(Data), P, L, max, HTTP_LEVEL);
-    if C <= 0 then // error (maybe from libdeflate_deflate_compress)
-      Data := ''
-    else
-    begin
-      inc(P, C);
-      PCardinal(P)^ := crc32(0, pointer(Data), L); // maybe libdeflate_crc32
-      inc(P, 4);
-      PCardinal(P)^ := L;
-      inc(P, 4);
-      FakeLength(tmp, P - pointer(tmp)); // no realloc
-      Data := tmp;
-    end;
-  end
+    Data := GZWrite(pointer(Data), length(Data), HTTP_LEVEL)
   else
-    Data := gzread(pointer(Data), L);
+    Data := GZRead(pointer(Data), length(Data));
   result := 'gzip';
 end;
 

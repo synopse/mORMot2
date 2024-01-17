@@ -1271,7 +1271,8 @@ type
     // instead of length(array) or high(array) when accessing the data: in fact
     // length(array) will store the memory size reserved, not the items count
     // - if aCountPointer is set, its content will be set to 0, whatever the
-    // array length is, or the current aCountPointer^ value is
+    // array length is, or the current aCountPointer^ value is - to bypass this
+    // behavior and keep an existing Count, call UseExternalCount() after Init()
     // - a sample usage may be:
     // !var
     // !  DA: TDynArray;
@@ -1880,6 +1881,7 @@ type
     property Info: TRttiCustom
       read fInfo;
     /// low-level direct access to the external count (if defined at Init)
+    // - use UseExternalCount() after Init to avoid resetting the count to 0
     property CountExternal: PInteger
       read fCountP;
   end;

@@ -77,11 +77,11 @@ type
   /// http.sys API 2.0 logging file rollover types
   // - match low-level HTTP_LOGGING_ROLLOVER_TYPE as defined in HTTP 2.0 API
   THttpApiLoggingRollOver = (
-    hlrSize,
-    hlrDaily,
-    hlrWeekly,
-    hlrMonthly,
-    hlrHourly);
+    hlroSize,
+    hlroDaily,
+    hlroWeekly,
+    hlroMonthly,
+    hlroHourly);
 
   /// http.sys API 2.0 logging option flags
   // - used to alter the default logging behavior

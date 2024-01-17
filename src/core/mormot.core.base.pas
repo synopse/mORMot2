@@ -1582,6 +1582,9 @@ function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): Ptr
 // - returns -(foundindex+1) i.e. <0 if the specified Value was found
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 
+/// retrieve the matching index or where to insert an integer value
+function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+
 /// retrieve the index where to insert a word value in a sorted word array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - returns -(foundindex+1) i.e. <0 if the specified Value was found
@@ -6950,7 +6953,7 @@ end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L: PtrInt;
+  L, RR: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -6966,10 +6969,41 @@ begin
         result := -result - 1; // return -(foundindex+1) if already exists
         exit;
       end;
+      RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      dec(result);
       if cmp < 0 then
-        L := result + 1
+        L := RR
       else
-        R := result - 1;
+        R := result;
+    until L > R;
+    while (result >= 0) and
+          (P^[result] >= Value) do
+      dec(result);
+    inc(result); // return the index where to insert
+  end;
+end;
+
+function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+var
+  L, RR: PtrInt;
+  cmp: integer;
+begin
+  if R < 0 then
+    result := 0
+  else
+  begin
+    L := 0;
+    repeat
+      result := (L + R) shr 1;
+      cmp := P^[result] - Value;
+      if cmp = 0 then
+        exit; // return exact matching index
+      RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      dec(result);
+      if cmp < 0 then
+        L := RR
+      else
+        R := result;
     until L > R;
     while (result >= 0) and
           (P^[result] >= Value) do

@@ -209,8 +209,6 @@ type
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
     procedure _IdemPropName;
-    /// test UrlEncode() and UrlDecode() functions
-    procedure UrlEncoding;
     /// test our internal fast TGUID process functions
     procedure _GUID;
     /// test ParseCommandArguments() function
@@ -2367,100 +2365,6 @@ begin
   finally
     l.Free;
   end;
-end;
-
-procedure TTestCoreBase.UrlEncoding;
-var
-  i, j: integer;
-  s: RawByteString;
-  name, value, utf: RawUtf8;
-  str: string;
-  P: PUtf8Char;
-  Guid2: TGuid;
-  U: TUri;
-const
-  guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
-
-  procedure Test(const decoded, encoded: RawUtf8);
-  begin
-    CheckEqual(UrlEncode(decoded), encoded);
-    Check(UrlDecode(encoded) = decoded);
-    Check(UrlDecode(PUtf8Char(encoded)) = decoded);
-  end;
-
-begin
-  str := Utf8ToString(UrlEncode(StringToUtf8('https://test3.diavgeia.gov.gr/doc/')));
-  check(str = 'https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
-  Test('abcdef', 'abcdef');
-  Test('abcdefyzABCDYZ01239_-.~ ', 'abcdefyzABCDYZ01239_-.%7E+');
-  Test('"Aardvarks lurk, OK?"', '%22Aardvarks+lurk%2C+OK%3F%22');
-  Test('"Aardvarks lurk, OK%"', '%22Aardvarks+lurk%2C+OK%25%22');
-  Test('where=name like :(''Arnaud%'')', 'where%3Dname+like+%3A%28%27Arnaud%25%27%29');
-  Check(UrlDecode('where=name%20like%20:(%27Arnaud%%27):') =
-    'where=name like :(''Arnaud%''):', 'URI from browser');
-  P := UrlDecodeNextNameValue('where=name+like+%3A%28%27Arnaud%25%27%29%3A', name, value);
-  Check(P <> nil);
-  Check(P^ = #0);
-  Check(name = 'where');
-  Check(value = 'name like :(''Arnaud%''):');
-  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%25%27%29%3A',
-    name, value);
-  Check(P <> nil);
-  Check(P^ = #0);
-  Check(name = 'where');
-  Check(value = 'name like :(''Arnaud%''):');
-  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%%27%29%3A', name, value);
-  Check(P <> nil);
-  Check(P^ = #0);
-  Check(name = 'where');
-  Check(value = 'name like :(''Arnaud%''):', 'URI from browser');
-  P := UrlDecodeNextNameValue('name%2Ccom+plex=value', name, value);
-  Check(P <> nil);
-  Check(P^ = #0);
-  CheckEqual(name, 'name,com plex');
-  CheckEqual(value, 'value');
-  P := UrlDecodeNextNameValue('name%2Ccomplex%3Dvalue', name, value);
-  Check(P <> nil);
-  Check(P^ = #0);
-  CheckEqual(name, 'name,complex');
-  CheckEqual(value, 'value');
-  for i := 0 to 100 do
-  begin
-    j := i * 5; // circumvent weird FPC code generation bug in -O2 mode
-    s := RandomUtf8(j);
-    CheckEqual(UrlDecode(UrlEncode(s)), s, s);
-  end;
-  utf := BinToBase64Uri(@Guid, SizeOf(Guid));
-  Check(utf = '00amyWGct0y_ze4lIsj2Mw');
-  FillCharFast(Guid2, SizeOf(Guid2), 0);
-  Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
-  Check(IsEqualGuid(Guid2, Guid));
-  Check(IsEqualGuid(@Guid2, @Guid));
-  Check(U.From('toto.com'));
-  CheckEqual(U.Uri, 'http://toto.com/');
-  Check(not U.Https);
-  Check(U.From('toto.com:123'));
-  CheckEqual(U.Uri, 'http://toto.com:123/');
-  Check(not U.Https);
-  Check(U.From('https://toto.com:123/tata/titi'));
-  CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
-  Check(U.Https);
-  Check(U.From('https://toto.com:123/tata/tutu:tete'));
-  CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
-  Check(U.From('http://user:password@server:port/address'));
-  Check(not U.Https);
-  CheckEqual(U.Uri, 'http://server:port/address');
-  CheckEqual(U.User, 'user');
-  CheckEqual(U.Password, 'password');
-  Check(U.From('https://user@server:port/address'));
-  Check(U.Https);
-  CheckEqual(U.Uri, 'https://server:port/address');
-  CheckEqual(U.User, 'user');
-  CheckEqual(U.Password, '');
-  Check(U.From('toto.com/tata/tutu:tete'));
-  CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
-  CheckEqual(U.User, '');
-  CheckEqual(U.Password, '');
 end;
 
 procedure TTestCoreBase._GUID;
@@ -5634,7 +5538,66 @@ var
   D: TDateTime;
   tmp: RawUtf8;
   b: TTimeLogBits;
+  st, start: TSynSystemTime;
 begin
+  Check(st.FromText('19821031T142319'));
+  start := st;
+  CheckEqual(st.ToText, '1982-10-31T14:23:19.000');
+  st.Second := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T14:24:00.000', 'next minute');
+  st.Minute := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T15:00:00.000', 'next hour');
+  st.Hour := 24;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'next day');
+  st.Day := st.DaysInMonth + 1; // + 1 to switch to next month
+  CheckEqual(st.Day, 31);
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-12-01T00:00:00.000', 'next month');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1983-01-01T00:00:00.000', 'next year 1');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'next year 2');
+  // reset each time - as THttpAnalyzer.ComputeConsolidateTime
+  st := start;
+  CheckEqual(st.ToText, '1982-10-31T14:23:19.000');
+  st.Second := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T14:24:00.000', 'nextminute');
+  st := start;
+  st.Second := 0;
+  st.Minute := 60;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-10-31T15:00:00.000', 'nexthour');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 24;
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'nextday');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 0;
+  st.Day := st.DaysInMonth + 1; // + 1 to switch to next month
+  CheckEqual(st.Day, 32);
+  st.Normalize;
+  CheckEqual(st.ToText, '1982-11-01T00:00:00.000', 'nextmonth');
+  st := start;
+  st.Second := 0;
+  st.Minute := 0;
+  st.Hour := 0;
+  st.Day := 1;
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1983-01-01T00:00:00.000', 'nextyear 1');
+  st.Month := 13;
+  st.Normalize;
+  CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'nextyear 2');
   for i := 1700 to 2500 do
     Check(mormot.core.datetime.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
@@ -6533,6 +6496,43 @@ var
   end;
 
 begin
+  // user agent bot detection
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like ' +
+    'Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/' +
+    '605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'));
+  Check(not IsHttpUserAgentBot(
+    'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko'));
+  Check(IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.com/bot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.org/bot.html)'));
+  Check(not IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.cam/bot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)'));
+  Check(IsHttpUserAgentBot(
+    'adidxbot/1.1 (+http://search.msn.com/msnbot.htm)'));
+  Check(IsHttpUserAgentBot(
+    'Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)'));
+  Check(IsHttpUserAgentBot(
+    'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)'));
+  Check(IsHttpUserAgentBot(
+   'serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;'));
   // some HTTP methods
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');

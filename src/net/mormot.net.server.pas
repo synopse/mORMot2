@@ -10,7 +10,6 @@ unit mormot.net.server;
    - Abstract UDP Server
    - Custom URI Routing using an efficient Radix Tree
    - Shared Server-Side HTTP Process
-   - HTTP Server Logging Processors
    - THttpServerSocket/THttpServer HTTP/1.1 Server
    - THttpPeerCache Local Peer-to-peer Cache
    - THttpApiServer HTTP/1.1 Server Over Windows http.sys Module
@@ -320,6 +319,7 @@ function UriMethod(const Text: RawUtf8; out Method: TUriRouterMethod): boolean;
 function IsValidUriRoute(p: PUtf8Char): boolean;
 
 
+
 { ******************** Shared Server-Side HTTP Process }
 
 type
@@ -418,6 +418,7 @@ type
   // algorithm to focus the process on the first threads of the pool - by design,
   // this will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
   // - hsoEnablePipelining enable HTTP pipelining (unsafe) on THttpAsyncServer
+  // - hsoEnableLogging enable an associated THttpServerGeneric.Logger instance
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -432,7 +433,8 @@ type
     hsoThreadSocketAffinity,
     hsoReusePort,
     hsoThreadSmooting,
-    hsoEnablePipelining);
+    hsoEnablePipelining,
+    hsoEnableLogging);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -463,6 +465,7 @@ type
     fOnSendFile: TOnHttpServerSendFile;
     fFavIcon: RawByteString;
     fRouterClass: TRadixTreeNodeClass;
+    fLogger: THttpLogger;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetRouterClass(aRouter: TRadixTreeNodeClass);
     procedure SetServerName(const aName: RawUtf8); virtual;
@@ -696,6 +699,13 @@ type
     // - may be nil if Route has never been accessed, i.e. no routing was set
     property Router: TUriRouter
       read fRoute;
+    /// access to the HTTP logger initialized with hsoEnableLogging option
+    // - you can customize the logging process via Logger.Format,
+    // Logger.DestFolder, Logger.DefaultRotate, Logger.DefaultRotateFiles
+    // properties and Logger.DefineHost() method
+    // - equals nil if hsoEnableLogging was not set in the constructor
+    property Logger: THttpLogger
+      read fLogger;
   end;
 
 
@@ -762,167 +772,6 @@ function GetMainMacAddress(out Mac: TMacAddress;
 function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8;
   UpAndDown: boolean = false): boolean; overload;
-
-
-{ ******************** HTTP Server Logging Processors }
-
-const
-  /// THttpLogger.Parse() text matching the nginx predefined "combined" format
-  LOGFORMAT_COMBINED = '$remote_addr - $remote_user [$time_local] ' +
-    '"$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
-
-type
-  /// HTTP server abstract parent for Logger / Analyzer
-  // - do not use this abstract class but e.g. THttpLogger
-  // - you can merge several THttpLoger instances via the OnContinue property
-  THttpAfterResponse = class(TSynPersistent)
-  protected
-    fSafe: TOSLightLock;
-    fOnContinue: TOnHttpServerAfterResponse;
-  public
-    /// initialize this instance
-    constructor Create; override;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// process the supplied request information
-    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
-    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(Connection: THttpServerConnectionID;
-      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-      Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      StartMicroSec, Received, Sent: Int64); virtual; abstract;
-    /// the overriden Append() method will call this event with its own process
-    property OnContinue: TOnHttpServerAfterResponse
-      read fOnContinue write fOnContinue;
-  end;
-
-  /// supported THttpLoger place holders
-  // - matches nginx log module naming, with some additional fields
-  // - values are provided as TOnHttpServerAfterResponse event parameters
-  // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
-  // - hlvBytes_Sent is the number of bytes sent to a client
-  // - hlvConnection is the THttpServerConnectionID
-  // - hlvConnection_Flags is the CSV of supplied THttpServerRequestFlags
-  // - hlvConnection_Upgrade is "upgrade" when "connection: upgrade" in headers
-  // - hlvDocument_Uri equals hlvUri value
-  // - hlvElapsed is the request processing time as text (e.g. '1.2s')
-  // - hlvElapsedMSec is the request processing time in milliseconds
-  // - hlvElapsedUSec is the request processing time in microseconds
-  // - hlvHostName is the "Host:" header value
-  // - hlvHttp_Referer is the "Referer:" header value
-  // - hlvHttp_User_Agent is the "User-Agent:" header value
-  // - hlvHttps is "on" if the connection operates in HTTPS mode
-  // - hlvMsec is current time in seconds with milliseconds resolution
-  // - hlvReceived is the request size from the client, as text
-  // - hlvRemote_Addr is the client IP address
-  // - hlvRemote_User is the user name supplied if hsrAuthorized is set
-  // - hlvRequest is the full original request line
-  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and Url values
-  // - hlvRequest_Length is the number of bytes received from the client
-  // (including headers and request body)
-  // - hlvRequest_Method is usually "GET" or "POST"
-  // - hlvRequest_Time is processing time in seconds with milliseconds resolution
-  // - hlvRequest_Uri is the full original request line with arguments
-  // - hlvScheme is either "HTTP" or "HTTPS"
-  // - hlvSent is the response size sent back to the client, as text
-  // - hlvServer_Protocol is either "HTTP/1.0" or "HTTP/1.1"
-  // - hlvStatus is the response status code (e.g. "200" or "404")
-  // - hlvTime_Epoch is the UTC time as seconds since the Unix Epoch
-  // - hlvTime_EpochMSec is the UTC time as milliseconds since the Unix Epoch
-  // - hlvTime_Iso8601 is the UTC (not local) time in the ISO 8601 standard format
-  // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
-  // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
-  // - hlvUri is the normalized current URI
-  THttpLogVariable = (
-    hlvUnknown,
-    hlvBody_Bytes_Sent,
-    hlvBytes_Sent,
-    hlvConnection,
-    hlvConnection_Flags,
-    hlvConnection_Upgrade,
-    hlvDocument_Uri,
-    hlvElapsed,
-    hlvElapsedMSec,
-    hlvElapsedUSec,
-    hlvHostName,
-    hlvHttp_Referer,
-    hlvHttp_User_Agent,
-    hlvHttps,
-    hlvMsec,
-    hlvReceived,
-    hlvRemote_Addr,
-    hlvRemote_User,
-    hlvRequest,
-    hlvRequest_Hash,
-    hlvRequest_Length,
-    hlvRequest_Method,
-    hlvRequest_Time,
-    hlvRequest_Uri,
-    hlvScheme,
-    hlvSent,
-    hlvServer_Protocol,
-    hlvStatus,
-    hlvStatus_Text,
-    hlvTime_Epoch,
-    hlvTime_EpochMSec,
-    hlvTime_Iso8601,
-    hlvTime_Local,
-    hlvTime_Http,
-    hlvUri);
-
-  /// set of supported THttpLoger place holders, matching nginx log module naming
-  THttpLogVariables = set of THttpLogVariable;
-
-  /// store an array of HTTP log variables, ready to be rendered by THttpLoger
-  // - hlvUnknown is used to define a text place holder
-  THttpLogVariableDynArray = array of THttpLogVariable;
-
-  /// HTTP server log format parser and interpreter
-  THttpLogger = class(THttpAfterResponse)
-  protected
-    fWriter: TTextDateWriter;
-    fFormat, fLineFeed: RawUtf8;
-    fVariable: THttpLogVariableDynArray;
-    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
-    fLastFlush: cardinal;
-    fVariables: THttpLogVariables;
-    fFlags: set of (ffOwnWriter);
-    procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-  public
-    /// initialize this instance
-    constructor Create(aWriter: TTextDateWriter;
-      const aFormat: RawUtf8 = LOGFORMAT_COMBINED); reintroduce; overload;
-    /// initialize this instance to generate a new log file
-    constructor Create(const aFileName: TFileName;
-      const aFormat: RawUtf8 = LOGFORMAT_COMBINED); reintroduce; overload;
-    /// finalize this instance
-    destructor Destroy; override;
-    /// parse a HTTP server log format string
-    // - returns '' on success, or an error message on invalid input
-    function Parse(const aFormat: RawUtf8): RawUtf8;
-    /// append a request information to the destination log file
-    // - thread-safe method matching TOnHttpServerAfterResponse signature, to
-    // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(Connection: THttpServerConnectionID;
-      const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-      Flags: THttpServerRequestFlags; StatusCode: cardinal;
-      StartMicroSec, Received, Sent: Int64); override;
-    /// low-level access to the parsed log format state machine
-    property Variable: THttpLogVariableDynArray
-      read fVariable;
-    /// low-level access to the parsed log format used variables
-    property Variables: THttpLogVariables
-      read fVariables;
-    /// low-level access to the destination TTextWriter instance
-    property Writer: TTextDateWriter
-      read fWriter write fWriter;
-    /// customize the log line feed pattern
-    // - matches the operating system value by default (CR or CRLF)
-    property LineFeed: RawUtf8
-      read fLineFeed write fLineFeed;
-  end;
-
-
 
 
 
@@ -1363,7 +1212,7 @@ type
     fMonoThread: boolean;
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
     fBanned: THttpAcceptBan; // for hsoBan40xIP
-    fOnAcceptIdle: TNotifyEvent;
+    fOnAcceptIdle: TOnPollSocketsIdle;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -1400,7 +1249,7 @@ type
     // if hsoBan40xIP option (i.e. the Banned property) has been set
     // - on Windows, requires some requests to trigger the event, because it
     // seems that accept() has timeout only on POSIX systems
-    property OnAcceptIdle: TNotifyEvent
+    property OnAcceptIdle: TOnPollSocketsIdle
       read fOnAcceptIdle write fOnAcceptIdle;
   published
     /// will contain the current number of connections to the server
@@ -1414,7 +1263,6 @@ type
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
       read fThreadPool;
-  published
     /// set if hsoBan40xIP has been defined
     // - indicates e.g. how many accept() have been rejected from their IP
     // - you can customize its behavior once the server is started by resetting
@@ -1920,7 +1768,7 @@ type
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
     procedure SetLoggingServiceName(const aName: RawUtf8);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      StatusCode: cardinal; Started, Received, Sent: Int64); virtual;
+      StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -2036,11 +1884,11 @@ type
     // instance logging state will be replicated to all cloned instances
     // - you can select the output folder and the expected logging layout
     // - aSoftwareName will set the optional W3C-only software name string
-    // - aRolloverSize will be used only when aRolloverType is hlrSize
+    // - aRolloverSize will be used only when aRolloverType is hlroSize
     procedure LogStart(const aLogFolder: TFileName;
       aType: THttpApiLoggingType = hltW3C;
       const aSoftwareName: TFileName = '';
-      aRolloverType: THttpApiLoggingRollOver = hlrDaily;
+      aRolloverType: THttpApiLoggingRollOver = hlroDaily;
       aRolloverSize: cardinal = 0;
       aLogFields: THttpApiLogFields = [hlfDate..hlfSubStatus];
       aFlags: THttpApiLoggingFlags = [hlfUseUtf8Conversion]);
@@ -2312,7 +2160,7 @@ type
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequestAbstract): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
-      StatusCode: cardinal; Started, Received, Sent: Int64); override;
+      StatusCode: cardinal; Elapsed, Received, Sent: QWord); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
     procedure DestroyMainThread; override;
   public
@@ -2547,7 +2395,7 @@ begin
   result := false;
   if Text = '' then
     exit;
-  case PCardinal(Text)^ of // case-sensitive test in occurrence order
+  case PCardinal(Text)^ of // case-sensitive test in occurence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Method := urmGet;
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
@@ -3188,6 +3036,12 @@ constructor THttpServerGeneric.Create(const OnStart, OnStop: TOnNotifyThread;
 begin
   fOptions := ProcessOptions; // should be set before SetServerName
   SetServerName('mORMot2 (' + OS_TEXT + ')');
+  if hsoEnableLogging in fOptions then
+  begin
+    fLogger := THttpLogger.Create;
+    fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
+    fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
+  end;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
@@ -3195,6 +3049,7 @@ destructor THttpServerGeneric.Destroy;
 begin
   inherited Destroy;
   FreeAndNil(fRoute);
+  FreeAndNil(fLogger);
 end;
 
 function THttpServerGeneric.Route: TUriRouter;
@@ -3757,265 +3612,6 @@ begin
 end;
 
 
-{ ******************** HTTP Server Logging Processors }
-
-{ THttpAfterResponse }
-
-constructor THttpAfterResponse.Create;
-begin
-  fSafe.Init;
-end;
-
-destructor THttpAfterResponse.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
-end;
-
-
-{ THttpLogger }
-
-constructor THttpLogger.Create(aWriter: TTextDateWriter;
-  const aFormat: RawUtf8);
-var
-  err: RawUtf8;
-begin
-  inherited Create;
-  fWriter := aWriter;
-  fLineFeed := CRLF; // default operating-system dependent Line Feed
-  if aFormat = '' then
-    exit;
-  err := Parse(aFormat);
-  if err <> '' then
-    raise EHttpServer.CreateUtf8('%.Create: %', [self, err]);
-end;
-
-constructor THttpLogger.Create(const aFileName: TFileName;
-  const aFormat: RawUtf8);
-begin
-  fFlags := [ffOwnWriter];
-  Create(TTextDateWriter.CreateOwnedFileStream(aFileName, 65536), aFormat);
-end;
-
-destructor THttpLogger.Destroy;
-begin
-  inherited Destroy;
-  if ffOwnWriter in fFlags then
-    FreeAndNil(fWriter);
-end;
-
-function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
-var
-  p, start: PUtf8Char;
-  v: integer;
-begin
-  result := '';
-  fFormat := aFormat;
-  fVariable := nil;
-  fVariables := [];
-  fUnknownPosLen := nil;
-  p := pointer(aFormat);
-  repeat
-    start := p;
-    while not (p^ in [#0, '$']) do
-      inc(p);
-    if p <> start then
-    begin
-      SetLength(fVariable, length(fVariable) + 1); // append 0 = hlvUnknown
-      AddInteger(fUnknownPosLen, start - pointer(aFormat));  // pos
-      AddInteger(fUnknownPosLen, p - start);                 // len
-    end;
-    if p^ = #0 then
-      break;
-    inc(p); // ignore '$'
-    start := p;
-    while tcIdentifier in TEXT_CHARS[p^] do
-      inc(p);
-    v := GetEnumNameValueTrimmed(TypeInfo(THttpLogVariable), start, p - start);
-    if v <= 0 then
-    begin
-      FormatUtf8('Unknown $% variable', [start], result);
-      exit;
-    end;
-    SetLength(fVariable, length(fVariable) + 1);
-    fVariable[high(fVariable)] := THttpLogVariable(v);
-    include(fVariables, THttpLogVariable(v));
-  until false;
-end;
-
-procedure THttpLogger.Append(Connection: THttpServerConnectionID;
-  const User, Method, Host, Url, Referer, UserAgent, RemoteIP: RawUtf8;
-  Flags: THttpServerRequestFlags; StatusCode: cardinal;
-  StartMicroSec, Received, Sent: Int64);
-var
-  n: integer;
-  v: ^THttpLogVariable;
-  poslen: PIntegerArray; // pos1,len1, pos2,len2, ... pairs
-  elapsed: Int64;
-const
-  SCHEME: array[boolean] of string[7]  = ('http', 'https');
-  HTTP:   array[boolean] of string[15] = ('HTTP/1.1', 'HTTP/1.0');
-begin
-  // optionally merge calls
-  if Assigned(fOnContinue) then
-    fOnContinue(Connection, User, Method, Host, Url, Referer, UserAgent,
-      RemoteIP, Flags, StatusCode, StartMicroSec, Received, Sent);
-  // very efficient log generation with no transient memory allocation
-  if (fWriter = nil) or
-     (fVariable = nil) then
-   exit; // nothing to process here
-  elapsed := 0;
-  v := pointer(fVariable);
-  n := length(fVariable);
-  poslen := pointer(fUnknownPosLen);
-  fWriter.OnFlushToStream := OnFlushToStream;
-  fWriter.CustomOptions := fWriter.CustomOptions +
-    [twoNoWriteToStreamException, twoFlushToStreamNoAutoResize];
-  fSafe.Lock;
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin
-    // code within the loop should not raise exceptions
-  {$endif HASFASTTRYFINALLY}
-    repeat
-      case v^ of // compile as a fast lookup table jump on FPC
-        hlvUnknown: // plain text
-          begin
-            fWriter.AddNoJsonEscape(@PByteArray(fFormat)[poslen^[0]], poslen^[1]);
-            poslen := @poslen^[2]; // next pos,len pair
-          end;
-        hlvBody_Bytes_Sent, // no body size by now
-        hlvBytes_Sent:
-          fWriter.AddQ(Sent);
-        hlvConnection:
-          fWriter.AddQ(Connection); // Connection ID (or Serial)
-        hlvConnection_Flags:
-          PRttiInfo(TypeInfo(THttpServerRequestFlag))^.
-            EnumBaseType^.GetSetNameJsonArray(
-              fWriter, byte(Flags), ',', #0, {fullasstar=}false, {trim=}true);
-        hlvConnection_Upgrade:
-          if hsrConnectionUpgrade in Flags then
-            fWriter.AddShorter('upgrade');
-        hlvDocument_Uri,
-        hlvUri:
-          //TODO: normalize URI
-          fWriter.AddString(Url);
-        hlvElapsed,
-        hlvElapsedMSec,
-        hlvElapsedUSec,
-        hlvRequest_Time: // no socket communication time included by now
-          if StartMicroSec <> 0 then
-          begin
-            if elapsed = 0 then
-            begin
-              QueryPerformanceMicroSeconds(elapsed);
-              dec(elapsed, StartMicroSec);
-            end;
-            if v^ = hlvElapsed then
-              fWriter.AddShort(MicroSecToString(elapsed))
-            else if (elapsed > 0) and
-               (v^ = hlvElapsedUSec) then
-              fWriter.AddQ(elapsed)
-            else if elapsed < 1000 then
-              fWriter.Add('0') // less than 1 ms
-            else
-              fWriter.AddSeconds(elapsed div 1000);
-          end
-          else
-            fWriter.Add('0');
-        hlvHostName:
-          if Host = '' then
-            fWriter.Add('-')
-          else
-            fWriter.AddString(Host);
-        hlvHttp_Referer:
-          if Referer = '' then
-            fWriter.Add('-')
-          else
-            fWriter.AddString(Referer);
-        hlvHttp_User_Agent:
-          if UserAgent = '' then
-            fWriter.Add('-')
-          else
-            fWriter.AddString(UserAgent);
-        hlvHttps:
-          if hsrHttps in Flags then
-            fWriter.AddShorter('on');
-        hlvMsec:
-          fWriter.AddSeconds(UnixMSTimeUtcFast);
-        hlvReceived:
-          fWriter.AddShort(KBNoSpace(Received));
-        hlvRemote_Addr:
-          if RemoteIP = '' then
-            fWriter.AddShort('127.0.0.1')
-          else
-            fWriter.AddString(RemoteIP);
-        hlvRemote_User:
-          if User = '' then
-            fWriter.Add('-')
-          else
-            fWriter.AddString(User);
-        hlvRequest:
-          begin
-            fWriter.AddString(Method);
-            fWriter.Add(' ');
-            fWriter.AddString(Url);
-            fWriter.Add(' ');
-            fWriter.AddShorter(HTTP[hsrHttp10 in Flags]);
-          end;
-        hlvRequest_Hash:
-          fWriter.AddUHex(crc32c(crc32c(crc32c(byte(Flags),
-            pointer(Host), length(Host)),
-            pointer(Method), length(Method)),
-            pointer(Url), length(Url)));
-        hlvRequest_Length:
-          fWriter.AddQ(Received);
-        hlvRequest_Method:
-          fWriter.AddString(Method);
-        hlvRequest_Uri:
-          fWriter.AddString(Url);
-        hlvScheme:
-          fWriter.AddShorter(SCHEME[hsrHttps in Flags]);
-        hlvSent:
-          fWriter.AddShort(KBNoSpace(Sent));
-        hlvServer_Protocol:
-           fWriter.AddShorter(HTTP[hsrHttp10 in Flags]);
-        hlvStatus:
-          fWriter.AddU(StatusCode);
-        hlvStatus_Text:
-          fWriter.AddShort(StatusCodeToShort(StatusCode));
-        hlvTime_Epoch:
-          fWriter.AddQ(UnixTimeUtc);
-        hlvTime_EpochMSec:
-          fWriter.AddQ(UnixMSTimeUtcFast);
-        // dates are all in UTC/GMT as it should be with any safe policy
-        hlvTime_Iso8601:
-          fWriter.AddCurrentIsoDateTime({local=}false, {ms=}false, 'T', 'Z');
-        hlvTime_Local:
-          fWriter.AddCurrentNcsaLogTime({local=}false, '+0000');
-        hlvTime_Http:
-          fWriter.AddCurrentHttpTime({local=}false, 'GMT');
-      end;
-      inc(v);
-      dec(n);
-    until n = 0;
-    fWriter.AddString(fLineFeed);
-    if GetTickCount64 shr 10 <> fLastFlush then
-      fWriter.FlushFinal; // force write to disk at least every second
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
-  end;
-end;
-
-procedure THttpLogger.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-begin
-  fLastFlush := GetTickCount64 shr 10; // no need to flush within this second
-end;
-
-
 { ******************** THttpServerSocket/THttpServer HTTP/1.1 Server }
 
 { THttpServerSocketGeneric }
@@ -4500,6 +4096,7 @@ var
   cltservsock: THttpServerSocket;
   res: TNetResult;
   banlen, tix, bantix: integer;
+  tix64: QWord;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
@@ -4530,13 +4127,16 @@ begin
           cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down, and end thread now
       end;
+      tix64 := 0;
       if Assigned(fBanned) and
          {$ifdef OSPOSIX}
          (res = nrRetry) and // Windows does not implement timeout on accept()
          {$endif OSPOSIX}
          (fBanned.Count <> 0) then
       begin
-        tix := GetTickCount64 div 1000; // call DoRotate exactly every second
+        // call fBanned.DoRotate exactly every second
+        tix64 := mormot.core.os.GetTickCount64;
+        tix := tix64 div 1000;
         {$ifdef OSPOSIX} // Windows would require some activity - not an issue
         if bantix = 0 then
           fSock.ReceiveTimeout := 1000 // accept() to exit after one second
@@ -4546,10 +4146,14 @@ begin
           fBanned.DoRotate; // update internal THttpAcceptBan lists
         bantix := tix;
       end;
-      if res = nrRetry then // accept() timeout after 5000/1000 ms
+      if res = nrRetry then // accept() timeout after 1 or 5 seconds
       begin
+        if tix64 = 0 then
+          tix64 := mormot.core.os.GetTickCount64;
         if Assigned(fOnAcceptIdle) then
-          fOnAcceptIdle(self); // called every few seconds (e.g. 5 by default)
+          fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
+        if Assigned(fLogger) then
+          fLogger.OnIdle(tix64); // flush log file(s) on idle server
         continue;
       end;
       if fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
@@ -4579,9 +4183,9 @@ begin
                   Process(cltservsock, 0, self);
                 end;
               grIntercepted:
-                ; // no ban
+                ; // handled by OnHeaderParsed event -> no ban
             else
-              if fBanned.BanIP(cltaddr.IP4) then
+              if fBanned.BanIP(cltaddr.IP4) then // e.g. after grTimeout
                 IncStat(grBanned);
             end;
             OnDisconnect;
@@ -4598,7 +4202,7 @@ begin
       begin
         // ServerThreadPoolCount > 0 will use the thread pool to process the
         // request header, and probably its body unless kept-alive or upgraded
-        // - this is the most efficient way of using this server
+        // - this is the most efficient way of using this server class
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
@@ -4639,6 +4243,7 @@ var
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
   started: Int64;
+  ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
      (ClientSock.Http.Headers = '') or
@@ -4685,10 +4290,21 @@ begin
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
       try
-        fOnAfterResponse(req.ConnectionID, req.AuthenticatedUser, req.Method,
-          req.Host, req.Url, ClientSock.Http.Referer, req.UserAgent,
-          req.RemoteIP, req.ConnectionFlags, req.RespStatus,
-          started, ClientSock.BytesIn, ClientSock.BytesOut);
+        QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+        dec(ctx.ElapsedMicroSec, started);
+        ctx.Connection := req.ConnectionID;
+        ctx.User := pointer(req.AuthenticatedUser);
+        ctx.Method := pointer(req.Method);
+        ctx.Host := pointer(req.Host);
+        ctx.Url := pointer(req.Url);
+        ctx.Referer := pointer(ClientSock.Http.Referer);
+        ctx.UserAgent := pointer(req.UserAgent);
+        ctx.RemoteIP := pointer(req.RemoteIP);
+        ctx.Flags := req.ConnectionFlags;
+        ctx.StatusCode := req.RespStatus;
+        ctx.Received := ClientSock.BytesIn;
+        ctx.Sent := ClientSock.BytesOut;
+        fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
       except
         on E: Exception do // paranoid
         begin
@@ -6073,7 +5689,7 @@ begin
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
       result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
-        exit; // successful direct downloading from last peer
+        exit; // successfull direct downloading from last peer
       result := 0; // may be HTTP_NOCONTENT if not found on this peer
     finally
       fClientSafe.UnLock;
@@ -6539,6 +6155,8 @@ begin
   fOnBeforeBody := From.fOnBeforeBody;
   fOnBeforeRequest := From.fOnBeforeRequest;
   fOnAfterRequest := From.fOnAfterRequest;
+  fOnAfterResponse := From.fOnAfterResponse;
+  fMaximumAllowedContentLength := From.fMaximumAllowedContentLength;
   fCallbackSendDelay := From.fCallbackSendDelay;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
@@ -6667,7 +6285,7 @@ var
   datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
   datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
   logdata: PHTTP_LOG_FIELDS_DATA;
-  started: Int64;
+  started, elapsed: Int64;
   contrange: ShortString;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
@@ -6911,7 +6529,7 @@ begin
                           if AccessToken <> 0 then
                           begin
                             ctxt.fAuthenticatedUser := LookupToken(AccessToken);
-                            // AccessToken lifecycle is application responsibility
+                            // AccessToken lifecycle is application responsability
                             CloseHandle(AccessToken);
                             ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
                             include(ctxt.fConnectionFlags, hsrAuthorized);
@@ -7027,8 +6645,10 @@ begin
               if not respsent then
                 if not SendResponse then
                   continue;
+              QueryPerformanceMicroSeconds(elapsed);
+              dec(elapsed, started);
               DoAfterResponse(
-                ctxt, referer, outstatcode, started, incontlen, bytessent);
+                ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
             except
               on E: Exception do
                 // handle any exception raised during process: show must go on!
@@ -7267,7 +6887,7 @@ begin
     aLogFields := [hlfDate..hlfSubStatus];
   log.Fields := integer(aLogFields);
   log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
-  if aRolloverType = hlrSize then
+  if aRolloverType = hlroSize then
     log.RolloverSize := aRolloverSize;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
@@ -7472,12 +7092,30 @@ begin
 end;
 
 procedure THttpApiServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
+  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
+var
+  ctx: TOnHttpServerAfterResponseContext;
 begin
   if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt.ConnectionID, Ctxt.AuthenticatedUser, Ctxt.Method,
-      Ctxt.Host, Ctxt.Url, Referer, Ctxt.UserAgent, Ctxt.RemoteIP,
-      Ctxt.ConnectionFlags, StatusCode, Started, Received, Sent);
+  try
+    ctx.Connection := Ctxt.ConnectionID;
+    ctx.User := pointer(Ctxt.AuthenticatedUser);
+    ctx.Method := pointer(Ctxt.Method);
+    ctx.Host := pointer(Ctxt.Host);
+    ctx.Url := pointer(Ctxt.Url);
+    ctx.Referer := pointer(Referer);
+    ctx.UserAgent := pointer(Ctxt.UserAgent);
+    ctx.RemoteIP := pointer(Ctxt.RemoteIP);
+    ctx.Flags := Ctxt.ConnectionFlags;
+    ctx.StatusCode := StatusCode;
+    ctx.ElapsedMicroSec := Elapsed;
+    ctx.Received := Received;
+    ctx.Sent := Sent;
+    fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
+  except
+    on E: Exception do // paranoid
+      fOnAfterResponse := nil; // won't try again
+  end;
 end;
 
 
@@ -8084,12 +7722,12 @@ begin
 end;
 
 procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; StatusCode: cardinal; Started, Received, Sent: Int64);
+  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
-  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Started, Received, Sent);
+  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
 end;
 
 function THttpApiWebSocketServer.GetProtocol(index: integer):
@@ -8369,8 +8007,7 @@ end;
 
 {$endif USEWININET}
 
-begin
-  //writeln(SizeOf(THttpPeerCacheMessage));
+initialization
   assert(SizeOf(THttpPeerCacheMessage) = 192);
 
 end.

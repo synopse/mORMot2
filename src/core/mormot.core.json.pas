@@ -878,12 +878,14 @@ type
     // - may be used with InternalJsonWriter, as a faster alternative to
     // ! AddNoJsonEscapeUtf8(Source.Text);
     procedure AddNoJsonEscape(Source: TJsonWriter); overload;
-    /// append a UTF-8 already encoded JSON forcing Unicode escape
-    // - don't escapes chars according to the JSON RFC but escape all 8-bit
+    /// append a UTF-8 already encoded JSON buffer forcing Unicode escape
+    // - don't escapes chars according to the JSON RFC but convert any 8-bit
     // UTF-8 values as their UTF-16 \u#### escaped content
+    // - i.e. generate a pure ASCII output with no UTF-8 encoding involved
     // - used for jsonEscapeUnicode to follow python default json.dumps() layout
     procedure AddNoJsonEscapeForcedUnicode(P: PUtf8Char; Len: PtrInt);
-    /// append a pure UTF-8 encoded JSON with \u#### no Unicode escape
+    /// append a UTF-8 encoded JSON buffer without any \u#### Unicode escape
+    // - i.e. \u#### patterns will be converted into pure UTF-8 output
     // - as used for jsonNoEscapeUnicode transformation
     procedure AddNoJsonEscapeForcedNoUnicode(P: PUtf8Char; Len: PtrInt);
     /// append an open array constant value to the buffer
@@ -7006,7 +7008,7 @@ begin
   repeat
     P2 := P;
     repeat
-      if P^ <> '\' then
+      if P^ <> '\' then // quickly search for \### escape marker
       begin
         inc(P);
         dec(Len);
@@ -7016,7 +7018,7 @@ begin
       end;
       if P[1] = 'u' then // found a \u#### pattern
         break;
-      inc(P, 2); // ignore whole \# escaped block
+      inc(P, 2); // ignore this \# two-chars escape block
       dec(Len, 2);
       if Len = 0 then
         break;

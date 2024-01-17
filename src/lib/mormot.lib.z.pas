@@ -403,7 +403,7 @@ type
 // or equal to 'out_nbytes_avail' bytes, then libdeflate_deflate_decompress()
 // will write the actual uncompressed size to actual_out_nbytes_ret and
 // return 0 (LIBDEFLATE_SUCCESS).  Otherwise, it will return
-// LIBDEFLATE_INSUFFICIENT_SPACE if  the provided buffer was
+// LIBDEFLATE_INSUFFICIENT_SPACE if the provided buffer was
 // not large enough but no other problems were encountered, or another
 // nonzero result code if decompression failed for another reason.
 function libdeflate_deflate_decompress(

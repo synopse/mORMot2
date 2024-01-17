@@ -5529,10 +5529,139 @@ end;
 
 procedure TTestCoreProcess.UrlEncoding;
 var
-  i: integer;
+  i, j: integer;
   s, t, d: RawUtf8;
   hf: TTextWriterHtmlFormat;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+  name, value, utf: RawUtf8;
+  str: string;
+  P: PUtf8Char;
+  Guid2: TGuid;
+  U: TUri;
+const
+  guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
+
+  procedure DoOne(const value, expected: RawUtf8);
+  var
+    res: RawUtf8;
+  begin
+    w.CancelAll;
+    w.AddUrlNameNormalize(pointer(value), length(value));
+    w.SetText(res);
+    CheckEqual(res, expected);
+  end;
+
+  procedure Test(const decoded, encoded: RawUtf8);
+  begin
+    CheckEqual(UrlEncode(decoded), encoded);
+    Check(UrlDecode(encoded) = decoded);
+    Check(UrlDecode(PUtf8Char(encoded)) = decoded);
+    DoOne(StringReplaceChars(encoded, '+', ' '), decoded); // + only after ?
+  end;
+
 begin
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    DoOne('', '');
+    DoOne('a', 'a');
+    DoOne('ab', 'ab');
+    DoOne('a%20b', 'a b');
+    DoOne('a% b', 'a% b');
+    DoOne('/', '/');
+    DoOne('//', '/');
+    DoOne('a/b', 'a/b');
+    DoOne('a//b', 'a/b');
+    DoOne('a///b', 'a/b');
+    DoOne('/ab', '/ab');
+    DoOne('//ab', '/ab');
+    DoOne('///ab', '/ab');
+    DoOne('ab/', 'ab/');
+    DoOne('ab//', 'ab/');
+    DoOne('ab///', 'ab/');
+    DoOne('a/b/', 'a/b/');
+    DoOne('/ab//', '/ab/');
+    DoOne('//ab///', '/ab/');
+    DoOne('ab'#0, 'ab');
+    DoOne('ab'#0'c', 'ab');
+    DoOne('/ab'#0'c', '/ab');
+    DoOne('/ab//'#0'c', '/ab/');
+    DoOne(#0'c', '');
+    Test('abcdef', 'abcdef');
+    Test('where=name like :(''Arnaud%'')', 'where%3Dname+like+%3A%28%27Arnaud%25%27%29');
+    Test('"Aardvarks lurk, OK?"', '%22Aardvarks+lurk%2C+OK%3F%22');
+    Test('"Aardvarks lurk, OK%"', '%22Aardvarks+lurk%2C+OK%25%22');
+    Test('abcdefyzABCDYZ01239_-.~ ', 'abcdefyzABCDYZ01239_-.%7E+');
+  finally
+    FreeAndNil(w);
+  end;
+  str := Utf8ToString(UrlEncode(StringToUtf8('https://test3.diavgeia.gov.gr/doc/')));
+  check(str = 'https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
+  Check(UrlDecode('where=name%20like%20:(%27Arnaud%%27):') =
+    'where=name like :(''Arnaud%''):', 'URI from browser');
+  P := UrlDecodeNextNameValue('where=name+like+%3A%28%27Arnaud%25%27%29%3A', name, value);
+  Check(P <> nil);
+  Check(P^ = #0);
+  Check(name = 'where');
+  Check(value = 'name like :(''Arnaud%''):');
+  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%25%27%29%3A',
+    name, value);
+  Check(P <> nil);
+  Check(P^ = #0);
+  Check(name = 'where');
+  Check(value = 'name like :(''Arnaud%''):');
+  P := UrlDecodeNextNameValue('where%3Dname+like+%3A%28%27Arnaud%%27%29%3A', name, value);
+  Check(P <> nil);
+  Check(P^ = #0);
+  Check(name = 'where');
+  Check(value = 'name like :(''Arnaud%''):', 'URI from browser');
+  P := UrlDecodeNextNameValue('name%2Ccom+plex=value', name, value);
+  Check(P <> nil);
+  Check(P^ = #0);
+  CheckEqual(name, 'name,com plex');
+  CheckEqual(value, 'value');
+  P := UrlDecodeNextNameValue('name%2Ccomplex%3Dvalue', name, value);
+  Check(P <> nil);
+  Check(P^ = #0);
+  CheckEqual(name, 'name,complex');
+  CheckEqual(value, 'value');
+  for i := 0 to 100 do
+  begin
+    j := i * 5; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomUtf8(j);
+    CheckEqual(UrlDecode(UrlEncode(s)), s, s);
+  end;
+  utf := BinToBase64Uri(@Guid, SizeOf(Guid));
+  Check(utf = '00amyWGct0y_ze4lIsj2Mw');
+  FillCharFast(Guid2, SizeOf(Guid2), 0);
+  Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
+  Check(IsEqualGuid(Guid2, Guid));
+  Check(IsEqualGuid(@Guid2, @Guid));
+  Check(U.From('toto.com'));
+  CheckEqual(U.Uri, 'http://toto.com/');
+  Check(not U.Https);
+  Check(U.From('toto.com:123'));
+  CheckEqual(U.Uri, 'http://toto.com:123/');
+  Check(not U.Https);
+  Check(U.From('https://toto.com:123/tata/titi'));
+  CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
+  Check(U.Https);
+  Check(U.From('https://toto.com:123/tata/tutu:tete'));
+  CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
+  Check(U.From('http://user:password@server:port/address'));
+  Check(not U.Https);
+  CheckEqual(U.Uri, 'http://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  Check(U.From('https://user@server:port/address'));
+  Check(U.Https);
+  CheckEqual(U.Uri, 'https://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, '');
+  Check(U.From('toto.com/tata/tutu:tete'));
+  CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
+  CheckEqual(U.User, '');
+  CheckEqual(U.Password, '');
   CheckEqual(UrlEncode(''), '');
   CheckEqual(UrlDecode(''), '');
   CheckEqual(UrlEncodeName(''), '');

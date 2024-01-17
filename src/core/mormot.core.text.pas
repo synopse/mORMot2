@@ -458,12 +458,12 @@ type
   // use it e.g. with AJAX clients, but is would be handled as expected by all
   // our units as valid JSON input, without previous correction
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
-  // property names
+  // property names, which is the smallest data output within mORMot instances
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
-  // but you can use jsonEscapeUnicode to produce compact 7-bit ASCII output,
-  // with \u#### escape of all accents, e.g. as default python json.dumps
-  // - jsonNoEscapeUnicode will process any \u#### pattern and ensure proper
-  // UTF-8 is generated instead
+  // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
+  // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
+  // - jsonNoEscapeUnicode will search for any \u#### pattern and generate pure
+  // UTF-8 output instead
   // - those features are not implemented in this unit, but in mormot.core.json
   TTextWriterJsonFormat = (
     jsonCompact,
@@ -744,6 +744,9 @@ type
     // putting two single quotes in a row - as in Pascal."
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
+    /// append an URI-decoded domain name, also normalizing dual // into /
+    // - only parameters - i.e. after '?' - may have ' ' replaced by '+'
+    procedure AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
     /// append some UTF-8 chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some UTF-8 chars, escaping all HTML special chars as expected
@@ -3443,6 +3446,38 @@ end;
 
 { ************ TTextWriter parent class for Text Generation }
 
+function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean; // for inlining
+var
+  b, c: byte;
+  {$ifdef CPUX86NOTPIC}
+  tab: THexToDualByte absolute ConvertHexToBin;
+  {$else}
+  tab: PByteArray; // faster on PIC, ARM and x86_64
+  {$endif CPUX86NOTPIC}
+begin
+  if Hex <> nil then
+  begin
+    {$ifndef CPUX86NOTPIC}
+    tab := @ConvertHexToBin;
+    {$endif CPUX86NOTPIC}
+    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
+    c := tab[ord(Hex[1])];
+    if (b <> 255) and
+       (c <> 255) then
+    begin
+      if Bin <> nil then
+      begin
+        inc(c, b);
+        Bin^ := AnsiChar(c);
+      end;
+      result := true;
+      exit;
+    end;
+  end;
+  result := false; // return false if any invalid char
+end;
+
+
 { TTextWriter }
 
 var
@@ -3533,7 +3568,7 @@ begin
       fStream.Free;
   if not (twoBufferIsExternal in fCustomOptions) then
     FreeMem(fTempBuf);
-  inherited;
+  inherited Destroy;
 end;
 
 function TTextWriter.PendingBytes: PtrUInt;
@@ -4933,6 +4968,43 @@ begin
   Add(Quote);
 end;
 
+procedure TTextWriter.AddUrlNameNormalize(U: PUtf8Char; L: PtrInt);
+begin
+  if L <= 0 then
+    exit;
+  repeat
+    if B >= BEnd then
+      FlushToStream; // inlined Add() in the loop
+    inc(B);
+    case U^ of
+      #0:
+        begin
+          dec(B); // reached end of URI (should not happen if L is accurate)
+          break;
+        end;
+      '%':
+        if (L <= 2) or
+           not HexToChar(PAnsiChar(U + 1), B) then
+          B^ := '%'  // browsers may not follow the RFC (e.g. encode % as % !)
+        else
+        begin
+          inc(U, 2); // jump %xx
+          dec(L, 2);
+        end;
+      '/':
+         if (L = 1) or
+            (U[1] <> '/') then
+           B^ := '/'
+         else
+           dec(B); // normalize URI by ignoring this first /
+    else
+      B^ := U^;
+    end;
+    inc(U);
+    dec(L);
+  until L = 0;
+end;
+
 var
   HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
   HTML_ESCAPED: array[1..4] of string[7] = (
@@ -5149,20 +5221,20 @@ begin
   fWriter := Owner;
   if Assigned(fWriter.OnFlushToStream) then
     raise ESynException.CreateUtf8('Unexpected %.Create', [self]);
-  fWriter.OnFlushToStream := FlushToStream;
+  fWriter.OnFlushToStream := FlushToStream; // register
 end;
 
 destructor TEchoWriter.Destroy;
 begin
   if (fWriter <> nil) and
      (TMethod(fWriter.OnFlushToStream).Data = self) then
-    fWriter.OnFlushToStream := nil;
+    fWriter.OnFlushToStream := nil; // unregister
   inherited Destroy;
 end;
 
 procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
 var
-  e, n: PtrInt;
+  e, n, cap: PtrInt;
 begin
   if twoEndOfLineCRLF in fWriter.CustomOptions then
     fWriter.AddCR
@@ -5174,17 +5246,19 @@ begin
     if fEchoPendingExecuteBackground then
     begin
       fBackSafe.Lock;
-      n := fBack.Count;
-      if length(fBack.Level) = n then
-      begin
-        n := NextGrow(fBack.Count);
-        SetLength(fBack.Level, n);
-        SetLength(fBack.Text, n);
+      try
         n := fBack.Count;
+        if length(fBack.Level) = n then
+        begin
+          cap := NextGrow(n);
+          SetLength(fBack.Level, cap);
+          SetLength(fBack.Text, cap);
+        end;
+        fBack.Level[n] := aLevel;
+        fBack.Text[n] := fEchoBuf;
+      finally
+        fBackSafe.UnLock;
       end;
-      fBack.Level[n] := aLevel;
-      fBack.Text[n] := fEchoBuf;
-      fBackSafe.UnLock;
     end
     else
       for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
@@ -5205,7 +5279,7 @@ begin
   if fBack.Count = 0 then
     exit;
   fBackSafe.Lock;
-  MoveFast(fBack, todo, SizeOf(fBack)); // copy without refcount
+  MoveFast(fBack, todo, SizeOf(fBack)); // fast copy without refcount
   FillCharFast(fBack, SizeOf(fBack), 0);
   fBackSafe.UnLock;
   for i := 0 to todo.Count - 1 do
@@ -5221,11 +5295,10 @@ end;
 
 procedure TEchoWriter.FlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
-  if fEchos <> nil then
-  begin
-    EchoFlush;
-    fEchoStart := 0;
-  end;
+  if fEchos = nil then
+    exit;
+  EchoFlush;
+  fEchoStart := 0;
 end;
 
 procedure TEchoWriter.EchoAdd(const aEcho: TOnTextWriterEcho);
@@ -9519,37 +9592,6 @@ function HexToCharValid(Hex: PAnsiChar; HexToBin: PByteArray): boolean;
 begin
   result := (HexToBin[Ord(Hex[0])] <= 15) and
             (HexToBin[Ord(Hex[1])] <= 15);
-end;
-
-function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
-var
-  b, c: byte;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
-begin
-  if Hex <> nil then
-  begin
-    {$ifndef CPUX86NOTPIC}
-    tab := @ConvertHexToBin;
-    {$endif CPUX86NOTPIC}
-    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
-    c := tab[ord(Hex[1])];
-    if (b <> 255) and
-       (c <> 255) then
-    begin
-      if Bin <> nil then
-      begin
-        inc(c, b);
-        Bin^ := AnsiChar(c);
-      end;
-      result := true;
-      exit;
-    end;
-  end;
-  result := false; // return false if any invalid char
 end;
 
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolean;

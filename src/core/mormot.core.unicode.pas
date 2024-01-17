@@ -5389,7 +5389,7 @@ function IdemPropNameU(const P1, P2: RawUtf8): boolean;
 var
   L: TStrLen;
 begin
-  if pointer(P1) <> pointer(P2) then
+  if PtrUInt(P1) <> PtrUInt(P2) then
     if (PtrUInt(P1) <> 0) and
        (PtrUInt(P2) <> 0) then
     begin
