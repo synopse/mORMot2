@@ -6496,6 +6496,33 @@ var
   end;
 
 begin
+  // user agent bot detection
+  Check(IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.com/bot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.org/bot.html)'));
+  Check(not IsHttpUserAgentBot(
+    'Googlebot/2.1 (+http://www.google.cam/bot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)'));
+  Check(IsHttpUserAgentBot(
+    'adidxbot/1.1 (+http://search.msn.com/msnbot.htm)'));
+  Check(IsHttpUserAgentBot(
+    'Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)'));
+  Check(IsHttpUserAgentBot(
+    'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot'));
+  Check(IsHttpUserAgentBot(
+    'Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)'));
+  Check(IsHttpUserAgentBot(
+   'serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;'));
   // some HTTP methods
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');
