@@ -93,7 +93,7 @@ uses
   ZDbcIntfs,
   ZDbcResultSet,
   ZDbcMetadata,
-  
+
   // mORMot units after ZDBC due to some name conflicts (e.g. Utf8ToString)
   mormot.core.base,
   mormot.core.os,
@@ -322,7 +322,7 @@ type
     /// the ColumnsToJson options provided by ZDBC
     // - jcoEndJsonObject:
     // cancels last comma, adds the close object bracket '}' and add's the next comma.
-    // If not set you can continue writting some custom data into your
+    // If not set you can continue writing some custom data into your
     // object json but you also have to finalize each row-object then.
     // - jcoMongoISODate:
     // formats the date,time,datetime values as mongo

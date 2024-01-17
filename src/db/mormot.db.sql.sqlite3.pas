@@ -115,7 +115,7 @@ type
     // - StartTransaction method must have been called before
     procedure Rollback; override;
     /// the associated SQLite3 DB instance
-    // - assigned to not nil after successfull connection
+    // - assigned to not nil after successful connection
     property DB: TSqlDataBase
       read fDB;
     /// query or change the SQlite3 file-based syncrhonization mode, i.e. the

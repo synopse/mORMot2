@@ -33,7 +33,7 @@ uses
   mormot.core.rtti,
   mormot.core.json;
 
-  
+
 { ************** Low-Level Variant Wrappers }
 
 type
@@ -1815,7 +1815,7 @@ type
     /// delete one or several value/item in this document, from its value
     // - returns the number of deleted items
     // - returns 0 if the document is not a dvObject, or if no match was found
-    // - if the value exists several times, all occurences would be removed
+    // - if the value exists several times, all occurrences would be removed
     // - is optimized for DeleteByValue(null) call
     function DeleteByValue(const aValue: Variant;
       CaseInsensitive: boolean = false): integer;
@@ -4144,7 +4144,7 @@ begin
     else if PDocVariantData(Value)^.IsArray then
     begin
       W.Add('[');
-      if n <> 0 then      
+      if n <> 0 then
         repeat
           W.AddVariant(val^, twJsonEscape);
           dec(n);

@@ -1051,7 +1051,7 @@ type
       const GroupAN, GroupDN: array of RawUtf8; Nested: boolean = true;
       const BaseDN: RawUtf8 = ''; GroupsAN: PRawUtf8DynArray = nil): boolean; overload;
     /// test whether the client is connected to the server
-    // - if AndBound is set, it also checks that a successfull bind request has been made
+    // - if AndBound is set, it also checks that a successful bind request has been made
     function Connected(AndBound: boolean = true): boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted

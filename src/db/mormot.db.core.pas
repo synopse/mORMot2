@@ -1326,7 +1326,7 @@ type
     procedure AddFieldValue(const FieldName, FieldValue: RawUtf8;
       FieldType: TJsonObjectDecoderFieldType);
     /// encode as a SQL-ready INSERT or UPDATE statement
-    // - after a successfull call to Decode()
+    // - after a successful call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
     // (i.e. ' inside a string is stored as '')
     // - if InlinedParams was TRUE, it will create prepared parameters like
@@ -1337,10 +1337,10 @@ type
     /// encode the FieldNames/FieldValues[] as a JSON object
     procedure EncodeAsJson(out result: RawUtf8);
     /// set the specified array to the fields names
-    // - after a successfull call to Decode()
+    // - after a successful call to Decode()
     procedure AssignFieldNamesTo(var Fields: TRawUtf8DynArray);
     /// returns TRUE if the specified array match the decoded fields names
-    // - after a successfull call to Decode()
+    // - after a successful call to Decode()
     function SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
     /// search for a field name in the current identified FieldNames[]
     function FindFieldName(const FieldName: RawUtf8): PtrInt;

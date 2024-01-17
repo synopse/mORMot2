@@ -82,11 +82,11 @@ type
   // - supports forward only Write() compression
   TSynZipCompressor = class(TSynZipStream)
   public
-    /// create a compression stream, writting the compressed data into
+    /// create a compression stream, writing the compressed data into
     // the specified stream (e.g. a file stream)
     constructor Create(outStream: TStream; CompressionLevel: integer;
       Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
-    /// create a compression stream, writting the compressed data into
+    /// create a compression stream, writing the compressed data into
     // the specified file name
     constructor Create(const outFile: TFileName; CompressionLevel: integer;
       Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
@@ -102,7 +102,7 @@ type
   // - supports forward only Write() decompression
   TSynZipDecompressor = class(TSynZipStream)
   public
-    /// create a decompression stream, writting the uncompressed data into
+    /// create a decompression stream, writing the uncompressed data into
     // the specified stream (e.g. a file stream)
     // - only supported formats are szcfRaw and szcfZip (not szcfGZ)
     constructor Create(outStream: TStream;
@@ -158,7 +158,7 @@ type
     // - return the number of bytes uncompressed (<=destsize)
     // - return 0 if the input stream is finished
     function ZStreamNext: integer;
-    /// any successfull call to ZStreamStart should always run ZStreamDone
+    /// any successful call to ZStreamStart should always run ZStreamDone
     // - return true if the crc and the uncompressed size are ok
     function ZStreamDone: boolean;
   end;
@@ -3601,6 +3601,6 @@ end;
 initialization
   AlgoDeflate := TAlgoDeflate.Create;
   AlgoDeflateFast := TAlgoDeflateFast.Create;
-  
+
 end.
 

@@ -1131,7 +1131,7 @@ var
     /// Linux Distribution release name, retrieved from /etc/*-release
     release: RawUtf8;
   end;
-  
+
 {$endif OSWINDOWS}
 
 {$M+} // to have existing RTTI for published properties
@@ -1293,19 +1293,19 @@ type
     /// search for "-parametername" and return its RawUtf8 "parametervalue"
     function Get(const name: array of RawUtf8; out value: RawUtf8;
       const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
-    /// search for "-parametername" and return all RawUtf8 "parametervalue" occurences
+    /// search for "-parametername" and return all RawUtf8 "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     function Get(const name: RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
-    /// search for "-parametername" and return all string "parametervalue" occurences
+    /// search for "-parametername" and return all string "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TStringDynArray;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     function Get(const name: array of RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
-    /// search for "-parametername" and return all string "parametervalue" occurences
+    /// search for "-parametername" and return all string "parametervalue" occurrences
     function Get(const name: RawUtf8; out value: TStringDynArray;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
@@ -1423,7 +1423,7 @@ type
     ProgramName: RawUtf8;
     /// the main executable details, as used e.g. by TSynLog
     // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.123 (2011-03-29 11:09:06)'
-    // - you should have called GetExecutableVersion or SetExecutableVersion  
+    // - you should have called GetExecutableVersion or SetExecutableVersion
     // to populate this field
     ProgramFullSpec: RawUtf8;
     /// the main executable file name (including full path)
@@ -1627,7 +1627,7 @@ function GetRawSmbios: boolean;
 
 type
   /// the basic SMBIOS fields supported by GetSmbios/DecodeSmbios functions
-  // - only include the first occurence for board/cpu/battery types
+  // - only include the first occurrence for board/cpu/battery types
   // - see TSmbiosInfo in mormot.core.perf.pas for more complete decoding
   TSmbiosBasicInfo = (
     sbiUndefined,
@@ -3274,7 +3274,7 @@ type
   // even in case of a disk/partition full of logs
   TFileStreamWithoutWriteError = class(TFileStreamEx)
   public
-    /// this overriden function returns Count, as if it was always sucessfull
+    /// this overriden function returns Count, as if it was always successful
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
@@ -8984,7 +8984,7 @@ begin
         len := StrLen(s);
         if cur^ <> sbiUndefined then
         begin
-          if info[cur^] = '' then // only set the first occurence if multiple
+          if info[cur^] = '' then // only set the first occurrence if multiple
           begin
             trimright := len;
             while (trimright <> 0) and

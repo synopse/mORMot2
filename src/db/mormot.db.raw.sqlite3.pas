@@ -3991,7 +3991,7 @@ type
   end;
   {$M-}
 
-  /// allow access to an exernal SQLite3 library engine
+  /// allow access to an external SQLite3 library engine
   // - you can e.g. replace the main sqlite3 engine with any external library:
   // ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
   // ! sqlite3 := TSqlite3LibraryDynamic.Create;
@@ -4557,7 +4557,7 @@ type
     // - raise an ESqlite3Exception on any error
     procedure BindZero(Param: integer; Size: integer);
 
-  // 3. Field attributes after a sucessfull Step() (returned SQLITE_ROW)
+  // 3. Field attributes after a successful Step() (returned SQLITE_ROW)
   public
     /// the field name of the current ROW, first Col is 0
     function FieldName(Col: integer): RawUtf8;
@@ -4921,7 +4921,7 @@ type
       aOpenV2Flags: integer = 0; aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); reintroduce;
     /// close a database and free its memory and context
-    //- if TransactionBegin was called but not commited, a RollBack is performed
+    //- if TransactionBegin was called but not committed, a RollBack is performed
     destructor Destroy; override;
     /// Execute all SQL statements in aSql UTF-8 encoded string
     // - can be prepared with TransactionBegin()

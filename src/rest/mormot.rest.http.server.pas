@@ -863,7 +863,7 @@ begin
   if fHttpServer = nil then
   begin
     // create one instance of our pure socket servers
-    // (on Windows, may be used as fallback if http.sys was unsuccessfull)
+    // (on Windows, may be used as fallback if http.sys was unsuccessful)
     if aUse in [low(HTTPSERVERSOCKETCLASS)..high(HTTPSERVERSOCKETCLASS)] then
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
         HttpThreadTerminate, TrimU(fRestServerNames), aThreadPoolCount, 30000, hso)

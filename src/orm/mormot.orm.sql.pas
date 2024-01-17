@@ -2306,7 +2306,7 @@ begin
       if fStoredClassMapping^.AppendFieldName(order^.Column, WR) then
       begin
         // invalid "order" column index -> abort search and return ''
-        fRest.InternalLog('ComputeSql: unknown order % collumn',
+        fRest.InternalLog('ComputeSql: unknown order % column',
           [order^.Column], sllWarning);
         exit;
       end;

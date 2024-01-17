@@ -1769,14 +1769,14 @@ function Split(const Str, SepStr: RawUtf8; var LeftStr: RawUtf8;
 function Split(const Str: RawUtf8; const SepStr: array of RawUtf8;
   const DestPtr: array of PRawUtf8): PtrInt; overload;
 
-/// returns the last occurence of the given SepChar separated context
+/// returns the last occurrence of the given SepChar separated context
 // - e.g. SplitRight('01/2/34','/')='34'
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
 // - if LeftStr is supplied, the RawUtf8 it points to will be filled with
 // the left part just before SepChar ('' if SepChar doesn't appear)
 function SplitRight(const Str: RawUtf8; SepChar: AnsiChar; LeftStr: PRawUtf8 = nil): RawUtf8;
 
-/// returns the last occurence of the given SepChar separated context
+/// returns the last occurrence of the given SepChar separated context
 // - e.g. SplitRight('path/one\two/file.ext','/\')='file.ext', i.e.
 // SepChars='/\' will be like ExtractFileName() over RawUtf8 string
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
@@ -2226,7 +2226,7 @@ type
     procedure Flush;
     /// case-insensitive search for a given TFileName in the folder
     // - returns '' if not found, or the exact file name in the POSIX folder
-    // - is thred-safe and non blocking during its lookup
+    // - is thread-safe and non blocking during its lookup
     // - can optionally return MicroSec spent for actual filenames read on disk
     function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
     /// how many file entries are currently in the internal list
@@ -5662,7 +5662,7 @@ var
   t, o: PtrInt;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7;
-  {$else}            
+  {$else}
   tab: PByteArray; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin

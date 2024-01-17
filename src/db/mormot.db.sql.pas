@@ -1727,7 +1727,7 @@ type
       AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSqlDBConnection.NewStatementPrepared() for handling cache
-    function IsCachable(P: PUtf8Char): boolean; virtual;
+    function IsCacheable(P: PUtf8Char): boolean; virtual;
     /// check if a primary key has already an index
     // - can specify if it is ascending only, which is not the case for Firebird
     function IsPrimaryKeyIndexed(var AscendingOnly: boolean): boolean; virtual;
@@ -1970,7 +1970,7 @@ type
     /// connect to the specified database
     // - should raise an Exception on error
     // - this default implementation will notify OnProgress callback for
-    // sucessfull re-connection: it should be called in overridden methods
+    // successful re-connection: it should be called in overridden methods
     // AFTER actual connection process
     procedure Connect; virtual;
     /// stop connection to the specified database
@@ -2052,7 +2052,7 @@ type
     /// returns TRUE if the connection was set
     property Connected: boolean
       read IsConnected;
-    /// number of sucessfull connections for this instance
+    /// number of successful connections for this instance
     // - can be greater than 1 in case of re-connection via Disconnect/Connect
     property TotalConnectionCount: integer
       read fTotalConnectionCount;
@@ -3796,7 +3796,7 @@ const
     nil);
   _LASTCACHEABLE = 0; // following items in _CACHEABLE[] should not be cached
 
-function TSqlDBConnectionProperties.IsCachable(P: PUtf8Char): boolean;
+function TSqlDBConnectionProperties.IsCacheable(P: PUtf8Char): boolean;
 var
   c: PtrInt;
   selectWithNoParamOrWhere: boolean;
@@ -7503,7 +7503,7 @@ begin
     // full cache support
     if result = nil then
     begin
-      iscacheable := fProperties.IsCachable(Pointer(aSql));
+      iscacheable := fProperties.IsCacheable(Pointer(aSql));
       if iscacheable and
          (stmt <> nil) then // RefCount > 1
       begin

@@ -328,20 +328,20 @@ type
     obBlockSize);
 
 /// retrieve the use counts of allocated small blocks
-// - returns maxcount biggest results, sorted by "orderby" field occurence
+// - returns maxcount biggest results, sorted by "orderby" field occurrence
 function GetSmallBlockStatus(maxcount: integer = 10;
   orderby: TSmallBlockOrderBy = obTotal; count: PPtrUInt = nil; bytes: PPtrUInt = nil;
   small: PCardinal = nil; tiny: PCardinal = nil): TSmallBlockStatusDynArray;
 
 /// retrieve all small blocks which suffered from blocking during multi-thread
-// - returns maxcount biggest results, sorted by SleepCount occurence
+// - returns maxcount biggest results, sorted by SleepCount Occurrence
 function GetSmallBlockContention(
   maxcount: integer = 10): TSmallBlockContentionDynArray;
 
 
 /// convenient debugging function into the console
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
-// up to the smallblockcontentioncount biggest occurences
+// up to the smallblockcontentioncount biggest occurrences
 // - see also RetrieveMemoryManagerInfo from mormot.core.log for runtime call
 procedure WriteHeapStatus(const context: ShortString = '';
   smallblockstatuscount: integer = 8; smallblockcontentioncount: integer = 8;
@@ -349,7 +349,7 @@ procedure WriteHeapStatus(const context: ShortString = '';
 
 /// convenient debugging function into a string
 // - if smallblockcontentioncount > 0, includes GetSmallBlockContention() info
-// up to the smallblockcontentioncount biggest occurences
+// up to the smallblockcontentioncount biggest occurrences
 // - see also RetrieveMemoryManagerInfo from mormot.core.log for more details
 // - warning: this function is not thread-safe
 function GetHeapStatus(const context: ShortString; smallblockstatuscount,

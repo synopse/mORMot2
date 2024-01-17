@@ -1620,7 +1620,7 @@ type
     /// 2.0+/3.1+ Installed Size in bytes (s)
     // - e.g. '128 KB'
     Size: RawUtf8;
-    /// 2.0+/3.1+ Maxium Size in bytes (m)
+    /// 2.0+/3.1+ Maximum Size in bytes (m)
     // - e.g. '128 KB'
     MaxSize: RawUtf8;
     /// 2.0+ Current SRAM type (c)

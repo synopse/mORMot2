@@ -350,7 +350,7 @@ type
     twoNonExpandedArrays,
     twoNoSharedStream,
     twoNoWriteToStreamException);
-    
+
   /// options set for a TTextWriter / TTextWriter instance
   // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
   // or set global process customization for a TTextWriter
@@ -472,7 +472,7 @@ type
     jsonUnquotedPropNameCompact,
     jsonEscapeUnicode,
     jsonNoEscapeUnicode);
-    
+
   /// parent to T*Writer text processing classes, with the minimum set of methods
   // - use an internal buffer, so much faster than naive string+string
   // - see TTextDateWriter in mormot.core.datetime for date/time methods
@@ -932,7 +932,7 @@ type
     // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified when calling the
     // TTextWriter constructor, it can be forced via this property, before
-    // any writting
+    // any writing
     property Stream: TStream
       read fStream write SetStream;
     /// global options to customize this TTextWriter instance process
@@ -2337,7 +2337,7 @@ implementation
   {$WARN 4056 off : Conversion between ordinals and pointers is not portable }
 {$endif FPC}
 
- 
+
 { ************ CSV-like Iterations over Text Buffers }
 
 function IdemPCharAndGetNextItem(var source: PUtf8Char; const searchUp: RawUtf8;

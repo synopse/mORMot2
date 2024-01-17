@@ -46,7 +46,7 @@ uses
   mormot.core.zip,     // for ODS export
   mormot.crypt.secure, // for TSynUniqueIdentifierBits
   mormot.db.core;
-  
+
 
 { ************ Shared ORM/JSON Fields and Values Definitions }
 
@@ -331,7 +331,7 @@ type
 
   /// contains the parameters used for sorting
   // - FieldCount is 0 if was never sorted
-  // - used to sort data again after a successfull data update with
+  // - used to sort data again after a successful data update with
   // TOrmTableJson.FillFrom()
   TOrmTableSortParams = record
     Comp: TUtf8Compare;
@@ -715,7 +715,7 @@ function ToText(vk: TOrmVirtualKind): PShortString; overload;
 
 
 /// encode as a SQL-ready INSERT or UPDATE statement with ? as values
-// - after a successfull call to Decode()
+// - after a successful call to Decode()
 // - FieldValues[] content will be ignored
 // - Occasion can be only ooInsert or ooUpdate
 // - for ooUpdate, will create UPDATE ... SET ... where UpdateIDFieldName=?
@@ -9564,7 +9564,7 @@ begin
   quicksort.DataStart := fDataStart;
   {$endif NOPOINTEROFFSET}
   if fFieldIndexID < 0 then // consummed as OffsetID = OffsetField - OField2ID
-    quicksort.OField2ID := Field // if no ID colum, use first on field collision
+    quicksort.OField2ID := Field // if no ID column, use first on field collision
   else
     quicksort.OField2ID := Field - fFieldIndexID;
   if PCurrentRow = nil then

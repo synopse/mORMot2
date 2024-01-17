@@ -741,7 +741,7 @@ type
       read fServer;
     /// how many connections have been accepted since server startup
     // - ConnectionCount is the number of long-living connections, this
-    // counter is the absolute number of successfull accept() calls,
+    // counter is the absolute number of successful accept() calls,
     // including short-living (e.g. HTTP/1.0) connections
     property Accepted: Int64
       read fAccepted;

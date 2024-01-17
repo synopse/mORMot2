@@ -244,7 +244,7 @@ type
     procedure GetTableNames(out Tables: TRawUtf8DynArray); override;
     /// determine if the SQL statement can be cached
     // - always returns false, to force a new fake statement to be created
-    function IsCachable(P: PUtf8Char): boolean; override;
+    function IsCacheable(P: PUtf8Char): boolean; override;
   published
     /// Connect and Disconnect won't really connect nor disconnect the
     // remote connection
@@ -1108,7 +1108,7 @@ begin
   Process(cGetTableNames, self, Tables);
 end;
 
-function TSqlDBProxyConnectionPropertiesAbstract.IsCachable(P: PUtf8Char): boolean;
+function TSqlDBProxyConnectionPropertiesAbstract.IsCacheable(P: PUtf8Char): boolean;
 begin
   result := False;
 end;
@@ -2138,5 +2138,5 @@ initialization
   {$ifdef USELIBCURL}
   TSqlDBCurlConnectionProperties.RegisterClassNameForDefinition;
   {$endif USELIBCURL}
-  
+
 end.

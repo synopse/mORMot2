@@ -113,7 +113,7 @@ type
     /// set or retrieve the .static local folder name
     property ViewStaticFolder: TFileName
       read fViewStaticFolder write fViewStaticFolder;
-    /// any occurence of this tag in a rendered view will be converted
+    /// any occurrence of this tag in a rendered view will be converted
     // into the rendering time in microseconds
     // - equals '[[GENERATION_TIME_TAG]]' by default
     property ViewGenerationTimeTag: RawUtf8

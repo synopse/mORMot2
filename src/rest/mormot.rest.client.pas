@@ -317,7 +317,7 @@ type
   {$endif DOMAINRESTAUTH}
 
   /// store the information about the current session
-  // - as set after a sucessfull TRestClientUri.SetUser() method
+  // - as set after a successful TRestClientUri.SetUser() method
   TRestClientSession = record
   {$ifdef HASINLINE}
   private
@@ -338,7 +338,7 @@ type
     // TAuthGroup ID casted as a pointer) properties - you can retrieve any
     // optional binary data associated with this user via RetrieveBlobFields()
     User: TAuthUser;
-    /// the current session ID as set after a successfull SetUser() method call
+    /// the current session ID as set after a successful SetUser() method call
     // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
     // is not started yet - i.e. if SetUser() call failed
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
@@ -900,7 +900,7 @@ type
     // specified by the server at session handshake
     property ComputeSignature: TOnRestAuthenticationSignedUriComputeSignature
       read fComputeSignature write fComputeSignature;
-    /// the current session information as set by a successfull SetUser() call
+    /// the current session information as set by a successful SetUser() call
     property Session: TRestClientSession
       read fSession;
     /// the current user as set by SetUser() method
@@ -984,11 +984,11 @@ type
     // - the callback could return false to close the connection
     property OnAfterCall: TOnClientCall
       read fOnAfterCall write fOnAfterCall;
-    /// this Event is called if Uri() was not successfull
+    /// this Event is called if Uri() was not successful
     // - the callback could return true to retry the call
     property OnError: TOnClientCall
       read fOnError write fOnError;
-    /// this Event is called if Uri() was not successfull
+    /// this Event is called if Uri() was not successful
     // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed
@@ -1022,7 +1022,7 @@ type
     // into LastErrorCode/LastErrorMessage properties
     property LastErrorException: ExceptClass
       read fLastErrorException;
-    /// maximum additional retry occurence
+    /// maximum additional retry occurrence
     // - defaut is 1, i.e. will retry once
     // - set OnAuthentificationFailed to nil in order to avoid any retry
     property MaximumAuthentificationRetry: integer
@@ -1039,7 +1039,7 @@ type
     // wait and retry until the specified timeout is reached
     property ConnectRetrySeconds: integer
       read fConnectRetrySeconds write fConnectRetrySeconds;
-    /// the current session ID as set after a successfull SetUser() method call
+    /// the current session ID as set after a successful SetUser() method call
     // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
     // is not started yet - i.e. if SetUser() call failed
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
@@ -1176,7 +1176,7 @@ type
       aServerUnregister: boolean = false); virtual;
     /// just a wrapper to reset the internal Event state to evNone
     // - may be used to re-use the same TBlockingCallback instance, after
-    // a successfull WaitFor/CallbackFinished process
+    // a successful WaitFor/CallbackFinished process
     // - returns TRUE on success (i.e. status was not beWaiting)
     // - if there is a WaitFor currently in progress, returns FALSE
     function Reset: boolean; virtual;

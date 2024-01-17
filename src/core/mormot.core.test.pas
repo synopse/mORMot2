@@ -151,7 +151,7 @@ type
     fAssertionsBeforeRun: integer;
     fAssertionsFailedBeforeRun: integer;
     /// any number not null assigned to this field will display a "../s" stat
-    fRunConsoleOccurenceNumber: cardinal;
+    fRunConsoleOccurrenceNumber: cardinal;
     /// any number not null assigned to this field will display a "using .. MB" stat
     fRunConsoleMemoryUsed: Int64;
     /// any text assigned to this field will be displayed on console
@@ -349,7 +349,7 @@ type
   TSynTests = class(TSynTest)
   protected
     /// any number not null assigned to this field will display a "../sec" stat
-    fRunConsoleOccurenceNumber: cardinal;
+    fRunConsoleOccurrenceNumber: cardinal;
     fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
@@ -1304,7 +1304,7 @@ begin
             end;
             C.fAssertionsBeforeRun := C.fAssertions;
             C.fAssertionsFailedBeforeRun := C.fAssertionsFailed;
-            C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
+            C.fRunConsoleOccurrenceNumber := fRunConsoleOccurrenceNumber;
             log := BeforeRun;
             TestTimer.Start;
             C.MethodSetup;
@@ -1434,9 +1434,9 @@ begin
   end;
   fNotifyProgress := '';
   DoText(['  ', TestTimer.Stop]);
-  if C.fRunConsoleOccurenceNumber > 0 then
+  if C.fRunConsoleOccurrenceNumber > 0 then
     DoText(['  ', IntToThousandString(TestTimer.PerSec(
-      C.fRunConsoleOccurenceNumber)), '/s']);
+      C.fRunConsoleOccurrenceNumber)), '/s']);
   if C.fRunConsoleMemoryUsed > 0 then
   begin
     DoText(['  ', KB(C.fRunConsoleMemoryUsed)]);
