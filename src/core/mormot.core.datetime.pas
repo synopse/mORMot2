@@ -409,7 +409,7 @@ type
     Year: word;
     /// the Month value of this timstamp, in range 1..12
     Month: word;
-    /// which day of week this Date happend
+    /// which day of week this Date happened
     // - Sunday is DayOfWeek 1, Saturday is 7
     // - DayOfWeek field is not handled by its methods by default, but could be
     // filled on demand via ComputeDayOfWeek

@@ -86,7 +86,7 @@ type
     // the specified stream (e.g. a file stream)
     constructor Create(outStream: TStream; CompressionLevel: integer;
       Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;
-    /// create a compression stream, writting the compressed data into
+    /// create a compression stream, writing the compressed data into
     // the specified file name
     constructor Create(const outFile: TFileName; CompressionLevel: integer;
       Format: TSynZipCompressorFormat = szcfRaw); reintroduce; overload;

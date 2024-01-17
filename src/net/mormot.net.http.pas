@@ -1544,7 +1544,7 @@ type
     fWriterHostLast: TTextDateWriter;
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
-    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
+    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fVariables: THttpLogVariables;
     fDestFolder, fDestMainLog: TFileName;
     fFlags: set of (ffOwnWriterSingle);
@@ -4982,7 +4982,7 @@ end;
 function ToScope(Text: PUtf8Char; out Scope: THttpAnalyzerScope): boolean;
 begin
   result := false;
-  case PCardinal(Text)^ of // case-sensitive test in occurence order
+  case PCardinal(Text)^ of // case-sensitive test in occurrence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Scope := hasGet;
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
