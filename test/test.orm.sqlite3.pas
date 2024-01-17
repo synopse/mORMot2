@@ -456,7 +456,7 @@ begin
   // Inserting data 1x without transaction ');
   InsertData(1);
   { Insert some sample data - now with transaction. Multiple records are
-    inserted and not yet commited until the transaction is finally ended.
+    inserted and not yet committed until the transaction is finally ended.
     This single transaction is very fast compared to multiple individual
     transactions. It is even faster than other database engines. }
   Demo.TransactionBegin;

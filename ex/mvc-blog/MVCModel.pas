@@ -130,12 +130,12 @@ type
     Lock: IAutoLocker;
     Lookup: array of record
       Ident: RawUtf8;
-      Occurence: integer;
+      Occurrence: integer;
     end;
     OrderID: TIntegerDynArray;
     procedure Init(const aRest: IRestOrm);
     function Get(tagID: integer): RawUtf8;
-    procedure SaveOccurence(const aRest: IRestOrm);
+    procedure SaveOccurrence(const aRest: IRestOrm);
     procedure SortTagsByIdent(var Tags: TIntegerDynArray);
     function GetAsDocVariantArray: Variant;
   end;
@@ -150,7 +150,7 @@ type
     class procedure InitializeTable(const Server: IRestOrmServer;
       const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
     procedure SetPublishedMonth(FromTime: TTimeLog);
-    // note: caller should call Tags.SaveOccurence() to update the DB
+    // note: caller should call Tags.SaveOccurrence() to update the DB
     procedure TagsAddOrdered(aTagID: Integer; var aTags: TOrmTags);
   published
     property PublishedMonth: Integer
@@ -187,13 +187,13 @@ type
   TOrmTag = class(TOrm)
   private
     fIdent: RawUtf8;
-    fOccurence: integer;
+    fOccurrence: integer;
     fCreatedAt: TCreateTime;
   published
     property Ident: RawUtf8
       index 80 read fIdent write fIdent;
-    property Occurence: Integer
-      read fOccurence write fOccurence;
+    property Occurrence: Integer
+      read fOccurrence write fOccurrence;
     property CreatedAt: TCreateTime
       read fCreatedAt write fCreatedAt;
   end;
@@ -310,7 +310,7 @@ begin
      AddInteger(fTags, aTagID, true) then
     with aTags.Lock.ProtectMethod do
     begin
-      inc(aTags.Lookup[aTagID - 1].Occurence);
+      inc(aTags.Lookup[aTagID - 1].Occurrence);
       aTags.SortTagsByIdent(fTags);
     end;
 end;
@@ -337,11 +337,11 @@ begin
     begin
       ndx := OrderID[i] - 1;
       with Lookup[ndx] do
-        if Occurence > 0 then
+        if Occurrence > 0 then
           TDocVariantData(result).AddItem(
             _ObjFast(['tagID', ndx + 1,
                       'ident', Ident,
-                      'occurence', Occurence]));
+                      'occurrence', Occurrence]));
     end;
 end;
 
@@ -355,7 +355,7 @@ begin
     Lock := TAutoLocker.Create;
   with Lock.ProtectMethod,
     TAutoFree.One(tag, TOrmTag.CreateAndFillPrepare(
-      aRest, 'order by Ident', 'RowID,Ident,Occurence')) do
+      aRest, 'order by Ident', 'RowID,Ident,Occurrence')) do
   begin
     count := tag.FillTable.RowCount;
     if count = 0 then
@@ -377,28 +377,28 @@ begin
       with Lookup[tag.ID - 1] do
       begin
         Ident := tag.Ident;
-        Occurence := tag.Occurence;
+        Occurrence := tag.Occurrence;
       end;
   end;
 end;
 
-procedure TOrmTags.SaveOccurence(const aRest: IRestOrm);
+procedure TOrmTags.SaveOccurrence(const aRest: IRestOrm);
 var
   tag: TOrmTag;
   batch: TRestBatch;
 begin
   with TAutoFree.Several([
-         @tag,   TOrmTag.CreateAndFillPrepare(aRest, '', 'RowID,Occurence'),
+         @tag,   TOrmTag.CreateAndFillPrepare(aRest, '', 'RowID,Occurrence'),
          @batch, TRestBatch.Create(aRest, TOrmTag, 1000)]),
        Lock.ProtectMethod do
   begin
     while tag.FillOne do
     begin
       if tag.ID <= length(Lookup) then
-        if Lookup[tag.ID - 1].Occurence <> tag.Occurence then
+        if Lookup[tag.ID - 1].Occurrence <> tag.Occurrence then
         begin
-          tag.Occurence := Lookup[tag.ID - 1].Occurence;
-          batch.Update(tag); // will update only Occurence field
+          tag.Occurrence := Lookup[tag.ID - 1].Occurrence;
+          batch.Update(tag); // will update only Occurrence field
         end;
     end;
     aRest.BatchSend(batch);
@@ -791,7 +791,7 @@ begin
     batch.Add(article, true, false, [], true);
   end;
   Rest.BatchSend(batch);
-  aTagsLookup.SaveOccurence(Rest);
+  aTagsLookup.SaveOccurrence(Rest);
   writeln(#13#10'-- import finished!');
 end;
 

@@ -212,7 +212,7 @@ end;
 
 function TRttiProp.WriteIsDefined: boolean;
 begin
-  with PPropInfo(@self)^ do // see typinfo.IsWriteableProp
+  with PPropInfo(@self)^ do // see typinfo.IsWritableProp
     result := (SetProc <> nil) and
       ((integer(PropProcs) shr 2) and 3 in [ptField..ptVirtual]);
 end;

@@ -883,7 +883,7 @@ type
     fWriter: TTextDateWriter;
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
-    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurence
+    fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fLastFlush: cardinal;
     fVariables: THttpLogVariables;
     fFlags: set of (ffOwnWriter);
@@ -2547,7 +2547,7 @@ begin
   result := false;
   if Text = '' then
     exit;
-  case PCardinal(Text)^ of // case-sensitive test in occurence order
+  case PCardinal(Text)^ of // case-sensitive test in occurrence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Method := urmGet;
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
@@ -6073,7 +6073,7 @@ begin
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
       result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
-        exit; // successfull direct downloading from last peer
+        exit; // successful direct downloading from last peer
       result := 0; // may be HTTP_NOCONTENT if not found on this peer
     finally
       fClientSafe.UnLock;
@@ -6911,7 +6911,7 @@ begin
                           if AccessToken <> 0 then
                           begin
                             ctxt.fAuthenticatedUser := LookupToken(AccessToken);
-                            // AccessToken lifecycle is application responsability
+                            // AccessToken lifecycle is application responsibility
                             CloseHandle(AccessToken);
                             ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
                             include(ctxt.fConnectionFlags, hsrAuthorized);

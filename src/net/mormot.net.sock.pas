@@ -256,7 +256,7 @@ type
     /// set low SIO_SET_PRIORITY_HINT (Windows 10+) or SO_PRIORITY (Linux)
     // - on Windows, try to use LEDBAT algorithm - to be set before accept/connect
     procedure SetLowPriority;
-    /// check if SetLowPriority was successfull on the connection
+    /// check if SetLowPriority was successful on the connection
     // - on Windows, to be called after accept/connect to see e.g. if LEDBAT is
     // used on the connection (false for old Windows, or e.g. if TCP timestamps
     // are disabled on the other side)

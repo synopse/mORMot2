@@ -2027,7 +2027,7 @@ type
     function Load(const aLibraryName: TFileName): boolean;
     /// unload a PKCS#11 previously loaded library
     procedure UnLoad;
-    /// returns true if a previous Create(aFileName) or Load() was successfull
+    /// returns true if a previous Create(aFileName) or Load() was successful
     function Loaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
 

@@ -1051,7 +1051,7 @@ type
     // - equals 32 by default which is more than enough for most PKI, and don't
     // affect performance because most context is cached during the process
     // - 0 would mean that IsValid() checks for a single issuer in the known
-    // Trust[] list, and consider it successfull even if the "root anchor" was
+    // Trust[] list, and consider it successful even if the "root anchor" was
     // not reached - but may be unsafe if the "root anchor" has been revoked
     property ValidDepth: integer
       read fValidDepth write fValidDepth;
@@ -4567,5 +4567,5 @@ end;
 
 initialization
   InitializeUnit;
-  
+
 end.

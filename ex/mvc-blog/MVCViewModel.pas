@@ -147,7 +147,7 @@ resourcestring
   sErrorInvalidLogin = 'Wrong logging information';
   sErrorNeedValidAuthorSession =
     'You need to be logged as a valid Author to perform this action';
-  sErrorWriting = 'An error occured during saving the information to the database';
+  sErrorWriting = 'An error occurred during saving the information to the database';
 
 
 { TBlogApplication }
@@ -305,7 +305,7 @@ begin
     end;
     if RestModel.Orm.BatchSend(batch, articles) = HTTP_SUCCESS then
     begin
-      fTagsLookup.SaveOccurence(RestModel.Orm);
+      fTagsLookup.SaveOccurrence(RestModel.Orm);
       comment.Author := article.Author;
       comment.AuthorName := article.AuthorName;
       batch.Reset(TOrmComment, 20000);

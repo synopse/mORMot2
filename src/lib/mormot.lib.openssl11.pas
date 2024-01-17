@@ -583,7 +583,7 @@ const
   SSL_ERROR_WANT_ASYNC = 9;
   SSL_ERROR_WANT_ASYNC_JOB = 10;
   SSL_ERROR_WANT_CLIENT_HELLO_CB = 11;
-  
+
   SSL_OP_LEGACY_SERVER_CONNECT = $00000004;
   SSL_OP_TLSEXT_PADDING = $00000010;
   SSL_OP_SAFARI_ECDHE_ECDSA_BUG = $00000040;
@@ -8269,7 +8269,7 @@ begin
     if loc < 0 then
       break;
     X509_NAME_delete_entry(@self, loc).Free;
-    last := loc; // find and delete all occurences
+    last := loc; // find and delete all occurrences
   until false;
 end;
 

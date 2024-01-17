@@ -1501,7 +1501,7 @@ type
     /// use this method if the caller expect no data, just a status
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
-    // - by default, calling this method will mark process as successfull
+    // - by default, calling this method will mark process as successful
     procedure Success(Status: integer = HTTP_SUCCESS); virtual;
     /// use this method to send back an error to the caller
     // - expects Status to not be HTTP_SUCCESS neither HTTP_CREATED,
@@ -3734,7 +3734,7 @@ end;
 { ************ TRestUriContext REST Parent Process on Server Side }
 
 const
-  // sorted by occurence for in-order O(n) search via IntegerScanIndex()
+  // sorted by occurrence for in-order O(n) search via IntegerScanIndex()
   METHODNAME: array[TUriMethod] of RawUtf8 = (
     'GET',
     'POST',

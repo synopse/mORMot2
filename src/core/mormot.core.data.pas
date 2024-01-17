@@ -1496,7 +1496,7 @@ type
     // first string field (i.e. set to SortDynArrayString), you can fill the
     // first string field with the searched value (if returned index is >= 0)
     // - return the index found (0..Count-1), or -1 if Item was not found and
-    // the supplied element has been succesfully added
+    // the supplied element has been successfully added
     // - if the array is sorted, it will use fast O(log(n)) binary search
     // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Item must be of the same exact type than the dynamic array,

@@ -336,11 +336,11 @@ function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
 // - caller should check that return PUtf8Char is indeed a "
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 
-/// reach positon just after the current JSON string in the supplied UTF-8 buffer
+/// reach position just after the current JSON string in the supplied UTF-8 buffer
 // - will first ensure that P^='"' then process like GotoEndJsonItem()
 function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
 
-/// reach positon just after the current JSON item in the supplied UTF-8 buffer
+/// reach position just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - returns nil if the specified buffer is not valid JSON content
@@ -3572,7 +3572,7 @@ end;
 
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 begin
-  // P^='"' at function call and at sucessfull function return
+  // P^='"' at function call and at successful function return
   result := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
 end;
 

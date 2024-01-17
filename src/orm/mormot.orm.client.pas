@@ -218,7 +218,7 @@ type
     // - in aClient-Server environment with multiple Clients connected at the
     // same time, you should better use BATCH process, specifying a positive
     // AutomaticTransactionPerRow parameter to BatchStart()
-    // - this version retries a TranslationBegin() to be successfull within
+    // - this version retries a TranslationBegin() to be successful within
     // a supplied number of times
     // - will retry every 100 ms for "Retries" times (excluding the connection
     // time in this 100 ms time period

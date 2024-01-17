@@ -41,7 +41,7 @@ uses
 
 type
   LONG_PTR = PtrInt;
-  
+
   TTimeStamp = record
     dwLowDateTime: cardinal;
     dwHighDateTime: cardinal;
@@ -302,7 +302,7 @@ const
   SEC_I_CONTEXT_EXPIRED	       = $00090317;
   SEC_I_INCOMPLETE_CREDENTIALS = $00090320;
   SEC_I_RENEGOTIATE            = $00090321;
-  
+
   SEC_E_UNSUPPORTED_FUNCTION   = $80090302;
   SEC_E_INVALID_TOKEN          = $80090308;
   SEC_E_MESSAGE_ALTERED        = $8009030F;
@@ -711,7 +711,7 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
 
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
-// - aInData contains data recieved from client
+// - aInData contains data received from client
 // - aOutData contains data that must be sent to client
 // - if this function returns True, server must send aOutData to client
 // and call function again with the data returned from client

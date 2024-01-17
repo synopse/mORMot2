@@ -762,7 +762,7 @@ type
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
     // with aOnProcess, then supplied to as aMsg parameter for each call
-    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurrence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
@@ -770,7 +770,7 @@ type
     /// add a message to be processed during the next execution of a task
     // - supplied message will be added to the internal FIFO list associated
     // with aOnProcess, then supplied to as aMsg parameter for each call
-    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurrence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     function EnQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
@@ -783,11 +783,11 @@ type
     // - returns true on success, false if the supplied message was not registered
     function DeQueue(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUtf8): boolean;
-    /// execute a task without waiting for the next aOnProcessSecs occurence
+    /// execute a task without waiting for the next aOnProcessSecs occurrence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     function ExecuteNow(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
-    /// execute a task without waiting for the next aOnProcessSecs occurence
+    /// execute a task without waiting for the next aOnProcessSecs occurrence
     // - aOnProcess should not have been registered by a previous call to Enable() method
     function ExecuteOnce(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// wait until no background task is processed
@@ -852,7 +852,7 @@ type
     function NotifyFinished(alreadyLocked: boolean = false): boolean; virtual;
     /// just a wrapper to reset the internal Event state to evNone
     // - may be used to re-use the same TBlockingProcess instance, after
-    // a successfull WaitFor/NotifyFinished process
+    // a successful WaitFor/NotifyFinished process
     // - returns TRUE on success (i.e. status was not evWaiting), setting
     // the current state to evNone, and the Call property to 0
     // - if there is a WaitFor currently in progress, returns FALSE

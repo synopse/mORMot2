@@ -46,7 +46,7 @@ function ToVarUInt32Length(Value: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return the number of bytes necessary to store some data with a its
-// 32-bit variable-length integer legnth
+// 32-bit variable-length integer length
 function ToVarUInt32LengthWithData(Value: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -889,7 +889,7 @@ type
     /// append 8 bytes of 64-bit integer at the current position
     procedure WriteI64(Data: Int64);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append the same byte a given number of occurences at the current position
+    /// append the same byte a given number of occurrences at the current position
     procedure WriteN(Data: byte; Count: integer);
     /// append some content (may be text or binary) prefixed by its encoded length
     // - will write DataLen as VarUInt32, then the Data content, as expected

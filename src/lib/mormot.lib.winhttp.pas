@@ -756,7 +756,7 @@ const
   HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER = 1;
 
   // HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION - When set the unicode fields
-  //      will be converted to UTF-8 multibytes when writting to the log
+  //      will be converted to UTF-8 multibytes when writing to the log
   //      files. When this flag is not present, the local code page
   //      conversion happens.
   HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION = 2;
@@ -1276,7 +1276,7 @@ const
   ERROR_INSUFFICIENT_BUFFER = Windows.ERROR_INSUFFICIENT_BUFFER;
 
   ERROR_WINHTTP_AUTODETECTION_FAILED = 12180;
-  
+
 const
   winhttpdll = 'winhttp.dll';
 
@@ -1555,7 +1555,7 @@ var
 
 type
   EWinHttp = class(ExceptionWithProps);
-  
+
   TWinHttpApis = (
     hOpen,
     hSetStatusCallback,
@@ -2577,7 +2577,7 @@ end;
 const
   // paranoid check of the API mapping against our internal enumerations
   HTTP_LOG_FIELD_TEST_SUB_STATUS: THttpApiLogFields = [hlfSubStatus];
-  
+
 initialization
   Assert(
     {$ifdef CPU64}

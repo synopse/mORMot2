@@ -11,7 +11,7 @@ unit mormot.soa.server;
     - TServiceFactoryServer Service Provider
     - TServiceContainerServer Services Holder
     - Asynchronous REST Synchronisation Classes
-    
+
   *****************************************************************************
 }
 
@@ -257,7 +257,7 @@ type
       var aOpaque): integer;
     /// low-level get an implementation Inst.Instance for the given Inst.InstanceID
     // - is called by ExecuteMethod() in sicClientDriven mode
-    // - returns -1 on error, or aMethodIndex for successfull execution,
+    // - returns -1 on error, or aMethodIndex for successful execution,
     // e.g. 0 after {"method":"_free_".. call
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
     function RetrieveInstance(Ctxt: TRestServerUriContext;

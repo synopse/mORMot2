@@ -2074,13 +2074,13 @@ type
     function SessionGetUser(aSessionID: cardinal): TAuthUser;
     /// persist all in-memory sessions into a compressed binary file
     // - you should not call this method it directly, but rather use Shutdown()
-    // with a StateFileName parameter - to be used e.g. for a short maintainance
+    // with a StateFileName parameter - to be used e.g. for a short maintenance
     // server shutdown, without loosing the current logged user sessions
     // - this method IS thread-safe, and calls internally Sessions.Safe.ReadOnlyLock
     procedure SessionsSaveToFile(const aFileName: TFileName);
     /// re-create all in-memory sessions from a compressed binary file
     // - typical use is after a server restart, with the file supplied to the
-    // Shutdown() method: it could be used e.g. for a short maintainance server
+    // Shutdown() method: it could be used e.g. for a short maintenance server
     // shutdown, without loosing the current logged user sessions
     // - WARNING: this method will restore authentication sessions for the ORM,
     // but not any complex state information used by interface-based services,
@@ -4735,7 +4735,7 @@ begin
           [User.GroupRights.Ident, User.LogonName, fID, fRemoteIP,
            aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent,
            ToTextOS(integer(fRemoteOsVersion))], self);
-      exit; // create successfull
+      exit; // create successful
     end;
     // on error: set GroupRights back to a pseudo TAuthGroup = ID
     User.GroupRights.Free;
@@ -7712,7 +7712,7 @@ begin
   try
     for i := 0 to length(fSessionAuthentication) - 1 do
       if fSessionAuthentication[i].Auth(Ctxt) then
-        // found an authentication, which may be successfull or not
+        // found an authentication, which may be successful or not
         break;
   finally
     fSessions.Safe.WriteUnLock;

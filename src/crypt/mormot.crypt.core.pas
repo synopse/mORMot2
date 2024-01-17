@@ -213,7 +213,7 @@ var
 
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
-  
+
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
@@ -2327,13 +2327,13 @@ type
     // - may be used in Stream mode, or to initialize in RC4-drop[n] mode
     procedure Drop(Count: cardinal);
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceeded with an Init() call
+    // - each call to this method shall be preceded with an Init() call
     // - RC4 is a symmetrical algorithm: use this Encrypt() method
     // for both encryption and decryption of any buffer
     procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceeded with an Init() call
+    // - each call to this method shall be preceded with an Init() call
     // - RC4 is a symmetrical algorithm: use this EncryptBuffer() method
     // for both encryption and decryption of any buffer
     procedure EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
@@ -11716,5 +11716,5 @@ initialization
 
 finalization
   FinalizeUnit;
-  
+
 end.

@@ -29,7 +29,7 @@ uses
   mormot.core.unicode,
   mormot.core.text;
 
-  
+
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
 const
@@ -341,7 +341,7 @@ type
     Year: word;
     /// the Month value of this Date (1..12)
     Month: word;
-    /// which day of week this Date happend
+    /// which day of week this Date happened
     // - sunday is DayOfWeek 1, saturday is 7
     // - DayOfWeek field is not handled by its methods by default, but could be
     // filled on demand via ComputeDayOfWeek - making this record 64-bit long
@@ -1970,7 +1970,7 @@ begin
   while not TryEncodeDayOfWeekInMonth(aYear, Month, d, dow, result) do
   begin
     // if Day = 5 then try it and if needed decrement to find the last
-    // occurence of the day in this month
+    // Occurrence of the day in this month
     if d = 0 then
     begin
       TryEncodeDayOfWeekInMonth(aYear, Month, 1, 7, result);

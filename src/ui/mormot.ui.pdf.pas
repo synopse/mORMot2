@@ -726,7 +726,7 @@ type
     // - if NextLine is true, the first written PDF Text command is not Tj but '
     // - during the text process, corresponding TPdfTrueTypeFont properties are
     // updated (Unicode version created if necessary, indicate used glyphs for
-    // further Font properties writting to the PDF file content...)
+    // further Font properties writing to the PDF file content...)
     // - if the current font is not true Type, all Unicode characters are
     // drawn as '?'
     function AddToUnicodeHexText(const Text: PdfString; NextLine: boolean;
@@ -737,7 +737,7 @@ type
     // - if NextLine is true, the first written PDF Text command is not Tj but '
     // - during the text process, corresponding TPdfTrueTypeFont properties are
     // updated (Unicode version created if necessary, indicate used glyphs for
-    // further Font properties writting to the PDF file content...)
+    // further Font properties writing to the PDF file content...)
     // - if the current font is not true Type, all Unicode characters are
     // drawn as '?'
     function AddUnicodeHexText(PW: PWideChar; PWLen: integer; NextLine: boolean;

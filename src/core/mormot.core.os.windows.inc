@@ -2484,7 +2484,7 @@ begin
   if fFileName = '' then
     exit;
   // GetFileVersionInfo() modifies the filename parameter data while parsing
-  // -> copy the FileName into local tmp buffer to create a writeable copy
+  // -> copy the FileName into local tmp buffer to create a writable copy
   Size := GetFileVersionInfoSizeW(W32Copy(fFileName, tmp), Size2);
   if Size > 0 then
   begin
@@ -3742,7 +3742,7 @@ end;
 
 type
   EService = class(Exception);
-  
+
 constructor TServiceController.CreateNewService(const TargetComputer,
   DatabaseName, Name, DisplayName: RawUtf8; const Path: TFileName;
   const OrderGroup: RawUtf8; const Dependencies: RawUtf8;

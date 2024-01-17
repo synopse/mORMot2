@@ -1014,7 +1014,7 @@ begin
   end;
   sqlite3_check(aDB.DB, sqlite3.create_module_v2(aDB.DB, pointer(fModuleName),
     fModule, self, sqlite3InternalFreeModule)); // raise ESqlite3Exception on error
-  fDB := aDB; // mark successfull create_module() for sqlite3InternalFreeModule
+  fDB := aDB; // mark successful create_module() for sqlite3InternalFreeModule
 end;
 
 

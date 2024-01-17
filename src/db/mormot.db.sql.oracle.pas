@@ -75,7 +75,7 @@ type
     class function ExtractTnsName(const aServerName: RawUtf8): RawUtf8;
     /// determine if the SQL statement can be cached
     // - always returns false, to force server-side caching only on this driver
-    function IsCachable(P: PUtf8Char): boolean; override;
+    function IsCacheable(P: PUtf8Char): boolean; override;
     function SqlLimitClause(AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
@@ -168,7 +168,7 @@ type
     /// initialize a new SQL query statement for the given connection
     // - if UseCache=true, this overridden implementation will use server-side
     // Oracle statement cache - in this case, StatementCacheSize will define
-    // how many statements are to be cached - not that IsCachable() has been
+    // how many statements are to be cached - not that IsCacheable() has been
     // overriden to return false, so statement cache on client side is disabled
     // - the caller should free the instance after use
     function NewStatement: TSqlDBStatement; override;
@@ -371,7 +371,7 @@ begin
     result := copy(aServerName, i + 1, 100);
 end;
 
-function TSqlDBOracleConnectionProperties.IsCachable(P: PUtf8Char): boolean;
+function TSqlDBOracleConnectionProperties.IsCacheable(P: PUtf8Char): boolean;
 begin
   result := false; // no client-side cache, only server-side
 end;

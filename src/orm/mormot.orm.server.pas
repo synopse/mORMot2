@@ -223,7 +223,7 @@ type
     // of the framework
     function InternalUpdateEvent(aEvent: TOrmEvent; aTableIndex: integer; aID: TID;
       const aSentData: RawUtf8; aIsBlobFields: PFieldBits; aRec: TOrm): boolean; virtual;
-    /// this method is called internally after any successfull deletion to
+    /// this method is called internally after any successful deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
     // for database coherency, into 0

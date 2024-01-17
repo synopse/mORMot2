@@ -544,7 +544,7 @@ type
   // - proper threading expects the TSynLog.NotifyThreadEnded method to be called
   // when a thread is about to terminate, e.g. from TRest.EndCurrentThread
   // - by default, ptMergedInOneFile will indicate that all threads are logged
-  // in the same file, in occurence order
+  // in the same file, in occurrence order
   // - if set to ptOneFilePerThread, it will create one .log file per thread
   // - if set to ptIdentifiedInOneFile, a new column will be added for each
   // log row, with the corresponding ThreadID - LogView tool will be able to
@@ -840,13 +840,13 @@ type
     /// the internal in-memory buffer size, in bytes
     // - this is the number of bytes kept in memory before flushing to the hard
     // drive; you can call TSynLog.Flush method or set AutoFlushTimeOut > 0
-    // in order to force the writting to disk
+    // in order to force the writing to disk
     // - is set to 4096 by default (4 KB is the standard hard drive cluster size)
     property BufferSize: integer
       read fBufferSize write fBufferSize;
     /// define how thread will be identified during logging process
     // - by default, ptMergedInOneFile will indicate that all threads are logged
-    // in the same file, in occurence order (so multi-thread process on server
+    // in the same file, in occurrence order (so multi-thread process on server
     // side may be difficult to interpret)
     // - if RotateFileCount and RotateFileSizeKB/RotateFileDailyAtHour are set,
     // will be ignored (internal thread list shall be defined for one process)
@@ -1590,7 +1590,7 @@ type
     // - returns '' if supplied index is out of range
     // - if the text is not truly UTF-8 encoded, would use the current system
     // codepage to create a valid string
-    // - you may specify a text to replace all #9 characters occurences
+    // - you may specify a text to replace all #9 characters occurrences
     // - is used e.g. in TMainLogView.ListDrawCell
     function EventString(index: integer; const replaceTabs: RawUtf8 = '';
       maxutf8len: integer = 0; includeFirstColumns: boolean = false): string;
@@ -1609,7 +1609,7 @@ type
     /// returns all days of this log file
     // - only available for low-resolution timestamp, i.e. Freq=0
     procedure GetDays(out Days: TDateTimeDynArray);
-    /// returns the number of occurences of a given thread
+    /// returns the number of occurrences of a given thread
     function ThreadRows(ThreadID: integer): cardinal;
     /// retrieve the level of an event
     // - is calculated by Create() constructor
@@ -7920,6 +7920,6 @@ initialization
 
 finalization
   FinalizeUnit;
-  
+
 end.
 

@@ -1119,10 +1119,10 @@ type
     // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     // - a dynamic array of integers will be created in Results,
     // containing all ROWDID created for each BatchAdd call, 200 (=HTTP_SUCCESS)
-    // for all successfull BatchUpdate/BatchDelete, or 0 on error
+    // for all successful BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
-    // imply that all statements in the BATCH sequence were successfull),
+    // imply that all statements in the BATCH sequence were successful),
     // or boRollbackOnError should be set in TRestBatchOptions
     // - note that the caller shall still free the supplied Batch instance
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
@@ -1311,7 +1311,7 @@ type
     // - in aClient-Server environment with multiple Clients connected at the
     // same time, you should better use BATCH process, specifying a positive
     // AutomaticTransactionPerRow parameter to BatchStart()
-    // - this version retries a TranslationBegin() to be successfull within
+    // - this version retries a TranslationBegin() to be successful within
     // a supplied number of times
     // - will retry every 100 ms for "Retries" times (excluding the connection
     // time in this 100 ms time period
@@ -1380,10 +1380,10 @@ type
     // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     // - a dynamic array of integers will be created in Results,
     // containing all ROWDID created for each BatchAdd call, 200 (=HTTP_SUCCESS)
-    // for all successfull BatchUpdate/BatchDelete, or 0 on error
+    // for all successful BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
-    // imply that all statements in the BATCH sequence were successfull
+    // imply that all statements in the BATCH sequence were successful
     function BatchSend(var Results: TIDDynArray): integer; overload;
     /// abort a BATCH sequence started by BatchStart method
     // - in short, nothing is sent to the remote server, and current BATCH
@@ -1560,7 +1560,7 @@ type
     // TRestStorageExternal classes defined in mormot.orm.sql) could flush
     // the database content without proper notification
     procedure FlushInternalDBCache;
-    /// this method is called internally after any successfull deletion to
+    /// this method is called internally after any successful deletion to
     // ensure relational database coherency
     // - reset all matching TRecordReference properties in the database Model,
     // for database coherency, into 0
@@ -3854,7 +3854,7 @@ type
     function FieldNameByIndex(FieldIndex: integer): RawUtf8;
 
     /// opaque object used on the Server side to specify e.g. the DB connection
-    // - will define such a generic TObject, to avoid any unecessary type
+    // - will define such a generic TObject, to avoid any unnecessary type
     // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
     // a TSqlDBConnectionProperties instance in mormot.orm.sql.pas, or by
@@ -6156,7 +6156,7 @@ begin
       exit; // data field layout is not consistent: should never happen
     end;
   end;
-  result := true; // if we reached here, means successfull conversion from P^
+  result := true; // if we reached here, means successful conversion from P^
 end;
 
 function TOrmTableJson.UpdateFrom(const aJson: RawUtf8; var Refreshed: boolean;
