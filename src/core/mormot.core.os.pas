@@ -3412,7 +3412,8 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
   Recursive: boolean = false; TotalSize: PInt64 = nil): boolean;
 
 /// check if the directory is writable for the current user
-// - try to write a small file with a random name
+// - try to write and delete a void file with a random name
+// - on Windows, will try as 'xxx.exe' to trigger the weird UAC heuristic
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 type
@@ -7130,8 +7131,10 @@ begin
     exit; // the whole folder is read-only
   retry := 20;
   repeat
-    fn := Format('%s' + PathDelim + {$ifdef OSPOSIX} '.' + {$endif OSPOSIX}
-      '%x.test', [dir, Random32]);
+    fn := Format('%s' + PathDelim +
+      {$ifdef OSPOSIX} '.%x.test' // make the file "invisible"
+      {$else}          '%x.exe'   // try as .exe to trigger the UAC heuristic :(
+      {$endif OSPOSIX}, [dir, Random32]);
     if not FileExists(fn) then
       break;
     dec(retry); // never loop forever
