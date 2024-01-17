@@ -4977,7 +4977,10 @@ begin
     inc(B);
     case U^ of
       #0:
-        break; // reached end of URI (should not happen if L is accurate)
+        begin
+          dec(B); // reached end of URI (should not happen if L is accurate)
+          break;
+        end;
       '%':
         if (L <= 2) or
            not HexToChar(PAnsiChar(U + 1), B) then

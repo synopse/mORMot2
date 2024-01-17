@@ -4216,7 +4216,7 @@ end;
 
 constructor THttpLogger.Create;
 begin
-  inherited Create;
+  inherited Create;  // fSafe.Init
   fLineFeed := CRLF; // default operating-system dependent Line Feed
   fDefaultRotate := hlrAfter10MB;
   fDefaultRotateFiles := 9;
@@ -4716,7 +4716,7 @@ var
   fromgz: TUnixTime;
   tix: cardinal;
 begin
-  inherited Create;
+  inherited Create; // fSafe.Init
   fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
   fSaved := fTracked;
   fSuspendFile := aSuspendFile;

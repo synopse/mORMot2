@@ -5532,7 +5532,49 @@ var
   i: integer;
   s, t, d: RawUtf8;
   hf: TTextWriterHtmlFormat;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+
+  procedure DoOne(const value, expected: RawUtf8);
+  var
+    res: RawUtf8;
+  begin
+    w.CancelAll;
+    w.AddUrlNormalize(pointer(value), length(value));
+    w.SetText(res);
+    CheckEqual(res, expected);
+  end;
+
 begin
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    DoOne('', '');
+    DoOne('a', 'a');
+    DoOne('ab', 'ab');
+    DoOne('a%20b', 'a b');
+    DoOne('a% b', 'a% b');
+    DoOne('/', '/');
+    DoOne('//', '/');
+    DoOne('a/b', 'a/b');
+    DoOne('a//b', 'a/b');
+    DoOne('a///b', 'a/b');
+    DoOne('/ab', '/ab');
+    DoOne('//ab', '/ab');
+    DoOne('///ab', '/ab');
+    DoOne('ab/', 'ab/');
+    DoOne('ab//', 'ab/');
+    DoOne('ab///', 'ab/');
+    DoOne('a/b/', 'a/b/');
+    DoOne('/ab//', '/ab/');
+    DoOne('//ab///', '/ab/');
+    DoOne('ab'#0, 'ab');
+    DoOne('ab'#0'c', 'ab');
+    DoOne('/ab'#0'c', '/ab');
+    DoOne('/ab//'#0'c', '/ab/');
+    DoOne(#0'c', '');
+  finally
+    w.Free;
+  end;
   CheckEqual(UrlEncode(''), '');
   CheckEqual(UrlDecode(''), '');
   CheckEqual(UrlEncodeName(''), '');
