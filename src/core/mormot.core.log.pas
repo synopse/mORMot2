@@ -3121,7 +3121,7 @@ begin
     fDebugFile := aExeName;
   MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
-    if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
+    if not IsDirectoryWritable(ExtractFilePath(MabFile), [idwExcludeWinSys]) then
       // read/only exe folder -> store .mab in local non roaming user folder
       MabFile := IncludeTrailingPathDelimiter(GetSystemPath(spUserData)) +
                    ExtractFileName(Mabfile);
@@ -3926,7 +3926,7 @@ begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := Executable.ProgramFilePath; // use .exe path by default
-  if not IsDirectoryWritable(fDestinationPath) then
+  if not IsDirectoryWritable(fDestinationPath, [idwExcludeWinSys]) then
     fDestinationPath := GetSystemPath(spLog); // fallback to a writable folder
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;

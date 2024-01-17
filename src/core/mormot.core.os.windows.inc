@@ -2564,21 +2564,28 @@ const
     CSIDL_COMMON_DOCUMENTS, // spCommonDocuments C:\Users\Public\Documents
     CSIDL_PERSONAL,         // spUserDocuments   C:\Documents and Settings\<user>\My Documents
     0,                      // spTempFolder
-    CSIDL_LOCAL_APPDATA);   // spLog             C:\Users\<user>\AppData\Local
+    0);                     // spLog
   ENV: array[TSystemPath] of TFileName = (
     'ALLUSERSAPPDATA',      // spCommonData
     'LOCALAPPDATA',         // spUserData
     '',                     // spCommonDocuments
     '',                     // spUserDocuments
     'TEMP',                 // spTempFolder
-    'LOCALAPPDATA');        // spLog
+    '');                    // spLog
 var
   tmp: array[0..MAX_PATH] of char;
 begin
-  if (kind = spLog) and
-     IsDirectoryWritable(Executable.ProgramFilePath) then
-    result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
-  else if (CSIDL[kind] <> 0) and
+  if kind = spLog then
+  begin
+    // spLog needs a specific behavior
+    result := Executable.ProgramFilePath;
+    if not IsDirectoryWritable(result, [idwExcludeWinSys]) then
+      // fallback to 'C:\Users\<user>\AppData\Local\log'
+      result := GetSystemPath(spUserData);
+    result := result + 'log\';
+    exit;
+  end;
+  if (CSIDL[kind] <> 0) and
      DelayedProc(SHGetFolderPath, SHFolderDll, 'SHFolder.dll',
        'SHGetFolderPath' + _AW) and
      (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then

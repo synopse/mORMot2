@@ -4421,7 +4421,8 @@ begin
     raise EHttpLogger.CreateUtf8(
       'Impossible to set %.DestFolder once started', [self]);
   fDestFolder := EnsureDirectoryExists(aFolder, EHttpLogger);
-  if not IsDirectoryWritable(fDestFolder) then // better fail ASAP
+  if not IsDirectoryWritable(fDestFolder, [idwExcludeWinSys]) then
+    // better fail ASAP
     raise EHttpLogger.CreateUtf8('Not writable %.DestFolder = %', [self, aFolder]);
 end;
 

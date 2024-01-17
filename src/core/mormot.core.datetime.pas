@@ -1800,7 +1800,7 @@ begin
     GlobalLock;
     try
       LogToTextFileName := ChangeFileExt(Executable.ProgramFileName, '.log');
-      if not IsDirectoryWritable(Executable.ProgramFilePath) then
+      if not IsDirectoryWritable(Executable.ProgramFilePath, [idwExcludeWinSys]) then
         LogToTextFileName := GetSystemPath(spLog) + ExtractFileName(LogToTextFileName);
     finally
       GlobalUnLock;
