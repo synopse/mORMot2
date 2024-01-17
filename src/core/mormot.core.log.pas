@@ -3925,7 +3925,7 @@ constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
-  fDestinationPath := Executable.ProgramFilePath; // use .exe path
+  fDestinationPath := Executable.ProgramFilePath; // use .exe path by default
   if not IsDirectoryWritable(fDestinationPath) then
     fDestinationPath := GetSystemPath(spLog); // fallback to a writable folder
   fDefaultExtension := '.log';

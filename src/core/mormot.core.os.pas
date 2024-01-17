@@ -2009,6 +2009,10 @@ function IsUacVirtual(const Folder: TFileName): boolean;
 // true on Vista+ Win32 and false on Win64
 function IsUacVirtualizationEnabled: boolean;
 
+var
+  /// global flag to disable IsUacVirtual() check in IsDirectoryWritable()
+  IsDirectoryWritableAllowUacVirtual: boolean = false;
+
 /// retrieve the name and domain of a given SID
 // - returns stUndefined if the SID could not be resolved by LookupAccountSid()
 function LookupSid(sid: PSid; out name, domain: RawUtf8;
@@ -3425,7 +3429,8 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
 
 /// check if the directory is writable for the current user
 // - try to write and delete a void file with a random name
-// - on Windows, will try as 'xxx.exe' to trigger the weird UAC heuristic
+// - on Win32 Vista+, detects and rejects 'c:\windows' and 'c:\program files'
+// UAC virtual folders unless IsDirectoryWritableAllowUacVirtual global is true
 function IsDirectoryWritable(const Directory: TFileName): boolean;
 
 type
@@ -7139,13 +7144,18 @@ var
 begin
   dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
+  {$ifdef OSWINDOWS32}
+  if (not IsDirectoryWritableAllowUacVirtual) and
+     IsUacVirtual(dir) then
+    exit; // 'c:\windows' or 'c:\program files' with UAC virtualization enabled
+  {$endif OSWINDOWS32}
   if FileIsReadOnly(dir) then
     exit; // the whole folder is read-only
   retry := 20;
   repeat
     fn := Format('%s' + PathDelim +
       {$ifdef OSPOSIX} '.%x.test' // make the file "invisible"
-      {$else}          '%x.exe'   // try as .exe to trigger the UAC heuristic :(
+      {$else}          '%x.crt'   // try to trigger the UAC heuristic :(
       {$endif OSPOSIX}, [dir, Random32]);
     if not FileExists(fn) then
       break;
