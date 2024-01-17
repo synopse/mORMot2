@@ -2823,6 +2823,16 @@ function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   PreviousState: PTokenPrivileges; ReturnLength: PDWord): BOOL;
     stdcall; external advapi32;
 
+function IsSystemFolder(const Folder: TFileName): boolean;
+begin
+  if CompareText(copy(Folder, 2,  9), ':\windows') = 0 then
+    result := ord(Folder[11]) in [0, ord('\')]
+  else
+    result := (CompareText(copy(Folder, 2, 15), ':\program files') = 0) and
+              ((ord(Folder[17]) in [0, ord('\')]) or
+               (CompareText(copy(Folder, 17, 6), ' (x86)') = 0));
+end;
+
 {$ifdef CPU32}
 var
   IsUacEnabled: (iueUntested, iueDisabled, iueEnabled);
@@ -2841,10 +2851,11 @@ begin
       if OpenProcessToken(GetCurrentProcess, TOKEN_QUERY, token) then
       begin
         enabled := 1;
-        len := 0;
+        len := SizeOf(enabled);
         if GetTokenInformation(token, _TokenVirtualizationEnabled,
              @enabled, SizeOf(enabled), len) and
            (enabled = 0) then
+          // in practice, may return enabled=0 even if Virtualization is active
           IsUacEnabled := iueDisabled;
         CloseHandle(token);
       end;
@@ -2852,28 +2863,23 @@ begin
   result := IsUacEnabled = iueEnabled;
 end;
 
-function IsUacVirtual(const Folder: TFileName): boolean;
+function IsUacVirtualFolder(const Folder: TFileName): boolean;
 begin
   // note: IsUacVirtualizationEnabled seems to return false positives -> only OS
-  if OSVersion < wVista then
-    result := false // no UAC on Windows XP
-  else if CompareText(copy(Folder, 2,  9), ':\windows') = 0 then
-    result := ord(Folder[11]) in [0, ord('\')]
-  else
-    result := (CompareText(copy(Folder, 2, 15), ':\program files') = 0) and
-              ((ord(Folder[17]) in [0, ord('\')]) or
-               (CompareText(copy(Folder, 17, 6), ' (x86)') = 0))
+  result := (OSVersion >= wVista) and // no UAC on Windows XP
+            IsSystemFolder(Folder);
 end;
+
 {$else}
 
 function IsUacVirtualizationEnabled: boolean;
 begin
-  result := false; // never enabled on Win64
+  result := false; // never enabled for a Win64 process
 end;
 
-function IsUacVirtual(const Folder: TFileName): boolean;
+function IsUacVirtualFolder(const Folder: TFileName): boolean;
 begin
-  result := false; // UAC never enabled on Win64 -> just a regular folder
+  result := false; // never enabled for a Win64 process
 end;
 
 {$endif CPU32}
