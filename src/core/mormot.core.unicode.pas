@@ -1937,6 +1937,13 @@ function FindNameValue(P: PUtf8Char; UpperName: PAnsiChar): PUtf8Char; overload;
 function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
   var Value: RawUtf8; KeepNotFoundValue: boolean = false;
   UpperNameSeparator: AnsiChar = #0): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// search and returns a PUtf8Char value from its uppercased named entry
+// - as called when inlining FindNameValue()
+// - won't make any memory allocation, so could be fine for a quick lookup
+function FindNameValuePointer(NameValuePairs: PUtf8Char; UpperName: PAnsiChar;
+  out FoundLen: PtrInt; UpperNameSeparator: AnsiChar): PUtf8Char;
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
@@ -8171,13 +8178,13 @@ eof:    result := nil; // reached P^=#0 -> not found
   until false;
 end;
 
-function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
-  var Value: RawUtf8; KeepNotFoundValue: boolean; UpperNameSeparator: AnsiChar): boolean;
+function FindNameValuePointer(NameValuePairs: PUtf8Char; UpperName: PAnsiChar;
+  out FoundLen: PtrInt; UpperNameSeparator: AnsiChar): PUtf8Char;
 var
   P: PUtf8Char;
   L: PtrInt;
 begin
-  P := FindNameValue(pointer(NameValuePairs), UpperName);
+  P := FindNameValue(NameValuePairs, UpperName);
   if P <> nil then
     repeat
       if UpperNameSeparator <> #0 then
@@ -8192,17 +8199,34 @@ begin
         inc(L);
       while P[L - 1] = ' ' do  // trim right
         dec(L);
-      FastSetString(Value, P, L);
-      result := true;
-      exit;
+      FoundLen := L;
+      break;
     until false;
-  if not KeepNotFoundValue then
-    {$ifdef FPC}
-    FastAssignNew(Value);
-    {$else}
-    Value := '';
-    {$endif FPC}
-  result := false;
+  result := P;
+end;
+
+function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
+  var Value: RawUtf8; KeepNotFoundValue: boolean; UpperNameSeparator: AnsiChar): boolean;
+var
+  P: PUtf8Char;
+  L: PtrInt;
+begin
+  P := FindNameValuePointer(pointer(NameValuePairs), UpperName, L, UpperNameSeparator);
+  if P <> nil then
+  begin
+    FastSetString(Value, P, L);
+    result := true;
+  end
+  else
+  begin
+    if not KeepNotFoundValue then
+      {$ifdef FPC}
+      FastAssignNew(Value);
+      {$else}
+      Value := '';
+      {$endif FPC}
+    result := false;
+  end;
 end;
 
 function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
