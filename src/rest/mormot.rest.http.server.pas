@@ -821,6 +821,8 @@ begin
     include(hso, hsoNoXPoweredHeader);
   if rsoBan40xIP in fOptions then
     include(hso, hsoBan40xIP);
+  if rsoEnableLogging in fOptions then
+    include(hso, hsoEnableLogging);
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);

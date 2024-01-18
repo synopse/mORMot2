@@ -2605,6 +2605,7 @@ type
   // - rsoIncludeDateHeader will let all answers include a Date: ... HTTP header
   // - rsoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // is returned (but 401/403) - only implemented by socket servers for now
+  // - rsoEnableLogging enable an associated THttpServerGeneric.Logger instance
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoOnlyValidUtf8,
@@ -2616,7 +2617,8 @@ type
     rsoLogVerbose,
     rsoNoXPoweredHeader,
     rsoIncludeDateHeader,
-    rsoBan40xIP);
+    rsoBan40xIP,
+    rsoEnableLogging);
 
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;
