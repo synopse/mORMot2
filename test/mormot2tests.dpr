@@ -44,6 +44,7 @@ uses
   //mormot.db.rad.nexusdb,
   {$endif FPC}
   mormot.lib.openssl11,
+  mormot.crypt.x509,
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
