@@ -575,7 +575,7 @@ type
     Connection: THttpServerConnectionID;
     Flags: THttpServerRequestFlags;
     StatusCode: cardinal;
-    ElapsedMicroSec: Int64;
+    ElapsedMicroSec, Tix64: Int64;
     Received, Sent: QWord;
   end;
 
@@ -583,7 +583,7 @@ type
   // - main purpose is to apply post-response e.g. logging or real-time analysis
   // using THttpAfterResponse classes (e.g. THttpLogger or THttpAnalyzer)
   TOnHttpServerAfterResponse = procedure(
-    const Context: TOnHttpServerAfterResponseContext) of object;
+    var Context: TOnHttpServerAfterResponseContext) of object;
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client
@@ -1396,7 +1396,7 @@ type
     /// process the supplied request information
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(const Context: TOnHttpServerAfterResponseContext);  virtual; abstract;
+    procedure Append(var Context: TOnHttpServerAfterResponseContext); virtual; abstract;
     /// overriden Append() and OnIdle() methods will call this event
     // - so that you can cascade e.g. both THttpLogger and THttpAnalyzer
     property OnContinue: THttpAfterResponse
@@ -1588,7 +1588,7 @@ type
     /// append a request information to the destination log file
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
+    procedure Append(var Context: TOnHttpServerAfterResponseContext); override;
     /// retrieve the main parameters from another THttpLogger instance
     procedure CopyParams(Another: THttpLogger);
     /// customize the log line feed pattern
@@ -1840,7 +1840,7 @@ type
     /// append a request information to the internal counters
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
     // be applied directly as a THttpServerGeneric.OnAfterResponse callback
-    procedure Append(const Context: TOnHttpServerAfterResponseContext); override;
+    procedure Append(var Context: TOnHttpServerAfterResponseContext); override;
     /// retrieve the current state for a given period and scope
     // - consolidate hapMinute..hapYear values up to the requested Period
     // - this method is thread-safe
@@ -4486,7 +4486,7 @@ begin
   fUnknownPosLen := nil;
 end;
 
-procedure THttpLogger.Append(const Context: TOnHttpServerAfterResponseContext);
+procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n: integer;
   tix10: cardinal;
@@ -4504,7 +4504,9 @@ begin
   if fVariable = nil then // nothing to process
     exit;
   // retrieve the output stream for the expected .log file
-  tix10 := GetTickCount64 shr 10;
+  if Context.Tix64 = 0 then
+    Context.Tix64 := GetTickCount64;
+  tix10 := Context.Tix64 shr 10;
   wr := GetWriter(tix10, RawUtf8(Context.Host));
   if (wr = nil) or
      (wr.Stream = nil) then
@@ -5008,7 +5010,7 @@ begin
   result := true;
 end;
 
-procedure THttpAnalyzer.Append(const Context: TOnHttpServerAfterResponseContext);
+procedure THttpAnalyzer.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   tix, crc, i: cardinal;
   s: THttpAnalyzerScope;
@@ -5020,6 +5022,9 @@ begin
   // prepare the information to be merged
   if fTracked = [] then
     exit; // nothing to process here
+  if Context.Tix64 = 0 then
+    Context.Tix64 := GetTickCount64;
+  tix := Context.Tix64 div 1000;
   fModified := true; // for UpdateSuspendFile
   tix := GetTickCount64 div 1000;
   new.Count := 1;

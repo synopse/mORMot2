@@ -4304,6 +4304,7 @@ begin
         ctx.RemoteIP := pointer(req.RemoteIP);
         ctx.Flags := req.ConnectionFlags;
         ctx.StatusCode := req.RespStatus;
+        ctx.Tix64 := 0;
         ctx.Received := ClientSock.BytesIn;
         ctx.Sent := ClientSock.BytesOut;
         fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
@@ -7113,6 +7114,7 @@ begin
     ctx.ElapsedMicroSec := Elapsed;
     ctx.Received := Received;
     ctx.Sent := Sent;
+    ctx.Tix64 := 0;
     fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
     on E: Exception do // paranoid

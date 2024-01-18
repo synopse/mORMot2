@@ -3624,6 +3624,7 @@ begin
   ctx.StatusCode := fRespStatus;
   ctx.Received := fBytesRecv;
   ctx.Sent := fBytesSend;
+  ctx.Tix64 := 0;
   try
     fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
