@@ -1468,12 +1468,14 @@ type
 
 { ************ TRestRouter for efficient Radix Tree based URI Multiplexing }
 
-  /// context information, as cloned by TRestTreeNode.Split()
+  /// REST-specific context information, as stored in TRestTreeNode
   TRestTreeNodeData = record
     /// which kind of execution this node is about
     Node: TRestNode;
     /// the ORM/SOA TRestServer execution context
     Command: TRestServerUriContextCommand;
+    /// the static engine kind of this Table ORM class - set at runtime
+    TableStaticKind: TRestServerKind;
     /// the index of the associated method (16-bit is enough, -1 for none)
     // - for rn*Method*, in TRestServer.PublishedMethod[]
     // - for rnInterface*, in Service.InterfaceFactory.Methods[MethodIndex-4] or
@@ -1481,6 +1483,10 @@ type
     MethodIndex: {$ifdef CPU32} SmallInt {$else} integer {$endif};
     /// the properties of the ORM class in the server TOrmModel for rnTable*
     Table: TOrmModelProperties;
+    /// the main engine of this Table ORM class - set at runtime
+    TableMain: TRestOrm;
+    /// the static engine of this Table ORM class - set at runtime
+    TableStatic: TRestOrm;
     /// the ORM BLOB field definition for rnTableIDBlob
     Blob: TOrmPropInfoRttiRawBlob;
     /// the interface-based service for rnInterface
@@ -1492,7 +1498,7 @@ type
   protected
     function LookupParam(Ctxt: TObject; Pos: PUtf8Char; Len: integer): boolean; override;
   public
-    /// all context information, as cloned by Split()
+    /// REST-specific context information, as cloned by Split()
     Data: TRestTreeNodeData;
     /// overriden to support the additional Data fields
     function Split(const Text: RawUtf8): TRadixTreeNode; override;
@@ -5960,7 +5966,7 @@ function TRestRouter.Lookup(Ctxt: TRestServerUriContext): TRestTreeNode;
 var
   p: PUtf8Char;
   t: TOrmModelProperties;
-  orm: TRestOrmServer;
+  main, static: TRestOrm;
   i: PtrInt;
 begin
   // find the matching node in the URI Radix Tree
@@ -5978,7 +5984,7 @@ begin
   result := pointer(TRestTreeNode(fTree[Ctxt.Method].Root).Lookup(p, Ctxt));
   if result = nil then
     exit;
-  // save the execution node information into Ctxt
+  // copy the execution node information into Ctxt
   Ctxt.fNode := result.Data.Node;
   Ctxt.fCommand := result.Data.Command;
   t := result.Data.Table;
@@ -5990,11 +5996,20 @@ begin
     Ctxt.fTableModelProps := t;
     if result.Data.Node in [rnTableID, rnTableIDBlob, rnTableIDMethod] then
       SetQWord(Ctxt.fRouterParam, PQWord(@Ctxt.fTableID)^);
-    orm := pointer(fOwner.fOrmInstance);
-    Ctxt.fTableEngine := orm;
-    Ctxt.fStaticOrm := orm.GetStaticTableIndex(t.TableIndex, Ctxt.fStaticKind);
-    if Ctxt.fStaticOrm <> nil then
-      Ctxt.fTableEngine := Ctxt.fStaticOrm;
+    if result.Data.TableMain = nil then
+    begin
+      // retrieve once the low-level ORM engine information of this table
+      main := pointer(fOwner.fOrmInstance);
+      static := TRestOrmServer(main).GetStaticTableIndex(
+        Ctxt.fTableIndex, result.Data.TableStaticKind);
+      if static <> nil then
+        main := static;
+      result.Data.TableStatic := static;
+      result.Data.TableMain := main; // should be set last
+    end;
+    Ctxt.fStaticKind  := result.Data.TableStaticKind; // from node cached data
+    Ctxt.fTableEngine := result.Data.TableMain;
+    Ctxt.fStaticOrm   := result.Data.TableStatic;
   end;
   case result.Data.Node of
     rnTableIDBlob:
@@ -6007,7 +6022,7 @@ begin
       begin
         // method-based service request
         i := result.Data.MethodIndex;
-        Ctxt.fMethodIndex := i;
+        Ctxt.fMethodIndex  := i;
         Ctxt.fServerMethod := @fOwner.fPublishedMethod[i];
         // for rnMethodPath: Ctxt.fUriPath was set in LookupParam
       end;
