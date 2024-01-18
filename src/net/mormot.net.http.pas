@@ -1544,7 +1544,7 @@ type
     fWriterSingle: TTextDateWriter; // from CreateWithWriter/CreateWithFile
     fWriterHostSafe: TLightLock;
     fWriterHost: THttpLoggerWriterDynArray; // from Create + DefineHost
-    fWriterHostLast: TTextDateWriter;
+    fWriterHostLast, fWriterHostMain: TTextDateWriter;
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
@@ -1556,6 +1556,7 @@ type
     procedure SetFormat(const aFormat: RawUtf8);
     procedure SetDestFolder(const aFolder: TFileName);
     function GetPerHostFileName(const aHost: RawUtf8): TFileName; virtual;
+    function CreateMainWriter: TTextDateWriter;
     function GetWriter(Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
   public
     /// initialize this multi-host logging instance
@@ -1718,7 +1719,7 @@ type
     // - for hapMinute, this field is computed using a hashtable of IPs,
     // so should be considered as a somewhat good approximation of the reality
     // - for periods longer than hapMinute, this field is the mean of numbers
-    // of unique IPs for the number of measures within this period
+    // of unique IPs per minute for the number of measures within this period
     // - it should always considered as a relative number, not an absolute number
     UniqueIP: cardinal;
     /// number of bytes received from the client for this counter requests
@@ -4130,7 +4131,7 @@ begin
         if Trunc(NowUtc) >= fRotateDate then
         begin
           SetRotateDate; // always prepare next rotation date
-          needrotate := TextLength <> 0; // something to rotate
+          needrotate := size <> 0; // something to rotate
         end;
       end;
     hlrAfter1MB:
@@ -4318,17 +4319,32 @@ begin
     result := FormatString('%%.log', [result, LowerCase(aHost)]);
 end;
 
+function THttpLogger.CreateMainWriter: TTextDateWriter;
+begin
+  result := THttpLoggerWriter.Create(
+    self, '', fDefaultRotate, fDefaultRotateFiles);
+  ObjArrayAdd(fWriterHost, result);
+  fWriterHostMain := result;
+end;
+
 function THttpLogger.GetWriter(
   Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
 var
   n: integer;
   p: ^THttpLoggerWriter;
 begin
-  // quickly retrieve the corresponding instance
+  // should be called outside fSafe.Lock
   result := fWriterSingle;
   if result <> nil then
     exit;
-  if Host <> '' then
+  // quickly retrieve the previous instance if the same Host was used
+  if Host = '' then
+  begin
+    result := fWriterHostMain; // very common case of no Host
+    if result <> nil then
+      exit;
+  end
+  else
   begin
     result := fWriterHostLast; // pointer-sized variables are atomic
     if (result <> nil) and     // naive but efficient cache
@@ -4344,9 +4360,7 @@ begin
   if p = nil then
     // no previous DefineHost() call: set WriterHost[0] = access.log instance
     try
-      result := THttpLoggerWriter.Create(
-                  self, '', fDefaultRotate, fDefaultRotateFiles);
-      ObjArrayAdd(fWriterHost, result);
+      result := CreateMainWriter;
     finally
       fWriterHostSafe.UnLock;
     end
@@ -4390,8 +4404,7 @@ begin
   try
     if fWriterHost = nil then
       // first call: we need to set WriterHost[0] = access.log
-      ObjArrayAdd(fWriterHost, THttpLoggerWriter.Create(
-             self, '', fDefaultRotate, fDefaultRotateFiles))
+      CreateMainWriter
     else
       // search if we need to update a previous DefineHost()
       for i := 1 to length(fWriterHost) - 1 do
@@ -4807,7 +4820,7 @@ begin
           fSafe.Lock;
           try
             fUniqueIPDepth := value;
-            Finalize(fUniqueIP);  // release up to 120KB with max value=65536
+            Finalize(fUniqueIP);  // release up to 128KB with max value=65536
             value := value shr 3; // from bits to bytes
             if value <> 0 then
               for s := low(fUniqueIP) to high(fUniqueIP) do
@@ -4881,7 +4894,7 @@ var
   ps, ns, al: PHttpAnalyzerState;
   prev, next: PHttpAnalyzerStates;
 begin
-  // called once per second
+  // called once per second, consolidate once per minute
   fLastConsolidate := tixsec;
   last := pred(hapMinute);
   if now = 0 then
@@ -4931,7 +4944,7 @@ begin
              (s in fSaved) then
             begin
               // persistence is done in the background from fToSave by DoSave
-              if savenow = 0 then // retrieved once for the whole method
+              if savenow = 0 then // computed once for the whole method
                 savenow := DateTimeToUnixTime(now) - UNIXTIME_MINIMAL;
               if fToSave.Count = length(fToSave.State) then
                 SetLength(fToSave.State, NextGrow(fToSave.Count));
@@ -4961,7 +4974,7 @@ begin
     else
       break; // actual computation is done only once per minute
   if last >= hapMinute then
-    ComputeConsolidateTime(last, 0);
+    ComputeConsolidateTime(last, now);
 end;
 
 procedure THttpAnalyzer.DoSave;
