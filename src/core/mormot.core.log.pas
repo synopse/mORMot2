@@ -4023,18 +4023,18 @@ end;
 
 function TSynLogFamily.GetArchiveDestPath(age: TDateTime): TFileName;
 var
-  Y, M, D: word;
-  tmp: array[0..7] of AnsiChar;
+  dt: TSynSystemTime;
+  tmp: string[7];
 begin
   // returns 'ArchivePath\log\YYYYMM\'
   result := EnsureDirectoryExists(ArchivePath + 'log');
   if result = '' then
     exit; // impossible to create the archive folder
-  DecodeDate(age, Y, M, D);
-  YearToPChar(Y, @tmp[0]);
-  PWord(@tmp[4])^ := TwoDigitLookupW[M];
-  PWord(@tmp[6])^ := ord(PathDelim);
-  result := result + Ansi7ToString(tmp, 7);
+  dt.FromDate(age); // faster than RTL DecodeDate()
+  tmp[0] := #6;
+  YearToPChar(dt.Year, @tmp[1]);
+  PWord(@tmp[5])^ := TwoDigitLookupW[dt.Month];
+  result := MakePath([result, tmp], {enddelim=}true);
 end;
 
 destructor TSynLogFamily.Destroy;
