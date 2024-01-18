@@ -4112,13 +4112,15 @@ end;
 
 procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
 var
+  size: QWord;
   needrotate: boolean;
 begin
   // quickly check if we need to rotate this .log file
   if (fStream = nil) or
      not fRotating.TryLock then
     exit; // avoid race condition (paranoid)
-  needrotate := fTotalFileSize >= 100 shl 20; // force always above 100MB
+  size := TextLength;
+  needrotate := size >= 100 shl 20; // force always above 100MB
   case fRotate of
     hlrDaily,
     hlrWeekly:
@@ -4132,11 +4134,11 @@ begin
         end;
       end;
     hlrAfter1MB:
-      needrotate := fTotalFileSize >= 1 shl 20;
+      needrotate := size >= 1 shl 20;
     hlrAfter10MB:
-      needrotate := fTotalFileSize >= 10 shl 20;
+      needrotate := size >= 10 shl 20;
     hlrAfter32MB:
-      needrotate := fTotalFileSize >= 32 shl 20;
+      needrotate := size >= 32 shl 20;
   end; // hlrAfter100MB + hlrUndefined = above 100MB
   if needrotate then
   try
@@ -4204,12 +4206,16 @@ end;
 
 constructor THttpLoggerWriter.Create(aOwner: THttpLogger; const aHost: RawUtf8;
   aRotate: THttpLoggerRotate; aRotateFiles: integer);
+var
+  s: TStream;
 begin
   fHost := aHost;
   fOwner := aOwner;
   fRotate := aRotate;
   fFileName := fOwner.GetPerHostFileName(aHost);
-  inherited Create(TFileStreamEx.CreateWrite(fFileName), 65536);
+  s := TFileStreamEx.CreateWrite(fFileName);
+  s.Seek(0, soEnd); // append
+  inherited Create(s, 65536);
   fCustomOptions := [twoNoWriteToStreamException,
                      twoFlushToStreamNoAutoResize,
                      twoStreamIsOwned];
@@ -5408,7 +5414,7 @@ begin
   begin
     case p^.Period of // OnSave() should be in hapMinute..hapMonth range
       hapMinute:
-        ; // not indexed
+        ; // no need to be indexed
       hapCurrent,
       hapYear,
       hapAll: // paranoid
