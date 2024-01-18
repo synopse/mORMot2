@@ -3614,8 +3614,8 @@ begin
   ctx.Method := pointer(fHttp.CommandMethod);
   ctx.Host := pointer(fHttp.Host);
   ctx.Url := pointer(fHttp.CommandUri);
-  ctx.User := nil;
-  if hsrAuthorized in fRequestFlags then // from THttpServerSocketGeneric.Authorization
+  ctx.User := nil; // from THttpServerSocketGeneric.Authorization()
+  if hsrAuthorized in fRequestFlags then
     ctx.User := pointer(fHttp.BearerToken);
   ctx.Referer := pointer(fHttp.Referer);
   ctx.UserAgent := pointer(fHttp.UserAgent);
