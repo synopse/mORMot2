@@ -4488,11 +4488,11 @@ end;
 
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
-  n: integer;
-  tix10: cardinal;
-  l: PtrInt;
+  n, urllen: integer;
+  tix10, crc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
+  now: TSynSystemTime;
   wr: TTextDateWriter;
 const
   SCHEME: array[boolean] of string[7]  = ('http', 'https');
@@ -4511,6 +4511,24 @@ begin
   if (wr = nil) or
      (wr.Stream = nil) then
     exit;
+  // pre-compute CPU intensive values outside of fSafe.Lock
+  urllen := 0;
+  if (fVariables * [hlvDocument_Uri, hlvUri] <> []) and
+     (Context.Url <> nil) then
+  begin
+    urllen := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
+    if urllen < 0 then
+      urllen := length(RawUtf8(Context.Url));
+  end;
+  if fVariables * [hlvTime_Iso8601, hlvTime_Local, hlvTime_Http] <> [] then
+    // dates are all in UTC/GMT as it should on any server
+    FromGlobalTime(now, {local=}false, Context.Tix64);
+  crc := 0;
+  if hlvRequest_Hash in fVariables then
+    crc := crc32c(crc32c(crc32c(byte(Context.Flags),
+      Context.Host,   length(RawUtf8(Context.Host))),
+      Context.Method, length(RawUtf8(Context.Method))),
+      Context.Url,    length(RawUtf8(Context.Url)));
   // very efficient log generation with no transient memory allocation
   v := pointer(fVariable);
   n := length(fVariable);
@@ -4543,13 +4561,7 @@ begin
             wr.AddShorter('upgrade');
         hlvDocument_Uri,
         hlvUri:
-          if Context.Url <> nil then
-          begin
-            l := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
-            if l < 0 then
-              l := length(RawUtf8(Context.Url));
-            wr.AddUrlNameNormalize(Context.Url, l); // URL decode + // normalize
-          end;
+          wr.AddUrlNameNormalize(Context.Url, urllen); // URL decode + trim //
         hlvElapsed:
           wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
         hlvElapsedUSec:
@@ -4603,10 +4615,7 @@ begin
             wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
         hlvRequest_Hash:
-            wr.AddUHex(crc32c(crc32c(crc32c(byte(Context.Flags),
-              Context.Host, length(RawUtf8(Context.Host))),
-              Context.Method, length(RawUtf8(Context.Method))),
-              Context.Url, length(RawUtf8(Context.Url))));
+          wr.AddUHex(crc);
         hlvRequest_Length:
           wr.AddQ(Context.Received);
         hlvRequest_Method:
@@ -4627,13 +4636,12 @@ begin
           wr.AddQ(UnixTimeUtc);
         hlvTime_EpochMSec:
           wr.AddQ(UnixMSTimeUtcFast);
-        // dates are all in UTC/GMT as it should on any safe server process
         hlvTime_Iso8601:
-          wr.AddCurrentIsoDateTime({local=}false, {ms=}false, 'T', 'Z');
+          now.AddIsoDateTime(wr, {ms=}false, 'T', 'Z');
         hlvTime_Local:
-          wr.AddCurrentNcsaLogTime({local=}false, '+0000');
+          now.AddNcsaText(wr, '+0000');
         hlvTime_Http:
-          wr.AddCurrentHttpTime({local=}false, 'GMT');
+          now.AddHttpDate(wr, 'GMT');
       end;
       inc(v);
       dec(n);
@@ -4982,16 +4990,16 @@ begin
   if new.UniqueIP = 0 then // hash bit index
     exit; // no valid RemoteIP, or UniqueIPDepth is 0
   p := pointer(fUniqueIP[s]);
-  if GetBitPtr(p, new.UniqueIP) then // this IP was already included
+  if GetBitPtr(p, new.UniqueIP) then // this IP was already marked
     exit;
   inc(cur^.UniqueIP);         // first time observed in this scope
   SetBitPtr(p, new.UniqueIP); // mark the bit in the hash table
 end;
 
-function ToScope(Text: PUtf8Char; out Scope: THttpAnalyzerScope): boolean;
+function ToScope(Text: PCardinal; out Scope: THttpAnalyzerScope): boolean;
 begin
   result := false;
-  case PCardinal(Text)^ of // case-sensitive test in occurrence order
+  case Text^ of // case-sensitive test in occurrence order
     ord('G') + ord('E') shl 8 + ord('T') shl 16:
       Scope := hasGet;
     ord('P') + ord('O') shl 8 + ord('S') shl 16 + ord('T') shl 24:
@@ -5012,67 +5020,76 @@ end;
 
 procedure THttpAnalyzer.Append(var Context: TOnHttpServerAfterResponseContext);
 var
-  tix, crc, i: cardinal;
-  s: THttpAnalyzerScope;
+  tix, crc: cardinal;
+  met, mob, bot, cod: THttpAnalyzerScope;
   new: THttpAnalyzerState;
 begin
   // optionally merge calls
   if Assigned(fOnContinue) then
     fOnContinue.Append(Context);
-  // prepare the information to be merged
+  // pre-compute CPU intensive scopes outside of fSafe.Lock
   if fTracked = [] then
     exit; // nothing to process here
   if Context.Tix64 = 0 then
     Context.Tix64 := GetTickCount64;
   tix := Context.Tix64 div 1000;
   fModified := true; // for UpdateSuspendFile
-  tix := GetTickCount64 div 1000;
+  if (Context.Method = nil) or
+     (fTracked * [hasGet .. hasOptions] = []) or
+     not ToScope(Context.Method, met) or
+     not (met in fTracked) then
+    met := hasAny;
+  mob := hasAny;
+  bot := hasAny;
+  if Context.UserAgent <> nil then
+  begin
+    if hasMobile in fTracked then
+      // browser/OS detection using the User-Agent is a very tricky context
+      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
+      // we only detect mobile devices, which seems fair enough
+      if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
+        mob := hasMobile;
+    if hasBot in fTracked then
+      // bots detection is not easier, but our naive patterns seem good enough
+      if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
+        bot := hasBot;
+  end;
+  cod := hasAny;
+  if fTracked * [has1xx .. has5xx] <> [] then
+  begin
+    cod := THttpAnalyzerScope((Context.StatusCode div 100) + (ord(has1xx) - 1));
+    if (cod < has1xx) or
+       (cod > has5xx) or
+       not (cod in fTracked) then
+      cod := hasAny;
+  end;
   new.Count := 1;
   new.Time := Context.ElapsedMicroSec; // Time unit is microsec for hapCurrent
   new.UniqueIP := 0;
   if (Context.RemoteIP <> nil) and
      (fUniqueIPDepth <> 0) then
-  begin
+  begin // may use AesNiHash32
     crc := DefaultHasher(0, Context.RemoteIP, length(RawUtf8(Context.RemoteIP)));
     crc := crc and (fUniqueIPDepth - 1); // power-of-two modulo
     if crc = 0 then
       crc := 1;
-    new.UniqueIP := crc; // store bit index
+    new.UniqueIP := crc; // store hash bit index
   end;
   new.Read := Context.Received;
   new.Write := Context.Sent;
+  // integrate request information to the current state
   fSafe.Lock;
   try
-    // integrate request information to the current state
+    // add new counters to the tracked scopes
     DoAppend(new, hasAny);
-    if (Context.Method <> nil) and
-       (fTracked * [hasGet .. hasOptions] <> []) and
-       ToScope(Context.Method, s) and
-       (s in fTracked) then
-      DoAppend(new, s);
-    if fTracked * [has1xx .. has5xx] <> [] then
-    begin
-      i := (Context.StatusCode div 100) - 1; // 1xx..5xx -> 0..4
-      if i < 5 then
-      begin
-        s := THttpAnalyzerScope(byte(has1xx) + i);
-        if s in fTracked then
-          DoAppend(new, s);
-      end;
-    end;
-    if Context.UserAgent <> nil then
-    begin
-      if hasMobile in fTracked then
-        // browser/OS detection using the User-Agent is a very tricky context
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
-        // we only detect mobile devices, which seems fair enough
-        if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
-          DoAppend(new, hasMobile);
-      if hasBot in fTracked then
-        // bots detection is not easier, but our naive patterns seem good enough
-        if IsHttpUserAgentBot(RawUtf8(Context.UserAgent)) then
-          DoAppend(new, hasBot);
-    end;
+    if met <> hasAny then
+      DoAppend(new, met);
+    if cod <> hasAny then
+      DoAppend(new, cod);
+    if mob <> hasAny then
+      DoAppend(new, mob);
+    if bot <> hasAny then
+      DoAppend(new, bot);
     if (hsrHttps in Context.Flags) and
        (hasHttps in fTracked) then
       DoAppend(new, hasHttps);
