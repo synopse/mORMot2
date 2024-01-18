@@ -1739,6 +1739,9 @@ type
     /// substract all field values from another counter state
     procedure Sub(const Another: THttpAnalyzerState);
       {$ifdef HASINLINE} inline; {$endif}
+    /// compute the substraction between two counter state
+    procedure Diff(const Total, Substract: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the processing time as MicroSeconds
     // - computed from the 32-bit Time field, with the Period unit
     function TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
@@ -4708,6 +4711,15 @@ begin
   dec(UniqueIP, Another.UniqueIP);
   dec(Read,     Another.Read);
   dec(Write,    Another.Write);
+end;
+
+procedure THttpAnalyzerState.Diff(const Total, Substract: THttpAnalyzerState);
+begin
+  Count := Total.Count - Substract.Count;
+  Time  := Total.Time - Substract.Time;
+  Read  := Total.Read - Substract.Read;
+  Write := Total.Write - Substract.Write;
+  UniqueIP := (Total.UniqueIP + Substract.UniqueIP) shr 1; // mean
 end;
 
 function THttpAnalyzerState.TimeMicroSec(Period: THttpAnalyzerPeriod): QWord;
