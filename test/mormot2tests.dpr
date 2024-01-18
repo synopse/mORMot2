@@ -92,6 +92,7 @@ begin
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
     Param('ntp', 'a NTP/SNTP #server name/IP to use instead of time.google.com');
+    Option('nontp', 'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
     OpenSslDefaultCrypto := Utf8ToString(
@@ -111,6 +112,7 @@ begin
   {$ifdef USE_OPENSSL}
   // warning: OpenSSL on Windows requires to download the right libraries
   RegisterOpenSsl;
+  RegisterX509; // enable the additional CryptPublicKey[] algorithms for X.509
   if OpenSslIsAvailable then
     FormatShort(' and OpenSSL %', [OpenSslVersionHexa], ssl);
   {$endif USE_OPENSSL}
@@ -123,8 +125,8 @@ begin
     FormatShort('cp%', [Unicode_CodePage], cp);
   end;
   GetMemoryInfo(mem, false);
-  CustomVersions := Format(#13#10#13#10'%s [%s %s %x]'#13#10 +
-    '    %s'#13#10'    on %s'#13#10'Using mORMot %s%s'#13#10'    %s',
+  CustomVersions := Format(CRLF + CRLF + '%s [%s %s %x]'+ CRLF +
+    '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s%s'+ CRLF + '    %s',
     [OSVersionText, cp, KBNoSpace(mem.memtotal), OSVersionInt32, CpuInfoText,
      BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION, ssl, sqlite3.Version]);
   result := inherited Run;
@@ -132,20 +134,17 @@ end;
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  //
-  AddCase([
-    //TTestCoreBase,
-    //TTestCoreProcess
-  ]);
   //exit;
   AddCase([
-  //
-    TTestCoreBase, TTestCoreProcess,
+    TTestCoreBase,
+    TTestCoreProcess,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}
-    TTestCoreCrypto, TTestCoreEcc,
-    TTestCoreCompression, TNetworkProtocols
+    TTestCoreCrypto,
+    TTestCoreEcc,
+    TTestCoreCompression,
+    TNetworkProtocols
   ]);
 end;
 
@@ -153,10 +152,14 @@ procedure TIntegrationTests.ORM;
 begin
   //exit;
   AddCase([
-    //
-    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteFileMemoryMap,
-    TTestSqliteMemory, TTestExternalDatabase,
-    TTestClientServerAccess, TTestMultiThreadProcess
+    TTestOrmCore,
+    TTestSqliteFile,
+    TTestSqliteFileWAL,
+    TTestSqliteFileMemoryMap,
+    TTestSqliteMemory,
+    TTestExternalDatabase,
+    TTestClientServerAccess,
+    TTestMultiThreadProcess
   ]);
 end;
 
@@ -168,7 +171,6 @@ begin
   {$endif LIBQUICKJSSTATIC}
   //exit;
   AddCase([
-    //
     TTestServiceOrientedArchitecture,
     TTestBidirectionalRemoteConnection
   ]);
