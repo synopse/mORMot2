@@ -4120,7 +4120,7 @@ begin
   if (fStream = nil) or
      not fRotating.TryLock then
     exit; // avoid race condition (paranoid)
-  size := TextLength;
+  size := fTotalFileSize + PendingBytes;
   needrotate := size >= 100 shl 20; // force always above 100MB
   case fRotate of
     hlrDaily,
@@ -4184,6 +4184,7 @@ begin
     end;
     // create a new .log file with the same file name
     fStream := TFileStreamEx.Create(fFileName, fmCreate or fmShareDenyWrite);
+    fInitialStreamPosition := 0; // brand new file
     CancelAll;
   finally
     fOwner.fSafe.UnLock;
@@ -4213,6 +4214,7 @@ begin
   fHost := aHost;
   fOwner := aOwner;
   fRotate := aRotate;
+  fRotateFiles := aRotateFiles;
   fFileName := fOwner.GetPerHostFileName(aHost);
   s := TFileStreamEx.CreateWrite(fFileName);
   s.Seek(0, soEnd); // append
