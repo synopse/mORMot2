@@ -540,6 +540,10 @@ type
 
   {$A+}
 
+/// internal low-level function to retrieve the cached current decoded date/time
+procedure FromGlobalTime(LocalTime: boolean; tix64: Int64;
+  out NewTime: TSynSystemTime);
+
 /// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
@@ -1813,20 +1817,23 @@ end;
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 var
-  // GlobalTime[LocalTime] cache protected using Rcu128()
-  GlobalTime: array[boolean] of record
+  // GlobalTime[LocalTime] thread-safe cache
+  GlobalTime: array[boolean] of packed record
+    safe: TLightLock; // better than RCU
     time: TSystemTime;
-    clock: PtrInt; // avoid slower API call with 8-16ms loss of precision
+    clock: cardinal;  // avoid slower API call with 8-16ms loss of precision
+    _pad: array[1 .. 64 - SizeOf(TLightLock) - SizeOf(TSystemTime) - 4] of byte;
   end;
 
-procedure FromGlobalTime(LocalTime: boolean; out NewTime: TSynSystemTime);
+procedure FromGlobalTime(LocalTime: boolean; tix64: Int64;
+  out NewTime: TSynSystemTime);
 var
-  tix: PtrInt;
+  tix: cardinal;
   newtimesys: TSystemTime absolute NewTime;
 begin
   with GlobalTime[LocalTime] do
   begin
-    tix := GetTickCount64 shr 4;
+    tix := tix64 shr 4;
     if clock <> tix then // recompute every 16 ms
     begin
       clock := tix;
@@ -1835,16 +1842,23 @@ begin
         GetLocalTime(newtimesys)
       else
         GetSystemTime(newtimesys);
-      Rcu128(newtimesys, time);
+      {$ifdef OSPOSIX}
+      // two TSystemTime fields are inverted in FPC datih.inc :(
+      tix := newtimesys.DayOfWeek;
+      NewTime.Day := newtimesys.Day;
+      NewTime.DayOfWeek := tix;
+      {$endif OSPOSIX}
+      safe.Lock;
+      time := newtimesys;
+      safe.UnLock;
     end
     else
-      Rcu128(time, NewTime);
+    begin
+      safe.Lock;
+      newtimesys := time;
+      safe.UnLock;
+    end;
   end;
-  {$ifdef OSPOSIX} // two TSystemTime fields are inverted in FPC datih.inc :(
-  tix := newtimesys.DayOfWeek;
-  NewTime.Day := newtimesys.Day;
-  NewTime.DayOfWeek := tix;
-  {$endif OSPOSIX}
 end;
 
 
@@ -1892,7 +1906,7 @@ procedure TSynDate.FromNow(localtime: boolean);
 var
   dt: TSynSystemTime;
 begin
-  FromGlobalTime(localtime, dt);
+  FromGlobalTime(localtime, GetTickCount64, dt);
   self := PSynDate(@dt)^; // 4 first fields of TSynSystemTime do match
 end;
 
@@ -2048,17 +2062,17 @@ end;
 
 procedure TSynSystemTime.FromNowUtc;
 begin
-  FromGlobalTime(false, self);
+  FromGlobalTime({local=}false, GetTickCount64, self);
 end;
 
 procedure TSynSystemTime.FromNowLocal;
 begin
-  FromGlobalTime(true, self);
+  FromGlobalTime({local=}true, GetTickCount64, self);
 end;
 
 procedure TSynSystemTime.FromNow(localtime: boolean);
 begin
-  FromGlobalTime(localtime, self);
+  FromGlobalTime(localtime, GetTickCount64, self);
 end;
 
 procedure TSynSystemTime.FromDateTime(const dt: TDateTime);
@@ -2911,7 +2925,7 @@ procedure TTimeLogBits.FromUtcTime;
 var
   now: TSynSystemTime;
 begin
-  FromGlobalTime(false, now);
+  FromGlobalTime(false, GetTickCount64, now);
   From(@now);
 end;
 
@@ -2919,7 +2933,7 @@ procedure TTimeLogBits.FromNow;
 var
   now: TSynSystemTime;
 begin
-  FromGlobalTime(true, now);
+  FromGlobalTime(true, GetTickCount64, now);
   From(@now);
 end;
 
@@ -3507,6 +3521,7 @@ procedure InitializeUnit;
 begin
   // as expected by ParseMonth() to call FindShortStringListExact()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
+  assert(SizeOf(GlobalTime) = 128);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
   _Iso8601ToDateTime := Iso8601ToDateTime;
