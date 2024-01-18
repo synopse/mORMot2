@@ -5387,6 +5387,8 @@ begin
 end;
 
 procedure TSynLog.LogCurrentTime;
+var
+  time: TSynSystemTime;
 begin
   if fFamily.HighResolutionTimestamp then
   begin
@@ -5396,7 +5398,8 @@ begin
   end
   else
   begin
-    fWriter.AddCurrentLogTime(fFamily.LocalTimestamp);
+    time.FromNow(fFamily.LocalTimestamp);
+    time.AddLogTime(fWriter);
     if fFamily.ZonedTimestamp then
       fWriter.Add('Z');
   end;

@@ -1907,10 +1907,14 @@ begin
       if IsDirectoryWritable('/var/log') then
          // may not be writable by not root on POSIX
         result := '/var/log/'
-      else if IsDirectoryWritable(Executable.ProgramFilePath) then
-        result := Executable.ProgramFilePath
       else
-        result := EnsureDirectoryExists(GetSystemPath(spUserData) + 'log');
+      begin
+        if IsDirectoryWritable(Executable.ProgramFilePath) then
+          result := Executable.ProgramFilePath
+        else
+          result := GetSystemPath(spUserData);
+        result := EnsureDirectoryExists(result + 'log');
+      end;
     spUserData:
       begin
         //  ~/.cache/appname
