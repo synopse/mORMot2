@@ -1726,7 +1726,7 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
   const Separator: shortstring = #13#10);
 
 /// append some path parts into a single file name with proper path delimiters
-// - set EndWithDelim=true if you want to create e.g. full a folder name
+// - set EndWithDelim=true if you want to create e.g. a full folder name
 // - similar to os.path.join() in the Python RTL
 // - e.g. on Windows: MakePath(['abc', 1, 'toto.json']) = 'abc\1\toto.json'
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;

@@ -1677,9 +1677,9 @@ type
   /// the kind of counters covered by THttpAnalyzer / THttpMetrics
   THttpAnalyzerScopes = set of THttpAnalyzerScope;
 
-  /// possible time periods used for THttpAnalyzer data consolidation
-  // - hapCurrent, hapYear and hapAll are only available in THttpAnalyzer context
-  // - TOnHttpAnalyzerSave and THttpMetrics handle hapMinute..hapMonth only
+  /// possible time periods used for THttpAnalyzer / THttpMetrics data
+  // - hapCurrent, hapYear and hapAll are specific to THttpAnalyzer context
+  // - TOnHttpAnalyzerSave and THttpMetrics store hapMinute..hapMonth only
   THttpAnalyzerPeriod = (
     hapCurrent,
     hapMinute,
@@ -1813,7 +1813,7 @@ type
     fState: THttpAnalyzerConsolidated;
     fUniqueIPDepth: cardinal;
     fUniqueIP: array[THttpAnalyzerScope] of TByteDynArray;
-    fToSave: record
+    fToSave: record // protected by the main fSafe
       Count: integer;
       State: THttpAnalyzerToSaveDynArray;
     end;

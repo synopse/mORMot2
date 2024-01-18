@@ -2959,8 +2959,8 @@ function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
 /// returns the current UTC time
-// - use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
-// or GetSystemTimeAsFileTime under Windows
+// - wrap UnixMSTimeUtcFast, so use e.g. clock_gettime(CLOCK_REALTIME_COARSE)
+// under Linux, or GetSystemTimeAsFileTime under Windows
 function NowUtc: TDateTime;
 
 /// returns the current UTC date/time as a second-based c-encoded time
