@@ -251,6 +251,7 @@ type
     fModel: TOrmModel;
     fClient: TRestClientDB;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal = 700);
+    procedure TestHttp(withlog: boolean);
     procedure ClientTest(aRouting: TRestServerUriContextClass;
       aAsJsonObject: boolean; aRunInOtherThread: boolean = false;
       aOptions: TInterfaceMethodOptions = []);
@@ -311,6 +312,8 @@ type
     procedure ClientSideJsonRPC;
     /// test REStful mode using HTTP client/server communication
     procedure TestOverHTTP;
+    /// test REStful mode using HTTP client/server communication and logs
+    procedure TestOverHTTPWithLogs;
     /// test the security features
     procedure Security;
     /// test interface stubbing / mocking
@@ -1679,23 +1682,42 @@ begin
 end;
 
 procedure TTestServiceOrientedArchitecture.TestOverHTTP;
+begin
+  TestHttp({withlog=}false);
+end;
+
+procedure TTestServiceOrientedArchitecture.TestOverHTTPWithLogs;
+begin
+  TestHttp({withlog=}true);
+end;
+
+procedure TTestServiceOrientedArchitecture.TestHttp(withlog: boolean);
 var
   HTTPServer: TRestHttpServer;
   HTTPClient: TRestHttpClient;
   Inst: TTestServiceInstances;
   Json: RawUtf8;
   i: integer;
+  opt: TRestHttpServerOptions;
   URI: TRestServerUriDynArray;
 const
   SERVICES: array[0..4] of RawUtf8 = (
-    'Calculator', 'ComplexCalculator',
-    'TestUser', 'TestGroup', 'TestPerThread');
+    'Calculator',
+    'ComplexCalculator',
+    'TestUser',
+    'TestGroup',
+    'TestPerThread');
 begin
   fClient.Server.ServicesRouting := TRestServerRoutingRest; // back to default
   GlobalInterfaceTestMode := itmHttp;
+  opt := HTTPSERVER_DEFAULT_OPTIONS;
+  if withlog then
+    include(opt, rsoEnableLogging);
   HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
-    HTTP_DEFAULT_MODE, 8, secNone);
+    HTTP_DEFAULT_MODE, 8, secNone, '', '', opt);
   try
+    if withlog then
+      HTTPServer.HttpServer.Logger.DefaultRotate := hlrAfter1MB;
     FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
     HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fModel);
     try
