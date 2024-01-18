@@ -1717,10 +1717,8 @@ type
     // - only populated if THttpAnalyzer.UniqueIPDepth is set to a hash bitsize
     // - for hapMinute, this field is computed using a hashtable of IPs,
     // so should be considered as a somewhat good approximation of the reality
-    // - for periods longer than hapMinute, this field is the sum of numbers
-    // of unique IPs per minute for all nested minutes, so is relevant to compare
-    // values in the same period only (e.g. divided by the number of collected
-    // minutes to get the average unique IP count per minute)
+    // - for periods longer than hapMinute, this field is the mean of numbers
+    // of unique IPs for the number of measures within this period
     // - it should always considered as a relative number, not an absolute number
     UniqueIP: cardinal;
     /// number of bytes received from the client for this counter requests
@@ -1825,7 +1823,7 @@ type
     fConsolidateNextTime: array[hapMinute .. hapYear] of TDateTime;
     procedure SetUniqueIPDepth(value: cardinal);
     procedure ComputeConsolidateTime(last: THttpAnalyzerPeriod; ref: TDateTime);
-    procedure Consolidate(tixsec: cardinal);
+    procedure Consolidate(tixsec: cardinal; now: TDateTime = 0);
     procedure DoAppend(const new: THttpAnalyzerState; s: THttpAnalyzerScope);
     procedure DoSave;
   public
@@ -4869,23 +4867,24 @@ begin
   fConsolidateNextTime[hapYear] := t.ToDateTime;
 end;
 
-procedure THttpAnalyzer.Consolidate(tixsec: cardinal);
+procedure THttpAnalyzer.Consolidate(tixsec: cardinal; now: TDateTime);
 var
   p, last: THttpAnalyzerPeriod;
   s: THttpAnalyzerScope;
   savenow: cardinal;
-  now: TDateTime;
   ps, ns, al: PHttpAnalyzerState;
   prev, next: PHttpAnalyzerStates;
 begin
   // called once per second
   fLastConsolidate := tixsec;
   last := pred(hapMinute);
-  now := NowUtc;
+  if now = 0 then
+    now := NowUtc;
   savenow := 0;
   prev := @fState[hapCurrent];
   next := prev;
   al := pointer(@fState[hapAll]);
+  // p in hapMinute..hapYear range
   for p := low(fConsolidateNextTime) to high(fConsolidateNextTime) do
     if now >= fConsolidateNextTime[p] then
     begin
@@ -4909,26 +4908,35 @@ begin
             hapMonth:
               ps^.Time := ps^.Time div 1000; // hapMonth/hapYear in sec
           end;
+          if ps^.UniqueIP <> 0 then
+            case p of // compute the mean within each period interval
+              hapHour:
+                ps^.UniqueIP := ps^.UniqueIP div 60;
+              hapDay:
+                ps^.UniqueIP := ps^.UniqueIP div 24;
+              hapMonth:
+                ps^.UniqueIP := ps^.UniqueIP div
+                  DaysInMonth(fConsolidateNextTime[p] - 1);
+            end;
           ns^.Add(ps^);
           // persist previous level before cleaning ps^
           if Assigned(fOnSave) and
              (p < hapYear) and  // OnSave() called in hapMinute..hapMonth range
              (s in fSaved) then
-            with fToSave do
             begin
-              // persistence is done in the background from fToSave.State[]
-              if savenow = 0 then // lock once for the whole method
+              // persistence is done in the background from fToSave by DoSave
+              if savenow = 0 then // retrieved once for the whole method
                 savenow := DateTimeToUnixTime(now) - UNIXTIME_MINIMAL;
-              if Count = length(State) then
-                SetLength(State, NextGrow(Count));
-              with State[Count] do
+              if fToSave.Count = length(fToSave.State) then
+                SetLength(fToSave.State, NextGrow(fToSave.Count));
+              with fToSave.State[fToSave.Count] do
               begin
                 Date := savenow;   // as UnixTimeMinimalUtc
                 Period := p; // store previous level = hapMinute..hapMonth
                 Scope := s;
                 State.From(ps^);
               end;
-              inc(Count);
+              inc(fToSave.Count);
             end;
           // reset previous level for a new period
           if (al = nil) and
@@ -5079,7 +5087,7 @@ begin
   new.Count := 1;
   new.Time := Context.ElapsedMicroSec; // Time unit is microsec for hapCurrent
   new.UniqueIP := 0;
-  if (Context.RemoteIP <> nil) and
+  if (Context.RemoteIP <> nil) and // unique IP counting
      (fUniqueIPDepth <> 0) then
   begin // may use AesNiHash32
     crc := DefaultHasher(0, Context.RemoteIP, length(RawUtf8(Context.RemoteIP)));
