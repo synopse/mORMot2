@@ -438,10 +438,13 @@ type
     function EncodeForTimeChange(const aYear: word): TDateTime;
     /// fill fields with the current UTC time, using a 8-16ms thread-safe cache
     procedure FromNowUtc;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill fields with the current UTC or local time, using a 8-16ms thread-safe cache
     procedure FromNow(localtime: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill fields from the given value - but not DayOfWeek
     procedure FromDateTime(const dt: TDateTime);
     /// fill Year/Month/Day fields from the given value - but not DayOfWeek
@@ -541,8 +544,8 @@ type
   {$A+}
 
 /// internal low-level function to retrieve the cached current decoded date/time
-procedure FromGlobalTime(LocalTime: boolean; tix64: Int64;
-  out NewTime: TSynSystemTime);
+procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
+  tix64: Int64 = 0);
 
 /// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
@@ -1825,15 +1828,16 @@ var
     _pad: array[1 .. 64 - SizeOf(TLightLock) - SizeOf(TSystemTime) - 4] of byte;
   end;
 
-procedure FromGlobalTime(LocalTime: boolean; tix64: Int64;
-  out NewTime: TSynSystemTime);
+procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
+  tix64: Int64);
 var
   tix: cardinal;
   newtimesys: TSystemTime absolute NewTime;
 begin
+  if tix64 = 0 then
+    tix64 := GetTickCount64;
+  tix := tix64 shr 4;
   with GlobalTime[LocalTime] do
-  begin
-    tix := tix64 shr 4;
     if clock <> tix then // recompute every 16 ms
     begin
       clock := tix;
@@ -1858,7 +1862,6 @@ begin
       newtimesys := time;
       safe.UnLock;
     end;
-  end;
 end;
 
 
@@ -1906,7 +1909,7 @@ procedure TSynDate.FromNow(localtime: boolean);
 var
   dt: TSynSystemTime;
 begin
-  FromGlobalTime(localtime, GetTickCount64, dt);
+  FromGlobalTime(dt, localtime);
   self := PSynDate(@dt)^; // 4 first fields of TSynSystemTime do match
 end;
 
@@ -2062,17 +2065,17 @@ end;
 
 procedure TSynSystemTime.FromNowUtc;
 begin
-  FromGlobalTime({local=}false, GetTickCount64, self);
+  FromGlobalTime(self, {local=}false);
 end;
 
 procedure TSynSystemTime.FromNowLocal;
 begin
-  FromGlobalTime({local=}true, GetTickCount64, self);
+  FromGlobalTime(self, {local=}true);
 end;
 
 procedure TSynSystemTime.FromNow(localtime: boolean);
 begin
-  FromGlobalTime(localtime, GetTickCount64, self);
+  FromGlobalTime(self, localtime);
 end;
 
 procedure TSynSystemTime.FromDateTime(const dt: TDateTime);
@@ -2925,7 +2928,7 @@ procedure TTimeLogBits.FromUtcTime;
 var
   now: TSynSystemTime;
 begin
-  FromGlobalTime(false, GetTickCount64, now);
+  FromGlobalTime(now, {local=}false);
   From(@now);
 end;
 
@@ -2933,7 +2936,7 @@ procedure TTimeLogBits.FromNow;
 var
   now: TSynSystemTime;
 begin
-  FromGlobalTime(true, GetTickCount64, now);
+  FromGlobalTime(now, {local=}true);
   From(@now);
 end;
 

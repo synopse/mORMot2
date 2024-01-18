@@ -623,7 +623,7 @@ begin
     inc(TempMonth, 3);
   result.Month := TempMonth;
   result.Year := YYear + (JulianDN * 100);
-  // initialize fake dayOfWeek - as used by FromGlobalTime Rcu128
+  // initialize fake dayOfWeek - as used by FromGlobalTime()
   result.DayOfWeek := 0;
 end;
 
