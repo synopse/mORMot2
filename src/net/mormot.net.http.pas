@@ -2296,40 +2296,41 @@ begin
   // we used https://github.com/monperrus/crawler-user-agents as starting reference
   result := false;
   url := PosEx('//', UserAgent);
-  if url = 0 then
-    exit; // a browser usually has no http://... reference within
-  i := PosEx('.com/', UserAgent, url);
+  if url = 0 then // a browser usually has no http://... reference within
+    exit;
+  i := PosEx('.com/', UserAgent, url); // start searching after http:// pattern
   if i = 0 then
     i := PosEx('.org/', UserAgent, url);
-  if i <> 0 then
-     case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
-       // Googlebot/2.1 (+http://www.google.com/bot.html)
-       ord('b') + ord('o') shl 8 + ord('t') shl 16,
-       // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
-       ord('b') + ord('i') shl 8 + ord('n') shl 16,
-       // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
-       ord('h') + ord('e') shl 8 + ord('l') shl 16,
-       // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
-       ord('m') + ord('s') shl 8 + ord('n') shl 16,
-       // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
-       ord('a') + ord('b') shl 8 + ord('o') shl 16,
-       // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
-       // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
-       ord('s') + ord('e') shl 8 + ord('a') shl 16,
-       // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
-       ord('d') + ord('u') shl 8 + ord('c') shl 16,
-       // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
-       ord('g') + ord('o') shl 8 + ord('/') shl 16,
-       // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
-       ord('r') + ord('o') shl 8 + ord('b') shl 16:
-         result := true;
-     else
-       case PCardinal(@PByteArray(UserAgent)[i - 4])^ and $00ffffff of
-         // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
-         ord('b') + ord('o') shl 8 + ord('t') shl 16:
-           result := true;
-       end;
-     end;
+  if i = 0 then
+    exit;
+  case PCardinal(@PByteArray(UserAgent)[i + 4])^ and $00ffffff of
+    // Googlebot/2.1 (+http://www.google.com/bot.html)
+    ord('b') + ord('o') shl 8 + ord('t') shl 16,
+    // Mozilla/5.0 (compatible; adidxbot/2.0;  http://www.bing.com/bingbot.htm)
+    ord('b') + ord('i') shl 8 + ord('n') shl 16,
+    // Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)
+    ord('h') + ord('e') shl 8 + ord('l') shl 16,
+    // adidxbot/1.1 (+http://search.msn.com/msnbot.htm)
+    ord('m') + ord('s') shl 8 + ord('n') shl 16,
+    // Speedy Spider (http://www.entireweb.com/about/search_tech/speedy_spider/
+    ord('a') + ord('b') shl 8 + ord('o') shl 16,
+    // Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
+    // Mozilla/5.0 (compatible; coccoc/1.0; +http://help.coccoc.com/searchengine)
+    ord('s') + ord('e') shl 8 + ord('a') shl 16,
+    // DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)
+    ord('d') + ord('u') shl 8 + ord('c') shl 16,
+    // Mozilla/5.0 (compatible; Applebot/0.3; +http://www.apple.com/go/applebot
+    ord('g') + ord('o') shl 8 + ord('/') shl 16,
+    // Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)
+    ord('r') + ord('o') shl 8 + ord('b') shl 16:
+      result := true;
+  else
+    case PCardinal(@PByteArray(UserAgent)[i - 4])^ and $00ffffff of
+      // serpstatbot/1.0 (advanced backlink tracking bot; http://serpstatbot.com/;)
+      ord('b') + ord('o') shl 8 + ord('t') shl 16:
+        result := true;
+    end;
+  end;
 end;
 
 function ByPriority(const A, B): integer;
