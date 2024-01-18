@@ -554,7 +554,10 @@ function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean
 function IsLeapYear(Year: cardinal): boolean;
 
 /// compute how many days there are in a given month
-function DaysInMonth(Year, Month: cardinal): cardinal;
+function DaysInMonth(Year, Month: cardinal): cardinal; overload;
+
+/// compute how many days there are in the month of a given date
+function DaysInMonth(Date: TDateTime): cardinal; overload;
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -1917,7 +1920,7 @@ procedure TSynDate.FromDate(date: TDate);
 var
   dt: TSynSystemTime;
 begin
-  dt.FromDate(date); // faster than DecodeDate
+  dt.FromDate(date); // faster than RTL DecodeDate()
   self := PSynDate(@dt)^;
 end;
 
@@ -1987,6 +1990,14 @@ end;
 function DaysInMonth(Year, Month: cardinal): cardinal;
 begin
   result := MonthDays[IsLeapYear(Year)][Month];
+end;
+
+function DaysInMonth(Date: TDateTime): cardinal;
+var
+  dt: TSynSystemTime;
+begin
+  dt.FromDate(Date); // faster than RTL DecodeDate()
+  result := dt.DaysInMonth;
 end;
 
 
