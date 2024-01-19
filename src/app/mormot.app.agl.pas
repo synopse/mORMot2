@@ -32,6 +32,7 @@ uses
   mormot.core.json,
   mormot.core.data,
   mormot.core.log,
+  mormot.core.zip,
   mormot.net.http,
   mormot.net.client,
   mormot.app.console,
@@ -47,6 +48,7 @@ type
   /// define one TSynAngelizeService action
   // - depending on the context, as "method:param" pair
   TSynAngelizeAction = type RawUtf8;
+
   /// define one or several TSynAngelizeService action(s)
   // - stored as a JSON array in the settings
   TSynAngelizeActions = array of TSynAngelizeAction;
@@ -58,9 +60,12 @@ type
   // - soReplaceEnv let "StartEnv" values fully replace the existing environment
   // - soWinJobCloseChildren will setup a Windows Job to close any child
   // process(es) when the created process quits - not set by default
+  // - soRedirectLogRotateCompress will rotate redirected console output files
+  // using .gz compression instead of plain copy
   TStartOptions = set of (
     soReplaceEnv,
-    soWinJobCloseChildren);
+    soWinJobCloseChildren,
+    soRedirectLogRotateCompress);
 
   /// used to process a "start:exename" command in the background
   TSynAngelizeRunner = class(TThreadAbstract)
@@ -679,16 +684,22 @@ begin
   for i := n - 1 downto 1 do
   begin
     fn[i - 1] := fRedirectFileName + '.' + IntToStr(i);
+    if soRedirectLogRotateCompress in fService.StartOptions then
+      fn[i - 1] := fn[i - 1] + '.gz';
     if (old = 0) and
        FileExists(fn[i - 1]) then
       old := i;
   end;
   if old = n - 1 then
-    DeleteFile(fn[old - 1]);            // delete e.g. 'xxx.9'
+    DeleteFile(fn[old - 1]);      // delete e.g. 'xxx.9'
   for i := n - 2 downto 1 do
-    RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
+    RenameFile(fn[i - 1], fn[i]); // e.g. 'xxx.8' -> 'xxx.9'
   FreeAndNil(fRedirect);
-  RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
+  if soRedirectLogRotateCompress in fService.StartOptions then
+    GZFile(fRedirectFileName, fn[0], 1)   // 'xxx' -> 'xxx.1.gz' (libdeflate)
+  else
+    RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
+  DeleteFile(fRedirectFileName);
   fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
 end;
 
