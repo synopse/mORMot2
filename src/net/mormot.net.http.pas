@@ -1520,14 +1520,15 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     Rotating: TLightLock;
+    FileName: TFileName;
     Trigger: THttpRotaterTrigger;
     Files: integer;
     NextTix10: cardinal;
     TriggerDate: integer; // = next Trunc(NowUtc)
-    FileName: TFileName;
-    OnRotate: procedure(Event: THttpRotaterEvent) of object;
+    OnRotate: procedure(Event: THttpRotaterEvent) of object; // call the owner
+    procedure Setup(aTrigger: THttpRotaterTrigger; aFiles: integer);
     procedure TryRotate(Tix10: cardinal; Size: QWord);
-    procedure SetRotateDate(dt: TDateTime);
+    procedure PrepareRotateDate(dt: TDateTime);
     procedure DoRotate;
   end;
 
@@ -1918,37 +1919,58 @@ type
       read fState[hapAll, hasAny].Time;
   end;
 
-  /// abstract parent class used to persist THttpAnalyzer information in files
+  /// abstract parent class used to persist THttpAnalyzer information into files
+  // - with optional output file rotation/compression (disabled by default)
   THttpAnalyzerPersistAbstract = class(TSynPersistent)
   protected
-    fFileName: TFileName;
+    fSafe: TOSLightLock;
+    fRotate: THttpRotater;
+    procedure OnRotate(Event: THttpRotaterEvent);
+    procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
+      virtual; abstract; // to be overriden
   public
-    /// intitialize this persistence instance
+    /// initialize this persistence instance
     constructor Create(const aFileName: TFileName); reintroduce; virtual;
+    /// finalize this persistence instance
+    destructor Destroy; override;
+    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
+    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+    /// enable/disable optional output file rotation and compression
+    // - rotation and .gz compression is done in the same folder as FileName
+    procedure SetRotation(aTrigger: THttpRotaterTrigger; aFiles: integer);
   published
-    /// the current persistent file name
+    /// the current output file name
     property FileName: TFileName
-      read fFileName;
+      read fRotate.FileName;
+    /// how optional rotation is triggered
+    // - as defined by SetRotation()
+    property Rotate: THttpRotaterTrigger
+      read fRotate.Trigger;
+    /// how many rotated files are kept on disk
+    // - as defined by SetRotation()
+    property RotateFiles: integer
+      read fRotate.Files;
   end;
 
   /// class allowing to persist THttpAnalyzer information into a CSV file
   // - output will have Date,Period,Scope,Count,Time,Read,Write columns
   THttpAnalyzerPersistCsv = class(THttpAnalyzerPersistAbstract)
-  public
-    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
-    // - will persist the state items as CSV rows
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  protected
+    // will persist the state items as CSV rows
+    procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
+      override;
   end;
 
   /// class allowing to persist THttpAnalyzer information into a JSON file
   // - format will be a JSON array of THttpAnalyzerToSave JSON objects as
   // $ {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
   // with "p" and "s" fields being ord(THttpAnalyzerPeriod/THttpAnalyzerScope)
+  // - we use single-letter field names to reduce the JSON output size
   THttpAnalyzerPersistJson = class(THttpAnalyzerPersistAbstract)
-  public
-    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
-    // - will persist the state items as JSON objects
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  protected
+    // will persist the state items as JSON objects
+    procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
+      override;
   end;
 
   /// class allowing to persist THttpAnalyzer information into a binary file
@@ -1957,9 +1979,10 @@ type
   // - is likely to be persisted in hapMinute resolution up to one month (28MB)
   // - to be further aggregated and searched by THttpMetrics.AddFromBinary()
   THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
-  public
-    /// this is the main callback of persistence, matching THttpAnalyser.OnSave
-    procedure OnSave(const State: THttpAnalyzerToSaveDynArray);
+  protected
+    // will persist the state items as flat raw binary
+    procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
+      override;
   end;
 
   /// metadata as decoded by THttpMetrics.LoadHeader() class function
@@ -4128,7 +4151,7 @@ end;
 
 { THttpRotater }
 
-procedure THttpRotater.SetRotateDate(dt: TDateTime);
+procedure THttpRotater.PrepareRotateDate(dt: TDateTime);
 var
   day: integer;
 begin
@@ -4153,8 +4176,8 @@ begin
   // quickly check if we need to rotate this (.log) file
   if (Trigger = hrtUndefined) or
      not Assigned(OnRotate) or
-     not Rotating.TryLock then
-    exit; // avoid race condition (paranoid)
+     not Rotating.TryLock then // on race condition: try rotate later
+    exit;
   needrotate := Size >= 100 shl 20; // always rotate above 100MB
   case Trigger of
     hrtDaily,
@@ -4165,8 +4188,8 @@ begin
         dt := NowUtc;
         if Trunc(dt) >= TriggerDate then
         begin
-          SetRotateDate(dt); // always prepare next rotation date
-          needrotate := Size <> 0; // something to rotate
+          PrepareRotateDate(dt);
+          needrotate := Size <> 0; // if something to rotate: no void .gz
         end;
       end;
     hrtAfter1MB:
@@ -4232,6 +4255,18 @@ begin
     end;
 end;
 
+procedure THttpRotater.Setup(aTrigger: THttpRotaterTrigger; aFiles: integer);
+begin
+  Rotating.Lock;
+  try
+    Trigger := aTrigger;
+    Files := aFiles;
+    PrepareRotateDate(0);
+  finally
+    Rotating.UnLock;
+  end;
+end;
+
 
 { THttpLoggerWriter }
 
@@ -4278,17 +4313,15 @@ var
 begin
   fHost := aHost;
   fOwner := aOwner;
-  fRotate.Trigger := aRotate;
-  fRotate.Files := aRotateFiles;
   fRotate.OnRotate := OnRotate;
   fRotate.FileName := fOwner.GetPerHostFileName(aHost);
+  fRotate.Setup(aRotate, aRotateFiles);
   s := TFileStreamEx.CreateWrite(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
   fCustomOptions := [twoNoWriteToStreamException,
                      twoFlushToStreamNoAutoResize,
                      twoStreamIsOwned];
-  fRotate.SetRotateDate(0);
 end;
 
 destructor THttpLoggerWriter.Destroy;
@@ -4477,11 +4510,13 @@ begin
         w := fWriterHost[i];
         if IdemPropNameU(w.Host, h) then
         begin
-          if aRotateFiles >= 0 then
-            w.fRotate.Files := aRotateFiles;
-          if aRotate <> hrtUndefined then
-            w.fRotate.Trigger := aRotate;
-          w.fRotate.SetRotateDate(0);
+          // keep existing value if not overriden
+          if aRotate = hrtUndefined then
+            aRotate := w.fRotate.Trigger;
+          if aRotateFiles < 0 then
+            aRotateFiles := w.fRotate.Files;
+          // upgrade the parameters
+          w.fRotate.Setup(aRotate, aRotateFiles);
           exit;
         end;
       end;
@@ -5280,10 +5315,64 @@ end;
 
 { THttpAnalyzerPersistAbstract }
 
+procedure THttpAnalyzerPersistAbstract.OnRotate(Event: THttpRotaterEvent);
+begin
+  case Event of
+    hreLock:
+      fSafe.Lock;
+    hreUnLock:
+      fSafe.UnLock;
+    // no need of hreOpenFile/hreCloseFile because the file doesn't stay open
+  end;
+end;
+
 constructor THttpAnalyzerPersistAbstract.Create(const aFileName: TFileName);
 begin
+  fSafe.Init;
   inherited Create;
-  fFileName := ExpandFileName(aFileName);
+  fRotate.FileName := ExpandFileName(aFileName);
+  fRotate.OnRotate := OnRotate;
+  // keep hrtUndefined = no rotation by default
+end;
+
+destructor THttpAnalyzerPersistAbstract.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+procedure THttpAnalyzerPersistAbstract.OnSave(
+  const State: THttpAnalyzerToSaveDynArray);
+var
+  f: TStream;
+  size: Int64;
+begin
+  if (State <> nil) and
+     (FileName <> '') then
+  try
+    fSafe.Lock;
+    try
+      f := TFileStreamEx.CreateWrite(FileName);
+      try
+        DoSave(State, f);
+        size := f.Seek(0, soCurrent);
+      finally
+        f.Free; // close the file once done
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+    if fRotate.Trigger <> hrtUndefined then
+      fRotate.TryRotate(GetTickCount64 shr 10, size); // outside of the lock
+  except
+    fRotate.FileName := ''; // ignore any error in the callback, but don't retry
+  end;
+end;
+
+procedure THttpAnalyzerPersistAbstract.SetRotation(
+  aTrigger: THttpRotaterTrigger; aFiles: integer);
+begin
+  fRotate.Setup(aTrigger, aFiles);
 end;
 
 
@@ -5296,152 +5385,115 @@ const
   _PERIOD: array[THttpAnalyzerPeriod] of string[3] = (
     ',?,', ',m,', ',h,', ',D,', ',M,', ',Y,', ',*,');
 
-procedure THttpAnalyzerPersistCsv.OnSave(
-  const State: THttpAnalyzerToSaveDynArray);
+procedure THttpAnalyzerPersistCsv.DoSave(
+  const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
 var
   n: integer;
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
-  f: TStream;
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
   if _SCOPE[hasAny] = '' then
     GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope), @_SCOPE);
-  if (State <> nil) and
-     (fFileName <> '') then
+  w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
-    f := TFileStreamEx.CreateWrite(fFileName);
-    try
-      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
-      try
-        if f.Seek(0, soEnd) = 0 then // append or write header
-          w.AddShort('Date,Period,Scope,Count,Time,Read,Write'#13#10);
-        n := length(State);
-        p := pointer(State);
-        repeat
-          t.FromDateTime(p^.DateTime);
-          t.Second := 0; // seconds part is irrelevant
-          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
-            t.AddIsoDate(w) // time part is irrelevant
-          else
-            t.AddIsoDateTime(w, {ms=}false, {first=}' ');
-          w.AddShorter(_PERIOD[p^.Period]);
-          w.AddString(_SCOPE[p^.Scope]);
-          w.Add(',');
-          w.AddQ(p^.State.Count);
-          w.Add(',');
-          w.AddQ(p^.State.Time);
-          w.Add(',');
-          w.AddQ(p^.State.Read);
-          w.Add(',');
-          w.AddQ(p^.State.Write);
-          w.AddCR;
-          inc(p);
-          dec(n);
-        until n = 0;
-        w.FlushFinal;
-      finally
-        w.Free;
-      end;
-    finally
-      f.Free;
-    end;
-  except
-    fFileName := ''; // ignore any write error in the callback, but don't retry
+    if Dest.Seek(0, soEnd) = 0 then // append or write header
+      w.AddShort('Date,Period,Scope,Count,Time,Read,Write'#13#10);
+    n := length(State);
+    p := pointer(State);
+    repeat
+      t.FromDateTime(p^.DateTime);
+      t.Second := 0; // seconds part is irrelevant
+      if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+        t.AddIsoDate(w) // time part is irrelevant
+      else
+        t.AddIsoDateTime(w, {ms=}false, {first=}' ');
+      w.AddShorter(_PERIOD[p^.Period]);
+      w.AddString(_SCOPE[p^.Scope]);
+      w.Add(',');
+      w.AddQ(p^.State.Count);
+      w.Add(',');
+      w.AddQ(p^.State.Time);
+      w.Add(',');
+      w.AddQ(p^.State.Read);
+      w.Add(',');
+      w.AddQ(p^.State.Write);
+      w.AddCR;
+      inc(p);
+      dec(n);
+    until n = 0;
+    w.FlushFinal;
+  finally
+    w.Free;
   end;
 end;
 
 
 { THttpAnalyzerPersistJson }
 
-procedure THttpAnalyzerPersistJson.OnSave(
-  const State: THttpAnalyzerToSaveDynArray);
+procedure THttpAnalyzerPersistJson.DoSave(
+  const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
 var
   n: integer;
   existing: Int64;
   p: PHttpAnalyzerToSave;
   t: TSynSystemTime;
-  f: TStream;
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
   // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
-  if (State <> nil) and
-     (fFileName <> '') then
+  existing := Dest.Seek(0, soEnd);
+  if existing <> 0 then
+    Dest.Seek(existing - 1, soBeginning); // rewind ending ']'
+  w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
-    f := TFileStreamEx.CreateWrite(fFileName);
-    try
-      existing := f.Seek(0, soEnd);
-      if existing <> 0 then
-        f.Seek(existing - 1, soBeginning); // rewind ending ']'
-      w := TTextDateWriter.Create(f, @tmp, SizeOf(tmp));
-      try
-        if existing = 0 then
-          w.Add('[', #10); // open new JSON array
-        n := length(State);
-        p := pointer(State);
-        repeat
-          w.AddShorter('{"d":"');
-          t.FromDateTime(p^.DateTime);
-          t.Second := 0; // seconds part is irrelevant
-          if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
-            t.AddIsoDate(w) // time part is irrelevant
-          else
-            t.AddIsoDateTime(w, {ms=}false); // true Iso-8601 date/time
-          w.AddShorter('","p":');
-          w.AddU(ord(p^.Period));
-          w.AddShorter(',"s":');
-          w.AddU(ord(p^.Scope));
-          w.AddShorter(',"c":');
-          w.AddQ(p^.State.Count);
-          w.AddShorter(',"t":');
-          w.AddQ(p^.State.Time);
-          w.AddShorter(',"r":');
-          w.AddQ(p^.State.Read);
-          w.AddShorter(',"w":');
-          w.AddQ(p^.State.Write);
-          w.Add('}');
-          dec(n);
-          if n = 0 then
-            break;
-          w.Add(',', #10);
-          inc(p);
-        until false;
-        w.Add(']'); // close the JSON array
-        w.FlushFinal;
-      finally
-        w.Free;
-      end;
-    finally
-      f.Free;
-    end;
-  except
-    fFileName := ''; // ignore any write error in the callback, but don't retry
+    if existing = 0 then
+      w.Add('[', #10); // open new JSON array
+    n := length(State);
+    p := pointer(State);
+    repeat
+      w.AddShorter('{"d":"');
+      t.FromDateTime(p^.DateTime);
+      t.Second := 0; // seconds part is irrelevant
+      if PCardinal(@t.Hour)^ = 0 then // Hour:Minute = 0 ?
+        t.AddIsoDate(w) // time part is irrelevant
+      else
+        t.AddIsoDateTime(w, {ms=}false); // true Iso-8601 date/time
+      w.AddShorter('","p":');
+      w.AddU(ord(p^.Period));
+      w.AddShorter(',"s":');
+      w.AddU(ord(p^.Scope));
+      w.AddShorter(',"c":');
+      w.AddQ(p^.State.Count);
+      w.AddShorter(',"t":');
+      w.AddQ(p^.State.Time);
+      w.AddShorter(',"r":');
+      w.AddQ(p^.State.Read);
+      w.AddShorter(',"w":');
+      w.AddQ(p^.State.Write);
+      w.Add('}');
+      dec(n);
+      if n = 0 then
+        break;
+      w.Add(',', #10);
+      inc(p);
+    until false;
+    w.Add(']'); // close the JSON array
+    w.FlushFinal;
+  finally
+    w.Free;
   end;
 end;
 
 
 { THttpAnalyzerPersistBinary }
 
-procedure THttpAnalyzerPersistBinary.OnSave(
-  const State: THttpAnalyzerToSaveDynArray);
-var
-  f: TStream;
+procedure THttpAnalyzerPersistBinary.DoSave(
+  const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
 begin
-  if (State <> nil) and
-     (fFileName <> '') then
-  try
-    f := TFileStreamEx.CreateWrite(fFileName);
-    try
-      f.Seek(0, soEnd); // just append
-      f.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
-    finally
-      f.Free;
-    end;
-  except
-    fFileName := ''; // ignore any write error in the callback, but don't retry
-  end;
+  Dest.Seek(0, soEnd); // just append
+  Dest.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
 end;
 
 
@@ -5539,7 +5591,7 @@ begin
       istop := isto;
       exit;
     end;
-  // retrieve the per-date boundaries using O(log(count)) binary search
+  // retrieve the per-date boundaries using O(log(n)) binary search
   fDynArray.FastLocateSorted(startdate, istart);
   fDynArray.FastLocateSorted(stopdate, istop);
   // save for next request on the same exact time range - e.g. from a DashBoard
@@ -5662,7 +5714,9 @@ begin
     w := TBufferWriter.Create(tmp); // in-memory persistence before compression
   try
     SaveToWriter(w);
-    if Algo <> nil then
+    if Algo = nil then
+      w.Flush
+    else
       FileFromString(Algo.Compress(w.FlushTo, {trigger=}2048), Dest);
   finally
     w.Free;
