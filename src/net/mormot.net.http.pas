@@ -1800,6 +1800,12 @@ type
   /// a dynamic array of counters information
   THttpAnalyzerStateDynArray = array of THttpAnalyzerState;
 
+  /// store the current THttpAnalyzer for a given period, i.e. all scopes
+  THttpAnalyzerStatePerPeriod = array[THttpAnalyzerPeriod] of THttpAnalyzerState;
+
+  /// store the current THttpAnalyzer for a given scope, i.e. all periods
+  THttpAnalyzerStatePerScope = array[THttpAnalyzerScope] of THttpAnalyzerState;
+
   /// store all consolidated states in a Round-Robin manner
   THttpAnalyzerConsolidated = array[THttpAnalyzerPeriod] of THttpAnalyzerStates;
 
@@ -1871,6 +1877,8 @@ type
     procedure Consolidate(tixsec: cardinal; now: TDateTime = 0);
     procedure DoAppend(const new: THttpAnalyzerState; s: THttpAnalyzerScope);
     procedure DoSave;
+    procedure DoGet(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+      out State: THttpAnalyzerState);
   public
     /// initialize this HTTP server analyzer instance
     // - you can specify an optional file name to persist the current counters
@@ -1892,7 +1900,13 @@ type
     // - UniqueIP is not corrected to include the mean of previous periods
     // - this method is thread-safe
     procedure Get(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
-      out State: THttpAnalyzerState);
+      out State: THttpAnalyzerState); overload;
+    /// retrieve the current state for all scopes over a given period
+    procedure Get(Period: THttpAnalyzerPeriod;
+      out State: THttpAnalyzerStatePerScope); overload;
+    /// retrieve the current state for all periods of a given scope
+    procedure Get(Scope: THttpAnalyzerScope;
+      out State: THttpAnalyzerStatePerPeriod); overload;
     /// force persistence of the pending counters
     procedure UpdateSuspendFile;
     /// a power-of-two bits size in range 2048..65536 for UniqueIP detection
@@ -5319,31 +5333,66 @@ begin
   end;
 end;
 
-procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
+procedure THttpAnalyzer.DoGet(Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
 var
   p: THttpAnalyzerPeriod;
 begin
   // same counters carry propagation algorithm than in Consolidate()
+  {%H-}State.From(fState[hapCurrent][Scope]);
+  if Period = hapCurrent then
+    exit;
+  State.Time := State.Time div 1000; // hapMinute..hapDay/hapAll in millisec
+  if Period = hapAll then
+    State.AddCounters(fState[hapAll][Scope])
+  else
+    for p := hapMinute to Period do // hapMinute..hapYear consolidation
+    begin
+      if p = hapMonth then
+        State.Time := State.Time div 1000; // hapMonth/hapYear in sec
+      State.AddCounters(fState[p][Scope]);
+    end;
+end;
+
+procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
+  Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
+begin
   fSafe.Lock;
   try
-    {%H-}State.From(fState[hapCurrent][Scope]);
-    if Period = hapCurrent then
-      exit;
-    State.Time := State.Time div 1000; // hapMinute..hapDay/hapAll in millisec
-    if Period = hapAll then
-      State.AddCounters(fState[hapAll][Scope])
-    else
-      for p := hapMinute to Period do // hapMinute..hapYear consolidation
-      begin
-        if p = hapMonth then
-          State.Time := State.Time div 1000; // hapMonth/hapYear in sec
-        State.AddCounters(fState[p][Scope]);
-      end;
+    DoGet(Period, Scope, State);
   finally
     fSafe.UnLock;
   end;
 end;
+
+procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
+  out State: THttpAnalyzerStatePerScope);
+var
+  s: THttpAnalyzerScope;
+begin
+  fSafe.Lock;
+  try
+    for s := low(s) to high(s) do
+      DoGet(Period, s, State[s]);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure THttpAnalyzer.Get(Scope: THttpAnalyzerScope;
+  out State: THttpAnalyzerStatePerPeriod);
+var
+  p: THttpAnalyzerPeriod;
+begin
+  fSafe.Lock;
+  try
+    for p := low(p) to high(p) do
+      DoGet(p, Scope, State[p]);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 
 
 { THttpAnalyzerPersistAbstract }
