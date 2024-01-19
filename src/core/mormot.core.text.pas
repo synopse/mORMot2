@@ -733,6 +733,15 @@ type
     /// append a #0-terminated UTF-8 buffer excluding any space or control char
     // - this won't escape the text as expected by JSON
     procedure AddTrimSpaces(P: PUtf8Char); overload;
+    /// append some text with left-filled spaces up to Width characters count
+    procedure AddSpaced(const Text: RawUtf8; Width: PtrInt;
+      SepChar: AnsiChar = #0); overload;
+    /// append some text with left-filled spaces up to Width characters count
+    procedure AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt); overload;
+    /// append some number with left-filled spaces up to Width characters count
+    // - if the value too big to fit in Width, will append K(Value) abbreviation
+    procedure AddSpaced(Value: QWord; Width: PtrInt;
+      SepChar: AnsiChar = #0); overload;
     /// append some UTF-8 chars, replacing a given character with another
     procedure AddReplace(Text: PUtf8Char; Orig, Replaced: AnsiChar);
     /// append some UTF-8 chars, quoting all " chars
@@ -1807,8 +1816,8 @@ procedure KBU(bytes: Int64; var result: RawUtf8);
 // - append E, P, T, G, M, K symbol, with one fractional digit
 procedure K(value: Int64; out result: TShort16); overload;
 
-  /// convert a count to a human readable value power-of-two metric value
-  // - append E, P, T, G, M, K symbol, with one fractional digit
+/// convert a count to a human readable value power-of-two metric value
+// - append E, P, T, G, M, K symbol, with one fractional digit
 function K(value: Int64): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
@@ -4794,6 +4803,43 @@ begin
   end
   else
     AddNoJsonEscape(pointer(Text), L);
+end;
+
+procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);
+begin
+  if Width <= TextLen then
+    TextLen := Width // truncate text left
+  else
+    AddChars(' ', Width - TextLen);
+  AddNoJsonEscape(Text, TextLen);
+end;
+
+procedure TTextWriter.AddSpaced(const Text: RawUtf8; Width: PtrInt;
+  SepChar: AnsiChar);
+begin
+  AddSpaced(PUtf8Char(pointer(Text)), length(Text));
+  if SepChar <> #0 then
+    Add(SepChar);
+end;
+
+procedure TTextWriter.AddSpaced(Value: QWord; Width: PtrInt; SepChar: AnsiChar);
+var
+  tmp: array[0..23] of AnsiChar;
+  alt: TShort16;
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  p := StrUInt64(@tmp[23], Value);
+  len := @tmp[23] - p;
+  if len > Width then
+  begin
+    K(Value, alt); // truncate to xxxK or xxxM
+    p := @alt[1];
+    len := ord(alt[0]);
+  end;
+  AddSpaced(p, len);
+  if SepChar <> #0 then
+    Add(SepChar);
 end;
 
 procedure TTextWriter.AddStringCopy(const Text: RawUtf8; start, len: PtrInt);
@@ -8739,37 +8785,37 @@ begin
   begin
     u := kb;
     rem := bytes;
-    hi := bytes shr 10;
+    hi  := bytes shr 10;
   end
   else if bytes < 1 shl 30 - (1 shl 30) div 10 then
   begin
     u := mb;
     rem := bytes shr 10;
-    hi := bytes shr 20;
+    hi  := bytes shr 20;
   end
   else if bytes < Int64(1) shl 40 - (Int64(1) shl 40) div 10 then
   begin
     u := gb;
     rem := bytes shr 20;
-    hi := bytes shr 30;
+    hi  := bytes shr 30;
   end
   else if bytes < Int64(1) shl 50 - (Int64(1) shl 50) div 10 then
   begin
     u := tb;
     rem := bytes shr 30;
-    hi := bytes shr 40;
+    hi  := bytes shr 40;
   end
   else if bytes < Int64(1) shl 60 - (Int64(1) shl 60) div 10 then
   begin
     u := pb;
     rem := bytes shr 40;
-    hi := bytes shr 50;
+    hi  := bytes shr 50;
   end
   else
   begin
     u := eb;
     rem := bytes shr 50;
-    hi := bytes shr 60;
+    hi  := bytes shr 60;
   end;
   rem := rem and 1023;
   if rem <> 0 then
