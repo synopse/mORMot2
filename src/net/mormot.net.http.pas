@@ -1907,6 +1907,16 @@ type
     /// retrieve the current state for all periods of a given scope
     procedure Get(Scope: THttpAnalyzerScope;
       out State: THttpAnalyzerStatePerPeriod); overload;
+    /// retrieve per-period current state as a human-readable CSV
+    // - returns all scope information over a given period in a simple text table
+    function GetAsText(Period: THttpAnalyzerPeriod): RawUtf8; overload;
+    /// retrieve a current state scope as a human-readable CSV
+    // - returns all periods information of a given scope in a simple text table
+    function GetAsText(Scope: THttpAnalyzerScope): RawUtf8; overload;
+    /// retrieve a current state scope or period as a human-readable CSV
+    // - Name is the trimmed THttpAnalyzerPeriod/THttpAnalyzerScope identifier,
+    // as retrieved from RTTI - to be used e.g. from an URI or from command line
+    function GetAsText(const Name: RawUtf8): RawUtf8; overload;
     /// force persistence of the pending counters
     procedure UpdateSuspendFile;
     /// a power-of-two bits size in range 2048..65536 for UniqueIP detection
@@ -5393,6 +5403,97 @@ begin
   end;
 end;
 
+var // filled from RTTI in initialization section below
+  _SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
+  _PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
+const
+  _WIDTH = 10;
+
+procedure AppendFieldNames(w: TTextWriter);
+begin
+  w.AddSpaced('Count',    _WIDTH, ',');
+  w.AddSpaced('Time',     _WIDTH, ',');
+  w.AddSpaced('UniqueIP', _WIDTH, ',');
+  w.AddSpaced('Read',     _WIDTH, ',');
+  w.AddSpaced('Write',    _WIDTH);
+  w.AddCR;
+end;
+
+procedure AppendFieldValues(w: TTextWriter; const d: THttpAnalyzerState);
+begin
+  w.AddSpaced(d.Count,    _WIDTH, ',');
+  w.AddSpaced(d.Time,     _WIDTH, ',');
+  w.AddSpaced(d.UniqueIP, _WIDTH, ',');
+  w.AddSpaced(d.Read,     _WIDTH, ',');
+  w.AddSpaced(d.Write,    _WIDTH);
+  w.AddCR;
+end;
+
+function THttpAnalyzer.GetAsText(Period: THttpAnalyzerPeriod): RawUtf8;
+var
+  s: THttpAnalyzerScope;
+  d: THttpAnalyzerStatePerScope;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  Get(Period, d);
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    w.AddSpaced('Scope', _WIDTH, ',');
+    AppendFieldNames(w);
+    for s := low(s) to high(s) do
+    begin
+      w.AddSpaced(_SCOPE[s], _WIDTH, ',');
+      AppendFieldValues(w, d[s]);
+    end;
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+function THttpAnalyzer.GetAsText(Scope: THttpAnalyzerScope): RawUtf8;
+var
+  p: THttpAnalyzerPeriod;
+  d: THttpAnalyzerStatePerPeriod;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  Get(Scope, d);
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    w.AddSpaced('Period', _WIDTH, ',');
+    AppendFieldNames(w);
+    for p := low(p) to high(p) do
+    begin
+      w.AddSpaced(_PERIOD[p], _WIDTH, ',');
+      AppendFieldValues(w, d[p]);
+    end;
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+function THttpAnalyzer.GetAsText(const Name: RawUtf8): RawUtf8;
+var
+  s: THttpAnalyzerScope;
+  p: THttpAnalyzerPeriod;
+begin
+  for s := low(s) to high(s) do
+    if IdemPropNameU(Name, _SCOPE[s]) then
+    begin
+      result := GetAsText(s);
+      exit;
+    end;
+  for p := low(p) to high(p) do
+    if IdemPropNameU(Name, _PERIOD[p]) then
+    begin
+      result := GetAsText(p);
+      exit;
+    end;
+  result := '';
+end;
 
 
 { THttpAnalyzerPersistAbstract }
@@ -5460,11 +5561,8 @@ end;
 
 { THttpAnalyzerPersistCsv }
 
-var
-  _SCOPE: array[THttpAnalyzerScope] of RawUtf8;
-
 const
-  _PERIOD: array[THttpAnalyzerPeriod] of string[3] = (
+  _PERIODCSV: array[THttpAnalyzerPeriod] of string[3] = (
     ',?,', ',m,', ',h,', ',D,', ',M,', ',Y,', ',*,');
 
 procedure THttpAnalyzerPersistCsv.DoSave(
@@ -5476,8 +5574,6 @@ var
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
-  if _SCOPE[hasAny] = '' then
-    GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope), @_SCOPE);
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if Dest.Seek(0, soEnd) = 0 then // append or write header
@@ -5491,7 +5587,7 @@ begin
         t.AddIsoDate(w) // time part is irrelevant
       else
         t.AddIsoDateTime(w, {ms=}false, {first=}' ');
-      w.AddShorter(_PERIOD[p^.Period]);
+      w.AddShorter(_PERIODCSV[p^.Period]);
       w.AddString(_SCOPE[p^.Scope]);
       w.Add(',');
       w.AddQ(p^.State.Count);
@@ -6154,6 +6250,8 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @_SCOPE);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @_PERIOD);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
