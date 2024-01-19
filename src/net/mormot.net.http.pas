@@ -1424,7 +1424,7 @@ type
   // - hlvRemote_Addr is the client IP address
   // - hlvRemote_User is the user name supplied if hsrAuthorized is set
   // - hlvRequest is the full original request line
-  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and full URI
+  // - hlvRequest_Hash is a crc32c hexa of Flags, Host, Method and full URI
   // - hlvRequest_Length is the number of bytes received from the client
   // (including headers and request body)
   // - hlvRequest_Method is usually "GET" or "POST"
@@ -1440,7 +1440,7 @@ type
   // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
   // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
   // - hlvUri is the normalized current URI, i.e. without any ?... parameter
-  // - hlvUri_Hash is a crc32c hash of Flags, Host, Method and normalized URI
+  // - hlvUri_Hash is a crc32c of Flags, Host, Method and URI without parameter
   THttpLogVariable = (
     hlvUnknown,
     hlvBody_Bytes_Sent,
@@ -1775,6 +1775,10 @@ type
     /// add all field values from another counter state
     procedure Add(const Another: THttpAnalyzerState);
       {$ifdef HASINLINE} inline; {$endif}
+    /// add all field values but UniqueIP from another counter state
+    // - exclude UniqueIP which is NOT a counter, but an approximation or mean
+    procedure AddCounters(const Another: THttpAnalyzerState);
+      {$ifdef HASINLINE} inline; {$endif}
     /// substract all field values from another counter state
     procedure Sub(const Another: THttpAnalyzerState);
       {$ifdef HASINLINE} inline; {$endif}
@@ -1885,6 +1889,7 @@ type
     procedure Append(var Context: TOnHttpServerAfterResponseContext); override;
     /// retrieve the current state for a given period and scope
     // - consolidate hapMinute..hapYear values up to the requested Period
+    // - UniqueIP is not corrected to include the mean of previous periods
     // - this method is thread-safe
     procedure Get(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
       out State: THttpAnalyzerState);
@@ -4668,11 +4673,11 @@ begin
   if fVariables * [hlvRequest_Hash, hlvUri_Hash] <> [] then
   begin
     crc := crc32c(crc32c(byte(Context.Flags),
-        Context.Host,   length(RawUtf8(Context.Host))),
-        Context.Method, length(RawUtf8(Context.Method)));
+                         Context.Host,   length(RawUtf8(Context.Host))),
+                         Context.Method, length(RawUtf8(Context.Method)));
     if hlvRequest_Hash in fVariables then
       reqcrc := crc32c(crc, Context.Url, length(RawUtf8(Context.Url)));
-    if hlvUri_Hash in fVariables then
+    if hlvUri_Hash in fVariables then // without args, but not fully normalized
       uricrc := crc32c(crc, Context.Url, urllen);
   end;
   // very efficient log generation with no transient memory allocation
@@ -4846,6 +4851,14 @@ begin
   inc(Count,    Another.Count);
   inc(Time,     Another.Time);
   inc(UniqueIP, Another.UniqueIP);
+  inc(Read,     Another.Read);
+  inc(Write,    Another.Write);
+end;
+
+procedure THttpAnalyzerState.AddCounters(const Another: THttpAnalyzerState);
+begin
+  inc(Count,    Another.Count);
+  inc(Time,     Another.Time);
   inc(Read,     Another.Read);
   inc(Write,    Another.Write);
 end;
@@ -5311,7 +5324,7 @@ procedure THttpAnalyzer.Get(Period: THttpAnalyzerPeriod;
 var
   p: THttpAnalyzerPeriod;
 begin
-  // same value carry propagation algorithm than in Consolidate()
+  // same counters carry propagation algorithm than in Consolidate()
   fSafe.Lock;
   try
     {%H-}State.From(fState[hapCurrent][Scope]);
@@ -5319,13 +5332,13 @@ begin
       exit;
     State.Time := State.Time div 1000; // hapMinute..hapDay/hapAll in millisec
     if Period = hapAll then
-      State.Add(fState[hapAll][Scope])
+      State.AddCounters(fState[hapAll][Scope])
     else
       for p := hapMinute to Period do // hapMinute..hapYear consolidation
       begin
         if p = hapMonth then
           State.Time := State.Time div 1000; // hapMonth/hapYear in sec
-        State.Add(fState[p][Scope]);
+        State.AddCounters(fState[p][Scope]);
       end;
   finally
     fSafe.UnLock;
