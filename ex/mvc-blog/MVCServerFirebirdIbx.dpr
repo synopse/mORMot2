@@ -7,7 +7,7 @@ program MVCServerFirebirdIbx;
 
 {$ifdef OSWINDOWS}
   {$apptype console}
-  {$R mormot.win.default.manifest.res}
+  {$R ..\..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 uses
@@ -51,7 +51,7 @@ begin
                 'SYSDBA',
                 'masterkey');
     aExternalDB.FirebirdLibraryPathName:='C:\Firebird\firebird3_32\fbclient.dll';
-    aExternalDB.CreateDescendingPK:=true;
+    aExternalDB.CreateDescendingOnlyPK:=true;
     try
       VirtualTableExternalRegisterAll(aModel,aExternalDB, [regMapAutoKeywordFields]);
       aServer := TRestServerDB.Create(aModel, SQLITE_MEMORY_DATABASE_NAME);
