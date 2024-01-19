@@ -1820,7 +1820,7 @@ type
     /// the timestamp of the data consolidation - from UnixTimeMinimalUtc()
     // - use the DateTime method to retrieve an usable value
     Date: cardinal;
-    /// the resolution time period (hapMinute .. hapAll)
+    /// the resolution time period in hapMinute..hapMonth range
     Period: THttpAnalyzerPeriod;
     /// the corresponding counter
     Scope: THttpAnalyzerScope;
@@ -2113,6 +2113,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// search for a Period/Scope information for a given time range
     // - Period could be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - if Period is hapAll then no period filtering would take place
+    // - if Scope is hasAny then no scope filtering would take place
     // - very fast, using per-Period indexes for hapHour .. hapMonth
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
       Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
@@ -5795,12 +5797,12 @@ begin
       'Unexpected %. RangeToPeriodIndex(%)', [self, ToText(period)^]);
   if fPeriodLastCount < fCount then
     CreatePeriodIndex; // refresh indexes if needed
-  with fPeriod[period] do // hapHour .. hapMonth
+  with fPeriod[period] do // use hapHour .. hapMonth index
   begin
-    start := FastSearchIntegerSorted(pointer(Index), Count - 1, start);
+    start  := FastSearchIntegerSorted(pointer(Index), Count - 1, start);
+    stop   := FastSearchIntegerSorted(pointer(Index), Count - 1, stop);
     pstart := @Index[start];
-    stop := FastSearchIntegerSorted(pointer(Index), Count - 1, stop);
-    pstop := @Index[stop];
+    pstop  := @Index[stop];
   end;
   result := stop - start; // returns the number of indexes in pstart..pstop
 end;
@@ -6170,7 +6172,7 @@ var
 
 begin
   result := nil;
-  if not (Period in [hapMinute .. hapMonth]) then
+  if not (Period in [hapMinute .. hapMonth, hapAll]) then
     exit; // OnSave() has been done in this range only
   count := 0;
   capacity := 0;
@@ -6183,15 +6185,16 @@ begin
     if ndxStart >= ndxStop then
       exit;
     // perform the actual (indexed) search
-    if Period = hapMinute then
+    if Period in [hapMinute, hapAll] then
     begin
-      // hapMinute: brute force search within this s <= x < p time range
+      // direct O(n) search within ndxStart < ndxStop range
       s := @v[ndxStart];
       p := @v[ndxStop];
-      while PtrUInt(s) < PtrUInt(p) do
-      begin
-        if (s^.Period = Period) and
-           (s^.Scope = Scope) then
+      repeat
+        if ((Period = hapAll) or
+            (s^.Period = hapMinute)) and
+           ((Scope = hasAny) or
+            (s^.Scope = Scope)) then
         begin
           if count = capacity then
             ResultGrow;
@@ -6199,25 +6202,23 @@ begin
           inc(count);
         end;
         inc(s);
-      end;
+      until s = p;
     end
     else
-    begin
       // hapHour..hapMonth: search using the index of this Period
-      RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi);
-      while PtrUInt(si) < PtrUInt(pi) do
-      begin
-        s := @v[si^];
-        if s^.Scope = Scope then
-        begin
-          if count = capacity then
-            ResultGrow;
-          result[count] := s^;
-          inc(count);
-        end;
-        inc(si);
-      end;
-    end;
+      if RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi) > 0 then
+        repeat
+          s := @v[si^];
+          if (Scope = hasAny) or
+             (s^.Scope = Scope) then
+          begin
+            if count = capacity then
+              ResultGrow;
+            result[count] := s^;
+            inc(count);
+          end;
+          inc(si);
+        until si = pi;
   finally
     fSafe.UnLock;
   end;
