@@ -1403,9 +1403,9 @@ type
   end;
 
   /// supported THttpLoger place holders
+  // - uses RTTI to parse the actual variable names e.g. '$uri' into hlvUri
   // - matches nginx log module naming, with some additional fields
   // - values are provided as TOnHttpServerAfterResponse event parameters
-  // - variable names in format string uses RTTI e.g. '$uri" for hlvUri
   // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
   // - hlvBytes_Sent is the number of bytes sent to a client
   // - hlvConnection is the THttpServerConnectionID
@@ -1424,7 +1424,7 @@ type
   // - hlvRemote_Addr is the client IP address
   // - hlvRemote_User is the user name supplied if hsrAuthorized is set
   // - hlvRequest is the full original request line
-  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and Url values
+  // - hlvRequest_Hash is a crc32c hash of Flags, Host, Method and full URI
   // - hlvRequest_Length is the number of bytes received from the client
   // (including headers and request body)
   // - hlvRequest_Method is usually "GET" or "POST"
@@ -1440,6 +1440,7 @@ type
   // - hlvTime_Local is the UTC (not local) time in the Commong Log (NCSA) format
   // - hlvTime_Http is the UTC (not local) time in the HTTP human-readable format
   // - hlvUri is the normalized current URI, i.e. without any ?... parameter
+  // - hlvUri_Hash is a crc32c hash of Flags, Host, Method and normalized URI
   THttpLogVariable = (
     hlvUnknown,
     hlvBody_Bytes_Sent,
@@ -1475,7 +1476,8 @@ type
     hlvTime_Iso8601,
     hlvTime_Local,
     hlvTime_Http,
-    hlvUri);
+    hlvUri,
+    hlvUri_Hash);
 
   /// set of supported THttpLoger place holders, matching nginx log module naming
   THttpLogVariables = set of THttpLogVariable;
@@ -4617,7 +4619,7 @@ end;
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n, urllen: integer;
-  tix10, crc: cardinal;
+  tix10, crc, reqcrc, uricrc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   now: TSynSystemTime;
@@ -4641,7 +4643,7 @@ begin
     exit;
   // pre-compute CPU intensive values outside of fSafe.Lock
   urllen := 0;
-  if (fVariables * [hlvDocument_Uri, hlvUri] <> []) and
+  if (fVariables * [hlvDocument_Uri, hlvUri, hlvUri_Hash] <> []) and
      (Context.Url <> nil) then
   begin
     urllen := PosExChar('?', RawUtf8(Context.Url)) - 1; // exclude arguments
@@ -4651,12 +4653,16 @@ begin
   if fVariables * [hlvTime_Iso8601, hlvTime_Local, hlvTime_Http] <> [] then
     // dates are all in UTC/GMT as it should on any server
     FromGlobalTime(now, {local=}false, Context.Tix64);
-  crc := 0;
-  if hlvRequest_Hash in fVariables then
-    crc := crc32c(crc32c(crc32c(byte(Context.Flags),
-      Context.Host,   length(RawUtf8(Context.Host))),
-      Context.Method, length(RawUtf8(Context.Method))),
-      Context.Url,    length(RawUtf8(Context.Url)));
+  if fVariables * [hlvRequest_Hash, hlvUri_Hash] <> [] then
+  begin
+    crc := crc32c(crc32c(byte(Context.Flags),
+        Context.Host,   length(RawUtf8(Context.Host))),
+        Context.Method, length(RawUtf8(Context.Method)));
+    if hlvRequest_Hash in fVariables then
+      reqcrc := crc32c(crc, Context.Url, length(RawUtf8(Context.Url)));
+    if hlvUri_Hash in fVariables then
+      uricrc := crc32c(crc, Context.Url, urllen);
+  end;
   // very efficient log generation with no transient memory allocation
   v := pointer(fVariable);
   n := length(fVariable);
@@ -4744,7 +4750,7 @@ begin
             wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
         hlvRequest_Hash:
-          wr.AddUHex(crc);
+          wr.AddUHex(reqcrc{%H-});
         hlvRequest_Length:
           wr.AddQ(Context.Received);
         hlvRequest_Method:
@@ -4771,6 +4777,8 @@ begin
           now.AddNcsaText(wr, '+0000');
         hlvTime_Http:
           now.AddHttpDate(wr, 'GMT');
+        hlvUri_Hash:
+          wr.AddUHex(uricrc{%H-});
       end;
       inc(v);
       dec(n);
