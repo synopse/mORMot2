@@ -626,8 +626,7 @@ type
     fAuthBearer,
     fUserAgent,
     fOutContentType,
-    fOutCustomHeaders,
-    fRespReason: RawUtf8;
+    fOutCustomHeaders: RawUtf8;
     fInContent,
     fOutContent: RawByteString;
     fConnectionID: THttpServerConnectionID;

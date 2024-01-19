@@ -1914,7 +1914,7 @@ var
     res := Head(requrl, params.KeepAlive, params.Header);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
-        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
+        [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     expectedsize := Http.ContentLength;
     result := expectedsize > 0;
     if result and
@@ -1954,7 +1954,7 @@ var
     // verify (partial) response
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
-        [self, fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
+        [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     // finalize the successful request
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()

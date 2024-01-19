@@ -2324,7 +2324,7 @@ class procedure TMvcApplication.GotoError(var Action: TMvcAction;
 begin
   if ErrorCode <= HTTP_CONTINUE then
     ErrorCode := HTTP_BADREQUEST;
-  GotoView(Action, 'Error', ['Msg', StatusCodeToErrorMsg(ErrorCode)], ErrorCode);
+  GotoView(Action, 'Error', ['Msg', StatusCodeToShort(ErrorCode)], ErrorCode);
 end;
 
 class procedure TMvcApplication.GotoDefault(var Action: TMvcAction;

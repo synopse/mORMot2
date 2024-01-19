@@ -2906,13 +2906,12 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   begin
     OutCustomHeaders := '';
     OutContentType := 'text/html; charset=utf-8'; // create message to display
-    StatusCodeToReason(fRespStatus, fRespReason);
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
-      '<h1>% Server Error %</h1><hr><p>HTTP % %</p><p>%</p><small>%</small></body></html>',
+      '<h1>% Server Error %</h1><hr><p>HTTP %</p><p>%</p><small>%</small></body></html>',
       [
-        fServer.ServerName, fRespStatus, fRespStatus,
-        fRespReason, HtmlEscapeString(fErrorMessage), XPOWEREDVALUE
+        fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
+        HtmlEscapeString(fErrorMessage), XPOWEREDVALUE
       ],
       RawUtf8(fOutContent));
   end;
@@ -2944,10 +2943,7 @@ begin
   else
   begin // other less common cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    StatusCodeToReason(fRespStatus, fRespReason);
-    h^.Append(fRespStatus);
-    h^.Append(' ');
-    h^.Append(fRespReason);
+    h^.AppendShort(StatusCodeToShort(fRespStatus));
     h^.AppendCRLF;
   end;
   // append (and sanitize) custom headers from Request() method
