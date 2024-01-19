@@ -1578,10 +1578,12 @@ type
     // - returns '' on success, or an error message on invalid input
     // - recognized $variable names match trimmed THttpLogVariable enumeration
     // - the Format property will call this method and raise EHttpLogger on error
+    // - can NOT be called once the server started its logging process
     function Parse(const aFormat: RawUtf8): RawUtf8; virtual;
     /// register a HTTP host to process its own log file
     // - you can customize its rotation process, if needed
     // - fails if CreateWithWriter or CreateWithFile constructors were used
+    // - can be called even after the server started its logging process
     procedure DefineHost(const aHost: RawUtf8;
       aRotate: THttpLoggerRotate = hlrUndefined;
       aRotateFiles: integer = -1); virtual;
@@ -1619,6 +1621,7 @@ type
     // - recognized $variable names match trimmed THttpLogVariable enumeration,
     // so will follow most of nginx log module naming convention
     // - equals by default LOGFORMAT_COMBINED, i.e. the "combined" log format
+    // - can NOT be set once the server started its logging process
     property Format: RawUtf8
       read fFormat write SetFormat;
     /// where the log files will be stored, if not supplied in CreateWithFile()
@@ -1627,6 +1630,7 @@ type
     // - if not defined, GetSystemPath(spLog) will be used
     // - DefineHost() could generate additional per Host (rotated) log file
     // - not used if CreateWithWriter or CreateWithFile constructors were called
+    // - can NOT be set once the server started its logging process
     property DestFolder: TFileName
       read fDestFolder write SetDestFolder;
     /// the log file name to be used in DestFolder for the main log file
@@ -4292,9 +4296,9 @@ begin
   try
     // force write to disk at least every second
     if fWriterSingle <> nil then
-      fWriterSingle.FlushFinal;
-    if (fWriterHost <> nil) and
-       fWriterHostSafe.TryLock then
+      fWriterSingle.FlushFinal
+    else if (fWriterHost <> nil) and
+            fWriterHostSafe.TryLock then
       try
         tix10 := tix64 shr 10;
         for i := 0 to length(fWriterHost) - 1 do
@@ -4322,6 +4326,7 @@ end;
 
 function THttpLogger.CreateMainWriter: TTextDateWriter;
 begin
+  // caller made fWriterHostSafe.Lock
   result := THttpLoggerWriter.Create(
     self, '', fDefaultRotate, fDefaultRotateFiles);
   ObjArrayAdd(fWriterHost, result);
@@ -4338,56 +4343,52 @@ begin
   result := fWriterSingle;
   if result <> nil then
     exit;
-  // quickly retrieve the previous instance if the same Host was used
+  // quickly retrieve the main instance or the previous Host
   if Host = '' then
-  begin
-    result := fWriterHostMain; // very common case of no Host
-    if result <> nil then
-      exit;
-  end
+    result := fWriterHostMain // very common case of no Host
   else
   begin
     result := fWriterHostLast; // pointer-sized variables are atomic
     if (result <> nil) and     // naive but efficient cache
        IdemPropNameU(THttpLoggerWriter(result).Host, Host) then
-    begin
-      THttpLoggerWriter(result).TryRotate(Tix10);
-      exit;
-    end;
+      result := nil;
   end;
-  // lookup of this Host in the internal WriteHost[] list
-  fWriterHostSafe.Lock;
-  p := pointer(fWriterHost);
-  if p = nil then
-    // no previous DefineHost() call: set WriterHost[0] = access.log instance
-    try
-      result := CreateMainWriter;
-    finally
-      fWriterHostSafe.UnLock;
-    end
-  else
+  if result = nil then
   begin
-    // search for any matching THttpLoggerWriter.Host value
-    result := p^; // p^ = WriterHost[0] = access.log as default
-    if Host <> '' then
+    // need to lookup this Host in the internal WriteHost[] list
+    fWriterHostSafe.Lock;
+    p := pointer(fWriterHost);
+    if p = nil then
+      // no previous DefineHost() call: use WriterHost[0] = access.log instance
+      try
+        result := CreateMainWriter;
+      finally
+        fWriterHostSafe.UnLock;
+      end
+    else
     begin
-      n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-      repeat
-        inc(p);
-        dec(n);
-        if n = 0 then
-          break;
-        if IdemPropNameU(p^.Host, Host) then
-        begin
-          result := p^; // found log instance for this Host name
-          fWriterHostLast := result;
-          break;
-        end;
-      until false;
+      // search for any matching THttpLoggerWriter.Host value
+      result := p^; // p^ = WriterHost[0] = access.log as default
+      if Host <> '' then
+      begin
+        n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
+        repeat
+          inc(p);
+          dec(n);
+          if n = 0 then
+            break;
+          if IdemPropNameU(p^.Host, Host) then
+          begin
+            result := p^; // found log instance for this Host name
+            fWriterHostLast := result;
+            break;
+          end;
+        until false;
+      end;
+      fWriterHostSafe.UnLock;
     end;
-    fWriterHostSafe.UnLock;
-    THttpLoggerWriter(result).TryRotate(Tix10); // outside the lock
   end;
+  THttpLoggerWriter(result).TryRotate(Tix10); // outside the lock
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
@@ -4437,6 +4438,8 @@ procedure THttpLogger.SetFormat(const aFormat: RawUtf8);
 var
   err: RawUtf8;
 begin
+  if aFormat = fFormat then
+    exit;
   err := Parse(aFormat);
   if err <> '' then
     raise EHttpLogger.CreateUtf8('%.SetFormat: % in [%]', [self, err, aFormat]);
@@ -4459,18 +4462,23 @@ var
   p, start: PUtf8Char;
   v: integer;
 begin
-  // reset any previous format
-  fVariable := nil;
-  fVariables := [];
-  fUnknownPosLen := nil;
-  // actually parse the input
+  // check the state
+  result := 'Impossible once started';
+  if (fWriterHost <> nil) or
+     (fWriterSingle <> nil) then
+    exit;
+  // check the input
   result := 'No Format';
   if aFormat = '' then
     exit;
   result := 'Format is too long';
   if length(aFormat) shr 16 <> 0 then
     exit; // fUnknownPosLen[] are encoded as two 16-bit values
+  // reset any previous format
   result := '';
+  fVariable := nil;
+  fVariables := [];
+  fUnknownPosLen := nil;
   fFormat := aFormat;
   p := pointer(aFormat);
   repeat
@@ -4583,7 +4591,8 @@ begin
             wr.AddShorter('upgrade');
         hlvDocument_Uri,
         hlvUri:
-          wr.AddUrlNameNormalize(Context.Url, urllen); // URL decode + trim //
+          if urllen <> 0 then
+            wr.AddUrlNameNormalize(Context.Url, urllen); // URL decode + trim //
         hlvElapsed:
           wr.AddShort(MicroSecToString(Context.ElapsedMicroSec));
         hlvElapsedUSec:
@@ -4596,7 +4605,7 @@ begin
             wr.AddSeconds(QWord(Context.ElapsedMicroSec) div 1000);
         hlvHostName:
           if (Context.Host = nil) or
-             ((PClass(wr)^ = THttpLoggerWriter) and
+             ((fWriterSingle = nil) and
               (THttpLoggerWriter(wr).Host <> '')) then
             wr.Add('-') // no need to write $hostname in a per-host log
           else
@@ -4669,7 +4678,7 @@ begin
       dec(n);
     until n = 0;
     wr.AddString(fLineFeed);
-    if (PClass(wr)^ = THttpLoggerWriter) and
+    if (fWriterSingle = nil) and
        (THttpLoggerWriter(wr).fLastWriteToStreamTix10 <> tix10) then
       wr.FlushFinal; // force write to disk at least every second
   {$ifdef HASFASTTRYFINALLY}
