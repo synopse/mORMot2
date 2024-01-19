@@ -1987,7 +1987,7 @@ type
 
   /// class allowing to persist THttpAnalyzer information into a JSON file
   // - format will be a JSON array of THttpAnalyzerToSave JSON objects as
-  // $ {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  // $ {"d":"xxx","p":x,"s":x,"c":x,"t":x,"i":x,"r":x,"w":x}
   // with "p" and "s" fields being ord(THttpAnalyzerPeriod/THttpAnalyzerScope)
   // - we use single-letter field names to reduce the JSON output size
   THttpAnalyzerPersistJson = class(THttpAnalyzerPersistAbstract)
@@ -5481,7 +5481,7 @@ begin
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if Dest.Seek(0, soEnd) = 0 then // append or write header
-      w.AddShort('Date,Period,Scope,Count,Time,Read,Write'#13#10);
+      w.AddShort('Date,Period,Scope,Count,Time,UniqueIP,Read,Write'#13#10);
     n := length(State);
     p := pointer(State);
     repeat
@@ -5497,6 +5497,8 @@ begin
       w.AddQ(p^.State.Count);
       w.Add(',');
       w.AddQ(p^.State.Time);
+      w.Add(',');
+      w.AddU(p^.State.UniqueIP);
       w.Add(',');
       w.AddQ(p^.State.Read);
       w.Add(',');
@@ -5524,7 +5526,7 @@ var
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
-  // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"r":x,"w":x}
+  // {"d":"xxx","p":x,"s":x,"c":x,"t":x,"i":x,"r":x,"w":x}
   existing := Dest.Seek(0, soEnd);
   if existing <> 0 then
     Dest.Seek(existing - 1, soBeginning); // rewind ending ']'
@@ -5550,6 +5552,8 @@ begin
       w.AddQ(p^.State.Count);
       w.AddShorter(',"t":');
       w.AddQ(p^.State.Time);
+      w.AddShorter(',"i":');
+      w.AddU(p^.State.UniqueIP);
       w.AddShorter(',"r":');
       w.AddQ(p^.State.Read);
       w.AddShorter(',"w":');

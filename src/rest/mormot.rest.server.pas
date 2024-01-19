@@ -1889,13 +1889,13 @@ type
     // callback should set the corresponding error to the supplied context e.g.
     // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
     // - since this event will be executed by every TRestServer.Uri call,
-    // it should better not make any slow process (like writing to a remote DB)
+    // it should better not make any slow process (like accessing a remote DB)
     OnBeforeUri: TOnBeforeUri;
     /// event trigerred when Uri() finished to process an ORM/SOA command
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
     // - since this event will be executed by every TRestServer.Uri call,
-    // it should better not make any slow process (like writing to a remote DB)
+    // it should better not make any slow process (like accessing a remote DB)
     OnAfterUri: TOnAfterUri;
     /// event trigerred when Uri() raise an exception and failed to process a request
     // - if Ctxt.ExecuteCommand raised an exception, this callback will be
