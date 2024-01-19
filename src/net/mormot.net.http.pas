@@ -5094,8 +5094,8 @@ begin
   if Context.UserAgent <> nil then
   begin
     if hasMobile in fTracked then
-      // browser/OS detection using the User-Agent is a very tricky context
-      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
+      // browser/OS detection using the User-Agent is a complete mess
+      // https://webaim.org/blog/user-agent-string-history
       // we only detect mobile devices, which seems fair enough
       if PosEx('Mobile', RawUtf8(Context.UserAgent)) > 0 then
         mob := hasMobile;
