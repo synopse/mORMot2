@@ -7372,11 +7372,11 @@ begin
         for i := 0 to fSessions.Count - 1 do
           TAuthSession(fSessions.List[i]).SaveTo(W);
         W.Write4(fSessionCounter);
-        W.Write4(MAGIC_SESSION + 1);
-        W.Flush;
       finally
         fSessions.Safe.ReadOnlyUnLock;
       end;
+      W.Write4(MAGIC_SESSION + 1);
+      W.Flush;
     finally
       W.Free;
     end;
@@ -7426,12 +7426,12 @@ begin
       fStats.ClientConnect;
     end;
     fSessionCounter := PCardinal(R.P)^;
-    inc(PCardinal(R.P));
-    if PCardinal(R.P)^ <> MAGIC_SESSION + 1 then
-      ContentError;
   finally
     fSessions.Safe.WriteUnLock;
   end;
+  inc(PCardinal(R.P));
+  if PCardinal(R.P)^ <> MAGIC_SESSION + 1 then
+    ContentError;
   if andDeleteExistingFileAfterRead then
     DeleteFile(aFileName);
 end;

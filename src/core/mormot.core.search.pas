@@ -4265,8 +4265,7 @@ begin
         bdDiff:
           ZeroCompressXor(pointer(fStore), pointer(fKnownStore), head.size, W);
       end;
-      W.Flush;
-      result := TRawByteStringStream(W.Stream).DataString;
+      result := W.FlushTo;
     finally
       W.Free;
     end;

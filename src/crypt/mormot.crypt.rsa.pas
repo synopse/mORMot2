@@ -539,7 +539,7 @@ type
     function Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
     function Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
   public
-    /// intitialize the RSA key context
+    /// initialize the RSA key context
     constructor Create; override;
     /// finalize the RSA key context
     destructor Destroy; override;
