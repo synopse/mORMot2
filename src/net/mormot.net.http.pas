@@ -2076,7 +2076,14 @@ type
       out istart, istop: integer): PHttpAnalyzerToSaveArray;
     function RangeToPeriodIndex(period: THttpAnalyzerPeriod;
       start, stop: integer; out pstart, pstop: PInteger): integer;
+    procedure DoFind(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+      Scope: THttpAnalyzerScope; NoPeriod, NoScope: boolean;
+      out Result: THttpAnalyzerToSaveDynArray);
+    procedure DoText(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+      Scope: THttpAnalyzerScope; NoPeriod, NoScope: boolean; out Result: RawUtf8);
   public
+    /// intialize this instance
+    constructor Create; override;
     /// release all stored data
     procedure Clear;
     /// append a FileName content in the THttpAnalyzerPersistBinary format
@@ -2111,14 +2118,40 @@ type
     /// raw thread-unsafe access to the data - to be protected with Safe.Lock
     function Get(Row: integer): PHttpAnalyzerToSave;
       {$ifdef HASINLINE} inline; {$endif}
-    /// search for a Period/Scope information for a given time range
-    // - Period could be in OnSave() range, i.e. hapMinute .. hapMonth
-    // - if Period is hapAll then no period filtering would take place
-    // - if Scope is hasAny then no scope filtering would take place
+    /// search for matching Period and Scope information for a given time range
+    // - Period should be in OnSave() range, i.e. hapMinute .. hapMonth
     // - very fast, using per-Period indexes for hapHour .. hapMonth
-    // - you can use ToText() over the result to retrieve human-readbale CSV
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
-      Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+      Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray; overload;
+    /// search for a Period information for a given time range
+    // - Period should be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - very fast, using per-Period indexes for hapHour .. hapMonth
+    function Find(Start, Stop: TDateTime;
+      Period: THttpAnalyzerPeriod): THttpAnalyzerToSaveDynArray; overload;
+    /// search for a Scope information for a given time range
+    function Find(Start, Stop: TDateTime;
+      Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray; overload;
+    /// return all information for a given time range
+    function Find(Start, Stop: TDateTime): THttpAnalyzerToSaveDynArray; overload;
+    /// return information as CSV for a given time range of a Period and Scope
+    // - Period should be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - very fast, using per-Period indexes for hapHour .. hapMonth
+    function GetAsText(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
+      Scope: THttpAnalyzerScope): RawUtf8; overload;
+    /// return any Scope information as CSV for a given time range of a Period
+    // - Period should be in OnSave() range, i.e. hapMinute .. hapMonth
+    // - very fast, using per-Period indexes for hapHour .. hapMonth
+    function GetAsText(Start, Stop: TDateTime;
+      Period: THttpAnalyzerPeriod): RawUtf8; overload;
+    /// return any Period information as CSV for a given time range of a Scope
+    function GetAsText(Start, Stop: TDateTime;
+      Scope: THttpAnalyzerScope): RawUtf8; overload;
+    /// return all metrics information as CSV for a given time range
+    function GetAsText(Start, Stop: TDateTime): RawUtf8; overload;
+    /// return any Period information as CSV for a given time range of a Scope
+    // - Name is the trimmed THttpAnalyzerPeriod/THttpAnalyzerScope identifier,
+    // as retrieved from RTTI - to be used e.g. from an URI or from command line
+    function GetAsText(Start, Stop: TDateTime; const Name: RawUtf8): RawUtf8; overload;
     /// class function able to retrieve the metadata of our optimized binary format
     class function LoadHeader(const FileName: TFileName;
       out Info: THttpMetricsHeader): boolean;
@@ -2168,12 +2201,15 @@ function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
 function ToText(v: THttpLogVariable): PShortString; overload;
 function ToText(r: THttpRotaterTrigger): PShortString; overload;
 
+function FromText(const Text: RawUtf8; out Scope: THttpAnalyzerScope): boolean; overload;
+function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean; overload;
+
 /// convert some THttpMetrics.Find() result into human-readable CSV text
-// - SearchedPeriod and SearchedScope could be assigned to the corresponding
-// parameters used on Find() to remove Period and/or Scope columns from the CSV
-function ToText(const Metrics: THttpAnalyzerToSaveDynArray;
-  SearchedPeriod: THttpAnalyzerPeriod = hapAll;
-  SearchedScope: THttpAnalyzerScope = hasAny): RawUtf8; overload;
+// - can remove Period and/or Scope columns from the CSV, depending on the
+// overloaded Find() method which has been used
+// - as called by THttpMetrics.GetAsText() overloaded methods
+procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
+  NoPeriod, NoScope: boolean; out Result: RawUtf8);
 
 
 implementation
@@ -4932,6 +4968,16 @@ end;
 
 { THttpAnalyzer }
 
+var // delayed fill from RTTI enum trimmed text via GetScopePeriodRtti
+  _SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
+  _PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
+
+procedure GetScopePeriodRtti;
+begin // no need to link this if THttpAnalyzer/THttpMetrics are not used
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @_SCOPE);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @_PERIOD);
+end;
+
 constructor THttpAnalyzer.Create(const aSuspendFile: TFileName;
   aSuspendFileSaveMinutes: integer);
 var
@@ -4940,6 +4986,8 @@ var
   fromgz: TUnixTime;
   tix: cardinal;
 begin
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti;
   inherited Create; // fSafe.Init
   fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
   fSaved := fTracked;
@@ -5412,9 +5460,6 @@ begin
   end;
 end;
 
-var // filled from RTTI in initialization section below
-  _SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
-  _PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
 const
   _WIDTH = 10;
 
@@ -5489,19 +5534,12 @@ var
   s: THttpAnalyzerScope;
   p: THttpAnalyzerPeriod;
 begin
-  for s := low(s) to high(s) do
-    if IdemPropNameU(Name, _SCOPE[s]) then
-    begin
-      result := GetAsText(s);
-      exit;
-    end;
-  for p := low(p) to high(p) do
-    if IdemPropNameU(Name, _PERIOD[p]) then
-    begin
-      result := GetAsText(p);
-      exit;
-    end;
   result := '';
+  if Name <> '' then
+    if FromText(Name, s) then
+      result := GetAsText(s)
+    else if FromText(Name, p) then
+      result := GetAsText(p);
 end;
 
 
@@ -5570,10 +5608,6 @@ end;
 
 { THttpAnalyzerPersistCsv }
 
-const
-  _PERIODCSV: array[THttpAnalyzerPeriod] of string[3] = (
-    ',?,', ',m,', ',h,', ',D,', ',M,', ',Y,', ',*,');
-
 procedure THttpAnalyzerPersistCsv.DoSave(
   const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
 var
@@ -5583,6 +5617,8 @@ var
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti; // paranoid - has been done in THttpAnalyzer.Create
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if Dest.Seek(0, soEnd) = 0 then // append or write header
@@ -5596,7 +5632,8 @@ begin
         t.AddIsoDate(w) // time part is irrelevant
       else
         t.AddIsoDateTime(w, {ms=}false, {first=}' ');
-      w.AddShorter(_PERIODCSV[p^.Period]);
+      w.AddString(_PERIOD[p^.Period]);
+      w.Add(',');
       w.AddString(_SCOPE[p^.Scope]);
       w.Add(',');
       w.AddQ(p^.State.Count);
@@ -5689,6 +5726,13 @@ end;
 
 
 { THttpMetrics }
+
+constructor THttpMetrics.Create;
+begin
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti;
+  inherited Create;
+end;
 
 function THttpMetrics.Get(Row: integer): PHttpAnalyzerToSave;
 begin
@@ -6161,9 +6205,79 @@ end;
 
 function THttpMetrics.Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+begin
+  DoFind(Start, Stop, Period, Scope, {noperiod=}false, {noscope=}false, result);
+end;
+
+function THttpMetrics.Find(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod): THttpAnalyzerToSaveDynArray;
+begin
+  DoFind(Start, Stop, Period, hasAny, {noperiod=}false, {noscope=}true, result);
+end;
+
+function THttpMetrics.Find(Start, Stop: TDateTime;
+  Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
+begin
+  DoFind(Start, Stop, hapAll, Scope, {noperiod=}true, {noscope=}false, result);
+end;
+
+function THttpMetrics.Find(Start, Stop: TDateTime): THttpAnalyzerToSaveDynArray;
+begin
+  DoFind(Start, Stop, hapAll, hasAny, {noperiod=}true, {noscope=}true, result);
+end;
+
+function THttpMetrics.GetAsText(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope): RawUtf8;
+begin
+  DoText(Start, Stop, Period, Scope, {noperiod=}false, {noscope=}false, result);
+end;
+
+function THttpMetrics.GetAsText(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod): RawUtf8;
+begin
+  DoText(Start, Stop, Period, hasAny, {noperiod=}false, {noscope=}true, result);
+end;
+
+function THttpMetrics.GetAsText(Start, Stop: TDateTime;
+  Scope: THttpAnalyzerScope): RawUtf8;
+begin
+  DoText(Start, Stop, hapAll, Scope, {noperiod=}true, {noscope=}false, result);
+end;
+
+function THttpMetrics.GetAsText(Start, Stop: TDateTime): RawUtf8;
+begin
+  DoText(Start, Stop, hapAll, hasAny, {noperiod=}true, {noscope=}true, result);
+end;
+
+function THttpMetrics.GetAsText(Start, Stop: TDateTime;
+  const Name: RawUtf8): RawUtf8;
 var
-  ndxStart, ndxStop: integer;
-  count, capacity: PtrInt;
+  s: THttpAnalyzerScope;
+  p: THttpAnalyzerPeriod;
+begin
+  result := '';
+  if Name <> '' then
+    if FromText(Name, s) then
+      result := GetAsText(Start, Stop, s)
+    else if FromText(Name, p) then
+      result := GetAsText(Start, Stop, p);
+end;
+
+procedure THttpMetrics.DoText(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+  NoPeriod, NoScope: boolean; out Result: RawUtf8);
+var
+  tmp: THttpAnalyzerToSaveDynArray;
+begin
+  DoFind(Start, Stop, Period, Scope, NoPeriod, NoScope, tmp);
+  MetricsToCsv(tmp, NoPeriod, NoScope, Result);
+end;
+
+procedure THttpMetrics.DoFind(Start, Stop: TDateTime;
+  Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
+  NoPeriod, NoScope: boolean; out Result: THttpAnalyzerToSaveDynArray);
+var
+  ndxStart, ndxStop, count, capacity: integer;
   si, pi: PInteger;
   p, s: PHttpAnalyzerToSave;
   v: PHttpAnalyzerToSaveArray;
@@ -6174,12 +6288,13 @@ var
       capacity := 40 // generous initial allocation (1600 bytes)
     else
       capacity := NextGrow(capacity);
-    SetLength(result, capacity);
+    SetLength(Result, capacity);
   end;
 
 begin
-  result := nil;
-  if not (Period in [hapMinute .. hapMonth, hapAll]) then
+  if (Stop <= Start) or
+     ((not NoPeriod) and
+      (not (Period in [hapMinute .. hapMonth]))) then
     exit; // OnSave() has been done in this range only
   count := 0;
   capacity := 0;
@@ -6192,20 +6307,35 @@ begin
     if ndxStart >= ndxStop then
       exit;
     // perform the actual (indexed) search
-    if Period in [hapMinute, hapAll] then
+    if NoPeriod then
     begin
-      // direct O(n) search within ndxStart < ndxStop range
+      // NoPeriod: direct O(n) search within ndxStart < ndxStop range
       s := @v[ndxStart];
       p := @v[ndxStop];
       repeat
-        if ((Period = hapAll) or
-            (s^.Period = hapMinute)) and
-           ((Scope = hasAny) or
+        if NoScope or
+           (s^.Scope = Scope) then
+        begin
+          if count = capacity then
+            ResultGrow;
+          Result[count] := s^;
+          inc(count);
+        end;
+        inc(s);
+      until s = p;
+    end else if Period = hapMinute then
+    begin
+      // hapMinute: direct O(n) search within ndxStart < ndxStop range
+      s := @v[ndxStart];
+      p := @v[ndxStop];
+      repeat
+        if (s^.Period = hapMinute) and
+           (NoScope or
             (s^.Scope = Scope)) then
         begin
           if count = capacity then
             ResultGrow;
-          result[count] := s^;
+          Result[count] := s^;
           inc(count);
         end;
         inc(s);
@@ -6216,12 +6346,12 @@ begin
       if RangeToPeriodIndex(Period, ndxStart, ndxStop, si, pi) > 0 then
         repeat
           s := @v[si^];
-          if (Scope = hasAny) or
+          if NoScope or
              (s^.Scope = Scope) then
           begin
             if count = capacity then
               ResultGrow;
-            result[count] := s^;
+            Result[count] := s^;
             inc(count);
           end;
           inc(si);
@@ -6229,8 +6359,8 @@ begin
   finally
     fSafe.UnLock;
   end;
-  if result <> nil then
-    DynArrayFakeLength(result, count);
+  if Result <> nil then
+    DynArrayFakeLength(Result, count);
 end;
 
 
@@ -6254,12 +6384,44 @@ begin
   result := GetEnumName(TypeInfo(THttpRotaterTrigger), ord(r));
 end;
 
+function FromText(const Text: RawUtf8; out Scope: THttpAnalyzerScope): boolean;
+var
+  s: THttpAnalyzerScope;
+begin
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti;
+  for s := low(s) to high(s) do
+    if IdemPropNameU(Text, _SCOPE[s]) then
+    begin
+      Scope := s;
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
+function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean;
+var
+  p: THttpAnalyzerPeriod;
+begin
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti;
+  for p := low(p) to high(p) do
+    if IdemPropNameU(Text, _PERIOD[p]) then
+    begin
+      Period := p;
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
 const
   // truncate 'YYMMDDHHMMSS' formatted date/time depending on period resolution
   _DATELEN: array[THttpAnalyzerPeriod] of byte = (12, 10, 8, 6, 4, 2, 12);
 
-function ToText(const Metrics: THttpAnalyzerToSaveDynArray;
-  SearchedPeriod: THttpAnalyzerPeriod; SearchedScope: THttpAnalyzerScope): RawUtf8;
+procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
+  NoPeriod, NoScope: boolean; out Result: RawUtf8);
 var
   n: integer;
   d: PHttpAnalyzerToSave;
@@ -6267,15 +6429,16 @@ var
   date: TShort16;
   tmp: TTextWriterStackBuffer;
 begin
-  result := '';
   if Metrics = nil then
     exit;
+  if _SCOPE[hasAny] = '' then
+    GetScopePeriodRtti; // if not done in THttpAnalyzer/THttpMetrics.Create
   w := TTextWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Date',   _WIDTH, ',');
-    if SearchedPeriod = hapAll then
+    if not NoPeriod then
       w.AddSpaced('Period', _WIDTH, ',');
-    if SearchedScope = hasAny then
+    if not NoScope then
       w.AddSpaced('Scope',  _WIDTH, ',');
     AppendFieldNames(w);
     n := length(Metrics);
@@ -6284,15 +6447,15 @@ begin
       DateTimeToFileShort(d^.DateTime, date);
       w.AddSpaced(@date[1], _DATELEN[d^.Period], _WIDTH);
       w.AddComma;
-      if SearchedPeriod = hapAll then
+      if not NoPeriod then
         w.AddSpaced(_PERIOD[d^.Period], _WIDTH, ',');
-      if SearchedScope = hasAny then
+      if not NoScope then
         w.AddSpaced(_SCOPE[d^.Scope], _WIDTH, ',');
       AppendFieldValues(w, d^.State);
       inc(d);
       dec(n);
     until n = 0;
-    w.SetText(result);
+    w.SetText(Result);
   finally
     w.Free;
   end;
@@ -6301,8 +6464,6 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @_SCOPE);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @_PERIOD);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
