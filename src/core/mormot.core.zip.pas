@@ -882,8 +882,9 @@ const
 {$ifdef LIBDEFLATESTATIC}
 var
   // libdeflate + AVX is much faster than zlib, but its API expects only buffers
-  // - files up to 64MB will call libdeflate and a temporary memory buffer
-  LIBDEFLATE_MAXSIZE: Int64 = 64 shl 20;
+  // - files or buffers up to 64MB (on 32-bit OS) or 128MB (on 64-bit OS) will
+  // call libdeflate and a temporary memory buffer
+  LIBDEFLATE_MAXSIZE: Int64 = {$ifdef CPU32} 64 {$else} 128 {$endif} shl 20;
 {$endif LIBDEFLATESTATIC}
 
 
@@ -1209,7 +1210,7 @@ begin
      (filename = '') then
     exit;
   {$ifdef LIBDEFLATESTATIC}
-  // files up to 64MB will call libdeflate using a temporary memory buffer
+  // files up to 64MB/128MB will call libdeflate using a temporary memory buffer
   if uncomplen32 < LIBDEFLATE_MAXSIZE then
     FileFromString(ToMem, filename)
   else
@@ -1341,7 +1342,7 @@ begin
   try
     {$ifdef LIBDEFLATESTATIC}
     // libdeflate is much faster than zlib, but its API expects only buffers
-    if FileSize(orig) < LIBDEFLATE_MAXSIZE then
+    if FileSize(orig) <= LIBDEFLATE_MAXSIZE then
     begin
       src := StringFromFile(orig);
       dst := GZWrite(pointer(src), length(src), CompressionLevel);
@@ -1378,7 +1379,7 @@ begin
   try
     {$ifdef LIBDEFLATESTATIC}
     // libdeflate is much faster than zlib, but its API expects only buffers
-    if len < LIBDEFLATE_MAXSIZE then
+    if len <= LIBDEFLATE_MAXSIZE then
     begin
       dst := GZWrite(buf, len, CompressionLevel);
       result := (dst <> '') and
@@ -2013,7 +2014,7 @@ begin
       if (met = Z_DEFLATED) and
          (Int64(todo) <= LIBDEFLATE_MAXSIZE) then
       begin
-        // files up to 64MB will be loaded into memory and call libdeflate
+        // files up to 64MB/128MB will be loaded into memory and call libdeflate
         Setlength(tmp, todo);
         if not FileReadAll(f, pointer(tmp), todo) then
           raise ESynZip.CreateUtf8('%.AddDeflated: failed to read % [%]',
@@ -2974,7 +2975,7 @@ begin
   begin
     local.LoadAndDataSeek(fSource, e^.fileinfo.offset + fSourceOffset);
     {$ifdef LIBDEFLATESTATIC}
-    // files up to 64MB will call libdeflate using a temporary memory buffer
+    // up to 64MB/128MB will call libdeflate using a temporary memory buffer
     if (aInfo.f32.zZipMethod = Z_DEFLATED) and
        (len < LIBDEFLATE_MAXSIZE) then
       with aInfo.f64 do
@@ -3048,7 +3049,7 @@ begin
       Z_DEFLATED:
         with aInfo.f64 do
         {$ifdef LIBDEFLATESTATIC}
-        // files up to 64MB will call libdeflate using a temporary memory buffer
+        // up to 64MB/128MB will call libdeflate using a temporary memory buffer
         if len < LIBDEFLATE_MAXSIZE then
         begin
           FastSetRawByteString(tmp, nil, len);
