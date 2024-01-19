@@ -116,7 +116,7 @@ type
     function IsPrimaryKeyIndexed(var AscendingOnly: boolean): boolean; override;
   published
     /// full file path name to the firebird client dll (fbclient.dll), default ''
-    property FirebirdLibraryPathName: RawUtf8
+    property FirebirdLibraryPathName: string
       read fFirebirdLibraryPathName write fFirebirdLibraryPathName;
     /// optional low-levl IBX DB Params, see documentation in IBX/FB Pascal API
     property IbxDBParams: TStringList
