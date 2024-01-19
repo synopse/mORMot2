@@ -495,6 +495,10 @@ type
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
+  /// a shortstring which only takes 48 bytes of memory
+  TShort47 = string[47];
+  PShort47 = ^TShort47;
+
   /// used e.g. for SetThreadName/GetCurrentThreadName
   TShort31 = string[31];
   PShort31 = ^TShort31;

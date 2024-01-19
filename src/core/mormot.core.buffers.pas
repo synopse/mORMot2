@@ -7923,7 +7923,7 @@ end;
 procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet; space2plus: cardinal);
 var
   c: cardinal;
-  hex: ^TByteToWord;
+  hex: PByteToWord;
 begin
   hex := @TwoDigitsHexWB;
   repeat

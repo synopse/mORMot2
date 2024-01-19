@@ -1944,20 +1944,19 @@ type
 
 /// convert any HTTP_* constant to an integer error code and its English text
 // - returns e.g. 'HTTP Error 404 - Not Found', calling StatusCodeToReason()
-function StatusCodeToErrorMsg(Code: integer): ShortString;
-
-/// convert any HTTP_* constant to an integer status code and its English text
-// - returns e.g. '200 OK' or '404 Not Found', calling StatusCodeToReason()
-function StatusCodeToShort(Code: integer): ShortString;
+function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
 
 type
-  /// lookup table used for fast hexadecimal conversion
+  /// type of a lookup table used for fast hexadecimal conversion
   THexToDualByte = packed array[0..511] of byte;
+  /// type of a lookup table used for fast XML/HTML conversion
   TAnsiCharToByte = array[AnsiChar] of byte;
+  /// type of a lookup table used for fast two-digit chars conversion
   TAnsiCharToWord = array[AnsiChar] of word;
+  /// type of a lookup table used for fast two-digit chars conversion
   TByteToWord = array[byte] of word;
   PByteToWord = ^TByteToWord;
 
@@ -5060,10 +5059,10 @@ var
   temp: TTextWriterStackBuffer;
   W: TTextWriter;
 begin
-  {$ifndef UNICODE}
-  if not NeedsHtmlEscape(pointer(text), fmt) then // work for any AnsiString
-  {$else}
+  {$ifdef UNICODE}
   if fmt = hfNone then
+  {$else}
+  if not NeedsHtmlEscape(pointer(text), fmt) then // work for any AnsiString
   {$endif UNICODE}
   begin
     StringToUtf8(text, result);
@@ -9022,20 +9021,12 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-function StatusCodeToErrorMsg(Code: integer): ShortString;
+function StatusCodeToErrorMsg(Code: integer): RawUtF8;
 var
   msg: RawUtf8;
 begin
   StatusCodeToReason(Code, msg);
-  FormatShort('HTTP Error % - %', [Code, msg], result);
-end;
-
-function StatusCodeToShort(Code: integer): ShortString;
-var
-  msg: RawUtf8;
-begin
-  StatusCodeToReason(Code, msg);
-  FormatShort('% %', [Code, msg], result);
+  FormatUtf8('HTTP Error % - %', [Code, msg], result);
 end;
 
 

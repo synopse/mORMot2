@@ -151,14 +151,17 @@ const
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 // - returns the generic 'Invalid Request' for unknown Code
 // - use an internal cache for efficiency
-// - see also StatusCodeToErrorMsg() from mormot.core.text if you need
-// the HTTP error as both integer and text, returned as ShortString
+// - see also StatusCodeToShort and StatusCodeToErrorMsg from mormot.core.text
 function StatusCodeToReason(Code: cardinal): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the HTTP reason text from its integer code
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 procedure StatusCodeToReason(Code: cardinal; var Reason: RawUtf8); overload;
+
+/// convert any HTTP_* constant to an integer status code and its English text
+// - returns e.g. '200 OK' or '404 Not Found', calling StatusCodeToReason()
+function StatusCodeToShort(Code: cardinal): TShort47;
 
 /// returns true for successful HTTP status codes, i.e. in 200..399 range
 // - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
@@ -5503,7 +5506,7 @@ implementation
 { ****************** Some Cross-System Type and Constant Definitions }
 
 var
-  // live cache array to avoid memory allocations
+  // StatusCodeToReason() cache to avoid memory allocations
   ReasonCache: array[1..5, 0..13] of RawUtf8;
 
 procedure StatusCode2Reason(Code: cardinal; var Reason: RawUtf8);
@@ -5626,6 +5629,19 @@ begin
     exit;
   StatusCode2Reason(Code, Reason);
   ReasonCache[Hi, Lo] := Reason;
+end;
+
+function StatusCodeToShort(Code: cardinal): TShort47;
+var
+  msg: RawUtf8;
+begin
+  if Code > 599 then
+    Code := 999; // ensure stay in TShort47
+  StatusCodeToReason(Code, msg); // max length = 32 chars
+  result[0] := #0;
+  AppendShortCardinal(Code, result);
+  AppendShortChar(' ', result);
+  AppendShortAnsi7String(msg, result);
 end;
 
 function StatusCodeIsSuccess(Code: integer): boolean;
