@@ -1604,8 +1604,8 @@ var
 begin
   fApplication.GetViewInfo(fMethodIndex, info);
   renderContext := _ObjFast([
-    'main', info,
-    'msg', StatusCodeToErrorMsg(ErrorCode),
+    'main',      info,
+    'msg',       StatusCodeToErrorMsg(ErrorCode),
     'errorCode', ErrorCode,
     ErrorName, ErrorValue]);
   renderContext.originalErrorContext := JsonReformat(ToUtf8(renderContext));

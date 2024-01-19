@@ -1954,8 +1954,10 @@ type
   THexToDualByte = packed array[0..511] of byte;
   /// type of a lookup table used for fast XML/HTML conversion
   TAnsiCharToByte = array[AnsiChar] of byte;
+  PAnsiCharToByte = ^TAnsiCharToByte;
   /// type of a lookup table used for fast two-digit chars conversion
   TAnsiCharToWord = array[AnsiChar] of word;
+  PAnsiCharToWord = ^TAnsiCharToWord;
   /// type of a lookup table used for fast two-digit chars conversion
   TByteToWord = array[byte] of word;
   PByteToWord = ^TByteToWord;
@@ -5012,7 +5014,7 @@ var
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
   beg: PUtf8Char;
-  esc: ^TAnsiCharToByte;
+  esc: PAnsiCharToByte;
 begin
   if Text = nil then
     exit;
@@ -5079,7 +5081,7 @@ end;
 
 function NeedsHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat): boolean;
 var
-  esc: ^TAnsiCharToByte;
+  esc: PAnsiCharToByte;
 begin
   if (Text <> nil) and
      (Fmt <> hfNone) then
@@ -5102,7 +5104,7 @@ procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
   Fmt: TTextWriterHtmlFormat);
 var
   beg: PUtf8Char;
-  esc: ^TAnsiCharToByte;
+  esc: PAnsiCharToByte;
 begin
   if (Text = nil) or
      (TextLen <= 0) then
@@ -5166,7 +5168,7 @@ var
 procedure TTextWriter.AddXmlEscape(Text: PUtf8Char);
 var
   i, beg: PtrInt;
-  esc: ^TAnsiCharToByte;
+  esc: PAnsiCharToByte;
 begin
   if Text = nil then
     exit;
@@ -9037,7 +9039,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TAnsiCharToWord absolute TwoDigitsHexW;
   {$else}
-  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
@@ -9230,7 +9232,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TAnsiCharToWord absolute TwoDigitsHexW;
   {$else}
-  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
@@ -9257,7 +9259,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
   {$else}
-  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
@@ -9293,7 +9295,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TAnsiCharToWord absolute TwoDigitsHexWLower;
   {$else}
-  tab: ^TAnsiCharToWord; // faster on PIC, ARM and x86_64
+  tab: PAnsiCharToWord; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   if (Bin = nil) or

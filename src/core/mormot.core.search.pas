@@ -3902,7 +3902,7 @@ function TExprParserMatch.Search(aText: PUtf8Char; aTextLen: PtrInt): boolean;
 var
   P, PEnd: PUtf8Char;
   n: PtrInt;
-  tab: ^TAnsiCharToByte;
+  tab: PAnsiCharToByte;
 begin
   P := aText;
   if (P = nil) or
