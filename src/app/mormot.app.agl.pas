@@ -673,7 +673,6 @@ var
   fn: array of TFileName;
   n, i, old: PtrInt;
 begin
-  FreeAndNil(fRedirect);
   n := fService.RedirectLogRotateFiles;
   SetLength(fn, n - 1);
   old := 0;
@@ -688,6 +687,7 @@ begin
     DeleteFile(fn[old - 1]);            // delete e.g. 'xxx.9'
   for i := n - 2 downto 1 do
     RenameFile(fn[i - 1], fn[i]);       // e.g. 'xxx.8' -> 'xxx.9'
+  FreeAndNil(fRedirect);
   RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
   fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
 end;
