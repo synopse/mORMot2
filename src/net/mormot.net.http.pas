@@ -1489,36 +1489,63 @@ type
 
   THttpLogger = class;
 
-  /// define how THttpLogger/THttpLoggerWriter do rotate its content
-  THttpLoggerRotate = (
-    hlrUndefined,
-    hlrDaily,
-    hlrWeekly,
-    hlrAfter1MB,
-    hlrAfter10MB,
-    hlrAfter32MB,
-    hlrAfter100MB);
+  /// define how THttpLogger/THttpAnalyzerPersistAbstract do rotate its content
+  // - hrtUndefined disable the whole file rotation feature - beware that the
+  // file will grow without any size limit, so may exhaust your disk size
+  // - hrtDaily/hrtWeekly will rotate every day/week or after 100MB of content
+  // - hrtAfter1MB/hrtAfter10MB/hrtAfter32MB/hrtAfter100MB will rotate after
+  // 1/10/32/100 MB of content
+  THttpRotaterTrigger = (
+    hrtUndefined,
+    hrtDaily,
+    hrtWeekly,
+    hrtAfter1MB,
+    hrtAfter10MB,
+    hrtAfter32MB,
+    hrtAfter100MB);
+
+  THttpRotaterEvent = (
+    hreLock,
+    hreUnLock,
+    hreOpenFile,
+    hreCloseFile);
+
+  /// low-level field object able to perform file rotation with .gz compression
+  // - to be used as a protected field - see e.g. THttpLoggerWriter or
+  // THttpAnalyzerPersistAbstract
+  {$ifdef USERECORDWITHMETHODS}
+  THttpRotater = record
+  {$else}
+  THttpRotater = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Rotating: TLightLock;
+    Trigger: THttpRotaterTrigger;
+    Files: integer;
+    NextTix10: cardinal;
+    TriggerDate: integer; // = next Trunc(NowUtc)
+    FileName: TFileName;
+    OnRotate: procedure(Event: THttpRotaterEvent) of object;
+    procedure TryRotate(Tix10: cardinal; Size: QWord);
+    procedure SetRotateDate(dt: TDateTime);
+    procedure DoRotate;
+  end;
 
   /// a per-host TTextDateWriter stream class used by THttpLogger
   THttpLoggerWriter = class(TTextDateWriter)
   protected
     fHost: RawUtf8;
     fOwner: THttpLogger;
-    fFileName: TFileName;
-    fRotating: TLightLock;
-    fRotate: THttpLoggerRotate;
-    fRotateFiles: integer;
-    fRotateTix10: cardinal;
-    fRotateDate: integer; // = next Trunc(NowUtc)
+    fRotate: THttpRotater;
     fLastWriteToStreamTix10: cardinal;
     procedure TryRotate(Tix10: cardinal);
-    procedure SetRotateDate;
-    procedure DoRotate;
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure OnRotate(Event: THttpRotaterEvent);
     procedure WriteToStream(data: pointer; len: PtrUInt); override;
   public
     /// initialize a TTextDateWriter instance for THttpLogger
     constructor Create(aOwner: THttpLogger; const aHost: RawUtf8;
-      aRotate: THttpLoggerRotate; aRotateFiles: integer); reintroduce;
+      aRotate: THttpRotaterTrigger; aRotateFiles: integer); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
     /// the associated lowercased Host name of this writer
@@ -1527,7 +1554,7 @@ type
       read fHost;
     /// the file name of this .log instance
     property FileName: TFileName
-      read fFileName;
+      read fRotate.FileName;
   end;
   /// dynamic array used by THttpLogger to store its per-host log writers
   THttpLoggerWriterDynArray = array of THttpLoggerWriter;
@@ -1550,7 +1577,7 @@ type
     fVariables: THttpLogVariables;
     fDestFolder, fDestMainLog: TFileName;
     fFlags: set of (ffOwnWriterSingle);
-    fDefaultRotate: THttpLoggerRotate;
+    fDefaultRotate: THttpRotaterTrigger;
     fDefaultRotateFiles: integer;
     procedure SetFormat(const aFormat: RawUtf8);
     procedure SetDestFolder(const aFolder: TFileName);
@@ -1578,14 +1605,15 @@ type
     // - returns '' on success, or an error message on invalid input
     // - recognized $variable names match trimmed THttpLogVariable enumeration
     // - the Format property will call this method and raise EHttpLogger on error
-    // - can NOT be called once the server started its logging process
+    // - will refuse to be called once the server started its logging process
     function Parse(const aFormat: RawUtf8): RawUtf8; virtual;
     /// register a HTTP host to process its own log file
-    // - you can customize its rotation process, if needed
+    // - you can customize its rotation process, if needed - hrtUndefined or -1
+    // values will just use main DefaultRotate/DefaultRotateFiles values
     // - fails if CreateWithWriter or CreateWithFile constructors were used
     // - can be called even after the server started its logging process
     procedure DefineHost(const aHost: RawUtf8;
-      aRotate: THttpLoggerRotate = hlrUndefined;
+      aRotate: THttpRotaterTrigger = hrtUndefined;
       aRotateFiles: integer = -1); virtual;
     /// append a request information to the destination log file
     // - thread-safe method matching TOnHttpServerAfterResponse signature, to
@@ -1638,16 +1666,19 @@ type
     // - DefineHost() will use the 'hostname.log' pattern for its own log files
     property DestMainLog: TFileName
       read fDestMainLog write fDestMainLog;
-    /// define when log file rotation should occur
-    // - default value is hlrAfter10MB
-    // - you can customize this in DefineHost() optional aRotate parameter
+    /// define when/how log file rotation should occur
+    // - default value is hrtAfter10MB
+    // - if set to hrtUndefined, no rotation will happen at all - but be aware
+    // that the log file could exhaust all your storage space
+    // - see also the DefineHost() optional aRotate parameter
     // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DefaultRotate: THttpLoggerRotate
+    property DefaultRotate: THttpRotaterTrigger
       read fDefaultRotate write fDefaultRotate;
     /// how many log files are kept by default, including the main file
-    // - default value is 9, i.e. to generate 'xxx.1.gz' up to 'xxx.9.gz'
-    // - setting 0 would disable the whole rotation process
-    // - you can customize this in DefineHost() optional aRotateFiles parameter
+    // - default value is 9, i.e. generating 'xxx.1.gz' up to 'xxx.9.gz' backups
+    // - setting 0 would disable the whole rotation process and just delete the
+    // main file everytime the DefaultRotate condition is met
+    // - see also the DefineHost() optional aRotateFiles parameter
     // - not used if CreateWithWriter or CreateWithFile constructors were called
     property DefaultRotateFiles: integer
       read fDefaultRotateFiles write fDefaultRotateFiles;
@@ -2074,7 +2105,7 @@ const
 function ToText(s: THttpAnalyzerScope): PShortString; overload;
 function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
 function ToText(v: THttpLogVariable): PShortString; overload;
-function ToText(r: THttpLoggerRotate): PShortString; overload;
+function ToText(r: THttpRotaterTrigger): PShortString; overload;
 
 
 
@@ -4095,102 +4126,102 @@ begin
 end;
 
 
-{ THttpLoggerWriter }
+{ THttpRotater }
 
-procedure THttpLoggerWriter.SetRotateDate;
+procedure THttpRotater.SetRotateDate(dt: TDateTime);
 var
-  dt: TDateTime;
   day: integer;
 begin
-  dt := NowUtc; // no local date/time because it may go back in time
+  if dt = 0 then
+    dt := NowUtc; // no local date/time because it may go back in time
   day := Trunc(dt);
-  case fRotate of
-    hlrDaily:
+  case Trigger of
+    hrtDaily:
       // trigger next day just after UTC midnight
-      fRotateDate := day + 1;
-    hlrWeekly:
+      TriggerDate := day + 1;
+    hrtWeekly:
       // Sunday is DayOfWeek 1, Saturday is 7
-      fRotateDate := day + 8 - DayOfWeek(dt); // next Sunday after UTC midnight
+      TriggerDate := day + 8 - DayOfWeek(dt); // next Sunday after UTC midnight
   end;
 end;
 
-procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
+procedure THttpRotater.TryRotate(Tix10: cardinal; Size: QWord);
 var
-  size: QWord;
   needrotate: boolean;
+  dt: TDateTime;
 begin
-  // quickly check if we need to rotate this .log file
-  if (fStream = nil) or
-     not fRotating.TryLock then
+  // quickly check if we need to rotate this (.log) file
+  if (Trigger = hrtUndefined) or
+     not Assigned(OnRotate) or
+     not Rotating.TryLock then
     exit; // avoid race condition (paranoid)
-  size := fTotalFileSize + PendingBytes;
-  needrotate := size >= 100 shl 20; // force always above 100MB
-  case fRotate of
-    hlrDaily,
-    hlrWeekly:
-      if Tix10 >= fRotateTix10 then
+  needrotate := Size >= 100 shl 20; // always rotate above 100MB
+  case Trigger of
+    hrtDaily,
+    hrtWeekly:
+      if NextTix10 >= Tix10 then
       begin
-        fRotateTix10 := Tix10 + 60 * 60; // check fRotateDate every hour
-        if Trunc(NowUtc) >= fRotateDate then
+        NextTix10 := Tix10 + 60 * 60; // check TriggerDate every hour
+        dt := NowUtc;
+        if Trunc(dt) >= TriggerDate then
         begin
-          SetRotateDate; // always prepare next rotation date
-          needrotate := size <> 0; // something to rotate
+          SetRotateDate(dt); // always prepare next rotation date
+          needrotate := Size <> 0; // something to rotate
         end;
       end;
-    hlrAfter1MB:
-      needrotate := size >= 1 shl 20;
-    hlrAfter10MB:
-      needrotate := size >= 10 shl 20;
-    hlrAfter32MB:
-      needrotate := size >= 32 shl 20;
-  end; // hlrAfter100MB + hlrUndefined = above 100MB
+    hrtAfter1MB:
+      needrotate := Size >= 1 shl 20;
+    hrtAfter10MB:
+      needrotate := Size >= 10 shl 20;
+    hrtAfter32MB:
+      needrotate := Size >= 32 shl 20;
+  end; // hrtAfter100MB = above 100MB
   if needrotate then
   try
-    // rotate the file now - in a dedicated method
+    // rotate the file now - in a dedicated sub-method
     DoRotate;
   finally
-    fRotating.UnLock; // eventual release
+    Rotating.UnLock; // eventual release
   end
   else
-    fRotating.UnLock; // quick execution path if nothing to rotate
+    Rotating.UnLock; // quick execution path if nothing to rotate
 end;
 
-procedure THttpLoggerWriter.DoRotate;
+procedure THttpRotater.DoRotate;
 var
   fn: array of TFileName;
   tocompress: TFileName;
   i, old: PtrInt;
 begin
-  fOwner.fSafe.Lock;
+  OnRotate(hreLock);
   try
-    // close this .log file
-    FlushFinal;
-    FreeAndNil(fStream);
-    if fRotateFiles > 0 then
+    // close this (.log) file
+    OnRotate(hreCloseFile);
+    if Files > 0 then
     begin
       // perform file rotations similar to the standard logrotate tool
-      SetLength(fn, fRotateFiles); // = 9 by default
+      SetLength(fn, Files); // = 9 by default
       old := 0;
-      for i := fRotateFiles downto 1 do
+      for i := Files downto 1 do
       begin
-        fn[i - 1] := FormatString('%.%.gz', [fFileName, i]);
+        fn[i - 1] := FormatString('%.%.gz', [FileName, i]);
         if (old = 0) and
            FileExists(fn[i - 1]) then
           old := i;
       end;
-      if old = fRotateFiles then
+      if old = Files then
         DeleteFile(fn[old - 1]);         // delete e.g. 'xxx.9.gz'
-      for i := fRotateFiles - 1 downto 1 do
+      for i := Files - 1 downto 1 do
         RenameFile(fn[i - 1], fn[i]);    // e.g. 'xxx.8.gz' -> 'xxx.9.gz'
-      tocompress := fFileName + '.tmp';
-      RenameFile(fFileName, tocompress); // 'xxx' -> 'xxx.tmp'
-    end;
-    // create a new .log file with the same file name
-    fStream := TFileStreamEx.Create(fFileName, fmCreate or fmShareDenyWrite);
-    fInitialStreamPosition := 0; // brand new file
-    CancelAll;
+      tocompress := FileName + '.tmp';
+      RenameFile(FileName, tocompress); // 'xxx' -> 'xxx.tmp'
+    end
+    else
+      DeleteFile(FileName); // restart from scratch
+    // create a new (.log) file with the same file name
+    OnRotate(hreOpenFile);
   finally
-    fOwner.fSafe.UnLock;
+    OnRotate(hreUnLock);
   end;
   // compress 'xxx.tmp' -> 'xxx.1.gz' outside the main lock
   if tocompress <> '' then
@@ -4201,6 +4232,16 @@ begin
     end;
 end;
 
+
+{ THttpLoggerWriter }
+
+procedure THttpLoggerWriter.TryRotate(Tix10: cardinal);
+begin
+  if (fStream <> nil) and
+     (fRotate.Trigger <> hrtUndefined) then
+    fRotate.TryRotate(Tix10, fTotalFileSize + PendingBytes);
+end;
+
 procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
 begin
   // no need of THttpLogger.OnIdle to flush this log file within this second
@@ -4209,23 +4250,45 @@ begin
   inherited WriteToStream(data, len);
 end;
 
+procedure THttpLoggerWriter.OnRotate(Event: THttpRotaterEvent);
+begin
+  case Event of
+    hreLock:
+      fOwner.fSafe.Lock;
+    hreUnLock:
+      fOwner.fSafe.UnLock;
+    hreOpenFile:
+      begin
+        fStream := TFileStreamEx.Create(FileName, fmCreate or fmShareDenyWrite);
+        fInitialStreamPosition := 0; // brand new file
+        CancelAll;
+      end;
+    hreCloseFile:
+      begin
+        FlushFinal;
+        FreeAndNil(fStream);
+      end;
+  end;
+end;
+
 constructor THttpLoggerWriter.Create(aOwner: THttpLogger; const aHost: RawUtf8;
-  aRotate: THttpLoggerRotate; aRotateFiles: integer);
+  aRotate: THttpRotaterTrigger; aRotateFiles: integer);
 var
   s: TStream;
 begin
   fHost := aHost;
   fOwner := aOwner;
-  fRotate := aRotate;
-  fRotateFiles := aRotateFiles;
-  fFileName := fOwner.GetPerHostFileName(aHost);
-  s := TFileStreamEx.CreateWrite(fFileName);
+  fRotate.Trigger := aRotate;
+  fRotate.Files := aRotateFiles;
+  fRotate.OnRotate := OnRotate;
+  fRotate.FileName := fOwner.GetPerHostFileName(aHost);
+  s := TFileStreamEx.CreateWrite(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
   fCustomOptions := [twoNoWriteToStreamException,
                      twoFlushToStreamNoAutoResize,
                      twoStreamIsOwned];
-  SetRotateDate;
+  fRotate.SetRotateDate(0);
 end;
 
 destructor THttpLoggerWriter.Destroy;
@@ -4241,7 +4304,7 @@ constructor THttpLogger.Create;
 begin
   inherited Create;  // fSafe.Init
   fLineFeed := CRLF; // default operating-system dependent Line Feed
-  fDefaultRotate := hlrAfter10MB;
+  fDefaultRotate := hrtAfter10MB;
   fDefaultRotateFiles := 9;
   fDestMainLog := 'access.log';
 end;
@@ -4388,11 +4451,11 @@ begin
       fWriterHostSafe.UnLock;
     end;
   end;
-  THttpLoggerWriter(result).TryRotate(Tix10); // outside the lock
+  THttpLoggerWriter(result).TryRotate(Tix10); // outside of the lock
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
-  aRotate: THttpLoggerRotate; aRotateFiles: integer);
+  aRotate: THttpRotaterTrigger; aRotateFiles: integer);
 var
   i: PtrInt;
   w: THttpLoggerWriter;
@@ -4408,22 +4471,22 @@ begin
       // first call: we need to set WriterHost[0] = access.log
       CreateMainWriter
     else
-      // search if we need to update a previous DefineHost()
+      // search if we need to update a previous DefineHost() parameters
       for i := 1 to length(fWriterHost) - 1 do
       begin
         w := fWriterHost[i];
         if IdemPropNameU(w.Host, h) then
         begin
           if aRotateFiles >= 0 then
-            w.fRotateFiles := aRotateFiles;
-          if aRotate <> hlrUndefined then
-            w.fRotate := aRotate;
-          w.SetRotateDate;
+            w.fRotate.Files := aRotateFiles;
+          if aRotate <> hrtUndefined then
+            w.fRotate.Trigger := aRotate;
+          w.fRotate.SetRotateDate(0);
           exit;
         end;
       end;
     // add a new definition for this specific host
-    if aRotate = hlrUndefined then
+    if aRotate = hrtUndefined then
       aRotate := fDefaultRotate;
     if aRotateFiles < 0 then
       aRotateFiles := fDefaultRotateFiles;
@@ -5942,9 +6005,9 @@ begin
   result := GetEnumName(TypeInfo(THttpLogVariable), ord(v));
 end;
 
-function ToText(r: THttpLoggerRotate): PShortString;
+function ToText(r: THttpRotaterTrigger): PShortString;
 begin
-  result := GetEnumName(TypeInfo(THttpLoggerRotate), ord(r));
+  result := GetEnumName(TypeInfo(THttpRotaterTrigger), ord(r));
 end;
 
 

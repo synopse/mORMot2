@@ -1884,11 +1884,11 @@ type
     // instance logging state will be replicated to all cloned instances
     // - you can select the output folder and the expected logging layout
     // - aSoftwareName will set the optional W3C-only software name string
-    // - aRolloverSize will be used only when aRolloverType is hlroSize
+    // - aRolloverSize will be used only when aRolloverType is hlrSize
     procedure LogStart(const aLogFolder: TFileName;
       aType: THttpApiLoggingType = hltW3C;
       const aSoftwareName: TFileName = '';
-      aRolloverType: THttpApiLoggingRollOver = hlroDaily;
+      aRolloverType: THttpApiLoggingRollOver = hlrDaily;
       aRolloverSize: cardinal = 0;
       aLogFields: THttpApiLogFields = [hlfDate..hlfSubStatus];
       aFlags: THttpApiLoggingFlags = [hlfUseUtf8Conversion]);
@@ -6886,7 +6886,7 @@ begin
     aLogFields := [hlfDate..hlfSubStatus];
   log.Fields := integer(aLogFields);
   log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
-  if aRolloverType = hlroSize then
+  if aRolloverType = hlrSize then
     log.RolloverSize := aRolloverSize;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
