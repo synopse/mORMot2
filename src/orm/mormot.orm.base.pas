@@ -4590,8 +4590,8 @@ end;
 
 procedure TOrmPropInfoRttiInt32.SetValueInt32(Instance: TObject; Value: integer);
 begin
-  if fIntegerGetPropOffset then // roSLong without any getter
-    PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^ := Value
+  if fIntegerSetPropOffset then // roSLong without any setter
+    PInteger(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := Value
   else
     fPropInfo.SetOrdProp(Instance, Value);
 end;
