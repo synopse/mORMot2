@@ -2116,6 +2116,7 @@ type
     // - if Period is hapAll then no period filtering would take place
     // - if Scope is hasAny then no scope filtering would take place
     // - very fast, using per-Period indexes for hapHour .. hapMonth
+    // - you can use ToText() over the result to retrieve human-readbale CSV
     function Find(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
       Scope: THttpAnalyzerScope): THttpAnalyzerToSaveDynArray;
     /// class function able to retrieve the metadata of our optimized binary format
@@ -2167,6 +2168,12 @@ function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
 function ToText(v: THttpLogVariable): PShortString; overload;
 function ToText(r: THttpRotaterTrigger): PShortString; overload;
 
+/// convert some THttpMetrics.Find() result into human-readable CSV text
+// - SearchedPeriod and SearchedScope could be assigned to the corresponding
+// parameters used on Find() to remove Period and/or Scope columns from the CSV
+function ToText(const Metrics: THttpAnalyzerToSaveDynArray;
+  SearchedPeriod: THttpAnalyzerPeriod = hapAll;
+  SearchedScope: THttpAnalyzerScope = hasAny): RawUtf8; overload;
 
 
 implementation
@@ -6247,6 +6254,49 @@ begin
   result := GetEnumName(TypeInfo(THttpRotaterTrigger), ord(r));
 end;
 
+const
+  // truncate 'YYMMDDHHMMSS' formatted date/time depending on period resolution
+  _DATELEN: array[THttpAnalyzerPeriod] of byte = (12, 10, 8, 6, 4, 2, 12);
+
+function ToText(const Metrics: THttpAnalyzerToSaveDynArray;
+  SearchedPeriod: THttpAnalyzerPeriod; SearchedScope: THttpAnalyzerScope): RawUtf8;
+var
+  n: integer;
+  d: PHttpAnalyzerToSave;
+  w: TTextWriter;
+  date: TShort16;
+  tmp: TTextWriterStackBuffer;
+begin
+  result := '';
+  if Metrics = nil then
+    exit;
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    w.AddSpaced('Date',   _WIDTH, ',');
+    if SearchedPeriod = hapAll then
+      w.AddSpaced('Period', _WIDTH, ',');
+    if SearchedScope = hasAny then
+      w.AddSpaced('Scope',  _WIDTH, ',');
+    AppendFieldNames(w);
+    n := length(Metrics);
+    d := pointer(Metrics);
+    repeat
+      DateTimeToFileShort(d^.DateTime, date);
+      w.AddSpaced(@date[1], _DATELEN[d^.Period], _WIDTH);
+      w.AddComma;
+      if SearchedPeriod = hapAll then
+        w.AddSpaced(_PERIOD[d^.Period], _WIDTH, ',');
+      if SearchedScope = hasAny then
+        w.AddSpaced(_SCOPE[d^.Scope], _WIDTH, ',');
+      AppendFieldValues(w, d^.State);
+      inc(d);
+      dec(n);
+    until n = 0;
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
 
 
 initialization
