@@ -1893,9 +1893,9 @@ var
   V: PEntry absolute Data;
 begin
   W.AddJsonEscape([
-    'ID', V.ID,
+    'ID',        V.ID,
     'Timestamp', Int64(V.Timestamp512),
-    'Json', V.Json]);
+    'Json',      V.Json]);
 end;
 
 procedure TTestServiceOrientedArchitecture.Cleanup;
@@ -1905,11 +1905,11 @@ begin
   if fClient <> nil then
   begin
     fClient.CallBackGet('stat', [
-      'withtables', true,
-      'withsqlite3', true,
-      'withmethods', true,
+      'withtables',     true,
+      'withsqlite3',    true,
+      'withmethods',    true,
       'withinterfaces', true,
-      'withsessions', true], stats);
+      'withsessions',   true], stats);
     FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
     FreeAndNil(fClient);
   end;

@@ -550,6 +550,10 @@ function GetIPAddresses(Kind: TIPAddress = tiaIPv4): TRawUtf8DynArray;
 function GetIPAddressesText(const Sep: RawUtf8 = ' ';
   Kind: TIPAddress = tiaIPv4): RawUtf8;
 
+/// check if Host is in 127.0.0.0/8 range - warning: Host should be not nil
+function IsLocalHost(Host: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 type
   /// the network interface type, as stored in TMacAddress.Kind
   // - we don't define all ARP models, but try to detect most basic types
@@ -2256,7 +2260,7 @@ begin
       exit;
     end
     else if (address = '') or
-            (address = cLocalhost) or
+            IsLocalHost(pointer(address)) or
             PropNameEquals(address, 'localhost') or
             (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     begin
@@ -3191,6 +3195,12 @@ begin
     inc(P, 2);
     inc(i);
   until false;
+end;
+
+function IsLocalHost(Host: PUtf8Char): boolean;
+begin
+  result := (PCardinal(Host)^ =
+     ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24);
 end;
 
 procedure NetAddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);

@@ -4527,9 +4527,8 @@ begin
     exit;
   // quickly retrieve the main instance or the previous Host
   if (Host <> '') and
-     // '127.0.0.0/8' (from THttpClientSocket.RequestSendHeader) is no true host
-     (PCardinal(Host)^ <>
-        ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24) then
+     // 127.0.0.0/8 (e.g. from THttpClientSocket.RequestSendHeader) is no host
+     not IsLocalHost(pointer(Host)) then
   begin
     result := fWriterHostLast; // pointer-sized variables are atomic
     if (result <> nil) and     // naive but efficient cache
