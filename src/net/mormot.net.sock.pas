@@ -1693,9 +1693,8 @@ type
 /// create a TCrtSocket instance, returning nil on error
 // - useful to easily catch any exception, and provide a custom TNetTlsContext
 // - aTunnel could be populated from mormot.net.client GetSystemProxyUri()
-function SocketOpen(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false; aTLSContext: PNetTlsContext = nil;
-  aTunnel: PUri = nil): TCrtSocket;
+function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean = false;
+  aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil): TCrtSocket;
 
 
 { ********* NTP / SNTP Protocol Client }

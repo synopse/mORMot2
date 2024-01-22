@@ -368,8 +368,8 @@ type
     /// serialize a given TObject as JSON into OutContent and OutContentType fields
     procedure SetOutJson(Value: TObject); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// notify the server that it should wait for the AsyncResponse callback
-    // - would raise an EHttpServer exception if AsyncResponse is not set
+    /// notify the server that it should wait for the OnAsyncResponse callback
+    // - would raise an EHttpServer exception if OnAsyncResponse is not set
     // - returns HTTP_ASYNCRESPONSE (777) internal code as recognized e.g. by
     // THttpAsyncServer
     function SetAsyncResponse: integer;
@@ -2882,17 +2882,41 @@ const
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
+// rfProgressiveStatic mode - only for THttpPeerCache over THttpServer
+const
+  // custom HTTP header to supply the expected file size
+  STATICFILE_PROGRESSIVE = 'STATIC-PROGSIZE:';
+  // wait up to 10 seconds for new file content
+  STATICFILE_PROGRESSIVE_TIMEOUT = 10;
+
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
 
   procedure ProcessStaticFile;
   var
     fn: TFileName;
+    progsizeHeader: RawUtf8;
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
-    if (not Assigned(fServer.OnSendFile)) or
-       (not fServer.OnSendFile(self, fn)) then
+    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGRESSIVE, progsizeHeader);
+    SetInt64(pointer(progsizeHeader), Context.ContentLength);
+    if Context.ContentLength <> 0 then
+      // file is not fully available: wait for sending
+      if ((not (rfWantRange in Context.ResponseFlags)) or
+          Context.ValidateRange) and
+         (FileSize(fn) <= Context.ContentLength) then
+      begin
+        Context.ContentStream :=
+          TFileStreamEx.Create(fn, fmOpenReadDenyNone);
+        Context.ResponseFlags := Context.ResponseFlags +
+          [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
+      end
+      else
+        fRespStatus := HTTP_NOTFOUND
+    else if (not Assigned(fServer.OnSendFile)) or
+            (not fServer.OnSendFile(self, fn)) then
+      // regular file sending by chunks
       if Context.ContentFromFile(fn, CompressGz) then
         OutContent := Context.Content
       else
@@ -2920,10 +2944,10 @@ var
   P, PEnd: PUtf8Char;
   len: PtrInt;
   h: PRawByteStringBuffer;
-begin
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
+begin
   // process content
-  Context.ContentLength := 0;
+  Context.ContentLength := 0; // needed by ProcessStaticFile
   if (OutContentType <> '') and
      (OutContentType[1] = '!') then
     if OutContentType = NORESPONSE_CONTENT_TYPE then
@@ -4000,7 +4024,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
-  fServerSendBufferSize := 256 shl 10; // 256KB of is fine on Windows + POSIX
+  fServerSendBufferSize := 256 shl 10; // 256KB seems fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions);
   if hsoBan40xIP in ProcessOptions then
@@ -4243,7 +4267,8 @@ var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  started: Int64;
+  started, progSize, progOffs: Int64;
+  tix, endtix: cardinal;
   ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
@@ -4267,6 +4292,7 @@ begin
     // send back the response
     if Terminated then
       exit;
+    endtix := 0;
     if hfConnectionClose in ClientSock.Http.HeaderFlags then
       ClientSock.fKeepAliveClient := false;
     if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
@@ -4278,9 +4304,57 @@ begin
           hrsSendBody:
             begin
               dest.Clear; // body is retrieved from Content/ContentStream
-              ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
+              if rfProgressiveStatic in ClientSock.Http.ResponseFlags then
+              begin
+                // we need to wait for the data to be available
+                if ClientSock.Http.ContentStream = nil then
+                  break; // paranoid
+                tix := mormot.core.os.GetTickCount64 shr 10;
+                if endtix = 0 then // initial call
+                  endtix := tix + STATICFILE_PROGRESSIVE_TIMEOUT;
+                progSize := ClientSock.Http.ContentStream.Size; // current size
+                progOffs := ClientSock.Http.RangeOffset;
+                if progOffs <> 0 then
+                  if progSize < progOffs then
+                  begin
+                    if tix > endtix then
+                    begin
+                      ClientSock.fKeepAliveClient := false;
+                      break; // timeout
+                    end;
+                    SleepHiRes(10); // wait until we reach this offset
+                    continue;
+                  end
+                  else
+                  begin
+                    ClientSock.Http.ContentStream.Seek(progOffs, soBeginning);
+                    ClientSock.Http.RangeOffset := 0;
+                  end
+                else
+                  progOffs := ClientSock.Http.ContentStream.Seek(0, soCurrent);
+                dec(progSize, progOffs);
+                if progSize <= 0 then
+                begin
+                  if tix > endtix then
+                  begin
+                    ClientSock.fKeepAliveClient := false;
+                    break; // timeout
+                  end;
+                  SleepHiRes(10); // wait until we got some new data
+                  continue;
+                end;
+                // we have something to send
+                endtix := tix + STATICFILE_PROGRESSIVE_TIMEOUT;
+                if progSize > fServerSendBufferSize then
+                  progSize := fServerSendBufferSize;
+                ClientSock.Http.ProcessBody(dest, progSize);
+              end
+              else
+                // regular transmission of a fully available file
+                ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
+              // send body content by dest chunks
               if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
-                continue; // send body by fServerSendBufferSize chunks
+                continue;
             end;
         end;
         ClientSock.fKeepAliveClient := false; // socket close on write error
@@ -4470,7 +4544,8 @@ begin
     // get and parse HTTP request header
     if not GetHeader(noheaderfilter) then
     begin
-      SockSendFlush('HTTP/1.0 400 Bad Request'#13#10#13#10'Rejected Headers');
+      SockSendFlush('HTTP/1.0 400 Bad Request'#13#10 +
+        'Content-Length: 16'#13#10#13#10'Rejected Headers');
       result := grRejected;
       exit;
     end;

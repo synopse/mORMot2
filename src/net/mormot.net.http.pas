@@ -246,7 +246,8 @@ type
     rfRange,
     rfHttp10,
     rfContentStreamNeedFree,
-    rfAsynchronous);
+    rfAsynchronous,
+    rfProgressiveStatic);
 
   PHttpRequestContext = ^THttpRequestContext;
 
@@ -279,7 +280,6 @@ type
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
-    function ValidateRange: boolean;
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -382,6 +382,8 @@ type
     function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
     /// uncompress Content according to CompressContentEncoding header
     procedure UncompressData;
+    /// check RangeOffset/RangeLength against ContentLength
+    function ValidateRange: boolean;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
     procedure ProcessInit(InStream: TStream);
       {$ifdef HASINLINE} inline; {$endif}
@@ -3460,6 +3462,9 @@ begin
   else if ContentLength = 0 then
     // we just finished background ProcessWrite of the last chunk
     State := hrsResponseDone
+  else if rfProgressiveStatic in ResponseFlags then
+    // only THttpServer supports STATICFILE_PROGRESSIVE headers
+    raise EHttpSocket.Create('ProcessWrite: unsupported rfProgressiveStatic')
   else
     // paranoid check
     raise EHttpSocket.CreateUtf8('ProcessWrite: len=%', [MaxSize]);
@@ -4519,7 +4524,7 @@ var
 begin
   // should be called outside fSafe.Lock
   result := fWriterSingle;
-  if result <> nil then
+  if result <> nil then // from CreateWithWriter/CreateWithFile
     exit;
   // quickly retrieve the main instance or the previous Host
   if (Host <> '') and
