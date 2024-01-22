@@ -3406,7 +3406,7 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing path delimiter
-// - returns '' on error, unless RaiseExceptionOnCreationFailure is true
+// - returns '' on error, unless RaiseExceptionOnCreationFailure is set
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
 
@@ -7075,8 +7075,7 @@ function EnsureDirectoryExists(const Directory: TFileName;
 begin
   if Directory = '' then
     if RaiseExceptionOnCreationFailure <> nil then
-      raise RaiseExceptionOnCreationFailure.Create(
-        'Unexpected EnsureDirectoryExists('''')')
+      raise RaiseExceptionOnCreationFailure.Create('EnsureDirectoryExists('''')')
     else
       result := ''
   else
@@ -7086,7 +7085,8 @@ begin
       if not ForceDirectories(result) then
         if RaiseExceptionOnCreationFailure <> nil then
           raise RaiseExceptionOnCreationFailure.CreateFmt(
-            'Impossible to create folder %s', [result])
+            'EnsureDirectoryExists(%s) failed as %s',
+            [result, GetErrorText(GetLastError)])
         else
           result := '';
   end;
