@@ -2137,6 +2137,8 @@ type
     fTerminated: boolean;
     fMode: (mUnknown, mRead, mWrite);
     function GetSize: Int64; override;
+    procedure SetSize(NewSize: Longint); override;
+    procedure SetSize(const NewSize: Int64); override;
     function GetProgress: RawUtf8;
     procedure DoReport(ReComputeElapsed: boolean);
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
@@ -9433,6 +9435,16 @@ begin
     result := fInfo.ExpectedSize
   else
     result := fInfo.CurrentSize;
+end;
+
+procedure TStreamRedirect.SetSize(NewSize: Longint);
+begin
+  raise EStreamRedirect.CreateUtf8('%.Size is read/only', [self]);
+end;
+
+procedure TStreamRedirect.SetSize(const NewSize: Int64);
+begin
+  raise EStreamRedirect.CreateUtf8('%.Size is read/only', [self]);
 end;
 
 class procedure TStreamRedirect.ProgressStreamToConsole(Sender: TStreamRedirect);
