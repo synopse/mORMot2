@@ -3927,7 +3927,8 @@ begin
   fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := Executable.ProgramFilePath; // use .exe path by default
   if not IsDirectoryWritable(fDestinationPath, [idwExcludeWinSys]) then
-    fDestinationPath := GetSystemPath(spLog); // fallback to a writable folder
+    // fallback to a writable folder
+    fDestinationPath := GetSystemPath(spLog);
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;

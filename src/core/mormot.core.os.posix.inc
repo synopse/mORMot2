@@ -3092,7 +3092,7 @@ begin
   end;
   if not IsDirectoryWritable(pidpath) then
     // if the executable folder is not writable, use the temporary folder
-    pidpath := GetSystemPath(spTempFolder);
+    pidpath := GetSystemPath(spTemp);
   result := Format('%s.%s.pid', [pidpath, Executable.ProgramName]);
 end;
 

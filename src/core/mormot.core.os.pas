@@ -1518,8 +1518,8 @@ type
   // spLog either to '<exepath>\log' or 'C:\Users\<user>\AppData\Local',
   // spCommonDocuments to 'C:\Users\Public\Documents',
   // spUserDocuments to 'C:\Documents and Settings\<user>\My Documents',
-  // and spTempFolder will use the TEMP environment variable
-  // - on POSIX, spTempFolder will use $TMPDIR/$TMP environment variables,
+  // and spTemp will use the TEMP environment variable
+  // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
   // spUserData maps '$XDG_CACHE_HOME/<exename>' or '~/.cache/<exename>',
   // and spLog (if writable) to '/var/log' or '<exepath>' or '~/log'
@@ -1528,14 +1528,19 @@ type
     spUserData,
     spCommonDocuments,
     spUserDocuments,
-    spTempFolder,
+    spTemp,
     spLog);
+
+{$ifndef PUREMORMOT2}
+const
+  spTempFolder = spTemp;
+{$endif PUREMORMOT2}
 
 /// returns an operating system folder
 // - will return the full path of a given kind of private or shared folder,
 // depending on the underlying operating system
 // - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
-// - under POSIX, will return $TMP/$TMPDIR folder for spTempFolder, ~/.cache/appname
+// - under POSIX, will return $TMP/$TMPDIR folder for spTemp, ~/.cache/appname
 // for spUserData, /var/log for spLog, or the $HOME folder
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
@@ -6920,7 +6925,7 @@ var
   retry: integer;
 begin
   // fast cross-platform implementation
-  folder := GetSystemPath(spTempFolder);
+  folder := GetSystemPath(spTemp);
   if _TmpCounter = 0 then
     _TmpCounter := Random32;
   retry := 10;
@@ -7174,21 +7179,25 @@ var
   f: THandle;
   retry: integer;
 begin
+  // check the Directory itself
   dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
   if FileIsReadOnly(dir) then
-    exit; // the whole folder is read-only for this user
+    exit; // the whole folder is read-only for the currently running user
   {$ifdef OSWINDOWS}
+  // ensure is not a system/virtual folder
   if ((idwExcludeWinUac in Flags) and
       IsUacVirtualFolder(dir)) or
      ((idwExcludeWinSys in Flags) and
       IsSystemFolder(dir)) then
     exit;
+  // compute a non existing temporary file name in this Directory
   if idwTryWinExeFile in Flags then
     fmt := '%s\%x.exe'  // may trigger the anti-virus heuristic
   else
     fmt := '%s\%x.crt'; // may trigger the UAC heuristic
   {$else}
+  // compute a non existing temporary file name in this Directory
   fmt := '%s/.%x.test'; // make the file "invisible"
   {$endif OSWINDOWS}
   retry := 20;
@@ -7200,6 +7209,7 @@ begin
     if retry = 0 then
       exit;
   until false;
+  // ensure we can create this temporary file
   f := FileCreate(fn);
   if not ValidHandle(f) then
     exit; // a file can't be created

@@ -1986,7 +1986,7 @@ begin
     urlfile := 'index';
   result := destfile;
   if result = '' then
-    result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile)
+    result := GetSystemPath(spTemp) + Utf8ToString(urlfile)
   else if DirectoryExists(result) then // not a file, but a folder
     result := MakePath([result, urlfile]);
   expectedsize := 0;
