@@ -4991,9 +4991,14 @@ end;
 function THttpPeerCrypt.SendRespToClient(const aRequest: THttpPeerCacheMessage;
   var aResp : THttpPeerCacheMessage; const aUrl: RawUtf8;
   aOutStream: TStreamRedirect; aRetry: boolean): integer;
+var
+  tls: boolean;
+  head, ip: RawUtf8;
 
-  procedure SendRespToClientFailed;
+  procedure SendRespToClientFailed(E: TClass);
   begin
+    fLog.Add.Log(sllWarning, 'OnDownload: request %:% % failed as % %',
+      [ip, fPort, aUrl, result, E], self);
     if (fInstable <> nil) and // RejectInstablePeersMin
        not aRetry then        // not from partial request before broadcast
       fInstable.BanIP(aResp.IP4);
@@ -5002,10 +5007,8 @@ function THttpPeerCrypt.SendRespToClient(const aRequest: THttpPeerCacheMessage;
     result := 0; // will fallback to regular GET on the main repository
   end;
 
-var
-  tls: boolean;
-  head, ip: RawUtf8;
 begin
+  result := 0;
   try
     // compute the call parameters and the request bearer
     IP4Text(@aResp.IP4, ip);
@@ -5023,10 +5026,11 @@ begin
       fClient.TLS.IgnoreCertificateErrors := tls; // self-signed
       fClient.OpenBind(ip, fPort, {bind=}false, tls);
       fClient.ReceiveTimeout := 5000; // once connected, 5 seconds timeout
+      fClient.OnLog := fLog.DoLog;
     end;
     // makes the GET request, optionally with the needed range bytes
     fClient.RangeStart := aRequest.RangeStart;
-    fClient.RangeEnd := aRequest.RangeEnd;
+    fClient.RangeEnd   := aRequest.RangeEnd;
     if fSettings.LimitMBPerSec >= 0 then // -1 to keep original value
       aOutStream.LimitPerSecond := fSettings.LimitMBPerSec shl 20; // bytes/sec
     result := fClient.Request(
@@ -5035,14 +5039,10 @@ begin
     if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
       fClientIP4 := aResp.IP4 // success or not found (HTTP_NOCONTENT)
     else
-      SendRespToClientFailed; // error downloading from local peer
+      SendRespToClientFailed(nil); // error downloading from local peer
   except
     on E: Exception do
-    begin
-      fLog.Add.Log(sllWarning, 'OnDownload: % failed as %',
-        [aUrl, E.ClassType], self);
-      SendRespToClientFailed;
-    end;
+      SendRespToClientFailed(E.ClassType);
   end;
 end;
 
