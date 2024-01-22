@@ -2135,6 +2135,7 @@ begin
     if not RenameFile(part, result) then
       raise EHttpSocket.CreateUtf8(
         '%.WGet: impossible to rename % as %', [self, part, result]);
+    // set part='' to notify fully downloaded into result file name
     part := '';
     // notify e.g. THttpPeerCache of the newly downloaded file
     if Assigned(params.Alternate) and // alternate is not relevant here
@@ -2146,10 +2147,11 @@ begin
       // intercept any fatal error
     end;
   finally
-    partstream.Free;  // ensure close file on unexpected error (if not already)
-    if (part <> '') and
-       not params.Resume then
-      DeleteFile(part); // force next attempt from scratch if resume is not set
+    partstream.Free;  // close .part file on unexpected error (if not already)
+    if part <> '' then // is there still some interuppted .part content?
+      if (FileSize(part) < 32768) or // not worth it, and maybe HTML error msg
+         not params.Resume then      // resume is not enabled
+      DeleteFile(part); // force next attempt from scratch
   end;
 end;
 
