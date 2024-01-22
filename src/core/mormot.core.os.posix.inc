@@ -1900,8 +1900,9 @@ begin
     User := RawUtf8(GetEnvironmentVariable('USER'));
 end;
 
-procedure _ComputeSystemPath(kind: TSystemPath; out result: TFileName);
+procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 begin
+  result := ''; // "out result" param is not enough for FPC
   case kind of
     spLog:
       begin

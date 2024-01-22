@@ -2547,7 +2547,7 @@ var
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
 
-procedure _ComputeSystemPath(kind: TSystemPath; out result: TFileName);
+procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 const
   CSIDL_PERSONAL = $0005;
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
@@ -2574,6 +2574,7 @@ const
 var
   tmp: array[0..MAX_PATH] of char;
 begin
+  result := '';
   case kind of
     spLog:
       begin
