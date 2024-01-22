@@ -3034,8 +3034,11 @@ begin
   SetServerName('mORMot2 (' + OS_TEXT + ')');
   if hsoEnableLogging in fOptions then
   begin
-    fLogger := THttpLogger.Create;
-    fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
+    if fLogger = nil then // <> nil from THttpApiServer.CreateClone
+    begin
+      fLogger := THttpLogger.Create;
+      fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
+    end;
     fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
   end;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
@@ -6163,6 +6166,7 @@ begin
   if From.fLogData <> nil then
     fLogData := pointer(fLogDataStorage);
   fOptions := From.fOptions; // needed by SetServerName() below
+  fLogger := From.fLogger;   // share same THttpLogger instance
   SetServerName(From.fServerName); // setters are sometimes needed
   SetRemoteIPHeader(From.fRemoteIPHeader);
   SetRemoteConnIDHeader(From.fRemoteConnIDHeader);
@@ -6222,6 +6226,8 @@ begin
     {$ifdef FPC}
     WaitForSingleObject(Handle, 30000); // sometimes needed on FPC
     {$endif FPC}
+    if fOwner <> nil then
+      fLogger := nil; // to be released only by the main thread
   finally
     inherited Destroy;
   end;
