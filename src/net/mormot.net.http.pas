@@ -3428,7 +3428,7 @@ begin
       end
     else
       // ContentStream <> nil requires async body sending
-      State := hrsSendBody; // send the ContentStream out by chunks
+      State := hrsSendBody; // let ProcessBody() send ContentStream by chunks
 end;
 
 procedure THttpRequestContext.ProcessBody(
@@ -3477,30 +3477,28 @@ var
   gz: TFileName;
 begin
   Content := '';
+  // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
      (pointer(CommandMethod) <> pointer(_HEADVAR)) and
      not (rfWantRange in ResponseFlags) then
   begin
-    // try locally cached gzipped static content
     gz := FileName + '.gz';
     ContentLength := FileSize(gz);
     if ContentLength > 0 then
     begin
-      // there is an already-compressed .gz file to send away
       ContentStream := TFileStreamEx.Create(gz, fmOpenReadDenyNone);
       ContentEncoding := 'gzip';
       include(ResponseFlags, rfContentStreamNeedFree);
       result := true;
-      exit; // only use ContentStream to bypass recompression
+      exit; // force ContentStream of raw .gz file to bypass recompression
     end;
   end;
+  // check the actual file on disk
   ContentLength := FileSize(FileName);
-  result := ContentLength <> 0;
-  if result and
-     (rfWantRange in ResponseFlags) then
-    if not ValidateRange then
-      result := false; // invalid offset
+  result := (ContentLength <> 0) and
+            ((not (rfWantRange in ResponseFlags)) or
+             ValidateRange);
   if not result then
     // there is no such file available, or range clearly wrong
     exit;
@@ -3517,10 +3515,8 @@ begin
     FreeAndNilSafe(ContentStream);
   end
   else
-  begin
     // stream existing big file by chunks (also used for HEAD or Range)
     include(ResponseFlags, rfContentStreamNeedFree);
-  end;
 end;
 
 
