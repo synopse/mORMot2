@@ -1559,12 +1559,11 @@ type
   // - unauthenticated requests from browsers (i.e. not Delphi clients) may
   // be redirected to the TRestServer.Auth() method via rsoRedirectForbiddenToAuth
   // (e.g. for TRestServerAuthenticationHttpBasic popup)
-  // - some REST/AJAX clients may expect to return status code 204 as
-  // instead of 200 in case of a successful operation, but with no returned
-  // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
-  // rsoHttp200WithNoBodyReturns204 so that any HTTP_SUCCESS (200) with no
-  // returned body will return a HTTP_NOCONTENT (204), as expected by
-  // some clients
+  // - some REST/AJAX clients may expect to return status code 204 instead of 200
+  // in case of a successful operation, but with no returned body (e.g. DELETE
+  // with SAPUI5 / OpenUI5 framework): include rsoHttp200WithNoBodyReturns204
+  // so that any HTTP_SUCCESS (200) with no returned body will return a
+  // HTTP_NOCONTENT (204), as expected by some clients
   // - by default, Add() or Update() will return HTTP_CREATED (201) or
   // HTTP_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
   // to return as JSON the last inserted/updated record

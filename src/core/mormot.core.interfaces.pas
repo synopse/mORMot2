@@ -766,8 +766,9 @@ type
   // regular HTTP_* response code, in addition to the regular JSON answer - i.e.
   // there will be a "result" member in the transmitted JSON anyway
   // - the returned value should be in HTTP response code range, i.e. 200..599
-  // - by design, HTTP_NOCONTENT can not be used: return HTTP_SUCCESS and let
-  // the web server class decide if there is no output body content involved
+  // - by design, HTTP_NOCONTENT can/should not be used: return HTTP_SUCCESS and
+  // set rsoHttp200WithNoBodyReturns204 option to let TRestServer.Uri decide and
+  // return HTTP_SUCCESS if there is an output body, or HTTP_NOCONTENT if void
   TServiceCustomStatus = type cardinal;
 
 
