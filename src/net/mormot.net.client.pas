@@ -1707,16 +1707,22 @@ begin
            not HttpMethodWithNoBody(ctxt.method) then
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
+          // specific TStreamRedirect expectations
           if (ctxt.OutStream <> nil) and
-             (Http.ContentLength > 0) and
-             (ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) and
              ctxt.OutStream.InheritsFrom(TStreamRedirect) then
-            TStreamRedirect(ctxt.OutStream).ExpectedSize :=
-              fRangeStart + Http.ContentLength; // we know the size
-          GetBody(ctxt.OutStream); // retrieve whole response body
+            if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+            begin
+              if Http.ContentLength > 0 then
+                TStreamRedirect(ctxt.OutStream).ExpectedSize :=
+                  fRangeStart + Http.ContentLength // we know the size
+            end
+            else
+              ctxt.OutStream := nil; // don't append the server error message
+          // retrieve whole response body
+          GetBody(ctxt.OutStream);
         end;
         // successfully sent -> reset some fields for the next request
-        if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+        if ctxt.Status in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
           RequestClear;
       except
         on E: Exception do
@@ -1869,7 +1875,7 @@ begin
         if (OutStream <> nil) and
            (OutStream.Position <> ctxt.OutStreamInitialPos) then
         begin
-          OutStream.Size := ctxt.OutStreamInitialPos; // truncate
+          OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
           OutStream.Position := ctxt.OutStreamInitialPos; // reset position
         end;
       end;
@@ -1923,6 +1929,17 @@ var
       requrl := fRedirected; // don't perform 302 twice
   end;
 
+  procedure NewPartStream(Mode: cardinal);
+  var
+    redirected: TStream;
+  begin
+    if Assigned(params.OnStreamCreate) then
+      redirected := params.OnStreamCreate(part, Mode)
+    else
+      redirected := TFileStreamEx.Create(part, Mode);
+    partstream := params.Hasher.Create(redirected);
+  end;
+
   procedure DoRequestAndFreePartStream;
   var
     lastmod: RawUtf8;
@@ -1945,7 +1962,8 @@ var
       // alternate download (e.g. local peer-to-peer cache) from file hash
       res := params.Alternate.OnDownload(
                self, params, requrl, expectedsize, partstream);
-      alternate := alternate or (res <> 0); // to notify OnDownloadFailed
+      if res <> 0 then
+        alternate := true; // to notify OnDownloadFailed
     end;
     if res = 0 then
       // regular direct GET, if not done via Alternate.OnDownload()
@@ -1964,17 +1982,6 @@ var
       FileSetDate(part, DateTimeToFileDate(partmodif))
     else
       partmodif := 0;
-  end;
-
-  procedure NewPartStream(Mode: cardinal);
-  var
-    redirected: TStream;
-  begin
-    if Assigned(params.OnStreamCreate) then
-      redirected := params.OnStreamCreate(part, Mode)
-    else
-      redirected := TFileStreamEx.Create(part, Mode);
-    partstream := params.Hasher.Create(redirected);
   end;
 
 begin
