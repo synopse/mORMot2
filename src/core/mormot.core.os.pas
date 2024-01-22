@@ -3261,6 +3261,7 @@ type
   TFileStreamEx = class(TFileStreamFromHandle)
   Private
     fFileName : TFileName;
+    function GetSize: Int64; override;
   public
     /// open or create the file from its name, depending on the supplied Mode
     // - Mode is typically fmCreate / fmOpenReadDenyNone
@@ -6653,6 +6654,11 @@ begin
 end;
 
 { TFileStreamEx }
+
+function TFileStreamEx.GetSize: Int64;
+begin
+  result := FileSize(Handle); // faster than 3 FileSeek() calls
+end;
 
 constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
 var
