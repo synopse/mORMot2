@@ -6275,7 +6275,7 @@ var
   compressset: THttpSocketCompressSet;
   incontlen: Qword;
   incontlenchunk, incontlenread: cardinal;
-  incontenc, inaccept, range, referer: RawUtf8;
+  incontenc, inaccept, host, range, referer: RawUtf8;
   outcontenc, outstat: RawUtf8;
   outstatcode, afterstatcode: cardinal;
   respsent: boolean;
@@ -6508,6 +6508,9 @@ begin
               FastSetString(ctxt.fInContentType, pRawValue, RawValueLength);
             with req^.headers.KnownHeaders[reqUserAgent] do
               FastSetString(ctxt.fUserAgent, pRawValue, RawValueLength);
+            with req^.headers.KnownHeaders[reqHost] do
+              FastSetString(ctxt.fHost, pRawValue, RawValueLength);
+            host := ctxt.Host; // may be reset during Request()
             with req^.Headers.KnownHeaders[reqAuthorization] do
               if (RawValueLength > 7) and
                  IdemPChar(pointer(pRawValue), 'BEARER ') then
@@ -6652,6 +6655,7 @@ begin
                   continue;
               QueryPerformanceMicroSeconds(elapsed);
               dec(elapsed, started);
+              ctxt.Host := host; // may have been reset during Request()
               DoAfterResponse(
                 ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
             except
