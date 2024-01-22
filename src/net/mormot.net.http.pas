@@ -5579,25 +5579,25 @@ procedure THttpAnalyzerPersistAbstract.OnSave(
   const State: THttpAnalyzerToSaveDynArray);
 var
   f: TStream;
-  size: Int64;
 begin
   if (State <> nil) and
      (FileName <> '') then
   try
+    // try rotation before appending any new information - and outside Safe.lock
+    if fRotate.Trigger > hrtDisabled then
+      fRotate.TryRotate(GetTickCount64 shr 10, FileSize(FileName));
+    // append the new information using DoSave() overriden method
     fSafe.Lock;
     try
       f := TFileStreamEx.CreateWrite(FileName);
       try
         DoSave(State, f);
-        size := f.Seek(0, soCurrent);
       finally
         f.Free; // close the file once done
       end;
     finally
       fSafe.UnLock;
     end;
-    if fRotate.Trigger > hrtDisabled then
-      fRotate.TryRotate(GetTickCount64 shr 10, size); // outside of the lock
   except
     fRotate.FileName := ''; // ignore any error in the callback, but don't retry
   end;
