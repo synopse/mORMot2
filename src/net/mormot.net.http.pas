@@ -3339,7 +3339,7 @@ begin
      (ContentStream = nil) then // no stream compression (yet)
     CompressContent(CompressAcceptHeader, Compress, ContentType,
       Content, ContentEncoding);
-  // method will return a buffer to be sent
+  // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
   // handle response body with optional range support
   if rfAcceptRange in ResponseFlags then
@@ -3419,7 +3419,7 @@ begin
           Process.Append(ContentPos, ContentLength);
           Content := ''; // release ASAP
           Head.Reset;
-          result := @Process; // DoRequest will use Process
+          result := @Process; // DoRequest will use Process buffer
           State := hrsResponseDone;
         end
         else
@@ -4526,18 +4526,21 @@ begin
   if result <> nil then
     exit;
   // quickly retrieve the main instance or the previous Host
-  if Host = '' then
-    result := fWriterHostMain // very common case of no Host
-  else
+  if (Host <> '') and
+     // '127.0.0.0/8' (from THttpClientSocket.RequestSendHeader) is no true host
+     (PCardinal(Host)^ <>
+        ord('1') + ord('2') shl 8 + ord('7') shl 16 + ord('.') shl 24) then
   begin
     result := fWriterHostLast; // pointer-sized variables are atomic
     if (result <> nil) and     // naive but efficient cache
        IdemPropNameU(THttpLoggerWriter(result).Host, Host) then
       result := nil;
-  end;
+  end
+  else
+    result := fWriterHostMain; // very common case of loopback or no Host
   if result = nil then
   begin
-    // need to lookup this Host in the internal WriteHost[] list
+    // thread-safe lookup of this Host in the internal WriteHost[] list
     fWriterHostSafe.Lock;
     p := pointer(fWriterHost);
     if p = nil then
@@ -4570,7 +4573,8 @@ begin
       fWriterHostSafe.UnLock;
     end;
   end;
-  THttpLoggerWriter(result).TryRotate(Tix10); // outside of the lock
+  // try rotation before appending any new information - and outside of the lock
+  THttpLoggerWriter(result).TryRotate(Tix10);
 end;
 
 procedure THttpLogger.DefineHost(const aHost: RawUtf8;
