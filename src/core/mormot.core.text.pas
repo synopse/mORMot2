@@ -3720,7 +3720,8 @@ var
 begin
   if Assigned(fOnFlushToStream) then
     fOnFlushToStream(data, len);
-  if len <> 0 then
+  if (len <> 0) and
+     Assigned(fStream) then
     repeat
       written := fStream.Write(data^, len);
       if PtrInt(written) <= 0 then
