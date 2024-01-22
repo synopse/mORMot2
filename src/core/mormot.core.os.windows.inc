@@ -528,6 +528,7 @@ var
   tmp: array[0..511] of WideChar;
 begin
   bak := GetLastError;
+  src := nil;
   flags := FORMAT_MESSAGE_FROM_SYSTEM;
   if ModuleName = nil then
   begin
@@ -539,7 +540,6 @@ begin
       _fmt('ERROR_%s', [cod], result);
       exit;
     end;
-    src := nil;
   end
   else
   begin
@@ -2547,59 +2547,76 @@ var
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
 
-function _ComputeSystemPath(kind: TSystemPath): TFileName;
+procedure _ComputeSystemPath(kind: TSystemPath; out result: TFileName);
 const
   CSIDL_PERSONAL = $0005;
   CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
   CSIDL: array[TSystemPath] of integer = (
-    CSIDL_COMMON_APPDATA,   // spCommonData      C:\ProgramData
-    CSIDL_LOCAL_APPDATA,    // spUserData        C:\Users\<user>\AppData\Local
-    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments C:\Users\Public\Documents
-    CSIDL_PERSONAL,         // spUserDocuments   C:\Documents and Settings\<user>\My Documents
-    0,                      // spTempFolder
+    CSIDL_COMMON_APPDATA,   // spCommonData
+                            // C:\ProgramData
+    CSIDL_LOCAL_APPDATA,    // spUserData
+                            // C:\Users\<user>\AppData\Local
+    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
+                            // C:\Users\Public\Documents
+    CSIDL_PERSONAL,         // spUserDocuments
+                            // C:\Documents and Settings\<user>\My Documents
+    0,                      // spTemp
     0);                     // spLog
   ENV: array[TSystemPath] of TFileName = (
-    'ALLUSERSAPPDATA',      // spCommonData
-    'LOCALAPPDATA',         // spUserData
-    '',                     // spCommonDocuments
-    '',                     // spUserDocuments
-    'TEMP',                 // spTempFolder
-    '');                    // spLog
+    'ALLUSERSAPPDATA', // spCommonData
+    'LOCALAPPDATA',    // spUserData
+    '',                // spCommonDocuments
+    '',                // spUserDocuments
+    'TEMP',            // spTemp
+    '');               // spLog
 var
   tmp: array[0..MAX_PATH] of char;
 begin
-  if kind = spLog then
-  begin
-    // spLog needs a specific behavior
-    result := Executable.ProgramFilePath;
-    if not IsDirectoryWritable(result, [idwExcludeWinSys]) then
-      // fallback to 'C:\Users\<user>\AppData\Local\log'
-      result := GetSystemPath(spUserData);
-    result := result + 'log\';
-    exit;
-  end;
-  if (CSIDL[kind] <> 0) and
-     DelayedProc(SHGetFolderPath, SHFolderDll, 'SHFolder.dll',
-       'SHGetFolderPath' + _AW) and
-     (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
-    result := tmp
+  case kind of
+    spLog:
+      begin
+        result := Executable.ProgramFilePath; // try <exepath>\log
+        if not IsDirectoryWritable(result, [idwExcludeWinSys]) then
+          // fallback to 'C:\Users\<user>\AppData\Local\<exename>-log'
+          result := format('%s%s-',
+                      [GetSystemPath(spUserData), Executable.ProgramName]);
+        result := EnsureDirectoryExists(result + 'log');
+        if result <> '' then
+          exit; // found
+        // 'C:\Documents and Settings\<user>\Local Settings\Temp\<exename>-log'
+        result := format('%s%s-log',
+                    [GetSystemPath(spTemp), Executable.ProgramName]);
+      end;
+    spTemp:
+      begin
+        // typically 'C:\Documents and Settings\<user>\Local Settings\Temp'
+        if GetTempPath(MAX_PATH, @tmp) <> 0 then
+          result := tmp; // retrieve from dedicated API
+        if result = '' then
+          result := GetEnvironmentVariable('TEMP');
+      end;
   else
-  begin
-    result := GetEnvironmentVariable(ENV[kind]);
-    if result = '' then
+    if (CSIDL[kind] <> 0) and
+       DelayedProc(SHGetFolderPath, SHFolderDll, 'SHFolder.dll',
+         'SHGetFolderPath' + _AW) and
+       (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
+      // retrieved from official CSIDL
+      result := tmp
+    else
     begin
-      result := GetEnvironmentVariable('APPDATA');
+      // fallback to environment variables (very unlikely)
+      result := GetEnvironmentVariable(ENV[kind]);
       if result = '' then
       begin
-        result := GetEnvironmentVariable('TEMP');
+        result := GetEnvironmentVariable('APPDATA');
         if result = '' then
           result := Executable.ProgramFilePath;
       end;
     end;
   end;
-  result := IncludeTrailingPathDelimiter(result);
+  result := EnsureDirectoryExists(result, EOSException);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;

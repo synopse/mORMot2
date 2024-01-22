@@ -1900,31 +1900,36 @@ begin
     User := RawUtf8(GetEnvironmentVariable('USER'));
 end;
 
-function _ComputeSystemPath(kind: TSystemPath): TFileName;
+procedure _ComputeSystemPath(kind: TSystemPath; out result: TFileName);
 begin
   case kind of
     spLog:
-      if IsDirectoryWritable('/var/log') then
-         // may not be writable by not root on POSIX
-        result := '/var/log/'
-      else
       begin
-        if IsDirectoryWritable(Executable.ProgramFilePath) then
-          result := Executable.ProgramFilePath
-        else
-          result := GetSystemPath(spUserData);
+        if IsDirectoryWritable('/var/log') then
+          // '/var/log/<exename>' may be available only to root on POSIX
+          result := EnsureDirectoryExists(
+                      '/var/log/' + TFileName(Executable.ProgramName));
+        if result <> '' then
+          exit; // found
+        result := Executable.ProgramFilePath;  // '<exepath>/log'
+        if not IsDirectoryWritable(Executable.ProgramFilePath) then
+          result := GetSystemPath(spUserData); // '~/.cache/<exename>/log'
         result := EnsureDirectoryExists(result + 'log');
+        if result <> '' then
+          exit; // found
+        result := format('%s%s-log',          // '/tmp/<exename>-log'
+                    [GetSystemPath(spTemp), Executable.ProgramName]);
       end;
     spUserData:
       begin
-        //  ~/.cache/appname
+        // '~/.cache/<exename>'
         result := GetEnvironmentVariable('XDG_CACHE_HOME');
         if (result = '') or
            not IsDirectoryWritable(result) then
           result := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-        result := EnsureDirectoryExists(result + TFileName(Executable.ProgramName));
+        result := result + TFileName(Executable.ProgramName);
       end;
-    spTempFolder:
+    spTemp:
       begin
         result := GetEnvironmentVariable('TMPDIR'); // POSIX
         if result = '' then
@@ -1937,10 +1942,10 @@ begin
             result := '/var/tmp/';
       end;
   else
-    // POSIX requires a value for $HOME
+    // POSIX requires a value for the $HOME environment variable
     result := GetEnvironmentVariable('HOME');
   end;
-  result := IncludeTrailingPathDelimiter(result);
+  result := EnsureDirectoryExists(result, EOSException);
 end;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;

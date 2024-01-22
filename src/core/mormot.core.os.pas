@@ -1514,15 +1514,16 @@ var
 type
   /// identify an operating system folder for GetSystemPath()
   // - on Windows, spCommonData maps e.g. 'C:\ProgramData',
-  // spUserData points to 'C:\Users\<user>\AppData\Local',
-  // spLog either to '<exepath>\log' or 'C:\Users\<user>\AppData\Local',
+  // spUserData points to 'C:\Users\<user>\AppData\Local', spLog either
+  // to '<exepath>\log' or 'C:\Users\<user>\AppData\Local\<exename>-log',
   // spCommonDocuments to 'C:\Users\Public\Documents',
   // spUserDocuments to 'C:\Documents and Settings\<user>\My Documents',
-  // and spTemp will use the TEMP environment variable
+  // and spTemp will call GetTempPath() or read the $TEMP environment variable
   // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
   // spUserData maps '$XDG_CACHE_HOME/<exename>' or '~/.cache/<exename>',
-  // and spLog (if writable) to '/var/log' or '<exepath>' or '~/log'
+  // and spLog (if writable) to '/var/log/<exename>' or '<exepath>/log'
+  // or '~/.cache/<exename>/log'
   TSystemPath = (
     spCommonData,
     spUserData,
@@ -1540,8 +1541,7 @@ const
 // - will return the full path of a given kind of private or shared folder,
 // depending on the underlying operating system
 // - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
-// - under POSIX, will return $TMP/$TMPDIR folder for spTemp, ~/.cache/appname
-// for spUserData, /var/log for spLog, or the $HOME folder
+// - under POSIX, will return the proper environment variable
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
@@ -8526,11 +8526,10 @@ var
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
   result := _SystemPath[kind];
-  if result = '' then
-  begin
-    result := _ComputeSystemPath(kind);
-    _SystemPath[kind] := result;
-  end;
+  if result <> '' then
+    exit;
+  _ComputeSystemPath(kind, result); // in os.posix.inc or os.windows.inc
+  _SystemPath[kind] := result;
 end;
 
 function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
