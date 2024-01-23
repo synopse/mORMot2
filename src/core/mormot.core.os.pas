@@ -74,10 +74,16 @@ const
   /// a convenient constant to open a file for reading without exclusion
   fmOpenReadShared = fmOpenRead or fmShareReadWrite;
 
+  /// a convenient constant to open a file for writing without exclusion
+  fmOpenWriteShared = fmOpenReadWrite or fmShareReadWrite;
+
+  /// a convenient constant to create a file without exclusion
+  fmCreateShared = fmCreate or fmShareReadWrite;
+
   /// a convenient array constant to open a file for writing without exclusion
   fmCreateOrRewrite: array[{rewrite=}boolean] of cardinal = (
-   fmCreate    or fmShareReadWrite,
-   fmOpenWrite or fmShareReadWrite);
+   fmCreateShared,
+   fmOpenWriteShared);
 
 const
   /// void HTTP Status Code (not a standard value, for internal use only)
