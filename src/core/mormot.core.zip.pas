@@ -1676,7 +1676,7 @@ var
   tmp: RawByteString;
 begin
   fInfo.OnProgress := OnInfoProgress;
-  h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
+  h := FileOpen(aFileName, fmOpenReadWrite or fmShareReadWrite);
   if ValidHandle(h) then
   begin
     // we need fDest for WriteRawHeader below

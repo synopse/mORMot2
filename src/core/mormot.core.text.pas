@@ -3561,7 +3561,7 @@ constructor TTextWriter.CreateOwnedFileStream(
   const aFileName: TFileName; aBufSize: integer);
 begin
   DeleteFile(aFileName);
-  fStream := TFileStreamEx.Create(aFileName, fmCreate or fmShareDenyWrite);
+  fStream := TFileStreamEx.Create(aFileName, fmCreate or fmShareRead);
   fCustomOptions := [twoStreamIsOwned];
   SetBuffer(nil, aBufSize);
 end;

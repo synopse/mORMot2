@@ -5720,7 +5720,7 @@ begin
           else if (fFileRotationSize = 0) or
                   not exists then
             TFileStreamEx.Create(fFileName, fmCreate).Free; // a void file
-          h := FileOpen(fFileName, fmOpenReadWrite or fmShareDenyWrite);
+          h := FileOpen(fFileName, fmOpenReadWrite or fmShareRead);
           if ValidHandle(h) then 
           begin
             fWriterStream :=

@@ -4381,7 +4381,7 @@ begin
       fOwner.fSafe.UnLock;
     hreOpenFile:
       begin
-        fStream := TFileStreamEx.Create(FileName, fmCreate or fmShareDenyWrite);
+        fStream := TFileStreamEx.Create(FileName, fmCreate or fmShareRead);
         fInitialStreamPosition := 0; // brand new file
         CancelAll;
       end;

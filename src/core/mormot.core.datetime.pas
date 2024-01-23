@@ -1753,10 +1753,10 @@ begin
     exit;
   AppendToTextFileSafe.Lock;
   try
-    f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
+    f := FileOpen(aFileName, fmOpenWrite or fmShareReadWrite);
     if not ValidHandle(f) then
     begin
-      f := FileCreate(aFileName);
+      f := FileCreate(aFileName, fmShareReadWrite);
       if not ValidHandle(f) then
         exit; // you may not have write access to this folder
     end;
@@ -1774,7 +1774,7 @@ begin
       if not ValidHandle(f) then
         exit;
       FileClose(f);
-      f := FileOpen(aFileName, fmOpenWrite or fmShareDenyNone);
+      f := FileOpen(aFileName, fmOpenWrite or fmShareReadWrite);
       if not ValidHandle(f) then
         exit;
     end;

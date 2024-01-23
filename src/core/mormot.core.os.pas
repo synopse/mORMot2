@@ -63,12 +63,20 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = false;
   {$endif OSWINDOWS}
+
+  /// human-friendly alias to open a file for exclusive writing
+  fmShareRead      = fmShareDenyWrite;
+  /// human-friendly alias to open a file for exclusive reading
+  fmShareWrite     = fmShareDenyRead;
+  /// human-friendly alias to open a file with no read/write exclusion
+  fmShareReadWrite = fmShareDenyNone;
+
   /// a convenient shortened constant to open a file for reading
-  fmOpenReadDenyNone = fmOpenRead or fmShareDenyNone;
+  fmOpenReadDenyNone = fmOpenRead or fmShareReadWrite;
   /// a convenient shortened constant to open a file for writing
   fmCreateOrRewrite: array[{rewrite=}boolean] of cardinal = (
-   fmCreate,
-   fmOpenWrite or fmShareDenyNone);
+   fmCreate    or fmShareReadWrite,
+   fmOpenWrite or fmShareReadWrite);
 
 const
   /// void HTTP Status Code (not a standard value, for internal use only)
