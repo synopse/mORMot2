@@ -343,10 +343,14 @@ type
     fServer: THttpServerGeneric;
     fErrorMessage: string;
     fOnAsyncResponse: TOnHttpServerRequestAsyncResponse;
+    fPeerCachePartialID, fPeerCachePartialTix: cardinal;
+    fPeerCachePartialNewStreamFileName: TFileName;
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
     function GetFullURL: SynUnicode;
     {$endif USEWININET}
+    function PeerCachePartialProcess(var http: THttpRequestContext;
+      var dest: TRawByteStringBuffer): integer; // from THttpServer.Process
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
@@ -2835,6 +2839,74 @@ end;
 
 { THttpServerRequest }
 
+// rfProgressiveStatic mode - only for THttpPeerCache over THttpServer
+const
+  // custom HTTP header to supply the expected file size
+  STATICFILE_PROGSIZE = 'STATIC-PROGSIZE:';
+  // wait up to 10 seconds for new file content
+  STATICFILE_PROGTIMEOUTSEC = 10;
+  // wait 10 ms before retry in THttpServer.Process
+  STATICFILE_PROGWAITMS = 10;
+
+function THttpServerRequest.PeerCachePartialProcess(
+  var http: THttpRequestContext; var dest: TRawByteStringBuffer): integer;
+var
+  tix: cardinal;
+  size, offs: Int64;
+begin
+  result := -1; // =0 to send, >0 as waitms, <0 to abort
+  // check if OnDownloadingFailed() notified to abort
+  if fPeerCachePartialID = 0 then
+    exit; // abort
+  // prepare to wait for the data to be available
+  tix := GetTickCount64 shr 10;
+  if fPeerCachePartialTix = 0 then
+    fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
+  // check if OnDownloaded() did notify the switch to a final file
+  if fPeerCachePartialNewStreamFileName <> '' then
+    try
+      offs := http.ContentStream.Seek(0, soCurrent);
+      FreeAndNil(http.ContentStream);
+      http.ContentStream := TFileStreamEx.Create(
+        fPeerCachePartialNewStreamFileName, fmOpenReadDenyNone);
+      http.ContentStream.Seek(offs, soBeginning);
+      fPeerCachePartialNewStreamFileName := '';
+    except
+      exit; // abort
+    end;
+  // check current state of the progressive/partial file
+  size := http.ContentStream.Size;
+  // implement RangeOffset
+  offs := http.RangeOffset;
+  if offs = 0 then
+    offs := http.ContentStream.Seek(0, soCurrent)
+  else if size >= offs then
+  begin
+    http.ContentStream.Seek(offs, soBeginning);
+    http.RangeOffset := 0;
+  end
+  else
+  begin
+    if tix < fPeerCachePartialTix then
+      result := STATICFILE_PROGWAITMS; // wait until reach offset
+    exit;
+  end;
+  // check if there is something new to send
+  dec(size, offs);
+  if size <= 0 then
+  begin
+    if tix < fPeerCachePartialTix then
+      result := STATICFILE_PROGWAITMS; // wait until got some data
+    exit;
+  end;
+  // we have something to send
+  fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
+  if size > (fServer as THttpServer).fServerSendBufferSize then
+    size := THttpServer(fServer).fServerSendBufferSize;
+  http.ProcessBody(dest, size);
+  result := 0; // send dest content
+end;
+
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
   aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
   aConnectionFlags: THttpServerRequestFlags;
@@ -2883,13 +2955,6 @@ const
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
-// rfProgressiveStatic mode - only for THttpPeerCache over THttpServer
-const
-  // custom HTTP header to supply the expected file size
-  STATICFILE_PROGRESSIVE = 'STATIC-PROGSIZE:';
-  // wait up to 10 seconds for new file content
-  STATICFILE_PROGRESSIVE_TIMEOUT = 10;
-
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
 
@@ -2900,7 +2965,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
-    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGRESSIVE, progsizeHeader);
+    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
     SetInt64(pointer(progsizeHeader), Context.ContentLength);
     if Context.ContentLength <> 0 then
       // file is not fully available: wait for sending
@@ -2908,8 +2973,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
           Context.ValidateRange) and
          (FileSize(fn) <= Context.ContentLength) then
       begin
-        Context.ContentStream :=
-          TFileStreamEx.Create(fn, fmOpenReadDenyNone);
+        Context.ContentStream := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
         Context.ResponseFlags := Context.ResponseFlags +
           [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
       end
@@ -4268,8 +4332,8 @@ var
   req: THttpServerRequest;
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
-  started, progSize, progOffs: Int64;
-  tix, endtix: cardinal;
+  started: Int64;
+  wait: integer;
   ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
@@ -4293,7 +4357,6 @@ begin
     // send back the response
     if Terminated then
       exit;
-    endtix := 0;
     if hfConnectionClose in ClientSock.Http.HeaderFlags then
       ClientSock.fKeepAliveClient := false;
     if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
@@ -4301,54 +4364,29 @@ begin
       begin
         case ClientSock.Http.State of
           hrsResponseDone:
-            break; // finished
+            break; // finished (set by ClientSock.Http.ProcessBody)
           hrsSendBody:
             begin
               dest.Clear; // body is retrieved from Content/ContentStream
               if rfProgressiveStatic in ClientSock.Http.ResponseFlags then
               begin
-                // we need to wait for the data to be available
-                if ClientSock.Http.ContentStream = nil then
-                  break; // paranoid
-                tix := mormot.core.os.GetTickCount64 shr 10;
-                if endtix = 0 then // initial call
-                  endtix := tix + STATICFILE_PROGRESSIVE_TIMEOUT;
-                progSize := ClientSock.Http.ContentStream.Size; // current size
-                progOffs := ClientSock.Http.RangeOffset;
-                if progOffs <> 0 then
-                  if progSize < progOffs then
+                // progressive/partial file transmission
+                wait := req.PeerCachePartialProcess(ClientSock.Http, dest);
+                if wait <> 0 then // wait=0 if dest has some content to send
+                  if wait < 0 then
                   begin
-                    if tix > endtix then
-                    begin
-                      ClientSock.fKeepAliveClient := false;
-                      break; // timeout
-                    end;
-                    SleepHiRes(10); // wait until we reach this offset
-                    continue;
+                    if Assigned(ClientSock.OnLog) then
+                      ClientSock.OnLog(sllWarning,
+                        'Process: PeerCachePartialID=% aborted',
+                        [req.fPeerCachePartialID], self);
+                    ClientSock.fKeepAliveClient := false; // close connection
+                    break; // abort
                   end
                   else
                   begin
-                    ClientSock.Http.ContentStream.Seek(progOffs, soBeginning);
-                    ClientSock.Http.RangeOffset := 0;
-                  end
-                else
-                  progOffs := ClientSock.Http.ContentStream.Seek(0, soCurrent);
-                dec(progSize, progOffs);
-                if progSize <= 0 then
-                begin
-                  if tix > endtix then
-                  begin
-                    ClientSock.fKeepAliveClient := false;
-                    break; // timeout
+                    SleepHiRes(wait);
+                    continue; // wait until got some data
                   end;
-                  SleepHiRes(10); // wait until we got some new data
-                  continue;
-                end;
-                // we have something to send
-                endtix := tix + STATICFILE_PROGRESSIVE_TIMEOUT;
-                if progSize > fServerSendBufferSize then
-                  progSize := fServerSendBufferSize;
-                ClientSock.Http.ProcessBody(dest, progSize);
               end
               else
                 // regular transmission of a fully available file
