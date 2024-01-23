@@ -167,12 +167,14 @@ type
   // - waoNoMinimalSize should let OnDownload() accept even the smallest files
   // - waoTryLastPeer/waoBroadcastNotAlone will force homonymous
   // pcoTryLastPeer/pcoBroadcastNotAlone THttpPeerCacheOption
+  // - waoNoProgressiveDownloading will disable pcfResponsePartial requests
   TWGetAlternateOption = (
     waoPermanentCache,
     waoNoHeadFirst,
     waoNoMinimalSize,
     waoTryLastPeer,
-    waoBroadcastNotAlone);
+    waoBroadcastNotAlone,
+    waoNoProgressiveDownloading);
 
   /// define how THttpClientSocketWGet.Alternate should operate this file
   TWGetAlternateOptions = set of TWGetAlternateOption;
@@ -238,6 +240,7 @@ type
     /// initialize the default parameters
     procedure Clear;
     /// after Clear, instantiate and wrap THttpClientSocket.WGet
+    // - would return the downloaded file name on success
     function WGet(const url: RawUtf8; const destfile: TFileName;
       const tunnel: RawUtf8 = ''; tls: PNetTlsContext = nil;
       sockettimeout: cardinal = 10000; redirectmax: integer = 0): TFileName;
@@ -248,6 +251,7 @@ type
   // - as set to THttpClientSocketWGet.Alternate optional parameter
   IWGetAlternate = interface
     /// try to download a resource from the alternative source
+    // - e.g. THttpPeerCache will broadcast and retrieve the file from its peers
     // - this method is called after a HEAD on the server to retrieve the file
     // size and ensure the client is authorized to get the resource
     // - Params.Hasher/Hash are expected to be populated
@@ -256,20 +260,34 @@ type
     // !      {retry=}false, {instream=}nil, OutStream)
     // - OutStream.LimitPerSecond may be overriden during the call, e.g. if
     // operating on a local network
-    // - could return 0 to fallback to a regular GET (e.g. not cached)
+    // - should return HTTP_SUCCESS or HTTP_PARTIALCONTENT on success
+    // - should return 0 if hash was not found, to fallback to a regular GET
     function OnDownload(Sender: THttpClientSocket;
       const Params: THttpClientSocketWGet; const Url: RawUtf8;
       ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
+    /// notify the alternate download implementation that there is a file
+    // currently downloading into a .partial local file content
+    // - e.g. THttpPeerCache will make this file available as pcfResponsePartial
+    // - Params.Hasher/Hash are expected to be populated
+    // - returns an integer OnDownloadingID > 0 to be supplied to OnDowloaded()
+    // or OnDownloadingFailed()
+    function OnDownloading(const Params: THttpClientSocketWGet;
+      const Partial: TFileName; ExpectedFullSize: Int64): integer;
     /// put a downloaded file into the alternative source cache
-    // - this method is called after the file has been successfully downloaded
+    // - e.g. THttpPeerCache will add this file to its cache, and resume any
+    // pcfResponsePartial with the new file name
+    // - this method is called after any file has been successfully downloaded
     // - Params.Hasher/Hash are expected to be populated
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
-      const Source: TFileName);
+      const Partial: TFileName; OnDownloadingID: integer);
     /// notify the alternate download implementation that the data supplied
     // by OnDownload() was incorrect
+    // - e.g. THttpPeerCache will delete this file from its cache
     // - mainly if the resulting hash does not match
-    // - e.g. THttpPeerCache is likely to delete this file from its cache
     procedure OnDownloadFailed(const Params: THttpClientSocketWGet);
+    /// notify the alternate download implementation that OnDownloading() failed
+    // - e.g. THttpPeerCache will abort publishing this partial file
+    procedure OnDownloadingFailed(OnDownloadingID: integer);
   end;
 
   /// THttpClientSocket.Request low-level execution context
@@ -1910,10 +1928,10 @@ var
   cached, part: TFileName;
   requrl, parthash, urlfile: RawUtf8;
   partmodif: TDateTime;
-  res: integer;
   partstream: TStreamRedirect;
-  resumed, alternate: boolean;
+  res, alternatedownloading: integer;
   expectedsize: Int64;
+  resumed, alternatedownload: boolean;
 
   function GetExpectedSizeAndRedirection: boolean;
   begin
@@ -1933,6 +1951,7 @@ var
   var
     redirected: TStream;
   begin
+    Mode := Mode or fmShareRead; // e.g. to allow partial PeerCache reading
     if Assigned(params.OnStreamCreate) then
       redirected := params.OnStreamCreate(part, Mode)
     else
@@ -1963,12 +1982,23 @@ var
       res := params.Alternate.OnDownload(
                self, params, requrl, expectedsize, partstream);
       if res <> 0 then
-        alternate := true; // to notify OnDownloadFailed
+        alternatedownload := true; // to notify OnDownloadFailed
     end;
     if res = 0 then
+    begin
+      // notify that parallel progressive downloading is possible on this file
+      if Assigned(params.Alternate) and
+         (params.Hasher <> nil) and
+         (params.Hash <> '') and
+         not (waoNoProgressiveDownloading in params.AlternateOptions) and
+         ((expectedsize <> 0) or
+          GetExpectedSizeAndRedirection) then
+        alternatedownloading := params.Alternate.OnDownloading(
+                                  params, part, expectedsize);
       // regular direct GET, if not done via Alternate.OnDownload()
       res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
         {retry=}false, {instream=}nil, partstream);
+    end;
     // verify (partial) response
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
@@ -1984,6 +2014,30 @@ var
       partmodif := 0;
   end;
 
+  procedure EndAlternateDownloading;
+  begin
+    try
+      params.Alternate.OnDownloadingFailed(alternatedownloading);
+    except
+      // ignore any fatal error in callbacks
+    end;
+    alternatedownloading := 0;
+  end;
+
+  procedure DeletePartAndResetDownload;
+  begin
+    if alternatedownload then // something went wrong with OnDownload()
+    try
+      params.Alternate.OnDownloadFailed(params); // notify
+    except
+      // intercept any fatal error in callbacks
+    end;
+    alternatedownload := false;
+    if alternatedownloading <> 0 then
+      EndAlternateDownloading;
+    DeleteFile(part); // this .part was clearly incorrect
+  end;
+
 begin
   // prepare input parameters and result file name
   QueryPerformanceMicroSeconds(start); // for NotifyEnded() from cache
@@ -1997,7 +2051,8 @@ begin
   else if DirectoryExists(result) then // not a file, but a folder
     result := MakePath([result, urlfile]);
   expectedsize := 0;
-  alternate := false;
+  alternatedownload := false;
+  alternatedownloading := 0;
   // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
@@ -2113,20 +2168,15 @@ begin
         if Assigned(OnLog) then
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
-        NewPartStream(fmCreate);    // get rid of wrong file
-        requrl := url;
+        DeletePartAndResetDownload; // get rid of wrong file
+        NewPartStream(fmCreate);    // setup a new output stream
+        requrl := url;              // reset any redirection
         DoRequestAndFreePartStream; // try again without any resume
       end;
       // now the hash should be correct
       if not PropNameEquals(parthash, params.Hash) then
       begin
-        if alternate then // something went wrong with OnDownload()
-        try
-          params.Alternate.OnDownloadFailed(params); // notify
-        except
-          // intercept any fatal error
-        end;
-        DeleteFile(part); // this .part was clearly incorrect
+        DeletePartAndResetDownload;
         raise EHttpSocket.CreateUtf8('%.WGet: %:%/% hash failure (% vs %)',
           [self, fServer, fPort, url, parthash, params.Hash]);
       end;
@@ -2138,27 +2188,30 @@ begin
         OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached]);
       CopyFile(part, cached, {failsexist=}false);
     end;
+    // notify e.g. THttpPeerCache of the newly downloaded file
+    if Assigned(params.Alternate) and // alternate is not relevant here
+       (params.Hasher <> nil) and
+       (params.Hash <> '') then
+      try
+        params.Alternate.OnDowloaded(params, part, alternatedownloading);
+        alternatedownloading := 0;
+      except
+        // ignore any fatal error in callbacks
+      end;
     // valid .part file can now be converted into the result file
     if not RenameFile(part, result) then
       raise EHttpSocket.CreateUtf8(
         '%.WGet: impossible to rename % as %', [self, part, result]);
     // set part='' to notify fully downloaded into result file name
     part := '';
-    // notify e.g. THttpPeerCache of the newly downloaded file
-    if Assigned(params.Alternate) and // alternate is not relevant here
-       (params.Hasher <> nil) and
-       (params.Hash <> '') then
-    try
-      params.Alternate.OnDowloaded(params, result);
-    except
-      // intercept any fatal error
-    end;
   finally
     partstream.Free;  // close .part file on unexpected error (if not already)
+    if alternatedownloading <> 0 then
+      EndAlternateDownloading;
     if part <> '' then // is there still some interuppted .part content?
       if (FileSize(part) < 32768) or // not worth it, and maybe HTML error msg
          not params.Resume then      // resume is not enabled
-      DeleteFile(part); // force next attempt from scratch
+        DeleteFile(part); // force next attempt from scratch
   end;
 end;
 
