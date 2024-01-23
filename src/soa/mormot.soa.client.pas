@@ -491,7 +491,7 @@ begin
   begin
     // per-reference RawByteString SOA client process with no Base64 encoding
     FakeCallGetParamsFromStack(ctxt);
-    FastSetString(Json, nil, SizeOf(cardinal) + SizeOf(pointer));
+    FastSetString(Json, SizeOf(cardinal) + SizeOf(pointer));
     PCardinalArray(Json)[0] := JSON_BIN_MAGIC_C; // marker
     PPointer(@PCardinalArray(Json)[1])^ :=
       PPointer(ctxt.Value[ctxt.Method^.ArgsInFirst])^; // set reference

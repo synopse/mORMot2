@@ -871,7 +871,7 @@ var
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(CharCount);
-  FastSetString(RawUtf8(result), nil, CharCount);
+  FastSetString(RawUtf8(result), CharCount);
   for i := 0 to CharCount - 1 do
     PByteArray(result)[i] := 32 + R[i] mod 94;
   tmp.Done;
@@ -884,7 +884,7 @@ var
   tmp: TSynTempBuffer;
 begin
   R := tmp.InitRandom(count);
-  FastSetString(RawUtf8(result), nil, count);
+  FastSetString(RawUtf8(result), count);
   for i := 0 to count - 1 do
     PByteArray(result)[i] := ord(chars64[PtrInt(R[i]) and 63]);
   tmp.Done;

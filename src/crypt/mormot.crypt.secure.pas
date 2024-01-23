@@ -6209,7 +6209,7 @@ end;
 
 function TCryptRandom.Get(len: PtrInt): RawByteString;
 begin
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   Get(pointer(result), len);
 end;
 
@@ -8852,7 +8852,7 @@ var
 begin
   // limitation: CertName is ignored and 'Dummy Cert' is forced
   result := '';
-  FastSetRawByteString(dummy, nil, _DUMMYLEN);
+  FastNewRawByteString(dummy, _DUMMYLEN);
   if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
     exit;
   p := pointer(dummy);
@@ -9487,7 +9487,7 @@ begin
     tmp[n] := 0; // positive numbers start with a 0 or 0x..7x
     inc(n);
   end;
-  FastSetRawByteString(result, nil, n);
+  FastNewRawByteString(result, n);
   p := pointer(result);
   repeat
     dec(n);

@@ -5071,7 +5071,7 @@ begin
   if (P <> nil) and
      (L <> 0) then
   begin
-    FastSetRawByteString(result, nil, L * 3);
+    FastNewRawByteString(result, L * 3);
     FakeSetLength(result, Utf8ToWideChar(pointer(result), P, L));
   end
   else
@@ -5138,7 +5138,7 @@ begin
   if (c < 0) or
      (z < c) then
     c := z;
-  FastSetString(result, nil, len shl 1);
+  FastSetString(result, len shl 1);
   d := pointer(result);
   MoveFast(s^, d^, c);
   inc(s, c);
@@ -5182,7 +5182,7 @@ begin
     result := u;
     exit;
   end;
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   d := pointer(result);
   MoveFast(s^, d^, c);
   inc(s, c);
@@ -7569,7 +7569,7 @@ begin
     if text[i] <= ' ' then
     begin
       n := i - 1;
-      FastSetString(result, nil, len);
+      FastSetString(result, len);
       P := pointer(result);
       if n > 0 then
         MoveFast(pointer(text)^, P^, n);
@@ -7595,7 +7595,7 @@ begin
     if text[i] in exclude then
     begin
       n := i - 1;
-      FastSetString(result, nil, len - 1);
+      FastSetString(result, len - 1);
       P := pointer(result);
       if n > 0 then
         MoveFast(pointer(text)^, P^, n);
@@ -7624,7 +7624,7 @@ begin
     result := text; // no exclude char found
     exit;
   end;
-  FastSetString(result, nil, len - 1);
+  FastSetString(result, len - 1);
   P := pointer(result);
   MoveFast(pointer(text)^, P^, first);
   inc(P, first);
@@ -7708,7 +7708,7 @@ begin
       break;
     AddInteger(pos, posCount, found);
   until false;
-  FastSetString(result, nil, Length(S) + (newlen - oldlen) * posCount);
+  FastSetString(result, Length(S) + (newlen - oldlen) * posCount);
   last := 1;
   src := pointer(S);
   dst := pointer(result);
@@ -7838,7 +7838,7 @@ begin
     result := Source;
     exit;
   end;
-  FastSetString(result, nil, L + n * pred(ttl));
+  FastSetString(result, L + n * pred(ttl));
   Process(pointer(Source), pointer(result), pointer(TabText), ttl);
 end;
 
@@ -7848,7 +7848,7 @@ begin
     FastAssignNew(result)
   else
   begin
-    FastSetString(result, nil, Count);
+    FastSetString(result, Count);
     FillCharFast(pointer(result)^, Count, byte(Ch));
   end;
 end;
@@ -7893,7 +7893,7 @@ begin
     for i := quote1 to PLen - 1 do
       if P[i] = Quote then
         inc(nquote);
-  FastSetString(result, nil, PLen + nquote + 2);
+  FastSetString(result, PLen + nquote + 2);
   R := pointer(result);
   R^ := Quote;
   inc(R);

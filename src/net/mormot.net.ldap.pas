@@ -3053,7 +3053,7 @@ end;
 
 function TLdapClient.ReceivePacket(DestLen: integer): RawByteString;
 begin
-  FastSetRawByteString(result, nil, DestLen);
+  FastNewRawByteString(result, DestLen);
   ReceivePacket(pointer(result), DestLen);
 end;
 

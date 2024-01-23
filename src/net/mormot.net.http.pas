@@ -2286,7 +2286,7 @@ begin
   else
   begin
     // allocate at once and append all non-purged headers
-    FastSetString(result, nil, tot);
+    FastSetString(result, tot);
     P := pointer(result);
     for i := 0 to n - 1 do
     begin

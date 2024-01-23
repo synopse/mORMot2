@@ -4567,7 +4567,7 @@ begin
     // direct allocation if no JSON escape is needed
     Lp := length(aPrefix);
     Ls := length(aSuffix);
-    FastSetString(result, nil, PLen + Lp + Ls + 2);
+    FastSetString(result, PLen + Lp + Ls + 2);
     D := pointer(result); // we checked dest result <> source P above
     if Lp > 0 then
     begin

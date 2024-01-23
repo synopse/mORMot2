@@ -676,7 +676,7 @@ begin
       len := swap(lenw);
       if len <= length(Request) then
         exit;
-      FastSetRawByteString(answer, nil, len);
+      FastNewRawByteString(answer, len);
       hdr := pointer(answer);
       if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
          (hdr^.Xid <> PDnsHeader(Request)^.Xid) or

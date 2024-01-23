@@ -3465,7 +3465,7 @@ function Pad(const text: RawUtf8; max: integer): RawUtf8;
 var
   len: integer;
 begin
-  FastSetString(result, nil, max);
+  FastSetString(result, max);
   len := length(text);
   if len > max then
     len := max
@@ -4161,7 +4161,7 @@ function TPkcs11.GetRandom(Len: PtrInt): RawByteString;
 begin
   EnsureSession('GetRandom');
   if Len > 0 then
-    FastSetRawByteString(result, nil, Len);
+    FastNewRawByteString(result, Len);
   if (Len <= 0) or
      (fC.GenerateRandom(fSession, pointer(result), Len) <> CKR_SUCCESS) then
     result := '';
@@ -4259,7 +4259,7 @@ begin
   if (fC.GetAttributeValue(fSession, obj, @a, 1) <> CKR_SUCCESS) or
      (a.ulValueLen = CK_UNAVAILABLE_INFORMATION) then
     exit; // impossible to retrieve the length
-  FastSetString(result, nil, a.ulValueLen);
+  FastSetString(result, a.ulValueLen);
   a.pValue := pointer(result); // copy the attribute value to result
   if fC.GetAttributeValue(fSession, obj, @a, 1) <> CKR_SUCCESS then
     result := '';

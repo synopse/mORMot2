@@ -730,13 +730,22 @@ function NextGrow(capacity: integer): integer;
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer
 // - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
 // - faster especially under FPC
-procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt);
+procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt); overload;
+  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// faster equivalence to SetString(s,nil,len) function
+procedure FastSetString(var s: RawUtf8; len: PtrInt); overload;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// equivalence to SetString(s,pansichar,len) function but from a raw pointer
 // - so works with both PAnsiChar and PUtf8Char input buffer (or even PByteArray)
 // - faster especially under FPC
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
+  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// equivalence to SetString(s,nil,len) function to allocate a new RawByteString
+// - faster especially under FPC
+procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// equivalence to SetString(s,pansichar,len) function with a specific code page
@@ -4575,6 +4584,11 @@ begin
     FastAssignNew(s, r);
 end;
 
+procedure FastSetString(var s: RawUtf8; len: PtrInt);
+begin
+  FastAssignNew(s, FastNewString(len, CP_UTF8));
+end;
+
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
 var
   r: pointer;
@@ -4589,11 +4603,16 @@ begin
     FastAssignNew(s, r);
 end;
 
+procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
+begin
+  FastAssignNew(s, FastNewString(len, CP_RAWBYTESTRING));
+end;
+
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
   len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
-  FastSetRawByteString(holder, nil, len + alignment);
+  FastNewRawByteString(holder, len + alignment);
   aligned := pointer(holder);
   while PtrUInt(aligned) and alignment <> 0 do
     inc(PByte(aligned));
@@ -4942,7 +4961,7 @@ begin
     result := '';
     exit;
   end;
-  FastSetString(result, nil, (len * 3) - 1);
+  FastSetString(result, (len * 3) - 1);
   dec(len);
   tab := @HexCharsLower;
   P := pointer(result);
@@ -4971,7 +4990,7 @@ begin
     result := '';
     exit;
   end;
-  FastSetString(result, nil, (len * 3) - 1);
+  FastSetString(result, (len * 3) - 1);
   tab := @HexCharsLower;
   P := pointer(result);
   i := len;

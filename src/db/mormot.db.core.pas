@@ -2217,7 +2217,7 @@ begin
   result := '';
   if Date <= 0 then
     exit;
-  FastSetString(result, nil, 13);
+  FastSetString(result, 13);
   PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(Date, PUtf8Char(pointer(result)) + 3, True);
 end;
@@ -2229,7 +2229,7 @@ begin
      (Month - 1 > 11) or
      (Day - 1 > 30) then
     exit;
-  FastSetString(result, nil, 13);
+  FastSetString(result, 13);
   PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
   DateToIso8601PChar(PUtf8Char(pointer(result)) + 3, True, Year, Month, Day);
 end;

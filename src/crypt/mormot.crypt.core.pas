@@ -5312,7 +5312,7 @@ var
 begin
   inlen := length(Input);
   outlen := EncryptPkcs7Length(inlen, IVAtBeginning);
-  FastSetRawByteString(result, nil, outlen + TrailerLen);
+  FastNewRawByteString(result, outlen + TrailerLen);
   EncryptPkcs7Buffer(pointer(Input), pointer(result), inlen, outlen, IVAtBeginning);
 end;
 
@@ -5431,7 +5431,7 @@ begin
   if not DecryptPkcs7Len(InputLen, ivsize, Input,
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
-  FastSetRawByteString(result, nil, InputLen);
+  FastNewRawByteString(result, InputLen);
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), InputLen);
   padding := CheckPadding(@PByteArray(result)^[InputLen - 1]);
   if padding = 0 then
@@ -5963,7 +5963,7 @@ begin
   len := length(Input);
   if IVAtBeginning then
     inc(len, SizeOf(TAesBlock));
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   p := pointer(result);
   if IVAtBeginning then
   begin
@@ -5992,7 +5992,7 @@ begin
     inc(p);
     dec(len, SizeOf(p^));
   end;
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   DecryptCts(p, pointer(result), len);
 end;
 
@@ -7475,7 +7475,7 @@ end;
 
 function TAesPrngAbstract.FillRandom(Len: integer): RawByteString;
 begin
-  FastSetRawByteString(result, nil, Len);
+  FastNewRawByteString(result, Len);
   FillRandom(pointer(result), Len);
 end;
 
@@ -7491,7 +7491,7 @@ function TAesPrngAbstract.FillRandomHex(Len: integer): RawUtf8;
 var
   bin: pointer;
 begin
-  FastSetString(result, nil, Len * 2);
+  FastSetString(result, Len * 2);
   if Len = 0 then
     exit;
   bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
@@ -7744,7 +7744,7 @@ begin
   else
   try
     // retrieve some initial entropy from OS (but for gesUserOnly)
-    FastSetRawByteString(fromos, nil, Len);
+    FastNewRawByteString(fromos, Len);
     if Source <> gesUserOnly then
       FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
     if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
@@ -8045,7 +8045,7 @@ begin
     2:
       inc(blen, 3);
   end;
-  FastSetString(result, nil, blen);
+  FastSetString(result, blen);
   RawBase64Uri(pointer(result), P, bdiv, bmod);
 end;
 
@@ -9232,7 +9232,7 @@ var
   len: integer;
 begin
   len := length(Source);
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len);
 end;
 
@@ -9259,7 +9259,7 @@ var
   len: integer;
 begin
   len := length(Source);
-  FastSetRawByteString(result, nil, len);
+  FastNewRawByteString(result, len);
   Cypher(pointer(Source), pointer(result), len);
 end;
 
@@ -10902,7 +10902,7 @@ end;
 
 function AesBlockToString(const block: TAesBlock): RawUtf8;
 begin
-  FastSetString(result, nil, 32);
+  FastSetString(result, 32);
   mormot.core.text.BinToHex(@block, pointer(result), 16);
 end;
 
@@ -11107,7 +11107,7 @@ type
 function AES(const Key; KeySize: cardinal; const s: RawByteString;
   Encrypt: boolean): RawByteString;
 begin
-  FastSetRawByteString(result, nil, length(s));
+  FastNewRawByteString(result, length(s));
   if s <> '' then
     AES(Key, KeySize, pointer(s), pointer(result), length(s), Encrypt);
 end;
@@ -11539,7 +11539,7 @@ end;
 function AESSHA256(const s, Password: RawByteString;
   Encrypt: boolean): RawByteString;
 begin
-  FastSetRawByteString(result, nil, length(s));
+  FastNewRawByteString(result, length(s));
   AESSHA256(pointer(s), pointer(result), length(s), Password, Encrypt);
 end;
 

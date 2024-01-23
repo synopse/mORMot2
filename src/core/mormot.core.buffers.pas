@@ -4543,7 +4543,7 @@ begin
   if fPos + maxlen > fBufLen then
   begin
     if maxlen > length(tmp) then
-      FastSetRawByteString(tmp, nil, maxlen); // don't reallocate buffer (reuse)
+      FastNewRawByteString(tmp, maxlen); // don't reallocate buffer (reuse)
     result := pointer(tmp);
   end
   else
@@ -5228,7 +5228,7 @@ begin
      (CheckMagicForCompressed and
       IsContentCompressed(Plain, PlainLen)) then
   begin
-    FastSetRawByteString(result, nil, PlainLen + BufferOffset + 9);
+    FastNewRawByteString(result, PlainLen + BufferOffset + 9);
     R := pointer(result);
     inc(R, BufferOffset);
     PCardinal(R)^ := crc;
@@ -5241,7 +5241,7 @@ begin
     len := CompressDestLen(PlainLen) + BufferOffset;
     if len > SizeOf(tmp) then
     begin
-      FastSetRawByteString(result, nil, len);
+      FastNewRawByteString(result, len);
       R := pointer(result);
     end
     else
@@ -5376,7 +5376,7 @@ begin
   len := DecompressHeader(Comp, CompLen, Load);
   if len = 0 then
     exit;
-  FastSetRawByteString(result, nil, len + BufferOffset);
+  FastNewRawByteString(result, len + BufferOffset);
   dec := pointer(result);
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
     result := '';
@@ -5399,7 +5399,7 @@ begin
   len := DecompressHeader(pointer(Comp), length(Comp), Load);
   if len = 0 then
     exit; // invalid crc32c
-  FastSetRawByteString(Dest, nil, len);
+  FastNewRawByteString(Dest, len);
   if DecompressBody(pointer(Comp), pointer(Dest), length(Comp), len, Load) then
     result := true
   else
@@ -5425,7 +5425,7 @@ begin
   else
   begin
     if PlainLen > length(tmp) then
-      FastSetRawByteString(tmp, nil, PlainLen);
+      FastNewRawByteString(tmp, PlainLen);
     if DecompressBody(Comp, pointer(tmp), CompLen, PlainLen, Load) then
       result := pointer(tmp);
   end;
@@ -5504,11 +5504,11 @@ begin
       head.UnCompressedSize := count;
     if S = nil then
     begin
-      FastSetRawByteString(tmps, nil, head.UnCompressedSize);
+      FastNewRawByteString(tmps, head.UnCompressedSize);
       S := pointer(tmps); // here S is a temporary buffer
     end;
     if {%H-}tmpd = '' then
-      FastSetRawByteString(tmpd, nil, AlgoCompressDestLen(head.UnCompressedSize));
+      FastNewRawByteString(tmpd, AlgoCompressDestLen(head.UnCompressedSize));
     dec(count, head.UnCompressedSize); // supports premature end of input
     if S = pointer(tmps) then
       head.UnCompressedSize := Source.Read(S^, head.UnCompressedSize);
@@ -5640,7 +5640,7 @@ begin
     else
     begin
       if Head.CompressedSize > length({%H-}tmps) then
-        FastSetRawByteString(tmps, nil, Head.CompressedSize);
+        FastNewRawByteString(tmps, Head.CompressedSize);
       S := pointer(tmps);
       if Source.Read(S^, Head.CompressedSize) <> Head.CompressedSize then
         break;
@@ -5663,7 +5663,7 @@ begin
     else
     begin
       if Head.UnCompressedSize > length({%H-}tmpd) then
-        FastSetRawByteString(tmpd, nil, Head.UnCompressedSize);
+        FastNewRawByteString(tmpd, Head.UnCompressedSize);
       D := pointer(tmpd);
     end;
     if stored then
@@ -6063,7 +6063,7 @@ begin
   L := 0;
   for i := 0 to high(Values) do
     inc(L, length(Values[i]));
-  FastSetRawByteString(result{%H-}, nil, L);
+  FastNewRawByteString(result{%H-}, L);
   P := pointer(result);
   for i := 0 to high(Values) do
   begin
@@ -6470,7 +6470,7 @@ begin
   len := length(s);
   if len = 0 then
     exit;
-  FastSetString(result, nil, BinToBase64Length(len));
+  FastSetString(result, BinToBase64Length(len));
   Base64Encode(pointer(result), pointer(s), len);
 end;
 
@@ -6497,7 +6497,7 @@ var
 begin
   outlen := BinToBase64Length(len);
   inc(outlen, 2 * (outlen shr 6) + 2); // one CRLF per line
-  FastSetString(result{%H-}, nil, PtrInt(outlen) + length(Prefix) + length(Suffix));
+  FastSetString(result{%H-}, PtrInt(outlen) + length(Prefix) + length(Suffix));
   p := pointer(result);
   if Prefix <> '' then
   begin
@@ -6547,7 +6547,7 @@ begin
   result := '';
   if BinBytes = 0 then
     exit;
-  FastSetString(result, nil, BinToBase64Length(BinBytes));
+  FastSetString(result, BinToBase64Length(BinBytes));
   Base64Encode(pointer(result), Bin, BinBytes);
 end;
 
@@ -6565,7 +6565,7 @@ begin
   len := ((lendata + 2) div 3) * 4 + lenprefix + lensuffix;
   if WithMagic then
     inc(len, 3);
-  FastSetString(result, nil, len);
+  FastSetString(result, len);
   if lenprefix > 0 then
     MoveFast(pointer(Prefix)^, res^, lenprefix);
   if WithMagic then
@@ -6594,7 +6594,7 @@ begin
   Result := '';
   if DataLen <= 0 then
     exit;
-  FastSetString(Result, nil, ((DataLen + 2) div 3) * 4 + 3);
+  FastSetString(Result, ((DataLen + 2) div 3) * 4 + 3);
   PInteger(pointer(Result))^ := JSON_BASE64_MAGIC_C;
   Base64Encode(PAnsiChar(pointer(Result)) + 3, Data, DataLen);
 end;
@@ -6723,7 +6723,7 @@ begin
   resultLen := Base64LengthAdjust(sp, len);
   if resultLen <> 0 then
   begin
-    FastSetRawByteString(data, nil, resultLen);
+    FastNewRawByteString(data, resultLen);
     result := Base64DecodeMain(sp, pointer(data), len); // may use AVX2
   end;
   if not result then
@@ -6831,7 +6831,7 @@ begin
   len := length(s);
   if len = 0 then
     exit;
-  FastSetString(result, nil, BinToBase64uriLength(len));
+  FastSetString(result, BinToBase64uriLength(len));
   Base64uriEncode(pointer(result), pointer(s), len);
 end;
 
@@ -6840,7 +6840,7 @@ begin
   result := '';
   if BinBytes <= 0 then
     exit;
-  FastSetString(result, nil, BinToBase64uriLength(BinBytes));
+  FastSetString(result, BinToBase64uriLength(BinBytes));
   Base64uriEncode(pointer(result), Bin, BinBytes);
 end;
 
@@ -6899,7 +6899,7 @@ begin
   resultLen := Base64uriToBinLength(len);
   if resultLen <> 0 then
   begin
-    FastSetRawByteString(bin, nil, resultLen);
+    FastNewRawByteString(bin, resultLen);
     result := Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(bin), len);
   end;
   if not result then
@@ -7273,7 +7273,7 @@ var
 
 function BinToBase32(Bin: PAnsiChar; BinLen: PtrInt): RawUtf8;
 begin
-  FastSetString(result, nil, BinToBase32Length(BinLen));
+  FastSetString(result, BinToBase32Length(BinLen));
   if result <> '' then
     BinToBase32(pointer(Bin), pointer(result), BinLen, @b32enc);
 end;
@@ -7372,7 +7372,7 @@ begin
   if (B32Len > 0) and
      ((B32Len and 7) = 0) then
   begin
-    FastSetRawByteString(result, nil, (B32Len shr 3) * 5);
+    FastNewRawByteString(result, (B32Len shr 3) * 5);
     p := Base32Decode(@ConvertBase32ToBin, B32, pointer(result), B32Len);
     if p <> nil then
     begin
@@ -7979,7 +7979,7 @@ begin
   result := '';
   if Text = nil then
     exit;
-  FastSetString(result, nil, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 32));
+  FastSetString(result, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 32));
   _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 32);
 end;
 
@@ -7988,7 +7988,7 @@ begin
   result := '';
   if Text = nil then
     exit;
-  FastSetString(result, nil, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 48));
+  FastSetString(result, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 48));
   _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 48);
 end;
 
@@ -8144,7 +8144,7 @@ begin
     // decode value content
     if len <> 0 then
     begin
-      FastSetString(Value, nil, len);
+      FastSetString(Value, len);
       V := pointer(Value);
       U := Beg;
       repeat
@@ -8215,7 +8215,7 @@ begin
   if len = 0 then
     exit;
   // decode name content
-  FastSetString(Name, nil, len);
+  FastSetString(Name, len);
   V := pointer(Name);
   U := Beg;
   repeat
@@ -9152,7 +9152,7 @@ end;
 
 function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
 begin
-  FastSetString(result{%H-}, nil, sourcelen * 3); // worse case
+  FastSetString(result{%H-}, sourcelen * 3); // worse case
   if sourcelen <> 0 then
     FakeLength(result, pointer(EscapeBuffer(
       pointer(result), sourcelen, pointer(result), sourcelen * 3)));
@@ -10774,7 +10774,7 @@ begin
   if (Values <> nil) and
      (Count > 1) then
   begin
-    FastSetRawByteString(tmp, nil, Position);
+    FastNewRawByteString(tmp, Position);
     v := pointer(Values);
     for i := 1 to Count do
     begin
@@ -11073,7 +11073,7 @@ begin
   if MaxSize > fCapacity then
   begin
     fCapacity := MaxSize;
-    FastSetRawByteString(fBuffer, nil, MaxSize); // no realloc -> no SetLength()
+    FastNewRawByteString(fBuffer, MaxSize); // no realloc -> no SetLength()
   end;
   result := pointer(fBuffer);
 end;
@@ -11152,7 +11152,7 @@ begin
     Text := fBuffer // fast COW
   else
   begin
-    FastSetString(Text, nil, Len + Overhead);
+    FastSetString(Text, Len + Overhead);
     MoveFast(pointer(fBuffer)^, pointer(Text)^, Len);
     if OverHead = 0 then
       exit;

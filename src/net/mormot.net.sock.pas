@@ -3150,7 +3150,7 @@ begin
     exit;
   end;
   L := L shr 1;
-  FastSetString(result, nil, (L * 3) - 1);
+  FastSetString(result, (L * 3) - 1);
   h := pointer(Hex);
   m := pointer(result);
   repeat
@@ -3177,7 +3177,7 @@ var
 begin
   if maclen < 0 then
     maclen := 0;
-  FastSetString(result, nil, maclen * 2);
+  FastSetString(result, maclen * 2);
   if maclen = 0 then
     exit;
   dec(maclen);
@@ -4371,7 +4371,7 @@ begin
   l := 0;
   for i := 0 to high(v) do
     inc(l, length(v[i]));
-  FastSetString(result, nil, l);
+  FastSetString(result, l);
   p := pointer(result);
   for i := 0 to high(v) do
   begin
@@ -5194,7 +5194,7 @@ begin
   if (self = nil) or
      (Length <= 0) then
     exit;
-  FastSetRawByteString(result, nil, Length);
+  FastNewRawByteString(result, Length);
   if SockInRead(pointer(result), Length, UseOnlySockIn) <> Length then
     result := '';
 end;
@@ -5391,7 +5391,7 @@ end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
 begin
-  FastSetRawByteString(result, nil, Length);
+  FastNewRawByteString(result, Length);
   SockRecv(pointer(result), Length);
 end;
 

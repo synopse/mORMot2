@@ -145,7 +145,7 @@ begin
   if Len > 0 then
     if IsAnsiCompatibleW(P, Len) then
     begin
-      FastSetString(res, nil, Len);
+      FastSetString(res, Len);
       for i := 0 to Len - 1 do
         PByteArray(res)[i] := PWordArray(P)[i]; // fast direct conversion
     end
@@ -3747,7 +3747,7 @@ begin
     siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
     if siz > SizeOf(info) then
     begin
-      FastSetRawByteString(tmp, nil, siz);
+      FastNewRawByteString(tmp, siz);
       get(_RSMB_, 0, pointer(tmp), siz);
       PInt64(@info)^ := PInt64(tmp)^; // header fields = 64-bit
       FastSetRawByteString(info.data, @PInt64Array(tmp)[1], siz - SizeOf(Int64));

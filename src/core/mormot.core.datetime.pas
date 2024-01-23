@@ -1415,7 +1415,7 @@ begin
     result := ''
   else
   begin
-    FastSetString(result, nil, 10);
+    FastSetString(result, 10);
     DateToIso8601PChar(Date, pointer(result), True);
   end;
 end;
@@ -1480,14 +1480,14 @@ end;
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;
 // use YYYYMMDD / YYYY-MM-DD date format
 begin
-  FastSetString(result, nil, 8 + 2 * integer(Expanded));
+  FastSetString(result, 8 + 2 * integer(Expanded));
   DateToIso8601PChar(Date, pointer(result), Expanded);
 end;
 
 function DateToIso8601(Y, M, D: cardinal; Expanded: boolean): RawUtf8;
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
-  FastSetString(result, nil, 8 + 2 * integer(Expanded));
+  FastSetString(result, 8 + 2 * integer(Expanded));
   DateToIso8601PChar(pointer(result), Expanded, Y, M, D);
 end;
 
@@ -1495,7 +1495,7 @@ function TimeToIso8601(Time: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean): RawUtf8;
 // use Thhmmss[.sss] / Thh:mm:ss[.sss] format
 begin
-  FastSetString(result, nil, 7 + 2 * integer(Expanded) + 4 * integer(WithMS));
+  FastSetString(result, 7 + 2 * integer(Expanded) + 4 * integer(WithMS));
   TimeToIso8601PChar(Time, pointer(result), Expanded, FirstChar, WithMS);
 end;
 

@@ -8803,7 +8803,7 @@ begin
   end;
   SepLen := length(Sep);
   inc(L, length(Head) + SepLen * (fRowCount - 1) + length(Trail));
-  FastSetString(result, nil, L);
+  FastSetString(result, L);
   P := AppendRawUtf8ToBuffer(pointer(result), Head);
   n := fRowCount;
   repeat
@@ -11416,7 +11416,7 @@ begin
     result := '';
     exit;
   end;
-  FastSetString(result, nil, l - 1); // allocate once for all
+  FastSetString(result, l - 1); // allocate once for all
   p := pointer(result);
   for f := 0 to Fields.Count - 1 do
     if FieldBitGet(Bits, f) then

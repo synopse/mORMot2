@@ -2252,7 +2252,7 @@ begin
     PInteger(c)^ := integer(Flags);
     c[4] := AnsiChar(mmkBody);
     complen := zlibCompressMax(cmdlen + 5);
-    FastSetRawByteString(comp, nil, complen);
+    FastNewRawByteString(comp, complen);
     if cmdlen < 1024 then
       level := Z_NO_COMPRESSION // not worth compressing on the wire
       // but we use zlib anyway, otherwise the response is not compressed
@@ -2399,7 +2399,7 @@ begin
     if (cmp.UncompressedSize < 5) or
        (cmp.UncompressedSize > 16 shl 20) then
       raise EMongoException.CreateUtf8('%size=%', [_E, cmp.UncompressedSize]);
-    FastSetRawByteString(fReply, nil, cmp.UncompressedSize);
+    FastNewRawByteString(fReply, cmp.UncompressedSize);
     // may use libdeflate on supported platforms
     if UncompressMem(
         PAnsiChar(cmp) + SizeOf(cmp^), pointer(fReply), len - SizeOf(cmp^),

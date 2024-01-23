@@ -1381,8 +1381,7 @@ begin
                 ftDate:
                   begin
                     VDBType := SQLT_DAT;
-                    FastSetRawByteString(
-                      VData, nil, fParamsArrayCount * SizeOf(TOracleDate));
+                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(TOracleDate));
                     oData := pointer(VData);
                     oLength := SizeOf(TOracleDate);
                   end;
@@ -1391,8 +1390,7 @@ begin
                   begin
                     // starting with 11.2, OCI supports NUMBER conversion to/from Int64
                     VDBType := SQLT_INT;
-                    FastSetRawByteString(
-                      VData, nil, fParamsArrayCount * SizeOf(Int64));
+                    FastNewRawByteString(VData, fParamsArrayCount * SizeOf(Int64));
                     oData := pointer(VData);
                     oLength := SizeOf(Int64);
                   end;
@@ -1447,7 +1445,7 @@ begin
                 SQLT_STR:
                   begin
                     inc(oLength); // space for trailing #0
-                    FastSetRawByteString(VData, nil, oLength * fParamsArrayCount);
+                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oData := Pointer(VData); // in-place quote removal in text
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
@@ -1458,7 +1456,7 @@ begin
                   end;
                 SQLT_LVB:
                   begin
-                    FastSetRawByteString(VData, nil, oLength * fParamsArrayCount);
+                    FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oData := Pointer(VData);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
@@ -1513,8 +1511,7 @@ begin
                   ociArrays[ociArraysCount]),
                 fError);
               inc(ociArraysCount);
-              FastSetRawByteString(
-                param.VData, nil, Length(param.VArray) * SizeOf(Int64));
+              FastNewRawByteString(param.VData, Length(param.VArray) * SizeOf(Int64));
               oData := pointer(param.VData);
               for j := 0 to Length(param.VArray) - 1 do
                 case param.VType of

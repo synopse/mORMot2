@@ -2120,7 +2120,7 @@ end;
 
 procedure TBsonObjectID.ToText(var result: RawUtf8);
 begin
-  FastSetString(result, nil, SizeOf(self) * 2);
+  FastSetString(result, SizeOf(self) * 2);
   mormot.core.text.BinToHex(@self, pointer(result), SizeOf(self));
 end;
 
@@ -2201,8 +2201,8 @@ begin
          (PInteger(VBlob)^ <> Length(RawByteString(VBlob)) - (SizeOf(integer) + 1)) then
         Blob := ''
       else
-        FastSetRawByteString(
-          Blob, PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
+        FastSetRawByteString(Blob,
+          PAnsiChar(VBlob) + (SizeOf(integer) + 1), PInteger(VBlob)^);
   end;
 end;
 
@@ -2446,7 +2446,7 @@ var
     buf: PAnsiChar;
   begin
     bsonvalue.VBlob := nil; // avoid GPF
-    FastSetRawByteString(RawByteString(bsonvalue.VBlob), nil, RegLen + OptLen + 2);
+    FastNewRawByteString(RawByteString(bsonvalue.VBlob), RegLen + OptLen + 2);
     buf := bsonvalue.VBlob;
     MoveFast(Reg^, buf^, RegLen);
     inc(buf, RegLen);

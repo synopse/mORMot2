@@ -1935,7 +1935,7 @@ begin
   try
     a.IV := secret.h.Lo; // use 128-bit of secret.h
     o := a.EncryptPkcs7Length(l, {withiv=}false);
-    FastSetRawByteString(result, nil, o + SizeOf(ephpub));
+    FastNewRawByteString(result, o + SizeOf(ephpub));
     p := pointer(result);
     p^ := ephpub;
     inc(p);
@@ -4835,7 +4835,7 @@ begin
   try
     SetIVAndMacNonce({encrypt=}true);
     len := fAes[true].EncryptPkcs7Length(length(aPlain), false);
-    FastSetRawByteString(aEncrypted, nil, len + SizeOf(THash256)); // trailing MAC
+    FastNewRawByteString(aEncrypted, len + SizeOf(THash256)); // trailing MAC
     // encrypt the input
     fAes[true].EncryptPkcs7Buffer(
       Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
@@ -5333,8 +5333,8 @@ begin
         // for ECC, returns the x,y uncompressed coordinates from stored ASN.1
         if Ecc256r1ExtractAsn1(fSubjectPublicKey, k) then
         begin
-          FastSetRawByteString(x, nil, ECC_BYTES);;
-          FastSetRawByteString(y, nil, ECC_BYTES);;
+          FastNewRawByteString(x, ECC_BYTES);;
+          FastNewRawByteString(y, ECC_BYTES);;
           bswap256(@PHash512Rec(@k)^.Lo, pointer(x));
           bswap256(@PHash512Rec(@k)^.Hi, pointer(y));
           result := true;

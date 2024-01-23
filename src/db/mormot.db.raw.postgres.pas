@@ -275,7 +275,7 @@ begin
   else
     exit; // unsupported
   end;
-  FastSetRawByteString(Bin, nil, len);
+  FastNewRawByteString(Bin, len);
   p := pointer(Bin);
   p^ := $01000000;           // dimensions
   inc(p);

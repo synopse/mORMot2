@@ -609,7 +609,7 @@ begin
       if toEcdhe in fOptions then
       begin
         // optional ECDHE ephemeral encryption
-        FastSetRawByteString(frame, nil, SizeOf(TTunnelEcdhFrame));
+        FastNewRawByteString(frame, SizeOf(TTunnelEcdhFrame));
         with PTunnelEcdhFrame(frame)^ do
           RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
         if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create

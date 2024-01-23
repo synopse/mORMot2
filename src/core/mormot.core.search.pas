@@ -2661,7 +2661,7 @@ var
   m: PSBNDMQ2Mask absolute result;
   c: PCardinal;
 begin
-  FastSetRawByteString(result, nil, SizeOf(m^));
+  FastNewRawByteString(result, SizeOf(m^));
   FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do
   begin
@@ -4410,7 +4410,7 @@ var
 begin
   PEnd := PAnsiChar(P) + Len - 4;
   DestLen := FromVarUInt32(P);
-  FastSetRawByteString(Dest, nil, DestLen); // FPC uses var
+  FastNewRawByteString(Dest, DestLen);
   D := pointer(Dest);
   DEnd := D + DestLen;
   crc := 0;

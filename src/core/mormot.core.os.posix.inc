@@ -2163,7 +2163,7 @@ var
         break;
       // fn := [subpath + '/'] + e^.d_name
       el := StrLen(@e^.d_name);
-      FastSetString(fn, nil, pl + el);
+      FastSetString(fn, pl + el);
       if pl <> 0 then
       begin
         MoveFast(pointer(subpath)^, pointer(fn)^, pl - 1);

@@ -1996,7 +1996,7 @@ begin
       inc(P);
     end;
   // set headers content
-  FastSetString(result{%H-}, nil, L);
+  FastSetString(result{%H-}, L);
   D := pointer(result);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
@@ -2536,7 +2536,7 @@ begin
       inc(len, h^.ulNameLength + h^.ulValueLength + 4);
     inc(h);
   end;
-  FastSetString(result{%H-}, nil, len);
+  FastSetString(result{%H-}, len);
   d := Pointer(result);
   h := aHeaders;
   for i := 1 to aHeadersCount do

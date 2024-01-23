@@ -2726,7 +2726,7 @@ begin
     exit;
   ValueLen := length(Value);
   SepLen := Length(Sep);
-  FastSetString(result, nil, ValueLen * Count + SepLen * pred(Count));
+  FastSetString(result, ValueLen * Count + SepLen * pred(Count));
   P := pointer(result);
   i := 1;
   repeat
@@ -3262,7 +3262,7 @@ begin
   len := seplen * HighValues;
   for i := 0 to HighValues do
     inc(len, length(Values[i]));
-  FastSetString(result, nil, len); // allocate the result buffer as once
+  FastSetString(result, len); // allocate the result buffer as once
   P := pointer(result);
   i := 0;
   repeat
@@ -3346,7 +3346,7 @@ begin
   inc(len, (n - 1) + length(pref) + length(suf));
   if inlin then
     inc(len, n * 4); // :( ): markers
-  FastSetString(result, nil, len);
+  FastSetString(result, len);
   P := pointer(result);
   if pref <> '' then
   begin
@@ -3856,7 +3856,7 @@ begin
       FastSetString(result, PAnsiChar(Memory) + fInitialStreamPosition, Len)
   else
   begin
-    FastSetString(result, nil, Len);
+    FastSetString(result, Len);
     fStream.Seek(fInitialStreamPosition, soBeginning);
     fStream.Read(pointer(result)^, Len);
   end;
@@ -5465,7 +5465,7 @@ begin
   l := length(src);
   if l <> 0 then
   begin
-    FastSetString(result, nil, l * 3); // allocate maximum size
+    FastSetString(result, l * 3); // allocate maximum size
     l := EscapeHexBuffer(pointer(src), pointer(result), l,
       toescape, escape) - pointer(result);
   end;
@@ -5512,7 +5512,7 @@ begin
     result := src // no unescape needed
   else
   begin
-    FastSetString(result, nil, length(src)); // allocate maximum size
+    FastSetString(result, length(src)); // allocate maximum size
     FakeSetLength(result, UnescapeHexBuffer(
       pointer(src), pointer(result), escape) - pointer(result));
   end;
@@ -5544,7 +5544,7 @@ begin
   l := length(src);
   if l <> 0 then
   begin
-    FastSetString(result, nil, l * 2); // allocate maximum size
+    FastSetString(result, l * 2); // allocate maximum size
     l := EscapeCharBuffer(pointer(src), pointer(result), l,
       toescape, escape) - pointer(result);
   end;
@@ -7542,7 +7542,7 @@ end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, nil, 3);
+  FastSetString(result, 3);
   PCardinal(result)^ := ((Value shr 12) and $3f) or
                         ((Value shr 6) and $3f) shl 8 or
                         (Value and $3f) shl 16 + $202020;
@@ -7550,7 +7550,7 @@ end;
 
 procedure Int18ToChars3(Value: cardinal; var result: RawUtf8);
 begin
-  FastSetString(result, nil, 3);
+  FastSetString(result, 3);
   PCardinal(result)^ := ((Value shr 12) and $3f) or
                         ((Value shr 6) and $3f) shl 8 or
                         (Value and $3f) shl 16 + $202020;
@@ -7566,14 +7566,14 @@ end;
 
 function UInt3DigitsToUtf8(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, nil, 3);
+  FastSetString(result, 3);
   PWordArray(result)[0] := TwoDigitLookupW[Value div 10];
   PByteArray(result)[2] := (Value mod 10) + 48;
 end;
 
 function UInt4DigitsToUtf8(Value: cardinal): RawUtf8;
 begin
-  FastSetString(result, nil, 4);
+  FastSetString(result, 4);
   if Value > 9999 then
     Value := 9999;
   YearToPChar(Value, pointer(result));
@@ -8372,7 +8372,7 @@ begin
   until ArgCount = 0;
   last := c;
   tmp := Text;
-  FastSetString(Text, nil, L);
+  FastSetString(Text, L);
   MoveFast(pointer(tmp)^, PByteArray(Text)[L - argN], argN);
   Write(PUtf8Char(pointer(Text)));
 end;
@@ -8399,7 +8399,7 @@ procedure TFormatUtf8.WriteUtf8(var result: RawUtf8);
 begin
   if L = 0 then
     exit; // caller ensured that result=''
-  FastSetString(RawUtf8(result), nil, L);
+  FastSetString(RawUtf8(result), L);
   Write(pointer(result));
 end;
 
@@ -9106,13 +9106,13 @@ var
   L: integer;
 begin
   L := length(Bin);
-  FastSetString(result, nil, L * 2);
+  FastSetString(result, L * 2);
   mormot.core.text.BinToHex(pointer(Bin), pointer(result), L);
 end;
 
 function BinToHex(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, nil, BinBytes * 2);
+  FastSetString(result, BinBytes * 2);
   mormot.core.text.BinToHex(Bin, pointer(result), BinBytes);
 end;
 
@@ -9297,7 +9297,7 @@ end;
 
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, nil, BinBytes * 2);
+  FastSetString(result, BinBytes * 2);
   BinToHexDisplay(Bin, pointer(result), BinBytes);
 end;
 
@@ -9328,7 +9328,7 @@ end;
 
 procedure BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt; var result: RawUtf8);
 begin
-  FastSetString(result, nil, BinBytes * 2);
+  FastSetString(result, BinBytes * 2);
   BinToHexLower(Bin, pointer(result), BinBytes);
 end;
 
@@ -9363,7 +9363,7 @@ end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8;
 begin
-  FastSetString(result, nil, BinBytes * 2);
+  FastSetString(result, BinBytes * 2);
   BinToHexDisplayLower(Bin, pointer(result), BinBytes);
 end;
 
@@ -9410,7 +9410,7 @@ end;
 
 procedure PointerToHex(aPointer: Pointer; var result: RawUtf8);
 begin
-  FastSetString(result, nil, SizeOf(Pointer) * 2);
+  FastSetString(result, SizeOf(Pointer) * 2);
   BinToHexDisplay(@aPointer, pointer(result), SizeOf(Pointer));
 end;
 
@@ -9421,25 +9421,25 @@ end;
 
 function CardinalToHex(aCardinal: cardinal): RawUtf8;
 begin
-  FastSetString(result, nil, SizeOf(aCardinal) * 2);
+  FastSetString(result, SizeOf(aCardinal) * 2);
   BinToHexDisplay(@aCardinal, pointer(result), SizeOf(aCardinal));
 end;
 
 function CardinalToHexLower(aCardinal: cardinal): RawUtf8;
 begin
-  FastSetString(result, nil, SizeOf(aCardinal) * 2);
+  FastSetString(result, SizeOf(aCardinal) * 2);
   BinToHexDisplayLower(@aCardinal, pointer(result), SizeOf(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUtf8;
 begin
-  FastSetString(result, nil, SizeOf(Int64) * 2);
+  FastSetString(result, SizeOf(Int64) * 2);
   BinToHexDisplay(@aInt64, pointer(result), SizeOf(Int64));
 end;
 
 procedure Int64ToHex(aInt64: Int64; var result: RawUtf8);
 begin
-  FastSetString(result, nil, SizeOf(Int64) * 2);
+  FastSetString(result, SizeOf(Int64) * 2);
   BinToHexDisplay(@aInt64, pointer(result), SizeOf(Int64));
 end;
 
@@ -9480,7 +9480,7 @@ var
   L: PtrInt;
 begin
   L := DisplayMinChars(@aInt64, SizeOf(Int64));
-  FastSetString(result, nil, L * 2);
+  FastSetString(result, L * 2);
   BinToHexDisplay(@aInt64, pointer(result), L);
 end;
 
@@ -9795,7 +9795,7 @@ function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 var
   P: PUtf8Char;
 begin
-  FastSetString(result, nil, 38);
+  FastSetString(result, 38);
   P := pointer(result);
   P^ := '{';
   GuidToText(P + 1, @guid)^ := '}';
@@ -9803,7 +9803,7 @@ end;
 
 function ToUtf8(const guid: TGuid): RawUtf8;
 begin
-  FastSetString(result, nil, 36);
+  FastSetString(result, 36);
   GuidToText(pointer(result), @Guid);
 end;
 
@@ -10023,7 +10023,7 @@ begin
      (L <= 0) or
      (L > MaxAllowedSize) then
     exit;
-  FastSetString(result, nil, L);
+  FastSetString(result, L);
   if S.Read(pointer(result)^, L) <> L then
     result := '';
 end;

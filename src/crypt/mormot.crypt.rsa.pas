@@ -1151,7 +1151,7 @@ begin
     result := ''
   else
   begin
-    FastSetRawByteString(result, nil, Size * HALF_BYTES);
+    FastNewRawByteString(result, Size * HALF_BYTES);
     Save(pointer(result), length(result), andrelease);
   end;
 end;
@@ -2979,7 +2979,7 @@ begin
     end;
     // concatenate the header, encrypted key and message
     msgpos := SizeOf(head) + length(enckey);
-    FastSetRawByteString(result, nil, msgpos + length(encmsg));
+    FastNewRawByteString(result, msgpos + length(encmsg));
     PRsaSealHeader(result)^ := head;
     MoveFast(pointer(enckey)^, PByteArray(result)[SizeOf(head)], length(enckey));
     MoveFast(pointer(encmsg)^, PByteArray(result)[msgpos], length(encmsg));

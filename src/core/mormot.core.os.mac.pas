@@ -92,7 +92,7 @@ begin
     typeID := CFGetTypeID(ref);
     if typeID = CFStringGetTypeID then
     begin
-      FastSetString(result, nil, 1024);
+      FastSetString(result, 1024);
       CFStringGetCString(ref, pointer(result), length(result), kCFStringEncodingMacRoman);
       SetLength(result, StrLen(pointer(result)));
     end

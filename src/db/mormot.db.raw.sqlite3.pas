@@ -6595,7 +6595,7 @@ begin
   len := StrLen(input);
   if len <> 0 then
   begin
-    FastSetString(tmp, nil, len * 2); // Unicode Upper may enhance input length
+    FastSetString(tmp, len * 2); // Unicode Upper may enhance input length
     len := Utf8UpperReference(input, pointer(tmp), len) - PUtf8Char(pointer(tmp));
   end;
   // don't call SetLength() but use forcedlen to truncate the value

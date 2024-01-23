@@ -3174,7 +3174,7 @@ begin
     exit;
   result := ndx;
   // parse SQL and replace ? into $n $nn $nnn
-  FastSetString(aNewSql, nil, L);
+  FastSetString(aNewSql, L);
   s := pointer(aSql);
   d := pointer(aNewSql);
   ndx := 0;
@@ -3271,7 +3271,7 @@ begin
     dec(n);
   until n = 0;
   // generate the output JSON
-  FastSetString(Result, nil, L);
+  FastSetString(Result, L);
   d := pointer(Result);
   d^ := Open;
   inc(d);
@@ -8011,8 +8011,8 @@ begin
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    FastSetString(
-      RawUtf8(CheckParam(Param, ftUtf8, IO)^.VData), Value, StrLen(Value));
+    FastSetString(RawUtf8(CheckParam(Param, ftUtf8, IO)^.VData),
+      Value, StrLen(Value));
 end;
 
 procedure TSqlDBStatementWithParams.BindTextW(Param: integer; const Value:

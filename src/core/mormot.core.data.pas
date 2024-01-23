@@ -5375,7 +5375,7 @@ begin
     Len := DelimLen * (fCount - 1);
     for i := 0 to fCount - 1 do
       inc(Len, length(fValue[i]));
-    FastSetString(result, nil, Len);
+    FastSetString(result, Len);
     P := pointer(result);
     i := 0;
     repeat
