@@ -2406,7 +2406,12 @@ function CloseHandle(hObject: THandle): BOOL; stdcall;
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 // - also supports aFileName longer than MAX_PATH
-function FileCreate(const aFileName: TFileName; aMode: integer = 0): THandle; 
+// - on Windows, aRights parameter is just ignored, and on POSIX aRights = 0
+// will set the default octal 644 file access attributes (-rw-r-r--)
+// - warning: this function replaces ALL SysUtils.FileCreate() overloads,
+// putting aMode as the SECOND parameter, just like with FileOpen()
+function FileCreate(const aFileName: TFileName; aMode: integer = 0;
+  aRights: integer = 0): THandle;
 
 /// redefined here to call CreateFileW() on non-Unicode RTL and support
 // aFileName longer than MAX_PATH
@@ -2446,6 +2451,13 @@ function FileSetTime(const FileName: TFileName;
 /// faster cross-platform alternative to sysutils homonymous function
 // - will directly use fpstat() so is slightly faster than default FPC RTL
 function FileExists(const FileName: TFileName): boolean;
+
+/// redefined from FPC RTL sysutils for consistency
+// - warning: this function replaces ALL SysUtils.FileCreate() overloads,
+// putting aMode as the SECOND parameter, just like with FileOpen()
+// - on POSIX, aRights = 0 will set default octal 644 attributes (-rw-r-r--)
+function FileCreate(const aFileName: TFileName; aMode: integer = 0;
+  aRights: integer = 0): THandle;
 
 /// returns how many files could be opened at once on this POSIX system
 // - hard=true is for the maximum allowed limit, false for the current process
@@ -6673,7 +6685,7 @@ var
   h: THandle;
 begin
   if Mode and fmCreate = fmCreate then
-    h := FileCreate(aFileName, Mode)
+    h := FileCreate(aFileName, Mode and (not fmCreate))
   else
     h := FileOpen(aFileName, Mode);
   CreateFromHandle(aFileName, h);

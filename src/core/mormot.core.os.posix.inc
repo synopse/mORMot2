@@ -1174,6 +1174,19 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
+function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
+begin
+  if (aMode = 0) and
+     (aRights = 0) then
+    result := sysutils.FileCreate(aFileName)
+  else
+  begin
+    if aRights = 0 then // use 644 / '-rw-r-r--' default POSIX file attributes
+      aRights := S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH;
+    result := sysutils.FileCreate(aFileName, aMode, aRights);
+  end;
+end;
+
 procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
 begin
   time := QWord(st.st_mtime) * MilliSecsPerSec + // no local conversion needed

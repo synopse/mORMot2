@@ -940,10 +940,11 @@ begin
   end;
 end;
 
-function FileCreate(const aFileName: TFileName; aMode: integer): THandle;
+function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 var
   tmp: TW32Temp;
 begin
+  // aRights parameter is just ignored on Windows
   result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
     FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 end;
