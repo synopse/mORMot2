@@ -1213,6 +1213,7 @@ type
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
     fBanned: THttpAcceptBan; // for hsoBan40xIP
     fOnAcceptIdle: TOnPollSocketsIdle;
+    fOnRequestFree: procedure(Sender: THttpServerRequest) of object;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -1507,8 +1508,6 @@ type
       read fCachePermMinBytes  write fCachePermMinBytes;
   end;
 
-  THttpPeerCache = class;
-
   /// abstract parent to THttpPeerCache for its cryptographic core
   THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
   protected
@@ -1548,6 +1547,8 @@ type
 
   /// exception class raised on THttpPeerCache issues
   EHttpPeerCache = class(ESynException);
+
+  THttpPeerCache = class;
 
   /// background UDP server thread, associated to a THttpPeerCache instance
   THttpPeerCacheThread = class(TUdpServerThread)
@@ -4391,6 +4392,12 @@ begin
         end;
       end;
   finally
+    if Assigned(fOnRequestFree) then
+      try
+        fOnRequestFree(req); // e.g. THttpPeerCache.OnRequestFree
+      except
+        // ignore any callback exception
+      end;
     req.Free;
     ClientSock.Http.ProcessDone;   // ContentStream.Free
   end;
@@ -5140,7 +5147,7 @@ begin
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
-  TSynLog.Add.Log(sllTrace, 'Create: Code=%, Seq=#%',
+  TSynLog.Add.Log(sllTrace, 'Create: SecretFingerPrint=%, Seq=#%',
     [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
   FillZero(key.b);
 end;
@@ -5684,7 +5691,6 @@ end;
 function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
   const Params: THttpClientSocketWGet; const Url: RawUtf8;
   ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
-
 var
   req: THttpPeerCacheMessage;
   resp : THttpPeerCacheMessageDynArray;
