@@ -1312,6 +1312,7 @@ type
     pcfRequest,
     pcfResponseNone,
     pcfResponseOverloaded,
+    pcfResponsePartial,
     pcfResponseFull,
     pcfBearer);
 
@@ -1731,6 +1732,7 @@ const
     pcfPong,
     pcfResponseNone,
     pcfResponseOverloaded,
+    pcfResponsePartial,
     pcfResponseFull];
 
   PEER_CACHE_PATTERN = '*.cache';
@@ -5359,11 +5361,16 @@ begin
           if integer(fOwner.fHttpServer.ConnectionsActive) >
                       fOwner.Settings.LimitClientCount then
             resp.Kind := pcfResponseOverloaded
-          else if fOwner.LocalFileName(fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
-            resp.Kind := pcfResponseFull;
+          else if fOwner.LocalFileName(
+                           fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
+            resp.Kind := pcfResponseFull
+          else if fOwner.PartialFileName(
+                           fMsg, nil, nil, @resp.Size) = HTTP_SUCCESS then
+            resp.Kind := pcfResponsePartial;
           DoSendResponse;
         end;
       pcfPong,
+      pcfResponsePartial,
       pcfResponseFull:
         if not late then
         begin
@@ -5737,7 +5744,8 @@ begin
     minsize := fSettings.CacheTempMinBytes;
   if aSize >= minsize then
     exit; // big enough
-  fLog.Add.Log(sllTrace, '%: size < minsize=%', [aCaller, KB(minsize)], self);
+  if fVerboseLog then
+    fLog.Add.Log(sllTrace, '%: size < minsize=%', [aCaller, KB(minsize)], self);
   result := true; // too small
 end;
 
@@ -5746,6 +5754,9 @@ var
   a: THttpPeerCacheMessage absolute VA;
   b: THttpPeerCacheMessage absolute VB;
 begin
+  result := CompareCardinal(ord(b.Kind), ord(a.Kind));
+  if result <> 0 then // pcfResponseFull first
+    exit;
   result := CompareCardinal(NETHW_ORDER[a.Hardware], NETHW_ORDER[b.Hardware]);
   if result <> 0 then // ethernet first
     exit;
@@ -6287,13 +6298,19 @@ function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
   fn: TFileName;
+  size: Int64;
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
+    size := 0;
+    // msg.Kind = pcfBearer so we need to ask both Local+PartialFileName()
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
+    if (result <> HTTP_SUCCESS) and
+       (fPartialSequence <> 0) then
+      result := PartialFileName(msg, Ctxt as THttpServerRequest, @fn, @size);
     if result <> HTTP_SUCCESS then
     begin
       if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
@@ -6303,9 +6320,11 @@ begin
     // just return the file as requested
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
+    if size <> 0 then
+      Ctxt.OutCustomHeaders := FormatUtf8(STATICFILE_PROGSIZE + ' %', [size]);
   finally
-    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as %',
-      [result, Ctxt.RemoteIP, Ctxt.Url, fn], self);
+    fLog.Add.Log(sllDebug, 'OnRequest=% from % % as % %',
+      [result, Ctxt.RemoteIP, Ctxt.Url, fn, size], self);
   end;
 end;
 
