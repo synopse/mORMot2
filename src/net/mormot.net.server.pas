@@ -1295,11 +1295,9 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
 {
   TODO:
-  - Peer push during initial GET from a main server (no wait for whole content).
-  - Daemon/Service background mode for the mget tool.
-  - Get Peer addresses from a file or central server instead of broadcasting?
-  - Asymmetric security using ECDH shared secret?
-  - Frame signature using ECDHE with ephemeral keys?
+  - Daemon/Service background mode for the mget tool
+  - Asymmetric security using ECDH shared secret? use HTTPS instead?
+  - Frame signature using ECDHE with ephemeral keys? use HTTPS instead?
   - Allow binding to several network interfaces? (e.g. wifi to/from ethernet)
 }
 
@@ -2896,14 +2894,17 @@ begin
   if fPeerCachePartialNewStreamFileName <> '' then
     try
       offs := http.ContentStream.Seek(0, soCurrent); // current position
+      if offs < 0 then
+        exit; // the stream is clearly in foobar state
       FreeAndNil(http.ContentStream);
       http.ContentStream := TFileStreamEx.Create(
         fPeerCachePartialNewStreamFileName, fmOpenReadShared);
       fPeerCachePartialNewStreamFileName := '';
-      if http.ContentStream.Seek(offs, soBeginning) <> offs then
+      if (http.ContentStream.Seek(offs, soBeginning) <> offs) or
+         (fPeerCachePartialID = 0) then
         exit; // the final file can't be smaller than the partial file
     except
-      exit; // abort
+      exit; // abort if file is not readable
     end;
   // check current state of the progressive/partial file
   size := http.ContentStream.Size;
@@ -2924,7 +2925,7 @@ begin
   // check if there is something new to send
   offs := http.ContentStream.Seek(0, soCurrent);
   if offs < 0 then
-    exit; // FileSeek() returned -1 on error: something is wrong this file
+    exit; // FileSeek() returned -1 on error: something is wrong with this file
   dec(size, offs);
   if size <= 0 then
   begin
@@ -2937,7 +2938,8 @@ begin
   if size > (fServer as THttpServer).fServerSendBufferSize then
     size := THttpServer(fServer).fServerSendBufferSize;
   http.ProcessBody(dest, size); // read size bytes from ContentStream into dest
-  if dest.Len <> 0 then // abort if ContentStream.Read()=0
+  if (fPeerCachePartialID <> 0) and
+     (dest.Len <> 0) then // abort if ContentStream.Read()=0
     result := 0; // send dest content
 end;
 
@@ -6322,7 +6324,7 @@ begin
         result := HTTP_NOCONTENT;        // OnDownload should make a broadcast
       exit;
     end;
-    // just return the file as requested
+    // just return the (partial) file as requested
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
     if size <> 0 then
