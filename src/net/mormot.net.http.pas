@@ -3436,7 +3436,7 @@ end;
 procedure THttpRequestContext.ProcessBody(
   var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
 var
-  P: pointer;
+  p: pointer;
 begin
   // THttpAsyncConnection.DoRequest did send the headers: now send body chunks
   if State <> hrsSendBody then
@@ -3448,9 +3448,9 @@ begin
   begin
     if ContentStream <> nil then
     begin
-      P := Process.Reserve(MaxSize);
-      MaxSize := ContentStream.Read(P^, MaxSize);
-      Dest.Append(P, MaxSize);
+      p := Process.Reserve(MaxSize);
+      MaxSize := ContentStream.Read(p^, MaxSize);
+      Dest.Append(p, MaxSize);
     end
     else
     begin

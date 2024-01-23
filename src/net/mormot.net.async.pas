@@ -1556,7 +1556,7 @@ begin
             UnlockAndCloseConnection(false, connection, 'ProcessRead recv');
             exit;
           end;
-          connection.fRd.Append(@temp, recved); // will mostly reuse fRd.Buffer
+          connection.fRd.Append(@temp, recved); // to reuse fRd.Buffer
           inc(added, recved);
         until recved < SizeOf(temp);
         if added > 0 then

@@ -2644,7 +2644,7 @@ type
     fBuffer: RawByteString;
     fLen: PtrInt;
     fCapacity: PtrInt; // may not be length(fBuffer) after AsText(UseMainBuffer)
-    procedure GrowBuffer(needed: PtrInt);
+    procedure RawAppend(P: pointer; PLen: PtrInt);
   public
     /// set Len to 0, but doesn't clear/free the Buffer itself
     procedure Reset;
@@ -10992,25 +10992,31 @@ begin
   result := pointer(fBuffer);
 end;
 
-procedure TRawByteStringBuffer.GrowBuffer(needed: PtrInt);
-begin
-  if fCapacity = 0 then
-    inc(needed, 128) // small overhead at first
-  else
-    inc(needed, needed shr 3 + 2048); // generous overhead
-  fCapacity := needed;
-  SetLength(fBuffer, needed);
-end;
-
-procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt);
+procedure TRawByteStringBuffer.RawAppend(P: pointer; PLen: PtrInt);
 var
   needed: PtrInt;
 begin
   needed := fLen + PLen + 2;
   if needed > fCapacity then
-    GrowBuffer(needed);
+  begin
+    if fCapacity = 0 then
+      inc(needed, 128) // small overhead at first
+    else
+      inc(needed, needed shr 3 + 2048); // generous overhead
+    fCapacity := needed;
+    if fLen = 0 then
+      FastNewRawByteString(fBuffer, needed) // no realloc
+    else
+      SetLength(fBuffer, needed); // realloc = move existing data
+  end;
   MoveFast(P^, PByteArray(fBuffer)[fLen], PLen);
   inc(fLen, PLen);
+end;
+
+procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt);
+begin
+  if PLen > 0 then
+    RawAppend(P, PLen);
 end;
 
 procedure TRawByteStringBuffer.Append(const Text: RawUtf8);
@@ -11019,7 +11025,7 @@ var
 begin
   P := pointer(Text);
   if P <> nil then
-    Append(P, PStrLen(P - _STRLEN)^);
+    RawAppend(P, PStrLen(P - _STRLEN)^);
 end;
 
 procedure TRawByteStringBuffer.Append(Value: QWord);
@@ -11034,7 +11040,7 @@ begin
   {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
-    Append(P, @tmp[23] - P);
+    RawAppend(P, @tmp[23] - P);
   end;
 end;
 
@@ -11052,7 +11058,7 @@ end;
 
 procedure TRawByteStringBuffer.AppendShort(const Text: ShortString);
 begin
-  Append(@Text[1], length(Text));
+  RawAppend(@Text[1], length(Text));
 end;
 
 function TRawByteStringBuffer.TryAppend(P: pointer; PLen: PtrInt): boolean;
