@@ -7205,7 +7205,7 @@ begin
       raise ESynCrypto.CreateUtf8('AesPkcs7File: already existing %', [fn]);
   end;
   try
-    s := TFileStreamEx.Create(src, fmOpenReadDenyNone);
+    s := TFileStreamEx.Create(src, fmOpenReadShared);
     try
       d := TFileStreamEx.Create(fn, fmCreate);
       try

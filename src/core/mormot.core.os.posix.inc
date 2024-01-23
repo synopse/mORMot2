@@ -1287,7 +1287,7 @@ begin
     else
       DeleteFile(Target);
   try
-    src := TFileStreamEx.Create(Source, fmOpenReadDenyNone);
+    src := TFileStreamEx.Create(Source, fmOpenReadShared);
     try
       dst := TFileStreamEx.Create(Target, fmCreate);
       try

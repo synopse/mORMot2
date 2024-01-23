@@ -1351,7 +1351,7 @@ begin
       exit;
     end;
     {$endif LIBDEFLATESTATIC}
-    s := TFileStreamEx.Create(orig, fmOpenReadDenyNone);
+    s := TFileStreamEx.Create(orig, fmOpenReadShared);
     try
       gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
       try
@@ -1676,7 +1676,7 @@ var
   tmp: RawByteString;
 begin
   fInfo.OnProgress := OnInfoProgress;
-  h := FileOpen(aFileName, fmOpenReadWrite or fmShareReadWrite);
+  h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
   if ValidHandle(h) then
   begin
     // we need fDest for WriteRawHeader below
@@ -1997,7 +1997,7 @@ begin
     else
       ZipName := NormalizeZipName(aFileName);
   // open the input file
-  f := FileOpen(aFileName, fmOpenReadDenyNone);
+  f := FileOpen(aFileName, fmOpenReadShared);
   if ValidHandle(f) then
     try
       // retrieve file size and date
@@ -2742,7 +2742,7 @@ var
   h: TLibHandle;
 begin
   fFileName := aFileName;
-  h := FileOpen(aFileName, fmOpenReadDenyNone);
+  h := FileOpen(aFileName, fmOpenReadShared);
   Create(h, ZipStartOffset, Size, WorkingMem);
 end;
 
@@ -3274,7 +3274,7 @@ begin
   M := TFileStreamEx.Create(MainFile, fmOpenReadWrite);
   try
     pos := M.Seek(0, soEnd);
-    A := TFileStreamEx.Create(AppendFile, fmOpenReadDenyNone);
+    A := TFileStreamEx.Create(AppendFile, fmOpenReadShared);
     try
       StreamCopyUntilEnd(A, M); // faster than M.CopyFrom(A, 0);
       FileAppendSignature(M, pos);
@@ -3310,7 +3310,7 @@ begin
     try
       parsePEheader := keepdigitalsign;
       // copy main source file
-      M := TFileStreamEx.Create(main, fmOpenReadDenyNone);
+      M := TFileStreamEx.Create(main, fmOpenReadShared);
       try
         repeat
           read := M.Read(buf, SizeOf(buf));
@@ -3354,7 +3354,7 @@ begin
       APos := O.Position;
       if append <> '' then
       begin
-        A := TFileStreamEx.Create(append, fmOpenReadDenyNone);
+        A := TFileStreamEx.Create(append, fmOpenReadShared);
         try
           StreamCopyUntilEnd(A, O);
         finally

@@ -817,7 +817,7 @@ var
   header: word;
 begin
   result := false;
-  h := FileOpen(FileName, fmOpenReadDenyNone);
+  h := FileOpen(FileName, fmOpenReadShared);
   if not ValidHandle(h) then
     exit;
   result := (FileRead(h, header, 2) = 2) and

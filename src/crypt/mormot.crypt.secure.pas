@@ -8705,7 +8705,7 @@ var
 begin
   result := '';
   firstbuf := true;
-  M := TFileStreamEx.Create(MainFile, fmOpenReadDenyNone);
+  M := TFileStreamEx.Create(MainFile, fmOpenReadShared);
   try
     repeat
       read := M.Read(buf{%H-}, SizeOf(buf));

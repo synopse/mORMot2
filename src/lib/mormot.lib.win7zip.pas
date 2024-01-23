@@ -1371,7 +1371,7 @@ begin
   // first try to identify from binary header
   if not OnlyFileName then
   begin
-    f := FileOpen(FileName, fmOpenReadDenyNone);
+    f := FileOpen(FileName, fmOpenReadShared);
     if not ValidHandle(f) then
       exit;
     l := FileRead(f, h, SizeOf(h));
@@ -2015,7 +2015,7 @@ procedure T7zReader.OpenFile(const name: TFileName);
 var
   strm: IInStream;
 begin
-  strm := T7zStream.CreateFromFile(name, fmOpenReadDenyNone);
+  strm := T7zStream.CreateFromFile(name, fmOpenReadShared);
   E7Zip.CheckOk(self, 'OpenFile',
     InArchive.Open(strm, @MAXCHECK, self as IArchiveOpenCallBack));
   fFileName := name;
@@ -2373,7 +2373,7 @@ var
   item: T7zItem;
   Handle: THandle;
 begin
-  Handle := FileOpen(Filename, fmOpenReadDenyNone);
+  Handle := FileOpen(Filename, fmOpenReadShared);
   result := ValidHandle(Handle);
   if not result then
     exit;
@@ -2613,7 +2613,7 @@ begin
       smFile:
         if not fCurrentItem.IsFolder then
           inStream := T7zStream.CreateFromFile(
-            fCurrentItem.FileName, fmOpenReadDenyNone, index);
+            fCurrentItem.FileName, fmOpenReadShared, index);
       smStream:
         if not fCurrentItem.IsFolder then
         begin

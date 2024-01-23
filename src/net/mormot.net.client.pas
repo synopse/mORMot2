@@ -1413,7 +1413,7 @@ var
   fs: TStream;
   fn: RawUtf8;
 begin
-  fs := TFileStreamEx.Create(filename, fmOpenReadDenyNone);
+  fs := TFileStreamEx.Create(filename, fmOpenReadShared);
   // an exception is raised in above line if filename is incorrect
   fn := StringToUtf8(ExtractFileName(filename));
   Add(name, '', contenttype, fn, 'binary')^.ContentFile := filename;

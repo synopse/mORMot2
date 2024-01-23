@@ -5747,7 +5747,7 @@ var
   h: TAlgoCompressHead;
 begin
   result := false;
-  f := FileOpen(Name, fmOpenReadDenyNone);
+  f := FileOpen(Name, fmOpenReadShared);
   if not ValidHandle(f) then
     exit;
   l := FileRead(f, h, SizeOf(h));
@@ -9912,7 +9912,7 @@ end;
 constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
   aBufSize: integer);
 begin
-  Create(TFileStreamEx.Create(aSourceFileName, fmOpenReadDenyNone));
+  Create(TFileStreamEx.Create(aSourceFileName, fmOpenReadShared));
   fOwnStream := fSource;
 end;
 

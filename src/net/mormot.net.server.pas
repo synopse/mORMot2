@@ -3002,7 +3002,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
           Context.ValidateRange) and
          (FileSize(fn) <= Context.ContentLength) then
       begin
-        Context.ContentStream := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
+        Context.ContentStream := TFileStreamEx.Create(fn, fmOpenReadShared);
         Context.ResponseFlags := Context.ResponseFlags +
           [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
       end
@@ -5812,7 +5812,7 @@ begin
   if LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS then
   begin
     l.Log(sllDebug, 'OnDownload: from local %', [fn], self);
-    local := TFileStreamEx.Create(fn, fmOpenReadDenyNone);
+    local := TFileStreamEx.Create(fn, fmOpenReadShared);
     try
       // range support
       if req.RangeStart > 0 then
@@ -6756,8 +6756,7 @@ var
     if ctxt.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
-      filehandle := FileOpen(Utf8ToString(ctxt.OutContent),
-        fmOpenReadDenyNone);
+      filehandle := FileOpen(Utf8ToString(ctxt.OutContent), fmOpenReadShared);
       if not ValidHandle(filehandle)  then
       begin
         SendError(HTTP_NOTFOUND, WinErrorText(GetLastError, nil));

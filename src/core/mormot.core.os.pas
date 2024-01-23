@@ -71,9 +71,10 @@ const
   /// human-friendly alias to open a file with no read/write exclusion
   fmShareReadWrite = fmShareDenyNone;
 
-  /// a convenient shortened constant to open a file for reading
-  fmOpenReadDenyNone = fmOpenRead or fmShareReadWrite;
-  /// a convenient shortened constant to open a file for writing
+  /// a convenient constant to open a file for reading without exclusion
+  fmOpenReadShared = fmOpenRead or fmShareReadWrite;
+
+  /// a convenient array constant to open a file for writing without exclusion
   fmCreateOrRewrite: array[{rewrite=}boolean] of cardinal = (
    fmCreate    or fmShareReadWrite,
    fmOpenWrite or fmShareReadWrite);
@@ -3284,7 +3285,7 @@ type
     function GetSize: Int64; override; // faster (1 API call instead of 3)
   public
     /// open or create the file from its name, depending on the supplied Mode
-    // - Mode is typically fmCreate / fmOpenReadDenyNone
+    // - Mode is typically fmCreate / fmOpenReadShared
     constructor Create(const aFileName: TFileName; Mode: cardinal);
     /// can use this class from a low-level file OS handle
     constructor CreateFromHandle(const aFileName: TFileName; aHandle: THandle);
@@ -3327,7 +3328,7 @@ function FileOpenSequentialRead(const FileName: TFileName): integer;
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 
-/// try to open the file from its name, as fmOpenReadDenyNone
+/// try to open the file from its name, as fmOpenReadShared
 // - on Windows, calls CreateFileW(aFileName,GENERIC_READ) then CloseHandle
 // - on POSIX, calls fpOpen(pointer(aFileName),O_RDONLY) with no fpFlock() call
 function IsFileReadable(const aFileName: TFileName): boolean;
@@ -7403,7 +7404,7 @@ begin
   result := false;
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
-  F := FileOpen(aFileName, fmOpenReadDenyNone);
+  F := FileOpen(aFileName, fmOpenReadShared);
   if not ValidHandle(F) then
     exit;
   if Map(F) then
@@ -7441,7 +7442,7 @@ begin
   fFileName := aFileName;
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
-  fFileStream := TFileStreamEx.Create(aFileName, fmOpenReadDenyNone);
+  fFileStream := TFileStreamEx.Create(aFileName, fmOpenReadShared);
   Create(fFileStream.Handle, aCustomSize, aCustomOffset);
 end;
 

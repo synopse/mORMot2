@@ -3492,7 +3492,7 @@ begin
     ContentLength := FileSize(gz);
     if ContentLength > 0 then
     begin
-      ContentStream := TFileStreamEx.Create(gz, fmOpenReadDenyNone);
+      ContentStream := TFileStreamEx.Create(gz, fmOpenReadShared);
       ContentEncoding := 'gzip';
       include(ResponseFlags, rfContentStreamNeedFree);
       result := true;
@@ -3508,7 +3508,7 @@ begin
     // there is no such file available, or range clearly wrong
     exit;
   include(ResponseFlags, rfAcceptRange);
-  ContentStream := TFileStreamEx.Create(FileName, fmOpenReadDenyNone);
+  ContentStream := TFileStreamEx.Create(FileName, fmOpenReadShared);
   if RangeOffset <> 0 then
     ContentStream.Seek(RangeOffset, soBeginning);
   if (ContentLength < 1 shl 20) and
@@ -6150,7 +6150,7 @@ begin
   FastRecordClear(@Info, TypeInfo(THttpMetricsHeader));
   result := false;
   // read (and decompress if needed) the first file chunk
-  f := FileOpen(FileName, fmOpenReadDenyNone);
+  f := FileOpen(FileName, fmOpenReadShared);
   if not ValidHandle(f) then
     exit;
   len := FileRead(f, tmp, SizeOf(tmp));
