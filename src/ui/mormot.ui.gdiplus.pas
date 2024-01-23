@@ -600,7 +600,7 @@ begin
   Clear;
   if not FileExists(FileName) then
     exit;
-  s := TFileStreamEx.Create(FileName, fmOpenReadDenyNone);
+  s := TFileStreamEx.Create(FileName, fmOpenReadShared);
   try
     LoadFromStream(s);
   finally

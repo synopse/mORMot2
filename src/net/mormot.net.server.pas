@@ -2883,7 +2883,8 @@ var
   tix: cardinal;
   size, offs: Int64;
 begin
-  result := -1; // =0 to send, >0 as waitms, <0 to abort
+  // method should return 0 to send dest, >0 as waitms, <0 to abort
+  result := -1;
   // check if OnDownloadingFailed() notified to abort
   if fPeerCachePartialID = 0 then
     exit; // abort
@@ -2894,12 +2895,13 @@ begin
   // check if OnDownloaded() did notify the switch to a final file
   if fPeerCachePartialNewStreamFileName <> '' then
     try
-      offs := http.ContentStream.Seek(0, soCurrent);
+      offs := http.ContentStream.Seek(0, soCurrent); // current position
       FreeAndNil(http.ContentStream);
       http.ContentStream := TFileStreamEx.Create(
-        fPeerCachePartialNewStreamFileName, fmOpenReadDenyNone);
-      http.ContentStream.Seek(offs, soBeginning);
+        fPeerCachePartialNewStreamFileName, fmOpenReadShared);
       fPeerCachePartialNewStreamFileName := '';
+      if http.ContentStream.Seek(offs, soBeginning) <> offs then
+        exit; // the final file can't be smaller than the partial file
     except
       exit; // abort
     end;
@@ -2907,20 +2909,22 @@ begin
   size := http.ContentStream.Size;
   // implement RangeOffset
   offs := http.RangeOffset;
-  if offs = 0 then
-    offs := http.ContentStream.Seek(0, soCurrent)
-  else if size >= offs then
-  begin
-    http.ContentStream.Seek(offs, soBeginning);
-    http.RangeOffset := 0;
-  end
-  else
-  begin
-    if tix < fPeerCachePartialTix then
-      result := STATICFILE_PROGWAITMS; // wait until reach offset
-    exit;
-  end;
+  if offs <> 0 then
+    if size >= offs then
+      if http.ContentStream.Seek(offs, soBeginning) <> offs then
+        exit // paranoid
+      else
+        http.RangeOffset := 0
+    else
+    begin
+      if tix < fPeerCachePartialTix then
+        result := STATICFILE_PROGWAITMS; // wait until reach offset
+      exit;
+    end;
   // check if there is something new to send
+  offs := http.ContentStream.Seek(0, soCurrent);
+  if offs < 0 then
+    exit; // FileSeek() returned -1 on error: something is wrong this file
   dec(size, offs);
   if size <= 0 then
   begin
@@ -2932,8 +2936,9 @@ begin
   fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
   if size > (fServer as THttpServer).fServerSendBufferSize then
     size := THttpServer(fServer).fServerSendBufferSize;
-  http.ProcessBody(dest, size);
-  result := 0; // send dest content
+  http.ProcessBody(dest, size); // read size bytes from ContentStream into dest
+  if dest.Len <> 0 then // abort if ContentStream.Read()=0
+    result := 0; // send dest content
 end;
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
