@@ -926,12 +926,26 @@ begin
     result := DeleteFileW(W32(aFileName, tmp));
 end;
 
-function FileCreate(const aFileName: TFileName): THandle;
+function FileShare(aMode: integer): DWord;
+begin
+  case (aMode and $f0) of
+    fmShareRead:       // = fmShareDenyWrite
+      result := FILE_SHARE_READ;
+    fmShareWrite:      // = fmShareDenyRead
+      result := FILE_SHARE_WRITE;
+    fmShareReadWrite:  // = fmShareDenyNone
+      result := FILE_SHARE_READ or FILE_SHARE_WRITE;
+  else
+    result := 0;
+  end;
+end;
+
+function FileCreate(const aFileName: TFileName; aMode: integer): THandle;
 var
   tmp: TW32Temp;
 begin
   result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
-    0, nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
 const
@@ -941,25 +955,14 @@ const
 function FileOpen(const aFileName: TFileName; aMode: integer): THandle;
 const
   ACCESS: array[0..2] of DWord = (
-    GENERIC_READ,
-    GENERIC_WRITE,
-    GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES);
-  SHARE: array[0..4] of DWord = (
-    0,
-    0,
-    FILE_SHARE_READ,
-    FILE_SHARE_WRITE,
-    FILE_SHARE_READ or FILE_SHARE_WRITE);
+    GENERIC_READ,   // fmOpenRead  = $0000
+    GENERIC_WRITE,  // fmOpenWrite = $0001
+    GENERIC_READ or GENERIC_WRITE or FILE_WRITE_ATTRIBUTES); // fmOpenReadWrite
 var
   tmp: TW32Temp;
-  s: PtrInt;
 begin
-  s := (aMode and $f0) shr 4;
-  if s <= high(SHARE) then
-   result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3], SHARE[s],
-     nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
-  else
-    result := INVALID_HANDLE_VALUE;
+ result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3],
+    FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
@@ -1071,8 +1074,8 @@ var
   tmp: TW32Temp;
 begin
   result := CreateFileW(W32(FileName, tmp), GENERIC_READ,
-    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-    OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0);
+    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING,
+    FILE_FLAG_SEQUENTIAL_SCAN, 0);
 end;
 
 function IsFileReadable(const aFileName: TFileName): boolean;
@@ -1081,8 +1084,7 @@ var
   h: THandle;
 begin
   h := CreateFileW(W32(aFileName, tmp), GENERIC_READ,
-    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-    OPEN_EXISTING, 0, 0);
+    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
   result := ValidHandle(h);
   if result then
     CloseHandle(h);

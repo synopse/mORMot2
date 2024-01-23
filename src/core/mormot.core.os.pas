@@ -2406,7 +2406,7 @@ function CloseHandle(hObject: THandle): BOOL; stdcall;
 /// redefined here to avoid warning to include "Windows" in uses clause
 // - why did Delphi define this slow RTL function as inlined in SysUtils.pas?
 // - also supports aFileName longer than MAX_PATH
-function FileCreate(const aFileName: TFileName): THandle;
+function FileCreate(const aFileName: TFileName; aMode: integer = 0): THandle; 
 
 /// redefined here to call CreateFileW() on non-Unicode RTL and support
 // aFileName longer than MAX_PATH
