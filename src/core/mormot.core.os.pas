@@ -3267,9 +3267,9 @@ type
   /// a TFileStream replacement which supports FileName longer than MAX_PATH,
   // and a proper Create(aHandle) constructor in FPC
   TFileStreamEx = class(TFileStreamFromHandle)
-  Private
+  protected
     fFileName : TFileName;
-    function GetSize: Int64; override;
+    function GetSize: Int64; override; // faster (1 API call instead of 3)
   public
     /// open or create the file from its name, depending on the supplied Mode
     // - Mode is typically fmCreate / fmOpenReadDenyNone
@@ -6673,7 +6673,7 @@ var
   h: THandle;
 begin
   if Mode and fmCreate = fmCreate then
-    h := FileCreate(aFileName)
+    h := FileCreate(aFileName, Mode)
   else
     h := FileOpen(aFileName, Mode);
   CreateFromHandle(aFileName, h);
@@ -6692,13 +6692,9 @@ constructor TFileStreamEx.CreateWrite(const aFileName: TFileName);
 var
   h: THandle;
 begin
-  if not FileExists(aFileName) then
-  begin
-    h := FileCreate(aFileName);
-    if ValidHandle(h) then
-      FileClose(h);
-  end;
-  h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyWrite);
+  h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
+  if not ValidHandle(h) then // we may need to create the file
+    h := FileCreate(aFileName, fmShareRead);
   CreateFromHandle(aFileName, h);
 end;
 
