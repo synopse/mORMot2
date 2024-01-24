@@ -425,7 +425,7 @@ const
     [hrsSendBody];
 
 var // filled from RTTI enum trimmed text during unit initialization
-  HTTP_STATE:  array[THttpRequestState] of RawUtf8;
+  HTTP_STATE: array[THttpRequestState] of RawUtf8;
 
 function ToText(st: THttpRequestState): PShortString; overload; // HTTP_STATE[]
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
@@ -1559,12 +1559,12 @@ type
     procedure WriteToStream(data: pointer; len: PtrUInt); override;
   public
     /// initialize a TTextDateWriter instance for THttpLogger
-    constructor Create(aOwner: THttpLogger; const aHost: RawUtf8;
+    constructor Create(aOwner: THttpLogger; const aHost: RawUtf8; aError: boolean;
       aRotate: THttpRotaterTrigger; aRotateFiles: integer); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
     /// the associated lowercased Host name of this writer
-    // - equals '' for the main access.log writer
+    // - equals '' for the main access.log writer and '!error!' for error.log
     property Host: RawUtf8
       read fHost;
     /// the file name of this .log instance
@@ -1585,20 +1585,21 @@ type
     fWriterSingle: TTextDateWriter; // from CreateWithWriter/CreateWithFile
     fWriterHostSafe: TLightLock;
     fWriterHost: THttpLoggerWriterDynArray; // from Create + DefineHost
-    fWriterHostLast, fWriterHostMain: TTextDateWriter;
+    fWriterHostLast, fWriterHostMain, fWriterHostError: TTextDateWriter;
     fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
-    fVariables: THttpLogVariables;
-    fDestFolder, fDestMainLog: TFileName;
-    fFlags: set of (ffOwnWriterSingle);
+    fDestFolder, fDestMainLog, fDestErrorLog: TFileName;
+    fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
     fDefaultRotate: THttpRotaterTrigger;
     fDefaultRotateFiles: integer;
+    fVariables: THttpLogVariables;
     procedure SetFormat(const aFormat: RawUtf8);
     procedure SetDestFolder(const aFolder: TFileName);
-    function GetPerHostFileName(const aHost: RawUtf8): TFileName; virtual;
-    function CreateMainWriter: TTextDateWriter;
-    function GetWriter(Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
+    function GetWriterFileName(const aHost: RawUtf8; aError: boolean): TFileName; virtual;
+    procedure CreateMainWriters;
+    function GetWriter(Tix10: cardinal; const Host: RawUtf8;
+      Error: boolean): TTextDateWriter;
   public
     /// initialize this multi-host logging instance
     // - this is how THttpServerGeneric initializes its own logging system
@@ -1682,6 +1683,12 @@ type
     // - DefineHost() will use the 'hostname.log' pattern for its own log files
     property DestMainLog: TFileName
       read fDestMainLog write fDestMainLog;
+    /// the log file name to be used in DestFolder for the error log file
+    // - equals 'error.log' by default, just like nginx
+    // - this log file will consist in the THttpRequestState error text
+    // followed by the regular log output Format of the request (as access.log)
+    property DestErrorLog: TFileName
+      read fDestErrorLog write fDestErrorLog;
     /// define when/how log file rotation should occur
     // - default value is hrtAfter10MB
     // - if set to hrtDisabled, no rotation will happen at all - but be aware
@@ -4405,14 +4412,14 @@ begin
 end;
 
 constructor THttpLoggerWriter.Create(aOwner: THttpLogger; const aHost: RawUtf8;
-  aRotate: THttpRotaterTrigger; aRotateFiles: integer);
+  aError: boolean; aRotate: THttpRotaterTrigger; aRotateFiles: integer);
 var
   s: TStream;
 begin
   fHost := aHost;
   fOwner := aOwner;
   fRotate.OnRotate := OnRotate;
-  fRotate.FileName := fOwner.GetPerHostFileName(aHost);
+  fRotate.FileName := fOwner.GetWriterFileName(aHost, aError);
   fRotate.Setup(aRotate, aRotateFiles);
   s := TFileStreamEx.CreateWrite(fRotate.FileName);
   s.Seek(0, soEnd); // append
@@ -4438,6 +4445,7 @@ begin
   fDefaultRotate := hrtAfter10MB;
   fDefaultRotateFiles := 9;
   fDestMainLog := 'access.log';
+  fDestErrorLog := 'error.log';
 end;
 
 constructor THttpLogger.CreateWithWriter(aWriter: TTextDateWriter;
@@ -4507,28 +4515,34 @@ begin
   end;
 end;
 
-function THttpLogger.GetPerHostFileName(const aHost: RawUtf8): TFileName;
+function THttpLogger.GetWriterFileName(
+  const aHost: RawUtf8; aError: boolean): TFileName;
 begin
   if fDestFolder = '' then
     fDestFolder := GetSystemPath(spLog); // default if not customized
   result := fDestFolder;
-  if aHost = '' then
+  if aError then
+    result := result + fDestErrorLog
+  else if aHost = '' then
     result := result + fDestMainLog
   else
     result := FormatString('%%.log', [result, LowerCase(aHost)]);
 end;
 
-function THttpLogger.CreateMainWriter: TTextDateWriter;
+procedure THttpLogger.CreateMainWriters;
 begin
   // caller made fWriterHostSafe.Lock
-  result := THttpLoggerWriter.Create(
-    self, '', fDefaultRotate, fDefaultRotateFiles);
-  ObjArrayAdd(fWriterHost, result);
-  fWriterHostMain := result;
+  fWriterHostMain := THttpLoggerWriter.Create(
+    self, '', {error=}false, fDefaultRotate, fDefaultRotateFiles);
+  ObjArrayAdd(fWriterHost, fWriterHostMain);
+  // DefineHost() filters '!' so error.log has a fake name for debugging
+  fWriterHostError := THttpLoggerWriter.Create(
+    self, '!error.log!', {error=}true, fDefaultRotate, fDefaultRotateFiles);
+  ObjArrayAdd(fWriterHost, fWriterHostError);
 end;
 
-function THttpLogger.GetWriter(
-  Tix10: cardinal; const Host: RawUtf8): TTextDateWriter;
+function THttpLogger.GetWriter(Tix10: cardinal;
+  const Host: RawUtf8; Error: boolean): TTextDateWriter;
 var
   n: integer;
   p: ^THttpLoggerWriter;
@@ -4537,52 +4551,69 @@ begin
   result := fWriterSingle;
   if result <> nil then // from CreateWithWriter/CreateWithFile
     exit;
-  // quickly retrieve the main instance or the previous Host
-  if (Host <> '') and
-     // 127.0.0.0/8 (e.g. from THttpClientSocket.RequestSendHeader) is no host
-     not IsLocalHost(pointer(Host)) then
+  // quickly retrieve the main/error instance or the previous Host
+  if not Error then
   begin
-    result := fWriterHostLast; // pointer-sized variables are atomic
-    if (result <> nil) and     // naive but efficient cache
-       IdemPropNameU(THttpLoggerWriter(result).Host, Host) then
-      result := nil;
+    result := fWriterHostMain; // very common case of loopback or no Host
+    if (Host <> '') and
+       (ffHadDefineHost in fFlags) and
+       not IsLocalHost(pointer(Host)) then
+    // 127.0.0.0/8 (e.g. from THttpClientSocket.RequestSendHeader) is no host
+    begin
+      result := fWriterHostLast; // pointer-sized variables are atomic
+      if (result <> nil) and     // naive but efficient cache
+         not IdemPropNameU(THttpLoggerWriter(result).Host, Host) then
+        result := nil; // force WriterHost[2..] lookup
+    end;
   end
   else
-    result := fWriterHostMain; // very common case of loopback or no Host
+    result := fWriterHostError;
   if result = nil then
   begin
-    // thread-safe lookup of this Host in the internal WriteHost[] list
+    // thread-safe lookup of this Host in the internal WriterHost[] list
     fWriterHostSafe.Lock;
     p := pointer(fWriterHost);
-    if p = nil then
-      // no previous DefineHost() call: use WriterHost[0] = access.log instance
+    if p <> nil then
+    begin
+      if not Error then
+      begin
+        // search for any matching WriterHost[2..].Host value
+        result := p^; // p^ = WriterHost[0] = access.log as default
+        if (Host <> '') and
+           (ffHadDefineHost in fFlags) and
+           not IsLocalHost(pointer(Host)) then
+        begin
+          n := PDALen(PAnsiChar(p) - _DALEN)^ + (_DAOFF - 1);
+          inc(p); // ignore both WriterHost[0/1]
+          repeat
+            inc(p);
+            dec(n);
+            if n = 0 then
+              break;
+            if IdemPropNameU(p^.Host, Host) then
+            begin
+              result := p^; // found a log instance for this Host name
+              fWriterHostLast := result;
+              break;
+            end;
+          until false;
+        end;
+      end
+      else
+        result := fWriterHostError;
+      fWriterHostSafe.UnLock;
+    end
+    else
+      // no previous DefineHost() call: add WriterHost[0/1] = access/error.log
       try
-        result := CreateMainWriter;
+        CreateMainWriters;
+        if Error then
+          result := fWriterHostError
+        else
+          result := fWriterHostMain;
       finally
         fWriterHostSafe.UnLock;
-      end
-    else
-    begin
-      // search for any matching THttpLoggerWriter.Host value
-      result := p^; // p^ = WriterHost[0] = access.log as default
-      if Host <> '' then
-      begin
-        n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-        repeat
-          inc(p);
-          dec(n);
-          if n = 0 then
-            break;
-          if IdemPropNameU(p^.Host, Host) then
-          begin
-            result := p^; // found log instance for this Host name
-            fWriterHostLast := result;
-            break;
-          end;
-        until false;
       end;
-      fWriterHostSafe.UnLock;
-    end;
   end;
   // try rotation before appending any new information - and outside of the lock
   THttpLoggerWriter(result).TryRotate(Tix10);
@@ -4602,8 +4633,8 @@ begin
   fWriterHostSafe.Lock;
   try
     if fWriterHost = nil then
-      // first call: we need to set WriterHost[0] = access.log
-      CreateMainWriter
+      // first call: we need to add WriterHost[0/1] = access/error.log
+      CreateMainWriters
     else
       // search if we need to update a previous DefineHost() parameters
       for i := 1 to length(fWriterHost) - 1 do
@@ -4626,8 +4657,9 @@ begin
       aRotate := fDefaultRotate;
     if aRotateFiles < 0 then
       aRotateFiles := fDefaultRotateFiles;
-    w := THttpLoggerWriter.Create(self, h, aRotate, aRotateFiles);
+    w := THttpLoggerWriter.Create(self, h, {err=}false, aRotate, aRotateFiles);
     ObjArrayAdd(fWriterHost, w);
+    include(fFlags, ffHadDefineHost);
   finally
     fWriterHostSafe.UnLock;
   end;
@@ -4730,16 +4762,13 @@ begin
   // optionally merge calls
   if Assigned(fOnContinue) then
     fOnContinue.Append(Context);
-  // should we process this request?
   if fVariable = nil then // nothing to process
     exit;
-  if Context.State <> hrsResponseDone then
-    exit; // this was an error
   // retrieve the output stream for the expected .log file
   if Context.Tix64 = 0 then
     Context.Tix64 := GetTickCount64;
   tix10 := Context.Tix64 shr 10;
-  wr := GetWriter(tix10, RawUtf8(Context.Host));
+  wr := GetWriter(tix10, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
   if (wr = nil) or
      (wr.Stream = nil) then
     exit;
@@ -4753,7 +4782,7 @@ begin
       urllen := length(RawUtf8(Context.Url));
   end;
   if fVariables * [hlvTime_Iso8601, hlvTime_Local, hlvTime_Http] <> [] then
-    // dates are all in UTC/GMT as it should on any server
+    // dates are all in UTC/GMT as it should on any serious design
     FromGlobalTime(now, {local=}false, Context.Tix64);
   reqcrc := 0;
   uricrc := 0;
@@ -4776,8 +4805,13 @@ begin
   try
   {$else}
   begin
-    // code within the loop should not raise exceptions
+    // code within the loop should not raise any exception
   {$endif HASFASTTRYFINALLY}
+    if Context.State <> hrsResponseDone then // for error.log
+    begin
+      wr.AddString(HTTP_STATE[Context.State]);
+      wr.Add(' ');
+    end;
     repeat
       case v^ of // compile as a fast lookup table jump on FPC
         hlvUnknown: // plain text

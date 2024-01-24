@@ -1303,7 +1303,7 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
 type
   /// the content of a binary THttpPeerCacheMessage
-  // - would eventually be extended in the future for frame versioning
+  // - could eventually be extended in the future for frame versioning
   THttpPeerCacheMessageKind = (
     pcfPing,
     pcfPong,
