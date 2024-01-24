@@ -2384,8 +2384,8 @@ end;
 
 procedure TSqlDBOleDBMSSQL2018ConnectionProperties.SetInternalProperties;
 begin
-  inherited SetInternalProperties;
   fProviderName := 'MSOLEDBSQL';
+  inherited SetInternalProperties;
 end;
 
 
