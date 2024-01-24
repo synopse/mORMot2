@@ -29,6 +29,14 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
+  mormot.core.text,
+  mormot.core.buffers,
+  mormot.core.data,
+  mormot.core.datetime,
+  mormot.core.rtti,
+  mormot.core.json, // TSynDictionary for THttpRequestCached
+  mormot.core.perf,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
@@ -45,14 +53,6 @@ uses
   mormot.lib.sspi, // do-nothing units on non compliant systems
   mormot.lib.gssapi,
   {$endif DOMAINRESTAUTH}
-  mormot.core.unicode,
-  mormot.core.text,
-  mormot.core.buffers,
-  mormot.core.data,
-  mormot.core.datetime,
-  mormot.core.rtti,
-  mormot.core.json, // TSynDictionary for THttpRequestCached
-  mormot.core.perf,
   mormot.crypt.secure;
 
 

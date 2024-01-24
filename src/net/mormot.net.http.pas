@@ -1410,6 +1410,7 @@ type
 
   /// supported THttpLoger place holders
   // - uses RTTI to parse the actual variable names e.g. '$uri' into hlvUri
+  // or '$uri_hash' into hlvUri_Hash
   // - matches nginx log module naming, with some additional fields
   // - values are provided as TOnHttpServerAfterResponse event parameters
   // - hlvBody_Bytes_Sent equals hlvBytes_Sent with current implementation
@@ -1664,7 +1665,8 @@ type
     // - if not supplied in Create() you can assign a format at runtime via this
     // property to call Parse() - raising EHttpLogger on error
     // - recognized $variable names match trimmed THttpLogVariable enumeration,
-    // so will follow most of nginx log module naming convention
+    // so will follow most of nginx log module naming convention with some
+    // welcome additions
     // - equals by default LOGFORMAT_COMBINED, i.e. the "combined" log format
     // - can NOT be set once the server started its logging process
     property Format: RawUtf8
@@ -4710,6 +4712,7 @@ begin
   fVariable := nil;
   fVariables := [];
   fUnknownPosLen := nil;
+  // parse the input format using RTTI for $variable names
   fFormat := aFormat;
   p := pointer(aFormat);
   repeat
@@ -4722,8 +4725,8 @@ begin
       AddInteger(fUnknownPosLen, (start - pointer(aFormat)) +  // 16-bit pos
                                  ((p - start) shl 16))         // 16-bit len
     end;
-    if p^ = #0 then
-      break;
+    if p^ = #0 then // success
+      exit;
     inc(p); // ignore '$'
     start := p;
     while tcIdentifier in TEXT_CHARS[p^] do
@@ -4739,8 +4742,6 @@ begin
     include(fVariables, THttpLogVariable(v));
   until false;
   // reset internal state on error parsing
-  if result = '' then
-    exit;
   fFormat := '';
   fVariable := nil;
   fVariables := [];
