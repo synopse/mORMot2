@@ -2226,7 +2226,6 @@ end;
 destructor TRestClientUri.Destroy;
 var
   t, i: PtrInt;
-  table: TOrmClass;
   tounlock: TIDDynArray; // need a private local copy
 begin
   include(fInternalState, isDestroying);
@@ -2239,14 +2238,11 @@ begin
   try
     // unlock all records still locked by this client
     if fModel <> nil then
-      for t := 0 to high(fModel.Locks) do
+      for t := 0 to length(fModel.Locks) - 1 do
       begin
         tounlock := fModel.Locks[t].LockedIDs;
-        if tounlock = nil then
-          continue;
-        table := fModel.Tables[t];
         for i := 0 to length(tounlock) - 1 do
-          fOrm.UnLock(table, tounlock[i]); // notify the server
+          fOrm.UnLock(fModel.Tables[t], tounlock[i]); // notify the server
       end;
     SessionClose; // if not already notified
   finally

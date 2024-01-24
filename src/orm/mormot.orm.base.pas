@@ -2771,8 +2771,7 @@ type
     function LockedIDs: TIDDynArray;
     /// remove all the locked TID entries, after a specified time
     // - could be used to release locked records e.g. if some client(s) crashed
-    // - default delay is 30 minutes, which seems correct for most DB usages
-    procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
+    procedure PurgeOlderThan(MinutesFromNow: cardinal);
     /// the current number of locked TID
     property Count: PtrInt
       read fCount;

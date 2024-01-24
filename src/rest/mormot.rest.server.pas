@@ -3802,7 +3802,7 @@ begin
       begin
         // STATE method for TRestClientServerInternalState
         // this method is called with Root (-> Table=nil -> Static=nil)
-        // we need a specialized method in order to avoid fStats.Invalid increase
+        // need a specialized method in order to avoid fStats.Invalid increase
         fCall^.OutStatus := HTTP_SUCCESS;
         TRestOrmServer(Server.fOrmInstance).RefreshInternalStateFromStatic;
       end

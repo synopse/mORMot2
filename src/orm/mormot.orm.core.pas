@@ -4255,7 +4255,7 @@ type
     /// return true if a specified record is locked
     function IsLocked(aRec: TOrm): boolean; overload;
     /// delete all the locked IDs entries, after a specified time
-    // - to be used to release locked records if the client crashed
+    // - could be used to release locked records e.g. if some client(s) crashed
     // - default value is 30 minutes, which seems correct for common usage
     procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
 

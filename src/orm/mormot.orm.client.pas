@@ -529,7 +529,7 @@ begin
   if ForUpdate then
   begin
     if not fModel.Lock(tableindex, aID) then
-      exit; // error marking as locked by the client
+      exit; // already locked on client side: no need to ask the server
   end
   else if fCache.Retrieve(aID, Value, tableindex) = ocrRetrievedFromCache then
   begin
@@ -554,7 +554,7 @@ begin
     end;
   finally
     if ForUpdate then
-      fModel.UnLock(tableindex, aID);
+      fModel.UnLock(tableindex, aID); // unlock on client side
   end;
 end;
 
