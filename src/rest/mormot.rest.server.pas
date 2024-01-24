@@ -3807,8 +3807,8 @@ begin
         TRestOrmServer(Server.fOrmInstance).RefreshInternalStateFromStatic;
       end
   else
-    raise EOrmException.CreateUtf8('%.ExecuteOrmGet(method=%)',
-      [self, ord(Method)]);
+    raise EOrmException.CreateUtf8('Unexpected %.ExecuteOrmGet(method=%)',
+      [self, ToText(Method)]);
   end;
 end;
 
@@ -5899,7 +5899,7 @@ var
 begin
   if (aFrom < low(fTree)) or
      (aFrom > high(fTree)) then
-    raise ERestTree.CreateUtf8('%.Setup(%)?', [self, MethodText(aFrom)]);
+    raise ERestTree.CreateUtf8('%.Setup(%)?', [self, ToText(aFrom)]);
   if fTree[aFrom] = nil then
     fTree[aFrom] := TRadixTreeParams.Create(TRestTreeNode, [rtoCaseInsensitiveUri]);
   uri := fOwner.Model.Root;
@@ -5910,7 +5910,7 @@ begin
     exit;
   if result.Data.Node <> rnNone then
     raise ERestTree.CreateUtf8('%.Setup(m%,''%'',%) already exists as %',
-      [self, MethodText(aFrom), aUri, ToText(aNode)^, ToText(result.Data.Node)^]);
+      [self, ToText(aFrom), aUri, ToText(aNode)^, ToText(result.Data.Node)^]);
   inc(fTreeCount[aFrom]);
   inc(fNodeCount[aNode]);
   result.Data.Node := aNode;
@@ -6076,7 +6076,7 @@ begin
   result := ''; // just concatenate the counters for logging
   for m := low(m) to high(m) do
     if fTreeCount[m] <> 0 then
-      result := FormatUtf8('% %=%', [result, MethodText(m), fTreeCount[m]]);
+      result := FormatUtf8('% %=%', [result, ToText(m), fTreeCount[m]]);
   for n := low(n) to high(n) do
     if fNodeCount[n] <> 0 then
       result := FormatUtf8('% %=%', [result, ToText(n)^, fNodeCount[n]]);

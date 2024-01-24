@@ -2650,7 +2650,7 @@ begin
   begin
     u := fModel.GetUriCallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
-    m := MethodText(method);
+    m := RawUtf8(ToText(method));
     result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);

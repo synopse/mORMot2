@@ -1531,8 +1531,7 @@ function ToMethod(const method: RawUtf8): TUriMethod;
   {$ifdef FPC}inline;{$endif}
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
-function MethodText(m: TUriMethod): RawUtf8;
-  {$ifdef FPC}inline;{$endif}
+function ToText(m: TUriMethod): PUtf8Char; overload;
 
 
 {$ifndef PUREMORMOT2}
@@ -3735,7 +3734,7 @@ end;
 
 const
   // sorted by occurrence for in-order O(n) search via IntegerScanIndex()
-  METHODNAME: array[TUriMethod] of RawUtf8 = (
+  METHODNAME: array[TUriMethod] of PUtf8Char = (
     'GET',
     'POST',
     'PUT',
@@ -3763,13 +3762,13 @@ begin
       (PCardinal(method)^) and $dfdfdfdf) + 1);
 end;
 
-function MethodText(m: TUriMethod): RawUtf8;
+function ToText(m: TUriMethod): PUtf8Char;
 begin
   dec(m); // METHODNAME[] has no mNone entry
   if cardinal(m) < cardinal(ord(high(METHODNAME))) then
     result := METHODNAME[m]
   else
-    result := '';
+    result := nil;
 end;
 
 
