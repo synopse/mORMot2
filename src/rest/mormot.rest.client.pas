@@ -2226,8 +2226,8 @@ end;
 destructor TRestClientUri.Destroy;
 var
   t, i: PtrInt;
-  aID: TID;
-  Table: TOrmClass;
+  table: TOrmClass;
+  tounlock: TIDDynArray; // need a private local copy
 begin
   include(fInternalState, isDestroying);
   if SynLogFileFreeing then // may be owned by a TSynLogFamily
@@ -2237,18 +2237,16 @@ begin
   {$endif OSWINDOWS}
   FreeAndNilSafe(fFakeCallbacks);
   try
-    // unlock all still locked records by this client
+    // unlock all records still locked by this client
     if fModel <> nil then
       for t := 0 to high(fModel.Locks) do
       begin
-        Table := fModel.Tables[t];
-        with fModel.Locks[t] do
-          for i := 0 to Count - 1 do
-          begin
-            aID := IDs[i];
-            if aID <> 0 then // 0 is empty after unlock
-              fOrm.UnLock(Table, aID);
-          end;
+        tounlock := fModel.Locks[t].LockedIDs;
+        if tounlock = nil then
+          continue;
+        table := fModel.Tables[t];
+        for i := 0 to length(tounlock) - 1 do
+          fOrm.UnLock(table, tounlock[i]); // notify the server
       end;
     SessionClose; // if not already notified
   finally

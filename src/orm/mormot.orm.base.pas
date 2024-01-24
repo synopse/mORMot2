@@ -2744,45 +2744,40 @@ type
 { ************ TOrmLocks and TOrmCacheTable Basic Structures }
 
 type
-  /// used to store the locked record list, in a specified table
-  // - the maximum count of the locked list if fixed to 512 by default,
-  // which seems correct for common usage
+  /// used to store the locked record TID in memory
   {$ifdef USERECORDWITHMETHODS}
   TOrmLocks = record
   {$else}
   TOrmLocks = object
   {$endif USERECORDWITHMETHODS}
+  private
+    fSafe: TRWLock; // thread-safe and not blocking concurrent IsLocked()
+    fID: TIDDynArray;       // array [0..Count-1] of locked TID
+    fTix: TIntegerDynArray; // GetTickCount64 shr 10 values at the Lock() time
+    fCount: PtrInt;
+    fLastPurge: integer;
   public
-    /// the number of locked records slots available in this object
-    Capacity: integer;
-    /// the number of locked records in this object
-    Count: integer;
-    /// contains the locked record ID
-    // - an empty position is marked with 0 after UnLock()
-    IDs: TIDDynArray;
-    /// contains the time and date of the lock
-    // - filled internally by the fast GetTickCount64() function (faster than
-    // TDateTime or TSystemTime/GetLocalTime)
-    // - used to purge to old entries - see PurgeOlderThan() method below
-    Ticks64s: TInt64DynArray;
-    /// make the methods thread-safe and IsLock() not blocking
-    Safe: TRWLock;
-    /// lock a record, specified by its ID
+    /// lock a record, specified by its TID
     // - returns true on success, false if was already locked
     function Lock(aID: TID): boolean;
-    /// unlock a record, specified by its ID
+    /// unlock a record, specified by its TID
     // - returns true on success, false if was not already locked
     function UnLock(aID: TID): boolean;
-    /// return true if a record, specified by its ID, is locked
+    /// return true if a record, specified by its TID, is locked
     function IsLocked(aID: TID): boolean;
-    /// delete all the locked IDs entries, after a specified time
-    // - to be used to release locked records if the client crashed
-    // - default value is 30 minutes, which seems correct for common database usage
+    /// unlock all records at once
+    procedure UnLockAll;
+    /// make a thread-safe copy of all locked record TID
+    function LockedIDs: TIDDynArray;
+    /// remove all the locked TID entries, after a specified time
+    // - could be used to release locked records e.g. if some client(s) crashed
+    // - default delay is 30 minutes, which seems correct for most DB usages
     procedure PurgeOlderThan(MinutesFromNow: cardinal = 30);
+    /// the current number of locked TID
+    property Count: PtrInt
+      read fCount;
   end;
-
   POrmLocks = ^TOrmLocks;
-
   TOrmLocksDynArray = array of TOrmLocks;
 
   /// for TOrmCache, stores one ORM value
@@ -10378,158 +10373,152 @@ end;
 
 function TOrmLocks.IsLocked(aID: TID): boolean;
 begin
-  result := (@self <> nil) and
-            (Count <> 0) and
-            (aID <> 0);
-  if not result then
+  result := false;
+  if (@self = nil) or
+     (aID = 0) or
+     (fCount = 0) then
     exit;
-  Safe.ReadOnlyLock;
-  result := Int64ScanExists(pointer(IDs), Capacity, aID);
-  Safe.ReadOnlyUnLock;
+  fSafe.ReadOnlyLock;
+  result := Int64ScanExists(pointer(fID), fCount, aID);
+  fSafe.ReadOnlyUnLock;
 end;
 
 function TOrmLocks.Lock(aID: TID): boolean;
 var
-  P: PInt64;
-  n: integer;
-  tix: Int64;
+  n: PtrInt;
 begin
+  result := false;
   if (@self = nil) or
      (aID = 0) then
-    // void or full
-    result := false
-  else
-  begin
-    Safe.ReadWriteLock;
-    try
-      if Count = 0 then
-        P := nil
-      else
-        P := Int64Scan(pointer(IDs), Capacity, aID);
-      if P <> nil then
-        // already locked
-        result := false
-      else
-      begin
-        tix := GetTickCount64;
-        Safe.WriteLock;
-        try
-          // add to ID[] and Ticks64s[]
-          if Count = Capacity then
-            P := nil // no void entry
-          else
-            P := Int64Scan(pointer(IDs), Capacity, 0);
-          if P = nil then
-          begin
-            // no free entry -> add at the end
-            if Capacity >= length(IDs) then
-            begin
-              n := NextGrow(Capacity);
-              SetLength(IDs, n);
-              SetLength(Ticks64s, n);
-            end;
-            IDs[Capacity] := aID;
-            Ticks64s[Capacity] := tix;
-            inc(Capacity);
-          end
-          else
-          begin
-            // store at free entry
-            P^ := aID;
-            Ticks64s[(PtrUInt(P) - PtrUInt(IDs)) shr 3] := tix;
-          end;
-          inc(Count);
-        finally
-          Safe.WriteUnLock;
-        end;
-        result := true;
-      end;
-    finally
-      Safe.ReadWriteUnLock;
-    end;
-  end;
-end;
-
-procedure TOrmLocks.PurgeOlderThan(MinutesFromNow: cardinal);
-var
-  tix: Int64;
-  i, n: PtrInt;
-begin
-  if (@self = nil) or
-     (Count = 0) then
-    exit; // nothing to purge
-  if MinutesFromNow = 0 then
-    if Count = Capacity then
-      exit
-    else
-      tix := 0 // vacuum with no purge
-  else
-    tix := GetTickCount64 - MinutesFromNow * (1000 * 60);
-  Safe.WriteLock;
+    exit;
+  fSafe.ReadWriteLock;
   try
-    n := 0;
-    for i := 0 to Capacity - 1 do
-      if (IDs[i] <> 0) and
-         ((tix = 0) or
-          (Ticks64s[i] >= tix)) then // not too old
-        begin
-          if n <> i then // vaccuum storage
-          begin
-            IDs[n] := IDs[i];
-            Ticks64s[n] := Ticks64s[i];
-          end;
-          inc(n);
-        end;
-    if Count <> n then
-      raise EOrmException.CreateUtf8('TOrmLocks.PurgeOlderThan %<>%', [Count, n]);
-    Capacity := n;
-    SetLength(IDs, n);
-    SetLength(Ticks64s, n);
+    if Int64ScanExists(pointer(fID), fCount, aID) then
+      exit; // already locked
+    result := true;
+    fSafe.WriteLock;
+    try // add to fID[] and fTix[]
+      n := fCount;
+      if n >= length(fID) then
+      begin
+        n := NextGrow(n);
+        SetLength(fID, n);
+        SetLength(fTix, n);
+        n := fCount;
+      end;
+      fID[n] := aID;
+      fTix[n] := GetTickCount64 shr 10;
+      inc(fCount);
+    finally
+      fSafe.WriteUnLock;
+    end;
   finally
-    Safe.WriteUnLock;
+    fSafe.ReadWriteUnLock;
   end;
 end;
 
 function TOrmLocks.UnLock(aID: TID): boolean;
 var
-  P: PInt64;
+  i, n: PtrInt;
+begin
+  result := false;
+  if (@self = nil) or
+     (fCount = 0) or
+     (aID = 0) then
+    exit;
+  fSafe.ReadWriteLock;
+  try
+    i := Int64ScanIndex(pointer(fID), fCount, aID);
+    if i < 0 then
+      exit; // not locked
+    result := true;
+    fSafe.WriteLock;
+    try // remove from fID[] and fTix[]
+      dec(fCount);
+      if fCount = 0 then
+      begin
+        fID := nil;
+        fTix := nil;
+        exit;
+      end;
+      n := fCount - i;
+      if n = 0 then
+        exit;
+      MoveFast(fID[i + 1],  fID[i],  n * SizeOf(fID[0])); // fast enough
+      MoveFast(fTix[i + 1], fTix[i], n * SizeOf(fTix[0]));
+    finally
+      fSafe.WriteUnLock;
+    end;
+  finally
+    fSafe.ReadWriteUnLock;
+  end;
+end;
+
+procedure TOrmLocks.UnLockAll;
 begin
   if (@self = nil) or
-     (Count = 0) or
-     (aID = 0) then
-    result := false
-  else
-  begin
-    Safe.ReadWriteLock;
-    try
-      P := Int64Scan(pointer(IDs), Capacity, aID);
-      if P = nil then
-        result := false
-      else
+     (fCount = 0) then
+    exit;
+  fSafe.WriteLock;
+  try
+    fID := nil;
+    fTix := nil;
+    fCount := 0;
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+function TOrmLocks.LockedIDs: TIDDynArray;
+begin
+  result := nil;
+  if (@self = nil) or
+     (fCount = 0) then
+    exit;
+  fSafe.ReadOnlyLock;
+  try
+    result := copy(fID, 0, fCount); // private copy
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+end;
+
+procedure TOrmLocks.PurgeOlderThan(MinutesFromNow: cardinal);
+var
+  old: integer;
+  i, n: PtrInt;
+begin
+  if (@self = nil) or
+     (fCount = 0) or
+     (MinutesFromNow = 0) then
+    exit; // nothing to purge
+  old := GetTickCount64 shr 10; // as seconds
+  if old - fLastPurge < 60 then
+    exit; // no need to purge more than once per minute
+  fLastPurge := old;
+  dec(old, MinutesFromNow * 60);
+  if old <= 0 then
+    exit; // this computer just started
+  fSafe.WriteLock;
+  try
+    n := 0;
+    for i := 0 to fCount - 1 do // brute force is fast enough every minute
+      if fTix[i] >= old then
       begin
-        Safe.WriteLock;
-        dec(Count);
-        if Count = 0 then
+        if n <> i then
         begin
-          IDs := nil;
-          Ticks64s := nil;
-          Capacity := 0;
-        end
-        else
-        begin
-          P^ := 0; // 0 marks free entry
-          if (Count > 128) and
-             (length(IDs) > Count shl 1) then
-            PurgeOlderThan(0) // vaccuum
-          else if ((PtrUInt(P) - PtrUInt(IDs)) shr 3 >= PtrUInt(Capacity - 1)) then
-            dec(Capacity); // freed last entry -> decrease list length
+          fID[n] := fID[i];
+          fTix[n] := fTix[i];
         end;
-        result := true;
-        Safe.WriteUnLock;
+        inc(n);
       end;
-    finally
-      Safe.ReadWriteUnLock;
-    end;
+    fCount := n;
+    if n <> 0 then
+      exit;
+    fID := nil;
+    fTix := nil;
+  finally
+    fSafe.WriteUnLock;
   end;
 end;
 

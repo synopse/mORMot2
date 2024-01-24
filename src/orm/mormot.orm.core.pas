@@ -10268,7 +10268,7 @@ var
   i: PtrInt;
 begin
   for i := 0 to length(fLocks) - 1 do
-    fLocks[i].Count := 0;
+    fLocks[i].UnLockAll;
 end;
 
 function TOrmModel.RecordReference(Table: TOrmClass; ID: TID): TRecordReference;
