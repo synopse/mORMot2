@@ -496,7 +496,7 @@
       {$define ISDELPHI20092010}  // to circumvent some specific bugs
     {$ifend}
     {$if CompilerVersion >= 21.0}
-      {$define HASSAFEINLINE}     // earliest Delphi have troubles inlining :(
+      {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}

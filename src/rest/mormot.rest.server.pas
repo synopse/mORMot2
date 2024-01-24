@@ -3599,7 +3599,7 @@ begin
         begin
           if TableID > 0 then
           begin
-            // GET ModelRoot/TableName/TableID[/Blob] to retrieve one member,
+            // GET/LOCK ModelRoot/TableName/TableID[/Blob] to retrieve one member,
             // with or without locking, or a specified blob field content
             if Method = mLOCK then
               // LOCK is to be followed by PUT -> check user

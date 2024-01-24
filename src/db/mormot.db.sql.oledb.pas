@@ -62,14 +62,14 @@ const
     DBTYPE_BYTES or DBTYPE_BYREF); // ftBlob
 
   FIELDTYPE2OLEDBTYPE_NAME: array[TSqlDBFieldType] of WideString = (
-     '',                 // ftUnknown
-     'DBTYPE_I4',        // ftNull
-     'DBTYPE_I8',        // ftInt64
-     'DBTYPE_R8',        // ftDouble
-     'DBTYPE_CY',        // ftCurrency
-     'DBTYPE_DATE',      // ftDate
-     'DBTYPE_WVARCHAR',  // ftUtf8
-     'DBTYPE_BINARY');   // ftBlob
+    '',                 // ftUnknown
+    'DBTYPE_I4',        // ftNull
+    'DBTYPE_I8',        // ftInt64
+    'DBTYPE_R8',        // ftDouble
+    'DBTYPE_CY',        // ftCurrency
+    'DBTYPE_DATE',      // ftDate
+    'DBTYPE_WVARCHAR',  // ftUtf8
+    'DBTYPE_BINARY');   // ftBlob
 
 
 { ************ TSqlDBOleDBConnection* and TSqlDBOleDBStatement Classes }
@@ -199,8 +199,8 @@ type
   /// used to store properties and value about one TSqlDBOleDBStatement Param
   // - we don't use a Variant, not the standard TSqlDBParam record type,
   // but manual storage for better performance
-  // - whole memory block of a TSqlDBOleDBStatementParamDynArray will be used as the
-  // source Data for the OleDB parameters - so we should align data carefully
+  // - whole memory block of a TSqlDBOleDBStatementParamDynArray will be used as
+  // the source Data for the OleDB parameters - so we should align data carefully
   {$ifdef CPU64}
     {$A8} // un-packed records
   {$else}
@@ -237,8 +237,8 @@ type
     /// define if parameter can be retrieved after a stored procedure execution
     VInOut: TSqlDBParamInOutType;
     // so that VInt64 will be 8 bytes aligned
-    VFill: array[SizeOf(TSqlDBFieldType)+SizeOf(TSqlDBParamInOutType)+SizeOf(integer)..
-      SizeOf(Int64)-1] of byte;
+    VFill: array[SizeOf(TSqlDBFieldType) + SizeOf(TSqlDBParamInOutType) +
+                 SizeOf(integer).. SizeOf(Int64) - 1] of byte;
   end;
   {$ifdef CPU64}
     {$A-} // packed records
@@ -391,7 +391,8 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an EOleDBException on any error
-    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSql: RawUtf8;
+      ExpectResults: boolean = false); overload; override;
     /// Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should have been already bound with Bind*()
     // functions above
@@ -556,7 +557,8 @@ type
     // optimization as defined in TSqlDBConnectionProperties.Create(),
     // since INSERT with multiple VALUES (..),(..),(..) is available only
     // since SQL Server 2008
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
+    constructor Create(
+      const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
   end;
 
   /// OleDB connection properties to Microsoft SQL Server 2008, via
@@ -796,8 +798,8 @@ function TSqlDBOleDBStatement.CheckParam(Param: integer;
   NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): POleDBStatementParam;
 begin
   if Param <= 0 then
-    raise EOleDBException.CreateUtf8('%.Bind*() called with Param=% should be >= 1',
-      [self, Param]);
+    raise EOleDBException.CreateUtf8(
+      '%.Bind*() called with Param=% should be >= 1', [self, Param]);
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param - 1];
