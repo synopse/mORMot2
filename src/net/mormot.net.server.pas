@@ -5344,7 +5344,7 @@ begin
        (fMsg.DestIP4 <> fOwner.fIP4) then // will also detect any unexpected NAT
      begin
        if fOwner.fVerboseLog then
-         DoLog('ignored', []);
+         DoLog('ignored %', [ToText(fMsg)]);
        exit;
      end;
   late := (fMsg.Kind in PCF_RESPONSE) and
@@ -6011,7 +6011,7 @@ begin
       'OnDowloaded: % already in cache', [Partial], self);
     // size mismatch may happen on race condition (hash collision is unlikely)
     if PartialID <> 0 then
-      PartialChangeFile(PartialID, local); // switch to local file
+      PartialChangeFile(PartialID, local); // switch to the local file
     exit;
   end;
   QueryPerformanceMicroSeconds(start);
@@ -6204,7 +6204,9 @@ var
   changed: integer;
 begin
   // called from OnDowloaded() with the new cached file name to use
-  if PartialID = 0 then
+  if (PartialID = 0) or
+     (fPartialSequence = 0) or // only THttpServer supports this
+     (PartialID >= fPartialSequence) then
     exit;
   changed := 0;
   fPartialSafe.Lock;
@@ -6214,13 +6216,17 @@ begin
       with fPartial[i] do
       begin
         PartFile := NewFile;
-        for j := 0 to length(Context) - 1 do
+        for j := length(Context) - 1 downto 0 do
+        try
           with Context[j] do
             if fPeerCachePartialID <> 0 then
             begin
               fPeerCachePartialNewStreamFileName := NewFile; // notify switch
               inc(changed);
             end;
+        except
+          PtrArrayDelete(Context, j); // paranoid
+        end;
       end;
   finally
     fPartialSafe.UnLock;
@@ -6234,7 +6240,7 @@ end;
 procedure THttpPeerCache.OnDownloadingFailed(PartialID: integer);
 var
   i, j: PtrInt;
-  aborted: integer;
+  aborted, raised: integer;
 begin
   if (PartialID = 0) or
      (fPartialSequence = 0) or // only THttpServer supports this
@@ -6242,6 +6248,7 @@ begin
     exit;
   // unregister and abort any partial downloading process
   aborted := 0;
+  raised := 0;
   fPartialSafe.Lock;
   try
     i := PartialFromID(PartialID);
@@ -6254,7 +6261,11 @@ begin
         begin
           aborted := length(Context);
           for j := 0 to aborted - 1 do
-            Context[j].fPeerCachePartialID := 0; // abort THttpServer.Process
+            try
+              Context[j].fPeerCachePartialID := 0; // abort THttpServer.Process
+            except
+              inc(raised); // paranoid
+            end;
           Context := nil;
         end;
       end;
@@ -6264,7 +6275,8 @@ begin
   if fVerboseLog or
      (i < 0) then
     fLog.Add.Log(LOG_TRACEWARNING[i < 0],
-      'OnDownloadingFailed(%): found=% aborted=%', [PartialID, i, aborted], self);
+      'OnDownloadingFailed(%): found=% raised=% aborted=%',
+        [PartialID, i, raised, aborted], self);
   if aborted <> 0 then
     SleepHiRes(STATICFILE_PROGWAITMS * 2); // wait for THttpServer.Process abort
 end;
@@ -6275,7 +6287,7 @@ var
   deleted, released: boolean;
 begin
   if Sender.fPeerCachePartialID = 0 then
-    exit;
+    exit; // e.g. after OnDownloadingFailed()
   deleted := false;
   released := false;
   fPartialSafe.Lock;
