@@ -1424,9 +1424,11 @@ type
   // - hlvHostName is the "Host:" header value
   // - hlvHttp_Referer is the "Referer:" header value
   // - hlvHttp_User_Agent is the "User-Agent:" header value
+  // - hlvHttp_State is the HTTP processing state (THttpRequestState) as text
+  // - hlvHttp_StateOrd is the HTTP processing state (THttpRequestState) as integer
   // - hlvHttps is "on" if the connection operates in HTTPS mode
   // - hlvMsec is current time in seconds with milliseconds resolution
-  // - hlvReceived is the request size from the client, as text
+  // - hlvReceived is the request size from the client, as KBNoSpace() text
   // - hlvRemote_Addr is the client IP address
   // - hlvRemote_User is the user name supplied if hsrAuthorized is set
   // - hlvRequest is the full original request line
@@ -1437,7 +1439,7 @@ type
   // - hlvRequest_Time is processing time in seconds with milliseconds resolution
   // - hlvRequest_Uri is the full original request line with arguments
   // - hlvScheme is either "HTTP" or "HTTPS"
-  // - hlvSent is the response size sent back to the client, as text
+  // - hlvSent is the response size sent back to the client, as KBNoSpace() text
   // - hlvServer_Protocol is either "HTTP/1.0" or "HTTP/1.1"
   // - hlvStatus is the response status code (e.g. "200" or "404")
   // - hlvTime_Epoch is the UTC time as seconds since the Unix Epoch
@@ -1461,6 +1463,8 @@ type
     hlvHostName,
     hlvHttp_Referer,
     hlvHttp_User_Agent,
+    hlvHttp_State,
+    hlvHttp_StateOrd,
     hlvHttps,
     hlvMsec,
     hlvReceived,
@@ -4822,6 +4826,10 @@ begin
             wr.Add('-')
           else
             wr.AddString(RawUtf8(Context.UserAgent));
+        hlvHttp_State:
+          wr.AddString(HTTP_STATE[Context.State]);
+        hlvHttp_StateOrd:
+          wr.AddU(ord(Context.State));
         hlvHttps:
           if hsrHttps in Context.Flags then
             wr.AddShorter('on');
