@@ -10,7 +10,7 @@ uses
   unix,
   unixcp,
   unixtype,
-  unixutil, // for TZSeconds - used by sysutils anyway
+  unixutil, // for TZSeconds - as used by sysutils anyway
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
@@ -585,22 +585,25 @@ end;
 
 {$endif NODIRECTTHREADMANAGER}
 
-const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
+const
   HoursPerDay = 24;
   MinsPerHour = 60;
   SecsPerMin  = 60;
   MinsPerDay  = HoursPerDay * MinsPerHour;
-  SecsPerDay  = MinsPerDay * SecsPerMin;
+  SecsPerDay  = MinsPerDay  * SecsPerMin;
   SecsPerHour = MinsPerHour * SecsPerMin;
   MilliSecsPerSec = 1000;
   MicroSecsPerSec = 1000000;
   MicroSecsPerMilliSec = 1000;
-  NanoSecsPerMicroSec = 1000;
-  NanoSecsPerMilliSec = 1000000;
-  C1970       = 2440588;
-  D0          = 1461;
-  D1          = 146097;
-  D2          = 1721119;
+  NanoSecsPerMicroSec  = 1000;
+  NanoSecsPerMilliSec  = 1000000;
+
+const
+  // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
+  D0 = 1461;
+  D1 = 146097;
+  D2 = 1721119;
+  C1970 = 2440588;
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
   {$ifdef HASINLINE}inline;{$endif}
@@ -720,6 +723,16 @@ begin
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
+procedure GetLocalTime(out result: TSystemTime);
+var
+  tz: timeval;
+begin
+  fpgettimeofday(@tz, nil);
+  // + unixutil.TZSeconds = UTC to local time conversion
+  EpochToSystemTime(tz.tv_sec + TZSeconds, result);
+  result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
+end;
+
 {$else}
 
 
@@ -805,6 +818,19 @@ begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
   EpochToSystemTime(r.tv_sec, result);
+  result.MilliSecond := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec);
+end;
+
+// c_timezone: longint external 'c' name 'timezone'; is broken and returns 0
+
+procedure GetLocalTime(out result: TSystemTime);
+var
+  r: timespec;
+begin
+  // faster than fpgettimeofday() which makes a syscall and don't use vDSO
+  clock_gettime(CLOCK_REALTIME_FAST, @r);
+  // + unixutil.TZSeconds = UTC to local time conversion
+  EpochToSystemTime(r.tv_sec + TZSeconds, result);
   result.MilliSecond := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec);
 end;
 

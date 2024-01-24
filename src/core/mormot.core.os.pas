@@ -2687,14 +2687,6 @@ type
   /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
   TOSLightMutex = pointer;
 
-/// returns the current UTC time as TSystemTime
-// - under Delphi/Windows, directly call the homonymous Win32 API
-// - redefined in mormot.core.os to avoid dependency to the Windows unit
-// - you should call directly FPC's version otherwise
-// - warning: do not call this function directly, but use TSynSystemTime as
-// defined in mormot.core.datetime which is really cross-platform
-procedure GetLocalTime(out result: TSystemTime); stdcall;
-
 /// a wrapper around FileTimeToLocalFileTime/FileTimeToSystemTime Windows APIs
 // - only used by mormot.lib.static for proper SQlite3 linking on Windows
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
@@ -2860,12 +2852,25 @@ procedure InitializeCriticalSectionIfNeededAndEnter(var cs: TRTLCriticalSection)
 // - if the supplied mutex is void (i.e. all filled with 0), do nothing
 procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 
-/// returns the current UTC time as TSystemTime
+/// returns the current UTC time as TSystemTime from the OS
+// - under Delphi/Windows, directly call the homonymous Win32 API
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
-// - under Windows, directly call the homonymous Win32 API
+// or fpgettimeofday() on Darwin/MacOS
 // - warning: do not call this function directly, but use TSynSystemTime as
 // defined in mormot.core.datetime which is really cross-platform
 procedure GetSystemTime(out result: TSystemTime);
+  {$ifdef OSWINDOWS} stdcall; {$endif}
+
+/// returns the current Local time as TSystemTime from the OS
+// - under Delphi/Windows, directly call the homonymous Win32 API
+// - redefined in mormot.core.os to avoid dependency to the Windows unit
+// - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
+// or fpgettimeofday() on Darwin/MacOS, with FPC RTL TZSeconds adjustment (so
+// will be fixed for the whole process lifetime and won't change at daylight)
+// - warning: do not call this function directly, but use TSynSystemTime as
+// defined in mormot.core.datetime which is really cross-platform
+procedure GetLocalTime(out result: TSystemTime);
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// compatibility function, wrapping Win32 API file truncate at current position
