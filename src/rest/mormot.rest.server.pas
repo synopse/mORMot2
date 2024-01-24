@@ -254,6 +254,11 @@ type
     procedure ComputeStatsAfterCommand;
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); override;
     function IsRemoteIPBanned: boolean; // as method to avoid temp IP string
+    procedure OrmGetNoTable(params: PUtf8Char);
+    procedure OrmGetTableID;
+    procedure OrmGetTable(params: PUtf8Char);
+    procedure OrmGetConvertOutBodyAsPlainJson(const FieldsCsv: RawUtf8;
+      Options: TOrmWriterOptions);
     /// register the interface-based SOA URIs to Server.Router multiplexer
     // - abstract implementation which is to be overridden
     class procedure UriComputeRoutes(Router: TRestRouter; Server: TRestServer); virtual;
@@ -2474,12 +2479,12 @@ const
   /// the default URI parameters for query paging
   // - those values are the one expected by YUI components
   PAGINGPARAMETERS_YAHOO: TRestServerUriPagingParameters = (
-    Sort: 'SORT=';
-    Dir: 'DIR=';
+    Sort:       'SORT=';
+    Dir:        'DIR=';
     StartIndex: 'STARTINDEX=';
-    Results: 'RESULTS=';
-    Select: 'SELECT=';
-    Where: 'WHERE=';
+    Results:    'RESULTS=';
+    Select:     'SELECT=';
+    Where:      'WHERE=';
     SendTotalRowsCountFmt: '');
 
   /// default value of TRestServer.StatLevels property
@@ -3447,344 +3452,350 @@ begin
   end;
 end;
 
+procedure TRestServerUriContext.OrmGetConvertOutBodyAsPlainJson(
+  const FieldsCsv: RawUtf8; Options: TOrmWriterOptions);
+var
+  rec: TOrm;
+  W: TOrmWriter;
+  bits: TFieldBits;
+  withid: boolean;
+  tmp: TTextWriterStackBuffer;
+begin
+  // force plain standard JSON output for AJAX clients
+  if (FieldsCsv = '') or
+     // handle ID single field only if ID_str is needed
+     (IsRowID(pointer(FieldsCsv)) and
+      not (owoID_str in Options)) or
+     // we won't handle min()/max() functions
+     not TableModelProps.Props.FieldBitsFromCsv(FieldsCsv, bits, withid) then
+    exit;
+  rec := Table.CreateAndFillPrepare(fCall^.OutBody);
+  try
+    W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
+      true, FieldsCsv, {knownrows=}0, 0, @tmp);
+    try
+      W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
+      W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
+      rec.AppendFillAsJsonValues(W);
+      W.SetText(fCall^.OutBody);
+    finally
+      W.Stream.Free; // associated TRawByteStringStream instance
+      W.Free;
+    end;
+  finally
+    rec.Free;
+  end;
+end;
+
 const
-  METHOD_WRITE: array[0..3] of PUtf8Char = (
-   'INSERT', // mPOST
-   'UPDATE', // mPUT
-   'DELETE', // mDELETE
+  SQL_METHOD_WRITE: array[0..3] of PUtf8Char = (
+   'INSERT', // 'INSERT ... FROM ...'    -> mPOST
+   'UPDATE', // 'UPDATE (....) FROM ...' -> mPUT
+   'DELETE', // 'DELETE FROM ...'        -> mDELETE
    nil);
 
-procedure TRestServerUriContext.ExecuteOrmGet;
-
-  procedure ConvertOutBodyAsPlainJson(const FieldsCsv: RawUtf8;
-    Options: TOrmWriterOptions);
-  var
-    rec: TOrm;
-    W: TOrmWriter;
-    bits: TFieldBits;
-    withid: boolean;
-    tmp: TTextWriterStackBuffer;
+procedure TRestServerUriContext.OrmGetNoTable(params: PUtf8Char);
+var
+  sqlselect, sql: RawUtf8;
+  sqlisselect: boolean;
+  tableindexes: TIntegerDynArray;
+  opt: TOrmWriterOptions;
+  i: PtrInt;
+begin
+  // GET ModelRoot
+  if Method = mLOCK then
+    exit; // no Table = no ID = nothing to LOCK
+  // retrieve SQL input from the HTTP request
+  if (fCall^.InBody = '') and
+     (params <> nil) and
+     (reUrlEncodedSql in fCall^.RestAccessRights^.AllowRemoteExecute) then
   begin
-    // force plain standard JSON output for AJAX clients
-    if (FieldsCsv = '') or
-       // handle ID single field only if ID_str is needed
-       (IsRowID(pointer(FieldsCsv)) and
-        not (owoID_str in Options)) or
-       // we won't handle min()/max() functions
-       not TableModelProps.Props.FieldBitsFromCsv(FieldsCsv, bits, withid) then
-      exit;
-    rec := Table.CreateAndFillPrepare(fCall^.OutBody);
-    try
-      W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
-        true, FieldsCsv, {knownrows=}0, 0, @tmp);
-      try
-        W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
-        W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
-        rec.AppendFillAsJsonValues(W);
-        W.SetText(fCall^.OutBody);
-      finally
-        W.Stream.Free; // associated TRawByteStringStream instance
-        W.Free;
+    // GET with a sql statement sent in URI, as sql=....
+    while not UrlDecodeValue(params, 'SQL=', sql, @params) do
+      if params = nil then
+        break;
+  end
+  else
+    // GET with a sql statement sent as UTF-8 body (not 100% HTTP compatible)
+    sql := fCall^.InBody;
+  if sql = '' then
+    exit;
+  // check permissions
+  sqlisselect := IsSelect(pointer(sql), @sqlselect);
+  if not (sqlisselect or
+          (reSql in fCall^.RestAccessRights^.AllowRemoteExecute)) then
+    exit;
+  fStaticOrm := nil;
+  if sqlisselect then
+  begin
+    tableindexes := Server.fModel.GetTableIndexesFromSqlSelect(sql);
+    if tableindexes = nil then
+    begin
+      // check permission for SELECT without any known table
+      if not (reSqlSelectWithoutTable in
+          fCall^.RestAccessRights^.AllowRemoteExecute) then
+      begin
+        fCall^.OutStatus := HTTP_NOTALLOWED;
+        exit;
       end;
-    finally
-      rec.Free;
+    end
+    else
+    begin
+      // check permission for SELECT with one (or several JOINed) tables
+      for i := 0 to length(tableindexes) - 1 do
+        if not (tableindexes[i] in fCall^.RestAccessRights^.GET) then
+        begin
+          fCall^.OutStatus := HTTP_NOTALLOWED;
+          exit;
+        end;
+      // use the first static table (poorman's JOIN)
+      fStaticOrm := TRestOrmServer(Server.fOrmInstance).
+        InternalAdaptSql(tableindexes[0], sql);
     end;
   end;
+  // execute this SQL statement
+  if fStaticOrm <> nil then
+  begin
+    fTableEngine := fStaticOrm;
+    fCall^.OutBody := fStaticOrm.EngineList(tableindexes[0], sql);
+  end
+  else
+    fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
+      MainEngineList(sql, false, nil);
+  // security note: only first statement is run by EngineList()
+  if fCall^.OutBody = '' then
+    exit;
+  // got JSON list '[{...}]' ?
+  if (sqlselect <> '') and
+     (length(tableindexes) = 1) then
+  begin
+    InternalSetTableFromTableIndex(tableindexes[0]);
+    opt := ClientOrmOptions;
+    if opt <> [] then
+      OrmGetConvertOutBodyAsPlainJson(sqlselect, opt);
+  end;
+  fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
+  if not sqlisselect then
+    // needed for fStats.NotifyOrm(Method) below
+    fMethod := TUriMethod(IdemPPChar(SqlBegin(pointer(sql)),
+      @SQL_METHOD_WRITE) + 2); // not found (-1) -> +2 -> mGET=1
+end;
 
+procedure TRestServerUriContext.OrmGetTableID;
 var
-  sqlselect, sqlwhere, sqlwherecount, sqlsort, sqldir, sql: RawUtf8;
-  sqlstartindex, sqlresults, sqltotalrowcount: integer;
-  nonstandardsqlparameter, nonstandardsqlwhereparameter: boolean;
-  paging: PRestServerUriPagingParameters;
-  sqlisselect: boolean;
-  resultlist: TOrmTable;
-  tableindexes: TIntegerDynArray;
-  rec: TOrm;
-  opt: TOrmWriterOptions;
-  P, params: PUtf8Char;
-  i, j, L: PtrInt;
   cache: TOrmCache;
+  opt: TOrmWriterOptions;
+  rec: TOrm;
 begin
-  params := fParameters;
+  // GET/LOCK ModelRoot/TableName/TableID[/Blob]
+  // here, Table<>nil and TableIndex in [0..MAX_TABLES-1]
+  if Method = mLOCK then
+    // LOCK is to be followed by PUT -> check user
+    if not (TableIndex in fCall^.RestAccessRights^.PUT) then
+      fCall^.OutStatus := HTTP_NOTALLOWED
+    else if Server.fModel.Lock(TableIndex, TableID) then
+      fMethod := mGET; // mark successfully locked
+  if fMethod = mLOCK then
+    exit;
+  if fUriBlobField <> nil then
+  begin
+    // GET ModelRoot/TableName/TableID/Blob: retrieve blob content
+    if TableEngine.EngineRetrieveBlob(TableIndex, TableID,
+        fUriBlobField.PropInfo, RawBlob(fCall^.OutBody)) then
+    begin
+      fCall^.OutHead := GetMimeContentTypeHeader(fCall^.OutBody);
+      fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
+    end
+    else
+      fCall^.OutStatus := HTTP_NOTFOUND;
+    exit;
+  end;
+  // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
+  cache := TRestOrm(Server.fOrmInstance).CacheOrNil;
+  fCall^.OutBody := cache.RetrieveJson(Table, TableIndex, TableID);
+  if fCall^.OutBody = '' then // not in cache
+  begin
+    // get JSON object '{...}'
+    if StaticOrm <> nil then
+      fCall^.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
+    else
+      fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
+        MainEngineRetrieve(TableIndex, TableID);
+    // cache if expected
+    if cache <> nil then
+      if fCall^.OutBody = '' then
+        cache.NotifyDeletion(TableIndex, TableID)
+      else
+        cache.NotifyJson(Table, TableIndex, TableID, fCall^.OutBody);
+  end;
+  if fCall^.OutBody = '' then
+  begin
+    fCall^.OutStatus := HTTP_NOTFOUND;
+    exit;
+  end;
+  // something was found
+  fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
+  opt := ClientOrmOptions;
+  if opt = [] then // no need to rewrite the JSON output
+    exit;
+  rec := Table.CreateFrom(fCall^.OutBody); // private copy (if from cache)
+  try
+    fCall^.OutBody := rec.GetJsonValues(
+      {expand=}true, {withid=}true, ooSelect, nil, opt);
+  finally
+    rec.Free;
+  end;
+end;
+
+procedure TRestServerUriContext.OrmGetTable(params: PUtf8Char);
+var
+  select, where, wherecount, sort, dir, sql: RawUtf8;
+  startindex, results, totalrowcount: integer;
+  customselect, customwhere: boolean;
+  paging: PRestServerUriPagingParameters;
+  resultlist: TOrmTable;
+  opt: TOrmWriterOptions;
+  P: PUtf8Char;
+  i, j, L: PtrInt;
+begin
+  // GET ModelRoot/TableName with 'select=..&where=' or YUI paging
+  totalrowcount := 0;
+  // if no ?select= is specified, default is to return all IDs of this table
+  select := ROWID_TXT;
+  if params <> nil then
+  begin
+    // extract '?select=...&where=...' or '?where=...' parameters
+    startindex := 0;
+    results := 0;
+    if params^ <> #0 then
+    begin
+      paging := @Server.UriPagingParameters;
+      customselect := paging^.Select <> PAGINGPARAMETERS_YAHOO.Select;
+      customwhere  := paging^.Where  <> PAGINGPARAMETERS_YAHOO.Where;
+      repeat
+        UrlDecodeValue(params, paging^.Sort,   sort);
+        UrlDecodeValue(params, paging^.Dir,    dir);
+        UrlDecodeValue(params, paging^.Select, select);
+        UrlDecodeInteger(params, paging^.StartIndex, startindex);
+        UrlDecodeInteger(params, paging^.Results,    results);
+        // try default YUI names if custom names did not work
+        if customselect and
+           (select = '') then
+          UrlDecodeValue(params, PAGINGPARAMETERS_YAHOO.Select, select);
+        if customwhere and
+           ({%H-}where = '') then
+          UrlDecodeValue(params, PAGINGPARAMETERS_YAHOO.Where, where);
+        UrlDecodeValue(params, paging^.Where, where, @params);
+      until params = nil;
+    end;
+    // let SQLite3 do the sort and the paging (will be ignored by Static)
+    wherecount := where; // "select count(*)" won't expect any ORDER
+    if (sort <> '') and
+       (StrPosI('ORDER BY ', pointer(where)) = nil) then
+    begin
+      if SameTextU(dir, 'DESC') then
+        // allow DESC, default is ASC
+        sort := sort + ' DESC';
+      where := where + ' ORDER BY ' + sort;
+    end;
+    TrimSelf(where);
+    if (results <> 0) and
+       (StrPosI('LIMIT ', pointer(where)) = nil) then
+    begin
+      if Server.UriPagingParameters.SendTotalRowsCountFmt <> '' then
+      begin
+        if where = wherecount then
+        begin
+          i := PosEx('ORDER BY ', UpperCase(wherecount));
+          if i > 0 then
+            // if ORDER BY already in the where clause
+            SetLength(wherecount, i - 1);
+        end;
+        resultlist := TRestOrmServer(Server.fOrmInstance).
+          ExecuteList([Table], Server.fModel.TableProps[TableIndex].
+            SqlFromSelectWhere('Count(*)', wherecount));
+        if resultlist <> nil then
+        try
+          totalrowcount := resultlist.GetAsInteger(1, 0);
+        finally
+          resultlist.Free;
+        end;
+      end;
+      where := FormatUtf8('% LIMIT % OFFSET %', [where, results, startindex]);
+    end;
+  end;
+  // execute the select/where request on this table
+  sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
+    select, TrimU(where));
+  fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
+    InternalListRawUtf8(TableIndex, sql);
+  if fCall^.OutBody = '' then
+  begin
+    fCall^.OutStatus := HTTP_NOTFOUND;
+    exit;
+  end;
+  // got JSON list '[{...}]' ?
+  opt := ClientOrmOptions;
+  if opt <> [] then
+    OrmGetConvertOutBodyAsPlainJson(select, opt);
+  fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
+  if Server.UriPagingParameters.SendTotalRowsCountFmt = '' then
+    exit;
+  // insert "totalRows":% optional value to the JSON output
+  if (rsoNoAjaxJson in Server.Options) or
+     (ClientKind = ckFramework) then
+  begin
+    // optimized non-expanded mORMot-specific layout
+    P := pointer(fCall^.OutBody);
+    L := length(fCall^.OutBody);
+    P := NotExpandedBufferRowCountPos(P, P + L);
+    j := 0;
+    if P <> nil then
+      j := P - pointer(fCall^.OutBody) - 11
+    else
+      for i := 1 to 10 do
+        if fCall^.OutBody[L] = '}' then
+        begin
+          j := L;
+          break;
+        end
+        else
+          dec(L);
+    if j > 0 then
+      Insert(FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
+        [totalrowcount]), fCall^.OutBody, j);
+  end
+  else
+  begin
+    // expanded format -> as {"values":[...],"total":n}
+    if totalrowcount = 0 then // avoid sending fields array
+      fCall^.OutBody := '[]'
+    else
+      TrimSelf(fCall^.OutBody);
+    fCall^.OutBody := '{"values":' + fCall^.OutBody +
+      FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
+       [totalrowcount]) + '}';
+  end;
+end;
+
+procedure TRestServerUriContext.ExecuteOrmGet;
+begin
   case Method of
     mLOCK,
     mGET:
       begin
         if Table = nil then
-        begin
-          if Method <> mLOCK then
-          begin
-            if (fCall^.InBody = '') and
-               (params <> nil) and
-               (reUrlEncodedSql in fCall^.RestAccessRights^.AllowRemoteExecute) then
-            begin
-              // GET with a sql statement sent in URI, as sql=....
-              while not UrlDecodeValue(params, 'SQL=', sql, @params) do
-                if params = nil then
-                  break;
-            end
-            else
-              // GET with a sql statement sent as UTF-8 body (not 100% HTTP compatible)
-              sql := fCall^.InBody;
-            if sql <> '' then
-            begin
-              sqlisselect := IsSelect(pointer(sql), @sqlselect);
-              if sqlisselect or
-                 (reSql in fCall^.RestAccessRights^.AllowRemoteExecute) then
-              begin
-                fStaticOrm := nil;
-                if sqlisselect then
-                begin
-                  tableindexes := Server.fModel.GetTableIndexesFromSqlSelect(sql);
-                  if tableindexes = nil then
-                  begin
-                    // check for SELECT without any known table
-                    if not (reSqlSelectWithoutTable in
-                        fCall^.RestAccessRights^.AllowRemoteExecute) then
-                    begin
-                      fCall^.OutStatus := HTTP_NOTALLOWED;
-                      exit;
-                    end;
-                  end
-                  else
-                  begin
-                    // check for SELECT with one (or several JOINed) tables
-                    for i := 0 to length(tableindexes) - 1 do
-                      if not (tableindexes[i] in fCall^.RestAccessRights^.GET) then
-                      begin
-                        fCall^.OutStatus := HTTP_NOTALLOWED;
-                        exit;
-                      end;
-                    // use the first static table (poorman's JOIN)
-                    fStaticOrm := TRestOrmServer(Server.fOrmInstance).
-                      InternalAdaptSql(tableindexes[0], sql);
-                  end;
-                end;
-                if StaticOrm <> nil then
-                begin
-                  fTableEngine := StaticOrm;
-                  fCall^.OutBody := StaticOrm.EngineList(tableindexes[0], sql);
-                end
-                else
-                  fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
-                    MainEngineList(sql, false, nil);
-                // security note: only first statement is run by EngineList()
-                if fCall^.OutBody <> '' then
-                begin
-                  // got JSON list '[{...}]' ?
-                  if (sqlselect <> '') and
-                     (length(tableindexes) = 1) then
-                  begin
-                    InternalSetTableFromTableIndex(tableindexes[0]);
-                    opt := ClientOrmOptions;
-                    if opt <> [] then
-                      ConvertOutBodyAsPlainJson(sqlselect, opt);
-                  end;
-                  fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
-                  if not sqlisselect then
-                    // needed for fStats.NotifyOrm(Method) below
-                    fMethod := TUriMethod(IdemPPChar(SqlBegin(pointer(sql)),
-                      @METHOD_WRITE) + 2); // -1+2 -> mGET=1
-                end;
-              end;
-            end;
-          end;
-        end
-        else
-        // here, Table<>nil and TableIndex in [0..MAX_TABLES-1]
-        if not (TableIndex in fCall^.RestAccessRights^.GET) then
-          // rejected from User Access
+          // GET ModelRoot
+          OrmGetNoTable(fParameters)
+        else if not (TableIndex in fCall^.RestAccessRights^.GET) then
+          // GET/LOCK ModelRoot/TableName/* rejected from User Access
           fCall^.OutStatus := HTTP_NOTALLOWED
-        else
-        begin
-          if TableID > 0 then
-          begin
-            // GET/LOCK ModelRoot/TableName/TableID[/Blob] to retrieve one member,
-            // with or without locking, or a specified blob field content
-            if Method = mLOCK then
-              // LOCK is to be followed by PUT -> check user
-              if not (TableIndex in fCall^.RestAccessRights^.PUT) then
-                fCall^.OutStatus := HTTP_NOTALLOWED
-              else if Server.fModel.Lock(TableIndex, TableID) then
-                fMethod := mGET; // mark successfully locked
-            if fMethod <> mLOCK then
-              if fUriBlobField <> nil then
-              begin
-                // GET ModelRoot/TableName/TableID/Blob: retrieve blob content
-                if TableEngine.EngineRetrieveBlob(TableIndex, TableID,
-                    fUriBlobField.PropInfo, RawBlob(fCall^.OutBody)) then
-                begin
-                  fCall^.OutHead := GetMimeContentTypeHeader(fCall^.OutBody);
-                  fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
-                end
-                else
-                  fCall^.OutStatus := HTTP_NOTFOUND;
-              end
-              else
-              begin
-                // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
-                cache := TRestOrm(Server.fOrmInstance).CacheOrNil;
-                fCall^.OutBody := cache.RetrieveJson(Table, TableIndex, TableID);
-                if fCall^.OutBody = '' then
-                begin
-                  // get JSON object '{...}'
-                  if StaticOrm <> nil then
-                    fCall^.OutBody := StaticOrm.EngineRetrieve(TableIndex, TableID)
-                  else
-                    fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
-                      MainEngineRetrieve(TableIndex, TableID);
-                  // cache if expected
-                  if cache <> nil then
-                    if fCall^.OutBody = '' then
-                      cache.NotifyDeletion(TableIndex, TableID)
-                    else
-                      cache.NotifyJson(Table, TableIndex, TableID, fCall^.OutBody);
-                end;
-                if fCall^.OutBody <> '' then
-                begin
-                  // if something was found
-                  opt := ClientOrmOptions;
-                  if opt <> [] then
-                  begin
-                    // cached? -> make private copy, with proper opt layout
-                    rec := Table.CreateFrom(fCall^.OutBody);
-                    try
-                      fCall^.OutBody := rec.GetJsonValues(
-                        {expand=}true, {withid=}true, ooSelect, nil, opt);
-                    finally
-                      rec.Free;
-                    end;
-                  end;
-                  fCall^.OutStatus := HTTP_SUCCESS; // 200 OK
-                end
-                else
-                  fCall^.OutStatus := HTTP_NOTFOUND;
-              end;
-          end
-          else
-          // ModelRoot/TableName with 'select=..&where=' or YUI paging
-          if Method <> mLOCK then
-          begin
-            // Safe.Lock not available here
-            sqlselect := ROWID_TXT; // if no select is specified (i.e. ModelRoot/TableName)
-            // all IDs of this table are returned to the client
-            sqltotalrowcount := 0;
-            if params <> nil then
-            begin
-              // '?select=...&where=...' or '?where=...'
-              sqlstartindex := 0;
-              sqlresults := 0;
-              if params^ <> #0 then
-              begin
-                paging := @Server.UriPagingParameters;
-                nonstandardsqlparameter :=
-                  paging^.Select <> PAGINGPARAMETERS_YAHOO.Select;
-                nonstandardsqlwhereparameter :=
-                  paging^.Where <> PAGINGPARAMETERS_YAHOO.Where;
-                repeat
-                  UrlDecodeValue(params, paging^.Sort, sqlsort);
-                  UrlDecodeValue(params, paging^.Dir, sqldir);
-                  UrlDecodeInteger(params, paging^.StartIndex, sqlstartindex);
-                  UrlDecodeInteger(params, paging^.Results, sqlresults);
-                  UrlDecodeValue(params, paging^.Select, sqlselect);
-                  if nonstandardsqlparameter and
-                     (sqlselect = '') then
-                    UrlDecodeValue(params, PAGINGPARAMETERS_YAHOO.Select, sqlselect);
-                  if nonstandardsqlwhereparameter and
-                     ({%H-}sqlwhere = '') then
-                    UrlDecodeValue(params, PAGINGPARAMETERS_YAHOO.Where, sqlwhere);
-                  UrlDecodeValue(params, paging^.Where, sqlwhere, @params);
-                until params = nil;
-              end;
-              // let SQLite3 do the sort and the paging (will be ignored by Static)
-              sqlwherecount := sqlwhere; // "select count(*)" won't expect any ORDER
-              if (sqlsort <> '') and
-                 (StrPosI('ORDER BY ', pointer(sqlwhere)) = nil) then
-              begin
-                if SameTextU(sqldir, 'DESC') then
-                  // allow DESC, default is ASC
-                  sqlsort := sqlsort + ' DESC';
-                sqlwhere := sqlwhere + ' ORDER BY ' + sqlsort;
-              end;
-              TrimSelf(sqlwhere);
-              if (sqlresults <> 0) and
-                 (StrPosI('LIMIT ', pointer(sqlwhere)) = nil) then
-              begin
-                if Server.UriPagingParameters.SendTotalRowsCountFmt <> '' then
-                begin
-                  if sqlwhere = sqlwherecount then
-                  begin
-                    i := PosEx('ORDER BY ', UpperCase(sqlwherecount));
-                    if i > 0 then
-                      // if ORDER BY already in the sqlwhere clause
-                      SetLength(sqlwherecount, i - 1);
-                  end;
-                  resultlist := TRestOrmServer(Server.fOrmInstance).
-                    ExecuteList([Table], Server.fModel.TableProps[TableIndex].
-                      SqlFromSelectWhere('Count(*)', sqlwherecount));
-                  if resultlist <> nil then
-                  try
-                    sqltotalrowcount := resultlist.GetAsInteger(1, 0);
-                  finally
-                    resultlist.Free;
-                  end;
-                end;
-                sqlwhere := FormatUtf8('% LIMIT % OFFSET %', [sqlwhere,
-                  sqlresults, sqlstartindex]);
-              end;
-            end;
-            sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
-              sqlselect, TrimU(sqlwhere));
-            fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
-              InternalListRawUtf8(TableIndex, sql);
-            if fCall^.OutBody <> '' then
-            begin
-              // got JSON list '[{...}]' ?
-              opt := ClientOrmOptions;
-              if opt <> [] then
-                ConvertOutBodyAsPlainJson(sqlselect, opt);
-              fCall^.OutStatus := HTTP_SUCCESS;  // 200 OK
-              if Server.UriPagingParameters.SendTotalRowsCountFmt <> '' then
-                // insert "totalRows":% optional value to the JSON output
-                if (rsoNoAjaxJson in Server.Options) or
-                   (ClientKind = ckFramework) then
-                begin
-                  // optimized non-expanded mORMot-specific layout
-                  P := pointer(fCall^.OutBody);
-                  L := length(fCall^.OutBody);
-                  P := NotExpandedBufferRowCountPos(P, P + L);
-                  j := 0;
-                  if P <> nil then
-                    j := P - pointer(fCall^.OutBody) - 11
-                  else
-                    for i := 1 to 10 do
-                      if fCall^.OutBody[L] = '}' then
-                      begin
-                        j := L;
-                        break;
-                      end
-                      else
-                        dec(L);
-                  if j > 0 then
-                    Insert(FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-                      [sqltotalrowcount]), fCall^.OutBody, j);
-                end
-                else
-                begin
-                  // expanded format -> as {"values":[...],"total":n}
-                  if sqltotalrowcount = 0 then // avoid sending fields array
-                    fCall^.OutBody := '[]'
-                  else
-                    TrimSelf(fCall^.OutBody);
-                  fCall^.OutBody := '{"values":' + fCall^.OutBody +
-                    FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-                     [sqltotalrowcount]) + '}';
-                end;
-            end
-            else
-              fCall^.OutStatus := HTTP_NOTFOUND;
-          end;
-        end;
+        else if TableID > 0 then
+          // GET/LOCK ModelRoot/TableName/TableID[/Blob]
+          OrmGetTableID
+        else if Method <> mLOCK then
+          // GET ModelRoot/TableName with 'select=..&where=' or YUI paging
+          OrmGetTable(fParameters);
         if fCall^.OutStatus = HTTP_SUCCESS then
           Server.fStats.NotifyOrm(Method);
       end;
@@ -7633,8 +7644,7 @@ begin
         // if no custom error message, compute it now as JSON
         ctxt.Error(ctxt.CustomErrorMsg, Call.OutStatus);
     // 8. compute returned ORM InternalState indicator
-    if ((rsoNoInternalState in fOptions) or
-        (rsoNoTableURI in fOptions)) and
+    if (fOptions * [rsoNoInternalState, rsoNoTableURI] <> []) and
        (ctxt.Method <> mSTATE) then
       // reduce headers verbosity
       Call.OutInternalState := 0
