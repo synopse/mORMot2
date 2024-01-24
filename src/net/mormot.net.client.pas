@@ -345,10 +345,10 @@ type
     fDigestAuthUserName: RawUtf8;
     fDigestAuthPassword: SpiUtf8;
     fDigestAuthAlgo: TDigestAlgo;
+    fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
-    fRedirectMax: integer;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif DOMAINRESTAUTH}
@@ -1876,27 +1876,31 @@ begin
         OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
       if IdemPChar(pointer(ctxt.url), 'HTTP') and
          newuri.From(ctxt.url) then
+      begin
+        fRedirected := newuri.Address;
         if (hfConnectionClose in Http.HeaderFlags) or
            (newuri.Server <> Server) or
            (newuri.Port <> Port) or
            (newuri.Https <> TLS.Enabled) then
-      begin
-        Close; // relocated to another server -> reset the TCP connection
-        try
-          OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
-          fRedirected := newuri.Address;
-        except
-          ctxt.status := HTTP_NOTFOUND;
-        end;
-        HttpStateReset;
-        ctxt.url := newuri.Address;
-        if (OutStream <> nil) and
-           (OutStream.Position <> ctxt.OutStreamInitialPos) then
         begin
-          OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
-          OutStream.Position := ctxt.OutStreamInitialPos; // reset position
+          Close; // relocated to another server -> reset the TCP connection
+          try
+            OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
+          except
+            ctxt.status := HTTP_NOTFOUND;
+          end;
+          HttpStateReset;
+          ctxt.url := newuri.Address;
+          if (OutStream <> nil) and
+             (OutStream.Position <> ctxt.OutStreamInitialPos) then
+          begin
+            OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
+            OutStream.Position := ctxt.OutStreamInitialPos; // reset position
+          end;
         end;
-      end;
+      end
+      else
+        fRedirected := ctxt.url;
       inc(ctxt.redirected);
     until false;
     if Assigned(fOnAfterRequest) then
@@ -1937,9 +1941,9 @@ var
     expsize := Http.ContentLength;
     result := expsize > 0;
     if result and
-       (fRedirected <> '') and
-       (fRedirected <> requrl) then
-      requrl := fRedirected; // don't perform 302 twice
+       (fRedirected <> '') then
+      // don't perform 3xx again - especially needed if server:port changed
+      requrl := fRedirected;
   end;
 
   procedure NewStream(Mode: cardinal);
