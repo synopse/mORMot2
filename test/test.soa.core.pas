@@ -301,11 +301,11 @@ type
     /// test the client-side implementation with SHA3-256 URI signature
     procedure ClientSideRESTSignWithSha3;
     /// test the client-side implementation using TRestServerAuthenticationNone
-    procedure ClientSideRESTWeakAuthentication;
+    procedure ClientSideRESTWeakAuth;
     /// test the client-side implementation using TRestServerAuthenticationHttpBasic
-    procedure ClientSideRESTBasicAuthentication;
+    procedure ClientSideRESTBasicAuth;
     /// test the custom record Json serialization
-    procedure ClientSideRESTCustomRecordLayout;
+    procedure ClientSideRESTCustomRecord;
     /// test the client-side in RESTful mode with all calls logged in a table
     procedure ClientSideRESTServiceLogToDB;
     /// test the client-side implementation in Json-RPC mode
@@ -1830,7 +1830,7 @@ begin
     TRestServerAuthenticationDefault).Algorithm := suaCRC32;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuthentication;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuth;
 begin
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
   fClient.Server.AuthenticationUnregister([
@@ -1844,7 +1844,7 @@ begin
   fClient.Server.AuthenticationUnregister(TRestServerAuthenticationNone);
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuthentication;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTBasicAuth;
 begin
   fClient.SessionClose;
   fClient.Server.AuthenticationRegister(TRestServerAuthenticationHttpBasic);
@@ -1860,7 +1860,7 @@ begin
   fClient.SetUser('User', 'synopse');
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecordLayout;
+procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecord;
 begin
   TRttiJson.RegisterCustomSerializer(TypeInfo(TEntry),
     TTestServiceOrientedArchitecture.CustomReader,
