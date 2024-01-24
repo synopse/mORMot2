@@ -1705,8 +1705,9 @@ type
 
   /// each kind of counters covered by THttpAnalyzer / THttpMetrics
   // - i.e. HTTP verbs, HTTP status codes, UserAgent or HTTP scheme or auth
-  // - you can interpolate hasDesktop/hasHttp/hasUnAuthorized-like counters as
-  // ! Diff(state[hasAny], state[hasMobile/hasHttps/hasAuthorized])
+  // - you can interpolate hasResponseDone/hasDesktop/hasHttp/hasUnAuthorized
+  // reverse counters as
+  // ! Diff(state[hasAny], state[hasFailed/hasMobile/hasHttps/hasAuthorized])
   THttpAnalyzerScope = (
     hasAny,
     hasGet,
@@ -1720,6 +1721,7 @@ type
     has3xx,
     has4xx,
     has5xx,
+    hasFailed,
     hasMobile,
     hasBot,
     hasHttps,
@@ -2020,7 +2022,7 @@ type
   /// class allowing to persist THttpAnalyzer information into a binary file
   // - output will just be raw THttpAnalyzerToSave array memory layout with no
   // encoding nor compression involved
-  // - is likely to be persisted in hapMinute resolution up to one month (28MB)
+  // - is likely to be persisted in hapMinute resolution up to one month (29MB)
   // - to be further aggregated and searched by THttpMetrics.AddFromBinary()
   THttpAnalyzerPersistBinary = class(THttpAnalyzerPersistAbstract)
   protected
@@ -2193,8 +2195,8 @@ const
 
   /// we support up to 10,485,760 metrics per THttpMetrics instance
   // - i.e. 400MB of continuous memory buffer for its internal storage
-  // - one year of minute-resolution data uses around 320MB (60*24*365*16*40)
-  // - hapMinute should be better stored per month - i.e. up to 28MB
+  // - one year of minute-resolution data uses around 340MB (60*24*365*17*40)
+  // - hapMinute should be better stored per month - i.e. up to 29MB
   // - allow to maintain two bufers (compressed + uncompressed) even on Win32
   HTTPMETRICS_MAXCOUNT = (400 shl 20) div SizeOf(THttpAnalyzerToSave);
 
@@ -5356,6 +5358,9 @@ begin
       DoAppend(new, met);
     if cod <> hasAny then
       DoAppend(new, cod);
+    if (Context.State <> hrsResponseDone) and
+       (hasFailed in fTracked) then
+      DoAppend(new, hasFailed);
     if mob <> hasAny then
       DoAppend(new, mob);
     if bot <> hasAny then
