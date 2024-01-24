@@ -1825,7 +1825,7 @@ end;
 
 function ToText(res: TNetResult): PShortString;
 begin
-  result := @_NR[res]; // no mormot.core.rtti.pas need
+  result := @_NR[res]; // no mormot.core.rtti.pas involved
 end;
 
 

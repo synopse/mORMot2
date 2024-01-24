@@ -737,6 +737,7 @@ type
     procedure AddSpaced(const Text: RawUtf8; Width: PtrInt;
       SepChar: AnsiChar = #0); overload;
     /// append some text with left-filled spaces up to Width characters count
+    // - if the value too big to fit, will truncate up to the first Width chars
     procedure AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt); overload;
     /// append some number with left-filled spaces up to Width characters count
     // - if the value too big to fit in Width, will append K(Value) abbreviation
@@ -4809,7 +4810,7 @@ end;
 procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);
 begin
   if Width <= TextLen then
-    TextLen := Width // truncate text left
+    TextLen := Width // truncate text right
   else
     AddChars(' ', Width - TextLen);
   AddNoJsonEscape(Text, TextLen);

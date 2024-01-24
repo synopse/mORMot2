@@ -4400,7 +4400,7 @@ begin
       begin
         case ClientSock.Http.State of
           hrsResponseDone:
-            break; // finished (set by ClientSock.Http.ProcessBody)
+            break; // finished (set e.g. by ClientSock.Http.ProcessBody)
           hrsSendBody:
             begin
               dest.Clear; // body is retrieved from Content/ContentStream

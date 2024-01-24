@@ -424,8 +424,10 @@ const
   HTTP_REQUEST_WRITE =
     [hrsSendBody];
 
+var // filled from RTTI enum trimmed text during unit initialization
+  HTTP_STATE:  array[THttpRequestState] of RawUtf8;
 
-function ToText(st: THttpRequestState): PShortString; overload;
+function ToText(st: THttpRequestState): PShortString; overload; // HTTP_STATE[]
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
 function ToText(csp: TCrtSocketPending): PShortString; overload;
 function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
@@ -2086,8 +2088,6 @@ type
     procedure DoText(Start, Stop: TDateTime; Period: THttpAnalyzerPeriod;
       Scope: THttpAnalyzerScope; NoPeriod, NoScope: boolean; out Result: RawUtf8);
   public
-    /// intialize this instance
-    constructor Create; override;
     /// release all stored data
     procedure Clear;
     /// append a FileName content in the THttpAnalyzerPersistBinary format
@@ -2199,9 +2199,12 @@ const
   // rather THttpMetrics.LoadHeader if you want to identify .mhm files
   HTTPMETRICS_MAGIC: string[23] = 'mORMotAnalyzerV1'#26;
 
+var // filled from RTTI enum trimmed text during unit initialization
+  HTTP_SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
+  HTTP_PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
 
-function ToText(s: THttpAnalyzerScope): PShortString; overload;
-function ToText(p: THttpAnalyzerPeriod): PShortString; overload;
+function ToText(s: THttpAnalyzerScope): PShortString; overload;  // HTTP_SCOPE[]
+function ToText(p: THttpAnalyzerPeriod): PShortString; overload; // HTTP_PERIOD[]
 function ToText(v: THttpLogVariable): PShortString; overload;
 function ToText(r: THttpRotaterTrigger): PShortString; overload;
 
@@ -4977,16 +4980,6 @@ end;
 
 { THttpAnalyzer }
 
-var // delayed fill from RTTI enum trimmed text via GetScopePeriodRtti
-  _SCOPE:  array[THttpAnalyzerScope]  of RawUtf8;
-  _PERIOD: array[THttpAnalyzerPeriod] of RawUtf8;
-
-procedure GetScopePeriodRtti;
-begin // no need to link this if THttpAnalyzer/THttpMetrics are not used
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @_SCOPE);
-  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @_PERIOD);
-end;
-
 constructor THttpAnalyzer.Create(const aSuspendFile: TFileName;
   aSuspendFileSaveMinutes: integer);
 var
@@ -4995,8 +4988,6 @@ var
   fromgz: TUnixTime;
   tix: cardinal;
 begin
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti;
   inherited Create; // fSafe.Init
   fTracked := [low(THttpAnalyzerScope) .. high(THttpAnalyzerScope)];
   fSaved := fTracked;
@@ -5506,7 +5497,7 @@ begin
     AppendFieldNames(w);
     for s := low(s) to high(s) do
     begin
-      w.AddSpaced(_SCOPE[s], _WIDTH, ',');
+      w.AddSpaced(HTTP_SCOPE[s], _WIDTH, ',');
       AppendFieldValues(w, d[s]);
     end;
     w.SetText(result);
@@ -5529,7 +5520,7 @@ begin
     AppendFieldNames(w);
     for p := low(p) to high(p) do
     begin
-      w.AddSpaced(_PERIOD[p], _WIDTH, ',');
+      w.AddSpaced(HTTP_PERIOD[p], _WIDTH, ',');
       AppendFieldValues(w, d[p]);
     end;
     w.SetText(result);
@@ -5626,8 +5617,6 @@ var
   w: TTextDateWriter;
   tmp: TSynTempBuffer;
 begin
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti; // paranoid - has been done in THttpAnalyzer.Create
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if Dest.Seek(0, soEnd) = 0 then // append or write header
@@ -5641,9 +5630,9 @@ begin
         t.AddIsoDate(w) // time part is irrelevant
       else
         t.AddIsoDateTime(w, {ms=}false, {first=}' ');
-      w.AddString(_PERIOD[p^.Period]);
+      w.AddString(HTTP_PERIOD[p^.Period]);
       w.Add(',');
-      w.AddString(_SCOPE[p^.Scope]);
+      w.AddString(HTTP_SCOPE[p^.Scope]);
       w.Add(',');
       w.AddQ(p^.State.Count);
       w.Add(',');
@@ -5735,13 +5724,6 @@ end;
 
 
 { THttpMetrics }
-
-constructor THttpMetrics.Create;
-begin
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti;
-  inherited Create;
-end;
 
 function THttpMetrics.Get(Row: integer): PHttpAnalyzerToSave;
 begin
@@ -5854,7 +5836,7 @@ begin
   // caller should have made Safe.Lock and insured period in hapHour..hapMonth
   if not (period in [hapHour..hapMonth]) then
     raise EHttpMetrics.CreateUtf8(
-      'Unexpected %. RangeToPeriodIndex(%)', [self, ToText(period)^]);
+      'Unexpected %. RangeToPeriodIndex(%)', [self, HTTP_PERIOD[period]]);
   if fPeriodLastCount < fCount then
     CreatePeriodIndex; // refresh indexes if needed
   with fPeriod[period] do // use hapHour .. hapMonth index
@@ -6397,10 +6379,8 @@ function FromText(const Text: RawUtf8; out Scope: THttpAnalyzerScope): boolean;
 var
   s: THttpAnalyzerScope;
 begin
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti;
   for s := low(s) to high(s) do
-    if IdemPropNameU(Text, _SCOPE[s]) then
+    if IdemPropNameU(Text, HTTP_SCOPE[s]) then
     begin
       Scope := s;
       result := true;
@@ -6413,10 +6393,8 @@ function FromText(const Text: RawUtf8; out Period: THttpAnalyzerPeriod): boolean
 var
   p: THttpAnalyzerPeriod;
 begin
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti;
   for p := low(p) to high(p) do
-    if IdemPropNameU(Text, _PERIOD[p]) then
+    if IdemPropNameU(Text, HTTP_PERIOD[p]) then
     begin
       Period := p;
       result := true;
@@ -6440,15 +6418,13 @@ var
 begin
   if Metrics = nil then
     exit;
-  if _SCOPE[hasAny] = '' then
-    GetScopePeriodRtti; // if not done in THttpAnalyzer/THttpMetrics.Create
   w := TTextWriter.CreateOwnedStream(tmp);
   try
-    w.AddSpaced('Date',   _WIDTH, ',');
+    w.AddSpaced('Date', _WIDTH, ',');
     if not NoPeriod then
       w.AddSpaced('Period', _WIDTH, ',');
     if not NoScope then
-      w.AddSpaced('Scope',  _WIDTH, ',');
+      w.AddSpaced('Scope', _WIDTH, ',');
     AppendFieldNames(w);
     n := length(Metrics);
     d := pointer(Metrics);
@@ -6457,9 +6433,9 @@ begin
       w.AddSpaced(@date[1], _DATELEN[d^.Period], _WIDTH);
       w.AddComma;
       if not NoPeriod then
-        w.AddSpaced(_PERIOD[d^.Period], _WIDTH, ',');
+        w.AddSpaced(HTTP_PERIOD[d^.Period], _WIDTH, ',');
       if not NoScope then
-        w.AddSpaced(_SCOPE[d^.Scope], _WIDTH, ',');
+        w.AddSpaced(HTTP_SCOPE[d^.Scope], _WIDTH, ',');
       AppendFieldValues(w, d^.State);
       inc(d);
       dec(n);
@@ -6473,6 +6449,9 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);
+  GetEnumTrimmedNames(TypeInfo(THttpAnalyzerPeriod), @HTTP_PERIOD);
+  GetEnumTrimmedNames(TypeInfo(THttpRequestState),   @HTTP_STATE);
   _GETVAR :=  'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';

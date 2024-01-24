@@ -3201,7 +3201,7 @@ begin
   if (fOwner.fLog <> nil) and
      (acoVerboseLog in fOwner.Options) and
      not (acoNoLogRead in fOwner.Options) then
-    fOwner.LogVerbose(self, 'OnRead %', [ToText(fHttp.State)^], fRd);
+    fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
   result := soClose;
   if fOwner.fClients = nil then
     fHttp.State := hrsErrorMisuse
@@ -3236,7 +3236,7 @@ begin
       else
         begin
           fOwner.DoLog(sllWarning, 'OnRead: close connection after %',
-            [ToText(fHttp.State)^], self);
+            [HTTP_STATE[fHttp.State]], self);
           DoReject(HTTP_BADREQUEST);
           result := soClose;
         end;
@@ -3309,7 +3309,7 @@ begin
   else if fHttp.State <> hrsResponseDone then
   begin
     fOwner.DoLog(sllWarning, 'AfterWrite: unexpected %',
-      [ToText(fHttp.State)^], self);
+      [HTTP_STATE[fHttp.State]], self);
     if Assigned(fServer.fOnAfterResponse) then
       DoAfterResponse;
     result := soClose;
