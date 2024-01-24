@@ -570,12 +570,14 @@ type
 
   /// raw parameter type of TOnHttpServerAfterResponse
   // - THttpServerRequest instance has already been reset in mormot.net.async
-  // - we use such a record with pointer fields to minimize the stack size
-  // and avoid any ref-count when passing RawUtf8 values between event callbacks
+  // - we use a record to minimize the stack size between methods calls
+  // - we use opaque pointer fields instead of RawUtf8 to avoid any ref-count
+  // - State should be hrsResponseDone on success, or the failing state
   TOnHttpServerAfterResponseContext = record
     User, Method, Host, Url, Referer, UserAgent, RemoteIP: pointer; // = RawUtf8
     Connection: THttpServerConnectionID;
     Flags: THttpServerRequestFlags;
+    State: THttpRequestState;
     StatusCode: cardinal;
     ElapsedMicroSec, Tix64: Int64;
     Received, Sent: QWord;
@@ -4719,8 +4721,11 @@ begin
   // optionally merge calls
   if Assigned(fOnContinue) then
     fOnContinue.Append(Context);
+  // should we process this request?
   if fVariable = nil then // nothing to process
     exit;
+  if Context.State <> hrsResponseDone then
+    exit; // this was an error
   // retrieve the output stream for the expected .log file
   if Context.Tix64 = 0 then
     Context.Tix64 := GetTickCount64;

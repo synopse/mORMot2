@@ -3310,6 +3310,8 @@ begin
   begin
     fOwner.DoLog(sllWarning, 'AfterWrite: unexpected %',
       [ToText(fHttp.State)^], self);
+    if Assigned(fServer.fOnAfterResponse) then
+      DoAfterResponse;
     result := soClose;
     exit;
   end;
@@ -3621,6 +3623,7 @@ begin
   ctx.UserAgent := pointer(fHttp.UserAgent);
   ctx.RemoteIP := pointer(fRemoteIP);
   ctx.Flags := fRequestFlags;
+  ctx.State := fHttp.State;
   ctx.StatusCode := fRespStatus;
   ctx.Received := fBytesRecv;
   ctx.Sent := fBytesSend;

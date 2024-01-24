@@ -4439,32 +4439,33 @@ begin
       ClientSock.fKeepAliveClient := false;
     // the response has been sent: handle optional OnAfterResponse event
     if Assigned(fOnAfterResponse) then
-      try
-        QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
-        dec(ctx.ElapsedMicroSec, started);
-        ctx.Connection := req.ConnectionID;
-        ctx.User := pointer(req.AuthenticatedUser);
-        ctx.Method := pointer(req.Method);
-        ctx.Host := pointer(req.Host);
-        ctx.Url := pointer(req.Url);
-        ctx.Referer := pointer(ClientSock.Http.Referer);
-        ctx.UserAgent := pointer(req.UserAgent);
-        ctx.RemoteIP := pointer(req.RemoteIP);
-        ctx.Flags := req.ConnectionFlags;
-        ctx.StatusCode := req.RespStatus;
-        ctx.Tix64 := 0;
-        ctx.Received := ClientSock.BytesIn;
-        ctx.Sent := ClientSock.BytesOut;
-        fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
-      except
-        on E: Exception do // paranoid
-        begin
-          fOnAfterResponse := nil; // won't try again
-          if Assigned(ClientSock.OnLog) then
-            ClientSock.OnLog(sllWarning,
-              'Process: OnAfterResponse raised % -> disabled', [E], self);
-        end;
+    try
+      QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
+      dec(ctx.ElapsedMicroSec, started);
+      ctx.Connection := req.ConnectionID;
+      ctx.User := pointer(req.AuthenticatedUser);
+      ctx.Method := pointer(req.Method);
+      ctx.Host := pointer(req.Host);
+      ctx.Url := pointer(req.Url);
+      ctx.Referer := pointer(ClientSock.Http.Referer);
+      ctx.UserAgent := pointer(req.UserAgent);
+      ctx.RemoteIP := pointer(req.RemoteIP);
+      ctx.Flags := req.ConnectionFlags;
+      ctx.State := ClientSock.Http.State;
+      ctx.StatusCode := req.RespStatus;
+      ctx.Tix64 := 0;
+      ctx.Received := ClientSock.BytesIn;
+      ctx.Sent := ClientSock.BytesOut;
+      fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
+    except
+      on E: Exception do // paranoid
+      begin
+        fOnAfterResponse := nil; // won't try again
+        if Assigned(ClientSock.OnLog) then
+          ClientSock.OnLog(sllWarning,
+            'Process: OnAfterResponse raised % -> disabled', [E], self);
       end;
+    end;
   finally
     if Assigned(fOnRequestFree) then
       try
@@ -7507,6 +7508,7 @@ begin
     ctx.UserAgent := pointer(Ctxt.UserAgent);
     ctx.RemoteIP := pointer(Ctxt.RemoteIP);
     ctx.Flags := Ctxt.ConnectionFlags;
+    ctx.State := hrsResponseDone;
     ctx.StatusCode := StatusCode;
     ctx.ElapsedMicroSec := Elapsed;
     ctx.Received := Received;
