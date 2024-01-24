@@ -1917,21 +1917,16 @@ begin
   result := Get(url, KeepAlive, AuthorizationBearer(AuthToken));
 end;
 
-{$ifdef ISDELPHI20062007}
-  {$warnings off} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
-
 function THttpClientSocket.WGet(const url: RawUtf8; const destfile: TFileName;
   var params: THttpClientSocketWGet): TFileName;
 var
-  size, start: Int64;
+  size, expsize, start: Int64;
+  res, altdownloading: integer;
   cached, part: TFileName;
   requrl, parthash, urlfile: RawUtf8;
   partmodif: TDateTime;
-  partstream: TStreamRedirect;
-  res, alternatedownloading: integer;
-  expectedsize: Int64;
-  resumed, alternatedownload: boolean;
+  stream: TStreamRedirect;
+  resumed, altdownload: boolean;
 
   function GetExpectedSizeAndRedirection: boolean;
   begin
@@ -1939,15 +1934,15 @@ var
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
-    expectedsize := Http.ContentLength;
-    result := expectedsize > 0;
+    expsize := Http.ContentLength;
+    result := expsize > 0;
     if result and
        (fRedirected <> '') and
        (fRedirected <> requrl) then
       requrl := fRedirected; // don't perform 302 twice
   end;
 
-  procedure NewPartStream(Mode: cardinal);
+  procedure NewStream(Mode: cardinal);
   var
     redirected: TStream;
   begin
@@ -1956,33 +1951,32 @@ var
       redirected := params.OnStreamCreate(part, Mode)
     else
       redirected := TFileStreamEx.Create(part, Mode);
-    partstream := params.Hasher.Create(redirected);
+    stream := params.Hasher.Create(redirected);
   end;
 
-  procedure DoRequestAndFreePartStream;
+  procedure DoRequestAndFreeStream;
   var
     lastmod: RawUtf8;
   begin
     // prepare TStreamRedirect context
-    partstream.Context := urlfile;
-    partstream.OnProgress := params.OnProgress;
-    partstream.OnLog := OnLog;
-    partstream.TimeOut := params.TimeOutSec * 1000;
-    partstream.LimitPerSecond := params.LimitBandwith;
+    stream.Context := urlfile;
+    stream.OnProgress := params.OnProgress;
+    stream.OnLog := OnLog;
+    stream.TimeOut := params.TimeOutSec * 1000;
+    stream.LimitPerSecond := params.LimitBandwith;
     // perform the actual request
     res := 0;
     if Assigned(params.Alternate) and
        (params.Hasher <> nil) and
        (params.Hash <> '') and
        ((waoNoHeadFirst in params.AlternateOptions) or
-        (expectedsize <> 0) or // ensure we made HEAD once for auth and size
+        (expsize <> 0) or // ensure we made HEAD once for auth and size
         GetExpectedSizeAndRedirection) then
     begin
       // alternate download (e.g. local peer-to-peer cache) from file hash
-      res := params.Alternate.OnDownload(
-               self, params, requrl, expectedsize, partstream);
+      res := params.Alternate.OnDownload(self, params, requrl, expsize, stream);
       if res <> 0 then
-        alternatedownload := true; // to notify OnDownloadFailed
+        altdownload := true; // to notify OnDownloadFailed
     end;
     if res = 0 then
     begin
@@ -1991,22 +1985,21 @@ var
          (params.Hasher <> nil) and
          (params.Hash <> '') and
          not (waoNoProgressiveDownloading in params.AlternateOptions) and
-         ((expectedsize <> 0) or
+         ((expsize <> 0) or
           GetExpectedSizeAndRedirection) then
-        alternatedownloading := params.Alternate.OnDownloading(
-                                  params, part, expectedsize);
+        altdownloading := params.Alternate.OnDownloading(params, part, expsize);
       // regular direct GET, if not done via Alternate.OnDownload()
       res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
-        {retry=}false, {instream=}nil, partstream);
+        {retry=}false, {instream=}nil, stream);
     end;
     // verify (partial) response
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     // finalize the successful request
-    partstream.Ended; // notify finished
-    parthash := partstream.GetHash; // hash updated on each partstream.Write()
-    FreeAndNil(partstream);
+    stream.Ended; // notify finished
+    parthash := stream.GetHash; // hash updated on each stream.Write()
+    FreeAndNil(stream);
     lastmod := Http.HeaderGetValue('LAST-MODIFIED');
     if HttpDateToDateTime(lastmod, partmodif, {local=}true) then
       FileSetDate(part, DateTimeToFileDate(partmodif))
@@ -2014,33 +2007,36 @@ var
       partmodif := 0;
   end;
 
-  procedure EndAlternateDownloading;
+  procedure AbortAlternateDownloading;
   begin
     try
-      params.Alternate.OnDownloadingFailed(alternatedownloading);
+      params.Alternate.OnDownloadingFailed(altdownloading);
     except
       // ignore any fatal error in callbacks
     end;
-    alternatedownloading := 0;
+    altdownloading := 0;
   end;
 
   procedure DeletePartAndResetDownload;
   begin
-    if alternatedownload then // something went wrong with OnDownload()
+    if altdownload then // something went wrong with OnDownload()
     try
       params.Alternate.OnDownloadFailed(params); // notify
     except
       // intercept any fatal error in callbacks
     end;
-    alternatedownload := false;
-    if alternatedownloading <> 0 then
-      EndAlternateDownloading;
+    altdownload := false;
+    if altdownloading <> 0 then
+      AbortAlternateDownloading;
     DeleteFile(part); // this .part was clearly incorrect
   end;
 
 begin
-  // prepare input parameters and result file name
   QueryPerformanceMicroSeconds(start); // for NotifyEnded() from cache
+  expsize := 0;
+  altdownload := false;
+  altdownloading := 0;
+  // check requested url and result file name
   requrl := url;
   urlfile := ExtractResourceName(url); // TUri + UrlDecode() + sanitize filename
   if urlfile = '' then
@@ -2050,9 +2046,6 @@ begin
     result := GetSystemPath(spTemp) + Utf8ToString(urlfile)
   else if DirectoryExists(result) then // not a file, but a folder
     result := MakePath([result, urlfile]);
-  expectedsize := 0;
-  alternatedownload := false;
-  alternatedownloading := 0;
   // retrieve the .hash of this file
   TrimSelf(params.Hash);
   if params.HashFromServer and
@@ -2132,10 +2125,10 @@ begin
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
     // try to get expected target size with a HEAD request
     if GetExpectedSizeAndRedirection and
-       (Size < expectedsize) then
+       (size < expsize) then
     begin // seems good enough
-      NewPartStream(fmOpenReadWrite);
-      partstream.Append; // hash partial content
+      NewStream(fmOpenReadWrite);
+      stream.Append; // hash partial content
       fRangeStart := size;
     end
     else
@@ -2143,9 +2136,9 @@ begin
       resumed := false;
       DeleteFile(part); // reject this .part if unknown or too big
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'WGet %: got Size=% Expected=% -> reset %',
-          [url, Size, expectedsize, part], self);
-      NewPartStream(fmCreate);
+        OnLog(sllTrace, 'WGet %: size=% expected=% -> reset %',
+          [url, size, expsize, part], self);
+      NewStream(fmCreate);
     end;
   end
   else
@@ -2153,11 +2146,11 @@ begin
     resumed := false;
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
-    NewPartStream(fmCreate);
+    NewStream(fmCreate);
   end;
   // actual file retrieval
   try
-    DoRequestAndFreePartStream;
+    DoRequestAndFreeStream;
     if (params.Hash <> '') and
        (parthash <> '') then
     begin
@@ -2169,9 +2162,9 @@ begin
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
         DeletePartAndResetDownload; // get rid of wrong file
-        NewPartStream(fmCreate);    // setup a new output stream
-        requrl := url;              // reset any redirection
-        DoRequestAndFreePartStream; // try again without any resume
+        NewStream(fmCreate);       // setup a new output stream
+        requrl := url;            // reset any redirection
+        DoRequestAndFreeStream;  // try again without any resume
       end;
       // now the hash should be correct
       if not PropNameEquals(parthash, params.Hash) then
@@ -2193,8 +2186,8 @@ begin
        (params.Hasher <> nil) and
        (params.Hash <> '') then
       try
-        params.Alternate.OnDowloaded(params, part, alternatedownloading);
-        alternatedownloading := 0;
+        params.Alternate.OnDowloaded(params, part, altdownloading);
+        altdownloading := 0;
       except
         // ignore any fatal error in callbacks
       end;
@@ -2205,19 +2198,15 @@ begin
     // set part='' to notify fully downloaded into result file name
     part := '';
   finally
-    partstream.Free;  // close .part file on unexpected error (if not already)
-    if alternatedownloading <> 0 then
-      EndAlternateDownloading;
+    stream.Free;  // close .part file on unexpected error (if not already)
+    if altdownloading <> 0 then
+      AbortAlternateDownloading;
     if part <> '' then // is there still some interuppted .part content?
       if (FileSize(part) < 32768) or // not worth it, and maybe HTML error msg
          not params.Resume then      // resume is not enabled
         DeleteFile(part); // force next attempt from scratch
   end;
 end;
-
-{$ifdef ISDELPHI20062007}
-  {$warnings on} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
 
 function THttpClientSocket.Head(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
