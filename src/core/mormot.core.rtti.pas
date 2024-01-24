@@ -572,7 +572,7 @@ type
       AlsoTrimLowerCase: boolean = true): integer; overload;
     /// get the corresponding enumeration ordinal value, from its trimmed name
     function GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integer;
-      ExactCase: boolean): integer;
+      CaseSensitive: boolean): integer;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -3330,12 +3330,12 @@ begin
 end;
 
 function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: integer;
-  ExactCase: boolean): integer;
+  CaseSensitive: boolean): integer;
 begin
   if (Value <> nil) and
      (ValueLen > 0) and
      (MinValue = 0) then
-    if ExactCase then
+    if CaseSensitive then
       result := FindShortStringListTrimLowerCaseExact(NameList, MaxValue, Value, ValueLen)
     else
       result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen)
@@ -5243,14 +5243,14 @@ function GetEnumNameValueTrimmed(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
-    GetEnumNameValueTrimmed(aValue, aValueLen, {exactcase=}false);
+    GetEnumNameValueTrimmed(aValue, aValueLen, {casesensitive=}false);
 end;
 
 function GetEnumNameValueTrimmedExact(aTypeInfo: PRttiInfo; aValue: PUtf8Char;
   aValueLen: PtrInt): integer;
 begin
   result := aTypeInfo^.EnumBaseType^.
-    GetEnumNameValueTrimmed(aValue, aValueLen, {exactcase=}true);
+    GetEnumNameValueTrimmed(aValue, aValueLen, {casesensitive=}true);
 end;
 
 function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
