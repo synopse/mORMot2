@@ -470,9 +470,9 @@ type
     /// Get the file build version number
     function FileBuildVersion: cardinal;
       {$ifdef HASINLINE} inline; {$endif}
-    /// Get the file version as a string
+    /// Get the file version as a text
     // - Format is '[major].[minor].[patch].[build]'
-    function FileVersionStr: string;
+    function FileVersionStr: RawUtf8;
   end;
   TVSFixedFileInfo = _VS_FIXEDFILEINFO;
   PVSFixedFileInfo = ^_VS_FIXEDFILEINFO;
@@ -514,9 +514,9 @@ function DWordAlign(Offset: cardinal; Base: cardinal = 0): cardinal;
 type
   /// Cross platform PE (Portable Executable) file parser
   // - see @https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
-  // - the file is mapped in memory and most of the getters will return pointer
-  // to the mapped memory instead of copy, however some data is cached when parsed
-  // to simplify later access (like StringFileInfoEntries)
+  // - the file is mapped in memory and most of the getters will return pointers
+  // to the mapped memory instead of copying the information, however some data
+  // is cached when parsed to simplify later access (e.g. StringFileInfoEntries)
   // - when parsing specific sections (like ParseResources) pointers to the inner
   // data are saved and later accessible using associated properties
   // - see GetPEFileVersion() as a wrapper to this class
@@ -541,125 +541,126 @@ type
     fMap: TMemoryMap;
     function GetImageDataDirectory(DirectoryId: cardinal): PImageDataDirectory;
     function GetSectionHeader(SectionId: cardinal): PImageSectionHeader;
-    /// Parse a StringFileInfo or VarFileInfo struct.
+    /// parse a StringFileInfo or VarFileInfo struct.
     // - Address is the starting address of a StringFileInfo/VarFileInfo struct
-    // - Set fStringFileInfo or fVarFileInfo depending on the struct at the given address
-    // - Returns the end address of the file info
-    // - Called by ParseResources
+    // - set fStringFileInfo or fVarFileInfo depending on the struct at the given address
+    // - returns the end address of the file info
+    // - called by ParseResources
     function ParseFileInfo(Address: pointer): pointer;
   public
-    /// Constructor which initializes all saved pointers to nil
+    /// constructor which initializes all saved pointers to nil
     constructor Create;
-    /// Destructor which unloads the current file
+    /// destructor which unloads the current file
     destructor Destroy; override;
-    /// Load a PE file in memory
-    // - Return true if the file has been successfully loaded
+    /// load a PE file in memory
+    // - return true if the file has been successfully loaded
     function LoadFromFile(const Filename: TFileName): boolean;
-    /// Unload the current file in memory
-    // - Can be called even if no file is loaded
+    /// unload the current file in memory
+    // - can be called even if no file is loaded
     procedure Unload;
 
-    /// Search the section containing the given RVA
-    // - Return the section index (see SectionHeaders property)
-    // - If no section is found, return -1
+    /// search the section containing the given RVA
+    // - return the section index (see SectionHeaders property)
+    // - if no section is found, return -1
     function GetSectionIndexByRVA(RVA: cardinal): integer;
-    /// Search the section named AName
-    // - Return the section index (see SectionHeaders property)
-    // - If no section is found, return -1
+    /// search the section named AName
+    // - return the section index (see SectionHeaders property)
+    // - if no section is found, return -1
     function GetSectionIndexByName(const AName: RawUtf8): integer;
-    /// Search the section associated to the given directory
-    // see IMAGE_DIRECTORY_ENTRY_* consts
-    // - Return the section index (see SectionHeaders property)
-    // - If no section is found, return -1
+    /// search the section associated to the given directory
+    // - accepts IMAGE_DIRECTORY_ENTRY_EXPORT ... constants
+    // - return the section index (see SectionHeaders property)
+    // - if no section is found, return -1
     function GetSectionIndexFromDirectory(DirectoryId: cardinal): integer;
 
-    /// Translate RVA to physical address
+    /// translate RVA to physical address
     // - ASectionId is the section containing the RVA
-    // - Doesn't verify section id, an invalid section id will lead to access violation
-    // - Return the physical address, ie the offset from the file first byte
+    // - doesn't verify section id, an invalid section id will lead to access violation
+    // - return the physical address, ie the offset from the file first byte
     function GetPhAddByRVA(RVA: cardinal; ASectionId: cardinal): cardinal; overload;
-    /// Translate RVA to physical address
-    // - Return the physical address, ie the offset from the file first byte
-    // - If the RVA is not contained by any section, 0 is returned
+    /// translate RVA to physical address
+    // - return the physical address, ie the offset from the file first byte
+    // - if the RVA is not contained by any section, 0 is returned
     function GetPhAddByRVA(RVA: cardinal): cardinal; overload;
 
-    /// Parse the Resource directory associated section
+    /// parse the Resource directory associated section
     // - see https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#the-rsrc-section
-    // - Return false if there is no resource section
-    // - Set VersionInfo, FixedFileInfo, StringFileInfo, FirstStringTable
+    // - return false if there is no resource section
+    // - set VersionInfo, FixedFileInfo, StringFileInfo, FirstStringTable and
     // VarFileInfo pointers if found
     function ParseResources: boolean;
-    /// Parse the StringFileInfo entries
-    // - This is the main method to be called after Create
-    // - Call ParseResources if needed
-    // - Parsed entries are accessible using the StringFileInfoEntries property
+    /// parse the StringFileInfo entries
+    // - this is the main method to be called after Create
+    // - call ParseResources if needed
+    // - parsed entries are accessible using the StringFileInfoEntries property
     function ParseStringFileInfoEntries: boolean;
 
-    /// Check whether there is a valid PE file loaded
+    /// check whether there is a valid PE file loaded
     function IsLoaded: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// Check whether the PE file is an x64 arch
+    /// check whether the PE file is an x64 arch
     function Is64: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// Number of sections
-    // - It is the high boundary of the SectionHeaders property
+    /// number of sections in this PE file
+    // - it is the high boundary of the SectionHeaders property
     property NumberOfSections: cardinal
       read fNumberOfSections;
 
     /// PE Header pointer for 32bit arch
-    // - See Is64 to check arch
-    // - Regroup the COFF Header and the Optional Header
+    // - see Is64 to check arch
+    // - regroup the COFF Header and the Optional Header
     property PEHeader32: PImageNtHeaders32
       read fPEHeader.PHeaders32;
     /// PE Header pointer for 64bit arch
-    // - See Is64 to check arch
-    // - Regroup the COFF Header and the Optional Header
+    // - see Is64 to check arch
+    // - regroup the COFF Header and the Optional Header
     property PEHeader64: PImageNtHeaders64
       read fPEHeader.PHeaders64;
     /// COFF Header (start of PE Header)
     property CoffHeader: PImageFileHeader
       read fCoffHeader;
-    /// First image section header (end of PE Header)
+    /// first image section header (end of PE Header)
     property SectionHeadersStart: PImageSectionHeader
       read fSectionHeadersStart;
-    /// Get the image data directory struct at the given id
-    // - See IMAGE_DIRECTORY_ENTRY_* consts
-    // - Return -1 if the DirectoryId is out of bounds
+    /// get the image data directory struct at the given id
+    // - see IMAGE_DIRECTORY_ENTRY_* consts
+    // - return -1 if the DirectoryId is out of bounds
     property ImageDataDirectory[DirectoryId: cardinal]: PImageDataDirectory
      read GetImageDataDirectory;
-    /// Get the section header at the given section id
-    // - Return nil if the id is out of bounds
+    /// get the section header at the given section id
+    // - return nil if the id is out of bounds
     property SectionHeaders[SectionId: cardinal]: PImageSectionHeader
       read GetSectionHeader;
 
-    /// VersionInfo Resource pointer, set by ParseResources
+    /// VersionInfo Resource pointer, as set by ParseResources
     property VersionInfo: PVsVersionInfo
       read fVersionInfo;
-    /// FixedFileInfo Resource pointer, set by ParseResources
+    /// FixedFileInfo Resource pointer, as set by ParseResources
     property FixedFileInfo: PVSFixedFileInfo
       read fFixedFileInfo;
-    /// StringFileInfo Resource pointer, set by ParseResources
+    /// StringFileInfo Resource pointer, as set by ParseResources
     property StringFileInfo: PStringFileInfo
       read fStringFileInfo;
-    /// FirstStringTable Resource pointer, set by ParseResources
+    /// FirstStringTable Resource pointer, as set by ParseResources
     property FirstStringTable: PStringTable
       read fFirstStringTable;
-    /// VarFileInfo Resource pointer, set by ParseResources
+    /// VarFileInfo Resource pointer, as set by ParseResources
     property VarFileInfo: PVarFileInfo
       read fVarFileInfo;
-    /// Get the file version as a string
-    // - Format is '[major].[minor].[patch].[build]'
+    /// get the file version as a string
+    // - format is '[major].[minor].[patch].[build]'
     // - is a wrapper around FixedFileInfo.FileVersionStr
-    function FileVersionStr: string;
-    /// StringFileInfo entries, parsed a TDocVariantDat
-    // - Populated by ParseStringFileInfo
+    function FileVersionStr: RawUtf8;
+    /// StringFileInfo entries, parsed as a TDocVariant object document
+    // - populated by ParseStringFileInfo
     property StringFileInfoEntries: TDocVariantData
       read fStringFileInfoEntries;
   end;
 
 
 /// return all version information from a Portable Executable (Win32/Win64) file
-// - returns a TDocVariant with all parsed string versions, and "FileVersionNum"
+// as a TDocVariant object document
+// - returns an obhect with all parsed string versions, and "FileVersionNum"
 // as TSynPELoader.FileVersionStr from _VS_FIXEDFILEINFO resource, "IsWin64"
 // as boolean TSynPELoader.Is64 value, and "FullFileName" as aFileName value
 // - returns a void document if the file does not exist, or has no info resource
@@ -693,13 +694,13 @@ begin
   result := FileVersionLS and $ffff;
 end;
 
-function _VS_FIXEDFILEINFO.FileVersionStr: string;
+function _VS_FIXEDFILEINFO.FileVersionStr: RawUtf8;
 begin
   if @self = nil then
     result := ''
   else
-    result := format('%d.%d.%d.%d',
-      [FileMajorVersion, FileMinorVersion, FilePatchVersion, FileBuildVersion]);
+    FormatUtf8('%.%.%.%', [FileMajorVersion, FileMinorVersion,
+      FilePatchVersion, FileBuildVersion], result);
 end;
 
 
@@ -786,7 +787,7 @@ begin
      (SectionId >= NumberOfSections) then
     raise EPeCoffLoader.Create('_IMAGE_RESOURCE_DIRECTORY_ENTRY.Data?');
   result := pointer(PAnsiChar(fSectionHeadersStart) +
-    SizeOf(TImageSectionHeader) * SectionId);
+                      SizeOf(TImageSectionHeader) * SectionId);
 end;
 
 constructor TSynPELoader.Create;
@@ -947,7 +948,8 @@ begin
         Key := pointer(PAnsiChar(StrEntry) + SizeOf(StrEntry^));
         Value := pointer(PAnsiChar(StrEntry) +
           DWordAlign(SizeOf(StrEntry^) + 2 * (StrLenW(Key) + 1), Offset));
-        fStringFileInfoEntries.AddValue(UnicodeBufferToUtf8(Key), UnicodeBufferToUtf8(Value));
+        fStringFileInfoEntries.AddValue(
+          UnicodeBufferToUtf8(Key), UnicodeBufferToVariant(Value));
         if StrEntry^.Length = 0 then
           StrEntry := StrEntryEnd // end
         else
@@ -1021,32 +1023,34 @@ begin
     end;
   finally
     if not result then
-      UnLoad; // clear on parsing error
+      UnLoad; // clear on any parsing error
   end;
 end;
 
-function TSynPELoader.FileVersionStr: string;
+function TSynPELoader.FileVersionStr: RawUtf8;
 begin
   result := fFixedFileInfo.FileVersionStr;
 end;
 
 
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
+var
+  pe: TSynPELoader;
 begin
   result.InitFast;
-  with TSynPELoader.Create do
+  pe := TSynPELoader.Create;
   try
-    if LoadFromFile(aFileName) then
-      if ParseStringFileInfoEntries then
-      begin
-        result := StringFileInfoEntries;
-        result.AddNameValuesToObject([
-          'FullFileName',   aFileName,
-          'FileVersionNum', FileVersionStr,
-          'IsWin64',        Is64]);
-      end;
+    if pe.LoadFromFile(aFileName) and
+       pe.ParseStringFileInfoEntries then
+    begin
+      result.AddNameValuesToObject([
+        'FullFileName',   aFileName,
+        'FileVersionNum', pe.FileVersionStr,
+        'IsWin64',        pe.Is64]);
+      result.AddFrom(variant(pe.StringFileInfoEntries));
+    end;
   finally
-    Free;
+    pe.Free;
   end;
 end;
 
