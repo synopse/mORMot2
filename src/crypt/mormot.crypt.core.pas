@@ -1502,7 +1502,7 @@ type
   // SynCrypto.pas' TAESCTR class was wrongly named and TAesCtr in this unit
   // refers to the standard NIST implementation (also much faster on x86_64)
   // - so you need to rename any mORMot 1 TAESCTR class into TAesC64
-  TAesCtrAny = TAesC64;
+  TAesCtrAny  = TAesC64;
   TAesCtrNist = TAesCtr;
 
 
@@ -3029,13 +3029,10 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 {$endif PUREMORMOT2}
 
 
-/// deprecated SHA-256 hash calculation of some data (string-encoded), with
-// padding if incoming key text is shorter than 255 bytes
-// - result is returned in hexadecimal format
-// - WARNING: this algorithm is proprietary, and less secure (and standard)
-// than the PBKDF2 algorithm, so it should be considered as deprecated; it
-// is supplied only for backward compatibility of existing code:
-// use Pbkdf2HmacSha256() or similar functions for safer password derivation
+/// SHA-256 hash calculation with padding if shorter than 255 bytes
+// - WARNING: this algorithm is DEPRECATED, and supplied only for backward
+// compatibility of existing code (CryptDataForCurrentUser or TProtocolAes)
+// - use Pbkdf2HmacSha256() or similar functions for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 
 
@@ -11632,18 +11629,18 @@ begin
   {$endif ASMX64}
   {$ifdef USEAESNIHASH}
   if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
-     (cfSSE3 in CpuFeatures) and    // PSHUFB
+     (cfSSE3  in CpuFeatures) and   // PSHUFB
      (cfAesNi in CpuFeatures) then  // AESENC
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
     RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // genuine to avoid hash flooding
-    AesNiHash32 := @_AesNiHash32;
-    AesNiHash64 := @_AesNiHash64;
-    AesNiHash128 := @_AesNiHash128;
-    DefaultHasher := @_AesNiHash32;
-    InterningHasher := @_AesNiHash32;
-    DefaultHasher64 := @_AesNiHash64;
+    AesNiHash32      := @_AesNiHash32;
+    AesNiHash64      := @_AesNiHash64;
+    AesNiHash128     := @_AesNiHash128;
+    DefaultHasher    := @_AesNiHash32;
+    InterningHasher  := @_AesNiHash32;
+    DefaultHasher64  := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;
   end;
   {$endif USEAESNIHASH}

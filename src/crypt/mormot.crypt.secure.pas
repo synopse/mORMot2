@@ -5828,16 +5828,16 @@ begin
   if aClass = nil then
     aClass := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
   fAes[false] := aClass.Create(aKey, aKeySize);
-  fAheadMode := fAes[false].AlgoMode in [mCfc, mOfc, mCtc, mGcm];
-  fAes[true] := fAes[false].CloneEncryptDecrypt;
+  fAes[true]  := fAes[false].CloneEncryptDecrypt;
+  fAheadMode  := fAes[false].AlgoMode in [mCfc, mOfc, mCtc, mGcm];
 end;
 
 constructor TProtocolAes.CreateFrom(aAnother: TProtocolAes);
 begin
   inherited Create;
   fAes[false] := aAnother.fAes[false].Clone;
-  fAheadMode := aAnother.fAheadMode;
-  fAes[true] := fAes[false].CloneEncryptDecrypt;
+  fAes[true]  := fAes[false].CloneEncryptDecrypt;
+  fAheadMode  := aAnother.fAheadMode;
 end;
 
 destructor TProtocolAes.Destroy;
@@ -5931,9 +5931,9 @@ begin
   Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
-  // expiration
+  // custom expiration
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
-  // default algorithm is 0, i.e. crc32c()
+  // default algorithm is caCrc32c
   if not Assigned(CryptCrc32(SignAlgo)) then
     raise ECrypt.CreateUtf8(
       'Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
@@ -5976,8 +5976,8 @@ begin
         raise ECrypt.Create('TBinaryCookieGenerator: Too Big Too Fat');
     end;
     cc.head.cryptnonce := Random32;
-    cc.head.session := result;
-    cc.head.issued := UnixTimeMinimalUtc;
+    cc.head.session    := result;
+    cc.head.issued     := UnixTimeMinimalUtc;
     if TimeOutMinutes = 0 then
       TimeOutMinutes := DefaultTimeOutMinutes;
     if TimeOutMinutes = 0 then
