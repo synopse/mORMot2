@@ -3845,6 +3845,15 @@ initialization
   AlgoDeflateFast := TAlgoDeflateFast.Create;
   AlgoGZ := TAlgoGZ.Create;
   AlgoGZFast := TAlgoGZFast.Create;
+  {$ifdef LIBDEFLATESTATIC}
+  {$ifdef CPU64}
+  if SystemMemorySize > 4 shl 30 then    // if this computer has more than 4 GB
+    if SystemMemorySize > 8 shl 30 then  // more than 8 GB
+      LIBDEFLATE_MAXSIZE := 512 shl 20   // allow up to 512 MB for libdeflate
+    else
+      LIBDEFLATE_MAXSIZE := 256 shl 20;  // allow up to 256 MB
+  {$endif CPU64}
+  {$endif LIBDEFLATESTATIC}
 
 end.
 
