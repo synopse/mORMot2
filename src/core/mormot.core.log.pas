@@ -907,10 +907,10 @@ type
     // be restarted from scratch when it reaches RotateFileSizeKB size or when
     // RotateFileDailyAtHour time is reached
     // - if set to a number > 1, some rotated files will be compressed using the
-    // LogCompressAlgo algorithm (i.e. AlgoSynLZ by default), and will be named
-    // e.g. as MainLogFileName.0.synlz .. MainLogFileName.7.synlz for
-    // RotateFileCount=9 (total count = 9, including 1 main log file and
-    // 8 .synlz files)
+    // LogCompressAlgo algorithm (i.e. AlgoSynLZ by default but consider AlgoGZFast
+    // from mormot.core.zip to generate .gz files), and will be named e.g. as
+    // <MainLogFileName>.0.synlz .. <MainLogFileName>.7.synlz for RotateFileCount
+    // as 9 (i.e. total count = 9, including 1 main log file and 8 .synlz files)
     property RotateFileCount: cardinal
       read fRotateFileCount write fRotateFileCount;
     /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)

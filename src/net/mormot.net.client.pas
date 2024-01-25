@@ -562,12 +562,17 @@ var
 
 
 /// ask the Operating System to return the Tunnel/Proxy settings for a given URI
-// - as used by OpenHttp/OpenHttpGet and TSimpleHttpClient
+// - as used internally by OpenHttp/OpenHttpGet and TSimpleHttpClient to call
+// THttpClientSocket.Open() constructor
 // - if proxy is set, will return its value from @temp, otherwise return
-// @DefaultHttpClientSocketProxy or call
-// GetProxyForUri(DefaultHttpClientSocketProxyAuto) to fill and return @temp
+// @DefaultHttpClientSocketProxy or call GetProxyForUri() to fill and return @temp
 // - return nil if no proxy is to be used for this URI
 function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
+
+/// ask the Operating System to return the Tunnel/Proxy settings for a given URI
+// - return DefaultHttpClientSocketProxy.URI or call GetProxyForUri()
+// - return '' if no proxy is to be used for this URI
+function GetSystemProxy(const uri: RawUtf8): RawUtf8;
 
 /// ask the Operating System to return the Tunnel/Proxy setting for a given URI
 // - will always use or HTTP_PROXY/HTTPS_PROXY environment variables
@@ -1563,6 +1568,14 @@ begin
     result := @temp
   else
     result := nil;
+end;
+
+function GetSystemProxy(const uri: RawUtf8): RawUtf8;
+begin
+  if DefaultHttpClientSocketProxy.Server <> '' then
+    result := DefaultHttpClientSocketProxy.URI
+  else
+    result := GetProxyForUri(uri, DefaultHttpClientSocketProxyAuto);
 end;
 
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean): RawUtf8;

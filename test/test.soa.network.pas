@@ -455,8 +455,8 @@ begin
   TestRest(fServer);
 end;
 
-function TTestBidirectionalRemoteConnection.NewClient(const port: RawUtf8):
-  TRestHttpClientWebsockets;
+function TTestBidirectionalRemoteConnection.NewClient(
+  const port: RawUtf8): TRestHttpClientWebsockets;
 begin
   result := TRestHttpClientWebsockets.Create(
     '127.0.0.1', port, TOrmModel.Create(fServer.Model));
