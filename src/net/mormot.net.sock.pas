@@ -4655,6 +4655,7 @@ constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
   aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean;
   aTLSContext: PNetTlsContext; aTunnel: PUri);
 begin
+  // call main virtual constructor
   Create(aTimeOut); // default read timeout is 10 seconds
   // copy the input parameters before OpenBind()
   if aTLSContext <> nil then

@@ -447,14 +447,13 @@ type
   // standard gzip/deflate or custom (synlz) protocols
   THttpSocket = class(TCrtSocket)
   protected
-    /// to call GetBody only once
-    fBodyRetrieved: boolean;
-    /// fill the internal state and flags to their default/void values
-    procedure HttpStateReset;
+    fBodyRetrieved: boolean;  // to call GetBody only once
+    procedure HttpStateReset; // Http.Clear + fBodyRetrieved := false
+      {$ifdef HASINLINE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public
-    /// the whole context of the HTTP request
+    /// the whole context of the HTTP/1.0 or HTTP/1.1 request
     Http: THttpRequestContext;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
