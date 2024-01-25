@@ -1600,7 +1600,6 @@ function TSynAngelize.DoNotifyByEmail(const aService: TSynAngelizeService;
 var
   sas: TSynAngelizeSettings;
   title, body: RawUtf8;
-  mem: TMemoryInfo;
 begin
   result := false;
   sas := fSettings as TSynAngelizeSettings;
@@ -1612,17 +1611,10 @@ begin
   try
     FormatUtf8('[% %] % %',
       [Executable.Host, sas.ServiceName, aWhat, aService.Name], title);
-    GetMemoryInfo(mem, false);
     FormatUtf8('% % on host % triggered a "%" notification.'#13#10#13#10 +
-               'Local UTC date is %.'#13#10 +
-               'Memory is % free over %.'#13#10 +
-               {$ifdef OSPOSIX}
-               'LoadAvg = %'#13#10 +
-               {$endif OSPOSIX}
-               #13#10'Context = %'#13#10,
-      [sas.ServiceName, aService.Name, Executable.Host, aWhat, NowUtcToString,
-       KB(mem.memfree), KB(mem.memtotal),
-       {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} aContext], body);
+               '%'#13#10'Context = %'#13#10,
+      [sas.ServiceName, aService.Name, Executable.Host, aWhat,
+       GetSystemInfoText, aContext], body);
     result := SendEmail(fSmtp, sas.SmtpFrom, aEmailTo,
       MimeHeaderEncode(title), Utf8ToWinAnsi(body));
   except
