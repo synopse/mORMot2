@@ -4113,21 +4113,20 @@ var
   info: TMemoryInfo;
 begin
   tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
-  if fLastMemoryInfoRetrievedTix <> tix then
-  begin
-    fLastMemoryInfoRetrievedTix := tix;
-    if not GetMemoryInfo(info, {withalloc=}true) then
-      exit;
-    FMemoryLoadPercent := info.percent;
-    FPhysicalMemoryTotal.Bytes := info.memtotal;
-    FPhysicalMemoryFree.Bytes := info.memfree;
-    FPagingFileTotal.Bytes := info.filetotal;
-    FPagingFileFree.Bytes := info.filefree;
-    FVirtualMemoryTotal.Bytes := info.vmtotal;
-    FVirtualMemoryFree.Bytes := info.vmfree;
-    FAllocatedReserved.Bytes := info.allocreserved;
-    FAllocatedUsed.Bytes := info.allocused;
-  end;
+  if fLastMemoryInfoRetrievedTix = tix then
+    exit;
+  fLastMemoryInfoRetrievedTix := tix;
+  if not GetMemoryInfo(info, {withalloc=}true) then
+    exit;
+  FMemoryLoadPercent         := info.percent;
+  FPhysicalMemoryTotal.Bytes := info.memtotal;
+  FPhysicalMemoryFree.Bytes  := info.memfree;
+  FPagingFileTotal.Bytes     := info.filetotal;
+  FPagingFileFree.Bytes      := info.filefree;
+  FVirtualMemoryTotal.Bytes  := info.vmtotal;
+  FVirtualMemoryFree.Bytes   := info.vmfree;
+  FAllocatedReserved.Bytes   := info.allocreserved;
+  FAllocatedUsed.Bytes       := info.allocused;
 end;
 
 

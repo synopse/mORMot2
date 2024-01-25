@@ -1854,6 +1854,7 @@ function EciesHeaderFile(const encryptedfile: TFileName; out head: TEciesHeader;
 var
   F: THandle;
   len: PtrInt;
+  size: Int64;
   tmp: RawByteString;
 begin
   result := false;
@@ -1867,10 +1868,14 @@ begin
   if result and
      (rawencryptedfile <> '') then
   begin
-    len := FileSize(F) - SizeOf(head);
-    SetLength(tmp, len);
-    result := FileReadAll(F, pointer(tmp), len) and
-              FileFromString(tmp, rawencryptedfile);
+    size := FileSize(F);
+    if size < MaxInt then // FileReadAll() is limited to 2GB
+    begin
+      len := size - SizeOf(head);
+      FastNewRawByteString(tmp, len);
+      result := FileReadAll(F, pointer(tmp), len) and
+                FileFromString(tmp, rawencryptedfile);
+    end;
   end;
   FileClose(F);
 end;
@@ -2541,7 +2546,7 @@ begin
       FillcharFast(head.sign, SizeOf(head.sign), 255); // Version=255=not signed
     if not Ecc256r1MakeKey(head.rndpub, rndpriv) then
       raise EEccException.CreateUtf8('%.Encrypt: MakeKey?', [self]);
-    SetLength(secret, SizeOf(TEccSecretKey));
+    FastNewRawByteString(secret, SizeOf(TEccSecretKey));
     if not Ecc256r1SharedSecret(
         fContent.Head.Signed.PublicKey, rndpriv, PEccSecretKey(secret)^) then
       raise EEccException.CreateUtf8('%.Encrypt: SharedSecret?', [self]);
@@ -2584,7 +2589,7 @@ begin
       HmacSha256(mackey.b, enc, head.hmac);
     end;
     head.crc := crc32c(PCardinal(@head.hmac)^, @head, SizeOf(head) - SizeOf(head.crc));
-    SetLength(result, SizeOf(head) + length(enc));
+    FastNewRawByteString(result, SizeOf(head) + length(enc));
     PEciesHeader(result)^ := head;
     MoveFast(pointer(enc)^, PByteArray(result)[SizeOf(head)], length(enc));
   finally
@@ -2852,7 +2857,7 @@ begin
             head := 0
           else
             head := SizeOf(PRIVKEY_MAGIC);
-          SetLength(result, head + PRIVKEY_SALTSIZE + length(enc));
+          FastNewRawByteString(result, head + PRIVKEY_SALTSIZE + length(enc));
           MoveFast(PRIVKEY_MAGIC, e[0], head);
           XorBlock16(pointer(salt), @e[head], @PRIVKEY_MAGIC);
           MoveFast(pointer(enc)^, e[head + PRIVKEY_SALTSIZE], length(enc));
@@ -2936,7 +2941,7 @@ begin
       onelen := onechunk
     else
       onelen := difflen - pos;
-    SetLength(one, head + 2 + onelen);
+    FastNewRawByteString(one, head + 2 + onelen);
     MoveFast(PRIVKEY_MAGIC, PByteArray(one)^[0], head);
     PByteArray(one)^[head] := index;
     PByteArray(one)^[head + 1] := DestFileCount;
@@ -3195,7 +3200,7 @@ begin
       result := ecdInvalidSerial;
       exit;
     end;
-    SetLength(secret, SizeOf(TEccSecretKey));
+    FastNewRawByteString(secret, SizeOf(TEccSecretKey));
     if not Ecc256r1SharedSecret(
         head.rndpub, fPrivateKey, PEccSecretKey(secret)^) then
       exit;
