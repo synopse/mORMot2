@@ -1365,17 +1365,18 @@ type
   {$M+}
   /// Fast low-level Socket implementation
   // - direct access to the OS (Windows, Linux) network layer API
-  // - use Open constructor to create a client to be connected to a server
+  // - use Open/OpenUri constructor or Create + ConnectUri for a client socket
   // - use Bind constructor to initialize a server
   // - call CreateSockIn to use readln(SockIn^, ...) as with standard text files
   // - even if you do not use read(SockIn^), you may call CreateSockIn then
   // read the (binary) content via SockInRead/SockInPending methods, which would
   // benefit of the SockIn^ input buffer to maximize reading speed
   // - use SockSend() overloaded methods, followed by a SockFlush call
-  // - CreateSockOut for write/writeln is now deprected because it had no buffering
+  // - CreateSockOut for write/writeln is now deprecqted because it has no buffering
   // - since this class rely on its internal optimized buffering system,
   // TCP_NODELAY is set to disable the Nagle algorithm
-  // - our classes are (much) faster than the Indy or Synapse implementation
+  // - can use TLS (using the SChannel API on Windows, or by including
+  // mormot.lib.openssl11 unit to your project) or HTTP Proxy/Tunnel
   TCrtSocket = class
   protected
     fSock: TNetSocket;
@@ -1410,6 +1411,7 @@ type
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
     // - User/Password would be taken into consideration for authentication
+    // - could be populated by mormot.net.client Tunnel.From(GetSystemProxy())
     Tunnel: TUri;
     /// direct access to the optional low-level TLS Options and Information
     // - depending on the actual INetTls implementation, some fields may not
@@ -1417,21 +1419,22 @@ type
     TLS: TNetTlsContext;
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
-    /// common initialization of all constructors
-    // - do not call directly, but use Open / Bind constructors instead
+    /// common initialization of all constructors of this class
+    // - if you call it directly, you can setup all the needed parameters (e.g.
+    // TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
+    // - see also Open/OpenUri/Bind other constructors
     constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
-    /// constructor to connect to aServer:aPort
-    // - optionaly via TLS (using the SChannel API on Windows, or by including
-    // mormot.lib.openssl11 unit to your project) - with custom input options
-    // - aTunnel could be populated from mormot.net.client GetSystemProxyUri()
+    /// constructor to create a client connection to aServer:aPort
     // - see also SocketOpen() for a wrapper catching any connection exception
+    // - aTunnel could be populated by mormot.net.client GetSystemProxyUri()
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTcp;
       aTimeOut: cardinal = 10000; aTLS: boolean = false;
       aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil);
-    /// high-level constructor to connect to a given URI
+    /// constructor to create a client connection to a given URI
+    // - returns TUri.Address as parsed from aUri
     constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
-      aTLSContext: PNetTlsContext = nil); overload;
+      aTLSContext: PNetTlsContext = nil);
     /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
@@ -1442,7 +1445,13 @@ type
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
       aTimeOut: integer = 10000; aReusePort: boolean = false);
-    /// low-level internal method called by Open() and Bind() constructors
+    /// after Create(), create a client connection to a given server URI
+    // - returns TUri.Address as parsed from aUri
+    // - this is just a convenient wrapper around OpenBind() for a client socket
+    procedure ConnectUri(const aUri: RawUtf8; out aAddress: RawUtf8);
+    /// after Create(), open or bind to a given server port
+    // - consider Connect() if you just want to connect
+    // - low-level internal method called by Open() and Bind() constructors
     // - raise an ENetSock exception on error
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
@@ -4778,6 +4787,17 @@ begin
         [ClassNameShort(self)^, ClassNameShort(E)^, E.Message]);
     end;
   end;
+end;
+
+procedure TCrtSocket.ConnectUri(const aUri: RawUtf8; out aAddress: RawUtf8);
+var
+  u: TUri;
+begin
+  if not u.From(aUri) then
+    raise ENetSock.Create('%s.ConnectUri: invalid %s',
+            [ClassNameShort(self)^, aUri]);
+  aAddress := u.Address;
+  OpenBind(u.Server, u.Port, {doBind=}false, u.Https);
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
