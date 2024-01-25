@@ -10,7 +10,7 @@ unit mormot.core.zip;
     - TSynZipCompressor Stream Class
     - GZ Read/Write Support
     - .ZIP Archive File Support
-    - TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms
+    - TAlgoDeflate and TAlgoGZ High-Level Compression Algorithms
 
   *****************************************************************************
 }
@@ -863,7 +863,7 @@ function HashFileCrc32(const FileName: TFileName): RawUtf8;
 
 
 
-{ ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
+{ ************ TAlgoDeflate and TAlgoGZ High-Level Compression Algorithms }
 
 var
   /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
@@ -874,6 +874,18 @@ var
   // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflateFast: TAlgoCompress;
 
+  /// acccess to .gz compression in level 6 as a TAlgoCompress class for files
+  // - since .gz is a file-level algorithm, this class won't use our custom
+  // TAlgoCompress file layout and only supports file methods in .gz format
+  // - will use faster libdeflate instead of plain zlib if available
+  AlgoGZ: TAlgoCompress;
+
+  /// acccess to .gz compression in level 1 as a TAlgoCompress class for files
+  // - since .gz is a file-level algorithm, this class won't use our custom
+  // TAlgoCompress file layout and only supports file methods in .gz format
+  // - will use faster libdeflate instead of plain zlib if available
+  // - this algorithm is perfect for LogCompressAlgo #.log.gz rotation
+  AlgoGZFast: TAlgoCompress;
 
 
 
@@ -3557,7 +3569,7 @@ begin
 end;
 
 
-{ ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
+{ ************ TAlgoDeflate and TAlgoGZ High-Level Compression Algorithms }
 
 { TAlgoDeflate }
 
@@ -3618,14 +3630,143 @@ type
 constructor TAlgoDeflateFast.Create;
 begin
   fAlgoID := 3;
+  fAlgoFileExt := '.gz';
   inherited Create;
   fDeflateLevel := 1;
+end;
+
+type
+  /// implement the AlgoGZ global variable
+  // - since .gz is a file-level algorithm, this class won't use the regular
+  // TAlgoCompress file layout and only support raw buffer and file methods
+  TAlgoGZ = class(TAlgoCompress)
+  protected
+    fCompressionLevel: integer;
+  public
+    /// set AlgoID = 9 as genuine byte identifier for .gz (even if not used)
+    constructor Create; override;
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; override;
+    function AlgoDecompressDestLen(Comp: pointer): integer; override;
+    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
+    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
+    class function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean; override;
+    function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
+      ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean; override;
+    function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
+      ForceHash32: boolean): boolean; override;
+  end;
+
+{ TAlgoGZFast }
+
+constructor TAlgoGZ.Create;
+begin
+  if fAlgoID = 0 then // if not overriden by TAlgoGZFast
+    fAlgoID := 9;
+  fCompressionLevel := 6;
+  fAlgoHasForcedFormat := true; // trigger EAlgoCompress e.g. on stream methods
+  inherited Create;
+end;
+
+function TAlgoGZ.AlgoCompressDestLen(PlainLen: integer): integer;
+begin
+  result := GZWriteLen(PlainLen);
+end;
+
+function TAlgoGZ.AlgoCompress(Plain: pointer; PlainLen: integer;
+  Comp: pointer): integer;
+begin
+   result := GZWrite(Plain, Comp, PlainLen, fCompressionLevel);
+end;
+
+function TAlgoGZ.AlgoDecompressDestLen(Comp: pointer): integer;
+begin
+  // .gz has the length at the end of the file, with no way of knowing its size
+  EnsureAlgoHasNoForcedFormat('AlgoDecompressDestLen');
+  result := 0; // make compiler happy
+end;
+
+function TAlgoGZ.AlgoDecompress(Comp: pointer; CompLen: integer;
+  Plain: pointer): integer;
+var
+  gzr: TGZRead;
+begin
+  if gzr.Init(Comp, CompLen, {noHCRCcheck=}false) and
+     gzr.ToBuffer(Plain) then
+    result := gzr.uncomplen32
+  else
+    result := 0;
+end;
+
+function TAlgoGZ.AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+  Partial: pointer; PartialLen, PartialLenMax: integer): integer;
+var
+  gzr: TGZRead;
+begin
+  if gzr.Init(Comp, CompLen, {noHCRCcheck=}true) and
+     gzr.ToBuffer(Partial, PartialLen) then
+    result := PartialLen
+  else
+    result := 0;
+end;
+
+class function TAlgoGZ.FileIsCompressed(
+  const Name: TFileName; Magic: cardinal): boolean;
+var
+  f: THandle;
+  l: integer;
+  h: array[0..4] of cardinal;
+begin
+  result := false;
+  f := FileOpen(Name, fmOpenReadShared);
+  if not ValidHandle(f) then
+    exit;
+  l := FileRead(f, h, SizeOf(h));
+  result := (l = SizeOf(h)) and
+            (h[0] and $ffffff = GZHEAD[0]); // only check the .gz magic
+  FileClose(f);
+end;
+
+function TAlgoGZ.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
+  ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean;
+begin
+  result := GZFile(Source, Dest, fCompressionLevel);
+end;
+
+function TAlgoGZ.FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
+  ForceHash32: boolean): boolean;
+var
+  gzr: TGZRead;
+  tmp: RawByteString;
+begin
+  tmp := StringFromFile(Source);
+  result := gzr.Init(pointer(tmp), length(tmp)) and
+            gzr.ToFile(Dest);
+end;
+
+
+{ TAlgoGZFast }
+
+type
+  TAlgoGZFast = class(TAlgoGZ)
+  public
+    constructor Create; override;
+  end;
+
+constructor TAlgoGZFast.Create;
+begin
+  fAlgoID := 10;
+  inherited Create;
+  fCompressionLevel := 1;
 end;
 
 
 initialization
   AlgoDeflate := TAlgoDeflate.Create;
   AlgoDeflateFast := TAlgoDeflateFast.Create;
+  AlgoGZ := TAlgoGZ.Create;
+  AlgoGZFast := TAlgoGZFast.Create;
 
 end.
 

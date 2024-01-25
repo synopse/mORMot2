@@ -241,7 +241,8 @@ type
     /// contains a genuine byte identifier for this algorithm
     // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
     // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
-    // (in mormot.lib.lizard.pas), 7/8 for TAlgoRleLZ/TAlgoRle
+    // (in mormot.lib.lizard.pas), 7/8 for TAlgoRleLZ/TAlgoRle, 9/10 for limited
+    // TAlgoGZ/TAlgoGZFast (in mormot.core.zip.pas)
     property AlgoID: byte
       read fAlgoID;
     /// the usual file extension of this algorithm
@@ -542,17 +543,21 @@ var
   // - as used within mormot.core.log.pas unit, and defined in this unit to be
   // available wihout any dependency to it (e.g. in compression units)
   // - assigned to AlgoSynLZ by default for .synlz which is the fastest for logs
-  // - you may set AlgoLizardFast or AlgoLizardHuffman as alternatives
-  // (default AlgoLizard is much slower and less efficient on logs)
+  // - you may set AlgoGZFast from mormot.core.zip.pas to generate .gz standard
+  // files during TSynLog file rotation (with libdeflate if available)
+  // - you may set AlgoLizardFast or AlgoLizardHuffman as non-standard
+  // alternatives (default AlgoLizard is much slower and less efficient on logs)
   // - if you set nil, no compression will take place during rotation
-  // - consider AlgoDeflate which gives the best compression ratio and is also
-  // very fast if libdeflate is available (e.g. on FPC x86_64)
   // - note that compression itself is run in the logging background thread
   LogCompressAlgo: TAlgoCompress;
 
-  /// used by TSynLogArchiveEvent handlers to compress and delete older .log
-  // files using our proprietary FileCompress format for a given algorithm
-  // - late binding redirection, implemented in mormot.core.log.pas
+  /// internal wrapper function used by TSynLogArchiveEvent handlers to compress
+  // and delete older .log files using our proprietary FileCompress format for
+  // a given algorithm
+  // - as used within mormot.core.log.pas unit, and defined in this unit to be
+  // available wihout any dependency to it (e.g. in compression units)
+  // - called by EventArchiveLizard/EventArchiveSynLZ to implement
+  // .synlz/.synliz archival
   LogCompressAlgoArchive: function(aAlgo: TAlgoCompress; aMagic: cardinal;
     const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
