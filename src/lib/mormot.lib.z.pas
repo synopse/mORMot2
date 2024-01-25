@@ -886,7 +886,7 @@ end;
 
 function zlibCompressMax(input: PtrUInt): PtrUInt;
 begin
-  // zlib compresBound = len + (len >> 12) + (len >> 14) +  (len >> 25) + 13
+  // zlib compressBound = len + (len >> 12) + (len >> 14) +  (len >> 25) + 13
   result := input + input shr 12 + input shr 14 + input shr 25 + 256;
 end;
 
