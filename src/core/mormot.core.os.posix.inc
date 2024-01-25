@@ -3868,10 +3868,7 @@ begin
   // pure LINUX branch
   GetSystemMacAddress := _GetSystemMacAddress;
   if Sysinfo(@si) = 0 then
-  begin
     SystemMemorySize := si.totalram * si.mem_unit;
-    SystemInfo.dwPageSize := si.mem_unit;
-  end;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
@@ -4022,8 +4019,7 @@ begin
   end;
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
-  if SystemInfo.dwPageSize = 0 then
-    SystemInfo.dwPageSize := getpagesize; // call libc API
+  SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
     CpuInfoText := _oskb(CpuCacheSize) + ' cache';
   if CpuSockets = 0 then
