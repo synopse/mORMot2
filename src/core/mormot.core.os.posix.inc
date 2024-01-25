@@ -2546,22 +2546,28 @@ var
 begin
   result := false;
   FillCharFast(info, SizeOf(info), 0);
-  // sysinfo() syscall has not enough information: use /proc
+  // sysinfo() syscall has not enough information: use /proc sysfiles
   proc := StringFromFile('/proc/meminfo', {hasnosize=}true);
   if proc = '' then
     exit;
-  info.memtotal := FindMemInfo(proc, 'MEMTOTAL:');
-  info.memfree  := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
+  info.memtotal  := FindMemInfo(proc, 'MEMTOTAL:');
+  info.memfree   := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
+  info.filetotal := FindMemInfo(proc, 'SWAPTOTAL:');
+  info.filefree  := FindMemInfo(proc, 'SWAPFREE:');
+  // note: Windows-like virtual memory information is not available under Linux
+  info.vmtotal   := FindMemInfo(proc, 'COMMITLIMIT:');
+  info.vmfree    := FindMemInfo(proc, 'MEMFREE:');
+  if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
+    info.memfree  := info.vmfree +
+                     FindMemInfo(proc, 'BUFFERS:') +
+                     FindMemInfo(proc, 'CACHED:')  +
+                     FindMemInfo(proc, 'SRECLAIMABLE:') -
+                     FindMemInfo(proc, 'SHMEM:');
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
     result := true;
   end;
-  info.filetotal := FindMemInfo(proc, 'SWAPTOTAL:');
-  info.filefree  := FindMemInfo(proc, 'SWAPFREE:');
-  info.vmtotal   := FindMemInfo(proc, 'COMMITLIMIT:');
-  info.vmfree    := FindMemInfo(proc, 'MEMFREE:');
-  // note: virtual memory information is not available under Linux
   if not withalloc then
     exit;
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
