@@ -213,7 +213,9 @@ type
   TAlgoCompress = class
   protected
     fAlgoID: byte;
+    fAlgoHasForcedFormat: boolean;
     fAlgoFileExt: TFileName;
+    procedure EnsureAlgoHasNoForcedFormat(const caller: shortstring);
   public
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -246,6 +248,10 @@ type
     // - e.g. '.synlz' or '.synz' or '.synliz' for SynLZ, Deflate or Lizard
     property AlgoFileExt: TFileName
       read fAlgoFileExt;
+    /// if this algorithm does not supports our custom storage format
+    // - e.g. AlgoGZ set true and only supports plain buffers and files methods
+    property AlgoHasForcedFormat: boolean
+      read fAlgoHasForcedFormat;
   public
     /// will register AlgoID in the global list, for Algo() class methods
     // - no need to free this instance, since it will be owned by the global list
@@ -378,7 +384,9 @@ type
     // matching the Magic number as supplied to FileCompress() function
     // - follow the FileIsSynLZ() deprecated function format
     // - expects the compressed data to be at file beginning (not appended)
-    class function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean;
+    // - may be overriden to support a standard file layout (e.g. AlgoGZ)
+    class function FileIsCompressed(const Name: TFileName;
+      Magic: cardinal): boolean; virtual;
     /// compress a file content using this compression algorithm
     // - source file is split into ChunkBytes blocks (128 MB by default) for
     // fast in-memory compression of any file size, then compressed and
@@ -388,16 +396,18 @@ type
     // file format
     // - follow the FileSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
+    // - may be overriden to support a standard file layout (e.g. AlgoGZ)
     function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean = false; ChunkBytes: Int64 = 128 shl 20;
-      WithTrailer: boolean = false): boolean;
+      WithTrailer: boolean = false): boolean; virtual;
     /// uncompress a file previously compressed via FileCompress()
     // - you should specify a Magic number to be used to identify the compressed
     // file format
     // - follow the FileUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
+    // - may be overriden to support a standard file layout (e.g. AlgoGZ)
     function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
-      ForceHash32: boolean = false): boolean;
+      ForceHash32: boolean = false): boolean; virtual;
 
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
@@ -5184,6 +5194,12 @@ begin
   end;
 end;
 
+procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: shortstring);
+begin
+  if fAlgoHasForcedFormat then
+    raise EAlgoCompress.CreateUtf8('%.% is unsupported', [self, caller]);
+end;
+
 function TAlgoCompress.AlgoHash(Previous: cardinal;
   Data: pointer; DataLen: integer): cardinal;
 begin
@@ -5223,6 +5239,7 @@ begin
     result := '';
     exit;
   end;
+  EnsureAlgoHasNoForcedFormat('Compress');
   crc := AlgoHash(0, Plain, PlainLen);
   if (PlainLen < CompressionSizeTrigger) or
      (CheckMagicForCompressed and
@@ -5280,6 +5297,7 @@ begin
      (PlainLen = 0) or
      (CompLen < PlainLen + 9) then
     exit;
+  EnsureAlgoHasNoForcedFormat('Compress');
   PCardinal(Comp)^ := AlgoHash(0, Plain, PlainLen);
   if (PlainLen >= CompressionSizeTrigger) and
      not (CheckMagicForCompressed and
@@ -5322,6 +5340,7 @@ begin
   if (self = nil) or
      (PlainLen = 0) then
     exit;
+  EnsureAlgoHasNoForcedFormat('CompressToBytes');
   crc := AlgoHash(0, Plain, PlainLen);
   if PlainLen < CompressionSizeTrigger then
   begin
@@ -5442,6 +5461,7 @@ begin
      (Comp = nil) or
      (PartialLenMax < PartialLen) then
     exit;
+  EnsureAlgoHasNoForcedFormat('DecompressPartial');
   if Comp[4] = COMPRESS_STORED then
     if PCardinal(Comp)^ = PCardinal(Comp + 5)^ then
       BodyLen := CompLen - 9
@@ -5488,9 +5508,11 @@ var
   tmps, tmpd: RawByteString;
 begin
   result := 0;
-  if (Dest = nil) or
+  if (self = nil) or
+     (Dest = nil) or
      (Source = nil) then
     exit;
+  EnsureAlgoHasNoForcedFormat('StreamCompress');
   count := Source.Size;
   if count = 0 then
     exit;
@@ -5615,8 +5637,10 @@ var
 
 begin
   result := false;
-  if Source = nil then
+  if (self = nil) or
+     (Source = nil) then
     exit;
+  EnsureAlgoHasNoForcedFormat('StreamUnCompress');
   sourceSize := Source.Size;
   sourcePosition := Source.Position;
   if Source.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
@@ -5728,6 +5752,8 @@ begin
     result := 0
   else
   begin
+    if fAlgoHasForcedFormat then
+      EnsureAlgoHasNoForcedFormat('StreamComputeLen');
     trailer := PAlgoCompressTrailer(P + Len - SizeOf(TAlgoCompressTrailer));
     if (Magic = trailer^.Magic) and
        (trailer^.HeaderRelativeOffset < Len) and
@@ -5761,6 +5787,7 @@ function TAlgoCompress.FileCompress(const Source, Dest: TFileName; Magic: cardin
 var
   S, D: THandleStream;
 begin
+  EnsureAlgoHasNoForcedFormat('FileCompres'); // should be overriden
   result := false;
   if (ChunkBytes > 0) and
      FileExists(Source) then
@@ -5789,6 +5816,7 @@ function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
 var
   S, D: THandleStream;
 begin
+  EnsureAlgoHasNoForcedFormat('FileUnCompress'); // should be overriden
   result := false;
   if FileExists(Source) then
   try
@@ -5818,8 +5846,10 @@ begin
   result := 0;
   if (self = nil) or
      (CompLen <= 9) or
-     (Comp = nil) or
-     ((Load <> aclNoCrcFast) and
+     (Comp = nil) then
+    exit;
+  EnsureAlgoHasNoForcedFormat('Decompress');
+  if ((Load <> aclNoCrcFast) and
       (AlgoHash(0, Comp + 9, CompLen - 9) <> PCardinal(Comp + 5)^)) then
     exit;
   if Comp[4] = COMPRESS_STORED then

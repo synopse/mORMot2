@@ -6530,8 +6530,6 @@ begin
 end;
 
 
-
-
 { ************** Efficient .log File Access via TSynLogFile }
 
 { TSynLogFile }
