@@ -3745,6 +3745,10 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 // - returns e.g. 'used 6GB/16GB (35% free)' text
 function GetMemoryInfoText: RawUtf8;
 
+/// retrieve some human-readable text about the current system in several lines
+// - includes UTC timestamp, memory and disk availability, and exe/OS/CPU info
+function GetSystemInfoText: RawUtf8;
+
 /// retrieve low-level information about a given disk partition
 // - as used by TSynMonitorDisk and GetDiskPartitionsText()
 // - aDriveFolderOrFile is a directory on disk (no need to specify a raw drive
@@ -7642,6 +7646,21 @@ var
 begin
   if not GetDiskInfo(aDriveFolderOrFile, result, free, total) then
     result := 0;
+end;
+
+function GetSystemInfoText: RawUtf8;
+var
+  avail, free, total: QWord;
+begin
+  GetDiskInfo(Executable.ProgramFilePath, avail, free, total);
+  result := _fmt('Current UTC date is %s (%d)'#13#10'Memory %s'#13#10 +
+                 'Executable free disk %s/%s'#13#10 +
+                 {$ifdef OSPOSIX} 'LoadAvg is %s'#13#10 + {$endif OSPOSIX}
+                 '%s'#13#10'%s'#13#10'%s'#13#10'%s'#13#10,
+    [FormatDateTime('yyyy"-"mm"-"dd" "hh":"nn":"ss', NowUtc), UnixTimeUtc,
+     GetMemoryInfoText, _oskb(avail), _oskb(total),
+     {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} Executable.Version.VersionInfo,
+     OSVersionText, CpuInfoText, BiosInfoText]);
 end;
 
 function ConsoleReadBody: RawByteString;

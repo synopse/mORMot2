@@ -2528,7 +2528,7 @@ end;
 function RetrieveLoadAvg: RawUtf8;
 begin
   // the libc parses this file anyway :)
-  result := StringFromFile('/proc/loadavg', {nosize=}true);
+  result := TrimU(StringFromFile('/proc/loadavg', {nosize=}true));
 end;
 
 function FindMemInfo(const meminfo, up: RawUtf8): PtrUInt;
@@ -2795,6 +2795,7 @@ var
 begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := '.';
+  FillCharFast(fs, SizeOf(fs), 0);
   result := fpStatFS(aDriveFolderOrFile, @fs) = 0;
   aAvailableBytes := QWord(fs.bavail) * QWord(fs.bsize);
   aFreeBytes := aAvailableBytes; // no user Quota involved here
