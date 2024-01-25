@@ -463,8 +463,8 @@ begin
            addr4.sin_addr := h^.h_addr^^;
         AF_INET6:
            psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
-        else
-          result := nrNotImplemented;
+      else
+        result := nrNotImplemented;
       end;
     end;
   finally

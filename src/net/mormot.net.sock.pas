@@ -749,7 +749,7 @@ type
   // $   TLS.WithPeerInfo := true;
   // $   TLS.IgnoreCertificateErrors := true;
   // $   TLS.CipherList := 'ECDHE-RSA-AES256-GCM-SHA384';
-  // $   OpenBind('synopse.info', '443', {bind=}false, {tls=}true);
+  // $   ConnectUri('https://synopse.info');
   // $   writeln(TLS.PeerInfo);
   // $   writeln(TLS.CipherName);
   // $   writeln(Get('/forum/', 1000), ' len=', ContentLength);
@@ -759,7 +759,7 @@ type
   // $ end;
   // - for passing a PNetTlsContext, use InitNetTlsContext for initialization
   TNetTlsContext = record
-    /// output: set by TCrtSocket.OpenBind() method once TLS is established
+    /// output: set by ConnectUri/OpenBind method once TLS is established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     // - on client: will avoid checking the server certificate, so will
@@ -1446,9 +1446,10 @@ type
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
       aTimeOut: integer = 10000; aReusePort: boolean = false);
     /// after Create(), create a client connection to a given server URI
-    // - returns TUri.Address as parsed from aUri
+    // - optionally returns TUri.Address as parsed from aUri
+    // - raise an ENetSock exception on error
     // - this is just a convenient wrapper around OpenBind() for a client socket
-    procedure ConnectUri(const aUri: RawUtf8; out aAddress: RawUtf8);
+    procedure ConnectUri(const aUri: RawUtf8; aAddress: PRawUtf8 = nil);
     /// after Create(), open or bind to a given server port
     // - consider Connect() if you just want to connect
     // - low-level internal method called by Open() and Bind() constructors
@@ -1610,9 +1611,9 @@ type
     // specify e.g. THttpServerSocket if you expect incoming HTTP requests
     function AcceptIncoming(ResultClass: TCrtSocketClass = nil;
       Async: boolean = false): TCrtSocket;
-    /// remote IP address after OpenBind() or AcceptRequest() call over TCP
-    // - after OpenBind() is the TNetAddr.IP as returned by NewSocket(), i.e.
-    // the IP of the server
+    /// the IP address of the other endpoint of this connection
+    // - after OpenBind/ConnectUri, is the TNetAddr.IP as returned by
+    // NewSocket(), i.e. the IP of the server
     // - after AcceptRequest(), is either the raw IP of the client socket, or
     // a custom header value set by a local proxy as retrieved by inherited
     // THttpServerSocket.GetRequest, searching the header named in
@@ -2261,26 +2262,20 @@ var
 begin
   fromcache := false;
   tobecached := false;
-  if layer in nlIP then
-    if not ToCardinal(port, p, {minimal=}1) then
-    begin
-      result := nrNotFound;
-      exit;
-    end
-    else if (address = '') or
-            IsLocalHost(pointer(address)) or
-            PropNameEquals(address, 'localhost') or
-            (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
-    begin
-      result := addr.SetIP4Port(cLocalhost32, p);
-      exit;
-    end
-    else if NetIsIP4(pointer(address), @ip4) then
-    begin
-      result := addr.SetIP4Port(ip4, p);
-      exit;
-    end
-    else if Assigned(NewSocketAddressCache) then
+  if layer = nlUnix then
+    result := addr.SetFrom(address, '', nlUnix)
+  else if not ToCardinal(port, p, {minimal=}1) then
+    result := nrNotFound
+  else if (address = '') or
+          IsLocalHost(pointer(address)) or
+          PropNameEquals(address, 'localhost') or
+          (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
+    result := addr.SetIP4Port(cLocalhost32, p)
+  else if NetIsIP4(pointer(address), @ip4) then
+    result := addr.SetIP4Port(ip4, p)
+  else
+  begin
+    if Assigned(NewSocketAddressCache) then
       if NewSocketAddressCache.Search(address, addr) then
       begin
         fromcache := true;
@@ -2289,7 +2284,8 @@ begin
       end
       else
         tobecached := true;
-  result := addr.SetFrom(address, port, layer);
+    result := addr.SetFrom(address, port, layer);
+  end;
 end;
 
 function ExistSocketAddressFromCache(const host: RawUtf8): boolean;
@@ -2453,20 +2449,18 @@ begin
     if fromcache then
       // ensure the cache won't contain this faulty address any more
       NewSocketAddressCache.Flush(address);
-  end
-  else
-  begin
-    // Socket is successfully connected -> setup the connection
-    if tobecached then
-      // update cache once we are sure the host actually exists
-      NewSocketAddressCache.Add(address, addr);
-    netsocket := sock;
-    netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
-    if netaddr <> nil then
-      if (addr.Port <> 0) or                   // 0 = assigned by the OS
-         (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
-        MoveFast(addr, netaddr^, addr.Size);
+    exit;
   end;
+  // Socket is successfully connected -> setup the connection
+  if tobecached then
+    // update cache once we are sure the host actually exists
+    NewSocketAddressCache.Add(address, addr);
+  netsocket := sock;
+  netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
+  if netaddr <> nil then
+    if (addr.Port <> 0) or                   // 0 = assigned by the OS
+       (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
+      MoveFast(addr, netaddr^, addr.Size);
 end;
 
 
@@ -4283,20 +4277,17 @@ begin
   repeat
     u := up^;
     if u = #0 then
-      break;
+      break; // match
     inc(up);
     c := p^;
     inc(p);
     if c = u  then
-      continue;
-    if (c >= 'a') and
-       (c <= 'z') then
-    begin
-      dec(c, 32);
-      if c <> u then
-        exit;
-    end
-    else
+      continue
+    else if (c < 'a') or
+            (c > 'z') then
+      exit;
+    dec(c, 32); // convert char to uppercase
+    if c <> u then
       exit;
   until false;
   result := true;
@@ -4493,7 +4484,7 @@ end;
 
 function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
-  P, S, P1, P2: PAnsiChar;
+  p, s, p1, p2: PAnsiChar;
   i: integer;
 begin
   Clear;
@@ -4501,68 +4492,68 @@ begin
   TrimSelf(aUri);
   if aUri = '' then
     exit;
-  P := pointer(aUri);
-  S := P;
-  while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
-    inc(S);
-  if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
+  p := pointer(aUri);
+  s := p;
+  while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
+    inc(s);
+  if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
-    FastSetString(Scheme, P, S - P);
-    if NetStartWith(pointer(P), 'HTTPS') then
+    FastSetString(Scheme, p, s - p);
+    if NetStartWith(pointer(p), 'HTTPS') then
       Https := true
-    else if NetStartWith(pointer(P), 'UDP') then
+    else if NetStartWith(pointer(p), 'UDP') then
       layer := nlUdp; // 'udp://server:port';
-    P := S + 3;
+    p := s + 3;
   end;
-  if NetStartWith(pointer(P), 'UNIX:') then
+  if NetStartWith(pointer(p), 'UNIX:') then
   begin
-    inc(P, 5); // 'http://unix:/path/to/socket.sock:/url/path'
+    inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
     layer := nlUnix;
-    S := P;
-    while not (S^ in [#0, ':']) do
-      inc(S); // Server='path/to/socket.sock'
+    s := p;
+    while not (s^ in [#0, ':']) do
+      inc(s); // Server='path/to/socket.sock'
   end
   else
   begin
-    P1 := pointer(PosChar(pointer(P), '@'));
-    if P1 <> nil then
+    p1 := pointer(PosChar(pointer(p), '@'));
+    if p1 <> nil then
     begin
       // parse 'https://user:password@server:port/address'
-      P2 := pointer(PosChar(pointer(P), '/'));
-      if (P2 = nil) or
-         (PtrUInt(P2) > PtrUInt(P1)) then
+      p2 := pointer(PosChar(pointer(p), '/'));
+      if (p2 = nil) or
+         (PtrUInt(p2) > PtrUInt(p1)) then
       begin
-        FastSetString(User, P, P1 - P);
+        FastSetString(User, p, p1 - p);
         i := PosExChar(':', User);
         if i <> 0 then
         begin
           Password := copy(User, i + 1, 1000);
           SetLength(User, i - 1);
         end;
-        P := P1 + 1;
+        p := p1 + 1;
       end;
     end;
-    S := P;
-    while not (S^ in [#0, ':', '/']) do
-      inc(S); // 'server:port/address' or 'server/address'
+    s := p;
+    while not (s^ in [#0, ':', '/']) do
+      inc(s); // 'server:port/address' or 'server/address'
   end;
-  FastSetString(Server, P, S - P);
-  if S^ = ':' then
+  FastSetString(Server, p, s - p);
+  if s^ = ':' then
   begin
-    inc(S);
-    P := S;
-    while not (S^ in [#0, '/']) do
-      inc(S);
-    FastSetString(Port, P, S - P); // Port='' for nlUnix
+    inc(s);
+    p := s;
+    while not (s^ in [#0, '/']) do
+      inc(s);
+    FastSetString(Port, p, s - p); // Port='' for nlUnix
   end
   else if DefaultPort <> '' then
     Port := DefaultPort
   else
     Port := DEFAULT_PORT[Https];
-  if S^ <> #0 then // ':' or '/'
+  if s^ <> #0 then // ':' or '/'
   begin
-    inc(S);
-    FastSetString(Address, S, StrLen(S));
+    inc(s);
+    FastSetString(Address, s, StrLen(s));
   end;
   if Server <> '' then
     result := true;
@@ -4673,16 +4664,7 @@ begin
      (aTunnel^.Server <> '') then
     Tunnel := aTunnel^;
   // OpenBind() raise an exception on error
-  {$ifdef OSPOSIX}
-  if NetStartWith(pointer(aServer), 'UNIX:') then
-  begin
-    // aServer='unix:/path/to/myapp.socket'
-    OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUnix);
-    fServer := aServer; // keep the full server name if reused after Close
-  end
-  else
-  {$endif OSPOSIX}
-    OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
+  OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
   if aTLSContext <> nil then
     aTLSContext^ := TLS; // copy back information to the caller TNetTlsContext
 end;
@@ -4693,7 +4675,8 @@ var
   u, t: TUri;
 begin
   if not u.From(aUri) then
-    raise ENetSock.Create('%s.OpenUri: invalid %s', [ClassNameShort(self)^, aUri]);
+    raise ENetSock.Create('%s.OpenUri(%s): invalid URI',
+            [ClassNameShort(self)^, aUri]);
   aAddress := u.Address;
   t.From(aTunnel);
   Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
@@ -4789,15 +4772,16 @@ begin
   end;
 end;
 
-procedure TCrtSocket.ConnectUri(const aUri: RawUtf8; out aAddress: RawUtf8);
+procedure TCrtSocket.ConnectUri(const aUri: RawUtf8; aAddress: PRawUtf8);
 var
   u: TUri;
 begin
   if not u.From(aUri) then
-    raise ENetSock.Create('%s.ConnectUri: invalid %s',
+    raise ENetSock.Create('%s.ConnectUri(%s): invalid URI',
             [ClassNameShort(self)^, aUri]);
-  aAddress := u.Address;
   OpenBind(u.Server, u.Port, {doBind=}false, u.Https);
+  if aAddress <> nil then
+    aAddress^ := u.Address;
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
@@ -4830,8 +4814,9 @@ begin
       // handle client tunnelling via an HTTP(s) proxy
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
-        raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
-          'TLS layers', [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
+        raise ENetSock.Create(
+          '%s.Open(%s:%s): %s proxy - unsupported dual TLS layers',
+          [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
           fTimeout, fTimeout, fTimeout, {retry=}2, fSock, @addr);
@@ -4868,12 +4853,25 @@ begin
     else
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
+    {$ifdef OSPOSIX}
+    // check if aServer is 'unix:/path/to/myapp.socket' with default nlTcp
+    if (aLayer = nlTcp) and
+       NetStartWith(pointer(fServer), 'UNIX:') then
+    begin
+      aLayer := nlUnix;
+      delete(fServer, 1, 5);
+    end;
+    {$endif OSPOSIX}
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'Before NewSocket', [], self);
     res := NewSocket(fServer, fPort, aLayer, doBind,
       fTimeout, fTimeout, fTimeout, retry, fSock, @addr, aReusePort);
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'After NewSocket=%', [ToText(res)^], self);
+    {$ifdef OSPOSIX}
+    if aLayer = nlUnix then
+      fServer := aServer; // keep the full server name if reused after Close
+    {$endif OSPOSIX}
     addr.IP(fRemoteIP, true);
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s) [remoteip=%s]',
