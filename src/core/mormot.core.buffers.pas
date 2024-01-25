@@ -220,10 +220,9 @@ type
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
       Data: pointer; DataLen: integer): cardinal; overload; virtual;
-    /// computes the digital signature of the buffer, or Hash32() if defined
+    /// computes the digital signature of the buffer, or Hash32() if specified
     function AlgoHash(ForceHash32: boolean;
       Data: pointer; DataLen: integer): cardinal; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// get maximum possible (worse) compressed size for the supplied length
     function AlgoCompressDestLen(PlainLen: integer): integer; virtual; abstract;
     /// this method will compress the supplied data
@@ -8801,8 +8800,8 @@ begin
       $c0..$c3, $c5..$c7, $c9..$cb, $cd..$cf: // SOF
         begin
           Height := swap(PWord(jpeg + 4)^);
-          Width := swap(PWord(jpeg + 6)^);
-          Bits := PByte(jpeg + 8)^ * 8;
+          Width  := swap(PWord(jpeg + 6)^);
+          Bits   := PByte(jpeg + 8)^ * 8;
           result := (Height > 0) and
                     (Height < 20000) and
                     (Width > 0) and

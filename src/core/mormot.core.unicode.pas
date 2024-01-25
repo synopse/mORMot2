@@ -865,6 +865,10 @@ function UnicodeBufferToString(source: PWideChar): string;
 function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// convert an Unicode buffer into a variant storing a UTF-8 string
+// - could be used e.g. as TDocVariantData.AddValue() parameter
+function UnicodeBufferToVariant(source: PWideChar): variant;
+
 {$ifdef HASVARUSTRING}
 
 /// convert a Delphi 2009+ or FPC Unicode string into our UTF-8 string
@@ -4668,6 +4672,13 @@ end;
 function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
 begin
   RawUnicodeToUtf8(source, StrLenW(source), result);
+end;
+
+function UnicodeBufferToVariant(source: PWideChar): variant;
+begin
+  ClearVariantForString(result);
+  if Source <> nil then
+    RawUnicodeToUtf8(source, StrLenW(source), RawUtf8(TVarData(result).VAny));
 end;
 
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;

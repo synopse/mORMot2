@@ -3477,7 +3477,7 @@ type
   // - on Win32 Vista+, idwExcludeWinUac will check IsUacVirtualFolder()
   // - on Windows, idwExcludeWinSys will check IsSystemFolder()
   // - on Windows, idwTryWinExeFile will try to generate a 'xxxxx.exe' file
-  // - idwWriteSomeContent will also try to write some bytes in the file
+  // - idwWriteSomeContent will also try to write some bytes into the file
   TIsDirectoryWritable = set of (
     idwExcludeWinUac,
     idwExcludeWinSys,
