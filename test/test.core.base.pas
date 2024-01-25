@@ -3808,16 +3808,16 @@ begin
   for i := 11 to 150 do
     AppendShortCardinal(i, a);
   CheckHash(a, $1CDCEE09, 'AppendShortCardinal');
-  Check(_oskb(0)            = '0KB');
-  Check(_oskb(1 shl 10 - 1) = '1KB');
-  Check(_oskb(1 shl 10)     = '1KB');
-  Check(_oskb(1 shl 10 + 1) = '1KB');
-  Check(_oskb(1 shl 20 - 1) = '1MB');
-  Check(_oskb(1 shl 20)     = '1MB');
-  Check(_oskb(1 shl 20 + 1) = '1MB');
-  Check(_oskb(1 shl 30 - 1) = '1GB');
-  Check(_oskb(1 shl 30)     = '1GB');
-  Check(_oskb(1 shl 30 + 1) = '1GB');
+  Check(_oskb(0)            = '0KB', 'oskb0');
+  Check(_oskb(1 shl 10 - 1) = '1KB', 'oskb1');
+  Check(_oskb(1 shl 10)     = '1KB', 'oskb2');
+  Check(_oskb(1 shl 10 + 1) = '1KB', 'oskb3');
+  Check(_oskb(1 shl 20 - 1) = '1MB', 'oskb4');
+  Check(_oskb(1 shl 20)     = '1MB', 'oskb5');
+  Check(_oskb(1 shl 20 + 1) = '1MB', 'oskb6');
+  Check(_oskb(1 shl 30 - 1) = '1GB', 'oskb7');
+  Check(_oskb(1 shl 30)     = '1GB', 'oskb8');
+  Check(_oskb(1 shl 30 + 1) = '1GB', 'oskb9');
   n := 100000;
   Timer.Start;
   crc := 0;

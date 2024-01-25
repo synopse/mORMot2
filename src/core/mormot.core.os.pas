@@ -3886,8 +3886,8 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8Dy
 {$endif OSWINDOWS}
 
 /// internal function to avoid linking mormot.core.buffers.pas
-// - will round up the value to fit in a single number without decimals
-function _oskb(Size: QWord): string;
+// - will output the value as one number with one decimal and KB/MB/GB/TB suffix
+function _oskb(Size: QWord): shortstring;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEM encoding
@@ -5710,25 +5710,28 @@ begin
   result := false;
 end;
 
-function _oskb(Size: QWord): string;
+function _oskb(Size: QWord): shortstring;
 const
-  _U: array[0..2] of string[3] = ('GB', 'MB', 'KB');
+  _U: array[0..3] of AnsiChar = 'TGMK';
 var
-  u, v: cardinal;
+  u: PtrInt;
+  b: QWord;
 begin
   u := 0;
-  v := (Size + 1 shl 29) shr 30; // "+ 1 shl ##" to round up the value
-  if v = 0 then
-  begin
+  b := Qword(1) shl 40;
+  repeat
+    if Size > b shr 1 then
+      break;
+    b := b shr 10;
     inc(u);
-    v := (Size + 1 shl 19) shr 20;
-    if v = 0 then
-    begin
-      inc(u);
-      v := (Size + 1 shl 9) shr 10;
-    end;
-  end;
-  result := format('%d%s', [v, _U[u]]);
+  until u = high(_u);
+  str(Size / b : 1 : 1, result); // let the FPU + RTL do the conversion for us
+  if (result[0] <= #2) or
+     (result[ord(result[0]) - 1] <> '.') or
+     (result[ord(result[0])] <> '0') then
+    inc(result[0], 2);
+  result[ord(result[0]) - 1] := _U[u];
+  result[ord(result[0])] := 'B';
 end;
 
 function SidLength(sid: PSid): PtrInt;
@@ -6173,7 +6176,7 @@ begin
   result := ToText(osv);
   if (osv.os = osWindows) and
      (osv.winbuild <> 0) then
-    // include the Windows build number, e.g. 'Windows 11 64-bit 22000'
+    // include the Windows build number, e.g. 'Windows 11 64bit 22000'
     result := _fmt('%s %d', [result, osv.winbuild]);
   if (osv.os >= osLinux) and
      (osv.utsrelease[2] <> 0) then
