@@ -144,7 +144,8 @@ type
     /// uncompress the .gz content into a memory buffer
     // - warning: dest should be at least uncomplen32 in size (works only if
     // was not truncated to 2^32)
-    function ToBuffer(dest: PAnsiChar; maxDest: PtrInt = 0): boolean;
+    function ToBuffer(dest: PAnsiChar; maxDest: PtrInt = 0;
+      noCRCcheck: boolean = false): boolean;
     /// uncompress the .gz content into a stream
     function ToStream(stream: TStream; tempBufSize: integer = 0): boolean;
     /// uncompress the .gz content into a file
@@ -876,13 +877,13 @@ var
 
   /// acccess to .gz compression in level 6 as a TAlgoCompress class for files
   // - since .gz is a file-level algorithm, this class won't use our custom
-  // TAlgoCompress file layout and only supports file methods in .gz format
+  // TAlgoCompress file layout and only supports buffer and file methods
   // - will use faster libdeflate instead of plain zlib if available
   AlgoGZ: TAlgoCompress;
 
   /// acccess to .gz compression in level 1 as a TAlgoCompress class for files
   // - since .gz is a file-level algorithm, this class won't use our custom
-  // TAlgoCompress file layout and only supports file methods in .gz format
+  // TAlgoCompress file layout and only supports buffer and file methods
   // - will use faster libdeflate instead of plain zlib if available
   // - this algorithm is perfect for LogCompressAlgo #.log.gz rotation
   AlgoGZFast: TAlgoCompress;
@@ -1190,7 +1191,8 @@ begin
     result := ''; // invalid CRC or truncated uncomplen32
 end;
 
-function TGZRead.ToBuffer(dest: PAnsiChar; maxDest: PtrInt): boolean;
+function TGZRead.ToBuffer(dest: PAnsiChar; maxDest: PtrInt;
+  noCRCcheck: boolean): boolean;
 begin
   result := false;
   if (comp = nil) or
@@ -1201,7 +1203,8 @@ begin
   if maxDest = 0 then
     maxDest := uncomplen32;
   if (cardinal(UnCompressMem(comp, dest, complen, maxDest)) = uncomplen32) and
-     ((maxDest <> PtrInt(uncomplen32)) or // no crc32 for partial output
+     (noCRCcheck or
+      (maxDest <> PtrInt(uncomplen32)) or // no crc32 for partial output
       (mormot.lib.z.crc32(0, dest, maxDest) = crc32)) then
     result := true;
 end;
@@ -3642,16 +3645,34 @@ type
   TAlgoGZ = class(TAlgoCompress)
   protected
     fCompressionLevel: integer;
+    function UseLevel(Plain: PAnsiChar; PlainLen, CompSizeTrigger: integer;
+      CheckCompressed: boolean): integer;
   public
     /// set AlgoID = 9 as genuine byte identifier for .gz (even if not used)
     constructor Create; override;
-    function AlgoCompressDestLen(PlainLen: integer): integer; override;
-    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; override;
+    /// this method raises EAlgoCompress because we don't know the Comp length
     function AlgoDecompressDestLen(Comp: pointer): integer; override;
-    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
+    // those other methods are properly implemented for .gz content
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+    function AlgoCompress(Plain: pointer; PlainLen: integer;
+      Comp: pointer): integer; override;
+    function AlgoDecompress(Comp: pointer; CompLen: integer;
+      Plain: pointer): integer; override;
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
-    class function FileIsCompressed(const Name: TFileName; Magic: cardinal): boolean; override;
+    function Compress(Plain: PAnsiChar; PlainLen, CompressionSizeTrigger: integer;
+      CheckMagicForCompressed: boolean; BufferOffset: integer): RawByteString; override;
+    function Compress(Plain, Comp: PAnsiChar;
+      PlainLen, CompLen, CompressionSizeTrigger: integer;
+      CheckMagicForCompressed: boolean): integer; override;
+    function DecompressHeader(Comp: PAnsiChar; CompLen: integer;
+      Load: TAlgoCompressLoad): integer; override;
+    function DecompressBody(Comp, Plain: PAnsiChar; CompLen, PlainLen: integer;
+      Load: TAlgoCompressLoad): boolean; override;
+    function DecompressPartial(Comp, Partial: PAnsiChar; CompLen,
+      PartialLen, PartialLenMax: integer): integer; override;
+    class function FileIsCompressed(const Name: TFileName;
+      Magic: cardinal): boolean; override;
     function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean; override;
     function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
@@ -3709,6 +3730,63 @@ begin
     result := PartialLen
   else
     result := 0;
+end;
+
+function TAlgoGZ.UseLevel(Plain: PAnsiChar; PlainLen, CompSizeTrigger: integer;
+  CheckCompressed: boolean): integer;
+begin
+  result := fCompressionLevel;
+  if (PlainLen < CompSizeTrigger) or
+     (CheckCompressed and
+      IsContentCompressed(Plain, PlainLen)) then
+    result := 0; // .gz format but with store compression algorithm
+end;
+
+function TAlgoGZ.Compress(Plain: PAnsiChar; PlainLen,
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean;
+  BufferOffset: integer): RawByteString;
+begin
+  if BufferOffset <> 0 then
+    EnsureAlgoHasNoForcedFormat('Compress(BufferOffet)');
+  result := GZWrite(Plain, PlainLen,
+    UseLevel(Plain, PlainLen, CompressionSizeTrigger, CheckMagicForCompressed));
+end;
+
+function TAlgoGZ.Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen,
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
+begin
+  if CompLen < GZWriteLen(PlainLen) then
+    result := 0
+  else
+    result := GZWrite(Plain, Comp, PlainLen,
+      UseLevel(Plain, PlainLen, CompressionSizeTrigger, CheckMagicForCompressed));
+end;
+
+function TAlgoGZ.DecompressHeader(Comp: PAnsiChar; CompLen: integer;
+  Load: TAlgoCompressLoad): integer;
+var
+  gzr: TGZRead;
+begin
+  result := 0;
+  if gzr.Init(Comp, CompLen, {noHCRCcheck=}true) then
+    result := gzr.uncomplen32;
+end;
+
+function TAlgoGZ.DecompressBody(Comp, Plain: PAnsiChar;
+  CompLen, PlainLen: integer; Load: TAlgoCompressLoad): boolean;
+var
+  gzr: TGZRead;
+  nocrc: boolean;
+begin
+  nocrc := Load = aclNoCrcFast;
+  result := gzr.Init(Comp, CompLen, nocrc) and
+            gzr.ToBuffer(Plain, PlainLen, nocrc);
+end;
+
+function TAlgoGZ.DecompressPartial(Comp, Partial: PAnsiChar;
+  CompLen, PartialLen, PartialLenMax: integer): integer;
+begin
+  result := AlgoDecompressPartial(Comp, CompLen, Partial, PartialLen, PartialLenMax);
 end;
 
 class function TAlgoGZ.FileIsCompressed(
