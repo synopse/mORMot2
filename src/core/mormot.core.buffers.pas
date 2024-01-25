@@ -273,11 +273,12 @@ type
     function Compress(Plain: PAnsiChar; PlainLen: integer;
       CompressionSizeTrigger: integer = 100;
       CheckMagicForCompressed: boolean = false;
-      BufferOffset: integer = 0): RawByteString; overload;
+      BufferOffset: integer = 0): RawByteString; overload; virtual;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
-      CompressionSizeTrigger: integer = 100; CheckMagicForCompressed: boolean = false): integer; overload;
+      CompressionSizeTrigger: integer = 100;
+      CheckMagicForCompressed: boolean = false): integer; overload; virtual;
     /// compress a memory buffer with crc32c hashing to a TByteDynArray
     function CompressToBytes(const Plain: RawByteString;
       CompressionSizeTrigger: integer = 100;
@@ -322,11 +323,11 @@ type
     // then return the uncompressed size in bytes, or 0 if the crc32c does not match
     // - should call DecompressBody() later on to actually retrieve the content
     function DecompressHeader(Comp: PAnsiChar; CompLen: integer;
-      Load: TAlgoCompressLoad = aclNormal): integer;
+      Load: TAlgoCompressLoad = aclNormal): integer; virtual;
     /// decode the content of a memory buffer compressed via the Compress() method
     // - PlainLen has been returned by a previous call to DecompressHeader()
     function DecompressBody(Comp, Plain: PAnsiChar; CompLen, PlainLen: integer;
-      Load: TAlgoCompressLoad = aclNormal): boolean;
+      Load: TAlgoCompressLoad = aclNormal): boolean; virtual;
     /// partial decoding of a memory buffer compressed via the Compress() method
     // - returns 0 on error, or how many bytes have been written to Partial
     // - will call virtual AlgoDecompressPartial() which is slower, but expected
@@ -336,7 +337,7 @@ type
     // with PartialLenMax > expected PartialLen, and returned bytes may be >
     // PartialLen, but always <= PartialLenMax
     function DecompressPartial(Comp, Partial: PAnsiChar; CompLen,
-      PartialLen, PartialLenMax: integer): integer;
+      PartialLen, PartialLenMax: integer): integer; virtual;
     /// compress a Stream content using this compression algorithm
     // - source Stream may be read and compressed by ChunkBytes = 4MB chunks
     // - a 32-bit Magic number identifies the compressed content chunks
@@ -441,6 +442,7 @@ type
     class function UncompressedSize(const Comp: RawByteString): integer;
     /// returns the algorithm name, from its classname
     // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
+    // TAlgoDeflateFast->'deflatefast'
     function AlgoName: TShort16;
   end;
 
@@ -5236,8 +5238,7 @@ var
   crc: cardinal;
   tmp: array[0..16383] of AnsiChar;  // big enough to resize result in-place
 begin
-  if (self = nil) or
-     (PlainLen = 0) or
+  if (PlainLen = 0) or
      (Plain = nil) then
   begin
     result := '';
@@ -5297,8 +5298,7 @@ var
   len: integer;
 begin
   result := 0;
-  if (self = nil) or
-     (PlainLen = 0) or
+  if (PlainLen = 0) or
      (CompLen < PlainLen + 9) then
     exit;
   EnsureAlgoHasNoForcedFormat('Compress');
@@ -5440,6 +5440,9 @@ function TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
   out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
   result := nil;
+  if self = nil then
+    exit;
+  EnsureAlgoHasNoForcedFormat('Decompress');
   PlainLen := DecompressHeader(Comp, CompLen, Load);
   if PlainLen = 0 then
     exit;
@@ -5848,8 +5851,7 @@ function TAlgoCompress.DecompressHeader(Comp: PAnsiChar; CompLen: integer;
   Load: TAlgoCompressLoad): integer;
 begin
   result := 0;
-  if (self = nil) or
-     (CompLen <= 9) or
+  if (CompLen <= 9) or
      (Comp = nil) then
     exit;
   EnsureAlgoHasNoForcedFormat('Decompress');
@@ -5869,8 +5871,7 @@ function TAlgoCompress.DecompressBody(Comp, Plain: PAnsiChar;
   CompLen, PlainLen: integer; Load: TAlgoCompressLoad): boolean;
 begin
   result := false;
-  if (self = nil) or
-     (PlainLen <= 0) then
+  if PlainLen <= 0 then
     exit;
   if Comp[4] = COMPRESS_STORED then
     MoveFast(Comp[9], Plain[0], PlainLen)
@@ -9618,7 +9619,7 @@ begin
   else
   begin
     // compute the hash of the existing partial content
-    SetLength(buf, 1 shl 20); // 1MB temporary buffer
+    FastNewRawByteString(buf, 1 shl 20); // 1MB temporary buffer
     repeat
       read := fRedirected.Read(pointer(buf)^, length(buf));
       if read <= 0 then
@@ -9937,7 +9938,7 @@ end;
 
 constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
 begin
-  SetLength(fBuffer, aBufSize);
+  FastNewRawByteString(fBuffer, aBufSize);
   fSource := aSource;
   fSize := fSource.Size; // get it once
   fSource.Seek(0, soBeginning);

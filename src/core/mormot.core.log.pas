@@ -5357,8 +5357,8 @@ begin
   if GetMemoryInfo(info, {withalloc=}true) then
     fWriter.Add(
       ' System: memtotal=% memfree=% filetotal=% filefree=% allocres=% allocused=% ',
-      [KBNoSpace(info.memtotal), KBNoSpace(info.memfree),
-       KBNoSpace(info.filetotal), KBNoSpace(info.filefree),
+      [KBNoSpace(info.memtotal),      KBNoSpace(info.memfree),
+       KBNoSpace(info.filetotal),     KBNoSpace(info.filefree),
        KBNoSpace(info.allocreserved), KBNoSpace(info.allocused)]);
   // include mormot.core.fpcx64mm raw information if available
   fWriter.AddNoJsonEscapeUtf8(RetrieveMemoryManagerInfo);
