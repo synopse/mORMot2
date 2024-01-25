@@ -2094,7 +2094,7 @@ begin
          (fDiffTotal > 0) then
       begin
         Data.Kernel := ((pkrn - PrevKernel) * 100) / fDiffTotal;
-        Data.User := ((pusr - PrevUser) * 100) / fDiffTotal;
+        Data.User   := ((pusr - PrevUser)   * 100) / fDiffTotal;
       end;
       PrevKernel := pkrn;
       PrevUser := pusr;
@@ -2102,8 +2102,8 @@ begin
       mem.cb := SizeOf(mem);
       if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
       begin
-        Data.WorkKB := mem.WorkingSetSize shr 10;
-        Data.VirtualKB := mem.PagefileUsage shr 10;
+        Data.WorkKB    := mem.WorkingSetSize shr 10;
+        Data.VirtualKB := mem.PagefileUsage  shr 10;
       end;
       result := true;
     end;
@@ -2116,35 +2116,33 @@ function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
 begin
   if fDiffTotal <= 0 then
   begin
-    Idle := 0;
+    Idle   := 0;
     Kernel := 0;
-    User := 0;
+    User   := 0;
     result := false;
   end
   else
   begin
     Kernel := {%H-}SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
-    User := {%H-}SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
-    Idle := 100 - Kernel - User; // ensure sum is always 100%
+    User   := {%H-}SimpleRoundTo2Digits((fDiffUser * 100)   / fDiffTotal);
+    Idle   := 100 - Kernel - User; // ensure sum is always 100%
     result := true;
   end;
 end;
 
-{$ifndef UNICODE} // missing API for FPC and oldest Delphi
+{$ifndef UNICODE} // 64-bit aware Windows API missing on FPC and oldest Delphi
 
 type
-  DWORDLONG = QWord;
-
   TMemoryStatusEx = record
     dwLength: DWord;
     dwMemoryLoad: DWord;
-    ullTotalPhys: DWORDLONG;
-    ullAvailPhys: DWORDLONG;
-    ullTotalPageFile: DWORDLONG;
-    ullAvailPageFile: DWORDLONG;
-    ullTotalVirtual: DWORDLONG;
-    ullAvailVirtual: DWORDLONG;
-    ullAvailExtendedVirtual: DWORDLONG;
+    ullTotalPhys: QWord;
+    ullAvailPhys: QWord;
+    ullTotalPageFile: QWord;
+    ullAvailPageFile: QWord;
+    ullTotalVirtual: QWord;
+    ullAvailVirtual: QWord;
+    ullAvailExtendedVirtual: QWord;
   end;
 
 // information about the system's current usage of both physical and virtual memory
@@ -2166,40 +2164,37 @@ begin
   FillCharFast(global, SizeOf(global), 0);
   global.dwLength := SizeOf(global);
   result := GlobalMemoryStatusEx(global);
-  info.percent := global.dwMemoryLoad;
-  info.memtotal := global.ullTotalPhys;
-  info.memfree := global.ullAvailPhys;
+  info.percent   := global.dwMemoryLoad;
+  info.memtotal  := global.ullTotalPhys;
+  info.memfree   := global.ullAvailPhys;
   info.filetotal := global.ullTotalPageFile;
-  info.filefree := global.ullAvailPageFile;
-  info.vmtotal := global.ullTotalVirtual;
-  info.vmfree := global.ullAvailVirtual;
+  info.filefree  := global.ullAvailPageFile;
+  info.vmtotal   := global.ullTotalVirtual;
+  info.vmfree    := global.ullAvailVirtual;
   info.allocreserved := 0;
-  info.allocused := 0;
+  info.allocused     := 0;
+  if not withalloc then
+    exit;
   {$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
-  if withalloc then
-  begin
-    GetMemoryManagerState(Heap); // direct raw FastMM4 access
-    info.allocused := Heap.TotalAllocatedMediumBlockSize +
-                      Heap.TotalAllocatedLargeBlockSize;
-    info.allocreserved := Heap.ReservedMediumBlockAddressSpace +
-                          Heap.ReservedLargeBlockAddressSpace;
-    for sb := 0 to high(Heap.SmallBlockTypeStates) do
-      with Heap.SmallBlockTypeStates[sb] do
-      begin
-        inc(info.allocused, UseableBlockSize * AllocatedBlockCount);
-        inc(info.allocreserved, ReservedAddressSpace);
-      end;
-  end;
+  GetMemoryManagerState(Heap); // direct raw FastMM4 access
+  info.allocused := Heap.TotalAllocatedMediumBlockSize +
+                    Heap.TotalAllocatedLargeBlockSize;
+  info.allocreserved := Heap.ReservedMediumBlockAddressSpace +
+                        Heap.ReservedLargeBlockAddressSpace;
+  for sb := 0 to high(Heap.SmallBlockTypeStates) do
+    with Heap.SmallBlockTypeStates[sb] do
+    begin
+      inc(info.allocused, UseableBlockSize * AllocatedBlockCount);
+      inc(info.allocreserved, ReservedAddressSpace);
+    end;
   {$else}
-  if withalloc and
-     DelayedGetProcessMemoryInfo then
-  begin
-    FillcharFast(mem, SizeOf(mem), 0);
-    mem.cb := SizeOf(mem);
-    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
-    info.allocreserved := mem.PeakWorkingSetSize;
-    info.allocused := mem.WorkingSetSize;
-  end;
+  if not DelayedGetProcessMemoryInfo then
+    exit;
+  FillcharFast(mem, SizeOf(mem), 0);
+  mem.cb := SizeOf(mem);
+  GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
+  info.allocreserved := mem.PeakWorkingSetSize;
+  info.allocused     := mem.WorkingSetSize;
   {$endif WITH_FASTMM4STATS}
 end;
 
@@ -5152,6 +5147,7 @@ var
   GetLogicalProcessorInformation: function(
    var Info: TSystemLogicalProcessorInformation; Len: PDWord): BOOL; stdcall;
   wine_get_version: function: PAnsiChar; stdcall;
+  mem: TMemoryStatusEx;
   Res: BOOL;
   P: pointer;
   Vers: TWindowsVersion;
@@ -5231,6 +5227,10 @@ begin
      (PtrUInt(SystemInfo.lpMinimumApplicationAddress) <= MIN_PTR_VALUE) then
     PtrUInt(SystemInfo.lpMinimumApplicationAddress) := MIN_PTR_VALUE;
   Freemem(P);
+  FillCharFast(mem, SizeOf(mem), 0);
+  mem.dwLength := SizeOf(mem);
+  if GlobalMemoryStatusEx(mem) then
+    SystemMemorySize := mem.ullTotalPhys;
   OSVersionInfo.dwOSVersionInfoSize := SizeOf(OSVersionInfo);
   GetVersionEx(OSVersionInfo);
   Vers := wUnknown;

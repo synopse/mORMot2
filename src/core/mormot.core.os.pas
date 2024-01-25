@@ -1152,6 +1152,10 @@ var
 
 {$endif OSWINDOWS}
 
+  /// the number of physical memory bytes available to the process
+  // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
+  SystemMemorySize: PtrUInt;
+
 {$M+} // to have existing RTTI for published properties
 
 type
@@ -3320,6 +3324,7 @@ type
   end;
 
 /// a wrapper around FileRead() to ensure a whole memory buffer is retrieved
+// - expects Size to be up to 2GB (seems like a big enough memory buffer)
 // - on Windows, will read by 16MB chunks to avoid ERROR_NO_SYSTEM_RESOURCES
 // - will call FileRead() and retry up to Size bytes are filled in the buffer
 // - return true if all memory buffer has been read, or false on error

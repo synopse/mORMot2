@@ -2393,8 +2393,7 @@ end;
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
   FillCharFast(info, SizeOf(info), 0);
-  info.memtotal := fpsysctlhwint(
-    {$ifdef OSDARWIN} HW_MEMSIZE {$else} HW_PHYSMEM {$endif});
+  info.memtotal := SystemMemorySize; // retrieved at startup
   info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
   result := info.memtotal <> 0;// avoid div per 0 exception
   if result then
@@ -2537,7 +2536,7 @@ var
   v: RawUtf8;
 begin
   FindNameValue(meminfo, up, v);
-  result := GetCardinal(pointer(v)) shl 10;
+  result := GetCardinal(pointer(v)) shl 10; // from KB to bytes
 end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -2547,29 +2546,29 @@ var
 begin
   result := false;
   FillCharFast(info, SizeOf(info), 0);
+  // sysinfo() syscall has not enough information: use /proc
   proc := StringFromFile('/proc/meminfo', {hasnosize=}true);
   if proc = '' then
     exit;
   info.memtotal := FindMemInfo(proc, 'MEMTOTAL:');
-  info.memfree := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
+  info.memfree  := FindMemInfo(proc, 'MEMAVAILABLE:'); // MemFree is too low
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
     result := true;
   end;
   info.filetotal := FindMemInfo(proc, 'SWAPTOTAL:');
-  info.filefree := FindMemInfo(proc, 'SWAPFREE:');
-  info.vmtotal := FindMemInfo(proc, 'COMMITLIMIT:');
-  info.vmfree := FindMemInfo(proc, 'MEMFREE:');
+  info.filefree  := FindMemInfo(proc, 'SWAPFREE:');
+  info.vmtotal   := FindMemInfo(proc, 'COMMITLIMIT:');
+  info.vmfree    := FindMemInfo(proc, 'MEMFREE:');
+  // note: virtual memory information is not available under Linux
+  if not withalloc then
+    exit;
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
-  if withalloc then
-  begin
-    // virtual memory information is not available under Linux
-    proc := StringFromFile('/proc/self/statm', {hasnosize=}true);
-    P := pointer(proc);
-    info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
-    info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
-  end;
+  proc := StringFromFile('/proc/self/statm', {hasnosize=}true);
+  P := pointer(proc);
+  info.allocreserved := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmSize
+  info.allocused     := GetNextCardinal(P) * SystemInfo.dwPageSize; // VmRSS
 end;
 
 procedure DoHash128File(var h: THash128; const filename: TFileName);
@@ -3810,6 +3809,7 @@ var
   {$ifdef OSLINUX}
   prodver, dist: RawUtf8;
   SR: TSearchRec;
+  si: TSysInfo;  // Linuxism
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   {$ifndef NODIRECTTHREADMANAGER}
@@ -3823,7 +3823,6 @@ begin
                    'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
-  SystemInfo.dwPageSize := getpagesize; // call libc API
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -3839,15 +3838,18 @@ begin
   {$ifdef OSDARWIN}
   // pure MACOS branch
   CpuCache[1].LineSize := fpsysctlhwint(HW_CACHELINE);
-  CpuCache[1].Size := fpsysctlhwint(HW_L1DCACHESIZE);
+  CpuCache[1].Size     := fpsysctlhwint(HW_L1DCACHESIZE);
   CpuCache[2].LineSize := fpsysctlhwint(HW_CACHELINE);
-  CpuCache[2].Size := fpsysctlhwint(HW_L2CACHESIZE);
+  CpuCache[2].Size     := fpsysctlhwint(HW_L2CACHESIZE);
   CpuCacheSize := CpuCache[2].Size;
   if CpuCacheSize = 0 then
     CpuCacheSize := CpuCache[1].Size;
   if CpuCacheSize <> 0 then
     CpuCacheText := 'L1=' + _oskb(CpuCache[1].Size) +
                    ' L2=' + _oskb(CpuCache[2].Size);
+  SystemMemorySize := fpsysctlhwint(HW_MEMSIZE);
+  {$else}
+  SystemMemorySize := fpsysctlhwint(HW_PHYSMEM);
   {$endif OSDARWIN}
   {$else}
   {$ifdef OSANDROID}
@@ -3859,6 +3861,11 @@ begin
   {$else}
   // pure LINUX branch
   GetSystemMacAddress := _GetSystemMacAddress;
+  if Sysinfo(@si) = 0 then
+  begin
+    SystemMemorySize := si.totalram * si.mem_unit;
+    SystemInfo.dwPageSize := si.mem_unit;
+  end;
   prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
     ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
@@ -4009,6 +4016,8 @@ begin
   end;
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
+  if SystemInfo.dwPageSize = 0 then
+    SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
     CpuInfoText := _oskb(CpuCacheSize) + ' cache';
   if CpuSockets = 0 then
