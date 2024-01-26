@@ -3334,6 +3334,11 @@ type
 // - return true if all memory buffer has been read, or false on error
 function FileReadAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
 
+/// a wrapper around FileWrite() to ensure a whole memory buffer is retrieved
+// - will call FileWrite() and retry up to Size bytes are written from the buffer
+// - return true if all memory buffer has been written, or false on error
+function FileWriteAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
+
 /// overloaded function optimized for one pass reading of a (huge) file
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
@@ -3391,6 +3396,11 @@ function FileFromString(const Content: RawByteString; const FileName: TFileName;
 
 /// create a File from a memory buffer content
 function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
+
+/// create or append a string content to a File
+// - can optionally rotate the file to a FileName+'.bak'  over a specific size
+function AppendToFile(const Content: RawUtf8; const FileName: TFileName;
+  BackupOverMaxSize: Int64 = 0): boolean;
 
 /// compute an unique temporary file name
 // - following 'exename_123.tmp' pattern, in the system temporary folder
@@ -6775,18 +6785,35 @@ var
   chunk, read: PtrInt;
 begin
   result := false;
-  repeat
-    chunk := Size;
-    {$ifdef OSWINDOWS}
-    if chunk > 16 shl 20 then
-      chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
-    {$endif OSWINDOWS}
-    read := FileRead(F, Buffer^, chunk);
-    if read <= 0 then
-      exit; // error reading Size bytes
-    inc(PByte(Buffer), read);
-    dec(Size, read);
-  until Size = 0;
+  if Size > 0 then
+    repeat
+      chunk := Size;
+      {$ifdef OSWINDOWS}
+      if chunk > 16 shl 20 then
+        chunk := 16 shl 20; // to avoid ERROR_NO_SYSTEM_RESOURCES errors
+      {$endif OSWINDOWS}
+      read := FileRead(F, Buffer^, chunk);
+      if read <= 0 then
+        exit; // error reading Size bytes
+      inc(PByte(Buffer), read);
+      dec(Size, read);
+    until Size = 0;
+  result := true;
+end;
+
+function FileWriteAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
+var
+  written: PtrInt;
+begin
+  result := false;
+  if Size > 0 then
+    repeat
+      written := FileWrite(F, Buffer^, Size);
+      if written <= 0 then
+        exit; // fatal error
+      inc(PByte(Buffer), written); // e.g. may have been interrrupted
+      dec(Size, written);
+    until Size = 0;
   result := true;
 end;
 
@@ -6821,7 +6848,7 @@ begin
       if (size < MaxInt) and // 2GB seems big enough for a RawByteString
          (size > 0) then
       begin
-        SetLength(result, size);
+        FastNewRawByteString(result, size);
         if not FileReadAll(F, pointer(result), size) then
           result := ''; // error reading
       end;
@@ -6903,37 +6930,25 @@ end;
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean; FileDate: TDateTime): boolean;
 var
-  F: THandle;
-  P: PByte;
-  L, written: integer;
+  h: THandle;
 begin
   result := false;
-  if FileName = '' then
+  h := FileCreate(FileName);
+  if not ValidHandle(h) then
     exit;
-  F := FileCreate(FileName);
-  if PtrInt(F) < 0 then
-    exit;
-  L := length(Content);
-  P := pointer(Content);
-  while L > 0 do
+  if not FileWriteAll(h, pointer(Content), length(Content)) then
   begin
-    written := FileWrite(F, P^, L);
-    if written < 0 then
-    begin
-      FileClose(F);
-      exit;
-    end;
-    dec(L, written);
-    inc(P, written);
+    FileClose(h); // abort on write error
+    exit;
   end;
   if FlushOnDisk then
-    FlushFileBuffers(F);
+    FlushFileBuffers(h);
   {$ifdef OSWINDOWS}
   if FileDate <> 0 then
-    FileSetDate(F, DateTimeToFileDate(FileDate)); // use the existing handle
-  FileClose(F);
+    FileSetDate(h, DateTimeToFileDate(FileDate)); // use the existing handle
+  FileClose(h);
   {$else}
-  FileClose(F); // POSIX expects the file to be closed to set the date
+  FileClose(h); // POSIX expects the file to be closed to set the date
   if FileDate <> 0 then
     FileSetDate(FileName, DateTimeToFileDate(FileDate));
   {$endif OSWINDOWS}
@@ -6942,28 +6957,45 @@ end;
 
 function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
 var
-  F: THandle;
-  written: PtrInt;
+  h: THandle;
 begin
   result := false;
-  if FileName = '' then
+  h := FileCreate(FileName);
+  if not ValidHandle(h) then
     exit;
-  F := FileCreate(FileName);
-  if PtrInt(F) < 0 then
+  result := FileWriteAll(h, Buf, Len);
+  FileClose(h);
+end;
+
+function AppendToFile(const Content: RawUtf8; const FileName: TFileName;
+  BackupOverMaxSize: Int64): boolean;
+var
+  h: THandle;
+  bak: TFileName;
+begin
+  result := Content = '';
+  if result then
     exit;
-  result := true;
-  while Len > 0 do
+  if (BackupOverMaxSize > 0) and
+     (FileSize(FileName) > BackupOverMaxSize) then
   begin
-    written := FileWrite(F, Buf^, Len);
-    if written <= 0 then
-    begin
-      result := false;
-      break;
-    end;
-    dec(Len, written);
-    inc(PByte(Buf), written);
+    bak := FileName + '.bak';
+    DeleteFile(bak);
+    RenameFile(FileName, bak);
+    h := 0;
+  end
+  else
+    h := FileOpen(FileName, fmOpenWriteShared);
+  if ValidHandle(h) then
+    FileSeek64(0, soFromEnd) // append
+  else
+  begin
+    h := FileCreate(FileName, fmShareReadWrite);
+    if not ValidHandle(h) then
+      exit;
   end;
-  FileClose(F);
+  result := FileWriteAll(h, pointer(Content), Length(Content));
+  FileClose(h);
 end;
 
 var
@@ -7672,9 +7704,8 @@ var
   len, n: integer;
   P: PByte;
 begin
-  result := '';
   len := ConsoleStdInputLen;
-  SetLength(result, len);
+  FastNewRawByteString(result, len);
   P := pointer(result);
   while len > 0 do
   begin
