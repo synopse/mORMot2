@@ -5710,7 +5710,7 @@ begin
   if fWriterClass = nil then
     // use TJsonWriter since mormot.core.json.pas is linked
     fWriterClass := TJsonWriter;
-  // create fWriter and fWriterEcho instances
+  // create fWriter instance
   if fWriter = nil then
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TJsonWriter;
@@ -5720,8 +5720,10 @@ begin
          twoForceJsonExtended,
          twoNoWriteToStreamException] // if TFileStreamNoWriteError is not set
       - [twoFlushToStreamNoAutoResize]; // stick to BufferSize
-    fWriterEcho := TEchoWriter.Create(fWriter);
   end;
+  // create fWriterEcho instance
+  if fWriterEcho = nil then
+    fWriterEcho := TEchoWriter.Create(fWriter);
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
   if integer(fFamily.EchoToConsole) <> 0 then
     fWriterEcho.EchoAdd(ConsoleEcho);

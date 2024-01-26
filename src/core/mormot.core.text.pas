@@ -1096,6 +1096,7 @@ type
     fBackSafe: TLightLock; // protect fBack.Level/Text
     fEchoPendingExecuteBackground: boolean;
     function EchoFlush: PtrInt;
+    procedure EchoPendingToBackground(aLevel: TSynLogInfo);
     function GetEndOfLineCRLF: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
@@ -5281,43 +5282,47 @@ begin
   inherited Destroy;
 end;
 
+procedure TEchoWriter.EchoPendingToBackground(aLevel: TSynLogInfo);
+var
+  n, cap: PtrInt;
+begin
+  fBackSafe.Lock;
+  try
+    n := fBack.Count;
+    if length(fBack.Level) = n then
+    begin
+      cap := NextGrow(n);
+      SetLength(fBack.Level, cap);
+      SetLength(fBack.Text, cap);
+    end;
+    fBack.Level[n] := aLevel;
+    fBack.Text[n] := fEchoBuf;
+  finally
+    fBackSafe.UnLock;
+  end;
+end;
+
 procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
 var
-  e, n, cap: PtrInt;
+  e: PtrInt;
 begin
   if twoEndOfLineCRLF in fWriter.CustomOptions then
     fWriter.AddCR
   else
     fWriter.Add(#10);
-  if fEchos <> nil then
-  begin
-    fEchoStart := EchoFlush;
-    if fEchoPendingExecuteBackground then
-    begin
-      fBackSafe.Lock;
+  if fEchos = nil then
+    exit; // no redirection yet
+  fEchoStart := EchoFlush;
+  if fEchoPendingExecuteBackground then
+    EchoPendingToBackground(aLevel)
+  else
+    for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
       try
-        n := fBack.Count;
-        if length(fBack.Level) = n then
-        begin
-          cap := NextGrow(n);
-          SetLength(fBack.Level, cap);
-          SetLength(fBack.Text, cap);
-        end;
-        fBack.Level[n] := aLevel;
-        fBack.Text[n] := fEchoBuf;
-      finally
-        fBackSafe.UnLock;
+        fEchos[e](self, aLevel, fEchoBuf);
+      except // remove callback in case of exception during echoing
+        MultiEventRemove(fEchos, e);
       end;
-    end
-    else
-      for e := length(fEchos) - 1 downto 0 do // for MultiEventRemove() below
-        try
-          fEchos[e](self, aLevel, fEchoBuf);
-        except // remove callback in case of exception during echoing
-          MultiEventRemove(fEchos, e);
-        end;
-    fEchoBuf := '';
-  end;
+  fEchoBuf := '';
 end;
 
 procedure TEchoWriter.EchoPendingExecute;
