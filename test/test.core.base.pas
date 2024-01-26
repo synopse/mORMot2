@@ -7599,7 +7599,7 @@ var
   var
     i: integer;
   begin
-    Check(length(test) = MAX + 1);
+    CheckEqual(length(test), MAX + 1);
     for i := 0 to MAX do
     begin
       CheckSame(test[i].Real, 0.5 + i);
@@ -7618,7 +7618,7 @@ begin
     p := TPersistentAutoCreateFieldsTest.CreateFake;
     ObjArrayAdd(arr, p);
     tmp := DynArraySaveJson(arr, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
-    check(tmp = '[{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
+    checkEqual(tmp, '[{"Text":"text","Value1":{"Real":1.5,"Imaginary":2.5},' +
       '"Value2":{"Real":1.7,"Imaginary":2.7}}]');
     for i := 1 to MAX do
     begin
@@ -7628,9 +7628,9 @@ begin
     end;
     tmp := DynArraySaveJson(arr, TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
     ObjArrayClear(arr);
-    Check(length(arr) = 0);
+    CheckEqual(length(arr), 0);
     DynArrayLoadJson(arr, pointer(tmp), TypeInfo(TPersistentAutoCreateFieldsTestObjArray));
-    Check(length(arr) = MAX + 1);
+    CheckEqual(length(arr), MAX + 1);
     for i := 0 to MAX do
     begin
       Check(arr[i].text = 'text');
@@ -7665,8 +7665,8 @@ begin
   r1 := TOrmArrayTest.CreateFrom(tmp);
   r2 := TOrmArrayTest.CreateFrom(tmp);
   try
-    check(r1.IDValue = 0);
-    check(r2.IDValue = 0);
+    CheckEqual(r1.IDValue, 0);
+    CheckEqual(r2.IDValue, 0);
     CheckValues(r1.Values);
     CheckValues(r2.Values);
     check(r1.SameValues(r2));
