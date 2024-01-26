@@ -904,6 +904,7 @@ var
   // libdeflate + AVX is much faster than zlib, but its API expects only buffers
   // - files or buffers up to 64MB (on 32-bit OS) or 128MB (on 64-bit OS) will
   // call libdeflate and a temporary memory buffer
+  // - at startup, on a PC with more than 4/8GB of RAM, allow up to 256/512MB
   LIBDEFLATE_MAXSIZE: Int64 = {$ifdef CPU32} 64 {$else} 128 {$endif} shl 20;
 {$endif LIBDEFLATESTATIC}
 
@@ -3633,7 +3634,7 @@ type
 constructor TAlgoDeflateFast.Create;
 begin
   fAlgoID := 3;
-  fAlgoFileExt := '.gz';
+  fAlgoFileExt := '.synz';
   inherited Create;
   fDeflateLevel := 1;
 end;
@@ -3685,6 +3686,7 @@ constructor TAlgoGZ.Create;
 begin
   if fAlgoID = 0 then // if not overriden by TAlgoGZFast
     fAlgoID := 9;
+  fAlgoFileExt := '.gz';
   fCompressionLevel := 6;
   fAlgoHasForcedFormat := true; // trigger EAlgoCompress e.g. on stream methods
   inherited Create;
@@ -3845,15 +3847,17 @@ initialization
   AlgoDeflateFast := TAlgoDeflateFast.Create;
   AlgoGZ := TAlgoGZ.Create;
   AlgoGZFast := TAlgoGZFast.Create;
+  // libdeflate: when memory is cheap, use it rather than the CPU
   {$ifdef LIBDEFLATESTATIC}
   {$ifdef CPU64}
-  if SystemMemorySize > 4 shl 30 then    // if this computer has more than 4 GB
-    if SystemMemorySize > 8 shl 30 then  // more than 8 GB
-      LIBDEFLATE_MAXSIZE := 512 shl 20   // allow up to 512 MB for libdeflate
+  if SystemMemorySize > 4 shl 30 then
+    if SystemMemorySize > 8 shl 30 then // more than 8 GB:
+      LIBDEFLATE_MAXSIZE := 512 shl 20  // allow up to 512 MB for libdeflate
     else
-      LIBDEFLATE_MAXSIZE := 256 shl 20;  // allow up to 256 MB
+      LIBDEFLATE_MAXSIZE := 256 shl 20; // more than 4 GB: allow up to 256 MB
   {$endif CPU64}
   {$endif LIBDEFLATESTATIC}
+  // if you don't like those defaults, you can fix your own LIBDEFLATE_MAXSIZE
 
 end.
 
