@@ -5627,29 +5627,21 @@ end;
 procedure TSynLog.ComputeFileName;
 var
   timeNow, hourRotate, timeBeforeRotate: TDateTime;
-  {$ifdef OSPOSIX}
-  i: PtrInt;
-  {$endif OSPOSIX}
 begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
-  begin
-    Utf8ToFileName(Executable.ProgramName, fFileName);
-    if fFamily.IncludeComputerNameInFileName or
-       fFamily.IncludeUserNameInFileName then
-    begin
-      fFileName := fFileName + ' (';
-      if fFamily.IncludeUserNameInFileName then
-        fFileName := fFileName + Utf8ToString(Executable.User);
+    // compute the default filename as '<exename>(<user>@<host>)'
+    with Executable do
       if fFamily.IncludeComputerNameInFileName then
-      begin
         if fFamily.IncludeUserNameInFileName then
-          fFileName := fFileName + '@';
-        fFileName := fFileName + Utf8ToString(Executable.Host);
-      end;
-      fFileName := fFileName + ')';
-    end;
-  end;
+          fFileName := FormatString('%(%@%)', [ProgramName, User, Host])
+        else
+          fFileName := FormatString('%(%)', [ProgramName, Host])
+      else if fFamily.IncludeUserNameInFileName then
+        fFileName := FormatString('%(%)', [ProgramName, User])
+      else
+        Utf8ToFileName(ProgramName, fFileName);
+  // prepare for any file rotation
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount > 0 then
   begin
@@ -5658,7 +5650,7 @@ begin
     if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
       hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
-      timeNow := Time;
+      timeNow := Time; // local time hour
       if hourRotate < timeNow then
         hourRotate := hourRotate + 1; // will happen tomorrow
       timeBeforeRotate := hourRotate - timeNow;
@@ -5666,22 +5658,23 @@ begin
         GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
     end;
   end;
+  // file name should include current timestamp if no rotation is involved
   if (fFileRotationSize = 0) and
      (fFileRotationDailyAtHourTix = 0) then
-    fFileName := fFileName + ' ' + Ansi7ToString(NowToString(false));
+    fFileName := FormatString('% %', [fFileName, NowToFileShort]);
   {$ifdef OSWINDOWS}
+  // include library name
   if IsLibrary and
      (fFamily.fCustomFileName = '') then
     fFileName := fFileName + ' ' + ExtractFileName(GetModuleName(HInstance));
+  {$else}
+  // normalize file name to be more readable and usable on POSIX command line
+  fFileName := StringReplace(fFileName, ' ', '-', [rfReplaceAll]);
   {$endif OSWINDOWS}
+  // include thread ID in ptOneFilePerThread mode
   if fFamily.fPerThreadLog = ptOneFilePerThread then
-    fFileName := fFileName + ' ' +
-      sysutils.IntToHex(PtrInt(GetCurrentThreadId), 8);
-  {$ifdef OSPOSIX}
-  for i := 1 to length(fFileName) do
-    if fFileName[i] = ' ' then
-      fFileName[i] := '-'; // more readable and usable on POSIX command line
-  {$endif OSPOSIX}
+    fFileName := FormatString('% %',
+      [fFileName, PointerToHexShort(pointer(GetCurrentThreadId))]);
   fFileName := fFamily.fDestinationPath + fFileName + fFamily.fDefaultExtension;
 end;
 
