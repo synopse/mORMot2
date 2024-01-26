@@ -383,6 +383,7 @@ type
     /// uncompress Content according to CompressContentEncoding header
     procedure UncompressData;
     /// check RangeOffset/RangeLength against ContentLength
+    // - and update ResponseFlags and ContentLength properties
     function ValidateRange: boolean;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
     procedure ProcessInit(InStream: TStream);
@@ -3324,7 +3325,7 @@ begin
                 result := true;
                 exit;
               end;
-              SetLength(Content, ContentLength);
+              FastNewRawByteString(Content, ContentLength);
               ContentPos := pointer(Content);
             end;
             MoveFast(st.P^, ContentPos^, st.LineLen);
@@ -3498,8 +3499,10 @@ end;
 function THttpRequestContext.ContentFromFile(
   const FileName: TFileName; CompressGz: integer): boolean;
 var
+  h: THandle;
   gz: TFileName;
 begin
+  result := false;
   Content := '';
   // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
@@ -3508,39 +3511,45 @@ begin
      not (rfWantRange in ResponseFlags) then
   begin
     gz := FileName + '.gz';
-    ContentLength := FileSize(gz);
-    if ContentLength > 0 then
+    h := FileOpen(gz, fmOpenRead or fmShareRead);
+    if ValidHandle(h) then
     begin
-      ContentStream := TFileStreamEx.Create(gz, fmOpenReadShared);
-      ContentEncoding := 'gzip';
+      ContentStream := TFileStreamEx.CreateFromHandle(gz, h);
       include(ResponseFlags, rfContentStreamNeedFree);
+      ContentLength := FileSize(h);
+      ContentEncoding := 'gzip';
       result := true;
       exit; // force ContentStream of raw .gz file to bypass recompression
     end;
   end;
-  // check the actual file on disk
-  ContentLength := FileSize(FileName);
-  result := (ContentLength <> 0) and
-            ((not (rfWantRange in ResponseFlags)) or
-             ValidateRange);
-  if not result then
-    // there is no such file available, or range clearly wrong
+  // check the actual file on disk against any requested range
+  h := FileOpen(FileName, fmOpenReadShared);
+  if not ValidHandle(h) then
     exit;
+  ContentLength := FileSize(h);
+  if rfWantRange in ResponseFlags then
+    if not ValidateRange then
+    begin
+      FileClose(h);
+      exit;
+    end
+    else if RangeOffset <> 0 then
+      FileSeek64(h, RangeOffset);
+  // we can send this file out
+  result := true;
   include(ResponseFlags, rfAcceptRange);
-  ContentStream := TFileStreamEx.Create(FileName, fmOpenReadShared);
-  if RangeOffset <> 0 then
-    ContentStream.Seek(RangeOffset, soBeginning);
   if (ContentLength < 1 shl 20) and
      (pointer(CommandMethod) <> pointer(_HEADVAR)) then
   begin
-    // smallest files (up to 1MB) in temp memory (and maybe compress them)
-    SetLength(Content, ContentLength);
-    ContentStream.Read(pointer(Content)^, ContentLength);
-    FreeAndNilSafe(ContentStream);
-  end
-  else
-    // stream existing big file by chunks (also used for HEAD or Range)
-    include(ResponseFlags, rfContentStreamNeedFree);
+    // smallest files (up to 1MB) are sent from temp memory (maybe compressed)
+    FastNewRawByteString(Content, ContentLength);
+    result := FileReadAll(h, pointer(Content), ContentLength);
+    FileClose(h);
+    exit;
+  end;
+  // stream existing big file by chunks (also used for HEAD or Range)
+  ContentStream := TFileStreamEx.CreateFromHandle(FileName, h);
+  include(ResponseFlags, rfContentStreamNeedFree);
 end;
 
 
