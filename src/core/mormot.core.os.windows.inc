@@ -415,6 +415,13 @@ begin
 end;
 {$I+}
 
+function IsSharedViolation(ErrorCode: integer): boolean;
+begin
+  if ErrorCode = 0 then
+    ErrorCode := GetLastError;
+  result := ErrorCode in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION];
+end;
+
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
@@ -718,18 +725,18 @@ begin
       if GetFileInformationByHandle(h, lp) then
       begin
         Attr.dwFileAttributes := lp.dwFileAttributes;
-        Attr.ftCreationTime := lp.ftCreationTime;
+        Attr.ftCreationTime   := lp.ftCreationTime;
         Attr.ftLastAccessTime := lp.ftLastAccessTime;
-        Attr.ftLastWriteTime := lp.ftLastWriteTime;
-        Attr.nFileSizeHigh := lp.nFileSizeHigh;
-        Attr.nFileSizeLow := lp.nFileSizeLow;
+        Attr.ftLastWriteTime  := lp.ftLastWriteTime;
+        Attr.nFileSizeHigh    := lp.nFileSizeHigh;
+        Attr.nFileSizeLow     := lp.nFileSizeLow;
       end
       else
         result := false;
       CloseHandle(h);
     end
     else
-      result := GetLastError in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION];
+      result := IsSharedViolation;
   end;
 end;
 

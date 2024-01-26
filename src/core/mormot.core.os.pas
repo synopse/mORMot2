@@ -2889,6 +2889,10 @@ procedure FlushFileBuffers(F: THandle);
 function GetLastError: integer;
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
+/// check if the last error reporting by the system is a file access violation
+// - call GetLastError is no ErrorCode is supplied
+function IsSharedViolation(ErrorCode: integer = 0): boolean;
+
 /// compatibility function, wrapping Win32 API last error code
 procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}

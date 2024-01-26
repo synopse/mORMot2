@@ -1386,6 +1386,13 @@ begin
   result := fpgeterrno;
 end;
 
+function IsSharedViolation(ErrorCode: integer): boolean;
+begin
+  if ErrorCode = 0 then
+    ErrorCode := fpgeterrno;
+  result := ErrorCode = ESysEACCES;
+end;
+
 procedure SetLastError(error: integer);
 begin
   fpseterrno(error);
