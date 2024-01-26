@@ -7596,57 +7596,57 @@ begin
     Utf16_WIN32NOCASE);
   // note: standard SQLite3 NOCASE collation is used for AnsiString
   // register the MOD() user function, similar to the standard % operator
-  sqlite3.create_function(DB, 'MOD', 2, SQLITE_ANY, nil,
-    InternalMod, nil, nil);
+  sqlite3.create_function(DB, 'MOD', 2, SQLITE_DETERMINISTIC,
+    nil, InternalMod, nil, nil);
   // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
-  sqlite3.create_function(DB, 'TIMELOG', 1, SQLITE_ANY, nil,
-    InternalTimeLog, nil, nil);
+  sqlite3.create_function(DB, 'TIMELOG', 1, SQLITE_DETERMINISTIC,
+    nil, InternalTimeLog, nil, nil);
   // register TIMELOGUNIX(), returning Unix Epoch seconds from TTimeLog value
-  sqlite3.create_function(DB, 'TIMELOGUNIX', 1, SQLITE_ANY, nil,
-    InternalTimeLogUnix, nil, nil);
+  sqlite3.create_function(DB, 'TIMELOGUNIX', 1, SQLITE_DETERMINISTIC,
+    nil, InternalTimeLogUnix, nil, nil);
   // register SOUNDEX() SOUNDEXFR() SOUNDEXES() functions
-  sqlite3.create_function(DB, 'SOUNDEX', 1, SQLITE_UTF8, nil,
-    InternalSoundex, nil, nil);
-  sqlite3.create_function(DB, 'SOUNDEXFR', 1, SQLITE_UTF8, nil,
-    InternalSoundexFr, nil, nil);
-  sqlite3.create_function(DB, 'SOUNDEXES', 1, SQLITE_UTF8, nil,
-    InternalSoundexEs, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEX', 1, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalSoundex, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEXFR', 1, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalSoundexFr, nil, nil);
+  sqlite3.create_function(DB, 'SOUNDEXES', 1, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalSoundexEs, nil, nil);
   // rank() function as proposed in http://www.sqlite.org/fts3.html#appendix_a
-  sqlite3.create_function(DB, 'RANK', -1, SQLITE_ANY, nil,
-    InternalRank, nil, nil);
+  sqlite3.create_function(DB, 'RANK', -1, SQLITE_DETERMINISTIC,
+    nil, InternalRank, nil, nil);
   // register CONCAT() function to process fast string concatenation
-  sqlite3.create_function(DB, 'CONCAT', 2, SQLITE_UTF8, nil, nil,
-    InternalConcatStep, InternalConcatFinal);
+  sqlite3.create_function(DB, 'CONCAT', 2, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, nil, InternalConcatStep, InternalConcatFinal);
   // functions to handle some standard dynamic array BLOB content in SQL
   // IntegerDynArrayContains(BlobField,10) returning a boolean
-  sqlite3.create_function(DB, 'INTEGERDYNARRAYCONTAINS', 2, SQLITE_ANY, nil,
-    InternalIntegerDynArray, nil, nil);
+  sqlite3.create_function(DB, 'INTEGERDYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
+    nil, InternalIntegerDynArray, nil, nil);
   // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
-  sqlite3.create_function(DB, 'BYTEDYNARRAYCONTAINS', 2, SQLITE_ANY,
+  sqlite3.create_function(DB, 'BYTEDYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
     TypeInfo(TByteDynArray), InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'WORDDYNARRAYCONTAINS', 2, SQLITE_ANY,
+  sqlite3.create_function(DB, 'WORDDYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
     TypeInfo(TWordDynArray), InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'CARDINALDYNARRAYCONTAINS', 2, SQLITE_ANY,
+  sqlite3.create_function(DB, 'CARDINALDYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
     TypeInfo(TCardinalDynArray), InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'INT64DYNARRAYCONTAINS', 2, SQLITE_ANY,
+  sqlite3.create_function(DB, 'INT64DYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
     TypeInfo(TInt64DynArray), InternalSimpleInt64DynArray, nil, nil);
-  sqlite3.create_function(DB, 'CURRENCYDYNARRAYCONTAINS', 2, SQLITE_ANY,
+  sqlite3.create_function(DB, 'CURRENCYDYNARRAYCONTAINS', 2, SQLITE_DETERMINISTIC,
     TypeInfo(TInt64DynArray), InternalSimpleInt64DynArray, nil, nil);
   // RawUtf8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
-  sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSCASE', 2, SQLITE_ANY,
-    nil, InternalRawUtf8DynArray, nil, nil);
-  sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSNOCASE', 2, SQLITE_ANY,
-    @Utf8ILComp, InternalRawUtf8DynArray, nil, nil);
+  sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSCASE', 2,
+    SQLITE_DETERMINISTIC, nil, InternalRawUtf8DynArray, nil, nil);
+  sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSNOCASE', 2,
+    SQLITE_DETERMINISTIC, @Utf8ILComp, InternalRawUtf8DynArray, nil, nil);
   // JSON related functions (e.g. for ORM storing variants as JSON UTF-8 text)
-  sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_ANY, nil,
-    InternalJsonGet, nil, nil);
-  sqlite3.create_function(DB, 'JSONHAS', 2, SQLITE_ANY, nil,
-    InternalJsonHas, nil, nil);
-  sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_ANY, nil,
-    InternalJsonSet, nil, nil);
+  sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalJsonGet, nil, nil);
+  sqlite3.create_function(DB, 'JSONHAS', 2, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalJsonHas, nil, nil);
+  sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalJsonSet, nil, nil);
   // register UNICODEUPPER() function using Unicode 10.0 uppercase folding
-  sqlite3.create_function(DB, 'UNICODEUPPER', 1, SQLITE_UTF8, nil,
-    InternalUnicodeUpper, nil, nil);
+  sqlite3.create_function(DB, 'UNICODEUPPER', 1, SQLITE_UTF8 or SQLITE_DETERMINISTIC,
+    nil, InternalUnicodeUpper, nil, nil);
   // reallocate all TSqlDataBaseSQLFunction for re-Open (TRestServerDB.Backup)
   for i := 0 to fSqlFunctions.Count - 1 do
     TSqlDataBaseSQLFunction(fSqlFunctions.List[i]).CreateFunction(DB);
@@ -8895,7 +8895,7 @@ function TSqlDataBaseSQLFunction.CreateFunction(DB: TSqlite3DB): integer;
 begin
   if self <> nil then
     result := sqlite3.create_function(DB, pointer(fSqlName),
-      FunctionParametersCount, SQLITE_ANY, self, fInternalFunction, nil, nil)
+      FunctionParametersCount, SQLITE_UTF8, self, fInternalFunction, nil, nil)
   else
     result := SQLITE_ERROR;
 end;
