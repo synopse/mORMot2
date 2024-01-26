@@ -296,7 +296,7 @@ procedure LogToTextFile(Msg: RawUtf8);
 // - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
-function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
+function AppendToTextFile(const aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64 = MAXLOGSIZE; aUtcTimeStamp: boolean = false): boolean;
 
 
@@ -559,13 +559,15 @@ function DaysInMonth(Year, Month: cardinal): cardinal; overload;
 /// compute how many days there are in the month of a given date
 function DaysInMonth(Date: TDateTime): cardinal; overload;
 
-/// retrieve the current Date, in the ISO 8601 layout, but expanded and
+/// retrieve the current local Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
-function NowToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' '): RawUtf8;
+function NowToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' ';
+  UtcDate: boolean = false): RawUtf8;
 
 /// retrieve the current UTC Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
 function NowUtcToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' '): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert some date/time to the ISO 8601 text layout, including milliseconds
 // - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
@@ -1737,58 +1739,20 @@ end;
 var
   AppendToTextFileSafe: TLightLock; // to make AppendToTextFile() thread-safe
 
-function AppendToTextFile(aLine: RawUtf8; const aFileName: TFileName;
+function AppendToTextFile(const aLine: RawUtf8; const aFileName: TFileName;
   aMaxSize: Int64; aUtcTimeStamp: boolean): boolean;
 var
-  f: THandle;
-  old: TFileName;
-  buf: array[1..22] of AnsiChar;
-  size: Int64;
-  i: integer;
-  now: TSynSystemTime;
+  line: RawUtf8;
 begin
   result := false;
   if (aFileName = '') or
      (aLine = '') then
     exit;
+  FormatUtf8(CRLF + '% %',
+    [NowToString(true, ' ', aUtcTimeStamp), TrimControlChars(aLine)], line);
   AppendToTextFileSafe.Lock;
   try
-    f := FileOpen(aFileName, fmOpenWriteShared);
-    if not ValidHandle(f) then
-    begin
-      f := FileCreate(aFileName);
-      if not ValidHandle(f) then
-        exit; // you may not have write access to this folder
-    end;
-    // append to end of file
-    size := FileSeek64(f, 0, soFromEnd);
-    if (aMaxSize > 0) and
-       (size > aMaxSize) then
-    begin
-      // rotate log file if too big
-      FileClose(f);
-      old := aFileName + '.bak'; // '.log.bak'
-      DeleteFile(old); // rotate once
-      RenameFile(aFileName, old);
-      f := FileCreate(aFileName);
-      if not ValidHandle(f) then
-        exit;
-      FileClose(f);
-      f := FileOpen(aFileName, fmOpenWriteShared);
-      if not ValidHandle(f) then
-        exit;
-    end;
-    PWord(@buf)^ := 13 + 10 shl 8; // first go to next line
-    now.FromNow(not aUtcTimeStamp);
-    DateToIso8601PChar(@buf[3], true, now.Year, now.Month, now.Day);
-    TimeToIso8601PChar(@buf[13], true, now.Hour, now.Minute, now.Second, 0, ' ');
-    buf[22] := ' ';
-    for i := 1 to length(aLine) do
-      if aLine[i] < ' ' then
-        aLine[i] := ' '; // avoid line feed in text log file
-    result := (FileWrite(f, buf, SizeOf(buf)) = SizeOf(buf)) and
-              (FileWrite(f, pointer(aLine)^, length(aLine)) = length(aLine));
-    FileClose(f);
+    AppendToFile(line, aFileName, aMaxSize);
   finally
     AppendToTextFileSafe.UnLock;
   end;
@@ -2604,20 +2568,21 @@ begin
   result := true;
 end;
 
-function NowToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUtf8;
+function NowToString(Expanded: boolean; FirstTimeChar: AnsiChar;
+  UtcDate: boolean): RawUtf8;
 var
   I: TTimeLogBits;
 begin
-  I.FromNow;
+  if UtcDate then
+    I.FromUtcTime
+  else
+    I.FromNow;
   result := I.Text(Expanded, FirstTimeChar);
 end;
 
 function NowUtcToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUtf8;
-var
-  I: TTimeLogBits;
 begin
-  I.FromUtcTime;
-  result := I.Text(Expanded, FirstTimeChar);
+  result := NowToString(Expanded, FirstTimeChar, {UTC=}true);
 end;
 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
