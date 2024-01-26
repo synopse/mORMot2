@@ -6518,7 +6518,7 @@ begin
                 W.Add('"');
               end
               else
-                W.AddNoJsonEscape(V.VText);
+                W.AddNoJsonEscape(V.VText, StrLen(V.VText));
             end;
           ftBlob:
             W.AddShorter(BLOB[Tab]);  // ForceBlobAsNull should be true

@@ -945,7 +945,7 @@ begin
           if ColumnValueDBType = SQLT_INT then
             W.Add(PInt64(V)^)
           else
-            W.AddNoJsonEscape(V); // already as SQLT_STR
+            W.AddNoJsonEscape(V, StrLen(V)); // already as SQLT_STR
         ftDouble:
           W.AddDouble(unaligned(PDouble(V)^));
         ftCurrency:
