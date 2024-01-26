@@ -250,6 +250,7 @@ type
       read fAlgoFileExt;
     /// if this algorithm does not supports our custom storage format
     // - e.g. AlgoGZ set true and only supports plain buffers and files methods
+    // and would raise EAlgoCompress when stream methods are used
     property AlgoHasForcedFormat: boolean
       read fAlgoHasForcedFormat;
   public

@@ -696,9 +696,11 @@ begin
     RenameFile(fn[i - 1], fn[i]); // e.g. 'xxx.8' -> 'xxx.9'
   FreeAndNil(fRedirect);
   if soRedirectLogRotateCompress in fService.StartOptions then
-    GZFile(fRedirectFileName, fn[0], 1)   // 'xxx' -> 'xxx.1.gz' (libdeflate)
+     // 'xxx' -> 'xxx.1.gz' (libdeflate)
+    GZFile(fRedirectFileName, fn[0], {complevel=}1, {copydate=}true)
   else
-    RenameFile(fRedirectFileName, fn[0]); // 'xxx' -> 'xxx.1'
+    // 'xxx' -> 'xxx.1'
+    RenameFile(fRedirectFileName, fn[0]);
   DeleteFile(fRedirectFileName);
   fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
 end;

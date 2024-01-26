@@ -1371,7 +1371,8 @@ begin
   result := zlibCompressMax(PlainLen); // (GZHEAD_SIZE + 8) already included
 end;
 
-function GZFile(const orig, destgz: TFileName; CompressionLevel: integer): boolean;
+function GZFile(const orig, destgz: TFileName; CompressionLevel: integer;
+  copydate: boolean): boolean;
 var
   gz: TSynZipCompressor;
   s: TStream;
@@ -1388,21 +1389,25 @@ begin
       dst := GZWrite(pointer(src), length(src), CompressionLevel);
       result := (dst <> '') and
                 FileFromString(dst, destgz);
-      exit;
-    end;
+    end
+    else
     {$endif LIBDEFLATESTATIC}
-    s := TFileStreamEx.Create(orig, fmOpenReadShared);
-    try
-      gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
+    begin
+      s := TFileStreamEx.Create(orig, fmOpenReadShared);
       try
-        StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
-        result := true;
+        gz := TSynZipCompressor.Create(destgz, CompressionLevel, szcfGZ);
+        try
+          StreamCopyUntilEnd(s, gz); // faster and safer than gz.CopyFrom(s, 0);
+          result := true;
+        finally
+          gz.Free;
+        end;
       finally
-        gz.Free;
+        s.Free;
       end;
-    finally
-      s.Free;
     end;
+    if copydate then
+      FileSetDate(destgz, FileAge(orig));
   except
     result := false;
   end;
@@ -3749,7 +3754,7 @@ function TAlgoGZ.Compress(Plain: PAnsiChar; PlainLen,
   BufferOffset: integer): RawByteString;
 begin
   if BufferOffset <> 0 then
-    EnsureAlgoHasNoForcedFormat('Compress(BufferOffet)');
+    EnsureAlgoHasNoForcedFormat('Compress(BufferOffet<>0)');
   result := GZWrite(Plain, PlainLen,
     UseLevel(Plain, PlainLen, CompressionSizeTrigger, CheckMagicForCompressed));
 end;
@@ -3796,7 +3801,7 @@ class function TAlgoGZ.FileIsCompressed(
 var
   f: THandle;
   l: integer;
-  h: array[0..4] of cardinal;
+  h: array[0..4] of cardinal; // .gz file should be at least 20 bytes long
 begin
   result := false;
   f := FileOpen(Name, fmOpenReadShared);
@@ -3811,7 +3816,7 @@ end;
 function TAlgoGZ.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
   ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean;
 begin
-  result := GZFile(Source, Dest, fCompressionLevel);
+  result := GZFile(Source, Dest, fCompressionLevel, {copydate=}true);
 end;
 
 function TAlgoGZ.FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
@@ -3823,6 +3828,8 @@ begin
   tmp := StringFromFile(Source);
   result := gzr.Init(pointer(tmp), length(tmp)) and
             gzr.ToFile(Dest);
+  if result then
+    FileSetDate(Dest, FileAge(Source));
 end;
 
 
