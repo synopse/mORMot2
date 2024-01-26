@@ -3177,6 +3177,11 @@ function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 // - returns 0 if the conversion failed
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
+/// check if a file exists and can not be written
+// - on POSIX, call fpaccess() and check for the W_OK attribute
+// - on Windows, supports aFileName longer than MAX_PATH
+function FileIsReadOnly(const FileName: TFileName): boolean;
+
 /// reduce the visibility of a given file, and set its read/write attributes
 // - on POSIX, change attributes for the the owner, and reset group/world flags
 // so that it is accessible by the current user only; under POSIX, there is
@@ -3361,7 +3366,7 @@ function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 /// try to open the file from its name, as fmOpenReadShared
 // - on Windows, calls CreateFileW(aFileName,GENERIC_READ) then CloseHandle
 // - on POSIX, calls fpOpen(pointer(aFileName),O_RDONLY) with no fpFlock() call
-function IsFileReadable(const aFileName: TFileName): boolean;
+function FileIsReadable(const aFileName: TFileName): boolean;
 
 /// copy all Source content into Dest from current position
 // - on Delphi, Dest.CopyFrom(Source, 0) uses GetSize and ReadBuffer which is
@@ -7312,8 +7317,10 @@ var
   retry: integer;
 begin
   // check the Directory itself
-  dir := ExcludeTrailingPathDelimiter(Directory);
   result := false;
+  if Directory = '' then
+    exit;                       
+  dir := ExcludeTrailingPathDelimiter(Directory);
   if FileIsReadOnly(dir) then
     exit; // the whole folder is read-only for the currently running user
   {$ifdef OSWINDOWS}
@@ -7332,7 +7339,7 @@ begin
   // compute a non existing temporary file name in this Directory
   fmt := '%s/.%x.test'; // make the file "invisible"
   {$endif OSWINDOWS}
-  retry := 20;
+  retry := 10;
   repeat
     fn := Format(fmt, [dir, Random32]);
     if not FileExists(fn) then

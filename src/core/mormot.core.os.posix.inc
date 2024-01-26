@@ -1169,12 +1169,19 @@ begin
   result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
 end;
 
+function FileIsReadOnly(const FileName: TFileName): boolean;
+begin
+  result := (FileName <> '') and
+            (fpaccess(pointer(FileName), W_OK) <> 0);
+end;
+
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
 begin
-  if ReadOnly then
-    fpchmod(pointer(FileName), S_IRUSR)
-  else
-    fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
+  if FileName <> '' then
+    if ReadOnly then
+      fpchmod(pointer(FileName), S_IRUSR)
+    else
+      fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
 end;
 
 procedure FileSetSticky(const FileName: TFileName);
@@ -1366,7 +1373,7 @@ begin
   result := fpOpen(pointer(FileName), O_RDONLY); // no fpFlock() call
 end;
 
-function IsFileReadable(const aFileName: TFileName): boolean;
+function FileIsReadable(const aFileName: TFileName): boolean;
 var
   fd: integer;
 begin

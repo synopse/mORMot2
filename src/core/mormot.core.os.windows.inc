@@ -854,6 +854,14 @@ begin
   result := string(SynUnicode(tmp));
 end;
 
+function FileIsReadOnly(const FileName: TFileName): boolean;
+var
+  FA: WIN32_FILE_ATTRIBUTE_DATA;
+begin
+  result := (not GetFileAttributesInternal(FileName, FA, {followlink=}false)) or
+            (FA.dwFileAttributes and faReadOnly <> 0);
+end;
+
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
@@ -1093,7 +1101,7 @@ begin
     FILE_FLAG_SEQUENTIAL_SCAN, 0);
 end;
 
-function IsFileReadable(const aFileName: TFileName): boolean;
+function FileIsReadable(const aFileName: TFileName): boolean;
 var
   tmp: TW32Temp;
   h: THandle;
