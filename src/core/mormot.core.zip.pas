@@ -187,13 +187,14 @@ function GZWrite(buf, dest: pointer; len, level: PtrInt): PtrInt; overload;
 // - will use libdeflate if possible, then TSynZipCompressor for minimal memory
 // use during (huge) file compression
 function GZFile(const orig, destgz: TFileName;
-  CompressionLevel: integer = 6): boolean; overload;
+  CompressionLevel: integer = Z_USUAL_COMPRESSION;
+  copydate: boolean = false): boolean; overload;
 
 /// compress a memory buffer into a new .gz file
 // - will use libdeflate if possible, then TSynZipCompressor for minimal memory
 // use during (huge) file compression
 function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
-  CompressionLevel: integer = 6): boolean; overload;
+  CompressionLevel: integer = Z_USUAL_COMPRESSION): boolean; overload;
 
 
 { ************  .ZIP Archive File Support }
@@ -678,7 +679,8 @@ type
     // - can use faster libdeflate instead of plain zlib if available
     // - will call IsContentCompressed() to detect and use Z_STORED if applying
     procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: PtrInt;
-      CompressLevel: integer = 6; FileAge: integer = 0); overload;
+      CompressLevel: integer = Z_USUAL_COMPRESSION;
+      FileAge: integer = 0); overload;
     /// add a memory buffer to the zip file, without compression
     // - content is stored, not deflated
     // - by default, current date/time is used if no FileAge is supplied; see also
@@ -693,7 +695,7 @@ type
     // - can use faster libdeflate (if available) for files up to 64 MB, but
     // fallback to zlib with 1MB chunks for bigger files
     procedure AddDeflated(const aFileName: TFileName;
-      RemovePath: boolean = true; CompressLevel: integer = 6;
+      RemovePath: boolean = true; CompressLevel: integer = Z_USUAL_COMPRESSION;
       ZipName: TFileName = ''); overload;
     /// compress some data into a new zip entry as a TStream instance
     // - data will be compressed by one or several calls to result.Write()
@@ -702,7 +704,7 @@ type
     // - currently do not support any OnProgressStep notification, because
     // we don't know the input size ahead of time
     function AddDeflatedStream(const aZipName: TFileName;
-      FileAge: integer = 0; CompressLevel: integer = 6): TStream;
+      FileAge: integer = 0; CompressLevel: integer = Z_USUAL_COMPRESSION): TStream;
     /// add a (huge) file to the zip file, without compression
     // - copy reading 1MB chunks of input, triggerring zip64 format if needed
     // - just a wrapper around AddDeflated() with CompressLevel=-1
@@ -718,12 +720,13 @@ type
     // - returns the number of files added
     function AddFolder(const FolderName: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
-      CompressLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
-      IncludeVoidFolders: boolean = false; ZipFolder: TFileName = ''): integer;
+      CompressLevel: integer = Z_USUAL_COMPRESSION;
+      const OnAdd: TOnZipWriteAdd = nil; IncludeVoidFolders: boolean = false;
+      ZipFolder: TFileName = ''): integer;
     /// compress (using AddDeflate) the supplied files
     // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
     procedure AddFiles(const aFiles: array of TFileName;
-      RemovePath: boolean = true; CompressLevel: integer = 6);
+      RemovePath: boolean = true; CompressLevel: integer = Z_USUAL_COMPRESSION);
     /// add a file from an already compressed zip entry
     procedure AddFromZip(ZipSource: TZipRead; ZipEntry: integer);
     /// append a file content into the destination file
@@ -764,7 +767,8 @@ type
 
 var
   /// the default compression level to be applied to EventArchiveZip()
-  EventArchiveZipCompressLevel: integer = 6;
+  // - you may set Z_BEST_SPEED (1) for faster process (and lower compression)
+  EventArchiveZipCompressLevel: integer = Z_USUAL_COMPRESSION;
 
 /// a TSynLogArchiveEvent handler which will compress older .log files
 // into .zip archive files
@@ -795,15 +799,16 @@ procedure FileAppend(const MainFile, AppendFile, NewFile: TFileName;
 // StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFolder(const MainFile, NewFile, ZipFolder: TFileName;
   const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
-  CompressionLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil;
-  PreserveWinDigSign: boolean = false);
+  CompressionLevel: integer = Z_USUAL_COMPRESSION;
+  const OnAdd: TOnZipWriteAdd = nil; PreserveWinDigSign: boolean = false);
 
 /// zip a some files after the end of MainFile into NewFile
 // - PreserveWinDigSign legacy method is rejected by modern Windows, so
 // StuffExeCertificate() from mormot.crypt.secure is to be used instead
 procedure ZipAppendFiles(const MainFile, NewFile: TFileName;
   const ZipFiles: array of TFileName; RemovePath: boolean = true;
-  CompressionLevel: integer = 6; PreserveWinDigSign: boolean = false);
+  CompressionLevel: integer = Z_USUAL_COMPRESSION;
+  PreserveWinDigSign: boolean = false);
 
 
 /// (un)compress a data content using the gzip algorithm
@@ -835,7 +840,7 @@ function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 /// compress some data, with a proprietary format (deflate + Adler32)
 // - for backward compatibility - consider using TAlgoCompress instead
 function CompressString(const data: RawByteString; failIfGrow: boolean = false;
-  CompressionLevel: integer = 6) : RawByteString;
+  CompressionLevel: integer = Z_USUAL_COMPRESSION) : RawByteString;
 
 /// uncompress some data, with a proprietary format (deflate + Adler32)
 // - for backward compatibility - consider using TAlgoCompress instead
@@ -867,21 +872,25 @@ function HashFileCrc32(const FileName: TFileName): RawUtf8;
 { ************ TAlgoDeflate and TAlgoGZ High-Level Compression Algorithms }
 
 var
-  /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
+  /// acccess to Zip Deflate compression in level Z_USUAL_COMPRESSION (6)
+  // as a TAlgoCompress class
   // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflate: TAlgoCompress;
 
-  /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
+  /// acccess to Zip Deflate compression in level Z_BEST_SPEED (1)
+  // as a TAlgoCompress class
   // - will use faster libdeflate instead of plain zlib if available
   AlgoDeflateFast: TAlgoCompress;
 
-  /// acccess to .gz compression in level 6 as a TAlgoCompress class for files
+  /// acccess to .gz compression in level Z_USUAL_COMPRESSION (6)
+  // as a TAlgoCompress class for buffers and files (not stream)
   // - since .gz is a file-level algorithm, this class won't use our custom
   // TAlgoCompress file layout and only supports buffer and file methods
   // - will use faster libdeflate instead of plain zlib if available
   AlgoGZ: TAlgoCompress;
 
-  /// acccess to .gz compression in level 1 as a TAlgoCompress class for files
+  /// acccess to .gz compression in level Z_BEST_SPEED (1)
+  // as a TAlgoCompress class for buffers and files (not stream)
   // - since .gz is a file-level algorithm, this class won't use our custom
   // TAlgoCompress file layout and only supports buffer and file methods
   // - will use faster libdeflate instead of plain zlib if available
@@ -3471,7 +3480,7 @@ begin
 end;
 
 const
-  HTTP_LEVEL = 1; // 6 is standard, but 1 is enough and faster
+  HTTP_LEVEL = Z_BEST_SPEED; // 1 is enough and way faster
 
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 begin
@@ -3601,7 +3610,7 @@ begin
     fAlgoID := 2;
   fAlgoFileExt := '.synz';
   inherited Create;
-  fDeflateLevel := 6;
+  fDeflateLevel := Z_USUAL_COMPRESSION;
 end;
 
 function TAlgoDeflate.RawProcess(src, dst: pointer; srcLen, dstLen,
@@ -3641,7 +3650,7 @@ begin
   fAlgoID := 3;
   fAlgoFileExt := '.synz';
   inherited Create;
-  fDeflateLevel := 1;
+  fDeflateLevel := Z_BEST_SPEED; // = 1
 end;
 
 type
@@ -3692,7 +3701,7 @@ begin
   if fAlgoID = 0 then // if not overriden by TAlgoGZFast
     fAlgoID := 9;
   fAlgoFileExt := '.gz';
-  fCompressionLevel := 6;
+  fCompressionLevel := Z_USUAL_COMPRESSION;
   fAlgoHasForcedFormat := true; // trigger EAlgoCompress e.g. on stream methods
   inherited Create;
 end;
@@ -3845,11 +3854,13 @@ constructor TAlgoGZFast.Create;
 begin
   fAlgoID := 10;
   inherited Create;
-  fCompressionLevel := 1;
+  // fastest - ideal for logs, especially with libdeflate
+  fCompressionLevel := Z_BEST_SPEED; // = 1
 end;
 
 
-initialization
+procedure InitializeUnit;
+begin
   AlgoDeflate := TAlgoDeflate.Create;
   AlgoDeflateFast := TAlgoDeflateFast.Create;
   AlgoGZ := TAlgoGZ.Create;
@@ -3864,7 +3875,11 @@ initialization
       LIBDEFLATE_MAXSIZE := 256 shl 20; // more than 4 GB: allow up to 256 MB
   {$endif CPU64}
   {$endif LIBDEFLATESTATIC}
-  // if you don't like those defaults, you can fix your own LIBDEFLATE_MAXSIZE
+  // if you don't like those defaults, you can set your own LIBDEFLATE_MAXSIZE
+end;
+
+initialization
+  InitializeUnit;
 
 end.
 
