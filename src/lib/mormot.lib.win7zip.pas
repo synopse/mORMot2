@@ -2423,7 +2423,7 @@ var
           if (f.Attr and (faDirectory + faVolumeID{%H-})) = 0 then
           begin
             fn := p + f.Name;
-            if IsFileReadable(fn) then
+            if FileIsReadable(fn) then
             begin
               item := T7zItem.Create;
               item.SourceMode := smFile;

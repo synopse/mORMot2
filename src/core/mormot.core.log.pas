@@ -3123,8 +3123,7 @@ begin
   if not FileExists(MabFile) then
     if not IsDirectoryWritable(ExtractFilePath(MabFile), [idwExcludeWinSys]) then
       // read/only exe folder -> store .mab in local non roaming user folder
-      MabFile := IncludeTrailingPathDelimiter(GetSystemPath(spUserData)) +
-                   ExtractFileName(Mabfile);
+      MabFile := GetSystemPath(spUserData) + ExtractFileName(Mabfile);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
     MapAge := FileAgeToUnixTimeUtc(fDebugFile);

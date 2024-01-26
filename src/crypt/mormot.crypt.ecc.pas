@@ -2021,13 +2021,13 @@ const
 
 function EccKeyFileFolder: TFileName;
 begin
-  if _EccKeyFileFolder = '' then
-  begin
-    _EccKeyFileFolder := GetSystemPath(spUserData) + _KEYFILEFOLDER;
-    if not DirectoryExists(_EccKeyFileFolder) then
-      CreateDir(_EccKeyFileFolder); // always create this folder
-  end;
   result := _EccKeyFileFolder;
+  if result <> '' then
+    exit;
+  result := EnsureDirectoryExists(GetSystemPath(spUserData) + _KEYFILEFOLDER);
+  if result = '' then
+    EnsureDirectoryExists(GetSystemPath(spTemp) + _KEYFILEFOLDER);
+  _EccKeyFileFolder := result;
 end;
 
 function EccKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
