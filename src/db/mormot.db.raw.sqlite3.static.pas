@@ -728,8 +728,9 @@ begin
           CodecAesProcess(page + p, buf, pagesize, @new, true);
         inc(buf, pagesize);
       end;
-      FileSeek64(F, posi);
-      FileWrite(F, pointer(temp)^, pagesize * n); // update in-place
+      FileSeek64(F, posi); // update in-place where we just read
+      if not FileWriteAll(F, pointer(temp), pagesize * n) then
+        exit;
       inc(posi, pagesize * n);
       inc(page, n);
     end;
@@ -833,8 +834,9 @@ begin
       break; // stop on any read error
     if OldPassWord <> '' then
       XorOffset(@buf, posi, R, @oldtable); // uncrypt with oldtable key
-    FileSeek64(F, posi);
-    FileWrite(F, buf, R); // update buffer
+    FileSeek64(F, posi); // update in-place where we just read
+    if not FileWriteAll(F, @buf, R) then // update buffer
+      break;
     inc(posi, cardinal(R));
   end;
   FileClose(F);
