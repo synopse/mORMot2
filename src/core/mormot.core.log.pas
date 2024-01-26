@@ -5679,65 +5679,33 @@ begin
 end;
 
 procedure TSynLog.CreateLogWriter;
-var
-  i, retry: integer;
-  h: THandle;
-  exists: boolean;
 begin
-  if fWriterStream = nil then
+  if fWriterStream = nil then // may be set by overriden CreateLogWriter method
   begin
     // create fWriterStream instance
     ComputeFileName;
-    if fFamily.NoFile then
-      fWriterStream := TFakeWriterStream.Create
-    else
-    begin
-      if FileExists(fFileName) then
-        case fFamily.FileExistsAction of
-          acOverwrite:
-            DeleteFile(fFileName);
-          acAppend:
-            Include(fInternalFlags, logHeaderWritten);
+    if not fFamily.NoFile then
+      // open write access to the .log file
+      try
+        if fFamily.FileExistsAction = acOverwrite then
+        begin
+          DeleteFile(fFileName);
+          fWriterStream :=
+            TFileStreamNoWriteError.Create(fFileName, fmCreate or fmShareRead);
+          exclude(fInternalFlags, logHeaderWritten);
+        end
+        else
+        begin
+          fWriterStream :=
+            TFileStreamNoWriteError.CreateAndRenameIfLocked(fFileName);
+          if fWriterStream.Seek(0, soEnd) <> 0 then
+            include(fInternalFlags, logHeaderWritten); // write headers once
         end;
-      for retry := 1 to 3 do
-      begin
-        for i := 1 to retry * 3 do
-        try
-          exists := FileExists(fFileName);
-          if exists and
-             (fFamily.FileExistsAction <> acOverwrite) then
-          begin
-            if fFamily.FileExistsAction = acAppend then
-              Include(fInternalFlags, logHeaderWritten);
-          end
-          else if (fFileRotationSize = 0) or
-                  not exists then
-            TFileStreamEx.Create(fFileName, fmCreate).Free; // a void file
-          h := FileOpen(fFileName, fmOpenReadWrite or fmShareRead);
-          if ValidHandle(h) then 
-          begin
-            fWriterStream :=
-              TFileStreamWithoutWriteError.CreateFromHandle(fFileName, h);
-            break;
-          end
-          else // likely to be ERROR_ACCESS_DENIED
-            SleepHiRes(50); // wait a little for the file to be available
-        except
-          on Exception do
-            SleepHiRes(10);
-        end;
-        if fWriterStream <> nil then
-          break;
-        fFileName := ChangeFileExt(fFileName,
-          '-' + IntToStr(retry) + fFamily.fDefaultExtension);
+      except
+        // continue if file creation fails (e.g. R/O folder or disk full)
       end;
-    end;
     if fWriterStream = nil then
-      // let's continue if file creation fails (e.g. R/O folder or disk full)
-      fWriterStream := TFakeWriterStream.Create;
-    if (fFileRotationSize > 0) or
-       (fFamily.FileExistsAction <> acOverwrite) then
-      fWriterStream.Seek(0, soEnd); // in rotation mode, append at the end
+      fWriterStream := TFakeWriterStream.Create; // don't write anything
   end;
   if fWriterClass = nil then
     // use TJsonWriter since mormot.core.json.pas is linked
@@ -5750,7 +5718,7 @@ begin
       + [twoEnumSetsAsTextInRecord, // debug-friendly text output
          twoFullSetsAsStar,
          twoForceJsonExtended,
-         twoNoWriteToStreamException]
+         twoNoWriteToStreamException] // if TFileStreamNoWriteError is not set
       - [twoFlushToStreamNoAutoResize]; // stick to BufferSize
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
