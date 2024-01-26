@@ -1958,53 +1958,76 @@ begin
     User := RawUtf8(GetEnvironmentVariable('USER'));
 end;
 
+function GetEnvFolder(const name: string; var folder: TFileName;
+  writable: boolean): boolean;
+begin
+  folder := GetEnvironmentVariable(name);
+  if folder <> '' then
+    if writable and
+       not IsDirectoryWritable(folder) then
+      folder := ''
+    else
+      folder := IncludeTrailingPathDelimiter(folder);
+  result := folder <> '';
+end;
+
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 begin
   result := ''; // "out result" param is not enough for FPC
   case kind of
     spLog:
       begin
+        // try '/var/log/<exename>'
         if IsDirectoryWritable('/var/log') then
-          // '/var/log/<exename>' may be available only to root on POSIX
+        begin
           result := EnsureDirectoryExists(
                       '/var/log/' + TFileName(Executable.ProgramName));
-        if result <> '' then
-          exit; // found
-        result := Executable.ProgramFilePath;  // '<exepath>/log'
-        if not IsDirectoryWritable(Executable.ProgramFilePath) then
-          result := GetSystemPath(spUserData); // '~/.cache/<exename>/log'
-        result := EnsureDirectoryExists(result + 'log');
-        if result <> '' then
-          exit; // found
-        result := format('%s%s-log',          // '/tmp/<exename>-log'
-                    [GetSystemPath(spTemp), Executable.ProgramName]);
+          if result <> '' then
+            exit;
+        end;
+        // try '<exepath>/log'
+        if IsDirectoryWritable(Executable.ProgramFilePath) then
+        begin
+          result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log');
+          if result <> '' then
+            exit;
+        end;
+        // try '$TMP/<exename>-log' - spUserData/$HOME is no option on POSIX
+        result := EnsureDirectoryExists(format('%s%s-log',
+          [GetSystemPath(spTemp), Executable.ProgramName]));
       end;
+    // warning: $HOME is reported wrong with sudo for spUserData/spUserDocuments
     spUserData:
       begin
-        // '~/.cache/<exename>'
-        result := GetEnvironmentVariable('XDG_CACHE_HOME');
-        if (result = '') or
-           not IsDirectoryWritable(result) then
-          result := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-        result := result + TFileName(Executable.ProgramName);
+        // try $XDG_CACHE_HOME
+        if GetEnvFolder('XDG_CACHE_HOME', result, {writable=}true) then
+          exit;
+        // try '$HOME/.cache'
+        result := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
+        if IsDirectoryWritable(result) then
+          exit;
+        // try '$TMP/<user>'
+        result := EnsureDirectoryExists(
+          GetSystemPath(spTemp) + TFileName(Executable.User));
       end;
     spTemp:
       begin
-        result := GetEnvironmentVariable('TMPDIR'); // POSIX
-        if result = '' then
-          result := GetEnvironmentVariable('TMP');
-        if (result = '') or
-           not IsDirectoryWritable(result) then
-          if IsDirectoryWritable('/tmp') then
-            result := '/tmp/'
-          else
-            result := '/var/tmp/';
+        // try $TMPDIR (POSIX standard) and $TMP and $TEMP
+        if GetEnvFolder('TMPDIR', result, {writable=}true) or
+           GetEnvFolder('TMP',    result, {writable=}true) or
+           GetEnvFolder('TEMP',   result, {writable=}true) then
+          exit;
+        // try /tmp
+        result := '/tmp/';
+        if IsDirectoryWritable(result) then
+          exit;
+        // try /var/tmp
+        result := '/var/tmp/';
       end;
   else
     // POSIX requires a value for the $HOME environment variable
-    result := GetEnvironmentVariable('HOME');
+    GetEnvFolder('HOME', result, {writable=}false);
   end;
-  result := EnsureDirectoryExists(result, EOSException);
 end;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;

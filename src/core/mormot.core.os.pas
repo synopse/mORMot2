@@ -1540,9 +1540,8 @@ type
   // and spTemp will call GetTempPath() or read the $TEMP environment variable
   // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
-  // spUserData maps '$XDG_CACHE_HOME/<exename>' or '~/.cache/<exename>',
-  // and spLog (if writable) to '/var/log/<exename>' or '<exepath>/log'
-  // or '~/.cache/<exename>/log'
+  // spUserData maps $XDG_CACHE_HOME or '$HOME/.cache' or '$TMP/<user>', and
+  // spLog maps '/var/log/<exename>' or '<exepath>/log' or '$TMP/<exename>-log'
   TSystemPath = (
     spCommonData,
     spUserData,
