@@ -1390,7 +1390,7 @@ const
     302,                        // bspMost < 2000
     high(BIGINT_PRIMES_DELTA)); // bspAll  < 18000
 
-// profiling shows that Miller-Rabin takes 150 times more time than bspMost
+// profiling shows that Miller-Rabin takes 150 times more than bspMost
 
 function TBigInt.MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
 var
@@ -1540,7 +1540,7 @@ begin
     if GetBitsCount(Value^, n * HALF_BITS) < n * (HALF_BITS div 3) then
     begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
-      // with our TAesPrng, it never occurred after 1,000,000,000 trials
+      // - with our TAesPrng, it never occurred after 1,000,000,000 trials
       dec(min);
       if min = 0 then // paranoid
         raise ERsaException.Create('TBigInt.FillPrime: weak CSPRNG');
@@ -1555,7 +1555,7 @@ begin
       break;
     raise ERsaException.Create('TBigInt.FillPrime FIPS_MIN'); // paranoid
   until false;
-  // search for the next prime starting at this point
+  // brute force search for the next prime starting at this point
   result := true; 
   repeat
     if IsPrime(Extend, Iterations) then
@@ -1573,7 +1573,7 @@ begin
     //      it seems not necessary for RSA because ECM algo negates its benefits
     // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
     //      especially because having multiple rounds of Miller-Rabin is plenty
-    //      with keysize >= 2048-bit (FIPC 186-4 appendix B.3.1 item A)
+    //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
     // - see https://security.stackexchange.com/a/176396/155098
     //   and https://crypto.stackexchange.com/a/15761/40200
   until GetTickCount64 > EndTix; // IsPrime() may be slow for sure
