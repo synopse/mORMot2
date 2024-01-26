@@ -4355,7 +4355,8 @@ begin
   // compress 'xxx.tmp' -> 'xxx.1.gz' outside the main lock
   if tocompress <> '' then
     try
-      GZFile(tocompress, fn[0], {level=}1); // may use libdeflate
+      // may use libdeflate
+      GZFile(tocompress, fn[0], {level=}1, {copydate=}true);
     finally
       DeleteFile(tocompress);
     end;
