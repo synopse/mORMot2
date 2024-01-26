@@ -392,8 +392,8 @@ const
   SQLITE_IOERR_DIR_FSYNC = 1290;
   /// The SQLITE_CANTOPEN_DIRTYWAL result code is not used at this time.
   SQLITE_CANTOPEN_DIRTYWAL = 1294;
-  /// The SQLITE_CONSTRAINT_NOTNULL error code is an extended error code for SQLITE_CONSTRAINT indicating that
-  // a NOT NULL constraint failed.
+  /// The SQLITE_CONSTRAINT_NOTNULL error code is an extended error code for
+  // SQLITE_CONSTRAINT indicating that a NOT NULL constraint failed.
   SQLITE_CONSTRAINT_NOTNULL = 1299;
   /// The SQLITE_READONLY_DIRECTORY result code indicates that the database is read-only because process does
   // not have permission to create a journal file in the same directory as the database and the creation of a
@@ -689,10 +689,10 @@ const
   // SQLITE_CONFIG_SCRATCH and SQLITE_CONFIG_PAGECACHE
   // - There are three arguments: An 8-byte aligned pointer to the memory, the number
   // of bytes in the memory buffer, and the minimum allocation size.
-  // - If the first pointer (the memory pointer) is NULL, then SQLite reverts
+  // - If the first pointer (the memory pointer) is nil, then SQLite reverts
   // to using its default memory allocator (the system malloc() implementation),
   // undoing any prior invocation of SQLITE_CONFIG_MALLOC.
-  // - If the memory pointer is not NULL and either SQLITE_ENABLE_MEMSYS3 or
+  // - If the memory pointer is not nil and either SQLITE_ENABLE_MEMSYS3 or
   // SQLITE_ENABLE_MEMSYS5 are defined, then the alternative memory allocator is
   // engaged to handle all of SQLites memory allocation needs.
   // - The first pointer (the memory pointer) must be aligned to an 8-byte boundary
@@ -750,9 +750,9 @@ const
   SQLITE_CONFIG_GETPCACHE = 15;
   /// This option takes two arguments: a pointer to a function with a call
   // signature of void(*)(void*,int,const char*), and a pointer to void
-  // - If the function pointer is not NULL, it is invoked by sqlite3.log()
+  // - If the function pointer is not nil, it is invoked by sqlite3.log()
   // to process each logging event.
-  // - If the function pointer is NULL, the sqlite3.log() interface becomes a no-op.
+  // - If the function pointer is nil, the sqlite3.log() interface becomes a no-op.
   // - The void pointer that is the second argument to SQLITE_CONFIG_LOG is passed
   // through as the first parameter to the application-defined logger function whenever
   // that function is invoked.
@@ -803,8 +803,8 @@ const
   // - The SQLITE_CONFIG_LOG option takes two arguments: a pointer to a function
   // with a call signature of void(*)(void*,int,const char*), and a pointer
   // to void.
-  // - If the function pointer is not NULL, it is invoked by sqlite3_log()
-  // to process each logging event. If the function pointer is NULL, the
+  // - If the function pointer is not nil, it is invoked by sqlite3_log()
+  // to process each logging event. If the function pointer is nil, the
   // sqlite3_log() interface becomes a no-op.
   // - The void pointer that is the second argument to SQLITE_CONFIG_LOG is
   // passed through as the first parameter to the application-defined logger
@@ -893,7 +893,7 @@ const
   // memory allocator configuration for the database connection.
   // - The first argument (the third parameter to sqlite3_db_config() is a
   // pointer to a memory buffer to use for lookaside memory.
-  // - The first argument after the SQLITE_DBCONFIG_LOOKASIDE verb may be NULL
+  // - The first argument after the SQLITE_DBCONFIG_LOOKASIDE verb may be nil
   // in which case SQLite will allocate the lookaside buffer itself using
   // sqlite3_malloc().
   // - The second argument is the size of each lookaside buffer slot.
@@ -917,7 +917,7 @@ const
   // positive to enable FK enforcement or negative to leave FK enforcement unchanged.
   // - The second parameter is a pointer to an integer into which is written
   // 0 or 1 to indicate whether FK enforcement is off or on following this call.
-  // - The second parameter may be a NULL pointer, in which case the FK
+  // - The second parameter may be a nil pointer, in which case the FK
   // enforcement setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_FKEY = 1002;
   /// This option is used to enable or disable triggers.
@@ -927,7 +927,7 @@ const
   // - The second parameter is a pointer to an integer into which is written
   // 0 or 1 to indicate whether triggers are disabled or enabled following
   // this call.
-  // - The second parameter may be a NULL pointer, in which case the trigger
+  // - The second parameter may be a nil pointer, in which case the trigger
   // setting is not reported back.
   // - Originally this option disabled all triggers. However, since SQLite
   // version 3.35.0, TEMP triggers are still allowed even if this option is off.
@@ -942,7 +942,7 @@ const
   // unchanged.
   // - The second parameter is a pointer to an integer into which is
   // written 0 or 1 to indicate whether fts3_tokenizer is disabled or enabled
-  // following this call. The second parameter may be a NULL pointer, in which
+  // following this call. The second parameter may be a nil pointer, in which
   // case the new setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER = 1004;
   /// This option is used to enable or disable the sqlite3_load_extension()
@@ -959,7 +959,7 @@ const
   // - The second parameter is a pointer to an integer into which is written
   // 0 or 1 to indicate whether sqlite3_load_extension() interface is disabled
   // or enabled following this call.
-  // - The second parameter may be a NULL pointer, in which case the new
+  // - The second parameter may be a nil pointer, in which case the new
   // setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION = 1005;
 
@@ -1229,6 +1229,76 @@ const
   // - This mode works the same way as SQLITE_CHECKPOINT_RESTART with the addition that it also
   // truncates the log file to zero bytes just prior to a successful return.
   SQLITE_CHECKPOINT_TRUNCATE = 3;
+
+
+  /// preferred text encoding (eTextRep) bitmask to define a deterministic function
+  // - The SQLITE_DETERMINISTIC flag means that the new function always gives
+  // the same output when the input parameters are the same. The abs() function
+  // is deterministic, for example, but randomblob() is not. Functions must be
+  // deterministic in order to be used in certain contexts such as with the
+  // WHERE clause of partial indexes or in generated columns. SQLite might also
+  // optimize deterministic functions by factoring them out of inner loops.
+  SQLITE_DETERMINISTIC    = $000000800;
+  /// preferred text encoding (eTextRep) bitmask to define a top-level SQL function
+  // - The SQLITE_DIRECTONLY flag means that the function may only be invoked
+  // from top-level SQL, and cannot be used in VIEWs or TRIGGERs nor in schema
+  // structures such as CHECK constraints, DEFAULT clauses, expression indexes,
+  // partial indexes, or generated columns.
+  // - The SQLITE_DIRECTONLY flag is recommended for any application-defined
+  // SQL function that has side-effects or that could potentially leak sensitive
+  // information. This will prevent attacks in which an application is tricked
+  // into using a database file that has had its schema surreptitiously modified
+  // to invoke the application-defined function in ways that are harmful.
+  // - Some people say it is good practice to set SQLITE_DIRECTONLY on all
+  // application-defined SQL functions, regardless of whether or not they are
+  // security sensitive, as doing so prevents those functions from being used
+  // inside of the database schema, and thus ensures that the database can be
+  // inspected and modified using generic tools (such as the CLI) that do not
+  // have access to the application-defined functions.
+  SQLITE_DIRECTONLY       = $000080000;
+  /// preferred text encoding (eTextRep) bitmask if a SQL function may ask for
+  // a sub-types of its arguments
+  // - The SQLITE_SUBTYPE flag indicates to SQLite that a function might call
+  // sqlite3.value_subtype() to inspect the sub-types of its arguments. This
+  // flag instructs SQLite to omit some corner-case optimizations that might
+  // disrupt the operation of the sqlite3?value_subtype() function, causing
+  // it to return zero rather than the correct subtype(). SQL functions that
+  // invokes sqlite3.value_subtype() should have this property. If the
+  // SQLITE_SUBTYPE property is omitted, then the return value from
+  // sqlite3_value.subtype() might sometimes be zero even though a non-zero
+  // subtype was specified by the function argument expression.
+  SQLITE_SUBTYPE          = $000100000;
+  /// preferred text encoding (eTextRep) bitmask to define an innocuous function
+  // - The SQLITE_INNOCUOUS flag means that the function is unlikely to cause
+  // problems even if misused. An innocuous function should have no side effects
+  // and should not depend on any values other than its input parameters. The
+  // abs() function is an example of an innocuous function. The load_extension()
+  // SQL function is not innocuous because of its side effects.
+  // - SQLITE_INNOCUOUS is similar to SQLITE_DETERMINISTIC, but is not exactly
+  // the same. The random() function is an example of a function that is
+  // innocuous but not deterministic.
+  // - Some heightened security settings (SQLITE_DBCONFIG_TRUSTED_SCHEMA and
+  // PRAGMA trusted_schema=OFF) disable the use of SQL functions inside views
+  // and triggers and in schema structures such as CHECK constraints,
+  // DEFAULT clauses, expression indexes, partial indexes, and generated columns
+  // unless the function is tagged with SQLITE_INNOCUOUS. Most built-in functions
+  // are innocuous. Developers are advised to avoid using the SQLITE_INNOCUOUS
+  // flag for application-defined functions unless the function has been
+  // carefully audited and found to be free of potentially security-adverse
+  // side-effects and information-leaks.
+  SQLITE_INNOCUOUS        = $000200000;
+  /// preferred text encoding (eTextRep) bitmask if a SQL function may ask for
+  // a sub-types of its result argument
+  // - The SQLITE_RESULT_SUBTYPE flag indicates to SQLite that a function might
+  // call sqlite3.result_subtype() to cause a sub-type to be associated with its
+  // result. Every function that invokes sqlite3.result_subtype() should have
+  // this property. If it does not, then the call to sqlite3.result_subtype()
+  // might become a no-op if the function is used as term in an expression index.
+  // On the other hand, SQL functions that never invoke sqlite3.result_subtype()
+  // should avoid setting this property, as the purpose of this property is to
+  // disable certain optimizations that are incompatible with subtypes.
+  SQLITE_RESULT_SUBTYPE   = $001000000;
+
 
 type
   /// type for a custom destructor for the text or BLOB content
@@ -1666,17 +1736,17 @@ type
     // $ nArg = 1
     // The single row with rowid equal to ppArg[0] is deleted. No insert occurs.
     // $ nArg > 1
-    // $ ppArg[0] = NULL
+    // $ ppArg[0] = nil
     // A new row is inserted with a rowid ppArg[1] and column values in ppArg[2]
     // and following. If ppArg[1] is an SQL NULL, the a new unique rowid is
     // generated automatically.
     // $ nArg > 1
-    // $ ppArg[0] <> NULL
+    // $ ppArg[0] <> nil
     // $ ppArg[0] = ppArg[1]
     // The row with rowid ppArg[0] is updated with new values in ppArg[2] and
     // following parameters.
     // $ nArg > 1
-    // $ ppArg[0] <> NULL
+    // $ ppArg[0] <> nil
     // $ ppArg[0] <> ppArg[1]
     // The row with rowid ppArg[0] is updated with rowid ppArg[1] and new values
     // in ppArg[2] and following parameters. This will occur when an SQL statement
@@ -2007,16 +2077,19 @@ type
     ProfileNanoSeconds: Int64); cdecl;
 
   /// Callback function registered by sqlite3.exec()
-  // - This procedure will be invoked for each result row coming out of the evaluated SQL statements
-  // - If returns non-zero, the sqlite3.exec() routine returns SQLITE_ABORT without invoking
-  // the callback again and without running any subsequent SQL statements.
-  // - UserData argument is a copy of the context pointer, as provided at sqlite3.exec() call
+  // - This procedure will be invoked for each result row coming out of the
+  // evaluated SQL statements
+  // - If returns non-zero, the sqlite3.exec() routine returns SQLITE_ABORT
+  // without invoking the callback again and without running any subsequent
+  // SQL statements.
+  // - UserData argument is a copy of the context pointer, as provided at
+  // sqlite3.exec() call
   // - NumCols is the number of columns in the result
-  // - ColValues is an array of pointers to strings obtained as if from sqlite3.column_text(),
-  // one for each column. If an element of a result row is NULL then the corresponding string
-  // pointer is a NULL pointer.
-  // - ColNames is an array of pointers to strings where each entry represents the name of
-  // corresponding result column as obtained from sqlite3.column_name().
+  // - ColValues is an array of pointers to strings obtained as if from
+  // sqlite3.column_text(), one for each column. If an element of a result row
+  // is NULL then the corresponding string pointer is a nil pointer.
+  // - ColNames is an array of pointers to strings where each entry represents
+  // the name of corresponding result column as obtained from sqlite3.column_name().
   TSqlExecCallback = function(UserData: pointer; NumCols: integer; ColValues:
     PPUtf8CharArray; ColNames: PPUtf8CharArray): integer; cdecl;
 
@@ -2704,7 +2777,7 @@ type
 
     /// Returns a pointer to a UTF-8 string containing the SQL text of prepared statement P
     // with bound parameters expanded.
-    // - Returns NULL if insufficient memory is available to hold the result, or if the result
+    // - Returns nil if insufficient memory is available to hold the result, or if the result
     // would exceed the the maximum string length determined by the SQLITE_LIMIT_LENGTH.
     // - The result is obtained from sqlite3.malloc() and must be free by the application by
     // passing it to sqlite3.free_().
@@ -2747,7 +2820,7 @@ type
     // the table and returns SQLITE_OK if the table exists and SQLITE_ERROR if it does not.
     // - If zTableName is nil then the result is undefined behavior.
     // - zDbName is either the name of the database (i.e. "main", "temp", or an
-    // attached database) containing the specified table or NULL.
+    // attached database) containing the specified table or nil.
     // - If zDbName is nil, then all attached databases are searched for the table using the same
     // algorithm used by the database engine to resolve unqualified table references.
     // - The memory pointed to by the character pointers returned for the declaration type
@@ -2794,8 +2867,8 @@ type
     /// Returns the original un-aliased database name that is the origin of a particular
     // result column in SELECT statement as a zero-terminated UTF-8 string.
     // - If the column returned by the statement is an expression or subquery and is
-    // not a column value, then returns NULL.
-    // Might also returns NULL if a memory allocation error occurs.
+    // not a column value, then returns nil.
+    // Might also returns nil if a memory allocation error occurs.
     // - The returned string pointer is valid until either the prepared statement is
     // destroyed by sqlite3.finalize() or until the statement is automatically reprepared
     // by the first call to sqlite3.step() for a particular run or until the same information
@@ -2805,8 +2878,8 @@ type
     /// Returns the original un-aliased table name that is the origin of a particular
     // result column in SELECT statement as a zero-terminated UTF-8 string.
     // - If the column returned by the statement is an expression or subquery and is
-    // not a column value, then returns NULL.
-    // Might also returns NULL if a memory allocation error occurs.
+    // not a column value, then returns nil.
+    // Might also returns nil if a memory allocation error occurs.
     // - The returned string pointer is valid until either the prepared statement is
     // destroyed by sqlite3.finalize() or until the statement is automatically reprepared
     // by the first call to sqlite3.step() for a particular run or until the same information
@@ -2816,8 +2889,8 @@ type
     /// Returns the original un-aliased origin name that is the origin of a particular
     // result column in SELECT statement as a zero-terminated UTF-8 string.
     // - If the column returned by the statement is an expression or subquery and is
-    // not a column value, then returns NULL.
-    // Might also returns NULL if a memory allocation error occurs.
+    // not a column value, then returns nil.
+    // Might also returns nil if a memory allocation error occurs.
     // - The returned string pointer is valid until either the prepared statement is
     // destroyed by sqlite3.finalize() or until the statement is automatically reprepared
     // by the first call to sqlite3.step() for a particular run or until the same information
@@ -2897,6 +2970,11 @@ type
     // - The subtype information can be used to pass a limited amount of context from
     // one SQL function to another. Use the sqlite3.result_subtype() routine to set
     // the subtype for the return value of an SQL function.
+    // - Every application-defined SQL function that invoke this interface should
+    // include the SQLITE_SUBTYPE property in the text encoding argument when the
+    // function is registered. If the SQLITE_SUBTYPE property is omitted, then
+    // sqlite3.value_subtype() might return zero instead of the upstream subtype
+    // in some corner cases.
     value_subtype: function(Value: TSqlite3Value): cardinal; cdecl;
 
     /// Attempts to apply numeric affinity to the value
@@ -2933,17 +3011,17 @@ type
 
     /// Makes a copy of the sqlite3_value object D and returns a pointer to that copy.
     // - The result is a protected object even if the input is not.
-    // - Returns NULL if V is NULL or if a memory allocation fails.
+    // - Returns nil if V is NULL or if a memory allocation fails.
     value_dup: function(Value: TSqlite3Value): TSqlite3Value; cdecl;
 
     ///  Frees an sqlite3_value object previously obtained from sqlite3.value_dup().
-    // - If V is a NULL pointer then sqlite3_value_free(V) is a harmless no-op.
+    // - If Value is a nil pointer then sqlite3_value_free(Value) is a harmless no-op.
     value_free: procedure(Value: TSqlite3Value); cdecl;
 
     /// If Value object V was initialized using sqlite3.bind_pointer(S,I,P,X,D)
     // or sqlite3.result_pointer(C,P,X,D) and if X and Y are strings that compare equal
     // according to strcmp(X,Y), then sqlite3.value_pointer(V,Y) will return the pointer P.
-    // Otherwise, sqlite3.value_pointer(V,Y) returns a NULL.
+    // Otherwise, sqlite3.value_pointer(V,Y) returns a nil.
     value_pointer: function(Value: TSqlite3Value; Typ: PUtf8Char): pointer; cdecl;
 
     /// Converts a sqlite3.value object, specified by its handle,
@@ -2962,8 +3040,7 @@ type
     // into a blob memory, and returns a copy of that value
     value_blob: function(Value: TSqlite3Value): pointer; cdecl;
 
-    /// Add SQL functions or aggregates or to redefine the behavior of existing
-    // SQL functions or aggregates
+    /// Add or redefine SQL functions or aggregates
     // - The first parameter is the database connection to which the SQL function is
     // to be added. If an application uses more than one database connection then
     // application-defined SQL functions must be added to each database connection
@@ -2979,22 +3056,48 @@ type
     // SQLITE_LIMIT_FUNCTION_ARG current limit. If the third parameter is less
     // than -1 or greater than 127 then the behavior is undefined.
     // - The fourth parameter, eTextRep, specifies what text encoding this SQL
-    // function prefers for its parameters. Every SQL function implementation must
-    // be able to work with UTF-8, UTF-16le, or UTF-16be. But some implementations
-    // may be more efficient with one encoding than another. When multiple
-    // implementations of the same function are available, SQLite will pick the one
-    // that involves the least amount of data conversion. If there is only a single
-    // implementation which does not care what text encoding is used, then the
-    // fourth argument should be SQLITE_ANY.
+    // function prefers for its parameters, and some optional flags to describe
+    // the behavior of the function, like SQLITE_DETERMINISTIC or SQLITE_SUBTYPE.
+    // - About the text encoding preference, the application should set this
+    // parameter to SQLITE_UTF16LE if the function implementation invokes
+    // sqlite3.value_text16le() on an input, or SQLITE_UTF16BE if the
+    // implementation invokes sqlite3.value_text16be() on an input, or
+    // SQLITE_UTF16 if sqlite3.value_text16() is used, or SQLITE_UTF8 otherwise.
+    // The same SQL function may be registered multiple times using different
+    // preferred text encodings, with different implementations for each encoding.
+    // When multiple implementations of the same function are available, SQLite
+    // will pick the one that involves the least amount of data conversion.
+    // Use of SQLITE_ANY in the fourth argument is now seen as deprecated.
+    // - The fourth parameter may optionally be ORed with SQLITE_DETERMINISTIC
+    // to signal that the function will always return the same result given
+    // the same inputs within a single SQL statement. Most SQL functions are
+    // deterministic. The built-in random() SQL function is an example of a
+    // function that is not deterministic. The SQLite query planner is able
+    // to perform additional optimizations on deterministic functions, so use
+    // of the SQLITE_DETERMINISTIC flag is recommended where possible.
+    // - The fourth parameter may also optionally include the SQLITE_DIRECTONLY flag,
+    // which if present prevents the function from being invoked from within
+    // VIEWs, TRIGGERs, CHECK constraints, generated column expressions, index
+    // expressions, or the WHERE clause of partial indexes. For best security,
+    // the SQLITE_DIRECTONLY flag is recommended for all application-defined
+    // SQL functions that do not need to be used inside of triggers, view,
+    // CHECK constraints, or other elements of the database schema. This flags
+    // is especially recommended for SQL functions that have side effects or
+    // reveal internal application state. Without this flag, an attacker might
+    // be able to modify the schema of a database file to include invocations
+    // of the function with parameters chosen by the attacker, which the
+    // application will then execute when the database file is opened and read.
     // - The fifth parameter, pApp, is an arbitrary pointer. The implementation
     // of the function can gain access to this pointer using sqlite3.user_data().
-    // - The seventh, eighth and ninth parameters, xFunc, xStep and xFinal, are
-    // pointers to C-language functions that implement the SQL function or aggregate.
-    // A scalar SQL function requires an implementation of the xFunc callback only;
-    // nil pointers must be passed as the xStep and xFinal parameters. An aggregate
-    // SQL function requires an implementation of xStep and xFinal and nil pointer
-    // must be passed for xFunc. To delete an existing SQL function or aggregate,
-    // pass nil pointers for all three function callbacks.
+    // - The sixth, seventh and eighth parameters passed to the three
+    // "sqlite3.create_function*" functions, xFunc, xStep and xFinal, are
+    // pointers to C-language functions that implement the SQL function or
+    // aggregate. A scalar SQL function requires an implementation of the xFunc
+    // callback only; nil pointers must be passed as the xStep and xFinal
+    // parameters. An aggregate SQL function requires an implementation of
+    // xStep and xFinal and nil pointer must be passed for xFunc. To delete
+    // an existing SQL function or aggregate, pass nil pointers for all three
+    // function callbacks.
     // - It is permitted to register multiple implementations of the same functions
     // with the same name but with either differing numbers of arguments or
     // differing preferred text encodings. SQLite will use the implementation
@@ -3003,8 +3106,7 @@ type
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSqlFunctionFunc;
       xFinal: TSqlFunctionFinal): integer; cdecl;
 
-    /// Add SQL functions or aggregates or to redefine the behavior of existing
-    // SQL functions or aggregates, including destruction
+    /// Add or redefine SQL functions or aggregates, including destruction
     // - if the additinal xDestroy parameter is not nil, then it is invoked when
     // the function is deleted, either by being overloaded or when the database
     // connection closes.
@@ -3016,17 +3118,16 @@ type
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSqlFunctionFunc;
       xFinal: TSqlFunctionFinal; xDestroy: TSqlDestroyPtr): integer; cdecl;
 
-    /// Add SQL functions or aggregates or to redefine the behavior of existing
-    // SQL functions or aggregates, including  extra callback functions needed
-    // by aggregate window functions
+    /// Add or redefine SQL functions or aggregates, including extra callback
+    // functions needed by aggregate window functions
     // - see https://www.sqlite.org/windowfunctions.html#aggregate_window_functions
-    // - sixth, seventh, eighth and ninth parameters (xStep, xFinal, xValue
-    // and xInverse) passed to this function are pointers to callbacks that
-    // implement the new aggregate window function. xStep and xFinal must both
-    // be non-nil. xValue and xInverse may either both be nil, in which case a
-    // regular aggregate function is created, or must both be non-nil, in which
-    // case the new function may be used as either an aggregate or aggregate
-    // window function
+    // - The sixth, seventh, eighth and ninth parameters (xStep, xFinal,
+    // xValue and xInverse) passed to sqlite3.create_window_function are pointers
+    // to C-language callbacks that implement the new function. xStep and xFinal
+    // must both be non-nil. xValue and xInverse may either both be nil,
+    // in which case a regular aggregate function is created, or must both
+    // be non-nil, in which case the new function may be used as either
+    // an aggregate or aggregate window function.
     // - this function is not available in older revisions, i.e. before 3.25.2
     create_window_function: function(DB: TSqlite3DB; FunctionName: PUtf8Char;
       nArg, eTextRep: integer; pApp: pointer; xStep: TSqlFunctionFunc;
@@ -3138,8 +3239,18 @@ type
 
     /// Causes the subtype of the result from the application-defined SQL function with
     // Context to be the Value.
-    // - Only the lower 8 bits of the subtype T are preserved in current versions of SQLite;
-    // higher order bits are discarded.
+    // - Only the lower 8 bits of the subtype T are preserved in current versions
+    // of SQLite; higher order bits are discarded. The number of subtype bytes
+    // preserved by SQLite might increase in future releases of SQLite.
+    // - Every application-defined SQL function that invokes this interface should
+    // include the SQLITE_RESULT_SUBTYPE property in its text encoding argument
+    // when the SQL function is registered. If the SQLITE_RESULT_SUBTYPE property
+    // is omitted from the function that invokes sqlite3.result_subtype(), then
+    // in some cases the sqlite3.result_subtype() might fail to set the result subtype.
+    // - If SQLite is compiled with -DSQLITE_STRICT_SUBTYPE=1, then any SQL function
+    // that invokes the sqlite3.result_subtype() interface and that does not have
+    // the SQLITE_RESULT_SUBTYPE property will raise an error. Future versions
+    // of SQLite might enable -DSQLITE_STRICT_SUBTYPE=1 by default.
     result_subtype: procedure(Context: TSqlite3FunctionContext; Value: cardinal); cdecl;
 
     /// Cause the implemented SQL function to throw an exception
@@ -3196,12 +3307,12 @@ type
     // - set DestroyPtr to SQLITE_TRANSIENT (-1) for SQLite to make its own private
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
+    // - note that the official SQLite3 documentation could lead into misunderstanding:
+    // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
+    // all column values
     bind_text: function(S: TSqlite3Statement;
       Param: integer; Text: PUtf8Char; Text_bytes: integer = -1;
       DestroyPtr: TSqlDestroyPtr = SQLITE_TRANSIENT): integer; cdecl;
-      // note that the official SQLite3 documentation could lead into misunderstanding:
-      // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
-      // all column values
 
     /// Bind a Blob Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
@@ -3293,11 +3404,13 @@ type
     bind_parameter_index: function(S: TSqlite3Statement; ParamName: PUtf8Char): integer; cdecl;
 
     /// Returns the name of the N-th SQL parameter in the prepared statement S.
-    // - SQL parameters of the form "?NNN" or ":AAA" or "@AAA" or "$AAA" have a name which is
-    // the string "?NNN" or ":AAA" or "@AAA" or "$AAA" respectively. In other words, the initial
-    // ":" or "$" or "@" or "?" is included as part of the name. Parameters of the form "?" without
-    // a following integer have no name and are referred to as "nameless" or "anonymous parameters".
-    // If the value N is out of range or if the N-th parameter is nameless, then NULL is returned.
+    // - SQL parameters of the form "?NNN" or ":AAA" or "@AAA" or "$AAA" have a
+    // name which is the string "?NNN" or ":AAA" or "@AAA" or "$AAA" respectively.
+    // In other words, the initial ":" or "$" or "@" or "?" is included as part
+    // of the name. Parameters of the form "?" without a following integer have
+    // no name and are referred to as "nameless" or "anonymous parameters". If
+    // the value N is out of range or if the N-th parameter is nameless, then
+    // nil is returned.
     bind_parameter_name: function(S: TSqlite3Statement; Param: integer): PUtf8Char; cdecl;
 
     /// Open a BLOB For Incremental I/O
@@ -3646,9 +3759,9 @@ type
     db_cacheflush: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Returns a pointer to the filename associated with database DBName of connection DB.
-    // - If there is no attached database N on the database connection DB, or if database DBName
-    // is a temporary or in-memory database, then this function will return either a NULL
-    // pointer or an empty string.
+    // - If there is no attached database N on the database connection DB, or
+    // if database DBName is a temporary or in-memory database, then this
+    // function will return either a nil pointer or an empty string.
     // - The string value returned by this routine is owned and managed by the database connection.
     // - The value will be valid until the database DBName is DETACH-ed or until the database connection closes.
     // - The filename returned by this function is the output of the xFullPathname method of the VFS.
@@ -4454,7 +4567,8 @@ type
     /// Execute one SQL statement which return the results as a TDocVariant array
     // - if aSql is '', the statement should have been prepared, reset and bound
     // if necessary - if aSql <> '' then the statement would be closed internally
-    // - if any error occurs, ESqlite3Exception is catched and null is returned
+    // - if any error occurs, ESqlite3Exception is catched and a null variant
+    // is returned
     procedure ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;
       out aResult: variant; aResultModel: TDocVariantModel = mFastFloat;
       aMaxRows: PtrInt = 1 shl 20; aBlobNoMagic: boolean = false);
@@ -6331,7 +6445,8 @@ begin
   if argc >= 1 then
   begin
     MI := sqlite3.value_blob(argv[0]);
-    // rank(nil) for example select rank(matchinfo(tabName)) without corresponding MATCH clause
+    // rank(nil) for example select rank(matchinfo(tabName)) without
+    // corresponding MATCH clause
     if MI = nil then
     begin
       sqlite3.result_double(Context, 0);
