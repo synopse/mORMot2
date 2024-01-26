@@ -2211,20 +2211,20 @@ type
   /// monitor a POSIX folder for all its file names, and allow efficient
   // case-insensitive search, as it would on a Windows file system
   // - will use our fast PosixFileNames() low-level API to read the names
+  // and store them into its in-memory cache (until Flush or after FlushSeconds)
   TPosixFileCaseInsensitive = class
   protected
     fSafe: TRWLightLock;
     fFiles: TRawUtf8DynArray;
     fFolder: TFileName;
-    fLastTix: integer;
+    fNextTix, fFlushSeconds: integer;
     fSubFolders: boolean;
     procedure SetFolder(const aFolder: TFileName);
     procedure SetSubFolders(aSubFolders: boolean);
   public
     /// initialize the file names lookup
     constructor Create(const aFolder: TFileName; aSubFolders: boolean); reintroduce;
-    /// should be called on a regular pace (e.g. every second) to force
-    // reload of the files every minute
+    /// to be called on a regular pace (e.g. every second) to perform FlushSeconds
     procedure OnIdle(tix64: Int64);
     /// clear the internal list to force full reload of the directory
     procedure Flush;
@@ -2243,6 +2243,11 @@ type
     /// define if sub-folders should also be included to the internal list
     property SubFolders: boolean
       read fSubFolders write SetSubFolders;
+    /// after how many seconds OnIdle() should flush the internal cache
+    // - default is 60, i.e. 1 minute
+    // - you can set 0 to disable any auto-flush from OnIdle()
+    property FlushSeconds: integer
+      read fFlushSeconds write fFlushSeconds;
   end;
 {$endif OSPOSIX}
 
@@ -9244,6 +9249,7 @@ constructor TPosixFileCaseInsensitive.Create(
 begin
   fFolder := aFolder;
   fSubFolders := aSubFolders;
+  fFlushSeconds := 60;
 end;
 
 procedure TPosixFileCaseInsensitive.SetFolder(const aFolder: TFileName);
@@ -9253,7 +9259,6 @@ begin
   fSafe.WriteLock;
   try
     fFiles := nil; // force list refresh
-    fLastTix := 0;
     fFolder := aFolder;
   finally
     fSafe.WriteUnLock;
@@ -9272,17 +9277,16 @@ end;
 procedure TPosixFileCaseInsensitive.OnIdle(tix64: Int64);
 begin
   if (self = nil) or
-     (fFiles = nil) then
+     (fFiles = nil) or
+     (fFlushSeconds = 0) then
     exit;
   if tix64 = 0 then
     tix64 := GetTickCount64;
-  tix64 := (tix64 shr 16) + 1; // changes every 65,536 seconds
-  if tix64 = fLastTix then
+  if tix64 shr 10 < fNextTix then
     exit;
   fSafe.WriteLock;
   try
     fFiles := nil; // force list refresh
-    fLastTix := tix64;
   finally
     fSafe.WriteUnLock;
   end;
@@ -9301,12 +9305,12 @@ var
   fn: RawUtf8;
 begin
   result := '';
+  if aReadMs <> nil then
+    aReadMs^ := 0;
   if (self = nil) or
      (fFolder = '') or
      (aSearched = '') then
     exit;
-  start := 0;
-  stop := 0;
   if fFiles = nil then // need to refresh the cache
   begin
     fSafe.WriteLock;
@@ -9317,9 +9321,14 @@ begin
           QueryPerformanceMicroSeconds(start);
         fFiles := PosixFileNames(fFolder, fSubFolders); // fast syscall
         QuickSortRawUtf8(fFiles, length(fFiles), nil, @StrIComp);
-        if aReadMs <> nil then
-          QueryPerformanceMicroSeconds(stop);
         // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
+        if aReadMs <> nil then
+        begin
+          QueryPerformanceMicroSeconds(stop);
+          aReadMs^ := stop - start;
+        end;
+        if fFlushSeconds <> 0 then
+          fNextTix := (GetTickCount64 shr 10) + fFlushSeconds;
       end;
     finally
       fSafe.WriteUnLock;
@@ -9335,8 +9344,6 @@ begin
   finally
     fSafe.ReadUnLock;
   end;
-  if aReadMs <> nil then
-    aReadMs^ := stop - start; // may be 0 if read only from internal cache
 end;
 
 function TPosixFileCaseInsensitive.Count: PtrInt;
