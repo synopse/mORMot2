@@ -3317,12 +3317,17 @@ type
   end;
 
   /// file stream which ignores I/O write errors
-  // - in case disk space is exhausted, TFileStreamWithoutWriteError.WriteBuffer
+  // - in case disk space is exhausted, TFileStreamNoWriteError.WriteBuffer
   // won't throw any exception, so application will continue to work
   // - used e.g. by TSynLog to let the application continue with no exception,
   // even in case of a disk/partition full of logs
-  TFileStreamWithoutWriteError = class(TFileStreamEx)
+  TFileStreamNoWriteError = class(TFileStreamEx)
   public
+    /// open for writing, potentially with alternate unlocked file names
+    // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
+    // - on error, will try up to aAliases alternate '<filename>-locked<#>.<ext>'
+    constructor CreateAndRenameIfLocked(
+      var aFileName: TFileName; aAliases: integer = 3);
     /// this overriden function returns Count, as if it was always successful
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
@@ -6749,12 +6754,57 @@ begin
 end;
 
 
-{ TFileStreamWithoutWriteError }
+{ TFileStreamNoWriteError }
 
-function TFileStreamWithoutWriteError.Write(const Buffer; Count: Longint): Longint;
+constructor TFileStreamNoWriteError.CreateAndRenameIfLocked(
+  var aFileName: TFileName; aAliases: integer);
+var
+  h: THandle;
+  fn, ext: TFileName;
+  err, retry: integer;
+
+  function CanOpenWrite: boolean;
+  begin
+    h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
+    result := ValidHandle(h);
+    if not result then
+      err := GetLastError;
+  end;
+
 begin
-  inherited Write(Buffer, Count);
-  result := Count; // to ignore I/O errors
+  // logic similar to TSynLog.CreateLogWriter
+  h := 0;
+  err := 0;
+  if not CanOpenWrite then
+    if not FileExists(aFileName) then
+      // immediately raise EOSException if this new file could not be created
+      h := FileCreate(aFileName, fmShareRead)
+    else
+    begin
+      fn := aFileName;
+      ext := ExtractFileExt(aFileName);
+      for retry := 1 to aAliases do
+      begin
+        if IsSharedViolation(err) then
+        begin
+          // file was locked: wait a little for a background process and retry
+          SleepHiRes(50);
+          if CanOpenWrite then
+            break;
+        end;
+        // file can't be opened: try '<filename>-locked<#>.<ext>' alternatives
+        aFileName := ChangeFileExt(fn, '-locked' + IntToStr(retry) + ext);
+        if CanOpenWrite then
+          break;
+      end;
+    end;
+  CreateFromHandle(aFileName, h);
+end;
+
+function TFileStreamNoWriteError.Write(const Buffer; Count: Longint): Longint;
+begin
+  FileWriteAll(Handle, @Buffer, Count); // and ignore any I/O error
+  result := Count; //
 end;
 
 

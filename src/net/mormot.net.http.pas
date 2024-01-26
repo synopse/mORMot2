@@ -4423,7 +4423,7 @@ begin
   fRotate.OnRotate := OnRotate;
   fRotate.FileName := fOwner.GetWriterFileName(aHost, aError);
   fRotate.Setup(aRotate, aRotateFiles);
-  s := TFileStreamEx.CreateWrite(fRotate.FileName);
+  s := TFileStreamNoWriteError.CreateAndRenameIfLocked(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
   fCustomOptions := [twoNoWriteToStreamException,
@@ -4468,7 +4468,7 @@ constructor THttpLogger.CreateWithFile(const aFileName: TFileName;
   const aFormat: RawUtf8);
 begin
   fFlags := [ffOwnWriterSingle];
-  CreateWithWriter(TTextDateWriter.CreateOwnedFileStream(aFileName, 65536), aFormat);
+  CreateWithWriter(TTextDateWriter.CreateOwnedFileStream(aFileName), aFormat);
 end;
 
 destructor THttpLogger.Destroy;

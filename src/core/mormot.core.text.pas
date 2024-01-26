@@ -537,7 +537,7 @@ type
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
     constructor CreateOwnedFileStream(const aFileName: TFileName;
-      aBufSize: integer = 8192);
+      aBufSize: integer = 16384);
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;

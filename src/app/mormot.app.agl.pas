@@ -701,8 +701,9 @@ begin
   else
     // 'xxx' -> 'xxx.1'
     RenameFile(fRedirectFileName, fn[0]);
+  // delete and recreate 'xxx'
   DeleteFile(fRedirectFileName);
-  fRedirect := TFileStreamEx.CreateWrite(fRedirectFileName); // 'xxx'
+  fRedirect := TFileStreamNoWriteError.CreateAndRenameIfLocked(fRedirectFileName);
 end;
 
 function TSynAngelizeRunner.OnRedirect(
@@ -1459,7 +1460,7 @@ begin
           lf := NormalizeFileName(Utf8ToString(
             Sender.Expand(Service, Service.RedirectLogFile, true)));
           try
-            ls := TFileStreamEx.CreateWrite(lf);
+            ls := TFileStreamNoWriteError.CreateAndRenameIfLocked(lf);
             ls.Seek(0, soEnd); // append
             Log.Log(sllTrace, 'Start: redirecting console output to %', [lf], Sender);
           except
