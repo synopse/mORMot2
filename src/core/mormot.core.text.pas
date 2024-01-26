@@ -2382,7 +2382,7 @@ begin
     {$ifdef CPUINTEL}
     S := PosChar(S, Sep); // SSE2 asm on i386 and x86_64
     if S = nil then
-      S := P + StrLen(P);
+      S := P + mormot.core.base.StrLen(P);
     {$else}
     while (S^ <> #0) and
           (S^ <> Sep) do
@@ -4118,7 +4118,7 @@ end;
 
 procedure TTextWriter.AddFloatStr(P: PUtf8Char);
 begin
-  if StrLen(P) > 127 then
+  if mormot.core.base.StrLen(P) > 127 then
     exit; // clearly invalid input
   if BEnd - B <= 127 then
     FlushToStream;
@@ -4292,7 +4292,7 @@ end;
 
 procedure TTextWriter.AddNoJsonEscape(P: Pointer);
 begin
-  AddNoJsonEscape(P, StrLen(PUtf8Char(P)));
+  AddNoJsonEscape(P, mormot.core.base.StrLen(PUtf8Char(P)));
 end;
 
 procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
@@ -4462,7 +4462,7 @@ end;
 
 procedure TTextWriter.AddProp(PropName: PUtf8Char);
 begin
-  AddProp(PropName, StrLen(PropName));
+  AddProp(PropName, mormot.core.base.StrLen(PropName));
 end;
 
 procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
@@ -5068,7 +5068,7 @@ begin
     exit;
   if Fmt = hfNone then
   begin
-    AddNoJsonEscape(Text);
+    AddNoJsonEscape(Text, mormot.core.base.StrLen(Text));
     exit;
   end;
   esc := @HTML_ESC[Fmt];
@@ -7983,7 +7983,7 @@ begin
       begin
         // expect UTF-8 content
         Res.Text := V.VPointer;
-        Res.Len := StrLen(V.VPointer);
+        Res.Len := mormot.core.base.StrLen(V.VPointer);
       end;
     vtChar:
       begin
@@ -8101,7 +8101,7 @@ begin
       vtPChar:
         begin
           isString := true;
-          FastSetString(result, VPChar, StrLen(VPChar));
+          FastSetString(result, VPChar, mormot.core.base.StrLen(VPChar));
         end;
       vtChar:
         begin
