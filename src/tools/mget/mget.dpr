@@ -17,7 +17,7 @@ program mget;
   For PeerCache to work, please open port 8089 for TCP+UDP on the firewall:
     Debian:   sudo ufw allow from 192.168.0.0/24 to any port 8089
     Windows:  netsh firewall add portopening all 8089 peerCache
-      (see the actual command supplied by "mget /help" response) 
+      (see the actual command supplied by "mget /help" response)
 }
 
 {$I ..\..\mormot.defines.inc}
@@ -43,6 +43,7 @@ uses
   mormot.core.variants,
   mormot.core.json,
   mormot.core.log,
+  mormot.core.zip,
   mormot.net.sock,
   mormot.net.client,
   mormot.net.server,
@@ -164,8 +165,10 @@ begin
       begin
         PerThreadLog := ptIdentifiedInOneFile;
         FileExistsAction := acAppend;
+        AutoFlushTimeOut := 1;
         RotateFileCount := 2;
         RotateFileSizeKB := 2 shl 10;
+        LogCompressAlgo := AlgoGZFast; // rotate as mget.1.gz every 2MB
         DestinationPath := EnsureDirectoryExists(logfolder);
       end;
     end;
