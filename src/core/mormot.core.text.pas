@@ -3358,11 +3358,11 @@ begin
   end;
   if inlin then
     repeat
-      PWord(P)^ := ord(':') + ord('(') shl 8;
+      PCardinal(P)^ := ord(':') + ord('(') shl 8;
       inc(P, 2);
       MoveFast(int[I2T_SIZE - ord(int^)], P^, ord(int^));
       inc(P, ord(int^));
-      PWord(P)^ := ord(')') + ord(':') shl 8;
+      PCardinal(P)^ := ord(')') + ord(':') shl 8;
       inc(P, 2);
       dec(n);
       if n = 0 then
@@ -4151,7 +4151,7 @@ procedure TTextWriter.AddCR;
 begin
   if B >= BEnd then
     FlushToStream;
-  PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
+  PCardinal(B + 1)^ := 13 + 10 shl 8; // CR + LF
   inc(B, 2);
 end;
 
@@ -4167,7 +4167,7 @@ begin
     ntabs := 0; // fHumanReadableLevel=-1 after the last level of a document
   if BEnd - B <= PtrInt(ntabs) then
     FlushToStream;
-  PWord(B + 1)^ := 13 + 10 shl 8; // CR + LF
+  PCardinal(B + 1)^ := 13 + 10 shl 8; // CR + LF
   if ntabs > 0 then
     FillCharFast(B[3], ntabs, 9); // #9=tab
   inc(B, ntabs + 2);
@@ -4483,7 +4483,7 @@ begin
     B[1] := '"';
     MoveFast(PropName^, B[2], PropNameLen);
     inc(B, PropNameLen + 2);
-    PWord(B)^ := ord('"') + ord(':') shl 8;
+    PCardinal(B)^ := ord('"') + ord(':') shl 8;
     inc(B);
   end;
 end;
@@ -4603,7 +4603,7 @@ begin
     MoveFast(Text[1], B^, L);
     inc(B, L);
   end;
-  PWord(B)^ := 13 + 10 shl 8; // CR + LF
+  PCardinal(B)^ := 13 + 10 shl 8; // CR + LF
   inc(B);
 end;
 
@@ -4767,7 +4767,7 @@ procedure TTextWriter.AddByteToHex(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  PWord(B + 1)^ := TwoDigitsHexWB[Value];
+  PCardinal(B + 1)^ := TwoDigitsHexWB[Value];
   inc(B, 2);
 end;
 
@@ -4775,7 +4775,7 @@ procedure TTextWriter.AddByteToHexLower(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  PWord(B + 1)^ := TwoDigitsHexWBLower[Value];
+  PCardinal(B + 1)^ := TwoDigitsHexWBLower[Value];
   inc(B, 2);
 end;
 
@@ -5679,7 +5679,7 @@ begin
   if c < 10000 then
   begin
     result := P - 6; // only decimals -> append '0.xxxx'
-    PWord(result)^ := ord('0') + ord('.') shl 8;
+    PCardinal(result)^ := ord('0') + ord('.') shl 8;
     YearToPChar(c, PUtf8Char(P) - 4);
   end
   else
@@ -6105,7 +6105,7 @@ begin
   {$endif DOUBLETOSHORT_USEGRISU}
   if Value = 0 then
   begin
-    PWord(S)^ := 1 + ord('0') shl 8;
+    PCardinal(S)^ := 1 + ord('0') shl 8;
     result := 1;
     exit;
   end;
@@ -7023,7 +7023,7 @@ begin
      (w.f = 0) then
   begin
     {$ifdef GRISU1_F2A_ZERONOFRACT}
-    PWord(str)^ := 1 + ord('0') shl 8; // just return '0'
+    PCardinal(str)^ := 1 + ord('0') shl 8; // just return '0'
     {$else}
     if frac_digits >= 0 then
       d2a_return_fixed(str, minus, buf, 0, 1, frac_digits)
@@ -7606,13 +7606,13 @@ begin
   result[0] := #2;
   if Value > 99 then
     Value := 99;
-  PWord(@result[1])^ := TwoDigitLookupW[Value];
+  PCardinal(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
 function UInt2DigitsToShortFast(Value: byte): TShort4;
 begin
   result[0] := #2;
-  PWord(@result[1])^ := TwoDigitLookupW[Value];
+  PCardinal(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
 function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean;
@@ -8479,7 +8479,7 @@ begin
   if (Format = '') or
      (high(Args) < 0) then // no formatting needed
     result := Format
-  else if PWord(Format)^ = ord('%') then    // optimize raw conversion
+  else if PWord(Format)^ = ord('%') then // optimize raw conversion
     VarRecToUtf8(Args[0], result)
   else
   begin

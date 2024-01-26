@@ -1542,6 +1542,8 @@ type
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
   // spUserData maps $XDG_CACHE_HOME or '$HOME/.cache' or '$TMP/<user>', and
   // spLog maps '/var/log/<exename>' or '<exepath>/log' or '$TMP/<exename>-log'
+  // - on all systems, returned spTemp, spLog and spUserData folders are always
+  // writable by the current user
   TSystemPath = (
     spCommonData,
     spUserData,
