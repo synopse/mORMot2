@@ -2617,7 +2617,7 @@ begin
       smStream:
         if not fCurrentItem.IsFolder then
         begin
-          fCurrentItem.Stream.Seek(0, soFromBeginning);
+          fCurrentItem.Stream.Seek(0, soBeginning);
           inStream := T7zStream.Create(
             fCurrentItem.Stream, {owned=}false, index);
         end;

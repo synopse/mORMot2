@@ -5824,7 +5824,7 @@ begin
     try
       // range support
       if req.RangeStart > 0 then
-        req.RangeStart := local.Seek(req.RangeStart, soFromBeginning);
+        req.RangeStart := local.Seek(req.RangeStart, soBeginning);
       if (req.RangeEnd <= 0) or
          (req.RangeEnd >= req.Size) then
         req.RangeEnd := req.Size - 1;

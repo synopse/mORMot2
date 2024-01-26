@@ -11232,7 +11232,7 @@ var
       if outStream.InheritsFrom(TMemoryStream) then
         with TMemoryStream(outStream) do
         begin
-          P := Seek(0, soFromCurrent);
+          P := Seek(0, soCurrent);
           size := P + Len; // auto-reserve space (no Realloc:)
           Seek(P + Len, soBeginning);
           bOut := PAnsiChar(Memory) + P;

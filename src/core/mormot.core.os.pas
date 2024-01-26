@@ -3207,7 +3207,7 @@ function FileSize(F: THandle): Int64; overload;
 // - Delphi FileSeek() is buggy -> use this function to safely access files
 // bigger than 2 GB (thanks to sanyin for the report)
 function FileSeek64(Handle: THandle; const Offset: Int64;
-  Origin: cardinal): Int64;
+  Origin: cardinal = soFromBeginning): Int64;
 
 /// get a file size and its UTC Unix timestamp in milliseconds resolution
 // - return false if FileName was not found
@@ -7397,7 +7397,7 @@ begin
   begin
     // mapping is not worth it for size < 1MB which can be just read at once
     GetMem(fBuf, fBufSize);
-    FileSeek64(fFile, aCustomOffset, soFromBeginning);
+    FileSeek64(fFile, aCustomOffset);
     if FileReadAll(fFile, fBuf, fBufSize) then
       result := true
     else
@@ -8579,9 +8579,9 @@ begin
         AddRawUtf8(fNames[clkArg], s);
     inc(i);
   until i = n;
-  SetLength(fRetrieved[clkArg], length(fNames[clkArg]));
+  SetLength(fRetrieved[clkArg],    length(fNames[clkArg]));
   SetLength(fRetrieved[clkOption], length(fNames[clkOption]));
-  SetLength(fRetrieved[clkParam], length(fNames[clkParam]));
+  SetLength(fRetrieved[clkParam],  length(fNames[clkParam]));
   result := true;
 end;
 

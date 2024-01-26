@@ -356,7 +356,7 @@ begin
     S := TMemoryStream.Create;
     try
       TGraphic(Source).SaveToStream(S);
-      S.Seek(0, soFromBeginning);
+      S.Seek(0, soBeginning);
       LoadFromStream(S);
     finally
       S.Free;

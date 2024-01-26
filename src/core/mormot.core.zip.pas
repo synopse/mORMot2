@@ -1767,7 +1767,7 @@ begin
             len := info.f64.zzipSize;
             if writepos >= Int64(s^.fileinfo.offset) then
               raise ESynZip.CreateUtf8('%.CreateFrom deletion overlap', [self]);
-            FileSeek64(h, writepos, soFromBeginning);
+            FileSeek64(h, writepos);
             inc(writepos, WriteHeader(s^.zipName));
             if len > 0 then
               if s^.local <> nil then
@@ -1784,12 +1784,12 @@ begin
                   FastNewRawByteString(tmp, 1 shl 20);
                 readpos := Int64(s^.fileinfo.offset) + info.localsize;
                 repeat
-                  FileSeek64(h, readpos, soFromBeginning);
+                  FileSeek64(h, readpos);
                   read := length(tmp);
                   if len < read then
                     read := len;
                   read := FileRead(h, pointer(tmp)^, read);
-                  FileSeek64(h, writepos, soFromBeginning);
+                  FileSeek64(h, writepos);
                   FileWrite(h, pointer(tmp)^, read);
                   inc(readpos, read);
                   inc(writepos, read);
@@ -1828,7 +1828,7 @@ begin
         inc(s);
       end;
       // rewind to the position fitted for new files appending
-      FileSeek64(h, writepos, soFromBeginning);
+      FileSeek64(h, writepos);
     finally
       R.Free;
     end;
@@ -2055,8 +2055,7 @@ begin
   if ValidHandle(f) then
     try
       // retrieve file size and date
-      todo := FileSeek64(f, 0, soFromEnd);
-      FileSeek64(f, 0, soFromBeginning);
+      todo := FileSize(f);
       age := FileAgeToWindowsTime(aFileName);
       // check if the file should be stored or use libdeflate
       met := Z_DEFLATED;

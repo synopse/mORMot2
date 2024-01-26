@@ -701,8 +701,8 @@ begin
        (head.d0 <> SQLITE_FILE_HEADER128.Lo) or
        ((head.d1 = SQLITE_FILE_HEADER128.Hi) <> (OldPassWord = '')) then
       exit;
-    FileSeek64(F, 0, soFromBeginning);
-    SetLength(temp, bufsize);
+    FileSeek64(F, 0);
+    FastNewRawByteString(temp, bufsize);
     posi := 0;
     page := 1;
     while page <= pagecount do
@@ -728,7 +728,7 @@ begin
           CodecAesProcess(page + p, buf, pagesize, @new, true);
         inc(buf, pagesize);
       end;
-      FileSeek64(F, posi, soFromBeginning);
+      FileSeek64(F, posi);
       FileWrite(F, pointer(temp)^, pagesize * n); // update in-place
       inc(posi, pagesize * n);
       inc(page, n);
@@ -825,7 +825,7 @@ begin
   if OldPassWord <> '' then
     CreateSqlEncryptTableBytes(OldPassWord, @oldtable);
   posi := 1024; // don't change first page, which is uncrypted
-  FileSeek64(F, 1024, soFromBeginning);
+  FileSeek64(F, 1024);
   while posi < size do
   begin
     R := FileRead(F, buf, SizeOf(buf)); // read buffer
@@ -833,7 +833,7 @@ begin
       break; // stop on any read error
     if OldPassWord <> '' then
       XorOffset(@buf, posi, R, @oldtable); // uncrypt with oldtable key
-    FileSeek64(F, posi, soFromBeginning);
+    FileSeek64(F, posi);
     FileWrite(F, buf, R); // update buffer
     inc(posi, cardinal(R));
   end;
