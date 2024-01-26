@@ -3235,7 +3235,7 @@ var
   n: integer;
   z, s: TStream;
   age: TDateTime;
-  zipname: TFileName;
+  zipname, decname: TFileName;
 begin
   result := false;
   EventArchiveZipSafe.Lock;
@@ -3264,8 +3264,22 @@ begin
         EventArchiveZipWrite.AddDeflated(
           aOldLogFileName, false, EventArchiveZipCompressLevel, zipname)
       else
+      // decompress and re-compress the .synlz/.synliz content into .zip
+      if LogCompressAlgo.AlgoHasForcedFormat then
       begin
-        // decompress and re-compress the .synlz/.synliz content into .zip
+        // use a temporary file (e.g. for AlgoGZ) if streaming is no option
+        decname := aOldLogFileName + '.plain';
+        try
+          if LogCompressAlgo.FileUnCompress(aOldLogFileName, decname, LOG_MAGIC) then
+            EventArchiveZipWrite.AddDeflated(
+              decname, false, EventArchiveZipCompressLevel, zipname);
+        finally
+          DeleteFile(decname);
+        end;
+      end
+      else
+      begin
+        // use efficient direct streaming decompression/recompression
         s := FileStreamSequentialRead(aOldLogFileName);
         try
           z := EventArchiveZipWrite.AddDeflatedStream(zipname,
