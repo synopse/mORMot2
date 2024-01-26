@@ -952,8 +952,11 @@ var
   tmp: TW32Temp;
 begin
   // aRights parameter is just ignored on Windows
-  result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
-    FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  if aFileName = '' then
+    result := 0
+  else
+    result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
+      FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
 const
@@ -969,8 +972,11 @@ const
 var
   tmp: TW32Temp;
 begin
- result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3],
-    FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if aFileName = '' then
+    result := 0
+  else
+   result := CreateFileW(W32(aFileName, tmp), ACCESS[aMode and 3],
+      FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
@@ -978,7 +984,8 @@ var
   FileTime: TFileTime;
   D: THandle;
 begin
-  if Dest = '' then
+  if (Dest = '') or
+     not ValidHandle(SourceHandle) then
     result := false
   else
   begin

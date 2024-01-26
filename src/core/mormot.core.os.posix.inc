@@ -1138,17 +1138,20 @@ end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 begin
-  result := FileSetDate(Dest, FileGetDate(SourceHandle)) = 0;
+  result := (Dest <> '') and
+            ValidHandle(SourceHandle) and
+            (FileSetDate(Dest, FileGetDate(SourceHandle)) = 0);
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName;
   WinTime: integer): boolean;
 var
-  datetime: TDateTime;
+  dt: TDateTime;
 begin
-  datetime := WindowsFileTimeToDateTime(WinTime);
-  result := (datetime <> 0) and
-            (FileSetDate(Dest, DateTimeToFileDate(datetime)) = 0); // with LocalToEpoch()
+  dt := WindowsFileTimeToDateTime(WinTime);
+  result := (Dest <> '') and
+            (dt <> 0) and
+            (FileSetDate(Dest, DateTimeToFileDate(dt)) = 0); // with LocalToEpoch()
 end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
@@ -1202,9 +1205,11 @@ end;
 
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 begin
-  if (aMode = 0) and
-     (aRights = 0) then
-    result := sysutils.FileCreate(aFileName)
+  if aFileName = '' then
+    result := 0
+  else if (aMode = 0) and
+          (aRights = 0) then
+    result := sysutils.FileCreate(aFileName) // direct call of the FPC RTL
   else
   begin
     if aRights = 0 then // use 644 / '-rw-r-r--' default POSIX file attributes
@@ -2208,7 +2213,7 @@ var
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
           begin
-            if n = 0 then
+            if n = 0 then // generous initial result capacity
               SetLength(result, 128)
             else if n = length(result) then
               SetLength(result, NextGrow(n));
