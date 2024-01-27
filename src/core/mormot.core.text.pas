@@ -823,6 +823,9 @@ type
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean = false);
+    /// append some binary data as hexadecimal text conversion
+    // - append its minimal chars, i.e. excluding last bytes containing 0
+    procedure AddBinToHexMinChars(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean = false);
     /// fast conversion from binary data into hexa chars, ready to be displayed
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
@@ -4947,7 +4950,8 @@ end;
 procedure TTextWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
 begin
-  AddBinToHexDisplayLower(Bin, DisplayMinChars(Bin, BinBytes), QuotedChar);
+  if BinBytes > 0 then
+    AddBinToHexDisplayLower(Bin, DisplayMinChars(Bin, BinBytes), QuotedChar);
 end;
 
 procedure TTextWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
@@ -4984,6 +4988,13 @@ begin
     B := fTempBuf;
   until false;
   dec(B); // allow CancelLastChar
+end;
+
+procedure TTextWriter.AddBinToHexMinChars(Bin: Pointer; BinBytes: PtrInt;
+  LowerHex: boolean);
+begin
+  if BinBytes > 0 then
+    AddBinToHex(Bin, DisplayMinChars(Bin, BinBytes), LowerHex);
 end;
 
 procedure TTextWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
@@ -9474,6 +9485,11 @@ end;
 
 function ToHexShort(P: pointer; Len: PtrInt): TShort64;
 begin
+  if Len = 0 then
+  begin
+    result[0] := AnsiChar(Len);
+    exit;
+  end;
   if Len > 32 then
     Len := 32;
   Len := DisplayMinChars(P, Len);
