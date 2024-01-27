@@ -2025,8 +2025,6 @@ begin
   if result <> '' then
     exit;
   result := EnsureDirectoryExists(GetSystemPath(spUserData) + _KEYFILEFOLDER);
-  if result = '' then
-    EnsureDirectoryExists(GetSystemPath(spTemp) + _KEYFILEFOLDER);
   _EccKeyFileFolder := result;
 end;
 
@@ -2035,7 +2033,6 @@ var
   match: TFindFilesDynArray;
   ext, mask: TFileName;
 begin
-  match := nil; // to please Kylix
   if privkey then
     ext := ECCCERTIFICATESECRET_FILEEXT
   else

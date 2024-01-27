@@ -1045,8 +1045,8 @@ type
   // like OpenSSL) may not be installed - you can add it via your package
   // manager, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3
-  // - under a 64-bit Linux system, if compiled with Kylix, you should install
-  // the 32-bit flavor of libcurl, e.g. on Ubuntu:
+  // - under a 64-bit Linux system, if compiled into linux-i386 target, you
+  // should install the 32-bit flavor of libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
