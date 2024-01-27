@@ -858,7 +858,7 @@ function FileIsReadOnly(const FileName: TFileName): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  result := (not GetFileAttributesInternal(FileName, FA, {followlink=}false)) or
+  result := GetFileAttributesInternal(FileName, FA, {followlink=}false) and
             (FA.dwFileAttributes and faReadOnly <> 0);
 end;
 
