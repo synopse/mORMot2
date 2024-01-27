@@ -2637,7 +2637,7 @@ begin
       end;
     end;
   end;
-  result := EnsureDirectoryExists(result, EOSException);
+  result := EnsureDirectoryExists(result);
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
