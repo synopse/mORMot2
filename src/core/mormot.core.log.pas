@@ -5269,11 +5269,11 @@ begin
     {$endif OSWINDOWS}
     {$ifdef CPUINTEL}
       Add(':');
-      AddBinToHex(@CpuFeatures, SizeOf(CpuFeatures));
+      AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUINTEL}
     {$ifdef CPUARM3264}
       Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
-      AddBinToHex(@CpuFeatures, SizeOf(CpuFeatures));
+      AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUARM3264}
       AddShorter(' OS=');
     {$ifdef OSWINDOWS}
@@ -6692,6 +6692,7 @@ var
 
 var
   aWow64, feat: RawUtf8;
+  f: PAnsiChar;
   i: PtrInt;
   j, Level: integer;
   TSEnter, TSLeave: Int64;
@@ -6760,14 +6761,17 @@ begin
        not GetOne(' FREQ=', aWow64) then
       exit;
     Split(fCPU, ':', fCpu, feat);
-    if feat <> '' then
-      case feat[1] of
+    f := pointer(feat);
+    if f <> nil then
+      // HexToBin() stops decoding at ' ' so AddBinToHexMinChars()-truncated or
+      // old/smaller T*CpuFeatures members will be left filled with 0
+      case f^ of
         '-': // ARM32 marker
-          mormot.core.text.HexToBin(pointer(feat), @fArm32CPU, SizeOf(fArm32CPU));
+          mormot.core.text.HexToBin(f + 1, @fArm32CPU, SizeOf(fArm32CPU));
         '+': // AARCH64 marker
-          mormot.core.text.HexToBin(pointer(feat), @fArm64CPU, SizeOf(fArm64CPU));
-      else // old/smaller TIntelCpuFeatures members will be left filled with 0
-        mormot.core.text.HexToBin(pointer(feat), @fIntelCPU, SizeOf(fIntelCPU));
+          mormot.core.text.HexToBin(f + 1, @fArm64CPU, SizeOf(fArm64CPU));
+      else
+        mormot.core.text.HexToBin(f, @fIntelCPU, SizeOf(fIntelCPU));
       end;
     fWow64 := aWow64 = '1';
     SetInt64(PBeg, fFreq);
