@@ -294,7 +294,7 @@ type
   TTHttpClientSocketRequestParams = record
     url, method, header: RawUtf8;
     Data: RawByteString;
-    DataType: RawUtf8;
+    DataMimeType: RawUtf8;
     status, redirected: integer;
     InStream, OutStream: TStream;
     KeepAlive: cardinal;
@@ -371,13 +371,14 @@ type
     // - after an Open(server,port), return 200,202,204 if OK, or an http
     // status error otherwise
     // - retry is usually false, but could be recursively recalled as true
-    // - use either Data or InStream for sending its body request
+    // - use either Data or InStream for sending its body request (with its MIME
+    // content type as DataMimeType e.g. JSON_CONTENT_TYPE)
     // - response body will be either in Content or in OutStream
     // - wrapper around RequestInternal() with OnBeforeRequest/OnAfterRequest
     // and RedirectMax handling
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
-      const header: RawUtf8; const Data: RawByteString = '';
-      const DataType: RawUtf8 = ''; retry: boolean = false;
+      const Header: RawUtf8; const Data: RawByteString = '';
+      const DataMimeType: RawUtf8 = ''; retry: boolean = false;
       InStream: TStream = nil; OutStream: TStream = nil): integer; virtual;
     /// low-level processing method called from Request()
     // - can be used e.g. when implementing callbacks like OnAuthorize or
@@ -403,17 +404,17 @@ type
       const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Post(const url: RawUtf8; const Data: RawByteString;
-      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const DataMimeType: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer; overload;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     // - this overloaded method accepts a TStream for its output body content
     // - you could use a THttpMultiPartStream for multipart/formdata HTTP POST
     function Post(const url: RawUtf8; Data: TStream;
-      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const DataMimeType: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer; overload;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Put(const url: RawUtf8; const Data: RawByteString;
-      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const DataMimeType: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -1121,13 +1122,13 @@ type
     /// low-level entry point of this instance, using an TUri as input
     // - rather use the Request() more usable method
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
-      const Data: RawByteString; const DataType: RawUtf8;
+      const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; overload;
     /// simple-to-use entry point of this instance
     // - use Body and Headers properties to retrieve the HTTP body and headers
-    function Request(const uri: RawUtf8; const method: RawUtf8 = 'GET';
-      const header: RawUtf8 = ''; const data: RawByteString = '';
-      const datatype: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
+      const Header: RawUtf8 = ''; const Data: RawByteString = '';
+      const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     /// access to the raw TLS settings for THttpClientSocket
     function SocketTLS: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1680,7 +1681,7 @@ begin
         if (dat <> '') or
            ((ctxt.method <> 'GET') and // no message body len/type for GET/HEAD
             (ctxt.method <> 'HEAD')) then
-          CompressDataAndWriteHeaders(ctxt.DataType, dat, ctxt.InStream);
+          CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
         if ctxt.header <> '' then
           SockSend(ctxt.header);
         if Http.CompressAcceptEncoding <> '' then
@@ -1819,8 +1820,8 @@ begin
 end;
 
 function THttpClientSocket.Request(const url, method: RawUtf8;
-  KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
+  KeepAlive: cardinal; const Header: RawUtf8; const Data: RawByteString;
+  const DataMimeType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
   ctxt: TTHttpClientSocketRequestParams;
   newuri: TUri;
@@ -1833,7 +1834,7 @@ begin
   ctxt.KeepAlive := KeepAlive;
   ctxt.header := TrimU(header);
   ctxt.Data := Data;
-  ctxt.DataType := DataType;
+  ctxt.DataMimeType := DataMimeType;
   ctxt.InStream := InStream;
   ctxt.OutStream := OutStream;
   if OutStream <> nil then
@@ -2232,21 +2233,21 @@ begin
 end;
 
 function THttpClientSocket.Post(const url: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
+  const DataMimeType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
-  result := Request(url, 'POST', KeepAlive, header, Data, DataType);
+  result := Request(url, 'POST', KeepAlive, header, Data, DataMimeType);
 end;
 
 function THttpClientSocket.Post(const url: RawUtf8; Data: TStream;
-  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
+  const DataMimeType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
-  result := Request(url, 'POST', KeepAlive, header, '', DataType, false, Data);
+  result := Request(url, 'POST', KeepAlive, header, '', DataMimeType, false, Data);
 end;
 
 function THttpClientSocket.Put(const url: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
+  const DataMimeType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
-  result := Request(url, 'PUT', KeepAlive, header, Data, DataType);
+  result := Request(url, 'PUT', KeepAlive, header, Data, DataMimeType);
 end;
 
 function THttpClientSocket.Delete(const url: RawUtf8; KeepAlive: cardinal;
@@ -3439,7 +3440,7 @@ end;
 
 function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; KeepAlive: cardinal): integer;
+  const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
 var
   temp: TUri;
 begin
@@ -3461,7 +3462,7 @@ begin
         fHttps.UserAgent := fUserAgent;
     end;
     result := fHttps.Request(
-      Uri.Address, Method, KeepAlive, Header, Data, DataType, fHeaders, fBody);
+      Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
     if KeepAlive = 0 then
       FreeAndNil(fHttps);
     exit;
@@ -3486,7 +3487,7 @@ begin
       exit
     else
       result := fHttp.Request(
-        Uri.Address, Method, KeepAlive, Header, Data, DataType, true);
+        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, true);
     fBody := fHttp.Http.Content;
     fHeaders := fHttp.Http.Headers;
     if KeepAlive = 0 then
@@ -3496,15 +3497,15 @@ begin
   end;
 end;
 
-function TSimpleHttpClient.Request(const uri: RawUtf8; const method: RawUtf8;
-  const header: RawUtf8; const data: RawByteString; const datatype: RawUtf8;
-  keepalive: cardinal): integer;
+function TSimpleHttpClient.Request(const Uri: RawUtf8; const Method: RawUtf8;
+  const Header: RawUtf8; const Data: RawByteString; const DataMimeType: RawUtf8;
+  KeepAlive: cardinal): integer;
 var
   u: TUri;
 begin
-  fUri := uri;
-  if u.From(uri) then
-    result := RawRequest(u, method, header, data, datatype, keepalive)
+  fUri := Uri;
+  if u.From(Uri) then
+    result := RawRequest(u, Method, Header, Data, DataMimeType, KeepAlive)
   else
     result := HTTP_NOTFOUND;
   fStatus := result;
@@ -3595,11 +3596,7 @@ begin
      fCache.FindAndCopy(aAddress, cache) then
     FormatUtf8('If-None-Match: %', [cache.Tag], headin);
   if fTokenHeader <> '' then
-  begin
-    if {%H-}headin <> '' then
-      headin := headin + #13#10;
-    headin := headin + fTokenHeader;
-  end;
+    AppendLine(headin, [fTokenHeader]);
   status := fClient.RawRequest(fUri, 'GET', headin, '', '', fKeepAlive);
   modified := true;
   case status of
