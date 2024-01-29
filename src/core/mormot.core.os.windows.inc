@@ -2613,8 +2613,9 @@ begin
   case kind of
     spLog:
       begin
-        result := Executable.ProgramFilePath; // try <exepath>\log
-        if not IsDirectoryWritable(result, [idwExcludeWinSys]) then
+        // try <exepath>\log - without [idwExcludeWinSys] (writable is enough)
+        result := Executable.ProgramFilePath;
+        if not IsDirectoryWritable(result) then
           // fallback to 'C:\Users\<user>\AppData\Local\<exename>-log'
           result := format('%s%s-',
                       [GetSystemPath(spUserData), Executable.ProgramName]);

@@ -3121,7 +3121,8 @@ begin
     fDebugFile := aExeName;
   MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
-    if not IsDirectoryWritable(ExtractFilePath(MabFile), [idwExcludeWinSys]) then
+    if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
+      // (do not include [idwExcludeWinSys] because if we can as admin then OK)
       // read/only exe folder -> store .mab in local non roaming user folder
       MabFile := GetSystemPath(spUserData) + ExtractFileName(Mabfile);
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -3924,8 +3925,9 @@ constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
-  fDestinationPath := Executable.ProgramFilePath; // use .exe path by default
-  if not IsDirectoryWritable(fDestinationPath, [idwExcludeWinSys]) then
+  fDestinationPath := Executable.ProgramFilePath;
+  // use .exe path by default - without [idwExcludeWinSys] (writable is enough)
+  if not IsDirectoryWritable(fDestinationPath) then
     // fallback to a writable folder
     fDestinationPath := GetSystemPath(spLog);
   fDefaultExtension := '.log';
