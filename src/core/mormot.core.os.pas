@@ -7325,8 +7325,8 @@ begin
   if Directory = '' then
     exit;                       
   dir := ExcludeTrailingPathDelimiter(Directory);
-  if FileIsReadOnly(dir) then
-    exit; // the whole folder is read-only for the currently running user
+  if not FileIsWritable(dir) then
+    exit; // the folder does not exist or is read-only for the current user
   {$ifdef OSWINDOWS}
   // ensure is not a system/virtual folder
   if ((idwExcludeWinUac in Flags) and
