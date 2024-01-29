@@ -1771,13 +1771,13 @@ begin
   end;
   if LogToTextFileName = '' then
   begin
-    GlobalLock;
+    AppendToTextFileSafe.Lock;
     try
       LogToTextFileName := ChangeFileExt(Executable.ProgramFileName, '.log');
       if not IsDirectoryWritable(Executable.ProgramFilePath, [idwExcludeWinSys]) then
         LogToTextFileName := GetSystemPath(spLog) + ExtractFileName(LogToTextFileName);
     finally
-      GlobalUnLock;
+      AppendToTextFileSafe.UnLock;
     end;
   end;
   AppendToTextFile(Msg, LogToTextFileName);
