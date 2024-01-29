@@ -10,6 +10,7 @@ unit mormot.core.variants;
   - Low-Level Variant Wrappers
   - Custom Variant Types with JSON support
   - TDocVariant Object/Array Document Holder with JSON support
+  - IDocList/IDocDict advanced Wrappers of TDocVariant Documents
   - JSON Parsing into Variant
   - Variant Binary Serialization
 
@@ -2774,6 +2775,99 @@ function VariantLoad(const Bin: RawByteString;
 procedure FromVarVariant(var Source: PByte; var Value: variant;
   CustomVariantOptions: PDocVariantOptions; SourceMax: PByte);
   {$ifdef HASINLINE}inline;{$endif}
+
+
+{ ************** IDocList/IDocDict advanced Wrappers of TDocVariant Documents }
+
+type
+  IDocList = interface;
+  IDocDict = interface;
+
+  /// internal map of a variant memory structure for IDocList/IDocDict wrappers
+  // - you don't allocate those structures, but a TDocValue
+  TDocRefVariant = record
+  public
+    V: TVarData;
+    class operator Implicit(const A: TDocRefVariant): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    class operator Implicit(const A: TDocRefVariant): integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    class operator Implicit(const A: TDocRefVariant): Int64;
+      {$ifdef HASINLINE} inline; {$endif}
+    class operator Implicit(const A: TDocRefVariant): string;
+    class operator Implicit(const A: TDocRefVariant): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    class operator Implicit(const A: TDocRefVariant): IDocList;
+      {$ifdef HASINLINE} inline; {$endif}
+    class operator Implicit(const A: TDocRefVariant): IDocDict;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  /// reference a value for IDocList/IDocDict wrappers
+  TDocValue = ^TDocRefVariant;
+
+  /// common methods to IDocList/IDocDict wrappers
+  IDocVariant = interface
+    /// equals dvArray for IDocList, dvObject for IDocDict
+    function Kind: TDocVariantKind;
+    /// how many items or name/value pairs are stored in this instance
+    function Count: integer;
+    /// low-level access to the internal TDocVariantData
+    function Value: PDocVariantData;
+    /// equals true if the Value is owned by this IDocList/IDocDict instance
+    function ValueIsOwned: boolean;
+  end;
+
+  IDocList = interface(IDocVariant)
+    ['{8186E3D3-3C9C-46E6-89D1-82ADDB741AAB}']
+    /// return a of a sub-range of this IDocList
+    // - returned IDocList instance is just a reference of this main list
+    // $ list.Slice(10) returns items 10..Count-1
+    // $ list.Slice(0, 10) returns first 0..9 items
+    // $ list.Slice(10, 20) returns items 10..29 - truncated if Count<30
+    // $ list.Slice(-10) returns last Count-10..Count-1 items
+    function Slice(Offset: integer; Limit: integer = 0): IDocList;
+  end;
+
+  IDocDict = interface(IDocVariant)
+    ['{E4176BFF-AFDC-4A63-8DBD-D4F495D56B1A}']
+  end;
+
+/// create a self-owned IDocList from a JSON array
+function DocList(const json: RawUtf8;
+  model: TDocVariantModel = mFastFloat): IDocList; overload;
+
+/// create a self-owned IDocList from a set of values
+function DocList(const values: array of const;
+  model: TDocVariantModel = mFastFloat): IDocList; overload;
+
+/// create a IDocList as weak reference to a TDocVariantData
+function DocList(const dv: TDocVariantData): IDocList; overload;
+
+/// create a self-owned IDocList as full copy of a TDocVariantData
+function DocListCopy(const dv: TDocVariantData;
+  model: TDocVariantModel = mFastFloat): IDocList;
+
+/// create a IDocList as weak reference to a variant holding a TDocVariantData
+function DocListFromVariant(const v: variant): IDocList;
+
+/// create a self-owned IDocDict from a JSON object
+function DocDict(const json: RawUtf8;
+  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+
+/// create a self-owned IDocDict from a set of name,value pairs
+function DocDict(const namevalues: array of const;
+  model: TDocVariantModel = mFastFloat): IDocList; overload;
+
+/// create a IDocDict as weak reference to a TDocVariantData
+function DocDict(const dv: TDocVariantData): IDocDict; overload;
+
+/// create a self-owned IDocDict as full copy of a TDocVariantData
+function DocDictCopy(const dv: TDocVariantData;
+  model: TDocVariantModel = mFastFloat): IDocDict;
+
+/// create a IDocDict as weak reference to a variant holding a TDocVariantData
+function DocDictFromVariant(const v: variant): IDocDict;
 
 
 implementation
@@ -8974,6 +9068,334 @@ begin
   Source := PByte(VariantLoad(Value, pointer(Source),
     CustomVariantOptions, pointer(SourceMax)));
 end;
+
+
+{ ************** IDocList/IDocDict advanced Wrappers of TDocVariant Documents }
+
+type
+  TIDocVariant = class(TInterfacedObject)
+  protected
+    fValue: PDocVariantData;
+    fValueOwner: TVarData;
+  public
+    constructor CreateOwned;
+    constructor CreateCopy(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
+    constructor CreateByRef(const dv: TDocVariantData); reintroduce;
+    destructor Destroy; override;
+    function Kind: TDocVariantKind;
+    function Value: PDocVariantData;
+    function ValueIsOwned: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
+  TIDocList = class(TIDocVariant, IDocList)
+  protected
+    fRangeStart: integer;
+    fRangeCount: integer;   // 0 means no custom range
+    fRangeOwner: TIDocList; // manual refcount to avoid slower IDocList here
+    function RangeStart: PVariant;
+      {$ifdef HASINLINE} inline; {$endif}
+    function RangeStop: PVariant;
+      {$ifdef HASINLINE} inline; {$endif}
+  public
+    destructor Destroy; override;
+    function Count: integer;
+    function Slice(Offset: integer = 0; Limit: integer = 0): IDocList;
+  end;
+
+  TIDocDict = class(TIDocVariant, IDocDict)
+  public
+    function Count: integer;
+  end;
+
+function DocList(const json: RawUtf8; model: TDocVariantModel): IDocList;
+var
+  v: TIDocList;
+begin
+  result := nil;
+  if GetFirstJsonToken(pointer(json)) <> jtArrayStart then
+    exit;
+  v := TIDocList.CreateOwned;
+  result := v;
+  if not v.Value^.InitJson(json, model) or
+     not v.Value^.IsArray then
+    result := nil;
+end;
+
+function DocList(const dv: TDocVariantData): IDocList;
+begin
+  if dv.IsArray then
+    result := TIDocList.CreateByRef(dv)
+  else
+    result := nil;
+end;
+
+function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
+begin
+  if dv.IsArray then
+    result := TIDocList.CreateCopy(dv, model)
+  else
+    result := nil;
+end;
+
+function DocList(const values: array of const; model: TDocVariantModel): IDocList;
+var
+  v: TIDocList;
+begin
+  v := TIDocList.CreateOwned;
+  result := v;
+  v.Value^.InitArray(values, model);
+end;
+
+function DocListFromVariant(const v: variant): IDocList;
+var
+  dv: PDocVariantData;
+begin
+  if _SafeArray(variant(v), dv) then
+    result := TIDocList.CreateByRef(dv^)
+  else
+    result := nil;
+end;
+
+
+function DocDict(const json: RawUtf8; model: TDocVariantModel): IDocDict;
+var
+  v: TIDocDict;
+begin
+  result := nil;
+  if GetFirstJsonToken(pointer(json)) <> jtObjectStart then
+    exit;
+  v := TIDocDict.CreateOwned;
+  result := v;
+  if not v.Value^.InitJson(json, model) or
+     not v.Value^.IsObject then
+    result := nil;
+end;
+
+function DocDict(const dv: TDocVariantData): IDocDict;
+begin
+  if dv.IsObject then
+    result := TIDocDict.CreateByRef(dv)
+  else
+    result := nil;
+end;
+
+function DocDictCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocDict;
+begin
+  if dv.IsObject then
+    result := TIDocDict.CreateCopy(dv, model)
+  else
+    result := nil;
+end;
+
+function DocDict(const namevalues: array of const; model: TDocVariantModel): IDocList;
+var
+  v: TIDocList;
+begin
+  v := TIDocList.CreateOwned;
+  result := v;
+  v.Value^.InitObject(namevalues, model);
+end;
+
+function DocDictFromVariant(const v: variant): IDocDict;
+var
+  dv: PDocVariantData;
+begin
+  if _SafeObject(variant(v), dv) then
+    result := TIDocDict.CreateByRef(dv^)
+  else
+    result := nil;
+end;
+
+
+{ TIDocVariant }
+
+constructor TIDocVariant.CreateOwned;
+begin
+  fValue := @fValueOwner;
+end;
+
+constructor TIDocVariant.CreateCopy(const dv: TDocVariantData; m: TDocVariantModel);
+begin
+  fValue := @fValueOwner;
+  fValue^.Init(m, dv.Kind);
+  fValue^.VName := copy(dv.VName);
+  fValue^.VValue := copy(dv.VValue);
+end;
+
+constructor TIDocVariant.CreateByRef(const dv: TDocVariantData);
+begin
+  fValue := @dv;
+end;
+
+function TIDocVariant.Kind: TDocVariantKind;
+begin
+  result := fValue^.Kind;
+end;
+
+function TIDocVariant.Value: PDocVariantData;
+begin
+  result := fValue;
+end;
+
+function TIDocVariant.ValueIsOwned: boolean;
+begin
+  result := fValue = @fValueOwner;
+end;
+
+destructor TIDocVariant.Destroy;
+begin
+  inherited Destroy;
+  if ValueIsOwned then
+    fValue^.ClearFast;
+end;
+
+
+{ TIDocList }
+
+function TIDocList.RangeStart: PVariant;
+begin
+  result := pointer(fValue^.VValue);
+  if fRangeStart <> 0 then
+    inc(result, fRangeStart);
+end;
+
+function TIDocList.RangeStop: PVariant;
+begin
+  result := pointer(fValue^.VValue);
+  if fRangeCount <> 0 then
+    inc(result, fRangeCount)
+  else
+    inc(result, fValue^.Count);
+end;
+
+destructor TIDocList.Destroy;
+begin
+  inherited Destroy;
+  if fRangeOwner <> nil then
+    fRangeOwner._Release; // manual refcount
+end;
+
+function TIDocList.Count: integer;
+begin
+  if fRangeCount = 0 then
+    result := fValue^.Count
+  else
+    result := fRangeCount;
+end;
+
+function TIDocList.Slice(Offset: integer; Limit: integer): IDocList;
+var
+  v: TIDocList;
+  n, s: integer;
+begin
+  // check requested range parameters - supporting nested Slice() calls
+  n := Count;
+  if Offset < 0 then
+  begin
+    inc(Offset, n);
+    if Offset < 0 then
+      Offset := 0;
+  end;
+  s := n - Offset;
+  if s <= 0 then
+  begin
+    result := DocList([]); // void IDocList
+    exit;
+  end;
+  if Limit > s then
+    Limit := s;
+  // safe weak reference to this main instance - with proper refcount
+  v := TIDocList.Create;
+  result := v;
+  _AddRef; // manual refcount to avoid slower fRangeOwner: IDocList
+  v.fRangeOwner := self;
+  v.fValue := fValue;
+  v.fRangeStart := Offset;
+  v.fRangeCount := Limit;
+end;
+
+
+{ TIDocDict }
+
+function TIDocDict.Count: integer;
+begin
+  result := fValue^.Count;
+end;
+
+
+{ TDocRefVariant }
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): boolean;
+begin
+  if not VariantToBoolean(variant(A), result) then
+    result := false;
+end;
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): integer;
+begin
+  if not VariantToInteger(variant(A), result) then
+    result := 0;
+end;
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): Int64;
+begin
+  if not VariantToInt64(variant(A), result) then
+    result := 0;
+end;
+
+{$ifdef UNICODE}
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): string;
+var
+  wasString: boolean;
+  tmp: RawUtf8;
+begin
+  VariantToUtf8(variant(A), tmp, wasString);
+  if not wasString or
+     IsAnsiCompatible(result) then
+    Ansi7ToString(pointer(tmp), length(tmp), result)
+  else
+    Utf8DecodeToUnicodeString(pointer(tmp), length(tmp), result);
+end;
+
+{$else}
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): string;
+var
+  wasString: boolean;
+  tmp: pointer;
+begin
+  VariantToUtf8(variant(A), RawUtf8(result), wasString);
+  if not wasString or
+     (Unicode_CodePage = CP_UTF8) or // e.g. on POSIX or Lazarus
+     IsAnsiCompatible(result) then
+    exit;
+  tmp := pointer(result); // avoid an hidden try...finally generation
+  pointer(result) := nil;
+  result := CurrentAnsiConvert.Utf8ToAnsi(RawUtf8(tmp));
+  FastAssignNew(tmp);
+end;
+
+{$endif UNICODE}
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): RawUtf8;
+var
+  wasString: boolean;
+begin
+  VariantToUtf8(variant(A), RawUtf8(result), wasString);
+end;
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): IDocList;
+begin
+  result := DocListFromVariant(variant(A));
+end;
+
+class operator TDocRefVariant.Implicit(const A: TDocRefVariant): IDocDict;
+begin
+  result := DocDictFromVariant(variant(A));
+end;
+
 
 var
   // naive but efficient type cache - e.g. for TBsonVariant or TQuickJsVariant
