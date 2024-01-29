@@ -1159,6 +1159,7 @@ begin
   finally
     s.Free;
   end;
+  FakeCodePage(result, CP_UTF8); // won't hurt on blobs, but FPC needed on text
 end;
 
 function UncompressZipString(const src: RawByteString; ZlibFormat: boolean;
