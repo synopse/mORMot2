@@ -84,6 +84,7 @@ function libc_memchr(s: Pointer; c: Integer; n: PtrInt): Pointer; cdecl;
 function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
+function libc_fileno(f: Pointer): Integer; cdecl;
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
 function libc_log(d: double): double; cdecl;
 
@@ -318,7 +319,9 @@ function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
   external _CLIB name 'strchr';
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
   external _CLIB name 'strtod';
-function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
+ function libc_fileno(f: Pointer): Integer; cdecl;
+   external _CLIB name '_fileno';
+ function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
   external _CLIB name '_write';
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
   external _CLIB name 'qsort';
@@ -397,7 +400,7 @@ end;
 function fputc(c: integer; f: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'fputc'; {$endif}
 begin
-  if libc_write(PtrInt(f), @c, 1) = 1 then
+  if libc_write(libc_fileno(f), @c, 1) = 1 then
     result := c
   else
     result := 26;
@@ -420,7 +423,7 @@ end;
 function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
 begin
-  result := libc_write(PtrInt(f), buf, size * count) div size;
+  result := libc_write(libc_fileno(f), buf, size * count) div size;
 end;
 
 {$ifdef CPUX86}
