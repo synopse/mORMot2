@@ -745,7 +745,8 @@ var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
   ST, LT: TSystemTime;
 begin
-  if GetFileAttributesInternal(FileName, FA) and
+  if (FileName <> '') and
+     GetFileAttributesInternal(FileName, FA) and
      FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
      SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
     result := SystemTimeToDateTime(LT)
@@ -757,7 +758,8 @@ function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUn
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  if GetFileAttributesInternal(FileName, FA) and
+  if (FileName <> '') and
+     GetFileAttributesInternal(FileName, FA) and
      (AllowDir or ({%H-}FA.dwFileAttributes and faDirectory = 0)) then
     result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
   else
@@ -770,16 +772,17 @@ var
   ft: TFileTime;
 begin
   result := 0;
-  if GetFileAttributesInternal(FileName, FA) and
+  if (FileName <> '') and
+     GetFileAttributesInternal(FileName, FA) and
      ({%H-}FA.dwFileAttributes and faDirectory = 0) and
-     FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) then
-    if not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
-      result := 0;
+     FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) and
+     not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
+    result := 0;
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
 begin
-  result := FileSetDate(Dest, WinTime) = 0;
+  result := FileSetDate(Dest, WinTime) = 0; // we already are on Windows
 end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
@@ -801,13 +804,13 @@ begin
   result := GetFileInformationByHandle(aFileHandle, lp);
   if not result then
     exit;
-  LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+  LastWriteAccess    := FileTimeToUnixMSTime(lp.ftLastWriteTime);
   FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
-  lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+  lastreadaccess     := FileTimeToUnixMSTime(lp.ftLastAccessTime);
   PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
   PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
-  PInt64Rec(@FileId).lo := lp.nFileIndexLow;
-  PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
+  PInt64Rec(@FileId).lo   := lp.nFileIndexLow;
+  PInt64Rec(@FileId).hi   := lp.nFileIndexHigh;
   if LastWriteAccess <> 0 then
     if (FileCreateDateTime = 0) or
        (FileCreateDateTime > LastWriteAccess) then
@@ -867,20 +870,25 @@ function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean):
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  result := GetFileAttributesInternal(FileName, FA, FollowLink) and
+  result := (FileName <> '') and
+            GetFileAttributesInternal(FileName, FA, FollowLink) and
             ((FA.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
 end;
 
 function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
+var
+  L: integer;
 begin
-  if FileName = '' then
+  L := length(FileName);
+  if L = 0 then
     result := false
-  else if FileName = '.' then
+  else if (L = 1) and
+          (FileName[1] = '.') then
     result := true
-  else if FileName[length(FileName)] <> '\' then
+  else if FileName[L] <> '\' then
     result := FileExists(FileName, FollowLink, {checkasdir=}true)
   else
-    result := FileExists(copy(FileName, 1, length(FileName) - 1), FollowLink, true);
+    result := FileExists(copy(FileName, 1, L - 1), FollowLink, true);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -900,7 +908,8 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  result := GetFileAttributesInternal(FileName, FA);
+  result := (FileName <> '') and
+            GetFileAttributesInternal(FileName, FA);
   if not result then
     exit;
   PInt64Rec(@FileSize)^.Lo := FA.nFileSizeLow;
