@@ -1693,6 +1693,15 @@ procedure FormatShort16(const Format: RawUtf8; const Args: array of const;
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
 
+/// concatenate several arguments into an UTF-8 string
+function Make(const Args: array of const): RawUtf8; overload;
+
+/// concatenate several arguments into an UTF-8 string
+procedure Make(const Args: array of const; var Result: RawUtf8); overload;
+
+/// concatenate several arguments into a RTL string
+function MakeString(const Args: array of const): string;
+
 /// append some text items to a RawUtf8 variable
 // - see also AppendLine() below if you need a separator
 procedure Append(var Text: RawUtf8; const Args: array of const); overload;
@@ -8717,6 +8726,32 @@ var
   f: TFormatUtf8;
 begin
   {%H-}f.DoPrepend(RawUtf8(Text), @Args[0], length(Args), CP_RAWBYTESTRING);
+end;
+
+function Make(const Args: array of const): RawUtf8;
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAdd(@Args[0], length(Args));
+  FastSetString(result, f.L);
+  f.Write(pointer(result));
+end;
+
+procedure Make(const Args: array of const; var Result: RawUtf8);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAdd(@Args[0], length(Args));
+  FastSetString(result, f.L);
+  f.Write(pointer(result));
+end;
+
+function MakeString(const Args: array of const): string;
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoAdd(@Args[0], length(Args));
+  f.WriteString(result);
 end;
 
 function MakePath(const Part: array of const; EndWithDelim: boolean;
