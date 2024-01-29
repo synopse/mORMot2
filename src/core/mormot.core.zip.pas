@@ -1196,7 +1196,7 @@ begin
       (crc32 = 0)) then
     // 0 length stream
     exit;
-  FastNewRawByteString(result, uncomplen32);
+  FastSetString(RawUtf8(result), uncomplen32); // use CP_UTF8 for FPC
   if not ToBuffer(pointer(result)) then
     result := ''; // invalid CRC or truncated uncomplen32
 end;
@@ -1372,7 +1372,7 @@ begin
   inc(PCardinal(p));
   PCardinal(p)^ := len;
   inc(PCardinal(p));
-  result := p - dest; // no realloc
+  result := p - dest; // return compressed size
 end;
 
 function GZWriteLen(PlainLen: integer): integer;
