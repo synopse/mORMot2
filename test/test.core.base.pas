@@ -6022,12 +6022,13 @@ begin
   CurrentRawSid(s1, wttProcess);
   CurrentRawSid(s2, wttThread);
   Check(SidCompare(pointer(s1), pointer(s2)) = 0);
-  s := RawSidToText(s1);
-  CheckUtf8(IdemPChar(pointer(s), 'S-1-5-21-'), s);
   sids := CurrentGroupsSid;
   Check(sids <> nil);
   known := CurrentKnownGroups;
   Check(known <> []);
+  s := RawSidToText(s1);
+  CheckUtf8(IdemPChar(pointer(s), 'S-1-5-'), s);
+  // domain users are S-1-5-21-*, but LOCAL_SYSTEM is S-1-5-18
   for k := low(k) to high(k) do
   begin
     s := RawSidToText(KnownRawSid(k));
