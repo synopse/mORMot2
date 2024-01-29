@@ -742,7 +742,7 @@ begin
      ((ColumnDBCharSet <> OCI_AL32UTF8) and
       (ColumnDBCharSet <> OCI_UTF8) and
       (ColumnDBForm <> SQLCS_NCHAR) and
-      (fAnsiConvert.CodePage = CurrentAnsiConvert.CodePage)) then
+      (fAnsiConvert.CodePage = cardinal(Unicode_CodePage))) then
     SetString(result, P, L)
   else
     result := CurrentAnsiConvert.AnsiToAnsi(fAnsiConvert, P, L);

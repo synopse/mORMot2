@@ -6167,7 +6167,7 @@ begin
                not fConnection.Properties.VariantStringAsWideString then
             begin
               VType := varString;
-              if (CurrentAnsiConvert.CodePage = CP_UTF8) and
+              if (Unicode_CodePage = CP_UTF8) and
                  (V.VText = pointer(tmp)) then
                 RawByteString(VAny) := tmp
               else

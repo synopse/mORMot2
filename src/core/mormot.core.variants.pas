@@ -4995,20 +4995,19 @@ var
   tmp: variant;
 begin
   Init(aOptions, dvArray);
-  if high(aItems) >= 0 then
-  begin
-    VCount := length(aItems);
-    SetLength(VValue, VCount);
-    if dvoValueCopiedByReference in VOptions then
-      for arg := 0 to high(aItems) do
-        VarRecToVariant(aItems[arg], VValue[arg])
-    else
-      for arg := 0 to high(aItems) do
-      begin
-        VarRecToVariant(aItems[arg], tmp);
-        InternalSetValue(arg, tmp);
-      end;
-  end;
+  if high(aItems) < 0 then
+    exit;
+  VCount := length(aItems);
+  SetLength(VValue, VCount);
+  if dvoValueCopiedByReference in VOptions then
+    for arg := 0 to high(aItems) do
+      VarRecToVariant(aItems[arg], VValue[arg])
+  else
+    for arg := 0 to high(aItems) do
+    begin
+      VarRecToVariant(aItems[arg], tmp);
+      InternalSetValue(arg, tmp);
+    end;
 end;
 
 procedure TDocVariantData.InitArray(const aItems: array of const;
