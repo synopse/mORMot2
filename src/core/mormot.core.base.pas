@@ -754,10 +754,15 @@ procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// assign any constant or already ref-counted AnsiString/RawUtf8
-// - with default s=nil, is an equivalence to Finalize(s) or s := ''
+// - by default, called with s = nil, is an equivalence to Finalize(d) or d := ''
 // - is also called by FastSetString/FastSetStringCP to setup its allocated value
 // - faster especially under FPC
 procedure FastAssignNew(var d; s: pointer = nil);
+  {$ifndef FPC_CPUX64} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// internal function to assign any constant or ref-counted AnsiString/RawUtf8
+// - caller should have tested that pointer(d) <> nil
+procedure FastAssignNewNotVoid(var d; s: pointer); overload;
   {$ifndef FPC_CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// internal function used by FastSetString/FastSetStringCP
@@ -4427,6 +4432,18 @@ begin
     FreeMem(sr);
 end;
 
+procedure FastAssignNewNotVoid(var d; s: pointer);
+var
+  sr: PStrRec; // local copy to use register
+begin
+  sr := Pointer(d);
+  Pointer(d) := s;
+  dec(sr);
+  if (sr^.refcnt >= 0) and
+     StrCntDecFree(sr^.refcnt) then
+    FreeMem(sr);
+end;
+
 {$endif FPC_ASMX64}
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
@@ -4567,7 +4584,7 @@ begin
   if pointer(s) = nil then
     pointer(s) := r
   else
-    FastAssignNew(s, r);
+    FastAssignNewNotVoid(s, r);
 end;
 
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt);
@@ -4578,15 +4595,21 @@ begin
   if (p <> nil) and
      (r <> nil) then
     MoveFast(p^, r^, len);
-  if s = '' then
+  if pointer(s) = nil then
     pointer(s) := r
   else
-    FastAssignNew(s, r);
+    FastAssignNewNotVoid(s, r);
 end;
 
 procedure FastSetString(var s: RawUtf8; len: PtrInt);
+var
+  r: pointer;
 begin
-  FastAssignNew(s, FastNewString(len, CP_UTF8));
+  r := FastNewString(len, CP_UTF8);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNewNotVoid(s, r);
 end;
 
 procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
@@ -4600,12 +4623,18 @@ begin
   if pointer(s) = nil then
     pointer(s) := r
   else
-    FastAssignNew(s, r);
+    FastAssignNewNotVoid(s, r);
 end;
 
 procedure FastNewRawByteString(var s: RawByteString; len: PtrInt);
+var
+  r: pointer;
 begin
-  FastAssignNew(s, FastNewString(len, CP_RAWBYTESTRING));
+  r := FastNewString(len, CP_RAWBYTESTRING);
+  if pointer(s) = nil then
+    pointer(s) := r
+  else
+    FastAssignNewNotVoid(s, r);
 end;
 
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;

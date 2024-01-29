@@ -731,6 +731,25 @@ asm
 @z:
 end;
 
+procedure FastAssignNewNotVoid(var d; s: pointer);
+nostackframe; assembler;
+asm
+        mov     rax, qword ptr [d]
+        mov     qword ptr [d], s
+        lea     d, qword ptr [rax - _STRRECSIZE] // for fpc_freemem() below
+        {$ifdef STRCNT32}
+        cmp     dword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
+        jl      @z
+   lock dec     dword ptr [rax - _STRCNT]
+        {$else}
+        cmp     qword ptr [rax - _STRCNT], 0 // refcnt=-1 for const
+        jl      @z
+   lock dec     qword ptr [rax - _STRCNT]
+        {$endif STRCNT32}
+        jbe     fpc_freemem
+@z:
+end;
+
 {$endif FPC}
 
 {
