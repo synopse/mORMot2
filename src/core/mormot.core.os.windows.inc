@@ -3034,16 +3034,14 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if RawTokenGetInfo(tok, TokenGroups, buf) >= SizeOf({%H-}nfo^) then
-  begin
-    nfo := buf.buf;
-    if nfo.GroupCount <> 0 then
-    begin
-      SetLength(result, nfo.GroupCount);
-      for i := 0 to nfo.GroupCount - 1 do
-        result[i] := pointer(nfo.Groups[i].Sid); // within buf.buf/len
-    end;
-  end;
+  if RawTokenGetInfo(tok, TokenGroups, buf) < SizeOf({%H-}nfo^) then
+    exit;
+  nfo := buf.buf;
+  if nfo.GroupCount = 0 then
+    exit;
+  SetLength(result, nfo.GroupCount);
+  for i := 0 to nfo.GroupCount - 1 do
+    result[i] := pointer(nfo.Groups[i].Sid); // within buf.buf/len
 end;
 
 function TokenGroupsText(tok: THandle): TRawUtf8DynArray;
@@ -3057,8 +3055,18 @@ end;
 function TokenHasGroup(tok: THandle; sid: PSid): boolean;
 var
   tmp: TSynTempBuffer;
+  i: PtrInt;
 begin
-  result := HasSid(RawTokenGroups(tok, tmp), sid);
+  result := false;
+  if (sid <> nil) and
+     (RawTokenGetInfo(tok, TokenGroups, tmp) <> 0) then
+    with PTokenGroups(tmp.buf)^ do
+      for i := 0 to GroupCount - 1 do
+        if SidCompare(pointer(Groups[i].Sid), sid) = 0 then
+        begin
+          result := true;
+          break;
+        end;
   tmp.Done;
 end;
 
@@ -3095,10 +3103,19 @@ begin
   tmp.Done;
 end;
 
-function CurrentKnownGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
+function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
+var
+  h: THandle;
+begin
+  h := RawTokenOpen(wtt, TOKEN_QUERY);
+  result := TokenHasGroup(h, sid);
+  CloseHandle(h);
+end;
+
+function CurrentUserHasGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
 begin
   result := (wks <> wksNull) and
-            (wks in CurrentKnownGroups(wtt));
+            CurrentUserHasGroup(pointer(KnownRawSid(wks)), wtt);
 end;
 
 function CurrentUserHasGroup(const sid: RawUtf8; wtt: TWinTokenType): boolean;
@@ -3107,14 +3124,6 @@ var
 begin
   result := TextToSid(pointer(sid), s) and
             CurrentUserHasGroup(@s, wtt);
-end;
-
-function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := HasSid(CurrentGroups(wtt, tmp), sid);
-  tmp.Done;
 end;
 
 function CurrentUserHasAnyGroup(const sid: RawSidDynArray; wtt: TWinTokenType): boolean;
@@ -3150,7 +3159,7 @@ end;
 
 function CurrentUserIsAdmin: boolean;
 begin
-  result := wksBuiltinAdministrators in CurrentKnownGroups;
+  result := CurrentUserHasGroup(wksBuiltinAdministrators);
 end;
 
 function LookupSid(sid: PSid; out name, domain: RawUtf8;

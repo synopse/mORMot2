@@ -2005,8 +2005,9 @@ function CurrentGroupsSid(wtt: TWinTokenType = wttProcess): TRawUtf8DynArray;
 function CurrentKnownGroups(wtt: TWinTokenType = wttProcess): TWellKnownSids;
 
 /// fast check if the current user, from process or thread, has a well-known group SID
-function CurrentKnownGroup(wks: TWellKnownSid;
-  wtt: TWinTokenType = wttProcess): boolean;
+// - e.g. CurrentUserHasGroup(wksLocalSystem) returns true for LOCAL_SYSTEM user
+function CurrentUserHasGroup(wks: TWellKnownSid;
+  wtt: TWinTokenType = wttProcess): boolean; overload;
 
 /// fast check if the current user, from process or thread, has a given group SID
 function CurrentUserHasGroup(const sid: RawUtf8;
@@ -2025,8 +2026,9 @@ function CurrentUserHasAnyGroup(const sid: RawSidDynArray;
 function CurrentUserHasGroup(const name, domain, server: RawUtf8;
   wtt: TWinTokenType = wttProcess): boolean; overload;
 
-/// just a wrapper around "wksBuiltinAdministrators in CurrentKnownGroups"
+/// just a wrapper around CurrentUserHasGroup(wksBuiltinAdministrators)
 function CurrentUserIsAdmin: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// rough detection of 'c:\windows' and 'c:\program files' folders
 function IsSystemFolder(const Folder: TFileName): boolean;
@@ -5946,6 +5948,7 @@ begin
 end;
 
 var
+  KNOWN_SID_SAFE: TLightLock; // lighter than GlobalLock/GlobalUnLock
   KNOWN_SID: array[TWellKnownSid] of RawSid;
   KNOWN_SID_TEXT: array[TWellKnownSid] of string[15];
 const
@@ -6032,13 +6035,13 @@ begin
       end;
     end;
   end;
-  GlobalLock;
+  KNOWN_SID_SAFE.Lock;
   if KNOWN_SID[wks] = '' then
   begin
     SidToTextShort(@sid, KNOWN_SID_TEXT[wks]);
     ToRawSid(@sid, KNOWN_SID[wks]); // to be set last
   end;
-  GlobalUnLock;
+  KNOWN_SID_SAFE.UnLock;
 end;
 
 function KnownRawSid(wks: TWellKnownSid): RawSid;
