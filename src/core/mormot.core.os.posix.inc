@@ -1169,10 +1169,10 @@ begin
   result := DateTimeToWindowsFileTime(FileAgeToDateTime(FileName));
 end;
 
-function FileIsReadOnly(const FileName: TFileName): boolean;
+function FileIsWritable(const FileName: TFileName): boolean;
 begin
   result := (FileName <> '') and
-            (fpaccess(pointer(FileName), W_OK) <> 0);
+            (fpaccess(pointer(FileName), W_OK) = 0);
 end;
 
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);

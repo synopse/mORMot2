@@ -3181,10 +3181,10 @@ function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 // - returns 0 if the conversion failed
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
-/// check if a file exists and can not be written
+/// check if a file exists and can be written
 // - on POSIX, call fpaccess() and check for the W_OK attribute
 // - on Windows, supports aFileName longer than MAX_PATH
-function FileIsReadOnly(const FileName: TFileName): boolean;
+function FileIsWritable(const FileName: TFileName): boolean;
 
 /// reduce the visibility of a given file, and set its read/write attributes
 // - on POSIX, change attributes for the the owner, and reset group/world flags

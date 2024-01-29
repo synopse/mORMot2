@@ -854,12 +854,13 @@ begin
   result := string(SynUnicode(tmp));
 end;
 
-function FileIsReadOnly(const FileName: TFileName): boolean;
+function FileIsWritable(const FileName: TFileName): boolean;
 var
   FA: WIN32_FILE_ATTRIBUTE_DATA;
 begin
-  result := GetFileAttributesInternal(FileName, FA, {followlink=}false) and
-            (FA.dwFileAttributes and faReadOnly <> 0);
+  result := (FileName <> '') and
+            GetFileAttributesInternal(FileName, FA) and
+            (FA.dwFileAttributes and faReadOnly = 0);
 end;
 
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
