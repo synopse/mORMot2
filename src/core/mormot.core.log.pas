@@ -5673,7 +5673,7 @@ begin
   // include thread ID in ptOneFilePerThread mode
   if fFamily.fPerThreadLog = ptOneFilePerThread then
     fFileName := FormatString('% %',
-      [fFileName, PointerToHexShort(pointer(GetCurrentThreadId))]);
+      [fFileName, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
   fFileName := fFamily.fDestinationPath + fFileName + fFamily.fDefaultExtension;
 end;
 
