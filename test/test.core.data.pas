@@ -6174,10 +6174,6 @@ begin
   Z.Free;
   Check(GZRead(M.Memory, M.Position) = Data, 'gzread');
   crc1 := crc32(0, M.Memory, M.Position);
-  s := Data;
-  Check(CompressGZip(s, true) = 'gzip');
-  Check(CompressGZip(s, false) = 'gzip');
-  Check(s = Data, 'compressGZip');
   Check(gzr.Init(M.Memory, M.Position), 'TGZRead');
   Check({%H-}gzr.uncomplen32 = Cardinal(length(Data)));
   Check(gzr.crc32 = crc0);
@@ -6202,6 +6198,12 @@ begin
   check(gzr.ZStreamDone, 'ZStreamDone');
   Check(gzr.uncomplen32 = Cardinal(length(s)));
   check(s = Data);
+  s := Data;
+  Check(CompressGZip(s, {compress=}true) = 'gzip');
+  //FileFromString(s, 'test.plain.gz');
+  Check(CompressGZip(s, {compress=}false) = 'gzip');
+  //FileFromString(s, 'test.plain');
+  Check(s = Data, 'compressGZip');
   s := Data;
   Check(CompressDeflate(s, true) = 'deflate');
   Check(CompressDeflate(s, false) = 'deflate');
