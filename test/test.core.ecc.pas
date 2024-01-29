@@ -432,11 +432,16 @@ var
   var
     sw: ICommandLine;
     cl: TCommandLine;
+    res: TEccCommandError;
+    c, r: RawUtf8;
   begin
     cl := TCommandLine.Create(nv);
     sw := cl;
-    {%H-}check(EccCommand(cmd, sw) = eccSuccess);
-    if CheckFailed(cl.ConsoleLines <> nil) then
+    res := EccCommand(cmd, sw);
+    ShortStringToAnsi7String(GetEnumName(TypeInfo(TEccCommand), ord(cmd))^, c);
+    ShortStringToAnsi7String(GetEnumName(TypeInfo(TEccCommandError), ord(res))^, r);
+    CheckUtf8(res = eccSuccess, 'cmd=% res=%', [c, r]);
+    if CheckFailed(cl.ConsoleLines <> nil, 'consolelines') then
       result := @DocVariantDataFake
     else
     begin
@@ -468,7 +473,7 @@ begin
           'newpass',       pass,
           'newrounds',     rounds]);
         sw := cl;
-        check(EccCommand(ecNew, sw) = eccSuccess);
+        check(EccCommand(ecNew, sw) = eccSuccess, 'new');
         if CheckFailed(cl.ConsoleLines <> nil) then
           exit;
         id := TrimU(split(cl.ConsoleLines[high(cl.ConsoleLines)], '.'));
@@ -486,7 +491,7 @@ begin
               'saltrounds', i + 10], ecCrypt);
       end;
     sw := TCommandLine.Create([]);
-    check(EccCommand(ecChainAll, sw) = eccSuccess);
+    check(EccCommand(ecChainAll, sw) = eccSuccess, 'chainall');
     for i := 0 to high(keys) do
       with keys[i] do
       begin
@@ -495,17 +500,17 @@ begin
           'pass',   pass,
           'rounds', rounds], ecInfoPriv)^ do
         begin
-          check(I['Version'] = 1);
-          check(U['Serial'] = id);
-          check(U['Issuer'] = issuer);
+          checkEqual(I['Version'], 1);
+          checkEqual(U['Serial'], id);
+          checkEqual(U['Issuer'], issuer);
         end;
         with Exec(['file', crypt], ecInfoCrypt)^ do
         begin
-          check(I['Size'] = length(text));
-          check(U['recipient'] = issuer);
-          check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
-          check(U['Algorithm'] = ShortStringToAnsi7String(
+          checkEqual(I['Size'], length(text));
+          checkEqual(U['recipient'], issuer);
+          checkEqual(U['Recipientserial'], id);
+          checkEqual(length(U['RandomPublicKey']), SizeOf(TEccPublicKey) * 2);
+          checkEqual(U['Algorithm'],ShortStringToAnsi7String(
             ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
           check(O['Signature']^.VarType = varNull, 'not signed');
           check(not B['Meta']);
@@ -518,7 +523,7 @@ begin
           'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
-        check(StringFromFile(plainfn) = text);
+        check(StringFromFile(plainfn) = text, 'decrypt with auth');
         Exec([
           'file',       test,
           'out',        crypt,
@@ -536,25 +541,25 @@ begin
           'file',    crypt,
           'rawfile', rawfn], ecInfoCrypt)^ do
         begin
-          check(I['Size'] = length(text));
-          check(U['recipient'] = issuer);
-          check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = SizeOf(TEccPublicKey) * 2);
-          check(U['Algorithm'] = 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
-          check(O['Signature']^.I['Version'] = 1, 'signed');
-          check(O['Signature']^.U['AuthoritySerial'] = id, 'serial');
-          check(B['Meta']);
+          checkEqual(I['Size'], length(text));
+          checkEqual(U['recipient'], issuer);
+          checkEqual(U['Recipientserial'], id);
+          checkEqual(length(U['RandomPublicKey']), SizeOf(TEccPublicKey) * 2);
+          checkEqual(U['Algorithm'], 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
+          checkEqual(O['Signature']^.I['Version'], 1, 'signed');
+          checkEqual(O['Signature']^.U['AuthoritySerial'], id, 'serial');
+          check(B['Meta'], 'meta');
         end;
-        check(PosEx(StringFromFile(rawfn), StringFromFile(crypt)) =
-                SizeOf(TEciesHeader) + 1);
-        DeleteFile(plainfn);
+        checkEqual(PosEx(StringFromFile(rawfn), StringFromFile(crypt)),
+                   SizeOf(TEciesHeader) + 1, 'posex');
+        check(DeleteFile(plainfn), 'delete');
         Exec([
           'file',       crypt,
           'out',        plainfn,
           'authpass',   pass,
           'authrounds', rounds,
           'saltrounds', i + 10], ecDecrypt);
-        check(StringFromFile(plainfn) = text, 'guess .private from header');
+        Check(StringFromFile(plainfn) = text, 'guess .private from header');
       end;
   finally
     SetCurrentDir('..');

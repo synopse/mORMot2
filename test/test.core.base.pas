@@ -4970,6 +4970,16 @@ begin
   Check(MakeCsv([1, 2, 3]) = '1,2,3');
   Check(MakeCsv([1, '2', 3], true) = '1,2,3,');
   Check(MakeCsv([1, '2 ,', 3]) = '1,2 ,3');
+  Check(Make([]) = '');
+  Check(Make([1]) = '1');
+  Check(Make([1, 2, 3]) = '123');
+  Check(Make([1, '2', 3]) = '123');
+  Check(Make([1, '2 ,', 3]) = '12 ,3');
+  Check(MakeString([]) = '');
+  Check(MakeString([1]) = '1');
+  Check(MakeString([1, 2, 3]) = '123');
+  Check(MakeString([1, '2', 3]) = '123');
+  Check(MakeString([1, '2 ,', 3]) = '12 ,3');
   U := '';
   Append(U, []);
   CheckEqual(U, '');
