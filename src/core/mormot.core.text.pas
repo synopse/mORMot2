@@ -4418,7 +4418,8 @@ begin
     {$ifdef UNICODE}
     AddNoJsonEscapeW(pointer(s), 0);
     {$else}
-    AddNoJsonEscape(pointer(s), length(s), CurrentAnsiConvert.CodePage);
+    AddNoJsonEscape(pointer(s), length(s),
+      Unicode_CodePage); // =CurrentAnsiConvert.CodePage
     {$endif UNICODE}
 end;
 

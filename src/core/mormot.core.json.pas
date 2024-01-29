@@ -196,6 +196,12 @@ function IsValidJson(const s: RawUtf8; strict: boolean = false): boolean; overlo
 // - numbers, escaped strings and commas are wild guessed, for performance
 function IsValidJsonBuffer(P: PUtf8Char; strict: boolean = false): boolean;
 
+/// returns the JSON type of a supplied #0 ended buffer
+// - will move to the first non-space char, then returns its JSON_TOKENS[] value
+// - for valid JSON, is likely to return jtDoubleQuote, jtFirstDigit,
+// jtNullFirstChar, jtTrueFirstChar, jtFalseFirstChar, jtObjectStart or jtArrayStart
+function GetFirstJsonToken(P: PUtf8Char): TJsonToken;
+
 /// validate the supplied #0 ended buffer and returns its JSON type
 // - on parsing error, returns P=nil and jtNone
 // - will move P to the next JSON item, and return the JSON token kind, e.g.
@@ -3101,6 +3107,14 @@ begin
   P := parser.GotoEnd(P);
   result := (P <> nil) and
             (P - B = len);
+end;
+
+function GetFirstJsonToken(P: PUtf8Char): TJsonToken;
+begin
+  if P <> nil then
+    result := JSON_TOKENS[GotoNextNotSpace(P)^]
+  else
+    result := jtNone;
 end;
 
 function GetNextJsonToken(var P: PUtf8Char; strict: boolean; DocCount: PInteger): TJsonToken;
