@@ -2536,8 +2536,11 @@ begin
              (Count > 0) then
           begin
             head.magic := THash128(ECIES_MAGIC[1]); // indicates efMetaData
-            content := ToJson('', '', jsonUnquotedPropNameCompact) + #0 + content;
-          end; // new format storing {metadata}+#0+plain
+            // new format storing {metadata}+#0+plain
+            content := ToJson('', '', jsonUnquotedPropNameCompact);
+            Append(content, #0); // circumvent FPC compiler error
+            Append(content, plain);
+          end;
     end
     else
       FillcharFast(head.sign, SizeOf(head.sign), 255); // Version=255=not signed

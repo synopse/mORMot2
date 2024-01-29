@@ -575,7 +575,8 @@ begin
     end;
     ip := Sender.RemoteIP;
     if Frame.opcode = focContinuation then
-      Frame.payload := ip + #13 + Name + #13 + UpgradeUri; // propagate to Private Relay
+      // propagate to Private Relay
+      Frame.payload := Make([ip, #13, Name, #13, UpgradeUri]);
     if not fOwner.EncapsulateAndSend(
         fOwner.fServerConnected, ip, Frame, Sender.Protocol.ConnectionID) and
        (Frame.opcode <> focConnectionClose) then

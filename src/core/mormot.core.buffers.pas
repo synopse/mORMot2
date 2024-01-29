@@ -7602,8 +7602,8 @@ var
     if (boundary <> '') and
        (boundary[1] = '"') then
       TrimChars(boundary, 1, 1); // "boundary" -> boundary
-    endBoundary := '--' + boundary + '--' + #13#10;
-    boundary := '--' + boundary + #13#10;
+    Make(['--', boundary, '--'#13#10], endBoundary);
+    boundary := Make(['--', boundary, #13#10]);
     result := true;
   end;
 

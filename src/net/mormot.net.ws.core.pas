@@ -2440,7 +2440,7 @@ begin
   // return the 101 header and switch protocols
   ComputeChallenge(key, Digest);
   if {%H-}extout <> '' then
-    extout := 'Sec-WebSocket-Extensions: ' + extout + #13#10;
+    extout := Make(['Sec-WebSocket-Extensions: ', extout, #13#10]);
   FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
              'Upgrade: websocket'#13#10 +
              'Connection: Upgrade'#13#10 +

@@ -1752,7 +1752,7 @@ begin
   fOutput.Header := HEADER_CONTENT_TYPE + view.ContentType;
   if _Safe(outContext)^.GetAsRawUtf8('CustomOutHttpHeader', head) and
      (head <> '') then
-    fOutput.Header := fOutput.Header + #13#10 + head;
+    AppendLine(fOutput.Header, [head]);
   fOutput.Status := status;
   fOutputFlags := view.Flags;
 end;
@@ -1926,10 +1926,9 @@ function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;
   const aFileContent: RawByteString): RawByteString;
 begin
   if aFileContent <> '' then
-    result := GetMimeContentType(
-      pointer(aFileContent), length(aFileContent), aFileName) + #10 +
-      // also cache content-type
-      aFileContent
+    result := Make([
+      GetMimeContentType(pointer(aFileContent), length(aFileContent), aFileName),
+      #10, aFileContent]) // also cache content-type
   else
     result := '';
   fStaticCache.Add(StringToUtf8(aFileName), result);
@@ -2196,15 +2195,15 @@ doInput:    if fInput = '' then
         rootCache:
           if fOutput.Status = HTTP_SUCCESS then
           begin
-            RootValue := fOutput.Header + #0 + fOutput.Content;
+            Make([fOutput.Header, #0, fOutput.Content], RootValue);
             RootValueExpirationTime := fCacheCurrentSec;
           end
           else
             RootValue := '';
         inputCache:
           if fOutput.Status = HTTP_SUCCESS then
-            InputValues.Add(fCacheCurrentInputValueKey, fOutput.Header + #0 +
-              fOutput.Content, fCacheCurrentSec)
+            InputValues.Add(fCacheCurrentInputValueKey,
+              Make([fOutput.Header, #0, fOutput.Content]), fCacheCurrentSec)
           else
             InputValues.Add(fCacheCurrentInputValueKey, '');
       end;

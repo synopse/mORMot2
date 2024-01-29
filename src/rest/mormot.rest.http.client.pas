@@ -571,10 +571,7 @@ begin
     if fUriPrefix <> '' then
       Call.Url := fUriPrefix + Call.Url;
     if fCustomHeader <> '' then
-      if Call.InHead = '' then
-        Call.InHead := fCustomHeader
-      else
-        Call.InHead := Call.InHead + #13#10 + fCustomHeader;
+      AppendLine(Call.InHead, [fCustomHeader]);
     fSafe.Enter;
     try
       res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);

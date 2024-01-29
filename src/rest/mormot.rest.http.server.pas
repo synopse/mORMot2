@@ -1363,8 +1363,7 @@ begin
     'Access-Control-Expose-Headers: content-length,location,server-internalstate'#13#10 +
     'Access-Control-Allow-Origin: ', origin]);
   if fAccessControlAllowCredential then
-    Ctxt.OutCustomHeaders := Ctxt.OutCustomHeaders + #13#10 +
-      'Access-Control-Allow-Credentials: true';
+    Ctxt.AddOutHeader(['Access-Control-Allow-Credentials: true']);
 end;
 
 procedure TRestHttpServer.ComputeHostUrl(

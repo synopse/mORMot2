@@ -2568,11 +2568,11 @@ begin
   begin
     OutContentLen := length(OutContent);
     case IdemPPChar(OutContentTypeP, @_CONTENTCOMP) of
-      0:
+      0: // text/*
         compressible := true;
-      1:
+      1: // image/*
         compressible := IdemPPChar(OutContentTypeP + 6, @_CONTENTIMG) >= 0;
-      2:
+      2: // aplication/*
         compressible := IdemPPChar(OutContentTypeP + 12, @_CONTENTAPP) >= 0;
     else
       compressible := false;
@@ -3762,10 +3762,7 @@ begin
       while not eof(SockIn^) do
       begin
         readln(SockIn^, line);
-        if Http.Content = '' then
-          Http.Content := line
-        else
-          Http.Content := Http.Content + #13#10 + line;
+        AppendLine(RawUtf8(Http.Content), [line]);
       end;
     Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
@@ -3875,10 +3872,7 @@ procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);
 begin
   TrimSelf(AppendedHeader);
   if AppendedHeader <> '' then
-    if fInHeaders = '' then
-      fInHeaders := AppendedHeader
-    else
-      fInHeaders := NetConcat([fInHeaders, #13#10, AppendedHeader]);
+    AppendLine(fInHeaders, [AppendedHeader]);
 end;
 
 procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);

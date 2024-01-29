@@ -4297,9 +4297,7 @@ begin
     if result or
        (Name = '') then
       exit;
-    if Content <> '' then
-      Content := Content + #13#10;
-    Content := Content + Name + NewValue;
+    AppendLine(Content, [Name, NewValue]);
     result := true;
   end;
 end;
@@ -11079,7 +11077,7 @@ procedure TRadixTreeNode.ToText(var Result: RawUtf8; Level: integer);
 var
   i: PtrInt;
 begin
-  Result := Result + RawUtf8OfChar(' ', Level) + Chars + #10;
+  Append(Result, [RawUtf8OfChar(' ', Level), Chars, #10]);
   for i := 0 to high(Child) do
     Child[i].ToText(Result, Level + length(Chars));
 end;

@@ -7930,7 +7930,7 @@ begin
      (HeadLen <> 0) then
   begin
     LibraryRequestString(h, Head, HeadLen);
-    call.InHead := h + call.InHead + #13#10;
+    call.InHead := Make([h, call.InHead, #13#10]);
   end;
   LibraryRequestString(call.InBody, SendData, SendDataLen);
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;

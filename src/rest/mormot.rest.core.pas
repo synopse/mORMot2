@@ -3965,8 +3965,7 @@ end;
 
 procedure TRestUriContext.OutHeadFromCookie;
 begin
-  fCall.OutHead := TrimU(fCall.OutHead + #13#10 +
-                        'Set-Cookie: ' + fOutSetCookie);
+  AppendLine(fCall.OutHead, ['Set-Cookie: ', fOutSetCookie]);
 end;
 
 function TRestUriContext.ContentTypeIsJson: boolean;
@@ -3998,8 +3997,7 @@ end;
 
 procedure SetCacheControl(var Head: RawUtf8; CacheControlMaxAge: integer);
 begin
-  Head := Head + #13#10 + 'Cache-Control: max-age=' +
-    UInt32ToUtf8(CacheControlMaxAge);
+  AppendLine(Head, ['Cache-Control: max-age=', CacheControlMaxAge]);
 end;
 
 procedure Process304NotModified(Call: PRestUriParams; const ServerHash: RawUtf8);
@@ -4012,7 +4010,7 @@ begin
     server := crc32cUtf8ToHex(Call^.OutBody);
   server := '"' + server + '"';
   if client <> server then
-    Call^.OutHead := Call^.OutHead + #13#10 + 'ETag: ' + server
+    AppendLine(Call^.OutHead, ['ETag: ', server])
   else
   begin
     // save bandwidth by returning "304 Not Modified"
@@ -4105,22 +4103,19 @@ begin
   begin
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     begin
-      if fCall^.OutHead <> '' then
-        fCall^.OutHead := fCall^.OutHead + #13#10;
       if ContentType <> '' then
-        fCall^.OutHead := fCall^.OutHead + HEADER_CONTENT_TYPE + ContentType
+        AppendLine(fCall^.OutHead, [HEADER_CONTENT_TYPE + ContentType])
       else
-        fCall^.OutHead := fCall^.OutHead + GetMimeContentTypeHeader('', FileName);
+        AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
     end;
     if CacheControlMaxAge > 0 then
-      fCall^.OutHead := fCall^.OutHead +
-        #13#10'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
+      AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAge]);
     fCall^.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then
     begin
       FindNameValue(fCall^.InHead, 'IF-NONE-MATCH:', clienthash);
       UInt64ToUtf8(unixfiletime, serverhash);
-      fCall^.OutHead := fCall^.OutHead + #13#10'ETag: ' + serverhash;
+      AppendLine(fCall^.OutHead, ['ETag: ', serverhash]);
       if clienthash = serverhash then
       begin
         fCall^.OutStatus := HTTP_NOTMODIFIED;
@@ -4128,11 +4123,11 @@ begin
       end;
     end;
     // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
-    fCall^.OutHead := STATICFILE_CONTENT_TYPE_HEADER + #13#10 + fCall^.OutHead;
+    Prepend(fCall^.OutHead, [STATICFILE_CONTENT_TYPE_HEADER + #13#10]);
     StringToUtf8(FileName, fCall^.OutBody); // body=filename for STATICFILE_CONTENT
     if AttachmentFileName <> '' then
-      fCall^.OutHead := fCall^.OutHead +
-        #13#10'Content-Disposition: attachment; filename="' + AttachmentFileName + '"';
+      AppendLine(fCall^.OutHead, ['Content-Disposition: attachment; filename="',
+        AttachmentFileName, '"']);
   end;
 end;
 

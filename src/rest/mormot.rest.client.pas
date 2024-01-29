@@ -1528,8 +1528,8 @@ begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
      (Sender.Session.User <> nil) then
-    Call.InHead := TrimU(Call.InHead + // session ID transmitted as HTTP cookie
-      (#13#10'Cookie: ' + REST_COOKIE_SESSION + '=') + Sender.Session.IDHexa8);
+    AppendLine(Call.InHead, [('Cookie: ' + REST_COOKIE_SESSION + '='),
+      Sender.Session.IDHexa8]); // session ID transmitted as HTTP cookie
 end;
 
 class function TRestClientAuthenticationHttpAbstract.ClientSetUser(
@@ -2484,7 +2484,7 @@ var
     if fSession.Authentication <> nil then
       fSession.Authentication.ClientSessionSign(self, Call);
     if fSession.HttpHeader <> '' then
-      Call.InHead := TrimU(Call.InHead + #13#10 + fSession.HttpHeader);
+      AppendLine(Call.InHead, [fSession.HttpHeader]);
     if SendData <> nil then
       Call.InBody := SendData^;
     if Assigned(fOnIdle) then

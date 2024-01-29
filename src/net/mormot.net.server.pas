@@ -3951,10 +3951,8 @@ begin
   result := match <> 0;
   if not result then
     exit; // no match -> manual send
-  Context.OutContent :=
-    copy(Context.OutContent, match + 1, 1024); // remove '/var/www'
-  Context.OutCustomHeaders := TrimU(Context.OutCustomHeaders + #13#10 +
-    'X-Accel-Redirect: ' + Context.OutContent);
+  Context.AddOutHeader(['X-Accel-Redirect: ',
+    copy(Context.OutContent, match + 1, 1024)]); // remove '/var/www'
   Context.OutContent := '';
 end;
 

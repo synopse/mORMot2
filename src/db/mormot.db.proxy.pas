@@ -1040,7 +1040,7 @@ begin
     on E: Exception do
     begin
       PRemoteMessageHeader(msgout)^.Command := cExceptionRaised;
-      Append(msgout, StringToUtf8(E.ClassName + #0 + E.Message));
+      Append(msgout, Make([E, #0, E.Message]));
     end;
   end;
   Output := HandleOutput(msgout);
@@ -1065,7 +1065,7 @@ begin
   SetLength(credential, 4);
   PCardinal(credential)^ := fProtocol.Authenticate.ComputeHash(
     token, UserID, PassWord);
-  credential := UserID + #1 + credential;
+  Prepend(credential, [UserID, #1]);
   fCurrentSession := Process(cGetDbms, credential, fDbms);
 end;
 
