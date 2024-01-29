@@ -1971,45 +1971,40 @@ begin
   result := folder <> '';
 end;
 
+function WritableFolder(const parent, sub: TFileName; var folder: TFileName): boolean;
+begin
+  result := false;
+  if not IsDirectoryWritable(parent) then
+    exit;
+  folder := EnsureDirectoryExists(parent + sub);
+  if folder = '' then
+    exit;
+  if IsDirectoryWritable(folder) then
+    result := true
+  else
+    folder := '';
+end;
+
 procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 begin
   result := ''; // "out result" param is not enough for FPC
   case kind of
     spLog:
-      begin
-        // try '/var/log/<exename>'
-        if IsDirectoryWritable('/var/log') then
-        begin
-          result := EnsureDirectoryExists(
-                      '/var/log/' + TFileName(Executable.ProgramName));
-          if result <> '' then
-            exit;
-        end;
-        // try '<exepath>/log'
-        if IsDirectoryWritable(Executable.ProgramFilePath) then
-        begin
-          result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log');
-          if result <> '' then
-            exit;
-        end;
-        // try '$TMP/<exename>-log' - spUserData/$HOME is no option on POSIX
+         // try '/var/log/<exename>'
+      if not WritableFolder('/var/log/', TFileName(Executable.ProgramName), result) and
+         // try '<exepath>/log'
+         not WritableFolder(Executable.ProgramFilePath, 'log', result) then
+        // fallback to '$TMP/<exename>-log' - spUserData/$HOME is no option
         result := EnsureDirectoryExists(format('%s%s-log',
           [GetSystemPath(spTemp), Executable.ProgramName]));
-      end;
     // warning: $HOME is reported wrong with sudo for spUserData/spUserDocuments
     spUserData:
-      begin
-        // try $XDG_CACHE_HOME
-        if GetEnvFolder('XDG_CACHE_HOME', result, {writable=}true) then
-          exit;
-        // try '$HOME/.cache'
-        result := EnsureDirectoryExists(GetSystemPath(spUserDocuments) + '.cache');
-        if IsDirectoryWritable(result) then
-          exit;
-        // try '$TMP/<user>'
-        result := EnsureDirectoryExists(
-          GetSystemPath(spTemp) + TFileName(Executable.User));
-      end;
+         // try $XDG_CACHE_HOME
+      if not GetEnvFolder('XDG_CACHE_HOME', result, {writable=}true) and
+         // try '$HOME/.cache'
+         not WritableFolder(GetSystemPath(spUserDocuments), '.cache', result) then
+        // fallback to '$TMP/<user>'
+        WritableFolder(GetSystemPath(spTemp), TFileName(Executable.User), result);
     spTemp:
       begin
         // try $TMPDIR (POSIX standard) and $TMP and $TEMP
@@ -2019,10 +2014,9 @@ begin
           exit;
         // try /tmp
         result := '/tmp/';
-        if IsDirectoryWritable(result) then
-          exit;
-        // try /var/tmp
-        result := '/var/tmp/';
+        if not IsDirectoryWritable(result) then
+          // fallback to /var/tmp
+          result := '/var/tmp/';
       end;
   else
     // POSIX requires a value for the $HOME environment variable

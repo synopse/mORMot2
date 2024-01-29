@@ -1533,11 +1533,13 @@ var
 type
   /// identify an operating system folder for GetSystemPath()
   // - on Windows, spCommonData maps e.g. 'C:\ProgramData',
-  // spUserData points to 'C:\Users\<user>\AppData\Local', spLog either
-  // to '<exepath>\log' or 'C:\Users\<user>\AppData\Local\<exename>-log',
+  // spUserData points to 'C:\Users\<user>\AppData\Local',
   // spCommonDocuments to 'C:\Users\Public\Documents',
-  // spUserDocuments to 'C:\Documents and Settings\<user>\My Documents',
-  // and spTemp will call GetTempPath() or read the $TEMP environment variable
+  // spUserDocuments to 'C:\Users\<user>\Documents',
+  // spTemp will call GetTempPath() or read the $TEMP environment variable,
+  // pointing typically to 'C:\Users\<user>\AppData\Local\Temp\',
+  // and spLog either to '<exepath>\log' or
+  // 'C:\Users\<user>\AppData\Local\<exename>-log' (the first writable)
   // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
   // spUserData maps $XDG_CACHE_HOME or '$HOME/.cache' or '$TMP/<user>', and
@@ -1562,6 +1564,7 @@ const
 // depending on the underlying operating system
 // - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
 // - under POSIX, will return the proper environment variable
+// - spLog is a writable sub-folder specific to mORMot, always created if needed
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 

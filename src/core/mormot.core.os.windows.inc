@@ -2567,12 +2567,12 @@ var
   SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
 
-procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
 const
-  CSIDL_PERSONAL = $0005;
-  CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
-  CSIDL_COMMON_APPDATA = $0023;
+  CSIDL_PERSONAL         = $0005;
+  CSIDL_LOCAL_APPDATA    = $001C; // local non roaming user folder
+  CSIDL_COMMON_APPDATA   = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
+
   CSIDL: array[TSystemPath] of integer = (
     CSIDL_COMMON_APPDATA,   // spCommonData
                             // C:\ProgramData
@@ -2581,10 +2581,15 @@ const
     CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
                             // C:\Users\Public\Documents
     CSIDL_PERSONAL,         // spUserDocuments
-                            // C:\Documents and Settings\<user>\My Documents
+                            // C:\Users\<user>\Documents
     0,                      // spTemp
     0);                     // spLog
-  ENV: array[TSystemPath] of TFileName = (
+  // note: for SYSTEM user, got C:\Windows\System32\config\systemprofile\AppData
+  // or C:\Windows\SysWOW64\config\systemprofile\AppData (on Win32 over Win64)
+
+procedure _ComputeSystemPath(kind: TSystemPath; var result: TFileName);
+const
+  _ENV: array[TSystemPath] of TFileName = (
     'ALLUSERSAPPDATA', // spCommonData
     'LOCALAPPDATA',    // spUserData
     '',                // spCommonDocuments
@@ -2604,19 +2609,19 @@ begin
           result := format('%s%s-',
                       [GetSystemPath(spUserData), Executable.ProgramName]);
         result := EnsureDirectoryExists(result + 'log');
-        if result <> '' then
-          exit; // found
-        // 'C:\Documents and Settings\<user>\Local Settings\Temp\<exename>-log'
-        result := format('%s%s-log',
-                    [GetSystemPath(spTemp), Executable.ProgramName]);
+        if IsDirectoryWritable(result) then
+          exit; // found a folder able to receive new logs
+        // 'C:\Users\<user>\AppData\Local\Temp\<exename>-log'
+        result := EnsureDirectoryExists(format('%s%s-log',
+                    [GetSystemPath(spTemp), Executable.ProgramName]));
       end;
     spTemp:
       begin
-        // typically 'C:\Documents and Settings\<user>\Local Settings\Temp'
+        // typically 'C:\Users\<user>\AppData\Local\Temp'
         if GetTempPath(MAX_PATH, @tmp) <> 0 then
-          result := tmp; // retrieve from dedicated API
+          result := tmp; // retrieve from dedicated standard API
         if result = '' then
-          result := GetEnvironmentVariable('TEMP');
+          result := GetEnvironmentVariable(_ENV[spTemp]); // fallback
       end;
   else
     if (CSIDL[kind] <> 0) and
@@ -2628,7 +2633,7 @@ begin
     else
     begin
       // fallback to environment variables (very unlikely)
-      result := GetEnvironmentVariable(ENV[kind]);
+      result := GetEnvironmentVariable(_ENV[kind]);
       if result = '' then
       begin
         result := GetEnvironmentVariable('APPDATA');
@@ -2637,7 +2642,8 @@ begin
       end;
     end;
   end;
-  result := EnsureDirectoryExists(result);
+  if result <> '' then
+    result := IncludeTrailingPathDelimiter(result); // no EnsureDirectoryExists
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
