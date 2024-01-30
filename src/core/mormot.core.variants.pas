@@ -181,7 +181,7 @@ function VariantCompareI(const V1, V2: variant): PtrInt;
 
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
-// - here Str='' equals unassigned, null or false
+// - here Str='' equals unassigned (varEmpty), null or false
 // - if CaseSensitive is false, will use PropNameEquals() for comparison
 function VariantEquals(const V: Variant; const Str: RawUtf8;
   CaseSensitive: boolean = true): boolean; overload;
@@ -273,7 +273,7 @@ type
     procedure CopyByValue(var Dest: TVarData;
       const Source: TVarData); virtual;
     /// this method will allow to look for dotted name spaces, e.g. 'parent.child'
-    // - should return Unassigned if the FullName does not match any value
+    // - return Unassigned (varEmpty) if the FullName does not match any value
     // - will identify TDocVariant storage, or resolve and call the generic
     // TSynInvokeableVariantType.IntGet() method until nested value match
     // - you can set e.g. PathDelim = '/' to search e.g. for 'parent/child'
@@ -1595,7 +1595,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
-    // - it will return Unassigned if there is no item at the supplied aPath
+    // - return Unassigned (varEmpty) if there is no item at the supplied aPath
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
     // - see also the P[] property if the default aPathDelim = '.' is enough
     function GetValueByPath(
@@ -1610,7 +1610,7 @@ type
       aPathDelim: AnsiChar = '.'): boolean; overload;
     /// retrieve a value, given its path
     // - path is defined as a list of names, e.g. ['doc','glossary','title']
-    // - returns Unassigned if there is no item at the supplied aPath
+    // - return Unassigned (varEmpty) if there is no item at the supplied aPath
     // - this method will only handle nested TDocVariant values: use the
     // slightly slower GetValueByPath() overloaded method, if any nested object
     // may be of another type (e.g. a TBsonVariant)
@@ -2333,8 +2333,8 @@ function _Arr(const Items: array of const;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
-// - this global function is an alias to TDocVariant.NewJson(), and
-// will return an Unassigned variant if JSON content was not correctly converted
+// - this global function is an alias to TDocVariant.NewJson(), and return
+// an Unassigned (varEmpty) variant if JSON content was not correctly converted
 // - object or array will be initialized from the supplied JSON content, e.g.
 // ! aVariant := _Json('{"id":10,"doc":{"name":"John","birthyear":1972}}');
 // ! // now you can access to the properties via late binding
@@ -2433,7 +2433,7 @@ function _ArrFast(const Items: array of const): variant; overload;
 // from a supplied (extended) JSON content
 // - this global function is an handy alias to:
 // ! _Json(JSON, JSON_FAST);
-// so it will return an Unassigned variant if JSON content was not correct
+// so returns an Unassigned (varEmpty) variant if JSON content was not correct
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
@@ -4276,7 +4276,6 @@ procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
 var
   S: TDocVariantData absolute Source;
   D: TDocVariantData absolute Dest;
-  i: PtrInt;
 begin
   //Assert(Source.VType=DocVariantVType);
   VarClearAndSetType(variant(Dest), PCardinal(@S)^); // VType + VOptions
@@ -4287,13 +4286,9 @@ begin
     exit; // no data to copy
   D.VName := S.VName;
   if dvoValueCopiedByReference in S.VOptions then
-    D.VValue := S.VValue
+    D.VValue := S.VValue // byref copy of the whole array
   else
-  begin
-    SetLength(D.VValue, S.VCount);
-    for i := 0 to S.VCount - 1 do
-      D.VValue[i] := S.VValue[i];
-  end;
+    D.VValue := system.copy(S.VValue); // new array, but byref values
 end;
 
 procedure TDocVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -5122,7 +5117,7 @@ begin
       VCount := length(aItems)
     else
       VCount := aCount;
-    VValue := aItems; // fast by-reference copy of VValue[]
+    VValue := aItems; // fast by-reference copy of VValue[] array
     if not aItemsCopiedByReference then
       InitCopy(variant(self), aOptions);
   end;
@@ -6987,12 +6982,52 @@ function TDocVariantData.Delete(Index: PtrInt): boolean;
 var
   n: PtrInt;
 begin
+  result := false;
   if cardinal(Index) >= cardinal(VCount) then
-    result := false
-  else
+    exit;
+  dec(VCount);
+  if VName <> nil then
   begin
-    dec(VCount);
+    if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
+      VName := copy(VName); // make unique
+    VName[Index] := '';
+  end;
+  if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
+    VValue := copy(VValue); // make unique
+  VarClear(VValue[Index]);
+  n := VCount - Index;
+  if n <> 0 then
+  begin
     if VName <> nil then
+    begin
+      MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
+      pointer(VName[VCount]) := nil; // avoid GPF
+    end;
+    MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
+    TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
+  end;
+  result := true;
+end;
+
+function TDocVariantData.Extract(aIndex: integer; var aValue: variant;
+  aName: PRawUtf8): boolean;
+var
+  v: pointer;
+begin
+  result := false;
+  if aIndex < 0 then
+    inc(aIndex, VCount);
+  if cardinal(aIndex) >= cardinal(VCount) then
+    exit;
+  if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
+    VValue := copy(VValue); // make unique
+  v := @VValue[aIndex]; // extract instead of copy
+  PVarData(@aValue)^ := PVarData(v)^;
+  PCardinal(v)^ := varEmpty; // no VarClear
+  if aName <> nil then
+    if VName = nil then
+      FastAssignNew(aName^)
+    else
     begin
       if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
         VName := copy(VName); // make unique
@@ -9490,9 +9525,9 @@ end;
 
 const
   // _CMP2SORT[] comparison of simple types - as copied to _VARDATACMP[]
-  _NUM1: array[varEmpty..varDate] of byte = (
+  _VARDATACMPNUM1: array[varEmpty..varDate] of byte = (
     1, 1, 2, 3, 4, 5, 6, 7);
-  _NUM2: array[varShortInt..varWord64] of byte = (
+  _VARDATACMPNUM2: array[varShortInt..varWord64] of byte = (
     8, 9, 10, 11, 12, 13);
 
 procedure InitializeUnit;
@@ -9531,11 +9566,11 @@ begin
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do
   begin
-    for i := low(_NUM1) to high(_NUM1) do
-      _VARDATACMP[i, ins] := _NUM1[i];
+    for i := low(_VARDATACMPNUM1) to high(_VARDATACMPNUM1) do
+      _VARDATACMP[i, ins] := _VARDATACMPNUM1[i];
     _VARDATACMP[varBoolean, ins] := 14;
-    for i := low(_NUM2) to high(_NUM2) do
-      _VARDATACMP[i, ins] := _NUM2[i];
+    for i := low(_VARDATACMPNUM2) to high(_VARDATACMPNUM2) do
+      _VARDATACMP[i, ins] := _VARDATACMPNUM2[i];
   end;
   _VARDATACMP[varString, false] := 15;
   _VARDATACMP[varString, true]  := 16;
