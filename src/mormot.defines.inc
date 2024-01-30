@@ -157,6 +157,7 @@
   {$define NODELPHIASM}     // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASITERATORS}
+  {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
@@ -491,6 +492,7 @@
       {$define ISDELPHI2009}      // to circumvent some specific bugs
       {$define ISDELPHI20092010}
       {$define HASNOSTATICRTTI}   // has no TypeInfo(TGuid)
+      {$define HASIMPLICITOPERATOR}  // Delphi 2009 "implicit operator" seems OK
     {$ifend}
     {$if CompilerVersion = 21}    // = Delphi 2010
       {$define ISDELPHI20092010}  // to circumvent some specific bugs
@@ -500,6 +502,7 @@
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}
+      {$define HASIMPLICITOPERATOR}
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
