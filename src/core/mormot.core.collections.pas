@@ -1164,7 +1164,7 @@ begin
   end;
   s := fDynArray.Info.Cache.ItemSize;
   state.After := state.Current + s * PtrUInt(fCount);
-  dec(state.Current, s);
+  dec(state.Current, s); // for the first MoveNext
 end;
 
 procedure TIListParent.NewEnumerator(var state: TIListEnumeratorState;
