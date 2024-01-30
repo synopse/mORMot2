@@ -3208,14 +3208,14 @@ begin
       result := ''; // default VariantToUtf8(null)='null'
     {$ifdef UNICODE} // not HASVARUSTRING: here we handle string=UnicodeString
     varOleStr:
-      SetString(result, TVarData(V).VAny, length(WideString(TVarData(V).VAny)));
+      SetString(result, PWideChar(TVarData(V).VAny), length(WideString(TVarData(V).VAny)));
     varUString:
       result := UnicodeString(TVarData(V).VAny);
     varUStringByRef:
-      result := PUnicodeString(TVarData(V).VAny)^
+      result := PUnicodeString(TVarData(V).VAny)^;
     varOleStrByRef:
-      SetString(result, PPointer(TVarData(V).VAny)^,
-        length(PWideString(TVarData(V).VAny))^);
+      SetString(result, PPWideChar(TVarData(V).VAny)^,
+        length(PWideString(TVarData(V).VAny)^));
     {$endif UNICODE}
   else
     begin
@@ -3437,8 +3437,10 @@ begin
       varString,
       varStringByRef:
         vt := varWord64 + 1;
-      {$ifdef HASVARUSTRING}
+      {$ifdef HASVARUSTRARG}
       varUStrArg,
+      {$endif HASVARUSTRARG}
+      {$ifdef HASVARUSTRING}
       varUString,
       varUStringByRef:
         vt := varWord64 + 2;
