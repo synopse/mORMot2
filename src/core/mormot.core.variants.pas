@@ -2892,13 +2892,14 @@ type
     /// adds an IDocList/IDocDict element at the end of the list
     function Append(const value: IDocAny): integer; overload;
     /// return a of a (sub-range) copy of this IDocList
-    // - returns a new IDocList instance with the extracted data
-    // $ list.Copy returns a copy of the list
-    // $ list.Copy(10) returns items 10..Count-1 of the list
-    // $ list.Copy(0, 10) returns first 0..9 items of the list
-    // $ list.Copy(10, 20) returns items 10..29 - truncated if Count<30
-    // $ list.Copy(-10) returns last Count-10..Count-1 items of the list
-    function Copy(Offset: integer; Limit: integer = 0): IDocList;
+    // - returns a new IDocList instance as Python list[start:stop] range,
+    // stop position being *excluded* to the result:
+    // $ list.Copy returns a copy of the whole list
+    // $ list.Copy(10) returns items #10..#Count-1, i.e. list[10:]
+    // $ list.Copy(-2) returns last #Count-2..#Count-1 items, i.e. list[-2:]
+    // $ list.Copy(1, 9) returns items #1..#8, i.e. list[1..9]
+    // $ list.Copy(1, -2) returns items #1..#Count-3, i.e. list[1:-2]
+    function Copy(start: integer = 0; stop: integer = 0): IDocList;
     /// counts the number of elements with the specified value
     function Count(const value: variant): integer; overload;
     /// counts the number of elements with the specified value
@@ -6065,8 +6066,7 @@ begin
           TSynInvokeableVariantType(Handler).CopyByValue(
             TVarData(VValue[ndx]), v^)
         else
-          Handler.Copy(
-            TVarData(VValue[ndx]), v^, false)
+          Handler.Copy(TVarData(VValue[ndx]), v^, false)
       else
         VValue[ndx] := variant(v^); // default copy
     end;
@@ -9406,7 +9406,7 @@ type
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
     function Append(const value: IDocAny): integer; overload;
-    function Copy(Offset: integer = 0; Limit: integer = 0): IDocList;
+    function Copy(start, stop: integer): IDocList;
     function Count(const value: variant): integer; overload;
     function Count(const value: RawUtf8): integer; overload;
     procedure Extend(const value: IDocList); overload;
@@ -9725,10 +9725,19 @@ begin
   result := fValue^.AddItem(PVariant(value.Value)^);
 end;
 
-function TDocList.Copy(Offset: integer; Limit: integer): IDocList;
+function TDocList.Copy(start, stop: integer): IDocList;
 begin
   result := TDocList.CreateOwned;
-  result.Value^.InitArrayFrom(fValue^, fValue^.Options, Offset, Limit);
+  if stop <> 0 then
+  begin
+    if stop < 0 then
+      inc(stop, fValue^.Count);
+    if stop <= start then
+      exit
+    else
+      dec(stop, start); // from index to limit, excluding stop position
+  end;
+  result.Value^.InitArrayFrom(fValue^, fValue^.Options, start, stop);
 end;
 
 function TDocList.Count(const value: variant): integer;
