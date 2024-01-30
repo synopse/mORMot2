@@ -869,6 +869,14 @@ function UnicodeBufferToUtf8(source: PWideChar): RawUtf8;
 // - could be used e.g. as TDocVariantData.AddValue() parameter
 function UnicodeBufferToVariant(source: PWideChar): variant;
 
+/// convert any RTL string into a variant storing a UTF-8 string
+// - could be used e.g. as TDocVariantData.AddValue() parameter
+function StringToVariant(const Txt: string): variant; overload;
+
+/// convert any RTL string into a variant storing a UTF-8 string
+// - could be used e.g. as TDocVariantData.AddValue() parameter
+procedure StringToVariant(const Txt: string; var result: variant); overload;
+
 {$ifdef HASVARUSTRING}
 
 /// convert a Delphi 2009+ or FPC Unicode string into our UTF-8 string
@@ -4684,6 +4692,27 @@ begin
   ClearVariantForString(result);
   if Source <> nil then
     RawUnicodeToUtf8(source, StrLenW(source), RawUtf8(TVarData(result).VAny));
+end;
+
+function StringToVariant(const Txt: string): variant;
+begin
+  StringToVariant(Txt, result);
+end;
+
+procedure StringToVariant(const Txt: string; var result: variant);
+begin
+  ClearVariantForString(result);
+  if Txt <> '' then
+    {$ifndef UNICODE}
+    if (Unicode_CodePage = CP_UTF8) or
+       IsAnsiCompatible(Txt) then
+    begin
+      RawByteString(TVarData(result).VAny) := Txt;
+      EnsureRawUtf8(RawByteString(TVarData(result).VAny));
+    end
+    else
+    {$endif UNICODE}
+      StringToUtf8(Txt, RawUtf8(TVarData(result).VAny));
 end;
 
 procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
