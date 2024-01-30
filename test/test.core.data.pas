@@ -130,6 +130,8 @@ type
     procedure MustacheRenderer;
     /// variant-based JSON/BSON document process
     procedure _TDocVariant;
+    /// IDocList / IDocDict wrappers
+    procedure _IDocList;
     /// low-level TDecimal128 decimal value process (as used in BSON)
     procedure _TDecimal128;
     /// BSON process (using TDocVariant)
@@ -3914,6 +3916,100 @@ begin
   CheckEqual(HtmlEscapeMarkdown(':test: :)'),
     '<p>:test: ' + EMOJI_UTF8[eSmiley] + '</p>');
   CheckEqual(HtmlEscapeMarkdown(':test: (:)'), '<p>:test: (:)</p>');
+end;
+
+procedure TTestCoreProcess._IDocList;
+var
+  l: IDocList;
+  i: integer;
+  {$ifdef HASIMPLICITOPERATOR}
+  l2: IDocList;
+  v: TDocValue;
+  one: variant;
+  n, num: integer;
+  s: string;
+  u: RawUtf8;
+  {$endif HASIMPLICITOPERATOR}
+begin
+  Check(l = nil);
+  l := DocList('[1,2, 3,"4",5,"6"]');
+  Check(l <> nil);
+  CheckEqual(l.Len, 6);
+  Check(l.I[0] = 1);
+  Check(l.I[1] = 2);
+  Check(l.I[2] = 3);
+  CheckEqual(l.I[0], 1);
+  CheckEqual(l.I[1], 2);
+  CheckEqual(l.I[2], 3);
+  CheckEqual(l.I[4], 5);
+  CheckEqual(l.U[0], '1');
+  CheckEqual(l.U[1], '2');
+  CheckEqual(l.U[2], '3');
+  CheckEqual(l.U[3], '4');
+  CheckEqual(l.U[4], '5');
+  CheckEqual(l.U[5], '6');
+  CheckEqual(l.ToJson, '[1,2,3,"4",5,"6"]');
+  Check(l.Exists(1));
+  Check(l.Exists('6'));
+  for i := 0 to l.Len - 1 do
+    Check(l.Exists(l[i]));
+  l.Sort;
+  CheckEqual(l.ToJson, '[1,2,3,"4",5,"6"]');
+  CheckEqual(l.Copy.ToJson, '[1,2,3,"4",5,"6"]');
+  CheckEqual(l.Copy(1).ToJson, '[2,3,"4",5,"6"]');
+  CheckEqual(l.Copy(1, 1).ToJson, '[]');
+  CheckEqual(l.Copy(1, 2).ToJson, '[2]');
+  CheckEqual(l.Copy(1, 3).ToJson, '[2,3]');
+  CheckEqual(l.Copy(1, -2).ToJson, '[2,3,"4"]');
+  {$ifdef HASIMPLICITOPERATOR}
+  n := 0;
+  for v in l do
+  begin
+    Check(v.Kind = dvUndefined);
+    one := v;
+    Check(l.Exists(one), 'implicit variant');
+    CheckEqual(l.Index(one), n, 'indexof');
+    u := v;
+    Check(l.Exists(u), 'implicit RawUtf8');
+    CheckEqual(l.Index(u), n, 'indexof RawUtf8');
+    s := v;
+    Check(l.Exists(s), 'implicit string');
+    inc(n);
+    num := v;
+    if v.IsString then
+      CheckEqual(num, 0, 'implicit not integer')
+    else
+      CheckEqual(num, n, 'implicit integer');
+  end;
+  l2 := DocList;
+  CheckEqual(l2.Len, 0);
+  CheckEqual(l2.ToJson, '[]');
+  for v in l.Range do
+    l2.Append(variant(v));
+  CheckEqual(l2.Len, l.len);
+  CheckEqual(l2.ToJson, l.ToJson);
+  l2.Clear;
+  n := 0;
+  for v in l2 do
+    inc(n);
+  CheckEqual(n, 0);
+  CheckEqual(l2.Len, 0);
+  for v in l.Range(1, 3) do
+    l2.Append(variant(v));
+  CheckEqual(l2.Len, 2);
+  CheckEqual(l2.ToJson, '[2,3]');
+  l2.Clear;
+  CheckEqual(l2.Len, 0);
+  for v in l.Range(1, -2) do
+    l2.Append(variant(v));
+  CheckEqual(l2.Len, 3);
+  CheckEqual(l2.ToJson, '[2,3,"4"]');
+  {$endif HASIMPLICITOPERATOR}
+  l.Sort({reverse}true);
+  CheckEqual(l.ToJson, '["6",5,"4",3,2,1]');
+  l.Clear;
+  CheckEqual(l.Len, 0);
+  CheckEqual(l.ToJson, '[]');
 end;
 
 procedure TTestCoreProcess._TDecimal128;
