@@ -955,6 +955,7 @@ type
     procedure InternalNotFound(var Dest: variant; aIndex: integer); overload;
     function InternalNotFound(aName: PUtf8Char): PVariant; overload;
     function InternalNotFound(aIndex: integer): PDocVariantData; overload;
+    function RangeVoid(var Offset, Limit: integer): boolean;
     procedure ClearFast;
   public
     /// initialize a TDocVariantData to store some document-based content
@@ -1076,6 +1077,15 @@ type
     procedure InitArrayFromCsvFile(const aCsv: RawUtf8;
       aOptions: TDocVariantOptions; aSeparator: AnsiChar = #0;
       aQuote: AnsiChar = #0);
+    /// create a TDocVariant array, from a sub-range of this document array
+    // - returned variant instance is a dvArray containing only the specified rows
+    // $ new.InitArrayFrom(src) returns a copy of src array
+    // $ new.InitArrayFrom(src, 10) returns items 10..Count-1 of src
+    // $ new.InitArrayFrom(src, 0, 10) returns first 0..9 items of src
+    // $ new.InitArrayFrom(src, 10, 20) returns items 10..29 - truncated if Count<30
+    // $ new.InitArrayFrom(src, -10) returns last Count-10..Count-1 items of src
+    procedure InitArrayFrom(const aSource: TDocVariantData;
+      aOptions: TDocVariantOptions; aOffset: integer = 0; aLimit: integer = 0); overload;
     /// initialize a variant instance to store some RawUtf8 array content
     procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions; aCount: integer = -1); overload;
@@ -5220,6 +5230,15 @@ begin
   end;
 end;
 
+procedure TDocVariantData.InitArrayFrom(const aSource: TDocVariantData;
+  aOptions: TDocVariantOptions; aOffset, aLimit: integer);
+begin
+  Init(aOptions, dvArray);
+  VCount := aLimit;
+  if not aSource.RangeVoid(aOffset, VCount) then // not void
+    VValue := copy(aSource.VValue, aOffset, VCount); // new array, byref values
+end;
+
 function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
   aCount: integer; const aItems): PRttiVarData;
 begin
@@ -5901,6 +5920,28 @@ begin
     model := TDocVariantModel(ndx);
     result := true;
   end;
+end;
+
+function TDocVariantData.RangeVoid(var Offset, Limit: integer): boolean;
+var
+  n, l: integer;
+begin
+  result := true; // void
+  n := Count;
+  if Offset < 0 then
+  begin
+    inc(Offset, n);
+    if Offset < 0 then
+      Offset := 0;
+  end;
+  if Limit = 0 then
+    Limit := n;
+  l := n - Offset;
+  if l <= 0 then
+    exit;
+  if Limit > l then
+    Limit := l;
+  result := false; // not void
 end;
 
 procedure TDocVariantData.SetCount(aCount: integer);
