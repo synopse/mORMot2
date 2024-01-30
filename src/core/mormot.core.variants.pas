@@ -1826,6 +1826,10 @@ type
     // - will use IdemPChar(), so search would be case-insensitive
     function DeleteByStartName(aStartName: PUtf8Char;
       aStartNameLen: integer): integer;
+    /// retrieve a value at a given index, and delete it from the array
+    // - negative aIndex are from VCount, i.e. Extract(-1) pop the last item
+    function Extract(aIndex: integer; var aValue: variant;
+      aName: PRawUtf8 = nil): boolean;
     /// search a property match in this document, handled as array or object
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item index will be returned, on match
@@ -1848,6 +1852,9 @@ type
     // - you could make several searches, using the StartIndex optional parameter
     function SearchItemByValue(const aValue: Variant;
       CaseInsensitive: boolean = false; StartIndex: PtrInt = 0): PtrInt;
+    /// search and count occurences of one value in this document, handled as array
+    function CountItemByValue(const aValue: Variant;
+      CaseInsensitive: boolean = false; StartIndex: integer = 0): integer;
     /// sort the document object values by name
     // - do nothing if the document is not a dvObject
     // - will follow case-insensitive order (@StrIComp) by default, but you
@@ -6397,6 +6404,21 @@ begin
   result := -1;
 end;
 
+function TDocVariantData.CountItemByValue(const aValue: Variant;
+  CaseInsensitive: boolean; StartIndex: integer): integer;
+var
+  v: PVarData;
+  ndx: integer;
+begin
+  result := 0; // returns the number of occurences of this value
+  v := @VValue[StartIndex];
+  for ndx := StartIndex to VCount - 1 do
+    if FastVarDataComp(v, @aValue, CaseInsensitive) = 0 then
+      inc(result)
+    else
+      inc(v);
+end;
+
 type
   {$ifdef USERECORDWITHMETHODS}
   TQuickSortDocVariant = record
@@ -7031,24 +7053,11 @@ begin
     begin
       if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
         VName := copy(VName); // make unique
-      VName[Index] := '';
+      v := @VName[aIndex];
+      FastAssignNew(aName^, PPointer(v)^); // no refcount
+      PPointer(v)^ := nil;
     end;
-    if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
-      VValue := copy(VValue); // make unique
-    VarClear(VValue[Index]);
-    n := VCount - Index;
-    if n <> 0 then
-    begin
-      if VName <> nil then
-      begin
-        MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
-        PtrUInt(VName[VCount]) := 0; // avoid GPF
-      end;
-      MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
-      TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
-    end;
-    result := true;
-  end;
+  result := Delete(aIndex);
 end;
 
 function TDocVariantData.Delete(const aName: RawUtf8): boolean;
