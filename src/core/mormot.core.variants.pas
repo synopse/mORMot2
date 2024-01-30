@@ -186,6 +186,13 @@ function VariantCompareI(const V1, V2: variant): PtrInt;
 function VariantEquals(const V: Variant; const Str: RawUtf8;
   CaseSensitive: boolean = true): boolean; overload;
 
+/// return the TVarData.VType as text, e.g. 'Integer', 'String' or 'DocVariant'
+function VariantTypeName(V: PVarData): PShortString; overload;
+
+/// return the variant VType as text, e.g. 'Integer', 'String' or 'DocVariant'
+function VariantTypeName(const V: variant): PShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************** Custom Variant Types with JSON support }
 
@@ -3380,7 +3387,78 @@ begin
     result := 0;
 end;
 
+const
+  _VARDATATEXT: array[0.. varWord64 + 5] of string[15] = (
+    'Empty', 'Null', 'SmallInt', 'Integer', 'Single', 'Double', 'Currency',
+    'Date', 'OleStr', 'Dispatch', 'Error', 'Boolean', 'Variant', 'Unknown',
+    'Decimal', '15', 'ShortInt', 'Byte', 'Word', 'LongWord', 'Int64', 'QWord',
+    'String', 'UString', 'Any', 'Array', 'DocVariant');
 var
+  _VariantTypeNameAsInt: shortstring; // seldom called
+
+function VariantTypeName(V: PVarData): PShortString;
+var
+  vt: PtrUInt;
+  ct: TSynInvokeableVariantType;
+  tmp: TVarData;
+begin
+  vt := V.VType;
+  if vt > varWord64 then
+  repeat
+    if SetVariantUnRefSimpleValue(PVariant(V)^, tmp{%H-}) then
+    begin
+      V := @tmp;
+      vt := tmp.VType;
+      if vt <= varWord64 then
+        break;
+    end;
+    case vt of
+      varStrArg,
+      varString,
+      varStringByRef:
+        vt := varWord64 + 1;
+      {$ifdef HASVARUSTRING}
+      varUStrArg,
+      varUString,
+      varUStringByRef:
+        vt := varWord64 + 2;
+      {$endif HASVARUSTRING}
+      varAny:
+        vt := varWord64 + 3;
+      varArray:
+        vt := varWord64 + 4;
+      varVariantByRef:
+        begin
+          result := VariantTypeName(V^.VPointer);
+          exit;
+        end;
+    else
+      if vt = DocVariantVType then
+        vt := varWord64 + 5
+      else
+      begin
+        ct := FindSynVariantType(vt);
+        if ct = nil then
+        begin
+          str(vt, _VariantTypeNameAsInt);
+          result := @_VariantTypeNameAsInt; // return VType as number
+        end
+        else
+          result := PPointer(PPtrInt(ct)^ + vmtClassName)^;
+        exit;
+      end
+    end;
+    break;
+  until false;
+  result := @_VARDATATEXT[vt];
+end;
+
+function VariantTypeName(const V: variant): PShortString;
+begin
+  result := VariantTypeName(@V);
+end;
+
+const
   _CMP2SORT: array[0..18] of TDynArraySortCompare = (
     nil,                         // 0
     SortDynArrayEmptyNull,       // 1
@@ -3405,7 +3483,7 @@ var
     SortDynArrayAnsiStringI,     // 16
     SortDynArrayUnicodeString,   // 17
     SortDynArrayUnicodeStringI); // 18
-
+var
   // FastVarDataComp() efficient lookup for per-VType comparison function
   _VARDATACMP: array[0 .. $102 {varUString}, boolean] of byte; // _CMP2SORT[]
 
@@ -4507,8 +4585,8 @@ begin
     if cardinal(result^.VType) = docv then
       exit;
   end;
-  raise EDocVariant.CreateUtf8('DocVariantType.Data(%<>TDocVariant)',
-    [ord(result^.VType)]);
+  raise EDocVariant.CreateUtf8('Unexpected DocVariantData(var%)',
+    [VariantTypeName(PVarData(result))^]);
 end;
 
 {$ifdef FPC_OR_UNICODE} // Delphi has problems inlining this :(
@@ -5854,7 +5932,7 @@ begin
       Source := @SourceDocVariant;
   if cardinal(Source^.VType) <> DocVariantVType then
     raise EDocVariant.CreateUtf8(
-      'No TDocVariant for InitCopy(%)', [ord(Source.VType)]);
+      'Unexpected InitCopy(var%)', [VariantTypeName(PVarData(Source))^]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source <> @self then
   begin
