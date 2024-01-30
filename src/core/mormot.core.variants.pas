@@ -2800,6 +2800,8 @@ type
   IDocList = interface;
   IDocDict = interface;
 
+  {$ifdef HASITERATORS}
+
   /// internal map of a variant memory structure for IDocList/IDocDict wrappers
   // - you don't allocate those structures, but a TDocValue
   TDocRefVariant = record
@@ -2823,30 +2825,79 @@ type
   /// reference a value for IDocList/IDocDict wrappers
   TDocValue = ^TDocRefVariant;
 
-  /// common methods to IDocList/IDocDict wrappers
-  IDocVariant = interface
+  {$endif HASITERATORS}
+
+  /// abstract parent with common methods to IDocList/IDocDict wrappers
+  IDocAny = interface
+    /// remove all elements from the list/dictionary
+    procedure Clear;
     /// equals dvArray for IDocList, dvObject for IDocDict
     function Kind: TDocVariantKind;
     /// how many items or name/value pairs are stored in this instance
-    function Count: integer;
-    /// low-level access to the internal TDocVariantData
+    function Len: integer;
+    /// low-level access to the internal TDocVariantData storage
     function Value: PDocVariantData;
     /// equals true if the Value is owned by this IDocList/IDocDict instance
     function ValueIsOwned: boolean;
+    /// returns itself as a IDocList, or nil if is a IDocDict
+    function AsList: IDocList;
+    /// returns itself as a IDocDic, or nil if is a IDocList
+    function AsDict: IDocDict;
   end;
 
-  IDocList = interface(IDocVariant)
+  /// a List, used to store multiple values
+  // - implemented via an internal TDocVariantData dvArray
+  // - follows most Python Lists naming and conventions
+  IDocList = interface(IDocAny)
     ['{8186E3D3-3C9C-46E6-89D1-82ADDB741AAB}']
-    /// return a of a sub-range of this IDocList
-    // - returned IDocList instance is just a reference of this main list
-    // $ list.Slice(10) returns items 10..Count-1
-    // $ list.Slice(0, 10) returns first 0..9 items
-    // $ list.Slice(10, 20) returns items 10..29 - truncated if Count<30
-    // $ list.Slice(-10) returns last Count-10..Count-1 items
-    function Slice(Offset: integer; Limit: integer = 0): IDocList;
+    /// adds an element at the end of the list
+    function Append(const value: variant): integer; overload;
+    /// adds an UTF-8 text element at the end of the list
+    function Append(const value: RawUtf8): integer; overload;
+    /// adds an IDocList/IDocDict element at the end of the list
+    function Append(const value: IDocAny): integer; overload;
+    /// return a of a (sub-range) copy of this IDocList
+    // - returns a new IDocList instance with the extract data
+    // $ list.Copy returns a copy of the list
+    // $ list.Copy(10) returns items 10..Count-1 of the list
+    // $ list.Copy(0, 10) returns first 0..9 items of the list
+    // $ list.Copy(10, 20) returns items 10..29 - truncated if Count<30
+    // $ list.Copy(-10) returns last Count-10..Count-1 items of the list
+    function Copy(Offset: integer; Limit: integer = 0): IDocList;
+    /// counts the number of elements with the specified value
+    function Count(const value: variant): integer; overload;
+    /// counts the number of elements with the specified value
+    function Count(const value: RawUtf8): integer; overload;
+    /// add the elements of a list, to the end of the current list
+    procedure Extend(const value: IDocList); overload;
+    /// add the supplied elements, to the end of the current list
+    procedure Extend(const value: array of const); overload;
+    /// returns the position at the first occurrence of the specified value
+    function Index(const value: variant): integer; overload;
+    /// returns the position at the first occurrence of the specified value
+    function Index(const value: RawUtf8;
+      caseinsensitive: boolean = false): integer; overload;
+    /// inserts the specified value at the specified position
+    function Insert(position: integer; const value: variant): integer; overload;
+    /// inserts the specified value at the specified position
+    function Insert(position: integer; const value: RawUtf8): integer; overload;
+    /// removes the element at the specified position
+    function Pop(position: integer = -1): variant;
+    /// removes the first occurrence of the element with the specified value
+    function Remove(const value: variant): integer; overload;
+    /// removes the first occurrence of the element with the specified value
+    function Remove(const value: RawUtf8;
+      caseinsensitive: boolean = false): integer; overload;
+    /// reverses the sorting order of the elements
+    procedure Reverse;
+    /// sorts the list ascending by default
+    procedure Sort(reverse: boolean = false; key: TVariantCompare = nil);
   end;
 
-  IDocDict = interface(IDocVariant)
+  /// a Dictionary, used to store key:value pairs
+  // - implemented via an internal TDocVariantData dvObject
+  // - follows most Python Dictionaries naming and conventions
+  IDocDict = interface(IDocAny)
     ['{E4176BFF-AFDC-4A63-8DBD-D4F495D56B1A}']
   end;
 
@@ -9158,59 +9209,68 @@ end;
 { ************** IDocList/IDocDict advanced Wrappers of TDocVariant Documents }
 
 type
-  TIDocVariant = class(TInterfacedObject)
+  TDocAny = class(TInterfacedObject)
   protected
     fValue: PDocVariantData;
-    fValueOwner: TVarData;
+    fValueOwned: TVarData;
   public
     constructor CreateOwned;
     constructor CreateCopy(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
     constructor CreateByRef(const dv: TDocVariantData); reintroduce;
     destructor Destroy; override;
+    procedure Clear;
+    function AsList: IDocList;
+    function AsDict: IDocDict;
     function Kind: TDocVariantKind;
+    function Len: integer;
     function Value: PDocVariantData;
     function ValueIsOwned: boolean;
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
-  TIDocList = class(TIDocVariant, IDocList)
-  protected
-    fRangeStart: integer;
-    fRangeCount: integer;   // 0 means no custom range
-    fRangeOwner: TIDocList; // manual refcount to avoid slower IDocList here
-    function RangeStart: PVariant;
-      {$ifdef HASINLINE} inline; {$endif}
-    function RangeStop: PVariant;
-      {$ifdef HASINLINE} inline; {$endif}
+  TDocList = class(TDocAny, IDocList)
   public
-    destructor Destroy; override;
-    function Count: integer;
-    function Slice(Offset: integer = 0; Limit: integer = 0): IDocList;
+    function Append(const value: variant): integer; overload;
+    function Append(const value: RawUtf8): integer; overload;
+    function Append(const value: IDocAny): integer; overload;
+    function Copy(Offset: integer = 0; Limit: integer = 0): IDocList;
+    function Count(const value: variant): integer; overload;
+    function Count(const value: RawUtf8): integer; overload;
+    procedure Extend(const value: IDocList); overload;
+    procedure Extend(const value: array of const); overload;
+    function Index(const value: variant): integer; overload;
+    function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
+    function Insert(position: integer; const value: variant): integer; overload;
+    function Insert(position: integer; const value: RawUtf8): integer; overload;
+    function Pop(position: integer): variant;
+    function Remove(const value: variant): integer; overload;
+    function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
+    procedure Reverse;
+    procedure Sort(reverse: boolean; key: TVariantCompare);
   end;
 
-  TIDocDict = class(TIDocVariant, IDocDict)
+  TDocDict = class(TDocAny, IDocDict)
   public
-    function Count: integer;
   end;
+
+
+{ IDocList factories functions }
 
 function DocList(const json: RawUtf8; model: TDocVariantModel): IDocList;
-var
-  v: TIDocList;
 begin
   result := nil;
   if GetFirstJsonToken(pointer(json)) <> jtArrayStart then
     exit;
-  v := TIDocList.CreateOwned;
-  result := v;
-  if not v.Value^.InitJson(json, model) or
-     not v.Value^.IsArray then
+  result := TDocList.CreateOwned;
+  if not result.Value^.InitJson(json, model) or
+     not result.Value^.IsArray then
     result := nil;
 end;
 
 function DocList(const dv: TDocVariantData): IDocList;
 begin
   if dv.IsArray then
-    result := TIDocList.CreateByRef(dv)
+    result := TDocList.CreateByRef(dv)
   else
     result := nil;
 end;
@@ -9218,18 +9278,15 @@ end;
 function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
 begin
   if dv.IsArray then
-    result := TIDocList.CreateCopy(dv, model)
+    result := TDocList.CreateCopy(dv, model)
   else
     result := nil;
 end;
 
 function DocList(const values: array of const; model: TDocVariantModel): IDocList;
-var
-  v: TIDocList;
 begin
-  v := TIDocList.CreateOwned;
-  result := v;
-  v.Value^.InitArray(values, model);
+  result := TDocList.CreateOwned;
+  result.Value^.InitArray(values, model);
 end;
 
 function DocListFromVariant(const v: variant): IDocList;
@@ -9237,30 +9294,29 @@ var
   dv: PDocVariantData;
 begin
   if _SafeArray(variant(v), dv) then
-    result := TIDocList.CreateByRef(dv^)
+    result := TDocList.CreateByRef(dv^)
   else
     result := nil;
 end;
 
 
+{ IDocDict factories functions }
+
 function DocDict(const json: RawUtf8; model: TDocVariantModel): IDocDict;
-var
-  v: TIDocDict;
 begin
   result := nil;
   if GetFirstJsonToken(pointer(json)) <> jtObjectStart then
     exit;
-  v := TIDocDict.CreateOwned;
-  result := v;
-  if not v.Value^.InitJson(json, model) or
-     not v.Value^.IsObject then
+  result := TDocDict.CreateOwned;
+  if not result.Value^.InitJson(json, model) or
+     not result.Value^.IsObject then
     result := nil;
 end;
 
 function DocDict(const dv: TDocVariantData): IDocDict;
 begin
   if dv.IsObject then
-    result := TIDocDict.CreateByRef(dv)
+    result := TDocDict.CreateByRef(dv)
   else
     result := nil;
 end;
@@ -9268,18 +9324,15 @@ end;
 function DocDictCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocDict;
 begin
   if dv.IsObject then
-    result := TIDocDict.CreateCopy(dv, model)
+    result := TDocDict.CreateCopy(dv, model)
   else
     result := nil;
 end;
 
 function DocDict(const namevalues: array of const; model: TDocVariantModel): IDocList;
-var
-  v: TIDocList;
 begin
-  v := TIDocList.CreateOwned;
-  result := v;
-  v.Value^.InitObject(namevalues, model);
+  result := TDocList.CreateOwned;
+  result.Value^.InitObject(namevalues, model);
 end;
 
 function DocDictFromVariant(const v: variant): IDocDict;
@@ -9287,127 +9340,188 @@ var
   dv: PDocVariantData;
 begin
   if _SafeObject(variant(v), dv) then
-    result := TIDocDict.CreateByRef(dv^)
+    result := TDocDict.CreateByRef(dv^)
   else
     result := nil;
 end;
 
 
-{ TIDocVariant }
+{ TDocAny }
 
-constructor TIDocVariant.CreateOwned;
+constructor TDocAny.CreateOwned;
 begin
-  fValue := @fValueOwner;
+  fValue := @fValueOwned;
 end;
 
-constructor TIDocVariant.CreateCopy(const dv: TDocVariantData; m: TDocVariantModel);
+constructor TDocAny.CreateCopy(const dv: TDocVariantData; m: TDocVariantModel);
 begin
-  fValue := @fValueOwner;
+  fValue := @fValueOwned;
   fValue^.Init(m, dv.Kind);
-  fValue^.VName := copy(dv.VName);
+  fValue^.VName  := copy(dv.VName); // new arrays, but byref values
   fValue^.VValue := copy(dv.VValue);
 end;
 
-constructor TIDocVariant.CreateByRef(const dv: TDocVariantData);
+constructor TDocAny.CreateByRef(const dv: TDocVariantData);
 begin
   fValue := @dv;
 end;
 
-function TIDocVariant.Kind: TDocVariantKind;
+function TDocAny.Kind: TDocVariantKind;
 begin
-  result := fValue^.Kind;
+  result := fValue^.GetKind;
 end;
 
-function TIDocVariant.Value: PDocVariantData;
+function TDocAny.Len: integer;
+begin
+  result := fValue^.VCount;
+end;
+
+function TDocAny.Value: PDocVariantData;
 begin
   result := fValue;
 end;
 
-function TIDocVariant.ValueIsOwned: boolean;
+function TDocAny.ValueIsOwned: boolean;
 begin
-  result := fValue = @fValueOwner;
+  result := fValue = @fValueOwned;
 end;
 
-destructor TIDocVariant.Destroy;
+destructor TDocAny.Destroy;
 begin
   inherited Destroy;
   if ValueIsOwned then
     fValue^.ClearFast;
 end;
 
-
-{ TIDocList }
-
-function TIDocList.RangeStart: PVariant;
+procedure TDocAny.Clear;
 begin
-  result := pointer(fValue^.VValue);
-  if fRangeStart <> 0 then
-    inc(result, fRangeStart);
+  fValue^.Reset;
 end;
 
-function TIDocList.RangeStop: PVariant;
+function TDocAny.AsList: IDocList;
 begin
-  result := pointer(fValue^.VValue);
-  if fRangeCount <> 0 then
-    inc(result, fRangeCount)
+  if fValue^.IsArray then
+    result := self as TDocList
   else
-    inc(result, fValue^.Count);
+    result := nil;
 end;
 
-destructor TIDocList.Destroy;
+function TDocAny.AsDict: IDocDict;
 begin
-  inherited Destroy;
-  if fRangeOwner <> nil then
-    fRangeOwner._Release; // manual refcount
-end;
-
-function TIDocList.Count: integer;
-begin
-  if fRangeCount = 0 then
-    result := fValue^.Count
+  if fValue^.IsObject then
+    result := self as TDocDict
   else
-    result := fRangeCount;
+    result := nil;
 end;
 
-function TIDocList.Slice(Offset: integer; Limit: integer): IDocList;
+
+{ TDocList }
+
+function TDocList.Append(const value: variant): integer;
+begin
+  result := fValue^.AddItem(value);
+end;
+
+function TDocList.Append(const value: RawUtf8): integer;
+begin
+  result := fValue^.AddItemText(value);
+end;
+
+function TDocList.Append(const value: IDocAny): integer;
+begin
+  result := fValue^.AddItem(PVariant(value.Value)^);
+end;
+
+function TDocList.Copy(Offset: integer; Limit: integer): IDocList;
+begin
+  result := TDocList.CreateOwned;
+  result.Value^.InitArrayFrom(fValue^, fValue^.Options, Offset, Limit);
+end;
+
+function TDocList.Count(const value: variant): integer;
+begin
+  result := fValue^.CountItemByValue(value);
+end;
+
+function TDocList.Count(const value: RawUtf8): integer;
 var
-  v: TIDocList;
-  n, s: integer;
+  v: TVarData;
 begin
-  // check requested range parameters - supporting nested Slice() calls
-  n := Count;
-  if Offset < 0 then
-  begin
-    inc(Offset, n);
-    if Offset < 0 then
-      Offset := 0;
-  end;
-  s := n - Offset;
-  if s <= 0 then
-  begin
-    result := DocList([]); // void IDocList
-    exit;
-  end;
-  if Limit > s then
-    Limit := s;
-  // safe weak reference to this main instance - with proper refcount
-  v := TIDocList.Create;
-  result := v;
-  _AddRef; // manual refcount to avoid slower fRangeOwner: IDocList
-  v.fRangeOwner := self;
-  v.fValue := fValue;
-  v.fRangeStart := Offset;
-  v.fRangeCount := Limit;
+  v.VType := varString;
+  v.VAny := pointer(value); // direct set to a RawUtf8 value
+  result := fValue^.CountItemByValue(variant(v));
+end;
+
+procedure TDocList.Extend(const value: IDocList);
+begin
+  if value <> nil then
+    fValue^.AddFrom(variant(value.Value^));
+end;
+
+procedure TDocList.Extend(const value: array of const);
+begin
+  fValue^.AddItems(value);
+end;
+
+function TDocList.Index(const value: variant): integer;
+begin
+  result := fValue^.SearchItemByValue(value);
+end;
+
+function TDocList.Index(const value: RawUtf8; caseinsensitive: boolean): integer;
+var
+  v: TRttiVarData;
+begin
+  v.VType := varString;
+  v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
+  result := fValue^.SearchItemByValue(variant(v), caseinsensitive);
+end;
+
+function TDocList.Insert(position: integer; const value: variant): integer;
+begin
+  result := fValue^.AddItem(value, position);
+end;
+
+function TDocList.Insert(position: integer; const value: RawUtf8): integer;
+begin
+  result := fValue^.AddItemText(value, position);
+end;
+
+function TDocList.Pop(position: integer): variant;
+begin
+  if not fValue^.Extract(position, result) then
+    VarClear(result);
+end;
+
+function TDocList.Remove(const value: variant): integer;
+begin
+  result := fValue^.SearchItemByValue(value);
+  if result >= 0 then
+    fValue^.Delete(result);
+end;
+
+function TDocList.Remove(const value: RawUtf8; caseinsensitive: boolean): integer;
+begin
+  result := Index(value, caseinsensitive);
+  if result >= 0 then
+    fValue^.Delete(result);
+end;
+
+procedure TDocList.Reverse;
+begin
+  fValue^.Reverse;
+end;
+
+procedure TDocList.Sort(reverse: boolean; key: TVariantCompare);
+begin
+  fValue^.SortByValue(key, reverse);
 end;
 
 
-{ TIDocDict }
+{ TDocDict }
 
-function TIDocDict.Count: integer;
-begin
-  result := fValue^.Count;
-end;
 
+{$ifdef HASITERATORS}
 
 { TDocRefVariant }
 
@@ -9437,8 +9551,7 @@ var
   tmp: RawUtf8;
 begin
   VariantToUtf8(variant(A), tmp, wasString);
-  if not wasString or
-     IsAnsiCompatible(result) then
+  if not wasString then
     Ansi7ToString(pointer(tmp), length(tmp), result)
   else
     Utf8DecodeToUnicodeString(pointer(tmp), length(tmp), result);
@@ -9481,6 +9594,7 @@ begin
   result := DocDictFromVariant(variant(A));
 end;
 
+{$endif HASITERATORS}
 
 var
   // naive but efficient type cache - e.g. for TBsonVariant or TQuickJsVariant
