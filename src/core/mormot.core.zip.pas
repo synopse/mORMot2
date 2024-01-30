@@ -2951,7 +2951,7 @@ begin
     exit;
   end;
   // call libdeflate_crc32 / libdeflate_deflate_decompress if available
-  FastNewRawByteString(result, info.f64.zfullSize);
+  FastSetString(RawUtf8(result), info.f64.zfullSize); // assume CP_UTF8 for FPC
   e := @Entry[aIndex];
   if e^.local = nil then
   begin

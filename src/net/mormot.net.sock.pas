@@ -5213,7 +5213,7 @@ begin
   if (self = nil) or
      (Length <= 0) then
     exit;
-  FastNewRawByteString(result, Length);
+  FastSetString(RawUtf8(result), Length); // assume CP_UTF8 for FPC RTL bug
   if SockInRead(pointer(result), Length, UseOnlySockIn) <> Length then
     result := '';
 end;
@@ -5410,7 +5410,7 @@ end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
 begin
-  FastNewRawByteString(result, Length);
+  FastSetString(RawUtf8(result), Length); // assume CP_UTF8 for FPC RTL bug
   SockRecv(pointer(result), Length);
 end;
 

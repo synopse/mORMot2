@@ -5400,7 +5400,7 @@ begin
   len := DecompressHeader(Comp, CompLen, Load);
   if len = 0 then
     exit;
-  FastNewRawByteString(result, len + BufferOffset);
+  FastSetString(RawUtf8(result), len + BufferOffset); // CP_UTF8 for FPC RTL bug
   dec := pointer(result);
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
     result := '';
@@ -5423,7 +5423,7 @@ begin
   len := DecompressHeader(pointer(Comp), length(Comp), Load);
   if len = 0 then
     exit; // invalid crc32c
-  FastNewRawByteString(Dest, len);
+  FastSetString(RawUtf8(Dest), len); // assume CP_UTF8 for FPC RTL bug
   if DecompressBody(pointer(Comp), pointer(Dest), length(Comp), len, Load) then
     result := true
   else
@@ -5452,7 +5452,7 @@ begin
   else
   begin
     if PlainLen > length(tmp) then
-      FastNewRawByteString(tmp, PlainLen);
+      FastSetString(RawUtf8(tmp), PlainLen); // assume CP_UTF8 for FPC RTL bug
     if DecompressBody(Comp, pointer(tmp), CompLen, PlainLen, Load) then
       result := pointer(tmp);
   end;
@@ -10805,12 +10805,12 @@ procedure TRawByteStringGroup.Compact;
 var
   i: integer;
   v: PRawByteStringGroupValue;
-  tmp: RawByteString;
+  tmp: RawUtf8;
 begin
   if (Values <> nil) and
      (Count > 1) then
   begin
-    FastNewRawByteString(tmp, Position);
+    FastSetString(tmp, Position); // assume CP_UTF8 for FPC RTL bug
     v := pointer(Values);
     for i := 1 to Count do
     begin
@@ -11191,7 +11191,7 @@ begin
   if UseMainBuffer and
      (PStrCnt(PAnsiChar(pointer(fBuffer)) - _STRCNT)^ = 1) and
      (Len + Overhead <= fCapacity) then
-    Text := fBuffer // fast COW
+    FastAssignUtf8(Text, fBuffer) // fast COW and assume CP_UTF8 for FPC RTL bug
   else
   begin
     FastSetString(Text, Len + Overhead);

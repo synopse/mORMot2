@@ -5428,7 +5428,7 @@ begin
   if not DecryptPkcs7Len(InputLen, ivsize, Input,
       IVAtBeginning, RaiseESynCryptoOnError) then
     exit;
-  FastNewRawByteString(result, InputLen);
+  FastSetString(RawUtf8(result), InputLen); // assume CP_UTF8 for FPC RTL bug
   Decrypt(@PByteArray(Input)^[ivsize], pointer(result), InputLen);
   padding := CheckPadding(@PByteArray(result)^[InputLen - 1]);
   if padding = 0 then
@@ -5989,7 +5989,7 @@ begin
     inc(p);
     dec(len, SizeOf(p^));
   end;
-  FastNewRawByteString(result, len);
+  FastSetString(RawUtf8(result), len); // assume CP_UTF8 for FPC RTL bug
   DecryptCts(p, pointer(result), len);
 end;
 

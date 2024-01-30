@@ -6910,7 +6910,7 @@ begin
       if (size < MaxInt) and // 2GB seems big enough for a RawByteString
          (size > 0) then
       begin
-        FastNewRawByteString(result, size);
+        FastSetString(RawUtf8(result), size); // assume CP_UTF8 for FPC RTL bug
         if not FileReadAll(F, pointer(result), size) then
           result := ''; // error reading
       end;

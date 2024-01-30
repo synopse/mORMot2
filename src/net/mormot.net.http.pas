@@ -3325,7 +3325,7 @@ begin
                 result := true;
                 exit;
               end;
-              FastNewRawByteString(Content, ContentLength);
+              FastSetString(RawUtf8(Content), ContentLength); // CP_UTF8 for FPC
               ContentPos := pointer(Content);
             end;
             MoveFast(st.P^, ContentPos^, st.LineLen);
@@ -3542,7 +3542,7 @@ begin
      (pointer(CommandMethod) <> pointer(_HEADVAR)) then
   begin
     // smallest files (up to 1MB) are sent from temp memory (maybe compressed)
-    FastNewRawByteString(Content, ContentLength);
+    FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
     result := FileReadAll(h, pointer(Content), ContentLength);
     FileClose(h);
     exit;
