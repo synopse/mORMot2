@@ -3981,6 +3981,7 @@ begin
     else
       CheckEqual(num, n, 'implicit integer');
   end;
+  CheckEqual(n, l.len);
   l2 := DocList;
   CheckEqual(l2.Len, 0);
   CheckEqual(l2.ToJson, '[]');
@@ -4004,6 +4005,30 @@ begin
     l2.Append(variant(v));
   CheckEqual(l2.Len, 3);
   CheckEqual(l2.ToJson, '[2,3,"4"]');
+  n := 0;
+  for one in l do
+  begin
+    Check(l.Exists(one), 'variant as iterator');
+    CheckEqual(l.Index(one), n, 'indexof variant iterator');
+    inc(n);
+  end;
+  CheckEqual(n, l.len);
+  n := 0;
+  for u in l do
+  begin
+    Check(l.Exists(u), 'RawUtf8 as iterator');
+    CheckEqual(l.Index(u), n, 'indexof RawUtf8 iterator');
+    inc(n);
+  end;
+  CheckEqual(n, l.len);
+  n := 0;
+  for num in l do
+  begin
+    inc(n);
+    if num <> 0 then // 0 for "4" and "6"
+      CheckEqual(num, n, 'integer iterator');
+  end;
+  CheckEqual(n, l.len);
   {$endif HASIMPLICITOPERATOR}
   l.Sort({reverse}true);
   CheckEqual(l.ToJson, '["6",5,"4",3,2,1]');
