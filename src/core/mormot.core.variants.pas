@@ -2856,11 +2856,35 @@ type
     function AsDict: IDocDict;
   end;
 
+  /// exception raised by IDocList
+  EDocList = class(EDocVariant);
+  /// exception raised by IDocDict
+  EDocDict = class(EDocVariant);
+
   /// a List, used to store multiple values
   // - implemented via an internal TDocVariantData dvArray
   // - follows most Python Lists naming and conventions
   IDocList = interface(IDocAny)
     ['{8186E3D3-3C9C-46E6-89D1-82ADDB741AAB}']
+    // methods used as getter/setter for properties
+    function GetItem(position: integer): variant;
+    function GetL(position: integer): IDocList;
+    function GetD(position: integer): IDocDict;
+    function GetU(position: integer): RawUtf8;
+    function GetS(position: integer): string;
+    function GetI(position: integer): Int64;
+    function GetF(position: integer): double;
+    function GetC(position: integer): currency;
+    function GetB(position: integer): boolean;
+    procedure SetItem(position: integer; const value: variant);
+    procedure SetL(position: integer; const Value: IDocList);
+    procedure SetD(position: integer; const Value: IDocDict);
+    procedure SetU(position: integer; const Value: RawUtf8);
+    procedure SetS(position: integer; const Value: string);
+    procedure SetI(position: integer; Value: Int64);
+    procedure SetF(position: integer; const Value: double);
+    procedure SetC(position: integer; const Value: currency);
+    procedure SetB(position: integer; Value: boolean);
     /// adds an element at the end of the list
     function Append(const value: variant): integer; overload;
     /// adds an UTF-8 text element at the end of the list
@@ -2868,7 +2892,7 @@ type
     /// adds an IDocList/IDocDict element at the end of the list
     function Append(const value: IDocAny): integer; overload;
     /// return a of a (sub-range) copy of this IDocList
-    // - returns a new IDocList instance with the extract data
+    // - returns a new IDocList instance with the extracted data
     // $ list.Copy returns a copy of the list
     // $ list.Copy(10) returns items 10..Count-1 of the list
     // $ list.Copy(0, 10) returns first 0..9 items of the list
@@ -2903,6 +2927,40 @@ type
     procedure Reverse;
     /// sorts the list ascending by default
     procedure Sort(reverse: boolean = false; key: TVariantCompare = nil);
+    /// access one element in the list, as variant
+    // - this is the default property of this instance so list[n] gives
+    // direct access to the item at index 0 <= n < len -1 in the IDocList
+    // - negative positions are retrieved from the end, e.g. list[-1] maps
+    // the last element of the list
+    // - raise an EDocList exception on out-of-range position
+    // - U[] S[] I[] F[] C[] B[] L[] D[] are faster and safer if you expect
+    // to retrieve a specific value type
+    property Item[position: integer]: variant
+      read GetItem write SetItem; default;
+    /// access one element in the list, as UTF-8 text
+    property U[position: integer]: RawUtf8
+      read GetU write SetU;
+    /// access one element in the list, as RTL string text
+    property S[position: integer]: string
+      read GetS write SetS;
+    /// access one element in the list, as integer
+    property I[position: integer]: Int64
+      read GetI write SetI;
+    /// access one element in the list, as floating-point double
+    property F[position: integer]: double
+      read GetF write SetF;
+    /// access one element in the list, as fixed precision currency
+    property C[position: integer]: currency
+      read GetC write SetC;
+    /// access one element in the list, as boolean
+    property B[position: integer]: boolean
+      read GetB write SetB;
+    /// access one element in the list, as IDocList
+    property L[position: integer]: IDocList
+      read GetL write SetL;
+    /// access one element in the list, as IDocDict
+    property D[position: integer]: IDocDict
+      read GetD write SetD;
   end;
 
   /// a Dictionary, used to store key:value pairs
@@ -9326,6 +9384,25 @@ type
 
   TDocList = class(TDocAny, IDocList)
   public
+    function ValueAt(position: integer): PVariant;
+    function GetItem(position: integer): variant;
+    function GetU(position: integer): RawUtf8;
+    function GetS(position: integer): string;
+    function GetI(position: integer): Int64;
+    function GetF(position: integer): double;
+    function GetC(position: integer): currency;
+    function GetB(position: integer): boolean;
+    function GetL(position: integer): IDocList;
+    function GetD(position: integer): IDocDict;
+    procedure SetItem(position: integer; const value: variant);
+    procedure SetU(position: integer; const Value: RawUtf8);
+    procedure SetS(position: integer; const Value: string);
+    procedure SetI(position: integer; Value: Int64);
+    procedure SetF(position: integer; const Value: double);
+    procedure SetC(position: integer; const Value: currency);
+    procedure SetB(position: integer; Value: boolean);
+    procedure SetL(position: integer; const Value: IDocList);
+    procedure SetD(position: integer; const Value: IDocDict);
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
     function Append(const value: IDocAny): integer; overload;
@@ -9512,6 +9589,126 @@ end;
 
 
 { TDocList }
+
+function TDocList.ValueAt(position: integer): PVariant;
+var
+  ndx, n: PtrUInt;
+begin
+  ndx := position;
+  n := fValue^.VCount;
+  if position < 0 then
+    inc(ndx, n);
+  if ndx >= n then
+    raise EDocList.CreateUtf8('Index % out of range (len=%)', [position, n]);
+  result := @fValue^.VValue[ndx];
+  // setters should not call EnsureUnique() because is done in constructor
+end;
+
+function TDocList.GetItem(position: integer): variant;
+begin
+  result := ValueAt(position)^;
+end;
+
+procedure TDocList.SetItem(position: integer; const value: variant);
+begin
+  SetVariantByValue(value, ValueAt(position)^);
+end;
+
+function TDocList.GetU(position: integer): RawUtf8;
+begin
+  VariantToUtf8(ValueAt(position)^, result);
+end;
+
+procedure TDocList.SetU(position: integer; const Value: RawUtf8);
+begin
+  RawUtf8ToVariant(Value, ValueAt(position)^);
+end;
+
+function TDocList.GetS(position: integer): string;
+begin
+  VariantToString(ValueAt(position)^, result);
+end;
+
+procedure TDocList.SetS(position: integer; const Value: string);
+begin
+  StringToVariant(Value, ValueAt(position)^);
+end;
+
+function TDocList.GetI(position: integer): Int64;
+var
+  v: PVariant;
+begin
+  v := ValueAt(position);
+  if not VariantToInt64(v^, result) then
+    raise EDocList.CreateUtf8('I[%] on a var%', [position, VariantTypeName(v^)^]);
+end;
+
+function TDocList.GetF(position: integer): double;
+var
+  v: PVariant;
+begin
+  v := ValueAt(position);
+  if not VariantToDouble(v^, result) then
+    raise EDocList.CreateUtf8('F[%] on a var%', [position, VariantTypeName(v^)^]);
+end;
+
+function TDocList.GetC(position: integer): currency;
+var
+  v: PVariant;
+begin
+  v := ValueAt(position);
+  if not VariantToCurrency(v^, result) then
+    raise EDocList.CreateUtf8('C[%] on a var%', [position, VariantTypeName(v^)^]);
+end;
+
+procedure TDocList.SetI(position: integer; Value: Int64);
+begin
+  ValueAt(position)^ := Value;
+end;
+
+procedure TDocList.SetF(position: integer; const Value: double);
+begin
+  ValueAt(position)^ := Value;
+end;
+
+procedure TDocList.SetC(position: integer; const Value: currency);
+begin
+  ValueAt(position)^ := Value;
+end;
+
+function TDocList.GetB(position: integer): boolean;
+var
+  v: PVariant;
+begin
+  v := ValueAt(position);
+  if not VariantToBoolean(v^, result) then
+    raise EDocList.CreateUtf8('B[%] on a var%', [position, VariantTypeName(v^)^]);
+end;
+
+function TDocList.GetL(position: integer): IDocList;
+begin
+  result := TDocList.CreateByRef(_Safe(ValueAt(position)^, dvArray)^);
+end;
+
+function TDocList.GetD(position: integer): IDocDict;
+begin
+  result := TDocDict.CreateByRef(_Safe(ValueAt(position)^, dvObject)^);
+end;
+
+procedure TDocList.SetB(position: integer; Value: boolean);
+begin
+  ValueAt(position)^ := Value;
+end;
+
+procedure TDocList.SetL(position: integer; const Value: IDocList);
+begin
+  ValueAt(position)^ := PVariant(Value.Value)^;
+end;
+
+procedure TDocList.SetD(position: integer; const Value: IDocDict);
+begin
+  ValueAt(position)^ := PVariant(Value.Value)^;
+end;
 
 function TDocList.Append(const value: variant): integer;
 begin
