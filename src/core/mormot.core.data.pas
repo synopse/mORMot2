@@ -10595,10 +10595,8 @@ begin
   if (Values = nil) or
      (Excluded = nil) then
     exit; // nothing to exclude
-  if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-    Values := copy(Values); // make unique
-  if PDACnt(PAnsiChar(Excluded) - _DACNT)^ > 1 then
-    Excluded := copy(Excluded);
+  EnsureUnique(Values);
+  EnsureUnique(Excluded);
   v := Length(Values);
   n := 0;
   x := Length(Excluded);
@@ -10638,10 +10636,8 @@ begin
     Values := nil;
     exit;
   end;
-  if PDACnt(PAnsiChar(Values) - _DACNT)^ > 1 then
-    Values := copy(Values); // make unique
-  if PDACnt(PAnsiChar(Included) - _DACNT)^ > 1 then
-    Included := copy(Included);
+  EnsureUnique(Values);
+  EnsureUnique(Included);
   v := Length(Values);
   n := 0;
   x := Length(Included);

@@ -1746,6 +1746,21 @@ function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger = nil);
 
+/// same as Value := copy(Value) but faster and with no temporary variable
+procedure DynArrayEnsureUnique(Value: PPointer; Info: PRttiInfo);
+
+/// same as Value := copy(Value) but faster and with no temporary variable
+procedure EnsureUnique(var Value: TIntegerDynArray); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// same as Value := copy(Value) but faster and with no temporary variable
+procedure EnsureUnique(var Value: TRawUtf8DynArray); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// same as Value := copy(Value) but faster and with no temporary variable
+procedure EnsureUnique(var Value: TVariantDynArray); overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
 
 { ************* Managed Types Finalization, Random or Copy }
 
@@ -5906,8 +5921,29 @@ begin
     Info := Info^.DynArrayItemType(elemsize);
     DynArrayNew(Value, n, elemsize); // allocate zeroed memory
     inc(p);
-    CopySeveral(pointer(p), Value^, n, Info, elemsize);
+    CopySeveral(Value^, pointer(p), n, Info, elemsize);
   end;
+end;
+
+procedure EnsureUnique(var Value: TIntegerDynArray);
+begin
+  if (Value <> nil) and
+     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+    DynArrayEnsureUnique(@Value, TypeInfo(TIntegerDynArray));
+end;
+
+procedure EnsureUnique(var Value: TRawUtf8DynArray); overload;
+begin
+  if (Value <> nil) and
+     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+    DynArrayEnsureUnique(@Value, TypeInfo(TRawUtf8DynArray));
+end;
+
+procedure EnsureUnique(var Value: TVariantDynArray); overload;
+begin
+  if (Value <> nil) and
+     (PDACnt(PAnsiChar(Value) - _DACNT)^ > 1) then
+    DynArrayEnsureUnique(@Value, TypeInfo(TVariantDynArray));
 end;
 
 

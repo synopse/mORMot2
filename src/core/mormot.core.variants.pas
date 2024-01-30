@@ -4692,7 +4692,7 @@ begin
 end;
 
 function _SafeArray(const Value: variant; ExpectedCount: integer;
-  out DV: PDocVariantData): boolean; overload;
+  out DV: PDocVariantData): boolean;
 begin
   result := _Safe(Value, DV) and
             {%H-}DV^.IsArray and
@@ -7202,12 +7202,10 @@ begin
   dec(VCount);
   if VName <> nil then
   begin
-    if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
-      VName := copy(VName); // make unique
+    EnsureUnique(VName);
     VName[Index] := '';
   end;
-  if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
-    VValue := copy(VValue); // make unique
+  EnsureUnique(VValue);
   VarClear(VValue[Index]);
   n := VCount - Index;
   if n <> 0 then
@@ -7233,8 +7231,7 @@ begin
     inc(aIndex, VCount);
   if cardinal(aIndex) >= cardinal(VCount) then
     exit;
-  if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
-    VValue := copy(VValue); // make unique
+  EnsureUnique(VValue);
   v := @VValue[aIndex]; // extract instead of copy
   PVarData(@aValue)^ := PVarData(v)^;
   PCardinal(v)^ := varEmpty; // no VarClear
@@ -7243,8 +7240,7 @@ begin
       FastAssignNew(aName^)
     else
     begin
-      if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
-        VName := copy(VName); // make unique
+      EnsureUnique(VName);
       v := @VName[aIndex];
       FastAssignNew(aName^, PPointer(v)^); // no refcount
       PPointer(v)^ := nil;
