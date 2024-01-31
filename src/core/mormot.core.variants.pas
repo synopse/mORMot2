@@ -10638,11 +10638,13 @@ end;
 
 function TDocDict.ValueAt(const key: RawUtf8): PVariant;
 begin
-  // raise EDocVariant exception if dvoReturnNullForUnknownProperty is not set
   if fPathDelim = #0 then
     result := pointer(fValue^.GetVarData(key, fSorted)) // faster
   else
-    result := fValue^.GetPVariantExistingByPath(key, fPathDelim);
+    result := fValue^.GetPVariantByPath(key, fPathDelim);
+  if result = nil then
+    // raise EDocVariant exception if dvoReturnNullForUnknownProperty is not set
+    result := fValue^.InternalNotFound(pointer(key));
 end;
 
 function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
@@ -10927,7 +10929,10 @@ end;
 
 function TDocDict.Exists(const key: RawUtf8): boolean;
 begin
-  result := ValueAt(key) <> nil;
+  if fPathDelim = #0 then
+    result := fValue^.GetVarData(key, fSorted) <> nil // faster
+  else
+    result := fValue^.GetPVariantByPath(key, fPathDelim) <> nil;
 end;
 
 function TDocDict.Pop(const key: RawUtf8): variant;
