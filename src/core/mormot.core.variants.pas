@@ -2989,7 +2989,11 @@ type
     /// adds an UTF-8 text element at the end of the list
     function Append(const value: RawUtf8): integer; overload;
     /// adds an IDocList/IDocDict element at the end of the list
-    function Append(const value: IDocAny): integer; overload;
+    function AppendDoc(const value: IDocAny): integer;
+    /// compare this IDocList value with another instance
+    // - each element of the list will be compared, in their expected order
+    function Compare(const another: IDocList;
+      caseinsensitive: boolean = false): integer;
     /// return a of a (sub-range) copy of this IDocList
     // - consider Range() if you want just to loop over some sub-range, and
     // do not need to allocate a new IDocList instance
@@ -3150,6 +3154,10 @@ type
     procedure SetU(const key: RawUtf8; const value: RawUtf8);
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
+    /// compare this IDocDict value with another instance
+    // - each key/value pair will be compared, in their expected order
+    function Compare(const another: IDocDict;
+      caseinsensitive: boolean = false): integer;
     /// returns a copy of the specified dictionary
     function Copy: IDocDict;
     /// removes the element at the specified key, not returning it
@@ -6491,21 +6499,16 @@ var
   nameCmp: TDynArraySortCompare;
 begin
   // first validate the type: as { or [ in JSON
+  result := -1;
   nameCmp := nil;
   if IsArray then
   begin
     if not Another.IsArray then
-    begin
-      result := -1;
       exit;
-    end;
   end
   else if IsObject then
     if not Another.IsObject then
-    begin
-      result := 1;
-      exit;
-    end
+      exit
     else
       nameCmp := SortDynArrayAnsiStringByCase[not IsCaseSensitive];
   // compare as many in-order content as possible
@@ -9745,8 +9748,9 @@ type
     procedure SetU(position: integer; const value: RawUtf8);
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
-    function Append(const value: IDocAny): integer; overload;
+    function AppendDoc(const value: IDocAny): integer;
     function Copy(start, stop: integer): IDocList;
+    function Compare(const another: IDocList; caseinsensitive: boolean): integer;
     function Count(const value: variant): integer; overload;
     function Count(const value: RawUtf8): integer; overload;
     procedure Extend(const value: IDocList); overload;
@@ -9816,6 +9820,7 @@ type
     function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
+    function Compare(const another: IDocDict; caseinsensitive: boolean): integer;
     function Copy: IDocDict;
     function Del(const key: RawUtf8): boolean;
     function Exists(const key: RawUtf8): boolean;
@@ -10067,6 +10072,14 @@ begin
     result := nil;
 end;
 
+function DocListFrom(const dictarray: IDocDictDynArray): IDocList;
+var
+  i: PtrInt;
+begin
+  result := DocList(mFastFloat);
+  for i := 0 to length(dictarray) - 1 do
+    result.AppendDoc(dictarray[i]);
+end;
 
 { IDocDict factories functions }
 
@@ -10423,7 +10436,7 @@ begin
   result := fValue^.AddItemText(value);
 end;
 
-function TDocList.Append(const value: IDocAny): integer;
+function TDocList.AppendDoc(const value: IDocAny): integer;
 begin
   result := fValue^.AddItem(PVariant(value.Value)^);
 end;
@@ -10453,6 +10466,14 @@ begin
     result.Value^.Init(fValue^.Options, dvArray)
   else
     result.Value^.InitArrayFrom(fValue^, fValue^.Options, start, stop);
+end;
+
+function TDocList.Compare(const another: IDocList; caseinsensitive: boolean): integer;
+begin
+  if another = nil then
+    result := 1
+  else
+    result := fValue^.Compare(another.Value^, caseinsensitive);
 end;
 
 function TDocList.Count(const value: variant): integer;
@@ -10664,6 +10685,11 @@ end;
 procedure TDocDict.SetPathDelim(value: AnsiChar);
 begin
   fPathDelim := value;
+end;
+
+function TDocDict.Compare(const another: IDocDict; caseinsensitive: boolean): integer;
+begin
+  result := fValue^.Compare(another.Value^, caseinsensitive);
 end;
 
 function TDocDict.ValueAt(const key: RawUtf8): PVariant;
