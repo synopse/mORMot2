@@ -2824,15 +2824,17 @@ type
 
   /// internal map of a variant memory structure for IDocList/IDocDict wrappers
   // - implicit class operators are used to ease its work with high-level result
-  // variables like RawUtf8 or IDocList/IDocDict
+  // variables like RawUtf8 or IDocList/IDocDict - even as iterator variables
   TDocValue = record
   public
-    /// raw access to the pointer to the corresponting value
+    /// raw pointer access to the corresponting value
+    // - you should not use this field, but implicit operators
     V: PVariant;
-    /// returns true if the sotred value is a string
+    /// returns true if the current value is a string
     function IsString: boolean; inline;
-    /// returns dvArray for a IDocList, dvObject for a IDocDict and dvUndefined
-    // for any other value (regular string, number)
+    /// returns the high-level TDocVariant type of the current value
+    // - i.e. dvArray for a IDocList, dvObject for a IDocDict and dvUndefined
+    // for any other value (e.g. string, number...)
     function Kind: TDocVariantKind; { better not inlined }
   public
     class operator Implicit(const A: TDocValue): boolean;  inline;
@@ -2844,16 +2846,73 @@ type
     class operator Implicit(const A: TDocValue): IDocDict; inline;
     class operator Implicit(const A: TDocValue): variant;  inline;
     class operator Implicit(const A: TDocValue): PVarData; inline;
+    class operator Implicit(const A: TDocValue): PDocVariantData;
   end;
 
-  /// low-level Enumerator as returned by IDocList.GetEnumerator
-  TDocListEnumerator = record
+  /// low-level Enumerator as returned by IDocList.GetEnumerator and
+  // IDocDict.Values
+  TDocValueEnumerator = record
   private
     Curr, After: TDocValue;
   public
     function MoveNext: boolean; inline;
-    function GetEnumerator: TDocListEnumerator; inline;
+    function GetEnumerator: TDocValueEnumerator; inline;
     property Current: TDocValue
+      read Curr;
+  end;
+
+  /// low-level Enumerator as returned by IDocList.Objects
+  TDocObjectEnumerator = record
+  private
+    CurrDict: IDocDict; // a single instance reused during whole iteration
+    Curr, After: PVariant;
+    CurrDictValue: ^PDocVariantData;
+  public
+    function MoveNext: boolean; { better not inlined for _Safe }
+    function GetEnumerator: TDocObjectEnumerator; inline;
+    property Current: IDocDict
+      read CurrDict;
+  end;
+
+  /// internal map of a key name for IDocDict wrappers
+  TDocKey = record
+  public
+    /// raw pointer access to the corresponting name
+    V: PRawUtf8;
+  public
+    class operator Implicit(const A: TDocKey): string;   inline;
+    class operator Implicit(const A: TDocKey): RawUtf8;  inline;
+  end;
+
+  /// low-level Enumerator as returned by IDocDict.Keys
+  TDocKeyEnumerator = record
+  private
+    Curr, After: TDocKey;
+  public
+    function MoveNext: boolean; inline;
+    function GetEnumerator: TDocKeyEnumerator; inline;
+    property Current: TDocKey
+      read Curr;
+  end;
+
+  /// store one key/value pair as returned by IDocDict.GetEnumerator
+  // - thanks to TDocKey/TDocValue wrappers, no transient copy is involved
+  TDocDictFields = record
+    /// efficient/indirect access to one key of the current IDocDict element
+    Key: TDocKey;
+    /// efficient/indirect access to one value of the current IDocDict element
+    Value: TDocValue;
+  end;
+
+  /// low-level Enumerator as returned by IDocDict.GetEnumerator
+  TDocDictEnumerator = record
+  private
+    Curr: TDocDictFields;
+    AfterValue: TDocValue;
+  public
+    function MoveNext: boolean; inline;
+    function GetEnumerator: TDocDictEnumerator; inline;
+    property Current: TDocDictFields
       read Curr;
   end;
 
@@ -2865,22 +2924,38 @@ type
     procedure Clear;
     /// equals dvArray for IDocList, dvObject for IDocDict
     function Kind: TDocVariantKind;
+    /// the known model of the internal TDocVariantData storage
+    function Model: TDocVariantModel;
     /// how many items or name/value pairs are stored in this instance
     function Len: integer;
-    /// low-level access to the internal TDocVariantData storage
-    function Value: PDocVariantData;
-    /// equals true if the Value is owned by this IDocList/IDocDict instance
-    function ValueIsOwned: boolean;
+    /// serialize this IDocList/IDocDict into a JSON array/object
+    function ToJson(format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// returns itself as a IDocList, or nil if is a IDocDict
     function AsList: IDocList;
     /// returns itself as a IDocDic, or nil if is a IDocList
     function AsDict: IDocDict;
+    /// returns the associated TDocVariant instance
+    function AsVariant: variant;
+    /// low-level access to the internal TDocVariantData storage
+    function Value: PDocVariantData;
+    /// equals true if the Value is owned by this IDocList/IDocDict instance
+    function ValueIsOwned: boolean;
   end;
 
   /// exception raised by IDocList
-  EDocList = class(EDocVariant);
+  EDocList = class(EDocVariant)
+  public
+    class procedure GetRaise(method: AnsiChar; pos: integer; const v: variant);
+  end;
+
   /// exception raised by IDocDict
-  EDocDict = class(EDocVariant);
+  EDocDict = class(EDocVariant)
+  public
+    class procedure GetRaise(method: AnsiChar; const key: RawUtf8; const v: variant);
+  end;
+
+  /// a dynamic array of IDocDict instances
+  IDocDictDynArray = array of IDocDict;
 
   /// a List, used to store multiple values
   // - implemented via an internal TDocVariantData dvArray
@@ -2888,24 +2963,27 @@ type
   IDocList = interface(IDocAny)
     ['{8186E3D3-3C9C-46E6-89D1-82ADDB741AAB}']
     // methods used as getter/setter for properties
+    function GetB(position: integer): boolean;
+    function GetC(position: integer): currency;
+    function GetD(position: integer): IDocDict;
+    function GetF(position: integer): double;
+    function GetI(position: integer): Int64;
     function GetItem(position: integer): variant;
     function GetL(position: integer): IDocList;
-    function GetD(position: integer): IDocDict;
-    function GetU(position: integer): RawUtf8;
     function GetS(position: integer): string;
-    function GetI(position: integer): Int64;
-    function GetF(position: integer): double;
-    function GetC(position: integer): currency;
-    function GetB(position: integer): boolean;
+    function GetU(position: integer): RawUtf8;
+    {$ifdef HASIMPLICITOPERATOR}
+    function GetV(position: integer): TDocValue;
+    {$endif HASIMPLICITOPERATOR}
+    procedure SetB(position: integer; value: boolean);
+    procedure SetC(position: integer; const value: currency);
+    procedure SetD(position: integer; const value: IDocDict);
+    procedure SetF(position: integer; const value: double);
+    procedure SetI(position: integer; value: Int64);
     procedure SetItem(position: integer; const value: variant);
-    procedure SetL(position: integer; const Value: IDocList);
-    procedure SetD(position: integer; const Value: IDocDict);
-    procedure SetU(position: integer; const Value: RawUtf8);
-    procedure SetS(position: integer; const Value: string);
-    procedure SetI(position: integer; Value: Int64);
-    procedure SetF(position: integer; const Value: double);
-    procedure SetC(position: integer; const Value: currency);
-    procedure SetB(position: integer; Value: boolean);
+    procedure SetL(position: integer; const value: IDocList);
+    procedure SetS(position: integer; const value: string);
+    procedure SetU(position: integer; const value: RawUtf8);
     /// adds an element at the end of the list
     function Append(const value: variant): integer; overload;
     /// adds an UTF-8 text element at the end of the list
@@ -2918,37 +2996,62 @@ type
     // - returns a new IDocList instance as Python list[start:stop] range,
     // stop position being *excluded* to the result:
     // $ list.Copy returns a copy of the whole list
-    // $ list.Copy(10) returns items #10..#Count-1, i.e. list[10:]
+    // $ list.Copy(10) returns elements #10..#Count-1, i.e. list[10:]
     // $ list.Copy(-2) returns last #Count-2..#Count-1 items, i.e. list[-2:]
-    // $ list.Copy(1, 9) returns items #1..#8, i.e. list[1..9]
-    // $ list.Copy(1, -2) returns items #1..#Count-3, i.e. list[1:-2]
+    // $ list.Copy(1, 9) returns elements #1..#8, i.e. list[1..9]
+    // $ list.Copy(1, -2) returns elements #1..#Count-3, i.e. list[1:-2]
     function Copy(start: integer = 0; stop: integer = 0): IDocList;
     /// counts the number of elements with the specified value
     function Count(const value: variant): integer; overload;
     /// counts the number of elements with the specified value
     function Count(const value: RawUtf8): integer; overload;
-    /// add the elements of a list, to the end of the current list
-    procedure Extend(const value: IDocList); overload;
-    /// add the supplied elements, to the end of the current list
-    procedure Extend(const value: array of const); overload;
-    /// returns the position at the first occurrence of the specified value
-    function Index(const value: variant): integer; overload;
-    /// returns the position at the first occurrence of the specified text value
-    function Index(const value: RawUtf8;
-      caseinsensitive: boolean = false): integer; overload;
+    /// removes the element at the specified position, not returning it
+    function Del(position: integer): boolean;
     /// check if a specified value is present in the list
     function Exists(const value: variant): boolean; overload;
     /// check if a specified text value is present in the list
     function Exists(const value: RawUtf8;
       caseinsensitive: boolean = false): boolean; overload;
+    /// add the elements of a list, to the end of the current list
+    procedure Extend(const value: IDocList); overload;
+    /// add the supplied elements, to the end of the current list
+    procedure Extend(const value: array of const); overload;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// default iterator over all elements of this IDocList
+    function GetEnumerator: TDocValueEnumerator;
+    {$endif HASIMPLICITOPERATOR}
+    /// returns the position at the first occurrence of the specified value
+    function Index(const value: variant): integer; overload;
+    /// returns the position at the first occurrence of the specified text value
+    function Index(const value: RawUtf8;
+      caseinsensitive: boolean = false): integer; overload;
     /// inserts the specified value at the specified position
     function Insert(position: integer; const value: variant): integer; overload;
     /// inserts the specified value at the specified position
     function Insert(position: integer; const value: RawUtf8): integer; overload;
+    /// returns all IDocDict kind of elements of this IDocList
+    // - the list should consist e.g. of a JSON array of JSON objects
+    // - will just ignore any element of the IDocList which is not a IDocDict
+    function ObjectsDictDynArray: IDocDictDynArray;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// allow to iterate over IDocDict kind of elements of this IDocList
+    // - the list should consist e.g. of a JSON array of JSON objects
+    // - will just ignore any element of the IDocList which is not a IDocDict
+    // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
+    function Objects: TDocObjectEnumerator;
+    {$endif HASIMPLICITOPERATOR}
     /// removes the element at the specified position, and returns it
     function Pop(position: integer = -1): variant;
-    /// removes the element at the specified position, not returning it
-    function Del(position: integer): boolean;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// allow to iterate over a specific range of elements of this IDocList
+    // - elements are returned directly from the main list
+    // $ "for v in list.Range" returns all elements, i.e. maps "for v in list"
+    // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
+    // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
+    // $ "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
+    // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
+    function Range(start: integer = 0; stop: integer = 0): TDocValueEnumerator;
+    {$endif HASIMPLICITOPERATOR}
     /// removes the first occurrence of the element with the specified value
     function Remove(const value: variant): integer; overload;
     /// removes the first occurrence of the element with the specified value
@@ -2958,23 +3061,11 @@ type
     procedure Reverse;
     /// sorts the list ascending by default
     procedure Sort(reverse: boolean = false; key: TVariantCompare = nil);
-    /// serialize this list into a JSON array
-    function ToJson(format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// allow to iterate over all elements of this IDocList
-    function GetEnumerator: TDocListEnumerator;
-    /// allow to iterate over a specific range of elements of this IDocList
-    // - elements are returned directly from the main list
-    // $ "for v in list.Range" returns all items, i.e. maps "for v in list"
-    // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
-    // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
-    // $ "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
-    // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
-    function Range(start: integer = 0; stop: integer = 0): TDocListEnumerator;
-    {$endif HASIMPLICITOPERATOR}
+    /// low-level direct access to a stored element in TDocVariantData.Value[]
+    function ValueAt(position: integer): PVariant;
     /// access one element in the list, as variant
     // - this is the default property of this instance so list[n] gives
-    // direct access to the item at index 0 <= n < len -1 in the IDocList
+    // direct access to the element at index 0 <= n < len -1 in the IDocList
     // - negative positions are retrieved from the end, e.g. list[-1] maps
     // the last element of the list
     // - raise an EDocList exception on out-of-range position
@@ -2982,6 +3073,12 @@ type
     // to retrieve a specific value type
     property Item[position: integer]: variant
       read GetItem write SetItem; default;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// read access of one element in the list, as TDocValue
+    // - may be slightly more convenient than the plain variant returned by Item[]
+    property V[position: integer]: TDocValue
+      read GetV;
+    {$endif HASIMPLICITOPERATOR}
     /// access one element in the list, as UTF-8 text
     property U[position: integer]: RawUtf8
       read GetU write SetU;
@@ -3016,25 +3113,30 @@ type
   end;
 
 /// create a self-owned void IDocList
-function DocList: IDocList; overload;
+function DocList(model: TDocVariantModel = mFastFloat): IDocList; overload;
 
 /// create a self-owned IDocList from a JSON array
 function DocList(const json: RawUtf8;
   model: TDocVariantModel = mFastFloat): IDocList; overload;
 
+/// create a self-owned IDocList from TOrmTableJson ORM/DB dual JSON formats
+function DocListFromResults(const json: RawUtf8;
+  model: TDocVariantModel = mFastFloat): IDocList;
+
 /// create a self-owned IDocList from a set of values
 function DocList(const values: array of const;
   model: TDocVariantModel = mFastFloat): IDocList; overload;
 
-/// create a IDocList as weak reference to a TDocVariantData
+/// create a IDocList as weak reference to a TDocVariant dvArray
+function DocListFrom(const v: variant): IDocList;
+
+/// create a IDocList as weak reference to a TDocVariantData dvArray
 function DocList(const dv: TDocVariantData): IDocList; overload;
 
-/// create a self-owned IDocList as full copy of a TDocVariantData
+/// create a self-owned IDocList as full copy of a TDocVariantData dvArray
 function DocListCopy(const dv: TDocVariantData;
   model: TDocVariantModel = mFastFloat): IDocList;
 
-/// create a IDocList as weak reference to a variant holding a TDocVariantData
-function DocListFromVariant(const v: variant): IDocList;
 
 /// create a self-owned void IDocDict
 function DocDict: IDocDict; overload;
@@ -9424,6 +9526,137 @@ end;
 
 { ************** IDocList/IDocDict advanced Wrappers of TDocVariant Documents }
 
+type
+  TDocAny = class(TInterfacedObject)
+  protected
+    fValue: PDocVariantData;
+    fValueOwned: TVarData;
+  public
+    constructor CreateOwned;
+    constructor CreateCopy(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
+    constructor CreateByRef(dv: PDocVariantData); reintroduce;
+    destructor Destroy; override;
+    procedure Clear;
+    function Kind: TDocVariantKind;
+    function Model: TDocVariantModel;
+    function Len: integer;
+    function ToJson(format: TTextWriterJsonFormat): RawUtf8;
+    function Value: PDocVariantData;
+    function ValueIsOwned: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    function AsList: IDocList;
+    function AsDict: IDocDict;
+    function AsVariant: variant;
+  end;
+
+  TDocList = class(TDocAny, IDocList)
+  public
+    function GetB(position: integer): boolean;
+    function GetC(position: integer): currency;
+    function GetD(position: integer): IDocDict;
+    function GetF(position: integer): double;
+    function GetI(position: integer): Int64;
+    function GetItem(position: integer): variant;
+    function GetL(position: integer): IDocList;
+    function GetS(position: integer): string;
+    function GetU(position: integer): RawUtf8;
+    procedure SetB(position: integer; value: boolean);
+    procedure SetC(position: integer; const value: currency);
+    procedure SetD(position: integer; const value: IDocDict);
+    procedure SetF(position: integer; const value: double);
+    procedure SetI(position: integer; value: Int64);
+    procedure SetItem(position: integer; const value: variant);
+    procedure SetL(position: integer; const value: IDocList);
+    procedure SetS(position: integer; const value: string);
+    procedure SetU(position: integer; const value: RawUtf8);
+    function Append(const value: variant): integer; overload;
+    function Append(const value: RawUtf8): integer; overload;
+    function Append(const value: IDocAny): integer; overload;
+    function Copy(start, stop: integer): IDocList;
+    function Count(const value: variant): integer; overload;
+    function Count(const value: RawUtf8): integer; overload;
+    procedure Extend(const value: IDocList); overload;
+    procedure Extend(const value: array of const); overload;
+    function Index(const value: variant): integer; overload;
+    function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
+    function Exists(const value: variant): boolean; overload;
+    function Exists(const value: RawUtf8; caseinsensitive: boolean): boolean; overload;
+    function Insert(position: integer; const value: variant): integer; overload;
+    function Insert(position: integer; const value: RawUtf8): integer; overload;
+    function ObjectsDictDynArray: IDocDictDynArray;
+    function Pop(position: integer): variant;
+    function Del(position: integer): boolean;
+    function Remove(const value: variant): integer; overload;
+    function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
+    procedure Reverse;
+    procedure Sort(reverse: boolean; key: TVariantCompare);
+    function ValueAt(position: integer): PVariant;
+    {$ifdef HASIMPLICITOPERATOR}
+    function GetV(position: integer): TDocValue;
+    function GetEnumerator: TDocValueEnumerator;
+    function Range(start, stop: integer): TDocValueEnumerator;
+    function Objects: TDocObjectEnumerator;
+    {$endif HASIMPLICITOPERATOR}
+  end;
+
+  TDocDict = class(TDocAny, IDocDict)
+  protected
+    fPathDelim: AnsiChar;
+    fSorted: TUtf8Compare;
+    function GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
+    function SetValueAt(const key: RawUtf8; const value: variant): boolean;
+    function PopAt(const key: RawUtf8; value: PVariant): boolean;
+  public
+    function GetB(const key: RawUtf8): boolean;
+    function GetC(const key: RawUtf8): currency;
+    function GetD(const key: RawUtf8): IDocDict;
+    function GetF(const key: RawUtf8): double;
+    function GetI(const key: RawUtf8): Int64;
+    function GetItem(const key: RawUtf8): variant;
+    function GetL(const key: RawUtf8): IDocList;
+    function GetS(const key: RawUtf8): string;
+    function GetU(const key: RawUtf8): RawUtf8;
+    procedure SetB(const key: RawUtf8; const value: boolean);
+    procedure SetC(const key: RawUtf8; const value: currency);
+    procedure SetD(const key: RawUtf8; const value: IDocDict);
+    procedure SetF(const key: RawUtf8; const value: double);
+    procedure SetI(const key: RawUtf8; const value: Int64);
+    procedure SetItem(const key: RawUtf8; const value: variant);
+    procedure SetL(const key: RawUtf8; const value: IDocList);
+    procedure SetS(const key: RawUtf8; const value: string);
+    procedure SetU(const key: RawUtf8; const value: RawUtf8);
+    function Get(const key: RawUtf8): variant; overload;
+    function GetDef(const key: RawUtf8; const default: variant): variant; overload;
+    function GetDef(const key: RawUtf8; const default: RawUtf8): variant; overload;
+    function Get(const key: RawUtf8; var value: variant): boolean; overload;
+    function Get(const key: RawUtf8; var value: RawUtf8): boolean; overload;
+    function Get(const key: RawUtf8; var value: string): boolean; overload;
+    function Get(const key: RawUtf8; var value: Int64): boolean; overload;
+    function Get(const key: RawUtf8; var value: double): boolean; overload;
+    function Get(const key: RawUtf8; var value: currency): boolean; overload;
+    function Get(const key: RawUtf8; var value: IDocList): boolean; overload;
+    function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
+    function GetPathDelim: AnsiChar;
+    procedure SetPathDelim(value: AnsiChar);
+    function Copy: IDocDict;
+    function Del(const key: RawUtf8): boolean;
+    function Exists(const key: RawUtf8): boolean;
+    function Pop(const key: RawUtf8): variant; overload;
+    function Pop(const key: RawUtf8; const default: variant): variant; overload;
+    function PopItem(out key: RawUtf8; out value: variant): boolean;
+    function SetDefault(const key: RawUtf8): variant; overload;
+    function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
+    procedure Sort(reverse: boolean; keycompare: TUtf8Compare);
+    procedure Update(const key: RawUtf8; const value: variant); overload;
+    procedure Update(const keyvalues: array of const); overload;
+    function ValueAt(const key: RawUtf8): PVariant;
+    {$ifdef HASIMPLICITOPERATOR}
+    function GetV(const key: RawUtf8): TDocValue;
+    function GetEnumerator: TDocDictEnumerator;
+    function Keys: TDocKeyEnumerator;
+    function Values: TDocValueEnumerator;
+    {$endif HASIMPLICITOPERATOR}
+  end;
 
 {$ifdef HASIMPLICITOPERATOR}
 
@@ -9471,12 +9704,12 @@ end;
 
 class operator TDocValue.Implicit(const A: TDocValue): IDocList;
 begin
-  result := DocListFromVariant(A.V^);
+  result := DocListFrom(A.V^);
 end;
 
 class operator TDocValue.Implicit(const A: TDocValue): IDocDict;
 begin
-  result := DocDictFromVariant(A.V^);
+  result := DocDictFrom(A.V^);
 end;
 
 class operator TDocValue.Implicit(const A: TDocValue): variant;
@@ -9489,10 +9722,14 @@ begin
   result := pointer(A.V);
 end;
 
+class operator TDocValue.Implicit(const A: TDocValue): PDocVariantData;
+begin
+  result := _Safe(A.V^); // better not inlined at TDocValue level
+end;
 
-{ TDocListEnumerator }
+{ TDocValueEnumerator }
 
-function TDocListEnumerator.MoveNext: boolean;
+function TDocValueEnumerator.MoveNext: boolean;
 var
   c: PVariant;
 begin
@@ -9502,91 +9739,103 @@ begin
   result := PtrUInt(c) < PtrUInt(After.V);
 end;
 
-function TDocListEnumerator.GetEnumerator: TDocListEnumerator;
+function TDocValueEnumerator.GetEnumerator: TDocValueEnumerator;
 begin
   result := self; // just copy 2 pointers
 end;
 
+{ TDocObjectEnumerator }
+
+function TDocObjectEnumerator.MoveNext: boolean;
+var
+  c: PVariant;
+  v: TDocDict;
+  dv: PDocVariantData;
+begin
+  result := false;
+  repeat
+    c := Curr;
+    inc(c);
+    Curr := c;
+    if PtrUInt(c) >= PtrUInt(After) then
+      exit; // reached end of list
+    dv := _Safe(c^);
+    if not dv.IsObject then
+      continue; // ignore any list element which is not a IDocDict
+    if CurrDict = nil then
+    begin
+      v := TDocDict.Create;
+      CurrDictValue := @v.fValue;
+      CurrDict := v;
+    end;
+    CurrDictValue^ := dv; // directly change TDocDict.fValue
+    result := true;
+    exit;
+  until false;
+end;
+
+function TDocObjectEnumerator.GetEnumerator: TDocObjectEnumerator;
+begin
+  result := self;
+end;
+
+
+{ TDocKey }
+
+class operator TDocKey.Implicit(const A: TDocKey): string;
+begin
+  Utf8ToStringVar(A.V^, result);
+end;
+
+class operator TDocKey.Implicit(const A: TDocKey): RawUtf8;
+begin
+  result := A.V^;
+end;
+
+{ TDocKeyEnumerator }
+
+function TDocKeyEnumerator.MoveNext: boolean;
+var
+  c: PRawUtf8;
+begin
+  c := Curr.V;
+  inc(c);
+  Curr.V := c;
+  result := PtrUInt(c) < PtrUInt(After.V);
+end;
+
+function TDocKeyEnumerator.GetEnumerator: TDocKeyEnumerator;
+begin
+  result := self; // just copy 2 pointers
+end;
+
+{ TDocDictEnumerator }
+
+function TDocDictEnumerator.MoveNext: boolean;
+var
+  v: PVariant;
+begin
+  inc(Curr.Key.V);
+  v := Curr.Value.V;
+  inc(v);
+  Curr.Value.V := v;
+  result := PtrUInt(v) < PtrUInt(AfterValue.V);
+end;
+
+function TDocDictEnumerator.GetEnumerator: TDocDictEnumerator;
+begin
+  result := self; // just copy 3 pointers
+end;
+
 {$endif HASIMPLICITOPERATOR}
-
-type
-  TDocAny = class(TInterfacedObject)
-  protected
-    fValue: PDocVariantData;
-    fValueOwned: TVarData;
-  public
-    constructor CreateOwned;
-    constructor CreateCopy(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
-    constructor CreateByRef(const dv: TDocVariantData); reintroduce;
-    destructor Destroy; override;
-    procedure Clear;
-    function AsList: IDocList;
-    function AsDict: IDocDict;
-    function Kind: TDocVariantKind;
-    function Len: integer;
-    function Value: PDocVariantData;
-    function ValueIsOwned: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
-  end;
-
-  TDocList = class(TDocAny, IDocList)
-  public
-    function ValueAt(position: integer): PVariant;
-    function GetItem(position: integer): variant;
-    function GetU(position: integer): RawUtf8;
-    function GetS(position: integer): string;
-    function GetI(position: integer): Int64;
-    function GetF(position: integer): double;
-    function GetC(position: integer): currency;
-    function GetB(position: integer): boolean;
-    function GetL(position: integer): IDocList;
-    function GetD(position: integer): IDocDict;
-    procedure SetItem(position: integer; const value: variant);
-    procedure SetU(position: integer; const Value: RawUtf8);
-    procedure SetS(position: integer; const Value: string);
-    procedure SetI(position: integer; Value: Int64);
-    procedure SetF(position: integer; const Value: double);
-    procedure SetC(position: integer; const Value: currency);
-    procedure SetB(position: integer; Value: boolean);
-    procedure SetL(position: integer; const Value: IDocList);
-    procedure SetD(position: integer; const Value: IDocDict);
-    function Append(const value: variant): integer; overload;
-    function Append(const value: RawUtf8): integer; overload;
-    function Append(const value: IDocAny): integer; overload;
-    function Copy(start, stop: integer): IDocList;
-    function Count(const value: variant): integer; overload;
-    function Count(const value: RawUtf8): integer; overload;
-    procedure Extend(const value: IDocList); overload;
-    procedure Extend(const value: array of const); overload;
-    function Index(const value: variant): integer; overload;
-    function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
-    function Exists(const value: variant): boolean; overload;
-    function Exists(const value: RawUtf8; caseinsensitive: boolean): boolean; overload;
-    function Insert(position: integer; const value: variant): integer; overload;
-    function Insert(position: integer; const value: RawUtf8): integer; overload;
-    function Pop(position: integer): variant;
-    function Del(position: integer): boolean;
-    function Remove(const value: variant): integer; overload;
-    function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
-    procedure Reverse;
-    procedure Sort(reverse: boolean; key: TVariantCompare);
-    function ToJson(format: TTextWriterJsonFormat): RawUtf8;
-    {$ifdef HASIMPLICITOPERATOR}
-    function GetEnumerator: TDocListEnumerator;
-    function Range(start, stop: integer): TDocListEnumerator;
-    {$endif HASIMPLICITOPERATOR}
-  end;
-
-  TDocDict = class(TDocAny, IDocDict)
-  public
-  end;
 
 
 { IDocList factories functions }
 
-function DocList: IDocList;
+function DocList(model: TDocVariantModel): IDocList;
 begin
   result := TDocList.CreateOwned;
+  result.Value^.Init(model, dvArray);
 end;
 
 function DocList(const json: RawUtf8; model: TDocVariantModel): IDocList;
@@ -9595,15 +9844,23 @@ begin
   if GetFirstJsonToken(pointer(json)) <> jtArrayStart then
     exit;
   result := TDocList.CreateOwned;
-  if not result.Value^.InitJson(json, model) or
+  if not result.Value^.InitJson(json, JSON_[model]) or
      not result.Value^.IsArray then
+    result := nil;
+end;
+
+function DocListFromResults(const json: RawUtf8;
+  model: TDocVariantModel): IDocList;
+begin
+  result := TDocList.CreateOwned;
+  if not result.Value^.InitArrayFromResults(json, model) then
     result := nil;
 end;
 
 function DocList(const dv: TDocVariantData): IDocList;
 begin
   if dv.IsArray then
-    result := TDocList.CreateByRef(dv)
+    result := TDocList.CreateByRef(@dv)
   else
     result := nil;
 end;
@@ -9622,12 +9879,12 @@ begin
   result.Value^.InitArray(values, model);
 end;
 
-function DocListFromVariant(const v: variant): IDocList;
+function DocListFrom(const v: variant): IDocList;
 var
   dv: PDocVariantData;
 begin
   if _SafeArray(variant(v), dv) then
-    result := TDocList.CreateByRef(dv^)
+    result := TDocList.CreateByRef(dv)
   else
     result := nil;
 end;
@@ -9669,8 +9926,8 @@ end;
 
 function DocDict(const namevalues: array of const; model: TDocVariantModel): IDocList;
 begin
-  result := TDocList.CreateOwned;
-  result.Value^.InitObject(namevalues, model);
+  result := TDocDict.CreateOwned;
+  result.Value^.InitObject(keyvalues, model);
 end;
 
 function DocDictFromVariant(const v: variant): IDocDict;
@@ -9699,9 +9956,16 @@ begin
   fValue^.VValue := copy(dv.VValue);
 end;
 
-constructor TDocAny.CreateByRef(const dv: TDocVariantData);
+constructor TDocAny.CreateByRef(dv: PDocVariantData);
 begin
-  fValue := @dv;
+  fValue := dv;
+end;
+
+destructor TDocAny.Destroy;
+begin
+  inherited Destroy;
+  if ValueIsOwned then
+    fValue^.Void;
 end;
 
 function TDocAny.Kind: TDocVariantKind;
@@ -9709,9 +9973,26 @@ begin
   result := fValue^.GetKind;
 end;
 
+function TDocAny.Model: TDocVariantModel;
+begin
+  if not fValue^.GetModel(result) then
+    result := mFastFloat; // default value if not exactly found
+end;
+
 function TDocAny.Len: integer;
 begin
   result := fValue^.VCount;
+end;
+
+function TDocAny.ToJson(format: TTextWriterJsonFormat): RawUtf8;
+begin
+  if fValue^.Count = 0 then
+    if fValue^.IsArray then
+      result := '[]'
+    else
+      result := '{}'
+  else
+    DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
 end;
 
 function TDocAny.Value: PDocVariantData;
@@ -9724,16 +10005,9 @@ begin
   result := fValue = @fValueOwned;
 end;
 
-destructor TDocAny.Destroy;
-begin
-  inherited Destroy;
-  if ValueIsOwned then
-    fValue^.ClearFast;
-end;
-
 procedure TDocAny.Clear;
 begin
-  fValue^.Reset;
+  fValue^.Void; // keep Options and Kind
 end;
 
 function TDocAny.AsList: IDocList;
@@ -9752,6 +10026,18 @@ begin
     result := nil;
 end;
 
+function TDocAny.AsVariant: variant;
+begin
+  result := PVariant(fValue)^;
+end;
+
+
+{ EDocList }
+
+class procedure EDocList.GetRaise(method: AnsiChar; pos: integer; const v: variant);
+begin
+  raise CreateUtf8('%[%] on a var%', [method, pos, VariantTypeName(v)^]);
+end;
 
 { TDocList }
 
@@ -9784,9 +10070,9 @@ begin
   VariantToUtf8(ValueAt(position)^, result);
 end;
 
-procedure TDocList.SetU(position: integer; const Value: RawUtf8);
+procedure TDocList.SetU(position: integer; const value: RawUtf8);
 begin
-  RawUtf8ToVariant(Value, ValueAt(position)^);
+  RawUtf8ToVariant(value, ValueAt(position)^);
 end;
 
 function TDocList.GetS(position: integer): string;
@@ -9794,9 +10080,9 @@ begin
   VariantToString(ValueAt(position)^, result);
 end;
 
-procedure TDocList.SetS(position: integer; const Value: string);
+procedure TDocList.SetS(position: integer; const value: string);
 begin
-  StringToVariant(Value, ValueAt(position)^);
+  StringToVariant(value, ValueAt(position)^);
 end;
 
 function TDocList.GetI(position: integer): Int64;
@@ -9805,7 +10091,7 @@ var
 begin
   v := ValueAt(position);
   if not VariantToInt64(v^, result) then
-    raise EDocList.CreateUtf8('I[%] on a var%', [position, VariantTypeName(v^)^]);
+    EDocList.GetRaise('I', position, v^);
 end;
 
 function TDocList.GetF(position: integer): double;
@@ -9814,7 +10100,7 @@ var
 begin
   v := ValueAt(position);
   if not VariantToDouble(v^, result) then
-    raise EDocList.CreateUtf8('F[%] on a var%', [position, VariantTypeName(v^)^]);
+    EDocList.GetRaise('F', position, v^);
 end;
 
 function TDocList.GetC(position: integer): currency;
@@ -9823,22 +10109,22 @@ var
 begin
   v := ValueAt(position);
   if not VariantToCurrency(v^, result) then
-    raise EDocList.CreateUtf8('C[%] on a var%', [position, VariantTypeName(v^)^]);
+    EDocList.GetRaise('C', position, v^);
 end;
 
-procedure TDocList.SetI(position: integer; Value: Int64);
+procedure TDocList.SetI(position: integer; value: Int64);
 begin
-  ValueAt(position)^ := Value;
+  ValueAt(position)^ := value;
 end;
 
-procedure TDocList.SetF(position: integer; const Value: double);
+procedure TDocList.SetF(position: integer; const value: double);
 begin
-  ValueAt(position)^ := Value;
+  ValueAt(position)^ := value;
 end;
 
-procedure TDocList.SetC(position: integer; const Value: currency);
+procedure TDocList.SetC(position: integer; const value: currency);
 begin
-  ValueAt(position)^ := Value;
+  ValueAt(position)^ := value;
 end;
 
 function TDocList.GetB(position: integer): boolean;
@@ -9847,32 +10133,44 @@ var
 begin
   v := ValueAt(position);
   if not VariantToBoolean(v^, result) then
-    raise EDocList.CreateUtf8('B[%] on a var%', [position, VariantTypeName(v^)^]);
+    EDocList.GetRaise('B', position, v^);
 end;
 
 function TDocList.GetL(position: integer): IDocList;
 begin
-  result := TDocList.CreateByRef(_Safe(ValueAt(position)^, dvArray)^);
+  result := TDocList.CreateByRef(_Safe(ValueAt(position)^, dvArray));
 end;
 
 function TDocList.GetD(position: integer): IDocDict;
 begin
-  result := TDocDict.CreateByRef(_Safe(ValueAt(position)^, dvObject)^);
+  result := TDocDict.CreateByRef(_Safe(ValueAt(position)^, dvObject));
 end;
 
-procedure TDocList.SetB(position: integer; Value: boolean);
+procedure TDocList.SetB(position: integer; value: boolean);
 begin
-  ValueAt(position)^ := Value;
+  ValueAt(position)^ := value;
 end;
 
-procedure TDocList.SetL(position: integer; const Value: IDocList);
+procedure TDocList.SetL(position: integer; const value: IDocList);
+var
+  v: PVariant;
 begin
-  ValueAt(position)^ := PVariant(Value.Value)^;
+  v := ValueAt(position);
+  if value = nil then
+    VarClear(v^)
+  else
+    v^ := PVariant(value.Value)^;
 end;
 
-procedure TDocList.SetD(position: integer; const Value: IDocDict);
+procedure TDocList.SetD(position: integer; const value: IDocDict);
+var
+  v: PVariant;
 begin
-  ValueAt(position)^ := PVariant(Value.Value)^;
+  v := ValueAt(position);
+  if value = nil then
+    VarClear(v^)
+  else
+    v^ := PVariant(value.Value)^;
 end;
 
 function TDocList.Append(const value: variant): integer;
@@ -9911,7 +10209,9 @@ end;
 function TDocList.Copy(start, stop: integer): IDocList;
 begin
   result := TDocList.CreateOwned;
-  if not DocListRangeVoid(start, stop, fValue^.Count) then
+  if DocListRangeVoid(start, stop, fValue^.Count) then
+    result.Value^.Init(fValue^.Options, dvArray)
+  else
     result.Value^.InitArrayFrom(fValue^, fValue^.Options, start, stop);
 end;
 
@@ -9974,10 +10274,37 @@ begin
   result := fValue^.AddItemText(value, position);
 end;
 
+function TDocList.ObjectsDictDynArray: IDocDictDynArray;
+var
+  n, i: PtrInt;
+  p: PVariant;
+  dv: PDocVariantData;
+begin
+  result := nil;
+  n := fValue^.Count;
+  if n = 0 then
+    exit;
+  p := pointer(fValue^.VValue);
+  i := 0;
+  repeat
+    if _SafeObject(p^, dv) then
+    begin
+      if result = nil then
+        SetLength(result, n); // allocate only when needed
+      result[i] := TDocDict.CreateByRef(dv);
+      inc(i);
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+  if i <> 0 then
+    DynArrayFakeLength(result, i); // no realloc
+end;
+
 function TDocList.Pop(position: integer): variant;
 begin
   if not fValue^.Extract(position, result) then
-    VarClear(result);
+    raise EDocList.CreateUtf8('Pop index % out of range', [position]);
 end;
 
 function TDocList.Del(position: integer): boolean;
@@ -10009,30 +10336,33 @@ begin
   fValue^.SortByValue(key, reverse);
 end;
 
-function TDocList.ToJson(format: TTextWriterJsonFormat): RawUtf8;
-begin
-  if fValue^.Count = 0 then
-    result := '[]'
-  else
-    DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
-end;
-
 {$ifdef HASIMPLICITOPERATOR}
 
-function TDocList.GetEnumerator: TDocListEnumerator;
+function TDocList.GetV(position: integer): TDocValue;
+begin
+  result.V := ValueAt(position);
+end;
+
+procedure SetValueEnumerator(dv: PDocVariantData; var res: TDocValueEnumerator);
+  {$ifdef HASINLINE} inline; {$endif}
 var
   v: PVariant;
 begin
-  v := pointer(fValue^.VValue);
-  result.Curr.V := v;
-  result.After.V := v;
+  v := pointer(dv^.VValue);
+  res.Curr.V := v;
+  res.After.V := v;
   if v = nil then
     exit;
-  inc(result.After.V, fValue^.VCount);
-  dec(result.Curr.V); // for the first MoveNext
+  inc(res.After.V, dv^.VCount);
+  dec(res.Curr.V); // for the first MoveNext
 end;
 
-function TDocList.Range(start, stop: integer): TDocListEnumerator;
+function TDocList.GetEnumerator: TDocValueEnumerator;
+begin
+  SetValueEnumerator(fValue, result{%H-}); // shared with IDocDict.Values
+end;
+
+function TDocList.Range(start, stop: integer): TDocValueEnumerator;
 var
   v: PVariant;
 begin
@@ -10047,6 +10377,11 @@ begin
   result.Curr.V := v;
   inc(v, stop + 1);
   result.After.V := v;
+end;
+
+function TDocList.Objects: TDocObjectEnumerator;
+begin
+
 end;
 
 {$endif HASIMPLICITOPERATOR}
