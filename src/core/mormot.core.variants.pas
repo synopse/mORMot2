@@ -3060,7 +3060,13 @@ type
     /// reverses the sorting order of the elements
     procedure Reverse;
     /// sorts the list ascending by default
-    procedure Sort(reverse: boolean = false; key: TVariantCompare = nil);
+    procedure Sort(reverse: boolean = false; compare: TVariantCompare = nil);
+    /// sorts the IDocDict objects in the list by a given key name
+    procedure SortByKeyValue(const key: RawUtf8; reverse: boolean = false;
+      valuecompare: TVariantCompare = nil); overload;
+    /// sorts the IDocDict objects in the list by several key names
+    procedure SortByKeyValue(const keys: array of RawUtf8;
+      reverse: boolean = false; valuecompare: TVariantCompare = nil); overload;
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(position: integer): PVariant;
     /// access one element in the list, as variant
@@ -3082,26 +3088,34 @@ type
     /// access one element in the list, as UTF-8 text
     property U[position: integer]: RawUtf8
       read GetU write SetU;
-    /// access one element in the list, as RTL string text
+    /// access one element in the list, as RTL String text
     property S[position: integer]: string
       read GetS write SetS;
-    /// access one element in the list, as integer
+    /// access one element in the list, as Integer
     property I[position: integer]: Int64
       read GetI write SetI;
-    /// access one element in the list, as floating-point double
+    /// access one element in the list, as floating-point Double
     property F[position: integer]: double
       read GetF write SetF;
-    /// access one element in the list, as fixed precision currency
+    /// access one element in the list, as fixed precision Currency
     property C[position: integer]: currency
       read GetC write SetC;
     /// access one element in the list, as boolean
     property B[position: integer]: boolean
       read GetB write SetB;
-    /// access one element in the list, as IDocList
+    /// access one element in the list, as IDocList (List)
     property L[position: integer]: IDocList
       read GetL write SetL;
-    /// access one element in the list, as IDocDict
+    /// access one element in the list, as IDocDict (Dictionary)
     property D[position: integer]: IDocDict
+      read GetD write SetD;
+    /// access one element in the list, as IDocList (Array)
+    // - property alias, for compatibility with existing code
+    property A[position: integer]: IDocList
+      read GetL write SetL;
+    /// access one element in the list, as IDocDict (Object)
+    // - property alias, for compatibility with existing code
+    property O[position: integer]: IDocDict
       read GetD write SetD;
   end;
 
@@ -7109,7 +7123,7 @@ var
   qs: TQuickSortDocVariant;
 begin
   if (not IsObject) or
-     (VCount <= 0) then
+     (VCount <= 1) then
     exit;
   if Assigned(SortCompare) then
     qs.nameCompare := SortCompare
@@ -7129,7 +7143,7 @@ procedure TDocVariantData.SortByValue(SortCompare: TVariantCompare;
 var
   qs: TQuickSortDocVariant;
 begin
-  if VCount <= 0 then
+  if VCount <= 1 then
     exit;
   if Assigned(SortCompare) then
     qs.valueCompare := SortCompare
@@ -7150,7 +7164,7 @@ procedure TDocVariantData.SortByRow(const SortComparer: TVariantComparer;
 var
   qs: TQuickSortDocVariant;
 begin
-  if (VCount <= 0) or
+  if (VCount <= 1) or
      (not Assigned(SortComparer)) then
     exit;
   qs.valueCompare := nil;
@@ -7174,7 +7188,7 @@ type
   TQuickSortDocVariantValuesByField = object
   {$endif USERECORDWITHMETHODS}
   public
-    Lookup: array of TQuickSortByFieldLookup;
+    Lookup: array of TQuickSortByFieldLookup; // per-name values
     Compare: TVariantCompare;
     CompareField: TVariantCompareField;
     Fields: PRawUtf8Array;
@@ -9749,7 +9763,11 @@ type
     function Remove(const value: variant): integer; overload;
     function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
     procedure Reverse;
-    procedure Sort(reverse: boolean; key: TVariantCompare);
+    procedure Sort(reverse: boolean; compare: TVariantCompare);
+    procedure SortByKeyValue(const key: RawUtf8; reverse: boolean;
+      compare: TVariantCompare); overload;
+    procedure SortByKeyValue(const keys: array of RawUtf8; reverse: boolean;
+      compare: TVariantCompare); overload;
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
     function GetV(position: integer): TDocValue;
@@ -10553,9 +10571,21 @@ begin
   fValue^.Reverse;
 end;
 
-procedure TDocList.Sort(reverse: boolean; key: TVariantCompare);
+procedure TDocList.Sort(reverse: boolean; compare: TVariantCompare);
 begin
-  fValue^.SortByValue(key, reverse);
+  fValue^.SortByValue(compare, reverse);
+end;
+
+procedure TDocList.SortByKeyValue(const key: RawUtf8; reverse: boolean;
+  compare: TVariantCompare);
+begin
+  fValue^.SortArrayByField(key, compare, reverse);
+end;
+
+procedure TDocList.SortByKeyValue(const keys: array of RawUtf8;
+  reverse: boolean; compare: TVariantCompare);
+begin
+  fValue^.SortArrayByFields(keys, compare, nil, reverse);
 end;
 
 {$ifdef HASIMPLICITOPERATOR}
