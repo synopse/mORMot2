@@ -3108,8 +3108,153 @@ type
   /// a Dictionary, used to store key:value pairs
   // - implemented via an internal TDocVariantData dvObject
   // - follows most Python Dictionaries naming and conventions
+  // - keys are by default searched on the ground object, but you can set
+  // PathDelim e.g. to '.' to enable sub-object location (and insertion)
   IDocDict = interface(IDocAny)
     ['{E4176BFF-AFDC-4A63-8DBD-D4F495D56B1A}']
+    // methods used as getter/setter for properties
+    function GetB(const key: RawUtf8): boolean;
+    function GetC(const key: RawUtf8): currency;
+    function GetD(const key: RawUtf8): IDocDict;
+    function GetF(const key: RawUtf8): double;
+    function GetI(const key: RawUtf8): Int64;
+    function GetItem(const key: RawUtf8): variant;
+    function GetL(const key: RawUtf8): IDocList;
+    function GetS(const key: RawUtf8): string;
+    function GetU(const key: RawUtf8): RawUtf8;
+    {$ifdef HASIMPLICITOPERATOR}
+    function GetV(const key: RawUtf8): TDocValue;
+    {$endif HASIMPLICITOPERATOR}
+    procedure SetB(const key: RawUtf8; const value: boolean);
+    procedure SetC(const key: RawUtf8; const value: currency);
+    procedure SetD(const key: RawUtf8; const value: IDocDict);
+    procedure SetF(const key: RawUtf8; const value: double);
+    procedure SetI(const key: RawUtf8; const value: Int64);
+    procedure SetItem(const key: RawUtf8; const value: variant);
+    procedure SetL(const key: RawUtf8; const value: IDocList);
+    procedure SetS(const key: RawUtf8; const value: string);
+    procedure SetU(const key: RawUtf8; const value: RawUtf8);
+    function GetPathDelim: AnsiChar;
+    procedure SetPathDelim(value: AnsiChar);
+    /// returns a copy of the specified dictionary
+    function Copy: IDocDict;
+    /// removes the element at the specified key, not returning it
+    function Del(const key: RawUtf8): boolean;
+    /// check if the specified key exists in the dictionary
+    function Exists(const key: RawUtf8): boolean;
+    /// access one element in the dictionary, as variant
+    // - if the key does not exist, returns varEmpty and raise no exception
+    function Get(const key: RawUtf8): variant; overload;
+    /// access one element in the dictionary, as variant
+    // - if the key does not exist, returns the supplied default value
+    function GetDef(const key: RawUtf8; const default: variant): variant; overload;
+    /// access one element in the dictionary, as variant
+    // - if the key does not exist, returns the supplied default value
+    function GetDef(const key: RawUtf8; const default: RawUtf8): variant; overload;
+    /// access one element in the dictionary, as variant
+    // - if the key does not exist, returns false
+    function Get(const key: RawUtf8; var value: variant): boolean; overload;
+    /// access one element in the dictionary, as UTF-8 text
+    // - if the key does not exist, returns false
+    function Get(const key: RawUtf8; var value: RawUtf8): boolean; overload;
+    /// access one element in the dictionary, as RTL string text
+    // - if the key does not exist, returns false
+    function Get(const key: RawUtf8; var value: string): boolean; overload;
+    /// access one element in the dictionary, as integer
+    // - if the key does not exist or is not an integer, returns false
+    function Get(const key: RawUtf8; var value: Int64): boolean; overload;
+    /// access one element in the dictionary, as floating-point double
+    // - if the key does not exist or can not be converted, returns false
+    function Get(const key: RawUtf8; var value: double): boolean; overload;
+    /// access one element in the dictionary, fixed precision currency
+    // - if the key does not exist or can not be converted, returns false
+    function Get(const key: RawUtf8; var value: currency): boolean; overload;
+    /// access one element in the dictionary, as by-reference IDocList
+    // - if the key does not exist or is not a IDocList, returns false
+    function Get(const key: RawUtf8; var value: IDocList): boolean; overload;
+    /// access one element in the dictionary, as a by-reference IDocDict
+    // - if the key does not exist or is not a IDocDict, returns false
+    function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
+    /// removes the specified element from the dictionary
+    // - if the key does not exist, raise a EDocDict exception
+    function Pop(const key: RawUtf8): variant; overload;
+    /// removes the specified element from the dictionary
+    // - if the key does not exist, returns the supplied default value
+    function Pop(const key: RawUtf8; const default: variant): variant; overload;
+    /// removes the last inserted key-value pair into the dictionary
+    // - returns false if the dictionary is empty
+    function PopItem(out key: RawUtf8; out value: variant): boolean;
+    /// returns the value of the specified key, or insert null for this key
+    function SetDefault(const key: RawUtf8): variant; overload;
+    /// returns the value of the specified key, or insert the specified value
+    function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
+    /// sorts the dictionary content by their key names
+    // - follow dvoNameCaseSensitive option by default, or supplied keycompare
+    // - once sorted, key lookup will use O(log(n)) - faster than default O(n)
+    procedure Sort(reverse: boolean = false; keycompare: TUtf8Compare = nil);
+    /// updates (or inserts) the specified key/value pair
+    procedure Update(const key: RawUtf8; const value: variant); overload;
+    /// updates (or inserts) the specified key/value pairs
+    procedure Update(const keyvalues: array of const); overload;
+    /// low-level direct access to a stored element in TDocVariantData.Value[]
+    function ValueAt(const key: RawUtf8): PVariant;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// default iterator over all key/value pairs of this IDocDict
+    function GetEnumerator: TDocDictEnumerator;
+    /// allow to iterate over all keys of this IDocDict
+    function Keys: TDocKeyEnumerator;
+    /// allow to iterate over all values of this IDocDict
+    function Values: TDocValueEnumerator;
+    {$endif HASIMPLICITOPERATOR}
+    /// enable nested objects location in keys fot Get() and Item[]
+    // - equals #0 by default, meaning only root object keys are located, e.g.
+    // dict.D['child2']
+    // - if PathDelim is e.g. set to '.', then dict.U['child2.name'] matches
+    // dict.D['child2'].U['name']
+    // - note that if the sub object does not exist, setting a value will force
+    // its creation (and all needed hierarchy)
+    property PathDelim: AnsiChar
+      read GetPathDelim write SetPathDelim;
+    /// access one element in the dictionary from its key, as variant
+    // - this is the default property of this instance so dict[name] gives
+    // direct access to each value in the IDocDict
+    // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
+    // - see Get() overloaded methods to silently check for a key existence
+    // - PathDelim can be set to locate (and create) the key by its full path
+    // - U[] S[] I[] F[] C[] B[] L[] D[] are faster and safer if you expect
+    // to retrieve a specific value type
+    property Item[const key: RawUtf8]: variant
+      read GetItem write SetItem; default;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// read access of one element in the dictionary from its key, as TDocValue
+    // - may be slightly more convenient than the plain variant returned by Item[]
+    property V[const key: RawUtf8]: TDocValue
+      read GetV;
+    {$endif HASIMPLICITOPERATOR}
+    /// access one element in the dictionary from its key, as UTF-8 text
+    property U[const key: RawUtf8]: RawUtf8
+      read GetU write SetU;
+    /// access one element in the dictionary from its key, as RTL string text
+    property S[const key: RawUtf8]: string
+      read GetS write SetS;
+    /// access one element in the dictionary from its key, as integer
+    property I[const key: RawUtf8]: Int64
+      read GetI write SetI;
+    /// access one element in the dictionary from its key, as floating-point double
+    property F[const key: RawUtf8]: double
+      read GetF write SetF;
+    /// access one element in the dictionary from its key, as fixed precision currency
+    property C[const key: RawUtf8]: currency
+      read GetC write SetC;
+    /// access one element in the dictionary from its key, as boolean
+    property B[const key: RawUtf8]: boolean
+      read GetB write SetB;
+    /// access one element in the dictionary from its key, as IDocList
+    property L[const key: RawUtf8]: IDocList
+      read GetL write SetL;
+    /// access one element in the dictionary from its key, as IDocDict
+    property D[const key: RawUtf8]: IDocDict
+      read GetD write SetD;
   end;
 
 /// create a self-owned void IDocList
@@ -3139,25 +3284,40 @@ function DocListCopy(const dv: TDocVariantData;
 
 
 /// create a self-owned void IDocDict
-function DocDict: IDocDict; overload;
+function DocDict(model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
 /// create a self-owned IDocDict from a JSON object
 function DocDict(const json: RawUtf8;
   model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
-/// create a self-owned IDocDict from a set of name,value pairs
-function DocDict(const namevalues: array of const;
-  model: TDocVariantModel = mFastFloat): IDocList; overload;
+/// create an array of self-owned IDocDict from a JSON array of JSON objects
+// - set jsonfromresults=true if input is TOrmTableJson ORM/DB dual JSON formats
+// - any element of the JSON array which is not a JSON object will be ignored
+function DocDictDynArray(const json: RawUtf8;
+  model: TDocVariantModel = mFastFloat;
+  jsonfromresults: boolean = false): IDocDictDynArray;
 
-/// create a IDocDict as weak reference to a TDocVariantData
+/// create a self-owned IDocDict from a set of key,value pairs
+function DocDict(const keyvalues: array of const;
+  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+
+/// create a self-owned IDocDict from a set of keys - values will be Null
+function DocDictFromKeys(const keys: array of RawUtf8;
+  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+
+/// create a self-owned IDocDict from a set of keys and a gien value
+function DocDictFromKeys(const keys: array of RawUtf8; const value: variant;
+  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+
+/// create a IDocDict as weak reference to a TDocVariant dvObject
+function DocDictFrom(const v: variant): IDocDict;
+
+/// create a IDocDict as weak reference to a TDocVariantData dvObject
 function DocDict(const dv: TDocVariantData): IDocDict; overload;
 
-/// create a self-owned IDocDict as full copy of a TDocVariantData
+/// create a self-owned IDocDict as full copy of a TDocVariantData dvObject
 function DocDictCopy(const dv: TDocVariantData;
   model: TDocVariantModel = mFastFloat): IDocDict;
-
-/// create a IDocDict as weak reference to a variant holding a TDocVariantData
-function DocDictFromVariant(const v: variant): IDocDict;
 
 
 implementation
@@ -9892,9 +10052,10 @@ end;
 
 { IDocDict factories functions }
 
-function DocDict: IDocDict;
+function DocDict(model: TDocVariantModel): IDocDict;
 begin
   result := TDocDict.CreateOwned;
+  result.Value^.Init(model, dvObject);
 end;
 
 function DocDict(const json: RawUtf8; model: TDocVariantModel): IDocDict;
@@ -9908,10 +10069,61 @@ begin
     result := nil;
 end;
 
+function DocDictDynArray(const json: RawUtf8;
+  model: TDocVariantModel; jsonfromresults: boolean): IDocDictDynArray;
+var
+  main: TDocVariantData;
+  n, i: PtrInt;
+  p: PVariant;
+  dv: PDocVariantData;
+  v: TDocDict;
+begin
+  result := nil;
+  if jsonfromresults then
+  begin
+    if not main.InitArrayFromResults(json, model) then
+      exit;
+  end
+  else if not main.InitJson(json, model) or
+          not main.IsArray then
+    exit;
+  n := main.Count;
+  if n = 0 then
+    exit;
+  p := pointer(main.VValue);
+  i := 0;
+  repeat
+    if _SafeObject(p^, dv) then
+    begin
+      if result = nil then
+        SetLength(result, n); // allocate only when needed
+      v := TDocDict.CreateOwned;
+      v.fValueOwned := PVarData(dv)^; // raw copy with no refcount
+      PRttiVarData(dv)^.VType := varEmpty; // not in main any more
+      result[i] := v;
+      inc(i);
+    end;
+    inc(p);
+    dec(n);
+  until n = 0;
+  if i <> 0 then
+    DynArrayFakeLength(result, i); // no realloc
+end;
+
+function DocDictFrom(const v: variant): IDocDict;
+var
+  dv: PDocVariantData;
+begin
+  if _SafeObject(variant(v), dv) then
+    result := TDocDict.CreateByRef(dv)
+  else
+    result := nil;
+end;
+
 function DocDict(const dv: TDocVariantData): IDocDict;
 begin
   if dv.IsObject then
-    result := TDocDict.CreateByRef(dv)
+    result := TDocDict.CreateByRef(@dv)
   else
     result := nil;
 end;
@@ -9924,20 +10136,30 @@ begin
     result := nil;
 end;
 
-function DocDict(const namevalues: array of const; model: TDocVariantModel): IDocList;
+function DocDict(const keyvalues: array of const; model: TDocVariantModel): IDocDict;
 begin
   result := TDocDict.CreateOwned;
   result.Value^.InitObject(keyvalues, model);
 end;
 
-function DocDictFromVariant(const v: variant): IDocDict;
+function DocDictFromKeys(const keys: array of RawUtf8;
+  model: TDocVariantModel): IDocDict;
+begin
+  result := DocDictFromKeys(keys, Null, model);
+end;
+
+function DocDictFromKeys(const keys: array of RawUtf8; const value: variant;
+  model: TDocVariantModel): IDocDict;
 var
+  i: PtrInt;
   dv: PDocVariantData;
 begin
-  if _SafeObject(variant(v), dv) then
-    result := TDocDict.CreateByRef(dv^)
-  else
-    result := nil;
+  result := TDocDict.CreateOwned;
+  dv := result.Value;
+  dv^.Init(model, dvObject);
+  dv^.SetCapacity(length(keys));
+  for i := 0 to high(keys) do
+    dv^.AddOrUpdateValue(keys[i], value);
 end;
 
 
@@ -10381,13 +10603,425 @@ end;
 
 function TDocList.Objects: TDocObjectEnumerator;
 begin
-
+  fixme
 end;
 
 {$endif HASIMPLICITOPERATOR}
 
 
+{ EDocDict }
+
+class procedure EDocDict.GetRaise(method: AnsiChar; const key: RawUtf8; const v: variant);
+begin
+  raise CreateUtf8('%[%] on a var%', [method, key, VariantTypeName(v)^]);
+end;
+
 { TDocDict }
+
+function TDocDict.GetPathDelim: AnsiChar;
+begin
+  result := fPathDelim;
+end;
+
+procedure TDocDict.SetPathDelim(value: AnsiChar);
+begin
+  fPathDelim := value;
+end;
+
+function TDocDict.ValueAt(const key: RawUtf8): PVariant;
+begin
+  // raise EDocVariant exception if dvoReturnNullForUnknownProperty is not set
+  if fPathDelim = #0 then
+    result := pointer(fValue^.GetVarData(key, fSorted)) // faster
+  else
+    result := fValue^.GetPVariantExistingByPath(key, fPathDelim);
+end;
+
+function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
+begin
+  // return false if not found
+  if fPathDelim = #0 then
+    value := pointer(fValue^.GetVarData(key, fSorted)) // faster
+  else
+    value := fValue^.GetPVariantByPath(key, fPathDelim);
+  result := value <> nil;
+end;
+
+function TDocDict.SetValueAt(const key: RawUtf8; const value: variant): boolean;
+begin
+  if fPathDelim = #0 then
+    result := fValue^.AddOrUpdateValue(key, value) >= 0
+  else
+    result := fValue^.SetValueByPath(key, value, {create=}true, fPathDelim);
+  if result then
+    fSorted := nil;
+end;
+
+function TDocDict.PopAt(const key: RawUtf8; value: PVariant): boolean;
+var
+  ndx: PtrInt;
+begin
+  if fPathDelim = #0 then
+  begin
+    result := false;
+    ndx := fValue^.GetValueIndex(key);
+    if ndx < 0 then
+      exit; // not found
+    if value <> nil then
+      value^ := fValue^.VValue[ndx];
+    result := fValue^.Delete(ndx);
+  end
+  else
+    result := fValue.DeleteByPath(key, fPathDelim, value);
+end;
+
+function TDocDict.GetB(const key: RawUtf8): boolean;
+var
+  v: PVariant;
+begin
+  v := ValueAt(key);
+  if not VariantToBoolean(v^, result) then
+    EDocDict.GetRaise('B', key, v^);
+end;
+
+function TDocDict.GetC(const key: RawUtf8): currency;
+var
+  v: PVariant;
+begin
+  v := ValueAt(key);
+  if not VariantToCurrency(v^, result) then
+    EDocDict.GetRaise('C', key, v^);
+end;
+
+function TDocDict.GetD(const key: RawUtf8): IDocDict;
+begin
+  result := TDocDict.CreateByRef(_Safe(ValueAt(key)^, dvObject));
+end;
+
+function TDocDict.GetF(const key: RawUtf8): double;
+var
+  v: PVariant;
+begin
+  v := ValueAt(key);
+  if not VariantToDouble(v^, result) then
+    EDocDict.GetRaise('F', key, v^);
+end;
+
+function TDocDict.GetI(const key: RawUtf8): Int64;
+var
+  v: PVariant;
+begin
+  v := ValueAt(key);
+  if not VariantToInt64(v^, result) then
+    EDocDict.GetRaise('I', key, v^);
+end;
+
+function TDocDict.GetItem(const key: RawUtf8): variant;
+begin
+  result := ValueAt(key)^;
+end;
+
+function TDocDict.GetL(const key: RawUtf8): IDocList;
+begin
+  result := TDocList.CreateByRef(_Safe(ValueAt(key)^, dvArray));
+end;
+
+function TDocDict.GetS(const key: RawUtf8): string;
+begin
+  VariantToString(ValueAt(key)^, result);
+end;
+
+function TDocDict.GetU(const key: RawUtf8): RawUtf8;
+begin
+  VariantToUtf8(ValueAt(key)^, result);
+end;
+
+procedure TDocDict.SetB(const key: RawUtf8; const value: boolean);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.SetC(const key: RawUtf8; const value: currency);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.SetD(const key: RawUtf8; const value: IDocDict);
+var
+  v: PVariant;
+begin
+  if value = nil then
+    v := @DocVariantDataFake
+  else
+    v := pointer(value.Value);
+  SetValueAt(key, v^)
+end;
+
+procedure TDocDict.SetF(const key: RawUtf8; const value: double);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.SetI(const key: RawUtf8; const value: Int64);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.SetItem(const key: RawUtf8; const value: variant);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.SetL(const key: RawUtf8; const value: IDocList);
+var
+  v: PVariant;
+begin
+  if value = nil then
+    v := @DocVariantDataFake
+  else
+    v := pointer(value.Value);
+  SetValueAt(key, v^)
+end;
+
+procedure TDocDict.SetS(const key: RawUtf8; const value: string);
+var
+  v: variant;
+begin
+  StringToVariant(value, v);
+  SetValueAt(key, v);
+end;
+
+procedure TDocDict.SetU(const key: RawUtf8; const value: RawUtf8);
+var
+  v: variant;
+begin
+  RawUtf8ToVariant(value, v);
+  SetValueAt(key, v);
+end;
+
+function TDocDict.Get(const key: RawUtf8): variant;
+var
+  v: PVariant;
+begin
+  if GetValueAt(key, v) then
+    result := v^
+  else
+    VarClear(result);
+end;
+
+function TDocDict.GetDef(const key: RawUtf8; const default: variant): variant;
+var
+  v: PVariant;
+begin
+  if GetValueAt(key, v) then
+    result := v^
+  else
+    result := default;
+end;
+
+function TDocDict.GetDef(const key: RawUtf8; const default: RawUtf8): variant;
+var
+  v: PVariant;
+begin
+  if GetValueAt(key, v) then
+    result := v^
+  else
+    RawUtf8ToVariant(default, result);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: variant): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v);
+  if result then
+    value := v^;
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: RawUtf8): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v);
+  if result then
+    VariantToUtf8(v^, value, {wasstring=}result);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: string): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v);
+  if result then
+    VariantToString(v^, value);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: Int64): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            VariantToInt64(v^, value);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: double): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            VariantToDouble(v^, value);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: currency): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            VariantToCurrency(v^, value);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: IDocList): boolean;
+var
+  v: PVariant;
+  dv: PDocVariantData;
+begin
+  result := GetValueAt(key, v) and
+            _SafeArray(v^, dv);
+  if result then
+    value := TDocList.CreateByRef(dv);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: IDocDict): boolean;
+var
+  v: PVariant;
+  dv: PDocVariantData;
+begin
+  result := GetValueAt(key, v) and
+            _SafeObject(v^, dv);
+  if result then
+    value := TDocDict.CreateByRef(dv);
+end;
+
+function TDocDict.Copy: IDocDict;
+var
+  v: TDocDict;
+begin
+  v := TDocDict.CreateCopy(fValue^, Model);
+  v.fPathDelim := fPathDelim;
+  v.fSorted := fSorted;
+  result := v;
+end;
+
+function TDocDict.Del(const key: RawUtf8): boolean;
+begin
+  result := PopAt(key, nil);
+end;
+
+function TDocDict.Exists(const key: RawUtf8): boolean;
+begin
+  result := ValueAt(key) <> nil;
+end;
+
+function TDocDict.Pop(const key: RawUtf8): variant;
+begin
+  if not PopAt(key, @result) then
+    raise EDocDict.CreateUtf8('Pop with unknown key [%]', [key]);
+end;
+
+function TDocDict.Pop(const key: RawUtf8; const default: variant): variant;
+begin
+  if not PopAt(key, @result) then
+    result := default;
+end;
+
+function TDocDict.PopItem(out key: RawUtf8; out value: variant): boolean;
+var
+  ndx: PtrInt;
+begin
+  result := false;
+  ndx := fValue^.Count - 1;
+  if ndx < 0 then
+    exit;
+  key := fValue^.VName[ndx];
+  value := fValue^.VValue[ndx];
+  result := fValue^.Delete(ndx);
+end;
+
+function TDocDict.SetDefault(const key: RawUtf8): variant;
+begin
+  result := SetDefault(key, Null);
+end;
+
+function TDocDict.SetDefault(const key: RawUtf8; const default: variant): variant;
+begin
+  if Get(key, result) then
+    exit;
+  SetValueAt(key, default);
+  result := default;
+end;
+
+procedure TDocDict.Sort(reverse: boolean; keycompare: TUtf8Compare);
+begin
+  if not Assigned(keycompare) then
+    keycompare := StrCompByCase[fValue^.IsCaseSensitive];
+  fValue^.SortByName(keycompare, reverse);
+  if reverse then
+    fSorted := nil
+  else
+    fSorted := keycompare;
+end;
+
+procedure TDocDict.Update(const key: RawUtf8; const value: variant);
+begin
+  SetValueAt(key, value);
+end;
+
+procedure TDocDict.Update(const keyvalues: array of const);
+begin
+  fValue^.Update(keyvalues);
+end;
+
+{$ifdef HASIMPLICITOPERATOR}
+
+function TDocDict.GetV(const key: RawUtf8): TDocValue;
+begin
+  result.V := ValueAt(key);
+end;
+
+function TDocDict.GetEnumerator: TDocDictEnumerator;
+var
+  v: PVariant;
+begin
+  v := pointer(fValue^.VValue);
+  result.Curr.Value.V := v;
+  result.AfterValue.V := v;
+  if v = nil then
+    exit;
+  inc(result.AfterValue.V, fValue^.VCount);
+  result.Curr.Key.V := pointer(fValue^.VName);
+  dec(result.Curr.Value.V); // for the first MoveNext
+  dec(result.Curr.Key.V);
+end;
+
+function TDocDict.Keys: TDocKeyEnumerator;
+var
+  v: PRawUtf8;
+begin
+  v := pointer(fValue^.VName);
+  result.Curr.V := v;
+  result.After.V := v;
+  if v = nil then
+    exit;
+  inc(result.After.V, fValue^.VCount);
+  dec(result.Curr.V); // for the first MoveNext
+end;
+
+function TDocDict.Values: TDocValueEnumerator;
+begin
+  SetValueEnumerator(fValue, result{%H-}); // shared with IDocList
+end;
+
+{$endif HASIMPLICITOPERATOR}
 
 
 var
