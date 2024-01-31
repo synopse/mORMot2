@@ -5632,7 +5632,7 @@ begin
     r := r.ArrayRtti;
   result := (r <> nil) and
             (r.Parser = ptRawUtf8) and
-            (r.Cache.CodePage = CP_UTF8);
+            (r.Cache.CodePage = CP_UTF8); // properly detected on Delphi 7/2007
 end;
 
 procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
@@ -5644,27 +5644,25 @@ var
   fin: PRttiFinalizers;
 begin
   info.RecordManagedFields(fields); // retrieve RTTI once for n items
-  if fields.Count > 0 then
-  begin
-    fin := @RTTI_FINALIZE;
+  if fields.Count = 0 then
+    exit;
+  fin := @RTTI_FINALIZE;
+  repeat
+    f := fields.Fields;
+    i := fields.Count;
     repeat
-      f := fields.Fields;
-      i := fields.Count;
-      repeat
-        p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
-        {$ifdef FPC_OLDRTTI}
-        if Assigned(fin[p^.Kind]) then
-        {$endif FPC_OLDRTTI}
-          fin[p^.Kind](v + f^.Offset, p);
-        inc(f);
-        dec(i);
-      until i = 0;
-      inc(v, fields.Size);
-      dec(n);
-    until n = 0;
-  end;
+      p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+      {$ifdef FPC_OLDRTTI}
+      if Assigned(fin[p^.Kind]) then
+      {$endif FPC_OLDRTTI}
+        fin[p^.Kind](v + f^.Offset, p);
+      inc(f);
+      dec(i);
+    until i = 0;
+    inc(v, fields.Size);
+    dec(n);
+  until n = 0;
 end;
-
 
 procedure StringClearSeveral(v: PPointer; n: PtrInt);
 var
@@ -5726,22 +5724,20 @@ procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
 var
   p: PDynArrayRec;
 begin
-  if Value <> nil then
+  if Value = nil then
+    exit;
+  p := Value^;
+  if p = nil then
+    exit;
+  dec(p);
+  if (p^.refCnt >= 0) and
+     DACntDecFree(p^.refCnt) then
   begin
-    p := Value^;
-    if p <> nil then
-    begin
-      dec(p);
-      if (p^.refCnt >= 0) and
-         DACntDecFree(p^.refCnt) then
-      begin
-        if ElemInfo <> nil then
-          FastFinalizeArray(Value^, ElemInfo, p^.length);
-        Freemem(p);
-      end;
-      Value^ := nil;
-    end;
+    if ElemInfo <> nil then
+      FastFinalizeArray(Value^, ElemInfo, p^.length);
+    Freemem(p);
   end;
+  Value^ := nil;
 end;
 
 function FastRecordClear(Value: pointer; Info: PRttiInfo): PtrInt;
