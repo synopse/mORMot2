@@ -10602,8 +10602,16 @@ begin
 end;
 
 function TDocList.Objects: TDocObjectEnumerator;
+var
+  v: PVariant;
 begin
-  fixme
+  v := pointer(fValue^.VValue);
+  result.Curr := v;
+  result.After := v;
+  if v = nil then
+    exit;
+  inc(result.After, fValue^.VCount);
+  dec(result.Curr); // for the first MoveNext
 end;
 
 {$endif HASIMPLICITOPERATOR}
