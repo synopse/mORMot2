@@ -131,7 +131,7 @@ type
     /// variant-based JSON/BSON document process
     procedure _TDocVariant;
     /// IDocList / IDocDict wrappers
-    procedure _IDocList;
+    procedure _IDocAny;
     /// low-level TDecimal128 decimal value process (as used in BSON)
     procedure _TDecimal128;
     /// BSON process (using TDocVariant)
@@ -3918,15 +3918,16 @@ begin
   CheckEqual(HtmlEscapeMarkdown(':test: (:)'), '<p>:test: (:)</p>');
 end;
 
-procedure TTestCoreProcess._IDocList;
+procedure TTestCoreProcess._IDocAny;
 var
-  l: IDocList;
-  i: integer;
+  l, l2, l3: IDocList;
+  i, n: integer;
+  d: IDocDict;
+  darr: IDocDictDynArray;
   {$ifdef HASIMPLICITOPERATOR}
-  l2: IDocList;
   v: TDocValue;
   one: variant;
-  n, num: integer;
+  num: integer;
   s: string;
   u: RawUtf8;
   {$endif HASIMPLICITOPERATOR}
@@ -3935,9 +3936,12 @@ begin
   l := DocList('[1,2, 3,"4",5,"6"]');
   Check(l <> nil);
   CheckEqual(l.Len, 6);
-  Check(l.I[0] = 1);
-  Check(l.I[1] = 2);
-  Check(l.I[2] = 3);
+  Check(l[0] = 1);
+  Check(l[1] = 2);
+  Check(l[2] = 3);
+  Check(l[3] = '4');
+  Check(l[4] = 5);
+  Check(l[5] = '6');
   CheckEqual(l.I[0], 1);
   CheckEqual(l.I[1], 2);
   CheckEqual(l.I[2], 3);
@@ -3948,6 +3952,14 @@ begin
   CheckEqual(l.U[3], '4');
   CheckEqual(l.U[4], '5');
   CheckEqual(l.U[5], '6');
+  {$ifdef HASIMPLICITOPERATOR}
+  CheckEqual(l.V[0], 1);
+  CheckEqual(l.V[1], 2);
+  CheckEqual(l.V[2], 3);
+  CheckEqual(l.V[3], '4');
+  CheckEqual(l.V[4], 5);
+  CheckEqual(l.V[5], '6');
+  {$endif HASIMPLICITOPERATOR}
   CheckEqual(l.ToJson, '[1,2,3,"4",5,"6"]');
   Check(l.Exists(1));
   Check(l.Exists('6'));
@@ -3990,6 +4002,7 @@ begin
   CheckEqual(l2.Len, l.len);
   CheckEqual(l2.ToJson, l.ToJson);
   l2.Clear;
+  CheckEqual(l2.ToJson, '[]');
   n := 0;
   for v in l2 do
     inc(n);
@@ -4029,7 +4042,135 @@ begin
       CheckEqual(num, n, 'integer iterator');
   end;
   CheckEqual(n, l.len);
+  n := 0;
+  for l2 in l do
+  begin
+    Check(l2 = nil, 'IDocList iterator');
+    inc(n);
+  end;
+  CheckEqual(n, l.len);
+  l2 := DocList('[{a:1},{a:2},"oups",{a:3}]');
+  CheckEqual(l2.len, 4);
+  n := 0;
+  for d in l2.Objects do
+  begin
+    Check(d <> nil, 'l2.Objects');
+    Check(d.Kind = dvObject);
+    Check(d.Exists('a'), 'l2.a');
+    if n <= 1 then
+      CheckEqual(d.Compare(l2.D[n]), 0, 'compare');
+    inc(n);
+    CheckEqual(d['a'], n, 'd.a=n');
+    CheckEqual(d.I['a'], n, 'di.a=n');
+    Check(not d.Exists('b'), 'di.b');
+    d['b'] := n * 2;
+    Check(d.Exists('b'), 'di.b!');
+    CheckEqual(d.I['b'], n * 2, 'dib');
+  end;
+  CheckEqual(n, 3);
+  CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
+    '[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
+  d := l2.V[0];
+  {$else}
+  l2 := DocList('[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
+  d := l2.D[0];
   {$endif HASIMPLICITOPERATOR}
+  d.I['b'] := 7;
+  d.Del('a');
+  l2.Del(2);
+  CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
+    '[{b:7},{a:2,b:4},{a:3,b:6}]');
+  l2.SortByKeyValue('b');
+  CheckEqual(l2.ToJson, '[{"a":2,"b":4},{"a":3,"b":6},{"b":7}]');
+  l2 := DocList('[{b:1},{b:2},{b:3}]');
+  CheckEqual(l2.len, 3);
+  darr := l2.ObjectsDictDynArray;
+  CheckEqual(length(darr), 3, 'darr');
+  n := 0;
+  for i := 0 to high(darr) do
+  begin
+    d := darr[i];
+    Check(d <> nil, 'l2.darr');
+    Check(d.Kind = dvObject);
+    Check(d.Exists('b'), 'darr.b');
+    CheckEqual(n, i);
+    inc(n);
+    CheckEqual(integer(d['b']), n, 'darr.b=n');
+    CheckEqual(d.I['b'], n, 'darri.b=n');
+  end;
+  CheckEqual(n, 3);
+  l2.SortByKeyValue('b');
+  CheckEqual(l2.ToJson, '[{"b":1},{"b":2},{"b":3}]');
+  l2.SortByKeyValue('b', {reverse=}true);
+  CheckEqual(l2.ToJson, '[{"b":3},{"b":2},{"b":1}]');
+  CheckEqual(l2.Compare(l3), 1, 'l2l3compa');
+  l3 := l2.Copy;
+  CheckEqual(l3.len, 3);
+  CheckEqual(l3.ToJson, '[{"b":3},{"b":2},{"b":1}]');
+  CheckEqual(l2.Compare(l3), 0, 'l2l3compb');
+  l2.SortByKeyValue(['b']);
+  CheckEqual(l2.ToJson, '[{"b":1},{"b":2},{"b":3}]');
+  CheckEqual(l3.len, 3);
+  CheckEqual(l3.ToJson, '[{"b":3},{"b":2},{"b":1}]', 'l2.copy');
+  CheckEqual(l2.Compare(l3), -1, 'l2l3compc');
+  l2.O[0]['abc'] := 4;
+  CheckEqual(l2.ToJson, '[{"b":1,"abc":4},{"b":2},{"b":3}]');
+  l2.Clear;
+  CheckEqual(l2.len, 0);
+  darr := DocDictDynArray('[{a:0},{a:1},{a:2}]');
+  CheckEqual(length(darr), 3, 'darr');
+  l2 := DocListFrom(darr);
+  CheckEqual(l2.ToJson, '[{"a":0},{"a":1},{"a":2}]');
+  for i := 0 to high(darr) do
+  begin
+    d := darr[i];
+    Check(d <> nil, 'darr0');
+    Check(d.Kind = dvObject);
+    Check(d.Exists('a'), 'darr1');
+    Check(d['a'] = i, 'darr2');
+    CheckEqual(d.I['a'], i, 'darr3');
+    Check(not d.Exists('b'), 'darr4');
+    Check(VarIsEmptyOrNull(d['b']), 'darr5');
+    CheckEqual(d.I['b'], 0, 'darr6');
+    d.Sort;
+    Check(d.Exists('a'), 'darr7');
+    Check(not d.Exists('b'), 'darr8');
+    d['b'] := i + 20;
+    Check(d.Exists('b'), 'darr9');
+    CheckEqual(d.I['b'], i + 20, 'darr10');
+  end;
+  l2 := DocListFrom(darr);
+  CheckEqual(l2.ToJson, '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]');
+  d := l2.D[1];
+  d.PathDelim := '.';
+  d.U['c'] := 'C';
+  CheckEqual(d.ToJson, '{"a":1,"b":21,"c":"C"}');
+  d.U['d.e.f'] := 'FF';
+  CheckEqual(d.ToJson, '{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}');
+  CheckHash(l2.ToJson, $78EDCAEE, 'l2def');
+  CheckEqual(d.Len, 4);
+  d.Clear;
+  CheckEqual(d.Len, 0);
+  CheckEqual(d.ToJson, '{}');
+  CheckEqual(l2.ToJson, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd by ref');
+  d := l2.D[1].Copy;
+  d.Update('c', 1);
+  CheckEqual(d.ToJson, '{"c":1}');
+  d.Update(['d', 'D', 'b', 7]);
+  CheckEqual(d.ToJson, '{"c":1,"d":"D","b":7}');
+  d.B['d'] := true;
+  CheckEqual(d.ToJson, '{"c":1,"d":true,"b":7}');
+  d['c'] := 12;
+  CheckEqual(d.ToJson, '{"c":12,"d":true,"b":7}');
+  CheckEqual(l2.ToJson, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd copy');
+  l3 := l2.Reduce(['a', 'b']);
+  CheckEqual(l3.ToJson, '[{"a":0,"b":20},{"a":2,"b":22}]');
+  l3 := l2.Reduce(['b']);
+  CheckEqual(l3.ToJson, '[{"b":20},{"b":22}]');
+  CheckEqual(l2.ToJson, '[{"a":0,"b":20},{},{"a":2,"b":22}]');
+  CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['b']).ToJson, '{"b":1}');
+  CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['c', 'b']).ToJson, '{"c":4,"b":1}');
+  CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['d', 'a']).ToJson, '{"a":3}');
   l.Sort({reverse}true);
   CheckEqual(l.ToJson, '["6",5,"4",3,2,1]');
   l.Clear;
