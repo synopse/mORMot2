@@ -968,6 +968,7 @@ type
     function InternalNotFound(aIndex: integer): PDocVariantData; overload;
     function RangeVoid(var Offset, Limit: integer): boolean;
     procedure ClearFast;
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -1269,6 +1270,8 @@ type
     // - like Clear + Init() with the same options
     // - will reset Kind to dvUndefined
     procedure Reset;
+    /// keep the current Options and Kind, but reset all data and VCount to 0
+    procedure Void;
     /// fill all Values[] with #0, then delete all values
     // - could be used to specifically remove sensitive information from memory
     procedure FillZero;
@@ -1288,7 +1291,7 @@ type
     /// low-level method to force a number of items
     // - could be used to fast add items to the internal Values[]/Names[] arrays
     // - just set protected VCount field, do not resize the arrays: caller
-    // should ensure that Capacity is big enough
+    // should ensure that Capacity is big enough and to call Void if aCount=0
     procedure SetCount(aCount: integer);
       {$ifdef HASINLINE}inline;{$endif}
     /// efficient comparison of two TDocVariantData content
@@ -3214,6 +3217,12 @@ begin
   VarClear(value);
 end;
 
+procedure TDocVariantData.ClearFast; // defined here for proper inlining
+begin
+  TRttiVarData(self).VType := 0; // clear VType and VOptions
+  Void;
+end;
+
 procedure _VariantClearSeveral(V: PVarData; n: integer);
 var
   vt, docv: cardinal;
@@ -4379,8 +4388,7 @@ begin
     0:
       if SameText(Name, 'Clear') then
       begin
-        Data^.VCount := 0;
-        Data^.VOptions := Data^.VOptions - [dvoIsObject, dvoIsArray];
+        Data^.Reset;
         result := true;
       end;
     1:
@@ -6119,11 +6127,12 @@ begin
   VariantDynArrayClear(SourceVValue);
 end;
 
-procedure TDocVariantData.ClearFast;
+procedure TDocVariantData.Void;
 begin
-  TRttiVarData(self).VType := 0; // clear VType and VOptions
-  FastDynArrayClear(@VName, TypeInfo(RawUtf8));
-  FastDynArrayClear(@VValue, TypeInfo(variant));
+  if VName <> nil then
+    FastDynArrayClear(@VName,  TypeInfo(RawUtf8));
+  if VValue <> nil then
+    FastDynArrayClear(@VValue, TypeInfo(variant));
   VCount := 0;
 end;
 
@@ -6136,15 +6145,9 @@ begin
 end;
 
 procedure TDocVariantData.Reset;
-var
-  backup: TDocVariantOptions;
 begin
-  if VCount = 0 then
-    exit;
-  backup := VOptions - [dvoIsArray, dvoIsObject];
-  ClearFast;
-  VOptions := backup;
-  VType := DocVariantVType;
+  VOptions := VOptions - [dvoIsArray, dvoIsObject];
+  Void;
 end;
 
 procedure TDocVariantData.FillZero;
@@ -7295,10 +7298,15 @@ function TDocVariantData.Delete(Index: PtrInt): boolean;
 var
   n: PtrInt;
 begin
-  result := false;
-  if cardinal(Index) >= cardinal(VCount) then
+  result := cardinal(Index) < cardinal(VCount);
+  if not result then
     exit;
   dec(VCount);
+  if VCount = 0 then
+  begin
+    Void; // reset all in-memory storage and capacity
+    exit;
+  end;
   if VName <> nil then
   begin
     EnsureUnique(VName);
@@ -7307,17 +7315,15 @@ begin
   EnsureUnique(VValue);
   VarClear(VValue[Index]);
   n := VCount - Index;
-  if n <> 0 then
+  if n = 0 then
+    exit;
+  if VName <> nil then
   begin
-    if VName <> nil then
-    begin
-      MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
-      pointer(VName[VCount]) := nil; // avoid GPF
-    end;
-    MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
-    TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
+    MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
+    pointer(VName[VCount]) := nil; // avoid GPF
   end;
-  result := true;
+  MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
+  TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
 end;
 
 function TDocVariantData.Extract(aIndex: integer; var aValue: variant;
@@ -7334,7 +7340,7 @@ begin
   EnsureUnique(VValue);
   v := @VValue[aIndex]; // extract instead of copy
   PVarData(@aValue)^ := PVarData(v)^;
-  PCardinal(v)^ := varEmpty; // no VarClear(v^)
+  PRttiVarData(v)^.VType := varEmpty; // no VarClear(v^)
   if aName <> nil then
     if VName = nil then
       FastAssignNew(aName^)
@@ -7721,9 +7727,8 @@ begin
   begin
     if Assigned(aSortedCompare) then
       if @aSortedCompare = @StrComp then
-        // use our branchless asm for StrComp()
-        ndx := FastFindPUtf8CharSorted(
-          pointer(VName), VCount - 1, pointer(aName))
+        // use dedicated (branchless x86_64 asm) function for StrComp()
+        ndx := FastFindPUtf8CharSorted(pointer(VName), VCount - 1, pointer(aName))
       else
         ndx := FastFindPUtf8CharSorted(
           pointer(VName), VCount - 1, pointer(aName), aSortedCompare)
@@ -8022,7 +8027,7 @@ begin
       begin
         ndx := v^.InternalAdd(@n[1], ord(n[0])); // in two steps for FPC
         v := @v^.VValue[ndx];
-        v^.InitClone(self); // same as root
+        v^.InitClone(self); // same Options than root but with no Kind
       end
       else
         exit
