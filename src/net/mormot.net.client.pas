@@ -1648,6 +1648,7 @@ procedure THttpClientSocket.RequestInternal(
 var
   P: PUtf8Char;
   pending: TCrtSocketPending;
+  bodystream: TStream;
   loerr: integer;
   dat: RawByteString;
   timer: TPrecisionTimer;
@@ -1740,18 +1741,19 @@ begin
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
           // specific TStreamRedirect expectations
-          if (ctxt.OutStream <> nil) and
-             ctxt.OutStream.InheritsFrom(TStreamRedirect) then
+          bodystream := ctxt.OutStream;
+          if (bodystream <> nil) and
+             bodystream.InheritsFrom(TStreamRedirect) then
             if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
             begin
               if Http.ContentLength > 0 then
-                TStreamRedirect(ctxt.OutStream).ExpectedSize :=
+                TStreamRedirect(bodystream).ExpectedSize :=
                   fRangeStart + Http.ContentLength // we know the size
             end
             else
-              ctxt.OutStream := nil; // don't append the server error message
+              bodystream := nil; // don't append any HTML server error message
           // retrieve whole response body
-          GetBody(ctxt.OutStream);
+          GetBody(bodystream);
         end;
         // successfully sent -> reset some fields for the next request
         if ctxt.Status in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
