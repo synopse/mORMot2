@@ -3295,7 +3295,10 @@ function DocList(const values: array of const;
   model: TDocVariantModel = mFastFloat): IDocList; overload;
 
 /// create a IDocList as weak reference to a TDocVariant dvArray
-function DocListFrom(const v: variant): IDocList;
+function DocListFrom(const v: variant): IDocList; overload;
+
+/// create a self-owned IDocList from a dynamic array of IDocDict values
+function DocListFrom(const dictarray: IDocDictDynArray): IDocList; overload;
 
 /// create a IDocList as weak reference to a TDocVariantData dvArray
 function DocList(const dv: TDocVariantData): IDocList; overload;
