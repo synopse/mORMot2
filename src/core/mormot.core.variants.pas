@@ -3056,6 +3056,9 @@ type
     // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
     function Range(start: integer = 0; stop: integer = 0): TDocValueEnumerator;
     {$endif HASIMPLICITOPERATOR}
+    /// extract a list of IDocDict elements which contains only specified keys
+    // - could be used to filter a list of objects into a smaller dataset
+    function Reduce(const keys: array of RawUtf8): IDocList;
     /// removes the first occurrence of the element with the specified value
     function Remove(const value: variant): integer; overload;
     /// removes the first occurrence of the element with the specified value
@@ -3206,6 +3209,9 @@ type
     /// removes the last inserted key-value pair into the dictionary
     // - returns false if the dictionary is empty
     function PopItem(out key: RawUtf8; out value: variant): boolean;
+    /// extract into a new IDocDict which contains only specified keys
+    // - could be used to filter unneeded fields in an object
+    function Reduce(const keys: array of RawUtf8): IDocDict;
     /// returns the value of the specified key, or insert null for this key
     function SetDefault(const key: RawUtf8): variant; overload;
     /// returns the value of the specified key, or insert the specified value
@@ -7410,13 +7416,15 @@ var
   ndx, j: PtrInt;
   reduced: TDocVariantData;
 begin
-  TVarData(result) := DV_FAST[dvUndefined];
+  result.Init(VOptions); // same options than the main document
   if (VCount = 0) or
      (high(aPropNames) < 0) then
     exit;
   if IsObject then
     for j := 0 to high(aPropNames) do
     begin
+      if aPropNames[j] = '' then
+        continue; // avoid GPF in FindNonVoid()
       ndx := FindNonVoid[aCaseSensitive](
         pointer(VName), pointer(aPropNames[j]), length(aPropNames[j]), VCount);
       if ndx >= 0 then
@@ -9767,6 +9775,7 @@ type
     function ObjectsDictDynArray: IDocDictDynArray;
     function Pop(position: integer): variant;
     function Del(position: integer): boolean;
+    function Reduce(const keys: array of RawUtf8): IDocList;
     function Remove(const value: variant): integer; overload;
     function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
     procedure Reverse;
@@ -9830,6 +9839,7 @@ type
     function Pop(const key: RawUtf8): variant; overload;
     function Pop(const key: RawUtf8; const default: variant): variant; overload;
     function PopItem(out key: RawUtf8; out value: variant): boolean;
+    function Reduce(const keys: array of RawUtf8): IDocDict;
     function SetDefault(const key: RawUtf8): variant; overload;
     function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
     procedure Sort(reverse: boolean; keycompare: TUtf8Compare);
@@ -10576,6 +10586,12 @@ begin
   result := fValue^.Delete(position);
 end;
 
+function TDocList.Reduce(const keys: array of RawUtf8): IDocList;
+begin
+  result := DocList(Model);
+  fValue^.Reduce(keys, fValue^.IsCaseSensitive, result.Value^);
+end;
+
 function TDocList.Remove(const value: variant): integer;
 begin
   result := fValue^.SearchItemByValue(value);
@@ -11017,6 +11033,12 @@ begin
   key := fValue^.VName[ndx];
   value := fValue^.VValue[ndx];
   result := fValue^.Delete(ndx);
+end;
+
+function TDocDict.Reduce(const keys: array of RawUtf8): IDocDict;
+begin
+  result := DocDict(Model);
+  fValue^.Reduce(keys, fValue^.IsCaseSensitive, result.Value^);
 end;
 
 function TDocDict.SetDefault(const key: RawUtf8): variant;
