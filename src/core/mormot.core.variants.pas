@@ -1645,8 +1645,13 @@ type
     // - if the supplied aPath does not match any object, it will return nil
     // - if aPath is found, returns a pointer to the corresponding value
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
-    function GetPVariantByPath(
-      const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): PVariant;
+    function GetPVariantByPath(const aPath: RawUtf8;
+      aPathDelim: AnsiChar = '.'): PVariant;
+    /// retrieve a reference to a value, given its path
+    // - if the supplied aPath does not match any object, it will follow
+    // dvoReturnNullForUnknownProperty option
+    function GetPVariantExistingByPath(const aPath: RawUtf8;
+      aPathDelim: AnsiChar = '.'): PVariant;
     /// retrieve a reference to a TDocVariant, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - if the supplied aPath does not match any object, it will return false
@@ -1829,7 +1834,8 @@ type
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - return TRUE on success, FALSE if the supplied name does not exist
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
-    function DeleteByPath(const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): boolean;
+    function DeleteByPath(const aPath: RawUtf8; aPathDelim: AnsiChar = '.';
+      aDeletedValue: PVariant = nil): boolean;
     /// delete a value in this document, by property name match
     // - {aPropName:aPropValue} will be searched within the stored array or
     // object, and the corresponding item will be deleted, on match
@@ -7412,11 +7418,11 @@ begin
     raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
 end;
 
-function TDocVariantData.DeleteByPath(
-  const aPath: RawUtf8; aPathDelim: AnsiChar): boolean;
+function TDocVariantData.DeleteByPath(const aPath: RawUtf8;
+  aPathDelim: AnsiChar; aDeletedValue: PVariant): boolean;
 var
   csv: PUtf8Char;
-  v: PDocVariantData;
+  dv: PDocVariantData;
   ndx: PtrInt;
   n: ShortString;
 begin
@@ -7424,17 +7430,19 @@ begin
   if IsArray then
     exit;
   csv := pointer(aPath);
-  v := @self;
+  dv := @self;
   repeat
-    ndx := v^.InternalNextPath(csv, @n, aPathDelim);
+    ndx := dv^.InternalNextPath(csv, @n, aPathDelim);
     if csv = nil then
     begin
       // we reached the last item of the path, which is to be deleted
-      result := v^.Delete(ndx);
+      if aDeletedValue <> nil then
+        aDeletedValue^ := dv^.VValue[ndx];
+      result := dv^.Delete(ndx);
       exit;
     end;
   until (ndx < 0) or
-       not _SafeObject(v^.VValue[ndx], v);
+       not _SafeObject(dv^.VValue[ndx], dv);
 end;
 
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;
@@ -7795,6 +7803,7 @@ var
   path: PUtf8Char;
   ndx: PtrInt;
   n: ShortString;
+  dv: PDocVariantData;
 begin
   if (cardinal(VType) <> DocVariantVType) or
      (aPath = '') or
@@ -7807,16 +7816,22 @@ begin
   result := @self;
   path := pointer(aPath);
   repeat
-    with _Safe(result^)^ do
-    begin
-      ndx := InternalNextPath(path, @n, aPathDelim);
-      result := nil;
-      if ndx < 0 then
-        exit;
-      result := @VValue[ndx];
-    end;
+    dv := _Safe(result^);
+    ndx := dv^.InternalNextPath(path, @n, aPathDelim);
+    result := nil;
+    if ndx < 0 then
+      exit;
+    result := @dv^.VValue[ndx];
   until path = nil;
   // if we reached here, we have result=found item
+end;
+
+function TDocVariantData.GetPVariantExistingByPath(const aPath: RawUtf8;
+  aPathDelim: AnsiChar): PVariant;
+begin
+  result := GetPVariantByPath(aPath, aPathDelim);
+  if result = nil then
+    result := InternalNotFound(pointer(aPath));
 end;
 
 function TDocVariantData.GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
