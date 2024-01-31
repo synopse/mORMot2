@@ -958,7 +958,7 @@ type
     function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalUniqueValue(aIndex: PtrInt);
+    procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(var aCsv: PUtf8Char; aName: PShortString;
       aPathDelim: AnsiChar): PtrInt;
       {$ifdef FPC}inline;{$endif}
@@ -5465,12 +5465,17 @@ procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant
 begin
   SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
   if dvoInternValues in VOptions then
-    InternalUniqueValue(aIndex);
+    InternalUniqueValueAt(aIndex);
 end;
 
-procedure TDocVariantData.InternalUniqueValue(aIndex: PtrInt);
+procedure TDocVariantData.InternalUniqueValueAt(aIndex: PtrInt);
 begin
   DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
+end;
+
+procedure InternalUniqueValue(aValue: PVariant); // local to this unit
+begin
+  DocVariantType.InternValues.UniqueVariant(aValue^);
 end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
@@ -5599,7 +5604,7 @@ begin
       SetVariantByValue(tmp, VValue[arg + VCount]);
     end;
     if dvoInternValues in VOptions then
-      InternalUniqueValue(arg + VCount);
+      InternalUniqueValueAt(arg + VCount);
   end;
   inc(VCount, n);
 end;
@@ -6770,7 +6775,7 @@ begin
   else
     SetVariantByValue(aValue, v^);
   if dvoInternValues in VOptions then
-    InternalUniqueValue(result);
+    InternalUniqueValue(v);
 end;
 
 function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
@@ -6823,7 +6828,7 @@ begin
     added := InternalAdd(aPaths[ndx]);
     PVarData(@VValue[added])^ := v;
     if dvoInternValues in VOptions then
-      InternalUniqueValue(added);
+      InternalUniqueValueAt(added);
   end;
 end;
 
@@ -6904,7 +6909,7 @@ begin
     added := InternalAdd('');
     VarRecToVariant(aValue[ndx], VValue[added]);
     if dvoInternValues in VOptions then
-      InternalUniqueValue(added);
+      InternalUniqueValueAt(added);
   end;
 end;
 
@@ -6927,7 +6932,7 @@ begin
     raise EDocVariant.CreateUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs);
   if dvoInternValues in VOptions then
-    InternalUniqueValue(added);
+    InternalUniqueValueAt(added);
 end;
 
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
@@ -10327,8 +10332,14 @@ begin
 end;
 
 procedure TDocList.SetItem(position: integer; const value: variant);
+var
+  v: PVariant;
 begin
-  SetVariantByValue(value, ValueAt(position)^);
+  v := ValueAt(position);
+  SetVariantByValue(value, v^); // may convert to RawUtf8/varString
+  if (PVarData(v)^.VType = varString) and
+     (dvoInternValues in fValue^.VOptions) then
+    InternalUniqueValue(v);
 end;
 
 function TDocList.GetU(position: integer): RawUtf8;
@@ -10337,8 +10348,13 @@ begin
 end;
 
 procedure TDocList.SetU(position: integer; const value: RawUtf8);
+var
+  v: PVariant;
 begin
-  RawUtf8ToVariant(value, ValueAt(position)^);
+  v := ValueAt(position);
+  RawUtf8ToVariant(value, v^);
+  if dvoInternValues in fValue^.VOptions then
+    InternalUniqueValue(v);
 end;
 
 function TDocList.GetS(position: integer): string;
@@ -10347,8 +10363,13 @@ begin
 end;
 
 procedure TDocList.SetS(position: integer; const value: string);
+var
+  v: PVariant;
 begin
-  StringToVariant(value, ValueAt(position)^);
+  v := ValueAt(position);
+  StringToVariant(value, v^); // convert and store as RawUtf8/varString
+  if dvoInternValues in fValue^.VOptions then
+    InternalUniqueValue(v);
 end;
 
 function TDocList.GetI(position: integer): Int64;
