@@ -2920,6 +2920,9 @@ type
 
   /// abstract parent with common methods to IDocList/IDocDict wrappers
   IDocAny = interface
+    // methods used as getter/setter for properties
+    function GetJson: RawUtf8;
+    procedure SetJson(const value: RawUtf8);
     /// remove all elements from the list/dictionary
     procedure Clear;
     /// equals dvArray for IDocList, dvObject for IDocDict
@@ -2928,8 +2931,8 @@ type
     function Model: TDocVariantModel;
     /// how many items or name/value pairs are stored in this instance
     function Len: integer;
-    /// serialize this IDocList/IDocDict into a JSON array/object
-    function ToJson(format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+    /// serialize this IDocList/IDocDict into a JSON array/object specific format
+    function ToJson(format: TTextWriterJsonFormat): RawUtf8;
     /// returns itself as a IDocList, or nil if is a IDocDict
     function AsList: IDocList;
     /// returns itself as a IDocDic, or nil if is a IDocList
@@ -2940,6 +2943,9 @@ type
     function Value: PDocVariantData;
     /// equals true if the Value is owned by this IDocList/IDocDict instance
     function ValueIsOwned: boolean;
+    /// unserialize/serialize this IDocList/IDocDict from/into a JSON array/object
+    property Json: RawUtf8
+      read GetJson write SetJson;
   end;
 
   /// exception raised by IDocList
@@ -2951,7 +2957,7 @@ type
   /// exception raised by IDocDict
   EDocDict = class(EDocVariant)
   public
-    class procedure GetRaise(method: AnsiChar; const key: RawUtf8; const v: variant);
+    class procedure Error(method: AnsiChar; const key: RawUtf8; const v: variant);
   end;
 
   /// a dynamic array of IDocDict instances
@@ -3046,6 +3052,9 @@ type
     {$endif HASIMPLICITOPERATOR}
     /// removes the element at the specified position, and returns it
     function Pop(position: integer = -1): variant;
+    /// removes the last inserted element, with no out-of-range error raised
+    // - you may change the extraction position (negatives from Len)
+    function PopItem(out value: variant; position: integer = -1): boolean;
     {$ifdef HASIMPLICITOPERATOR}
     /// allow to iterate over a specific range of elements of this IDocList
     // - elements are returned directly from the main list
@@ -3210,7 +3219,9 @@ type
     function Pop(const key: RawUtf8; const default: variant): variant; overload;
     /// removes the last inserted key-value pair into the dictionary
     // - returns false if the dictionary is empty
-    function PopItem(out key: RawUtf8; out value: variant): boolean;
+    // - you may change the extraction position (negatives from Len)
+    function PopItem(out key: RawUtf8; out value: variant;
+      position: integer = -1): boolean;
     /// extract into a new IDocDict which contains only specified keys
     // - could be used to filter unneeded fields in an object
     function Reduce(const keys: array of RawUtf8): IDocDict;
@@ -9758,6 +9769,7 @@ type
     function Model: TDocVariantModel;
     function Len: integer;
     function ToJson(format: TTextWriterJsonFormat): RawUtf8;
+    function GetJson: RawUtf8;
     function Value: PDocVariantData;
     function ValueIsOwned: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -9786,6 +9798,7 @@ type
     procedure SetL(position: integer; const value: IDocList);
     procedure SetS(position: integer; const value: string);
     procedure SetU(position: integer; const value: RawUtf8);
+    procedure SetJson(const value: RawUtf8);
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
     function AppendDoc(const value: IDocAny): integer;
@@ -9803,6 +9816,7 @@ type
     function Insert(position: integer; const value: RawUtf8): integer; overload;
     function ObjectsDictDynArray: IDocDictDynArray;
     function Pop(position: integer): variant;
+    function PopItem(out value: variant; position: integer): boolean;
     function Del(position: integer): boolean;
     function Reduce(const keys: array of RawUtf8): IDocList;
     function Remove(const value: variant): integer; overload;
@@ -9824,7 +9838,7 @@ type
 
   TDocDict = class(TDocAny, IDocDict)
   protected
-    fPathDelim: AnsiChar;
+    fPathDelim: AnsiChar; // some additional parameters to this IDocDict state
     fSorted: TUtf8Compare;
     function GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
     function SetValueAt(const key: RawUtf8; const value: variant): boolean;
@@ -9861,13 +9875,14 @@ type
     function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
+    procedure SetJson(const value: RawUtf8);
     function Compare(const another: IDocDict; caseinsensitive: boolean): integer;
     function Copy: IDocDict;
     function Del(const key: RawUtf8): boolean;
     function Exists(const key: RawUtf8): boolean;
     function Pop(const key: RawUtf8): variant; overload;
     function Pop(const key: RawUtf8; const default: variant): variant; overload;
-    function PopItem(out key: RawUtf8; out value: variant): boolean;
+    function PopItem(out key: RawUtf8; out value: variant; position: integer): boolean;
     function Reduce(const keys: array of RawUtf8): IDocDict;
     function SetDefault(const key: RawUtf8): variant; overload;
     function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
@@ -10065,13 +10080,8 @@ end;
 
 function DocList(const json: RawUtf8; model: TDocVariantModel): IDocList;
 begin
-  result := nil;
-  if GetFirstJsonToken(pointer(json)) <> jtArrayStart then
-    exit;
-  result := TDocList.CreateOwned;
-  if not result.Value^.InitJson(json, JSON_[model]) or
-     not result.Value^.IsArray then
-    result := nil;
+  result := DocList(model);
+  result.SetJson(json);
 end;
 
 function DocListFromResults(const json: RawUtf8;
@@ -10097,7 +10107,6 @@ begin
   else
     result := nil;
 end;
-
 
 function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
 begin
@@ -10142,13 +10151,8 @@ end;
 
 function DocDict(const json: RawUtf8; model: TDocVariantModel): IDocDict;
 begin
-  result := nil;
-  if GetFirstJsonToken(pointer(json)) <> jtObjectStart then
-    exit;
-  result := TDocDict.CreateOwned;
-  if not result.Value^.InitJson(json, model) or
-     not result.Value^.IsObject then
-    result := nil;
+  result := DocDict(model);
+  result.SetJson(json);
 end;
 
 function DocDictDynArray(const json: RawUtf8;
@@ -10314,6 +10318,11 @@ begin
     DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
 end;
 
+function TDocAny.GetJson: RawUtf8;
+begin
+  result := ToJson(jsonCompact);
+end;
+
 function TDocAny.Value: PDocVariantData;
 begin
   result := fValue;
@@ -10403,6 +10412,13 @@ begin
   RawUtf8ToVariant(value, v^);
   if dvoInternValues in fValue^.VOptions then
     InternalUniqueValue(v);
+end;
+
+procedure TDocList.SetJson(const value: RawUtf8);
+begin
+  if (GetFirstJsonToken(pointer(value)) <> jtArrayStart) or
+     not fValue^.InitJson(value, fValue^.Options) then
+    fValue^.Void;
 end;
 
 function TDocList.GetS(position: integer): string;
@@ -10565,10 +10581,10 @@ end;
 
 function TDocList.Count(const value: RawUtf8): integer;
 var
-  v: TVarData;
+  v: TRttiVarData;
 begin
   v.VType := varString;
-  v.VAny := pointer(value); // direct set to a RawUtf8 value
+  v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
   result := fValue^.CountItemByValue(variant(v));
 end;
 
@@ -10648,6 +10664,11 @@ function TDocList.Pop(position: integer): variant;
 begin
   if not fValue^.Extract(position, result) then
     raise EDocList.CreateUtf8('Pop index % out of range', [position]);
+end;
+
+function TDocList.PopItem(out value: variant; position: integer): boolean;
+begin
+  result := fValue^.Extract(position, value);
 end;
 
 function TDocList.Del(position: integer): boolean;
@@ -10758,7 +10779,7 @@ end;
 
 { EDocDict }
 
-class procedure EDocDict.GetRaise(method: AnsiChar; const key: RawUtf8; const v: variant);
+class procedure EDocDict.Error(method: AnsiChar; const key: RawUtf8; const v: variant);
 begin
   raise CreateUtf8('%[%] on a var%', [method, key, VariantTypeName(v)^]);
 end;
@@ -10773,6 +10794,13 @@ end;
 procedure TDocDict.SetPathDelim(value: AnsiChar);
 begin
   fPathDelim := value;
+end;
+
+procedure TDocDict.SetJson(const value: RawUtf8);
+begin
+  if (GetFirstJsonToken(pointer(value)) <> jtObjectStart) or
+     not fValue^.InitJson(value, fValue^.Options) then
+    fValue^.Void;
 end;
 
 function TDocDict.Compare(const another: IDocDict; caseinsensitive: boolean): integer;
@@ -10825,7 +10853,7 @@ var
 begin
   v := ValueAt(key);
   if not VariantToBoolean(v^, result) then
-    EDocDict.GetRaise('B', key, v^);
+    EDocDict.Error('B', key, v^);
 end;
 
 function TDocDict.GetC(const key: RawUtf8): currency;
@@ -10834,7 +10862,7 @@ var
 begin
   v := ValueAt(key);
   if not VariantToCurrency(v^, result) then
-    EDocDict.GetRaise('C', key, v^);
+    EDocDict.Error('C', key, v^);
 end;
 
 function TDocDict.GetD(const key: RawUtf8): IDocDict;
@@ -10848,7 +10876,7 @@ var
 begin
   v := ValueAt(key);
   if not VariantToDouble(v^, result) then
-    EDocDict.GetRaise('F', key, v^);
+    EDocDict.Error('F', key, v^);
 end;
 
 function TDocDict.GetI(const key: RawUtf8): Int64;
@@ -10857,7 +10885,7 @@ var
 begin
   v := ValueAt(key);
   if not VariantToInt64(v^, result) then
-    EDocDict.GetRaise('I', key, v^);
+    EDocDict.Error('I', key, v^);
 end;
 
 function TDocDict.GetItem(const key: RawUtf8): variant;
@@ -10891,14 +10919,10 @@ begin
 end;
 
 procedure TDocDict.SetD(const key: RawUtf8; const value: IDocDict);
-var
-  v: PVariant;
 begin
   if value = nil then
-    v := @DocVariantDataFake
-  else
-    v := pointer(value.Value);
-  SetValueAt(key, v^)
+    EDocDict.Error('D', key, Null);
+  SetValueAt(key, PVariant(value.Value)^)
 end;
 
 procedure TDocDict.SetF(const key: RawUtf8; const value: double);
@@ -10917,14 +10941,10 @@ begin
 end;
 
 procedure TDocDict.SetL(const key: RawUtf8; const value: IDocList);
-var
-  v: PVariant;
 begin
   if value = nil then
-    v := @DocVariantDataFake
-  else
-    v := pointer(value.Value);
-  SetValueAt(key, v^)
+    EDocDict.Error('D', key, Null);
+  SetValueAt(key, PVariant(value.Value)^)
 end;
 
 procedure TDocDict.SetS(const key: RawUtf8; const value: string);
@@ -11051,7 +11071,7 @@ var
   v: TDocDict;
 begin
   v := TDocDict.CreateCopy(fValue^);
-  v.fPathDelim := fPathDelim;
+  v.fPathDelim := fPathDelim; // also include additional parameters
   v.fSorted := fSorted;
   result := v;
 end;
@@ -11081,22 +11101,15 @@ begin
     result := default;
 end;
 
-function TDocDict.PopItem(out key: RawUtf8; out value: variant): boolean;
-var
-  ndx: PtrInt;
+function TDocDict.PopItem(out key: RawUtf8; out value: variant;
+  position: integer): boolean;
 begin
-  result := false;
-  ndx := fValue^.Count - 1;
-  if ndx < 0 then
-    exit;
-  key := fValue^.VName[ndx];
-  value := fValue^.VValue[ndx];
-  result := fValue^.Delete(ndx);
+  result := fValue^.Extract(position, value, @key);
 end;
 
 function TDocDict.Reduce(const keys: array of RawUtf8): IDocDict;
 begin
-  result := DocDict(Model);
+  result := TDocDict.CreateOwned;
   fValue^.Reduce(keys, fValue^.IsCaseSensitive, result.Value^);
 end;
 
@@ -11121,7 +11134,7 @@ begin
   if reverse then
     fSorted := nil
   else
-    fSorted := keycompare;
+    fSorted := keycompare; // for O(log(n)) binary search on key lookup
 end;
 
 procedure TDocDict.Update(const key: RawUtf8; const value: variant);
