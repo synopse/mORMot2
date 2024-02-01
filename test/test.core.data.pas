@@ -4074,7 +4074,7 @@ begin
   for num := 0 to 6 do
   begin
     n := 0;
-    for d in l2.Objects('a', num) do
+    for d in l2.Objects('a=', num) do
     begin
       Check(d <> nil, 'l2.A');
       Check(d.Kind = dvObject);
@@ -4088,11 +4088,14 @@ begin
       CheckEqual(n, 0);
   end;
   n := 0;
-  for d in l2.Objects('b', 3, 0) do
+  for d in l2.Objects('b', 3, coEqualTo, nil) do
     inc(n);
   CheckEqual(n, 0);
+  for d in l2.Objects('b >= 3') do
+    inc(n);
+  CheckEqual(n, 2);
   n := 0;
-  for d in l2.Objects('b', 3, 1) do
+  for d in l2.Objects('b', 3, coGreaterThan, nil) do
   begin
     Check(d <> nil, 'l2.B');
     Check(d.Kind = dvObject);
@@ -4103,7 +4106,15 @@ begin
   end;
   CheckEqual(n, 2);
   n := 0;
-  for d in l2.Objects('b', 3, -1) do
+  for d in l2.Objects('b', 3, coLessThan, nil) do
+    inc(n);
+  CheckEqual(n, 1);
+  n := 0;
+  for d in l2.Objects('b<3') do
+    inc(n);
+  CheckEqual(n, 1);
+  n := 0;
+  for d in l2.Objects('b<', 3) do
     inc(n);
   CheckEqual(n, 1);
   d := l2.V[0];
@@ -4214,9 +4225,9 @@ begin
   l3 := l2.Reduce(['a', 'b']);
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]');
   {$ifdef HASIMPLICITOPERATOR}
-  l3 := l2.Filter('a', 1);
+  l3 := l2.Filter('a=', 1);
   CheckEqual(l3.Json, '[]', 'filter1');
-  l3 := l2.Filter('a', 2);
+  l3 := l2.Filter('a=', 2);
   CheckEqual(l3.Json, '[{"a":2,"b":22}]', 'filter2');
   {$endif HASIMPLICITOPERATOR}
   l3 := l2.Reduce(['b']);

@@ -2749,6 +2749,10 @@ function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
 procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
   var Doc: TDocVariantData; Options: PDocVariantOptions = nil);
 
+/// parse a "key<value" or "key<" expression for SortMatch() comparison
+function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
+  out Match: TCompareOperator; Value: PVariant): boolean;
+
 
 { ************** Variant Binary Serialization }
 
@@ -2874,7 +2878,7 @@ type
     CompKey: RawUtf8;
     CompValue: Variant;
     CompFunc: TVariantCompare;
-    CompResult: integer;
+    CompMatch: TCompareOperator;
   public
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocObjectEnumerator;
@@ -3073,13 +3077,18 @@ type
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
-    /// return only matching key/value over IDocDict kind of elements in this list
-    // - search compare(object.key,value)=compareresult (normalized as 0,-1,+1)
+    /// search matching expression over IDocDict kind of elements in this list
+    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    function Filter(const expression: RawUtf8): IDocList; overload;
+    /// search matching expression over IDocDict kind of elements in this list
+    // - use e.g. Filter('name=', 'Synopse') or Filter('price<', MaxPrice)
+    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
+    /// search matching key/value over IDocDict kind of elements in this list
+    // - raw search for compare(object.key,value)=match
     // - default compare=nil will use VariantCompare
     // - if just a wrapper around "for o in Objects() do result.Extend(o)"
     function Filter(const key: RawUtf8; const value: variant;
-      compareresult: integer = 0;
-      compare: TVariantCompare = nil): IDocList;
+      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
     /// default iterator over all elements of this IDocList
     function GetEnumerator: TDocValueEnumerator;
     /// allow to iterate over a specific range of elements of this IDocList
@@ -3095,12 +3104,17 @@ type
     // - will just ignore any element of the IDocList which is not a IDocDict
     // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
     function Objects: TDocObjectEnumerator; overload;
+    /// iterate matching expression over IDocDict kind of elements in this IDocList
+    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    function Objects(const expression: RawUtf8): TDocObjectEnumerator; overload;
+    /// iterate matching expression over IDocDict kind of elements in this IDocList
+    // - use e.g. Objects('name=', 'Synopse') or Objects('price<', MaxPrice)
+    function Objects(const expression: RawUtf8;
+      const value: variant): TDocObjectEnumerator; overload;
     /// iterate matching key/value over IDocDict kind of elements in this IDocList
-    // - search compare(object.key,value)=compareresult (normalized as 0,-1,+1)
-    // - default compare=nil will use VariantCompare
+    // - raw search for compare(object.key,value)=match
     function Objects(const key: RawUtf8; const value: variant;
-      compareresult: integer = 0;
-      compare: TVariantCompare = nil): TDocObjectEnumerator; overload;
+      match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator; overload;
     /// read access of one element in the list, as TDocValue
     // - may be more convenient than the plain variant as returned by Item[]
     property V[position: integer]: TDocValue
@@ -9724,6 +9738,56 @@ begin
           'contenttype', ContentType]));
 end;
 
+function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
+  out Match: TCompareOperator; Value: PVariant): boolean;
+var
+  B: PUtf8Char;
+begin
+  result := false;
+  if Expression = nil then
+    exit;
+  Expression := GotoNextNotSpace(Expression);
+  B := Expression;
+  while jcJsonIdentifier in JSON_CHARS[Expression^] do
+    inc(Expression);
+  if Expression^ = #0 then
+    exit;
+  FastSetString(Key, B, Expression - B);
+  Expression := GotoNextNotSpace(Expression);
+  B := Expression;
+  while Expression^ in ['<', '>', '='] do
+    inc(Expression);
+  case Expression - B of
+    1:
+      case B^ of
+        '=':
+          Match := coEqualTo;
+        '<':
+          Match := coLessThan;
+        '>':
+          Match := coGreaterThan
+      else
+        exit;
+      end;
+    2:
+      case PWord(B)^ of
+        ord('>') + ord('=') shl 8:
+          Match := coGreaterThanOrEqualTo;
+        ord('<') + ord('=') shl 8:
+          Match := coLessThanOrEqualTo;
+        ord('!') + ord('=') shl 8,
+        ord('<') + ord('>') shl 8:
+          Match := coNotEqualTo;
+      else
+        exit;
+      end;
+  else
+    exit;
+  end;
+  if Value <> nil then
+    TextBufferToVariant(GotoNextNotSpace(Expression), {allowdouble=}true, Value^);
+  result := true;
+end;
 
 { ************** Variant Binary Serialization }
 
@@ -9854,13 +9918,18 @@ type
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
     function Filter(const key: RawUtf8; const value: variant;
-      compareresult: integer; compare: TVariantCompare): IDocList;
+      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
+    function Filter(const expression: RawUtf8): IDocList; overload;
+    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
     function GetV(position: integer): TDocValue;
     function GetEnumerator: TDocValueEnumerator;
     function Range(start, stop: integer): TDocValueEnumerator;
     function Objects: TDocObjectEnumerator; overload;
     function Objects(const key: RawUtf8; const value: variant;
-      compareresult: integer; compare: TVariantCompare): TDocObjectEnumerator; overload;
+      match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator; overload;
+    function Objects(const expression: RawUtf8): TDocObjectEnumerator; overload;
+    function Objects(const expression: RawUtf8;
+      const value: variant): TDocObjectEnumerator; overload;
     {$endif HASIMPLICITOPERATOR}
   end;
 
@@ -10019,7 +10088,6 @@ var
   c, o: PVariant;
   v: TDocDict;
   dv: PDocVariantData;
-  res: integer;
 begin
   result := false;
   repeat
@@ -10028,28 +10096,15 @@ begin
     Curr := c;
     if PtrUInt(c) >= PtrUInt(After) then
       exit; // reached end of list
-    dv := _Safe(c^);
-    if CompKey = '' then
+    if not _Safe(c^, dv) then
+      continue
+    else if CompKey = '' then
     begin
       if not dv.IsObject then
         continue; // ignore any list element which is not a IDocDict
     end
-    else if dv^.GetObjectProp(CompKey, o) then
-    begin
-      res := CompFunc(o^, CompValue);
-      if CompResult = 0 then // normalize function result
-      begin
-        if res <> 0 then
-          continue;
-      end else if CompResult < 0 then
-      begin
-        if res >= 0 then
-          continue;
-      end
-      else if res <= 0 then
-        continue;
-    end
-    else
+    else if not dv^.GetObjectProp(CompKey, o) or
+            not SortMatch(CompFunc({%H-}o^, CompValue), CompMatch) then
       continue;
     if CurrDict = nil then
     begin
@@ -10769,7 +10824,7 @@ end;
 {$ifdef HASIMPLICITOPERATOR}
 
 function TDocList.Filter(const key: RawUtf8; const value: variant;
-  compareresult: integer; compare: TVariantCompare): IDocList;
+  match: TCompareOperator; compare: TVariantCompare): IDocList;
 var
   o: IDocDict;
   v: PDocVariantData;
@@ -10777,9 +10832,30 @@ begin
   result := TDocList.CreateOwned;
   v := result.Value;
   v^.Init(fValue^.Options, dvArray);
+  if key = '' then
+    exit;
   v^.SetCapacity(fValue^.Count);
-  for o in Objects(key, value, compareresult, compare) do
+  for o in Objects(key, value, match, compare) do
     v^.AddItem(o.Value^);
+end;
+
+function TDocList.Filter(const expression: RawUtf8): IDocList;
+var
+  k: RawUtf8;
+  v: variant;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(expression), k, m, @v);
+  result := Filter(k, v, m, nil);
+end;
+
+function TDocList.Filter(const expression: RawUtf8; const value: variant): IDocList;
+var
+  k: RawUtf8;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(expression), k, m, nil);
+  result := Filter(k, value, m, nil);
 end;
 
 function TDocList.GetV(position: integer): TDocValue;
@@ -10837,7 +10913,7 @@ begin
 end;
 
 function TDocList.Objects(const key: RawUtf8; const value: variant;
-  compareresult: integer; compare: TVariantCompare): TDocObjectEnumerator;
+  match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator;
 begin
   result := Objects;
   result.CompKey := key;
@@ -10845,7 +10921,27 @@ begin
   if not Assigned(compare) then
     compare := @VariantCompare;
   result.CompFunc := compare;
-  result.CompResult := compareresult;
+  result.CompMatch := match;
+end;
+
+function TDocList.Objects(const expression: RawUtf8): TDocObjectEnumerator;
+var
+  k: RawUtf8;
+  v: variant;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(expression), k, m, @v);
+  result := Objects(k, v, m, nil);
+end;
+
+function TDocList.Objects(const expression: RawUtf8;
+  const value: variant): TDocObjectEnumerator;
+var
+  k: RawUtf8;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(expression), k, m, nil);
+  result := Objects(k, value, m, nil);
 end;
 
 {$endif HASIMPLICITOPERATOR}
