@@ -1936,6 +1936,24 @@ type
     // (in this case, it is dvUndefined)
     function Reduce(const aPropNames: array of RawUtf8; aCaseSensitive: boolean;
       aDoNotAddVoidProp: boolean = false): variant; overload;
+    /// create a TDocVariant array, matching a filtering expression
+    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    procedure ReduceFilter(const aExpression: RawUtf8;
+      var result: TDocVariantData; aCompare: TVariantCompare = nil); overload;
+    /// create a TDocVariant array, matching a filtering expression
+    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    function ReduceFilter(const aExpression: RawUtf8): variant; overload;
+    /// create a TDocVariant array, matching a filtering expression
+    // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
+    procedure ReduceFilter(const aExpression: RawUtf8; const aValue: variant;
+      var result: TDocVariantData; aCompare: TVariantCompare = nil); overload;
+    /// create a TDocVariant array, matching a filtering expression
+    // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
+    function ReduceFilter(const aExpression: RawUtf8; const aValue: variant): variant; overload;
+    /// create a TDocVariant array, matching a filtering set of raw parameters
+    procedure ReduceFilter(const aKey: RawUtf8; const aValue: variant;
+      aMatch: TCompareOperator; aCompare: TVariantCompare;
+      var result: TDocVariantData); overload;
     /// create a TDocVariant array, from the values of a single property of the
     // objects of this document array, specified by name
     // - you can optionally apply an additional filter to each reduced item
@@ -3038,6 +3056,17 @@ type
     procedure Extend(const value: IDocList); overload;
     /// add the supplied elements, to the end of the current list
     procedure Extend(const value: array of const); overload;
+    /// search matching expression over IDocDict kind of elements in this list
+    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    function Filter(const expression: RawUtf8): IDocList; overload;
+    /// search matching expression over IDocDict kind of elements in this list
+    // - use e.g. Filter('name=', 'Synopse') or Filter('price<', MaxPrice)
+    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
+    /// search matching key/value over IDocDict kind of elements in this list
+    // - raw search for compare(object.key,value)=match
+    // - default compare=nil will use VariantCompare
+    function Filter(const key: RawUtf8; const value: variant;
+      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
     /// returns the position at the first occurrence of the specified value
     function Index(const value: variant): integer; overload;
     /// returns the position at the first occurrence of the specified text value
@@ -3077,18 +3106,6 @@ type
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
-    /// search matching expression over IDocDict kind of elements in this list
-    // - expressions are e.g. 'name=Synopse' or 'price<100'
-    function Filter(const expression: RawUtf8): IDocList; overload;
-    /// search matching expression over IDocDict kind of elements in this list
-    // - use e.g. Filter('name=', 'Synopse') or Filter('price<', MaxPrice)
-    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
-    /// search matching key/value over IDocDict kind of elements in this list
-    // - raw search for compare(object.key,value)=match
-    // - default compare=nil will use VariantCompare
-    // - if just a wrapper around "for o in Objects() do result.Extend(o)"
-    function Filter(const key: RawUtf8; const value: variant;
-      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
     /// default iterator over all elements of this IDocList
     function GetEnumerator: TDocValueEnumerator;
     /// allow to iterate over a specific range of elements of this IDocList
@@ -7466,8 +7483,7 @@ begin
 end;
 
 procedure TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
-  aCaseSensitive: boolean; var result: TDocVariantData;
-  aDoNotAddVoidProp: boolean);
+  aCaseSensitive: boolean; var result: TDocVariantData; aDoNotAddVoidProp: boolean);
 var
   ndx, j: PtrInt;
   reduced: TDocVariantData;
@@ -7500,6 +7516,70 @@ begin
     end;
 end;
 
+procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8; const aValue: variant;
+  aMatch: TCompareOperator; aCompare: TVariantCompare; var result: TDocVariantData);
+var
+  n: integer;
+  v, obj: PVariant;
+  dv: PDocVariantData;
+begin
+  result.Init(VOptions, dvArray); // same options than the main document
+  n := VCount;
+  if (n = 0) or
+     (aKey = '') or
+     not IsArray then
+    exit;
+  if not Assigned(aCompare) then
+    aCompare := @VariantCompare;
+  v := pointer(VValue);
+  repeat
+    dv := _Safe(v^);
+    if dv^.GetObjectProp(aKey, obj) and
+       SortMatch(aCompare({%H-}obj^, aValue), aMatch) then
+    begin
+      if result.VCount = 0 then
+        SetLength(result.VValue, n);
+      result.AddItem(PVariant(dv)^);
+    end;
+    inc(v);
+    dec(n);
+  until n = 0;
+end;
+
+procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
+  var result: TDocVariantData; aCompare: TVariantCompare);
+var
+  k: RawUtf8;
+  v: variant;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(aExpression), k, m, @v);
+  ReduceFilter(k, v, m, aCompare, result);
+end;
+
+function TDocVariantData.ReduceFilter(const aExpression: RawUtf8): variant;
+begin
+  VarClear(result{%H-});
+  ReduceFilter(aExpression, PDocVariantData(@result)^);
+end;
+
+procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
+  const aValue: variant; var result: TDocVariantData; aCompare: TVariantCompare);
+var
+  k: RawUtf8;
+  m: TCompareOperator;
+begin
+  ParseSortMatch(pointer(aExpression), k, m, nil);
+  ReduceFilter(k, aValue, m, aCompare, result);
+end;
+
+function TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
+  const aValue: variant): variant;
+begin
+  VarClear(result{%H-});
+  ReduceFilter(aExpression, aValue, PDocVariantData(@result)^);
+end;
+
 function TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   const OnReduce: TOnReducePerItem): variant;
 begin
@@ -7514,7 +7594,7 @@ var
   item: PDocVariantData;
   v: PVariant;
 begin
-  TVarData(result) := DV_FAST[dvArray];
+  result.Init(VOptions, dvArray); // same options than the main document
   if (VCount <> 0) and
      (aPropName <> '') and
      IsArray then
@@ -7539,7 +7619,7 @@ var
   ndx: PtrInt;
   v: PVariant;
 begin
-  TVarData(result) := DV_FAST[dvArray];
+  result.Init(VOptions, dvArray); // same options than the main document
   if (VCount <> 0) and
      (aPropName <> '') and
      IsArray then
@@ -9899,6 +9979,10 @@ type
     function Count(const value: RawUtf8): integer; overload;
     procedure Extend(const value: IDocList); overload;
     procedure Extend(const value: array of const); overload;
+    function Filter(const key: RawUtf8; const value: variant;
+      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
+    function Filter(const expression: RawUtf8): IDocList; overload;
+    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
     function Index(const value: variant): integer; overload;
     function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
     function Exists(const value: variant): boolean; overload;
@@ -9920,10 +10004,6 @@ type
       compare: TVariantCompare); overload;
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
-    function Filter(const key: RawUtf8; const value: variant;
-      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
-    function Filter(const expression: RawUtf8): IDocList; overload;
-    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
     function GetV(position: integer): TDocValue;
     function GetEnumerator: TDocValueEnumerator;
     function Range(start, stop: integer): TDocValueEnumerator;
@@ -10824,42 +10904,26 @@ begin
   fValue^.SortArrayByFields(keys, compare, nil, reverse);
 end;
 
-{$ifdef HASIMPLICITOPERATOR}
-
 function TDocList.Filter(const key: RawUtf8; const value: variant;
   match: TCompareOperator; compare: TVariantCompare): IDocList;
-var
-  o: IDocDict;
-  v: PDocVariantData;
 begin
   result := TDocList.CreateOwned;
-  v := result.Value;
-  v^.Init(fValue^.Options, dvArray);
-  if key = '' then
-    exit;
-  v^.SetCapacity(fValue^.Count);
-  for o in Objects(key, value, match, compare) do
-    v^.AddItem(o.Value^);
+  fValue^.ReduceFilter(key, value, match, compare, result.Value^);
 end;
 
 function TDocList.Filter(const expression: RawUtf8): IDocList;
-var
-  k: RawUtf8;
-  v: variant;
-  m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(expression), k, m, @v);
-  result := Filter(k, v, m, nil);
+  result := TDocList.CreateOwned;
+  fValue^.ReduceFilter(expression, result.Value^);
 end;
 
 function TDocList.Filter(const expression: RawUtf8; const value: variant): IDocList;
-var
-  k: RawUtf8;
-  m: TCompareOperator;
 begin
-  ParseSortMatch(pointer(expression), k, m, nil);
-  result := Filter(k, value, m, nil);
+  result := TDocList.CreateOwned;
+  fValue^.ReduceFilter(expression, value, result.Value^);
 end;
+
+{$ifdef HASIMPLICITOPERATOR}
 
 function TDocList.GetV(position: integer): TDocValue;
 begin
