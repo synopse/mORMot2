@@ -2583,6 +2583,20 @@ function IsWebSocketUpgrade(headers: PUtf8Char): boolean;
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
 
 type
+  /// store a TRawUtf8DynArray with its efficient hash table
+  {$ifdef USERECORDWITHMETHODS}
+  TRawUtf8Hashed = record
+  {$else}
+  TRawUtf8Hashed = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Count: integer;
+    Value: TRawUtf8DynArray;
+    Values: TDynArrayHashed;
+    /// initialize the RawUtf8 dynamic array and hasher
+    procedure Init;
+  end;
+
   /// used to store one list of hashed RawUtf8 in TRawUtf8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   // - each slot has its own TRWLightLock for efficient concurrent reads
@@ -2593,9 +2607,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fSafe: TRWLightLock;
-    fCount: integer;
-    fValue: TRawUtf8DynArray;
-    fValues: TDynArrayHashed;
+    fHash: TRawUtf8Hashed;
   public
     /// initialize the RawUtf8 slot (and its Safe mutex)
     procedure Init;
@@ -2617,7 +2629,7 @@ type
     function Clean(aMaxRefCount: TStrCnt): integer;
     /// how many items are currently stored in Value[]
     property Count: integer
-      read fCount;
+      read fHash.Count;
   end;
   PRawUtf8InterningSlot = ^TRawUtf8InterningSlot;
 
@@ -4576,13 +4588,20 @@ end;
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
 
+{ TRawUtf8Hashed }
+
+procedure TRawUtf8Hashed.Init;
+begin
+  Values.InitSpecific(TypeInfo(TRawUtf8DynArray), Value, ptRawUtf8,
+    @Count, false, InterningHasher);
+end;
+
 
 { TRawUtf8InterningSlot }
 
 procedure TRawUtf8InterningSlot.Init;
 begin
-  fValues.InitSpecific(TypeInfo(TRawUtf8DynArray), fValue, ptRawUtf8,
-    @fCount, false, InterningHasher);
+  fHash.Init;
 end;
 
 procedure TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
@@ -4592,23 +4611,23 @@ var
   added: boolean;
 begin
   fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
   begin
-    aResult := fValue[i]; // return unified string instance
+    aResult := fHash.Value[i]; // return unified string instance
     fSafe.ReadUnLock;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added within the write lock
-  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
   if added then
   begin
-    fValue[i] := aText; // copy new value to the pool
+    fHash.Value[i] := aText; // copy new value to the pool
     aResult := aText;
   end
   else
-    aResult := fValue[i]; // was added in a background thread
+    aResult := fHash.Value[i]; // was added in a background thread
   fSafe.WriteUnLock;
 end;
 
@@ -4627,23 +4646,23 @@ begin
   end;
   c := aText[aTextLen];
   aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
+  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
   if i >= 0 then
   begin
-    aResult := fValue[i]; // return unified string instance
+    aResult := fHash.Value[i]; // return unified string instance
     fSafe.ReadUnLock;
     aText[aTextLen] := c;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added
-  bak := fValues.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
-  PDynArrayHasher(@fValues.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
-  i := fValues.FindHashedForAdding(aText, added, aTextHash);
-  PDynArrayHasher(@fValues.Hasher)^.fCompare := bak;
+  bak := fHash.Values.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+  PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
+  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
+  PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := bak;
   if added then
-    FastSetString(fValue[i], aText, aTextLen); // new value to the pool
-  aResult := fValue[i];
+    FastSetString(fHash.Value[i], aText, aTextLen); // new value to the pool
+  aResult := fHash.Value[i];
   fSafe.WriteUnLock;
   aText[aTextLen] := c;
 end;
@@ -4654,20 +4673,20 @@ var
   added: boolean;
 begin
   fSafe.ReadLock;
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
   begin
-    aText := fValue[i]; // return unified string instance
+    aText := fHash.Value[i]; // return unified string instance
     fSafe.ReadUnLock;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added
-  i := fValues.FindHashedForAdding(aText, added, aTextHash);
+  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
   if added then
-    fValue[i] := aText  // copy new value to the pool
+    fHash.Value[i] := aText  // copy new value to the pool
   else
-    aText := fValue[i]; // was added in a background thread
+    aText := fHash.Value[i]; // was added in a background thread
   fSafe.WriteUnLock;
 end;
 
@@ -4677,9 +4696,9 @@ var
 begin
   result := nil;
   fSafe.ReadLock;
-  i := fValues.Hasher.FindOrNewComp(aTextHash, @aText);
+  i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
-    result := pointer(fValue[i]); // return a pointer to unified string instance
+    result := pointer(fHash.Value[i]); // return a pointer to unified string instance
   fSafe.ReadUnLock;
 end;
 
@@ -4687,8 +4706,8 @@ procedure TRawUtf8InterningSlot.Clear;
 begin
   fSafe.WriteLock;
   try
-    fValues.SetCount(0); // Values.Clear
-    fValues.Hasher.ForceReHash;
+    fHash.Values.SetCount(0); // Values.Clear
+    fHash.Values.Hasher.ForceReHash;
   finally
     fSafe.WriteUnLock;
   end;
@@ -4700,15 +4719,15 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  if fCount = 0 then
+  if fHash.Count = 0 then
     exit;
   fSafe.WriteLock;
   try
-    if fCount = 0 then
+    if fHash.Count = 0 then
       exit;
-    s := pointer(fValue);
+    s := pointer(fHash.Value);
     d := s;
-    for i := 1 to fCount do
+    for i := 1 to fHash.Count do
     begin
       if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then
       begin
@@ -4732,8 +4751,8 @@ begin
     end;
     if result > 0 then
     begin
-      fValues.SetCount((PtrUInt(d) - PtrUInt(fValue)) div SizeOf(d^));
-      fValues.ForceReHash;
+      fHash.Values.SetCount((PtrUInt(d) - PtrUInt(fHash.Value)) div SizeOf(d^));
+      fHash.Values.ForceReHash;
     end;
   finally
     fSafe.WriteUnLock;
