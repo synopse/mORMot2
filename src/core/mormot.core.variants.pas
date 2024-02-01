@@ -3698,41 +3698,41 @@ end;
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   VarClear(result{%H-});
-  with TVarData(result) do
+  with TRttiVarData(result) do
     case V.VType of
       vtPointer:
         VType := varNull;
       vtBoolean:
         begin
           VType := varBoolean;
-          VBoolean := V.VBoolean;
+          Data.VBoolean := V.VBoolean;
         end;
       vtInteger:
         begin
           VType := varInteger;
-          VInteger := V.VInteger;
+          Data.VInteger := V.VInteger;
         end;
       vtInt64:
         begin
           VType := varInt64;
-          VInt64 := V.VInt64^;
+          Data.VInt64 := V.VInt64^;
         end;
       {$ifdef FPC}
       vtQWord:
         begin
           VType := varWord64;
-          VQWord := V.VQWord^;
+          Data.VQWord := V.VQWord^;
         end;
       {$endif FPC}
       vtCurrency:
         begin
           VType := varCurrency;
-          VInt64 := PInt64(V.VCurrency)^;
+          Data.VInt64 := PInt64(V.VCurrency)^;
         end;
       vtExtended:
         begin
           VType := varDouble;
-          VDouble := V.VExtended^;
+          Data.VDouble := V.VExtended^;
         end;
       vtVariant:
         result := V.VVariant^;
@@ -3740,8 +3740,8 @@ begin
       vtAnsiString:
         begin
           VType := varString;
-          VAny := nil;
-          RawByteString(VAny) := RawByteString(V.VAnsiString);
+          Data.VAny := nil;
+          RawByteString(Data.VAny) := RawByteString(V.VAnsiString);
         end;
       {$ifdef HASVARUSTRING}
       vtUnicodeString,
@@ -3754,8 +3754,8 @@ begin
       vtClass:
         begin
           VType := varString;
-          VString := nil; // avoid GPF on next line
-          VarRecToUtf8(V, RawUtf8(VString)); // return as new RawUtf8 instance
+          Data.VString := nil; // avoid GPF on next line
+          VarRecToUtf8(V, RawUtf8(Data.VString)); // decode as new RawUtf8
         end;
       vtObject:
         // class instance will be serialized as a TDocVariant
@@ -7608,6 +7608,8 @@ end;
 function TDocVariantData.Delete(Index: PtrInt): boolean;
 var
   n: PtrInt;
+  v: PVariantArray;
+  k: PRawUtf8Array;
 begin
   result := cardinal(Index) < cardinal(VCount);
   if not result then
@@ -7618,23 +7620,26 @@ begin
     Void; // reset all in-memory storage and capacity
     exit;
   end;
-  if VName <> nil then
+  k := pointer(VName);
+  if k <> nil then
   begin
     EnsureUnique(VName);
-    VName[Index] := '';
+    k := @VName[Index];
+    FastAssignNew(k[0]);
   end;
   EnsureUnique(VValue);
-  VarClear(VValue[Index]);
+  v := @VValue[Index];
+  VarClear(v[0]);
   n := VCount - Index;
   if n = 0 then
     exit;
-  if VName <> nil then
+  if k <> nil then
   begin
-    MoveFast(VName[Index + 1], VName[Index], n * SizeOf(pointer));
-    pointer(VName[VCount]) := nil; // avoid GPF
+    MoveFast(k[1], k[0], n * SizeOf(pointer));
+    pointer(k[n]) := nil; // avoid GPF
   end;
-  MoveFast(VValue[Index + 1], VValue[Index], n * SizeOf(variant));
-  TRttiVarData(VValue[VCount]).VType := varEmpty; // avoid GPF
+  MoveFast(v[1], v[0], n * SizeOf(variant));
+  TRttiVarData(v[n]).VType := varEmpty; // avoid GPF
 end;
 
 function TDocVariantData.Extract(aIndex: integer; var aValue: variant;
@@ -7647,11 +7652,11 @@ begin
     inc(aIndex, VCount);
   if cardinal(aIndex) >= cardinal(VCount) then
     exit;
-  VarClear(aValue);
   EnsureUnique(VValue);
-  v := @VValue[aIndex]; // extract instead of copy
-  PVarData(@aValue)^ := PVarData(v)^;
-  PRttiVarData(v)^.VType := varEmpty; // no VarClear(v^)
+  VarClear(aValue);
+  v := @VValue[aIndex];
+  PRttiVarData(@aValue)^ := PRttiVarData(v)^; // no refcount
+  PRttiVarData(v)^.VType := varEmpty;         // no VarClear(v^)
   if aName <> nil then
     if VName = nil then
       FastAssignNew(aName^)
@@ -7671,11 +7676,11 @@ var
 begin
   result := false;
   ndx := GetValueIndex(aName);
-  if ndx < 0 then
-    exit;
-  if aValue <> nil then
-    aValue^ := VValue[ndx];
-  result := Delete(ndx);
+  if ndx >= 0 then
+    if aValue <> nil then
+      result := Extract(ndx, aValue^)
+    else
+      result := Delete(ndx);
 end;
 
 function TDocVariantData.Delete(const aNames: array of RawUtf8): integer;
@@ -8206,7 +8211,7 @@ begin
   if (cardinal(res^.VType) = VType) and
      (PDocVariantData(res)^.VCount = 0) then
     // return void TDocVariant as null
-    TVarData(result).VType := varNull
+    TRttiVarData(result).VType := varNull
   else
     // copy found value
     result := PVariant(found)^;
