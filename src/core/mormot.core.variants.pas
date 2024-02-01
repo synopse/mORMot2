@@ -955,7 +955,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant): boolean;
       {$ifdef FPC}inline;{$endif}
-    function InternalAdd(aName: PUtf8Char; aNameLen: integer): integer; overload;
+    function InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
@@ -1326,7 +1326,7 @@ type
     // - you can specify an optional aIndex value to Insert instead of Add
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
-    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer; overload;
+    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer; 
     {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in dv do" statements
     // - returns pointers over all Names[] and Values[]
@@ -4691,7 +4691,7 @@ begin
   end;
   ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
   if ndx < 0 then
-    ndx := dv.InternalAdd(Name, NameLen);
+    ndx := dv.InternalAddBuf(pointer(Name), NameLen);
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
@@ -5826,7 +5826,7 @@ begin
       end
       else
       begin
-        j := InternalAdd(''); // new row of data
+        j := InternalAdd('', -1); // new row of data
         v := @VValue[j];      // in two lines for FPC
         v^.Init(aOptions, dvObject);
         v^.VName := nam;
@@ -6661,7 +6661,7 @@ begin
             (FastVarDataComp(@aValue, pointer(v), aCaseInsensitive) = 0);
 end;
 
-function TDocVariantData.InternalAdd(aName: PUtf8Char; aNameLen: integer): integer;
+function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
 var
   tmp: RawUtf8; // so that the caller won't need to reserve such a temp var
 begin
@@ -6673,6 +6673,8 @@ function TDocVariantData.InternalAdd(
   const aName: RawUtf8; aIndex: integer): integer;
 var
   len: integer;
+  v: PVariantArray;
+  k: PRawUtf8Array;
 begin
   // validate consistent add/insert
   if aName <> '' then
@@ -6707,29 +6709,30 @@ begin
   inc(VCount);
   if cardinal(aIndex) < cardinal(result) then
   begin
-    // reserve space for the inserted new item
+    // reserve space for the inserted new item within existing data
     dec(result, aIndex);
-    MoveFast(VValue[aIndex], VValue[aIndex + 1], result * SizeOf(variant));
-    PInteger(@VValue[aIndex])^ := varEmpty; // avoid GPF
+    v := @VValue[aIndex];
+    MoveFast(v[0], v[1], result * SizeOf(variant));
+    PInteger(v)^ := varEmpty; // avoid GPF
     if aName <> '' then
     begin
       if Length(VName) <> len then
         SetLength(VName, len);
-      MoveFast(VName[aIndex], VName[aIndex + 1], result * SizeOf(pointer));
-      PPointer(@VName[aIndex])^ := nil;
+      k := @VName[aIndex];
+      MoveFast(k[0], k[1], result * SizeOf(pointer));
+      PPointer(k)^ := nil; // avoid GPF
     end;
     result := aIndex;
   end;
-  if aName <> '' then
-  begin
-    // store the object field name
-    if Length(VName) <> len then
-      SetLength(VName, len);
-    if dvoInternNames in VOptions then
-      DocVariantType.InternNames.Unique(VName[result], aName)
-    else
-      VName[result] := aName;
-  end;
+  if aName = '' then
+    exit;
+  // store the object field name
+  if Length(VName) <> len then
+    SetLength(VName, len);
+  if dvoInternNames in VOptions then
+    DocVariantType.InternNames.Unique(VName[result], aName)
+  else
+    VName[result] := aName;
 end;
 
 {$ifdef HASITERATORS}
@@ -8396,7 +8399,7 @@ begin
     if ndx < 0 then
       if aCreateIfNotExisting then
       begin
-        ndx := v^.InternalAdd(@n[1], ord(n[0])); // in two steps for FPC
+        ndx := v^.InternalAddBuf(@n[1], ord(n[0])); // in two steps for FPC
         v := @v^.VValue[ndx];
         v^.InitClone(self); // same Options than root but with no Kind
       end
@@ -8406,7 +8409,7 @@ begin
       exit; // incorrect path
   until false;
   if ndx < 0 then
-    ndx := v^.InternalAdd(@n[1], ord(n[0]));
+    ndx := v^.InternalAddBuf(@n[1], ord(n[0]));
   v^.InternalSetValue(ndx, aValue);
   result := true;
 end;
