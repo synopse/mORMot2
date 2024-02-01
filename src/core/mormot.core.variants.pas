@@ -2897,6 +2897,7 @@ type
     CompValue: Variant;
     CompFunc: TVariantCompare;
     CompMatch: TCompareOperator;
+    CompKeyHasPath: boolean;
   public
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocObjectEnumerator;
@@ -3057,10 +3058,10 @@ type
     /// add the supplied elements, to the end of the current list
     procedure Extend(const value: array of const); overload;
     /// search matching expression over IDocDict kind of elements in this list
-    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    // - expressions are e.g. 'name=Synopse' or 'info.price<100'
     function Filter(const expression: RawUtf8): IDocList; overload;
     /// search matching expression over IDocDict kind of elements in this list
-    // - use e.g. Filter('name=', 'Synopse') or Filter('price<', MaxPrice)
+    // - use e.g. Filter('name=', 'Synopse') or Filter('info.price<', MaxPrice)
     function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
     /// search matching key/value over IDocDict kind of elements in this list
     // - raw search for compare(object.key,value)=match
@@ -3122,10 +3123,10 @@ type
     // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
     function Objects: TDocObjectEnumerator; overload;
     /// iterate matching expression over IDocDict kind of elements in this IDocList
-    // - expressions are e.g. 'name=Synopse' or 'price<100'
+    // - expressions are e.g. 'name=Synopse' or 'info.price<100'
     function Objects(const expression: RawUtf8): TDocObjectEnumerator; overload;
     /// iterate matching expression over IDocDict kind of elements in this IDocList
-    // - use e.g. Objects('name=', 'Synopse') or Objects('price<', MaxPrice)
+    // - use e.g. Objects('name=', 'Synopse') or Objects('info.price<', MaxPrice)
     function Objects(const expression: RawUtf8;
       const value: variant): TDocObjectEnumerator; overload;
     /// iterate matching key/value over IDocDict kind of elements in this IDocList
@@ -7009,6 +7010,7 @@ var
   ndx: PtrInt;
 begin
   result := false;
+  aFound := nil;
   if (VCount = 0) or
      (aName = '') or
      not IsObject then
@@ -7521,6 +7523,7 @@ procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8; const aValue: varian
 var
   n: integer;
   v, obj: PVariant;
+  haspath: boolean;
   dv: PDocVariantData;
 begin
   result.Init(VOptions, dvArray); // same options than the main document
@@ -7531,14 +7534,19 @@ begin
     exit;
   if not Assigned(aCompare) then
     aCompare := @VariantCompare;
+  haspath := PosExChar('.', aKey) <> 0;
   v := pointer(VValue);
   repeat
     dv := _Safe(v^);
-    if dv^.GetObjectProp(aKey, obj) and
+    if haspath then
+      obj := dv^.GetPVariantByPath(aKey, '.')
+    else
+      dv^.GetObjectProp(aKey, obj);
+    if (obj <> nil) and
        SortMatch(aCompare({%H-}obj^, aValue), aMatch) then
     begin
       if result.VCount = 0 then
-        SetLength(result.VValue, n);
+        SetLength(result.VValue, n); // prepare for maximum capacity
       result.AddItem(PVariant(dv)^);
     end;
     inc(v);
@@ -8262,7 +8270,7 @@ begin
       exit;
     result := @dv^.VValue[ndx];
   until path = nil;
-  // if we reached here, we have result=found item
+  // if we reached here, we have exhausted all path, so result is the found item
 end;
 
 function TDocVariantData.GetPVariantExistingByPath(const aPath: RawUtf8;
@@ -10186,9 +10194,19 @@ begin
       if not dv.IsObject then
         continue; // ignore any list element which is not a IDocDict
     end
-    else if not dv^.GetObjectProp(CompKey, o) or
-            not SortMatch(CompFunc({%H-}o^, CompValue), CompMatch) then
-      continue;
+    else
+    begin
+      if CompKeyHasPath then
+      begin
+        o := dv^.GetPVariantByPath(CompKey, '.');
+        if o = nil then
+          continue;
+      end
+      else if not dv^.GetObjectProp(CompKey, o) then
+        continue;
+      if not SortMatch(CompFunc({%H-}o^, CompValue), CompMatch) then
+        continue;
+    end;
     if CurrDict = nil then
     begin
       v := TDocDict.Create;
@@ -10989,6 +11007,7 @@ begin
     compare := @VariantCompare;
   result.CompFunc := compare;
   result.CompMatch := match;
+  result.CompKeyHasPath := PosExChar('.', key) <> 0;
 end;
 
 function TDocList.Objects(const expression: RawUtf8): TDocObjectEnumerator;

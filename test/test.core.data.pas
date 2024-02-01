@@ -4114,9 +4114,42 @@ begin
     inc(n);
   CheckEqual(n, 1);
   n := 0;
-  for d in l2.Objects('b<', 3) do
+  for d in l2.Objects('b>=', 3) do
     inc(n);
+  CheckEqual(n, 2);
+  d := DocDictFromKeys(['A', 'B', 'C'], 7);
+  CheckEqual(d.Json, '{"A":7,"B":7,"C":7}');
+  d.PathDelim := '.';
+  d.S['D.E.F'] := 'ff';
+  CheckEqual(d.Json, '{"A":7,"B":7,"C":7,"D":{"E":{"F":"ff"}}}');
+  l2.Insert(0, d.AsVariant);
+  CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
+    '[{A:7,B:7,C:7,D:{E:{F:"ff"}}},{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
+  n := 0;
+  for d in l2.Objects('D.E.F=ff') do
+  begin
+    CheckEqual(d.Json, '{"A":7,"B":7,"C":7,"D":{"E":{"F":"ff"}}}');
+    inc(n);
+  end;
   CheckEqual(n, 1);
+  l3 := DocList(l2.Json);
+  for d in l3.Objects('D.E.F=ff') do
+  begin
+    CheckEqual(d.Json, '{"A":7,"B":7,"C":7,"D":{"E":{"F":"ff"}}}');
+    dec(n);
+  end;
+  CheckEqual(n, 0);
+  n := 0;
+  for d in l2.Objects('D.E.F=fe') do
+    inc(n);
+  CheckEqual(n, 0);
+  l2.Del(0);
+  CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
+    '[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
+  n := 0;
+  for d in l2.Objects('D.E.F=ff') do
+    inc(n);
+  CheckEqual(n, 0);
   d := l2.V[0];
   {$else}
   l2 := DocList('[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
@@ -4199,8 +4232,11 @@ begin
   CheckEqual(d.Json, '{"a":1,"b":21,"c":"C"}');
   d.U['d.e.f'] := 'FF';
   CheckEqual(d.Json, '{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}');
-  CheckHash(l2.Json, $78EDCAEE, 'l2def');
   CheckEqual(d.Len, 4);
+  CheckHash(l2.Json, $78EDCAEE, 'l2def');
+  l3 := l2.Filter('d.e.f=FF');
+  CheckEqual(l3.Json, '[{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}]', 'defFF');
+  Check(l3.D[0].Compare(d) = 0, 'l3Dcomp');
   d.Clear;
   CheckEqual(d.Len, 0);
   CheckEqual(d.Json, '{}');
@@ -4224,12 +4260,16 @@ begin
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd copy');
   l3 := l2.Reduce(['a', 'b']);
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]');
-  {$ifdef HASIMPLICITOPERATOR}
+  l3 := l2.Filter('a=0');
+  CheckEqual(l3.Json, '[{"a":0,"b":20}]', 'filter0');
+  l3 := l2.Filter('a<10');
+  CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]', 'filter10');
   l3 := l2.Filter('a=', 1);
   CheckEqual(l3.Json, '[]', 'filter1');
-  l3 := l2.Filter('a=', 2);
-  CheckEqual(l3.Json, '[{"a":2,"b":22}]', 'filter2');
-  {$endif HASIMPLICITOPERATOR}
+  l3 := l2.Filter('b=', 22);
+  CheckEqual(l3.Json, '[{"a":2,"b":22}]', 'filter22');
+  l3 := l2.Filter('b<=', 21);
+  CheckEqual(l3.Json, '[{"a":0,"b":20}]', 'filter21');
   l3 := l2.Reduce(['b']);
   CheckEqual(l3.Json, '[{"b":20},{"b":22}]');
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]');
@@ -4244,6 +4284,8 @@ begin
   one := l.Pop;
   Check(one = 1);
   CheckEqual(l.Json, '["6",5,"4",2]');
+  l.Insert(3, 3);
+  CheckEqual(l.Json, '["6",5,"4",3,2]');
   n := l.Len;
   while l.PopItem(one) do
   begin
