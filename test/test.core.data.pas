@@ -4071,6 +4071,41 @@ begin
   CheckEqual(n, 3);
   CheckEqual(l2.ToJson(jsonUnquotedPropNameCompact),
     '[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
+  for num := 0 to 6 do
+  begin
+    n := 0;
+    for d in l2.Objects('a', num) do
+    begin
+      Check(d <> nil, 'l2.A');
+      Check(d.Kind = dvObject);
+      Check(d.Exists('a'), 'd.A');
+      CheckEqual(d.I['a'], num, 'di.a=j');
+      inc(n);
+    end;
+    if num in [1..3] then
+      CheckEqual(n, 1)
+    else
+      CheckEqual(n, 0);
+  end;
+  n := 0;
+  for d in l2.Objects('b', 3, 0) do
+    inc(n);
+  CheckEqual(n, 0);
+  n := 0;
+  for d in l2.Objects('b', 3, 1) do
+  begin
+    Check(d <> nil, 'l2.B');
+    Check(d.Kind = dvObject);
+    Check(d.Exists('a'), 'd.Ba');
+    Check(d.Exists('b'), 'd.Bb');
+    Check(d.I['b'] > 2);
+    inc(n);
+  end;
+  CheckEqual(n, 2);
+  n := 0;
+  for d in l2.Objects('b', 3, -1) do
+    inc(n);
+  CheckEqual(n, 1);
   d := l2.V[0];
   {$else}
   l2 := DocList('[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
@@ -4178,6 +4213,12 @@ begin
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd copy');
   l3 := l2.Reduce(['a', 'b']);
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]');
+  {$ifdef HASIMPLICITOPERATOR}
+  l3 := l2.Filter('a', 1);
+  CheckEqual(l3.Json, '[]', 'filter1');
+  l3 := l2.Filter('a', 2);
+  CheckEqual(l3.Json, '[{"a":2,"b":22}]', 'filter2');
+  {$endif HASIMPLICITOPERATOR}
   l3 := l2.Reduce(['b']);
   CheckEqual(l3.Json, '[{"b":20},{"b":22}]');
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]');

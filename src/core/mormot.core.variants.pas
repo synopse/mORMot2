@@ -1179,8 +1179,7 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     // - consider the faster InitArrayFromResults() from ORM/SQL JSON results
     function InitJsonInPlace(Json: PUtf8Char;
-      aOptions: TDocVariantOptions = [];
-      aEndOfObject: PUtf8Char = nil): PUtf8Char;
+      aOptions: TDocVariantOptions = []; aEndOfObject: PUtf8Char = nil): PUtf8Char;
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
     // - a private copy of the incoming JSON buffer will be used, then
@@ -2867,9 +2866,13 @@ type
     CurrDict: IDocDict; // a single instance reused during whole iteration
     Curr, After: PVariant;
     CurrDictValue: ^PDocVariantData;
+    CompKey: RawUtf8;
+    CompValue: Variant;
+    CompFunc: TVariantCompare;
+    CompResult: integer;
   public
-    function MoveNext: boolean; { better not inlined for _Safe }
-    function GetEnumerator: TDocObjectEnumerator; inline;
+    function MoveNext: boolean; { too complex to be inlined }
+    function GetEnumerator: TDocObjectEnumerator;
     property Current: IDocDict
       read CurrDict;
   end;
@@ -3026,10 +3029,6 @@ type
     procedure Extend(const value: IDocList); overload;
     /// add the supplied elements, to the end of the current list
     procedure Extend(const value: array of const); overload;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// default iterator over all elements of this IDocList
-    function GetEnumerator: TDocValueEnumerator;
-    {$endif HASIMPLICITOPERATOR}
     /// returns the position at the first occurrence of the specified value
     function Index(const value: variant): integer; overload;
     /// returns the position at the first occurrence of the specified text value
@@ -3043,28 +3042,11 @@ type
     // - the list should consist e.g. of a JSON array of JSON objects
     // - will just ignore any element of the IDocList which is not a IDocDict
     function ObjectsDictDynArray: IDocDictDynArray;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// allow to iterate over IDocDict kind of elements of this IDocList
-    // - the list should consist e.g. of a JSON array of JSON objects
-    // - will just ignore any element of the IDocList which is not a IDocDict
-    // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
-    function Objects: TDocObjectEnumerator;
-    {$endif HASIMPLICITOPERATOR}
     /// removes the element at the specified position, and returns it
     function Pop(position: integer = -1): variant;
     /// removes the last inserted element, with no out-of-range error raised
     // - you may change the extraction position (negatives from Len)
     function PopItem(out value: variant; position: integer = -1): boolean;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// allow to iterate over a specific range of elements of this IDocList
-    // - elements are returned directly from the main list
-    // $ "for v in list.Range" returns all elements, i.e. maps "for v in list"
-    // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
-    // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
-    // $ "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
-    // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
-    function Range(start: integer = 0; stop: integer = 0): TDocValueEnumerator;
-    {$endif HASIMPLICITOPERATOR}
     /// extract a list of IDocDict elements which contains only specified keys
     // - could be used to filter a list of objects into a smaller dataset
     function Reduce(const keys: array of RawUtf8): IDocList;
@@ -3085,6 +3067,40 @@ type
       reverse: boolean = false; valuecompare: TVariantCompare = nil); overload;
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(position: integer): PVariant;
+    {$ifdef HASIMPLICITOPERATOR}
+    /// return only matching key/value over IDocDict kind of elements in this list
+    // - search compare(object.key,value)=compareresult (normalized as 0,-1,+1)
+    // - default compare=nil will use VariantCompare
+    // - if just a wrapper around "for o in Objects() do result.Extend(o)"
+    function Filter(const key: RawUtf8; const value: variant;
+      compareresult: integer = 0;
+      compare: TVariantCompare = nil): IDocList;
+    /// default iterator over all elements of this IDocList
+    function GetEnumerator: TDocValueEnumerator;
+    /// allow to iterate over a specific range of elements of this IDocList
+    // - elements are returned directly from the main list
+    // $ "for v in list.Range" returns all elements, i.e. maps "for v in list"
+    // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
+    // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
+    // $ "for v in list.Range(1, 9)" returns #1..#8, i.e. list[1..9]
+    // $ "for v in list.Range(1, -2)" returns #1..#Count-3, i.e. list[1:-2]
+    function Range(start: integer = 0; stop: integer = 0): TDocValueEnumerator;
+    /// iterate over IDocDict kind of elements in this IDocList
+    // - the list should consist e.g. of a JSON array of JSON objects
+    // - will just ignore any element of the IDocList which is not a IDocDict
+    // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
+    function Objects: TDocObjectEnumerator; overload;
+    /// iterate matching key/value over IDocDict kind of elements in this IDocList
+    // - search compare(object.key,value)=compareresult (normalized as 0,-1,+1)
+    // - default compare=nil will use VariantCompare
+    function Objects(const key: RawUtf8; const value: variant;
+      compareresult: integer = 0;
+      compare: TVariantCompare = nil): TDocObjectEnumerator; overload;
+    /// read access of one element in the list, as TDocValue
+    // - may be more convenient than the plain variant as returned by Item[]
+    property V[position: integer]: TDocValue
+      read GetV;
+    {$endif HASIMPLICITOPERATOR}
     /// access one element in the list, as variant
     // - this is the default property of this instance so list[n] gives
     // direct access to the element at index 0 <= n < len -1 in the IDocList
@@ -3095,12 +3111,6 @@ type
     // to retrieve a specific value type
     property Item[position: integer]: variant
       read GetItem write SetItem; default;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// read access of one element in the list, as TDocValue
-    // - may be slightly more convenient than the plain variant returned by Item[]
-    property V[position: integer]: TDocValue
-      read GetV;
-    {$endif HASIMPLICITOPERATOR}
     /// access one element in the list, as UTF-8 text
     property U[position: integer]: RawUtf8
       read GetU write SetU;
@@ -3246,6 +3256,10 @@ type
     function Keys: TDocKeyEnumerator;
     /// allow to iterate over all values of this IDocDict
     function Values: TDocValueEnumerator;
+    /// read access of one element in the dictionary from its key, as TDocValue
+    // - may be slightly more convenient than the plain variant returned by Item[]
+    property V[const key: RawUtf8]: TDocValue
+      read GetV;
     {$endif HASIMPLICITOPERATOR}
     /// enable nested objects location in keys fot Get() and Item[]
     // - equals #0 by default, meaning only root object keys are located, e.g.
@@ -3266,12 +3280,6 @@ type
     // to retrieve a specific value type
     property Item[const key: RawUtf8]: variant
       read GetItem write SetItem; default;
-    {$ifdef HASIMPLICITOPERATOR}
-    /// read access of one element in the dictionary from its key, as TDocValue
-    // - may be slightly more convenient than the plain variant returned by Item[]
-    property V[const key: RawUtf8]: TDocValue
-      read GetV;
-    {$endif HASIMPLICITOPERATOR}
     /// access one element in the dictionary from its key, as UTF-8 text
     property U[const key: RawUtf8]: RawUtf8
       read GetU write SetU;
@@ -9829,10 +9837,14 @@ type
       compare: TVariantCompare); overload;
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
+    function Filter(const key: RawUtf8; const value: variant;
+      compareresult: integer; compare: TVariantCompare): IDocList;
     function GetV(position: integer): TDocValue;
     function GetEnumerator: TDocValueEnumerator;
     function Range(start, stop: integer): TDocValueEnumerator;
-    function Objects: TDocObjectEnumerator;
+    function Objects: TDocObjectEnumerator; overload;
+    function Objects(const key: RawUtf8; const value: variant;
+      compareresult: integer; compare: TVariantCompare): TDocObjectEnumerator; overload;
     {$endif HASIMPLICITOPERATOR}
   end;
 
@@ -9988,9 +10000,10 @@ end;
 
 function TDocObjectEnumerator.MoveNext: boolean;
 var
-  c: PVariant;
+  c, o: PVariant;
   v: TDocDict;
   dv: PDocVariantData;
+  res: integer;
 begin
   result := false;
   repeat
@@ -10000,13 +10013,33 @@ begin
     if PtrUInt(c) >= PtrUInt(After) then
       exit; // reached end of list
     dv := _Safe(c^);
-    if not dv.IsObject then
-      continue; // ignore any list element which is not a IDocDict
+    if CompKey = '' then
+    begin
+      if not dv.IsObject then
+        continue; // ignore any list element which is not a IDocDict
+    end
+    else if dv^.GetObjectProp(CompKey, o) then
+    begin
+      res := CompFunc(o^, CompValue);
+      if CompResult = 0 then // normalize function result
+      begin
+        if res <> 0 then
+          continue;
+      end else if CompResult < 0 then
+      begin
+        if res >= 0 then
+          continue;
+      end
+      else if res <= 0 then
+        continue;
+    end
+    else
+      continue;
     if CurrDict = nil then
     begin
       v := TDocDict.Create;
       CurrDictValue := @v.fValue;
-      CurrDict := v;
+      CurrDict := v; // share a single TDocDict instance during loop
     end;
     CurrDictValue^ := dv; // directly change TDocDict.fValue
     result := true;
@@ -10018,7 +10051,6 @@ function TDocObjectEnumerator.GetEnumerator: TDocObjectEnumerator;
 begin
   result := self;
 end;
-
 
 { TDocKey }
 
@@ -10720,6 +10752,20 @@ end;
 
 {$ifdef HASIMPLICITOPERATOR}
 
+function TDocList.Filter(const key: RawUtf8; const value: variant;
+  compareresult: integer; compare: TVariantCompare): IDocList;
+var
+  o: IDocDict;
+  v: PDocVariantData;
+begin
+  result := TDocList.CreateOwned;
+  v := result.Value;
+  v^.Init(fValue^.Options, dvArray);
+  v^.SetCapacity(fValue^.Count);
+  for o in Objects(key, value, compareresult, compare) do
+    v^.AddItem(o.Value^);
+end;
+
 function TDocList.GetV(position: integer): TDocValue;
 begin
   result.V := ValueAt(position);
@@ -10772,6 +10818,18 @@ begin
     exit;
   inc(result.After, fValue^.VCount);
   dec(result.Curr); // for the first MoveNext
+end;
+
+function TDocList.Objects(const key: RawUtf8; const value: variant;
+  compareresult: integer; compare: TVariantCompare): TDocObjectEnumerator;
+begin
+  result := Objects;
+  result.CompKey := key;
+  result.CompValue := value;
+  if not Assigned(compare) then
+    compare := @VariantCompare;
+  result.CompFunc := compare;
+  result.CompResult := compareresult;
 end;
 
 {$endif HASIMPLICITOPERATOR}
