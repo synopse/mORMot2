@@ -3805,6 +3805,19 @@ type
   // and SortDynArrayPUtf8CharI/SortDynArrayStringI in mormot.core.text
   TDynArraySortCompare = function(const A, B): integer;
 
+  /// the recognized operators for comparison functions results match
+  TCompareOperator = (
+     coEqualTo,
+     coNotEqualTo,
+     coLessThan,
+     coLessThanOrEqualTo,
+     coGreaterThan,
+     coGreaterThanOrEqualTo);
+
+/// fast search if a comparison function result (-1,0,+1) match an operator
+function SortMatch(CompareResult: integer; Operator: TCompareOperator): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A, B): integer;
 
@@ -11679,6 +11692,25 @@ end;
 
 
 { ************ Sorting/Comparison Functions }
+
+function SortMatch(CompareResult: integer; Operator: TCompareOperator): boolean;
+begin
+  case Operator of
+    coEqualTo:
+      result := CompareResult = 0;
+    coNotEqualTo:
+      result := CompareResult <> 0;
+    coLessThan:
+      result := CompareResult < 0;
+    coLessThanOrEqualTo:
+      result := CompareResult <= 0;
+    coGreaterThan:
+      result := CompareResult > 0;
+  // coGreaterThanOrEqualTo:
+  else
+    result := CompareResult >= 0;
+  end;
+end;
 
 function SortDynArrayVariant(const A, B): integer;
 begin
