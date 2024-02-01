@@ -4257,6 +4257,18 @@ begin
   CheckEqual(key, 'b');
   Check(one = 7);
   CheckEqual(d.Json, '{"c":12}');
+  d.Update(['a', 1, 'c', 2]);
+  CheckEqual(d.Json, '{"c":2,"a":1}');
+  d.Sort;
+  CheckEqual(d.Json, '{"a":1,"c":2}');
+  d.Update(DocDict(['a', 1, 'b', 3]));
+  CheckEqual(d.Json, '{"a":1,"c":2,"b":3}');
+  d.Update(DocDict(['d', 10, 'b', 4, 'c', 5]), {onlymissing=}true);
+  CheckEqual(d.Json, '{"a":1,"c":2,"b":3,"d":10}');
+  d.SetDefault('new');
+  CheckEqual(d.Json, '{"a":1,"c":2,"b":3,"d":10,"new":null}');
+  d.SetDefault('new', 10);
+  CheckEqual(d.Json, '{"a":1,"c":2,"b":3,"d":10,"new":null}');
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd copy');
   l3 := l2.Reduce(['a', 'b']);
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]');
@@ -4273,6 +4285,8 @@ begin
   l3 := l2.Reduce(['b']);
   CheckEqual(l3.Json, '[{"b":20},{"b":22}]');
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]');
+  l2.Extend(l3);
+  CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22},{"b":20},{"b":22}]');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['b']).Json, '{"b":1}');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['c', 'b']).Json, '{"c":4,"b":1}');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['d', 'a']).Json, '{"a":3}');
@@ -4286,9 +4300,17 @@ begin
   CheckEqual(l.Json, '["6",5,"4",2]');
   l.Insert(3, 3);
   CheckEqual(l.Json, '["6",5,"4",3,2]');
+  CheckEqual(l.Count('one'), 0);
+  l.Append('one');
+  CheckEqual(l.Json, '["6",5,"4",3,2,"one"]');
+  CheckEqual(l.Count('one'), 1);
+  for n := 0 to l.Len - 1 do
+    CheckEqual(l.Count(l[n]), 1, 'l.Count');
   n := l.Len;
+  CheckEqual(n, 6);
   while l.PopItem(one) do
   begin
+    CheckEqual(l.Count(one), 0);
     Check(not VarIsEmptyOrNull(one), 'popitem');
     dec(n);
   end;

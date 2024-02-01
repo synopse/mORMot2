@@ -3284,6 +3284,8 @@ type
     procedure Update(const key: RawUtf8; const value: variant); overload;
     /// updates (or inserts) the specified key/value pairs
     procedure Update(const keyvalues: array of const); overload;
+    /// updates (or inserts) the specified key/value pairs of another IDocDict
+    procedure Update(const source: IDocDict; addonlymissing: boolean = false); overload;
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(const key: RawUtf8): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
@@ -3355,6 +3357,7 @@ type
   IDocArray = IDocList;
   /// alias to our interface dictionary type, for compatibility with existing code
   IDocObject = IDocDict;
+
 
 /// create a self-owned void IDocList
 function DocList(model: TDocVariantModel = mFastFloat): IDocList; overload;
@@ -3431,6 +3434,43 @@ function DocDictCopy(const dv: TDocVariantData;
 
 
 implementation
+
+// some early methods implementation, defined here for proper inlining
+// PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
+
+function TDocVariantData.GetKind: TDocVariantKind;
+var
+  c: cardinal;
+begin
+  c := PInteger(@self)^;
+  if (c and (1 shl (ord(dvoIsObject) + 16))) <> 0 then
+    result := dvObject
+  else if (c and (1 shl (ord(dvoIsArray) + 16))) <> 0 then
+    result := dvArray
+  else
+    result := dvUndefined;
+end;
+
+function TDocVariantData.IsObject: boolean;
+begin
+  result := (PInteger(@self)^ and (1 shl (ord(dvoIsObject) + 16))) <> 0;
+end;
+
+function TDocVariantData.IsArray: boolean;
+begin
+  result := (PInteger(@self)^ and (1 shl (ord(dvoIsArray) + 16))) <> 0;
+end;
+
+function TDocVariantData.IsCaseSensitive: boolean;
+begin
+  result := (PInteger(@self)^ and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
+end;
+
+procedure TDocVariantData.ClearFast;
+begin
+  TRttiVarData(self).VType := 0; // clear VType and VOptions
+  Void;
+end;
 
 
 { ************** Low-Level Variant Wrappers }
@@ -3593,12 +3633,6 @@ begin
   if TVarData(value).VType = varString then
     FillZero(RawByteString(TVarData(value).VAny));
   VarClear(value);
-end;
-
-procedure TDocVariantData.ClearFast; // defined here for proper inlining
-begin
-  TRttiVarData(self).VType := 0; // clear VType and VOptions
-  Void;
 end;
 
 procedure _VariantClearSeveral(V: PVarData; n: integer);
@@ -4608,39 +4642,6 @@ class procedure EDocVariant.RaiseSafe(Kind: TDocVariantKind);
 begin
   raise CreateUtf8('_Safe(%)?', [ToText(Kind)^]);
 end;
-
-
-// defined here for proper inlining
-// PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
-
-function TDocVariantData.GetKind: TDocVariantKind;
-var
-  c: cardinal;
-begin
-  c := PInteger(@self)^;
-  if (c and (1 shl (ord(dvoIsObject) + 16))) <> 0 then
-    result := dvObject
-  else if (c and (1 shl (ord(dvoIsArray) + 16))) <> 0 then
-    result := dvArray
-  else
-    result := dvUndefined;
-end;
-
-function TDocVariantData.IsObject: boolean;
-begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoIsObject) + 16))) <> 0;
-end;
-
-function TDocVariantData.IsArray: boolean;
-begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoIsArray) + 16))) <> 0;
-end;
-
-function TDocVariantData.IsCaseSensitive: boolean;
-begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
-end;
-
 
 { TDocVariant }
 
@@ -6437,6 +6438,7 @@ var
   SourceVValue: TVariantDynArray;
   Handler: TCustomVariantType;
   v: PVarData;
+  vv: PVariant;
 begin
   with TVarData(SourceDocVariant) do
     if cardinal(VType) = varVariantByRef then
@@ -6478,9 +6480,10 @@ begin
   if VCount > 0 then
   begin
     SetLength(VValue, VCount);
-    for ndx := 0 to VCount - 1 do
-    begin
-      v := @SourceVValue[ndx];
+    v := pointer(SourceVValue);
+    vv := pointer(VValue);
+    ndx := VCount;
+    repeat
       repeat
         vt := v^.VType;
         if vt <> varVariantByRef then
@@ -6489,23 +6492,32 @@ begin
       until false;
       if vt < varFirstCustom then
         // simple string/number types copy
-        VValue[ndx] := variant(v^)
+        vv^ := variant(v^)
       else if vt = DocVariantVType then
         // direct recursive copy for TDocVariant
-        TDocVariantData(VValue[ndx]).InitCopy(variant(v^), VOptions)
+        PDocVariantData(vv)^.InitCopy(variant(v^), VOptions)
       else if FindCustomVariantType(vt, Handler) then
         if Handler.InheritsFrom(TSynInvokeableVariantType) then
-          TSynInvokeableVariantType(Handler).CopyByValue(
-            TVarData(VValue[ndx]), v^)
+          TSynInvokeableVariantType(Handler).CopyByValue(PVarData(vv)^, v^)
         else
-          Handler.Copy(TVarData(VValue[ndx]), v^, false)
+          Handler.Copy(PVarData(vv)^, v^, false)
       else
-        VValue[ndx] := variant(v^); // default copy
-    end;
+        vv^ := variant(v^); // default copy
+      inc(v);
+      inc(vv);
+      dec(ndx);
+    until ndx = 0;
     if dvoInternValues in VOptions then
+    begin
+      ndx := VCount;
+      vv := pointer(VValue);
       with DocVariantType.InternValues do
-        for ndx := 0 to VCount - 1 do
-          UniqueVariant(VValue[ndx]);
+        repeat
+          UniqueVariant(vv^);
+          inc(vv);
+          dec(ndx);
+        until ndx = 0;
+    end;
   end;
   VariantDynArrayClear(SourceVValue);
 end;
@@ -6513,7 +6525,7 @@ end;
 procedure TDocVariantData.Void;
 begin
   if VName <> nil then
-    FastDynArrayClear(@VName,  TypeInfo(RawUtf8));
+    FastDynArrayClear(@VName, TypeInfo(RawUtf8));
   if VValue <> nil then
     FastDynArrayClear(@VValue, TypeInfo(variant));
   VCount := 0;
@@ -6535,10 +6547,17 @@ end;
 
 procedure TDocVariantData.FillZero;
 var
-  ndx: PtrInt;
+  n: integer;
+  v: PVariant;
 begin
-  for ndx := 0 to VCount - 1 do
-    mormot.core.variants.FillZero(VValue[ndx]);
+  n := VCount;
+  v := pointer(VValue);
+  if n <> 0 then
+    repeat
+      mormot.core.variants.FillZero(v^);
+      inc(v);
+      dec(n);
+    until n = 0;
   Reset;
 end;
 
@@ -6917,41 +6936,68 @@ end;
 procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
 var
   src: PDocVariantData;
-  ndx: PtrInt;
+  n: integer;
+  v: PVariant;
+  k: PRawUtf8;
 begin
   src := _Safe(aDocVariant);
-  if src^.Count = 0 then
+  n := src^.Count;
+  if n = 0 then
     exit; // nothing to add
-  if src^.IsArray then
+  v := pointer(src^.VValue);
+  k := pointer(src^.VName);
+  if k = nil then // source aDocVariant is a dvArray
     // add array items
     if IsObject then
       // types should match
       exit
     else
-      for ndx := 0 to src^.Count - 1 do
-        AddItem(src^.VValue[ndx])
+      repeat
+        AddItem(v^);
+        inc(v);
+        dec(n)
+      until n = 0
   else
     // add object items
     if IsArray then
       // types should match
       exit
     else if dvoCheckForDuplicatedNames in VOptions then
-      for ndx := 0 to src^.Count - 1 do
-        AddOrUpdateValue(src^.VName[ndx], src^.VValue[ndx])
+      repeat
+        AddOrUpdateValue(k^, v^);
+        inc(k);
+        inc(v);
+        dec(n)
+      until n = 0
     else
-      for ndx := 0 to src^.Count - 1 do
-        AddValue(src^.VName[ndx], src^.VValue[ndx]);
+      repeat
+        AddValue(k^, v^);
+        inc(k);
+        inc(v);
+        dec(n)
+      until n = 0;
 end;
 
 procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant;
   aOnlyAddMissing: boolean);
 var
   src: PDocVariantData;
-  ndx: PtrInt;
+  n: integer;
+  v: PVariant;
+  k: PRawUtf8;
 begin
   src := _Safe(aDocVariant, dvObject);
-  for ndx := 0 to src^.Count - 1 do
-    AddOrUpdateValue(src^.VName[ndx], src^.VValue[ndx], nil, aOnlyAddMissing);
+  n := src^.Count;
+  if n = 0 then
+    exit; // nothing to add
+  v := pointer(src^.VValue);
+  k := pointer(src^.VName);
+  repeat
+    AddOrUpdateValue(k^, v^, nil, aOnlyAddMissing);
+    inc(k);
+    inc(v);
+    dec(n)
+  until n = 0;
 end;
 
 function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): integer;
@@ -7070,10 +7116,12 @@ function TDocVariantData.SearchItemByValue(const aValue: Variant;
   CaseInsensitive: boolean; StartIndex: PtrInt): PtrInt;
 var
   v: PVarData;
+  tmp: variant;
 begin
+  SetVariantByValue(aValue, tmp); // ensure text is RawUtf8
   v := @VValue[StartIndex];
   for result := StartIndex to VCount - 1 do
-    if FastVarDataComp(v, @aValue, CaseInsensitive) = 0 then
+    if FastVarDataComp(v, @tmp, CaseInsensitive) = 0 then
       exit
     else
       inc(v);
@@ -7085,14 +7133,17 @@ function TDocVariantData.CountItemByValue(const aValue: Variant;
 var
   v: PVarData;
   ndx: integer;
+  tmp: variant;
 begin
   result := 0; // returns the number of occurences of this value
+  SetVariantByValue(aValue, tmp); // ensure text is RawUtf8
   v := @VValue[StartIndex];
   for ndx := StartIndex to VCount - 1 do
-    if FastVarDataComp(v, @aValue, CaseInsensitive) = 0 then
-      inc(result)
-    else
-      inc(v);
+  begin
+    if FastVarDataComp(v, @tmp, CaseInsensitive) = 0 then
+      inc(result);
+    inc(v);
+  end;
 end;
 
 type
@@ -10090,6 +10141,7 @@ type
     procedure Sort(reverse: boolean; keycompare: TUtf8Compare);
     procedure Update(const key: RawUtf8; const value: variant); overload;
     procedure Update(const keyvalues: array of const); overload;
+    procedure Update(const source: IDocDict; addonlymissing: boolean); overload;
     function ValueAt(const key: RawUtf8): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
     function GetV(const key: RawUtf8): TDocValue;
@@ -11414,6 +11466,12 @@ end;
 procedure TDocDict.Update(const keyvalues: array of const);
 begin
   fValue^.Update(keyvalues);
+end;
+
+procedure TDocDict.Update(const source: IDocDict; addonlymissing: boolean);
+begin
+  if source <> nil then
+    fValue^.AddOrUpdateFrom(PVariant(source.Value)^, addonlymissing);
 end;
 
 {$ifdef HASIMPLICITOPERATOR}
