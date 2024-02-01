@@ -3921,14 +3921,14 @@ end;
 procedure TTestCoreProcess._IDocAny;
 var
   l, l2, l3: IDocList;
-  i, n: integer;
+  i, n, num: integer;
   d: IDocDict;
   darr: IDocDictDynArray;
   key: RawUtf8;
   one: variant;
   {$ifdef HASIMPLICITOPERATOR}
+  f: TDocDictFields;
   v: TDocValue;
-  num: integer;
   s: string;
   u: RawUtf8;
   {$endif HASIMPLICITOPERATOR}
@@ -3973,8 +3973,21 @@ begin
   CheckEqual(l.Copy(1, 1).Json, '[]');
   CheckEqual(l.Copy(1, 2).Json, '[2]');
   CheckEqual(l.Copy(1, 3).Json, '[2,3]');
-  CheckEqual(l.Copy(1, -2).Json, '[2,3,"4"]');
+  Check(l.Copy(1, -2).ToString = '[2,3,"4"]');
   {$ifdef HASIMPLICITOPERATOR}
+  for f in DocList('[{"a":0,"b":20},{"a":2,"b":22}]').D[0] do
+    if f.Key.Equals('a') then
+    begin
+      CheckEqual(f.Value, 0);
+      CheckEqual(f.KeyValue, 'a=0');
+    end
+    else if f.Key.Equals('b') then
+    begin
+      CheckEqual(f.Value, 20);
+      CheckEqual(f.KeyValue, 'b=20');
+    end
+    else
+      Check(false, 'f.ab');
   n := 0;
   for v in l do
   begin
@@ -4202,6 +4215,13 @@ begin
   CheckEqual(l2.Json, '[{"b":1,"abc":4},{"b":2},{"b":3}]');
   l2.Clear;
   CheckEqual(l2.len, 0);
+  l2 := DocList('[{"a":10,"b":20},{"a":1,"b":21},{"a":11,"b":20}]');
+  l2.SortByKeyValue(['b', 'a']);
+  CheckEqual(l2.Json, '[{"a":10,"b":20},{"a":11,"b":20},{"a":1,"b":21}]');
+  {$ifdef HASIMPLICITOPERATOR}
+  for d in l2.Objects('b<21') do
+    check(d.I['b'] < 21);
+  {$endif HASIMPLICITOPERATOR}
   darr := DocDictDynArray('[{a:0},{a:1},{a:2}]');
   CheckEqual(length(darr), 3, 'darr');
   l2 := DocListFrom(darr);
@@ -4223,6 +4243,8 @@ begin
     d['b'] := i + 20;
     Check(d.Exists('b'), 'darr9');
     CheckEqual(d.I['b'], i + 20, 'darr10');
+    if d.Get('b', num) then
+      checkEqual(num, i + 20, 'darr11');
   end;
   l2 := DocListFrom(darr);
   CheckEqual(l2.Json, '[{"a":0,"b":20},{"a":1,"b":21},{"a":2,"b":22}]');
@@ -4230,10 +4252,14 @@ begin
   d.PathDelim := '.';
   d.U['c'] := 'C';
   CheckEqual(d.Json, '{"a":1,"b":21,"c":"C"}');
+  CheckEqual(d.Value^.Count, 3);
   d.U['d.e.f'] := 'FF';
   CheckEqual(d.Json, '{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}');
   CheckEqual(d.Len, 4);
   CheckHash(l2.Json, $78EDCAEE, 'l2def');
+  l3 := DocList('[{ab:1,cd:{ef:"two"}}]');
+  Check(l3[0].ab = 1, 'latebinding a');
+  Check(l3[0].cd.ef = 'two', 'latebinding a');
   l3 := l2.Filter('d.e.f=FF');
   CheckEqual(l3.Json, '[{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}]', 'defFF');
   Check(l3.D[0].Compare(d) = 0, 'l3Dcomp');
@@ -4269,6 +4295,12 @@ begin
   CheckEqual(d.Json, '{"a":1,"c":2,"b":3,"d":10,"new":null}');
   d.SetDefault('new', 10);
   CheckEqual(d.Json, '{"a":1,"c":2,"b":3,"d":10,"new":null}');
+  d := DocDict(['one', 1, 'two', 2, 'three', _ArrFast([5, 6, 7, 'huit'])]);
+  CheckEqual(d.Len, 3); // one dictionary with 3 elements
+  CheckEqual(d.Json, '{"one":1,"two":2,"three":[5,6,7,"huit"]}');
+  d.Sort; // sort by key names
+  CheckEqual(d.Json, '{"one":1,"three":[5,6,7,"huit"],"two":2}');
+  CheckEqual(d.I['two'], 2); // faster O(log(n)) lookup after Sort
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]', 'd copy');
   l3 := l2.Reduce(['a', 'b']);
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]');
@@ -4287,6 +4319,8 @@ begin
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22}]');
   l2.Extend(l3);
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22},{"b":20},{"b":22}]');
+  l2.Del(1);
+  CheckEqual(l2.Json, '[{"a":0,"b":20},{"a":2,"b":22},{"b":20},{"b":22}]');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['b']).Json, '{"b":1}');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['c', 'b']).Json, '{"c":4,"b":1}');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['d', 'a']).Json, '{"a":3}');

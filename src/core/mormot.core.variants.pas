@@ -2910,6 +2910,8 @@ type
   public
     /// raw pointer access to the corresponting name
     V: PRawUtf8;
+    function Equals(const txt: RawUtf8): boolean; inline;
+    function Utf8: RawUtf8; inline;
   public
     class operator Implicit(const A: TDocKey): string;   inline;
     class operator Implicit(const A: TDocKey): RawUtf8;  inline;
@@ -2929,10 +2931,13 @@ type
   /// store one key/value pair as returned by IDocDict.GetEnumerator
   // - thanks to TDocKey/TDocValue wrappers, no transient copy is involved
   TDocDictFields = record
+  public
     /// efficient/indirect access to one key of the current IDocDict element
     Key: TDocKey;
     /// efficient/indirect access to one value of the current IDocDict element
     Value: TDocValue;
+    /// returns 'Key=Value' text
+    function KeyValue(const separator: RawUtf8 = '='): RawUtf8;
   end;
 
   /// low-level Enumerator as returned by IDocDict.GetEnumerator
@@ -2970,6 +2975,8 @@ type
     function AsDict: IDocDict;
     /// returns the associated TDocVariant instance
     function AsVariant: variant;
+    /// convert into JSON array/object as RTL string
+    function ToString(format: TTextWriterJsonFormat = jsonCompact): string;
     /// low-level access to the internal TDocVariantData storage
     function Value: PDocVariantData;
     /// equals true if the Value is owned by this IDocList/IDocDict instance
@@ -3243,7 +3250,13 @@ type
     /// access one element in the dictionary, as RTL string text
     // - if the key does not exist, returns false
     function Get(const key: RawUtf8; var value: string): boolean; overload;
-    /// access one element in the dictionary, as integer
+    /// access one element in the dictionary, as boolean
+    // - if the key does not exist or is not an integer, returns false
+    function Get(const key: RawUtf8; var value: boolean): boolean; overload;
+    /// access one element in the dictionary, as 32-bit integer
+    // - if the key does not exist or is not an integer, returns false
+    function Get(const key: RawUtf8; var value: integer): boolean; overload;
+    /// access one element in the dictionary, as 64-bit integer
     // - if the key does not exist or is not an integer, returns false
     function Get(const key: RawUtf8; var value: Int64): boolean; overload;
     /// access one element in the dictionary, as floating-point double
@@ -3258,6 +3271,9 @@ type
     /// access one element in the dictionary, as a by-reference IDocDict
     // - if the key does not exist or is not a IDocDict, returns false
     function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
+    /// access one element in the dictionary, as by-reference TDocVariantData
+    // - if the key does not exist or is not a IDocList, returns false
+    function Get(const key: RawUtf8; var value: PDocVariantData): boolean; overload;
     /// removes the specified element from the dictionary
     // - if the key does not exist, raise a EDocDict exception
     function Pop(const key: RawUtf8): variant; overload;
@@ -5656,7 +5672,7 @@ end;
 procedure TDocVariantData.AddNameValuesToObject(
   const NameValuePairs: array of const);
 var
-  n, arg: PtrInt;
+  n, arg, ndx: PtrInt;
   tmp: variant;
 begin
   n := length(NameValuePairs);
@@ -5673,18 +5689,19 @@ begin
   end;
   for arg := 0 to n - 1 do
   begin
-    VarRecToUtf8(NameValuePairs[arg * 2], VName[arg + VCount]);
+    ndx := arg + VCount;
+    VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
     if dvoInternNames in VOptions then
-      DocVariantType.InternNames.UniqueText(VName[arg + VCount]);
+      DocVariantType.InternNames.UniqueText(VName[ndx]);
     if dvoValueCopiedByReference in VOptions then
-      VarRecToVariant(NameValuePairs[arg * 2 + 1], VValue[arg + VCount])
+      VarRecToVariant(NameValuePairs[arg * 2 + 1], VValue[ndx])
     else
     begin
       VarRecToVariant(NameValuePairs[arg * 2 + 1], tmp);
-      SetVariantByValue(tmp, VValue[arg + VCount]);
+      SetVariantByValue(tmp, VValue[ndx]);
     end;
     if dvoInternValues in VOptions then
-      InternalUniqueValueAt(arg + VCount);
+      InternalUniqueValueAt(ndx);
   end;
   inc(VCount, n);
 end;
@@ -10012,6 +10029,7 @@ type
     function Model: TDocVariantModel;
     function Len: integer;
     function ToJson(format: TTextWriterJsonFormat): RawUtf8;
+    function ToString(format: TTextWriterJsonFormat): string; reintroduce;
     function GetJson: RawUtf8;
     function Value: PDocVariantData;
     function ValueIsOwned: boolean;
@@ -10120,11 +10138,14 @@ type
     function Get(const key: RawUtf8; var value: variant): boolean; overload;
     function Get(const key: RawUtf8; var value: RawUtf8): boolean; overload;
     function Get(const key: RawUtf8; var value: string): boolean; overload;
+    function Get(const key: RawUtf8; var value: boolean): boolean; overload;
+    function Get(const key: RawUtf8; var value: integer): boolean; overload;
     function Get(const key: RawUtf8; var value: Int64): boolean; overload;
     function Get(const key: RawUtf8; var value: double): boolean; overload;
     function Get(const key: RawUtf8; var value: currency): boolean; overload;
     function Get(const key: RawUtf8; var value: IDocList): boolean; overload;
     function Get(const key: RawUtf8; var value: IDocDict): boolean; overload;
+    function Get(const key: RawUtf8; var value: PDocVariantData): boolean; overload;
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
     procedure SetJson(const value: RawUtf8);
@@ -10291,6 +10312,16 @@ end;
 
 { TDocKey }
 
+function TDocKey.Equals(const txt: RawUtf8): boolean;
+begin
+  result := txt = V^;
+end;
+
+function TDocKey.Utf8: RawUtf8;
+begin
+  result := V^;
+end;
+
 class operator TDocKey.Implicit(const A: TDocKey): string;
 begin
   Utf8ToStringVar(A.V^, result);
@@ -10299,6 +10330,13 @@ end;
 class operator TDocKey.Implicit(const A: TDocKey): RawUtf8;
 begin
   result := A.V^;
+end;
+
+{ TDocDictFields }
+
+function TDocDictFields.KeyValue(const separator: RawUtf8): RawUtf8;
+begin
+  Make([Key.V^, separator, Value.V^], result);
 end;
 
 { TDocKeyEnumerator }
@@ -10585,6 +10623,11 @@ begin
       result := '{}'
   else
     DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
+end;
+
+function TDocAny.ToString(format: TTextWriterJsonFormat): string;
+begin
+  Utf8ToStringVar(ToJson(format), result);
 end;
 
 function TDocAny.GetJson: RawUtf8;
@@ -11341,6 +11384,22 @@ begin
     VariantToString(v^, value);
 end;
 
+function TDocDict.Get(const key: RawUtf8; var value: boolean): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            VariantToBoolean(v^, value);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: integer): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            VariantToInteger(v^, value);
+end;
+
 function TDocDict.Get(const key: RawUtf8; var value: Int64): boolean;
 var
   v: PVariant;
@@ -11385,6 +11444,14 @@ begin
             _SafeObject(v^, dv);
   if result then
     value := TDocDict.CreateByRef(dv);
+end;
+
+function TDocDict.Get(const key: RawUtf8; var value: PDocVariantData): boolean;
+var
+  v: PVariant;
+begin
+  result := GetValueAt(key, v) and
+            _Safe(v^, value);
 end;
 
 function TDocDict.Copy: IDocDict;
