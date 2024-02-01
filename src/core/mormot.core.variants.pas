@@ -3174,11 +3174,11 @@ type
     // - warning: weak reference to the main list, unless you explicitly Copy it
     property D[position: integer]: IDocDict
       read GetD write SetD;
-    /// access one element in the list, as IDocList (Array)
+    /// access one element in the list, as IDocList/IDocArray
     // - property alias, for compatibility with existing code
     property A[position: integer]: IDocList
       read GetL write SetL;
-    /// access one element in the list, as IDocDict (Object)
+    /// access one element in the list, as IDocDict/IDocObject
     // - property alias, for compatibility with existing code
     property O[position: integer]: IDocDict
       read GetD write SetD;
@@ -3341,7 +3341,20 @@ type
     /// access one element in the dictionary from its key, as IDocDict
     property D[const key: RawUtf8]: IDocDict
       read GetD write SetD;
+    /// access one element in the dictionary from its key, as IDocList/IDocArray
+    // - property alias, for compatibility with existing code
+    property A[const key: RawUtf8]: IDocList
+      read GetL write SetL;
+    /// access one element in the dictionary from its key, as IDocDict/IDocObject
+    // - property alias, for compatibility with existing code
+    property O[const key: RawUtf8]: IDocDict
+      read GetD write SetD;
   end;
+
+  /// alias to our interface list type, for compatibility with existing code
+  IDocArray = IDocList;
+  /// alias to our interface dictionary type, for compatibility with existing code
+  IDocObject = IDocDict;
 
 /// create a self-owned void IDocList
 function DocList(model: TDocVariantModel = mFastFloat): IDocList; overload;
