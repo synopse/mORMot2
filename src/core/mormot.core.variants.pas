@@ -3310,8 +3310,12 @@ function DocListFrom(const dictarray: IDocDictDynArray): IDocList; overload;
 function DocList(const dv: TDocVariantData): IDocList; overload;
 
 /// create a self-owned IDocList as full copy of a TDocVariantData dvArray
+function DocListCopy(const dv: TDocVariantData): IDocList; overload;
+
+/// create a self-owned IDocList as full copy of a TDocVariantData dvArray
+// and a specific options model
 function DocListCopy(const dv: TDocVariantData;
-  model: TDocVariantModel = mFastFloat): IDocList;
+  model: TDocVariantModel): IDocList; overload;
 
 
 /// create a self-owned void IDocDict
@@ -3347,8 +3351,12 @@ function DocDictFrom(const v: variant): IDocDict;
 function DocDict(const dv: TDocVariantData): IDocDict; overload;
 
 /// create a self-owned IDocDict as full copy of a TDocVariantData dvObject
+function DocDictCopy(const dv: TDocVariantData): IDocDict; overload;
+
+/// create a self-owned IDocDict as full copy of a TDocVariantData dvObject
+// and a specific options model
 function DocDictCopy(const dv: TDocVariantData;
-  model: TDocVariantModel = mFastFloat): IDocDict;
+  model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
 
 implementation
@@ -9726,7 +9734,8 @@ type
     fValueOwned: TVarData;
   public
     constructor CreateOwned;
-    constructor CreateCopy(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
+    constructor CreateNew(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
+    constructor CreateCopy(const dv: TDocVariantData); reintroduce;
     constructor CreateByRef(dv: PDocVariantData); reintroduce;
     destructor Destroy; override;
     procedure Clear;
@@ -10066,10 +10075,19 @@ begin
     result := nil;
 end;
 
+function DocListCopy(const dv: TDocVariantData): IDocList; overload;
+begin
+  if dv.IsArray then
+    result := TDocList.CreateCopy(dv)
+  else
+    result := nil;
+end;
+
+
 function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
 begin
   if dv.IsArray then
-    result := TDocList.CreateCopy(dv, model)
+    result := TDocList.CreateNew(dv, model)
   else
     result := nil;
 end;
@@ -10177,10 +10195,18 @@ begin
     result := nil;
 end;
 
+function DocDictCopy(const dv: TDocVariantData): IDocDict;
+begin
+  if dv.IsObject then
+    result := TDocDict.CreateCopy(dv)
+  else
+    result := nil;
+end;
+
 function DocDictCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocDict;
 begin
   if dv.IsObject then
-    result := TDocDict.CreateCopy(dv, model)
+    result := TDocDict.CreateNew(dv, model)
   else
     result := nil;
 end;
@@ -10219,12 +10245,19 @@ begin
   fValue := @fValueOwned;
 end;
 
-constructor TDocAny.CreateCopy(const dv: TDocVariantData; m: TDocVariantModel);
+constructor TDocAny.CreateNew(const dv: TDocVariantData; m: TDocVariantModel);
 begin
   fValue := @fValueOwned;
   fValue^.Init(m, dv.Kind);
-  fValue^.VName  := copy(dv.VName); // new arrays, but byref values
-  fValue^.VValue := copy(dv.VValue);
+  fValue^.VName  := copy(dv.VName, 0, dv.Count); // new arrays, but byref values
+  fValue^.VValue := copy(dv.VValue, 0, dv.Count);
+  fValue^.VCount := dv.Count;
+end;
+
+constructor TDocAny.CreateCopy(const dv: TDocVariantData);
+begin
+  fValue := @fValueOwned;
+  fValue^.InitFrom(dv, true, true); // new arrays, but byref values
 end;
 
 constructor TDocAny.CreateByRef(dv: PDocVariantData);
@@ -10257,7 +10290,7 @@ end;
 
 function TDocAny.ToJson(format: TTextWriterJsonFormat): RawUtf8;
 begin
-  if fValue^.Count = 0 then
+  if fValue^.Count = 0 then // don't return null but Python-like results
     if fValue^.IsArray then
       result := '[]'
     else
@@ -11012,7 +11045,7 @@ function TDocDict.Copy: IDocDict;
 var
   v: TDocDict;
 begin
-  v := TDocDict.CreateCopy(fValue^, Model);
+  v := TDocDict.CreateCopy(fValue^);
   v.fPathDelim := fPathDelim;
   v.fSorted := fSorted;
   result := v;
