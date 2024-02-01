@@ -1826,7 +1826,7 @@ type
     function Delete(Index: PtrInt): boolean; overload;
     /// delete a value/item in this document, from its name
     // - return TRUE on success, FALSE if the supplied name does not exist
-    function Delete(const aName: RawUtf8): boolean; overload;
+    function Delete(const aName: RawUtf8; aValue: PVariant = nil): boolean; overload;
     /// delete/filter some values/items in this document, from their name
     // - return the number of deleted items
     function Delete(const aNames: array of RawUtf8): integer; overload;
@@ -3111,9 +3111,11 @@ type
     property B[position: integer]: boolean
       read GetB write SetB;
     /// access one element in the list, as IDocList (List)
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     property L[position: integer]: IDocList
       read GetL write SetL;
     /// access one element in the list, as IDocDict (Dictionary)
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     property D[position: integer]: IDocDict
       read GetD write SetD;
     /// access one element in the list, as IDocList (Array)
@@ -7663,9 +7665,17 @@ begin
   result := Delete(aIndex);
 end;
 
-function TDocVariantData.Delete(const aName: RawUtf8): boolean;
+function TDocVariantData.Delete(const aName: RawUtf8; aValue: PVariant): boolean;
+var
+  ndx: PtrInt;
 begin
-  result := Delete(GetValueIndex(aName));
+  result := false;
+  ndx := GetValueIndex(aName);
+  if ndx < 0 then
+    exit;
+  if aValue <> nil then
+    aValue^ := VValue[ndx];
+  result := Delete(ndx);
 end;
 
 function TDocVariantData.Delete(const aNames: array of RawUtf8): integer;
@@ -10797,19 +10807,9 @@ begin
 end;
 
 function TDocDict.PopAt(const key: RawUtf8; value: PVariant): boolean;
-var
-  ndx: PtrInt;
 begin
   if fPathDelim = #0 then
-  begin
-    result := false;
-    ndx := fValue^.GetValueIndex(key);
-    if ndx < 0 then
-      exit; // not found
-    if value <> nil then
-      value^ := fValue^.VValue[ndx];
-    result := fValue^.Delete(ndx);
-  end
+    result := fValue.Delete(key, value)
   else
     result := fValue.DeleteByPath(key, fPathDelim, value);
 end;
