@@ -2629,7 +2629,7 @@ function ObjectDefaultToVariant(aClass: TClass;
 // - expect the JSON input buffer to be already unescaped and #0 terminated,
 // e.g. by TGetJsonField, and having set properly the wasString flag
 // - set the varString or call GetVariantFromNotStringJson() if TryCustomVariants=nil
-// - or call GetJsonToAnyVariant() to support TryCustomVariants^ complex input
+// - or call JsonToAnyVariant() to support TryCustomVariants^ complex input
 procedure GetVariantFromJsonField(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false; JsonLen: integer = 0);
@@ -2696,6 +2696,11 @@ function GetNumericVariantFromJson(Json: PUtf8Char;
 procedure TextToVariant(const aValue: RawUtf8; AllowVarDouble: boolean;
   out aDest: variant);
 
+/// convert some UTF-8 buffer into a variant, detecting JSON numbers or constants
+// - first try GetVariantFromNotStringJson() then fallback to RawUtf8ToVariant()
+procedure TextBufferToVariant(aValue: PUtf8Char; AllowVarDouble: boolean;
+  out aDest: variant);
+
 /// convert some UTF-8 text buffer into a variant, with string interning
 // - similar to TextToVariant(), but with string interning (if Interning<>nil)
 // - first try GetVariantFromNotStringJson() then fallback to RawUtf8ToVariant()
@@ -2709,8 +2714,8 @@ function GetNextItemToVariant(var P: PUtf8Char;
   out Value: Variant; Sep: AnsiChar = ','; AllowDouble: boolean = true): boolean;
 
 /// retrieve a variant value from a JSON number or string
-// - follows TJsonWriter.AddVariant() format (calls GetJsonToAnyVariant)
-// - make a temporary copy before parsing - use GetJsonToAnyVariant() on a buffer
+// - follows TJsonWriter.AddVariant() format (calls JsonToAnyVariant)
+// - make a temporary copy before parsing - use JsonToAnyVariant() on a buffer
 // - return true and set Value on success, or false and empty Value on error
 function VariantLoadJson(var Value: Variant; const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions = nil;
@@ -2730,7 +2735,7 @@ function JsonToVariant(const Json: RawUtf8;
   AllowDouble: boolean = false): variant;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// just a wrapper around GetJsonToAnyVariant() with some TDocVariantOptions
+/// just a wrapper around JsonToAnyVariant() with some TDocVariantOptions
 function JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty];
   AllowDouble: boolean = false): PUtf8Char;
@@ -9582,6 +9587,17 @@ begin
   except // some obscure floating point exception may occur
   end;
   RawUtf8ToVariant(aValue, aDest);
+end;
+
+procedure TextBufferToVariant(aValue: PUtf8Char; AllowVarDouble: boolean;
+  out aDest: variant);
+begin
+  try
+    if GetVariantFromNotStringJson(aValue, TVarData(aDest), AllowVarDouble) then
+      exit;
+  except // some obscure floating point exception may occur
+  end;
+  RawUtf8ToVariant(aValue, StrLen(aValue), aDest);
 end;
 
 function GetNextItemToVariant(var P: PUtf8Char; out Value: Variant;
