@@ -3125,7 +3125,11 @@ type
     /// removes the last inserted element into a value-owned IDocDict
     // - returns false if there is no value at this position (raise no EDocList)
     // - you may change the extraction position (negatives from Len)
-    function PopItem(out value: variant; position: integer = -1): boolean;
+    function PopItem(out value: variant; position: integer = -1): boolean; overload;
+    /// removes the last inserted IDocDict, with no out-of-range error raised
+    // - you may change the extraction position (negatives from Len)
+    // - returns false if there is no value at this position, or it is no IDocDict
+    function PopItem(out value: IDocDict; position: integer = -1): boolean; overload;
     /// extract a list of IDocDict elements which contains only specified keys
     // - could be used to filter a list of objects into a smaller dataset
     function Reduce(const keys: array of RawUtf8): IDocList;
@@ -3267,7 +3271,10 @@ type
     /// compare this IDocDict value with another instance
     // - each key/value pair will be compared, in their expected order
     function Compare(const another: IDocDict;
-      caseinsensitive: boolean = false): integer;
+      caseinsensitive: boolean = false): integer; overload;
+    /// compare the specified keys of this IDocDict value with another instance
+    function Compare(const another: IDocDict; const keys: array of RawUtf8;
+      caseinsensitive: boolean = false): integer; overload;
     /// returns a copy of the specified dictionary
     function Copy: IDocDict;
     /// removes the element at the specified key, not returning it
@@ -10203,7 +10210,8 @@ type
     function Insert(position: integer; const value: RawUtf8): integer; overload;
     function ObjectsDictDynArray: IDocDictDynArray;
     function Pop(position: integer): variant;
-    function PopItem(out value: variant; position: integer): boolean;
+    function PopItem(out value: variant; position: integer): boolean; overload;
+    function PopItem(out value: IDocDict; position: integer): boolean; overload;
     function Del(position: integer): boolean;
     function Reduce(const keys: array of RawUtf8): IDocList;
     function Remove(const value: variant): integer; overload;
@@ -10272,7 +10280,9 @@ type
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
     procedure SetJson(const value: RawUtf8);
-    function Compare(const another: IDocDict; caseinsensitive: boolean): integer;
+    function Compare(const another: IDocDict; caseinsensitive: boolean): integer; overload;
+    function Compare(const another: IDocDict; const keys: array of RawUtf8;
+      caseinsensitive: boolean = false): integer; overload;
     function Copy: IDocDict;
     function Del(const key: RawUtf8): boolean;
     function Exists(const key: RawUtf8): boolean;
@@ -11108,6 +11118,18 @@ begin
   result := fValue^.Extract(position, value);
 end;
 
+function TDocList.PopItem(out value: IDocDict; position: integer): boolean;
+begin
+  result := false;
+  if position < 0 then
+    inc(position, fValue^.Count);
+  if (cardinal(position) >= cardinal(fValue^.Count)) or
+     not _Safe(fValue^.VValue[position]).IsObject then
+    exit;
+  value := TDocDict.CreateOwned;
+  result := fValue^.Extract(position, PVariant(value.Value)^);
+end;
+
 function TDocList.Del(position: integer): boolean;
 begin
   result := fValue^.Delete(position);
@@ -11296,6 +11318,12 @@ end;
 function TDocDict.Compare(const another: IDocDict; caseinsensitive: boolean): integer;
 begin
   result := fValue^.Compare(another.Value^, caseinsensitive);
+end;
+
+function TDocDict.Compare(const another: IDocDict;
+  const keys: array of RawUtf8; caseinsensitive: boolean): integer;
+begin
+  result := fValue^.CompareObject(keys, another.Value^, caseinsensitive);
 end;
 
 function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
