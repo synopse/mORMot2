@@ -10042,18 +10042,18 @@ end;
 function ParseSortMatch(Expression: PUtf8Char; out Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 var
-  B: PUtf8Char;
+  KB, KE, B: PUtf8Char;
 begin
   result := false;
   if Expression = nil then
     exit;
   Expression := GotoNextNotSpace(Expression);
-  B := Expression;
+  KB := Expression;
   while jcJsonIdentifier in JSON_CHARS[Expression^] do
     inc(Expression);
   if Expression^ = #0 then
     exit;
-  FastSetString(Key, B, Expression - B);
+  KE := Expression;
   Expression := GotoNextNotSpace(Expression);
   B := Expression;
   while Expression^ in ['<', '>', '='] do
@@ -10085,6 +10085,7 @@ begin
   else
     exit;
   end;
+  FastSetString(Key, KB, KE - KB);
   if Value <> nil then
     TextBufferToVariant(GotoNextNotSpace(Expression), {allowdouble=}true, Value^);
   result := true;
@@ -11132,6 +11133,8 @@ end;
 
 function TDocList.Del(position: integer): boolean;
 begin
+  if position < 0 then
+    inc(position, fValue^.Count);
   result := fValue^.Delete(position);
 end;
 
@@ -11255,6 +11258,8 @@ end;
 function TDocList.Objects(const key: RawUtf8; const value: variant;
   match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator;
 begin
+  if key = '' then
+    raise EDocList.Create('Invalid expression on Objects()');
   result := Objects;
   result.CompKey := key;
   result.CompValue := value;
