@@ -3934,8 +3934,13 @@ var
   {$endif HASIMPLICITOPERATOR}
 begin
   Check(l = nil);
-  l := DocList('[1,2, 3,"4",5,"6"]');
+  l := DocList('[1,2, 3,"4",5,"6", 1.0594631]');
   Check(l <> nil);
+  CheckEqual(l.Len, 7);
+  Check(l[0] = 1);
+  CheckSame(l[6], 1.0594631);
+  CheckEqual(l.Json, '[1,2,3,"4",5,"6",1.0594631]');
+  Check(VarIsFloat(l.Pop));
   CheckEqual(l.Len, 6);
   Check(l[0] = 1);
   Check(l[1] = 2);
@@ -4032,6 +4037,16 @@ begin
     l2.Append(variant(v));
   CheckEqual(l2.Len, 3);
   CheckEqual(l2.Json, '[2,3,"4"]');
+  n := 0;
+  for num in l.Range(0, -1) do // [1,2,3,"4",5]
+  begin
+    inc(n);
+    if n = 4 then
+       CheckEqual(num, 0)
+    else
+      CheckEqual(num, n);
+  end;
+  CheckEqual(n, 5);
   n := 0;
   for one in l do
   begin
@@ -4379,6 +4394,14 @@ begin
     dec(n);
   end;
   CheckEqual(n, 1, 'stop@tobeignored');
+  Check(l3.PopItem(one), 'popitem');
+  Check(one = 'tobeignored', 'lastitem');
+  Check(DocList('[{ab:1,cd:{ef:"two"}}]')[0].cd.ef = 'two', '1lin1');
+  Check(DocList('[{ab:1,cd:{ef:"two"}}]').First('ab<>0').cd.ef = 'two', '1lin2');
+  l := DocList('[{ab:1,cd:{ef:"two"}}]');
+  one := l.First('ab<>0');
+  l := nil;
+  Check(one.cd.ef = 'two', 'early release of the IDocList instance');
 end;
 
 procedure TTestCoreProcess._TDecimal128;
