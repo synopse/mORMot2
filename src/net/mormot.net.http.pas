@@ -3070,7 +3070,7 @@ begin
   if nfHeadersParsed in HeaderFlags then
     exit;
   include(HeaderFlags, nfHeadersParsed);
-  Head.AsText(Headers, {ForRemoteIP=}40, {usemainbuffer=}Interning <> nil);
+  Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}Interning <> nil);
   Head.Reset;
   if Compress <> nil then
     if AcceptEncoding <> '' then
