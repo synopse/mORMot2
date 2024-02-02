@@ -4090,39 +4090,36 @@ var
 
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
 var
-  at, bt, sametypecomp: PtrUInt;
-  au, bu: pointer;
-  wasString: boolean;
-label
-  rtl, utf;
+  at, bt, cmp2sort: PtrUInt;
+  ah, bh: TSynInvokeableVariantType;
 begin
-  if A <> nil then
+  at := PtrUInt(A); // A=nil -> at=varEmpty
+  if at <> 0 then
     repeat
-      at := cardinal(A^.VType);
+      at := PVarData(at)^.VType;
       if at <> varVariantByRef then
         break;
-      A := A^.VPointer;
-    until false
-  else
-    at := varNull;
-  if B <> nil then
+      at := PtrUInt(A.VPointer);
+      A := pointer(at);
+    until at = 0;
+  bt := PtrUInt(B);
+  if bt <> 0 then
     repeat
-      bt := cardinal(B^.VType);
+      bt := PVarData(bt)^.VType;
       if bt <> varVariantByRef then
         break;
-      B := B^.VPointer;
-    until false
-  else
-    bt := varNull;
+      bt := PtrUInt(B.VPointer);
+      B := pointer(bt);
+    until bt = 0;
   if at = bt then
     // optimized comparison if A and B share the same type (most common case)
     if at <= high(_VARDATACMP) then
     begin
-      sametypecomp := _VARDATACMP[at, caseInsensitive];
-      if sametypecomp <> 0 then
-        result := _CMP2SORT[sametypecomp](A^.VAny, B^.VAny)
+      cmp2sort := _VARDATACMP[at, caseInsensitive];
+      if cmp2sort <> 0 then
+        result := _CMP2SORT[cmp2sort](A^.VAny, B^.VAny)
       else
-rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
+        result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     end
     else if at = varStringByRef then
       // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
@@ -4132,21 +4129,20 @@ rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
       result := _CMP2SORT[_VARDATACMP[varSynUnicode, caseInsensitive]](
          PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at < varFirstCustom then
-      goto rtl
+      result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     else if at = DocVariantVType then
       // direct TDocVariantDat.VName/VValue comparison with no serialization
       result := PDocVariantData(A)^.Compare(PDocVariantData(B)^, caseInsensitive)
     else
-      // compare from custom types UTF-8 text representation/serialization
-      begin
-utf:    au := nil; // no try..finally for local RawUtf8 variables
-        bu := nil;
-        VariantToUtf8(PVariant(A)^, RawUtf8(au), wasString);
-        VariantToUtf8(PVariant(B)^, RawUtf8(bu), wasString);
-        result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
-        FastAssignNew(au);
-        FastAssignNew(bu);
-      end
+    begin
+      ah := FindSynVariantType(at);
+      if ah = nil then
+        // compare from custom types UTF-8 text representation/serialization
+        result := VariantCompAsText(A, B, caseInsensitive)
+      else
+        // use proper virtual method
+        result := ah.IntCompare(A^, B^, caseInsensitive);
+    end
   // A and B do not share the same type
   else if (at <= varNull) or
           (bt <= varNull) then
@@ -4155,9 +4151,21 @@ utf:    au := nil; // no try..finally for local RawUtf8 variables
           (at <> varOleStr) and
           (bt < varString) and
           (bt <> varOleStr) then
-    goto rtl
+    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
+  else if (at < varFirstCustom) and
+          (bt < varFirstCustom) then
+    result := VariantCompAsText(A, B, caseInsensitive) // RawUtf8 convert
   else
-    goto utf;
+  begin
+    ah := FindSynVariantType(at);
+    bh := FindSynVariantType(bt);
+    if ah <> nil then
+      result := ah.IntCompare(A^, B^, caseInsensitive)
+    else if bh <> nil then
+      result := - bh.IntCompare(B^, A^, caseInsensitive)
+    else
+      result := VariantCompAsText(A, B, caseInsensitive); // RawUtf8 convert
+  end;
 end;
 
 function VariantCompare(const V1, V2: variant): PtrInt;
