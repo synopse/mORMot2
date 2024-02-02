@@ -4263,6 +4263,11 @@ begin
   l3 := l2.Filter('d.e.f=FF');
   CheckEqual(l3.Json, '[{"a":1,"b":21,"c":"C","d":{"e":{"f":"FF"}}}]', 'defFF');
   Check(l3.D[0].Compare(d) = 0, 'l3Dcomp');
+  Check(l3.D[0].Compare(d, ['b']) = 0, 'l3Dcompb');
+  Check(l3.D[0].Compare(d, ['b', 'c']) = 0, 'l3Dcompbc');
+  Check(l3.D[0].Compare(d, ['b', 'c', 'a']) = 0, 'l3Dcompbca');
+  Check(l3.D[0].Compare(d, ['b', 'c', 'd', 'a']) = 0, 'l3Dcompbcda');
+  Check(l3.D[0].Compare(d, ['b', 'c', 'd', 'a', 'f']) = 0, 'l3Dcompbcdaf');
   d.Clear;
   CheckEqual(d.Len, 0);
   CheckEqual(d.Json, '{}');
@@ -4310,9 +4315,9 @@ begin
   CheckEqual(l3.Json, '[{"a":0,"b":20},{"a":2,"b":22}]', 'filter10');
   l3 := l2.Filter('a=', 1);
   CheckEqual(l3.Json, '[]', 'filter1');
-  l3 := l2.Filter('b=', 22);
+  l3 := l2.Filter('b =', 22);
   CheckEqual(l3.Json, '[{"a":2,"b":22}]', 'filter22');
-  l3 := l2.Filter('b<=', 21);
+  l3 := l2.Filter('b <=', 21);
   CheckEqual(l3.Json, '[{"a":0,"b":20}]', 'filter21');
   l3 := l2.Reduce(['b']);
   CheckEqual(l3.Json, '[{"b":20},{"b":22}]');
@@ -4320,6 +4325,10 @@ begin
   l2.Extend(l3);
   CheckEqual(l2.Json, '[{"a":0,"b":20},{},{"a":2,"b":22},{"b":20},{"b":22}]');
   l2.Del(1);
+  l3 := l2.Copy(-2);
+  CheckEqual(l3.Len, l2.Len - 2);
+  l3.Extend(['tobeignored']);
+  CheckEqual(l3.Json, '[{"b":20},{"b":22},"tobeignored"]');
   CheckEqual(l2.Json, '[{"a":0,"b":20},{"a":2,"b":22},{"b":20},{"b":22}]');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['b']).Json, '{"b":1}');
   CheckEqual(DocDict('{a:3,b:1,c:4}').Reduce(['c', 'b']).Json, '{"c":4,"b":1}');
@@ -4340,10 +4349,17 @@ begin
   CheckEqual(l.Count('one'), 1);
   for n := 0 to l.Len - 1 do
     CheckEqual(l.Count(l[n]), 1, 'l.Count');
+  CheckEqual(l.Compare(l), 0, 'comp1');
+  l2 := l.Copy;
+  CheckEqual(l.Compare(l2), 0, 'comp2');
   n := l.Len;
   CheckEqual(n, 6);
+  Check(d <> nil);
+  Check(not l.PopItem(d), 'noobject1');
+  Check(d = nil, 'afterpop');
   while l.PopItem(one) do
   begin
+    Check(not l.PopItem(d), 'noobject2');
     CheckEqual(l.Count(one), 0);
     Check(not VarIsEmptyOrNull(one), 'popitem');
     dec(n);
@@ -4351,6 +4367,18 @@ begin
   CheckEqual(n, 0);
   CheckEqual(l.Len, 0);
   CheckEqual(l.Json, '[]');
+  CheckEqual(l3.Json, '[{"b":20},{"b":22},"tobeignored"]');
+  l3.Reverse;
+  CheckEqual(l3.Json, '["tobeignored",{"b":22},{"b":20}]');
+  n := l3.Len;
+  while l3.PopItem(d) do
+  begin
+    Check(d.Exists('b'));
+    Check(d['b'] >= 20);
+    Check(d.I['b'] >= 20);
+    dec(n);
+  end;
+  CheckEqual(n, 1, 'stop@tobeignored');
 end;
 
 procedure TTestCoreProcess._TDecimal128;
