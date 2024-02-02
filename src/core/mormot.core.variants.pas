@@ -1951,21 +1951,23 @@ type
       aDoNotAddVoidProp: boolean = false): variant; overload;
     /// create a TDocVariant array, matching a filtering expression
     // - expressions are e.g. 'name=Synopse' or 'price<100'
-    procedure ReduceFilter(const aExpression: RawUtf8;
-      var result: TDocVariantData; aCompare: TVariantCompare = nil); overload;
+    procedure ReduceFilter(const aExpression: RawUtf8; var result: TDocVariantData;
+      aLimit: integer = 0; aCompare: TVariantCompare = nil); overload;
     /// create a TDocVariant array, matching a filtering expression
     // - expressions are e.g. 'name=Synopse' or 'price<100'
-    function ReduceFilter(const aExpression: RawUtf8): variant; overload;
+    function ReduceFilter(const aExpression: RawUtf8; aLimit: integer = 0): variant; overload;
     /// create a TDocVariant array, matching a filtering expression
     // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
     procedure ReduceFilter(const aExpression: RawUtf8; const aValue: variant;
-      var result: TDocVariantData; aCompare: TVariantCompare = nil); overload;
+      var result: TDocVariantData; aCompare: TVariantCompare = nil;
+      aLimit: integer = 0); overload;
     /// create a TDocVariant array, matching a filtering expression
     // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
-    function ReduceFilter(const aExpression: RawUtf8; const aValue: variant): variant; overload;
+    function ReduceFilter(const aExpression: RawUtf8; const aValue: variant;
+      aLimit: integer = 0): variant; overload;
     /// create a TDocVariant array, matching a filtering set of raw parameters
     procedure ReduceFilter(const aKey: RawUtf8; const aValue: variant;
-      aMatch: TCompareOperator; aCompare: TVariantCompare;
+      aMatch: TCompareOperator; aCompare: TVariantCompare; aLimit: integer;
       var result: TDocVariantData); overload;
     /// create a TDocVariant array, from the values of a single property of the
     // objects of this document array, specified by name
@@ -7718,8 +7720,9 @@ begin
     end;
 end;
 
-procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8; const aValue: variant;
-  aMatch: TCompareOperator; aCompare: TVariantCompare; var result: TDocVariantData);
+procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8;
+  const aValue: variant; aMatch: TCompareOperator; aCompare: TVariantCompare;
+  aLimit: integer; var result: TDocVariantData);
 var
   n, prev: integer;
   v, obj: PVariant;
@@ -7750,43 +7753,62 @@ begin
         SetLength(result.VValue, n); // prepare for maximum capacity
       result.AddItem(PVariant(dv)^);
     end;
+    dec(aLimit);
+    if aLimit = 0 then
+      exit;
     inc(v);
     dec(n);
   until n = 0;
 end;
 
 procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  var result: TDocVariantData; aCompare: TVariantCompare);
+  var result: TDocVariantData; aLimit: integer; aCompare: TVariantCompare);
 var
   k: RawUtf8;
   v: variant;
   m: TCompareOperator;
 begin
   ParseSortMatch(pointer(aExpression), k, m, @v);
-  ReduceFilter(k, v, m, aCompare, result);
+  ReduceFilter(k, v, m, aCompare, aLimit, result);
 end;
 
-function TDocVariantData.ReduceFilter(const aExpression: RawUtf8): variant;
+procedure ToSingle(result: PRttiVarData);
+var
+  tmp: TDocVariantData;
+begin
+  PRttiVarData(@tmp)^ := result^; // main dvArray to be finalized at exit
+  result^.VType := varEmpty;
+  if tmp.VCount <> 0 then
+    PVariant(result)^ := tmp.VValue[0]; // return the first (and unique) item
+end;
+
+function TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
+  aLimit: integer): variant;
 begin
   VarClear(result{%H-});
-  ReduceFilter(aExpression, PDocVariantData(@result)^);
+  ReduceFilter(aExpression, PDocVariantData(@result)^, aLimit);
+  if aLimit = 1 then
+    ToSingle(@result);
 end;
 
 procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  const aValue: variant; var result: TDocVariantData; aCompare: TVariantCompare);
+  const aValue: variant; var result: TDocVariantData;
+  aCompare: TVariantCompare; aLimit: integer);
 var
   k: RawUtf8;
   m: TCompareOperator;
 begin
   ParseSortMatch(pointer(aExpression), k, m, nil);
-  ReduceFilter(k, aValue, m, aCompare, result);
+  ReduceFilter(k, aValue, m, aCompare, aLimit, result);
 end;
 
 function TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  const aValue: variant): variant;
+  const aValue: variant; aLimit: integer): variant;
 begin
   VarClear(result{%H-});
   ReduceFilter(aExpression, aValue, PDocVariantData(@result)^);
+  if aLimit = 1 then
+    ToSingle(@result);
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;

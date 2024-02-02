@@ -2782,8 +2782,8 @@ begin
       {$endif CPU64}
   else if pmax >= 1 then
   begin
-    // PMax in [1..30] = len in [2..31]
-    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper); // lookup table
+    // PMax=[1..30] -> len=[2..31] -> aPattern becomes a SBNDMQ2 lookup table
+    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper);
     if aCaseInsensitive then
       Search := SearchSBNDMQ2U
     else
