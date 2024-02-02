@@ -963,8 +963,8 @@ type
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
     function GetVariantByPath(const aNameOrPath: RawUtf8): Variant;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetObjectProp(const aName: RawUtf8; out aFound: PVariant): boolean;
-      {$ifdef FPC}inline;{$endif}
+    function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
+      aPreviousIndex: PInteger): boolean;
     function InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
@@ -2914,6 +2914,7 @@ type
     CompFunc: TVariantCompare;
     CompMatch: TCompareOperator;
     CompKeyHasPath: boolean;
+    CompKeyPrev: integer;
   public
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocObjectEnumerator;
@@ -6792,7 +6793,7 @@ var
   v: PVariant;
 begin
   if (cardinal(VType) = DocVariantVType) and
-     GetObjectProp(aName, v{%H-}) then
+     GetObjectProp(aName, v{%H-}, nil) then
     result := FastVarDataComp(pointer(v), @aValue, aCaseInsensitive)
   else
     result := -1;
@@ -6804,7 +6805,7 @@ var
   v: PVariant;
 begin
   result := (cardinal(VType) = DocVariantVType) and
-            GetObjectProp(aName, v{%H-}) and
+            GetObjectProp(aName, v{%H-}, nil) and
             (FastVarDataComp(@aValue, pointer(v), aCaseInsensitive) = 0);
 end;
 
@@ -7161,20 +7162,33 @@ begin
 end;
 
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
-  out aFound: PVariant): boolean;
+  out aFound: PVariant; aPreviousIndex: PInteger): boolean;
 var
-  ndx: PtrInt;
+  ndx, n: PtrInt;
 begin
   result := false;
   aFound := nil;
-  if (VCount = 0) or
+  n := VCount;
+  if (n = 0) or
      (aName = '') or
      not IsObject then
     exit;
-  ndx := FindNonVoid[IsCaseSensitive](
-        pointer(VName), pointer(aName), length(aName), VCount);
+  ndx := -1;
+  if aPreviousIndex <> nil then
+  begin // optimistic try if this field is in the same place
+    ndx := aPreviousIndex^;
+    if (PtrUInt(ndx) >= PtrUInt(n)) or
+       (SortDynArrayAnsiStringByCase[not IsCaseSensitive](
+         VName[ndx], aName) <> 0) then
+      ndx := -1;
+  end;
+  if ndx < 0 then
+    ndx := FindNonVoid[IsCaseSensitive](
+          pointer(VName), pointer(aName), length(aName), n);
   if ndx < 0 then
     exit;
+  if aPreviousIndex <> nil then
+    aPreviousIndex^ := ndx;
   aFound := @VValue[ndx];
   result  := true;
 end;
@@ -7183,6 +7197,7 @@ function TDocVariantData.SearchItemByProp(const aPropName, aPropValue: RawUtf8;
   aPropValueCaseSensitive: boolean): integer;
 var
   v: PVariant;
+  prev: integer;
 begin
   if IsObject then
   begin
@@ -7192,10 +7207,13 @@ begin
       exit;
   end
   else if IsArray then
+  begin
+    prev := -1; // optimistic search aPropName at the previous field position
     for result := 0 to VCount - 1 do
-      if _Safe(VValue[result])^.GetObjectProp(aPropName, v) and
+      if _Safe(VValue[result])^.GetObjectProp(aPropName, v, @prev) and
          VariantEquals({%H-}v^, aPropValue, aPropValueCaseSensitive) then
         exit;
+  end;
   result := -1;
 end;
 
@@ -7682,7 +7700,7 @@ end;
 procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8; const aValue: variant;
   aMatch: TCompareOperator; aCompare: TVariantCompare; var result: TDocVariantData);
 var
-  n: integer;
+  n, prev: integer;
   v, obj: PVariant;
   haspath: boolean;
   dv: PDocVariantData;
@@ -7695,6 +7713,7 @@ begin
     exit;
   if not Assigned(aCompare) then
     aCompare := @VariantCompare;
+  prev := -1; // optimistic search aPropName at the previous field position
   haspath := PosExChar('.', aKey) <> 0;
   v := pointer(VValue);
   repeat
@@ -7702,7 +7721,7 @@ begin
     if haspath then
       obj := dv^.GetPVariantByPath(aKey, '.')
     else
-      dv^.GetObjectProp(aKey, obj);
+      dv^.GetObjectProp(aKey, obj, @prev);
     if (obj <> nil) and
        SortMatch(aCompare({%H-}obj^, aValue), aMatch) then
     begin
@@ -7760,19 +7779,22 @@ procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   var result: TDocVariantData; const OnReduce: TOnReducePerItem);
 var
   ndx: PtrInt;
+  prev: integer;
   item: PDocVariantData;
   v: PVariant;
 begin
   result.Init(VOptions, dvArray); // same options than the main document
-  if (VCount <> 0) and
-     (aPropName <> '') and
-     IsArray then
-    for ndx := 0 to VCount - 1 do
-      if _Safe(VValue[ndx], item) and
-         {%H-}item^.GetObjectProp(aPropName, v) then
-        if (not Assigned(OnReduce)) or
-           OnReduce(item) then
-          result.AddItem(v^);
+  if (VCount = 0) or
+     (aPropName = '') or
+     not IsArray then
+    exit;
+  prev := -1; // optimistic search aPropName at the previous field position
+  for ndx := 0 to VCount - 1 do
+    if _Safe(VValue[ndx], item) and
+       {%H-}item^.GetObjectProp(aPropName, v, @prev) then
+      if (not Assigned(OnReduce)) or
+         OnReduce(item) then
+        result.AddItem(v^);
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
@@ -7786,17 +7808,20 @@ procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   var result: TDocVariantData; const OnReduce: TOnReducePerValue);
 var
   ndx: PtrInt;
+  prev: integer;
   v: PVariant;
 begin
   result.Init(VOptions, dvArray); // same options than the main document
-  if (VCount <> 0) and
-     (aPropName <> '') and
-     IsArray then
-    for ndx := 0 to VCount - 1 do
-      if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v) then
-        if (not Assigned(OnReduce)) or
-           OnReduce(v^) then
-          result.AddItem(v^);
+  if (VCount = 0) or
+     (aPropName = '') or
+     not IsArray then
+    exit;
+  prev := -1; // optimistic search aPropName at the previous field position
+  for ndx := 0 to VCount - 1 do
+    if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v, @prev) then
+      if (not Assigned(OnReduce)) or
+         OnReduce(v^) then
+        result.AddItem(v^);
 end;
 
 function NotIn(a, v: PVarData; n: integer; caseins: boolean): boolean;
@@ -7816,15 +7841,18 @@ function TDocVariantData.ReduceAsVariantArray(const aPropName: RawUtf8;
   aDuplicates: TSearchDuplicate): TVariantDynArray;
 var
   n, ndx: PtrInt;
+  prev: integer;
   v: PVariant;
 begin
-  n := 0;
   result := nil;
-  if (VCount <> 0) and
-     (aPropName <> '') and
-     IsArray then
+  if (VCount = 0) or
+     (aPropName = '') or
+     not IsArray then
+    exit;
+  prev := -1; // optimistic search aPropName at the previous field position
+  n := 0;
   for ndx := 0 to VCount - 1 do
-    if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v) then
+    if _Safe(VValue[ndx])^.GetObjectProp(aPropName, v, @prev) then
       if (aDuplicates = sdNone) or
          NotIn(pointer(result), pointer(v), n, aDuplicates = sdCaseInsensitive) then
       begin
@@ -8154,7 +8182,7 @@ var
   v: PVariant;
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     not GetObjectProp(aName, v{%H-}) then
+     not GetObjectProp(aName, v{%H-}, nil) then
     result := aDefault
   else
     SetVariantByValue(v^, result);
@@ -8165,7 +8193,7 @@ var
   v: PVariant;
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     not GetObjectProp(aName, v{%H-}) then
+     not GetObjectProp(aName, v{%H-}, nil) then
     SetVariantNull(result{%H-})
   else
     SetVariantByValue(v^, result);
@@ -8176,7 +8204,7 @@ var
   v: PVariant;
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     not GetObjectProp(aName, v{%H-}) then
+     not GetObjectProp(aName, v{%H-}, nil) then
    VarClear(result{%H-})
   else
     SetVariantByValue(v^, result);
@@ -10368,7 +10396,7 @@ begin
         if o = nil then
           continue;
       end
-      else if not dv^.GetObjectProp(CompKey, o) then
+      else if not dv^.GetObjectProp(CompKey, o, @CompKeyPrev) then
         continue;
       if not SortMatch(CompFunc({%H-}o^, CompValue), CompMatch) then
         continue;
@@ -10962,6 +10990,8 @@ function TDocList.Compare(const another: IDocList; caseinsensitive: boolean): in
 begin
   if another = nil then
     result := 1
+  else if another.Value = fValue then
+    result := 0 // same reference
   else
     result := fValue^.Compare(another.Value^, caseinsensitive);
 end;
@@ -11196,6 +11226,7 @@ begin
   result.CompFunc := compare;
   result.CompMatch := match;
   result.CompKeyHasPath := PosExChar('.', key) <> 0;
+  result.CompKeyPrev := -1; // optimistic key search in previous position
 end;
 
 function TDocList.Objects(const expression: RawUtf8): TDocObjectEnumerator;
