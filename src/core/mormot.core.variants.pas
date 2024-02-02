@@ -3102,12 +3102,17 @@ type
     function Filter(const expression: RawUtf8): IDocList; overload;
     /// search matching expression over IDocDict kind of elements in this list
     // - use e.g. Filter('name=', 'Synopse') or Filter('info.price<', MaxPrice)
-    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
+    function Filter(const expression: RawUtf8; const value: variant;
+      limit: integer = 0): IDocList; overload;
     /// search matching key/value over IDocDict kind of elements in this list
     // - raw search for compare(object.key,value)=match
     // - default compare=nil will use VariantCompare
-    function Filter(const key: RawUtf8; const value: variant;
+    function Filter(const key: RawUtf8; const value: variant; limit: integer;
       match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
+    /// search the first matching expression over IDocDict kind of elements
+    function First(const expression: RawUtf8): variant; overload;
+    /// search the first matching expression over IDocDict kind of elements
+    function First(const expression: RawUtf8; const value: variant): variant; overload;
     /// returns the position at the first occurrence of the specified value
     function Index(const value: variant): integer; overload;
     /// returns the position at the first occurrence of the specified text value
@@ -10221,10 +10226,13 @@ type
     function Count(const value: RawUtf8): integer; overload;
     procedure Extend(const value: IDocList); overload;
     procedure Extend(const value: array of const); overload;
-    function Filter(const key: RawUtf8; const value: variant;
+    function Filter(const key: RawUtf8; const value: variant; limit: integer;
       match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
     function Filter(const expression: RawUtf8): IDocList; overload;
-    function Filter(const expression: RawUtf8; const value: variant): IDocList; overload;
+    function Filter(const expression: RawUtf8; const value: variant;
+      limit: integer): IDocList; overload;
+    function First(const expression: RawUtf8): variant; overload;
+    function First(const expression: RawUtf8; const value: variant): variant; overload;
     function Index(const value: variant): integer; overload;
     function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
     function Exists(const value: variant): boolean; overload;
@@ -11203,22 +11211,33 @@ begin
 end;
 
 function TDocList.Filter(const key: RawUtf8; const value: variant;
-  match: TCompareOperator; compare: TVariantCompare): IDocList;
+  limit: integer; match: TCompareOperator; compare: TVariantCompare): IDocList;
 begin
   result := TDocList.CreateOwned;
-  fValue^.ReduceFilter(key, value, match, compare, result.Value^);
+  fValue^.ReduceFilter(key, value, match, compare, limit, result.Value^);
 end;
 
 function TDocList.Filter(const expression: RawUtf8): IDocList;
-begin
+begin // no limit here to avoid confusion between overloads
   result := TDocList.CreateOwned;
   fValue^.ReduceFilter(expression, result.Value^);
 end;
 
-function TDocList.Filter(const expression: RawUtf8; const value: variant): IDocList;
+function TDocList.Filter(const expression: RawUtf8; const value: variant;
+  limit: integer): IDocList;
 begin
   result := TDocList.CreateOwned;
-  fValue^.ReduceFilter(expression, value, result.Value^);
+  fValue^.ReduceFilter(expression, value, result.Value^, nil, limit);
+end;
+
+function TDocList.First(const expression: RawUtf8): variant;
+begin
+  result := fValue^.ReduceFilter(expression, {limit=} 1);
+end;
+
+function TDocList.First(const expression: RawUtf8; const value: variant): variant;
+begin
+  result := fValue^.ReduceFilter(expression, value, {limit=} 1);
 end;
 
 {$ifdef HASIMPLICITOPERATOR}
