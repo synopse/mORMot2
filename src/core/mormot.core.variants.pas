@@ -11286,25 +11286,27 @@ begin
   result := fValue^.Compare(another.Value^, caseinsensitive);
 end;
 
-function TDocDict.ValueAt(const key: RawUtf8): PVariant;
-begin
-  if fPathDelim = #0 then
-    result := pointer(fValue^.GetVarData(key, fSorted)) // faster
-  else
-    result := fValue^.GetPVariantByPath(key, fPathDelim);
-  if result = nil then
-    // raise EDocVariant exception if dvoReturnNullForUnknownProperty is not set
-    result := fValue^.InternalNotFound(pointer(key));
-end;
-
 function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
 begin
-  // return false if not found
   if fPathDelim = #0 then
     value := pointer(fValue^.GetVarData(key, fSorted)) // faster
   else
     value := fValue^.GetPVariantByPath(key, fPathDelim);
-  result := value <> nil;
+  result := value <> nil; // return false if not found
+end;
+
+function TDocDict.GetExistingValueAt(const key, method: RawUtf8): PVariant;
+begin
+  if not GetValueAt(key, result) then
+    if dvoReturnNullForUnknownProperty in fValue^.VOptions then
+      result := @DocVariantDataFake
+    else
+      raise EDocDict.CreateUtf8('%[''%''] key not found', [method, key]);
+end;
+
+function TDocDict.ValueAt(const key: RawUtf8): PVariant;
+begin
+  result := GetExistingValueAt(key, 'ValueAt');
 end;
 
 function TDocDict.SetValueAt(const key: RawUtf8; const value: variant): boolean;
@@ -11329,7 +11331,7 @@ function TDocDict.GetB(const key: RawUtf8): boolean;
 var
   v: PVariant;
 begin
-  v := ValueAt(key);
+  v := GetExistingValueAt(key, 'B');
   if not VariantToBoolean(v^, result) then
     EDocDict.Error('B', key, v^);
 end;
@@ -11338,21 +11340,22 @@ function TDocDict.GetC(const key: RawUtf8): currency;
 var
   v: PVariant;
 begin
-  v := ValueAt(key);
+  v := GetExistingValueAt(key, 'C');
   if not VariantToCurrency(v^, result) then
     EDocDict.Error('C', key, v^);
 end;
 
 function TDocDict.GetD(const key: RawUtf8): IDocDict;
 begin
-  result := TDocDict.CreateByRef(_Safe(ValueAt(key)^, dvObject));
+  result := TDocDict.CreateByRef(
+    _Safe(GetExistingValueAt(key, 'D')^, dvObject));
 end;
 
 function TDocDict.GetF(const key: RawUtf8): double;
 var
   v: PVariant;
 begin
-  v := ValueAt(key);
+  v := GetExistingValueAt(key, 'F');
   if not VariantToDouble(v^, result) then
     EDocDict.Error('F', key, v^);
 end;
@@ -11361,29 +11364,30 @@ function TDocDict.GetI(const key: RawUtf8): Int64;
 var
   v: PVariant;
 begin
-  v := ValueAt(key);
+  v := GetExistingValueAt(key, 'I');
   if not VariantToInt64(v^, result) then
     EDocDict.Error('I', key, v^);
 end;
 
 function TDocDict.GetItem(const key: RawUtf8): variant;
 begin
-  result := ValueAt(key)^;
+  result := GetExistingValueAt(key, 'Item')^;
 end;
 
 function TDocDict.GetL(const key: RawUtf8): IDocList;
 begin
-  result := TDocList.CreateByRef(_Safe(ValueAt(key)^, dvArray));
+  result := TDocList.CreateByRef(
+    _Safe(GetExistingValueAt(key, 'B')^, dvArray));
 end;
 
 function TDocDict.GetS(const key: RawUtf8): string;
 begin
-  VariantToString(ValueAt(key)^, result);
+  VariantToString(GetExistingValueAt(key, 'S')^, result);
 end;
 
 function TDocDict.GetU(const key: RawUtf8): RawUtf8;
 begin
-  VariantToUtf8(ValueAt(key)^, result);
+  VariantToUtf8(GetExistingValueAt(key, 'U')^, result);
 end;
 
 procedure TDocDict.SetB(const key: RawUtf8; const value: boolean);
@@ -11659,7 +11663,7 @@ end;
 
 function TDocDict.GetV(const key: RawUtf8): TDocValue;
 begin
-  result.V := ValueAt(key);
+  result.V := GetExistingValueAt(key, 'V');
 end;
 
 function TDocDict.GetEnumerator: TDocDictEnumerator;
