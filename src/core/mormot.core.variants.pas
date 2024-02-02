@@ -273,6 +273,12 @@ type
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
     procedure Clear(var V: TVarData); override;
+    /// compare two items - this overriden method will redirect to Compare()
+    function CompareOp(const Left, Right: TVarData;
+      const Operation: TVarOp): boolean; override;
+    /// compare two items - overriden method calling VariantCompAsText()
+    procedure Compare(const Left, Right: TVarData;
+      var Relationship: TVarCompareResult); override;
     /// copy two variant content
     // - this default implementation will copy the TVarData memory
     // - override it if your custom type needs to manage its internal structure
@@ -350,6 +356,10 @@ function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
 // - as used e.g. by TJsonWriter.AddVariant
 function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
   Escape: TTextWriterKind): boolean;
+
+/// low-level conversion of a Compare() result to TCustomVariantType.Compare
+function SortCompTo(cmp: integer): TVarCompareResult;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************** TDocVariant Object/Array Document Holder with JSON support }
@@ -4252,6 +4262,16 @@ begin
   end;
 end;
 
+function SortCompTo(cmp: integer): TVarCompareResult;
+begin
+  if cmp = 0 then
+    result := crEqual
+  else if cmp > 0 then
+    result:= crGreaterThan
+  else
+    result := crLessThan;
+end;
+
 
 { TSynInvokeableVariantType }
 
@@ -4284,7 +4304,7 @@ function TSynInvokeableVariantType.{%H-}IntGet(var Dest: TVarData;
   NoException: boolean): boolean;
 begin
   raise ESynVariant.CreateUtf8('Unexpected %.IntGet(%): this kind of ' +
-    'custom variant does not support sub-fields', [self, Name]);
+    'custom variant does not support fields', [self, Name]);
 end;
 
 function TSynInvokeableVariantType.{%H-}IntSet(const Instance, Value: TVarData;
@@ -4292,6 +4312,40 @@ function TSynInvokeableVariantType.{%H-}IntSet(const Instance, Value: TVarData;
 begin
   raise ESynVariant.CreateUtf8('Unexpected %.IntSet(%): this kind of ' +
     'custom variant is read-only', [self, Name]);
+end;
+
+function TSynInvokeableVariantType.IntCompare(
+  const Instance, Another: TVarData; CaseInsensitive: boolean): integer;
+begin
+  result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
+end;
+
+const
+  FROM_VAROP: array[opcmpeq .. opcmpge, TVarCompareResult] of boolean = (
+    (false,  true,   false), // opcmpeq
+    (true,   false,  true),  // opcmpne
+    (true,   false,  false), // opcmplt
+    (true,   true,   false), // opcmple
+    (false,  false,  true),  // opcmpgt
+    (false,  true,   true)); // opcmpge
+    // crLessThan crEqual crGreaterThan
+
+function TSynInvokeableVariantType.CompareOp(const Left, Right: TVarData;
+  const Operation: TVarOp): boolean;
+var
+  vcr: TVarCompareResult;
+begin
+  // redirect to Compare() as Delphi RTL does (but not the FPC RTL)
+  if not (Operation in [low(FROM_VAROP) .. high(FROM_VAROP)]) then
+    raise ESynVariant.CreateUtf8('Unexpected %.CompareOp(%)', [self, ord(Operation)]);
+  Compare(Left, Right, vcr);
+  result := FROM_VAROP[Operation, vcr];
+end;
+
+procedure TSynInvokeableVariantType.Compare(const Left, Right: TVarData;
+  var Relationship: TVarCompareResult);
+begin
+  Relationship := SortCompTo(VariantCompAsText(@Left, @Right, {CaseInsen=}false));
 end;
 
 const
@@ -5024,15 +5078,13 @@ end;
 procedure TDocVariant.Compare(const Left, Right: TVarData;
   var Relationship: TVarCompareResult);
 var
-  res: integer;
+  l, r: PDocVariantData;
 begin
-  res := FastVarDataComp(@Left, @Right, {caseins=}false);
-  if res < 0 then
-    Relationship := crLessThan
-  else if res > 0 then
-    Relationship := crGreaterThan
+  if _Safe(variant(Left), l) and // Left is likely to be a TDocVariant
+     _Safe(variant(Right), r) then
+    RelationShip := SortCompTo(l^.Compare(r^, {caseins=}false))
   else
-    Relationship := crEqual;
+    inherited Compare(Left, Right, RelationShip); // fallback to UTF-8 conversion
 end;
 
 class procedure TDocVariant.New(out aValue: variant;

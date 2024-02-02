@@ -455,12 +455,6 @@ type
     /// copy one instance
     procedure Copy(var Dest: TVarData; const Source: TVarData;
       const Indirect: boolean); override;
-    /// compare two variant values
-    // - handle comparison of any variant, including TBsonVariant, via a
-    // temporary JSON conversion, and case-sensitive comparison
-    // - it uses case-sensitive text (hexadecimal) comparison for betObjectID
-    procedure Compare(const Left, Right: TVarData;
-      var Relationship: TVarCompareResult); override;
     /// convert a TBsonDocument binary content into a TBsonVariant of kind
     // betDoc or betArray
     // - see also all BsonVariant() overloaded functions, which also create
@@ -2705,28 +2699,6 @@ begin
         VBlob := nil; // avoid GPF
         RawByteString(VBlob) := RawByteString(TBsonVariantData(Source).VBlob);
       end;
-  end;
-end;
-
-procedure TBsonVariant.Compare(const Left, Right: TVarData;
-  var Relationship: TVarCompareResult);
-var
-  res: integer;
-  LeftU, RightU: RawUtf8;
-begin
-  LeftU := VariantSaveMongoJson(variant(Left), modMongoStrict);
-  RightU := VariantSaveMongoJson(variant(Right), modMongoStrict);
-  if LeftU = RightU then
-    Relationship := crEqual
-  else
-  begin
-    res := StrComp(pointer(LeftU), pointer(RightU));
-    if res < 0 then
-      Relationship := crLessThan
-    else if res > 0 then
-      Relationship := crGreaterThan
-    else
-      Relationship := crEqual;
   end;
 end;
 
