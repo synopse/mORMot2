@@ -321,6 +321,9 @@ type
     /// override this abstract method for actual setter by name implementation
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
+    /// override this method for custom comparison - default VariantCompAsText()
+    function IntCompare(const Instance, Another: TVarData;
+      CaseInsensitive: boolean): integer; virtual;
     /// identify how this custom type behave
     // - as set by the class constructor, to avoid calling any virtual method
     property Options: TSynInvokeableVariantTypeOptions
@@ -10223,6 +10226,7 @@ type
     fSorted: TUtf8Compare;
     function GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
     function SetValueAt(const key: RawUtf8; const value: variant): boolean;
+    function GetExistingValueAt(const key, method: RawUtf8): PVariant;
     function PopAt(const key: RawUtf8; value: PVariant): boolean;
   public
     function GetB(const key: RawUtf8): boolean;
