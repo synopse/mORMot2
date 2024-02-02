@@ -1299,8 +1299,8 @@ type
       CaseInsensitive: boolean = false): integer; overload;
     /// efficient comparison of two TDocVariantData objects
     // - will always ensure that both this instance and Another are Objects
-    // - will compare all values following the supplied Fields order
-    // - if no Fields is specified, will fallback to regular Compare()
+    // - will compare all supplied Fields values in their specified order
+    // - if ObjFields is void, will fallback to regular Compare()
     function CompareObject(const ObjFields: array of RawUtf8;
       const Another: TDocVariantData; CaseInsensitive: boolean = false): integer;
     /// efficient equality comparison of two TDocVariantData content
@@ -2851,9 +2851,11 @@ type
   /// internal map of a variant memory structure for IDocList/IDocDict wrappers
   // - implicit class operators are used to ease its work with high-level result
   // variables like RawUtf8 or IDocList/IDocDict - even as iterator variables
+  // - warning: is a weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocValue = record
   public
-    /// raw pointer access to the corresponting value
+    /// raw pointer access to the corresponting value IDocList/IDocDict
     // - you should not use this field, but implicit operators
     V: PVariant;
     /// returns true if the current value is a string
@@ -2877,6 +2879,8 @@ type
 
   /// low-level Enumerator as returned by IDocList.GetEnumerator and
   // IDocDict.Values
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocValueEnumerator = record
   private
     Curr, After: TDocValue;
@@ -2888,6 +2892,8 @@ type
   end;
 
   /// low-level Enumerator as returned by IDocList.Objects
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly call IDocDict.Copy to use outside of the loop
   TDocObjectEnumerator = record
   private
     CurrDict: IDocDict; // a single instance reused during whole iteration
@@ -2906,6 +2912,8 @@ type
   end;
 
   /// internal map of a key name for IDocDict wrappers
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocKey = record
   public
     /// raw pointer access to the corresponting name
@@ -2918,6 +2926,8 @@ type
   end;
 
   /// low-level Enumerator as returned by IDocDict.Keys
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocKeyEnumerator = record
   private
     Curr, After: TDocKey;
@@ -2930,6 +2940,8 @@ type
 
   /// store one key/value pair as returned by IDocDict.GetEnumerator
   // - thanks to TDocKey/TDocValue wrappers, no transient copy is involved
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocDictFields = record
   public
     /// efficient/indirect access to one key of the current IDocDict element
@@ -2941,6 +2953,8 @@ type
   end;
 
   /// low-level Enumerator as returned by IDocDict.GetEnumerator
+  // - warning: weak reference to the main IDocList/IDocDict, so you need to
+  // explicitly convert it into stand-alone variables to use outside of the loop
   TDocDictEnumerator = record
   private
     Curr: TDocDictFields;
@@ -2978,10 +2992,13 @@ type
     /// convert into JSON array/object as RTL string
     function ToString(format: TTextWriterJsonFormat = jsonCompact): string;
     /// low-level access to the internal TDocVariantData storage
+    // - warning: is a weak reference pointer to the main IDocList/IDocDict, so
+    // you need to copy it to use it outside of this instance
     function Value: PDocVariantData;
     /// equals true if the Value is owned by this IDocList/IDocDict instance
     function ValueIsOwned: boolean;
     /// unserialize/serialize this IDocList/IDocDict from/into a JSON array/object
+    // - use ToString if you want the result as RTL string
     property Json: RawUtf8
       read GetJson write SetJson;
   end;
@@ -3089,8 +3106,10 @@ type
     // - will just ignore any element of the IDocList which is not a IDocDict
     function ObjectsDictDynArray: IDocDictDynArray;
     /// removes the element at the specified position, and returns it
+    // - raise an EDocList on invalid supplied position
     function Pop(position: integer = -1): variant;
-    /// removes the last inserted element, with no out-of-range error raised
+    /// removes the last inserted element into a value-owned IDocDict
+    // - returns false if there is no value at this position (raise no EDocList)
     // - you may change the extraction position (negatives from Len)
     function PopItem(out value: variant; position: integer = -1): boolean;
     /// extract a list of IDocDict elements which contains only specified keys
@@ -3114,10 +3133,12 @@ type
     /// low-level direct access to a stored element in TDocVariantData.Value[]
     function ValueAt(position: integer): PVariant;
     {$ifdef HASIMPLICITOPERATOR}
-    /// default iterator over all elements of this IDocList
+    /// default iterator over all elements of this IDocList, returning TDocValue
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     function GetEnumerator: TDocValueEnumerator;
     /// allow to iterate over a specific range of elements of this IDocList
-    // - elements are returned directly from the main list
+    // - elements are returned directly from the main list as weak references
+    // $ var v: TDocValue;
     // $ "for v in list.Range" returns all elements, i.e. maps "for v in list"
     // $ "for v in list.Range(10)" returns #10..#Count-1, i.e. list[10:]
     // $ "for v in list.Range(-2)" returns last #Count-2..#Count-1, i.e. list[-2:]
@@ -3128,20 +3149,25 @@ type
     // - the list should consist e.g. of a JSON array of JSON objects
     // - will just ignore any element of the IDocList which is not a IDocDict
     // - TDocObjectEnumerator will maintain and reuse a single IDocDict instance
+    // - warning: IDocDict is a weak reference, explicitly Copy outside the loop
     function Objects: TDocObjectEnumerator; overload;
     /// iterate matching expression over IDocDict kind of elements in this IDocList
     // - expressions are e.g. 'name=Synopse' or 'info.price<100'
+    // - warning: IDocDict is a weak reference, explicitly Copy outside the loop
     function Objects(const expression: RawUtf8): TDocObjectEnumerator; overload;
     /// iterate matching expression over IDocDict kind of elements in this IDocList
-    // - use e.g. Objects('name=', 'Synopse') or Objects('info.price<', MaxPrice)
+    // - use e.g. Objects('name =', 'Synopse') or Objects('info.price<', MaxPrice)
+    // - warning: IDocDict is a weak reference, explicitly Copy outside the loop
     function Objects(const expression: RawUtf8;
       const value: variant): TDocObjectEnumerator; overload;
     /// iterate matching key/value over IDocDict kind of elements in this IDocList
     // - raw search for compare(object.key,value)=match
+    // - warning: IDocDict is a weak reference, explicitly Copy outside the loop
     function Objects(const key: RawUtf8; const value: variant;
       match: TCompareOperator; compare: TVariantCompare): TDocObjectEnumerator; overload;
     /// read access of one element in the list, as TDocValue
     // - may be more convenient than the plain variant as returned by Item[]
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     property V[position: integer]: TDocValue
       read GetV;
     {$endif HASIMPLICITOPERATOR}
@@ -3183,10 +3209,12 @@ type
       read GetD write SetD;
     /// access one element in the list, as IDocList/IDocArray
     // - property alias, for compatibility with existing code
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     property A[position: integer]: IDocList
       read GetL write SetL;
     /// access one element in the list, as IDocDict/IDocObject
     // - property alias, for compatibility with existing code
+    // - warning: weak reference to the main list, unless you explicitly Copy it
     property O[position: integer]: IDocDict
       read GetD write SetD;
   end;
