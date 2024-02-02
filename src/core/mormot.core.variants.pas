@@ -6745,13 +6745,12 @@ function TDocVariantData.CompareObject(const ObjFields: array of RawUtf8;
   const Another: TDocVariantData; CaseInsensitive: boolean): integer;
 var
   f: PtrInt;
-  ndx: integer;
-  v1, v2: PVarData;
+  prev: integer;
+  v1, v2: PVariant;
 begin
   if IsObject then
-    if Another.IsObject then
+    if Another.IsObject then // compare Object, possibly by specified fields
     begin
-      // compare Object, Object by specified fields
       if high(ObjFields) < 0 then
       begin
         result := Compare(Another, CaseInsensitive);
@@ -6759,19 +6758,14 @@ begin
       end;
       for f := 0 to high(ObjFields) do
       begin
-        v1 := GetVarData(ObjFields[f], nil, @ndx);
-        if (cardinal(ndx) < cardinal(Another.VCount)) and
-           (SortDynArrayAnsiStringByCase[not IsCaseSensitive](
-              ObjFields[f], Another.VName[ndx]) = 0) then
-          v2 := @Another.VValue[ndx] // ObjFields are likely at the same position
-        else
-          v2 := Another.GetVarData(ObjFields[f]); // full safe field name lookup
-        result := FastVarDataComp(v1, v2, CaseInsensitive);
+        prev := -1; // optimistic: fields may be in the same position
+        GetObjectProp(ObjFields[f], v1, @prev);
+        Another.GetObjectProp(ObjFields[f], v2, @prev);
+        result := FastVarDataComp(pointer(v1), pointer(v2), CaseInsensitive);
         if result <> 0 then // each value should match
           exit;
       end;
-      // all fields did match -> difference is now about the document size
-      result := VCount - Another.VCount;
+      result := 0; // all supplied fields did match
     end
     else
       result := 1   // Object, not Object
@@ -7651,16 +7645,19 @@ begin
   if VCount <= 0 then
     exit;
   if VName <> nil then
-    DynArray(TypeInfo(TRawUtf8DynArray), VName, @VCount).Reverse;
-  DynArray(TypeInfo(TVariantDynArray), VValue, @VCount).Reverse;
+  begin
+    DynArrayFakeLength(VName, VCount);
+    DynArray(TypeInfo(TRawUtf8DynArray), VName).Reverse;
+  end;
+  DynArrayFakeLength(VValue, VCount);
+  DynArray(TypeInfo(TVariantDynArray), VValue).Reverse;
 end;
 
 function TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
   aCaseSensitive, aDoNotAddVoidProp: boolean): variant;
 begin
   VarClear(result{%H-});
-  Reduce(
-    aPropNames, aCaseSensitive, PDocVariantData(@result)^, aDoNotAddVoidProp);
+  Reduce(aPropNames, aCaseSensitive, PDocVariantData(@result)^, aDoNotAddVoidProp);
 end;
 
 procedure TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
