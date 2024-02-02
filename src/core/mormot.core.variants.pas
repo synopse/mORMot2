@@ -274,9 +274,10 @@ type
     // - override it if your custom type needs to manage its internal memory
     procedure Clear(var V: TVarData); override;
     /// compare two items - this overriden method will redirect to Compare()
+    // - Delphi RTL does this redirection, where FPC does not (but should)
     function CompareOp(const Left, Right: TVarData;
       const Operation: TVarOp): boolean; override;
-    /// compare two items - overriden method calling VariantCompAsText()
+    /// compare two items - overriden method calling case-sensitive IntCompare()
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
     /// copy two variant content
@@ -321,7 +322,7 @@ type
     /// override this abstract method for actual setter by name implementation
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
-    /// override this method for custom comparison - default VariantCompAsText()
+    /// override this method if default VariantCompAsText() call is not optimal
     function IntCompare(const Instance, Another: TVarData;
       CaseInsensitive: boolean): integer; virtual;
     /// identify how this custom type behave
@@ -792,16 +793,15 @@ type
     // - only types processed by now are string/OleStr/UnicodeString/date
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
-    /// compare two variant values
-    // - redirect to case-sensitive FastVarDataComp() comparison
-    procedure Compare(const Left, Right: TVarData;
-      var Relationship: TVarCompareResult); override;
     /// overriden method for actual getter by name implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt; NoException: boolean): boolean; override;
     /// overriden method for actual setter by name implementation
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
+    /// overriden method redirecting to TDocVariantData.Compare()
+    function IntCompare(const Instance, Another: TVarData;
+      CaseInsensitive: boolean): integer; override;
   end;
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
@@ -4147,7 +4147,7 @@ begin
         // compare from custom types UTF-8 text representation/serialization
         result := VariantCompAsText(A, B, caseInsensitive)
       else
-        // use proper virtual method
+        // use proper virtual comparison method
         result := ah.IntCompare(A^, B^, caseInsensitive);
     end
   // A and B do not share the same type
@@ -4364,7 +4364,7 @@ end;
 procedure TSynInvokeableVariantType.Compare(const Left, Right: TVarData;
   var Relationship: TVarCompareResult);
 begin
-  Relationship := SortCompTo(VariantCompAsText(@Left, @Right, {CaseInsen=}false));
+  Relationship := SortCompTo(IntCompare(Left, Right, {CaseInsen=}false));
 end;
 
 const
@@ -4844,6 +4844,18 @@ begin
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
+function TDocVariant.IntCompare(const Instance, Another: TVarData;
+  CaseInsensitive: boolean): integer;
+var
+  l, r: PDocVariantData;
+begin
+  if _Safe(variant(Instance), l) and // is likely to be a TDocVariant
+     _Safe(variant(Another), r) then
+    result := l^.Compare(r^, CaseInsensitive)
+  else // inlined inherited
+    result := VariantCompAsText(@Instance, @Another, CaseInsensitive);
+end;
+
 function TDocVariant.IterateCount(const V: TVarData;
   GetObjectAsValues: boolean): integer;
 var
@@ -5092,18 +5104,6 @@ begin
     DocVariantType.ToJson(@Source, json);
     RawUtf8ToVariant(json, Dest, AVarType); // convert to JSON text
   end;
-end;
-
-procedure TDocVariant.Compare(const Left, Right: TVarData;
-  var Relationship: TVarCompareResult);
-var
-  l, r: PDocVariantData;
-begin
-  if _Safe(variant(Left), l) and // Left is likely to be a TDocVariant
-     _Safe(variant(Right), r) then
-    RelationShip := SortCompTo(l^.Compare(r^, {caseins=}false))
-  else
-    inherited Compare(Left, Right, RelationShip); // fallback to UTF-8 conversion
 end;
 
 class procedure TDocVariant.New(out aValue: variant;
