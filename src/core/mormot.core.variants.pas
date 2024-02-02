@@ -6705,7 +6705,9 @@ end;
 function TDocVariantData.Compare(const Another: TDocVariantData;
   CaseInsensitive: boolean): integer;
 var
-  j, n: PtrInt;
+  n: integer;
+  ndx: PtrInt;
+  v1, v2: PVarData;
   nameCmp: TDynArraySortCompare;
 begin
   // first validate the type: as { or [ in JSON
@@ -6725,17 +6727,21 @@ begin
   n := Another.VCount;
   if VCount < n then
     n := VCount;
-  for j := 0 to n - 1 do
+  v1 := pointer(VValue);
+  v2 := pointer(Another.VValue);
+  for ndx := 0 to n - 1 do
   begin
     if Assigned(nameCmp) then
     begin // each name should match
-      result := nameCmp(VName[j], Another.VName[j]);
+      result := nameCmp(VName[ndx], Another.VName[ndx]);
       if result <> 0 then
         exit;
     end;
-    result := FastVarDataComp(@VValue[j], @Another.VValue[j], CaseInsensitive);
+    result := FastVarDataComp(v1, v2, CaseInsensitive);
     if result <> 0 then // each value should match
       exit;
+    inc(v1);
+    inc(v2);
   end;
   // all content did match -> difference is now about the document count
   result := VCount - Another.VCount;
