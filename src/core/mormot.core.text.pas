@@ -1445,6 +1445,10 @@ procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
   var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal low-level function to compare two variants with RawUt8 conversion
+// - as used e.g. by FastVarDataComp() for complex or diverse VType
+function VariantCompAsText(A, B: PVarData; caseInsensitive: boolean): integer;
+
 var
   /// save a variant value into a JSON content
   // - is implemented by mormot.core.json.pas and mormot.core.variants.pas:
@@ -7565,6 +7569,20 @@ procedure __VariantToUtf8DateTimeToIso8601(DT: TDateTime; FirstChar: AnsiChar;
 begin
   raise ESynException.Create('VariantToUtf8(varDate) unsupported:' +
     ' please include mormot.core.datetime to your uses clause');
+end;
+
+function VariantCompAsText(A, B: PVarData; caseInsensitive: boolean): integer;
+var
+  au, bu: pointer;
+  wasString: boolean;
+begin
+  au := nil; // no try..finally for local RawUtf8 variables
+  bu := nil;
+  VariantToUtf8(PVariant(A)^, RawUtf8(au), wasString);
+  VariantToUtf8(PVariant(B)^, RawUtf8(bu), wasString);
+  result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
+  FastAssignNew(au);
+  FastAssignNew(bu);
 end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
