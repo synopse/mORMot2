@@ -2011,6 +2011,11 @@ var
     Check(IsObjectDefaultOrVoid(GDtoObject));
     Check(IsObjectDefaultOrVoid(G2));
     Check(ObjectEquals(G2, GDtoObject));
+    J := ObjectToJson(GDtoObject);
+    CheckEqual(J, '{"NestedObject":{"FieldString":"","FieldInteger":0,' +
+      '"FieldVariant":null},"SomeField":""}');
+    Check(ObjectLoadJson(G2, J), 'void obj');
+    Check(ObjectEquals(G2, GDtoObject));
     U := '{"SomeField":"Test"}';
     Check(ObjectLoadJson(GDtoObject, U, nil, []), 'nestedvariant1');
     Check(not ObjectEquals(G2, GDtoObject));
