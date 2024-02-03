@@ -648,6 +648,8 @@ end;
 
 procedure TServiceComplexCalculator.FillPeople(var People: TOrmPeople);
 begin
+  if People.ID = 0 then
+    exit; // check transmission of LastName/FirstName as ""
   People.LastName  := FormatUtf8('Last %', [People.ID]);
   People.FirstName := FormatUtf8('First %', [People.ID]);
 end;
@@ -1002,8 +1004,16 @@ begin
         people.IDValue := c;
         Inst.CC.FillPeople(people);
         Check(people.ID = c);
-        Check(people.LastName = FormatUtf8('Last %', [c]));
-        Check(people.FirstName = FormatUtf8('First %', [c]));
+        if c = 0 then
+        begin
+          Check(people.LastName = '');
+          Check(people.FirstName = '');
+        end
+        else
+        begin
+          Check(people.LastName = FormatUtf8('Last %', [c]));
+          Check(people.FirstName = FormatUtf8('First %', [c]));
+        end;
       finally
         people.Free;
       end;
