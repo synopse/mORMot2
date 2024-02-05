@@ -2515,6 +2515,8 @@ type
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
     function ClassNewInstance: pointer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// allow low-level customization of the fClassNewInstance pointer
+    procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
     /// recursively search for 'one.two.three' nested properties
@@ -8113,6 +8115,11 @@ end;
 function TRttiCustom.ClassNewInstance: pointer;
 begin
   result := fClassNewInstance(self);
+end;
+
+procedure TRttiCustom.SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
+begin
+  fClassNewInstance := FactoryMethod;
 end;
 
 procedure TRttiCustom.PropsClear;
