@@ -10177,6 +10177,7 @@ type
     fValueOwned: TVarData;
   public
     constructor CreateOwned;
+    constructor CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
     constructor CreateNew(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
     constructor CreateCopy(const dv: TDocVariantData); reintroduce;
     constructor CreateByRef(dv: PDocVariantData); reintroduce;
@@ -10735,13 +10736,22 @@ begin
   fValue := @fValueOwned;
 end;
 
+constructor TDocAny.CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
+begin
+  fValue := @fValueOwned;
+  if opt = nil then
+    opt := @JSON_[DocAnyDefaultModel];
+  TRttiVarData(fValueOwned).VType := DocVariantVType;
+  TDocVariantData(fValueOwned).VOptions := opt^ + dv;
+end;
+
 constructor TDocAny.CreateNew(const dv: TDocVariantData; m: TDocVariantModel);
 begin
   fValue := @fValueOwned;
-  fValue^.Init(m, dv.Kind);
-  fValue^.VName  := copy(dv.VName, 0, dv.Count); // new arrays, but byref values
-  fValue^.VValue := copy(dv.VValue, 0, dv.Count);
-  fValue^.VCount := dv.Count;
+  TDocVariantData(fValueOwned).Init(m, dv.Kind); // new arrays, but byref values
+  TDocVariantData(fValueOwned).VName  := copy(dv.VName, 0, dv.Count); 
+  TDocVariantData(fValueOwned).VValue := copy(dv.VValue, 0, dv.Count);
+  TDocVariantData(fValueOwned).VCount := dv.Count;
 end;
 
 constructor TDocAny.CreateCopy(const dv: TDocVariantData);
