@@ -10872,10 +10872,12 @@ end;
 
 class procedure TDocAny.JS(W: TJsonWriter; Data: pointer;
   Options: TTextWriterWriteObjectOptions);
-var
-  any: ^IDocAny absolute Data;
 begin
-  DocVariantType.ToJson(W, pointer(any^.Value));
+  Data := PPointer(Data)^;
+  if Data = nil then
+    W.AddNull // avoid GPF if IDocAny = nil
+  else
+    DocVariantType.ToJson(W, pointer(IDocAny(Data).Value));
 end;
 
 

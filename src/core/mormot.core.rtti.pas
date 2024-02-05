@@ -5509,7 +5509,7 @@ begin
     aTypeName := aInfo^.Name;
   a^.TypeName := aTypeName;
   if ArgCount > 1 then
-    if aInfo^.Kind in rkRecordOrDynArrayTypes  then
+    if aInfo^.Kind in rkRecordOrDynArrayTypes then
     begin
       if aFlags * [pfConst, pfVar, pfOut] = [] then
         RaiseError('%: % parameter should be declared as const, var or out',
@@ -5517,7 +5517,7 @@ begin
     end
     else if aInfo^.Kind = rkInterface then
       if Rtti.FindType(aInfo).HasClassNewInstance then
-      begin // e.g. IDocList/IDocDict
+      begin // e.g. IDocList/IDocDict with custom JSON serialization
         if aFlags * [pfConst, pfVar, pfOut] = [] then
           RaiseError('%: % parameter should be declared as const, var or out',
             [a^.ParamName^, aTypeName^])
