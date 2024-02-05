@@ -2147,11 +2147,10 @@ function GetValueObject(Instance: TObject; const Path: RawUtf8;
 // - same implementation than GetDataFromJson() global low-level function
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later or if the string comes from
-// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJson()
-function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
+// LoadJson() instead or a make temporary copy if you need to access it later
+function LoadJsonInPlace(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): PUtf8Char;
 
 /// unserialize most kind of content as JSON, using its RTTI, as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -2159,7 +2158,7 @@ function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // so is safe with a read/only or shared string - but slightly slower
 function LoadJson(var Value; const Json: RawUtf8; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char = nil; CustomVariantOptions: PDocVariantOptions = nil;
-  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean; overload;
+  Tolerant: boolean = true; Interning: TRawUtf8Interning = nil): boolean;
 
 /// fill a record content from a JSON serialization as saved by
 // TJsonWriter.AddRecordJson / RecordSaveJson
@@ -11056,7 +11055,7 @@ begin
     p^.GetValueVariant(Instance, TVarData(Value), @JSON_[mFastFloat]);
 end;
 
-function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
+function LoadJsonInPlace(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
   EndOfObject: PUtf8Char; CustomVariantOptions: PDocVariantOptions;
   Tolerant: boolean; Interning: TRawUtf8Interning): PUtf8Char;
 begin
@@ -11074,7 +11073,7 @@ var
 begin
   tmp.Init(Json); // make private copy before in-place decoding
   try
-    result := LoadJson(Value, tmp.buf, TypeInfo, EndOfObject,
+    result := LoadJsonInPlace(Value, tmp.buf, TypeInfo, EndOfObject,
       CustomVariantOptions, Tolerant, Interning) <> nil;
   finally
     tmp.Done;

@@ -2486,7 +2486,7 @@ begin
     CheckUtf8(TextToVariantNumberType(pointer(s)) = varString,
       '%:%', [PT_INFO[pt].RawName, s]);
     FillCharFast(h2, SizeOf(h2), 0);
-    Check(LoadJson(h2, pointer(s), PT_INFO[pt]) <> nil);
+    Check(LoadJsonInPlace(h2, pointer(s), PT_INFO[pt]) <> nil);
     CheckUtf8(CompareMem(@h, @h2, PT_SIZE[pt]), '%', [PT_INFO[pt].RawName]);
   end;
 end;
