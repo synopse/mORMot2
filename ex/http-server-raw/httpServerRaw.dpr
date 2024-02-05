@@ -1,6 +1,8 @@
 program httpServerRaw;
 
 {
+  Some numbers on my dev PC (Core i5-13500 running Debian 12 at that time):
+
   usr@pc:~ sudo apt install wrk
   usr@pc:~ wrk -c 1024 -t 8 http://localhost:8888/echo
   Running 10s test @ http://localhost:8888/echo

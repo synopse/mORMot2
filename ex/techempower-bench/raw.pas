@@ -576,7 +576,8 @@ begin
     W := TTextWriter.CreateOwnedStream(tmp{%H-});
     try
       W.AddShort('UPDATE world SET randomNumber = v.randomNumber FROM (VALUES');
-      for i := 1 to cnt do begin
+      for i := 1 to cnt do
+      begin
         W.AddShort('(?::integer, ?::integer)');
         W.Add(',');
       end;
