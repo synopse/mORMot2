@@ -909,6 +909,8 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       CheckSame(n1, n2);
       Rec1.FileExtension := ''; // to avoid memory leak
     end;
+    i1 := Random32;
+    i2 := Random32;
     l1 := DocList([{%H-}i1, {%H-}i2]);
     I.TestDocList(l1, i1, l2); // l2:=l1 & l1:=DocList([1,2,3,i1])
     CheckEqual(l1.Json, FormatUtf8('[1,2,3,%]', [i1]));
