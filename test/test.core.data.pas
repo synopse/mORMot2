@@ -3923,6 +3923,18 @@ begin
   CheckEqual(HtmlEscapeMarkdown(':test: (:)'), '<p>:test: (:)</p>');
 end;
 
+type
+  TDocAnyTest = class(TSynAutoCreateFields) // validate such magic fields
+  protected
+    fList: IDocList;
+    fDict: IDocDict;
+  published
+    property List: IDocList
+      read fList write fList;
+    property Dict: IDocDict
+      read fDict write fDict;
+  end;
+
 procedure TTestCoreProcess._IDocAny;
 var
   l, l2, l3: IDocList;
@@ -3931,6 +3943,7 @@ var
   darr: IDocDictDynArray;
   key: RawUtf8;
   one: variant;
+  any: TDocAnyTest;
   {$ifdef HASIMPLICITOPERATOR}
   f: TDocDictFields;
   v: TDocValue;
@@ -4407,6 +4420,57 @@ begin
   one := l.First('ab<>0');
   l := nil;
   Check(one.cd.ef = 'two', 'early release of the IDocList instance');
+  l := nil;
+  Check(LoadJson(l, ' [5,6]', TypeInfo(IDocList)), 'loadjsonlist1');
+  Check(l <> nil);
+  CheckEqual(l.Len, 2);
+  CheckEqual(l.Json, '[5,6]');
+  Check(LoadJson(l, ' ["sept"]', TypeInfo(IDocList)), 'loadjsonlist1');
+  Check(l <> nil);
+  CheckEqual(l.Len, 1);
+  CheckEqual(l.Json, '["sept"]');
+  d := nil;
+  Check(LoadJson(d, ' { z:"zz"}', TypeInfo(IDocDict)), 'loadjsondict1');
+  Check(d <> nil);
+  CheckEqual(d.Len, 1);
+  CheckEqual(d.ToJson(jsonEscapeUnicode), '{"z":"zz"}');
+  Check(LoadJson(d, ' { a:3, b : 4}', TypeInfo(IDocDict)), 'loadjsondict2');
+  Check(d <> nil);
+  CheckEqual(d.Len, 2);
+  CheckEqual(d.ToJson(jsonEscapeUnicode), '{"a":3,"b":4}');
+  any := TDocAnyTest.Create;
+  try
+    Check(any.List <> nil);
+    CheckEqual(any.List.Len, 0);
+    Check(any.Dict <> nil);
+    CheckEqual(any.Dict.Len, 0);
+    CheckEqual(ObjectToJson(any), '{"List":[],"Dict":{}}');
+    Check(ObjectLoadJson(any, '{"List":[],"Dict":{}}'), 'olj1');
+    Check(any.List <> nil);
+    CheckEqual(any.List.Len, 0);
+    Check(any.Dict <> nil);
+    CheckEqual(any.Dict.Len, 0);
+    Check(ObjectLoadJson(any, '{list:[1,2,3],dict:{a:1,b:2}}'), 'olj2');
+    Check(any.List <> nil);
+    CheckEqual(any.List.Len, 3);
+    CheckEqual(any.List.Json, '[1,2,3]');
+    Check(any.Dict <> nil);
+    CheckEqual(any.Dict.Len, 2);
+    CheckEqual(any.Dict.Json, '{"a":1,"b":2}');
+    Check(ObjectLoadJson(any, '{"List":[],"Dict":{}}'), 'olj3');
+    Check(any.List <> nil);
+    CheckEqual(any.List.Len, 0);
+    Check(any.Dict <> nil);
+    CheckEqual(any.Dict.Len, 0);
+    Check(ObjectLoadJson(any, '{list:[1,2,3],dict:{a:1,b:2}}'), 'olj2');
+    CheckEqual(any.List.Len, 3);
+    CheckEqual(any.Dict.Len, 2);
+    Check(ObjectLoadJson(any, '{"List":null,"Dict":null}'), 'olj3');
+    CheckEqual(any.List.Len, 0);
+    CheckEqual(any.Dict.Len, 0);
+  finally
+    any.Free;
+  end;
 end;
 
 procedure TTestCoreProcess._TDecimal128;
