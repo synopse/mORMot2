@@ -110,8 +110,8 @@ type
     function RepeatJsonArray(const item: RawUtf8; count: integer): RawJson;
     function RepeatTextArray(const item: RawUtf8; count: integer): RawUtf8;
     // validates IDocList/IDocDict parameters - cannot be in result
-    procedure TestDocList(var list: IDocList; out input: IDocList);
-    procedure TestDocDict(var dict: IDocDict; out input: IDocDict);
+    procedure TestDocList(var list: IDocList; const data: variant; out input: IDocList);
+    procedure TestDocDict(var dict: IDocDict; const data: variant; out input: IDocDict);
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -350,8 +350,8 @@ type
     function DirectCall(const Data: RawBlob): integer;
     function RepeatJsonArray(const item: RawUtf8; count: integer): RawJson;
     function RepeatTextArray(const item: RawUtf8; count: integer): RawUtf8;
-    procedure TestDocList(var list: IDocList; out input: IDocList);
-    procedure TestDocDict(var dict: IDocDict; out input: IDocDict);
+    procedure TestDocList(var list: IDocList; const data: variant; out input: IDocList);
+    procedure TestDocDict(var dict: IDocDict; const data: variant; out input: IDocDict);
     function Test(A, B: Integer): RawUtf8;
   end;
 
@@ -545,16 +545,18 @@ begin
   end;
 end;
 
-procedure TServiceCalculator.TestDocList(var list: IDocList; out input: IDocList);
+procedure TServiceCalculator.TestDocList(var list: IDocList;
+  const data: variant; out input: IDocList);
 begin
   input := list;
-  list := DocList([1, 2, 3]);
+  list := DocList([1, 2, 3, data]);
 end;
 
-procedure TServiceCalculator.TestDocDict(var dict: IDocDict; out input: IDocDict);
+procedure TServiceCalculator.TestDocDict(var dict: IDocDict;
+  const data: variant; out input: IDocDict);
 begin
   input := dict;
-  dict := DocDict(['a', 1, 'b', 2]);
+  dict := DocDict(['a', 1, 'b', 2, 'data', data]);
 end;
 
 var
@@ -907,14 +909,14 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       CheckSame(n1, n2);
       Rec1.FileExtension := ''; // to avoid memory leak
       l1 := DocList([i1, i2]);
-      I.TestDocList(l1, l2); // l2:=l1 & l1:=DocList([1,2,3])
-      CheckEqual(l1.Json, '[1,2,3]');
+      I.TestDocList(l1, i1, l2); // l2:=l1 & l1:=DocList([1,2,3,i1])
+      CheckEqual(l1.Json, FormatUtf8('[1,2,3,%]', [i1]));
       CheckEqual(l2.Len, 2);
       CheckEqual(l2.I[0], i1);
       CheckEqual(l2.I[1], i2);
       d1 := DocDict(['a', i1]);
-      I.TestDocDict(d1, d2); // d2:=d1 & d1:=DocDict(['a',1,'b',2])
-      CheckEqual(d1.Json, '{"a":1,"b":2}');
+      I.TestDocDict(d1, i2, d2); // d2:=d1 & d1:=DocDict(['a',1,'b',2,'data',i2])
+      CheckEqual(d1.Json, FormatUtf8('{"a":1,"b":2,"data":%}', [i2]));
       CheckEqual(d2.Len, 1);
       CheckEqual(d2.I['a'], i1);
     end;
@@ -1465,7 +1467,7 @@ begin
     exit;
   //JsonReformatToFile(S.Contract, 'contract.json');
   //FileFromString(S.ContractHash, 'contract.hash');
-  CheckEqual(S.ContractHash, '"06ED8F60A1F9F11E"');
+  CheckEqual(S.ContractHash, '"8AB8C2407CD836D7"');
   Check(TServiceCalculator(nil).Test(1, 2) = '3');
   Check(TServiceCalculator(nil).ToTextFunc(777) = '777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
