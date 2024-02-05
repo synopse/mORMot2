@@ -11589,7 +11589,9 @@ begin
   // now we can register some local type alias to be found by name or ASAP
   Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt),
     TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
+  // prepare some JSON wrappers
   GetDataFromJson := _GetDataFromJson;
+  InitializeVariantsJson; // from mormot.core.variants
   {$ifdef FPC} // we need to call it once so that it is linked to the executable
   JsonForDebug(nil, dummy, dummy);
   {$endif FPC}
