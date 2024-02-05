@@ -2518,6 +2518,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// allow low-level customization of the fClassNewInstance pointer
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
+    /// check if this type has ClassNewInstance information
+    function HasClassNewInstance: boolean;
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
     /// recursively search for 'one.two.three' nested properties
@@ -8123,6 +8125,12 @@ begin
   fClassNewInstance := FactoryMethod;
 end;
 
+function TRttiCustom.HasClassNewInstance: boolean;
+begin
+  result := (self <> nil) and
+            (@fClassNewInstance <> @_New_NotImplemented);
+end;
+
 procedure TRttiCustom.PropsClear;
 begin
   Props.InternalClear;
@@ -8838,10 +8846,10 @@ begin
           rkInterface:
             if (p^.OffsetGet >= 0) and
                (p^.OffsetSet >= 0) then
-              if @p^.Value.fClassNewInstance = @_New_NotImplemented then
-                PtrArrayAdd(result.fAutoResolveInterfaces, p)
+              if p^.Value.HasClassNewInstance then
+                PtrArrayAdd(result.fAutoCreateInstances, p)
               else
-                PtrArrayAdd(result.fAutoCreateInstances, p);
+                PtrArrayAdd(result.fAutoResolveInterfaces, p);
         end;
         inc(p);
       end;
