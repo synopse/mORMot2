@@ -114,10 +114,12 @@ type
   // (i.e. defined as var/out, or is a record or a reference-counted type result)
   // - vIsQword is set for ValueType=imvInt64 over a QWord unsigned 64-bit value
   // - vIsDynArrayString is set for ValueType=imvDynArray of string values
+  // - vIsInterfaceJson is set for an interface with custom JSON serializers
   TInterfaceMethodValueAsm = set of (
     vPassedByReference,
     vIsQword,
-    vIsDynArrayString);
+    vIsDynArrayString,
+    vIsInterfaceJson);
 
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
@@ -2758,7 +2760,10 @@ begin
     imvRawJson:
       WR.AddShorter('null,'); // may raise an error on client side for imvObject
     imvInterface:
-      WR.AddShorter('0,');
+      if vIsInterfaceJson in ValueKindAsm then // e.g. IDocList
+        WR.AddShorter('null,')
+      else
+        WR.AddShorter('0,');
     imvDynArray:
       WR.AddShorter('[],');
     imvRecord:
@@ -3426,7 +3431,8 @@ begin
       if a^.ValueDirection in [imdConst, imdVar] then
       begin
         V := ctxt.Value[arg];
-        if a^.ValueType = imvInterface then
+        if (a^.ValueType = imvInterface) and
+           not (vIsInterfaceJson in a^.ValueKindAsm) then // e.g. not IDocList
           InterfaceWrite(W, ctxt.Method^, a^, V^)
         else
         begin
@@ -3901,7 +3907,9 @@ begin
             ErrorMsg := ' - class not allowed as function result: ' +
               'use a var/out parameter';
         imvInterface:
-          if ValueDirection <> imdConst then
+          if Assigned(ArgRtti.JsonWriter.Code) then
+            include(ValueKindAsm, vIsInterfaceJson) // e.g. IDocList
+          else if ValueDirection <> imdConst then
             ErrorMsg := ' - interface not allowed as output: ' +
               'use a const parameter';
       end;
@@ -7558,7 +7566,8 @@ begin
               ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Json := ParObjValues[a]
           else if ctxt.Json = nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
-          if arg^.ValueType = imvInterface then
+          if (arg^.ValueType = imvInterface) and
+             not (vIsInterfaceJson in arg^.ValueKindAsm) then // e.g. not IDocList
             if Assigned(OnCallback) then
               // retrieve TRestServerUriContext.ExecuteCallback fake interface
               // via TServiceContainerServer.GetFakeCallback

@@ -1217,7 +1217,8 @@ begin
             for a := ArgsInFirst to ArgsInLast do
               with Args[a] do
                 if (ValueDirection <> imdOut) and
-                   (ValueType <> imvInterface) and
+                   ((ValueType <> imvInterface) or
+                    (vIsInterfaceJson in ValueKindAsm)) and
                    not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                 begin
                   W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format

@@ -5516,7 +5516,13 @@ begin
           [a^.ParamName^, aTypeName^]);
     end
     else if aInfo^.Kind = rkInterface then
-      if not (pfConst in aFlags) then
+      if Rtti.FindType(aInfo).HasClassNewInstance then
+      begin // e.g. IDocList/IDocDict
+        if aFlags * [pfConst, pfVar, pfOut] = [] then
+          RaiseError('%: % parameter should be declared as const, var or out',
+            [a^.ParamName^, aTypeName^])
+      end
+      else if not (pfConst in aFlags) then
         RaiseError('%: % parameter should be declared as const',
           [a^.ParamName^, aTypeName^]);
   if aParamName = nil then
