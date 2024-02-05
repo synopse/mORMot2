@@ -3007,16 +3007,20 @@ procedure FillAnsiStringFromRandom(dest: PByteArray; size: PtrUInt);
 // TLecuyer table (note that RTL's system.Random function is not thread-safe)
 function Random32: cardinal; overload;
 
+/// fast compute of some 31-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function Random31: integer;
+
+/// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function Random64: QWord;
+
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
 // - calls internally the overloaded Random32 function, ensuring Random32(max)<max
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 function Random32(max: cardinal): cardinal; overload;
-
-/// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
-function Random64: QWord;
 
 /// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
@@ -9053,6 +9057,11 @@ end;
 function Random32: cardinal;
 begin
   result := _Lecuyer.Next;
+end;
+
+function Random31: integer;
+begin
+  result := _Lecuyer.Next shr 1;
 end;
 
 function Random32(max: cardinal): cardinal;

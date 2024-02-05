@@ -853,12 +853,12 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     CheckEqual(length(strs1), 3);
     for t := 1 to Iterations do
     begin
-      i1 := Random(MaxInt) - Random(MaxInt);
-      i2 := Random(MaxInt) - i1;
+      i1 := Random31 - Random31;
+      i2 := Random31 - i1;
       Check(I.Add(i1, i2) = i1 + i2);
       Check(I.Multiply(i1, i2) = Int64(i1) * Int64(i2));
-      n1 := Random * 1E-9 - Random * 1E-8;
-      n2 := n1 * Random;
+      n1 := RandomDouble * 1E-9 - RandomDouble * 1E-8;
+      n2 := n1 * RandomDouble;
       CheckSame(I.Subtract(n1, n2), n1 - n2);
       s1 := n1;
       s2 := n2;
@@ -877,7 +877,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       c := cardinal(i2);
       Check(I.SpecialCall(s, i3, c, [pctNone], [pctModTime, pctCreateTime], o) =
         [pctModTime, pctCreateTime, pctNone]);
-      Check(i3 = i1 + length(s));
+      CheckEqual(i3, i1 + length(s));
       Check(c = cardinal(i2) + 1);
       Check(o = [sicClientDriven, sicPerGroup]);
       Ints[0] := i1;
@@ -908,18 +908,18 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Check(RecRes.Json = StringToUtf8(Rec1.FileExtension));
       CheckSame(n1, n2);
       Rec1.FileExtension := ''; // to avoid memory leak
-      l1 := DocList([i1, i2]);
-      I.TestDocList(l1, i1, l2); // l2:=l1 & l1:=DocList([1,2,3,i1])
-      CheckEqual(l1.Json, FormatUtf8('[1,2,3,%]', [i1]));
-      CheckEqual(l2.Len, 2);
-      CheckEqual(l2.I[0], i1);
-      CheckEqual(l2.I[1], i2);
-      d1 := DocDict(['a', i1]);
-      I.TestDocDict(d1, i2, d2); // d2:=d1 & d1:=DocDict(['a',1,'b',2,'data',i2])
-      CheckEqual(d1.Json, FormatUtf8('{"a":1,"b":2,"data":%}', [i2]));
-      CheckEqual(d2.Len, 1);
-      CheckEqual(d2.I['a'], i1);
     end;
+    l1 := DocList([{%H-}i1, {%H-}i2]);
+    I.TestDocList(l1, i1, l2); // l2:=l1 & l1:=DocList([1,2,3,i1])
+    CheckEqual(l1.Json, FormatUtf8('[1,2,3,%]', [i1]));
+    CheckEqual(l2.Len, 2);
+    CheckEqual(l2.I[0], i1);
+    CheckEqual(l2.I[1], i2);
+    d1 := DocDict(['a', i1]);
+    I.TestDocDict(d1, i2, d2); // d2:=d1 & d1:=DocDict(['a',1,'b',2,'data',i2])
+    CheckEqual(d1.Json, FormatUtf8('{"a":1,"b":2,"data":%}', [i2]));
+    CheckEqual(d2.Len, 1);
+    CheckEqual(d2.I['a'], i1);
     n1 := 0;
     RecRes := I.ComplexCall(Ints, nil, Str2, Rec1, Rec2, n1, n2);
     Check(length(Str2) = 5);
@@ -1119,11 +1119,11 @@ begin
   for c := 0 to Iterations shr 2 do
   begin
     CheckSame(Inst.CN.Imaginary, n2, 1E-9);
-    n1 := Random * 1000;
+    n1 := RandomDouble * 1000;
     Inst.CN.Real := n1;
     CheckSame(Inst.CN.Real, n1);
     CheckSame(Inst.CN.Imaginary, n2, 1E-9);
-    n2 := Random * 1000;
+    n2 := RandomDouble * 1000;
     Inst.CN.Imaginary := n2;
     CheckSame(Inst.CN.Real, n1);
     CheckSame(Inst.CN.Imaginary, n2, 1E-9);
@@ -2262,8 +2262,8 @@ var
 begin
   U := fUserRepository.GetUserByName(UserName);
   Assert(U.Name = UserName, 'internal verification');
-  U.Password := Int32ToUtf8(Random(MaxInt));
-  U.MobilePhoneNumber := Int32ToUtf8(Random(MaxInt));
+  U.Password := UInt32ToUtf8(Random32);
+  U.MobilePhoneNumber := UInt32ToUtf8(Random32);
   if fSmsSender.Send('Your new password is ' + U.Password, U.MobilePhoneNumber) then
     fUserRepository.Save(U);
 end;
