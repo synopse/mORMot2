@@ -5426,7 +5426,7 @@ begin
     raise EInterfaceResolver.CreateUtf8('%.Resolve(?,?)', [self]);
 end;
 
-type // to access fAutoCreateInterfaces protected field
+type // to access fAutoResolveInterfaces protected field
   TRttiCustomWrapper = class(TRttiJson);
 
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
@@ -5450,7 +5450,7 @@ begin
      not (rcfAutoCreateFields in r.Flags) then
     r := DoRegisterAutoCreateFields(self);
   // resolve all published interface fields
-  p := pointer(TRttiCustomWrapper(r).fAutoCreateInterfaces);
+  p := pointer(TRttiCustomWrapper(r).fAutoResolveInterfaces);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)

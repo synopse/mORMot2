@@ -2405,9 +2405,10 @@ type
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
     fClassNewInstance: TRttiCustomNewInstance; // mormot.core.json implemented
-    fAutoCreateClasses, // three lists made by RegisterAutoCreateFieldsClass
+    fAutoCreateInstances, // some lists made by RegisterAutoCreateFieldsClass
+    fAutoDestroyClasses,
     fAutoCreateObjArrays,
-    fAutoCreateInterfaces: PRttiCustomPropDynArray;
+    fAutoResolveInterfaces: PRttiCustomPropDynArray;
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
@@ -8826,7 +8827,10 @@ begin
           rkClass:
             if (p^.OffsetGet >= 0) and
                (p^.OffsetSet >= 0) then
-              PtrArrayAdd(result.fAutoCreateClasses, p);
+            begin
+              PtrArrayAdd(result.fAutoCreateInstances, p);
+              PtrArrayAdd(result.fAutoDestroyClasses, p);
+            end;
           rkDynArray:
             if (rcfObjArray in p^.Value.Flags) and
                (p^.OffsetGet >= 0) then
@@ -8834,7 +8838,10 @@ begin
           rkInterface:
             if (p^.OffsetGet >= 0) and
                (p^.OffsetSet >= 0) then
-              PtrArrayAdd(result.fAutoCreateInterfaces, p);
+              if @p^.Value.fClassNewInstance = @_New_NotImplemented then
+                PtrArrayAdd(result.fAutoResolveInterfaces, p)
+              else
+                PtrArrayAdd(result.fAutoCreateInstances, p);
         end;
         inc(p);
       end;

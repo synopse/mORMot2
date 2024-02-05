@@ -11315,15 +11315,15 @@ begin
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
     r := DoRegisterAutoCreateFields(ObjectInstance);
-  p := pointer(r.fAutoCreateClasses);
+  p := pointer(r.fAutoCreateInstances);
   if p = nil then
     exit;
-  // create all published class fields
+  // create all published class (or IDocList/IDocDict) fields
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
   repeat
     with p^^ do
       PPointer(PAnsiChar(ObjectInstance) + OffsetGet)^ :=
-        TRttiJson(Value).fClassNewInstance(Value);
+        TRttiJson(Value).fClassNewInstance(Value); // class or interface
     inc(p);
     dec(n);
   until n = 0;
@@ -11343,7 +11343,7 @@ begin
   r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   {$endif NOPATCHVMT}
   // free all published class fields
-  p := pointer(r.fAutoCreateClasses);
+  p := pointer(r.fAutoDestroyClasses);
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
