@@ -3504,6 +3504,9 @@ function DocDictCopy(const dv: TDocVariantData): IDocDict; overload;
 function DocDictCopy(const dv: TDocVariantData;
   model: TDocVariantModel = mFastFloat): IDocDict; overload;
 
+var
+  /// default TDocVariant model for IDocList/IDocDict
+  DocAnyDefaultModel: TDocVariantModel = mFastFloat;
 
 implementation
 
@@ -10608,7 +10611,7 @@ function DocListFrom(const dictarray: IDocDictDynArray): IDocList;
 var
   i: PtrInt;
 begin
-  result := DocList(mFastFloat);
+  result := DocList(DocAnyDefaultModel);
   for i := 0 to length(dictarray) - 1 do
     result.AppendDoc(dictarray[i]);
 end;
@@ -10780,7 +10783,7 @@ end;
 function TDocAny.Model: TDocVariantModel;
 begin
   if not fValue^.GetModel(result) then
-    result := mFastFloat; // default value if not exactly found
+    result := DocAnyDefaultModel; // default value if not exactly found
 end;
 
 function TDocAny.Len: integer;
@@ -10902,8 +10905,9 @@ end;
 
 procedure TDocList.SetJson(const value: RawUtf8);
 begin
-  if (GetFirstJsonToken(pointer(value)) <> jtArrayStart) or
-     not fValue^.InitJson(value, fValue^.Options) then
+  if GetFirstJsonToken(pointer(value)) <> jtArrayStart then
+    fValueOwned.VType := DocVariantVType
+  else if not fValue^.InitJson(value, fValue^.Options) then
     fValue^.Void;
 end;
 
@@ -11366,8 +11370,9 @@ end;
 
 procedure TDocDict.SetJson(const value: RawUtf8);
 begin
-  if (GetFirstJsonToken(pointer(value)) <> jtObjectStart) or
-     not fValue^.InitJson(value, fValue^.Options) then
+  if GetFirstJsonToken(pointer(value)) <> jtObjectStart then
+    fValueOwned.VType := DocVariantVType
+  else if not fValue^.InitJson(value, fValue^.Options) then
     fValue^.Void;
 end;
 
