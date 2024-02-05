@@ -3508,6 +3508,10 @@ var
   /// default TDocVariant model for IDocList/IDocDict
   DocAnyDefaultModel: TDocVariantModel = mFastFloat;
 
+/// internal initialization function called from mormot.core.json
+procedure InitializeVariantsJson;
+
+
 implementation
 
 // some early methods implementation, defined here for proper inlining
@@ -10178,6 +10182,8 @@ type
   protected
     fValue: PDocVariantData;
     fValueOwned: TVarData;
+    class procedure JS(W: TJsonWriter; Data: pointer;
+      Options: TTextWriterWriteObjectOptions);
   public
     constructor CreateOwned;
     constructor CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
@@ -10201,6 +10207,8 @@ type
   end;
 
   TDocList = class(TDocAny, IDocList)
+  protected
+    class procedure JL(var Context: TJsonParserContext; Data: pointer);
   public
     function GetB(position: integer): boolean;
     function GetC(position: integer): currency;
@@ -10279,6 +10287,7 @@ type
     function SetValueAt(const key: RawUtf8; const value: variant): boolean;
     function GetExistingValueAt(const key, method: RawUtf8): PVariant;
     function PopAt(const key: RawUtf8; value: PVariant): boolean;
+    class procedure JL(var Context: TJsonParserContext; Data: pointer);
   public
     function GetB(const key: RawUtf8): boolean;
     function GetC(const key: RawUtf8): currency;
@@ -10793,13 +10802,7 @@ end;
 
 function TDocAny.ToJson(format: TTextWriterJsonFormat): RawUtf8;
 begin
-  if fValue^.Count = 0 then // don't return null but Python-like results
-    if fValue^.IsArray then
-      result := '[]'
-    else
-      result := '{}'
-  else
-    DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
+  DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
 end;
 
 function TDocAny.ToString(format: TTextWriterJsonFormat): string;
@@ -10846,6 +10849,33 @@ end;
 function TDocAny.AsVariant: variant;
 begin
   result := PVariant(fValue)^;
+end;
+
+procedure JL_IDocAny(var Context: TJsonParserContext;
+  Doc: PDocVariantData; Token: TJsonToken);
+var
+  ctx: TGetJsonField absolute Context; // circumvent USERECORDWITHMETHODS
+  opt: PDocVariantOptions;
+begin
+  Doc^.Void; // IDocList/IDocDict may be existing and with some previous data
+  if GetFirstJsonToken(ctx.Json) <> Token then
+  begin
+    Context.Valid := (ctx.Json <> nil) and Context.ParseNull;
+    exit;
+  end;
+  opt := Context.CustomVariant;
+  if opt = nil then
+    opt := @Doc^.Options;
+  ctx.Json := Doc^.InitJsonInPlace(ctx.Json, opt^, @ctx.EndOfObject);
+  Context.Valid := ctx.Json <> nil;
+end;
+
+class procedure TDocAny.JS(W: TJsonWriter; Data: pointer;
+  Options: TTextWriterWriteObjectOptions);
+var
+  any: ^IDocAny absolute Data;
+begin
+  DocVariantType.ToJson(W, pointer(any^.Value));
 end;
 
 
@@ -11348,6 +11378,15 @@ end;
 
 {$endif HASIMPLICITOPERATOR}
 
+class procedure TDocList.JL(var Context: TJsonParserContext; Data: pointer);
+var
+  list: ^IDocList absolute Data;
+begin
+  if not Assigned(list^) then
+    list^ := CreateAs(Context.CustomVariant, [dvoIsArray]);
+  JL_IDocAny(Context, list^.Value, jtArrayStart);
+end;
+
 
 { EDocDict }
 
@@ -11801,6 +11840,42 @@ begin
 end;
 
 {$endif HASIMPLICITOPERATOR}
+
+class procedure TDocDict.JL(var Context: TJsonParserContext; Data: pointer);
+var
+  dict: ^IDocDict absolute Data;
+begin
+  if not Assigned(dict^) then
+    dict^ := CreateAs(Context.CustomVariant, [dvoIsObject]);
+  JL_IDocAny(Context, dict^.Value, jtObjectStart);
+end;
+
+function _New_IDocList(Rtti: TRttiCustom): pointer;
+var
+  list: IDocList;
+begin
+  list := TDocList.CreateAs(nil, [dvoIsArray]);
+  list._AddRef;
+  result := pointer(list);
+end;
+
+function _New_IDocDict(Rtti: TRttiCustom): pointer;
+var
+  dict: IDocDict;
+begin
+  dict := TDocDict.CreateAs(nil, [dvoIsObject]);
+  dict._AddRef;
+  result := pointer(dict);
+end;
+
+procedure InitializeVariantsJson;
+begin
+  // register the IDocList/IDocDict interface types JSON serialization
+  TRttiJson.RegisterCustomSerializer(TypeInfo(IDocList), TDocList.JL, TDocList.JS).
+    SetClassNewInstance(@_New_IDocList);
+  TRttiJson.RegisterCustomSerializer(TypeInfo(IDocDict), TDocDict.JL, TDocDict.JS).
+    SetClassNewInstance(@_New_IDocDict);
+end;
 
 
 var
