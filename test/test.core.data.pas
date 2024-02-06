@@ -3935,15 +3935,44 @@ type
       read fDict write fDict;
   end;
 
+  TDocTest = class;
+  IDocTest = interface(ISerializable)
+    ['{C9AB0B6F-0418-4CE8-914A-F75521F36E33}']
+    function Data: TDocTest;
+  end;
+  TDocTest = class(TInterfacedSerializableAutoCreateFields, IDocTest)
+  protected
+    fAny: TDocAnyTest;
+    fName: RawUtf8;
+    fList: IDocList;
+    fInfo: variant;
+    function Data: TDocTest;
+  published
+    property Any: TDocAnyTest
+      read fAny;
+    property Name: RawUtf8
+      read fName write fName;
+    property List: IDocList
+      read fList;
+    property Info: variant
+      read fInfo write fInfo;
+  end;
+
+function TDocTest.Data: TDocTest;
+begin
+  result := self;
+end;
+
 procedure TTestCoreProcess._IDocAny;
 var
   l, l2, l3: IDocList;
   i, n, num: integer;
   d: IDocDict;
   darr: IDocDictDynArray;
-  key: RawUtf8;
+  json, key: RawUtf8;
   one: variant;
   any: TDocAnyTest;
+  dt: IDocTest;
   {$ifdef HASIMPLICITOPERATOR}
   f: TDocDictFields;
   v: TDocValue;
@@ -3951,6 +3980,7 @@ var
   u: RawUtf8;
   {$endif HASIMPLICITOPERATOR}
 begin
+  // validate basic IDocList features
   Check(l = nil);
   l := DocList('[1,2, 3,"4",5,"6", 1.0594631]');
   Check(l <> nil);
@@ -3998,6 +4028,7 @@ begin
   CheckEqual(l.Copy(1, 3).Json, '[2,3]');
   Check(l.Copy(1, -2).ToString = '[2,3,"4"]');
   {$ifdef HASIMPLICITOPERATOR}
+  // validate IDocList enumerators
   for f in DocList('[{"a":0,"b":20},{"a":2,"b":22}]').D[0] do
     if f.Key.Equals('a') then
     begin
@@ -4201,6 +4232,7 @@ begin
   l2 := DocList('[{a:1,b:2},{a:2,b:4},"oups",{a:3,b:6}]');
   d := l2.D[0];
   {$endif HASIMPLICITOPERATOR}
+  // validate IDocDict process
   d.I['b'] := 7;
   d.Del('a');
   l2.Del(2);
@@ -4438,6 +4470,7 @@ begin
   Check(d <> nil);
   CheckEqual(d.Len, 2);
   CheckEqual(d.ToJson(jsonEscapeUnicode), '{"a":3,"b":4}');
+  // validate IDocList/IDocDict as published properties
   any := TDocAnyTest.Create;
   try
     Check(any.List <> nil);
@@ -4471,6 +4504,35 @@ begin
   finally
     any.Free;
   end;
+  // validate TInterfacedSerializableAutoCreateFields
+  TDocTest.RegisterToRtti(TypeInfo(IDocTest));
+  Check(IsEqualGuid(TDocTest.Guid^, IDocTest));
+  Check(dt = nil);
+  CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), 'null');
+  Check(LoadJson(dt, '{name:"abc",list:[1,2,3],info:123}', TypeInfo(IDocTest)));
+  Check(dt <> nil);
+  Check(dt.Data.Any <> nil);
+  CheckEqual(dt.Data.Any.List.Json, '[]');
+  CheckEqual(dt.Data.Any.Dict.Json, '{}');
+  CheckEqual(dt.Data.Name, 'abc');
+  CheckEqual(dt.Data.List.Json, '[1,2,3]');
+  Check(dt.Data.Info = 123);
+  json := dt.Json;
+  CheckEqual(json,
+    '{"Any":{"List":[],"Dict":{}},"Name":"abc","List":[1,2,3],"Info":123}');
+  CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
+  TDocTest.NewInterface(dt);
+  CheckEqual(SaveJson(dt, TypeInfo(IDocTest)),
+    '{"Any":{"List":[],"Dict":{}},"Name":"","List":[],"Info":null}');
+  dt.Data.Any.List.Extend([1, 2, 3]);
+  dt.Data.Any.Dict['a'] := 4;
+  dt.Data.Name := 'doe';
+  dt.Data.List.Append('zero');
+  dt.Data.Info := dt.Data.List.AsVariant;
+  json := dt.Json;
+  CheckEqual(json, '{"Any":{"List":[1,2,3],"Dict":{"a":4}},' +
+    '"Name":"doe","List":["zero"],"Info":["zero"]}');
+  CheckEqual(SaveJson(dt, TypeInfo(IDocTest)), json);
 end;
 
 procedure TTestCoreProcess._TDecimal128;
