@@ -11809,7 +11809,7 @@ end;
 
 procedure InitializeVariantsJson;
 begin
-  // register the IDocList/IDocDict interface types JSON serialization
+  // called from mormot.core.json once TRttiJson is set as global RTTI class
   TDocList.RegisterToRtti(TypeInfo(IDocList));
   TDocDict.RegisterToRtti(TypeInfo(IDocDict));
 end;
