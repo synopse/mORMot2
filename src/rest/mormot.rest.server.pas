@@ -2610,6 +2610,8 @@ type
   // - rsoBan40xIP will reject any IP for a few seconds after a 4xx error code
   // is returned (but 401/403) - only implemented by socket servers for now
   // - rsoEnableLogging enable an associated THttpServerGeneric.Logger instance
+  // - rsoTelemetryCsv and rsoTelemetryJson will enable CSV or JSON consolidated
+  // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
   TRestHttpServerOption = (
     rsoOnlyJsonRequests,
     rsoOnlyValidUtf8,
@@ -2622,7 +2624,9 @@ type
     rsoNoXPoweredHeader,
     rsoIncludeDateHeader,
     rsoBan40xIP,
-    rsoEnableLogging);
+    rsoEnableLogging,
+    rsoTelemetryCsv,
+    rsoTelemetryJson);
 
   /// how to customize TRestHttpServer process
   TRestHttpServerOptions = set of TRestHttpServerOption;

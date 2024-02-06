@@ -1893,6 +1893,8 @@ type
     fSuspendFileAutoSaveMinutes: cardinal;
     fSuspendFileAutoSaveTix, fLastConsolidate: cardinal;
     fConsolidateNextTime: array[hapMinute .. hapYear] of TDateTime;
+    fPersisters: TObjectDynArray;
+    fDestFolder: TFileName;
     procedure SetUniqueIPDepth(value: cardinal);
     procedure ComputeConsolidateTime(last: THttpAnalyzerPeriod; ref: TDateTime);
     procedure Consolidate(tixsec: cardinal; now: TDateTime = 0);
@@ -1900,6 +1902,8 @@ type
     procedure DoSave;
     procedure DoGet(Period: THttpAnalyzerPeriod; Scope: THttpAnalyzerScope;
       out State: THttpAnalyzerState);
+    function GetDestFolder: TFileName;
+    procedure SetDestFolder(const Value: TFileName);
   public
     /// initialize this HTTP server analyzer instance
     // - you can specify an optional file name to persist the current counters
@@ -1959,6 +1963,11 @@ type
     /// event handler used to persist the information
     property OnSave: TOnHttpAnalyzerSave
       read fOnSave write fOnSave;
+    /// where the associated telemetry CSV/JSON files will be stored
+    // - if not defined, GetSystemPath(spLog) will be used
+    // - can NOT be set once the analyzer started its saving process
+    property DestFolder: TFileName
+      read GetDestFolder write SetDestFolder;
   published
     /// define which THttpAnalyzerScopes fields are to be tracked
     property Tracked: THttpAnalyzerScopes
@@ -1980,12 +1989,17 @@ type
   protected
     fSafe: TOSLightLock;
     fRotate: THttpRotater;
+    fOnContinue: TOnHttpAnalyzerSave;
+    fOwner: THttpAnalyzer;
     procedure OnRotate(Event: THttpRotaterEvent);
     procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
       virtual; abstract; // to be overriden
+    function GetDefaultFileName: TFileName; virtual; abstract;
   public
     /// initialize this persistence instance
     constructor Create(const aFileName: TFileName); reintroduce; virtual;
+    /// initialize this persistence for a given THttpAnalyzer
+    constructor CreateOwned(aOwner: THttpAnalyzer);
     /// finalize this persistence instance
     destructor Destroy; override;
     /// this is the main callback of persistence, matching THttpAnalyser.OnSave
@@ -1993,6 +2007,10 @@ type
     /// enable/disable optional output file rotation and compression
     // - rotation and .gz compression is done in the same folder as FileName
     procedure SetRotation(aTrigger: THttpRotaterTrigger; aFiles: integer);
+    /// OnSave() methods will call this event
+    // - so that you can cascade several THttpAnalyzerPersistAbstract instances
+    property OnContinue: TOnHttpAnalyzerSave
+      read fOnContinue write fOnContinue;
   published
     /// the current output file name
     property FileName: TFileName
@@ -2014,6 +2032,7 @@ type
     // will persist the state items as CSV rows
     procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
       override;
+    function GetDefaultFileName: TFileName; override;
   end;
 
   /// class allowing to persist THttpAnalyzer information into a JSON file
@@ -2026,6 +2045,7 @@ type
     // will persist the state items as JSON objects
     procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
       override;
+    function GetDefaultFileName: TFileName; override;
   end;
 
   /// class allowing to persist THttpAnalyzer information into a binary file
@@ -2038,6 +2058,7 @@ type
     // will persist the state items as flat raw binary
     procedure DoSave(const State: THttpAnalyzerToSaveDynArray; Dest: TStream);
       override;
+    function GetDefaultFileName: TFileName; override;
   end;
 
   /// metadata as decoded by THttpMetrics.LoadHeader() class function
@@ -4325,6 +4346,7 @@ var
   tocompress: TFileName;
   i, old: PtrInt;
 begin
+  // acquire the (.log) file using the lock shared with the main process
   OnRotate(hreLock);
   try
     // close this (.log) file
@@ -4689,7 +4711,6 @@ begin
       'Impossible to set %.DestFolder once started', [self]);
   fDestFolder := EnsureDirectoryExists(aFolder, EHttpLogger);
   if not IsDirectoryWritable(fDestFolder, [idwExcludeWinSys]) then
-    // better fail ASAP
     raise EHttpLogger.CreateUtf8('Not writable %.DestFolder = %', [self, aFolder]);
 end;
 
@@ -5077,6 +5098,7 @@ begin
      (fSuspendFile <> '') then
     UpdateSuspendFile;
   inherited Destroy;
+  ObjArrayClear(fPersisters);
 end;
 
 procedure THttpAnalyzer.SetUniqueIPDepth(value: cardinal);
@@ -5451,6 +5473,22 @@ begin
   end;
 end;
 
+function THttpAnalyzer.GetDestFolder: TFileName;
+begin
+  if fDestFolder = '' then
+    fDestFolder := GetSystemPath(spLog); // default
+  result := fDestFolder;
+end;
+
+procedure THttpAnalyzer.SetDestFolder(const Value: TFileName);
+begin
+  if fDestFolder <> '' then
+    raise EHttpAnalyzer.CreateUtf8('%.DestFolder can be set once', [self]);
+  fDestFolder := EnsureDirectoryExists(Value, EHttpAnalyzer);
+  if not IsDirectoryWritable(fDestFolder, [idwExcludeWinSys]) then
+    raise EHttpAnalyzer.CreateUtf8('Not writable %.DestFolder = %', [self, Value]);
+end;
+
 procedure THttpAnalyzer.DoGet(Period: THttpAnalyzerPeriod;
   Scope: THttpAnalyzerScope; out State: THttpAnalyzerState);
 var
@@ -5611,9 +5649,20 @@ constructor THttpAnalyzerPersistAbstract.Create(const aFileName: TFileName);
 begin
   fSafe.Init;
   inherited Create;
-  fRotate.FileName := ExpandFileName(aFileName);
+  if aFileName <> '' then
+    fRotate.FileName := ExpandFileName(aFileName);
   fRotate.OnRotate := OnRotate;
   // keep hrtUndefined = no rotation by default
+end;
+
+constructor THttpAnalyzerPersistAbstract.CreateOwned(aOwner: THttpAnalyzer);
+begin
+  Create(''); // Rotate.FileName will be set in OnSave() from fOwner.DestFolder
+  fRotate.Trigger := hrtDaily;
+  ObjArrayAdd(aOwner.fPersisters, self);
+  fOnContinue := aOwner.fOnSave;
+  aOwner.fOnSave := OnSave;
+  fOwner := aOwner;
 end;
 
 destructor THttpAnalyzerPersistAbstract.Destroy;
@@ -5627,8 +5676,17 @@ procedure THttpAnalyzerPersistAbstract.OnSave(
 var
   f: TStream;
 begin
-  if (State <> nil) and
-     (FileName <> '') then
+  if State = nil then
+    exit;
+  // optionally merge calls
+  if Assigned(fOnContinue) then
+    fOnContinue(State);
+  // if needed, compute the destination file name from THttpAnalyzer.DestFolder
+  if (FileName = '') and
+     (fOwner <> nil) then
+    fRotate.FileName := fOwner.GetDestFolder + GetDefaultFileName;
+  // redirect persistence to DoSave() virtual method, with proper file rotation
+  if FileName <> '' then
   try
     // try rotation before appending any new information - and outside Safe.lock
     if fRotate.Trigger > hrtDisabled then
@@ -5704,6 +5762,11 @@ begin
   end;
 end;
 
+function THttpAnalyzerPersistCsv.GetDefaultFileName: TFileName;
+begin
+  result := 'telemetry.csv';
+end;
+
 
 { THttpAnalyzerPersistJson }
 
@@ -5763,6 +5826,11 @@ begin
   end;
 end;
 
+function THttpAnalyzerPersistJson.GetDefaultFileName: TFileName;
+begin
+  result := 'telemetry.json';
+end;
+
 
 { THttpAnalyzerPersistBinary }
 
@@ -5771,6 +5839,11 @@ procedure THttpAnalyzerPersistBinary.DoSave(
 begin
   Dest.Seek(0, soEnd); // just append
   Dest.WriteBuffer(pointer(State)^, length(State) * SizeOf(State[0]));
+end;
+
+function THttpAnalyzerPersistBinary.GetDefaultFileName: TFileName;
+begin
+  result := 'telemetry.raw';
 end;
 
 

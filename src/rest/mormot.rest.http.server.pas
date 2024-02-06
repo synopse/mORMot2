@@ -823,6 +823,10 @@ begin
     include(hso, hsoBan40xIP);
   if rsoEnableLogging in fOptions then
     include(hso, hsoEnableLogging);
+  if rsoTelemetryCsv in fOptions then
+    include(hso, hsoTelemetryCsv);
+  if rsoTelemetryJson in fOptions then
+    include(hso, hsoTelemetryJson);
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);

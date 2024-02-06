@@ -423,6 +423,8 @@ type
   // this will disable both hsoThreadCpuAffinity and hsoThreadSocketAffinity
   // - hsoEnablePipelining enable HTTP pipelining (unsafe) on THttpAsyncServer
   // - hsoEnableLogging enable an associated THttpServerGeneric.Logger instance
+  // - hsoTelemetryCsv and hsoTelemetryJson will enable CSV or JSON consolidated
+  // per-minute metrics logging via an associated THttpServerGeneric.Analyzer
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -438,7 +440,9 @@ type
     hsoReusePort,
     hsoThreadSmooting,
     hsoEnablePipelining,
-    hsoEnableLogging);
+    hsoEnableLogging,
+    hsoTelemetryCsv,
+    hsoTelemetryJson);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
@@ -470,6 +474,7 @@ type
     fFavIcon: RawByteString;
     fRouterClass: TRadixTreeNodeClass;
     fLogger: THttpLogger;
+    fAnalyzer: THttpAnalyzer;
     function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetRouterClass(aRouter: TRadixTreeNodeClass);
     procedure SetServerName(const aName: RawUtf8); virtual;
@@ -710,6 +715,11 @@ type
     // - equals nil if hsoEnableLogging was not set in the constructor
     property Logger: THttpLogger
       read fLogger;
+    /// access to the HTTP analyzer initialized with hsoTelemetryCsv or
+    // hsoTelemetryJson options
+    // - you can customize this process via Analyzer.DestFolder
+    property Analyzer: THttpAnalyzer
+      read fAnalyzer;
   end;
 
 
@@ -3166,6 +3176,17 @@ begin
     end;
     fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
   end;
+  if fOptions * [hsoTelemetryCsv, hsoTelemetryJson] <> [] then
+  begin
+    if fAnalyzer = nil then // <> nil from THttpApiServer.CreateClone
+      fAnalyzer := THttpAnalyzer.Create; // no suspend file involved
+    fAnalyzer.OnContinue := fLogger;
+    fOnAfterResponse := fAnalyzer.Append;
+    if hsoTelemetryCsv in fOptions then
+      THttpAnalyzerPersistCsv.CreateOwned(fAnalyzer);
+    if hsoTelemetryJson in fOptions then
+      THttpAnalyzerPersistJson.CreateOwned(fAnalyzer);
+  end;
   inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop, ProcessName);
 end;
 
@@ -3173,6 +3194,7 @@ destructor THttpServerGeneric.Destroy;
 begin
   inherited Destroy;
   FreeAndNil(fRoute);
+  FreeAndNil(fAnalyzer);
   FreeAndNil(fLogger);
 end;
 
@@ -3231,7 +3253,7 @@ begin
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
-  aCompressMinSize, aPriority: integer);
+  aCompressMinSize: integer; aPriority: integer);
 begin
   RegisterCompressFunc(
     fCompress, aFunction, fCompressAcceptEncoding, aCompressMinSize, aPriority);
@@ -4277,7 +4299,9 @@ begin
         if Assigned(fOnAcceptIdle) then
           fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
         if Assigned(fLogger) then
-          fLogger.OnIdle(tix64); // flush log file(s) on idle server
+          fLogger.OnIdle(tix64) // flush log file(s) on idle server
+        else if Assigned(fAnalyzer) then
+          fAnalyzer.OnIdle(tix64); // consolidate telemetry if needed
         continue;
       end;
       if fBanned.IsBanned(cltaddr) then // IP filtering from blacklist
