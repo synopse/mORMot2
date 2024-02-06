@@ -192,6 +192,11 @@ begin
   result := DeRef(PTypeData(@self)^.IntfParentRef);
 end;
 
+function InterfaceEntryIsStandard(Entry: PInterfaceEntry): boolean;
+begin
+  result := Entry^.IType = etStandard;
+end;
+
 
 function TRttiProp.TypeInfo: PRttiInfo;
 begin

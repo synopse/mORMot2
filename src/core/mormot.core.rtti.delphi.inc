@@ -210,6 +210,11 @@ begin
   result := Pointer(PTypeData(@self)^.IntfParent^);
 end;
 
+function InterfaceEntryIsStandard(Entry: PInterfaceEntry): boolean;
+begin
+  result := Entry^.IOffset <> 0;
+end;
+
 function TRttiProp.TypeInfo: PRttiInfo;
 begin
   result := pointer(PPropInfo(@self)^.PropType^);

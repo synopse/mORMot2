@@ -942,6 +942,8 @@ type
     procedure InterfaceAncestors(out Ancestors: PRttiInfoDynArray;
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
+    /// for rkInterface: check if this type (or ancestor) implements a TGuid
+    function InterfaceImplements(const AGuid: TGuid): boolean;
   end;
 
   {$A+}
@@ -1653,6 +1655,10 @@ type
 function GetRttiInterface(aTypeInfo: PRttiInfo;
   out aDefinition: TRttiInterface): integer;
 
+/// check if a pre-computed PInterfaceEntry has a direct IOffset information
+function InterfaceEntryIsStandard(Entry: PInterfaceEntry): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// execute an instance method from its RTTI per-interface information
 // - calling this function with a pre-computed PInterfaceEntry value is faster
 // than calling the TObject.GetInterface() method, especially when the class
@@ -2349,7 +2355,7 @@ type
 
   PRttiCustomProps = ^TRttiCustomProps;
 
-  /// used internally for fast allocation of a rkClass instance
+  /// used internally for fast allocation of a rkClass/rkInterface instance
   // - member is properly initialized by TRttiJson from mormot.core.json.pas
   TRttiCustomNewInstance = function(Rtti: TRttiCustom): pointer;
 
@@ -3866,9 +3872,8 @@ begin
   typ := InterfaceType;
   repeat
     nfo := typ^.IntfParent;
-    if nfo = nil then
-      exit;
-    if nfo = TypeInfo(IInterface) then
+    if (nfo = nil) or
+       (nfo = TypeInfo(IInterface)) then
       exit;
     typ := nfo^.InterfaceType;
     if ifHasGuid in typ^.IntfFlags then
@@ -3886,6 +3891,28 @@ begin
       inc(n);
     end;
   until false;
+end;
+
+function TRttiInfo.InterfaceImplements(const AGuid: TGuid): boolean;
+var
+  nfo: PRttiInfo;
+  typ: PRttiInterfaceTypeData;
+begin
+  result := false;
+  if (@self = nil) or
+     IsNullGuid(AGuid) or
+     (Kind <> rkInterface) then
+    exit;
+  typ := InterfaceType;
+  repeat
+    nfo := typ^.IntfParent;
+    if (nfo = nil) or
+       (nfo = TypeInfo(IInterface)) then
+      exit;
+    typ := nfo^.InterfaceType;
+  until (ifHasGuid in typ^.IntfFlags) and
+        IsEqualGuid(AGuid, typ^.IntfGuid^);
+  result := true; // found
 end;
 
 
@@ -5565,19 +5592,14 @@ begin
   result := false;
   pointer(Obj) := nil;
   if Entry <> nil then
-    {$ifdef FPC}
-    if Entry^.IType = etStandard then
-    {$else}
-    if Entry^.IOffset <> 0 then
-    {$endif FPC}
+    if InterfaceEntryIsStandard(Entry) then
     begin
       // fast interface retrieval from the interface field instance
-      Pointer(Obj) := Pointer(PAnsiChar(Instance) + Entry^.IOffset);
-      if Pointer(Obj) <> nil then
-      begin
-        IInterface(Obj)._AddRef;
-        result := true;
-      end;
+      pointer(Obj) := pointer(PAnsiChar(Instance) + Entry^.IOffset);
+      if pointer(Obj) = nil then
+         exit;
+      IInterface(Obj)._AddRef;
+      result := true;
     end
     else
       // there is a getter method -> use slower but safe RTL method
