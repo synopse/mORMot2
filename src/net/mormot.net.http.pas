@@ -5788,7 +5788,9 @@ begin
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if existing = 0 then
-      w.Add('[', #10); // open new JSON array
+      w.Add('[', #10) // open new JSON array
+    else
+      w.Add(',', #10); // append
     n := length(State);
     p := pointer(State);
     repeat
