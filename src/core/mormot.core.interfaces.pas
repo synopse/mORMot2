@@ -32,10 +32,10 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.rtti,
   mormot.core.buffers,
   mormot.core.variants,
   mormot.core.data,
-  mormot.core.rtti,
   mormot.core.json,
   mormot.core.threads,
   mormot.core.test, // for TInterfaceMock

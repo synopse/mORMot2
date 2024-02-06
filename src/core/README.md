@@ -20,11 +20,10 @@ Basic types and reusable stand-alone functions shared by all framework units
 - Framework Version and Information
 - Common Types Used for Compatibility Between Compilers and CPU
 - Numbers (floats and integers) Low-level Definitions
-- integer Arrays Manipulation
+- Integer Arrays Manipulation
 - `ObjArray` `PtrArray` `InterfaceArray` Wrapper Functions
 - Low-level Types Mapping Binary or Bits Structures
 - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
-- Date / Time Processing
 - Efficient `Variant` Values Conversion
 - Sorting/Comparison Functions
 - Some Convenient `TStream` descendants and File access functions
@@ -86,6 +85,8 @@ Date and Time definitions and process shared by all framework units
 - `TSynDate` / `TSynDateTime` / `TSynSystemTime` High-Level objects
 - `TUnixTime` / `TUnixMSTime` POSIX Epoch Compatible 64-bit date/time
 - `TTimeLog` efficient 64-bit custom date/time encoding
+- `TTextDateWriter` supporting date/time ISO-8601 serialization
+- `TValuePUtf8Char` text value wrapper record
 
 ### mormot.core.rtti
 
@@ -95,7 +96,7 @@ Cross-Compiler RTTI Definitions shared by all framework units
 - Published `class` Properties and Methods RTTI
 - `IInvokable` Interface RTTI
 - Efficient Dynamic Arrays and Records Process
-- Managed Types Finalization or Copy
+- Managed Types Finalization, Random or Copy
 - RTTI Value Types used for JSON Parsing
 - RTTI-based Registration for Custom JSON Parsing
 - High Level `TObjectWithID` and `TObjectWithCustomCreate` Class Types
@@ -103,7 +104,7 @@ Cross-Compiler RTTI Definitions shared by all framework units
 
 Purpose of this unit is to avoid any direct use of `TypInfo.pas` RTL unit, which is not exactly compatible between compilers, and lacks of direct RTTI access with no memory allocation. We define pointers to RTTI record/object to access `TypeInfo()` via a set of explicit methods. Here fake record/objects are just wrappers around pointers defined in Delphi/FPC RTL's `TypInfo.pas` with the magic of inlining. We redefined all RTTI definitions as `TRtti*` types to avoid confusion with type names as published by the `TypInfo` unit.
 
-At higher level, the new `TRttiCustom` class is the main cached entry of our customizable RTTI,accessible from the global `Rtti.*` methods. It is enhanced in the `mormot.core.json` unit to support JSON.
+At higher level, the new `TRttiCustom` class is the main cached entry of our customizable RTTI,accessible from the global `Rtti.*` methods. It is enhanced as `TRttiJson` in the `mormot.core.json` unit to support JSON.
 
 ### mormot.core.buffers
 
@@ -115,6 +116,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - URI-Encoded Text Buffer Process
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
+- `TStreamRedirect` and other Hash process
 - Markup (e.g. HTML or Emoji) process
 - `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
@@ -122,7 +124,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 
 Low-Level Data Processing Functions shared by all framework units
 - RTL `TPersistent` / `TInterfacedObject` with Custom Constructor
-- `TSynPersistent*` / `TSyn*List` classes
+- `TSynPersistent*` / `TSyn*List` `TSynLocker` classes
 - `TSynPersistentStore` with proper Binary Serialization
 - INI Files and In-memory Access
 - Efficient RTTI Values Binary Serialization and Comparison
@@ -151,7 +153,7 @@ JSON functions shared by all framework units
 
 In respect to `generics.collections` from the Delphi or FPC RTL, this unit uses `interface` as variable holders, and leverage them to reduce the generated code as much as possible, as the *Spring4D 2.0 framework* does, but for both Delphi and FPC. As a result, compiled units (`.dcu`/`.ppu`) and executable are much smaller, and faster to compile.
 
-It publishes `TDynArray` and `TSynDictionary` high-level features like indexing, sorting, JSON/binary serialization or thread safety as Generics strong typing.
+Those `interfaces` publish `TDynArray` and `TSynDictionary` high-level features like indexing, sorting, JSON/binary serialization or thread safety as Generics strong typing.
 
 Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factories as main entry points of these efficient data structures.
    
@@ -161,7 +163,9 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 - Low-Level `Variant` Wrappers
 - Custom `Variant` Types with JSON support
 - `TDocVariant` Object/Array Document Holder with JSON support
+- `IDocList`/`IDocDict` advanced Wrappers of `TDocVariant` Documents
 - JSON Parsing into `Variant`
+- `Variant` Binary Serialization
 
 ### mormot.core.search
 
@@ -225,6 +229,7 @@ Implements SOLID Process via Interface types
 - `TInterfaceFactory` Generating Runtime Implementation Class
 - `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
 - `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
+- `TInterfacedObjectFake` with JITted Methods Execution
 - `TInterfaceMethodExecute` for Method Execution from JSON
 - `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
 

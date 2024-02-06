@@ -243,7 +243,7 @@ type
   /// handle {{mustache}} template rendering context from RTTI and variables
   // - the context is given via our RTTI information
   // - performance is somewhat higher than TSynMustacheContextVariant because
-  // less computation is needed for filling the TDocVariant data
+  // less computation is needed for filling transient TDocVariant instances
   TSynMustacheContextData = class(TSynMustacheContext)
   protected
     fContext: array of record
@@ -1872,18 +1872,18 @@ begin
 end;
 
 function TSynMustache.RenderData(const Value; ValueTypeInfo: PRttiInfo;
-  const OnGetData: TOnGetGlobalData;
-  Partials: TSynMustachePartials; const Helpers: TSynMustacheHelpers;
-  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+  const OnGetData: TOnGetGlobalData; Partials: TSynMustachePartials;
+  const Helpers: TSynMustacheHelpers; const OnTranslate: TOnStringTranslate;
+  EscapeInvert: boolean): RawUtf8;
 begin
   result := RenderDataRtti(@Value, Rtti.RegisterType(ValueTypeInfo),
     OnGetData, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
 function TSynMustache.RenderDataArray(const Value: TDynArray;
-  const OnGetData: TOnGetGlobalData;
-  Partials: TSynMustachePartials; const Helpers: TSynMustacheHelpers;
-  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+  const OnGetData: TOnGetGlobalData; Partials: TSynMustachePartials;
+  const Helpers: TSynMustacheHelpers; const OnTranslate: TOnStringTranslate;
+  EscapeInvert: boolean): RawUtf8;
 var
   n: PtrInt;
 begin
@@ -1895,9 +1895,9 @@ begin
 end;
 
 function TSynMustache.RenderDataRtti(Value: pointer; ValueRtti: TRttiCustom;
-  const OnGetData: TOnGetGlobalData;
-  Partials: TSynMustachePartials; const Helpers: TSynMustacheHelpers;
-  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
+  const OnGetData: TOnGetGlobalData; Partials: TSynMustachePartials;
+  const Helpers: TSynMustacheHelpers; const OnTranslate: TOnStringTranslate;
+  EscapeInvert: boolean): RawUtf8;
 var
   ctx: TSynMustacheContextData;
   tmp: TTextWriterStackBuffer;
@@ -1910,7 +1910,7 @@ begin
   else
     ctx := TSynMustacheContextData.Create(
       self, TJsonWriter.CreateOwnedStream(tmp), SectionMaxCount,
-      Value, ValueRtti, true);
+      Value, ValueRtti, {ownwriter=}true);
   try
     ctx.Helpers := Helpers;
     ctx.Partials := Partials;

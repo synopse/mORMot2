@@ -33,7 +33,10 @@ On Windows, some Operating-System high-level features like Windows HTTP and WebS
 
 Cross-Platform and Cross-Compiler `zlib` API
 - Low-Level ZLib Streaming Access
+- Low-Level libdeflate in-memory Compression Library
 - Simple Wrapper Functions for Deflate/ZLib Process
+
+FPC Intel-Linux and Win32 use the faster libdeflate for in-memory compression.
 
 ### mormot.lib.lizard
 

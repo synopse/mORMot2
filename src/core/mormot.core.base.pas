@@ -14,7 +14,6 @@ unit mormot.core.base;
     - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
     - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
-    - Date / Time Processing
     - Efficient Variant Values Conversion
     - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
