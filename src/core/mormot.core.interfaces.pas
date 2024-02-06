@@ -5129,12 +5129,10 @@ begin
     // here we are protected within a fSafe.WriteLock
     n := length(fEntry);
     SetLength(fEntry, n + 1);
-    begin
-      en := @fEntry[n];
-      en^.TypeInfo := aInterface;
-      en^.ImplementationClass := Rtti.RegisterClass(aImplementationClass);
-      en^.InterfaceEntry := e;
-    end;
+    en := @fEntry[n];
+    en^.TypeInfo := aInterface;
+    en^.ImplementationClass := Rtti.RegisterClass(aImplementationClass);
+    en^.InterfaceEntry := e;
   finally
     fSafe.WriteUnLock;
   end;
