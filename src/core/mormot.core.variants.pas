@@ -2985,10 +2985,7 @@ type
   {$endif HASIMPLICITOPERATOR}
 
   /// abstract parent with common methods to IDocList/IDocDict wrappers
-  IDocAny = interface
-    // methods used as getter/setter for properties
-    function GetJson: RawUtf8;
-    procedure SetJson(const value: RawUtf8);
+  IDocAny = interface(ISerializable)
     /// remove all elements from the list/dictionary
     procedure Clear;
     /// equals dvArray for IDocList, dvObject for IDocDict
@@ -2997,26 +2994,16 @@ type
     function Model: TDocVariantModel;
     /// how many items or name/value pairs are stored in this instance
     function Len: integer;
-    /// serialize this IDocList/IDocDict into a JSON array/object specific format
-    function ToJson(format: TTextWriterJsonFormat): RawUtf8;
     /// returns itself as a IDocList, or nil if is a IDocDict
     function AsList: IDocList;
     /// returns itself as a IDocDic, or nil if is a IDocList
     function AsDict: IDocDict;
     /// returns the associated TDocVariant instance
     function AsVariant: variant;
-    /// convert into JSON array/object as RTL string
-    function ToString(format: TTextWriterJsonFormat = jsonCompact): string;
     /// low-level access to the internal TDocVariantData storage
     // - warning: is a weak reference pointer to the main IDocList/IDocDict, so
     // you need to copy it to use it outside of this instance
     function Value: PDocVariantData;
-    /// equals true if the Value is owned by this IDocList/IDocDict instance
-    function ValueIsOwned: boolean;
-    /// unserialize/serialize this IDocList/IDocDict from/into a JSON array/object
-    // - use ToString if you want the result as RTL string
-    property Json: RawUtf8
-      read GetJson write SetJson;
   end;
 
   /// exception raised by IDocList
@@ -10178,12 +10165,10 @@ end;
 { ************** IDocList/IDocDict advanced Wrappers of TDocVariant Documents }
 
 type
-  TDocAny = class(TInterfacedObject)
+  TDocAny = class(TInterfacedSerializable)
   protected
     fValue: PDocVariantData;
     fValueOwned: TVarData;
-    class procedure JS(W: TJsonWriter; Data: pointer;
-      Options: TTextWriterWriteObjectOptions);
   public
     constructor CreateOwned;
     constructor CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
@@ -10195,9 +10180,7 @@ type
     function Kind: TDocVariantKind;
     function Model: TDocVariantModel;
     function Len: integer;
-    function ToJson(format: TTextWriterJsonFormat): RawUtf8;
-    function ToString(format: TTextWriterJsonFormat): string; reintroduce;
-    function GetJson: RawUtf8;
+    procedure ToJson(W: TJsonWriter; Options: TTextWriterWriteObjectOptions); override;
     function Value: PDocVariantData;
     function ValueIsOwned: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -10207,9 +10190,11 @@ type
   end;
 
   TDocList = class(TDocAny, IDocList)
-  protected
-    class procedure JL(var Context: TJsonParserContext; Data: pointer);
   public
+    // TInterfacedSerializable methods
+    constructor Create(options: PDocVariantOptions); override;
+    procedure FromJson(var context: TJsonParserContext); override;
+    // IDocList methods
     function GetB(position: integer): boolean;
     function GetC(position: integer): currency;
     function GetD(position: integer): IDocDict;
@@ -10228,7 +10213,7 @@ type
     procedure SetL(position: integer; const value: IDocList);
     procedure SetS(position: integer; const value: string);
     procedure SetU(position: integer; const value: RawUtf8);
-    procedure SetJson(const value: RawUtf8);
+    //procedure SetJson(const value: RawUtf8); override;
     function Append(const value: variant): integer; overload;
     function Append(const value: RawUtf8): integer; overload;
     function AppendDoc(const value: IDocAny): integer;
@@ -10287,8 +10272,11 @@ type
     function SetValueAt(const key: RawUtf8; const value: variant): boolean;
     function GetExistingValueAt(const key, method: RawUtf8): PVariant;
     function PopAt(const key: RawUtf8; value: PVariant): boolean;
-    class procedure JL(var Context: TJsonParserContext; Data: pointer);
   public
+    // TInterfacedSerializable methods
+    constructor Create(options: PDocVariantOptions); override;
+    procedure FromJson(var context: TJsonParserContext); override;
+    // IDocDict methods
     function GetB(const key: RawUtf8): boolean;
     function GetC(const key: RawUtf8): currency;
     function GetD(const key: RawUtf8): IDocDict;
@@ -10323,7 +10311,6 @@ type
     function Get(const key: RawUtf8; var value: PDocVariantData): boolean; overload;
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
-    procedure SetJson(const value: RawUtf8);
     function Compare(const another: IDocDict; caseinsensitive: boolean): integer; overload;
     function Compare(const another: IDocDict; const keys: array of RawUtf8;
       caseinsensitive: boolean = false): integer; overload;
@@ -10472,7 +10459,7 @@ begin
     end;
     if CurrDict = nil then
     begin
-      v := TDocDict.Create;
+      v := TDocDict.CreateByRef(nil);
       CurrDictValue := @v.fValue;
       CurrDict := v; // share a single TDocDict instance during loop
     end;
@@ -10800,19 +10787,9 @@ begin
   result := fValue^.VCount;
 end;
 
-function TDocAny.ToJson(format: TTextWriterJsonFormat): RawUtf8;
+procedure TDocAny.ToJson(W: TJsonWriter; Options: TTextWriterWriteObjectOptions);
 begin
-  DocVariantType.ToJson(PVarData(fValue), result, '', '', format);
-end;
-
-function TDocAny.ToString(format: TTextWriterJsonFormat): string;
-begin
-  Utf8ToStringVar(ToJson(format), result);
-end;
-
-function TDocAny.GetJson: RawUtf8;
-begin
-  result := ToJson(jsonCompact);
+  DocVariantType.ToJson(W, PVarData(fValue));
 end;
 
 function TDocAny.Value: PDocVariantData;
@@ -10870,16 +10847,6 @@ begin
   Context.Valid := ctx.Json <> nil;
 end;
 
-class procedure TDocAny.JS(W: TJsonWriter; Data: pointer;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  Data := PPointer(Data)^;
-  if Data = nil then
-    W.AddNull // avoid GPF if IDocAny = nil
-  else
-    DocVariantType.ToJson(W, pointer(IDocAny(Data).Value));
-end;
-
 
 { EDocList }
 
@@ -10889,6 +10856,16 @@ begin
 end;
 
 { TDocList }
+
+constructor TDocList.Create(options: PDocVariantOptions);
+begin
+  CreateAs(options, [dvoIsArray]);
+end;
+
+procedure TDocList.FromJson(var context: TJsonParserContext);
+begin
+  JL_IDocAny(context, fValue, jtArrayStart);
+end;
 
 function TDocList.ValueAt(position: integer): PVariant;
 var
@@ -10933,14 +10910,6 @@ begin
   RawUtf8ToVariant(value, v^);
   if dvoInternValues in fValue^.VOptions then
     InternalUniqueValue(v);
-end;
-
-procedure TDocList.SetJson(const value: RawUtf8);
-begin
-  if GetFirstJsonToken(pointer(value)) <> jtArrayStart then
-    fValueOwned.VType := DocVariantVType
-  else if not fValue^.InitJson(value, fValue^.Options) then
-    fValue^.Void;
 end;
 
 function TDocList.GetS(position: integer): string;
@@ -11380,14 +11349,7 @@ end;
 
 {$endif HASIMPLICITOPERATOR}
 
-class procedure TDocList.JL(var Context: TJsonParserContext; Data: pointer);
-var
-  list: ^IDocList absolute Data;
-begin
-  if not Assigned(list^) then
-    list^ := CreateAs(Context.CustomVariant, [dvoIsArray]);
-  JL_IDocAny(Context, list^.Value, jtArrayStart);
-end;
+
 
 
 { EDocDict }
@@ -11399,6 +11361,16 @@ end;
 
 { TDocDict }
 
+constructor TDocDict.Create(options: PDocVariantOptions);
+begin
+  CreateAs(options, [dvoIsObject]);
+end;
+
+procedure TDocDict.FromJson(var context: TJsonParserContext);
+begin
+  JL_IDocAny(context, fValue, jtObjectStart);
+end;
+
 function TDocDict.GetPathDelim: AnsiChar;
 begin
   result := fPathDelim;
@@ -11407,14 +11379,6 @@ end;
 procedure TDocDict.SetPathDelim(value: AnsiChar);
 begin
   fPathDelim := value;
-end;
-
-procedure TDocDict.SetJson(const value: RawUtf8);
-begin
-  if GetFirstJsonToken(pointer(value)) <> jtObjectStart then
-    fValueOwned.VType := DocVariantVType
-  else if not fValue^.InitJson(value, fValue^.Options) then
-    fValue^.Void;
 end;
 
 function TDocDict.Compare(const another: IDocDict; caseinsensitive: boolean): integer;
@@ -11843,40 +11807,11 @@ end;
 
 {$endif HASIMPLICITOPERATOR}
 
-class procedure TDocDict.JL(var Context: TJsonParserContext; Data: pointer);
-var
-  dict: ^IDocDict absolute Data;
-begin
-  if not Assigned(dict^) then
-    dict^ := CreateAs(Context.CustomVariant, [dvoIsObject]);
-  JL_IDocAny(Context, dict^.Value, jtObjectStart);
-end;
-
-function _New_IDocList(Rtti: TRttiCustom): pointer;
-var
-  list: IDocList;
-begin
-  list := TDocList.CreateAs(nil, [dvoIsArray]);
-  list._AddRef;
-  result := pointer(list);
-end;
-
-function _New_IDocDict(Rtti: TRttiCustom): pointer;
-var
-  dict: IDocDict;
-begin
-  dict := TDocDict.CreateAs(nil, [dvoIsObject]);
-  dict._AddRef;
-  result := pointer(dict);
-end;
-
 procedure InitializeVariantsJson;
 begin
   // register the IDocList/IDocDict interface types JSON serialization
-  TRttiJson.RegisterCustomSerializer(TypeInfo(IDocList), TDocList.JL, TDocList.JS).
-    SetClassNewInstance(@_New_IDocList);
-  TRttiJson.RegisterCustomSerializer(TypeInfo(IDocDict), TDocDict.JL, TDocDict.JS).
-    SetClassNewInstance(@_New_IDocDict);
+  TDocList.RegisterToRtti(TypeInfo(IDocList));
+  TDocDict.RegisterToRtti(TypeInfo(IDocDict));
 end;
 
 
