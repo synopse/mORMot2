@@ -902,16 +902,16 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Check(Rec1.FileExtension = Executable.ProgramFileName);
       Check(Rec2.ID = i1 + 1);
       Check(Rec2.Timestamp512 = c - 1);
-      Check(Rec2.Json = IntegerDynArrayToCSV(pointer(Ints), length(Ints)));
-      Check(RecRes.ID = i1);
+      CheckEqual(Rec2.Json, IntegerDynArrayToCSV(pointer(Ints), length(Ints)));
+      CheckEqual(RecRes.ID, i1);
       Check(RecRes.Timestamp512 = c);
-      Check(RecRes.Json = StringToUtf8(Rec1.FileExtension));
+      CheckEqual(RecRes.Json, StringToUtf8(Rec1.FileExtension));
       CheckSame(n1, n2);
       Rec1.FileExtension := ''; // to avoid memory leak
     end;
     i1 := Random32;
     i2 := Random32;
-    l1 := DocList([{%H-}i1, {%H-}i2]);
+    l1 := DocList([i1, i2]);
     I.TestDocList(l1, i1, l2); // l2:=l1 & l1:=DocList([1,2,3,i1])
     CheckEqual(l1.Json, FormatUtf8('[1,2,3,%]', [i1]));
     CheckEqual(l2.Len, 2);
