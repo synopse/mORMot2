@@ -748,6 +748,7 @@ type
         SerializableInterface: pointer; // = TRttiCustom of the rkInterface
       );
       rkInterface: (
+        InterfaceGuid: PGuid;
         SerializableClass: TClass; // = TInterfacedSerializable
         SerializableInterfaceEntryOffset: integer; // resolve once
       );
@@ -3768,7 +3769,9 @@ begin
         Cache.CodePage := AnsiStringCodePage; // use TypeInfo() on old Delphi
         Cache.Engine := TSynAnsiConvert.Engine(Cache.CodePage);
       end;
-   end;
+    rkInterface:
+      Cache.InterfaceGuid := InterfaceGuid;
+  end;
 end;
 
 function TRttiInfo.InterfaceType: PRttiInterfaceTypeData;

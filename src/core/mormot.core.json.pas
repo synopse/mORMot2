@@ -2328,12 +2328,12 @@ function JsonToXML(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
 /// should be called by T*AutoCreateFields constructors
 // - will also register this class type, if needed, so RegisterClass() is
 // redundant to this method
-procedure AutoCreateFields(ObjectInstance: TObject);
+function AutoCreateFields(ObjectInstance: TObject): TRttiJson;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// should be called by T*AutoCreateFields destructors
 // - constructor should have called AutoCreateFields()
-procedure AutoDestroyFields(ObjectInstance: TObject);
+procedure AutoDestroyFields(ObjectInstance: TObject; Info: TRttiJson = nil);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function called by AutoCreateFields() when inlined
@@ -2432,8 +2432,6 @@ type
   /// meta-class definition of TInterfacedObjectAutoCreateFields
   TInterfacedObjectAutoCreateFieldsClass = class of TInterfacedObjectAutoCreateFields;
 
-  TInterfacedSerializable = class;
-
   /// abstract interface parent with common methods for JSON serialization
   // - to implement this, you can inherit from TInterfacedSerializable
   ISerializable = interface
@@ -2485,6 +2483,12 @@ type
   public
     /// register this class to implement a given ISerializer sub-interface
     class function RegisterToRtti(InterfaceInfo: PRttiInfo): TRttiJson;
+    /// return the associated ISerializer sub-interface TGuid
+    // - as registered by RegisterToRtti() class method
+    class function Guid: PGuid;
+    /// create a new instance as the associated ISerializer sub-interface
+    // - as registered by RegisterToRtti() class method
+    class procedure NewInterface(out Obj);
     /// serialize this instance into a JSON array/object specific format
     function ToJson(format: TTextWriterJsonFormat;
       options: TTextWriterWriteObjectOptions): RawUtf8; overload; virtual;
@@ -5569,7 +5573,7 @@ begin // call TDebugFile.FindLocationShort if mormot.core.log is used
   w.Add('"');
 end;
 
-//  serialization of properties for both records and classes
+// serialization of properties for both records and classes
 procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
   nfo: TRttiJson;
@@ -11368,22 +11372,21 @@ begin // sub procedure for smaller code generation in AutoCreateFields/Create
   result := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^) as TRttiJson;
 end;
 
-procedure AutoCreateFields(ObjectInstance: TObject);
+function AutoCreateFields(ObjectInstance: TObject): TRttiJson;
 var
-  r: TRttiJson;
   n: integer;
   p: PPRttiCustomProp;
 begin
   // inlined Rtti.RegisterClass()
   {$ifdef NOPATCHVMT}
-  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+  result := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
   {$else}
-  r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+  result := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   {$endif NOPATCHVMT}
-  if (r = nil) or
-     not (rcfAutoCreateFields in r.Flags) then
-    r := DoRegisterAutoCreateFields(ObjectInstance);
-  p := pointer(r.fAutoCreateInstances);
+  if (result = nil) or
+     not (rcfAutoCreateFields in result.Flags) then
+    result := DoRegisterAutoCreateFields(ObjectInstance);
+  p := pointer(result.fAutoCreateInstances);
   if p = nil then
     exit;
   // create all published class (or IDocList/IDocDict) fields
@@ -11397,21 +11400,21 @@ begin
   until n = 0;
 end;
 
-procedure AutoDestroyFields(ObjectInstance: TObject);
+procedure AutoDestroyFields(ObjectInstance: TObject; Info: TRttiJson);
 var
-  r: TRttiJson;
   n: integer;
   p: PPRttiCustomProp;
   arr: pointer;
   o: TObject;
 begin
-  {$ifdef NOPATCHVMT}
-  r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
-  {$else}
-  r := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
-  {$endif NOPATCHVMT}
+  if Info = nil then
+    {$ifdef NOPATCHVMT}
+    Info := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
+    {$else}
+    Info := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
+    {$endif NOPATCHVMT}
   // free all published class fields
-  p := pointer(r.fAutoDestroyClasses);
+  p := pointer(Info.fAutoDestroyClasses);
   if p <> nil then
   begin
     n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -11425,7 +11428,7 @@ begin
     until n = 0;
   end;
   // release all published T*ObjArray fields
-  p := pointer(r.fAutoCreateObjArrays);
+  p := pointer(Info.fAutoCreateObjArrays);
   if p = nil then
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
@@ -11499,14 +11502,49 @@ end;
 
 { TInterfacedSerializable }
 
-function TInterfacedSerializable.GetJson: RawUtf8;
-begin
-  result := ToJson(jsonCompact, []);
-end;
-
 class function TInterfacedSerializable.SerializableInterface: TRttiCustom;
 begin
   result := Rtti.FindClass(self).Cache.SerializableInterface;
+end;
+
+class function TInterfacedSerializable.Guid: PGuid;
+begin
+  result := SerializableInterface.Cache.InterfaceGuid;
+end;
+
+function _New_ISerializable(Rtti: TRttiCustom): pointer;
+begin
+  result := TInterfacedSerializableClass(Rtti.Cache.SerializableClass).Create(nil);
+  TInterfacedSerializable(result).fRefCount := 1; // inlined GetInterface()
+  inc(PByte(result), Rtti.Cache.SerializableInterfaceEntryOffset);
+end;
+
+class procedure TInterfacedSerializable.NewInterface(out Obj);
+begin
+  pointer(Obj) := _New_ISerializable(SerializableInterface);
+end;
+
+class function TInterfacedSerializable.RegisterToRtti(
+  InterfaceInfo: PRttiInfo): TRttiJson;
+var
+  ent: PInterfaceEntry;
+begin
+  ent := nil;
+  if (self <> nil) and
+     InterfaceInfo^.InterfaceImplements(ISerializable) then
+    ent := GetInterfaceEntry(InterfaceInfo^.InterfaceGuid^); // resolve TGuid
+  if (ent = nil) or
+     not InterfaceEntryIsStandard(ent) then
+    raise ERttiException.CreateUtf8('Unexpected %.RegisterToRtti(%)',
+      [self, InterfaceInfo^.Name^]);
+  result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
+  result.fCache.SerializableClass := self;
+  result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset; // get once
+  TOnRttiJsonRead(result.fJsonReader) := JL;
+  TOnRttiJsonWrite(result.fJsonWriter) := JS;
+  result.SetParserType(result.Parser, result.ParserComplex); // needed
+  result.fNewInstance := @_New_ISerializable;
+  TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
 end;
 
 procedure TInterfacedSerializable.SetJson(const value: RawUtf8);
@@ -11540,7 +11578,7 @@ var
   i: ^ISerializable absolute data;
 begin
   if not Assigned(i^) then
-  begin
+  begin // inlined Create + GetInterface()
     o := Create(context.CustomVariant);
     o.fRefCount := 1;
     inc(PByte(o), context.Info.Cache.SerializableInterfaceEntryOffset);
@@ -11549,34 +11587,9 @@ begin
   i^.FromJson(context)
 end;
 
-function _New_ISerializable(Rtti: TRttiCustom): pointer;
+function TInterfacedSerializable.GetJson: RawUtf8;
 begin
-  result := TInterfacedSerializableClass(Rtti.Cache.SerializableClass).Create(nil);
-  TInterfacedSerializable(result).fRefCount := 1;
-  inc(PByte(result), Rtti.Cache.SerializableInterfaceEntryOffset);
-end;
-
-class function TInterfacedSerializable.RegisterToRtti(
-  InterfaceInfo: PRttiInfo): TRttiJson;
-var
-  ent: PInterfaceEntry;
-begin
-  ent := nil;
-  if (self <> nil) and
-     InterfaceInfo^.InterfaceImplements(ISerializable) then
-    ent := GetInterfaceEntry(InterfaceInfo^.InterfaceGuid^); // resolve TGuid
-  if (ent = nil) or
-     not InterfaceEntryIsStandard(ent) then
-    raise ERttiException.CreateUtf8('Unexpected %.RegisterToRtti(%)',
-      [self, InterfaceInfo^.Name^]);
-  result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
-  result.fCache.SerializableClass := self;
-  result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset;
-  TOnRttiJsonRead(result.fJsonReader) := JL;
-  TOnRttiJsonWrite(result.fJsonWriter) := JS;
-  result.SetParserType(result.Parser, result.ParserComplex); // needed
-  result.fNewInstance := @_New_ISerializable;
-  TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
+  result := ToJson(jsonCompact, []);
 end;
 
 function TInterfacedSerializable.ToJson(format: TTextWriterJsonFormat;
