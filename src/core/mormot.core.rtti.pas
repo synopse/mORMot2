@@ -2410,7 +2410,7 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
-    fClassNewInstance: TRttiCustomNewInstance; // mormot.core.json implemented
+    fNewInstance: TRttiCustomNewInstance; // mormot.core.json implemented
     fAutoCreateInstances, // some lists made by RegisterAutoCreateFieldsClass
     fAutoDestroyClasses,
     fAutoCreateObjArrays,
@@ -7985,7 +7985,7 @@ begin
     include(fFlags, rcfArrayItemManaged);
   if aParser in (ptStringTypes - [ptRawJson]) then
     include(fFlags, rcfJsonString);
-  fClassNewInstance := @_New_NotImplemented;
+  fNewInstance := @_New_NotImplemented; // raise ERttiException by default
   result := self;
 end;
 
@@ -8145,18 +8145,18 @@ end;
 
 function TRttiCustom.ClassNewInstance: pointer;
 begin
-  result := fClassNewInstance(self);
+  result := fNewInstance(self);
 end;
 
 procedure TRttiCustom.SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
 begin
-  fClassNewInstance := FactoryMethod;
+  fNewInstance := FactoryMethod;
 end;
 
 function TRttiCustom.HasClassNewInstance: boolean;
 begin
   result := (self <> nil) and
-            (@fClassNewInstance <> @_New_NotImplemented);
+            (@fNewInstance <> @_New_NotImplemented);
 end;
 
 procedure TRttiCustom.PropsClear;

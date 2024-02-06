@@ -7946,7 +7946,7 @@ begin
     if Ctxt.Info.Kind = rkClass then
     begin
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info);
+        PPointer(Data)^ := TRttiJson(Ctxt.Info).fNewInstance(Ctxt.Info);
       Data := PPointer(Data)^; // as expected by the callback
     end;
     TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data)
@@ -7963,7 +7963,7 @@ begin
         exit;
       end;
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
+        PPointer(Data)^ := TRttiJson(Ctxt.Info).fNewInstance(Ctxt.Info)
       else if (jpoClearValues in Ctxt.Options) and
               not (rcfClassMayBeID in Ctxt.Info.Flags) then
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
@@ -8128,7 +8128,7 @@ begin
     if iteminfo.Kind = rkClass then
     begin
       Ctxt.Info := iteminfo; // as in _JL_RttiCustom()
-      Data^ := TRttiJson(iteminfo).fClassNewInstance(iteminfo);
+      Data^ := TRttiJson(iteminfo).fNewInstance(iteminfo);
       item := Data^; // class are accessed by reference
       if (rcfHookRead in iteminfo.Flags) and
          TCCHook(item).RttiBeforeReadObject(@Ctxt) then
@@ -8301,7 +8301,7 @@ begin
           Valid := false
         else
         begin
-          tmp := TRttiJson(Info).fClassNewInstance(Info);
+          tmp := TRttiJson(Info).fNewInstance(Info);
           try
             v.Prop := Prop; // JsonLoad() would reset Prop := nil
             TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
@@ -10178,17 +10178,17 @@ begin
     repeat
       if C = TObjectList then // any branch taken will break below
       begin
-        fClassNewInstance := @_New_ObjectList;
+        fNewInstance := @_New_ObjectList;
         fJsonSave := @_JS_TObjectList;
         fJsonLoad := @_JL_TObjectList;
       end
       else if C = TInterfacedObjectWithCustomCreate then
-        fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
+        fNewInstance := @_New_InterfacedObjectWithCustomCreate
       else if C = TPersistentWithCustomCreate then
-        fClassNewInstance := @_New_PersistentWithCustomCreate
+        fNewInstance := @_New_PersistentWithCustomCreate
       else if C = TObjectWithCustomCreate then
       begin
-        fClassNewInstance := @_New_ObjectWithCustomCreate;
+        fNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
         // - is used e.g. by TOrm or TObjectWithID
         n := Props.Count;
@@ -10199,14 +10199,14 @@ begin
       end
       else if C = TSynObjectList then
       begin
-        fClassNewInstance := @_New_SynObjectList;
+        fNewInstance := @_New_SynObjectList;
         fJsonSave := @_JS_TSynObjectList;
         fJsonLoad := @_JL_TSynObjectList;
       end
       else if C = TSynLocked then
-        fClassNewInstance := @_New_SynLocked
+        fNewInstance := @_New_SynLocked
       else if C = TComponent then
-        fClassNewInstance := @_New_Component
+        fNewInstance := @_New_Component
       else if C = TInterfacedCollection then
       begin
         if fValueClass <> C then
@@ -10214,22 +10214,22 @@ begin
           fCollectionItem := TInterfacedCollectionClass(fValueClass).GetClass;
           fCollectionItemRtti := Rtti.RegisterClass(fCollectionItem);
         end;
-        fClassNewInstance := @_New_InterfacedCollection;
+        fNewInstance := @_New_InterfacedCollection;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
       end
       else if C = TCollection then
       begin
-        fClassNewInstance := @_New_Collection;
+        fNewInstance := @_New_Collection;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;
       end
       else if C = TCollectionItem then
-        fClassNewInstance := @_New_CollectionItem
+        fNewInstance := @_New_CollectionItem
       else if C = TList then
-        fClassNewInstance := @_New_List
+        fNewInstance := @_New_List
       else if C = TObject then
-        fClassNewInstance := @_New_Object
+        fNewInstance := @_New_Object
       else
       begin
         // customize JSON serialization
@@ -10311,7 +10311,7 @@ end;
 
 function TRttiJson.ParseNewInstance(var Context: TJsonParserContext): TObject;
 begin
-  result := fClassNewInstance(self);
+  result := fNewInstance(self);
   TRttiJsonLoad(fJsonLoad)(@result, Context);
   if not Context.Valid then
     FreeAndNil(result);
@@ -11322,7 +11322,7 @@ begin
   repeat
     with p^^ do
       PPointer(PAnsiChar(ObjectInstance) + OffsetGet)^ :=
-        TRttiJson(Value).fClassNewInstance(Value); // class or interface
+        TRttiJson(Value).fNewInstance(Value); // class or interface
     inc(p);
     dec(n);
   until n = 0;
