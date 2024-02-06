@@ -5739,6 +5739,7 @@ begin
         t.AddIsoDate(w) // time part is irrelevant
       else
         t.AddIsoDateTime(w, {ms=}false, {first=}' ');
+      w.Add(',');
       w.AddString(HTTP_PERIOD[p^.Period]);
       w.Add(',');
       w.AddString(HTTP_SCOPE[p^.Scope]);
