@@ -5531,7 +5531,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
 // use the system code page or even UTF-16 binary with BOM (!) - so you
 // may consider using AnsiToUtf8() with the proper code page
 // - will optionally call onoutput() to notify the new output state
-// - can abort if onoutput() callback returns false, or waitfordelayms expires
+// - aborts if onoutput() callback returns true, or waitfordelayms expires
 // - optional env is Windows only, (FPC popen does not support it), and should
 // be encoded as name=value#0 pairs
 // - you can specify a wrkdir if the path specified by cmd is not good enough
@@ -5548,20 +5548,25 @@ var
 
 {$ifdef OSWINDOWS}
 type
-  /// how in RunRedirect() or RunCommand() should try to gracefully terminate
+  /// how RunRedirect() or RunCommand() should try to gracefully terminate
   // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT
   // - ramQuit calls QuitProcess(), i.e. send WM_QUIT on all the process threads
+  // - note that TerminateProcess is always called after RunAbortTimeoutSecs
+  // timeout, or if this set of methods is void
   TRunAbortMethods = set of (ramCtrlC, ramQuit);
 var
   /// RunRedirect/RunCommand methods to gracefully terminate before TerminateProcess
   RunAbortMethods: TRunAbortMethods = [ramCtrlC, ramQuit];
 {$else}
 type
-  /// how in RunRedirect() should try to gracefully terminate
-  TRunAbortMethods = set of (ramSIGTERM);
+  /// how RunRedirect() should try to gracefully terminate
+  // - ramSigTerm send a fpkill(pid, SIGTERM) to the process
+  // - note that SIGKILL is always sent after RunAbortTimeoutSecs timeout,
+  // or if ramSigTerm was not supplied
+  TRunAbortMethods = set of (ramSigTerm);
 var
   /// RunRedirect() methods to gracefully terminate before SIGKILL
-  RunAbortMethods: TRunAbortMethods = [ramSIGTERM];
+  RunAbortMethods: TRunAbortMethods = [ramSigTerm];
 {$endif OSWINDOWS}
 
 

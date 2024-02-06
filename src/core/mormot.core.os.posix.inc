@@ -3511,7 +3511,7 @@ begin
       if RunAbortTimeoutSecs > 0 then
       begin
         // try gracefull death
-        if (ramSIGTERM in RunAbortMethods) and
+        if (ramSigTerm in RunAbortMethods) and
            (fpkill(pid, SIGTERM) = 0) then
         begin
           endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
