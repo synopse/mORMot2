@@ -744,6 +744,13 @@ type
         ItemSize: integer;
         ItemCount: integer;  // rkArray only
       );
+      rkClass: (
+        SerializableInterface: pointer; // = TRttiCustom of the rkInterface
+      );
+      rkInterface: (
+        SerializableClass: TClass; // = TInterfacedSerializable
+        SerializableInterfaceEntryOffset: integer; // resolve once
+      );
   end;
 
   /// map extended PRttiInfo content

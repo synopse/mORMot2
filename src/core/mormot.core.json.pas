@@ -2432,6 +2432,76 @@ type
   /// meta-class definition of TInterfacedObjectAutoCreateFields
   TInterfacedObjectAutoCreateFieldsClass = class of TInterfacedObjectAutoCreateFields;
 
+  TInterfacedSerializable = class;
+
+  /// abstract interface parent with common methods for JSON serialization
+  // - to implement this, you can inherit from TInterfacedSerializable
+  ISerializable = interface
+    ['{EA7F298D-06D7-4ADF-9F75-6598B75338B3}']
+    // methods used as getter/setter for the Json property
+    function GetJson: RawUtf8;
+    procedure SetJson(const value: RawUtf8);
+    /// serialize this instance into a JSON array/object specific format
+    function ToJson(format: TTextWriterJsonFormat;
+      options: TTextWriterWriteObjectOptions = []): RawUtf8; overload;
+    /// convert this instance into JSON array/object as RTL string
+    function ToString(format: TTextWriterJsonFormat = jsonCompact;
+      options: TTextWriterWriteObjectOptions = []): string;
+    /// raw unserialization of a JSON content into this instance
+    procedure FromJson(var Context: TJsonParserContext);
+    /// raw serialization of this instance into a JSON writer
+    procedure ToJson(W: TJsonWriter; options: TTextWriterWriteObjectOptions); overload;
+    /// unserialize/serialize this IDocList/IDocDict from/into a JSON array/object
+    // - use ToString if you want the result as RTL string
+    property Json: RawUtf8
+      read GetJson write SetJson;
+  end;
+
+  {$M+}
+  /// abstract class parent with ISerializable methods for JSON serialization
+  // - you need to override Create, ToJson and FromJson abstract methods
+  TInterfacedSerializable = class(TInterfacedObject, ISerializable)
+  protected
+    // methods used as getter/setter for the Json property
+    function GetJson: RawUtf8;
+    procedure SetJson(const value: RawUtf8); virtual;
+    // used internally for proper ISerializable instances serialization
+    class function SerializableInterface: TRttiCustom;
+      {$ifdef HASINLINE} inline; {$endif}
+    class procedure JS(W: TJsonWriter; data: pointer;
+      options: TTextWriterWriteObjectOptions);
+    class procedure JL(var context: TJsonParserContext; data: pointer);
+  public
+    /// factory of one class implementing a ISerializable interface
+    // - this abstract method must be overriden
+    constructor Create(options: PDocVariantOptions); reintroduce; virtual; abstract;
+    /// raw serialization of this instance into a JSON writer
+    // - this abstract method must be overriden
+    procedure ToJson(W: TJsonWriter;
+      options: TTextWriterWriteObjectOptions); overload; virtual; abstract;
+    /// raw unserialization of a JSON content into this instance
+    // - this abstract method must be overriden
+    procedure FromJson(var context: TJsonParserContext); virtual; abstract;
+  public
+    /// register this class to implement a given ISerializer sub-interface
+    class function RegisterToRtti(InterfaceInfo: PRttiInfo): TRttiJson;
+    /// serialize this instance into a JSON array/object specific format
+    function ToJson(format: TTextWriterJsonFormat;
+      options: TTextWriterWriteObjectOptions): RawUtf8; overload; virtual;
+    /// convert this instance into JSON array/object as RTL string
+    function ToString(format: TTextWriterJsonFormat;
+      options: TTextWriterWriteObjectOptions): string; reintroduce; virtual;
+    /// unserialize/serialize this instance from/into a JSON array/object
+    // - use ToString if you want the result as RTL string
+    property Json: RawUtf8
+      read GetJson write SetJson;
+  end;
+  {$M-}
+  /// meta-class of the TInterfacedSerializable type
+  TInterfacedSerializableClass = class of TInterfacedSerializable;
+  /// points to a TInterfacedSerializable class instance
+  PInterfacedSerializable = ^TInterfacedSerializable;
+
   /// abstract TCollectionItem class, which will instantiate all its nested class
   // published properties, then release them (and any T*ObjArray) when freed
   // - could be used for gathering of TCollectionItem properties, e.g. for
@@ -5812,7 +5882,6 @@ begin
     include(o, woStoreClassName);
   _JS_Objects(Ctxt.W, pointer(Data^.List), Data^.Count, o);
 end;
-
 
 
 { ********** TJsonWriter class with proper JSON escaping and WriteObject() support }
@@ -11425,6 +11494,110 @@ destructor TInterfacedObjectAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
+end;
+
+
+{ TInterfacedSerializable }
+
+function TInterfacedSerializable.GetJson: RawUtf8;
+begin
+  result := ToJson(jsonCompact, []);
+end;
+
+class function TInterfacedSerializable.SerializableInterface: TRttiCustom;
+begin
+  result := Rtti.FindClass(self).Cache.SerializableInterface;
+end;
+
+procedure TInterfacedSerializable.SetJson(const value: RawUtf8);
+var
+  tmp: TSynTempBuffer;
+  ctx: TJsonParserContext;
+begin
+  tmp.Init(value);
+  try
+    ctx.InitParser(tmp.buf, SerializableInterface, [], nil, nil, nil);
+    FromJson(ctx);
+  finally
+    tmp.Done;
+  end;
+end;
+
+class procedure TInterfacedSerializable.JS(W: TJsonWriter; data: pointer;
+  options: TTextWriterWriteObjectOptions);
+begin
+  data := PPointer(data)^;
+  if data = nil then
+    W.AddNull // avoid GPF if ISerializable = nil
+  else
+    ISerializable(data).ToJson(W, options);
+end;
+
+class procedure TInterfacedSerializable.JL(var context: TJsonParserContext;
+  data: pointer);
+var
+  o: TInterfacedSerializable;
+  i: ^ISerializable absolute data;
+begin
+  if not Assigned(i^) then
+  begin
+    o := Create(context.CustomVariant);
+    o.fRefCount := 1;
+    inc(PByte(o), context.Info.Cache.SerializableInterfaceEntryOffset);
+    PPointer(data)^ := o;
+  end;
+  i^.FromJson(context)
+end;
+
+function _New_ISerializable(Rtti: TRttiCustom): pointer;
+begin
+  result := TInterfacedSerializableClass(Rtti.Cache.SerializableClass).Create(nil);
+  TInterfacedSerializable(result).fRefCount := 1;
+  inc(PByte(result), Rtti.Cache.SerializableInterfaceEntryOffset);
+end;
+
+class function TInterfacedSerializable.RegisterToRtti(
+  InterfaceInfo: PRttiInfo): TRttiJson;
+var
+  ent: PInterfaceEntry;
+begin
+  ent := nil;
+  if (self <> nil) and
+     InterfaceInfo^.InterfaceImplements(ISerializable) then
+    ent := GetInterfaceEntry(InterfaceInfo^.InterfaceGuid^); // resolve TGuid
+  if (ent = nil) or
+     not InterfaceEntryIsStandard(ent) then
+    raise ERttiException.CreateUtf8('Unexpected %.RegisterToRtti(%)',
+      [self, InterfaceInfo^.Name^]);
+  result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
+  result.fCache.SerializableClass := self;
+  result.fCache.SerializableInterfaceEntryOffset := ent^.IOffset;
+  TOnRttiJsonRead(result.fJsonReader) := JL;
+  TOnRttiJsonWrite(result.fJsonWriter) := JS;
+  result.SetParserType(result.Parser, result.ParserComplex); // needed
+  result.fNewInstance := @_New_ISerializable;
+  TRttiJson(Rtti.RegisterClass(self)).fCache.SerializableInterface := result;
+end;
+
+function TInterfacedSerializable.ToJson(format: TTextWriterJsonFormat;
+  options: TTextWriterWriteObjectOptions): RawUtf8;
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    ToJson(W, options);
+    W.SetText(result, Format);
+  finally
+    W.Free;
+  end;
+end;
+
+function TInterfacedSerializable.ToString(format: TTextWriterJsonFormat;
+  options: TTextWriterWriteObjectOptions): string;
+begin
+  Utf8ToStringVar(ToJson(format, options), result);
 end;
 
 
