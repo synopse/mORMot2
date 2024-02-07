@@ -1469,7 +1469,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetCached: RawJson;
     procedure SetShutdown(Value: boolean); virtual;
-    function IDText(aID: TRestStorageMultiDatabaseID): TShort16;
+    function IDText(aID: TRestStorageMultiDatabaseID): TShort16; virtual;
     function GetDB(aID: TRestStorageMultiDatabaseID): IRestOrmServer; virtual;
     function NewModel: TOrmModel; virtual;
     // inherited classes should implement this abstract virtual method
@@ -5427,7 +5427,7 @@ end;
 
 function TRestStorageMulti.IDText(aID: TRestStorageMultiDatabaseID): TShort16;
 begin
-  BinToHexDisplayLowerShort16(aID, fDatabaseIDBits, result);
+  BinBitsToHexDisplayLowerShort16(aID, fDatabaseIDBits, result);
 end;
 
 function TRestStorageMulti.IsDatabaseIDCorrect(aID: TRestStorageMultiDatabaseID): boolean;
@@ -5480,7 +5480,7 @@ constructor TRestStorageMultiOnDisk.Create(aLog: TSynLogFamily;
 begin
   inherited Create(aLog, aDatabaseIDBits, aModelClasses, aSettings);
   if aDatafolder <> '' then
-    fDataFolder := EnsureDirectoryExists(aDatafolder);
+    fDataFolder := EnsureDirectoryExists(aDatafolder, ERestStorageMulti);
   fFilePrefix := aFilePrefix;
 end;
 
