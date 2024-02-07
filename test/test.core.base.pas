@@ -2378,6 +2378,11 @@ var
 const
   Guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 begin
+  CheckEqual(BitsToBytes(0), 0);
+  for i := 1 to 8 do
+    CheckEqual(BitsToBytes(i), 1);
+  for i := 9 to 15 do
+    CheckEqual(BitsToBytes(i), 2);
   s := GuidToRawUtf8(Guid);
   Check(s = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
   Check(TextToGuid(@s[2], @g2)^ = '}');

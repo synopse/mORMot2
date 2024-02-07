@@ -2434,6 +2434,7 @@ type
 
   /// abstract interface parent with common methods for JSON serialization
   // - to implement this, you can inherit from TInterfacedSerializable
+  // or TInterfacedSerializableAutoCreateFields
   ISerializable = interface
     ['{EA7F298D-06D7-4ADF-9F75-6598B75338B3}']
     // methods used as getter/setter for the Json property
