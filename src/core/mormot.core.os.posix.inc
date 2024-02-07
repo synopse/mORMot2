@@ -3448,7 +3448,7 @@ var
   var
     u: RawUtf8;
   begin
-    result := false;
+    result := false; // return false on pipe closed
     if WaitReadPending(fd, wait) then
     begin
       n := fpread(fd, tmp, SizeOf(tmp));

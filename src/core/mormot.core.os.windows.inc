@@ -4847,22 +4847,24 @@ var
   procedure RedirectOutput(flush: boolean);
   var
     new: RawByteString;
-    pending: Int64;
-    n: cardinal;
+    pending, n: cardinal;
     tmp: TSynTempBuffer;
   begin
     repeat
-      Win32Check(GetFileSizeEx(rd, pending));
-      if pending = 0 then
+      pending := 0;
+      if not PeekNamedPipe(rd, nil, 0, nil, @pending, nil) or
+         (pending = 0) then
       begin
         if (not flush) and
            Assigned(onoutput) and
            onoutput('', processinfo.dwProcessId) then
-            exitcode := WAIT_OBJECT_0; // returned true to abort
+            exitcode := WAIT_OBJECT_0; // onoutput() returned true to abort
         break;
       end;
+      if pending > SizeOf(tmp) then
+        pending := SizeOf(tmp);
       n := 0;
-      Win32Check(ReadFile(rd, tmp, SizeOf(tmp), n, nil));
+      Win32Check(ReadFile(rd, tmp, pending, n, nil));
       if n <= 0 then
         break;
       if redirected <> nil then
