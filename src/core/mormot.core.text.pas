@@ -9480,6 +9480,8 @@ procedure BinBitsToHexDisplayLowerShort16(Bin: Int64; BinBits: PtrInt;
   var Result: TShort16);
 begin
   Result[0] := AnsiChar(BitsToBytes(BinBits) * 2);
+  if Result[0] > #16 then
+    Result[0] := #16;
   BinToHexDisplayLower(@Bin, @Result[1], ord(Result[0]) shr 1);
 end;
 
