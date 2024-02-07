@@ -52,7 +52,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -98,7 +98,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -157,7 +157,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -203,7 +203,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -267,7 +267,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -321,7 +321,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -367,7 +367,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -413,7 +413,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -469,7 +469,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -524,7 +524,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -571,7 +571,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -626,7 +626,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -681,7 +681,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -736,7 +736,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -792,7 +792,7 @@
           <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -1258,7 +1258,7 @@
     <Linking>
             <Debugging>
               <GenerateDebugInfo Value="True"/>
-              <DebugInfoType Value="dsDwarf2"/>
+              <DebugInfoType Value="dsDwarf3"/>
               <UseLineInfoUnit Value="False"/>
             </Debugging>
     </Linking>
