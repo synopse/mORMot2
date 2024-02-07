@@ -859,7 +859,7 @@ type
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     procedure SendPacket(const Asn1Data: TAsnObject);
     procedure ReceivePacket(Dest: pointer; DestLen: integer); overload;
-    function ReceivePacket(DestLen: integer): RawByteString; overload;
+    procedure ReceivePacket(var Append: RawByteString; Len: PtrInt); overload;
     procedure ReceivePacketFillSockBuffer;
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
@@ -3051,10 +3051,13 @@ begin
   // note: several SEQ messages may be returned
 end;
 
-function TLdapClient.ReceivePacket(DestLen: integer): RawByteString;
+procedure TLdapClient.ReceivePacket(var Append: RawByteString; Len: PtrInt);
+var
+  l: PtrInt;
 begin
-  FastNewRawByteString(result, DestLen);
-  ReceivePacket(pointer(result), DestLen);
+  l := length(Append);
+  SetLength(Append, l + Len);
+  ReceivePacket(@PByteArray(Append)[l], Len);
 end;
 
 function TLdapClient.ReceiveResponse: TAsnObject;
@@ -3071,17 +3074,17 @@ begin
     ReceivePacket(@b, 1); // ASN type
     if b <> ASN1_SEQ then
       exit;
-    FastSetRawByteString(result, @b, 1);
+    FastSetRawByteString(result, @b, 2);
     ReceivePacket(@b, 1); // first byte of ASN length
-    Append(result, @b, 1);
-    if b > $7f then // $8x means x bytes of length
-      AsnAdd(result, ReceivePacket(b and $7f));
+    PByteArray(result)[1] := b;
+    if b > $7f then
+      ReceivePacket(result, b and $7f); // $8x means x bytes of length
     // decode length of LDAP packet
     pos := 2;
     len := AsnDecLen(pos, result);
     // retrieve body of LDAP packet
     if len > 0 then
-      AsnAdd(result, ReceivePacket(len));
+      ReceivePacket(result, len);
   except
     on Exception do
     begin
@@ -3111,17 +3114,17 @@ begin
   fResultString := '';
   fResponseCode := LDAP_ASN1_ERROR;
   fResponseDN := '';
-  if (AsnNext(pos, Asn1Response) <> ASN1_SEQ) or
-     (AsnNextInteger(pos, Asn1Response, asntype) <> fSeq) or
+  if (AsnNext(Pos, Asn1Response) <> ASN1_SEQ) or
+     (AsnNextInteger(Pos, Asn1Response, asntype) <> fSeq) or
      (asntype <> ASN1_INT) then
     exit;
-  fResponseCode := AsnNext(pos, Asn1Response, nil, @seqend);
+  fResponseCode := AsnNext(Pos, Asn1Response, nil, @seqend);
   if fResponseCode in LDAP_ASN1_RESPONSES then
   begin
     // final response
-    fResultCode := AsnNextInteger(pos, Asn1Response, asntype);
-    AsnNext(pos, Asn1Response, @fResponseDN);   // matchedDN
-    AsnNext(pos, Asn1Response, @fResultString); // diagnosticMessage
+    fResultCode := AsnNextInteger(Pos, Asn1Response, asntype);
+    AsnNext(Pos, Asn1Response, @fResponseDN);   // matchedDN
+    AsnNext(Pos, Asn1Response, @fResultString); // diagnosticMessage
     if not (fResultCode in LDAP_RES_NOERROR) then
     begin
       errmsg := RawLdapErrorString(fResultCode);
@@ -3131,7 +3134,7 @@ begin
         fResultString := FormatUtf8('% [%]', [errmsg, fResultString]);
     end;
     if fResultCode = LDAP_RES_REFERRAL then
-      if AsnNext(pos, Asn1Response, @s) = ASN1_CTC3 then
+      if AsnNext(Pos, Asn1Response, @s) = ASN1_CTC3 then
       begin
         x := 1;
         while x < length(s) do
@@ -3140,14 +3143,14 @@ begin
           fReferals.Add(t);
         end;
     end;
-    result := copy(Asn1Response, pos, length(Asn1Response) - pos + 1); // body
-    pos := length(Asn1Response) + 1;
+    result := copy(Asn1Response, Pos, length(Asn1Response) - Pos + 1); // body
+    Pos := length(Asn1Response) + 1;
   end
   else
   begin
     // partial response (e.g. LDAP_ASN1_SEARCH_ENTRY)
-    result := copy(Asn1Response, pos, seqend - pos);
-    pos := seqend;
+    result := copy(Asn1Response, Pos, seqend - Pos);
+    Pos := seqend;
   end;
 end;
 
