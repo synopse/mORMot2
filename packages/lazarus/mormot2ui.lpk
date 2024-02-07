@@ -17,7 +17,7 @@
       </CodeGeneration>
       <Linking>
         <Debugging>
-          <DebugInfoType Value="dsDwarf3"/>
+          <DebugInfoType Value="dsDwarf2"/>
         </Debugging>
       </Linking>
       <Other>
