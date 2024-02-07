@@ -3624,6 +3624,9 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
 
+const
+  ASN1_OID_PAGEDRESULTS = '1.2.840.113556.1.4.319';
+
 function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
   const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
 var
@@ -3637,17 +3640,16 @@ begin
   result := false;
   if not fSock.SockConnected then
     exit;
-  // see https://ldap.com/ldapv3-wire-protocol-reference-search
   QueryPerformanceMicroSeconds(start);
   fSearchResult.Clear;
   fReferals.Clear;
   s := RawLdapSearch(BaseDN, TypesOnly, Filter, Attributes, fSearchScope,
     fSearchAliases, fSearchSizeLimit, fSearchTimeLimit);
-  if fSearchPageSize > 0 then
+  if fSearchPageSize > 0 then // https://www.rfc-editor.org/rfc/rfc2696
     Append(s, Asn(
         AsnSeq([
-           Asn('1.2.840.113556.1.4.319'), // controlType: pagedresultsControl
-           ASN1_BOOLEAN_VALUE[false],     // criticality: false
+           Asn(ASN1_OID_PAGEDRESULTS), // controlType: pagedresultsControl
+           ASN1_BOOLEAN_VALUE[false],  // criticality: false
            Asn(AsnSeq([
                  Asn(fSearchPageSize),
                  Asn(fSearchCookie)
@@ -3706,7 +3708,7 @@ begin
     if AsnNext(n, resp) = ASN1_SEQ then
     begin
       AsnNext(n, resp, @s);
-      if s = '1.2.840.113556.1.4.319' then
+      if s = ASN1_OID_PAGEDRESULTS then
       begin
         AsnNext(n, resp, @s); // searchControlValue
         n := 1;
@@ -3778,7 +3780,6 @@ begin
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
-
 function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
 var
   query, decoded: TAsnObject;
