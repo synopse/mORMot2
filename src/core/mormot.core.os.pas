@@ -3427,9 +3427,9 @@ function StringFromFolders(const Folders: array of TFileName;
 
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
-// - can optionaly force writing to disk, and/or set the file local timestamp
+// - can optionaly force flush all write buffers to disk
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
-  FlushOnDisk: boolean = false; FileDate: TDateTime = 0): boolean;
+  FlushOnDisk: boolean = false): boolean;
 
 /// create a File from a memory buffer content
 function FileFromBuffer(Buf: pointer; Len: PtrInt; const FileName: TFileName): boolean;
@@ -7015,8 +7015,8 @@ begin
     DynArrayFakeLength(FileNames^, n);
 end;
 
-function FileFromString(const Content: RawByteString; const FileName: TFileName;
-  FlushOnDisk: boolean; FileDate: TDateTime): boolean;
+function FileFromString(const Content: RawByteString;
+  const FileName: TFileName; FlushOnDisk: boolean): boolean;
 var
   h: THandle;
 begin
@@ -7031,15 +7031,7 @@ begin
   end;
   if FlushOnDisk then
     FlushFileBuffers(h);
-  {$ifdef OSWINDOWS}
-  if FileDate <> 0 then
-    FileSetDate(h, DateTimeToFileDate(FileDate)); // use the existing handle
   FileClose(h);
-  {$else}
-  FileClose(h); // POSIX expects the file to be closed to set the date
-  if FileDate <> 0 then
-    FileSetDate(FileName, DateTimeToFileDate(FileDate));
-  {$endif OSWINDOWS}
   result := true;
 end;
 

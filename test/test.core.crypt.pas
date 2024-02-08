@@ -2627,13 +2627,14 @@ begin
       end;
       // force file refresh (from previously bak state)
       Check(not dig.RefreshFile);
-      FileFromString(bak, fn, false, Now - 1); // as previous day to refresh
-      Check(dig.RefreshFile);
-      Check(not dig.Modified);
+      FileFromString(bak, fn);
+      FileSetDateFromUnixUtc(fn, UnixTimeUtc - SecsPerDay); // as previous day
+      Check(dig.RefreshFile, 'RefreshFile');
+      Check(not dig.Modified, 'not Modified');
       for u := 0 to high(users) do
         Check((dig.CheckCredential(users[u], pwds[u])  = asrMatch) =
               ((u and 7) <> 0), 'check8');
-      Check(length(users) <> dig.Count);
+      Check(length(users) <> dig.Count, 'users<>count');
       // validate GetUsers method
       users2 := dig.GetUsers;
       CheckEqual(length(users2), dig.Count);

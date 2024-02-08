@@ -3306,7 +3306,9 @@ begin
     result := Decrypt(
       content, plain, Signature, MetaData, @filetime, Salt, SaltRounds);
     if result in ECC_VALIDDECRYPT then
-      if not FileFromString(plain, dest, false, filetime) then
+      if FileFromString(plain, dest) and
+         FileSetDateFromUnixUtc(dest, DateTimeToUnixTime(filetime)) then
+      else
         result := ecdWriteFileError;
   finally
     FillZero(plain);
