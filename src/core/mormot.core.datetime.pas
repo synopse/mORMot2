@@ -603,14 +603,21 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
 
+/// convert some "HTTP-date" format as defined by RFC 7231 into UTC date/time
+function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
+
 type
-  THttpDateNowUtc = string[37];
+  THttpDateNowUtc = string[39];
 
 /// returns the current UTC timestamp as the full 'Date' HTTP header line
-// - e.g. 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
-// - returns as a shortstring to avoid a memory allocation by caller
+// - e.g. as 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
+// - returns as a 40-bytes shortstring to avoid a memory allocation by caller
 // - use an internal cache for every second refresh
 function HttpDateNowUtc: THttpDateNowUtc;
+
+/// returns the a specified UTC timestamp in HTTP-like format
+// - e.g. as 'Tue, 15 Nov 1994 12:45:26 GMT'
+function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -2649,14 +2656,11 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 var
   T: TSynSystemTime;
 begin
-  if (httpdate <> '') and
-     T.FromHttpDate(httpdate, tolocaltime) then
-  begin
+  PInt64(@datetime)^ := 0;
+  result := (httpdate <> '') and
+            T.FromHttpDate(httpdate, tolocaltime);
+  if result then
     datetime := T.ToDateTime;
-    result := true;
-  end
-  else
-    result := false;
 end;
 
 function HttpDateToDateTime(const httpdate: RawUtf8;
@@ -2664,6 +2668,15 @@ function HttpDateToDateTime(const httpdate: RawUtf8;
 begin
   if not HttpDateToDateTime(httpdate, result, tolocaltime) then
     result := 0;
+end;
+
+function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
+var
+  dt: TDateTime;
+begin
+  result := 0;
+  if HttpDateToDateTime(httpdate, dt, {tolocaltime=}false) then
+    result := DateTimeToUnixTime(dt);
 end;
 
 var
@@ -2691,6 +2704,19 @@ begin
   end;
   MoveFast(_HttpDateNowUtc[0], result[0], ord(_HttpDateNowUtc[0]) + 1);
   _HttpDateNowUtcLock.UnLock;
+end;
+
+function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
+var
+  T: TSynSystemTime;
+begin
+  if UnixMSTime <= 0 then
+    result[0] := #0
+  else
+  begin
+    T.FromUnixMsTime(UnixMSTime);
+    T.ToHttpDateShort(result);
+  end;
 end;
 
 function TimeToString: RawUtf8;
