@@ -170,6 +170,8 @@ type
     /// called after each published properties execution
     procedure MethodCleanUp; virtual;
     procedure AddLog(condition: boolean; const msg: string);
+    procedure DoCheckUtf8(condition: boolean; const msg: RawUtf8;
+      const args: array of const);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -234,6 +236,7 @@ type
     /// used by the published methods to run a test assertion, with an UTF-8 error message
     // - condition must equals TRUE to pass the test
     procedure CheckUtf8(condition: boolean; const msg: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUtf8()
     // - condition must equals TRUE to pass the test
@@ -682,10 +685,10 @@ procedure TSynTestCase.Check(condition: boolean; const msg: string);
 begin
   if self = nil then
     exit;
+  inc(fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  inc(fAssertions);
   if not condition then
     TestFailed(msg);
 end;
@@ -697,10 +700,10 @@ begin
     result := false;
     exit;
   end;
+  inc(fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
-  inc(fAssertions);
   if condition then
     result := false
   else
@@ -715,47 +718,101 @@ begin
   result := CheckFailed(not condition, msg);
 end;
 
-function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
+procedure TSynTestCase.DoCheckUtf8(condition: boolean; const msg: RawUtf8;
+  const args: array of const);
+var
+  str: string;
 begin
-  result := a = b;
-  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+  // inc(fAssertions) has been made by the caller
+  if msg <> '' then
+  begin
+    FormatString(msg, args, str);
+    if tcoLogEachCheck in fOptions then
+      AddLog(condition, str);
+  end;
+  if not condition then
+    TestFailed(str{%H-});
 end;
 
-function TSynTestCase.CheckEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
+procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
+  const args: array of const);
 begin
+  inc(fAssertions);
+  if not condition or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(condition, msg, args);
+end;
+
+procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
+begin
+  inc(fAssertions);
+  if not condition or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(condition, '%', [msg]);
+end;
+
+function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
+begin
+  inc(fAssertions);
+  result := a = b;
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+end;
+
+function TSynTestCase.CheckEqual(const a, b, msg: RawUtf8): boolean;
+begin
+  inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
-  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
+  inc(fAssertions);
   result := a = b;
-  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUtf8): boolean;
 begin
+  inc(fAssertions);
   result := a <> b;
-  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
+  inc(fAssertions);
   result := SortDynArrayRawByteString(a, b) <> 0;
-  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
+  inc(fAssertions);
   result := a <> b;
-  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckSame(const Value1, Value2: double; const Precision: double;
+function TSynTestCase.CheckSame(const Value1, Value2, Precision: double;
   const msg: string): boolean;
 begin
+  inc(fAssertions);
   result := SameValue(Value1, Value2, Precision);
-  CheckUtf8(result, EQUAL_MSG, [Value1, Value2, msg]);
+  if not result or
+     (tcoLogEachCheck in fOptions) then
+    DoCheckUtf8(result, NOTEQUAL_MSG, [Value1, Value2, msg]);
 end;
 
 function TSynTestCase.CheckSameTime(const Value1, Value2: TDateTime;
@@ -769,34 +826,6 @@ function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of
 begin
   result := (FindRawUtf8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
   Check(result);
-end;
-
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
-begin
-  inc(fAssertions);
-  if not condition or
-     (tcoLogEachCheck in fOptions) then
-    CheckUtf8(condition, '%', [msg]);
-end;
-
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
-  const args: array of const);
-var
-  str: string; // using a sub-proc may be faster, but unstable on Android
-begin
-  inc(fAssertions);
-  if not condition or
-     (tcoLogEachCheck in fOptions) then
-  begin
-    if msg <> '' then
-    begin
-      FormatString(msg, args, str);
-      if tcoLogEachCheck in fOptions then
-        AddLog(condition, str);
-    end;
-    if not condition then
-      TestFailed(str{%H-});
-  end;
 end;
 
 function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
