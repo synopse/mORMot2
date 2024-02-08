@@ -343,6 +343,8 @@ type
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during ParseHeader
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: Int64;
+    /// known GMT timestamp of output content, may be reported as 'Last-Modified:'
+    ContentLastModified: TUnixMSTime;
     /// stream-oriented alternative to the Content in-memory buffer
     // - is typically a TFileStreamEx
     ContentStream: TStream;
@@ -2785,6 +2787,7 @@ begin
   RangeLength := -1;
   Content := '';
   ContentLength := -1;
+  ContentLastModified := 0;
   ServerInternalState := 0;
   CompressContentEncoding := -1;
   integer(CompressAcceptHeader) := 0;
@@ -3448,6 +3451,12 @@ begin
   result^.AppendShort('Content-Length: ');
   result^.Append(ContentLength);
   result^.AppendCRLF;
+  if ContentLastModified > 0 then
+  begin
+    result^.AppendShort('Last-Modified: ');
+    result^.AppendShort(UnixMSTimeUtcToHttpDate(ContentLastModified));
+    result^.AppendCRLF;
+  end;
   if (ContentType <> '') and
      (ContentType[1] <> '!') then
   begin
@@ -3550,6 +3559,8 @@ function THttpRequestContext.ContentFromFile(
 var
   h: THandle;
   gz: TFileName;
+  id: Int64; // dummy variables
+  fc: TUnixMSTime;
 begin
   result := false;
   Content := '';
@@ -3575,7 +3586,7 @@ begin
   h := FileOpen(FileName, fmOpenReadShared);
   if not ValidHandle(h) then
     exit;
-  ContentLength := FileSize(h);
+  FileInfoByHandle(h, id, ContentLength, ContentLastModified, fc);
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin
