@@ -2327,7 +2327,8 @@ function TrimGuid(var text: RawUtf8): boolean;
 // - it will read binary or text content from the current position until the
 // end (using TStream.Size)
 // - uses RawByteString for byte storage, whatever the codepage is
-function StreamToRawByteString(aStream: TStream): RawByteString;
+function StreamToRawByteString(aStream: TStream; aSize: Int64 = -1;
+  aCodePage: integer = CP_RAWBYTESTRING): RawByteString;
 
 /// iterative function to retrieve the new content appended to a stream
 // - aPosition should be set to 0 before the initial call
@@ -10067,26 +10068,30 @@ begin
   end;
 end;
 
-function StreamToRawByteString(aStream: TStream): RawByteString;
+function StreamToRawByteString(aStream: TStream; aSize: Int64;
+  aCodePage: integer): RawByteString;
 var
-  current, size: Int64;
+  current: Int64;
 begin
   result := '';
   if aStream = nil then
     exit;
   current := aStream.Position;
   if (current = 0) and
-     aStream.InheritsFrom(TRawByteStringStream) then
+     aStream.InheritsFrom(TRawByteStringStream) and
+     ((aSize < 0) or
+      (aSize = length(TRawByteStringStream(aStream).DataString))) then
   begin
     result := TRawByteStringStream(aStream).DataString; // fast COW
     exit;
   end;
-  size := aStream.Size - current;
-  if (size = 0) or
-     (size > maxInt) then
+  if aSize < 0 then
+    aSize := aStream.Size - current;
+  if (aSize = 0) or
+     (aSize > maxInt) then
     exit;
-  pointer(result) := FastNewString(size, CP_RAWBYTESTRING);
-  aStream.Read(pointer(result)^, size);
+  pointer(result) := FastNewString(aSize, aCodePage);
+  aStream.ReadBuffer(pointer(result)^, aSize);
   aStream.Position := current;
 end;
 
@@ -10103,7 +10108,7 @@ begin
   pointer(result) := FastNewString(size, CP_RAWBYTESTRING);
   current := aStream.Position;
   aStream.Position := aPosition;
-  aStream.Read(pointer(result)^, size);
+  aStream.ReadBuffer(pointer(result)^, size);
   aStream.Position := current;
   aPosition := current;
 end;
