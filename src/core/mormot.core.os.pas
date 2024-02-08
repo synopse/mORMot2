@@ -120,6 +120,8 @@ const
   HTTP_USEPROXY = 305;
   /// HTTP Status Code for "Temporary Redirect"
   HTTP_TEMPORARYREDIRECT = 307;
+  /// HTTP Status Code for "Permanent Redirect"
+  HTTP_PERMANENTREDIRECT = 308;
   /// HTTP Status Code for "Bad Request"
   HTTP_BADREQUEST = 400;
   /// HTTP Status Code for "Unauthorized"
@@ -5648,7 +5650,7 @@ begin
       Reason := 'Use Proxy';
     HTTP_TEMPORARYREDIRECT:
       Reason := 'Temporary Redirect';
-    308:
+    HTTP_PERMANENTREDIRECT:
       Reason := 'Permanent Redirect';
     HTTP_BADREQUEST:
       Reason := 'Bad Request';

@@ -2138,9 +2138,9 @@ begin
           with fExtractCurrent do
           begin
             FileName := path;
-            Created := GetPropFileTime(index, kpidCreationTime);
+            Created  := GetPropFileTime(index, kpidCreationTime);
             Accessed := GetPropFileTime(index, kpidLastAccessTime);
-            Written := GetPropFileTime(index, kpidLastWriteTime);
+            Written  := GetPropFileTime(index, kpidLastWriteTime);
           end;
         end;
   end;

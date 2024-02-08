@@ -1416,7 +1416,7 @@ begin
       end;
     end;
     if copydate then
-      FileSetDate(destgz, FileAge(orig));
+      FileSetDateFrom(destgz, orig);
   except
     result := false;
   end;
@@ -3851,7 +3851,7 @@ begin
   result := gzr.Init(pointer(tmp), length(tmp)) and
             gzr.ToFile(Dest);
   if result then
-    FileSetDate(Dest, FileAge(Source));
+    FileSetDateFrom(Dest, Source);
 end;
 
 

@@ -1313,6 +1313,7 @@ begin
      (lp.st_birthtime < lp.st_ctime) then
     lp.st_ctime := lp.st_birthtime;
   {$endif OSOPENBSD}
+  // ignore nanoseconds/Milliseconds for FileCreateDateTime
   FileCreateDateTime := Int64(lp.st_ctime) * MilliSecsPerSec;
   if LastWriteAccess <> 0 then
     if (FileCreateDateTime = 0) or
