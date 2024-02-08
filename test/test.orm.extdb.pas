@@ -929,7 +929,7 @@ var
   RJoin: TOrmTestJoin;
   RHist: TOrmMyHistory;
   Tables: TRawUtf8DynArray;
-  i, n, aID: integer;
+  i, n, nb, aID: integer;
   Orm: TRestOrmServer;
   ok: Boolean;
   BatchID, BatchIDUpdate, BatchIDJoined: TIDDynArray;
@@ -1024,7 +1024,7 @@ begin
     aExternalClient.Server.DB.Synchronous := smOff;
     aExternalClient.Server.DB.LockingMode := lmExclusive;
     aExternalClient.Server.DB.GetTableNames(Tables);
-    Check(Tables = nil); // we reset the testExternal.db3 file
+    Check(Tables = nil, 'reset testExternal.db3 file');
     Start := aExternalClient.Client.GetServerTimestamp;
     aExternalClient.Server.Server.
       SetStaticVirtualTableDirect(StaticVirtualTableDirect);
@@ -1090,9 +1090,12 @@ begin
         end;
         Check(aExternalClient.Orm.Retrieve(1, RInt1));
         Check(RInt1.IDValue = 1);
-        Check(n = fPeopleData.RowCount);
+        CheckEqual(n, fPeopleData.RowCount);
         CheckEqual(aExternalClient.Client.BatchSend(BatchID), HTTP_SUCCESS, 'bs');
-        CheckEqual(length(BatchID), n - 99, 'bsn');
+        CheckEqual(length(BatchID), n - 99, 'bsn1');
+        for i := 0 to high(BatchID) do
+          CheckEqual(BatchID[i], i + 100, 'batchid');
+        nb := BatchID[high(BatchID)];
         Check(aExternalClient.Orm.TableHasRows(TOrmPeopleExt));
         CheckEqual(aExternalClient.Orm.TableMaxID(TOrmPeopleExt), n);
         CheckEqual(aExternalClient.Orm.TableRowCount(TOrmPeopleExt), n);
@@ -1119,7 +1122,8 @@ begin
         end;
         Updated := aExternalClient.Orm.GetServerTimestamp;
         Check(Updated >= Start);
-        for i := 1 to BatchID[high(BatchID)] do
+        CheckEqual(nb, BatchID[high(BatchID)]);
+        for i := 1 to nb do
           if i mod 100 = 0 then
           begin
             RExt.fLastChange := 0;
@@ -1159,7 +1163,8 @@ begin
           end;
         Check(aExternalClient.Client.BatchSend(BatchIDUpdate) = HTTP_SUCCESS);
         Check(length(BatchIDUpdate) = 70);
-        for i := 1 to BatchID[high(BatchID)] do
+        CheckEqual(nb, BatchID[high(BatchID)]);
+        for i := 1 to nb do
           if i and 127 = 0 then
             if i > 4000 then
             begin
@@ -1172,40 +1177,39 @@ begin
               Check(aExternalClient.Client.Delete(TOrmPeopleExt, i),
                 'Delete 1/128 rows');
         CheckEqual(aExternalClient.Client.BatchSend(BatchIDUpdate), HTTP_SUCCESS);
-        Check(length(BatchIDUpdate) = 55);
-        n := aExternalClient.Client.TableRowCount(TOrmPeople);
-        Check(aExternalClient.Server.Server.
-          TableRowCount(TOrmPeopleExt) = 10925);
+        CheckEqual(length(BatchIDUpdate), 55);
+        n := aExternalClient.Client.TableRowCount(TOrmPeople); // check below
+        CheckEqual(aExternalClient.Server.Server.TableRowCount(TOrmPeopleExt), 10925);
         Orm := aExternalClient.Server.OrmInstance as TRestOrmServer;
         CheckEqual(Orm.GetVirtualStorage(TOrmPeople), nil);
         Check(Orm.GetVirtualStorage(TOrmPeopleExt) <> nil);
         Check(Orm.GetVirtualStorage(TOrmOnlyBlob) <> nil);
-        for i := 1 to BatchID[high(BatchID)] do
+        CheckEqual(nb, BatchID[high(BatchID)]);
+        for i := 1 to nb do
         begin
           RExt.fLastChange := 0;
           RExt.CreatedAt := 0;
           RExt.YearOfBirth := 0;
           ok := aExternalClient.Client.Retrieve(i, RExt, false);
           Check(ok = (i and 127 <> 0), 'deletion');
-          if ok then
+          if not ok then
+            continue;
+          CheckEqual(VariantDynArrayToJson(RExt.Value),
+            FormatUtf8('["text",%]', [RExt.YearOfDeath]));
+          Check(RExt.CreatedAt >= Start);
+          Check(RExt.CreatedAt <= Updated);
+          if i mod 100 = 0 then
           begin
-            CheckEqual(VariantDynArrayToJson(RExt.Value),
-              FormatUtf8('["text",%]', [RExt.YearOfDeath]));
-            Check(RExt.CreatedAt >= Start);
-            Check(RExt.CreatedAt <= Updated);
-            if i mod 100 = 0 then
-            begin
-              CheckEqual(RExt.YearOfBirth, RExt.YearOfDeath, 'Update1');
-              CheckUtf8(RExt.LastChange >= Updated, 'LastChange1 %>=%',
-                [RExt.LastChange, Updated]);
-            end
-            else
-            begin
-              Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update2');
-              Check(RExt.LastChange >= Start);
-              CheckUtf8(RExt.LastChange <= Updated, 'LastChange2 %<=%',
-                [RExt.LastChange, Updated]);
-            end;
+            CheckEqual(RExt.YearOfBirth, RExt.YearOfDeath, 'Update1');
+            CheckUtf8(RExt.LastChange >= Updated, 'LastChange1 %>=%',
+              [RExt.LastChange, Updated]);
+          end
+          else
+          begin
+            Check(RExt.YearOfBirth <> RExt.YearOfDeath, 'Update2');
+            Check(RExt.LastChange >= Start);
+            CheckUtf8(RExt.LastChange <= Updated, 'LastChange2 %<=%',
+              [RExt.LastChange, Updated]);
           end;
         end;
         aExternalClient.Client.Retrieve(400, RExt);
