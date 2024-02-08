@@ -6467,6 +6467,15 @@ begin
   end;
   s := '{"b":30,"a":"toto"}'; // temp read-only var for proper overload call
   CheckEqual(UrlEncodeJsonObject('', s, []), '?b=30&a=toto');
+  {$ifdef OSWINDOWS}
+  Check(GetFileNameFromUrl('file:///c:/temp/toto.text') = 'c:\temp\toto.text', 't1');
+  Check(GetFileNameFromUrl('file:///c:\temp\toto.text') = 'c:\temp\toto.text', 't2');
+  Check(GetFileNameFromUrl(
+    'file://someserver/temp/toto.text') = '\\someserver\temp\toto.text', 't3');
+  {$else}
+  Check(GetFileNameFromUrl('file://someserver/temp/toto.text') = '', 'posix1');
+  Check(GetFileNameFromUrl('file:///temp/toto.text') = '/temp/toto.text', 'posix2');
+  {$endif OSWINDOWS}
 end;
 
 procedure TTestCoreBase.MimeTypes;

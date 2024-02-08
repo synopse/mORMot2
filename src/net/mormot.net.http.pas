@@ -175,6 +175,13 @@ function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
 function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
   out Value: Int64): boolean; overload;
 
+{$ifdef OSPOSIX}
+/// convert a file URL to a local file path using TUri
+// - Windows implementeds this in mormot.core.os.pas via PathCreateFromUrl() API
+// - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
+function GetFileNameFromUrl(const Uri: string): TFileName;
+{$endif OSPOSIX}
+
 /// extract a 64-bit value from a 'Range: xxx-xxx ' input
 // - returned P^ points to the first non digit char - not as GetNextItemQWord()
 function GetNextRange(var P: PUtf8Char): Qword;
@@ -2717,6 +2724,27 @@ begin
   end;
   result := false;
 end;
+
+{$ifdef OSPOSIX}
+
+function GetFileNameFromUrl(const Uri: string): TFileName;
+var
+  u: TUri;
+begin
+  result := '';
+  u.From(RawUtf8(Uri));
+  if (u.Server = '') or
+     PropNameEquals(u.Server, 'localhost') or
+     IsLocalHost(pointer(u.Server)) then // supports only local files
+  begin
+    result := string(UrlDecodeName(u.Address));
+    if (result <> '') and
+       (result[1] <> '/') then
+      insert('/', result, 1);
+  end;
+end;
+
+{$endif OSPOSIX}
 
 function GetNextRange(var P: PUtf8Char): Qword;
 var
