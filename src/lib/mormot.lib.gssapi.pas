@@ -113,6 +113,8 @@ const
   GSS_S_UNSEQ_TOKEN     = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 3);
   GSS_S_GAP_TOKEN       = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 4);
 
+  // raw 1.3.6.1.5.5.2 OID
+  // {iso(1) org(3) dod(6) internet(1) security(5) mechanisms(5) snego(2)}
   gss_mech_spnego: array [0..5] of byte = (
     43, 6, 1, 5, 5, 2);
   gss_mech_spnego_desc: gss_OID_desc = (
@@ -120,6 +122,8 @@ const
     elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
 
+  // raw 1.2.840.113554.1.2.2 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) krb5(2)}
   gss_mech_krb5: array [0..8] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2);
   gss_mech_krb5_desc: gss_OID_desc = (
@@ -128,6 +132,7 @@ const
   GSS_C_MECH_KRB5: gss_OID = @gss_mech_krb5_desc;
 
   // raw 1.2.840.113554.1.2.2.1 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) krb5(2) krb5-name(1)}
   gss_nt_krb5_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
   gss_nt_krb5_name_desc: gss_OID_desc = (
@@ -136,6 +141,7 @@ const
   GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
 
   // raw 1.2.840.113554.1.2.1.1 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) generic(1) user-name(1)}
   gss_nt_user_name: array [0..9] of byte = (
     42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
   gss_nt_user_name_desc: gss_OID_desc = (
