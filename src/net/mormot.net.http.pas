@@ -362,6 +362,8 @@ type
     CompressContentEncoding: integer;
     /// reset this request context to be used without any ProcessInit/Read/Write
     procedure Clear;
+    /// parse CommandUri into CommandMethod/CommandUri fields
+    function ParseCommand: boolean;
     /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -374,8 +376,9 @@ type
     // - also set CompressContentEncoding/CompressAcceptHeader from Compress[]
     // and Content-Encoding header value
     procedure ParseHeaderFinalize;
-    /// parse Command into CommandMethod/CommandUri fields
-    function ParseCommand: boolean;
+    /// parse supplied command uri and headers
+    function ParseAll(aInStream: TStream; const aInContent: RawByteString;
+      const aCommand, aHeaders: RawUtf8): boolean;
     /// search a value from the internal parsed Headers
     // - supplied aUpperName should be already uppercased:
     // HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
@@ -410,6 +413,10 @@ type
     // - then append small content (<MaxSizeAtOnce) to result if possible, and
     // refresh the final State to hrsSendBody/hrsResponseDone
     function CompressContentAndFinalizeHead(MaxSizeAtOnce: integer): PRawByteStringBuffer;
+    /// compute ouput headers and body from current output state
+    // - alternate to CompressContentAndFinalizeHead() when Headers and
+    // Content/ContentStream/ContentLength/ContentEncoding are manually set
+    function ContentToOutput(aStatus: integer; aOutStream: TStream): integer;
     /// body sending socket entry point of our asynchronous HTTP Server
     // - to be called when some bytes could be written to output socket
     procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
@@ -3124,10 +3131,33 @@ begin
   include(HeaderFlags, nfHeadersParsed);
   Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}Interning <> nil);
   Head.Reset;
-  if Compress <> nil then
-    if AcceptEncoding <> '' then
-      CompressAcceptHeader :=
-        ComputeContentEncoding(Compress, pointer(AcceptEncoding));
+  if (Compress <> nil) and
+     (AcceptEncoding <> '') then
+    CompressAcceptHeader := ComputeContentEncoding(Compress, pointer(AcceptEncoding));
+end;
+
+function THttpRequestContext.ParseAll(aInStream: TStream;
+  const aInContent: RawByteString; const aCommand, aHeaders: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+  u: RawUtf8;
+begin
+  ProcessInit(aInStream);
+  Content := aInContent;
+  result := false;
+  CommandUri := aCommand;
+  if not ParseCommand then
+    exit;
+  p := pointer(aHeaders);
+  while p <> nil do
+  begin
+    u := GetNextLine(p, p, {trim=}true);
+    if u = '' then
+      break;
+    ParseHeader(pointer(u), length(u), {unfiltered=}false);
+  end;
+  ParseHeaderFinalize;
+  result := true;
 end;
 
 var
@@ -3403,6 +3433,44 @@ begin
          (State = hrsGetBodyContentLength) or
          (State >= hrsWaitProcessing));
   result := true; // notify the next main state change
+end;
+
+function THttpRequestContext.ContentToOutput(
+  aStatus: integer; aOutStream: TStream): integer;
+begin
+  if (aStatus = HTTP_SUCCESS) and
+     (ContentLength = 0) then
+    aStatus := HTTP_NOCONTENT;
+  result := aStatus;
+  // compute response headers
+  AppendLine(Headers, ['Content-Length: ', ContentLength]);
+  if ContentLastModified <> 0 then
+    AppendLine(Headers, ['Last-Modified: ',
+      UnixMSTimeUtcToHttpDate(ContentLastModified)]);
+  if rfAcceptRange in ResponseFlags then
+    AppendLine(Headers, ['Accept-Ranges: bytes']);
+  if rfRange in ResponseFlags then
+    AppendLine(Headers, ['Content-Range: bytes ', RangeOffset, '-',
+      RangeOffset + ContentLength - 1, '/', RangeLength]);
+  if ContentEncoding <> '' then
+    AppendLine(Headers, ['Content-Encoding: ', ContentEncoding]);
+  // compute response body
+  if (pointer(CommandMethod) = pointer(_HEADVAR)) or
+     (ContentLength = 0) then
+    exit;
+  if aOutStream <> nil then
+    if ContentStream = nil then
+    begin
+      aOutStream.WriteBuffer(pointer(Content)^, ContentLength);
+      Content := '';
+    end
+    else
+      aOutStream.CopyFrom(ContentStream, ContentLength)
+  else if ContentStream <> nil then
+  begin
+    FastSetString(RawUtf8(Content), ContentLength);
+    ContentStream.ReadBuffer(pointer(Content)^, ContentLength);
+  end;
 end;
 
 function THttpRequestContext.CompressContentAndFinalizeHead(
