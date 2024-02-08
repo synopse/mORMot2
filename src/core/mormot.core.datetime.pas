@@ -450,6 +450,10 @@ type
     /// fill Year/Month/Day fields from the given value - but not DayOfWeek
     // - faster than the RTL DecodeDate() function
     procedure FromDate(const dt: TDateTime);
+    /// fill fields from the given value - but not DayOfWeek
+    procedure FromUnixTime(ut: TUnixTime);
+    /// fill fields from the given value - but not DayOfWeek
+    procedure FromUnixMsTime(ut: TUnixMsTime);
     /// fill Hour/Minute/Second/Millisecond fields from the given number of milliseconds
     // - faster than the RTL DecodeTime() function
     procedure FromMS(ms: PtrUInt);
@@ -2057,6 +2061,16 @@ procedure TSynSystemTime.FromDateTime(const dt: TDateTime);
 begin
   FromDate(dt);
   FromTime(dt);
+end;
+
+procedure TSynSystemTime.FromUnixTime(ut: TUnixTime);
+begin
+  FromDateTime(ut / SecsPerDay + UnixDateDelta); // via a temp TDateTime
+end;
+
+procedure TSynSystemTime.FromUnixMsTime(ut: TUnixMsTime);
+begin
+  FromDateTime(ut / MSecsPerDay + UnixDateDelta); // via a temp TDateTime
 end;
 
 procedure TSynSystemTime.FromDate(const dt: TDateTime);
