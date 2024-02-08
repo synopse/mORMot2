@@ -1132,20 +1132,45 @@ function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUn
 var
   st: TStat;
 begin
+  result := 0;
   if (FileName <> '') and
      (fpStat(pointer(FileName), st) = 0) and
      (AllowDir or
       (not FpS_ISDIR(st.st_mode))) then
-    result := st.st_mtime // as TUnixTime seconds, with no local conversion
-  else
-    result := 0
+    result := st.st_mtime; // as TUnixTime seconds, with no local conversion
+end;
+
+function FileHandleToUnixTimeUtc(F: THandle): TUnixTime;
+var
+  st: TStat;
+begin
+  result := 0;
+  if ValidHandle(F) and
+     (FpFStat(F, st) = 0) then
+    result := st.st_mtime;
+end;
+
+function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean;
+var
+  t: TUtimBuf;
+begin
+  result := false;
+  if (Dest = '') or
+     (Time = 0) then
+    exit;
+  t.actime := Time;
+  t.modtime := Time;
+  result := FpUtime(pointer(Dest), @t) = 0; // direct syscall
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 begin
-  result := (Dest <> '') and
-            ValidHandle(SourceHandle) and
-            (FileSetDate(Dest, FileGetDate(SourceHandle)) = 0);
+  result := FileSetDateFromUnixUtc(Dest, FileHandleToUnixTimeUtc(SourceHandle));
+end;
+
+function FileSetDateFrom(const Dest, Source: TFileName): boolean;
+begin
+  result := FileSetDateFromUnixUtc(Dest, FileAgeToUnixTimeUtc(Source));
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName;

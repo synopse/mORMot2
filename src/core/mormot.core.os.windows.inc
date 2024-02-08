@@ -249,10 +249,20 @@ begin
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
 end;
 
+const
+  SecsPerFileTime = 10000000;
+  MilliSecsPerFileTime = 10000;
+
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
-  I64 := I64 * 10000000;
-  inc(I64, UnixFileTimeDelta);
+  I64 := (I64 * SecsPerFileTime) + UnixFileTimeDelta;
+  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
+  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
+end;
+
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
+begin
+  I64 := (I64 * MilliSecsPerFileTime) + UnixFileTimeDelta;
   FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
   FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
 end;
@@ -279,9 +289,9 @@ begin
   end;
   {$ifdef CPU64}
   FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div 10000000;
+  result := (nano100 - UnixFileTimeDelta) div SecsPerFileTime;
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div 10000000;
+  result := (PInt64(@ft)^ - UnixFileTimeDelta) div SecsPerFileTime;
   {$endif CPU64}
 end;
 
@@ -298,9 +308,9 @@ begin
   end;
   {$ifdef CPU64}
   FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div 10000;
+  result := (nano100 - UnixFileTimeDelta) div MilliSecsPerFileTime;
   {$else} 
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div 10000;
+  result := (PInt64(@ft)^ - UnixFileTimeDelta) div MilliSecsPerFileTime;
   {$endif CPU64}
 end;
 
@@ -803,6 +813,23 @@ begin
   result := FileSetDate(Dest, WinTime) = 0; // we already are on Windows
 end;
 
+function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean;
+var
+  D: THandle;
+  ft: TFileTime;
+begin
+  result := false;
+  if (Dest = '') or
+     (Time = 0) then
+    exit;
+  D := FileOpen(Dest, fmOpenWrite);
+  if not ValidHandle(D) then
+    exit;
+  UnixTimeToFileTime(Time, ft);
+  result := SetFileTime(D, nil, nil, @ft);
+  FileClose(D);
+end;
+
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
 begin
   result := F.Time; // already in the expected legacy format
@@ -1035,6 +1062,21 @@ begin
     else
       result := false;
   end;
+end;
+
+function FileSetDateFrom(const Dest, Source: TFileName): boolean;
+var
+  S: THandle;
+begin
+  result := false;
+  if (Dest = '') or
+     (Source = '') then
+    exit;
+  S := FileOpen(Source, fmOpenReadShared);
+  if not ValidHandle(S) then
+    exit;
+  result := FileSetDateFrom(Dest, S);
+  FileClose(S);
 end;
 
 procedure FileSetAttr(const FileName: TFileName; Attr: integer);

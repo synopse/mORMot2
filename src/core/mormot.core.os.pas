@@ -161,6 +161,9 @@ const
   // - for internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
 
+  /// the successful HTTP response codes after a GET request
+  HTTP_GET_OK = [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT];
+
 /// retrieve the HTTP reason text from its integer code
 // - e.g. StatusCodeToReason(200)='OK'
 // - as defined in http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -2704,6 +2707,9 @@ procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 
+/// convert an Unix milliseconds time to a Win32 64-bit FILETIME value
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
+
 /// convert a TDateTime to a Win32 64-bit FILETIME value
 procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
 
@@ -3155,8 +3161,8 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 // - returns 0 if file (or folder if AllowDir is true) doesn't exist
 // - returns the system API file age (not converted local), encoded as TUnixTime
 // - under Windows, will use GetFileAttributesEx and FileTimeToUnixTime
-// - under POSIX, will call directly the stat API
-// - slightly faster than FileAgeToDateTime() since don't convert to local time
+// - under POSIX, will call directly the stat syscall
+// - faster than FileAgeToDateTime() since don't convert to local time
 function FileAgeToUnixTimeUtc(const FileName: TFileName;
   AllowDir: boolean = false): TUnixTime;
 
@@ -3167,13 +3173,22 @@ function FileAgeToWindowsTime(const FileName: TFileName): integer;
 
 /// copy the date of one file to another
 // - FileSetDate(THandle, Age) is not implemented on POSIX: filename is needed
-function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean; overload;
+
+/// copy the date of one file to another
+// - FileSetDate(THandle, Age) is not implemented on POSIX: filename is needed
+function FileSetDateFrom(const Dest, Source: TFileName): boolean; overload;
 
 /// copy the date of one file from a Windows File 32-bit TimeStamp
 // - this cross-system function is used e.g. by mormot.core.zip which expects
 // Windows TimeStamps in its headers
 // - FileSetDate(THandle, Age) is not implemented on POSIX: filename is needed
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
+
+/// set the file date/time from a supplied UTC TUnixTime value
+// - avoid any temporary conversion to local time
+// - Time may come from FileAgeToUnixTimeUtc()
+function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean;
 
 /// convert a Windows API File 32-bit TimeStamp into a regular TDateTime
 // - returns 0 if the conversion failed
