@@ -1756,7 +1756,7 @@ begin
           GetBody(bodystream);
         end;
         // successfully sent -> reset some fields for the next request
-        if ctxt.Status in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
+        if ctxt.Status in HTTP_GET_OK then
           RequestClear;
       except
         on E: Exception do
@@ -1859,7 +1859,7 @@ begin
           Assigned(fOnAuthorize) then
       begin
         if assigned(OnLog) then
-          OnLog(sllTrace, 'Request(% %)=%', [method, url, ctxt.status], self);
+          OnLog(sllTrace, 'Request(% %)=%', [ctxt.method, url, ctxt.status], self);
         if rAuth in ctxt.retry then
           break;
         include(ctxt.retry, rAuth);
@@ -1870,7 +1870,7 @@ begin
           Assigned(fOnProxyAuthorize) then
       begin
         if assigned(OnLog) then
-          OnLog(sllTrace, 'Request(% %)=%', [method, url, ctxt.status], self);
+          OnLog(sllTrace, 'Request(% %)=%', [ctxt.method, url, ctxt.status], self);
         if rAuthProxy in ctxt.retry then
           break;
         include(ctxt.retry, rAuthProxy);
@@ -1888,8 +1888,23 @@ begin
       else
         ctxt.retry := [];
       ctxt.url := Http.HeaderGetValue('LOCATION');
+      case ctxt.status of
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
+        HTTP_MOVEDPERMANENTLY,
+        HTTP_SEEOTHER:
+          ctxt.method := 'GET';
+        // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
+      end;
+      if (OutStream <> nil) and
+         // TStreamRedirect would have set bodystream := nil in RequestInternal
+         not OutStream.InheritsFrom(TStreamRedirect) and
+         (OutStream.Position <> ctxt.OutStreamInitialPos) then
+      begin
+        OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
+        OutStream.Position := ctxt.OutStreamInitialPos; // reset position
+      end;
       if assigned(OnLog) then
-        OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
+        OnLog(sllTrace, 'Request % % redirected to %', [ctxt.method, url, ctxt.url], self);
       if IdemPChar(pointer(ctxt.url), 'HTTP') and
          newuri.From(ctxt.url) then
       begin
@@ -1907,12 +1922,6 @@ begin
           end;
           HttpStateReset;
           ctxt.url := newuri.Address;
-          if (OutStream <> nil) and
-             (OutStream.Position <> ctxt.OutStreamInitialPos) then
-          begin
-            OutStream.Size := ctxt.OutStreamInitialPos;     // truncate
-            OutStream.Position := ctxt.OutStreamInitialPos; // reset position
-          end;
         end;
       end
       else
