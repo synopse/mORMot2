@@ -9,6 +9,7 @@ unit mormot.net.client;
    HTTP Client Classes
    - THttpMultiPartStream for multipart/formdata HTTP POST
    - THttpClientSocket Implementing HTTP client over plain sockets
+   - Additional Client Protocols Support
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHttp
    - TSimpleHttpClient Wrapper Class
@@ -320,6 +321,10 @@ type
   TOnHttpClientSocketRequest = function(Sender: THttpClientSocket;
     var Context: TTHttpClientSocketRequestParams): boolean of object;
 
+  /// callback used by THttpClientSocket.Request to process any custom protocol
+  TOnHttpClientSocketProtocol = function(
+    var http: THttpRequestContext): integer of object;
+
   /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document
   // - the REST commands (GET/POST/PUT/DELETE) are directly available
@@ -348,6 +353,7 @@ type
     fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
+    fOnProtocolRequest: TOnHttpClientSocketProtocol;
     fOnAfterRequest: TOnHttpClientSocketRequest;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
@@ -366,6 +372,12 @@ type
     constructor Create(aTimeOut: PtrInt = 0); override;
     /// finalize this instance
     destructor Destroy; override;
+    /// constructor to create a client connection to a given URI
+    // - returns TUri.Address as parsed from aUri
+    // - overriden to support custom RegisterNetClientProtocol()
+    constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
+      const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
+      aTLSContext: PNetTlsContext = nil); override;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -588,6 +600,19 @@ function GetProxyForUri(const uri: RawUtf8;
 // - optionally sanitize the output to be filename-compatible
 // - note that it returns an UTF-8 string as resource URI, not TFileName
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawUtf8;
+
+
+{ ******************** Additional Client Protocols Support }
+
+var
+  /// raw thread-safe access to <Name:RawUtf8,TOnHttpClientSocketProtocol> pairs
+  NetClientProtocols: TSynDictionary;
+
+/// register a INetClientProtocol
+// - you can unregister a protocol by setting OnRequest = nil
+// - note that the class instance used by OnRequest will be owned by thit unit
+procedure RegisterNetClientProtocol(
+  const Name: RawUtf8; const OnRequest: TOnHttpClientSocketProtocol);
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1441,6 +1466,41 @@ begin
 end;
 
 
+{ ******************** Additional Client Protocols Support }
+
+procedure RegisterNetClientProtocol(
+  const Name: RawUtf8; const OnRequest: TOnHttpClientSocketProtocol);
+var
+  m: TMethod;
+begin
+  if NetClientProtocols.FindAndExtract(Name, m) then
+    TObject(m.Data).Free; // was owned by this unit
+  if Assigned(OnRequest) then
+    NetClientProtocols.Add(Name, OnRequest);
+end;
+
+
+{ TNetClientProtocolFile }
+
+type
+  TNetClientProtocolFile = class
+  public
+    function OnRequest(var http: THttpRequestContext): integer;
+  end;
+
+function TNetClientProtocolFile.OnRequest(var http: THttpRequestContext): integer;
+var
+  fn: TFileName;
+begin
+  // try PathCreateFromUrl() API on Windows, or parse using TUri on POSIX
+  fn := GetFileNameFromUrl(Utf8ToString(http.CommandResp));
+  if (fn <> '') and
+     http.ContentFromFile(fn, -1) then // into http.Content/ContentStream
+    result := HTTP_SUCCESS
+  else
+    result := HTTP_NOTFOUND;
+  http.Headers := ''; // no custom headers
+end;
 
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
@@ -1609,6 +1669,25 @@ destructor THttpClientSocket.Destroy;
 begin
   FillZero(fDigestAuthPassword);
   inherited Destroy;
+end;
+
+constructor THttpClientSocket.OpenUri(const aUri: RawUtf8;
+  out aAddress: RawUtf8; const aTunnel: RawUtf8; aTimeOut: cardinal;
+  aTLSContext: PNetTlsContext);
+var
+  u: TUri;
+begin
+  if (u.From(aUri) or // e.g. 'file:///path/to' returns false but is valid
+      (u.Address <> '')) and
+     not IdemPChar(pointer(u.Scheme), 'HTTP') and
+     NetClientProtocols.FindAndCopy(u.Scheme, fOnProtocolRequest) then
+    begin
+      Create(aTimeOut); // no socket involved
+      fOpenUriFull := aUri; // e.g. to call PatchCreateFromUrl() Windows API
+      aAddress := u.Address;
+    end
+  else
+    inherited OpenUri(aUri, aAddress, aTunnel, aTimeOut, aTLSContext);
 end;
 
 procedure THttpClientSocket.RequestInternal(
@@ -1851,8 +1930,25 @@ begin
      fOnBeforeRequest(self, ctxt) then
   begin
     fRedirected := '';
+    if Assigned(fOnProtocolRequest) then
+    begin
+      // emulate a custom protocol (e.g. 'file://') into a HTTP request
+      if Http.ParseAll(ctxt.InStream, ctxt.Data,
+          FormatUtf8('% % HTTP/1.0', [method, ctxt.url]), ctxt.header) then
+      begin
+        Http.CommandResp := fOpenUriFull;
+        ctxt.status := fOnProtocolRequest(Http);
+        if StatusCodeIsSuccess(ctxt.status) then
+          ctxt.status := Http.ContentToOutput(ctxt.status, ctxt.OutStream);
+        if assigned(OnLog) then
+          OnLog(sllTrace, 'Request(%)=% via %.OnRequest',
+            [fOpenUriFull, ctxt.status,
+             TObject(TMethod(fOnProtocolRequest).Data)], self);
+      end;
+    end
+    else
     repeat
-      // this will handle the actual request, with proper retrial
+      // sub-method to handle the actual request, with proper retrial
       RequestInternal(ctxt);
       // handle optional (proxy) authentication callbacks
       if (ctxt.status = HTTP_UNAUTHORIZED) and
@@ -1953,14 +2049,13 @@ var
   res, altdownloading: integer;
   cached, part: TFileName;
   requrl, parthash, urlfile: RawUtf8;
-  partmodif: TDateTime;
   stream: TStreamRedirect;
   resumed, altdownload: boolean;
 
   function GetExpectedSizeAndRedirection: boolean;
   begin
     res := Head(requrl, params.KeepAlive, params.Header);
-    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+    if not (res in HTTP_GET_OK) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     expsize := Http.ContentLength;
@@ -2022,7 +2117,7 @@ var
         {retry=}false, {instream=}nil, stream);
     end;
     // verify (partial) response
-    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+    if not (res in HTTP_GET_OK) then
       raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     // finalize the successful request
@@ -2030,10 +2125,8 @@ var
     parthash := stream.GetHash; // hash updated on each stream.Write()
     FreeAndNil(stream);
     lastmod := Http.HeaderGetValue('LAST-MODIFIED');
-    if HttpDateToDateTime(lastmod, partmodif, {local=}true) then
-      FileSetDate(part, DateTimeToFileDate(partmodif))
-    else
-      partmodif := 0;
+    if lastmod <> '' then
+      FileSetDateFromUnixUtc(part, HttpDateToUnixTime(lastmod));
   end;
 
   procedure AbortAlternateDownloading;
@@ -3897,12 +3990,35 @@ begin
 end;
 
 
+procedure InitializeUnit;
+begin
+  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10 min timeout
+  NetClientProtocols := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+    TypeInfo(TMethodDynArray), {caseinsensitive=}true);
+  RegisterNetClientProtocol('file', TNetClientProtocolFile.Create.OnRequest);
+end;
+
+procedure FinalizeUnit;
+var
+  i: integer;
+  m: PMethod;
+begin
+  NewSocketAddressCache := nil;
+  m := NetClientProtocols.Values.Value^;
+  for i := 1 to NetClientProtocols.Values.Count do
+  begin
+    TObject(m^.Data).Free; // was owned by this unit
+    inc(m);
+  end;
+  NetClientProtocols.Free;
+end;
+
 
 initialization
-  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10 min timeout
+  InitializeUnit;
 
 finalization
-  NewSocketAddressCache := nil;
+  FinalizeUnit;
 
 end.
 

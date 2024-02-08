@@ -37,6 +37,7 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 HTTP Client Classes
 - `THttpMultiPartStream` for multipart/formdata HTTP POST
 - `THttpClientSocket` Implementing HTTP client over plain sockets
+- Additional Client Protocols Support (e.g. 'file://')
 - `THttpRequest` Abstract HTTP client class
 - `TWinHttp` `TWinINet` `TWinHttpWebSocketClient` `TCurlHTTP`
 - `TSimpleHttpClient` Wrapper Class
