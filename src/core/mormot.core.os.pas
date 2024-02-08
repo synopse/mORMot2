@@ -3130,6 +3130,12 @@ function NormalizeFileName(const FileName: TFileName): TFileName;
 // - could be used when generating command line parameters
 function QuoteFileName(const FileName: TFileName): TFileName;
 
+/// ask the Operating System to convert a file URL to a local file path
+// - only Windows has a such a PathCreateFromUrl() API
+// - POSIX always returns ''
+// - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
+function GetFileNameFromUrl(const Uri: string): TFileName;
+
 /// faster cross-platform alternative to sysutils homonymous function
 // - on Windows, just redirect to WindowsFileTimeToDateTime() since FileDate
 // is already expected to be in local time from FileAge()

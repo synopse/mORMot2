@@ -644,6 +644,24 @@ begin
     Value := QWord((QWord(v) * 1000000) div _QueryPerformanceFrequency);
 end;
 
+var
+  shlwapiDll: THandle; // lazy loading (only by TNetClientProtocolFile)
+  PathCreateFromUrl: function(pszUrl, pszPath: PChar; var pcchPath: cardinal;
+    dwFlags: cardinal): HRESULT; stdcall;
+
+function GetFileNameFromUrl(const Uri: string): TFileName;
+var
+  len: DWORD;
+  tmp: array[0..MAX_PATH] of char;
+begin
+  result := '';
+  len := MAX_PATH;
+  if DelayedProc(PathCreateFromUrl, shlwapiDll, 'shlwapi.dll',
+       'PathCreateFromUrl' + _AW) and
+     (PathCreateFromUrl(pointer(Uri), @tmp, len, 0) = S_OK) then
+    result := tmp;
+end;
+
 const
   faInvalidFile = faDirectory + faVolumeID{%H-} + faSysFile{%H-} + faHidden{%H-};
   faDirectoryMask = faDirectory + faHidden{%H-};
