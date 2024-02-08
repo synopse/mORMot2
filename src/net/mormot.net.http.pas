@@ -444,6 +444,11 @@ const
 var // filled from RTTI enum trimmed text during unit initialization
   HTTP_STATE: array[THttpRequestState] of RawUtf8;
 
+  /// highest files size for THttpRequestContext.ContentFromFile load to memory
+  // - default to 1MB on 32-bit systems, 2MB on 64-bit systems
+  HttpContentFromFileSizeInMemory: PtrInt =
+     {$ifdef CPU32} 1 shl 20 {$else} 2 shl 20 {$endif};
+
 function ToText(st: THttpRequestState): PShortString; overload; // HTTP_STATE[]
 function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
 function ToText(csp: TCrtSocketPending): PShortString; overload;
@@ -3468,7 +3473,7 @@ begin
       aOutStream.CopyFrom(ContentStream, ContentLength)
   else if ContentStream <> nil then
   begin
-    FastSetString(RawUtf8(Content), ContentLength);
+    FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
     ContentStream.ReadBuffer(pointer(Content)^, ContentLength);
   end;
 end;
@@ -3545,7 +3550,7 @@ begin
     end;
     result^.AppendCRLF;
   end;
-  // try to send both headers and body in a single socket syscal
+  // try to send both headers and body in a single socket syscall
   Process.Reset;
   if pointer(CommandMethod) = pointer(_HEADVAR) then
     // return only the headers
@@ -3666,10 +3671,10 @@ begin
   // we can send this file out
   result := true;
   include(ResponseFlags, rfAcceptRange);
-  if (ContentLength < 1 shl 20) and
+  if (ContentLength < HttpContentFromFileSizeInMemory) and
      (pointer(CommandMethod) <> pointer(_HEADVAR)) then
   begin
-    // smallest files (up to 1MB) are sent from temp memory (maybe compressed)
+    // smallest files (up to few MB) are sent from temp memory (maybe compressed)
     FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
     result := FileReadAll(h, pointer(Content), ContentLength);
     FileClose(h);

@@ -2104,7 +2104,7 @@ var
     end;
     if res = 0 then
     begin
-      // notify that parallel progressive downloading is possible on this file
+      // notify that parallel rfProgressiveStatic mode is possible on this file
       if Assigned(params.Alternate) and
          (params.Hasher <> nil) and
          (params.Hash <> '') and
