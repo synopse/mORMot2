@@ -3007,14 +3007,14 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   procedure ProcessStaticFile;
   var
     fn: TFileName;
-    progsizeHeader: RawUtf8;
+    progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
     ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
     SetInt64(pointer(progsizeHeader), Context.ContentLength);
     if Context.ContentLength <> 0 then
-      // file is not fully available: wait for sending
+      // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
           Context.ValidateRange) and
          (FileSize(fn) <= Context.ContentLength) then
@@ -5218,7 +5218,7 @@ begin
     result := fClient.Request(
       aUrl, 'GET', 30000, head, '',  '', aRetry, nil, aOutStream);
     fLog.Add.Log(sllTrace, 'OnDownload: request=%', [result], self);
-    if result in [HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT] then
+    if result in HTTP_GET_OK then
       fClientIP4 := aResp.IP4 // success or not found (HTTP_NOCONTENT)
     else
       SendRespToClientFailed(nil); // error downloading from local peer
@@ -5702,7 +5702,7 @@ begin
       begin
         fn := temp;      // found in temporary cache folder
         if lfnSetDate in aFlags then
-          FileSetDate(temp, DateTimeToFileDate(Now)); // renew TTL
+          FileSetDateFromUnixUtc(temp, UnixTimeUtc); // renew TTL
       end;
     end;
   finally
@@ -6089,7 +6089,7 @@ begin
     ok := CopyFile(Partial, local, {failsifexists=}false);
     if ok and istemp then
       // force timestamp = now within the temporary folder
-      FileSetDate(local, DateTimeToFileDate(Now));
+      FileSetDateFromUnixUtc(local, UnixTimeUtc)
   finally
     fFilesSafe.UnLock;
   end;
@@ -6340,19 +6340,19 @@ function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   msg: THttpPeerCacheMessage;
   fn: TFileName;
-  size: Int64;
+  progsize: Int64; // expected progressive file size, to be supplied as header
 begin
   // retrieve context - already checked by OnBeforeBody
   result := HTTP_BADREQUEST;
   if BearerDecode(Ctxt.AuthBearer, msg) then
   try
     // get local filename from decoded bearer hash
-    size := 0;
+    progsize := 0;
     // msg.Kind = pcfBearer so we need to ask both Local+PartialFileName()
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if (result <> HTTP_SUCCESS) and
        (fPartialSequence <> 0) then
-      result := PartialFileName(msg, Ctxt as THttpServerRequest, @fn, @size);
+      result := PartialFileName(msg, Ctxt as THttpServerRequest, @fn, @progsize);
     if result <> HTTP_SUCCESS then
     begin
       if IsZero(THash128(msg.Uuid)) then // from "fake" response bearer
@@ -6362,11 +6362,11 @@ begin
     // just return the (partial) file as requested
     Ctxt.OutContent := StringToUtf8(fn);
     Ctxt.OutContentType := STATICFILE_CONTENT_TYPE;
-    if size <> 0 then
-      Ctxt.OutCustomHeaders := FormatUtf8(STATICFILE_PROGSIZE + ' %', [size]);
+    if progsize <> 0 then // header for rfProgressiveStatic mode
+      Ctxt.OutCustomHeaders := FormatUtf8(STATICFILE_PROGSIZE + ' %', [progsize]);
   finally
     fLog.Add.Log(sllDebug, 'OnRequest=% from % % as % %',
-      [result, Ctxt.RemoteIP, Ctxt.Url, fn, size], self);
+      [result, Ctxt.RemoteIP, Ctxt.Url, fn, progsize], self);
   end;
 end;
 
