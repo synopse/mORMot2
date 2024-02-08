@@ -948,6 +948,7 @@ var
   OnNetTlsAcceptChallenge: TOnNetTlsAcceptChallenge;
 
 
+
 { ******************** Efficient Multiple Sockets Polling }
 
 type
@@ -1383,7 +1384,8 @@ type
     fServer: RawUtf8;
     fPort: RawUtf8;
     fProxyUrl: RawUtf8;
-    fRemoteIP: RawUtf8; // set by OpenBind() or AcceptRequest() from TNetAddr
+    fRemoteIP: RawUtf8;    // set by OpenBind() or AcceptRequest() from TNetAddr
+    fOpenUriFull: RawUtf8; // set by OpenUri()
     fSockIn: PTextFile;
     {$ifndef PUREMORMOT2}
     fSockOut: PTextFile;
@@ -1434,7 +1436,7 @@ type
     // - returns TUri.Address as parsed from aUri
     constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
-      aTLSContext: PNetTlsContext = nil);
+      aTLSContext: PNetTlsContext = nil); virtual;
     /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
@@ -1620,6 +1622,9 @@ type
     // THttpServerGeneric.RemoteIPHeader (e.g. 'X-Real-IP' for nginx)
     property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
+    /// the full requested URI, as specified to OpenUri() constructor
+    property OpenUriFull: RawUtf8
+      read fOpenUriFull;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress(LocalAsVoid: boolean = false): RawUtf8;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
@@ -4492,6 +4497,7 @@ begin
   TrimSelf(aUri);
   if aUri = '' then
     exit;
+  // parse Scheme
   p := pointer(aUri);
   s := p;
   while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
@@ -4505,6 +4511,7 @@ begin
       layer := nlUdp; // 'udp://server:port';
     p := s + 3;
   end;
+  // parse Server
   if NetStartWith(pointer(p), 'UNIX:') then
   begin
     inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
@@ -4538,6 +4545,7 @@ begin
       inc(s); // 'server:port/address' or 'server/address'
   end;
   FastSetString(Server, p, s - p);
+  // optional Port
   if s^ = ':' then
   begin
     inc(s);
@@ -4550,6 +4558,7 @@ begin
     Port := DefaultPort
   else
     Port := DEFAULT_PORT[Https];
+  // all the remaining text is the Address
   if s^ <> #0 then // ':' or '/'
   begin
     inc(s);
@@ -4677,6 +4686,7 @@ begin
   if not u.From(aUri) then
     raise ENetSock.Create('%s.OpenUri(%s): invalid URI',
             [ClassNameShort(self)^, aUri]);
+  fOpenUriFull := aUri;
   aAddress := u.Address;
   t.From(aTunnel);
   Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
