@@ -1668,8 +1668,9 @@ function SynchFolders(const Reference, Dest: TFileName;
   Options: TSynchFoldersOptions): integer;
 var
   ref, dst, reffn, dstfn: TFileName;
-  fref, fdst: TSearchRec;
-  reftime: TDateTime;
+  fdst: TSearchRec;
+  refsize: Int64;
+  reftime: TUnixMSTime;
   s: RawByteString;
 begin
   result := 0;
@@ -1682,29 +1683,21 @@ begin
       if SearchRecValidFile(fdst) then
       begin
         reffn := ref + fdst.Name;
+        if not FileInfoByName(reffn, refsize, reftime) then
+          continue; // only update existing files
+        if not (sfoByContent in Options) then
+          if (refsize = fdst.Size) and
+             (reftime = SearchRecToUnixTimeUtc(fdst)) then
+            continue;
         dstfn := dst + fdst.Name;
-        if sfoByContent in Options then
-          reftime := FileAgeToDateTime(reffn)
-        else if FindFirst(reffn, faAnyFile, fref) = 0 then
-        begin
-          if (fdst.Size = fref.Size) and
-             (fdst.Time = fref.Time) then
-            reftime := 0
-          else
-            reftime := SearchRecToDateTime(fref);
-          FindClose(fref);
-        end
-        else
-          reftime := 0; // "continue" trigger unexpected warning on Delphi
-        if reftime = 0 then
-          continue; // skip if no reference file to copy from
         s := StringFromFile(reffn);
         if (s = '') or
            ((sfoByContent in Options) and
             (length(s) = fdst.Size) and
             (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dstfn))) then
           continue;
-        FileFromString(s, dstfn, false, reftime);
+        FileFromString(s, dstfn);
+        FileSetDateFromUnixUtc(dstfn, reftime div MSecsPerSec);
         inc(result);
         if sfoWriteFileNameToConsole in Options then
           ConsoleWrite('synched %', [dstfn]);
