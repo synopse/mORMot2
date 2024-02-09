@@ -5627,7 +5627,7 @@ var
   opt: THttpServerOptions;
 begin
   if aHttpServerClass = nil then
-    aHttpServerClass := THttpServer; // may be THttpAsyncServer
+    aHttpServerClass := THttpServer;
   opt := [hsoBan40xIP, hsoNoXPoweredHeader];
   if fVerboseLog then
     include(opt, hsoLogVerbose);
@@ -5643,6 +5643,7 @@ begin
     end
     else
       THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
+  // note: by now, THttpAsyncServer is incompatible with rfProgressiveStatic
   if aHttpServerClass = THttpServer then
   begin
     inc(fPartialSequence); // mark partial downloading possible
@@ -6153,6 +6154,7 @@ begin
   result := 0;
   if (fPartialSequence = 0) or // only THttpServer supports this
      (ExpectedFullSize = 0) or
+     (waoNoProgressiveDownloading in Params.AlternateOptions) or
      not WGetToHash(Params, h) or
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
     exit;

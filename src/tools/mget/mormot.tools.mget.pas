@@ -131,6 +131,7 @@ begin
         fPeerSecret := HexToBin(fPeerSecretHexa);
       try
         fPeerCache := THttpPeerCache.Create(fPeerSettings, fPeerSecret);
+        // by now, THttpAsyncServer is incompatible with rfProgressiveStatic
       except
         Peer := false; // disable --peer if something is wrong
       end;
