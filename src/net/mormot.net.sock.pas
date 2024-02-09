@@ -1104,9 +1104,12 @@ type
     fSubscription: TPollSocketsSubscription;
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
     fPollLock: TOSLightLock;
+    fMergeSubscribeEventsLock: TLightLock;
+    // note: $ifdef POLLSOCKETEPOLL is not possible here
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
     function MergePendingEvents(const new: TPollSocketResults): integer;
+    function MergeSubscribeEvents: boolean;
     // virtual methods below could be overridden for O(1) pending state check
     function EnsurePending(tag: TPollSocketTag): boolean; virtual;
     procedure SetPending(tag: TPollSocketTag); virtual;
@@ -3824,6 +3827,7 @@ begin
   if fTerminated or
      (fPending.Count <= 0) then
     exit;
+  // search for the next event in fPending
   fPendingSafe.Lock; // former versions used TryLock but unstable on Windows
   try  // HASFASTTRYFINALLY is unsafe here and has little performance impact
     n := fPending.Count;
@@ -3854,6 +3858,12 @@ begin
   finally
     fPendingSafe.UnLock;
   end;
+  (*{$ifndef POLLSOCKETEPOLL} // never called in practice :(
+  // poll/socket does not include the just subscribed sockets
+  if not result and
+     MergeSubscribeEvents then
+    result := GetOnePending(notif, call);
+  {$endif POLLSOCKETEPOLL}*)
   if result and
      Assigned(fOnLog) then // log outside fPendingSafe
     fOnLog(sllTrace, 'GetOnePending(%)=% % #%/%', [call,
@@ -3918,6 +3928,39 @@ begin
   until n = 0;
   fPending.Count := len;
 end;
+
+{$ifdef POLLSOCKETEPOLL}
+function TPollSockets.MergeSubscribeEvents: boolean;
+begin
+  result := false; // epool has asynchronously subscription
+end;
+{$else}
+function TPollSockets.MergeSubscribeEvents: boolean;
+var
+  sub: TPollSocketsSubscribeDynArray;
+  new: TPollSocketResults;
+begin
+  // never called in practice: pending subscription seems no bottleneck
+  result := false;
+  if (fSubscription.SubscribeCount <> 0) and
+     fMergeSubscribeEventsLock.TryLock then
+  try
+    fSubscriptionSafe.Lock;
+    sub := copy(fSubscription.Subscribe, 0, fSubscription.SubscribeCount);
+    fSubscriptionSafe.UnLock;
+    if not WaitForSeveral(sub, new, {timeoutMS=}10) then
+      exit;
+    fPendingSafe.Lock;
+    try
+      result := MergePendingEvents(new) <> 0;
+    finally
+      fPendingSafe.UnLock;
+    end;
+  finally
+    fMergeSubscribeEventsLock.UnLock;
+  end;
+end;
+{$endif POLLSOCKETEPOLL}
 
 function TPollSockets.PollForPendingEvents(timeoutMS: integer): integer;
 var
