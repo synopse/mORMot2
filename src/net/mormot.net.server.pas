@@ -3636,7 +3636,8 @@ const
     1,  // makWifi
     4,  // makTunnel
     3,  // makPpp
-    5); // makSoftware
+    5,  // makCellular
+    6); // makSoftware
 
 function SortByMacAddressFilter(const A, B): integer;
 var
@@ -3696,7 +3697,7 @@ begin
     allowed := [makEthernet, makWifi]
   else if mafEthernetOnly in Filter then
     include(allowed, makEthernet);
-  if (available * allowed) <> [] then // e.g. always makUndefined on OSBSDDARWIN
+  if (available * allowed) <> [] then // e.g. if all makUndefined
     for i := high(all) downto 0 do
       if not (all[i].Kind in allowed) then
         arr.Delete(i);
@@ -3709,7 +3710,7 @@ begin
     exit;
   if length(all) > 1 then
   begin
-    GetMacAddressSafe.Lock;
+    GetMacAddressSafe.Lock; // protect GetMacAddressFilter global variable
     try
       GetMacAddressFilter := Filter;
       arr.Sort(SortByMacAddressFilter);

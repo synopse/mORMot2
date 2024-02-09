@@ -563,6 +563,7 @@ type
     makWifi,
     makTunnel,
     makPpp,
+    makCellular,
     makSoftware);
   /// a set of network interface types
   TMacAddressKinds = set of TMacAddressKind;

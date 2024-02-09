@@ -634,6 +634,11 @@ const
   ARPHRD_TUNNEL6   = 769;
   ARPHRD_IEEE80211 = 801;
 
+  // https://github.com/apple/darwin-xnu/blob/main/bsd/net/if_types.h
+  IFT_ETHER    = $06;
+  IFT_PPP      = $17;
+  IFT_CELLULAR = $ff;
+
 {$ifndef OSANDROID}
   // on POSIX, use getifaddrs/freeifaddrs from libc
   {$define USE_IFADDRS}
@@ -838,8 +843,15 @@ begin
               // BSD/DARWIN do name the networks from their manufacturer
               // -> parse net.wlan.devices ?
               IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
-              // so all interfaces will be identified as maKUndefined
+              case psockaddr_dl(info^.ifa_addr)^.sdl_type of
+                IFT_ETHER:
+                  Kind := makEthernet;
+                IFT_PPP:
+                  Kind := makPpp;
+                IFT_CELLULAR:
+                  Kind := makCellular;
               {$else}
+              IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
               case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
                 ARPHRD_ETHER:
                   begin
@@ -856,6 +868,7 @@ begin
                   Kind := makTunnel;
                 ARPHRD_PPP:
                   Kind := makPpp;
+            {$endif OSBSDDARWIN}
               else
                 // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
                 if Name <> '' then
@@ -867,8 +880,6 @@ begin
                       Kind := makWifi;
                   end;
               end;
-              IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
-            {$endif OSBSDDARWIN}
             end
             else
             begin
