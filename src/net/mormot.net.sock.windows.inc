@@ -639,7 +639,7 @@ begin
   end
   else
     ptv := nil; // infinite timeout
-  res := select(sock + 1, rdp, wrp, erp, ptv);
+  res := select({ignored=}0, rdp, wrp, erp, ptv);
   if res < 0 then
   begin
     if loerr <> nil then
@@ -1129,7 +1129,6 @@ type
   // because the new WSAPoll API is just an emulator using select() internally
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
-    fHighestSocket: TNetSocket;
     fTagSocket: array of TNetSocket;
     fTagTag: array of TPollSocketTag;
     // reference values prepared for Select() call
@@ -1169,8 +1168,6 @@ begin
   fTagSocket[fCount] := socket;
   fTagTag[fCount] := tag;
   inc(fCount);
-  if PtrUInt(socket) > PtrUInt(fHighestSocket) then
-    fHighestSocket := socket;
   result := true;
 end;
 
@@ -1194,8 +1191,6 @@ begin
       MoveFast(fTagSocket[i + 1], fTagSocket[i], n * SizeOf(fTagSocket[i]));
       MoveFast(fTagTag[i + 1], fTagTag[i], n * SizeOf(fTagTag[i]));
     end;
-    if fCount = 0 then
-      fHighestSocket := nil;
     result := true;
   end;
 end;
@@ -1234,7 +1229,7 @@ begin
   else
     wrp := nil;
   SetTimeVal(timeoutMS, tv);
-  if select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv) <= 0 then
+  if select({ignored=}0, rdp, wrp, nil, @tv) <= 0 then
     exit;
   if length(results.Events) < fCount then
     SetLength(results.Events, FD_SETSIZE);
