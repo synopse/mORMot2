@@ -1072,11 +1072,12 @@ type
     events: TPollSocketEvents;
   end;
   PPollSocketsSubscribe = ^TPollSocketsSubscribe;
+  TPollSocketsSubscribeDynArray = array of TPollSocketsSubscribe;
 
   // as used by TPollSockets.Subscribe/Unsubscribe for select/poll thread safety
   TPollSocketsSubscription = record
     Unsubscribe: TNetSocketDynArray;
-    Subscribe: array of TPollSocketsSubscribe;
+    Subscribe: TPollSocketsSubscribeDynArray;
     UnsubscribeCount: integer;
     SubscribeCount: integer;
   end;
@@ -1213,8 +1214,7 @@ function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a TPollSocketResult opaque 64-bit from its corresponding information
-procedure SetRes(var res: TPollSocketResult;
-  tag: TPollSocketTag; ev: TPollSocketEvents);
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// set the TPollSocketEvents set as [] from TPollSocketResult opaque 64-bit
@@ -1233,6 +1233,12 @@ function PollSocketClass: TPollSocketClass;
 // - return a TPollSocketSelect under Windows, or TPollSocketPoll on POSIX, so
 // up to 512 sockets on Windows (via select), 20000 on POSIX (via poll)
 function PollFewSockets: TPollSocketAbstract;
+
+/// poll once the state of several sockets, directly as TPollSocketResults info
+// - will only check the subscribed Sockets[] in pseRead state
+// - use select() under Windows, or poll() on POSIX with temporary FD arrays
+function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
+  var results: TPollSocketResults; timeoutMS: integer): boolean;
 
 
 function ToText(ev: TPollSocketEvents): TShort8; overload;

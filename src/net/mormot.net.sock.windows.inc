@@ -1280,6 +1280,59 @@ begin
   result := TPollSocketSelect.Create(nil);
 end;
 
+function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
+  var results: TPollSocketResults; timeoutMS: integer): boolean;
+var
+  n: integer;
+  s: PPollSocketsSubscribe;
+  p: ^TSocket;
+  r: PPollSocketResult;
+  tv: TTimeVal;
+  fd: TFDSet;
+begin
+  result := false;
+  results.Count := 0;
+  n := length(Sockets);
+  if n = 0 then
+    exit;
+  fd.fd_count := 0;
+  s := pointer(Sockets);
+  p := @fd.fd_array;
+  repeat
+    if pseRead in s^.events then
+    begin
+      p^ := TSocket(s^.socket);
+      inc(p);
+      inc(fd.fd_count);
+      if fd.fd_count = FD_SETSIZE then
+        break;
+    end;
+    inc(s);
+    dec(n);
+  until n = 0;
+  if fd.fd_count = 0 then
+    exit; // no pseRead to check
+  SetTimeVal(timeoutMS, tv);
+  n := select({ignored=}0, @fd, nil, nil, @tv);
+  if n <= 0 then
+    exit;
+  results.Count := n;
+  SetLength(results.Events, n);
+  r := pointer(results.Events);
+  s := pointer(Sockets);
+  repeat
+    if FD_ISSET(s^.socket, fd) then
+    begin
+      SetRes(r^, s^.tag, [pseRead]);
+      inc(r);
+      dec(n);
+      if n = 0 then
+        break;
+    end;
+    inc(s);
+  until false;
+  result := true;
+end;
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }

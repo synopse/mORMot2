@@ -1059,6 +1059,16 @@ end;
 
 { ******************** Efficient Multiple Sockets Polling }
 
+function PseToPollEvent(events: TPollSocketEvents): integer; inline;
+begin
+  if pseRead in events then
+    result := POLLIN or POLLPRI
+  else
+    result := 0;
+  if pseWrite in events then
+    result := result or POLLOUT;
+end;
+
 type
   /// socket polling via the POSIX poll API
   // - direct call of the Linux/POSIX poll() API
@@ -1097,12 +1107,7 @@ begin
      (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
-  if pseRead in events then
-    e := POLLIN or POLLPRI
-  else
-    e := 0;
-  if pseWrite in events then
-    e := e or POLLOUT;
+  e := PseToPollEvent(events);
   s := PtrUInt(socket);
   new := -1;
   p := pointer(fFD);
@@ -1195,9 +1200,26 @@ begin
   result := false;
 end;
 
+function PollEventToPse(r: integer): TPollSocketEvents; inline;
+begin
+  if r = POLLIN then
+    byte(result) := byte([pseRead]) // optimized for the most common case
+  else
+  begin
+    byte(result) := 0;
+    if r and (POLLIN or POLLPRI) <> 0 then
+      include(result, pseRead);
+    if r and POLLOUT <> 0 then
+      include(result, pseWrite);
+    if r and POLLERR <> 0 then
+      include(result, pseError);
+    if r and POLLHUP <> 0 then
+      include(result, pseClosed);
+  end;
+end;
+
 procedure PollConvert(p: PPollFD; d: PPollSocketResult; n: integer; t: PPollSocketTag);
 var
-  e: TPollSocketEvents;
   r: integer;
 begin
   repeat
@@ -1205,21 +1227,7 @@ begin
     if (r <> 0) and
        (p^.fd > 0) then
     begin
-      if r = POLLIN then
-        byte(e) := byte([pseRead]) // optimized for the most common case
-      else
-      begin
-        byte(e) := 0;
-        if r and (POLLIN or POLLPRI) <> 0 then
-          include(e, pseRead);
-        if r and POLLOUT <> 0 then
-          include(e, pseWrite);
-        if r and POLLERR <> 0 then
-          include(e, pseError);
-        if r and POLLHUP <> 0 then
-          include(e, pseClosed);
-      end;
-      SetRes(d^, t^, e);
+      SetRes(d^, t^, PollEventToPse(r));
       inc(d);
       p^.revents := 0; // reset result flags for reuse
     end;
@@ -1259,6 +1267,60 @@ begin
   result := TPollSocketPoll.Create(nil);
 end;
 
+function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
+  var results: TPollSocketResults; timeoutMS: integer): boolean;
+var
+  n, res: integer;
+  fd: array of TPollFD;
+  s: PPollSocketsSubscribe;
+  p: PPollFD;
+  r: PPollSocketResult;
+begin
+  result := false;
+  results.Count := 0;
+  n := length(Sockets);
+  if n = 0 then
+    exit;
+  SetLength(fd, n);
+  res := 0;
+  s := pointer(Sockets);
+  p := pointer(fd);
+  repeat
+    if pseRead in s^.events then
+    begin
+      p^.fd := PtrUInt(s^.socket);
+      p^.events := POLLIN or POLLPRI;
+      inc(p);
+      inc(res);
+    end;
+    inc(s);
+    dec(n);
+  until n = 0;
+  if res = 0 then
+    exit; // no pseRead to check
+  n := poll(pointer(fd), res, timeoutMS);
+  if n <= 0 then
+    exit;
+  results.Count := n;
+  SetLength(results.Events, n);
+  r := pointer(results.Events);
+  s := pointer(Sockets);
+  p := pointer(fd);
+  repeat
+    res := p^.revents;
+    if res <> 0 then
+    begin
+      SetRes(r^, s^.tag, PollEventToPse(res));
+      inc(r);
+      dec(n);
+      if n = 0 then
+        break;
+    end;
+    inc(s);
+    inc(p);
+  until false;
+  result := true;
+end;
 
 {$ifdef USEPOLL}
 
@@ -1297,7 +1359,7 @@ type
       read fEPFD;
   end;
 
-{$define POLLSOCKETEPOLL}
+{$define POLLSOCKETEPOLL} // $ifdef in main mormot.net.sock.pas implementation
 // is defined for TPollSocketEpoll.FollowEpoll = true
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
