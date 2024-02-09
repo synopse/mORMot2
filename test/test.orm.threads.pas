@@ -680,15 +680,18 @@ end;
 {$endif ONLYUSEHTTPSOCKET}
 {$endif USEWININET}
 
+const
+  useHttp = useHttpAsync;
+
 procedure TTestMultiThreadProcess.TCPSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpAsync);
+  Test(TRestHttpClientSocket, useHttp);
 end;
 
 {$ifdef OSPOSIX}
 procedure TTestMultiThreadProcess.UnixDomainSockets;
 begin
-  Test(TRestHttpClientSocket, useHttpAsync, amLocked,
+  Test(TRestHttpClientSocket, useHttp, amLocked,
     'unix:' + RawUtf8(ChangeFileExt(Executable.ProgramFileName, '.sock')));
 end;
 {$endif OSPOSIX}
@@ -702,7 +705,7 @@ end;
 {$ifdef USELIBCURL}
 procedure TTestMultiThreadProcess._libcurl;
 begin
-  Test(TRestHttpClientCurl, useHttpAsync);
+  Test(TRestHttpClientCurl, useHttp);
 end;
 {$endif USELIBCURL}
 
