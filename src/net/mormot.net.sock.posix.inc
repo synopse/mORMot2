@@ -835,9 +835,10 @@ begin
             if info^.ifa_addr <> nil then
             begin
               {$ifdef OSBSDDARWIN}
-              // BSD do name the networks from their manufacturer
+              // BSD/DARWIN do name the networks from their manufacturer
               // -> parse net.wlan.devices ?
               IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
+              // so all interfaces will be identified as maKUndefined
               {$else}
               case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
                 ARPHRD_ETHER:

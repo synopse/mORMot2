@@ -3670,26 +3670,38 @@ end;
 
 function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
 var
-  allowed: TMacAddressKinds;
+  allowed, available: TMacAddressKinds;
   all: TMacAddressDynArray;
   arr: TDynArray;
-  i: PtrInt;
+  i, bct: PtrInt;
 begin
   result := false;
   all := copy(GetMacAddresses({upanddown=}false));
   if all = nil then
     exit;
   arr.Init(TypeInfo(TMacAddressDynArray), all);
+  bct := 0;
+  available := [];
+  for i := 0 to high(all) do
+    with all[i] do
+    begin
+      include(available, Kind);
+      if Broadcast <> '' then
+        inc(bct);
+      {writeln(Kind, ' ', Address,' name=',Name,' ifindex=',IfIndex,
+         ' ip=',ip,' netmask=',netmask,' broadcast=',broadcast);}
+    end;
   allowed := [];
   if mafLocalOnly in Filter then
     allowed := [makEthernet, makWifi]
   else if mafEthernetOnly in Filter then
     include(allowed, makEthernet);
-  if allowed <> [] then
+  if (available * allowed) <> [] then // e.g. always makUndefined on OSBSDDARWIN
     for i := high(all) downto 0 do
       if not (all[i].Kind in allowed) then
         arr.Delete(i);
-  if mafRequireBroadcast in Filter then
+  if (mafRequireBroadcast in Filter) and
+     (bct <> 0) then
     for i := high(all) downto 0 do
       if all[i].Broadcast = '' then
         arr.Delete(i);
