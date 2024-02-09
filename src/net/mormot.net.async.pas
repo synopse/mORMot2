@@ -1826,11 +1826,15 @@ begin
           (fOwner.fThreadClients.Count > 0) and
           (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) do
       fOwner.ThreadClientsConnect;
-    ms := 1000;
+    // compute the best delay depending on the socket layer
+    ms := 1000; // epoll is asynchronous
     case fProcess of
       atpReadSingle:
         if fOwner.fClientsEpoll then
           ms := 100; // for quick shutdown
+      atpReadPoll:
+        if not fOwner.fClientsEpoll then
+          ms := 10; // let WaitForModified(ms) quickly react to subscriptions
     end;
     // main TAsyncConnections read/write process
     while not Terminated and
