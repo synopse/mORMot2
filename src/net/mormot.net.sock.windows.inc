@@ -322,6 +322,14 @@ const
   // no address, look for MX record
   WSANO_ADDRESS           = WSANO_DATA;
 
+  // WinSock 2 extension
+  WSAIOPENDING        = ERROR_IO_PENDING;
+  WSAIOINCOMPLETE     = ERROR_IO_INCOMPLETE;
+  WSAINVALIDHANDLE    = ERROR_INVALID_HANDLE;
+  WSAINVALIDPARAMETER = ERROR_INVALID_PARAMETER;
+  WSANOTENOUGHMEMORY  = ERROR_NOT_ENOUGH_MEMORY;
+  WSAOPERATIONABORTED = ERROR_OPERATION_ABORTED;
+
 const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
@@ -428,6 +436,23 @@ function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
 
 function recv(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
   external ws2 name 'recv';
+
+type
+  TWsaBuf = record
+    len: cardinal;
+    buf: PByteArray;
+  end;
+  PWsaBuf = ^TWsaBuf;
+
+function wsarecv(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+   var lpNumberOfBytesRecvd: cardinal; var lpFlags: cardinal;
+   lpOverlapped: POverlapped; lpCompletionRoutine: pointer): integer; stdcall;
+  external ws2 name 'WSARecv';
+
+function wsasend(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+   var lpNumberOfBytesRecvd: cardinal; dwFlags: cardinal;
+   lpOverlapped: POverlapped; lpCompletionRoutine: pointer): integer; stdcall;
+  external ws2 name 'WSASend';
 
 function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; stdcall;
@@ -1328,6 +1353,7 @@ begin
   until false;
   result := true;
 end;
+
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
