@@ -1355,6 +1355,147 @@ begin
 end;
 
 
+{ *************************** Windows IOCP sockets support }
+
+type
+  // data structure used by TWinIocp.Subscribe
+  PIocpSubscription = ^TIocpSubscription;
+  TIocpSubscription = packed record
+    head: TLockedListOne; // should be the first for TLockedList to work
+    overlapped: TOverlapped;
+    tag: TPollSocketTag;
+    buf: TWsaBuf;
+    socket: TSocket;
+    seq: integer;
+    events: TPollSocketEvents;
+  end;
+
+{ TWinIocp }
+
+constructor TWinIocp.Create(processing: integer);
+begin
+  if processing = 0 then
+    processing := SystemInfo.dwNumberOfProcessors;
+  fIocp := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, processing);
+  if fIocp <= 0 then
+    RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
+  fOne.Init(SizeOf(TIocpSubscription));
+  fSequence := Random31;
+  fProcessingCount := processing;
+end;
+
+destructor TWinIocp.Destroy;
+var
+  tix, endtix: cardinal;
+begin
+  if not fTerminated then
+    Terminate;
+  endtix := 0;
+  if fGetNextWait <> 0 then
+    repeat
+      SleepHiRes(10);
+      if fGetNextWait = 0 then
+        break;
+      PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify again (paranoid)
+      tix := mormot.core.os.GetTickCount64 shr 10;
+      if endtix = 0 then
+        endtix := tix + 5;
+    until tix > endtix; // never wait forever
+  if fIocp <> 0 then
+    CloseHandle(fIocp);
+  inherited Destroy;
+  fOne.Done;
+end;
+
+procedure TWinIocp.Terminate;
+var
+  i: integer;
+begin
+  fTerminated := true;
+  if fIocp <> 0 then
+    for i := 1 to fProcessingCount do
+      PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify threads
+end;
+
+function TWinIocp.ResetEvent(one: PWinIocpSubscription): boolean;
+var
+  bytes, flags: cardinal;
+  o: PIocpSubscription absolute one;
+begin
+  result := false;
+  if fTerminated then
+    exit;
+  // overlapped read or write with zero byte to avoid WSAENOBUFS and work with
+  // regular sockets recv/send calls
+  bytes := 0;
+  flags := 0;
+  if pseRead in o^.events then
+    if (wsarecv(TSocket(socket), @o^.buf, 1, bytes, flags,
+                 @o^.overlapped, nil) <> NO_ERROR) and
+       (sockerrno <> WSAIOPENDING) then
+      exit;
+  bytes := 0;
+  if pseWrite in o^.events then
+    if (wsasend(TSocket(socket), @o^.buf, 1, bytes, 0,
+                 @o^.overlapped, nil) <> NO_ERROR) and
+       (sockerrno <> WSAIOPENDING) then
+      exit;
+  result := true;
+end;
+
+function TWinIocp.GetNext(timeoutms: integer; events: PPollSocketEvents): TPollSocketTag;
+var
+  one: PIocpSubscription;
+  bytes: cardinal;
+  dummy: PtrUInt;
+begin
+  result := 0;
+  if fTerminated then
+    exit;
+  one := nil;
+  LockedInc32(@fGetNextWait);
+  GetQueuedCompletionStatus(fIocp, bytes, dummy, POverlapped(one), timeoutms);
+  LockedDec32(@fGetNextWait);
+  if result = 0 then
+    exit;
+  dec(PLockedListOne(one)); // from one^.overlapped to one^
+  if one^.seq <> integer(dummy) then
+    exit;
+  result := one^.tag; // paranoid (avoid potential ABA problem)
+  if events <> nil then
+    events^ := one^.events;
+end;
+
+function TWinIocp.Subscribe(socket: TNetSocket;
+  events: TPollSocketEvents; tag: TPollSocketTag): PWinIocpSubscription;
+var
+  one: PIocpSubscription;
+begin
+  result := nil;
+  if fTerminated then
+    exit;
+  one := fOne.New;
+  one^.tag := tag;
+  one^.socket := TSocket(socket);
+  one^.seq := InterLockedIncrement(fSequence);
+  one^.events := events;
+  if (CreateIoCompletionPort(one^.socket, fIocp, one^.seq, 0) = NO_ERROR) and
+     ResetEvent(one) then
+    result := one
+  else
+    fOne.Free(one);
+end;
+
+function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
+begin
+  result := false;
+  if fTerminated or
+     (one = nil) then
+    exit;
+  fOne.Free(one);
+  result := true;
+end;
+
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 

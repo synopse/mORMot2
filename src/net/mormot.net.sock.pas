@@ -11,6 +11,7 @@ unit mormot.net.sock;
    - MAC and IP Addresses Support
    - TLS / HTTPS Encryption Abstract Layer
    - Efficient Multiple Sockets Polling
+   - Windows IOCP sockets support
    - TUri parsing/generating URL wrapper
    - TCrtSocket Buffered Socket Read/Write Class
    - NTP / SNTP Protocol Client
@@ -963,6 +964,7 @@ type
 
   /// set of events monitored by TPollSocketAbstract
   TPollSocketEvents = set of TPollSocketEvent;
+  PPollSocketEvents = ^TPollSocketEvents;
 
   /// some opaque value (typically a pointer) associated with a polling event
   TPollSocketTag = type PtrInt;
@@ -1243,9 +1245,55 @@ function PollFewSockets: TPollSocketAbstract;
 function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
   var results: TPollSocketResults; timeoutMS: integer): boolean;
 
-
 function ToText(ev: TPollSocketEvents): TShort8; overload;
 
+
+{ *************************** Windows IOCP sockets support }
+
+{$ifdef OSWINDOWS}
+
+type
+  EWinIocp = class(ExceptionWithProps);
+
+  /// opaque pointer to one TWinIocp.Subscribe state
+  PWinIocpSubscription = pointer;
+
+  /// socket polling via Windows' IOCP API
+  // - logic in inverted in respect to select() or poll/epoll() APIs so we
+  // can't inherit from TPollAbstract
+  TWinIocp = class
+  protected
+    fIocp: THandle;
+    // O(1) memory allocation of TIocpSubscription buffers with recycling
+    fOne: TLockedList;
+    fProcessingCount, fSequence, fGetNextWait: integer;
+    fTerminated: boolean;
+  public
+    /// initialize this IOCP queue for a number of processing threads
+    constructor Create(processing: integer);
+    /// finalize this IOCP queue
+    destructor Destroy; override;
+    /// subscribe for events on a given socket
+    function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): PWinIocpSubscription;
+    /// unsubscribe for events on a given socket
+    function Unsubscribe(one: PWinIocpSubscription): boolean;
+    /// pick a pending task from the internal queue without any timeout
+    // - is typically called from processing threads
+    // - once data is read/write from result^.socket, call ResetEvent(result)
+    function GetNext(timeoutms: integer = INFINITE;
+      events: PPollSocketEvents = nil): TPollSocketTag;
+    /// notify IOCP that it needs to track the next events on this subscription
+    // - typically called after socket recv/send
+    function ResetEvent(one: PWinIocpSubscription): boolean;
+    /// shutdown this IOCP process - called e.g. by Destroy
+    procedure Terminate;
+    /// how many processing threads are likely to call GetNext
+    property ProcessingCount: integer
+      read fProcessingCount;
+  end;
+
+{$endif OSWINDOWS}
 
 { *************************** TUri parsing/generating URL wrapper }
 
@@ -3647,6 +3695,7 @@ constructor TPollSocketAbstract.Create(aOwner: TPollSockets);
 begin
   fOwner := aOwner;
 end;
+
 
 
 { TPollSockets }
