@@ -1253,19 +1253,16 @@ function ToText(ev: TPollSocketEvents): TShort8; overload;
 {$ifdef OSWINDOWS}
 
 type
-  EWinIocp = class(ExceptionWithProps);
-
   /// opaque pointer to one TWinIocp.Subscribe state
-  PWinIocpSubscription = pointer;
+  PWinIocpSubscription = type pointer;
 
   /// socket polling via Windows' IOCP API
-  // - logic in inverted in respect to select() or poll/epoll() APIs so we
-  // can't inherit from TPollAbstract
+  // - logic is inverted in respect to select() or poll/epoll() APIs so we
+  // can't inherit from TPollAbstract, and provide its own stand-alone class
   TWinIocp = class
   protected
     fIocp: THandle;
-    // O(1) memory allocation of TIocpSubscription buffers with recycling
-    fOne: TLockedList;
+    fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
     fProcessingCount, fSequence, fGetNextWait: integer;
     fTerminated: boolean;
   public
@@ -1280,12 +1277,12 @@ type
     function Unsubscribe(one: PWinIocpSubscription): boolean;
     /// pick a pending task from the internal queue without any timeout
     // - is typically called from processing threads
-    // - once data is read/write from result^.socket, call ResetEvent(result)
-    function GetNext(timeoutms: integer = INFINITE;
+    // - once data is read/write from result^.socket, call PrepareGetNext()
+    function GetNext(timeoutms: cardinal = INFINITE;
       events: PPollSocketEvents = nil): TPollSocketTag;
     /// notify IOCP that it needs to track the next events on this subscription
     // - typically called after socket recv/send
-    function ResetEvent(one: PWinIocpSubscription): boolean;
+    function PrepareGetNext(one: PWinIocpSubscription): boolean;
     /// shutdown this IOCP process - called e.g. by Destroy
     procedure Terminate;
     /// how many processing threads are likely to call GetNext
@@ -1294,6 +1291,7 @@ type
   end;
 
 {$endif OSWINDOWS}
+
 
 { *************************** TUri parsing/generating URL wrapper }
 

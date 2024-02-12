@@ -1378,7 +1378,7 @@ begin
     processing := SystemInfo.dwNumberOfProcessors;
   fIocp := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, processing);
   if fIocp <= 0 then
-    RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
+    RaiseLastError('TWinIocp: CreateIoCompletionPort', ENetSock);
   fOne.Init(SizeOf(TIocpSubscription));
   fSequence := Random31;
   fProcessingCount := processing;
@@ -1399,8 +1399,10 @@ begin
       PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify again (paranoid)
       tix := mormot.core.os.GetTickCount64 shr 10;
       if endtix = 0 then
-        endtix := tix + 5;
-    until tix > endtix; // never wait forever
+        endtix := tix + 5
+      else if tix > endtix then
+        break; // never wait forever
+    until false;
   if fIocp <> 0 then
     CloseHandle(fIocp);
   inherited Destroy;
@@ -1417,33 +1419,35 @@ begin
       PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify threads
 end;
 
-function TWinIocp.ResetEvent(one: PWinIocpSubscription): boolean;
+function TWinIocp.PrepareGetNext(one: PWinIocpSubscription): boolean;
 var
   bytes, flags: cardinal;
   o: PIocpSubscription absolute one;
 begin
   result := false;
-  if fTerminated then
+  if (one = nil) or
+     fTerminated then
     exit;
   // overlapped read or write with zero byte to avoid WSAENOBUFS and work with
   // regular sockets recv/send calls
   bytes := 0;
   flags := 0;
   if pseRead in o^.events then
-    if (wsarecv(TSocket(socket), @o^.buf, 1, bytes, flags,
+    if (wsarecv(o^.socket, @o^.buf, 1, bytes, flags,
                  @o^.overlapped, nil) <> NO_ERROR) and
        (sockerrno <> WSAIOPENDING) then
       exit;
   bytes := 0;
   if pseWrite in o^.events then
-    if (wsasend(TSocket(socket), @o^.buf, 1, bytes, 0,
+    if (wsasend(o^.socket, @o^.buf, 1, bytes, 0,
                  @o^.overlapped, nil) <> NO_ERROR) and
        (sockerrno <> WSAIOPENDING) then
       exit;
   result := true;
 end;
 
-function TWinIocp.GetNext(timeoutms: integer; events: PPollSocketEvents): TPollSocketTag;
+function TWinIocp.GetNext(timeoutms: cardinal;
+  events: PPollSocketEvents): TPollSocketTag;
 var
   one: PIocpSubscription;
   bytes: cardinal;
@@ -1480,7 +1484,7 @@ begin
   one^.seq := InterLockedIncrement(fSequence);
   one^.events := events;
   if (CreateIoCompletionPort(one^.socket, fIocp, one^.seq, 0) = NO_ERROR) and
-     ResetEvent(one) then
+     PrepareGetNext(one) then
     result := one
   else
     fOne.Free(one);
