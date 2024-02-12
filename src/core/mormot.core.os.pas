@@ -4331,6 +4331,41 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
+  /// points to one data entry in TLockedList
+  PLockedListOne = ^TLockedListOne;
+  /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
+  // - TLockedList should store unmanaged records starting with those fields
+  TLockedListOne = record
+    next, prev: pointer;
+  end;
+
+  /// thread-safe dual-linked list of TLockedListOne descendants with recycle bin
+  {$ifdef USERECORDWITHMETHODS}
+  TLockedList = record
+  {$else}
+  TLockedList = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fBin: PLockedListOne;
+    fSize, fCount: cardinal;
+  public
+    /// thread-safe access to the list
+    Safe: TLightLock;
+    /// raw access to the stored items as PLockedListOne dual-linked list
+    Head: pointer;
+    /// initialize the storage, with an optional overhead for prev, next fields
+    procedure Init(Size: PtrUInt);
+    /// release all stored memory
+    procedure Done;
+    /// allocate a new PLockedListOne data instance in threadsafe O(1) process
+    function New: pointer;
+    /// release one PLockedListOne used data instance in threadsafe O(1) process
+    procedure Free(one: pointer);
+    /// how many PLockedListOne data instance are currently stored in this list
+    property Count: cardinal
+      read fCount;
+  end;
+
 type
   /// how TSynLocker handles its thread processing
   // - by default, uSharedLock will use the main TRTLCriticalSection
@@ -9562,6 +9597,83 @@ end;
 procedure TOSLock.UnLock;
 begin
   mormot.core.os.LeaveCriticalSection(CS);
+end;
+
+
+{ TLockedList }
+
+procedure TLockedList.Init(Size: PtrUInt);
+begin
+  FillCharFast(self, SizeOf(Self), 0);
+  fSize := Size;
+end;
+
+procedure LockedListFreeAll(o: PLockedListOne);
+var
+  next: PLockedListOne;
+begin
+  while o <> nil do
+  begin
+    next := o.next;
+    FreeMem(o);
+    o := next;
+  end;
+end;
+
+procedure TLockedList.Done;
+begin
+  LockedListFreeAll(Head);
+  LockedListFreeAll(fBin);
+  FillCharFast(self, SizeOf(self), 0);
+end;
+
+function TLockedList.New: pointer;
+begin
+  Safe.Lock;
+  try
+    // try to recycle from single-linked list bin, or allocate
+    result := fBin;
+    if result <> nil then
+      fBin := PLockedListOne(result).next
+    else
+      result := AllocMem(fSize);
+    // insert at beginning of the main double-linked list
+    if Head <> nil then
+    begin
+      PLockedListOne(result).next := Head;
+      PLockedListOne(Head).prev := result;
+    end;
+    Head := result;
+    inc(fCount);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TLockedList.Free(one: pointer);
+var
+  o: PLockedListOne;
+begin
+  if one = nil then
+    exit;
+  Safe.Lock;
+  try
+    // remove from main double-linked list
+    o := one;
+    if o = Head then
+      Head := o.next;
+    if o.next <> nil then
+      PLockedListOne(o.next).prev := o.prev;
+    if o.prev <> nil then
+      PLockedListOne(o.prev).next := o.next;
+    // add to the recycle bin
+    FillCharFast(o^, fSize, 0); // garbage collect as void
+    o.next := fBin;
+    fBin := o;
+    dec(fCount);
+  finally
+    Safe.UnLock;
+  end;
 end;
 
 
