@@ -6249,10 +6249,11 @@ begin
     end;
   for i := N - 2 to N do
   begin
-    o := list.New; // from recycled slots
+    o := list.New; // from recycled slot
     o^.data1 := i;
     o^.data2 := i * 3;
   end;
+  CheckEqual(list.Count, j);
   for i := N downto 1 do
     if i and 255 <> 0 then
     begin
@@ -6261,6 +6262,8 @@ begin
       CheckEqual(o^.data2, i * 3);
       o := o^.head.next;
     end;
+  list.Clear;
+  CheckEqual(list.Count, 0);
   list.Done;
   CheckEqual(list.Count, 0);
 end;

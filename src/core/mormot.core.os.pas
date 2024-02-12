@@ -4338,30 +4338,40 @@ type
   TLockedListOne = record
     next, prev: pointer;
   end;
+  /// optional callback event to finalize one TLockedListOne instance
+  TOnLockedListOne = procedure(one: PLockedListOne) of object;
 
-  /// thread-safe dual-linked list of TLockedListOne descendants with recycle bin
+  /// thread-safe dual-linked list of TLockedListOne descendants with recycling
   {$ifdef USERECORDWITHMETHODS}
   TLockedList = record
   {$else}
   TLockedList = object
   {$endif USERECORDWITHMETHODS}
   private
-    fBin: PLockedListOne;
+    fHead, fBin: pointer;
     fSize, fCount: cardinal;
+    fOnFree: TOnLockedListOne;
   public
     /// thread-safe access to the list
     Safe: TLightLock;
-    /// raw access to the stored items as PLockedListOne dual-linked list
-    Head: pointer;
     /// initialize the storage, with an optional overhead for prev, next fields
-    procedure Init(Size: PtrUInt);
+    procedure Init(Size: PtrUInt; const OnFree: TOnLockedListOne = nil);
     /// release all stored memory
     procedure Done;
     /// allocate a new PLockedListOne data instance in threadsafe O(1) process
     function New: pointer;
     /// release one PLockedListOne used data instance in threadsafe O(1) process
     procedure Free(one: pointer);
-    /// how many PLockedListOne data instance are currently stored in this list
+    /// release all TLockedListOne instances currently stored in this list
+    // - without moving any of those instances into the internal recycle bin
+    procedure Clear;
+    /// release all to-be-recycled items available in the internal bin
+    procedure EmptyBin;
+    /// raw access to the stored items as PLockedListOne dual-linked list
+    property Head: pointer
+      read fHead;
+    /// how many TLockedListOne instances are currently stored in this list
+    // - excluding the instances in the recycle bin
     property Count: cardinal
       read fCount;
   end;
@@ -9602,19 +9612,22 @@ end;
 
 { TLockedList }
 
-procedure TLockedList.Init(Size: PtrUInt);
+procedure TLockedList.Init(Size: PtrUInt; const OnFree: TOnLockedListOne);
 begin
   FillCharFast(self, SizeOf(Self), 0);
   fSize := Size;
+  fOnFree := OnFree;
 end;
 
-procedure LockedListFreeAll(o: PLockedListOne);
+procedure LockedListFreeAll(o: PLockedListOne; const OnFree: TOnLockedListOne);
 var
   next: PLockedListOne;
 begin
   while o <> nil do
   begin
     next := o.next;
+    if Assigned(OnFree) then
+      OnFree(o);
     FreeMem(o);
     o := next;
   end;
@@ -9622,9 +9635,32 @@ end;
 
 procedure TLockedList.Done;
 begin
-  LockedListFreeAll(Head);
-  LockedListFreeAll(fBin);
-  FillCharFast(self, SizeOf(self), 0);
+  Clear;
+  EmptyBin;
+end;
+
+
+procedure TLockedList.Clear;
+begin
+  Safe.Lock;
+  try
+    LockedListFreeAll(fHead, fOnFree);
+    fHead := nil;
+    fCount := 0;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TLockedList.EmptyBin;
+begin
+  Safe.Lock;
+  try
+    LockedListFreeAll(fBin, nil);
+    fBin := nil;
+  finally
+    Safe.UnLock;
+  end;
 end;
 
 function TLockedList.New: pointer;
@@ -9638,12 +9674,12 @@ begin
     else
       result := AllocMem(fSize);
     // insert at beginning of the main double-linked list
-    if Head <> nil then
+    if fHead <> nil then
     begin
-      PLockedListOne(result).next := Head;
-      PLockedListOne(Head).prev := result;
+      PLockedListOne(result).next := fHead;
+      PLockedListOne(fHead).prev := result;
     end;
-    Head := result;
+    fHead := result;
     inc(fCount);
   finally
     Safe.UnLock;
@@ -9660,13 +9696,15 @@ begin
   try
     // remove from main double-linked list
     o := one;
-    if o = Head then
-      Head := o.next;
+    if o = fHead then
+      fHead := o.next;
     if o.next <> nil then
       PLockedListOne(o.next).prev := o.prev;
     if o.prev <> nil then
       PLockedListOne(o.prev).next := o.next;
-    // add to the recycle bin
+    // release internals and add to the recycle bin
+    if Assigned(fOnFree) then
+      fOnFree(o);
     FillCharFast(o^, fSize, 0); // garbage collect as void
     o.next := fBin;
     fBin := o;
