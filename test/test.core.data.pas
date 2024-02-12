@@ -116,6 +116,8 @@ type
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
     procedure _RTTI;
+    /// validate some internal data structures
+    procedure DataStructures;
     /// some low-level Url encoding from parameters
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
@@ -6176,6 +6178,91 @@ begin
   finally
     cc.Free;
   end;
+end;
+
+type
+  TOne = record
+    head: TLockedListOne;
+    data1, data2: integer;
+  end;
+  POne = ^TOne;
+
+procedure TTestCoreProcess.DataStructures;
+const
+  N = 1000000;
+var
+  list: TLockedList;
+  i, j: integer;
+  o, next: POne;
+begin
+  list.Init(SizeOf(TOne));
+  CheckEqual(list.Count, 0);
+  for i := 1 to N do
+  begin
+    o := list.New;
+    CheckEqual(list.Count, i);
+    o^.data1 := i;
+    o^.data2 := i * 3;
+  end;
+  CheckEqual(list.Count, N);
+  o := list.Head;
+  for i := N downto 1 do
+  begin
+    Check(o <> nil);
+    CheckEqual(o^.data1, i, 'new0');
+    CheckEqual(o^.data2, i * 3, 'new1');
+    o := o^.head.next;
+  end;
+  j := 0;
+  o := list.Head;
+  for i := N downto 1 do
+  begin
+    Check(o <> nil);
+    next := o^.head.next;
+    if i and 255 = 0 then
+      list.Free(o)
+    else
+      inc(j);
+    o := next;
+  end;
+  CheckEqual(list.Count, j);
+  o := list.Head;
+  for i := N downto 1 do
+    if i and 255 <> 0 then
+    begin
+      Check(o <> nil);
+      CheckEqual(o^.data1, i, 'del');
+      CheckEqual(o^.data2, i * 3);
+      o := o^.head.next;
+    end;
+  for i := 1 to 3 do
+    list.Free(list.Head);
+  CheckEqual(list.Count, j - 3, 'del from head');
+  o := list.Head;
+  for i := N - 3 downto 1 do
+    if i and 255 <> 0 then
+    begin
+      Check(o <> nil);
+      CheckEqual(o^.data1, i);
+      CheckEqual(o^.data2, i * 3);
+      o := o^.head.next;
+    end;
+  for i := N - 2 to N do
+  begin
+    o := list.New; // from recycled slots
+    o^.data1 := i;
+    o^.data2 := i * 3;
+  end;
+  for i := N downto 1 do
+    if i and 255 <> 0 then
+    begin
+      Check(o <> nil);
+      CheckEqual(o^.data1, i, 'new2');
+      CheckEqual(o^.data2, i * 3);
+      o := o^.head.next;
+    end;
+  list.Done;
+  CheckEqual(list.Count, 0);
 end;
 
 procedure TTestCoreProcess.UrlEncoding;
