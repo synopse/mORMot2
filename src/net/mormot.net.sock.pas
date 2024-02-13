@@ -1253,11 +1253,13 @@ function ToText(ev: TPollSocketEvents): TShort8; overload;
 {$ifdef OSWINDOWS}
 
 type
+  EWinIocp = class(ExceptionWithProps);
+
   /// opaque pointer to one TWinIocp.Subscribe state
   PWinIocpSubscription = type pointer;
 
   /// socket polling via Windows' IOCP API
-  // - logic is inverted in respect to select() or poll/epoll() APIs so we
+  // - logic is inverted in respect to select() or poll/epoll() APIs so it
   // can't inherit from TPollAbstract, and provide its own stand-alone class
   TWinIocp = class
   protected
@@ -1265,26 +1267,28 @@ type
     fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
     fProcessingCount, fSequence, fGetNextWait: integer;
     fTerminated: boolean;
+    fEvent: TPollSocketEvent;
   public
-    /// initialize this IOCP queue for a number of processing threads
-    constructor Create(processing: integer);
+    /// initialize this IOCP queue for a number of processing thread and event
+    constructor Create(processing: integer; event: TPollSocketEvent);
     /// finalize this IOCP queue
     destructor Destroy; override;
     /// subscribe for events on a given socket
-    function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
-      tag: TPollSocketTag): PWinIocpSubscription;
+    function Subscribe(socket: TNetSocket; tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
     function Unsubscribe(one: PWinIocpSubscription): boolean;
     /// pick a pending task from the internal queue without any timeout
     // - is typically called from processing threads
     // - once data is read/write from result^.socket, call PrepareGetNext()
-    function GetNext(timeoutms: cardinal = INFINITE;
-      events: PPollSocketEvents = nil): TPollSocketTag;
+    function GetNext(timeoutms: cardinal = INFINITE): TPollSocketTag;
     /// notify IOCP that it needs to track the next events on this subscription
     // - typically called after socket recv/send
     function PrepareGetNext(one: PWinIocpSubscription): boolean;
     /// shutdown this IOCP process - called e.g. by Destroy
     procedure Terminate;
+    /// either pseRead or pseWrite event is assigned to this TWinIocp instance
+    property Event: TPollSocketEvent
+      read fEvent;
     /// how many processing threads are likely to call GetNext
     property ProcessingCount: integer
       read fProcessingCount;
