@@ -3273,7 +3273,7 @@ begin
       'Pool', ''), 'Thread', '');
   // create IO completion port to queue the HTTP requests
   {$ifdef USE_WINIOCP}
-  fRequestQueue := CreateIoCompletionPort(aOverlapHandle, 0, nil, NumberOfThreads);
+  fRequestQueue := IocpCreate(aOverlapHandle, 0, nil, NumberOfThreads);
   if fRequestQueue = INVALID_HANDLE_VALUE then
     fRequestQueue := 0;
   if fRequestQueue = 0 then
@@ -3299,7 +3299,7 @@ begin
     {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
     for i := 0 to fWorkThreadCount - 1 do
-      PostQueuedCompletionStatus(fRequestQueue, 0, nil, nil);
+      IocpPostQueuedStatus(fRequestQueue, 0, nil, nil);
       // TaskAbort() is done in Execute when fTerminated = true
     {$else}
     // notify the threads we are shutting down using the event
@@ -3333,7 +3333,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   function Enqueue: boolean;
   begin
     // IOCP has its own queue
-    result := PostQueuedCompletionStatus(fRequestQueue, 0, nil, aContext);
+    result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
   end;
 
 {$else}
@@ -3516,7 +3516,7 @@ var
   ctxt: pointer;
   {$ifdef USE_WINIOCP}
   dum1: cardinal;
-  dum2: PtrUInt;
+  dum2: pointer;
   {$endif USE_WINIOCP}
 begin
   if fOwner <> nil then
@@ -3525,7 +3525,7 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if (not GetQueuedCompletionStatus(
+      if (not IocpGetQueuedStatus(
              fOwner.fRequestQueue, dum1, dum2, ctxt, INFINITE) and
           fOwner.NeedStopOnIOError) then
         break;
@@ -3537,7 +3537,7 @@ begin
             fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
           except
           end;
-          if not GetQueuedCompletionStatus(
+          if not IocpGetQueuedStatus(
                 fOwner.fRequestQueue, dum1, dum2, ctxt, 1) then
             break;
         end;

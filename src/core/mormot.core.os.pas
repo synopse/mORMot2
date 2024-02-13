@@ -2404,20 +2404,20 @@ procedure EnterCriticalSection(var cs: TRTLCriticalSection); stdcall;
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
-/// initialize IOCP instance
-// - redefined in mormot.core.os to avoid dependency to the Windows unit
-function CreateIoCompletionPort(FileHandle, ExistingCompletionPort: THandle;
+/// initialize Windows IOCP instance
+// - renamed in mormot.core.os to avoid dependency to the Windows unit
+function IocpCreate(FileHandle, ExistingCompletionPort: THandle;
   CompletionKey: pointer; NumberOfConcurrentThreads: DWORD): THandle; stdcall;
 
-/// retrieve IOCP instance status
-// - redefined in mormot.core.os to avoid dependency to the Windows unit
-function GetQueuedCompletionStatus(CompletionPort: THandle;
-  var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: PtrUInt;
+/// retrieve Windows IOCP instance status
+// - renamed in mormot.core.os to avoid dependency to the Windows unit
+function IocpGetQueuedStatus(CompletionPort: THandle;
+  var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: pointer;
   var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
 
-/// trigger a IOCP instance
-// - redefined in mormot.core.os to avoid dependency to the Windows unit
-function PostQueuedCompletionStatus(CompletionPort: THandle;
+/// trigger a Windows IOCP instance
+// - renamed in mormot.core.os to avoid dependency to the Windows unit
+function IocpPostQueuedStatus(CompletionPort: THandle;
   NumberOfBytesTransferred: DWORD; dwCompletionKey: pointer;
   lpOverlapped: POverlapped): BOOL; stdcall;
 

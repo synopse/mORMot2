@@ -7716,7 +7716,7 @@ begin
         conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
         conn.Close(WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS,
           Pointer(conn.fBuffer), Length(conn.fBuffer));
-// PostQueuedCompletionStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
+// IocpPostQueuedStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
       end;
     end;
   finally
@@ -7928,7 +7928,7 @@ begin
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := 'Closed after ping timeout';
-      PostQueuedCompletionStatus(
+      IocpPostQueuedStatus(
         fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
     end
     else if elapsed >= fProtocol.fServer.PingTimeout * 1000 then
@@ -8177,7 +8177,7 @@ procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
   const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
 begin
   if Assigned(fLastConnection) then
-    PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, nil,
+    IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
   inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
 end;
@@ -8326,8 +8326,7 @@ end;
 
 procedure THttpApiWebSocketServer.SendServiceMessage;
 begin
-  PostQueuedCompletionStatus(
-    fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
+  IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
 end;
 
 procedure THttpApiWebSocketServer.SetOnWSThreadStart(const Value: TOnNotifyThread);
