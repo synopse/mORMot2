@@ -1256,7 +1256,21 @@ type
   EWinIocp = class(ExceptionWithProps);
 
   /// opaque pointer to one TWinIocp.Subscribe state
-  PWinIocpSubscription = type pointer;
+  PWinIocpSubscription = ^TWinIocpSubscription;
+  /// high-level access to one TWinIocp.Subscribe state details
+  {$ifdef USERECORDWITHMETHODS}
+  TWinIocpSubscription = record
+  {$else}
+  TWinIocpSubscription = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// return the TPollSocketTag associated with a Subscribe() event
+    function Tag: TPollSocketTag;
+    /// return the TNetSocket associated with a Subscribe() event
+    function Socket: TNetSocket;
+    /// check the overlapped status of a Subscribe() event
+    function HasCompleted: boolean;
+  end;
 
   /// socket polling via Windows' IOCP API
   // - logic is inverted in respect to select() or poll/epoll() APIs so it
@@ -1265,7 +1279,7 @@ type
   protected
     fIocp: THandle;
     fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
-    fProcessingCount, fSequence, fGetNextWait: integer;
+    fProcessingCount, fGetNextWait: integer;
     fTerminated: boolean;
     fEvent: TPollSocketEvent;
   public
@@ -1280,7 +1294,7 @@ type
     /// pick a pending task from the internal queue without any timeout
     // - is typically called from processing threads
     // - once data is read/write from result^.socket, call PrepareGetNext()
-    function GetNext(timeoutms: cardinal = INFINITE): TPollSocketTag;
+    function GetNext(timeoutms: cardinal = INFINITE): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next events on this subscription
     // - typically called after socket recv/send
     function PrepareGetNext(one: PWinIocpSubscription): boolean;

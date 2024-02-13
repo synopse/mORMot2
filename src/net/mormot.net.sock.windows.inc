@@ -1358,7 +1358,7 @@ end;
 { *************************** Windows IOCP sockets support }
 
 type
-  // data structure used by TWinIocp.Subscribe
+  // data structure returned by TWinIocp.Subscribe as PWinIocpSubscription
   PIocpSubscription = ^TIocpSubscription;
   TIocpSubscription = packed record
     head: TLockedListOne; // should be the first for TLockedList to work
@@ -1366,13 +1366,25 @@ type
     tag: TPollSocketTag;
     buf: TWsaBuf;
     socket: TSocket;
-    seq: integer; // avoid ABA race condition (paranoid)
   end;
 
-function HasOverlappedIoCompleted(const overlap: TOverlapped): boolean;
-  {$ifdef INLINE} inline; {$endif} // Windows macro
+
+{ TWinIocpSubscription }
+
+function TWinIocpSubscription.Tag: TPollSocketTag;
 begin
-  result := PtrUInt(overlap.Internal) <> STATUS_PENDING;
+  result := PIocpSubscription(@self)^.tag;
+end;
+
+function TWinIocpSubscription.Socket: TNetSocket;
+begin
+  result := TNetSocket(PIocpSubscription(@self)^.socket);
+end;
+
+function TWinIocpSubscription.HasCompleted: boolean;
+begin
+  result := (@self <> nil) and
+    (PtrUInt(PIocpSubscription(@self)^.overlapped.Internal) <> STATUS_PENDING);
 end;
 
 
@@ -1385,11 +1397,10 @@ begin
   fEvent := event;
   if processing = 0 then
     processing := SystemInfo.dwNumberOfProcessors;
-  fIocp := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, processing);
+  fIocp := IocpCreate(INVALID_HANDLE_VALUE, 0, nil, processing);
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
   fOne.Init(SizeOf(TIocpSubscription));
-  fSequence := Random31;
   fProcessingCount := processing;
 end;
 
@@ -1400,7 +1411,7 @@ begin
   fTerminated := true;
   if fIocp <> 0 then
     for i := 1 to fProcessingCount do
-      PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify threads
+      IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads
 end;
 
 destructor TWinIocp.Destroy;
@@ -1412,7 +1423,7 @@ begin
   endtix := 0;
   if fGetNextWait <> 0 then
     repeat
-      PostQueuedCompletionStatus(fIocp, 0, 0, nil); // notify again (paranoid)
+      IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
       SleepHiRes(10);
       if fGetNextWait = 0 then
         break;
@@ -1456,25 +1467,26 @@ begin
   result := true;
 end;
 
-function TWinIocp.GetNext(timeoutms: cardinal): TPollSocketTag;
+function TWinIocp.GetNext(timeoutms: cardinal): PWinIocpSubscription;
 var
-  one: PIocpSubscription;
   bytes: cardinal;
-  dummy: PtrUInt;
+  one, dummy: pointer;
 begin
-  result := 0;
+  result := nil;
   if fTerminated then
     exit;
-  one := nil;
-  LockedInc32(@fGetNextWait);
-  GetQueuedCompletionStatus(fIocp, bytes, dummy, POverlapped(one), timeoutms);
-  LockedDec32(@fGetNextWait);
-  if fTerminated or
-     (one = nil) then
-    exit;
-  dec(PLockedListOne(one)); // from one^.overlapped to one^
-  if one^.seq = integer(dummy) then // paranoid (avoid Unsubscribe ABA problem)
-    result := one^.tag;
+  repeat
+    one := nil;
+    dummy := nil;
+    LockedInc32(@fGetNextWait);
+    IocpGetQueuedStatus(fIocp, bytes, dummy, one, timeoutms);
+    LockedDec32(@fGetNextWait);
+    if fTerminated or
+       (one = nil) then
+      exit;
+    dec(PLockedListOne(one)); // from one^.overlapped to one^
+  until pointer(PIocpSubscription(one)^.head.sequence) = dummy; // avoid ABA issue
+  result := one;
 end;
 
 function TWinIocp.Subscribe(socket: TNetSocket; tag: TPollSocketTag): PWinIocpSubscription;
@@ -1489,22 +1501,17 @@ begin
   one := fOne.New;
   one^.tag := tag;
   one^.socket := TSocket(socket);
-  one^.seq := InterLockedIncrement(fSequence);
-  if (CreateIoCompletionPort(one^.socket, fIocp, one^.seq, 0) = NO_ERROR) and
-     PrepareGetNext(one) then
-    result := one
+  if (IocpCreate(one^.socket, fIocp, pointer(one^.head.sequence), 0) = NO_ERROR) and
+     PrepareGetNext(pointer(one)) then
+    result := pointer(one)
   else
     fOne.Free(one);
 end;
 
 function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
 begin
-  result := false;
-  if fTerminated or
-     (one = nil) then
-    exit;
-  fOne.Free(one); one^.seq will avoid ABA problem in GetNext()
-  result := true;
+  result := (not fTerminated) and
+            fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
 end;
 
 
