@@ -4335,8 +4335,11 @@ type
   PLockedListOne = ^TLockedListOne;
   /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
   // - TLockedList should store unmanaged records starting with those fields
+  // - the sequence field contain an incremental integer, to avoid ABA problems
+  // when instances are recycled
   TLockedListOne = record
     next, prev: pointer;
+    sequence: PtrUInt;
   end;
   /// optional callback event to finalize one TLockedListOne instance
   TOnLockedListOne = procedure(one: PLockedListOne) of object;
@@ -4350,18 +4353,19 @@ type
   private
     fHead, fBin: pointer;
     fSize, fCount: cardinal;
+    fSequence: PtrUInt;
     fOnFree: TOnLockedListOne;
   public
     /// thread-safe access to the list
     Safe: TLightLock;
-    /// initialize the storage, with an optional overhead for prev, next fields
+    /// initialize the storage for an inherited TLockedListOne size
     procedure Init(Size: PtrUInt; const OnFree: TOnLockedListOne = nil);
     /// release all stored memory
     procedure Done;
     /// allocate a new PLockedListOne data instance in threadsafe O(1) process
     function New: pointer;
     /// release one PLockedListOne used data instance in threadsafe O(1) process
-    procedure Free(one: pointer);
+    function Free(one: pointer): boolean;
     /// release all TLockedListOne instances currently stored in this list
     // - without moving any of those instances into the internal recycle bin
     procedure Clear;
@@ -9614,9 +9618,10 @@ end;
 
 procedure TLockedList.Init(Size: PtrUInt; const OnFree: TOnLockedListOne);
 begin
-  FillCharFast(self, SizeOf(Self), 0);
+  FillCharFast(self, SizeOf(self), 0);
   fSize := Size;
   fOnFree := OnFree;
+  fSequence := Random31;
 end;
 
 procedure LockedListFreeAll(o: PLockedListOne; const OnFree: TOnLockedListOne);
@@ -9638,7 +9643,6 @@ begin
   Clear;
   EmptyBin;
 end;
-
 
 procedure TLockedList.Clear;
 begin
@@ -9673,12 +9677,12 @@ begin
       fBin := PLockedListOne(result).next
     else
       result := AllocMem(fSize);
+    PLockedListOne(result).sequence := fSequence;
+    inc(fSequence); // protected by Safe.Lock
     // insert at beginning of the main double-linked list
+    PLockedListOne(result).next := fHead;
     if fHead <> nil then
-    begin
-      PLockedListOne(result).next := fHead;
       PLockedListOne(fHead).prev := result;
-    end;
     fHead := result;
     inc(fCount);
   finally
@@ -9686,16 +9690,17 @@ begin
   end;
 end;
 
-procedure TLockedList.Free(one: pointer);
+function TLockedList.Free(one: pointer): boolean;
 var
-  o: PLockedListOne;
+  o: PLockedListOne absolute one;
 begin
-  if one = nil then
+  result := false;
+  if (o = nil) or
+     (o^.sequence = 0) then
     exit;
   Safe.Lock;
   try
     // remove from main double-linked list
-    o := one;
     if o = fHead then
       fHead := o.next;
     if o.next <> nil then
@@ -9712,6 +9717,7 @@ begin
   finally
     Safe.UnLock;
   end;
+  result := true;
 end;
 
 
