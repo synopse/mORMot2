@@ -2533,6 +2533,10 @@ function ServiceRunningContext: PServiceRunningContext;
 function ServiceRunningRequest: TRestServerUriContext;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef PUREMORMOT2}
+function CurrentServiceContext: TServiceRunningContext;
+{$endif PUREMORMOT2}
+
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TRestServerAuthenticationDefault.Auth
 // - this function is very fast, even if cryptographically-level SHA-3 secure
@@ -2767,10 +2771,15 @@ end;
 
 function ServiceRunningRequest: TRestServerUriContext;
 begin
-  result := PerThreadRunningContextAddress; // from mormot.core.interfaces.pas
-  if result <> nil then
-    result := PServiceRunningContext(result).Request; // avoid GPF
+  result := PServiceRunningContext(PerThreadRunningContextAddress).Request;
 end;
+
+{$ifndef PUREMORMOT2}
+function CurrentServiceContext: TServiceRunningContext;
+begin
+  result := ServiceRunningContext^;
+end;
+{$endif PUREMORMOT2}
 
 function ToText(n: TRestNode): PShortString;
 begin

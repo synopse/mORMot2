@@ -2558,7 +2558,8 @@ procedure BackgroundExecuteInstanceRelease(instance: TObject;
 
 
 /// low-level internal function returning the TServiceRunningContext threadvar
-// - mormot.rest.server.pas' ServiceRunningContext function redirects to this
+// - mormot.rest.server.pas ServiceRunningContext function redirects to this
+// - not inlined to ensure the associated threadvar is always properly linked
 function PerThreadRunningContextAddress: pointer;
 
 const
