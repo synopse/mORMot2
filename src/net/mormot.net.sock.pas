@@ -140,6 +140,7 @@ type
   /// end-user code should use this TNetSocket type to hold a socket reference
   // - then its methods will allow cross-platform access to the connection
   TNetSocket = ^TNetSocketWrap;
+  PNetSocket = ^TNetSocket;
 
   /// internal mapping of an address, in any supported socket layer
   {$ifdef USERECORDWITHMETHODS}
@@ -1296,6 +1297,7 @@ type
     fTerminated, fUnsubscribeShouldShutdownSocket: boolean;
     fOnLog: TSynLogProc;
     fAcceptExUsed: TLightLock; // can track only a single acceptex()
+    fAcceptSocket: TNetSocket;
     fAcceptExBuf: TBytes;
   public
     /// initialize this IOCP queue for a number of processing thread
@@ -1318,7 +1320,7 @@ type
     /// retrieve the remote address of the last GetNext(wieAccept) call
     // - this function includes PrepareGetNext(one)
     function PrepareGetNextAccept(one: PWinIocpSubscription;
-      out Remote: TNetAddr): boolean;
+      out Socket: TNetSocket; out Remote: TNetAddr): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
     /// how many processing threads are likely to call GetNext

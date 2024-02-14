@@ -1492,6 +1492,8 @@ begin
     CloseHandle(fIocp);
   inherited Destroy;
   fOne.Done;
+  if fAcceptSocket <> nil then
+    fAcceptSocket^.Close;
 end;
 
 const
@@ -1507,8 +1509,7 @@ begin
   result := nil;
   if fTerminated then
     exit;
-  if (socket = nil) or
-     (tag = 0) then
+  if socket = nil then
     raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
   o := fOne.New;
   o^.tag := tag;
@@ -1564,12 +1565,14 @@ begin
     wieAccept:
       if Assigned(acceptex) and
          Assigned(getacceptexsockaddrs) then
-        if fAcceptExUsed.TryLock then
+        if (fAcceptSocket = nil) and
+           fAcceptExUsed.TryLock then
         begin
           if fAcceptExBuf = nil then
             SetLength(fAcceptExBuf, ACCEPTEX_SIZE * 2);
-          result := acceptex(o^.Socket, 0, pointer(fAcceptExBuf),
-                      0, ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @o^.over) or
+          fAcceptSocket := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
+          result := acceptex(o^.Socket, TSocket(fAcceptSocket),
+            pointer(fAcceptExBuf), 0, ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @o^.over) or
                     (sockerrno = WSAIOPENDING)
         end
         else
@@ -1613,7 +1616,7 @@ begin
 end;
 
 function TWinIocp.PrepareGetNextAccept(one: PWinIocpSubscription;
-  out Remote: TNetAddr): boolean;
+  out Socket: TNetSocket; out Remote: TNetAddr): boolean;
 var
   l, r: PSockAddr;
   llen, rlen: integer;
@@ -1625,6 +1628,7 @@ begin
   FillCharFast(Remote, SizeOf(Remote), 0);
   if (one^.Event <> wieAccept) or
      (fAcceptExBuf = nil) or
+     (fAcceptSocket = nil) or
      not fAcceptExUsed.IsLocked or
      not Assigned(getacceptexsockaddrs) then
   begin
@@ -1644,6 +1648,8 @@ begin
      (rlen > SizeOf(Remote)) then
     exit;
   MoveFast(r^, Remote, rlen);
+  Socket := fAcceptSocket;
+  fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
   result := PrepareGetNext(one);
   if Assigned(fOnLog) then
