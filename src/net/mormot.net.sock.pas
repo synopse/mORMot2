@@ -1245,6 +1245,9 @@ function PollFewSockets: TPollSocketAbstract;
 function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
   var results: TPollSocketResults; timeoutMS: integer): boolean;
 
+const
+  POLL_SOCKET_EVENT: array[TPollSocketEvent] of AnsiChar = 'rwec';
+
 function ToText(ev: TPollSocketEvents): TShort8; overload;
 
 
@@ -3664,32 +3667,15 @@ end;
 
 function ToText(ev: TPollSocketEvents): TShort8;
 var
-  L: PtrInt;
-  P: PUtf8Char;
+  e: TPollSocketEvent;
 begin
-  L := 0;
-  P := @result;
-  if pseRead in ev then
-  begin
-    inc(L);
-    P[L] := 'r';
-  end;
-  if pseWrite in ev then
-  begin
-    inc(L);
-    P[L] := 'w';
-  end;
-  if pseError in ev then
-  begin
-    inc(L);
-    P[L] := 'e';
-  end;
-  if pseClosed in ev then
-  begin
-    inc(L);
-    P[L] := 'c';
-  end;
-  P[0] := AnsiChar(L);
+  result[0] := #0;
+  for e := low(e) to high(e) do
+    if e in ev then
+    begin
+      inc(result[0]);
+      result[ord(result[0])] := POLL_SOCKET_EVENT[e];
+    end;
 end;
 
 
