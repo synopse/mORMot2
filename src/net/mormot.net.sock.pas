@@ -4321,7 +4321,7 @@ function TPollSockets.GetOne(timeoutMS: integer; const call: RawUtf8;
   out notif: TPollSocketResult): boolean;
 {$ifndef POLLSOCKETEPOLL}
 var
-  start, tix, endtix: Int64;
+  start, tix, endtix, lasttix: Int64;
 {$endif POLLSOCKETEPOLL}
 begin
   // first check if some pending events are available
@@ -4342,6 +4342,7 @@ begin
   PQWord(@notif)^ := 0;
   start := 0;
   endtix := 0;
+  lasttix := 0;
   LockedInc32(@fGettingOne);
   try
     repeat
@@ -4365,8 +4366,12 @@ begin
       tix := SleepStep(start, @fTerminated); // 0/1/5/50/120-250 ms steps
       if endtix = 0 then
         endtix := start + timeoutMS
-      else if Assigned(fOnGetOneIdle) then
+      else if Assigned(fOnGetOneIdle) and
+              (tix <> lasttix) then
+      begin
         fOnGetOneIdle(self, tix);
+        lasttix := tix; // no need to call too often
+      end;
       if fTerminated then
         exit;
       result := GetOnePending(notif, call); // retrieved from another thread?
