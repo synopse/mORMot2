@@ -4098,6 +4098,9 @@ type
     // - could also be used to thread-safely acquire a shared resource
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// check if the non-rentrant lock has been acquired
+    function IsLocked: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// leave an exclusive non-rentrant lock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -9328,6 +9331,11 @@ function TLightLock.TryLock: boolean;
 begin
   result := (Flags = 0) and // first check without any (slow) atomic opcode
             LockedExc(Flags, 1, 0);
+end;
+
+function TLightLock.IsLocked: boolean;
+begin
+  result := Flags <> 0;
 end;
 
 procedure TLightLock.LockSpin;
