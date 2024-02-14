@@ -20,6 +20,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 {$ifdef USE_WINIOCP}
+  // TWinIocp does not follow the select/poll pattern: code requires adaptation
   {$define WINIOCP_READ}
   {.$define WINIOCP_WRITE} // not yet finished
 {$else}
@@ -1183,10 +1184,9 @@ constructor TPollAsyncSockets.Create(aOptions: TPollAsyncSocketsOptions;
 begin
   fOptions := aOptions;
   inherited Create;
-  fRead := TPollReadSockets.Create
-    {$ifdef WINIOCP_READ}(pseRead, aThreadCount){$endif};
+  fRead := TPollReadSockets.Create{$ifdef WINIOCP_READ}(aThreadCount){$endif};
   fRead.UnsubscribeShouldShutdownSocket := true;
-  fWrite := TPollWriteSockets.Create{$ifdef WINIOCP_WRITE}(pseWrite, 1){$endif};
+  fWrite := TPollWriteSockets.Create;
 end;
 
 destructor TPollAsyncSockets.Destroy;
@@ -1471,7 +1471,7 @@ begin
     else
     begin
       {$ifdef WINIOCP_READ}
-      connection.fIocpRead := fRead.Subscribe(connection.fSocket, tag);
+      connection.fIocpRead := fRead.Subscribe(wieRecv, connection.fSocket, tag);
       result := connection.fIocpRead <> nil;
       {$else}
       result := fRead.Subscribe(connection.fSocket, [pseRead], tag);
@@ -1482,7 +1482,7 @@ begin
     else
     begin
       {$ifdef WINIOCP_WRITE}
-      connection.fIocpWrite := fWrite.Subscribe(connection.fSocket, tag);
+      connection.fIocpWrite := fWrite.Subscribe(wieSend, connection.fSocket, tag);
       result := connection.fIocpWrite <> nil;
       {$else}
       result := fWrite.Subscribe(connection.fSocket, [pseWrite], tag);

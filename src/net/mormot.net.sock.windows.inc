@@ -61,6 +61,20 @@ const
   IPPROTO_IPV6   =   41;
   IPPROTO_ICMPV6 =   58;
 
+const
+  SIO_GET_EXTENSION_FUNCTION_POINTER = $c8000006;
+  WSAID_ACCEPTEX: TGuid =
+    (D1: $b5367df1; D2: $cbac; D3: $11cf;
+     D4: ($95, $ca, $00, $80, $5f, $48, $a1, $92));
+  WSAID_GETACCEPTEXSOCKADDRS: TGuid =
+    (D1: $b5367df2; D2: $cbac; D3: $11cf;
+     D4: ($95, $ca, $00, $80, $5f, $48, $a1, $92));
+  {
+  WSAID_TRANSMITFILE: TGuid =
+    (D1: $b5367df0; D2: $cbac; D3: $11cf;
+     D4: ($95, $ca, $00, $80, $5f, $48, $a1, $92));
+  }
+
 type
   PInAddr = ^in_addr;
   in_addr = packed record
@@ -359,6 +373,14 @@ type
   end;
   WSAData = TWSAData;
 
+  PTransmitFileBuffers = ^TTransmitFileBuffers;
+  TTransmitFileBuffers = record
+    Head: pointer;
+    HeadLength: cardinal;
+    Tail: pointer;
+    TailLength: cardinal;
+ end;
+
 const
   _ST: array[TNetLayer] of integer = (
     SOCK_STREAM,
@@ -444,15 +466,21 @@ type
   end;
   PWsaBuf = ^TWsaBuf;
 
-function wsarecv(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+function WSARecv(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; var lpFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSARecv';
 
-function wsasend(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+function WSASend(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; dwFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSASend';
+
+function WSAIoctl(s : TSocket; dwIoControlCode: cardinal; lpvInBuffer: pointer;
+   cbInBuffer: cardinal; lpvOutBuffer: pointer; cbOutBuffer: cardinal;
+   lpcbBytesReturned: PCardinal; lpOverlapped: POverlapped;
+   lpCompletionRoutine: pointer): integer; stdcall;
+  external ws2 name 'WSAIoctl';
 
 function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; stdcall;
@@ -480,6 +508,20 @@ begin
   // no accept4() on Windows -> async will be done later
 end;
 
+var
+  // some extended WinSock functions resolved in InitializeUnit below
+  acceptex: function(ListenSocket, AcceptSocket: TSocket; pOutBuff: pointer;
+    ReceiveDataLen, LocalAddrLen, RemoteAddrLen: DWORD; var BytesReceived: DWORD;
+    pOverlapped: POverlapped): BOOL; stdcall;
+  getacceptexsockaddrs: procedure(lpOutputBuffer: pointer;
+    dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength: DWORD;
+    var LocalSockaddr: PSockAddr; var LocalSockaddrLength: integer;
+    var RemoteSockaddr: PSockAddr; var RemoteSockaddrLength: integer); stdcall;
+  {
+  transmitfile: function(s: TSocket; hFile: THandle;
+    NumberOfBytesToWrite, NumberOfBytesPerSend: DWORD; pOvp: POverlapped;
+    pTransmitBuffers: PTransmitFileBuffers; dwFlags: DWORD): BOOL; stdcall;
+  }
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
@@ -1366,10 +1408,17 @@ type
     buf: TWsaBuf;
     tag: TPollSocketTag;
     socket: TSocket;
+    event: TWinIocpEvent;
+    eventchar: AnsiChar;
   end;
 
 
 { TWinIocpSubscription }
+
+function TWinIocpSubscription.Event: TWinIocpEvent;
+begin
+  result := PIocpSubscription(@self)^.event;
+end;
 
 function TWinIocpSubscription.Tag: TPollSocketTag;
 begin
@@ -1396,21 +1445,17 @@ end;
 
 { TWinIocp }
 
-constructor TWinIocp.Create(event: TPollSocketEvent; processing: integer);
+constructor TWinIocp.Create(processing: integer);
 begin
-  if not (event in [pseRead, pseWrite]) then
-    raise EWinIocp.CreateFmt('TWinIocp.Create(%s)', [ord(event)]);
   if processing = 0 then
     processing := SystemInfo.dwNumberOfProcessors;
   fIocp := IocpCreate(INVALID_HANDLE_VALUE, 0, nil, processing);
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
-  fEvent := event;
   fProcessingCount := processing;
   fOne.Init(SizeOf(TIocpSubscription));
   if Assigned(fOnLog) then
-    fOnLog(sllDebug, 'Create event=% processing=%',
-      [POLL_SOCKET_EVENT[fEvent], fProcessingCount], self);
+    fOnLog(sllDebug, 'Create processing=%', [fProcessingCount], self);
 end;
 
 procedure TWinIocp.Terminate;
@@ -1427,12 +1472,11 @@ var
   tix, endtix: cardinal;
 begin
   if Assigned(fOnLog) then
-    fOnLog(sllDebug, 'Destroy % count=%',
-      [POLL_SOCKET_EVENT[fEvent], fOne.Count], self);
+    fOnLog(sllDebug, 'Destroy count=%', [fOne.Count], self);
   if not fTerminated then
     Terminate;
   endtix := 0;
-  if fGetNextPending <> 0 then // wait until pending GetNext() are terminated
+  if fGetNextPending <> 0 then // wait for all pending GetNext() termination
     repeat
       if Assigned(fOnLog) then
         fOnLog(sllDebug, 'Destroy pending=%', [fGetNextPending], self);
@@ -1450,6 +1494,51 @@ begin
   fOne.Done;
 end;
 
+const
+  IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWA';
+
+function TWinIocp.Subscribe(event: TWinIocpEvent; socket: TNetSocket;
+  tag: TPollSocketTag): PWinIocpSubscription;
+var
+  o: PIocpSubscription;
+  res: TNetResult;
+  sll: TSynLogInfo;
+begin
+  result := nil;
+  if fTerminated then
+    exit;
+  if (socket = nil) or
+     (tag = 0) then
+    raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
+  o := fOne.New;
+  o^.tag := tag;
+  o^.socket := TSocket(socket);
+  o^.event := event;
+  o^.eventchar := IOCP_EVENT[event];
+  sll := sllTrace;
+  res := nrOk;
+  if IocpCreate(o^.socket, fIocp, pointer(o^.head.sequence), 0) = 0 then
+  begin
+    sll := sllLastError;
+    res := nrFatalError;
+  end
+  else if not PrepareGetNext(pointer(o)) then
+  begin
+    sll := sllWarning;
+    res := nrRetry;
+  end;
+  if Assigned(fOnLog) then
+    fOnLog(sll, 'Subscribe(event=% socket=% seq=%)=% cnt=%', [o^.eventchar,
+      socket, pointer(o^.head.sequence), ToText(res)^, Count], self);
+  if res = nrOk then
+    result := pointer(o)
+  else
+    fOne.Free(o);
+end;
+
+const
+  ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
+
 function TWinIocp.PrepareGetNext(one: PWinIocpSubscription): boolean;
 var
   bytes, flags: cardinal;
@@ -1463,24 +1552,41 @@ begin
   // and work with regular sockets recv/send calls like TPollSocketAbstract
   bytes := 0;
   flags := 0;
-  case fEvent of
-    pseRead:
-      result := // wsarecv=NO_ERROR if there is something to recv()
-        (wsarecv(o^.socket, @o^.buf, 1, bytes, flags, @o^.over) = NO_ERROR) or
+  case o^.event of
+    wieRecv:
+      result := // WSARecv=NO_ERROR if there is something to recv()
+        (WSARecv(o^.socket, @o^.buf, 1, bytes, flags, @o^.over) = NO_ERROR) or
         (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data 
-    pseWrite:
+    wieSend:
       result :=
-        (wsasend(o^.socket, @o^.buf, 1, bytes, 0, @o^.over) = NO_ERROR) or
+        (WSASend(o^.socket, @o^.buf, 1, bytes, 0, @o^.over) = NO_ERROR) or
         (sockerrno = WSAIOPENDING);
+    wieAccept:
+      if Assigned(acceptex) and
+         Assigned(getacceptexsockaddrs) then
+        if fAcceptExUsed.TryLock then
+        begin
+          if fAcceptExBuf = nil then
+            SetLength(fAcceptExBuf, ACCEPTEX_SIZE * 2);
+          result := acceptex(o^.Socket, 0, pointer(fAcceptExBuf),
+                      0, ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @o^.over) or
+                    (sockerrno = WSAIOPENDING)
+        end
+        else
+          raise EWinIocp.Create('TWinIocp.PrepareGetNext: concurrent wieAccept')
+      else
+        raise EWinIocp.Create('TWinIocp.PrepareGetNext: no acceptex() API');
     end;
   if Assigned(fOnLog) then
-    fOnLog(sllTrace, 'PrepareGetNext(sock=%)=%', [pointer(o^.socket), result], self);
+    fOnLog(sllTrace, 'PrepareGetNext(%%)=%',
+      [o^.eventchar, pointer(o^.socket), result], self);
 end;
 
 function TWinIocp.GetNext(timeoutms: cardinal): PWinIocpSubscription;
 var
   bytes: cardinal;
   o, dummy: pointer;
+  sll: TSynLogInfo;
   one: PIocpSubscription absolute o;
 begin
   result := nil;
@@ -1496,47 +1602,52 @@ begin
        (o = nil) then
       exit;
     dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over)); // from o^.over to o^
+    sll := sllTrace;
+    if pointer(one^.head.sequence) <> dummy then
+      sll := sllWarning; // detect ABA race condition
     if Assigned(fOnLog) then
-      fOnLog(sllTrace, 'GetNext: sock=% %=%',
-        [pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
-  until pointer(one^.head.sequence) = dummy; // avoid ABA issue
+      fOnLog(sll, 'GetNext(%%) %=%', [one^.eventchar,
+        pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
+  until sll = sllTrace;
   result := o;
 end;
 
-function TWinIocp.Subscribe(socket: TNetSocket; tag: TPollSocketTag): PWinIocpSubscription;
+function TWinIocp.GetNextAccept(one: PWinIocpSubscription;
+  out Remote: TNetAddr): boolean;
 var
-  o: PIocpSubscription;
-  res: TNetResult;
-  sll: TSynLogInfo;
+  l, r: PSockAddr;
+  llen, rlen: integer;
 begin
-  result := nil;
-  if fTerminated then
+  result := false;
+  if (one = nil) or
+     fTerminated then
     exit;
-  if (socket = nil) or
-     (tag = 0) then
-    raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
-  o := fOne.New;
-  o^.tag := tag;
-  o^.socket := TSocket(socket);
-  sll := sllTrace;
-  res := nrOk;
-  if IocpCreate(o^.socket, fIocp, pointer(o^.head.sequence), 0) = 0 then
+  FillCharFast(Remote, SizeOf(Remote), 0);
+  if (one^.Event <> wieAccept) or
+     (fAcceptExBuf = nil) or
+     not fAcceptExUsed.IsLocked or
+     not Assigned(getacceptexsockaddrs) then
   begin
-    sll := sllLastError;
-    res := nrFatalError;
-  end
-  else if not PrepareGetNext(pointer(o)) then
-  begin
-    sll := sllWarning;
-    res := nrRetry;
+    if Assigned(fOnLog) then
+      fOnLog(sllWarning, 'GetNextAccept(%)=false', [pointer(one^.socket)], self);
+    exit;
   end;
+  l := nil;
+  r := nil;
+  llen := 0;
+  rlen := 0;
+  getacceptexsockaddrs(pointer(fAcceptExBuf),
+    0, ACCEPTEX_SIZE, ACCEPTEX_SIZE, l, llen, r, rlen);
+  if (r = nil) or
+     (rlen = 0) or
+     (rlen > SizeOf(Remote)) then
+    exit;
+  MoveFast(r^, Remote, rlen);
+  fAcceptExUsed.UnLock;
+  result := true;
   if Assigned(fOnLog) then
-    fOnLog(sll, 'Subscribe(socket=% seq=%)=% cnt=%',
-      [socket, pointer(o^.head.sequence), ToText(res)^, Count], self);
-  if res = nrOk then
-    result := pointer(o)
-  else
-    fOne.Free(o);
+    fOnLog(sllTrace, 'GetNextAccept(%)=%',
+      [pointer(one^.socket), Remote.IPShort], self);
 end;
 
 function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
@@ -1548,12 +1659,14 @@ begin
      (one = nil) then
     exit;
   res := nrOK;
-  if fUnsubscribeShouldShutdownSocket then
+  if fUnsubscribeShouldShutdownSocket and
+     (one^.Event <> wieAccept) then
     res := TNetSocket(PIocpSubscription(one)^.socket).ShutdownAndClose({rdwr=}false);
   if Assigned(fOnLog) then
     with PIocpSubscription(one)^ do
-      fOnLog(sllTrace, 'UnSubscribe(socket=% seq=%) cnt=% %',
-        [pointer(socket), pointer(head.sequence), Count, ToText(res)^], self);
+      fOnLog(sllTrace, 'UnSubscribe(event=% socket=% seq=%) cnt=% %',
+        [eventchar, pointer(socket), pointer(head.sequence), Count - 1,
+         ToText(res)^], self);
   result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
 end;
 
@@ -2139,6 +2252,16 @@ end;
 
 
 
+function GetExtensionFunc(sock: TSocket; const id: TGuid): pointer;
+var
+  ret: cardinal;
+begin
+  result := nil;
+  if WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, @id, sizeof(id),
+      @result, SizeOf(result), @ret, nil, nil) <> 0 then
+    result := nil;
+end;
+
 function NewSChannelNetTls: INetTls;
 begin
   result := TSChannelNetTls.Create;
@@ -2148,10 +2271,17 @@ var
   WsaDataOnce: TWSADATA;
 
 procedure InitializeUnit;
+var
+  sock: TSocket;
 begin
   WSAStartup($0202, WsaDataOnce);
   SocketAPIVersion := RawUtf8(Format('%s.%d',
     [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
+  sock := socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+  acceptex := GetExtensionFunc(sock, WSAID_ACCEPTEX);
+  getacceptexsockaddrs := GetExtensionFunc(sock, WSAID_GETACCEPTEXSOCKADDRS);
+  //transmitfile := GetExtensionFunc(sock, WSAID_TRANSMITFILE);
+  closesocket(sock);
   NewNetTls := NewSChannelNetTls;
 end;
 

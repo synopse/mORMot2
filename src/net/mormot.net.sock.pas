@@ -1258,6 +1258,12 @@ function ToText(ev: TPollSocketEvents): TShort8; overload;
 type
   EWinIocp = class(ExceptionWithProps);
 
+  /// define which events TWinIocp should monitor
+  TWinIocpEvent = (
+    wieRecv,
+    wieSend,
+    wieAccept);
+
   /// opaque pointer to one TWinIocp.Subscribe state
   PWinIocpSubscription = ^TWinIocpSubscription;
   /// high-level access to one TWinIocp.Subscribe state details
@@ -1267,18 +1273,20 @@ type
   TWinIocpSubscription = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// return the TPollSocketTag associated with a Subscribe() event
+    /// return the TWinIocpEvent associated with a Subscribe() call
+    function Event: TWinIocpEvent;
+    /// return the TPollSocketTag associated with a Subscribe() call
     function Tag: TPollSocketTag;
-    /// return the TNetSocket associated with a Subscribe() event
+    /// return the TNetSocket associated with a Subscribe() call
     function Socket: TNetSocket;
-    /// check the overlapped status of a Subscribe() event
+    /// check the overlapped status of a Subscribe() call
     function HasCompleted: boolean;
   end;
 
   {$M+}
   /// socket polling via Windows' IOCP API
-  // - logic is inverted in respect to select() or poll/epoll() APIs so it
-  // can't inherit from TPollAbstract, and provide its own stand-alone class
+  // - IOCP logic does not match select() or poll/epoll() APIs so it can't
+  // inherit from TPollAbstract, and requires its own stand-alone class
   // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
   protected
@@ -1286,29 +1294,32 @@ type
     fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
     fProcessingCount, fPendingCount, fGetNextPending: integer;
     fTerminated, fUnsubscribeShouldShutdownSocket: boolean;
-    fEvent: TPollSocketEvent;
     fOnLog: TSynLogProc;
+    fAcceptExUsed: TLightLock; // can track only a single acceptex()
+    fAcceptExBuf: TBytes;
   public
-    /// initialize this IOCP queue for a number of processing thread and event
-    constructor Create(event: TPollSocketEvent; processing: integer);
+    /// initialize this IOCP queue for a number of processing thread
+    constructor Create(processing: integer = 1);
     /// finalize this IOCP queue
     destructor Destroy; override;
     /// subscribe for events on a given socket
-    function Subscribe(socket: TNetSocket; tag: TPollSocketTag): PWinIocpSubscription;
+    function Subscribe(event: TWinIocpEvent; socket: TNetSocket;
+      tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
+    // - only a single wieAccept subscription is allowed
     function Unsubscribe(one: PWinIocpSubscription): boolean;
     /// pick a pending task from the internal queue without any timeout
     // - is typically called from processing threads
     // - once data is recv/send from result^.Socket, please call PrepareGetNext()
-    function GetNext(timeoutms: cardinal = INFINITE): PWinIocpSubscription;
+    function GetNext(timeoutms: cardinal): PWinIocpSubscription;
+    /// retrieve the remote address of the last GetNext(wieAccept) call
+    // - you should call this function before any PrepareGetNext(one)
+    function GetNextAccept(one: PWinIocpSubscription; out Remote: TNetAddr): boolean;
     /// notify IOCP that it needs to track the next events on this subscription
     // - typically called after socket recv/send
     function PrepareGetNext(one: PWinIocpSubscription): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
-    /// either pseRead or pseWrite event is assigned to this TWinIocp instance
-    property Event: TPollSocketEvent
-      read fEvent;
     /// how many processing threads are likely to call GetNext
     property ProcessingCount: integer
       read fProcessingCount;
