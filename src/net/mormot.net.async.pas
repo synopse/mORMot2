@@ -595,7 +595,7 @@ type
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond; virtual;
     function WriteGetOne(timeout: integer; out notif: TPollSocketResult;
-      accept: PNetAddr): boolean;
+      accept: PNetAddr; accepted: PNetSocket): boolean;
     {$ifndef WINIOCP_READ}
     function ThreadPollingWakeup(Events: integer): PtrInt;
     {$endif WINIOCP_READ}
@@ -2855,7 +2855,7 @@ begin
 end;
 
 function TAsyncConnections.WriteGetOne(timeout: integer;
-  out notif: TPollSocketResult; accept: PNetAddr): boolean;
+  out notif: TPollSocketResult; accept: PNetAddr; accepted: PNetSocket): boolean;
 {$ifdef WINIOCP_WRITE}
 var
   sub: PWinIocpSubscription;
@@ -2881,8 +2881,9 @@ begin
   if sub = nil then
     exit;
   if (accept <> nil) and
+     (accepted <> nil) and
      (sub.Event = wieAccept) then
-    if not fClients.fWrite.PrepareGetNextAccept(sub, accept^) then
+    if not fClients.fWrite.PrepareGetNextAccept(sub, accepted^, accept^) then
       exit;
   SetRes(notif{%H-}, sub.Tag, [pseWrite]);
   result := true;
@@ -3127,7 +3128,7 @@ begin
     begin
       PQWord(@notif)^ := 0; // direct blocking accept() by default
       if async and
-         not WriteGetOne(1000, notif, @sin) then
+         not WriteGetOne(1000, notif, @sin, @client) then
         continue;
       if ResToTag(notif) = 0 then // no tag = main accept()
       begin
@@ -3135,8 +3136,11 @@ begin
           // could we Accept one or several incoming connection(s)?
           {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
           {$ifdef WINIOCP_WRITE}
-          if async then
-            res := nrOk // WriteGetOne() did accept a new sin
+          if async then // WriteGetOne() did accept a new sin
+            if acoEnableTls in fOptions then
+              res := nrOk // keep blocking during TLS handshake
+            else
+              res := client.MakeAsync
           else
           {$endif WINIOCP_WRITE}
             res := fServer.Sock.Accept(client, sin, // = accept4() on Linux
@@ -3269,7 +3273,7 @@ begin
         // will first connect some clients in this main thread
         ThreadClientsConnect;
     while not Terminated do
-      if WriteGetOne(1000, notif, nil) then
+      if WriteGetOne(1000, notif, nil, nil) then
         fClients.ProcessWrite(notif);
     DoLog(sllInfo, 'Execute: done % C', [fProcessName], self);
   except
@@ -4035,7 +4039,7 @@ begin
         begin
           // some huge packets queued for async sending (seldom)
           // note: fWrite.GetOne() calls ProcessIdleTix() while looping
-          if fAsync.WriteGetOne(ms, notif, nil) then
+          if fAsync.WriteGetOne(ms, notif, nil, nil) then
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then
           begin
