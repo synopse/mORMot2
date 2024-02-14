@@ -334,11 +334,15 @@ type
     // - use with care: performance degrades with highly concurrent HTTP/1.1
     property ReadWaitMs: integer
       read fReadWaitMs write fReadWaitMs;
+    /// raw access to the asynchronous recv() process
+    property Reader: TPollConnectionSockets
+      read fRead;
+    /// raw access to the asynchronous send() process
+    property Writer: TPollSockets
+      read fWrite;
   end;
 
   {$M-}
-
-function ToText(ev: TPollSocketEvent): PShortString; overload;
 
 
 { ******************** Client or Server Asynchronous Process }
@@ -919,6 +923,7 @@ type
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
     // the main thread will Send output packets in the background
     procedure Execute; override;
+    function GetApiVersion: RawUtf8; override; // 'WinIocp'
   public
     /// create an event-driven HTTP Server
     constructor Create(const aPort: RawUtf8;
@@ -950,13 +955,6 @@ implementation
 
 
 { ******************** Low-Level Non-blocking Connections }
-
-function ToText(ev: TPollSocketEvent): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TPollSocketEvent), ord(ev));
-end;
-
-
 
 { TPollAsyncConnection }
 
@@ -1482,8 +1480,8 @@ begin
      else
        include(connection.fFlags, fSubWrite);
   if fDebugLog <> nil then
-    DoLog('Subscribe(%)=% % handle=% %', [pointer(connection.fSocket),
-      BOOL_STR[result], caller, connection.Handle, ToText(sub)^]);
+    DoLog('Subscribe(%,%)=% % handle=%', [pointer(connection.fSocket),
+      POLL_SOCKET_EVENT[sub], BOOL_STR[result], caller, connection.Handle]);
 end;
 
 procedure TPollAsyncSockets.CloseConnection(var connection: TPollAsyncConnection);
@@ -3850,6 +3848,15 @@ function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
 begin
   result := fAsync.fExecuteState; // state comes from THttpAsyncConnections
   fExecuteMessage := fAsync.fExecuteMessage;
+end;
+
+function THttpAsyncServer.GetApiVersion: RawUtf8;
+begin
+  {$ifdef USE_WINIOCP}
+  result := 'WinIocp';
+  {$else}
+  result := 'WinSock';
+  {$endif USE_WINIOCP}
 end;
 
 procedure THttpAsyncServer.IdleEverySecond;

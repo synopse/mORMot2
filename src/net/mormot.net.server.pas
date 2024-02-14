@@ -687,9 +687,6 @@ type
     property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
-    /// returns the API version used by the inherited implementation
-    property ApiVersion: RawUtf8
-      read GetApiVersion;
     /// the Server name, UTF-8 encoded, e.g. 'mORMot2 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
@@ -699,6 +696,9 @@ type
     /// the associated process name
     property ProcessName: RawUtf8
       read fProcessName write fProcessName;
+    /// returns the API version used by the inherited implementation
+    property ApiVersion: RawUtf8
+      read GetApiVersion;
     /// allow to customize this HTTP server instance
     // - some inherited classes may have only partial support of those options
     property Options: THttpServerOptions
@@ -6550,7 +6550,7 @@ end;
 
 function THttpApiServer.GetApiVersion: RawUtf8;
 begin
-  FormatUtf8('HTTP API %.%',
+  FormatUtf8('http.sys %.%',
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
