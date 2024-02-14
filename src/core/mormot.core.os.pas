@@ -4352,12 +4352,15 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fHead, fBin: pointer;
-    fSize, fCount: cardinal;
+    fSize: integer;
     fSequence: PtrUInt;
     fOnFree: TOnLockedListOne;
   public
     /// thread-safe access to the list
     Safe: TLightLock;
+    /// how many TLockedListOne instances are currently stored in this list
+    // - excluding the instances in the recycle bin
+    Count: integer;
     /// initialize the storage for an inherited TLockedListOne size
     procedure Init(Size: PtrUInt; const OnFree: TOnLockedListOne = nil);
     /// release all stored memory
@@ -4374,10 +4377,6 @@ type
     /// raw access to the stored items as PLockedListOne dual-linked list
     property Head: pointer
       read fHead;
-    /// how many TLockedListOne instances are currently stored in this list
-    // - excluding the instances in the recycle bin
-    property Count: cardinal
-      read fCount;
   end;
 
 type
@@ -9650,7 +9649,7 @@ begin
   try
     LockedListFreeAll(fHead, fOnFree);
     fHead := nil;
-    fCount := 0;
+    Count := 0;
   finally
     Safe.UnLock;
   end;
@@ -9684,7 +9683,7 @@ begin
     if fHead <> nil then
       PLockedListOne(fHead).prev := result;
     fHead := result;
-    inc(fCount);
+    inc(Count);
   finally
     Safe.UnLock;
   end;
@@ -9713,7 +9712,7 @@ begin
     FillCharFast(o^, fSize, 0); // garbage collect as void
     o.next := fBin;
     fBin := o;
-    dec(fCount);
+    dec(Count);
   finally
     Safe.UnLock;
   end;
