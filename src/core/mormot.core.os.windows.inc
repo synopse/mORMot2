@@ -531,6 +531,20 @@ begin
         result := 'WINHTTP_TIMEOUT';
       ERROR_WINHTTP_INVALID_SERVER_RESPONSE:
         result := 'WINHTTP_INVALID_SERVER_RESPONSE';
+      10022:
+        result := 'WSAEINVAL';
+      10024:
+        result := 'WSAEMFILE';
+      10035:
+        result := 'WSAEWOULDBLOCK';
+      10038:
+        result := 'WSAENOTSOCK';
+      10060:
+        result := 'WSAETIMEDOUT';
+      10061:
+        result := 'WSAECONNREFUSED';
+      11003:
+        result := 'WSATRY_AGAIN';
       else
         result := nil;
     end;
