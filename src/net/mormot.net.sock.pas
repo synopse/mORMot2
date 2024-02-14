@@ -1312,12 +1312,13 @@ type
     // - is typically called from processing threads
     // - once data is recv/send from result^.Socket, please call PrepareGetNext()
     function GetNext(timeoutms: cardinal): PWinIocpSubscription;
-    /// retrieve the remote address of the last GetNext(wieAccept) call
-    // - you should call this function before any PrepareGetNext(one)
-    function GetNextAccept(one: PWinIocpSubscription; out Remote: TNetAddr): boolean;
-    /// notify IOCP that it needs to track the next events on this subscription
+    /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send
     function PrepareGetNext(one: PWinIocpSubscription): boolean;
+    /// retrieve the remote address of the last GetNext(wieAccept) call
+    // - this function includes PrepareGetNext(one)
+    function PrepareGetNextAccept(one: PWinIocpSubscription;
+      out Remote: TNetAddr): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
     /// how many processing threads are likely to call GetNext
