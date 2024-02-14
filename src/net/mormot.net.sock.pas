@@ -4378,10 +4378,10 @@ begin
       if endtix = 0 then
         endtix := start + timeoutMS
       else if Assigned(fOnGetOneIdle) and
-              (tix <> lasttix) then
+              (tix shr 6 <> lasttix) then
       begin
         fOnGetOneIdle(self, tix);
-        lasttix := tix; // no need to call too often
+        lasttix := tix shr 6; // call every 64ms at most
       end;
       if fTerminated then
         exit;
