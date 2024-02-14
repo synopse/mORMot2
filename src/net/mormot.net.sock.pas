@@ -1275,6 +1275,7 @@ type
     function HasCompleted: boolean;
   end;
 
+  {$M+}
   /// socket polling via Windows' IOCP API
   // - logic is inverted in respect to select() or poll/epoll() APIs so it
   // can't inherit from TPollAbstract, and provide its own stand-alone class
@@ -1282,12 +1283,13 @@ type
   protected
     fIocp: THandle;
     fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
-    fProcessingCount, fGetNextWait: integer;
-    fTerminated: boolean;
+    fProcessingCount, fPendingCount, fGetNextPending: integer;
+    fTerminated, fUnsubscribeShouldShutdownSocket: boolean;
     fEvent: TPollSocketEvent;
+    fOnLog: TSynLogProc;
   public
     /// initialize this IOCP queue for a number of processing thread and event
-    constructor Create(processing: integer; event: TPollSocketEvent);
+    constructor Create(event: TPollSocketEvent; processing: integer);
     /// finalize this IOCP queue
     destructor Destroy; override;
     /// subscribe for events on a given socket
@@ -1296,12 +1298,12 @@ type
     function Unsubscribe(one: PWinIocpSubscription): boolean;
     /// pick a pending task from the internal queue without any timeout
     // - is typically called from processing threads
-    // - once data is read/write from result^.socket, call PrepareGetNext()
+    // - once data is recv/send from result^.Socket, please call PrepareGetNext()
     function GetNext(timeoutms: cardinal = INFINITE): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next events on this subscription
     // - typically called after socket recv/send
     function PrepareGetNext(one: PWinIocpSubscription): boolean;
-    /// shutdown this IOCP process - called e.g. by Destroy
+    /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
     /// either pseRead or pseWrite event is assigned to this TWinIocp instance
     property Event: TPollSocketEvent
@@ -1309,7 +1311,25 @@ type
     /// how many processing threads are likely to call GetNext
     property ProcessingCount: integer
       read fProcessingCount;
+    /// flag set when Terminate has been called
+    property Terminated: boolean
+      read fTerminated;
+    /// how many notified events are currently in the internal queue
+    // - always returns 0 with IOCP because we can't know the internal state
+    property PendingCount: integer
+      read fPendingCount;
+    /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
+    property UnsubscribeShouldShutdownSocket: boolean
+      read fUnsubscribeShouldShutdownSocket write fUnsubscribeShouldShutdownSocket;
+    /// allow raw debugging via logs of the low-level process
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
+  published
+    /// how many TSocket instances are currently tracked
+    property Count: integer
+      read fOne.Count;
   end;
+  {$M-}
 
 {$endif OSWINDOWS}
 

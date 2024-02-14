@@ -446,12 +446,12 @@ type
 
 function wsarecv(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; var lpFlags: cardinal;
-   lpOverlapped: POverlapped; lpCompletionRoutine: pointer): integer; stdcall;
+   lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSARecv';
 
 function wsasend(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; dwFlags: cardinal;
-   lpOverlapped: POverlapped; lpCompletionRoutine: pointer): integer; stdcall;
+   lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSASend';
 
 function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
@@ -1362,9 +1362,9 @@ type
   PIocpSubscription = ^TIocpSubscription;
   TIocpSubscription = packed record
     head: TLockedListOne; // should be the first for TLockedList to work
-    overlapped: TOverlapped;
-    tag: TPollSocketTag;
+    over: TOverlapped;
     buf: TWsaBuf;
+    tag: TPollSocketTag;
     socket: TSocket;
   end;
 
@@ -1373,35 +1373,44 @@ type
 
 function TWinIocpSubscription.Tag: TPollSocketTag;
 begin
-  result := PIocpSubscription(@self)^.tag;
+  if @self = nil then
+    result := 0
+  else
+    result := PIocpSubscription(@self)^.tag;
 end;
 
 function TWinIocpSubscription.Socket: TNetSocket;
 begin
-  result := TNetSocket(PIocpSubscription(@self)^.socket);
+  if @self = nil then
+    result := nil
+  else
+    result := TNetSocket(PIocpSubscription(@self)^.socket);
 end;
 
 function TWinIocpSubscription.HasCompleted: boolean;
 begin
   result := (@self <> nil) and
-    (PtrUInt(PIocpSubscription(@self)^.overlapped.Internal) <> STATUS_PENDING);
+    (PtrUInt(PIocpSubscription(@self)^.over.Internal) <> STATUS_PENDING);
 end;
 
 
 { TWinIocp }
 
-constructor TWinIocp.Create(processing: integer; event: TPollSocketEvent);
+constructor TWinIocp.Create(event: TPollSocketEvent; processing: integer);
 begin
   if not (event in [pseRead, pseWrite]) then
     raise EWinIocp.CreateFmt('TWinIocp.Create(%s)', [ord(event)]);
-  fEvent := event;
   if processing = 0 then
     processing := SystemInfo.dwNumberOfProcessors;
   fIocp := IocpCreate(INVALID_HANDLE_VALUE, 0, nil, processing);
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
-  fOne.Init(SizeOf(TIocpSubscription));
+  fEvent := event;
   fProcessingCount := processing;
+  fOne.Init(SizeOf(TIocpSubscription));
+  if Assigned(fOnLog) then
+    fOnLog(sllDebug, 'Create event=% processing=%',
+      [POLL_SOCKET_EVENT[fEvent], fProcessingCount], self);
 end;
 
 procedure TWinIocp.Terminate;
@@ -1409,30 +1418,32 @@ var
   i: integer;
 begin
   fTerminated := true;
-  if fIocp <> 0 then
-    for i := 1 to fProcessingCount do
-      IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads
+  for i := 1 to fProcessingCount do
+    IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads/queue
 end;
 
 destructor TWinIocp.Destroy;
 var
   tix, endtix: cardinal;
 begin
+  if Assigned(fOnLog) then
+    fOnLog(sllDebug, 'Destroy % count=%',
+      [POLL_SOCKET_EVENT[fEvent], fOne.Count], self);
   if not fTerminated then
     Terminate;
   endtix := 0;
-  if fGetNextWait <> 0 then
+  if fGetNextPending <> 0 then // wait until pending GetNext() are terminated
     repeat
+      if Assigned(fOnLog) then
+        fOnLog(sllDebug, 'Destroy pending=%', [fGetNextPending], self);
       IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
       SleepHiRes(10);
-      if fGetNextWait = 0 then
-        break;
       tix := mormot.core.os.GetTickCount64 shr 10;
       if endtix = 0 then
         endtix := tix + 5
       else if tix > endtix then
         break; // never wait forever
-    until false;
+    until fGetNextPending = 0;
   if fIocp <> 0 then
     CloseHandle(fIocp);
   inherited Destroy;
@@ -1448,70 +1459,102 @@ begin
   if (one = nil) or
      fTerminated then
     exit;
-  // overlapped read or write with o^.buf.len=0 to avoid WSAENOBUFS
-  // and work with regular sockets recv/send calls as TPollSocketAbstract
+  // asynchronous overlapped read or write with o^.buf.len=0 to avoid WSAENOBUFS
+  // and work with regular sockets recv/send calls like TPollSocketAbstract
   bytes := 0;
   flags := 0;
   case fEvent of
     pseRead:
-      if (wsarecv(o^.socket, @o^.buf, 1, bytes, flags,
-                   @o^.overlapped, nil) <> NO_ERROR) and
-         (sockerrno <> WSAIOPENDING) then
-        exit;
+      result := // wsarecv=NO_ERROR if there is something to recv()
+        (wsarecv(o^.socket, @o^.buf, 1, bytes, flags, @o^.over) = NO_ERROR) or
+        (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data 
     pseWrite:
-      if (wsasend(o^.socket, @o^.buf, 1, bytes, 0,
-                   @o^.overlapped, nil) <> NO_ERROR) and
-         (sockerrno <> WSAIOPENDING) then
-        exit;
+      result :=
+        (wsasend(o^.socket, @o^.buf, 1, bytes, 0, @o^.over) = NO_ERROR) or
+        (sockerrno = WSAIOPENDING);
     end;
-  result := true;
+  if Assigned(fOnLog) then
+    fOnLog(sllTrace, 'PrepareGetNext(sock=%)=%', [pointer(o^.socket), result], self);
 end;
 
 function TWinIocp.GetNext(timeoutms: cardinal): PWinIocpSubscription;
 var
   bytes: cardinal;
-  one, dummy: pointer;
+  o, dummy: pointer;
+  one: PIocpSubscription absolute o;
 begin
   result := nil;
   if fTerminated then
     exit;
   repeat
-    one := nil;
+    o := nil;
     dummy := nil;
-    LockedInc32(@fGetNextWait);
-    IocpGetQueuedStatus(fIocp, bytes, dummy, one, timeoutms);
-    LockedDec32(@fGetNextWait);
+    LockedInc32(@fGetNextPending);
+    IocpGetQueuedStatus(fIocp, bytes, dummy, o, timeoutms);
+    LockedDec32(@fGetNextPending);
     if fTerminated or
-       (one = nil) then
+       (o = nil) then
       exit;
-    dec(PLockedListOne(one)); // from one^.overlapped to one^
-  until pointer(PIocpSubscription(one)^.head.sequence) = dummy; // avoid ABA issue
-  result := one;
+    dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over)); // from o^.over to o^
+    if Assigned(fOnLog) then
+      fOnLog(sllTrace, 'GetNext: sock=% %=%',
+        [pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
+  until pointer(one^.head.sequence) = dummy; // avoid ABA issue
+  result := o;
 end;
 
 function TWinIocp.Subscribe(socket: TNetSocket; tag: TPollSocketTag): PWinIocpSubscription;
 var
-  one: PIocpSubscription;
+  o: PIocpSubscription;
+  res: TNetResult;
+  sll: TSynLogInfo;
 begin
   result := nil;
   if fTerminated then
     exit;
-  if tag = 0 then
-    raise EWinIocp.Create('Unexpected TWinIocp.Subscribe with tag=0');
-  one := fOne.New;
-  one^.tag := tag;
-  one^.socket := TSocket(socket);
-  if (IocpCreate(one^.socket, fIocp, pointer(one^.head.sequence), 0) = NO_ERROR) and
-     PrepareGetNext(pointer(one)) then
-    result := pointer(one)
+  if (socket = nil) or
+     (tag = 0) then
+    raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
+  o := fOne.New;
+  o^.tag := tag;
+  o^.socket := TSocket(socket);
+  sll := sllTrace;
+  res := nrOk;
+  if IocpCreate(o^.socket, fIocp, pointer(o^.head.sequence), 0) = 0 then
+  begin
+    sll := sllLastError;
+    res := nrFatalError;
+  end
+  else if not PrepareGetNext(pointer(o)) then
+  begin
+    sll := sllWarning;
+    res := nrRetry;
+  end;
+  if Assigned(fOnLog) then
+    fOnLog(sll, 'Subscribe(socket=% seq=%)=% cnt=%',
+      [socket, pointer(o^.head.sequence), ToText(res)^, Count], self);
+  if res = nrOk then
+    result := pointer(o)
   else
-    fOne.Free(one);
+    fOne.Free(o);
 end;
 
 function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
+var
+  res: TNetResult;
 begin
-  result := (not fTerminated) and
-            fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
+  result := false;
+  if fTerminated or
+     (one = nil) then
+    exit;
+  res := nrOK;
+  if fUnsubscribeShouldShutdownSocket then
+    res := TNetSocket(PIocpSubscription(one)^.socket).ShutdownAndClose({rdwr=}false);
+  if Assigned(fOnLog) then
+    with PIocpSubscription(one)^ do
+      fOnLog(sllTrace, 'UnSubscribe(socket=% seq=%) cnt=% %',
+        [pointer(socket), pointer(head.sequence), Count, ToText(res)^], self);
+  result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
 end;
 
 
