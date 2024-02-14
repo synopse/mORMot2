@@ -19,8 +19,13 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$undef USE_WINIOCP}
-// to disable TWinIocp usage in this unit on Windows
+{$ifdef USE_WINIOCP}
+  {$define WINIOCP_READ}
+  {.$define WINIOCP_WRITE} // not yet finished
+{$else}
+  {$undef WINIOCP_READ}
+  {$undef WINIOCP_WRITE}
+{$endif USE_WINIOCP}
 
 uses
   sysutils,
@@ -110,10 +115,13 @@ type
     fReadThread: TSynThread;
     // how many bytes have been transmitted via Send() and Recv() methods
     fBytesRecv, fBytesSend: Int64;
-    {$ifdef USE_WINIOCP}
-    // opaque Windows IOCP instance returned by TWinIocp.Subscribe()
-    fIocpSub: PWinIocpSubscription;
-    {$endif USE_WINIOCP}
+    // opaque Windows IOCP instances returned by TWinIocp.Subscribe()
+    {$ifdef WINIOCP_READ}
+    fIocpRead: PWinIocpSubscription;
+    {$endif WINIOCP_READ}
+    {$ifdef WINIOCP_WRITE}
+    fIocpWrite: PWinIocpSubscription;
+    {$endif WINIOCP_WRITE}
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
     // - overriding this method is cheaper than the plain Create destructor
@@ -195,16 +203,21 @@ type
   /// callback prototype for TPollAsyncSockets.OnStop events
   TOnPollAsyncProc = procedure(Sender: TPollAsyncConnection) of object;
 
-  {$ifdef USE_WINIOCP}
-  TPollConnectionSockets = TWinIocp;
+  {$ifdef WINIOCP_READ}
+  TPollReadSockets = TWinIocp;
   {$else}
-  TPollConnectionSockets = class(TPollSockets)
+  TPollReadSockets = class(TPollSockets)
   protected
     function EnsurePending(tag: TPollSocketTag): boolean; override;
     procedure SetPending(tag: TPollSocketTag); override;
     function UnsetPending(tag: TPollSocketTag): boolean; override;
   end;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
+  {$ifdef WINIOCP_WRITE}
+  TPollWriteSockets = TWinIocp;
+  {$else}
+  TPollWriteSockets = TPollSockets;
+  {$endif WINIOCP_WRITE}
 
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
@@ -221,8 +234,8 @@ type
   // blocking process (e.g. computing requests answers) from OnRead callbacks
   TPollAsyncSockets = class
   protected
-    fRead: TPollConnectionSockets; // may be TWinIocp
-    fWrite: TPollSockets; // separated fWrite (short-term subscribe)
+    fRead: TPollReadSockets; // may be TWinIocp
+    fWrite: TPollWriteSockets; // separated fWrite (short-term subscribe)
     fProcessingRead, fProcessingWrite: integer;
     fSendBufferSize: integer; // retrieved at first connection Start()
     fReadCount: Int64;
@@ -290,12 +303,6 @@ type
     procedure ProcessWrite(const notif: TPollSocketResult);
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
-    /// low-level access to the polling class used for incoming data
-    property PollRead: TPollConnectionSockets
-      read fRead;
-    /// low-level access to the polling class used for outgoind data
-    property PollWrite: TPollSockets
-      write fWrite;
     /// some processing options
     property Options: TPollAsyncSocketsOptions
       read fOptions write fOptions;
@@ -334,12 +341,12 @@ type
     // - use with care: performance degrades with highly concurrent HTTP/1.1
     property ReadWaitMs: integer
       read fReadWaitMs write fReadWaitMs;
-    /// raw access to the asynchronous recv() process
-    property Reader: TPollConnectionSockets
+    /// low-level access to the polling class used for recv() data
+    property PollRead: TPollReadSockets
       read fRead;
-    /// raw access to the asynchronous send() process
-    property Writer: TPollSockets
-      read fWrite;
+    /// low-level access to the polling class used for send() data
+    property PollWrite: TPollWriteSockets
+      write fWrite;
   end;
 
   {$M-}
@@ -420,7 +427,7 @@ type
       read GetTotal;
   end;
 
-  {$ifdef USE_WINIOCP}
+  {$ifdef WINIOCP_READ}
   /// TAsyncConnectionsThread.Execute will directly call TWinIocp.GetNext()
   TAsyncConnectionsThreadProcess = (
     atpReadPending);
@@ -432,7 +439,7 @@ type
     atpReadPending
   );
   TAsyncConnectionsThreadProcesses = set of TAsyncConnectionsThreadProcess;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
 
   /// used to implement a thread poll to process TAsyncConnection instances
   TAsyncConnectionsThread = class(TSynThread)
@@ -445,14 +452,13 @@ type
     fIndex: integer;
     fName: RawUtf8;
     fCustomObject: TObject;
-    {$ifndef USE_WINIOCP}
+    {$ifndef WINIOCP_READ}
     fEvent: TSynEvent;
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingLastWakeUpCount: integer;
     function GetNextRead(out notif: TPollSocketResult): boolean;
-    procedure ReleaseEvent;
-      {$ifdef HASINLINE} inline; {$endif}
-    {$endif USE_WINIOCP}
+    procedure ReleaseEvent; {$ifdef HASINLINE} inline; {$endif}
+    {$endif WINIOCP_READ}
     procedure Execute; override;
   public
     /// initialize the thread
@@ -555,14 +561,14 @@ type
     fLastOperationIdleSeconds: cardinal;
     fKeepConnectionInstanceMS: cardinal;
     fLastOperationMS: Int64; // as set by ProcessIdleTix()
-    {$ifndef USE_WINIOCP}
+    {$ifndef WINIOCP_READ}
     fThreadReadPoll: TAsyncConnectionsThread;
     fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupLoad: integer;
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingAwakeCount: integer;
     fClientsEpoll: boolean; // = PollSocketClass.FollowEpoll
-    {$endif USE_WINIOCP}
+    {$endif WINIOCP_READ}
     fGC: array[1..2] of TAsyncConnectionsGC;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
@@ -586,9 +592,9 @@ type
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond; virtual;
-    {$ifndef USE_WINIOCP}
+    {$ifndef WINIOCP_READ}
     function ThreadPollingWakeup(Events: integer): PtrInt;
-    {$endif USE_WINIOCP}
+    {$endif WINIOCP_READ}
   public
     /// initialize the multiple connections
     // - don't use this constructor but inherited client/server classes
@@ -676,14 +682,14 @@ type
     /// allow to customize low-level options for processing
     property Options: TAsyncConnectionsOptions
       read fOptions write fOptions;
-    {$ifndef USE_WINIOCP}
+    {$ifndef WINIOCP_READ}
     // how many events a fast active thread is supposed to handle in its loop
     // for the acoThreadSmooting option in ThreadPollingWakeup()
     // - will wake up the threads only if the previous seem to be somewhat idle
     // - default value is (ThreadPoolCount/CpuCount)*8, with a minimum of 4
     property ThreadPollingWakeupLoad: integer
       read fThreadPollingWakeupLoad write fThreadPollingWakeupLoad;
-    {$endif USE_WINIOCP}
+    {$endif WINIOCP_READ}
     /// access to the associated log class
     property Log: TSynLogClass
       read fLog;
@@ -1129,11 +1135,11 @@ begin
 end;
 
 
-{$ifndef USE_WINIOCP}
+{$ifndef WINIOCP_READ}
 
-{ TPollConnectionSockets }
+{ TPollReadSockets }
 
-function TPollConnectionSockets.EnsurePending(tag: TPollSocketTag): boolean;
+function TPollReadSockets.EnsurePending(tag: TPollSocketTag): boolean;
 begin
   // fast O(1) flag access
   if tag = 0 then // tag = 0 at shutdown
@@ -1145,13 +1151,13 @@ begin
   end;
 end;
 
-procedure TPollConnectionSockets.SetPending(tag: TPollSocketTag);
+procedure TPollReadSockets.SetPending(tag: TPollSocketTag);
 begin
   if tag <> 0 then // tag = 0 at shutdown
     include(TPollAsyncConnection(tag).fFlags, fReadPending);
 end;
 
-function TPollConnectionSockets.UnsetPending(tag: TPollSocketTag): boolean;
+function TPollReadSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
   result := false;
   if tag <> 0 then
@@ -1167,7 +1173,7 @@ begin
     end;
 end;
 
-{$endif USE_WINIOCP}
+{$endif WINIOCP_READ}
 
 
 { TPollAsyncSockets }
@@ -1177,10 +1183,10 @@ constructor TPollAsyncSockets.Create(aOptions: TPollAsyncSocketsOptions;
 begin
   fOptions := aOptions;
   inherited Create;
-  fRead := TPollConnectionSockets.Create
-    {$ifdef USE_WINIOCP}(pseRead, aThreadCount){$endif};
+  fRead := TPollReadSockets.Create
+    {$ifdef WINIOCP_READ}(pseRead, aThreadCount){$endif};
   fRead.UnsubscribeShouldShutdownSocket := true;
-  fWrite := TPollSockets.Create;
+  fWrite := TPollWriteSockets.Create{$ifdef WINIOCP_WRITE}(pseWrite, 1){$endif};
 end;
 
 destructor TPollAsyncSockets.Destroy;
@@ -1255,7 +1261,8 @@ begin
       // unsubscribe and close the socket
       if fSubWrite in connection.fFlags then
         // write first because of fRead.UnsubscribeShouldShutdownSocket
-        fWrite.Unsubscribe(sock, TPollSocketTag(connection));
+        fWrite.Unsubscribe({$ifdef WINIOCP_WRITE} connection.fIocpWrite {$else}
+                           sock, TPollSocketTag(connection) {$endif});
       if connection.fSecure <> nil then
         try
           connection.fSecure := nil; // perform TLS shutdown and release context
@@ -1265,7 +1272,7 @@ begin
       if fSubRead in connection.fFlags then
         // note: fRead.UnsubscribeShouldShutdownSocket=true, so ShutdownAndClose
         // is done now on Epoll, or at next PollForPendingEvents()
-        fRead.Unsubscribe({$ifdef USE_WINIOCP} connection.fIocpSub {$else}
+        fRead.Unsubscribe({$ifdef WINIOCP_READ} connection.fIocpRead {$else}
                            sock, TPollSocketTag(connection) {$endif})
       else
         // close the socket even if not subscribed (e.g. HTTP/1.0)
@@ -1463,17 +1470,24 @@ begin
       exit
     else
     begin
-      {$ifdef USE_WINIOCP}
-      connection.fIocpSub := fRead.Subscribe(connection.fSocket, tag);
-      result := connection.fIocpSub <> nil;
+      {$ifdef WINIOCP_READ}
+      connection.fIocpRead := fRead.Subscribe(connection.fSocket, tag);
+      result := connection.fIocpRead <> nil;
       {$else}
       result := fRead.Subscribe(connection.fSocket, [pseRead], tag);
-      {$endif USE_WINIOCP}
+      {$endif WINIOCP_READ}
     end
   else if fSubWrite in connection.fFlags then
       exit
     else
+    begin
+      {$ifdef WINIOCP_WRITE}
+      connection.fIocpWrite := fWrite.Subscribe(connection.fSocket, tag);
+      result := connection.fIocpWrite <> nil;
+      {$else}
       result := fWrite.Subscribe(connection.fSocket, [pseWrite], tag);
+      {$endif WINIOCP_WRITE}
+    end;
   if result then
      if sub = pseRead then
        include(connection.fFlags, fSubRead)
@@ -1615,9 +1629,9 @@ begin
         // ensure this connection will be tracked for next recv()
         if connection <> nil then // UnlockAndCloseConnection() may set Free+nil
         begin
-          {$ifdef USE_WINIOCP}
-          fRead.PrepareGetNext(connection.fIocpSub); // overlapped WSARecv()
-          {$endif USE_WINIOCP}
+          {$ifdef WINIOCP_READ}
+          fRead.PrepareGetNext(connection.fIocpRead); // overlapped WSARecv()
+          {$endif WINIOCP_READ}
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
@@ -1691,7 +1705,8 @@ begin
           break // may block, try later
         else if res <> nrOk then
         begin
-          fWrite.Unsubscribe(connection.fSocket, ResToTag(notif));
+          fWrite.Unsubscribe({$ifdef WINIOCP_WRITE} connection.fIocpWrite {$else}
+            connection.fSocket, TPollSocketTag(connection) {$endif});
           exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write failed as % -> Unsubscribe(%,%) %', [ToText(res)^,
@@ -1723,16 +1738,21 @@ begin
         if connection.fWr.Len = 0 then
         begin
           // no further ProcessWrite unless slot.fWr contains pending data
-          fWrite.Unsubscribe(connection.fSocket, ResToTag(notif));
+          fWrite.Unsubscribe({$ifdef WINIOCP_WRITE} connection.fIocpWrite {$else}
+            connection.fSocket, TPollSocketTag(connection) {$endif});
           exclude(connection.fFlags, fSubWrite);
           if fDebugLog <> nil then
             DoLog('Write Unsubscribe(sock=%,handle=%)=% %',
              [pointer(connection.fSocket), connection.Handle, fWrite]);
         end;
       end;
+      {$ifdef WINIOCP_WRITE}
+      if connection.fWr.Len <> 0 then
+        fWrite.PrepareGetNext(connection.fIocpWrite); // overlapped WSASend()
+      {$endif WINIOCP_WRITE}
     finally
       if res in [nrOk, nrRetry] then
-        connection.UnLock(true)
+        connection.UnLock({writer=}true)
       else
         // sending error or AfterWrite abort
         UnlockAndCloseConnection(true, connection, 'ProcessWrite');
@@ -1833,9 +1853,9 @@ begin
   fOwner := aOwner;
   fProcess := aProcess;
   fIndex := aIndex;
-  {$ifndef USE_WINIOCP}
+  {$ifndef WINIOCP_READ}
   fEvent := TSynEvent.Create;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
   fOnThreadTerminate := fOwner.fOnThreadTerminate;
   inherited Create({suspended=}false);
 end;
@@ -1843,13 +1863,13 @@ end;
 destructor TAsyncConnectionsThread.Destroy;
 begin
   inherited Destroy;
-  {$ifndef USE_WINIOCP}
+  {$ifndef WINIOCP_READ}
   fEvent.Free;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
   FreeAndNil(fCustomObject);
 end;
 
-{$ifndef USE_WINIOCP}
+{$ifndef WINIOCP_READ}
 
 procedure TAsyncConnectionsThread.ReleaseEvent;
 begin
@@ -1878,15 +1898,15 @@ begin
     end;
 end;
 
-{$endif USE_WINIOCP}
+{$endif WINIOCP_READ}
 
 procedure TAsyncConnectionsThread.Execute;
 var
-  {$ifdef USE_WINIOCP}
+  {$ifdef WINIOCP_READ}
   sub: PWinIocpSubscription;
   {$else}
   new, ms: integer;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
   notif: TPollSocketResult;
 begin
   FormatUtf8('R%:%', [fIndex, fOwner.fProcessName], fName);
@@ -1899,7 +1919,7 @@ begin
           (fOwner.fThreadClients.Count > 0) and
           (InterlockedDecrement(fOwner.fThreadClients.Count) >= 0) do
       fOwner.ThreadClientsConnect;
-    {$ifdef USE_WINIOCP} // TWinIocp needs only atpReadPending threads
+    {$ifdef WINIOCP_READ} // TWinIocp needs only atpReadPending threads
     while not Terminated and
           (fOwner.fClients <> nil) and
           (fOwner.fClients.fRead <> nil) do
@@ -1987,7 +2007,7 @@ begin
         raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
           [self, ord(fProcess)]);
       end;
-    {$endif USE_WINIOCP}
+    {$endif WINIOCP_READ}
     fOwner.DoLog(sllInfo, 'Execute: done %', [fName], self);
   except
     on E: Exception do
@@ -2021,12 +2041,12 @@ begin
   fLastOperationReleaseMemorySeconds := 60;
   fLastOperationSec := Qword(mormot.core.os.GetTickCount64) div 1000; // ASAP
   fKeepConnectionInstanceMS := 100;
-  {$ifndef USE_WINIOCP}
+  {$ifndef WINIOCP_READ}
   fThreadPollingWakeupLoad :=
     (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
   if fThreadPollingWakeupLoad < 4 then
     fThreadPollingWakeupLoad := 4; // below 4, the whole algorithm seems pointless
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
   fLog := aLog;
   fConnectionClass := aConnectionClass;
   opt := [];
@@ -2035,7 +2055,9 @@ begin
   fClients := TAsyncConnectionsSockets.Create(opt, aThreadPoolCount);
   fClients.fOwner := self;
   fClients.OnStart := ProcessClientStart;
+  {$ifndef WINIOCP_WRITE}
   fClients.fWrite.OnGetOneIdle := ProcessIdleTix;
+  {$endif WINIOCP_WRITE}
   if Assigned(fLog) and
      (acoDebugReadWriteLog in aOptions) then
   begin
@@ -2049,7 +2071,7 @@ begin
   // initiate the read/receive thread(s)
   fThreadPoolCount := aThreadPoolCount;
   SetLength(fThreads, fThreadPoolCount);
-  {$ifdef USE_WINIOCP}
+  {$ifdef WINIOCP_READ}
   for i := 0 to aThreadPoolCount - 1 do
     fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   {$else}
@@ -2063,7 +2085,7 @@ begin
     for i := 1 to aThreadPoolCount - 1 do
       fThreads[i] := TAsyncConnectionsThread.Create(self, atpReadPending, i);
   end;
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
   tix := mormot.core.os.GetTickCount64 + 7000;
   repeat
      if AllThreadsStarted then
@@ -2199,10 +2221,10 @@ begin
         with fThreads[i] do
           if fExecuteState = esRunning then
           begin
-            {$ifndef USE_WINIOCP}
+            {$ifndef WINIOCP_READ}
             if fEvent <> nil then
               fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
-            {$endif USE_WINIOCP}
+            {$endif WINIOCP_READ}
             if p and 15 = 0 then
               DoLog(sllTrace, 'Shutdown unfinished=%', [fThreads[i]], self);
             inc(n);
@@ -2307,7 +2329,7 @@ end;
 // - on Linux, waking up threads is done via efficient blocking eventfd()
 // - on Windows, TWinIocp will directly handle atpReadPending thread wakening
 
-{$ifndef USE_WINIOCP}
+{$ifndef WINIOCP_READ}
 function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
 var
   i: PtrInt;
@@ -2378,7 +2400,7 @@ begin
   for i := 0 to result - 1 do
     fThreads[ndx[i]].fEvent.SetEvent; // on Linux, uses eventfd()
 end;
-{$endif USE_WINIOCP}
+{$endif WINIOCP_READ}
 
 procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArgs: array of const; Instance: TObject);
@@ -2434,7 +2456,7 @@ begin
     include(aConnection.fFlags, fInList);
     LockedInc32(@fConnectionCount);
   end
-  else if {$ifndef USE_WINIOCP} (fThreadReadPoll = nil) or {$endif}
+  else if {$ifndef WINIOCP_READ} (fThreadReadPoll = nil) or {$endif}
           aAddAndSubscribe then
     // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
     ConnectionAdd(aConnection);
@@ -2861,7 +2883,7 @@ end;
 
 function TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection): boolean;
 begin
-  {$ifndef USE_WINIOCP}
+  {$ifndef WINIOCP_READ}
   if fThreadReadPoll <> nil then
   begin
     // initial accept() will be directly redirected to atpReadPending threads
@@ -2872,7 +2894,7 @@ begin
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
   else
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
     result := false; // Subscribe() is done by TPollAsyncSockets.Start caller
 end;
 
@@ -2919,7 +2941,7 @@ begin
   until false;
 end;
 
-{$ifdef USE_WINIOCP}
+{$ifdef WINIOCP_READ}
 procedure TAsyncServer.Shutdown;
 begin
   inherited Shutdown;
@@ -2940,10 +2962,8 @@ begin
       if not Terminated then
       begin
         Terminate;
-        {$ifndef USE_WINIOCP}
         if fEvent <> nil then
           fEvent.SetEvent;
-        {$endif USE_WINIOCP}
       end;
   if fServer.SockIsDefined then
   begin
@@ -2971,7 +2991,7 @@ begin
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
   end;
 end;
-{$endif USE_WINIOCP}
+{$endif WINIOCP_READ}
 
 destructor TAsyncServer.Destroy;
 var
@@ -3077,7 +3097,7 @@ begin
             ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
           if Terminated then
           begin
-            {$ifndef USE_WINIOCP}
+            {$ifndef WINIOCP_READ}
             // specific behavior from Shutdown method
             if fClientsEpoll and
                (res = nrOK) then
@@ -3088,7 +3108,7 @@ begin
               len := 1;
               client.Send(@len, len); // release touchandgo.WaitFor
             end;
-            {$endif USE_WINIOCP}
+            {$endif WINIOCP_READ}
             break;
           end;
           {if res = nrRetry then
@@ -3852,11 +3872,11 @@ end;
 
 function THttpAsyncServer.GetApiVersion: RawUtf8;
 begin
-  {$ifdef USE_WINIOCP}
+  {$ifdef WINIOCP_READ}
   result := 'WinIocp';
   {$else}
   result := 'WinSock';
-  {$endif USE_WINIOCP}
+  {$endif WINIOCP_READ}
 end;
 
 procedure THttpAsyncServer.IdleEverySecond;
@@ -3935,11 +3955,11 @@ begin
       tix := mormot.core.os.GetTickCount64 shr 16; // delay=500 after 1 min idle
       lasttix := tix;
       ms := 1000; // fine if OnGetOneIdle is called in-between
-      {$ifndef USE_WINIOCP}
+      {$ifndef WINIOCP_READ}
       if fAsync.fClientsEpoll then
         if fCallbackSendDelay <> nil then
           ms := fCallbackSendDelay^; // for WebSockets frame gathering
-      {$endif USE_WINIOCP}
+      {$endif WINIOCP_READ}
       while not Terminated and
             not fAsync.Terminated do
         if fAsync.fClients.fWrite.Count + fAsync.fClients.fWrite.SubscribeCount = 0 then
