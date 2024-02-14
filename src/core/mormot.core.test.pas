@@ -1605,7 +1605,7 @@ begin
   inherited Create(Ident);
   with TSynLogTestLog.Family do
   begin
-    if integer(Level) = 0 then // if no exception is set
+    if integer(Level) = 0 then // if no exception is set: at least main errors
       Level := [sllException, sllExceptionOS, sllFail];
     if AutoFlushTimeOut = 0 then
       // flush any pending text into .log file every 2 sec

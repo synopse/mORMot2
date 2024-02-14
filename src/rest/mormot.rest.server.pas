@@ -6098,10 +6098,10 @@ var
   n: TRestNode;
 begin
   result := ''; // just concatenate the counters for logging
-  for m := low(m) to high(m) do
+  for m := low(fTreeCount) to high(fTreeCount) do
     if fTreeCount[m] <> 0 then
       result := FormatUtf8('% %=%', [result, ToText(m), fTreeCount[m]]);
-  for n := low(n) to high(n) do
+  for n := low(fNodeCount) to high(fNodeCount) do
     if fNodeCount[n] <> 0 then
       result := FormatUtf8('% %=%', [result, ToText(n)^, fNodeCount[n]]);
 end;
@@ -6932,7 +6932,7 @@ begin
     fRouterSafe.WriteUnLock;
   end;
   if log <> nil then
-    log.Log(sllDebug, 'ComputeRoutes %: %',
+    log.Log(sllDebug, 'ComputeRoutes %:%',
       [fModel.Root, fRouter.InfoText], self);
 end;
 
