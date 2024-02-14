@@ -1279,6 +1279,7 @@ type
   /// socket polling via Windows' IOCP API
   // - logic is inverted in respect to select() or poll/epoll() APIs so it
   // can't inherit from TPollAbstract, and provide its own stand-alone class
+  // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
   protected
     fIocp: THandle;

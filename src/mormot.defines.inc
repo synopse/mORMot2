@@ -749,10 +749,12 @@
 
   {$ifndef ONLYUSEHTTPSOCKET}
     {$define USEWININET}      // publish TWinINet/TWinHttp/TWinHttpAPI classes
-    {$define USE_WINIOCP}     // I/O completion ports API fine under Windows
-    // (under Linux/POSIX, we fallback to a classical event-driven pool)
     {$define USEHTTPSYS}      // enable http.sys kernel-mode Web server
   {$endif ONLYUSEHTTPSOCKET}
+
+  {$define USE_WINIOCP}     // I/O completion ports API is fine under Windows
+  // (as used by mormot.core.threads and mormot.net.async)
+  // (under Linux/POSIX, we fallback to a classical event-driven pool)
 
   {$ifndef NOSSPIAUTH}        // from mormot.lib.sspi
     {$define DOMAINRESTAUTH}  // enable SSPI in mormot.rest.client/server
@@ -763,6 +765,7 @@
 {$ifdef OSPOSIX}
 
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
+  {$undef USE_WINIOCP}        // disable any Windows-specific code
 
   {$ifdef OSANDROID}
 
