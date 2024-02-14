@@ -572,6 +572,7 @@ type
     {$endif WINIOCP_READ}
     fGC: array[1..2] of TAsyncConnectionsGC;
     fOnIdle: array of TOnPollSocketsIdle;
+    fLastTixIdle: cardinal;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
       Address, Port: RawUtf8;
@@ -593,6 +594,8 @@ type
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond; virtual;
+    function WriteGetOne(timeout: integer; out notif: TPollSocketResult;
+      accept: PNetAddr): boolean;
     {$ifndef WINIOCP_READ}
     function ThreadPollingWakeup(Events: integer): PtrInt;
     {$endif WINIOCP_READ}
@@ -2851,6 +2854,45 @@ begin
        MicroSecFrom(start)], self);
 end;
 
+function TAsyncConnections.WriteGetOne(timeout: integer;
+  out notif: TPollSocketResult; accept: PNetAddr): boolean;
+{$ifdef WINIOCP_WRITE}
+var
+  sub: PWinIocpSubscription;
+  tix: Int64;
+  tix32: cardinal;
+begin
+  result := false;
+  sub := fClients.fWrite.GetNext(timeout);
+  if Terminated then
+    exit;
+  if fOnIdle <> nil then
+  begin
+    tix := mormot.core.os.GetTickCount64;
+    tix32 := tix shr 6; // call every 64ms at most
+    if tix32 <> fLastTixIdle then
+    begin
+      fLastTixIdle := tix32;
+      ProcessIdleTix(self, tix);
+    end;
+    if Terminated then
+      exit;
+  end;
+  if sub = nil then
+    exit;
+  if (accept <> nil) and
+     (sub.Event = wieAccept) then
+    if not fClients.fWrite.PrepareGetNextAccept(sub, accept^) then
+      exit;
+  SetRes(notif{%H-}, sub.Tag, [pseWrite]);
+  result := true;
+end;
+{$else}
+begin
+  result := fClients.fWrite.GetOne(timeout, 'AW', notif);
+end;
+{$endif WINIOCP_WRITE}
+
 procedure TAsyncConnections.ProcessIdleTix(Sender: TObject; NowTix: Int64);
 var
   sec: TAsyncConnectionSec;
@@ -3067,32 +3109,38 @@ begin
     if not fServer.SockIsDefined then // paranoid check
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
+    async := false; // at least first Accept() will be blocking
     if not fExecuteAcceptOnly then
       // setup the main bound connection to be polling together with the writes
+      {$ifdef WINIOCP_WRITE}
+      if fClients.fWrite.Subscribe(wieAccept, fServer.Sock, {tag=}0) <> nil then
+        async := true
+      {$else}
       if fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {tag=}0) then
         fClients.fWrite.PollForPendingEvents(0) // actually subscribe
+      {$endif WINIOCP_WRITE}
       else
-        raise EAsyncConnections.CreateUtf8('%.Execute: no accept sub', [self]);
+        raise EAsyncConnections.CreateUtf8('%.Execute: accept subscribe', [self]);
     // main socket accept/send processing loop
-    async := false; // first Accept() will be blocking
     start := 0;
     while not Terminated do
     begin
-      if not async then
-        PQWord(@notif)^ := 0 // blocking initial accept()
-      else if not fClients.fWrite.GetOne(900, 'AW', notif) then
+      PQWord(@notif)^ := 0; // direct blocking accept() by default
+      if async and
+         not WriteGetOne(1000, notif, @sin) then
         continue;
-      if Terminated then
-        break;
       if ResToTag(notif) = 0 then // no tag = main accept()
       begin
         repeat
           // could we Accept one or several incoming connection(s)?
-          // async=true to expect client in non-blocking mode from now on
-          // will use accept4() single syscall on Linux
           {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
-          res := fServer.Sock.Accept(client, sin,
-            {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
+          {$ifdef WINIOCP_WRITE}
+          if async then
+            res := nrOk // WriteGetOne() did accept a new sin
+          else
+          {$endif WINIOCP_WRITE}
+            res := fServer.Sock.Accept(client, sin, // = accept4() on Linux
+              {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
           {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
             ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
           if Terminated then
@@ -3114,7 +3162,7 @@ begin
           {if res = nrRetry then
             DoLog(sllCustom1, 'Execute: Accept(%) retry', [fServer.Port], self);}
           if res = nrRetry then
-            break; // 10 seconds timeout
+            break; // timeout
           if (fBanned <> nil) and
              (fBanned.Count <> 0) and
              fBanned.IsBanned(sin) then // IP filtering from blacklist
@@ -3221,7 +3269,7 @@ begin
         // will first connect some clients in this main thread
         ThreadClientsConnect;
     while not Terminated do
-      if fClients.fWrite.GetOne(1000, 'C', notif) then
+      if WriteGetOne(1000, notif, nil) then
         fClients.ProcessWrite(notif);
     DoLog(sllInfo, 'Execute: done % C', [fProcessName], self);
   except
@@ -3962,7 +4010,8 @@ begin
       {$endif WINIOCP_READ}
       while not Terminated and
             not fAsync.Terminated do
-        if fAsync.fClients.fWrite.Count + fAsync.fClients.fWrite.SubscribeCount = 0 then
+        if {$ifndef WINIOCP_WRITE} fAsync.fClients.fWrite.SubscribeCount + {$endif}
+             fAsync.fClients.fWrite.Count = 0  then
         begin
           // no socket/poll/epoll API nedeed (most common case)
           if (fCallbackSendDelay <> nil) and
@@ -3986,7 +4035,7 @@ begin
         begin
           // some huge packets queued for async sending (seldom)
           // note: fWrite.GetOne() calls ProcessIdleTix() while looping
-          if fAsync.fClients.fWrite.GetOne(ms, 'W', notif) then
+          if fAsync.WriteGetOne(ms, notif, nil) then
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then
           begin
