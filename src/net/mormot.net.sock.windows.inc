@@ -456,22 +456,22 @@ function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; stdcall;
   external ws2 name 'select';
 
-function recv(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
+function recv(s: TSocket; Buf: pointer; len, flags: integer): integer; stdcall;
   external ws2 name 'recv';
 
 type
   TWsaBuf = record
-    len: cardinal;
-    buf: PByteArray;
+    cLength: cardinal;
+    pBuffer: pointer;
   end;
   PWsaBuf = ^TWsaBuf;
 
-function WSARecv(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+function WSARecv(s : TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; var lpFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSARecv';
 
-function WSASend(s : TSocket; buf: PWsaBuf; dwBufferCount: cardinal;
+function WSASend(s : TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; dwFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSASend';
@@ -482,14 +482,14 @@ function WSAIoctl(s : TSocket; dwIoControlCode: cardinal; lpvInBuffer: pointer;
    lpCompletionRoutine: pointer): integer; stdcall;
   external ws2 name 'WSAIoctl';
 
-function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
+function recvfrom(s: TSocket; Buf: pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; stdcall;
   external ws2 name 'recvfrom';
 
-function send(s: TSocket; Buf: Pointer; len, flags: integer): integer; stdcall;
+function send(s: TSocket; Buf: pointer; len, flags: integer): integer; stdcall;
   external ws2 name 'send';
 
-function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
+function sendto(s: TSocket; Buf: pointer; len, flags: integer;
    addrto: PSockAddr; tolen: integer): integer; stdcall;
   external ws2 name 'sendto';
 
@@ -942,7 +942,7 @@ var
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWORD; Reserved: pointer;
       pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
   SendARP: function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
-    PhyAddrLen: Pointer): DWORD; stdcall;
+    PhyAddrLen: pointer): DWORD; stdcall;
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
     pOutBufLen: PULONG): DWORD; stdcall;
   GetBestInterface: function(dwDestAddrIPv4: cardinal;
@@ -1401,10 +1401,11 @@ end;
 
 type
   // one overlapped structure for each TWinIocpEvent
-  TOverlappedEvent = packed record
+  TOverlappedEvent = record // should NOT be packed
     prepared: TLightLock;
     overlapped: TOverlapped;
     event: TWinIocpEvent; // should appear just after the TOverlapped
+    buf: TWsaBuf;
   end;
 
   // data structure returned by TWinIocp.Subscribe as PWinIocpSubscription
@@ -1536,35 +1537,39 @@ const
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
 function TWinIocp.PrepareNext(one: PWinIocpSubscription;
-  event: TWinIocpEvent): boolean;
+  event: TWinIocpEvent; buf: pointer; buflen: integer): boolean;
 var
   bytes, flags: cardinal;
   sll: TSynLogInfo;
   o: PIocpSubscription absolute one;
-  over: ^TOverlappedEvent;
+  ov: ^TOverlappedEvent;
   err: PUtf8Char;
 begin
   result := false;
   if (one = nil) or
      fTerminated then
     exit;
-  over := @o^.over[event]; // each event has its own TOverlappedEvent buffer
-  if not over^.prepared.TryLock then
+  ov := @o^.over[event]; // each event has its own TOverlappedEvent buffer
+  if not ov^.prepared.TryLock then
     raise EWinIocp.CreateFmt('TWinIocp.PrepareGetNet: concurrent %s on %x',
       [IOCP_EVENT[event], integer(o^.socket)]);
   err := nil;
   bytes := 0;
   flags := 0;
+  if buflen <= 0 then
+    buf := nil; // ensure consistent TWsaBuf
+  ov^.buf.pBuffer := buf;
+  ov^.buf.cLength := buflen;
   case event of
     // asynchronous overlapped read or write with fWsaBuf.len=0 to avoid WSAENOBUFS
     // and work with regular sockets recv/send calls like TPollSocketAbstract
     wieRecv:
       result := // WSARecv=NO_ERROR if there is something to recv()
-        (WSARecv(o^.socket, @fWsaBuf, 1, bytes, flags, @over^.overlapped) = NO_ERROR) or
-        (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data 
+        (WSARecv(o^.socket, ov^.buf, 1, bytes, flags, @ov^.overlapped) = NO_ERROR) or
+        (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data
     wieSend:
       result :=
-        (WSASend(o^.socket, @fWsaBuf, 1, bytes, 0, @over^.overlapped) = NO_ERROR) or
+        (WSASend(o^.socket, ov^.buf, 1, bytes, 0, @ov^.overlapped) = NO_ERROR) or
         (sockerrno = WSAIOPENDING);
     // overlapped AcceptEx() to be followed by GetNextAcceptAndPrepare()
     wieAccept:
@@ -1578,7 +1583,7 @@ begin
           fAcceptSocket := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
           result := acceptex(
                      o^.Socket, TSocket(fAcceptSocket), pointer(fAcceptExBuf), 0,
-                     ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @over^.overlapped) or
+                     ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @ov^.overlapped) or
                     (sockerrno = WSAIOPENDING)
         end
         else
@@ -1590,7 +1595,7 @@ begin
     end;
   if err <> nil then
   begin
-    over^.prepared.UnLock;
+    ov^.prepared.UnLock;
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
       [IOCP_EVENT[event], err, integer(o^.socket)]);
   end;
@@ -1598,20 +1603,20 @@ begin
   begin
     sll := sllTrace;
     if not result then
-      sll := sllWarning;
+      sll := sllLastError;
     fOnLog(sll, 'PrepareNext(%%)=%',
       [IOCP_EVENT[event], pointer(o^.socket), result], self);
   end;
 end;
 
 function TWinIocp.GetNext(timeoutms: cardinal;
-  out event: TWinIocpEvent): PWinIocpSubscription;
+  out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
 var
-  bytes: cardinal;
   o, dummy: pointer;
   sll: TSynLogInfo;
   one: PIocpSubscription absolute o;
 begin
+  bytes := 0;
   result := nil;
   if fTerminated then
     exit;
@@ -1639,7 +1644,8 @@ begin
       sll := sllError; // this TOverlappedEvent should be locked/prepared
     if Assigned(fOnLog) then
       if sll = sllTrace then
-        fOnLog(sll, 'GetNext=%%', [IOCP_EVENT[event], pointer(one^.socket)], self)
+        fOnLog(sll, 'GetNext=%% %',
+          [IOCP_EVENT[event], pointer(one^.socket), bytes], self)
       else
         fOnLog(sll, 'GetNext=%% %=%', [IOCP_EVENT[event],
           pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
@@ -1682,7 +1688,7 @@ begin
   Socket := fAcceptSocket;
   fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
-  result := PrepareNext(one, wieAccept);
+  result := PrepareNext(one, wieAccept, nil, 0);
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'GetNextAcceptAndPrepare(%)=% %',
       [pointer(one^.socket), result, Remote.IPShort], self);

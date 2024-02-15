@@ -1286,8 +1286,7 @@ type
   /// socket polling via Windows' IOCP API
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
   // inherit from TPollAbstract, and requires its own stand-alone class
-  // - this class won't handle any recv/send buffers (to avoid WSAENOBUFS errors),
-  // but will detect pending wieRecv/wieSend events on a set of subscribed sockets
+  // - will handle wieRecv/wieSend events on a set of subscribed sockets
   // - it could also track asynchronous AcceptEx() calls as wieAccept event
   // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
@@ -1300,7 +1299,6 @@ type
     fAcceptExUsed: TLightLock; // can track only a single AcceptEx()
     fAcceptSocket: TNetSocket;
     fAcceptExBuf: TBytes;
-    fWsaBuf: array[0..1] of pointer; // void TWsaBuf with len=0
   public
     /// initialize this IOCP queue for a number of processing thread
     constructor Create(processing: integer = 1);
@@ -1317,13 +1315,17 @@ type
     // - is typically called from processing threads
     // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
     // call PrepareNext()
-    // - for wieAccept, call GetNextAcceptAndPrepare()
+    // - for wieAccept, call then GetNextAcceptAndPrepare()
     function GetNext(timeoutms: cardinal;
-      out event: TWinIocpEvent): PWinIocpSubscription;
+      out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next event on this subscription
-    // - typically called after socket recv/send
-    function PrepareNext(one: PWinIocpSubscription;
-      event: TWinIocpEvent): boolean;
+    // - typically called after socket recv/send to re-subscribe for events
+    // - for wieRecv events, you should better not supply any buf/buflen to
+    // avoid potential WSAENOBUFS errors (the "zero read byte trick")
+    // - for wieSend, you would rather specify a buffer to be sent asynchronously
+    // and avoid GetNext() to return immediately even if send() would fail
+    function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
+      buf: pointer; buflen: integer): boolean;
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
     // - includes PrepareNext(one) to accept the next incoming socket
     function GetNextAcceptAndPrepare(one: PWinIocpSubscription;
