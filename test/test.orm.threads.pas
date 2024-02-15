@@ -128,11 +128,11 @@ type
   published
     /// initialize fDatabase and create MaxThreads threads for clients
     procedure CreateThreadPool;
+    /// direct test of its RESTful methods
+    procedure _TRestServerDB;
 {$ifdef FORCE_TCPONLY}
   public
 {$endif FORCE_TCPONLY}
-    /// direct test of its RESTful methods
-    procedure _TRestServerDB;
     /// test via TRestClientDB instances
     procedure _TRestClientDB;
     {$ifdef HAS_NAMEDPIPES}
@@ -346,13 +346,16 @@ begin
             log.Log(sllTrace, 'Execute wait', self);
           end;
         finally
-          log.Log(sllTrace, 'Execute finally', self);
+          log.Log(sllTrace, 'Execute finally pending=%',
+            [fTest.fPendingThreadCount], self);
           for i := 0 to high(Rest) do
             if Rest[i] <> fTest.fDatabase then
               FreeAndNil(Rest[i]);
           fProcessFinished := true;
           if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
             fTest.fPendingThreadFinished.SetEvent; // notify all finished
+          log.Log(sllTrace, 'Execute SetEvent pending=%',
+            [fTest.fPendingThreadCount], self);
           log := nil;
         end;
       except
@@ -543,7 +546,8 @@ begin
         fHttpServer.Route.Get('/info', '/root/timestamp/info');
         fHttpServer.Route.Get('/people/<id>', '/root/people/<id>');
       end;
-      //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port); readln;
+      //writeln('server running on ',fDatabase.Model.Root,':',fHttpserver.Port);
+      //ConsoleWaitForEnterKey;
       {$ifdef CPUARM}
       SleepHiRes(10); // may be needed on slow RaspPi e.g.
       {$endif CPUARM}
