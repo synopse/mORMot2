@@ -10473,7 +10473,7 @@ var
   read, err: integer;
 begin
   read := SSL_read(fSsl, Buffer, Length);
-  if read < 0 then
+  if read <= 0 then // read operation was not successful
   begin
     err := SSL_get_error(fSsl, read);
     case err of
@@ -10492,7 +10492,7 @@ begin
        (fLastError <> nil) then
       SSL_error(err, fLastError^);
   end
-  else
+  else // return value is number of bytes actually read from the TLS connection
   begin
     Length := read;
     result := nrOK;
@@ -10509,7 +10509,7 @@ var
   sent, err: integer;
 begin
   sent := SSL_write(fSsl, Buffer, Length);
-  if sent < 0 then
+  if sent <= 0 then // write operation was not successful
   begin
     err := SSL_get_error(fSsl, sent);
     case err of
@@ -10528,7 +10528,7 @@ begin
        (fLastError <> nil) then
       SSL_error(err, fLastError^);
   end
-  else
+  else // return value is number of bytes actually written to the TLS connection
   begin
     Length := sent;
     result := nrOK;
