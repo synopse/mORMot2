@@ -1259,7 +1259,7 @@ function ToText(ev: TPollSocketEvents): TShort8; overload;
 type
   EWinIocp = class(ExceptionWithProps);
 
-  /// define which events TWinIocp should monitor
+  /// define the events TWinIocp can monitor
   TWinIocpEvent = (
     wieRecv,
     wieSend,
@@ -1274,55 +1274,59 @@ type
   TWinIocpSubscription = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// return the TWinIocpEvent associated with a Subscribe() call
-    function Event: TWinIocpEvent;
     /// return the TPollSocketTag associated with a Subscribe() call
     function Tag: TPollSocketTag;
     /// return the TNetSocket associated with a Subscribe() call
     function Socket: TNetSocket;
     /// check the overlapped status of a Subscribe() call
-    function HasCompleted: boolean;
+    function HasCompleted(event: TWinIocpEvent): boolean;
   end;
 
   {$M+}
   /// socket polling via Windows' IOCP API
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
   // inherit from TPollAbstract, and requires its own stand-alone class
-  // - this class won't handle any recv/send buffers, but will detect pending
-  // wieRecv/wieSend event on a set of subscribed sockets
+  // - this class won't handle any recv/send buffers (to avoid WSAENOBUFS errors),
+  // but will detect pending wieRecv/wieSend events on a set of subscribed sockets
   // - it could also track asynchronous AcceptEx() calls as wieAccept event
   // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
   protected
-    fIocp: THandle;
-    fOne: TLockedList; // O(1) memory allocation/recycling of Subscribe buffers
-    fProcessingCount, fPendingCount, fGetNextPending: integer;
-    fTerminated, fUnsubscribeShouldShutdownSocket: boolean;
+    fOne: TLockedList; // O(1) allocate/recycle PWinIocpSubscription instances
+    fProcessingCount, fGetNextPending: integer;
+    fTerminated, fUnsubscribeShutdownSocket: boolean;
     fOnLog: TSynLogProc;
+    fIocp: THandle;
     fAcceptExUsed: TLightLock; // can track only a single AcceptEx()
     fAcceptSocket: TNetSocket;
     fAcceptExBuf: TBytes;
+    fWsaBuf: array[0..1] of pointer; // void TWsaBuf with len=0
   public
     /// initialize this IOCP queue for a number of processing thread
     constructor Create(processing: integer = 1);
     /// finalize this IOCP queue
     destructor Destroy; override;
-    /// subscribe for events on a given socket
-    function Subscribe(event: TWinIocpEvent; socket: TNetSocket;
+    /// associate this IOCP queue to a given socket
+    // - no event is actually tracked, until PrepareGetNext() is called
+    // - the IOCP API limits a socket to be tracked by a single TWinIocp queue
+    function Subscribe(socket: TNetSocket;
       tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
-    // - only a single wieAccept subscription is allowed
     function Unsubscribe(one: PWinIocpSubscription): boolean;
-    /// pick a pending task from the internal queue without any timeout
+    /// pick a pending task from the internal queue within a specified timeout
     // - is typically called from processing threads
-    // - once data is recv/send from result^.Socket, please call PrepareGetNext()
-    function GetNext(timeoutms: cardinal): PWinIocpSubscription;
+    // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
+    // call PrepareGetNext()
+    // - for wieAccept, call GetNextAcceptAndPrepare()
+    function GetNext(timeoutms: cardinal;
+      out event: TWinIocpEvent): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send
-    function PrepareGetNext(one: PWinIocpSubscription): boolean;
-    /// retrieve the remote address of the last GetNext(wieAccept) call
-    // - this function includes PrepareGetNext(one)
-    function PrepareGetNextAccept(one: PWinIocpSubscription;
+    function PrepareGetNext(one: PWinIocpSubscription;
+      event: TWinIocpEvent): boolean;
+    /// retrieve the new socket and remote address after a GetNext(wieAccept)
+    // - includes PrepareGetNext(one) to accept the next incoming socket
+    function GetNextAcceptAndPrepare(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
@@ -1332,13 +1336,9 @@ type
     /// flag set when Terminate has been called
     property Terminated: boolean
       read fTerminated;
-    /// how many notified events are currently in the internal queue
-    // - always returns 0 with IOCP because we can't know the internal state
-    property PendingCount: integer
-      read fPendingCount;
     /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
     property UnsubscribeShouldShutdownSocket: boolean
-      read fUnsubscribeShouldShutdownSocket write fUnsubscribeShouldShutdownSocket;
+      read fUnsubscribeShutdownSocket write fUnsubscribeShutdownSocket;
     /// allow raw debugging via logs of the low-level process
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;
