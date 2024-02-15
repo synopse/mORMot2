@@ -1830,6 +1830,9 @@ begin
   FillCharFast(fRW, SizeOf(fRW), 0);
   fSecure := nil;
   fLastOperation := 0;
+  {$ifdef USE_WINIOCP}
+  fIocp := nil;
+  {$endif USE_WINIOCP}
   fRemoteIP4 := aRemoteIP.IP4;
   aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
 end;
