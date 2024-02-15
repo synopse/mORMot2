@@ -118,6 +118,7 @@ type
     // opaque Windows IOCP instances returned by TWinIocp.Subscribe()
     {$ifdef USE_WINIOCP}
     fIocp: PWinIocpSubscription; // a single IOCP queue for wieRecv+wieSend
+    procedure IocpPrepareNextWrite(queue: TWinIocp);
     {$endif USE_WINIOCP}
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
@@ -295,7 +296,9 @@ type
     function ProcessRead(Sender: TSynThread; const notif: TPollSocketResult): boolean;
     /// one thread should execute this method with the proper pseWrite notif
     // - thread-safe handle of any outgoing packets
-    procedure ProcessWrite(const notif: TPollSocketResult);
+    // - sent  is the number of bytes already sent from connection.fWr buffer,
+    // e.g. via TWinIocp.PrepareNext(wieSend)
+    procedure ProcessWrite(const notif: TPollSocketResult; sent: integer);
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
     /// some processing options
@@ -1138,8 +1141,26 @@ begin
     inc(fBytesRecv, len);
 end;
 
+{$ifdef USE_WINIOCP}
 
-{$ifndef USE_WINIOCP}
+procedure TPollAsyncConnection.IocpPrepareNextWrite(queue: TWinIocp);
+var
+  buf: pointer;
+  len: integer;
+begin
+  if fWr.Len = 0 then
+    exit;
+  buf := nil; // on TLS, don't send any plain buffer
+  len := 0;
+  if fSecure = nil then
+  begin
+    buf := fWr.Buffer; // try to send some data asynchronously
+    len := fWr.Len;    // otherwise GetNext() would return with no delay
+  end;
+  queue.PrepareNext(fIocp, wieSend, buf, len);
+end;
+
+{$else}
 
 { TPollReadSockets }
 
@@ -1503,9 +1524,9 @@ begin
   if result then
     case sub of
       pseRead:
-        result := fIocp.PrepareNext(connection.fIocp, wieRecv);
+        result := fIocp.PrepareNext(connection.fIocp, wieRecv, nil, 0);
       pseWrite:
-        result := fIocp.PrepareNext(connection.fIocp, wieSend);
+        result := fIocp.PrepareNext(connection.fIocp, wieSend, nil, 0);
     end;
   {$else}
   if sub = pseRead then
@@ -1662,7 +1683,7 @@ begin
         begin
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           {$ifdef USE_WINIOCP}
-          fIocp.PrepareNext(connection.fIocp, wieRecv);
+          fIocp.PrepareNext(connection.fIocp, wieRecv, nil, 0);
           {$else}
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
@@ -1689,11 +1710,12 @@ begin
   end;
 end;
 
-procedure TPollAsyncSockets.ProcessWrite(const notif: TPollSocketResult);
+procedure TPollAsyncSockets.ProcessWrite(
+  const notif: TPollSocketResult; sent: integer);
 var
   connection: TPollAsyncConnection;
   buf: PByte;
-  buflen, bufsent, sent: integer;
+  buflen, bufsent: integer;
   res: TNetResult;
   start: Int64;
 begin
@@ -1704,19 +1726,23 @@ begin
      connection.IsClosed then
     exit;
   // we are now sure that the socket is writable and safe
-  sent := 0;
   //DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
   LockedInc32(@fProcessingWrite);
   try
     res := nrOK;
-    if connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
+    if ((connection.fSecure = nil) or // ensure TLS won't actually block
+        (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
+       connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
       //DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
       buflen := connection.fWr.Len;
       if buflen = 0 then
         exit;
       buf := connection.fWr.Buffer;
-      repeat
+      inc(buf, sent); // sent > 0 e.g. after wieSend
+      dec(buflen, sent);
+      while buflen > 0 do
+      begin
         if fDebugLog <> nil then
           QueryPerformanceMicroSeconds(start);
         if fTerminated or
@@ -1750,12 +1776,11 @@ begin
         inc(sent, bufsent);
         inc(buf, bufsent);
         dec(buflen, bufsent);
-      until buflen = 0;
+      end;
       inc(fWriteBytes, sent);
       connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
       if connection.fWr.Len = 0 then
-      begin
-        // no data any more to be sent - maybe call slot.fWr.Append
+        // no more data in output buffer - AfterWrite may refill connection.fWr
         try
           if connection.AfterWrite <> soContinue then
           begin
@@ -1768,21 +1793,18 @@ begin
         except
           connection.fWr.Reset;
         end;
-        if connection.fWr.Len = 0 then
-        begin
-          // no further ProcessWrite unless slot.fWr contains pending data
-          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
-          fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
-          exclude(connection.fFlags, fSubWrite);
-          {$endif USE_WINIOCP}
-          if fDebugLog <> nil then
-            DoLog('Write Unsubscribe(sock=%,handle=%)=%',
-             [pointer(connection.fSocket), connection.Handle]);
-        end;
-      end;
       {$ifdef USE_WINIOCP}
-      if connection.fWr.Len <> 0 then
-        fIocp.PrepareNext(connection.fIocp, wieSend);
+      connection.IocpPrepareNextWrite(fIocp);
+      {$else}
+      if connection.fWr.Len = 0 then
+      begin
+        // no further ProcessWrite unless slot.fWr contains pending data
+        fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
+        exclude(connection.fFlags, fSubWrite);
+        if fDebugLog <> nil then
+          DoLog('Write Unsubscribe(sock=%,handle=%)=%',
+           [pointer(connection.fSocket), connection.Handle]);
+      end;
       {$endif USE_WINIOCP}
     finally
       if res in [nrOk, nrRetry] then
@@ -1793,9 +1815,9 @@ begin
     end
     else
     begin
-      // if already locked (unlikely) -> will try next time
+      // if already locked (unlikely) -> retry later
       {$ifdef USE_WINIOCP}
-      fIocp.PrepareNext(connection.fIocp, wieSend);
+      connection.IocpPrepareNextWrite(fIocp);
       {$endif USE_WINIOCP}
       if fDebugLog <> nil then
         DoLog('ProcessWrite: WaitLock failed % -> will retry later',
@@ -1948,6 +1970,7 @@ var
   {$ifdef USE_WINIOCP}
   e: TWinIocpEvent;
   sub: PWinIocpSubscription;
+  bytes: cardinal;
   {$else}
   new, ms: integer;
   {$endif USE_WINIOCP}
@@ -1968,7 +1991,7 @@ begin
           (fOwner.fClients <> nil) and
           (fOwner.fClients.fIocp <> nil) do
     begin
-      sub := fOwner.fClients.fIocp.GetNext(INFINITE, e);
+      sub := fOwner.fClients.fIocp.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // Terminated
       case e of
@@ -1980,7 +2003,7 @@ begin
         wieSend:
           begin
             SetRes(notif, sub^.Tag, [pseWrite]);
-            fOwner.fClients.ProcessWrite(notif);
+            fOwner.fClients.ProcessWrite(notif, bytes);
           end;
       end;
     end;
@@ -3047,6 +3070,7 @@ begin
     end;
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
   end;
+  inherited Shutdown;
 end;
 {$endif USE_WINIOCP}
 
@@ -3233,7 +3257,7 @@ begin
         // this was a pseWrite notification -> try to send pending data
         // here connection = TObject(notif.tag)
         // - never executed if fExecuteAcceptOnly=true (THttpAsyncServer)
-        fClients.ProcessWrite(notif);
+        fClients.ProcessWrite(notif, 0);
       {$endif USE_WINIOCP}
     end;
   except
@@ -3301,7 +3325,7 @@ begin
     {$else}
     while not Terminated do
       if fClients.fWrite.GetOne(1000, 'W', notif) then
-        fClients.ProcessWrite(notif);
+        fClients.ProcessWrite(notif, 0);
     {$endif USE_WINIOCP}
     DoLog(sllInfo, 'Execute: done % C', [fProcessName], self);
   except
@@ -4075,7 +4099,7 @@ begin
           // some huge packets queued for async sending (less common)
           // note: fWrite.GetOne() calls ProcessIdleTix() while looping
           if fAsync.fClients.fWrite.GetOne(ms, 'W', notif) then
-            fAsync.fClients.ProcessWrite(notif);
+            fAsync.fClients.ProcessWrite(notif, 0);
           if fCallbackSendDelay <> nil then
           begin
             tix := mormot.core.os.GetTickCount64 shr 16;
