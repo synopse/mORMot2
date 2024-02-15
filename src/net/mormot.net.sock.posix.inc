@@ -1456,7 +1456,7 @@ begin
       fMaxSockets := fCount;
     end;
     if (fOwner <> nil) and
-       fOwner.fUnsubscribeShouldShutdownSocket then
+       fOwner.fUnsubscribeShutdownSocket then
       socket.ShutdownAndClose({rdwr=}false);
   end;
 end;

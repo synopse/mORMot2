@@ -1099,7 +1099,7 @@ type
     fPollIndex: integer;
     fGettingOne: integer;
     fTerminated: boolean;
-    fUnsubscribeShouldShutdownSocket: boolean;
+    fUnsubscribeShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
@@ -1181,7 +1181,7 @@ type
     // - Destroy will also shutdown any remaining sockets if PollForPendingEvents
     // has not been called before shutdown
     property UnsubscribeShouldShutdownSocket: boolean
-      read fUnsubscribeShouldShutdownSocket write fUnsubscribeShouldShutdownSocket;
+      read fUnsubscribeShutdownSocket write fUnsubscribeShutdownSocket;
     /// the actual polling class used to track socket state changes
     property PollClass: TPollSocketClass
       read fPollClass write fPollClass;
@@ -3781,7 +3781,7 @@ begin
   for i := 0 to high(fPoll) do
     FreeAndNilSafe(fPoll[i]);
   {$ifndef POLLSOCKETEPOLL}
-  if fUnsubscribeShouldShutdownSocket and
+  if fUnsubscribeShutdownSocket and
      (fSubscription.UnsubscribeCount > 0) then
   begin
     if Assigned(fOnLog) then
@@ -4110,7 +4110,7 @@ begin
       fOnLog(sllTrace, 'PollForPendingEvents sub=% unsub=%',
         [sub.SubscribeCount, sub.UnsubscribeCount], self);
     // ensure subscribe + unsubscribe pairs are ignored
-    if not fUnsubscribeShouldShutdownSocket then
+    if not fUnsubscribeShutdownSocket then
       for u := 0 to sub.UnsubscribeCount - 1 do
       begin
         sock := sub.Unsubscribe[u];
@@ -4137,7 +4137,7 @@ begin
             if fPoll[p].Unsubscribe(sock) then
             begin
               dec(fCount);
-              if fUnsubscribeShouldShutdownSocket then
+              if fUnsubscribeShutdownSocket then
                 sock.ShutdownAndClose({rdwr=}false);
               {if Assigned(fOnLog) then
                 fOnLog(sllTrace, 'PollForPendingEvents Unsubscribe(%) count=%',
