@@ -174,7 +174,7 @@ type
     // - allow to gather output frames in ProcessLoopStepSend
     // - GetTickCount64 resolution is around 16ms on Windows and 4ms on Linux,
     // so default 10 ms value seems fine for a cross-platform similar behavior
-    // (resulting in a 16ms period on Windows, and a 12ms period on Linux)
+    // (resulting in a <16ms period on Windows, and <12ms period on Linux)
     SendDelay: cardinal;
     /// will close the connection after a given number of invalid Heartbeat sent
     // - when a Hearbeat is failed to be transmitted, the class will start

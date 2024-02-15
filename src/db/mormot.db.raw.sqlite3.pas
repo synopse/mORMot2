@@ -6887,17 +6887,18 @@ end;
 procedure TSqlDataBase.Execute(const aSql: RawUtf8);
 var
   R: TSqlRequest;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  Timer.Start;
+  QueryPerformanceMicroSeconds(start);
   Lock(aSql); // run one statement -> we can trust IsSelect()
   try
     R.Execute(DB, aSql);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSql], self);
+    fLog.Add.Log(sllSQL, '% % %',
+      [MicroSecFrom(start), FileNameWithoutPath, aSql], self);
   end;
 end;
 
@@ -6930,20 +6931,20 @@ procedure TSqlDataBase.Execute(const aSql: RawUtf8;
   out aValue: Int64; NoLog: boolean);
 var
   R: TSqlRequest;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   if not NoLog then
-    Timer.Start;
+    QueryPerformanceMicroSeconds(start);
   Lock(aSql);
   try
     R.Execute(DB, aSql, aValue);
   finally
     UnLock;
     if not NoLog then
-      fLog.Add.Log(sllSQL, '% % returned % for %', [Timer.Stop,
-        FileNameWithoutPath, aValue, aSql], self);
+      fLog.Add.Log(sllSQL, '% % returned % for %',
+        [MicroSecFrom(start), FileNameWithoutPath, aValue, aSql], self);
   end;
 end;
 
@@ -6951,12 +6952,12 @@ procedure TSqlDataBase.Execute(const aSql: RawUtf8;
   out aValue: RawUtf8; NoLog: boolean);
 var
   R: TSqlRequest;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   if not NoLog then
-    Timer.Start;
+    QueryPerformanceMicroSeconds(start);
   Lock(aSql);
   try
     R.Execute(DB, aSql, aValue);
@@ -6964,27 +6965,27 @@ begin
     UnLock;
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned [%] for %',
-        [Timer.Stop, FileNameWithoutPath, aValue, aSql], self);
+        [MicroSecFrom(start), FileNameWithoutPath, aValue, aSql], self);
   end;
 end;
 
 function TSqlDataBase.ExecuteNoException(const aSql: RawUtf8): boolean;
 var
   R: TSqlRequest;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   result := false;
   if (self = nil) or
      (DB = 0) then
     exit; // avoid GPF in case of call from a static-only server
-  Timer.Start;
+  QueryPerformanceMicroSeconds(start);
   Lock(aSql); // run one statement -> we can trust IsCacheable()
   try
     result := R.ExecuteNoException(DB, aSql);
   finally
     UnLock;
     fLog.Add.Log(sllSQL, '% % % = %',
-      [Timer.Stop, FileNameWithoutPath, aSql, BOOL_STR[result]], self);
+      [MicroSecFrom(start), FileNameWithoutPath, aSql, BOOL_STR[result]], self);
   end;
 end;
 
@@ -7019,14 +7020,14 @@ function TSqlDataBase.ExecuteJson(const aSql: RawUtf8; Expand: boolean;
 var
   R: TSqlRequest;
   Count: PtrInt;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   if self = nil then
   begin
     result := '';
     exit; // avoid GPF in case of call from a static-only server
   end;
-  Timer.Start;
+  QueryPerformanceMicroSeconds(start);
   result := LockJson(aSql, aResultCount); // lock and try getting from cache
   if result = '' then
     // only Execute the DB request if not got from cache
@@ -7036,8 +7037,8 @@ begin
         aResultCount^ := Count;
     finally
       UnLockJson(aSql, result, Count);
-      fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
-        FileNameWithoutPath, length(result), aSql], self);
+      fLog.Add.Log(sllSQL, '% % returned % bytes %',
+        [MicroSecFrom(start), FileNameWithoutPath, length(result), aSql], self);
     end;
 end;
 
@@ -7074,19 +7075,19 @@ function TSqlDataBase.Execute(const aSql: RawUtf8;
   var aValues: TRawUtf8DynArray): integer;
 var
   R: TSqlRequest;
-  Timer: TPrecisionTimer;
+  start: Int64;
 begin
   result := 0;
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  Timer.Start;
+  QueryPerformanceMicroSeconds(start);
   Lock(aSql);
   try
     result := R.Execute(DB, aSql, aValues);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % returned % rows %', [Timer.Stop,
-      FileNameWithoutPath, result, aSql], self);
+    fLog.Add.Log(sllSQL, '% % returned % rows %',
+      [MicroSecFrom(start), FileNameWithoutPath, result, aSql], self);
   end;
 end;
 

@@ -3470,9 +3470,9 @@ procedure TRestBackgroundTimer.AsyncBackgroundInterning(
 var
   i: PtrInt;
   claimed, total: integer;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
-  timer.Start;
+  QueryPerformanceMicroSeconds(start);
   claimed := 0;
   fBackgroundInterningSafe.Lock;
   try
@@ -3489,7 +3489,7 @@ begin
   fRest.InternalLog(
     '%.AsyncInterning: Clean(%) claimed %/% strings from % pools in %',
     [ClassType, fBackgroundInterningMaxRefCount, claimed, total,
-     length(fBackgroundInterning), timer.Stop], sllDebug);
+     length(fBackgroundInterning), MicroSecFrom(start)], sllDebug);
 end;
 
 procedure TRestBackgroundTimer.AsyncInterning(Interning: TRawUtf8Interning;

@@ -1730,11 +1730,11 @@ var
   bodystream: TStream;
   loerr: integer;
   dat: RawByteString;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   if Assigned(OnLog) then
   begin
-    timer.Start;
+    QueryPerformanceMicroSeconds(start);
     OnLog(sllTrace, 'RequestInternal % %:%/% flags=% retry=%', [ctxt.method,
       fServer, fPort, ctxt.url, ToText(Http.HeaderFlags), byte(ctxt.retry)], self);
   end;
@@ -1851,7 +1851,8 @@ begin
     finally
       if Assigned(OnLog) then
          OnLog(sllTrace, 'RequestInternal status=% keepalive=% flags=% in %',
-           [ctxt.Status, ctxt.KeepAlive, ToText(Http.HeaderFlags), timer.Stop], self);
+           [ctxt.Status, ctxt.KeepAlive, ToText(Http.HeaderFlags),
+            MicroSecFrom(start)], self);
       if ctxt.KeepAlive = 0 then
         Close;
     end;

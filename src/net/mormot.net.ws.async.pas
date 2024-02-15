@@ -406,13 +406,13 @@ var
   i, conn, valid, sent, invalid, unknown: PtrInt;
   pending: TPollAsyncConnectionHandleDynArray; // keep fOutgoingSafe lock short
   c: TAsyncConnection;
-  timer: TPrecisionTimer;
+  start, elapsed: Int64;
 begin
+  start := 0;
+  elapsed := 0;
   if Assigned(fLog) and
      (sllTrace in fLog.Family.Level) then
-    timer.Start // we monitor frame sending timing
-  else
-    timer.Init; // no need to call high-precision timing API
+    QueryPerformanceMicroSeconds(start); // we monitor frame sending timing
   fOutgoingSafe.Lock;
   try
     conn := fOutgoingCount;
@@ -439,13 +439,17 @@ begin
     else
       inc(unknown);
   end;
-  timer.Pause; // BeforeSendFrame encrypt/compress may have taken some time
+  if start <> 0 then
+  begin // BeforeSendFrame encrypt/compress may have taken some time
+    QueryPerformanceMicroSeconds(elapsed);
+    dec(elapsed, start);
+  end;
   if (invalid <> 0) or
      (unknown <> 0) or
-     (timer.TimeInMicroSec > 500) then // 0.5 ms seems responsive enough
+     (elapsed > 500) then // 0.5 ms seems responsive enough
     DoLog(sllTrace,
       'ProcessIdleTixSendFrames conn=% valid=% invalid=% unknown=% in %',
-      [conn, valid, invalid, unknown, timer.Time], self);
+      [conn, valid, invalid, unknown, MicroSecToString(elapsed)], self);
 end;
 
 procedure TWebSocketAsyncConnections.ProcessIdleTix(Sender: TObject;

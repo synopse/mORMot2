@@ -1945,7 +1945,7 @@ var
   renderer: TMvcRendererReturningData;
   methodIndex: integer;
   method: PInterfaceMethod;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   // 1. parse URI
   p := pointer(MethodName);
@@ -2013,7 +2013,7 @@ begin
   else
   begin
     // 4. render regular page using proper viewer
-    timer.Start;
+    QueryPerformanceMicroSeconds(start);
     if PropNameEquals(rawFormat, 'json') then
       rendererClass := TMvcRendererJson
     else
@@ -2058,7 +2058,7 @@ begin
       body := renderer.Output.Content;
       if viewHasGenerationTimeTag in renderer.fOutputFlags then
         body := StringReplaceAll(body, fViews.ViewGenerationTimeTag,
-          ShortStringToAnsi7String(timer.Stop));
+          ShortStringToAnsi7String(MicroSecFrom(start)));
       Ctxt.Returns(body, renderer.Output.Status, renderer.Output.Header,
         {handle304=}true, {noerrorprocess=}true, {cachecontrol=}0,
         {hashwithouttime=}crc32cUtf8ToHex(renderer.Output.Content));

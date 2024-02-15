@@ -442,9 +442,9 @@ function TRestStorageMongoDB.EngineNextID: TID;
   procedure ComputeMax_ID;
   var
     res: variant;
-    timer: TPrecisionTimer;
+    start: Int64;
   begin
-    timer.Start;
+    QueryPerformanceMicroSeconds(start);
     case fEngineAddCompute of
       eacLastIDOnce,
       eacLastIDEachTime:
@@ -467,7 +467,7 @@ function TRestStorageMongoDB.EngineNextID: TID;
         'Unexpected %.EngineNextID with %', [self, ToText(fEngineAddCompute)^]);
     end;
     InternalLog('ComputeMax_ID=% in % using %',
-      [fEngineLastID, timer.Stop, ToText(fEngineAddCompute)^], sllInfo);
+      [fEngineLastID, MicroSecFrom(start), ToText(fEngineAddCompute)^], sllInfo);
   end;
 
 begin
