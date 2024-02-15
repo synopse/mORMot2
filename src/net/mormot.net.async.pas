@@ -117,7 +117,7 @@ type
     fBytesRecv, fBytesSend: Int64;
     // opaque Windows IOCP instances returned by TWinIocp.Subscribe()
     {$ifdef USE_WINIOCP}
-    fIocp: PWinIocpSubscription; // a single IOCP queue for read+write+accept
+    fIocp: PWinIocpSubscription; // a single IOCP queue for wieRecv+wieSend
     {$endif USE_WINIOCP}
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
@@ -1503,9 +1503,9 @@ begin
   if result then
     case sub of
       pseRead:
-        result := fIocp.PrepareGetNext(connection.fIocp, wieRecv);
+        result := fIocp.PrepareNext(connection.fIocp, wieRecv);
       pseWrite:
-        result := fIocp.PrepareGetNext(connection.fIocp, wieSend);
+        result := fIocp.PrepareNext(connection.fIocp, wieSend);
     end;
   {$else}
   if sub = pseRead then
@@ -1662,7 +1662,7 @@ begin
         begin
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           {$ifdef USE_WINIOCP}
-          fIocp.PrepareGetNext(connection.fIocp, wieRecv);
+          fIocp.PrepareNext(connection.fIocp, wieRecv);
           {$else}
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
@@ -1737,10 +1737,10 @@ begin
           break // may block, try later
         else if res <> nrOk then
         begin
-          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareGetNext() call is enough
+          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
           fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
           exclude(connection.fFlags, fSubWrite);
-          {$endif USE_WINIOCP} // no TWinIocp.PrepareGetNext() call is enough
+          {$endif USE_WINIOCP}
           if fDebugLog <> nil then
             DoLog('Write failed as % -> Unsubscribe(%,%)', [ToText(res)^,
               pointer(connection.fSocket), connection.Handle]);
@@ -1771,7 +1771,7 @@ begin
         if connection.fWr.Len = 0 then
         begin
           // no further ProcessWrite unless slot.fWr contains pending data
-          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareGetNext() call is enough
+          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
           fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
           exclude(connection.fFlags, fSubWrite);
           {$endif USE_WINIOCP}
@@ -1782,7 +1782,7 @@ begin
       end;
       {$ifdef USE_WINIOCP}
       if connection.fWr.Len <> 0 then
-        fIocp.PrepareGetNext(connection.fIocp, wieSend);
+        fIocp.PrepareNext(connection.fIocp, wieSend);
       {$endif USE_WINIOCP}
     finally
       if res in [nrOk, nrRetry] then
@@ -1795,7 +1795,7 @@ begin
     begin
       // if already locked (unlikely) -> will try next time
       {$ifdef USE_WINIOCP}
-      fIocp.PrepareGetNext(connection.fIocp, wieSend);
+      fIocp.PrepareNext(connection.fIocp, wieSend);
       {$endif USE_WINIOCP}
       if fDebugLog <> nil then
         DoLog('ProcessWrite: WaitLock failed % -> will retry later',

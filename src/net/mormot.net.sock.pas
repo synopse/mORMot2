@@ -1307,7 +1307,7 @@ type
     /// finalize this IOCP queue
     destructor Destroy; override;
     /// associate this IOCP queue to a given socket
-    // - no event is actually tracked, until PrepareGetNext() is called
+    // - no event is actually tracked, until PrepareNext() is called
     // - the IOCP API limits a socket to be tracked by a single TWinIocp queue
     function Subscribe(socket: TNetSocket;
       tag: TPollSocketTag): PWinIocpSubscription;
@@ -1316,16 +1316,16 @@ type
     /// pick a pending task from the internal queue within a specified timeout
     // - is typically called from processing threads
     // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
-    // call PrepareGetNext()
+    // call PrepareNext()
     // - for wieAccept, call GetNextAcceptAndPrepare()
     function GetNext(timeoutms: cardinal;
       out event: TWinIocpEvent): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send
-    function PrepareGetNext(one: PWinIocpSubscription;
+    function PrepareNext(one: PWinIocpSubscription;
       event: TWinIocpEvent): boolean;
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
-    // - includes PrepareGetNext(one) to accept the next incoming socket
+    // - includes PrepareNext(one) to accept the next incoming socket
     function GetNextAcceptAndPrepare(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy

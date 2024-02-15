@@ -1535,7 +1535,7 @@ const
   IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWA';
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
-function TWinIocp.PrepareGetNext(one: PWinIocpSubscription;
+function TWinIocp.PrepareNext(one: PWinIocpSubscription;
   event: TWinIocpEvent): boolean;
 var
   bytes, flags: cardinal;
@@ -1591,15 +1591,15 @@ begin
   if err <> nil then
   begin
     over^.prepared.UnLock;
-    raise EWinIocp.CreateFmt('TWinIocp.PrepareGetNext(%s): %s',
-      [IOCP_EVENT[event], err]);
+    raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
+      [IOCP_EVENT[event], err, integer(o^.socket)]);
   end;
   if Assigned(fOnLog) then
   begin
     sll := sllTrace;
     if not result then
       sll := sllWarning;
-    fOnLog(sll, 'PrepareGetNext(%%)=%',
+    fOnLog(sll, 'PrepareNext(%%)=%',
       [IOCP_EVENT[event], pointer(o^.socket), result], self);
   end;
 end;
@@ -1682,7 +1682,7 @@ begin
   Socket := fAcceptSocket;
   fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
-  result := PrepareGetNext(one, wieAccept);
+  result := PrepareNext(one, wieAccept);
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'GetNextAcceptAndPrepare(%)=% %',
       [pointer(one^.socket), result, Remote.IPShort], self);
