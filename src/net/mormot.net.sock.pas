@@ -1288,6 +1288,9 @@ type
   /// socket polling via Windows' IOCP API
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
   // inherit from TPollAbstract, and requires its own stand-alone class
+  // - this class won't handle any recv/send buffers, but will detect pending
+  // wieRecv/wieSend event on a set of subscribed sockets
+  // - it could also track asynchronous AcceptEx() calls as wieAccept event
   // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
   protected
@@ -1296,7 +1299,7 @@ type
     fProcessingCount, fPendingCount, fGetNextPending: integer;
     fTerminated, fUnsubscribeShouldShutdownSocket: boolean;
     fOnLog: TSynLogProc;
-    fAcceptExUsed: TLightLock; // can track only a single acceptex()
+    fAcceptExUsed: TLightLock; // can track only a single AcceptEx()
     fAcceptSocket: TNetSocket;
     fAcceptExBuf: TBytes;
   public

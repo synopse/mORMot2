@@ -1263,7 +1263,7 @@ begin
       connection.fSocket := nil;
       // unsubscribe and close the socket
       if fSubWrite in connection.fFlags then
-        // write first because of fRead.UnsubscribeShouldShutdownSocket
+        // write first because of fRead.UnsubscribeShouldShutdownSocket=true
         fWrite.Unsubscribe({$ifdef WINIOCP_WRITE} connection.fIocpWrite {$else}
                            sock, TPollSocketTag(connection) {$endif});
       if connection.fSecure <> nil then
@@ -1274,7 +1274,7 @@ begin
         end;
       if fSubRead in connection.fFlags then
         // note: fRead.UnsubscribeShouldShutdownSocket=true, so ShutdownAndClose
-        // is done now on Epoll, or at next PollForPendingEvents()
+        // is done now on Epoll/TWinIocp, or at next PollForPendingEvents()
         fRead.Unsubscribe({$ifdef WINIOCP_READ} connection.fIocpRead {$else}
                            sock, TPollSocketTag(connection) {$endif})
       else
@@ -3136,7 +3136,7 @@ begin
           // could we Accept one or several incoming connection(s)?
           {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
           {$ifdef WINIOCP_WRITE}
-          if async then // WriteGetOne() did accept a new sin
+          if async then // WriteGetOne() did accept a new sin/client pair
             if acoEnableTls in fOptions then
               res := nrOk // keep blocking during TLS handshake
             else
@@ -3221,7 +3221,7 @@ begin
           end
           else
             client.ShutdownAndClose({rdwr=}false);
-        until Terminated;
+        until {$ifdef WINIOCP_WRITE} async or {$endif}Terminated;
       end
       else
         // this was a pseWrite notification -> try to send pending data
@@ -4037,8 +4037,8 @@ begin
         end
         else
         begin
-          // some huge packets queued for async sending (seldom)
-          // note: fWrite.GetOne() calls ProcessIdleTix() while looping
+          // some huge packets queued for async sending (less common)
+          // note: WriteGetOne() calls ProcessIdleTix() while looping
           if fAsync.WriteGetOne(ms, notif, nil, nil) then
             fAsync.fClients.ProcessWrite(notif);
           if fCallbackSendDelay <> nil then

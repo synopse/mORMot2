@@ -7529,8 +7529,8 @@ begin
       b.Insert(@i, SizeOf(i));
     CheckLogTime(b.Inserted = SIZ, 'Insert(%)', [SIZ - 1000]);
     savSIZ := b.SaveTo;
-    CheckLogTime(length(savSIZ) > length(sav1000), 'b.SaveTo(%) len=%', [SIZ, kb
-      (savSIZ)]);
+    CheckLogTime(length(savSIZ) > length(sav1000), 'b.SaveTo(%) len=%',
+      [SIZ, kb (savSIZ)]);
     for i := 1 to SIZ do
       Check(b.MayExist(@i, SizeOf(i)));
     CheckLogTime(b.Inserted = SIZ, 'MayExists(%)=true', [SIZ]);
