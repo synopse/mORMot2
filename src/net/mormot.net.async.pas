@@ -1327,7 +1327,11 @@ begin
         // close the socket even if not subscribed (e.g. HTTP/1.0)
         sock.ShutdownAndClose({rdwr=}false);
       result := true;
-    end;
+    end
+    {$ifdef USE_WINIOCP}
+    else if connection.fIocp <> nil then
+      fIocp.Unsubscribe(connection.fIocp);
+    {$endif USE_WINIOCP}
   finally
     LockedDec32(@fProcessingRead);
   end;
@@ -1657,7 +1661,7 @@ begin
           begin
             sll := sllTrace;
             if not (res in [nrOk, nrRetry, nrClosed]) then
-              sll := sllLastError;
+              sll := sllWarning;
             DoLog('ProcessRead recv(%)=% len=% %in %',
               [pointer(connection.Socket), ToText(res)^, recved, wf,
                MicroSecFrom(start)], sll);
