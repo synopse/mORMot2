@@ -579,6 +579,13 @@ var
   /// global TSynAnsiConvert instance with no encoding (RawByteString/RawBlob)
   RawByteStringConvert: TSynAnsiFixedWidth;
 
+/// check if a code page is known to be of fixed width, i.e. not MBCS
+// - i.e. will be implemented as a TSynAnsiFixedWidth
+function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
+
+/// return a code page number into human-friendly text
+function CodePageToText(aCodePage: cardinal): TShort16;
+
 
 { *************** Text File Loading with BOM/Unicode Support }
 
@@ -3410,14 +3417,6 @@ begin
   fAnsiCharShift := 1; // default is safe
 end;
 
-function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
-begin
-  result := ((aCodePage >= 1250) and
-             (aCodePage <= 1258)) or
-            (aCodePage = CP_LATIN1) or
-            (aCodePage >= CP_RAWBLOB);
-end;
-
 function GetEngine(aCodePage: cardinal): TSynAnsiConvert;
   {$ifdef HASINLINE} inline; {$endif}
 var
@@ -4312,6 +4311,30 @@ begin
 end;
 
 
+function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
+begin
+  result := ((aCodePage >= 1250) and
+             (aCodePage <= 1258)) or
+            (aCodePage = CP_LATIN1) or
+            (aCodePage >= CP_RAWBLOB);
+end;
+
+function CodePageToText(aCodePage: cardinal): TShort16;
+begin
+  case aCodePage of
+    CP_UTF8:
+      result := 'utf8';
+    CODEPAGE_US:
+      result := 'WinAnsi';
+  else
+    begin
+      PCardinal(@result)^ := 2 + ord('c') shl 8 + ord('p') shl 16;
+      AppendShortCardinal(aCodePage, result);
+    end;
+  end;
+end;
+
+
 { *************** Text File Loading with BOM/Unicode Support }
 
 function BomFile(var Buffer: pointer; var BufferSize: PtrInt): TBomFile;
@@ -4429,7 +4452,6 @@ begin
     end;
   {$endif UNICODE}
 end;
-
 
 
 { *************** Low-Level String Conversion Functions }
