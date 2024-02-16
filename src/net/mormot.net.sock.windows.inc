@@ -1475,13 +1475,16 @@ end;
 destructor TWinIocp.Destroy;
 var
   tix, endtix: cardinal;
+  sub: PIocpSubscription;
 begin
   if Assigned(fOnLog) then
     fOnLog(sllDebug, 'Destroy count=%', [fOne.Count], self);
+  // notify the queue we are about to close
   if not fTerminated then
     Terminate;
+  // wait for all pending GetNext() termination
   endtix := 0;
-  if fGetNextPending <> 0 then // wait for all pending GetNext() termination
+  if fGetNextPending <> 0 then
     repeat
       if Assigned(fOnLog) then
         fOnLog(sllDebug, 'Destroy pending=%', [fGetNextPending], self);
@@ -1493,12 +1496,28 @@ begin
       else if tix > endtix then
         break; // never wait forever
     until fGetNextPending = 0;
+  // delete the queue
   if fIocp <> 0 then
     CloseHandle(fIocp);
-  inherited Destroy;
-  fOne.Done;
+  // close and/or log remainining sockets
+  if Assigned(fOnLog) or
+     fUnsubscribeShutdownSocket then
+  begin
+    sub := fOne.Head;
+    while sub <> nil do
+    begin
+      if fUnsubscribeShutdownSocket then
+        TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
+      if Assigned(fOnLog) then
+        fOnLog(sllDebug, 'leak sock=%', [pointer(sub^.socket)], nil);
+      sub := sub.head.next;
+    end;
+  end;
   if fAcceptSocket <> nil then
     fAcceptSocket^.Close;
+  // release all memory slots
+  fOne.Done;
+  inherited Destroy;
 end;
 
 function TWinIocp.Subscribe(socket: TNetSocket;
