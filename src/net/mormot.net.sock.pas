@@ -1937,10 +1937,12 @@ begin
       result := nrTooManyConnections;
     WSAECONNREFUSED:
       result := nrRefused;
-    {$ifdef OSLINUX}
-    ESysEPIPE:
+    {$ifdef OSPOSIX}
+    ESysEPIPE,
+    {$endif OSPOSIX}
+    WSAECONNRESET,
+    WSAECONNABORTED:
       result := nrClosed;
-    {$endif OSLINUX}
   else
     if err = AnotherNonFatal then
       result := nrRetry
