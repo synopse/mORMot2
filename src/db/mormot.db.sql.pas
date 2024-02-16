@@ -2115,7 +2115,7 @@ type
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
     fDbms: TSqlDBDefinition;
-    fSqlLogLevel: TSynLogInfo;
+    fSqlLogLevel: TSynLogLevel;
     fSql: RawUtf8;
     fCache: TSqlDBStatementCache;
     fSqlLogLog: TSynLog;
@@ -2148,13 +2148,13 @@ type
     /// return the associated statement instance for a ISqlDBRows interface
     function Instance: TSqlDBStatement;
     /// wrappers to compute sllSQL/sllDB/sllResult SQL context with a local timer
-    function SqlLogBegin(Level: TSynLogInfo): TSynLog;
+    function SqlLogBegin(Level: TSynLogLevel): TSynLog;
       {$ifdef HASINLINE} inline; {$endif}
     function SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
     function SqlLogEnd(Msg: PShortString = nil): Int64; overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifndef SYNDB_SILENCE}
-    function DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogInfo): TSynLog;
+    function DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogLevel): TSynLog;
     function DoSqlLogEnd(Msg: PShortString): Int64;
     {$endif SYNDB_SILENCE}
   public
@@ -6821,7 +6821,7 @@ end;
 
 {$ifdef SYNDB_SILENCE}
 
-function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.SqlLogBegin(Level: TSynLogLevel): TSynLog;
 begin
   result := nil;
   if Level = sllDB then  // sllDB = prepare
@@ -6838,7 +6838,7 @@ end;
 
 {$else}
 
-function TSqlDBStatement.DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogLevel): TSynLog;
 begin
   result := Log.SynLog;
   fSqlLogLevel := Level;
@@ -6850,7 +6850,7 @@ begin
     fSqlLogTimer.Resume; // sllSQL or sllResult
 end;
 
-function TSqlDBStatement.SqlLogBegin(Level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.SqlLogBegin(Level: TSynLogLevel): TSynLog;
 var
   fam: TSynLogFamily;
 begin

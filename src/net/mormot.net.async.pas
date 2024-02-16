@@ -246,7 +246,7 @@ type
     fOnFirstRead, fOnStop: TOnPollAsyncProc;
     function GetCount: integer;
     procedure DoLog(const TextFmt: RawUtf8; const TextArgs: array of const;
-      Level: TSynLogInfo = sllTrace);
+      Level: TSynLogLevel = sllTrace);
     // pseError: return false to close socket and connection
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; virtual; abstract;
@@ -594,7 +594,7 @@ type
     function LockedConnectionDelete(
       aConnection: TAsyncConnection; aIndex: integer): boolean;
     procedure ConnectionAdd(conn: TAsyncConnection);
-    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
     procedure ProcessIdleTix(Sender: TObject; NowTix: Int64); virtual;
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
@@ -1345,7 +1345,7 @@ begin
 end;
 
 procedure TPollAsyncSockets.DoLog(const TextFmt: RawUtf8;
-  const TextArgs: array of const; Level: TSynLogInfo);
+  const TextArgs: array of const; Level: TSynLogLevel);
 begin
   fDebugLog.Add.Log(Level, TextFmt, TextArgs, self);
 end;
@@ -1580,7 +1580,7 @@ var
   res: TNetResult;
   start: Int64;
   wf: string[3];
-  sll: TSynLogInfo;
+  sll: TSynLogLevel;
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := true; // if closed or properly read: don't retry
@@ -2500,7 +2500,7 @@ begin
 end;
 {$endif USE_WINIOCP}
 
-procedure TAsyncConnections.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TAsyncConnections.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArgs: array of const; Instance: TObject);
 begin
   if (self <> nil) and

@@ -258,7 +258,7 @@ type
     // - the supplied message would be appended, with its timing
     // - warning: this method is not thread-safe
     procedure CheckLogTime(condition: boolean; const msg: RawUtf8;
-      const args: array of const; level: TSynLogInfo = sllTrace);
+      const args: array of const; level: TSynLogLevel = sllTrace);
     /// used by the published methods to run test assertion against a Hash32() constant
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
@@ -422,7 +422,7 @@ type
     // ! TSynLogTestLog := TSqlLog;
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string = '';
-      withLogs: TSynLogInfos = [sllLastError, sllError, sllException, sllExceptionOS, sllFail];
+      withLogs: TSynLogLevels = [sllLastError, sllError, sllException, sllExceptionOS, sllFail];
       options: TSynTestOptions = []; const workdir: TFileName = ''); virtual;
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
@@ -460,7 +460,7 @@ type
     // ! end;
     function Run: boolean; virtual;
     /// could be overriden to redirect the content to proper TSynLog.Log()
-    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const); virtual;
     /// number of failed tests after the last call to the Run method
     property FailedCount: integer
@@ -656,7 +656,7 @@ end;
 
 procedure TSynTestCase.AddLog(condition: boolean; const msg: string);
 const
-  LEV: array[boolean] of TSynLogInfo = (
+  LEV: array[boolean] of TSynLogLevel = (
     sllFail, sllCustom4);
 var
   tix, crc: cardinal; // use a crc since strings are not thread-safe
@@ -859,7 +859,7 @@ begin
 end;
 
 procedure TSynTestCase.CheckLogTime(condition: boolean; const msg: RawUtf8;
-  const args: array of const; level: TSynLogInfo);
+  const args: array of const; level: TSynLogLevel);
 var
   str: string;
 begin
@@ -1224,7 +1224,7 @@ begin
   DoColor(ccLightGray);
 end;
 
-procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArgs: array of const);
 begin
   if Level = sllFail then
@@ -1514,7 +1514,7 @@ end;
 {$I+}
 
 class procedure TSynTests.RunAsConsole(const CustomIdent: string;
-  withLogs: TSynLogInfos; options: TSynTestOptions; const workdir: TFileName);
+  withLogs: TSynLogLevels; options: TSynTestOptions; const workdir: TFileName);
 var
   tests: TSynTests;
   redirect: TFileName;

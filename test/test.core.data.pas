@@ -1298,9 +1298,9 @@ type
 
   TDtoObject2 = class(TDtoObject)
   private
-    fLevel: TSynLogInfo;
+    fLevel: TSynLogLevel;
   published
-    property Level: TSynLogInfo
+    property Level: TSynLogLevel
       read fLevel;
   end;
 
@@ -5999,7 +5999,7 @@ var
   i: Integer;
   tmp: RawUtf8;
   auto: TPersistentAutoCreateFieldsTest;
-  s: TSynLogInfos;
+  s: TSynLogLevels;
   astext: boolean;
   P: PUtf8Char;
   eoo: AnsiChar;
@@ -6086,8 +6086,8 @@ begin
   check(EmojiParseDots(P) = eExpressionless);
   check(P^ = #0);
   // enumerates
-  with PRttiInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
-    for i := 0 to integer(high(TSynLogInfo)) do
+  with PRttiInfo(TypeInfo(TSynLogLevel))^.EnumBaseType^ do
+    for i := 0 to integer(high(TSynLogLevel)) do
     begin
       {$ifdef VERBOSE}
       writeln(i, ' ', GetEnumName(i)^, ' ', GetEnumNameTrimed(i));
@@ -6099,22 +6099,22 @@ begin
       Check(GetEnumNameValue(tmp) = i);
       Check(GetEnumNameValue(pointer(tmp)) = i);
       Check(GetEnumNameValue(
-        mormot.core.rtti.GetEnumName(TypeInfo(TSynLogInfo), i)^) = i);
+        mormot.core.rtti.GetEnumName(TypeInfo(TSynLogLevel), i)^) = i);
       Check(mormot.core.rtti.GetEnumNameValue(
-        TypeInfo(TSynLogInfo), pointer(tmp), length(tmp), true) = i);
+        TypeInfo(TSynLogLevel), pointer(tmp), length(tmp), true) = i);
       tmp := GetEnumName(i)^;
       Check(mormot.core.rtti.GetEnumNameValue(
-        TypeInfo(TSynLogInfo), pointer(tmp), length(tmp)) = i);
+        TypeInfo(TSynLogLevel), pointer(tmp), length(tmp)) = i);
     end;
   // set to JSON
   for astext := false to true do
   begin
     integer(s) := 0;
-    for i := -1 to ord(high(TSynLogInfo)) do
+    for i := -1 to ord(high(TSynLogLevel)) do
     begin
       if i >= 0 then
         SetBit(s, i);
-      tmp := SaveJson(s, TypeInfo(TSynLogInfos), astext);
+      tmp := SaveJson(s, TypeInfo(TSynLogLevels), astext);
       if astext then
         case i of
           -1:
@@ -6122,7 +6122,7 @@ begin
           0:
             Check(tmp = '["sllNone"]');
         else
-          if i = ord(high(TSynLogInfo)) then
+          if i = ord(high(TSynLogLevel)) then
             Check(tmp = '["*"]');
         end
       else
@@ -6130,13 +6130,13 @@ begin
       tmp := tmp + ','; // mimics GetJsonField layout
       P := pointer(tmp);
       eoo := ' ';
-      Check(mormot.core.json.GetSetNameValue(TypeInfo(TSynLogInfos), P, eoo) =
+      Check(mormot.core.json.GetSetNameValue(TypeInfo(TSynLogLevels), P, eoo) =
         cardinal(s));
       Check(eoo = ',');
     end;
   end;
-  Check(PRttiInfo(TypeInfo(TSynLogInfos))^.SetEnumType =
-    PRttiInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
+  Check(PRttiInfo(TypeInfo(TSynLogLevels))^.SetEnumType =
+    PRttiInfo(TypeInfo(TSynLogLevel))^.EnumBaseType);
   // class RTTI
   with PRttiInfo(TypeInfo(TOrmTest))^ do
   begin

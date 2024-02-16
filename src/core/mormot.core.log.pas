@@ -214,12 +214,12 @@ const
   MAX_SYNLOGFAMILY = 15;
 
   /// can be set to TSynLogFamily.Level in order to log all available events
-  LOG_VERBOSE: TSynLogInfos =
-    [succ(sllNone)..high(TSynLogInfo)];
+  LOG_VERBOSE: TSynLogLevels =
+    [succ(sllNone)..high(TSynLogLevel)];
 
   /// contains the logging levels for which stack trace should be dumped
   // - which are mainly exceptions or application errors
-  LOG_STACKTRACE: TSynLogInfos =
+  LOG_STACKTRACE: TSynLogLevels =
     [sllException,
      sllExceptionOS,
      sllLastError,
@@ -229,7 +229,7 @@ const
   /// the text equivalency of each logging level, as written in the log file
   // - PCardinal(@LOG_LEVEL_TEXT[L][3])^ will be used for fast level matching
   // so text must be unique for characters [3..6] -> e.g. 'UST4'
-  LOG_LEVEL_TEXT: array[TSynLogInfo] of string[7] = (
+  LOG_LEVEL_TEXT: array[TSynLogLevel] of string[7] = (
     '       ',  // sllNone
     ' info  ',  // sllInfo
     ' debug ',  // sllDebug
@@ -268,7 +268,7 @@ var
   // - matches the TColor values, as used by the VCL/LCL
   // - first array is for the background, second is for the text (black/white)
   // - is defined as var and not const to allow customization at runtime
-  LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
+  LOG_LEVEL_COLORS: array[boolean, TSynLogLevel] of integer = (
    ($FFFFFF,    // sllNone
     $DCC0C0,    // sllInfo
     $DCDCDC,    // sllDebug
@@ -338,7 +338,7 @@ var
   /// console colors corresponding to each logging level
   // - to be used with mormot.core.os TextColor()
   // - is defined as var and not const to allow customization at runtime
-  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
+  LOG_CONSOLE_COLORS: array[TSynLogLevel] of TConsoleColor = (
     ccLightGray,    // sllNone
     ccWhite,        // sllInfo
     ccLightGray,    // sllDebug
@@ -373,10 +373,10 @@ var
     ccLightBlue);   // sllMonitoring
 
 const
-  /// how TLogFilter map TSynLogInfo events
-  LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
+  /// how TLogFilter map TSynLogLevel events
+  LOG_FILTER: array[TSynLogFilter] of TSynLogLevels = (
     [],                                                       // lfNone
-    [succ(sllNone)..high(TSynLogInfo)],                       // lfAll
+    [succ(sllNone)..high(TSynLogLevel)],                       // lfAll
     [sllError, sllLastError, sllException, sllExceptionOS],   // lfErrors
     [sllException, sllExceptionOS],                           // lfExceptions
     [sllEnter, sllLeave],                                     // lfProfile
@@ -387,34 +387,34 @@ const
     [sllDDDError, sllDDDInfo]);                               // lfDDD
 
   /// may be used to log as Debug or Error event, depending on an Error: boolean
-  LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (
+  LOG_DEBUGERROR: array[boolean] of TSynLogLevel = (
     sllDebug,
     sllError);
 
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
-  LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (
+  LOG_TRACEWARNING: array[boolean] of TSynLogLevel = (
     sllTrace,
     sllWarning);
 
   /// may be used to log as Trace or Error event, depending on an Error: boolean
-  LOG_TRACEERROR: array[boolean] of TSynLogInfo = (
+  LOG_TRACEERROR: array[boolean] of TSynLogLevel = (
     sllTrace,
     sllError);
 
   /// may be used to log as Info or Warning event, depending on an Error: boolean
-  LOG_INFOWARNING: array[boolean] of TSynLogInfo = (
+  LOG_INFOWARNING: array[boolean] of TSynLogLevel = (
     sllInfo,
     sllWarning);
 
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
-function ToText(event: TSynLogInfo): RawUtf8; overload;
+function ToText(event: TSynLogLevel): RawUtf8; overload;
 
 /// returns the trimmed text value of a logging levels set
-function ToText(events: TSynLogInfos): ShortString; overload;
+function ToText(events: TSynLogLevels): ShortString; overload;
 
-/// returns the ready-to-be displayed text of a TSynLogInfo value
-function ToCaption(event: TSynLogInfo): string; overload;
+/// returns the ready-to-be displayed text of a TSynLogLevel value
+function ToCaption(event: TSynLogLevel): string; overload;
 
 /// returns the ready-to-be displayed text of a TSynLogFilter value
 function ToCaption(filter: TSynLogFilter): string; overload;
@@ -475,7 +475,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - if Instance is set, it will log the corresponding class name and address
     // (to be used if you didn't call TSynLog.Enter() method first)
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject = nil); overload;
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -483,36 +483,36 @@ type
     // method first)
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
-    procedure Log(Level: TSynLogInfo; const Text: RawUtf8;
+    procedure Log(Level: TSynLogLevel; const Text: RawUtf8;
       Instance: TObject = nil; TextTruncateAtLength: integer = maxInt); overload;
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
-    procedure Log(Level: TSynLogInfo; const Text: string;
+    procedure Log(Level: TSynLogLevel; const Text: string;
       Instance: TObject = nil); overload;
     {$endif UNICODE}
     /// call this method to add the content of an object to the log at a
     // specified level
     // - TSynLog will write the class and hexa address - TSqlLog will write the
     // object JSON content
-    procedure Log(Level: TSynLogInfo; Instance: TObject); overload;
+    procedure Log(Level: TSynLogLevel; Instance: TObject); overload;
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSqlLog will be
     // able to write TObject/TOrm and sets content as JSON
-    procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
+    procedure Log(Level: TSynLogLevel; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TDebugFile, will log the
     // unit name, associated symbol and source code line
-    procedure Log(Level: TSynLogInfo = sllTrace); overload;
+    procedure Log(Level: TSynLogLevel = sllTrace); overload;
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited
     // by #13#10 (CRLF)
     // - if a line starts with IgnoreWhenStartWith (already uppercase), it won't
     // be added to the log content (to be used e.g. with '--' for SQL statements)
-    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char;
+    procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char;
       aInstance: TObject = nil; const IgnoreWhenStartWith: PAnsiChar = nil);
     /// retrieve the associated logging instance
     function Instance: TSynLog;
@@ -605,7 +605,7 @@ type
   // ! end; // when ILog is out-of-scope, will log the method leaving
   TSynLogFamily = class
   protected
-    fLevel, fLevelStackTrace: TSynLogInfos;
+    fLevel, fLevelStackTrace: TSynLogLevels;
     fArchiveAfterDays: integer;
     fArchivePath: TFileName;
     fOnArchive: TSynLogArchiveEvent;
@@ -638,7 +638,7 @@ type
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
     fExceptionIgnore: TList;
-    fEchoToConsole: TSynLogInfos;
+    fEchoToConsole: TSynLogLevels;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
     fEchoRemoteEvent: TOnTextWriterEcho;
@@ -654,9 +654,9 @@ type
     function CreateSynLog: TSynLog;
     procedure EnsureAutoFlushRunning;
     procedure SetDestinationPath(const value: TFileName);
-    procedure SetLevel(aLevel: TSynLogInfos);
+    procedure SetLevel(aLevel: TSynLogLevels);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
-    procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    procedure SetEchoToConsole(aEnabled: TSynLogLevels);
     procedure SetEchoToConsoleUseJournal(aValue: boolean);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
@@ -757,7 +757,7 @@ type
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
     // - EchoCustom or EchoToConsole can be activated separately
-    property EchoToConsole: TSynLogInfos
+    property EchoToConsole: TSynLogLevels
       read fEchoToConsole write SetEchoToConsole;
     /// redirect all EchoToConsole logging into the Linux journald service
     // - do nothing on Windows or BSD systems
@@ -789,13 +789,13 @@ type
       read fIdent;
     /// the current level of logging information for this family
     // - can be set e.g. to LOG_VERBOSE in order to log every kind of events
-    property Level: TSynLogInfos
+    property Level: TSynLogLevels
       read fLevel write SetLevel;
     /// the levels which will include a stack trace of the caller
     // - by default, contains sllStackTrace,sllException,sllExceptionOS plus
     // sllError,sllFail,sllLastError,sllDDDError
     // - exceptions will always trace the stack
-    property LevelStackTrace: TSynLogInfos
+    property LevelStackTrace: TSynLogLevels
       read fLevelStackTrace write fLevelStackTrace;
     /// the folder where the log must be stored
     // - by default, is in the executable folder
@@ -1010,7 +1010,7 @@ type
     fThreadContext: PSynLogThreadContext;
     fThreadID: TThreadID;
     fThreadIndex: integer;
-    fCurrentLevel: TSynLogInfo;
+    fCurrentLevel: TSynLogLevel;
     fInternalFlags: set of (logHeaderWritten, logInitDone, logRemoteDisable);
     {$ifndef NOEXCEPTIONINTERCEPT}
     fExceptionIgnoredBackup: boolean;
@@ -1041,26 +1041,26 @@ type
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-    procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure LogInternalFmt(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
-    procedure LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
+    procedure LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
       Instance: TObject; TextTruncateAtLength: integer);
-    procedure LogInternalRtti(Level: TSynLogInfo; const aName: RawUtf8;
+    procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
-    procedure LogHeader(Level: TSynLogInfo);
-    procedure LogTrailer(Level: TSynLogInfo);
+    procedure LogHeader(Level: TSynLogLevel);
+    procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef HASINLINE}inline;{$endif}
     procedure LogCurrentTime; virtual;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
     procedure AddMemoryStats; virtual;
     procedure AddErrorMessage(Error: cardinal);
-    procedure AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
+    procedure AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
-    procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
+    procedure AddRecursion(aIndex: integer; aLevel: TSynLogLevel);
     function GetThreadContext: PSynLogThreadContext;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextAndDisableExceptions;
@@ -1069,7 +1069,7 @@ type
     procedure ThreadContextRehash;
     function NewRecursion: PSynLogThreadRecursion;
     function Instance: TSynLog;
-    function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogInfo;
+    function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
   public
     /// intialize for a TSynLog class instance
@@ -1188,7 +1188,7 @@ type
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
     // - will force a manual breakpoint if tests are run from the IDE
-    class procedure DebuggerNotify(Level: TSynLogInfo; const Format: RawUtf8;
+    class procedure DebuggerNotify(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const);
     /// call this method to add some information to the log at the specified level
     // - will use TTextWriter.Add(...,twOnSameLine) to append its content
@@ -1196,14 +1196,14 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArgs: array of const; aInstance: TObject = nil); overload;
     /// same as Log(Level,TextFmt,[]) but with one RawUtf8 parameter
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArg: RawUtf8; aInstance: TObject = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+    procedure Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
       const TextArg: Int64; aInstance: TObject = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add some information to the log at the specified level
@@ -1215,13 +1215,13 @@ type
     // $ 0000000000002DB9 debug TObjectList(00425E68) GarbageCollector
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
-    procedure Log(Level: TSynLogInfo; const Text: RawUtf8; aInstance: TObject = nil;
+    procedure Log(Level: TSynLogLevel; const Text: RawUtf8; aInstance: TObject = nil;
       TextTruncateAtLength: integer = maxInt); overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef UNICODE}
     /// call this method to add some RTL string to the log at a specified level
     // - this overloaded version will avoid a call to StringToUtf8()
-    procedure Log(Level: TSynLogInfo; const Text: string;
+    procedure Log(Level: TSynLogLevel; const Text: string;
       aInstance: TObject = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     {$endif UNICODE}
@@ -1234,19 +1234,19 @@ type
     // $ 20110330 10010005 debug {"TObjectList(00B1AD60)":["TObjectList(00B1AE20)","TObjectList(00B1AE80)"]}
     // - if aInstance is an Exception, it will handle its class name and Message:
     // $ 20110330 10010005 debug "EClassName(00C2129A)":"Exception message"
-    procedure Log(Level: TSynLogInfo; aInstance: TObject); overload;
+    procedure Log(Level: TSynLogLevel; aInstance: TObject); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
-    procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
+    procedure Log(Level: TSynLogLevel; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TDebugFile, will log the
     // unit name, associated symbol and source code line
-    procedure Log(Level: TSynLogInfo); overload;
+    procedure Log(Level: TSynLogLevel); overload;
     /// allows to identify the current thread with a textual representation
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
@@ -1259,7 +1259,7 @@ type
     // #13#10 (CRLF)
     // - if a line starts with IgnoreWhenStartWith (already uppercase), it won't
     // be added to the log content (to be used e.g. with '--' for SQL statements)
-    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char; aInstance: TObject = nil;
+    procedure LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
     /// manual low-level TSynLog.Enter execution without the ISynLog
     // - may be used to log Enter/Leave stack from non-pascal code
@@ -1290,7 +1290,7 @@ type
     // signature, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
-    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+    class procedure DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
     /// low-level class method which can be assigned to a TOnInfoProgress callback
     // - as used e.g. by TStreamRedirect.OnInfoProgress or TZipAbstract.OnProgress
@@ -1385,12 +1385,12 @@ type
     // - similar to TOnTextWriterEcho, as defined in mormot.core.text
     // - an initial call with Level=sllNone and the whole previous Text may be
     // transmitted, if ReceiveExistingKB is set for TSynLogCallbacks.Subscribe()
-    procedure Log(Level: TSynLogInfo; const Text: RawUtf8);
+    procedure Log(Level: TSynLogLevel; const Text: RawUtf8);
   end;
 
   /// store a subscribe to ISynLogCallback
   TSynLogCallback = record
-    Levels: TSynLogInfos;
+    Levels: TSynLogLevels;
     Callback: ISynLogCallback;
   end;
 
@@ -1416,13 +1416,13 @@ type
     /// register a callback for a given set of log levels
     // - you can specify a number of KB of existing log content to send to the
     // monitoring tool, before the actual real-time process
-    function Subscribe(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
+    function Subscribe(const Levels: TSynLogLevels; const Callback: ISynLogCallback;
       ReceiveExistingKB: cardinal = 0): integer; virtual;
     /// unregister a callback previously registered by Subscribe()
     procedure Unsubscribe(const Callback: ISynLogCallback); virtual;
     /// notify a given log event
     // - matches the TOnTextWriterEcho signature
-    function OnEcho(Sender: TEchoWriter; Level: TSynLogInfo;
+    function OnEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean;
   published
     /// how many registrations are currently defined
@@ -1435,7 +1435,7 @@ type
   // in mORMotService.pas, which may be more integrated
   TSynLogSettings = class(TSynPersistent)
   protected
-    fLevels: TSynLogInfos;
+    fLevels: TSynLogLevels;
     fDestinationPath: TFileName;
     fRotateFileCount: integer;
     fLogClass: TSynLogClass;
@@ -1453,7 +1453,7 @@ type
     // - i.e. a combination of none or several logging event
     // - if "*" is serialized, unneeded sllNone won't be part of the set
     // - default is LOG_STACKTRACE
-    property Levels: TSynLogInfos
+    property Levels: TSynLogLevels
       read fLevels write fLevels;
     /// allow to customize where the logs should be written
     // - default is the system log folder (e.g. /var/log on Linux)
@@ -1520,7 +1520,7 @@ type
   TSynLogFile = class(TMemoryMapText)
   protected
     /// map the events occurring in the .log file content
-    fLevels: TSynLogInfoDynArray;
+    fLevels: TSynLogLevelDynArray;
     fLineLevelOffset: byte;
     fLineTextOffset: byte;
     fLineHeaderCountToIgnore: byte;
@@ -1544,7 +1544,7 @@ type
     fDayChangeIndex: TIntegerDynArray;
     fDayCount: TIntegerDynArray;
     /// retrieve all used event levels
-    fLevelUsed: TSynLogInfos;
+    fLevelUsed: TSynLogLevels;
     /// =0 if date time resolution, >0 if high-resolution time stamp
     fFreq: Int64;
     /// used by EventDateTime() to compute date from time stamp
@@ -1564,13 +1564,13 @@ type
     fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
     /// used by ProcessOneLine//GetLogLevelTextMap
-    fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
+    fLogLevelsTextMap: array[TSynLogLevel] of cardinal;
     fIntelCPU: TIntelCpuFeatures;
     fArm32CPU: TArm32HwCaps;
     fArm64CPU: TArm64HwCaps;
     procedure SetLogProcMerged(const Value: boolean);
     function GetEventText(index: integer): RawUtf8;
-    function GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;
+    function GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogLevel;
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
     procedure CleanLevels;
@@ -1599,7 +1599,7 @@ type
     /// sort the LogProc[] array according to the supplied order
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
-    function EventCount(const aSet: TSynLogInfos): integer;
+    function EventCount(const aSet: TSynLogLevels): integer;
     /// add a new line to the already parsed content
     // - overriden method which would identify the freq=%,%,% pseudo-header
     procedure AddInMemoryLine(const aNewLine: RawUtf8); override;
@@ -1616,11 +1616,11 @@ type
     /// retrieve the level of an event
     // - is calculated by Create() constructor
     // - EventLevel[] array index is from 0 to Count-1
-    property EventLevel: TSynLogInfoDynArray
+    property EventLevel: TSynLogLevelDynArray
       read fLevels;
     /// retrieve all used event levels
     // - is calculated by Create() constructor
-    property EventLevelUsed: TSynLogInfos
+    property EventLevelUsed: TSynLogLevels
       read fLevelUsed;
     /// retrieve the description text of an event
     // - returns '' if supplied index is out of range
@@ -1649,7 +1649,7 @@ type
     property LogProcMerged: boolean
       read fLogProcIsMerged write SetLogProcMerged;
     /// all used event levels, as retrieved at log file content parsing
-    property LevelUsed: TSynLogInfos
+    property LevelUsed: TSynLogLevels
       read fLevelUsed;
     /// high-resolution time stamp frequence, as retrieved from log file header
     // - equals 0 if date time resolution, >0 if high-resolution time stamp
@@ -1741,7 +1741,7 @@ type
   protected
     fSelected: TIntegerDynArray;
     fSelectedCount: integer;
-    fEvents: TSynLogInfos;
+    fEvents: TSynLogLevels;
     fThreadSelected: TByteDynArray;
     fThreadSelectedMax: integer;
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
@@ -1751,9 +1751,9 @@ type
     /// add a new line to the already parsed content
     // - overriden method would add the inserted index to Selected[]
     procedure AddInMemoryLine(const aNewLine: RawUtf8); override;
-    /// search for the next matching TSynLogInfo, from the current row index
+    /// search for the next matching TSynLogLevel, from the current row index
     // - returns -1 if no match was found
-    function SearchNextEvent(aEvent: TSynLogInfo; aRow: integer): PtrInt;
+    function SearchNextEvent(aEvent: TSynLogLevel; aRow: integer): PtrInt;
     /// search for the next matching text, from the current row index
     // - returns -1 if no match was found
     function SearchNextText(const aPattern: RawUtf8; aRow, aDelta: integer): PtrInt;
@@ -1779,7 +1779,7 @@ type
     // - returns -1 if no match was found
     function SearchPreviousSameThread(aRow: integer): PtrInt;
     /// returns the ready-to-be text of a cell of the main TDrawGrid
-    function GetCell(aCol, aRow: integer; out aLevel: TSynLogInfo): string;
+    function GetCell(aCol, aRow: integer; out aLevel: TSynLogLevel): string;
     /// returns the ready-to-be displayed text of one or several selected rows
     function GetLineForMemo(aRow, aTop, aBottom: integer): string;
     /// returns the ready-to-be copied text of a selected row
@@ -1792,7 +1792,7 @@ type
     procedure SetAllThreads(enabled: boolean);
     /// define the current selection range, according to event kinds
     // - once you have set Events and Threads[], call Select() to fill Selected[]
-    property Events: TSynLogInfos
+    property Events: TSynLogLevels
       read fEvents write fEvents;
     /// define the current selection range, according to a thread ID
     // - here the supplied thread ID starts at 1
@@ -1851,7 +1851,7 @@ type
 
 const
   /// used to convert a TSynLog event level into a syslog message severity
-  LOG_TO_SYSLOG: array[TSynLogInfo] of TSyslogSeverity = (
+  LOG_TO_SYSLOG: array[TSynLogLevel] of TSyslogSeverity = (
     ssDebug,   // sllNone
     ssInfo,    // sllInfo
     ssDebug,   // sllDebug
@@ -3588,20 +3588,20 @@ end;
 { ************** Logging via TSynLogFamily, TSynLog, ISynLog }
 
 var
-  _LogInfoText: array[TSynLogInfo] of RawUtf8;
-  _LogInfoCaption: array[TSynLogInfo] of string;
+  _LogInfoText: array[TSynLogLevel] of RawUtf8;
+  _LogInfoCaption: array[TSynLogLevel] of string;
 
-function ToText(event: TSynLogInfo): RawUtf8;
+function ToText(event: TSynLogLevel): RawUtf8;
 begin
   result := _LogInfoText[event];
 end;
 
-function ToText(events: TSynLogInfos): ShortString;
+function ToText(events: TSynLogLevels): ShortString;
 begin
-  GetSetNameShort(TypeInfo(TSynLogInfos), events, result, {trimleft=}true);
+  GetSetNameShort(TypeInfo(TSynLogLevels), events, result, {trimleft=}true);
 end;
 
-function ToCaption(event: TSynLogInfo): string;
+function ToCaption(event: TSynLogLevel): string;
 begin
   result := _LogInfoCaption[event];
 end;
@@ -3871,7 +3871,7 @@ begin
     fDestinationPath := IncludeTrailingPathDelimiter(value);
 end;
 
-procedure TSynLogFamily.SetLevel(aLevel: TSynLogInfos);
+procedure TSynLogFamily.SetLevel(aLevel: TSynLogLevels);
 begin
   // ensure BOTH Enter+Leave are always selected at once, if any is set
   if sllEnter in aLevel then
@@ -3892,7 +3892,7 @@ begin
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
-procedure TSynLogFamily.SetEchoToConsole(aEnabled: TSynLogInfos);
+procedure TSynLogFamily.SetEchoToConsole(aEnabled: TSynLogLevels);
 begin
   if (self = nil) or
      (aEnabled = fEchoToConsole) then
@@ -4405,7 +4405,7 @@ begin
   inc(c^.RecursionCount);
 end;
 
-procedure TSynLog.LogTrailer(Level: TSynLogInfo);
+procedure TSynLog.LogTrailer(Level: TSynLogLevel);
 begin
   if Level in fFamily.fLevelStackTrace then
     AddStackTrace(Level, nil);
@@ -4878,7 +4878,7 @@ begin
 end;
 
 {$ifdef OSLINUX}
-procedure SystemdEcho(Level: TSynLogInfo; const Text: RawUtf8);
+procedure SystemdEcho(Level: TSynLogLevel; const Text: RawUtf8);
 var
   tmp: TShort16;
   mtmp: RawUtf8;
@@ -4912,7 +4912,7 @@ begin
 end;
 {$endif OSLINUX}
 
-function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogInfo;
+function TSynLog.ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 begin
   result := true;
@@ -4935,7 +4935,7 @@ begin
   end;
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
@@ -4943,7 +4943,7 @@ begin
     LogInternalFmt(Level, TextFmt, TextArgs, aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArg: RawUtf8; aInstance: TObject);
 begin
   if (self <> nil) and
@@ -4951,7 +4951,7 @@ begin
     LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArg: Int64; aInstance: TObject);
 begin
   if (self <> nil) and
@@ -4959,7 +4959,7 @@ begin
     LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const Text: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
   aInstance: TObject; TextTruncateAtLength: integer);
 begin
   if (self <> nil) and
@@ -4968,7 +4968,7 @@ begin
 end;
 
 {$ifdef UNICODE}
-procedure TSynLog.Log(Level: TSynLogInfo; const Text: string; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
@@ -4976,7 +4976,7 @@ begin
 end;
 {$endif UNICODE}
 
-procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char;
+procedure TSynLog.LogLines(Level: TSynLogLevel; LinesToLog: PUtf8Char;
   aInstance: TObject; const IgnoreWhenStartWith: PAnsiChar);
 
   procedure DoLog(LinesToLog: PUtf8Char);
@@ -5038,7 +5038,7 @@ begin
     result := PPointer(self)^;
 end;
 
-class procedure TSynLog.DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+class procedure TSynLog.DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
@@ -5099,7 +5099,7 @@ begin
   end;
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogLevel; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) and
@@ -5107,7 +5107,7 @@ begin
     LogInternalText(Level, '', aInstance, maxInt);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUtf8;
+procedure TSynLog.Log(Level: TSynLogLevel; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   if (self <> nil) and
@@ -5119,7 +5119,7 @@ end;
   {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
 {$endif ISDELPHI}
 
-procedure TSynLog.Log(Level: TSynLogInfo);
+procedure TSynLog.Log(Level: TSynLogLevel);
 var
   lasterror: integer;
   {$ifdef ISDELPHI}
@@ -5176,7 +5176,7 @@ asm
 end;
 {$endif CPU64DELPHI}
 
-class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
+class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel;
   const Format: RawUtf8; const Args: array of const);
 var
   Msg: RawUtf8;
@@ -5409,7 +5409,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogHeader(Level: TSynLogInfo);
+procedure TSynLog.LogHeader(Level: TSynLogLevel);
 var
   i: integer;
 begin
@@ -5524,7 +5524,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
+procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const TextFmt: RawUtf8;
   const TextArgs: array of const; Instance: TObject);
 var
   lasterror: cardinal;
@@ -5555,7 +5555,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
+procedure TSynLog.LogInternalText(Level: TSynLogLevel; const Text: RawUtf8;
   Instance: TObject; TextTruncateAtLength: integer);
 var
   lasterror, textlen: integer;
@@ -5607,7 +5607,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalRtti(Level: TSynLogInfo; const aName: RawUtf8;
+procedure TSynLog.LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
@@ -5767,7 +5767,7 @@ begin
     result := 0;
 end;
 
-procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
+procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogLevel);
 var
   r: PSynLogThreadRecursion;
 begin
@@ -5825,7 +5825,7 @@ end;
 
 {$ifdef FPC}
 
-procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
+procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
 var
   frames: array[0..61] of pointer; // on Win64, RtlCaptureStackBackTrace < 62
   i, depth: PtrInt;
@@ -5851,7 +5851,7 @@ end;
 
 {$else not FPC}
 
-procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
+procedure TSynLog.AddStackTrace(Level: TSynLogLevel; Stack: PPtrUInt);
 
 {$ifdef CPU64}
 
@@ -6337,7 +6337,7 @@ begin
   inherited Destroy;
 end;
 
-function TSynLogCallbacks.OnEcho(Sender: TEchoWriter; Level: TSynLogInfo;
+function TSynLogCallbacks.OnEcho(Sender: TEchoWriter; Level: TSynLogLevel;
   const Text: RawUtf8): boolean;
 var
   i: PtrInt;
@@ -6363,7 +6363,7 @@ begin
   end;
 end;
 
-function TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
+function TSynLogCallbacks.Subscribe(const Levels: TSynLogLevels;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal): integer;
 var
   reg: TSynLogCallback;
@@ -6504,27 +6504,27 @@ end;
 
 constructor TSynLogFile.Create;
 var
-  L: TSynLogInfo;
+  L: TSynLogLevel;
 begin
-  for L := low(TSynLogInfo) to high(TSynLogInfo) do
+  for L := low(TSynLogLevel) to high(TSynLogLevel) do
     // LOG_LEVEL_TEXT[L][3] -> test e.g. 'UST4' chars
     fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^;
 end;
 
-function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;
+function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogLevel;
 var
   P: PtrInt;
 begin
   P := PtrInt(IntegerScan(@fLogLevelsTextMap[succ(sllNone)],
-    ord(high(TSynLogInfo)), PCardinal(LineBeg + fLineLevelOffset)^));
+    ord(high(TSynLogLevel)), PCardinal(LineBeg + fLineLevelOffset)^));
   if P <> 0 then
-    result := TSynLogInfo(
+    result := TSynLogLevel(
       (P - PtrInt(PtrUInt(@fLogLevelsTextMap[succ(sllNone)]))) shr 2 + 1)
   else
     result := sllNone;
 end;
 
-function TSynLogFile.EventCount(const aSet: TSynLogInfos): integer;
+function TSynLogFile.EventCount(const aSet: TSynLogLevels): integer;
 var
   i: PtrInt;
 begin
@@ -7085,7 +7085,7 @@ procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
 var
   thread, n, i: PtrUInt;
   MS: integer;
-  L: TSynLogInfo;
+  L: TSynLogLevel;
 begin
   inherited ProcessOneLine(LineBeg, LineEnd);
   if length(fLevels) < fLinesMax then
@@ -7449,7 +7449,7 @@ begin
 end;
 
 function TSynLogFileView.GetCell(aCol, aRow: integer;
-  out aLevel: TSynLogInfo): string;
+  out aLevel: TSynLogLevel): string;
 begin
   aLevel := sllNone;
   result := '';
@@ -7474,7 +7474,7 @@ begin
       result := EventString(aRow, '   ', MAXLOGLINES);
 end;
 
-function TSynLogFileView.SearchNextEvent(aEvent: TSynLogInfo;
+function TSynLogFileView.SearchNextEvent(aEvent: TSynLogLevel;
   aRow: integer): PtrInt;
 begin
   if cardinal(aRow) < cardinal(fSelectedCount) then
@@ -7866,8 +7866,8 @@ end;
 procedure InitializeUnit;
 begin
   mormot.core.os.InitializeCriticalSection(GlobalThreadLock);
-  GetEnumTrimmedNames(TypeInfo(TSynLogInfo), @_LogInfoText);
-  GetEnumCaptions(TypeInfo(TSynLogInfo), @_LogInfoCaption);
+  GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
+  GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';
   SetThreadName := _SetThreadName;
   SetCurrentThreadName('MainThread');

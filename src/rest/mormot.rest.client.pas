@@ -837,12 +837,12 @@ type
     // of high activity
     // - map TOnTextWriterEcho signature, so that you will be able to set e.g.:
     // ! TSqlLog.Family.EchoCustom := aClient.ServerRemoteLog;
-    function ServerRemoteLog(Sender: TEchoWriter; Level: TSynLogInfo;
+    function ServerRemoteLog(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; overload; virtual;
     /// internal method able to emulate a call to TSynLog.Add.Log()
     // - will compute timestamp and event text, than call the overloaded
     // ServerRemoteLog() method
-    function ServerRemoteLog(Level: TSynLogInfo; const FormatMsg: RawUtf8;
+    function ServerRemoteLog(Level: TSynLogLevel; const FormatMsg: RawUtf8;
       const Args: array of const): boolean; overload;
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
@@ -2813,7 +2813,7 @@ begin
 end;
 
 function TRestClientUri.ServerRemoteLog(Sender: TEchoWriter;
-  Level: TSynLogInfo; const Text: RawUtf8): boolean;
+  Level: TSynLogLevel; const Text: RawUtf8): boolean;
 begin
   if fRemoteLogThread = nil then
     result := InternalRemoteLogSend(Text)
@@ -2824,7 +2824,7 @@ begin
   end;
 end;
 
-function TRestClientUri.ServerRemoteLog(Level: TSynLogInfo;
+function TRestClientUri.ServerRemoteLog(Level: TSynLogLevel;
   const FormatMsg: RawUtf8; const Args: array of const): boolean;
 begin
   result := ServerRemoteLog(nil, Level, FormatUtf8('%00%    %',

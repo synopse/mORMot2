@@ -3058,7 +3058,7 @@ var
 
 procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
-  level: TSynLogInfo;
+  level: TSynLogLevel;
   si_code: integer;
   text: string[4]; // code below has no memory allocation
 begin

@@ -1186,7 +1186,7 @@ type
         dvoValueCopiedByReference]): variant;
     /// log the input or output parameters to a log instance
     procedure AddLog(aLog: TSynLogClass; aOutput: boolean;
-      aLevel: TSynLogInfo = sllTrace);
+      aLevel: TSynLogLevel = sllTrace);
     /// input parameters when calling the method
     // - order shall follow the method const and var parameters
     // ! Stub.Add(10,20) -> Input[0]=10, Input[1]=20
@@ -1609,7 +1609,7 @@ type
       const aEventParams: RawUtf8 = ''): TInterfaceStub; overload;
     /// will add execution rules for all methods to log the input parameters
     // - aKind will define how the input parameters are serialized in JSON
-    function Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
+    function Executes(aLog: TSynLogClass; aLogLevel: TSynLogLevel;
       aKind: TInterfaceMethodParamsDocVariantKind): TInterfaceStub; overload;
 
     /// add an exception rule for a given method
@@ -5835,7 +5835,7 @@ begin
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.AddLog(aLog: TSynLogClass;
-  aOutput: boolean; aLevel: TSynLogInfo);
+  aOutput: boolean; aLevel: TSynLogLevel);
 var
   val: variant;
 begin
@@ -6062,7 +6062,7 @@ end;
 type
   TInterfaceStubExecutesToLog = packed record
     Log: TSynLogClass;
-    LogLevel: TSynLogInfo;
+    LogLevel: TSynLogLevel;
     Kind: TInterfaceMethodParamsDocVariantKind;
   end;
   PInterfaceStubExecutesToLog = ^TInterfaceStubExecutesToLog;
@@ -6075,7 +6075,7 @@ begin
        Ctxt.InputAsDocVariant(Kind, JSON_FAST_EXTENDED)]);
 end;
 
-function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
+function TInterfaceStub.Executes(aLog: TSynLogClass; aLogLevel: TSynLogLevel;
   aKind: TInterfaceMethodParamsDocVariantKind): TInterfaceStub;
 var
   tmp: RawUtf8;

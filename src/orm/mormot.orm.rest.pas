@@ -491,10 +491,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function LogFamily: TSynLogFamily;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure InternalLog(const Text: RawUtf8; Level: TSynLogInfo); overload;
+    procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalLog(const Format: RawUtf8; const Args: array of const;
-      Level: TSynLogInfo = sllTrace); overload;
+      Level: TSynLogLevel = sllTrace); overload;
     function GetServerTimestamp: TTimeLog;
       {$ifdef HASINLINE}inline;{$endif}
     function GetCurrentSessionUserID: TID; virtual;
@@ -795,7 +795,7 @@ begin
   result := fRest.LogFamily;
 end;
 
-procedure TRestOrm.InternalLog(const Text: RawUtf8; Level: TSynLogInfo);
+procedure TRestOrm.InternalLog(const Text: RawUtf8; Level: TSynLogLevel);
 begin
   fRest.InternalLog(Text, Level);
 end;
@@ -2567,7 +2567,7 @@ begin
 end;
 
 procedure TRestOrm.InternalLog(const Format: RawUtf8; const Args: array of const;
-  Level: TSynLogInfo);
+  Level: TSynLogLevel);
 begin
   fRest.InternalLog(Format, Args, Level);
 end;

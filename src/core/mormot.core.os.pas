@@ -3091,7 +3091,7 @@ type
     ETimestamp: TUnixTime;
     /// the logging level corresponding to this exception
     // - may be either sllException or sllExceptionOS
-    ELevel: TSynLogInfo;
+    ELevel: TSynLogLevel;
     /// retrieve some extended information about a given Exception
     // - on Windows, recognize most DotNet CLR Exception Names
     function AdditionalInfo(out ExceptionNames: TPUtf8CharDynArray): cardinal;
@@ -5268,7 +5268,7 @@ type
     procedure ServiceProc(ArgCount: integer; Args: PPWideChar);
   public
     /// internal method redirecting to WindowsServiceLog global variable
-    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
+    class procedure DoLog(Level: TSynLogLevel; const Fmt: RawUtf8;
       const Args: array of const; Instance: TObject);
     /// Creates the service
     // - the service is added to the internal registered services

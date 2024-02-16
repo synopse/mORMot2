@@ -769,7 +769,7 @@ type
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
         virtual; abstract;
     procedure Log(const frame: TWebSocketFrame; const aMethodName: ShortString;
-      aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
+      aEvent: TSynLogLevel = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: integer;
     function HiResDelay(var start: Int64): Int64;
   public
@@ -2934,7 +2934,7 @@ begin
 end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
-  const aMethodName: ShortString; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
+  const aMethodName: ShortString; aEvent: TSynLogLevel; DisableRemoteLog: boolean);
 
   procedure DoLog(log: TSynLog);
   var

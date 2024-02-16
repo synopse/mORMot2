@@ -1076,11 +1076,11 @@ type
   /// callback used to echo each line of TEchoWriter class
   // - should return TRUE on success, FALSE if the log was not echoed: but
   // TSynLog will continue logging, even if this event returned FALSE
-  TOnTextWriterEcho = function(Sender: TEchoWriter; Level: TSynLogInfo;
+  TOnTextWriterEcho = function(Sender: TEchoWriter; Level: TSynLogLevel;
     const Text: RawUtf8): boolean of object;
 
   TEchoWriterBack = record
-    Level: TSynLogInfoDynArray;
+    Level: TSynLogLevelDynArray;
     Text: TRawUtf8DynArray;
     Count: PtrInt;
   end;
@@ -1099,7 +1099,7 @@ type
     fBackSafe: TLightLock; // protect fBack.Level/Text
     fEchoPendingExecuteBackground: boolean;
     function EchoFlush: PtrInt;
-    procedure EchoPendingToBackground(aLevel: TSynLogInfo);
+    procedure EchoPendingToBackground(aLevel: TSynLogLevel);
     function GetEndOfLineCRLF: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
@@ -1118,7 +1118,7 @@ type
     // - any callback registered via EchoAdd() will monitor this line in the
     // current thread, or calling EchoPendingExecute from a background thread
     // - used e.g. by TSynLog for console output, as stated by Level parameter
-    procedure AddEndOfLine(aLevel: TSynLogInfo = sllNone);
+    procedure AddEndOfLine(aLevel: TSynLogLevel = sllNone);
     /// add a callback to echo each line written by this class
     // - this class expects AddEndOfLine to mark the end of each line
     procedure EchoAdd(const aEcho: TOnTextWriterEcho);
@@ -5308,7 +5308,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TEchoWriter.EchoPendingToBackground(aLevel: TSynLogInfo);
+procedure TEchoWriter.EchoPendingToBackground(aLevel: TSynLogLevel);
 var
   n, cap: PtrInt;
 begin
@@ -5328,7 +5328,7 @@ begin
   end;
 end;
 
-procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogInfo);
+procedure TEchoWriter.AddEndOfLine(aLevel: TSynLogLevel);
 var
   e: PtrInt;
 begin

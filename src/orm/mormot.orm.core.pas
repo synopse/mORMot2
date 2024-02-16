@@ -1215,10 +1215,10 @@ type
     /// returns TRUE if this table is worth caching (e.g. not in memory)
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
     /// log the corresponding text (if logging is enabled)
-    procedure InternalLog(const Text: RawUtf8; Level: TSynLogInfo); overload;
+    procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Format: RawUtf8; const Args: array of const;
-      Level: TSynLogInfo = sllTrace); overload;
+      Level: TSynLogLevel = sllTrace); overload;
     /// access to the associate TSynLog class type
     function LogClass: TSynLogClass;
     /// access to the associate TSynLog class familly

@@ -4052,7 +4052,7 @@ type
   // - sllDDDInfo will log any DDD-related low-level debugging information
   // - sllMonitoring will log the statistics information (if available),
   // or may be used for real-time chat among connected people to ToolsAdmin
-  TSynLogInfo = (
+  TSynLogLevel = (
     sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
     sllEnter, sllLeave,
     sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
@@ -4065,19 +4065,24 @@ type
   // - i.e. a combination of none or several logging event
   // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
   // to log all errors and exceptions
-  TSynLogInfos = set of TSynLogInfo;
+  TSynLogLevels = set of TSynLogLevel;
 
   /// a dynamic array of logging event levels
-  TSynLogInfoDynArray = array of TSynLogInfo;
+  TSynLogLevelDynArray = array of TSynLogLevel;
 
   /// callback definition used to abstractly log some events
   // - defined as TMethod to avoid dependency with the mormot.core.log unit
   // - match class procedure TSynLog.DoLog
   // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
   // or TCrtSocket.OnLog in mormot.net.sock
-  TSynLogProc = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
+  TSynLogProc = procedure(Level: TSynLogLevel; const Fmt: RawUtf8;
      const Args: array of const; Instance: TObject = nil) of object;
 
+{$ifndef PUREMORMOT2}
+  TSynLogInfo  = TSynLogLevel;
+  TSynLogInfos = TSynLogLevels;
+  TSynLogInfoDynArray = TSynLogLevelDynArray;
+{$endif PUREMORMOT2}
 
 type
   /// fast bit-encoded date and time value
@@ -12107,7 +12112,7 @@ var
   i, n: integer;
   crc: cardinal;
 begin
-  assert(ord(high(TSynLogInfo)) = 31);
+  assert(ord(high(TSynLogLevel)) = 31);
   // initialize internal constants
   for i := 0 to 255 do
   begin

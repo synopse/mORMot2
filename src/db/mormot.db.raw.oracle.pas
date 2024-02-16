@@ -788,7 +788,7 @@ type
   protected
     procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
-      LogLevelNoRaise: TSynLogInfo = sllNone);
+      LogLevelNoRaise: TSynLogLevel = sllNone);
     function BlobOpen(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
     function BlobRead(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
@@ -916,11 +916,11 @@ type
     /// raise an exception on error
     procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError;
-      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
+      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogLevel = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     procedure CheckSession(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError;
-      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
+      InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogLevel = sllNone);
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: RawByteString); overload;
@@ -1499,7 +1499,7 @@ end;
 
 procedure TSqlDBOracleLib.HandleError(Conn: TSqlDBConnection;
   Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
-  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
 var
   msg: RawUtf8;
   tmp: array[0..3071] of AnsiChar;
@@ -1554,7 +1554,7 @@ end;
 
 procedure TSqlDBOracleLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
-  LogLevelNoRaise: TSynLogInfo);
+  LogLevelNoRaise: TSynLogLevel);
 begin
   if Status <> OCI_SUCCESS then
     HandleError(Conn, Stmt, Status, ErrorHandle, InfoRaiseException, LogLevelNoRaise);
@@ -1562,7 +1562,7 @@ end;
 
 procedure TSqlDBOracleLib.CheckSession(Conn: TSqlDBConnection;
   Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
-  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
 var
   msg: RawUtf8;
   tmp: array[0..3071] of AnsiChar;

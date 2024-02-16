@@ -1041,8 +1041,8 @@ type
     fFindBatchSize, fGetMoreBatchSize: integer;
     fZlibSize, fZlibNumberToReturn, fZlibLevel: integer;
     fLog: TSynLog;
-    fLogRequestEvent: TSynLogInfo;
-    fLogReplyEvent: TSynLogInfo;
+    fLogRequestEvent: TSynLogLevel;
+    fLogReplyEvent: TSynLogLevel;
     fLogReplyEventMaxSize: cardinal;
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
@@ -1095,8 +1095,8 @@ type
     // - you can also specify the event types to be used for requests or
     // replay: by default, a verbose log with sllSQL and sllDB will be set
     // - e.g. mormot.orm.mongodb.pas will call Client.SetLog(SQLite3Log) for you
-    procedure SetLog(LogClass: TSynLogClass; RequestEvent: TSynLogInfo = sllSQL;
-      ReplyEvent: TSynLogInfo = sllDB; ReplyEventMaxSize: cardinal = 1024);
+    procedure SetLog(LogClass: TSynLogClass; RequestEvent: TSynLogLevel = sllSQL;
+      ReplyEvent: TSynLogLevel = sllDB; ReplyEventMaxSize: cardinal = 1024);
 
     /// retrieve extended server version and build information, as text
     // - will create a string from ServerBuildInfo object, e.g. as
@@ -1233,7 +1233,7 @@ type
     // with the corresponding logging event kind
     // - will use the Log property for the destination log
     // - you may also call the SetLog() method to set all options at once
-    property LogRequestEvent: TSynLogInfo
+    property LogRequestEvent: TSynLogLevel
       read fLogRequestEvent write fLogRequestEvent;
     /// if set to something else than default sllNone, will log each reply
     // with the corresponding logging event kind
@@ -1242,7 +1242,7 @@ type
     // only for debugging purposes - or set LogReplyEventMaxSize to a low value
     // - will use the Log property for the destination log
     // - you may also call the SetLog() method to set all options at once
-    property LogReplyEvent: TSynLogInfo
+    property LogReplyEvent: TSynLogLevel
       read fLogReplyEvent write fLogReplyEvent;
     /// defines how many characters a LogReplyEvent entry may append in the log
     // - is set by default to 1024, which sounds somewhat good for debugging
@@ -3437,8 +3437,8 @@ begin
   inherited;
 end;
 
-procedure TMongoClient.SetLog(LogClass: TSynLogClass; RequestEvent, ReplyEvent:
-  TSynLogInfo; ReplyEventMaxSize: cardinal);
+procedure TMongoClient.SetLog(LogClass: TSynLogClass; 
+  RequestEvent, ReplyEvent: TSynLogLevel; ReplyEventMaxSize: cardinal);
 begin
   fLog := LogClass.Add;
   LogRequestEvent := RequestEvent;

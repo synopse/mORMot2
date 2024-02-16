@@ -1526,7 +1526,7 @@ var
   o: PIocpSubscription;
   res: TNetResult;
   e: TWinIocpEvent;
-  sll: TSynLogInfo;
+  sll: TSynLogLevel;
 begin
   result := nil;
   if fTerminated then
@@ -1564,7 +1564,7 @@ function TWinIocp.PrepareNext(one: PWinIocpSubscription;
   acceptsock: TNetSocket): boolean;
 var
   bytes, flags: cardinal;
-  sll: TSynLogInfo;
+  sll: TSynLogLevel;
   o: PIocpSubscription absolute one;
   ov: ^TOverlappedEvent;
   err: PUtf8Char;
@@ -1638,7 +1638,7 @@ function TWinIocp.GetNext(timeoutms: cardinal;
   out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
 var
   o, dummy: pointer;
-  sll: TSynLogInfo;
+  sll: TSynLogLevel;
   one: PIocpSubscription absolute o;
 begin
   bytes := 0;

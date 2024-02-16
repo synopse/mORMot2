@@ -4682,12 +4682,12 @@ type
   protected
     fContent: RawUtf8;
     fDateTime: TDateTime;
-    fLevel: TSynLogInfo;
+    fLevel: TSynLogLevel;
   published
     /// the log event time stamp
     property DateTime: TDateTime read fDateTime;
     /// the log event level
-    property Level: TSynLogInfo read fLevel;
+    property Level: TSynLogLevel read fLevel;
     /// the textual message associated to the log event
     property Content: RawUtf8 read fContent;
   end;

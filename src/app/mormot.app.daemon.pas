@@ -49,7 +49,7 @@ type
     {$ifdef OSWINDOWS}
     fServiceDependencies: RawUtf8;
     {$endif OSWINDOWS}
-    fLog: TSynLogInfos;
+    fLog: TSynLogLevels;
     fLogRotateFileCount: integer;
     fLogPath: TFileName;
     fLogClass: TSynLogClass;
@@ -91,7 +91,7 @@ type
     property ServiceExecutable: TFileName
       read fServiceExecutable write fServiceExecutable;
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
-    property Log: TSynLogInfos
+    property Log: TSynLogLevels
       read fLog write fLog;
     /// allow to customize where the logs should be written
     property LogPath: TFileName

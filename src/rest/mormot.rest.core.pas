@@ -538,10 +538,10 @@ type
     class function ClassFrom(aDefinition: TSynConnectionDefinition): TRestClass;
 
     /// ease logging of some text in the context of the current TRest
-    procedure InternalLog(const Text: RawUtf8; Level: TSynLogInfo); overload;
+    procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
     /// ease logging of some text in the context of the current TRest
     procedure InternalLog(const Format: RawUtf8; const Args: array of const;
-      Level: TSynLogInfo = sllTrace); overload;
+      Level: TSynLogLevel = sllTrace); overload;
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
@@ -2069,7 +2069,7 @@ begin
   fLogFamily := fLogClass.Family;
 end;
 
-procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogInfo);
+procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogLevel);
 begin
   if (self <> nil) and
      (fLogFamily <> nil) and
@@ -2078,7 +2078,7 @@ begin
 end;
 
 procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
-  Level: TSynLogInfo);
+  Level: TSynLogLevel);
 begin
   if (self <> nil) and
      (fLogFamily <> nil) and

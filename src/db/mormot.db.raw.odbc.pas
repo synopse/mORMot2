@@ -760,12 +760,12 @@ type
     /// raise an exception on error
     procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status: SqlReturn;
       HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
-      LogLevelNoRaise: TSynLogInfo = sllNone);
+      LogLevelNoRaise: TSynLogLevel = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
     procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-      InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
+      InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
     /// wrapper around SqlGetDiagField() API call
     function GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
     /// wrapper around GetInfo() API call
@@ -1018,7 +1018,7 @@ end;
 
 procedure TOdbcLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
 begin
   if Status <> SQL_SUCCESS then
     HandleError(Conn, Stmt, Status, HandleType, Handle, InfoRaiseException,
@@ -1063,7 +1063,7 @@ end;
 
 procedure TOdbcLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
-  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
+  InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
 const
   FMT: PUtf8Char = '%[%] % (%)'#13#10;
 var
