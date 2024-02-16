@@ -1657,7 +1657,7 @@ begin
   result := o;
 end;
 
-function TWinIocp.GetNextAcceptAndPrepare(one: PWinIocpSubscription;
+function TWinIocp.GetNextAccept(one: PWinIocpSubscription;
   out Socket: TNetSocket; out Remote: TNetAddr): boolean;
 var
   l, r: PSockAddr;
@@ -1674,7 +1674,7 @@ begin
      not Assigned(getacceptexsockaddrs) then
   begin
     if Assigned(fOnLog) then
-      fOnLog(sllWarning, 'GetNextAcceptAndPrepare(%)=false',
+      fOnLog(sllWarning, 'GetNextAccept(%)=false',
         [pointer(one^.socket)], self);
     exit;
   end;
@@ -1692,10 +1692,10 @@ begin
   Socket := fAcceptSocket;
   fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
-  result := PrepareNext(one, wieAccept, nil, 0);
+  result := true;
   if Assigned(fOnLog) then
-    fOnLog(sllTrace, 'GetNextAcceptAndPrepare(%)=% %',
-      [pointer(one^.socket), result, Remote.IPShort], self);
+    fOnLog(sllTrace, 'GetNextAccept(%)=%',
+      [pointer(one^.socket), Remote.IPShort], self);
 end;
 
 function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;

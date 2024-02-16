@@ -1292,7 +1292,7 @@ type
   end;
 
   {$M+}
-  /// socket polling via Windows' IOCP API
+  /// efficient socket polling via Windows' IOCP API
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
   // inherit from TPollAbstract, and requires its own stand-alone class
   // - will handle wieRecv/wieSend events on a set of subscribed sockets
@@ -1336,8 +1336,7 @@ type
     function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
       buf: pointer; buflen: integer): boolean;
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
-    // - includes PrepareNext(one) to accept the next incoming socket
-    function GetNextAcceptAndPrepare(one: PWinIocpSubscription;
+    function GetNextAccept(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
