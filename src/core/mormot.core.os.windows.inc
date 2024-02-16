@@ -543,6 +543,10 @@ begin
         result := 'WSAENOTSOCK';
       10053:
         result := 'WSAECONNABORTED';
+      10054:
+        result := 'WSAECONNRESET';
+      10055:
+        result := 'WSAENOBUFS';
       10060:
         result := 'WSAETIMEDOUT';
       10061:
