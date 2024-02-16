@@ -930,6 +930,7 @@ type
     fConnectionsClass: THttpAsyncConnectionsClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
+    fExecuteEvent: TSynEvent;
     fHttpDateNowUtc: string[39]; // consume 37 chars, aligned to 40 bytes
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -2264,20 +2265,17 @@ begin
   if Terminated or
      (fGC[1].Count + fGC[2].Count = 0) then
     exit;
+  fGC[1].Safe.Lock;
   fGC[2].Safe.Lock;
   try
-    fGC[1].Safe.Lock;
-    try
-      // keep in first generation GC for 100 ms by default
-      n1 := OneGC(fGC[1], fGC[2], fLastOperationMS, fKeepConnectionInstanceMS);
-    finally
-      fGC[1].Safe.UnLock;
-    end;
+    // keep in first generation GC for 100 ms by default
+    n1 := OneGC(fGC[1], fGC[2], fLastOperationMS, fKeepConnectionInstanceMS);
     // wait 2 seconds until no pending event is in queue and free instances
     tofree.Count := 0;
     n2 := OneGC(fGC[2], tofree, fLastOperationMS, 2000);
   finally
     fGC[2].Safe.UnLock;
+    fGC[1].Safe.UnLock;
   end;
   if n1 + n2 + tofree.Count = 0 then
     exit;
@@ -2291,7 +2289,7 @@ end;
 
 procedure TAsyncConnections.Shutdown;
 var
-  i, n, p: PtrInt;
+  i, n: PtrInt;
   endtix: Int64;
 begin
   Terminate;
@@ -2314,28 +2312,26 @@ begin
   if fThreads <> nil then
   begin
     for i := 0 to high(fThreads) do
+    begin
       fThreads[i].Terminate; // set the Terminated flag
-    p := 0;
+      {$ifndef USE_WINIOCP}
+      if fThreads[i].fEvent <> nil then
+        fThreads[i].fEvent.SetEvent; // release any lock (e.g. atpReadPoll)
+      {$endif USE_WINIOCP}
+    end;
     endtix := endtix + 10000; // wait up to 10 seconds
     repeat
+      SleepHiRes(1);
       n := 0;
       for i := 0 to high(fThreads) do
         with fThreads[i] do
           if fExecuteState = esRunning then
           begin
-            {$ifndef USE_WINIOCP}
-            if fEvent <> nil then
-              fEvent.SetEvent; // release any (e.g. atpReadPoll) lock
-            {$endif USE_WINIOCP}
-            if p and 15 = 0 then
-              DoLog(sllTrace, 'Shutdown unfinished=%', [fThreads[i]], self);
+            DoLog(sllTrace, 'Shutdown unfinished=%', [Name], self);
             inc(n);
           end;
-      if n = 0 then
-        break;
-      SleepHiRes(1);
-      inc(p);
-    until mormot.core.os.GetTickCount64 > endtix;
+    until (n = 0) or
+          (mormot.core.os.GetTickCount64 > endtix);
     FreeAndNilSafe(fClients); // FreeAndNil() sets nil before which is incorrect
     ObjArrayClear(fThreads, {continueonexception=}true);
   end;
@@ -3145,9 +3141,11 @@ begin
     [GetEnumName(TypeInfo(THttpServerExecuteState), ord(State))^], self);
 end;
 
-{.$define IOCP_ACCEPTEX}
-{.$define IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-// it was reported to be more stable/scaling by some experts, but not by us
+{$ifdef USE_WINIOCP}
+  {.$define IOCP_ACCEPTEX}
+  {.$define IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+  // it was reported to be more stable/scaling by some experts, but not by us
+{$endif USE_WINIOCP}
 
 procedure TAsyncServer.Execute;
 var
@@ -3999,6 +3997,7 @@ begin
   fProcessName := ProcessName;
   if fProcessName = '' then
     fProcessName := aPort;
+  fExecuteEvent := TSynEvent.Create;
   // initialize HTTP parsing
   fHeadersDefaultBufferSize := 2048; // one fpcx64mm small block
   fHeadersMaximumSize := 65535;
@@ -4049,7 +4048,9 @@ begin
   // abort pending async process
   if fAsync <> nil then
     fAsync.Shutdown;
-  // terminate the (void) Execute (suspended) thread
+  // terminate the Execute thread
+  if fExecuteEvent <> nil then
+    fExecuteEvent.SetEvent;
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
@@ -4059,6 +4060,7 @@ begin
     Dispose(fInterning);
     fInterning := nil;
   end;
+  FreeAndNil(fExecuteEvent);
 end;
 
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
@@ -4176,7 +4178,11 @@ begin
             msidle := 500 // idle server
           else
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
-          SleepHiRes(msidle);
+          fExecuteEvent.WaitFor(msidle);
+          if fShutdownInProgress or
+             Terminated or
+             fAsync.Terminated then
+            break;
           // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
           tix64 := mormot.core.os.GetTickCount64;
           tix := tix64 shr 16; // check SendFrame idle after 1 minute
