@@ -1523,6 +1523,7 @@ type
     fSockInEofError: integer;
     fWasBind: boolean;
     fSocketLayer: TNetLayer;
+    fSocketFamily: TNetFamily;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
@@ -1805,6 +1806,9 @@ type
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TNetLayer
       read fSocketLayer;
+    /// low-level socket family, initialized after Open() with socket
+    property SocketFamily: TNetFamily
+      read fSocketFamily;
     /// IP address, initialized after Open() with Server name
     property Server: RawUtf8
       read fServer;
@@ -4986,6 +4990,7 @@ var
 begin
   TLS.Enabled := false; // reset this flag which is set at output if aTLS=true
   fSocketLayer := aLayer;
+  fSocketFamily := nfUnknown;
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then
   begin
@@ -5015,6 +5020,7 @@ begin
         if res = nrOK then
         begin
           addr.IP(fRemoteIP, true);
+          fSocketFamily := addr.Family;
           res := nrRefused;
           SockSend(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
@@ -5065,6 +5071,7 @@ begin
       fServer := aServer; // keep the full server name if reused after Close
     {$endif OSPOSIX}
     addr.IP(fRemoteIP, true);
+    fSocketFamily := addr.Family;
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s) [remoteip=%s]',
         [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort, fRemoteIP], res);
