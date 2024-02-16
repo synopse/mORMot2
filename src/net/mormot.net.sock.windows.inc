@@ -1541,7 +1541,8 @@ const
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
 function TWinIocp.PrepareNext(one: PWinIocpSubscription;
-  event: TWinIocpEvent; buf: pointer; buflen: integer): boolean;
+  event: TWinIocpEvent; buf: pointer; buflen: integer;
+  acceptsock: TNetSocket): boolean;
 var
   bytes, flags: cardinal;
   sll: TSynLogInfo;
@@ -1584,9 +1585,11 @@ begin
         begin
           if fAcceptExBuf = nil then
             SetLength(fAcceptExBuf, ACCEPTEX_SIZE * 2);
-          fAcceptSocket := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
+          if acceptsock = nil then
+            acceptsock := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
+          fAcceptSocket := acceptsock;
           result := acceptex(
-                     o^.Socket, TSocket(fAcceptSocket), pointer(fAcceptExBuf), 0,
+                     o^.Socket, TSocket(acceptsock), pointer(fAcceptExBuf), 0,
                      ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @ov^.overlapped) or
                     (sockerrno = WSAIOPENDING)
         end
@@ -1597,7 +1600,7 @@ begin
     else
        err := 'unexpected event';
     end;
-  if err <> nil then
+  if err <> nil then // fatal error: need to fix the code -> raise EWinIocp
   begin
     ov^.prepared.UnLock;
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
@@ -1607,9 +1610,8 @@ begin
   begin
     sll := sllTrace;
     if not result then
-      sll := sllLastError;
-    fOnLog(sll, 'PrepareNext(%%)=%',
-      [IOCP_EVENT[event], pointer(o^.socket), result], self);
+      sll := sllLastError; // socket error: log and return false
+    fOnLog(sll, 'PrepareNext(%%)', [IOCP_EVENT[event], pointer(o^.socket)], self);
   end;
 end;
 

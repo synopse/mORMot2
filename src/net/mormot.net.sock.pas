@@ -1333,8 +1333,9 @@ type
     // avoid potential WSAENOBUFS errors (the "zero read byte trick")
     // - for wieSend, you would rather specify a buffer to be sent asynchronously
     // and avoid GetNext() to return immediately even if send() would fail
+    // - for wieAccept, you can specify a pre-allocated TNetSocket to use
     function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
-      buf: pointer; buflen: integer): boolean;
+      buf: pointer = nil; buflen: integer = 0; acceptsock: TNetSocket = nil): boolean;
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
     function GetNextAccept(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;
