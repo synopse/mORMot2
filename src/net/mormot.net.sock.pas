@@ -352,6 +352,15 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   out netsocket: TNetSocket; netaddr: PNetAddr = nil;
   bindReusePort: boolean = false): TNetResult;
 
+/// create a new raw TNetSocket instance
+// - returns nil on error
+function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;
+
+/// create several new raw TNetSocket instances
+// - raise ENetSock on error
+function NewRawSockets(family: TNetFamily; layer: TNetLayer;
+  count: integer): TNetSocketDynArray;
+
 /// delete a hostname from TNetAddr.SetFrom internal short-living cache
 procedure NetAddrFlush(const hostname: RawUtf8);
 
@@ -2328,7 +2337,7 @@ var
   s: TSocket;
 begin
   s := socket(PSockAddr(@Addr)^.sa_family, _ST[layer], _IP[layer]);
-  if s < 0 then
+  if s <= 0 then
     result := nil
   else
     result := TNetSocket(s);
@@ -2583,6 +2592,33 @@ begin
     if (addr.Port <> 0) or                   // 0 = assigned by the OS
        (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
       MoveFast(addr, netaddr^, addr.Size);
+end;
+
+function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;
+var
+  s: TSocket;
+begin
+  s := socket(_SF[family], _ST[layer], _IP[layer]);
+  if s <= 0 then
+    result := nil
+  else
+    result := TNetSocket(s);
+end;
+
+function NewRawSockets(family: TNetFamily; layer: TNetLayer;
+  count: integer): TNetSocketDynArray;
+var
+  i: PtrInt;
+  s: TSocket;
+begin
+  SetLength(result, count);
+  for i := 0 to count - 1 do
+  begin
+    s := socket(_SF[family], _ST[layer], _IP[layer]);
+    if s <= 0 then
+      ENetSock.CheckLastError('NewNetSockets', {forceraise=}true);
+    result[i] := TNetSocket(s);
+  end;
 end;
 
 

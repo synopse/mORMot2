@@ -386,10 +386,14 @@ const
     SOCK_STREAM,
     SOCK_DGRAM,
     0);
-
   _IP: array[TNetLayer] of integer = (
     IPPROTO_TCP,
     IPPROTO_UDP,
+    0);
+  _SF: array[TNetFamily] of integer = (
+    0,
+    AF_INET,
+    AF_INET6,
     0);
 
 function htons(port: cardinal): cardinal; {$ifdef HASINLINE} inline; {$endif}

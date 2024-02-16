@@ -91,11 +91,15 @@ const
     SOCK_STREAM,
     SOCK_DGRAM,
     SOCK_STREAM);
-
   _IP: array[TNetLayer] of integer = (
     IPPROTO_TCP,
     IPPROTO_UDP,
     0);
+  _SF: array[TNetFamily] of integer = (
+    0,
+    AF_INET,
+    AF_INET6,
+    AF_UNIX);
 
 {$packrecords C}
 
