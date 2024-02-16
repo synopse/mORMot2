@@ -3129,9 +3129,27 @@ begin
     [GetEnumName(TypeInfo(THttpServerExecuteState), ord(State))^], self);
 end;
 
+{.$define IOCP_ACCEPTEX}
+{.$define IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+// it was reported to be more stable/scaling by some experts, but not by us
+
 procedure TAsyncServer.Execute;
 var
-  {$ifndef USE_WINIOCP} // in IOCP mode, this thread does only blocking accept()
+  {$ifdef USE_WINIOCP}
+  // in IOCP mode, this thread does only accept() or acceptex()
+  {$ifdef IOCP_ACCEPTEX}
+  iocp: TWinIocp; // wieAccept events in their its own IOCP queue
+  sub: PWinIocpSubscription;
+  e: TWinIocpEvent;
+  bytes: cardinal;
+  {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+  sockets: TNetSocketDynArray;
+  s: TNetSocket;
+  i: PtrInt;
+  {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+  {$endif IOCP_ACCEPTEX}
+  {$else}
+  // in select/poll/epoll mode, this thread may do accept or accept+write
   notif: TPollSocketResult;
   async: boolean;
   {$endif USE_WINIOCP}
@@ -3146,6 +3164,10 @@ begin
   // and Send() output packets in the background if fExecuteAcceptOnly=false
   SetCurrentThreadName('A:%', [fProcessName]);
   NotifyThreadStart(self);
+  {$ifdef IOCP_ACCEPTEX}
+  iocp := TWinIocp.Create({processing=}1);
+  try
+  {$endif IOCP_ACCEPTEX}
   try
     // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
@@ -3154,7 +3176,17 @@ begin
     if not fServer.SockIsDefined then // paranoid check
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
-    {$ifndef USE_WINIOCP}
+    {$ifdef USE_WINIOCP}
+    {$ifdef IOCP_ACCEPTEX}
+    {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+    sockets := NewRawSockets(fServer.SocketFamily, nlTcp, 10000);
+    i := 0; // we have pre-allocated 10000 sockets
+    {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+    sub := iocp.Subscribe(fServer.Sock, 0);
+    if not iocp.PrepareNext(sub, wieAccept) then
+      RaiseLastError('TAsyncServer.Execute: acceptex', EWinIocp);
+    {$endif IOCP_ACCEPTEX}
+    {$else}
     async := false; // at least first Accept() will be blocking
     if not fExecuteAcceptOnly then
       // setup the main bound connection to be polling together with the writes
@@ -3167,18 +3199,52 @@ begin
     start := 0;
     while not Terminated do
     begin
-      {$ifndef USE_WINIOCP}
+      {$ifdef USE_WINIOCP}
+      {$ifdef IOCP_ACCEPTEX}
+      sub := iocp.GetNext(INFINITE, e, bytes);
+      if sub = nil then
+        break;
+      if iocp.GetNextAccept(sub, client, sin) then
+      begin
+        if acoEnableTls in fOptions then
+          res := nrOk
+        else
+          res := client.MakeAsync;
+        if res = nrOk then
+        {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+        begin
+          s := nil;
+          if i <= high(sockets) then
+          begin
+            s := sockets[i]; // we provide our own pre-allocated socket
+            inc(i);
+          end;
+          if not iocp.PrepareNext(sub, wieAccept, nil, 0, s) then
+            res := nrFatalError;
+        end;
+        {$else}
+          if not iocp.PrepareNext(sub, wieAccept) then
+            res := nrFatalError;
+        {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+      end
+      else
+        res := nrFatalError;
+      {$else}
+      res := fServer.Sock.Accept(client, sin, // = accept4() on Linux
+        {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
+      {$endif IOCP_ACCEPTEX}
+      {$else}
       PQWord(@notif)^ := 0; // direct blocking accept() by default
       if async and
          not fClients.fWrite.GetOne(1000, 'AW', notif) then
         continue;
       if ResToTag(notif) = 0 then // no tag = main accept()
       begin
-      {$endif USE_WINIOCP}
         // could we Accept one or several incoming connection(s)?
         {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
         res := fServer.Sock.Accept(client, sin, // = accept4() on Linux
           {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
+      {$endif USE_WINIOCP}
         {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
           ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
         if Terminated then
@@ -3276,6 +3342,11 @@ begin
         [E.ClassType, fProcessName], self);
     end;
   end;
+  {$ifdef IOCP_ACCEPTEX}
+  finally
+    iocp.Free;
+  end;
+  {$endif IOCP_ACCEPTEX}
   DoLog(sllInfo, 'Execute: done AW %', [fProcessName], self);
   SetExecuteState(esFinished);
 end;
