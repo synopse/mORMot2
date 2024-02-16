@@ -1324,7 +1324,7 @@ type
     // - is typically called from processing threads
     // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
     // call PrepareNext()
-    // - for wieAccept, call then GetNextAcceptAndPrepare()
+    // - for wieAccept, call then GetNextAccept() and PrepareNext()
     function GetNext(timeoutms: cardinal;
       out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next event on this subscription

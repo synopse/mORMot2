@@ -53,7 +53,7 @@ type
     // the ODBC Data source name as defined in "ODBC Data Source Administrator"
     // tool (C:\Windows\SysWOW64\odbcad32.exe for 32bit app on Win64) - in this
     // case, aDatabaseName will be ignored
-    // - SQLDriverConnect() API will be used if aServerName is '' and
+    // - SqlDriverConnect() API will be used if aServerName is '' and
     // aDatabaseName is set - in this case, aDatabaseName should contain a
     // full connection string like (e.g. for a local SQLEXPRESS instance):
     // ! 'DRIVER=SQL Server Native Client 10.0;UID=.;server=.\SQLEXPRESS;'+
@@ -112,7 +112,7 @@ type
     procedure GetProcedureParameters(const aProcName: RawUtf8;
       out Parameters: TSqlDBProcColumnDefineDynArray); override;
     /// if full connection string may prompt the user for additional information
-    // - property used only with SQLDriverConnect() API (i.e. when aServerName
+    // - property used only with SqlDriverConnect() API (i.e. when aServerName
     // is '' and aDatabaseName contains a full connection string)
     // - set to TRUE to allow UI prompt if needed
     property SqlDriverConnectPrompt: boolean
@@ -396,7 +396,7 @@ begin
         fSqlDriverFullString[1] := #0;
         Len := 0;
         Check(self, nil,
-          SQLDriverConnectA(fDbc, GetDesktopWindow, Pointer(fDatabaseName),
+          SqlDriverConnectA(fDbc, GetDesktopWindow, Pointer(fDatabaseName),
             length(fDatabaseName), pointer(fSqlDriverFullString), length(fSqlDriverFullString),
             Len, DRIVERCOMPLETION[fOdbcProperties.fSqlDriverConnectPrompt]),
           SQL_HANDLE_DBC, fDbc);
