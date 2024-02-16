@@ -23,7 +23,7 @@ interface
   {$undef USE_WINIOCP}
 {$endif NO_ASYNC_WINIOCP}
 // you may define NO_ASYNC_WINIOCP conditional to force regular select() instead
-// of TWinIocp - but the later is twice faster and scales much better
+// of TWinIocp - but the later seems faster and should scale much better
 
 uses
   sysutils,
@@ -118,7 +118,7 @@ type
     // opaque Windows IOCP instances returned by TWinIocp.Subscribe()
     {$ifdef USE_WINIOCP}
     fIocp: PWinIocpSubscription; // a single IOCP queue for wieRecv+wieSend
-    procedure IocpPrepareNextWrite(queue: TWinIocp);
+    function IocpPrepareNextWrite(queue: TWinIocp): boolean;
     {$endif USE_WINIOCP}
     /// called when the instance is connected to a poll
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
@@ -1143,21 +1143,18 @@ end;
 
 {$ifdef USE_WINIOCP}
 
-procedure TPollAsyncConnection.IocpPrepareNextWrite(queue: TWinIocp);
-var
-  buf: pointer;
-  len: integer;
+function TPollAsyncConnection.IocpPrepareNextWrite(queue: TWinIocp): boolean;
 begin
   if fWr.Len = 0 then
-    exit;
-  buf := nil; // on TLS, don't send any plain buffer
-  len := 0;
-  if fSecure = nil then
-  begin
-    buf := fWr.Buffer; // try to send some data asynchronously
-    len := fWr.Len;    // otherwise GetNext() would return with no delay
-  end;
-  queue.PrepareNext(fIocp, wieSend, buf, len);
+    // nothing more to send
+    result := true
+  else if fSecure = nil then
+    // try to send some plain data asynchronously
+    // otherwise GetNext() would return with no delay
+    result := queue.PrepareNext(fIocp, wieSend, fWr.Buffer, fWr.len)
+  else
+    // on TLS, don't send any plain buffer but let INetTls handle the socket
+    result := queue.PrepareNext(fIocp, wieSend);
 end;
 
 {$else}
@@ -1524,9 +1521,9 @@ begin
   if result then
     case sub of
       pseRead:
-        result := fIocp.PrepareNext(connection.fIocp, wieRecv, nil, 0);
+        result := fIocp.PrepareNext(connection.fIocp, wieRecv);
       pseWrite:
-        result := fIocp.PrepareNext(connection.fIocp, wieSend, nil, 0);
+        result := fIocp.PrepareNext(connection.fIocp, wieSend);
     end;
   {$else}
   if sub = pseRead then
@@ -1683,7 +1680,8 @@ begin
         begin
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           {$ifdef USE_WINIOCP}
-          fIocp.PrepareNext(connection.fIocp, wieRecv, nil, 0);
+          if not fIocp.PrepareNext(connection.fIocp, wieRecv) then
+            UnlockAndCloseConnection(false, connection, 'ProcessRead PrepareNext');
           {$else}
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
@@ -1730,8 +1728,12 @@ begin
   LockedInc32(@fProcessingWrite);
   try
     res := nrOK;
+    {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
         (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
+    {$else}
+    if
+    {$endif USE_WINIOCP}
        connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
       //DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
@@ -1794,7 +1796,9 @@ begin
           connection.fWr.Reset;
         end;
       {$ifdef USE_WINIOCP}
-      connection.IocpPrepareNextWrite(fIocp);
+      if res in [nrOk, nrRetry] then
+        if not connection.IocpPrepareNextWrite(fIocp) then
+          res := nrFatalError;
       {$else}
       if connection.fWr.Len = 0 then
       begin
@@ -1816,12 +1820,13 @@ begin
     else
     begin
       // if already locked (unlikely) -> retry later
-      {$ifdef USE_WINIOCP}
-      connection.IocpPrepareNextWrite(fIocp);
-      {$endif USE_WINIOCP}
       if fDebugLog <> nil then
         DoLog('ProcessWrite: WaitLock failed % -> will retry later',
           [pointer(connection)]);
+      {$ifdef USE_WINIOCP}
+      if not connection.IocpPrepareNextWrite(fIocp) then
+        CloseConnection(connection);
+      {$endif USE_WINIOCP}
     end;
   finally
     LockedDec32(@fProcessingWrite);
@@ -2264,7 +2269,8 @@ begin
     exit;
   // np := fClients.fRead.DeleteSeveralPending(pointer(gc), ngc); always 0
   if Assigned(fLog) then
-    fLog.Add.Log(sllTrace,  'DoGC #1=% #2=% free=%', [n1, n2, tofree.Count], self);
+    fLog.Add.Log(sllTrace,  'DoGC #1=% #2=% free=% client=%',
+      [n1, n2, tofree.Count, fClients.Count], self);
   if tofree.Count <> 0 then
     ObjArrayClear(tofree.Items, {continueonexc=}true, @tofree.Count);
 end;
