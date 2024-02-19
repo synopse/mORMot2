@@ -2276,13 +2276,13 @@ begin
   if Terminated or
      (fGC[1].Count + fGC[2].Count = 0) then
     exit;
+  tofree.Count := 0;
   fGC[1].Safe.Lock;
   fGC[2].Safe.Lock;
   try
     // keep in first generation GC for 100 ms by default
     n1 := OneGC(fGC[1], fGC[2], fLastOperationMS, fKeepConnectionInstanceMS);
     // wait 2 seconds until no pending event is in queue and free instances
-    tofree.Count := 0;
     n2 := OneGC(fGC[2], tofree, fLastOperationMS, 2000);
   finally
     fGC[2].Safe.UnLock;
@@ -2968,16 +2968,22 @@ begin
   // called from fClients.fWrite.OnGetOneIdle callback
   if Terminated then
     exit;
-  fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
-  DoGC;
-  if fOnIdle <> nil then
-    for i := 0 to length(fOnIdle) - 1 do
-      fOnIdle[i](Sender, NowTix);
-  sec := Qword(NowTix) div 1000; // 32-bit second resolution is fine
-  if sec = fLastOperationSec then
-    exit; // not a new second tick yet
-  fLastOperationSec := sec;
-  IdleEverySecond;
+  try
+    fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
+    DoGC;
+    if fOnIdle <> nil then
+      for i := 0 to length(fOnIdle) - 1 do
+        fOnIdle[i](Sender, NowTix);
+    sec := Qword(NowTix) div 1000; // 32-bit second resolution is fine
+    if (sec = fLastOperationSec) or
+       Terminated then
+      exit; // not a new second tick yet
+    fLastOperationSec := sec;
+    IdleEverySecond;
+  except // any exception from here is fatal for the whole server process
+    on E: Exception do
+      DoLog(sllWarning, 'ProcessIdleTix catched %', [E], self);
+  end;
   // note: this method should be non-blocking and return quickly
   // e.g. overriden in TWebSocketAsyncConnections to send pending frames
 end;
