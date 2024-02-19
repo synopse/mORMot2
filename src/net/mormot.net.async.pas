@@ -144,6 +144,8 @@ type
     function AfterWrite: TPollAsyncSocketOnReadWrite; virtual;
     /// this method is called when the sockets is closing
     procedure OnClose; virtual;
+    /// called by ReleaseMemoryOnIdle within the read lock: clean fRd here
+    function ReleaseReadMemoryOnIdle: PtrInt; virtual;
   public
     /// finalize the instance
     destructor Destroy; override;
@@ -892,6 +894,7 @@ type
     procedure DoAfterResponse;
     procedure AsyncResponse(Sender: THttpServerRequestAbstract;
       RespStatus: integer);
+    function ReleaseReadMemoryOnIdle: PtrInt; override;
   public
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); override;
@@ -1070,6 +1073,12 @@ begin
   include(fFlags, fClosed);
 end;
 
+function TPollAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
+begin
+  result := fRd.Capacity; // returns number of bytes released
+  fRd.Clear; // fBuffer := ''
+end;
+
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
 begin
   // called now and then to reduce temp memory consumption on Idle connections
@@ -1077,8 +1086,7 @@ begin
   if (fRd.Buffer <> nil) and
      TryLock({wr=}false) then
   begin
-    inc(result, fRd.Capacity); // returns number of bytes released
-    fRd.Clear;
+    inc(result, ReleaseReadMemoryOnIdle);
     UnLock(false);
   end;
   if (fWr.Buffer <> nil) and
@@ -3806,6 +3814,15 @@ begin
     if locked then
       UnLock({wr=}false);
   end;
+end;
+
+function THttpAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
+begin
+  result := inherited ReleaseReadMemoryOnIdle; // clean fRd memory
+  inc(result, fHttp.Head.Capacity);
+  fHttp.Head.Clear;
+  inc(result, fHttp.Process.Capacity);
+  fHttp.Process.Clear;
 end;
 
 function THttpAsyncConnection.DoRequest: TPollAsyncSocketOnReadWrite;
