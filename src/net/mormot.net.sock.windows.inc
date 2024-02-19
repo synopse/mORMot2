@@ -1406,7 +1406,7 @@ end;
 type
   // one overlapped structure for each TWinIocpEvent
   TOverlappedEvent = record // should NOT be packed
-    prepared: TLightLock;
+    prepared: TLightLock;   // used if wioLockEvent is set in fOptions
     overlapped: TOverlapped;
     event: TWinIocpEvent;   // should appear just after the TOverlapped
     buf: TWsaBuf;
@@ -1454,7 +1454,7 @@ end;
 
 { TWinIocp }
 
-constructor TWinIocp.Create(processing: integer);
+constructor TWinIocp.Create(processing: integer; options: TWinIocpOptions);
 begin
   if processing = 0 then
     processing := SystemInfo.dwNumberOfProcessors;
@@ -1462,6 +1462,7 @@ begin
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
   fMaxWait := processing;
+  fOptions := options;
   fOne.Init(SizeOf(TIocpSubscription));
   if Assigned(fOnLog) then
     fOnLog(sllDebug, 'Create maxwait=%', [fMaxWait], self);
@@ -1505,12 +1506,12 @@ begin
     CloseHandle(fIocp);
   // close and/or log remainining sockets
   if Assigned(fOnLog) or
-     fUnsubscribeShutdownSocket then
+     (wioUnsubscribeShutdownSocket in fOptions) then
   begin
     sub := fOne.Head;
     while sub <> nil do
     begin
-      if fUnsubscribeShutdownSocket then
+      if wioUnsubscribeShutdownSocket in fOptions then
         TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
       if Assigned(fOnLog) then
         fOnLog(sllDebug, 'leak sock=% over=%',
@@ -1579,7 +1580,8 @@ begin
      fTerminated then
     exit;
   oe := @o^.over[event]; // each event has its own TOverlappedEvent buffer
-  if not oe^.prepared.TryLock then
+  if (wioLockEvent in fOptions) and
+     not oe^.prepared.TryLock then
     raise EWinIocp.CreateFmt('TWinIocp.PrepareGetNet: concurrent %s on %x',
       [IOCP_EVENT[event], integer(o^.socket)]);
   err := nil;
@@ -1632,7 +1634,8 @@ begin
     end;
   if err <> nil then // fatal error: need to fix the code -> raise EWinIocp
   begin
-    oe^.prepared.UnLock;
+    if wioLockEvent in fOptions then
+      oe^.prepared.UnLock;
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
       [IOCP_EVENT[event], err, integer(o^.socket)]);
   end;
@@ -1679,14 +1682,17 @@ begin
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
     dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
     // now o/one points to PWinIocpSubscription/PIocpSubscription
-    oe := @one^.over[event];
     sll := sllTrace;
     if pointer(one^.head.sequence) <> dummy then
       sll := sllWarning // detect ABA race condition
-    else if oe^.prepared.IsLocked then
-      oe^.prepared.UnLock
-    else
-      sll := sllError; // this TOverlappedEvent should be locked/prepared
+    else if wioLockEvent in fOptions then
+    begin
+      oe := @one^.over[event];
+      if oe^.prepared.IsLocked then
+        oe^.prepared.UnLock
+      else
+        sll := sllError; // this TOverlappedEvent should be locked/prepared
+    end;
     if Assigned(fOnLog) then
       if sll = sllTrace then
         fOnLog(sll, 'GetNext=%% %',
@@ -1749,7 +1755,7 @@ begin
      (one = nil) then
     exit;
   res := nrOK;
-  if fUnsubscribeShutdownSocket then
+  if wioUnsubscribeShutdownSocket in fOptions then
     res := TNetSocket(o^.socket).ShutdownAndClose({rdwr=}false);
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'UnSubscribe(socket=% seq=%) cnt=% %',

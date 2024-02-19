@@ -1291,6 +1291,15 @@ type
     function HasCompleted(event: TWinIocpEvent): boolean;
   end;
 
+  /// allow to customize TWinIocp process
+  // - wioUnsubscribeShutdownSocket let Unsubscribe() also call
+  // ShutdownAndClose(socket)
+  // - wioLockEvent will use a lock to track PrepareNext/GetNext pairs
+  TWinIocpOption = (
+    wioUnsubscribeShutdownSocket,
+    wioLockEvent);
+  TWinIocpOptions = set of TWinIocpOption;
+
   {$M+}
   /// efficient socket polling via Windows' IOCP API
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
@@ -1302,7 +1311,8 @@ type
   protected
     fOne: TLockedList; // O(1) allocate/recycle PWinIocpSubscription instances
     fMaxWait, fWaiting, fPosted: integer;
-    fTerminated, fUnsubscribeShutdownSocket: boolean;
+    fOptions: TWinIocpOptions;
+    fTerminated: boolean;
     fOnLog: TSynLogProc;
     fIocp: THandle;
     fAcceptExUsed: TLightLock; // can track only a single AcceptEx()
@@ -1310,7 +1320,7 @@ type
     fAcceptExBuf: TBytes;
   public
     /// initialize this IOCP queue for a number of processing thread
-    constructor Create(processing: integer = 1);
+    constructor Create(processing: integer = 1; options: TWinIocpOptions = []);
     /// finalize this IOCP queue
     destructor Destroy; override;
     /// associate this IOCP queue to a given socket
@@ -1347,9 +1357,6 @@ type
     /// flag set when Terminate has been called
     property Terminated: boolean
       read fTerminated;
-    /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
-    property UnsubscribeShouldShutdownSocket: boolean
-      read fUnsubscribeShutdownSocket write fUnsubscribeShutdownSocket;
     /// allow raw debugging via logs of the low-level process
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;

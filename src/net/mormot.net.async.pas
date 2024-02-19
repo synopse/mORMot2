@@ -1210,8 +1210,7 @@ begin
   fOptions := aOptions;
   inherited Create;
   {$ifdef USE_WINIOCP}
-  fIocp := TWinIocp.Create(aThreadCount);
-  fIocp.UnsubscribeShouldShutdownSocket := true;
+  fIocp := TWinIocp.Create(aThreadCount, [wioUnsubscribeShutdownSocket]);
   {$else}
   fRead := TPollReadSockets.Create;
   fRead.UnsubscribeShouldShutdownSocket := true;
