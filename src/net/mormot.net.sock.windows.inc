@@ -1408,9 +1408,10 @@ type
   TOverlappedEvent = record // should NOT be packed
     prepared: TLightLock;
     overlapped: TOverlapped;
-    event: TWinIocpEvent; // should appear just after the TOverlapped
+    event: TWinIocpEvent;   // should appear just after the TOverlapped
     buf: TWsaBuf;
   end;
+  POverlappedEvent = ^TOverlappedEvent;
 
   // data structure returned by TWinIocp.Subscribe as PWinIocpSubscription
   PIocpSubscription = ^TIocpSubscription;
@@ -1457,10 +1458,10 @@ begin
   fIocp := IocpCreate(INVALID_HANDLE_VALUE, 0, nil, processing);
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);
-  fProcessingCount := processing;
+  fMaxWait := processing;
   fOne.Init(SizeOf(TIocpSubscription));
   if Assigned(fOnLog) then
-    fOnLog(sllDebug, 'Create processing=%', [fProcessingCount], self);
+    fOnLog(sllDebug, 'Create maxwait=%', [fMaxWait], self);
 end;
 
 procedure TWinIocp.Terminate;
@@ -1468,7 +1469,7 @@ var
   i: integer;
 begin
   fTerminated := true; // set the flag
-  for i := 1 to fProcessingCount do
+  for i := 1 to fMaxWait do
     IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads/queue
 end;
 
@@ -1484,10 +1485,10 @@ begin
     Terminate;
   // wait for all pending GetNext() termination
   endtix := 0;
-  if fGetNextPending <> 0 then
+  if fWaiting <> 0 then
     repeat
       if Assigned(fOnLog) then
-        fOnLog(sllDebug, 'Destroy pending=%', [fGetNextPending], self);
+        fOnLog(sllDebug, 'Destroy waiting=%', [fWaiting], self);
       IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
       SleepHiRes(10);
       tix := mormot.core.os.GetTickCount64 shr 10;
@@ -1495,7 +1496,7 @@ begin
         endtix := tix + 5
       else if tix > endtix then
         break; // never wait forever
-    until fGetNextPending = 0;
+    until fWaiting = 0;
   // delete the queue
   if fIocp <> 0 then
     CloseHandle(fIocp);
@@ -1509,7 +1510,9 @@ begin
       if fUnsubscribeShutdownSocket then
         TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
       if Assigned(fOnLog) then
-        fOnLog(sllDebug, 'leak sock=%', [pointer(sub^.socket)], nil);
+        fOnLog(sllDebug, 'leak sock=% over=%',
+          [pointer(sub^.socket),
+           PtrUInt(sub^.over[wieRecv].overlapped.Internal)], nil);
       sub := sub.head.next;
     end;
   end;
@@ -1563,40 +1566,45 @@ function TWinIocp.PrepareNext(one: PWinIocpSubscription;
   event: TWinIocpEvent; buf: pointer; buflen: integer;
   acceptsock: TNetSocket): boolean;
 var
-  bytes, flags: cardinal;
-  sll: TSynLogLevel;
+  bytes, flags, e: cardinal;
   o: PIocpSubscription absolute one;
-  ov: ^TOverlappedEvent;
+  oe: POverlappedEvent;
   err: PUtf8Char;
 begin
   result := false;
   if (one = nil) or
      fTerminated then
     exit;
-  ov := @o^.over[event]; // each event has its own TOverlappedEvent buffer
-  if not ov^.prepared.TryLock then
+  oe := @o^.over[event]; // each event has its own TOverlappedEvent buffer
+  if not oe^.prepared.TryLock then
     raise EWinIocp.CreateFmt('TWinIocp.PrepareGetNet: concurrent %s on %x',
       [IOCP_EVENT[event], integer(o^.socket)]);
   err := nil;
   bytes := 0;
   flags := 0;
   if buflen <= 0 then
+  begin
     buf := nil; // ensure consistent TWsaBuf
-  ov^.buf.pBuffer := buf;
-  ov^.buf.cLength := buflen;
+    buflen := 0;
+  end;
+  oe^.buf.pBuffer := buf;
+  oe^.buf.cLength := buflen;
   case event of
-    // asynchronous overlapped read or write with fWsaBuf.len=0 to avoid WSAENOBUFS
-    // and work with regular sockets recv/send calls like TPollSocketAbstract
     wieRecv:
+      // from mormot.net.async: overlapped read with buflen=0 to avoid WSAENOBUFS
+      // and work with regular sockets recv() calls like TPollSocketAbstract
       result := // WSARecv=NO_ERROR if there is something to recv()
-        (WSARecv(o^.socket, ov^.buf, 1, bytes, flags, @ov^.overlapped) = NO_ERROR) or
+        (WSARecv(o^.socket, oe^.buf, 1, bytes, flags, @oe^.overlapped) = NO_ERROR) or
         (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data
     wieSend:
+      // from mormot.net.async: overlapped write with buf/buflen = connection.fWr
+      // to avoid GetNext returning with no delay (and save a syscall)
       result :=
-        (WSASend(o^.socket, ov^.buf, 1, bytes, 0, @ov^.overlapped) = NO_ERROR) or
+        (WSASend(o^.socket, oe^.buf, 1, bytes, 0, @oe^.overlapped) = NO_ERROR) or
         (sockerrno = WSAIOPENDING);
-    // overlapped AcceptEx() to be followed by GetNextAcceptAndPrepare()
     wieAccept:
+      // overlapped AcceptEx() to be followed by GetNextAcceptAndPrepare()
+      // from mormot.net.async: not used, unless IOCP_ACCEPTEX is defined
       if Assigned(acceptex) and
          Assigned(getacceptexsockaddrs) then
         if (fAcceptSocket = nil) and
@@ -1609,7 +1617,7 @@ begin
           fAcceptSocket := acceptsock;
           result := acceptex(
                      o^.Socket, TSocket(acceptsock), pointer(fAcceptExBuf), 0,
-                     ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @ov^.overlapped) or
+                     ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @oe^.overlapped) or
                     (sockerrno = WSAIOPENDING)
         end
         else
@@ -1621,17 +1629,22 @@ begin
     end;
   if err <> nil then // fatal error: need to fix the code -> raise EWinIocp
   begin
-    ov^.prepared.UnLock;
+    oe^.prepared.UnLock;
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s): %s on %x',
       [IOCP_EVENT[event], err, integer(o^.socket)]);
   end;
+  if result then
+    LockedInc32(@fPosted);
   if Assigned(fOnLog) then
-  begin
-    sll := sllTrace;
-    if not result then
-      sll := sllLastError; // socket error: log and return false
-    fOnLog(sll, 'PrepareNext(%%)', [IOCP_EVENT[event], pointer(o^.socket)], self);
-  end;
+    if result then
+      fOnLog(sllTrace, 'PrepareNext(%%)',
+        [IOCP_EVENT[event], pointer(o^.socket)], self)
+    else
+    begin
+      e := GetLastError;
+      fOnLog(sllDebug, 'PrepareNext(%%) error % %',
+        [IOCP_EVENT[event], pointer(o^.socket), e, WinErrorConstant(e)], self);
+    end;
 end;
 
 function TWinIocp.GetNext(timeoutms: cardinal;
@@ -1640,6 +1653,7 @@ var
   o, dummy: pointer;
   sll: TSynLogLevel;
   one: PIocpSubscription absolute o;
+  oe: POverlappedEvent;
 begin
   bytes := 0;
   result := nil;
@@ -1648,23 +1662,25 @@ begin
   repeat
     o := nil;
     dummy := nil;
-    LockedInc32(@fGetNextPending);
+    LockedInc32(@fWaiting);
     IocpGetQueuedStatus(fIocp, bytes, dummy, o, timeoutms);
-    LockedDec32(@fGetNextPending);
+    LockedDec32(@fWaiting);
     if fTerminated or
        (o = nil) then // o=nil from IocpPostQueuedStatus() in Terminate
       exit;
+    LockedDec32(@fPosted);
     inc(POverlapped(o));
     PByte(@event)^ := PByte(o)^; // TOverlappedEvent.event just after overlapped
     if event > high(event) then
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
     dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
     // now o/one points to PWinIocpSubscription/PIocpSubscription
+    oe := @one^.over[event];
     sll := sllTrace;
     if pointer(one^.head.sequence) <> dummy then
       sll := sllWarning // detect ABA race condition
-    else if one^.over[event].prepared.IsLocked then
-      one^.over[event].prepared.UnLock
+    else if oe^.prepared.IsLocked then
+      oe^.prepared.UnLock
     else
       sll := sllError; // this TOverlappedEvent should be locked/prepared
     if Assigned(fOnLog) then

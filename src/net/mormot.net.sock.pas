@@ -1301,7 +1301,7 @@ type
   TWinIocp = class
   protected
     fOne: TLockedList; // O(1) allocate/recycle PWinIocpSubscription instances
-    fProcessingCount, fGetNextPending: integer;
+    fMaxWait, fWaiting, fPosted: integer;
     fTerminated, fUnsubscribeShutdownSocket: boolean;
     fOnLog: TSynLogProc;
     fIocp: THandle;
@@ -1342,8 +1342,8 @@ type
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
     /// how many processing threads are likely to call GetNext
-    property ProcessingCount: integer
-      read fProcessingCount;
+    property MaxWait: integer
+      read fMaxWait;
     /// flag set when Terminate has been called
     property Terminated: boolean
       read fTerminated;
@@ -1357,6 +1357,13 @@ type
     /// how many TSocket instances are currently tracked
     property Count: integer
       read fOne.Count;
+    /// how many PrepareNext() are waiting for their asynchronous GetNext()
+    property Posted: integer
+      read fPosted;
+    /// how many GetNext() are waiting for the next event
+    // - Waiting=MaxWait means that there is currently no completed event
+    property Waiting: integer
+      read fWaiting;
   end;
   {$M-}
 
