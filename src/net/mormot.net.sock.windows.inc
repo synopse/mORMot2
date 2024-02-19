@@ -1444,11 +1444,33 @@ begin
     result := TNetSocket(PIocpSubscription(@self)^.socket);
 end;
 
-function TWinIocpSubscription.HasCompleted(event: TWinIocpEvent): boolean;
+function TWinIocpSubscription.CurrentStatus: TPollSocketEvents;
+var
+  o: PIocpSubscription;
 begin
-  result := (@self <> nil) and
-    (PtrUInt(PIocpSubscription(@self)^.over[event].overlapped.Internal) <>
-      STATUS_PENDING);
+  result := [];
+  o := @self;
+  if o = nil then
+    exit;
+  // most common case is Internal = STATUS_WAIT_0 = 0
+  case PtrUInt(o^.over[wieRecv].overlapped.Internal) of
+    STATUS_PENDING:
+      include(result, pseRead);
+    STATUS_REMOTE_DISCONNECT:
+      include(result, pseClosed);
+  end;
+  case PtrUInt(o^.over[wieSend].overlapped.Internal) of
+    STATUS_PENDING:
+      include(result, pseWrite);
+    STATUS_REMOTE_DISCONNECT:
+      include(result, pseClosed);
+  end;
+  case PtrUInt(o^.over[wieAccept].overlapped.Internal) of
+    STATUS_PENDING:
+      include(result, pseRead); // as select/poll/epoll
+    STATUS_REMOTE_DISCONNECT:
+      include(result, pseClosed);
+  end;
 end;
 
 

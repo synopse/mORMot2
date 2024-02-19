@@ -1288,7 +1288,7 @@ type
     /// return the TNetSocket associated with a Subscribe() call
     function Socket: TNetSocket;
     /// check the overlapped status of a Subscribe() call
-    function HasCompleted(event: TWinIocpEvent): boolean;
+    function CurrentStatus: TPollSocketEvents;
   end;
 
   /// allow to customize TWinIocp process
