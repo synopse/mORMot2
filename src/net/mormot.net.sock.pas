@@ -1320,13 +1320,6 @@ type
       tag: TPollSocketTag): PWinIocpSubscription;
     /// unsubscribe for events on a given socket
     function Unsubscribe(one: PWinIocpSubscription): boolean;
-    /// pick a pending task from the internal queue within a specified timeout
-    // - is typically called from processing threads
-    // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
-    // call PrepareNext()
-    // - for wieAccept, call then GetNextAccept() and PrepareNext()
-    function GetNext(timeoutms: cardinal;
-      out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
     /// notify IOCP that it needs to track the next event on this subscription
     // - typically called after socket recv/send to re-subscribe for events
     // - for wieRecv events, you should better not supply any buf/buflen to
@@ -1336,9 +1329,23 @@ type
     // - for wieAccept, you can specify a pre-allocated TNetSocket to use
     function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
       buf: pointer = nil; buflen: integer = 0; acceptsock: TNetSocket = nil): boolean;
+    /// pick a pending task from the internal queue within a specified timeout
+    // - is typically called from processing threads
+    // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
+    // call PrepareNext()
+    // - for wieAccept, call then GetNextAccept() and PrepareNext()
+    function GetNext(timeoutms: cardinal;
+      out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
     function GetNextAccept(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;
+    /// browse all overlapped strctures and return all completed TPollSocketTag
+    // - i.e. return the tags of all "event" which would appear in GetNext()
+    // - could be called e.g. every few seconds when Waiting=MaxWait, for
+    // paranoid deep cleaning (seems necessary e.g. with very aggressive tools
+    // like wrk and a lot of concurrent connections on oldest Windows revisions)
+    // - won't include PrepareNext(event) with buf/buflen <> nil/0
+    function GetWaiting(event: TWinIocpEvent = wieRecv): TPollSocketTagDynArray;
     /// shutdown this IOCP process and its queue - called e.g. by Destroy
     procedure Terminate;
     /// how many processing threads are likely to call GetNext

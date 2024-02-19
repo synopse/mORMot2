@@ -1425,6 +1425,9 @@ type
 
 { TWinIocpSubscription }
 
+const
+  STATUS_REMOTE_DISCONNECT = $C000013C;
+
 function TWinIocpSubscription.Tag: TPollSocketTag;
 begin
   if @self = nil then
@@ -1733,6 +1736,40 @@ begin
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'GetNextAccept(%)=%',
       [pointer(one^.socket), Remote.IPShort], self);
+end;
+
+function TWinIocp.GetWaiting(event: TWinIocpEvent): TPollSocketTagDynArray;
+var
+  sub: PIocpSubscription;
+  oe: POverlappedEvent;
+  status: cardinal;
+  n: integer;
+begin
+  result := nil;
+  if fPosted = 0 then
+    exit;
+  n := 0;
+  fOne.Safe.Lock;
+  try
+    sub := fOne.Head;
+    while sub <> nil do
+    begin
+      oe := @sub^.over[event];
+      status := PtrUInt(oe^.overlapped.Internal);
+      if (status = STATUS_REMOTE_DISCONNECT) or
+         ((status = STATUS_PENDING) and
+          (oe^.buf.cLength = 0)) then
+        AddInt64(TInt64DynArray(result), n, sub^.tag);
+      sub := sub^.head.next;
+    end;
+  finally
+    fOne.Safe.UnLock;
+  end;
+  if n = 0 then
+    exit;
+  DynArrayFakeLength(result, n);
+  if Assigned(fOnLog) then
+    fOnLog(sllDebug, 'GetWaiting(%)=%', [IOCP_EVENT[event], n], self);
 end;
 
 function TWinIocp.Unsubscribe(one: PWinIocpSubscription): boolean;
