@@ -376,14 +376,14 @@ const
   /// how TLogFilter map TSynLogLevel events
   LOG_FILTER: array[TSynLogFilter] of TSynLogLevels = (
     [],                                                       // lfNone
-    [succ(sllNone)..high(TSynLogLevel)],                       // lfAll
+    [succ(sllNone) .. high(TSynLogLevel)],                    // lfAll
     [sllError, sllLastError, sllException, sllExceptionOS],   // lfErrors
     [sllException, sllExceptionOS],                           // lfExceptions
     [sllEnter, sllLeave],                                     // lfProfile
     [sllSQL, sllCache, sllDB],                                // lfDatabase
     [sllClient, sllServer, sllServiceCall, sllServiceReturn], // lfClientServer
     [sllDebug, sllTrace, sllEnter],                           // lfDebug
-    [sllCustom1..sllCustom4],                                 // lfCustom
+    [sllCustom1 .. sllCustom4],                               // lfCustom
     [sllDDDError, sllDDDInfo]);                               // lfDDD
 
   /// may be used to log as Debug or Error event, depending on an Error: boolean

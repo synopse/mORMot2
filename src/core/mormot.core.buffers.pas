@@ -2649,6 +2649,48 @@ type
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
 
+  /// thread-safe reusable set of constant RawByteString instances
+  // - use internally its own TLockedList O(1) efficient structure
+  // - warning: any call to New() should manually be followed by one Release()
+  TRawByteStringCached = class
+  protected
+    fLength: integer;
+    fOne: TLockedList;
+  public
+    /// initialize the internal cache for a given length
+    constructor Create(aLength: integer);
+    /// return a new RawByteString of a given length, with refcount = -2
+    // - may be allocated or returned from its internal cache
+    procedure New(var aDest: RawByteString;
+      aCodePage: integer = CP_RAWBYTESTRING); overload;
+    /// return a new RawUtf8 of a given length, with refcount = -2
+    procedure New(var aDest: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return a new RawUtf8 of a given length into a pointer, with refcount = -2
+    procedure NewUtf8(var aDest: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// put back a RawByteString acquired from New() into the internal cache
+    procedure Release(var aDest: RawByteString); overload;
+    /// put back a RawUtf8 acquired from New() into the internal cache
+    procedure Release(var aDest: RawUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// put back a RawByteString acquired from NewUtf8() into the internal cache
+    procedure Release(var aDest: pointer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// release the RawByteString instances in the cache bin
+    // - keep any existing New() instances intact
+    // - returns how many memory has been released to the heap
+    function Clean: PtrInt;
+    /// release all cached instances
+    destructor Destroy; override;
+    /// how many New() calls are currently active
+    property Count: integer
+      read fOne.Count;
+    /// the length() of RawByteString returned by New()
+    property Length: integer
+      read fLength;
+  end;
+
   /// store one RawByteString content with an associated length
   // - to be used e.g. as a convenient reusable memory buffer
   {$ifdef USERECORDWITHMETHODS}
@@ -11004,6 +11046,85 @@ begin
   P := Find(aPosition, aLength);
   if P <> nil then
     MoveFast(P^, aDest^, aLength);
+end;
+
+
+{ TRawByteStringCached }
+
+type
+  TRawByteStringCacheOne = record
+    header: TLockedListOne;
+    strrec: TStrRec;
+  end;
+  PRawByteStringCacheOne = ^TRawByteStringCacheOne;
+
+constructor TRawByteStringCached.Create(aLength: integer);
+begin
+  fLength := aLength;
+  fOne.Init(aLength + (SizeOf(TRawByteStringCacheOne) + 1));
+end;
+
+procedure TRawByteStringCached.New(var aDest: RawByteString; aCodePage: integer);
+var
+  one: PRawByteStringCacheOne;
+begin
+  one := fOne.New;
+  one^.strrec.codePage := aCodePage;
+  one^.strrec.elemSize := 1;
+  one^.strrec.refCnt := -2;
+  one^.strrec.length := fLength;
+  inc(one);
+  FastAssignNew(aDest, one);
+end;
+
+procedure TRawByteStringCached.New(var aDest: RawUtf8);
+begin
+  New(RawByteString(aDest), CP_UTF8);
+end;
+
+procedure TRawByteStringCached.NewUtf8(var aDest: pointer);
+begin
+  New(PRawByteString(@aDest)^, CP_UTF8);
+end;
+
+procedure TRawByteStringCached.Release(var aDest: RawByteString);
+var
+  one: PRawByteStringCacheOne;
+begin
+  if self <> nil then
+  begin
+    one := pointer(aDest);
+    dec(one);
+    if (one^.strrec.refCnt = -2) and
+       (one^.strrec.length = TStrLen(fLength)) and
+       fOne.Free(one) then
+    begin
+      pointer(aDest) := nil;
+      exit;
+    end;
+  end;
+  FastAssignNew(aDest) // this was a regular RawByteString
+end;
+
+procedure TRawByteStringCached.Release(var aDest: RawUtf8);
+begin
+  Release(RawByteString(aDest));
+end;
+
+procedure TRawByteStringCached.Release(var aDest: pointer);
+begin
+  Release(PRawByteString(@aDest)^);
+end;
+
+function TRawByteStringCached.Clean: PtrInt;
+begin
+  result := fOne.EmptyBin * fOne.Size;
+end;
+
+destructor TRawByteStringCached.Destroy;
+begin
+  fOne.Done;
+  inherited Destroy;
 end;
 
 
