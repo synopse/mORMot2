@@ -4365,7 +4365,7 @@ type
     // - excluding the instances in the recycle bin
     Count: integer;
     /// initialize the storage for an inherited TLockedListOne size
-    procedure Init(Size: PtrUInt; const OnFree: TOnLockedListOne = nil);
+    procedure Init(onesize: PtrUInt; const onefree: TOnLockedListOne = nil);
     /// release all stored memory
     procedure Done;
     /// allocate a new PLockedListOne data instance in threadsafe O(1) process
@@ -4376,10 +4376,14 @@ type
     // - without moving any of those instances into the internal recycle bin
     procedure Clear;
     /// release all to-be-recycled items available in the internal bin
-    procedure EmptyBin;
+    // - returns how many items have been released from the internal collector
+    function EmptyBin: integer;
     /// raw access to the stored items as PLockedListOne dual-linked list
     property Head: pointer
       read fHead;
+    /// the size of one stored instance, including its TLockedListOne header
+    property Size: integer
+      read fSize;
   end;
 
 type
@@ -9623,20 +9627,22 @@ end;
 
 { TLockedList }
 
-procedure TLockedList.Init(Size: PtrUInt; const OnFree: TOnLockedListOne);
+procedure TLockedList.Init(onesize: PtrUInt; const onefree: TOnLockedListOne);
 begin
   FillCharFast(self, SizeOf(self), 0);
-  fSize := Size;
-  fOnFree := OnFree;
+  fSize := onesize;
+  fOnFree := onefree;
   fSequence := Random31;
 end;
 
-procedure LockedListFreeAll(o: PLockedListOne; const OnFree: TOnLockedListOne);
+function LockedListFreeAll(o: PLockedListOne; const OnFree: TOnLockedListOne): integer;
 var
   next: PLockedListOne;
 begin
+  result := 0;
   while o <> nil do
   begin
+    inc(result);
     next := o.next;
     if Assigned(OnFree) then
       OnFree(o);
@@ -9663,11 +9669,11 @@ begin
   end;
 end;
 
-procedure TLockedList.EmptyBin;
+function TLockedList.EmptyBin: integer;
 begin
   Safe.Lock;
   try
-    LockedListFreeAll(fBin, nil);
+    result := LockedListFreeAll(fBin, nil);
     fBin := nil;
   finally
     Safe.UnLock;
