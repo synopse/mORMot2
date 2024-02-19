@@ -176,10 +176,12 @@ function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
   out Value: Int64): boolean; overload;
 
 {$ifdef OSPOSIX}
-/// convert a file URL to a local file path using TUri
-// - Windows implementeds this in mormot.core.os.pas via PathCreateFromUrl() API
+
+/// convert a file URL to a local file path using our TUri parser
+// - mormot.core.os.pas implements this on Windows via PathCreateFromUrl() API
 // - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
 function GetFileNameFromUrl(const Uri: string): TFileName;
+
 {$endif OSPOSIX}
 
 /// extract a 64-bit value from a 'Range: xxx-xxx ' input
@@ -2783,7 +2785,7 @@ end;
 
 procedure THttpRequestContext.Clear;
 begin
-  Head.Reset;
+  Head.Reset;  // set Len to 0, but keep existing fBuffer
   Process.Reset;
   State := hrsNoStateMachine;
   HeaderFlags := [];

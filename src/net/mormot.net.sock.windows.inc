@@ -1503,6 +1503,8 @@ destructor TWinIocp.Destroy;
 var
   tix, endtix: cardinal;
   sub: PIocpSubscription;
+  tmp: cardinal;
+  tmplen: integer;
 begin
   if Assigned(fOnLog) then
     fOnLog(sllDebug, 'Destroy count=%', [fOne.Count], self);
@@ -1533,12 +1535,16 @@ begin
     sub := fOne.Head;
     while sub <> nil do
     begin
+      if Assigned(fOnLog) then
+      begin
+        tmplen := 4; // is usually recv=-1 + WSAEWOULDBLOCK so not recoverable
+        tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
+        fOnLog(sllWarning, 'leak sock=% over=% recv=% %',
+          [pointer(sub^.socket), PtrUInt(sub^.over[wieRecv].overlapped.Internal),
+           tmplen, sockerrno], nil);
+      end;
       if wioUnsubscribeShutdownSocket in fOptions then
         TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
-      if Assigned(fOnLog) then
-        fOnLog(sllDebug, 'leak sock=% over=%',
-          [pointer(sub^.socket),
-           PtrUInt(sub^.over[wieRecv].overlapped.Internal)], nil);
       sub := sub.head.next;
     end;
   end;
