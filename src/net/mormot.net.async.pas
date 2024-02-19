@@ -260,6 +260,9 @@ type
       const caller: shortstring);
     function RawWrite(connection: TPollAsyncConnection;
       var data: PByte; var datalen: integer): boolean;
+    {$ifdef USE_WINIOCP}
+    procedure IocpWaitingProcessRead(Sender: TSynThread);
+    {$endif USE_WINIOCP}
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -1600,7 +1603,8 @@ begin
     if pseClosed in pse then
     begin
       // - properly triggered from EPOLLRDHUP on Linux in ET mode
-      // - never notified on Windows: select() doesn't return any "close" flag
+      // - on Windows, IocpWaitingProcessRead() may return it from overlapped
+      // STATUS_REMOTE_DISCONNECT; but select() doesn't return any "close" flag
       // and checking for pending bytes for closed connection is not correct
       // on multi-thread -> Recv() below will properly detect disconnection
       CloseConnection(connection, 'ProcessRead pseClosed');
@@ -1852,6 +1856,26 @@ begin
   end;
 end;
 
+{$ifdef USE_WINIOCP}
+
+procedure TPollAsyncSockets.IocpWaitingProcessRead(Sender: TSynThread);
+var
+  i: PtrInt;
+  res: TPollSocketResultDynArray;
+  start: Int64;
+begin
+  // this does not fix anything: all ProcessRead get recv()=Retry :(
+  res := fIocp.GetWaiting(wieRecv);
+  if res = nil then
+    exit;
+  QueryPerformanceMicroSeconds(start);
+  for i := 0 to high(res) do
+    ProcessRead(Sender, res[i]);
+  if fDebugLog <> nil then
+    DoLog('IocpProcessRead: % in %', [length(res), MicroSecFrom(start)], sllDebug);
+end;
+
+{$endif USE_WINIOCP}
 
 { ******************** Client or Server Asynchronous Process }
 
@@ -2983,9 +3007,17 @@ begin
     MultiEventAdd(fOnIdle, TMethod(aOnIdle));
 end;
 
+{$ifdef USE_WINIOCP}
+
 function TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection): boolean;
 begin
-  {$ifndef USE_WINIOCP}
+  result := false; // Subscribe() is done by TPollAsyncSockets.Start caller
+end;
+
+{$else}
+
+function TAsyncConnections.ProcessClientStart(Sender: TPollAsyncConnection): boolean;
+begin
   if fThreadReadPoll <> nil then
   begin
     // initial accept() will be directly redirected to atpReadPending threads
@@ -2996,9 +3028,10 @@ begin
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
   else
-  {$endif USE_WINIOCP}
     result := false; // Subscribe() is done by TPollAsyncSockets.Start caller
 end;
+
+{$endif USE_WINIOCP}
 
 
 { TAsyncServer }
@@ -4183,6 +4216,13 @@ begin
           else
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
           fExecuteEvent.WaitFor(msidle);
+          if fShutdownInProgress or
+             Terminated or
+             fAsync.Terminated then
+            break;
+          // if the IOCP queue is void, try to read it manually (does not work)
+          if fAsync.fClients.fIocp.Waiting = fAsync.fClients.fIocp.MaxWait then
+            fAsync.fClients.IocpWaitingProcessRead(self);
           if fShutdownInProgress or
              Terminated or
              fAsync.Terminated then
