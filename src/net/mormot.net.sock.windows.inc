@@ -1563,6 +1563,8 @@ end;
 
 const
   IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWA';
+  IOCP_PSE: array[TWinIocpEvent] of TPollSocketEvent = (
+    pseRead, pseWrite, pseError);
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
 function TWinIocp.PrepareNext(one: PWinIocpSubscription;
@@ -1738,30 +1740,51 @@ begin
       [pointer(one^.socket), Remote.IPShort], self);
 end;
 
-function TWinIocp.GetWaiting(event: TWinIocpEvent): TPollSocketTagDynArray;
+function TWinIocp.GetWaiting(event: TWinIocpEvent): TPollSocketResultDynArray;
 var
   sub: PIocpSubscription;
   oe: POverlappedEvent;
-  status: cardinal;
+  ev, evpending: TPollSocketEvents;
+  res: TPollSocketResult;
   n: integer;
 begin
   result := nil;
   if fPosted = 0 then
     exit;
+  byte(evpending) := 0;
+  include(evpending, IOCP_PSE[event]);
+  byte(ev) := 0;
   n := 0;
   fOne.Safe.Lock;
   try
     sub := fOne.Head;
-    while sub <> nil do
-    begin
+    if sub <> nil then
+    repeat
       oe := @sub^.over[event];
-      status := PtrUInt(oe^.overlapped.Internal);
-      if (status = STATUS_REMOTE_DISCONNECT) or
-         ((status = STATUS_PENDING) and
-          (oe^.buf.cLength = 0)) then
-        AddInt64(TInt64DynArray(result), n, sub^.tag);
+      case PtrUInt(oe^.overlapped.Internal) of
+        STATUS_WAIT_0:
+          begin
+            sub := sub^.head.next; // most common case
+            if sub <> nil then
+              continue;
+            break;
+          end;
+        STATUS_REMOTE_DISCONNECT:
+          ev := [pseClosed];
+        STATUS_PENDING:
+          if oe^.buf.cLength = 0 then
+            ev := evpending;
+      end;
+      if ev <> [] then
+      begin
+        SetRes(res, sub^.tag, ev);
+        AddInt64(TInt64DynArray(result), n, res);
+        byte(ev) := 0;
+      end;
       sub := sub^.head.next;
-    end;
+      if sub = nil then
+        break;
+    until false;
   finally
     fOne.Safe.UnLock;
   end;
