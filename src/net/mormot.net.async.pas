@@ -943,7 +943,9 @@ type
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
     // the main thread will Send output packets in the background
     procedure Execute; override;
+    {$ifdef OSWINDOWS}
     function GetApiVersion: RawUtf8; override; // 'WinIocp'
+    {$endif OSWINDOWS}
   public
     /// create an event-driven HTTP Server
     constructor Create(const aPort: RawUtf8;
@@ -3287,6 +3289,7 @@ begin
       {$endif USE_WINIOCP}
         {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
           ToText(res)^, pointer(client), fAccepted, fConnectionHigh], self);}
+        // first check if the server was shut down
         if Terminated then
         begin
           {$ifndef USE_WINIOCP}
@@ -3303,10 +3306,12 @@ begin
           {$endif USE_WINIOCP}
           break;
         end;
+        // check if fServer.Sock.Accept() did return with a socket, or a timeout
         {if res = nrRetry then
           DoLog(sllCustom1, 'Execute: Accept(%) retry', [fServer.Port], self);}
         if res = nrRetry then // timeout
           continue;
+        // check if the remote IP is banned
         if (fBanned <> nil) and
            (fBanned.Count <> 0) and
            fBanned.IsBanned(sin) then // IP filtering from blacklist
@@ -3318,7 +3323,7 @@ begin
           client.ShutdownAndClose({rdwr=}false);    // reject before TLS setup
           continue;
         end;
-        inc(fAccepted);
+        // ensure we don't have too many connections on this server instance
         {$ifdef USE_WINIOCP}
         if fClients.fIocp.Count > fMaxConnections then
         {$else}
@@ -3330,18 +3335,20 @@ begin
           client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
           res := nrTooManyConnections;
         end;
+        // handle any socket error in fServer.Sock.Accept()
+        if Terminated then
+          break;
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
-          DoLog(sllLastError, 'Execute: Accept(%) failed as %',
+          DoLog(sllDebug, 'Execute: Accept(%) failed as %',
             [fServer.Port, ToText(res)^], self);
           // progressive wait on socket error, including nrTooManyConnections
           SleepStep(start);
           continue;
         end;
-        if Terminated then
-          break;
         // if we reached here, we have accepted a connection -> process
+        inc(fAccepted);
         start := 0; // reset sleep pace on error
         if ConnectionCreate(client, sin, connection) then
         begin
@@ -4104,6 +4111,7 @@ begin
   fExecuteMessage := fAsync.fExecuteMessage;
 end;
 
+{$ifdef OSWINDOWS}
 function THttpAsyncServer.GetApiVersion: RawUtf8;
 begin
   {$ifdef USE_WINIOCP}
@@ -4112,6 +4120,7 @@ begin
   result := 'WinSock';
   {$endif USE_WINIOCP}
 end;
+{$endif OSWINDOWS}
 
 procedure THttpAsyncServer.IdleEverySecond;
 var
