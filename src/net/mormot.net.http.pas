@@ -686,6 +686,7 @@ type
     fRouteNode: TRadixTreeNodeParams; // is a TUriTreeNode
     fRouteName: pointer; // set by TUriTreeNode.LookupParam
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
+    fHttp: PHttpRequestContext; // as supplied to Prepare()
     function GetRouteValuePosLen(const Name: RawUtf8;
       var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
@@ -696,11 +697,11 @@ type
     // - won't reset other parameters: should come after a plain Create or
     // an explicit THttpServerRequest.Recycle()
     procedure Prepare(const aHttp: THttpRequestContext; const aRemoteIP: RawUtf8;
-      aAuthorize: THttpServerRequestAuthentication); overload;
+      aAuthorize: THttpServerRequestAuthentication);
     /// prepare an incoming request from explicit values
     // - could be used for non-HTTP execution, e.g. from a WebSockets link
-    procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8); overload;
+    procedure PrepareDirect(const aUrl, aMethod, aInHeaders: RawUtf8;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(AppendedHeader: RawUtf8);
@@ -2811,10 +2812,14 @@ begin
   Options := [];
   Headers := '';
   ContentType := '';
-  Upgrade := '';
-  BearerToken := '';
-  UserAgent := '';
-  Referer := '';
+  if Upgrade <> '' then
+    Upgrade := '';
+  if BearerToken <> '' then
+    BearerToken := '';
+  if UserAgent <> '' then
+    UserAgent := '';
+  if Referer <> '' then
+    Referer := '';
   RangeOffset := 0;
   RangeLength := -1;
   Content := '';
@@ -4068,23 +4073,11 @@ end;
 
 { THttpServerRequestAbstract }
 
-procedure THttpServerRequestAbstract.Prepare(
-  const aUrl, aMethod, aInHeaders: RawUtf8; const aInContent: RawByteString;
-  const aInContentType, aRemoteIP: RawUtf8);
-begin
-  // Create or Recycle() would have zeroed other fields
-  fRemoteIP := aRemoteIP;
-  fUrl := aUrl;
-  fMethod := aMethod;
-  fInHeaders := aInHeaders;
-  fInContentType := aInContentType;
-  fInContent := aInContent;
-end;
-
 procedure THttpServerRequestAbstract.Prepare(const aHttp: THttpRequestContext;
   const aRemoteIP: RawUtf8; aAuthorize: THttpServerRequestAuthentication);
 begin
   fRemoteIP := aRemoteIP;
+  fHttp := @aHttp;
   fUrl := aHttp.CommandUri;
   fMethod := aHttp.CommandMethod;
   fInHeaders := aHttp.Headers;
@@ -4100,6 +4093,20 @@ begin
     fAuthBearer := aHttp.BearerToken;
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
+end;
+
+procedure THttpServerRequestAbstract.PrepareDirect(
+  const aUrl, aMethod, aInHeaders: RawUtf8; const aInContent: RawByteString;
+  const aInContentType, aRemoteIP: RawUtf8);
+begin
+  // Create or Recycle() would have zeroed other fields
+  fRemoteIP := aRemoteIP;
+  fHttp := nil;
+  fUrl := aUrl;
+  fMethod := aMethod;
+  fInHeaders := aInHeaders;
+  fInContentType := aInContentType;
+  fInContent := aInContent;
 end;
 
 procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);
