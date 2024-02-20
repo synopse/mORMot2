@@ -11074,8 +11074,10 @@ var
   one: PRawByteStringCacheOne;
 begin
   one := fOne.New;
+  {$ifdef HASCODEPAGE}
   one^.strrec.codePage := aCodePage;
   one^.strrec.elemSize := 1;
+  {$endif HASCODEPAGE}
   one^.strrec.refCnt := -2;
   one^.strrec.length := fLength;
   inc(one);
