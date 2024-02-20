@@ -2989,7 +2989,7 @@ begin
     ProcessErrorMessage;
   // append Command
   h := @Context.Head;
-  h^.Reset; // reuse previous 2KB buffer
+  h^.Reset; // reuse main 2KB buffer
   if fRespStatus = HTTP_SUCCESS then // optimistic approach
     h^.AppendShort(_CMD_200[
       rfWantRange in Context.ResponseFlags, // HTTP_PARTIALCONTENT=206 support

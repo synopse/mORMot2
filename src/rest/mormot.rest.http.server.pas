@@ -1450,7 +1450,7 @@ begin
       try
         FormatUtf8('%/%/%',
           [aSender.Model.Root, aInterfaceDotMethodName, aFakeCallID], url);
-        ctxt.Prepare(url, 'POST', '', '[' + aParams + ']', '', '');
+        ctxt.PrepareDirect(url, 'POST', '', '[' + aParams + ']', '', '');
         // fHttpServer.Callback() raises EHttpServer but for bidir servers
         status := fHttpServer.Callback(ctxt, {nonblocking=}aResult = nil);
         if status = HTTP_SUCCESS then
