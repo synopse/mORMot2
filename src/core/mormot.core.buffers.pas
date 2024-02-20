@@ -11337,7 +11337,7 @@ begin
     if OverHead = 0 then
       exit;
   end;
-  FakeLength(Text, Len);
+  FakeLength(Text, Len); // keep OverHead allocated
 end;
 
 

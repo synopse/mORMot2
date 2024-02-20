@@ -258,8 +258,6 @@ type
     rfAsynchronous,
     rfProgressiveStatic);
 
-  PHttpRequestContext = ^THttpRequestContext;
-
   /// raw information used during THttpRequestContext header parsing
   TProcessParseLine = record
     P: PUtf8Char;
@@ -278,10 +276,12 @@ type
   THttpRequestContext = object
   {$endif USERECORDWITHMETHODS}
   private
-    ContentLeft: Int64;
-    ContentPos: PByte;
-    ContentEncoding, CommandUriInstance, LastHost: RawUtf8;
-    CommandUriInstanceLen: PtrInt;
+    fContentLeft: Int64;
+    fContentPos: PByte;
+    fContentEncoding, fCommandUriInstance, fLastHost: RawUtf8;
+    fCommandUriInstanceLen: PtrInt;
+    fPeerCachePartialTix, fPeerCachePartialID: cardinal;
+    fPeerCachePartialNewStreamFileName: TFileName;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
@@ -426,7 +426,17 @@ type
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
       {$ifdef HASINLINE} inline; {$endif}
+    /// implements rfProgressiveStatic mode e.g. from THttpServer.Process
+    // - returns 0 to send Dest content, >0 to wait some ms, <0 to abort
+    function ProcessPeerCachePartial(var Dest: TRawByteStringBuffer;
+      MaxSizeAtOnce: PtrInt): integer;
+    /// notify that a file in rfProgressiveStatic mode has changed
+    function ProcessSetPeerCachePartialFileName(const FileName: TFileName): boolean;
+    /// the sequence ID used by ProcessPeerCachePartial()
+    property PeerCachePartialID: cardinal
+      read fPeerCachePartialID write fPeerCachePartialID;
   end;
+  PHttpRequestContext = ^THttpRequestContext;
 
 const
   /// when THttpRequestContext.State is expected some ProcessRead() data
@@ -442,6 +452,14 @@ const
   /// when THttpRequestContext.State is expected some ProcessWrite() data
   HTTP_REQUEST_WRITE =
     [hrsSendBody];
+
+  /// rfProgressiveStatic mode custom HTTP header to supply the expected file size
+  STATICFILE_PROGSIZE = 'STATIC-PROGSIZE:';
+  /// wait up to 10 seconds for new file content in rfProgressiveStatic mode
+  STATICFILE_PROGTIMEOUTSEC = 10;
+  /// rfProgressiveStatic mode wait 10 ms before retry in THttpServer.Process
+  // - up to 16ms on Windows
+  STATICFILE_PROGWAITMS = 10;
 
 var // filled from RTTI enum trimmed text during unit initialization
   HTTP_STATE: array[THttpRequestState] of RawUtf8;
@@ -2805,6 +2823,10 @@ begin
   ServerInternalState := 0;
   CompressContentEncoding := -1;
   integer(CompressAcceptHeader) := 0;
+  fPeerCachePartialID := 0;
+  fPeerCachePartialTix := 0;
+  if fPeerCachePartialNewStreamFileName <> '' then
+    fPeerCachePartialNewStreamFileName := '';
 end;
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
@@ -2928,14 +2950,14 @@ begin
         while (P^ > #0) and
               (P^ <= ' ') do
           inc(P); // trim left
-        if (LastHost <> '') and
-           (StrComp(pointer(P), pointer(LastHost)) = 0) then
-          Host := LastHost // optimistic approach
+        if (fLastHost <> '') and
+           (StrComp(pointer(P), pointer(fLastHost)) = 0) then
+          Host := fLastHost // optimistic approach
         else
         begin
           GetTrimmed(P, P2, PLen, Host);
-          if LastHost = '' then
-            LastHost := Host; // thread-safe cache for next reused call
+          if fLastHost = '' then
+            fLastHost := Host; // thread-safe cache for next reused call
         end;
         // always add to headers - 'host:' sometimes parsed directly
       end;
@@ -3255,7 +3277,7 @@ procedure THttpRequestContext.ProcessInit(InStream: TStream);
 begin
   Clear;
   ContentStream := InStream;
-  ContentLeft := 0;
+  fContentLeft := 0;
   State := hrsGetCommand;
 end;
 
@@ -3310,12 +3332,12 @@ begin
           else
           begin
             // no real interning, but CommandUriInstance buffer reuse
-            if st.LineLen > CommandUriInstanceLen then
+            if st.LineLen > fCommandUriInstanceLen then
             begin
-              CommandUriInstanceLen := st.LineLen + 256;
-              FastSetString(CommandUriInstance, nil, CommandUriInstanceLen);
+              fCommandUriInstanceLen := st.LineLen + 256;
+              FastSetString(fCommandUriInstance, nil, fCommandUriInstanceLen);
             end;
-            CommandUri := CommandUriInstance; // COW memory buffer reuse
+            CommandUri := fCommandUriInstance; // COW memory buffer reuse
             MoveFast(st.Line^, pointer(CommandUri)^, st.LineLen);
             FakeLength(CommandUri, st.LineLen);
           end;
@@ -3347,16 +3369,16 @@ begin
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
         begin
-          ContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
-          if ContentLeft <> 0 then
+          fContentLeft := HttpChunkToHex32(PAnsiChar(st.Line));
+          if fContentLeft <> 0 then
           begin
             if ContentStream = nil then
             begin
               // reserve appended chunk size to Content memory buffer
-              SetLength(Content, length(Content) + ContentLeft);
-              ContentPos := @PByteArray(Content)[length(Content)];
+              SetLength(Content, length(Content) + fContentLeft);
+              fContentPos := @PByteArray(Content)[length(Content)];
             end;
-            inc(ContentLength, ContentLeft);
+            inc(ContentLength, fContentLeft);
             State := hrsGetBodyChunkedData;
           end
           else
@@ -3366,19 +3388,19 @@ begin
           exit;
       hrsGetBodyChunkedData:
         begin
-          if st.Len < ContentLeft then
+          if st.Len < fContentLeft then
             st.LineLen := st.Len
           else
-            st.LineLen := ContentLeft;
+            st.LineLen := fContentLeft;
           if ContentStream <> nil then
             ContentStream.WriteBuffer(st.P^, st.LineLen)
           else
           begin
-            MoveFast(st.P^, ContentPos^, st.LineLen);
-            inc(ContentPos, st.LineLen);
+            MoveFast(st.P^, fContentPos^, st.LineLen);
+            inc(fContentPos, st.LineLen);
           end;
-          dec(ContentLeft, st.LineLen);
-          if ContentLeft = 0 then
+          dec(fContentLeft, st.LineLen);
+          if fContentLeft = 0 then
             State := hrsGetBodyChunkedDataVoidLine
           else
             exit;
@@ -3398,12 +3420,12 @@ begin
           exit;
       hrsGetBodyContentLength:
         begin
-          if ContentLeft = 0 then
-            ContentLeft := ContentLength;
-          if st.Len < ContentLeft then
+          if fContentLeft = 0 then
+            fContentLeft := ContentLength;
+          if st.Len < fContentLeft then
             st.LineLen := st.Len
           else
-            st.LineLen := ContentLeft;
+            st.LineLen := fContentLeft;
           if ContentStream = nil then
           begin
             if Content = '' then // we need to allocate the result memory buffer
@@ -3415,16 +3437,16 @@ begin
                 exit;
               end;
               FastSetString(RawUtf8(Content), ContentLength); // CP_UTF8 for FPC
-              ContentPos := pointer(Content);
+              fContentPos := pointer(Content);
             end;
-            MoveFast(st.P^, ContentPos^, st.LineLen);
-            inc(ContentPos, st.LineLen);
+            MoveFast(st.P^, fContentPos^, st.LineLen);
+            inc(fContentPos, st.LineLen);
           end
           else
             ContentStream.WriteBuffer(st.P^, st.LineLen);
           dec(st.Len, st.LineLen);
-          dec(ContentLeft, st.LineLen);
-          if ContentLeft = 0 then
+          dec(fContentLeft, st.LineLen);
+          if fContentLeft = 0 then
             if st.Len <> 0 then
               State := hrsErrorUnsupportedFormat // should be no further input
             else
@@ -3459,8 +3481,8 @@ begin
   if rfRange in ResponseFlags then
     AppendLine(Headers, ['Content-Range: bytes ', RangeOffset, '-',
       RangeOffset + ContentLength - 1, '/', RangeLength]);
-  if ContentEncoding <> '' then
-    AppendLine(Headers, ['Content-Encoding: ', ContentEncoding]);
+  if fContentEncoding <> '' then
+    AppendLine(Headers, ['Content-Encoding: ', fContentEncoding]);
   // compute response body
   if (pointer(CommandMethod) = pointer(_HEADVAR)) or
      (ContentLength = 0) then
@@ -3487,7 +3509,7 @@ begin
   if (integer(CompressAcceptHeader) <> 0) and
      (ContentStream = nil) then // no stream compression (yet)
     CompressContent(CompressAcceptHeader, Compress, ContentType,
-      Content, ContentEncoding);
+      Content, fContentEncoding);
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
   // handle response body with optional range support
@@ -3495,12 +3517,12 @@ begin
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
   if ContentStream = nil then
   begin
-    ContentPos := pointer(Content); // for ProcessBody below
+    fContentPos := pointer(Content); // for ProcessBody below
     ContentLength := length(Content);
     if rfWantRange in ResponseFlags then
       if not (rfRange in ResponseFlags) then // not already from ContentFromFile
         if ValidateRange then
-          inc(ContentPos, RangeOffset) // rfRange has just been set
+          inc(fContentPos, RangeOffset) // rfRange has just been set
         else
           ContentLength := 0; // invalid range: return void response
     // ContentStream<>nil did set ContentLength/rfRange in ContentFromFile
@@ -3517,10 +3539,10 @@ begin
     result^.AppendCRLF;
   end;
   // finalize headers
-  if ContentEncoding <> '' then
+  if fContentEncoding <> '' then
   begin
     result^.AppendShort('Content-Encoding: ');
-    result^.Append(ContentEncoding);
+    result^.Append(fContentEncoding);
     result^.AppendCRLF;
   end;
   result^.AppendShort('Content-Length: ');
@@ -3561,7 +3583,7 @@ begin
     // there is a body to send
     if ContentStream = nil then
       if (ContentLength = 0) or
-         result^.TryAppend(ContentPos, ContentLength) then
+         result^.TryAppend(fContentPos, ContentLength) then
         // single socket send() is possible (small body appended to headers)
         State := hrsResponseDone
       else
@@ -3571,7 +3593,7 @@ begin
           // single socket send() is possible (body fits in the sending buffer)
           Process.Reserve(Head.Len + ContentLength);
           Process.Append(Head.Buffer, Head.Len);
-          Process.Append(ContentPos, ContentLength);
+          Process.Append(fContentPos, ContentLength);
           Content := ''; // release ASAP
           Head.Reset;
           result := @Process; // DoRequest will use Process buffer
@@ -3607,8 +3629,8 @@ begin
     end
     else
     begin
-      Dest.Append(ContentPos, MaxSize);
-      inc(ContentPos, MaxSize);
+      Dest.Append(fContentPos, MaxSize);
+      inc(fContentPos, MaxSize);
     end;
     dec(ContentLength, MaxSize);
   end
@@ -3652,7 +3674,7 @@ begin
       ContentStream := TFileStreamEx.CreateFromHandle(gz, h);
       include(ResponseFlags, rfContentStreamNeedFree);
       ContentLength := FileSize(h);
-      ContentEncoding := 'gzip';
+      fContentEncoding := 'gzip';
       result := true;
       exit; // force ContentStream of raw .gz file to bypass recompression
     end;
@@ -3687,6 +3709,83 @@ begin
   include(ResponseFlags, rfContentStreamNeedFree);
 end;
 
+function THttpRequestContext.ProcessSetPeerCachePartialFileName(
+  const FileName: TFileName): boolean;
+begin
+  result := false;
+  if fPeerCachePartialID = 0 then
+    exit;
+  fPeerCachePartialNewStreamFileName := FileName;
+  result := true;
+end;
+
+function THttpRequestContext.ProcessPeerCachePartial(
+  var Dest: TRawByteStringBuffer; MaxSizeAtOnce: PtrInt): integer;
+var
+  tix: cardinal;
+  size, offs: Int64;
+begin
+  // method returns 0 to send Dest, >0 as waitms, <0 to abort
+  result := -1;
+  // check if OnDownloadingFailed() notified to abort
+  if fPeerCachePartialID = 0 then
+    exit; // abort
+  // prepare to wait for the data to be available
+  tix := GetTickCount64 shr 10;
+  if fPeerCachePartialTix = 0 then
+    fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
+  // check if OnDownloaded() did notify the switch to a final file
+  if fPeerCachePartialNewStreamFileName <> '' then
+    try
+      offs := ContentStream.Seek(0, soCurrent); // current position
+      if offs < 0 then
+        exit; // the stream is clearly in foobar state
+      FreeAndNil(ContentStream);
+      ContentStream := TFileStreamEx.Create(
+        fPeerCachePartialNewStreamFileName, fmOpenReadShared);
+      fPeerCachePartialNewStreamFileName := '';
+      if (ContentStream.Seek(offs, soBeginning) <> offs) or
+         (fPeerCachePartialID = 0) then
+        exit; // the final file can't be smaller than the partial file
+    except
+      exit; // abort if file is not readable
+    end;
+  // check current state of the progressive/partial file
+  size := ContentStream.Size;
+  // implement RangeOffset
+  offs := RangeOffset;
+  if offs <> 0 then
+    if size >= offs then
+      if ContentStream.Seek(offs, soBeginning) <> offs then
+        exit // paranoid
+      else
+        RangeOffset := 0
+    else
+    begin
+      if tix < fPeerCachePartialTix then
+        result := STATICFILE_PROGWAITMS; // wait until reach offset
+      exit;
+    end;
+  // check if there is something new to send
+  offs := ContentStream.Seek(0, soCurrent);
+  if offs < 0 then
+    exit; // FileSeek() returned -1 on error: something is wrong with this file
+  dec(size, offs);
+  if size <= 0 then
+  begin
+    if tix < fPeerCachePartialTix then
+      result := STATICFILE_PROGWAITMS; // wait until got some data
+    exit;
+  end;
+  // we have something to send
+  fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
+  if size > MaxSizeAtOnce then
+    size := MaxSizeAtOnce;
+  ProcessBody(Dest, size); // read size bytes from ContentStream into dest
+  if (fPeerCachePartialID <> 0) and
+     (dest.Len <> 0) then // abort if ContentStream.Read()=0
+    result := 0; // send dest content
+end;
 
 function ToText(st: THttpRequestState): PShortString;
 begin
