@@ -3158,7 +3158,7 @@ begin
   if nfHeadersParsed in HeaderFlags then
     exit;
   include(HeaderFlags, nfHeadersParsed);
-  Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}Interning <> nil);
+  Head.AsText(Headers, {overheadForRemoteIP=}40, {usemain=}false); // keep 2KB main buffer
   Head.Reset;
   if (Compress <> nil) and
      (AcceptEncoding <> '') then
