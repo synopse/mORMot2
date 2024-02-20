@@ -6044,7 +6044,7 @@ begin
           exit;
         inc(B);
         if c < 32 then
-          B^ := ' '
+          B^ := ' ' // on same line
         else
           B^ := AnsiChar(c);
         dec(SourceChars);

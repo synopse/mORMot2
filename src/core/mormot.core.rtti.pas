@@ -6865,21 +6865,18 @@ begin
       [RttiProp^.Name^]);
   addr := PtrInt(RttiProp^.GetFieldAddr(nil));
   // GetterCall/SetterCall will handle void "read"/"write" attributes
+  OffsetGet := -1;
+  OffsetSet := -1;
   if RttiProp^.GetterCall = rpcField then
-    OffsetGet := addr
-  else
-    OffsetGet := -1;
+    OffsetGet := addr;
   if RttiProp^.SetterCall = rpcField then
-    OffsetSet := addr
-  else
-    OffsetSet := -1;
+    OffsetSet := addr;
   Name := ToUtf8(RttiProp^.Name^);
   fOrigName := Name;
   Prop := RttiProp;
+  OrdinalDefault := NO_DEFAULT;
   if rcfHasRttiOrd in Value.Cache.Flags then
-    OrdinalDefault := RttiProp.Default
-  else
-    OrdinalDefault := NO_DEFAULT;
+    OrdinalDefault := RttiProp.Default;
   Stored := RttiProp^.IsStoredKind;
   result := Value.Size;
 end;
