@@ -179,6 +179,11 @@ begin
 end;
 {$endif ONLYUSEHTTPSOCKET}
 
+const
+  useHttp: array[boolean] of TRestHttpServerUse = (
+   //useHttpAsync, useHttpAsync);
+   HTTP_DEFAULT_MODE, useHttpAsync); // = HTTPS_DEFAULT_MODE
+
 procedure TTestClientServerAccess._TRestHttpServer;
 begin
   Model := TOrmModel.Create([TOrmPeople], 'root');
@@ -189,8 +194,9 @@ begin
     DataBase.DB.Synchronous := smOff;
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
-      HTTPS_DEFAULT_MODE[fHttps], 16, HTTPS_SECURITY_SELFSIGNED[true, fHttps],
-      '', '', [{rsoLogVerbose}]);
+      useHttp[fHttps], 16, HTTPS_SECURITY_SELFSIGNED[true, fHttps], '', '',
+      []);
+      //[rsoLogVerbose]);
     AddConsole('using % %', [Server.HttpServer, Server.HttpServer.APIVersion]);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
@@ -556,7 +562,7 @@ begin
       end;
     // launch one HTTP server for all TRestServerDB instances
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [Instance[0].Database,
-      Instance[1].Database, Instance[2].Database], '+', HTTP_DEFAULT_MODE, 4,
+      Instance[1].Database, Instance[2].Database], '+', useHttp[false], 4,
       secNone, '', '', [rsoLogVerbose]);
     // initialize the clients
     for i := 0 to high(Instance) do
