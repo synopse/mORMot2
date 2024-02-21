@@ -258,6 +258,17 @@ type
     rfAsynchronous,
     rfProgressiveStatic);
 
+  /// define THttpRequestContext.ProcessBody response
+  // - hrpSend should try to send the Dest buffer content
+  // - hrpWait is returned in rfProgressiveStatic mode to wait for more data
+  // - hrpAbort needs to close the connection
+  // - hrpDone indicates that the whole body content has been sent
+  THttpRequestProcessBody = (
+    hrpSend,
+    hrpWait,
+    hrpAbort,
+    hrpDone);
+
   /// raw information used during THttpRequestContext header parsing
   TProcessParseLine = record
     P: PUtf8Char;
@@ -423,7 +434,8 @@ type
     function ContentToOutput(aStatus: integer; aOutStream: TStream): integer;
     /// body sending socket entry point of our asynchronous HTTP Server
     // - to be called when some bytes could be written to output socket
-    procedure ProcessBody(var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
+    function ProcessBody(var Dest: TRawByteStringBuffer;
+      MaxSize: PtrInt): THttpRequestProcessBody;
     /// should be done when the HTTP Server state machine is done
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
@@ -458,9 +470,6 @@ const
   STATICFILE_PROGSIZE = 'STATIC-PROGSIZE:';
   /// wait up to 10 seconds for new file content in rfProgressiveStatic mode
   STATICFILE_PROGTIMEOUTSEC = 10;
-  /// rfProgressiveStatic mode wait 10 ms before retry in THttpServer.Process
-  // - up to 16ms on Windows
-  STATICFILE_PROGWAITMS = 10;
 
 var // filled from RTTI enum trimmed text during unit initialization
   HTTP_STATE: array[THttpRequestState] of RawUtf8;
@@ -475,6 +484,7 @@ function ToText(hf: THttpRequestHeaderFlags): TShort8; overload;
 function ToText(csp: TCrtSocketPending): PShortString; overload;
 function ToText(tls: TCrtSocketTlsAfter): PShortString; overload;
 function ToText(mak: TMacAddressKind): PShortString; overload;
+function ToText(hrp: THttpRequestProcessBody): PShortString; overload;
 
 
 { ******************** THttpSocket Implementing HTTP over plain sockets }
@@ -3614,39 +3624,46 @@ begin
       State := hrsSendBody; // let ProcessBody() send ContentStream by chunks
 end;
 
-procedure THttpRequestContext.ProcessBody(
-  var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
+function THttpRequestContext.ProcessBody(
+  var Dest: TRawByteStringBuffer; MaxSize: PtrInt): THttpRequestProcessBody;
+var
+  available: Int64;
 begin
-  // THttpAsyncConnection.DoRequest did send the headers: now send body chunks
+  // THttpAsyncConnection.DoRequest did send the headers: now send body chunk(s)
+  if ContentLength = 0 then
+    // we just finished background ProcessWrite of the last chunk
+    State := hrsResponseDone;
+  result := hrpDone;
   if State <> hrsSendBody then
     exit;
+  // support progressive/partial ContentStream process
+  if rfProgressiveStatic in ResponseFlags then
+  begin
+    result := DoProgressive(available);
+    if result <> hrpSend then
+      exit; // e.g. hrpWait or hrpAbort
+    if available < MaxSize then
+      MaxSize := available; // send what we got until now
+  end;
   // send in the background, using polling up to MaxSize (256KB typical)
   if ContentLength < MaxSize then
     MaxSize := ContentLength;
-  if MaxSize > 0 then
-  begin
-    if ContentStream <> nil then
-    begin
-      Process.Reserve(MaxSize);
-      MaxSize := ContentStream.Read(Process.Buffer^, MaxSize);
-      Dest.Append(Process.Buffer, MaxSize);
-    end
-    else
-    begin
-      Dest.Append(fContentPos, MaxSize);
-      inc(fContentPos, MaxSize);
-    end;
-    dec(ContentLength, MaxSize);
-  end
-  else if ContentLength = 0 then
-    // we just finished background ProcessWrite of the last chunk
-    State := hrsResponseDone
-  else if rfProgressiveStatic in ResponseFlags then
-    // only THttpServer supports STATICFILE_PROGRESSIVE headers
-    raise EHttpSocket.Create('ProcessWrite: unsupported rfProgressiveStatic')
-  else
-    // paranoid check
+  if MaxSize <= 0 then
+    // paranoid check of the server logic
     raise EHttpSocket.CreateUtf8('ProcessWrite: len=%', [MaxSize]);
+  if ContentStream <> nil then
+  begin
+    Process.Reserve(MaxSize);
+    MaxSize := ContentStream.Read(Process.Buffer^, MaxSize);
+    Dest.Append(Process.Buffer, MaxSize);
+  end
+  else
+  begin
+    Dest.Append(fContentPos, MaxSize);
+    inc(fContentPos, MaxSize);
+  end;
+  dec(ContentLength, MaxSize);
+  result := hrpSend;
 end;
 
 procedure THttpRequestContext.ProcessDone;
@@ -3803,6 +3820,11 @@ end;
 function ToText(mak: TMacAddressKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TMacAddressKind), ord(mak));
+end;
+
+function ToText(hrp: THttpRequestProcessBody): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpRequestProcessBody), ord(hrp));
 end;
 
 

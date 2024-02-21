@@ -4317,6 +4317,9 @@ begin
   LockedDec32(@fServerConnectionActive);
 end;
 
+const
+  STATICFILE_PROGWAITMS = 10; // up to 16ms on Windows
+
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
@@ -4324,7 +4327,6 @@ var
   output: PRawByteStringBuffer;
   dest: TRawByteStringBuffer;
   started: Int64;
-  wait: integer;
   ctx: TOnHttpServerAfterResponseContext;
 begin
   if (ClientSock = nil) or
@@ -4359,33 +4361,23 @@ begin
           hrsSendBody:
             begin
               dest.Clear; // body is retrieved from Content/ContentStream
-              if rfProgressiveStatic in ClientSock.Http.ResponseFlags then
-              begin
-                // progressive/partial file transmission
-                wait := ClientSock.Http.ProcessPeerCachePartial(
-                  dest, fServerSendBufferSize);
-                if wait <> 0 then // wait=0 if dest has some content to send
-                  if wait < 0 then
+              case ClientSock.Http.ProcessBody(dest, fServerSendBufferSize) of
+                hrpSend:
+                  if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
+                    continue;
+                hrpWait:
                   begin
-                    if Assigned(ClientSock.OnLog) then
-                      ClientSock.OnLog(sllWarning,
-                        'Process: PeerCachePartialID=% aborted',
-                        [ClientSock.Http.PeerCachePartialID], self);
-                    ClientSock.fKeepAliveClient := false; // close connection
-                    break; // abort
-                  end
-                  else
-                  begin
-                    SleepHiRes(wait);
+                    SleepHiRes(STATICFILE_PROGWAITMS);
                     continue; // wait until got some data
                   end;
-              end
-              else
-                // regular transmission of a fully available file
-                ClientSock.Http.ProcessBody(dest, fServerSendBufferSize);
-              // send body content by dest chunks
-              if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
-                continue;
+                hrpDone:
+                  break;
+              else // hrpAbort:
+                if Assigned(ClientSock.OnLog) then
+                  ClientSock.OnLog(sllWarning,
+                    'Process: ProcessBody aborted (ProgressiveID=%)',
+                    [ClientSock.Http.ProgressiveID], self);
+              end;
             end;
         end;
         ClientSock.fKeepAliveClient := false; // socket close on write error

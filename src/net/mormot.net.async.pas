@@ -3635,48 +3635,53 @@ begin
 end;
 
 function THttpAsyncConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
+var
+  hrp: THttpRequestProcessBody;
 begin
-  result := soContinue;
+  result := soClose; // on error, shutdown and clear the connection
   if fOwner.fClients = nil then
     fHttp.State := hrsErrorMisuse;
   // compute next step
   if fHttp.State = hrsSendBody then
   begin
     // use the HTTP state machine to fill fWr with outgoing body chunk
-    fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
+    hrp := fHttp.ProcessBody(fWr, fOwner.fClients.fSendBufferSize);
     if acoVerboseLog in fOwner.fOptions then
-      fOwner.DoLog(sllTrace, 'AfterWrite SendBody ContentLength=% Wr=%',
-        [fHttp.ContentLength, fWr.Len], self);
-    if fWr.Len <> 0 then
-      // need to continue background sending
-      exit;
-  end
-  else if fHttp.State <> hrsResponseDone then
+      fOwner.DoLog(sllTrace, 'AfterWrite ProcessBody=% ContentLength=% Wr=%',
+        [ToText(hrp)^, fHttp.ContentLength, fWr.Len], self);
+    case hrp of
+      hrpSend:
+        begin
+          result := soContinue; // background sending
+          exit;
+        end;
+      hrpWait:
+        begin
+          result := soWaitWrite; // not yet available (rfProgressiveStatic mode)
+          exit;
+        end;
+    end; // hrpAbort, hrpDone will check hrsResponseDone
+  end;
+  // if we reached here, we are either finished or failed
+  fHttp.ProcessDone;   // ContentStream.Free
+  fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
+  if Assigned(fServer.fOnAfterResponse) then
+    DoAfterResponse;
+  if fHttp.State <> hrsResponseDone then
   begin
     fOwner.DoLog(sllWarning, 'AfterWrite: unexpected %',
       [HTTP_STATE[fHttp.State]], self);
-    if Assigned(fServer.fOnAfterResponse) then
-      DoAfterResponse;
-    result := soClose;
-    exit;
+    exit; // return soClose
   end;
-  // whole headers (+ body) outgoing content was sent
+  // state = hrsResponseDone: whole headers (+ body) outgoing content were sent
   if acoVerboseLog in fOwner.fOptions then
     fOwner.DoLog(sllTrace, 'AfterWrite Done ContentLength=% Wr=% Flags=%',
       [fHttp.ContentLength, fWr.Len, ToText(fHttp.HeaderFlags)], self);
-  if Assigned(fServer.fOnAfterResponse) then
-    DoAfterResponse;
-  fHttp.ProcessDone;   // ContentStream.Free
-  fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
   if hfConnectionClose in fHttp.HeaderFlags then
-    // connection: close -> shutdown and clear the connection
-    result := soClose
-  else
-  begin
-    // kept alive connection -> reset the HTTP parser and continue
-    HttpInit;
-    result := soContinue;
-  end;
+    exit; // return soClose
+  // kept alive connection -> reset the HTTP parser and continue
+  HttpInit;
+  result := soContinue;
 end;
 
 function THttpAsyncConnection.DecodeHeaders: integer;
