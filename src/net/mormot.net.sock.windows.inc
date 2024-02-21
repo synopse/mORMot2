@@ -1452,20 +1452,25 @@ begin
   o := @self;
   if o = nil then
     exit;
-  // most common case is Internal = STATUS_WAIT_0 = 0
   case cardinal(PtrUInt(o^.over[wieRecv].overlapped.Internal)) of
+    STATUS_WAIT_0:
+      ; // most common case
     STATUS_PENDING:
       include(result, pseRead);
     STATUS_REMOTE_DISCONNECT:
       include(result, pseClosed);
   end;
   case cardinal(PtrUInt(o^.over[wieSend].overlapped.Internal)) of
+    STATUS_WAIT_0:
+      ; // most common case
     STATUS_PENDING:
       include(result, pseWrite);
     STATUS_REMOTE_DISCONNECT:
       include(result, pseClosed);
   end;
   case cardinal(PtrUInt(o^.over[wieAccept].overlapped.Internal)) of
+    STATUS_WAIT_0:
+      ; // most common case
     STATUS_PENDING:
       include(result, pseRead); // as select/poll/epoll
     STATUS_REMOTE_DISCONNECT:
@@ -1729,7 +1734,7 @@ begin
         fOnLog(sll, 'GetNext=%% %=%', [IOCP_EVENT[event],
           pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
   until sll = sllTrace;
-  result := o;
+  result := o; // got valid event
 end;
 
 function TWinIocp.GetNextAccept(one: PWinIocpSubscription;
