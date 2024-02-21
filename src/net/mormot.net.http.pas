@@ -233,7 +233,7 @@ type
     hroHeadersUnfiltered);
 
   /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
-  // - separated from THttpRequestReponseFlags so that they would both be stored
+  // - separated from THttpRequestResponseFlags so that they would both be stored
   // and accessed as a single byte - which is faster than word on Intel CPUs
   // - do not modify unless you fix the associated ToText() overloaded function
   THttpRequestHeaderFlags = set of (
@@ -249,7 +249,7 @@ type
   /// map the output state for THttpRequestContext.ResponseFlags
   // - separated from THttpRequestHeaderFlags so that they would both be stored
   // and accessed as a single byte - which is faster than word on Intel CPUs
-  THttpRequestReponseFlags = set of (
+  THttpRequestResponseFlags = set of (
     rfAcceptRange,
     rfWantRange,
     rfRange,
@@ -297,7 +297,7 @@ type
     /// map the presence of some HTTP headers, retrieved during ParseHeader
     HeaderFlags: THttpRequestHeaderFlags;
     /// some flags used when sending the response
-    ResponseFlags: THttpRequestReponseFlags;
+    ResponseFlags: THttpRequestResponseFlags;
     /// customize the HTTP process
     Options: THttpRequestOptions;
     /// could be set so that ParseHeader/GetTrimmed will intern RawUtf8 values
