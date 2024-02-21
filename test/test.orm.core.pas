@@ -548,18 +548,18 @@ begin
   Check(not IsSelect(' delete from toto'));
   Check(not IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
-  Check(GetTableNameFromSqlSelect('select a,b  from  titi', false) = 'titi');
-  Check(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false) = 'titi');
-  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', false) = 'titi');
-  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu order by a',
-    false) = 'titi');
-  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', true) = '');
-  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
-    'select a,b  from  titi where id=2')) = 'titi');
-  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
-    'select a,b  from  titi,tutu')) = 'titi,tutu');
-  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
-    'select a,b  from  titi, tutu ,  tata where a=2')) = 'titi,tutu,tata');
+  CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi', false), 'titi');
+  CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false), 'titi');
+  CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', false), 'titi');
+  CheckEqual(GetTableNameFromSqlSelect(
+    'select a,b  from  titi,tutu order by a', false), 'titi');
+  CheckEqual(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', true), '');
+  CheckEqual(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
+    'select a,b  from  titi where id=2')), 'titi');
+  CheckEqual(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
+    'select a,b  from  titi,tutu')), 'titi,tutu');
+  CheckEqual(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
+    'select a,b  from  titi, tutu ,  tata where a=2')), 'titi,tutu,tata');
   T := TOrmTest.Create;
   J := TOrmJson.Create;
   M := TOrmModel.Create([TOrmTest, TOrmJson]);
@@ -571,7 +571,7 @@ begin
   end;
   for i := 0 to GetRttiProp(TOrmJson, P) - 1 do
   begin
-    Check(TOrmJson.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
+    CheckEqual(TOrmJson.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)), i);
     pi := J.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8);
     check(pi <> nil);
     if pi.name = 'Json' then
@@ -601,8 +601,8 @@ begin
   T2 := TOrmTest.Create;
   try
     Check(T.OrmProps = T.Orm);
-    Check(T.Orm.SqlTableName = 'Test');
-    Check(T.SqlTableName = 'Test');
+    CheckEqual(T.Orm.SqlTableName, 'Test');
+    CheckEqual(T.SqlTableName, 'Test');
     Check(GetCaptionFromClass(T.RecordClass) = 'Test');
     s := T.GetSqlSet;
     CheckEqual(s,

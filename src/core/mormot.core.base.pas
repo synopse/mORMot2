@@ -9251,7 +9251,7 @@ var
   c: cardinal;
 begin
   // retrieve CPUID raw flags
-  FillChar(regs, SizeOf(regs), 0); // no FillCharFast needed here
+  FillChar(regs, SizeOf(regs), 0); // no FillCharFast here
   GetCpuid({eax=}1, {ecx=}0, regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;

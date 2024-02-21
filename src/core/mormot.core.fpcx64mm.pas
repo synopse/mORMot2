@@ -528,7 +528,7 @@ begin
     if (VirtualQuery(next, @meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
        (meminfo.State = MEM_FREE) and
        (meminfo.RegionSize >= nextsize) and // enough space?
-       // reserve the address space in two steps for thread safety
+       // set the address space in two reserve + commit steps for thread safety
        (VirtualAlloc(next, nextsize, MEM_RESERVE, PAGE_READWRITE) <> nil) and
        (VirtualAlloc(next, nextsize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
       begin

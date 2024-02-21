@@ -1888,7 +1888,7 @@ begin
   begin
     // VirtualQuery API is slow but better than raising an exception
     // see https://stackoverflow.com/a/37547837/458259
-    FillChar(meminfo, SizeOf(meminfo), 0);
+    FillCharFast(meminfo, SizeOf(meminfo), 0);
     result := (VirtualQuery(p, meminfo, SizeOf(meminfo)) = SizeOf(meminfo)) and
               (meminfo.RegionSize >= SizeOf(pointer)) and
               (meminfo.State = MEM_COMMIT) and
