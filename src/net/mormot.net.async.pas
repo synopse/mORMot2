@@ -56,9 +56,13 @@ type
   /// a dynamic array of TPollAsyncConnectionHandle identifiers
   TPollAsyncConnectionHandleDynArray = array of TPollAsyncConnectionHandle;
 
-  /// let TPollAsyncSockets.OnRead/AfterWrite shutdown the socket if needed
+  /// define the TPollAsyncSockets.OnRead/AfterWrite method result
+  // - soContinue should continue reading/writing content from/to the socket
+  // - soWaitWrite (for AfterWrite) should wait a little then retry writing
+  // - soClose would shutdown the socket
   TPollAsyncSocketOnReadWrite = (
     soContinue,
+    soWaitWrite,
     soClose
   );
 
@@ -1812,13 +1816,21 @@ begin
       if connection.fWr.Len = 0 then
         // no more data in output buffer - AfterWrite may refill connection.fWr
         try
-          if connection.AfterWrite <> soContinue then
-          begin
-            if fDebugLog <> nil then
-              DoLog('ProcessWrite % closed by AfterWrite handle=% sent=%',
-                [pointer(connection.fSocket), connection.Handle, sent]);
-            connection.fWr.Clear;
-            res := nrClosed;
+          case connection.AfterWrite of
+            soContinue:
+              ;
+            soClose:
+              begin
+                if fDebugLog <> nil then
+                  DoLog('ProcessWrite % closed by AfterWrite handle=% sent=%',
+                    [pointer(connection.fSocket), connection.Handle, sent]);
+                connection.fWr.Clear;
+                res := nrClosed;
+              end;
+            soWaitWrite:
+              begin
+
+              end;
           end;
         except
           connection.fWr.Reset;
