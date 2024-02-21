@@ -3513,7 +3513,7 @@ begin
   fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
   if hsoHeadersUnfiltered in fServer.Options then
     include(fHttp.Options, hroHeadersUnfiltered);
-  fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // 2KB by default
+  fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // reusable 2KB buffer
   fHeadersSec := 0;
   fBytesRecv := 0; // reset stats
   fBytesSend := 0;

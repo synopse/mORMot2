@@ -2737,9 +2737,9 @@ type
     /// add some UTF-8 buffer content to the Buffer, without resizing it
     function TryAppend(P: pointer; PLen: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// ensure the internal Buffer has at least MaxSize bytes and return it
+    /// ensure the internal Buffer has at least MaxSize bytes
     // - also reset the internal Len to 0
-    function Reserve(MaxSize: PtrInt): pointer; overload;
+    procedure Reserve(MaxSize: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// use a specified string buffer as start
     procedure Reserve(const WorkingBuffer: RawByteString); overload;
@@ -11243,12 +11243,11 @@ begin
     result := false;
 end;
 
-function TRawByteStringBuffer.Reserve(MaxSize: PtrInt): pointer;
+procedure TRawByteStringBuffer.Reserve(MaxSize: PtrInt);
 begin
   fLen := 0;
   if MaxSize > length(fBuffer) then
     RawRealloc(MaxSize);
-  result := pointer(fBuffer);
 end;
 
 procedure TRawByteStringBuffer.Reserve(const WorkingBuffer: RawByteString);
@@ -11337,7 +11336,8 @@ begin
     if OverHead = 0 then
       exit;
   end;
-  FakeLength(Text, Len); // keep OverHead allocated
+  // keep OverHead allocated, but SetLength(Len) and put #0 at right position
+  FakeLength(Text, Len);
 end;
 
 

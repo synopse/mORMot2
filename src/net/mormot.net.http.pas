@@ -3596,12 +3596,12 @@ begin
         if ContentLength + Head.Len < MaxSizeAtOnce then
         begin
           // single socket send() is possible (body fits in the sending buffer)
+          result := @Process; // DoRequest will use the Process buffer
           Process.Reserve(Head.Len + ContentLength);
           Process.Append(Head.Buffer, Head.Len);
           Process.Append(fContentPos, ContentLength);
           Content := ''; // release ASAP
           Head.Reset;
-          result := @Process; // DoRequest will use Process buffer
           State := hrsResponseDone;
         end
         else
@@ -3615,8 +3615,6 @@ end;
 
 procedure THttpRequestContext.ProcessBody(
   var Dest: TRawByteStringBuffer; MaxSize: PtrInt);
-var
-  p: pointer;
 begin
   // THttpAsyncConnection.DoRequest did send the headers: now send body chunks
   if State <> hrsSendBody then
@@ -3628,9 +3626,9 @@ begin
   begin
     if ContentStream <> nil then
     begin
-      p := Process.Reserve(MaxSize);
-      MaxSize := ContentStream.Read(p^, MaxSize);
-      Dest.Append(p, MaxSize);
+      Process.Reserve(MaxSize);
+      MaxSize := ContentStream.Read(Process.Buffer^, MaxSize);
+      Dest.Append(Process.Buffer, MaxSize);
     end
     else
     begin
