@@ -280,8 +280,8 @@ type
     fContentPos: PByte;
     fContentEncoding, fCommandUriInstance, fLastHost: RawUtf8;
     fCommandUriInstanceLen: PtrInt;
-    fPeerCachePartialTix, fPeerCachePartialID: cardinal;
-    fPeerCachePartialNewStreamFileName: TFileName;
+    fProgressiveTix, fProgressiveID: cardinal;
+    fProgressiveNewStreamFileName: TFileName;
     procedure SetRawUtf8(var res: RawUtf8; P: pointer; PLen: PtrInt;
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
@@ -289,6 +289,8 @@ type
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
+    /// implements rfProgressiveStatic mode from ProcessBody
+    function DoProgressive(out availablesize: Int64): THttpRequestProcessBody;
   public
     // reusable buffers for internal process - do not use
     Head, Process: TRawByteStringBuffer;
@@ -426,15 +428,14 @@ type
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
       {$ifdef HASINLINE} inline; {$endif}
-    /// implements rfProgressiveStatic mode e.g. from THttpServer.Process
-    // - returns 0 to send Dest content, >0 to wait some ms, <0 to abort
-    function ProcessPeerCachePartial(var Dest: TRawByteStringBuffer;
-      MaxSizeAtOnce: PtrInt): integer;
     /// notify that a file in rfProgressiveStatic mode has changed
-    function ProcessSetPeerCachePartialFileName(const FileName: TFileName): boolean;
-    /// the sequence ID used by ProcessPeerCachePartial()
-    property PeerCachePartialID: cardinal
-      read fPeerCachePartialID write fPeerCachePartialID;
+    // - e.g. from THttpPeerCache.OnDownloaded/PartialChangeFile
+    function ChangeProgressiveFileName(const FileName: TFileName): boolean;
+    /// the sequence ID used in rfProgressiveStatic mode
+    // - equals 0 if disabled or aborted
+    // - match THttpPeerCachePartial.Sequance value
+    property ProgressiveID: cardinal
+      read fProgressiveID write fProgressiveID;
   end;
   PHttpRequestContext = ^THttpRequestContext;
 
@@ -2828,10 +2829,10 @@ begin
   ServerInternalState := 0;
   CompressContentEncoding := -1;
   integer(CompressAcceptHeader) := 0;
-  fPeerCachePartialID := 0;
-  fPeerCachePartialTix := 0;
-  if fPeerCachePartialNewStreamFileName <> '' then
-    fPeerCachePartialNewStreamFileName := '';
+  fProgressiveID := 0;
+  fProgressiveTix := 0;
+  if fProgressiveNewStreamFileName <> '' then
+    fProgressiveNewStreamFileName := '';
 end;
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
@@ -3712,82 +3713,76 @@ begin
   include(ResponseFlags, rfContentStreamNeedFree);
 end;
 
-function THttpRequestContext.ProcessSetPeerCachePartialFileName(
+function THttpRequestContext.ChangeProgressiveFileName(
   const FileName: TFileName): boolean;
 begin
   result := false;
-  if fPeerCachePartialID = 0 then
+  if fProgressiveID = 0 then
     exit;
-  fPeerCachePartialNewStreamFileName := FileName;
+  fProgressiveNewStreamFileName := FileName;
   result := true;
 end;
 
-function THttpRequestContext.ProcessPeerCachePartial(
-  var Dest: TRawByteStringBuffer; MaxSizeAtOnce: PtrInt): integer;
+function THttpRequestContext.DoProgressive(
+  out availablesize: Int64): THttpRequestProcessBody;
 var
   tix: cardinal;
-  size, offs: Int64;
+  offs: Int64;
 begin
-  // method returns 0 to send Dest, >0 as waitms, <0 to abort
-  result := -1;
+  result := hrpAbort;
   // check if OnDownloadingFailed() notified to abort
-  if fPeerCachePartialID = 0 then
+  if fProgressiveID = 0 then
     exit; // abort
   // prepare to wait for the data to be available
   tix := GetTickCount64 shr 10;
-  if fPeerCachePartialTix = 0 then
-    fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
-  // check if OnDownloaded() did notify the switch to a final file
-  if fPeerCachePartialNewStreamFileName <> '' then
+  if fProgressiveTix = 0 then
+    fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
+  // check if ChangeProgressiveFileName() did notify the switch to a final file
+  if fProgressiveNewStreamFileName <> '' then
     try
       offs := ContentStream.Seek(0, soCurrent); // current position
       if offs < 0 then
         exit; // the stream is clearly in foobar state
       FreeAndNil(ContentStream);
       ContentStream := TFileStreamEx.Create(
-        fPeerCachePartialNewStreamFileName, fmOpenReadShared);
-      fPeerCachePartialNewStreamFileName := '';
+        fProgressiveNewStreamFileName, fmOpenReadShared);
+      fProgressiveNewStreamFileName := '';
       if (ContentStream.Seek(offs, soBeginning) <> offs) or
-         (fPeerCachePartialID = 0) then
+         (fProgressiveID = 0) then
         exit; // the final file can't be smaller than the partial file
     except
       exit; // abort if file is not readable
     end;
   // check current state of the progressive/partial file
-  size := ContentStream.Size;
+  availablesize := ContentStream.Size;
   // implement RangeOffset
   offs := RangeOffset;
   if offs <> 0 then
-    if size >= offs then
+    if availablesize >= offs then
       if ContentStream.Seek(offs, soBeginning) <> offs then
         exit // paranoid
       else
-        RangeOffset := 0
+        RangeOffset := 0 // Seek() once
     else
     begin
-      if tix < fPeerCachePartialTix then
-        result := STATICFILE_PROGWAITMS; // wait until reach offset
+      if tix < fProgressiveTix then
+        result := hrpWait; // wait until reached offset
       exit;
     end;
   // check if there is something new to send
   offs := ContentStream.Seek(0, soCurrent);
   if offs < 0 then
     exit; // FileSeek() returned -1 on error: something is wrong with this file
-  dec(size, offs);
-  if size <= 0 then
+  dec(availablesize, offs);
+  if availablesize <= 0 then
   begin
-    if tix < fPeerCachePartialTix then
-      result := STATICFILE_PROGWAITMS; // wait until got some data
+    if tix < fProgressiveTix then
+      result := hrpWait; // wait until got some data
     exit;
   end;
   // we have something to send
-  fPeerCachePartialTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
-  if size > MaxSizeAtOnce then
-    size := MaxSizeAtOnce;
-  ProcessBody(Dest, size); // read size bytes from ContentStream into dest
-  if (fPeerCachePartialID <> 0) and
-     (dest.Len <> 0) then // abort if ContentStream.Read()=0
-    result := 0; // send dest content
+  fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
+  result := hrpSend;
 end;
 
 function ToText(st: THttpRequestState): PShortString;
