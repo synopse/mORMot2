@@ -10093,13 +10093,15 @@ begin
       end;
     2:
       case PWord(B)^ of
+        ord('=') + ord('=') shl 8: // c-style
+          Match := coEqualTo;
+        ord('!') + ord('=') shl 8, // c-style
+        ord('<') + ord('>') shl 8:
+          Match := coNotEqualTo;
         ord('>') + ord('=') shl 8:
           Match := coGreaterThanOrEqualTo;
         ord('<') + ord('=') shl 8:
           Match := coLessThanOrEqualTo;
-        ord('!') + ord('=') shl 8,
-        ord('<') + ord('>') shl 8:
-          Match := coNotEqualTo;
       else
         exit;
       end;

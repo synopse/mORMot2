@@ -1294,7 +1294,7 @@ type
   /// allow to customize TWinIocp process
   // - wioUnsubscribeShutdownSocket let Unsubscribe() also call
   // ShutdownAndClose(socket)
-  // - wioLockEvent will use a lock to track PrepareNext/GetNext pairs
+  // - paranoid wioLockEvent will track PrepareNext/GetNext pairs
   TWinIocpOption = (
     wioUnsubscribeShutdownSocket,
     wioLockEvent);

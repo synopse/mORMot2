@@ -3810,15 +3810,15 @@ type
 
   /// the recognized operators for comparison functions results match
   TCompareOperator = (
-     coEqualTo,
-     coNotEqualTo,
-     coLessThan,
-     coLessThanOrEqualTo,
-     coGreaterThan,
-     coGreaterThanOrEqualTo);
+    coEqualTo,
+    coNotEqualTo,
+    coLessThan,
+    coLessThanOrEqualTo,
+    coGreaterThan,
+    coGreaterThanOrEqualTo);
 
-/// fast search if a comparison function result (-1,0,+1) match an operator
-function SortMatch(CompareResult: integer; Operator: TCompareOperator): boolean;
+/// fast search if a comparison function result (<0,0,>0) match an operator
+function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// compare two "array of boolean" elements
@@ -11707,9 +11707,9 @@ end;
 
 { ************ Sorting/Comparison Functions }
 
-function SortMatch(CompareResult: integer; Operator: TCompareOperator): boolean;
+function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
 begin
-  case Operator of
+  case CompareOperator of
     coEqualTo:
       result := CompareResult = 0;
     coNotEqualTo:
