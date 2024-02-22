@@ -3414,7 +3414,7 @@ begin
 end;
 
 function TSynWindowsPrivileges.SetPrivilege(
-  wsp: TWinSystemPrivilege; enabled: boolean): boolean;
+  wsp: TWinSystemPrivilege; on: boolean): boolean;
 var
   tp: TOKEN_PRIVILEGES;
   id: TLargeInteger;
@@ -3435,7 +3435,7 @@ begin
   tpprev.PrivilegeCount := 1;
   tpprev.Privileges[0].Luid := PInt64(@id)^;
   with tpprev.Privileges[0] do
-    if enabled then
+    if on then
       Attributes := Attributes or SE_PRIVILEGE_ENABLED
     else
       Attributes := Attributes xor (SE_PRIVILEGE_ENABLED and Attributes);

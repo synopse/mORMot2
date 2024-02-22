@@ -1869,7 +1869,7 @@ type
     fEnabled: TWinSystemPrivileges;
     fDefEnabled: TWinSystemPrivileges;
     fToken: THandle;
-    function SetPrivilege(wsp: TWinSystemPrivilege; enabled: boolean): boolean;
+    function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
     procedure LoadPrivileges;
   public
     /// initialize the object dedicated to management of available privileges
