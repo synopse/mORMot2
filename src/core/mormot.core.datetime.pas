@@ -2729,7 +2729,6 @@ begin
       Safe.UnLock;
       T.FromNowUtc;
       T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
-      c := GetTickCount64 shr 10;
       Safe.Lock;
       Value := now;
     end;
