@@ -542,6 +542,9 @@ type
     // - set e.g. Second := 60 to force the next minute, or Hour := 24 so that
     // it will be normalized to the next day
     procedure Normalize;
+    /// change the system date/time with the value stored in this instance
+    // - i.e. call SetSystemTime/fpsettimeofday API with the stored date/time
+    function ChangeOperatingSystemTime: boolean;
   end;
 
   /// pointer to our cross-platform and cross-compiler TSystemTime 128-bit structure
@@ -2574,6 +2577,17 @@ begin
     NormalizeMonth;
   end;
 end;
+
+function TSynSystemTime.ChangeOperatingSystemTime: boolean;
+begin
+  {$ifdef OSPOSIX}
+  result := SetSystemTime(ToUnixTime); // fpsettimeofday
+  {$else}
+  result := SetSystemTime(PSystemTime(@self)^); // set privilege + API + notify
+  {$endif OSPOSIX}
+  FillCharFast(GlobalTime, SizeOf(GlobalTime), 0); // reset cache
+end;
+
 
 function TryEncodeDate(Year, Month, Day: cardinal;
   out Date: TDateTime): boolean;
