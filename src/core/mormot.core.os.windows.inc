@@ -437,6 +437,25 @@ begin
   result := Windows.GetModuleHandle(lpModuleName); // call either A or W API
 end;
 
+function SetSystemTime(const utctime: TSystemTime): boolean;
+var
+  privileges: TSynWindowsPrivileges;
+begin
+  try
+    privileges.Init;
+    try
+      privileges.Enable(wspSystemTime); // ensure has SE_SYSTEMTIME_NAME
+      result := Windows.SetSystemTime(PSystemTime(@utctime)^);
+    finally
+      privileges.Done;
+    end;
+    if result then
+      PostMessage(HWND_BROADCAST, WM_TIMECHANGE, 0, 0); // notify the apps
+  except
+    result := false;
+  end;
+end;
+
 const
   // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes
   ERROR_STANDARD1: array[0..39] of PUtf8Char = (

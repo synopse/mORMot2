@@ -2876,10 +2876,21 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
 // or fpgettimeofday() on Darwin/MacOS
-// - warning: do not call this function directly, but use TSynSystemTime as
-// defined in mormot.core.datetime which is really cross-platform
+// - warning: do not call this function directly, but rather mormot.core.datetime
+// TSynSystemTime.FromNowUtc cross-platform method instead
 procedure GetSystemTime(out result: TSystemTime);
   {$ifdef OSWINDOWS} stdcall; {$endif}
+
+/// set the current system time as UTC timestamp
+// - we define two functions with diverse signature to circumvent the FPC RTL
+// TSystemTime field order inconsistency
+// - warning: do not call this function directly, but rather mormot.core.datetime
+// TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
+{$ifdef OSWINDOWS}
+function SetSystemTime(const utctime: TSystemTime): boolean;
+{$else}
+function SetSystemTime(utctime: TUnixTime): boolean;
+{$endif OSWINDOWS}
 
 /// returns the current Local time as TSystemTime from the OS
 // - under Delphi/Windows, directly call the homonymous Win32 API
@@ -2887,8 +2898,8 @@ procedure GetSystemTime(out result: TSystemTime);
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
 // or fpgettimeofday() on Darwin/MacOS, with FPC RTL TZSeconds adjustment (so
 // will be fixed for the whole process lifetime and won't change at daylight)
-// - warning: do not call this function directly, but use TSynSystemTime as
-// defined in mormot.core.datetime which is really cross-platform
+// - warning: do not call this function directly, but rather mormot.core.datetime
+// TSynSystemTime.FromNowLocal cross-platform method instead
 procedure GetLocalTime(out result: TSystemTime);
   {$ifdef OSWINDOWS} stdcall; {$endif}
 

@@ -846,6 +846,15 @@ end;
 
 {$endif OSDARWIN}
 
+function SetSystemTime(utctime: TUnixTime): boolean;
+var
+  u: timeval;
+begin
+  u.tv_sec := utctime;
+  u.tv_usec := 0;
+  result := fpsettimeofday(@u, nil) = 0;
+end;
+
 function UnixMSTimeUtcFast: TUnixMSTime;
 begin
   result := UnixMSTimeUtc;
