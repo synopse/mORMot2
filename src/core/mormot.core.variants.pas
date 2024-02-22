@@ -3445,6 +3445,9 @@ function DocList(const dv: TDocVariantData): IDocList; overload;
 /// create a self-owned IDocList as full copy of a TDocVariantData dvArray
 function DocListCopy(const dv: TDocVariantData): IDocList; overload;
 
+/// create a self-owned IDocList as full copy of a TDocVariant dvArray
+function DocListCopy(const v: variant): IDocList; overload;
+
 /// create a self-owned IDocList as full copy of a TDocVariantData dvArray
 // and a specific options model
 function DocListCopy(const dv: TDocVariantData;
@@ -3486,10 +3489,13 @@ function DocDict(const dv: TDocVariantData): IDocDict; overload;
 /// create a self-owned IDocDict as full copy of a TDocVariantData dvObject
 function DocDictCopy(const dv: TDocVariantData): IDocDict; overload;
 
+/// create a self-owned IDocDict as full copy of a TDocVariant dvObject
+function DocDictCopy(const v: variant): IDocDict; overload;
+
 /// create a self-owned IDocDict as full copy of a TDocVariantData dvObject
 // and a specific options model
 function DocDictCopy(const dv: TDocVariantData;
-  model: TDocVariantModel = mFastFloat): IDocDict; overload;
+  model: TDocVariantModel): IDocDict; overload;
 
 var
   /// default TDocVariant model for IDocList/IDocDict
@@ -10573,12 +10579,17 @@ begin
     result := nil;
 end;
 
-function DocListCopy(const dv: TDocVariantData): IDocList; overload;
+function DocListCopy(const dv: TDocVariantData): IDocList;
 begin
   if dv.IsArray then
     result := TDocList.CreateCopy(dv)
   else
     result := nil;
+end;
+
+function DocListCopy(const v: variant): IDocList;
+begin
+  result := DocListCopy(_Safe(v)^);
 end;
 
 function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
@@ -10693,6 +10704,11 @@ begin
     result := TDocDict.CreateCopy(dv)
   else
     result := nil;
+end;
+
+function DocDictCopy(const v: variant): IDocDict;
+begin
+  result := DocDictCopy(_Safe(v)^);
 end;
 
 function DocDictCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocDict;
