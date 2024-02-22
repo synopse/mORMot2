@@ -519,6 +519,8 @@ type
     procedure ToIsoTime(out text: RawUtf8; FirstTimeChar: RawUtf8 = 'T');
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
+    /// convert the stored time into a TUnixTime in seconds since UNIX Epoch
+    function ToUnixTime: TUnixTime;
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate);
       {$ifdef HASINLINE}inline;{$endif}
@@ -2463,6 +2465,17 @@ begin
     result := 0;
 end;
 
+function TSynSystemTime.ToUnixTime: TUnixTime;
+var
+  dt: TDateTime;
+begin
+  dt := ToDateTime;
+  if dt = 0 then
+    result := 0
+  else
+    result := DateTimeToUnixTime(dt);
+end;
+
 procedure TSynSystemTime.ToSynDate(out date: TSynDate);
 begin
   date := PSynDate(@self)^; // first 4 fields do match
@@ -3050,13 +3063,19 @@ begin
 end;
 
 function TTimeLogBits.ToUnixTime: TUnixTime;
+var
+  dt: TDateTime;
 begin
-  result := DateTimeToUnixTime(ToDateTime);
+  dt := ToDateTime;
+  if dt = 0 then
+    result := 0
+  else
+    result := DateTimeToUnixTime(dt);
 end;
 
 function TTimeLogBits.ToUnixMSTime: TUnixMSTime;
 begin
-  result := DateTimeToUnixMSTime(ToDateTime);
+  result := ToUnixTime * MSecsPerSec;
 end;
 
 function TTimeLogBits.Text(Dest: PUtf8Char; Expanded: boolean;
