@@ -13,7 +13,7 @@ unit mormot.db.nosql.mongodb;
 
   Note: This driver uses the new OP_MSG/OP_COMPRESSED Wire protocol, mandatory
    since MongoDB 5.1/6.0. Define MONGO_OLDPROTOCOL conditional for your project
-   if you want to connect to old < 3.6 MongoDB instances.
+   if you want to connect to deprecated < 3.6 MongoDB instances.
 
   *****************************************************************************
 }
@@ -635,9 +635,8 @@ end;
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
-    procedure FetchAllToJson(W: TJsonWriter;
-      Mode: TMongoJsonMode = modMongoStrict; WithHeader: boolean = false;
-      MaxSize: PtrUInt = 0);
+    procedure FetchAllToJson(W: TJsonWriter; Mode: TMongoJsonMode = modMongoStrict;
+      WithHeader: boolean = false; MaxSize: PtrUInt = 0);
     /// return all documents content as a JSON array, or one JSON object
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
@@ -1723,6 +1722,25 @@ type
     // return a dvArray kind of TDocVariant
     function AggregateDoc(const Operators: RawUtf8;
       const Params: array of const): variant; overload;
+    /// calculate one aggregate value using the MongoDB aggregation framework
+    // and return the result as a IDocDict instance
+    // - you should specify the aggregation pipeline as a list of JSON object
+    // operators (without the [..]) - for reference of all available phases,
+    // see http://docs.mongodb.org/manual/core/aggregation-pipeline
+    // - return nil if the server sent back no {result:...} member
+    // - if the server sent back at least one item as {result:[{..}]}, will
+    // return this first (and may be single) item as a IDocDict
+    function AggregateDocDict(const Operators: RawUtf8;
+      const Params: array of const): IDocDict;
+    /// calculate aggregate values using the MongoDB aggregation framework
+    // and return the result as a IDocList instance
+    // - you should specify the aggregation pipeline as a list of JSON object
+    // operators (without the [..]) - for reference of all available phases,
+    // see http://docs.mongodb.org/manual/core/aggregation-pipeline
+    // - return nil if the server sent back no {result:...} member
+    // - return a IDocDict with one or several items from {result:[{..}]}
+    function AggregateDocList(const Operators: RawUtf8;
+      const Params: array of const): IDocList;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - the Aggregation Framework was designed to be more efficient than the
     // alternative map-reduce pattern, and is available since MongoDB 2.2 -
@@ -2254,7 +2272,7 @@ begin
     complen := zlibCompressMax(cmdlen + 5);
     FastNewRawByteString(comp, complen);
     if cmdlen < 1024 then
-      level := Z_NO_COMPRESSION // not worth compressing on the wire
+      level := Z_NO_COMPRESSION // not worth to be compressed on the wire
       // but we use zlib anyway, otherwise the response is not compressed
     else
       level := mc.ZlibLevel;   // 1 (fastest) by default
@@ -4025,6 +4043,29 @@ function TMongoCollection.AggregateDoc(const Operators: RawUtf8;
   const Params: array of const): variant;
 begin
   result := AggregateDocFromJson(FormatUtf8(Operators, Params));
+end;
+
+function TMongoCollection.AggregateDocDict(const Operators: RawUtf8;
+  const Params: array of const): IDocDict;
+var
+  reply, res: variant;
+begin
+  result := nil;
+  if AggregateCallFromJson(FormatUtf8(Operators, Params), reply, res) then
+    with _Safe(res)^ do
+      if IsArray and
+         (Count <> 0) then
+        result:= DocDictCopy(Values[0]);
+end;
+
+function TMongoCollection.AggregateDocList(const Operators: RawUtf8;
+  const Params: array of const): IDocList;
+var
+  reply, res: variant;
+begin
+  result := nil;
+  if AggregateCallFromJson(FormatUtf8(Operators, Params), reply, res) then
+    result:= DocListCopy(res);
 end;
 
 function TMongoCollection.AggregateJson(const Operators: RawUtf8;
