@@ -1869,13 +1869,13 @@ type
     fEnabled: TWinSystemPrivileges;
     fDefEnabled: TWinSystemPrivileges;
     fToken: THandle;
-    function SetPrivilege(
-      aPrivilege: TWinSystemPrivilege; aEnablePrivilege: boolean): boolean;
+    function SetPrivilege(wsp: TWinSystemPrivilege; enabled: boolean): boolean;
     procedure LoadPrivileges;
   public
     /// initialize the object dedicated to management of available privileges
     // - aTokenPrivilege can be used for current process or current thread
-    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess);
+    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess;
+      aLoadPrivileges: boolean = true);
     /// finalize the object and relese Token handle
     // - aRestoreInitiallyEnabled parameter can be used to restore initially
     // state of enabled privileges
@@ -1894,7 +1894,7 @@ type
     /// set of enabled privileges for current process/thread
     property Enabled: TWinSystemPrivileges
       read fEnabled;
-    /// handle to the low-level privileges token
+    /// low-level access to the privileges token handle
     property Token: THandle
       read fToken;
   end;
@@ -2683,6 +2683,7 @@ type
   // defined in mormot.core.datetime which is really cross-platform, and has
   // consistent field order (FPC POSIX/Windows fields do not match!)
   TSystemTime = Windows.TSystemTime;
+  PSystemTime = Windows.PSystemTime;
 
   /// system-specific type returned by FileAge(): local 32-bit bitmask on Windows
   TFileAge = integer;

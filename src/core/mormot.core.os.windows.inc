@@ -3300,13 +3300,15 @@ end;
 
 { TSynWindowsPrivileges }
 
-procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType);
+procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType;
+  aLoadPrivileges: boolean);
 begin
   fAvailable := [];
   fEnabled := [];
   fDefEnabled := [];
   fToken := RawTokenOpen(aTokenPrivilege, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
-  LoadPrivileges;
+  if aLoadPrivileges then
+    LoadPrivileges;
 end;
 
 procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean);
@@ -3360,6 +3362,9 @@ var
 begin
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
+  fAvailable := [];
+  fEnabled := [];
+  fDefEnabled := [];
   try
     if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
@@ -3373,11 +3378,13 @@ begin
          RaiseLastError('LoadPriviledges: LookupPrivilegeNameA');
       name[0] := AnsiChar(len);
       for p := low(p) to high(p) do
-        if PropNameEquals(PShortString(@name), PShortString(@_WSP[p])) then
+        if not (p in fAvailable) and
+           PropNameEquals(PShortString(@name), PShortString(@_WSP[p])) then
         begin
-          Include(fAvailable, p);
+          include(fAvailable, p);
           if priv.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
-            Include(fDefEnabled, p);
+            include(fDefEnabled, p);
+          break;
         end;
       inc(priv);
     end;
@@ -3387,8 +3394,8 @@ begin
   end;
 end;
 
-function TSynWindowsPrivileges.SetPrivilege(aPrivilege: TWinSystemPrivilege;
-  aEnablePrivilege: boolean): boolean;
+function TSynWindowsPrivileges.SetPrivilege(
+  wsp: TWinSystemPrivilege; enabled: boolean): boolean;
 var
   tp: TOKEN_PRIVILEGES;
   id: TLargeInteger;
@@ -3396,7 +3403,7 @@ var
   cbprev: DWord;
 begin
   result := false;
-  if not LookupPrivilegeValueA(nil, @_WSP[aPrivilege][1], id) then
+  if not LookupPrivilegeValueA(nil, @_WSP[wsp][1], id) then
     exit;
   tp.PrivilegeCount := 1;
   tp.Privileges[0].Luid := PInt64(@id)^;
@@ -3409,7 +3416,7 @@ begin
   tpprev.PrivilegeCount := 1;
   tpprev.Privileges[0].Luid := PInt64(@id)^;
   with tpprev.Privileges[0] do
-    if aEnablePrivilege then
+    if enabled then
       Attributes := Attributes or SE_PRIVILEGE_ENABLED
     else
       Attributes := Attributes xor (SE_PRIVILEGE_ENABLED and Attributes);
