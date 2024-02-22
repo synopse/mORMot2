@@ -2707,9 +2707,11 @@ begin
 end;
 
 var
-  _HttpDateNowUtc: THttpDateNowUtc;
-  _HttpDateNowUtcLock: TLightLock;
-  _HttpDateNowUtcTix: cardinal; // = GetTickCount64 div 1024 (every second)
+  _HttpDateNowUtc: record
+    Safe: TLightLock;
+    Tix: cardinal; // = GetTickCount64 div 1024 (every second)
+    Value: THttpDateNowUtc;
+  end;
 
 function HttpDateNowUtc: THttpDateNowUtc;
 var
@@ -2718,19 +2720,22 @@ var
   now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   c := GetTickCount64 shr 10;
-  _HttpDateNowUtcLock.Lock;
-  if c <> _HttpDateNowUtcTix then
+  with _HttpDateNowUtc do
   begin
-    _HttpDateNowUtcLock.UnLock;
-    T.FromNowUtc;
-    T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
-    c := GetTickCount64 shr 10;
-    _HttpDateNowUtcLock.Lock;
-    _HttpDateNowUtcTix := c;
-    _HttpDateNowUtc := now;
+    Safe.Lock;
+    if c <> Tix then
+    begin
+      Tix := c; // let this single thread update the Value
+      Safe.UnLock;
+      T.FromNowUtc;
+      T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
+      c := GetTickCount64 shr 10;
+      Safe.Lock;
+      Value := now;
+    end;
+    MoveFast(Value[0], result[0], ord(Value[0]) + 1);
+    Safe.UnLock;
   end;
-  MoveFast(_HttpDateNowUtc[0], result[0], ord(_HttpDateNowUtc[0]) + 1);
-  _HttpDateNowUtcLock.UnLock;
 end;
 
 function UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime): TShort31;
