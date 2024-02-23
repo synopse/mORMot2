@@ -985,8 +985,10 @@ type
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
+    fOnProgressiveRequestFree: THttpPartials;
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
+    procedure DoProgressiveRequestFree(var Ctxt: THttpRequestContext);
     procedure SetServerKeepAliveTimeOut(Value: cardinal);
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     procedure IncStat(one: THttpServerSocketGetRequestResult);
@@ -1224,7 +1226,6 @@ type
     fOnHeaderParsed: TOnHttpServerHeaderParsed;
     fBanned: THttpAcceptBan; // for hsoBan40xIP
     fOnAcceptIdle: TOnPollSocketsIdle;
-    fOnRequestFree: procedure(Sender: PHttpRequestContext) of object;
     function GetExecuteState: THttpServerExecuteState; override;
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -1594,14 +1595,6 @@ type
     lfnSetDate,
     lfnEnsureDirectoryExists);
 
-  THttpPeerCachePartial = record
-    Sequence: integer; // =0 if empty/recyclable
-    Hash: THttpPeerCacheHash;
-    FullSize: Int64;
-    PartFile: TFileName;
-    HttpContext: array of PHttpRequestContext;
-  end;
-
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
   // - TCP is bound to a local THttpServer content delivery
@@ -1616,9 +1609,7 @@ type
     fTempFilesDeleteDeprecatedTix, fInstableTix, fBroadcastTix: cardinal;
     fSettingsOwned, fVerboseLog: boolean;
     fFilesSafe: TOSLock; // concurrent cached files access
-    fPartialSafe: TLightLock;
-    fPartialSequence: integer; // > 0 if supported by the fHttpServer class
-    fPartial: array of THttpPeerCachePartial; // only a few items at a time
+    fPartials: THttpPartials;
     // most of these internal methods are virtual for proper customization
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
       aHttpServerThreadCount: integer; const aIP: RawUtf8); virtual;
@@ -1634,11 +1625,8 @@ type
       out aLocal: TFileName; out isTemp: boolean): boolean;
     function TooSmallFile(const aParams: THttpClientSocketWGet;
       aSize: Int64; const aCaller: shortstring): boolean;
-    function PartialFromID(PartialID: integer): PtrInt;
     function PartialFileName(const aMessage: THttpPeerCacheMessage;
       aHttp: PHttpRequestContext; aFileName: PFileName; aSize: PInt64): integer;
-    procedure PartialChangeFile(PartialID: integer; const NewFile: TFileName);
-    procedure OnRequestFree(Sender: PHttpRequestContext);
   public
     /// initialize this peer-to-peer cache instance
     // - any supplied aSettings should be owned by the caller (e.g from a main
@@ -1674,11 +1662,11 @@ type
     // - make this .part file available as pcfResponsePartial
     // - returns PartialID > 0 sequence
     function OnDownloading(const Params: THttpClientSocketWGet;
-      const Partial: TFileName; ExpectedFullSize: Int64): integer;
+      const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     /// notify the alternate download implementation that OnDownloading() failed
     // - e.g. THttpPeerCache is likely to abort publishing this partial file
-    procedure OnDownloadingFailed(PartialID: integer);
+    procedure OnDownloadingFailed(ID: THttpPartialID);
     /// broadcast a pcfPing on the network interface and return the responses
     function Ping: THttpPeerCacheMessageDynArray;
     /// method called by the HttpServer before any request is processed
@@ -3879,6 +3867,19 @@ begin
   end;
 end;
 
+procedure THttpServerSocketGeneric.DoProgressiveRequestFree(
+  var Ctxt: THttpRequestContext);
+begin
+  if Assigned(fOnProgressiveRequestFree) and
+     (rfProgressiveStatic in Ctxt.ResponseFlags) then
+    try
+      fOnProgressiveRequestFree.Remove(@Ctxt);
+      exclude(Ctxt.ResponseFlags, rfProgressiveStatic); // remove it once
+    except
+      ; // ignore any exception in callbacks
+    end;
+end;
+
 procedure THttpServerSocketGeneric.SetServerKeepAliveTimeOut(Value: cardinal);
 begin
   fServerKeepAliveTimeOut := Value;
@@ -4420,12 +4421,8 @@ begin
     end;
   finally
     req.Free;
-    if Assigned(fOnRequestFree) then
-      try
-        fOnRequestFree(@ClientSock.Http); // e.g. THttpPeerCache.OnRequestFree
-      except
-        // ignore any callback exception
-      end;
+    if Assigned(fOnProgressiveRequestFree) then
+      DoProgressiveRequestFree(ClientSock.Http); // e.g. THttpPartials.Remove
     ClientSock.Http.ProcessDone;   // ContentStream.Free
   end;
   // add transfert stats to main socket
@@ -5563,8 +5560,10 @@ begin
   // note: by now, THttpAsyncServer is incompatible with rfProgressiveStatic
   if aHttpServerClass = THttpServer then
   begin
-    inc(fPartialSequence); // > 0 if supported by the fHttpServer class
-    THttpServer(fHttpServer).fOnRequestFree := OnRequestFree;
+    fPartials := THttpPartials.Create;
+    if fVerboseLog then
+      fPartials.OnLog := fLog.DoLog;
+    THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
   end;
 end;
 
@@ -5580,6 +5579,7 @@ begin
   fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
   FreeAndNil(fUdpServer);
   FreeAndNil(fHttpServer);
+  FreeAndNil(fPartials);
   fFilesSafe.Done;
   inherited Destroy;
 end;
@@ -5964,7 +5964,7 @@ begin
       'OnDowloaded: % already in cache', [Partial], self);
     // size mismatch may happen on race condition (hash collision is unlikely)
     if PartialID <> 0 then
-      PartialChangeFile(PartialID, local); // switch to the local file
+      fPartials.ChangeFile(PartialID, local); // switch to the local file
     exit;
   end;
   QueryPerformanceMicroSeconds(start);
@@ -6026,7 +6026,7 @@ begin
   end;
   if PartialID <> 0 then
     if ok then
-      PartialChangeFile(PartialID, local) // switch to final local file
+      fPartials.ChangeFile(PartialID, local) // switch to final local file
     else
       OnDownloadingFailed(PartialID);     // abort
   QueryPerformanceMicroSeconds(stop);
@@ -6049,92 +6049,31 @@ begin
     fLog.Add.Log(sllLastError, 'OnDowloadFailed: error deleting %', [local], self);
 end;
 
-function THttpPeerCache.PartialFromID(PartialID: integer): PtrInt;
-var
-  p: ^THttpPeerCachePartial;
-begin
-  p := pointer(fPartial);
-  for result := 0 to length(fPartial) - 1 do
-    if p^.Sequence = PartialID then // fast enough with a few slots
-      exit
-    else
-      inc(p);
-  result := -1;
-end;
-
 function THttpPeerCache.OnDownloading(const Params: THttpClientSocketWGet;
-  const Partial: TFileName; ExpectedFullSize: Int64): integer;
+  const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
 var
   h: THttpPeerCacheHash;
-  i: PtrInt;
 begin
-  result := 0;
-  if (fPartialSequence = 0) or // > 0 if supported by the fHttpServer class
-     (ExpectedFullSize = 0) or
+  if (fPartials = nil) or // not supported by this fHttpServer class
      (waoNoProgressiveDownloading in Params.AlternateOptions) or
      not WGetToHash(Params, h) or
      TooSmallFile(Params, ExpectedFullSize, 'OnDownloading') then
-    exit;
-  fPartialSafe.Lock;
-  try
-    result := fPartialSequence; // 1,2,3...
-    inc(fPartialSequence);
-    i := PartialFromID(0); // try to reuse an empty slot
-    if i < 0 then
-    begin
-      i := length(fPartial);
-      SetLength(fPartial, i + 1); // need a new slot
-    end;
-    with fPartial[i] do
-    begin
-      Sequence := result;
-      Hash := h;
-      FullSize := ExpectedFullSize;
-      PartFile := Partial;
-      HttpContext := nil;
-    end;
-  finally
-    fPartialSafe.UnLock;
-  end;
-  if fVerboseLog then
-    fLog.Add.Log(sllTrace, 'OnDowloading(%)=%', [Partial, result], self);
+    result := 0
+  else
+    result := fPartials.Add(Partial, ExpectedFullSize, @h.Hash, HASH_SIZE[h.Algo]);
 end;
 
 function THttpPeerCache.PartialFileName(
   const aMessage: THttpPeerCacheMessage; aHttp: PHttpRequestContext;
   aFileName: PFileName; aSize: PInt64): integer;
 var
-  i, l: PtrInt;
   fn: TFileName;
   size: Int64;
-  p: ^THttpPeerCachePartial;
 begin
   result := HTTP_NOTFOUND;
-  if fPartialSequence = 0 then // > 0 if supported by the fHttpServer class
+  if fPartials = nil then // not supported by this fHttpServer class
     exit;
-  size := 0;
-  l := SizeOf(aMessage.Hash.Algo) + HASH_SIZE[aMessage.Hash.Algo];
-  fPartialSafe.Lock;
-  try
-    p := pointer(fPartial);
-    for i := 1 to length(fPartial) do
-      if (p^.Sequence <> 0) and
-         CompareMem(@p^.Hash, @aMessage.Hash, l) then
-      begin
-        size := p^.FullSize;
-        fn   := p^.PartFile;
-        if aHttp <> nil then
-        begin
-          PtrArrayAdd(p^.HttpContext, aHttp);
-          aHttp^.ProgressiveID := p^.Sequence;
-        end;
-        break;
-      end
-      else
-        inc(p);
-  finally
-    fPartialSafe.UnLock;
-  end;
+  fn := fPartials.Find(@aMessage.Hash.Hash, HASH_SIZE[aMessage.Hash.Algo], aHttp, size);
   if fVerboseLog then
     fLog.Add.Log(sllTrace, 'PartialFileName: % size=% msg: size=% start=% end=%',
       [fn, size, aMessage.Size, aMessage.RangeStart, aMessage.RangeEnd], self);
@@ -6151,117 +6090,11 @@ begin
     aSize^ := size;
 end;
 
-procedure THttpPeerCache.PartialChangeFile(PartialID: integer;
-  const NewFile: TFileName);
-var
-  i, j: PtrInt;
-  changed: integer;
+procedure THttpPeerCache.OnDownloadingFailed(ID: THttpPartialID);
 begin
-  // called from OnDowloaded() with the new cached file name to use
-  if (PartialID = 0) or
-     (fPartialSequence = 0) or // > 0 if supported by the fHttpServer class
-     (PartialID >= fPartialSequence) then
-    exit;
-  changed := 0;
-  fPartialSafe.Lock;
-  try
-    i := PartialFromID(PartialID);
-    if i >= 0 then
-      with fPartial[i] do
-      begin
-        PartFile := NewFile;
-        for j := length(HttpContext) - 1 downto 0 do
-        try
-          if HttpContext[j]^.ChangeProgressiveFileName(NewFile) then
-            inc(changed);
-        except
-          PtrArrayDelete(HttpContext, j); // paranoid
-        end;
-      end;
-  finally
-    fPartialSafe.UnLock;
-  end;
-  if fVerboseLog or
-     (i < 0) then
-    fLog.Add.Log(LOG_TRACEWARNING[i < 0],
-      'PartialChangeFile(%): found=% changed=%', [PartialID, i, changed], self);
-end;
-
-procedure THttpPeerCache.OnDownloadingFailed(PartialID: integer);
-var
-  i, j: PtrInt;
-  aborted, raised: integer;
-begin
-  if (PartialID = 0) or
-     (fPartialSequence = 0) or // > 0 if supported by the fHttpServer class
-     (PartialID >= fPartialSequence) then
-    exit;
   // unregister and abort any partial downloading process
-  aborted := 0;
-  raised := 0;
-  fPartialSafe.Lock;
-  try
-    i := PartialFromID(PartialID);
-    if i >= 0 then
-      with fPartial[i] do
-      begin
-        Sequence := 0; // reuse this slot
-        PartFile := '';
-        if HttpContext <> nil then
-        begin
-          aborted := length(HttpContext);
-          for j := 0 to aborted - 1 do
-            try
-              HttpContext[j].ProgressiveID := 0; // abort THttpServer.Process
-            except
-              inc(raised); // paranoid
-            end;
-          HttpContext := nil;
-        end;
-      end;
-  finally
-    fPartialSafe.UnLock;
-  end;
-  if fVerboseLog or
-     (i < 0) then
-    fLog.Add.Log(LOG_TRACEWARNING[i < 0],
-      'OnDownloadingFailed(%): found=% raised=% aborted=%',
-        [PartialID, i, raised, aborted], self);
-  if aborted <> 0 then
-    SleepHiRes(STATICFILE_PROGWAITMS * 2); // wait for THttpServer.Process abort
-end;
-
-procedure THttpPeerCache.OnRequestFree(Sender: PHttpRequestContext);
-var
-  i: PtrInt;
-  deleted, released: boolean;
-begin
-  if Sender.ProgressiveID = 0 then
-    exit; // e.g. after OnDownloadingFailed()
-  deleted := false;
-  released := false;
-  fPartialSafe.Lock;
-  try
-    i := PartialFromID(Sender.ProgressiveID);
-    if i >= 0 then
-      with fPartial[i] do
-      begin
-        if PtrArrayDelete(HttpContext, Sender) >= 0 then
-          deleted := true;
-        if HttpContext = nil then
-        begin
-          Sequence := 0; // reuse this slot
-          released := true;
-        end;
-      end;
-  finally
-    fPartialSafe.UnLock;
-  end;
-  if fVerboseLog or
-     not deleted then
-    fLog.Add.Log(LOG_TRACEWARNING[not deleted],
-      'OnRequestFree(%): requestdeleted=% partialreleased=%',
-      [Sender.ProgressiveID, ord(deleted), ord(released)], self);
+  if fPartials.Abort(ID) <> 0 then
+    SleepHiRes(500); // wait for THttpServer.Process abort
 end;
 
 function THttpPeerCache.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -6279,7 +6112,7 @@ begin
     // msg.Kind = pcfBearer so we need to ask both Local+PartialFileName()
     result := LocalFileName(msg, [lfnSetDate], @fn, nil);
     if (result <> HTTP_SUCCESS) and
-       (fPartialSequence <> 0) then // > 0 if supported by the fHttpServer class
+       (fPartials <> nil) then // if supported by the fHttpServer class
       result := PartialFileName(
                   msg, (Ctxt as THttpServerRequest).fHttp, @fn, @progsize);
     if result <> HTTP_SUCCESS then
