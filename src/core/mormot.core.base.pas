@@ -7419,6 +7419,7 @@ begin
   dec(n);
   if n > aIndex then
     MoveFast(a[aIndex + 1], a[aIndex], (n - aIndex) * SizeOf(pointer));
+  a[n] := nil; // better safe than sorry
   if aCount = nil then
     SetLength(a, n)
   else
@@ -7440,7 +7441,7 @@ begin
   dec(n);
   if n > result then
     MoveFast(a[result + 1], a[result], (n - result) * SizeOf(pointer));
-  a[n] := nil; // is used sometimes on managed arrays to search by pointer
+  a[n] := nil; // better safe than sorry
   if aCount = nil then
     SetLength(a, n)
   else
