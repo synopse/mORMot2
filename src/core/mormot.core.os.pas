@@ -4809,6 +4809,10 @@ procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 function ObjArrayAdd(var aObjArray; aItem: TObject;
   var aSafe: TLightLock; aCount: PInteger = nil): PtrInt; overload;
 
+/// wrapper to implement a thread-safe pointer dynamic array storage
+function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;
+  aCount: PInteger = nil): PtrInt; overload;
+
 /// try to kill/cancel a thread
 // - on Windows, calls the TerminateThread() API
 // - under Linux/FPC, calls pthread_cancel() API which is asynchronous
@@ -10337,6 +10341,14 @@ begin
     result := PtrArrayAdd(aObjArray, aItem, aCount^)
   else
     result := PtrArrayAdd(aObjArray, aItem);
+  aSafe.UnLock;
+end;
+
+function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;
+  aCount: PInteger): PtrInt;
+begin
+  aSafe.Lock;
+  result := PtrArrayDelete(aPtrArray, aItem, aCount);
   aSafe.UnLock;
 end;
 
