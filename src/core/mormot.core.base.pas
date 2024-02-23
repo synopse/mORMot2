@@ -4150,6 +4150,12 @@ type
   /// dynamic array of timestamps stored as millisecond-based Unix Time
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
+const
+  /// may be used to log as Trace or Warning event, depending on an Error: boolean
+  LOG_TRACEWARNING: array[boolean] of TSynLogLevel = (
+    sllTrace,
+    sllWarning);
+
 
 implementation
 

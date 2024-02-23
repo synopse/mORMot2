@@ -1605,7 +1605,6 @@ var
   res: TNetResult;
   start: Int64;
   wf: string[3];
-  sll: TSynLogLevel;
   temp: array[0..$7fff] of byte; // up to 32KB moved to small reusable fRd.Buffer
 begin
   result := true; // if closed or properly read: don't retry
@@ -1679,14 +1678,10 @@ begin
           else
             wf[0] := #0;
           if fDebugLog <> nil then
-          begin
-            sll := sllTrace;
-            if not (res in [nrOk, nrRetry, nrClosed]) then
-              sll := sllWarning;
             DoLog('ProcessRead recv(%)=% len=% %in %',
               [pointer(connection.Socket), ToText(res)^, recved, wf,
-               MicroSecFrom(start)], sll);
-          end;
+               MicroSecFrom(start)],
+              LOG_TRACEWARNING[not (res in [nrOk, nrRetry, nrClosed])]);
           if connection.fSocket = nil then
             exit; // Stop() called
           if res = nrRetry then

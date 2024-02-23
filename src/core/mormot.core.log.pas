@@ -391,11 +391,6 @@ const
     sllDebug,
     sllError);
 
-  /// may be used to log as Trace or Warning event, depending on an Error: boolean
-  LOG_TRACEWARNING: array[boolean] of TSynLogLevel = (
-    sllTrace,
-    sllWarning);
-
   /// may be used to log as Trace or Error event, depending on an Error: boolean
   LOG_TRACEERROR: array[boolean] of TSynLogLevel = (
     sllTrace,
