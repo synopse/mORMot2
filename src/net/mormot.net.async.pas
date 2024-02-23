@@ -193,6 +193,15 @@ type
       read fHandle;
   end;
 
+  /// thread-safe storage of several connections
+  // - use e.g. by TPollAsyncSockets.ProcessWaitingWrite or to implement
+  // generational garbage collector of TAsyncConnection instances
+  TPollAsyncConnections = record
+    Safe: TLightLock;
+    Count: integer;
+    Items: array of TPollAsyncConnection;
+  end;
+
   /// possible options for low-level TPollAsyncSockets process
   // - as translated from homonymous high-level acoWritePollOnly
   // TAsyncConnectionsOptions item
@@ -532,17 +541,6 @@ type
     acoThreadSmooting
   );
 
-  /// implement generational garbage collector of TAsyncConnection instances
-  // - we define two generations: the first has a TTL of KeepConnectionInstanceMS
-  // (100ms) and are used to avoid GPF or confusion on still active connections;
-  // the second has a TTL of 2 seconds and will be used by ConnectionCreate to
-  // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
-  TAsyncConnectionsGC = record
-    Safe: TLightLock;
-    Count: integer;
-    Items: TAsyncConnectionDynArray;
-  end;
-
   /// dynamic array of TAsyncConnectionsThread instances
   TAsyncConnectionsThreads = array of TAsyncConnectionsThread;
 
@@ -582,7 +580,12 @@ type
     fThreadPollingAwakeCount: integer;
     fClientsEpoll: boolean; // = PollSocketClass.FollowEpoll
     {$endif USE_WINIOCP}
-    fGC: array[1..2] of TAsyncConnectionsGC;
+    /// implement generational garbage collector of TAsyncConnection instances
+    // - we define two generations: the first has a TTL of KeepConnectionInstanceMS
+    // (100ms) and are used to avoid GPF or confusion on still active connections;
+    // the second has a TTL of 2 seconds and will be used by ConnectionCreate to
+    // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
+    fGC: array[1..2] of TPollAsyncConnections;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
@@ -2243,14 +2246,10 @@ begin
     exit;
   (aConnection as TAsyncConnection).fLastOperation := fLastOperationMS; // in ms
   with fGC[1] do // add to 1st generation
-  begin
-    Safe.Lock;
-    ObjArrayAddCount(Items, aConnection, Count);
-    Safe.UnLock;
-  end;
+    ObjArrayAdd(Items, aConnection, Safe, @Count);
 end;
 
-function OneGC(var gen, dst: TAsyncConnectionsGC; lastms, oldms: cardinal): PtrInt;
+function OneGC(var gen, dst: TPollAsyncConnections; lastms, oldms: cardinal): PtrInt;
 var
   c: TAsyncConnection;
   i: PtrInt;
@@ -2261,7 +2260,7 @@ begin
   oldms := lastms - oldms;
   for i := 0 to gen.Count - 1 do
   begin
-    c := gen.Items[i];
+    c := pointer(gen.Items[i]);
     if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation as ms
     begin
       // release after timeout
@@ -2284,7 +2283,7 @@ end;
 
 procedure TAsyncConnections.DoGC;
 var
-  tofree: TAsyncConnectionsGC;
+  tofree: TPollAsyncConnections;
   n1, n2: integer;
 begin
   if Terminated or
@@ -2549,7 +2548,7 @@ begin
         if Count > 0 then
         begin
           dec(Count);
-          aConnection := Items[Count];
+          aConnection := pointer(Items[Count]);
         end;
         Safe.UnLock;
       end;
@@ -3662,21 +3661,21 @@ begin
       fOwner.DoLog(sllTrace, 'AfterWrite ProcessBody=% ContentLength=% Wr=%',
         [ToText(hrp)^, fHttp.ContentLength, fWr.Len], self);
     case hrp of
-      hrpSend:
+      hrpSend: // background sending
         begin
-          result := soContinue; // background sending
+          result := soContinue;
           exit;
         end;
-      hrpWait:
+      hrpWait: // not yet available (rfProgressiveStatic mode)
         begin
-          result := soWaitWrite; // not yet available (rfProgressiveStatic mode)
+          result := soWaitWrite;
           exit;
         end;
     end; // hrpAbort, hrpDone will check hrsResponseDone
   end;
   // if we reached here, we are either finished or failed
   fHttp.ProcessDone;   // ContentStream.Free
-  fHttp.Process.Clear; // CompressContentAndFinalizeHead may have set it
+  fHttp.Process.Clear; // CompressContentAndFinalizeHead may have allocated it
   if Assigned(fServer.fOnAfterResponse) then
     DoAfterResponse;
   if fHttp.State <> hrsResponseDone then
@@ -3839,7 +3838,7 @@ begin
       locked := false;
       c := self;
       fServer.fAsync.fClients.CloseConnection(c, 'AsyncResponse');
-    end
+    end;
   finally
     if locked then
       UnLock({wr=}false);
@@ -4154,7 +4153,7 @@ begin
   end;
   // ensure log file(s) are flushed/consolidated if needed
   if fLogger <> nil then
-    fLogger.OnIdle(fAsync.fLastOperationMS) // = GetTickCount64
+    fLogger.OnIdle(fAsync.fLastOperationMS) // = ProcessIdleTix() GetTickCount64
   else if fAnalyzer <> nil then
     fAnalyzer.OnIdle(fAsync.fLastOperationMS);
   // clean interned HTTP headers at least every 16 secs
