@@ -259,6 +259,7 @@ type
     fReadWaitMs: integer;
     fOnStart: TOnPollAsyncFunc;
     fOnFirstRead, fOnStop: TOnPollAsyncProc;
+    fWaitingWrite: TPollAsyncConnections; // to implement soWaitWrite
     function GetCount: integer;
     procedure DoLog(const TextFmt: RawUtf8; const TextArgs: array of const;
       Level: TSynLogLevel = sllTrace);
@@ -275,6 +276,9 @@ type
       const caller: shortstring);
     function RawWrite(connection: TPollAsyncConnection;
       var data: PByte; var datalen: integer): boolean;
+    function DoAfterWrite(const caller: shortstring;
+      connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
+    procedure ProcessWaitingWrite; // pending soWaitWrite
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -1417,7 +1421,7 @@ var
   res: TNetResult;
   sent: integer;
 begin
-  result := false;
+  result := false; // closed or failed
   repeat
     if fTerminated or
        (connection.fSocket = nil) then
@@ -1427,12 +1431,13 @@ begin
     if connection.fSocket = nil then
       exit;  // Stop() called
     if res = nrRetry then
-      break; // fails now -> retry later in ProcessWrite
+      break; // fails now -> return true and retry later in ProcessWrite
     if res <> nrOK then
     begin
       if fDebugLog <> nil then
-        DoLog('Write: Send(%)=% len=% handle=%', [pointer(connection.Socket),
-          ToText(res)^, sent, connection.Handle], sllLastError);
+        DoLog('Write: connection.Send(%)=% len=% handle=%',
+          [pointer(connection.Socket), ToText(res)^,
+           sent, connection.Handle], sllLastError);
       exit;  // connection closed or broken -> abort
     end;
     inc(data, sent);
@@ -1440,7 +1445,7 @@ begin
     inc(fWriteBytes, sent);
     dec(datalen, sent);
   until datalen = 0;
-  result := true; // sent some data - some may be pending in data/datalen
+  result := true; // retry later (perhaps with pending data/datalen)
 end;
 
 function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
@@ -1448,6 +1453,7 @@ function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
 var
   P: PByte;
   previous: integer;
+  res: TPollAsyncSocketOnReadWrite;
 begin
   result := false;
   if (datalen <= 0) or
@@ -1461,35 +1467,34 @@ begin
     // we acquired the write lock: immediate or delayed/buffered sending
     //DoLog('Write: WaitLock fProcessingWrite=%', [fProcessingWrite]);
     P := data;
+    // try to send now in non-blocking mode (works most of the time)
     previous := connection.fWr.Len;
     if (previous = 0) and
        not (paoWritePollOnly in fOptions) then
-      // try to send now in non-blocking mode (works most of the time)
-      if not RawWrite(connection, P, datalen) then
+      if not RawWrite(connection, P, datalen) then // use OS buffers
         exit; // aborted
     if connection.fSocket = nil then
       exit;
-    result := true;
     if datalen <> 0 then
+    begin
       // use fWrite output polling for the remaining data in ProcessWrite
-      connection.fWr.Append(P, datalen)
+      connection.fWr.Append(P, datalen);
+      res := soContinue;
+    end
     else
       // notify everything written - and maybe call slot.fWr.Append
-      try
-        result := connection.AfterWrite = soContinue;
-        if (not result) and
-           (fDebugLog <> nil) then
-          DoLog('Write % closed by AfterWrite handle=%',
-            [pointer(connection.Socket), connection.Handle]);
-      except
+      res := DoAfterWrite('Write', connection);
+    result := true; // soContinue or soWaitWrite
+    case res of
+      soContinue:
+        if connection.fWr.Len > 0 then
+         // there is still some pending output bytes
+         if previous = 0 then
+           // register for ProcessWrite() if not already
+           result := SubscribeConnection('write', connection, pseWrite);
+      soClose:
         result := false;
-      end;
-    if result and
-       (connection.fWr.Len > 0) then
-      // there is still some pending output bytes
-      if previous = 0 then
-        // register for ProcessWrite() if not already
-        result := SubscribeConnection('write', connection, pseWrite);
+    end;
   finally
     //DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
     if result then
@@ -1748,8 +1753,8 @@ procedure TPollAsyncSockets.ProcessWrite(
 var
   connection: TPollAsyncConnection;
   buf: PByte;
-  buflen, bufsent: integer;
-  res: TNetResult;
+  buflen: integer;
+  res: TPollAsyncSocketOnReadWrite;
   start: Int64;
 begin
   connection := TPollAsyncConnection(ResToTag(notif));
@@ -1762,7 +1767,7 @@ begin
   //DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
   LockedInc32(@fProcessingWrite);
   try
-    res := nrOK;
+    res := soContinue;
     {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
         (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
@@ -1778,70 +1783,31 @@ begin
       buf := connection.fWr.Buffer;
       inc(buf, sent); // sent > 0 e.g. after wieSend
       dec(buflen, sent);
-      while buflen > 0 do
+      sent := buflen;
+      if fDebugLog <> nil then
+        QueryPerformanceMicroSeconds(start);
+      if not RawWrite(connection, buf, buflen) then
       begin
-        if fDebugLog <> nil then
-          QueryPerformanceMicroSeconds(start);
-        if fTerminated or
-           (connection.fSocket = nil) then
-          exit;
-        bufsent := buflen;
-        //DoLog('ProcessWrite: before Send buflen=%', [bufsent]);
-        res := connection.Send(buf, bufsent);
-        if fDebugLog <> nil then
-        begin
-          DoLog('ProcessWrite send(%)=% %/%B in % fProcessingWrite=%',
-            [pointer(connection.fSocket), ToText(res)^, bufsent, buflen,
-             MicroSecFrom(start), fProcessingWrite]);
-        end;
-        if connection.fSocket = nil then
-          exit; // Stop() called
-        if res = nrRetry then
-          break // may block, try later
-        else if res <> nrOk then
-        begin
-          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
-          fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
-          exclude(connection.fFlags, fSubWrite);
-          {$endif USE_WINIOCP}
-          if fDebugLog <> nil then
-            DoLog('Write failed as % -> Unsubscribe(%,%)', [ToText(res)^,
-              pointer(connection.fSocket), connection.Handle]);
-          exit; // socket closed gracefully or unrecoverable error -> abort
-        end;
-        inc(fWriteCount);
-        inc(sent, bufsent);
-        inc(buf, bufsent);
-        dec(buflen, bufsent);
+        {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
+        fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
+        exclude(connection.fFlags, fSubWrite);
+        {$endif USE_WINIOCP}
+        res := soClose;
+        exit; // socket closed gracefully or unrecoverable error -> abort
       end;
-      inc(fWriteBytes, sent);
+      dec(sent, buflen); // buflen = remaining data to send
+      if fDebugLog <> nil then
+        DoLog('ProcessWrite send(%) %/%B in % fProcessingWrite=%',
+          [pointer(connection.fSocket), sent, buflen,
+           MicroSecFrom(start), fProcessingWrite]);
       connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
       if connection.fWr.Len = 0 then
         // no more data in output buffer - AfterWrite may refill connection.fWr
-        try
-          case connection.AfterWrite of
-            soContinue:
-              ;
-            soClose:
-              begin
-                if fDebugLog <> nil then
-                  DoLog('ProcessWrite % closed by AfterWrite handle=% sent=%',
-                    [pointer(connection.fSocket), connection.Handle, sent]);
-                connection.fWr.Clear;
-                res := nrClosed;
-              end;
-            soWaitWrite:
-              begin
-
-              end;
-          end;
-        except
-          connection.fWr.Reset;
-        end;
+        res := DoAfterWrite('ProcessWrite', connection);
       {$ifdef USE_WINIOCP}
-      if res in [nrOk, nrRetry] then
+      if res = soContinue then
         if not connection.IocpPrepareNextWrite(fIocp) then
-          res := nrFatalError;
+          res := soClose;
       {$else}
       if connection.fWr.Len = 0 then
       begin
@@ -1849,16 +1815,15 @@ begin
         fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
         exclude(connection.fFlags, fSubWrite);
         if fDebugLog <> nil then
-          DoLog('Write Unsubscribe(sock=%,handle=%)=%',
+          DoLog('ProcessWrite Unsubscribe(sock=%,handle=%)=%',
            [pointer(connection.fSocket), connection.Handle]);
       end;
       {$endif USE_WINIOCP}
     finally
-      if res in [nrOk, nrRetry] then
-        connection.UnLock({writer=}true)
+      if res = soClose then // sending error or AfterWrite abort
+        UnlockAndCloseConnection(true, connection, 'ProcessWrite')
       else
-        // sending error or AfterWrite abort
-        UnlockAndCloseConnection(true, connection, 'ProcessWrite');
+        connection.UnLock({writer=}true);
     end
     else
     begin
@@ -1873,6 +1838,74 @@ begin
     end;
   finally
     LockedDec32(@fProcessingWrite);
+  end;
+end;
+
+function TPollAsyncSockets.DoAfterWrite(const caller: shortstring;
+  connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
+begin
+  try
+    result := connection.AfterWrite;
+    case result of
+      soClose:
+        begin
+          if fDebugLog <> nil then
+            DoLog('% % closed by AfterWrite handle=%',
+              [caller, pointer(connection.fSocket), connection.Handle]);
+          connection.fWr.Clear;
+        end;
+      soWaitWrite:
+        with fWaitingWrite do
+          ObjArrayAdd(Items, connection, Safe, @Count);
+    end; // soContinue would just continue and send connection.fWr content
+  except
+    connection.fWr.Clear;
+    result := soClose; // intercept any exception in AfterWrite overriden method
+  end;
+end;
+
+procedure TPollAsyncSockets.ProcessWaitingWrite;
+var
+  queue: array of TPollAsyncConnection;
+  connection: TPollAsyncConnection;
+  res: TPollAsyncSocketOnReadWrite;
+  i, n: PtrInt;
+  {%H-}log: ISynLog;
+begin
+  if fWaitingWrite.Count = 0 then
+    exit; // no connection in pending rfProgressiveStatic mode
+  log := fDebugLog.Enter('ProcessWaitingWrite %', [fWaitingWrite.Count], self);
+  with fWaitingWrite do
+  begin
+    Safe.Lock;
+    n := Count;
+    Count := 0;
+    pointer(queue) := pointer(Items); // no refcount
+    pointer(Items) := nil;
+    Safe.UnLock;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    if fTerminated then
+      exit;
+    connection := queue[i];
+    res := soClose;
+    if not connection.IsClosed then
+      if connection.WaitLock({writer=}true, 0) then
+      try
+        res := DoAfterWrite('ProcessWaitingWrite', connection);
+        if (res = soContinue) and
+           (connection.fWr.Len > 0) then // async sending of the new data
+          SubscribeConnection('waitwrite', connection, pseWrite);
+      finally
+        if res = soClose then
+          UnlockAndCloseConnection(true, connection, 'ProcessWaitingWrite')
+        else
+          connection.UnLock({writer=}true);
+      end
+      else // retry if locked (unlikely)
+        with fWaitingWrite do
+          ObjArrayAdd(Items, connection, Safe, @Count);
   end;
 end;
 
@@ -2245,6 +2278,8 @@ begin
   if Terminated then
     exit;
   (aConnection as TAsyncConnection).fLastOperation := fLastOperationMS; // in ms
+  with fClients.fWaitingWrite do
+    PtrArrayDelete(Items, aConnection, Safe, @Count);
   with fGC[1] do // add to 1st generation
     ObjArrayAdd(Items, aConnection, Safe, @Count);
 end;
@@ -2982,11 +3017,22 @@ begin
   if Terminated then
     exit;
   try
+    if (fClients <> nil) and
+       (fClients.fWaitingWrite.Count <> 0) and
+       (fLastOperationMS shr 5 <> NowTix shr 5) then // at most every 32ms
+    begin
+      fClients.ProcessWaitingWrite; // process pending soWaitWrite
+      if Terminated then
+        exit;
+    end;
     fLastOperationMS := NowTix; // internal reusable cache to avoid syscall
     DoGC;
     if fOnIdle <> nil then
       for i := 0 to length(fOnIdle) - 1 do
-        fOnIdle[i](Sender, NowTix);
+        if Terminated then
+          exit
+        else
+          fOnIdle[i](Sender, NowTix);
     sec := Qword(NowTix) div 1000; // 32-bit second resolution is fine
     if (sec = fLastOperationSec) or
        Terminated then
