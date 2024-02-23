@@ -1839,7 +1839,7 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 // !   ObjArrayClear(arr); // release all items
 // ! end;
 // - return the index of the item in the dynamic array
-function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
+function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add an item to a T*ObjArray dynamic array storage
