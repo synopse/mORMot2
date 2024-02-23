@@ -1597,7 +1597,7 @@ type
 
   /// implement a local peer-to-peer download cache via UDP and TCP
   // - UDP broadcasting is used for local peers discovery
-  // - TCP is bound to a local THttpServer content delivery
+  // - TCP is bound to a local THttpServer/THttpAsyncServer content delivery
   // - will maintain its own local folders of cached files, stored by hash
   THttpPeerCache = class(THttpPeerCrypt, IWGetAlternate)
   protected
@@ -5542,7 +5542,7 @@ var
 begin
   if aHttpServerClass = nil then
     aHttpServerClass := THttpServer;
-  opt := [hsoBan40xIP, hsoNoXPoweredHeader];
+  opt := [hsoBan40xIP, hsoNoXPoweredHeader, hsoThreadSmooting];
   if fVerboseLog then
     include(opt, hsoLogVerbose);
   if pcoSelfSignedHttps in fSettings.Options then
@@ -5550,6 +5550,13 @@ begin
   fHttpServer := aHttpServerClass.Create(aIP, nil,
     fLog.Family.OnThreadEnded, 'PeerCache', aHttpServerThreadCount, 30000, opt);
   if aHttpServerClass.InheritsFrom(THttpServerSocketGeneric) then
+  begin
+    // note: both THttpServer and THttpAsyncServer support rfProgressiveStatic
+    fPartials := THttpPartials.Create;
+    if fVerboseLog then
+      fPartials.OnLog := fLog.DoLog;
+    THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
+    // actually start and wait for the local HTTP server to be available
     if pcoSelfSignedHttps in fSettings.Options then
     begin
       fLog.Add.Log(sllTrace, 'StartHttpServer: self-signed HTTPS', self);
@@ -5557,13 +5564,6 @@ begin
     end
     else
       THttpServerSocketGeneric(fHttpServer).WaitStarted(10);
-  // note: by now, THttpAsyncServer is incompatible with rfProgressiveStatic
-  if aHttpServerClass = THttpServer then
-  begin
-    fPartials := THttpPartials.Create;
-    if fVerboseLog then
-      fPartials.OnLog := fLog.DoLog;
-    THttpServerSocketGeneric(fHttpServer).fOnProgressiveRequestFree := fPartials;
   end;
 end;
 

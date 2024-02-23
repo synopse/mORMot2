@@ -3555,7 +3555,11 @@ end;
 
 procedure THttpAsyncConnection.BeforeDestroy;
 begin
-  fHttp.ProcessDone;
+  if Assigned(fServer) and
+     Assigned(fServer.fOnProgressiveRequestFree) and
+     (rfProgressiveStatic in fHttp.ResponseFlags) then
+    fServer.DoProgressiveRequestFree(fHttp);
+  fHttp.ProcessDone; // ContentStream.Free
   FreeAndNil(fRequest);
   inherited BeforeDestroy;
 end;
@@ -3715,6 +3719,9 @@ begin
     end; // hrpAbort, hrpDone will check hrsResponseDone
   end;
   // if we reached here, we are either finished or failed
+  if Assigned(fServer.fOnProgressiveRequestFree) and
+     (rfProgressiveStatic in fHttp.ResponseFlags) then
+    fServer.DoProgressiveRequestFree(fHttp);
   fHttp.ProcessDone;   // ContentStream.Free
   fHttp.Process.Clear; // CompressContentAndFinalizeHead may have allocated it
   if Assigned(fServer.fOnAfterResponse) then
