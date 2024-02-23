@@ -3563,8 +3563,8 @@ end;
 procedure THttpAsyncConnection.HttpInit;
 begin
   fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
-  if hsoHeadersUnfiltered in fServer.Options then
-    include(fHttp.Options, hroHeadersUnfiltered);
+  if Assigned(fServer) then
+    fHttp.Options := fServer.fDefaultRequestOptions;
   fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // reusable 2KB buffer
   fHeadersSec := 0;
   fBytesRecv := 0; // reset stats

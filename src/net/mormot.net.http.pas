@@ -247,7 +247,8 @@ type
     // - returns the number of removeed HTTP requests
     function Abort(ID: THttpPartialID): integer;
     /// unregister a HTTP request to a given partial
-    // - called when the request is finished e.g. as TOnHttpRequestFree callback
+    // - called when the request is finished e.g. via
+    // THttpServerSocketGeneric.DoProgressiveRequestFree private method
     procedure Remove(Sender: PHttpRequestContext);
   end;
 

@@ -449,6 +449,7 @@ type
   protected
     fShutdownInProgress, fFavIconRouted: boolean;
     fOptions: THttpServerOptions;
+    fDefaultRequestOptions: THttpRequestOptions;
     fRoute: TUriRouter;
     /// optional event handlers for process interception
     fOnRequest: TOnHttpServerRequest;
@@ -3257,6 +3258,9 @@ begin
   FormatUtf8('Server: %'#13#10, [fServerName], fRequestHeaders);
   if not (hsoNoXPoweredHeader in fOptions) then
     Append(fRequestHeaders, XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10);
+  fDefaultRequestOptions := [];
+  if hsoHeadersUnfiltered in fOptions then
+    include(fDefaultRequestOptions, hroHeadersUnfiltered);
 end;
 
 procedure THttpServerGeneric.SetOptions(opt: THttpServerOptions);

@@ -273,14 +273,14 @@ type
     // - returns an integer OnDownloadingID > 0 to be supplied to OnDowloaded()
     // or OnDownloadingFailed()
     function OnDownloading(const Params: THttpClientSocketWGet;
-      const Partial: TFileName; ExpectedFullSize: Int64): integer;
+      const Partial: TFileName; ExpectedFullSize: Int64): THttpPartialID;
     /// put a downloaded file into the alternative source cache
     // - e.g. THttpPeerCache will add this file to its cache, and resume any
     // pcfResponsePartial with the new file name
     // - this method is called after any file has been successfully downloaded
     // - Params.Hasher/Hash are expected to be populated
     procedure OnDowloaded(const Params: THttpClientSocketWGet;
-      const Partial: TFileName; OnDownloadingID: integer);
+      const Partial: TFileName; OnDownloadingID: THttpPartialID);
     /// notify the alternate download implementation that the data supplied
     // by OnDownload() was incorrect
     // - e.g. THttpPeerCache will delete this file from its cache
@@ -288,7 +288,7 @@ type
     procedure OnDownloadFailed(const Params: THttpClientSocketWGet);
     /// notify the alternate download implementation that OnDownloading() failed
     // - e.g. THttpPeerCache will abort publishing this partial file
-    procedure OnDownloadingFailed(OnDownloadingID: integer);
+    procedure OnDownloadingFailed(OnDownloadingID: THttpPartialID);
   end;
 
   /// THttpClientSocket.Request low-level execution context
