@@ -4805,6 +4805,10 @@ procedure SwitchToThread;
 /// try LockedExc() in a loop, calling SwitchToThread after some spinning
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
+/// wrapper to implement a thread-safe T*ObjArray dynamic array storage
+function ObjArrayAdd(var aObjArray; aItem: TObject;
+  var aSafe: TLightLock; aCount: PInteger = nil): PtrInt; overload;
+
 /// try to kill/cancel a thread
 // - on Windows, calls the TerminateThread() API
 // - under Linux/FPC, calls pthread_cancel() API which is asynchronous
@@ -10323,6 +10327,17 @@ begin
   while (Target <> Comperand) or
         not LockedExc(Target, NewValue, Comperand) do
     spin := DoSpin(spin);
+end;
+
+function ObjArrayAdd(var aObjArray; aItem: TObject;
+  var aSafe: TLightLock; aCount: PInteger): PtrInt;
+begin
+  aSafe.Lock;
+  if aCount <> nil then
+    result := PtrArrayAdd(aObjArray, aItem, aCount^)
+  else
+    result := PtrArrayAdd(aObjArray, aItem);
+  aSafe.UnLock;
 end;
 
 function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
