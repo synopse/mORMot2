@@ -1575,6 +1575,7 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 
 /// force an operating system folder
 // - if the default location is not good enough for your project
+// - will just check that the directory exists, not that it is writable
 function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
 
 type
@@ -8800,10 +8801,13 @@ begin
 end;
 
 function SetSystemPath(kind: TSystemPath; const path: TFileName): boolean;
+var
+  full: TFileName;
 begin
-  result := DirectoryExists(path);
+  full := ExpandFileName(ExcludeTrailingPathDelimiter(path));
+  result := DirectoryExists(full);
   if result then
-    _SystemPath[kind] := IncludeTrailingPathDelimiter(ExpandFileName(path));
+    _SystemPath[kind] := IncludeTrailingPathDelimiter(full);
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
