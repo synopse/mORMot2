@@ -663,7 +663,7 @@ begin
       fNameForDebug := fManager.fOnGetName(self);
     if fNameForDebug = '' then
       FormatUtf8('% %', [ToHexShort(@fThreadId, SizeOf(fThreadId)),
-        CurrentThreadName], fNameForDebug);
+        CurrentThreadNameShort^], fNameForDebug);
     if Assigned(fManager.fOnGetWebAppRootPath) then
       fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
     else

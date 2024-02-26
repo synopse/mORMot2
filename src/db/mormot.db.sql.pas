@@ -7769,7 +7769,7 @@ begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   PerThreadConnectionIndex: integer; // for GetLockedPerThreadIndex O(1) lookup
 
 function TSqlDBConnectionPropertiesThreadSafe.GetLockedPerThreadIndex: PtrInt;

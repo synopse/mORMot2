@@ -4861,12 +4861,12 @@ function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolea
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 
 /// name the current thread so that it would be easily identified in the IDE debugger
-// - could then be retrieved by CurrentThreadName/GetCurrentThreadName
+// - could then be retrieved by CurrentThreadNameShort/GetCurrentThreadName
 // - just a wrapper around SetThreadName(GetCurrentThreadId, ...)
 procedure SetCurrentThreadName(const Format: RawUtf8; const Args: array of const); overload;
 
 /// name the current thread so that it would be easily identified in the IDE debugger
-// - could also be retrieved by CurrentThreadName/GetCurrentThreadName
+// - could also be retrieved by CurrentThreadNameShort/GetCurrentThreadName
 // - just a wrapper around SetThreadName(GetCurrentThreadId, ...)
 procedure SetCurrentThreadName(const Name: RawUtf8); overload;
 
@@ -4877,24 +4877,22 @@ var
   // conditional, if you have issues with this feature when debugging your app
   // - most meaningless patterns (like 'TSql') are trimmed to reduce the
   // resulting length - which is convenient e.g. with POSIX truncation to 16 chars
-  // - you can retrieve the name later on using CurrentThreadName
+  // - you can retrieve the name later on using CurrentThreadNameShort
   // - this method will register TSynLog.LogThreadName(), so threads calling it
   // should also call TSynLogFamily.OnThreadEnded/TSynLog.NotifyThreadEnded
   SetThreadName: procedure(ThreadID: TThreadID; const Format: RawUtf8;
     const Args: array of const);
 
-threadvar
-  /// low-level access to the thread name, as set by SetThreadName()
-  // - since threadvar can't contain managed strings, it is limited to 31 chars,
-  // which is enough since POSIX truncates to 16 chars and SetThreadName does
-  // trim meaningless patterns
-  CurrentThreadName: TShort31;
+/// low-level access to the thread name, as set by SetThreadName()
+// - since threadvar can't contain managed strings, it is defined as TShort31,
+// so is limited to 31 chars, which is enough since POSIX truncates to 16 chars
+// and SetThreadName does trim meaningless patterns
+function CurrentThreadNameShort: PShortString;
 
 /// retrieve the thread name, as set by SetThreadName()
-// - if possible, direct CurrentThreadName threadvar access is slightly faster
-// - will return the CurrentThreadName value, truncated to 31 chars
+// - if possible, direct CurrentThreadNameShort function is slightly faster
+// - will return the CurrentThreadNameShort^ threadvar 31 chars value
 function GetCurrentThreadName: RawUtf8;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the thread id and the thread name as a ShortString
 // - returns e.g. 'Thread 0001abcd [shortthreadname]'
@@ -10402,15 +10400,23 @@ begin
   SetThreadName(GetCurrentThreadId, '%', [Name]);
 end;
 
+threadvar // do not publish for compilation within Delphi packages
+  _CurrentThreadName: TShort31; // 31 chars is enough for our debug purpose
+
+function CurrentThreadNameShort: PShortString;
+begin
+  result := @_CurrentThreadName;
+end;
+
 function GetCurrentThreadName: RawUtf8;
 begin
-  ShortStringToAnsi7String(CurrentThreadName, result);
+  ShortStringToAnsi7String(_CurrentThreadName, result);
 end;
 
 function GetCurrentThreadInfo: ShortString;
 begin
   result := ShortString(format('Thread %x [%s]',
-    [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
+    [PtrUInt(GetCurrentThreadId), _CurrentThreadName]));
 end;
 
 

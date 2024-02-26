@@ -1387,7 +1387,7 @@ end;
 constructor TSqlDBPostgresAsyncThread.Create(aOwner: TSqlDBPostgresAsync);
 begin
   fOwner := aOwner;
-  FormatUtf8('db%', [CurrentThreadName], fName);
+  FormatUtf8('db%', [CurrentThreadNameShort^], fName);
   inherited Create({suspended=}false);
 end;
 

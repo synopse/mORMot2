@@ -1962,7 +1962,7 @@ end;
 var
   LastDbError: TLastError; // store last error texts
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   LastDbErrorID: TLastErrorID; // 32-bit error text identifier for each thread
 
 procedure SetDbError(const text: RawUtf8);

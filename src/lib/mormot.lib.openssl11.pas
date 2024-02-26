@@ -10095,7 +10095,7 @@ type
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   _PeerVerify: TOpenSslNetTls; // OpenSSL is a dumb library for sure
 
 function AfterConnectionPeerVerify(

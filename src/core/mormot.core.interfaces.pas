@@ -6600,7 +6600,7 @@ type
   end;
   PPerThreadRunningContext = ^TPerThreadRunningContext;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   PerThreadRunningContext: TPerThreadRunningContext;
 
 function PerThreadRunningContextAddress: pointer;

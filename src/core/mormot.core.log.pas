@@ -978,7 +978,7 @@ type
     /// used by TSynLog.Enter methods to handle recursive calls tracing
     Recursion: array of TSynLogThreadRecursion;
     /// the associated thread name
-    // - is probably more complete than CurrentThreadName: TShort31 threadvar
+    // - is probably more complete than CurrentThreadNameShort^ threadvar
     ThreadName: RawUtf8;
   end;
 
@@ -1246,7 +1246,7 @@ type
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
     // - is called automatically by SetThreadName() global function
-    // - if Name='', will use CurrentThreadName threadvar
+    // - if Name='', will use CurrentThreadNameShort^ threadvar
     procedure LogThreadName(const Name: RawUtf8);
     /// call this method to add some multi-line information to the log at a
     // specified level
@@ -3668,11 +3668,6 @@ var
   // - protected by GlobalThreadLock
   SynLogFile: TSynLogDynArray;
 
-threadvar
-  /// each thread can access to its own TSynLog instance
-  // - implements TSynLogFamily.PerThreadLog=ptOneFilePerThread option
-  SynLogLookupThreadVar: TSynLogFileLookup;
-
 
 type
   // RRD of last 128 lines to be sent to console (no need of older data)
@@ -3848,7 +3843,7 @@ end;
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext); forward;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   /// each thread can have exceptions interception disabled
   // - as set by TSynLogFamily.ExceptionIgnoreCurrentThread property
   ExceptionIgnorePerThread: boolean;
@@ -3955,6 +3950,11 @@ begin
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
+
+threadvar // do not publish for compilation within Delphi packages
+  /// each thread can access to its own TSynLog instance
+  // - implements TSynLogFamily.PerThreadLog=ptOneFilePerThread option
+  SynLogLookupThreadVar: TSynLogFileLookup;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin
@@ -4499,8 +4499,8 @@ begin
   if (fFamily.fPerThreadLog = ptIdentifiedInOneFile) and
      (fThreadContext^.ThreadName = '') and
      (sllInfo in fFamily.fLevel) and
-     (CurrentThreadName[0] <> #0) then
-    // set fThreadContext^.ThreadName, and log it (if not already)
+     (CurrentThreadNameShort^[0] <> #0) then
+    // set a default fThreadContext^.ThreadName, and log it (if not already)
     LogThreadName('');
 end;
 
@@ -4550,7 +4550,7 @@ end;
 
 procedure TSynLog.NotifyThreadEnded;
 begin
-  CurrentThreadName[0] := #0; // reset threadvar
+  CurrentThreadNameShort^[0] := #0; // reset threadvar
   if (self = nil) or
      (fThreadContextCount = 0) then
     exit; // nothing to release
@@ -6107,8 +6107,8 @@ begin
       if DefaultSynLogExceptionToStr(log.fWriter, Ctxt) then
         goto fin;
 adr:  // regular exception context log with its stack trace
-      log.fWriter.Add(' ', '[');
-      log.fWriter.AddShort(CurrentThreadName); // fThreadContext^.ThreadName may be ''
+      log.fWriter.Add(' ', '['); // fThreadContext^.ThreadName may be ''
+      log.fWriter.AddShort(CurrentThreadNameShort^);
       log.fWriter.AddShorter('] at ');
       try
         TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
@@ -6249,6 +6249,7 @@ var
   name: RawUtf8;
   i: PtrInt;
   n: TShort31;
+  ps: PShortString;
 begin
   if SynLogFileFreeing then
     exit;
@@ -6294,12 +6295,13 @@ begin
       if n[0] = #31 then
         break; // TShort31
     end;
-  if CurrentThreadName = n then
+  ps := CurrentThreadNameShort;
+  if ps^ = n then
     exit; // already set as such
   RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
   mormot.core.os.EnterCriticalSection(GlobalThreadLock);
   try
-    CurrentThreadName := ''; // for LogThreadName(name) to appear once
+    ps^ := ''; // for LogThreadName(name) to appear once
     for i := 0 to high(SynLogFamily) do
       with SynLogFamily[i] do
         if (sllInfo in Level) and
@@ -6308,7 +6310,7 @@ begin
           fGlobalLog.LogThreadName(name); // try to put the full name in log
   finally
     mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-    CurrentThreadName := n; // low-level short name will be used from now
+    ps^ := n; // low-level short name will be used from now
   end;
 end;
 

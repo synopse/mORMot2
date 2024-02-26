@@ -1315,7 +1315,7 @@ var
 begin
   if self = nil then
     exit;
-  if CurrentThreadName = '' then
+  if CurrentThreadNameShort^ = '' then
     SetCurrentThreadName('% %% %', [self, fPort, fRestServerNames, Sender]);
   fSafe.WriteLock; // protect fRestServers[]
   try

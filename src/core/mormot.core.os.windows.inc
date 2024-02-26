@@ -3923,7 +3923,7 @@ begin
   // not needed - GetRawSmbios() is likely to work with no administrator rights
 end;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   CoInitCounter: integer;
 
 // avoid including ActiveX unit

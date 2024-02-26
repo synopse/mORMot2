@@ -8833,7 +8833,7 @@ begin
   until Length = 0;
 end;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
 function Lecuyer: PLecuyer;

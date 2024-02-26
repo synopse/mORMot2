@@ -3580,7 +3580,7 @@ begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;
   end;
-  if CurrentThreadName[0] = #0 then
+  if CurrentThreadNameShort^[0] = #0 then
     SetCurrentThreadName('Pool%-%', [fThreadNumber, fOwner.fName]);
 end;
 

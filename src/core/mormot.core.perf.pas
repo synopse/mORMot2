@@ -4781,7 +4781,7 @@ begin
   result := 1; // should never be 0 (mark release of TSynFpuException instance)
 end;
 
-threadvar
+threadvar // do not publish for compilation within Delphi packages
   GlobalSynFpuExceptionDelphi,
   GlobalSynFpuExceptionLibrary: TSynFpuException;
 

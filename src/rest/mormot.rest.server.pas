@@ -7469,7 +7469,7 @@ begin
   if Sender = nil then
     raise ERestException.CreateUtf8('%.BeginCurrentThread(nil)', [self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ''%'' ThreadCount=%',
-    [Sender.ClassType, fModel.Root, {%H-}pointer(id), CurrentThreadName, tc]);
+    [Sender.ClassType, fModel.Root, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
     raise ERestException.CreateUtf8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
@@ -7498,7 +7498,7 @@ begin
   if Sender = nil then
     raise ERestException.CreateUtf8('%.EndCurrentThread(nil)', [self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ''%'' ThreadCount=%',
-    [Sender.ClassType, {%H-}pointer(id), CurrentThreadName, tc]);
+    [Sender.ClassType, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
     raise ERestException.CreateUtf8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
