@@ -3780,19 +3780,19 @@ type
   {$endif FPC}
 
 const
-  CRYPTDLL = 'Crypt32.dll';
+  crypt32 = 'Crypt32.dll';
   CRYPTPROTECT_UI_FORBIDDEN = 1;
   CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
 
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
-    stdcall; external CRYPTDLL;
+    stdcall; external crypt32;
 
 function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
-    stdcall; external CRYPTDLL;
+    stdcall; external crypt32;
 
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;
   Encrypt: boolean): RawByteString;
@@ -3828,18 +3828,18 @@ end;
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
-    stdcall; external CRYPTDLL;
+    stdcall; external crypt32;
 
 function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
-  stdcall; external CRYPTDLL;
+  stdcall; external crypt32;
 
 function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
   pszString: PAnsiChar; var pchString: DWord): BOOL;
-    stdcall; external CRYPTDLL;
+    stdcall; external crypt32;
 
 function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
-    stdcall; external CRYPTDLL;
+    stdcall; external crypt32;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
