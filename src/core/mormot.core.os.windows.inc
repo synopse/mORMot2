@@ -3849,6 +3849,7 @@ var
   tmp: TSynTempBuffer;
 begin
   // call the Windows API to retrieve the System certificates
+  result := '';
   resultlen := 0;
   store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
   try

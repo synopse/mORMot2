@@ -5937,6 +5937,7 @@ function SidsToText(sids: PSids): TRawUtf8DynArray;
 var
   i: PtrInt;
 begin
+  result := nil;
   SetLength(result, length(sids));
   for i := 0 to length(sids) - 1 do
     result[i] := SidToText(sids[i]);
@@ -7038,6 +7039,7 @@ function StringFromFiles(const FileName: array of TFileName): TRawByteStringDynA
 var
   f: PtrInt;
 begin
+  result := nil;
   SetLength(result, length(FileName));
   for f := 0 to high(FileName) do
     result[f] := StringFromFile(FileName[f]);

@@ -2887,6 +2887,7 @@ var
   av, fr, tot: QWord;
 begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
+  result := nil;
   {$ifdef OSLINUXANDROID}
   mounts := StringFromFile('/proc/self/mounts', {hasnosize=}true);
   if mounts = '' then
