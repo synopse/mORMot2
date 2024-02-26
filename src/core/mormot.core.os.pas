@@ -7445,7 +7445,8 @@ begin
   if idwTryWinExeFile in Flags then
     fmt := '%s\%x.exe'  // may trigger the anti-virus heuristic
   else
-    fmt := '%s\%x.crt'; // may trigger the UAC heuristic
+    fmt := '%s\%x.test'; // neutral file name
+    // we tried .crt which triggered UAC heuristic but also some anti-viruses :(
   {$else}
   // compute a non existing temporary file name in this Directory
   fmt := '%s/.%x.test'; // make the file "invisible"
