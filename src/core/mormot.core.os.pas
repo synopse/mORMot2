@@ -7409,10 +7409,13 @@ begin
   end;
 end;
 
+var
+  lastIsDirectoryWritable: TFileName; // naive but efficient cache
+
 function IsDirectoryWritable(const Directory: TFileName;
   Flags: TIsDirectoryWritable): boolean;
 var
-  dir, fmt, fn: TFileName;
+  dir, last, fmt, fn: TFileName;
   f: THandle;
   retry: integer;
 begin
@@ -7421,6 +7424,14 @@ begin
   if Directory = '' then
     exit;                       
   dir := ExcludeTrailingPathDelimiter(Directory);
+  if Flags = [] then
+  begin
+    last := lastIsDirectoryWritable;
+    result := (last <> '') and
+              (dir = last);
+    if result then
+      exit; // we just tested this folder
+  end;
   if not FileIsWritable(dir) then
     exit; // the folder does not exist or is read-only for the current user
   {$ifdef OSWINDOWS}
@@ -7458,7 +7469,9 @@ begin
     result := false;
   FileClose(f);
   if not DeleteFile(fn) then // success if the file can be created and deleted
-    result := false;
+    result := false
+  else if result then
+    lastIsDirectoryWritable := dir
 end;
 
 
