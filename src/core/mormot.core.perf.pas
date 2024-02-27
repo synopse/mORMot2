@@ -99,7 +99,7 @@ type
   TSynMonitorOneBytes = type QWord;
 
   /// would identify the process throughput, during monitoring
-  // - it indicates e.g. "immediate" bandwith usage
+  // - it indicates e.g. "immediate" bandwidth usage
   // - any property defined with this type would be identified by TSynMonitorUsage
   TSynMonitorBytesPerSec = type QWord;
 
@@ -352,7 +352,7 @@ type
       read GetAsText;
   end;
 
-  /// able to serialize any bandwith as bytes count per second
+  /// able to serialize any bandwidth as bytes count per second
   // - is usually associated with TSynMonitorOneSize properties,
   // e.g. to monitor IO activity
   TSynMonitorThroughput = class(TSynMonitorSizeParent)
@@ -534,7 +534,7 @@ type
     /// how many total data has been hanlded during all working process
     property Size: TSynMonitorSize
       read fSize;
-    /// data processing bandwith, returned as B/KB/MB per second
+    /// data processing bandwidth, returned as B/KB/MB per second
     property Throughput: TSynMonitorThroughput
       read fThroughput;
   end;
@@ -567,10 +567,10 @@ type
     /// how many data has been sent back
     property Output: TSynMonitorSize
       read fOutput;
-    /// incoming data processing bandwith, returned as B/KB/MB per second
+    /// incoming data processing bandwidth, returned as B/KB/MB per second
     property InputThroughput: TSynMonitorThroughput
       read fInputThroughput;
-    /// outgoing data processing bandwith, returned as B/KB/MB per second
+    /// outgoing data processing bandwidth, returned as B/KB/MB per second
     property OutputThroughput: TSynMonitorThroughput
       read fOutputThroughput;
   end;

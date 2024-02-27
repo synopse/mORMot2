@@ -6321,7 +6321,7 @@ end;
 function THttpMetrics.Get(Row: integer): PHttpAnalyzerToSave;
 begin
   // caller should have made Safe.Lock
-  result := fState.Find(Row * SizeOf(result^), SizeOf(result^));
+  result := fState.Find(Row * SizeOf(result{%H-}^), SizeOf(result^));
 end;
 
 procedure THttpMetrics.CreateDynArray;
@@ -6530,7 +6530,7 @@ begin
   if Algo = nil then
     w := TBufferWriter.Create(Dest) // direct-to-fly persistence
   else
-    w := TBufferWriter.Create(tmp); // in-memory persistence before compression
+    w := TBufferWriter.Create(tmp{%H-}); // in-memory persistence before compression
   try
     SaveToWriter(w);
     if Algo = nil then
@@ -6673,7 +6673,7 @@ begin
        not Source.PeekVarUInt32(peek) or
        (peek <> firstdate) then
       exit;
-    fState.Add(nil, fCount * SizeOf(s^)); // pre-allocate all data
+    fState.Add(nil, fCount * SizeOf({%H-}s^)); // pre-allocate all data
     prevdate := 0;
     s := StateAsCompactArray.Value^;
     rd := pointer(Source.P); // use a faster PByte within the loop

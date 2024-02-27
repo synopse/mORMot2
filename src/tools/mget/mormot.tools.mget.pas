@@ -79,7 +79,7 @@ type
       read fHashAlgo write fHashAlgo;
     property hashValue: RawUtf8
       read fHashValue write fHashValue;
-    property limitBandwithMB: integer
+    property limitBandwidthMB: integer
       read fLimitBandwidthMB write fLimitBandwidthMB;
     property tcpTimeoutSec: integer
       read fTcpTimeoutSec write fTcpTimeoutSec;
@@ -178,7 +178,7 @@ begin
     if not Silent then
       wget.OnProgress := TStreamRedirect.ProgressStreamToConsole;
   end;
-  wget.LimitBandwith := fLimitBandwidthMB shl 20;
+  wget.LimitBandwidth := fLimitBandwidthMB shl 20;
   wget.TimeOutSec := fWholeRequestTimeoutSec;
   // (peer) cache support
   if Cache then

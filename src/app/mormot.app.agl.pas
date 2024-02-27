@@ -1331,7 +1331,7 @@ end;
 
 function TSynAngelize.FileNameExpand(const aName: TFileName): TFileName;
 begin
-  Utf8ToFileName(DoExpand(nil, StringToUtf8(aName)), result);
+  Utf8ToFileName(DoExpand(nil, StringToUtf8(aName)), result{%H-});
 end;
 
 type

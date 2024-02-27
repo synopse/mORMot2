@@ -7864,7 +7864,7 @@ begin
         pointer(res), length(res), '[', ']');
       exit;
     end;
-  Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
+  Ctxt.Call.OutBody := '["OK"]';  // to save bandwidth if no adding
 end;
 
 function TRestServer.ExportServerGlobalLibraryRequest(Disable: boolean): boolean;

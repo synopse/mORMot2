@@ -232,7 +232,7 @@ type
     /// allow to customize request headers, e.g. a cookie or Auth-Bearer
     Header: RawUtf8;
     /// can be used to reduce the download speed into supplied bytes per second
-    LimitBandwith: integer;
+    LimitBandwidth: integer;
     /// will raise ESynException after TimeOutSec seconds are elapsed
     // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout for
     // each packet, whereas this property is about the global time elapsed
@@ -2088,7 +2088,7 @@ var
     stream.OnProgress := params.OnProgress;
     stream.OnLog := OnLog;
     stream.TimeOut := params.TimeOutSec * 1000;
-    stream.LimitPerSecond := params.LimitBandwith;
+    stream.LimitPerSecond := params.LimitBandwidth;
     // perform the actual request
     res := 0;
     if Assigned(params.Alternate) and

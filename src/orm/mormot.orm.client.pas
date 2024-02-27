@@ -889,7 +889,7 @@ begin
     SetLength(Results, ExpectedResultsCount);
     if IdemPChar(R, '["OK"]') then
     begin
-      // to save bandwith if no adding
+      // to save bandwidth if no adding
       for i := 0 to ExpectedResultsCount - 1 do
         Results[i] := HTTP_SUCCESS;
     end

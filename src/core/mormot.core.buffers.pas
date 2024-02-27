@@ -9727,7 +9727,7 @@ begin
             [self, Caller, fInfo.Context, MilliSecToString(fInfo.Elapsed)]);
         if fLimitPerSecond > 0 then
         begin
-          // adjust bandwith limit every 128 ms by adding some sleep() steps
+          // adjust bandwidth limit every 128 ms by adding some sleep() steps
           tosleep := ((fInfo.ProcessedSize * 1000) div fLimitPerSecond) - fInfo.Elapsed;
           if tosleep > 10 then // on Windows, typical resolution is 16ms
           begin
