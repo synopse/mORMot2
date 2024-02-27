@@ -1101,7 +1101,7 @@ begin
             end
             else
               r := r^.Next;
-          Speed := p^.TransmitLinkSpeed;
+          Speed := p^.TransmitLinkSpeed div 1000; // stored as Mbits/s
           if p^.ReceiveLinkSpeed < Speed then
             Speed := p^.ReceiveLinkSpeed; // unlikely
           if p^.Dhcpv4Server.lpSockaddr <> nil then

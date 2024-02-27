@@ -621,7 +621,7 @@ type
     // - typically 1500 over an Ethernet network
     // - not available on BSD
     Mtu: cardinal;
-    /// the current link speed in bits per second (typically 100 or 1000)
+    /// the current link speed in Mbits per second (typically 100 or 1000)
     // - not available on Windows XP or BSD
     // - some interfaces (e.g. makWifi on Linux) may have a 0 value
     Speed: cardinal;
