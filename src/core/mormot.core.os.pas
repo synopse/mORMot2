@@ -8637,7 +8637,9 @@ const
   CLK_TXT: array[clkOption .. clkParam] of RawUtf8 = (
     ' [options]', ' [params]');
   CLK_DESCR: array[clkOption .. clkParam] of RawUtf8 = (
-    'Options:', 'Params:');
+    'Options', 'Params');
+  CASE_DESCR: array[boolean] of RawUtf8 = (
+    ':', ' (case-sensitive):');
 
 function TExecutableCommandLine.FullDescription(
   const customexedescription, exename, onlyusage: RawUtf8): RawUtf8;
@@ -8663,7 +8665,8 @@ begin
       if fDescDetail[clk] <> '' then
       begin
         if clk in [low(CLK_TXT) .. high(CLK_TXT)] then
-          result := result + fLineFeed + CLK_DESCR[clk];
+          result := result + fLineFeed +
+                    CLK_DESCR[clk] + CASE_DESCR[CaseSensitiveNames];
         result := result + fLineFeed + fDescDetail[clk];
       end;
 end;
