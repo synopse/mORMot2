@@ -1676,8 +1676,8 @@ begin
     LockedInc32(@fPosted);
   if Assigned(fOnLog) then
     if result then
-      fOnLog(sllTrace, 'PrepareNext(%%)',
-        [IOCP_EVENT[event], pointer(o^.socket)], self)
+      fOnLog(sllTrace, 'PrepareNext(%%,%)',
+        [IOCP_EVENT[event], pointer(o^.socket), buflen], self)
     else
     begin
       e := GetLastError;
