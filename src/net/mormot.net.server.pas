@@ -1359,7 +1359,7 @@ type
     /// the IPv4 broadcast address the local network interface
     // - e.g. 192.168.1.255
     BroadcastIP4: cardinal;
-    /// the link speed in bits per second of the local network interface
+    /// the link speed (in Mbits per second) of the local network interface
     Speed: cardinal;
     /// the hardware model of this network interface
     Hardware: TMacAddressKind;
