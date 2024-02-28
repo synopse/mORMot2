@@ -1748,7 +1748,7 @@ procedure TPollAsyncSockets.ProcessWrite(
 var
   connection: TPollAsyncConnection;
   buf: PByte;
-  buflen: integer;
+  buflen, w: integer;
   res: TPollAsyncSocketOnReadWrite;
   start: Int64;
 begin
@@ -1771,30 +1771,39 @@ begin
     {$endif USE_WINIOCP}
        connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
-      //DoLog('ProcessWrite: Locked fProcessingWrite=%', [fProcessingWrite]);
       buflen := connection.fWr.Len;
       if buflen = 0 then
         exit;
       buf := connection.fWr.Buffer;
-      inc(buf, sent); // sent > 0 e.g. after wieSend
-      dec(buflen, sent);
-      sent := buflen;
-      if fDebugLog <> nil then
-        QueryPerformanceMicroSeconds(start);
-      if not RawWrite(connection, buf, buflen) then
+      if sent > 0 then // e.g. after IOCP wieSend
       begin
-        {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
-        fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
-        exclude(connection.fFlags, fSubWrite);
-        {$endif USE_WINIOCP}
-        res := soClose;
-        exit; // socket closed gracefully or unrecoverable error -> abort
+        inc(buf, sent);
+        dec(buflen, sent);
       end;
-      dec(sent, buflen); // buflen = remaining data to send
-      if fDebugLog <> nil then
-        DoLog('ProcessWrite send(%) %/%B in % fProcessingWrite=%',
-          [pointer(connection.fSocket), sent, buflen,
-           MicroSecFrom(start), fProcessingWrite]);
+      if buflen > 0 then
+      begin
+        w := buflen;
+        if fDebugLog <> nil then
+          QueryPerformanceMicroSeconds(start);
+        if not RawWrite(connection, buf, buflen) then
+        begin
+          {$ifndef USE_WINIOCP} // no TWinIocp.PrepareNext() call is enough
+          fWrite.Unsubscribe(connection.fSocket, TPollSocketTag(connection));
+          exclude(connection.fFlags, fSubWrite);
+          {$endif USE_WINIOCP}
+          res := soClose;
+          exit; // socket closed gracefully or unrecoverable error -> abort
+        end;
+        dec(w, buflen); // buflen = remaining data to send
+        inc(sent, w);   // beforewrite = actually sent by RawWrite()
+        if fDebugLog <> nil then
+          DoLog('ProcessWrite RawWrite(%)=% sent=% remain=% in % pw=%',
+            [pointer(connection.fSocket), w, sent, buflen,
+             MicroSecFrom(start), fProcessingWrite]);
+      end
+      else if fDebugLog <> nil then
+        DoLog('ProcessWrite sent(%)=% pw=%',
+          [pointer(connection.fSocket), sent, fProcessingWrite]);
       connection.fWr.Remove(sent); // is very likely to just set fWr.Len := 0
       if connection.fWr.Len = 0 then
         // no more data in output buffer - AfterWrite may refill connection.fWr
@@ -1842,6 +1851,8 @@ begin
   try
     result := connection.AfterWrite;
     case result of
+      soContinue:
+        ; // just send connection.fWr content
       soClose:
         begin
           if fDebugLog <> nil then
@@ -1852,7 +1863,7 @@ begin
       soWaitWrite:
         with fWaitingWrite do
           ObjArrayAdd(Items, connection, Safe, @Count);
-    end; // soContinue would just continue and send connection.fWr content
+    end;
   except
     connection.fWr.Clear;
     result := soClose; // intercept any exception in AfterWrite overriden method
