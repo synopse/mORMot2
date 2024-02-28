@@ -1774,9 +1774,9 @@ begin
   opt := HTTPSERVER_DEFAULT_OPTIONS;
   //opt := opt + [rsoLogVerbose];
   if withlog then
-    include(opt, rsoEnableLogging);
+    opt := opt + [rsoEnableLogging, rsoTelemetryCsv, rsoTelemetryJson];
   HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
-    useHttpAsync, // HTTP_DEFAULT_MODE,
+    useBidirAsync, // HTTP_DEFAULT_MODE,
     8, secNone, '', '', opt);
   try
     if withlog then
