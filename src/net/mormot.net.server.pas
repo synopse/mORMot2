@@ -5889,7 +5889,7 @@ begin
     result := HTTP_SUCCESS
   else if not fVerboseLog then
     exit;
-  fLog.Add.Log(sllTrace, 'OnBeforeBody: % from %', [result, aRemoteIP], self);
+  fLog.Add.Log(sllTrace, 'OnBeforeBody=% from %', [result, aRemoteIP], self);
 end;
 
 procedure THttpPeerCache.OnIdle(tix64: Int64);
@@ -6154,7 +6154,7 @@ begin
   end;
   hex[0] := AnsiChar(l * 2);
   with msg do
-    FormatShort('% #% % % % to % % % msk=% bst=% %b/s %% siz=%',
+    FormatShort('% #% % % % to % % % msk=% bst=% %Mb/s %% siz=%',
       [ToText(Kind)^, CardinalToHexShort(Seq), GuidToShort(Uuid), OS_NAME[Os.os],
        IP4ToShort(@IP4), IP4ToShort(@DestIP4), ToText(Hardware)^,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
