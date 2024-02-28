@@ -1425,7 +1425,7 @@ type
     // - i.e. Port=8089, LimitMBPerSec=10, LimitClientCount=32,
     // RejectInstablePeersMin=4, CacheTempMaxMB=1000, CacheTempMaxMin=60,
     // CacheTempMinBytes=CachePermMinBytes=2048,
-    // BroadcastTimeoutMS=10 HttpTimeoutMS=50 and BroadcastMaxResponses=24
+    // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
     constructor Create; override;
   published
     /// the local port used for UDP and TCP process
@@ -1479,7 +1479,7 @@ type
     property BroadcastMaxResponses: integer
       read fBroadcastMaxResponses write fBroadcastMaxResponses;
     /// the socket level timeout for HTTP requests
-    // - default to very low 50 ms because should be local
+    // - default to low 500 ms because should be local
     property HttpTimeoutMS: integer
       read fHttpTimeoutMS write fHttpTimeoutMS;
     /// location of the temporary cached files, available for remote requests
@@ -5204,7 +5204,7 @@ begin
   fCachePermMinBytes := 2048;
   fBroadcastTimeoutMS := 10;
   fBroadcastMaxResponses := 24;
-  fHttpTimeoutMS := 50;
+  fHttpTimeoutMS := 500;
 end;
 
 
