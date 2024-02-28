@@ -7145,7 +7145,7 @@ begin
   else
     h := FileOpen(FileName, fmOpenWriteShared);
   if ValidHandle(h) then
-    FileSeek64(0, soFromEnd) // append
+    FileSeek64(h, 0, soFromEnd) // append
   else
   begin
     h := FileCreate(FileName, fmShareReadWrite);
