@@ -833,7 +833,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
   procedure TestCalculator(const I: ICalculator);
   var
     i1, i2: PtrInt;
-    t, i3: integer;
+    n, t, i3: integer;
     c: cardinal;
     cu: currency;
     n1, n2, s1, s2: double;
@@ -843,7 +843,8 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Str2: TWideStringDynArray;
     Rec1: TVirtualTableModuleProperties;
     Rec2, RecRes: TEntry;
-    s: RawUtf8;
+    s, u: RawUtf8;
+    p: PUtf8Char;
     r: string;
     l1, l2: IDocList;
     d1, d2: IDocDict;
@@ -932,11 +933,27 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Check(Str2[4] = '');
     s := RawUtf8OfChar(#1, 100);
     CheckEqual(I.DirectCall(s), 100);
-    s := RawUtf8OfChar('-', 600);
-    t := length(I.RepeatJsonArray(s, 100));
+    s := RandomUri(600);
+    u := I.RepeatJsonArray(s, 100);
+    t := length(u);
     checkutf8(t = 1 + 100 * 603, 'RawJson %', [KB(t)]);
-    t := length(I.RepeatTextArray(s, 100));
-    checkutf8(t = 100 * 600, 'RawUtf8 %', [KB(t)]);
+    l1 := DocList(u);
+    CheckEqual(l1.Len, 100, 'RJA');
+    for i1 := 0 to l1.Len - 1 do
+      CheckEqual(l1.U[i1], s, 'RJA');
+    n := 100;
+    if GlobalInterfaceTestMode = itmHttp then
+      n := 1000; // validate a 600KB response (e.g. trigger IOCP send buffering)
+    u := I.RepeatTextArray(s, n);
+    t := length(u);
+    CheckEqual(t, n * 600, 'RepeatTextArray');
+    p := pointer(u);
+    repeat
+      Check(CompareMem(p, pointer(s), 600), 'RTA');
+      inc(p, 600);
+      dec(t, 600)
+    until t = 0;
+    Check(p^ = #0, 'end RTA');
   end;
 
 var
@@ -1755,10 +1772,12 @@ begin
   fClient.Server.ServicesRouting := TRestServerRoutingRest; // back to default
   GlobalInterfaceTestMode := itmHttp;
   opt := HTTPSERVER_DEFAULT_OPTIONS;
+  //opt := opt + [rsoLogVerbose];
   if withlog then
     include(opt, rsoEnableLogging);
   HTTPServer := TRestHttpServer.Create(HTTP_DEFAULTPORT, [fClient.Server], '+',
-    HTTP_DEFAULT_MODE, 8, secNone, '', '', opt);
+    useHttpAsync, // HTTP_DEFAULT_MODE,
+    8, secNone, '', '', opt);
   try
     if withlog then
       HTTPServer.HttpServer.Logger.DefaultRotate := hrtAfter1MB;
