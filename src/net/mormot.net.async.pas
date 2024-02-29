@@ -1716,7 +1716,7 @@ begin
           connection.UnLock(false); // UnlockSlotAndCloseConnection set slot=nil
           {$ifdef USE_WINIOCP}
           if not fIocp.PrepareNext(connection.fIocp, wieRecv) then
-            UnlockAndCloseConnection(false, connection, 'ProcessRead PrepareNext');
+            CloseConnection(connection, 'ProcessRead PrepareNext');
           {$else}
           if (connection.fSocket <> nil) and
              not (fClosed in connection.fFlags) and
@@ -1733,6 +1733,11 @@ begin
         if fDebugLog <> nil then
           // happens on thread contention
           DoLog('ProcessRead: TryLock failed %', [connection]);
+        SleepHiRes(0); // avoid switch threads for nothing
+        {$ifdef USE_WINIOCP}
+        if not fIocp.PrepareNext(connection.fIocp, wieRecv) then
+          CloseConnection(connection, 'ProcessRead waitlock iocp');
+        {$endif USE_WINIOCP}
         result := false; // retry later
       end;
     end;
