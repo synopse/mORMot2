@@ -4351,8 +4351,8 @@ type
   PLockedListOne = ^TLockedListOne;
   /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
   // - TLockedList should store unmanaged records starting with those fields
-  // - the sequence field contain an incremental integer, to avoid ABA problems
-  // when instances are recycled
+  // - sequence field contains an incremental random-seeded 30-bit integer > 65535,
+  // to avoid ABA problems when instances are recycled
   TLockedListOne = record
     next, prev: pointer;
     sequence: PtrUInt;
@@ -9674,7 +9674,7 @@ begin
   FillCharFast(self, SizeOf(self), 0);
   fSize := onesize;
   fOnFree := onefree;
-  fSequence := Random31;
+  fSequence := (Random32 shr 2) + 65536; // 65535 < sequence < MaxInt
 end;
 
 function LockedListFreeAll(o: PLockedListOne; const OnFree: TOnLockedListOne): integer;

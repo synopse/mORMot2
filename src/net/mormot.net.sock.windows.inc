@@ -1686,37 +1686,64 @@ begin
     end;
 end;
 
+function TWinIocp.Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
+  bytes: cardinal): boolean;
+var
+  seq: pointer;
+begin
+  result := false;
+  if fTerminated then
+    exit;
+  // 65535 < seq < MaxInt from PrepareNext(), seq=nil from Terminate
+  seq := pointer(ord(event) + 1);
+  result := IocpPostQueuedStatus(fIocp, bytes, seq, {overlap=}pointer(one));
+  if result then
+    LockedInc32(@fPosted);
+end;
+
 function TWinIocp.GetNext(timeoutms: cardinal;
   out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
 var
-  o, dummy: pointer;
+  o, seq: pointer;
+  e: PtrUInt;
   sll: TSynLogLevel;
   one: PIocpSubscription absolute o;
   oe: POverlappedEvent;
 begin
-  bytes := 0;
   result := nil;
   if fTerminated then
     exit;
   repeat
+    bytes := 0;
     o := nil;
-    dummy := nil;
+    seq := nil;
+    sll := sllTrace;
     // retrieve the next pending event from the IOCP queue
     LockedInc32(@fWaiting);
-    IocpGetQueuedStatus(fIocp, bytes, dummy, o, timeoutms);
+    IocpGetQueuedStatus(fIocp, bytes, seq, o, timeoutms);
     LockedDec32(@fWaiting);
     if fTerminated or
-       (o = nil) then // o=nil from IocpPostQueuedStatus() in Terminate
+       (seq = nil) then // seq=nil from Terminate
       exit;
     LockedDec32(@fPosted);
+    e := PtrUInt(seq) - 1;
+    if e <= PtrUInt(ord(high(event))) then
+    begin
+      // seq := pointer(ord(event) + 1) from Enqueue()
+      PByte(@event)^ := e;
+      if Assigned(fOnLog) then
+        fOnLog(sllTrace, 'GetNextEnqueue=%% %',
+          [IOCP_EVENT[event], pointer(one^.socket), bytes], self);
+      break;
+    end;
+    // O(1) decode overlapped socket notification from PrepareNext()
     inc(POverlapped(o));
     PByte(@event)^ := PByte(o)^; // TOverlappedEvent.event just after overlapped
     if event > high(event) then
       raise EWinIocp.Create('TWinIocp.GetNext: corrupted overlapped structure');
     dec(PByte(o), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
     // now o/one points to PWinIocpSubscription/PIocpSubscription
-    sll := sllTrace;
-    if pointer(one^.head.sequence) <> dummy then
+    if pointer(one^.head.sequence) <> seq then
       sll := sllWarning // detect ABA race condition
     else if wioLockEvent in fOptions then
     begin
@@ -1732,7 +1759,7 @@ begin
           [IOCP_EVENT[event], pointer(one^.socket), bytes], self)
       else
         fOnLog(sll, 'GetNext=%% %=%', [IOCP_EVENT[event],
-          pointer(one^.socket), pointer(one^.head.sequence), dummy], self);
+          pointer(one^.socket), pointer(one^.head.sequence), seq], self);
   until sll = sllTrace;
   result := o; // got valid event
 end;
@@ -1826,7 +1853,7 @@ type
   public
     destructor Destroy; override;
     // INetTls methods
-    procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     procedure AfterBind(var Context: TNetTlsContext);
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
