@@ -1816,7 +1816,7 @@ type
     // is immediately discarded at Close
     property Linger: integer
       write SetLinger;
-    /// low-level socket handle, initialized after Open() with socket
+    /// low-level socket handle as pointer, initialized after Open() with socket
     property Sock: TNetSocket
       read fSock write fSock;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket

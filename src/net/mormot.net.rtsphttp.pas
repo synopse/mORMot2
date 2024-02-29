@@ -289,11 +289,12 @@ begin
             if now > old.fExpires then
             begin
               if log <> nil then
-                log.Log(sllTrace, 'ConnectionCreate deletes deprecated %',
-                  [old], self);
+                log.Log(sllTrace,
+                  'ConnectionCreate deletes deprecated %', [old], self);
               fPendingGet.Delete(i);
             end
-            else if fPendingGet[i] = cookie then
+            else if (found < 0) and
+                    (fPendingGet[i] = cookie) then
               found := i;
           end;
           if IsGet(sock.Method) then
@@ -353,12 +354,6 @@ begin
     end;
     if get = nil then
       exit;
-    if not get.SockConnected then
-    begin
-      if log <> nil then
-        log.Log(sllDebug, 'ConnectionCreate: GET disconnected %', [get], self);
-      exit;
-    end;
     res := NewSocket(
       fRtspServer, fRtspPort, nlTcp, {bind=}false, 1000, 1000, 1000, 0, rtsp);
     if res <> nrOK then
