@@ -1524,26 +1524,22 @@ begin
   if self = TSynTests then
     raise ESynException.Create('You should inherit from TSynTests');
   // properly parse command line switches
-  with Executable.Command do
+  {$ifndef OSPOSIX}
+  Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');
+  {$endif OSPOSIX}
+  if Executable.Command.Arg(0, '#filename to redirect the console output') then
+    Utf8ToFileName(Executable.Command.Args[0], redirect);
+  Executable.Command.Get(['test'], restrict,
+    'the #class.method name(s) to restrict the tests');
+  DescribeCommandLine; // may be overriden to define additional parameters
+  err := Executable.Command.DetectUnknown;
+  if (err <> '') or
+     Executable.Command.Option(['?', 'help'], 'display this message') or
+     SameText(redirect, 'help') then
   begin
-    ExeDescription := Executable.ProgramName;
-    {$ifndef OSPOSIX}
-    Option('noenter', 'do not wait for ENTER key on exit');
-    {$endif OSPOSIX}
-    if Arg(0, '#filename to redirect the console output') then
-      Utf8ToFileName(Args[0], redirect);
-    Executable.Command.Get(['test'], restrict,
-      'the #class.method name(s) to restrict the tests');
-    DescribeCommandLine; // may be overriden to define additional parameters
-    err := DetectUnknown;
-    if (err <> '') or
-       Option(['?', 'help'], 'display this message') or
-       SameText(redirect, 'help') then
-    begin
-      ConsoleWrite(err);
-      ConsoleWrite(FullDescription);
-      exit;
-    end;
+    ConsoleWrite(err);
+    ConsoleWrite(Executable.Command.FullDescription);
+    exit;
   end;
   // setup logs and console
   AllocConsole;

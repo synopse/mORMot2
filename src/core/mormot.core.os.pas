@@ -8261,6 +8261,7 @@ begin
       User := 'unknown';
     Version := TFileVersion.Create(ProgramFileName); // with versions=0
     Command := TExecutableCommandLine.Create;
+    Command.ExeDescription := ProgramName;
     Command.Parse;
   end;
   ComputeExecutableHash;
