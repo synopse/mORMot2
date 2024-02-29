@@ -1777,6 +1777,7 @@ begin
       buf := connection.fWr.Buffer;
       if sent > 0 then // e.g. after IOCP wieSend
       begin
+        inc(connection.fBytesSend, sent);
         inc(buf, sent);
         dec(buflen, sent);
       end;
