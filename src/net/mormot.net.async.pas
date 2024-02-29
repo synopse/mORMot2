@@ -1766,10 +1766,10 @@ begin
     {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
         (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
+       connection.WaitLock({writer=}true, {timeout=}0) then
     {$else}
-    if
+    if connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     {$endif USE_WINIOCP}
-       connection.WaitLock({writer=}true, {timeout=}0) then // no need to wait
     try
       buflen := connection.fWr.Len;
       if buflen = 0 then
@@ -3233,31 +3233,28 @@ begin
 end;
 
 {$ifdef USE_WINIOCP}
-  {.$define IOCP_ACCEPTEX}
   {.$define IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-  // it was reported to be more stable/scaling by some experts, but not by us
+  // was reported to be more stable/scaling by some experts, but not our tests
 {$endif USE_WINIOCP}
 
 procedure TAsyncServer.Execute;
 var
   {$ifdef USE_WINIOCP}
-  // in IOCP mode, this thread does only accept() or acceptex()
-  {$ifdef IOCP_ACCEPTEX}
-  iocp: TWinIocp; // wieAccept events in their its own IOCP queue
+  // in IOCP mode, this thread does wieAccept and wieSend
+  iocp: TWinIocp; // wieAccept/wieSend events in their its own IOCP queue
   sub: PWinIocpSubscription;
   e: TWinIocpEvent;
   bytes: cardinal;
   {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
   sockets: TNetSocketDynArray;
+  socketsalloc: PtrInt;
   s: TNetSocket;
-  i: PtrInt;
   {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-  {$endif IOCP_ACCEPTEX}
   {$else}
   // in select/poll/epoll mode, this thread may do accept or accept+write
-  notif: TPollSocketResult;
   async: boolean;
   {$endif USE_WINIOCP}
+  notif: TPollSocketResult;
   client: TNetSocket;
   connection: TAsyncConnection;
   res: TNetResult;
@@ -3269,10 +3266,10 @@ begin
   // and Send() output packets in the background if fExecuteAcceptOnly=false
   SetCurrentThreadName('A:%', [fProcessName]);
   NotifyThreadStart(self);
-  {$ifdef IOCP_ACCEPTEX}
+  {$ifdef USE_WINIOCP}
   iocp := TWinIocp.Create({processing=}1);
   try
-  {$endif IOCP_ACCEPTEX}
+  {$endif USE_WINIOCP}
   try
     // create and bind fServer to the expected TCP port
     SetExecuteState(esBinding);
@@ -3282,15 +3279,13 @@ begin
       raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
     {$ifdef USE_WINIOCP}
-    {$ifdef IOCP_ACCEPTEX}
-    {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-    sockets := NewRawSockets(fServer.SocketFamily, nlTcp, 10000);
-    i := 0; // we have pre-allocated 10000 sockets
-    {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
     sub := iocp.Subscribe(fServer.Sock, 0);
     if not iocp.PrepareNext(sub, wieAccept) then
       RaiseLastError('TAsyncServer.Execute: acceptex', EWinIocp);
-    {$endif IOCP_ACCEPTEX}
+    {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+    sockets := NewRawSockets(fServer.SocketFamily, nlTcp, 10000);
+    socketsalloc := 0; // we have pre-allocated 10000 sockets
+    {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
     {$else}
     async := false; // at least first Accept() will be blocking
     if not fExecuteAcceptOnly then
@@ -3304,42 +3299,46 @@ begin
     start := 0;
     while not Terminated do
     begin
+      PQWord(@notif)^ := 0; // direct blocking accept() by default
       {$ifdef USE_WINIOCP}
-      {$ifdef IOCP_ACCEPTEX}
       sub := iocp.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break;
-      if iocp.GetNextAccept(sub, client, sin) then
-      begin
-        if acoEnableTls in fOptions then
-          res := nrOk
-        else
-          res := client.MakeAsync;
-        if res = nrOk then
-        {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-        begin
-          s := nil;
-          if i <= high(sockets) then
+      res := nrFatalError;
+      case e of
+        wieAccept:
+          if iocp.GetNextAccept(sub, client, sin) then
           begin
-            s := sockets[i]; // we provide our own pre-allocated socket
-            inc(i);
+            if acoEnableTls in fOptions then
+              res := nrOk
+            else
+              res := client.MakeAsync;
+            if res = nrOk then
+            {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
+            begin
+              s := nil; // allocate in PrepareNext()
+              if socketsalloc <= high(sockets) then
+              begin
+                s := sockets[socketsalloc]; // provide one pre-allocated socket
+                inc(socketsalloc);
+              end;
+              if not iocp.PrepareNext(sub, wieAccept, nil, 0, s) then
+                res := nrFatalError;
+            end;
+            {$else}
+              if not iocp.PrepareNext(sub, wieAccept) then
+                res := nrFatalError;
+            {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
           end;
-          if not iocp.PrepareNext(sub, wieAccept, nil, 0, s) then
-            res := nrFatalError;
-        end;
-        {$else}
-          if not iocp.PrepareNext(sub, wieAccept) then
-            res := nrFatalError;
-        {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-      end
-      else
-        res := nrFatalError;
+        wieSend:
+          begin
+            SetRes(notif, sub^.Tag, [pseWrite]);
+            res := nrOk;
+          end;
+      end;
+      if e = wieAccept then
+      begin
       {$else}
-      res := fServer.Sock.Accept(client, sin,
-        {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
-      {$endif IOCP_ACCEPTEX}
-      {$else}
-      PQWord(@notif)^ := 0; // direct blocking accept() by default
       if async and
          not fClients.fWrite.GetOne(1000, 'AW', notif) then
         continue;
@@ -3433,14 +3432,12 @@ begin
         end
         else
           client.ShutdownAndClose({rdwr=}false);
-      {$ifndef USE_WINIOCP}
       end
       else
         // this was a pseWrite notification -> try to send pending data
         // here connection = TObject(notif.tag)
         // - never executed if fExecuteAcceptOnly=true (THttpAsyncServer)
         fClients.ProcessWrite(notif, 0);
-      {$endif USE_WINIOCP}
     end;
   except
     on E: Exception do
@@ -3452,11 +3449,11 @@ begin
         [E.ClassType, fProcessName], self);
     end;
   end;
-  {$ifdef IOCP_ACCEPTEX}
+  {$ifdef USE_WINIOCP}
   finally
     iocp.Free;
   end;
-  {$endif IOCP_ACCEPTEX}
+  {$endif USE_WINIOCP}
   DoLog(sllInfo, 'Execute: done AW %', [fProcessName], self);
   SetExecuteState(esFinished);
 end;

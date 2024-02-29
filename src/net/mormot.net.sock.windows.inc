@@ -1499,6 +1499,8 @@ procedure TWinIocp.Terminate;
 var
   i: integer;
 begin
+  if self = nil then
+    exit;
   fTerminated := true; // set the flag
   for i := 1 to fMaxWait do
     IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads/queue
@@ -1546,7 +1548,7 @@ begin
         tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
         fOnLog(sllWarning, 'leak sock=% over=% recv=% %',
           [pointer(sub^.socket), PtrUInt(sub^.over[wieRecv].overlapped.Internal),
-           tmplen, sockerrno], nil);
+           tmplen, sockerrno], self);
       end;
       if wioUnsubscribeShutdownSocket in fOptions then
         TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
@@ -1569,7 +1571,8 @@ var
   sll: TSynLogLevel;
 begin
   result := nil;
-  if fTerminated then
+  if (self = nil) or
+     fTerminated then
     exit;
   if socket = nil then
     raise EWinIocp.Create('Unexpected TWinIocp.Subscribe(nil)');
@@ -1609,7 +1612,8 @@ var
   err: PUtf8Char;
 begin
   result := false;
-  if (one = nil) or
+  if (self = nil) or
+     (one = nil) or
      fTerminated then
     exit;
   oe := @o^.over[event]; // each event has its own TOverlappedEvent buffer
@@ -1692,13 +1696,17 @@ var
   seq: pointer;
 begin
   result := false;
-  if fTerminated then
+  if (self = nil) or
+     fTerminated then
     exit;
   // 65535 < seq < MaxInt from PrepareNext(), seq=nil from Terminate
   seq := pointer(ord(event) + 1);
   result := IocpPostQueuedStatus(fIocp, bytes, seq, {overlap=}pointer(one));
   if result then
     LockedInc32(@fPosted);
+  if Assigned(fOnLog) then
+    fOnLog(sllTrace, 'Enqueue(one=% % %)=%',
+      [one, IOCP_EVENT[event], bytes, result], self);
 end;
 
 function TWinIocp.GetNext(timeoutms: cardinal;
@@ -1711,7 +1719,8 @@ var
   oe: POverlappedEvent;
 begin
   result := nil;
-  if fTerminated then
+  if (self = nil) or
+     fTerminated then
     exit;
   repeat
     bytes := 0;
@@ -1771,7 +1780,8 @@ var
   llen, rlen: integer;
 begin
   result := false;
-  if (one = nil) or
+  if (self = nil) or
+     (one = nil) or
      fTerminated then
     exit;
   FillCharFast(Remote, SizeOf(Remote), 0);
@@ -1811,8 +1821,9 @@ var
   o: PIocpSubscription absolute one;
 begin
   result := false;
-  if fTerminated or
-     (one = nil) then
+  if (self = nil) or
+     (one = nil) or
+     fTerminated then
     exit;
   res := nrOK;
   if wioUnsubscribeShutdownSocket in fOptions then
