@@ -6481,32 +6481,32 @@ end;
 procedure TTestCoreBase.MimeTypes;
 const
   MIMES: array[0..51] of TFileName = (
-    'png', 'image/png',
-    'PNg', 'image/png',
-    'gif', 'image/gif',
-    'tif', 'image/tiff',
+    'png',  'image/png',
+    'PNg',  'image/png',
+    'gif',  'image/gif',
+    'tif',  'image/tiff',
     'tiff', 'image/tiff',
-    'jpg', 'image/jpeg',
-    'JPG', 'image/jpeg',
+    'jpg',  'image/jpeg',
+    'JPG',  'image/jpeg',
     'jpeg', 'image/jpeg',
-    'bmp', 'image/bmp',
-    'doc', 'application/msword',
+    'bmp',  'image/bmp',
+    'doc',  'application/msword',
     'docx', 'application/msword',
-    'htm', HTML_CONTENT_TYPE,
+    'htm',  HTML_CONTENT_TYPE,
     'html', HTML_CONTENT_TYPE,
     'HTML', HTML_CONTENT_TYPE,
-    'css', 'text/css',
-    'js', 'text/javascript',
-    'ico', 'image/x-icon',
-    'pdf', 'application/pdf',
-    'PDF', 'application/pdf',
+    'css',  'text/css',
+    'js',   'text/javascript',
+    'ico',  'image/x-icon',
+    'pdf',  'application/pdf',
+    'PDF',  'application/pdf',
     'Json', JSON_CONTENT_TYPE,
     'webp', 'image/webp',
     'manifest', 'text/cache-manifest',
     'appcache', 'text/cache-manifest',
     'h264', 'video/H264',
-    'x', 'application/x-compress',
-    'ogg', 'video/ogg');
+    'x',    'application/x-compress',
+    'ogg',  'video/ogg');
   BIN: array[0..1] of Cardinal = (
     $04034B50, $38464947);
   BIN_MIME: array[0..1] of RawUtf8 = (
