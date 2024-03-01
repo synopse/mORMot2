@@ -8092,8 +8092,11 @@ begin
       end;
       // persist the new private user key into local hidden file
       if FileExists(fn) then
+      begin
         // allow rewrite of an invalid local file
         FileSetHidden(fn, {ReadOnly=}false);
+        DeleteFile(fn); // WinApi FileCreate can NOT overwrite a hidden file
+      end;
       TAesPrng.Main.FillRandom(_h.k); // from strong CSPRNG random
       key := TAesPrng.Main.AFSplit(_h.k, SizeOf(_h.k), 126);
       {$ifdef OSWINDOWS}
@@ -8106,7 +8109,7 @@ begin
       {$endif OSWINDOWS}
       key := AesPkcs7(key2, {encrypt=}true, k256, 256, mCfb);
       if not FileFromString(key, fn) then
-        ESynCrypto.CreateUtf8('Unable to write %', [fn]);
+        raise ESynCrypto.CreateUtf8('Unable to write %', [fn]);
       FileSetHidden(fn, {ReadOnly=}true); // chmod 400
     finally
       FillZero(key);
