@@ -476,7 +476,7 @@ const
 
 // crypt32.dll API calls
 
-function CertOpenStoreW(lpszStoreProvider: PWideChar; dwEncodingType: cardinal;
+function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
   hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE; stdcall;
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
@@ -1027,7 +1027,7 @@ function FreeCredentialsHandle;      external secur32;
 const
   crypt32 = 'crypt32.dll';
 
-function CertOpenStoreW;                    external crypt32;
+function CertOpenStore;                     external crypt32;
 function CertOpenSystemStoreW;              external crypt32;
 function CertCloseStore;                    external crypt32;
 function CertFindCertificateInStore;        external crypt32;
