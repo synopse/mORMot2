@@ -941,19 +941,26 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     CheckEqual(l1.Len, 100, 'RJA');
     for i1 := 0 to l1.Len - 1 do
       CheckEqual(l1.U[i1], s, 'RJA');
+    c := 1; // within the same process, no need to push this request
     n := 100;
     if GlobalInterfaceTestMode = itmHttp then
-      n := 1000; // validate a 600KB response (e.g. trigger IOCP send buffering)
-    u := I.RepeatTextArray(s, n);
-    t := length(u);
-    CheckEqual(t, n * 600, 'RepeatTextArray');
-    p := pointer(u);
+    begin
+      c := 50; // >5000 for very agressive tests
+      n := 1000; // generate a 600KB response (e.g. test IOCP background send)
+    end;
     repeat
-      Check(CompareMem(p, pointer(s), 600), 'RTA');
-      inc(p, 600);
-      dec(t, 600)
-    until t = 0;
-    Check(p^ = #0, 'end RTA');
+      u := I.RepeatTextArray(s, n);
+      t := length(u);
+      CheckEqual(t, n * 600, 'RepeatTextArray');
+      p := pointer(u);
+      repeat
+        Check(CompareMem(p, pointer(s), 600), 'RTA');
+        inc(p, 600);
+        dec(t, 600)
+      until t = 0;
+      Check(p^ = #0, 'end RTA');
+      dec(c);
+    until c = 0;
   end;
 
 var
