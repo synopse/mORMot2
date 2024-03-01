@@ -530,7 +530,7 @@ end;
 function TServiceCalculator.RepeatTextArray(
   const item: RawUtf8; count: integer): RawUtf8;
 var
-  buf: array[word] of byte;
+  buf: array[word] of byte; // 64KB temp buffer
 begin
   with TJsonWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
   try

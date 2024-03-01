@@ -1737,9 +1737,9 @@ const
     'application/vnd.ms-excel',      // mtXls
     HTML_CONTENT_TYPE,               // mtHtml
     'text/css',                      // mtCss
-    'application/javascript',        // mtJS
+    'text/javascript',               // mtJS RFC 9239
     'image/x-icon',                  // mtXIcon
-    'text/font-woff',         // mtFont
+    'font/woff',                     // mtFont RFC 8081
     TEXT_CONTENT_TYPE,               // mtText
     'image/svg+xml',                 // mtSvg
     XML_CONTENT_TYPE,                // mtXml
@@ -8691,10 +8691,10 @@ const
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
-    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtFont,
-    mtOgg,  mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText,
-    mtText, mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,
-    mtWmv,  mtAvi,  mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
+    mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtFont, mtOgg,
+    mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
+    mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
+    mtAvi,  mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var

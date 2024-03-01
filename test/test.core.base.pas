@@ -6496,7 +6496,7 @@ const
     'html', HTML_CONTENT_TYPE,
     'HTML', HTML_CONTENT_TYPE,
     'css', 'text/css',
-    'js', 'application/javascript',
+    'js', 'text/javascript',
     'ico', 'image/x-icon',
     'pdf', 'application/pdf',
     'PDF', 'application/pdf',
