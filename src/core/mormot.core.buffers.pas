@@ -1739,7 +1739,7 @@ const
     'text/css',                      // mtCss
     'application/javascript',        // mtJS
     'image/x-icon',                  // mtXIcon
-    'application/font-woff',         // mtFont
+    'text/font-woff',         // mtFont
     TEXT_CONTENT_TYPE,               // mtText
     'image/svg+xml',                 // mtSvg
     XML_CONTENT_TYPE,                // mtXml
