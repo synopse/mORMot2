@@ -14,9 +14,9 @@ program mget;
 
   *****************************************************************************
 
-  For PeerCache to work, please open port 8089 for TCP+UDP on the firewall:
-    Debian:   sudo ufw allow from 192.168.0.0/24 to any port 8089
-    Windows:  netsh firewall add portopening all 8089 peerCache
+  For PeerCache to work, please open port 8099 for TCP+UDP on the firewall:
+    Debian:   sudo ufw allow from 192.168.0.0/24 to any port 8099
+    Windows:  netsh firewall add portopening all 8099 peerCache
       (see the actual command supplied by "mget /help" response)
 }
 

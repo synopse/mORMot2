@@ -1036,7 +1036,7 @@ begin
   try
     hps.CacheTempPath := Executable.ProgramFilePath + 'peercachetemp';
     hps.CachePermPath := Executable.ProgramFilePath + 'peercacheperm';
-    hps.Port := 8008; // don't use default 8089
+    hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoVerboseLog {,pcoSelfSignedHttps}];
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret');

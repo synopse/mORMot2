@@ -1422,7 +1422,7 @@ type
     fCacheTempPath, fCachePermPath: TFileName;
   public
     /// set the default settings
-    // - i.e. Port=8089, LimitMBPerSec=10, LimitClientCount=32,
+    // - i.e. Port=8099, LimitMBPerSec=10, LimitClientCount=32,
     // RejectInstablePeersMin=4, CacheTempMaxMB=1000, CacheTempMaxMin=60,
     // CacheTempMinBytes=CachePermMinBytes=2048,
     // BroadcastTimeoutMS=10 HttpTimeoutMS=500 and BroadcastMaxResponses=24
@@ -1431,7 +1431,7 @@ type
     /// the local port used for UDP and TCP process
     // - value should match on all peers for proper discovery
     // - UDP for discovery, TCP for HTTP/HTTPS content delivery
-    // - is 8089 by default, which is unassigned by IANA
+    // - is 8099 by default, which is unassigned by IANA
     property Port: TNetPort
       read fPort write fPort;
     /// allow to customize the process
@@ -1514,7 +1514,7 @@ type
     /// above how many bytes the peer network should be asked for a permanent file
     // - there is no size limitation if the file is already in the permanent
     // cache, or if the waoNoMinimalSize option is specified by WGet()
-    // - default is 2048 bytes, i.e. 2KB
+    // - default is 2048 bytes, i.e. 2KB, which is just two network MTU trips
     property CachePermMinBytes: integer
       read fCachePermMinBytes  write fCachePermMinBytes;
   end;
@@ -5192,7 +5192,7 @@ end;
 constructor THttpPeerCacheSettings.Create;
 begin
   inherited Create;
-  fPort := 8089;
+  fPort := 8099;
   fLimitMBPerSec := 10;
   fLimitClientCount := 32;
   fRejectInstablePeersMin := 4;
