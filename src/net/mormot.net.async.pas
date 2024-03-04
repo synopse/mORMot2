@@ -10,6 +10,7 @@ unit mormot.net.async;
    - Low-Level Non-blocking Connections
    - Client or Server Asynchronous Process
    - THttpAsyncServer Event-Driven HTTP Server
+   - THttpProxyCache HTTP Proxy with Cache
 
   *****************************************************************************
 
@@ -38,6 +39,7 @@ uses
   mormot.core.threads,
   mormot.core.log,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.perf,
   mormot.core.zip,
   mormot.crypt.secure,
@@ -988,6 +990,93 @@ type
       read fAsync;
   end;
 
+
+{ ******************** THttpProxyCache HTTP Proxy with Cache }
+
+type
+  /// define one remote content source for THttpProxyCache
+  THttpProxyCacheSource = class(TSynPersistent)
+  protected
+    fRemote, fLocal: RawUtf8;
+    fCachePath: TFileName;
+    fDisabled: boolean;
+    fThreadCount: integer;
+  published
+    /// this source won't be processed if this property is set to true
+    property Disabled: boolean
+      read fDisabled write fDisabled;
+    /// the local URI prefix to use with the main HTTP(S) server of this instance
+    // - a typical value is e.g. 'debian' or 'debian-security'
+    // - if not set the last folder of the Remote value will be used, e.g.
+    // 'debian' for 'http://ftp.debian.org/debian'
+    property Local: RawUtf8
+      read fLocal write fLocal;
+
+    /// the full remote origin URL start to ask
+    // - the Local prefix will be removed from the client request, then appended
+    // to this remote URI, which is e.g. 'http://ftp.debian.org/debian' or
+    // 'http://security.debian.org/debian-security' matching Local 'debian' or
+    // 'debian-security' prefixes
+    property Remote: RawUtf8
+      read fRemote write fRemote;
+    /// overwrite the main DefaultCachePath setting
+    property CachePath: TFileName
+      read fCachePath write fCachePath;
+  end;
+
+  /// define one or several remote content source(s) for THttpProxyCache
+  THttpProxyCacheSourceObjArray = array of THttpProxyCacheSource;
+
+  /// define the THttpProxyCache forward proxy process
+  THttpProxyCacheSettings = class(TSynAutoCreateFields)
+  protected
+    fPort: TNetPort;
+    fThreadCount: integer;
+    fDefaultCachePath: TFileName;
+    fSource: THttpProxyCacheSourceObjArray;
+    fServer: THttpAsyncServer;
+  public
+    /// append and own a given THttpProxyCacheSource definition at runtime
+    procedure AddSource(one: THttpProxyCacheSource);
+    /// the local HTTP(S) asynchronous server
+    property Server: THttpAsyncServer
+      read fServer;
+  published
+    /// the local port used for HTTP/HTTPS content delivery
+    // - is 8098 by default (THttpPeerCache uses 8099), unassigned by IANA
+    property Port: TNetPort
+      read fPort write fPort;
+    /// the number of threads of the HTTP/HTTPS content delivery
+    // - default value is 4 sub-threads
+    property ThreadCount: integer
+      read fThreadCount write fThreadCount;
+    /// where the cached files are to be stored
+    // - can be overriden by Source[].CachePath property
+    property DefaultCachePath: TFileName
+      read fDefaultCachePath;
+    /// define the remote content sources
+    property Source: THttpProxyCacheSourceObjArray
+      read fSource;
+  end;
+
+  /// implements a HTTP forward proxy, with caching
+  THttpProxyCache = class(TSynAutoCreateFields)
+  protected
+    fSettings: THttpProxyCacheSettings;
+    fLog: TSynLogClass;
+    fSettingsOwned, fVerboseLog: boolean;
+  public
+    /// initialize this forward proxy instance
+    // - the supplied aSettings should be owned by the caller (e.g from a main
+    // settings class instance)
+    // - may raise some exceptions if the HTTP server cannot be started
+    constructor Create(aSettings: THttpProxyCacheSettings); reintroduce; virtual;
+    /// finalize this class instance
+    destructor Destroy; override;
+    /// access to the used settings
+    property Settings: THttpProxyCacheSettings
+      read fSettings;
+  end;
 
 
 
@@ -4364,6 +4453,51 @@ begin
   fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
 end;
 
+
+{ ******************** THttpProxyCache HTTP Proxy with Cache }
+
+{ THttpProxyCacheSettings }
+
+procedure THttpProxyCacheSettings.AddSource(one: THttpProxyCacheSource);
+begin
+  if one <> nil then
+    ObjArrayAdd(fSource, one);
+end;
+
+
+{ THttpProxyCache }
+
+constructor THttpProxyCache.Create(aSettings: THttpProxyCacheSettings);
+var
+  log: ISynLog;
+begin
+  fLog := TSynLog;
+  log := fLog.Enter('Create %', [aSettings], self);
+  if aSettings = nil then
+  begin
+    fSettings := THttpProxyCacheSettings.Create;
+    fSettingsOwned := true;
+  end
+  else
+    fSettings := aSettings;
+
+end;
+
+destructor THttpProxyCache.Destroy;
+begin
+  if fSettingsOwned then
+    fSettings.Free;
+  fSettings := nil; // notify background threads and event callbacks
+  inherited Destroy;
+end;
+
+
+
+initialization
+  {$ifndef HASDYNARRAYTYPE}
+  Rtti.RegisterObjArray(
+    TypeInfo(THttpProxyCacheSourceObjArray), THttpProxyCacheSource);
+  {$endif HASDYNARRAYTYPE}
 
 end.
 
