@@ -4365,7 +4365,7 @@ begin
             break; // finished (set e.g. by ClientSock.Http.ProcessBody)
           hrsSendBody:
             begin
-              dest.Clear; // body is retrieved from Content/ContentStream
+              dest.Reset; // body is retrieved from Content/ContentStream
               case ClientSock.Http.ProcessBody(dest, fServerSendBufferSize) of
                 hrpSend:
                   if ClientSock.TrySndLow(dest.Buffer, dest.Len) then
