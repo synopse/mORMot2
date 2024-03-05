@@ -4469,7 +4469,7 @@ end;
 
 constructor THttpProxyCache.Create(aSettings: THttpProxyCacheSettings);
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   fLog := TSynLog;
   log := fLog.Enter('Create %', [aSettings], self);
