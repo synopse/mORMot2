@@ -746,7 +746,7 @@ type
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fUrlParamPos: PUtf8Char; // may be set by TUriTreeNode.LookupParam
     fRouteNode: TRadixTreeNodeParams; // is a TUriTreeNode
-    fRouteName: pointer; // set by TUriTreeNode.LookupParam
+    fRouteName: pointer; // TRawUtf8DynArray set by TUriTreeNode.LookupParam
     fRouteValuePosLen: TIntegerDynArray; // [pos1,len1,...] pairs in fUri
     fHttp: PHttpRequestContext; // as supplied to Prepare()
     function GetRouteValuePosLen(const Name: RawUtf8;
@@ -4382,6 +4382,8 @@ begin
      (Name = '') or
      (fRouteName = nil) then
     exit;
+  // fRouteName = pointer(TRawUtf8DynArray) of all the <param1> <param2> names,
+  // in order, up to this parameter
   i := FindNonVoidRawUtf8(fRouteName, pointer(Name), length(Name),
                           PDALen(PAnsiChar(fRouteName) - _DALEN)^ + _DAOFF);
   if i < 0 then
