@@ -802,6 +802,8 @@ type
     /// check a TUriRouter <parameter> value parsed from URI
     // - both Name lookup and value comparison are case-sensitive
     function RouteEquals(const Name, ExpectedValue: RawUtf8): boolean;
+    /// an additional custom parameter, as provided to TUriRouter.Setup
+    function RouteOpaque: pointer; virtual; abstract;
     /// retrieve and decode an URI-encoded parameter as UTF-8 text
     // - UpperName should follow the UrlDecodeValue() format, e.g. 'NAME='
     function UrlParam(const UpperName: RawUtf8; out Value: RawUtf8): boolean; overload;

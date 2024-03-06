@@ -126,6 +126,8 @@ type
     ToUriErrorStatus: {$ifdef CPU32} word {$else} cardinal {$endif};
     /// the callback registered by Run() for this URI
     Execute: TOnHttpServerRequest;
+    /// an additional pointer value, assigned to Ctxt.RouteOpaque of Execute()
+    ExecuteOpaque: pointer;
   end;
 
   /// implement a Radix Tree node to hold one URI registration
@@ -174,7 +176,7 @@ type
     fTreeNodeClass: TRadixTreeNodeClass;
     procedure Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
       aTo: TUriRouterMethod; const aToUri: RawUtf8;
-      const aExecute: TOnHttpServerRequest);
+      const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
   public
     /// initialize this URI routing engine
     constructor Create(aNodeClass: TRadixTreeNodeClass;
@@ -232,20 +234,26 @@ type
     // $ Route.Run([urmGet, urmPost, urmPut, urmDelete],
     // $    '/user/<user>/pic/<id>', DoUserPic) // CRUD picture access
     procedure Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
-      const aExecute: TOnHttpServerRequest);
+      const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer = nil);
     /// just a wrapper around Run([urmGet], aUri, aExecute) registration method
     // - e.g. Route.Get('/plaintext', DoPlainText);
-    procedure Get(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Get(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmPost], aUri, aExecute) registration method
-    procedure Post(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Post(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmPut], aUri, aExecute) registration method
-    procedure Put(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Put(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmDelete], aUri, aExecute) registration method
-    procedure Delete(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Delete(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmOptions], aUri, aExecute) registration method
-    procedure Options(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Options(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// just a wrapper around Run([urmHead], aUri, aExecute) registration method
-    procedure Head(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest); overload;
+    procedure Head(const aUri: RawUtf8; const aExecute: TOnHttpServerRequest;
+      aExecuteOpaque: pointer = nil); overload;
     /// assign the published methods of a class instance to their URI via RTTI
     // - the signature of each method should match TOnHttpServerRequest
     // - the method name is used for the URI, e.g. Instance.user as '/user',
@@ -368,6 +376,8 @@ type
     /// serialize a given TObject as JSON into OutContent and OutContentType fields
     procedure SetOutJson(Value: TObject); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// an additional custom parameter, as provided to TUriRouter.Setup
+    function RouteOpaque: pointer; override;
     /// notify the server that it should wait for the OnAsyncResponse callback
     // - would raise an EHttpServer exception if OnAsyncResponse is not set
     // - returns HTTP_ASYNCRESPONSE (777) internal code as recognized e.g. by
@@ -2583,7 +2593,7 @@ end;
 
 procedure TUriRouter.Setup(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
   aTo: TUriRouterMethod; const aToUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 var
   n: TUriTreeNode;
   u: PUtf8Char;
@@ -2619,8 +2629,11 @@ begin
         raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
           [self, aFromUri]);
     if Assigned(aExecute) then
+    begin
       // this URI should redirect to a TOnHttpServerRequest callback
-      n.Data.Execute := aExecute
+      n.Data.Execute := aExecute;
+      n.Data.ExecuteOpaque := aExecuteOpaque;
+    end
     else
     begin
       n.Data.ToUriMethod := aTo;
@@ -2683,17 +2696,17 @@ end;
 procedure TUriRouter.Rewrite(aFrom: TUriRouterMethod; const aFromUri: RawUtf8;
   aTo: TUriRouterMethod; const aToUri: RawUtf8);
 begin
-  Setup(aFrom, aFromUri, aTo, aToUri, nil);
+  Setup(aFrom, aFromUri, aTo, aToUri, nil, nil);
 end;
 
 procedure TUriRouter.Run(aFrom: TUriRouterMethods; const aFromUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 var
   m: TUriRouterMethod;
 begin
   for m := low(fTree) to high(fTree) do
     if m in aFrom then
-      Setup(m, aFromUri, m, '', aExecute);
+      Setup(m, aFromUri, m, '', aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Get(const aFrom, aTo: RawUtf8; aToMethod: TUriRouterMethod);
@@ -2728,39 +2741,39 @@ begin
 end;
 
 procedure TUriRouter.Get(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmGet], aUri, aExecute);
+  Run([urmGet], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Post(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmPost], aUri, aExecute);
+  Run([urmPost], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Put(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmPut], aUri, aExecute);
+  Run([urmPut], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Delete(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmDelete], aUri, aExecute);
+  Run([urmDelete], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Options(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmOptions], aUri, aExecute);
+  Run([urmOptions], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.Head(const aUri: RawUtf8;
-  const aExecute: TOnHttpServerRequest);
+  const aExecute: TOnHttpServerRequest; aExecuteOpaque: pointer);
 begin
-  Run([urmHead], aUri, aExecute);
+  Run([urmHead], aUri, aExecute, aExecuteOpaque);
 end;
 
 procedure TUriRouter.RunMethods(RouterMethods: TUriRouterMethods;
@@ -3044,6 +3057,13 @@ procedure THttpServerRequest.SetOutJson(Value: TObject);
 begin
   ObjectToJson(Value, RawUtf8(fOutContent), []);
   fOutContentType := JSON_CONTENT_TYPE_VAR;
+end;
+
+function THttpServerRequest.RouteOpaque: pointer;
+begin
+  result := fRouteNode;
+  if result <> nil then
+    result := TUriTreeNode(result).Data.ExecuteOpaque;
 end;
 
 function THttpServerRequest.SetAsyncResponse: integer;
