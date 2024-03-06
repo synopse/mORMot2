@@ -341,7 +341,7 @@ procedure TNetworkProtocols._TUriTree;
 var
   tree: TUriTree;
   router: TUriRouter;
-  ctxt: THttpServerRequestAbstract;
+  ctxt: THttpServerRequest;
   i: PtrInt;
   n: TRadixTreeNode;
   timer: TPrecisionTimer;
@@ -451,7 +451,7 @@ begin
   finally
     tree.Free;
   end;
-  ctxt := THttpServerRequestAbstract.Create;
+  ctxt := THttpServerRequest.Create(nil, 0, nil, [], nil);
   router := TUriRouter.Create(TUriTreeNode);
   try
     Call('/plaintext', '', '', false, -1, 0);
