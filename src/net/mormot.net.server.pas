@@ -530,6 +530,10 @@ type
     // root URI registered at http.sys level - there is no such limitation with
     // the socket servers, which bind to a port, so handle all URIs on it
     function Route: TUriRouter;
+    /// thread-safe replace the TUriRouter instance
+    // - returns the existing instance: caller should keep it for a few seconds
+    // untouched prior to Free it, to let finish any pending background process
+    function ReplaceRoute(another: TUriRouter): TUriRouter;
     /// will route a GET to /favicon.ico to the given .ico file content
     // - if none is supplied, the default Synopse/mORMot icon is used
     // - if '' is supplied, /favicon.ico will return a 404 error status
@@ -3128,25 +3132,41 @@ end;
 
 function THttpServerGeneric.Route: TUriRouter;
 begin
+  result := nil; // avoid GPF
   if self = nil then
-    result := nil // avoid GPF
-  else
-  begin
+    exit;
+  result := fRoute;
+  if result <> nil then
+    exit;
+  GlobalLock; // paranoid thread-safety
+  try
     if fRoute = nil then
     begin
-      GlobalLock; // paranoid thread-safety
-      try
-        if fRoute = nil then
-        begin
-          if fRouterClass = nil then
-            fRouterClass := TUriTreeNode;
-          fRoute := TUriRouter.Create(fRouterClass);
-        end;
-      finally
-        GlobalUnLock;
-      end;
+      if fRouterClass = nil then
+        fRouterClass := TUriTreeNode;
+      fRoute := TUriRouter.Create(fRouterClass);
     end;
+  finally
+    GlobalUnLock;
+  end;
+  result := fRoute;
+end;
+
+function THttpServerGeneric.ReplaceRoute(another: TUriRouter): TUriRouter;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  GlobalLock; // paranoid thread-safety
+  try
     result := fRoute;
+    if result <> nil then
+      result.Safe.WriteLock;
+    fRoute := another;
+    if result <> nil then
+      result.Safe.WriteUnLock;
+  finally
+    GlobalUnLock;
   end;
 end;
 
