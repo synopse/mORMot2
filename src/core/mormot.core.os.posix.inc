@@ -739,11 +739,19 @@ end;
 {$ifdef OSBSD}
 
 const
+  {$ifdef OSFREEBSD}
   // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
-  CLOCK_REALTIME = 0;
+  CLOCK_REALTIME  = 0;
   CLOCK_MONOTONIC = 4;
-  CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
+  CLOCK_REALTIME_COARSE  = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
+  {$else}
+  // see https://github.com/openbsd/src/blob/master/sys/sys/_time.h#L63
+  CLOCK_REALTIME  = 0;
+  CLOCK_MONOTONIC = 3;
+  CLOCK_REALTIME_COARSE  = CLOCK_REALTIME; // no FAST/COARSE version
+  CLOCK_MONOTONIC_COARSE = CLOCK_MONOTONIC;
+  {$endif OSFREEBSD}
 
 function clock_gettime(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_gettime';
@@ -754,9 +762,9 @@ function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
 {$else}
 
 const
-  CLOCK_REALTIME = 0;
-  CLOCK_MONOTONIC = 1;
-  CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
+  CLOCK_REALTIME         = 0;
+  CLOCK_MONOTONIC        = 1;
+  CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
   CLOCK_MONOTONIC_COARSE = 6;
 
 // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
