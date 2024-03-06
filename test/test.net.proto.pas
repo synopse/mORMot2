@@ -189,6 +189,7 @@ begin
       for r := 0 to rmax do
         with req[r] do
         begin
+          test.Check(get.SockConnected);
           post := TCrtSocket.Open('localhost', proxy.Server.Port);
           post.SndLow('POST /sw.mov HTTP/1.0'#13#10 +
             'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
@@ -198,6 +199,10 @@ begin
             'Cache-Control: no-cache'#13#10 +
             'Content-Length: 32767'#13#10 +
             'Expires: Sun, 9 Jan 1972 00:00:00 GMT'#13#10#13#10);
+          if log <> nil then
+            log.Log(sllTrace, 'req[%].get=% connected=%',
+              [r, get.Sock, get.SockConnected], proxy);
+          test.Check(get.SockConnected);
           stream := streamer.AcceptIncoming(nil, {async=}false);
           if stream = nil then
           begin
@@ -243,7 +248,7 @@ begin
             //if log <> nil then
             //  log.Log(sllCustom1, 'RegressionTests % #%/% received %',
             //    [clientcount, r, rmax, text], proxy);
-            test.check(text = session);
+            test.CheckEqual(text, session);
           end;
       end;
       if log <> nil then
