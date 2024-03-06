@@ -597,6 +597,7 @@ const
   MicroSecsPerMilliSec = 1000;
   NanoSecsPerMicroSec  = 1000;
   NanoSecsPerMilliSec  = 1000000;
+  NanoSecsPerSec       = 1000000000;
 
 const
   // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
@@ -659,42 +660,46 @@ function mach_absolute_time: UInt64;
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
   cdecl external clib name 'mach_timebase_info';
 
+function mach_continuous_time: UInt64;
+  cdecl external clib name 'mach_continuous_time';
+
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
   mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
-procedure QueryPerformanceNanosec(out Value: Int64);
+procedure machtimetonanosec(var Value: Int64); inline;
 begin
-  // Win32-API like function which returns time in nano second resolution
-  Value := mach_absolute_time;
-  if mach_timeinfo.Denom = 1 then
-    if mach_timeinfo.Numer = 1 then
-      // seems to be the case on Intel CPUs
-      exit
-    else
+  if not mach_timenanosecond then
+    if mach_timeinfo.Denom = 1 then
+      // integer resolution is enough
       Value := Value * mach_timeinfo.Numer
-  else
-    // use floating point to avoid potential overflow
-    Value := round(Value * mach_timecoeff);
+    else
+      // use floating point to avoid potential overflow
+      Value := round(Value * mach_timecoeff);
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 begin
-  if mach_timenanosecond then
-    Value := mach_absolute_time
-  else
-    QueryPerformanceNanosec(Value);
+  Value := mach_absolute_time;
+  machtimetonanosec(Value);
   Value := Value div NanoSecsPerMicroSec; // ns to us
 end;
 
 function GetTickCount64: Int64;
 begin
-  if mach_timenanosecond then
-    result := mach_absolute_time
-  else
-    QueryPerformanceNanosec(result);
+  result := mach_absolute_time;
+  machtimetonanosec(result);
   result := result div NanoSecsPerMilliSec; // ns to ms
+end;
+
+function GetUptimeSec: cardinal;
+var
+  v: Int64;
+begin
+  v := mach_continuous_time;
+  machtimetonanosec(v);
+  result := v div NanoSecsPerSec; // ns to s
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -743,12 +748,14 @@ const
   // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME  = 0;
   CLOCK_MONOTONIC = 4;
+  CLOCK_BOOTTIME  = 5;
   CLOCK_REALTIME_COARSE  = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
   {$else}
   // see https://github.com/openbsd/src/blob/master/sys/sys/_time.h#L63
   CLOCK_REALTIME  = 0;
   CLOCK_MONOTONIC = 3;
+  CLOCK_BOOTTIME  = 6;
   CLOCK_REALTIME_COARSE  = CLOCK_REALTIME; // no FAST/COARSE version
   CLOCK_MONOTONIC_COARSE = CLOCK_MONOTONIC;
   {$endif OSFREEBSD}
@@ -766,6 +773,7 @@ const
   CLOCK_MONOTONIC        = 1;
   CLOCK_REALTIME_COARSE  = 5; // see http://lwn.net/Articles/347811
   CLOCK_MONOTONIC_COARSE = 6;
+  CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
 // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
@@ -790,6 +798,8 @@ var
   // - so that QueryPerformanceMicroSeconds() is not subject to NTP adjustments
   CLOCK_MONOTONIC_HIRES: integer = CLOCK_MONOTONIC;
 
+  // contains CLOCK_BOOTTIME since kernel 2.6.39
+  CLOCK_UPTIME: integer = CLOCK_MONOTONIC;
 
 function UnixMSTimeUtc: TUnixMSTime;
 var
@@ -850,6 +860,16 @@ begin
   // convert from nanoseconds into milliseconds
   result := QWord(PtrUInt(tp.tv_nsec) div PtrUInt(NanoSecsPerMilliSec)) +
             QWord(tp.tv_sec) * MilliSecsPerSec;
+end;
+
+function GetUptimeSec: cardinal;
+var
+  tp: timespec;
+begin
+  tp.tv_sec := 0;
+  clock_gettime(CLOCK_UPTIME, @tp);
+  // convert from nanoseconds into milliseconds
+  result := tp.tv_sec;
 end;
 
 {$endif OSDARWIN}
@@ -4164,6 +4184,8 @@ begin
   if clock_gettime(CLOCK_MONOTONIC_RAW, @tp) = 0 then
     CLOCK_MONOTONIC_HIRES := CLOCK_MONOTONIC_RAW;
   {$endif OSLINUX}
+  if clock_gettime(CLOCK_BOOTTIME, @tp) = 0 then
+    CLOCK_UPTIME := CLOCK_BOOTTIME;
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) or
      (clock_gettime(CLOCK_MONOTONIC_HIRES, @tp) <> 0) then

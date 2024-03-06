@@ -3033,6 +3033,13 @@ var
 function GetTickCount64: Int64;
 {$endif OSWINDOWS}
 
+/// returns how many seconds the system was up, accouting for time when
+// the computer is asleep
+// - on Windows, computes GetTickCount64 div 1000
+// - on Linux/BSD, will use CLOCK_BOOTTIME/CLOCK_UPTIME clock
+// - on MacOS, will use mach_continuous_time() API
+function GetUptimeSec: cardinal;
+
 /// returns the current UTC time
 // - wrap UnixMSTimeUtcFast, so use e.g. clock_gettime(CLOCK_REALTIME_COARSE)
 // under Linux, or GetSystemTimeAsFileTime under Windows

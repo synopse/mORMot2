@@ -1255,6 +1255,11 @@ begin
   TLightLock(P).UnLock;
 end;
 
+function GetUptimeSec: cardinal;
+begin
+  result := GetTickCount64 div MSecsPerSec; // good enough
+end;
+
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms <> 0 then
