@@ -2354,7 +2354,7 @@ begin
   result := ''; // not implemented yet on BSD/Darwin
   // use fpsysctl with CTL_KERN + KERN_PROC + KERN_PROC_PID
   //  https://man.openbsd.org/sysctl.2#KERN_PROC_PID
-  // the trouble with is the name is likely to be truncated to 16 chars
+  // another trouble is that the name is likely to be truncated to 16 chars
   // because it is defined p_comm[MAXCOMLEN + 1] in the very complex headers
 end;
 
@@ -2508,27 +2508,25 @@ procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
   avg: TLoadAvg absolute mem;
-  us: Int64 absolute mem;
-  {$ifndef OSDARWIN}
-  guid: THash128Rec absolute mem;
-  {$endif OSDARWIN}
+  us: Int64 absolute mem.vmtotal; // =0 after above GetMemoryInfo()
+  guid: THash128Rec absolute mem.filetotal; // also = 0
 begin
-  // this is the very minimal OS entropy we could get for BSD/Darwin
+  //some minimal OS entropy we could get for BSD/Darwin
   QueryPerformanceMicroSeconds(us);
   e.i[0] := e.i[0] xor us;
+  e.i[1] := e.i[1] xor GetTickCount64;
   getloadavg(avg, 3);
   DefaultHasher128(@e.h1, @avg, SizeOf(avg)); // may be AesNiHash128
   GetMemoryInfo(mem, {withalloc=}false);
   DefaultHasher128(@e.h2, @mem, SizeOf(mem));
   {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
-  e.i[6] := e.i[6] xor mach_absolute_time; // monotonic clock in nanoseconds
+  guid.Lo := mach_absolute_time; // monotonic clock in nanoseconds
+  guid.Hi := mach_continuous_time;
   {$else}
   CreateGuid(guid.guid); // use e.g. FreeBSD syscall or /dev/urandom
-  e.r[3].L := e.r[3].L xor guid.L;
-  e.r[3].H := e.r[3].H xor guid.H;
   {$endif OSDARWIN}
   QueryPerformanceMicroSeconds(us); // should have changed in-between
-  e.i[7] := e.i[7] xor us;
+  crcblocks(@e.h3, @mem, SizeOf(mem) shr 4); // another algo
 end;
 
 {$else} // Linux-specific code
@@ -2702,6 +2700,8 @@ begin
   DoHash128File(e.h0, '/proc/self/statm');
   DoHash128File(e.h0, '/proc/self/stat');
   DoHash128File(e.h1, '/proc/stat');
+  clock_gettime(CLOCK_UPTIME, @rt);
+  DefaultHasher128(@e.h2, @rt, SizeOf(rt)); // maybe AesNiHash128
   // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
   DoHash128File(e.h2, '/proc/sys/kernel/random/uuid');
   DoHash128File(e.h3, '/proc/sys/kernel/random/boot_id');
