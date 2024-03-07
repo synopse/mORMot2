@@ -162,13 +162,17 @@ const
           {$define OPENSSLSTATIC}
           {$endif CPUX64_static}
         {$else}
+          // regular OpenSSL 1.1 dylib - to be supplied
           LIB_CRYPTO1 = 'libcrypto.1.1.dylib'; // typically ARM64
           LIB_SSL1 = 'libssl.1.1.dylib';
           _PU = '';
         {$endif CPUINTEL}
-        // most common OpenSSL library names on MacOS
-        LIB_CRYPTO3 = 'libcrypto.dylib';
-        LIB_SSL3 = 'libssl.dylib';
+        // regular OpenSSL 3 dylib - to be supplied
+        // the system dylib fails as "xxx is loading libcrypto in an unsafe way"
+        // because Apple deprecates its OS lib since 10.7 days (2011) so we
+        // won't try to load plain libcrypto/libssl.dylib
+        LIB_CRYPTO3 = 'libcrypto.3.dylib';
+        LIB_SSL3 = 'libssl.3.dylib';
       {$else}
         {$ifdef OSLINUX}
         // specific versions on Linux
