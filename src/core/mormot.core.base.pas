@@ -8842,12 +8842,14 @@ begin
 end;
 
 {$ifdef OSDARWIN} // FPC CreateGuid calls /dev/urandom which is not advised
-function mach_absolute_time: Int64; cdecl external 'c';
+function mach_absolute_time: Int64;   cdecl external 'c';
+function mach_continuous_time: Int64; cdecl external 'c';
 
-procedure CreateGuid(var guid: TGuid);
+procedure CreateGuid(var guid: TGuid); // sysutils version is slow
 begin
-  PInt64(@Guid)^ := mach_absolute_time;  // monotonic time in nanoseconds
-  crc128c(@Guid, SizeOf(Guid), THash128(Guid)); // good enough diffusion
+  PInt64Array(@guid)^[0] := mach_absolute_time;  // monotonic time (in ns)
+  PInt64Array(@guid)^[1] := mach_continuous_time;
+  crc128c(@guid, SizeOf(guid), THash128(guid)); // good enough diffusion
 end;
 {$endif OSDARWIN}
 
@@ -8887,8 +8889,9 @@ begin
   RdRand32(@e.r[0].c, length(e.r[0].c));
   e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has changed in-between
   {$else}
-  {$ifdef OSDARWIN}
+  {$ifdef OSDARWIN} // fallback to known OS API on Mac M1/M2
   e.r[3].Lo := e.r[3].Lo xor mach_absolute_time; // as defined above
+  e.r[3].Hi := e.r[3].Hi xor mach_continuous_time;
   {$endif OSDARWIN}
   e.r[3].Hi := e.r[3].Hi xor GetTickCount64; // always defined in FPC RTL
   {$endif CPUINTEL}
