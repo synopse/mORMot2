@@ -65,6 +65,7 @@ uses
   mormot.core.rtti,
   mormot.core.log,
   mormot.core.text,
+  mormot.net.sock,
   mormot.net.http,
   mormot.net.server,
   mormot.net.async;
@@ -90,20 +91,22 @@ var
 
 function TSimpleHttpAsyncServer.DoOnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  if fHttpServer is THttpAsyncServer then
+ { if fHttpServer is THttpAsyncServer then
     with THttpAsyncServer(fHttpServer) do
       if Assigned(Async.Log) then
-        Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);
+        Async.Log.Add.Log(sllInfo, 'DoOnRequest %', [Ctxt], self);}
   if IsPost(Ctxt.Method) then
+  begin
     // POST = echo
-    Ctxt.OutContent := Ctxt.InContent
+    Ctxt.OutContent := Ctxt.InContent;
+    Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  end
   else
     // GET or HEAD
-    Ctxt.OutContent := FormatUtf8('got % request #% from connection #%',
+    Ctxt.SetOutText('got % request #% from connection #%',
       [Ctxt.Url, CardinalToHexShort(InterlockedIncrement(RequestID)),
        CardinalToHexShort(Ctxt.ConnectionID)]);
        // CardinalToHexShort() to keep the same length (as request by ab)
-  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
   result := HTTP_SUCCESS;
 end;
 
@@ -142,6 +145,7 @@ begin
       //EchoToConsole := Level;
       PerThreadLog := ptIdentifiedInOneFile;
       HighResolutionTimestamp := true;
+      AutoFlushTimeOut := 1;
     end;
 
   simpleServer := TSimpleHttpAsyncServer.Create();
