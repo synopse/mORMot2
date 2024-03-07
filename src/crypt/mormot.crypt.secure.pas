@@ -5940,7 +5940,7 @@ begin
   CrcAlgo := SignAlgo;
   Padding := 0;
   // 256 bytes of strong cryptographic randomness (public values use Lecuyer)
-  MainAesPrng.FillRandom(@Crypt, SizeOf(Crypt));
+  TAesPrng.Main.FillRandom(@Crypt, SizeOf(Crypt));
 end;
 
 type
@@ -6286,7 +6286,7 @@ type
 
 procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  MainAesPrng.FillRandom(dst, dstlen);
+  TAesPrng.Main.FillRandom(dst, dstlen);
 end;
 
 
@@ -8264,7 +8264,9 @@ var
   b, bits: integer;
   n: RawUtf8;
 begin
-  TAesPrng.Main; // initialize MainAesPrng
+  // don't call TAesPrng.Main to initialize MainAesPrng yet, because
+  // OpenSslRandBytes() may not be already set and gathering OS entropy
+  // may not be needed at all
   GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
     if GlobalCryptAlgo <> nil then
@@ -8658,7 +8660,7 @@ begin
     result := Input
   else
   begin
-    pks := MainAesPrng.AFSplit(Input, AfSplitRounds);
+    pks := TAesPrng.Main.AFSplit(Input, AfSplitRounds);
     result := AesPkcs7(pks, {encrypt=}true, PrivatePassword, Salt, Pbkdf2Rounds);
     FillZero(pks);
   end;
