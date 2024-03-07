@@ -3620,10 +3620,8 @@ begin
   result := '';
 end;
 
-function getpagesize: integer;
-begin
-  result := 4096;
-end;
+const
+  getpagesize = 4096;
 
 {$else}
 function getpagesize: integer;
@@ -4170,6 +4168,7 @@ begin
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
+  OSVersionText := ToText(OSVersion32) + ' (' + OSVersionText + ')';
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and

@@ -628,6 +628,27 @@ type
   end;
 
 const
+  /// the recognized MacOS versions, as plain text
+  // - indexed from OSVersion32.utsrelease[2] kernel revision
+  MACOS_NAME: array[8 .. 24] of RawUtf8 = (
+    '10.4 Tiger',
+    '10.5 Leopard',
+    '10.6 Snow Leopard',
+    '10.7 Lion',
+    '10.8 Mountain Lion',
+    '10.9 Mavericks',
+    '10.10 Yosemite',
+    '10.11 El Capitan',
+    '10.12 Sierra',
+    '10.13 High Sierra',
+    '10.14 Mojave',
+    '10.15 Catalina',
+    '11 Big Sur',
+    '12 Monterey',
+    '13 Ventura',
+    '14 Sonoma',
+    '15 Next');
+
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
   WINDOWS_NAME: array[TWindowsVersion] of RawUtf8 = (
@@ -838,6 +859,7 @@ var
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
+  // or 'macOS 13 Ventura (Darwin 22.3.0)'
   OSVersionText: RawUtf8;
   /// some addition system information as text, e.g. 'Wine 1.1.5'
   // - also always appended to OSVersionText high-level description
@@ -845,7 +867,8 @@ var
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOS(OSVersionInt32)
-  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0'
+  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or
+  // 'macOS 13 Ventura 22.3.0'
   OSVersionShort: RawUtf8;
 
   /// some textual information about the current CPU
@@ -888,11 +911,11 @@ var
   OSVersionInt32: integer absolute OSVersion32;
 
 /// convert an Operating System type into its text representation
-// - returns e.g. 'Windows Vista' or 'Ubuntu'
+// - returns e.g. 'Windows Vista' or 'Ubuntu' or 'macOS 13 Ventura'
 function ToText(const osv: TOperatingSystemVersion): RawUtf8; overload;
 
 /// convert an Operating System type into its one-word text representation
-// - returns e.g. 'Vista' or 'Ubuntu'
+// - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
 function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 
 /// convert a 32-bit Operating System type into its full text representation
@@ -6297,18 +6320,26 @@ end;
 
 function ToText(const osv: TOperatingSystemVersion): RawUtf8;
 begin
-  if osv.os = osWindows then
-    result := 'Windows ' + WINDOWS_NAME[osv.win]
-  else
-    result := OS_NAME[osv.os];
+  result := OS_NAME[osv.os];
+  case osv.os of
+    osWindows:
+      result := 'Windows ' + WINDOWS_NAME[osv.win];
+    osOSX:
+      if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
+        result := 'macOS ' + MACOS_NAME[osv.utsrelease[2]];
+  end;
 end;
 
 function ToTextShort(const osv: TOperatingSystemVersion): RawUtf8;
 begin
-  if osv.os = osWindows then
-    result := WINDOWS_NAME[osv.win]
-  else
-    result := OS_NAME[osv.os];
+  result := OS_NAME[osv.os];
+  case osv.os of
+    osWindows:
+      result := WINDOWS_NAME[osv.win];
+    osOSX:
+      if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
+        result := MACOS_NAME[osv.utsrelease[2]];
+  end;
 end;
 
 const
