@@ -1831,6 +1831,10 @@ var
   // random generator to be used, like TSystemPrng or TAesPrngOsl
   MainAesPrng: TAesPrngAbstract;
 
+  /// low-level RAND_bytes() OpenSSL API function set by mormot.crypt.openssl
+  // - used by TAesPrng.GetEntropy if available to add some audited entropy
+  OpenSslRandBytes: function(buf: PByte; num: integer): integer; cdecl;
+
 /// low-level anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
@@ -7764,6 +7768,10 @@ begin
     sha3.Update(@data, SizeOf(data));
     // 512-bit from RdRand32 + Rdtsc + Now + CreateGuid
     XorEntropy(data);
+    sha3.Update(@data, SizeOf(data));
+    // 512-bit from OpenSSL audited random generator (from mormot.crypt.openssl)
+    if Assigned(OpenSslRandBytes) then
+      OpenSslRandBytes(@data, SizeOf(data));
     sha3.Update(@data, SizeOf(data));
     // 512-bit from /dev/urandom or CryptGenRandom system entropy source
     with _OSEntropySeed do

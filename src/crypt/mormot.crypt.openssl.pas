@@ -3418,6 +3418,7 @@ begin
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   // register OpenSSL methods to our high-level cryptographic catalog
   TCryptRandomOpenSsl.Implements('rnd-openssl');
+  @OpenSslRandBytes := @RAND_bytes;
   // may override existing mormot.crypt.ecc/mormot.crypt.rsa implementations
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for caa := low(caa) to high(caa) do
