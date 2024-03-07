@@ -3186,7 +3186,8 @@ function THttpServerGeneric.GetFavIcon(Ctxt: THttpServerRequestAbstract): cardin
 begin
   if fFavIcon = '' then
     result := HTTP_NOTFOUND
-  else begin
+  else
+  begin
     Ctxt.OutContent := fFavIcon;
     Ctxt.OutContentType := 'image/x-icon';
     result := HTTP_SUCCESS;

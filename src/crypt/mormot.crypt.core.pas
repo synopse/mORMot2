@@ -7763,6 +7763,7 @@ begin
     sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     sha3.Update(RawSmbios.Data); // may be ''
+    sha3.Update(@CpuCache, SizeOf(CpuCache));
     // 512-bit randomness and entropy from mormot.core.base
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     sha3.Update(@data, SizeOf(data));

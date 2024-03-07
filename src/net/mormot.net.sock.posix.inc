@@ -628,9 +628,18 @@ end;
 { ******************** Mac and IP Addresses Support }
 
 const
-  IFF_UP = $1;
+  IFF_UP        = $1;
   IFF_BROADCAST = $2;
   IFF_LOOPBACK  = $8;
+
+  {$ifdef OSBSDDARWIN}
+
+  // https://github.com/apple/darwin-xnu/blob/main/bsd/net/if_types.h
+  IFT_ETHER    = $06;
+  IFT_PPP      = $17;
+  IFT_CELLULAR = $ff;
+
+  {$else}
 
   // https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/if_arp.h
   ARPHRD_ETHER     = 1;
@@ -639,10 +648,7 @@ const
   ARPHRD_TUNNEL6   = 769;
   ARPHRD_IEEE80211 = 801;
 
-  // https://github.com/apple/darwin-xnu/blob/main/bsd/net/if_types.h
-  IFT_ETHER    = $06;
-  IFT_PPP      = $17;
-  IFT_CELLULAR = $ff;
+  {$endif OSBSDDARWIN}
 
 {$ifndef OSANDROID}
   // on POSIX, use getifaddrs/freeifaddrs from libc

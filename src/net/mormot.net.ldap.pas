@@ -2608,7 +2608,8 @@ begin
     if trans = lctNone then
       raise ELdap.CreateUtf8('%: invalid %', [self, GetTargetUri]);
   end
-  else begin
+  else
+  begin
     // guess the LDAP server from system information and CLDAP
     trans := LoadDefaultFromSystem(TryKerberos);
     if trans = lctNone then
