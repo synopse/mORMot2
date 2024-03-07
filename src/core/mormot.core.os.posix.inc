@@ -657,11 +657,11 @@ type
 function mach_absolute_time: UInt64;
   cdecl external clib name 'mach_absolute_time';
 
-function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
-  cdecl external clib name 'mach_timebase_info';
-
 function mach_continuous_time: UInt64;
   cdecl external clib name 'mach_continuous_time';
+
+function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
+  cdecl external clib name 'mach_timebase_info';
 
 var
   mach_timeinfo: TTimebaseInfoData;

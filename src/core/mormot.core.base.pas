@@ -8887,7 +8887,7 @@ begin
   {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
   e.r[3].Lo := e.r[3].Lo xor Rdtsc;
   RdRand32(@e.r[0].c, length(e.r[0].c));
-  e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has changed in-between
+  e.r[3].Hi := e.r[3].Hi xor Rdtsc; // has slightly changed in-between
   {$else}
   {$ifdef OSDARWIN} // fallback to known OS API on Mac M1/M2
   e.r[3].Lo := e.r[3].Lo xor mach_absolute_time; // as defined above
