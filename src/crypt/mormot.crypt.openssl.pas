@@ -3227,6 +3227,22 @@ begin
 end;
 
 
+{ TCryptRandomOpenSsl }
+
+type
+  TCryptRandomOpenSsl = class(TCryptRandom)
+  public
+    procedure Get(dst: pointer; dstlen: PtrInt); override;
+  end;
+
+procedure TCryptRandomOpenSsl.Get(dst: pointer; dstlen: PtrInt);
+begin
+  if (dst <> nil) and
+     (dstlen > 0) then
+    RAND_bytes(dst, dstlen);
+end;
+
+
 function ToText(u: TX509Usage): RawUtf8;
 begin
   result := GetEnumNameTrimed(TypeInfo(TX509Usage), ord(u));
@@ -3394,13 +3410,14 @@ begin
     {$endif HASAESNI}
   end;
   // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
-  @Ecc256r1MakeKey := @ecc_make_key_osl;
-  @Ecc256r1Sign := @ecdsa_sign_osl;
-  @Ecc256r1Verify := @ecdsa_verify_osl;
+  @Ecc256r1MakeKey      := @ecc_make_key_osl;
+  @Ecc256r1Sign         := @ecdsa_sign_osl;
+  @Ecc256r1Verify       := @ecdsa_verify_osl;
   @Ecc256r1VerifyUncomp := @ecdsa_verify_uncompressed_osl;
   @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
   TEcc256r1Verify := TEcc256r1VerifyOsl;
   // register OpenSSL methods to our high-level cryptographic catalog
+  TCryptRandomOpenSsl.Implements('rnd-openssl');
   // may override existing mormot.crypt.ecc/mormot.crypt.rsa implementations
   TCryptAsymOsl.Implements('secp256r1,NISTP-256,prime256v1'); // with caaES256
   for caa := low(caa) to high(caa) do
