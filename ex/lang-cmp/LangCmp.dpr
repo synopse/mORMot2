@@ -5,6 +5,7 @@ program LangCmp;
   Implements https://github.com/losvedir/transit-lang-cmp with mORMot/FPC.
   Please download and unzip in ./MBTA_GTFS sub-folder the trips.txt and
    stop_times.txt reference CSV from https://cdn.mbta.com/MBTA_GTFS.zip
+  https://blog.synopse.info/?post/2022/11/26/Modern-Pascal-is-Still-in-the-Race
 }
 
 // define this to enable TRawUtf8Interning for CSV values
@@ -135,17 +136,17 @@ begin
   SetLength(result, trn);
   res := pointer(result);
   repeat
-    res^.TripID := pointer(tr^.TripID);
+    res^.TripID    := pointer(tr^.TripID);
     res^.ServiceID := pointer(tr^.ServiceID);
-    res^.RouteID := pointer(tr^.RouteID);
+    res^.RouteID   := pointer(tr^.RouteID);
     st := stopTimes.FindAllSorted(tr^.TripID, stn);
     if st <> nil then
     begin
       SetLength(res^.Schedules, stn);
       sch := pointer(res^.Schedules);
       repeat
-        sch^.StopID := pointer(st^.StopID);
-        sch^.Arrival := pointer(st^.Arrival);
+        sch^.StopID    := pointer(st^.StopID);
+        sch^.Arrival   := pointer(st^.Arrival);
         sch^.Departure := pointer(st^.Departure);
         inc(sch);
         inc(st);
