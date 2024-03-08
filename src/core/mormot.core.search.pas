@@ -3446,10 +3446,11 @@ var
   pr: PRttiCustomProp;
   p, v: PUtf8Char;
   s: RawUtf8;
-  mapcount, mapped, m: PtrInt;
-  rec: pointer;
+  mapcount, mapped: PtrInt;
+  rec: PAnsiChar;
   map: PRttiCustomPropDynArray;
-  n: integer;
+  m: ^PRttiCustomProp;
+  extcount, mcount: integer;
   ext: PInteger;
 begin
   result := false;
@@ -3483,17 +3484,18 @@ begin
   if mapped = 0 then
     exit; // no field matching any header
   // parse the value rows
-  n := 0;
+  extcount := 0;
   ext := Value.CountExternal;
   if ext = nil then
-    Value.UseExternalCount(@n); // faster Value.NewPtr
+    Value.UseExternalCount(@extcount); // faster Value.NewPtr
   v := Csv;
   while v^ in [#10, #13] do
     inc(v);
   while v^ <> #0 do
   begin
     rec := Value.NewPtr;
-    m := 0;
+    m := pointer(map);
+    mcount := mapcount;
     repeat
       // parse next value
       Csv := v;
@@ -3502,20 +3504,23 @@ begin
       while (v^ <> ',') and
             (v^ > #13) do
         inc(v);
-      if (m < mapcount) and
-         (map[m] <> nil) then // not matching fields are just ignored
+      if mcount <> 0 then
       begin
-        if Csv^ = '"' then
+        if m^ <> nil then // not matching fields are just ignored
         begin
-          UnQuoteSqlStringVar(Csv, s);
-          if Intern <> nil then
-            Intern.UniqueText(s);
-        end
-        else
-          Intern.Unique(s, Csv, v - Csv);
-        map[m].SetValueText(rec, s);
+          if Csv^ = '"' then
+          begin
+            UnQuoteSqlStringVar(Csv, s);
+            if Intern <> nil then
+              Intern.UniqueText(s);
+          end
+          else
+            Intern.Unique(s, Csv, v - Csv);
+          m^.Value.ValueSetText(rec + m^.OffsetSet, s);
+        end;
+        inc(m);
+        dec(mcount);
       end;
-      inc(m);
       if v^ <> ',' then
         break;
       inc(v);
