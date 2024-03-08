@@ -5735,10 +5735,10 @@ const
    'Not Acceptable',                    // HTTP_NOTACCEPTABLE
    'Partial Content',                   // HTTP_PARTIALCONTENT
    'Payload Too Large',                 // HTTP_PAYLOADTOOLARGE
+   'Created',                           // HTTP_CREATED
    'See Other',                         // HTTP_SEEOTHER
    'Continue',                          // HTTP_CONTINUE
    'Switching Protocols',               // HTTP_SWITCHINGPROTOCOLS
-   'Created',                           // HTTP_CREATED
    'Accepted',                          // HTTP_ACCEPTED
    'Non-Authoritative Information',     // HTTP_NONAUTHORIZEDINFO
    'Reset Content',                     // HTTP_RESETCONTENT
@@ -5781,10 +5781,10 @@ const
     HTTP_NOTACCEPTABLE,
     HTTP_PARTIALCONTENT,
     HTTP_PAYLOADTOOLARGE,
+    HTTP_CREATED,
     HTTP_SEEOTHER,
     HTTP_CONTINUE,
     HTTP_SWITCHINGPROTOCOLS,
-    HTTP_CREATED,
     HTTP_ACCEPTED,
     HTTP_NONAUTHORIZEDINFO,
     HTTP_RESETCONTENT,

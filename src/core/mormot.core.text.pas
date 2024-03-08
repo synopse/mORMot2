@@ -1970,7 +1970,7 @@ type
   ESynExceptionClass = class of ESynException;
 
 /// convert any HTTP_* constant to an integer error code and its English text
-// - returns e.g. 'HTTP Error 404 - Not Found', calling StatusCodeToReason()
+// - returns e.g. 'HTTP Error 404 - Not Found', calling StatusCodeToText()
 function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 
 
@@ -9164,12 +9164,9 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-function StatusCodeToErrorMsg(Code: integer): RawUtF8;
-var
-  msg: RawUtf8;
+function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 begin
-  StatusCodeToReason(Code, msg);
-  FormatUtf8('HTTP Error % - %', [Code, msg], result);
+  FormatUtf8('HTTP Error % - %', [Code, StatusCodeToText(Code)^], result);
 end;
 
 

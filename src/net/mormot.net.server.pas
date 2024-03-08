@@ -2995,15 +2995,19 @@ begin
     ProcessErrorMessage;
   // append Command
   h := @Context.Head;
-  h^.Reset; // reuse main 2KB buffer
+  h^.Reset; // reuse 2KB header buffer
   if fRespStatus = HTTP_SUCCESS then // optimistic approach
     h^.AppendShort(_CMD_200[
       rfWantRange in Context.ResponseFlags, // HTTP_PARTIALCONTENT=206 support
       rfHttp10 in Context.ResponseFlags])   // HTTP/1.0 support
   else
-  begin // other less common cases
+  begin // other cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    h^.AppendShort(StatusCodeToShort(fRespStatus));
+    if cardinal(fRespStatus) > 999 then
+      fRespStatus := 999; // avoid SmallUInt32Utf8[] overflow
+    h^.Append(SmallUInt32Utf8[fRespStatus]);
+    h^.Append(' ');
+    h^.Append(StatusCodeToText(fRespStatus)^);
     h^.AppendCRLF;
   end;
   // append (and sanitize) custom headers from Request() method
