@@ -11988,8 +11988,11 @@ begin
   {$ifdef FPC}
   // circumvent FPC 3.2+ inverted parameters order - may be fixed in later FPC
   test := _ObjFast([]);
-  test.Add('nam', 'val'); // late binding DispInvoke() call
-  DispInvokeArgOrderInverted := (_Safe(test)^.Names[0] = 'val');
+  try
+    test.Add('nam', 'val'); // late binding DispInvoke() call
+    DispInvokeArgOrderInverted := (_Safe(test)^.Names[0] = 'val');
+  except // paranoid to avoid fatal exception during process initialization
+  end;
   {$endif FPC}
 end;
 

@@ -5719,7 +5719,7 @@ implementation
 
 const
   // StatusCodeToReason() StatusCodeToText() table to avoid memory allocations
-  // - roughly sorted by actual usage
+  // - roughly sorted by actual usage order for WordScanIndex()
   HTTP_REASON: array[0..43] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
    'No Content',                        // HTTP_NOCONTENT
