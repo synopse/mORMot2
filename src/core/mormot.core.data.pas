@@ -10942,9 +10942,9 @@ begin
     1:
       result := ByteScanIndex(P, Count, PByte(V)^); // SSE2 asm on Intel/AMD
     2:
-      result := WordScanIndex(P, Count, PWord(V)^); // SSE2 asm
+      result := WordScanIndex(P, Count, PWord(V)^); // may use SSE2 asm
     4:
-      result := IntegerScanIndex(P, Count, PInteger(V)^); // SSE2 asm
+      result := IntegerScanIndex(P, Count, PInteger(V)^); // may use SSE2 asm
     8:
       result := Int64ScanIndex(P, Count, PInt64(V)^);
     SizeOf(THash128):
