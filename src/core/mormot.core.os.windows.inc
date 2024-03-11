@@ -5434,9 +5434,10 @@ begin
     end;
   if Vers >= wVista then
   begin
+    // see https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions
     if OSVersionInfo.wProductType <> VER_NT_WORKSTATION then
     begin
-      // Server edition - see https://shorturl.at/aryAY for build numbers
+      // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
       if Vers = wServer2016 then
         // we identify only LTSC server versions
@@ -5448,24 +5449,16 @@ begin
     end
     else if (Vers = wTen) and
             (OSVersionInfo.dwBuildNumber >= 22000) then
-      // Windows 11 has always 22000.### build https://shorturl.at/fntPS
+      // Windows 11 has always 22000.###
       Vers := wEleven;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
   end;
   OSVersion := Vers;
-  if OSVersion >= wVista then
-    OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION
-  else
+  OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION;
+  if Vers < wVista then
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
-  with OSVersionInfo do
-    if wServicePackMajor = 0 then
-      _fmt('Windows %s (%d.%d.%d)', [WINDOWS_NAME[Vers],
-        dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText)
-    else
-      _fmt('Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers], wServicePackMajor,
-        dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
@@ -5479,15 +5472,32 @@ begin
       OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
     end;
     NtQueryInformationProcess := GetProcAddress(h, 'NtQueryInformationProcess');
-    RtlInitUnicodeString := GetProcAddress(h, 'RtlInitUnicodeString');
-    NtOpenSection := GetProcAddress(h, 'NtOpenSection');
-    NtMapViewOfSection := GetProcAddress(h, 'NtMapViewOfSection');
-    NtUnmapViewOfSection := GetProcAddress(h, 'NtUnmapViewOfSection');
+    RtlInitUnicodeString      := GetProcAddress(h, 'RtlInitUnicodeString');
+    NtOpenSection             := GetProcAddress(h, 'NtOpenSection');
+    NtMapViewOfSection        := GetProcAddress(h, 'NtMapViewOfSection');
+    NtUnmapViewOfSection      := GetProcAddress(h, 'NtUnmapViewOfSection');
   end;
+  // retrieve Software/Hardware information from Registry
+  if reg.ReadOpen(wrLocalMachine, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion') then
+  begin
+    WindowsUbr := reg.ReadDword('UBR');
+    WindowsProductName := reg.ReadString('ProductName');
+    WindowsDisplayVersion := reg.ReadString('DisplayVersion');
+  end;
+  with OSVersionInfo do
+  begin
+    _fmt('Windows %s (%d.%d.%d)', [WINDOWS_NAME[Vers],
+      dwMajorVersion, dwMinorVersion, dwBuildNumber], OSVersionText);
+    if wServicePackMajor <> 0 then
+      insert(_fmt('SP%d ', [wServicePackMajor]), OSVersionText, PosExChar('(', OSVersionText));
+  end;
+  if WindowsUbr <> 0 then
+    insert(_fmt('.%d', [WindowsUbr]), OSVersionText, length(OSVersionText));
+  if WindowsDisplayVersion <> '' then
+    insert(WindowsDisplayVersion + ' ', OSVersionText, PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
     OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
-  // retrieve Hardware information from Registry
-  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\CentralProcessor\0') then
+  if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\CentralProcessor\0', true) then
   begin
     cpu := reg.ReadString('ProcessorNameString');
     if cpu = '' then

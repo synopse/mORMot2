@@ -854,9 +854,9 @@ var
     {$endif OSWINDOWS};
 
   /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 'Windows XP SP3 (5.1.2600)' or
+  // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 13 Ventura (Darwin 22.3.0)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
-  // or 'macOS 13 Ventura (Darwin 22.3.0)'
   OSVersionText: RawUtf8;
   /// some addition system information as text, e.g. 'Wine 1.1.5'
   // - also always appended to OSVersionText high-level description
@@ -867,6 +867,18 @@ var
   // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or
   // 'macOS 13 Ventura 22.3.0'
   OSVersionShort: RawUtf8;
+
+  {$ifdef OSWINDOWS}
+  /// on Windows, the Update Build Revision as shown with the "ver/winver" command
+  // - to track the current update state of the system
+  WindowsUbr: integer;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. 'Windows 10 Entreprise N'
+  WindowsProductName: RawUtf8;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. '22H2'
+  WindowsDisplayVersion: RawUtf8;
+  {$endif OSWINDOWS}
 
   /// some textual information about the current CPU
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz 3MB cache'
