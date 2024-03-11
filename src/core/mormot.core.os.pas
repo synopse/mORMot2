@@ -644,7 +644,7 @@ const
     '12 Monterey',
     '13 Ventura',
     '14 Sonoma',
-    '15 Next');
+    '15 Glow'); // use known internal codename for upcoming version
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
