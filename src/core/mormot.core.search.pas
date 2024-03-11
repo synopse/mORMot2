@@ -5977,7 +5977,7 @@ begin
         begin
           // warning: never defined on XP/2003, and not for all entries
           first := reg.ReadDword('FirstEntry');
-          last := reg.ReadDword('LastEntry');
+          last  := reg.ReadDword('LastEntry');
           if (first > 0) and
              (last >= first) then
           begin

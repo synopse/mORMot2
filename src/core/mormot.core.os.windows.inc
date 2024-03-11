@@ -5478,7 +5478,7 @@ begin
     NtUnmapViewOfSection      := GetProcAddress(h, 'NtUnmapViewOfSection');
   end;
   // retrieve Software/Hardware information from Registry
-  if reg.ReadOpen(wrLocalMachine, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion') then
+  if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then
   begin
     WindowsUbr := reg.ReadDword('UBR');
     WindowsProductName := reg.ReadString('ProductName');
