@@ -302,8 +302,13 @@ function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 /// add one TMach if not already registered in the Several[] dynamic array
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 
-/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
-function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
+/// returns TRUE if Match<>nil and if any Match[].Match(Text) is TRUE
+function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// returns TRUE if Match<>nil and if any Match[].Match(Text, TextLen) is TRUE
+function MatchAny(const Match: TMatchDynArray;
+  Text: PUtf8Char; TextLen: PtrInt): boolean; overload;
 
 /// apply the CSV-supplied glob patterns to an array of RawUtf8
 // - any text not matching the pattern will be deleted from the array
@@ -2990,7 +2995,7 @@ var
   i: PtrInt;
 begin
   result := true;
-  for i := 0 to high(Several) do
+  for i := 0 to length(Several) - 1 do
     if Several[i].Equals(One) then
       exit;
   result := false;
@@ -3010,19 +3015,28 @@ begin
 end;
 
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
+begin
+  result := MatchAny(Match, pointer(Text), length(Text));
+end;
+
+function MatchAny(const Match: TMatchDynArray;
+  Text: PUtf8Char; TextLen: PtrInt): boolean;
 var
   m: PMatch;
-  i: integer;
+  n: integer;
 begin
-  result := true;
-  if Match = nil then
-    exit;
   m := pointer(Match);
-  for i := 1 to length(Match) do
-    if m^.Match(Text) then
-      exit
-    else
+  if m <> nil then
+  begin
+    result := true;
+    n := PDALen(PAnsiChar(m) - _DALEN)^ + (_DAOFF - 1);
+    repeat
+      if m^.Match(Text, TextLen) then
+        exit;
       inc(m);
+      dec(n);
+    until n = 0;
+  end;
   result := false;
 end;
 
