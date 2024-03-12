@@ -1016,18 +1016,21 @@ type
     function CheckName(const name: TValuePUtf8Char;
       caseinsensitive: boolean): THttpProxyCacheResult;
   published
-    /// default -1 will use the main THttpProxyCacheSettings value
+    /// size (in bytes) below which the file should be included in this cache
+    // - default -1 will use the main THttpProxyCacheSettings value
     property MaxSize: integer
       read fMaxSize write fMaxSize;
-    /// default -1 will use the main THttpProxyCacheSettings value
+    /// how many seconds this file should remain in this cache
+    // - default -1 will use the main THttpProxyCacheSettings value
     property TimeoutSec: integer
       read fTimeoutSec write fTimeoutSec;
     /// CSV list of GLOB file names to be excluded to this cache
     // - e.g. '*.changelog,*.tmp'
     property IgnoreCsv: RawUtf8
       read fIgnoreCsv write fIgnoreCsv;
-    /// CSV list of GLOB file names to be cached
-    // - e.g. '*.deb'
+    /// CSV list of GLOB file names to be included in this cache even if
+    // its size does not match MaxSize
+    // - e.g. '*.xml'
     property ForceCsv: RawUtf8
       read fForceCsv write fForceCsv;
   end;
@@ -1074,10 +1077,10 @@ type
     // 'debian-security' prefixes
     property Remote: RawUtf8
       read fRemote write fRemote;
-    /// overwrite the main MemCache setting
+    /// overwrite the main MemCache setting to tune in-memory caching
     property MemCache: THttpProxyCacheMem
       read fMemCache write fMemCache;
-    /// overwrite the main DiskCache setting
+    /// overwrite the main DiskCache setting to tune on-disk caching
     property DiskCache: THttpProxyCacheDisk
       read fDiskCache write fDiskCache;
   end;
