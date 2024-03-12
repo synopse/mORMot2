@@ -802,6 +802,8 @@ type
     /// check a TUriRouter <parameter> value parsed from URI
     // - both Name lookup and value comparison are case-sensitive
     function RouteEquals(const Name, ExpectedValue: RawUtf8): boolean;
+    /// returns the TUriRouter <parameter> value from its 0-based index as text buffer
+    function RouteAt(ParamIndex: PtrUInt; var Value: TValuePUtf8Char): boolean;
     /// an additional custom parameter, as provided to TUriRouter.Setup
     function RouteOpaque: pointer; virtual; abstract;
     /// retrieve and decode an URI-encoded parameter as UTF-8 text
@@ -4429,6 +4431,30 @@ var
 begin
   result := GetRouteValuePosLen(Name, v) and
             (CompareBuf(ExpectedValue, v.Text, v.Len) = 0);
+end;
+
+function THttpServerRequestAbstract.RouteAt(
+  ParamIndex: PtrUInt; var Value: TValuePUtf8Char): boolean;
+var
+  v: PIntegerArray;
+begin
+  result := false;
+  Value.Text := nil;
+  Value.Len := 0;
+  if self = nil then
+    exit;
+  v := pointer(fRouteValuePosLen);
+  if v = nil then
+    exit;
+  ParamIndex := ParamIndex * 2;
+  if ParamIndex >= PtrUInt(PDALen(PAnsiChar(v) - _DALEN)^ + (_DAOFF - 1)) then
+    exit; // avoid buffer overflow
+  v := @v[ParamIndex]; // one [pos,len] pair in fUrl
+  if v[0] = 0 then
+    exit;
+  Value.Text := PUtf8Char(pointer(fUrl)) + v[0];
+  Value.Len := v[1];
+  result := true;
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
