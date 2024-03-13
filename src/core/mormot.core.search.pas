@@ -302,13 +302,15 @@ function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 /// add one TMach if not already registered in the Several[] dynamic array
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 
-/// returns TRUE if Match<>nil and if any Match[].Match(Text) is TRUE
+/// allocate one TMach in the Several[] dynamic array
+function MatchNew(var Several: TMatchDynArray): PMatch;
+
+/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// returns TRUE if Match<>nil and if any Match[].Match(Text, TextLen) is TRUE
-function MatchAny(const Match: TMatchDynArray;
-  Text: PUtf8Char; TextLen: PtrInt): boolean; overload;
+/// returns TRUE if Match=nil or if any Match[].Match(Text, TextLen) is TRUE
+function MatchAny(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean; overload;
 
 /// apply the CSV-supplied glob patterns to an array of RawUtf8
 // - any text not matching the pattern will be deleted from the array
@@ -1524,7 +1526,6 @@ function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TD
 
 
 implementation
-
 
 
 { ****************** Files Search in Folders }
@@ -2945,7 +2946,6 @@ function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
 var
   P, S: PUtf8Char;
 begin
-  result := 0;
   P := pointer(CsvPattern);
   if P <> nil then
     repeat
@@ -2953,15 +2953,12 @@ begin
       while not (P^ in [#0, CsvSep]) do
         inc(P);
       if P <> S then
-      begin
-        SetLength(Match, result + 1);
-        Match[result].Prepare(S, P - S, CaseInsensitive, {reuse=}true);
-        inc(result);
-      end;
+        MatchNew(Match)^.Prepare(S, P - S, CaseInsensitive, {reuse=}true);
       if P^ = #0 then
         break;
       inc(P);
     until false;
+  result := length(Match);
 end;
 
 function SetMatchs(CsvPattern: PUtf8Char; CaseInsensitive: boolean;
@@ -3002,41 +2999,40 @@ begin
 end;
 
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
-var
-  n: PtrInt;
 begin
   result := not MatchExists(One, Several);
   if result then
-  begin
-    n := length(Several);
-    SetLength(Several, n + 1);
-    Several[n] := One;
-  end;
+    MatchNew(Several)^ := One;
+end;
+
+function MatchNew(var Several: TMatchDynArray): PMatch;
+var
+  n: PtrInt;
+begin
+  n := length(Several);
+  SetLength(Several, n + 1);
+  result := @Several[n];
 end;
 
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 begin
-  result := MatchAny(Match, pointer(Text), length(Text));
+  result := MatchAny(pointer(Match), pointer(Text), length(Text));
 end;
 
-function MatchAny(const Match: TMatchDynArray;
-  Text: PUtf8Char; TextLen: PtrInt): boolean;
+function MatchAny(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean;
 var
-  m: PMatch;
   n: integer;
 begin
-  m := pointer(Match);
-  if m <> nil then
-  begin
-    result := true;
-    n := PDALen(PAnsiChar(m) - _DALEN)^ + (_DAOFF - 1);
-    repeat
-      if m^.Match(Text, TextLen) then
-        exit;
-      inc(m);
-      dec(n);
-    until n = 0;
-  end;
+  result := true;
+  if Match = nil then
+    exit;
+  n := PDALen(PAnsiChar(Match) - _DALEN)^ + (_DAOFF - 1);
+  repeat
+    if Match^.Match(Text, TextLen) then
+      exit;
+    inc(Match);
+    dec(n);
+  until n = 0;
   result := false;
 end;
 
