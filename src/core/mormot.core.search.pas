@@ -278,6 +278,37 @@ type
     function MatchString(const aText: string): integer;
   end;
 
+  /// store a decoded URI as full path and file/resource name
+  {$ifdef USERECORDWITHMETHODS}
+  TUriMatchName = record
+  {$else}
+  TUriMatchName = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Path, Name: TValuePUtf8Char;
+    /// to be called once Path has been populated to compute Name
+    procedure ParsePath;
+  end;
+
+  /// efficient GLOB path or resource name lockup for an URI
+  // - using mORMot fast TMatch engine
+  {$ifdef USERECORDWITHMETHODS}
+  TUriMatch = record
+  {$else}
+  TUriMatch = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    Init: TLightLock;
+    Names, Paths: TMatchDynArray;
+    procedure DoInit(csv: PUtf8Char; caseinsensitive: boolean);
+  public
+    /// main entry point of the GLOB resource/path URI pattern matching
+    // - will thread-safe initialize the internal TMatch instances if necessary
+    function Check(const csv: RawUtf8; const uri: TUriMatchName;
+      caseinsensitive: boolean): boolean;
+  end;
+
+
 
 /// fill the Match[] dynamic array with all glob patterns supplied as CSV
 // - returns how many patterns have been set in Match[|]
@@ -2874,6 +2905,69 @@ end;
 function TMatch.CaseInsensitive: boolean;
 begin
   result := Upper = @NormToUpperAnsi7;
+end;
+
+
+{ TUriMatchName }
+
+procedure TUriMatchName.ParsePath;
+var
+  i: PtrInt;
+begin
+  Name := Path;
+  i := Name.Len;
+  while i > 0 do // retrieve
+  begin
+    dec(i);
+    if Name.Text[i] <> '/' then
+      continue;
+    inc(i);
+    inc(Name.Text, i);
+    dec(Name.Len, i);
+    break;
+  end;
+end;
+
+
+{ TUriMatch }
+
+procedure TUriMatch.DoInit(csv: PUtf8Char; caseinsensitive: boolean);
+var
+  s: PUtf8Char;
+  m: ^TMatchDynArray;
+begin
+  if csv <> nil then
+    repeat
+      m := @Names; // default 'file.ext' pattern
+      csv := GotoNextNotSpace(csv);
+      s := csv;
+      repeat
+        case csv^ of
+          #0,
+          ',':
+            break;
+          '/':
+            m := @Paths; // is a 'path/to/file.ext' pattern
+        end;
+        inc(csv);
+      until false;
+      if csv <> s then
+        MatchNew(m^)^.Prepare(s, csv - s, caseinsensitive, true);
+      if csv^ = #0 then
+        break;
+      inc(csv);
+    until false;
+end;
+
+function TUriMatch.Check(const csv: RawUtf8;
+  const uri: TUriMatchName; caseinsensitive: boolean): boolean;
+begin
+  if Init.TryLock then // thread-safe init once from supplied csv
+    DoInit(pointer(csv), caseinsensitive);
+  result := ((Names <> nil) and
+             MatchAny(pointer(Names), uri.Name.Text, uri.Name.Len)) or
+            ((Paths <> nil) and
+             MatchAny(pointer(Paths), uri.Path.Text, uri.Path.Len));
 end;
 
 
