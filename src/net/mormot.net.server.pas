@@ -475,6 +475,7 @@ type
     fServerName: RawUtf8;
     fRequestHeaders: RawUtf8; // pre-computed headers with ServerName
     fCallbackSendDelay: PCardinal;
+    fCallbackOutgoingCount: PCardinal; //TODO
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
     fOnSendFile: TOnHttpServerSendFile;
@@ -2969,16 +2970,19 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 
   procedure ProcessErrorMessage;
   begin
-    OutCustomHeaders := '';
-    OutContentType := 'text/html; charset=utf-8'; // create message to display
+    if fErrorMessage = '' then
+      StatusCodeToReason(fRespStatus, fOutCustomHeaders)
+    else
+      fOutCustomHeaders := HtmlEscapeString(fErrorMessage);
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
-      '<h1>% Server Error %</h1><hr><p>HTTP %</p><p>%</p><small>%</small></body></html>',
-      [
-        fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
-        HtmlEscapeString(fErrorMessage), XPOWEREDVALUE
-      ],
+      '<h1>% Server Error %</h1><hr>' +
+      '<p>HTTP %</p><p>%</p><small>%</small></body></html>',
+      [fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
+       fOutCustomHeaders, XPOWEREDVALUE],
       RawUtf8(fOutContent));
+    fOutCustomHeaders := '';
+    fOutContentType := 'text/html; charset=utf-8'; // create message to display
   end;
 
 var
@@ -4389,6 +4393,8 @@ begin
      Terminated then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
+if Assigned(ClientSock.OnLog) then
+ClientSock.OnLog(sllCustom1, 'Process: headers=%', [ClientSock.Http.Headers], self);
   // compute and send back the response
   if Assigned(fOnAfterResponse) then
     QueryPerformanceMicroSeconds(started);
@@ -4397,6 +4403,8 @@ begin
   try
     // compute the response
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
+if Assigned(ClientSock.OnLog) then
+ClientSock.OnLog(sllCustom1, 'Process: DoRequest=%', [req], self);
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
@@ -4407,6 +4415,8 @@ begin
       exit;
     if hfConnectionClose in ClientSock.Http.HeaderFlags then
       ClientSock.fKeepAliveClient := false;
+if Assigned(ClientSock.OnLog) then
+ClientSock.OnLog(sllCustom1, 'Process=%: send back len=%', [req.RespStatus, output.Len], self);      
     if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
       while not Terminated do
       begin
