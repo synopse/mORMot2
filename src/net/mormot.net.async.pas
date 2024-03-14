@@ -1086,7 +1086,7 @@ type
 
   /// the available options for THttpProxyServer/THttpProxyCache
   THttpProxyServerOption = (
-    psoLogVersbose,
+    psoLogVerbose,
     psoHttpsSelfSigned,
     psoEnableLogging);
   /// a set of available options for THttpProxyServer
@@ -4631,7 +4631,7 @@ begin
   hso := [hsoNoXPoweredHeader,
           hsoThreadSmooting];
   if Assigned(log) and
-     (psoLogVersbose in fSettings.Server.Options) then
+     (psoLogVerbose in fSettings.Server.Options) then
     include(hso, hsoLogVerbose);
   if psoEnableLogging in fSettings.Server.Options then
     include(hso, hsoEnableLogging);
