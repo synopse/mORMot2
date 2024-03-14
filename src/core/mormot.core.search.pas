@@ -3120,9 +3120,17 @@ begin
   result := true;
   if Match = nil then
     exit;
-  n := PDALen(PAnsiChar(Match) - _DALEN)^ + (_DAOFF - 1);
+  if TextLen <= 0 then
+    Text := nil;
+  n := PDALen(PAnsiChar(pointer(Match)) - _DALEN)^ + (_DAOFF - 1);
   repeat
-    if Match^.Match(Text, TextLen) then
+    // inlined Match^.Match() to avoid internal error on Delphi
+    if Text <> nil then
+    begin
+      if Match^.Search(Match, Text, TextLen) then
+        exit;
+    end
+    else if Match^.pmax < 0 then
       exit;
     inc(Match);
     dec(n);
