@@ -3912,8 +3912,6 @@ function THttpRequestContext.ContentFromFile(
 var
   h: THandle;
   gz: TFileName;
-  id: Int64; // dummy variables
-  fc: TUnixMSTime;
 begin
   result := false;
   Content := '';
@@ -3939,7 +3937,7 @@ begin
   h := FileOpen(FileName, fmOpenReadShared);
   if not ValidHandle(h) then
     exit;
-  FileInfoByHandle(h, id, ContentLength, ContentLastModified, fc);
+  FileInfoByHandle(h, nil, @ContentLength, @ContentLastModified, nil);
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin

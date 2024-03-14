@@ -2933,6 +2933,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   var
     fn: TFileName;
     progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
+    h: THandle;
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
@@ -2941,15 +2942,21 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     if Context.ContentLength <> 0 then
       // STATICFILE_PROGSIZE: file is not fully available: wait for sending
       if ((not (rfWantRange in Context.ResponseFlags)) or
-          Context.ValidateRange) and
-         (FileSize(fn) <= Context.ContentLength) then
+          Context.ValidateRange) then
       begin
-        Context.ContentStream := TFileStreamEx.Create(fn, fmOpenReadShared);
-        Context.ResponseFlags := Context.ResponseFlags +
-          [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
+        h := FileOpen(fn, fmOpenReadShared);
+        if ValidHandle(h) then
+        begin
+          Context.ContentStream := TFileStreamEx.CreateFromHandle(fn, h);
+          Context.ResponseFlags := Context.ResponseFlags +
+            [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
+          FileInfoByHandle(h, nil, nil, @Context.ContentLastModified, nil);
+        end
+        else
+          fRespStatus := HTTP_NOTFOUND
       end
       else
-        fRespStatus := HTTP_NOTFOUND
+        fRespStatus := HTTP_RANGENOTSATISFIABLE
     else if (not Assigned(fServer.OnSendFile)) or
             (not fServer.OnSendFile(self, fn)) then
       // regular file sending by chunks
