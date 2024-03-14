@@ -1494,11 +1494,7 @@ var
 begin
   // try PathCreateFromUrl() API on Windows, or parse using TUri on POSIX
   fn := GetFileNameFromUrl(Utf8ToString(http.CommandResp));
-  if (fn <> '') and
-     http.ContentFromFile(fn, -1) then // into http.Content/ContentStream
-    result := HTTP_SUCCESS
-  else
-    result := HTTP_NOTFOUND;
+  result := http.ContentFromFile(fn, -1); // into http.Content/ContentStream
   http.Headers := ''; // no custom headers
 end;
 
