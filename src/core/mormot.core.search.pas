@@ -2836,8 +2836,9 @@ end;
 
 function TMatch.Match(const aText: RawUtf8): boolean;
 begin
-  if aText <> '' then
-    result := Search(@self, pointer(aText), length(aText))
+  if pointer(aText) <> nil then
+    result := Search(@self,
+                pointer(aText), PStrLen(PAnsiChar(pointer(aText)) - _STRLEN)^)
   else
     result := pmax < 0;
 end;
@@ -3233,7 +3234,7 @@ var
   len: integer;
 begin
   len := StringToUtf8(aText, temp);
-  result := match(temp.buf, len);
+  result := Match(temp.buf, len);
   temp.Done;
 end;
 
