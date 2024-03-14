@@ -458,7 +458,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// initialize ContentStream/ContentLength from a given file name
     // - if CompressGz is set, would also try for a cached local FileName+'.gz'
-    function ContentFromFile(const FileName: TFileName; CompressGz: integer): boolean;
+    // - returns HTTP_SUCCESS, HTTP_NOTFOUND or HTTP_RANGENOTSATISFIABLE
+    function ContentFromFile(const FileName: TFileName; CompressGz: integer): integer;
     /// uncompress Content according to CompressContentEncoding header
     procedure UncompressData;
     /// check RangeOffset/RangeLength against ContentLength
@@ -3908,13 +3909,15 @@ begin
 end;
 
 function THttpRequestContext.ContentFromFile(
-  const FileName: TFileName; CompressGz: integer): boolean;
+  const FileName: TFileName; CompressGz: integer): integer;
 var
   h: THandle;
   gz: TFileName;
 begin
-  result := false;
+  result := HTTP_NOTFOUND;
   Content := '';
+  if FileName = '' then
+    exit;
   // try if there is an already-compressed .gz file to send away
   if (CompressGz >= 0) and
      (CompressGz in CompressAcceptHeader) and
@@ -3929,7 +3932,7 @@ begin
       include(ResponseFlags, rfContentStreamNeedFree);
       ContentLength := FileSize(h);
       fContentEncoding := 'gzip';
-      result := true;
+      result := HTTP_SUCCESS;
       exit; // force ContentStream of raw .gz file to bypass recompression
     end;
   end;
@@ -3941,20 +3944,26 @@ begin
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin
+      result := HTTP_RANGENOTSATISFIABLE;
       FileClose(h);
       exit;
     end
     else if RangeOffset <> 0 then
       FileSeek64(h, RangeOffset);
   // we can send this file out
-  result := true;
+  result := HTTP_SUCCESS;
   include(ResponseFlags, rfAcceptRange);
   if (ContentLength < HttpContentFromFileSizeInMemory) and
      (pointer(CommandMethod) <> pointer(_HEADVAR)) then
   begin
     // smallest files (up to few MB) are sent from temp memory (maybe compressed)
     FastSetString(RawUtf8(Content), ContentLength); // assume CP_UTF8 for FPC
-    result := FileReadAll(h, pointer(Content), ContentLength);
+    if not FileReadAll(h, pointer(Content), ContentLength) then
+    begin
+      Content := '';
+      ContentLength := 0;
+      result := HTTP_NOTFOUND;
+    end;
     FileClose(h);
     exit;
   end;

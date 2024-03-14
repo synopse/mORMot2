@@ -2959,14 +2959,12 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
         fRespStatus := HTTP_RANGENOTSATISFIABLE
     else if (not Assigned(fServer.OnSendFile)) or
             (not fServer.OnSendFile(self, fn)) then
+    begin
       // regular file sending by chunks
-      if Context.ContentFromFile(fn, CompressGz) then
-        OutContent := Context.Content
-      else
-      begin
-        FormatString('Impossible to find %', [fn], fErrorMessage);
-        fRespStatus := HTTP_NOTFOUND;
-      end;
+      fRespStatus := Context.ContentFromFile(fn, CompressGz);
+      if fRespStatus = HTTP_SUCCESS then
+        OutContent := Context.Content;
+    end;
   end;
 
   procedure ProcessErrorMessage;
