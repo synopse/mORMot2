@@ -4705,25 +4705,35 @@ function THttpProxyCache.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   one: THttpProxySource;
   uri: TUriMatchName;
-  cache: (cNone, cMem, cDisk);
+  forced, ignored: (cNone, cMem, cDisk);
 begin
   result := HTTP_NOTFOUND;
+  // retrieve O(1) execution context
   one := Ctxt.RouteOpaque;
   if one = nil then
     exit;
-  // retrieve path and file name from URI
+  // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
   uri.ParsePath; // compute uri.Name
   // ensure was not marked as rejected
-  if one.fReject.Check(one.fRejectCsv, uri, {caseinsensitive=}false) then
+  if (one.RejectCsv <> '') and
+     one.fReject.Check(one.RejectCsv, uri, {caseinsensitive=}false) then
     exit;
-  // check if should be cached
-  if one.MemCache.fForce.Check(one.MemCache.ForceCsv, uri, false) then
-    cache := cMem
-  else if one.DiskCache.fForce.Check(one.DiskCache.ForceCsv, uri, false) then
-    cache := cDisk
-  else
-    cache := cNone;
+  // check if should (not) be cached
+  forced := cNone;
+  ignored := cNone;
+  if (one.MemCache.ForceCsv <> '') and
+     one.MemCache.fForce.Check(one.MemCache.ForceCsv, uri, false) then
+    forced := cMem
+  else if (one.DiskCache.ForceCsv <> '') and
+          one.DiskCache.fForce.Check(one.DiskCache.ForceCsv, uri, false) then
+    forced := cDisk
+  else if (one.MemCache.IgnoreCsv <> '') and
+     one.MemCache.fIgnore.Check(one.MemCache.IgnoreCsv, uri, false) then
+    ignored := cMem
+  else if (one.DiskCache.IgnoreCsv <> '') and
+          one.DiskCache.fIgnore.Check(one.DiskCache.IgnoreCsv, uri, false) then
+    ignored := cDisk;
 
 end;
 
