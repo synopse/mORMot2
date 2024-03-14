@@ -881,30 +881,44 @@ begin // return the search record timestamp with no local time conversion
   result := FileTimeToUnixTime(F.FindData.ftLastWriteTime);
 end;
 
-function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
- out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
+function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 var
-  lastreadaccess: TUnixMSTime;
+  mtime, atime, ctime: Int64;
   lp: TByHandleFileInformation;
 begin
   result := GetFileInformationByHandle(aFileHandle, lp);
   if not result then
     exit;
-  LastWriteAccess    := FileTimeToUnixMSTime(lp.ftLastWriteTime);
-  FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
-  lastreadaccess     := FileTimeToUnixMSTime(lp.ftLastAccessTime);
-  PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
-  PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
-  PInt64Rec(@FileId).lo   := lp.nFileIndexLow;
-  PInt64Rec(@FileId).hi   := lp.nFileIndexHigh;
-  if LastWriteAccess <> 0 then
-    if (FileCreateDateTime = 0) or
-       (FileCreateDateTime > LastWriteAccess) then
-      FileCreateDateTime := LastWriteAccess;
-  if lastreadaccess <> 0 then
-    if (FileCreateDateTime = 0) or
-       (FileCreateDateTime > lastreadaccess) then
-      FileCreateDateTime := lastreadaccess;
+  if FileId <> nil then
+  begin
+    PInt64Rec(FileId)^.lo := lp.nFileIndexLow;
+    PInt64Rec(FileId)^.hi := lp.nFileIndexHigh;
+  end;
+  if FileSize <> nil then
+  begin
+    PInt64Rec(FileSize)^.lo := lp.nFileSizeLow;
+    PInt64Rec(FileSize)^.hi := lp.nFileSizeHigh;
+  end;
+  if (LastWriteAccess = nil) and
+     (FileCreateDateTime = nil) then
+    exit;
+  mtime := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+  if LastWriteAccess <> nil then
+    LastWriteAccess^ := mtime;
+  if FileCreateDateTime = nil then
+    exit;
+  atime := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+  ctime := FileTimeToUnixMSTime(lp.ftCreationTime);
+  if mtime <> 0 then
+    if (ctime = 0) or
+       (ctime > mtime) then
+      ctime := mtime;
+  if atime <> 0 then
+    if (ctime = 0) or
+       (ctime > atime) then
+      ctime := atime;
+  FileCreateDateTime^ := ctime;
 end;
 
 function FileIsExecutable(const FileName: TFileName): boolean;

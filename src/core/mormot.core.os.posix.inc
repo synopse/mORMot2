@@ -1330,10 +1330,10 @@ begin
   result := FPLSeek(Handle, Offset, Origin);
 end;
 
-function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
-  out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
+function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 var
-  lastreadaccess: Int64;
+  mtime, atime, ctime: Int64;
   lp: TStat;
   r: integer;
 begin
@@ -1341,9 +1341,18 @@ begin
   result := r >= 0;
   if not result then
     exit;
-  FileId := lp.st_ino;
-  FileSize := lp.st_size;
-  StatTimeMS(lp, LastWriteAccess);
+  if FileId <> nil then
+    FileId^ := lp.st_ino;
+  if FileSize <> nil then
+    FileSize^ := lp.st_size;
+  if (LastWriteAccess = nil) and
+     (FileCreateDateTime = nil) then
+    exit;
+  StatTimeMS(lp, mtime);
+  if LastWriteAccess <> nil then
+    LastWriteAccess^ := mtime;
+  if FileCreateDateTime = nil then
+    exit;
   // some FS don't populate all fields, so we use what we actually got
   {$ifdef OSOPENBSD}
   if (lp.st_birthtime <> 0) and
@@ -1351,16 +1360,17 @@ begin
     lp.st_ctime := lp.st_birthtime;
   {$endif OSOPENBSD}
   // ignore nanoseconds/Milliseconds for FileCreateDateTime
-  FileCreateDateTime := Int64(lp.st_ctime) * MilliSecsPerSec;
-  if LastWriteAccess <> 0 then
-    if (FileCreateDateTime = 0) or
-       (FileCreateDateTime > LastWriteAccess) then
-      FileCreateDateTime := LastWriteAccess;
-  lastreadaccess := Int64(lp.st_atime) * MilliSecsPerSec;
-  if lastreadaccess <> 0 then
-    if (FileCreateDateTime = 0) or
-       (FileCreateDateTime > lastreadaccess) then
-      FileCreateDateTime := lastreadaccess;
+  ctime := Int64(lp.st_ctime) * MilliSecsPerSec;
+  atime := Int64(lp.st_atime) * MilliSecsPerSec;
+  if mtime <> 0 then
+    if (ctime = 0) or
+       (ctime > mtime) then
+      ctime := mtime;
+  if atime <> 0 then
+    if (ctime = 0) or
+       (ctime > atime) then
+      ctime := atime;
+  FileCreateDateTime^ := ctime;
 end;
 
 function FileIsExecutable(const FileName: TFileName): boolean;

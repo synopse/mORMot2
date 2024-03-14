@@ -3305,12 +3305,13 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 
 /// get low-level file information, in a cross-platform way
 // - returns true on success
+// - you can specify nil for any returned value if you don't need
 // - here file write/creation time are given as TUnixMSTime values, for better
 // cross-platform process - note that FileCreateDateTime may not be supported
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
-function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize: Int64;
-  out LastWriteAccess, FileCreateDateTime: TUnixMSTime): boolean;
+function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 
 /// check if a given file is likely to be an executable
 // - will check the DOS/WinPE executable header in its first bytes on Windows
