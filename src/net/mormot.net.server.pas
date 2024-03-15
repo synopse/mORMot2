@@ -2966,20 +2966,18 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
       if fRespStatus = HTTP_SUCCESS then
         OutContent := Context.Content;
     end;
+    if fRespStatus <> HTTP_SUCCESS then
+      fErrorMessage := 'Error getting file'; // required by ProcessErrorMessage
   end;
 
   procedure ProcessErrorMessage;
   begin
-    if fErrorMessage = '' then
-      StatusCodeToReason(fRespStatus, fOutCustomHeaders)
-    else
-      fOutCustomHeaders := HtmlEscapeString(fErrorMessage);
     FormatUtf8(
       '<!DOCTYPE html><html><body style="font-family:verdana">' +
       '<h1>% Server Error %</h1><hr>' +
       '<p>HTTP %</p><p>%</p><small>%</small></body></html>',
       [fServer.ServerName, fRespStatus, StatusCodeToShort(fRespStatus),
-       fOutCustomHeaders, XPOWEREDVALUE],
+       HtmlEscapeString(fErrorMessage), XPOWEREDVALUE],
       RawUtf8(fOutContent));
     fOutCustomHeaders := '';
     fOutContentType := 'text/html; charset=utf-8'; // create message to display
