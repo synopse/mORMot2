@@ -2396,12 +2396,13 @@ var
   fn: TFileName;
   volume: SynUnicode;
   av, fr, tot: QWord;
+  p: ^TDiskPartition;
 begin
   result := nil;
   n := 0;
   fn := '#:';
   drives := GetLogicalDrives;
-  m := 1 shl 2;
+  m := 1 shl 2; // bit 2 = drive C
   for drive := 3 to 26 do
   begin
     // retrieve partitions mounted as C..Z drives
@@ -2411,10 +2412,11 @@ begin
       if GetDiskInfo(fn, av, fr, tot, @volume) then
       begin
         SetLength(result, n + 1);
-        Win32PWideCharToUtf8(pointer(volume), length(volume), result[n].name);
+        p := @result[n];
+        Win32PWideCharToUtf8(pointer(volume), length(volume), p^.name);
+        p^.mounted := fn;
+        p^.size := tot;
         volume := '';
-        result[n].mounted := fn;
-        result[n].size := tot;
         inc(n);
       end;
     end;
