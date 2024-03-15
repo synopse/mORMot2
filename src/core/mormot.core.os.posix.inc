@@ -3912,6 +3912,9 @@ var
   P: PAnsiChar;
   modname, beg: PUtf8Char;
   uts: UtsName;
+  {$ifndef NODIRECTTHREADMANAGER}
+  tm: TThreadManager;
+  {$endif NODIRECTTHREADMANAGER}
   {$ifndef OSDARWIN}
   {$ifdef CPUARM3264}
   act, aci: TIntegerDynArray;
@@ -3930,11 +3933,17 @@ var
   prodver, dist: RawUtf8;
   SR: TSearchRec;
   si: TSysInfo;  // Linuxism
+
+  function GetSysFile(const fn: TFileName): RawUtf8;
+  begin
+    result := TrimU(StringFromFile(fn, true));
+    write(fn,' = ',result);
+    if result = 'Default string' then // e.g. on ProxMox containers or VMs
+      result := '';
+    writeln(' = ',result);
+  end;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
-  {$ifndef NODIRECTTHREADMANAGER}
-  tm: TThreadManager;
-  {$endif NODIRECTTHREADMANAGER}
 begin
   // retrieve Kernel and Hardware information
   StdOutIsTTY := not IsDebuggerPresent and
@@ -3983,17 +3992,17 @@ begin
   GetSystemMacAddress := _GetSystemMacAddress;
   if Sysinfo(@si) = 0 then
     SystemMemorySize := si.totalram * si.mem_unit;
-  prod := TrimU(TrimU(StringFromFile('/sys/class/dmi/id/sys_vendor', true)) +
-    ' ' + StringFromFile('/sys/class/dmi/id/product_name', true));
+  prod := TrimU(GetSysFile('/sys/class/dmi/id/sys_vendor') + ' ' +
+                GetSysFile('/sys/class/dmi/id/product_name'));
   if prod <> '' then
   begin // e.g. 'QEMU KVM Virtual Machine' or 'LENOVO 20HES23B0U'
-    prodver := TrimU(StringFromFile('/sys/class/dmi/id/product_version', true));
+    prodver := GetSysFile('/sys/class/dmi/id/product_version');
     if prodver <> '' then
       prod := prod + ' ' + prodver;
   end
   else
     // return e.g. 'Raspberry Pi 3 Model B Rev 1.2'
-    prod := TrimU(StringFromFile('/proc/device-tree/model', true));
+    prod := GetSysFile('/proc/device-tree/model');
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and
      (release[1] = '"') then
@@ -4014,7 +4023,7 @@ begin
        (FindNext(SR) = 0) then
       release := SR.Name;
     release := split(release, '-');
-    dist := split(TrimU(StringFromFile('/etc/' + SR.Name)), #10);
+    dist := split(StringFromFile('/etc/' + SR.Name), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
@@ -4115,7 +4124,8 @@ begin
       BiosInfoText := prod
     else
       BiosInfoText := BiosInfoText + ' (' + prod + ')';
-  end;
+  end else if BiosInfoText = '' then
+    BiosInfoText := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
   if cache <> nil then
   begin
     CpuCacheText := TrimU(cache);
