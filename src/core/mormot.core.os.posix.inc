@@ -3937,10 +3937,8 @@ var
   function GetSysFile(const fn: TFileName): RawUtf8;
   begin
     result := TrimU(StringFromFile(fn, true));
-    write(fn,' = ',result);
     if result = 'Default string' then // e.g. on ProxMox containers or VMs
       result := '';
-    writeln(' = ',result);
   end;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
