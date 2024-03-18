@@ -2938,6 +2938,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   begin
     ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
     Utf8ToFileName(OutContent, fn);
+    OutContent := '';
     ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);
     SetInt64(pointer(progsizeHeader), Context.ContentLength);
     if Context.ContentLength <> 0 then
@@ -2964,10 +2965,10 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
       // regular file sending by chunks
       fRespStatus := Context.ContentFromFile(fn, CompressGz);
       if fRespStatus = HTTP_SUCCESS then
-        OutContent := Context.Content;
+        OutContent := Context.Content; // small static file content
     end;
-    if fRespStatus <> HTTP_SUCCESS then
-      fErrorMessage := 'Error getting file'; // required by ProcessErrorMessage
+    if not StatusCodeIsSuccess(fRespStatus) then
+      fErrorMessage := 'Error getting file'; // detected by ProcessErrorMessage
   end;
 
   procedure ProcessErrorMessage;
@@ -2986,6 +2987,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
 var
   P, PEnd: PUtf8Char;
   len: PtrInt;
+  status: PtrUInt;
   h: PRawByteStringBuffer;
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
 begin
@@ -3010,9 +3012,10 @@ begin
   else
   begin // other cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    if cardinal(fRespStatus) > 999 then
-      fRespStatus := 999; // avoid SmallUInt32Utf8[] overflow
-    h^.Append(SmallUInt32Utf8[fRespStatus]);
+    status := fRespStatus;
+    if status > 999 then
+      status := 999; // avoid SmallUInt32Utf8[] overflow
+    h^.Append(SmallUInt32Utf8[status]);
     h^.Append(' ');
     h^.Append(StatusCodeToText(fRespStatus)^);
     h^.AppendCRLF;
