@@ -1897,11 +1897,8 @@ begin
     TextColorAppend(ccLightGray, s);
   // display whole line in a single syscall
   ConsoleCriticalSection.Lock;
-  try
-    fpwrite(StdOutputHandle, pointer(s), length(s)); // UTF-8 console
-  finally
-    ConsoleCriticalSection.UnLock;
-  end;
+  FileWriteAll(StdOutputHandle, pointer(s), length(s)); // UTF-8 console
+  ConsoleCriticalSection.UnLock;
 end;
 
 function UnixKeyPending: boolean;
