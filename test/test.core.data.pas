@@ -5994,6 +5994,22 @@ begin
   csv := RawUtf8ArrayToCsv(AValue);
 end;
 
+{$ifdef HASEXTRECORDRTTI} // Delphi 2010+ enhanced RTTI
+type
+  TCat = packed record
+    Name: RawUtf8
+  end;
+  TCatDynArray = array of TCat;
+  TPeople = packed record
+    Cat: TCat;
+    CatNested: packed record
+      Name: RawUtf8;
+    end;
+    Cats: TCatDynArray;
+    CatsNested: array of TCat;
+  end;
+{$endif HASEXTRECORDRTTI}
+
 procedure TTestCoreProcess._RTTI;
 var
   i: Integer;
@@ -6007,7 +6023,19 @@ var
   ep: TSetMyEnumPart;
   cc: TComplexClass;
   v: variant;
+  {$ifdef HASEXTRECORDRTTI}
+  r: TRttiCustom;
+  {$endif HASEXTRECORDRTTI}
 begin
+  {$ifdef HASEXTRECORDRTTI}
+  r := Rtti.RegisterType(TypeInfo(TPeople));
+  check(r <> nil);
+  checkEqual(r.Props.Count, 4);
+  checkEqual(r.Props.List[0].Name, 'Cat');
+  checkEqual(r.Props.List[1].Name, 'CatNested');
+  checkEqual(r.Props.List[2].Name, 'Cats');
+  checkEqual(r.Props.List[3].Name, 'CatsNested');
+  {$endif HASEXTRECORDRTTI}
   // CSV to set
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), ''), 0, 'TSetMyEnum0');
   checkEqual(GetSetCsvValue(TypeInfo(TSetMyEnum), 'none'), 0, 'TSetMyEnum?');
