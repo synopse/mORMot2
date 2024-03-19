@@ -592,6 +592,7 @@ type
     fSOA: variant;
     fSourcePath: TFileNameDynArray;
     fHasAnyRecord: boolean;
+    fNestedId: Integer;
     function ContextFromRtti(typ: TWrapperType; rtti: TRttiCustom = nil;
       typName: RawUtf8 = ''; const parentName: RawUtf8 = ''): variant;
     function ContextNestedProperties(rtti: TRttiCustom;
@@ -798,7 +799,12 @@ begin
   // set typName/typAsName
   if typName = '' then
     if rtti <> nil then
-      typName := rtti.Name
+    begin
+      if rcfWithoutRtti in rtti.Flags then
+        typName := 'T'+parentName+IntToStr(InterlockedIncrement(fNestedId))
+      else
+        typName := rtti.Name;
+    end
     else
       typName := TYPES_LANG[lngDelphi, typ];
   typAsName := GetEnumName(TypeInfo(TWrapperType), ord(typ));
