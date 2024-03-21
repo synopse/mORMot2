@@ -260,6 +260,8 @@ type
     // - you should never have to call this constructor, but define a global
     // variable holding a reference to a shared instance
     constructor Create; virtual;
+    /// finalize this algorithm
+    destructor Destroy; override;
     /// get maximum possible (worse) compressed size for the supplied length
     // - including the crc32c + algo 9 bytes header
     function CompressDestLen(PlainLen: integer): integer;
@@ -5151,6 +5153,13 @@ begin
       [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
   RegisterGlobalShutdownRelease(self);
+end;
+
+destructor TAlgoCompress.Destroy;
+begin
+  if LogCompressAlgo = self then
+    LogCompressAlgo := nil; // avoid GPF at shutdown
+  inherited Destroy;
 end;
 
 class function TAlgoCompress.Algo(const Comp: RawByteString): TAlgoCompress;
