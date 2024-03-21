@@ -1340,6 +1340,9 @@ type
     /// mark and describe an "arg" value by 0-based index in Args[]
     function Arg(index: integer;
       const description: RawUtf8 = ''): boolean; overload;
+    /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
+    function ArgString(index: integer;
+      const description: RawUtf8 = ''): string;
     /// mark and describe an "arg" value in Args[]
     function Arg(const name: RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
@@ -8483,6 +8486,14 @@ begin
   if result then
     fRetrieved[clkArg][index] := true;
   Describe([], clkArg, description, '', index + 1);
+end;
+
+function TExecutableCommandLine.ArgString(index: integer;
+  const description: RawUtf8): string;
+begin
+  result := '';
+  if Arg(index, description) then
+    result := string(Args[0]);
 end;
 
 function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
