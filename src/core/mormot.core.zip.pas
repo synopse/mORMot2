@@ -373,6 +373,7 @@ type
 
   //// last header structure, as used in .zip file format
   // - those 22 bytes end the file and are used to find the TFileHeader entries
+  // - in practice, this is the minimal size of a valid but void .zip file
   TLastHeader = record
     /// $06054b50 PK#5#6 = LASTHEADER_SIGNATURE_INC -
     signature: cardinal;
@@ -2475,7 +2476,7 @@ begin
       exit;
     end;
     dec(Size);
-    if Size <= SizeOf(TLastHeader) then
+    if Size < SizeOf(TLastHeader) then
       break;
   end;
   result := nil;
@@ -2527,6 +2528,8 @@ begin
     lastheader.totalFiles := lh32^.totalFiles;
     lastheader.headerOffset := lh32^.headerOffset;
   end;
+  if lastheader.totalFiles = 0 then
+    exit; // a void .zip file has no central directory nor any file header
   fCentralDirectoryOffset := lastheader.headerOffset;
   if (fCentralDirectoryOffset <= Offset) or
      (fCentralDirectoryOffset +
@@ -2711,7 +2714,7 @@ begin
     Size := FileSize(aFile);
   if Size < WorkingMem then
     WorkingMem := Size; // up to 1MB by default
-  if WorkingMem < 32 then
+  if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
     raise ESynZip.CreateUtf8('%.Create: No ZIP header found %', [self, fFileName]);
   FastNewRawByteString(fSourceBuffer, WorkingMem);
   P := pointer(fSourceBuffer);
@@ -2721,6 +2724,12 @@ begin
   if ZipStartOffset = 0 then
   begin
     fSource.Seek(0, soBeginning);
+    if WorkingMem = SizeOf(TLastHeader) then
+    begin
+      fSource.Read(P^, WorkingMem);
+      Create(P, WorkingMem); // void .zip
+      exit;
+    end;
     if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
        IsZipStart(@local) then
     begin
