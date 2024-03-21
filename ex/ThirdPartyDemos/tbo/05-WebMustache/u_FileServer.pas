@@ -537,23 +537,12 @@ begin
   FHttpServer := THttpServer.Create(pmcPort, Nil, Nil, '', {ServerThreadPoolCount=} 2, keepAliveMs, serverOptions);
   if (pmMode = hsmHttp10) or (pmMode = hsmHttp11) then
     FHttpServer.WaitStarted(WAIT_SECONDS)
+  else if pmMode = hsmHttpsSelf then
+    FHttpServer.WaitStartedHttps(WAIT_SECONDS)
   else
   begin
-    if pmMode = hsmHttpsSelf then
-    begin
-      InitNetTlsContextSelfSignedServer(tls);
-      try
-        FHttpServer.WaitStarted(WAIT_SECONDS, @tls);
-      finally
-        DeleteFile(Utf8ToString(tls.CertificateFile));
-        DeleteFile(Utf8ToString(tls.PrivateKeyFile));
-      end;
-    end
-    else
-    begin
-      InitNetTlsContext(tls, True, pmcCertFileName, pmcPrivKeyFileName, pmcPrivKeyPassword);
-      FHttpServer.WaitStarted(WAIT_SECONDS, @tls);
-    end;
+    InitNetTlsContext(tls, True, pmcCertFileName, pmcPrivKeyFileName, pmcPrivKeyPassword);
+    FHttpServer.WaitStarted(WAIT_SECONDS, @tls);
   end;
 
   Result := FHttpServer.Started;
