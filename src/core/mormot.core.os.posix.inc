@@ -1147,7 +1147,7 @@ begin
 end;
 
 const
-  faInvalidFile = faDirectory;
+  faInvalidFile   = faDirectory;
   faDirectoryMask = faDirectory;
 
 function FileDateToDateTime(const FileDate: TFileAge): TDateTime;

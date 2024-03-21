@@ -644,7 +644,7 @@ type
     fDestroying: boolean;
     fRotateFileCurrent: cardinal;
     fRotateFileCount: cardinal;
-    fRotateFileSize: cardinal;
+    fRotateFileSizeKB: cardinal;
     fRotateFileDailyAtHour: integer;
     function CreateSynLog: TSynLog;
     procedure EnsureAutoFlushRunning;
@@ -665,9 +665,7 @@ type
     /// intialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
     constructor Create(aSynLog: TSynLogClass);
-    /// release associated memory
-    // - will also find and archive DestinationPath\*.log files older than
-    // ArchiveAfterDays into ArchivePath
+    /// close any console echo, and release associated memory
     destructor Destroy; override;
 
     /// retrieve the corresponding log file of this thread and family
@@ -697,6 +695,14 @@ type
     // - is called e.g. by TRest.EndCurrentThread
     // - just a wrapper around TSynLog.NotifyThreadEnded
     procedure OnThreadEnded(Sender: TThread);
+    /// clean up *.log file by running OnArchive() on deprecated files
+    // - will find and archive DestinationPath\*.log (or sourcePath\*.log)
+    // files older than ArchiveAfterDays (or archiveDays), into the ArchivePath
+    // (or destPath) folder
+    // - was previously done in Destroy, but it makes better sense to run it
+    // only when needed (least astonishment principle), and with customization
+    procedure ArchiveOldFiles(sourcePath: TFileName = '';
+      destPath: TFileName = ''; archiveDays: integer = -1);
 
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list, as such:
@@ -912,7 +918,7 @@ type
     // - specify the maximum file size upon which .synlz rotation takes place
     // - is not used if RotateFileCount is left to its default 0
     property RotateFileSizeKB: cardinal
-      read fRotateFileSize write fRotateFileSize;
+      read fRotateFileSizeKB write fRotateFileSizeKB;
     /// fixed hour of the day where logging files rotation should be performed
     // - by default, equals -1, meaning no rotation
     // - you can set a time value between 0 and 23 to force the rotation at this
@@ -3969,7 +3975,7 @@ begin
     ObjArrayAdd(SynLogFile, result);
     if fPerThreadLog = ptOneFilePerThread then
       if (fRotateFileCount = 0) and
-         (fRotateFileSize = 0) and
+         (fRotateFileSizeKB = 0) and
          (fRotateFileDailyAtHour < 0) and
          (fIdent <= MAX_SYNLOGFAMILY) then
         SynLogLookupThreadVar[fIdent] := result
@@ -4035,44 +4041,59 @@ begin
 end;
 
 destructor TSynLogFamily.Destroy;
-var
-  SR: TSearchRec;
-  oldTime, aTime: TDateTime;
-  aOldLogFileName, aPath: TFileName;
 begin
   fDestroying := true;
   EchoRemoteStop;
   ExceptionIgnore.Free;
+  inherited Destroy;
+end;
+
+procedure TSynLogFamily.ArchiveOldFiles(
+  sourcePath, destPath: TFileName; archiveDays: integer);
+var
+  sr: TSearchRec;
+  srName: TFileName;
+  srTime, triggerTime: TDateTime;
+begin
+  if not Assigned(OnArchive) then
+    exit;
+  if sourcePath = '' then
+    sourcePath := fDestinationPath;
+  // search for logs older than ArchiveAfterDays to trigger OnArchive()
+  if FindFirst(sourcePath + '*' + fDefaultExtension,
+       faAnyFile - faDirectory, sr) = 0 then
   try
-    if Assigned(OnArchive) then
-      // search for logs older than ArchiveAfterDays to trigger OnArchive()
-      if FindFirst(fDestinationPath + '*' + fDefaultExtension, faAnyFile, SR) = 0 then
-      try
-        if ArchiveAfterDays < 0 then
-          ArchiveAfterDays := 0;
-        oldTime := NowUtc - ArchiveAfterDays;
-        repeat
-          if (SR.Name[1] = '.') or
-             (faDirectory and SR.Attr <> 0) then
-            continue;
-          aTime := SearchRecToDateTimeUtc(SR);
-          if (aTime = 0) or
-             (aTime > oldTime) then
-            continue;
-          aOldLogFileName := fDestinationPath + SR.Name;
-          if {%H-}aPath = '' then
-            aPath := GetArchiveDestPath(aTime);
-          if aPath = '' then
-            break; // impossible to create the archive folder
-          OnArchive(aOldLogFileName, aPath); // archive and delete
-        until FindNext(SR) <> 0;
-      finally
-        FindClose(SR);
-        if aPath <> '' then     // if OnArchive() was called
-          OnArchive('', aPath); // always eventually close .zip
+    triggerTime := 0;
+    if archiveDays < 0 then
+      archiveDays := ArchiveAfterDays;
+    if archiveDays > 0 then
+      triggerTime := NowUtc - archiveDays;
+    repeat
+      if not SearchRecValidFile(sr) then
+        continue;
+      srTime := SearchRecToDateTimeUtc(sr);
+      if (srTime = 0) or
+         (srTime > triggerTime) then
+        continue;
+      if srName = '' then
+        if destPath = '' then
+          destPath := GetArchiveDestPath(srTime)
+        else
+          destPath := EnsureDirectoryExists(destPath);
+      srName := sourcePath + sr.Name;
+      if sr.Size = 0 then
+      begin
+        DeleteFile(srName); // nothing to archive
+        continue;
       end;
+      if destPath = '' then
+        break; // impossible to create the archive folder
+      OnArchive(srName, destPath); // archive and delete
+    until FindNext(sr) <> 0;
   finally
-    inherited Destroy;
+    FindClose(sr);
+    if srName <> '' then     // if OnArchive() was called
+      OnArchive('', destPath); // always eventually close .zip
   end;
 end;
 
@@ -4086,7 +4107,7 @@ begin
       exit;
     if (fPerThreadLog = ptOneFilePerThread) and
        (fRotateFileCount = 0) and
-       (fRotateFileSize = 0) and
+       (fRotateFileSizeKB = 0) and
        (fRotateFileDailyAtHour < 0) and
        (fIdent <= MAX_SYNLOGFAMILY) then
     begin
@@ -5645,8 +5666,8 @@ begin
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount > 0 then
   begin
-    if fFamily.fRotateFileSize > 0 then
-      fFileRotationSize := fFamily.fRotateFileSize shl 10; // size KB -> B
+    if fFamily.fRotateFileSizeKB > 0 then
+      fFileRotationSize := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
     if fFamily.fRotateFileDailyAtHour in [0..23] then
     begin
       hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
