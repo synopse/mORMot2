@@ -7125,6 +7125,9 @@ begin
       Check(false, E.Message);
   end;
   Check(DeleteFile(FN));
+  TZipWrite.Create(FN).Free;
+  CheckEqual(FileSize(FN), SizeOf(MINIM_ZIP), 'TZipWrite void .zip');
+  Check(DeleteFile(FN));
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
