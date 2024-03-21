@@ -462,7 +462,8 @@ type
     // - TSystemPath values are available as %CommonData%, %UserData%,
     // %CommonDocuments%, %UserDocuments%, %TempFolder% and %Log%
     // - %agl.base% is the location of the agl executable
-    // - %agl.now% is the current date and time, in a filename compatible format
+    // - %agl.now% is the current local date and time, in a filename compatible format
+    // - %agl.utc% is the current UTC date and time, in a filename compatible format
     // - %agl.params% are the additional parameters supplied to the command line
     // - %agl.propname% is the "propname": property value in the main
     // TSynAngelizeSettings, e.g. %agl.folder% for location of the *.service files,
@@ -1280,12 +1281,15 @@ begin
         delete(v, 1, 4);
         case FindPropName(['base',
                            'now',
+                           'utc',
                            'params'], v) of
           0: // %agl.base% is the location of the agl executable
             StringToUtf8(Executable.ProgramFilePath, v);
-          1: // %agl.now% is the current date/time
+          1: // %agl.now% is the current local date/time
             v := DateTimeToFileShort(Now);
-          2: // %agl.params% are the additional parameters supplied to command line
+          2: // %agl.utc% is the current UTC date/time
+            v := DateTimeToFileShort(NowUtc);
+          3: // %agl.params% are the additional parameters supplied to command line
             StringToUtf8(fAdditionalParams, v);
         else
           // e.g %agl.folder% or %agl.logpath%
