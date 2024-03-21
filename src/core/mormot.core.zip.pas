@@ -775,7 +775,8 @@ var
 // into .zip archive files
 // - resulting file will be named YYYYMM.zip and will be located in the
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
-function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+function EventArchiveZip(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
 /// check the content of a .zip file, decompressing and checking all crc
 // - just a wrapper around TZipRead.TestAll
@@ -3238,11 +3239,13 @@ var
   EventArchiveZipSafe: TLightLock; // paranoid but better safe than sorry
   EventArchiveZipWrite: TZipWrite = nil;
 
-function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+function EventArchiveZip(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var
   n: integer;
   z, s: TStream;
-  age: TDateTime;
+  fsize: Int64;
+  ftime: TUnixMSTime;
   zipname, decname: TFileName;
 begin
   result := false;
@@ -3251,20 +3254,22 @@ begin
     if aOldLogFileName = '' then
       // last call with '' to eventually close the current .zip
       FreeAndNilSafe(EventArchiveZipWrite)
+    else if not FileInfoByName(aOldLogFileName, fsize, ftime) then
+      // this file does not exist
+      exit
+    else if fsize = 0 then
+      // just delete a void aOldLogFileName (not from TSynLog, but anyway)
+      result := DeleteFile(aOldLogFileName)
     else
     begin
-      // add aOldLogFileName into the .zip
-      age := FileAgeToDateTime(aOldLogFileName);
-      if age = 0 then
-        exit; // paranoid
       // ensure the .zip archive is opened
       if EventArchiveZipWrite = nil then
         EventArchiveZipWrite := TZipWrite.CreateFrom(
           copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
       // compute readable, but unique timestamped filename in the .zip
-      n := EventArchiveZipWrite.Count;
+      n := EventArchiveZipWrite.Count; // unique by design
       zipname := FormatString('%-%.log',
-        [DateTimeToFileShort(age), ToHexShort(@n, SizeOf(n))]);
+        [UnixMSTimeToFileShort(ftime), ToHexShort(@n, SizeOf(n))]);
       // add the file content to the .zip
       if (LogCompressAlgo = nil) or
          not LogCompressAlgo.FileIsCompressed(aOldLogFileName, LOG_MAGIC) then
@@ -3291,7 +3296,8 @@ begin
         s := FileStreamSequentialRead(aOldLogFileName);
         try
           z := EventArchiveZipWrite.AddDeflatedStream(zipname,
-             DateTimeToWindowsFileTime(age), EventArchiveZipCompressLevel);
+             DateTimeToWindowsFileTime(UnixMSTimeToDateTime(ftime)),
+             EventArchiveZipCompressLevel);
           try
             // re-compression is done for each TAlgoCompress chunk
             LogCompressAlgo.StreamUnCompress(s, z, LOG_MAGIC, {hash32=}true);

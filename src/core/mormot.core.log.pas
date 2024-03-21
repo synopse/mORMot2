@@ -6446,22 +6446,31 @@ end;
 function _LogCompressAlgoArchive(aAlgo: TAlgoCompress; aMagic: cardinal;
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 var
-  dest: TFileName;
-  age: TDateTime;
+  folder, dest, ext: TFileName;
+  fsize: Int64;
+  ftime: TUnixMSTime;
   i: integer;
 begin
   result := false;
-  age := FileAgeToUnixTimeUtc(aOldLogFileName);
-  if age <> 0 then
+  if (aOldLogFileName = '') or // last call is always with ''
+     not FileInfoByName(aOldLogFileName, fsize, ftime) then
+    // old log file does not exist
+    exit
+  else if fsize = 0 then
+    // just delete a void .log file (not from TSynLog, but supported anyway)
+    result := DeleteFile(aOldLogFileName)
+  else
   try
     // dest = 'ArchivePath\log\YYYYMM\yyyymmddhhmmss.log.synlz/synliz'
+    folder := EnsureDirectoryExists(aDestinationPath);
+    if aAlgo <> nil then
+      ext := aAlgo.AlgoFileExt;
     i := 100;
     repeat
-      dest := FormatString('%%.log%', [EnsureDirectoryExists(aDestinationPath),
-        DateTimeToFileShort(age), aAlgo.AlgoFileExt]);
+      dest := FormatString('%%.log%', [folder, UnixMSTimeToFileShort(ftime), ext]);
       if not FileExists(dest) then
         break;
-      age := age + 1 / SecsPerDay; // ensure unique
+      inc(ftime, MSecsPerSec); // ensure unique
       dec(i);
       if i = 0 then // paranoid
         raise ESynLogException.Create('LogCompressAlgoArchive infinite loop');
