@@ -1229,9 +1229,11 @@ begin
             'nestedRecordArray', null,
             'fields', ContextNestedProperties(prop.Value, fullName)])], result);
     else
-      if TDocVariantData(result).GetValueIndex('toVariant') < 0 then
+      if not TDocVariantData(result).Exists('toVariant') then
         isSimple := true;
-    end;
+    end
+  else if not TDocVariantData(result).Exists('toVariant') then
+    isSimple := true;
   _ObjAddProp('isSimple', isSimple, result);
 end;
 
