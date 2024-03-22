@@ -492,7 +492,14 @@ const
     wVariant,        // oftVariant
     wVariant,        // oftNullable
     wBlob,           // oftBlob
-    wBlob,           // oftBlobDynArray
+//    wBlob,           // oftBlobDynArray
+// In ContextFromRtti
+//    typ := TYPES_ORM[GetOrmFieldType(rtti.Info)];
+//    if typ = wUnknown then
+//    begin
+//      typ := TYPES_SIMPLE[rtti.Parser];
+// Check this maybe there is better solution. TYPES_ORM[] return wBlob, we need wArray
+    wArray,           // oftBlobDynArray
     wRecord,         // oftBlobCustom
     wRecord,         // oftUtf8Custom
     wUnknown,        // oftMany
@@ -542,7 +549,9 @@ const
     wEnum,     //  ptEnumeration
     wSet,      //  ptSet
     wUnknown,  //  ptClass
-    wUnknown,  //  ptDynArray
+//    wUnknown,  //  ptDynArray
+// ptDynArray is new in mormot2 I use same writer wArray
+    wArray,    //  ptDynArray
     wUnknown,  //  ptInterface
     wRawUtf8,  //  ptPUtf8Char
     wUnknown); //  ptCustom
@@ -583,6 +592,7 @@ type
     fSOA: variant;
     fSourcePath: TFileNameDynArray;
     fHasAnyRecord: boolean;
+    fNestedId: Integer;
     function ContextFromRtti(typ: TWrapperType; rtti: TRttiCustom = nil;
       typName: RawUtf8 = ''; const parentName: RawUtf8 = ''): variant;
     function ContextNestedProperties(rtti: TRttiCustom;
@@ -649,12 +659,21 @@ var
   i: PtrInt;
 begin
   SetVariantNull(result);
-  if rtti.Parser in [ptRecord, ptArray, ptClass] then
+  if rtti.Parser in [ptRecord, ptClass] then
   begin
     TDocVariant.NewFast(result);
     for i := 0 to rtti.Props.Count - 1 do
       TDocVariantData(result).AddItem(
         ContextOneProperty(rtti.Props.List[i], parentName));
+  end
+// Move ptArray and add ptDynArray to use ArrayRtti
+  else
+  if rtti.Parser in [ptArray, ptDynArray] then
+  begin
+    TDocVariant.NewFast(result);
+    for i := 0 to rtti.ArrayRtti.Props.Count - 1 do
+      TDocVariantData(result).AddItem(
+        ContextOneProperty(rtti.ArrayRtti.Props.List[i], parentName));
   end;
 end;
 
@@ -733,6 +752,12 @@ var
             else
               info := ContextFromRtti(wUnknown, rtti.ArrayRtti);
           end;
+          // Check this. Is ItemCount>0 right code to distinct static and dynamic arrays
+          // Can be used to create static array
+          //  array{{#staticMaxIndex}}[0..{{staticMaxIndex}}]{{/staticMaxIndex}} of ..
+          // dynamic arrays have ItemCount=0
+          if rtti.Cache.ItemCount>0 then
+            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount-1);
           _Safe(info)^.AddValue('name', typName);
         end;
     end;
@@ -774,7 +799,12 @@ begin
   // set typName/typAsName
   if typName = '' then
     if rtti <> nil then
-      typName := rtti.Name
+    begin
+      if rcfWithoutRtti in rtti.Flags then
+        typName := 'T'+parentName+IntToStr(InterlockedIncrement(fNestedId))
+      else
+        typName := rtti.Name;
+    end
     else
       typName := TYPES_LANG[lngDelphi, typ];
   typAsName := GetEnumName(TypeInfo(TWrapperType), ord(typ));
@@ -1198,25 +1228,56 @@ begin
     'fullPropName', fullName], result);
   if level > 0 then
     _ObjAddPropU('nestedIdentation', RawUtf8OfChar(' ', level * 2), result);
-  case prop.Value.Parser of
-    ptRecord:
-      _ObjAddProps([
-        'isSimple',    null,
-        'nestedRecord', _ObjFast([
-          'nestedRecord', null,
-          'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
-    ptArray:
-      _ObjAddProps([
-        'isSimple',          null,
-        'nestedRecordArray', _ObjFast([
-          'nestedRecordArray', null,
-          'fields', ContextNestedProperties(prop.Value, fullName)])], result);
-  else
+  // Is this "rcfWithoutRtti in prop.Value.Flags" right code to distinct nested record/array
+  // TCat = packed record
+  //   Name: RawUtf8
+  // end;
+  // TCatDynArray = array of TCat;
+  // TPeople = packed record
+  //   Cat: TCat;
+  //   CatNested: packed record
+  //       Name: RawUtf8;
+  //     end;
+  //   Cats: TCatDynArray;
+  //   CatsNested: array of TCat;
+  // end;
+  // Currenct code aleways create nestedRecord/Array. With this change nestedRecord is only for CatNested/CatsNested
+  // TODO !!!
+  // rtti.Name is strange for nested type and we have now
+  // for CatNested  "typeDelphi": "000000000166c680"
+  // for CatsNested "typeDelphi": "[TCat10]"
+  // Correct rtti.Name is nedded for pas2js, nested record and arrays is supported, but nested array of nestedd  record is not supported in latest version, but can be easy created this temporary types if names is OK
+  // This change also solve problem in topic https://synopse.info/forum/viewtopic.php?id=5835
+  // Some hint of mormot1 breaking change, nestedRecord[Arrays] is array in mormot1, "fields" property don't exists (in M1 context.json). Is this as disigned?
+  if rcfWithoutRtti in prop.Value.Flags then
+  begin
+    case prop.Value.Parser of
+      ptRecord:
+        _ObjAddProps([
+          'isSimple',    null,
+          'nestedRecord', _ObjFast([
+            'nestedRecord', null,
+            'fields',  ContextNestedProperties(prop.Value, fullName)])], result);
+      ptArray, ptDynArray:
+        begin
+          _ObjAddProps([
+            'isSimple',          null,
+            'nestedRecordArray', _ObjFast([
+              'nestedRecordArray', null,
+              'fields', ContextNestedProperties(prop.Value, fullName)])], result);
+        end
+    else
+      if TDocVariantData(result).GetValueIndex('toVariant') < 0 then
+        _ObjAddProp('isSimple', true, result)
+      else
+        _ObjAddProp('isSimple', null, result);
+    end;
+  end
+    else
     if TDocVariantData(result).GetValueIndex('toVariant') < 0 then
       _ObjAddProp('isSimple', true, result)
     else
       _ObjAddProp('isSimple', null, result);
-  end;
 end;
 
 function TWrapperContext.Context: variant;
