@@ -1747,6 +1747,7 @@ type
     fThreadSelectedMax: integer;
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
     function GetThreads(thread: integer): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetThreads(thread: integer; value: boolean);
   public
     /// add a new line to the already parsed content
@@ -7736,37 +7737,6 @@ begin
   result := -1;
 end;
 
-function TSynLogFileView.Select(aRow: integer): integer;
-var
-  i, search: PtrInt;
-begin
-  result := 0;
-  if integer(fEvents) <> 0 then
-  begin
-    if cardinal(aRow) < cardinal(fSelectedCount) then
-      search := fSelected[aRow]
-    else
-      search := maxInt;
-    fSelectedCount := 0;
-    for i := 0 to Count - 1 do
-      if fLevels[i] in fEvents then
-        if (fThreads = nil) or
-           GetBitPtr(pointer(fThreadSelected), fThreads[i] - 1) then
-        begin
-          if search <= i then
-          begin
-            // found the closed selected index
-            result := fSelectedCount;
-            search := maxInt;
-          end;
-          if fSelectedCount = length(fSelected) then
-            SetLength(fSelected, NextGrow(fSelectedCount));
-          fSelected[fSelectedCount] := i;
-          inc(fSelectedCount);
-        end;
-  end;
-end;
-
 procedure TSynLogFileView.SetAllThreads(enabled: boolean);
 const
   B: array[boolean] of byte = (0, 255);
@@ -7788,7 +7758,38 @@ function TSynLogFileView.GetThreads(thread: integer): boolean;
 begin
   dec(thread);
   result := (cardinal(thread) < fThreadMax) and
-    GetBitPtr(pointer(fThreadSelected), thread);
+            GetBitPtr(pointer(fThreadSelected), thread);
+end;
+
+function TSynLogFileView.Select(aRow: integer): integer;
+var
+  i, search: PtrInt;
+begin
+  result := 0;
+  if integer(fEvents) <> 0 then
+  begin
+    if cardinal(aRow) < cardinal(fSelectedCount) then
+      search := fSelected[aRow]
+    else
+      search := maxInt;
+    fSelectedCount := 0;
+    for i := 0 to Count - 1 do
+      if fLevels[i] in fEvents then
+        if (fThreads = nil) or
+           GetThreads(fThreads[i]) then
+        begin
+          if search <= i then
+          begin
+            // found the closed selected index
+            result := fSelectedCount;
+            search := maxInt;
+          end;
+          if fSelectedCount = length(fSelected) then
+            SetLength(fSelected, NextGrow(fSelectedCount));
+          fSelected[fSelectedCount] := i;
+          inc(fSelectedCount);
+        end;
+  end;
 end;
 
 
