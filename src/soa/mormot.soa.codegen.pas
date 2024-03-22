@@ -1084,7 +1084,7 @@ begin
       _ObjAddProps([
         'argName',  ParamName^,
         'argType',  ArgTypeName^,
-        'arg.dir',  ord(ValueDirection),
+        'dir',      ord(ValueDirection),
         'dirName',  DIRTODELPHI[ValueDirection],
         'dirNoOut', DIRTOSMS[ValueDirection]], arg);
       if ValueDirection in [imdConst, imdVar] then
