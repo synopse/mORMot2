@@ -357,6 +357,8 @@ const
   INTEGER_NAME:  string[7] = 'Integer';
   // FPC RTTI names cardinal type as "longword"
   CARDINAL_NAME: string[8] = 'Cardinal';
+  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
+  UTF8_NAME: string[7] = 'RawUtf8';
 
 function TRttiInfo.Name: PShortString;
 begin
@@ -365,11 +367,14 @@ begin
   if result <> nil then
     if result <> TypeInfo(integer) then
       if result <> TypeInfo(cardinal) then
-        result := @RawName
+        if result <> TypeInfo(RawUtf8) then
+          result := @RawName     // as stored in RTTI
+        else
+          result := @UTF8_NAME   // instead of 'UTF8String'
       else
-        result := @CARDINAL_NAME
+        result := @CARDINAL_NAME // instead of 'longword'
     else
-      result := @INTEGER_NAME
+      result := @INTEGER_NAME    // instead of 'longint'
   else
     result := @NULCHAR;
 end;

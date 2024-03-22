@@ -381,11 +381,18 @@ begin
   end;
 end;
 
+const
+  // RawUtf8 is defined as weak system.UTF8String type in mormot.core.base
+  UTF8_NAME: string[7] = 'RawUtf8';
 
 function TRttiInfo.Name: PShortString;
 begin
-  if @self <> nil then
-    result := @RawName
+  result := pointer(@self);
+  if result <> nil then
+    if result <> TypeInfo(RawUtf8) then
+      result := @RawName   // as stored in RTTI
+    else
+      result := @UTF8_NAME // instead of 'UTF8String'
   else
     result := @NULCHAR;
 end;

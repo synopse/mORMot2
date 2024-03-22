@@ -785,8 +785,8 @@ type
     /// the declared name of the type ('String','Word','RawUnicode'...)
     // - will return '' if @self is nil
     // - on FPC, will adjust 'integer'/'cardinal' from 'longint'/'longword' RTTI
+    // - on Delphi and FPC, will adjust weak RawUtf8 = UTF8String as 'RawUtf8'
     function Name: PShortString;
-      {$ifdef ISDELPHI2010}inline;{$endif}
     /// efficiently finalize any (managed) type value
     // - do nothing for unmanaged types (e.g. integer)
     // - if you are sure that your type is managed, you may call directly

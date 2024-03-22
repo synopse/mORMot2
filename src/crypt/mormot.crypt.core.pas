@@ -11614,7 +11614,7 @@ begin
     // use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;
     // on old compilers, USEAESNIHASH is not set -> crc32c is a good fallback
-    DefaultHasher := @crc32c_sse42_aesni;
+    DefaultHasher   := @crc32c_sse42_aesni;
     InterningHasher := @crc32c_sse42_aesni;
   end;
   {$endif CRC32C_X64}
