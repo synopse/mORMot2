@@ -879,34 +879,41 @@ type
   THttpAsyncServer = class;
   THttpAsyncConnections = class;
 
-  /// abstract HTTP client or server connection to our non-blocking THttpAsyncServer
+  /// abstract HTTP server or client connection to our non-blocking THttpAsyncServer
   THttpAsyncConnection = class(TAsyncConnection)
   protected
     fHttp: THttpRequestContext; // non-blocking HTTP state machine
+    fServer: THttpAsyncServer;
     function ReleaseReadMemoryOnIdle: PtrInt; override;
   end;
 
+  /// handle one HTTP client connection to our non-blocking THttpAsyncServer
+  THttpAsyncClientConnection = class(THttpAsyncConnection)
+  protected
+    procedure AfterCreate; override;
+    procedure BeforeDestroy; override;
+  end;
+
   /// handle one HTTP server connection to our non-blocking THttpAsyncServer
-  // - implements server-side HTTP process of a given async socket
   THttpAsyncServerConnection = class(THttpAsyncConnection)
   protected
-    fServer: THttpAsyncServer;
     fKeepAliveSec: TAsyncConnectionSec;
+    fHeadersSec: TAsyncConnectionSec;
     fPipelineEnabled: boolean;
     fPipelinedWrite: boolean;
     fRequestFlags: THttpServerRequestFlags;
     fRespStatus: cardinal;
     fRequest: THttpServerRequest; // recycled between calls
-    fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
+    fConnectionID: THttpServerConnectionID; // may be <> fHandle behind nginx
     fAfterResponseStart: Int64;
-    fHeadersSec: TAsyncConnectionSec;
     fAuthRejectSec: cardinal;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
+    procedure HttpInit;
     // overriden to wait for background Write to finish
     procedure BeforeProcessRead; override;
-    // redirect to fHttp.ProcessRead() with server-side logic
+    // redirect to fHttp.ProcessRead()
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     // DoRequest gathered all output in fWR buffer to be sent at once
     function FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
@@ -919,7 +926,6 @@ type
     function DoRequest: TPollAsyncSocketOnReadWrite;
     function DoResponse(res: TPollAsyncSocketOnReadWrite): TPollAsyncSocketOnReadWrite;
     procedure DoAfterResponse;
-    procedure HttpInit;
     procedure AsyncResponse(Sender: THttpServerRequestAbstract;
       RespStatus: integer);
   public
@@ -929,13 +935,6 @@ type
     // - may return nil e.g. behind a nginx proxy
     function GetConnectionOpaque: PHttpServerConnectionOpaque;
       {$ifdef HASINLINE} inline; {$endif}
-  end;
-
-  /// handle one HTTP client connection to our non-blocking THttpAsyncServer
-  THttpAsyncClientConnection = class(THttpAsyncConnection)
-  protected
-    procedure AfterCreate; override;
-    procedure BeforeDestroy; override;
   end;
 
   /// event-driven process of HTTP/WebSockets connections
@@ -3745,6 +3744,7 @@ end;
 
 { ******************** THttpAsyncServer Event-Driven HTTP Server }
 
+
 { THttpAsyncConnection }
 
 function THttpAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
@@ -3757,6 +3757,20 @@ begin
 end;
 
 
+{ THttpAsyncClientConnection }
+
+procedure THttpAsyncClientConnection.AfterCreate;
+begin
+  fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
+
+end;
+
+procedure THttpAsyncClientConnection.BeforeDestroy;
+begin
+
+end;
+
+
 { THttpAsyncServerConnection }
 
 procedure THttpAsyncServerConnection.AfterCreate;
@@ -3764,22 +3778,24 @@ begin
   fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
   if fServer <> nil then
   begin
-    HttpInit;
     fHttp.Interning := fServer.fInterning;
     fHttp.Compress := fServer.fCompress;
     fHttp.CompressAcceptEncoding := fServer.fCompressAcceptEncoding;
+    fHttp.Options := fServer.fDefaultRequestOptions;
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
     if hsoEnablePipelining in fServer.Options then
       fPipelineEnabled := true;
   end;
+  HttpInit;
   // inherited AfterCreate; // void parent method
 end;
 
 procedure THttpAsyncServerConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   inherited Recycle(aRemoteIP);
+  fHttp.Reset;
   if fServer <> nil then
   begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
@@ -3809,9 +3825,7 @@ end;
 
 procedure THttpAsyncServerConnection.HttpInit;
 begin
-  fHttp.ProcessInit({instream=}nil); // ready to process this HTTP request
-  if Assigned(fServer) then
-    fHttp.Options := fServer.fDefaultRequestOptions;
+  fHttp.ProcessInit; // ready to process this HTTP request
   fHttp.Head.Reserve(fServer.HeadersDefaultBufferSize); // reusable 2KB buffer
   fHeadersSec := 0;
   fBytesRecv := 0; // reset stats
@@ -4003,6 +4017,7 @@ begin
   if hfConnectionClose in fHttp.HeaderFlags then
     exit; // return soClose
   // kept alive connection -> reset the HTTP parser and continue
+  fHttp.Reset;
   HttpInit;
   result := soContinue;
 end;
@@ -4099,7 +4114,7 @@ begin
     result := DoReject(status);
     exit;
   end;
-  // now THttpAsyncConnection.OnRead can get the body
+  // now THttpAsyncServerConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
   if not (fHttp.State in [hrsWaitProcessing, hrsWaitAsyncProcessing, hrsUpgraded]) and
      // HEAD and OPTIONS are requests with Content-Length header but no body
@@ -4311,19 +4326,6 @@ begin
         'AfterWrite: OnAfterResponse raised % -> disabled', [E], self);
     end;
   end;
-end;
-
-
-{ THttpAsyncClientConnection }
-
-procedure THttpAsyncClientConnection.AfterCreate;
-begin
-
-end;
-
-procedure THttpAsyncClientConnection.BeforeDestroy;
-begin
-
 end;
 
 { THttpAsyncConnections }

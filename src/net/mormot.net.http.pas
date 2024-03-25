@@ -427,8 +427,8 @@ type
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved by ParseHeader
     // and mapped into the Compress[] array
     CompressContentEncoding: integer;
-    /// reset this request context to be used without any ProcessInit/Read/Write
-    procedure Clear;
+    /// reset this request context to be used prior to any ProcessInit/Read/Write
+    procedure Reset;
     /// parse CommandUri into CommandMethod/CommandUri fields
     function ParseCommand: boolean;
     /// parse a HTTP header text line into Header and fill internal properties
@@ -466,7 +466,7 @@ type
     // - and update ResponseFlags and ContentLength properties
     function ValidateRange: boolean;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
-    procedure ProcessInit(InStream: TStream);
+    procedure ProcessInit;
       {$ifdef HASINLINE} inline; {$endif}
     /// receiving socket entry point of our asynchronous HTTP Server
     // - to be called with the incoming bytes from the socket receive buffer
@@ -618,7 +618,7 @@ type
   THttpServerConnectionIDDynArray = array of THttpServerConnectionID;
 
   /// an opaque connection-specific pointers identifier with a strong type
-  // - each THttpAsyncConnection or THttpServerSocket raw connection instance
+  // - each THttpAsyncServerConnection or THttpServerSocket raw connection instance
   // maintains those two abstract PtrUInt tags, as a fConnectionOpaque field
   // - match TRestServerConnectionOpaque as defined in mormot.rest.core
   THttpServerConnectionOpaque = record
@@ -3047,7 +3047,7 @@ end;
 
 { THttpRequestContext }
 
-procedure THttpRequestContext.Clear;
+procedure THttpRequestContext.Reset;
 begin
   Head.Reset;  // set Len to 0, but keep existing fBuffer
   Process.Reset;
@@ -3070,6 +3070,7 @@ begin
   Content := '';
   ContentLength := -1;
   ContentLastModified := 0;
+  ContentStream := nil;
   ServerInternalState := 0;
   CompressContentEncoding := -1;
   integer(CompressAcceptHeader) := 0;
@@ -3421,7 +3422,9 @@ var
   p: PUtf8Char;
   u: RawUtf8;
 begin
-  ProcessInit(aInStream);
+  Reset;
+  State := hrsGetCommand;
+  ContentStream := aInStream;
   Content := aInContent;
   result := false;
   CommandUri := aCommand;
@@ -3523,11 +3526,11 @@ begin
   end;
 end;
 
-procedure THttpRequestContext.ProcessInit(InStream: TStream);
+procedure THttpRequestContext.ProcessInit;
 begin
-  Clear;
-  ContentStream := InStream;
-  fContentLeft := 0;
+  RangeLength := -1;
+  ContentLength := -1;
+  CompressContentEncoding := -1;
   State := hrsGetCommand;
 end;
 
@@ -4100,7 +4103,7 @@ end;
 
 procedure THttpSocket.HttpStateReset;
 begin
-  Http.Clear;
+  Http.Reset;
   fBodyRetrieved := false;
 end;
 
@@ -4165,9 +4168,9 @@ begin
   result := true;
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % % flags=% len=% %',
-      [Http.CommandMethod, Http.CommandUri, ToText(Http.HeaderFlags),
-       Http.ContentLength, Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
+      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
+      Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
