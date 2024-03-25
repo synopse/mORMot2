@@ -4165,9 +4165,9 @@ begin
   result := true;
   Http.ParseHeaderFinalize; // compute all meaningful headers
   if Assigned(OnLog) then
-    OnLog(sllTrace, 'GetHeader % % flags=% len=% %', [Http.CommandMethod,
-      Http.CommandUri, ToText(Http.HeaderFlags), Http.ContentLength,
-      Http.ContentType], self);
+    OnLog(sllTrace, 'GetHeader % % flags=% len=% %',
+      [Http.CommandMethod, Http.CommandUri, ToText(Http.HeaderFlags),
+       Http.ContentLength, Http.ContentType], self);
 end;
 
 procedure THttpSocket.GetBody(DestStream: TStream);
