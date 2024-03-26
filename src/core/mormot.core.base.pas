@@ -3977,6 +3977,7 @@ type
     // the current position with the supplied data
     function Write(const Buffer; Count: Longint): Longint; override;
     /// retrieve the stored content from a given position, as UTF-8 text
+    // - warning: may directly return DataString and reset its value to ''
     procedure GetAsText(StartPos, Len: PtrInt; var Text: RawUtf8);
     /// reset the internal DataString content and the current position
     procedure Clear;
