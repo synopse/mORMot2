@@ -12072,12 +12072,9 @@ begin
      (StartPos >= L) then
     FastAssignNew(Text) // nothing to return
   else if (StartPos = 0) and
-          (Len >= L) and
+          (Len = L) and
           (PStrCnt(PAnsiChar(pointer(fDataString)) - _STRCNT)^ = 1) then
-  begin
-    FakeLength(fDataString, Len);
-    FastAssignUtf8(Text, fDataString); // fast return fDataString instance
-  end
+    FastAssignUtf8(Text, fDataString) // fast return the fDataString instance
   else
   begin
     dec(L, StartPos);
