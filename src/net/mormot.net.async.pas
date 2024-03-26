@@ -127,9 +127,9 @@ type
     fIocp: PWinIocpSubscription; // a single IOCP queue for wieRecv+wieSend
     function IocpPrepareNextWrite(queue: TWinIocp): boolean;
     {$endif USE_WINIOCP}
-    /// called when the instance is connected to a poll
+    /// called when the instance is connected to a poll, after Create or Recycle
     // - i.e. at the end of TAsyncConnections.ConnectionNew(), when Handle is set
-    // - overriding this method is cheaper than the plain Create destructor
+    // - overriding this method is cheaper than its plain Create destructor
     // - default implementation does nothing
     procedure AfterCreate; virtual;
     /// called when the instance is about to be deleted from a poll
@@ -2847,9 +2847,9 @@ begin
     exit;
   aConnection.fSocket := aSocket;
   aConnection.fHandle := InterlockedIncrement(fLastHandle);
-  if fLastHandle < 0 then // paranoid (overflow after 4 years at 1000 conn/sec)
-  begin
-    fLastHandle := 0; // reset sequence
+  if fLastHandle < 0 then
+  begin // paranoid sequence overflow after 4 years at 1000 conn/sec
+    LockedAdd32(PCardinal(@fLastHandle)^, $80000000); // thread-safe reset to 0
     aConnection.fHandle := InterlockedIncrement(fLastHandle);
   end;
   if acoNoConnectionTrack in fOptions then
