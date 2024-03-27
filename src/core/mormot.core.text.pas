@@ -4838,7 +4838,7 @@ end;
 procedure TTextWriter.AddSpaced(const Text: RawUtf8; Width: PtrInt;
   SepChar: AnsiChar);
 begin
-  AddSpaced(PUtf8Char(pointer(Text)), length(Text));
+  AddSpaced(pointer(Text), length(Text), Width);
   if SepChar <> #0 then
     Add(SepChar);
 end;
