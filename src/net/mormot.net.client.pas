@@ -320,8 +320,8 @@ type
   TOnHttpClientSocketRequest = function(Sender: THttpClientSocket;
     var Context: THttpClientRequest): boolean of object;
 
-  /// callback used by THttpClientSocket.Request to process any custom protocol
-  TOnHttpClientSocketProtocol = function(
+  /// callback used e.g. by THttpClientSocket.Request to process any custom protocol
+  TOnHttpClientRequest = function(
     var http: THttpRequestContext): integer of object;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -352,7 +352,7 @@ type
     fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
-    fOnProtocolRequest: TOnHttpClientSocketProtocol;
+    fOnProtocolRequest: TOnHttpClientRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
@@ -603,14 +603,14 @@ function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawU
 { ******************** Additional Client Protocols Support }
 
 var
-  /// raw thread-safe access to <Name:RawUtf8,TOnHttpClientSocketProtocol> pairs
+  /// raw thread-safe access to <Name:RawUtf8,TOnHttpClientRequest> pairs
   NetClientProtocols: TSynDictionary;
 
 /// register a INetClientProtocol
 // - you can unregister a protocol by setting OnRequest = nil
 // - note that the class instance used by OnRequest will be owned by thit unit
 procedure RegisterNetClientProtocol(
-  const Name: RawUtf8; const OnRequest: TOnHttpClientSocketProtocol);
+  const Name: RawUtf8; const OnRequest: TOnHttpClientRequest);
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1467,7 +1467,7 @@ end;
 { ******************** Additional Client Protocols Support }
 
 procedure RegisterNetClientProtocol(
-  const Name: RawUtf8; const OnRequest: TOnHttpClientSocketProtocol);
+  const Name: RawUtf8; const OnRequest: TOnHttpClientRequest);
 var
   m: TMethod;
 begin
