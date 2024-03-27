@@ -292,7 +292,7 @@ type
   end;
 
   /// THttpClientSocket.Request low-level execution context
-  TTHttpClientSocketRequestParams = record
+  THttpClientRequest = record
     url, method, header: RawUtf8;
     Data: RawByteString;
     DataMimeType: RawUtf8;
@@ -313,13 +313,12 @@ type
   // - more complex schemes (like SSPI) could be implemented within the
   // callback - see e.g. THttpClientSocket.AuthorizeSspi class method
   TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
-    var Context: TTHttpClientSocketRequestParams;
-    const Authenticate: RawUtf8): boolean of object;
+    var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean of object;
 
   /// callback used by THttpClientSocket.Request before/after every request
   // - return true to continue execution, false to abort normal process
   TOnHttpClientSocketRequest = function(Sender: THttpClientSocket;
-    var Context: TTHttpClientSocketRequestParams): boolean of object;
+    var Context: THttpClientRequest): boolean of object;
 
   /// callback used by THttpClientSocket.Request to process any custom protocol
   TOnHttpClientSocketProtocol = function(
@@ -361,8 +360,7 @@ type
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
     function OnAuthorizeDigest(Sender: THttpClientSocket;
-      var Context: TTHttpClientSocketRequestParams;
-      const Authenticate: RawUtf8): boolean;
+      var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -395,7 +393,7 @@ type
     /// low-level processing method called from Request()
     // - can be used e.g. when implementing callbacks like OnAuthorize or
     // OnBeforeRequest/OnAfterRequest
-    procedure RequestInternal(var ctxt: TTHttpClientSocketRequestParams); virtual;
+    procedure RequestInternal(var ctxt: THttpClientRequest); virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -440,13 +438,13 @@ type
     // - match the OnAuthorize: TOnHttpClientSocketAuthorize callback signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class function AuthorizeSspi(Sender: THttpClientSocket;
-      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
+      var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
     // - match the OnProxyAuthorize: TOnHttpClientSocketAuthorize signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class function ProxyAuthorizeSspi(Sender: THttpClientSocket;
-      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
+      var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
     // - used by class procedure AuthorizeSspi/ProxyAuthorizeSspi callbacks
@@ -1686,8 +1684,7 @@ begin
     inherited OpenUri(aUri, aAddress, aTunnel, aTimeOut, aTLSContext);
 end;
 
-procedure THttpClientSocket.RequestInternal(
-  var ctxt: TTHttpClientSocketRequestParams);
+procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
 
   procedure DoRetry(FatalError: integer;
     const Fmt: RawUtf8; const Args: array of const);
@@ -1901,7 +1898,7 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const Header: RawUtf8; const Data: RawByteString;
   const DataMimeType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
-  ctxt: TTHttpClientSocketRequestParams;
+  ctxt: THttpClientRequest;
   newuri: TUri;
 begin
   ctxt.url := url;
@@ -2371,8 +2368,7 @@ begin
 end;
 
 function THttpClientSocket.OnAuthorizeDigest(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams;
-  const Authenticate: RawUtf8): boolean;
+  var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
 var
   auth: RawUtf8;
   p: PUtf8Char;
@@ -2398,8 +2394,7 @@ end;
 
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 
-procedure DoSspi(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams;
+procedure DoSspi(Sender: THttpClientSocket; var Context: THttpClientRequest;
   const Authenticate, InHeaderUp, OutHeader: RawUtf8);
 var
   sc: TSecContext;
@@ -2435,7 +2430,7 @@ begin
 end;
 
 class function THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
+  var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
 begin
   if InitializeDomainAuth then
     // try to setup sspi/gssapi -> SECPKGNAMEHTTP
@@ -2446,7 +2441,7 @@ begin
 end;
 
 class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
-  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8): boolean;
+  var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
 begin
   if InitializeDomainAuth then
     // try to setup sspi/gssapi -> SECPKGNAMEHTTP
