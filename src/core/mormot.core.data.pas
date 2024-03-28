@@ -9540,10 +9540,9 @@ end;
 
 const
   // reduces memory consumption and enhances distribution at hash table growing
-  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 15 {$endif}] of integer = (
+  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 13 {$endif}] of integer = (
     {$ifndef DYNARRAYHASH_PO2}
-    31, 127, 251, 499, 797, 1259, 2011, 3203, 5087,
-    8089, 12853, 20399, 81649, 129607, 205759,
+    251, 499, 797, 1259, 2011, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
     {$endif DYNARRAYHASH_PO2}
     // start after HASH_PO2=2^18=262144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
