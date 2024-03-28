@@ -1188,7 +1188,7 @@ type
     LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// most HTTP servers support a per-connection pointer storage
     // - may be nil if unsupported, e.g. by the http.sys servers
-    // - map to THttpAsyncConnection or THttpServerSocket fConnectionOpaque field
+    // - map to THttpAsyncServerConnection or THttpServerSocket fConnectionOpaque
     // of type THttpServerConnectionOpaque as defined in mormot.net.http
     // - could be used to avoid a lookup to a ConnectionID-indexed dictionary
     // - warning: only ValueExternal is usable by end-user code

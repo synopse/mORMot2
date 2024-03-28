@@ -291,15 +291,15 @@ type
     procedure OnDownloadingFailed(OnDownloadingID: THttpPartialID);
   end;
 
-  /// THttpClientSocket.Request low-level execution context
+  /// internal low-level execution context for THttpClientSocket.Request
   THttpClientRequest = record
-    url, method, header: RawUtf8;
+    Url, Method, Header: RawUtf8;
     Data: RawByteString;
     DataMimeType: RawUtf8;
-    status, redirected: integer;
+    Status, Redirected: integer;
     InStream, OutStream: TStream;
     KeepAlive: cardinal;
-    retry: set of (rMain, rAuth, rAuthProxy);
+    Retry: set of (rMain, rAuth, rAuthProxy);
     OutStreamInitialPos: Int64;
   end;
 
