@@ -3359,7 +3359,7 @@ type
     property V[const key: RawUtf8]: TDocValue
       read GetV;
     {$endif HASIMPLICITOPERATOR}
-    /// enable nested objects location in keys fot Get() and Item[]
+    /// enable nested objects location in keys for Get() and Item[]
     // - equals #0 by default, meaning only root object keys are located, e.g.
     // dict.D['child2']
     // - if PathDelim is e.g. set to '.', then dict.U['child2.name'] matches

@@ -268,6 +268,8 @@ type
     hrsSendBody,
     hrsResponseDone,
     hrsUpgraded,
+    hrsConnect,
+    hrsSendHeaders,
     hrsErrorPayloadTooLarge,
     hrsErrorRejected,
     hrsErrorMisuse,
@@ -512,11 +514,13 @@ const
      hrsGetBodyChunkedHexNext,
      hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
-     hrsGetBodyContentLength];
+     hrsGetBodyContentLength,
+     hrsConnect];
 
   /// when THttpRequestContext.State is expected some ProcessWrite() data
   HTTP_REQUEST_WRITE =
-    [hrsSendBody];
+    [hrsSendBody,
+     hrsSendHeaders];
 
   /// rfProgressiveStatic mode custom HTTP header to supply the expected file size
   STATICFILE_PROGSIZE = 'STATIC-PROGSIZE:';

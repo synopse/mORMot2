@@ -46,6 +46,7 @@ uses
   mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.http,
+  mormot.net.client,
   mormot.net.server; // for multi-threaded process
 
 
@@ -887,7 +888,8 @@ type
     function ReleaseReadMemoryOnIdle: PtrInt; override;
   end;
 
-  /// handle one HTTP client connection to our non-blocking THttpAsyncServer
+  /// handle one HTTP client connection handled by our non-blocking THttpAsyncServer
+  // - used e.g. for efficient reverse proxy support with another server
   THttpAsyncClientConnection = class(THttpAsyncConnection)
   protected
     procedure AfterCreate; override;
@@ -953,6 +955,41 @@ type
       read fBanned;
   end;
 
+  /// implement HTTP async client requests
+  // - reusing the threads pool and sockets polling of an associated
+  // TAsyncConnections instance (typically a THttpAsyncServer)
+  // - the connections are maintained for a
+  THttpAsyncClientConnections = class(TSynPersistent)
+  protected
+    fLock: TLightLock;
+    fOwner: TAsyncConnections;
+    fConnectionTimeoutMS: integer;
+  public
+    /// initialize the instance for a given TAsyncConnections
+    // - connections will be kept alive up to aConnectionTimeoutSec seconds,
+    // ready to be
+    constructor Create(aOwner: TAsyncConnections;
+      aConnectionTimeoutSec: integer); reintroduce;
+    /// start an async connection to a remote HTTP server using a callback
+    // - the aOnStateChanged event will be called after each http.State change
+    // - hrsSendHeaders could override http.Headers or http.CommandMethod or
+    // http.CommandUri or http.Host/UserAgent or http.ContentLength to customize
+    // the request headers to be sent to the remote HTTP server
+    // - hrsSendBody could set http.Content or http.ContentStream (POST/PUT)
+    // - hrsGetBody* could parse the received http.Headers and set http.Content
+    // or http.ContentStream
+    // - eventually hrsResponseDone or one hrsError* will mark the end of process
+    function StartRequest(const aUrl, aMethod, aHeaders: RawUtf8;
+      const aOnStateChanged: TOnHttpClientRequest; aTls: PNetTlsContext;
+      out aConnection: THttpAsyncClientConnection): TNetResult;
+    /// start an async GET request to a remote HTTP server into a file
+    function StartGetFile(const aUrl, aHeaders: RawUtf8; aTls: PNetTlsContext;
+      const aFileName: TFileName; const aOnProcess: TOnHttpClientRequest;
+      out aConnection: THttpAsyncClientConnection): TNetResult;
+    /// called to notify that the main process is about to finish
+    procedure Shutdown;
+  end;
+
   /// meta-class of THttpAsyncConnections type
   THttpAsyncConnectionsClass = class of THttpAsyncConnections;
 
@@ -967,6 +1004,7 @@ type
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
+    fClients: THttpAsyncClientConnections; // allocated when needed
     fHttpDateNowUtc: string[39]; // consume 37 chars, aligned to 40 bytes
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
@@ -987,6 +1025,9 @@ type
       ProcessOptions: THttpServerOptions = []); override;
     /// finalize the HTTP Server
     destructor Destroy; override;
+    /// access async connections to any remote HTTP server
+    // - will reuse the threads pool and sockets polling of this instance
+    function Clients: THttpAsyncClientConnections;
   published
     /// initial capacity of internal per-connection Headers buffer
     // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
@@ -2692,8 +2733,8 @@ begin
   if Terminated then
     exit;
   with fThreadClients do
-    res := NewSocket(Address, Port, nlTcp, {bind=}false, timeout, timeout,
-      timeout, {retry=}0, client, @addr);
+    res := NewSocket(Address, Port, nlTcp, {bind=}false, Timeout, Timeout,
+      Timeout, {retry=}0, client, @addr);
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
@@ -2847,8 +2888,9 @@ begin
     exit;
   aConnection.fSocket := aSocket;
   aConnection.fHandle := InterlockedIncrement(fLastHandle);
-  if fLastHandle < 0 then
-  begin // paranoid sequence overflow after 4 years at 1000 conn/sec
+  while aConnection.fHandle < 0 do
+  begin
+    // paranoid sequence overflow (may appear after 4 years at 1000 conn/sec)
     LockedAdd32(PCardinal(@fLastHandle)^, $80000000); // thread-safe reset to 0
     aConnection.fHandle := InterlockedIncrement(fLastHandle);
   end;
@@ -2943,7 +2985,8 @@ begin
   if not (fInList in aConnection.fFlags) then
   begin
     // this connection was not part of fConnection[] list nor subscribed
-    // e.g. HTTP/1.0 short request -> explicit GC - Free is unstable here
+    // e.g. HTTP/1.0 short request
+    // -> explicit GC - Free is unstable here
     AddGC(aConnection);
     result := true;
     exit;
@@ -3761,11 +3804,48 @@ end;
 
 procedure THttpAsyncClientConnection.AfterCreate;
 begin
-  fServer := (fOwner as THttpAsyncConnections).fAsyncServer;
-
+  if fOwner.InheritsFrom(THttpAsyncConnections) then
+    fServer := THttpAsyncConnections(fOwner).fAsyncServer;
+  if fServer <> nil then
+    fHttp.Compress := fServer.fCompress;
+  fHttp.ProcessInit; // ready to process this HTTP request
+  fHttp.State := hrsConnect;
+  // inherited AfterCreate; // void parent method
 end;
 
 procedure THttpAsyncClientConnection.BeforeDestroy;
+begin
+  fHttp.ProcessDone; // ContentStream.Free
+  // inherited BeforeDestroy; // void parent method
+end;
+
+
+{ THttpAsyncClientConnections }
+
+constructor THttpAsyncClientConnections.Create(aOwner: TAsyncConnections;
+  aConnectionTimeoutSec: integer);
+begin
+  fOwner := aOwner;
+  fConnectionTimeoutMS := aConnectionTimeoutSec * 1000;
+end;
+
+function THttpAsyncClientConnections.StartRequest(
+  const aUrl, aMethod, aHeaders: RawUtf8;
+  const aOnStateChanged: TOnHttpClientRequest; aTls: PNetTlsContext;
+  out aConnection: THttpAsyncClientConnection): TNetResult;
+begin
+
+end;
+
+function THttpAsyncClientConnections.StartGetFile(
+  const aUrl, aHeaders: RawUtf8; aTls: PNetTlsContext;
+  const aFileName: TFileName; const aOnProcess: TOnHttpClientRequest;
+  out aConnection: THttpAsyncClientConnection): TNetResult;
+begin
+
+end;
+
+procedure THttpAsyncClientConnections.Shutdown;
 begin
 
 end;
@@ -4421,15 +4501,18 @@ destructor THttpAsyncServer.Destroy;
 begin
   // no more incoming request
   Shutdown;
-  // abort pending async process
+  // abort pending async processes
   if fAsync <> nil then
     fAsync.Shutdown;
+  if fClients <> nil then
+    fClients.Shutdown;
   // terminate the Execute thread
   if fExecuteEvent <> nil then
     fExecuteEvent.SetEvent;
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
+  FreeAndNilSafe(fClients);
   // release associated context
   if fInterning <> nil then
   begin
@@ -4437,6 +4520,18 @@ begin
     fInterning := nil;
   end;
   FreeAndNil(fExecuteEvent);
+end;
+
+function THttpAsyncServer.Clients: THttpAsyncClientConnections;
+begin
+  if fClients = nil then
+  begin
+    fSafe.Lock;
+    if fClients = nil then
+      fClients := THttpAsyncClientConnections.Create(fAsync, {timeoutsec=}0);
+    fSafe.UnLock;
+  end;
+  result := fClients;
 end;
 
 function THttpAsyncServer.GetExecuteState: THttpServerExecuteState;
