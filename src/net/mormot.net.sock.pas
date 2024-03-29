@@ -946,7 +946,7 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
-  // - on other targets, could be set by the mormot.lib.openssl11.pas unit
+  // - could also be overriden e.g. by the mormot.lib.openssl11.pas unit
   NewNetTls: function: INetTls;
 
   /// global callback set to TNetTlsContext.AfterAccept from InitNetTlsContext()

@@ -53,6 +53,10 @@ uses
 { ******************** Low-Level Non-blocking Connections }
 
 type
+  {$M+}
+  TPollAsyncSockets = class;
+  {$M-}
+
   /// 32-bit integer value used to identify an asynchronous connection
   // - will start from 1, and increase during the TAsyncConnections live-time
   TPollAsyncConnectionHandle = type integer;
@@ -137,6 +141,11 @@ type
     // - overriding this method is cheaper than the plain Destroy destructor
     // - default implementation does nothing
     procedure BeforeDestroy; virtual;
+    /// called when fFirstRead flag is set, i.e. once just after connection
+    // - should return true on success, or false to close the connection
+    // - this default implementation will just call aOwner.fOnFirstRead()
+    // and return false on any exception (typically a TLS error)
+    function OnFirstRead(aOwner: TPollAsyncSockets): boolean; virtual;
     /// called just before ProcessRead/OnRead are done
     // - is overriden e.g. in THttpAsyncConnection to wait for background Write
     procedure BeforeProcessRead; virtual;
@@ -1276,6 +1285,18 @@ procedure TPollAsyncConnection.BeforeDestroy;
 begin
 end;
 
+function TPollAsyncConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
+begin
+  result := true; // continue
+  if Assigned(aOwner) and
+     Assigned(aOwner.fOnFirstRead) then
+    try
+      aOwner.fOnFirstRead(self); // typically TAsyncServer.OnFirstReadDoTls
+    except
+      result := false; // notify error within callback
+    end;
+end;
+
 procedure TPollAsyncConnection.BeforeProcessRead;
 begin
 end;
@@ -1908,17 +1929,17 @@ begin
         if not (fFirstRead in connection.fFlags) then
         begin
           include(connection.fFlags, fFirstRead);
-          if Assigned(fOnFirstRead) then
-          try
-            fOnFirstRead(connection); // e.g. TAsyncServer.OnFirstReadDoTls
-          except
+          // calls e.g. TAsyncServer.OnFirstReadDoTls
+          if not connection.OnFirstRead(self) then
+          begin
             // TLS error -> abort
             UnlockAndCloseConnection(false, connection, 'ProcessRead OnFirstRead');
             exit;
-          end
-          else if (retryms = 0) and
-                  (fProcessingRead < 4) then // < 4 for "wrk -c 10000" not fail
-            retryms := 50; // just after accept() on a idle server
+          end;
+          // waiting a little just after accept() helps a idle server to respond
+          if (retryms = 0) and
+             (fProcessingRead < 4) then // < 4 for "wrk -c 10000" not fail
+            retryms := 50;
         end;
         // receive as much data as possible into connection.fRd buffer
         repeat
@@ -2361,6 +2382,7 @@ begin
           end;
         wieSend:
           // writes are done in the single (and main) fOwner.Execute thread
+          // -> just relay this event to the proper IOCP queue
           fOwner.fIocp.Enqueue(sub, e, bytes);
       end;
     end;
@@ -3612,7 +3634,7 @@ begin
       if e = wieAccept then
       begin
       {$else}
-      bytes := 0;
+      bytes := 0; // only set with IOCP (wieSend)
       if async and
          not fClients.fWrite.GetOne(1000, 'AW', notif) then
         continue;
