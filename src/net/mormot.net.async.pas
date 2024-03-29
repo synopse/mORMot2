@@ -901,8 +901,12 @@ type
   // - used e.g. for efficient reverse proxy support with another server
   THttpAsyncClientConnection = class(THttpAsyncConnection)
   protected
+    fHostName, fAddress: RawUtf8; // = TUri.Server and TUri.Address
+    fTls: TNetTlsContext; // associated TLS options and informations
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
+    /// called once just after connection to setup the TLS handshake
+    function OnFirstRead(aOwner: TPollAsyncSockets): boolean; override;
   end;
 
   /// handle one HTTP server connection to our non-blocking THttpAsyncServer
@@ -3841,6 +3845,19 @@ begin
   // inherited BeforeDestroy; // void parent method
 end;
 
+function THttpAsyncClientConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
+begin
+  result := true; // continue
+  if Assigned(fSecure) then
+    try
+      fSocket.MakeBlocking;
+      fSecure.AfterConnection(fSocket, fTls, fHostName);
+      fSocket.MakeAsync;
+    except
+      result := false; // e.g. TLS handshake failure
+    end;
+end;
+
 
 { THttpAsyncClientConnections }
 
@@ -3855,8 +3872,49 @@ function THttpAsyncClientConnections.StartRequest(
   const aUrl, aMethod, aHeaders: RawUtf8;
   const aOnStateChanged: TOnHttpClientRequest; aTls: PNetTlsContext;
   out aConnection: THttpAsyncClientConnection): TNetResult;
+var
+  uri: TUri;
+  addr: TNetAddr;
+  sock: TNetSocket;
 begin
-
+  // validate the input parameters
+  aConnection := nil;
+  result := nrNotImplemented;
+  if fOwner = nil then
+    exit;
+  result := nrNotFound;
+  if (aMethod = '') or
+     not uri.From(aUrl) then
+    exit;
+  result := addr.SetFrom(uri.Server, uri.Port, nlTcp);
+  if result <> nrOk then
+    exit;
+  // create a new HttpAsyncClientConnection instance (and its socket)
+  result := nrNoSocket;
+  sock := addr.NewSocket(nlTcp);
+  if sock = nil then
+    exit;
+  sock.MakeAsync;
+  aConnection := THttpAsyncClientConnection.Create(fOwner, addr){%H-};
+  if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
+  begin
+    aConnection.Free;
+    result := nrRefused;
+    exit;
+  end;
+  aConnection.fHostName := uri.Server;
+  aConnection.fAddress := uri.Address;
+  // optionally prepare for TLS
+  if (aTls <> nil) or
+     uri.Https then
+  begin
+    if aTls <> nil then
+      aConnection.fTls := aTls^;
+    aConnection.fSecure := NewNetTls;
+    result := nrNotImplemented;
+    if aConnection.fSecure = nil then
+      exit;
+  end;
 end;
 
 function THttpAsyncClientConnections.StartGetFile(
