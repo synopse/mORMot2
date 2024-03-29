@@ -69,6 +69,9 @@ const
   WSAID_GETACCEPTEXSOCKADDRS: TGuid =
     (D1: $b5367df2; D2: $cbac; D3: $11cf;
      D4: ($95, $ca, $00, $80, $5f, $48, $a1, $92));
+  WSAID_CONNECTEX: TGuid = (
+    D1: $25a207b9; D2:$ddf3; D3:$4660;
+    D4: ($8e, $e9, $76, $e5, $8c, $74, $06, $3e));
   {
   WSAID_TRANSMITFILE: TGuid =
     (D1: $b5367df0; D2: $cbac; D3: $11cf;
@@ -470,17 +473,21 @@ type
   end;
   PWsaBuf = ^TWsaBuf;
 
-function WSARecv(s : TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
+function WSAConnect(s: TSocket; name: PSockAddr; namelen: integer;
+   caller, callee, sqos, gqos: pointer): integer; stdcall;
+  external ws2 name 'WSAConnect';
+
+function WSARecv(s: TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; var lpFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSARecv';
 
-function WSASend(s : TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
+function WSASend(s: TSocket; var lpBuffers: TWsaBuf; dwBufferCount: cardinal;
    var lpNumberOfBytesRecvd: cardinal; dwFlags: cardinal;
    lpOverlapped: POverlapped; lpCompletionRoutine: pointer = nil): integer; stdcall;
   external ws2 name 'WSASend';
 
-function WSAIoctl(s : TSocket; dwIoControlCode: cardinal; lpvInBuffer: pointer;
+function WSAIoctl(s: TSocket; dwIoControlCode: cardinal; lpvInBuffer: pointer;
    cbInBuffer: cardinal; lpvOutBuffer: pointer; cbOutBuffer: cardinal;
    lpcbBytesReturned: PCardinal; lpOverlapped: POverlapped;
    lpCompletionRoutine: pointer): integer; stdcall;
@@ -521,6 +528,9 @@ var
     dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength: DWORD;
     var LocalSockaddr: PSockAddr; var LocalSockaddrLength: integer;
     var RemoteSockaddr: PSockAddr; var RemoteSockaddrLength: integer); stdcall;
+  connectex: function(Sock: TSocket; Name: PSockAddr; NameLen: integer;
+    SendBuf: pointer; SendLen: DWORD; var BytesSent: DWORD;
+    Overlapped: POverlapped): BOOL; stdcall;
   {
   transmitfile: function(s: TSocket; hFile: THandle;
     NumberOfBytesToWrite, NumberOfBytesPerSend: DWORD; pOvp: POverlapped;
@@ -1599,12 +1609,12 @@ begin
 end;
 
 const
-  IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWA';
+  IOCP_EVENT: array[TWinIocpEvent] of AnsiChar = 'RWAC12345';
   ACCEPTEX_SIZE = SOCKADDR_SIZE + 16;
 
 function TWinIocp.PrepareNext(one: PWinIocpSubscription;
   event: TWinIocpEvent; buf: pointer; buflen: integer;
-  acceptsock: TNetSocket): boolean;
+  netsock: TNetSocket): boolean;
 var
   bytes, flags, e: cardinal;
   o: PIocpSubscription absolute one;
@@ -1654,11 +1664,11 @@ begin
         begin
           if fAcceptExBuf = nil then
             SetLength(fAcceptExBuf, ACCEPTEX_SIZE * 2);
-          if acceptsock = nil then
-            acceptsock := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
-          fAcceptSocket := acceptsock;
+          if netsock = nil then
+            netsock := TNetSocket(socket(AF_INET, SOCK_STREAM, IPPROTO_IP));
+          fAcceptSocket := netsock;
           result := acceptex(
-                     o^.Socket, TSocket(acceptsock), pointer(fAcceptExBuf), 0,
+                     o^.Socket, TSocket(netsock), pointer(fAcceptExBuf), 0,
                      ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @oe^.overlapped) or
                     (sockerrno = WSAIOPENDING)
         end
@@ -1666,6 +1676,26 @@ begin
           err := 'concurrent wieAccept'
       else
          err := 'no acceptex() API';
+    wieConnect:
+      // overlapped ConnextEx()
+      // from mormot.net.async: used by THttpAsyncClientConnections.StartRequest
+      if Assigned(connectex) then
+        if Assigned(buf) and
+           (PNetAddr(buf)^.Size = buflen) then
+          if Assigned(netsock) then
+            // connectex() requires an explicit bind (which is done by connect)
+            if bind(TSocket(netsock), PSockAddr(buf), buflen) = NO_ERROR then
+              result := connectex(TSocket(netsock), PSockAddr(buf), buflen,
+                          nil, 0, bytes, @oe^.overlapped) or
+                        (sockerrno = WSAIOPENDING)
+            else
+              err := 'bind error'
+          else
+            err := 'no supplied netsock'
+        else
+          err := 'no supplied netaddr/buf'
+      else
+         err := 'no connectex() API';
     else
        err := 'unexpected event';
     end;
@@ -2445,6 +2475,7 @@ begin
   sock := socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
   acceptex := GetExtensionFunc(sock, WSAID_ACCEPTEX);
   getacceptexsockaddrs := GetExtensionFunc(sock, WSAID_GETACCEPTEXSOCKADDRS);
+  connectex := GetExtensionFunc(sock, WSAID_CONNECTEX);
   //transmitfile := GetExtensionFunc(sock, WSAID_TRANSMITFILE);
   closesocket(sock);
   NewNetTls := NewSChannelNetTls;

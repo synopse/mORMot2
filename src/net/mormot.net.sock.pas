@@ -1276,6 +1276,7 @@ type
     wieRecv,
     wieSend,
     wieAccept,
+    wieConnect,
     wieCustom1,
     wieCustom2,
     wieCustom3,
@@ -1313,7 +1314,8 @@ type
   // - IOCP logic does not match select() or poll/epoll() APIs so it can't
   // inherit from TPollAbstract, and requires its own stand-alone class
   // - will handle wieRecv/wieSend events on a set of subscribed sockets
-  // - it could also track asynchronous AcceptEx() calls as wieAccept event
+  // - wieAccept/wieConnect events would track asynchronous AcceptEx() or
+  // ConnectEx() calls
   // - mormot.net.async will check USE_WINIOCP conditional to use this class
   TWinIocp = class
   protected
@@ -1344,12 +1346,15 @@ type
     // avoid potential WSAENOBUFS errors (the "zero read byte trick")
     // - for wieSend, you would rather specify a buffer to be sent asynchronously
     // and avoid GetNext() to return immediately even if send() would fail
-    // - for wieAccept, you can specify a pre-allocated TNetSocket to use
+    // - for wieAccept, you can specify a pre-allocated TNetSocket (default nil
+    // will allocate one in the method)
+    // - for wieConnect, you need to specify a TNetSocket (not already bound) in
+    // netsock and a TNetAddr in buf/buflen
     function PrepareNext(one: PWinIocpSubscription; event: TWinIocpEvent;
-      buf: pointer = nil; buflen: integer = 0; acceptsock: TNetSocket = nil): boolean;
+      buf: pointer = nil; buflen: integer = 0; netsock: TNetSocket = nil): boolean;
     /// add manually an event to the IOCP queue
     // - it won't make any actual access to a socket, just append an event to
-    // the queue, as regular wieRecv/wieSend/wieAccept or any wieCustom*
+    // the queue, as regular wieRecv/wieSend/wieAccept/wieConnect or any wieCustom*
     function Enqueue(one: PWinIocpSubscription; event: TWinIocpEvent;
       bytes: cardinal = 0): boolean;
     /// pick a pending task from the internal queue within a specified timeout
@@ -1357,6 +1362,7 @@ type
     // - for wieRecv/wieSend, once data is recv/send from result^.Socket,
     // call PrepareNext()
     // - for wieAccept, call then GetNextAccept() and PrepareNext()
+    // - for wieConnect, start using the socket, e.g. with wieRecv/wieSend events
     // - for wieCustom*, it depends on your own custom logic
     function GetNext(timeoutms: cardinal;
       out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
