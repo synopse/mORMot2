@@ -201,6 +201,8 @@ type
     // - by default, blocking connect() timeout is not customizable: this method
     // will call MakeAsync/MakeBlocking and wait for the actual connection
     // - as called by NewSocket() high-level wrapper function
+    // - you can specify ms<0 to make an asynchronous connect() on this address
+    // without waiting yet
     function SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
     /// bind a TNetSocket instance to this network address
     function SocketBind(socket: TNetSocket): TNetResult;
@@ -2388,6 +2390,8 @@ begin
   if result <> nrOK then
     exit;
   connect(socket.Socket, @Addr, Size); // non-blocking connect() once
+  if ms < 0 then
+    exit; // don't wait now
   socket.MakeBlocking;
   repeat
     status := socket.WaitFor(20, [neWrite, neError, neClosed]);
