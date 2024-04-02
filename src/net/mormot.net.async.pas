@@ -905,6 +905,7 @@ type
     fTls: TNetTlsContext; // associated TLS options and informations
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
     /// called once just after connection to setup the TLS handshake
     function OnFirstRead(aOwner: TPollAsyncSockets): boolean; override;
   end;
@@ -1551,7 +1552,7 @@ begin
     {if fDebugLog <> nil then
       DoLog('Start sock=% handle=%',
         [pointer(connection.fSocket), connection.Handle]);}
-    // get sending buffer size from OS (if not already retrieved)
+    // get sending buffer size from OS (once - if not already retrieved)
     if fSendBufferSize = 0 then
       {$ifdef OSWINDOWS}
       // on Windows, default buffer is reported as 8KB by fSocket.SendBufferSize
@@ -3845,6 +3846,11 @@ begin
   // inherited BeforeDestroy; // void parent method
 end;
 
+function THttpAsyncClientConnection.OnRead: TPollAsyncSocketOnReadWrite;
+begin
+
+end;
+
 function THttpAsyncClientConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
 begin
   result := true; // continue
@@ -3876,6 +3882,7 @@ var
   uri: TUri;
   addr: TNetAddr;
   sock: TNetSocket;
+  tag: TPollSocketTag absolute aConnection;
 begin
   // validate the input parameters
   aConnection := nil;
@@ -3896,24 +3903,39 @@ begin
     exit;
   sock.MakeAsync;
   aConnection := THttpAsyncClientConnection.Create(fOwner, addr){%H-};
-  if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
-  begin
-    aConnection.Free;
+  try
     result := nrRefused;
-    exit;
-  end;
-  aConnection.fHostName := uri.Server;
-  aConnection.fAddress := uri.Address;
-  // optionally prepare for TLS
-  if (aTls <> nil) or
-     uri.Https then
-  begin
-    if aTls <> nil then
-      aConnection.fTls := aTls^;
-    aConnection.fSecure := NewNetTls;
-    result := nrNotImplemented;
-    if aConnection.fSecure = nil then
+    if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
       exit;
+    aConnection.fHostName := uri.Server;
+    aConnection.fAddress := uri.Address;
+    // optionally prepare for TLS
+    if (aTls <> nil) or
+       uri.Https then
+    begin
+      if aTls <> nil then
+        aConnection.fTls := aTls^;
+      aConnection.fSecure := NewNetTls;
+      result := nrNotImplemented;
+      if aConnection.fSecure = nil then
+        exit;
+    end;
+    // start async events subscription and connection
+    {$ifdef USE_WINIOCP}
+    if aConnection.fIocp = nil then
+      aConnection.fIocp := fOwner.fIocp.Subscribe(aConnection.fSocket, tag);
+    if fOwner.fIocp.PrepareNext(aConnection.fIocp, wieConnect) then
+      result := nrOk;
+    {$else}
+    result := addr.SocketConnect(aConnection.fSocket, -1);
+    if result <> nrOk then
+      exit;
+    if fOwner.fClients.fWrite.Subscribe(aConnection.fSocket, [pseWrite], tag) then
+      result := nrOk;
+    {$endif USE_WINIOCP}
+  finally
+    if result <> nrOk then
+      FreeAndNil(aConnection);
   end;
 end;
 
