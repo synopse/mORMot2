@@ -110,6 +110,7 @@ type
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
+    fInternalFlags: set of (ifWriteIsConnect);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -906,10 +907,12 @@ type
   THttpAsyncClientConnection = class(THttpAsyncConnection)
   protected
     fHostName, fAddress: RawUtf8; // = TUri.Server and TUri.Address
+    fOnHttpStateChanged: TOnHttpClientRequest;
     fTls: TNetTlsContext; // associated TLS options and informations
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
+    function AfterWrite: TPollAsyncSocketOnReadWrite; override;
     /// called once just after connection to setup the TLS handshake
     function OnFirstRead(aOwner: TPollAsyncSockets): boolean; override;
   end;
@@ -2070,6 +2073,7 @@ begin
     res := soContinue;
     {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
+        (ifWriteIsConnect in connection.fInternalFlags) or
         (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
        connection.WaitLock({writer=}true, {timeout=}20) then
        // allow to wait a little since we are in a single W thread
@@ -2400,6 +2404,11 @@ begin
           // writes are done in the single (and main) fOwner.Execute thread
           // -> just relay this event to the proper IOCP queue
           fOwner.fIocp.Enqueue(sub, e, bytes);
+        wieConnect: // from THttpAsyncClientConnections.StartRequest
+          begin
+            SetRes(notif, sub^.Tag, [pseWrite]);
+            fOwner.fClients.ProcessWrite(notif, 0);
+          end;
       end;
     end;
     {$else}
@@ -3873,6 +3882,11 @@ begin
 
 end;
 
+function THttpAsyncClientConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
+begin
+
+end;
+
 function THttpAsyncClientConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
 begin
   result := true; // continue
@@ -3909,7 +3923,8 @@ begin
   // validate the input parameters
   aConnection := nil;
   result := nrNotImplemented;
-  if fOwner = nil then
+  if (fOwner = nil) or
+     not Assigned(aOnStateChanged) then
     exit;
   result := nrNotFound;
   if (aMethod = '') or
@@ -3929,8 +3944,13 @@ begin
     result := nrRefused;
     if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
       exit;
+    aConnection.fHttp.CommandUri := aUrl;
+    aConnection.fHttp.CommandMethod := aMethod;
+    aConnection.fHttp.Headers := aHeaders;
     aConnection.fHostName := uri.Server;
     aConnection.fAddress := uri.Address;
+    aConnection.fOnHttpStateChanged := aOnStateChanged;
+    aConnection.fInternalFlags := [ifWriteIsConnect];
     // optionally prepare for TLS
     if (aTls <> nil) or
        uri.Https then
@@ -4785,7 +4805,7 @@ begin
           tix := tix64 shr 16; // check SendFrame idle after 1 minute
           fAsync.ProcessIdleTix(self, tix64);
           if (fCallbackSendDelay <> nil) and
-             //TODO: set and check fCallbackOutgoingCount>0 instead
+             //TODO: set and check fCallbackOutgoingCount>0 instead?
              (fAsync.fConnectionCount <> 0) then
             lasttix := tix; // need fCallbackSendDelay^ for upgraded connections
         {$ifndef USE_WINIOCP}
