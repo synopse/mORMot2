@@ -158,6 +158,9 @@ type
     // - Sender.LogVerbose() allows logging of escaped data
     // - could return sorClose to shutdown the socket, e.g. on parsing error
     function OnRead: TPollAsyncSocketOnReadWrite; virtual; abstract;
+    /// called by TPollAsyncSockets.SubscribeConnection([pseWrite]
+    // just after fWrite.Subscribe()
+    procedure OnAfterWriteSubscribe; virtual;
     /// this method is called when some data has been written to the socket
     // - default implementation will do nothing - see e.g. TRtspConnection
     // - you may send data asynchronously using Connection.wr.Append()
@@ -895,6 +898,7 @@ type
     fHttp: THttpRequestContext; // non-blocking HTTP state machine
     fServer: THttpAsyncServer;
     function ReleaseReadMemoryOnIdle: PtrInt; override;
+    procedure OnAfterWriteSubscribe; override;
   end;
 
   /// handle one HTTP client connection handled by our non-blocking THttpAsyncServer
@@ -1303,6 +1307,10 @@ begin
 end;
 
 procedure TPollAsyncConnection.BeforeProcessRead;
+begin
+end;
+
+procedure TPollAsyncConnection.OnAfterWriteSubscribe;
 begin
 end;
 
@@ -1860,7 +1868,10 @@ begin
      if sub = pseRead then
        include(connection.fFlags, fSubRead)
      else
+     begin
        include(connection.fFlags, fSubWrite);
+       connection.OnAfterWriteSubscribe;
+     end;
   {$endif USE_WINIOCP}
   if fDebugLog <> nil then
     DoLog('Subscribe(%,%)=% % handle=%',
@@ -3824,6 +3835,17 @@ begin
   fHttp.Head.Clear;
   inc(result, fHttp.Process.Capacity);
   fHttp.Process.Clear;
+end;
+
+procedure THttpAsyncConnection.OnAfterWriteSubscribe;
+begin
+  {$ifndef USE_WINIOCP}
+  if fServer <> nil then
+    if fOwner.fClients.fWrite.SubscribeCount +
+       fOwner.fClients.fWrite.Count = 0  then
+     // release fExecuteEvent.WaitFor(msidle) in THttpAsyncServer
+     fServer.fExecuteEvent.SetEvent;
+  {$endif USE_WINIOCP}
 end;
 
 
