@@ -66,11 +66,14 @@ type
 
   /// define the TPollAsyncSockets.OnRead/AfterWrite method result
   // - soContinue should continue reading/writing content from/to the socket
+  // - soDone should unsubscribe for the current read/write phase, but should
+  // not shutdown the socket yet
   // - soWaitWrite (for AfterWrite) should wait a little then retry writing
   // - soClose would shutdown the socket
   TPollAsyncSocketOnReadWrite = (
     soContinue,
     soWaitWrite,
+    soDone,
     soClose
   );
 
@@ -397,6 +400,9 @@ type
   end;
 
   {$M-}
+
+function ToText(so: TPollAsyncSocketOnReadWrite): PShortString; overload;
+
 
 
 { ******************** Client or Server Asynchronous Process }
@@ -890,6 +896,7 @@ type
   /// exception associated with Event-Driven HTTP Server process
   EHttpAsyncConnections = class(EAsyncConnections);
 
+  THttpAsyncClientConnection = class;
   THttpAsyncServer = class;
   THttpAsyncConnections = class;
 
@@ -902,19 +909,28 @@ type
     procedure OnAfterWriteSubscribe; override;
   end;
 
+  /// callback used e.g. by THttpAsyncClientConnection.OnStateChanged
+  TOnHttpClientAsync = function(
+    connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite of object;
+
   /// handle one HTTP client connection handled by our non-blocking THttpAsyncServer
   // - used e.g. for efficient reverse proxy support with another server
   THttpAsyncClientConnection = class(THttpAsyncConnection)
   protected
-    fHostName, fAddress: RawUtf8; // = TUri.Server and TUri.Address
-    fOnHttpStateChanged: TOnHttpClientRequest;
+    fHostName: RawUtf8; // = TUri.Server and TUri.Address
+    fOnStateChanged: TOnHttpClientAsync;
     fTls: TNetTlsContext; // associated TLS options and informations
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
     function AfterWrite: TPollAsyncSocketOnReadWrite; override;
+    function NotifyStateChange: TPollAsyncSocketOnReadWrite;
+      {$ifdef HASINLINE} inline; {$endif}
     /// called once just after connection to setup the TLS handshake
     function OnFirstRead(aOwner: TPollAsyncSockets): boolean; override;
+  public
+    property OnStateChanged: TOnHttpClientAsync
+      read fOnStateChanged;
   end;
 
   /// handle one HTTP server connection to our non-blocking THttpAsyncServer
@@ -985,10 +1001,11 @@ type
     fLock: TLightLock;
     fOwner: TAsyncConnections;
     fConnectionTimeoutMS: integer;
+    fUserAgent: RawUtf8;
   public
     /// initialize the instance for a given TAsyncConnections
     // - connections will be kept alive up to aConnectionTimeoutSec seconds,
-    // ready to be
+    // ready to be reused
     constructor Create(aOwner: TAsyncConnections;
       aConnectionTimeoutSec: integer); reintroduce;
     /// start an async connection to a remote HTTP server using a callback
@@ -1001,7 +1018,7 @@ type
     // or http.ContentStream
     // - eventually hrsResponseDone or one hrsError* will mark the end of process
     function StartRequest(const aUrl, aMethod, aHeaders: RawUtf8;
-      const aOnStateChanged: TOnHttpClientRequest; aTls: PNetTlsContext;
+      const aOnStateChanged: TOnHttpClientAsync; aTls: PNetTlsContext;
       out aConnection: THttpAsyncClientConnection): TNetResult;
     /// start an async GET request to a remote HTTP server into a file
     function StartGetFile(const aUrl, aHeaders: RawUtf8; aTls: PNetTlsContext;
@@ -1009,6 +1026,9 @@ type
       out aConnection: THttpAsyncClientConnection): TNetResult;
     /// called to notify that the main process is about to finish
     procedure Shutdown;
+    /// allow to customize the User-Agent used by each client connection
+    property UserAgent: RawUtf8
+      read fUserAgent write fUserAgent;
   end;
 
   /// meta-class of THttpAsyncConnections type
@@ -1792,8 +1812,10 @@ begin
          if previous = 0 then
            // register for ProcessWrite() if not already
            result := SubscribeConnection('write', connection, pseWrite);
+      soDone:
+        result := true;  // continue with no subscribe
       soClose:
-        result := false;
+        result := false; // abort
     end;
   finally
     //DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
@@ -1873,7 +1895,7 @@ begin
      else
      begin
        include(connection.fFlags, fSubWrite);
-       connection.OnAfterWriteSubscribe;
+       connection.OnAfterWriteSubscribe; // overriden in THttpAsyncConnection
      end;
   {$endif USE_WINIOCP}
   if fDebugLog <> nil then
@@ -2162,7 +2184,8 @@ begin
   try
     result := connection.AfterWrite;
     case result of
-      soContinue:
+      soContinue,
+      soDone:
         ; // just send connection.fWr content
       soClose:
         begin
@@ -2224,6 +2247,12 @@ begin
         with fWaitingWrite do
           ObjArrayAdd(Items, connection, Safe, @Count);
   end;
+end;
+
+
+function ToText(so: TPollAsyncSocketOnReadWrite): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TPollAsyncSocketOnReadWrite), ord(so));
 end;
 
 
@@ -3876,13 +3905,87 @@ begin
 end;
 
 function THttpAsyncClientConnection.OnRead: TPollAsyncSocketOnReadWrite;
+var
+  st: TProcessParseLine;
+  previous: THttpRequestState;
 begin
+  // cut-down version of THttpAsyncServerConnection.OnRead
+  if (fOwner.fLog <> nil) and
+     (acoVerboseLog in fOwner.Options) and
+     not (acoNoLogRead in fOwner.Options) then
+    fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
+  result := soClose;
+  st.P := fRd.Buffer;
+  st.Len := fRd.Len;
+  repeat
+    previous := fHttp.State;
+    if not fHttp.ProcessRead(st, {returnOnStateChange=}true) then
+      break;
+    if previous <> fHttp.State then
+    begin
+      result := NotifyStateChange;
+      if result <> soContinue then
+        break;
+    end;
+    case fHttp.State of
+      hrsGetBodyChunkedHexFirst,
+      hrsGetBodyContentLength:
+        begin
+          // we just received command + all headers
 
+
+        end;
+
+    end;
+  until false;
 end;
 
 function THttpAsyncClientConnection.AfterWrite: TPollAsyncSocketOnReadWrite;
+var
+  data: PByte;
+  datalen: integer;
 begin
+  result := soClose; // e.g. unexpected state
+  case fHttp.State of
+    hrsConnect:
+      begin
+        fHttp.Head.Append([
+          fHttp.CommandMethod, ' /', fHttp.CommandUri, ' HTTP/1.1'#13#10 +
+          'Host: ', fHostName, #13#10 +
+          'Connection: Keep-Alive'#13#10]);
+        if fHttp.Headers <> '' then // after PurgeHeaders(trim=true)
+          fHttp.Head.Append([fHttp.Headers, #13#10]);
+        fHttp.Head.Append(['User-Agent: ', fHttp.UserAgent, #13#10]);
+        // no Content-Encoding Content-Length Content-Type support yet
+        fHttp.Head.AppendCRLF; // end of header
+        data := fHttp.Head.Buffer;
+        datalen := fHttp.Head.Len;
+        if fOwner.fClients.RawWrite(self, data, datalen) and
+           (datalen = 0) then
+        begin
+          fHttp.Reset;
+          fHttp.State := hrsGetCommand;
+          result := NotifyStateChange;
+          if (result = soContinue) and
+             fOwner.fClients.SubscribeConnection('afterwrite', self, pseRead) then
+            result := soDone;  // register read + unregister write
+        end;
+      end;
+  end;
+  if result <> soDone then
+    fOwner.DoLog(sllWarning, 'AfterWrite=%: state=%',
+      [ToText(result)^, ToText(fHttp.State)^], self);
+end;
 
+function THttpAsyncClientConnection.NotifyStateChange: TPollAsyncSocketOnReadWrite;
+begin
+  result := soContinue;
+  if Assigned(fOnStateChanged) then
+    try
+      result := fOnStateChanged(self);
+    except
+      result := soClose;
+    end;
 end;
 
 function THttpAsyncClientConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
@@ -3906,11 +4009,12 @@ constructor THttpAsyncClientConnections.Create(aOwner: TAsyncConnections;
 begin
   fOwner := aOwner;
   fConnectionTimeoutMS := aConnectionTimeoutSec * 1000;
+  fUserAgent := DefaultUserAgent(self);
 end;
 
 function THttpAsyncClientConnections.StartRequest(
   const aUrl, aMethod, aHeaders: RawUtf8;
-  const aOnStateChanged: TOnHttpClientRequest; aTls: PNetTlsContext;
+  const aOnStateChanged: TOnHttpClientAsync; aTls: PNetTlsContext;
   out aConnection: THttpAsyncClientConnection): TNetResult;
 var
   uri: TUri;
@@ -3942,12 +4046,17 @@ begin
     result := nrRefused;
     if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
       exit;
-    aConnection.fHttp.CommandUri := aUrl;
+    aConnection.fHttp.CommandUri := uri.Address;
     aConnection.fHttp.CommandMethod := aMethod;
-    aConnection.fHttp.Headers := aHeaders;
-    aConnection.fHostName := uri.Server;
-    aConnection.fAddress := uri.Address;
-    aConnection.fOnHttpStateChanged := aOnStateChanged;
+    aConnection.fHttp.UserAgent := fUserAgent;
+    if aHeaders <> '' then
+      aConnection.fHttp.Headers := PurgeHeaders(aHeaders, {trim=}true);
+    aConnection.fHttp.Head.Reserve(2048); // 2KB max
+    if uri.Port = DEFAULT_PORT[aTls <> nil] then
+      aConnection.fHostName := uri.Server
+    else
+      Append(aConnection.fHostName, [uri.Server, ':', uri.Port]);
+    aConnection.fOnStateChanged := aOnStateChanged;
     aConnection.fInternalFlags := [ifWriteIsConnect];
     // optionally prepare for TLS
     if (aTls <> nil) or
