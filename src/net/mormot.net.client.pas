@@ -1509,23 +1509,21 @@ begin
   name[0] := #0;
   P := ClassNameShort(Instance);
   for i := 2 to ord(P^[0]) do
-    if P^[i] in ['A'..'Z'] then
-      if name[0] = #16 then
-        break
-      else
+    if P^[i] in ['A'..'Z'] then // append uppercase alphabetic chars
       begin
         inc(name[0]);
         name[ord(name[0])] := P^[i];
+        if name[0] = #16 then
+          break;
       end;
   // note: the framework would identify 'mORMot' pattern in the user-agent
   // header to enable advanced behavior e.g. about JSON transmission
   vers[0] := #0;
   if Executable.Version.Major <> 0 then
     FormatShort16('/%', [Executable.Version.Major], vers);
-  FormatUtf8(
+  result := FormatUtf8(
     'Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/% %%',
-    [name, copy(SYNOPSE_FRAMEWORK_VERSION, 1, 3), Executable.ProgramName,
-     vers], result);
+    [name, copy(SYNOPSE_FRAMEWORK_VERSION, 1, 3), Executable.ProgramName, vers]);
 end;
 
 
