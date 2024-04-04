@@ -1107,7 +1107,8 @@ const
       {$if declared(RTLVersion111)} + '.1' {$ifend} {$ifend} {$ifend}
                               + ' Alexandria'
     {$elseif defined(VER360)} + ' 12'
-      {$if declared(RTLVersion121)} + '.1' {$ifend}
+      {$if declared(RTLVersion122)} + '.2' {$else}
+      {$if declared(RTLVersion121)} + '.1' {$ifend} {$ifend}
                               + ' Athens'
     {$elseif defined(VER370)} + ' 13 Next'
     {$ifend}
