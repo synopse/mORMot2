@@ -586,10 +586,10 @@
         {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
       {$endif CPU64}
     {$ifend}
-    {$if CompilerVersion >= 36.0} // = Delphi 12 Yukon
+    {$if CompilerVersion >= 36.0} // = Delphi 12 Athens
       {$define ISDELPHI12}
     {$ifend}
-    {$if CompilerVersion >= 37.0} // = Delphi 13
+    {$if CompilerVersion >= 37.0} // = Delphi 13 Next
       {$define ISDELPHI13}
     {$ifend}
   {$else}
