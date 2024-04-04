@@ -2730,6 +2730,8 @@ type
     /// add some UTF-8 shortstring content to the Buffer, resizing it if needed
     procedure AppendShort(const Text: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
+    /// add some UTF-8 string(s) content to the Buffer, resizing it if needed
+    procedure Append(const Text: array of RawUtf8); overload;
     /// just after Append/AppendShort, append a #13#10 end of line
     procedure AppendCRLF;
       {$ifdef HASINLINE}inline;{$endif}
@@ -11238,6 +11240,14 @@ end;
 procedure TRawByteStringBuffer.AppendShort(const Text: ShortString);
 begin
   RawAppend(@Text[1], ord(Text[0]));
+end;
+
+procedure TRawByteStringBuffer.Append(const Text: array of RawUtf8);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Text) do
+    Append(Text[i]);
 end;
 
 function TRawByteStringBuffer.TryAppend(P: pointer; PLen: PtrInt): boolean;
