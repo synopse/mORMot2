@@ -3834,15 +3834,13 @@ end;
 
 { ******************** THttpAsyncServer Event-Driven HTTP Server }
 
-
 { THttpAsyncConnection }
 
 function THttpAsyncConnection.ReleaseReadMemoryOnIdle: PtrInt;
 begin
-  result := inherited ReleaseReadMemoryOnIdle; // clean fRd memory
-  inc(result, fHttp.Head.Capacity);
+  result := inherited ReleaseReadMemoryOnIdle + // clean fRd memory
+            fHttp.Head.Capacity + fHttp.Process.Capacity;
   fHttp.Head.Clear;
-  inc(result, fHttp.Process.Capacity);
   fHttp.Process.Clear;
 end;
 
@@ -3851,7 +3849,7 @@ begin
   {$ifndef USE_WINIOCP}
   if fServer <> nil then
     if fOwner.fClients.fWrite.SubscribeCount +
-       fOwner.fClients.fWrite.Count = 0  then
+       fOwner.fClients.fWrite.Count <= 1  then
      // release fExecuteEvent.WaitFor(msidle) in THttpAsyncServer
      fServer.fExecuteEvent.SetEvent;
   {$endif USE_WINIOCP}
@@ -4104,7 +4102,8 @@ begin
      not (acoNoLogRead in fOwner.Options) then
     fOwner.LogVerbose(self, 'OnRead %', [HTTP_STATE[fHttp.State]], fRd);
   result := soClose;
-  if fOwner.fClients = nil then
+  if (fServer = nil) or
+     (fOwner.fClients = nil) then
     fHttp.State := hrsErrorMisuse
   else if fServer.fShutdownInProgress then
     fHttp.State := hrsErrorShutdownInProgress
