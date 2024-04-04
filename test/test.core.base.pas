@@ -6593,6 +6593,14 @@ begin
   // some HTTP methods
   CheckEqual(PurgeHeaders(''), '');
   CheckEqual(PurgeHeaders('toto'), 'toto');
+  CheckEqual(PurgeHeaders(#13#10), #13#10);
+  CheckEqual(PurgeHeaders('toto'#13#10), 'toto'#13#10);
+  CheckEqual(PurgeHeaders(#13#10, true), '');
+  CheckEqual(PurgeHeaders('toto'#13#10, true), 'toto');
+  CheckEqual(PurgeHeaders('', true), '');
+  CheckEqual(PurgeHeaders('toto', true), 'toto');
+  CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10, true), 'toto');
+  CheckEqual(PurgeHeaders('toto'#13#10'content-length: 10'#13#10, true), 'toto');
   s := 'toto'#13#10;
   CheckEqual(PurgeHeaders(s), s);
   CheckEqual(PurgeHeaders('content-length: 10'#13#10'toto'#13#10), s);

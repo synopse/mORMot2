@@ -108,7 +108,8 @@ function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
 // - as used e.g. during TPublicRelay process from mormot.net.relay
-function PurgeHeaders(const headers: RawUtf8): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
+  upIgnore: PPAnsiChar = nil): RawUtf8;
 
 /// search, copy and remove a given HTTP header
 // - FindNameValue() makes search&copy, but this function also REMOVES the header
@@ -2394,7 +2395,7 @@ const
     'ACCEPT:',
     nil);
 
-function PurgeHeaders(const headers: RawUtf8): RawUtf8;
+function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PPAnsiChar): RawUtf8;
 var
   pos, len: array[byte] of word;
   n, purged, i, l, tot: PtrInt;
@@ -2403,6 +2404,8 @@ begin
   n := 0;
   tot := 0;
   purged := 0;
+  if upIgnore = nil then
+    upIgnore := @TOBEPURGED;
   // put all allowed headers in pos[]/len[]
   P := pointer(headers);
   if length(headers) shr 16 = 0 then // defined as word
@@ -2411,17 +2414,19 @@ begin
       if P^ = #0 then
         break;
       next := GotoNextLine(P);
-      if IdemPPChar(P, @TOBEPURGED) < 0 then
+      if IdemPPChar(P, upIgnore) < 0 then
       begin
         if n = high(len) then
           break;
         pos[n] := P - pointer(headers);
-        l := next - P;
         if next = nil then
-          if purged = 0 then
+          if (purged = 0) and
+             not trim then
             break
           else
-            l := StrLen(P);
+            l := StrLen(P)
+        else
+          l := next - P;
         inc(tot, l);
         len[n] := l;
         inc(n);
@@ -2431,7 +2436,8 @@ begin
       P := next;
     end;
   // recreate an expurgated headers set
-  if purged = 0 then
+  if (purged = 0) and
+     not trim then
     // nothing to purge
     result := headers
   else if tot = 0 then
@@ -2440,11 +2446,24 @@ begin
   else
   begin
     // allocate at once and append all non-purged headers
+    dec(n);
+    if trim then
+    begin
+      P := pointer(@PByteArray(headers)[{%H-}pos[n]]);
+      i := {%H-}len[n];
+      while (i > 0) and
+            (P[i - 1] < ' ') do
+      begin
+        dec(i); // trim right
+        dec(tot);
+      end;
+      len[n] := i;
+    end;
     FastSetString(result, tot);
     P := pointer(result);
-    for i := 0 to n - 1 do
+    for i := 0 to n do
     begin
-      MoveFast(PByteArray(headers)[{%H-}pos[i]], P^, {%H-}len[i]);
+      MoveFast(PByteArray(headers)[pos[i]], P^, len[i]);
       inc(P, len[i]);
     end;
     assert(P - pointer(result) = tot);
