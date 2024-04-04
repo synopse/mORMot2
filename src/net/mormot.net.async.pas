@@ -4117,7 +4117,7 @@ begin
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
     fPipelinedWrite := false;
-    while fHttp.ProcessRead(st) do
+    while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
     begin
       // detect pipelined GET input
       if fPipelineEnabled and

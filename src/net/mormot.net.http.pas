@@ -476,7 +476,8 @@ type
     // - caller should have checked that current State is in HTTP_REQUEST_READ
     // - returns true if a new State was reached, or false if some more
     // input is needed
-    function ProcessRead(var st: TProcessParseLine): boolean;
+    function ProcessRead(var st: TProcessParseLine;
+      returnOnStateChange: boolean): boolean;
     /// compress Content according to CompressAcceptHeader, adding headers
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Content is not '', will add 'Content-Type: ' header
@@ -2449,15 +2450,14 @@ begin
     dec(n);
     if trim then
     begin
-      P := pointer(@PByteArray(headers)[{%H-}pos[n]]);
-      i := {%H-}len[n];
-      while (i > 0) and
-            (P[i - 1] < ' ') do
-      begin
-        dec(i); // trim right
-        dec(tot);
-      end;
-      len[n] := i;
+      P := PUtf8Char(pointer(headers)) + {%H-}pos[n];
+      l := {%H-}len[n];
+      dec(tot, l);
+      while (l > 0) and
+            (P[l - 1] < ' ') do
+        dec(l); // trim right
+      inc(tot, l);
+      len[n] := l;
     end;
     FastSetString(result, tot);
     P := pointer(result);
@@ -3078,19 +3078,19 @@ begin
   HeaderFlags := [];
   ResponseFlags := [];
   Options := [];
-  Headers := '';
-  ContentType := '';
+  FastAssignNew(Headers);
+  FastAssignNew(ContentType);
   if Upgrade <> '' then
-    Upgrade := '';
+    FastAssignNew(Upgrade);
   if BearerToken <> '' then
-    BearerToken := '';
+    FastAssignNew(BearerToken);
   if UserAgent <> '' then
-    UserAgent := '';
+    FastAssignNew(UserAgent);
   if Referer <> '' then
-    Referer := '';
+    FastAssignNew(Referer);
   RangeOffset := 0;
   RangeLength := -1;
-  Content := '';
+  FastAssignNew(Content);
   ContentLength := -1;
   ContentLastModified := 0;
   ContentStream := nil;
@@ -3590,7 +3590,8 @@ begin
     result := false; // not enough input
 end;
 
-function THttpRequestContext.ProcessRead(var st: TProcessParseLine): boolean;
+function THttpRequestContext.ProcessRead(
+  var st: TProcessParseLine; returnOnStateChange: boolean): boolean;
 var
   previous: THttpRequestState;
 begin
@@ -3734,7 +3735,8 @@ begin
       State := hrsErrorMisuse; // out of context State for input
     end;
   until (State <> previous) and
-        ((State = hrsGetBodyChunkedHexFirst) or
+        (returnOnStateChange or
+         (State = hrsGetBodyChunkedHexFirst) or
          (State = hrsGetBodyContentLength) or
          (State >= hrsWaitProcessing));
   result := true; // notify the next main state change

@@ -1431,7 +1431,7 @@ type
     // - e.g. from 'https://user:password@server:port/address'
     Password: RawUtf8;
     /// the resource address, including optional parameters
-    // - e.g. '/category/name/10?param=1'
+    // - e.g. 'category/name/10?param=1'
     Address: RawUtf8;
     /// reset all stored information
     procedure Clear;
