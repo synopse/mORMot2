@@ -2071,8 +2071,6 @@ var
   end;
 
   procedure DoRequestAndFreeStream;
-  var
-    lastmod: RawUtf8;
   begin
     // prepare TStreamRedirect context
     stream.Context := urlfile;
@@ -2116,9 +2114,8 @@ var
     stream.Ended; // notify finished
     parthash := stream.GetHash; // hash updated on each stream.Write()
     FreeAndNil(stream);
-    lastmod := Http.HeaderGetValue('LAST-MODIFIED');
-    if lastmod <> '' then
-      FileSetDateFromUnixUtc(part, HttpDateToUnixTime(lastmod));
+    if Http.ContentLastModified > 0 then
+      FileSetDateFromUnixUtc(part, Http.ContentLastModified);
   end;
 
   procedure AbortAlternateDownloading;

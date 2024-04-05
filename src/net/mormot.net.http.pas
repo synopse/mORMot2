@@ -3156,6 +3156,7 @@ begin
   // your network architecture suffers from HTTP request smuggling
   // - much less readable than cascaded IdemPPChar(), but slightly faster ;)
   case PCardinal(P)^ or $20202020 of
+    // content-length/type/encoding
     ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('t') shl 24:
       if PCardinal(P + 4)^ or $20202020 =
         ord('e') + ord('n') shl 8 + ord('t') shl 16 + ord('-') shl 24 then
@@ -3216,6 +3217,7 @@ begin
                   end;
             end;
         end;
+    // host
     ord('h') + ord('o') shl 8 + ord('s') shl 16 + ord('t') shl 24:
       if P[4] = ':' then
       begin
@@ -3235,6 +3237,7 @@ begin
         end;
         // always add to headers - 'host:' sometimes parsed directly
       end;
+    // connection: close/upgrade/keep-alive
     ord('c') + ord('o') shl 8 + ord('n') shl 16 + ord('n') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
           ord('e') + ord('c') shl 8 + ord('t') shl 16 + ord('i') shl 24) and
@@ -3281,6 +3284,7 @@ begin
             end;
         end;
       end;
+    // accept-encoding
     ord('a') + ord('c') shl 8 + ord('c') shl 16 + ord('e') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('p') + ord('t') shl 8 + ord('-') shl 16 + ord('e') shl 24) and
@@ -3294,6 +3298,7 @@ begin
           if not HeadersUnFiltered then
             exit;
         end;
+    // user-agent
     ord('u') + ord('s') shl 8 + ord('e') shl 16 + ord('r') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('-') + ord('a') shl 8 + ord('g') shl 16 + ord('e') shl 24) and
@@ -3305,6 +3310,7 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // server-internalstate
     ord('s') + ord('e') shl 8 + ord('r') shl 16 + ord('v') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('e') + ord('r') shl 8 + ord('-') shl 16 + ord('i') shl 24) and
@@ -3322,6 +3328,7 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // expect
     ord('e') + ord('x') shl 8 + ord('p') shl 16 + ord('e') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('c') + ord('t') shl 8 + ord(':') shl 16 + ord(' ') shl 24) and
@@ -3333,6 +3340,7 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // authorization
     ord('a') + ord('u') shl 8 + ord('t') shl 16 + ord('h') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('o') + ord('r') shl 8 + ord('i') shl 16 + ord('z') shl 24) and
@@ -3349,6 +3357,7 @@ begin
           GetTrimmed(P + 22, P2, PLen, BearerToken, {nointern=}true);
         // always allow FindNameValue(..., HEADER_BEARER_UPPER, ...) search
       end;
+    // range
     ord('r') + ord('a') shl 8 + ord('n') shl 16 + ord('g') shl 24:
       if (PCardinal(P + 4)^ or $20202020 =
         ord('e') + ord(':') shl 8 + ord(' ') shl 16 + ord('b') shl 24) and
@@ -3383,6 +3392,7 @@ begin
           if not HeadersUnFiltered then
             exit;
         end;
+    // upgrade
     ord('u') + ord('p') shl 8 + ord('g') shl 16 + ord('r') shl 24:
       if PCardinal(P + 4)^ or $00202020 =
         ord('a') + ord('d') shl 8 + ord('e') shl 16 + ord(':') shl 24 then
@@ -3392,6 +3402,7 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // referer
     ord('r') + ord('e') shl 8 + ord('f') shl 16 + ord('e') shl 24:
       if PCardinal(P + 4)^ or $00202020 =
         ord('r') + ord('e') shl 8 + ord('r') shl 16 + ord(':') shl 24 then
@@ -3401,6 +3412,7 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // transfer-encoding
     ord('t') + ord('r') shl 8 + ord('a') shl 16 + ord('n') shl 24:
       if IdemPChar(P + 4, 'SFER-ENCODING: CHUNKED') then
       begin
@@ -3409,6 +3421,15 @@ begin
         if not HeadersUnFiltered then
           exit;
       end;
+    // last-modified
+    ord('l') + ord('a') shl 8 + ord('s') shl 16 + ord('t') shl 24:
+      if (PCardinal(P + 4)^ or $20202020 =
+            ord('-') + ord('m') shl 8 + ord('o') shl 16 + ord('d') shl 24) and
+         (PCardinal(P + 8)^ or $20202020 =
+            ord('i') + ord('f') shl 8 + ord('i') shl 16 + ord('e') shl 24) and
+         (PWord(P + 12)^ or $2020 = ord('d') + ord(':') shl 8) then
+        // 'LAST-MODIFIED: Sat, 10 Feb 2024 10:10:38 GMT'
+        ContentLastModified := HttpDateToUnixTimeBuffer(P + 14);
   end;
   // store meaningful headers into WorkBuffer, if not already there
   if PLen < 0 then
