@@ -2993,6 +2993,7 @@ var
 begin
   // process content
   Context.ContentLength := 0; // needed by ProcessStaticFile
+  Context.ContentLastModified := 0;
   if (OutContentType <> '') and
      (OutContentType[1] = '!') then
     if OutContentType = NORESPONSE_CONTENT_TYPE then
