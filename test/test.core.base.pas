@@ -5773,6 +5773,8 @@ begin
     'Sun, 06 Nov 2021 084937 east')), '');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
     'Tue, 15 Nov 1994 12:45:26 Z')), '1994-11-15T12:45:26');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sunday, 06-Nov-94 08:49:37 GMT')), '1994-11-06T08:49:37');
   // validate common TSynTimeZone process
   tz := TSynTimeZone.Create;
   try

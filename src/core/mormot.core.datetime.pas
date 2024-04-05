@@ -2183,18 +2183,18 @@ end;
 function TSynSystemTime.FromHttpDateBuffer(
   P: PUtf8Char; tolocaltime: boolean): boolean;
 var
-  S: PUtf8Char;
-  v, len, zone: integer;
   pnt: byte;
-  wday: boolean;
-  H, MI, SS, MS: cardinal;
+  hasday: boolean;
+  S: PUtf8Char;
+  zone: integer;
+  v, H, MI, SS, MS: cardinal;
   dt, t: TDateTime;
 begin
   // Sun, 06 Nov 1994 08:49:37 GMT    ; RFC 822, updated by RFC 1123
   // Sunday, 06-Nov-94 08:49:37 GMT   ; RFC 850, obsoleted by RFC 1036
   // Sun Nov  6 08:49:37 1994         ; ANSI C's asctime() Format
   Clear;
-  wday := false;
+  hasday := false;
   zone := maxInt; // invalid
   result := false;
   if P = nil then
@@ -2204,15 +2204,15 @@ begin
     case P^ of
       'A'..'Z',
       'a'..'z':
-        if (not wday) or
+        if (not hasday) or
            (not ParseMonth(P, Month)) then
         begin
-          P := GotoNextSpace(P);
-          wday := true; // first alphabetic word is always the week day text
+          hasday := true; // first alphabetic word is always the week day text
+          P := GotoNextSpace(P); // also ignore trailing '-'
         end;
       '0'..'9':
         begin
-          // e.g. '1994', '08:49:37 GMT' or '6'
+          // e.g. '1994' '08:49:37 GMT' or '6'
           pnt := 0;
           S := P;
           repeat
@@ -2233,41 +2233,40 @@ begin
               break;
             end;
           until false;
-          len := P - S;
-          if pnt = 2 then
-          begin
-            // e.g. '08:49:37 GMT'
-            if Iso8601ToTimePUtf8Char(S, len, H, MI, SS, MS) then
-            begin
-              Hour := H;
-              Minute := MI;
-              Second := SS;
-              MilliSecond := MS;
-              zone := 0; // GMT by default
-              ParseTimeZone(P, zone);
-            end;
-          end
-          else if pnt = 0 then
-          begin
-            // e.g. '6', '94' or '2014'
-            v := GetInteger(S, P);
-            if v > 0 then
-            begin
-              if (v < 32) and
-                 (Day = 0) then
-                Day := v
-              else if (Year = 0) and
-                      (v <= 9999) and
-                      ((Month > 0) or
-                       (v > 12)) then
+          case pnt of
+            0:
+              // e.g. '6', '94' or '2014'
               begin
-                if v < 32 then
-                  inc(v, 2000)
-                else if v < 1000 then
-                  inc(v, 1900);
-                Year := v;
+                v := GetCardinal(S);
+                if v <> 0 then
+                begin
+                  if (v < 32) and
+                     (Day = 0) then
+                    Day := v
+                  else if (Year = 0) and
+                          (v <= 9999) and
+                          ((v > 12) or
+                           (Month > 0)) then
+                  begin
+                    if v < 32 then
+                      inc(v, 2000)
+                    else if v < 1000 then
+                      inc(v, 1900);
+                    Year := v;
+                  end;
+                end;
               end;
-            end;
+            2:
+              // e.g. '08:49:37 GMT'
+              if Iso8601ToTimePUtf8Char(S, P - S, H, MI, SS, MS) then
+              begin
+                Hour := H;
+                Minute := MI;
+                Second := SS;
+                MilliSecond := MS;
+                zone := 0; // GMT by default
+                ParseTimeZone(P, zone);
+              end;
           end;
           if P^ = '-' then
             inc(P); // e.g. '06-Nov-94'
@@ -2275,7 +2274,7 @@ begin
     else
       P := GotoNextSpace(P);
     end;
-  until P^ in [#0, #13, #10]; // end of string or end of line (e.g. HTTP header)
+  until P^ in [#0, #10, #13]; // end of string or end of line (e.g. HTTP header)
   if (Year = 0) or
      (zone = maxInt) or
      (Month = 0) then
