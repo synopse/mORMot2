@@ -610,8 +610,16 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 function HttpDateToDateTime(const httpdate: RawUtf8;
   tolocaltime: boolean = false): TDateTime; overload;
 
+/// convert some "HTTP-date" format as defined by RFC 7231 into date/time
+// - wrapper around TSynSystemTime.FromHttpDate() conversion algorithm
+function HttpDateToDateTimeBuffer(httpdate: PUtf8Char; var datetime: TDateTime;
+  tolocaltime: boolean = false): boolean;
+
 /// convert some "HTTP-date" format as defined by RFC 7231 into UTC date/time
 function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
+
+/// convert some "HTTP-date" format as defined by RFC 7231 into UTC date/time
+function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
 
 type
   THttpDateNowUtc = string[39];
@@ -2711,12 +2719,33 @@ begin
     result := 0;
 end;
 
+function HttpDateToDateTimeBuffer(httpdate: PUtf8Char; var datetime: TDateTime;
+  tolocaltime: boolean): boolean;
+var
+  T: TSynSystemTime;
+begin
+  PInt64(@datetime)^ := 0;
+  result := (httpdate <> '') and
+            T.FromHttpDateBuffer(httpdate, tolocaltime);
+  if result then
+    datetime := T.ToDateTime;
+end;
+
 function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
 var
   dt: TDateTime;
 begin
   result := 0;
   if HttpDateToDateTime(httpdate, dt, {tolocaltime=}false) then
+    result := DateTimeToUnixTime(dt);
+end;
+
+function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
+var
+  dt: TDateTime;
+begin
+  result := 0;
+  if HttpDateToDateTimeBuffer(httpdate, dt, {tolocaltime=}false) then
     result := DateTimeToUnixTime(dt);
 end;
 
