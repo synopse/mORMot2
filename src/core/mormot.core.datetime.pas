@@ -473,6 +473,8 @@ type
     // $ Sun Nov  6 08:49:37 1994         ; ANSI C's asctime() format
     function FromHttpDate(const httpdate: RawUtf8;
       tolocaltime: boolean = false): boolean;
+    /// fill Year/Month/Day and Hour/Minute/Second fields from HTTP-date PUtf8Char
+    function FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean): boolean;
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
       const TZD: RawUtf8 = ''): RawUtf8;
@@ -2163,10 +2165,10 @@ begin
   end;
 end;
 
-function TSynSystemTime.FromHttpDate(const httpdate: RawUtf8;
-  tolocaltime: boolean): boolean;
+function TSynSystemTime.FromHttpDateBuffer(
+  P: PUtf8Char; tolocaltime: boolean): boolean;
 var
-  P, S: PUtf8Char;
+  S: PUtf8Char;
   v, len, pnt, zone: integer;
   H, MI, SS, MS: cardinal;
   dt, t: TDateTime;
@@ -2177,9 +2179,8 @@ begin
   Clear;
   zone := maxInt; // invalid
   result := false;
-  if length(httpdate) < 12 then
+  if P = nil then
     exit;
-  P := pointer(httpdate);
   repeat
     P := GotoNextNotSpace(P);
     case P^ of
@@ -2248,7 +2249,7 @@ begin
     else
       P := GotoNextSpace(P);
     end;
-  until P^ = #0;
+  until P^ in [#0, #13, #10]; // end of string or end of line (e.g. HTTP header)
   if (Year = 0) or
      (Zone = maxInt) or
      (Month = 0) then
@@ -2277,6 +2278,13 @@ begin
     FromDateTime(dt); // local TDateTime to compute time shift
   end;
   result := true;
+end;
+
+function TSynSystemTime.FromHttpDate(const httpdate: RawUtf8;
+  tolocaltime: boolean): boolean;
+begin
+  result := (length(httpdate) >= 12) and
+            FromHttpDateBuffer(pointer(httpdate), tolocaltime);
 end;
 
 function TSynSystemTime.ToText(Expanded: boolean; FirstTimeChar: AnsiChar;
