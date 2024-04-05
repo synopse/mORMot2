@@ -2420,14 +2420,13 @@ begin
         if n = high(len) then
           break;
         pos[n] := P - pointer(headers);
+        l := next - P;
         if next = nil then
           if (purged = 0) and
              not trim then
             break
           else
-            l := StrLen(P)
-        else
-          l := next - P;
+            l := StrLen(P);
         inc(tot, l);
         len[n] := l;
         inc(n);
