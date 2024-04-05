@@ -1639,15 +1639,15 @@ const
     #3'GMT'#4'NZDT'#1'M'#4'IDLE'#4'NZST'#3'NZT'#4'EADT'#3'GST'#3'JST'#3'CCT' +
     #4'WADT'#4'WAST'#3'ZP6'#3'ZP5'#3'ZP4'#2'BT'#3'EET'#4'MEST'#4'MESZ'#3'SST'  +
     #3'FST'#4'CEST'#3'CET'#3'FWT'#3'MET'#4'MEWT'#3'SWT'#2'UT'#3'UTC'#1'Z'  +
-    #2'UT'#3'WET'#1'A'#3'WAT'#3'BST'#2'AT'#3'ADT'#3'AST'#3'EDT'#3'EST'  +
+    #3'WET'#1'A'#3'WAT'#3'BST'#2'AT'#3'ADT'#3'AST'#3'EDT'#3'EST'  +
     #3'CDT'#3'CST'#3'MDT'#3'MST'#3'PDT'#3'PST'#3'YDT'#3'YST'#3'HDT'  +
     #4'AHST'#3'CAT'#3'HST'#4'EAST'#2'NT'#4'IDLW'#1'Y';
 
-  _TZv: array[0..55] of ShortInt = (
+  _TZv: array[0..54] of ShortInt = (
     0, 13, 12, 12, 12, 12, 11, 10, 9, 8,
     8, 7, 6, 5, 4, 3, 2, 2, 2, 2,
     2, 2, 1, 1, 1, 1, 1, 0, 0, 0,
-    0, 0, -1, -1, -1, -2, -3, -4, -4, -5,
+    0, -1, -1, -1, -2, -3, -4, -4, -5,
     -5, -6, -6, -7, -7, -8, -8, -9, -9,
     -10, -10, -10, -10, -11, -12, -12);
 
@@ -1667,31 +1667,37 @@ begin
   if P = nil then
     exit;
   P := GotoNextNotSpace(P);
-  if (P^ = '+') or
-     (P^ = '-') then
+  S := P;
+  if PCardinal(S)^ and $ffffff = // most common case (always for HTTP dates)
+       ord('G') + ord('M') shl 8 + ord('T') shl 16 then
   begin
-    if not (P[1] in ['0'..'9']) or
-       not (P[2] in ['0'..'9']) or
-       not (P[3] in ['0'..'9']) or
-       not (P[4] in ['0'..'9']) then
+    Zone := 0;
+    result := true;
+  end
+  else if (S^ = '+') or
+          (S^ = '-') then
+  begin
+    if not (S[1] in ['0'..'9']) or
+       not (S[2] in ['0'..'9']) or
+       not (S[3] in ['0'..'9']) or
+       not (S[4] in ['0'..'9']) then
       exit;
-    if (P^ = '-') and
-       (PCardinal(P + 1)^ = $30303030) then // '-0000' for current local
+    if (S^ = '-') and
+       (PCardinal(S + 1)^ = $30303030) then // '-0000' for current local
       Zone := TimeZoneLocalBias
     else
     begin
-      Zone := (ord(P[1]) * 10 + ord(P[2]) - (48 + 480)) * 60 +
-              (ord(P[3]) * 10 + ord(P[4]) - (48 + 480));
+      Zone := (ord(S[1]) * 10 + ord(S[2]) - (48 + 480)) * 60 +
+              (ord(S[3]) * 10 + ord(S[4]) - (48 + 480));
       if P^ = '-' then
         Zone := -Zone;
     end;
-    P := GotoNextNotSpace(P + 5);
+    P := GotoNextNotSpace(S + 5);
     result := true;
   end
   else
   begin
     // TODO: enhance TSynTimeZone from mormot.core.search to parse timezones?
-    S := P;
     while (S^ in ['a'..'z', 'A'..'Z']) do
       inc(S);
     z := S - P;
