@@ -1666,6 +1666,10 @@ const
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec');
 
+  HTML_MONTH_NAMES_32: array[0..11] of array[0..3] of AnsiChar = (
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC');
+
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean;
 var
   z: integer;
@@ -1732,7 +1736,7 @@ begin
             (GotoNextNotSpace(P)^ = #0);
 end;
 
-function ParseMonth(var P: PUtF8Char; var Month: word): boolean;
+function ParseMonth(var P: PUtf8Char; var Month: word): boolean;
 var
   m: integer;
 begin
@@ -1740,23 +1744,19 @@ begin
   if P = nil then
     exit;
   P := GotoNextNotSpace(P);
-  if (P[0] in ['a'..'z', 'A'..'Z']) and
-     (P[1] in ['a'..'z', 'A'..'Z']) and
-     (P[2] in ['a'..'z', 'A'..'Z']) then
-  begin
-    m := FindShortStringListExact(@HTML_MONTH_NAMES[1], 11, P, 3);
-    if m >= 0 then
-    begin
-      Month := m + 1;
-      inc(P, 3);
-      if P^ = '-' then
-        inc(P) // e.g. '06-Nov-94'
-      else
-        P := GotoNextNotSpace(P);
-      result := true;
-      exit;
-    end;
-  end;
+  m := PCardinal(P)^ and $dfdfdf;
+  if m and $00404040 <> $00404040 then // quick alphabetical guess
+    exit;
+  m := IntegerScanIndex(@HTML_MONTH_NAMES_32, 12, m);
+  if m < 0 then
+    exit;
+  Month := m + 1;
+  inc(P, 3);
+  if P^ = '-' then
+    inc(P) // e.g. '06-Nov-94'
+  else
+    P := GotoNextNotSpace(P);
+  result := true;
 end;
 
 function ParseMonth(const s: RawUtf8; var Month: word): boolean;

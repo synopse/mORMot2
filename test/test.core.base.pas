@@ -5744,6 +5744,8 @@ begin
   CheckEqual(bias, 0);
   Check(ParseTimeZone(' east', bias));
   CheckEqual(bias, -10 * 60);
+  Check(ParseTimeZone('Y   ', bias));
+  CheckEqual(bias, -12 * 60);
   Check(ParseTimeZone('gmT ', bias));
   CheckEqual(bias, 0);
   Check(ParseTimeZone('    IDLW    ', bias));
