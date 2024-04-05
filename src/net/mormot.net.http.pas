@@ -352,6 +352,8 @@ type
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    function ParseHttp(P: PUtf8Char): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
       nointern: boolean = false);
       {$ifdef HASINLINE} inline; {$endif}
@@ -432,8 +434,13 @@ type
     CompressContentEncoding: integer;
     /// reset this request context to be used prior to any ProcessInit/Read/Write
     procedure Reset;
-    /// parse CommandUri into CommandMethod/CommandUri fields
+    /// parse CommandUri into CommandMethod/CommandUri fields on server side
+    // - e.g. from CommandUri = 'GET /uri HTTP/1.1'
     function ParseCommand: boolean;
+    /// parse CommandUri into result fields on server side
+    // - e.g. from CommandUri = 'HTTP/1.1 200 OK'
+    // - returns 0 on parsing error, or the HTTP status (e.g. 200)
+    function ParseResponse: integer;
     /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -3485,6 +3492,23 @@ begin
   result := true;
 end;
 
+function THttpRequestContext.ParseHttp(P: PUtf8Char): boolean;
+begin
+  result := false;
+  if (PCardinal(P)^ <>
+       ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) or
+     (PCardinal(P + 4)^ and $ffffff <>
+       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
+    exit;
+  if P[7] <> '1' then
+    include(ResponseFlags, rfHttp10);
+  if not (hfConnectionClose in HeaderFlags) then
+    if not (hfConnectionKeepAlive in HeaderFlags) and // allow HTTP1.0+keepalive
+       (rfHttp10 in ResponseFlags) then // HTTP/1.1 is keep-alive by default
+      include(HeaderFlags, hfConnectionClose); // standard HTTP/1.0
+  result := true;
+end;
+
 var
   _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
 
@@ -3496,6 +3520,7 @@ begin
   result := false;
   if nfHeadersParsed in HeaderFlags then
     exit;
+  // e.g. from CommandUri = 'GET /uri HTTP/1.1'
   P := pointer(CommandUri);
   if P = nil then
     exit;
@@ -3543,18 +3568,22 @@ begin
   L := P - B;
   MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
   FakeLength(CommandUri, L);
-  if (PCardinal(P + 1)^ <>
-       ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) or
-     (PCardinal(P + 5)^ and $ffffff <>
-       ord('/') + ord('1') shl 8 + ord('.') shl 16) then
-    exit;
-  if P[8] <> '1' then
-    include(ResponseFlags, rfHttp10);
-  if not (hfConnectionClose in HeaderFlags) then
-    if not (hfConnectionKeepAlive in HeaderFlags) and // allow HTTP1.0+keepalive
-       (rfHttp10 in ResponseFlags) then // HTTP/1.1 is keep-alive by default
-      include(HeaderFlags, hfConnectionClose); // standard HTTP/1.0
-  result := true;
+  result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
+end;
+
+function THttpRequestContext.ParseResponse: integer;
+var
+  P: PUtf8Char;
+begin
+  // e.g. from CommandUri = 'HTTP/1.1 200 OK'
+  P := pointer(CommandUri);
+  if (P <> nil) and
+     not (nfHeadersParsed in HeaderFlags) and
+     ParseHttp(P) and
+     (P[8] = ' ') then
+    result := GetCardinal(P + 9)
+  else
+    result := 0;
 end;
 
 procedure THttpRequestContext.UncompressData;
@@ -4091,6 +4120,7 @@ begin
   fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // reset timeout
   result := hrpSend;
 end;
+
 
 function ToText(st: THttpRequestState): PShortString;
 begin
