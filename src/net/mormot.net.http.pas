@@ -440,7 +440,7 @@ type
     /// parse CommandUri into result fields on server side
     // - e.g. from CommandUri = 'HTTP/1.1 200 OK'
     // - returns 0 on parsing error, or the HTTP status (e.g. 200)
-    function ParseResponse: integer;
+    function ParseResponse(out RespStatus: integer): boolean;
     /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -3571,7 +3571,7 @@ begin
   result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
 end;
 
-function THttpRequestContext.ParseResponse: integer;
+function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
 var
   P: PUtf8Char;
 begin
@@ -3581,9 +3581,13 @@ begin
      not (nfHeadersParsed in HeaderFlags) and
      ParseHttp(P) and
      (P[8] = ' ') then
-    result := GetCardinal(P + 9)
+  begin
+    RespStatus := GetCardinal(P + 9);
+    result := (RespStatus >= 200) and
+              (RespStatus <= 599);
+  end
   else
-    result := 0;
+    result := false;
 end;
 
 procedure THttpRequestContext.UncompressData;
