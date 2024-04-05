@@ -5744,7 +5744,7 @@ begin
   CheckEqual(bias, 0);
   Check(ParseTimeZone(' east', bias));
   CheckEqual(bias, -10 * 60);
-  Check(ParseTimeZone('Y   ', bias));
+  Check(ParseTimeZone('y   ', bias));
   CheckEqual(bias, -12 * 60);
   Check(ParseTimeZone('gmT ', bias));
   CheckEqual(bias, 0);
@@ -5757,6 +5757,8 @@ begin
   CheckEqual(m, 1);
   Check(ParseMonth(' DEC ', m));
   CheckEqual(m, 12);
+  Check(ParseMonth(' apr-', m));
+  CheckEqual(m, 4);
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
     'Sun, 06 Nov 1994 08:49:37 GMT')), '1994-11-06T08:49:37');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(

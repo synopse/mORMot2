@@ -467,7 +467,7 @@ type
     // - returns true on success
     function FromText(const iso: RawUtf8): boolean;
     /// fill Year/Month/Day and Hour/Minute/Second fields from HTTP-date format
-    // - as defined by https://tools.ietf.org/html/rfc7231#section-7.1.1.1 e.g.
+    // - defined e.g. by https://datatracker.ietf.org/doc/html/rfc7231#section-7.1.1
     // $ Sun, 06 Nov 1994 08:49:37 GMT    ; IMF-fixdate
     // $ Sunday, 06-Nov-94 08:49:37 GMT   ; obsolete RFC 850 format
     // $ Sun Nov  6 08:49:37 1994         ; ANSI C's asctime() format
@@ -1683,6 +1683,7 @@ begin
   if PCardinal(S)^ and $ffffff = // most common case (always for HTTP dates)
        ord('G') + ord('M') shl 8 + ord('T') shl 16 then
   begin
+    P := GotoNextNotSpace(S + 3);
     Zone := 0;
     result := true;
   end
@@ -2183,7 +2184,9 @@ function TSynSystemTime.FromHttpDateBuffer(
   P: PUtf8Char; tolocaltime: boolean): boolean;
 var
   S: PUtf8Char;
-  v, len, pnt, zone: integer;
+  v, len, zone: integer;
+  pnt: byte;
+  wday: boolean;
   H, MI, SS, MS: cardinal;
   dt, t: TDateTime;
 begin
@@ -2191,6 +2194,7 @@ begin
   // Sunday, 06-Nov-94 08:49:37 GMT   ; RFC 850, obsoleted by RFC 1036
   // Sun Nov  6 08:49:37 1994         ; ANSI C's asctime() Format
   Clear;
+  wday := false;
   zone := maxInt; // invalid
   result := false;
   if P = nil then
@@ -2200,8 +2204,12 @@ begin
     case P^ of
       'A'..'Z',
       'a'..'z':
-        if not ParseMonth(P, Month) then
+        if (not wday) or
+           (not ParseMonth(P, Month)) then
+        begin
           P := GotoNextSpace(P);
+          wday := true; // first alphabetic word is always the week day text
+        end;
       '0'..'9':
         begin
           // e.g. '1994', '08:49:37 GMT' or '6'
@@ -2213,7 +2221,11 @@ begin
               '0'..'9':
                 ;
               ':':
-                inc(pnt);
+                begin
+                  inc(pnt);
+                  if pnt = 0 then
+                    exit;
+                end;
               '.':
                 if pnt < 2 then
                   break;
@@ -2265,7 +2277,7 @@ begin
     end;
   until P^ in [#0, #13, #10]; // end of string or end of line (e.g. HTTP header)
   if (Year = 0) or
-     (Zone = maxInt) or
+     (zone = maxInt) or
      (Month = 0) then
     exit;
   if Day = 0 then
