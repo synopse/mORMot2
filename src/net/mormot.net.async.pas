@@ -4049,27 +4049,30 @@ var
   h: THandle;
   tag: TPollSocketTag absolute aConnection;
 begin
-  // validate the input parameters
   aConnection := nil;
-  result := nrNotImplemented;
+  // validate the input parameters
   if (fOwner = nil) or
      not Assigned(aOnStateChanged) then
-    exit;
-  result := nrNotFound;
-  if (aMethod = '') or
-     not uri.From(aUrl) then
-    exit;
-  result := addr.SetFrom(uri.Server, uri.Port, nlTcp);
+    result := nrNotImplemented
+  else if (aMethod = '') or
+          not uri.From(aUrl) then
+    result := nrNotFound
+  else
+    result := addr.SetFrom(uri.Server, uri.Port, nlTcp);
   if result <> nrOk then
+  begin
+    fOwner.DoLog(sllDebug, 'StartRequest(% %)=%',
+      [aMethod, aUrl, ToText(result)^], self);
     exit;
+  end;
   // create a new HttpAsyncClientConnection instance (and its socket)
-  result := nrNoSocket;
-  sock := addr.NewSocket(nlTcp);
-  if sock = nil then
-    exit;
-  sock.MakeAsync;
   aConnection := THttpAsyncClientConnection.Create(fOwner, addr){%H-};
   try
+    result := nrNoSocket;
+    sock := addr.NewSocket(nlTcp);
+    if sock = nil then
+      exit;
+    sock.MakeAsync;
     result := nrRefused;
     if not fOwner.ConnectionNew(sock, aConnection, {add=}true) then
       exit;
@@ -4098,13 +4101,13 @@ begin
     aConnection.fOnStateChanged := aOnStateChanged;
     aConnection.fInternalFlags := [ifWriteIsConnect];
     // optionally prepare for TLS
+    result := nrNotImplemented;
     if (aTls <> nil) or
        uri.Https then
     begin
       if aTls <> nil then
         aConnection.fTls := aTls^;
       aConnection.fSecure := NewNetTls;
-      result := nrNotImplemented;
       if aConnection.fSecure = nil then
         exit;
     end;
@@ -4123,7 +4126,10 @@ begin
     {$endif USE_WINIOCP}
   finally
     if result <> nrOk then
+    begin
+      fOwner.DoLog(sllDebug, 'StartRequest(%)=%', [aUrl, ToText(result)^], self);
       FreeAndNil(aConnection);
+    end;
   end;
 end;
 
