@@ -7428,9 +7428,16 @@ begin
     MoveFast(a[aIndex + 1], a[aIndex], (n - aIndex) * SizeOf(pointer));
   a[n] := nil; // better safe than sorry
   if aCount = nil then
-    SetLength(a, n)
+    if n and 255 <> 0 then
+      DynArrayFakeLength(a, n) // call ReallocMem() once every 256 deletes
+    else
+      SetLength(a, n) // finalize if n = 0
   else
+  begin
     aCount^ := n;
+    if n = 0 then
+      Finalize(a);
+  end;
 end;
 
 function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): PtrInt;
@@ -7452,7 +7459,11 @@ begin
   if aCount = nil then
     SetLength(a, n)
   else
+  begin
     aCount^ := n;
+    if n = 0 then
+      Finalize(a);
+  end;
 end;
 
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
