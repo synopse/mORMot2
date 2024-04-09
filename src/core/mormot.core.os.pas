@@ -10431,6 +10431,11 @@ end;
 function PtrArrayDelete(var aPtrArray; aItem: pointer; var aSafe: TLightLock;
   aCount: PInteger): PtrInt;
 begin
+  if pointer(aPtrArray) = nil then
+  begin
+    result := -1; // no need to lock anything
+    exit;
+  end;
   aSafe.Lock;
   result := PtrArrayDelete(aPtrArray, aItem, aCount);
   aSafe.UnLock;
