@@ -113,7 +113,8 @@ type
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    fInternalFlags: set of (ifWriteIsConnect);
+    /// used e.g. for IOCP
+    fInternalFlags: set of (ifWriteWait);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -909,7 +910,7 @@ type
     procedure OnAfterWriteSubscribe; override;
   end;
 
-  /// define when the TOnHttpClientAsync callback is executed
+  /// define the TOnHttpClientAsync callback state machine steps
   // - hcsBeforeTlsHandshake allows to change connection.Tls parameters
   // - hcsAfterTlsHandshake can validate the connection.Tls information
   // - hcsBeforeSendHeaders allows to change emitted connection.Http.Head
@@ -928,6 +929,8 @@ type
     hcsHeadersReceived,
     hcsFinished,
     hcsFailed);
+  /// define when the TOnHttpClientAsync callback is to be executed
+  TOnHttpClientStates = set of TOnHttpClientState;
 
   /// callback used e.g. by THttpAsyncClientConnection.OnStateChanged
   // - should return soContinue on success, or anything else to abort/close
@@ -941,6 +944,7 @@ type
   protected
     fOnStateChanged: TOnHttpClientAsync;
     fResponseStatus: integer;
+    fOnStateChange: TOnHttpClientStates;
     fTls: TNetTlsContext;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -1038,9 +1042,11 @@ type
     /// start an async connection to a remote HTTP server using a callback
     // - the aOnStateChanged event will be called after each http.State change
     function StartRequest(const aUrl, aMethod, aHeaders: RawUtf8;
-      const aOnStateChanged: TOnHttpClientAsync; aTls: PNetTlsContext;
-      const aDestFileName: TFileName;
-      out aConnection: THttpAsyncClientConnection): TNetResult;
+      const aOnStateChanged: TOnHttpClientAsync;
+      aTls: PNetTlsContext; const aDestFileName: TFileName;
+      out aConnection: THttpAsyncClientConnection;
+      aOnStateChange: TOnHttpClientStates =
+        [low(TOnHttpClientState) .. high(TOnHttpClientState)]): TNetResult;
     /// called to notify that the main process is about to finish
     procedure Shutdown;
     /// allow to customize the User-Agent used by each client connection
@@ -2112,7 +2118,7 @@ begin
     res := soContinue;
     {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
-        (ifWriteIsConnect in connection.fInternalFlags) or
+        (ifWriteWait in connection.fInternalFlags) or
         (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
        connection.WaitLock({writer=}true, {timeout=}20) then
        // allow to wait a little since we are in a single W thread
@@ -3990,6 +3996,7 @@ begin
     case fHttp.State of
       hrsConnect:
         begin
+          exclude(fInternalFlags, ifWriteWait);
           // setup any TLS communication once connected (if needed)
           if Assigned(fSecure) then
             try
@@ -4051,7 +4058,8 @@ function THttpAsyncClientConnection.NotifyStateChange(
   state: TOnHttpClientState): TPollAsyncSocketOnReadWrite;
 begin
   result := soContinue;
-  if Assigned(fOnStateChanged) then
+  if Assigned(fOnStateChanged) and
+     (state in fOnStateChange) then
     try
       result := fOnStateChanged(state, self);
     except
@@ -4073,7 +4081,8 @@ end;
 function THttpAsyncClientConnections.StartRequest(
   const aUrl, aMethod, aHeaders: RawUtf8; const aOnStateChanged: TOnHttpClientAsync;
   aTls: PNetTlsContext; const aDestFileName: TFileName;
-  out aConnection: THttpAsyncClientConnection): TNetResult;
+  out aConnection: THttpAsyncClientConnection;
+  aOnStateChange: TOnHttpClientStates): TNetResult;
 var
   uri: TUri;
   addr: TNetAddr;
@@ -4132,8 +4141,8 @@ begin
       aConnection.fHttp.Host := uri.Server
     else
       Append(aConnection.fHttp.Host, [uri.Server, ':', uri.Port]);
+    aConnection.fOnStateChange := aOnStateChange;
     aConnection.fOnStateChanged := aOnStateChanged;
-    aConnection.fInternalFlags := [ifWriteIsConnect];
     // optionally prepare for TLS
     result := nrNotImplemented;
     if (aTls <> nil) or
@@ -4147,6 +4156,7 @@ begin
     end;
     // start async events subscription and connection
     {$ifdef USE_WINIOCP}
+    aConnection.fInternalFlags := [ifWriteWait];
     if aConnection.fIocp = nil then
       aConnection.fIocp := fOwner.fIocp.Subscribe(aConnection.fSocket, tag);
     if fOwner.fIocp.PrepareNext(aConnection.fIocp, wieConnect) then
