@@ -91,9 +91,12 @@ type
   public
     /// reintroduced constructor with TNetResult information
     constructor Create(msg: string; const args: array of const;
-      error: TNetResult = nrOK); reintroduce;
+      error: TNetResult = nrOK; errnumber: PInteger = nil); reintroduce;
+    /// reintroduced constructor with NetLastError call
+    constructor CreateLastError(const msg: string; const args: array of const);
     /// raise ENetSock if res is not nrOK or nrRetry
-    class procedure Check(res: TNetResult; const Context: ShortString);
+    class procedure Check(res: TNetResult; const Context: ShortString;
+      errnumber: PInteger = nil);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: ShortString;
       ForceRaise: boolean = false; AnotherNonFatal: integer = 0);
@@ -2013,31 +2016,48 @@ end;
 { ENetSock }
 
 constructor ENetSock.Create(msg: string; const args: array of const;
-  error: TNetResult);
+  error: TNetResult; errnumber: PInteger);
 begin
-  fLastError := error;
   if error <> nrOK then
+  begin
+    fLastError := error;
     msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
+    if errnumber <> nil then
+      msg := format('%s sys=%d', [msg, errnumber^]);
+  end;
   inherited CreateFmt(msg, args);
 end;
 
-class procedure ENetSock.Check(res: TNetResult; const Context: ShortString);
+constructor ENetSock.CreateLastError(const msg: string; const args: array of const);
+var
+  res: TNetResult;
+  err: integer;
+begin
+  res := NetLastError(NO_ERROR, @err);
+  if res in [nrOK, nrRetry] then
+     res := nrUnknownError;
+  Create(msg, args, res, @err);
+end;
+
+class procedure ENetSock.Check(res: TNetResult; const Context: ShortString;
+  errnumber: PInteger);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
-    raise Create('%s failed', [Context], res);
+    raise Create('%s failed', [Context], res, errnumber);
 end;
 
 class procedure ENetSock.CheckLastError(const Context: ShortString;
   ForceRaise: boolean; AnotherNonFatal: integer);
 var
   res: TNetResult;
+  err: integer;
 begin
-  res := NetLastError(AnotherNonFatal);
+  res := NetLastError(AnotherNonFatal, @err);
   if ForceRaise and
      (res in [nrOK, nrRetry]) then
     res := nrUnknownError;
-  Check(res, Context);
+  Check(res, Context, @err);
 end;
 
 
@@ -2668,16 +2688,11 @@ end;
 
 procedure TNetSocketWrap.SetOpt(prot, name: integer;
   value: pointer; valuelen: integer);
-var
-  err: TNetResult;
-  low: integer;
 begin
   if @self = nil then
     raise ENetSock.Create('SetOptions(%d,%d) with no socket', [prot, name]);
-  if setsockopt(TSocket(@self), prot, name, value, valuelen) = NO_ERROR then
-    exit;
-  err := NetLastError(NO_ERROR, @low);
-  raise ENetSock.Create('SetOptions(%d,%d) sockerr=%d', [prot, name, low], err);
+  if setsockopt(TSocket(@self), prot, name, value, valuelen) <> NO_ERROR then
+    raise ENetSock.CreateLastError('SetOptions(%d,%d)', [prot, name]);
 end;
 
 function TNetSocketWrap.GetOptInt(prot, name: integer): integer;
@@ -2689,7 +2704,7 @@ begin
   result := 0;
   len := SizeOf(result);
   if getsockopt(TSocket(@self), prot, name, @result, @len) <> NO_ERROR then
-    raise ENetSock.Create('GetOptInt(%d,%d)', [prot, name], NetLastError);
+    raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
@@ -5433,7 +5448,7 @@ begin
           break;
         res := InputSock(PTextRec(SockIn)^);
         if res < 0 then
-          ENetSock.CheckLastError('SockInRead', {forceraise=}true);
+          raise ENetSock.CreateLastError('%.SockInRead', [ClassNameShort(self)^]);
         // loop until Timeout
       until Timeout = 0;
   // direct receiving of the remaining bytes from socket
@@ -5608,8 +5623,8 @@ begin
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
       fSndBufLen := 0
     else
-      raise ENetSock.Create('%s.SockSendFlush(%s) len=%d',
-        [ClassNameShort(self)^, fServer, fSndBufLen], NetLastError);
+      raise ENetSock.CreateLastError('%s.SockSendFlush(%s) len=%d',
+        [ClassNameShort(self)^, fServer, fSndBufLen]);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
 end;
@@ -5627,9 +5642,9 @@ begin
     if rd = 0 then
       break;
     if not TrySndLow(pointer(chunk), rd) then
-      raise ENetSock.Create('%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s',
-        [ClassNameShort(self)^, ClassNameShort(Stream)^, ChunkSize,
-         rd, pos, fServer, fPort], NetLastError);
+      raise ENetSock.CreateLastError(
+        '%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s', [ClassNameShort(self)^,
+        ClassNameShort(Stream)^, ChunkSize, rd, pos, fServer, fPort]);
     inc(pos, rd);
   until false;
 end;
@@ -5641,8 +5656,8 @@ begin
   read := Length;
   if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or
      (Length <> read) then
-    raise ENetSock.Create('%s.SockRecv(%d) read=%d',
-      [ClassNameShort(self)^, Length, read], NetLastError);
+    raise ENetSock.CreateLastError('%s.SockRecv(%d) read=%d',
+      [ClassNameShort(self)^, Length, read]);
 end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
@@ -5805,7 +5820,7 @@ begin
     readln(SockIn^, Line); // use RTL over SockIn^ buffer
     err := ioresult;
     if err <> 0 then
-      raise ENetSock.Create('%s.SockRecvLn error %d after %d chars',
+      raise ENetSock.Create('%s.SockRecvLn ioresult=%d after %d chars',
         [ClassNameShort(self)^, err, Length(Line)]);
     {$I+}
   end
@@ -5816,16 +5831,16 @@ end;
 procedure TCrtSocket.SockRecvLn;
 var
   c: AnsiChar;
-  Error: integer;
+  err: integer;
 begin
   if SockIn <> nil then
   begin
     {$I-}
     readln(SockIn^);
-    Error := ioresult;
-    if Error <> 0 then
-      raise ENetSock.Create('%s.SockRecvLn error %d',
-        [ClassNameShort(self)^, Error]);
+    err := ioresult;
+    if err <> 0 then
+      raise ENetSock.Create('%s.SockRecvLn ioresult=%d',
+        [ClassNameShort(self)^, err]);
     {$I+}
   end
   else
@@ -5837,8 +5852,8 @@ end;
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P, Len) then
-    raise ENetSock.Create('%s.SndLow(%s) len=%d',
-      [ClassNameShort(self)^, fServer, Len], NetLastError);
+    raise ENetSock.CreateLastError('%s.SndLow(%s) len=%d',
+      [ClassNameShort(self)^, fServer, Len]);
 end;
 
 procedure TCrtSocket.SndLow(const Data: RawByteString);
