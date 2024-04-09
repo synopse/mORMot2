@@ -3954,7 +3954,6 @@ begin
           result := soClose;
           if not fHttp.ParseResponse(fResponseStatus) then
             break;
-          result := soContinue;
           fHttp.ParseHeaderFinalize;
           result := NotifyStateChange(hcsHeadersReceived);
           if result <> soContinue then
