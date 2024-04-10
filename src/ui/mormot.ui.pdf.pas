@@ -7642,12 +7642,12 @@ begin
   fLastOutline := result;
 end;
 
-function TPdfDocument.CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox;
-  ClipRc: PPdfBox): PdfString;
+function TPdfDocument.CreateOrGetImage(
+  B: TBitmap; DrawAt, ClipRc: PPdfBox): PdfString;
 var
   jpg: TJpegImage;
   img: TPdfImage;
-  hash: THash128Rec;
+  hash: THash128Rec; // no DefaultHasher128() because AesNiHash128() makes GPF
   y, w, h, row: integer;
   palcount: cardinal;
   pal: array of TPaletteEntry;
@@ -7682,12 +7682,12 @@ begin
       begin
         SetLength(pal, palcount);
         if GetPaletteEntries(B.Palette, 0, palcount, pal[0]) = palcount then
-          DefaultHasher128(@hash, pointer(pal), palcount * sizeof(TPaletteEntry));
+          hash.c0 := crc32c(hash.c0, pointer(pal), palcount * sizeof(pal[0]));
       end;
     end;
     row := (((w * row) + 31) and (not 31)) shr 3; // inlined BytesPerScanLine
     for y := 0 to h - 1 do
-      DefaultHasher128(@hash, B.{%H-}ScanLine[y], row);
+      hash.c[y and 3] := crc32c(hash.c[y and 3], B.{%H-}ScanLine[y], row);
     result := GetXObjectImageName(hash, w, h); // search for matching image
   end;
   if result = '' then
