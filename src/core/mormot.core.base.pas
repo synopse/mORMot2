@@ -7696,10 +7696,10 @@ begin
     exit;
   if aContinueOnException then
     for i := n - 1 downto 0 do
-    try
-      a[i].Free;
-    except
-    end
+      try
+        a[i].Free;
+      except
+      end
   else
     RawObjectsClear(pointer(a), n);
   a := nil; // finalize the dynamic array itself

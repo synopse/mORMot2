@@ -7275,7 +7275,7 @@ begin
   repeat
     // inlined IdemPropNameUSameLenNotNull(p, name, namelen)
     p1 := pointer(result^.Name);
-    if (p1 <> nil) and // Name='' after NameChange()
+    if (p1 <> nil) and // Name may be '' after NameChange()
        (PStrLen(p1 - _STRLEN)^ = namelen) then
     begin
       l := @p1[namelen - SizeOf(cardinal)];
@@ -8186,7 +8186,7 @@ begin
        (rc.Props.CountNonVoid = 0) then
       exit;
     GetNextItemShortString(FullName, @n, PathDelim);
-    if n[0] in [#0, #254] then
+    if n[0] = #0 then
       exit;
     result := FindCustomProp(
       pointer(rc.Props.List), @n[1], ord(n[0]), rc.Props.Count);

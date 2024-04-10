@@ -11269,6 +11269,8 @@ begin
   while P <> nil do
   begin
     GetNextItemShortString(P, @n); // n ends with #0
+    if n[0] = #0 then
+      exit;
     ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -11307,6 +11309,8 @@ begin
   while P <> nil do
   begin
     GetNextItemShortString(P, @n); // n ends with #0
+    if n[0] = #0 then
+      exit;
     if IsRowIDShort(n) then
     begin
       withID := true;
@@ -11484,6 +11488,8 @@ begin
   while P <> nil do
   begin
     GetNextItemShortString(P, @n); // n ends with #0
+    if n[0] = #0 then
+      exit;
     ndx := Fields.IndexByName(@n[1]);
     if ndx < 0 then
       exit; // invalid field name

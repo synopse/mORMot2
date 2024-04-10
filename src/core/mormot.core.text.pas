@@ -2596,7 +2596,7 @@ begin
   begin
     while (S^ <= ' ') and
           (S^ <> #0) do
-      inc(S);
+      inc(S); // trim left space
     len := 0;
     repeat
       c := S^;
@@ -2604,14 +2604,14 @@ begin
       if c = Sep then
         break;
       if c <> #0 then
-      begin
         if len < 254 then // avoid buffer overflow
         begin
           inc(len);
           D[len] := c;
-        end;
-        continue;
-      end;
+          continue;
+        end
+        else
+          len := 0;
       S := nil; // reached #0: end of input
       break;
     until false;

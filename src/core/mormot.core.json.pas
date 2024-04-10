@@ -10657,7 +10657,7 @@ begin
   result := self;
   repeat
     GetNextItemShortString(Path, @n, PathDelim);
-    if not (n[0] in [#0, #254]) then
+    if n[0] <> #0 then
       case result.Kind of
         rkVariant:
           // try TDocVariant/TBsonVariant name lookup

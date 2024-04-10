@@ -4664,8 +4664,8 @@ begin
   repeat
     if vt < varFirstCustom then
       exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName, @n, PathDelim); // n ends with #0
-    if n[0] in [#0, #254] then
+    GetNextItemShortString(FullName, @n, PathDelim); // n will end with #0
+    if n[0] = #0 then
       exit;
     if vt = VarType then
       handler := self
@@ -8062,7 +8062,7 @@ function TDocVariantData.InternalNextPath(
   var aCsv: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
 begin
   GetNextItemShortString(aCsv, aName, aPathDelim);
-  if (aName^[0] in [#0, #254]) or
+  if (aName^[0] = #0) or
      (VCount = 0) then
     result := -1
   else
