@@ -91,12 +91,12 @@ type
   public
     /// reintroduced constructor with TNetResult information
     constructor Create(msg: string; const args: array of const;
-      error: TNetResult = nrOK; errnumber: PInteger = nil); reintroduce;
+      error: TNetResult = nrOK; errnumber: system.PInteger = nil); reintroduce;
     /// reintroduced constructor with NetLastError call
     constructor CreateLastError(const msg: string; const args: array of const);
     /// raise ENetSock if res is not nrOK or nrRetry
-    class procedure Check(res: TNetResult; const Context: ShortString;
-      errnumber: PInteger = nil);
+    class procedure Check(res: TNetResult; const context: ShortString;
+      errnumber: system.PInteger = nil);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: ShortString;
       ForceRaise: boolean = false; AnotherNonFatal: integer = 0);
@@ -2016,7 +2016,7 @@ end;
 { ENetSock }
 
 constructor ENetSock.Create(msg: string; const args: array of const;
-  error: TNetResult; errnumber: PInteger);
+  error: TNetResult; errnumber: system.PInteger);
 begin
   if error <> nrOK then
   begin
@@ -2039,12 +2039,12 @@ begin
   Create(msg, args, res, @err);
 end;
 
-class procedure ENetSock.Check(res: TNetResult; const Context: ShortString;
-  errnumber: PInteger);
+class procedure ENetSock.Check(res: TNetResult; const context: ShortString;
+  errnumber: system.PInteger);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
-    raise Create('%s failed', [Context], res, errnumber);
+    raise Create('%s failed', [context], res, errnumber);
 end;
 
 class procedure ENetSock.CheckLastError(const Context: ShortString;
