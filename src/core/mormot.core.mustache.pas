@@ -1117,33 +1117,81 @@ var
 begin
   if GetDataFromContext(ValueName, rc, d) then
   begin
-    // direct append the {{###}} found data
+    // we can directly append the {{###}} found data
     if fEscapeInvert then
       UnEscape := not UnEscape;
-    if UnEscape or
-       (rcfIsNumber in rc.Cache.Flags) then
-      // numbers or true/false don't need any HTML escape
-      fWriter.AddRttiCustomJson(d, rc, twNone, [])
+    case rc.Parser of // FPC generates a jump table for this case statement
+      // try direct UTF-8 and UTF-16 strings (escaped) rendering
+      {$ifndef UNICODE}
+      ptString,
+      {$endif UNICODE}
+      ptRawUtf8,
+      ptRawJson,
+      ptPUtf8Char:
+        if UnEscape then
+          fWriter.AddHtmlEscape(PPUtf8Char(d)^) // faster with no length
+        else
+          fWriter.AddNoJsonEscape(PPUtf8Char(d)^);
+      {$ifdef UNICODE}
+      ptString,
+      {$endif UNICODE}
+      {$ifdef HASVARUSTRING}
+      ptUnicodeString,
+      {$endif HASVARUSTRING}
+      ptSynUnicode,
+      ptWideString:
+        if UnEscape then
+          fWriter.AddHtmlEscapeW(PPWideChar(d)^)
+        else
+          fWriter.AddNoJsonEscapeW(PPWord(d)^, 0);
+      // unescaped (and unquoted) numbers, date/time, guid or hash
+      ptByte:
+        fWriter.AddU(PByte(d)^);
+      ptWord:
+        fWriter.AddU(PWord(d)^);
+      ptInteger:
+        fWriter.Add(PInteger(d)^);
+      ptCardinal:
+        fWriter.AddU(PCardinal(d)^);
+      ptInt64:
+        fWriter.Add(PInt64(d)^);
+      ptQWord:
+        fWriter.AddQ(PQWord(d)^);
+      ptDouble:
+        fWriter.AddDouble(unaligned(PDouble(d)^));
+      ptCurrency:
+        fWriter.AddCurr64(d);
+      ptBoolean:
+        fWriter.Add(PBoolean(d)^);
+      ptDateTime,
+      ptDateTimeMS:
+        fWriter.AddDateTime(d, 'T', #0, rc.Parser = ptDateTimeMS, {wtime=}true);
+      ptUnixTime:
+        fWriter.AddUnixTime(d);
+      ptUnixMSTime:
+        fWriter.AddUnixMSTime(d, {withms=}true);
+      ptTimeLog:
+        fWriter.AddTimeLog(d);
+      ptGuid:
+        fWriter.Add(PGuid(d), #0);
+      ptHash128,
+      ptHash256,
+      ptHash512:
+        fWriter.AddBinToHexDisplayLower(d, rc.Size);
     else
-      case rc.Kind of
-        // try direct UTF-8 and UTF-16 strings rendering
-        rkLString:
-          fWriter.AddHtmlEscape(PPointer(d)^); // faster with no length
-        {$ifdef HASVARUSTRING}
-        rkUString,
-        {$endif HASVARUSTRING}
-        rkWString:
-          fWriter.AddHtmlEscapeW(PPointer(d)^);
+      if rcfIsNumber in rc.Cache.Flags then
+        // ordinals don't need any HTML escape nor quote
+        fWriter.AddRttiCustomJson(d, rc, twNone, [])
       else
-        begin
-          // use a temporary variant for any complex content (including JSON)
-          rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
-          if fEscapeInvert then
-            UnEscape := not UnEscape; // AppendVariant() does reverse it
-          AppendVariant(variant(tmp), UnEscape);
-          VarClearProc(tmp);
-        end;
+      begin
+        // use a temporary variant for any complex content (including JSON)
+        rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
+        if fEscapeInvert then
+          UnEscape := not UnEscape; // AppendVariant() will reverse it
+        AppendVariant(variant(tmp), UnEscape);
+        VarClearProc(tmp);
       end;
+    end;
   end
   else
   begin
