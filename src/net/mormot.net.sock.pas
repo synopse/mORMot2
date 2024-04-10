@@ -2023,7 +2023,7 @@ begin
     fLastError := error;
     msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
     if errnumber <> nil then
-      msg := format('%s sys=%d', [msg, errnumber^]);
+      msg := format('%s sys=%d (%s)', [msg, errnumber^, GetErrorText(errnumber^)]);
   end;
   inherited CreateFmt(msg, args);
 end;
