@@ -778,6 +778,10 @@ type
     function ColumnCurrency(Col: integer): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; overload;
+    /// return a Column UTF-8 text buffer of the current Row, first Col is 0
+    // - low-level function: may return nil if not supported by the provider
+    // - returned pointer is likely to last only until next Step or Reset call
+    function ColumnPUtf8(Col: integer): PUtf8Char;
     /// return a Column text value as RTL string of the current Row, first Col is 0
     function ColumnString(Col: integer): string; overload;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -2472,6 +2476,10 @@ type
     function ColumnCurrency(Col: integer): currency; overload; virtual; abstract;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; overload; virtual; abstract;
+    /// return a Column UTF-8 text buffer of the current Row, first Col is 0
+    // - default implementation returning nil, i.e. not supported by this provider
+    // - returned pointer is likely to last only until next Step or Reset call
+    function ColumnPUtf8(Col: integer): PUtf8Char; virtual;
     /// return a Column text value as RTL string of the current Row, first Col is 0
     // - this default implementation will call ColumnUtf8
     function ColumnString(Col: integer): string; overload; virtual;
@@ -6105,6 +6113,11 @@ begin
     result := 0
   else
     result := fColumnCount;
+end;
+
+function TSqlDBStatement.ColumnPUtf8(Col: integer): PUtf8Char;
+begin
+  result := nil; // not supported by this class yet
 end;
 
 function TSqlDBStatement.ColumnBlobBytes(Col: integer): TBytes;
