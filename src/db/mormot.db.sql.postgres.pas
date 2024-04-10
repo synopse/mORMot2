@@ -183,7 +183,8 @@ type
     procedure BindParams;
     /// raise an exception if Col is out of range according to fColumnCount
     // or rowset is not initialized
-    procedure CheckColAndRowset(const Col: integer);
+    procedure CheckColAndRowset(Col: integer);
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// finalize the statement for a given connection
     destructor Destroy; override;
@@ -931,13 +932,12 @@ begin
   end;
 end;
 
-procedure TSqlDBPostgresStatement.CheckColAndRowset(const Col: integer);
+procedure TSqlDBPostgresStatement.CheckColAndRowset(Col: integer);
 begin
-  CheckCol(Col);
-  if (fRes = nil) or
+  if (cardinal(Col) >= cardinal(fColumnCount)) or
+     (fRes = nil) or
      (fResStatus <> PGRES_TUPLES_OK) then
-    raise ESqlDBPostgres.CreateUtf8(
-      '%.Execute not called before Column*', [self]);
+    CheckColInvalid(Col);
 end;
 
 destructor TSqlDBPostgresStatement.Destroy;
