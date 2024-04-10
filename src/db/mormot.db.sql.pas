@@ -1261,7 +1261,7 @@ type
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
     fRollbackOnDisconnect, fReconnectAfterConnectionError,
     fEnsureColumnNameUnique, fFilterTableViewSchemaName,
-    fNoBlobBindArray: boolean;
+    fNoBlobBindArray, fIsThreadSafe: boolean;
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
@@ -1941,7 +1941,6 @@ type
     fProperties: TSqlDBConnectionProperties;
     fErrorException: ExceptClass;
     fErrorMessage: RawUtf8;
-    fTransactionCount: integer;
     fServerTimestampOffset: TDateTime;
     fCacheSafe: TOSLightLock; // protect fCache - warning: not reentrant!
     fCache: TRawUtf8List; // statements cache
@@ -1949,9 +1948,11 @@ type
     fCacheLastIndex: integer;
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
+    fTransactionCount: integer;
     fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
     fOnProcess: TOnSqlDBProcess;
+    fOwned: TObjectDynArray;
     function IsOutdated(tix: Int64): boolean; // do not make virtual nor inline
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
@@ -1966,6 +1967,15 @@ type
     constructor Create(aProperties: TSqlDBConnectionProperties); reintroduce; virtual;
     /// release memory and connection
     destructor Destroy; override;
+    /// retrieve one object owned by a thread-safe connection instance
+    // - may be used e.g. to reuse some internal processing objects
+    // - returns nil if SetThreadOwned() was not previously called
+    function GetThreadOwned(aClass: TClass): pointer;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// register one object owned by a thread-safe connection instance
+    // - returns the supplied aObject instance as a fluid-interface mechanism
+    // - raise an ESqlDBException if not a TSqlDBConnectionPropertiesThreadSafe
+    function SetThreadOwned(aObject: TObject): pointer;
 
     /// connect to the specified database
     // - should raise an Exception on error
@@ -7329,10 +7339,34 @@ begin
     Disconnect;
   except
     on E: Exception do
-      SynDBLog.Add.Log(sllError, 'e=%', [E]);
+      SynDBLog.Add.Log(sllError, 'Destroy: Disconnect raised %', [E], self);
   end;
+  ObjArrayClear(fOwned, {continueonexc=}true);
   inherited;
   fCacheSafe.Done;
+end;
+
+function TSqlDBConnection.GetThreadOwned(aClass: TClass): pointer;
+begin
+  if (self = nil) or
+     not fProperties.fIsThreadSafe then
+    result := nil
+  else
+  begin
+    result := pointer(fOwned);
+    if result <> nil then
+      result := FindPrivateSlot(aClass, result); // reuse logic from RTTI
+  end;
+end;
+
+function TSqlDBConnection.SetThreadOwned(aObject: TObject): pointer;
+begin
+  if (self = nil) or
+     not fProperties.fIsThreadSafe then
+    raise ESqlDBException.CreateUtf8('Unsupported %.SetThreadOwned', [self]);
+  result := aObject;
+  if result <> nil then
+    PtrArrayAdd(fOwned, aObject);
 end;
 
 function TSqlDBConnection.IsOutdated(tix: Int64): boolean;
@@ -7765,6 +7799,7 @@ end;
 constructor TSqlDBConnectionPropertiesThreadSafe.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
+  fIsThreadSafe := true;
   fConnectionPool := TSynObjectListLightLocked.Create;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
