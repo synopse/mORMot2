@@ -285,6 +285,10 @@ type
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; override;
+    /// return a Column UTF-8 text buffer of the current Row, first Col is 0
+    // - column type should be exactly OCI_UTF8, or would return nil
+    // - returned pointer is likely to last only until next Step or Reset call
+    function ColumnPUtf8(Col: integer): PUtf8Char; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     // - ColumnBlob() will return the binary content of the field is was not ftBlob,
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
@@ -930,8 +934,8 @@ begin
     raise ESqlDBOracle.CreateUtf8('%.ColumnToJson() with no prior Step', [self]);
   with fColumns[Col] do
   begin
-    indicator := PSmallIntArray(fRowBuffer)[cardinal(Col) * fRowCount +
-      fRowFetchedCurrent];
+    indicator := PSmallIntArray(fRowBuffer)[
+                   cardinal(Col) * fRowCount + fRowFetchedCurrent];
     if (indicator = -1) or
        (ColumnType = ftNull) then // ftNull for SQLT_RSET
       W.AddNull
@@ -1167,6 +1171,21 @@ begin
   else
     // need conversion to destination type
     ColumnToTypedValue(Col, ftUtf8, result);
+end;
+
+function TSqlDBOracleStatement.ColumnPUtf8(Col: integer): PUtf8Char;
+var
+  C: PSqlDBColumnProperty;
+begin
+  result := GetCol(Col, C);
+  if result <> nil then
+    if (result^ = #0) or
+       (C^.ColumnType <> ftUtf8) or
+       ((C^.ColumnValueDBCharSet <> OCI_AL32UTF8) and
+        (C^.ColumnValueDBCharSet <> OCI_UTF8) and
+        (C^.ColumnValueDBForm <> SQLCS_NCHAR)) or
+       not C^.ColumnValueInlined then
+      result := nil;
 end;
 
 function TSqlDBOracleStatement.ColumnCursor(Col: integer): ISqlDBRows;
@@ -2268,8 +2287,8 @@ begin
         inc(RowSize, fRowBufferCount * ColumnValueDBSize);
         inc(Indicators, fRowBufferCount * SizeOf(sb2));
       end;
-    assert(PtrUInt(Indicators - pointer(fRowBuffer)) = fRowBufferCount *
-      ColCount * SizeOf(sb2));
+    assert(PtrUInt(Indicators - pointer(fRowBuffer)) =
+             fRowBufferCount * ColCount * SizeOf(sb2));
     assert(RowSize <= fInternalBufferSize);
   end;
 end;

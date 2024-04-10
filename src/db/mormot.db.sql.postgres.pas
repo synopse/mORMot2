@@ -250,6 +250,9 @@ type
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; override;
+    /// return a Column UTF-8 text buffer of the current Row, first Col is 0
+    // - returned pointer is likely to last only until next Reset call
+    function ColumnPUtf8(Col: integer): PUtf8Char; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
     /// return one column value into JSON content
@@ -1250,6 +1253,12 @@ function TSqlDBPostgresStatement.ColumnUtf8(Col: integer): RawUtf8;
 begin
   CheckColAndRowset(Col);
   PQ.GetRawUtf8(fRes, fCurrentRow, Col, result);
+end;
+
+function TSqlDBPostgresStatement.ColumnPUtf8(Col: integer): PUtf8Char;
+begin
+  CheckColAndRowset(Col);
+  result := PQ.GetValue(fRes, fCurrentRow, Col);
 end;
 
 function TSqlDBPostgresStatement.ColumnBlob(Col: integer): RawByteString;

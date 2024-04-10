@@ -265,6 +265,9 @@ type
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; override;
+    /// return a Column UTF-8 text buffer of the current Row, first Col is 0
+    // - returned pointer is likely to last only until next Step or Reset call
+    function ColumnPUtf8(Col: integer): PUtf8Char; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     // - ColumnBlob() will return the binary content of the field is was not ftBlob,
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
@@ -632,6 +635,11 @@ end;
 function TSqlDBSQLite3Statement.ColumnUtf8(Col: integer): RawUtf8;
 begin
   result := fStatement.FieldUtf8(Col);
+end;
+
+function TSqlDBSQLite3Statement.ColumnPUtf8(Col: integer): PUtf8Char;
+begin
+  result := fStatement.FieldPUtf8(Col);
 end;
 
 constructor TSqlDBSQLite3Statement.Create(aConnection: TSqlDBConnection);

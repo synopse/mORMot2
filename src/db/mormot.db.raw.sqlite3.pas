@@ -4686,6 +4686,8 @@ type
     function FieldDouble(Col: integer): double;
     /// return a field UTF-8 encoded text value, first Col is 0
     function FieldUtf8(Col: integer): RawUtf8;
+    /// return a field UTF-8 buffer text value, first Col is 0
+    function FieldPUtf8(Col: integer): PUtf8Char;
     /// return a text value value as RTL string, first Col is 0
     // - note that prior to Delphi 2009, you may loose content during conversion
     function FieldS(Col: integer): string;
@@ -8558,9 +8560,16 @@ var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
-    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldUTF8');
-  P := pointer(sqlite3.column_text(Request, Col));
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldUtf8');
+  P := sqlite3.column_text(Request, Col);
   FastSetString(result, P, StrLen(P));
+end;
+
+function TSqlRequest.FieldPUtf8(Col: integer): PUtf8Char;
+begin
+  if cardinal(Col) >= cardinal(FieldCount) then
+    sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldPUtf8');
+  result := sqlite3.column_text(Request, Col);
 end;
 
 {$ifdef UNICODE}
