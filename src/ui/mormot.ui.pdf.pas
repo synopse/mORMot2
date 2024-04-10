@@ -1470,8 +1470,7 @@ type
     function GetXObjectIndex(const AName: PdfString): integer;
     /// retrieve a XObject TPdfImage index from its picture attributes
     // - returns '' if this image is not already there
-    // - uses 4 hash codes, created with 4 diverse seeds, in order to avoid
-    // false positives
+    // - uses 128-bit hashes of the TBitmap content to avoid false positives
     function GetXObjectImageName(
       const Hash: THash128Rec; Width, Height: integer): PdfString;
     /// wrapper to create an annotation
@@ -2708,7 +2707,7 @@ type
   private
     fPixelHeight: integer;
     fPixelWidth: integer;
-    fHash: THash128Rec;
+    fHash: THash128Rec; // 128-bit hash of the TBitmap raw content
   public
     /// create the image from a supplied VCL/LCL TGraphic instance
     // - handle TBitmap and SynGdiPlus picture types, i.e. TJpegImage
@@ -6897,24 +6896,24 @@ var
   img: TPdfImage absolute obj;
   i: PtrInt;
 begin
-  for i := 0 to fXObjectList.ItemCount - 1 do
-  begin
-    obj := fXObjectList.fArray.List[i];
-    if obj.fObjectType = otVirtualObject then
-      obj := TPdfXObject(fXRef.GetObject(obj.fObjectNumber));
-    if (obj <> nil) and
-       obj.InheritsFrom(TPdfImage) and
-       (img.PixelWidth = Width) and
-       (img.PixelHeight = Height) and
-       not IsZero(img.fHash.b) and
-       IsEqual(img.fHash.b, Hash.b) and
-       (obj.Attributes <> nil) then
+  if not IsZero(Hash.b) then
+    for i := 0 to fXObjectList.ItemCount - 1 do
     begin
-      result := TPdfName(obj.Attributes.ValueByName('Name')).Value;
-      if result <> '' then
-        exit;
+      obj := fXObjectList.fArray.List[i];
+      if obj.fObjectType = otVirtualObject then
+        obj := TPdfXObject(fXRef.GetObject(obj.fObjectNumber));
+      if (obj <> nil) and
+         obj.InheritsFrom(TPdfImage) and
+         (img.PixelWidth = Width) and
+         (img.PixelHeight = Height) and
+         IsEqual(img.fHash.b, Hash.b) and
+         (obj.Attributes <> nil) then
+      begin
+        result := TPdfName(obj.Attributes.ValueByName('Name')).Value;
+        if result <> '' then
+          exit;
+      end;
     end;
-  end;
   result := '';
 end;
 
@@ -7660,20 +7659,15 @@ begin
     exit;
   w := B.Width;
   h := B.Height;
-  if ForceNoBitmapReuse then
-    FillCharFast(hash, sizeof(hash), 0)
-  else
+  FillZero(hash.b);
+  if not ForceNoBitmapReuse then
   begin
     row := PERROW[B.PixelFormat];
     if row = 0 then
     begin
-      B.PixelFormat := pf24bit;
+      B.PixelFormat := pf24bit; // convert any device or custom bitmap
       row := 24;
     end;
-    hash.c0 := 0;
-    hash.c1 := 1400305337; // 3 prime numbers
-    hash.c2 := 2468776129;
-    hash.c3 := 3121238909;
     if B.Palette <> 0 then
     begin
       palcount := 0;
@@ -7705,7 +7699,8 @@ begin
         jpg.Free;
       end;
     end;
-    img.fHash := hash;
+    if not ForceNoBitmapReuse then
+      img.fHash := hash;
     result := 'SynImg' + UInt32ToPdfString(fXObjectList.ItemCount);
     if ForceJPEGCompression = 0 then
       AddXObject(result, img)
