@@ -228,6 +228,9 @@ type
     // corresponding TSynMustache.Render*() methods
     constructor Create(Owner: TSynMustache; WR: TJsonWriter;
       SectionMaxCount: integer; const aDocument: variant; OwnWriter: boolean);
+    /// render this reusable rendering context
+    // - wrap PushContext + Owner.RenderContext + Writer.SetText + CancelAll
+    function Render(const aDoc: variant): RawUtf8;
   end;
 
   TSynMustacheContextData = class;
@@ -273,6 +276,12 @@ type
     constructor Create(Owner: TSynMustache; WR: TJsonWriter;
       SectionMaxCount: integer; Value: pointer; ValueRtti: TRttiCustom;
       OwnWriter: boolean);
+    /// render this reusable rendering context
+    // - wrap PushContext + Owner.RenderContext + Writer.SetText + CancelAll
+    function RenderArray(const arr: TDynArray): RawUtf8;
+    /// render this reusable rendering context
+    // - wrap PushContext + Owner.RenderContext + Writer.SetText + CancelAll
+    function RenderRtti(Value: pointer; Rtti: TRttiCustom): RawUtf8;
     /// callback to get data at runtime from a global name
     // - when the Value variable provided to TSynMustache.RenderData is not enough
     property OnGetGlobalData: TOnGetGlobalData
@@ -417,6 +426,12 @@ type
       aTemplate: PUtf8Char; aTemplateLen: integer); overload; virtual;
     /// finalize internal memory
     destructor Destroy; override;
+    /// internal factory calling TSynMustacheContextVariant.Create()
+    // - to call e.g. result.Render() several times
+    function NewMustacheContextVariant: TSynMustacheContextVariant;
+    /// internal factory calling TSynMustacheContextData.Create()
+    // - to call e.g. result.RenderArray() or result.RenderRtti() several times
+    function NewMustacheContextData: TSynMustacheContextData;
     /// search some text within the {{mustache}} template text
     function FoundInTemplate(const text: RawUtf8): boolean;
     /// register one Expression Helper callback for a given list of helpers
@@ -821,6 +836,14 @@ begin
   PushContext(TVarData(aDocument)); // weak copy
 end;
 
+function TSynMustacheContextVariant.Render(const aDoc: variant): RawUtf8;
+begin
+  PushContext(TVarData(aDoc));
+  fOwner.RenderContext(self, 0, high(fOwner.fTags));
+  Writer.SetText(result);
+  CancelAll;
+end;
+
 procedure TSynMustacheContextVariant.PushContext(const aDoc: TVarData);
 begin
   if fContextCount >= length(fContext) then
@@ -989,6 +1012,27 @@ begin
   fGetVarDataFromContextNeedsFree := true;
   SetLength(fContext, SectionMaxCount + 4);
   PushContext(Value, ValueRtti);
+end;
+
+function TSynMustacheContextData.RenderArray(const arr: TDynArray): RawUtf8;
+var
+  n: PtrInt;
+begin
+  n := arr.Count;
+  if n <> 0 then
+    DynArrayFakeLength(arr.Value^, n); // as required by RenderContext()
+  PushContext(arr.Value, arr.Info);
+  fOwner.RenderContext(self, 0, high(fOwner.fTags));
+  Writer.SetText(result);
+  CancelAll;
+end;
+
+function TSynMustacheContextData.RenderRtti(Value: pointer; Rtti: TRttiCustom): RawUtf8;
+begin
+  PushContext(Value, Rtti);
+  fOwner.RenderContext(self, 0, high(fOwner.fTags));
+  Writer.SetText(result);
+  CancelAll;
 end;
 
 procedure TSynMustacheContextData.PushContext(Value: pointer; Rtti: TRttiCustom);
@@ -1778,14 +1822,24 @@ begin
   finally
     Free;
   end;
-  fCachedContextVariant := TSynMustacheContextVariant.Create(self,
+  fCachedContextVariant := NewMustacheContextVariant;
+  fCachedContextData    := NewMustacheContextData;
+end;
+
+function TSynMustache.NewMustacheContextVariant: TSynMustacheContextVariant;
+begin
+  result := TSynMustacheContextVariant.Create(self,
     TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
     SectionMaxCount + 4, Null, true);
-  fCachedContextVariant.CancelAll; // to be reused from a void context
-  fCachedContextData := TSynMustacheContextData.Create(self,
+  result.CancelAll; // to be reused from a void context
+end;
+
+function TSynMustache.NewMustacheContextData: TSynMustacheContextData;
+begin
+  result := TSynMustacheContextData.Create(self,
     TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
     SectionMaxCount + 4, nil, nil, true);
-  fCachedContextData.CancelAll; // to be reused from a void context
+  result.CancelAll; // to be reused from a void context
 end;
 
 procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
@@ -1937,7 +1991,7 @@ var
 begin
   n := Value.Count;
   if n <> 0 then
-    DynArrayFakeLength(Value.Value^, n); // as RenderDataRtti() expects
+    DynArrayFakeLength(Value.Value^, n); // as required by RenderDataRtti()
   result := RenderDataRtti(Value.Value, Value.Info,
     OnGetData, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
