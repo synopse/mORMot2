@@ -5121,7 +5121,7 @@ begin
   begin
     W := TTextWriter.CreateOwnedStream(temp);
     try
-      W.AddHtmlEscape(pointer(text), length(text), fmt);
+      W.AddHtmlEscape(pointer(text), fmt);
       W.SetText(result);
     finally
       W.Free;
