@@ -10619,7 +10619,6 @@ begin
   result := true;
 end;
 
-
 function StrEquAW(n: PByte; str: PWord): boolean;
 var
   c: cardinal;
@@ -10648,91 +10647,85 @@ var
   i: PtrInt;
   n: ShortString;
 begin
-  if (self = nil) or
-     (Data = nil) then
-  begin
-    result := nil;
-    exit;
-  end;
   result := self;
+  if (self <> nil) and
+     (Data <> nil) then
   repeat
     GetNextItemShortString(Path, @n, PathDelim);
-    if n[0] <> #0 then
-      case result.Kind of
-        rkVariant:
-          // try TDocVariant/TBsonVariant name lookup
-          if DocVariantType.FindSynVariantType(PVarData(Data)^.VType, vt) then
-          begin
-            TRttiVarData(v).VType := varEmpty; // or IntGet() would clear it
-            vt.IntGet(v, PVarData(Data)^, @n[1], ord(n[0]), {noexc=}true);
-            if v.VType <> varEmpty then
-            begin
-              Temp := v;
-              Data := @Temp;
-              result := PT_RTTI[ptVariant];
-              if Path = nil then
-                exit;
-              continue;
-            end;
-          end;
-        rkEnumeration,
-        rkSet:
-          // check enumeration/set name against the stored value
-          if Path = nil then // last path only
-          begin
-            i := result.Cache.EnumInfo^.GetEnumNameValue(@n[1], ord(n[0]));
-            if i >= 0 then
-            begin
-              // enum name match: return a boolean to stop searching
-              if result.Kind = rkEnumeration then
-              begin
-                // true = enum name matches the stored enum value
-                result.ValueToVariant(Data, v); // calls RTTI_FROM_ORD[]
-                PBoolean(@Temp)^ := v.VInt64 = i;
-              end
-              else
-                // true = enum name is part of the set value
-                PBoolean(@Temp)^ := GetBitPtr(Data, i);
-              Data := @Temp;
-              result := PT_RTTI[ptBoolean]; // true/false if enum name found
-              exit;
-            end;
-          end;
-        rkLString:
-          // compare a RawUtf8 value with the name
-          if Path = nil then // last path only
-            if StrEquA(@n[1], PPByte(Data)^) then // n[1] ends with #0
-              exit; // return self as non nil value
-        {$ifdef HASVARUSTRING}
-        rkUstring,
-        {$endif HASVARUSTRING}
-        rkWString:
-          // compare a UnicodeString/WideString value with the name
-          if Path = nil then // last path only
-            if StrEquAW(@n[1], PPWord(Data)^) then
-              exit;
-      else
-        if result.Props.CountNonVoid <> 0 then
+    if n[0] = #0 then
+      break;
+    if result.Props.CountNonVoid <> 0 then
+    begin
+      // search name in rkRecord/rkObject or rkClass properties
+      p := FindCustomProp(
+        pointer(result.Props.List), @n[1], ord(n[0]), result.Props.Count);
+      if (p = nil) or
+         (p^.OffsetGet < 0) then // we don't support getters yet
+        break;
+      result := p^.Value;
+      inc(PAnsiChar(Data), p.OffsetGet);
+      if Path = nil then
+        exit; // reach last path
+      if result.Kind = rkClass then // stored by reference
+        Data := PPointer(PAnsiChar(Data) + p.OffsetGet)^;
+      continue;
+    end
+    else
+    case result.Kind of
+      rkVariant:
+        // try TDocVariant/TBsonVariant name lookup
+        if DocVariantType.FindSynVariantType(PVarData(Data)^.VType, vt) then
         begin
-          // search name in rkRecord/rkObject or rkClass properties
-          p := FindCustomProp(
-            pointer(result.Props.List), @n[1], ord(n[0]), result.Props.Count);
-          if (p <> nil) and
-             (p^.OffsetGet >= 0) then // we don't support getters yet
-          begin
-            result := p^.Value;
-            inc(PAnsiChar(Data), p.OffsetGet);
-            if Path = nil then
-              exit;
-            if result.Kind = rkClass then // stored by reference
-              Data := PPointer(PAnsiChar(Data) + p.OffsetGet)^;
-            continue;
-          end;
+          TRttiVarData(v).VType := varEmpty; // IntGet() would clear it
+          vt.IntGet(v, PVarData(Data)^, @n[1], ord(n[0]), {noexc=}true);
+          if v.VType = varEmpty then
+            break;
+          Temp := v;
+          Data := @Temp;
+          result := PT_RTTI[ptVariant];
+          if Path = nil then
+            exit;
+          continue;
         end;
-      end;
-    result := nil; // path not found
-    exit;
+      rkEnumeration,
+      rkSet:
+        // check enumeration/set name against the stored value
+        if Path = nil then // last path only
+        begin
+          i := result.Cache.EnumInfo^.GetEnumNameValue(@n[1], ord(n[0]));
+          if i < 0 then
+            break;
+          // enum name match: return a boolean to stop searching
+          if result.Kind = rkEnumeration then
+          begin
+            // true = enum name matches the stored enum value
+            result.ValueToVariant(Data, v); // calls RTTI_FROM_ORD[]
+            PBoolean(@Temp)^ := v.VInt64 = i;
+          end
+          else
+            // true = enum name is part of the set value
+            PBoolean(@Temp)^ := GetBitPtr(Data, i);
+          Data := @Temp;
+          result := PT_RTTI[ptBoolean]; // true/false if enum name found
+          exit;
+        end;
+      rkLString:
+        // case-sensitive comparison of a UTF-8 value with the name
+        if Path = nil then // last path only
+          if StrEquA(@n[1], PPByte(Data)^) then // n[1] ends with #0
+            exit; // return self as non nil value
+      {$ifdef HASVARUSTRING}
+      rkUstring,
+      {$endif HASVARUSTRING}
+      rkWString:
+        // case-sensitive comparison of a UTF-16 value with the name
+        if Path = nil then // last path only
+          if StrEquAW(@n[1], PPWord(Data)^) then
+            exit;
+    end;
+    break;
   until false;
+  result := nil; // path not found
 end;
 
 procedure TRttiJson.RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
