@@ -1735,12 +1735,12 @@ begin
   if (hfConnectionClose in Http.HeaderFlags) or
      not SockIsDefined then
     DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive or maxrequest)', [])
-  else if SockReceivePending(0, @loerr) = cspSocketError then
+  else if not fSock.Available(@loerr) then
     DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
   else
     try
+      // send request - we use SockSend because writeln() is calling flush()
       try
-        // send request - we use SockSend because writeln() is calling flush()
         // prepare headers
         RequestSendHeader(ctxt.url, ctxt.method);
         if ctxt.KeepAlive > 0 then
