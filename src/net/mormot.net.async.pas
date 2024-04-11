@@ -225,6 +225,7 @@ type
     Count: integer;
     Items: array of TPollAsyncConnection;
   end;
+  PPollAsyncConnections = ^TPollAsyncConnections;
 
   /// possible options for low-level TPollAsyncSockets process
   // - as translated from homonymous high-level acoWritePollOnly
@@ -2656,7 +2657,8 @@ begin
     exit;
   (aConnection as TAsyncConnection).fLastOperation := fLastOperationMS; // in ms
   with fClients.fWaitingWrite do
-    PtrArrayDelete(Items, aConnection, Safe, @Count);
+    if Count <> 0 then
+      PtrArrayDelete(Items, aConnection, Safe, @Count);
   with fGC[1] do // add to 1st generation
     ObjArrayAdd(Items, aConnection, Safe, @Count);
 end;
@@ -4156,7 +4158,7 @@ begin
     end;
     // start async events subscription and connection
     {$ifdef USE_WINIOCP}
-    aConnection.fInternalFlags := [ifWriteWait];
+    include(aConnection.fInternalFlags, ifWriteWait);
     if aConnection.fIocp = nil then
       aConnection.fIocp := fOwner.fIocp.Subscribe(aConnection.fSocket, tag);
     if fOwner.fIocp.PrepareNext(aConnection.fIocp, wieConnect) then
@@ -4741,6 +4743,7 @@ begin
     end;
   end;
 end;
+
 
 { THttpAsyncConnections }
 
