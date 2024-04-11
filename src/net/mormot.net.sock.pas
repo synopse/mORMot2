@@ -1969,6 +1969,7 @@ begin
     WSAETIMEDOUT,
     WSAEWOULDBLOCK,
     {$endif OSWINDOWS}
+    WSAEINPROGRESS,
     WSATRY_AGAIN:
       result := nrRetry;
     WSAEINVAL:

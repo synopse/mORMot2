@@ -42,6 +42,7 @@ const
   WSAEINVAL        = ESysEINVAL;
   WSAEMFILE        = ESysEMFILE;
   WSAECONNREFUSED  = ESysECONNREFUSED;
+  WSAEINPROGRESS   = ESysEINPROGRESS;
 
   {$ifdef OSLINUX}
   SOCK_NONBLOCK = O_NONBLOCK; // see net.h
@@ -599,8 +600,7 @@ begin
     p.events := POLLIN or POLLPRI;
   if neWrite in scope then
     p.events := p.events or POLLOUT;
-  if neError in scope then
-    p.events := p.events or POLLERR;
+  // POLLERR and POLLHUP are ignored in p.events: implicit [neError]
   p.revents := 0;
   res := poll(@p, 1, ms);
   if res < 0 then
@@ -608,7 +608,7 @@ begin
     res := sockerrno;
     if loerr <> nil then
       loerr^ := res;
-    if res = WSATRY_AGAIN then
+    if res = ESysEAGAIN then
       // timeout, not a true error
       result := [];
     exit;
