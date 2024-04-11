@@ -4819,9 +4819,9 @@ var
 // wait 10 microsecond unless SleepHiRes0Yield is forced to true (bad idea)
 // - in respect to RTL's Sleep() function, it will return on ESysEINTR if was
 // interrupted by any OS signal
-// - warning: wait typically the next system timer interrupt on Windows, which
-// is every 16ms by default; as a consequence, never rely on the ms supplied
-// value to guess the elapsed time, but call GetTickCount64
+// - warning: wait typically for the next system timer interrupt on Windows,
+// which is every 16ms by default; as a consequence, never rely on the ms
+// supplied value to guess the elapsed time, but call GetTickCount64
 procedure SleepHiRes(ms: cardinal); overload;
 
 /// similar to Windows sleep() API call, but truly cross-platform and checking

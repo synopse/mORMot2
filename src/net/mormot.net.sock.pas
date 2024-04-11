@@ -282,6 +282,8 @@ type
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// change the socket state to non-blocking
+    // - note that on Windows, there is no easy way to check the non-blocking
+    // state of the socket (WSAIoctl has been deprecated for this)
     function MakeAsync: TNetResult;
     /// change the socket state to blocking
     function MakeBlocking: TNetResult;
@@ -1725,7 +1727,8 @@ type
     /// check if there are some pending bytes in the input sockets API buffer
     // - returns cspSocketError if the connection is broken or closed
     // - will first check for any INetTls.ReceivePending bytes in the TLS buffers
-    // - warning: on Windows, may wait a little less than TimeOutMS (select bug)
+    // - warning: on Windows, may wait for the next system timer interrupt, so
+    // actual wait may be a less than TimeOutMS if < 16 (select bug/feature)
     function SockReceivePending(TimeOutMS: integer;
       loerr: system.PInteger = nil): TCrtSocketPending;
     /// returns the socket input stream as a string
