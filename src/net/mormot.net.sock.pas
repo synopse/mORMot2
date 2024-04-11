@@ -2424,7 +2424,7 @@ begin
     exit; // don't wait now
   socket.MakeBlocking;
   repeat
-    status := socket.WaitFor(20, [neWrite, neError, neClosed]);
+    status := socket.WaitFor(20, [neWrite, neError]); // select() or poll()
     result := nrOK;
     if status = [neWrite] then
       exit;
@@ -2546,7 +2546,7 @@ begin
   repeat
     for i := 0 to length(result) - 1 do
       if (sock[i] <> nil) and
-         (sock[i].WaitFor(1, [neWrite]) = [neWrite]) then
+         (sock[i].WaitFor(1, [neWrite, neError]) = [neWrite]) then
       begin
         if sockets = nil then
           sock[i].ShutdownAndClose(false)
@@ -2934,7 +2934,7 @@ var
   read: integer;
   tmp: array[word] of byte; // use a buffer to avoid RecvPending() syscall
 begin
-  events := WaitFor(ms, [neRead]);
+  events := WaitFor(ms, [neRead, neError]); // select() or poll()
   if (neError in events) or
      (Assigned(terminated) and
       terminated^) then
@@ -2988,7 +2988,7 @@ var
   received: integer;
 begin
   repeat
-    if (WaitFor(ms, [neRead]) <> [neRead]) or
+    if (WaitFor(ms, [neRead, neError]) <> [neRead]) or // select() or poll()
        (Assigned(terminated) and
         terminated^) then
       break;
@@ -5685,12 +5685,12 @@ begin
       result := cspDataAvailable; // some data is available in the TLS buffers
       exit;
     end;
-    // check if something is available at socket level (even for TLS)
+    // select() or poll() to check for incoming data on socket (even for TLS)
     events := fSock.WaitFor(TimeOutMS, [neRead, neError], loerr);
   end
   else
     events := [neError];
-  if neError in events then
+  if events * [neError, neClosed] <> [] then
     result := cspSocketError
   else if neRead in events then
     result := cspDataAvailable
@@ -5756,7 +5756,7 @@ begin
       if (fSock.RecvPending(pending) = nrOk) and
          (pending > 0) then
         continue; // no need to call WaitFor()
-      events := fSock.WaitFor(TimeOut, [neRead]);
+      events := fSock.WaitFor(TimeOut, [neRead, neError]); // select() or poll()
       if neError in events then
       begin
         Close; // connection broken or socket closed gracefully
@@ -5893,7 +5893,7 @@ begin
     else if (res <> nrOK) and
             (res <> nrRetry) then
       exit; // fatal socket error
-    events := fSock.WaitFor(TimeOut, [neWrite]);
+    events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
     if (neError in events) or
        not (neWrite in events) then // identify timeout as error
       exit;

@@ -2019,7 +2019,7 @@ begin
           begin
             // seen after accept() or from ab -> leverage this thread
             recved := SizeOf(temp);
-            if connection.fSocket.WaitFor(retryms, [neRead]) = [neRead] then
+            if connection.fSocket.WaitFor(retryms, [neRead, neError]) = [neRead] then
               res := connection.Recv(@temp, recved);
             wf := 'wf ';
           end
@@ -2119,7 +2119,7 @@ begin
     {$ifdef USE_WINIOCP}
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
         (ifWriteWait in connection.fInternalFlags) or
-        (neWrite in connection.Socket.WaitFor(0, [neWrite]))) and
+        (neWrite in connection.Socket.WaitFor(0, [neWrite, neError]))) and
        connection.WaitLock({writer=}true, {timeout=}20) then
        // allow to wait a little since we are in a single W thread
     {$else}
@@ -3551,7 +3551,7 @@ begin
       begin
         len := 1;
         touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
-        ev := touchandgo.WaitFor(100, [neRead]);
+        ev := touchandgo.WaitFor(100, [neRead, neError]);
         DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
         SleepHiRes(1);
       end;

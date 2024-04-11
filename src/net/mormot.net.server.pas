@@ -2385,7 +2385,7 @@ begin
       raise EUdpServer.CreateFmt('%s.Execute: Bind failed', [ClassNameShort(self)^]);
     while not Terminated do
     begin
-      if fSock.WaitFor(1000, [neRead]) <> [] then
+      if fSock.WaitFor(1000, [neRead, neError]) <> [] then
       begin
         if Terminated then
         begin
