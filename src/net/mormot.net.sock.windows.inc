@@ -190,8 +190,6 @@ const
   IPV6_JOIN_GROUP        = 12; // add an IP group membership
   IPV6_LEAVE_GROUP       = 13; // drop an IP group membership
 
-  MSG_NOSIGNAL  = 0;
-
   // getnameinfo constants
   NI_MAXHOST	   = 1025;
   NI_MAXSERV	   = 32;
@@ -256,6 +254,7 @@ type
   end;
 
 const
+  MSG_NOSIGNAL  = $00;  // do not generate SIGPIPE (not defined on Windows)
   MSG_OOB       = $01;  // Process out-of-band data
   MSG_PEEK      = $02;  // Peek at incoming messages
 
@@ -657,6 +656,7 @@ begin
 end;
 
 procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if ms = 0 then
   begin

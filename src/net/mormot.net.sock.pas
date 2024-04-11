@@ -311,6 +311,10 @@ type
     /// call send in loop until the whole data buffer is sent
     function SendAll(Buf: PByte; len: integer;
       terminated: PTerminated = nil): TNetResult;
+    /// check if the socket is not closed nor broken
+    // - i.e. check if it is likely to be accept Send() and Recv() calls
+    // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
+    function Available(loerr: system.PInteger = nil): boolean;
     /// finalize a socket, calling Close after shutdown() if needed
     function ShutdownAndClose(rdwr: boolean): TNetResult;
     /// close the socket - consider ShutdownAndClose() for clean closing
@@ -3009,6 +3013,26 @@ begin
   until Assigned(terminated) and
         terminated^;
   result := nrClosed;
+end;
+
+function TNetSocketWrap.Available(loerr: system.PInteger): boolean;
+var
+  events: TNetEvents;
+  dummy: integer;
+begin
+  result := true;
+  events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
+  if events = [] then
+    exit; // the socket seems good enough
+  if events = [neRead] then
+    // on Windows, may be because of WSACONNRESET (nrClosed)
+    // on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
+    // no need to MakeAsync: recv() should not block after neRead
+    // expected recv() result: -1=error, 0=closed, 1=success
+    if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
+       (NetLastError(NO_ERROR, loerr) = nrRetry) then
+      exit;
+  result := false; // e.g. neError, neClosed
 end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
