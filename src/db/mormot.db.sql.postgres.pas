@@ -1422,20 +1422,18 @@ begin
       // wait to have some data pending on the input socket for a task
       repeat
         if fOwner.fConnection = nil then
-          res := []
+          res := [neClosed]
         else
-          res := fOwner.fConnection.Socket.WaitFor(-1, [neRead]);
-      until Terminated or
-            (res = [neRead]) or
-            ((res <> []) and
-             SleepOrTerminated(100)); // sleep(100) on broken connection
+          res := fOwner.fConnection.Socket.WaitFor(-1, [neRead, neError]);
+        if Terminated or
+           (res = [neRead]) then
+          break;
+        SleepHiRes(10); // loop on broken or not yet established connection
+      until Terminated;
       if Terminated then
         break;
       if not fOwner.fTasks.Pending then // happens e.g. during statement parsing
-        if SleepOrTerminated(10) then
-          break
-        else
-          continue;
+        continue; // no sleep(): just loop to WaitFor() syscall again
       // handle incoming responses from PostgreSQL
       task.OnFinished := nil;
       try
