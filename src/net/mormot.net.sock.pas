@@ -773,10 +773,10 @@ type
   // $   TLS.IgnoreCertificateErrors := true;
   // $   TLS.CipherList := 'ECDHE-RSA-AES256-GCM-SHA384';
   // $   ConnectUri('https://synopse.info');
-  // $   writeln(TLS.PeerInfo);
-  // $   writeln(TLS.CipherName);
-  // $   writeln(Get('/forum/', 1000), ' len=', ContentLength);
-  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000));
+  // $   ConsoleWrite(TLS.PeerInfo);
+  // $   ConsoleWrite(TLS.CipherName);
+  // $   ConsoleWrite([Get('/forum/', 1000), ' len=', ContentLength]);
+  // $   ConsoleWrite(Get('/fossil/wiki/Synopse+OpenSource', 1000));
   // $ finally
   // $   Free;
   // $ end;
@@ -3024,11 +3024,12 @@ begin
   events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
   if events = [] then
     exit; // the socket seems good enough
-  if events = [neRead] then
-    // on Windows, may be because of WSACONNRESET (nrClosed)
-    // on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
-    // no need to MakeAsync: recv() should not block after neRead
-    // expected recv() result: -1=error, 0=closed, 1=success
+  if neRead in events then
+    // - on Windows, may be because of WSACONNRESET (nrClosed)
+    // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
+    // - no need to MakeAsync: recv() should not block after neRead
+    // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
+    // - expected recv() result: -1=error, 0=closed, 1=success
     if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
        (NetLastError(NO_ERROR, loerr) = nrRetry) then
       exit;
