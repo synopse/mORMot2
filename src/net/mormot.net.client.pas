@@ -298,8 +298,8 @@ type
     DataMimeType: RawUtf8;
     Status, Redirected: integer;
     InStream, OutStream: TStream;
-    KeepAlive: cardinal;
-    Retry: set of (rMain, rAuth, rAuthProxy);
+    KeepAliveSec: cardinal;
+    Retry: set of (rMain, rAuth, rAuthProxy); // auth + retry state machine
     OutStreamInitialPos: Int64;
   end;
 
@@ -1690,13 +1690,13 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
     msg: RawUtf8;
   begin
     FormatUtf8(Fmt, Args, msg);
-    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
+    //writeln('DoRetry ',byte(ctxt.Retry), ' ', FatalError, ' / ', msg);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
-         [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.retry]], self);
-    if rMain in ctxt.retry then
+         [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.Retry]], self);
+    if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
-      ctxt.status := FatalError
+      ctxt.Status := FatalError
     else
     begin
       // recreate the connection and try again
@@ -1706,17 +1706,17 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
       try
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
-        include(ctxt.retry, rMain);
+        include(ctxt.Retry, rMain);
         RequestInternal(ctxt);
       except
         on Exception do
-          ctxt.status := FatalError;
+          ctxt.Status := FatalError;
       end;
     end;
   end;
 
 var
-  P: PUtf8Char;
+  cmd: PUtf8Char;
   pending: TCrtSocketPending;
   bodystream: TStream;
   loerr: integer;
@@ -1726,15 +1726,15 @@ begin
   if Assigned(OnLog) then
   begin
     QueryPerformanceMicroSeconds(start);
-    OnLog(sllTrace, 'RequestInternal % %:%/% flags=% retry=%', [ctxt.method,
-      fServer, fPort, ctxt.url, ToText(Http.HeaderFlags), byte(ctxt.retry)], self);
+    OnLog(sllTrace, 'RequestInternal % %:%/% flags=% retry=%', [ctxt.Method,
+      fServer, fPort, ctxt.Url, ToText(Http.HeaderFlags), byte(ctxt.Retry)], self);
   end;
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Http.Content := '';
   if (hfConnectionClose in Http.HeaderFlags) or
      not SockIsDefined then
-    DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive or maxrequest)', [])
+    DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
     DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
   else
@@ -1742,19 +1742,19 @@ begin
       // send request - we use SockSend because writeln() is calling flush()
       try
         // prepare headers
-        RequestSendHeader(ctxt.url, ctxt.method);
-        if ctxt.KeepAlive > 0 then
-          SockSend(['Keep-Alive: ', ctxt.KeepAlive,
-              #13#10'Connection: Keep-Alive'])
+        RequestSendHeader(ctxt.Url, ctxt.Method);
+        if ctxt.KeepAliveSec <> 0 then
+          SockSend(['Connection: Keep-Alive'#13#10 +
+                    'Keep-Alive: timeout=', ctxt.KeepAliveSec]) // as seconds
         else
           SockSend('Connection: Close');
         dat := ctxt.Data; // local var copy for Data to be compressed in-place
         if (dat <> '') or
-           ((ctxt.method <> 'GET') and // no message body len/type for GET/HEAD
-            (ctxt.method <> 'HEAD')) then
+           (not IsGet(ctxt.Method) and // no message body len/type for GET/HEAD
+            not IsHead(ctxt.Method)) then
           CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
-        if ctxt.header <> '' then
-          SockSend(ctxt.header);
+        if ctxt.Header <> '' then
+          SockSend(ctxt.Header);
         if Http.CompressAcceptEncoding <> '' then
           SockSend(Http.CompressAcceptEncoding);
         SockSendCRLF;
@@ -1767,47 +1767,57 @@ begin
           SockSendStream(ctxt.InStream);
         end;
         // wait and retrieve HTTP command line response
-        pending := SockReceivePending(Timeout); // wait using select/poll
-        if pending <> cspDataAvailable then
-        begin
-          if pending = cspNoData then
-            ctxt.status := HTTP_TIMEOUT // no retry on timeout
-          else
-            DoRetry(HTTP_TIMEOUT,
-              '% waiting %ms for headers', [ToText(pending)^, TimeOut]);
-          exit;
-        end;
-        SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
-        P := pointer(Http.CommandResp);
-        if IdemPChar(P, 'HTTP/1.') then
-        begin
-          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
-          ctxt.status := GetCardinal(P + 9);
-          if ctxt.status = 0 then
+        pending := SockReceivePending(Timeout, @loerr); // select/poll
+        case pending of
+          cspDataAvailable:
+            ; // ok
+          cspDataAvailableOnClosedSocket:
+            include(Http.HeaderFlags, hfConnectionClose); // socket is closed
+          cspNoData:
+            begin
+              ctxt.Status := HTTP_TIMEOUT; // no retry on real timeout
+              exit;
+            end;
+        else // cspSocketError, cspSocketClosed
           begin
-            ctxt.status := HTTP_HTTPVERSIONNONSUPPORTED;
+            DoRetry(HTTP_NOTFOUND, '% % waiting %ms for headers',
+              [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
             exit;
           end;
-          if P[7] = '0' then
-            // HTTP/1.0 -> force connection close
-            ctxt.KeepAlive := 0;
+        end;
+        SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
+        cmd := pointer(Http.CommandResp);
+        if IdemPChar(cmd, 'HTTP/1.') and
+           (cmd[7] in ['0', '1']) then
+        begin
+          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
+          ctxt.Status := GetCardinal(cmd + 9);
+          if (ctxt.Status < 200) or
+             (ctxt.Status > 599) then
+          begin
+            ctxt.Status := HTTP_HTTPVERSIONNONSUPPORTED;
+            exit;
+          end;
         end
         else
         begin
           // error on reading answer -> 505=wrong format
           if Http.CommandResp = '' then
-            DoRetry(HTTP_TIMEOUT, 'Broken Link - timeout=%ms', [TimeOut])
+            DoRetry(HTTP_NOTFOUND, 'Broken Link - timeout=%ms', [TimeOut])
           else
             DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
           exit;
         end;
         // retrieve all HTTP headers
         GetHeader({unfiltered=}false);
+        if (cmd[7] = '0') and  // plain HTTP/1.0 should force connection close
+           not (hfConnectionKeepAlive in Http.HeaderFlags) then
+          include(Http.HeaderFlags, hfConnectionClose);
         // retrieve Body content (if any)
-        if (ctxt.status >= HTTP_SUCCESS) and
-           (ctxt.status <> HTTP_NOCONTENT) and
-           (ctxt.status <> HTTP_NOTMODIFIED) and
-           not HttpMethodWithNoBody(ctxt.method) then
+        if (ctxt.Status >= HTTP_SUCCESS) and
+           (ctxt.Status <> HTTP_NOCONTENT) and
+           (ctxt.Status <> HTTP_NOTMODIFIED) and
+           not HttpMethodWithNoBody(ctxt.Method) then
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
           // specific TStreamRedirect expectations
@@ -1841,10 +1851,9 @@ begin
       end;
     finally
       if Assigned(OnLog) then
-         OnLog(sllTrace, 'RequestInternal status=% keepalive=% flags=% in %',
-           [ctxt.Status, ctxt.KeepAlive, ToText(Http.HeaderFlags),
-            MicroSecFrom(start)], self);
-      if ctxt.KeepAlive = 0 then
+         OnLog(sllTrace, 'RequestInternal status=% flags=% in %',
+           [ctxt.Status, ToText(Http.HeaderFlags), MicroSecFrom(start)], self);
+      if hfConnectionClose in Http.HeaderFlags then
         Close;
     end;
 end;
@@ -1899,25 +1908,30 @@ var
   ctxt: THttpClientRequest;
   newuri: TUri;
 begin
-  ctxt.url := url;
+  ctxt.Url := url;
   if (url = '') or
      (url[1] <> '/') then
     insert('/', ctxt.Url, 1); // normalize URI as in RFC (e.g. for Digest auth)
-  ctxt.method := method;
-  ctxt.KeepAlive := KeepAlive;
-  ctxt.header := TrimU(header);
+  ctxt.Method := method;
+  if KeepAlive = 0 then
+    ctxt.KeepAliveSec := 0
+  else if KeepAlive <= 1000 then
+    ctxt.KeepAliveSec := 1 // "Keep-Alive: timeout=xx" header unit is in seconds
+  else
+    ctxt.KeepAliveSec := KeepAlive div 1000;
+  ctxt.Header := TrimU(header);
   ctxt.Data := Data;
   ctxt.DataMimeType := DataMimeType;
   ctxt.InStream := InStream;
   ctxt.OutStream := OutStream;
   if OutStream <> nil then
     ctxt.OutStreamInitialPos := OutStream.Position;
-  ctxt.status := 0;
-  ctxt.redirected := 0;
+  ctxt.Status := 0;
+  ctxt.Redirected := 0;
   if retry then
-    ctxt.retry := [rMain]
+    ctxt.Retry := [rMain]
   else
-    ctxt.retry := [];
+    ctxt.Retry := [];
   if (not Assigned(fOnBeforeRequest)) or
      fOnBeforeRequest(self, ctxt) then
   begin
@@ -1926,15 +1940,15 @@ begin
     begin
       // emulate a custom protocol (e.g. 'file://') into a HTTP request
       if Http.ParseAll(ctxt.InStream, ctxt.Data,
-          FormatUtf8('% % HTTP/1.0', [method, ctxt.url]), ctxt.header) then
+          FormatUtf8('% % HTTP/1.0', [method, ctxt.Url]), ctxt.Header) then
       begin
         Http.CommandResp := fOpenUriFull;
-        ctxt.status := fOnProtocolRequest(Http);
-        if StatusCodeIsSuccess(ctxt.status) then
-          ctxt.status := Http.ContentToOutput(ctxt.status, ctxt.OutStream);
+        ctxt.Status := fOnProtocolRequest(Http);
+        if StatusCodeIsSuccess(ctxt.Status) then
+          ctxt.Status := Http.ContentToOutput(ctxt.Status, ctxt.OutStream);
         if assigned(OnLog) then
           OnLog(sllTrace, 'Request(%)=% via %.OnRequest',
-            [fOpenUriFull, ctxt.status,
+            [fOpenUriFull, ctxt.Status,
              TObject(TMethod(fOnProtocolRequest).Data)], self);
       end;
     end
@@ -1943,44 +1957,44 @@ begin
       // sub-method to handle the actual request, with proper retrial
       RequestInternal(ctxt);
       // handle optional (proxy) authentication callbacks
-      if (ctxt.status = HTTP_UNAUTHORIZED) and
+      if (ctxt.Status = HTTP_UNAUTHORIZED) and
           Assigned(fOnAuthorize) then
       begin
         if assigned(OnLog) then
-          OnLog(sllTrace, 'Request(% %)=%', [ctxt.method, url, ctxt.status], self);
-        if rAuth in ctxt.retry then
+          OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
+        if rAuth in ctxt.Retry then
           break;
-        include(ctxt.retry, rAuth);
+        include(ctxt.Retry, rAuth);
         if fOnAuthorize(self, ctxt, Http.HeaderGetValue('WWW-AUTHENTICATE')) then
           continue;
       end
-      else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
+      else if (ctxt.Status = HTTP_PROXYAUTHREQUIRED) and
           Assigned(fOnProxyAuthorize) then
       begin
         if assigned(OnLog) then
-          OnLog(sllTrace, 'Request(% %)=%', [ctxt.method, url, ctxt.status], self);
-        if rAuthProxy in ctxt.retry then
+          OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
+        if rAuthProxy in ctxt.Retry then
           break;
-        include(ctxt.retry, rAuthProxy);
+        include(ctxt.Retry, rAuthProxy);
         if fOnProxyAuthorize(self, ctxt, Http.HeaderGetValue('PROXY-AUTHENTICATE')) then
           continue;
       end;
       // handle redirection from returned headers
-      if (ctxt.status < 300) or              // 300..399 are redirections
-         (ctxt.status = HTTP_NOTMODIFIED) or // but 304 is not
-         (ctxt.status > 399) or              // 400.. are errors
-         (ctxt.redirected >= fRedirectMax) then
+      if (ctxt.Status < 300) or              // 300..399 are redirections
+         (ctxt.Status = HTTP_NOTMODIFIED) or // but 304 is not
+         (ctxt.Status > 399) or              // 400.. are errors
+         (ctxt.Redirected >= fRedirectMax) then
         break;
       if retry then
-        ctxt.retry := [rMain]
+        ctxt.Retry := [rMain]
       else
-        ctxt.retry := [];
-      ctxt.url := Http.HeaderGetValue('LOCATION');
-      case ctxt.status of
+        ctxt.Retry := [];
+      ctxt.Url := Http.HeaderGetValue('LOCATION');
+      case ctxt.Status of
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
         HTTP_MOVEDPERMANENTLY,
         HTTP_SEEOTHER:
-          ctxt.method := 'GET';
+          ctxt.Method := 'GET';
         // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
       end;
       if (OutStream <> nil) and
@@ -1992,9 +2006,9 @@ begin
         OutStream.Position := ctxt.OutStreamInitialPos; // reset position
       end;
       if assigned(OnLog) then
-        OnLog(sllTrace, 'Request % % redirected to %', [ctxt.method, url, ctxt.url], self);
-      if IdemPChar(pointer(ctxt.url), 'HTTP') and
-         newuri.From(ctxt.url) then
+        OnLog(sllTrace, 'Request % % redirected to %', [ctxt.Method, url, ctxt.Url], self);
+      if IdemPChar(pointer(ctxt.Url), 'HTTP') and
+         newuri.From(ctxt.Url) then
       begin
         fRedirected := newuri.Address;
         if (hfConnectionClose in Http.HeaderFlags) or
@@ -2006,20 +2020,20 @@ begin
           try
             OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
           except
-            ctxt.status := HTTP_NOTFOUND;
+            ctxt.Status := HTTP_NOTFOUND;
           end;
           HttpStateReset;
-          ctxt.url := newuri.Address;
+          ctxt.Url := newuri.Address;
         end;
       end
       else
-        fRedirected := ctxt.url;
-      inc(ctxt.redirected);
+        fRedirected := ctxt.Url;
+      inc(ctxt.Redirected);
     until false;
     if Assigned(fOnAfterRequest) then
       fOnAfterRequest(self, ctxt);
   end;
-  result := ctxt.status;
+  result := ctxt.Status;
 end;
 
 function THttpClientSocket.Get(const url: RawUtf8; KeepAlive: cardinal;

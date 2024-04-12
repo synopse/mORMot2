@@ -2104,7 +2104,7 @@ begin
   aUser := nil; // now owned by this instance
   if fSession.ServerTimeout > 0 then
   begin
-    // call _ping_ every half timeout period
+    // call _ping_ every half of the timeout period (received as minutes)
     period := fSession.ServerTimeout * (60 div 2);
     if period > 25 * 60 then
       // default REST heartbeat at least every 25 minutes
