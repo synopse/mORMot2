@@ -1524,8 +1524,10 @@ type
   /// identify the incoming data availability in TCrtSocket.SockReceivePending
   TCrtSocketPending = (
     cspSocketError,
+    cspSocketClosed,
     cspNoData,
-    cspDataAvailable);
+    cspDataAvailable,
+    cspDataAvailableOnClosedSocket);
 
   TCrtSocketTlsAfter = (
     cstaConnect,
@@ -1729,7 +1731,7 @@ type
     // - raise ENetSock exception on socket error
     function SockRecv(Length: integer): RawByteString; overload;
     /// check if there are some pending bytes in the input sockets API buffer
-    // - returns cspSocketError if the connection is broken or closed
+    // - returns cspSocketError/cspSocketClosed if the connection is broken/closed
     // - will first check for any INetTls.ReceivePending bytes in the TLS buffers
     // - warning: on Windows, may wait for the next system timer interrupt, so
     // actual wait may be a less than TimeOutMS if < 16 (select bug/feature)
@@ -5520,7 +5522,8 @@ begin
     exit;
   // no data in SockIn^.Buffer, so try if some pending at socket/TLS level
   case SockReceivePending(aTimeOutMS) of // check both TLS and socket levels
-    cspDataAvailable:
+    cspDataAvailable,
+    cspDataAvailableOnClosedSocket:
       begin
         backup := fTimeOut;
         fTimeOut := 0; // not blocking call to fill SockIn buffer
@@ -5535,7 +5538,8 @@ begin
           fTimeOut := backup;
         end;
       end;
-    cspSocketError:
+    cspSocketError,
+    cspSocketClosed:
       result := -1; // indicates broken/closed socket
   end; // cspNoData will leave result=0
 end;
@@ -5715,10 +5719,15 @@ begin
   end
   else
     events := [neError];
-  if events * [neError, neClosed] <> [] then
+  if neError in events then
     result := cspSocketError
   else if neRead in events then
-    result := cspDataAvailable
+    if neClosed in events then
+      result := cspDataAvailableOnClosedSocket // read+closed may coexist
+    else
+      result := cspDataAvailable
+  else if neClosed in events then
+    result := cspSocketClosed
   else
     result := cspNoData;
 end;
