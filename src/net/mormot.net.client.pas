@@ -1695,23 +1695,23 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
          [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.Retry]], self);
     if rMain in ctxt.Retry then
-      // we should retry once -> return error only if failed twice
-      ctxt.Status := FatalError
-    else
     begin
-      // recreate the connection and try again
-      Close;
-      //if Assigned(OnLog) then
-      //   OnLog(sllTrace, 'DoRetry after close', [], self);
-      try
-        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
-        HttpStateReset;
-        include(ctxt.Retry, rMain);
-        RequestInternal(ctxt);
-      except
-        on Exception do
-          ctxt.Status := FatalError;
-      end;
+      // we should retry once -> return error only if failed twice
+      ctxt.Status := FatalError;
+      exit;
+    end;
+    // recreate the connection and try again
+    Close;
+    //if Assigned(OnLog) then
+    //   OnLog(sllTrace, 'DoRetry after close', [], self);
+    try
+      OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
+      HttpStateReset;
+      include(ctxt.Retry, rMain);
+      RequestInternal(ctxt);
+    except
+      on Exception do
+        ctxt.Status := FatalError;
     end;
   end;
 
@@ -1738,124 +1738,124 @@ begin
   else if not fSock.Available(@loerr) then
     DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
   else
+  try
+    // send request - we use SockSend because writeln() is calling flush()
     try
-      // send request - we use SockSend because writeln() is calling flush()
-      try
-        // prepare headers
-        RequestSendHeader(ctxt.Url, ctxt.Method);
-        if ctxt.KeepAliveSec <> 0 then
-          SockSend(['Connection: Keep-Alive'#13#10 +
-                    'Keep-Alive: timeout=', ctxt.KeepAliveSec]) // as seconds
-        else
-          SockSend('Connection: Close');
-        dat := ctxt.Data; // local var copy for Data to be compressed in-place
-        if (dat <> '') or
-           (not IsGet(ctxt.Method) and // no message body len/type for GET/HEAD
-            not IsHead(ctxt.Method)) then
-          CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
-        if ctxt.Header <> '' then
-          SockSend(ctxt.Header);
-        if Http.CompressAcceptEncoding <> '' then
-          SockSend(Http.CompressAcceptEncoding);
-        SockSendCRLF;
-        // flush headers and Data/InStream body
-        SockSendFlush(dat);
-        if ctxt.InStream <> nil then
-        begin
-          // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
-          ctxt.InStream.Seek(0, soBeginning);
-          SockSendStream(ctxt.InStream);
-        end;
-        // wait and retrieve HTTP command line response
-        pending := SockReceivePending(Timeout, @loerr); // select/poll
-        case pending of
-          cspDataAvailable:
-            ; // ok
-          cspDataAvailableOnClosedSocket:
-            include(Http.HeaderFlags, hfConnectionClose); // socket is closed
-          cspNoData:
-            begin
-              ctxt.Status := HTTP_TIMEOUT; // no retry on real timeout
-              exit;
-            end;
-        else // cspSocketError, cspSocketClosed
+      // prepare headers
+      RequestSendHeader(ctxt.Url, ctxt.Method);
+      if ctxt.KeepAliveSec <> 0 then
+        SockSend(['Connection: Keep-Alive'#13#10 +
+                  'Keep-Alive: timeout=', ctxt.KeepAliveSec]) // as seconds
+      else
+        SockSend('Connection: Close');
+      dat := ctxt.Data; // local var copy for Data to be compressed in-place
+      if (dat <> '') or
+         (not IsGet(ctxt.Method) and // no message body len/type for GET/HEAD
+          not IsHead(ctxt.Method)) then
+        CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
+      if ctxt.Header <> '' then
+        SockSend(ctxt.Header);
+      if Http.CompressAcceptEncoding <> '' then
+        SockSend(Http.CompressAcceptEncoding);
+      SockSendCRLF;
+      // flush headers and Data/InStream body
+      SockSendFlush(dat);
+      if ctxt.InStream <> nil then
+      begin
+        // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
+        ctxt.InStream.Seek(0, soBeginning);
+        SockSendStream(ctxt.InStream);
+      end;
+      // wait and retrieve HTTP command line response
+      pending := SockReceivePending(Timeout, @loerr); // select/poll
+      case pending of
+        cspDataAvailable:
+          ; // ok
+        cspDataAvailableOnClosedSocket:
+          include(Http.HeaderFlags, hfConnectionClose); // socket is closed
+        cspNoData:
           begin
-            DoRetry(HTTP_NOTFOUND, '% % waiting %ms for headers',
-              [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
+            ctxt.Status := HTTP_TIMEOUT; // no retry on real timeout
             exit;
           end;
-        end;
-        SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
-        cmd := pointer(Http.CommandResp);
-        if IdemPChar(cmd, 'HTTP/1.') and
-           (cmd[7] in ['0', '1']) then
+      else // cspSocketError, cspSocketClosed
         begin
-          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
-          ctxt.Status := GetCardinal(cmd + 9);
-          if (ctxt.Status < 200) or
-             (ctxt.Status > 599) then
-          begin
-            ctxt.Status := HTTP_HTTPVERSIONNONSUPPORTED;
-            exit;
-          end;
-        end
-        else
-        begin
-          // error on reading answer -> 505=wrong format
-          if Http.CommandResp = '' then
-            DoRetry(HTTP_NOTFOUND, 'Broken Link - timeout=%ms', [TimeOut])
-          else
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
+          DoRetry(HTTP_NOTFOUND, '% % waiting %ms for headers',
+            [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
           exit;
         end;
-        // retrieve all HTTP headers
-        GetHeader({unfiltered=}false);
-        if (cmd[7] = '0') and  // plain HTTP/1.0 should force connection close
-           not (hfConnectionKeepAlive in Http.HeaderFlags) then
-          include(Http.HeaderFlags, hfConnectionClose);
-        // retrieve Body content (if any)
-        if (ctxt.Status >= HTTP_SUCCESS) and
-           (ctxt.Status <> HTTP_NOCONTENT) and
-           (ctxt.Status <> HTTP_NOTMODIFIED) and
-           not HttpMethodWithNoBody(ctxt.Method) then
-           // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
-        begin
-          // specific TStreamRedirect expectations
-          bodystream := ctxt.OutStream;
-          if (bodystream <> nil) and
-             bodystream.InheritsFrom(TStreamRedirect) then
-            if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
-            begin
-              if Http.ContentLength > 0 then
-                TStreamRedirect(bodystream).ExpectedSize :=
-                  fRangeStart + Http.ContentLength // we know the size
-            end
-            else
-              bodystream := nil; // don't append any HTML server error message
-          // retrieve whole response body
-          GetBody(bodystream);
-        end;
-        // successfully sent -> reset some fields for the next request
-        if ctxt.Status in HTTP_GET_OK then
-          RequestClear;
-      except
-        on E: Exception do
-          if E.InheritsFrom(ENetSock) or
-             E.InheritsFrom(EHttpSocket) then
-            // network layer problem - typically EHttpSocket
-            DoRetry(HTTP_NOTFOUND, '% raised after % [%]',
-              [E, ToText(ENetSock(E).LastError)^, E.Message])
-          else
-            // propagate custom exceptions to the caller (e.g. from progression)
-            raise;
       end;
-    finally
-      if Assigned(OnLog) then
-         OnLog(sllTrace, 'RequestInternal status=% flags=% in %',
-           [ctxt.Status, ToText(Http.HeaderFlags), MicroSecFrom(start)], self);
-      if hfConnectionClose in Http.HeaderFlags then
-        Close;
+      SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
+      cmd := pointer(Http.CommandResp);
+      if IdemPChar(cmd, 'HTTP/1.') and
+         (cmd[7] in ['0', '1']) then
+      begin
+        // get http numeric status code (200,404...) from 'HTTP/1.x ######'
+        ctxt.Status := GetCardinal(cmd + 9);
+        if (ctxt.Status < 200) or
+           (ctxt.Status > 599) then
+        begin
+          ctxt.Status := HTTP_HTTPVERSIONNONSUPPORTED;
+          exit;
+        end;
+      end
+      else
+      begin
+        // error on reading answer -> 505=wrong format
+        if Http.CommandResp = '' then
+          DoRetry(HTTP_NOTFOUND, 'Broken Link - timeout=%ms', [TimeOut])
+        else
+          DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
+        exit;
+      end;
+      // retrieve all HTTP headers
+      GetHeader({unfiltered=}false);
+      if (cmd[7] = '0') and  // plain HTTP/1.0 should force connection close
+         not (hfConnectionKeepAlive in Http.HeaderFlags) then
+        include(Http.HeaderFlags, hfConnectionClose);
+      // retrieve Body content (if any)
+      if (ctxt.Status >= HTTP_SUCCESS) and
+         (ctxt.Status <> HTTP_NOCONTENT) and
+         (ctxt.Status <> HTTP_NOTMODIFIED) and
+         not HttpMethodWithNoBody(ctxt.Method) then
+         // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
+      begin
+        // specific TStreamRedirect expectations
+        bodystream := ctxt.OutStream;
+        if (bodystream <> nil) and
+           bodystream.InheritsFrom(TStreamRedirect) then
+          if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+          begin
+            if Http.ContentLength > 0 then
+              TStreamRedirect(bodystream).ExpectedSize :=
+                fRangeStart + Http.ContentLength // we know the size
+          end
+          else
+            bodystream := nil; // don't append any HTML server error message
+        // retrieve whole response body
+        GetBody(bodystream);
+      end;
+      // successfully sent -> reset some fields for the next request
+      if ctxt.Status in HTTP_GET_OK then
+        RequestClear;
+    except
+      on E: Exception do
+        if E.InheritsFrom(ENetSock) or
+           E.InheritsFrom(EHttpSocket) then
+          // network layer problem - typically EHttpSocket
+          DoRetry(HTTP_NOTFOUND, '% raised after % [%]',
+            [E, ToText(ENetSock(E).LastError)^, E.Message])
+        else
+          // propagate custom exceptions to the caller (e.g. from progression)
+          raise;
     end;
+  finally
+    if Assigned(OnLog) then
+       OnLog(sllTrace, 'RequestInternal status=% flags=% in %',
+         [ctxt.Status, ToText(Http.HeaderFlags), MicroSecFrom(start)], self);
+    if hfConnectionClose in Http.HeaderFlags then
+      Close;
+  end;
 end;
 
 procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
@@ -1963,7 +1963,7 @@ begin
         if assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
         if rAuth in ctxt.Retry then
-          break;
+          break; // avoid infinite recursion
         include(ctxt.Retry, rAuth);
         if fOnAuthorize(self, ctxt, Http.HeaderGetValue('WWW-AUTHENTICATE')) then
           continue;
