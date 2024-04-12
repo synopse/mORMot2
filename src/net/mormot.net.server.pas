@@ -4825,7 +4825,8 @@ procedure THttpServerResp.Execute;
             [fServerSock.fSock, _CSP[pending]], self);
           {$endif SYNCRTDEBUGLOW}
           case pending of
-            cspSocketError:
+            cspSocketError,
+            cspSocketClosed:
               begin
                 if Assigned(fServer.Sock.OnLog) then
                   fServer.Sock.OnLog(sllTrace, 'Execute: Socket error from %',
@@ -4858,7 +4859,8 @@ procedure THttpServerResp.Execute;
                 end;
                 beforetix := tix;
               end;
-            cspDataAvailable:
+            cspDataAvailable,
+            cspDataAvailableOnClosedSocket:
               begin
                 // get request and headers
                 headertix := fServer.HeaderRetrieveAbortDelay;
@@ -4869,6 +4871,8 @@ procedure THttpServerResp.Execute;
                    fServer.Terminated then
                   // server is down -> disconnect the client
                   exit;
+                if pending = cspDataAvailableOnClosedSocket then
+                  fServerSock.KeepAliveClient := false; // we can't keep it
                 fServer.IncStat(res);
                 case res of
                   grBodyReceived,
