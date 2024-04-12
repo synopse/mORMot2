@@ -880,8 +880,8 @@ var
   WindowsDisplayVersion: RawUtf8;
   {$endif OSWINDOWS}
 
-  /// some textual information about the current CPU
-  // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz 3MB cache'
+  /// some textual information about the current CPU and its known cache
+  // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz [3MB]'
   CpuInfoText: RawUtf8;
   /// the on-chip cache size, in bytes, as returned by the OS
   // - retrieved from /proc/cpuinfo "cache size" entry (L3 cache) on Linux or

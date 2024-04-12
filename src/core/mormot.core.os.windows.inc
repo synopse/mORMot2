@@ -5575,7 +5575,7 @@ begin
         CpuCacheSize := CpuCache[i].Size;
         if CpuCacheSize <> 0 then // append the biggest level Cache size
         begin
-          cpu := _fmt('%s %s cache', [cpu, _oskb(CpuCacheSize)]);
+          cpu := _fmt('%s [%s]', [cpu, _oskb(CpuCacheSize)]);
           break;
         end;
       end;
@@ -5583,9 +5583,11 @@ begin
         with CpuCache[i] do
           if Count <> 0 then
             if Count = 1 then
-              CpuCacheText := _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
+              CpuCacheText :=
+                _fmt('%s L%d=%s ', [CpuCacheText, i, _oskb(Size)])
             else
-              CpuCacheText := _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
+              CpuCacheText :=
+                _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, _oskb(Size)]);
       TrimSelf(CpuCacheText);
     end;
   end;
