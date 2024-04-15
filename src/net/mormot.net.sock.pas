@@ -435,6 +435,9 @@ var
 // - e.g. ToText(nrNotFound)='Not Found'
 function ToText(res: TNetResult): PShortString; overload;
 
+/// convert a WaitFor() result set into a regular TNetResult enumerate
+function NetEventsToNetResult(ev: TNetEvents): TNetResult;
+
 
 { ******************** Mac and IP Addresses Support }
 
@@ -2020,6 +2023,18 @@ end;
 function ToText(res: TNetResult): PShortString;
 begin
   result := @_NR[res]; // no mormot.core.rtti.pas involved
+end;
+
+function NetEventsToNetResult(ev: TNetEvents): TNetResult;
+begin
+  if ev * [neRead, neWrite] <> [] then
+    result := nrOk
+  else if ev = [] then
+    result := nrRetry
+  else if neClosed in ev then
+    result := nrClosed
+  else
+    result := nrFatalError;
 end;
 
 
