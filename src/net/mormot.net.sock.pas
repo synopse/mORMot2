@@ -2431,7 +2431,6 @@ end;
 function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
 var
   tix: Int64;
-  status: TNetEvents;
 begin
   if ms < 20 then
     tix := 0
@@ -2445,15 +2444,8 @@ begin
     exit; // don't wait now
   socket.MakeBlocking;
   repeat
-    status := socket.WaitFor(20, [neWrite, neError]); // select() or poll()
-    result := nrOK;
-    if status = [neWrite] then
-      exit;
-    result := nrFatalError;
-    if neError in status then
-      exit;
-    result := nrClosed;
-    if neClosed in status then
+    result := NetEventsToNetResult(socket.WaitFor(20, [neWrite, neError]));
+    if result <> nrRetry then
       exit;
     // typically, status = [] for TRY_AGAIN result
     SleepHiRes(1);
@@ -2567,7 +2559,7 @@ begin
   repeat
     for i := 0 to length(result) - 1 do
       if (sock[i] <> nil) and
-         (sock[i].WaitFor(1, [neWrite, neError]) = [neWrite]) then
+         (neWrite in sock[i].WaitFor(1, [neWrite, neError])) then
       begin
         if sockets = nil then
           sock[i].ShutdownAndClose(false)
@@ -2951,16 +2943,14 @@ end;
 function TNetSocketWrap.RecvWait(ms: integer;
   out data: RawByteString; terminated: PTerminated): TNetResult;
 var
-  events: TNetEvents;
   read: integer;
   tmp: array[word] of byte; // use a buffer to avoid RecvPending() syscall
 begin
-  events := WaitFor(ms, [neRead, neError]); // select() or poll()
-  if (neError in events) or
-     (Assigned(terminated) and
-      terminated^) then
+  result := NetEventsToNetResult(WaitFor(ms, [neRead, neError]));
+  if Assigned(terminated) and
+     terminated^ then
     result := nrClosed
-  else if neRead in events then
+  else if result = nrOk then
   begin
     read := SizeOf(tmp);
     result := Recv(@tmp, read);
@@ -2972,9 +2962,7 @@ begin
         result := nrUnknownError
       else
         FastSetRawByteString(data, @tmp, read);
-  end
-  else
-    result := nrRetry;
+  end;
 end;
 
 function TNetSocketWrap.SendAll(Buf: PByte; len: integer;
@@ -3009,10 +2997,12 @@ var
   received: integer;
 begin
   repeat
-    if (WaitFor(ms, [neRead, neError]) <> [neRead]) or // select() or poll()
-       (Assigned(terminated) and
-        terminated^) then
-      break;
+    result := NetEventsToNetResult(WaitFor(ms, [neRead, neError]));
+    if Assigned(terminated) and
+       terminated^ then
+      break
+    else if result <> nrOK then
+      exit;
     received := len;
     result := Recv(Buf, received);
     if Assigned(terminated) and
@@ -3040,7 +3030,7 @@ begin
   result := true;
   events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
   if events = [] then
-    exit; // the socket seems good enough
+    exit; // the socket seems stable with no pending input
   if neRead in events then
     // - on Windows, may be because of WSACONNRESET (nrClosed)
     // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
@@ -3050,7 +3040,7 @@ begin
     if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
        (NetLastError(NO_ERROR, loerr) = nrRetry) then
       exit;
-  result := false; // e.g. neError, neClosed
+  result := false; // e.g. neError or neClosed with no neRead
 end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
