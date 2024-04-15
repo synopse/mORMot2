@@ -1444,6 +1444,9 @@ type
     // - return false if the parameters are valid
     // - otherwise, return true and caller should exit the process
     function ConsoleWriteUnknown(const exedescription: RawUtf8 = ''): boolean;
+    /// define 'h help' and call ConsoleWriteUnknown()
+    // - caller should exit the process if this method returned true
+    function ConsoleHelpFailed(const exedescription: RawUtf8 = ''): boolean;
     /// fill the stored arguments and options from executable parameters
     // - called e.g. at unit inialization to set Executable.CommandLine variable
     // - you can execute it again e.g. to customize the switches characters
@@ -8780,6 +8783,18 @@ begin
   ConsoleWrite(FullDescription(exedescription));
   ConsoleWrite(err, ccLightRed);
   TextColor(ccLightGray);
+end;
+
+function TExecutableCommandLine.ConsoleHelpFailed(
+  const exedescription: RawUtf8): boolean;
+begin
+  if exedescription <> '' then
+    fExeDescription := exedescription;
+  result := Option(['h', 'help'], 'display this help');
+  if result then
+    ConsoleWrite(FullDescription)
+  else
+    result := ConsoleWriteUnknown(exedescription);
 end;
 
 procedure TExecutableCommandLine.Clear;
