@@ -2020,7 +2020,7 @@ begin
           begin
             // seen after accept() or from ab -> leverage this thread
             recved := SizeOf(temp);
-            if connection.fSocket.WaitFor(retryms, [neRead, neError]) = [neRead] then
+            if neRead in connection.fSocket.WaitFor(retryms, [neRead, neError]) then
               res := connection.Recv(@temp, recved);
             wf := 'wf ';
           end
