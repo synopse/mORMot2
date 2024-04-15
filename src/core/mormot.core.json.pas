@@ -11285,6 +11285,7 @@ var
 begin
   ctxt.InitParser(From, nil, Options, nil, nil, Interning);
   result := ctxt.ParseNewObject;
+  Valid := ctxt.Valid;
 end;
 
 function PropertyFromJson(Prop: PRttiCustomProp; Instance: TObject;
