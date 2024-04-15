@@ -1421,6 +1421,11 @@ begin
   end;
 end;
 
+function ValidHandle(Handle: THandle): boolean;
+begin
+  result := PtrInt(Handle) >= 0; // 0=StdIn is a valid POSIX file descriptor
+end;
+
 function WaitReadPending(fd, timeout: integer): boolean;
 var
   p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()

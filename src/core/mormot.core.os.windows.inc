@@ -1217,6 +1217,11 @@ begin
     result := Windows.CopyFileW(W32(Source, s), W32(Target, t), FailIfExists);
 end;
 
+function ValidHandle(Handle: THandle): boolean;
+begin
+  result := PtrInt(Handle) > 0;
+end;
+
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 var
   tmp: TW32Temp;

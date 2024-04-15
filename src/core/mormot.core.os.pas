@@ -6759,11 +6759,6 @@ begin
   FindClose(SR);
 end;
 
-function ValidHandle(Handle: THandle): boolean;
-begin
-  result := PtrInt(Handle) > 0;
-end;
-
 function SafePathName(const Path: TFileName): boolean;
 var
   i, o: PtrInt;
