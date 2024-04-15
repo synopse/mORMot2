@@ -1329,6 +1329,7 @@ type
     fRawParams, fValues: TRawUtf8DynArray; // for clkParam
     fDesc, fDescDetail: array[clkArg .. clkParam] of RawUtf8;
     fRetrieved: array[clkArg .. clkParam] of TBooleanDynArray;
+    fDescArg: TRawUtf8DynArray;
     fCaseSensitiveNames: boolean;
     fSwitch: array[{long=}boolean] of RawUtf8;
     fLineFeed, fExeDescription: RawUtf8;
@@ -8403,6 +8404,13 @@ begin
         param := 'value';
     end;
     desc := desc + ' <' + param + '>';
+    if (k = clkArg) and
+       (argindex > 0) then
+    begin
+      if argindex > length(fDescArg) then
+        SetLength(fDescArg, argindex);
+      fDescArg[argindex - 1] := param;
+    end;
   end;
   fDesc[k] := fDesc[k] + ' ' + desc;
   j := 1;
@@ -8476,11 +8484,18 @@ begin
 end;
 
 function TExecutableCommandLine.Arg(index: integer; const description: RawUtf8): boolean;
+var
+  n: PtrUInt;
 begin
-  result := (self <> nil) and
-            (PtrUInt(index) < PtrUInt(length(fNames[clkArg])));
+  result := self <> nil;
+  if not result then
+    exit;
+  n := length(fNames[clkArg]);
+  result := PtrUInt(index) < n;
   if result then
-    fRetrieved[clkArg][index] := true;
+    fRetrieved[clkArg][index] := true
+  else
+    SetLength(fRetrieved[clkArg], n + 1); // to notify missing <arg>
   Describe([], clkArg, description, '', index + 1);
 end;
 
@@ -8738,18 +8753,19 @@ begin
   for clk := low(fRetrieved) to high(fRetrieved) do
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
-      begin
-        result := result + 'Unexpected ' + SwitchAsText(fNames[clk][i]) + ' ';
-        case clk of
-          clkArg:
-            result := result + 'argument';
-          clkOption:
-            result := result + 'option';
-          clkParam:
-            result := result + fValues[i] + ' parameter';
+        if clk = clkArg then
+          result := result + 'Missing <' + fDescArg[i] + '> argument' + fLineFeed
+        else
+        begin
+          result := result + 'Unexpected ' + SwitchAsText(fNames[clk][i]) + ' ';
+          case clk of
+            clkOption:
+              result := result + 'option.';
+            clkParam:
+              result := result + fValues[i] + ' parameter';
+          end;
+          result := result + fLineFeed;
         end;
-        result := result + fLineFeed;
-      end;
 end;
 
 function TExecutableCommandLine.ConsoleWriteUnknown(
