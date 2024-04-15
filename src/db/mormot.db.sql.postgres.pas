@@ -1426,7 +1426,7 @@ begin
         else
           res := fOwner.fConnection.Socket.WaitFor(-1, [neRead, neError]);
         if Terminated or
-           (res = [neRead]) then
+           (neRead in res) then
           break;
         SleepHiRes(10); // loop on broken or not yet established connection
       until Terminated;
