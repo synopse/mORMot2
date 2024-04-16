@@ -2905,6 +2905,7 @@ function FindCustomProp(p: PRttiCustomProp; name: pointer; namelen: TStrLen;
   count: integer): PRttiCustomProp;
 
 /// low-level internal function used e.g. by TRttiCustom.GetPrivateSlot()
+// - caller should ensure that slot <> nil
 function FindPrivateSlot(c: TClass; slot: PPointer): pointer;
 
 /// retrieve a (possibly nested) class property RTTI and instance by path

@@ -1953,10 +1953,10 @@ type
     fTotalConnectionCount: integer;
     fInternalProcessActive: integer;
     fTransactionCount: integer;
-    fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
     fOnProcess: TOnSqlDBProcess;
     fOwned: TObjectDynArray;
+    fRollbackOnDisconnect: boolean;
     function IsOutdated(tix: Int64): boolean; // do not make virtual nor inline
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
