@@ -8827,7 +8827,7 @@ var
   f, r, o: PtrInt;
   i64: Int64;
 label
-  nostr, str;
+  str;
 begin
   if (self = nil) or
      (fFieldCount <= 0) or
@@ -8884,11 +8884,7 @@ begin
           ftInt64,
           ftDouble,
           ftCurrency:
-nostr:      {$ifdef NOTORMTABLELEN}
-            W.AddNoJsonEscape(U, StrLen(U)); // StrLen() is fast enough
-            {$else}
-            W.AddNoJsonEscape(U, fLen[o]);
-            {$endif NOTORMTABLELEN}
+            W.AddShort(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
           ftDate,
           ftUtf8,
           ftBlob:
@@ -8898,10 +8894,10 @@ str:          W.Add('"');
               W.Add('"');
             end;
         else
-          if IsStringJson(U) then // fast and safe enough
+          if IsStringJson(U) then // fast and safe enough to guess from value
             goto str
           else
-            goto nostr;
+            W.AddNoJsonEscape(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
         end;
       W.AddComma;
       inc(o); // points to next value

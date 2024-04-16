@@ -10558,7 +10558,7 @@ begin
                 W.AddShort('<img alt="');
                 W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
                 W.AddShorter('" src="');
-                W.AddNoJsonEscape(B, P - B);
+                W.AddShort(B, P - B);
                 W.AddShorter('">');
                 inc(P);
                 continue;
@@ -10658,7 +10658,7 @@ begin
     begin
       P := c + 1; // continue parsing after the Emoji text
       if W <> nil then
-        W.AddNoJsonEscape(pointer(EMOJI_UTF8[result]), 4);
+        W.AddShort(pointer(EMOJI_UTF8[result]), 4);
       exit;
     end;
   end;

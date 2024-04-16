@@ -897,9 +897,8 @@ begin
         ftCurrency:
           W.AddFloatStr(Pointer(fColData[Col]));      // already as SQL_C_CHAR
         ftDate:
-          W.AddNoJsonEscape(@tmp,
-            PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToIso8601(
-              tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
+          W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.
+            ToIso8601(tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
         ftUtf8:
           begin
             W.Add('"');

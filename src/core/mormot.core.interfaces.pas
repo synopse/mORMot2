@@ -3025,7 +3025,7 @@ begin
            (vIsDynArrayString in arginfo^.ValueKindAsm) then
           W.AddJsonString(value)
         else
-          W.AddNoJsonEscape(pointer(value), length(value));
+          W.AddShort(pointer(value), length(value));
         if arginfo^.ValueType = imvDynArray then
           W.Add(']');
       end;

@@ -2895,7 +2895,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddNoJsonEscape(aColName, len);
+    AddShort(aColName, len);
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
@@ -3949,7 +3949,7 @@ begin
     try
       for i := 0 to FieldCount - 1 do
       begin
-        AddNoJsonEscape(FieldNames[i], FieldNamesL[i]);
+        AddShort(FieldNames[i], FieldNamesL[i]);
         AddComma;
       end;
       CancelLastComma;

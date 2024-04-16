@@ -4619,7 +4619,7 @@ begin
               continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
               Add(sep);
-            AddNoJsonEscape(Name.Text, Name.Len);
+            AddShort(Name.Text, Name.Len);
             Add('=');
             AddString(UrlEncode(Value.Text));
             sep := '&';
@@ -4954,7 +4954,7 @@ begin
             if wasString then
               AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
             else
-              AddNoJsonEscape(tmp.Text, tmp.Len); // numbers
+              AddShort(tmp.Text, tmp.Len); // numbers
             if tmp.TempRawUtf8 <> nil then
               RawUtf8(tmp.TempRawUtf8) := '';  // release temp memory
             Add(')', ':');
@@ -6380,32 +6380,31 @@ var
   quote: AnsiChar;
 begin
   L := length(QuotedString);
-  if L > 0 then
+  if L = 0 then
+    exit;
+  quote := QuotedString[1];
+  if (quote in ['''', '"']) and
+     (QuotedString[L] = quote) then
   begin
-    quote := QuotedString[1];
-    if (quote in ['''', '"']) and
-       (QuotedString[L] = quote) then
-    begin
-      Add('"');
-      P := pointer(QuotedString);
-      inc(P);
-      repeat
-        B := P;
-        while P[0] <> quote do
-          inc(P);
-        if P[1] <> quote then
-          break; // end quote
+    Add('"');
+    P := pointer(QuotedString);
+    inc(P);
+    repeat
+      B := P;
+      while P[0] <> quote do
         inc(P);
-        AddJsonEscape(B, P - B);
-        inc(P); // ignore double quote
-      until false;
-      if P - B <> 0 then
-        AddJsonEscape(B, P - B);
-      Add('"');
-    end
-    else
-      AddNoJsonEscape(pointer(QuotedString), length(QuotedString));
-  end;
+      if P[1] <> quote then
+        break; // end quote
+      inc(P);
+      AddJsonEscape(B, P - B);
+      inc(P); // ignore double quote
+    until false;
+    if P - B <> 0 then
+      AddJsonEscape(B, P - B);
+    Add('"');
+  end
+  else // was not a quoted string
+    AddNoJsonEscape(pointer(QuotedString), length(QuotedString));
 end;
 
 procedure TJsonWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
@@ -6710,7 +6709,7 @@ begin
       while (ValueLen > 0) and
             (Value[ValueLen - 1] <= ' ') do
         dec(ValueLen);
-      AddNoJsonEscape(Value, ValueLen);
+      AddShort(Value, ValueLen);
     end;
   end;
   if Json = nil then

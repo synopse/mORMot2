@@ -1327,7 +1327,7 @@ begin
   else
   begin
     W.AddShorter(',IP:"');
-    W.AddNoJsonEscape(ip, StrLen(ip));
+    W.AddShort(ip, StrLen(ip));
     W.AddShorter('"},');
   end;
   with Ctxt.ServiceExecution^ do

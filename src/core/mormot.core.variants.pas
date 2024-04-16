@@ -5008,7 +5008,7 @@ begin
         repeat
           if checkExtendedPropName and
              JsonPropNameValid(nam^) then
-            W.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
+            W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
           else
           begin
             W.Add('"');
@@ -8639,7 +8639,7 @@ begin
       begin
         if (dvoSerializeAsExtendedJson in VOptions) and
            JsonPropNameValid(nam^) then
-          W.AddNoJsonEscape(nam^, PStrLen(nam^ - _STRLEN)^)
+          W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
         else
         begin
           W.Add('"');

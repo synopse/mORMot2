@@ -949,14 +949,14 @@ begin
           if ColumnValueDBType = SQLT_INT then
             W.Add(PInt64(V)^)
           else
-            W.AddNoJsonEscape(V, StrLen(V)); // already as SQLT_STR
+            W.AddShort(V, StrLen(V)); // already as SQLT_STR
         ftDouble:
           W.AddDouble(unaligned(PDouble(V)^));
         ftCurrency:
           W.AddFloatStr(V); // already as SQLT_STR
         ftDate:
           if ColumnValueDBType = SQLT_DAT then
-            W.AddNoJsonEscape(@tmp, POracleDate(V)^.ToIso8601(tmp{%H-}))
+            W.AddShort(@tmp, POracleDate(V)^.ToIso8601(tmp{%H-}))
           else
           begin
             W.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS

@@ -1297,12 +1297,12 @@ begin
           if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
             W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
           else
-            // note: StrLen is slightly faster than PQ.GetLength for small content
-            W.AddNoJsonEscape(P, StrLen(P));
+            // note: StrLen seems slightly faster than PQ.GetLength for small content
+            W.AddShort(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
-            W.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col))
+            W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
           else
           begin
             W.Add('"');

@@ -1642,7 +1642,7 @@ procedure TDecimal128.AddText(W: TJsonWriter);
 var
   tmp: TDecimal128Str;
 begin
-  W.AddNoJsonEscape(@tmp, ToText(tmp));
+  W.AddShort(@tmp, ToText(tmp));
 end;
 
 function TDecimal128.ToVariant: variant;

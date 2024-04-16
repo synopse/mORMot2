@@ -717,11 +717,14 @@ type
     /// append an UTF-8 string several times
     procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
     /// append a ShortString
-    procedure AddShort(const Text: ShortString);
+    procedure AddShort(const Text: ShortString); overload;
+    /// append a ShortString - or at least a small buffer < 256 chars
+    procedure AddShort(Text: PUtf8Char; TextLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a TShort8 - Text should be not '', and up to 8 chars long
     // - this method is aggressively inlined, so may be preferred to AddShort()
     // for appending simple UTF-8 constant text
-    procedure AddShorter(const Text: TShort8);
+    procedure AddShorter(const Short8: TShort8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
     procedure AddNull;
@@ -3692,19 +3695,12 @@ begin
     '%.WrBase64() unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TTextWriter.AddShorter(const Text: TShort8);
-var
-  L: PtrInt;
+procedure TTextWriter.AddShorter(const Short8: TShort8);
 begin
-  L := ord(Text[0]);
-  if L > 0 then
-  begin
-    {$ifdef DEBUG} assert(L <= 8); {$endif}
-    if B >= BEnd then
-      FlushToStream;
-    PInt64(B + 1)^ := PInt64(@Text[1])^;
-    inc(B, L);
-  end;
+  if B >= BEnd then
+    FlushToStream;
+  PInt64(B + 1)^ := PInt64(@Short8[1])^;
+  inc(B, ord(Short8[0]));
 end;
 
 procedure TTextWriter.AddNull;
@@ -4612,17 +4608,19 @@ begin
     Add(SepChar);
 end;
 
-procedure TTextWriter.AddShort(const Text: ShortString);
-var
-  L: PtrInt;
+procedure TTextWriter.AddShort(Text: PUtf8Char; TextLen: PtrInt);
 begin
-  L := ord(Text[0]);
-  if L = 0 then
+  if TextLen <= 0 then
     exit;
-  if BEnd - B <= L then
+  if BEnd - B <= TextLen then
     FlushToStream;
-  MoveFast(Text[1], B[1], L);
-  inc(B, L);
+  MoveFast(Text^, B[1], TextLen);
+  inc(B, TextLen);
+end;
+
+procedure TTextWriter.AddShort(const Text: ShortString);
+begin
+  AddShort(@Text[1], ord(Text[0]));
 end;
 
 procedure TTextWriter.AddLine(const Text: ShortString);
@@ -4753,7 +4751,7 @@ var
   P: PAnsiChar;
   L: integer;
 begin
-  L := length(Text^);
+  L := ord(Text^[0]);
   P := @Text^[1];
   while (L > 0) and
         (P^ in ['a'..'z']) do
@@ -4762,9 +4760,11 @@ begin
     dec(L);
   end;
   if L = 0 then
-    AddShort(Text^)
-  else
-    AddNoJsonEscape(P, L);
+  begin
+    L := ord(Text^[0]);
+    P := @Text^[1];
+  end;
+  AddShort(P, L);
 end;
 
 procedure TTextWriter.AddTrimSpaces(const Text: RawUtf8);
