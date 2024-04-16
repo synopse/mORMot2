@@ -668,7 +668,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
+    // - called by inlined AddNoJsonEscape() if Len >= fTempBufSize
+    procedure AddNoJsonEscapeBig(P: Pointer; Len: PtrInt);
+    /// append some UTF-8 chars to the buffer - inlined for small content
+    // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscape(P: Pointer; Len: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
     procedure AddNoJsonEscapeUtf8(const text: RawByteString);
@@ -4308,21 +4313,14 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.AddNoJsonEscape(P: Pointer);
-begin
-  AddNoJsonEscape(P, mormot.core.base.StrLen(PUtf8Char(P)));
-end;
-
-procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
+procedure TTextWriter.AddNoJsonEscapeBig(P: Pointer; Len: PtrInt);
 var
   direct: PtrInt;
   D: PUtf8Char;
   comma: boolean;
 begin
-  if (P <> nil) and
-     (Len > 0) then
+  if Len > 0 then
     if Len < fTempBufSize * 2 then
-    begin
       repeat
         D := B + 1;
         direct := BEnd - D; // guess biggest size available in fTempBuf at once
@@ -4342,8 +4340,7 @@ begin
           inc(PByte(P), direct);
         end;
         FlushToStream;
-      until false;
-    end
+      until false
     else
     begin
       FlushFinal; // no auto-resize if content is really huge
@@ -4356,6 +4353,26 @@ begin
     end;
 end;
 
+procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
+begin
+  if P <> nil then
+    if PtrUInt(Len) < PtrUInt(fTempBufSize) then // inlined for small chunk
+    begin
+      if BEnd - B <= Len then
+        FlushToStream;
+      MoveFast(P^, B[1], Len);
+      inc(B, Len);
+    end
+    else
+      AddNoJsonEscapeBig(P, Len); // big chunks
+end;
+
+procedure TTextWriter.AddNoJsonEscape(P: Pointer);
+begin
+  if P <> nil then
+    AddNoJsonEscape(P, mormot.core.base.StrLen(PUtf8Char(P)));
+end;
+
 procedure EngineAppendUtf8(W: TTextWriter; Engine: TSynAnsiConvert;
   P: PAnsiChar; Len: PtrInt);
 var
@@ -4365,7 +4382,7 @@ begin
   Len := Engine.AnsiBufferToUtf8(tmp.Init(Len * 3), P, Len) - PUtf8Char({%H-}tmp.buf);
   W.AddNoJsonEscape(tmp.buf, Len);
   tmp.Done;
-end;{%H-}
+end;
 
 procedure TTextWriter.AddNoJsonEscape(P: PAnsiChar; Len: PtrInt; CodePage: cardinal);
 var
@@ -4812,18 +4829,8 @@ var
   L: PtrInt;
 begin
   L := PtrInt(Text);
-  if L = 0 then
-    exit;
-  L := PStrLen(L - _STRLEN)^;
-  if L < fTempBufSize then
-  begin
-    if BEnd - B <= L then
-      FlushToStream;
-    MoveFast(pointer(Text)^, B[1], L);
-    inc(B, L);
-  end
-  else
-    AddNoJsonEscape(pointer(Text), L);
+  if L <> 0 then
+    AddNoJsonEscape(pointer(Text), PStrLen(L - _STRLEN)^);
 end;
 
 procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);
@@ -9129,7 +9136,7 @@ begin
         {$else}
         WR.AddShort(' [unhandled ');
         {$endif OSWINDOWS}
-        WR.AddNoJSONEScape(extnames[i]);
+        WR.AddNoJsonEscape(extnames[i]);
         WR.AddShort('Exception]');
       end;
     end;
