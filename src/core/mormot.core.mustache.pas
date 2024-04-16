@@ -428,10 +428,12 @@ type
     destructor Destroy; override;
     /// internal factory calling TSynMustacheContextVariant.Create()
     // - to call e.g. result.Render() several times
-    function NewMustacheContextVariant: TSynMustacheContextVariant;
+    function NewMustacheContextVariant(
+      aBufSize: integer = 16384): TSynMustacheContextVariant;
     /// internal factory calling TSynMustacheContextData.Create()
     // - to call e.g. result.RenderArray() or result.RenderRtti() several times
-    function NewMustacheContextData: TSynMustacheContextData;
+    function NewMustacheContextData(
+      aBufSize: integer = 16384): TSynMustacheContextData;
     /// search some text within the {{mustache}} template text
     function FoundInTemplate(const text: RawUtf8): boolean;
     /// register one Expression Helper callback for a given list of helpers
@@ -1156,7 +1158,9 @@ procedure TSynMustacheContextData.AppendValue(ValueSpace: integer;
   const ValueName: RawUtf8; UnEscape: boolean);
 var
   d: pointer;
+  p: PUtf8Char;
   rc: TRttiCustom;
+  l: PtrInt;
   tmp: TVarData;
 begin
   if GetDataFromContext(ValueName, rc, d) then
@@ -1172,10 +1176,20 @@ begin
       ptRawUtf8,
       ptRawJson,
       ptPUtf8Char:
-        if UnEscape then
-          fWriter.AddNoJsonEscape(PPUtf8Char(d)^)
-        else
-          fWriter.AddHtmlEscape(PPUtf8Char(d)^); // faster with no length
+        begin
+          p := PPointer(d)^;
+          if p <> nil then
+            if UnEscape then
+            begin
+              if rc.Parser = ptPUtf8Char then
+                l := mormot.core.base.StrLen(p)
+              else
+                l := PStrLen(p - _STRLEN)^;
+              fWriter.AddNoJsonEscape(p, l);
+            end
+            else
+              fWriter.AddHtmlEscape(p); // faster with no length
+        end;
       {$ifdef UNICODE}
       ptString,
       {$endif UNICODE}
@@ -1224,7 +1238,7 @@ begin
         fWriter.AddBinToHexDisplayLower(d, rc.Size);
     else
       if rcfIsNumber in rc.Cache.Flags then
-        // ordinals don't need any HTML escape nor quote
+        // ordinals or floats don't need any HTML escape nor quote
         fWriter.AddRttiCustomJson(d, rc, twNone, [])
       else
       begin
@@ -1826,19 +1840,21 @@ begin
   fCachedContextData    := NewMustacheContextData;
 end;
 
-function TSynMustache.NewMustacheContextVariant: TSynMustacheContextVariant;
+function TSynMustache.NewMustacheContextVariant(
+  aBufSize: integer): TSynMustacheContextVariant;
 begin
   result := TSynMustacheContextVariant.Create(self,
-    TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
-    SectionMaxCount + 4, Null, true);
+    TJsonWriter.CreateOwnedStream(aBufSize, {nosharedstream=}true),
+    SectionMaxCount + 4, Null, {ownwriter=}true);
   result.CancelAll; // to be reused from a void context
 end;
 
-function TSynMustache.NewMustacheContextData: TSynMustacheContextData;
+function TSynMustache.NewMustacheContextData(
+  aBufSize: integer): TSynMustacheContextData;
 begin
   result := TSynMustacheContextData.Create(self,
-    TJsonWriter.CreateOwnedStream(16384, {nosharedstream=}true),
-    SectionMaxCount + 4, nil, nil, true);
+    TJsonWriter.CreateOwnedStream(aBufSize, {nosharedstream=}true),
+    SectionMaxCount + 4, nil, nil, {ownwriter=}true);
   result.CancelAll; // to be reused from a void context
 end;
 
