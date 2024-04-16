@@ -6880,7 +6880,7 @@ noesc:
     if Len >= 0 then
       dec(Len, start);
     if BEnd - B <= i then
-      AddNoJsonEscape(P, i)
+      AddNoJsonEscapeBig(P, i)
     else
     begin
       MoveFast(P^, B[1], i);

@@ -6533,16 +6533,14 @@ begin
                 W.Add('"');
             end;
           ftUtf8:
+            if not Tab then
             begin
-              if not Tab then
-              begin
-                W.Add('"');
-                W.AddJsonEscape(V.VText);
-                W.Add('"');
-              end
-              else
-                W.AddNoJsonEscape(V.VText, StrLen(V.VText));
-            end;
+              W.Add('"');
+              W.AddJsonEscape(V.VText);
+              W.Add('"');
+            end
+            else
+              W.AddNoJsonEscape(V.VText, StrLen(V.VText));
           ftBlob:
             W.AddShorter(BLOB[Tab]);  // ForceBlobAsNull should be true
         else
