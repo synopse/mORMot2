@@ -4315,7 +4315,8 @@ var
   D: PUtf8Char;
   comma: boolean;
 begin
-  if Len > 0 then
+  if (P <> nil) and
+     (Len > 0) then
     if Len < fTempBufSize * 2 then
       repeat
         D := B + 1;
@@ -4351,8 +4352,9 @@ end;
 
 procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 begin
-  if P <> nil then
-    if PtrUInt(Len) < PtrUInt(fTempBufSize) then // inlined for small chunk
+  if (P <> nil) and
+     (Len > 0) then
+    if Len < fTempBufSize then // inlined for small chunk
     begin
       if BEnd - B <= Len then
         FlushToStream;
@@ -5100,23 +5102,24 @@ var
 begin
   if Text = nil then
     exit;
-  if Fmt = hfNone then
+  if Fmt <> hfNone then
   begin
-    AddNoJsonEscape(Text, mormot.core.base.StrLen(Text));
-    exit;
-  end;
-  esc := @HTML_ESC[Fmt];
-  repeat
+    esc := @HTML_ESC[Fmt];
     beg := Text;
-    while esc[Text^] = 0 do
+    repeat
+      while esc[Text^] = 0 do
+        inc(Text);
+      AddNoJsonEscape(beg, Text - beg);
+      if Text^ = #0 then
+        exit
+      else
+        AddShorter(HTML_ESCAPED[esc[Text^]]);
       inc(Text);
-    AddNoJsonEscape(beg, Text - beg);
-    if Text^ = #0 then
-      exit
-    else
-      AddShorter(HTML_ESCAPED[esc[Text^]]);
-    inc(Text);
-  until Text^ = #0;
+      beg := Text;
+    until Text^ = #0;
+  end
+  else
+    AddNoJsonEscape(Text, mormot.core.base.StrLen(Text)); // hfNone
 end;
 
 function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
