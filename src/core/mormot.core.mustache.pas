@@ -1173,9 +1173,9 @@ begin
       ptRawJson,
       ptPUtf8Char:
         if UnEscape then
-          fWriter.AddHtmlEscape(PPUtf8Char(d)^) // faster with no length
+          fWriter.AddNoJsonEscape(PPUtf8Char(d)^)
         else
-          fWriter.AddNoJsonEscape(PPUtf8Char(d)^);
+          fWriter.AddHtmlEscape(PPUtf8Char(d)^); // faster with no length
       {$ifdef UNICODE}
       ptString,
       {$endif UNICODE}
@@ -1185,9 +1185,9 @@ begin
       ptSynUnicode,
       ptWideString:
         if UnEscape then
-          fWriter.AddHtmlEscapeW(PPWideChar(d)^)
+          fWriter.AddNoJsonEscapeW(PPWord(d)^, 0)
         else
-          fWriter.AddNoJsonEscapeW(PPWord(d)^, 0);
+          fWriter.AddHtmlEscapeW(PPWideChar(d)^);
       // unescaped (and unquoted) numbers, date/time, guid or hash
       ptByte:
         fWriter.AddU(PByte(d)^);
