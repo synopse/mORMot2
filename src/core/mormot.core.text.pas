@@ -4750,8 +4750,8 @@ end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
 var
-  P: PAnsiChar;
-  L: integer;
+  P: PUtf8Char;
+  L: PtrInt;
 begin
   L := ord(Text^[0]);
   P := @Text^[1];
