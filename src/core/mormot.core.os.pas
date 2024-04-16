@@ -1340,11 +1340,11 @@ type
       const def: RawUtf8 = ''; f: PtrInt = 0): PtrInt;
   public
     /// mark and describe an "arg" value by 0-based index in Args[]
-    function Arg(index: integer;
-      const description: RawUtf8 = ''): boolean; overload;
+    function Arg(index: integer; const description: RawUtf8 = '';
+      optional: boolean = true): boolean; overload;
     /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
-    function ArgString(index: integer;
-      const description: RawUtf8 = ''): string;
+    function ArgString(index: integer; const description: RawUtf8 = '';
+      optional: boolean = true): string;
     /// mark and describe an "arg" value in Args[]
     function Arg(const name: RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
@@ -8486,7 +8486,8 @@ begin
   result := -1
 end;
 
-function TExecutableCommandLine.Arg(index: integer; const description: RawUtf8): boolean;
+function TExecutableCommandLine.Arg(index: integer; const description: RawUtf8;
+  optional: boolean): boolean;
 var
   n: PtrUInt;
 begin
@@ -8498,21 +8499,25 @@ begin
   if result then
     fRetrieved[clkArg][index] := true
   else
+  begin
     SetLength(fRetrieved[clkArg], n + 1); // to notify missing <arg>
+    if optional then
+      fRetrieved[clkArg][index] := true;
+  end;
   Describe([], clkArg, description, '', index + 1);
 end;
 
 function TExecutableCommandLine.ArgString(index: integer;
-  const description: RawUtf8): string;
+  const description: RawUtf8; optional: boolean): string;
 begin
   result := '';
-  if Arg(index, description) then
+  if Arg(index, description, optional) then
     result := string(Args[0]);
 end;
 
 function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
 begin
-  result := Find([name], clkArg, description) >= 0;
+  result := Arg([name], description);
 end;
 
 function TExecutableCommandLine.Arg(const name: array of RawUtf8;
@@ -8763,7 +8768,7 @@ begin
           result := result + 'Unexpected ' + SwitchAsText(fNames[clk][i]) + ' ';
           case clk of
             clkOption:
-              result := result + 'option.';
+              result := result + 'option';
             clkParam:
               result := result + fValues[i] + ' parameter';
           end;
