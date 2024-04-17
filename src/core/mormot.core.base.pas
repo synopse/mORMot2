@@ -12061,16 +12061,21 @@ end;
 
 function TRawByteStringStream.Write(const Buffer; Count: Longint): Longint;
 begin
-  if Count <= 0 then
-    result := 0
-  else
-  begin
-    result := Count;
-    if fPosition + result > length(fDataString) then
-      SetLength(fDataString, fPosition + result);
-    MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
-    inc(fPosition, result);
-  end;
+  result := Count;
+  if result > 0 then
+    if fDataString = '' then // inlined FastSetString()
+    begin
+      pointer(fDataString) := FastNewString(result, CP_UTF8);
+      MoveFast(Buffer, pointer(fDataString)^, result);
+      fPosition := result;
+    end
+    else
+    begin
+      if fPosition + result > length(fDataString) then
+        SetLength(fDataString, fPosition + result); // resize
+      MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
+      inc(fPosition, result);
+    end;
 end;
 
 procedure TRawByteStringStream.GetAsText(StartPos, Len: PtrInt; var Text: RawUtf8);

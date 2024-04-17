@@ -541,6 +541,7 @@ type
     /// release all internal structures
     // - e.g. free fStream if the instance was owned by this class
     destructor Destroy; override;
+    {$ifndef PUREMORMOT2}
     /// allow to override the default (JSON) serialization of enumerations and
     // sets as text, which would write the whole identifier (e.g. 'sllError')
     // - calling SetDefaultEnumTrim(true) would force the enumerations to
@@ -551,6 +552,7 @@ type
     // in the TTextWriter.CustomOptions property of a given serializer
     // - note that unserialization process would recognize both formats
     class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
+    {$endif PUREMORMOT2}
 
     /// write pending data, then retrieve the whole text as a UTF-8 string
     function Text: RawUtf8;
@@ -3517,8 +3519,15 @@ end;
 
 { TTextWriter }
 
+{$ifndef PUREMORMOT2}
 var
   DefaultTextWriterTrimEnum: boolean; // see TTextWriter.SetDefaultEnumTrim()
+
+class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
+begin
+  DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
+end;
+{$endif PUREMORMOT2}
 
 procedure TTextWriter.InternalSetBuffer(aBuf: PUtf8Char; aBufSize: integer);
 begin
@@ -3526,8 +3535,10 @@ begin
   fTempBufSize := aBufSize;
   B := aBuf - 1; // Add() methods will append at B+1
   BEnd := aBuf + (aBufSize - 16); // -16 to avoid buffer overwrite/overread
+  {$ifndef PUREMORMOT2}
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions, twoTrimLeftEnumSets);
+  {$endif PUREMORMOT2}
 end;
 
 constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
@@ -3764,11 +3775,6 @@ begin
     result := 0
   else
     result := PtrUInt(B - fTempBuf + 1) + fTotalFileSize - fInitialStreamPosition;
-end;
-
-class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
-begin
-  DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
 end;
 
 procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
