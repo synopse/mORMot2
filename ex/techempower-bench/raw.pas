@@ -62,7 +62,7 @@ type
   end;
   TWorlds = array of TWorldRec;
   TFortune = packed record
-    id: integer;
+    id: PtrUInt;
     message: PUtf8Char;
   end;
   TFortunes = array of TFortune;
@@ -166,7 +166,7 @@ begin
 end;
 
 function GetQueriesParamValue(ctxt: THttpServerRequest;
-  const search: RawUtf8 = 'QUERIES='): cardinal;
+  const search: RawUtf8 = 'QUERIES='): cardinal; inline;
 begin
   if not ctxt.UrlParam(search, result) or
      (result = 0) then
@@ -217,7 +217,7 @@ begin
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
   fCachedWorldsTable := fStore.Orm.Cache.Table(TOrmCachedWorld);
-  fStore.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
+  fStore.Orm.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
   // setup the HTTP server
@@ -820,8 +820,8 @@ begin
   // register some RTTI for records JSON serialization
   Rtti.RegisterFromText([
     TypeInfo(TMessageRec), 'message:PUtf8Char',
-    TypeInfo(TWorldRec),   'id,randomNumber:integer',
-    TypeInfo(TFortune),    'id:integer message:PUtf8Char']);
+    TypeInfo(TWorldRec),   'id,randomNumber:cardinal',
+    TypeInfo(TFortune),    'id:PtrUInt message:PUtf8Char']);
 
   // compute default execution context from HW information
   cpuCount := CurrentCpuSet(cpuMask); // may run from a "taskset" command
