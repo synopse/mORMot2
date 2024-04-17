@@ -170,11 +170,13 @@ function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
 // - UpperName should follow the UrlDecodeCardinal() format, e.g. 'COUNT='
 function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
   out Value: cardinal): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// decode a given parameter from an Url, in any position, into a 64-bit Int64
 // - UpperName should follow the UrlDecodeInt64() format, e.g. 'ID='
 function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
   out Value: Int64): boolean; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifdef OSPOSIX}
 

@@ -351,9 +351,10 @@ type
     fServer: THttpServerGeneric;
     fErrorMessage: string;
     fOnAsyncResponse: TOnHttpServerRequestAsyncResponse;
+    fTempWriter: TJsonWriter; // reused between SetOutJson() calls
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
-    function GetFullURL: SynUnicode;
+    function GetFullUrl: SynUnicode;
     {$endif USEWININET}
   public
     /// initialize the context, associated to a HTTP server instance
@@ -365,6 +366,8 @@ type
     procedure Recycle(aConnectionID: THttpServerConnectionID;
       aConnectionThread: TSynThread; aConnectionFlags: THttpServerRequestFlags;
       aConnectionOpaque: PHttpServerConnectionOpaque);
+    /// finalize this execution context
+    destructor Destroy; override;
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
@@ -375,6 +378,12 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// serialize a given TObject as JSON into OutContent and OutContentType fields
     procedure SetOutJson(Value: TObject); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// low-level initialization of the associated TJsonWriter instance
+    // - will reset and reuse an TJsonWriter associated to this execution context
+    // - as called by SetOutJson() oveloaded methods using RTTI
+    // - a local TTextWriterStackBuffer should be provided as temporary buffer
+    function TempJsonWriter(var temp: TTextWriterStackBuffer): TJsonWriter;
       {$ifdef HASINLINE} inline; {$endif}
     /// an additional custom parameter, as provided to TUriRouter.Setup
     function RouteOpaque: pointer; override;
@@ -396,8 +405,8 @@ type
       read fErrorMessage write fErrorMessage;
     {$ifdef USEWININET}
     /// for THttpApiServer, input parameter containing the caller full URL
-    property FullURL: SynUnicode
-      read GetFullURL;
+    property FullUrl: SynUnicode
+      read GetFullUrl;
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
     property HttpApiRequest: PHTTP_REQUEST
       read fHttpApiRequest;
@@ -2917,6 +2926,11 @@ begin
   // Prepare() will set the other fields
 end;
 
+destructor THttpServerRequest.Destroy;
+begin
+  fTempWriter.Free;
+end;
+
 const
   _CMD_200: array[boolean, boolean] of string[31] = (
    ('HTTP/1.1 200 OK'#13#10,
@@ -3066,15 +3080,31 @@ begin
   FormatString(Fmt, Args, fErrorMessage);
 end;
 
-procedure THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo);
+function THttpServerRequest.TempJsonWriter(
+  var temp: TTextWriterStackBuffer): TJsonWriter;
 begin
-  SaveJson(Value^, TypeInfo, [twoNoSharedStream], RawUtf8(fOutContent), []);
+  if fTempWriter = nil then
+    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true)
+  else
+    fTempWriter.CancelAllWith(temp);
+  result := fTempWriter;
+end;
+
+procedure THttpServerRequest.SetOutJson(Value: pointer; TypeInfo: PRttiInfo);
+var
+  temp: TTextWriterStackBuffer;
+begin
+  TempJsonWriter(temp).AddTypedJson(Value, TypeInfo, []);
+  fTempWriter.SetText(RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
 procedure THttpServerRequest.SetOutJson(Value: TObject);
+var
+  temp: TTextWriterStackBuffer;
 begin
-  ObjectToJson(Value, RawUtf8(fOutContent), []);
+  TempJsonWriter(temp).WriteObject(Value, []);
+  fTempWriter.SetText(RawUtf8(fOutContent));
   fOutContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
@@ -3095,7 +3125,7 @@ end;
 
 {$ifdef USEWININET}
 
-function THttpServerRequest.GetFullURL: SynUnicode;
+function THttpServerRequest.GetFullUrl: SynUnicode;
 begin
   if fHttpApiRequest = nil then
     result := ''
