@@ -2865,6 +2865,10 @@ type
     // - this method is not thread-safe
     // - consider using TSynNameValue if you expect efficient name/value process
     function GetValueAt(Index: PtrInt): RawUtf8;
+    /// compare a Value with some RawUtf8 text
+    // - this method is not thread-safe
+    function EqualValueAt(Index: PtrInt; const aText: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve Value from an existing Name=Value, then optinally delete the entry
     // - if Name is found, will fill Value with the stored content and return true
     // - if Name is not found, Value is not modified, and false is returned
@@ -3003,6 +3007,10 @@ type
     // - reading this property is not thread-safe, since content may change
     property ObjectPtr: PPointerArray
       read GetObjectPtr;
+    /// direct access to the TRawUtf8DynArray instance
+    // - reading this property is not thread-safe, since content may change
+    property ValuePtr: TRawUtf8DynArray
+      read fValue;
     /// direct access to the TRawUtf8DynArray items dynamic array wrapper
     // - using this property is not thread-safe, since content may change
     property ValuesArray: TDynArrayHashed
@@ -5324,17 +5332,15 @@ end;
 
 function TRawUtf8List.GetTextPtr: PPUtf8CharArray;
 begin
-  if self = nil then
-    result := nil
-  else
+  result := pointer(self);
+  if self <> nil then
     result := pointer(fValue);
 end;
 
 function TRawUtf8List.GetObjectPtr: PPointerArray;
 begin
-  if self = nil then
-    result := nil
-  else
+  result := pointer(self);
+  if self <> nil then
     result := pointer(fObjects);
 end;
 
@@ -5494,6 +5500,13 @@ begin
     result := ''
   else
     TrimChars(result, Index, 0);
+end;
+
+function TRawUtf8List.EqualValueAt(Index: PtrInt; const aText: RawUtf8): boolean;
+begin
+  result := (self <>nil) and
+            (PtrUInt(Index) < PtrUInt(fCount)) and
+            (fValue[Index] = aText);
 end;
 
 function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;
