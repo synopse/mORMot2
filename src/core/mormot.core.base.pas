@@ -12005,7 +12005,7 @@ begin
     fPosition := result;
   end
   else
-    // quick exit on Delphi when retrieving TStream.Position
+    // optimize on Delphi when retrieving TStream.Position as Seek(0,soCurrent)
     result := fPosition;
 end;
 

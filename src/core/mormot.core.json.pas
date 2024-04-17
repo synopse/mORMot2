@@ -6480,16 +6480,16 @@ var
   save: TRttiJsonSave;
 begin
   {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(TypeInfo));
-  if ctxt.Info = nil then
-    AddNull // paranoid check
-  else
+  if ctxt.Info <> nil then
   begin
     save := ctxt.Info.JsonSave;
     if Assigned(save) then
       save(Value, ctxt)
     else
       BinarySaveBase64(Value, TypeInfo, rkRecordTypes, {withMagic=}true);
-  end;
+  end
+  else
+    AddNull; // paranoid check
 end;
 
 procedure TJsonWriter.WriteObject(Value: TObject;
