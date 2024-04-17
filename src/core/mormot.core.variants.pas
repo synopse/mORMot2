@@ -4720,7 +4720,7 @@ begin
   result := GetEnumName(TypeInfo(TDocVariantKind), ord(kind));
 end;
 
-procedure NeedJsonEscape(const Value: variant; var Json: RawUtf8;
+procedure __VariantSaveJsonEscape(const Value: variant; var Json: RawUtf8;
   Escape: TTextWriterKind);
 var
   temp: TTextWriterStackBuffer;
@@ -4751,7 +4751,7 @@ begin
     if (vt >= varFirstCustom) or
        ((Escape <> twNone) and
         not (vt in [varEmpty..varDate, varBoolean, varShortInt..varWord64])) then
-      NeedJsonEscape(PVariant(V)^, result, Escape)
+      __VariantSaveJsonEscape(PVariant(V)^, result, Escape)
     else
       VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
   end

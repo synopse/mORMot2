@@ -7526,13 +7526,13 @@ begin
       begin
         // fast lookup of the requested SQL in cache
         if (fCacheLast = cachedsql) and
-           (fCache.Strings[fCacheLastIndex] = cachedsql) then
+           fCache.EqualValueAt(fCacheLastIndex, cachedsql) then
           ndx := fCacheLastIndex // no need to use the hash lookup
         else
           ndx := fCache.IndexOf(cachedsql); // O(1) hash lookup from fNoDuplicate
         if ndx >= 0 then
         begin
-          stmt := fCache.Objects[ndx];
+          stmt := fCache.ObjectPtr[ndx];
           if stmt.RefCount = 1 then
           begin
             // this statement is not currently in use and can be returned
