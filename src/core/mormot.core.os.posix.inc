@@ -1504,9 +1504,7 @@ begin
     if (aCustomOffset and (SystemInfo.dwPageSize - 1)) <> 0 then
       raise EOSException.CreateFmt(
         'DoMap(aCustomOffset=%d) incompatible with dwPageSize=%d',
-        [aCustomOffset, SystemInfo.dwPageSize])
-    else
-      aCustomOffset := aCustomOffset div SystemInfo.dwPageSize;
+        [aCustomOffset, SystemInfo.dwPageSize]);
   fBuf := fpmmap(nil, fBufSize, PROT_READ, MAP_SHARED, fFile, aCustomOffset);
   if fBuf = MAP_FAILED then
   begin
