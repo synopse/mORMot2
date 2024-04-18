@@ -3619,13 +3619,9 @@ type
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
-    {$ifdef OSWINDOWS}
     fMap: THandle;
-    {$endif OSWINDOWS}
     fFileSize: Int64;
     fFileLocal, fLoadedNotMapped: boolean;
-    function DoMap(aCustomOffset: Int64): boolean;
-    procedure DoUnMap;
   public
     /// map the corresponding file handle
     // - if aCustomSize and aCustomOffset are specified, the corresponding
@@ -7667,8 +7663,11 @@ begin
     end;
   end
   else
+  begin
     // call actual Windows/POSIX memory mapping API
-    result := DoMap(aCustomOffset);
+    fBuf := FileReadMap(fFile, aCustomOffset, fBufSize, fMap);
+    result := fBuf <> nil;
+  end;
 end;
 
 procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: PtrUInt);
@@ -7705,7 +7704,7 @@ begin
   if fLoadedNotMapped then
     // mapping was not worth it
     Freemem(fBuf)
-  else
+  else if fFile <> 0 then
     // call actual Windows/POSIX map API
     DoUnMap;
   fBuf := nil;
