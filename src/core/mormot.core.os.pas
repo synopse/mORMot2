@@ -7696,9 +7696,8 @@ begin
   F := FileOpen(aFileName, fmOpenReadShared);
   if not ValidHandle(F) then
     exit;
-  if Map(F) then
-    result := true
-  else
+  result := Map(F);
+  if not result then
     FileClose(F);
   fFileLocal := result;
 end;

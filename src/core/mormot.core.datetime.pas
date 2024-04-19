@@ -546,6 +546,7 @@ type
     procedure Normalize;
     /// change the system date/time with the value stored in this instance
     // - i.e. call SetSystemTime/fpsettimeofday API with the stored date/time
+    // - will also flush the FromNowLocal/FromNowUtc cached timestamps
     function ChangeOperatingSystemTime: boolean;
   end;
 
