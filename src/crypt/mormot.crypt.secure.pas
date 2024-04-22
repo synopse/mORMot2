@@ -765,6 +765,7 @@ const
 
 /// returns the 32-bit crc function for a given algorithm
 // - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
+// - caSha1 has cryptographic level, with high performance on latest SHA-NI CPUs
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
 function ToText(algo: TSignAlgo): PShortString; overload;
@@ -1354,7 +1355,7 @@ type
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
     // - default crc32c is fast and secure enough on most platforms, but you
-    // may consider caDefault or caSha1 on recent Intel/AMD servers
+    // may consider caDefault or caSha1 on recent SHA-NI Intel/AMD servers
     procedure Init(const Name: RawUtf8 = 'mORMot';
       DefaultSessionTimeOutMinutes: cardinal = 0;
       SignAlgo: TCrc32Algo = caCrc32c);

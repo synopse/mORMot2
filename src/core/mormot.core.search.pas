@@ -652,29 +652,37 @@ type
   // - SaveTo() and LoadFrom() methods allow transmission of the bits array,
   // for a disk/database storage or transmission over a network
   // - internally, several (hardware-accelerated) crc32c hash functions will be
-  // used, with some random seed values, to simulate several hashing functions
+  // used, with some random seed values, to simulate several hashing functions;
+  // you can customize the hash function if needed
   // - all methods are thread-safe, and MayExist can be concurrent (via a TRWLock)
   TSynBloomFilter = class(TSynPersistent)
   private
+    fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
+    fHasher: THasher;
     fSize: cardinal;
-    fFalsePositivePercent: double;
     fBits: cardinal;
     fHashFunctions: cardinal;
     fInserted: cardinal;
+    fFalsePositivePercent: double;
     fStore: RawByteString;
-    fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
   public
+    /// don't call this raw constructor, but its overloads
+    constructor Create; override; overload;
     /// initialize the internal bits storage for a given number of items
     // - by default, internal bits array size will be guess from a 1 % false
     // positive rate - but you may specify another value, to reduce memory use
     // - this constructor would compute and initialize Bits and HashFunctions
     // corresponding to the expected false positive ratio
-    constructor Create(aSize: integer;
-      aFalsePositivePercent: double = 1); reintroduce; overload;
+    // - you can specify a custom hash function if you find that the default
+    // crc32c() has too many collisions: but SaveTo/LoadFrom will be tied to it;
+    // see e.g. CryptCrc32(caMd5/caSha1) from mormot.crypt.secure
+    constructor Create(aSize: integer; aFalsePositivePercent: double = 1;
+      aHasher: THasher = nil); reintroduce; overload;
     /// initialize the internal bits storage from a SaveTo() binary buffer
     // - this constructor will initialize the internal bits array calling LoadFrom()
-    constructor Create(const aSaved: RawByteString;
-      aMagic: cardinal = $B1003F11); reintroduce; overload;
+    // - you can specify a custom hash function to match with the one used before
+    constructor Create(const aSaved: RawByteString; aMagic: cardinal = $B1003F11;
+      aHasher: THasher = nil); reintroduce; overload;
     /// add an item in the internal bits array storage
     // - this method is thread-safe
     procedure Insert(const aValue: RawByteString); overload;
@@ -4078,11 +4086,17 @@ const
   BLOOM_VERSION = 0;
   BLOOM_MAXHASH = 32; // only 7 is needed for 1% false positive ratio
 
-constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double);
+constructor TSynBloomFilter.Create;
+begin
+  fHasher := @crc32c; // default/standard/mORMot1 hash function
+end;
+
+constructor TSynBloomFilter.Create(aSize: integer;
+  aFalsePositivePercent: double; aHasher: THasher);
 const
   LN2 = 0.69314718056;
 begin
-  inherited Create; // may have been overriden
+  Create; // set fHasher := crc32c + may have been overriden
   if aSize < 0 then
     fSize := 1000
   else
@@ -4093,6 +4107,8 @@ begin
     fFalsePositivePercent := 100
   else
     fFalsePositivePercent := aFalsePositivePercent;
+  if @aHasher <> nil then
+    fHasher := aHasher;
   // see http://stackoverflow.com/a/22467497
   fBits := Round(-ln(fFalsePositivePercent / 100) * aSize / (LN2 * LN2));
   fHashFunctions := Round(fBits / fSize * LN2);
@@ -4103,10 +4119,13 @@ begin
   Reset;
 end;
 
-constructor TSynBloomFilter.Create(const aSaved: RawByteString; aMagic: cardinal);
+constructor TSynBloomFilter.Create(const aSaved: RawByteString;
+  aMagic: cardinal; aHasher: THasher);
 begin
-  inherited Create; // may have been overriden
-  if not LoadFrom(aSaved, aMagic) then
+  Create; // set fHasher := crc32c + may have been overriden
+  if @aHasher <> nil then
+    fHasher := aHasher;
+  if not LoadFrom(aSaved, aMagic) then // will load fSize+fBits+fHashFunctions
     raise ESynException.CreateUtf8('%.Create with invalid aSaved content', [self]);
 end;
 
@@ -4124,11 +4143,11 @@ begin
      (aValueLen <= 0) or
      (fBits = 0) then
     exit;
-  h1 := crc32c(0, aValue, aValueLen);
+  h1 := fHasher(0, aValue, aValueLen);
   if fHashFunctions = 1 then
     h2 := 0
   else
-    h2 := crc32c(h1, aValue, aValueLen);
+    h2 := fHasher(h1, aValue, aValueLen);
   fSafe.WriteLock;
   try
     for h := 0 to fHashFunctions - 1 do
@@ -4157,11 +4176,11 @@ begin
      (aValueLen <= 0) or
      (fBits = 0) then
     exit;
-  h1 := crc32c(0, aValue, aValueLen);
+  h1 := fHasher(0, aValue, aValueLen);
   if fHashFunctions = 1 then
     h2 := 0
   else
-    h2 := crc32c(h1, aValue, aValueLen);
+    h2 := fHasher(h1, aValue, aValueLen);
   fSafe.ReadOnlyLock; // allow concurrent reads
   try
     for h := 0 to fHashFunctions - 1 do
@@ -4219,6 +4238,7 @@ begin
     aDest.Write4(fBits);
     aDest.Write1(fHashFunctions);
     aDest.Write4(fInserted);
+    // warning: fHasher is NOT persisted yet
     ZeroCompress(pointer(fStore), Length(fStore), aDest);
   finally
     fSafe.ReadOnlyUnLock;
@@ -4358,7 +4378,7 @@ begin
     head.size := length(fStore);
     head.inserted := fInserted;
     head.revision := fRevision;
-    head.crc := crc32c(0, @head, SizeOf(head) - SizeOf(head.crc));
+    head.crc := fHasher(0, @head, SizeOf(head) - SizeOf(head.crc));
     if head.kind = bdUpToDate then
     begin
       FastSetRawByteString(result, @head, SizeOf(head));
@@ -4392,7 +4412,7 @@ begin
   if (length(aDiff) < SizeOf(head^)) or
      (head.kind > high(TBloomDiffHeaderKind)) or
      (head.size <> cardinal(length(fStore))) or
-     (head.crc <> crc32c(0, pointer(head), SizeOf(head^) - SizeOf(head.crc))) then
+     (head.crc <> fHasher(0, pointer(head), SizeOf(head^) - SizeOf(head.crc))) then
     result := 0
   else
     result := head.Revision;
@@ -4409,7 +4429,7 @@ begin
   PLen := length(aDiff);
   if (PLen < SizeOf(head^)) or
      (head.kind > high(head.kind)) or
-     (head.crc <> crc32c(0, pointer(head), SizeOf(head^) - SizeOf(head.crc))) then
+     (head.crc <> fHasher(0, pointer(head), SizeOf(head^) - SizeOf(head.crc))) then
     exit;
   if (fStore <> '') and
      (head.size <> cardinal(length(fStore))) then
