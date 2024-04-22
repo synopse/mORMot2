@@ -2257,7 +2257,7 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           mov     r9d, $FFFF             // 16 bits mask = 16 bytes
           cmp     L, -16
           ja      @sml
-{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+{$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @by16:    // loop comparing 16 bytes
           movups  xmm1, oword ptr [P1 + L]
           movups  xmm2, oword ptr [P2 + L]
@@ -2269,6 +2269,17 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           jz      @eq                    // finished, equal
           cmp     L, -16
           jna     @by16                  // next 16 bytes
+          jmp     @sml
+@diff:    // difference found: find position
+          bsf     eax, eax
+          add     L, rax
+@last:    movzx   eax, byte ptr [P1 + L]
+          movzx   r9d, byte ptr [P2 + L]
+          sub     eax, r9d               // return result
+          ret
+@eq:      // equal
+          xor     eax, eax
+          ret
 @sml:     // less than 16 bytes left
           cmp     L, -8
           ja      @less8
@@ -2306,19 +2317,10 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
           test    L, L
           jz      @eq                    // no bytes left
           jmp     @last                  // one byte left
-@diff:    // difference found: find position
-          bsf     eax, eax
-          add     L, rax
-@last:    movzx   eax, byte ptr [P1 + L]
-          movzx   r9d, byte ptr [P2 + L]
-          sub     eax, r9d               // return result
-          ret
 @last2:   // difference in byte 0 or 1
           neg     al
           sbb     L, -1                  // add 1 to L if al == 0
           jmp     @last
-@eq:      // equal
-          xor     eax, eax
 end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
