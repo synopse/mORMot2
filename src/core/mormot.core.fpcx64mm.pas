@@ -927,9 +927,6 @@ type
 
   TSmallBlockPoolHeader = record
     BlockType: PSmallBlockType;
-    {$ifdef CPU32}
-    Padding32Bits: cardinal; // for 8*4=32 bytes alignment
-    {$endif CPU32}
     NextPartiallyFreePool: PSmallBlockPoolHeader;
     PreviousPartiallyFreePool: PSmallBlockPoolHeader;
     FirstFreeBlock: pointer;
