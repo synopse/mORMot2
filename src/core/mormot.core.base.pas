@@ -3896,6 +3896,9 @@ function SortDynArrayUnicodeString(const A, B): integer;
 // - the expected string type is the RTL string
 function SortDynArrayString(const A, B): integer;
 
+/// compare two "array of shortstring" elements, with case sensitivity
+function SortDynArrayShortString(const A, B): integer;
+
 /// compare two "array of variant" elements, with case sensitivity
 // - just a wrapper around SortDynArrayVariantComp(A,B,false)
 function SortDynArrayVariant(const A, B): integer;
@@ -10842,15 +10845,13 @@ var
   tab: PCrc32tab;
 begin
   result := not crc;
+  tab := @crc32ctab;
   if len > 0 then
-  begin
-    tab := @crc32ctab;
     repeat
-      result := tab[0, ToByte(result) xor ord(buf^)] xor (result shr 8);
+      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
       inc(buf);
       dec(len);
     until len = 0;
-  end;
   result := not result;
 end;
 
@@ -11855,6 +11856,22 @@ function SortDynArrayPUtf8Char(const A, B): integer;
 begin
   result := StrComp(pointer(A), pointer(B));
 end;
+
+function SortDynArrayShortString(const A, B): integer;
+var
+  sa: shortstring absolute A;
+  sb: shortstring absolute B;
+  la, lb: PtrInt;
+begin
+  la := ord(sa[0]);
+  lb := ord(sb[0]);
+  if la < lb then
+    la := lb;
+  result := MemCmp(@sa[1], @sb[1], la);
+  if result = 0 then
+    result := ord(sa[0]) - ord(sb[0]);
+end;
+
 
 {$if not defined(CPUX64ASM) and not defined(CPUX86)} // fallback if no asm
 
