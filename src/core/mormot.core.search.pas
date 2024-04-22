@@ -667,7 +667,7 @@ type
     fStore: RawByteString;
   public
     /// don't call this raw constructor, but its overloads
-    constructor Create; override; overload;
+    constructor Create; overload; override;
     /// initialize the internal bits storage for a given number of items
     // - by default, internal bits array size will be guess from a 1 % false
     // positive rate - but you may specify another value, to reduce memory use
