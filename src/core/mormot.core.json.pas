@@ -11765,7 +11765,7 @@ begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
   JSON_ESCAPE[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
   for i := 1 to 31 do
-    JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 should be escaped as \u00xx
+    JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 to escape #1..#31 as \u00xx
   JSON_ESCAPE[8]   := ord('b');  // others contain the escaped character
   JSON_ESCAPE[9]   := ord('t');
   JSON_ESCAPE[10]  := ord('n');

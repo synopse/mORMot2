@@ -1594,7 +1594,7 @@ begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    LinuxEventFDWrite(fFD, 1); // release the lock
+    LinuxEventFDWrite(fFD, 1); // release the lock or do nothing
     fpClose(fFD);
   end
   else

@@ -8505,8 +8505,8 @@ begin
   result := -1;
 end;
 
-function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+function FindShortStringListTrimLowerCaseExact(List: PShortString;
+  MaxValue: integer; aValue: PUtf8Char; aValueLen: PtrInt): integer;
 var
   PLen: PtrInt;
 begin
@@ -8522,7 +8522,7 @@ begin
         dec(PLen);
       until PLen = 0;
       if (PLen = aValueLen) and
-         CompareMemFixed(aValue, List, PLen) then
+         CompareMemSmall(aValue, List, PLen) then
         exit;
       inc(PUtf8Char(List), PLen);
     end;
