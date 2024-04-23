@@ -2666,11 +2666,12 @@ end;
 function OneGC(var gen, dst: TPollAsyncConnections; lastms, oldms: cardinal): PtrInt;
 var
   c: TAsyncConnection;
-  i: PtrInt;
+  i, d: PtrInt;
 begin
   result := 0;
   if gen.Count = 0 then
     exit;
+  d := dst.Count;
   oldms := lastms - oldms;
   for i := 0 to gen.Count - 1 do
   begin
@@ -2678,10 +2679,10 @@ begin
     if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation as ms
     begin
       // release after timeout
-      if dst.Count >= length(dst.Items) then
-        SetLength(dst.Items, dst.Count + gen.Count - i);
-      dst.Items[dst.Count] := c;
-      inc(dst.Count);
+      if d >= length(dst.Items) then
+        SetLength(dst.Items, d + gen.Count - i);
+      dst.Items[d] := c;
+      inc(d);
     end
     else
     begin
@@ -2693,6 +2694,7 @@ begin
     end;
   end;
   gen.Count := result; // don't resize gen.Items[] to avoid realloc
+  dst.Count := d;
 end;
 
 procedure TAsyncConnections.DoGC;
