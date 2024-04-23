@@ -2299,6 +2299,8 @@ begin
       dec(B.Bulk[j]);
     end;
     Check(CompareMem(@A.Bulk, @B.Bulk, i));
+    Check(CompareMemSmall(@A.Bulk, @B.Bulk, i));
+    Check(CompareMemFixed(@A.Bulk, @B.Bulk, i));
   end;
   for i := 0 to High(B.Bulk) do
     Check(CompareMemSmall(@A.Bulk, @B.Bulk, i));
@@ -3198,7 +3200,7 @@ begin
   if buf <> nil then
     while len > 0 do
     begin
-      result := crc32ctab[0, byte(result xor ord(buf^))] xor (result shr 8);
+      result := crc32ctab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     end;
@@ -3466,6 +3468,7 @@ begin
       CheckEqual(s2, S, 'LecuyerEncrypt');
     end;
   Test(crc32creference, 'pas');
+  Test(crc32cinlined, 'inl');
   Test(crc32cfast, 'fast');
   {$ifdef CPUINTEL}
   {$ifndef OSDARWIN}
@@ -3476,7 +3479,7 @@ begin
   {$ifdef CPUX64}
   if (cfSSE42 in CpuFeatures) and
      (cfAesNi in CpuFeatures) then
-    Test(crc32c, 'sse42+aesni'); // use SSE4.2+pclmulqdq instructions on x64
+    Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
   {$endif CPUX64}
   {$else}
   if @crc32c <> @crc32cfast then
