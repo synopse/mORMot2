@@ -1066,6 +1066,7 @@ type
     fHeadersMaximumSize: integer;
     fConnectionClass: TAsyncConnectionClass;
     fConnectionsClass: THttpAsyncConnectionsClass;
+    fRequestClass: THttpServerRequestClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
@@ -1093,6 +1094,9 @@ type
     /// access async connections to any remote HTTP server
     // - will reuse the threads pool and sockets polling of this instance
     function Clients: THttpAsyncClientConnections;
+    /// the class used for each THttpServerRequest instances
+    property RequestClass: THttpServerRequestClass
+      read fRequestClass write fRequestClass;
   published
     /// initial capacity of internal per-connection Headers buffer
     // - 2 KB by default is within the mormot.core.fpcx64mm SMALL blocks limit
@@ -4613,7 +4617,7 @@ begin
   if fRequest = nil then
   begin
     // created once, if not rejected by OnBeforeBody
-    fRequest := THttpServerRequest.Create(
+    fRequest := fServer.fRequestClass.Create(
       fServer, fConnectionID, fReadThread, fRequestFlags, GetConnectionOpaque);
     fRequest.OnAsyncResponse := AsyncResponse;
   end
@@ -4825,6 +4829,8 @@ begin
     fConnectionClass := THttpAsyncServerConnection;
   if fConnectionsClass = nil then
     fConnectionsClass := THttpAsyncConnections;
+  if fRequestClass = nil then
+    fRequestClass := THttpServerRequest;
   // bind and start the actual thread-pooled connections async server
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);

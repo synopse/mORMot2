@@ -412,6 +412,8 @@ type
       read fHttpApiRequest;
     {$endif USEWININET}
   end;
+  /// meta-class of HTTP server requests instances
+  THttpServerRequestClass = class of THttpServerRequest;
 
   /// available HTTP server options
   // - some THttpServerGeneric classes may have only partial support of them
