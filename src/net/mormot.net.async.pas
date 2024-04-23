@@ -757,6 +757,10 @@ type
     // - will WriteLock/block only on connection add/remove
     property ConnectionLock: TRWLock
       read fConnectionLock;
+    /// direct access to the class instantiated for each connection
+    // - as supplied to the constructor, but may be overriden just after startup
+    property ConnectionClass: TAsyncConnectionClass
+      read fConnectionClass write fConnectionClass;
     /// direct access to the internal AsyncConnectionsThread`s
     property Threads: TAsyncConnectionsThreads
       read fThreads;
@@ -4830,7 +4834,7 @@ begin
   if fConnectionsClass = nil then
     fConnectionsClass := THttpAsyncConnections;
   if fRequestClass = nil then
-    fRequestClass := THttpServerRequest;
+    fRequestClass := THttpServerRequest; // may be overriden later
   // bind and start the actual thread-pooled connections async server
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
