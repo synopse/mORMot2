@@ -95,6 +95,7 @@ type
     fTemplate: TSynMustache;
     fCachedWorldsTable: POrmCacheTable;
     fRawCache: TOrmWorlds;
+    fRandom: TLecuyer;
     {$ifdef USE_SQLITE3}
     fDbPool: TSqlDBSQLite3ConnectionProperties;
     procedure GenerateDB;
@@ -106,6 +107,7 @@ type
     // pipelined reading as used by /rawqueries and /rawupdates
     function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
     function ComputeRawFortunes(stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
+    function ComputeRandomWorld: integer; inline;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions;
       pin2Core: integer); reintroduce;
@@ -159,12 +161,6 @@ const
                      '</body>' +
                      '</html>';
 
-
-function ComputeRandomWorld: integer; inline;
-begin
-  result := Random32(WORLD_COUNT) + 1;
-end;
-
 function GetQueriesParamValue(ctxt: THttpServerRequest;
   const search: RawUtf8 = 'QUERIES='): cardinal; inline;
 begin
@@ -208,6 +204,7 @@ begin
   // setup the main ORM store
   fStore := TRestServerDB.Create(fModel, SQLITE_MEMORY_DATABASE_NAME);
   fStore.NoAjaxJson := true;
+  fRandom.Next;
   {$ifdef USE_SQLITE3}
   GenerateDB;
   {$else}
@@ -253,6 +250,11 @@ begin
   fDBPool.Free;
   ObjArrayClear(fRawCache);
   inherited Destroy;
+end;
+
+function TRawAsyncServer.ComputeRandomWorld: integer;
+begin
+  result := ((QWord(fRandom.RawNext) * WORLD_COUNT) shr 32) + 1;
 end;
 
 {$ifdef USE_SQLITE3}
