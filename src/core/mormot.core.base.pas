@@ -2955,7 +2955,7 @@ type
     /// force a random seed of the generator from current system state
     // - as executed by the Next method at thread startup, and after 2^32 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
-    procedure Seed(entropy: PByteArray; entropylen: PtrInt);
+    procedure Seed(entropy: PByteArray = nil; entropylen: PtrInt = 0);
     /// force a well-defined seed of the generator from a fixed initial point
     // - to be called before Next/Fill to generate the very same output
     // - will generate up to 16GB of predictable output, then switch to random
@@ -8992,7 +8992,7 @@ end;
 function TLecuyer.Next: cardinal;
 begin
   if seedcount = 0 then
-    Seed(nil, 0) // seed at startup, and after 2^32 of output data = 16 GB
+    Seed // seed at startup, and after 2^32 of output data = 16 GB
   else
     inc(seedcount);
   result := RawNext;
@@ -9026,7 +9026,7 @@ begin
   inc(seedcount, cardinal(bytes) shr 2);
   if (c = 0) or           // first use = seed at startup
      (c > seedcount) then // check for 32-bit overflow, i.e. after 16 GB
-    Seed(nil, 0);
+    Seed;
   repeat
     if bytes < 4 then
       break;
