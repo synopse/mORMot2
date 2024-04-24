@@ -700,8 +700,10 @@ type
     res: TWorlds;
     count, current: integer;
     update: TSqlDBPostgresAsyncStatement; // prepared before any callback
-    function Queries(async: TSqlDBPostgresAsync; ctxt: THttpServerRequest): cardinal;
-    function Updates(async: TSqlDBPostgresAsync; ctxt: THttpServerRequest): cardinal;
+    owner: TRawAsyncServer;
+    async: TSqlDBPostgresAsync;
+    function Queries(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
+    function Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
     procedure DoUpdates;
     procedure OnQueries(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     procedure OnRes({%H-}Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
@@ -709,48 +711,50 @@ type
 
 function TRawAsyncServer.asyncqueries(ctxt: THttpServerRequest): cardinal;
 begin
-  result := TAsyncWorld.Create.Queries(fDBPool.Async, ctxt);
+  result := TAsyncWorld.Create.Queries(self, ctxt);
 end;
 
 function TRawAsyncServer.asyncupdates(ctxt: THttpServerRequest): cardinal;
 begin
-  result := TAsyncWorld.Create.Updates(fDBPool.Async, ctxt);
+  result := TAsyncWorld.Create.Updates(self, ctxt);
 end;
 
 
 { TAsyncWorld }
 
-function TAsyncWorld.Queries(async: TSqlDBPostgresAsync; ctxt: THttpServerRequest): cardinal;
+function TAsyncWorld.Queries(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 var
   n: integer;
-  opt: TSqlDBPostgresAsyncStatementOptions; // for modified libpq
+  opt: TSqlDBPostgresAsyncStatementOptions; // forced options for modified libpq
+  select: TSqlDBPostgresAsyncStatement;
 begin
   request := ctxt;
+  if async = nil then
+    async := server.fDbPool.Async;
   if count = 0 then
     count := getQueriesParamValue(ctxt);
   SetLength(res, count); // count is > 0
-  with async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT) do
-  try
-    opt := AsyncOptions - [asoForceConnectionFlush];
-    n := count;
-    repeat
-      dec(n);
-      Bind(1, ComputeRandomWorld);
-      if n = 0 then // last item should include asoForceConnectionFlush (if set)
-        opt := AsyncOptions;
-      ExecuteAsync(ctxt, OnQueries, @opt);
-    until n = 0;
-  finally
-    UnLock;
-  end;
+  select := async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT);
+  opt := ASYNC_OPT - [asoForceConnectionFlush];
+  n := count;
+  repeat
+    dec(n);
+    select.Bind(1, server.ComputeRandomWorld);
+    if n = 0 then // last item should include asoForceConnectionFlush (if set)
+      opt := ASYNC_OPT;
+    select.ExecuteAsync(ctxt, OnQueries, @opt);
+  until n = 0;
+  select.UnLock;
   result := ctxt.SetAsyncResponse;
 end;
 
-function TAsyncWorld.Updates(async: TSqlDBPostgresAsync; ctxt: THttpServerRequest): cardinal;
+function TAsyncWorld.Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 begin
+  owner := server;
+  async := server.fDbPool.Async;
   count := getQueriesParamValue(ctxt);
   update := async.Prepare(WORLD_UPDATE_SQLN, false, ASYNC_OPT);
-  result := Queries(async, ctxt);
+  result := Queries(server, ctxt);
 end;
 
 procedure TAsyncWorld.OnQueries(Statement: TSqlDBPostgresAsyncStatement;
@@ -777,7 +781,7 @@ var
   params: TIntegerDynArray;
 begin
   for i := 0 to count - 1 do
-    res[i].randomNumber := ComputeRandomWorld;
+    res[i].randomNumber := owner.ComputeRandomWorld;
   SetLength(params, count);
   for i := 0 to count - 1 do
     params[i] := res[i].id;
