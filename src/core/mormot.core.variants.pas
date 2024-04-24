@@ -8501,12 +8501,12 @@ begin
   csv := pointer(aPath);
   if aPath <> '' then
     repeat
-      vt := PVarData(result)^.VType; // inlined dv := _Safe(result^)
-      if vt = varVariantByRef then
-      begin
+      repeat
+        vt := PVarData(result)^.VType; // inlined dv := _Safe(result^)
+        if vt <> varVariantByRef then
+          break;
         result := PVarData(result)^.VPointer;
-        vt := PVarData(result)^.VType;
-      end;
+      until false;
       if vt <> DocVariantVType then
         break;
       ndx := PDocVariantData(result)^.InternalNextPath(csv, @n, aPathDelim);
