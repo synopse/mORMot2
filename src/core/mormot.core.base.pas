@@ -3279,6 +3279,8 @@ var
   // - will also be used internally by SymmetricEncrypt and
   // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
   crc32ctab: TCrc32tab;
+  /// 8KB tables used by crc32fast() function
+  crc32tab: TCrc32tab;
 
 /// compute CRC32C checksum on the supplied buffer on processor-neutral code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
@@ -3287,6 +3289,10 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
 // - you should use crc32c() function instead of crc32cfast() or crc32csse42()
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+/// compute CRC32 checksum on the supplied buffer on processor-neutral code
+// - result is compatible with zlib's crc32() but not with crc32c/crc32cfast()
+function crc32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// compute CRC32C checksum on the supplied buffer using inlined code
 // - if the compiler supports inlining, will compute a slow but safe crc32c
@@ -3378,8 +3384,8 @@ var
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
   /// compute CRC32 checksum on the supplied buffer
-  // - is only available if mormot.lib.z.pas unit is included in the project
-  crc32: THasher;
+  // -  mormot.lib.z.pas will replace with its official (may be faster) version
+  crc32: THasher = crc32fast;
 
   /// compute ADLER32 checksum on the supplied buffer
   // - is only available if mormot.lib.z.pas unit is included in the project
@@ -10831,6 +10837,11 @@ begin
   result := crc32fasttab(crc, buf, len, @crc32ctab);
 end;
 
+function crc32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := crc32fasttab(crc, buf, len, @crc32tab);
+end;
+
 function crc32cBy4fast(crc, value: cardinal): cardinal;
 var
   tab: PCrc32tab;
@@ -12183,6 +12194,7 @@ begin
   assert(ord(high(TSynLogLevel)) = 31);
   // initialize internal constants
   crc32tabInit($82f63b78, crc32ctab); // crc32c() reversed polynom
+  crc32tabInit($edb88320, crc32tab);  // crc32() = zlib's reversed polynom
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
