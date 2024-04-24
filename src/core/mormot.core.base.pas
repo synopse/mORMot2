@@ -3292,7 +3292,8 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - if the compiler supports inlining, will compute a slow but safe crc32c
 // checksum of the binary buffer, without calling the main crc32c() function
 // - may be used e.g. to identify patched executable at runtime, for a licensing
-// protection system
+// protection system, or if you don't want to pollute the CPU L1 cache with
+// crc32cfast() bigger lookup tables
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -9868,14 +9869,11 @@ end;
 
 {$ifndef ASMINTEL}
 
-// fallback to pure pascal version for ARM or Intel PIC (no globals allowed)
-
-function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var
-  tab: PCrc32tab;
+// fallback to pure pascal version for ARM or Intel PIC
+function crc32fasttab(crc: cardinal; buf: PAnsiChar; len: cardinal;
+  tab: PCrc32tab): cardinal; inline;
 begin
   // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
-  tab := @crc32ctab;
   result := not crc;
   if (buf <> nil) and
      (len > 0) then
@@ -10826,6 +10824,11 @@ begin
     inc(Length);
   until Length = 0;
   result := true;
+end;
+
+function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := crc32fasttab(crc, buf, len, @crc32ctab);
 end;
 
 function crc32cBy4fast(crc, value: cardinal): cardinal;
@@ -12150,33 +12153,36 @@ begin
   raise EStreamError.CreateFmt('Unexpected %s.%s', [ClassNameShort(Caller)^, Context]);
 end;
 
-
-procedure InitializeUnit;
+procedure crc32tabInit(polynom: cardinal; var tab: TCrc32tab);
 var
   i, n: integer;
   crc: cardinal;
 begin
-  assert(ord(high(TSynLogLevel)) = 31);
-  // initialize internal constants
   for i := 0 to 255 do
   begin
     crc := i;
     for n := 1 to 8 do
-      if (crc and 1) <> 0 then // polynom is not the same as with zlib's crc32()
-        crc := (crc shr 1) xor $82f63b78
-      else
-        crc := crc shr 1;
-    crc32ctab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt
+    begin
+      crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+      tab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt
+    end;
   end;
   for i := 0 to 255 do
   begin
-    crc := crc32ctab[0, i];
-    for n := 1 to high(crc32ctab) do
+    crc := tab[0, i];
+    for n := 1 to high(tab) do
     begin
-      crc := (crc shr 8) xor crc32ctab[0, ToByte(crc)];
-      crc32ctab[n, i] := crc;
+      crc := (crc shr 8) xor tab[0, ToByte(crc)];
+      tab[n, i] := crc;
     end;
   end;
+end;
+
+procedure InitializeUnit;
+begin
+  assert(ord(high(TSynLogLevel)) = 31);
+  // initialize internal constants
+  crc32tabInit($82f63b78, crc32ctab); // crc32c() reversed polynom
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;

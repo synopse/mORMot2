@@ -545,19 +545,20 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
 @04:    mov     dword ptr [dst], eax
 end;
 
-function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function crc32fasttab(crc: cardinal; buf: PAnsiChar; len: cardinal;
+  tab: PCrc32tab): cardinal;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifdef SYSVABI}
         mov     r8d, len
+        mov     r9, tab
         {$endif SYSVABI}
         mov     eax, crc
         xor     ecx, ecx
-        test    buf, buf // buf=rdx/rsi len=r8
+        test    buf, buf // crc=eax buf=rdx/rsi len=r8 tab=r9
         jz      @z
         neg     r8
         jz      @z
         not     eax
-        lea     r9, [rip + crc32ctab]
         cmp     r8, -8
         jb      @head
 @sml:   mov     cl, byte ptr [buf]
