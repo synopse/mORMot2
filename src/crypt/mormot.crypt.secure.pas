@@ -736,7 +736,7 @@ type
   end;
 
   /// the known 32-bit crc algorithms as returned by CryptCrc32()
-  // - ccaCrc32 and ccaAdler32 require mormot.lib.z.pas to be included
+  // - ccaAdler32 requires mormot.lib.z.pas to be included
   // - caDefault may be AesNiHash32(), therefore not persistable between
   // executions, since is randomly seeded at process startup
   // - some cryptographic-level hashes are truncated to 32-bit - caSha1 could
@@ -764,7 +764,7 @@ const
     TStreamRedirectSha3_512);  // hfSHA3_512
 
 /// returns the 32-bit crc function for a given algorithm
-// - may return nil, e.g. for caCrc32/caAdler32 when mormot.lib.z is not loaded
+// - may return nil, e.g. for caAdler32 when mormot.lib.z is not loaded
 // - caSha1 has cryptographic level, with high performance on latest SHA-NI CPUs
 function CryptCrc32(algo: TCrc32Algo): THasher;
 
@@ -3881,9 +3881,9 @@ begin
     caCrc32c:
       result := crc32c;
     caCrc32:
-      result := crc32;   // from mormot.lib.z - nil if unit was not included
+      result := crc32;
     caAdler32:
-      result := adler32; // also from mormot.lib.z
+      result := adler32; // from mormot.lib.z - nil if unit was not included
     caxxHash32:
       result := @xxHash32;
     caFnv32:
@@ -5081,7 +5081,7 @@ begin
   d := @data[1];
   len := length(data);
   key := key xor cardinal(len);
-  tab := @crc32ctab;
+  tab := @crc32ctab; // use first 1KB of this 8KB table generated at startup
   for i := 0 to (len shr 2) - 1 do
   begin
     key := key xor tab[0, (cardinal(i) xor key) and 1023];

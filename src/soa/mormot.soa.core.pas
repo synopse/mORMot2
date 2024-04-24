@@ -25,7 +25,6 @@ uses
   sysutils,
   classes,
   variants,
-  mormot.lib.z, // use crc32() for contract hashing
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -1045,7 +1044,8 @@ begin
     [fInterfaceUri, LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
      fInterface.Contract], fContract);
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
-    CardinalToHex(Crc32String(fContract)) + '"'; // 2 hashes to avoid collision
+    CardinalToHex(crc32(0, pointer(fContract), length(fContract))) + '"';
+    // 2 hashes to avoid collision
   if aContractExpected <> '' then // override default contract
     if aContractExpected[1] <> '"' then
       // stored as JSON string
