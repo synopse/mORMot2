@@ -2604,21 +2604,20 @@ var
 begin
   S := P;
   D := pointer(Dest); // better FPC codegen with a dedicated variable
-  if S = nil then
-    PCardinal(D)^ := 0 // Dest='' with trailing #0
-  else
+  if S <> nil then
   begin
-    while (S^ <= ' ') and
-          (S^ <> #0) do
-      inc(S); // trim left space
     len := 0;
+    if S^ <= ' ' then
+      while (S^ <= ' ') and
+            (S^ <> #0) do
+        inc(S); // trim left space
     repeat
       c := S^;
       inc(S);
       if c = Sep then
         break;
       if c <> #0 then
-        if len < 254 then // avoid buffer overflow
+        if len < 254 then // avoid shortstring buffer overflow
         begin
           inc(len);
           D[len] := c;
@@ -2629,13 +2628,18 @@ begin
       S := nil; // reached #0: end of input
       break;
     until false;
-    while (len <> 0) and
-          (D[len] < ' ') do
-      dec(len); // trim right space
+    if len <> 0 then
+      repeat
+        if D[len] >= ' ' then
+          break;
+        dec(len); // trim right space
+      until len = 0;
     D[0] := AnsiChar(len);
     D[len + 1] := #0; // trailing #0
     P := S;
-  end;
+  end
+  else
+    PCardinal(D)^ := 0 // Dest='' with trailing #0
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;
