@@ -1465,7 +1465,7 @@ function SetValueObject(Instance: TObject; const Path: RawUtf8;
   const Value: variant): boolean;
 
 /// returns TRUE on a nil instance or if all its published properties are default/0
-// - calls internally TPropInfo.IsDefaultOrVoid()
+// - check nested TRttiCustom.Props and TRttiCustom.ValueIterateCount
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
 
 /// will reset all the object properties to their default
@@ -8052,7 +8052,7 @@ begin
     rkClass:
       result := IsObjectDefaultOrVoid(PObject(Data)^);
     else
-      // work for ordinal types and also for pointer/managed values
+      // work fast for ordinal types and also any pointer/managed values
       begin
         result := false;
         s := fCache.Size;
@@ -9378,6 +9378,9 @@ begin
   begin
     result := false;
     rc := Rtti.RegisterClass(Value.ClassType);
+    if (rc.ValueRtlClass <> vcNone) and
+       (rc.ValueIterateCount(@Value) > 0) then
+      exit; // e.g. TObjectList.Count or TCollection.Count
     p := pointer(rc.Props.List);
     for i := 1 to rc.Props.Count do
       if p^.ValueIsVoid(Value) then
