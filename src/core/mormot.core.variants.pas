@@ -8071,7 +8071,7 @@ begin
     end
     else
     begin
-      result := GetCardinalDef(@aName[1], PtrUInt(-1));
+      result := GetCardinalDef(@aName^[1], PtrUInt(-1));
       if PtrUInt(result) < PtrUInt(VCount) then // array index integer as text
         exit;
     end;
