@@ -4667,9 +4667,8 @@ begin
     GetNextItemShortString(FullName, @n, PathDelim); // n will end with #0
     if n[0] = #0 then
       exit;
-    if vt = VarType then
-      handler := self
-    else
+    handler := self;
+    if vt <> VarType then
     begin
       handler := mormot.core.variants.FindSynVariantType(vt);
       if handler = nil then
@@ -8062,12 +8061,21 @@ function TDocVariantData.InternalNextPath(
   var aCsv: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
 begin
   GetNextItemShortString(aCsv, aName, aPathDelim);
-  if (aName^[0] = #0) or
-     (VCount = 0) then
-    result := -1
-  else
-    result := FindNonVoid[IsCaseSensitive](
-      pointer(VName), @aName^[1], ord(aName^[0]), VCount);
+  if (VCount <> 0) and
+     (aName^[0] <> #0) then
+    if VName <> nil then
+    begin
+      result := FindNonVoid[IsCaseSensitive](
+        pointer(VName), @aName^[1], ord(aName^[0]), VCount);
+      exit;
+    end
+    else
+    begin
+      result := GetCardinalDef(@aName[1], PtrUInt(-1));
+      if PtrUInt(result) < PtrUInt(VCount) then // array index integer as text
+        exit;
+    end;
+  result := -1;
 end;
 
 procedure TDocVariantData.InternalNotFound(var Dest: variant; aName: PUtf8Char);
@@ -8458,7 +8466,7 @@ var
 begin
   VarClear(result{%H-});
   if (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) then
+     (VCount = 0) then
     exit;
   DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
   if cardinal(Dest.VType) >= varNull then
@@ -8472,7 +8480,7 @@ var
 begin
   result := false;
   if (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) then
+     (VCount = 0) then
     exit;
   DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
   if Dest.VType = varEmpty then
@@ -8484,30 +8492,31 @@ end;
 function TDocVariantData.GetPVariantByPath(
   const aPath: RawUtf8; aPathDelim: AnsiChar): PVariant;
 var
-  path: PUtf8Char;
   ndx: PtrInt;
+  vt: cardinal;
+  csv: PUtf8Char;
   n: ShortString;
-  dv: PDocVariantData;
 begin
-  if (cardinal(VType) <> DocVariantVType) or
-     (aPath = '') or
-     (not IsObject) or
-     (VCount = 0) then
-  begin
-    result := nil;
-    exit;
-  end;
   result := @self;
-  path := pointer(aPath);
-  repeat
-    dv := _Safe(result^);
-    ndx := dv^.InternalNextPath(path, @n, aPathDelim);
-    result := nil;
-    if ndx < 0 then
-      exit;
-    result := @dv^.VValue[ndx];
-  until path = nil;
-  // if we reached here, we have exhausted all path, so result is the found item
+  csv := pointer(aPath);
+  if aPath <> '' then
+    repeat
+      vt := PVarData(result)^.VType; // inlined dv := _Safe(result^)
+      if vt = varVariantByRef then
+      begin
+        result := PVarData(result)^.VPointer;
+        vt := PVarData(result)^.VType;
+      end;
+      if vt <> DocVariantVType then
+        break;
+      ndx := PDocVariantData(result)^.InternalNextPath(csv, @n, aPathDelim);
+      if ndx < 0 then
+        break;
+      result := @PDocVariantData(result)^.VValue[ndx];
+      if csv = nil then
+        exit; // exhausted all path, so result is the found item
+    until false;
+  result := nil;
 end;
 
 function TDocVariantData.GetPVariantExistingByPath(const aPath: RawUtf8;
