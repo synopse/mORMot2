@@ -1461,7 +1461,7 @@ var
   P: PAnsiChar;
   msg: string;
   unalign: PtrInt;
-  exp321, exp322, exp323, exp324: cardinal;
+  exp321, exp322, exp323, exp324, exp325: cardinal;
   exp641, exp642: QWord;
   hasher: TSynHasher;
 begin
@@ -1471,6 +1471,7 @@ begin
   exp322 := 0;
   exp323 := 0;
   exp324 := 0;
+  exp325 := 0;
   exp641 := 0;
   exp642 := 0;
   for unalign := 0 to HASHALIGN - 1 do
@@ -1483,6 +1484,7 @@ begin
     Check(Hash32Test(P, @xxHash32, exp323));
     if Assigned(AesNiHash32) then
       Check(Hash32Test(P, @AesNiHash32, exp324));
+    Check(Hash32Test(P, @crc32fast, exp325));
     Check(Hash64Test(P, @crc32cTwice, exp641));
     if Assigned(AesNiHash64) then
       Check(Hash64Test(P, @AesNiHash64, exp642));

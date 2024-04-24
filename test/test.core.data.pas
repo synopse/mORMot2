@@ -6915,7 +6915,7 @@ var
   Z: TSynZipCompressor;
   L, n: integer;
   P: PAnsiChar;
-  crc2: Cardinal;
+  crc2, crc3: Cardinal;
   st: TRawByteStringStream;
   s, tmp: RawByteString;
   gzr: TGZRead;
@@ -6936,6 +6936,7 @@ begin
   P := Pointer(Data);
   crc0 := 0;
   crc2 := 0;
+  crc3 := 0;
   while L <> 0 do
   begin
     if L > 1000 then
@@ -6945,12 +6946,14 @@ begin
     Z.Write(P^, n); // compress by little chunks to test streaming
     crc0 := crc32(crc0, P, n);
     crc2 := ReferenceCrc32(crc2, P, n);
+    crc3 := crc32fast(crc3, P, n);
     inc(P, n);
     dec(L, n);
   end;
   Check(crc0 = ReferenceCrc32(0, Pointer(Data), length(Data)));
   Check(crc0 = Z.CRC, 'crc32');
   Check(crc2 = crc0, 'crc32');
+  Check(crc3 = crc0, 'crc32');
   Z.Free;
   Check(GZRead(M.Memory, M.Position) = Data, 'gzread');
   crc1 := crc32(0, M.Memory, M.Position);

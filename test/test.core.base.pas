@@ -3467,6 +3467,11 @@ begin
       LecuyerEncrypt(i, s2);
       CheckEqual(s2, S, 'LecuyerEncrypt');
     end;
+  Check(crc32fast(0, @crc32tab, 5) = $DF4EC16C, 'crc32a');
+  Check(crc32fast(0, @crc32tab, 1024) = $6FCF9E13, 'crc32b');
+  Check(crc32fast(0, @crc32tab, 1024 - 5) = $70965738, 'crc32c');
+  Check(crc32fast(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF, 'crc32d');
+  Check(crc32fast(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32e');
   Test(crc32creference, 'pas');
   Test(crc32cinlined, 'inl');
   Test(crc32cfast, 'fast');
