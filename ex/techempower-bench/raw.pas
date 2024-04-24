@@ -95,7 +95,6 @@ type
     fTemplate: TSynMustache;
     fCachedWorldsTable: POrmCacheTable;
     fRawCache: TOrmWorlds;
-    fRandom: TLecuyer;
     {$ifdef USE_SQLITE3}
     fDbPool: TSqlDBSQLite3ConnectionProperties;
     procedure GenerateDB;
@@ -105,9 +104,9 @@ type
     procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     {$endif USE_SQLITE3}
     // pipelined reading as used by /rawqueries and /rawupdates
-    function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
+    function GetRawRandomWorlds(cnt: PtrInt;
+      out res: TWorlds; out gen: PLecuyer): boolean;
     function ComputeRawFortunes(stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
-    function ComputeRandomWorld: integer; inline;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions;
       pin2Core: integer); reintroduce;
@@ -161,6 +160,12 @@ const
                      '</body>' +
                      '</html>';
 
+
+function ComputeRandomWorld(gen: PLecuyer): integer; inline;
+begin
+  result := gen^.Next(WORLD_COUNT) + 1;
+end;
+
 function GetQueriesParamValue(ctxt: THttpServerRequest;
   const search: RawUtf8 = 'QUERIES='): cardinal; inline;
 begin
@@ -204,7 +209,6 @@ begin
   // setup the main ORM store
   fStore := TRestServerDB.Create(fModel, SQLITE_MEMORY_DATABASE_NAME);
   fStore.NoAjaxJson := true;
-  fRandom.Next;
   {$ifdef USE_SQLITE3}
   GenerateDB;
   {$else}
@@ -252,11 +256,6 @@ begin
   inherited Destroy;
 end;
 
-function TRawAsyncServer.ComputeRandomWorld: integer;
-begin
-  result := ((QWord(fRandom.RawNext) * WORLD_COUNT) shr 32) + 1;
-end;
-
 {$ifdef USE_SQLITE3}
 
 const
@@ -280,16 +279,18 @@ var
   b: TRestBatch;
   w: TOrmWorld;
   f: TOrmFortune;
+  gen: PLecuyer;
 begin
   fStore.Server.CreateMissingTables;
   w := TOrmWorld.Create;
   f := TOrmFortune.Create;
   b := TRestBatch.Create(fStore.Orm, nil);
   try
+    gen := Lecuyer;
     for i := 1 to WORLD_COUNT do
     begin
       w.IDValue := i;
-      w.RandomNumber := ComputeRandomWorld;
+      w.RandomNumber := ComputeRandomWorld(gen);
       b.Add(w, true, true);
     end;
     for i := low(_FORTUNES) to high(_FORTUNES) do
@@ -311,7 +312,8 @@ end;
 
 // query DB world table for /rawqueries and /rawupdates endpoints
 
-function TRawAsyncServer.GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
+function TRawAsyncServer.GetRawRandomWorlds(cnt: PtrInt;
+  out res: TWorlds; out gen: PLecuyer): boolean;
 var
   conn: TSqlDBConnection;
   stmt: ISqlDBStatement;
@@ -323,12 +325,13 @@ var
 begin
   result := false;
   SetLength(res{%H-}, cnt);
+  gen := Lecuyer;
   conn := fDbPool.ThreadSafeConnection;
   {$ifdef USE_SQLITE3}
   for i := 0 to cnt - 1 do
   begin
     stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-    stmt.Bind(1, ComputeRandomWorld);
+    stmt.Bind(1, ComputeRandomWorld(gen));
     stmt.ExecutePrepared;
     if not stmt.Step then
       exit;
@@ -342,7 +345,7 @@ begin
   pStmt := TSqlDBPostgresStatement(stmt.Instance);
   for i := 0 to cnt - 1 do
   begin
-    pStmt.Bind(1, ComputeRandomWorld);
+    pStmt.Bind(1, ComputeRandomWorld(gen));
     pStmt.SendPipelinePrepared;
     pConn.PipelineSync; // mandatory in TFB requirements (but not realistic)
   end;
@@ -422,7 +425,7 @@ function TRawAsyncServer.db(ctxt: THttpServerRequest): cardinal;
 var
   w: TOrmWorld;
 begin
-  w := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld);
+  w := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(Lecuyer));
   try
     ctxt.SetOutJson(w);
     result := HTTP_SUCCESS;
@@ -435,10 +438,12 @@ function TRawAsyncServer.queries(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
+  gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'QUERIES='));
+  gen := Lecuyer;
   for i := 0 to length(res) - 1 do
-    res[i] := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld);
+    res[i] := TOrmWorld.Create(fStore.Orm, ComputeRandomWorld(gen));
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   ObjArrayClear(res);
   result := HTTP_SUCCESS;
@@ -448,10 +453,12 @@ function TRawAsyncServer.cached_queries(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
+  gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
+  gen := Lecuyer;
   for i := 0 to length(res) - 1 do
-    res[i] := fCachedWorldsTable.Get(ComputeRandomWorld);
+    res[i] := fCachedWorldsTable.Get(ComputeRandomWorld(gen));
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;
@@ -489,19 +496,21 @@ var
   res: TOrmWorlds;
   w: TOrmWorld;
   b: TRestBatch;
+  gen: PLecuyer;
 begin
   result := HTTP_SERVERERROR;
   SetLength(res, GetQueriesParamValue(ctxt));
   b := TRestBatch.Create(fStore.ORM, TOrmWorld, {transrows=}0,
     [boExtendedJson, boNoModelEncoding, boPutNoCacheFlush]);
   try
+    gen := Lecuyer;
     for i := 0 to length(res) - 1 do
     begin
       w := TOrmWorld.Create;
       res[i] := w;
-      if not fStore.Orm.Retrieve(ComputeRandomWorld, w) then
+      if not fStore.Orm.Retrieve(ComputeRandomWorld(gen), w) then
         exit;
-      w.RandomNumber := ComputeRandomWorld;
+      w.RandomNumber := ComputeRandomWorld(gen);
       b.Update(w);
     end;
     result := b.Send;
@@ -521,7 +530,7 @@ begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   stmt := conn.NewStatementPrepared(WORLD_READ_SQL, true, true);
-  stmt.Bind(1, ComputeRandomWorld);
+  stmt.Bind(1, ComputeRandomWorld(Lecuyer));
   stmt.ExecutePrepared;
   if stmt.Step then
   begin
@@ -536,8 +545,9 @@ end;
 function TRawAsyncServer.rawqueries(ctxt: THttpServerRequest): cardinal;
 var
   res: TWorlds;
+  gen: PLecuyer;
 begin
-  if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res) then
+  if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res, gen) then
     exit(HTTP_SERVERERROR);
   ctxt.SetOutJson(@res, TypeInfo(TWorlds));
   result := HTTP_SUCCESS;
@@ -547,10 +557,12 @@ function TRawAsyncServer.rawcached(ctxt: THttpServerRequest): cardinal;
 var
   i: PtrInt;
   res: TOrmWorlds;
+  gen: PLecuyer;
 begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
+  gen := Lecuyer;
   for i := 0 to length(res) - 1 do
-    res[i] := fRawCache[ComputeRandomWorld - 1];
+    res[i] := fRawCache[ComputeRandomWorld(gen) - 1];
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;
@@ -587,10 +599,7 @@ begin
     try
       W.AddShort('UPDATE world SET randomNumber = v.randomNumber FROM (VALUES');
       for i := 1 to cnt do
-      begin
-        W.AddShort('(?::integer, ?::integer)');
-        W.Add(',');
-      end;
+        W.AddShort('(?::integer, ?::integer),');
       W.CancelLastComma;
       W.AddShort(' order by 1) AS v (id, randomNumber) WHERE world.id = v.id');
       W.SetText(LastComputeUpdateSql);
@@ -607,17 +616,18 @@ var
   cnt, i: PtrInt;
   res: TWorlds;
   params: TInt64DynArray;
+  gen: PLecuyer;
   conn: TSqlDBConnection;
   stmt: ISqlDBStatement;
 begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   cnt := getQueriesParamValue(ctxt);
-  if not getRawRandomWorlds(cnt, res) then
+  if not getRawRandomWorlds(cnt, res, gen) then
     exit;
   // generate new randoms
   for i := 0 to cnt - 1 do
-    res[i].randomNumber := ComputeRandomWorld;
+    res[i].randomNumber := ComputeRandomWorld(gen);
   if cnt > 20 then
   begin
     // fill parameters arrays for update with nested select (PostgreSQL only)
@@ -655,7 +665,7 @@ function TRawAsyncServer.asyncdb(ctxt: THttpServerRequest): cardinal;
 begin
   with fDbPool.Async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT) do
   try
-    Bind(1, ComputeRandomWorld);
+    Bind(1, ComputeRandomWorld(Lecuyer));
     ExecuteAsync(ctxt, OnAsyncDb);
   finally
     UnLock;
@@ -700,7 +710,6 @@ type
     res: TWorlds;
     count, current: integer;
     update: TSqlDBPostgresAsyncStatement; // prepared before any callback
-    owner: TRawAsyncServer;
     async: TSqlDBPostgresAsync;
     function Queries(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
     function Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
@@ -726,6 +735,7 @@ function TAsyncWorld.Queries(server: TRawAsyncServer; ctxt: THttpServerRequest):
 var
   n: integer;
   opt: TSqlDBPostgresAsyncStatementOptions; // forced options for modified libpq
+  gen: PLecuyer;
   select: TSqlDBPostgresAsyncStatement;
 begin
   request := ctxt;
@@ -737,9 +747,10 @@ begin
   select := async.PrepareLocked(WORLD_READ_SQL, {res=}true, ASYNC_OPT);
   opt := ASYNC_OPT - [asoForceConnectionFlush];
   n := count;
+  gen := Lecuyer;
   repeat
     dec(n);
-    select.Bind(1, server.ComputeRandomWorld);
+    select.Bind(1, ComputeRandomWorld(gen));
     if n = 0 then // last item should include asoForceConnectionFlush (if set)
       opt := ASYNC_OPT;
     select.ExecuteAsync(ctxt, OnQueries, @opt);
@@ -750,7 +761,6 @@ end;
 
 function TAsyncWorld.Updates(server: TRawAsyncServer; ctxt: THttpServerRequest): cardinal;
 begin
-  owner := server;
   async := server.fDbPool.Async;
   count := getQueriesParamValue(ctxt);
   update := async.Prepare(WORLD_UPDATE_SQLN, false, ASYNC_OPT);
@@ -779,9 +789,11 @@ procedure TAsyncWorld.DoUpdates;
 var
   i: PtrInt;
   params: TIntegerDynArray;
+  gen: PLecuyer;
 begin
+  gen := Lecuyer;
   for i := 0 to count - 1 do
-    res[i].randomNumber := owner.ComputeRandomWorld;
+    res[i].randomNumber := ComputeRandomWorld(gen);
   SetLength(params, count);
   for i := 0 to count - 1 do
     params[i] := res[i].id;
