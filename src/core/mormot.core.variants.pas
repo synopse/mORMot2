@@ -925,14 +925,16 @@ type
     // note: this structure uses all TVarData available space: no filler needed!
     VType: TVarType;              // 16-bit
     VOptions: TDocVariantOptions; // 16-bit
+    VCount: integer;              // 32-bit
     VName: TRawUtf8DynArray;      // pointer
     VValue: TVariantDynArray;     // pointer
-    VCount: integer;              // 32-bit
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
     // kind is stored as dvoIsArray/dvoIsObject within VOptions
     function GetKind: TDocVariantKind;
+      {$ifdef HASINLINE}inline;{$endif}
+    function Has(dvo: TDocVariantOption): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetOptions(const opt: TDocVariantOptions); // keep dvoIsObject/Array
       {$ifdef HASINLINE}inline;{$endif}
@@ -3512,26 +3514,31 @@ implementation
 // PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
 
 const
-  _DVO = (1 shl ord(dvoIsArray) + 1 shl ord(dvoIsObject));
+  _DVO = 1 shl ord(dvoIsArray) + 1 shl ord(dvoIsObject);
 
 function TDocVariantData.GetKind: TDocVariantKind;
 begin // [dvoIsArray]=1 [dvoIsObject]=2 -> dvUndefined=0 dvArray=1 dvObject=2
   result := TDocVariantKind((TRttiVarData(self).VType shr 16) and _DVO);
 end;
 
+function TDocVariantData.Has(dvo: TDocVariantOption): boolean;
+begin
+  result := (TRttiVarData(self).VType and (1 shl (ord(dvo) + 16))) <> 0;
+end;
+
 function TDocVariantData.IsObject: boolean;
 begin
-  result := (TRttiVarData(self).VType and (1 shl (ord(dvoIsObject) + 16))) <> 0;
+  result := Has(dvoIsObject);
 end;
 
 function TDocVariantData.IsArray: boolean;
 begin
-  result := (TRttiVarData(self).VType and (1 shl (ord(dvoIsArray) + 16))) <> 0;
+  result := Has(dvoIsArray);
 end;
 
 function TDocVariantData.IsCaseSensitive: boolean;
 begin
-  result := (TRttiVarData(self).VType and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
+  result := Has(dvoNameCaseSensitive);
 end;
 
 procedure TDocVariantData.ClearFast;
@@ -3698,7 +3705,7 @@ end;
 
 procedure FillZero(var value: variant);
 begin
-  if TVarData(value).VType = varString then
+  if TRttiVarData(value).VType and $ffff = varString then
     FillZero(RawByteString(TVarData(value).VAny));
   VarClear(value);
 end;
@@ -4399,11 +4406,11 @@ procedure TSynInvokeableVariantType.DispInvoke(
 var
   name: string;
   res: TVarData;
-  namelen, i, t, n: PtrInt;
+  namelen, i, asize, n: PtrInt;
   nameptr, a: PAnsiChar;
-  asize: PtrInt;
   v: PVarData;
   args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
+  t: cardinal;
   {$ifdef FPC}
   inverted: boolean;
   {$endif FPC}
@@ -4444,7 +4451,7 @@ begin
     for i := 0 to n - 1 do
     begin
       asize := SizeOf(pointer);
-      t := CallDesc^.ArgTypes[i] and ARGTYPE_MASK;
+      t := cardinal(CallDesc^.ArgTypes[i]) and ARGTYPE_MASK;
       case t of
         {$ifdef HASVARUSTRARG}
         varUStrArg:
@@ -4812,7 +4819,7 @@ begin
     ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.IsCaseSensitive);
     if ndx < 0 then
       if NoException or
-         (dvoReturnNullForUnknownProperty in dv.VOptions) then
+         dv.Has(dvoReturnNullForUnknownProperty) then
       begin
         SetVariantNull(PVariant(@Dest)^);
         result := false;
@@ -4966,7 +4973,7 @@ begin
         exit;
       end;
   end;
-  result := dvoReturnNullForUnknownProperty in Data.VOptions; // to avoid error
+  result := Data.Has(dvoReturnNullForUnknownProperty); // to avoid error
 end;
 
 procedure TDocVariant.ToJson(W: TJsonWriter; Value: PVarData);
@@ -4986,7 +4993,7 @@ begin
     forced := [];
     if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
     begin
-      if dvoSerializeAsExtendedJson in PDocVariantData(Value)^.VOptions then
+      if PDocVariantData(Value)^.Has(dvoSerializeAsExtendedJson) then
         forced := [twoForceJsonExtended]
       else
         forced := [twoForceJsonStandard];
@@ -5071,7 +5078,7 @@ begin
   if S.VCount = 0 then
     exit; // no data to copy
   D.VName := S.VName;
-  if dvoValueCopiedByReference in S.VOptions then
+  if S.Has(dvoValueCopiedByReference) then
     D.VValue := S.VValue // byref copy of the whole array
   else
     D.VValue := system.copy(S.VValue); // new array, but byref values
@@ -5661,7 +5668,7 @@ end;
 procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant);
 begin
   SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
-  if dvoInternValues in VOptions then
+  if Has(dvoInternValues) then
     InternalUniqueValueAt(aIndex);
 end;
 
@@ -5694,13 +5701,13 @@ function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
 begin
   TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
   VCount := CloneFrom.VCount;
-  if MakeUnique then
-    VName := copy(CloneFrom.VName) // new array, but byref names
+  if MakeUnique then // new array, but byref names
+    DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray))
   else
     VName := CloneFrom.VName;      // byref copy of the whole array
   if CloneValues then
-    if MakeUnique then
-      VValue := copy(CloneFrom.VValue) // new array, but byref values
+    if MakeUnique then // new array, but byref values
+      DynArrayCopy(@VValue, @CloneFrom.VValue, TypeInfo(TVariantDynArray))
     else
       VValue := CloneFrom.VValue       // byref copy of the whole array
   else
@@ -5782,16 +5789,16 @@ begin
   begin
     ndx := arg + VCount;
     VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
-    if dvoInternNames in VOptions then
+    if Has(dvoInternNames) then
       DocVariantType.InternNames.UniqueText(VName[ndx]);
-    if dvoValueCopiedByReference in VOptions then
+    if Has(dvoValueCopiedByReference) then
       VarRecToVariant(NameValuePairs[arg * 2 + 1], VValue[ndx])
     else
     begin
       VarRecToVariant(NameValuePairs[arg * 2 + 1], tmp);
       SetVariantByValue(tmp, VValue[ndx]);
     end;
-    if dvoInternValues in VOptions then
+    if Has(dvoInternValues) then
       InternalUniqueValueAt(ndx);
   end;
   inc(VCount, n);
@@ -5856,7 +5863,7 @@ begin
     exit;
   VCount := length(aItems);
   SetLength(VValue, VCount);
-  if dvoValueCopiedByReference in VOptions then
+  if Has(dvoValueCopiedByReference) then
     for arg := 0 to high(aItems) do
       VarRecToVariant(aItems[arg], VValue[arg])
   else
@@ -6260,17 +6267,14 @@ end;
 procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUtf8DynArray;
   const aValues: TVariantDynArray; aOptions: TDocVariantOptions);
 begin
-  VCount := length(aNames);
   if (aNames = nil) or
-     (length(aValues) <> VCount) then
-    VType := varNull
+     (length(aValues) <> PDALen(PAnsiChar(aNames) - _DALEN)^ + _DAOFF) then
+    TRttiVarData(self).VType := varNull
   else
   begin
-    VType := DocVariantVType;
-    VOptions := aOptions + [dvoIsObject];
-    pointer(VName) := nil;
+    Init(aOptions, dvObject);
+    VCount := PDALen(PAnsiChar(aNames) - _DALEN)^ + _DAOFF;
     VName := aNames; // fast by-reference copy of VName[] and VValue[]
-    pointer(VValue) := nil;
     VValue := aValues;
   end;
 end;
@@ -6280,9 +6284,7 @@ procedure TDocVariantData.InitObjectFromPath(const aPath: RawUtf8;
 var
   right: RawUtf8;
 begin
-  if aPath = '' then
-    VType := varNull
-  else
+  if aPath <> '' then
   begin
     Init(aOptions, dvObject);
     VCount := 1;
@@ -6294,7 +6296,9 @@ begin
     else
       PDocVariantData(@VValue[0])^.InitObjectFromPath(
         right, aValue, aOptions, aPathDelim);
+    exit;
   end;
+  TRttiVarData(self).VType := varNull;
 end;
 
 function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
@@ -6311,7 +6315,7 @@ begin
   result := nil;
   if Json = nil then
     exit;
-  if dvoInternValues in VOptions then
+  if Has(dvoInternValues) then
     intvalues := DocVariantType.InternValues
   else
     intvalues := nil;
@@ -6332,7 +6336,7 @@ begin
           Json := GotoNextNotSpace(Json + 1)
         else
         begin
-          if dvoJsonParseDoNotGuessCount in VOptions then
+          if Has(dvoJsonParseDoNotGuessCount) then
             cap := 8 // with a lot of nested objects -> best to ignore
           else
           begin
@@ -6386,7 +6390,7 @@ begin
           Json := GotoNextNotSpace(Json + 1)
         else
         begin
-          if dvoJsonParseDoNotGuessCount in VOptions then
+          if Has(dvoJsonParseDoNotGuessCount) then
             cap := 4 // with a lot of nested documents -> best to ignore
           else
           begin
@@ -6400,7 +6404,7 @@ begin
               include(VOptions, dvoJsonParseDoNotGuessCount);
             end;
           end;
-          if dvoInternNames in VOptions then
+          if Has(dvoInternNames) then
             intnames := DocVariantType.InternNames
           else
             intnames := nil;
@@ -6563,7 +6567,7 @@ begin
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
     pointer(VValue) := nil;
-    aOptions := aOptions - [dvoIsArray, dvoIsObject]; // may not be same as Source
+    aOptions := aOptions - [dvoIsArray, dvoIsObject]; // may not match Source
     if Source^.IsArray then
       include(aOptions, dvoIsArray)
     else if Source^.IsObject then
@@ -6573,7 +6577,7 @@ begin
       for ndx := 0 to VCount - 1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
       if (dvoInternNames in aOptions) and
-         not (dvoInternNames in Source^.Options) then
+         not Source^.Has(dvoInternNames) then
         with DocVariantType.InternNames do
           for ndx := 0 to VCount - 1 do
             UniqueText(VName[ndx]);
@@ -6615,7 +6619,7 @@ begin
       inc(vv);
       dec(ndx);
     until ndx = 0;
-    if dvoInternValues in VOptions then
+    if Has(dvoInternValues) then
     begin
       ndx := VCount;
       vv := pointer(VValue);
@@ -6887,7 +6891,7 @@ begin
   // store the object field name
   if Length(VName) <> len then
     SetLength(VName, len);
-  if dvoInternNames in VOptions then
+  if Has(dvoInternNames) then
     DocVariantType.InternNames.Unique(VName[result], aName)
   else
     VName[result] := aName;
@@ -6974,7 +6978,7 @@ begin
     result := -1;
     exit;
   end;
-  if dvoCheckForDuplicatedNames in VOptions then
+  if Has(dvoCheckForDuplicatedNames) then
     if GetValueIndex(aName) >= 0 then
       raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
   result := InternalAdd(aName, aIndex);
@@ -6983,7 +6987,7 @@ begin
     v^ := aValue
   else
     SetVariantByValue(aValue, v^);
-  if dvoInternValues in VOptions then
+  if Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
 
@@ -7008,7 +7012,7 @@ begin
   end;
   result := GetValueIndex(aName);
   if not DoUpdate and
-     (dvoCheckForDuplicatedNames in VOptions) and
+     (Has(dvoCheckForDuplicatedNames)) and
      (result >= 0) then
     raise EDocVariant.CreateUtf8(
       'AddValueFromText: Duplicated [%] name', [aName]);
@@ -7036,7 +7040,7 @@ begin
       continue; // path not found
     added := InternalAdd(aPaths[ndx]);
     PVarData(@VValue[added])^ := v;
-    if dvoInternValues in VOptions then
+    if Has(dvoInternValues) then
       InternalUniqueValueAt(added);
   end;
 end;
@@ -7070,7 +7074,7 @@ begin
     if IsArray then
       // types should match
       exit
-    else if dvoCheckForDuplicatedNames in VOptions then
+    else if Has(dvoCheckForDuplicatedNames) then
       repeat
         AddOrUpdateValue(k^, v^);
         inc(k);
@@ -7130,7 +7134,7 @@ function TDocVariantData.AddItemText(
   const aValue: RawUtf8; aIndex: integer): integer;
 begin
   result := InternalAdd('', aIndex);
-  if dvoInternValues in VOptions then
+  if Has(dvoInternValues) then
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
     RawUtf8ToVariant(aValue, VValue[result]);
@@ -7144,7 +7148,7 @@ begin
   begin
     added := InternalAdd('');
     VarRecToVariant(aValue[ndx], VValue[added]);
-    if dvoInternValues in VOptions then
+    if Has(dvoInternValues) then
       InternalUniqueValueAt(added);
   end;
 end;
@@ -7156,7 +7160,7 @@ var
   obj: PDocVariantData;
 begin
   if (aName <> '') and
-     (dvoCheckForDuplicatedNames in VOptions) then
+     (Has(dvoCheckForDuplicatedNames)) then
     if GetValueIndex(aName) >= 0 then
       raise EDocVariant.CreateUtf8('AddObject: Duplicated [%] name', [aName]);
   added := InternalAdd(aName);
@@ -7167,7 +7171,7 @@ begin
           not obj^.IsObject then
     raise EDocVariant.CreateUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs);
-  if dvoInternValues in VOptions then
+  if Has(dvoInternValues) then
     InternalUniqueValueAt(added);
 end;
 
@@ -8066,7 +8070,7 @@ end;
 
 procedure TDocVariantData.InternalNotFound(var Dest: variant; aName: PUtf8Char);
 begin
-  if dvoReturnNullForUnknownProperty in VOptions then
+  if Has(dvoReturnNullForUnknownProperty) then
     SetVariantNull(Dest)
   else
     raise EDocVariant.CreateUtf8('[%] property not found', [aName])
@@ -8074,7 +8078,7 @@ end;
 
 procedure TDocVariantData.InternalNotFound(var Dest: variant; aIndex: integer);
 begin
-  if dvoReturnNullForUnknownProperty in VOptions then
+  if Has(dvoReturnNullForUnknownProperty) then
     SetVariantNull(Dest)
   else
     raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
@@ -8082,7 +8086,7 @@ end;
 
 function TDocVariantData.InternalNotFound(aName: PUtf8Char): PVariant;
 begin
-  if dvoReturnNullForUnknownProperty in VOptions then
+  if Has(dvoReturnNullForUnknownProperty) then
     result := @DocVariantDataFake
   else
     raise EDocVariant.CreateUtf8('[%] property not found', [aName])
@@ -8090,7 +8094,7 @@ end;
 
 function TDocVariantData.InternalNotFound(aIndex: integer): PDocVariantData;
 begin
-  if dvoReturnNullForUnknownProperty in VOptions then
+  if Has(dvoReturnNullForUnknownProperty) then
     result := @DocVariantDataFake
   else
     raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
@@ -8632,7 +8636,7 @@ begin
     repeat
       if IdemPChar(nam^, Up) then
       begin
-        if (dvoSerializeAsExtendedJson in VOptions) and
+        if Has(dvoSerializeAsExtendedJson) and
            JsonPropNameValid(nam^) then
           W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
         else
@@ -8739,7 +8743,7 @@ procedure TDocVariantData.RetrieveNameOrRaiseException(
 begin
   if (cardinal(Index) >= cardinal(VCount)) or
      (VName = nil) then
-    if dvoReturnNullForUnknownProperty in VOptions then
+    if Has(dvoReturnNullForUnknownProperty) then
       Dest := ''
     else
       raise EDocVariant.CreateUtf8(
