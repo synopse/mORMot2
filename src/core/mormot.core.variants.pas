@@ -936,6 +936,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function Has(dvo: TDocVariantOption): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure Include(dvo: TDocVariantOption);
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetOptions(const opt: TDocVariantOptions); // keep dvoIsObject/Array
       {$ifdef HASINLINE}inline;{$endif}
     // capacity is Length(VValue) and Length(VName)
@@ -972,6 +974,8 @@ type
       aPreviousIndex: PInteger): boolean;
     function InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(var aCsv: PUtf8Char; aName: PShortString;
@@ -3547,6 +3551,13 @@ begin
   Void;
 end;
 
+procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant);
+begin
+  SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
+  if Has(dvoInternValues) then
+    InternalUniqueValueAt(aIndex);
+end;
+
 
 { ************** Low-Level Variant Wrappers }
 
@@ -5665,13 +5676,6 @@ begin
   result := fInternValues;
 end;
 
-procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant);
-begin
-  SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
-  if Has(dvoInternValues) then
-    InternalUniqueValueAt(aIndex);
-end;
-
 procedure TDocVariantData.InternalUniqueValueAt(aIndex: PtrInt);
 begin
   DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
@@ -5691,9 +5695,9 @@ end;
 procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData);
 begin
   TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType and not (_DVO shl 16);
-  pointer(VName) := nil; // to avoid GPF
-  pointer(VValue) := nil;
   VCount := 0;
+  pointer(VName)  := nil; // to avoid GPF
+  pointer(VValue) := nil;
 end;
 
 function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
@@ -5701,17 +5705,17 @@ function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
 begin
   TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
   VCount := CloneFrom.VCount;
-  if MakeUnique then // new array, but byref names
+  if MakeUnique then             // new array, but byref names
     DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray))
   else
-    VName := CloneFrom.VName;      // byref copy of the whole array
+    VName := CloneFrom.VName;    // byref copy of the whole array
   if CloneValues then
-    if MakeUnique then // new array, but byref values
+    if MakeUnique then           // new array, but byref values
       DynArrayCopy(@VValue, @CloneFrom.VValue, TypeInfo(TVariantDynArray))
     else
-      VValue := CloneFrom.VValue       // byref copy of the whole array
+      VValue := CloneFrom.VValue // byref copy of the whole array
   else
-    SetLength(VValue, VCount);         // setup void values
+    SetLength(VValue, VCount);   // setup void values
   result := pointer(VValue);
 end;
 
@@ -5719,9 +5723,9 @@ procedure TDocVariantData.Init(const aOptions: TDocVariantOptions);
 begin
   TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
     cardinal(word(aOptions) and not _DVO) shl 16;
-  pointer(VName) := nil; // to avoid GPF when mapped within a TVarData/variant
-  pointer(VValue) := nil;
   VCount := 0;
+  pointer(VName)  := nil; // to avoid GPF when mapped within a TVarData/variant
+  pointer(VValue) := nil;
 end;
 
 procedure TDocVariantData.Init(const aOptions: TDocVariantOptions;
@@ -5729,9 +5733,9 @@ procedure TDocVariantData.Init(const aOptions: TDocVariantOptions;
 begin // dvUndefined=0 dvArray=1 dvObject=2 -> [dvoIsArray]=1 [dvoIsObject]=2
   TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
     cardinal((word(aOptions) and not _DVO) + ord(aKind)) shl 16;
-  pointer(VName) := nil; // to avoid GPF
-  pointer(VValue) := nil;
   VCount := 0;
+  pointer(VName)  := nil; // to avoid GPF
+  pointer(VValue) := nil;
 end;
 
 procedure TDocVariantData.Init(aModel: TDocVariantModel; aKind: TDocVariantKind);
@@ -5767,39 +5771,52 @@ begin
   AddNameValuesToObject(NameValuePairs);
 end;
 
+procedure TDocVariantData.InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
+var
+  v: PVariant;
+begin
+  v := @VValue[aIndex];
+  if Has(dvoValueCopiedByReference) or
+     (aValue.VType <> vtVariant) then
+    VarRecToVariant(aValue, v^)
+  else
+    SetVariantByValue(aValue.VVariant^, v^);
+  if Has(dvoInternValues) then
+    InternalUniqueValueAt(aIndex);
+end;
+
+procedure TDocVariantData.Include(dvo: TDocVariantOption);
+begin
+  TRttiVarData(self).VType := TRttiVarData(self).VType or
+                              cardinal(1 shl (ord(dvo) + 16));
+end;
+
 procedure TDocVariantData.AddNameValuesToObject(
   const NameValuePairs: array of const);
 var
   n, arg, ndx: PtrInt;
-  tmp: variant;
 begin
   n := length(NameValuePairs);
   if (n = 0) or
      (n and 1 = 1) or
      IsArray then
     exit; // nothing to add
-  include(VOptions, dvoIsObject);
+  Include(dvoIsObject);
   n := n shr 1;
-  if length(VValue) < VCount + n then
+  ndx := n + VCount;
+  if length(VValue) < ndx then
   begin
-    SetLength(VValue, VCount + n);
-    SetLength(VName, VCount + n);
+    SetLength(VValue, ndx);
+    SetLength(VName, ndx);
   end;
+  ndx := VCount;
   for arg := 0 to n - 1 do
   begin
-    ndx := arg + VCount;
     VarRecToUtf8(NameValuePairs[arg * 2], VName[ndx]);
     if Has(dvoInternNames) then
       DocVariantType.InternNames.UniqueText(VName[ndx]);
-    if Has(dvoValueCopiedByReference) then
-      VarRecToVariant(NameValuePairs[arg * 2 + 1], VValue[ndx])
-    else
-    begin
-      VarRecToVariant(NameValuePairs[arg * 2 + 1], tmp);
-      SetVariantByValue(tmp, VValue[ndx]);
-    end;
-    if Has(dvoInternValues) then
-      InternalUniqueValueAt(ndx);
+    InternalSetVarRec(ndx, NameValuePairs[arg * 2 + 1]);
+    inc(ndx);
   end;
   inc(VCount, n);
 end;
@@ -5856,22 +5873,14 @@ procedure TDocVariantData.InitArray(const aItems: array of const;
   aOptions: TDocVariantOptions);
 var
   arg: PtrInt;
-  tmp: variant;
 begin
   Init(aOptions, dvArray);
   if high(aItems) < 0 then
     exit;
   VCount := length(aItems);
   SetLength(VValue, VCount);
-  if Has(dvoValueCopiedByReference) then
-    for arg := 0 to high(aItems) do
-      VarRecToVariant(aItems[arg], VValue[arg])
-  else
-    for arg := 0 to high(aItems) do
-    begin
-      VarRecToVariant(aItems[arg], tmp);
-      InternalSetValue(arg, tmp);
-    end;
+  for arg := 0 to high(aItems) do
+    InternalSetVarRec(arg, aItems[arg]);
 end;
 
 procedure TDocVariantData.InitArray(const aItems: array of const;
@@ -6330,7 +6339,7 @@ begin
           if Json^ = #0 then
             exit;
         until Json^ > ' ';
-        include(VOptions, dvoIsArray);
+        Include(dvoIsArray);
         if Json^ = ']' then
           // void but valid input array
           Json := GotoNextNotSpace(Json + 1)
@@ -6384,7 +6393,7 @@ begin
           if Json^ = #0 then
             exit;
         until Json^ > ' ';
-        include(VOptions, dvoIsObject);
+        Include(dvoIsObject);
         if Json^ = '}' then
           // void but valid input object
           Json := GotoNextNotSpace(Json + 1)
@@ -6401,7 +6410,7 @@ begin
             else if cap < 0 then
             begin // nested or huge objects are evil -> no more guess
               cap := -cap;
-              include(VOptions, dvoJsonParseDoNotGuessCount);
+              Include(dvoJsonParseDoNotGuessCount);
             end;
           end;
           if Has(dvoInternNames) then
@@ -6462,7 +6471,7 @@ begin
       begin
         if IdemPChar(Json + 1, 'ULL') then
         begin
-          include(VOptions, dvoIsObject);
+          Include(dvoIsObject);
           result := GotoNextNotSpace(Json + 4);
         end;
         exit;
@@ -6569,10 +6578,10 @@ begin
     pointer(VValue) := nil;
     aOptions := aOptions - [dvoIsArray, dvoIsObject]; // may not match Source
     if Source^.IsArray then
-      include(aOptions, dvoIsArray)
+      system.include(aOptions, dvoIsArray)
     else if Source^.IsObject then
     begin
-      include(aOptions, dvoIsObject);
+      system.include(aOptions, dvoIsObject);
       SetLength(VName, VCount);
       for ndx := 0 to VCount - 1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
@@ -6636,11 +6645,11 @@ end;
 
 procedure TDocVariantData.Void;
 begin
+  VCount := 0;
   if VName <> nil then
     FastDynArrayClear(@VName, TypeInfo(RawUtf8));
   if VValue <> nil then
     FastDynArrayClear(@VValue, TypeInfo(variant));
-  VCount := 0;
 end;
 
 procedure TDocVariantData.Clear;
@@ -6847,7 +6856,7 @@ begin
     if not IsObject then
     begin
       VType := DocVariantVType; // may not be set yet
-      include(VOptions, dvoIsObject);
+      Include(dvoIsObject);
     end;
   end
   else
@@ -6857,7 +6866,7 @@ begin
     if not IsArray then
     begin
       VType := DocVariantVType; // may not be set yet
-      include(VOptions, dvoIsArray);
+      Include(dvoIsArray);
     end;
   end;
   // grow up memory if needed
