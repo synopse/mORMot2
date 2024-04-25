@@ -945,6 +945,7 @@ type
     procedure CancelAll;
     /// same as CancelAll, and also reset the CustomOptions
     procedure CancelAllAsNew;
+      {$ifdef HASINLINE}inline;{$endif}
     /// same as CancelAll, and also use a new local TTextWriterStackBuffer
     procedure CancelAllWith(var temp: TTextWriterStackBuffer);
 

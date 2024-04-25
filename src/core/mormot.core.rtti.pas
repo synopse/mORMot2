@@ -5956,16 +5956,15 @@ begin
   p := Value^;
   Value^ := nil;
   dec(p);
-  if (p^.refCnt < 0) or
-     ((p^.refCnt > 1) and
-      not DACntDecFree(p^.refCnt)) then
-  begin
-    n := p^.length;
-    Info := Info^.DynArrayItemType(elemsize);
-    DynArrayNew(Value, n, elemsize); // allocate zeroed memory
-    inc(p);
-    CopySeveral(Value^, pointer(p), n, Info, elemsize);
-  end;
+  if (p^.refCnt >= 0) and
+     ((p^.refCnt <= 1) or
+      DACntDecFree(p^.refCnt)) then
+    exit;
+  n := p^.length;
+  Info := Info^.DynArrayItemType(elemsize);
+  DynArrayNew(Value, n, elemsize); // allocate zeroed memory
+  inc(p);
+  CopySeveral(Value^, pointer(p), n, Info, elemsize);
 end;
 
 procedure EnsureUnique(var Value: TIntegerDynArray);
