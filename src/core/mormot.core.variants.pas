@@ -561,12 +561,12 @@ type
   PDocVariantDataDynArray = array of PDocVariantData;
 
   /// define the TDocVariant storage layout
-  // - if it has one or more named properties, it is a dvObject
   // - if it has no name property, it is a dvArray
+  // - if it has one or more named properties, it is a dvObject
   TDocVariantKind = (
     dvUndefined,
-    dvObject,
-    dvArray);
+    dvArray,
+    dvObject);
 
   /// exception class associated to TDocVariant JSON/BSON document
   EDocVariant = class(ESynException)
@@ -994,12 +994,13 @@ type
     // !  assert(variant(Doc).name='John');
     // !end;
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure Init(aOptions: TDocVariantOptions = []); overload;
+    procedure Init(const aOptions: TDocVariantOptions = []); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store a content of some known type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure Init(aOptions: TDocVariantOptions;
+    procedure Init(const aOptions: TDocVariantOptions;
       aKind: TDocVariantKind); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store some document-based content
     // - use the options corresponding to the supplied TDocVariantModel
     // - if you call Init*() methods in a row, ensure you call Clear in-between
@@ -2033,16 +2034,16 @@ type
     // setting the variant properties: it will return dvObject
     // - but is you use AddItem(), values will have no associated names: the
     // document will be a dvArray
-    // - value computed from the dvoArray and dvoObject presence in Options
+    // - is computed from the dvoArray or dvoObject flags presence in Options
     property Kind: TDocVariantKind
       read GetKind;
     /// return the custom variant type identifier, i.e. DocVariantType.VarType
     property VarType: word
       read VType;
     /// number of items stored in this document
-    // - is 0 if Kind=dvUndefined
-    // - is the number of name/value pairs for Kind=dvObject
-    // - is the number of items for Kind=dvArray
+    // - always 0 for Kind=dvUndefined
+    // - the number of name/value pairs for Kind=dvObject (may be 0 if void)
+    // - the number of items for Kind=dvArray (may be 0 if void)
     property Count: integer
       read VCount;
     /// the current capacity of this document
@@ -3510,32 +3511,27 @@ implementation
 // some early methods implementation, defined here for proper inlining
 // PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
 
+const
+  _DVO = (1 shl ord(dvoIsArray) + 1 shl ord(dvoIsObject));
+
 function TDocVariantData.GetKind: TDocVariantKind;
-var
-  c: cardinal;
-begin
-  c := PInteger(@self)^;
-  if (c and (1 shl (ord(dvoIsObject) + 16))) <> 0 then
-    result := dvObject
-  else if (c and (1 shl (ord(dvoIsArray) + 16))) <> 0 then
-    result := dvArray
-  else
-    result := dvUndefined;
+begin // [dvoIsArray]=1 [dvoIsObject]=2 -> dvUndefined=0 dvArray=1 dvObject=2
+  result := TDocVariantKind((TRttiVarData(self).VType shr 16) and _DVO);
 end;
 
 function TDocVariantData.IsObject: boolean;
 begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoIsObject) + 16))) <> 0;
+  result := (TRttiVarData(self).VType and (1 shl (ord(dvoIsObject) + 16))) <> 0;
 end;
 
 function TDocVariantData.IsArray: boolean;
 begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoIsArray) + 16))) <> 0;
+  result := (TRttiVarData(self).VType and (1 shl (ord(dvoIsArray) + 16))) <> 0;
 end;
 
 function TDocVariantData.IsCaseSensitive: boolean;
 begin
-  result := (PInteger(@self)^ and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
+  result := (TRttiVarData(self).VType and (1 shl (ord(dvoNameCaseSensitive) + 16))) <> 0;
 end;
 
 procedure TDocVariantData.ClearFast;
@@ -5681,14 +5677,13 @@ end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
 begin
-  VOptions := (opt - [dvoIsArray, dvoIsObject]) +
-              (VOptions * [dvoIsArray, dvoIsObject]);
+  VOptions := TDocVariantOptions(word(cardinal(word(opt) and not _DVO) +
+                                      cardinal(word(VOptions) and _DVO)));
 end;
 
 procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData);
 begin
-  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType // VType+VOptions
-    and not ((1 shl (ord(dvoIsObject) + 16)) + (1 shl (ord(dvoIsArray) + 16)));
+  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType and not (_DVO shl 16);
   pointer(VName) := nil; // to avoid GPF
   pointer(VValue) := nil;
   VCount := 0;
@@ -5713,29 +5708,20 @@ begin
   result := pointer(VValue);
 end;
 
-procedure TDocVariantData.Init(aOptions: TDocVariantOptions);
+procedure TDocVariantData.Init(const aOptions: TDocVariantOptions);
 begin
-  VType := DocVariantVType;
-  aOptions := aOptions - [dvoIsArray, dvoIsObject];
-  VOptions := aOptions;
+  TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
+    cardinal(word(aOptions) and not _DVO) shl 16;
   pointer(VName) := nil; // to avoid GPF when mapped within a TVarData/variant
   pointer(VValue) := nil;
   VCount := 0;
 end;
 
-procedure TDocVariantData.Init(aOptions: TDocVariantOptions;
+procedure TDocVariantData.Init(const aOptions: TDocVariantOptions;
   aKind: TDocVariantKind);
-var
-  opt: cardinal; // Intel has latency on word-level memory access
-begin
-  aOptions := aOptions - [dvoIsArray, dvoIsObject];
-  if aKind <> dvUndefined then
-    if aKind = dvArray then
-      include(aOptions, dvoIsArray)
-    else
-      include(aOptions, dvoIsObject);
-  opt := word(aOptions);
-  TRttiVarData(self).VType := DocVariantVType + opt shl 16; // VType+VOptions
+begin // dvUndefined=0 dvArray=1 dvObject=2 -> [dvoIsArray]=1 [dvoIsObject]=2
+  TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
+    cardinal((word(aOptions) and not _DVO) + ord(aKind)) shl 16;
   pointer(VName) := nil; // to avoid GPF
   pointer(VValue) := nil;
   VCount := 0;
@@ -6015,7 +6001,7 @@ begin
     result := nil;
     exit;
   end;
-  aDest.Init(aOptions, dvArray);
+  {%H-}aDest.Init(aOptions, dvArray);
   aDest.VCount := aCount;
   SetLength(aDest.VValue, aCount);
   result := pointer(aDest.VValue);
@@ -10188,7 +10174,7 @@ type
     fValueOwned: TVarData;
   public
     constructor CreateOwned;
-    constructor CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
+    constructor CreateAs(opt: PDocVariantOptions; added: TDocVariantOption);
     constructor CreateNew(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
     constructor CreateCopy(const dv: TDocVariantData); reintroduce;
     constructor CreateByRef(dv: PDocVariantData); reintroduce;
@@ -10762,13 +10748,13 @@ begin
   fValue := @fValueOwned;
 end;
 
-constructor TDocAny.CreateAs(opt: PDocVariantOptions; dv: TDocVariantOptions);
+constructor TDocAny.CreateAs(opt: PDocVariantOptions; added: TDocVariantOption);
 begin
   fValue := @fValueOwned;
   if opt = nil then
     opt := @JSON_[DocAnyDefaultModel];
-  TRttiVarData(fValueOwned).VType := DocVariantVType;
-  TDocVariantData(fValueOwned).VOptions := opt^ + dv;
+  TRttiVarData(fValueOwned).VType := DocVariantVType +
+    cardinal(PWord(opt)^ + 1 shl ord(added)) shl 16; // VType+VOptions
 end;
 
 constructor TDocAny.CreateNew(const dv: TDocVariantData; m: TDocVariantModel);
@@ -10886,7 +10872,7 @@ end;
 
 constructor TDocList.Create(options: PDocVariantOptions);
 begin
-  CreateAs(options, [dvoIsArray]);
+  CreateAs(options, dvoIsArray);
 end;
 
 procedure TDocList.FromJson(var context: TJsonParserContext);
@@ -11390,7 +11376,7 @@ end;
 
 constructor TDocDict.Create(options: PDocVariantOptions);
 begin
-  CreateAs(options, [dvoIsObject]);
+  CreateAs(options, dvoIsObject);
 end;
 
 procedure TDocDict.FromJson(var context: TJsonParserContext);
