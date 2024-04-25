@@ -869,19 +869,13 @@ begin
   // parse command line parameters
   with Executable.Command do
   begin
-    ExeDescription := 'TFB Server using mORMot 2';
     if Option(['p', 'pin'], 'pin each server to a CPU') then
       pinServers2Cores := true;
     if Option('nopin', 'disable the CPU pinning') then
       pinServers2Cores := false; // no option would keep the default boolean
     Get(['s', 'servers'], servers, '#count of servers (listener sockets)', servers);
     Get(['t', 'threads'], threads, 'per-server thread pool #size', threads);
-    if Option(['?', 'help'], 'display this message') then
-    begin
-      ConsoleWrite(FullDescription);
-      exit;
-    end;
-    if ConsoleWriteUnknown then
+    if ConsoleHelpFailed('TFB Server using mORMot 2') then
       exit;
   end;
 
