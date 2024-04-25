@@ -2208,7 +2208,7 @@ function DeleteRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
 
 /// delete a RawUtf8 item in a dynamic array of RawUtf8;
 function DeleteRawUtf8(var Values: TRawUtf8DynArray;
-  Index: integer): boolean; overload;
+  Index: PtrInt): boolean; overload;
 
 /// sort a dynamic array of RawUtf8 items
 // - if CoValues is set, the integer items are also synchronized
@@ -9240,18 +9240,23 @@ begin
   QS.Sort(pointer(Values), L, R);
 end;
 
-function DeleteRawUtf8(var Values: TRawUtf8DynArray; Index: integer): boolean;
+procedure MakeUniqueArray(var Values: TRawUtf8DynArray);
+begin
+  Values := copy(Values); // sub-proc to avoid try..finally
+end;
+
+function DeleteRawUtf8(var Values: TRawUtf8DynArray; Index: PtrInt): boolean;
 var
-  n: integer;
+  n: PtrInt;
 begin
   n := length(Values);
-  if cardinal(Index) >= cardinal(n) then
+  if PtrUInt(Index) >= PtrUInt(n) then
     result := false
   else
   begin
     dec(n);
     if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
-      Values := copy(Values); // make unique
+      MakeUniqueArray(Values);
     Values[Index] := ''; // avoid GPF
     if n > Index then
     begin
@@ -9277,7 +9282,7 @@ begin
     dec(n);
     ValuesCount := n;
     if PDACnt(PAnsiChar(pointer(Values)) - _DACNT)^ > 1 then
-      Values := copy(Values); // make unique
+      MakeUniqueArray(Values);
     Values[Index] := ''; // avoid GPF
     dec(n, Index);
     if n > 0 then
