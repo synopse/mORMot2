@@ -10178,19 +10178,18 @@ type
     fValueOwned: TVarData;
   public
     constructor CreateOwned;
-    constructor CreateAs(opt: PDocVariantOptions; added: TDocVariantOption);
     constructor CreateNew(const dv: TDocVariantData; m: TDocVariantModel); reintroduce;
     constructor CreateCopy(const dv: TDocVariantData); reintroduce;
     constructor CreateByRef(dv: PDocVariantData); reintroduce;
     destructor Destroy; override;
+    procedure OwnedAs(opt: PDocVariantOptions; added: TDocVariantOption);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure Clear;
     function Kind: TDocVariantKind;
     function Model: TDocVariantModel;
     function Len: integer;
     procedure ToJson(W: TJsonWriter; Options: TTextWriterWriteObjectOptions); override;
     function Value: PDocVariantData;
-    function ValueIsOwned: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     function AsList: IDocList;
     function AsDict: IDocDict;
     function AsVariant: variant;
@@ -10551,9 +10550,12 @@ end;
 { IDocList factories functions }
 
 function DocList(model: TDocVariantModel): IDocList;
+var
+  v: TDocList;
 begin
-  result := TDocList.CreateOwned;
-  result.Value^.Init(model, dvArray);
+  v := TDocList.CreateOwned;
+  TDocVariantData(v.fValueOwned).Init(model, dvArray);
+  result := v;
 end;
 
 function DocList(const json: RawUtf8; model: TDocVariantModel): IDocList;
@@ -10571,19 +10573,23 @@ begin
 end;
 
 function DocList(const dv: TDocVariantData): IDocList;
+var
+  v: TDocList;
 begin
+  v := nil;
   if dv.IsArray then
-    result := TDocList.CreateByRef(@dv)
-  else
-    result := nil;
+    v := TDocList.CreateByRef(@dv);
+  result := v;
 end;
 
 function DocListCopy(const dv: TDocVariantData): IDocList;
+var
+  v: TDocList;
 begin
+  v := nil;
   if dv.IsArray then
-    result := TDocList.CreateCopy(dv)
-  else
-    result := nil;
+    v := TDocList.CreateCopy(dv);
+  result := v;
 end;
 
 function DocListCopy(const v: variant): IDocList;
@@ -10592,11 +10598,13 @@ begin
 end;
 
 function DocListCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocList;
+var
+  v: TDocList;
 begin
+  v := nil;
   if dv.IsArray then
-    result := TDocList.CreateNew(dv, model)
-  else
-    result := nil;
+    v := TDocList.CreateNew(dv, model);
+  result := v;
 end;
 
 function DocList(const values: array of const; model: TDocVariantModel): IDocList;
@@ -10608,11 +10616,12 @@ end;
 function DocListFrom(const v: variant): IDocList;
 var
   dv: PDocVariantData;
+  d: TDocList;
 begin
+  d := nil;
   if _SafeArray(variant(v), dv) then
-    result := TDocList.CreateByRef(dv)
-  else
-    result := nil;
+    d := TDocList.CreateByRef(dv);
+  result := d;
 end;
 
 function DocListFrom(const dictarray: IDocDictDynArray): IDocList;
@@ -10627,9 +10636,12 @@ end;
 { IDocDict factories functions }
 
 function DocDict(model: TDocVariantModel): IDocDict;
+var
+  v: TDocDict;
 begin
-  result := TDocDict.CreateOwned;
-  result.Value^.Init(model, dvObject);
+  v := TDocDict.CreateOwned;
+  TDocVariantData(v.fValueOwned).Init(model, dvObject);
+  result := v;
 end;
 
 function DocDict(const json: RawUtf8; model: TDocVariantModel): IDocDict;
@@ -10682,11 +10694,12 @@ end;
 function DocDictFrom(const v: variant): IDocDict;
 var
   dv: PDocVariantData;
+  d: TDocDict;
 begin
+  d := nil;
   if _SafeObject(variant(v), dv) then
-    result := TDocDict.CreateByRef(dv)
-  else
-    result := nil;
+    d := TDocDict.CreateByRef(dv);
+  result := d;
 end;
 
 function DocDict(const dv: TDocVariantData): IDocDict;
@@ -10698,11 +10711,13 @@ begin
 end;
 
 function DocDictCopy(const dv: TDocVariantData): IDocDict;
+var
+  d: TDocDict;
 begin
+  d := nil;
   if dv.IsObject then
-    result := TDocDict.CreateCopy(dv)
-  else
-    result := nil;
+    d := TDocDict.CreateCopy(dv);
+  result := d;
 end;
 
 function DocDictCopy(const v: variant): IDocDict;
@@ -10711,11 +10726,13 @@ begin
 end;
 
 function DocDictCopy(const dv: TDocVariantData; model: TDocVariantModel): IDocDict;
+var
+  d: TDocDict;
 begin
+  d := nil;
   if dv.IsObject then
-    result := TDocDict.CreateNew(dv, model)
-  else
-    result := nil;
+    d := TDocDict.CreateNew(dv, model);
+  result := d;
 end;
 
 function DocDict(const keyvalues: array of const; model: TDocVariantModel): IDocDict;
@@ -10752,7 +10769,7 @@ begin
   fValue := @fValueOwned;
 end;
 
-constructor TDocAny.CreateAs(opt: PDocVariantOptions; added: TDocVariantOption);
+procedure TDocAny.OwnedAs(opt: PDocVariantOptions; added: TDocVariantOption);
 begin
   fValue := @fValueOwned;
   if opt = nil then
@@ -10765,15 +10782,17 @@ constructor TDocAny.CreateNew(const dv: TDocVariantData; m: TDocVariantModel);
 begin
   fValue := @fValueOwned;
   TDocVariantData(fValueOwned).Init(m, dv.Kind); // new arrays, but byref values
-  TDocVariantData(fValueOwned).VName  := copy(dv.VName, 0, dv.Count); 
-  TDocVariantData(fValueOwned).VValue := copy(dv.VValue, 0, dv.Count);
+  if dv.Count = 0 then
+    exit;
+  DynArrayCopy(@fValue^.VName, @dv.VName, TypeInfo(TRawUtf8DynArray), @dv.Count);
+  DynArrayCopy(@fValue^.VValue, @dv.VValue, TypeInfo(TVariantDynArray), @dv.Count);
   TDocVariantData(fValueOwned).VCount := dv.Count;
 end;
 
 constructor TDocAny.CreateCopy(const dv: TDocVariantData);
 begin
   fValue := @fValueOwned;
-  fValue^.InitFrom(dv, true, true); // new arrays, but byref values
+  TDocVariantData(fValueOwned).InitFrom(dv, true, true); // new arrays, but byref values
 end;
 
 constructor TDocAny.CreateByRef(dv: PDocVariantData);
@@ -10784,8 +10803,8 @@ end;
 destructor TDocAny.Destroy;
 begin
   inherited Destroy;
-  if ValueIsOwned then
-    fValue^.Void;
+  if fValue = @fValueOwned then
+    TDocVariantData(fValueOwned).Void;
 end;
 
 function TDocAny.Kind: TDocVariantKind;
@@ -10812,11 +10831,6 @@ end;
 function TDocAny.Value: PDocVariantData;
 begin
   result := fValue;
-end;
-
-function TDocAny.ValueIsOwned: boolean;
-begin
-  result := fValue = @fValueOwned;
 end;
 
 procedure TDocAny.Clear;
@@ -10859,7 +10873,7 @@ begin
   end;
   opt := Context.CustomVariant;
   if opt = nil then
-    opt := @Doc^.Options;
+    opt := @Doc^.VOptions;
   ctx.Json := Doc^.InitJsonInPlace(ctx.Json, opt^, @ctx.EndOfObject);
   Context.Valid := ctx.Json <> nil;
 end;
@@ -10876,7 +10890,7 @@ end;
 
 constructor TDocList.Create(options: PDocVariantOptions);
 begin
-  CreateAs(options, dvoIsArray);
+  OwnedAs(options, dvoIsArray);
 end;
 
 procedure TDocList.FromJson(var context: TJsonParserContext);
@@ -10910,7 +10924,7 @@ begin
   v := ValueAt(position);
   SetVariantByValue(value, v^); // may convert to RawUtf8/varString
   if (PVarData(v)^.VType = varString) and
-     (dvoInternValues in fValue^.VOptions) then
+     fValue^.Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
 
@@ -10925,7 +10939,7 @@ var
 begin
   v := ValueAt(position);
   RawUtf8ToVariant(value, v^);
-  if dvoInternValues in fValue^.VOptions then
+  if fValue^.Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
 
@@ -10940,7 +10954,7 @@ var
 begin
   v := ValueAt(position);
   StringToVariant(value, v^); // convert and store as RawUtf8/varString
-  if dvoInternValues in fValue^.VOptions then
+  if fValue^.Has(dvoInternValues) then
     InternalUniqueValue(v);
 end;
 
@@ -11069,9 +11083,9 @@ function TDocList.Copy(start, stop: integer): IDocList;
 begin
   result := TDocList.CreateOwned;
   if DocListRangeVoid(start, stop, fValue^.Count) then
-    result.Value^.Init(fValue^.Options, dvArray)
+    result.Value^.Init(fValue^.VOptions, dvArray)
   else
-    result.Value^.InitArrayFrom(fValue^, fValue^.Options, start, stop);
+    result.Value^.InitArrayFrom(fValue^, fValue^.VOptions, start, stop);
 end;
 
 function TDocList.Compare(const another: IDocList; caseinsensitive: boolean): integer;
@@ -11380,7 +11394,7 @@ end;
 
 constructor TDocDict.Create(options: PDocVariantOptions);
 begin
-  CreateAs(options, dvoIsObject);
+  OwnedAs(options, dvoIsObject);
 end;
 
 procedure TDocDict.FromJson(var context: TJsonParserContext);
@@ -11421,7 +11435,7 @@ end;
 function TDocDict.GetExistingValueAt(const key, method: RawUtf8): PVariant;
 begin
   if not GetValueAt(key, result) then
-    if dvoReturnNullForUnknownProperty in fValue^.VOptions then
+    if fValue^.Has(dvoReturnNullForUnknownProperty) then
       result := @DocVariantDataFake
     else
       raise EDocDict.CreateUtf8('%[''%''] key not found', [method, key]);
