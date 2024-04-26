@@ -12178,35 +12178,42 @@ end;
 
 procedure crc32tabInit(polynom: cardinal; var tab: TCrc32tab);
 var
-  i, n: integer;
+  i, n: PtrUInt;
   crc: cardinal;
-begin
-  for i := 0 to 255 do
-  begin
-    crc := i;
-    for n := 1 to 8 do
-    begin
-      crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-      tab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt
-    end;
-  end;
-  for i := 0 to 255 do
-  begin
+begin // 256 bytes of code to generate 2 x 8KB lookup tables
+  i := 0;
+  repeat // unrolled branchless root lookup table generation
+    crc := cardinal(-(i and 1) and polynom) xor (i shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    tab[0, i] := crc;
+    if i = 255 then
+      break;
+    inc(i);
+  until false;
+  i := 0;
+  repeat // expand the root lookup table for by-8 fast computation
     crc := tab[0, i];
     for n := 1 to high(tab) do
     begin
       crc := (crc shr 8) xor tab[0, ToByte(crc)];
       tab[n, i] := crc;
     end;
-  end;
+    inc(i);
+  until i > 256;
 end;
 
 procedure InitializeUnit;
 begin
   assert(ord(high(TSynLogLevel)) = 31);
   // initialize internal constants
-  crc32tabInit($82f63b78, crc32ctab); // crc32c() reversed polynom
-  crc32tabInit($edb88320, crc32tab);  // crc32() = zlib's reversed polynom
+  crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
+  crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral     := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;

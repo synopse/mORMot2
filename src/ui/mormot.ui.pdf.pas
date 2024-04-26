@@ -10247,7 +10247,7 @@ type
     end;
   end;
 
-  /// internal data used during drawing
+  /// internal state machine used during EMF drawing
   // - contain the EMF enumeration engine state parameters
   TPdfEnum = class
   private
