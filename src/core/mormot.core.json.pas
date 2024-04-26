@@ -1568,6 +1568,7 @@ type
     procedure AddShort(PS: PShortString);
     /// some basic function to append an Int64 JSON value according to Options
     procedure Add64(Value: PInt64; UnSigned: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
     /// some basic function to append a TDateTime JSON value according to Options
     procedure AddDateTime(Value: PDateTime; WithMS: boolean);
     /// some basic function to append a "name":boolean JSON pair value
@@ -5099,19 +5100,49 @@ begin
 end;
 
 
+procedure _JS_Null(Data: PBoolean; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
+begin
+  W := Ctxt.W;
+  W.AddNull;
+end;
+
 procedure _JS_Boolean(Data: PBoolean; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add(Data^);
 end;
 
 procedure _JS_Byte(Data: PByte; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
 begin
-  Ctxt.W.AddU(Data^);
+  W := Ctxt.W;
+  W.AddU(Data^);
+end;
+
+procedure _JS_SmallInt(Data: PSmallInt; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
+begin
+  W := Ctxt.W;
+  W.Add(Data^);
+end;
+
+procedure _JS_ShortInt(Data: PShortInt; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
+begin
+  W := Ctxt.W;
+  W.Add(Data^);
 end;
 
 procedure _JS_Cardinal(Data: PCardinal; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
 begin
-  Ctxt.W.AddU(Data^);
+  W := Ctxt.W;
+  W.AddU(Data^);
 end;
 
 procedure _JS_Currency(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -5135,8 +5166,11 @@ begin
 end;
 
 procedure _JS_Integer(Data: PInteger; const Ctxt: TJsonSaveContext);
+var
+  W: TJsonWriter;
 begin
-  Ctxt.W.Add(Data^);
+  W := Ctxt.W;
+  W.Add(Data^);
 end;
 
 procedure _JS_QWord(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -5275,11 +5309,6 @@ begin
     Ctxt.W.AddUnixMSTime(Data, {withms=}true, '"')
   else
     Ctxt.Add64(Data, true);
-end;
-
-procedure _JS_Variant(Data: PVariant; const Ctxt: TJsonSaveContext);
-begin
-  Ctxt.W.AddVariant(Data^);
 end;
 
 procedure _JS_WinAnsi(Data: PWinAnsiString; const Ctxt: TJsonSaveContext);
@@ -5588,10 +5617,19 @@ begin
   c.W.BlockEnd(']', c.Options);
 end;
 
+procedure _JS_Variant(Data: PVarData; const Ctxt: TJsonSaveContext); forward;
+
+/// use pointer to allow any kind of Data^ type in above functions
+// - typecast to TRttiJsonSave for proper function call
 const
-  /// use pointer to allow any kind of Data^ type in above functions
-  // - typecast to TRttiJsonSave for proper function call
-  // - rkRecord and rkClass are handled in TRttiJson.SetParserType
+  VARIANT_JSONSAVE: array[varEmpty .. varOleUInt] of pointer = (
+    {0}  @_JS_Null, @_JS_Null, @_JS_SmallInt, @_JS_Integer, @_JS_Single,
+    {5}  @_JS_Double, @_JS_Currency, @_JS_DateTime, nil, nil,
+    {10} nil, @_JS_Boolean, nil, nil, nil,
+    {15} nil, @_JS_ShortInt, @_JS_Byte, @_JS_Word, @_JS_Cardinal,
+    {20} @_JS_Int64, @_JS_QWord, @_JS_Integer, @_JS_Cardinal);
+
+  // rkRecord and rkClass are handled in TRttiJson.SetParserType
   PT_JSONSAVE: array[TRttiParserType] of pointer = (
     nil, @_JS_Array, @_JS_Boolean, @_JS_Byte, @_JS_Cardinal, @_JS_Currency,
     @_JS_Double, @_JS_Extended, @_JS_Int64, @_JS_Integer, @_JS_QWord,
@@ -5603,10 +5641,38 @@ const
     @_JS_Enumeration, @_JS_Set, nil, @_JS_DynArray, @_JS_Interface,
     @_JS_PUtf8Char, nil);
 
-  /// use pointer to allow any complex kind of Data^ type in above functions
-  // - typecast to TRttiJsonSave for proper function call
   PTC_JSONSAVE: array[TRttiParserComplexType] of pointer = (
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
+
+procedure _JS_Variant(Data: PVarData; const Ctxt: TJsonSaveContext);
+var
+  vt: cardinal;
+  cv: TSynInvokeableVariantType;
+begin
+  repeat
+    vt := Data^.VType;
+    if vt <> varVariantByRef then
+      break;
+    Data := Data^.VPointer;
+  until false;
+  if vt <= high(VARIANT_JSONSAVE) then
+    TRttiJsonSave(VARIANT_JSONSAVE[vt])(@Data^.VAny, Ctxt)
+  else
+    case vt of // most common strings
+      varString:
+        Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
+      {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
+        _JS_Unicode(@Data^.VAny, Ctxt);
+    else
+      begin
+        cv := FindSynVariantType(vt); // our custom types
+        if cv <> nil then
+          cv.ToJson(Ctxt.W, Data)
+        else
+          Ctxt.W.AddVariant(PVariant(Data)^, twJsonEscape, Ctxt.Options);
+      end;
+    end;
+end;
 
 procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
@@ -6434,64 +6500,53 @@ end;
 procedure TJsonWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
+  ctxt: TJsonSaveContext;
   cv: TSynInvokeableVariantType;
-  v: TVarData absolute Value;
+  v: PVarData;
   vt: cardinal;
+  save: TRttiJsonSave;
 begin
-  vt := v.VType;
+  v := @Value;
+  repeat
+    vt := v^.VType;
+    if vt <> varVariantByRef then
+      break;
+    v := v^.VPointer;
+  until false;
+  if vt <= high(VARIANT_JSONSAVE) then
+  begin
+    ctxt.W := self;
+    ctxt.Options := WriteOptions; // other fields are just ignored
+    save := VARIANT_JSONSAVE[vt];
+    if Assigned(save) then
+    begin
+      save(@v^.VAny, ctxt);
+      exit;
+    end;
+  end;
+  if vt = varString then
+    AddText(RawByteString(v^.VString), Escape)
+  else
   case vt of
-    varEmpty,
-    varNull:
-      AddNull;
-    varSmallint:
-      Add(v.VSmallint);
-    varShortInt:
-      Add(v.VShortInt);
-    varByte:
-      AddU(v.VByte);
-    varWord:
-      AddU(v.VWord);
-    varLongWord:
-      AddU(v.VLongWord);
-    varInteger:
-      Add(v.VInteger);
-    varInt64:
-      Add(v.VInt64);
-    varWord64:
-      AddQ(v.VInt64);
-    varSingle:
-      AddSingle(v.VSingle);
-    varDouble:
-      AddDouble(v.VDouble);
-    varDate:
-      AddDateTime(@v.VDate, 'T', '"');
-    varCurrency:
-      AddCurr64(@v.VInt64);
-    varBoolean:
-      Add(v.VBoolean); // 'true'/'false'
-    varVariant:
-      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions);
-    varString:
-      AddText(RawByteString(v.VString), Escape);
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
-      AddTextW(v.VAny, Escape);
+      AddTextW(v^.VAny, Escape);
     varAny:
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
       // from TRttiCustomProp.GetValueDirect/GetValueGetter
-      AddRttiVarData(TRttiVarData(V), Escape, WriteOptions);
+      AddRttiVarData(PRttiVarData(v)^, Escape, WriteOptions);
     varVariantByRef:
-      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions);
+      AddVariant(PVariant(v^.VPointer)^, Escape, WriteOptions);
     varStringByRef:
-      AddText(PRawByteString(v.VAny)^, Escape);
+      AddText(PRawByteString(v^.VAny)^, Escape);
     {$ifdef HASVARUSTRING} varUStringByRef, {$endif}
     varOleStrByRef:
-      AddTextW(PPointer(v.VAny)^, Escape)
+      AddTextW(PPointer(v^.VAny)^, Escape)
   else
     begin
       cv := FindSynVariantType(vt); // our custom types
       if cv <> nil then
-        cv.ToJson(self, @v)
-      else if not CustomVariantToJson(self, @v, Escape) then // other custom
+        cv.ToJson(self, v)
+      else if not CustomVariantToJson(self, v, Escape) then // other custom
         raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
     end;
   end;
