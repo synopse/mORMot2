@@ -31,7 +31,8 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache = 512KB, assuming a low 1MB cache
-  // - today CPUs could have 144MB of cache (!) so we prefer a fixed value
+  // - today CPUs could have 144MB of (3D) cache (!) so we favor a fixed value
+  // and rely on the CPU hardware cache prefetch when accessing the data
   NONTEMPORALSIZE = 512 * 1024;
 
   {$ifdef NO_ERMS}
@@ -629,20 +630,16 @@ end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifdef SYSVABI}
-        mov     rcx, rdi
-        mov     rdx, rsi
-        {$endif SYSVABI}
-        mov     r10, rdx
+        mov     r10, val
         sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
-        xor     rdx, r10
-        sub     rdx, r10        // rdx=abs(val)
-        mov     rax, rdx
-        cmp     rdx, 10
+        xor     val, r10
+        sub     val, r10        // val=abs(val)
+        mov     rax, val
+        cmp     val, 10
         jb      @1              // direct process of common val<10
         lea     r8, [rip + TwoDigitLookup]
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
-@s:     lea     rcx, [rcx - 2]
+@s:     lea     P, [P - 2]
         cmp     rax, 100
         jb      @2
         lea     r9, [rax * 2]
@@ -653,35 +650,29 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         mov     rax, rdx
         imul    rdx, -200
         lea     rdx, [rdx + r8]
-        movzx   rdx, word ptr [rdx + r9]
-        mov     word ptr [rcx], dx
+        movzx   edx, word ptr [rdx + r9]
+        mov     word ptr [P], dx
         cmp     rax, 10
         jae     @s
 @1:     or      al, '0'
-        mov     byte ptr [rcx - 2], '-'
-        mov     byte ptr [rcx - 1], al
-        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+        mov     byte ptr [P - 2], '-'
+        mov     byte ptr [P - 1], al
+        lea     rax, [P + r10 - 1]       // includes '-' if val<0
         ret
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @2:     movzx   eax, word ptr [r8 + rax * 2]
-        mov     byte ptr [rcx - 1], '-'
-        mov     word ptr [rcx], ax
-        lea     rax, [rcx + r10]           // includes '-' if val<0
+        mov     byte ptr [P - 1], '-'
+        mov     word ptr [P], ax
+        lea     rax, [P + r10]           // includes '-' if val<0
 end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifdef SYSVABI}
-        mov     rcx, rdi
-        mov     rdx, rsi
-        mov     rax, rsi
-        cmp     rsi, 10
-        {$else}
-        mov     rax, rdx
-        cmp     rdx, 10
-        {$endif SYSVABI}
+        mov     rax, val
+        cmp     val, 10
         jb      @1  // direct process of common val<10
         lea     r8, [rip + TwoDigitLookup]
-@s:     lea     rcx, [rcx - 2]
+@s:     lea     P, [P - 2]
         cmp     rax, 100
         jb      @2
         lea     r9, [rax * 2]
@@ -693,17 +684,17 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         imul    rdx, -200
         add     rdx, r8
         movzx   rdx, word ptr [rdx + r9]
-        mov     word ptr [rcx], dx
+        mov     word ptr [P], dx
         cmp     rax, 10
         jae     @s
-@1:     sub     rcx, 1
+@1:     sub     P, 1
         or      al, '0'
-        mov     byte ptr [rcx], al
-@0:     mov     rax, rcx
+        mov     byte ptr [P], al
+@0:     mov     rax, P
         ret
 @2:     movzx   eax, word ptr [r8 + rax * 2]
-        mov     word ptr [rcx], ax
-        mov     rax, rcx
+        mov     word ptr [P], ax
+        mov     rax, P
 end;
 
 {$endif ASMX64}
