@@ -3515,7 +3515,7 @@ procedure InitializeVariantsJson;
 implementation
 
 // some early methods implementation, defined here for proper inlining
-// PInteger() is faster than (dvoXXX in VOptions) especially on Intel CPUs
+// 32-bit PInteger() is faster than 16-bit (dvoXXX in VOptions) on Intel CPUs
 
 const
   _DVO = 1 shl ord(dvoIsArray) + 1 shl ord(dvoIsObject);
@@ -4992,72 +4992,84 @@ var
   forced: TTextWriterOptions;
   nam: PPUtf8Char;
   val: PVariant;
+  vt: cardinal;
   n: integer;
   checkExtendedPropName: boolean;
 begin
-  if cardinal(Value.VType) = varVariantByRef then // inlined Safe()^
-    Value := Value.VPointer;
-  if cardinal(Value.VType) <> DocVariantVType then
-    W.AddNull
-  else
+  repeat
+    vt := Value^.VType;
+    if vt <> varVariantByRef then
+      break;
+    Value := Value^.VPointer;
+  until false;
+  if vt <> DocVariantVType then
   begin
-    forced := [];
-    if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
-    begin
-      if PDocVariantData(Value)^.Has(dvoSerializeAsExtendedJson) then
-        forced := [twoForceJsonExtended]
-      else
-        forced := [twoForceJsonStandard];
-      W.CustomOptions := W.CustomOptions + forced;
-    end;
-    n := PDocVariantData(Value)^.VCount;
-    val := pointer(PDocVariantData(Value)^.VValue);
-    if PDocVariantData(Value)^.IsObject then
-    begin
-      checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
-      W.Add('{');
-      nam := pointer(PDocVariantData(Value)^.VName);
-      if n <> 0 then
-        repeat
-          if checkExtendedPropName and
-             JsonPropNameValid(nam^) then
-            W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
-          else
-          begin
-            W.Add('"');
-            W.AddJsonEscape(nam^);
-            W.Add('"');
-          end;
-          W.Add(':');
-          W.AddVariant(val^, twJsonEscape);
-          dec(n);
-          if n = 0 then
-            break;
-          W.AddComma;
-          inc(nam);
-          inc(val);
-        until false;
-      W.Add('}');
-    end
-    else if PDocVariantData(Value)^.IsArray then
-    begin
-      W.Add('[');
-      if n <> 0 then
-        repeat
-          W.AddVariant(val^, twJsonEscape);
-          dec(n);
-          if n = 0 then
-            break;
-          W.AddComma;
-          inc(val);
-        until false;
-      W.Add(']');
-    end
-    else
-      W.AddNull;
-    if forced <> [] then
-      W.CustomOptions := W.CustomOptions - forced;
+    W.AddNull;
+    exit;
   end;
+  forced := [];
+  if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
+  begin
+    if PDocVariantData(Value)^.Has(dvoSerializeAsExtendedJson) then
+      forced := [twoForceJsonExtended]
+    else
+      forced := [twoForceJsonStandard];
+    W.CustomOptions := W.CustomOptions + forced;
+  end;
+  n := PDocVariantData(Value)^.VCount;
+  val := pointer(PDocVariantData(Value)^.VValue);
+  if PDocVariantData(Value)^.IsObject then
+  begin
+    checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
+    W.Add('{');
+    nam := pointer(PDocVariantData(Value)^.VName);
+    if n <> 0 then
+      repeat
+        if checkExtendedPropName and
+           JsonPropNameValid(nam^) then
+          W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
+        else
+        begin
+          W.B[1] := '"';
+          inc(W.B);
+          W.AddJsonEscape(nam^);
+          W.B[1] := '"';
+          inc(W.B);
+        end;
+        W.B[1] := ':';
+        inc(W.B);
+        W.AddVariant(val^, twJsonEscape);
+        dec(n);
+        if n = 0 then
+          break;
+        W.B[1] := ',';
+        inc(W.B);
+        inc(nam);
+        inc(val);
+      until false;
+    W.B[1] := '}';
+    inc(W.B);
+  end
+  else if PDocVariantData(Value)^.IsArray then
+  begin
+    W.Add('[');
+    if n <> 0 then
+      repeat
+        W.AddVariant(val^, twJsonEscape);
+        dec(n);
+        if n = 0 then
+          break;
+        W.B[1] := ',';
+        inc(W.B);
+        inc(val);
+      until false;
+    W.B[1] := ']';
+    inc(W.B);
+  end
+  else
+    W.AddNull;
+  if forced <> [] then
+    W.CustomOptions := W.CustomOptions - forced;
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
