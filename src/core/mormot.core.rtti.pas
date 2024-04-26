@@ -3318,7 +3318,8 @@ begin
         AddShort(V^);
       if quotedValues then
         Add('"');
-      AddComma;
+      B[1] := ',';
+      inc(B);
       inc(PByte(V), length(V^) + 1);
     end;
     CancelLastComma;

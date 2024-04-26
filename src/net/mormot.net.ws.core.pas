@@ -1632,15 +1632,19 @@ begin
   frame.tix := 0;
   WR := TJsonWriter.CreateOwnedStream(tmp);
   try
-    WR.Add('{');
+    WR.B[1] := '{';
+    inc(WR.B);
     WR.AddFieldName(Head);
-    WR.Add('[');
+    WR.B[1] := '[';
+    inc(WR.B);
     for i := 0 to High(Values) do
     begin
       WR.AddJsonEscape(Values[i]);
-      WR.AddComma;
+      WR.B[1] := ',';
+      inc(WR.B);
     end;
-    WR.Add('"');
+    WR.B[1] := '"';
+    inc(WR.B);
     WR.AddString(ContentType);
     WR.Add('"', ',');
     if Content = '' then

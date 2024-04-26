@@ -2748,7 +2748,8 @@ begin
   else
   begin
     WR.AddString(Value);
-    WR.AddComma;
+    WR.B[1] := ',';
+    inc(WR.B);
   end;
 end;
 
@@ -2770,7 +2771,8 @@ begin
     imvRecord:
       begin
         WR.AddVoidRecordJson(ArgRtti.Info);
-        WR.AddComma;
+        WR.B[1] := ',';
+        inc(WR.B);
       end;
     imvVariant:
       WR.AddShorter('null,');
@@ -3438,7 +3440,8 @@ begin
         else
         begin
           a^.AddJson(W, V, opt);
-          W.AddComma;
+          W.B[1] := ',';
+          inc(W.B);
         end;
       end;
       inc(a);
@@ -5805,7 +5808,8 @@ begin
         else
         begin
           W.AddVariant(fOutput[ndx], twJsonEscape);
-          W.AddComma;
+          W.B[1] := ',';
+          inc(W.B);
         end;
         inc(ndx);
         if cardinal(ndx) >= cardinal(fMethod^.ArgsOutputValuesCount) then
@@ -5813,7 +5817,8 @@ begin
       end;
     end;
     W.CancelLastComma;
-    W.Add(']');
+    W.B[1] := ']';
+    inc(W.B);
     W.SetText(fResult);
   finally
     W.Free;
@@ -7615,7 +7620,8 @@ begin
           if ResAsJsonObject then
             Res.AddPropName(arg^.ParamName^);
           arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
-          Res.AddComma;
+          Res.B[1] := ',';
+          inc(Res.B);
         end;
       end;
       Res.CancelLastComma;

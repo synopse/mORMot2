@@ -947,7 +947,8 @@ begin
   end;
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{');
+    W.B[1] := '{';
+    inc(W.B);
     for i := 0 to doc.Count - 1 do
     begin
       name := fStoredClassMapping^.ExternalToInternalOrNull(doc.Names[i]);
@@ -956,10 +957,12 @@ begin
           [self, doc.Names[i], fStoredClass]);
       W.AddProp(pointer(name), Length(name));
       W.AddVariant(doc.Values[i], twJsonEscape);
-      W.AddComma;
+      W.B[1] := ',';
+      inc(W.B);
     end;
     W.CancelLastComma;
-    W.Add('}');
+    W.B[1] := '}';
+    inc(W.B);
     W.SetText(result);
   finally
     W.Free;
@@ -1166,7 +1169,8 @@ begin
           W.AddNull
         else
           itemfound^.AddMongoJson(W, modNoMongo);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
       W.CancelLastComma;
       if W.Expand then

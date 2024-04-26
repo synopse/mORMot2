@@ -4392,9 +4392,11 @@ begin
          not (ve^ in [',', '}']) then
         exit;
       wk.AddNoJsonEscape(kb, ke - kb);
-      wk.AddComma;
+      wk.B[1] := ',';
+      inc(wk.B);
       wv.AddNoJsonEscape(vb, ve - vb);
-      wv.AddComma;
+      wv.B[1] := ',';
+      inc(wv.B);
       kb := ve + 1;
       inc(n);
     until ve^ = '}';
@@ -4664,9 +4666,11 @@ begin
     with TJsonWriter.CreateOwnedStream(temp) do
     try
       AddString(aPrefix);
-      Add('"');
+      B[1] := '"';
+      inc(B);
       AddJsonEscape(P, PLen);
-      Add('"');
+      B[1] := '"';
+      inc(B);
       AddString(aSuffix);
       SetText(result);
       exit;
@@ -5000,7 +5004,8 @@ end;
 // some methods defined here for proper inlining
 procedure TJsonWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
-  AddComma;
+  B[1] := ',';
+  inc(B);
   if woHumanReadable in Options then
     AddCRAndIndent;
 end;
@@ -5024,7 +5029,8 @@ begin
     dec(fHumanReadableLevel);
     AddCRAndIndent;
   end;
-  Add(Stopper);
+  B[1] := Stopper;
+  inc(B);
 end;
 
 
@@ -5048,7 +5054,8 @@ begin
     W.AddTrimLeftLowerCase(PS)
   else
     W.AddShort(PS^);
-  W.Add('"');
+  W.B[1] := '"';
+  inc(W.B);
 end;
 
 procedure TJsonSaveContext.Add64(Value: PInt64; UnSigned: boolean);
@@ -5075,12 +5082,13 @@ begin
   d := unaligned(Value^);
   W.AddDateTime(d, WithMS);
   if woDateTimeWithZSuffix in Options then
-    if not (twoDateTimeWithZ in W.CustomOptions) then // if not alreayd done
+    if not (twoDateTimeWithZ in W.CustomOptions) then // if not already done
       if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
         W.AddShort('T00:00:00Z') // the same pattern for date and dateTime
       else
         W.Add('Z');
-  W.Add('"');
+  W.B[1] := '"';
+  inc(W.B);
 end;
 
 procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
@@ -5146,7 +5154,8 @@ begin
   begin
     Ctxt.W.Add('"'); // no magic trailer as with mORMot 1
     Ctxt.W.WrBase64(pointer(Data^), length(Data^), {withmagic=}false);
-    Ctxt.W.Add('"');
+    Ctxt.W.B[1] := '"';
+    inc(Ctxt.W.B);
   end;
 end;
 
@@ -5169,7 +5178,8 @@ begin
     else
       Ctxt.W.AddAnyAnsiBuffer(Data, PStrLen(Data - _STRLEN)^, twJsonEscape, cp);
   end;
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_Ansi(Data: PPAnsiChar; const Ctxt: TJsonSaveContext);
@@ -5180,7 +5190,8 @@ begin
       // will handle any AnsiString, WinAnsiString or other CP
       Ctxt.W.AddAnyAnsiBuffer(Data^, length, twJsonEscape,
        {$ifdef HASCODEPAGE} codePage {$else} Ctxt.Info.Cache.CodePage {$endif});
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_Single(Data: PSingle; const Ctxt: TJsonSaveContext);
@@ -5192,7 +5203,8 @@ procedure _JS_Unicode(Data: PPWord; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   Ctxt.W.AddJsonEscapeW(Data^);
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_Char(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
@@ -5200,7 +5212,8 @@ begin
   Ctxt.W.Add('"');
   if Data^ <> #0 then // #0 will be serialized as ""
     Ctxt.W.AddJsonEscape(Data, 1);
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_WideChar(Data: PWord; const Ctxt: TJsonSaveContext);
@@ -5208,7 +5221,8 @@ begin
   Ctxt.W.Add('"');
   if Data^ <> 0 then
     Ctxt.W.AddJsonEscapeW(Data, 1);
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_DateTime(Data: PDateTime; const Ctxt: TJsonSaveContext);
@@ -5272,7 +5286,8 @@ procedure _JS_WinAnsi(Data: PWinAnsiString; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
   Ctxt.W.AddAnyAnsiBuffer(pointer(Data^), length(Data^), twJsonEscape, CP_WINANSI);
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_Word(Data: PWord; const Ctxt: TJsonSaveContext);
@@ -5299,7 +5314,8 @@ begin
   Ctxt.W.Add('"');
   if Data^ <> nil then
     Ctxt.W.AddJsonEscape(Data^, {len=}0);
-  Ctxt.W.Add('"');
+  Ctxt.W.B[1] := '"';
+  inc(Ctxt.W.B);
 end;
 
 procedure _JS_ID(Data: PInt64; const Ctxt: TJsonSaveContext);
@@ -5321,7 +5337,8 @@ begin
       Ctxt.W.WriteObjectPropNameShort('ID_str', Ctxt.Options);
     Ctxt.W.Add('"');
     Ctxt.W.Add(Data^);
-    Ctxt.W.Add('"');
+    Ctxt.W.B[1] := '"';
+    inc(Ctxt.W.B);
   end;
 end;
 
@@ -5496,7 +5513,8 @@ begin
           if not (rcfHookWriteProperty in item.Flags) or
              not TCCHook(v).RttiWritePropertyValue(c.W, p, c.Options) then
             _JS_OneProp(c, p, v);
-          c.W.AddComma; // no c.W.BlockAfterItem() within non-expanded layout
+          c.W.B[1] := ',';
+          inc(c.W.B); // no c.W.BlockAfterItem() within non-expanded layout
         end;
         inc(p);
         dec(f);
@@ -5669,9 +5687,11 @@ begin
       if woStoreClassName in c.Options then
       begin
         c.W.WriteObjectPropNameShort('ClassName', c.Options);
-        c.W.Add('"');
+        c.W.B[1] := '"';
+        inc(c.W.B);
         c.W.AddShort(ClassNameShort(PClass(Data)^)^);
-        c.W.Add('"');
+        c.W.B[1] := '"';
+        inc(c.W.B);
         if (c.Prop <> nil) or
            (woStorePointer in c.Options) then
           c.W.BlockAfterItem(c.Options);
@@ -5852,7 +5872,8 @@ begin
     repeat
       Ctxt.W.Add('"');
       Ctxt.W.AddJsonEscapeString(Data^.Strings[i]);
-      Ctxt.W.Add('"');
+      Ctxt.W.B[1] := '"';
+      inc(Ctxt.W.B);
       if i = last then
         break;
       Ctxt.W.BlockAfterItem(Ctxt.Options);
@@ -5879,7 +5900,8 @@ begin
     repeat
       Ctxt.W.Add('"');
       Ctxt.W.AddJsonEscape(u[i]);
-      Ctxt.W.Add('"');
+      Ctxt.W.B[1] := '"';
+      inc(Ctxt.W.B);
       if i = last then
         break;
       Ctxt.W.BlockAfterItem(Ctxt.Options);
@@ -5975,7 +5997,8 @@ procedure TJsonWriter.AddPropJsonString(const PropName: ShortString;
 begin
   AddProp(@PropName[1], ord(PropName[0]));
   AddJsonString(Text); // " + AddJsonEscape(Text) + "
-  AddComma;
+  B[1] := ',';
+  inc(B);
 end;
 
 procedure TJsonWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
@@ -6352,7 +6375,8 @@ begin
   for i := 0 to high(Values) do
   begin
     AddJsonEscape(Values[i]);
-    AddComma;
+    B[1] := ',';
+    inc(B);
   end;
   CancelLastComma;
 end;
@@ -6560,8 +6584,10 @@ begin
   {$else}
   Add(pointer(Text), length(Text), Escape);
   {$endif HASCODEPAGE}
-  if Escape = twJsonEscape then
-    Add('"');
+  if Escape <> twJsonEscape then
+    exit;
+  B[1] := '"';
+  inc(B);
 end;
 
 procedure TJsonWriter.AddTextW(P: PWord; Escape: TTextWriterKind);
@@ -6569,8 +6595,10 @@ begin
   if Escape = twJsonEscape then
     Add('"');
   AddW(P, 0, Escape);
-  if Escape = twJsonEscape then
-    Add('"');
+  if Escape <> twJsonEscape then
+    exit;
+  B[1] := '"';
+  inc(B);
 end;
 
 function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
@@ -6621,7 +6649,8 @@ begin
           if Format in [jsonHumanReadable, jsonUnquotedPropName] then
             AddCRAndIndent;
         end;
-        Add(']');
+        B[1] := ']';
+        inc(B);
       end;
     '{':
       begin
@@ -6657,7 +6686,8 @@ begin
                 AddNoJsonEscapeForcedNoUnicode(Name, NameLen)
               else
                 AddNoJsonEscapeForcedUnicode(Name, NameLen);
-              Add('"');
+              B[1] := '"';
+              inc(B);
             end;
             if Format in [jsonHumanReadable, jsonUnquotedPropName] then
               Add(':', ' ')
@@ -6677,7 +6707,8 @@ begin
         dec(fHumanReadableLevel);
         if Format in [jsonHumanReadable, jsonUnquotedPropName] then
           AddCRAndIndent;
-        Add('}');
+        B[1] := '}';
+        inc(B);
       end;
     '"':
       begin
@@ -7014,7 +7045,8 @@ begin
             vtClass:
               AddClassName(VClass);
           end;
-          Add('"');
+          B[1] := '"';
+          inc(B);
         end;
       vtBoolean:
         Add(VBoolean); // 'true'/'false'
@@ -7154,7 +7186,8 @@ procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
 begin
   Add('"');
   AddJsonEscape(pointer(Text));
-  Add('"');
+  B[1] := '"';
+  inc(B);
 end;
 
 procedure TJsonWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
@@ -7248,9 +7281,11 @@ begin
        (v = nil) then
       break; // invalid JSON input
     AddNoJsonEscape(keys, k - keys);
-    Add(':');
+    B[1] := ':';
+    inc(B);
     AddNoJsonEscape(values, v - values);
-    AddComma;
+    B[1] := ',';
+    inc(B);
     if (k^ <> ',') or
        (v^ <> ',') then
       break; // reached the end of the input JSON arrays
@@ -7300,7 +7335,8 @@ var
     else
       AddJsonEscape(NameValuePairs[a]);
     end;
-    AddComma;
+    B[1] := ',';
+    inc(B);
   end;
 
 begin

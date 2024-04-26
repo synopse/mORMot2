@@ -3433,7 +3433,8 @@ begin
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
               W.AddShorter('=v.');
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddComma;
+              W.B[1] := ',';
+              inc(W.B);
             end;
             W.CancelLastComma;
             W.AddShort(' from ( select');
@@ -3449,7 +3450,8 @@ begin
             for f := 0 to Decoder.FieldCount - 1 do
             begin
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddComma;
+              W.B[1] := ',';
+              inc(W.B);
             end;
             W.AddString(UpdateIDFieldName);
             W.AddShort(') where t.');
@@ -3486,7 +3488,8 @@ begin
             begin
               // append 'COL1,COL2'
               W.AddNoJsonEscape(Decoder.DecodedFieldNames^[f]);
-              W.AddComma;
+              W.B[1] := ',';
+              inc(W.B);
             end;
             W.CancelLastComma;
             W.AddShort(') values (');
@@ -8899,7 +8902,8 @@ str:          W.Add('"');
           else
             W.AddNoJsonEscape(U, {$ifdef NOTORMTABLELEN}StrLen(U){$else}fLen[o]{$endif});
         end;
-      W.AddComma;
+      W.B[1] := ',';
+      inc(W.B);
       inc(o); // points to next value
     end;
     W.CancelLastComma;
@@ -11075,7 +11079,8 @@ begin
   try
     if sfoExtendedJson in Format then
       W.CustomOptions := W.CustomOptions + [twoForceJsonExtended];
-    W.Add('{');
+    W.B[1] := '{';
+    inc(W.B);
     if (decoded <> 0) and
        (sfoPutIDFirst in Format) then
       W.AddPropInt64('ID', decoded);
@@ -11089,7 +11094,8 @@ begin
            not (info.Json^ in [',', ']']) then
           exit;
         W.AddNoJsonEscape(Start, info.Json - Start);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
         repeat
           inc(info.Json)
         until (info.Json^ > ' ') or
@@ -11435,7 +11441,8 @@ begin
         W.AddString(Fields.List[f].Name);
         if BitsSuffix <> '' then
           W.AddShort(BitsSuffix);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
     W.CancelLastComma;
     W.Add(Suffix, twNone);

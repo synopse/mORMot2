@@ -1307,7 +1307,8 @@ begin
           begin
             W.Add('"');
             W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
-            W.Add('"');
+            W.B[1] := '"';
+            inc(W.B);
           end;
         ftDate:
           begin
@@ -1316,7 +1317,8 @@ begin
                (PAnsiChar(P)[10] = ' ') then
               PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
             W.AddJsonEscape(P);
-            W.Add('"');
+            W.B[1] := '"';
+            inc(W.B);
           end;
         ftBlob:
           if fForceBlobAsNull then

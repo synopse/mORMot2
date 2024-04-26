@@ -8652,11 +8652,14 @@ begin
         begin
           W.Add('"');
           W.AddJsonEscape(nam^);
-          W.Add('"');
+          W.B[1] := '"';
+          inc(W.B);
         end;
-        W.Add(':');
+        W.B[1] := ':';
+        inc(W.B);
         W.AddVariant(val^, twJsonEscape);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
       dec(n);
       if n = 0 then
@@ -8665,7 +8668,8 @@ begin
       inc(val);
     until false;
     W.CancelLastComma;
-    W.Add('}');
+    W.B[1] := '}';
+    inc(W.B);
     W.SetText(result);
   finally
     W.Free;
@@ -8949,7 +8953,8 @@ begin
         else
         begin
           W.AddVariant(row^.VValue[f], twJsonEscape);
-          W.AddComma;
+          W.B[1] := ',';
+          inc(W.B);
         end;
     end;
     W.CancelLastComma;

@@ -4234,10 +4234,12 @@ begin
             W.AddProp(item.Name, item.NameLen);
           if item.AddMongoJson(W, Mode, MaxSize) then
             exit;
-          W.AddComma;
+          W.B[1] := ',';
+          inc(W.B);
         end;
         W.CancelLastComma;
-        W.Add('}');
+        W.B[1] := '}';
+        inc(W.B);
       end;
     betArray:
       begin
@@ -4248,10 +4250,12 @@ begin
               (W.TextLength > MaxSize)) or
              item.AddMongoJson(W, Mode, MaxSize) then
             exit;
-          W.AddComma;
+          W.B[1] := ',';
+          inc(W.B);
         end;
         W.CancelLastComma;
-        W.Add(']');
+        W.B[1] := ']';
+        inc(W.B);
       end;
   else
     raise EBsonException.CreateUtf8('BsonListToJson(Kind=%)', [ord(Kind)]);

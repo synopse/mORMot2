@@ -3883,7 +3883,8 @@ begin
       begin
         // append 'COL1,COL2'
         W.AddNoJsonEscape(DecodedFieldNames^[f]);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
       W.CancelLastComma;
       W.AddShort(') values (');
@@ -3919,10 +3920,12 @@ begin
           W.AddQuotedStringAsJson(FieldValues[f])
       else
         W.AddString(FieldValues[f]);
-      W.AddComma;
+      W.B[1] := ',';
+      inc(W.B);
     end;
     W.CancelLastComma;
-    W.Add('}');
+    W.B[1] := '}';
+    inc(W.B);
     W.SetText(result);
   finally
     W.Free;
@@ -3950,7 +3953,8 @@ begin
       for i := 0 to FieldCount - 1 do
       begin
         AddShort(FieldNames[i], FieldNamesL[i]);
-        AddComma;
+        B[1] := ',';
+        inc(B);
       end;
       CancelLastComma;
       SetText(result);

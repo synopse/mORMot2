@@ -1222,13 +1222,15 @@ begin
                    not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                 begin
                   W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format
-                  W.Add(':');
+                  W.B[1] := ':';
+                  inc(W.B);
                   if rcfSpi in ArgRtti.Flags then
                     W.AddShorter('"****",')
                   else
                   begin
                     AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                    W.AddComma;
+                    W.B[1] := ',';
+                    inc(W.B);
                   end;
                 end;
             W.CancelLastComma;
@@ -1257,7 +1259,8 @@ begin
                   // write up to 1KB of result binary as Base64 text
                   W.AddShort(',result:"');
                   W.WrBase64(pointer(content), len, false);
-                  W.Add('"');
+                  W.B[1] := '"';
+                  inc(W.B);
                 end;
               end
             else
@@ -1274,7 +1277,8 @@ begin
                     else
                     begin
                       AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                      W.AddComma;
+                      W.B[1] := ',';
+                      inc(W.B);
                     end;
                   end;
               W.CancelLastComma;
@@ -1286,7 +1290,8 @@ begin
           W.AddClassName(Sender.LastException.ClassType);
           W.Add(':', '"');
           W.AddJsonEscapeString(Sender.LastException.Message);
-          W.Add('"');
+          W.B[1] := '"';
+          inc(W.B);
         end;
     end;
 end;

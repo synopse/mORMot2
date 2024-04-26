@@ -2580,7 +2580,8 @@ var
   W: TOrmWriter absolute aDest;
 begin
   aRec.GetJsonValues(W);
-  W.AddComma;
+  W.B[1] := ',';
+  inc(W.B);
 end;
 
 function TRestStorageInMemory.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
@@ -3162,7 +3163,8 @@ begin
         if Expand then
           W.AddCR; // for better readability
         fValue[ndx].GetJsonValues(W);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
       result := KnownRowsCount;
     end
@@ -3193,7 +3195,8 @@ begin
                   if j >= 0 then
                   begin
                     fValue[j].GetJsonValues(W);
-                    W.AddComma;
+                    W.B[1] := ',';
+                    inc(W.B);
                     inc(result);
                     if (Stmt.Limit > 0) and
                        (result >= Stmt.Limit) then
@@ -3212,7 +3215,8 @@ begin
               if Prop.IsValueVoid(fValue[ndx]) = IsNull then
               begin
                 fValue[ndx].GetJsonValues(W);
-                W.AddComma;
+                W.B[1] := ',';
+                inc(W.B);
                 inc(result);
                 if (Stmt.Limit > 0) and
                   (result >= Stmt.Limit) then
@@ -3524,7 +3528,8 @@ begin
         else
           j := ndx[i];
         fValue[j].GetJsonValues(W);
-        W.AddComma;
+        W.B[1] := ',';
+        inc(W.B);
       end;
       W.EndJsonObject(fCount, fCount);
     finally

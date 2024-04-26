@@ -597,6 +597,7 @@ type
     {$endif CPU32}
     /// append a 32-bit signed integer Value as text
     procedure Add(Value: PtrInt); overload;
+      {$ifdef HASINLINE}{$ifdef ASMINTEL}inline;{$endif}{$endif}
     /// append a boolean Value as text
     // - write either 'true' or 'false'
     procedure Add(Value: boolean); overload;
@@ -609,6 +610,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: cardinal);
+      {$ifdef HASINLINE}{$ifdef ASMINTEL}inline;{$endif}{$endif}
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -3749,7 +3751,8 @@ begin
   for i := 0 to length(a) - 1 do
   begin
     WriteObject(a[i], aOptions);
-    AddComma;
+    B[1] := ',';
+    inc(B);
   end;
   CancelLastComma;
   Add(']');
@@ -4314,7 +4317,8 @@ begin
   for i := 0 to high(Integers) do
   begin
     Add(Integers[i]);
-    AddComma;
+    B[1] := ',';
+    inc(B);
   end;
   CancelLastComma;
 end;
@@ -4328,7 +4332,8 @@ begin
   for i := 0 to high(Doubles) do
   begin
     AddDouble(Doubles[i]);
-    AddComma;
+    B[1] := ',';
+    inc(B);
   end;
   CancelLastComma;
 end;
@@ -4555,11 +4560,18 @@ procedure TTextWriter.AddPropInt64(const PropName: ShortString;
 begin
   AddProp(@PropName[1], ord(PropName[0]));
   if WithQuote <> #0 then
-    Add(WithQuote);
+  begin
+    B[1] := WithQuote;
+    inc(B);
+  end;
   Add(Value);
+  inc(B);
   if WithQuote <> #0 then
-    Add(WithQuote);
-  AddComma;
+  begin
+    B^ := WithQuote;
+    inc(B);
+  end;
+  B^ := ',';
 end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUtf8);

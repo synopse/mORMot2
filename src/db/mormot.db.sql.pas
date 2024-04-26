@@ -6242,7 +6242,8 @@ begin
     if WR.Expand then
       WR.AddString(WR.ColNames[col]); // add '"ColumnName":'
     ColumnToJson(col, WR);
-    WR.AddComma;
+    WR.B[1] := ',';
+    inc(WR.B);
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
@@ -6392,10 +6393,12 @@ begin
   begin
     W.AddFieldName(ColumnName(col)); // add '"ColumnName":'
     ColumnToJson(col, W);
-    W.AddComma;
+    W.B[1] := ',';
+    inc(W.B);
   end;
   W.CancelLastComma; // cancel last ','
-  W.Add('}');
+  W.B[1] := '}';
+  inc(W.B);
 end;
 
 procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean);
@@ -6436,7 +6439,8 @@ begin
     while Step do
     begin
       ColumnsToJson(W);
-      W.AddComma;
+      W.B[1] := ',';
+      inc(W.B);
       inc(result);
       if (maxmem > 0) and
          (W.WrittenBytes > maxmem) then // TextLength is slower
@@ -8389,10 +8393,12 @@ begin
   begin
     W.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     ColumnToJson(col, W);
-    W.AddComma;
+    W.B[1] := ',';
+    inc(W.B);
   end;
   W.CancelLastComma; // cancel last ','
-  W.Add('}');
+  W.B[1] := '}';
+  inc(W.B);
 end;
 
 procedure TSqlDBStatementWithParamsAndColumns.ClearColumns;
