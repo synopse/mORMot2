@@ -5216,13 +5216,14 @@ begin
   inc(Ctxt.W.B);
 end;
 
-procedure _JS_Ansi(Data: PPAnsiChar; const Ctxt: TJsonSaveContext);
+procedure _JS_Ansi(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add('"');
-  if Data^ <> nil then
-    with PStrRec(Data^ - SizeOf(TStrRec))^ do
+  Data := PPointer(Data)^;
+  if Data <> nil then
+    with PStrRec(Data - SizeOf(TStrRec))^ do
       // will handle any AnsiString, WinAnsiString or other CP
-      Ctxt.W.AddAnyAnsiBuffer(Data^, length, twJsonEscape,
+      Ctxt.W.AddAnyAnsiBuffer(Data, length, twJsonEscape,
        {$ifdef HASCODEPAGE} codePage {$else} Ctxt.Info.Cache.CodePage {$endif});
   Ctxt.W.B[1] := '"';
   inc(Ctxt.W.B);
@@ -5667,7 +5668,11 @@ begin
   end;
   case vt of // most common strings
     varString:
+      {$ifdef HASCODEPAGE}
+      _JS_Ansi(@Data^.VAny, Ctxt);
+      {$else} // old Delphi can't use Ctxt.Info.Cache.CodePage 
       Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
+      {$endif HASCODEPAGE}
     {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
       _JS_Unicode(@Data^.VAny, Ctxt);
   else
@@ -6268,57 +6273,56 @@ var
 label
   utf8;
 begin
-  if (P <> nil) and
-     (Len > 0) then
-  begin
-    if CodePage = CP_ACP then // CP_UTF8 is very likely on POSIX or LCL
-      CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
-    case CodePage of
-      CP_UTF8:          // direct write of RawUtf8 content
-        begin
-          if Escape = twJsonEscape then
-            Len := 0;    // faster with no Len
-utf8:     Add(PUtf8Char(P), Len, Escape);
-        end;
-      CP_RAWBYTESTRING: // direct write of RawByteString content
-        goto utf8;
-      CP_UTF16:         // direct write of UTF-16 content
-        AddW(PWord(P), 0, Escape);
-      CP_RAWBLOB:       // RawBlob written with Base64 encoding
-        begin
-          AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
-          WrBase64(P, Len, {withMagic=}false);
-        end;
-    else
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  if CodePage = CP_ACP then // CP_UTF8 is very likely on POSIX or LCL
+    CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
+  case CodePage of
+    CP_UTF8:          // direct write of RawUtf8 content
       begin
-        // first handle trailing 7-bit ASCII chars, by quad
-        B := pointer(P);
-        if Len >= 4 then
-          repeat
-            if PCardinal(P)^ and $80808080 <> 0 then
-              break; // break on first non ASCII quad
-            inc(P, 4);
-            dec(Len, 4);
-          until Len < 4;
-        if (Len > 0) and
-           (P^ <= #127) then
-          repeat
-            inc(P);
-            dec(Len);
-          until (Len = 0) or
-                (P^ > #127);
-        if P <> pointer(B) then
-          Add(B, P - B, Escape);
-        if Len <= 0 then
-          exit;
-        // rely on explicit conversion for all remaining ASCII characters
-        engine := TSynAnsiConvert.Engine(CodePage);
-        if PClass(engine)^ = TSynAnsiFixedWidth then
-          InternalAddFixedAnsi(P, Len,
-            pointer(TSynAnsiFixedWidth(engine).AnsiToWide), Escape)
-        else
-          EngineAppendUtf8(self, engine, P, Len, Escape);
+        if Escape = twJsonEscape then
+          Len := 0;    // faster with no Len
+utf8:   Add(PUtf8Char(P), Len, Escape);
       end;
+    CP_RAWBYTESTRING: // direct write of RawByteString content as UTF-8
+      goto utf8;
+    CP_UTF16:         // direct write of UTF-16 content
+      AddW(PWord(P), 0, Escape);
+    CP_RAWBLOB:       // RawBlob written with Base64 encoding
+      begin
+        AddShorter(JSON_BASE64_MAGIC_S); // \uFFF0
+        WrBase64(P, Len, {withMagic=}false);
+      end;
+  else
+    begin
+      // first handle trailing 7-bit ASCII chars, by quad
+      B := pointer(P);
+      if Len >= 4 then
+        repeat
+          if PCardinal(P)^ and $80808080 <> 0 then
+            break; // break on first non ASCII quad
+          inc(P, 4);
+          dec(Len, 4);
+        until Len < 4;
+      if (Len > 0) and
+         (P^ <= #127) then
+        repeat
+          inc(P);
+          dec(Len);
+        until (Len = 0) or
+              (P^ > #127);
+      if P <> pointer(B) then
+        Add(B, P - B, Escape);
+      if Len <= 0 then
+        exit;
+      // rely on explicit conversion for all remaining ASCII characters
+      engine := TSynAnsiConvert.Engine(CodePage);
+      if PClass(engine)^ = TSynAnsiFixedWidth then
+        InternalAddFixedAnsi(P, Len,
+          pointer(TSynAnsiFixedWidth(engine).AnsiToWide), Escape)
+      else
+        EngineAppendUtf8(self, engine, P, Len, Escape);
     end;
   end;
 end;
