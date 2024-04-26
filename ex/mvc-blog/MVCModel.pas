@@ -606,7 +606,7 @@ var
         end
         else
           continue;
-        AddNoJSONEscape(PB, H - PB);
+        AddNoJSONEscapeFast(PB, H - PB);
         P := H;
         if IdemPChar(P, 'HTTP://SYNOPSE.INFO') then
         begin
