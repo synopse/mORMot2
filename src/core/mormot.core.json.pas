@@ -5619,7 +5619,7 @@ end;
 
 procedure _JS_Variant(Data: PVarData; const Ctxt: TJsonSaveContext); forward;
 
-/// use pointer to allow any kind of Data^ type in above functions
+/// use pointer to allow any kind of Data^ type in _JS_*() functions
 // - typecast to TRttiJsonSave for proper function call
 const
   VARIANT_JSONSAVE: array[varEmpty .. varOleUInt] of pointer = (
@@ -5648,6 +5648,7 @@ procedure _JS_Variant(Data: PVarData; const Ctxt: TJsonSaveContext);
 var
   vt: cardinal;
   cv: TSynInvokeableVariantType;
+  save: TRttiJsonSave;
 begin
   repeat
     vt := Data^.VType;
@@ -5656,22 +5657,28 @@ begin
     Data := Data^.VPointer;
   until false;
   if vt <= high(VARIANT_JSONSAVE) then
-    TRttiJsonSave(VARIANT_JSONSAVE[vt])(@Data^.VAny, Ctxt)
-  else
-    case vt of // most common strings
-      varString:
-        Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
-      {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
-        _JS_Unicode(@Data^.VAny, Ctxt);
-    else
-      begin
-        cv := FindSynVariantType(vt); // our custom types
-        if cv <> nil then
-          cv.ToJson(Ctxt.W, Data)
-        else
-          Ctxt.W.AddVariant(PVariant(Data)^, twJsonEscape, Ctxt.Options);
-      end;
+  begin
+    save := VARIANT_JSONSAVE[vt];
+    if Assigned(save) then
+    begin
+      save(@Data^.VAny, Ctxt);
+      exit;
     end;
+  end;
+  case vt of // most common strings
+    varString:
+      Ctxt.W.AddText(RawByteString(Data^.VString), twJsonEscape);
+    {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
+      _JS_Unicode(@Data^.VAny, Ctxt);
+  else
+    begin
+      cv := FindSynVariantType(vt); // our custom types
+      if cv <> nil then
+        cv.ToJson(Ctxt.W, Data)
+      else // unsupported or seldom used
+        Ctxt.W.AddVariant(PVariant(Data)^, twJsonEscape, Ctxt.Options);
+    end;
+  end;
 end;
 
 procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
