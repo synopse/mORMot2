@@ -104,8 +104,7 @@ type
     procedure OnAsyncFortunes(Statement: TSqlDBPostgresAsyncStatement; Context: TObject);
     {$endif USE_SQLITE3}
     // pipelined reading as used by /rawqueries and /rawupdates
-    function GetRawRandomWorlds(cnt: PtrInt;
-      out res: TWorlds; out gen: PLecuyer): boolean;
+    function GetRawRandomWorlds(cnt: PtrInt; out res: TWorlds): boolean;
     function ComputeRawFortunes(stmt: TSqlDBStatement; ctxt: THttpServerRequest): integer;
   public
     constructor Create(threadCount: integer; flags: THttpServerOptions;
@@ -313,7 +312,7 @@ end;
 // query DB world table for /rawqueries and /rawupdates endpoints
 
 function TRawAsyncServer.GetRawRandomWorlds(cnt: PtrInt;
-  out res: TWorlds; out gen: PLecuyer): boolean;
+  out res: TWorlds): boolean;
 var
   conn: TSqlDBConnection;
   stmt: ISqlDBStatement;
@@ -321,6 +320,7 @@ var
   pConn: TSqlDBPostgresConnection absolute conn;
   pStmt: TSqlDBPostgresStatement;
   {$endif USE_SQLITE3}
+  gen: PLecuyer;
   i: PtrInt;
 begin
   result := false;
@@ -545,9 +545,8 @@ end;
 function TRawAsyncServer.rawqueries(ctxt: THttpServerRequest): cardinal;
 var
   res: TWorlds;
-  gen: PLecuyer;
 begin
-  if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res, gen) then
+  if not GetRawRandomWorlds(GetQueriesParamValue(ctxt), res) then
     exit(HTTP_SERVERERROR);
   ctxt.SetOutJson(@res, TypeInfo(TWorlds));
   result := HTTP_SUCCESS;
@@ -623,9 +622,10 @@ begin
   result := HTTP_SERVERERROR;
   conn := fDbPool.ThreadSafeConnection;
   cnt := getQueriesParamValue(ctxt);
-  if not getRawRandomWorlds(cnt, res, gen) then
+  if not getRawRandomWorlds(cnt, res) then
     exit;
   // generate new randoms
+  gen := Lecuyer;
   for i := 0 to cnt - 1 do
     res[i].randomNumber := ComputeRandomWorld(gen);
   if cnt > 20 then
