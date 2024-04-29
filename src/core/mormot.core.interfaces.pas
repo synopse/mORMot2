@@ -2958,8 +2958,7 @@ begin
             inc(P); // include ending ','
           W.AddNoJsonEscape(Value, P - Value);
         end;
-    W.CancelLastComma;
-    W.Add('}');
+    W.CancelLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -3031,8 +3030,7 @@ begin
       end;
       W.AddComma;
     end;
-    W.CancelLastComma;
-    W.Add('}');
+    W.CancelLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -4219,8 +4217,7 @@ begin
           with Args[a] do
           if ValueDirection <> imdConst then
             AddDefaultJson(WR);
-        WR.CancelLastComma;
-        WR.Add(']');
+        WR.CancelLastComma(']');
         WR.SetText(DefaultResult);
       end;
     // compute the service contract as a JSON array
@@ -4235,8 +4232,7 @@ begin
         WR.CancelLastComma;
         WR.AddShorter(']},');
       end;
-    WR.CancelLastComma;
-    WR.Add(']');
+    WR.CancelLastComma(']');
     WR.SetText(fContract);
     {$ifdef SOA_DEBUG}
     JsonReformatToFile(fContract,TFileName(fInterfaceName + '-' +
@@ -5812,9 +5808,7 @@ begin
           break;
       end;
     end;
-    W.CancelLastComma;
-    W.B[1] := ']';
-    inc(W.B);
+    W.CancelLastComma(']');
     W.SetText(fResult);
   finally
     W.Free;

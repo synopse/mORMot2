@@ -3776,8 +3776,7 @@ begin
     WriteObject(a[i], aOptions);
     AddComma;
   end;
-  CancelLastComma;
-  Add(']');
+  CancelLastComma(']');
 end;
 
 procedure TTextWriter.WriteToStream(data: pointer; len: PtrUInt);

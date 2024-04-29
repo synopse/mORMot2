@@ -744,8 +744,7 @@ begin
       W.AddDirect('}', ',');
       Data.Next;
     until Data.Eof;
-    W.CancelLastComma;
-    W.Add(']');
+    W.CancelLastComma(']');
     W.SetText(RawUtf8(result));
   finally
     W.Free;

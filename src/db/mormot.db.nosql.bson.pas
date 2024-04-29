@@ -4236,9 +4236,7 @@ begin
             exit;
           W.AddComma;
         end;
-        W.CancelLastComma;
-        W.B[1] := '}';
-        inc(W.B);
+        W.CancelLastComma('}');
       end;
     betArray:
       begin
@@ -4251,9 +4249,7 @@ begin
             exit;
           W.AddComma;
         end;
-        W.CancelLastComma;
-        W.B[1] := ']';
-        inc(W.B);
+        W.CancelLastComma(']');
       end;
   else
     raise EBsonException.CreateUtf8('BsonListToJson(Kind=%)', [ord(Kind)]);

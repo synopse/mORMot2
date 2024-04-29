@@ -8669,9 +8669,7 @@ begin
       inc(nam);
       inc(val);
     until false;
-    W.CancelLastComma;
-    W.B[1] := '}';
-    inc(W.B);
+    W.CancelLastComma('}');
     W.SetText(result);
   finally
     W.Free;

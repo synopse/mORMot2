@@ -1606,8 +1606,7 @@ begin
       WR.AddString(fInterface[i].Service.Contract);
       WR.AddComma;
     end;
-    WR.CancelLastComma;
-    WR.Add(']');
+    WR.CancelLastComma(']');
     WR.SetText(RawUtf8(result));
   finally
     WR.Free;
@@ -1781,8 +1780,7 @@ begin
             aWriter.AddRecordJson(@List[i].PublicUri, TypeInfo(TRestServerUri));
             aWriter.AddComma;
           end;
-    aWriter.CancelLastComma;
-    aWriter.Add(']');
+    aWriter.CancelLastComma(']');
   finally
     Safe.ReadUnLock;
   end;

@@ -958,9 +958,7 @@ begin
       W.AddVariant(doc.Values[i], twJsonEscape);
       W.AddComma;
     end;
-    W.CancelLastComma;
-    W.B[1] := '}';
-    inc(W.B);
+    W.CancelLastComma('}');
     W.SetText(result);
   finally
     W.Free;

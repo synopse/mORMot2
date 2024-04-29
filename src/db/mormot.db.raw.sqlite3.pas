@@ -8329,9 +8329,7 @@ begin
     FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
     W.AddComma;
   end;
-  W.CancelLastComma;
-  W.B[1] := '}';
-  inc(W.B);
+  W.CancelLastComma('}');
 end;
 
 procedure TSqlRequest.ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;

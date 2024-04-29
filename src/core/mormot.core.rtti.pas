@@ -3450,8 +3450,7 @@ begin
       inc(PByte(PS), ord(PS^[0]) + 1); // next item
     end;
   end;
-  W.CancelLastComma;
-  W.Add(']');
+  W.CancelLastComma(']');
 end;
 
 function TRttiEnumType.GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar;

@@ -807,9 +807,7 @@ begin
       sqlite3.column_value(fStatement.Request, col), fForceBlobAsNull);
     W.AddComma;
   end;
-  W.CancelLastComma; // cancel last ','
-  W.B[1] := '}';
-  inc(W.B);
+  W.CancelLastComma('}');
 end;
 
 

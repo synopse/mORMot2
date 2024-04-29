@@ -6394,9 +6394,7 @@ begin
     ColumnToJson(col, W);
     W.AddComma;
   end;
-  W.CancelLastComma; // cancel last ','
-  W.B[1] := '}';
-  inc(W.B);
+  W.CancelLastComma('}');
 end;
 
 procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean);
@@ -8392,9 +8390,7 @@ begin
     ColumnToJson(col, W);
     W.AddComma;
   end;
-  W.CancelLastComma; // cancel last ','
-  W.B[1] := '}';
-  inc(W.B);
+  W.CancelLastComma('}');
 end;
 
 procedure TSqlDBStatementWithParamsAndColumns.ClearColumns;
