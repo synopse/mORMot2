@@ -582,6 +582,14 @@ type
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append one ASCII char to the buffer with no buffer check
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
+    procedure AddDirect(c: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append one ASCII char to the buffer with no buffer check
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
+    procedure AddDirect(c1, c2: AnsiChar); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append one comma (',') character
     procedure AddComma;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3642,6 +3650,18 @@ begin
     FlushToStream; // may rewind B -> not worth any local PUtf8Char variable
   B[1] := c;
   inc(B);
+end;
+
+procedure TTextWriter.AddDirect(c: AnsiChar);
+begin
+  B[1] := c;
+  inc(B);
+end;
+
+procedure TTextWriter.AddDirect(c1, c2: AnsiChar);
+begin
+  PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8;
+  inc(B, 2); // with proper constant propagation above when inlined
 end;
 
 procedure TTextWriter.AddComma;
