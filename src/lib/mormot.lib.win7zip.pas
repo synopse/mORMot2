@@ -1546,7 +1546,7 @@ begin
   if Assigned(fCreateObject) then
     exit;
   LastFoundDll := '';
-  raise E7Zip.CreateUtf8('% is not a Win' +
+  E7Zip.RaiseUtf8('% is not a Win' +
     {$ifdef CPU32} '32' {$else} '64'  {$endif CPU32} + ' 7-Zip library', [lib]);
 end;
 
@@ -1642,7 +1642,7 @@ begin
   fGetNumberOfMethods := LibraryResolve(lib.fHandle, 'GetNumberOfMethods');
   if not (Assigned(fGetMethodProperty) and
           Assigned(fGetNumberOfMethods)) then
-    raise E7Zip.CreateUtf8('% is not a codec library', [lib]);
+    E7Zip.RaiseUtf8('% is not a codec library', [lib]);
 end;
 
 function T7zCodec.GetDecoder(index: integer): ICompressCoder;
@@ -1694,12 +1694,12 @@ begin
     fLibOwned := lib; // to be released eventually
   inherited Create(lib);
   if fmt = fhUndefined then
-    raise E7Zip.CreateUtF8('%.Create(fhUndefined)', [self]);
+    E7Zip.RaiseUtf8('%.Create(fhUndefined)', [self]);
   fClassId := lib.FormatGuid(fmt);
   fFormat := fmt;
   fGetHandlerProperty := LibraryResolve(lib.fHandle, 'GetHandlerProperty');
   if not Assigned(fGetHandlerProperty) then
-    raise E7Zip.CreateUtf8('% is not an archive library', [lib]);
+    E7Zip.RaiseUtf8('% is not an archive library', [lib]);
 end;
 
 function T7zArchive.ClassId: TGuid;
@@ -1831,7 +1831,7 @@ end;
 procedure T7zReader.EnsureOpened;
 begin
   if fInArchive = nil then
-    raise E7Zip.CreateUtf8('% missing OpenFile/OpenStream', [self]);
+    E7Zip.RaiseUtf8('% missing OpenFile/OpenStream', [self]);
 end;
 
 const
@@ -1891,13 +1891,13 @@ begin
     fInArchive.GetProperty(Item, prop, result));
   with TVarData(result) do
     if VType = VT_FILETIME then
-      raise E7Zip.Create('GetProperty: VT_FILETIME is unsupported - ' +
-        'use GetPropDateTime instead')
+      E7Zip.RaiseUtf8('GetProperty(%): VT_FILETIME is unsupported - ' +
+        'use GetPropDateTime instead', [prop])
     else if (VType <> varEmpty) and
             (prop >= low(KPID_VTYPE)) and
             (prop <= high(KPID_VTYPE)) and
             (VType <> KPID_VTYPE[prop]) then
-      raise E7Zip.CreateUtf8('GetProperty(%): expected %, returned %',
+      E7Zip.RaiseUtf8('GetProperty(%): expected %, returned %',
         [prop, KPID_VTYPE[prop], VType])
 end;
 
@@ -1919,7 +1919,7 @@ begin
   E7Zip.CheckOK(self, 'GetPropDateTime',
     fInArchive.GetProperty(Item, prop, variant(v)));
   if not (v.VType in [varEmpty, VT_FILETIME]) then
-    raise E7Zip.CreateUtf8('T7zReader.GetPropDateTime=%', [v.VType]);
+    E7Zip.RaiseUtf8('T7zReader.GetPropDateTime=%', [v.VType]);
   VariantToDateTime(variant(v), result);
 end;
 
@@ -2541,7 +2541,7 @@ begin
     if not Assigned(fUpdateReader) then
       fOwner.CreateObject(fClassID, IOutArchive, fOutArchive)
     else if not Supports(fUpdateReader.InArchive, IOutArchive, fOutArchive) then
-      raise E7Zip.CreateUtf8('%.OutArchive: % format can not be updated',
+      E7Zip.RaiseUtf8('%.OutArchive: % format can not be updated',
         [self, fUpdateReader.FormatExt]);
   result := fOutArchive;
 end;
@@ -2750,10 +2750,9 @@ end;
 
 function T7zWriter.Get(index: PtrUInt): T7zItem;
 begin
-  if index < PtrUInt(length(fEntries)) then
-    result := fEntries[index]
-  else
-    raise E7Zip.CreateUtf8('Out of range %.Get(%)', [self, index]);
+  if index >= PtrUInt(length(fEntries)) then
+    E7Zip.RaiseUtf8('Out of range %.Get(%)', [self, index]);
+  result := fEntries[index]:
 end;
 
 function T7zWriter.GetZipName(index: integer): RawUtf8;

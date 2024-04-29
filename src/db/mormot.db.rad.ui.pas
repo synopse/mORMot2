@@ -369,8 +369,7 @@ begin
       end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
   else
-    raise EVirtualDataSet.CreateUtf8(
-      '%.GetFieldData unhandled DataType=% (%)',
+    EVirtualDataSet.RaiseUtf8('%.GetFieldData unhandled DataType=% (%)',
       [self, GetEnumName(TypeInfo(TFieldType), ord(Field.DataType))^,
        ord(Field.DataType)]);
   end;
@@ -409,7 +408,7 @@ function TVirtualDataSet.CreateBlobStream(Field: TField;
   Mode: TBlobStreamMode): TStream;
 begin
   if Mode <> bmRead then
-    raise EVirtualDataSet.CreateUtf8('% BLOB should be ReadOnly', [self]);
+    EVirtualDataSet.RaiseUtf8('% BLOB should be ReadOnly', [self]);
   result := GetBlobStream(Field, PRecInfo(ActiveBuffer).RowIndentifier);
   if result = nil then
     result := TSynMemoryStream.Create; // null BLOB returns a void TStream
@@ -539,7 +538,7 @@ begin
   begin
     dec(Value);
     if cardinal(Value) >= cardinal(GetRecordCount) then
-      raise EVirtualDataSet.CreateUtf8(
+      EVirtualDataSet.RaiseUtf8(
         '%.SetRecNo(%) with Count=%', [self, Value + 1, GetRecordCount]);
     DoBeforeScroll;
     fCurrentRow := Value;
@@ -770,8 +769,7 @@ begin
   begin
     // some columns name/type information has been supplied
     if n <> length(ColumnTypes) then
-      raise EVirtualDataSet.CreateUtf8(
-        '%.Create(ColumnNames<>ColumnTypes)', [self]);
+      EVirtualDataSet.RaiseUtf8('%.Create(ColumnNames<>ColumnTypes)', [self]);
     SetLength(fColumns, n);
     col := pointer(fColumns);
     for ndx := 0 to n - 1 do

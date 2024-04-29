@@ -1077,7 +1077,7 @@ begin
     else
       // SQL_INT128, SQL_DEC_FIXED, SQL_DEC16, SQL_DEC34
       // SQL_NULL, SQL_ARRAY, SQL_QUAD
-      raise ESqlDBException.CreateUtf8(
+      ESqlDBException.RaiseUtf8(
         '%.ColumnToJson: unexpected ColumnType(#% "%")=%',
         [self, Col, fColumns[Col].ColumnName, ord(fColumns[Col].ColumnType)]);
     end;

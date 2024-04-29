@@ -638,8 +638,7 @@ var
   aModel: TOrmModel;
 begin
   if not Assigned(aLogClass) then
-    raise ERestHttpClient.CreateUtf8(
-      '%.CreateForRemoteLogging(LogClass=nil)', [self]);
+    ERestHttpClient.RaiseUtf8('%.CreateForRemoteLogging(LogClass=nil)', [self]);
   aModel := TOrmModel.Create([], aRoot);
   Create(aServer, UInt32ToUtf8(aPort), aModel, aPort = 443);
   aModel.Owner := self;
@@ -797,7 +796,7 @@ procedure TRestHttpClientRequest.InternalOpen;
 begin
   InternalSetClass;
   if fRequestClass = nil then
-    raise ERestHttpClient.CreateUtf8('fRequestClass=nil for %', [self]);
+    ERestHttpClient.RaiseUtf8('fRequestClass=nil for %', [self]);
   fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
     fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
   fRequest.ExtendedOptions := fExtendedOptions;
@@ -871,7 +870,7 @@ function TRestHttpClientWebsockets.IsOpen: boolean;
         begin
           if Assigned(fOnConnectionFailed) then
             fOnConnectionFailed(self, nil, nil);
-          raise ERestHttpClient.CreateUtf8(
+          ERestHttpClient.RaiseUtf8(
             '%.InternalOpen: WebSocketsUpgrade failed - %', [self, err]);
         end;
       end;
@@ -886,7 +885,7 @@ function TRestHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactory;
   ParamValue: Pointer): TRestClientCallbackID;
 begin
   if WebSockets = nil then
-    raise EServiceException.CreateUtf8('Missing %.WebSocketsUpgrade() call ' +
+    EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call ' +
       'to enable interface parameter callbacks for %.%(%: %)',
       [self, Sender.InterfaceTypeInfo ^.Name, Method.Uri,
        ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
@@ -910,7 +909,7 @@ begin
     exit;
   end;
   if WebSockets = nil then
-    raise EServiceException.CreateUtf8('Missing %.WebSocketsUpgrade() call', [self]);
+    EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call', [self]);
   FormatUtf8('{"%":%}', [Factory.InterfaceTypeInfo^.RawName, FakeCallbackID], body);
   CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(
@@ -1039,7 +1038,7 @@ begin
         [sockets], self);
   if (aRaiseExceptionOnFailure <> nil) and
      (result <> '') then
-    raise aRaiseExceptionOnFailure.CreateUtf8('%.WebSocketsUpgrade failed: [%]',
+    aRaiseExceptionOnFailure.RaiseUtf8('%.WebSocketsUpgrade failed: [%]',
       [self, result]);
 end;
 
@@ -1060,7 +1059,7 @@ begin
         result := 'ServerTimestampSynchronize';
   end;
   if result <> '' then
-    raise ERestHttpClient.CreateUtf8('%.WebSocketsConnect failed on %:%/% -> %',
+    ERestHttpClient.RaiseUtf8('%.WebSocketsConnect failed on %:%/% -> %',
       [self, Server, Port, Model.Root, result]);
 end;
 

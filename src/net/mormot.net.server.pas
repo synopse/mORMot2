@@ -2622,7 +2622,7 @@ begin
   fromU := StringReplaceAll(aFromUri, '*', '<path:path>');
   toU := StringReplaceAll(aToUri, '*', '<path:path>');
   if not IsValidUriRoute(pointer(fromU)) then
-    raise EUriRouter.CreateUtf8('Invalid char in %.Setup(''%'')',
+    EUriRouter.RaiseUtf8('Invalid char in %.Setup(''%'')',
       [self, aFromUri]);
   fSafe.WriteLock;
   try
@@ -2636,13 +2636,13 @@ begin
       if toU = n.Data.ToUri then
         exit // same redirection: do nothing
       else
-        raise EUriRouter.CreateUtf8('%.Setup(''%''): already redirect to %',
+        EUriRouter.RaiseUtf8('%.Setup(''%''): already redirect to %',
           [self, aFromUri, n.Data.ToUri]);
     if Assigned(n.Data.Execute) then
       if CompareMem(@n.Data.Execute, @aExecute, SizeOf(TMethod)) then
         exit // same callback: do nothing
       else
-        raise EUriRouter.CreateUtf8('%.Setup(''%''): already registered',
+        EUriRouter.RaiseUtf8('%.Setup(''%''): already registered',
           [self, aFromUri]);
     if Assigned(aExecute) then
     begin
@@ -2662,7 +2662,7 @@ begin
         // pre-compute the rewritten URI into Data.ToUriPosLen[]
         u := pointer(toU);
         if u = nil then
-          raise EUriRouter.CreateUtf8('No ToUri in %.Setup(''%'')',
+          EUriRouter.RaiseUtf8('No ToUri in %.Setup(''%'')',
             [self, aFromUri]);
         if PosExChar('<', toU) <> 0 then // n.Data.ToUriPosLen=nil to use ToUri
           repeat
@@ -2681,11 +2681,11 @@ begin
               if pos <> 0 then
                 system.delete(item, 1, pos);
               if item = '' then
-                raise EUriRouter.CreateUtf8('Void <> in %.Setup(''%'')',
+                EUriRouter.RaiseUtf8('Void <> in %.Setup(''%'')',
                   [self, aToUri]);
               pos := FindRawUtf8(names, item);
               if pos < 0 then
-                raise EUriRouter.CreateUtf8('Unknown <%> in %.Setup(''%'')',
+                EUriRouter.RaiseUtf8('Unknown <%> in %.Setup(''%'')',
                   [item, self, aToUri]);
             end;
             AddInteger(n.Data.ToUriPosLen, pos);  // value index in Names[]
@@ -2703,7 +2703,7 @@ constructor TUriRouter.Create(aNodeClass: TRadixTreeNodeClass;
   aOptions: TRadixTreeOptions);
 begin
   if aNodeClass = nil then
-    raise EUriRouter.CreateUtf8('%.Create with aNodeClass=nil', [self]);
+    EUriRouter.RaiseUtf8('%.Create with aNodeClass=nil', [self]);
   fTreeNodeClass := aNodeClass;
   fTreeOptions := aOptions;
   inherited Create;
@@ -3120,7 +3120,7 @@ end;
 function THttpServerRequest.SetAsyncResponse: integer;
 begin
   if not Assigned(fOnAsyncResponse) then
-    raise EHttpServer.CreateUtf8(
+    EHttpServer.RaiseUtf8(
       '%.SetAsyncResponse with no OnAsyncResponse callback', [self]);
   result := HTTP_ASYNCRESPONSE;
 end;
@@ -3324,7 +3324,7 @@ end;
 procedure THttpServerGeneric.SetRouterClass(aRouter: TRadixTreeNodeClass);
 begin
   if fRouterClass <> nil then
-    raise EHttpServer.CreateUtf8('%.RouterClass already set', [self]);
+    EHttpServer.RaiseUtf8('%.RouterClass already set', [self]);
   fRouterClass := aRouter;
 end;
 
@@ -3839,12 +3839,12 @@ begin
       esRunning:
         break;
       esFinished:
-        raise EHttpServer.CreateUtf8('%.Execute aborted due to %',
+        EHttpServer.RaiseUtf8('%.Execute aborted due to %',
           [self, fExecuteMessage]);
     end;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
-      raise EHttpServer.CreateUtf8('%.WaitStarted timeout after % seconds [%]',
+      EHttpServer.RaiseUtf8('%.WaitStarted timeout after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
   // now the server socket has been bound, and is ready to accept connections
@@ -4280,7 +4280,7 @@ begin
     fSock := TCrtSocket.Bind(fSockPort, nlTcp, 5000, hsoReusePort in fOptions);
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
-      raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
+      EHttpServer.RaiseUtf8('%.Execute: %.Bind failed', [self, fSock]);
     // main ACCEPT loop
     while not Terminated do
     begin
@@ -5059,18 +5059,18 @@ end;
 procedure THttpPeerCrypt.AfterSettings;
 begin
   if fSettings = nil then
-    raise EHttpPeerCache.CreateUtf8('%.AfterSettings(nil)', [self]);
+    EHttpPeerCache.RaiseUtf8('%.AfterSettings(nil)', [self]);
   fLog.Add.Log(sllTrace, 'Create: with %', [fSettings], self);
   if fSettings.InterfaceName <> '' then
   begin
     if not GetMainMacAddress(fMac, fSettings.InterfaceName, {UpAndDown=}true) then
       // allow to pickup "down" interfaces if name is explicit
-      raise EHttpPeerCache.CreateUtf8(
+      EHttpPeerCache.RaiseUtf8(
         '%.Create: impossible to find the [%] network interface',
         [self, fSettings.InterfaceName]);
   end
   else if not GetMainMacAddress(fMac, [mafLocalOnly, mafRequireBroadcast]) then
-    raise EHttpPeerCache.CreateUtf8(
+    EHttpPeerCache.RaiseUtf8(
       '%.Create: impossible to find a local network interface', [self]);
   IPToCardinal(fMac.IP, fIP4);
   IPToCardinal(fMac.NetMask, fMaskIP4);
@@ -5263,7 +5263,7 @@ begin
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
   if aSharedSecret = '' then
-    raise EHttpPeerCache.CreateUtf8('%.Create without aSharedSecret', [self]);
+    EHttpPeerCache.RaiseUtf8('%.Create without aSharedSecret', [self]);
   HmacSha256('4b0fb62af680447c9d0604fc74b908fa', aSharedSecret, key.b);
   fAesEnc := TAesFast[mGCM].Create(key.Lo) as TAesGcmAbstract; // lower 128-bit
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
@@ -5616,7 +5616,7 @@ begin
   fPermFilesPath := EnsureDirectoryExists(fSettings.CachePermPath);
   if (fTempFilesPath = '') and
      (fPermFilesPath = '') then
-    raise EHttpPeerCache.CreateUtf8('%.Create: no cache defined', [self]);
+    EHttpPeerCache.RaiseUtf8('%.Create: no cache defined', [self]);
   // retrieve the local network interface (in inherited THttpPeerCrypt)
   AfterSettings; // fSettings should have been defined
   // start the local UDP server on this interface

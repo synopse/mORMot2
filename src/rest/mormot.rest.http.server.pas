@@ -1394,7 +1394,7 @@ function TRestHttpServer.WebSocketsEnable(const aWSURI, aWSEncryptionKey: RawUtf
   const aOnWSClosed: TOnWebSocketProtocolClosed): PWebSocketProcessSettings;
 begin
   if not (fUse in HTTP_BIDIR) then
-    raise EHttpServer.CreateUtf8(
+    EHttpServer.RaiseUtf8(
       'Unexpected %.WebSocketsEnable over % - need e.g. WEBSOCKETS_DEFAULT_MODE',
       [self, ToText(fUse)^]);
   result := (fHttpServer as THttpServerSocketGeneric).WebSocketsEnable(
@@ -1423,8 +1423,7 @@ function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
 begin
   if (aServer = nil) or
      (RestServerFind(aServer) < 0) then
-    raise EWebSockets.CreateUtf8(
-      '%.WebSocketEnable(aServer=%?)', [self, aServer]);
+    EWebSockets.RaiseUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWSEncryptionKey,
     aWSAjax, aWSBinaryOptions, aOnWSUpgraded, aOnWSClosed);
 end;

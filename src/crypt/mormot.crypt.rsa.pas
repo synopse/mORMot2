@@ -949,7 +949,7 @@ end;
 function TBigInt.SetPermanent: PBigInt;
 begin
   if RefCnt <> 1 then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       'TBigInt.SetPermanent(%): RefCnt=%', [@self, RefCnt]);
   RefCnt := -1;
   result := @self;
@@ -958,7 +958,7 @@ end;
 function TBigInt.ResetPermanent: PBigInt;
 begin
   if RefCnt >= 0 then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       'TBigInt.ResetPermanent(%): RefCnt=%', [@self, RefCnt]);
   RefCnt := 1;
   result := @self;
@@ -1919,7 +1919,7 @@ begin
   if ActiveCount <> 0 then
   try
     // warns for memory leaks after memory buffers are wiped and freed
-    raise ERsaException.CreateUtf8('%.Destroy: memory leak - ActiveCount=%',
+    ERsaException.RaiseUtf8('%.Destroy: memory leak - ActiveCount=%',
       [self, ActiveCount]);
   except
     // just notify the debugger, console and mormot log that it was plain wrong
@@ -1975,13 +1975,13 @@ const
 function TRsaContext.Allocate(n: integer; opt: TRsaAllocate): PBigint;
 begin
   if self = nil then
-    raise ERsaException.CreateUtf8('TRsa.Allocate(%): Owner=nil', [n]);
+    ERsaException.RaiseUtf8('TRsa.Allocate(%): Owner=nil', [n]);
   result := fFreeList;
   if result <> nil then
   begin
     // we can recycle a pre-allocated instance
     if result^.RefCnt <> 0 then
-      raise ERsaException.CreateUtf8(
+      ERsaException.RaiseUtf8(
         '%.Allocate(%): % RefCnt=%', [self, n, result, result^.RefCnt]);
     fFreeList := result^.fNextFree;
     dec(FreeCount);
@@ -2505,11 +2505,11 @@ procedure TRsa.LoadFromPublicKeyBinary(Modulus, Exponent: pointer;
   ModulusSize, ExponentSize: PtrInt);
 begin
   if not fM.IsZero then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       '%.LoadFromPublicKey on existing data', [self]);
   if (ModulusSize < 10) or
      (ExponentSize < 2) then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       '%.LoadFromPublicKey: unexpected ModulusSize=% ExponentSize=%',
       [self, ModulusSize, ExponentSize]);
   fModulusLen := ModulusSize;
@@ -2544,7 +2544,7 @@ var
 begin
   if not HexToBin(pointer(Hexa), length(Hexa), bin) or
      (length(bin) < 13) then
-    raise ERsaException.CreateUtf8('Invalid %.LoadFromPublicKeyHexa', [self]);
+    ERsaException.RaiseUtf8('Invalid %.LoadFromPublicKeyHexa', [self]);
   LoadFromPublicKeyBinary(b + 3, b, length(bin) - 3, 3);
 end;
 
@@ -2557,7 +2557,7 @@ end;
 procedure TRsa.LoadFromPrivateKey(const PrivateKey: TRsaPrivateKey);
 begin
   if not fM.IsZero then
-    raise ERsaException.CreateUtf8('%.LoadFromPrivateKey on existing data', [self]);
+    ERsaException.RaiseUtf8('%.LoadFromPrivateKey on existing data', [self]);
   with PrivateKey do
     if (PrivateExponent = '') or
        (Prime1 = '') or
@@ -2567,7 +2567,7 @@ begin
        (Coefficient = '') or
        (length(Modulus) < 10) or
        (length(PublicExponent) < 2) then
-    raise ERsaException.CreateUtf8('Incorrect %.LoadFromPrivateKey call', [self]);
+    ERsaException.RaiseUtf8('Incorrect %.LoadFromPrivateKey call', [self]);
   LoadFromPublicKeyBinary(
     pointer(PrivateKey.Modulus), pointer(PrivateKey.PublicExponent),
     length(PrivateKey.Modulus),  length(PrivateKey.PublicExponent));
@@ -3136,7 +3136,7 @@ begin
      not HasPrivateKey then
     exit;
   if (ModulusBits + 7) shr 3 <> ModulusLen then
-    raise ERsaException.CreateUtf8('%.DoPad: m=p*q is weak', [self]);
+    ERsaException.RaiseUtf8('%.DoPad: m=p*q is weak', [self]);
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
@@ -3191,7 +3191,7 @@ begin
     ord('P') + ord('S') shl 8:
       fRsaClass := TRsaPss;
   else
-    raise ECrypt.CreateUtf8('%.Create: unsupported name=%', [self, name]);
+    ECrypt.RaiseUtf8('%.Create: unsupported name=%', [self, name]);
   end;
   inherited Create(name);
   if fDefaultHasher = nil then
@@ -3205,7 +3205,7 @@ constructor TCryptAsymRsa.Create(const name, hasher: RawUtf8);
 begin
   fDefaultHasher := mormot.crypt.secure.Hasher(hasher); // set before Create()
   if fDefaultHasher = nil then
-    raise ECrypt.CreateUtf8('%.Create: unknown hasher=%', [self, hasher]);
+    ECrypt.RaiseUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);
 end;
 
@@ -3215,7 +3215,7 @@ var
   rsa: TRsa;
 begin
   if privpwd <> '' then
-    raise ECrypt.CreateUtf8('%.GenerateDer: unsupported privpwd', [self]);
+    ECrypt.RaiseUtf8('%.GenerateDer: unsupported privpwd', [self]);
   rsa := fRsaClass.Create;
   try
     if not rsa.Generate then
@@ -3314,7 +3314,7 @@ begin
           FreeAndNil(fRsa);
       end;
   else
-    raise ERsaException.CreateUtf8('%.Create: unsupported %',
+    ERsaException.RaiseUtf8('%.Create: unsupported %',
             [self, ToText(fKeyAlgo)^]);
   end;
 end;

@@ -1036,7 +1036,7 @@ begin
   fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceUri := fInterface.InterfaceUri;
   if fOrm.Model.GetTableIndex(fInterfaceUri) >= 0 then
-    raise EServiceException.CreateUtf8('%.Create: I% routing name is ' +
+    EServiceException.RaiseUtf8('%.Create: I% routing name is ' +
       'already used by a % SQL table name', [self, fInterfaceUri, fInterfaceUri]);
   SetLength(fExecution, fInterface.MethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
@@ -1134,7 +1134,7 @@ begin
     for i := 0 to high(IDs) do
       // fExecution[].Denied set is able to store IDs up to 256 only
       if IDs[i] > 255 then
-        raise EServiceException.CreateUtf8(
+        EServiceException.RaiseUtf8(
           'Unsupported %.Allow/Deny with GroupID=% >255', [self, IDs[i]]);
 end;
 
@@ -1293,14 +1293,14 @@ begin
     {$ifdef OSWINDOWS}
     if Assigned(ServiceSingle) and
        (opt * [optExecInMainThread, optFreeInMainThread] <> []) then
-       raise EServiceException.CreateUtf8('%.SetOptions(I%): [%] are not ' +
+       EServiceException.RaiseUtf8('%.SetOptions(I%): [%] are not ' +
          'compatible with a Windows Service which has no main thread',
          [self, fInterfaceUri, ToText(opt)]);
     {$endif OSWINDOWS}
     if (opt <> []) and
        (aAction in [moaReplace, moaInclude]) and
        (fInstanceCreation = sicPerThread) then
-      raise EServiceException.CreateUtf8(
+      EServiceException.RaiseUtf8(
         '%.SetOptions(I%,[%]) is not compatible with sicPerThread',
         [self, fInterfaceUri, ToText(opt)]);
     ExecutionAction(aMethod, aOptions, aAction);
@@ -1308,7 +1308,7 @@ begin
     if opt <> [] then
       if (optFreeInPerInterfaceThread in opt) and
          not (optExecInPerInterfaceThread in opt) then
-        raise EServiceException.CreateUtf8(
+        EServiceException.RaiseUtf8(
           '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
           ' without optExecInPerInterfaceThread', [self, fInterfaceUri])
       else for m := 0 to high(INTERFACEMETHOD_PERTHREADOPTIONS) do
@@ -1316,7 +1316,7 @@ begin
         mode := INTERFACEMETHOD_PERTHREADOPTIONS[m];
         if (opt * mode <> []) and
            (opt - mode <> []) then
-        raise EServiceException.CreateUtf8('%.SetOptions(I%): incompatible [%]',
+        EServiceException.RaiseUtf8('%.SetOptions(I%): incompatible [%]',
           [self, fInterfaceUri, ToText(opt)]);
       end;
   end;
@@ -1395,7 +1395,7 @@ var
 begin
   if (self = nil) or
      (aService = nil) then
-    raise EServiceException.CreateUtf8('%.AddServiceInternal(%)', [self, aService]);
+    EServiceException.RaiseUtf8('%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the im list
   if ExpectMangledUri then
     uri := aService.fInterfaceMangledUri
@@ -1418,17 +1418,17 @@ var
 begin
   for i := 0 to high(aInterfaces) do
     if aInterfaces[i] = nil then
-      raise EServiceException.CreateUtf8('%: aInterfaces[%]=nil', [self, i])
+      EServiceException.RaiseUtf8('%: aInterfaces[%]=nil', [self, i])
     else
       with aInterfaces[i]^ do
         if InterfaceGuid = nil then
-          raise EServiceException.CreateUtf8('%: % is not an interface',
+          EServiceException.RaiseUtf8('%: % is not an interface',
             [self, RawName])
         else if not (ifHasGuid in InterfaceType^.IntfFlags) then
-          raise EServiceException.CreateUtf8('%: % interface has no GUID',
+          EServiceException.RaiseUtf8('%: % interface has no GUID',
             [self, RawName])
         else if Info(InterfaceGuid^) <> nil then
-          raise EServiceException.CreateUtf8('%: % GUID already registered',
+          EServiceException.RaiseUtf8('%: % GUID already registered',
             [self, RawName])
 
 end;
@@ -1456,7 +1456,7 @@ begin
   FillCharFast(bits, SizeOf(bits), 0);
   n := length(fInterfaceMethod);
   if n > SizeOf(bits) shl 3 then
-    raise EServiceException.CreateUtf8('%.SetInterfaceMethodBits: n=%', [self, n]);
+    EServiceException.RaiseUtf8('%.SetInterfaceMethodBits: n=%', [self, n]);
   if IncludePseudoMethods then
     for i := 0 to n - 1 do
       if fInterfaceMethod[i].InterfaceMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then

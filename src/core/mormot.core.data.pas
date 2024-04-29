@@ -4790,7 +4790,7 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUtf8('%.Create(%) not allowed: ' +
+  ESynException.RaiseUtf8('%.Create(%) not allowed: ' +
     'should be a power of 2 <= 512', [self, aHashTables]);
 end;
 
@@ -5097,11 +5097,11 @@ begin
           aFreeAndReturnExistingObject^ := obj;
         end;
         if aRaiseExceptionIfExisting then
-          raise ESynException.CreateUtf8('%.Add duplicate [%]', [self, aText]);
+          ESynException.RaiseUtf8('%.Add duplicate [%]', [self, aText]);
         if aReplaceExistingObject then
         begin
           if obj = nil then
-            raise ESynException.CreateUtf8(
+            ESynException.RaiseUtf8(
               '%.AddOrReplaceObject with no object at [%]', [self, aText]);
           if fObjectsOwned in fFlags then
             FreeAndNil(fObjects[result]);
@@ -7151,7 +7151,7 @@ procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
   aCountPointer: PInteger);
 begin
   if aTypeInfo^.Kind <> rkDynArray then
-    raise EDynArray.CreateUtf8('TDynArray.Init: % is %, expected rkDynArray',
+    EDynArray.RaiseUtf8('TDynArray.Init: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
 end;
@@ -7160,7 +7160,7 @@ function TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
   aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean): TRttiParserType;
 begin
   if aTypeInfo^.Kind <> rkDynArray then
-    raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
+    EDynArray.RaiseUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
   result := SetParserType(aKind, aCaseInsensitive);
@@ -7181,10 +7181,10 @@ begin
   fCompare := PT_SORT[aCaseInsensitive, result];
   if not Assigned(fCompare) then
     if result = ptVariant then
-      raise EDynArray.CreateUtf8('TDynArray.SetParserType(%): missing mormot.core.json',
+      EDynArray.RaiseUtf8('TDynArray.SetParserType(%): missing mormot.core.json',
         [Info.Name, ToText(result)^])
     else if aKind <> ptNone then
-      raise EDynArray.CreateUtf8('TDynArray.SetParserType(%) unsupported %',
+      EDynArray.RaiseUtf8('TDynArray.SetParserType(%) unsupported %',
         [Info.Name, ToText(result)^]);
 end;
 
@@ -8823,7 +8823,7 @@ begin
   {$ifdef CPU32}
   if NeededSize > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
-    raise EDynArray.CreateUtf8('TDynArray.InternalSetLength(%,%) size concern',
+    EDynArray.RaiseUtf8('TDynArray.InternalSetLength(%,%) size concern',
       [fInfo.Name, NewLength]);
   {$endif CPU32}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
@@ -9881,7 +9881,7 @@ procedure TDynArrayHasher.RaiseFatalCollision(const caller: shortstring;
   aHashCode: cardinal);
 begin
   // a dedicated sub-procedure reduces code size
-  raise EDynArray.CreateUtf8('TDynArrayHasher.% fatal collision: ' +
+  EDynArray.RaiseUtf8('TDynArrayHasher.% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), fHashTableSize, fDynArray^.Count,
      fDynArray^.Capacity, fDynArray^.Info.Name, ToText(fDynArray^.Info.Parser)^]);
@@ -10338,17 +10338,15 @@ var
   added: boolean;
 begin
   ndx := FindHashedForAdding(aName, added);
-  if added then
-  begin
-    if aNewIndex <> nil then
-      aNewIndex^ := ndx;
-    result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-    PRawUtf8(result)^ := aName; // store unique name at 1st position
-  end
-  else if ExceptionMsg = '' then
-    raise EDynArray.CreateUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
-  else
-    raise EDynArray.CreateUtf8(ExceptionMsg, ExceptionArgs);
+  if not added then
+    if ExceptionMsg = '' then
+      EDynArray.RaiseUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
+    else
+      EDynArray.RaiseUtf8(ExceptionMsg, ExceptionArgs);
+  if aNewIndex <> nil then
+    aNewIndex^ := ndx;
+  result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
+  PRawUtf8(result)^ := aName; // store unique name at 1st position
 end;
 
 function TDynArrayHashed.FindHashedAndFill(var ItemToFill): PtrInt;
@@ -11128,7 +11126,7 @@ constructor TRadixTree.Create(aNodeClass: TRadixTreeNodeClass;
   aOptions: TRadixTreeOptions);
 begin
   if aNodeClass = nil then
-    raise ERadixTree.CreateUtf8('%.Create with aNodeClass=nil', [self]);
+    ERadixTree.RaiseUtf8('%.Create with aNodeClass=nil', [self]);
   fDefaultNodeClass := aNodeClass;
   fOptions := aOptions;
   if rtoCaseInsensitiveUri in aOptions then
@@ -11367,7 +11365,7 @@ begin
         break;
       GetNextItem(u, '>', item);
       if item = '' then
-        raise ERadixTree.CreateUtf8('Void <> in %.Setup(''%'')', [self, aFromUri]);
+        ERadixTree.RaiseUtf8('Void <> in %.Setup(''%'')', [self, aFromUri]);
       flags := [rtfParam];
       if IdemPChar(pointer(item), 'INT:') then
       begin
@@ -11382,7 +11380,7 @@ begin
         include(flags, rtfParamPath);
       end;
       if FindRawUtf8(aNames{%H-}, item) >= 0 then
-        raise ERadixTree.CreateUtf8('Duplicated <%> in %.Setup(''%'')',
+        ERadixTree.RaiseUtf8('Duplicated <%> in %.Setup(''%'')',
           [item, self, aFromUri]);
       AddRawUtf8(aNames, item);
       full := full + '<' + item + '>'; // avoid name collision with static
@@ -11394,7 +11392,7 @@ begin
         // TODO: detect wildchar incompatibilities with nested searches?
         break;
       if u^ <> '/' then
-        raise ERadixTree.CreateUtf8('Unexpected <%>% in %.Setup(''%'')',
+        ERadixTree.RaiseUtf8('Unexpected <%>% in %.Setup(''%'')',
           [item, u^, self, aFromUri]);
     until false;
   AfterInsert; // compute Depth and sort by priority

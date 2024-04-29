@@ -2199,7 +2199,7 @@ end;
 
 procedure TRestOrm.InternalBatchStop;
 begin
-  raise EOrmBatchException.CreateUtf8('Unexpected %.InternalBatchStop', [self]);
+  EOrmBatchException.RaiseUtf8('Unexpected %.InternalBatchStop', [self]);
 end;
 
 function TRestOrm.InternalBatchDirectSupport(Encoding: TRestBatchEncoding;
@@ -2301,7 +2301,7 @@ begin
     exit;
   L := BlobData.Seek(0, soEnd);
   if L > maxInt then
-    raise EOrmException.CreateUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
+    EOrmException.RaiseUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
   SetLength(data, L);
   BlobData.Seek(0, soBeginning);
   if BlobData.Read(pointer(data)^, L) <> L then
@@ -2641,7 +2641,7 @@ var
 begin
   if (FieldName = '') or
      (FieldIndex(FieldName) >= 0) then
-    raise EOrmTable.CreateUtf8('%.AddField(%) invalid fieldname', [self, FieldName]);
+    EOrmTable.RaiseUtf8('%.AddField(%) invalid fieldname', [self, FieldName]);
   // register the new field
   result := fFieldCount;
   inc(fFieldCount);
@@ -2870,7 +2870,7 @@ begin
     begin
       rec.FillContext.Fill(fUpdatedRows[r]);
       if rec.IDValue = 0 then
-        raise EOrmTable.CreateUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
+        EOrmTable.RaiseUtf8('%.UpdatesToBatch: no %.ID map', [self, c]);
       upd := fUpdatedRowsFields[r];
       if upd = 0 then // more than 32 fields -> include all fields to batch
         bits := def32
@@ -2885,7 +2885,7 @@ begin
           begin
             p := props[f];
             if p < 0 then
-              raise EOrmTable.CreateUtf8(
+              EOrmTable.RaiseUtf8(
                 '%.UpdatesToBatch: Unexpected %.%', [self, c, Results[f]]);
             FieldBitSet(bits, p);
           end;
@@ -2893,7 +2893,7 @@ begin
         end;
       end;
       if Batch.Update(rec, bits, {donotautocompute:}true) < 0 then
-        raise EOrmTable.CreateUtf8(
+        EOrmTable.RaiseUtf8(
           '%.UpdatesToBatch: Batch.Update % failed', [self, rec]);
       inc(result);
     end;

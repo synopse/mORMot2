@@ -3054,7 +3054,7 @@ regex:      W.AddShort(BSON_JSON_REGEX[0]);
     betMaxKey:
       W.AddShort(BSON_JSON_MAXKEY[Mode = modMongoShell]);
   else
-    raise EBsonException.CreateUtf8(
+    EBsonException.RaiseUtf8(
       'TBsonElement.AddMongoJson: unexpected type %', [integer(Kind)]);
   end;
 end;
@@ -3161,7 +3161,7 @@ str:    Kind := betString;
       begin
         FromBson(vbson.VBlob); // complex type stored as a RawByteString
         if ElementBytes < 0 then
-          raise EBsonException.CreateUtf8('TBsonElement.FromVariant(bson,%)',
+          EBsonException.RaiseUtf8('TBsonElement.FromVariant(bson,%)',
             [ToText(Kind)^]);
       end;
     end
@@ -3172,16 +3172,16 @@ str:    Kind := betString;
       else if vdoc.IsArray then
         Kind := betArray
       else
-        raise EBsonException.CreateUtf8('TBsonElement.FromVariant(doc,%)',
+        EBsonException.RaiseUtf8('TBsonElement.FromVariant(doc,%)',
           [ToText(vdoc.Kind)^]);
       aTemp := Bson(vdoc^);
       FromBson(pointer(aTemp));
       if ElementBytes < 0 then
-        raise EBsonException.CreateUtf8('TBsonElement.FromVariant(docbson,%)',
+        EBsonException.RaiseUtf8('TBsonElement.FromVariant(docbson,%)',
           [ToText(Kind)^]);
     end
     else
-      raise EBsonException.CreateUtf8(
+      EBsonException.RaiseUtf8(
         'TBsonElement.FromVariant(VType=%)', [v.VType]);
   end;
 end;
@@ -3267,16 +3267,14 @@ var
   P: PUtf8Char;
   len: PtrInt;
 begin
+  result := false;
   P := pointer(BSON);
   if P = nil then
-  begin
-    result := false;
     exit;
-  end;
   Kind := TBsonElementType(P^);
   case ord(P^) of
     ord(betEOF):
-      result := false;
+      ;
     ord(betFloat)..ord(betDecimal128),
     betMinKey,
     betMaxKey:
@@ -3289,7 +3287,7 @@ begin
         FromBson(BSON);
         len := ElementBytes;
         if len < 0 then
-          raise EBsonException.CreateUtf8(
+          EBsonException.RaiseUtf8(
             'TBsonElement.FromNext: unexpected size % for type %',
             [len, ord(Kind)]);
         inc(BSON, len);
@@ -3297,7 +3295,7 @@ begin
         result := true;
       end;
   else
-    raise EBsonException.CreateUtf8(
+    EBsonException.RaiseUtf8(
       'TBsonElement.FromNext: unexpected type %', [ord(Kind)]);
   end;
 end;
@@ -3576,7 +3574,7 @@ begin
        WriteEndingZero then
       Write1(0);
     if fDocumentStack = 0 then
-      raise EBsonException.CreateUtf8('Unexpected %.BsonDocumentEnd', [self]);
+      EBsonException.RaiseUtf8('Unexpected %.BsonDocumentEnd', [self]);
     dec(fDocumentStack);
     if fDocumentCount >= Length(fDocument) then
       SetLength(fDocument, NextGrow(fDocumentCount));
@@ -3645,7 +3643,7 @@ begin
           RawUtf8(tmp.TempRawUtf8) := '';
       end;
   else
-    raise EBsonException.CreateUtf8(
+    EBsonException.RaiseUtf8(
       '%.BsonWrite(TVarRec.VType=%) unsupported', [self, value.VType]);
   end;
 end;
@@ -3677,7 +3675,7 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
           json := pointer(temp);
           BsonWriteFromJson(name, json, nil);
           if json = nil then
-            raise EBsonException.CreateUtf8(
+            EBsonException.RaiseUtf8(
               '%.BsonWriteVariant(VType=%)', [self, VType]);
         end;
       end;
@@ -3737,7 +3735,7 @@ begin
   BsonDocumentBegin;
   if doc.VarType > varNull then // null,empty will write {}
     if doc.VarType <> DocVariantType.VarType then
-      raise EBsonException.CreateUtf8(
+      EBsonException.RaiseUtf8(
         '%.BsonWriteDoc(VType=%)', [self, doc.VarType])
     else
       for i := 0 to doc.Count - 1 do
@@ -3748,7 +3746,7 @@ begin
           UInt32ToUtf8(i, Name);
         BsonWriteVariant(Name, doc.Values[i]);
         if TotalWritten > BSON_MAXDOCUMENTSIZE then
-          raise EBsonException.CreateUtf8('%.BsonWriteDoc(size=%>max %)',
+          EBsonException.RaiseUtf8('%.BsonWriteDoc(size=%>max %)',
             [self, TotalWritten, BSON_MAXDOCUMENTSIZE]);
       end;
   BsonDocumentEnd;
@@ -3996,7 +3994,7 @@ begin
       end;
     end;
   if TotalWritten > BSON_MAXDOCUMENTSIZE then
-    raise EBsonException.CreateUtf8('Unexpected %.BsonWriteDoc(size=% > max=%)',
+    EBsonException.RaiseUtf8('Unexpected %.BsonWriteDoc(size=% > max=%)',
       [self, TotalWritten, BSON_MAXDOCUMENTSIZE]);
 end;
 
@@ -4252,7 +4250,7 @@ begin
         W.CancelLastComma(']');
       end;
   else
-    raise EBsonException.CreateUtf8('BsonListToJson(Kind=%)', [ord(Kind)]);
+    EBsonException.RaiseUtf8('BsonListToJson(Kind=%)', [ord(Kind)]);
   end;
   result := false; // not truncated 
 end;
@@ -4340,7 +4338,7 @@ begin
   if ID.FromText(Hexa) then
     ID.ToVariant(result)
   else
-    raise EBsonException.CreateUtf8('Invalid ObjectID("%")', [Hexa]);
+    EBsonException.RaiseUtf8('Invalid ObjectID("%")', [Hexa]);
 end;
 
 function BsonObjectID(const aObjectID: variant): TBsonObjectID;
@@ -4386,7 +4384,7 @@ var
   dec: TDecimal128;
 begin
   if dec.FromText(Value) = dsvError then
-    raise EBsonException.CreateUtf8('Invalid NumberDecimal("%")', [Value]);
+    EBsonException.RaiseUtf8('Invalid NumberDecimal("%")', [Value]);
   dec.ToVariant(result);
 end;
 
@@ -4408,7 +4406,7 @@ begin
     exit;
   end;
   if doc.VarType <> DocVariantType.VarType then
-    raise EBsonException.CreateUtf8(
+    EBsonException.RaiseUtf8(
       'Bson(doc) is % not a TDocVariant', [doc.VarType]);
   with TBsonWriter.Create(tmp{%H-}) do
   try

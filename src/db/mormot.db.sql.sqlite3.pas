@@ -347,7 +347,7 @@ end;
 constructor TSqlDBSQLite3ConnectionProperties.Create(aDB: TSqlDatabase);
 begin
   if aDB = nil then
-    raise ESqlDBException.CreateUtf8('%.Create(DB=nil)', [self]);
+    ESqlDBException.RaiseUtf8('%.Create(DB=nil)', [self]);
   fExistingDB := aDB;
   Create('', StringToUtf8(aDB.FileName), '', aDB.Password);
 end;
@@ -645,7 +645,7 @@ end;
 constructor TSqlDBSQLite3Statement.Create(aConnection: TSqlDBConnection);
 begin
   if not aConnection.InheritsFrom(TSqlDBSQLite3Connection) then
-    raise ESqlDBException.CreateUtf8('%.Create(%)', [self, aConnection]);
+    ESqlDBException.RaiseUtf8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
   fShouldLogSQL := (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level);
 end;
@@ -653,7 +653,7 @@ end;
 constructor TSqlDBSQLite3Statement.CreateFrom(aSQlite3DB: TSqlDataBase);
 begin
   if aSQlite3DB = nil then
-    raise ESqlDBException.CreateUtf8('%.CreateFrom(nil)', [self]);
+    ESqlDBException.RaiseUtf8('%.CreateFrom(nil)', [self]);
   fDB := aSQlite3DB;
   inherited Create(nil);
   fShouldLogSQL := (SynDBLog <> nil) and (sllSQL in SynDBLog.Family.Level);
@@ -763,7 +763,7 @@ begin
   if SeekFirst then
   begin
     if fCurrentRow > 0 then
-      raise ESqlDBException.CreateUtf8('%.Step(SeekFirst=true) not implemented', [self]);
+      ESqlDBException.RaiseUtf8('%.Step(SeekFirst=true) not implemented', [self]);
     fCurrentRow := 0;
     //fStatement.Reset;
   end;

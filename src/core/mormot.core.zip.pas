@@ -953,16 +953,14 @@ begin
     if (Offset <> 0) or
        (Origin <> soBeginning) or
        (fSizeIn <> 0) then
-      raise ESynZip.CreateUtf8('Unexpected %.Seek', [self]);
+      ESynZip.RaiseUtf8('Unexpected %.Seek', [self]);
   end;
 end;
 
 function TSynZipStream.{%H-}Read(var Buffer; Count: Longint): Longint;
 begin
-  {$ifdef DELPHI20062007}
-  result := 0;
-  {$endif DELPHI20062007}
-  raise ESynZip.CreateUtf8('%.Read is not supported', [self]);
+  ESynZip.RaiseUtf8('%.Read is not supported', [self]);
+  result := 0; // make compiler happy
 end;
 
 
@@ -1056,7 +1054,7 @@ constructor TSynZipDecompressor.Create(outStream: TStream;
   Format: TSynZipCompressorFormat);
 begin
   if fFormat = szcfGZ then
-    raise ESynZip.CreateUtf8('%.Create: unsupported szcfGZ', [self]);
+    ESynZip.RaiseUtf8('%.Create: unsupported szcfGZ', [self]);
   fDestStream := outStream;
   fFormat := Format;
   Z.Init(nil, 0, outStream, @fCrc, nil, 0, 256 shl 10); // use 256KB buffers
@@ -1742,7 +1740,7 @@ begin
     try
       if (R.fSourceOffset <> 0) or
          (fAppendOffset <> 0) then
-        raise ESynZip.CreateUtf8('%.CreateFrom: % not a plain .zip file',
+        ESynZip.RaiseUtf8('%.CreateFrom: % not a plain .zip file',
           [self, aFileName]);
       SetLength(fEntry, R.Count + 10);
       writepos := 0; // where to add new files
@@ -1759,7 +1757,7 @@ begin
         begin
           // append this entry to the TZipWrite directory
           if not R.RetrieveFileInfo(i, info) then
-            raise ESynZip.CreateUtf8('%.CreateFrom(%) failed on %',
+            ESynZip.RaiseUtf8('%.CreateFrom(%) failed on %',
               [self, aFileName, s^.zipName]);
           d^.h64 := info.f64;
           d^.h32.fileInfo := info.f32;
@@ -1768,7 +1766,7 @@ begin
             // some files were ignored -> move content over deleted file(s)
             len := info.f64.zzipSize;
             if writepos >= Int64(s^.fileinfo.offset) then
-              raise ESynZip.CreateUtf8('%.CreateFrom deletion overlap', [self]);
+              ESynZip.RaiseUtf8('%.CreateFrom deletion overlap', [self]);
             FileSeek64(h, writepos);
             inc(writepos, WriteHeader(s^.zipName));
             if len > 0 then
@@ -1813,7 +1811,7 @@ begin
               // zip64 input
               if d^.h32.fileInfo.extraLen <> SizeOf(d^.h64) then
                 // e.g. TFileInfoExtra64 with TFileInfoExtraName extension
-                raise ESynZip.CreateUtf8(
+                ESynZip.RaiseUtf8(
                   '%.CreateFrom unsupported fileinfo.extralen for % in %',
                   [self, s^.zipName, aFileName]);
               d^.h32.localHeadOff := ZIP32_MAXSIZE;
@@ -1960,7 +1958,7 @@ begin
     inc(PFileInfo(P));
     MoveFast(pointer(intName)^, P^, h32.fileInfo.nameLen);
     if ByteScanIndex(pointer(P), h32.fileInfo.nameLen, ord(fZipNamePathDelimReversed)) >= 0 then
-      raise ESynZip.CreateUtf8('%.WriteRawHeader(%)', [self, intName]); // paranoid
+      ESynZip.RaiseUtf8('%.WriteRawHeader(%)', [self, intName]); // paranoid
     inc(P, h32.fileInfo.nameLen);
     if h32.fileInfo.extraLen <> 0 then
       MoveFast(h64, P^, h32.fileInfo.extraLen);
@@ -2072,7 +2070,7 @@ begin
         // files up to 64MB/128MB will be loaded into memory and call libdeflate
         FastNewRawByteString(tmp, todo);
         if not FileReadAll(f, pointer(tmp), todo) then
-          raise ESynZip.CreateUtf8('%.AddDeflated: failed to read % [%]',
+          ESynZip.RaiseUtf8('%.AddDeflated: failed to read % [%]',
             [self, aFileName, GetLastError]);
         AddDeflated(ZipName, pointer(tmp), todo, CompressLevel, age);
         exit;
@@ -2105,7 +2103,7 @@ begin
           begin
             len := FileRead(f, pointer(tmp)^, length(tmp));
             if integer(len) <= 0 then
-              raise ESynZip.CreateUtf8('%.AddDeflated: failed to read % [%]',
+              ESynZip.RaiseUtf8('%.AddDeflated: failed to read % [%]',
                 [self, aFileName, GetLastError]);
             if deflate = nil then
             begin
@@ -2123,7 +2121,7 @@ begin
           begin
             deflate.Flush;
             if deflate.SizeIn <> h64.zfullSize then
-              raise ESynZip.CreateUtf8('%.AddDeflated: failed to deflate %',
+              ESynZip.RaiseUtf8('%.AddDeflated: failed to deflate %',
                 [self, aFileName]);
             h64.zzipSize := deflate.SizeOut;
             h32.fileInfo.zcrc32 := deflate.CRC;
@@ -2170,7 +2168,7 @@ begin
     begin
       if (fSizeIn shr 32 <> 0) or
          (fSizeOut shr 32 <> 0) then
-        raise ESynZip.CreateUtf8(
+        ESynZip.RaiseUtf8(
           '%.AddDeflatedStream: too much data in % - try ForceZip64=true',
           [fOwner, intName]);
       h32.fileInfo.zfullSize := fSizeIn; // Zip64 store ZIP32_MAXSIZE here
@@ -2286,7 +2284,7 @@ begin
       z := @ZipSource.Entry[ZipEntry];
       if (z^.dir64 = nil) and
          (h32.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0) then
-        raise ESynZip.CreateUtf8('%.AddFromZip failed on %: unexpected ' +
+        ESynZip.RaiseUtf8('%.AddFromZip failed on %: unexpected ' +
           'data descriptor (MacOS) format', [self, z^.zipName]);
       h32 := z^.dir^;
       h64:= z^.fileinfo; // from TZipRead.Create()
@@ -2515,10 +2513,10 @@ begin
   Create;
   if (BufZip = nil) or
      (Size < SizeOf(TLastHeader)) then
-     raise ESynZip.CreateUtf8('%.Create(nil)', [self]);
+     ESynZip.RaiseUtf8('%.Create(nil)', [self]);
   lh32 := LocateLastHeader(BufZip, Size, Offset, lh64);
   if lh32 = nil then
-    raise ESynZip.CreateUtf8('%.Create(%): zip trailer signature not found',
+    ESynZip.RaiseUtf8('%.Create(%): zip trailer signature not found',
       [self, fFileName]);
   if lh64 <> nil then
     // zip64 support
@@ -2535,7 +2533,7 @@ begin
   if (fCentralDirectoryOffset <= Offset) or
      (fCentralDirectoryOffset +
        Int64(lastheader.totalFiles * SizeOf(TFileHeader)) >= Offset + Size) then
-    raise ESynZip.CreateUtf8(
+    ESynZip.RaiseUtf8(
       '%.Create: corrupted Central Directory or too small WorkMem (Offset=%) %',
       [self, fCentralDirectoryOffset, fFileName]);
   fCentralDirectory := @BufZip[fCentralDirectoryOffset - Offset];
@@ -2548,12 +2546,12 @@ begin
     if (PtrUInt(h) + SizeOf(TFileHeader) >= PtrUInt(@BufZip[Size])) or
        (h^.signature + 1 <> ENTRY_SIGNATURE_INC) or
        (h^.fileInfo.nameLen = 0) then
-      raise ESynZip.CreateUtf8('%.Create: corrupted file header #%/% %',
+      ESynZip.RaiseUtf8('%.Create: corrupted file header #%/% %',
         [self, i, lastheader.totalFiles, fFileName]);
     hnext := pointer(PtrUInt(h) + SizeOf(h^) + h^.fileInfo.NameLen +
       h^.fileInfo.extraLen + h^.commentLen);
     if PtrUInt(hnext) >= PtrUInt(@BufZip[Size]) then
-      raise ESynZip.CreateUtf8('%: corrupted header in %', [self, fFileName]);
+      ESynZip.RaiseUtf8('%: corrupted header in %', [self, fFileName]);
     e^.dir := h;
     e^.storedName := PAnsiChar(h) + SizeOf(h^);
     SetString(tmp, e^.storedName, h^.fileInfo.nameLen); // better for FPC
@@ -2590,7 +2588,7 @@ begin
     end;
     if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
        not IsFolder(e^.zipName) then
-      raise ESynZip.CreateUtf8('%.Create: Unsupported zipmethod % for % in %',
+      ESynZip.RaiseUtf8('%.Create: Unsupported zipmethod % for % in %',
         [self, h^.fileInfo.zZipMethod, e^.zipName, fFileName]);
     { TFileInfoExtra64 is the layout of the zip64 extended info "extra" block.
       If one of the size or offset fields in the Local or Central directory
@@ -2606,19 +2604,19 @@ begin
       begin
         e^.dir64 := h^.LocateExtra(ZIP64_EXTRA_ID);
         if e^.dir64 = nil then
-          raise ESynZip.CreateUtf8('%.Create: zip64 extra not found for % in %',
+          ESynZip.RaiseUtf8('%.Create: zip64 extra not found for % in %',
             [self, e^.zipName, fFileName]);
         e^.fileinfo.zip64id := ZIP64_EXTRA_ID;
         e^.fileinfo.size := 3 * SizeOf(QWord);
       end
       else
-        raise ESynZip.CreateUtf8('%.Create: zip64 version % error for % in %',
+        ESynZip.RaiseUtf8('%.Create: zip64 version % error for % in %',
           [self, ToByte(h^.fileInfo.neededVersion), e^.zipName, fFileName]);
     p64 := @e^.dir64^.zfullSize; // where 64-bit field(s) may appear
     if e^.dir^.fileInfo.zfullSize = ZIP32_MAXSIZE then
     begin
       if e^.dir64 = nil then
-        raise ESynZip.CreateUtf8('zip64 FS format error for % in %',
+        ESynZip.RaiseUtf8('zip64 FS format error for % in %',
           [e^.zipName, fFileName]);
       e^.fileinfo.zfullSize := p64^;
       inc(p64); // go to the next field
@@ -2628,7 +2626,7 @@ begin
     if e^.dir^.fileInfo.zzipSize = ZIP32_MAXSIZE then
     begin
       if e^.dir64 = nil then
-        raise ESynZip.CreateUtf8('zip64 ZS format error for % in %',
+        ESynZip.RaiseUtf8('zip64 ZS format error for % in %',
           [e^.zipName, fFileName]);
       e^.fileinfo.zzipSize := p64^;
       inc(p64);
@@ -2637,7 +2635,7 @@ begin
       e^.fileinfo.zzipSize := e^.dir^.fileInfo.zzipSize;
     if e^.dir^.localHeadOff = ZIP32_MAXSIZE then
       if e^.dir64 = nil then
-        raise ESynZip.CreateUtf8('zip64 HO format error for % in %',
+        ESynZip.RaiseUtf8('zip64 HO format error for % in %',
           [e^.zipName, fFileName])
       else
         e^.fileinfo.offset := p64^
@@ -2653,7 +2651,7 @@ begin
           if (zcrc32 <> 0) or
              (zzipSize <> 0) or
              (zfullSize <> 0) then
-            raise ESynZip.CreateUtf8('%.Create: data descriptor (MacOS) with ' +
+            ESynZip.RaiseUtf8('%.Create: data descriptor (MacOS) with ' +
               'sizes for % %', [self, e^.zipName, fFileName]);
       if prev <> nil then
         prev^.nextlocal := e^.local;
@@ -2716,7 +2714,7 @@ begin
   if Size < WorkingMem then
     WorkingMem := Size; // up to 1MB by default
   if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
-    raise ESynZip.CreateUtf8('%.Create: No ZIP header found %', [self, fFileName]);
+    ESynZip.RaiseUtf8('%.Create: No ZIP header found %', [self, fFileName]);
   FastNewRawByteString(fSourceBuffer, WorkingMem);
   P := pointer(fSourceBuffer);
   // search for the first zip file local header
@@ -2797,7 +2795,7 @@ begin
       end;
     inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
   until read <> WorkingMem;
-  raise ESynZip.CreateUtf8('%.Create: No ZIP header found %', [self, fFileName]);
+  ESynZip.RaiseUtf8('%.Create: No ZIP header found %', [self, fFileName]);
 end;
 
 constructor TZipRead.Create(const aFileName: TFileName;
@@ -2901,7 +2899,7 @@ begin
   begin
     // this file is not within WorkingMem: search from disk
     if e^.nextlocaloffs = 0 then // paranoid
-      raise ESynZip.CreateUtf8('%: datadesc with nextlocaloffs=0', [self]);
+      ESynZip.RaiseUtf8('%: datadesc with nextlocaloffs=0', [self]);
     tmpLen := e^.nextlocaloffs - e^.fileinfo.offset;
     if tmpLen > SizeOf(tmp) then
       tmpLen := SizeOf(tmp); // search backward up to 1024 bytes
@@ -2913,7 +2911,7 @@ begin
     until tmpLen = 0;
     fSource.Seek(posi, soBeginning);
     if PtrUInt(fSource.Read(tmp, tmpLen)) <> tmpLen then
-      raise ESynZip.CreateUtf8('%: data descriptor read error on % %',
+      ESynZip.RaiseUtf8('%: data descriptor read error on % %',
         [self, e^.zipName, fFileName]);
     descmin := PtrUInt(@tmp);
     desc := pointer(descmin + tmpLen);
@@ -2952,16 +2950,15 @@ var
   tmp: RawByteString;
   info: TFileInfoFull;
 begin
+  result := '';
   if not RetrieveFileInfo(aIndex, info) or
      (info.f64.zfullSize = 0) or
      (info.f64.zzipSize > aMaxSize) or
      (info.f64.zfullSize > aMaxSize) then
-  begin
-    result := '';
     exit;
-  end;
   // call libdeflate_crc32 / libdeflate_deflate_decompress if available
   FastSetString(RawUtf8(result), info.f64.zfullSize); // assume CP_UTF8 for FPC
+  len := info.f64.zfullsize;
   e := @Entry[aIndex];
   if e^.local = nil then
   begin
@@ -2969,10 +2966,7 @@ begin
       e^.fileinfo.offset + fSourceOffset + PtrUInt(info.localsize), soBeginning);
     case info.f32.zZipMethod of
       Z_STORED:
-        begin
-          len := info.f64.zfullsize;
-          fSource.ReadBuffer(pointer(result)^, len);
-        end;
+        fSource.ReadBuffer(pointer(result)^, len);
       Z_DEFLATED:
         begin
           FastNewRawByteString(tmp, info.f64.zzipSize);
@@ -2981,7 +2975,7 @@ begin
             info.f64.zzipsize, info.f64.zfullsize);
         end;
     else
-      raise ESynZip.CreateUtf8('%.UnZip: Unsupported method % for % %',
+      ESynZip.RaiseUtf8('%.UnZip: Unsupported method % for % %',
         [self, info.f32.zZipMethod, e^.zipName, fFileName]);
     end;
   end
@@ -2990,21 +2984,18 @@ begin
     data := e^.local^.Data;
     case info.f32.zZipMethod of
       Z_STORED:
-        begin
-          len := info.f64.zfullsize;
-          MoveFast(data^, pointer(result)^, len);
-        end;
+        MoveFast(data^, pointer(result)^, len);
       Z_DEFLATED:
         len := UnCompressMem(data, pointer(result),
           info.f64.zzipsize, info.f64.zfullsize);
     else
-      raise ESynZip.CreateUtf8('%.UnZip: Unsupported method % for % %',
+      ESynZip.RaiseUtf8('%.UnZip: Unsupported method % for % %',
         [self, info.f32.zZipMethod, e^.zipName, fFileName]);
     end;
   end;
   if (len <> info.f64.zfullsize) or
      (mormot.lib.z.crc32(0, pointer(result), len) <> info.f32.zcrc32) then
-    raise ESynZip.CreateUtf8('%.UnZip: crc error for % %',
+    ESynZip.RaiseUtf8('%.UnZip: crc error for % %',
       [self, e^.zipName, fFileName]);
 end;
 
@@ -3032,7 +3023,7 @@ begin
   end;
   e := @Entry[aIndex];
   if not (aInfo.f32.zZipMethod in [Z_STORED, Z_DEFLATED]) then
-    raise ESynZip.CreateUtf8('%.UnZipStream: Unsupported method % for % %',
+    ESynZip.RaiseUtf8('%.UnZipStream: Unsupported method % for % %',
       [self, aInfo.f32.zZipMethod, e^.zipName, fFileName]);
   InfoStart(len, 'UnZip ', e^.zipName);
   if e^.local = nil then
@@ -3163,7 +3154,7 @@ begin
       LocalZipName := StringReplace(
         LocalZipName, fZipNamePathDelimString, PathDelim, [rfReplaceAll]);
     if not SafeFileName(LocalZipName) then
-      raise ESynZip.CreateUtf8('%.UnZip(%): unsafe file name ''%''',
+      ESynZip.RaiseUtf8('%.UnZip(%): unsafe file name ''%''',
         [self, fFileName, LocalZipName]);
     Dest := EnsureDirectoryExists(
               EnsureDirectoryExists(DestDir) + ExtractFilePath(LocalZipName));
@@ -3385,7 +3376,7 @@ var
   buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
   if new = main then
-    raise ESynZip.CreateUtf8('%: main=new=%', [ctxt, main]);
+    ESynZip.RaiseUtf8('%: main=new=%', [ctxt, main]);
   certoffs := 0;
   certlenoffs := 0;
   O := TFileStreamEx.Create(new, fmCreate);
@@ -3398,14 +3389,14 @@ begin
         repeat
           read := M.Read(buf, SizeOf(buf));
           if read < 0 then
-            raise ESynZip.CreateUtf8('%: % read error', [ctxt, main]);
+            ESynZip.RaiseUtf8('%: % read error', [ctxt, main]);
           if parsePEheader then
           begin
             // search for COFF/PE header in the first block
             i := 0;
             repeat
               if i >= read - (CERTIFICATE_ENTRY_OFFSET + 8) then
-                raise ESynZip.CreateUtf8(
+                ESynZip.RaiseUtf8(
                   '%: % is not a PE executable', [ctxt, main]);
               if PCardinal(@buf[i])^ = ord('P') + ord('E') shl 8 then
                 break; // typical DOS header is $100
@@ -3420,9 +3411,9 @@ begin
             M.Seek(certoffs, soBeginning);
             if (M.Read(certlen2, 4) <> 4) or
                (certlen2 <> certlen) then
-              raise ESynZip.CreateUtf8('%: % has no certificate', [ctxt, main]);
+              ESynZip.RaiseUtf8('%: % has no certificate', [ctxt, main]);
             if certoffs + certlen <> M.Size then
-              raise ESynZip.CreateUtf8(
+              ESynZip.RaiseUtf8(
                 '%: % should end with a certificate', [ctxt, main]);
             M.Seek(read, soBeginning);
             parsePEheader := false; // do it once
@@ -3453,7 +3444,7 @@ begin
           else if high(zipfiles) >= 0 then
             zip.AddFiles(zipfiles, flag, level)
           else
-            raise ESynZip.CreateUtf8('%: invalid call for %', [ctxt, main]);
+            ESynZip.RaiseUtf8('%: invalid call for %', [ctxt, main]);
         finally
           zip.Free;
         end;

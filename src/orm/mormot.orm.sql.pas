@@ -627,7 +627,7 @@ begin
   log.Log(sllInfo, '% as % % Server=%',
     [StoredClass, fTableName, fProperties, Owner], self);
   if fProperties = nil then
-    raise ERestStorage.CreateUtf8('%.Create: no external DB defined for %',
+    ERestStorage.RaiseUtf8('%.Create: no external DB defined for %',
       [self, StoredClass]);
   // ensure external field names are compatible with the external DB keywords
   for f := 0 to StoredClassRecordProps.Fields.Count - 1 do
@@ -686,7 +686,7 @@ begin
       begin
         LogFields(log);
         if fFieldsExternal = nil then
-          raise ERestStorage.CreateUtf8(
+          ERestStorage.RaiseUtf8(
             '%.Create: external table creation % failed: GetFields() ' +
             'returned nil - sql=[%]', [self, StoredClass, fTableName, s]);
       end;
@@ -721,7 +721,7 @@ begin
                   if ExecuteDirect(s, [], [], false) <> nil then
                     TableModified := true
                   else
-                    raise ERestStorage.CreateUtf8('%.Create: %: ' +
+                    ERestStorage.RaiseUtf8('%.Create: %: ' +
                       'unable to create external missing field %.% - sql=[%]',
                       [self, StoredClass, fTableName, Fields.List[f].Name, s]);
               end;
@@ -758,7 +758,7 @@ var
   log: ISynLog;
 begin
   if aServer = nil then
-    raise ERestStorage.CreateUtf8('%.Create(%): aServer=%', [self, aClass, aServer]);
+    ERestStorage.RaiseUtf8('%.Create(%): aServer=%', [self, aClass, aServer]);
   log := aServer.LogClass.Enter('Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB process: setup ORM mapping, and create table/columns
@@ -1027,7 +1027,7 @@ begin
     // lock protected by try..finally in TRestServer.RunBatch caller
     try
       if fBatchMethod <> mNone then
-        raise ERestStorage.CreateUtf8('Missing previous %.InternalBatchStop(%)',
+        ERestStorage.RaiseUtf8('Missing previous %.InternalBatchStop(%)',
           [self, StoredClass]);
       fBatchMethod := Method;
       fBatchOptions := BatchOptions;
@@ -1055,7 +1055,7 @@ var
   tmp: TSynTempBuffer;
 begin
   if fBatchMethod = mNone then
-    raise ERestStorage.CreateUtf8('%.InternalBatchStop(%).BatchMethod=mNone',
+    ERestStorage.RaiseUtf8('%.InternalBatchStop(%).BatchMethod=mNone',
       [self, StoredClass]);
   try
     if fBatchCount = 0 then
@@ -1395,7 +1395,7 @@ var
 begin
   result := '';
   if ReturnedRowCount <> nil then
-    raise ERestStorage.CreateUtf8('%.EngineList(ReturnedRowCount<>nil) for %',
+    ERestStorage.RaiseUtf8('%.EngineList(ReturnedRowCount<>nil) for %',
       [self, StoredClass]);
   stmt := PrepareInlinedForRows(SQL);
   if stmt <> nil then
@@ -1865,7 +1865,7 @@ begin
     ParamsCount := length(Params);
     if ParamsMatchCopiableFields and
        (ParamsCount <> Length(fStoredClassRecordProps.CopiableFields)) then
-      raise ERestStorage.CreateUtf8(
+      ERestStorage.RaiseUtf8(
         '%.ExecuteDirectSqlVar(ParamsMatchCopiableFields) for %',
         [self, StoredClass]);
     for f := 0 to ParamsCount - 1 do
@@ -2100,11 +2100,10 @@ begin
         if UpdatedID <> 0 then
           InsertedID := 0
         else
-          raise ERestStorage.CreateUtf8(
-            '%.ExecuteFromJson(%,soUpdate,UpdatedID=%)',
+          ERestStorage.RaiseUtf8('%.ExecuteFromJson(%,soUpdate,UpdatedID=%)',
             [self, StoredClass, UpdatedID]);
     else
-      raise ERestStorage.CreateUtf8('%.ExecuteFromJson(%,Occasion=%)?',
+      ERestStorage.RaiseUtf8('%.ExecuteFromJson(%,Occasion=%)?',
         [self, StoredClass, ToText(Occasion)^]);
     end;
     // decode fields
@@ -2197,7 +2196,7 @@ begin
       k := fFieldsInternalToExternal[k + 1];
     end;
     if k < 0 then
-      raise ERestStorage.CreateUtf8(
+      ERestStorage.RaiseUtf8(
         '%.JsonDecodedPrepareToSql(%): No column for [%] field in table %',
         [self, StoredClass, Decoder.FieldNames[f], fTableName]);
     Types[f] := fFieldsExternal[k].ColumnType;
@@ -2213,7 +2212,7 @@ begin
     fStoredClassMapping^.RowIDFieldName, BatchOptions, fProperties.Dbms);
   if Occasion = ooUpdate then
     if Decoder.FieldCount = MAX_SQLFIELDS then
-      raise ERestStorage.CreateUtf8(
+      ERestStorage.RaiseUtf8(
         'Too many fields for %.JsonDecodedPrepareToSql', [self])
     else
     begin

@@ -2546,7 +2546,7 @@ begin
             fOwner.fThreadReadPoll.ReleaseEvent; // atpReadPoll lock above
           end;
       else
-        raise EAsyncConnections.CreateUtf8('%.Execute: unexpected fProcess=%',
+        EAsyncConnections.RaiseUtf8('%.Execute: unexpected fProcess=%',
           [self, ord(fProcess)]);
       end;
     {$endif USE_WINIOCP}
@@ -2576,7 +2576,7 @@ begin
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
   if (aConnectionClass = TAsyncConnection) or
      (aConnectionClass = nil) then
-    raise EAsyncConnections.CreateUtf8('Unexpected %.Create(%)',
+    EAsyncConnections.RaiseUtf8('Unexpected %.Create(%)',
       [self, aConnectionClass]);
   if aThreadPoolCount <= 0 then
     aThreadPoolCount := 1;
@@ -2849,7 +2849,7 @@ begin
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
-    raise EAsyncConnections.CreateUtf8('%: %:% connection failure (%)',
+    EAsyncConnections.RaiseUtf8('%: %:% connection failure (%)',
       [self, fThreadClients.Address, fThreadClients.Port, ToText(res)^]);
   // create and register the async connection as in TAsyncServer.Execute
   if not ConnectionCreate(client, addr, result) then
@@ -3172,7 +3172,7 @@ begin
      (aHandle <= 0) then
     exit;
   if acoNoConnectionTrack in fOptions then
-    raise EAsyncConnections.CreateUtf8(
+    EAsyncConnections.RaiseUtf8(
       'Unexpected %.ConnectionFindAndLock(%)', [self, aHandle]);
   fConnectionLock.Lock(aLock);
   {$ifdef HASFASTTRYFINALLY}
@@ -3502,7 +3502,7 @@ var
   tix: Int64;
 begin
   if self = nil then
-    raise EAsyncConnections.CreateUtf8(
+    EAsyncConnections.RaiseUtf8(
       'TAsyncServer.WaitStarted(%) with self=nil', [seconds]);
   tix := mormot.core.os.GetTickCount64 + seconds * 1000; // never wait forever
   repeat
@@ -3512,12 +3512,12 @@ begin
       esRunning:
         exit;
       esFinished:
-        raise EAsyncConnections.CreateUtf8('%.Execute aborted as %',
+        EAsyncConnections.RaiseUtf8('%.Execute aborted as %',
           [self, fExecuteMessage]);
     end;
     SleepHiRes(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
-      raise EAsyncConnections.CreateUtf8(
+      EAsyncConnections.RaiseUtf8(
         '%.WaitStarted timeout after % seconds', [self, seconds]);
   until false;
 end;
@@ -3601,7 +3601,7 @@ begin
   // slow TLS processs is done from ProcessRead in a sub-thread
   if (fServer = nil) or
      (Sender.fSecure <> nil) then // paranoid
-    raise EAsyncConnections.CreateUtf8('Unexpected %.OnFirstReadDoTls', [self]);
+    EAsyncConnections.RaiseUtf8('Unexpected %.OnFirstReadDoTls', [self]);
   if not fServer.TLS.Enabled then  // if not already done in WaitStarted()
   begin
     fGC[1].Safe.Lock; // load certificates once from first connected thread
@@ -3662,7 +3662,7 @@ begin
     // BIND + LISTEN (TLS is done later)
     fServer := TCrtSocket.Bind(fSockPort, nlTcp, 5000, acoReusePort in Options);
     if not fServer.SockIsDefined then // paranoid check
-      raise EAsyncConnections.CreateUtf8('%.Execute: bind failed', [self]);
+      EAsyncConnections.RaiseUtf8('%.Execute: bind failed', [self]);
     SetExecuteState(esRunning);
     {$ifdef USE_WINIOCP}
     fIocpAccept := fIocp.Subscribe(fServer.Sock, 0);
@@ -3679,7 +3679,7 @@ begin
       if fClients.fWrite.Subscribe(fServer.Sock, [pseRead], {tag=}0) then
         fClients.fWrite.PollForPendingEvents(0) // actually subscribe
       else
-        raise EAsyncConnections.CreateUtf8('%.Execute: accept subscribe', [self]);
+        EAsyncConnections.RaiseUtf8('%.Execute: accept subscribe', [self]);
     {$endif USE_WINIOCP}
     // main socket accept/send processing loop
     start := 0;

@@ -387,8 +387,8 @@ begin
         (GetTickCount64 < endtix) do
     SleepHiRes(50);
   if fEngines.Count>0 then
-    raise EScriptException.CreateUtf8(
-      '%.Destroy: here are % unreleased engines', [self, fEngines.Count]);
+    EScriptException.RaiseUtf8('%.Destroy: % unreleased engines',
+      [self, fEngines.Count]);
   FreeAndNil(fMainEngine);
   inherited Destroy;
   fEngines.Free;
@@ -462,7 +462,7 @@ begin
     end;
     // if we reached here, we need a new TThreadSafeEngine instance
     if fEngines.Count >= fMaxEngines then
-      raise EScriptException.CreateUtf8(
+      EScriptException.RaiseUtf8(
         '%.ThreadSafeEngine reached its limit of % engines on %',
         [self, fMaxEngines, GetCurrentThreadInfo]);
     if Assigned(fOnLog) then
@@ -550,7 +550,7 @@ begin
       fOnLog(sllInfo, 'ThreadSafeEngine: created %', [result], self);
   end
   else if result.ThreadID <> tid then
-    raise EScriptException.CreateUtf8('Invalid %.InitializeMainEngine', [self]);
+    EScriptException.RaiseUtf8('Invalid %.InitializeMainEngine', [self]);
 end;
 
 var
@@ -713,8 +713,7 @@ procedure TThreadSafeEngine.DoBeginRequest;
 begin
   // paranoid todo: check if we need a Lock here to avoid GPF at expiration?
   if fRequestFpuBackup[0] = high(fRequestFpuBackup) then
-    raise EScriptException.CreateUtf8(
-      'Too Many Nested %.DoBeginRequest', [self]);
+    EScriptException.RaiseUtf8('Too Many Nested %.DoBeginRequest', [self]);
   inc(fRequestFpuBackup[0]);
   fRequestFpuBackup[fRequestFpuBackup[0]] := SetFpuFlags;
 end;

@@ -4371,7 +4371,7 @@ begin
   if BufLen > 1 shl 22 then
     BufLen := 1 shl 22 // 4 MB sounds right enough
   else if BufLen < 128 then
-    raise EBufferException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
+    EBufferException.RaiseUtf8('%.Create(BufLen=%)', [self, BufLen]);
   GetMem(fBufferInternal, BufLen);
   Setup(aStream, fBufferInternal, BufLen);
 end;
@@ -4425,7 +4425,7 @@ begin
   if fStream.InheritsFrom(TRawByteStringStream) and
      (fTotalFlushed > _STRMAXSIZE) then
     // Delphi strings have a 32-bit length so you should change your algorithm
-    raise EBufferException.CreateUtf8('%.Write: % overflow (%)',
+    EBufferException.RaiseUtf8('%.Write: % overflow (%)',
       [self, fStream, KBNoSpace(fTotalFlushed)]);
   fStream.WriteBuffer(Data^, DataLen);
 end;
@@ -5002,8 +5002,7 @@ begin
             PBeg := PAnsiChar(P) + 4; // leave space for chunk size
             P := PByte(CleverStoreInteger(pointer(Values), PBeg, PEnd, ValuesCount, n));
             if P = nil then
-              raise EBufferException.CreateUtf8(
-                '%.WriteVarUInt32Array: data not sorted', [self]);
+              EBufferException.RaiseUtf8('%.WriteVarUInt32Array: not sorted', [self]);
             PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg;
           end;
       end;
@@ -5105,7 +5104,7 @@ begin
   result := nil;
   siz := GetTotalWritten;
   if siz > _DAMAXSIZE then
-    raise EBufferException.CreateUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
+    EBufferException.RaiseUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
   SetLength(result, siz);
   if fStream.Position = 0 then
     // direct assignment from internal buffer
@@ -5151,7 +5150,7 @@ var
 begin
   existing := Algo(fAlgoID);
   if existing <> nil then
-    raise EAlgoCompress.CreateUtf8('%.Create: AlgoID=% already registered by %',
+    EAlgoCompress.RaiseUtf8('%.Create: AlgoID=% already registered by %',
       [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
   RegisterGlobalShutdownRelease(self);
@@ -5260,7 +5259,7 @@ end;
 procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: shortstring);
 begin
   if fAlgoHasForcedFormat then
-    raise EAlgoCompress.CreateUtf8('%.% is unsupported', [self, caller]);
+    EAlgoCompress.RaiseUtf8('%.% is unsupported', [self, caller]);
 end;
 
 function TAlgoCompress.AlgoHash(Previous: cardinal;
@@ -9515,12 +9514,12 @@ end;
 
 procedure TStreamRedirect.SetSize(NewSize: Longint);
 begin
-  raise EStreamRedirect.CreateUtf8('%.Size is read/only', [self]);
+  EStreamRedirect.RaiseUtf8('%.Size is read/only', [self]);
 end;
 
 procedure TStreamRedirect.SetSize(const NewSize: Int64);
 begin
-  raise EStreamRedirect.CreateUtf8('%.Size is read/only', [self]);
+  EStreamRedirect.RaiseUtf8('%.Size is read/only', [self]);
 end;
 
 class procedure TStreamRedirect.ProgressStreamToConsole(Sender: TStreamRedirect);
@@ -9645,11 +9644,9 @@ var
   read: PtrInt;
 begin
   if fRedirected = nil then
-    raise EStreamRedirect.CreateUtf8('%.Append(%): Redirected=nil',
-      [self, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.Append(%): Redirected=nil', [self, fInfo.Context]);
   if fMode = mRead then
-    raise EStreamRedirect.CreateUtf8('%.Append(%) after Read()',
-      [self, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.Append(%) after Read()', [self, fInfo.Context]);
   fMode := mWrite;
   if GetHashFileExt = '' then // DoHash() does nothing
   begin
@@ -9718,7 +9715,7 @@ begin
       begin
         if (fTimeOut <> 0) and
            (fInfo.Elapsed > fTimeOut) then
-          raise EStreamRedirect.CreateUtf8('%.%(%) timeout after %',
+          EStreamRedirect.RaiseUtf8('%.%(%) timeout after %',
             [self, Caller, fInfo.Context, MilliSecToString(fInfo.Elapsed)]);
         if fLimitPerSecond > 0 then
         begin
@@ -9750,19 +9747,16 @@ begin
      Assigned(fInfo.OnLog) then
     DoReport(false);
   if fTerminated then
-    raise EStreamRedirect.CreateUtf8('%.%(%) Terminated',
-      [self, Caller, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.%(%) Terminated', [self, Caller, fInfo.Context]);
 end;
 
 function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
 begin
   if fMode = mWrite then
-    raise EStreamRedirect.CreateUtf8('%.Read(%) in Write() mode',
-      [self, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.Read(%) in Write() mode', [self, fInfo.Context]);
   fMode := mRead;
   if fRedirected = nil then
-    raise EStreamRedirect.CreateUtf8('%.Read(%) with Redirected=nil',
-      [self, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.Read(%) with Redirected=nil', [self, fInfo.Context]);
   result := fRedirected.Read(Buffer, Count);
   ReadWriteHash(Buffer, result);
   ReadWriteReport('Read');
@@ -9771,8 +9765,7 @@ end;
 function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
 begin
   if fMode = mRead then
-    raise EStreamRedirect.CreateUtf8('%.Write(%) in Read() mode',
-      [self, fInfo.Context]);
+    EStreamRedirect.RaiseUtf8('%.Write(%) in Read() mode', [self, fInfo.Context]);
   fMode := mWrite;
   ReadWriteHash(Buffer, Count);
   result := Count;

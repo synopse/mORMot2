@@ -1364,7 +1364,7 @@ begin
   result := TSynMustache.Parse(aTemplate);
   if (result <> nil) and
      (fList.AddObject(aName, result) < 0) then
-    raise ESynMustache.CreateUtf8('%.Add(%) duplicated name', [self, aName]);
+    ESynMustache.RaiseUtf8('%.Add(%) duplicated name', [self, aName]);
 end;
 
 function TSynMustachePartials.Add(const aName: RawUtf8;
@@ -1526,7 +1526,7 @@ begin
                 aEnd := P;
                 fPos := P;
                 if not Scan(fTagStopChars) then
-                  raise ESynMustache.CreateUtf8('Unfinished {{%', [aStart]);
+                  ESynMustache.RaiseUtf8('Unfinished {{%', [aStart]);
                 if (aKind = mtVariableUnescape) and
                    (fTagStopChars = $7d7d) and
                    (PWord(fPos - 1)^ = $7d7d) then
@@ -1566,8 +1566,7 @@ begin
               (aEnd[-1] <= ' ') do
           dec(aEnd);
         if aEnd = aStart then
-          raise ESynMustache.CreateUtf8(
-            'Void % identifier', [KindToText(aKind)^]);
+          ESynMustache.RaiseUtf8('Void % identifier', [KindToText(aKind)^]);
         FastSetString(Value, aStart, aEnd - aStart);
         ValueSpace := PosExChar(' ', Value);
       end;
@@ -1581,9 +1580,9 @@ constructor TSynMustacheParser.Create(Template: TSynMustache;
 begin
   fTemplate := Template;
   if length(DelimiterStart) <> 2 then
-    raise ESynMustache.CreateUtf8('DelimiterStart="%"', [DelimiterStart]);
+    ESynMustache.RaiseUtf8('DelimiterStart="%"', [DelimiterStart]);
   if length(DelimiterStop) <> 2 then
-    raise ESynMustache.CreateUtf8('DelimiterStop="%"', [DelimiterStop]);
+    ESynMustache.RaiseUtf8('DelimiterStop="%"', [DelimiterStop]);
   fTagStartChars := PWord(DelimiterStart)^;
   fTagStopChars := PWord(DelimiterStop)^;
 end;
@@ -1682,14 +1681,13 @@ begin
     if Kind <> mtVariable then
       inc(fPos);
     if not Scan(fTagStopChars) then
-      raise ESynMustache.CreateUtf8('Unfinished {{tag [%]', [fPos]);
+      ESynMustache.RaiseUtf8('Unfinished {{tag [%]', [fPos]);
     case Kind of
       mtSetDelimiter:
         begin
           if (fScanEnd - fScanStart <> 6) or
              (fScanEnd[-1] <> '=') then
-            raise ESynMustache.Create(
-              'mtSetDelimiter syntax is e.g. {{=<% %>=}}');
+            raise ESynMustache.Create('mtSetDelimiter syntax is e.g. {{=<% %>=}}');
           fTagStartChars := PWord(fScanStart)^;
           fTagStopChars := PWord(fScanStart + 3)^;
           continue; // do not call AddTag(Kind=mtSetDelimiter)
@@ -1741,21 +1739,18 @@ begin
                         break;
                       end
                       else
-                        raise ESynMustache.CreateUtf8(
-                          'Got {{/%}}, expected {{/%}}',
+                        ESynMustache.RaiseUtf8('Got {{/%}}, expected {{/%}}',
                           [Value, fTemplate.fTags[j].Value]);
                   end;
               end;
             if SectionOppositeIndex < 0 then
-              raise ESynMustache.CreateUtf8(
-                'Missing section end {{/%}}', [Value]);
+              ESynMustache.RaiseUtf8('Missing section end {{/%}}', [Value]);
           end;
         mtSectionEnd:
           begin
             dec(secCount);
             if SectionOppositeIndex < 0 then
-              raise ESynMustache.CreateUtf8(
-                'Unexpected section end {{/%}}', [Value]);
+              ESynMustache.RaiseUtf8('Unexpected section end {{/%}}', [Value]);
           end;
       end;
   SetLength(fTemplate.fTags, fTagCount);
@@ -1930,7 +1925,7 @@ begin
           if TextLen <> 0 then
             Context.TranslateBlock(TextStart, TextLen);
       else
-        raise ESynMustache.CreateUtf8('Kind=% not implemented yet',
+        ESynMustache.RaiseUtf8('Kind=% not implemented yet',
           [KindToText(fTags[TagStart].Kind)^]);
       end;
     inc(TagStart);
@@ -2021,7 +2016,7 @@ var
   tmp: TTextWriterStackBuffer;
 begin
   if ValueRtti = nil then
-    raise ESynMustache.CreateUtf8('%.RenderData: invalid TypeInfo', [self]);
+    ESynMustache.RaiseUtf8('%.RenderData: invalid TypeInfo', [self]);
   ctx := fCachedContextData; // thread-safe reuse of shared rendering context
   if ctx.fReuse.TryLock then
     ctx.PushContext(Value, ValueRtti)

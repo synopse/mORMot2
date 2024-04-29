@@ -960,7 +960,7 @@ end;
 
 procedure TOrmTableToGrid.IDColumnHide; { TODO: IDColumnHide }
 begin
-  raise EOrmTableToGrid.CreateUtf8('%.IDColumnHide is unimplemented', [self]);
+  EOrmTableToGrid.RaiseUtf8('%.IDColumnHide is unimplemented', [self]);
   if NotDefined {or not Table.IDColumnHide} then
     exit;
   TDrawGrid(Owner).ColCount := Table.FieldCount; // we loose one column

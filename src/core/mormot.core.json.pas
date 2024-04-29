@@ -6017,7 +6017,7 @@ begin
   W := GetTempJsonWriter;
   W.WriteObject(Value, Options);
   AddJsonEscape(W);
-  Add('"');
+  AddDirect('"');
 end;
 
 procedure TJsonWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
@@ -6531,7 +6531,7 @@ begin
       if cv <> nil then
         cv.ToJson(self, v)
       else if not CustomVariantToJson(self, v, Escape) then // other custom
-        raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
+        EJsonException.RaiseUtf8('%.AddVariant VType=%', [self, vt]);
     end;
   end;
 end;
@@ -6606,7 +6606,7 @@ begin
     end
     else
       // rkRecord,rkObject have no getter methods
-      raise EJsonException.CreateUtf8('%.AddRttiVarData: unsupported % (%)',
+      EJsonException.RaiseUtf8('%.AddRttiVarData: unsupported % (%)',
         [self, Value.Prop.Value.Name, ToText(Value.Prop.Value.Kind)^]);
   end
   else
@@ -7441,7 +7441,7 @@ var
   temp: TDynArray;
 begin
   if Info.Kind <> rkDynArray then
-    raise EDynArray.CreateUtf8('%.AddDynArrayJson: % is %, expected rkDynArray',
+    EDynArray.RaiseUtf8('%.AddDynArrayJson: % is %, expected rkDynArray',
       [self, Info.Name, ToText(Info.Kind)^]);
   temp.InitRtti(Info, Value^);
   AddDynArrayJson(temp, WriteOptions);
@@ -9543,7 +9543,7 @@ begin
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
         ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
       if fValues.Add(aValue^) <> result then
-        raise ESynDictionary.CreateUtf8('%.Add fValues.Add', [self]);
+        ESynDictionary.RaiseUtf8('%.Add fValues.Add', [self]);
       if tim <> 0 then
         fTimeOuts.Add(tim);
     end
@@ -9623,7 +9623,7 @@ begin
   result := false;
   if (fValues.Info.ArrayRtti = nil) or
      (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
-    raise ESynDictionary.CreateUtf8('%.Values: % items are not dynamic arrays',
+    ESynDictionary.RaiseUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
   if aAction = iaFind then
     fSafe.ReadLock
@@ -10220,7 +10220,7 @@ end;
 function _New_Collection(Rtti: TRttiCustom): pointer;
 begin
   if Rtti.CollectionItem = nil then
-    raise ERttiException.CreateUtf8('% with CollectionItem=nil: please call ' +
+    ERttiException.RaiseUtf8('% with CollectionItem=nil: please call ' +
       'Rtti.RegisterCollection()', [Rtti.ValueClass]);
   result := TCollectionClass(Rtti.ValueClass).Create(Rtti.CollectionItem);
 end;
@@ -11237,7 +11237,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      not (TypeInfo.Kind in rkRecordTypes) then
-    raise EJsonException.CreateUtf8('RecordLoadJson: % is not a record',
+    EJsonException.RaiseUtf8('RecordLoadJson: % is not a record',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
     @Rec, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
@@ -11266,7 +11266,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      (TypeInfo.Kind <> rkDynArray) then
-    raise EJsonException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
+    EJsonException.RaiseUtf8('DynArrayLoadJson: % is not a dynamic array',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(
     @Value, Json, EndOfObject, JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant],
@@ -11614,7 +11614,7 @@ begin
     ent := GetInterfaceEntry(InterfaceInfo^.InterfaceGuid^); // resolve TGuid
   if (ent = nil) or
      not InterfaceEntryIsStandard(ent) then
-    raise ERttiException.CreateUtf8('Unexpected %.RegisterToRtti(%)',
+    ERttiException.RaiseUtf8('Unexpected %.RegisterToRtti(%)',
       [self, InterfaceInfo^.Name^]);
   result := Rtti.RegisterType(InterfaceInfo) as TRttiJson;
   result.fCache.SerializableClass := self;

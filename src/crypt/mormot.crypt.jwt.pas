@@ -806,7 +806,7 @@ constructor TJwtAbstract.Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
 begin
   inherited Create; // may have been overriden
   if aAlgorithm = '' then
-    raise EJwtException.CreateUtf8('%.Create(algo?)', [self]);
+    EJwtException.RaiseUtf8('%.Create(algo?)', [self]);
   if high(aAudience) >= 0 then
   begin
     fAudience := TRawUtf8DynArrayFrom(aAudience);
@@ -855,7 +855,7 @@ begin
   sig := ComputeSignature(headpayload);
   result := headpayload + '.' + sig;
   if length(result) > JWT_MAXSIZE then
-    raise EJwtException.CreateUtf8('%.Compute oversize: len=%',
+    EJwtException.RaiseUtf8('%.Compute oversize: len=%',
       [self, length(result)]);
   if Signature <> nil then
     Signature^ := sig;
@@ -878,7 +878,7 @@ function TJwtAbstract.PayloadToJson(const DataNameValue: array of const;
 
   procedure RaiseMissing(c: TJwtClaim);
   begin
-    raise EJwtException.CreateUtf8('%.PayloadToJson: missing % (''%'')',
+    EJwtException.RaiseUtf8('%.PayloadToJson: missing % (''%'')',
       [self, _TJwtClaim[c]^, JWT_CLAIMS_TEXT[c]]);
   end;
 
@@ -1507,7 +1507,7 @@ constructor TJwtEs256.Create(aCertificate: TEccCertificate; aClaims: TJwtClaims;
   aIDObfuscationKeyNewKdf: integer);
 begin
   if not aCertificate.CheckCRC then
-    raise EJwtException.CreateUtf8('%.Create(aCertificate?)', [self]);
+    EJwtException.RaiseUtf8('%.Create(aCertificate?)', [self]);
   inherited Create('ES256', aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   fCertificate := aCertificate;
@@ -1549,11 +1549,11 @@ var
 begin
   if not fCertificate.InheritsFrom(TEccCertificateSecret) or
      not TEccCertificateSecret(fCertificate).HasSecret then
-    raise EEccException.CreateUtf8('%.ComputeSignature expects % (%) to hold ' +
+    EEccException.RaiseUtf8('%.ComputeSignature expects % (%) to hold ' +
       'a private key', [self, fCertificate, fCertificate.Serial]);
   sha.Full(pointer(headpayload), length(headpayload), hash);
   if not Ecc256r1Sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
-    raise EEccException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
+    EEccException.RaiseUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64Uri(@sign, SizeOf(sign));
 end;
 
@@ -1578,7 +1578,7 @@ begin
     caaPS256 .. caaPS512:
       fRsa := TRsaPss.Create;
   else
-    raise EJwtException.CreateUtf8('%.Create with %', [self, ToText(a)^]);
+    EJwtException.RaiseUtf8('%.Create with %', [self, ToText(a)^]);
   end;
   try
     if aKey <> '' then
@@ -1587,15 +1587,15 @@ begin
       begin
         if (fRsa.ModulusBits < 2048) or
            not fRsa.CheckPrivateKey then
-        raise ERsaException.CreateUtf8('%.Create: invalid %-bit private key',
+        ERsaException.RaiseUtf8('%.Create: invalid %-bit private key',
           [self, fRsa.ModulusBits]);
       end
       else if fRsa.LoadFromPublicKeyPem(aKey) then // PEM or DER
         if fRsa.ModulusBits < 2048 then
-          raise ERsaException.CreateUtf8(
+          ERsaException.RaiseUtf8(
             '%.Create: invalid %-bit public key', [self, fRsa.ModulusBits]);
     if not fRsa.HasPublicKey then
-      raise ERsaException.CreateUtf8('%.Create: invalid key', [self]);
+      ERsaException.RaiseUtf8('%.Create: invalid key', [self]);
   except
     FreeAndNil(fRsa);
     raise;
@@ -1617,12 +1617,12 @@ var
   sig: RawByteString;
 begin
   if not fRsa.HasPrivateKey then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       '%.ComputeSignature requires a private key', [self]);
   h.Full(fHash, pointer(headpayload), length(headpayload), dig);
   sig := fRsa.Sign(@dig.b, fHash); // = encrypt with private key
   if sig = '' then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       '%.ComputeSignature: %.Sign failed', [self, fRsa]);
   result := BinToBase64Uri(pointer(sig), length(sig));
 end;
@@ -1634,7 +1634,7 @@ var
   dig: THash512Rec;
 begin
   if fRsa = nil then
-    raise ERsaException.CreateUtf8(
+    ERsaException.RaiseUtf8(
       '%.CheckSignature requires a public key', [self]);
   jwt.result := jwtInvalidSignature;
   if length(signature) <> fRsa.ModulusLen then
@@ -1690,7 +1690,7 @@ begin
   fAlgorithm := CAA_JWT[aAlgo];
   fKeyAlgo := CAA_CKA[aAlgo];;
   if CryptPublicKey[fKeyAlgo] = nil then
-    raise EJwtException.CreateUtf8('%.Create with unsupported %',
+    EJwtException.RaiseUtf8('%.Create with unsupported %',
             [self, ToText(aAlgo)^]);
   fPublicKey := CryptPublicKey[fKeyAlgo].Create;
   if aPublicKey = '' then
@@ -1698,11 +1698,11 @@ begin
     // no public key supplied: generate a new key pair
     fPrivateKey := CryptPrivateKey[fKeyAlgo].Create;
     if not fPublicKey.Load(fKeyAlgo, fPrivateKey.Generate(fAsymAlgo)) then
-      raise EJwtException.CreateUtf8('%.Create: impossible to generate a % key',
+      EJwtException.RaiseUtf8('%.Create: impossible to generate a % key',
               [self, ToText(fKeyAlgo)^]);
   end
   else if not fPublicKey.Load(fKeyAlgo, aPublicKey) then
-    raise EJwtException.CreateUtf8('%.Create: impossible to load this % key',
+    EJwtException.RaiseUtf8('%.Create: impossible to load this % key',
             [self, ToText(fKeyAlgo)^]);
   inherited Create(fAlgorithm, aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
@@ -1732,12 +1732,10 @@ var
   sig: RawByteString;
 begin
   if not Assigned(fPrivateKey) then
-    raise EJwtException.CreateUtf8(
-      '%.ComputeSignature requires a private key', [self]);
+    EJwtException.RaiseUtf8('%.ComputeSignature requires a private key', [self]);
   sig := fPrivateKey.Sign(fAsymAlgo, headpayload); // = encrypt with private key
   if sig = '' then
-    raise EJwtException.CreateUtf8(
-      '%.ComputeSignature: % Sign failed', [self, fAlgorithm]);
+    EJwtException.RaiseUtf8('%.ComputeSignature: % Sign failed', [self, fAlgorithm]);
   result := BinToBase64Uri(pointer(sig), length(sig));
 end;
 
@@ -1745,8 +1743,7 @@ procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var jwt: TJwtContent);
 begin
   if not Assigned(fPublicKey) then
-    raise EJwtException.CreateUtf8(
-      '%.CheckSignature requires a public key', [self]);
+    EJwtException.RaiseUtf8('%.CheckSignature requires a public key', [self]);
   if fPublicKey.Verify(fAsymAlgo, headpayload, signature) then // = decrypt
     jwt.result := jwtValid
   else

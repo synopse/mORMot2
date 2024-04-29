@@ -1545,8 +1545,7 @@ begin
      (Sender = nil) then
     exit;
   if aPasswordKind <> passClear then
-    raise ERestException.CreateUtf8(
-      '%.ClientSetUser(%) expects passClear', [self, Sender]);
+    ERestException.RaiseUtf8('%.ClientSetUser(%) expects passClear', [self, Sender]);
   Sender.SessionClose; // ensure Sender.SessionUser=nil
   try
     // inherited ClientSetUser() won't fit with server's Auth() method
@@ -1922,7 +1921,7 @@ begin
     if aServicesRouting <> fServicesRouting then
       if (aServicesRouting = nil) or
          (aServicesRouting = TRestClientRouting) then
-         raise EServiceException.CreateUtf8('Unexpected %.SetRoutingClass(%)',
+         EServiceException.RaiseUtf8('Unexpected %.SetRoutingClass(%)',
            [self, aServicesRouting])
       else
       begin
@@ -2009,8 +2008,8 @@ function TRestClientUri.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
   ParamValue: Pointer): TRestClientCallbackID;
 begin
-  raise EServiceException.CreateUtf8('% does not support interface parameters ' +
-    'for %.%(%: %): consider using another kind of client',
+  raise EServiceException.CreateUtf8('% does not support interface ' +
+    'parameters for %.%(%: %): consider using another kind of client',
     [self, Sender.InterfaceFactory.InterfaceName, Method.Uri,
      ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
 end;
@@ -2268,7 +2267,7 @@ procedure TRestClientUri.SetOrmInstance(aORM: TRestOrmParent);
 begin
   inherited SetOrmInstance(aORM); // set fOrm
   if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then
-    raise ERestException.CreateUtf8('%.Create with invalid %', [self, fOrmInstance]);
+    ERestException.RaiseUtf8('%.Create with invalid %', [self, fOrmInstance]);
   // enable redirection of Uri() from IRestOrm/IRestOrmClient into this class
   (fOrmInstance as TRestOrmClientUri).Uri := URI;
 end;
@@ -2840,10 +2839,10 @@ begin
   SetLogClass(TSynLog.Void); // this client won't log anything
   if not ServerRemoteLog(sllClient, 'Remote Client % Connected', [self]) then
     // first test server without threading
-    raise ERestException.CreateUtf8('%.ServerRemoteLogStart: Connection ' +
+    ERestException.RaiseUtf8('%.ServerRemoteLogStart: Connection ' +
       'to RemoteLog server impossible'#13#10'%', [LastErrorMessage]);
   if fRemoteLogThread <> nil then
-    raise ERestException.CreateUtf8('%.ServerRemoteLogStart twice', [self]);
+    ERestException.RaiseUtf8('%.ServerRemoteLogStart twice', [self]);
   fRemoteLogThread := TRemoteLogThread.Create(self);
   fRemoteLogClass := aLogClass.Add;
   aLogClass.Family.EchoRemoteStart(self, ServerRemoteLog, aClientOwnedByFamily);
@@ -2982,7 +2981,7 @@ var
 begin
   h := LibraryOpen(LibraryName);
   if h = 0 then
-    raise ERestException.CreateUtf8('%.Create: LoadLibrary(%) failed',
+    ERestException.RaiseUtf8('%.Create: LoadLibrary(%) failed',
       [self, LibraryName]);
   fRequest := LibraryResolve(h, 'LibraryRequest');
   call.Init;
@@ -2991,7 +2990,7 @@ begin
   begin
     @fRequest := nil;
     LibraryClose(h);
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '%.Create: % doesn''t export a valid LibraryRequest() function (ret=%)',
       [self, LibraryName, call.OutStatus]);
   end;

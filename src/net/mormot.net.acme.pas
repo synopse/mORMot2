@@ -615,7 +615,7 @@ begin
   if (fNewNonce = '') or
      (fNewAccount = '') or
      (fNewOrder = '') then
-    raise EAcmeClient.CreateUtf8('Invalid directory %', [fDirectoryUrl]);
+    EAcmeClient.RaiseUtf8('Invalid directory %', [fDirectoryUrl]);
 end;
 
 procedure TAcmeClient.CreateAccount;
@@ -630,7 +630,7 @@ begin
      'contact',              _ArrFast([fContact])]);
   status := JsonDecode(pointer(resp), 'status', nil, true);
   if AcmeTextToStatus(pointer(status)) <> asValid then
-    raise EAcmeClient.CreateUtf8('% returned status % (expected "valid")',
+    EAcmeClient.RaiseUtf8('% returned status % (expected "valid")',
       [fNewAccount, status]);
 end;
 
@@ -654,7 +654,7 @@ begin
     'authorizations'], @v1, true);
   result := AcmeTextToStatus(v1[0].Text);
   if result = asInvalid then
-    raise EAcmeClient.CreateUtf8('% returned "%" (expected "pending" or "ready")',
+    EAcmeClient.RaiseUtf8('% returned "%" (expected "pending" or "ready")',
       [fNewOrder, v1[0].Text]);
   v1[1].ToUtf8(fFinalize);
   // When a client receives an order from the server in reply to a
@@ -897,10 +897,10 @@ function TAcmeClient.RegisterAndWaitFolder(
   const aPrivateKeyPassword: SpiUtf8; WaitForSec: integer): TAcmeStatus;
 begin
   if fChallengeWwwFolder <> '' then
-    raise EAcmeClient.CreateUtf8(
+    EAcmeClient.RaiseUtf8(
       '%.RegisterAndWaitFolder: already called as %', [self, fChallengeWwwFolder]);
   if not DirectoryExists(ChallengeWwwFolder) then
-    raise EAcmeClient.CreateUtf8(
+    EAcmeClient.RaiseUtf8(
       '%.RegisterAndWaitFolder: unknown %', [self, ChallengeWwwFolder]);
   fChallengeWwwFolder := EnsureDirectoryExists(
     FormatString('%.well-known%acme-challenge',

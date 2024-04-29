@@ -338,7 +338,7 @@ begin
   if (fClient = nil) or
      (fClient.fSendNotificationsRest = nil) or
      (fClient.fSendNotificationsLogClass = nil) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%.Create(fClient.fSendNotifications=nil)', [self]);
   if aRetryPeriodSeconds <= 0 then
     fRetryPeriodSeconds := 1
@@ -378,7 +378,7 @@ begin
       if pendings = 0 then
         exit
       else
-        raise EServiceException.CreateUtf8(
+        EServiceException.RaiseUtf8(
           '%.ProcessPendingNotification pending=% with no DB row',
           [self, pendings]);
     end;
@@ -405,7 +405,7 @@ begin
         JSON_FAST_EXTENDED);
       pending.Output := variant(output);
       fClient.fSendNotificationsRest.ORM.Update(pending, 'Output', true);
-      raise EServiceException.CreateUtf8(
+      EServiceException.RaiseUtf8(
         '%.ProcessPendingNotification failed for %(%) [ID=%,pending=%] on %: %',
         [self, pending.Method, params, pending.IDValue, pendings, fRemote, error]);
     end;
@@ -800,8 +800,7 @@ var
 begin
   // extract interface RTTI and create fake interface (and any shared instance)
   if not aRest.InheritsFrom(TRestClientUri) then
-    EServiceException.CreateUtf8(
-      '%.Create(): % interface needs a Client connection',
+    EServiceException.RaiseUtf8('%.Create(): % interface requires a Client',
       [self, aInterface^.Name]);
   if fClient = nil then
     fClient := aRest;
@@ -824,12 +823,12 @@ begin
   begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
        TRestClientUri(fClient).ServicePublishOwnInterfaces, @RemoteContract, @Error) then
-      raise EServiceException.CreateUtf8('%.Create(): I% interface or % routing not ' +
+      EServiceException.RaiseUtf8('%.Create(): I% interface or % routing not ' +
         'supported by server [%]', [self, fInterfaceUri,
          TRestClientUri(fClient).ServicesRouting, Error]);
     if ('[' + ContractExpected + ']' <> RemoteContract) and
        ('{"contract":' + ContractExpected + '}' <> RemoteContract) then
-      raise EServiceException.CreateUtf8('%.Create(): server''s I% contract ' +
+      EServiceException.RaiseUtf8('%.Create(): server''s I% contract ' +
         'differs from client''s: expected [%], received % - you may need to ' +
         'upgrade your % client to match % server expectations',
         [self, fInterfaceUri, ContractExpected, RemoteContract,
@@ -842,7 +841,7 @@ begin
   FreeAndNilSafe(fSendNotificationsThread);
   if fSharedInstance <> nil then
     if fSharedInstance.RefCount <> 1 then
-      raise EServiceException.CreateUtf8(
+      EServiceException.RaiseUtf8(
         '%.Destroy with RefCount=%: you must release ' +
         'I% interface (setting := nil) before Client.Free',
         [self, fSharedInstance.RefCount, fInterfaceUri])
@@ -912,7 +911,7 @@ begin
   if (self = nil) or
      (aRest = nil) or
      (aLogClass = nil) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%.SendNotifications invalid call', [self]);
   if fSendNotificationsThread <> nil then
     if (aRest = fSendNotificationsRest) and
@@ -923,7 +922,7 @@ begin
       exit;
     end
     else
-      raise EServiceException.CreateUtf8('%.SendNotifications twice', [self]);
+      EServiceException.RaiseUtf8('%.SendNotifications twice', [self]);
   StoreNotifications(aRest, aLogClass);
   fSendNotificationsThread := TServiceFactoryClientNotificationThread.Create(
     self, aRemote, aRetryPeriodSeconds);
@@ -963,7 +962,7 @@ begin
   for o := low(o) to high(o) do
     if (o in aOptions) and
        not (o in [optNoLogInput..optErrorOnMissingParam]) then
-      raise EServiceException.CreateUtf8('%.SetOptions(%) not supported',
+      EServiceException.RaiseUtf8('%.SetOptions(%) not supported',
         [self, GetEnumName(TypeInfo(TInterfaceMethodOption), ord(o))^]);
   ExecutionAction(aMethod, aOptions, aAction);
 end;

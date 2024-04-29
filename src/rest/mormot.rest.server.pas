@@ -3155,7 +3155,7 @@ var
   fakeid: PtrInt;
 begin
   if not Assigned(Server.OnNotifyCallback) then
-    raise EServiceException.CreateUtf8('% does not implement callbacks for %',
+    EServiceException.RaiseUtf8('% does not implement callbacks for %',
       [Server, ParamInterfaceInfo.Name]);
   // Par is the callback ID transmitted from the client side
   fakeid := Ctxt.ParseInteger;
@@ -3263,7 +3263,7 @@ begin
   else
   begin
     if ForceServiceResultAsJsonObjectWithoutResult then
-      raise EServiceException.CreateUtf8('%.ServiceResultEnd(ID=%) with ' +
+      EServiceException.RaiseUtf8('%.ServiceResultEnd(ID=%) with ' +
         'ForceServiceResultAsJsonObjectWithoutResult', [self, ID]);
     WR.AddShorter(JSONSEND_WITHID[ForceServiceResultAsJsonObject]);
     WR.Add(ID); // only used in sicClientDriven mode
@@ -3355,7 +3355,7 @@ begin
   else
     // TServiceFactoryServer.ExecuteMethod() will use ServiceMethod(Index)
     if ServiceMethod = nil then
-      raise EServiceException.CreateUtf8('%.InternalExecuteSoaByInterface: ' +
+      EServiceException.RaiseUtf8('%.InternalExecuteSoaByInterface: ' +
         'ServiceMethodIndex=% and ServiceMethod=nil', [self, ServiceMethodIndex]);
   end;
   if (Session > CONST_AUTHENTICATION_NOT_USED) and
@@ -3831,7 +3831,7 @@ begin
         TRestOrmServer(Server.fOrmInstance).RefreshInternalStateFromStatic;
       end
   else
-    raise EOrmException.CreateUtf8('Unexpected %.ExecuteOrmGet(method=%)',
+    EOrmException.RaiseUtf8('Unexpected %.ExecuteOrmGet(method=%)',
       [self, ToText(Method)]);
   end;
 end;
@@ -4088,7 +4088,7 @@ begin
     if n >= max then
     begin
       if n >= MAX_INPUT * 2 then
-        raise EParsingException.CreateUtf8(
+        EParsingException.RaiseUtf8(
           'Security Policy: Accept up to % parameters for %.FillInput',
           [MAX_INPUT * 2, self]);
       inc(max, NextGrow(max));
@@ -4131,7 +4131,7 @@ begin
   GetInputByName(ParamName, 'Int', v);
   result := GetInt64(pointer(v), err);
   if err <> 0 then
-    raise EParsingException.CreateUtf8('%.InputInt[%]: ''%'' is not an integer',
+    EParsingException.RaiseUtf8('%.InputInt[%]: ''%'' is not an integer',
       [self, ParamName, v]);
 end;
 
@@ -4143,7 +4143,7 @@ begin
   GetInputByName(ParamName, 'Double', v);
   result := GetExtended(pointer(v), err);
   if err <> 0 then
-    raise EParsingException.CreateUtf8('%.InputDouble[%]: ''%'' is not a float',
+    EParsingException.RaiseUtf8('%.InputDouble[%]: ''%'' is not a float',
       [self, ParamName, v]);
 end;
 
@@ -4191,7 +4191,7 @@ var
 begin
   i := GetInputNameIndex(ParamName);
   if i < 0 then
-    raise EParsingException.CreateUtf8('%: missing Input%[%]',
+    EParsingException.RaiseUtf8('%: missing Input%[%]',
       [self, InputName, ParamName]);
   result := fInput[i * 2 + 1];
 end;
@@ -4283,7 +4283,7 @@ var
 begin
   i := GetInputNameIndex(ParamName);
   if i < 0 then
-    raise EParsingException.CreateUtf8('%: missing InputString[%]',
+    EParsingException.RaiseUtf8('%: missing InputString[%]',
       [self, ParamName]);
   Utf8ToStringVar(fInput[i * 2 + 1], result);
 end;
@@ -4376,12 +4376,12 @@ end;
 class procedure TRestServerUriContext.UriComputeRoutes(
   Router: TRestRouter; Server: TRestServer);
 begin
-  raise EParsingException.CreateUtf8('Unexpected %.UriComputeRoutes', [self]);
+  EParsingException.RaiseUtf8('Unexpected %.UriComputeRoutes', [self]);
 end;
 
 procedure TRestServerUriContext.ExecuteSoaByInterface;
 begin
-  raise EParsingException.CreateUtf8('Unexpected %.ExecuteSoaByInterface', [self]);
+  EParsingException.RaiseUtf8('Unexpected %.ExecuteSoaByInterface', [self]);
 end;
 
 function TRestServerUriContext.AuthenticationBearerToken: RawUtf8;
@@ -4593,8 +4593,7 @@ begin
   // here Ctxt.Service and ServiceMethod(Index) are set
   if (Server.Services = nil) or
      (Service = nil) then
-    raise EServiceException.CreateUtf8(
-      '%.ExecuteSoaByInterface invalid call', [self]);
+    EServiceException.RaiseUtf8('%.ExecuteSoaByInterface invalid call', [self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
   if fCall^.InBody <> '' then
   begin
@@ -4677,8 +4676,7 @@ begin
   // here Ctxt.Service is set (not ServiceMethodIndex yet)
   if (Server.Services = nil) or
      (Service = nil) then
-    raise EServiceException.CreateUtf8(
-      '%.ExecuteSoaByInterface invalid call', [self]);
+    EServiceException.RaiseUtf8('%.ExecuteSoaByInterface invalid call', [self]);
   tmp.Init(fCall^.InBody);
   try
     JsonDecode(tmp.buf, @RPC_NAMES, length(RPC_NAMES), @values, true);
@@ -4771,8 +4769,7 @@ begin
     User.GroupRights.Free;
     User.GroupRights := GID;
   end;
-  raise ESecurityException.CreateUtf8(
-    'Invalid %.Create(%,%)', [self, aCtxt, aUser]);
+  ESecurityException.RaiseUtf8('Invalid %.Create(%,%)', [self, aCtxt, aUser]);
 end;
 
 destructor TAuthSession.Destroy;
@@ -4865,8 +4862,8 @@ constructor TAuthSession.CreateFrom(var Read: TFastReader; Server: TRestServer;
   tix: Int64);
 begin
   if Read.NextByte <> TAUTHSESSION_MAGIC then
-    raise ESecurityException.CreateUtf8(
-      '%.CreateFrom() with invalid format on % %', [self, Server, Server.Model.Root]);
+    ESecurityException.RaiseUtf8('%.CreateFrom() with invalid format on % %',
+      [self, Server, Server.Model.Root]);
   fID := Read.VarUInt32;
   fUser := Server.AuthUserClass.Create;
   fUser.IDValue := Read.VarUInt32;
@@ -5621,7 +5618,7 @@ end;
 constructor TRestServerMonitor.Create(aServer: TRestServer);
 begin
   if aServer = nil then
-    raise EOrmException.CreateUtf8('%.Create(nil)', [self]);
+    EOrmException.RaiseUtf8('%.Create(nil)', [self]);
   inherited Create(aServer.Model.Root);
   fServer := aServer;
   SetLength(fPerTable[false], length(aServer.Model.Tables));
@@ -5765,7 +5762,7 @@ var
   g: TSynMonitorUsageGranularity;
 begin
   if aStorage = nil then
-    raise EOrmException.CreateUtf8('%.Create(nil)', [self]);
+    EOrmException.RaiseUtf8('%.Create(nil)', [self]);
   if aProcessIDShift < 0 then
     aProcessIDShift := 16 { see TSynUniqueIdentifierProcess }
   else if aProcessIDShift > 40 then
@@ -5922,7 +5919,7 @@ var
 begin
   if (aFrom < low(fTree)) or
      (aFrom > high(fTree)) then
-    raise ERestTree.CreateUtf8('%.Setup(%)?', [self, ToText(aFrom)]);
+    ERestTree.RaiseUtf8('%.Setup(%)?', [self, ToText(aFrom)]);
   if fTree[aFrom] = nil then
     fTree[aFrom] := TRadixTreeParams.Create(TRestTreeNode, [rtoCaseInsensitiveUri]);
   uri := fOwner.Model.Root;
@@ -5932,7 +5929,7 @@ begin
   if result = nil then
     exit;
   if result.Data.Node <> rnNone then
-    raise ERestTree.CreateUtf8('%.Setup(m%,''%'',%) already exists as %',
+    ERestTree.RaiseUtf8('%.Setup(m%,''%'',%) already exists as %',
       [self, ToText(aFrom), aUri, ToText(aNode)^, ToText(result.Data.Node)^]);
   inc(fTreeCount[aFrom]);
   inc(fNodeCount[aNode]);
@@ -5956,7 +5953,7 @@ begin
     rnInterfaceClientID:
       result.Data.Command := execSoaByInterface;
   else
-    raise ERestTree.CreateUtf8('%.Setup(%)?', [self, ToText(aNode)^]);
+    ERestTree.RaiseUtf8('%.Setup(%)?', [self, ToText(aNode)^]);
   end;
 end;
 
@@ -5978,7 +5975,7 @@ begin
          (n.Data.Command = execSoaByMethod) then
       begin
         if aMethodIndex >= length(fOwner.fPublishedMethod) then
-          raise ERestException.CreateUtf8('%.Setup method?', [self]);
+          ERestException.RaiseUtf8('%.Setup method?', [self]);
         if aMethodIndex = fOwner.fPublishedMethodBatchIndex then
           n.Data.Command := execOrmWrite; // BATCH is run as ORM write
       end;
@@ -6114,7 +6111,7 @@ end;
 constructor TRestServer.Create(aModel: TOrmModel; aHandleUserAuthentication: boolean);
 begin
   if aModel = nil then
-    raise EOrmException.CreateUtf8('%.Create(Model=nil)', [self]);
+    EOrmException.RaiseUtf8('%.Create(Model=nil)', [self]);
   // setup the associated ORM model
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fAuthUserClass := TAuthUser;
@@ -6204,7 +6201,7 @@ procedure TRestServer.SetOrmInstance(aORM: TRestOrmParent);
 begin
   inherited SetOrmInstance(aORM);
   if not aORM.GetInterface(IRestOrmServer, fServer) then
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '%.SetOrmInstance(%) is not an IRestOrmServer', [self, aORM]);
 end;
 
@@ -6447,7 +6444,7 @@ begin
     exit;
   end;
   if fStatUsage <> nil then
-    raise EModelException.CreateUtf8('%.StatUsage should be set once', [self]);
+    EModelException.RaiseUtf8('%.StatUsage should be set once', [self]);
   fStatUsage := usage;
   fStatUsage.Track(fStats, 'rest');
 end;
@@ -6794,7 +6791,7 @@ procedure TRestServer.SetOnNotifyCallback(const event: TOnRestServerClientCallba
 begin
   if Assigned(fOnNotifyCallback) and
      Assigned(event) then
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '%.OnNotifyCallback(%) set twice: only a single WS server can be assigned',
       [self, ClassNameShort(TObject(TMethod(event).Data))^]);
   fOnNotifyCallback := event;
@@ -6807,7 +6804,7 @@ begin
     if aServicesRouting <> fServicesRouting then
       if (aServicesRouting = nil) or
          (aServicesRouting = TRestServerUriContext) then
-        raise EServiceException.CreateUtf8(
+        EServiceException.RaiseUtf8(
           'Unexpected %.SetRoutingClass(%)', [self, aServicesRouting])
       else
       begin
@@ -7249,12 +7246,12 @@ begin
   if m = [] then
     m := aMethods; // use (default) supplied methods
   if aMethodName = '' then
-    raise EServiceException.CreateUtf8('%.ServiceMethodRegister('''')', [self]);
+    EServiceException.RaiseUtf8('%.ServiceMethodRegister('''')', [self]);
   // register the method to the internal list
   obj := TMethod(aEvent).Data;
   if not (rsoNoTableURI in fOptions) and
      (Model.GetTableIndex(aMethodName) >= 0) then
-    raise EServiceException.CreateUtf8('Published method name %.% ' +
+    EServiceException.RaiseUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [obj, aMethodName]);
   with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
     'Duplicated published method name %.%', [obj, aMethodName], @result))^ do
@@ -7464,18 +7461,18 @@ begin
   tc := fStats.NotifyThreadCount(1);
   id := GetCurrentThreadId;
   if Sender = nil then
-    raise ERestException.CreateUtf8('%.BeginCurrentThread(nil)', [self]);
+    ERestException.RaiseUtf8('%.BeginCurrentThread(nil)', [self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ''%'' ThreadCount=%',
     [Sender.ClassType, fModel.Root, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
       [self, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   with PServiceRunningContext(PerThreadRunningContextAddress)^ do
     if RunningThread <> Sender then
       // e.g. if length(TRestHttpServer.fRestServers)>1
       if RunningThread <> nil then
-        raise ERestException.CreateUtf8('%.BeginCurrentThread() twice', [self])
+        ERestException.RaiseUtf8('%.BeginCurrentThread() twice', [self])
       else
         // set the current TThread info
         RunningThread := Sender;
@@ -7493,11 +7490,11 @@ begin
   tc := fStats.NotifyThreadCount(-1);
   id := GetCurrentThreadId;
   if Sender = nil then
-    raise ERestException.CreateUtf8('%.EndCurrentThread(nil)', [self]);
+    ERestException.RaiseUtf8('%.EndCurrentThread(nil)', [self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ''%'' ThreadCount=%',
     [Sender.ClassType, {%H-}pointer(id), CurrentThreadNameShort^, tc]);
   if Sender.ThreadID <> id then
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
       [self, Sender, {%H-}pointer(Sender.ThreadID), {%H-}pointer(id)]);
   if Services <> nil then
@@ -7512,7 +7509,7 @@ begin
     if RunningThread <> nil then
       // e.g. if length(TRestHttpServer.fRestServers)>1
       if RunningThread <> Sender then
-        raise ERestException.CreateUtf8(
+        ERestException.RaiseUtf8(
           '%.EndCurrentThread(%) should match RunningThread=%',
           [self, Sender, RunningThread])
       else        // reset the TThread info

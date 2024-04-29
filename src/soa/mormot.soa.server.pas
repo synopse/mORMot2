@@ -596,7 +596,7 @@ begin
   fRestServer := aRestServer;
   inherited Create(aRestServer, aInterface, aInstanceCreation, aContractExpected);
   if fRestServer.MethodAddress(ShortString(InterfaceUri)) <> nil then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%.Create: I% URI already exposed by %.% published method',
       [self, InterfaceUri, fRestServer, InterfaceUri]);
   fImplementationClass := aImplementationClass;
@@ -604,11 +604,11 @@ begin
   begin
     fImplementationClassKind := ickFake;
     if aSharedInstance = nil then
-      raise EServiceException.CreateUtf8('%.Create: no Shared Instance for %/I%',
+      EServiceException.RaiseUtf8('%.Create: no Shared Instance for %/I%',
         [self, fImplementationClass, fInterfaceUri]);
     if (aSharedInstance as TInterfacedObjectFake).
         Factory.InterfaceTypeInfo <> aInterface then
-      raise EServiceException.CreateUtf8(
+      EServiceException.RaiseUtf8(
         '%.Create: shared % instance does not implement I%',
         [self, fImplementationClass, fInterfaceUri]);
   end
@@ -625,12 +625,12 @@ begin
     fImplementationClassInterfaceEntry := fImplementationClass.
       GetInterfaceEntry(fInterface.InterfaceIID);
     if fImplementationClassInterfaceEntry = nil then
-      raise EServiceException.CreateUtf8('%.Create: % does not implement I%',
+      EServiceException.RaiseUtf8('%.Create: % does not implement I%',
         [self, fImplementationClass, fInterfaceUri]);
   end;
   if (fInterface.MethodIndexCallbackReleased >= 0) and
      (InstanceCreation <> sicShared) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%.Create: I%() should be run as sicShared for CallbackReleased method', [self,
       fInterface.Methods[fInterface.MethodIndexCallbackReleased].InterfaceDotMethodName]);
   // initialize the shared instance or client driven parameters
@@ -642,14 +642,14 @@ begin
         else if aSharedInstance.InheritsFrom(fImplementationClass) then
           fSharedInstance := aSharedInstance
         else
-          raise EServiceException.CreateUtf8(
+          EServiceException.RaiseUtf8(
             '%.Create: % shared instance does not inherit from %',
             [self, aSharedInstance, fImplementationClass]);
         if fImplementationClassKind <> ickFake then
           if (fSharedInstance = nil) or
              not GetInterfaceFromEntry(fSharedInstance,
                fImplementationClassInterfaceEntry, fSharedInterface) then
-            raise EServiceException.CreateUtf8(
+            EServiceException.RaiseUtf8(
               '%.Create: % is no implementation of I%',
               [self, fSharedInstance, fInterfaceUri]);
       end;
@@ -680,7 +680,7 @@ procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
 begin
   if (self = nil) or
      (InstanceCreation in SERVICE_IMPLEMENTATION_NOID) then
-    raise EServiceException.CreateUtf8('%.SetTimeoutSecInt(%) with %',
+    EServiceException.RaiseUtf8('%.SetTimeoutSecInt(%) with %',
       [self, value, ToText(InstanceCreation)^]);
   fInstanceTimeOut := value;
 end;
@@ -1178,9 +1178,8 @@ begin
         dummyObj := nil;
         if not TServiceContainerServer(fResolver).TryResolve(
             fInterface.InterfaceTypeInfo, dummyObj) then
-          raise EInterfaceFactory.CreateUtf8(
-            'ickFromInjectedResolver: TryResolve(%) failed',
-            [fInterface.InterfaceName]);
+          EInterfaceFactory.RaiseUtf8(
+           'ickFromInjectedResolver: TryResolve(%) failed', [fInterface.InterfaceName]);
         result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
         // RefCount=1 after TryResolve() -> adjust
         dec(TInjectableObjectRest(result).fRefCount);
@@ -1655,7 +1654,7 @@ begin
     exit;
   end;
   if not Assigned(fServer.OnNotifyCallback) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%(%) does not support callbacks for I%',
       [fServer, fServer.Model.Root, aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then
@@ -1751,7 +1750,7 @@ begin
   if aSharedImplementation <> nil then
     if (aSharedImplementation.ClassType <> aImplementationClass) or
        (aInstanceCreation <> sicShared) then
-      raise EServiceException.CreateUtf8('%.AddImplementation: invalid % class',
+      EServiceException.RaiseUtf8('%.AddImplementation: invalid % class',
         [self, aSharedImplementation]);
   CheckInterface(aInterfaces);
   SetLength(uid, length(aInterfaces));
@@ -1780,7 +1779,7 @@ begin
   end;
   for j := 0 to high(uid) do
     if uid[j] <> nil then
-      raise EServiceException.CreateUtf8('%.AddImplementation: % not found in %',
+      EServiceException.RaiseUtf8('%.AddImplementation: % not found in %',
         [self, aInterfaces[j]^.RawName, aImplementationClass]);
   // register this implementation class
   for j := 0 to high(aInterfaces) do
@@ -2314,12 +2313,12 @@ constructor TServiceRecordVersionCallback.Create(aSlave: TRestServer;
   aMaster: TRestClientUri; aTable: TOrmClass; const aOnNotify: TOnBatchWrite);
 begin
   if aSlave = nil then
-    raise EServiceException.CreateUtf8('%.Create(%): Slave=nil',
+    EServiceException.RaiseUtf8('%.Create(%): Slave=nil',
       [self, aTable]);
   fSlave := aSlave;
   fRecordVersionField := aTable.OrmProps.RecordVersionField;
   if fRecordVersionField = nil then
-    raise EServiceException.CreateUtf8('%.Create: % has no TRecordVersion field',
+    EServiceException.RaiseUtf8('%.Create: % has no TRecordVersion field',
       [self, aTable]);
   fTable := aTable;
   fTableIndex := fSlave.Model.GetTableIndexExisting(aTable);
@@ -2337,7 +2336,7 @@ begin
   if (Revision < current) or
      ((Revision = current) and
       (Event <> ooInsert)) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       '%.SetCurrentRevision(%) on %: previous was %',
       [self, Revision, fTable, current]);
   fSlave.SetRecordVersionMax(fTableIndex, Revision);

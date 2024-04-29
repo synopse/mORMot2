@@ -1368,7 +1368,7 @@ begin
   end;
   n := PosExChar(PairEnd, s);
   if n = 0 then
-    raise ELdap.CreateUtf8('Missing ending parenthesis in %', [Value]);
+    ELdap.RaiseUtf8('Missing ending parenthesis in %', [Value]);
   len := length(s);
   x := 1;
   for n := 1 to len do
@@ -1457,7 +1457,7 @@ begin
     GetNextItemTrimed(p, ',', value);
     if (kind = '') or
        (value = '') then
-      raise ELdap.CreateUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
+      ELdap.RaiseUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
     if not PropNameValid(pointer(value)) then // simple alphanum is just fine
       value := LdapEscapeCN(LdapUnescape(value)); // may need some (un)escape
     LowerCaseSelf(kind);
@@ -1806,7 +1806,7 @@ end;
 function LdapEscapeName(const Text: RawUtf8): RawUtf8;
 begin
   if not LdapEscapeName(Text, result) then
-    raise ELdap.CreateUtf8('Invalid input name: %', [Text]);
+    ELdap.RaiseUtf8('Invalid input name: %', [Text]);
 end;
 
 function LdapIsValidDistinguishedName(const Text: RawUtf8): boolean;
@@ -1821,7 +1821,7 @@ begin
   if LdapIsValidDistinguishedName(Text) then
     result := Text // no escape of the DN value
   else
-    raise ELdap.CreateUtf8('Invalid distinguishedName: %', [Text]);
+    ELdap.RaiseUtf8('Invalid distinguishedName: %', [Text]);
 end;
 
 function LdapUnescape(const Text: RawUtf8): RawUtf8;
@@ -2606,18 +2606,18 @@ begin
     // there are some known LDAP server parameters
     trans := CheckTargetHost;
     if trans = lctNone then
-      raise ELdap.CreateUtf8('%: invalid %', [self, GetTargetUri]);
+      ELdap.RaiseUtf8('%: invalid %', [self, GetTargetUri]);
   end
   else
   begin
     // guess the LDAP server from system information and CLDAP
     trans := LoadDefaultFromSystem(TryKerberos);
     if trans = lctNone then
-      raise ELdap.CreateUtf8('%: no default LDAP server', [self]);
+      ELdap.RaiseUtf8('%: no default LDAP server', [self]);
   end;
   if EnsureEncrypted and
      (trans <> lctEncrypted) then
-    raise ELdap.CreateUtf8('%: no encryption on the wire', [self]);
+    ELdap.RaiseUtf8('%: no encryption on the wire', [self]);
 end;
 
 function TLdapClientSettings.GetTargetUri: RawUtf8;
@@ -3019,7 +3019,7 @@ begin
     // get as much as possible unciphered data from socket
     fSockBuffer := fSock.SockReceiveString;
     if fSockBuffer = '' then
-      raise ELdap.CreateUtf8('%.ReceivePacket: no response from %:%',
+      ELdap.RaiseUtf8('%.ReceivePacket: no response from %:%',
         [self, fSettings.TargetHost, fSettings.TargetPort]);
   end;
   {$ifdef ASNDEBUG}
@@ -3177,8 +3177,7 @@ begin
   if (fSettings.Password <> '') and
      not fSettings.Tls and
      not fSettings.AllowUnsafePasswordBind then
-    raise ELdap.CreateUtf8(
-      '%.Bind with a password requires a TLS connection', [self]);
+    ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
   SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                    Asn(fVersion),
                    Asn(fSettings.UserName),
@@ -3210,7 +3209,7 @@ begin
      not Connect then
     exit;
   if DIGEST_ALGONAME[Algo] = '' then
-    raise ESynCrypto.CreateUtf8('Unsupported %.BindSaslDigest(%) algorithm',
+    ELdap.RaiseUtf8('Unsupported %.BindSaslDigest(%) algorithm',
       [self, DIGEST_NAME[Algo]]);
   if fSettings.Password = '' then
     result := Bind
@@ -4358,7 +4357,7 @@ begin
     r := mormot.core.unicode.LowerCase(SplitRight(fKerberosSpn, '@'));
   inherited Create(r, daSHA3_256);
   if not InitializeDomainAuth then
-    raise ELdap.CreateUtf8('%.Create: no SSPI/GSSAPI available', [self]);
+    ELdap.RaiseUtf8('%.Create: no SSPI/GSSAPI available', [self]);
 end;
 
 function TBasicAuthServerKerberos.ExternalServerAsk(const aUser: RawUtf8;
@@ -4439,7 +4438,7 @@ begin
   if r = '' then
     r := fLdapSettings.KerberosDN; // e.g. 'ad.mycorp.com'
   if not fLdapSettings.Tls then
-    raise ELdap.CreateUtf8('%.Create(%): TLS is mandatory', [self, r]);
+    ELdap.RaiseUtf8('%.Create(%): TLS is mandatory', [self, r]);
   // setup the internal in-memory cache
   inherited Create(r, daSHA3_256);
   fUsers.TimeOutSeconds := aCacheTimeoutSec;

@@ -1112,9 +1112,9 @@ begin
     SetDbError(msg);
   end
   else if Stmt = nil then
-    raise EOdbcException.CreateUtf8('% error: %', [self, msg])
+    EOdbcException.RaiseUtf8('% error: %', [self, msg])
   else
-    raise EOdbcException.CreateUtf8('% - % error: %', [Stmt, self, msg]);
+    EOdbcException.RaiseUtf8('% - % error: %', [Stmt, self, msg]);
 end;
 
 

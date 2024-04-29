@@ -519,8 +519,7 @@ begin
       Add('"', ',');
       dec(count);
     end;
-    CancelLastComma;
-    Add(']');
+    CancelLastComma(']');
     SetText(RawUtf8(Result));
   finally
     Free;

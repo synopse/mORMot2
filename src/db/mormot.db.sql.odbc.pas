@@ -371,7 +371,7 @@ begin
   if fEnv = nil then
     if (ODBC = nil) or
        (ODBC.AllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, fEnv) = SQL_ERROR) then
-      raise EOdbcException.CreateUtf8('%: Unable to allocate an environment handle', [self]);
+      EOdbcException.RaiseUtf8('%: Unable to allocate an environment handle', [self]);
   with ODBC do
   try
     // connect
@@ -415,7 +415,7 @@ begin
       if fDbms = dDefault then
         fDbms := DBMS_TYPES[IdemPPChar(pointer(fDbmsName), @DBMS_NAMES)];
       if fDbms = dDefault then
-        raise EOdbcException.CreateUtf8(
+        EOdbcException.RaiseUtf8(
           '%.Connect: unrecognized provider DbmsName=% DriverName=% DbmsVersion=%',
           [self, DbmsName, DriverName, DbmsVersion]);
     end;
@@ -439,7 +439,7 @@ var
 begin
   Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOdbcConnectionProperties) then
-    raise EOdbcException.CreateUtf8('Invalid %.Create(%)', [self, aProperties]);
+    EOdbcException.RaiseUtf8('Invalid %.Create(%)', [self, aProperties]);
   fOdbcProperties := TSqlDBOdbcConnectionProperties(aProperties);
   inherited Create(aProperties);
 end;
@@ -518,7 +518,7 @@ var
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then
-    raise EOdbcException.CreateUtf8('% do not support nested transactions', [self]);
+    EOdbcException.RaiseUtf8('% do not support nested transactions', [self]);
   inherited StartTransaction;
   ODBC.Check(self, nil,
     ODBC.SetConnectAttrW(fDbc, SQL_AUTOCOMMIT, SQL_AUTOCOMMIT_OFF, 0),
@@ -533,7 +533,7 @@ var
   hDbc: SqlHDbc;
 begin
   if fStatement <> nil then
-    raise EOdbcException.CreateUtf8('%.AllocStatement called twice', [self]);
+    EOdbcException.RaiseUtf8('%.AllocStatement called twice', [self]);
   fCurrentRow := 0;
   fTotalRowsRetrieved := 0;
   if not fConnection.Connected then
@@ -688,8 +688,8 @@ var
 
   procedure RaiseError;
   begin
-    raise EOdbcException.CreateUtf8('%.GetCol: [%] column had Indicator=%', [self,
-      Col.ColumnName, Indicator]);
+    EOdbcException.RaiseUtf8('%.GetCol: [%] column had Indicator=%',
+      [self, Col.ColumnName, Indicator]);
   end;
 
 begin
@@ -740,8 +740,7 @@ begin
         if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
           Col.ColumnDataState := colDataFilled
         else
-          raise EOdbcException.CreateUtf8(
-            '%.GetCol: SQL_NO_TOTAL [%] % column has no size',
+          EOdbcException.RaiseUtf8('%.GetCol: SQL_NO_TOTAL [%] % column has no size',
             [self, Col.ColumnName, ToText(Col.ColumnType)^]);
     else
       RaiseError;
@@ -757,7 +756,7 @@ begin
   CheckCol(Col); // check Col<fColumnCount
   if (not Assigned(fStatement)) or
      (fColData = nil) then
-    raise EOdbcException.CreateUtf8('%.Column*() with no prior Execute', [self]);
+    EOdbcException.RaiseUtf8('%.Column*() with no prior Execute', [self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount - 1 do
     if fColumns[c].ColumnDataState = colNone then
@@ -883,7 +882,7 @@ var
 begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then
-    raise EOdbcException.CreateUtf8('%.ColumnToJson() with no prior Step', [self]);
+    EOdbcException.RaiseUtf8('%.ColumnToJson() with no prior Step', [self]);
   with fColumns[Col] do
   begin
     res := GetCol(Col, ColumnType);
@@ -912,7 +911,7 @@ begin
           else
             W.WrBase64(pointer(fColData[Col]), ColumnDataSize, true);
       else
-        raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+        ESqlDBException.RaiseUtf8('%: Invalid ColumnType()=%',
           [self, ord(ColumnType)]);
       end;
   end;
@@ -921,7 +920,7 @@ end;
 constructor TSqlDBOdbcStatement.Create(aConnection: TSqlDBConnection);
 begin
   if not aConnection.InheritsFrom(TSqlDBOdbcConnection) then
-    raise EOdbcException.CreateUtf8('%.Create(%)', [self, aConnection]);
+    EOdbcException.RaiseUtf8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
 end;
 
@@ -972,8 +971,8 @@ begin
     SQL_C_DOUBLE:
       result := SQL_DOUBLE;
   else
-    raise EOdbcException.CreateUtf8('%.ExecutePrepared: Unexpected ODBC C type %',
-      [self, CDataType]);
+    raise EOdbcException.CreateUtf8(
+      '%.ExecutePrepared: Unexpected ODBC C type %', [self, CDataType]);
   end;
 end;
 
@@ -999,7 +998,7 @@ label
 begin
   SqlLogBegin(sllSQL);
   if fStatement = nil then
-    raise EOdbcException.CreateUtf8('%.ExecutePrepared called without previous Prepare',
+    EOdbcException.RaiseUtf8('%.ExecutePrepared called without previous Prepare',
       [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   ansitext := TSqlDBOdbcConnection(fConnection).fOdbcProperties.
@@ -1008,7 +1007,7 @@ begin
     // 1. bind parameters
     if (fParamsArrayCount > 0) and
        (fDbms <> dMSSQL) then
-      raise EOdbcException.CreateUtf8('%.BindArray() not supported', [self]);
+      EOdbcException.RaiseUtf8('%.BindArray() not supported', [self]);
     if fParamCount > 0 then
     begin
       SetLength(StrLen_or_Ind, fParamCount);
@@ -1029,7 +1028,7 @@ begin
           begin
             // bind an array as one object - metadata only at the moment
             if VInOut <> paramIn then
-              raise EOdbcException.CreateUtf8(
+              EOdbcException.RaiseUtf8(
                 '%.ExecutePrepared: Unsupported array parameter direction #%',
                 [self, p + 1]);
             CValueType := SQL_C_DEFAULT;
@@ -1043,7 +1042,7 @@ begin
               ftUtf8:
                 ParameterValue := pointer(StrList_type);
             else
-              raise EOdbcException.CreateUtf8(
+              EOdbcException.RaiseUtf8(
                 '%.ExecutePrepared: Unsupported array parameter type #%',
                 [self, p + 1]);
             end;
@@ -1124,8 +1123,8 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
               ftBlob:
                 StrLen_or_Ind[p] := length(VData);
             else
-              raise EOdbcException.CreateUtf8('%.ExecutePrepared: invalid bound parameter #%',
-                [self, p + 1]);
+              EOdbcException.RaiseUtf8(
+                '%.ExecutePrepared: invalid bound parameter #%', [self, p + 1]);
             end;
             if ParameterValue = nil then
             begin
@@ -1281,8 +1280,7 @@ begin
   SqlLogBegin(sllDB);
   if (fStatement <> nil) or
      (fColumnCount > 0) then
-    raise EOdbcException.CreateUtf8(
-      '%.Prepare should be called only once', [self]);
+    EOdbcException.RaiseUtf8('%.Prepare should be called only once', [self]);
   // 1. process SQL
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
   fSqlW := Utf8DecodeToUnicodeRawByteString(fSQL);

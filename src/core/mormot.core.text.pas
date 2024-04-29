@@ -3699,7 +3699,7 @@ begin
     twOnSameLine:
       AddOnSameLine(pointer(tmp)); // minimalistic version for TSynLog
     twJsonEscape:
-      raise ESynException.CreateUtf8(
+      ESynException.RaiseUtf8(
         '%.Add(twJsonEscape) unimplemented: use TJsonWriter', [self]);
   end;
 end;
@@ -3707,39 +3707,37 @@ end;
 procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUtf8(
-    '%.AddVariant unimplemented: use TJsonWriter', [self]);
+  ESynException.RaiseUtf8('%.AddVariant unimplemented: use TJsonWriter', [self]);
 end;
 
 procedure TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUtf8(
-    '%.AddTypedJson unimplemented: use TJsonWriter', [self]);
+  ESynException.RaiseUtf8('%.AddTypedJson unimplemented: use TJsonWriter', [self]);
 end;
 
 function TTextWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
   Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
 begin
-  raise ESynException.CreateUtf8(
-    '%.AddJsonReformat unimplemented: use TJsonWriter', [self]);
+  ESynException.RaiseUtf8('%.AddJsonReformat unimplemented: use TJsonWriter', [self]);
+  result := nil; // make compiler happy
 end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
 begin
-  raise ESynException.CreateUtf8(
+  ESynException.RaiseUtf8(
     '%.Add(..,Escape: TTextWriterKind) unimplemented: use TJsonWriter', [self]);
 end;
 
 procedure TTextWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
 begin
-  raise ESynException.CreateUtf8(
+  ESynException.RaiseUtf8(
     '%.Add(..,Escape: TTextWriterKind) unimplemented: use TJsonWriter', [self]);
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 begin
-  raise ESynException.CreateUtf8(
+  ESynException.RaiseUtf8(
     '%.WrBase64() unimplemented: use TJsonWriter', [self]);
 end;
 
@@ -3762,8 +3760,7 @@ end;
 procedure TTextWriter.WriteObject(Value: TObject;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  raise ESynException.CreateUtf8(
-    '%.WriteObject unimplemented: use TJsonWriter', [self]);
+  ESynException.RaiseUtf8('%.WriteObject unimplemented: use TJsonWriter', [self]);
 end;
 
 procedure TTextWriter.AddObjArrayJson(const aObjArray;
@@ -3795,8 +3792,7 @@ begin
         if twoNoWriteToStreamException in fCustomOptions then
           break // silent failure
         else
-          raise ESynException.CreateUtf8(
-            '%.WriteToStream failed on %', [self, fStream]);
+          ESynException.RaiseUtf8('%.WriteToStream failed on %', [self, fStream]);
       inc(fTotalFileSize, written);
       dec(len, written);
       if len = 0 then
@@ -3815,7 +3811,7 @@ end;
 procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
 begin
   if aBufSize <= 16 then
-    raise ESynException.CreateUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
+    ESynException.RaiseUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
   if aBuf = nil then
     GetMem(aBuf, aBufSize)
   else
@@ -5382,7 +5378,7 @@ constructor TEchoWriter.Create(Owner: TTextWriter);
 begin
   fWriter := Owner;
   if Assigned(fWriter.OnFlushToStream) then
-    raise ESynException.CreateUtf8('Unexpected %.Create', [self]);
+    ESynException.RaiseUtf8('Unexpected %.Create', [self]);
   fWriter.OnFlushToStream := FlushToStream; // register
 end;
 

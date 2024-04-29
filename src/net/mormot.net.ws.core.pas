@@ -1478,10 +1478,10 @@ begin
       // prepare the HTTP request from input frame
       if (Ctxt = nil) or
          (not Assigned(onRequest)) then
-        raise EWebSockets.CreateUtf8('%.ProcessOne: onRequest=nil', [self]);
+        EWebSockets.RaiseUtf8('%.ProcessOne: onRequest=nil', [self]);
       if (head = '') or
          not FrameToInput(request, noAnswer, Ctxt) then
-        raise EWebSockets.CreateUtf8('%.ProcessOne: invalid frame', [self]);
+        EWebSockets.RaiseUtf8('%.ProcessOne: invalid frame', [self]);
       request.payload := ''; // release memory ASAP
       if fUpgradeBearerToken <> '' then
         Ctxt.AuthBearer := fUpgradeBearerToken; // re-pass the HTTP bearer
@@ -1787,7 +1787,7 @@ begin
   len := 0;
   for i := 0 to FramesCount - 1 do
     if Frames[i].opcode <> focText then
-      raise EWebSockets.CreateUtf8('%.SendFrames: unexpected %',
+      EWebSockets.RaiseUtf8('%.SendFrames: unexpected %',
         [self, ToText(Frames[i].opcode)])
     else
       inc(len, enc[i].Prepare(Frames[i], Owner.fMaskSentFrames));
@@ -1966,7 +1966,7 @@ begin
     begin
       res := fEncryption.Decrypt(frame.payload, value);
       if res <> sprSuccess then
-        raise EWebSockets.CreateUtf8('%.AfterGetFrame: encryption error %',
+        EWebSockets.RaiseUtf8('%.AfterGetFrame: encryption error %',
           [self, ToText(res)^]);
     end
     else
@@ -2029,7 +2029,7 @@ begin
     if Frames[i].opcode = focBinary then
       inc(len, ToVarUInt32LengthWithData(length(Frames[i].payload)))
     else
-      raise EWebSockets.CreateUtf8('%.SendFrames[%]: Unexpected opcode=%',
+      EWebSockets.RaiseUtf8('%.SendFrames[%]: Unexpected opcode=%',
         [self, i, ord(Frames[i].opcode)]);
   FastNewRawByteString(jumboFrame.payload, len);
   P := pointer(jumboFrame.payload);
@@ -2148,7 +2148,7 @@ constructor TWebSocketProtocolUri.Create(const aName, aPublicUri: RawUtf8;
 begin
   // validate and compute the NewUri prefix
   if aPublicUri = '' then
-    raise EJwtException.CreateUtf8('%.Create uri=%', [self, aPublicUri]);
+    EJwtException.RaiseUtf8('%.Create uri=''''', [self]);
   fPublicUri := aPublicUri;
   AppendCharOnceToRawUtf8(fPublicUri, '/');
   // initialize the generator and associated record RTTI
@@ -2641,7 +2641,7 @@ end;
 procedure TWebSocketProcess.SetLastPingTicks;
 begin
   if fNoLastSocketTicks then
-    raise EWebSockets.CreateUtf8('Unexpected %.LastPingDelay', [self]);
+    EWebSockets.RaiseUtf8('Unexpected %.LastPingDelay', [self]);
   fLastSocketTicks := GetTickCount64;
   fInvalidPingSendCount := 0;
 end;
@@ -2649,7 +2649,7 @@ end;
 function TWebSocketProcess.LastPingDelay: Int64;
 begin
   if fNoLastSocketTicks then
-    raise EWebSockets.CreateUtf8('Unexpected %.LastPingDelay', [self]);
+    EWebSockets.RaiseUtf8('Unexpected %.LastPingDelay', [self]);
   result := GetTickCount64 - fLastSocketTicks;
 end;
 
@@ -3055,7 +3055,7 @@ begin
       exit;
     end
     else
-      raise EWebSockets.CreateUtf8('SockInPending() Error % on %:% - from %',
+      EWebSockets.RaiseUtf8('SockInPending() Error % on %:% - from %',
         [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
   result := (pending > 0); // assume if we got 1 byte, we are likely to have two
 end;
@@ -3127,14 +3127,14 @@ begin
     else
       hdr.len32 := bswap32(hdr.len64);
     if hdr.len32 > WebSocketsMaxFrameMB shl 20 then
-      raise EWebSockets.CreateUtf8('%.GetFrame: length = % should be < % MB',
+      EWebSockets.RaiseUtf8('%.GetFrame: length = % should be < % MB',
         [process, KB(hdr.len32), WebSocketsMaxFrameMB]);
   end;
   if masked then
   begin
     len := 0; // not appended to hdr
     if not HasBytes(@hdr.mask, 4) then
-      raise EWebSockets.CreateUtf8('%.GetFrame: truncated mask', [process]);
+      EWebSockets.RaiseUtf8('%.GetFrame: truncated mask', [process]);
   end;
   len := 0; // prepare upcoming GetData
   result := true;
@@ -3192,7 +3192,7 @@ begin
               ErrorWithoutException^ := -1;
             end
             else
-              raise EWebSockets.CreateUtf8('%.GetFrame: received %, expected %',
+              EWebSockets.RaiseUtf8('%.GetFrame: received %, expected %',
                 [process, _TWebSocketFrameOpCode[opcode]^,
                  _TWebSocketFrameOpCode[outputframe.opcode]^]);
           end

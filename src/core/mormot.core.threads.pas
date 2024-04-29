@@ -2243,7 +2243,7 @@ begin
     {$endif OSWINDOWS}
       fCallerEvent.WaitForEver;
     if fPendingProcessFlag <> flagFinished then
-      ESynThread.CreateUtf8('%.WaitForFinished: flagFinished?', [self]);
+      ESynThread.RaiseUtf8('%.WaitForFinished: flagFinished?', [self]);
     if fBackgroundException <> nil then
     begin
       E := fBackgroundException;
@@ -2319,7 +2319,7 @@ end;
 procedure TSynBackgroundThreadEvent.Process;
 begin
   if not Assigned(fOnProcess) then
-    raise ESynThread.CreateUtf8('Invalid %.RunAndWait() call', [self]);
+    ESynThread.RaiseUtf8('Invalid %.RunAndWait() call', [self]);
   fOnProcess(self, fParam);
 end;
 
@@ -2331,7 +2331,7 @@ var
   Method: ^TThreadMethod;
 begin
   if fParam = nil then
-    raise ESynThread.CreateUtf8('Invalid %.RunAndWait() call', [self]);
+    ESynThread.RaiseUtf8('Invalid %.RunAndWait() call', [self]);
   Method := fParam;
   Method^();
 end;
@@ -2357,7 +2357,7 @@ end;
 procedure TSynBackgroundThreadProcedure.Process;
 begin
   if not Assigned(fOnProcess) then
-    raise ESynThread.CreateUtf8('Invalid %.RunAndWait() call', [self]);
+    ESynThread.RaiseUtf8('Invalid %.RunAndWait() call', [self]);
   fOnProcess(fParam);
 end;
 
@@ -2370,7 +2370,7 @@ constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUtf8;
   aStats: TSynMonitorClass; CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
-    raise ESynThread.CreateUtf8('%.Create(aOnProcess=nil)', [self]);
+    ESynThread.RaiseUtf8('%.Create(aOnProcess=nil)', [self]);
   if aStats <> nil then
     fStats := aStats.Create(aThreadName);
   fOnProcess := aOnProcess;
@@ -2929,7 +2929,7 @@ var
 begin
   inherited Create; // initialize fSafe
   if ThreadPoolCount < 0 then
-    raise ESynThread.CreateUtf8('%.Create(%,%)',
+    ESynThread.RaiseUtf8('%.Create(%,%)',
       [Self, ThreadPoolCount, ThreadName]);
   if ThreadPoolCount > MaxThreadPoolCount then
     ThreadPoolCount := MaxThreadPoolCount;
@@ -2984,8 +2984,8 @@ begin
         case fPool[t].AcquireThread of
           flagDestroying:
             // should not happen
-            raise ESynThread.CreateUtf8(
-              '%.ParallelRunAndWait [%] destroying', [self, fPool[t].fThreadName]);
+            ESynThread.RaiseUtf8('%.ParallelRunAndWait [%] destroying',
+              [self, fPool[t].fThreadName]);
           flagIdle:
             // acquired (should always be the case)
             break;
@@ -3022,8 +3022,7 @@ begin
           [{%H-}error, E, fPool[t].fThreadName, E.Message]);
     end;
     if error <> '' then
-      raise ESynThread.CreateUtf8('%.ParallelRunAndWait: %',
-        [self, error]);
+      ESynThread.RaiseUtf8('%.ParallelRunAndWait: %', [self, error]);
   end;
 end;
 
@@ -3098,7 +3097,7 @@ end;
 procedure TNotifiedThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
-    raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
+    ESynThread.RaiseUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOnThreadStart) and
      (not Assigned(Sender.StartNotified)) then
   begin
@@ -3573,7 +3572,7 @@ end;
 procedure TSynThreadPoolWorkThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
-    raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
+    ESynThread.RaiseUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOwner.fOnThreadStart) and
      (not Assigned(Sender.fStartNotified)) then
   begin

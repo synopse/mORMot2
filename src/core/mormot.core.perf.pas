@@ -2630,7 +2630,7 @@ end;
 procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
-    raise ESynException.CreateUtf8('Unexpected %.ProcessStart', [self]);
+    ESynException.RaiseUtf8('Unexpected %.ProcessStart', [self]);
   InternalTimer.Resume;
   fTaskStatus := taskNotStarted;
   fProcessing := true;
@@ -2650,7 +2650,7 @@ end;
 procedure TSynMonitor.ProcessStartTask;
 begin
   if fProcessing then
-    raise ESynException.CreateUtf8('Reentrant %.ProcessStart', [self]);
+    ESynException.RaiseUtf8('Reentrant %.ProcessStart', [self]);
   InternalTimer.Resume;
   fProcessing := true;
   LockedProcessDoTask;
@@ -3107,7 +3107,7 @@ begin
       if fTracked[i].Instance = Instance then
         exit
       else if PropNameEquals(fTracked[i].Name, instanceName) then
-        raise ESynException.CreateUtf8('%.Track("%") name already exists',
+        ESynException.RaiseUtf8('%.Track("%") name already exists',
           [self, instanceName]);
     SetLength(fTracked, n + 1);
     fTracked[n].Instance := Instance;
@@ -3317,7 +3317,7 @@ var
   g: PDocVariantData;
 begin
   if Gran < low(fValues) then
-    raise ESynException.CreateUtf8('%.Save(%) unexpected', [self, ToText(Gran)^]);
+    ESynException.RaiseUtf8('%.Save(%) unexpected', [self, ToText(Gran)^]);
   TDocVariant.IsOfTypeOrNewFast(fValues[Gran]);
   g := _Safe(fValues[Gran]);
   for t := 0 to length(fTracked) - 1 do

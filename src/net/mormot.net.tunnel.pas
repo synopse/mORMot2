@@ -364,7 +364,7 @@ begin
     if data = '' then
     begin
       Terminate;
-      raise ETunnel.CreateUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
+      ETunnel.RaiseUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
     end;
   end;
   // relay the (decrypted) data to the local loopback
@@ -376,7 +376,7 @@ begin
      Terminated then
     exit;
   Terminate;
-  raise ETunnel.CreateUtf8('%.OnReceived(%): error % when retransmitting',
+  ETunnel.RaiseUtf8('%.OnReceived(%): error % when retransmitting',
     [self, fPort, ToText(res)^]);
 end;
 
@@ -432,7 +432,7 @@ begin
                 fTransmit.Send(tmp);
             end;
         else
-          raise ETunnel.CreateUtf8('%.Execute(%): error % at receiving',
+          ETunnel.RaiseUtf8('%.Execute(%): error % at receiving',
             [self, fPort, ToText(res)^]);
         end;
       end;
@@ -544,9 +544,9 @@ begin
   // validate input parameters
   if (fPort <> 0) or
      (not Assigned(fTransmit)) then
-    raise ETunnel.CreateUtf8('%.Open invalid call', [self]);
+    ETunnel.RaiseUtf8('%.Open invalid call', [self]);
   if not uri.From(Address, '0') then
-    raise ETunnel.CreateUtf8('%.Open invalid %', [self, Address]);
+    ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   RemotePort := 0;
   fSession := Sess;
   TransmitOptions := TransmitOptions - [toClientSigned, toServerSigned];
@@ -592,13 +592,13 @@ begin
       log.Log(sllTrace, 'Open: after Send1 len=', [length(frame)], self);
     // server will wait until both sides sent an identical (signed) header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      raise ETunnel.CreateUtf8('Open handshake timeout on port %', [result]);
+      ETunnel.RaiseUtf8('Open handshake timeout on port %', [result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: after WaitPop1 len=', [length(remote)], self);
     if not FrameVerify(remote, SizeOf(header)) or // also checks length(remote)
        not CompareMem(pointer(remote), @header,
              SizeOf(header) - SizeOf(header.port)) then
-      raise ETunnel.CreateUtf8('Open handshake failed on port %', [result]);
+      ETunnel.RaiseUtf8('Open handshake failed on port %', [result]);
     RemotePort := PTunnelLocalHeader(remote)^.port;
     // optional encryption
     FillZero(key.b);
@@ -614,7 +614,7 @@ begin
           RandomBytes(@rnd, SizeOf(rnd)); // Lecuyer is enough for public random
         if IsZero(fEcdhe.pub) then // ephemeral key was not specified at Create
           if not Ecc256r1MakeKey(fEcdhe.pub, fEcdhe.priv) then
-            raise ETunnel.CreateUtf8('%.Open: no ECC engine available', [self]);
+            ETunnel.RaiseUtf8('%.Open: no ECC engine available', [self]);
         PTunnelEcdhFrame(frame)^.pub := fEcdhe.pub;
         fTransmit.Send(frame);
         if Assigned(log) then
@@ -761,7 +761,7 @@ begin
         head := pointer(request.payload);
         if (length(request.payload) <> SizeOf(head^)) or
            (head^.session <> session) then
-          raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
+          ETunnel.RaiseUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
             [self, length(request.payload), head^.session, session]);
         fOptions := head^.options;
         connections := (((Sender as TWebSocketProcessServer).
@@ -779,7 +779,7 @@ begin
             reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
             if (link^.ProcessB <> nil) or
                (reversed.fOptions <> fOptions) then
-              raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: abusive', [self]);
+              ETunnel.RaiseUtf8('%.ProcessIncomingFrame: abusive', [self]);
             // now both sides are properly connected
             link^.ProcessB := Sender;
             fReverse := link^.ProcessA;

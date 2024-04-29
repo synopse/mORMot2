@@ -3756,7 +3756,7 @@ begin
         Cache.ItemInfo := ArrayItemType(cnt, siz);
         if (cnt = 0) or
            (siz mod cnt <> 0) then
-          raise ERttiException.CreateUtf8('ComputeCache(%): array siz=% cnt=%',
+          ERttiException.RaiseUtf8('ComputeCache(%): array siz=% cnt=%',
             [RawName, siz, cnt]);
         Cache.ItemSize := siz div cnt;
         Cache.ItemCount := cnt;
@@ -4146,8 +4146,7 @@ begin
   if rpc = rpcField then
     call.Code := PPointer({%H-}call.Data)^
   else if TypeInfo^.Kind in [rkDynArray, rkInterface] then
-    raise ERttiException.CreateUtf8(
-      'TRttiProp.GetOrdProp(%) does not support a getter for %',
+    ERttiException.RaiseUtf8('TRttiProp.GetOrdProp(%) has no getter for %',
       [Instance.ClassType, ToText(TypeInfo^.Kind)^])
   else if rpc = rpcMethod then
     call.Code := TGetProc(call)
@@ -5581,7 +5580,7 @@ var
 begin
   if CurrentMethod <> nil then
     m := '.' + CurrentMethod^.Name;
-  raise ERttiException.CreateUtf8('GetRttiInterface(%%) failed - %',
+  ERttiException.RaiseUtf8('GetRttiInterface(%%) failed - %',
     [Definition.Name, {%H-}m, FormatUtf8(Format, Args)]);
 end;
 
@@ -6864,7 +6863,7 @@ var
 begin
   Value := Rtti.RegisterType(RttiProp^.TypeInfo);
   if Value = nil then
-    raise ERttiException.CreateUtf8('TRttiCustom: % property has no RTTI',
+    ERttiException.RaiseUtf8('TRttiCustom: % property has no RTTI',
       [RttiProp^.Name^]);
   addr := PtrInt(RttiProp^.GetFieldAddr(nil));
   // GetterCall/SetterCall will handle void "read"/"write" attributes
@@ -6957,7 +6956,7 @@ begin
      RVD.NeedsClear then
     VarClearProc(RVD.Data);
   if Prop = nil then // raise exception after NeedsClear to avoid memory leak
-    raise ERttiException.Create('TRttiCustomProp.SetValue: with Prop=nil');
+    ERttiException.RaiseUtf8('TRttiCustomProp.SetValue: with Prop=nil', []);
 end;
 
 function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boolean;
@@ -7366,8 +7365,7 @@ var
   p: PRttiCustomProp;
 begin
   if high(Old) <> high(New) then
-    raise ERttiException.CreateUtf8(
-      'NameChanges(%,%) fields count', [high(Old), high(New)]);
+    ERttiException.RaiseUtf8('NameChanges(%,%) fields count', [high(Old), high(New)]);
   // first reset the names
   p := pointer(List);
   for i := 1 to Count do
@@ -7380,7 +7378,7 @@ begin
   begin
     p := Find(Old[i]);
     if p = nil then
-      raise ERttiException.CreateUtf8('NameChanges(%) unknown', [Old[i]]);
+      ERttiException.RaiseUtf8('NameChanges(%) unknown', [Old[i]]);
     p^.Name := New[i];
   end;
   CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
@@ -7432,9 +7430,9 @@ end;
 function TRttiCustomProps.FromTextPrepare(const PropName: RawUtf8): integer;
 begin
   if PropName = '' then
-    raise ERttiException.Create('FromTextPrepare: Void property name');
+    ERttiException.RaiseUtF8('FromTextPrepare: Void property name', []);
   if Find(PropName) <> nil then
-    raise ERttiException.CreateUtf8('Duplicated % property name', [PropName]);
+    ERttiException.RaiseUtf8('Duplicated % property name', [PropName]);
   result := Count;
   inc(Count);
   SetLength(List, Count);
@@ -7467,7 +7465,7 @@ begin
        (p^.OffsetGet >= 0) then
     begin
       if not Assigned(p^.Value.fCopy) then
-        raise ERttiException.Create('Paranoid managed Value.Copy');
+        ERttiException.RaiseUtf8('Paranoid managed Value.Copy', []);
       include(result, rcfHasNestedManagedProperties);
       Managed[n] := p;
       inc(n);
@@ -7785,7 +7783,7 @@ begin
   if vmt^ = nil then
     PatchCodePtrUInt(pointer(vmt), PtrUInt(self), {leaveunprotected=}true);
   if vmt^ <> self then
-    raise ERttiException.CreateUtf8(
+    ERttiException.RaiseUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
   {$endif NOPATCHVMT}
   // identify the most known class types - see also overriden mormot.core.json
@@ -7920,7 +7918,7 @@ procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
 begin
   if (fNoRttiInfo <> nil) or
      not (rcfWithoutRtti in fFlags) then
-    raise ERttiException.CreateUtf8('Unexpected %.NoRttiSetAndRegister(%)',
+    ERttiException.RaiseUtf8('Unexpected %.NoRttiSetAndRegister(%)',
       [self, TypeName]);
   // validate record/dynarray only supported types
   case ParserType of
@@ -7945,7 +7943,7 @@ begin
         fCache.Size := SizeOf(pointer);
       end;
   else
-    raise ERttiException.CreateUtf8('Unexpected %.CreateWithoutRtti(%)',
+    ERttiException.RaiseUtf8('Unexpected %.CreateWithoutRtti(%)',
       [self, ToText(ParserType)^]);
   end;
   if NoRegister then
@@ -8020,7 +8018,7 @@ begin
     Data := pointer(mem);
     dec(mem);
     if mem.refCnt > 1 then
-      raise ERttiException.CreateUtf8('%.ArrayFinalize: % has refcnt=%',
+      ERttiException.RaiseUtf8('%.ArrayFinalize: % has refcnt=%',
         [self, ArrayRtti.Name, mem.refCnt]);
     n := mem.length;
   end;
@@ -8334,7 +8332,7 @@ begin
     else
     begin
       if not GetNextFieldProp(P, typname) then
-        ERttiException.CreateUtf8('Missing field type for %', [propname]);
+        ERttiException.RaiseUtf8('Missing field type for %', [propname]);
       c := Rtti.RegisterTypeFromName(typname, @pt);
       if c = nil then
       case pt of
@@ -8347,7 +8345,7 @@ begin
               P := GotoNextNotSpace(P + 2);
               if not GetNextFieldProp(P, atypname) or
                  (P = nil) then
-                ERttiException.Create('Missing array field type');
+                ERttiException.RaiseUtf8('Missing % array field type', [typname]);
               FormatUtf8('[%%]', [atypname, RttiArrayCount], typname);
               LockedInc32(@RttiArrayCount); // ensure genuine type name
               ac := Rtti.RegisterTypeFromName(atypname, @apt);
@@ -8361,7 +8359,7 @@ begin
             else
               P := nil;
             if P = nil then
-              raise ERttiException.CreateUtf8('Expected text definition syntax is ' +
+              ERttiException.RaiseUtf8('Expected text definition syntax is ' +
                 '"array of record" or "array of KnownType" for %', [propname]);
             pt := ptDynArray;
           end;
@@ -8407,8 +8405,7 @@ begin
               end;
             end;
             if ac = nil then
-              raise ERttiException.CreateUtf8(
-                'Unknown type %: %', [propname, typname]);
+              ERttiException.RaiseUtf8('Unknown type %: %', [propname, typname]);
             pt := ptDynArray;
           end;
       end;
@@ -8419,8 +8416,7 @@ begin
       if (c <> nil) or
          (ac <> nil) or
          not (pt in [ptRecord, ptDynArray]) then
-        raise ERttiException.CreateUtf8(
-          'Unexpected nested % %', [c, ToText(pt)^]);
+        ERttiException.RaiseUtf8('Unexpected nested % %', [c, ToText(pt)^]);
       nested := Rtti.GlobalClass.Create;
       nested.FromRtti(nil);
       nested.SetPropsFromText(P, ee, NoRegister);
@@ -8438,8 +8434,7 @@ begin
     begin
       if (c <> nil) or
          (pt <> ptDynArray) then // paranoid
-        raise ERttiException.CreateUtf8(
-          'Unexpected array % %', [c, ToText(pt)^]);
+        ERttiException.RaiseUtf8('Unexpected array % %', [c, ToText(pt)^]);
       c := Rtti.GlobalClass.Create;
       c.FromRtti(nil);
       c.NoRttiSetAndRegister(ptDynArray, typname, ac, NoRegister);
@@ -8540,7 +8535,7 @@ end;
 function TRttiCustom.ComputeFakeObjArrayRtti(aItemClass: TClass): TBytes;
 begin
   if Kind <> rkDynArray then
-    raise ERttiException.CreateUtf8('ComputeFakeArrayRtti %?', [Name]);
+    ERttiException.RaiseUtf8('ComputeFakeArrayRtti %?', [Name]);
   SetLength(result, InstanceSize);
   MoveFast(pointer(self)^, pointer(result)^, InstanceSize);  // weak copy
   TRttiCustom(pointer(result)).fObjArrayClass := aItemClass; // overwrite class
@@ -8824,7 +8819,7 @@ begin
     RegisterSafe.UnLock;
   end;
   if FindType(Info) <> result then // paranoid check
-    raise ERttiException.CreateUtf8('%.DoRegister(%)?', [self, Info.RawName]);
+    ERttiException.RaiseUtf8('%.DoRegister(%)?', [self, Info.RawName]);
 end;
 
 function TRttiCustomList.DoRegister(ObjectClass: TClass): TRttiCustom;
@@ -8939,7 +8934,7 @@ begin
     for i := 0 to Count - 1 do
       regtypes := {%H-}regtypes + fInstances[i].Name + ' ';
     newunit := _ClassUnit(RttiClass);
-    raise ERttiException.CreateUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
+    ERttiException.RaiseUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
       'some types have been registered as % before % has been loaded and ' +
       'initialized - please put % in the uses clause where you register '+
       'your [ %] types, in addition to mormot.core.rtti',
@@ -9050,7 +9045,7 @@ begin
   for i := 0 to high(ObjectClass) do
   begin
     if ObjectClass[i].InheritsFrom(TCollection) then
-      raise ERttiException.CreateUtf8(
+      ERttiException.RaiseUtf8(
         'RegisterClasses(%): please call RegisterCollection() instead',
         [ObjectClass[i]]);
     RegisterClass(ObjectClass[i]);
@@ -9092,10 +9087,10 @@ begin
     for i := 0 to (n shr 1) - 1 do
       if (InfoBinarySize[i * 2].VType <> vtPointer) or
          not(InfoBinarySize[i * 2 + 1].VType {%H-}in [vtInteger, vtInt64]) then
-        raise ERttiException.Create('Rtti.RegisterBinaryTypes(?)')
+        ERttiException.RaiseUtf8('Rtti.RegisterBinaryTypes(%)?', [i])
       else if RegisterType(InfoBinarySize[i * 2].VPointer).
          SetBinaryType(InfoBinarySize[i * 2 + 1].VInteger) = nil then
-        raise ERttiException.CreateUtf8('Rtti.RegisterBinaryTypes: %?',
+        ERttiException.RaiseUtf8('Rtti.RegisterBinaryTypes: %?',
            [PRttiInfo(InfoBinarySize[i * 2].VPointer)^.Name]);
 end;
 
@@ -9152,7 +9147,7 @@ begin
       rttisize := result.Size; // was taken from RTTI
       result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
       if result.Props.Size <> rttisize then
-        raise ERttiException.CreateUtf8('Rtti.RegisterFromText(%): text ' +
+        ERttiException.RaiseUtf8('Rtti.RegisterFromText(%): text ' +
           'definition  covers % bytes, but RTTI defined %',
           [DynArrayOrRecord^.RawName, result.Props.Size, rttisize]);
     end
@@ -9180,7 +9175,7 @@ begin
       result.FromRtti(nil);
     end
     else if not (result.Kind in rkRecordTypes) then
-      raise ERttiException.CreateUtf8('Rtti.RegisterFromText: existing % is a %',
+      ERttiException.RaiseUtf8('Rtti.RegisterFromText: existing % is a %',
         [TypeName, ToText(result.Kind)^]);
     result.PropsClear;
     P := pointer(RttiDefinition);
@@ -9759,9 +9754,9 @@ begin
   begin
     // paranoid checks
     if Assigned(RTTI_FINALIZE[k]) <> (k in rkManagedTypes) then
-      raise ERttiException.CreateUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
+      ERttiException.RaiseUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
     if Assigned(RTTI_MANAGEDCOPY[k]) <> (k in rkManagedTypes) then
-      raise ERttiException.CreateUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
+      ERttiException.RaiseUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
     // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetValueDirect/GetValueGetter
     case k of
       rkEnumeration,
@@ -9824,7 +9819,7 @@ begin
   PT_INFO[ptTimeLog]       := TypeInfo(TTimeLog);
   for t := succ(low(t)) to high(t) do
     if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
-      raise ERttiException.CreateUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
+      ERttiException.RaiseUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
   PTC_INFO[pctTimeLog]     := TypeInfo(TTimeLog);
   PTC_INFO[pctID]          := TypeInfo(TID);
   PTC_INFO[pctCreateTime]  := TypeInfo(TTimeLog);

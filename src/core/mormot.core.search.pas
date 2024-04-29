@@ -1904,7 +1904,7 @@ begin
           '%':
             goto next;
         else
-          raise ESynException.CreateUtf8(
+          ESynException.RaiseUtf8(
             'ScanUtf8: unknown ''%'' specifier [%]', [F^, fmt]);
         end;
         inc(result);
@@ -4126,7 +4126,7 @@ begin
   if @aHasher <> nil then
     fHasher := aHasher;
   if not LoadFrom(aSaved, aMagic) then // will load fSize+fBits+fHashFunctions
-    raise ESynException.CreateUtf8('%.Create with invalid aSaved content', [self]);
+    ESynException.RaiseUtf8('%.Create with invalid aSaved content', [self]);
 end;
 
 procedure TSynBloomFilter.Insert(const aValue: RawByteString);

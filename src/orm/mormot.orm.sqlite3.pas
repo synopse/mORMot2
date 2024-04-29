@@ -704,7 +704,7 @@ begin
         costPrimaryIndex:
           pInfo.estimatedRows := 1;
       else
-        raise EOrmException.CreateUtf8(
+        EOrmException.RaiseUtf8(
           'vt_BestIndex: unexpected EstimatedCost=%',
           [ord(prepared^.EstimatedCost)]);
       end;
@@ -976,9 +976,9 @@ end;
 procedure TOrmVirtualTableModuleSQLite3.Attach(aDB: TSqlDataBase);
 begin
   if aDB = nil then
-    raise ERestStorage.CreateUtf8('aDB=nil at %.SetDB()', [self]);
+    ERestStorage.RaiseUtf8('aDB=nil at %.SetDB()', [self]);
   if fDB <> nil then
-    raise ERestStorage.CreateUtf8('fDB<>nil at %.SetDB()', [self]);
+    ERestStorage.RaiseUtf8('fDB<>nil at %.SetDB()', [self]);
   FillCharFast(fModule, SizeOf(fModule), 0);
   fModule.iVersion := 1;
   fModule.xCreate := vt_Create;
@@ -1024,7 +1024,7 @@ constructor TOrmVirtualTableModuleServerDB.Create(aClass: TOrmVirtualTableClass;
   aServer: TRestOrmServer);
 begin
   if not aServer.InheritsFrom(TRestOrmServerDB) then
-    raise ERestStorage.CreateUtf8('%.Create expects a DB Server', [self]);
+    ERestStorage.RaiseUtf8('%.Create expects a DB Server', [self]);
   inherited;
   Attach(TRestOrmServerDB(aServer).DB);
   // any exception in Attach() will let release the instance by the RTL
@@ -1066,7 +1066,7 @@ begin
   fDBPassword := aDBPassword;
   orm := aServer.OrmInstance as TRestOrmServer;
   if orm = nil then
-    raise ERestStorage.CreateUtf8(
+    ERestStorage.RaiseUtf8(
       '%.Create: % has no OrmInstance - use TRestServerDB', [self, aServer]);
   inherited Create(aClass, orm, aShardRange, aOptions, aMaxShardCount);
   orm.StaticTableSetup(fStoredClassProps.TableIndex, self, sStaticDataTable);
@@ -1155,7 +1155,7 @@ begin
       fShardOffset := num;
     dec(num, fShardOffset);
     if not SameText(DBFileName(num), db[f].Name) then
-      raise EOrmException.CreateUtf8('%.InitShards(%)', [self, db[f].Name]);
+      EOrmException.RaiseUtf8('%.InitShards(%)', [self, db[f].Name]);
     if f = high(db) then
       fInitShardsIsLast := true;
     fShardLast := num - 1; // 'folder\root0005.dbs' -> fShardLast := 4
@@ -1248,7 +1248,7 @@ begin
   fStatementMaxParam := 1;
   PrepareStatement({cached=}true);
   if fStatement^.ParamCount <> ExpectedParams then
-    raise EOrmException.CreateUtf8(
+    EOrmException.RaiseUtf8(
       '%.PrepareCachedStatement(%) recognized % params, and % for SQLite3',
       [self, SQL, ExpectedParams, fStatement^.ParamCount]);
 end;
@@ -1269,7 +1269,7 @@ begin
   if fStatementMaxParam = 0 then
     exit; // no valid :(...): inlined parameter found -> manual bind
   if fStatement^.ParamCount <> fStatementMaxParam then
-    raise EOrmException.CreateUtf8(
+    EOrmException.RaiseUtf8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self, fStatementGenericSql, fStatementMaxParam, fStatement^.ParamCount]);
   for i := 0 to fStatementMaxParam - 1 do
@@ -2086,7 +2086,7 @@ begin
       tmp.Done;
     end;
     if sql = '' then
-      raise ERestStorage.CreateUtf8('%.MainEngineUpdate: invalid input [%]',
+      ERestStorage.RaiseUtf8('%.MainEngineUpdate: invalid input [%]',
         [self, EscapeToShort(SentData)]);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):',
       [props.SqlTableName, sql, ID]);
@@ -2383,7 +2383,7 @@ begin
   // decode and bind a JSON array of fields
   info.Json := GotoNextNotSpace(P);
   if info.Json^ <> '[' then
-    raise EOrmBatchException.CreateUtf8(
+    EOrmBatchException.RaiseUtf8(
       'Invalid simple batch - start with % instead of [', [info.Json^]);
   inc(info.Json);
   if id <> nil then
@@ -2442,7 +2442,7 @@ begin
   // BATCH_DIRECT: InternalBatchDirectOne() to SimpleFields[]
   if (fBatch^.ValuesCount <> 0) or
      (fBatch^.IDCount <> 0) then
-    raise EOrmBatchException.CreateUtf8(
+    EOrmBatchException.RaiseUtf8(
       '%.InternalBatchStop should have been called', [self]);
   fBatch^.Encoding := Encoding;
   fBatch^.Options := BatchOptions;
@@ -2470,11 +2470,11 @@ begin
      (b^.TableIndex < 0) then
     exit; // nothing to add
   if not (b^.Encoding in BATCH_INSERT) then
-    raise EOrmBatchException.CreateUtf8('%.InternalBatchStop: Encoding=%',
+    EOrmBatchException.RaiseUtf8('%.InternalBatchStop: Encoding=%',
       [self, ToText(b^.Encoding)^]);
   try
     if b^.ValuesCount <> b^.IDCount then
-      raise EOrmBatchException.CreateUtf8(
+      EOrmBatchException.RaiseUtf8(
         '%.InternalBatchStop(*Count?)', [self]);
     updateeventneeded := InternalUpdateEventNeeded(oeAdd, b^.TableIndex);
     props := fModel.Tables[b^.TableIndex].OrmProps;
@@ -2500,7 +2500,7 @@ begin
       end;
       if not InternalExecute(sql, {cache=}true) then
         // just like ESqlite3Exception below
-        raise EOrmBatchException.CreateUtf8(
+        EOrmBatchException.RaiseUtf8(
           '%.InternalBatchStop failed on %', [self, sql]);
       if updateeventneeded then
         InternalUpdateEvent(oeAdd, b^.TableIndex, b^.ID[0], v, nil, nil);
@@ -2563,7 +2563,7 @@ begin
           // here we need to decode a JSON object
           P := pointer(b^.Values[ndx]);
           if P = nil then
-            raise EOrmBatchException.CreateUtf8(
+            EOrmBatchException.RaiseUtf8(
               '%.InternalBatchStop: b^.Values[%]=''''', [self, ndx]);
           try
             if updateeventneeded then
@@ -2732,7 +2732,7 @@ begin
     until (ndx = b^.ValuesCount) and
           decodedsaved;
     if firstrow <> b^.ValuesCount then
-      raise EOrmBatchException.CreateUtf8('%.InternalBatchStop(firstrow)', [self]);
+      EOrmBatchException.RaiseUtf8('%.InternalBatchStop(firstrow)', [self]);
   finally
     b^.Encoding := encDelete;
     b^.Options := [];

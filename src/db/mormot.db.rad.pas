@@ -555,15 +555,13 @@ var
 begin
   SQLLogBegin(sllDB);
   if fPrepared then
-    raise ESqlDBDataset.CreateUtf8(
-      '%.Prepare(%) shall be called once', [self, aSQL]);
+    ESqlDBDataset.RaiseUtf8('%.Prepare(%) shall be called once', [self, aSQL]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL, sqlu);
   fPrepared := DatasetPrepare(Utf8ToString(sqlu));
   SQLLogEnd;
   if not fPrepared then
-    raise ESqlDBDataset.CreateUtf8(
-      '%.Prepare: DatasetPrepare(%) failed', [self, sqlu]);
+    ESqlDBDataset.RaiseUtf8('%.Prepare: DatasetPrepare(%) failed', [self, sqlu]);
 end;
 
 procedure TSqlDBDatasetStatementAbstract.ExecutePrepared;
@@ -576,8 +574,7 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount <> fParamCount then
-    raise ESqlDBDataset.CreateUtf8(
-      '%.ExecutePrepared expected % bound parameters, got %',
+    ESqlDBDataset.RaiseUtf8('%.ExecutePrepared expected % bound parameters, got %',
       [self, fPreparedParamsCount, fParamCount]);
   arrndx := -1; // either Bind() or BindArray() with no Array DML support
   repeat
@@ -796,7 +793,7 @@ begin
             W.WrBase64(pointer(blob), length(blob), true); // withMagic=true
           end;
       else
-        raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
+        ESqlDBException.RaiseUtf8('%: Invalid ColumnType()=%',
           [self, ord(ColumnType)]);
       end;
   end;
@@ -897,7 +894,7 @@ begin
             P.AsString := VData;
           {$endif UNICODE}
       else
-        raise ESqlDBDataset.CreateUtf8(
+        ESqlDBDataset.RaiseUtf8(
           '%.DataSetBindSqlParam: Invalid type % on bound parameter #%',
           [self, ord(VType), aParamIndex + 1]);
       end;
@@ -945,7 +942,7 @@ procedure TSqlDBDatasetStatement.Prepare(
 begin
   inherited;
   if fPreparedParamsCount <> fQueryParams.Count then
-    raise ESqlDBDataset.CreateUtf8(
+    ESqlDBDataset.RaiseUtf8(
       '%.Prepare expected % parameters in request, found % - [%]',
       [self, fPreparedParamsCount, fQueryParams.Count, aSQL]);
 end;

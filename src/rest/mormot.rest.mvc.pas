@@ -1321,18 +1321,15 @@ var
   age: TUnixTime;
 begin
   if cardinal(methodIndex) >= cardinal(fFactory.MethodsCount) then
-    raise EMvcException.CreateUtf8(
-      '%.Render(methodIndex=%)', [self, methodIndex]);
+    EMvcException.RaiseUtf8('%.Render(methodIndex=%)', [self, methodIndex]);
   with fViews[methodIndex],
        Locker.ProtectMethod do
   begin
     if MethodName = '' then
-      raise EMvcException.CreateUtf8(
-        '%.Render(''%''): not a View', [self, MethodName]);
+      EMvcException.RaiseUtf8('%.Render(''%''): not a View', [self, MethodName]);
     if (Mustache = nil) and
        (FileName = '') then
-      raise EMvcException.CreateUtf8(
-        '%.Render(''%''): Missing Template in ''%''',
+      EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
         [self, MethodName, SearchPattern]);
     if (Mustache = nil) or
        ((fViewTemplateFileTimestampMonitor <> 0) and
@@ -1352,13 +1349,11 @@ begin
             include(Flags, viewHasGenerationTimeTag);
         except
           on E: Exception do
-            raise EMvcException.CreateUtf8(
-              '%.Render(''%''): Invalid Template: % - %',
+            EMvcException.RaiseUtf8('%.Render(''%''): Invalid Template: % - %',
               [self, ShortFileName, E, E.Message]);
         end
         else
-          raise EMvcException.CreateUtf8(
-            '%.Render(''%''): Missing Template in ''%''',
+          EMvcException.RaiseUtf8('%.Render(''%''): Missing Template in ''%''',
             [self, ShortFileName, SearchPattern]);
         if fViewTemplateFileTimestampMonitor <> 0 then
           FileAgeCheckTick := GetTickCount64 +
@@ -1403,7 +1398,7 @@ begin
       finally
         Locker.Leave;
       end;
-      raise EMvcException.CreateUtf8(
+      EMvcException.RaiseUtf8(
         '%.Render(''%''): Void [%] Template - please customize this file!',
         [self, ShortFileName, FileName]);
     end;
@@ -1446,8 +1441,8 @@ begin
     // binary decoding of a rkRecord
     recsize := PRecordDataTypeInfo^.RecordSize;
     if recsize > SizeOf(rec) then
-      raise EMvcException.CreateUtf8(
-        '%.CheckAndRetrieveInfo: recsize=% overflow', [self, recsize]);
+      EMvcException.RaiseUtf8('%.CheckAndRetrieveInfo: recsize=% overflow',
+        [self, recsize]);
     FillCharFast(rec, recsize, 0);
   end;
   try
@@ -1643,7 +1638,7 @@ begin
             begin
               if err = '' then
                 err := 'execution error';
-              raise EMvcException.CreateUtf8('%.CommandRunMethod(I%): %',
+              EMvcException.RaiseUtf8('%.CommandRunMethod(I%): %',
                 [self, m^.InterfaceDotMethodName, err])
             end;
             action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
@@ -1873,7 +1868,7 @@ var
   method: RawUtf8;
 begin
   if aApplication = nil then
-    raise EMvcException.CreateUtf8('%.Create(aApplication=nil)', [self]);
+    EMvcException.RaiseUtf8('%.Create(aApplication=nil)', [self]);
   if aRestServer = nil then
     fRestServer := aApplication.RestModel as TRestServer
   else
@@ -2266,20 +2261,18 @@ begin
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
   if fFactoryErrorIndex < 0 then
-    raise EMvcException.CreateUtf8(
-      '% does not implement the IMvcApplication.Error() method',
+    EMvcException.RaiseUtf8('% does not implement the IMvcApplication.Error() method',
       [aInterface.RawName]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry = nil then
-    raise EMvcException.CreateUtf8(
-      '%.Start(%): this class should implement %',
+    EMvcException.RaiseUtf8('%.Start(%): this class should implement %',
       [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
   for m := 0 to fFactory.MethodsCount - 1 do
     if not MethodHasView(fFactory.Methods[m]) then
       with fFactory.Methods[m] do
         if ArgsOutFirst <> ArgsResultIndex then
-          raise EMvcException.CreateUtf8(
+          EMvcException.RaiseUtf8(
             '%.Start(%): %.% var/out param not allowed with TMvcAction result',
             [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName, URI])
         else

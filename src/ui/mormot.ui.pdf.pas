@@ -4224,7 +4224,7 @@ constructor TPdfDictionaryElement.Create(const AKey: PdfString;
   AValue: TPdfObject; AInternal: boolean);
 begin
   if not (AValue is TPdfObject) then
-    raise EPdfInvalidValue.CreateUtf8('TPdfDictionaryElement(%,%)', [AKey, AValue]);
+    EPdfInvalidValue.RaiseUtf8('TPdfDictionaryElement(%,%)', [AKey, AValue]);
   fKey := TPdfName.Create(AKey);
   fValue := AValue;
   fIsInternal := AInternal;
@@ -6505,7 +6505,7 @@ begin
     if Value < 0 then
       raise EPdfInvalidValue.Create('Zoom<0')
     else if Value > PDF_MAX_ZOOMSIZE then
-      raise EPdfInvalidValue.CreateUtf8('Zoom>%', [PDF_MAX_ZOOMSIZE])
+      EPdfInvalidValue.RaiseUtf8('Zoom>%', [PDF_MAX_ZOOMSIZE])
     else
       fZoom := Value;
 end;
@@ -6793,7 +6793,7 @@ begin
   if AObject.Attributes.ValueByName('Name') = nil then
   begin
     if GetXObject(AName) <> nil then
-      raise EPdfInvalidValue.CreateUtf8('RegisterXObject: dup name %', [AName]);
+      EPdfInvalidValue.RaiseUtf8('RegisterXObject: dup name %', [AName]);
     result := fXObjectList.AddItem(AObject);
     AObject.Attributes.AddItem('Name', AName);
   end
@@ -7005,7 +7005,7 @@ begin
     RaiseInvalidOperation; // we need a page to refer to
   if (aBookmarkName = '') or
      (fBookMarks.IndexOf(aBookmarkName) >= 0) then
-    raise EPdfInvalidValue.CreateUtf8(
+    EPdfInvalidValue.RaiseUtf8(
       'Duplicated or void bookmark name "%"', [aBookmarkName]);
   aDest := CreateDestination;
   aDest.DestinationType := dtXYZ;
@@ -7161,13 +7161,13 @@ function TPdfDocument.AddXObject(
   const AName: PdfString; AXObject: TPdfXObject): integer;
 begin
   if GetXObject(AName) <> nil then
-    raise EPdfInvalidValue.CreateUtf8('AddXObject: dup name %', [AName]);
+    EPdfInvalidValue.RaiseUtf8('AddXObject: dup name %', [AName]);
   // check whether AImage is valid PdfImage or not.
   if (AXObject = nil) or
      (AXObject.Attributes = nil) or
      (AXObject.Attributes.TypeOf <> 'XObject') or
      (AXObject.Attributes.PdfNameByName('Subtype') = nil) then
-    raise EPdfInvalidValue.CreateUtf8(
+    EPdfInvalidValue.RaiseUtf8(
       'AddXObject: invalid TPdfImage %', [AName]);
   fXRef.AddObject(AXObject);
   result := RegisterXObject(AXObject, AName);
@@ -8521,7 +8521,7 @@ begin
   // drawing object must be registered. check object name
   x := fDoc.GetXObject(AXObjectName);
   if x = nil then
-    raise EPdfInvalidValue.CreateUtf8('DrawXObject: unknown %', [AXObjectName]);
+    EPdfInvalidValue.RaiseUtf8('DrawXObject: unknown %', [AXObjectName]);
   o := fPage.GetResources('XObject');
   if o = nil then
     raise EPdfInvalidValue.Create('DrawXObject: no XObject');

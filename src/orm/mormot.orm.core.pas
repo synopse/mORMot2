@@ -5079,7 +5079,7 @@ procedure TOrmPropInfoRttiID.SetValue(Instance: TObject; Value: PUtf8Char;
   ValueLen: PtrInt; wasString: boolean);
 begin
   if TOrm(Instance).fFill.JoinedFields then
-    raise EModelException.CreateUtf8('%(%).SetValue after Create*Joined', [self, Name]);
+    EModelException.RaiseUtf8('%(%).SetValue after Create*Joined', [self, Name]);
   inherited SetValue(Instance, Value, ValueLen, wasString);
 end;
 
@@ -6465,7 +6465,7 @@ begin
         exit
       else
         // paranoid
-        raise EModelException.CreateUtf8('%.OrmProps: vmtAutoTable=%',
+        EModelException.RaiseUtf8('%.OrmProps: vmtAutoTable=%',
           [self, result]);
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
@@ -6548,7 +6548,7 @@ begin
   InternalCreate; // may be overriden
   fID := aID;
   if not SimplePropertiesFill(aSimpleFields) then
-    raise EOrmException.CreateUtf8('Incorrect %.Create(aSimpleFields) call', [self]);
+    EOrmException.RaiseUtf8('Incorrect %.Create(aSimpleFields) call', [self]);
 end;
 
 function TOrm.CreateCopy: TOrm;
@@ -7339,7 +7339,7 @@ var
   fields: TOrmPropInfoList;
 begin
   if aModel = nil then
-    raise EModelException.CreateUtf8('Invalid %.GetSqlCreate(nil) call', [self]);
+    EModelException.RaiseUtf8('Invalid %.GetSqlCreate(nil) call', [self]);
   Props := aModel.Props[self];
   if Props.Kind <>  ovkSQLite3 then
   begin
@@ -7362,15 +7362,15 @@ begin
           M := aModel.VirtualTableModule(self);
           if (M = nil) or
              (not Assigned(GetVirtualTableModuleName)) then
-            raise EModelException.CreateUtf8('No registered module for %', [self]);
+            EModelException.RaiseUtf8('No registered module for %', [self]);
           mname := GetVirtualTableModuleName(M);
           if Props.Props.Fields.Count = 0 then
-            raise EModelException.CreateUtf8(
+            EModelException.RaiseUtf8(
               'Virtual % % should have published properties', [mname, self]);
           result := result + mname + '(';
         end;
     else
-      raise EModelException.CreateUtf8('%.GetSqlCreate(%)?', [self, ToText(Props.Kind)^]);
+      EModelException.RaiseUtf8('%.GetSqlCreate(%)?', [self, ToText(Props.Kind)^]);
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
@@ -7753,7 +7753,7 @@ begin
   InternalCreate;
   props := aClient.Model.Props[POrmClass(self)^];
   if props.props.JoinedFields = nil then
-    raise EModelException.CreateUtf8('No nested TOrm to JOIN in %', [self]);
+    EModelException.RaiseUtf8('No nested TOrm to JOIN in %', [self]);
   sql := props.Sql.SelectAllJoined;
   if aFormatSQLJoin <> '' then
     sql := sql + FormatSql(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
@@ -7790,10 +7790,10 @@ constructor TOrm.CreateAndFillPrepareMany(const aClient: IRestOrm;
 begin
   InternalCreate;
   if Length(Orm.ManyFields) = 0 then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       '%.CreateAndFillPrepareMany() with no many-to-many fields', [self]);
   if not FillPrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin, aBoundsSQLJoin) then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       '%.CreateAndFillPrepareMany(): FillPrepareMany() failure', [self]);
 end;
 
@@ -7934,7 +7934,7 @@ begin
   begin
     M := TOrmMany(Props.ManyFields[f].GetInstance(self));
     if M = nil then
-      raise EOrmException.CreateUtf8('%.Create should have created %:% for EnginePrepareMany',
+      EOrmException.RaiseUtf8('%.Create should have created %:% for EnginePrepareMany',
         [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
     fFill.fTableMapRecordManyInstances[f] := M;
     Objects[f * 2 + 1] := M;
@@ -7943,7 +7943,7 @@ begin
     begin
       if (fRecordManySourceProp.ObjectClass <> PClass(self)^) or
          (fRecordManyDestProp.ObjectClass = nil) then
-        raise EOrmException.CreateUtf8('%.EnginePrepareMany %:% mismatch',
+        EOrmException.RaiseUtf8('%.EnginePrepareMany %:% mismatch',
           [self, Props.ManyFields[f].Name, Props.ManyFields[f].ObjectClass]);
       ObjectsClass[f * 2 + 2] := TOrmClass(fRecordManyDestProp.ObjectClass);
       D := TOrmClass(fRecordManyDestProp.ObjectClass).Create;
@@ -9096,7 +9096,7 @@ begin
     exit;
   main := m.Tables[p.fFtsWithoutContentTableIndex].SqlTableName;
   if not Server.IsInternalSQLite3Table(p.fFtsWithoutContentTableIndex) then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       '% is an external content FTS4/5 table but source % is not ' +
       'a local SQLite3 table: FTS search will be unavailable', [self, main]);
   fts := p.Props.SqlTableName;
@@ -9257,7 +9257,7 @@ begin
   // add properties to internal Fields list
   nProps := ClassFieldCountWithParents(aTable);
   if nProps > MAX_SQLFIELDS_INCLUDINGID then
-    raise EModelException.CreateUtf8('% has too many fields: %>=%',
+    EModelException.RaiseUtf8('% has too many fields: %>=%',
       [Table, nProps, MAX_SQLFIELDS]);
   opt := [pilRaiseEOrmExceptionIfNotHandled];
   if aTable.InheritsFrom(TOrmRTreeAbstract) then
@@ -9265,7 +9265,7 @@ begin
   fFields := TOrmPropInfoList.Create(aTable, opt);
   aTable.InternalRegisterCustomProperties(self);
   if Fields.Count > MAX_SQLFIELDS_INCLUDINGID then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       '% has too many fields after InternalRegisterCustomProperties(%): %>=%',
       [Table, self, Fields.Count, MAX_SQLFIELDS]);
   Fields.AfterAdd;
@@ -9283,10 +9283,10 @@ begin
     F := Fields.List[i];
     // check field name
     if IsRowID(pointer(F.Name)) then
-      raise EModelException.CreateUtf8('ID is already defined in TOrm: ' +
+      EModelException.RaiseUtf8('ID is already defined in TOrm: ' +
         '%.% field name is not allowed as published property', [Table, F.Name]);
     if PosEx(' ' + LowerCase(F.Name) + ' ', SQLITE3_KEYWORDS) > 0 then
-      raise EModelException.CreateUtf8(
+      EModelException.RaiseUtf8(
         '%.% field name conflicts with a SQL keyword', [Table, F.Name]);
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then
@@ -9343,7 +9343,7 @@ begin
           if DynArrayIndex > 0 then
             for j := 0 to nDynArray - 1 do
               if DynArrayFields[j].DynArrayIndex = DynArrayIndex then
-                raise EModelException.CreateUtf8('dup index % for %.% and %.% properties',
+                EModelException.RaiseUtf8('dup index % for %.% and %.% properties',
                   [DynArrayIndex, Table, Name, Table, DynArrayFields[j].Name]);
           DynArrayFields[nDynArray] := TOrmPropInfoRttiDynArray(F);
           if TOrmPropInfoRttiDynArray(F).ObjArray <> nil then
@@ -9373,7 +9373,7 @@ begin
       oftRecordVersion:
         begin
           if fRecordVersionField <> nil then
-            raise EModelException.CreateUtf8('%: only a single TRecordVersion ' +
+            EModelException.RaiseUtf8('%: only a single TRecordVersion ' +
               'field is allowed per class', [Table]);
           fRecordVersionField := F as TOrmPropInfoRttiRecordVersion;
           fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
@@ -9433,17 +9433,17 @@ Copiabl:FieldBitSet(CopiableFieldsBits, i);
     end;
   if SmallFieldsBits <> SimpleFieldsBits[ooSelect] - FieldBits[oftVariant] -
     FieldBits[oftBlobDynArray] - FieldBits[oftBlobCustom] - FieldBits[oftUtf8Custom] then
-    raise EModelException.CreateUtf8('TOrmProperties.Create(%) Bits?', [Table]);
+    EModelException.RaiseUtf8('TOrmProperties.Create(%) Bits?', [Table]);
   for oo := low(oo) to high(oo) do
     FieldBitsToIndex(SimpleFieldsBits[oo], SimpleFieldsIndex[oo], Fields.Count);
   if isTOrmMany then
   begin
     fRecordManySourceProp := Fields.ByRawUtf8Name('Source') as TOrmPropInfoRttiInstance;
     if fRecordManySourceProp = nil then
-      raise EModelException.CreateUtf8('% expects a SOURCE field', [Table]);
+      EModelException.RaiseUtf8('% expects a SOURCE field', [Table]);
     fRecordManyDestProp := Fields.ByRawUtf8Name('Dest') as TOrmPropInfoRttiInstance;
     if fRecordManyDestProp = nil then
-      raise EModelException.CreateUtf8('% expects a DEST field', [Table]);
+      EModelException.RaiseUtf8('% expects a DEST field', [Table]);
   end;
 end;
 
@@ -9517,7 +9517,7 @@ begin
     if fTables[result] = aTable then
       exit;
   if RaiseExceptionIfNotExisting then
-    raise EModelException.CreateUtf8('% must include %', [self, aTable]);
+    EModelException.RaiseUtf8('% must include %', [self, aTable]);
   result := -1;
 end;
 
@@ -9687,7 +9687,7 @@ begin
   ndx := GetTableIndexInheritsFrom(aTable);
   if ndx < 0 then
     if not AddTable(aTable, @ndx) then
-      raise EModelException.CreateUtf8('%.AddTableInherited(%)', [self, aTable]);
+      EModelException.RaiseUtf8('%.AddTableInherited(%)', [self, aTable]);
   result := Tables[ndx];
 end;
 
@@ -9707,11 +9707,11 @@ var
   i: PtrInt;
 begin
   if CloneFrom = nil then
-    raise EModelException.CreateUtf8('%.Create(CloneFrom=nil)', [self]);
+    EModelException.RaiseUtf8('%.Create(CloneFrom=nil)', [self]);
   fTables := CloneFrom.fTables;
   fTablesMax := CloneFrom.fTablesMax;
   if fTablesMax <> High(fTables) then
-    raise EModelException.CreateUtf8('%.Create: incorrect CloneFrom.TableMax', [self]);
+    EModelException.RaiseUtf8('%.Create: incorrect CloneFrom.TableMax', [self]);
   SetRoot(CloneFrom.fRoot);
   fOwner := CloneFrom.fOwner;
   fSortedTablesNameUpper := CloneFrom.fSortedTablesNameUpper;
@@ -9727,7 +9727,7 @@ end;
 
 constructor TOrmModel.Create;
 begin
-  raise EModelException.CreateUtf8(
+  EModelException.RaiseUtf8(
     'Plain %.Create is not allowed: use overloaded Create()', [self]);
 end;
 
@@ -9746,7 +9746,7 @@ begin
   fRootLen := length(aRoot);
   for i := 1 to fRootLen do // allow RFC URI + '/' for URI-fragment
     if not (aRoot[i] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '-', '.', '~', ' ', '/']) then
-      raise EModelException.CreateUtf8(
+      EModelException.RaiseUtf8(
         '%.Root=[%] contains URI unfriendly char #% [%]',
         [self, aRoot, ord(aRoot[i]), aRoot[i]]);
   if (aRoot <> '') and
@@ -9766,7 +9766,7 @@ var
 begin
   N := length(Tables);
   if N > SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8 then // TOrmAccessRights bits
-    raise EModelException.CreateUtf8('% % has too many Tables: %>%',
+    EModelException.RaiseUtf8('% % has too many Tables: %>%',
       [self, aRoot, N, SizeOf(SUPERVISOR_ACCESS_RIGHTS.Get) * 8]); // e.g. N>64
   // set the Tables to be associated with this Model, as TOrm classes
   fTablesMax := N - 1;
@@ -9940,7 +9940,7 @@ begin
     raise EModelException.CreateU('nil.GetTableIndexExisting');
   result := GetTableIndex(aTable);
   if result < 0 then
-    raise EModelException.CreateUtf8('% is not part of % root=%',
+    EModelException.RaiseUtf8('% is not part of % root=%',
       [aTable, self, Root]);
 end;
 
@@ -10039,7 +10039,7 @@ var
   p: array[0..31] of TOrmModelProperties;
 begin
   if self = nil then
-    raise EOrmException.CreateUtf8(
+    EOrmException.RaiseUtf8(
       'SqlFromSelectWhere(%): no Model', [SqlSelect]);
   if high(Tables) = 0 then
   begin
@@ -10049,7 +10049,7 @@ begin
   end;
   // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
   if cardinal(high(Tables)) > high(p) then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       '%.SqlFromSelectWhere(%) up to % Tables[]',
       [self, SqlSelect, Length(p)]);
   for i := 0 to high(Tables) do
@@ -10080,7 +10080,7 @@ begin
   if self = nil then
     exit;
   if fCustomCollationForAll[aFieldType] <> '' then
-    raise EModelException.CreateUtf8('%.SetCustomCollationForAll(%)' +
+    EModelException.RaiseUtf8('%.SetCustomCollationForAll(%)' +
       ' shall be called only once', [self, aCollationName]);
   fCustomCollationForAll[aFieldType] := aCollationName;
   for i := 0 to high(fTableProps) do
@@ -10305,7 +10305,7 @@ begin
   if (aModule = nil) or
      (not Assigned(GetVirtualTableModuleName)) or
      (GetVirtualTableModuleName(aModule) = '') then
-    raise EModelException.CreateUtf8('Unexpected %.VirtualTableRegister(%,%)',
+    EModelException.RaiseUtf8('Unexpected %.VirtualTableRegister(%,%)',
       [self, aClass, aModule]);
   i := GetTableIndexExisting(aClass);
   with TableProps[i] do
@@ -10314,7 +10314,7 @@ begin
       if Kind =  ovkSQLite3 then
         SetKind(ovkCustomAutoID) // SetKind() recompute all SQL
       else
-        raise EModelException.CreateUtf8('Invalid %.VirtualTableRegister(%) call: ' +
+        EModelException.RaiseUtf8('Invalid %.VirtualTableRegister(%) call: ' +
           'impossible to set class as virtual', [self, aClass]);
     ExternalDB.Init(aClass, aExternalTableName, aExternalDataBase, true, aMappingOptions);
     result := @ExternalDB;
@@ -10457,12 +10457,12 @@ begin
     ovkFts5:
       begin
         if Props.Fields.Count = 0 then
-          raise EModelException.CreateUtf8(
+          EModelException.RaiseUtf8(
             'Virtual FTS class % should have published properties', [Props.Table]);
         for f := 0 to Props.Fields.Count - 1 do
           with Props.Fields.List[f] do
             if OrmFieldTypeStored <> oftUtf8Text then
-              raise EModelException.CreateUtf8('%.%: FTS field must be RawUtf8',
+              EModelException.RaiseUtf8('%.%: FTS field must be RawUtf8',
                 [Props.Table, Name])
       end;
     ovkRTree,
@@ -10478,14 +10478,14 @@ begin
             if aAuxiliaryRTreeField in Attributes then // https://sqlite.org/rtree.html#auxiliary_columns
               expected := oftUnknown // will expect further columns to be auxiliary
             else if OrmFieldTypeStored <> expected then
-              raise EModelException.CreateUtf8('%.%: RTREE field must be %',
+              EModelException.RaiseUtf8('%.%: RTREE field must be %',
                 [Props.Table, Name, ToText(expected)^])
             else
               inc(Props.RTreeCoordBoundaryFields);
         if (Props.RTreeCoordBoundaryFields < 2) or
            (Props.RTreeCoordBoundaryFields > RTREE_MAX_DIMENSION * 2) or
            (Props.RTreeCoordBoundaryFields and 1 <> 0) then
-          raise EModelException.CreateUtf8(
+          EModelException.RaiseUtf8(
             '% has % fields: RTREE expects 2,4,6..% boundary columns',
             [Props.Table, Props.RTreeCoordBoundaryFields, RTREE_MAX_DIMENSION * 2]);
       end;
@@ -10497,7 +10497,7 @@ begin
   Sql.TableSimpleFields[true, false]  := ComputeSimpleFields(true, false);
   Sql.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
   if Props.SqlTableSimpleFieldsNoRowID <> Sql.TableSimpleFields[false, false] then
-    raise EModelException.CreateUtf8('SetKind(%)', [Props.Table]);
+    EModelException.RaiseUtf8('SetKind(%)', [Props.Table]);
   Sql.SelectAllWithRowID := SqlFromSelectWhere('*', '');
   Sql.SelectAllWithID := Sql.SelectAllWithRowID;
   if IdemPChar(PUtf8Char(pointer(Sql.SelectAllWithID)) + 7, 'ROWID') then
@@ -10519,19 +10519,19 @@ var
   field: RawUtf8;
 begin
   if not (Kind in [ovkFts4, ovkFts5]) then
-    raise EModelException.CreateUtf8(
+    EModelException.RaiseUtf8(
       'Fts4WithoutContent: % is not a FTS4/FTS5 table', [Props.Table]);
   fFtsWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
   for i := 0 to Props.Fields.Count - 1 do
   begin
     field := Props.Fields.List[i].Name;
     if ContentTable.OrmProps.Fields.IndexByName(field) < 0 then
-      raise EModelException.CreateUtf8('Fts4WithoutContent: %.% is not a % field',
+      EModelException.RaiseUtf8('Fts4WithoutContent: %.% is not a % field',
         [Props.Table, field, ContentTable]);
     fFtsWithoutContentFields := fFtsWithoutContentFields + ',new.' + field;
   end;
   if fFtsWithoutContentFields = '' then
-    raise EModelException.CreateUtf8('Fts4WithoutContent: % has no field', [Props.Table]);
+    EModelException.RaiseUtf8('Fts4WithoutContent: % has no field', [Props.Table]);
 end;
 
 function TOrmModelProperties.GetProp(const PropName: RawUtf8): TOrmPropInfo;
@@ -10828,7 +10828,7 @@ var
   i: PtrInt;
 begin
   if aRest = nil then
-    EOrmException.CreateUtf8('%.Create', [self]);
+    EOrmException.RaiseUtf8('%.Create(aRest=nil)', [self]);
   pointer(fRest) := pointer(aRest); // don't change IRestOrm reference count
   fModel := aRest.Model;
   SetLength(fCache, length(fModel.Tables));
@@ -11178,7 +11178,7 @@ constructor TRestBatch.Create(const aRest: IRestOrm; aTable: TOrmClass;
   InternalBufferSize: cardinal; CalledWithinRest: boolean);
 begin
   if aRest = nil then
-    raise EOrmBatchException.CreateUtf8('%.Create(aRest=nil)', [self]);
+    EOrmBatchException.RaiseUtf8('%.Create(aRest=nil)', [self]);
   fRest := aRest;
   fCalledWithinRest := CalledWithinRest;
   CreateNoRest(fRest.Model, aTable, AutomaticTransactionPerRow, Options,
@@ -11300,7 +11300,7 @@ function TRestBatch.RawAdd(const SentData: RawUtf8): integer;
 begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
-    raise EOrmBatchException.CreateUtf8('%.RawAdd %', [self, SentData]);
+    EOrmBatchException.RaiseUtf8('%.RawAdd %', [self, SentData]);
   Encode(fTable, encPost);
   fBatch.AddString(SentData);
   fBatch.AddComma;
@@ -11315,11 +11315,11 @@ var
 begin // '{"Table":[...,"PUT",{object},...]}'
   if (fBatch = nil) or
      (fTable = nil) then
-    raise EOrmBatchException.CreateUtf8('%.RawUpdate % %', [self, ID, SentData]);
+    EOrmBatchException.RaiseUtf8('%.RawUpdate % %', [self, ID, SentData]);
   Encode(fTable, encPut);
   if JsonGetID(pointer(SentData), sentID) then
     if sentID <> ID then
-      raise EOrmBatchException.CreateUtf8('%.RawUpdate ID=% <> %', [self, ID, SentData])
+      EOrmBatchException.RaiseUtf8('%.RawUpdate ID=% <> %', [self, ID, SentData])
     else
       fBatch.AddString(SentData)
   else
@@ -11350,7 +11350,7 @@ procedure TRestBatch.Encode(EncodedTable: TOrmClass;
 begin
   if (fTable <> nil) and
      (EncodedTable <> fTable) then
-    raise EOrmBatchException.CreateUtf8('% %" with % whereas expects %',
+    EOrmBatchException.RaiseUtf8('% %" with % whereas expects %',
       [self, BATCH_VERB[Encoding], EncodedTable, fTable]);
   fPreviousTableMatch := fPreviousTable = EncodedTable;
   if (boPostNoSimpleFields in fOptions) or

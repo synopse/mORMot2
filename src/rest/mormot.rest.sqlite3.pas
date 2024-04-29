@@ -410,7 +410,7 @@ var
   m: TOrmModel;
 begin
   if aRunningServer = nil then
-    raise ERestException.CreateUtf8('%.Create(nil)', [self]);
+    ERestException.RaiseUtf8('%.Create(nil)', [self]);
   m := TOrmModel.Create(aRunningServer.Model);
   m.Owner := Self; // auto-free m in TSqlRest.Destroy
   inherited Create(m);

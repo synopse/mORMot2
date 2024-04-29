@@ -313,7 +313,7 @@ begin
   result := nil;
   if (aProtocol = nil) or
      (aHost = '') then
-    raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
+    EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   try
     // call socket constructor
     result := Open(aHost, aPort, nlTcp, 10000, aTls, aTLSContext);
@@ -346,7 +346,7 @@ var
 begin
   if (aProtocol = nil) or
      not uri.From(aUri) then
-    raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
+    EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   result := WebSocketsConnect(uri.Server, uri.Port, aProtocol,
     aLog, aLogContext, uri.Address, aCustomHeaders,
     IdemPropNameU(uri.Scheme, 'WSS'), aTLSContext);

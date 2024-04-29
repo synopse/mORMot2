@@ -3027,7 +3027,7 @@ begin
       // add this CRL with its unknown SKID at the expected sorted position
       fDA.FastAddSorted(i, Crl)
     else
-      raise EX509.CreateUtf8('Inconsistent %.Add order', [self]); // paranoid
+      EX509.RaiseUtf8('Inconsistent %.Add order', [self]); // paranoid
   finally
     fSafe.WriteUnLock;
   end;
@@ -3077,7 +3077,7 @@ begin
       fDA.FastAddSorted(i, crl);
     end
     else
-      raise EX509.CreateUtf8('Inconsistent % order', [self]); // paranoid
+      EX509.RaiseUtf8('Inconsistent % order', [self]); // paranoid
     result := crl.AddRevocation(Serial, Reason, ValidDays, Date, CertIssuerDN);
     if result then
       crl.CrlNumber := crl.CrlNumber + 1; // ensure in increasing sequence
@@ -3729,7 +3729,7 @@ constructor TCryptCertAlgoX509.Create(xsa: TXSignatureAlgorithm;
   const suffix: RawUtf8);
 begin
   if xsa = xsaNone then
-    raise ECryptCertX509.CreateUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
+    ECryptCertX509.RaiseUtf8('Unexpected %.Create(%)', [self, ToText(xsa)^]);
   fXsa := xsa;
   fXka := XSA_TO_XKA[xsa];
   fCaa := XSA_TO_CAA[xsa];
@@ -4073,13 +4073,13 @@ begin
     // retrieve a compatible authority instance
     auth := AuthToCryptCertX509(Authority, cccCertWithPrivateKey, temp);
     if auth = nil then
-      raise EX509.CreateUtf8('%.Sign: unsupported Authority % %',
+      EX509.RaiseUtf8('%.Sign: unsupported Authority % %',
         [self, Authority.Instance, ToText(Authority.AsymAlgo)^]);
     if auth.fX509 = nil then
-      raise EX509.CreateUtf8('%.Sign: authority has no public key', [self]);
+      EX509.RaiseUtf8('%.Sign: authority has no public key', [self]);
     // validate usage
     if not (cuCrlSign in auth.fX509.Usages) then
-      EX509.CreateUtf8('%.Sign: authority has no cuCrlSign', [self]);
+      EX509.RaiseUtf8('%.Sign: authority has no cuCrlSign', [self]);
     // assign the Issuer information
     Signed.Issuer := auth.fX509.Signed.Subject;
     Signed.Extension[xceAuthorityKeyIdentifier] :=
@@ -4096,7 +4096,7 @@ begin
     fSignatureAlgorithm := auth.AlgoXsa;
   end
   else
-    raise EX509.CreateUtf8('%.Sign: not a CA', [self]);
+    EX509.RaiseUtf8('%.Sign: not a CA', [self]);
 end;
 
 function TX509Crl.VerifyCryptCert(const Authority: ICryptCert;

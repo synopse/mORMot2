@@ -716,7 +716,7 @@ function TRestOrmClientUri.EngineList(TableModelIndex: integer;
   const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
   if ReturnedRowCount <> nil then
-    raise EOrmException.CreateUtf8(
+    EOrmException.RaiseUtf8(
       '%.EngineList does not support ReturnedRowCount (yet)', [self]);
   if (self = nil) or
      (SQL = '') or

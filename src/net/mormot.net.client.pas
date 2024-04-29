@@ -1560,7 +1560,7 @@ var
 begin
   try
     if destfile = '' then
-      raise EHttpSocket.CreateUtf8('WGet(destfile='''') for %', [url]);
+      EHttpSocket.RaiseUtf8('WGet(destfile='''') for %', [url]);
     params.Clear;
     params.Resume := true;
     params.Hasher := hasher;
@@ -2062,7 +2062,7 @@ var
   begin
     res := Head(requrl, params.KeepAlive, params.Header);
     if not (res in HTTP_GET_OK) then
-      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
+      EHttpSocket.RaiseUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     expsize := Http.ContentLength;
     result := expsize > 0;
@@ -2122,7 +2122,7 @@ var
     end;
     // verify (partial) response
     if not (res in HTTP_GET_OK) then
-      raise EHttpSocket.CreateUtf8('%.WGet: %:%/% failed as %',
+      EHttpSocket.RaiseUtf8('%.WGet: %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     // finalize the successful request
     stream.Ended; // notify finished
@@ -2222,7 +2222,7 @@ begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
         if not CopyFile(cached, result, {failexists=}false) then
-          raise EHttpSocket.CreateUtf8('%.WGet: copy from % cache failed',
+          EHttpSocket.RaiseUtf8('%.WGet: copy from % cache failed',
             [self, cached]);
         if Assigned(params.OnProgress) then
           TStreamRedirect.NotifyEnded(params.OnProgress, nil,
@@ -2238,7 +2238,7 @@ begin
   if FileExists(result) then
     if not DeleteFile(result) or
        FileExists(result) then
-      raise EHttpSocket.CreateUtf8(
+      EHttpSocket.RaiseUtf8(
         '%.WGet: impossible to delete deprecated %', [self, result]);
   part := result + '.part';
   size := FileSize(part);
@@ -2295,7 +2295,7 @@ begin
       if not PropNameEquals(parthash, params.Hash) then
       begin
         DeletePartAndResetDownload;
-        raise EHttpSocket.CreateUtf8('%.WGet: %:%/% hash failure (% vs %)',
+        EHttpSocket.RaiseUtf8('%.WGet: %:%/% hash failure (% vs %)',
           [self, fServer, fPort, url, parthash, params.Hash]);
       end;
     end;
@@ -2318,7 +2318,7 @@ begin
       end;
     // valid .part file can now be converted into the result file
     if not RenameFile(part, result) then
-      raise EHttpSocket.CreateUtf8(
+      EHttpSocket.RaiseUtf8(
         '%.WGet: impossible to rename % as %', [self, part, result]);
     // set part='' to notify fully downloaded into result file name
     part := '';
@@ -2588,7 +2588,7 @@ var
   uri: TUri;
 begin
   if not uri.From(aUri) then
-    raise EHttpSocket.CreateUtf8('%.Create: invalid url=%', [self, aUri]);
+    EHttpSocket.RaiseUtf8('%.Create: invalid url=%', [self, aUri]);
   IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
   Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
@@ -2637,8 +2637,7 @@ begin
           with fCompress[i] do
             if Name = aDataEncoding then
               if Func(OutData, false) = '' then
-                raise EHttpSocket.CreateUtf8(
-                  '%.Request: % uncompress error', [self, Name])
+                EHttpSocket.RaiseUtf8('%.Request: % uncompress error', [self, Name])
               else
                 break; // successfully uncompressed content
       if aAcceptEncoding <> '' then
@@ -3667,7 +3666,7 @@ begin
   fClient := TSimpleHttpClient.Create(aOnlyUseClientSocket);
   if aUri <> '' then
     if not LoadFromUri(aUri, aToken) then
-      raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
+      ESynException.RaiseUtf8('%.Create: invalid aUri=%', [self, aUri]);
 end;
 
 procedure THttpRequestCached.Clear;

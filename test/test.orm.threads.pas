@@ -463,7 +463,7 @@ begin
       end;
   end
   else
-    raise ESynException.CreateUTF8('Invalid fTestClass=%', [fTestClass]);
+    raise ESynException.CreateUtf8('Invalid fTestClass=%', [fTestClass]);
 end;
 
 procedure TTestMultiThreadProcess.CreateThreadPool;

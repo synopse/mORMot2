@@ -4684,7 +4684,7 @@ end;
 constructor TBasicAuthServer.Create(const aRealm: RawUtf8);
 begin
   if aRealm = '' then
-    raise EDigest.CreateUtf8('%.Create: void Realm', [self]);
+    EDigest.RaiseUtf8('%.Create: void Realm', [self]);
   fRealm := aRealm;
   QuotedStr(fRealm, '"', fQuotedRealm);
   FormatUtf8('WWW-Authenticate: Basic realm="%"'#13#10, [fRealm], fBasicInit);
@@ -4735,12 +4735,12 @@ type
 constructor TDigestAuthServer.Create(const aRealm: RawUtf8; aAlgo: TDigestAlgo);
 begin
   if aAlgo = daUndefined then
-    raise EDigest.CreateUtf8('%.Create: undefined Algo', [self]);
+    EDigest.RaiseUtf8('%.Create: undefined Algo', [self]);
   inherited Create(aRealm);
   fAlgo := aAlgo;
   fAlgoSize := HASH_SIZE[DIGEST_ALGO[aAlgo]];
   if fAlgoSize > SizeOf(TDigestAuthHash) then // paranoid
-    raise EDigest.CreateUtf8('%.Create: % %-bit digest is too big',
+    EDigest.RaiseUtf8('%.Create: % %-bit digest is too big',
       [self, fAlgoSize shl 3, DIGEST_NAME[aAlgo]]);
   fRequestExpSec := 60;
   fOpaqueObfuscate := Random64; // changes at each server restart
@@ -4760,10 +4760,9 @@ procedure TDigestAuthServer.ComputeDigest(const aUser: RawUtf8;
   const aPassword: SpiUtf8; out Digest: THash512Rec);
 begin
   if PosExChar(':', aUser) <> 0 then
-    raise EDigest.CreateUtf8(
-      '%.ComputeDigest: unexpected '':'' in user=%', [self, aUser]);
+    EDigest.RaiseUtf8('%.ComputeDigest: unexpected '':'' in user=%', [self, aUser]);
   if DigestHA0(fAlgo, aUser, fRealm, aPassword, Digest) <> fAlgoSize then
-    raise EDigest.CreateUtf8('%.ComputeDigest: DigestHA0?', [self]);
+    EDigest.RaiseUtf8('%.ComputeDigest: DigestHA0?', [self]);
 end;
 
 function TDigestAuthServer.DigestInit(Opaque, Tix64: Int64;
@@ -4909,10 +4908,9 @@ constructor TDigestAuthServerFile.Create(const aRealm: RawUtf8;
 begin
   inherited Create(aRealm, aAlgo);
   if PosExChar(':', aRealm) <> 0 then
-    raise EDigest.CreateUtf8(
-      '%.Create: unexpected '':'' in realm=%', [self, aRealm]);
+    EDigest.RaiseUtf8('%.Create: unexpected '':'' in realm=%', [self, aRealm]);
   if aFileName = '' then
-    raise EDigest.CreateUtf8('%.Create: void filename', [self]);
+    EDigest.RaiseUtf8('%.Create: void filename', [self]);
   fFileName := ExpandFileName(aFileName);
   if aFilePassword <> '' then
     Pbkdf2HmacSha256(aFilePassword, aRealm, 1000, fAesKey);
@@ -5188,7 +5186,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      raise ECrypt.CreateUtf8('%.GetPassWordPlain unable to retrieve the ' +
+      ECrypt.RaiseUtf8('%.GetPassWordPlain unable to retrieve the ' +
         'stored value: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;
@@ -5299,12 +5297,12 @@ end;
 
 procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUtf8);
 begin
-  raise ECrypt.CreateUtf8('%.AuthenticateUser() is not implemented', [self]);
+  ECrypt.RaiseUtf8('%.AuthenticateUser() is not implemented', [self]);
 end;
 
 procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUtf8);
 begin
-  raise ECrypt.CreateUtf8('%.DisauthenticateUser() is not implemented', [self]);
+  ECrypt.RaiseUtf8('%.DisauthenticateUser() is not implemented', [self]);
 end;
 
 function TSynAuthenticationAbstract.CheckCredentials(const UserName: RawUtf8;
@@ -5936,8 +5934,7 @@ begin
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   // default algorithm is caCrc32c
   if not Assigned(CryptCrc32(SignAlgo)) then
-    raise ECrypt.CreateUtf8(
-      'Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
+    ECrypt.RaiseUtf8('Unsupported TBinaryCookieGenerator.Init(%)', [ToText(SignAlgo)^]);
   CrcAlgo := SignAlgo;
   Padding := 0;
   // 256 bytes of strong cryptographic randomness (public values use Lecuyer)
@@ -6056,8 +6053,7 @@ begin
   result := RecordLoadBase64(pointer(Saved), length(Saved),
     self, TypeInfo(TBinaryCookieGenerator), {uri=}true);
   if not Assigned(CryptCrc32(CrcAlgo)) then
-    raise ECrypt.CreateUtf8(
-      'Unsupported TBinaryCookieGenerator.Load(%)', [ToText(CrcAlgo)^]);
+    ECrypt.RaiseUtf8('Unsupported TBinaryCookieGenerator.Load(%)', [ToText(CrcAlgo)^]);
 end;
 
 
@@ -6075,7 +6071,7 @@ procedure GlobalCryptAlgoInit; forward;
 constructor TCryptAlgo.Create(const name: RawUtf8);
 begin
   if name = '' then
-    raise ECrypt.CreateUtf8('Unexpected %.Create('''')', [self]);
+    ECrypt.RaiseUtf8('Unexpected %.Create('''')', [self]);
   fName := LowerCase(name);
   RegisterGlobalShutdownRelease(self);
   GlobalCryptAlgo.AddOrReplaceObject(fName, self);
@@ -6106,7 +6102,7 @@ class function TCryptAlgo.InternalResolve(
 begin
   result := FindCsvIndex(CSV, name, ',', {casesens=}false);
   if result < 0 then
-    raise ECrypt.CreateUtf8('%.Create(''%''): unknown algorithm - try %',
+    ECrypt.RaiseUtf8('%.Create(''%''): unknown algorithm - try %',
       [self, name, CSV]);
 end;
 
@@ -6188,7 +6184,7 @@ end;
 constructor TCryptInstance.Create(algo: TCryptAlgo);
 begin
   if algo = nil then
-    raise ECrypt.CreateUtf8('Unexpected %.Create(nil)', [self]);
+    ECrypt.RaiseUtf8('Unexpected %.Create(nil)', [self]);
   fCryptAlgo := algo;
 end;
 
@@ -6201,7 +6197,7 @@ var
 begin
   algo := TCryptAlgo.InternalFind(name, LastAlgoInstance);
   if algo = nil then
-    raise ECrypt.CreateUtf8('Unexpected %.Create(''%'')', [self, name]);
+    ECrypt.RaiseUtf8('Unexpected %.Create(''%'')', [self, name]);
   Create(algo);
 end;
 
@@ -6486,7 +6482,7 @@ begin
   // resolve fFunc in New/Create, since crc32/adler functions may be set later
   fFunc := CryptCrc32(algo.fAlgo);
   if not Assigned(fFunc) then
-    raise ECrypt.CreateUtf8('%.New: unavailable ''%'' function', [self, algo.fName]);
+    ECrypt.RaiseUtf8('%.New: unavailable ''%'' function', [self, algo.fName]);
   inherited Create(algo);
 end;
 
@@ -6699,7 +6695,7 @@ var
 begin
   s := Signer(hash);
   if s = nil then
-    raise ECrypt.CreateUtf8('%.New: unknown ''%'' hash', [self, hash]);
+    ECrypt.RaiseUtf8('%.New: unknown ''%'' hash', [self, hash]);
   FillZero(key.b); // s.Pbkdf2 may generate less bits than the cipher consumes
   s.Pbkdf2(secret, salt, rounds, key);
   result := New(@key, encrypt);
@@ -7167,9 +7163,8 @@ var
   csr: ICryptCert;
 begin
   if PrivateKeyPem <> '' then
-    raise ECryptCert.CreateUtf8(
-      '%.CreateSelfSignedCsr % does not support a custom private key',
-      [self, AlgoName]);
+    ECryptCert.RaiseUtf8('%.CreateSelfSignedCsr % does not support ' +
+      'a custom private key', [self, AlgoName]);
   // by default, just generate a self-signed certificate as CSR
   csr := New;
   csr.Generate(Usages, Subjects, nil, 365, -1, Fields);
@@ -7194,7 +7189,7 @@ end;
 
 procedure TCryptCert.RaiseError(const Msg: shortstring);
 begin
-  raise ECryptCert.CreateUtf8('%.%', [self, Msg]);
+  ECryptCert.RaiseUtf8('%.%', [self, Msg]);
 end;
 
 procedure TCryptCert.RaiseError(const Fmt: RawUtf8;
@@ -7397,7 +7392,7 @@ begin
     ccfBase64Uri:
       result := BinToBase64uri(result);
   else
-    raise ECryptCert.CreateUtf8('Unexpected %.Save', [self]); // paranoid
+    ECryptCert.RaiseUtf8('Unexpected %.Save', [self]); // paranoid
   end;
 end;
 
@@ -7947,7 +7942,7 @@ begin
     if fCryptCertClass = nil then
       fCryptCertClass := PPointer(inst)^
     else
-      raise ECryptCert.CreateUtf8('%.Add(%) but we already store %',
+      ECryptCert.RaiseUtf8('%.Add(%) but we already store %',
         [self, inst, fCryptCertClass]);
   inst.fIndexer := self; // don't touch once indexed
   result := HumanHexToBin(inst.GetSubjectKey, bin) and
@@ -8716,11 +8711,11 @@ begin
       begin
         // search for COFF/PE header in the first block
         if read < 1024 then
-          raise EStuffExe.CreateUtf8('% read error', [MainFile]);
+          EStuffExe.RaiseUtf8('% read error', [MainFile]);
         i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
         if (i >= read) or
            (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
-          raise EStuffExe.CreateUtf8('% is not a PE executable', [MainFile]);
+          EStuffExe.RaiseUtf8('% is not a PE executable', [MainFile]);
         // parse PE header
         inc(i, CERTIFICATE_ENTRY_OFFSET);
         certoffs := PCardinal(@buf[i])^;
@@ -8728,22 +8723,21 @@ begin
         certlen := PCardinal(@buf[certlenoffs])^;
         if (certoffs = 0) or
            (certlen = 0) then
-           raise EStuffExe.CreateUtf8('% has no signature', [MainFile]);
+           EStuffExe.RaiseUtf8('% has no signature', [MainFile]);
         // parse certificate table
         if certoffs + certlen <> M.Size then
-          raise EStuffExe.CreateUtf8(
-            '% should end with a certificate', [MainFile]);
+          EStuffExe.RaiseUtf8('% should end with a certificate', [MainFile]);
         M.Seek(certoffs, soBeginning);
         if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
            (wc.dwLength <> certlen) or
            (wc.wRevision <> $200) or
            (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
-          raise EStuffExe.CreateUtf8('% unsupported signature', [MainFile]);
+          EStuffExe.RaiseUtf8('% unsupported signature', [MainFile]);
         // read original signature
         dec(certlen, SizeOf(wc));
         SetLength(result, certlen);
         if cardinal(M.Read(pointer(result)^, certlen)) <> certlen then
-          raise EStuffExe.CreateUtf8('% certificate reading', [MainFile]);
+          EStuffExe.RaiseUtf8('% certificate reading', [MainFile]);
         // note: don't remove ending #0 padding because some may be needed
         if lenoffs <> nil then
           lenoffs^ := certlenoffs;
@@ -8776,7 +8770,7 @@ begin
     exit;
   end;
   if result <> 2 then
-    raise EStuffExe.CreateUtf8('Parsing error: Asn1Len=%', [result]);
+    EStuffExe.RaiseUtf8('Parsing error: Asn1Len=%', [result]);
   result := p^;
   inc(p);
   result := (result shl 8) + p^;
@@ -8787,7 +8781,7 @@ function Asn1Next(var p: PAnsiChar; expected: byte; moveafter: boolean;
   const Ctxt: shortstring): PtrInt;
 begin
   if p^ <> AnsiChar(expected) then
-    raise EStuffExe.CreateUtf8('Parsing %: % instead of %',
+    EStuffExe.RaiseUtf8('Parsing %: % instead of %',
       [Ctxt, byte(p^), expected]);
   inc(p);
   result := Asn1Len(PByte(p));
@@ -8803,7 +8797,7 @@ begin
   repeat
     one := fixme^;
     if one[1] <> #$82 then
-      raise EStuffExe.CreateUtf8('Wrong fixme in %', [MainFile])
+      EStuffExe.RaiseUtf8('Wrong fixme in %', [MainFile])
     else
       PWord(one + 2)^ := swap(word(PtrInt(swap(PWord(one + 2)^)) + added));
     inc(fixme);
@@ -8894,14 +8888,14 @@ var
   fixme: array[0..3] of PAnsiChar;
 begin
   if NewFile = MainFile then
-    raise EStuffExe.CreateUtf8('MainFile=NewFile=%', [MainFile]);
+    EStuffExe.RaiseUtf8('MainFile=NewFile=%', [MainFile]);
   if Stuff = '' then
-    raise EStuffExe.CreateUtf8('Nothing to Stuff in %', [MainFile]);
+    EStuffExe.RaiseUtf8('Nothing to Stuff in %', [MainFile]);
   if length(Stuff) > 60000 then // encoded as 16-bit hexa (and ASN1_SEQ)
-    raise EStuffExe.CreateUtf8('Too much data (%) to Stuff within %',
+    EStuffExe.RaiseUtf8('Too much data (%) to Stuff within %',
       [KB(Stuff), MainFile]);
   if StrLen(pointer(Stuff)) <> length(Stuff) then
-    raise EStuffExe.CreateUtf8('Stuff should be pure Text for %', [MainFile]);
+    EStuffExe.RaiseUtf8('Stuff should be pure Text for %', [MainFile]);
   certoffs := 0;
   certlenoffs := 0;
   O := TFileStreamEx.Create(NewFile, fmCreate);
@@ -8910,17 +8904,17 @@ begin
       // copy MainFile source file, parsing the PE header and cert chain
       sig := FindExeCertificate(MainFile, O, wc, @certlenoffs, @certoffs);
       if length(sig) < 4000 then
-        raise EStuffExe.CreateUtf8('No signature found in %', [MainFile]);
+        EStuffExe.RaiseUtf8('No signature found in %', [MainFile]);
       if length(Stuff) + length(sig) > 64000 then // avoid ASN.1 overflow
-        raise EStuffExe.CreateUtf8('Too much data (%) to Stuff within %',
+        EStuffExe.RaiseUtf8('Too much data (%) to Stuff within %',
           [KB(Stuff), MainFile]);
       if PosEx(_CERTNAME_, sig) <> 0 then
-        raise EStuffExe.CreateUtf8('% is already stuffed', [MainFile]);
+        EStuffExe.RaiseUtf8('% is already stuffed', [MainFile]);
       // parse the original PKCS#7 signed data
       p := pointer(sig);
       fixme[0] := p;
       if Asn1Next(p, ASN1_SEQ, {moveafter=}false, 'SEQ') + 4 > length(sig) then
-        raise EStuffExe.CreateUtf8('Truncated signature in %', [MainFile]);
+        EStuffExe.RaiseUtf8('Truncated signature in %', [MainFile]);
       Asn1Next(p, ASN1_OBJID, true, 'OID');
       fixme[1] := p;
       Asn1Next(p, ASN1_CTC0, false, 'ARR');
@@ -8935,14 +8929,14 @@ begin
       certsend := p - pointer(sig);
       Asn1Next(p, ASN1_SETOF, true, 'SignerInfo');
       if p - pointer(sig) > length(sig) then
-        raise EStuffExe.CreateUtf8('Wrong cert ending in %', [MainFile]);
+        EStuffExe.RaiseUtf8('Wrong cert ending in %', [MainFile]);
       // append the stuffed data within a dummy certificate
       if UseInternalCertificate then
         newcert := _CreateDummyCertificate(Stuff, _CERTNAME_, _MARKER_)
       else // may come from OpenSSL
         newcert := CreateDummyCertificate(Stuff, _CERTNAME_, _MARKER_);
       if newcert = '' then
-        raise EStuffExe.CreateUtf8('CreateDummyCertificate for %', [MainFile]);
+        EStuffExe.RaiseUtf8('CreateDummyCertificate for %', [MainFile]);
       Asn1FixMe(@fixme, length(fixme), length(newcert), MainFile);
       insert(newcert, sig, certsend + 1);
       // write back the stuffed signature
@@ -9111,7 +9105,7 @@ begin
                   AsnOid(pointer(CKA_OID[cka]))
                 ]);
   else
-    raise ECrypt.CreateUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
+    ECrypt.RaiseUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
   end;
 end;
 
@@ -9664,7 +9658,7 @@ begin
         UInt2DigitsToShortFast(t.Minute),
         UInt2DigitsToShortFast(t.Second)])])
   else
-    raise ECrypt.CreateUtf8('Invalid AsnTime(%)', [dt]);
+    ECrypt.RaiseUtf8('Invalid AsnTime(%)', [dt]);
 end;
 
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;

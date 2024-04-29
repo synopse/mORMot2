@@ -1140,8 +1140,7 @@ begin
           begin
             exist := FindService(s.Name);
             if exist <> nil then
-              raise ESynAngelize.CreateUtf8(
-                'GetServices: duplicated % name in % and %',
+              ESynAngelize.RaiseUtf8('GetServices: duplicated % name in % and %',
                 [s.Name, s.FileName, exist.FileName]);
             // seems like a valid .service file
             ObjArrayAdd(fService, s);
@@ -1154,8 +1153,7 @@ begin
             fSettings.LogClass.Add.Log(sllDebug,
               'GetServices: disabled % (Level=%)', [r.Name, s.Level], self)
         else
-          raise ESynAngelize.CreateUtf8(
-                  'GetServices: invalid % content', [r.Name]);
+          ESynAngelize.RaiseUtf8('GetServices: invalid % content', [r.Name]);
         s.Free;
       end;
     until FindNext(r) <> 0;
@@ -1301,8 +1299,7 @@ begin
         DoExpandLookup(aService, v, id);
       // recursive process of other %...% values
       if fExpandLevel = 50 then
-        raise ESynAngelize.CreateUtf8(
-          'Expand: infinite recursion within %%%', ['%', id, '%']);
+        ESynAngelize.RaiseUtf8('Expand: infinite recursion within %%%', ['%', id, '%']);
       inc(fExpandLevel); // to detect and avoid stack overflow error
       v := DoExpand(aService, v);
       dec(fExpandLevel);
@@ -1330,7 +1327,7 @@ begin
       exit;
     end;
   end;
-  raise ESynAngelize.CreateUtf8('Expand: unknown %%%', ['%', aID, '%']);
+  ESynAngelize.RaiseUtf8('Expand: unknown %%%', ['%', aID, '%']);
 end;
 
 function TSynAngelize.FileNameExpand(const aName: TFileName): TFileName;
@@ -1419,7 +1416,7 @@ var
       [ToText(Action), status, expectedstatus], msg);
     case Ctxt of
       acDoStart:
-        raise ESynAngelize.CreateUtf8('DoStart % % %', [Service.Name, p, msg]);
+        ESynAngelize.RaiseUtf8('DoStart % % %', [Service.Name, p, msg]);
       acDoWatch:
         Service.OnWatchFailed(msg);
     end;
@@ -1488,7 +1485,7 @@ begin
         Service.fStarted := p;        
       end
       else
-        raise ESynAngelize.CreateUtf8(
+        ESynAngelize.RaiseUtf8(
           '%: only a single "start" is allowed per service', [Service.Name]);
     aaStop:
       if Service.fStarted <> '' then     
@@ -1523,7 +1520,7 @@ begin
             // may happen if there is no auto-restart mode
             Log.Log(sllDebug, 'Stop: % with nothing running', [p], Sender)
         else
-          raise ESynAngelize.CreateUtf8('% "stop:%" does not match "start:%"',
+          ESynAngelize.RaiseUtf8('% "stop:%" does not match "start:%"',
             [Service.Name, p, Service.fStarted]);
     aaHttp,
     aaHttps:
@@ -1560,7 +1557,7 @@ begin
       end;
     {$endif OSWINDOWS}
   else
-    raise ESynAngelize.CreateUtf8('Unexpected %', [ord(Action)]); // paranoid
+    ESynAngelize.RaiseUtf8('Unexpected %', [ord(Action)]); // paranoid
   end;
   result := true;
 end;
@@ -1698,15 +1695,15 @@ begin
   log := fSettings.LogClass.Enter(self, 'NewService');
   WriteCopyright;
   if ParamCount < 3 then
-    raise ESynAngelize.CreateUtf8(
+    ESynAngelize.RaiseUtf8(
       'Syntax is % /new "<servicename>" "<executable>" [<params>]',
       [Executable.ProgramName]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
   sn := TrimU(StringToUtf8(paramstr(2)));
   if sn = '' then
-    raise ESynAngelize.CreateUtf8('/new: invalid servicename "%"', [sn]);
+    ESynAngelize.RaiseUtf8('/new: invalid servicename "%"', [sn]);
   if FindService(sn) <> nil then
-    raise ESynAngelize.CreateUtf8('/new: duplicated servicename "%"', [sn]);
+    ESynAngelize.RaiseUtf8('/new: duplicated servicename "%"', [sn]);
   exe := sysutils.Trim(paramstr(3));
   {$ifdef OSWINDOWS}
   if ExtractFileExt(exe) = '' then
@@ -1715,7 +1712,7 @@ begin
   if exe <> '' then
     exe := ExpandFileName(exe);
   if not FileExists(exe) then
-    raise ESynAngelize.CreateUtf8('/new %: missing application "%"', [sn, exe]);
+    ESynAngelize.RaiseUtf8('/new %: missing application "%"', [sn, exe]);
   id := PropNameSanitize(sn, 'service');
   sas := fSettings as TSynAngelizeSettings;
   dir := EnsureDirectoryExists(sas.Folder, ESynAngelize);
@@ -1811,8 +1808,7 @@ begin
       s := fStarted[i];
       while s.fState <> ssRunning do
         if GetTickCount64 > endtix then
-          raise ESynAngelize.CreateUtf8(
-            'StartServices timeout waiting for %', [s.Name])
+          ESynAngelize.RaiseUtf8('StartServices timeout waiting for %', [s.Name])
         else
           SleepHiRes(10);
     end;

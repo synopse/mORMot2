@@ -421,8 +421,7 @@ begin
   end
   else
     errCode := nil;
-  raise ESqlDBPostgres.CreateUtf8(
-          '% % failed: % [%]', [self, ctxt, errCode, errMsg]);
+  ESqlDBPostgres.RaiseUtf8('% % failed: % [%]', [self, ctxt, errCode, errMsg]);
 end;
 
 procedure TSqlDBPostgresLib.Check(conn: PPGconn; const ctxt: ShortString;

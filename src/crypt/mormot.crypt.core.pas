@@ -5221,7 +5221,7 @@ begin
   if (aKeySizeBits <> 128) and
      (aKeySizeBits <> 192) and
      (aKeySizeBits <> 256) then
-    raise ESynCrypto.CreateUtf8('%.Create(KeySize=%): 128/192/256 required',
+    ESynCrypto.RaiseUtf8('%.Create(KeySize=%): 128/192/256 required',
       [self, aKeySizeBits]);
   fKeySize := aKeySizeBits;
   fKeySizeBytes := fKeySize shr 3;
@@ -5384,7 +5384,7 @@ begin
   if (InputLen < needed) or
      (InputLen and AesBlockMod <> 0) then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid InputLen=%',
+      ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid InputLen=%',
         [self, InputLen])
     else
     begin
@@ -5437,7 +5437,7 @@ begin
   padding := CheckPadding(@PByteArray(result)^[InputLen - 1]);
   if padding = 0 then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
+      ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
       result := ''
   else
@@ -5470,7 +5470,7 @@ begin
   padding := CheckPadding(@PByteArray(result)^[len - 1]);
   if padding = 0 then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid Input', [self])
+      ESynCrypto.RaiseUtf8('%.DecryptPkcs7: Invalid Input', [self])
     else
       result := nil
   else
@@ -5767,7 +5767,7 @@ begin
   if fAes.DecryptInit(fKey, fKeySize) then
     fAesInit := initDecrypt
   else
-    raise ESynCrypto.CreateUtf8('%.DecryptInit', [self]);
+    ESynCrypto.RaiseUtf8('%.DecryptInit', [self]);
 end;
 
 procedure TAesAbstractSyn.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -5786,7 +5786,7 @@ begin
   if fAes.EncryptInit(fKey, fKeySize) then
     fAesInit := initEncrypt
   else
-    raise ESynCrypto.CreateUtf8('%.EncryptInit', [self]);
+    ESynCrypto.RaiseUtf8('%.EncryptInit', [self]);
 end;
 
 procedure TAesAbstractSyn.TrailerBytes(count: cardinal);
@@ -5903,7 +5903,7 @@ begin
     EncryptInit;
   if Count < SizeOf(TAesBlock) then
     // RFC 3962 says it would pad the input with random up to 16 bytes
-    raise ESynCrypto.CreateUtf8('%.EncryptCts with Count=%', [self, Count])
+    ESynCrypto.RaiseUtf8('%.EncryptCts with Count=%', [self, Count])
   else if Count = SizeOf(TAesBlock) then
   begin
     fAes.Encrypt(PAesBlock(BufIn)^, PAesBlock(BufOut)^); // RFC says to use ECB
@@ -5930,7 +5930,7 @@ begin
   if fAesInit <> initDecrypt then
     DecryptInit;
   if Count < SizeOf(TAesBlock) then
-    raise ESynCrypto.CreateUtf8('%.DecryptCts with Count=%', [self, Count])
+    ESynCrypto.RaiseUtf8('%.DecryptCts with Count=%', [self, Count])
   else if Count = SizeOf(TAesBlock) then
   begin
     fAes.Decrypt(PAesBlock(BufIn)^, PAesBlock(BufOut)^); // ECB
@@ -6556,7 +6556,7 @@ begin
   fIVUpdated := true;
   fAlgoMode := mGcm;
   if not AesGcmInit then
-    raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, fKeySize]);
+    ESynCrypto.RaiseUtf8('%.Create(keysize=%) failed', [self, fKeySize]);
 end;
 
 destructor TAesGcmAbstract.Destroy;
@@ -6571,7 +6571,7 @@ begin
   if fStarted <> stEnc then
   begin
     if fStarted = stDec then
-      raise ESynCrypto.CreateUtf8('Unexpected %.Encrypt', [self]);
+      ESynCrypto.RaiseUtf8('Unexpected %.Encrypt', [self]);
     fStarted := stEnc;
     AesGcmReset; // caller should have set the IV
     if fAssociated <> '' then
@@ -6579,8 +6579,7 @@ begin
   end;
   if (Count <> 0) and
      not AesGcmProcess(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUtf8(
-      '%.Encrypt called after GCM final state', [self]);
+    ESynCrypto.RaiseUtf8('%.Encrypt called after GCM final state', [self]);
 end;
 
 procedure TAesGcmAbstract.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -6588,7 +6587,7 @@ begin
   if fStarted <> stDec then
   begin
     if fStarted = stEnc then
-      raise ESynCrypto.CreateUtf8('Unexpected %.Decrypt', [self]);
+      ESynCrypto.RaiseUtf8('Unexpected %.Decrypt', [self]);
     fStarted := stDec;
     AesGcmReset; // caller should have set the IV
     if fAssociated <> '' then
@@ -6596,8 +6595,7 @@ begin
   end;
   if (Count <> 0) and
      not AesGcmProcess(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUtf8(
-      '%.Decrypt called after GCM final state', [self]);
+    ESynCrypto.RaiseUtf8('%.Decrypt called after GCM final state', [self]);
 end;
 
 function TAesGcmAbstract.MacSetNonce(DoEncrypt: boolean;
@@ -6711,7 +6709,7 @@ begin
     // 8x interleaved aesni + pclmulqdq x86_64 asm
     result := true;
     if Count and AesBlockMod <> 0 then
-      raise ESynCrypto.CreateUtf8('%.Encrypt/Decrypt should use PKCS7', [self]);
+      ESynCrypto.RaiseUtf8('%.Encrypt/Decrypt should use PKCS7', [self]);
     inc(fGcm.atx_cnt.V, Count);
     repeat
       // regroup GMAC + AES-CTR per 1MB chunks to fit in CPU cache
@@ -6911,7 +6909,7 @@ end;
 
 procedure TAesCfbApi.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_CFB is not compliant', [self]);
+  ESynCrypto.RaiseUtf8('%: CRYPT_MODE_CFB is not compliant', [self]);
   fInternalMode := CRYPT_MODE_CFB;
   fAlgoMode := mCfb;
 end;
@@ -6920,7 +6918,7 @@ end;
 
 procedure TAesOfbApi.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES', [self]);
+  ESynCrypto.RaiseUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES', [self]);
   fInternalMode := CRYPT_MODE_OFB;
   fAlgoMode := mOfb;
 end;
@@ -7193,7 +7191,7 @@ var
 begin
   siz := FileSize(src);
   if siz <= 0 then
-    raise ESynCrypto.CreateUtf8('AesPkcs7File: no %', [src]);
+    ESynCrypto.RaiseUtf8('AesPkcs7File: no %', [src]);
   if siz > 1 shl 20 then
     siz := 1 shl 20
   else
@@ -7203,7 +7201,7 @@ begin
   begin
     fn := dst + '.partial'; // allow in-place replacement
     if FileExists(fn) then
-      raise ESynCrypto.CreateUtf8('AesPkcs7File: already existing %', [fn]);
+      ESynCrypto.RaiseUtf8('AesPkcs7File: already existing %', [fn]);
   end;
   try
     s := TFileStreamEx.Create(src, fmOpenReadShared);
@@ -7239,7 +7237,7 @@ begin
     if dst = src then // in-place replacement from .partial file
       if not DeleteFile(dst) or
          not RenameFile(fn, dst) then
-        raise ESynCrypto.CreateUtf8('AesPkcs7File: error renaming %', [fn]);
+        ESynCrypto.RaiseUtf8('AesPkcs7File: error renaming %', [fn]);
   except
     if fn <> dst then
       DeleteFile(fn); // remove any remaining .partial file on error
@@ -8118,7 +8116,7 @@ begin
       {$endif OSWINDOWS}
       key := AesPkcs7(key2, {encrypt=}true, k256, 256, mCfb);
       if not FileFromString(key, fn) then
-        raise ESynCrypto.CreateUtf8('Unable to write %', [fn]);
+        ESynCrypto.RaiseUtf8('Unable to write %', [fn]);
       FileSetHidden(fn, {ReadOnly=}true); // chmod 400
     finally
       FillZero(key);
@@ -9069,7 +9067,7 @@ begin
   if not Squeezing then
     PadAndSwitchToSqueezingPhase;
   if outputLength and 7 <> 0 then
-    raise ESynCrypto.CreateUtf8('TSha3Context.Squeeze(%?)', [outputLength]);
+    ESynCrypto.RaiseUtf8('TSha3Context.Squeeze(%?)', [outputLength]);
   written := 0;
   while written < outputLength do
   begin
@@ -9218,7 +9216,7 @@ begin
   if DigestBits = 0 then
     DigestBits := SHA3_DEF_LEN[Algo];
   if DigestBits > 512 then
-    raise ESynCrypto.CreateUtf8('TSha3.FullStr(bits=%)?', [DigestBits]);
+    ESynCrypto.RaiseUtf8('TSha3.FullStr(bits=%)?', [DigestBits]);
   Full(Algo, Buffer, Len, @tmp, DigestBits);
   result := mormot.core.text.BinToHex(@tmp, DigestBits shr 3);
   FillZero(tmp);
@@ -10744,7 +10742,7 @@ var
   j, tmp: PtrInt;
 begin
   if aKeyLen <= 0 then
-    raise ESynCrypto.CreateUtf8('TRC4.Init(invalid aKeyLen=%)', [aKeyLen]);
+    ESynCrypto.RaiseUtf8('TRC4.Init(invalid aKeyLen=%)', [aKeyLen]);
   dec(aKeyLen);
   for i := 0 to high(state) do
     state[i] := i;
@@ -11439,7 +11437,7 @@ begin
     exit;
   if (BufCount >= SizeOf(TAesBlock)) or
      not Aes.Initialized or NoCrypt then
-    raise ESynCrypto.CreateUtf8('Unexpected %.Finish', [self]);
+    ESynCrypto.RaiseUtf8('Unexpected %.Finish', [self]);
   XorOffset(@buf, DestSize, BufCount);
   Dest.WriteBuffer(buf, BufCount);
   BufCount := 0;
@@ -11447,12 +11445,14 @@ end;
 
 function TAesWriteStream.{%H-}Read(var Buffer; Count: integer): Longint;
 begin
-  raise ESynCrypto.CreateUtf8('Unexpected %.Read', [self]);
+  ESynCrypto.RaiseUtf8('Unexpected %.Read', [self]);
+  result := 0; // make compiler happy
 end;
 
 function TAesWriteStream.{%H-}Seek(Offset: integer; Origin: Word): Longint;
 begin
-  raise ESynCrypto.CreateUtf8('Unexpected %.Seek', [self]);
+  ESynCrypto.RaiseUtf8('Unexpected %.Seek', [self]);
+  result := 0; // make compiler happy
 end;
 
 function TAesWriteStream.Write(const Buffer; Count: integer): Longint;

@@ -1215,7 +1215,7 @@ begin
           bSHAKE256:
             SHAKE256.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
         else
-          raise ESynCrypto.CreateUtf8('Unexpected %', [TXT[b]]);
+          ESynCrypto.RaiseUtf8('Unexpected %', [TXT[b]]);
         end;
         Check((b >= bRC4) or
               (dig.d0 <> 0) or

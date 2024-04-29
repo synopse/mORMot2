@@ -3793,7 +3793,7 @@ begin
           pointer(Txt), length(Txt), UnicodeString(Value.VAny));
       {$endif HASVARUSTRING}
     else
-      raise ESynVariant.CreateUtf8('RawUtf8ToVariant(%)?', [ExpectedValueType]);
+      ESynVariant.RaiseUtf8('RawUtf8ToVariant(%)?', [ExpectedValueType]);
     end;
 end;
 
@@ -3950,7 +3950,7 @@ begin
         // class instance will be serialized as a TDocVariant
         ObjectToVariant(V.VObject, result, [woDontStoreDefault]);
     else
-      raise ESynVariant.CreateUtf8('Unhandled TVarRec.VType=%', [V.VType]);
+      ESynVariant.RaiseUtf8('Unhandled TVarRec.VType=%', [V.VType]);
     end;
 end;
 
@@ -4377,7 +4377,7 @@ var
 begin
   // redirect to Compare() as Delphi RTL does (but not the FPC RTL)
   if not (Operation in [low(FROM_VAROP) .. high(FROM_VAROP)]) then
-    raise ESynVariant.CreateUtf8('Unexpected %.CompareOp(%)', [self, ord(Operation)]);
+    ESynVariant.RaiseUtf8('Unexpected %.CompareOp(%)', [self, ord(Operation)]);
   Compare(Left, Right, vcr);
   result := FROM_VAROP[Operation, vcr];
 end;
@@ -4428,7 +4428,7 @@ var
 
   procedure RaiseInvalid;
   begin
-    raise ESynVariant.CreateUtf8('%.DispInvoke: invalid %(%) call',
+    ESynVariant.RaiseUtf8('%.DispInvoke: invalid %(%) call',
       [self, name, CallDesc^.ArgCount]);
   end;
 
@@ -4589,7 +4589,7 @@ end;
 
 procedure TSynInvokeableVariantType.ToJson(W: TJsonWriter; Value: PVarData);
 begin
-  raise ESynVariant.CreateUtf8('%.ToJson is not implemented', [self]);
+  ESynVariant.RaiseUtf8('%.ToJson is not implemented', [self]);
 end;
 
 procedure TSynInvokeableVariantType.ToJson(Value: PVarData;
@@ -5234,7 +5234,7 @@ begin
     if cardinal(result^.VType) = docv then
       exit;
   end;
-  raise EDocVariant.CreateUtf8('Unexpected DocVariantData(var%)',
+  EDocVariant.RaiseUtf8('Unexpected DocVariantData(var%)',
     [VariantTypeName(PVarData(result))^]);
 end;
 
@@ -6572,8 +6572,7 @@ begin
     else
       Source := @SourceDocVariant;
   if cardinal(Source^.VType) <> DocVariantVType then
-    raise EDocVariant.CreateUtf8(
-      'Unexpected InitCopy(var%)', [VariantTypeName(PVarData(Source))^]);
+    EDocVariant.RaiseUtf8('Unexpected InitCopy(var%)', [VariantTypeName(PVarData(Source))^]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source <> @self then
   begin
@@ -6856,7 +6855,7 @@ begin
   if aName <> '' then
   begin
     if IsArray then
-      raise EDocVariant.CreateUtf8(
+      EDocVariant.RaiseUtf8(
         'Add: Unexpected [%] object property in an array', [aName]);
     if not IsObject then
     begin
@@ -6994,7 +6993,7 @@ begin
   end;
   if Has(dvoCheckForDuplicatedNames) then
     if GetValueIndex(aName) >= 0 then
-      raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
+      EDocVariant.RaiseUtf8('AddValue: Duplicated [%] name', [aName]);
   result := InternalAdd(aName, aIndex);
   v := @VValue[result];
   if aValueOwned then
@@ -7028,8 +7027,7 @@ begin
   if not DoUpdate and
      (Has(dvoCheckForDuplicatedNames)) and
      (result >= 0) then
-    raise EDocVariant.CreateUtf8(
-      'AddValueFromText: Duplicated [%] name', [aName]);
+    EDocVariant.RaiseUtf8('AddValueFromText: Duplicated [%] name', [aName]);
   if result < 0 then
     result := InternalAdd(aName);
   v := @VValue[result];
@@ -7176,14 +7174,14 @@ begin
   if (aName <> '') and
      (Has(dvoCheckForDuplicatedNames)) then
     if GetValueIndex(aName) >= 0 then
-      raise EDocVariant.CreateUtf8('AddObject: Duplicated [%] name', [aName]);
+      EDocVariant.RaiseUtf8('AddObject: Duplicated [%] name', [aName]);
   added := InternalAdd(aName);
   obj := @VValue[added];
   if PInteger(obj)^ = 0 then // most common case is adding a new value
     obj^.InitClone(self)     // same options than owner document
   else if (obj^.VType <> VType) or
           not obj^.IsObject then
-    raise EDocVariant.CreateUtf8('AddObject: wrong existing [%]', [aName]);
+    EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs);
   if Has(dvoInternValues) then
     InternalUniqueValueAt(added);
@@ -7511,7 +7509,7 @@ begin
   Depth := high(aPropNames);
   if (Depth < 0) or
      (Depth > high(TQuickSortByFieldLookup)) then
-    raise EDocVariant.CreateUtf8('TDocVariantData.SortByFields(%)', [Depth]);
+    EDocVariant.RaiseUtf8('TDocVariantData.SortByFields(%)', [Depth]);
   // resolve GetPVariantByName(aPropNames) once into Lookup[]
   SetLength(Lookup, Doc^.VCount);
   if Assigned(aNameSortedCompare) then // just like GetVarData() searches names
@@ -7521,7 +7519,7 @@ begin
   for f := 0 to Depth do
   begin
     if aPropNames[f] = '' then
-      raise EDocVariant.CreateUtf8('TDocVariantData.SortByFields(%=void)', [f]);
+      EDocVariant.RaiseUtf8('TDocVariantData.SortByFields(%=void)', [f]);
     ndx := -1;
     for row := 0 to Doc^.VCount - 1 do
     begin
@@ -8087,7 +8085,7 @@ begin
   if Has(dvoReturnNullForUnknownProperty) then
     SetVariantNull(Dest)
   else
-    raise EDocVariant.CreateUtf8('[%] property not found', [aName])
+    EDocVariant.RaiseUtf8('[%] property not found', [aName])
 end;
 
 procedure TDocVariantData.InternalNotFound(var Dest: variant; aIndex: integer);
@@ -8095,7 +8093,7 @@ begin
   if Has(dvoReturnNullForUnknownProperty) then
     SetVariantNull(Dest)
   else
-    raise EDocVariant.CreateUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
+    EDocVariant.RaiseUtf8('Out of range [%] (count=%)', [aIndex, VCount]);
 end;
 
 function TDocVariantData.InternalNotFound(aName: PUtf8Char): PVariant;
@@ -8710,10 +8708,8 @@ procedure TDocVariantData.SetValueOrRaiseException(Index: integer;
   const NewValue: variant);
 begin
   if cardinal(Index) >= cardinal(VCount) then
-    raise EDocVariant.CreateUtf8(
-      'Out of range Values[%] (count=%)', [Index, VCount])
-  else
-    VValue[Index] := NewValue;
+    EDocVariant.RaiseUtf8('Out of range Values[%] (count=%)', [Index, VCount]);
+  VValue[Index] := NewValue;
 end;
 
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
@@ -8759,8 +8755,7 @@ begin
     if Has(dvoReturnNullForUnknownProperty) then
       Dest := ''
     else
-      raise EDocVariant.CreateUtf8(
-        'Out of range Names[%] (count=%)', [Index, VCount])
+      EDocVariant.RaiseUtf8('Out of range Names[%] (count=%)', [Index, VCount])
   else
     Dest := VName[Index];
 end;
@@ -8849,8 +8844,7 @@ function TDocVariantData.AddOrUpdateValue(const aName: RawUtf8;
   const aValue: variant; wasAdded: PBoolean; OnlyAddMissing: boolean): integer;
 begin
   if IsArray then
-    raise EDocVariant.CreateUtf8(
-      'AddOrUpdateValue("%") on an array', [aName]);
+    EDocVariant.RaiseUtf8('AddOrUpdateValue("%") on an array', [aName]);
   result := GetValueIndex(aName);
   if result < 0 then
   begin
@@ -8942,13 +8936,11 @@ begin
       if (r > 0) and
          ((not row^.IsObject) or
           (row^.VCount <> fieldCount)) then
-        raise EDocVariant.CreateUtf8(
-          'ToNonExpandedJson: Value[%] not expected object', [r]);
+        EDocVariant.RaiseUtf8('ToNonExpandedJson: Value[%] not expected object', [r]);
       for f := 0 to fieldCount - 1 do
         if (r > 0) and
            not PropNameEquals(row^.VName[f], field[f]) then
-          raise EDocVariant.CreateUtf8(
-            'ToNonExpandedJson: Value[%] field=% expected=%',
+          EDocVariant.RaiseUtf8('ToNonExpandedJson: Value[%] field=% expected=%',
             [r, row^.VName[f], field[f]])
         else
         begin
@@ -10920,7 +10912,7 @@ begin
   if position < 0 then
     inc(ndx, n);
   if ndx >= n then
-    raise EDocList.CreateUtf8('Index % out of range (len=%)', [position, n]);
+    EDocList.RaiseUtf8('Index % out of range (len=%)', [position, n]);
   result := @fValue^.VValue[ndx];
   // setters should not call EnsureUnique() because is done in constructor
 end;
@@ -11200,7 +11192,7 @@ end;
 function TDocList.Pop(position: integer): variant;
 begin
   if not fValue^.Extract(position, result) then
-    raise EDocList.CreateUtf8('Pop index % out of range', [position]);
+    EDocList.RaiseUtf8('Pop index % out of range', [position]);
 end;
 
 function TDocList.PopItem(out value: variant; position: integer): boolean;

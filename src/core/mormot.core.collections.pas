@@ -873,7 +873,7 @@ begin
   fOptions := aOptions;
   if (aDynArrayTypeInfo = nil) or
      (aDynArrayTypeInfo^.Kind <> rkDynArray) then
-     raise EIList.CreateUtf8('%.Create: % should be a dynamic array of T',
+     EIList.RaiseUtf8('%.Create: % should be a dynamic array of T',
        [self, aDynArrayTypeInfo^.Name^]);
   CreateRtti(Rtti.RegisterType(aDynArrayTypeInfo), aItemTypeInfo, aOptions, aSortAs);
 end;
@@ -886,7 +886,7 @@ begin
     loCaseInsensitive in fOptions);
   if (fDynArray.Info.ArrayRtti = nil) or
      (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind)  then
-    raise EIList.CreateUtf8('%.Create<%> (%) does not match % (%)',
+    EIList.RaiseUtf8('%.Create<%> (%) does not match % (%)',
       [self, aItemTypeInfo^.RawName, ToText(aItemTypeInfo^.Kind)^,
        aDynArray.Info^.RawName, ToText(fDynArray.Info.ArrayRtti.Kind)^]);
   if loNoFinalize in fOptions then
@@ -909,7 +909,7 @@ end;
 function TIListParent.Delete(ndx: PtrInt): boolean;
 begin
   if fHasher <> nil then
-    raise EIList.CreateUtf8('%.Delete(%) is not allowed  with ' +
+    EIList.RaiseUtf8('%.Delete(%) is not allowed  with ' +
       'loCreateUniqueIndex: use Remove()', [self, ndx]);
   result := fDynArray.Delete(ndx);
 end;
@@ -917,7 +917,7 @@ end;
 function TIListParent.DoPop(var dest; opt: TListPop): boolean;
 begin
   if fHasher <> nil then
-    raise EIList.CreateUtf8(
+    EIList.RaiseUtf8(
       '%.Pop() is not compatible with loCreateUniqueIndex', [self]);
   if popFromHead in opt then
     if popPeek in opt then
@@ -968,7 +968,7 @@ end;
 function TIListParent.DoAddSorted(const value; wasadded: PBoolean): integer;
 begin
   if fHasher = nil then
-    raise EIList.CreateUtf8('%.AddSorted() is not allowed  with ' +
+    EIList.RaiseUtf8('%.AddSorted() is not allowed  with ' +
       'loCreateUniqueIndex: use Add()', [self]);
   result := fDynArray.FastLocateOrAddSorted(value, wasadded);
 end;
@@ -1006,7 +1006,7 @@ end;
 procedure TIListParent.DoInsert(ndx: PtrInt; const value);
 begin
   if fHasher <> nil then
-    raise EIList.CreateUtf8('%.Insert(%) is not allowed with ' +
+    EIList.RaiseUtf8('%.Insert(%) is not allowed with ' +
       'loCreateUniqueIndex: use Add()', [self, ndx]);
   fDynArray.Insert(ndx, value);
 end;
@@ -1026,17 +1026,17 @@ end;
 
 procedure TIListParent.RaiseGetItem(ndx: PtrInt);
 begin
-  raise EIList.CreateUtf8('%.GetItem(%): out of range (Count=%)',
+  EIList.RaiseUtf8('%.GetItem(%): out of range (Count=%)',
     [self, ndx, fCount]);
 end;
 
 procedure TIListParent.RaiseSetItem(ndx: PtrInt);
 begin
   if fHasher <> nil then
-    raise EIList.CreateUtf8('%.SetItem(%) is not allowed with ' +
+    EIList.RaiseUtf8('%.SetItem(%) is not allowed with ' +
       'loCreateUniqueIndex: use Remove() then Add()', [self, ndx]);
   if PtrUInt(ndx) >= PtrUInt(fCount) then
-    raise EIList.CreateUtf8('%.SetItem(%): out of range (Count=%)',
+    EIList.RaiseUtf8('%.SetItem(%): out of range (Count=%)',
       [self, ndx, fCount]);
 end;
 
@@ -1316,11 +1316,11 @@ begin
   // validate or recognize most simple dynamic arrays from its TKey/TValue types
   if (aContext.KeyArrayTypeInfo = nil) or
      (aContext.KeyArrayTypeInfo ^.Kind <> rkDynArray) then
-     raise EIKeyValue.CreateUtf8('%.Create: % should be an array of TKey',
+     EIKeyValue.RaiseUtf8('%.Create: % should be an array of TKey',
        [self, aContext.KeyArrayTypeInfo^.Name^]);
   if (aContext.ValueArrayTypeInfo = nil) or
      (aContext.ValueArrayTypeInfo^.Kind <> rkDynArray) then
-     raise EIKeyValue.CreateUtf8('%.Create: % should be an array of TValue',
+     EIKeyValue.RaiseUtf8('%.Create: % should be an array of TValue',
        [self, aContext.ValueArrayTypeInfo^.Name^]);
   // initialize the associated dictionary
   fHasTimeout := aContext.Timeout <> 0;
@@ -1336,12 +1336,12 @@ begin
   if (fData.Keys.Info.ArrayRtti = nil) or
      ((aContext.KeyArrayTypeInfo <> nil) and
       (fData.Keys.Info.ArrayRtti.Info <> aContext.KeyItemTypeInfo)) then
-    raise EIKeyValue.CreateUtf8('%.Create: TKey does not match %',
+    EIKeyValue.RaiseUtf8('%.Create: TKey does not match %',
       [self, aContext.KeyArrayTypeInfo^.RawName]);
   if (fData.Values.Info.ArrayRtti = nil) or
      ((aContext.ValueArrayTypeInfo <> nil) and
       (fData.Values.Info.ArrayRtti.Info <> aContext.ValueItemTypeInfo)) then
-    raise EIKeyValue.CreateUtf8('%.Create: TValue does not match %',
+    EIKeyValue.RaiseUtf8('%.Create: TValue does not match %',
       [self, aContext.ValueArrayTypeInfo^.RawName]);
 end;
 
@@ -1370,7 +1370,7 @@ end;
 procedure TIKeyValueParent.AddOne(key, value: pointer);
 begin
   if fData.Add(key^, value^) < 0 then
-    raise EIKeyValue.CreateUtf8('%.Add: duplicated key', [self]);
+    EIKeyValue.RaiseUtf8('%.Add: duplicated key', [self]);
 end;
 
 procedure TIKeyValueParent.GetDefault(value: pointer);
@@ -1378,7 +1378,7 @@ begin
   if kvoDefaultIfNotFound in fOptions then
     fData.Values.ItemClear(value)
   else
-    raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+    EIKeyValue.RaiseUtf8('%.GetItem: key not found', [self]);
 end;
 
 procedure TIKeyValueParent.GetDefaultAndUnlock(value: pointer);
@@ -1389,7 +1389,7 @@ begin
   begin
     if fHasLock then
       fData.Safe^.ReadUnLock; // as expected by TIKeyValue<TKey, TValue>.GetItem
-    raise EIKeyValue.CreateUtf8('%.GetItem: key not found', [self]);
+    EIKeyValue.RaiseUtf8('%.GetItem: key not found', [self]);
   end;
 end;
 
@@ -1586,7 +1586,7 @@ end;
 class function Collections.{%H-}RaiseUseNewPlainKeyValue(
   const aContext: TNewKeyValueContext): pointer;
 begin
-  raise EIKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
+  raise EIList.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
     'complex - use Collections.NewPlainKeyValue<%, %> instead',
     [aContext.KeyItemTypeInfo.Name^, aContext.ValueItemTypeInfo.Name^]);
 end;

@@ -1633,7 +1633,7 @@ begin
   else if IsZero(Fields) then
     exit;
   if MaxLength > MAX_SQLFIELDS then
-    raise ESynDBException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
+    ESynDBException.RaiseUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
   n := FieldBitCount(Fields, MaxLength);
   if n = MaxLength then
   begin
@@ -2635,7 +2635,7 @@ begin
   inc(P, ppBeg + 1);    // P^ just after :(
   repeat
     if Count = high(Types) then
-      raise ESynDBException.CreateUtf8('Too many parameters in %', [SQL]);
+      ESynDBException.RaiseUtf8('Too many parameters in %', [SQL]);
     Gen^ := '?'; // replace :(...): by ?
     inc(Gen);
     if length(Values) <= Count then
@@ -2909,7 +2909,7 @@ procedure TResultsWriter.ChangeExpandedFields(aWithID: boolean;
   const aFields: TFieldIndexDynArray);
 begin
   if not Expand then
-    raise ESynDBException.CreateUtf8(
+    ESynDBException.RaiseUtf8(
       '%.ChangeExpandedFields() called with Expanded=false', [self]);
   fWithID := aWithID;
   fFields := aFields;

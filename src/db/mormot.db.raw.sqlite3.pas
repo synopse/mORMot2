@@ -6238,7 +6238,7 @@ begin
      (Assigned(P^[High(SQLITE3_ENTRIES)]) and
       (LibraryResolve(fLoader.Handle, 'sqlite3_snapshot_free') <>
          P^[High(SQLITE3_ENTRIES)])) then
-    raise ESqlite3Exception.CreateUtf8( // paranoid check
+    ESqlite3Exception.RaiseUtf8( // paranoid check
       '%.Create: please check SQLITE3_ENTRIES[] order for %', [self, LibraryName]);
   if (not Assigned(initialize)) or
      (not Assigned(libversion)) or
@@ -6255,7 +6255,7 @@ begin
     else
       vers := 'unknown';
     FreeAndNil(fLoader);
-    raise ESqlite3Exception.CreateUtf8(
+    ESqlite3Exception.RaiseUtf8(
       '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);
   end;
   BeforeInitialization;
@@ -6786,14 +6786,14 @@ var
 begin
   inherited Create; // initialize fSafe
   if sqlite3 = nil then
-    raise ESqlite3Exception.CreateUtf8('%.Create: No SQLite3 libray available' +
+    ESqlite3Exception.RaiseUtf8('%.Create: No SQLite3 libray available' +
       ' - you shall either add mormot.db.raw.sqlite3.static to your project uses clause, ' +
       'or run sqlite3 := TSqlite3LibraryDynamic.Create(..)', [self]);
   fLog := SQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
   fStatementMaxMemory := 512 shl 20;
   if SysUtils.Trim(aFileName) = '' then
-    raise ESqlite3Exception.CreateUtf8('%.Create('''')', [self]);
+    ESqlite3Exception.RaiseUtf8('%.Create('''')', [self]);
   if aOpenV2Flags = 0 then
     fOpenV2Flags := SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE
   else
@@ -6802,7 +6802,7 @@ begin
   fFileDefaultCacheSize := aDefaultCacheSize;
   if (fOpenV2Flags <> (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      (not Assigned(sqlite3.open_v2)) then
-    raise ESqlite3Exception.CreateUtf8(
+    ESqlite3Exception.RaiseUtf8(
       'Your % version of SQLite3 does not support custom OpenV2Flags=%',
       [sqlite3.libversion, fOpenV2Flags]);
   fFileName := aFileName;
@@ -7494,7 +7494,7 @@ begin
     log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
      (not Assigned(sqlite3.close)) then
-    raise ESqlite3Exception.CreateUtf8(
+    ESqlite3Exception.RaiseUtf8(
       '%.DBClose called with no sqlite3 global', [self]);
   if fBackupBackgroundInProcess <> nil then
     BackupBackgroundWaitUntilFinished;
@@ -7516,7 +7516,7 @@ begin
     log.Log(sllDB, 'Enable custom tokenizer for [%]', [FileName], self);
   if (sqlite3 = nil) or
      (not Assigned(sqlite3.db_config)) then
-    raise ESqlite3Exception.CreateUtf8(
+    ESqlite3Exception.RaiseUtf8(
       '%.EnableCustomTokenizer called with no sqlite3 engine', [self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
 end;
@@ -8226,7 +8226,7 @@ begin
             W.AddComma;
             inc(result);
             if W.WrittenBytes > MaxMemory then // TextLength is slower
-              raise ESqlite3Exception.CreateUTF8(
+              ESqlite3Exception.RaiseUtf8(
                 'TSqlRequest.Execute: output overflow after % for [%]',
                 [KB(MaxMemory), aSql]);
           end;
@@ -8999,7 +8999,7 @@ begin
   begin
     if c^.Timer = nil then
       // there was a Statement.Prepare exception on previous call
-      raise ESqlite3Exception.CreateUtf8(
+      ESqlite3Exception.RaiseUtf8(
         'TSqlStatementCached.Prepare failed [%]', [GenericSql]);
     if c^.Statement.Request <> 0 then
       c^.Statement.Reset;
@@ -9079,7 +9079,7 @@ var
       log.Log(sllTrace, '%', [self]);
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
-        raise ESqlite3Exception.CreateUtf8(
+        ESqlite3Exception.RaiseUtf8(
           '%.Execute aborted by OnProgress=false', [self]);
   end;
 
@@ -9137,10 +9137,10 @@ begin
               fn2 := ChangeFileExt(fn, '.db.tmp');
               DeleteFile(fn2);
               if not RenameFile(fn, fn2) then
-                raise ESqlite3Exception.CreateUtf8(
+                ESqlite3Exception.RaiseUtf8(
                   '%.Execute: RenameFile(%,%) failed', [self, fn, fn2]);
               if not TSqlDatabase.BackupSynLZ(fn2, fn, true) then
-                raise ESqlite3Exception.CreateUtf8(
+                ESqlite3Exception.RaiseUtf8(
                   '%.Execute: BackupSynLZ(%,%) failed', [self, fn, fn2]);
               if Assigned(log) then
                 log.Log(sllTrace, 'TSqlDatabase.BackupSynLZ into % %',

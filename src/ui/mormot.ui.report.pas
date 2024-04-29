@@ -2954,7 +2954,7 @@ begin
     LeftOffset := fForcedLeftOffset;
   RightOffset := fPhysicalSizePx.x - fPageMarginsPx.right;
   if RightOffset < LeftOffset then
-    raise EReport.CreateUtf8('%.GetTextLimitsPx: wrong margins', [self]);
+    EReport.RaiseUtf8('%.GetTextLimitsPx: wrong margins', [self]);
 end;
 
 procedure TGdiPages.HandleTabsAndPrint(const leftstring: SynUnicode;
@@ -3972,7 +3972,7 @@ begin
   if ForceEndGroup then
     EndGroup
   else if Assigned(fGroupPage) then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       'Cannot call %.NewPage within a group block', [self]);
   CheckHeaderDone;
   NewPageInternal;
@@ -3993,7 +3993,7 @@ begin
   if not fHeaderDone then
     exit; // i.e. haven't even started a page yet
   if Assigned(fGroupPage) then
-    raise EReport.CreateUtf8('%.BeginGroup: Group already started', [self]);
+    EReport.RaiseUtf8('%.BeginGroup: Group already started', [self]);
   if not GroupsMustBeOnSamePage then
   begin
     // Group "light" implementation
@@ -4168,7 +4168,7 @@ begin
   if self = nil then
     exit; // avoid GPF
   if not fHasPrinterInstalled then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       '%.PrintPages: no printer driver is currently installed', [self]);
   if PrintFrom < 0 then
     with TPrintDialog.Create(nil) do
@@ -4281,7 +4281,7 @@ begin
   if fTabCount > 1 then
   begin
     if tabs[0] <= 0 then
-      raise EReport.CreateUtf8(
+      EReport.RaiseUtf8(
         '%.SetTableStops(%): Tabs stops must be greater than 0',
         [self, tabs[0]]);
     fTab[0] := MmToPrinterPxX(tabs[0]);
@@ -4289,7 +4289,7 @@ begin
       if tabs[i] > tabs[i - 1] then
         fTab[i] := MmToPrinterPxX(tabs[i])
       else
-        raise EReport.CreateUtf8(
+        EReport.RaiseUtf8(
           '%.SetTableStops(%): Tabs stops must be in ascending order',
           [self, tabs[i]]);
   end
@@ -4444,7 +4444,7 @@ begin
     exit;
   end;
   if cardinal(index) >= cardinal(Length(fColumns)) then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       '%.GetColumnInfo(%): index out of range', [self, index]);
   with fColumns[index] do
   begin
@@ -4460,7 +4460,7 @@ begin
   if self = nil then
     exit; // avoid GPF
   if cardinal(index) >= cardinal(Length(fColumns)) then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       '%.SetColumnAlign(%): index out of range', [self, index])
   else
     fColumns[index].ColAlign := align;
@@ -4471,7 +4471,7 @@ begin
   if self = nil then
     exit; // avoid GPF
   if cardinal(index) >= cardinal(Length(fColumns)) then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       '%.SetColumnBold(%): index out of range', [self, index])
   else
     fColumns[index].ColBold := true;
@@ -4488,7 +4488,7 @@ begin
   n := length(fColumns);
   if (n > 0) and
      (left < fColumns[n - 1].ColRight) then
-    raise EReport.CreateUtf8(
+    EReport.RaiseUtf8(
       '%.AddColumn(%,%): columns overlap', [self, left, right]);
   SetLength(fColumns, n + 1);
   with fColumns[n] do

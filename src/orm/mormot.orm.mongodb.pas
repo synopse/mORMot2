@@ -463,7 +463,7 @@ function TRestStorageMongoDB.EngineNextID: TID;
             fEngineLastID := _Safe(res)^.I['max'];
         end;
     else
-      raise EOrmMongoDB.CreateUtf8(
+      EOrmMongoDB.RaiseUtf8(
         'Unexpected %.EngineNextID with %', [self, ToText(fEngineAddCompute)^]);
     end;
     InternalLog('ComputeMax_ID=% in % using %',
@@ -503,9 +503,9 @@ begin
   Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
   if (Doc.Kind <> dvObject) and
      (Occasion <> ooInsert) then
-    raise EOrmMongoDB.CreateUtf8('%.DocFromJson: invalid Json context', [self]);
+    EOrmMongoDB.RaiseUtf8('%.DocFromJson: invalid Json context', [self]);
   if not (Occasion in [ooInsert, ooUpdate]) then
-    raise EOrmMongoDB.CreateUtf8(
+    EOrmMongoDB.RaiseUtf8(
       'Unexpected %.DocFromJson(Occasion=%)', [self, ToText(Occasion)^]);
   // handle fields names and values
   MissingID := true;
@@ -528,7 +528,7 @@ begin
       // change field name to the external mapped name
       ndx := fStoredClassRecordProps.Fields.IndexByName(Doc.Names[i]);
       if ndx < 0 then
-        raise EOrmMongoDB.CreateUtf8(
+        EOrmMongoDB.RaiseUtf8(
           '%.DocFromJson: unknown field name [%]', [self, Doc.Names[i]]);
       Doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
       // normalize values from JSON high-level types into MongoDB native types
@@ -627,7 +627,7 @@ begin
     else
     begin
       if fEngineAddCompute = eacSynUniqueIdentifier then
-        raise EOrmMongoDB.CreateUtf8('%.DocFromJson: unexpected set ' +
+        EOrmMongoDB.RaiseUtf8('%.DocFromJson: unexpected set ' +
           '%.ID=% with %', [self, fStoredClass, result, fEngineGenerator]);
       fStorageSafe.Lock;
       if result > fEngineLastID then
@@ -640,7 +640,7 @@ begin
       fStoredClassRecordProps.RecordVersionField.PropertyIndex];
     if Doc.GetValueIndex(RecordVersionName) < 0 then
       if Owner = nil then
-        raise EOrmMongoDB.CreateUtf8(
+        EOrmMongoDB.RaiseUtf8(
           '%.DocFromJson: unexpected Owner=nil with %.%: TRecordVersion',
           [self, fStoredClass, fStoredClassRecordProps.RecordVersionField.Name])
       else
@@ -654,7 +654,7 @@ begin
         RecordVersionNotifyAddUpdate(Occasion, fStoredClassProps.TableIndex, Doc);
   end;
   if Doc.Kind <> dvObject then
-    raise EOrmMongoDB.CreateUtf8(
+    EOrmMongoDB.RaiseUtf8(
       '%.DocFromJson: Invalid Json context', [self]);
 end;
 
@@ -952,7 +952,7 @@ begin
     begin
       name := fStoredClassMapping^.ExternalToInternalOrNull(doc.Names[i]);
       if name = '' then
-        raise EOrmMongoDB.CreateUtf8('%.JsonFromDoc: Unknown field [%] for %',
+        EOrmMongoDB.RaiseUtf8('%.JsonFromDoc: Unknown field [%] for %',
           [self, doc.Names[i], fStoredClass]);
       W.AddProp(pointer(name), Length(name));
       W.AddVariant(doc.Values[i], twJsonEscape);
@@ -1035,7 +1035,7 @@ begin
       else if docv^.GetVarData(fBsonProjectionBlobFieldsNames[f], blob) then
         BsonVariantType.ToBlob(variant(blob), blobRaw)
       else
-        raise EOrmMongoDB.CreateUtf8(
+        EOrmMongoDB.RaiseUtf8(
           '%.RetrieveBlobFields(%): field [%] not found',
           [self, Value, fBsonProjectionBlobFieldsNames[f]]);
       (fStoredClassRecordProps.BlobFields[f] as TOrmPropInfoRttiRawBlob).
@@ -1128,7 +1128,7 @@ begin
   begin
     colCount := length(extFieldNames);
     if colCount <> length(W.ColNames) then
-      raise EOrmMongoDB.CreateUtf8(
+      EOrmMongoDB.RaiseUtf8(
         '%.GetJsonValues(%): column count concern %<>%',
         [self, StoredClass, colCount, length(W.ColNames)]);
     itemsize := colCount;
@@ -1138,7 +1138,7 @@ begin
       // retrieve all values of this BSON document into item[]
       if (row.Item.Kind <> betDoc) or
          (row.Item.Data.DocList = nil) then
-        raise EOrmMongoDB.CreateUtf8('%.GetJsonValues(%): invalid row kind=%',
+        EOrmMongoDB.RaiseUtf8('%.GetJsonValues(%): invalid row kind=%',
           [self, StoredClass, ord(row.Item.Kind)]);
       itemcount := 0;
       while row.Item.Data.DocList^ <> byte(betEOF) do
@@ -1590,7 +1590,7 @@ begin
     try
       if (fBatchMethod <> mNone) or
          (fBatchWriter <> nil) then
-        raise EOrmException.CreateUtf8(
+        EOrmException.RaiseUtf8(
           '%.InternalBatchStop should have been called', [self]);
       fBatchIDsCount := 0;
       fBatchMethod := BATCH_METHOD[Encoding];
@@ -1641,7 +1641,7 @@ begin
             BsonVariantFromInt64s(TInt64DynArray(fBatchIDs))])]));
         end;
     else
-      raise EOrmException.CreateUtf8('%.InternalBatchStop(%) with BatchMethod=%',
+      EOrmException.RaiseUtf8('%.InternalBatchStop(%) with BatchMethod=%',
         [self, StoredClass, ToText(fBatchMethod)]);
     end;
   finally

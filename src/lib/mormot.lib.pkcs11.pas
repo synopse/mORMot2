@@ -3584,7 +3584,7 @@ constructor TPkcs11.Create(const aLibraryName: TFileName);
 begin
   inherited Create;
   if not Load(aLibraryName) then
-    raise EPkcs11.CreateUtf8('%: error loading %', [self, aLibraryName]);
+    EPkcs11.RaiseUtf8('%: error loading %', [self, aLibraryName]);
 end;
 
 destructor TPkcs11.Destroy;
@@ -3602,14 +3602,14 @@ end;
 procedure TPkcs11.EnsureLoaded(const ctxt: ShortString);
 begin
   if not Loaded then
-    raise EPkcs11.CreateUtf8('%.%: no library loaded', [self, ctxt]);
+    EPkcs11.RaiseUtf8('%.%: no library loaded', [self, ctxt]);
 end;
 
 procedure TPkcs11.EnsureSession(const ctxt: ShortString);
 begin
   if (self = nil) or
      (fSession = 0) then
-    raise EPkcs11.CreateUtf8('%.% requires a session', [self, ctxt]);
+    EPkcs11.RaiseUtf8('%.% requires a session', [self, ctxt]);
 end;
 
 procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString;
@@ -3619,8 +3619,7 @@ begin
     exit;
   if unlock then
     Safe.UnLock;
-  raise EPkcs11.CreateUtf8(
-    '%.%: failed as % (%)', [self, ctxt, ToText(ToCKR(res))^, res]);
+  EPkcs11.RaiseUtf8('%.%: failed as % (%)', [self, ctxt, ToText(ToCKR(res))^, res]);
 end;
 
 procedure TPkcs11.CheckAttr(res: CK_RVULONG);
@@ -3652,7 +3651,7 @@ var
   notif: pointer;
 begin
   if fSession <> 0 then
-    raise EPkcs11.CreateUtf8('%: pending session', [self]);
+    EPkcs11.RaiseUtf8('%: pending session', [self]);
   Safe.Lock;
   try
     fSessionSlot := slot;
@@ -4305,7 +4304,7 @@ var
   obj: CK_OBJECT_HANDLE;
 begin
   if not (sfRW in fSessionFlags) then
-    raise EPkcs11.CreateUtf8('%.AddSessionData requires a R/W session', [self]);
+    EPkcs11.RaiseUtf8('%.AddSessionData requires a R/W session', [self]);
   a.New(CKO_DATA, DataLabel);
   if Application <> '' then
     a.Add(CKA_APPLICATION, Application);

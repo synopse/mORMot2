@@ -4349,7 +4349,7 @@ begin
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
-      raise ESynLogException.CreateUtf8(
+      ESynLogException.RaiseUtf8(
         '%.FamilyCreate: vmtAutoTable=% not %', [self, vmt, rtticustom]);
     {$endif NOPATCHVMT}
     Rtti.RegisterSafe.Lock;
@@ -4360,7 +4360,7 @@ begin
           // registered by a background thread
           exit
         else
-          raise ESynLogException.CreateUtf8( // paranoid
+          ESynLogException.RaiseUtf8( // paranoid
             '%.FamilyCreate: PrivateSlot=%', [self, result]);
       // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
@@ -5101,14 +5101,14 @@ begin
     if logRemoteDisable in fInternalFlags then
     begin
       mormot.core.os.LeaveCriticalSection(GlobalThreadLock);
-      raise ESynLogException.CreateUtf8('Nested %.DisableRotemoteLog', [self]);
+      ESynLogException.RaiseUtf8('Nested %.DisableRotemoteLog', [self]);
     end;
     include(fInternalFlags, logRemoteDisable);
   end
   else
   begin
     if not (logRemoteDisable in fInternalFlags) then
-      raise ESynLogException.CreateUtf8('Missing %.DisableRotemoteLog(true)', [self]);
+      ESynLogException.RaiseUtf8('Missing %.DisableRotemoteLog(true)', [self]);
     // DisableRemoteLog(false) -> add to events, and quit the global mutex
     exclude(fInternalFlags, logRemoteDisable);
     fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);

@@ -707,8 +707,7 @@ var
       // already registered
       exit;
     if rtti = nil then
-      raise EWrapperContext.CreateUtf8(
-        '%.RegisterType(%): no RTTI', [typAsName^, typName]);
+      EWrapperContext.RaiseUtf8('%.RegisterType(%): no RTTI', [typAsName^, typName]);
     case typ of
       wEnum,
       wSet:
@@ -758,7 +757,7 @@ begin
   if typ = wUnknown then
   begin
     if rtti = nil then
-      raise EWrapperContext.CreateUtf8(
+      EWrapperContext.RaiseUtf8(
         '%.ContextFromRtti: No RTTI nor typ for [%]', [self, typName]);
     typ := TYPES_ORM[GetOrmFieldType(rtti.Info)];
     if typ = wUnknown then
@@ -772,7 +771,7 @@ begin
           rkInterface:
             typ := wInterface;
         else
-          raise EWrapperContext.CreateUtf8(
+          EWrapperContext.RaiseUtf8(
             '%.ContextFromRtti: Not enough RTTI for [%]', [self, rtti.Name]);
         end;
     end;
@@ -880,7 +879,7 @@ begin
       if (fServer <> nil) and
          (fServer.Model.GetTableIndexInheritsFrom(
            TOrmClass(rtti.ValueClass)) < 0) then
-        raise EWrapperContext.CreateUtf8(
+        EWrapperContext.RaiseUtf8(
           '%.ContextFromRtti: % should be part of the model', [self, typName])
       else
         _ObjAddProps(['isSQLRecord',  true,
@@ -910,7 +909,7 @@ begin
     wInterface:
       _ObjAddProp('isInterface', true, result);
   else
-    raise EWrapperContext.CreateUtf8(
+    EWrapperContext.RaiseUtf8(
       'Unexpected type % (%) for [%]', [typAsName^, ord(typ), typName]);
   end;
 end;
@@ -957,7 +956,7 @@ begin
           nfoOrmFieldRttiTypeName);
       end
       else
-        raise EWrapperContext.CreateUtf8('Unexpected type % for %.%',
+        EWrapperContext.RaiseUtf8('Unexpected type % for %.%',
           [nfo, fServer.Model.Tables[t], nfo.Name]);
       kind := CROSSPLATFORM_KIND[nfo.OrmFieldType];
       _ObjAddProps(['index',        f + 1,
@@ -1843,7 +1842,7 @@ begin
             GetDocVariantByProp('interfaceName', intf, false, service) then
           service^.AddValue('query', ClassNameShort(queries[i])^)
         else
-          raise EWrapperContext.CreateUtf8('CustomDelays: unknown %', [intf]);
+          EWrapperContext.RaiseUtf8('CustomDelays: unknown %', [intf]);
       end;
     i := 0;
     while i + 2 <= high(CustomDelays) do
@@ -1857,8 +1856,7 @@ begin
              GetDocVariantByProp('methodName', meth, false, method) then
           method^.I['asynchdelay'] := delay
         else
-          raise EWrapperContext.CreateUtf8(
-            'CustomDelays: unknown %.%', [intf, meth]);
+          EWrapperContext.RaiseUtf8('CustomDelays: unknown %.%', [intf, meth]);
       inc(i, 3);
     end;
     pas := TSynMustache.Parse(Template).
@@ -2087,7 +2085,7 @@ begin
     ToConsole('%', [call.InBody], ccLightBlue);
   // execute the OnCall event handler to actually run the process
   if not Assigned(fOnCall) then
-    raise EServiceException.CreateUtf8(
+    EServiceException.RaiseUtf8(
       'No Client available to call %', [method.InterfaceDotMethodName]);
   fOnCall(fOptions, service, method, call); // will set URI + Bearer
   // send output to Console
@@ -2169,7 +2167,7 @@ begin
           inc(first);
         continue;
       end;
-      raise EServiceException.CreateUtf8(
+      EServiceException.RaiseUtf8(
         '%.Execute: unknown option [%]', [self, p[n]]);
     end;
     if n < high(p) then

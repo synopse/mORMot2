@@ -1715,7 +1715,7 @@ begin
     fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
   sign := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sign = '' then
-    raise EJwtException.CreateUtf8('%.ComputeSignature: OpenSslSign failed [%]',
+    EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign failed [%]',
       [self, SSL_error_short(ERR_get_error)]);
   result := BinToBase64Uri(sign);
 end;
@@ -1880,7 +1880,7 @@ end;
 constructor TCryptAsymOsl.Create(const name: RawUtf8);
 begin
   if not OpenSslSupports(fCaa) then
-    raise ECrypt.CreateUtf8('%.Create: unsupported %', [self, name]);
+    ECrypt.RaiseUtf8('%.Create: unsupported %', [self, name]);
   fDefaultHashAlgorithm := CAA_MD[fCaa];
   fEvpType := CAA_EVPTYPE[fCaa];
   fBitsOrCurve := CAA_BITSORCURVE[fCaa];
@@ -1897,7 +1897,7 @@ procedure TCryptAsymOsl.GeneratePem(out pub, priv: RawUtf8;
   const privpwd: RawUtf8);
 begin
   if privpwd <> '' then
-    raise ECrypt.CreateUtf8('%.GeneratePem(%): unsupported privpwd', [self, fName]);
+    ECrypt.RaiseUtf8('%.GeneratePem(%): unsupported privpwd', [self, fName]);
   OpenSslGenerateKeys(fEvpType, fBitsOrCurve, priv, pub);
 end;
 
@@ -2290,8 +2290,7 @@ function TCryptCertAlgoOpenSsl.CreateSelfSignedCsr(const Subjects: RawUtf8;
 
   procedure RaiseError(const msg: shortstring);
   begin
-    raise ECryptCert.CreateUtf8(
-      '%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
+    ECryptCert.RaiseUtf8('%.CreateSelfSignedCsr %: % error', [self, JwtName, msg]);
   end;
 
 var

@@ -206,7 +206,7 @@ var Log: ISynLog;
 begin
   if (fSession = nil) or
      (fDatabase = nil) then
-    raise ESqlDBBDE.CreateUtf8('%.Connect() on % failed: Database=nil',
+    ESqlDBBDE.RaiseUtf8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to Alias=%', [fDatabase.AliasName], self);
   try

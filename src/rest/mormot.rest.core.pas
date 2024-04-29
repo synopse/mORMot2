@@ -1908,9 +1908,9 @@ begin
      (fFakeCallback = nil) then
     exit;
   if aCallback = nil then
-    raise EServiceException.CreateUtf8('%.Redirect(nil)', [self]);
+    EServiceException.RaiseUtf8('%.Redirect(nil)', [self]);
   if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceIID, dest) then
-    raise EServiceException.CreateUtf8('%.Redirect [%]: % is not a %',
+    EServiceException.RaiseUtf8('%.Redirect [%]: % is not a %',
       [self, fFakeCallback.fName, aCallback, fFakeCallback.Factory.InterfaceName]);
   Redirect(dest, aMethodsNames, aSubscribe);
 end;
@@ -1979,7 +1979,7 @@ constructor TInterfacedObjectMulti.Create(aRest: TRest;
   out aCallbackInterface);
 begin
   if aRest = nil then
-    raise EServiceException.CreateUtf8('%.Create(aRest=nil)', [self]);
+    EServiceException.RaiseUtf8('%.Create(aRest=nil)', [self]);
   fRest := aRest;
   fLogClass := fRest.fLogClass;
   fName := fRest.Model.Root; // some context about the TRest running it
@@ -2139,7 +2139,7 @@ begin
   {$ifdef OSWINDOWS}
   if Assigned(ServiceSingle) and
      (Value = amMainThread) then
-     raise ERestException.CreateUtf8('%.SetAcquireExecutionMode(%, ' +
+     ERestException.RaiseUtf8('%.SetAcquireExecutionMode(%, ' +
        'amMainThread) is not compatible with a Windows Service which has ' +
        'no main thread', [self, ToText(Cmd)^]);
   {$endif OSWINDOWS}
@@ -2175,11 +2175,10 @@ end;
 procedure TRest.SetOrmInstance(aORM: TRestOrmParent);
 begin
   if fOrmInstance <> nil then
-    raise ERestException.CreateUtf8('%.SetOrmInstance twice', [self]);
+    ERestException.RaiseUtf8('%.SetOrmInstance twice', [self]);
   if (aORM = nil) or
      not aORM.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUtf8(
-      '%.SetOrmInstance(%) is not an IRestOrm', [self, aORM]);
+    ERestException.RaiseUtf8('%.SetOrmInstance(%) is not an IRestOrm', [self, aORM]);
   fOrmInstance := aORM;
 end;
 
@@ -2199,7 +2198,7 @@ begin
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
-      raise ERestException.CreateUtf8('%.Destroy: %.RefCount=%',
+      ERestException.RaiseUtf8('%.Destroy: %.RefCount=%',
         [self, fOrmInstance, fOrmInstance.RefCount])
     else
       // avoid dubious GPF
@@ -2296,7 +2295,7 @@ var
 begin
   C := ClassFrom(aDefinition);
   if C = nil then
-    raise ERestException.CreateUtf8('%.CreateFrom: unknown % class - please ' +
+    ERestException.RaiseUtf8('%.CreateFrom: unknown % class - please ' +
       'add a reference to its implementation unit', [self, aDefinition.Kind]);
   result := C.RegisteredClassCreateFrom(aModel, aDefinition, aServerHandleAuthentication);
 end;
@@ -3103,7 +3102,7 @@ var
   aName: RawUtf8;
 begin
   if aRest = nil then
-    raise ERestException.CreateUtf8('%.Create(aRest=nil,"%")', [self, aThreadName]);
+    ERestException.RaiseUtf8('%.Create(aRest=nil,"%")', [self, aThreadName]);
   fRest := aRest;
   if aThreadName <> '' then
     aName := aThreadName
@@ -3440,10 +3439,10 @@ var
 begin
   factory := TInterfaceFactory.Get(aGuid);
   if factory = nil then
-    raise EServiceException.CreateUtf8('%.AsyncRedirect: unknown %',
+    EServiceException.RaiseUtf8('%.AsyncRedirect: unknown %',
       [self, GuidToShort(aGuid)]);
   if aDestinationInterface = nil then
-    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
+    EServiceException.RaiseUtf8('%.AsyncRedirect(nil)', [self]);
   fRest.InternalLog('AsyncRedirect % to % using %',
     [factory.InterfaceName, ObjectFromInterface(aDestinationInterface), self]);
   Enable(AsyncBackgroundExecute, 3600);
@@ -3458,9 +3457,9 @@ var
   dest: IInvokable;
 begin
   if aDestinationInstance = nil then
-    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
+    EServiceException.RaiseUtf8('%.AsyncRedirect(nil)', [self]);
   if not aDestinationInstance.GetInterface(aGuid, dest) then
-    raise EServiceException.CreateUtf8('%.AsyncRedirect [%]: % is not a %',
+    EServiceException.RaiseUtf8('%.AsyncRedirect [%]: % is not a %',
       [self, fThreadName, aDestinationInstance, GuidToShort(aGuid)]);
   AsyncRedirect(aGuid, dest, aCallbackInterface, aOnResult);
 end;
@@ -3548,9 +3547,8 @@ begin
     AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TAuthUser);
     if (AuthGroupIndex < 0) or
        (AuthUserIndex < 0) then
-      raise EModelException.CreateUtf8(
-        '%.InitializeTable: Model has missing % or TAuthUser',
-        [self, self]);
+      EModelException.RaiseUtf8('%.InitializeTable: Model has missing % ' +
+        'or TAuthUser', [self, self]);
     UC := pointer(Server.Model.Tables[AuthUserIndex]);
     if not (itoNoAutoCreateGroups in Options) then
     begin
@@ -3899,8 +3897,8 @@ begin
     fInputCookies[n].Value := cv;
     inc(n);
     if n > COOKIE_MAXCOUNT_DOSATTACK then
-      raise ERestException.CreateUtf8(
-        '%.RetrieveCookies overflow (%): DOS attempt?', [self, KB(cookie)]);
+      ERestException.RaiseUtf8('%.RetrieveCookies overflow (%): DOS attempt?',
+        [self, KB(cookie)]);
   end;
   if n <> 0 then
     DynArrayFakeLength(fInputCookies, n);
@@ -3956,9 +3954,9 @@ begin
     exit;
   c := TrimU(aOutSetCookie);
   if not IsValidUtf8WithoutControlChars(c) then
-    raise ERestException.CreateUtf8('Unsafe %.SetOutSetCookie', [self]);
+    ERestException.RaiseUtf8('Unsafe %.SetOutSetCookie', [self]);
   if PosExChar('=', c) < 2 then
-    raise ERestException.CreateUtf8(
+    ERestException.RaiseUtf8(
       '"name=value" expected for %.SetOutSetCookie("%")', [self, c]);
   fOutSetCookie := c;
 end;
@@ -4292,7 +4290,7 @@ end;
 constructor TRestThread.Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean);
 begin
   if aRest = nil then
-    raise EOrmException.CreateUtf8('%.Create(aRest=nil)', [self]);
+    EOrmException.RaiseUtf8('%.Create(aRest=nil)', [self]);
   fSafe.Init;
   fRest := aRest;
   fOwnRest := aOwnRest;
@@ -4563,7 +4561,7 @@ begin
   begin
     factory := TInterfaceFactory.Get(aGuid);
     if factory = nil then
-      raise EServiceException.CreateUtf8('%.MultiRedirect: unknown %',
+      EServiceException.RaiseUtf8('%.MultiRedirect: unknown %',
         [self, GuidToShort(aGuid)]);
      result := TInterfacedObjectMulti.Create(fOwner, factory,
        aCallBackUnRegisterNeeded, aCallbackInterface).fList;
@@ -4627,7 +4625,7 @@ var
 begin
   if (aClient = nil) or
      (aID <= 0) then
-    raise EOrmException.CreateUtf8('Invalid %.CreateHistory(%,%,%) call',
+    EOrmException.RaiseUtf8('Invalid %.CreateHistory(%,%,%) call',
       [self, aClient, aTable, aID]);
   // read BLOB changes
   ref.From(aClient.Model, aTable, aID);
@@ -4638,7 +4636,7 @@ begin
   if fID <> 0 then
     aClient.RetrieveBlobFields(self); // load former fHistory field
   if not HistoryOpen(aClient.Model) then
-    raise EOrmException.CreateUtf8('HistoryOpen in %.CreateHistory(%,%,%)',
+    EOrmException.RaiseUtf8('HistoryOpen in %.CreateHistory(%,%,%)',
       [self, aClient, aTable, aID]);
   // append JSON changes
   hist := RecordClass.CreateAndFillPrepare(aClient,

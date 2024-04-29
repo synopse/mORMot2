@@ -580,7 +580,7 @@ begin // caller did "if not fConfigRetrieved then EnsureRetrieveConfig"
     if fConfigRetrieved then
       exit;
   until GetTickCount64 > endtix;
-  raise ECryptCertPkcs11.CreateUtf8('%.EnsureRetrieveConfig timeout', [self]);
+  ECryptCertPkcs11.RaiseUtf8('%.EnsureRetrieveConfig timeout', [self]);
 end;
 
 function TCryptCertAlgoPkcs11.Find(const Value: RawByteString;
@@ -654,7 +654,7 @@ begin
   if caa in CAA_RSA then
   begin
     if not rsa.FromDer(PrivKeyDer) then
-      raise ECryptCertPkcs11.CreateUtf8('%.Import: no RSA Key', [self]);
+      ECryptCertPkcs11.RaiseUtf8('%.Import: no RSA Key', [self]);
     Attr.Add(CKA_MODULUS, rsa.Modulus);
     Attr.Add(CKA_PUBLIC_EXPONENT, rsa.PublicExponent);
     Attr.Add(CKA_PRIME_1, rsa.Prime1);
@@ -670,13 +670,13 @@ begin
   begin
     ecp := CAA_TO_ECPARAMS[caa];
     if ecp = '' then
-      raise ECryptCertPkcs11.CreateUtf8(
+      ECryptCertPkcs11.RaiseUtf8(
         '%.Import: unsupported %', [self, Cert.CertAlgo.JwtName]);
     Attr.Add(CKA_EC_PARAMS, ecp);
     ecv := SeqToEccPrivKey(CAA_CKA[caa], PrivKeyDer);
     writeln(length(ecv));
     if ecv = '' then
-      raise ECryptCertPkcs11.CreateUtf8(
+      ECryptCertPkcs11.RaiseUtf8(
         '%.Import: incorrect % PrivKeyDer', [self, Cert.CertAlgo.JwtName]);
     Attr.Add(CKA_VALUE, ecv) // stored as raw big number value
   end;
@@ -759,7 +759,7 @@ end;
 
 procedure TCryptCertPkcs11.RaiseError(const Msg: shortstring);
 begin
-  raise ECryptCertPkcs11.CreateUtf8('% (slot=#%, CKA_ID=%) %',
+  ECryptCertPkcs11.RaiseUtf8('% (slot=#%, CKA_ID=%) %',
     [self, fSlotID, fStorageID, Msg]);
 end;
 

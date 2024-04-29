@@ -1547,9 +1547,9 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg{%H-}, self)
   else if Stmt = nil then
-    raise ESqlDBOracle.CreateUtf8('% error: %', [self, msg])
+    ESqlDBOracle.RaiseUtf8('% error: %', [self, msg])
   else
-    raise ESqlDBOracle.CreateUtf8('% error: %', [Stmt, msg]);
+    ESqlDBOracle.RaiseUtf8('% error: %', [Stmt, msg]);
 end;
 
 procedure TSqlDBOracleLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
@@ -1589,9 +1589,9 @@ begin
     if LogLevelNoRaise <> sllNone then
       SynDBLog.Add.Log(LogLevelNoRaise, msg, self)
     else if Stmt = nil then
-      raise ESqlDBOracle.CreateUtf8('% error: %', [self, msg])
+      ESqlDBOracle.RaiseUtf8('% error: %', [self, msg])
     else
-      raise ESqlDBOracle.CreateUtf8('% error: %', [Stmt, msg]);
+      ESqlDBOracle.RaiseUtf8('% error: %', [Stmt, msg]);
   end;
 end;
 

@@ -587,7 +587,7 @@ begin
   if (len and AesBlockMod <> 0) or
      (len <= 0) or
      (integer(page) <= 0) then
-    raise ESqlite3Exception.CreateUtf8(
+    ESqlite3Exception.RaiseUtf8(
       'Unexpected CodecAesProcess(page=%,len=%)', [page, len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page * 2654435761;

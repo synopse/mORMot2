@@ -798,7 +798,7 @@ function TSqlDBOleDBStatement.CheckParam(Param: integer;
   NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): POleDBStatementParam;
 begin
   if Param <= 0 then
-    raise EOleDBException.CreateUtf8(
+    EOleDBException.RaiseUtf8(
       '%.Bind*() called with Param=% should be >= 1', [self, Param]);
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
@@ -815,7 +815,7 @@ begin
   if (NewType in [ftUnknown, ftNull]) or
      (fConnection.Properties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    raise ESqlDBException.CreateUtf8(
+    ESqlDBException.RaiseUtf8(
       'Invalid call to %s.BindArray(Param=%d,Type=%s)',
       [self, Param, TSqlDBFieldTypeToString(NewType)]);
   SetLength(result^.VArray, ArrayCount);
@@ -825,7 +825,7 @@ end;
 constructor TSqlDBOleDBStatement.Create(aConnection: TSqlDBConnection);
 begin
   if not aConnection.InheritsFrom(TSqlDBOleDBConnection) then
-    raise EOleDBException.CreateUtf8('%.Create(%) expects a TSqlDBOleDBConnection',
+    EOleDBException.RaiseUtf8('%.Create(%) expects a TSqlDBOleDBConnection',
       [self, aConnection]);
   inherited Create(aConnection);
   fOleDBConnection := TSqlDBOleDBConnection(aConnection);
@@ -868,9 +868,9 @@ begin
   CheckCol(Col); // check Col value
   if (not Assigned(fRowSet)) or
      (fColumnCount = 0) then
-    raise EOleDBException.CreateUtf8('%.Column*() with no prior Execute', [self]);
+    EOleDBException.RaiseUtf8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
-    raise EOleDBException.CreateUtf8('%.Column*() with no prior Step', [self]);
+    EOleDBException.RaiseUtf8('%.Column*() with no prior Step', [self]);
   Column := @fColumns[Col];
   result := @fRowSetData[Column^.ColumnAttr];
   case TSqlDBOleDBStatus(PColumnValue(result)^.Status) of
@@ -1101,7 +1101,7 @@ label
 begin
   // dedicated version to avoid as much memory allocation than possible
   if CurrentRow <= 0 then
-    raise EOleDBException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
+    EOleDBException.RaiseUtf8('%.ColumnsToJson() with no prior Step', [self]);
   c := @fColumns[Col]; // fast direct conversion from OleDB buffers
   V := @fRowSetData[c^.ColumnAttr];
   case TSqlDBOleDBStatus(V^.Status) of
@@ -1156,8 +1156,7 @@ begin
   dec(Param); // start at #1
   if CheckIsOutParameter and
      (fParams[Param].VInOut = paramIn) then
-    raise EOleDBException.CreateUtf8('%.ParamToVariant expects an [In]Out parameter',
-      [self]);
+    EOleDBException.RaiseUtf8('%.ParamToVariant expects an [In]Out parameter', [self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
   // -> we have nothing to do but return the current value :)
@@ -1197,7 +1196,7 @@ begin
      (fColumnCount > 0) or
      (fColumnBindings <> nil) or
      (fParamBindings <> nil) then
-    raise EOleDBException.CreateUtf8('%.Prepare should be called once', [self]);
+    EOleDBException.RaiseUtf8('%.Prepare should be called once', [self]);
   inherited;
   with OleDBConnection do
   begin
@@ -1242,12 +1241,12 @@ begin
   SqlLogBegin(sllSQL);
   // 1. check execution context
   if not Assigned(fCommand) then
-    raise EOleDBException.CreateUtf8('%s.Prepare should have been called', [self]);
+    EOleDBException.RaiseUtf8('%s.Prepare should have been called', [self]);
   if Assigned(fRowSet) or
      (fColumnCount > 0) or
      (fColumnBindings <> nil) or
      (fParamBindings <> nil) then
-    raise EOleDBException.CreateUtf8('Missing call to %.Reset', [self]);
+    EOleDBException.RaiseUtf8('Missing call to %.Reset', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 2. bind parameters
   SetLength(IDLists, fParamCount);
@@ -1261,8 +1260,7 @@ begin
       for i := 0 to fParamCount - 1 do
         case fParams[i].VType of
           ftUnknown:
-            raise EOleDBException.CreateUtf8(
-              '%.Execute: missing #% bound parameter for [%]',
+            EOleDBException.RaiseUtf8('%.Execute: missing #% parameter for [%]',
               [self, i + 1, fSql]);
         end;
       P := pointer(fParams);
@@ -1315,7 +1313,7 @@ begin
             ftUtf8:
               ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamStrList;
           else
-            raise EOleDBException.CreateUtf8('Unsupported array parameter type %',
+            EOleDBException.RaiseUtf8('Unsupported array parameter type %',
               [TSqlDBFieldTypeToString(P^.VType)]);
           end;
           ssParamProps[ssParamPropsCount].cPropertySets := 1;
@@ -1438,7 +1436,7 @@ end;
 procedure TSqlDBOleDBStatement.FromRowSet(RowSet: IRowSet);
 begin
   if fRowSet <> nil then
-    EOleDBException.CreateUtf8('%.FromRowSet twice', [self]);
+    EOleDBException.RaiseUtf8('%.FromRowSet twice', [self]);
   if not Assigned(RowSet) then
     exit; // no row returned
   fRowSet := RowSet;
@@ -1474,7 +1472,7 @@ var
   sav: integer;
 begin
 {  if not Assigned(fCommand) then
-    raise EOleDBException.CreateUtf8('%.Execute should be called before Step', [self]); }
+    EOleDBException.RaiseUtf8('%.Execute should be called before Step', [self]); }
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
@@ -1698,8 +1696,7 @@ begin
             end;
           end;
       else
-        raise EOleDBException.CreateUtf8(
-          '%.Execute: wrong column [%] (%) for [%]',
+        EOleDBException.RaiseUtf8('%.Execute: wrong column [%] (%) for [%]',
           [self, aName, ToText(Col^.ColumnType)^, fSql]);
       end;
       inc(nfo);
@@ -1729,7 +1726,7 @@ begin
   if Connected then
     Disconnect;
   if OleDBProperties.ConnectionString = '' then
-    raise EOleDBException.CreateUtf8('%.Connect excepts a ConnectionString', [self]);
+    EOleDBException.RaiseUtf8('%.Connect excepts a ConnectionString', [self]);
   try
     // retrieve initialization parameters from connection string
     OleCheck(CoCreateInstance(CLSID_MSDAINITIALIZE, nil, CLSCTX_INPROC_SERVER,
@@ -1766,7 +1763,7 @@ var
 begin
   log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOleDBConnectionProperties) then
-    raise EOleDBException.CreateUtf8('Invalid %.Create(%)', [self, aProperties]);
+    EOleDBException.RaiseUtf8('Invalid %.Create(%)', [self, aProperties]);
   fOleDBProperties := TSqlDBOleDBConnectionProperties(aProperties);
   inherited;
   CoInit;
