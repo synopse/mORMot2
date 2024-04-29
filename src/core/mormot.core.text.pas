@@ -943,12 +943,17 @@ type
     /// the last char appended is canceled, if match the supplied one
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
-    procedure CancelLastChar(aCharToCancel: AnsiChar); overload;
+    procedure CancelLastChar(const aCharToCancel: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
-    procedure CancelLastComma;
+    procedure CancelLastComma; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the last char appended is canceled if it was a ',' and replaced
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
+    procedure CancelLastComma(const aReplaceChar: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
@@ -3981,6 +3986,20 @@ begin
   if (P >= fTempBuf) and
      (P^ = ',') then
     dec(B);
+end;
+
+procedure TTextWriter.CancelLastComma(const aReplaceChar: AnsiChar);
+var
+  P: PUtf8Char;
+begin
+  P := B;
+  if (P < fTempBuf) or
+     (P^ <> ',') then
+  begin
+    inc(P);
+    B := P;
+  end;
+  P^ := aReplaceChar;
 end;
 
 function TTextWriter.LastChar: AnsiChar;
