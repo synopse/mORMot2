@@ -591,6 +591,7 @@ type
     procedure AddDirect(c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one comma (',') character
+    // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddComma;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one ASCII char to the buffer, if not already there as LastChar
@@ -3666,8 +3667,6 @@ end;
 
 procedure TTextWriter.AddComma;
 begin
-  if B >= BEnd then
-    FlushToStream;
   B[1] := ',';
   inc(B);
 end;
@@ -3676,9 +3675,8 @@ procedure TTextWriter.Add(c1, c2: AnsiChar);
 begin
   if B >= BEnd then
     FlushToStream;
-  B[1] := c1;
-  B[2] := c2;
-  inc(B, 2);
+  PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8;
+  inc(B, 2); // with proper constant propagation above when inlined
 end;
 
 procedure TTextWriter.Add(const Format: RawUtf8; const Values: array of const;
@@ -3771,8 +3769,7 @@ begin
   for i := 0 to length(a) - 1 do
   begin
     WriteObject(a[i], aOptions);
-    B[1] := ',';
-    inc(B);
+    AddComma;
   end;
   CancelLastComma;
   Add(']');
@@ -3960,7 +3957,7 @@ begin
   InternalSetBuffer(@temp, SizeOf(temp));
 end;
 
-procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
+procedure TTextWriter.CancelLastChar(const aCharToCancel: AnsiChar);
 var
   P: PUtf8Char;
 begin
@@ -4337,8 +4334,7 @@ begin
   for i := 0 to high(Integers) do
   begin
     Add(Integers[i]);
-    B[1] := ',';
-    inc(B);
+    AddComma;
   end;
   CancelLastComma;
 end;
@@ -4352,8 +4348,7 @@ begin
   for i := 0 to high(Doubles) do
   begin
     AddDouble(Doubles[i]);
-    B[1] := ',';
-    inc(B);
+    AddComma;
   end;
   CancelLastComma;
 end;
@@ -4549,7 +4544,7 @@ begin
 end;
 
 procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
-begin
+begin // not faster with a local P: PUtf8Char temp pointer instead of B
   if PropNameLen <= 0 then
     exit; // paranoid check
   if BEnd - B <= PropNameLen then
