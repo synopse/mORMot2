@@ -3836,32 +3836,32 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
   TLS: boolean): boolean;
 var
-  TCP: TCrtSocket;
+  sock: TCrtSocket;
 
-  procedure Expect(const Answer: RawUtf8);
+  procedure Expect(const answer: RawUtf8);
   var
-    Res: RawUtf8;
+    res: RawUtf8;
   begin
     repeat
-      readln(TCP.SockIn^, Res);
+      readln(sock.SockIn^, res);
       if ioresult <> 0 then
-        raise ESendEmail.CreateUtf8('read error for %', [Res]);
-    until (Length(Res) < 4) or
-          (Res[4] <> '-'); // - indicates there are other headers following
-    if IdemPChar(pointer(Res), pointer(Answer)) then
+        ESendEmail.RaiseUtf8('read error for %', [res]);
+    until (Length(res) < 4) or
+          (res[4] <> '-'); // - indicates there are other headers following
+    if IdemPChar(pointer(res), pointer(answer)) then
       exit;
-    if Res = '' then
-      Res := 'Undefined Error';
-    raise ESendEmail.CreateUtf8('Command failed for % at %:% [%]',
-      [User, Server, Port, Res]);
+    if res = '' then
+      res := 'Undefined Error';
+    ESendEmail.RaiseUtf8('Command failed for % at %:% [%]',
+      [User, Server, Port, res]);
   end;
 
-  procedure Exec(const Command, Answer: RawUtf8);
+  procedure Exec(const Command, answer: RawUtf8);
   begin
-    TCP.SockSendFlush(Command + #13#10);
+    sock.SockSendFlush(Command + #13#10);
     if ioresult <> 0 then
-      raise ESendEmail.CreateUtf8('Write error for %', [Command]);
-    Expect(Answer)
+      ESendEmail.RaiseUtf8('Write error for %', [Command]);
+    Expect(answer)
   end;
 
 var
@@ -3872,10 +3872,10 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  TCP := SocketOpen(Server, Port, TLS);
-  if TCP <> nil then
+  sock := SocketOpen(Server, Port, TLS);
+  if sock <> nil then
   try
-    TCP.CreateSockIn; // we use SockIn for readln in Expect()
+    sock.CreateSockIn; // we use SockIn for readln in Expect()
     Expect('220');
     if (User <> '') and
        (Pass <> '') then
@@ -3887,8 +3887,8 @@ begin
     end
     else
       Exec('HELO ' + Server, '25');
-    TCP.SockSend(['MAIL FROM:<', From, '>']);
-    TCP.SockSendFlush;
+    sock.SockSend(['MAIL FROM:<', From, '>']);
+    sock.SockSendFlush;
     Expect('250');
     repeat
       GetNextItem(P, ',', rec);
@@ -3904,24 +3904,24 @@ begin
         ToList := ToList + ', ' + rec;
     until P = nil;
     Exec('DATA', '354');
-    TCP.SockSend([
+    sock.SockSend([
       'Subject: ', Subject, #13#10 +
       'From: ', From, ToList]);
     head := trimU(Headers);
     if (TextCharSet <> '') or
        (head = '') then
-      TCP.SockSend([
+      sock.SockSend([
         'Content-Type: text/plain; charset=', TextCharSet, #13#10 +
         'Content-Transfer-Encoding: 8bit']);
     if head <> '' then
-      TCP.SockSend(head);
-    TCP.SockSendCRLF; // end of headers
-    TCP.SockSend(Text);
+      sock.SockSend(head);
+    sock.SockSendCRLF; // end of headers
+    sock.SockSend(Text);
     Exec('.', '25');
     Exec('QUIT', '22');
     result := ioresult = 0;
   finally
-    TCP.Free;
+    sock.Free;
   end;
 end;
 
