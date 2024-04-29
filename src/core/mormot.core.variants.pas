@@ -8221,8 +8221,7 @@ begin
     end
     else
       // O(n) lookup for name -> efficient brute force sub-functions
-      result := FindNonVoid[IsCaseSensitive](
-        pointer(VName), aName, aNameLen, VCount)
+      result := FindNonVoid[aCaseSensitive](pointer(VName), aName, aNameLen, VCount)
   else
     result := -1;
 end;
