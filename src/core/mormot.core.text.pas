@@ -4719,40 +4719,10 @@ var
   D: PUtf8Char;
   c: AnsiChar;
 begin
-  if P <> nil then
-  begin
-    D := B + 1;
-    if P^ <> #0 then
-      repeat
-        if D >= BEnd then
-        begin
-          B := D - 1;
-          FlushToStream;
-          D := B + 1;
-        end;
-        c := P^;
-        if c < ' ' then
-          if c = #0 then
-            break
-          else
-            c := ' ';
-        D^ := c;
-        inc(P);
-        inc(D);
-      until false;
-    B := D - 1;
-  end;
-end;
-
-procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
-var
-  D: PUtf8Char;
-  c: AnsiChar;
-begin
-  if (P <> nil) and
-     (Len > 0) then
-  begin
-    D := B + 1;
+  if P = nil then
+    exit;
+  D := B + 1;
+  if P^ <> #0 then
     repeat
       if D >= BEnd then
       begin
@@ -4762,14 +4732,42 @@ begin
       end;
       c := P^;
       if c < ' ' then
-        c := ' ';
+        if c = #0 then
+          break
+        else
+          c := ' ';
       D^ := c;
-      inc(D);
       inc(P);
-      dec(Len);
-    until Len = 0;
-    B := D - 1;
-  end;
+      inc(D);
+    until false;
+  B := D - 1;
+end;
+
+procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
+var
+  D: PUtf8Char;
+  c: AnsiChar;
+begin
+  if (P = nil) or
+     (Len <= 0) then
+    exit;
+  D := B + 1;
+  repeat
+    if D >= BEnd then
+    begin
+      B := D - 1;
+      FlushToStream;
+      D := B + 1;
+    end;
+    c := P^;
+    if c < ' ' then
+      c := ' ';
+    D^ := c;
+    inc(D);
+    inc(P);
+    dec(Len);
+  until Len = 0;
+  B := D - 1;
 end;
 
 procedure TTextWriter.AddOnSameLineW(P: PWord; Len: PtrInt);
@@ -5008,11 +5006,15 @@ end;
 
 procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
   QuotedChar: AnsiChar);
+var
+  max: PtrUInt;
 begin
-  if cardinal(BinBytes * 2 + 1) >= cardinal(fTempBufSize) then
-    exit;
-  if BEnd - B <= BinBytes * 2 then
-    FlushToStream;
+  max := BinBytes * 2 + 1;
+  if BEnd - B <= max then
+    if max >= cardinal(fTempBufSize) then
+      exit // too big for a single call
+    else
+      FlushToStream;
   inc(B);
   if QuotedChar <> #0 then
   begin
@@ -8559,38 +8561,38 @@ var
   d: PTempUtf8;
 begin
   if (Max > 0) and
-     (L <> 0) then
+     (L <> 0) and
+     (Dest <> nil) then
   begin
     inc(Max, PtrUInt(Dest));
     d := @blocks;
-    if Dest <> nil then
-      repeat
-        if PtrUInt(Dest) + PtrUInt(d^.Len) > Max then
-        begin
-          // avoid buffer overflow
-          MoveFast(d^.Text^, Dest^, Max - PtrUInt(Dest));
-          repeat
-            if d^.TempRawUtf8 <> nil then
-              {$ifdef FPC}
-              FastAssignNew(d^.TempRawUtf8); // release temp RawUtf8
-              {$else}
-              RawUtf8(d^.TempRawUtf8) := '';
-              {$endif FPC}
-            inc(d);
-          until d = last; // avoid memory leak
-          result := PUtf8Char(Max);
-          exit;
-        end;
-        MoveFast(d^.Text^, Dest^, d^.Len);
-        inc(Dest, d^.Len);
-        if d^.TempRawUtf8 <> nil then
-          {$ifdef FPC}
-          FastAssignNew(d^.TempRawUtf8);
-          {$else}
-          RawUtf8(d^.TempRawUtf8) := '';
-          {$endif FPC}
-        inc(d);
-      until d = last;
+    repeat
+      if PtrUInt(Dest) + PtrUInt(d^.Len) > Max then
+      begin
+        // avoid buffer overflow
+        MoveFast(d^.Text^, Dest^, Max - PtrUInt(Dest));
+        repeat
+          if d^.TempRawUtf8 <> nil then
+            {$ifdef FPC}
+            FastAssignNew(d^.TempRawUtf8); // release temp RawUtf8
+            {$else}
+            RawUtf8(d^.TempRawUtf8) := '';
+            {$endif FPC}
+          inc(d);
+        until d = last; // avoid memory leak
+        result := PUtf8Char(Max);
+        exit;
+      end;
+      MoveFast(d^.Text^, Dest^, d^.Len);
+      inc(Dest, d^.Len);
+      if d^.TempRawUtf8 <> nil then
+        {$ifdef FPC}
+        FastAssignNew(d^.TempRawUtf8);
+        {$else}
+        RawUtf8(d^.TempRawUtf8) := '';
+        {$endif FPC}
+      inc(d);
+    until d = last;
   end;
   result := Dest;
 end;
