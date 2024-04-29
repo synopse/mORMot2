@@ -2752,7 +2752,7 @@ function T7zWriter.Get(index: PtrUInt): T7zItem;
 begin
   if index >= PtrUInt(length(fEntries)) then
     E7Zip.RaiseUtf8('Out of range %.Get(%)', [self, index]);
-  result := fEntries[index]:
+  result := fEntries[index];
 end;
 
 function T7zWriter.GetZipName(index: integer): RawUtf8;
