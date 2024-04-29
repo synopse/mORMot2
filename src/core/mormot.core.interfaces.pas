@@ -836,7 +836,7 @@ type
     // !   if ServiceContainer.Resolve(ICalculator,cal) then
     // !   ... use calc methods
     function Resolve(const aGuid: TGuid; out Obj;
-      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
+      aRaiseIfNotFound: ESynExceptionClass = nil): boolean; overload;
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     // - raise an EServiceException if any interface can't be resolved, unless
@@ -4936,7 +4936,7 @@ begin
 end;
 
 function TInterfaceResolver.Resolve(const aGuid: TGuid; out Obj;
-  aRaiseIfNotFound: EInterfaceResolver): boolean;
+  aRaiseIfNotFound: ESynExceptionClass): boolean;
 var
   known: TInterfaceFactory;
 begin
