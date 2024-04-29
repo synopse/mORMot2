@@ -957,7 +957,7 @@ begin
   FillCharFast(self, SizeOf(self), 0); // may be bigger than pthread struct
   {$ifdef OSPTHREADSLIB}
   if not Assigned(pthread_mutex_init) then
-    EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
+    raise EOSException.Create('TOSLightLock.Init: no pthread_mutex_init')
   else // no recursive attribute -> fast mutex
   {$endif OSPTHREADSLIB}
     pthread_mutex_init(@fMutex, nil);
