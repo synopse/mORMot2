@@ -1958,7 +1958,7 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateUtf8(const Format: RawUtf8; const Args: array of const);
+    constructor CreateUtf8(const Format: RawUtf8; const Args: array of const); virtual;
     /// constructor will accept RawUtf8 instead of string as message text
     constructor CreateU(const Msg: RawUtf8);
     /// constructor appending some FormatUtf8() content to the GetLastError
@@ -1969,6 +1969,8 @@ type
     // pointer, or the JSON representation of any supplied TDocVariant
     constructor CreateLastOSError(const Format: RawUtf8; const Args: array of const;
       const Trailer: ShortString = 'OSError');
+    /// a wrapper function around raise CreateUtf8()
+    class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the TSynLogExceptionToStrCustom
@@ -9185,6 +9187,12 @@ begin
   FormatUtf8('% 0x% [%] %', [Trailer, CardinalToHexShort(error),
     StringReplaceAll(GetErrorText(error), '%', '#'), Format], fmt);
   CreateUtf8(fmt, Args);
+end;
+
+class procedure ESynException.RaiseUtf8(const Format: RawUtf8;
+  const Args: array of const);
+begin
+  raise CreateUtf8(Format, Args);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
