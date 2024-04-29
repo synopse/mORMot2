@@ -3429,6 +3429,8 @@ begin
   else
   begin
     PS := NameList;
+    if twoTrimLeftEnumSets in W.CustomOptions then
+      ForceTrim := true;
     max := MaxValue;
     if max >= 32 then
       max := 31; // avoid buffer overflow on 32-bit cardinal Value
@@ -3438,8 +3440,7 @@ begin
       begin
         if QuoteChar <> #0 then
           W.Add(QuoteChar);
-        if ForceTrim or
-           (twoTrimLeftEnumSets in W.CustomOptions) then
+        if ForceTrim then
           W.AddTrimLeftLowerCase(PS)
         else
           W.AddShort(PS^);
