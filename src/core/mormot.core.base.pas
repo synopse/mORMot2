@@ -4937,6 +4937,40 @@ zero:
   result := false;
 end;
 
+{$ifdef HASINLINE} // defined here for proper inlining
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean;
+label
+  zero;
+begin
+  // cut-down version of our pure pascal CompareMem() function
+  {$ifndef CPUX86}
+  result := false;
+  {$endif CPUX86}
+  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
+  if Length >= PtrInt(PtrUInt(P1)) then
+    repeat // compare one PtrInt per loop
+      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
+        goto zero;
+      inc(PPtrInt(P1));
+      inc(PPtrInt(P2));
+    until Length < PtrInt(PtrUInt(P1));
+  inc(Length, SizeOf(PtrInt));
+  dec(PtrUInt(P2), PtrUInt(P1));
+  if PtrInt(PtrUInt(P1)) < Length then
+    repeat
+      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
+        goto zero;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1)) >= Length;
+  result := true;
+  exit;
+zero:
+  {$ifdef CPUX86}
+  result := false;
+  {$endif CPUX86}
+end;
+{$endif HASINLINE}
+
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 var
@@ -4947,7 +4981,9 @@ begin
   repeat
     p := n[result]; // all VName[]<>'' so p=n^<>nil
     if (PStrLen(p - _STRLEN)^ = len) and
-       CompareMemFixed(p, name, len) then
+       (p^ = PAnsiChar(name)^) and
+       ((len = 1) or
+        CompareMemFixed(p + 1, PAnsiChar(name) + 1, len - 1)) then
       exit;
     inc(result);
     dec(count);
@@ -4967,9 +5003,14 @@ begin
   repeat
     // inlined IdemPropNameUSameLenNotNull(p, name, len)
     p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if PStrLen(p1 - _STRLEN)^ = len then
+    if (PStrLen(p1 - _STRLEN)^ = len) and
+       ((ord(p1^) xor ord(p2^)) and $df = 0) then
     begin
-      l := @p1[len - SizeOf(cardinal)];
+      if len = 1 then
+        exit;
+      inc(p1);
+      inc(p2);
+      l := @p1[len - (SizeOf(cardinal) + 1)];
       dec(p2, PtrUInt(p1));
       while PtrUInt(l) >= PtrUInt(p1) do
         // compare 4 Bytes per loop
@@ -10879,38 +10920,6 @@ begin
       dec(len);
     until len = 0;
   result := not result;
-end;
-
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean;
-label
-  zero;
-begin
-  // cut-down version of our pure pascal CompareMem() function
-  {$ifndef CPUX86}
-  result := false;
-  {$endif CPUX86}
-  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
-  if Length >= PtrInt(PtrUInt(P1)) then
-    repeat // compare one PtrInt per loop
-      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
-        goto zero;
-      inc(PPtrInt(P1));
-      inc(PPtrInt(P2));
-    until Length < PtrInt(PtrUInt(P1));
-  inc(Length, SizeOf(PtrInt));
-  dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < Length then
-    repeat
-      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
-        goto zero;
-      inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= Length;
-  result := true;
-  exit;
-zero:
-  {$ifdef CPUX86}
-  result := false;
-  {$endif CPUX86}
 end;
 
 {$else}
