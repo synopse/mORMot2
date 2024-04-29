@@ -606,7 +606,7 @@ type
     {$endif CPU32}
     /// append a 32-bit signed integer Value as text
     procedure Add(Value: PtrInt); overload;
-      {$ifdef HASINLINE}{$ifdef ASMINTEL}inline;{$endif}{$endif}
+      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append a boolean Value as text
     // - write either 'true' or 'false'
     procedure Add(Value: boolean); overload;
@@ -619,7 +619,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: cardinal);
-      {$ifdef HASINLINE}{$ifdef ASMINTEL}inline;{$endif}{$endif}
+      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -943,7 +943,7 @@ type
     /// the last char appended is canceled, if match the supplied one
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
-    procedure CancelLastChar(const aCharToCancel: AnsiChar); overload;
+    procedure CancelLastChar(aCharToCancel: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
     // - only one char cancelation is allowed at the same position: don't call
@@ -953,7 +953,7 @@ type
     /// the last char appended is canceled if it was a ',' and replaced
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
-    procedure CancelLastComma(const aReplaceChar: AnsiChar); overload;
+    procedure CancelLastComma(aReplaceChar: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
@@ -3961,7 +3961,7 @@ begin
   InternalSetBuffer(@temp, SizeOf(temp));
 end;
 
-procedure TTextWriter.CancelLastChar(const aCharToCancel: AnsiChar);
+procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
 var
   P: PUtf8Char;
 begin
@@ -3987,7 +3987,7 @@ begin
     dec(B);
 end;
 
-procedure TTextWriter.CancelLastComma(const aReplaceChar: AnsiChar);
+procedure TTextWriter.CancelLastComma(aReplaceChar: AnsiChar);
 var
   P: PUtf8Char;
 begin
@@ -5009,8 +5009,8 @@ procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: PtrInt;
 var
   max: PtrUInt;
 begin
-  max := BinBytes * 2 + 1;
-  if BEnd - B <= max then
+  max := PtrUInt(BinBytes) * 2 + 1;
+  if PtrUInt(BEnd - B) <= max then
     if max >= cardinal(fTempBufSize) then
       exit // too big for a single call
     else

@@ -1453,11 +1453,9 @@ type
     // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure CopyValues(out Dest; ObjArrayByRef: boolean = false);
     /// serialize the content as a "key":value JSON object
-    procedure SaveToJson(
-      W: TJsonWriter; EnumSetsAsText: boolean = false); overload;
+    procedure SaveToJson(W: TJsonWriter; EnumSetsAsText: boolean = false); overload;
     /// serialize the content as a "key":value JSON object
-    function SaveToJson(
-      EnumSetsAsText: boolean = false): RawUtf8; overload;
+    function SaveToJson(EnumSetsAsText: boolean = false): RawUtf8; overload;
     /// serialize the Values[] as a JSON array
     function SaveValuesToJson(EnumSetsAsText: boolean = false;
       ReFormat: TTextWriterJsonFormat = jsonCompact): RawUtf8;

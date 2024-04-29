@@ -976,7 +976,7 @@ type
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(var aCsv: PUtf8Char; aName: PShortString;
       aPathDelim: AnsiChar): PtrInt;
