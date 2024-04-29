@@ -4414,7 +4414,7 @@ procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
 begin
   if (P <> nil) and
      (Len > 0) then
-    if Len < fTempBufSize then // inlined for small chunk
+    if Len < fTempBufSize then // can be inlined for small chunk
     begin
       if BEnd - B <= Len then
         FlushToStream;
@@ -4422,7 +4422,7 @@ begin
       inc(B, Len);
     end
     else
-      AddNoJsonEscapeBig(P, Len); // big chunks
+      AddNoJsonEscapeBig(P, Len); // big chunks (seldom used)
 end;
 
 procedure TTextWriter.AddNoJsonEscape(P: Pointer);

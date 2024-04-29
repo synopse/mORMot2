@@ -41,6 +41,8 @@ type
   ESynMustache = class(ESynException);
 
   /// identify the {{mustache}} tag kind
+  // - sorted by occurence, to optimize RenderContext() process
+  // - mtText for all text that appears outside a symbol
   // - mtVariable if the tag is a variable - e.g. {{myValue}} - or an Expression
   // Helper - e.g. {{helperName valueName}}
   // - mtVariableUnescape, mtVariableUnescapeAmp to unescape the variable HTML - e.g.
@@ -55,8 +57,8 @@ type
   // - mtSetDelimiter for setting custom delimeter symbols - e.g. {{=<% %>=}} -
   // Warning: current implementation only supports two character delimiters
   // - mtTranslate for content i18n via a callback - e.g. {{"English text}}
-  // - mtText for all text that appears outside a symbol
   TSynMustacheTagKind = (
+    mtText,
     mtVariable,
     mtVariableUnescape,
     mtVariableUnescapeAmp,
@@ -67,10 +69,9 @@ type
     mtPartial,
     mtSetPartial,
     mtSetDelimiter,
-    mtTranslate,
-    mtText);
+    mtTranslate);
 
-  /// store a {{mustache}} tag
+  /// store a {{mustache}} tag parsed definition
   TSynMustacheTag = record
     /// points to the mtText buffer start
     // - main template's text is not allocated as a separate string during
@@ -91,6 +92,8 @@ type
     // - is not set for mtText nor mtSetDelimiter
     Value: RawUtf8;
   end;
+  /// pointer reference to a {{mustache}} tag parsed definition
+  PSynMustacheTag = ^TSynMustacheTag;
 
   /// store all {{mustache}} tags of a given template
   TSynMustacheTagDynArray = array of TSynMustacheTag;
@@ -156,7 +159,7 @@ type
     function GetVariantFromContext(const ValueName: RawUtf8): variant;
     procedure PopContext;
     procedure AppendVariant(const Value: variant; UnEscape: boolean);
-    // inherited class should override those methods
+    // inherited class should override those methods used by RenderContext()
     function GotoNextListItem: boolean;
       virtual; abstract;
     function GetVarDataFromContext(ValueSpace: integer; const ValueName: RawUtf8;
@@ -480,7 +483,7 @@ type
     // - the rendering extended in fTags[] is supplied as parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned
     procedure RenderContext(Context: TSynMustacheContext;
-      TagStart, TagEnd: integer);
+      TagStart, TagEnd: PtrInt);
 
     /// renders the {{mustache}} template from a variant defined context
     // - the context is given via a custom variant type implementing
@@ -1854,82 +1857,79 @@ begin
 end;
 
 procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
-  TagStart, TagEnd: integer);
+  TagStart, TagEnd: PtrInt);
 var
   partial: TSynMustache;
+  t: PSynMustacheTag;
 begin
-  while TagStart <= TagEnd do
-  begin
-    with fTags[TagStart] do
-      case Kind of
-        mtText:
-          if TextLen <> 0 then
-            // may be 0 e.g. for standalone without previous Line
-            Context.fWriter.AddNoJsonEscape(TextStart, TextLen);
-        mtVariable:
-          Context.AppendValue(ValueSpace, Value, {unescape=}false);
-        mtVariableUnescape,
-        mtVariableUnescapeAmp:
-          Context.AppendValue(ValueSpace, Value, {unescape=}true);
-        mtSection:
-          case Context.AppendSection(ValueSpace, Value) of
-            msNothing:
-              begin
-                // e.g. for no key, false value, or empty list
-                TagStart := SectionOppositeIndex;
-                continue; // ignore whole section
-              end;
-            msList:
-              begin
-                while Context.GotoNextListItem do
-                  RenderContext(Context, TagStart + 1, SectionOppositeIndex - 1);
-                TagStart := SectionOppositeIndex;
-                // ignore whole section since we just rendered it as a list
-                continue;
-              end;
-          // msSingle, msSinglePseudo:
-          //   process the section once with current context
-          end;
-        mtInvertedSection:
-          // display section for no key, false value, or empty list
-          if Context.AppendSection(ValueSpace, Value) <> msNothing then
-          begin
-            TagStart := SectionOppositeIndex;
-            continue; // ignore whole section
-          end;
-        mtSectionEnd:
-          if (fTags[SectionOppositeIndex].Kind in
-               [mtSection, mtInvertedSection]) and
-             (Value[1] <> '-') and
-             (fTags[SectionOppositeIndex].ValueSpace = 0) then
-            Context.PopContext;
-        mtComment:
-          ; // just ignored
-        mtPartial:
-          begin
-            partial := fInternalPartials.GetPartial(Value);
-            if (partial = nil) and
-               (Context.fOwner <> self) then
-              // recursive call
-              partial := Context.fOwner.fInternalPartials.GetPartial(Value);
-            if (partial = nil) and
-               (Context.Partials <> nil) then
-              partial := Context.Partials.GetPartial(Value);
-            if partial <> nil then
-              partial.RenderContext(Context, 0, high(partial.fTags));
-          end;
-        mtSetPartial:
-          // ignore whole internal {{<partial}}
-          TagStart := SectionOppositeIndex;
-        mtTranslate:
-          if TextLen <> 0 then
-            Context.TranslateBlock(TextStart, TextLen);
-      else
-        ESynMustache.RaiseUtf8('Kind=% not implemented yet',
-          [KindToText(fTags[TagStart].Kind)^]);
-      end;
+  if TagStart <= TagEnd then
+  repeat
+    t := @fTags[TagStart];
+    case t^.Kind of
+      mtText:
+         // may be 0 e.g. for standalone without previous Line
+         Context.fWriter.AddNoJsonEscape(t^.TextStart, t^.TextLen);
+      mtVariable:
+        Context.AppendValue(t^.ValueSpace, t^.Value, {unescape=}false);
+      mtVariableUnescape,
+      mtVariableUnescapeAmp:
+        Context.AppendValue(t^.ValueSpace, t^.Value, {unescape=}true);
+      mtSection:
+        case Context.AppendSection(t^.ValueSpace, t^.Value) of
+          msNothing:
+            begin
+              // e.g. for no key, false value, or empty list
+              TagStart := t^.SectionOppositeIndex;
+              continue; // ignore whole section
+            end;
+          msList:
+            begin
+              while Context.GotoNextListItem do
+                RenderContext(Context, TagStart + 1, t^.SectionOppositeIndex - 1);
+              TagStart := t^.SectionOppositeIndex;
+              // ignore whole section since we just rendered it as a list
+              continue;
+            end;
+        // msSingle, msSinglePseudo:
+        //   process the section once with current context
+        end;
+      mtInvertedSection:
+        // display section for no key, false value, or empty list
+        if Context.AppendSection(t^.ValueSpace, t^.Value) <> msNothing then
+        begin
+          TagStart := t^.SectionOppositeIndex;
+          continue; // ignore whole section
+        end;
+      mtSectionEnd:
+        if t^.Value[1] <> '-' then
+          with fTags[t^.SectionOppositeIndex] do
+            if (Kind in [mtSection, mtInvertedSection]) and
+               (ValueSpace = 0) then
+              Context.PopContext;
+      mtComment:
+        ; // just ignored
+      mtPartial:
+        begin
+          partial := fInternalPartials.GetPartial(t^.Value);
+          if (partial = nil) and
+             (Context.fOwner <> self) then
+            // recursive call
+            partial := Context.fOwner.fInternalPartials.GetPartial(t^.Value);
+          if (partial = nil) and
+             (Context.Partials <> nil) then
+            partial := Context.Partials.GetPartial(t^.Value);
+          if partial <> nil then
+            partial.RenderContext(Context, 0, high(partial.fTags));
+        end;
+      mtSetPartial:
+        // ignore whole internal {{<partial}}
+        TagStart := t^.SectionOppositeIndex;
+      mtTranslate:
+        if t^.TextLen <> 0 then
+          Context.TranslateBlock(t^.TextStart, t^.TextLen);
+    end;
     inc(TagStart);
-  end;
+  until TagStart > TagEnd;
 end;
 
 function TSynMustache.Render(const Context: variant;
