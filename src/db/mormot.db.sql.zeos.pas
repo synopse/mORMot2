@@ -1418,14 +1418,14 @@ begin
             WR.AddCurr(fResultSet.GetCurrency(col + FirstDbcIndex));
         ftDate:
           begin
-            WR.Add('"');
+            WR.AddDirect('"');
             WR.AddDateTime(fResultSet.GetTimestamp(col + FirstDbcIndex),
               fForceDateWithMS);
-            WR.Add('"');
+            WR.AddDirect('"');
           end;
         ftUtf8:
           begin
-            WR.Add('"');
+            WR.AddDirect('"');
             if fDbms = dMSSQL then
             begin
               P := Pointer(fResultSet.GetPWideChar(col + FirstDbcIndex, Len));
@@ -1438,7 +1438,7 @@ begin
               if Len > 0 then
                 WR.AddJsonEscape(P, Len);
             end;
-            WR.Add('"');
+            WR.AddDirect('"');
           end;
         ftBlob:
           if fForceBlobAsNull then
@@ -1460,7 +1460,7 @@ begin
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
-    WR.Add('}');
+    WR.AddDirect('}');
 end;
 
 {$endif ZDBC_COLUMNSTOJSON}

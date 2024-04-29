@@ -6692,7 +6692,7 @@ begin
           begin
             W.AddShort(READWRITE[rw]);
             Stats.fPerTable[rw, i].ComputeDetailsTo(W);
-            W.Add('}', ',');
+            W.AddDirect('}', ',');
           end;
         W.CancelLastComma;
         W.AddShorter(']},');
@@ -6701,7 +6701,7 @@ begin
       Stats.UnLock;
     end;
     W.CancelLastComma;
-    W.Add(']', ',');
+    W.AddDirect(']', ',');
   end;
   if withmethods in Flags then
   begin
@@ -6714,10 +6714,10 @@ begin
         begin
           W.Add('{"%":', [Name]);
           Stats.ComputeDetailsTo(W);
-          W.Add('}', ',');
+          W.AddDirect('}', ',');
         end;
     W.CancelLastComma;
-    W.Add(']', ',');
+    W.AddDirect(']', ',');
   end;
   if withinterfaces in Flags then
   begin
@@ -6730,10 +6730,10 @@ begin
           begin
             W.Add('{"%":', [InterfaceFactory.Methods[i].InterfaceDotMethodName]);
             Stats[i].ComputeDetailsTo(W);
-            W.Add('}', ',');
+            W.AddDirect('}', ',');
           end;
     W.CancelLastComma;
-    W.Add(']', ',');
+    W.AddDirect(']', ',');
   end;
   if (withsessions in Flags) and
      (fSessions <> nil) then
@@ -6753,7 +6753,7 @@ begin
           begin
             W.Add('{"%":', [fPublishedMethod[i].Name]);
             a.fMethods[i].ComputeDetailsTo(W);
-            W.Add('}', ',');
+            W.AddDirect('}', ',');
           end;
         W.CancelLastComma;
         W.AddShort('],"interfaces":[');
@@ -6762,7 +6762,7 @@ begin
           begin
             W.Add('{"%":', [Services.InterfaceMethod[i].InterfaceDotMethodName]);
             a.fInterfaces[i].ComputeDetailsTo(W);
-            W.Add('}', ',');
+            W.AddDirect('}', ',');
           end;
         W.CancelLastComma;
         W.AddShorter(']},');
@@ -6771,7 +6771,7 @@ begin
       fSessions.Safe.ReadOnlyUnLock;
     end;
     W.CancelLastComma;
-    W.Add(']', ',');
+    W.AddDirect(']', ',');
   end;
   W.CancelLastComma;
   W.Add('}');
@@ -7156,7 +7156,7 @@ begin
   try
     fSessions.Safe.ReadOnlyLock;
     try
-      W.Add('[');
+      W.AddDirect('[');
       for i := 0 to fSessions.Count - 1 do
       begin
         W.WriteObject(fSessions.List[i]);

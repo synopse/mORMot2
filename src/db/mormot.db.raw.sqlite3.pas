@@ -8223,8 +8223,7 @@ begin
         SQLITE_ROW:
           begin
             FieldsToJson(W);
-            W.B[1] := ',';
-            inc(W.B);
+            W.AddComma;
             inc(result);
             if W.WrittenBytes > MaxMemory then // TextLength is slower
               raise ESqlite3Exception.CreateUTF8(
@@ -8324,13 +8323,11 @@ begin
   W.Add('{');
   for f := 0 to FieldCount - 1 do
   begin
-    W.B[1] := '"';
-    inc(W.B);
+    W.AddDirect('"');
     W.AddNoJsonEscape(sqlite3.column_name(fRequest, f));
-    W.Add('"', ':');
+    W.AddDirect('"', ':');
     FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.B[1] := '}';
@@ -8756,8 +8753,7 @@ begin
       begin
         WR.Add('"');
         WR.AddJsonEscape(sqlite3.value_text(Value), {len=}0); // len=0 : fastest
-        WR.B[1] := '"';
-        inc(WR.B);
+        WR.AddDirect('"');
       end;
   end;
 end;
@@ -8799,8 +8795,7 @@ begin
       WR.AddString(WR.ColNames[f]); // '"'+ColNames[]+'":'
     end;
     FieldToJson(WR, v, DoNotFetchBlobs); // append the value and a trailing ','
-    WR.B[1] := ',';
-    inc(WR.B);
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

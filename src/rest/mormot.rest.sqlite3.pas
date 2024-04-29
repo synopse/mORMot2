@@ -325,14 +325,13 @@ begin
           with Cache[ndx[i]] do
           begin
             W.AddJsonEscape([StatementSql, Timer]);
-            W.B[1] := ',';
-            inc(W.B);
+            W.AddComma;
           end;
       finally
         DB.UnLock;
       end;
       W.CancelLastComma;
-      W.Add(']', '}');
+      W.AddDirect(']', '}');
     end;
 end;
 

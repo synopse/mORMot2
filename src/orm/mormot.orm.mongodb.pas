@@ -947,8 +947,7 @@ begin
   end;
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.B[1] := '{';
-    inc(W.B);
+    W.AddDirect('{');
     for i := 0 to doc.Count - 1 do
     begin
       name := fStoredClassMapping^.ExternalToInternalOrNull(doc.Names[i]);
@@ -957,8 +956,7 @@ begin
           [self, doc.Names[i], fStoredClass]);
       W.AddProp(pointer(name), Length(name));
       W.AddVariant(doc.Values[i], twJsonEscape);
-      W.B[1] := ',';
-      inc(W.B);
+      W.AddComma;
     end;
     W.CancelLastComma;
     W.B[1] := '}';
@@ -1158,7 +1156,7 @@ begin
       end;
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
-        W.Add('{');
+        W.AddDirect('{');
       for col := 0 to colCount - 1 do
       begin
         if W.Expand then
@@ -1169,12 +1167,11 @@ begin
           W.AddNull
         else
           itemfound^.AddMongoJson(W, modNoMongo);
-        W.B[1] := ',';
-        inc(W.B);
+        W.AddComma;
       end;
       W.CancelLastComma;
       if W.Expand then
-        W.Add('}', ',')
+        W.AddDirect('}', ',')
       else
         W.AddComma;
       inc(result);

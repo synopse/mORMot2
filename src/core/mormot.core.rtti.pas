@@ -3306,7 +3306,7 @@ begin
     for i := MinValue to MaxValue do
     begin
       if quotedValues then
-        Add('"');
+        AddDirect('"');
       if unCamelCased then
       begin
         TrimLeftLowerCaseToShort(V, uncamel);
@@ -3317,9 +3317,8 @@ begin
       else
         AddShort(V^);
       if quotedValues then
-        Add('"');
-      B[1] := ',';
-      inc(B);
+        AddDirect('"');
+      AddComma;
       inc(PByte(V), length(V^) + 1);
     end;
     CancelLastComma;
@@ -3445,8 +3444,8 @@ begin
         else
           W.AddShort(PS^);
         if QuoteChar <> #0 then
-          W.Add(QuoteChar);
-        W.Add(SepChar);
+          W.AddDirect(QuoteChar);
+        W.AddDirect(SepChar);
       end;
       inc(PByte(PS), ord(PS^[0]) + 1); // next item
     end;

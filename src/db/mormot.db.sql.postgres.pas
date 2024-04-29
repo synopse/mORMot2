@@ -1297,7 +1297,7 @@ begin
           if ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
             W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
           else
-            // note: StrLen seems slightly faster than PQ.GetLength for small content
+            // note: StrLen slightly faster than PQ.GetLength for small content
             W.AddShort(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
@@ -1307,8 +1307,7 @@ begin
           begin
             W.Add('"');
             W.AddJsonEscape(P, 0); // Len=0 is faster than StrLen/GetLength
-            W.B[1] := '"';
-            inc(W.B);
+            W.AddDirect('"');
           end;
         ftDate:
           begin
@@ -1317,8 +1316,7 @@ begin
                (PAnsiChar(P)[10] = ' ') then
               PAnsiChar(P)[10] := 'T'; // ensure strict ISO-8601 encoding
             W.AddJsonEscape(P);
-            W.B[1] := '"';
-            inc(W.B);
+            W.AddDirect('"');
           end;
         ftBlob:
           if fForceBlobAsNull then

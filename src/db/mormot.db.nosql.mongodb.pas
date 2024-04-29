@@ -2887,7 +2887,7 @@ begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
     if ReturnAsJsonArray then
-      W.Add('[');
+      W.AddDirect('[');
     case Mode of
       modNoMongo:
         SendAndGetRepliesAndFree(Query, ReplyJsonNoMongo, W);
@@ -2898,7 +2898,7 @@ begin
     end;
     W.CancelLastComma;
     if ReturnAsJsonArray then
-      W.Add(']');
+      W.AddDirect(']');
     W.SetText(result);
     if (result = '') or
        (result = '[]') or

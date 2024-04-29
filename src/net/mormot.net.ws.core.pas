@@ -1632,23 +1632,19 @@ begin
   frame.tix := 0;
   WR := TJsonWriter.CreateOwnedStream(tmp);
   try
-    WR.B[1] := '{';
-    inc(WR.B);
+    WR.AddDirect('{');
     WR.AddFieldName(Head);
-    WR.B[1] := '[';
-    inc(WR.B);
+    WR.AddDirect('[');
     for i := 0 to High(Values) do
     begin
       WR.AddJsonEscape(Values[i]);
-      WR.B[1] := ',';
-      inc(WR.B);
+      WR.AddComma;
     end;
-    WR.B[1] := '"';
-    inc(WR.B);
+    WR.AddDirect('"');
     WR.AddString(ContentType);
-    WR.Add('"', ',');
+    WR.AddDirect('"', ',');
     if Content = '' then
-      WR.Add('"', '"')
+      WR.AddDirect('"', '"')
     else if (ContentType = '') or
             PropNameEquals(ContentType, JSON_CONTENT_TYPE) then
       WR.AddNoJsonEscape(pointer(Content), length(Content))
@@ -1656,7 +1652,7 @@ begin
       WR.AddJsonString(Content)
     else
       WR.WrBase64(pointer(Content), length(Content), true);
-    WR.Add(']', '}');
+    WR.AddDirect(']', '}');
     WR.SetText(RawUtf8(frame.payload));
   finally
     WR.Free;

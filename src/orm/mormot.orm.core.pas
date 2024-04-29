@@ -5134,7 +5134,7 @@ begin
       W.AddShort(' default values')
     else
     begin
-      W.Add(' ', '(');
+      W.AddDirect(' ', '(');
       if FieldBits <> nil then
       begin
         W.AddShorter('RowID,'); // first is always the ID
@@ -5142,8 +5142,7 @@ begin
           if FieldBitGet(FieldBits^, f) then
           begin
             W.AddString(Props.Fields.List[f].Name);
-            W.B[1] := ',';
-            inc(W.B);
+            W.AddComma;
           end;
       end
       else
@@ -5151,8 +5150,7 @@ begin
         begin
           // append 'COL1,COL2'
           W.AddString(FieldNames[f]);
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
       W.CancelLastComma;
       W.AddShort(') values (');
@@ -6994,8 +6992,7 @@ begin
   while FillOne do
   begin
     GetJsonValues(W);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.B[1] := ']';
@@ -7141,13 +7138,12 @@ begin
   if W.WithID then
   begin
     W.Add(fID);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
     if (owoID_str in W.OrmOptions) and W.Expand then
     begin
       W.AddShort(ID_STR[owoLowCaseID in W.OrmOptions]);
       W.Add(fID);
-      W.Add('"', ',');
+      W.AddDirect('"', ',');
     end;
     inc(c);
   end;
@@ -7162,15 +7158,12 @@ begin
         inc(c);
       end;
       Props.List[W.Fields[f]].GetJsonValues(self, W);
-      W.B[1] := ',';
-      inc(W.B);
+      W.AddComma;
     end;
   end;
   W.CancelLastComma; // cancel last ','
-  if not W.Expand then
-    exit;
-  W.B[1] := '}';
-  inc(W.B);
+  if W.Expand then
+    W.AddDirect('}');
 end;
 
 procedure TOrm.AppendAsJsonObject(W: TJsonWriter; Fields: TFieldBits;
@@ -7189,8 +7182,7 @@ begin
   begin
     W.AddShorter('{"ID":');
     W.Add(fID);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end
   else
     W.Add('{');
@@ -7202,13 +7194,11 @@ begin
   begin
     if FieldBitGet(Fields, i) then
     begin
-      W.B[1] := '"';
-      inc(W.B);
+      W.AddDirect('"');
       W.AddNoJsonEscape(pointer(nfo^.Name), length(nfo^.Name));
-      W.Add('"', ':');
+      W.AddDirect('"', ':');
       nfo^.GetJsonValues(self, W);
-      W.B[1] := ',';
-      inc(W.B);
+      W.AddComma;
     end;
     inc(nfo);
   end;
@@ -7226,8 +7216,7 @@ begin
   while FillOne do
   begin
     AppendAsJsonObject(W, Fields, WithID);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.B[1] := ']';
@@ -11243,12 +11232,12 @@ begin
      not (boOnlyObjects in fOptions) then
   begin
     fTableIndex := fModel.GetTableIndexExisting(aTable);
-    fBatch.Add('{'); // sending data is '{"Table":["cmd":values,...]}'
+    fBatch.AddDirect('{'); // sending data is '{"Table":["cmd":values,...]}'
     fBatch.AddFieldName(aTable.SqlTableName);
   end
   else
     fTableIndex := -1;
-  fBatch.Add('[');
+  fBatch.AddDirect('[');
   fAutomaticTransactionPerRow := AutomaticTransactionPerRow;
   fOptions := Options;
   if boOnlyObjects in Options then
@@ -11260,16 +11249,14 @@ begin
   begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.AddU(AutomaticTransactionPerRow);
-    fBatch.B[1] := ',';
-    inc(fBatch.B);
+    fBatch.AddComma;
   end;
   Options := Options - BATCH_OPTIONS_CLIENTONLY;
   if word(Options) <> 0 then
   begin
     fBatch.AddShort('"options",');
     fBatch.AddU(word(Options));
-    fBatch.B[1] := ',';
-    inc(fBatch.B);
+    fBatch.AddComma;
   end;
 end;
 
@@ -11326,8 +11313,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
     raise EOrmBatchException.CreateUtf8('%.RawAdd %', [self, SentData]);
   Encode(fTable, encPost);
   fBatch.AddString(SentData);
-  fBatch.B[1] := ',';
-  inc(fBatch.B);
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
@@ -11350,12 +11336,10 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   begin
     fBatch.AddShorter('{ID:');
     fBatch.Add(ID);
-    fBatch.B[1] := ',';
-    inc(fBatch.B);
+    fBatch.AddComma;
     fBatch.AddStringCopy(SentData, 2, maxInt shr 2);
   end;
-  fBatch.B[1] := ',';
-  inc(fBatch.B);
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
@@ -11398,17 +11382,16 @@ begin
         fBatch.AddShorter('",') // '{"Table":[...,"POST",{object},...]}'
       else
       begin
-        fBatch.Add('@'); // '[...,"POST@Table",{object}',...]'
+        fBatch.AddDirect('@'); // '[...,"POST@Table",{object}',...]'
         fBatch.AddString(EncodedTable.OrmProps.SqlTableName);
-        fBatch.Add('"', ',');
+        fBatch.AddDirect('"', ',');
       end;
     end;
   end;
   if ID <> 0 then
   begin
     fBatch.Add(ID);
-    fBatch.B[1] := ',';
-    inc(fBatch.B);
+    fBatch.AddComma;
   end;
 end;
 
@@ -11487,8 +11470,7 @@ begin
           if encoding = encPostHexID then
           begin
             fBatch.Add(Value.IDValue);
-            fBatch.B[1] := ',';
-            inc(fBatch.B);
+            fBatch.AddComma;
           end;
           nfo := pointer(props.Fields.List);
           for f := 0 to props.Fields.Count - 1 do
@@ -11496,8 +11478,7 @@ begin
             if FieldBitGet(fields, f) then
             begin
               nfo^.GetJsonValues(Value, fBatch);
-              fBatch.B[1] := ',';
-              inc(fBatch.B);
+              fBatch.AddComma;
             end;
             inc(nfo);
           end;
@@ -11511,8 +11492,7 @@ begin
   end
   else
     fBatch.Add('{', '}'); // '{"Table":[...,"POST",{},...]}'
-  fBatch.B[1] := ',';
-  inc(fBatch.B);
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
@@ -11605,16 +11585,14 @@ begin
     Encode(POrmClass(Value)^, encPutHexID, @fields);
     fBatch.Add('[');
     fBatch.Add(Value.IDValue); // RowID should be the first
-    fBatch.B[1] := ',';
-    inc(fBatch.B);
+    fBatch.AddComma;
     nfo := pointer(props.Fields.List);
     for f := 0 to props.Fields.Count - 1 do
     begin
       if FieldBitGet(fields, f) then
       begin
         nfo^.GetJsonValues(Value, fBatch);
-        fBatch.B[1] := ',';
-        inc(fBatch.B);
+        fBatch.AddComma;
       end;
       inc(nfo);
     end;
@@ -11622,8 +11600,7 @@ begin
     fBatch.B[1] := ']';
     inc(fBatch.B);
   end;
-  fBatch.B[1] := ',';
-  inc(fBatch.B);
+  fBatch.AddComma;
   if Assigned(fRest) and
      fCalledWithinRest and
      (fRest.CacheOrNil <> nil) then
@@ -11667,7 +11644,7 @@ begin
       if (fTable <> nil) and
          (fModel <> nil) and
          not (boOnlyObjects in fOptions) then
-        fBatch.Add('}'); // end sequence array '{"Table":["cmd":values,...]}'
+        fBatch.AddDirect('}'); // end sequence array '{"Table":["cmd":...]}'
       fBatch.SetText(Data);
     end;
     result := true;

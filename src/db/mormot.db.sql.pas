@@ -5276,7 +5276,7 @@ var
             begin
               for f := 0 to maxf do
               begin
-                W.Add('i');
+                W.AddDirect('i');
                 inc(p);
                 W.AddU(p);
                 if FieldValues[f, r] = 'null' then
@@ -5300,7 +5300,7 @@ var
                 W.AddShorter('=?,');
               end;
               W.CancelLastComma;
-              W.Add(#10, ',');
+              W.AddDirect(#10, ',');
             end;
             W.CancelLastComma;
             W.AddShort(') as begin'#10);
@@ -5309,7 +5309,7 @@ var
             begin
               EncodeInsertPrefix(W, BatchOptions, dFirebird);
               W.AddString(TableName);
-              W.Add(' ', '(');
+              W.AddDirect(' ', '(');
               for f := 0 to maxf do
               begin
                 W.AddString(FieldNames[f]);
@@ -5320,7 +5320,7 @@ var
               for f := 0 to maxf do
               begin
                 inc(p);
-                W.Add(':', 'i');
+                W.AddDirect(':', 'i');
                 W.AddU(p);
                 W.AddComma;
               end;
@@ -5342,7 +5342,7 @@ var
             begin
               W.AddShorter('into ');
               W.AddString(TableName);
-              W.Add(' ', '(');
+              W.AddDirect(' ', '(');
               for f := 0 to maxf do
               begin
                 W.AddString(FieldNames[f]);
@@ -5353,7 +5353,7 @@ var
               for f := 0 to maxf do
                 W.Add('?', ',');
               W.CancelLastComma;
-              W.Add(')', #10);
+              W.AddDirect(')', #10);
             end;
             W.AddShort('select 1 from dual');
             sqlcached := true;
@@ -5364,7 +5364,7 @@ var
           // INSERT .. VALUES (..),(..),(..),..
           EncodeInsertPrefix(W, BatchOptions, Props.fDbms);
           W.AddString(TableName);
-          W.Add(' ', '(');
+          W.AddDirect(' ', '(');
           for f := 0 to maxf do
           begin
             W.AddString(FieldNames[f]);
@@ -5374,11 +5374,11 @@ var
           W.AddShort(') values ');
           for r := 1 to rowcount do
           begin
-            W.Add('(');
+            W.AddDirect('(');
             for f := 0 to maxf do
               W.Add('?', ',');
             W.CancelLastComma;
-            W.Add(')', ',');
+            W.AddDirect(')', ',');
           end;
           W.CancelLastComma;
           sqlcached := true;
@@ -5521,7 +5521,7 @@ begin
           break;
         EncodeInsertPrefix(W, BatchOptions, dFirebird);
         W.AddString(TableName);
-        W.Add(' ', '(');
+        W.AddDirect(' ', '(');
         for f := 0 to maxf do
         begin
           W.AddString(FieldNames[f]);
@@ -6242,12 +6242,11 @@ begin
     if WR.Expand then
       WR.AddString(WR.ColNames[col]); // add '"ColumnName":'
     ColumnToJson(col, WR);
-    WR.B[1] := ',';
-    inc(WR.B);
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
-    WR.Add('}');
+    WR.AddDirect('}');
 end;
 
 procedure TSqlDBStatement.ColumnToSqlVar(Col: integer; var Value: TSqlVar;
@@ -6393,8 +6392,7 @@ begin
   begin
     W.AddFieldName(ColumnName(col)); // add '"ColumnName":'
     ColumnToJson(col, W);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma; // cancel last ','
   W.B[1] := '}';
@@ -6439,8 +6437,7 @@ begin
     while Step do
     begin
       ColumnsToJson(W);
-      W.B[1] := ',';
-      inc(W.B);
+      W.AddComma;
       inc(result);
       if (maxmem > 0) and
          (W.WrittenBytes > maxmem) then // TextLength is slower
@@ -8393,8 +8390,7 @@ begin
   begin
     W.AddFieldName(fColumns[col].ColumnName); // add '"ColumnName":'
     ColumnToJson(col, W);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma; // cancel last ','
   W.B[1] := '}';

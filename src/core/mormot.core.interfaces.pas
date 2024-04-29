@@ -2669,7 +2669,7 @@ begin
   WR.AddPropInt64('stacksize', SizeInStack);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameJsonArray(TypeInfo(TInterfaceMethodValueAsm), ValueKindAsm));
-  WR.Add('}', ',');
+  WR.AddDirect('}', ',');
 {$else}
   WR.AddShorter('"},');
 {$endif SOA_DEBUG}
@@ -2743,13 +2743,12 @@ begin
   begin
     WR.Add('"');
     WR.AddJsonEscape(pointer(Value));
-    WR.Add('"', ',');
+    WR.AddDirect('"', ',');
   end
   else
   begin
     WR.AddString(Value);
-    WR.B[1] := ',';
-    inc(WR.B);
+    WR.AddComma;
   end;
 end;
 
@@ -2771,8 +2770,7 @@ begin
     imvRecord:
       begin
         WR.AddVoidRecordJson(ArgRtti.Info);
-        WR.B[1] := ',';
-        inc(WR.B);
+        WR.AddComma;
       end;
     imvVariant:
       WR.AddShorter('null,');
@@ -2928,7 +2926,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{');
+    W.AddDirect('{');
     if (P = nil) or
        (P^ <> '[') then
       P := nil
@@ -2981,7 +2979,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{');
+    W.AddDirect('{');
     while (P <> nil) and
           GetNextFieldProp(P, arg) and
           (P <> nil) and
@@ -3022,14 +3020,14 @@ begin
           continue;
         if arginfo^.ValueType = imvDynArray then
           // write [value] or ["value"]
-          W.Add('[');
+          W.AddDirect('[');
         if (rcfJsonString in arginfo^.ArgRtti.Flags) or
            (vIsDynArrayString in arginfo^.ValueKindAsm) then
           W.AddJsonString(value)
         else
           W.AddShort(pointer(value), length(value));
         if arginfo^.ValueType = imvDynArray then
-          W.Add(']');
+          W.AddDirect(']');
       end;
       W.AddComma;
     end;
@@ -3440,8 +3438,7 @@ begin
         else
         begin
           a^.AddJson(W, V, opt);
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
       end;
       inc(a);
@@ -4217,7 +4214,7 @@ begin
       with fMethods[m] do
       begin
         WR.CancelAll;
-        WR.Add('[');
+        WR.AddDirect('[');
         for a := ArgsOutFirst to ArgsOutLast do
           with Args[a] do
           if ValueDirection <> imdConst then
@@ -4228,7 +4225,7 @@ begin
       end;
     // compute the service contract as a JSON array
     WR.CancelAll;
-    WR.Add('[');
+    WR.AddDirect('[');
     for m := 0 to MethodsCount - 1 do
       with fMethods[m] do
       begin
@@ -5808,8 +5805,7 @@ begin
         else
         begin
           W.AddVariant(fOutput[ndx], twJsonEscape);
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
         inc(ndx);
         if cardinal(ndx) >= cardinal(fMethod^.ArgsOutputValuesCount) then
@@ -7620,8 +7616,7 @@ begin
           if ResAsJsonObject then
             Res.AddPropName(arg^.ParamName^);
           arg^.AddJson(Res, fValues[a], opt[arg^.ValueDirection = imdVar]);
-          Res.B[1] := ',';
-          inc(Res.B);
+          Res.AddComma;
         end;
       end;
       Res.CancelLastComma;

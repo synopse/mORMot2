@@ -2473,7 +2473,7 @@ begin
         if ValuesInlinedMax > 1 then
           AddShorter('=:(')
         else
-          Add('=');
+          AddDirect('=');
         AddQuotedStr(pointer(Values[0]), length(Values[0]), '''');
         if ValuesInlinedMax > 1 then
           AddShorter('):');
@@ -2484,7 +2484,7 @@ begin
         for i := 0 to n - 1 do
         begin
           if ValuesInlinedMax > n then
-            Add(':', '(');
+            AddDirect(':', '(');
           AddQuotedStr(pointer(Values[i]), length(Values[i]), '''');
           if ValuesInlinedMax > n then
             AddShorter('):,')
@@ -2519,7 +2519,7 @@ begin
         if ValuesInlinedMax > 1 then
           AddShorter('=:(')
         else
-          Add('=');
+          AddDirect('=');
         Add(Values[0]);
         if ValuesInlinedMax > 1 then
           AddShorter('):');
@@ -2530,7 +2530,7 @@ begin
         for i := 0 to n - 1 do
         begin
           if ValuesInlinedMax > n then
-            Add(':', '(');
+            AddDirect(':', '(');
           Add(Values[i]);
           if ValuesInlinedMax > n then
             AddShorter('):,')
@@ -2832,7 +2832,7 @@ begin
         new := FastNewString(len + 3, CP_UTF8);
         new[0] := '"';
         MoveFast(c^^, new[1], len);
-        PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+        PCardinal(new + len + 1)^ := ord('"') + ord(':') shl 8;
         FastAssignNew(c^, new);
       end;
       inc(c);
@@ -2882,7 +2882,7 @@ begin
       new := FastNewString(len + 3, CP_UTF8);
       new[0] := '"';
       MoveFast(aColName^, new[1], len);
-      PWord(new + len + 1)^ := ord('"') + ord(':') shl 8;
+      PCardinal(new + len + 1)^ := ord('"') + ord(':') shl 8;
     end;
     FastAssignNew(ColNames[aColIndex], new);
   end
@@ -2899,7 +2899,7 @@ begin
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
-      Add('"' , ',');
+      AddDirect('"' , ',');
       fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
     end
     else
@@ -2929,9 +2929,9 @@ begin
       AddShort(',"rowCount":');
       Add(aRowsCount);
     end;
-    Add('}');
+    AddDirect('}');
   end;
-  Add(#10);
+  AddDirect(#10);
   if aFlushFinal then
     FlushFinal;
 end;
@@ -3870,7 +3870,7 @@ begin
         if not IsRowID(DecodedFieldNames^[f]) then
         begin
           W.AddNoJsonEscape(DecodedFieldNames^[f]);
-          W.Add('=');
+          W.AddDirect('=');
           AddValue;
         end;
       W.CancelLastComma;
@@ -3883,8 +3883,7 @@ begin
       begin
         // append 'COL1,COL2'
         W.AddNoJsonEscape(DecodedFieldNames^[f]);
-        W.B[1] := ',';
-        inc(W.B);
+        W.AddComma;
       end;
       W.CancelLastComma;
       W.AddShort(') values (');
@@ -3909,7 +3908,7 @@ begin
     exit;
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{');
+    W.AddDirect('{');
     for f := 0 to FieldCount - 1 do
     begin
       W.AddProp(DecodedFieldNames^[f]);
@@ -3920,8 +3919,7 @@ begin
           W.AddQuotedStringAsJson(FieldValues[f])
       else
         W.AddString(FieldValues[f]);
-      W.B[1] := ',';
-      inc(W.B);
+      W.AddComma;
     end;
     W.CancelLastComma;
     W.B[1] := '}';
@@ -3953,8 +3951,7 @@ begin
       for i := 0 to FieldCount - 1 do
       begin
         AddShort(FieldNames[i], FieldNamesL[i]);
-        B[1] := ',';
-        inc(B);
+        AddComma;
       end;
       CancelLastComma;
       SetText(result);

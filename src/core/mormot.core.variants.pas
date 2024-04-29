@@ -5030,25 +5030,20 @@ begin
           W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
         else
         begin
-          W.B[1] := '"';
-          inc(W.B);
+          W.AddDirect('"');
           W.AddJsonEscape(nam^);
-          W.B[1] := '"';
-          inc(W.B);
+          W.AddDirect('"');
         end;
-        W.B[1] := ':';
-        inc(W.B);
+        W.AddDirect(':');
         W.AddVariant(val^, twJsonEscape);
         dec(n);
         if n = 0 then
           break;
-        W.B[1] := ',';
-        inc(W.B);
+        W.AddComma;
         inc(nam);
         inc(val);
       until false;
-    W.B[1] := '}';
-    inc(W.B);
+    W.AddDirect('}');
   end
   else if PDocVariantData(Value)^.IsArray then
   begin
@@ -5059,12 +5054,10 @@ begin
         dec(n);
         if n = 0 then
           break;
-        W.B[1] := ',';
-        inc(W.B);
+        W.AddComma;
         inc(val);
       until false;
-    W.B[1] := ']';
-    inc(W.B);
+    W.AddDirect(']');
   end
   else
     W.AddNull;
@@ -8662,16 +8655,13 @@ begin
           W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
         else
         begin
-          W.Add('"');
+          W.AddDirect('"');
           W.AddJsonEscape(nam^);
-          W.B[1] := '"';
-          inc(W.B);
+          W.AddDirect('"');
         end;
-        W.B[1] := ':';
-        inc(W.B);
+        W.AddDirect(':');
         W.AddVariant(val^, twJsonEscape);
-        W.B[1] := ',';
-        inc(W.B);
+        W.AddComma;
       end;
       dec(n);
       if n = 0 then
@@ -8965,12 +8955,11 @@ begin
         else
         begin
           W.AddVariant(row^.VValue[f], twJsonEscape);
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
     end;
     W.CancelLastComma;
-    W.Add(']', '}');
+    W.AddDirect(']', '}');
     W.SetText(result);
   finally
     W.Free;

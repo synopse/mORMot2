@@ -837,21 +837,21 @@ begin
           if FunctionName <> '' then
           begin
             W.AddString(FunctionName);
-            W.Add('(');
+            W.AddDirect('(');
           end;
           if FunctionKnown = funcCountStar then
-            W.Add('*')
+            W.AddDirect('*')
           else
           begin
             W.AddString(fStoredClassMapping^.FieldNameByIndex(Field - 1));
             W.AddString(SubField);
           end;
           if FunctionName <> '' then
-            W.Add(')');
+            W.AddDirect(')');
           if ToBeAdded <> 0 then
           begin
             if ToBeAdded > 0 then
-              W.Add('+');
+              W.AddDirect('+');
             W.Add(ToBeAdded);
           end;
           if Alias <> '' then
@@ -872,11 +872,11 @@ begin
               W.AddString(name)
             else
             begin
-              W.Add('"');
+              W.AddDirect('"');
               W.AddString(FunctionName);
-              W.Add('(');
+              W.AddDirect('(');
               W.AddString(name);
-              W.Add(')', '"');
+              W.AddDirect(')', '"');
             end;
           end;
           W.AddComma;

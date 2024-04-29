@@ -1600,7 +1600,7 @@ begin
     exit;
   WR := TTextWriter.CreateOwnedStream(temp);
   try
-    WR.Add('[');
+    WR.AddDirect('[');
     for i := 0 to high(fInterface) do
     begin
       WR.AddString(fInterface[i].Service.Contract);

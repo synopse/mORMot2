@@ -4191,9 +4191,9 @@ begin
           AddComma;
           inc(i);
         until false;
-        Add(']');
+        AddDirect(']');
       end;
-      Add('}');
+      AddDirect('}');
       SetText(result);
     finally
       Free;

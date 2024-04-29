@@ -4234,8 +4234,7 @@ begin
             W.AddProp(item.Name, item.NameLen);
           if item.AddMongoJson(W, Mode, MaxSize) then
             exit;
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.B[1] := '}';
@@ -4250,8 +4249,7 @@ begin
               (W.TextLength > MaxSize)) or
              item.AddMongoJson(W, Mode, MaxSize) then
             exit;
-          W.B[1] := ',';
-          inc(W.B);
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.B[1] := ']';

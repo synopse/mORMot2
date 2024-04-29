@@ -4390,7 +4390,7 @@ begin
         dec(Len);
       WriteToStream(P, Len); // no need to transit huge content into fTempBuf
       if comma then
-        Add(','); // but we need the last comma to be cancelable
+        AddDirect(','); // but we need the last comma to be cancelable
     end;
 end;
 
@@ -4628,11 +4628,11 @@ begin
     AddShorter('void')
   else
     AddShort(ClassNameShort(Instance)^);
-  Add('(');
+  AddDirect('(');
   AddPointer(PtrUInt(Instance));
-  Add(')', '"');
+  AddDirect(')', '"');
   if SepChar <> #0 then
-    Add(SepChar);
+    AddDirect(SepChar);
 end;
 
 procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
@@ -4647,18 +4647,18 @@ begin
     if u^[0] <> #0 then
     begin
       AddShort(u^);
-      Add('.');
+      AddDirect('.');
     end;
   end;
   AddShort(PPShortString(PPAnsiChar(Instance)^ + vmtClassName)^^);
   if IncludePointer then
   begin
-    Add('(');
+    AddDirect('(');
     AddPointer(PtrUInt(Instance));
-    Add(')');
+    AddDirect(')');
   end;
   if SepChar<>#0 then
-    Add(SepChar);
+    AddDirect(SepChar);
 end;
 
 procedure TTextWriter.AddShort(Text: PUtf8Char; TextLen: PtrInt);
@@ -4673,7 +4673,10 @@ end;
 
 procedure TTextWriter.AddShort(const Text: ShortString);
 begin
-  AddShort(@Text[1], ord(Text[0]));
+  if BEnd - B <= 255 then
+    FlushToStream;
+  MoveFast(Text[1], B[1], ord(Text[0]));
+  inc(B, ord(Text[0]));
 end;
 
 procedure TTextWriter.AddLine(const Text: ShortString);
@@ -5330,7 +5333,7 @@ begin
             // characters below ' ', #9 e.g. -> // '&#x09;'
             AddShorter('&#x');
             AddByteToHex(ord(Text[i]));
-            Add(';');
+            AddDirect(';');
           end;
         '<':
           AddShorter('&lt;');
@@ -9194,7 +9197,7 @@ begin
         WR.AddShort('Exception]');
       end;
     end;
-    WR.Add(' ');
+    WR.AddDirect(' ');
     if WR.ClassType = TTextWriter then
       {$ifdef UNICODE}
       WR.AddOnSameLineW(pointer(Context.EInstance.Message), 0)
@@ -9206,9 +9209,9 @@ begin
   end
   else if Context.ECode <> 0 then
   begin
-    WR.Add(' ', '(');
+    WR.AddDirect(' ', '(');
     WR.AddPointer(Context.ECode);
-    WR.Add(')');
+    WR.AddDirect(')');
   end;
   result := false; // caller should append "at EAddr" and the stack trace
 end;

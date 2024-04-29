@@ -805,8 +805,7 @@ begin
     W.AddProp(sqlite3.column_name(fStatement.Request, col)); // '"ColumnName":'
     fStatement.FieldToJson(W,
       sqlite3.column_value(fStatement.Request, col), fForceBlobAsNull);
-    W.B[1] := ',';
-    inc(W.B);
+    W.AddComma;
   end;
   W.CancelLastComma; // cancel last ','
   W.B[1] := '}';

@@ -1222,15 +1222,13 @@ begin
                    not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                 begin
                   W.AddShort(ParamName^); // in JSON_FAST_EXTENDED format
-                  W.B[1] := ':';
-                  inc(W.B);
+                  W.AddDirect(':');
                   if rcfSpi in ArgRtti.Flags then
                     W.AddShorter('"****",')
                   else
                   begin
                     AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                    W.B[1] := ',';
-                    inc(W.B);
+                    W.AddComma;
                   end;
                 end;
             W.CancelLastComma;
@@ -1259,8 +1257,7 @@ begin
                   // write up to 1KB of result binary as Base64 text
                   W.AddShort(',result:"');
                   W.WrBase64(pointer(content), len, false);
-                  W.B[1] := '"';
-                  inc(W.B);
+                  W.AddDirect('"');
                 end;
               end
             else
@@ -1271,14 +1268,13 @@ begin
                      not ArgRtti.ValueIsVoid(Sender.Values[a]) then
                   begin
                     W.AddShort(ParamName^);
-                    W.Add(':');
+                    W.AddDirect(':');
                     if rcfSpi in ArgRtti.Flags then
                       W.AddShorter('"****",')
                     else
                     begin
                       AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
-                      W.B[1] := ',';
-                      inc(W.B);
+                      W.AddComma;
                     end;
                   end;
               W.CancelLastComma;
@@ -1288,10 +1284,9 @@ begin
         begin
           W.AddShort('},Output:{');
           W.AddClassName(Sender.LastException.ClassType);
-          W.Add(':', '"');
+          W.AddDirect(':', '"');
           W.AddJsonEscapeString(Sender.LastException.Message);
-          W.B[1] := '"';
-          inc(W.B);
+          W.AddDirect('"');
         end;
     end;
 end;
@@ -1328,7 +1323,7 @@ begin
     [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUtc, timeEnd]);
   ip := Ctxt.RemoteIPNotLocal;
   if ip = nil then
-    W.Add('}', ',')
+    W.AddDirect('}', ',')
   else
   begin
     W.AddShorter(',IP:"');
