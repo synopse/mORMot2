@@ -7278,9 +7278,14 @@ begin
     // inlined IdemPropNameUSameLenNotNull(p, name, namelen)
     p1 := pointer(result^.Name);
     if (p1 <> nil) and // Name may be '' after NameChange()
-       (PStrLen(p1 - _STRLEN)^ = namelen) then
+       (PStrLen(p1 - _STRLEN)^ = namelen) and      // compare lengths
+       ((ord(p1^) xor ord(p2^)) and $df = 0) then  // compare first char
     begin
-      l := @p1[namelen - SizeOf(cardinal)];
+      if namelen = 1 then
+        exit; // match found
+      inc(p1);
+      inc(p2);
+      l := @p1[namelen - (SizeOf(cardinal) + 1)];
       dec(p2, PtrUInt(p1));
       while PtrUInt(l) >= PtrUInt(p1) do
         // compare 4 Bytes per loop
