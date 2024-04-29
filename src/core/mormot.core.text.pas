@@ -5172,26 +5172,28 @@ var
   beg: PUtf8Char;
   esc: PAnsiCharToByte;
 begin
-  if Text = nil then
-    exit;
-  if Fmt <> hfNone then
-  begin
-    esc := @HTML_ESC[Fmt];
-    beg := Text;
-    repeat
-      while esc[Text^] = 0 do
-        inc(Text);
-      AddNoJsonEscape(beg, Text - beg);
-      if Text^ = #0 then
-        exit
-      else
-        AddShorter(HTML_ESCAPED[esc[Text^]]);
-      inc(Text);
+  if Text <> nil then
+    if Fmt <> hfNone then
+    begin
+      esc := @HTML_ESC[Fmt];
       beg := Text;
-    until Text^ = #0;
-  end
-  else
-    AddNoJsonEscape(Text, mormot.core.base.StrLen(Text)); // hfNone
+      repeat
+        while true do
+          if esc[Text^] = 0 then
+            inc(Text)
+          else
+            break;
+        AddNoJsonEscape(beg, Text - beg);
+        if Text^ = #0 then
+          exit
+        else
+          AddShorter(HTML_ESCAPED[esc[Text^]]);
+        inc(Text);
+        beg := Text;
+      until Text^ = #0;
+    end
+    else
+      AddNoJsonEscape(Text, mormot.core.base.StrLen(Text)); // hfNone
 end;
 
 function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
