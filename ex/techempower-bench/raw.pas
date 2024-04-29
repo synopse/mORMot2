@@ -93,7 +93,7 @@ type
     fModel: TOrmModel;
     fStore: TRestServerDB;
     fTemplate: TSynMustache;
-    fCachedWorldsTable: POrmCacheTable;
+    fOrmCache: POrmCacheTable;
     fRawCache: TOrmWorlds;
     {$ifdef USE_SQLITE3}
     fDbPool: TSqlDBSQLite3ConnectionProperties;
@@ -213,10 +213,10 @@ begin
   {$else}
   fStore.Server.CreateMissingTables; // create SQlite3 virtual tables
   {$endif USE_SQLITE3}
-  // pre-fill the ORM
+  // ORM and raw caches warmup
   if fStore.Server.Cache.SetCache(TOrmCachedWorld) then
     fStore.Server.Cache.FillFromQuery(TOrmCachedWorld, '', []);
-  fCachedWorldsTable := fStore.Orm.Cache.Table(TOrmCachedWorld);
+  fOrmCache := fStore.Orm.Cache.Table(TOrmCachedWorld);
   fStore.Orm.RetrieveListObjArray(fRawCache, TOrmCachedWorld, 'order by id', []);
   // initialize the mustache template for /fortunes
   fTemplate := TSynMustache.Parse(FORTUNES_TPL);
@@ -458,7 +458,7 @@ begin
   SetLength(res, GetQueriesParamValue(ctxt, 'COUNT='));
   gen := Lecuyer;
   for i := 0 to length(res) - 1 do
-    res[i] := fCachedWorldsTable.Get(ComputeRandomWorld(gen));
+    res[i] := fOrmCache.Get(ComputeRandomWorld(gen));
   ctxt.SetOutJson(@res, TypeInfo(TOrmWorlds));
   result := HTTP_SUCCESS;
 end;
@@ -749,8 +749,8 @@ begin
   n := count;
   gen := Lecuyer;
   repeat
-    dec(n);
     select.Bind(1, ComputeRandomWorld(gen));
+    dec(n);
     if n = 0 then // last item should include asoForceConnectionFlush (if set)
       opt := ASYNC_OPT;
     select.ExecuteAsync(ctxt, OnQueries, @opt);
