@@ -158,7 +158,6 @@ type
     procedure TranslateBlock(Text: PUtf8Char; TextLen: Integer); virtual;
     function GetVariantFromContext(const ValueName: RawUtf8): variant;
     procedure PopContext;
-    procedure AppendVariant(const Value: variant; UnEscape: boolean);
     // inherited class should override those methods used by RenderContext()
     function GotoNextListItem: boolean;
       virtual; abstract;
@@ -658,28 +657,6 @@ begin
     fWriter.AddNoJsonEscape(Text, TextLen);
 end;
 
-procedure TSynMustacheContext.AppendVariant(
-  const Value: variant; UnEscape: boolean);
-var
-  tmp: TTempUtf8;
-  wasString: boolean;
-begin
-  if fEscapeInvert then
-    UnEscape := not UnEscape;
-  if TVarData(Value).VType > varNull then
-    if Unescape or
-       VarIsNumeric(Value) then
-      // avoid RawUtf8 conversion for plain numbers or if no HTML escaping
-      fWriter.AddVariant(Value, twNone)
-    else
-    begin
-      VariantToTempUtf8(Value, tmp, wasString);
-      fWriter.AddHtmlEscape(tmp.Text, tmp.Len);
-      if tmp.TempRawUtf8 <> nil then
-        FastAssignNew(tmp.TempRawUtf8);
-    end;
-end;
-
 function TSynMustacheContext.GetVariantFromContext(
   const ValueName: RawUtf8): variant;
 var
@@ -945,8 +922,11 @@ procedure TSynMustacheContextVariant.AppendValue(ValueSpace: integer;
 var
   Value: TVarData;
 begin
+  if fEscapeInvert then
+    UnEscape := not UnEscape;
   GetVarDataFromContext(ValueSpace, ValueName, Value);
-  AppendVariant(variant(Value), UnEscape);
+  if Value.VType > varNull then
+    fWriter.AddVarData(@Value, not UnEscape);
 end;
 
 function SectionIsPseudo(const ValueName: RawUtf8; ListCount, ListCurrent: integer): boolean;
@@ -1161,104 +1141,21 @@ procedure TSynMustacheContextData.AppendValue(ValueSpace: integer;
   const ValueName: RawUtf8; UnEscape: boolean);
 var
   d: pointer;
-  p: PUtf8Char;
   rc: TRttiCustom;
-  l: PtrInt;
   tmp: TVarData;
 begin
+  if fEscapeInvert then
+    UnEscape := not UnEscape;
   if GetDataFromContext(ValueName, rc, d) then
-  begin
     // we can directly append the {{###}} found data
-    if fEscapeInvert then
-      UnEscape := not UnEscape;
-    case rc.Parser of // FPC generates a jump table for this case statement
-      // try direct UTF-8 and UTF-16 strings (escaped) rendering
-      {$ifndef UNICODE}
-      ptString,
-      {$endif UNICODE}
-      ptRawUtf8,
-      ptRawJson,
-      ptPUtf8Char:
-        begin
-          p := PPointer(d)^;
-          if p <> nil then
-            if UnEscape then
-            begin
-              if rc.Parser = ptPUtf8Char then
-                l := mormot.core.base.StrLen(p)
-              else
-                l := PStrLen(p - _STRLEN)^;
-              fWriter.AddNoJsonEscape(p, l);
-            end
-            else
-              fWriter.AddHtmlEscape(p); // faster with no length
-        end;
-      {$ifdef UNICODE}
-      ptString,
-      {$endif UNICODE}
-      {$ifdef HASVARUSTRING}
-      ptUnicodeString,
-      {$endif HASVARUSTRING}
-      ptSynUnicode,
-      ptWideString:
-        if UnEscape then
-          fWriter.AddNoJsonEscapeW(PPWord(d)^, 0)
-        else
-          fWriter.AddHtmlEscapeW(PPWideChar(d)^);
-      // unescaped (and unquoted) numbers, date/time, guid or hash
-      ptByte:
-        fWriter.AddU(PByte(d)^);
-      ptWord:
-        fWriter.AddU(PWord(d)^);
-      ptInteger:
-        fWriter.Add(PInteger(d)^);
-      ptCardinal:
-        fWriter.AddU(PCardinal(d)^);
-      ptInt64:
-        fWriter.Add(PInt64(d)^);
-      ptQWord:
-        fWriter.AddQ(PQWord(d)^);
-      ptDouble:
-        fWriter.AddDouble(unaligned(PDouble(d)^));
-      ptCurrency:
-        fWriter.AddCurr64(d);
-      ptBoolean:
-        fWriter.Add(PBoolean(d)^);
-      ptDateTime,
-      ptDateTimeMS:
-        fWriter.AddDateTime(d, 'T', #0, rc.Parser = ptDateTimeMS, {wtime=}true);
-      ptUnixTime:
-        fWriter.AddUnixTime(d);
-      ptUnixMSTime:
-        fWriter.AddUnixMSTime(d, {withms=}true);
-      ptTimeLog:
-        fWriter.AddTimeLog(d);
-      ptGuid:
-        fWriter.Add(PGuid(d), #0);
-      ptHash128,
-      ptHash256,
-      ptHash512:
-        fWriter.AddBinToHexDisplayLower(d, rc.Size);
-    else
-      if rcfIsNumber in rc.Cache.Flags then
-        // ordinals or floats don't need any HTML escape nor quote
-        fWriter.AddRttiCustomJson(d, rc, twNone, [])
-      else
-      begin
-        // use a temporary variant for any complex content (including JSON)
-        rc.ValueToVariant(d, tmp, @JSON_[mFastFloat]);
-        if fEscapeInvert then
-          UnEscape := not UnEscape; // AppendVariant() will reverse it
-        AppendVariant(variant(tmp), UnEscape);
-        VarClearProc(tmp);
-      end;
-    end;
-  end
+    rc.ValueWriteText(d, fWriter, not UnEscape)
   else
   begin
     // try {{helper value}} or {{helper}}
     GetHelperFromContext(ValueSpace, ValueName, tmp, {owned=}nil);
-    AppendVariant(variant(tmp), UnEscape);
+    if tmp.VType <= varNull then
+      exit;
+    fWriter.AddVarData(@tmp, not UnEscape);
     VarClearProc(tmp);
   end;
 end;
