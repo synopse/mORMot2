@@ -972,14 +972,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
       aPreviousIndex: PInteger): boolean;
-    function InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
+    function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
       {$ifdef HASSAFEINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
-    function InternalNextPath(var aCsv: PUtf8Char; aName: PShortString;
-      aPathDelim: AnsiChar): PtrInt;
+    function InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
+      out aLen: PtrInt): PtrInt;
       {$ifdef FPC}inline;{$endif}
     procedure InternalNotFound(var Dest: variant; aName: PUtf8Char); overload;
     procedure InternalNotFound(var Dest: variant; aIndex: integer); overload;
@@ -1657,8 +1657,7 @@ type
     // - this method will only handle nested TDocVariant values: use the
     // slightly slower GetValueByPath() overloaded method, if any nested object
     // may be of another type (e.g. a TBsonVariant)
-    function GetValueByPath(
-      const aDocVariantPath: array of RawUtf8): variant; overload;
+    function GetValueByPath(const aDocVariantPath: array of RawUtf8): variant; overload;
     /// retrieve a reference to a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - if the supplied aPath does not match any object, it will return nil
@@ -6836,16 +6835,17 @@ begin
             (FastVarDataComp(@aValue, pointer(v), aCaseInsensitive) = 0);
 end;
 
-function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: integer): integer;
+function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
 var
-  tmp: RawUtf8; // so that the caller won't need to reserve such a temp var
+  tmp: pointer; // so that the caller won't need to reserve such a temp var
 begin
-  FastSetString(tmp, aName, aNameLen);
-  result := InternalAdd(tmp, -1);
+  tmp := nil;
+  FastSetString(RawUtf8(tmp), aName, aNameLen);
+  result := InternalAdd(RawUtf8(tmp), -1);
+  FastAssignNew(tmp);
 end;
 
-function TDocVariantData.InternalAdd(
-  const aName: RawUtf8; aIndex: integer): integer;
+function TDocVariantData.InternalAdd(const aName: RawUtf8; aIndex: integer): integer;
 var
   len: integer;
   v: PVariantArray;
@@ -8059,21 +8059,30 @@ begin
     inc(result, ord(Delete(aNames[n])));
 end;
 
-function TDocVariantData.InternalNextPath(
-  var aCsv: PUtf8Char; aName: PShortString; aPathDelim: AnsiChar): PtrInt;
+function TDocVariantData.InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
+  out aLen: PtrInt): PtrInt;
+var
+  c: PUtf8Char;
 begin
-  GetNextItemShortString(aCsv, aName, aPathDelim);
-  if (VCount <> 0) and
-     (aName^[0] <> #0) then
+  c := aCsv;
+  if c <> nil then
+    while true do
+      if (c^ = #0) or
+         (c^ = aPathDelim) then
+        break
+      else
+        inc(c);
+  aLen := c - aCsv;
+  if (aLen <> 0) and
+     (VCount <> 0) then
     if VName <> nil then
     begin
-      result := FindNonVoid[IsCaseSensitive](
-        pointer(VName), @aName^[1], ord(aName^[0]), VCount);
+      result := FindNonVoid[IsCaseSensitive](pointer(VName), aCsv, aLen, VCount);
       exit;
     end
-    else
+    else if aCsv^ in ['0' .. '9'] then
     begin
-      result := GetCardinalDef(@aName^[1], PtrUInt(-1));
+      result := GetCardinal(aCsv, c);
       if PtrUInt(result) < PtrUInt(VCount) then // array index integer as text
         exit;
     end;
@@ -8117,26 +8126,30 @@ function TDocVariantData.DeleteByPath(const aPath: RawUtf8;
 var
   csv: PUtf8Char;
   dv: PDocVariantData;
-  ndx: PtrInt;
-  n: ShortString;
+  ndx, namelen: PtrInt;
 begin
   result := false;
-  if IsArray then
-    exit;
   csv := pointer(aPath);
+  if IsArray or
+     (csv = nil) then
+    exit;
   dv := @self;
   repeat
-    ndx := dv^.InternalNextPath(csv, @n, aPathDelim);
-    if csv = nil then
+    ndx := dv^.InternalNextPath(csv, aPathDelim, namelen);
+    if ndx < 0 then
+      exit;
+    inc(csv, namelen);
+    if csv^ = #0 then
     begin
       // we reached the last item of the path, which is to be deleted
       if aDeletedValue <> nil then
-        aDeletedValue^ := dv^.VValue[ndx];
+        aDeletedValue^ := dv^.VValue[ndx]; // make copy before deletion
       result := dv^.Delete(ndx);
       exit;
     end;
+    inc(csv); // ignore aPathDelim
   until (ndx < 0) or
-       not _SafeObject(dv^.VValue[ndx], dv);
+       not _Safe(dv^.VValue[ndx], dv);
 end;
 
 function TDocVariantData.DeleteByProp(const aPropName, aPropValue: RawUtf8;
@@ -8490,13 +8503,12 @@ begin
   result := true;
 end;
 
-function TDocVariantData.GetPVariantByPath(
-  const aPath: RawUtf8; aPathDelim: AnsiChar): PVariant;
+function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8;
+  aPathDelim: AnsiChar): PVariant;
 var
-  ndx: PtrInt;
+  ndx, namelen: PtrInt;
   vt: cardinal;
   csv: PUtf8Char;
-  n: ShortString;
 begin
   result := @self;
   csv := pointer(aPath);
@@ -8510,12 +8522,14 @@ begin
       until false;
       if vt <> DocVariantVType then
         break;
-      ndx := PDocVariantData(result)^.InternalNextPath(csv, @n, aPathDelim);
+      ndx := PDocVariantData(result)^.InternalNextPath(csv, aPathDelim, namelen);
       if ndx < 0 then
         break;
+      inc(csv, namelen);
       result := @PDocVariantData(result)^.VValue[ndx];
-      if csv = nil then
-        exit; // exhausted all path, so result is the found item
+      if csv^ = #0 then
+        exit; // exhausted whole path, so result is the found item
+      inc(csv); // aPathDelim
     until false;
   result := nil;
 end;
@@ -8716,8 +8730,7 @@ function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
 var
   csv: PUtf8Char;
   v: PDocVariantData;
-  ndx: PtrInt;
-  n: ShortString;
+  ndx, namelen: PtrInt;
 begin
   result := false;
   if IsArray then
@@ -8725,23 +8738,24 @@ begin
   csv := pointer(aPath);
   v := @self;
   repeat
-    ndx := v^.InternalNextPath(csv, @n, aPathDelim);
-    if csv = nil then
+    ndx := v^.InternalNextPath(csv, aPathDelim, namelen);
+    if csv[namelen] = #0 then
       break; // we reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting then
       begin
-        ndx := v^.InternalAddBuf(@n[1], ord(n[0])); // in two steps for FPC
+        ndx := v^.InternalAddBuf(csv, namelen); // in two steps for FPC
         v := @v^.VValue[ndx];
         v^.InitClone(self); // same Options than root but with no Kind
       end
       else
         exit
-    else if not _SafeObject(v^.VValue[ndx], v) then
+    else if not _Safe(v^.VValue[ndx], v) then
       exit; // incorrect path
+    inc(csv, namelen + 1); // next
   until false;
   if ndx < 0 then
-    ndx := v^.InternalAddBuf(@n[1], ord(n[0]));
+    ndx := v^.InternalAddBuf(csv, namelen);
   v^.InternalSetValue(ndx, aValue);
   result := true;
 end;
