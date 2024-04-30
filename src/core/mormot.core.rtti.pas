@@ -7040,7 +7040,7 @@ begin
   else
   begin
     GetValueGetter(Data, rvd);
-    case rvd.DataType of
+    case cardinal(rvd.DataType) of
       varEmpty,
       varNull:
         result := true;
@@ -7497,11 +7497,11 @@ begin
         with List[i] do
         begin
           if i > 0 then
-            Add(',', ' ');
+            AddDirect(',', ' ');
           AddNoJsonEscapeUtf8(Name);
           if IncludePropType then
           begin
-            Add(':', ' ');
+            AddDirect(':', ' ');
             AddString(Value.Name);
           end;
         end;

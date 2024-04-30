@@ -59,8 +59,8 @@ function VarIsVoid(const V: Variant): boolean;
 function VarStringOrNull(const v: RawUtf8): variant;
 
 type
-  /// a set of simple TVarData.VType, as specified to VarIs()
-  TVarDataTypes = set of 0..255;
+  /// a set of simple TVarData.VType values, as specified to VarIs()
+  TVarDataTypes = set of 0..31;
 
 /// allow to check for a specific set of TVarData.VType
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): boolean;
@@ -3525,7 +3525,7 @@ begin // [dvoIsArray]=1 [dvoIsObject]=2 -> dvUndefined=0 dvArray=1 dvObject=2
 end;
 
 function TDocVariantData.Has(dvo: TDocVariantOption): boolean;
-begin
+begin // faster equivalency to "result := dvo in VOptions;"
   result := (TRttiVarData(self).VType and (1 shl (ord(dvo) + 16))) <> 0;
 end;
 
@@ -3557,6 +3557,27 @@ begin
     InternalUniqueValueAt(aIndex);
 end;
 
+function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
+var
+  n: integer;
+  t: ^TSynInvokeableVariantType;
+begin
+  if (aVarType >= varFirstCustom) and
+     (aVarType < varArray) then
+  begin
+    t := pointer(SynVariantTypes);
+    n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
+    repeat
+      result := t^;
+      if result.VarType = aVarType then
+        exit;
+      inc(t);
+      dec(n);
+    until n = 0;
+  end;
+  result := nil;
+end;
+
 
 { ************** Low-Level Variant Wrappers }
 
@@ -3582,7 +3603,7 @@ end;
 
 function VarIsVoid(const V: Variant): boolean;
 var
-  vt: cardinal;
+  vt: PtrUInt;
   custom: TSynInvokeableVariantType;
 begin
   vt := TVarData(V).VType;
@@ -4256,27 +4277,6 @@ var
 
   /// list of custom types (but not DocVariantVType) supporting TryJsonToVariant
   SynVariantTryJsonTypes: array of TSynInvokeableVariantType;
-
-function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
-var
-  n: integer;
-  t: ^TSynInvokeableVariantType;
-begin
-  if (aVarType >= varFirstCustom) and
-     (aVarType < varArray) then
-  begin
-    t := pointer(SynVariantTypes);
-    n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
-    repeat
-      result := t^;
-      if result.VarType = aVarType then
-        exit;
-      inc(t);
-      dec(n);
-    until n = 0;
-  end;
-  result := nil;
-end;
 
 function SynRegisterCustomVariantType(
   aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
