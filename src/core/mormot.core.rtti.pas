@@ -3439,7 +3439,7 @@ begin
       if GetBitPtr(@Value, j) then
       begin
         if QuoteChar <> #0 then
-          W.Add(QuoteChar);
+          W.AddDirect(QuoteChar);
         if ForceTrim then
           W.AddTrimLeftLowerCase(PS)
         else

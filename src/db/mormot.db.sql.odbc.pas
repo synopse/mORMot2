@@ -903,7 +903,7 @@ begin
             W.Add('"');
             if ColumnDataSize > 1 then
               W.AddJsonEscapeW(Pointer(fColData[Col]), ColumnDataSize shr 1);
-            W.Add('"');
+            W.AddDirect('"');
           end;
         ftBlob:
           if fForceBlobAsNull then

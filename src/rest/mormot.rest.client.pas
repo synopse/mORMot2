@@ -2443,7 +2443,7 @@ begin
         if Ctxt.OutHead = '' then
         begin
           // <>'' if set via TServiceCustomAnswer
-          WR.Add(']', '}');
+          WR.AddDirect(']', '}');
           Ctxt.OutStatus := HTTP_SUCCESS;
         end;
         Ctxt.OutBody := WR.Text;

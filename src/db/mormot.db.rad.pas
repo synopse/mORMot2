@@ -771,7 +771,7 @@ begin
           begin
             W.Add('"');
             W.AddDateTime(f.AsDateTime, fForceDateWithMS);
-            W.Add('"');
+            W.AddDirect('"');
           end;
         mormot.db.core.ftUtf8:
           begin
@@ -782,7 +782,7 @@ begin
             else
           {$endif UNICODE}
               W.AddJsonEscapeString(f.AsString);
-            W.Add('"');
+            W.AddDirect('"');
           end;
         mormot.db.core.ftBlob:
           if fForceBlobAsNull then

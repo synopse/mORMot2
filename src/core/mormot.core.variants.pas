@@ -8654,7 +8654,7 @@ begin
   UpperCopy255(Up, aStartName)^ := #0;
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{');
+    W.AddDirect('{');
     n := VCount;
     nam := pointer(VName);
     val := pointer(VValue);
@@ -8939,9 +8939,9 @@ begin
     W.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
     for f := 0 to fieldCount - 1 do
     begin
-      W.Add('"');
+      W.AddDirect('"');
       W.AddJsonEscape(pointer(field[f]));
-      W.Add('"', ',');
+      W.AddDirect('"', ',');
     end;
     for r := 0 to VCount - 1 do
     begin

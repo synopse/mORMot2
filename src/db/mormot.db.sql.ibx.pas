@@ -1009,7 +1009,7 @@ begin
             s := fResults[Col].AsString;
             W.AddJsonEscape(pointer(s));
           end;
-          W.Add('"');
+          W.AddDirect('"');
         end;
       SQL_DOUBLE,
       SQL_D_FLOAT:
@@ -1026,7 +1026,7 @@ begin
         begin
           W.Add('"');
           W.AddDateTime(fResults[Col].GetAsDateTime, fForceDateWithMS);
-          W.Add('"');
+          W.AddDirect('"');
         end;
       SQL_BOOLEAN:
         W.Add(PByte(data)^ = 1);
@@ -1065,7 +1065,7 @@ begin
               s := fResults[Col].AsString;
               W.Add('"');
               W.AddJsonEscape(pointer(s));
-              W.Add('"');
+              W.AddDirect('"');
             end
             else
             begin

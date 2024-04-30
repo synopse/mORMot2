@@ -961,7 +961,7 @@ begin
           begin
             W.Add('"');  // SQLT_INTERVAL_YM/SQLT_INTERVAL_DS
             W.AddDateTime(IntervalTextToDateTime(V));
-            W.Add('"');
+            W.AddDirect('"');
           end;
         ftUtf8:
           begin
@@ -973,7 +973,7 @@ begin
                 OCI.ClobFromDescriptor(self, fContext, fError,
                   PPOCIDescriptor(V)^, ColumnValueDBForm, U, false);
             W.AddJsonEscape(pointer(U));
-            W.Add('"');
+            W.AddDirect('"');
           end;
         ftBlob:
           if fForceBlobAsNull then

@@ -3875,7 +3875,7 @@ begin
     else
     begin
       // returns ' (COL1,COL2) values ('VAL1',VAL2)'
-      W.Add(' ', '(');
+      W.AddDirect(' ', '(');
       for f := 0 to FieldCount - 1 do
       begin
         // append 'COL1,COL2'

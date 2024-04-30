@@ -6497,12 +6497,12 @@ begin
     for F := 0 to FMax do
     begin
       if not Tab then
-        W.Add('"');
+        W.AddDirect('"');
       W.AddString(ColumnName(F));
       if Tab then
-        W.Add(#9)
+        W.AddDirect(#9)
       else
-        W.Add('"', CommaSep);
+        W.AddDirect('"', CommaSep);
     end;
     W.CancelLastChar;
     W.AddCR;
@@ -6530,14 +6530,14 @@ begin
                 W.Add('"');
               W.AddDateTime(V.VDateTime, svoDateWithMS in V.Options);
               if not Tab then
-                W.Add('"');
+                W.AddDirect('"');
             end;
           ftUtf8:
             if not Tab then
             begin
               W.Add('"');
               W.AddJsonEscape(V.VText);
-              W.Add('"');
+              W.AddDirect('"');
             end
             else
               W.AddNoJsonEscape(V.VText, StrLen(V.VText));
@@ -6551,7 +6551,7 @@ begin
         if F = FMax then
           W.AddCR
         else
-          W.Add(CommaSep);
+          W.AddDirect(CommaSep);
       end;
       inc(result);
       if (maxmem > 0) and

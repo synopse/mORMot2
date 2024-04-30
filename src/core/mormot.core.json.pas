@@ -4615,9 +4615,9 @@ begin
             if Name.Len = 0 then
               continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
-              Add(sep);
+              AddDirect(sep);
             AddShort(Name.Text, Name.Len);
-            Add('=');
+            AddDirect('=');
             AddString(UrlEncode(Value.Text));
             sep := '&';
             IncludeQueryDelimiter := true;
@@ -4946,7 +4946,7 @@ begin
             AddJsonEscape(Params[P]) // does the JSON magic including "quotes"
           else
           begin
-            Add(':', '('); // markup for SQL parameter binding
+            AddDirect(':', '('); // markup for SQL parameter binding
             VarRecToTempUtf8(Params[P], tmp, @wasString);
             if wasString then
               AddQuotedStr(tmp.Text, tmp.Len, '''') // SQL quote
@@ -4954,7 +4954,7 @@ begin
               AddShort(tmp.Text, tmp.Len); // numbers
             if tmp.TempRawUtf8 <> nil then
               RawUtf8(tmp.TempRawUtf8) := '';  // release temp memory
-            Add(')', ':');
+            AddDirect(')', ':');
           end;
           inc(P);
         end
@@ -4997,8 +4997,7 @@ end;
 // some methods defined here for proper inlining
 procedure TJsonWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
-  B[1] := ',';
-  inc(B);
+  AddComma;
   if woHumanReadable in Options then
     AddCRAndIndent;
 end;
@@ -5022,8 +5021,7 @@ begin
     dec(fHumanReadableLevel);
     AddCRAndIndent;
   end;
-  B[1] := Stopper;
-  inc(B);
+  AddDirect(Stopper);
 end;
 
 
@@ -5078,14 +5076,14 @@ begin
       if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
         W.AddShort('T00:00:00Z') // the same pattern for date and dateTime
       else
-        W.Add('Z');
+        W.AddDirect('Z');
   W.AddDirect('"');
 end;
 
 procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
 begin
   AddShort(PS);
-  W.Add(':');
+  W.AddDirect(':');
   W.Add(Value);
 end;
 
@@ -5335,22 +5333,21 @@ var
   _str: ShortString;
 begin
   Ctxt.W.Add(Data^);
-  if woIDAsIDstr in Ctxt.Options then
+  if not (woIDAsIDstr in Ctxt.Options) then
+    exit;
+  Ctxt.W.BlockAfterItem(Ctxt.Options);
+  if (Ctxt.Prop <> nil) and
+     (Ctxt.Prop^.Name <> '') then
   begin
-    Ctxt.W.BlockAfterItem(Ctxt.Options);
-    if (Ctxt.Prop <> nil) and
-       (Ctxt.Prop^.Name <> '') then
-    begin
-      Ansi7StringToShortString(Ctxt.Prop^.Name, _str);
-      AppendShort('_str', _str);
-      Ctxt.W.WriteObjectPropNameShort(_str, Ctxt.Options);
-    end
-    else
-      Ctxt.W.WriteObjectPropNameShort('ID_str', Ctxt.Options);
-    Ctxt.W.Add('"');
-    Ctxt.W.Add(Data^);
-    Ctxt.W.AddDirect('"');
-  end;
+    Ansi7StringToShortString(Ctxt.Prop^.Name, _str);
+    AppendShort('_str', _str);
+    Ctxt.W.WriteObjectPropNameShort(_str, Ctxt.Options);
+  end
+  else
+    Ctxt.W.WriteObjectPropNameShort('ID_str', Ctxt.Options);
+  Ctxt.W.AddDirect('"');
+  Ctxt.W.Add(Data^);
+  Ctxt.W.AddDirect('"');
 end;
 
 procedure _JS_Enumeration(Data: PByte; const Ctxt: TJsonSaveContext);
@@ -5669,7 +5666,7 @@ procedure AppendExceptionLocation(w: TJsonWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
   w.Add('"');
   w.AddShort(GetExecutableLocation(e.RaisedAt));
-  w.Add('"');
+  w.AddDirect('"');
 end;
 
 // serialization of properties for both records and classes
@@ -5996,7 +5993,7 @@ procedure TJsonWriter.WriteObjectPropNameHumanReadable(
 begin
   AddCRAndIndent; // won't do anything if has already been done
   AddProp(PropName, PropNameLen); // handle twoForceJsonExtended
-  Add(' ');
+  AddDirect(' ');
 end;
 
 procedure TJsonWriter.WriteObjectPropNameShort(const PropName: ShortString;
@@ -6354,7 +6351,7 @@ begin
     end;
   end;
   if withMagic then
-    Add('"');
+    AddDirect('"');
 end;
 
 procedure TJsonWriter.BinarySaveBase64(Data: pointer; Info: PRttiInfo;
@@ -6475,7 +6472,7 @@ begin
     until false;
     if P - B <> 0 then
       AddJsonEscape(B, P - B);
-    Add('"');
+    AddDirect('"');
   end
   else // was not a quoted string
     AddNoJsonEscape(pointer(QuotedString), length(QuotedString));
@@ -6623,10 +6620,8 @@ begin
   {$else}
   Add(pointer(Text), length(Text), Escape);
   {$endif HASCODEPAGE}
-  if Escape <> twJsonEscape then
-    exit;
-  B[1] := '"';
-  inc(B);
+  if Escape = twJsonEscape then
+    AddDirect('"');
 end;
 
 procedure TJsonWriter.AddTextW(P: PWord; Escape: TTextWriterKind);
@@ -6634,10 +6629,8 @@ begin
   if Escape = twJsonEscape then
     Add('"');
   AddW(P, 0, Escape);
-  if Escape <> twJsonEscape then
-    exit;
-  B[1] := '"';
-  inc(B);
+  if Escape = twJsonEscape then
+    AddDirect('"');
 end;
 
 function TJsonWriter.AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
@@ -6737,7 +6730,7 @@ begin
             Json := AddJsonReformat(Json, Format, @objEnd);
             if objEnd = '}' then
               break;
-            Add(objEnd);
+            AddDirect(objEnd);
             if Format in [jsonHumanReadable, jsonUnquotedPropName] then
               AddCRAndIndent;
           until false;
@@ -6826,17 +6819,17 @@ begin
             exit;
           Add('<');
           if ArrayName = nil then
-            Add(n)
+            AddU(n)
           else
             AddXmlEscape(ArrayName);
-          Add('>');
+          AddDirect('>');
           Json := AddJsonToXML(Json, nil, @info.EndOfObject);
-          Add('<', '/');
+          AddDirect('<', '/');
           if ArrayName = nil then
-            Add(n)
+            AddU(n)
           else
             AddXmlEscape(ArrayName);
-          Add('>');
+          AddDirect('>');
           inc(n);
         until info.EndOfObject = ']';
       end;
@@ -6864,11 +6857,11 @@ begin
           begin
             Add('<');
             AddXmlEscape(Name);
-            Add('>');
+            AddDirect('>');
             Json := AddJsonToXML(Json, Name, @info.EndOfObject);
-            Add('<', '/');
+            AddDirect('<', '/');
             AddXmlEscape(Name);
-            Add('>');
+            AddDirect('>');
           end;
         until info.EndOfObject = '}';
       end;
@@ -7037,7 +7030,7 @@ begin
       AddByteToHex(c);
     end
     else
-      Add('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
+      AddDirect('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
     inc(i);
   end;
 end;
@@ -7221,8 +7214,7 @@ procedure TJsonWriter.AddJsonString(const Text: RawUtf8);
 begin
   Add('"');
   AddJsonEscape(pointer(Text));
-  B[1] := '"';
-  inc(B);
+  AddDirect('"');
 end;
 
 procedure TJsonWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
@@ -7356,7 +7348,7 @@ var
             if VarRecAsChar(NameValuePairs[a]) = ord('}') then
               break;
             AddJsonEscape(NameValuePairs[a]);
-            Add(':');
+            AddDirect(':');
             inc(a);
             WriteValue;
           end;
@@ -9129,7 +9121,7 @@ var
 begin
   with TJsonWriter.CreateOwnedStream(temp) do
   try
-    Add('{');
+    AddDirect('{');
     for i := 0 to Count - 1 do
       with List[i] do
       begin
@@ -9253,7 +9245,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(65536);
   try
-    W.Add('{');
+    W.AddDirect('{');
     AddJson(W);
     W.CancelLastComma('}');
     W.SetText(result, reformat);
@@ -10905,9 +10897,9 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('[');
+    W.AddDirect('[');
     W.AddCsvDouble(Values);
-    W.Add(']');
+    W.AddDirect(']');
     W.SetText(result);
   finally
     W.Free
@@ -10921,9 +10913,9 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('[');
+    W.AddDirect('[');
     W.AddCsvUtf8(Values);
-    W.Add(']');
+    W.AddDirect(']');
     W.SetText(result);
   finally
     W.Free
@@ -10937,9 +10929,9 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('[');
+    W.AddDirect('[');
     W.AddCsvInteger(Values);
-    W.Add(']');
+    W.AddDirect(']');
     W.SetText(result);
   finally
     W.Free
@@ -10966,10 +10958,10 @@ begin
     with TJsonWriter.CreateOwnedStream(temp) do
     try
       if not WithoutBraces then
-        Add('[');
+        AddDirect('[');
       AddCsvConst(Values);
       if not WithoutBraces then
-        Add(']');
+        AddDirect(']');
       SetText(result);
     finally
       Free
@@ -10986,11 +10978,11 @@ begin
     // unescape SQL quoted string value into a valid JSON string
     with TJsonWriter.CreateOwnedStream(temp) do
     try
-      Add('{', '"');
+      AddDirect('{', '"');
       AddNoJsonEscapeUtf8(Name);
-      Add('"', ':');
+      AddDirect('"', ':');
       AddQuotedStringAsJson(SQLValue);
-      Add('}');
+      AddDirect('}');
       SetText(result);
     finally
       Free;
@@ -11418,9 +11410,9 @@ begin
             for j := i + 1 to L do
               if NameSpace[j] in [' ', '>'] then
               begin
-                Add('<', '/');
+                AddDirect('<', '/');
                 AddStringCopy(NameSpace, i + 1, j - i - 1);
-                Add('>');
+                AddDirect('>');
                 break;
               end;
             break;

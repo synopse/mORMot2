@@ -2958,7 +2958,7 @@ begin
         W.Add('"');
         if Data.TextLen <> 0 then // otherwise AddJsonEscape() calls StrLen()
           W.AddJsonEscape(Data.Text, Data.TextLen);
-        W.Add('"');
+        W.AddDirect('"');
       end;
     ord(betDoc),
     ord(betArray):
@@ -2987,7 +2987,7 @@ begin
               W.WrBase64(Data.Blob, MaxSize, false);
               W.AddShort(BSON_JSON_BINARY[false, true]);
               W.AddBinToHex(@Data.BlobSubType, 1);
-              W.AddShorter('"}');
+              W.AddDirect('"', '}');
             end;
           modMongoShell:
             begin
@@ -2995,7 +2995,7 @@ begin
               W.AddBinToHex(@Data.BlobSubType, 1);
               W.AddShort(BSON_JSON_BINARY[true, true]);
               W.WrBase64(Data.Blob, MaxSize, false);
-              W.AddShorter('")');
+              W.AddDirect('"', ')');
             end;                  
         end;
       end;
@@ -3011,7 +3011,7 @@ Bin:      W.WrBase64(Element, ElementBytes, true);
           begin
             W.Add('/');
             W.AddNoJsonEscape(Data.RegEx, Data.RegExLen);
-            W.Add('/');
+            W.AddDirect('/');
             W.AddNoJsonEscape(Data.RegExOptions, Data.RegExOptionsLen);
           end
           else

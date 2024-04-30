@@ -1117,14 +1117,14 @@ Write:case c^.ColumnType of
           begin
             W.Add('"');
             W.AddDateTime(@V^.Double, 'T', #0, fForceDateWithMS);
-            W.Add('"');
+            W.AddDirect('"');
           end;
         ftUtf8:
           begin
             W.Add('"');
             if V^.Length > 1 then
               W.AddJsonEscapeW(ColPtr(C, V), V^.Length shr 1);
-            W.Add('"');
+            W.AddDirect('"');
           end;
         ftBlob:
           if fForceBlobAsNull then

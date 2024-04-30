@@ -3269,7 +3269,7 @@ begin
     WR.Add(ID); // only used in sicClientDriven mode
   end;
   if not ForceServiceResultAsJsonObjectWithoutResult then
-    WR.Add('}');
+    WR.AddDirect('}');
 end;
 
 procedure TRestServerUriContext.ServiceResult(const Name, JsonValue: RawUtf8);
@@ -4551,7 +4551,7 @@ var
 begin
   WR := TJsonWriter.CreateOwnedStream(temp);
   try // convert URI parameters into the expected ordered json array
-    WR.Add('[');
+    WR.AddDirect('[');
     m := ServiceMethod;
     ilow := 0;
     a := @m^.Args[m^.ArgsInFirst];

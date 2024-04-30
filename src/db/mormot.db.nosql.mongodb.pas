@@ -2019,7 +2019,7 @@ begin
     W.AddShorter(',resp:');
     W.AddPointer(PtrUInt(fResponseTo), '"');
   end;
-  W.Add('}');
+  W.AddDirect('}');
 end;
 
 function TMongoRequest.ToJson(Mode: TMongoJsonMode): RawUtf8;
@@ -2067,7 +2067,7 @@ begin
   AddMongoJson(variant(fSelector), W, modMongoShell);
   W.AddShort(',update:');
   AddMongoJson(variant(fUpdate), W, modMongoShell);
-  W.Add('}');
+  W.AddDirect('}');
 end;
 
 
@@ -2123,7 +2123,7 @@ begin
   W.CancelLastChar('}');
   W.AddShorter(',query:');
   AddMongoJson(variant(fQuery), W, modMongoShell);
-  W.Add('}');
+  W.AddDirect('}');
 end;
 
 
@@ -2179,7 +2179,7 @@ begin
     W.AddShort(',numberToSkip:');
     W.AddU(fNumberToSkip);
   end;
-  W.Add('}');
+  W.AddDirect('}');
 end;
 
 
@@ -2227,7 +2227,7 @@ begin
     W.AddComma;
   end;
   W.CancelLastComma;
-  W.Add(']', '}');
+  W.AddDirect(']', '}');
 end;
 
 {$else}
@@ -2309,7 +2309,7 @@ begin
   if AddMongoJson(fCommand, W, modMongoShell, 1024) then
     W.AddShorter('...') // huge Command has been truncated after 1KB
   else
-    W.Add('}')
+    W.AddDirect('}')
 end;
 
 

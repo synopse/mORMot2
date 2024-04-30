@@ -4180,7 +4180,7 @@ begin
       else
       begin
         // result is one array of values
-        Add('[');
+        AddDirect('[');
         i := 0;
         repeat
           AddJsonEscape(Values[i]);

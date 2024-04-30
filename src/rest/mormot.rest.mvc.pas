@@ -1630,7 +1630,7 @@ begin
           fExecuteCached[fMethodIndex].Acquire([], exec, WR);
           try
             WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
-            WR.Add('{');
+            WR.AddDirect('{');
             exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
             err := '';
             if not exec.ExecuteJson([fApplication.fFactoryEntry],
@@ -1644,7 +1644,7 @@ begin
             action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
             action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             if not isAction then
-              WR.Add('}');
+              WR.AddDirect('}');
             WR.SetText(methodOutput);
           finally
             fExecuteCached[fMethodIndex].Release(exec);

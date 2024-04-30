@@ -1444,7 +1444,7 @@ begin
         begin
           W.Add('"');
           W.AddDateTime(PDateTime(data)^);
-          W.Add('"');
+          W.AddDirect('"');
         end;
       ftUtf8:
         begin
@@ -1452,7 +1452,7 @@ begin
           len := FromVarUInt32(data);
           if len <> 0 then // otherwise W.AddJsonEscape() uses StrLen(data)
             W.AddJsonEscape(data, len);
-          W.Add('"');
+          W.AddDirect('"');
         end;
       ftBlob:
         if fForceBlobAsNull then
