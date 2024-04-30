@@ -2525,6 +2525,9 @@ type
     /// set a property value from a text value
     // - handle all kind of fields, e.g. converting from text into ordinal or floats
     function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
+    /// serialize a value into (HTML) text
+    // - implemented in TRttiJson for proper knowledge of JSON serialization
+    procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -8154,6 +8157,11 @@ begin
     else
       result := false;
   end;
+end;
+
+procedure TRttiCustom.ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean);
+begin
+  ERttiException.RaiseUtf8('Unexpected %.ValueWriteText(%)', [self, W]);
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;

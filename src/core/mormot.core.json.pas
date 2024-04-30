@@ -1924,6 +1924,8 @@ type
     // - for a string, Data^ will be compared to the name
     function ValueByPath(var Data: pointer; Path: PUtf8Char; var Temp: TVarData;
       PathDelim: AnsiChar = '.'): TRttiCustom; override;
+    /// serialize a value into (HTML) text
+    procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); override;
     /// efficient search of TRttiJson from a given RTTI TypeInfo()
     // - to be used instead of Rtti.Find() to return directly the TRttiJson instance
     class function Find(Info: PRttiInfo): TRttiJson;
@@ -10780,6 +10782,95 @@ begin
   until false;
   result := nil; // path not found
 end;
+
+procedure TRttiJson.ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean);
+var
+  l: PtrInt;
+  tmp: TVarData;
+  JW: TJsonWriter absolute W;
+begin
+  case fParser of // FPC generates a jump table for this case statement
+    // try direct UTF-8 and UTF-16 strings (escaped) rendering
+    {$ifndef UNICODE}
+    ptString,
+    {$endif UNICODE}
+    ptRawUtf8,
+    ptRawJson,
+    ptPUtf8Char:
+      begin
+        Data := PPointer(Data)^;  // get PUtf8Char
+        if Data <> nil then
+          if HtmlEscape then
+            W.AddHtmlEscape(Data) // faster with no length
+          else
+          begin
+            if fParser = ptPUtf8Char then
+              l := mormot.core.base.StrLen(Data)
+            else
+              l := PStrLen(PAnsiChar(Data) - _STRLEN)^;
+            W.AddNoJsonEscape(Data, l);
+          end;
+      end;
+    {$ifdef UNICODE}
+    ptString,
+    {$endif UNICODE}
+    {$ifdef HASVARUSTRING}
+    ptUnicodeString,
+    {$endif HASVARUSTRING}
+    ptSynUnicode,
+    ptWideString:
+      if HtmlEscape then
+        W.AddHtmlEscapeW(PPWideChar(Data)^)
+      else
+        W.AddNoJsonEscapeW(PPWord(Data)^, 0);
+    // unescaped (and unquoted) numbers, date/time, guid or hash
+    ptByte:
+      W.AddU(PByte(Data)^);
+    ptWord:
+      W.AddU(PWord(Data)^);
+    ptInteger:
+      W.Add(PInteger(Data)^);
+    ptCardinal:
+      W.AddU(PCardinal(Data)^);
+    ptInt64:
+      W.Add(PInt64(Data)^);
+    ptQWord:
+      W.AddQ(PQWord(Data)^);
+    ptDouble:
+      W.AddDouble(unaligned(PDouble(Data)^));
+    ptCurrency:
+      W.AddCurr64(Data);
+    ptBoolean:
+      W.Add(PBoolean(Data)^);
+    ptDateTime,
+    ptDateTimeMS:
+      JW.AddDateTime(Data, 'T', #0, fParser = ptDateTimeMS, {wtime=}true);
+    ptUnixTime:
+      JW.AddUnixTime(Data);
+    ptUnixMSTime:
+      JW.AddUnixMSTime(Data, {withms=}true);
+    ptTimeLog:
+      JW.AddTimeLog(Data);
+    ptGuid:
+      JW.Add(PGuid(Data), #0);
+    ptHash128,
+    ptHash256,
+    ptHash512:
+      W.AddBinToHexDisplayLower(Data, fCache.Size);
+  else
+    if rcfIsNumber in fCache.Flags then
+      // ordinals or floats don't need any HTML escape nor quote
+      JW.AddRttiCustomJson(Data, self, twNone, [])
+    else
+    begin
+      // use a temporary variant for any complex content (including JSON)
+      ValueToVariant(Data, tmp, @JSON_[mFastFloat]);
+      JW.AddVarData(@tmp, HtmlEscape);
+      VarClearProc(tmp);
+    end;
+  end;
+end;
+
 
 procedure TRttiJson.RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
 begin
