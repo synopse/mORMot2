@@ -896,6 +896,9 @@ type
     // - use overriden TJsonWriter version instead!
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
+    /// append a variant content as UTF-8 text
+    // - with optional HTML escape but no JSON serialization
+    procedure AddVarData(Value: PVarData; HtmlEscape: boolean);
     /// this class implementation will raise an exception
     // - use overriden TJsonWriter version instead!
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
@@ -3708,6 +3711,25 @@ procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
   ESynException.RaiseUtf8('%.AddVariant unimplemented: use TJsonWriter', [self]);
+end;
+
+procedure TTextWriter.AddVarData(Value: PVarData; HtmlEscape: boolean);
+var
+  tmp: TTempUtf8;
+  wasString: boolean;
+begin
+  if cardinal(Value^.VType) = varVariantByRef then
+    Value := Value^.VPointer;
+  if HtmlEscape and
+     not (cardinal(Value^.VType) in VTYPE_NUMERIC) then
+  begin // avoid UTF-8 conversion for plain numbers or if no HTML escaping
+    VariantToTempUtf8(PVariant(Value)^, tmp, wasString);
+    AddHtmlEscape(tmp.Text, tmp.Len);
+    if tmp.TempRawUtf8 <> nil then
+      FastAssignNew(tmp.TempRawUtf8);
+  end
+  else
+    AddVariant(PVariant(Value)^, twNone); // fast TJsonWriter.AddVariant
 end;
 
 procedure TTextWriter.AddTypedJson(Value, TypeInfo: pointer;
