@@ -1925,6 +1925,7 @@ type
     function ValueByPath(var Data: pointer; Path: PUtf8Char; var Temp: TVarData;
       PathDelim: AnsiChar = '.'): TRttiCustom; override;
     /// serialize a value into (HTML) text
+    // - warning: supplied W instance should be a TJsonWriter
     procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); override;
     /// efficient search of TRttiJson from a given RTTI TypeInfo()
     // - to be used instead of Rtti.Find() to return directly the TRttiJson instance
@@ -10865,7 +10866,7 @@ begin
     begin
       // use a temporary variant for any complex content (including JSON)
       ValueToVariant(Data, tmp, @JSON_[mFastFloat]);
-      JW.AddVarData(@tmp, HtmlEscape);
+      JW.AddVarData(@tmp, HtmlEscape); // potentially via a TTempUtf8
       VarClearProc(tmp);
     end;
   end;

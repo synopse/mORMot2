@@ -897,7 +897,7 @@ type
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
     /// append a variant content as UTF-8 text
-    // - with optional HTML escape but no JSON serialization
+    // - with optional HTML escape (via a TTempUtf8) but no JSON serialization
     procedure AddVarData(Value: PVarData; HtmlEscape: boolean);
     /// this class implementation will raise an exception
     // - use overriden TJsonWriter version instead!

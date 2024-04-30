@@ -2526,7 +2526,8 @@ type
     // - handle all kind of fields, e.g. converting from text into ordinal or floats
     function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
     /// serialize a value into (HTML) text
-    // - implemented in TRttiJson for proper knowledge of JSON serialization
+    // - implemented in TRttiJson for proper knowledge of complex types
+    // - warning: supplied W instance should be a TJsonWriter
     procedure ValueWriteText(Data: pointer; W: TTextWriter; HtmlEscape: boolean); virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
