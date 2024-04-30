@@ -8182,31 +8182,41 @@ function TRttiCustom.PropFindByPath(var Data: pointer; FullName: PUtf8Char;
   PathDelim: AnsiChar): PRttiCustomProp;
 var
   rc: TRttiCustom;
-  n: ShortString;
+  l: PtrInt;
+  c: AnsiChar;
 begin
   rc := self;
   repeat
     result := nil;
+    l := PtrInt(result);
     if (rc = nil) or
        (Data = nil) or
        (rc.Props.CountNonVoid = 0) then
       exit;
-    GetNextItemShortString(FullName, @n, PathDelim);
-    if n[0] = #0 then
+    repeat
+      c := FullName[l];
+      if (c = PathDelim) or
+         (c = #0) then
+        break;
+      inc(l);
+    until false;
+    if l = 0 then
       exit;
-    result := FindCustomProp(
-      pointer(rc.Props.List), @n[1], ord(n[0]), rc.Props.Count);
-    if (result = nil) or
-       (FullName = nil) then
-      exit;
+    result := FindCustomProp(pointer(rc.Props.List), FullName, l, rc.Props.Count);
+    if result = nil then
+      exit; // not found
+    inc(FullName, l);
+    if FullName^ = #0 then
+      exit; // full path parsed
+    inc(FullName); // PathDelim
     // search next path level
     rc := result.Value;
     if result.OffsetGet < 0 then
       Data := nil
-    else if rc.Kind in rkRecordTypes then
-      inc(PAnsiChar(Data), result.OffsetGet)
     else if rc.Kind = rkClass then
       Data := PPointer(PAnsiChar(Data) + result.OffsetGet)^
+    else if rc.Kind in rkRecordTypes then
+      inc(PAnsiChar(Data), result.OffsetGet)
     else
       Data := nil;
   until false;

@@ -725,8 +725,7 @@ asm
 @z:
 end;
 
-procedure FastAssignNewNotVoid(var d; s: pointer);
-nostackframe; assembler;
+procedure FastAssignNewNotVoid(var d; s: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr [d]
         mov     qword ptr [d], s
