@@ -5421,7 +5421,7 @@ begin
     if Context.State <> hrsResponseDone then // for error.log
     begin
       wr.AddString(HTTP_STATE[Context.State]);
-      wr.Add(' ');
+      wr.AddDirect(' ');
     end;
     repeat
       case v^ of // compile as a fast lookup table jump on FPC
@@ -5497,9 +5497,9 @@ begin
         hlvRequest:
           begin
             wr.AddString(RawUtf8(Context.Method));
-            wr.Add(' ');
+            wr.AddDirect(' ');
             wr.AddString(RawUtf8(Context.Url)); // full request = not normalized
-            wr.Add(' ');
+            wr.AddDirect(' ');
             wr.AddShorter(HTTP[hsrHttp10 in Context.Flags]);
           end;
         hlvRequest_Hash:
@@ -6325,19 +6325,19 @@ begin
         t.AddIsoDate(w) // time part is irrelevant
       else
         t.AddIsoDateTime(w, {ms=}false, {first=}' ');
-      w.Add(',');
+      w.AddComma;
       w.AddString(HTTP_PERIOD[p^.Period]);
-      w.Add(',');
+      w.AddComma;
       w.AddString(HTTP_SCOPE[p^.Scope]);
-      w.Add(',');
+      w.AddComma;
       w.AddQ(p^.State.Count);
-      w.Add(',');
+      w.AddComma;
       w.AddU(p^.State.Time);
-      w.Add(',');
+      w.AddComma;
       w.AddU(p^.State.UniqueIP);
-      w.Add(',');
+      w.AddComma;
       w.AddQ(p^.State.Read);
-      w.Add(',');
+      w.AddComma;
       w.AddQ(p^.State.Write);
       w.AddCR;
       inc(p);
@@ -6374,9 +6374,9 @@ begin
   w := TTextDateWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     if existing = 0 then
-      w.Add('[', #10) // open new JSON array
+      w.AddDirect('[', #10) // open new JSON array
     else
-      w.Add(',', #10); // append
+      w.AddDirect(',', #10); // append
     n := length(State);
     p := pointer(State);
     repeat
@@ -6401,14 +6401,14 @@ begin
       w.AddQ(p^.State.Read);
       w.AddShorter(',"w":');
       w.AddQ(p^.State.Write);
-      w.Add('}');
+      w.AddDirect('}');
       dec(n);
       if n = 0 then
         break;
-      w.Add(',', #10);
+      w.AddDirect(',', #10);
       inc(p);
     until false;
-    w.Add(']'); // close the JSON array
+    w.AddDirect(']'); // close the JSON array
     w.FlushFinal;
   finally
     w.Free;
