@@ -8797,7 +8797,7 @@ function TExecutableCommandLine.ConsoleHelpFailed(
 begin
   if exedescription <> '' then
     fExeDescription := exedescription;
-  result := Option(['h', 'help'], 'display this help');
+  result := Option(['?', 'h', 'help'], 'display this help');
   if result then
     ConsoleWrite(FullDescription)
   else
