@@ -6042,8 +6042,8 @@ begin
   CurrentRawSid(s2, wttThread);
   Check(SidCompare(pointer(s1), pointer(s2)) = 0);
   s := RawSidToText(s1);
-  CheckUtf8(IdemPChar(pointer(s), 'S-1-5-'), s);
-  // domain users are S-1-5-21-*, but LOCAL_SYSTEM is S-1-5-18
+  CheckUtf8(IdemPChar(pointer(s), 'S-1-'), s);
+  // domain users are S-1-5-21-*, but LOCAL_SYSTEM S-1-5-18 and AD user S-1-12
   sids := CurrentGroupsSid;
   Check(sids <> nil);
   known := CurrentKnownGroups;
