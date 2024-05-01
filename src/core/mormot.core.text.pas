@@ -618,13 +618,14 @@ type
     procedure AddCurr(const Value: currency); 
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
-    procedure AddU(Value: cardinal);
+    procedure AddU(Value: PtrUInt);
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
     procedure AddQ(Value: QWord);
+      {$ifdef CPU64}{$ifdef ASMINTEL}inline;{$endif}{$endif}
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -4127,7 +4128,7 @@ begin
   AddCurr64(PInt64(@Value));
 end;
 
-procedure TTextWriter.AddU(Value: cardinal);
+procedure TTextWriter.AddU(Value: PtrUInt);
 var
   tmp: array[0..23] of AnsiChar;
   P: PAnsiChar;

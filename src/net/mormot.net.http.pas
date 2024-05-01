@@ -6332,7 +6332,7 @@ begin
       w.Add(',');
       w.AddQ(p^.State.Count);
       w.Add(',');
-      w.AddQ(p^.State.Time);
+      w.AddU(p^.State.Time);
       w.Add(',');
       w.AddU(p^.State.UniqueIP);
       w.Add(',');
@@ -6394,7 +6394,7 @@ begin
       w.AddShorter(',"c":');
       w.AddQ(p^.State.Count);
       w.AddShorter(',"t":');
-      w.AddQ(p^.State.Time);
+      w.AddU(p^.State.Time);
       w.AddShorter(',"i":');
       w.AddU(p^.State.UniqueIP);
       w.AddShorter(',"r":');

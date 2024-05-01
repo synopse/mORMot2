@@ -1335,14 +1335,14 @@ function ToDouble(const text: RawUtf8; out value: double): boolean;
 //  !  P := StrInt32(@tmp[23],Value);
 //  !  SetString(result,P,@tmp[23]-P);
 //  !end;
-// - convert the input value as PtrInt, so as Int64 on 64-bit CPUs
+// - convert the input value as PtrInt, so work with Int64 on 64-bit CPUs
 // - not to be called directly: use IntToStr() or Int32ToUtf8() instead
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 
 /// internal fast unsigned integer val to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
-// - convert the input value as PtrUInt, so as QWord on 64-bit CPUs
+// - convert the input value as PtrUInt, so work with QWord on 64-bit CPUs
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 
 /// internal fast Int64 val to text conversion

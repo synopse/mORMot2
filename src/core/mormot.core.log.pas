@@ -5037,7 +5037,7 @@ begin
       fWriter.AddShort('SetThreadName ');
       fWriter.AddPointer(PtrUInt(fThreadID)); // as hexadecimal
       fWriter.AddDirect(' ');
-      fWriter.AddQ(PtrUInt(fThreadID));       // as decimal
+      fWriter.AddU(PtrUInt(fThreadID));       // as decimal
       fWriter.AddDirect('=');
       fWriter.AddString(n);
       LogTrailer(sllInfo);
@@ -5531,7 +5531,7 @@ begin
         fWriter.AddShort('SetThreadName ');
         fWriter.AddPointer(PtrUInt(c^.ID));
         fWriter.AddDirect(' ');
-        fWriter.AddQ(PtrUInt(c^.ID));
+        fWriter.AddU(PtrUInt(c^.ID));
         fWriter.AddDirect('=');
         fWriter.AddString(c^.ThreadName);
         fWriterEcho.AddEndOfLine(sllInfo);
