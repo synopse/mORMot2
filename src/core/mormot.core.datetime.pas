@@ -3461,13 +3461,10 @@ begin
   if (PInt64(Value)^ = 0) and
      (QuoteChar = #0) then
     exit;
-  if BEnd - B <= 26 then
+  if BEnd - B <= 32 then
     FlushToStream;
-  inc(B);
   if QuoteChar <> #0 then
-    B^ := QuoteChar
-  else
-    dec(B);
+    AddDirect(QuoteChar);
   if PInt64(Value)^ <> 0 then
   begin
     inc(B);
@@ -3487,15 +3484,9 @@ begin
     dec(B);
   end;
   if twoDateTimeWithZ in fCustomOptions then
-  begin
-    inc(B);
-    B^ := 'Z';
-  end;
+    AddDirect('Z');
   if QuoteChar <> #0 then
-  begin
-    inc(B);
-    B^ := QuoteChar;
-  end;
+    AddDirect(QuoteChar);
 end;
 
 procedure TTextDateWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
@@ -3560,7 +3551,7 @@ begin
   MilliSeconds := MilliSeconds * 10; // convert a.bcd to a.bcd0 currency/Curr64
   AddCurr64(@MilliSeconds); // fast output
   if Quote <> #0 then
-    Add(Quote);
+    AddDirect(Quote);
 end;
 
 
