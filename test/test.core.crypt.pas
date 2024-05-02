@@ -2973,10 +2973,14 @@ begin
     CheckEqual(c3.GetAuthorityKey, c1.GetSubjectKey);
     Check(c3.IsAuthorizedBy(c1), 'isauthby1');
     Check(not c3.IsAuthorizedBy(c3), 'isauthby2');
-    Check(c3.Verify(nil) = cvUnknownAuthority, 'Verify(nil)');
-    Check(c3.Verify(c1) = cvValidSigned, 'cvValidSigned1');
-    Check(c3.Verify(c2) = cvValidSigned, 'cvValidSigned2');
-    Check(c3.Verify(c3) = cvUnknownAuthority, 'Verify(c3)');
+    cv := c3.Verify(nil);
+    CheckUtf8(cv = cvUnknownAuthority, 'c3.Verify(nil)=%', [ToText(cv)^]);
+    cv := c3.Verify(c1);
+    CheckUtf8(cv = cvValidSigned, 'c3.Verify(c1)=%', [ToText(cv)^]);
+    cv := c3.Verify(c2);
+    CheckUtf8(cv = cvValidSigned, 'c3.Verify(c2)=%', [ToText(cv)^]);
+    cv := c3.Verify(c3);
+    CheckUtf8(cv = cvUnknownAuthority, 'c3.Verify(c3)=%', [ToText(cv)^]);
     n := '0123456789012345012345678901234'; // not a 16-byte multiple length
     r := c3.Encrypt(n);
     if r <> '' then // not all algorithms support encryption (RSA+ES256 only)

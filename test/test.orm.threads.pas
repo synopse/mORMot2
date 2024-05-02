@@ -556,7 +556,7 @@ begin
   // 2. Perform the tests
   if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     longstandingclient := CreateClient;
-  for several := 1 to 1 do // allow to increase rounds to debug stability
+  for several := 1 to 1 do // you may try and increase rounds to debug stability
   begin
     fRunningThreadCount := fMinThreads;
     repeat
