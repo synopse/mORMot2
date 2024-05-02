@@ -220,8 +220,7 @@ type
     procedure Execute; override;
     procedure LaunchProcess;
   public
-    constructor Create(
-      aTest: TTestMultiThreadProcess; aID: integer); reintroduce;
+    constructor Create(aTest: TTestMultiThreadProcess; aID: integer); reintroduce;
     destructor Destroy; override;
   end;
 
@@ -233,7 +232,6 @@ begin
   fEvent := TSynEvent.Create;
   fTest := aTest;
   fID := aID;
-  SetLength(fIDs, fTest.fOperationCount);
   inherited Create(False);
 end;
 
@@ -289,6 +287,8 @@ begin
             [Rest[0].ClassType, length(Rest), fIterationCount], self);
           if not fTest.CheckFailed(Rest <> nil) then
           begin
+            fIDs := nil; // reset between runs to avoid confusion
+            SetLength(fIDs, fIterationCount);
             n := 0;
             r := 0;
             log.Log(sllTrace, 'Execute Add', self);
@@ -306,6 +306,7 @@ begin
                 break;
               inc(n);
             end;
+            fTest.CheckEqual(n, fIterationCount, 'Rest.Add');
             log.Log(sllTrace, 'Execute http.Get', self);
             if (infoUri <> '') and
                not IdemPChar(pointer(fTest.fClientOnlyPort), 'UNIX:') and
@@ -494,10 +495,9 @@ procedure TTestMultiThreadProcess.Test(aClass: TRestClass;
   aHttp: TRestHttpServerUse; aWriteMode: TRestServerAcquireMode;
   const aPort: RawUtf8);
 var
-  n: integer;
-  i, j: integer;
+  n, i, j, id, several: integer;
   allFinished: boolean;
-  Thread: TTestMultiThreadProcessThread;
+  th1, th2: TTestMultiThreadProcessThread;
   longstandingclient: TRest;
   msg: RawUtf8;
   {$ifdef HAS_MESSAGES}
@@ -556,93 +556,99 @@ begin
   // 2. Perform the tests
   if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     longstandingclient := CreateClient;
-  fRunningThreadCount := fMinThreads;
-  repeat
-    // 2.1. Reset the DB content between loops
-    if (fRunningThreadCount > 1) and
-       (fDatabase <> nil) then
-      fDatabase.DB.Execute('delete from people');
-    if longstandingclient <> nil then
-      Check(not longstandingclient.Orm.MemberExists(TOrmPeople,
-        TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 1');
-    // 2.2. Launch the background client threads
-    fPendingThreadFinished.ResetEvent;
-    fPendingThreadCount := fRunningThreadCount;
-    //Write(fRunningThreadCount, ' ');
-    fTimer.Start;
-    for n := 0 to fRunningThreadCount - 1 do
-      TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
-    //write('.');
-    // 2.3. Wait for the background client threads process to be finished
+  for several := 1 to 1 do // allow to increase rounds to debug stability
+  begin
+    fRunningThreadCount := fMinThreads;
     repeat
-      {$ifdef HAS_MESSAGES}
-      if (fTestClass = TRestClientURIMessage) or
-         (fClientOnlyServerIP <> '') then
-        while PeekMessage(aMsg, 0, 0, 0, PM_REMOVE) do
-        begin
-          TranslateMessage(aMsg);
-          DispatchMessage(aMsg);
-        end;
-      {$endif HAS_MESSAGES}
-      if (fDatabase <> nil) and
-         (fDatabase.AcquireWriteMode = amMainThread) then
-        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
-      else
-        fPendingThreadFinished.WaitForEver;
-      allFinished := true;
+      // 2.1. Reset the DB content between loops
+      if fDatabase <> nil then
+        fDatabase.DB.Execute('delete from people');
+      if longstandingclient <> nil then
+        Check(not longstandingclient.Orm.MemberExists(TOrmPeople,
+          TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 1');
+      // 2.2. Launch the background client threads
+      fPendingThreadFinished.ResetEvent;
+      fPendingThreadCount := fRunningThreadCount;
+      //Write(fRunningThreadCount, ' ');
+      fTimer.Start;
       for n := 0 to fRunningThreadCount - 1 do
-        if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then
-        begin
-          allFinished := false;
-          break;
-        end;
-    until allFinished;
-    fTimer.Stop;
-    //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
-    msg := FormatUtf8('% %=%/s',
-      [msg, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
-    if longstandingclient <> nil then
-      Check(longstandingclient.Orm.MemberExists(TOrmPeople,
-        TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 2');
-    // 2.4. Check INSERTed IDs consistency
-    for n := 0 to fRunningThreadCount - 1 do
-      with TTestMultiThreadProcessThread(fThreads.List[n]) do
+        TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
+      //write('.');
+      // 2.3. Wait for the background client threads process to be finished
+      repeat
+        {$ifdef HAS_MESSAGES}
+        if (fTestClass = TRestClientURIMessage) or
+           (fClientOnlyServerIP <> '') then
+          while PeekMessage(aMsg, 0, 0, 0, PM_REMOVE) do
+          begin
+            TranslateMessage(aMsg);
+            DispatchMessage(aMsg);
+          end;
+        {$endif HAS_MESSAGES}
+        if (fDatabase <> nil) and
+           (fDatabase.AcquireWriteMode = amMainThread) then
+          CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+        else
+          fPendingThreadFinished.WaitForEver;
+        allFinished := true;
+        for n := 0 to fRunningThreadCount - 1 do
+          if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then
+          begin
+            allFinished := false;
+            break;
+          end;
+      until allFinished;
+      fTimer.Stop;
+      //WriteLn(' ',fTimer.PerSec(fOperationCount * 2));
+      msg := FormatUtf8('% %=%/s',
+        [msg, fRunningThreadCount, fTimer.PerSec(fOperationCount * 2)]);
+      if longstandingclient <> nil then
+        Check(longstandingclient.Orm.MemberExists(TOrmPeople,
+          TTestMultiThreadProcessThread(fThreads.List[0]).fIDs[0]), 'client 2');
+      // 2.4. Check INSERTed IDs consistency
+      for n := 0 to fRunningThreadCount - 1 do
+      begin
+        th1 := fThreads.List[n];
         for i := 0 to fRunningThreadCount - 1 do
           if i <> n then
           begin
-            Thread := fThreads.List[i];
-            for j := 0 to high(fIDs) do
-              if fIDs[j] > 0 then
-                if IntegerScanExists(pointer(Thread.fIDs),
-                     Thread.fIterationCount, fIDs[j]) then
-                  Check(false, format('Duplicate ID %d for thread %d and %d',
-                    [fIDs[j], i, n]));
+            th2 := fThreads.List[i];
+            for j := 0 to high(th1.fIDs) do
+            begin
+              id := th1.fIDs[j];
+              Check(id > 0, 'id=0');
+              CheckUtf8(not IntegerScanExists(
+                pointer(th2.fIDs), length(th2.fIDs), id),
+                'Duplicate ID % for thread % and %', [id, i, n]);
+            end;
           end;
-    // 2.5. Execution sequence is with 1,2,5,10,30,50 concurent threads
-    if fRunningThreadCount = 1 then
-      fRunningThreadCount := 2
-    else if fRunningThreadCount = 2 then
-      fRunningThreadCount := 5
-    else if fRunningThreadCount = 5 then
-      {$ifdef HAS_NAMEDPIPES}
-      if fTestClass = TRestClientURINamedPipe then
+      end;
+      // 2.5. Execution sequence is with 1,2,5,10,30,50 concurent threads
+      if fRunningThreadCount = 1 then
+        fRunningThreadCount := 2
+      else if fRunningThreadCount = 2 then
+        fRunningThreadCount := 5
+      else if fRunningThreadCount = 5 then
+        {$ifdef HAS_NAMEDPIPES}
+        if fTestClass = TRestClientURINamedPipe then
+          break
+        else
+        {$endif HAS_NAMEDPIPES}
+        {$ifdef CPUARM32}
+        if fTestClass = TRestHttpClientWebsockets then
+          break
+        else
+        {$endif CPUARM32}
+          fRunningThreadCount := 10
+      else
+      {$ifdef HAS_MESSAGES}
+      if fTestClass = TRestClientURIMessage then
         break
       else
-      {$endif HAS_NAMEDPIPES}
-      {$ifdef CPUARM32}
-      if fTestClass = TRestHttpClientWebsockets then
-        break
-      else
-      {$endif CPUARM32}
-        fRunningThreadCount := 10
-    else
-    {$ifdef HAS_MESSAGES}
-    if fTestClass = TRestClientURIMessage then
-      break
-    else
-    {$endif HAS_MESSAGES}
-      fRunningThreadCount := fRunningThreadCount + 20;
-  until fRunningThreadCount > fMaxThreads;
+      {$endif HAS_MESSAGES}
+        fRunningThreadCount := fRunningThreadCount + 20;
+    until fRunningThreadCount > fMaxThreads;
+  end;
   // 3. Cleanup for this protocol (but reuse the same threadpool)
   AddConsole('%', [msg]);
   DatabaseClose;
