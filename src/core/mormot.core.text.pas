@@ -4047,7 +4047,7 @@ var
   P: PAnsiChar;
   Len: PtrInt;
 begin
-  if BEnd - B <= 23 then
+  if BEnd - B <= 24 then
     FlushToStream;
   {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if PtrUInt(Value) <= high(SmallUInt32Utf8) then
@@ -4065,7 +4065,7 @@ begin
   inc(B, Len);
 end;
 
-{$ifdef CPU32} // Add(Value: PtrInt) already implemented it for CPU64
+{$ifdef CPU32} // Add(Value: PtrInt) already implements it for CPU64
 procedure TTextWriter.Add(Value: Int64);
 var
   tmp: array[0..23] of AnsiChar;
