@@ -2218,6 +2218,7 @@ begin
     begin
       // add "where ID=?" parameter
       Types[Decoder.FieldCount] := ftInt64;
+      Decoder.FieldTypeApproximation[Decoder.FieldCount] := ftaNumber;
       inc(Decoder.FieldCount);
     end;
 end;
