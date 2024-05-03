@@ -951,13 +951,13 @@ var
     CheckUtf8(Timestamp >= Start, '%>=%', [TimeStamp, Start]);
     if Event = heDelete then
       exit;
-    CheckEqual(RExt.ID, 400);
+    CheckEqual(RExt.ID, 400, 'rext');
     CheckEqual(RExt.FirstName, 'Franz36');
     CheckEqual(RExt.YearOfBirth, aYOB);
     R := RHist.HistoryGet(aIndex) as TOrmPeopleExt;
     if CheckFailed(R <> nil, 'get2') then
       exit;
-    CheckEqual(R.ID, 400);
+    CheckEqual(R.ID, 400, 'r');
     CheckEqual(R.FirstName, 'Franz36');
     CheckEqual(R.YearOfBirth, aYOB);
     R.Free;
@@ -969,7 +969,7 @@ var
   begin
     RHist := TOrmMyHistory.CreateHistory(aExternalClient.Orm, TOrmPeopleExt, 400);
     try
-      Check(RHist.HistoryCount = 504);
+      CheckEqual(RHist.HistoryCount, 504, 'HistoryCount');
       HistoryCheck(0, 1797, heAdd);
       HistoryCheck(1, 1828, heUpdate);
       HistoryCheck(2, 1515, heUpdate);

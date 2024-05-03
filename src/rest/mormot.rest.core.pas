@@ -1259,7 +1259,7 @@ type
 type
   /// the available HTTP methods transmitted between client and server
   // - remote ORM supports non-standard mLOCK/mUNLOCK/mABORT/mSTATE verbs
-  // - not all iana verbs are available, because TRestRouter will only
+  // - not all IANA verbs are available, because TRestRouter will only
   // support mGET .. mOPTIONS verbs anyway
   // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
   // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
@@ -1660,11 +1660,11 @@ type
     fHistoryModel: TOrmModel;
     fHistoryTable: TOrmClass;
     fHistoryTableIndex: integer;
-    fHistoryUncompressed: RawByteString;
     fHistoryUncompressedCount: integer;
+    fHistoryAddCount: integer;
+    fHistoryUncompressed: RawByteString;
     fHistoryUncompressedOffset: TIntegerDynArray;
     fHistoryAdd: TBufferWriter;
-    fHistoryAddCount: integer;
     fHistoryAddOffset: TIntegerDynArray;
   public
     /// load the change history of a given record
@@ -3748,7 +3748,7 @@ const
     'OPTIONS',
     '');
 var
-  // quick O(n) search of the first 4 characters within L1 cache
+  // quick O(n) search of the first 4 characters within L1 cache (56 bytes)
   METHODNAME32: array[TUriMethod] of cardinal;
 
 function ToMethod(const method: RawUtf8): TUriMethod;
@@ -4653,7 +4653,7 @@ begin
         rec.FillFrom(pointer(hist.SentDataJson));
         HistoryAdd(rec, hist);
       end;
-      HistorySave(nil); // update internal fHistory field
+      HistorySave(nil); // update intern fHistory field
     finally
       rec.Free;
     end;
