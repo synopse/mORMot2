@@ -1083,10 +1083,10 @@ type
   // !            Hexa8(Timestamp)+url))
   TRestServerAuthenticationSignedUri = class(TRestServerAuthenticationUri)
   protected
-    fNoTimestampCoherencyCheck: boolean;
     fTimestampCoherencySeconds: cardinal;
     fTimestampCoherencyTicks: cardinal;
     fComputeSignature: TOnRestAuthenticationSignedUriComputeSignature;
+    fNoTimestampCoherencyCheck: boolean;
     procedure SetNoTimestampCoherencyCheck(value: boolean);
     procedure SetTimestampCoherencySeconds(value: cardinal);
     procedure SetAlgorithm(value: TRestAuthenticationSignedUriAlgo);
@@ -2791,12 +2791,28 @@ end;
 
 constructor TRestServerUriContext.Create(aServer: TRestServer;
   const aCall: TRestUriParams);
+var
+  fam: TSynLogFamily;
+  tmp: pointer;
 begin
+  // setup the state machine
   inherited Create(aCall);
   fServer := aServer;
   fThreadServer := PerThreadRunningContextAddress;
   fThreadServer^.Request := self;
   fMethodIndex := -1;
+  // initialize optional logging
+  fam := fServer.LogFamily;
+  if (fam = nil) or
+     not (sllEnter in fam.Level) then
+    exit;
+  fLog := fam.Add;
+  tmp := nil; // same logic than Enter() but with no ISynLog involved
+  FormatUtf8('URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)],
+    RawUtf8(tmp));
+  fLog.ManualEnter(tmp, fServer, mnEnterOwnMethodName);
+  if fServer.StatLevels <> [] then // get start timestamp from log
+    fMicroSecondsStart := fLog.LastQueryPerformanceMicroSeconds;
 end;
 
 destructor TRestServerUriContext.Destroy;
@@ -2804,6 +2820,7 @@ begin
   if fThreadServer <> nil then
     fThreadServer^.Request := nil;
   inherited Destroy;
+  fLog.ManualLeave;
 end;
 
 procedure TRestServerUriContext.SetOutSetCookie(const aOutSetCookie: RawUtf8);
@@ -7073,6 +7090,7 @@ end;
 function TRestServer.SessionDeleteDeprecated(tix: cardinal): integer;
 var
   i: PtrInt;
+  log: ISynLog;
 begin
   // TRestServer.Uri() runs this method every second
   fSessionsDeprecatedTix := tix;
@@ -7087,13 +7105,20 @@ begin
       if tix > TAuthSession(fSessions.List[i]).TimeOutTix then
       begin
         if result = 0 then
+        begin
+          log := fLogClass.Enter(self, 'SessionDeleteDeprecated');
           fSessions.Safe.WriteLock; // upgrade the lock (seldom)
+        end;
         LockedSessionDelete(i, nil);
         inc(result);
       end;
   finally
     if result <> 0 then
+    begin
       fSessions.Safe.WriteUnlock;
+      if Assigned(log) then
+        log.Log(sllTrace, 'SessionDeleteDeprecated=%', [result], self);
+    end;
     fSessions.Safe.ReadWriteUnLock;
   end;
 end;
@@ -7539,7 +7564,6 @@ var
   tix: Int64;
   tix32: cardinal;
   outcomingfile: boolean;
-  log: ISynLog;
 begin
   if fShutdownRequested then
   begin
@@ -7547,10 +7571,6 @@ begin
     exit;
   end;
   // 1. pre-request preparation
-  if (fLogFamily <> nil) and
-     (sllEnter in fLogFamily.Level) then
-    log := fLogClass.Enter('URI % % in=%',
-      [Call.Method, Call.Url, KB(Call.InBody)], self);
   if fRouter = nil then
     ComputeRoutes; // thread-safe (re)initialize once if needed
   if Assigned(OnStartUri) then
@@ -7558,8 +7578,7 @@ begin
     Call.OutStatus := OnStartUri(Call);
     if Call.OutStatus <> HTTP_SUCCESS then
     begin
-      if log <> nil then
-        log.Log(sllServer, 'Uri: rejected by OnStartUri(% %)=%',
+      fLogClass.Add.Log(sllServer, 'Uri: rejected by OnStartUri(% %)=%',
           [Call.Method, Call.Url, Call.OutStatus], self);
       exit;
     end;
@@ -7575,12 +7594,6 @@ begin
       exit;
     end;
     // 3. setup the statistics
-    if log <> nil then
-    begin
-      ctxt.fLog := log.Instance;
-      if StatLevels <> [] then // get start timestamp from log
-        ctxt.fMicroSecondsStart := ctxt.fLog.LastQueryPerformanceMicroSeconds;
-    end;
     if StatLevels <> [] then
     begin
       if ctxt.fMicroSecondsStart = 0 then
@@ -7690,7 +7703,7 @@ begin
     // 9. gather statistics and log execution
     if ctxt.fMicroSecondsStart <> 0 then
       ctxt.ComputeStatsAfterCommand;
-    if log <> nil then
+    if ctxt.fLog <> nil then
       ctxt.LogFromContext;
     // 10. finalize execution context
     if Assigned(OnAfterUri) then
