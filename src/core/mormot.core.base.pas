@@ -4075,7 +4075,7 @@ type
     sllDDDError, sllDDDInfo, sllMonitoring);
 
   /// used to define a set of logging level abilities
-  // - i.e. a combination of none or several logging event
+  // - i.e. a combination of none or several logging event - stored as 32-bit
   // - e.g. use LOG_VERBOSE constant to log all events, or LOG_STACKTRACE
   // to log all errors and exceptions
   TSynLogLevels = set of TSynLogLevel;

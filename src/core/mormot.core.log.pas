@@ -3445,11 +3445,10 @@ var
 
   procedure AddHex;
   begin
-    if AllowNotCodeAddr then
-    begin
-      W.AddPointer(aAddressAbsolute);
-      W.Add(' ');
-    end;
+    if not AllowNotCodeAddr then
+      exit;
+    W.AddPointer(aAddressAbsolute);
+    W.AddDirect(' ');
   end;
 
 begin
@@ -3488,16 +3487,16 @@ begin
         W.AddString(debug.Units[u].Symbol.Name)
       else
         W.AddString(debug.Units[u].FileName);
-      W.Add(' ');
+      W.AddDirect(' ');
     end;
     if s >= 0 then
       W.AddString(debug.Symbols[s].Name);
-    W.Add(' ');
+    W.AddDirect(' ');
     if Line > 0 then
     begin
-      W.Add('(');
-      W.Add(Line);
-      W.Add(')', ' ');
+      W.AddDirect('(');
+      W.AddU(Line);
+      W.AddDirect(')', ' ');
     end;
     result := true;
   end
