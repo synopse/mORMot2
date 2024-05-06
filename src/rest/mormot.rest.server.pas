@@ -3020,7 +3020,6 @@ begin
     execOrmWrite:
       begin
         // special behavior to handle transactions at writing
-        method := ExecuteOrmWrite;
         endtix := TickCount64 + ms;
         while true do
           if exec^.Safe.TryLockMS(ms, @Server.fShutdownRequested) then
@@ -3038,7 +3037,7 @@ begin
                 break;   // will handle Mode<>amLocked below
               end;
               // if we reached here, there is a transaction on another session
-              tix := GetTickCount64; // not self.TickCount64 which is fixed
+              tix := GetTickCount64; // not self.TickCount64 which is cached
               if tix > endtix then
               begin
                 TimeOut; // we were not able to acquire the transaction
@@ -3053,6 +3052,7 @@ begin
               TimeOut;
               exit;
             end;
+        method := ExecuteOrmWrite;
       end;
   else
     raise EOrmException.CreateUtf8('Unexpected Command=% in %.Execute',
@@ -5028,16 +5028,18 @@ end;
 
 function TRestServerAuthenticationUri.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
+var
+  sigpos: PtrInt;
 begin
   result := nil;
-  if (Ctxt = nil) or
-     (Ctxt.UriSessionSignaturePos = 0) then
+  if Ctxt = nil then
     exit;
+  sigpos := Ctxt.UriSessionSignaturePos;
   // expected format is 'session_signature='Hexa8(SessionID)'...
-  if (Ctxt.UriSessionSignaturePos > 0) and
-     (Ctxt.UriSessionSignaturePos + (18 + 8) <= length(Ctxt.Call^.Url)) and
-     HexDisplayToCardinal(PAnsiChar(pointer(Ctxt.Call^.Url)) +
-       Ctxt.UriSessionSignaturePos + 18, Ctxt.fSession) then
+  if (sigpos > 0) and
+     (sigpos + (18 + 8) <= length(Ctxt.Call^.Url)) and
+     HexDisplayToBin(PAnsiChar(pointer(Ctxt.Call^.Url)) + sigpos + 18,
+       @Ctxt.fSession, SizeOf(Ctxt.fSession)) then
     result := fServer.LockedSessionAccess(Ctxt);
 end;
 
@@ -5089,18 +5091,18 @@ function TRestServerAuthenticationSignedUri.RetrieveSession(
 var
   ts, sign, minticks, expectedsign: cardinal;
   P: PAnsiChar;
-  len: integer;
+  len: PtrInt;
 begin
   result := inherited RetrieveSession(Ctxt);
   if result = nil then
     // no valid session ID in session_signature
     exit;
-  if Ctxt.UriSessionSignaturePos + (18 + 8 + 8 + 8) > length(Ctxt.Call^.Url) then
+  len := Ctxt.UriSessionSignaturePos - 1;
+  if len >= length(Ctxt.Call^.Url) - (18 + 8 + 8 + 8) then
   begin
     result := nil;
     exit;
   end;
-  len := Ctxt.UriSessionSignaturePos - 1;
   P := @Ctxt.Call^.Url[len + (20 + 8)]; // points to Hexa8(Timestamp)
   minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
   if HexDisplayToBin(P, @ts, SizeOf(ts)) and
@@ -7667,7 +7669,8 @@ begin
     if ctxt.OutSetCookie <> '' then
       ctxt.OutHeadFromCookie;
     // paranoid check of the supplied output headers
-    if not (rsoHttpHeaderCheckDisable in fOptions) and
+    if (Call.OutHead <> '') and
+       not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       ctxt.Error('Unsafe HTTP header rejected [%]',
         [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
