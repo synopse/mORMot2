@@ -256,10 +256,9 @@ type
     fStatementMonitor: TSynMonitor;
     fStaticStatementTimer: TPrecisionTimer;
     fStatementSql: RawUtf8;
-    fStatementGenericSql: RawUtf8;
-    fStatementMaxParam: integer;
     fStatementLastException: RawUtf8;
     fStatementTruncateSqlLogLen: integer;
+    fStatementDecoder: TExtractInlineParameters;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -1212,8 +1211,8 @@ begin
   fStaticStatementTimer.Start;
   if not Cached then
   begin
-    fStaticStatement.Prepare(DB.DB, fStatementGenericSql);
-    fStatementGenericSql := '';
+    fStaticStatement.Prepare(DB.DB, fStatementDecoder.GenericSql);
+    fStatementDecoder.GenericSql := '';
     fStatement := @fStaticStatement;
     fStatementTimer := @fStaticStatementTimer;
     fStatementMonitor := nil;
@@ -1224,14 +1223,14 @@ begin
     timer := @fStatementTimer
   else
     timer := nil;
-  fStatement := fStatementCache.Prepare(fStatementGenericSql, @wasprepared,
+  fStatement := fStatementCache.Prepare(fStatementDecoder.GenericSql, @wasprepared,
     timer, @fStatementMonitor, @plan);
   if wasprepared and
      (fRest <> nil) and
      (fRest.LogFamily <> nil) and
      (sllDB in fRest.LogFamily.Level) then
-    InternalLog('prepared % % %  %', [fStaticStatementTimer.Stop,
-      DB.FileNameWithoutPath, fStatementGenericSql, plan], sllDB);
+    fRest.InternalLog('prepared % % %  %', [fStaticStatementTimer.Stop,
+      DB.FileNameWithoutPath, fStatementDecoder.GenericSql, plan], sllDB);
   if timer = nil then
   begin
     fStaticStatementTimer.Start;
@@ -1244,8 +1243,8 @@ procedure TRestOrmServerDB.PrepareCachedStatement(const SQL: RawUtf8;
   ExpectedParams: integer);
 begin
   fStatementSql := SQL;
-  fStatementGenericSql := SQL;
-  fStatementMaxParam := 1;
+  fStatementDecoder.GenericSql := SQL;
+  fStatementDecoder.Count := ExpectedParams;
   PrepareStatement({cached=}true);
   if fStatement^.ParamCount <> ExpectedParams then
     EOrmException.RaiseUtf8(
@@ -1257,34 +1256,32 @@ procedure TRestOrmServerDB.GetAndPrepareStatement(const SQL: RawUtf8;
   ForceCacheStatement: boolean);
 var
   i: PtrInt;
-  decoder: TExtractInlineParameters;
 begin
   // prepare statement
   fStatementSql := SQL;
-  decoder.Parse(SQL);
-  fStatementGenericSql := decoder.GenericSql;
-  fStatementMaxParam := decoder.Count;
-  PrepareStatement(ForceCacheStatement or (fStatementMaxParam <> 0));
+  fStatementDecoder.Parse(SQL);
+  PrepareStatement(ForceCacheStatement or (fStatementDecoder.Count <> 0));
   // bind parameters
-  if fStatementMaxParam = 0 then
+  if fStatementDecoder.Count = 0 then
     exit; // no valid :(...): inlined parameter found -> manual bind
-  if fStatement^.ParamCount <> fStatementMaxParam then
+  if fStatement^.ParamCount <> fStatementDecoder.Count then
     EOrmException.RaiseUtf8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
-      [self, fStatementGenericSql, fStatementMaxParam, fStatement^.ParamCount]);
-  for i := 0 to fStatementMaxParam - 1 do
-    case decoder.Types[i] of
+      [self, fStatementDecoder.GenericSql, fStatementDecoder.Count,
+       fStatement^.ParamCount]);
+  for i := 0 to fStatementDecoder.Count - 1 do
+    case fStatementDecoder.Types[i] of
       sptNull:
         fStatement^.BindNull(i + 1);
       sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
       sptText:
-        fStatement^.Bind(i + 1, decoder.Values[i]);
+        fStatement^.Bind(i + 1, fStatementDecoder.Values[i]);
       sptBlob:
-        fStatement^.BindBlob(i + 1, decoder.Values[i]);
+        fStatement^.BindBlob(i + 1, fStatementDecoder.Values[i]);
       sptInteger:
-        fStatement^.Bind(i + 1, GetInt64(pointer(decoder.Values[i])));
+        fStatement^.Bind(i + 1, GetInt64(pointer(fStatementDecoder.Values[i])));
       sptFloat:
-        fStatement^.Bind(i + 1, GetExtended(pointer(decoder.Values[i])));
+        fStatement^.Bind(i + 1, GetExtended(pointer(fStatementDecoder.Values[i])));
     end;
 end;
 
@@ -1329,15 +1326,14 @@ begin
       begin
         // clean the reused statement
         fStatement^.Reset; // ensure e.g. any virtual cursor is closed ASAP
-        if (fStatementMaxParam <> 0) or
+        if (fStatementDecoder.Count <> 0) or
            ForceBindReset then
           fStatement^.BindReset; // early release bound blobs
       end;
       fStatement := nil;
     end;
     fStatementSql := '';
-    fStatementGenericSql := '';
-    fStatementMaxParam := 0;
+    fStatementDecoder.Reset;
     if E <> nil then
       ObjectToJson(E, fStatementLastException, TEXTWRITEROPTIONS_DEBUG);
   end;
@@ -1823,7 +1819,7 @@ begin
   except
     on E: ESqlite3Exception do
     begin
-      InternalLog('% for % // %', [E, aSql, fStatementGenericSql], sllError);
+      InternalLog('% for % // %', [E, aSql, fStatementDecoder.GenericSql], sllError);
       result := false;
     end;
   end
@@ -2664,7 +2660,7 @@ begin
       try
         try
           fStatementSql := logsql;
-          fStatementGenericSql  := sql;
+          fStatementDecoder.GenericSql := sql;
           PrepareStatement({cached=}(rowcount < 5) or not decodedsaved);
           arg := 0;
           case encoding of
