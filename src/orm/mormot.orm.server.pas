@@ -1767,10 +1767,9 @@ begin
   end;
   props := fModel.TableProps[tableindex].props;
   for i := 0 to high(FieldNames) do
-    if not IsRowID(pointer(FieldNames[i])) then
-      if props.Fields.IndexByName(FieldNames[i]) < 0 then
-        // wrong field name
-        exit;
+    if not props.IsFieldName(pointer(FieldNames[i])) then
+      // wrong field name
+      exit;
   if Unique then
     sql := 'UNIQUE '
   else

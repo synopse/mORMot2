@@ -5455,7 +5455,7 @@ begin // inlined FillPrepare/TOrmFill process
   for o := 0 to fFieldCount - 1 do
     if o <> fid then
     begin
-      f := fields.IndexByName(GetResults(o));
+      f := fields.IndexByNameU(GetResults(o));
       if f < 0 then
         continue;
       map^.map := o;
@@ -6281,7 +6281,7 @@ begin
     else
       with aRecord.Orm.Fields do
       begin
-        i := IndexByName(aName);
+        i := IndexByNameU(aName);
         if i >= 0 then
         begin // only map if column name is a valid field
           FieldBitSet(fTableMapFields, i);
@@ -6721,7 +6721,7 @@ begin
         // optimistic match
         f := i
       else
-        f := D.IndexByName(SP.Name);
+        f := D.IndexByNameU(pointer(SP.Name));
       if f >= 0 then
       begin
         SP.GetValueVar(aRecord, False, tmp, @wasString);
@@ -7876,7 +7876,7 @@ var
       exit;
     if not IsRowID(pointer(result)) then
     begin
-      i := Props.Fields.IndexByName(result);
+      i := Props.Fields.IndexByNameU(pointer(result));
       if i < 0 then
         exit;
       field := Props.Fields.List[i];

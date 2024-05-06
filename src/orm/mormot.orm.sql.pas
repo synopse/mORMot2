@@ -2186,7 +2186,7 @@ begin
       k := VIRTUAL_TABLE_ROWID_COLUMN
     else
     begin
-      k := fStoredClassRecordProps.Fields.IndexByName(Decoder.FieldNames[f]);
+      k := fStoredClassRecordProps.Fields.IndexByNameU(Decoder.FieldNames[f]);
       if k < 0 then
         k := -2;
     end;

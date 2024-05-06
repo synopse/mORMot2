@@ -1951,7 +1951,7 @@ begin
     Index := 0
   else
   begin
-    Index := fStoredClassRecordProps.Fields.IndexByName(pointer(FieldName));
+    Index := fStoredClassRecordProps.Fields.IndexByNameU(pointer(FieldName));
     if Index >= 0 then
       inc(Index) // FindWhereEqual() expects index = RTTI+1
     else

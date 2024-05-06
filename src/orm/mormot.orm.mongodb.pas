@@ -526,7 +526,7 @@ begin
     else
     begin
       // change field name to the external mapped name
-      ndx := fStoredClassRecordProps.Fields.IndexByName(Doc.Names[i]);
+      ndx := fStoredClassRecordProps.Fields.IndexByNameU(pointer(Doc.Names[i]));
       if ndx < 0 then
         EOrmMongoDB.RaiseUtf8(
           '%.DocFromJson: unknown field name [%]', [self, Doc.Names[i]]);

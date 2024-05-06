@@ -1946,20 +1946,22 @@ type
       var aDefaultIndex: PtrInt): TOrmPropInfo; overload;
     /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
-    function IndexByName(const aName: RawUtf8): integer; overload;
+    // - this function returns an integer, as expected by TOnGetFieldIndex event
+    // e.g. for TSelectStatement.Create()
+    function IndexByName(const aName: RawUtf8): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
-    function IndexByName(aName: PUtf8Char): PtrInt; overload;
+    function IndexByNameU(aName: PUtf8Char): PtrInt;
     /// find an item by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
-    function IndexByNameOrExcept(const aName: RawUtf8): integer;
+    function IndexByNameOrExcept(const aName: RawUtf8): PtrInt;
     /// find an item by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
     // - aName is not defined as "const aName" since it is made an ASCIIZ
-    function IndexByNameOrExceptShort(aName: ShortString): integer;
+    function IndexByNameOrExceptShort(aName: ShortString): PtrInt;
     /// find one or several items by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
@@ -1971,7 +1973,7 @@ type
     // instead of IndexByNameOrExcept('Address_Country')
     // - won't identify 'ID' / 'RowID' field names, just List[].
     // - raise an EOrmException if not found in the internal list
-    function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
+    function IndexByNameUnflattenedOrExcept(const aName: RawUtf8): PtrInt;
     /// fill a TRawUtf8DynArray instance from the field names
     // - excluding ID
     procedure NamesToRawUtf8DynArray(var Names: TRawUtf8DynArray);
@@ -7372,7 +7374,7 @@ function TOrmPropInfoList.ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo;
 var
   i: PtrInt;
 begin
-  i := IndexByName(pointer(aName));
+  i := IndexByNameU(pointer(aName));
   if i < 0 then
     result := nil
   else
@@ -7383,7 +7385,7 @@ function TOrmPropInfoList.ByName(aName: PUtf8Char): TOrmPropInfo;
 var
   i: PtrInt;
 begin
-  i := IndexByName(aName);
+  i := IndexByNameU(aName);
   if i < 0 then
     result := nil
   else
@@ -7401,11 +7403,11 @@ begin
     result := fList[i];
     if IdemPropNameU(result.Name, aName, aNameLen) then
     begin
-      inc(aDefaultIndex); // is likely to be in proper order
+      inc(aDefaultIndex);   // is likely to be in proper order
       exit;
     end;
   end;
-  i := IndexByName(aName); // fast O(log(n)) binary search
+  i := IndexByNameU(aName); // fast O(log(n)) binary search
   if i < 0 then
     result := nil
   else
@@ -7415,7 +7417,7 @@ begin
   end;
 end;
 
-function TOrmPropInfoList.IndexByName(aName: PUtf8Char): PtrInt;
+function TOrmPropInfoList.IndexByNameU(aName: PUtf8Char): PtrInt;
 var
   cmp, L, R: PtrInt;
   s: PByteArray;
@@ -7475,30 +7477,30 @@ end;
 
 function TOrmPropInfoList.IndexByName(const aName: RawUtf8): integer;
 begin
-  result := IndexByName(pointer(aName));
+  result := IndexByNameU(pointer(aName));
 end;
 
-function TOrmPropInfoList.IndexByNameOrExceptShort(aName: ShortString): integer;
+function TOrmPropInfoList.IndexByNameOrExceptShort(aName: ShortString): PtrInt;
 begin
   if IsRowIDShort(aName) then
     result := -1
   else
   begin
     aName[ord(aName[0]) + 1] := #0; // make ASCIIZ
-    result := IndexByName(@aName[1]); // fast O(log(n)) binary search
+    result := IndexByNameU(@aName[1]); // fast O(log(n)) binary search
     if result < 0 then
       EOrmException.RaiseUtf8(
         '%.IndexByNameOrExceptShort(%): unkwnown in %', [self, aName, fTable]);
   end;
 end;
 
-function TOrmPropInfoList.IndexByNameOrExcept(const aName: RawUtf8): integer;
+function TOrmPropInfoList.IndexByNameOrExcept(const aName: RawUtf8): PtrInt;
 begin
   if IsRowID(pointer(aName)) then
     result := -1
   else
   begin
-    result := IndexByName(pointer(aName)); // fast O(log(n)) binary search
+    result := IndexByNameU(pointer(aName)); // fast O(log(n)) binary search
     if result < 0 then
       EOrmException.RaiseUtf8(
         '%.IndexByNameOrExcept(%): unkwnown field in %', [self, aName, fTable]);
@@ -7543,7 +7545,7 @@ begin
   end;
 end;
 
-function TOrmPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUtf8): integer;
+function TOrmPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUtf8): PtrInt;
 begin
   if pilSubClassesFlattening in fOptions then
   begin
@@ -7555,7 +7557,7 @@ begin
   else
   begin
     // direct - and faster - O(log(n)) binary search
-    result := IndexByName(pointer(aName));
+    result := IndexByNameU(pointer(aName));
     if result >= 0 then
       exit;
   end;
@@ -11156,7 +11158,7 @@ function TOrmPropertiesAbstract.IsFieldName(PropName: PUtf8Char): boolean;
 begin
   result := (PropName <> nil) and
             (IsRowID(PropName) or
-             (Fields.IndexByName(PropName) >= 0));
+             (Fields.IndexByNameU(PropName) >= 0));
 end;
 
 const
@@ -11265,7 +11267,7 @@ begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
       exit;
-    ndx := Fields.IndexByName(@n[1]);
+    ndx := Fields.IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     FieldBitSet(Bits, ndx);
@@ -11310,7 +11312,7 @@ begin
       withID := true;
       continue;
     end;
-    ndx := Fields.IndexByName(@n[1]);
+    ndx := Fields.IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     FieldBitSet(Bits, ndx);
@@ -11345,7 +11347,7 @@ begin
     exit;
   for f := 0 to high(aFields) do
   begin
-    ndx := Fields.IndexByName(aFields[f]);
+    ndx := Fields.IndexByNameU(aFields[f]);
     if ndx < 0 then
       exit; // invalid field name
     FieldBitSet(Bits, ndx);
@@ -11379,7 +11381,7 @@ begin
     exit;
   for f := 0 to high(aFields) do
   begin
-    ndx := Fields.IndexByName(pointer(aFields[f]));
+    ndx := Fields.IndexByNameU(pointer(aFields[f]));
     if ndx < 0 then
       exit; // invalid field name
     FieldBitSet(Bits, ndx);
@@ -11453,7 +11455,7 @@ begin
     exit;
   for f := 0 to high(aFields) do
   begin
-    ndx := Fields.IndexByName(pointer(aFields[f]));
+    ndx := Fields.IndexByNameU(pointer(aFields[f]));
     if ndx < 0 then
       exit; // invalid field name
     AddFieldIndex(Indexes, ndx);
@@ -11484,7 +11486,7 @@ begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
       exit;
-    ndx := Fields.IndexByName(@n[1]);
+    ndx := Fields.IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
     AddFieldIndex(Indexes, ndx);
