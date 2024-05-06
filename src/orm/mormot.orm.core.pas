@@ -3847,7 +3847,7 @@ type
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - on error (i.e. if FieldIndex is out of range) will return TRUE
     // - otherwise, will return FALSE and append the external field name to Text
-    function AppendFieldName(FieldIndex: integer; WR: TJsonWriter): boolean; overload;
+    function AppendFieldName(FieldIndex: integer; WR: TTextWriter): boolean; overload;
     /// return the field name as RawUtf8 value
     // - if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN (-1), appends RowIDFieldName
     // - otherwise, will return the external field name
@@ -10795,7 +10795,7 @@ begin
 end;
 
 function TOrmMapping.AppendFieldName(FieldIndex: integer;
-  WR: TJsonWriter): boolean;
+  WR: TTextWriter): boolean;
 begin
   result := false; // success
   if FieldIndex = VIRTUAL_TABLE_ROWID_COLUMN then

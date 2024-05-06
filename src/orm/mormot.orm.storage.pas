@@ -5450,7 +5450,7 @@ begin
   if not fCache.FindAndCopy(aID, result) then
   begin
     result := NewDB(aID);
-    fLog.SynLog.Log(sllInfo, 'Initialized DB[%]=%',
+    fLog.Add.Log(sllInfo, 'Initialized DB[%]=%',
       [IDText(aID), ObjectFromInterface(result)], self);
   end;
 end;

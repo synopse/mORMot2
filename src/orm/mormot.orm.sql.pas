@@ -2242,7 +2242,7 @@ const
 function TRestStorageExternal.ComputeSql(
   var Prepared: TOrmVirtualTablePrepared): RawUtf8;
 var
-  WR: TJsonWriter;
+  WR: TTextWriter;
   i: PtrInt;
   where: POrmVirtualTablePreparedConstraint;
   order: ^TOrmVirtualTablePreparedOrderBy;
@@ -2258,7 +2258,7 @@ begin
     exit;
   end;
   result := '';
-  WR := TJsonWriter.CreateOwnedStream(temp);
+  WR := TTextWriter.CreateOwnedStream(temp);
   try
     WR.AddString(fSelectAllDirectSQL);
     where := @Prepared.Where;
@@ -2436,7 +2436,7 @@ begin
         fStatement.ExecutePrepared;
         result := Next; // on execution success, go to the first row
       end;
-      storage.LogFamily.SynLog.Log(sllSQL, 'Search %', [fSql], self);
+      storage.LogFamily.Add.Log(sllSQL, 'Search %', [fSql], self);
     except
       self.HandleClearPoolOnConnectionIssue;
     end;
