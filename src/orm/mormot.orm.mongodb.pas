@@ -497,7 +497,7 @@ var
   rtti: TRttiJson;
   js, RecordVersionName: RawUtf8;
   MissingID: boolean;
-  V: PVarData;
+  V: PRttiVarData;
 begin
   // parse input JSON
   Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
@@ -542,19 +542,19 @@ begin
             oftBoolean:
               begin
                 // normalize to boolean BSON
-                if V^.VInteger <> 0 then
-                  V^.VBoolean := true;
+                if V^.Data.VInteger <> 0 then
+                  V^.Data.VBoolean := true;
                 // doc.InitJson/GetVariantFromJson store 0,1 as varInteger
                 V^.VType := varBoolean;
               end;
             oftUnixTime:
               begin
-                V^.VDate := UnixTimeToDateTime(V^.VInteger);
+                V^.Data.VDate := UnixTimeToDateTime(V^.Data.VInteger);
                 V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
               end;
             oftUnixMSTime: // (very unlikely for actual time)
               begin
-                V^.VDate := UnixMSTimeToDateTime(V^.VInteger);
+                V^.Data.VDate := UnixMSTimeToDateTime(V^.Data.VInteger);
                 V^.VType := varDate;
               end;
           end;
@@ -563,12 +563,12 @@ begin
           case info.OrmFieldType of
             oftUnixTime:
               begin
-                V^.VDate := UnixTimeToDateTime(V^.VInt64);
+                V^.Data.VDate := UnixTimeToDateTime(V^.Data.VInt64);
                 V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
               end;
             oftUnixMSTime:
               begin
-                V^.VDate := UnixMSTimeToDateTime(V^.VInt64);
+                V^.Data.VDate := UnixMSTimeToDateTime(V^.Data.VInt64);
                 V^.VType := varDate;
               end;
           end;
@@ -580,22 +580,22 @@ begin
               begin
                 // ISO-8601 text as MongoDB date/time
                 Iso8601ToDateTimePUtf8CharVar(
-                  V^.VAny, length(RawByteString(V^.VAny)), dt);
-                RawByteString(V^.VAny) := '';
+                  V^.Data.VAny, length(RawByteString(V^.Data.VAny)), dt);
+                RawByteString(V^.Data.VAny) := '';
+                V^.Data.VDate := dt;
                 V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
-                V^.VDate := dt;
               end;
             oftBlob,
             oftBlobCustom:
               begin
                 // store Base64-encoded BLOB as binary
-                blob := BlobToRawBlob(RawByteString(V^.VAny));
+                blob := BlobToRawBlob(RawByteString(V^.Data.VAny));
                 BsonVariantType.FromBinary(blob, bbtGeneric, Variant(V^));
               end;
             oftBlobDynArray:
               begin
                 // store dynamic array as object (if has any Json)
-                blob := BlobToRawBlob(RawByteString(V^.VAny));
+                blob := BlobToRawBlob(RawByteString(V^.Data.VAny));
                 if blob = '' then
                   SetVariantNull(Variant(V^))
                 else
