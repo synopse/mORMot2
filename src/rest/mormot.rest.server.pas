@@ -2949,10 +2949,11 @@ begin
           s := a^.RetrieveSession(self); // retrieve from URI or cookie
           if s <> nil then
           begin
-            if (Log <> nil) and
+            if Assigned(fLog) and
+               (sllUserAuth in Server.fLogLevel) and
                (s.RemoteIP <> '') and
                (s.RemoteIP <> '127.0.0.1') then
-              Log.Log(sllUserAuth, '%/% %',
+              fLog.Log(sllUserAuth, '%/% %',
                 [s.User.LogonName, s.ID, s.RemoteIP], self);
             exit;
           end;
@@ -2977,8 +2978,8 @@ var
   txt: PShortString;
 begin
   txt := ToText(Reason);
-  if Log <> nil then
-    Log.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
+  if Assigned(fLog) then
+    fLog.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
       [txt^, Call^.Url, Session], self);
   // 401 HTTP_UNAUTHORIZED must include a WWW-Authenticate header, so return 403
   fCall^.OutStatus := HTTP_FORBIDDEN;
@@ -2993,9 +2994,9 @@ procedure TRestServerUriContext.ExecuteCommand;
 
   procedure TimeOut;
   begin
-    Server.InternalLog('TimeOut %.Execute(%) after % ms',
+    fServer.InternalLog('TimeOut %.Execute(%) after % ms',
       [self, ToText(Command)^,
-       Server.fAcquireExecution[Command].LockedTimeOut], sllServer);
+       fServer.fAcquireExecution[Command].LockedTimeOut], sllServer);
     if Call <> nil then
       Call^.OutStatus := HTTP_TIMEOUT; // 408 Request Time-out
   end;
@@ -3006,7 +3007,7 @@ var
   ms, current: cardinal;
   exec: PRestAcquireExecution;
 begin
-  exec := @Server.fAcquireExecution[Command];
+  exec := @fServer.fAcquireExecution[Command];
   ms := exec^.LockedTimeOut;
   if ms = 0 then
     ms := 10000; // never wait forever = 10 seconds max
@@ -3022,9 +3023,9 @@ begin
         // special behavior to handle transactions at writing
         endtix := TickCount64 + ms;
         while true do
-          if exec^.Safe.TryLockMS(ms, @Server.fShutdownRequested) then
+          if exec^.Safe.TryLockMS(ms, @fServer.fShutdownRequested) then
             try
-              current := TRestOrm(Server.fOrmInstance).TransactionActiveSession;
+              current := TRestOrm(fServer.fOrmInstance).TransactionActiveSession;
               if (current = 0) or
                  (current = Session) then
               begin
@@ -3060,13 +3061,13 @@ begin
   end;
   if exec^.Mode = amBackgroundOrmSharedThread then
     if (Command = execOrmWrite) and
-       (Server.fAcquireExecution[execOrmGet].Mode = amBackgroundOrmSharedThread) then
+       (fServer.fAcquireExecution[execOrmGet].Mode = amBackgroundOrmSharedThread) then
       fCommand := execOrmGet; // both ORM read+write will share the read thread
   case exec^.Mode of
     amUnlocked:
       method;
     amLocked:
-      if exec^.Safe.TryLockMS(ms, @Server.fShutdownRequested) then
+      if exec^.Safe.TryLockMS(ms, @fServer.fShutdownRequested) then
         try
           method;
         finally
@@ -3080,8 +3081,8 @@ begin
     amBackgroundOrmSharedThread:
       begin
         if exec^.Thread = nil then
-          exec^.Thread := Server.Run.NewBackgroundThreadMethod('% % %',
-            [self, Server.fModel.Root, ToText(Command)^]);
+          exec^.Thread := fServer.Run.NewBackgroundThreadMethod('% % %',
+            [self, fServer.fModel.Root, ToText(Command)^]);
         BackgroundExecuteThreadMethod(method, exec^.Thread);
       end;
   end;
@@ -3136,14 +3137,14 @@ const
   COMMANDTEXT: array[TRestServerUriContextCommand] of string[15] = (
     '?', 'Method', 'Interface', 'Read', 'Write');
 begin
-  if sllServer in fLog.GenericFamily.Level then
+  if sllServer in fServer.LogLevel then
     fLog.Log(sllServer, '% % % % %=% out=% in %', [SessionUserName,
       RemoteIPNotLocal, COMMANDTEXT[fCommand], fCall.Method,
       UriWithoutInlinedParams, fCall.OutStatus, KB(fCall.OutBody),
       MicroSecToString(fMicroSecondsElapsed)]);
   if (fCall.OutBody <> '') and
      not (optNoLogOutput in fServiceExecutionOptions) and
-     (sllServiceReturn in fLog.GenericFamily.Level) and
+     (sllServiceReturn in fServer.LogLevel) and
      (fCall.OutHead = '') or
       IsHtmlContentTypeTextual(pointer(fCall.OutHead)) then
     fLog.Log(sllServiceReturn, fCall.OutBody, self, MAX_SIZE_RESPONSE_LOG);
@@ -3394,15 +3395,15 @@ begin
         include(fServiceExecutionOptions, optNoLogOutput);
     end;
     // log method call and parameter values (if worth it)
-    if (Log <> nil) and
-       (sllServiceCall in Log.GenericFamily.Level) and
+    if Assigned(fLog) and
+       (sllServiceCall in fServer.LogLevel) and
        (ServiceParameters <> nil) and
        (PWord(ServiceParameters)^ <> ord('[') + ord(']') shl 8) then
      if optNoLogInput in ServiceExecutionOptions then
-       Log.Log(sllServiceCall, '%{}',
+       fLog.Log(sllServiceCall, '%{}',
          [ServiceMethod^.InterfaceDotMethodName], Server)
      else
-       Log.Log(sllServiceCall, '%%',
+       fLog.Log(sllServiceCall, '%%',
          [ServiceMethod^.InterfaceDotMethodName, ServiceParameters], Server);
     // OnMethodExecute() callback event
     if Assigned(TServiceFactoryServer(Service).OnMethodExecute) then
@@ -4118,9 +4119,9 @@ begin
   end
   else
     DynArrayFakeLength(fInput, n); // SetLength() would make a realloc()
-  if (Log <> nil) and
+  if Assigned(fLog) and
      (LogInputIdent <> '') then
-    Log.Add.Log(sllDebug, LogInputIdent, TypeInfo(TRawUtf8DynArray), fInput, self);
+    fLog.Add.Log(sllDebug, LogInputIdent, TypeInfo(TRawUtf8DynArray), fInput, self);
 end;
 
 function TRestServerUriContext.GetInputInt(const ParamName: RawUtf8): Int64;
@@ -4464,7 +4465,8 @@ procedure TRestServerUriContext.Error(const ErrorMessage: RawUtf8;
   Status: integer; CacheControlMaxAge: integer);
 begin
   inherited Error(ErrorMessage, Status, CacheControlMaxAge);
-  Server.InternalLog('%.Error: %', [ClassType, fCall^.OutBody], sllDebug);
+  if sllDebug in fServer.LogLevel then
+    fServer.InternalLog('%.Error: %', [ClassType, fCall^.OutBody], sllDebug);
 end;
 
 
@@ -4757,8 +4759,9 @@ begin
       fConnectionID := aCtxt.Call^.LowLevelConnectionID;
       aCtxt.SetRemoteIP(fRemoteIP);
       fRemoteOsVersion := aCtxt.SessionOS;
-      if aCtxt.Log <> nil then
-        aCtxt.Log.Log(sllUserAuth,
+      if Assigned(aCtxt.fLog) and
+         (sllUserAuth in aCtxt.Server.fLogLevel) then
+        aCtxt.fLog.Log(sllUserAuth,
           'New [%] session %/% created at %/% running % {%}',
           [User.GroupRights.Ident, User.LogonName, fID, fRemoteIP,
            aCtxt.Call^.LowLevelConnectionID, aCtxt.GetUserAgent,
@@ -4966,14 +4969,16 @@ begin
   if (result = nil) or
      (result.IDValue = 0) then
   begin
-    fServer.InternalLog('%.LogonName=% not found',
-      [fServer.fAuthUserClass, aUserName], sllUserAuth);
+    if sllUserAuth in fServer.LogLevel then
+      fServer.InternalLog('%.LogonName=% not found',
+        [fServer.fAuthUserClass, aUserName], sllUserAuth);
     FreeAndNil(result);
   end
   else if not result.CanUserLog(Ctxt) then
   begin
-    fServer.InternalLog('%.CanUserLog(%) returned FALSE -> rejected',
-      [result, aUserName], sllUserAuth);
+    if sllUserAuth in fServer.LogLevel then
+      fServer.InternalLog('%.CanUserLog(%) returned FALSE -> rejected',
+        [result, aUserName], sllUserAuth);
     FreeAndNil(result);
   end;
 end;
@@ -5119,13 +5124,15 @@ begin
         result.fLastTimestamp := ts;
       exit;
     end
-    else
-      Ctxt.Log.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
+    else if Assigned(Ctxt.fLog) and
+            (sllUserAuth in fServer.fLogLevel) then
+      Ctxt.fLog.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
         [CardinalToHexShort(expectedsign),
          CardinalToHexShort(sign)], self);
   end
-  else
-    Ctxt.Log.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
+  else if Assigned(Ctxt.fLog) and
+          (sllUserAuth in fServer.fLogLevel) then
+    Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
       [minticks, Int64(ts)], self);
   result := nil; // indicates invalid signature
 end;
@@ -5376,7 +5383,7 @@ begin
     exit;
   if GetUserPassFromInHead(Ctxt, usrpwd, usr, pwd) then
     if usr = result.User.LogonName then
-      with Ctxt.Server.AuthUserClass.Create do
+      with fServer.AuthUserClass.Create do
       try
         PasswordPlain := pwd; // compute SHA-256 hash of the supplied password
         if PasswordHashHexa = result.User.PasswordHashHexa then
@@ -5573,7 +5580,7 @@ begin
     end;
     // 2nd call: user was authenticated -> release used context
     ServerSspiAuthUser(fSspiAuthContext[ndx], username);
-    if sllUserAuth in fServer.fLogFamily.Level then
+    if sllUserAuth in fServer.fLogLevel then
       fServer.InternalLog('% Authentication success for %',
         [SecPackageName(fSspiAuthContext[ndx]), username], sllUserAuth);
     // now client is authenticated -> create a session for aUserName
@@ -5815,7 +5822,7 @@ begin
     if rec.Gran = mugHour then
       fComment := rec.Comment;
     if rec.Process <> fProcessID then
-      fLog.SynLog.Log(sllWarning, 'LoadDB(%,%) received Process=%, expected %',
+      fLog.Add.Log(sllWarning, 'LoadDB(%,%) received Process=%, expected %',
         [ID, ToText(Gran)^, rec.Process, fProcessID], self);
     result := true;
   end
@@ -6950,8 +6957,10 @@ begin
       a := fSessions.List[i];
       if a.User.IDValue = User.IDValue then
       begin
-        InternalLog('User.LogonName=% already connected from %/%',
-          [a.User.LogonName, a.RemoteIP, Ctxt.Call^.LowLevelConnectionID], sllUserAuth);
+        if sllUserAuth in fLogLevel then
+          InternalLog('User.LogonName=% already connected from %/%',
+            [a.User.LogonName, a.RemoteIP, Ctxt.Call^.LowLevelConnectionID],
+            sllUserAuth);
         Ctxt.AuthenticationFailed(afSessionAlreadyStartedForThisUser);
         exit; // user already connected
       end;
@@ -6962,10 +6971,11 @@ begin
     if OnSessionCreate(self, Session, Ctxt) then
     begin
       // callback returning TRUE aborts session creation
-      InternalLog('Session aborted by OnSessionCreate() callback ' +
-        'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
-        [User.LogonName, Session.RemoteIP, Ctxt.Call^.LowLevelConnectionID,
-         fStats.GetClientsCurrent, fSessions.Count], sllUserAuth);
+      if sllUserAuth in fLogLevel then
+        InternalLog('Session aborted by OnSessionCreate() callback ' +
+          'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
+          [User.LogonName, Session.RemoteIP, Ctxt.Call^.LowLevelConnectionID,
+           fStats.GetClientsCurrent, fSessions.Count], sllUserAuth);
       Ctxt.AuthenticationFailed(afSessionCreationAborted);
       User := nil;
       FreeAndNil(Session);
@@ -7045,13 +7055,14 @@ begin
         ClearConnectionOpaque(a.fConnectionOpaque)
       else
         ClearConnectionOpaque(Ctxt.Call^.LowLevelConnectionOpaque);
-    if Ctxt = nil then
-      InternalLog('Deleted deprecated session %:%/% soaGC=%',
-        [a.User.LogonName, a.ID, fSessions.Count, soa], sllUserAuth)
-    else
-      InternalLog('Deleted session %:%/% from %/% soaGC=%',
-        [a.User.LogonName, a.ID, fSessions.Count, a.RemoteIP,
-         Ctxt.Call^.LowLevelConnectionID, soa], sllUserAuth);
+    if sllUserAuth in fLogLevel then
+      if Ctxt = nil then
+        InternalLog('Deleted deprecated session %:%/% soaGC=%',
+          [a.User.LogonName, a.ID, fSessions.Count, soa], sllUserAuth)
+      else
+        InternalLog('Deleted session %:%/% from %/% soaGC=%',
+          [a.User.LogonName, a.ID, fSessions.Count, a.RemoteIP,
+           Ctxt.Call^.LowLevelConnectionID, soa], sllUserAuth);
     if Assigned(OnSessionClosed) then
       OnSessionClosed(self, a, Ctxt);
     fSessions.Delete(aSessionIndex);
@@ -7105,9 +7116,10 @@ begin
           result.fConnectionID := Ctxt.Call^.LowLevelConnectionID
         else if result.ConnectionID <> Ctxt.Call^.LowLevelConnectionID then
         begin
-          InternalLog('Session % from % rejected, since created from %/%',
-           [Ctxt.Session, Ctxt.Call^.LowLevelConnectionID,
-            result.RemoteIP, result.ConnectionID], sllUserAuth);
+          if sllUserAuth in fLogLevel then
+            InternalLog('Session % from % rejected, since created from %/%',
+             [Ctxt.Session, Ctxt.Call^.LowLevelConnectionID,
+              result.RemoteIP, result.ConnectionID], sllUserAuth);
           exit;
         end;
       // found the session: assign it to the request Ctxt
@@ -7807,8 +7819,9 @@ begin
           for i := 0 to Services.Count - 1 do
             inc(count, TServiceFactoryServer(Services.InterfaceList[i].Service).
               RenewSession(Ctxt));
-        InternalLog('Renew % authenticated session % from %: count=%',
-          [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
+        if sllUserAuth in fLogLevel then
+          InternalLog('Renew % authenticated session % from %: count=%',
+            [Model.Root, Ctxt.Session, Ctxt.RemoteIPNotLocal, count], sllUserAuth);
         Ctxt.Returns(['count', count]);
       end
       else if (fServices <> nil) and
@@ -7823,9 +7836,10 @@ begin
           old := GetInt64(pointer(Ctxt.Call^.InBody));
           count := (fServices as TServiceContainerServer).
             FakeCallbackReplaceConnectionID(old, Ctxt.Call^.LowLevelConnectionID);
-          InternalLog('%: Connection % replaced by % from % on %',
-            [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
-             Ctxt.RemoteIPNotLocal, Plural('interface', count)], sllHTTP);
+          if sllHTTP in fLogLevel then
+            InternalLog('%: Connection % replaced by % from % on %',
+              [Model.Root, old, Ctxt.Call^.LowLevelConnectionID,
+               Ctxt.RemoteIPNotLocal, Plural('interface', count)], sllHTTP);
           Ctxt.Returns(['count', count]);
         end;
     mPUT:

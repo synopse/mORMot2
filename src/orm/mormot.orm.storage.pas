@@ -2361,8 +2361,8 @@ begin
     begin
       if ExistingIndex <> nil then
         ExistingIndex^ := ndx
-      else
-        InternalLog('AddOne: non unique %.% on % %',
+      else if sllDB in fRest.LogLevel then
+        fRest.InternalLog('AddOne: non unique %.% on % %',
           [fStoredClass, fUnique[f].PropInfo.Name, fValue[ndx], Rec], sllDB);
       exit;
     end;
@@ -2376,8 +2376,8 @@ begin
     begin
       if ExistingIndex <> nil then
         ExistingIndex^ := ndx
-      else
-        InternalLog('AddOne: non unique %.ID on % %',
+      else if sllDB in fRest.LogLevel then
+        fRest.InternalLog('AddOne: non unique %.ID on % %',
           [fStoredClass, fValue[ndx], Rec], sllDB);
       exit;
     end;
@@ -2425,8 +2425,9 @@ begin
         if (ndx >= 0) and
            (ndx <> aUpdateIndex) then
         begin
-          InternalLog('UniqueFieldsUpdateOK failed on % for %',
-            [PropInfo.Name, aRec], sllDB);
+          if sllDB in fRest.LogLevel then
+            fRest.InternalLog('UniqueFieldsUpdateOK failed on % for %',
+              [PropInfo.Name, aRec], sllDB);
           exit;
         end;
       end;
@@ -3398,7 +3399,7 @@ begin
         fModified := true;
         UpdateFile;
       end;
-      InternalLog('DropValues % in %', [fStoredClass, timer.Stop]);
+      fRest.InternalLog('DropValues % in %', [fStoredClass, timer.Stop]);
     end;
   finally
     StorageUnLock;
@@ -3824,8 +3825,9 @@ begin
     exit;
   if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
-    InternalLog('EngineUpdateFieldIncrement(%) on UNIQUE %.%',
-      [ID, fStoredClass, P.Name], sllDB);
+    if sllDB in fRest.LogLevel then
+      fRest.InternalLog('EngineUpdateFieldIncrement(%) on UNIQUE %.%',
+        [ID, fStoredClass, P.Name], sllDB);
     exit;
   end;
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'EngineUpdateFieldIncrement' {$endif});
@@ -3833,8 +3835,9 @@ begin
     i := IDToIndex(ID);
     if i < 0 then
     begin
-      InternalLog('EngineUpdateFieldIncrement(%): %.ID=% not found',
-        [P.Name, fStoredClass, ID], sllDB);
+      if sllDB in fRest.LogLevel then
+        fRest.InternalLog('EngineUpdateFieldIncrement(%): %.ID=% not found',
+          [P.Name, fStoredClass, ID], sllDB);
       exit;
     end;
     P.GetValueVar(fValue[i], false, V, @wasString);
@@ -3842,8 +3845,9 @@ begin
     if wasString or
        (err <> 0) then
     begin
-      InternalLog('EngineUpdateFieldIncrement: %.%=[%] not an integer',
-        [fStoredClass, P.Name, V], sllDB);
+      if sllDB in fRest.LogLevel then
+        fRest.InternalLog('EngineUpdateFieldIncrement: %.%=[%] not an integer',
+          [fStoredClass, P.Name, V], sllDB);
       exit;
     end;
     Int64ToUtf8(int + Increment, V);
@@ -3894,7 +3898,9 @@ begin
     exit; // don't allow setting ID field, which is Read Only
   if FieldBitGet(fStoredClassRecordProps.IsUniqueFieldsBits, P.PropertyIndex) then
   begin
-    InternalLog('EngineUpdateField on UNIQUE %.%', [fStoredClass, P.Name], sllDB);
+    if sllDB in fRest.LogLevel then
+      fRest.InternalLog('EngineUpdateField on UNIQUE %.%',
+        [fStoredClass, P.Name], sllDB);
     exit; { TODO : allow update UNIQUE field? }
   end;
   SetValueWasString := SetValue[1] = '"';
@@ -4252,7 +4258,7 @@ begin
   finally
     StorageUnLock;
   end;
-  InternalLog('UpdateFile % in %', [fStoredClass, timer.Stop], sllDB);
+  fRest.InternalLog('UpdateFile % in %', [fStoredClass, timer.Stop], sllDB);
 end;
 
 procedure TRestStorageInMemory.SetFileName(const aFileName: TFileName);
@@ -4900,7 +4906,7 @@ begin
       fShardTableIndex[i] := -1
     else
       fShardTableIndex[i] := fShards[i].Model.GetTableIndexExisting(aClass);
-  InternalLog('Create(%,range=%,maxcount=%) [%..%]', [fStoredClass,
+  fRest.InternalLog('Create(%,range=%,maxcount=%) [%..%]', [fStoredClass,
     fShardRange, fMaxShardCount, fShardOffset, fShardOffset + n - 1], sllDB);
 end;
 
@@ -5062,7 +5068,9 @@ begin
       if fShards[fShardLast].EngineAdd(
         fShardTableIndex[fShardLast], data) <> result then
       begin
-        InternalLog('EngineAdd error %.ID=%', [fStoredClass, result], sllDB);
+        if sllDB in fRest.LogLevel then
+          fRest.InternalLog('EngineAdd error %.ID=%',
+            [fStoredClass, result], sllDB);
         result := 0;
       end;
     end;
@@ -5156,7 +5164,7 @@ var
   i: PtrInt;
 begin
   result := 0;
-  InternalLog('TableRowCount(%) may take a while', [fStoredClass], sllWarning);
+  fRest.InternalLog('TableRowCount(%) may take a while', [fStoredClass], sllWarning);
   for i := 0 to high(fShards) do
     // no StorageLock protection to avoid blocking
     if fShards[i] <> nil then

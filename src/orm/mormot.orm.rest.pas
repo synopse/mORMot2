@@ -2450,7 +2450,7 @@ begin
      (Batch = nil) then
     // no opened BATCH sequence
     exit;
-  InternalLog('BatchSend %', [Batch]);
+  fRest.InternalLog('BatchSend %', [Batch]);
   if Batch.PrepareForSending(json) then
     if json = '' then // i.e. Batch.Count=0
       result := HTTP_SUCCESS

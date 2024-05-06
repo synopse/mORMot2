@@ -923,10 +923,11 @@ begin
       status := BatchSend(batch, ids);
       if status = HTTP_SUCCESS then
       begin
-        InternalLog(
-          'RecordVersionSynchronize(%) Added=% Updated=% Deleted=% on %',
-          [Table, batch.AddCount, batch.UpdateCount, batch.DeleteCount,
-           Master], sllDebug);
+        if sllDebug in fRest.LogLevel then
+          fRest.InternalLog(
+            'RecordVersionSynchronize(%) Added=% Updated=% Deleted=% on %',
+            [Table, batch.AddCount, batch.UpdateCount, batch.DeleteCount,
+             Master], sllDebug);
         if ChunkRowLimit = 0 then
         begin
           result := fRecordVersionMax[t];
@@ -935,7 +936,7 @@ begin
       end
       else
       begin
-        InternalLog('RecordVersionSynchronize(%) BatchSend=%',
+        fRest.InternalLog('RecordVersionSynchronize(%) BatchSend=%',
           [Table, status], sllError);
         fRecordVersionMax[t] := 0; // force recompute the maximum from DB
         break;
@@ -1386,7 +1387,7 @@ begin
             RetrieveBlobFields(histblob);
           if not histblob.HistoryOpen(fModel) then
           begin
-            InternalLog('Invalid %.History BLOB content for ID=%: % ' +
+            fRest.InternalLog('Invalid %.History BLOB content for ID=%: % ' +
               'layout may have changed -> flush any previous content',
               [histblob.RecordClass, histblob.IDValue,
                histjson.ModifiedTable(fModel)], sllError);
@@ -1652,7 +1653,7 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
           Ref^.FieldType.Name, '0', Ref^.FieldType.Name, W);
     end;
     if not cascadeOK then
-      InternalLog('AfterDeleteForceCoherency() failed update %.%=%',
+      fRest.InternalLog('AfterDeleteForceCoherency() failed update %.%=%',
         [fModel.Tables[Ref^.TableIndex], Ref^.FieldType.Name, W], sllWarning);
   end;
 

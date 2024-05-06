@@ -1048,10 +1048,11 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
     finally
       fInstances.Safe.WriteUnLock;
     end;
-    fRestServer.InternalLog(
-      '%.RetrieveInstance: new I%(%) % instance (id=%) count=%',
-      [ClassType, fInterfaceUri, pointer(Inst.Instance),
-       ToText(fInstanceCreation)^, Inst.InstanceID, fInstances.Count], sllDebug);
+    if sllDebug in fRestServer.LogLevel then
+      fRestServer.InternalLog(
+        '%.RetrieveInstance: new I%(%) % instance (id=%) count=%',
+        [ClassType, fInterfaceUri, pointer(Inst.Instance),
+         ToText(fInstanceCreation)^, Inst.InstanceID, fInstances.Count], sllDebug);
   end;
 
 var
@@ -1078,10 +1079,11 @@ begin
             P := @fInstance[i]; // fInstance[i] due to Delete(i) below
             if tix > P^.LastAccess then
             begin
-              fRestServer.InternalLog('%.RetrieveInstance: deleted I% % ' +
-                'instance (id=%) after % minutes timeout',
-                [ClassType, fInterfaceUri, P^.Instance, P^.InstanceID,
-                 fInstanceTimeOut div 60], sllInfo);
+              if sllInfo in fRestServer.LogLevel then
+                fRestServer.InternalLog('%.RetrieveInstance: deleted I% % ' +
+                  'instance (id=%) after % minutes timeout',
+                  [ClassType, fInterfaceUri, P^.Instance, P^.InstanceID,
+                   fInstanceTimeOut div 60], sllInfo);
               InstanceFreeGC(P^.Instance);
               fInstances.DynArray.Delete(i);
             end;
@@ -1953,7 +1955,8 @@ begin
     FormatUtf8('[%,"%"]',
       [PtrInt(PtrUInt(fake.fFakeInterface)), fake.Factory.InterfaceName], params);
     Ctxt.ServiceParameters := pointer(params);
-    withlog := fake.canlog; // before ExcuteMethod which may free fake instance
+    withlog := (sllDebug in fRestServer.LogLevel) and
+               fake.CanLog; // before ExcuteMethod which may free fake instance
     fake._AddRef; // ExecuteMethod() calls fake._Release on its parameter
     fake.fService.ExecuteMethod(Ctxt);
     if withlog then
@@ -2024,8 +2027,9 @@ begin
        length(fCallbackNamesSorted) - 1, params[0].Name.Text) < 0) then
     exit;
   if not params[0].Name.Idem('ISynLogCallback') then // avoid stack overflow
-    fRestServer.InternalLog('%.ReleaseFakeCallback(%,"%") remote call',
-      [ClassType, fakeID, params[0].Name.Text], sllDebug);
+    if sllDebug in fRestServer.LogLevel then
+      fRestServer.InternalLog('%.ReleaseFakeCallback(%,"%") remote call',
+        [ClassType, fakeID, params[0].Name.Text], sllDebug);
   fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
   try
     fake := FakeCallbackFind(pointer(fFakeCallbacks.List), fFakeCallbacks.Count,
@@ -2416,7 +2420,7 @@ end;
 
 procedure TServiceRecordVersionCallback.CurrentFrame(isLast: boolean);
 
-  procedure Error(const msg: RawUtf8);
+  procedure Error(const msg: shortstring);
   begin
     fRest.InternalLog('%.CurrentFrame(%) on %: %',
       [self, isLast, fTable, msg], sllError);

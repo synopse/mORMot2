@@ -1099,7 +1099,7 @@ begin
   inc(fShardLast);
   FormatUtf8('shard%', [fShardLast], root);
   fn := DBFileName(fShardLast);
-  InternalLog('InitNewShard % on %', [root, fn]);
+  fRest.InternalLog('InitNewShard % on %', [root, fn], sllDB);
   model := TOrmModel.Create([fStoredClass], root);
   if fInitShardsIsLast then
     // last/new .dbs = 2MB cache, previous 1MB only
@@ -1134,7 +1134,7 @@ begin
   else
     mask := fShardRootFileName + '*.dbs';
   db := FindFiles(ExtractFilePath(mask), ExtractFileName(mask), '', [ffoSortByName]);
-  InternalLog('InitShards mask=% db=%', [mask, length(db)]);
+  fRest.InternalLog('InitShards mask=% db=%', [mask, length(db)], sllDB);
   if db = nil then
     exit; // no existing data
   fShardOffset := -1;
@@ -1147,7 +1147,7 @@ begin
     if (i <= 4) or
        not TryStrToInt(Copy(db[f].Name, i - 4, 4), num) then
     begin
-      InternalLog('InitShards(%)?', [db[f].Name], sllWarning);
+      fRest.InternalLog('InitShards(%)?', [db[f].Name], sllWarning);
       continue;
     end;
     if fShardOffset < 0 then
@@ -1227,8 +1227,7 @@ begin
     timer, @fStatementMonitor, @plan);
   if wasprepared and
      (fRest <> nil) and
-     (fRest.LogFamily <> nil) and
-     (sllDB in fRest.LogFamily.Level) then
+     (sllDB in fRest.LogLevel) then
     fRest.InternalLog('prepared % % %  %', [fStaticStatementTimer.Stop,
       DB.FileNameWithoutPath, fStatementDecoder.GenericSql, plan], sllDB);
   if timer = nil then
@@ -1298,7 +1297,7 @@ begin
       else
         fStatementTimer^.Pause;
       if E <> nil then
-        InternalLog('% for % // %',
+        fRest.InternalLog('% for % // %',
           [E, fStatementSql, fStatementDecoder.GenericSql], sllError)
       else if sllSQL in fRest.LogLevel then
         if (fStatementTruncateSqlLogLen > 0) and
@@ -1442,7 +1441,7 @@ begin
   if fBatch^.Encoding = encPost then
   begin
     if SentData = '' then
-      InternalLog('MainEngineAdd(%,SentData="") -> ' +
+      fRest.InternalLog('MainEngineAdd(%,SentData="") -> ' +
         'DEFAULT VALUES not implemented on BATCH', [sql], sllError)
     else
     begin

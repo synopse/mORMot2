@@ -805,7 +805,7 @@ begin
     end;
     if stmt.Offset <> 0 then
     begin
-      InternalLog('AdaptSqlForEngineList: unsupported OFFSET for [%]',
+      fRest.InternalLog('AdaptSqlForEngineList: unsupported OFFSET for [%]',
         [SQL], sllWarning);
       exit;
     end;
@@ -816,7 +816,7 @@ begin
       limit := fProperties.SqlLimitClause(stmt);
       if limit.Position = posNone then
       begin
-        InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
+        fRest.InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
           [ToText(fProperties.Dbms)^, SQL], sllWarning);
         exit;
       end;
@@ -908,7 +908,8 @@ begin
             if (FunctionName <> '') or
                (Operation > high(DB_SQLOPERATOR)) then
             begin
-              InternalLog('AdaptSqlForEngineList: unsupported function %() for [%]',
+              fRest.InternalLog(
+                'AdaptSqlForEngineList: unsupported function %() for [%]',
                 [FunctionName, SQL], sllWarning);
               exit;
             end;
@@ -2064,7 +2065,7 @@ begin
     conn := fProperties.ThreadSafeConnection;
     if conn.LastErrorWasAboutConnection then
     begin
-      InternalLog(
+      fRest.InternalLog(
         'HandleClearPoolOnConnectionIssue: ClearConnectionPool after %',
         [conn.LastErrorException], sllDB);
       fProperties.ClearConnectionPool;

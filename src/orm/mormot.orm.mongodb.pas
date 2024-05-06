@@ -298,7 +298,7 @@ begin
   inherited Create(aClass, aServer);
   // ConnectionProperties should have been set in OrmMapMongoDB()
   fCollection := fStoredClassMapping^.ConnectionProperties as TMongoCollection;
-  InternalLog('will store % using %', [aClass, Collection], sllInfo);
+  fRest.InternalLog('will store % using %', [aClass, Collection], sllInfo);
   BsonProjectionSet(fBsonProjectionSimpleFields, true,
     fStoredClassRecordProps.SimpleFieldsBits[ooSelect], nil, nil);
   BsonProjectionSet(fBsonProjectionBlobFields, false,
@@ -400,7 +400,7 @@ begin
   inherited;
   FreeAndNilSafe(fBatchWriter);
   fEngineGenerator.Free;
-  InternalLog('Destroy for % using %', [fStoredClass, Collection], sllInfo);
+  fRest.InternalLog('Destroy for % using %', [fStoredClass, Collection], sllInfo);
 end;
 
 function TRestStorageMongoDB.TableHasRows(Table: TOrmClass): boolean;
@@ -466,8 +466,9 @@ function TRestStorageMongoDB.EngineNextID: TID;
       EOrmMongoDB.RaiseUtf8(
         'Unexpected %.EngineNextID with %', [self, ToText(fEngineAddCompute)^]);
     end;
-    InternalLog('ComputeMax_ID=% in % using %',
-      [fEngineLastID, MicroSecFrom(start), ToText(fEngineAddCompute)^], sllInfo);
+    if sllInfo in fRest.LogLevel then
+      fRest.InternalLog('ComputeMax_ID=% in % using %',
+        [fEngineLastID, MicroSecFrom(start), ToText(fEngineAddCompute)^], sllInfo);
   end;
 
 begin
@@ -1210,7 +1211,7 @@ var
       for w := 2 to n - 1 do
         if not Stmt.Where[w].joinedOR then
         begin
-          InternalLog('%.EngineList: mixed AND/OR not supported for [%]',
+          fRest.InternalLog('%.EngineList: mixed AND/OR not supported for [%]',
             [ClassType, SQL], sllError);
           exit;
         end;
@@ -1230,7 +1231,7 @@ var
         if not B.BsonWriteQueryOperator(
             FieldName, NotClause, Operation, ValueVariant) then
         begin
-          InternalLog(
+          fRest.InternalLog(
             '%.EngineList: operator % not supported for field [%] in [%]',
             [ClassType, ToText(Operation)^, FieldName, SQL], sllError);
           exit;
@@ -1253,7 +1254,7 @@ var
     result := false;
     if Stmt.SqlStatement = '' then
     begin
-      InternalLog('%.EngineList: Invalid SQL statement [%]',
+      fRest.InternalLog('%.EngineList: Invalid SQL statement [%]',
         [ClassType, SQL], sllError);
       exit;
     end;
@@ -1267,7 +1268,7 @@ var
     end;
     if Stmt.WhereHasParenthesis then
     begin
-      InternalLog('%.EngineList: parenthesis not supported in [%]',
+      fRest.InternalLog('%.EngineList: parenthesis not supported in [%]',
         [ClassType, SQL], sllError);
       exit;
     end;
@@ -1338,7 +1339,7 @@ var
       if PropNameEquals(Stmt.Select[i].FunctionName, 'distinct') then
         if distinct >= 0 then
         begin
-          InternalLog('%.EngineList: distinct() only allowed once in [%]',
+          fRest.InternalLog('%.EngineList: distinct() only allowed once in [%]',
             [ClassType, SQL], sllError);
           exit;
         end
@@ -1361,7 +1362,7 @@ var
         for i := 0 to high(Stmt.GroupByField) do
           if Stmt.GroupByField[i] <> distinct then
           begin
-            InternalLog('%.EngineList: Distinct(%) expected GROUP BY % in [%]',
+            fRest.InternalLog('%.EngineList: Distinct(%) expected GROUP BY % in [%]',
               [ClassType, distinctName, distinctName, SQL], sllError);
             exit;
           end;
@@ -1389,7 +1390,7 @@ var
             ['max', 'min', 'avg', 'sum', 'count'], FunctionName));
           if ord(func) < 0 then
           begin
-            InternalLog('%.EngineList: unexpected function %() in [%]',
+            fRest.InternalLog('%.EngineList: unexpected function %() in [%]',
               [ClassType, FunctionName, SQL], sllError);
             exit;
           end;
@@ -1407,7 +1408,7 @@ var
         if (length(Stmt.OrderByField) <> 1) or
            (Stmt.OrderByField[0] <> distinct) then
         begin
-          InternalLog('%.EngineList: ORDER BY should match Distinct(%) in [%]',
+          fRest.InternalLog('%.EngineList: ORDER BY should match Distinct(%) in [%]',
             [ClassType, distinctName, SQL], sllError);
           exit;
         end;
@@ -1476,7 +1477,7 @@ begin
   ResCount := 0;
   if self = nil then
     exit;
-  InternalLog(SQL, sllSQL);
+  fRest.InternalLog(SQL, sllSQL);
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'MongoList' {$endif});
   try
     if PropNameEquals(fBasicSqlCount, SQL) then
