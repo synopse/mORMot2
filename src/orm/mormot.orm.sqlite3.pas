@@ -2152,8 +2152,8 @@ begin
      (FieldName = '') then
     exit;
   props := Model.TableProps[TableModelIndex].Props;
-  if props.Fields.IndexByName(FieldName) < 0 then
-    Exit;
+  if not props.Fields.Exists(FieldName) then
+    exit;
   if InternalUpdateEventNeeded(oeUpdate, TableModelIndex) or
      (props.RecordVersionField <> nil) then
     result := OneFieldValue(props.Table, FieldName, 'ID=?', [], [ID], value) and
@@ -2178,7 +2178,7 @@ begin
      (SetFieldName = '') then
     exit;
   props := Model.TableProps[TableModelIndex].Props;
-  if props.Fields.IndexByName(SetFieldName) < 0 then
+  if not props.Fields.Exists(SetFieldName) then
     exit;
   if WhereFieldName = '' then
     whereid := -1 // update all
@@ -2188,7 +2188,7 @@ begin
     if whereid <= 0 then
       exit;
   end
-  else if props.Fields.IndexByName(WhereFieldName) < 0 then
+  else if not props.Fields.Exists(WhereFieldName) then
     exit
   else
     whereid := 0;

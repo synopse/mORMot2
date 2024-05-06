@@ -1953,6 +1953,9 @@ type
     /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
     function IndexByNameU(aName: PUtf8Char): PtrInt;
+    /// check if an item exists in the list
+    function Exists(const aName: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EOrmException if not found in the internal list
@@ -7478,6 +7481,11 @@ end;
 function TOrmPropInfoList.IndexByName(const aName: RawUtf8): integer;
 begin
   result := IndexByNameU(pointer(aName));
+end;
+
+function TOrmPropInfoList.Exists(const aName: RawUtf8): boolean;
+begin
+  result := IndexByNameU(pointer(aName)) >= 0;
 end;
 
 function TOrmPropInfoList.IndexByNameOrExceptShort(aName: ShortString): PtrInt;
