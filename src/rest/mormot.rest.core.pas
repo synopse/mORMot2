@@ -1381,6 +1381,7 @@ type
     // - may avoid OS API calls on server side, during a request process
     // - warning: do not use within loops for timeout, because it won't change
     function TickCount64: Int64;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJwtAbstract.Verify method
@@ -3982,15 +3983,15 @@ end;
 
 function TRestUriContext.TickCount64: Int64;
 begin
-  if (self = nil) or
-     (fTix64 = 0) then
+  if self <> nil then
   begin
-    result := GetTickCount64;
-    if self <> nil then
-      fTix64 := result; // store in cache during the whole request flow
-  end
-  else
     result := fTix64;
+    if result <> 0 then
+      exit;
+  end;
+  result := mormot.core.os.GetTickCount64;
+  if self <> nil then
+    fTix64 := result; // store in cache during the whole request flow
 end;
 
 procedure SetCacheControl(var Head: RawUtf8; CacheControlMaxAge: integer);
