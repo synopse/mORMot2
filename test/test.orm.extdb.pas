@@ -995,9 +995,9 @@ begin
       MapAutoKeywordFields <> nil);
   Check(OrmMapExternal(fExternalModel, TOrmOnlyBlob, fProperties, 'OnlyBlobExternal') <> nil);
   Check(OrmMapExternal(fExternalModel, TOrmTestJoin, fProperties, 'TestJoinExternal') <> nil);
-  Check(OrmMapExternal(fExternalModel, TOrmASource, fProperties, 'SourceExternal') <> nil);
-  Check(OrmMapExternal(fExternalModel, TOrmADest, fProperties, 'DestExternal') <> nil);
-  Check(OrmMapExternal(fExternalModel, TOrmADests, fProperties, 'DestsExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmASource,  fProperties, 'SourceExternal')   <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADest,    fProperties, 'DestExternal')     <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADests,   fProperties, 'DestsExternal')    <> nil);
   DeleteFile('testExternal.db3'); // need a file for backup testing
   if TrackChanges and
      StaticVirtualTableDirect then
