@@ -951,6 +951,14 @@ type
       read fEndOfLineCRLF write fEndOfLineCRLF;
   end;
 
+  /// available options for TSynLogThreadRecursion.MethodNameLocal
+  // - define if the method name is local, i.e. shall not be displayed at Leave()
+  TSynLogThreadMethodName = (
+    mnAlways,
+    mnEnter,
+    mnLeave,
+    mnEnterOwnMethodName);
+
   /// TSynLogThreadContext will define a dynamic array of such information
   // - used by TSynLog.Enter methods to handle recursivity calls tracing
   TSynLogThreadRecursion = record
@@ -962,7 +970,7 @@ type
     /// internal reference count used at this recursion level by TSynLog._AddRef
     RefCount: integer;
     /// if the method name is local, i.e. shall not be displayed at Leave()
-    MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
+    MethodNameLocal: TSynLogThreadMethodName;
     {$ifdef ISDELPHI}
     /// the caller address, ready to display stack trace dump if needed
     Caller: PtrUInt;
@@ -1267,10 +1275,12 @@ type
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
     // - aMethodName should be a not nil constant text
-    procedure ManualEnter(aMethodName: PUtf8Char; aInstance: TObject = nil);
+    procedure ManualEnter(aMethodName: PUtf8Char; aInstance: TObject = nil;
+      aMethodNameLocal: TSynLogThreadMethodName =  mnEnter);
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level latest value returned by QueryPerformanceMicroSeconds()
     // - is only accurate after Enter() or if HighResolutionTimestamp is set
     function LastQueryPerformanceMicroSeconds: Int64;
@@ -4847,7 +4857,8 @@ begin
   result := log;
 end;
 
-procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
+procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject;
+  aMethodNameLocal: TSynLogThreadMethodName);
 var
   r: PSynLogThreadRecursion;
 begin
@@ -4862,7 +4873,7 @@ begin
     // inlined TSynLog.Enter
     r^.Instance := aInstance;
     r^.MethodName := aMethodName;
-    r^.MethodNameLocal := mnEnter;
+    r^.MethodNameLocal := aMethodNameLocal;
     // inlined TSynLog._AddRef
     if sllEnter in fFamily.Level then
     begin
