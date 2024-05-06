@@ -839,7 +839,7 @@ function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): R
 /// find out if the supplied WHERE clause starts with one of the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
