@@ -448,13 +448,12 @@ type
     fRun: TRestRunThreads;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
+    fLogLevel: TSynLogLevels;
+    fServerTimestampCacheTix: cardinal;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectList;
-    fServerTimestamp: record
-      Offset: TDateTime;
-      CacheTix: cardinal;
-      CacheValue: TTimeLogBits;
-    end;
+    fServerTimestampOffset: TDateTime;
+    fServerTimestampCacheValue: TTimeLogBits;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     /// wrapper methods to access fAcquireExecution[]
@@ -539,6 +538,7 @@ type
 
     /// ease logging of some text in the context of the current TRest
     procedure InternalLog(const Text: RawUtf8; Level: TSynLogLevel); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// ease logging of some text in the context of the current TRest
     procedure InternalLog(const Format: RawUtf8; const Args: array of const;
       Level: TSynLogLevel = sllTrace); overload;
@@ -657,6 +657,9 @@ type
     /// access to the associate TSynLog class familly
     property LogFamily: TSynLogFamily
       read fLogFamily;
+    /// access to the associate TSynLog class events
+    property LogLevel: TSynLogLevels
+      read fLogLevel;
 
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestOrm methods
@@ -2068,13 +2071,15 @@ procedure TRest.SetLogClass(aClass: TSynLogClass);
 begin
   fLogClass := aClass;
   fLogFamily := fLogClass.Family;
+  fLogLevel := [];
+  if fLogFamily <> nil then
+    fLogLevel := fLogFamily.Level;
 end;
 
 procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogLevel);
 begin
   if (self <> nil) and
-     (fLogFamily <> nil) and
-     (Level in fLogFamily.Level) then
+     (Level in fLogLevel) then
     fLogFamily.Add.Log(Level, Text, self);
 end;
 
@@ -2082,8 +2087,7 @@ procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
   Level: TSynLogLevel);
 begin
   if (self <> nil) and
-     (fLogFamily <> nil) and
-     (Level in fLogFamily.Level) then
+     (Level in fLogLevel) then
     fLogFamily.Add.Log(Level, Format, Args, self);
 end;
 
@@ -2091,9 +2095,12 @@ function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
   if (self <> nil) and
-     (fLogFamily <> nil) and
-     (sllEnter in fLogFamily.Level) then
-    result := fLogClass.Enter(TextFmt, TextArgs, aInstance)
+     (sllEnter in fLogLevel) then
+  begin
+    if aInstance = nil then
+      aInstance := self;
+    result := fLogClass.Enter(TextFmt, TextArgs, aInstance);
+  end
   else
     result := nil;
 end;
@@ -2105,25 +2112,24 @@ begin
   if tix64 = 0 then
     tix64 := GetTickCount64;
   tix := tix64 shr 9; // resolution change from 1 ms to 512 ms
-  with fServerTimestamp do
-    if CacheTix = tix then
-      result := CacheValue.Value
-    else
-    begin
-      CacheTix := tix;
-      CacheValue.From(NowUtc + Offset);
-      result := CacheValue.Value;
-    end;
+  if fServerTimestampCacheTix = tix then
+    result := fServerTimestampCacheValue.Value
+  else
+  begin
+    fServerTimestampCacheTix := tix;
+    fServerTimestampCacheValue.From(NowUtc + fServerTimestampOffset);
+    result := fServerTimestampCacheValue.Value;
+  end;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
 begin
   if Value = 0 then
-    fServerTimestamp.Offset := 0
+    fServerTimestampOffset := 0
   else
-    fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
-  if fServerTimestamp.Offset = 0 then
-    fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
+    fServerTimestampOffset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
+  if fServerTimestampOffset = 0 then
+    fServerTimestampOffset := 0.000001; // retrieve server date/time only once
 end;
 
 function TRest.GetAcquireExecutionMode(
