@@ -772,7 +772,7 @@ end;
 function TRestHttpClientSocket.InternalRequest(const url, method: RawUtf8;
   var Header, Data, DataType: RawUtf8): Int64Rec;
 begin
-  fLogFamily.SynLog.Log(sllTrace, 'InternalRequest % calling %(%).Request',
+  fLogFamily.Add.Log(sllTrace, 'InternalRequest % calling %(%).Request',
     [method, fSocket.ClassType, pointer(fSocket)], self);
   result.Lo := fSocket.Request(
     url, method, KeepAliveMS, Header, RawByteString(Data), DataType, false);
@@ -991,7 +991,7 @@ var
   prevconn: THttpServerConnectionID;
   log: ISynLog;
 begin
-  log := fLogFamily.SynLog.Enter(self, 'WebSocketsUpgrade');
+  log := fLogFamily.Add.Enter(self, 'WebSocketsUpgrade');
   sockets := WebSockets; // call IsOpen if necessary
   if sockets = nil then
     result := 'Impossible to connect to the Server'

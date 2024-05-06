@@ -3353,7 +3353,7 @@ begin
   g^.SortByName;
   ID.Truncate(Gran);
   if not SaveDB(ID.Value, fValues[Gran], Gran) then
-    fLog.SynLog.Log(sllWarning, 'Save(ID=%=%,%) failed',
+    fLog.Add.Log(sllWarning, 'Save(ID=%=%,%) failed',
       [ID.Value, ID.Text(true), ToText(Gran)^], self);
 end;
 

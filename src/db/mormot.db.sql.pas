@@ -6866,7 +6866,7 @@ end;
 
 function TSqlDBStatement.DoSqlLogBegin(Log: TSynLogFamily; Level: TSynLogLevel): TSynLog;
 begin
-  result := Log.SynLog;
+  result := Log.Add;
   fSqlLogLevel := Level;
   if Level = sllSQL then // sllSQL = executeprepared
     ComputeSqlWithInlinedParams;

@@ -1606,7 +1606,7 @@ begin
     if AutoFlushTimeOut = 0 then
       // flush any pending text into .log file every 2 sec
       AutoFlushTimeOut := 2;
-    fLogFile := SynLog;
+    fLogFile := Add;
   end;
 end;
 

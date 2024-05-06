@@ -2075,7 +2075,7 @@ begin
   if (self <> nil) and
      (fLogFamily <> nil) and
      (Level in fLogFamily.Level) then
-    fLogFamily.SynLog.Log(Level, Text, self);
+    fLogFamily.Add.Log(Level, Text, self);
 end;
 
 procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
@@ -2084,14 +2084,12 @@ begin
   if (self <> nil) and
      (fLogFamily <> nil) and
      (Level in fLogFamily.Level) then
-    fLogFamily.SynLog.Log(Level, Format, Args, self);
+    fLogFamily.Add.Log(Level, Format, Args, self);
 end;
 
 function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
-  if aInstance = nil then
-    aInstance := self;
   if (self <> nil) and
      (fLogFamily <> nil) and
      (sllEnter in fLogFamily.Level) then

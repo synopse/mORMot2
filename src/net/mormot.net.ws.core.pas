@@ -2968,7 +2968,7 @@ begin
       if aEvent in Level then
         if (logHeartbeat in fSettings.LogDetails) or
            not (frame.opcode in [focPing, focPong]) then
-          DoLog(SynLog);
+          DoLog(Add);
 end;
 
 function TWebSocketProcess.GetFrame(out Frame: TWebSocketFrame;

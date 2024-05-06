@@ -5832,18 +5832,15 @@ procedure TOnInterfaceStubExecuteParamsVariant.AddLog(aLog: TSynLogClass;
 var
   val: variant;
 begin
-  if aLog = nil then
+  if (aLog = nil) or
+     not (aLevel in aLog.Family.Level) then
     exit;
-  with aLog.Family do
-    if aLevel in Level then
-    begin
-      if aOutput then
-        val := OutputAsDocVariant(pdvObjectFixed)
-      else
-        val := InputAsDocVariant(pdvObjectFixed);
-      SynLog.Log(aLevel, '%(%)', [fMethod^.InterfaceDotMethodName,
-         _Safe(val)^.ToTextPairs('=', ',', twJsonEscape)], self);
-    end;
+  if aOutput then
+    val := OutputAsDocVariant(pdvObjectFixed)
+  else
+    val := InputAsDocVariant(pdvObjectFixed);
+  aLog.Add.Log(aLevel, '%(%)', [fMethod^.InterfaceDotMethodName,
+     _Safe(val)^.ToTextPairs('=', ',', twJsonEscape)], self);
 end;
 
 
