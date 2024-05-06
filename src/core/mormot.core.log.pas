@@ -646,6 +646,7 @@ type
     fRotateFileCount: cardinal;
     fRotateFileSizeKB: cardinal;
     fRotateFileDailyAtHour: integer;
+    function GetLog: TSynLog; // from inlined Add (calls CreateSynLog if needed)
     function CreateSynLog: TSynLog;
     procedure EnsureAutoFlushRunning;
     procedure SetDestinationPath(const value: TFileName);
@@ -669,9 +670,9 @@ type
     destructor Destroy; override;
 
     /// retrieve the corresponding log file of this thread and family
-    // - creates the TSynLog if not already existing for this current thread
-    // - not worth inlining: TSynLog.Add will directly check fGlobalLog
-    function SynLog: TSynLog;
+    // - calls GetLog if needed (e.g. at startup or if fGlobalLog is not set)
+    function Add: TSynLog;
+      {$ifdef HASINLINE} inline; {$endif}
     /// register one object and one echo callback for remote logging
     // - aClient is typically a mORMot's TRestHttpClient or a TSynLogCallbacks
     // instance as defined in this unit
@@ -3882,7 +3883,7 @@ begin
   if fHandleExceptions and
      (GlobalCurrentHandleExceptionSynLog = nil) then
   begin
-    SynLog; // force GlobalCurrentHandleExceptionSynLog assignment
+    GetLog; // force GlobalCurrentHandleExceptionSynLog assignment
     RawExceptionIntercept(SynLogException);
   end;
   {$endif NOEXCEPTIONINTERCEPT}
@@ -4097,7 +4098,17 @@ begin
   end;
 end;
 
-function TSynLogFamily.SynLog: TSynLog;
+function TSynLogFamily.Add: TSynLog;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  result := fGlobalLog;  // <>nil for ptMergedInOneFile/ptIdentifiedInOneFile
+  if result = nil then
+    result := GetLog; // call sub-proc for ptOneFilePerThread or once at startup
+end;
+
+function TSynLogFamily.GetLog: TSynLog;
 begin
   if self <> nil then
   begin
@@ -4263,7 +4274,7 @@ end;
 
 procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
 begin
-  SynLog.NotifyThreadEnded;
+  Add.NotifyThreadEnded;
 end;
 
 
@@ -4328,7 +4339,7 @@ begin
   result := lf.fGlobalLog;
   // <>nil for ptMergedInOneFile and ptIdentifiedInOneFile (most common case)
   if result = nil then
-    result := lf.SynLog; // ptOneFilePerThread or at startup
+    result := lf.GetLog; // ptOneFilePerThread or at startup
 end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
@@ -6017,7 +6028,7 @@ begin
     for i := 0 to high(SynLogFamily) do
       if SynLogFamily[i].fHandleExceptions then
       begin
-        result := SynLogFamily[i].SynLog;
+        result := SynLogFamily[i].Add;
         exit;
       end;
   end
