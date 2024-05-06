@@ -466,8 +466,7 @@ begin
   if (P = nil) or
      (PLen <= 0) then
     result := 0
-  else
-  if PWord(P)^ = ord('\') + ord('x') shl 8 then {ssByteAasHex in fServerSettings}
+  else if PWord(P)^ = ord('\') + ord('x') shl 8 then {ssByteAasHex in fServerSettings}
   begin
     result := (PLen - 2) shr 1; // skip trailing \x and compute number of bytes
     if result > 0 then

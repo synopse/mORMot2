@@ -839,6 +839,7 @@ function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): R
 /// find out if the supplied WHERE clause starts with one of the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
@@ -2463,22 +2464,24 @@ end;
 function SelectInClause(const PropName: RawUtf8; const Values: array of RawUtf8;
   const Suffix: RawUtf8; ValuesInlinedMax: integer): RawUtf8;
 var
-  n, i: integer;
+  n, i: PtrInt;
+  inlined: boolean;
   temp: TTextWriterStackBuffer;
 begin
   n := length(Values);
   if n > 0 then
-    with TJsonWriter.CreateOwnedStream(temp) do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
+      inlined := ValuesInlinedMax > n;
       AddString(PropName);
       if n = 1 then
       begin
-        if ValuesInlinedMax > 1 then
+        if inlined then
           AddShorter('=:(')
         else
           AddDirect('=');
         AddQuotedStr(pointer(Values[0]), length(Values[0]), '''');
-        if ValuesInlinedMax > 1 then
+        if inlined then
           AddShorter('):');
       end
       else
@@ -2486,10 +2489,10 @@ begin
         AddShorter(' in (');
         for i := 0 to n - 1 do
         begin
-          if ValuesInlinedMax > n then
+          if inlined then
             AddDirect(':', '(');
           AddQuotedStr(pointer(Values[i]), length(Values[i]), '''');
-          if ValuesInlinedMax > n then
+          if inlined then
             AddShorter('):,')
           else
             AddComma;
@@ -2789,17 +2792,16 @@ end;
 { TResultsWriter }
 
 const
-  VOID_ARRAY: PAnsiChar = '[]'#10;
-  VOID_FIELD: PAnsiChar = '{"FieldCount":0}';
+  VOID_ARRAYFIELD: array[boolean] of string[16] = (
+    '[]'#10, '{"FieldCount":0}'); // same as sqlite3_get_table()
 
 procedure TResultsWriter.CancelAllVoid;
+var
+  p: PShortString;
 begin
   CancelAll; // rewind JSON
-  if fExpand then
-    // same as sqlite3_get_table()
-    inc(fTotalFileSize, fStream.Write(VOID_ARRAY^, 3))
-  else
-    inc(fTotalFileSize, fStream.Write(VOID_FIELD^, 16));
+  p := @VOID_ARRAYFIELD[fExpand];
+  inc(fTotalFileSize, fStream.Write(p^[1], ord(p^[0])));
 end;
 
 constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
@@ -2870,7 +2872,7 @@ begin
       AddString(ColNames[i]);
       AddShorter('","');
     end;
-    CancelLastChar('"');
+    CancelLastChar;
     fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
@@ -3853,7 +3855,7 @@ function TJsonObjectDecoder.EncodeAsSql(const Prefix1, Prefix2: RawUtf8;
   Update: boolean; Prefix1Batch: PRestBatchOptions; DB: TSqlDBDefinition): RawUtf8;
 var
   f: PtrInt;
-  W: TJsonWriter;
+  W: TTextWriter;
   temp: TTextWriterStackBuffer;
 
   procedure AddValue;
@@ -3871,7 +3873,7 @@ begin
   result := '';
   if FieldCount = 0 then
     exit;
-  W := TJsonWriter.CreateOwnedStream(temp);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     if Prefix1Batch <> nil then
       EncodeInsertPrefix(W, Prefix1Batch^, DB)

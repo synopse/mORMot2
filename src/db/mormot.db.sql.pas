@@ -2579,6 +2579,7 @@ type
     // - this default method will raise an exception about unexpected behavior
     function ColumnCursor(const ColName: RawUtf8): ISqlDBRows; overload;
     /// append a Column as a JSON value, first Col is 0
+    // - in practice, this method is always overriden, so never called as such
     procedure ColumnToJson(Col: integer; W: TJsonWriter); virtual;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
@@ -5259,14 +5260,14 @@ var
   procedure ComputeSql(rowcount, offset: integer);
   var
     f, r, p, len: PtrInt;
-    W: TJsonWriter;
+    W: TTextWriter;
     tmp: TTextWriterStackBuffer;
   begin
     if (fDbms <> dFireBird) and
        (rowcount = prevrowcount) then
       exit;
     prevrowcount := rowcount;
-    W := TJsonWriter.CreateOwnedStream(tmp);
+    W := TTextWriter.CreateOwnedStream(tmp);
     try
       case Props.fDbms of
         dFirebird:
@@ -5481,7 +5482,7 @@ procedure TSqlDBConnectionProperties.MultipleValuesInsertFirebird(
   RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray;
   BatchOptions: TRestBatchOptions);
 var
-  W: TJsonWriter;
+  W: TTextWriter;
   maxf, sqllenwitoutvalues, sqllen, r, f, i: PtrInt;
   v: RawUtf8;
 begin
@@ -5509,7 +5510,7 @@ begin
     else
       inc(sqllenwitoutvalues, Length(FieldNames[f]));
     end;
-  W := TJsonWriter.CreateOwnedStream(49152);
+  W := TTextWriter.CreateOwnedStream(49152);
   try
     r := 0;
     repeat
@@ -6291,7 +6292,8 @@ end;
 procedure TSqlDBStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   blob: RawByteString;
-begin
+  p: pointer;
+begin // default implementation (never called in practice)
   if ColumnNull(col) then
     W.AddNull
   else
@@ -6313,7 +6315,10 @@ begin
       ftUtf8:
         begin
           W.Add('"');
-          W.AddJsonEscape(pointer(ColumnUtf8(col)));
+          p := ColumnPUtf8(col);
+          if p = nil then
+            p := pointer(ColumnUtf8(col));
+          W.AddJsonEscape(p);
           W.Add('"');
         end;
       ftBlob:
