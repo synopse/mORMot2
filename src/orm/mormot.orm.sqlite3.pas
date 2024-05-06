@@ -1300,20 +1300,22 @@ begin
         fStatementMonitor.ProcessEnd
       else
         fStatementTimer^.Pause;
-      if E = nil then
+      if E <> nil then
+        InternalLog('% for % // %',
+          [E, fStatementSql, fStatementDecoder.GenericSql], sllError)
+      else if HasLog(sllSQL) then
         if (fStatementTruncateSqlLogLen > 0) and
            (length(fStatementSql) > fStatementTruncateSqlLogLen) then
         begin
           c := fStatementSql[fStatementTruncateSqlLogLen];
           fStatementSql[fStatementTruncateSqlLogLen] := #0; // truncate
-          InternalLog('% % %... len=%', [fStatementTimer^.LastTime, Msg,
+          fRest.InternalLog('% % %... len=%', [fStatementTimer^.LastTime, Msg,
             PAnsiChar(pointer(fStatementSql)), length(fStatementSql)], sllSQL);
           fStatementSql[fStatementTruncateSqlLogLen] := c; // restore
         end
         else
-          InternalLog('% % %', [fStatementTimer^.LastTime, Msg, fStatementSql], sllSQL)
-      else
-        InternalLog('% for % // %', [E, fStatementSql, fStatementGenericSql], sllError);
+          fRest.InternalLog('% % %', [fStatementTimer^.LastTime, Msg,
+            fStatementSql], sllSQL);
       fStatementTimer := nil;
     end;
     fStatementMonitor := nil;
@@ -1337,7 +1339,7 @@ begin
     fStatementGenericSql := '';
     fStatementMaxParam := 0;
     if E <> nil then
-      FormatUtf8('% %', [E, ObjectToJsonDebug(E)], fStatementLastException);
+      ObjectToJson(E, fStatementLastException, TEXTWRITEROPTIONS_DEBUG);
   end;
 end;
 
@@ -1346,7 +1348,9 @@ procedure TRestOrmServerDB.GetAndPrepareStatementRelease(E: Exception;
 var
   msg: ShortString;
 begin
-  FormatShort(Format, Args, msg);
+  msg[0] := #0;
+  if HasLog(sllSQL) then
+    FormatShort(Format, Args, msg);
   GetAndPrepareStatementRelease(E, msg, ForceBindReset);
 end;
 
@@ -1746,7 +1750,7 @@ var
   n, res: integer;
   msg: ShortString;
 begin
-  msg := '';
+  msg[0] := #0;
   if (self <> nil) and
      (DB <> nil) then
   try
@@ -1767,7 +1771,8 @@ begin
               AddInt64(ValueInts^, n, fStatement^.FieldInt(0));
           until res = SQLITE_DONE;
           SetLength(ValueInts^, n);
-          FormatShort('returned Int64 len=%', [n], msg);
+          if HasLog(sllSQL) then
+            FormatShort('returned Int64 len=%', [n], msg);
         end
         else if (ValueInt = nil) and
                 (ValueUtf8 = nil) then
@@ -1778,12 +1783,14 @@ begin
           if LastInsertedID <> nil then
           begin
             LastInsertedID^ := sqlite3.last_insert_rowid(DB.DB);
-            FormatShort(' lastInsertedID=%', [LastInsertedID^], msg);
+            if HasLog(sllSQL) then
+              FormatShort(' lastInsertedID=%', [LastInsertedID^], msg);
           end;
           if LastChangeCount <> nil then
           begin
             LastChangeCount^ := sqlite3.changes(DB.DB);
-            FormatShort('% lastChangeCount=%', [msg, LastChangeCount^], msg);
+            if HasLog(sllSQL) then
+              FormatShort('% lastChangeCount=%', [msg, LastChangeCount^], msg);
           end;
         end
         else
@@ -1793,12 +1800,14 @@ begin
         else if ValueInt <> nil then
         begin
           ValueInt^ := fStatement^.FieldInt(0);
-          FormatShort('returned=%', [ValueInt^], msg);
+          if HasLog(sllSQL) then
+            FormatShort('returned=%', [ValueInt^], msg);
         end
         else
         begin
-          ValueUtf8^ := fStatement^.FieldUtf8(0);
-          FormatShort('returned="%"', [ValueUtf8^], msg);
+          fStatement^.FieldUtf8(0, ValueUtf8^);
+          if HasLog(sllSQL) then
+            FormatShort('returned="%"', [ValueUtf8^], msg);
         end;
         GetAndPrepareStatementRelease(nil, msg);
       except
@@ -1897,6 +1906,7 @@ function TRestOrmServerDB.MainEngineList(const SQL: RawUtf8; ForceAjax: boolean;
 var
   res: TRawByteStringStream;
   rows: integer;
+  msg: ShortString;
 begin
   result := '';
   rows := 0;
@@ -1908,6 +1918,7 @@ begin
     result := DB.LockJson(SQL, ReturnedRowCount); // lock and try from cache
     if result <> '' then
       exit;
+    msg[0] := #0;
     try
       // Execute request if was not got from cache
       try
@@ -1920,8 +1931,9 @@ begin
         finally
           res.Free;
         end;
-        GetAndPrepareStatementRelease(nil, 'returned % as %',
-          [Plural('row', rows), KB(result)]);
+        if HasLog(sllSQL) then
+          FormatShort('returned % as %', [Plural('row', rows), KB(result)], msg);
+        GetAndPrepareStatementRelease(nil, msg);
       except
         on E: ESqlite3Exception do
           GetAndPrepareStatementRelease(E);
@@ -1939,6 +1951,7 @@ function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
 var
   WR: TJsonWriter;
   tmp: TTextWriterStackBuffer;
+  msg: ShortString absolute tmp;
 begin
   // faster direct access with no ID inlining
   result := '';
@@ -1959,7 +1972,10 @@ begin
       WR.SetText(result);
   finally
     ReleaseJsonWriter(WR);
-    GetAndPrepareStatementRelease(nil, 'id=%', [ID]);
+    msg[0] := #0;
+    if HasLog(sllSQL) then
+      FormatShort('id=%', [ID], msg);
+    GetAndPrepareStatementRelease(nil, msg);
     DB.UnLock;
   end;
 end;
