@@ -2586,7 +2586,7 @@ end;
 function TRestStorageInMemory.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
   P: PUtf8Char;
-  Prop: RawUtf8;
+  n: ShortString;
   WithoutRowID: boolean;
 begin
   result := inherited AdaptSqlForEngineList(SQL);
@@ -2625,9 +2625,9 @@ begin
     exit;
   end;
   P := GotoNextNotSpace(P + 6);
-  GetNextItem(P, '=', Prop);
+  GetNextItemShortString(P, @n, '=');
   if (P = nil) or
-     (fStoredClassRecordProps.Fields.IndexByName(Prop) < 0) then
+     (fStoredClassRecordProps.Fields.IndexByNameU(@n[1]) < 0) then
     exit;
   if PWord(P)^ = ord(':') + ord('(') shl 8 then
     inc(P, 2); // +2 to ignore :(...): parameter
@@ -2638,9 +2638,8 @@ begin
       exit;
   end;
   repeat
-    inc(P)
-    // go to end of value
-  until P^ in [#0..' ', ';', ')'];
+    inc(P);
+  until P^ in [#0..' ', ';', ')']; // go to end of value
   if PWord(P)^ = ord(')') + ord(':') shl 8 then
     inc(P, 2); // ignore :(...): parameter
   P := GotoNextNotSpace(P);
