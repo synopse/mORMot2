@@ -1023,14 +1023,12 @@ procedure ObjectToJson(Value: TObject; var result: RawUtf8;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]); overload;
 
 /// will serialize any TObject into its expanded UTF-8 JSON representation
-// - includes debugger-friendly information, similar to TSynLog, i.e.
-// class name and sets/enumerates as text
+// - includes TEXTWRITEROPTIONS_DEBUG debugger-friendly information, similar to
+// TSynLog, i.e. class name and sets/enumerates as text
 // - redirect to ObjectToJson() with the proper TTextWriterWriteObjectOptions,
 // since our JSON serialization detects and serialize Exception.Message
-function ObjectToJsonDebug(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault,
-    woHumanReadable, woStoreClassName, woStorePointer,
-    woHideSensitivePersonalInformation]): RawUtf8;
+function ObjectToJsonDebug(Value: TObject): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// a wrapper around ConsoleWrite(ObjectToJson(Value))
 procedure ConsoleObject(Value: TObject;
@@ -1104,6 +1102,11 @@ const
   // - used e.g. by TTextWriter.CancelAllAsNew to reset its CustomOptions
   TEXTWRITEROPTIONS_RESET =
     [twoStreamIsOwned, twoStreamIsRawByteString, twoBufferIsExternal];
+
+  /// TTextWriter JSON serialization options with debugging/logging information
+  TEXTWRITEROPTIONS_DEBUG =
+    [woDontStoreDefault, woHumanReadable, woStoreClassName, woStorePointer,
+     woHideSensitivePersonalInformation];
 
 type
   TEchoWriter = class;
@@ -1949,7 +1952,7 @@ type
   {$M+}
   /// generic parent class of all custom Exception types of this unit
   // - all our classes inheriting from ESynException are serializable,
-  // so you could use ObjectToJsonDebug(anyESynException) to retrieve some
+  // so you could use ObjectToJsonDebug(any ESynException) to retrieve some
   // extended information
   ESynException = class(Exception)
   protected
@@ -5563,11 +5566,10 @@ begin
     end;
 end;
 
-function ObjectToJsonDebug(Value: TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
+function ObjectToJsonDebug(Value: TObject): RawUtf8;
 begin
-  // our JSON serialization detects and serialize Exception.Message
-  result := ObjectToJson(Value, Options);
+  // our JSON serialization properly detects and serializes Exception.Message
+  ObjectToJson(Value, result, TEXTWRITEROPTIONS_DEBUG);
 end;
 
 procedure ConsoleObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
@@ -9956,7 +9958,7 @@ end;
 function OctToBin(const Oct: RawUtf8): RawByteString;
 var
   tmp: TSynTempBuffer;
-  L: integer;
+  L: PtrInt;
 begin
   tmp.Init(length(Oct));
   try

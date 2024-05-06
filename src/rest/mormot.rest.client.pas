@@ -1992,7 +1992,7 @@ begin
   else
   begin
     fLastErrorException := PPointer(E)^;
-    fLastErrorMessage := ObjectToJsonDebug(E);
+    ObjectToJson(E, fLastErrorMessage, TEXTWRITEROPTIONS_DEBUG);
   end;
   if Assigned(fOnFailed) then
     fOnFailed(self, E, Call);
@@ -2460,7 +2460,7 @@ begin
     on E: Exception do
     begin
       Ctxt.OutHead := '';
-      Ctxt.OutBody := ObjectToJsonDebug(E);
+      ObjectToJson(E, Ctxt.OutBody, TEXTWRITEROPTIONS_DEBUG);
       Ctxt.OutStatus := HTTP_SERVERERROR;
     end;
   end;

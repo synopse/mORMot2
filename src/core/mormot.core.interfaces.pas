@@ -7292,7 +7292,7 @@ begin
         // multiple Instances[] notifies with fExecutedInstancesFailed[]
         if fExecutedInstancesFailed = nil then
           SetLength(fExecutedInstancesFailed, InstancesLast + 1);
-        fExecutedInstancesFailed[i] := ObjectToJsonDebug(Exc);
+        ObjectToJson(Exc, fExecutedInstancesFailed[i], TEXTWRITEROPTIONS_DEBUG);
       end;
     end;
   end;

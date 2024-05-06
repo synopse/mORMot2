@@ -1473,7 +1473,7 @@ begin
   except
     on E: Exception do
       if aErrorMsg <> nil then
-        aErrorMsg^ := ObjectToJsonDebug(E);
+        ObjectToJson(E, aErrorMsg^, TEXTWRITEROPTIONS_DEBUG);
   end;
 end;
 
