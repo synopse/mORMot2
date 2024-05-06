@@ -634,7 +634,7 @@ end;
 
 function TSqlDBSQLite3Statement.ColumnUtf8(Col: integer): RawUtf8;
 begin
-  result := fStatement.FieldUtf8(Col);
+  fStatement.FieldUtf8(Col, result);
 end;
 
 function TSqlDBSQLite3Statement.ColumnPUtf8(Col: integer): PUtf8Char;

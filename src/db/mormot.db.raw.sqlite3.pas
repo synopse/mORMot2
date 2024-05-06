@@ -4685,7 +4685,7 @@ type
     /// return a field floating point value, first Col is 0
     function FieldDouble(Col: integer): double;
     /// return a field UTF-8 encoded text value, first Col is 0
-    function FieldUtf8(Col: integer): RawUtf8;
+    procedure FieldUtf8(Col: integer; var Result: RawUtf8);
     /// return a field UTF-8 buffer text value, first Col is 0
     function FieldPUtf8(Col: integer): PUtf8Char;
     /// return a text value value as RTL string, first Col is 0
@@ -8272,7 +8272,7 @@ begin
           for i := 0 to n do
           begin
             write(OutFile,
-              {$ifdef OSWINDOWS} FieldA {$else} FieldUtf8 {$endif}(i));
+              {$ifdef OSWINDOWS} FieldA {$else} FieldPUtf8 {$endif}(i));
             if i < n then
               write(OutFile, '|');
           end;
@@ -8554,14 +8554,14 @@ begin
   Utf8ToStringVar(FieldDeclaredType(Col), result);
 end;
 
-function TSqlRequest.FieldUtf8(Col: integer): RawUtf8;
+procedure TSqlRequest.FieldUtf8(Col: integer; var Result: RawUtf8);
 var
   P: PUtf8Char;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldUtf8');
   P := sqlite3.column_text(Request, Col);
-  FastSetString(result, P, StrLen(P));
+  FastSetString(Result, P, StrLen(P));
 end;
 
 function TSqlRequest.FieldPUtf8(Col: integer): PUtf8Char;
