@@ -262,7 +262,7 @@ function FieldBitsToIndex(const Fields: TFieldBits;
 
 /// add a field index to an array of field indexes
 // - returns the index in Indexes[] of the newly appended Field value
-function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
+function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): PtrInt;
 
 /// convert an array of field indexes into a TFieldBits set of bits
 procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
@@ -270,7 +270,7 @@ procedure FieldIndexToBits(const Index: TFieldIndexDynArray;
 
 /// search a field index in an array of field indexes
 // - returns the index in Indexes[] of the given Field value, -1 if not found
-function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
+function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): PtrInt;
 
 /// convert an array of field indexes into a TFieldBits set of bits
 function FieldIndexToBits(const Index: TFieldIndexDynArray): TFieldBits; overload;
@@ -1645,7 +1645,7 @@ begin
   for i := 0 to MaxLength - 1 do
     if FieldBitGet(Fields, i) then
     begin
-      p^ := i;
+      p^ := i; // add in array of ShortInt or SmallInt
       inc(p);
       dec(n);
       if n = 0 then
@@ -1663,14 +1663,14 @@ begin
     FieldBitsToIndex(Fields, result, MaxLength);
 end;
 
-function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
+function AddFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): PtrInt;
 begin
   result := length(Indexes);
   SetLength(Indexes, result + 1);
-  Indexes[result] := Field;
+  Indexes[result] := Field; // add in array of ShortInt or SmallInt
 end;
 
-function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): integer;
+function SearchFieldIndex(var Indexes: TFieldIndexDynArray; Field: integer): PtrInt;
 begin
   for result := 0 to length(Indexes) - 1 do // never called, no need to optimize
     if Indexes[result] = Field then
@@ -4164,6 +4164,7 @@ begin
   // https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-upsert
 end;
 
+
 procedure InitializeUnit;
 var
   i, j: PtrInt;
@@ -4175,7 +4176,7 @@ begin
   begin
     SetLength(MAX_SQLFIELDS_INDEX[j], j);
     for i := 0 to j - 1 do
-      MAX_SQLFIELDS_INDEX[j, i] := i;
+      MAX_SQLFIELDS_INDEX[j, i] := i; // set array of ShortInt or SmallInt
   end;
 end;
 
