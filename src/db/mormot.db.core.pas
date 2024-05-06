@@ -772,7 +772,7 @@ type
     /// generic SQL statement with ? place holders for each inlined parameter
     GenericSql: RawUtf8;
     /// the number of parsed parameters, as filled in Values/Types
-    Count: integer;
+    Count: PtrInt;
     /// the SQL type associated with each Values[]
     // - recognized types are sptInteger, sptFloat, sptUtf8Text, sptDateTime
     // (marked with '\uFFF1...' trailer) and sptBlob (with '\uFFF0...' trailer)
@@ -799,6 +799,9 @@ type
     // - oftUnknown is set from a NULL value
     // - P=nil is returned on invalid content
     function ParseNext(P: PUtf8Char): PUtf8Char;
+    /// release all used memory by this instance, so that it could be re-used
+    procedure Reset;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 /// returns a 64-bit value as inlined ':(1234):' text
@@ -2616,23 +2619,25 @@ end;
 
 procedure TExtractInlineParameters.Parse(const SQL: RawUtf8);
 var
-  ppBeg: integer;
+  i: PtrInt;
   P, Gen: PUtf8Char;
 begin
   Count := 0;
-  ppBeg := PosEx(RawUtf8(':('), SQL, 1);
-  if (ppBeg = 0) or
-     (PosEx(RawUtf8('):'), SQL, ppBeg + 2) = 0) then
+  i := PosEx(RawUtf8(':('), SQL, 1);
+  if (i = 0) or
+     (PosEx(RawUtf8('):'), SQL, i + 2) = 0) then
   begin
     // SQL code with no valid :(...): internal parameters -> leave Count=0
     GenericSQL := SQL;
     exit;
   end;
   // compute GenericSql from SQL, converting :(...): into ?
-  FastSetString(GenericSQL, pointer(SQL), length(SQL)); // private copy
+  FastSetString(GenericSQL, length(SQL)); // private copy
+  dec(i);
   P := pointer(GenericSQL); // in-place string unescape (keep SQL untouched)
-  Gen := P + ppBeg - 1; // Gen^ just before :(
-  inc(P, ppBeg + 1);    // P^ just after :(
+  MoveFast(pointer(SQL)^, P^, i);
+  Gen := P + i;   // Gen^ just before :(
+  P := @PUtf8Char(pointer(SQL))[i + 2];  // P^ just after :(
   repeat
     if Count = high(Types) then
       ESynDBException.RaiseUtf8('Too many parameters in %', [SQL]);
@@ -2669,6 +2674,7 @@ var
   PBeg: PAnsiChar;
   L: integer;
   c: cardinal;
+  v: pointer;
   spt: TSqlParamType;
 begin
   result := nil; // indicates parsing error
@@ -2686,10 +2692,11 @@ begin
           // not a valid quoted string (e.g. unexpected end in middle of it)
           exit;
         spt := sptText;
-        L := length(Values[Count]) - 3;
+        v := pointer(Values[Count]);
+        L := length(RawUtf8(v)) - 3;
         if L > 0 then
         begin
-          c := PInteger(Values[Count])^ and $00ffffff;
+          c := PInteger(v)^ and $00ffffff;
           if c = JSON_BASE64_MAGIC_C then
           begin
             // ':("\uFFF0base64encodedbinary"):' format -> decode
@@ -2697,7 +2704,7 @@ begin
             spt := sptBlob;
           end
           else if (c = JSON_SQLDATE_MAGIC_C) and
-                  IsIso8601(PUtf8Char(pointer(Values[Count])) + 3, L) then
+                  IsIso8601(PUtf8Char(v) + 3, L) then
           begin
             // handle ':("\uFFF112012-05-04"):' format
             Delete(Values[Count], 1, 3);   // return only ISO-8601 text
@@ -2762,6 +2769,17 @@ begin
   // result<>nil only if value content was successfully decoded
   result := P + 2;
   Types[Count] := spt;
+end;
+
+procedure TExtractInlineParameters.Reset;
+var
+  p: pointer;
+begin
+  Count := 0;
+  FastAssignNew(GenericSql);
+  p := pointer(Values);
+  if p <> nil then
+    StringClearSeveral(p, PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF);
 end;
 
 
