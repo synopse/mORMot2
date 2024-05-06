@@ -1300,7 +1300,7 @@ begin
       if E <> nil then
         InternalLog('% for % // %',
           [E, fStatementSql, fStatementDecoder.GenericSql], sllError)
-      else if HasLog(sllSQL) then
+      else if sllSQL in fRest.LogLevel then
         if (fStatementTruncateSqlLogLen > 0) and
            (length(fStatementSql) > fStatementTruncateSqlLogLen) then
         begin
@@ -1345,7 +1345,7 @@ var
   msg: ShortString;
 begin
   msg[0] := #0;
-  if HasLog(sllSQL) then
+  if sllSQL in fRest.LogLevel then
     FormatShort(Format, Args, msg);
   GetAndPrepareStatementRelease(E, msg, ForceBindReset);
 end;
@@ -1767,7 +1767,7 @@ begin
               AddInt64(ValueInts^, n, fStatement^.FieldInt(0));
           until res = SQLITE_DONE;
           SetLength(ValueInts^, n);
-          if HasLog(sllSQL) then
+          if sllSQL in fRest.LogLevel then
             FormatShort('returned Int64 len=%', [n], msg);
         end
         else if (ValueInt = nil) and
@@ -1779,13 +1779,13 @@ begin
           if LastInsertedID <> nil then
           begin
             LastInsertedID^ := sqlite3.last_insert_rowid(DB.DB);
-            if HasLog(sllSQL) then
+            if sllSQL in fRest.LogLevel then
               FormatShort(' lastInsertedID=%', [LastInsertedID^], msg);
           end;
           if LastChangeCount <> nil then
           begin
             LastChangeCount^ := sqlite3.changes(DB.DB);
-            if HasLog(sllSQL) then
+            if sllSQL in fRest.LogLevel then
               FormatShort('% lastChangeCount=%', [msg, LastChangeCount^], msg);
           end;
         end
@@ -1796,13 +1796,13 @@ begin
         else if ValueInt <> nil then
         begin
           ValueInt^ := fStatement^.FieldInt(0);
-          if HasLog(sllSQL) then
+          if sllSQL in fRest.LogLevel then
             FormatShort('returned=%', [ValueInt^], msg);
         end
         else
         begin
           fStatement^.FieldUtf8(0, ValueUtf8^);
-          if HasLog(sllSQL) then
+          if sllSQL in fRest.LogLevel then
             FormatShort('returned="%"', [ValueUtf8^], msg);
         end;
         GetAndPrepareStatementRelease(nil, msg);
@@ -1927,7 +1927,7 @@ begin
         finally
           res.Free;
         end;
-        if HasLog(sllSQL) then
+        if sllSQL in fRest.LogLevel then
           FormatShort('returned % as %', [Plural('row', rows), KB(result)], msg);
         GetAndPrepareStatementRelease(nil, msg);
       except
@@ -1969,7 +1969,7 @@ begin
   finally
     ReleaseJsonWriter(WR);
     msg[0] := #0;
-    if HasLog(sllSQL) then
+    if sllSQL in fRest.LogLevel then
       FormatShort('id=%', [ID], msg);
     GetAndPrepareStatementRelease(nil, msg);
     DB.UnLock;
