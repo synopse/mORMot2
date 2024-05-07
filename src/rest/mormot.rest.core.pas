@@ -1208,8 +1208,9 @@ type
     procedure Init(const aUri, aMethod, aInHead, aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
-    procedure InBodyType(out ContentType: RawUtf8;
+    procedure InBodyType(var ContentType: RawUtf8;
       GuessJsonIfNoneSet: boolean = True);
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
@@ -1316,14 +1317,6 @@ type
     procedure SetInCookie(CookieName, CookieValue: RawUtf8);
     procedure SetOutSetCookie(const aOutSetCookie: RawUtf8); virtual;
   public
-    /// initialize the execution context
-    // - this method could have been declared as protected, since it should
-    // never be called outside the TRestServer.Uri() method workflow
-    // - should set Call, and Method members
-    constructor Create(const aCall: TRestUriParams);
-    /// finalize the execution context
-    destructor Destroy; override;
-
     /// access to all input/output parameters at TRestServer.Uri() level
     // - process should better call Results() or Success() methods to set the
     // appropriate answer or Error() method in case of an error
@@ -3688,7 +3681,7 @@ begin
   InBody := aInBody;
 end;
 
-procedure TRestUriParams.InBodyType(out ContentType: RawUtf8;
+procedure TRestUriParams.InBodyType(var ContentType: RawUtf8;
   GuessJsonIfNoneSet: boolean);
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, ContentType);
@@ -3776,21 +3769,6 @@ end;
 
 
 { TRestUriContext }
-
-constructor TRestUriContext.Create(const aCall: TRestUriParams);
-begin
-  fCall := @aCall;
-  fMethod := ToMethod(aCall.Method);
-  if aCall.InBody <> '' then
-    aCall.InBodyType(fInputContentType, {guessjsonifnone=}false);
-end;
-
-destructor TRestUriContext.Destroy;
-begin
-  inherited Destroy;
-  if fJwtContent <> nil then
-    Dispose(fJwtContent);
-end;
 
 function TRestUriContext.GetUserAgent: RawUtf8;
 begin

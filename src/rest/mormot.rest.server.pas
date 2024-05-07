@@ -2796,7 +2796,10 @@ var
   tmp: pointer;
 begin
   // setup the state machine
-  inherited Create(aCall);
+  fCall := @aCall;
+  fMethod := ToMethod(aCall.Method);
+  if aCall.InBody <> '' then
+    aCall.InBodyType(fInputContentType, {guessjsonifnone=}false);
   fServer := aServer;
   fThreadServer := PerThreadRunningContextAddress;
   fThreadServer^.Request := self;
@@ -2806,7 +2809,7 @@ begin
   if (fam = nil) or
      not (sllEnter in fam.Level) then
     exit;
-  fLog := fam.Add;
+  fLog := fam.Add; // TSynLog instance for the current thread
   tmp := nil; // same logic than Enter() but with no ISynLog involved
   FormatUtf8('URI % % in=%', [aCall.Method, aCall.Url, KB(aCall.InBody)],
     RawUtf8(tmp));
@@ -2821,6 +2824,8 @@ begin
     fThreadServer^.Request := nil;
   inherited Destroy;
   fLog.ManualLeave;
+  if fJwtContent <> nil then
+    Dispose(fJwtContent);
 end;
 
 procedure TRestServerUriContext.SetOutSetCookie(const aOutSetCookie: RawUtf8);
