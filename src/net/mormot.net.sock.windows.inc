@@ -2065,6 +2065,9 @@ var
   blob: TCryptDataBlob;
   pass: SynUnicode;
   flags: integer;
+  keyspec: cardinal;
+  prov: HCRYPTPROV;
+  freeprov: BOOL;
 begin
   if Context.CertificateFile = '' then
     // Load certificate and private key from Windows certificate store
@@ -2092,11 +2095,18 @@ begin
       ESChannelRaiseLastError('PFXImportCertStoreSEC_E_CERT_UNKNOWN',
         SEC_E_CERT_UNKNOWN);
   end;
-  // find first certificate in store
-  fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
-    fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, nil);
-  if fAcceptCert = nil then
-    raise ESChannel.Create('AfterBind: no Certificate available');
+  // find first certificate in store with private key
+  fAcceptCert := nil;
+  repeat
+    fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
+      fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
+    if fAcceptCert = nil then
+      raise ESChannel.Create('AfterBind: no Certificate available');
+  until CryptAcquireCertificatePrivateKey(
+         fAcceptCert, 0, nil, prov, keyspec, freeprov);
+  if freeprov and
+     CryptoApi.Available then
+    CryptoApi.ReleaseContext(prov, 0);
   // this global certificate will be used by AfterAccept()
   Context.AcceptCert := fAcceptCert;
 end;

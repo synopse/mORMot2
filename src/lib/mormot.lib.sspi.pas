@@ -503,6 +503,10 @@ function CertGetEnhancedKeyUsage(pCertContext: PCCERT_CONTEXT; dwFlags: cardinal
 function CertGetCertificateContextProperty(pCertContext: PCCERT_CONTEXT;
   dwPropId: cardinal; pvData: pointer; var pcbData: cardinal): BOOL; stdcall;
 
+function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardinal;
+  pvReserved: pointer; var phCryptProv: HCRYPTPROV; var pdwKeySpec: cardinal;
+  var pfCallerFreeProv: BOOL): BOOL; stdcall;
+
 function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
 
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
@@ -1036,6 +1040,7 @@ function CertCreateCertificateContext;      external crypt32;
 function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
+function CryptAcquireCertificatePrivateKey; external crypt32;
 function CertFreeCertificateContext;        external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
