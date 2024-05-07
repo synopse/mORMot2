@@ -1712,8 +1712,9 @@ begin
      (fFakeCallbacks.Count <> 0) then
   begin
     call.Init;
-    ctxt := TRestServerUriContext.Create(fRestServer, call);
+    ctxt := TRestServerUriContext.Create;
     try
+      ctxt.Prepare(fRestServer, call);
       fake := pointer(fFakeCallbacks.List);
       for i := 1 to fFakeCallbacks.Count do
       begin
@@ -1981,8 +1982,9 @@ begin
      (fFakeCallbacks.Count = 0) then
     exit;
   call.Init;
-  ctxt := TRestServerUriContext.Create(fRestServer, call){%H-};
+  ctxt := TRestServerUriContext.Create;
   try
+    ctxt.Prepare(fRestServer, call);
     fFakeCallbacks.Safe.WriteLock; // may include a nested WriteLock (reentrant)
     try
       fake := pointer(fFakeCallbacks.List);

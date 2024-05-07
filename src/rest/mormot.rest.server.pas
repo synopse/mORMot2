@@ -294,8 +294,7 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.Uri() method workflow
     // - should set Call, and Method members
-    constructor Create(aServer: TRestServer;
-      const aCall: TRestUriParams); reintroduce; virtual;
+    procedure Prepare(aServer: TRestServer; const aCall: TRestUriParams);
     /// finalize the execution context
     destructor Destroy; override;
 
@@ -2789,7 +2788,7 @@ end;
 
 { TRestServerUriContext }
 
-constructor TRestServerUriContext.Create(aServer: TRestServer;
+procedure TRestServerUriContext.Prepare(aServer: TRestServer;
   const aCall: TRestUriParams);
 var
   fam: TSynLogFamily;
@@ -2822,7 +2821,7 @@ destructor TRestServerUriContext.Destroy;
 begin
   if fThreadServer <> nil then
     fThreadServer^.Request := nil;
-  inherited Destroy;
+  //inherited Destroy; not needed
   fLog.ManualLeave;
   if fJwtContent <> nil then
     Dispose(fJwtContent);
@@ -7590,8 +7589,9 @@ begin
   end;
   // 2. request initialization
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
-  ctxt := fServicesRouting.Create(self, Call);
+  ctxt := fServicesRouting.Create;
   try
+    ctxt.Prepare(self, Call);
     if (fIPBan <> nil) and
        ctxt.IsRemoteIPBanned then
     begin
