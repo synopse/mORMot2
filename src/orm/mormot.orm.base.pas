@@ -10823,6 +10823,7 @@ begin
   result := nil;
   if (@self = nil) or
      not CacheEnable or
+     (Value = nil) or
      (TimeOutMS <> 0) then // by safety: TimeOutMS may delete the instance
     exit;
   i := SortFind(Value, aID, Count);
