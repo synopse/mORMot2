@@ -946,22 +946,19 @@ type
     Latitude: double;
     Longitude: double;
   end;
-
   TCityDynArray = array of TCity;
 
   TAmount = packed record
     firmID: integer;
     amount: RawUtf8;
   end;
-
-  TAmountCollection = array of TAmount;
+  TAmountDynArray = array of TAmount;
 
   TAmountI = packed record
     firmID: integer;
     amount: integer;
   end;
-
-  TAmountICollection = array of TAmountI;
+  TAmountIDynArray = array of TAmountI;
 
 procedure TTestCoreBase._TDynArrayHashed;
 var
@@ -974,15 +971,15 @@ var
   i, j: integer;
   A: TAmount;
   AI: TAmountI;
-  AmountCollection: TAmountCollection;
-  AmountICollection: TAmountICollection;
+  AmountCollection: TAmountDynArray;
+  AmountICollection: TAmountIDynArray;
   AmountDA, AmountIDA1, AmountIDA2: TDynArrayHashed;
 const
   CITIES_MAX = 200000;
 begin
 //FIXME - too slow on FullDebugMode exit;
   // default Init() will hash and compare binary content before string, i.e. firmID
-  AmountDA.Init(TypeInfo(TAmountCollection), AmountCollection);
+  AmountDA.Init(TypeInfo(TAmountDynArray), AmountCollection);
   Check(AmountDA.Info.Parser = ptDynArray);
   Check(AmountDA.Info.ArrayFirstField = ptInteger);
   Check(@AmountDA.HashItem = @DynArrayHashOne(ptInteger));
@@ -996,7 +993,7 @@ begin
   for i := 1 to length(AmountCollection) do
     Check(AmountDA.FindHashed(i) = i - 1);
   // default Init() will hash and compare the WHOLE binary content, i.e. 8 bytes
-  AmountIDA1.Init(TypeInfo(TAmountICollection), AmountICollection);
+  AmountIDA1.Init(TypeInfo(TAmountIDynArray), AmountICollection);
   Check(AmountIDA1.Info.Parser = ptDynArray);
   Check(AmountIDA1.Info.ArrayFirstField = ptInt64);
   Check(@AmountIDA1.HashItem = @DynArrayHashOne(ptInt64));
@@ -1016,7 +1013,7 @@ begin
   AmountIDA1.Clear;
   // specific hash & compare of the firmID integer first field
   AmountIDA2.InitSpecific(
-    TypeInfo(TAmountICollection), AmountICollection, ptInteger);
+    TypeInfo(TAmountIDynArray), AmountICollection, ptInteger);
   Check(AmountIDA2.Info.Parser = ptDynArray);
   Check(AmountIDA2.Info.ArrayFirstField = ptInt64); // global TRttiCustom untouched
   Check(@AmountIDA2.HashItem = @DynArrayHashOne(ptInteger));
@@ -1291,10 +1288,10 @@ begin
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
   Check(h=$9032161B,'TypeInfoToHash(TAmount)');
-  h := TypeInfoToHash(TypeInfo(TAmountCollection));
-  Check(h=$887ED692,'TypeInfoToHash(TAmountCollection)');
-  h := TypeInfoToHash(TypeInfo(TAmountICollection));
-  Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
+  h := TypeInfoToHash(TypeInfo(TAmountDynArray));
+  Check(h=$887ED692,'TypeInfoToHash(TAmountDynArray)');
+  h := TypeInfoToHash(TypeInfo(TAmountIDynArray));
+  Check(h=$4051BAC,'TypeInfoToHash(TAmountIDynArray)');
   }
   Check(not IsRawUtf8DynArray(nil), 'IsRawUtf8DynArray0');
   Check(IsRawUtf8DynArray(TypeInfo(TRawUtf8DynArray)), 'IsRawUtf8DynArray1');
@@ -1303,7 +1300,7 @@ begin
   Check(not IsRawUtf8DynArray(TypeInfo(TAmount)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TIntegerDynArray)), 'IsRawUtf8DynArray2');
   Check(not IsRawUtf8DynArray(TypeInfo(TPointerDynArray)), 'IsRawUtf8DynArray3');
-  Check(not IsRawUtf8DynArray(TypeInfo(TAmountCollection)), 'IsRawUtf8DynArray4');
+  Check(not IsRawUtf8DynArray(TypeInfo(TAmountDynArray)), 'IsRawUtf8DynArray4');
   W := TJsonWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray), AB);
@@ -2999,24 +2996,36 @@ begin
     check(s.Parse('') = eprNoExpression);
     check(s.Parse('  ') = eprNoExpression);
     check(s.Parse('1+ ') = eprMissingFinalWord);
-    Test('1', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
-    Test('   1   ', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
-    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
-    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13',
-      '2 3', '41', '4 3', '3 555']);
-    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13',
-      '2 3', '41', '4 3', '3 555']);
-    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
-    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'], ['2', '5 2 3 4 1',
-      '2 3', '41', '4 3', '3 5', '1 4 5']);
-    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'], ['2',
-      '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
+    Test('1', ['1', '1 2 3', '2 1'],
+              ['2', '13', '2 3']);
+    Test('   1   ', ['1', '1 2 3', '2 1'],
+                    ['2', '13', '2 3']);
+    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'],
+                ['2', '13', '2 3', '41']);
+    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'],
+                    ['2', '13', '2 3', '41']);
+    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'],
+                  ['2', '13', '2 3', '41']);
+    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'],
+                    ['2', '13', '2 3', '41']);
+    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'],
+                   ['2', '13', '2 3']);
+    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'],
+                      ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'],
+                      ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'],
+                ['1 4', '4 2 1', '2', '13', '2 3', '41']);
+    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
+                    ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
+    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'],
+        ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
     Test('1 - ( 4 & ( 57 + 6 ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
-      ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+        ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+    Test('1 - ( 4 & ( 5? + 6 ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
+        ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+    Test('1 - ( 4 & ( 5* + 6* ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
+        ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
   finally
     s.Free;
   end;

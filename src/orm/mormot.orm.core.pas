@@ -5446,7 +5446,7 @@ var
   map: ^TOrmTableFillOrm;
   fields: TOrmPropInfoList;
   u: PUtf8Char;
-  maps: array[0..MAX_SQLFIELDS - 1] of TOrmTableFillOrm;
+  maps: array[0 .. MAX_SQLFIELDS - 1] of TOrmTableFillOrm;
 begin // inlined FillPrepare/TOrmFill process
   nmap := 0;
   fields := RecordType.OrmProps.Fields;
@@ -6808,8 +6808,8 @@ procedure TOrm.FillFrom(P: PUtf8Char; FieldBits: PFieldBits);
 var
   info: TGetJsonField;
   i, j, n: PtrInt;
-  F: array[0..MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
-  L: array[0..MAX_SQLFIELDS - 1] of integer;   // and lens
+  F: array[0 .. MAX_SQLFIELDS - 1] of PUtf8Char; // store field/property names
+  L: array[0 .. MAX_SQLFIELDS - 1] of integer;   // and lens
 begin
   if FieldBits <> nil then
     FillZero(FieldBits^);
