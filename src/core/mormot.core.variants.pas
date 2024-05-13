@@ -1958,23 +1958,25 @@ type
     /// create a TDocVariant array, matching a filtering expression
     // - expressions are e.g. 'name=Synopse' or 'price<100'
     procedure ReduceFilter(const aExpression: RawUtf8; var result: TDocVariantData;
-      aLimit: integer = 0; aCompare: TVariantCompare = nil); overload;
+      aLimit: integer = 0; aCompare: TVariantCompare = nil;
+      aPathDelim: AnsiChar = #0); overload;
     /// create a TDocVariant array, matching a filtering expression
     // - expressions are e.g. 'name=Synopse' or 'price<100'
-    function ReduceFilter(const aExpression: RawUtf8; aLimit: integer = 0): variant; overload;
+    function ReduceFilter(const aExpression: RawUtf8; aLimit: integer = 0;
+      aPathDelim: AnsiChar = #0): variant; overload;
     /// create a TDocVariant array, matching a filtering expression
     // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
     procedure ReduceFilter(const aExpression: RawUtf8; const aValue: variant;
       var result: TDocVariantData; aCompare: TVariantCompare = nil;
-      aLimit: integer = 0); overload;
+      aLimit: integer = 0; aPathDelim: AnsiChar = #0); overload;
     /// create a TDocVariant array, matching a filtering expression
     // - e.g. ReduceFilter('name=','Synopse') or ReduceFilter('price<',MaxPrice)
     function ReduceFilter(const aExpression: RawUtf8; const aValue: variant;
-      aLimit: integer = 0): variant; overload;
+      aLimit: integer = 0; aPathDelim: AnsiChar = #0): variant; overload;
     /// create a TDocVariant array, matching a filtering set of raw parameters
     procedure ReduceFilter(const aKey: RawUtf8; const aValue: variant;
       aMatch: TCompareOperator; aCompare: TVariantCompare; aLimit: integer;
-      var result: TDocVariantData); overload;
+      aPathDelim: AnsiChar; var result: TDocVariantData); overload;
     /// create a TDocVariant array, from the values of a single property of the
     // objects of this document array, specified by name
     // - you can optionally apply an additional filter to each reduced item
@@ -3092,16 +3094,18 @@ type
     procedure Extend(const value: array of const); overload;
     /// search matching expression over IDocDict kind of elements in this list
     // - expressions are e.g. 'name=Synopse' or 'info.price<100'
-    function Filter(const expression: RawUtf8): IDocList; overload;
+    function Filter(const expression: RawUtf8;
+      pathdelim: AnsiChar = '.'): IDocList; overload;
     /// search matching expression over IDocDict kind of elements in this list
     // - use e.g. Filter('name=', 'Synopse') or Filter('info.price<', MaxPrice)
     function Filter(const expression: RawUtf8; const value: variant;
-      limit: integer = 0): IDocList; overload;
+      limit: integer = 0; pathdelim: AnsiChar = '.'): IDocList; overload;
     /// search matching key/value over IDocDict kind of elements in this list
     // - raw search for compare(object.key,value)=match
     // - default compare=nil will use VariantCompare
     function Filter(const key: RawUtf8; const value: variant; limit: integer;
-      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
+      match: TCompareOperator; compare: TVariantCompare;
+      pathdelim: AnsiChar = '.'): IDocList; overload;
     /// search the first matching expression over IDocDict kind of elements
     function First(const expression: RawUtf8): variant; overload;
     /// search the first matching expression over IDocDict kind of elements
@@ -7728,7 +7732,7 @@ end;
 
 procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8;
   const aValue: variant; aMatch: TCompareOperator; aCompare: TVariantCompare;
-  aLimit: integer; var result: TDocVariantData);
+  aLimit: integer; aPathDelim: AnsiChar; var result: TDocVariantData);
 var
   n, prev: integer;
   v, obj: PVariant;
@@ -7744,12 +7748,12 @@ begin
   if not Assigned(aCompare) then
     aCompare := @VariantCompare;
   prev := -1; // optimistic search aPropName at the previous field position
-  haspath := PosExChar('.', aKey) <> 0;
+  haspath := (aPathDelim <> #0) and (PosExChar(aPathDelim, aKey) <> 0);
   v := pointer(VValue);
   repeat
     dv := _Safe(v^);
     if haspath then
-      obj := dv^.GetPVariantByPath(aKey, '.')
+      obj := dv^.GetPVariantByPath(aKey, aPathDelim)
     else
       dv^.GetObjectProp(aKey, obj, @prev);
     if (obj <> nil) and
@@ -7768,14 +7772,15 @@ begin
 end;
 
 procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  var result: TDocVariantData; aLimit: integer; aCompare: TVariantCompare);
+  var result: TDocVariantData; aLimit: integer; aCompare: TVariantCompare;
+  aPathDelim: AnsiChar);
 var
   k: RawUtf8;
   v: variant;
   m: TCompareOperator;
 begin
   ParseSortMatch(pointer(aExpression), k, m, @v);
-  ReduceFilter(k, v, m, aCompare, aLimit, result);
+  ReduceFilter(k, v, m, aCompare, aLimit, aPathDelim, result);
 end;
 
 procedure ToSingle(result: PRttiVarData);
@@ -7789,30 +7794,30 @@ begin
 end;
 
 function TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  aLimit: integer): variant;
+  aLimit: integer; aPathDelim: AnsiChar): variant;
 begin
   VarClear(result{%H-});
-  ReduceFilter(aExpression, PDocVariantData(@result)^, aLimit);
+  ReduceFilter(aExpression, PDocVariantData(@result)^, aLimit, nil, aPathDelim);
   if aLimit = 1 then
     ToSingle(@result);
 end;
 
 procedure TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
   const aValue: variant; var result: TDocVariantData;
-  aCompare: TVariantCompare; aLimit: integer);
+  aCompare: TVariantCompare; aLimit: integer; aPathDelim: AnsiChar);
 var
   k: RawUtf8;
   m: TCompareOperator;
 begin
   ParseSortMatch(pointer(aExpression), k, m, nil);
-  ReduceFilter(k, aValue, m, aCompare, aLimit, result);
+  ReduceFilter(k, aValue, m, aCompare, aLimit, aPathDelim, result);
 end;
 
 function TDocVariantData.ReduceFilter(const aExpression: RawUtf8;
-  const aValue: variant; aLimit: integer): variant;
+  const aValue: variant; aLimit: integer; aPathDelim: AnsiChar): variant;
 begin
   VarClear(result{%H-});
-  ReduceFilter(aExpression, aValue, PDocVariantData(@result)^);
+  ReduceFilter(aExpression, aValue, PDocVariantData(@result)^, nil, aLimit, aPathDelim);
   if aLimit = 1 then
     ToSingle(@result);
 end;
@@ -10248,10 +10253,10 @@ type
     procedure Extend(const value: IDocList); overload;
     procedure Extend(const value: array of const); overload;
     function Filter(const key: RawUtf8; const value: variant; limit: integer;
-      match: TCompareOperator; compare: TVariantCompare): IDocList; overload;
-    function Filter(const expression: RawUtf8): IDocList; overload;
+      match: TCompareOperator; compare: TVariantCompare; pathdelim: AnsiChar): IDocList; overload;
+    function Filter(const expression: RawUtf8; pathdelim: AnsiChar): IDocList; overload;
     function Filter(const expression: RawUtf8; const value: variant;
-      limit: integer): IDocList; overload;
+      limit: integer; pathdelim: AnsiChar): IDocList; overload;
     function First(const expression: RawUtf8): variant; overload;
     function First(const expression: RawUtf8; const value: variant): variant; overload;
     function Index(const value: variant): integer; overload;
@@ -11274,24 +11279,24 @@ begin
   fValue^.SortArrayByFields(keys, compare, nil, reverse);
 end;
 
-function TDocList.Filter(const key: RawUtf8; const value: variant;
-  limit: integer; match: TCompareOperator; compare: TVariantCompare): IDocList;
+function TDocList.Filter(const key: RawUtf8; const value: variant; limit: integer;
+  match: TCompareOperator; compare: TVariantCompare; pathdelim: AnsiChar): IDocList;
 begin
   result := TDocList.CreateOwned;
-  fValue^.ReduceFilter(key, value, match, compare, limit, result.Value^);
+  fValue^.ReduceFilter(key, value, match, compare, limit, pathdelim, result.Value^);
 end;
 
-function TDocList.Filter(const expression: RawUtf8): IDocList;
+function TDocList.Filter(const expression: RawUtf8; pathdelim: AnsiChar): IDocList;
 begin // no limit here to avoid confusion between overloads
   result := TDocList.CreateOwned;
-  fValue^.ReduceFilter(expression, result.Value^);
+  fValue^.ReduceFilter(expression, result.Value^, 0, nil, pathdelim);
 end;
 
 function TDocList.Filter(const expression: RawUtf8; const value: variant;
-  limit: integer): IDocList;
+  limit: integer; pathdelim: AnsiChar): IDocList;
 begin
   result := TDocList.CreateOwned;
-  fValue^.ReduceFilter(expression, value, result.Value^, nil, limit);
+  fValue^.ReduceFilter(expression, value, result.Value^, nil, limit, pathdelim);
 end;
 
 function TDocList.First(const expression: RawUtf8): variant;

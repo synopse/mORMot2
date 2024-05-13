@@ -3343,8 +3343,7 @@ var
   {$else}
   tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
-begin
-  // see http://www.ietf.org/rfc/rfc4627.txt
+begin // see http://www.ietf.org/rfc/rfc4627.txt
   P := Json;
   Json := nil; // Json=nil indicates error or unexpected end (#0)
   Value := nil;
