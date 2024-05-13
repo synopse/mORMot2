@@ -9900,8 +9900,7 @@ begin
     if Props <> nil then
     begin
       max := Props.fModelMax;
-      if (max >= 0) and
-         (max <= fTablesMax)  then
+      if (max >= 0) and (max <= fTablesMax) then
       begin
         // fastest O(1) search in all registered models (if worth it)
         m := pointer(Props.fModel);
@@ -9948,7 +9947,7 @@ begin
   result := GetTableIndex(aTable);
   if result < 0 then
     EModelException.RaiseUtf8('% is not part of % root=%',
-      [aTable, self, Root]);
+      [aTable, self, fRoot]);
 end;
 
 function TOrmModel.GetTableExactIndex(const TableName: RawUtf8): PtrInt;
@@ -10138,10 +10137,10 @@ end;
 
 function TOrmModel.GetIDGenerator(aTable: TOrmClass): TSynUniqueIdentifierGenerator;
 var
-  i: cardinal;
+  i: PtrInt;
 begin
   i := GetTableIndexExisting(aTable);
-  if i < cardinal(length(fIDGenerator)) then
+  if i < length(fIDGenerator) then
     result := fIDGenerator[i]
   else
     result := nil;
@@ -10875,25 +10874,25 @@ end;
 
 function TOrmCache.Table(aTable: TOrmClass): POrmCacheTable;
 var
-  i: PtrUInt;
+  i: PtrInt;
 begin
   result := nil;
   if (self = nil) or (aTable = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
-  if i < PtrUInt(Length(fCache)) then
+  if i < length(fCache) then
     result := @fCache[i];
 end;
 
 function TOrmCache.TableSet(aTable: TOrmClass): POrmCacheTable;
 var
-  i: PtrUInt;
+  i: PtrInt;
 begin
   result := nil;
   if (self = nil) or (aTable = nil) or (Rest = nil) then
     exit;
   i := fModel.GetTableIndexExisting(aTable);
-  if (i < PtrUInt(Length(fCache))) and Rest.CacheWorthItForTable(i) then
+  if (i < length(fCache)) and Rest.CacheWorthItForTable(i) then
     result := @fCache[i];
 end;
 
