@@ -2981,7 +2981,7 @@ var
 
   procedure Test(const expression: RawUtf8; const ok, nok: array of RawUtf8);
   var
-    i: integer;
+    i: PtrInt;
   begin
     Check(s.Parse(expression) = eprSuccess);
     for i := 0 to high(ok) do

@@ -994,7 +994,7 @@ begin
         s[1] := NormToUpper[s[1]];
       end;
       WR.AddShorter(s);
-      WR.Add(' ');
+      WR.AddDirect(' ');
       dec(WordCount);
     end;
     WR.CancelLastChar(' ');
@@ -1003,7 +1003,7 @@ begin
         begin
           if RandomInclude <> '' then
           begin
-            WR.Add(' ');
+            WR.AddDirect(' ');
             WR.AddString(RandomInclude); // 5/128 = 4% chance of text inclusion
           end;
           last := space;
@@ -1024,13 +1024,13 @@ begin
     end;
     case last of
       space:
-        WR.Add(' ');
+        WR.AddDirect(' ');
       comma:
-        WR.Add(',', ' ');
+        WR.AddDirect(',', ' ');
       dot:
-        WR.Add('.', ' ');
+        WR.AddDirect('.', ' ');
       question:
-        WR.Add('?', ' ');
+        WR.AddDirect('?', ' ');
       paragraph:
         WR.AddShorter('.'#13#10);
     end;
