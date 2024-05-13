@@ -9886,7 +9886,7 @@ end;
 function TOrmModel.GetTableIndex(aTable: TOrmClass): PtrInt;
 var
   {$ifndef NOPATCHVMT}
-  i: PtrInt;
+  max: integer;
   Props: TOrmProperties;
   m: ^TOrmPropertiesModelEntry;
   {$endif NOPATCHVMT}
@@ -9897,19 +9897,26 @@ begin
   begin
     {$ifndef NOPATCHVMT}
     Props := aTable.OrmProps;
-    if (Props <> nil) and
-       (Props.fModelMax < fTablesMax) then
+    if Props <> nil then
     begin
-      // fastest O(1) search in all registered models (if worth it)
-      m := pointer(Props.fModel);
-      for i := 0 to Props.fModelMax do
-        if m^.Model = self then
-        begin
-          result := m^.TableIndex; // almost always loop-free
-          exit;
-        end
-        else
+      max := Props.fModelMax;
+      if (max >= 0) and
+         (max <= fTablesMax)  then
+      begin
+        // fastest O(1) search in all registered models (if worth it)
+        m := pointer(Props.fModel);
+        repeat
+          if m^.Model = self then
+          begin
+            result := m^.TableIndex; // almost always loop-free
+            exit;
+          end;
+          if max = 0 then
+            break;
+          dec(max);
           inc(m);
+        until false;
+      end;
     end;
     {$endif NOPATCHVMT}
     // manual search e.g. if fModel[] is not yet set or OrmProps has no VMT
