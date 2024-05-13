@@ -5724,7 +5724,7 @@ begin
     end;
   end;
   fPropInfo.SetLongStrProp(Instance, tmp{%H-});
-  result := True;
+  result := true;
 end;
 
 procedure TOrmPropInfoRttiAnsi.GetFieldSqlVar(Instance: TObject;
@@ -5809,7 +5809,7 @@ begin
     end;
   end;
   fPropInfo.SetLongStrProp(Instance, tmp{%H-});
-  result := True;
+  result := true;
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.GetFieldSqlVar(Instance: TObject;
@@ -6307,7 +6307,7 @@ begin
     end;
   end;
   fPropInfo.SetUnicodeStrProp(Instance, tmp{%H-});
-  result := True;
+  result := true;
 end;
 
 procedure TOrmPropInfoRttiUnicode.GetFieldSqlVar(Instance: TObject;

@@ -2672,7 +2672,7 @@ function TRestClientUri.ServiceRegister(const aInterfaces: array of PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUtf8): boolean;
 begin
-  result := False;
+  result := false;
   if (self = nil) or
      (high(aInterfaces) < 0) then
     exit;

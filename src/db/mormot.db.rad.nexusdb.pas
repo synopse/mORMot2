@@ -289,7 +289,7 @@ begin
      (fDatabaseName <> NEXUSDB_INMEMORY) then
     result := DirectoryExists(Utf8ToString(fDatabaseName))
   else
-    result := True; // if we cannot determine directly, assume it exists
+    result := true; // if we cannot determine directly, assume it exists
 end;
 
 function TSqlDBNexusDBConnectionProperties.CreateDatabase: boolean;

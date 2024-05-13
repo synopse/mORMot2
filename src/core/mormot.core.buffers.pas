@@ -7806,7 +7806,7 @@ begin
     for i := length(boundaries) - 1 downto 0 do
       W.Add('--%--'#13#10, [boundaries[i]]);
     W.SetText(MultiPartContent);
-    result := True;
+    result := true;
   finally
     W.Free;
   end;

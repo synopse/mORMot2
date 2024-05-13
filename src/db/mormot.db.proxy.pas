@@ -1110,7 +1110,7 @@ end;
 
 function TSqlDBProxyConnectionPropertiesAbstract.IsCacheable(P: PUtf8Char): boolean;
 begin
-  result := False;
+  result := false;
 end;
 
 

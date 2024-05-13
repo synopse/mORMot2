@@ -7464,7 +7464,7 @@ begin
   finally
     LeaveCriticalSection(fSafe);
   end;
-  result := True;
+  result := true;
 end;
 
 function THttpApiWebSocketServerProtocol.Close(index: integer;
@@ -7480,7 +7480,7 @@ begin
        (conn.fState = wsOpen) then
     begin
       conn.Close(aStatus, aBuffer, aBufferSize);
-      result := True;
+      result := true;
     end;
   end;
 end;
@@ -7591,7 +7591,7 @@ begin
        (conn.fState = wsOpen) then
     begin
       conn.Send(aBufferType, aBuffer, aBufferSize);
-      result := True;
+      result := true;
     end;
   end;
 end;
@@ -7621,7 +7621,7 @@ begin
      (Assigned(fProtocol.OnAccept) and
       not fProtocol.OnAccept(Ctxt as THttpServerRequest, Self)) then
   begin
-    result := False;
+    result := false;
     exit;
   end;
   EWebSocketApi.RaiseOnError(hCreateServerHandle,
@@ -7867,7 +7867,7 @@ begin
             err := WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
             EWebSocketApi.RaiseOnError(hCompleteAction, err);
           end;
-          result := False;
+          result := false;
           exit;
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
@@ -7883,7 +7883,7 @@ begin
               CloseConnection;
             end;
           fLastActionContext := actctxt;
-          result := False;
+          result := false;
           exit;
         end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
@@ -7898,7 +7898,7 @@ begin
             FastSetRawByteString(fBuffer, buf[0].pbBuffer, buf[0].ulBufferLength);
             fCloseStatus := buf[0].Reserved1;
             CloseConnection;
-            result := False;
+            result := false;
             exit;
           end
           else if buftyp = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
@@ -8191,7 +8191,7 @@ function TSynThreadPoolHttpApiWebSocketServer.NeedStopOnIOError: boolean;
 begin
   // If connection closed by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED
   // can be returned - Other connections must work normally
-  result := False;
+  result := false;
 end;
 
 procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThread);

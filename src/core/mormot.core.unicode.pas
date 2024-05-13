@@ -5571,7 +5571,7 @@ end;
 
 function IdemPCharWithoutWhiteSpace(p: PUtf8Char; up: PAnsiChar): boolean;
 begin
-  result := False;
+  result := false;
   if p = nil then
     exit;
   if up <> nil then

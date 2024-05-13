@@ -6325,7 +6325,7 @@ begin
   if (self = nil) or
      (Table = nil) or
      (PtrUInt(aRow) > PtrUInt(Table.fRowCount)) then
-    result := False
+    result := false
   else
   begin
     aRow := aRow * Table.fFieldCount;
@@ -6345,7 +6345,7 @@ begin
           {wasstring=}map^.TableIndex in fTable.fFieldParsedAsString);
       inc(map);
     end;
-    result := True;
+    result := true;
   end;
 end;
 
@@ -7655,7 +7655,7 @@ begin
           VarRecToUtf8(aSimpleFields[i], tmp); // will work for every type
           SimpleFields[i].SetValueVar(self, tmp, false);
         end;
-        result := True;
+        result := true;
       end;
 end;
 
@@ -8795,7 +8795,7 @@ var
 begin
   Where := IDWhereSql(aClient, aSourceID, False);
   if Where = '' then
-    result := False
+    result := false
   else
     result := aClient.OneFieldValues(RecordClass, 'Dest', Where,
       TInt64DynArray(DestIDs));
@@ -8808,7 +8808,7 @@ var
 begin
   aTable := DestGetJoinedTable(aClient, aDestWhereSql, aSourceID, jkDestID);
   if aTable = nil then
-    result := False
+    result := false
   else
   try
     aTable.GetRowValues(0, TInt64DynArray(DestIDs));

@@ -3472,7 +3472,7 @@ end;
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
 begin
-  result := True;
+  result := true;
 end;
 
 procedure TSynThreadPool.TaskAbort(aContext: Pointer);

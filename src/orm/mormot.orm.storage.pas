@@ -3967,7 +3967,7 @@ begin
     exit;
   if SentData = '' then
   begin
-    result := True;
+    result := true;
     exit;
   end;
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'EngineUpdate' {$endif});

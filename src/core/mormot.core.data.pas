@@ -8058,7 +8058,7 @@ var
   cmp: integer;
   P: PAnsiChar;
 begin
-  result := False;
+  result := false;
   n := GetCount;
   if Assigned(fCompare) then
     if n = 0 then // a void array is always sorted
@@ -8089,7 +8089,7 @@ begin
         begin
           // returns true + index of existing Item
           Index := i;
-          result := True;
+          result := true;
           exit;
         end
         else if cmp > 0 then

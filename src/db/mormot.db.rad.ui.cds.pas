@@ -420,7 +420,7 @@ begin
       aDataSet.Post;
     end;
     aDataSet.First;
-    result := True;
+    result := true;
   finally
     if prev.Active then
     begin

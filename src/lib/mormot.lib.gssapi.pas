@@ -510,7 +510,7 @@ begin
               CompareMemSmall(oid1^.elements, oid2^.elements, oid1^.length);
   end
   else
-    result := False;
+    result := false;
 end;
 
 function GSS_CALLING_ERROR(x: cardinal): cardinal;

@@ -2298,7 +2298,7 @@ var
   msg, tmp: string;
   u: RawUtf8;
 begin
-  result := False;
+  result := false;
   if (self = nil) or
      (Connection = nil) then
     exit;

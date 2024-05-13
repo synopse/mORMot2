@@ -606,7 +606,7 @@ var
   i, n: PtrInt;
   log: ISynLog;
 begin
-  result := False;
+  result := false;
   if (self = nil) or
      (aServer = nil) or
      (aServer.Model = nil) then
@@ -665,7 +665,7 @@ var
   i, j, n: PtrInt;
   log: ISynLog;
 begin
-  result := False;
+  result := false;
   if (self = nil) or
      (aServer = nil) or
      (aServer.Model = nil) then
