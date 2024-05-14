@@ -5867,11 +5867,10 @@ begin
         result := Utf8IComp(p1, p2) // default SYSTEMNOCASE collation
     else
       result := StrComp(p1, p2);
-    if fGetterIsFieldPropOffset = 0 then
-    begin
-      FastAssignNew(p1);
-      FastAssignNew(p2);
-    end;
+    if fGetterIsFieldPropOffset <> 0 then
+      exit;
+    FastAssignNew(p1);
+    FastAssignNew(p2);
   end;
 end;
 

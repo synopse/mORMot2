@@ -8791,46 +8791,46 @@ end;
 function TOrmMany.DestGet(const aClient: IRestOrm; aSourceID: TID;
   out DestIDs: TIDDynArray): boolean;
 var
-  Where: RawUtf8;
+  where: RawUtf8;
 begin
-  Where := IDWhereSql(aClient, aSourceID, False);
-  if Where = '' then
+  where := IDWhereSql(aClient, aSourceID, False);
+  if where = '' then
     result := false
   else
-    result := aClient.OneFieldValues(RecordClass, 'Dest', Where,
+    result := aClient.OneFieldValues(RecordClass, 'Dest', where,
       TInt64DynArray(DestIDs));
 end;
 
 function TOrmMany.DestGetJoined(const aClient: IRestOrm;
   const aDestWhereSql: RawUtf8; aSourceID: TID; out DestIDs: TIDDynArray): boolean;
 var
-  aTable: TOrmTable;
+  t: TOrmTable;
 begin
-  aTable := DestGetJoinedTable(aClient, aDestWhereSql, aSourceID, jkDestID);
-  if aTable = nil then
+  t := DestGetJoinedTable(aClient, aDestWhereSql, aSourceID, jkDestID);
+  if t = nil then
     result := false
   else
-  try
-    aTable.GetRowValues(0, TInt64DynArray(DestIDs));
-    result := true;
-  finally
-    aTable.Free;
-  end;
+    try
+      t.GetRowValues(0, TInt64DynArray(DestIDs));
+      result := true;
+    finally
+      t.Free;
+    end;
 end;
 
 function TOrmMany.DestGetJoined(const aClient: IRestOrm;
   const aDestWhereSql: RawUtf8; aSourceID: TID): TOrm;
 var
-  aTable: TOrmTable;
+  t: TOrmTable;
 begin
-  aTable := DestGetJoinedTable(aClient, aDestWhereSql, aSourceID, jkDestFields);
-  if aTable = nil then
+  t := DestGetJoinedTable(aClient, aDestWhereSql, aSourceID, jkDestFields);
+  if t = nil then
     result := nil
   else
   begin
     result := TOrmClass(Orm.fRecordManyDestProp.ObjectClass).Create;
-    aTable.OwnerMustFree := true;
-    result.FillPrepare(aTable, ctnTrimmed);
+    t.OwnerMustFree := true;
+    result.FillPrepare(t, ctnTrimmed);
   end;
 end;
 
@@ -8838,8 +8838,8 @@ function TOrmMany.DestGetJoinedTable(const aClient: IRestOrm;
   const aDestWhereSql: RawUtf8; aSourceID: TID; JoinKind: TOrmManyJoinKind;
   const FieldsCsv: RawUtf8): TOrmTable;
 var
-  Select, SQL: RawUtf8;
-  SelfProps, DestProps: TOrmModelProperties;
+  select, sql: RawUtf8;
+  slf, dst: TOrmModelProperties;
 
   procedure SelectFields(const Classes: array of TOrmModelProperties);
   var
@@ -8847,9 +8847,9 @@ var
   begin
     for i := 0 to high(Classes) do
     begin
-      Select := Select + Classes[i].Sql.TableSimpleFields[True, True];
+      select := select + Classes[i].sql.TableSimpleFields[True, True];
       if i < high(Classes) then
-        Select := Select + ',';
+        select := select + ',';
     end;
   end;
 
@@ -8867,48 +8867,46 @@ begin
     exit;
   with aClient.Model do
   begin
-    SelfProps := Props[POrmClass(self)^];
-    DestProps := Props[
-      TOrmClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)];
+    slf := Props[POrmClass(self)^];
+    dst := Props[TOrmClass(slf.Props.fRecordManyDestProp.ObjectClass)];
   end;
   case JoinKind of
     jkDestID:
-      Select := DestProps.Props.SqlTableName + '.RowID';
+      select := dst.Props.SqlTableName + '.RowID';
     jkPivotID:
-      Select := SelfProps.Props.SqlTableName + '.RowID';
+      select := slf.Props.SqlTableName + '.RowID';
     jkDestFields:
       if FieldsCsv = '' then
-        SelectFields([DestProps])
+        SelectFields([dst])
       else
-        Select := AddPrefixToCsv(pointer(FieldsCsv),
-          DestProps.Props.SqlTableName + '.');
+        select := AddPrefixToCsv(pointer(FieldsCsv), dst.Props.SqlTableName + '.');
     jkPivotFields:
       if FieldsCsv = '' then
-        SelectFields([SelfProps])
+        SelectFields([slf])
       else
-        Select := AddPrefixToCsv(pointer(FieldsCsv),
-          SelfProps.Props.SqlTableName + '.');
+        select := AddPrefixToCsv(pointer(FieldsCsv),
+          slf.Props.SqlTableName + '.');
     jkPivotAndDestFields:
       if FieldsCsv = '' then
-        SelectFields([SelfProps, DestProps])
+        SelectFields([slf, dst])
       else
-        Select := FieldsCsv;
+        select := FieldsCsv;
   end;
   if aDestWhereSql = '' then
     // fast inlined prepared statement
-    SQL := 'SELECT % FROM %,% WHERE %.Source=:(%): AND %.Dest=%.RowID'
+    sql := 'select % FROM %,% WHERE %.Source=:(%): AND %.Dest=%.RowID'
   else if PosEx(RawUtf8(':('), aDestWhereSql, 1) > 0 then
     // statement is globaly inlined -> cache prepared statement
-    SQL := 'SELECT % FROM %,% WHERE %.Source=:(%): AND %.Dest=%.RowID AND %'
+    sql := 'select % FROM %,% WHERE %.Source=:(%): AND %.Dest=%.RowID AND %'
   else
     // statement is not globaly inlined -> no caching of prepared statement
-    SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
+    sql := 'select % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
   result := aClient.ExecuteList([POrmClass(self)^,
-    TOrmClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
-    FormatUtf8(SQL, [{%H-}Select, DestProps.Props.SqlTableName,
-      SelfProps.Props.SqlTableName, SelfProps.Props.SqlTableName,
-      aSourceID, SelfProps.Props.SqlTableName,
-      DestProps.Props.SqlTableName, aDestWhereSql]));
+    TOrmClass(slf.Props.fRecordManyDestProp.ObjectClass)],
+    FormatUtf8(sql, [{%H-}select, dst.Props.SqlTableName,
+      slf.Props.SqlTableName, slf.Props.SqlTableName,
+      aSourceID, slf.Props.SqlTableName,
+      dst.Props.SqlTableName, aDestWhereSql]));
 end;
 
 function TOrmMany.DestGet(const aClient: IRestOrm;
@@ -8973,8 +8971,8 @@ end;
 function TOrmMany.InternalFillMany(const aClient: IRestOrm; aID: TID;
   const aAndWhereSql: RawUtf8; isDest: boolean): integer;
 var
-  aTable: TOrmTable;
-  Where: RawUtf8;
+  t: TOrmTable;
+  where: RawUtf8;
 begin
   result := 0;
   if self = nil then
@@ -8983,15 +8981,15 @@ begin
      (aID = 0) then
     if fSourceID <> nil then
       aID := fSourceID^; // has been set by TOrm.Create
-  Where := IDWhereSql(aClient, aID, isDest, aAndWhereSql);
-  if Where = '' then
+  where := IDWhereSql(aClient, aID, isDest, aAndWhereSql);
+  if where = '' then
     exit;
-  aTable := aClient.MultiFieldValues(RecordClass, '', Where);
-  if aTable = nil then
+  t := aClient.MultiFieldValues(RecordClass, '', where);
+  if t = nil then
     exit;
-  aTable.OwnerMustFree := true;
-  FillPrepare(aTable); // temporary storage for FillRow, FillOne and FillRewind
-  result := aTable.fRowCount;
+  t.OwnerMustFree := true;
+  FillPrepare(t); // temporary storage for FillRow, FillOne and FillRewind
+  result := t.fRowCount;
 end;
 
 function TOrmMany.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
@@ -9019,7 +9017,7 @@ end;
 function TOrmMany.IDWhereSql(const aClient: IRestOrm; aID: TID;
   isDest: boolean; const aAndWhereSql: RawUtf8): RawUtf8;
 const
-  FieldName: array[boolean] of RawUtf8 = ('Source=', 'Dest=');
+  FIELD_NAME: array[boolean] of RawUtf8 = ('Source=', 'Dest=');
 begin
   if (self = nil) or
      (aID = 0) or
@@ -9036,20 +9034,20 @@ begin
         result := '%% AND %'
     else // no inlined parameters -> not cached
       result := '%:(%):'; // no additional where clause -> inline ID
-    result := FormatUtf8(result, [FieldName[isDest], aID, aAndWhereSql]);
+    result := FormatUtf8(result, [FIELD_NAME[isDest], aID, aAndWhereSql]);
   end;
 end;
 
 function TOrmMany.SourceGet(const aClient: IRestOrm; aDestID: TID;
   out SourceIDs: TIDDynArray): boolean;
 var
-  Where: RawUtf8;
+  where: RawUtf8;
 begin
-  Where := IDWhereSql(aClient, aDestID, True);
-  if Where = '' then
+  where := IDWhereSql(aClient, aDestID, True);
+  if where = '' then
     result := false
   else
-    result := aClient.OneFieldValues(RecordClass, 'Source', Where,
+    result := aClient.OneFieldValues(RecordClass, 'Source', where,
       TInt64DynArray(SourceIDs));
 end;
 
@@ -9153,15 +9151,15 @@ end;
 
 class function TOrmRTree.ContainedIn(const BlobA, BlobB): boolean;
 var
-  A, B: TOrmTreeCoords;
+  a, b: TOrmTreeCoords;
   i: PtrInt;
 begin
-  BlobToCoord(BlobA, A);
-  BlobToCoord(BlobB, B);
+  BlobToCoord(BlobA, a);
+  BlobToCoord(BlobB, b);
   result := false;
   for i := 0 to (OrmProps.RTreeCoordBoundaryFields shr 1) - 1 do
-    if (A[i].max < B[i].min) or
-       (A[i].min > B[i].max) then
+    if (a[i].max < b[i].min) or
+       (a[i].min > b[i].max) then
       exit; // no match
   result := true; // box match
 end;
