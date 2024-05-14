@@ -1349,10 +1349,12 @@ begin
             begin
               DoColor(ccLightRed);
               AddFailed(E.ClassName + ': ' + E.Message);
-              DoText(['! ', fCurrentMethodInfo^.IdentTestName]);
+              DoTextLn(['! ', fCurrentMethodInfo^.IdentTestName]);
               if E.InheritsFrom(EControlC) then
                 raise; // Control-C should just abort whole test
-              DoTextLn([CRLF + '! ', GetLastExceptionText]); // with extended info
+              {$ifndef NOEXCEPTIONINTERCEPT}
+              DoTextLn(['! ', GetLastExceptionText]); // with extended info
+              {$endif NOEXCEPTIONINTERCEPT}
               DoColor(ccLightGray);
             end;
           end;
