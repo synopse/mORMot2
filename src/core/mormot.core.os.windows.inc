@@ -2138,6 +2138,27 @@ end;
 function CoCreateGuid(out guid: THash128Rec): HRESULT;
   stdcall; external 'ole32.dll';
 
+{$ifndef UNICODE} // 64-bit aware Windows API missing on FPC and oldest Delphi
+
+type
+  TMemoryStatusEx = record
+    dwLength: DWord;
+    dwMemoryLoad: DWord;
+    ullTotalPhys: QWord;
+    ullAvailPhys: QWord;
+    ullTotalPageFile: QWord;
+    ullAvailPageFile: QWord;
+    ullTotalVirtual: QWord;
+    ullAvailVirtual: QWord;
+    ullAvailExtendedVirtual: QWord;
+  end;
+
+// information about the system's current usage of both physical and virtual memory
+function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
+  stdcall; external kernel32;
+
+{$endif UNICODE}
+
 procedure XorOSEntropy(var e: THash512Rec);
 var
   h: THash128Rec;
@@ -2145,21 +2166,25 @@ var
     krn, usr, p, e: TFileTime;
   end;
   mem: TProcessMemoryCounters;
+  memst: TMemoryStatusEx;
 begin
   QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
   e.i[6] := e.i[6] xor h.Lo;
   if Assigned(GetProcessTimes) then
     GetProcessTimes(GetCurrentProcess, ft.p, ft.e, ft.krn, ft.usr);
   DefaultHasher128(@e.h0, @ft, SizeOf(ft));
+  FillCharFast(mem, SizeOf(mem), 0);
+  mem.cb := SizeOf(mem);
   if Assigned(GetProcessMemoryInfo) then // may have been delayed
-  begin
-    mem.cb := SizeOf(mem);
-    GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem));
-    DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  end;
+    if GetProcessMemoryInfo(GetCurrentProcess, mem, SizeOf(mem)) then
+      DefaultHasher128(@e.h1, @mem, SizeOf(mem));
+  FillCharFast(memst, SizeOf(memst), 0);
+  memst.dwLength := SizeOf(memst);
+  if GlobalMemoryStatusEx(memst) then
+    DefaultHasher128(@e.h2, @memst, SizeOf(memst));
   if Assigned(GetSystemTimes) then
     GetSystemTimes(ft.usr, ft.p, ft.e);
-  DefaultHasher128(@e.h2, @ft, SizeOf(ft));
+  DefaultHasher128(@e.h3, @ft, SizeOf(ft));
   CoCreateGuid(h); // very fast on Windows - used to obfuscate system info
   e.i[0] := e.i[0] xor h.Lo;
   e.i[1] := e.i[1] xor h.Hi;
@@ -2218,14 +2243,14 @@ begin
   FileTimeToInt64(ftidl, sidl);
   FileTimeToInt64(ftkrn, skrn);
   FileTimeToInt64(ftusr, susr);
-  fDiffIdle := sidl - fSysPrevIdle;
+  fDiffIdle   := sidl - fSysPrevIdle;
   fDiffKernel := skrn - fSysPrevKernel;
-  fDiffUser := susr - fSysPrevUser;
-  fDiffTotal := fDiffKernel + fDiffUser; // kernel time also includes idle time
+  fDiffUser   := susr - fSysPrevUser;
+  fDiffTotal  := fDiffKernel + fDiffUser; // kernel time also includes idle time
   dec(fDiffKernel, fDiffIdle);
-  fSysPrevIdle := sidl;
+  fSysPrevIdle   := sidl;
   fSysPrevKernel := skrn;
-  fSysPrevUser := susr;
+  fSysPrevUser   := susr;
 end;
 
 function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
@@ -2286,27 +2311,6 @@ begin
     result := true;
   end;
 end;
-
-{$ifndef UNICODE} // 64-bit aware Windows API missing on FPC and oldest Delphi
-
-type
-  TMemoryStatusEx = record
-    dwLength: DWord;
-    dwMemoryLoad: DWord;
-    ullTotalPhys: QWord;
-    ullAvailPhys: QWord;
-    ullTotalPageFile: QWord;
-    ullAvailPageFile: QWord;
-    ullTotalVirtual: QWord;
-    ullAvailVirtual: QWord;
-    ullAvailExtendedVirtual: QWord;
-  end;
-
-// information about the system's current usage of both physical and virtual memory
-function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
-  stdcall; external kernel32;
-
-{$endif UNICODE}
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 {$ifdef WITH_FASTMM4STATS}
