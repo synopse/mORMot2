@@ -2195,9 +2195,9 @@ begin
   if not DerToEcc(pointer(der), length(der), pub) then
     if length(der) = SizeOf(pub) then
       pub := PEccPublicKey(der)^
-    else
-      exit; // accept key in raw, PEM or DER format
-  result := true;
+    else if not Ecc256r1CompressAsn1(SeqToEccPubKey(ckaEcc256, der), pub) then
+      exit;
+  result := true; // accept key in raw, PEM or DER format
 end;
 
 function PemDerRawToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
