@@ -2161,12 +2161,12 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
-  h: THash128Rec;
   ft: packed record
     krn, usr, p, e: TFileTime;
   end;
   mem: TProcessMemoryCounters;
   memst: TMemoryStatusEx;
+  h: THash128Rec absolute memst;
 begin
   QueryPerformanceCounter(h.Lo); // e.h3 xored with raw timestamps
   e.i[6] := e.i[6] xor h.Lo;
