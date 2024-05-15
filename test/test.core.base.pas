@@ -3750,6 +3750,14 @@ begin
       Check(i32[i - 1] <= i32[i]);
     n := n * 10;
   until n > length(i32);
+  SetLength(i32, 1);
+  i32[0] := 1;
+  CheckEqual(length(i32), 1);
+  CheckEqual(i32[0], 1);
+  AddSortedInteger(i32, 2);
+  CheckEqual(length(i32), 2);
+  CheckEqual(i32[0], 1);
+  CheckEqual(i32[1], 2);
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;
