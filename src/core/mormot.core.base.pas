@@ -7006,7 +7006,7 @@ end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 var
-  L, RR: PtrInt;
+  L: PtrInt;
   cmp: integer;
 begin
   L := 0;
@@ -7015,42 +7015,38 @@ begin
       result := (L + R) shr 1;
       cmp := P^[result] - Value;
       if cmp = 0 then
-        exit;
-      RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
-      dec(result);
-      if cmp < 0 then
-        L := RR
+        exit
+      else if cmp < 0 then
+        L := result + 1
       else
-        R := result;
+        R := result - 1;
     until L > R;
   result := -1
 end;
 
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, RR: PtrInt;
-  cmp: integer;
+  L: PtrInt;
+  v: integer;
 begin
   L := 0;
   if 0 <= R then
     repeat
       result := (L + R) shr 1;
-      cmp := CompareInteger(P^[result], Value);
-      if cmp = 0 then
-        exit;
-      RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
-      dec(result);
-      if cmp < 0 then
-        L := RR
+      v := P^[result];
+     if v = Value then
+        exit
+      else if v < Value then
+        L := result + 1
       else
-        R := result;
+        R := result - 1;
     until L > R;
   result := -1
 end;
 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
 var
-  L, RR: PtrInt;
+  L: PtrInt;
   cmp: integer;
 begin
   L := 0;
@@ -7059,13 +7055,11 @@ begin
       result := (L + R) shr 1;
       cmp := CompareInt64(P^[result], Value);
       if cmp = 0 then
-        exit;
-      RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
-      dec(result);
-      if cmp < 0 then
-        L := RR
+        exit
+      else if cmp < 0 then
+        L := result + 1
       else
-        R := result;
+        R := result - 1;
     until L > R;
   result := -1
 end;
@@ -7074,7 +7068,7 @@ end;
 
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
 var
-  L, RR: PtrInt;
+  L: PtrInt;
   cmp: integer;
 begin
   L := 0;
@@ -7083,20 +7077,18 @@ begin
       result := (L + R) shr 1;
       cmp := CompareQWord(P^[result], Value);
       if cmp = 0 then
-        exit;
-      RR := result + 1; // compile as 2 branchless cmovc/cmovnc on FPC
-      dec(result);
-      if cmp < 0 then
-        L := RR
+        exit
+      else if cmp < 0 then
+        L := result + 1
       else
-        R := result;
+        R := result - 1;
     until L > R;
   result := -1
 end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, LL, RR: PtrInt;
+  L {$ifndef CPUX86}, LL, RR{$endif CPUX86}: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7112,12 +7104,19 @@ begin
         result := -result - 1; // return -(foundindex+1) if already exists
         exit;
       end;
+      {$ifdef CPUX86}   // less registers on good old i386 target
+      if cmp < 0 then
+        L := result + 1
+      else
+        R := result - 1;
+      {$else}
       RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
       LL := result - 1;
       if cmp < 0 then
         L := RR
       else
         R := LL;
+      {$endif CPUX86}
     until L > R;
     while (result >= 0) and
           (P^[result] >= Value) do
@@ -7128,7 +7127,7 @@ end;
 
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, LL, RR: PtrInt;
+  L {$ifndef CPUX86}, LL, RR{$endif CPUX86}: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7141,12 +7140,19 @@ begin
       cmp := P^[result] - Value;
       if cmp = 0 then
         exit; // return exact matching index
+      {$ifdef CPUX86}
+      if cmp < 0 then
+        L := result + 1
+      else
+        R := result - 1;
+      {$else}
       RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
       LL := result - 1;
       if cmp < 0 then
         L := RR
       else
         R := LL;
+      {$endif CPUX86}
     until L > R;
     while (result >= 0) and
           (P^[result] >= Value) do
