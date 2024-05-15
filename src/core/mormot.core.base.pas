@@ -7096,7 +7096,7 @@ end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, RR: PtrInt;
+  L, LL, RR: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7113,11 +7113,11 @@ begin
         exit;
       end;
       RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      dec(result);
+      LL := result - 1;
       if cmp < 0 then
         L := RR
       else
-        R := result;
+        R := LL;
     until L > R;
     while (result >= 0) and
           (P^[result] >= Value) do
@@ -7128,7 +7128,7 @@ end;
 
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L, RR: PtrInt;
+  L, LL, RR: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7142,11 +7142,11 @@ begin
       if cmp = 0 then
         exit; // return exact matching index
       RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      dec(result);
+      LL := result - 1;
       if cmp < 0 then
         L := RR
       else
-        R := result;
+        R := LL;
     until L > R;
     while (result >= 0) and
           (P^[result] >= Value) do
