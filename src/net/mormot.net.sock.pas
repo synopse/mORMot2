@@ -955,6 +955,9 @@ procedure InitNetTlsContext(var TLS: TNetTlsContext; Server: boolean = false;
   const CertificateFile: TFileName = ''; const PrivateKeyFile: TFileName = '';
   const PrivateKeyPassword: RawUtf8 = ''; const CACertificatesFile: TFileName = '');
 
+/// purge all output fields for a TNetTlsContext instance for proper reuse
+procedure ResetNetTlsContext(var TLS: TNetTlsContext);
+
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
@@ -3776,12 +3779,22 @@ begin
   Finalize(TLS);
   FillCharFast(TLS, SizeOf(TLS), 0);
   TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
-  TLS.CertificateFile := RawUtf8(CertificateFile);
+  TLS.CertificateFile := RawUtf8(CertificateFile); // RTL TFileName to RawUtf8
   TLS.PrivateKeyFile := RawUtf8(PrivateKeyFile);
   TLS.PrivatePassword := PrivateKeyPassword;
   TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
   if Server then
     TLS.OnAcceptServerName := OnNetTlsAcceptServerName; // e.g. mormot.net.acme
+end;
+
+procedure ResetNetTlsContext(var TLS: TNetTlsContext);
+begin
+  TLS.Enabled := false;
+  FastAssignNew(TLS.CipherName);
+  FastAssignNew(TLS.PeerIssuer);
+  FastAssignNew(TLS.PeerSubject);
+  FastAssignNew(TLS.PeerInfo);
+  FastAssignNew(TLS.LastError);
 end;
 
 
@@ -5077,7 +5090,7 @@ var
   res: TNetResult;
   addr: TNetAddr;
 begin
-  TLS.Enabled := false; // reset this flag which is set at output if aTLS=true
+  ResetNetTlsContext(TLS); // TLS.Enabled is set at output if aTLS=true
   fSocketLayer := aLayer;
   fSocketFamily := nfUnknown;
   fWasBind := doBind;
@@ -5417,9 +5430,9 @@ begin
   {$endif PUREMORMOT2}
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  // perform the TLS shutdown round and release the TLS context
+  // perform the TLS shutdown and release the TLS execution interface
   fSecure := nil; // will depend on the actual implementation class
-  // don't reset TLS.Enabled := false because it is needed e.g. on re-connect
+  // note: ResetNetTlsContext(TLS) is done in OpenBind()
   // actually close the socket and mark it as not SockIsDefined (<0)
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(start);
