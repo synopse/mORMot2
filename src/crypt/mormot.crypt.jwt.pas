@@ -155,6 +155,7 @@ type
     joAllowUnexpectedAudience,
     joNoJwtIDGenerate,
     joNoJwtIDCheck,
+    joNoAudienceCheck,
     joDoubleInData);
 
   /// store options for TJwtAbstract process
