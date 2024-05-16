@@ -9149,10 +9149,20 @@ end;
 { ************ TDynArrayHasher }
 
 function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
+var
+  l: PtrInt;
 begin
   Item := PPointer(Item)^; // passed by reference
   if Item <> nil then
-    result := Hasher(0, Item, PStrLen(Item - _STRLEN)^)
+  begin
+    l := PStrLen(Item - _STRLEN)^;
+    if l > 256 then // no need to hash too big a content
+    begin
+      Item := @Item[l - 256]; // hash ending of string (more likely to vary)
+      l := 256;
+    end;
+    result := Hasher(0, Item, l);
+  end
   else
     result := 0;
 end;
@@ -9170,9 +9180,19 @@ begin
 end;
 
 function HashSynUnicode(Item: PSynUnicode; Hasher: THasher): cardinal;
+var
+  l: PtrInt;
 begin
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(0, Pointer(Item^), Length(Item^) * 2)
+  begin
+    l := Length(Item^) * 2;
+    if l > 255 then // no need to hash too big a content
+    begin
+      Item := @PAnsiChar(Item)[l - 256]; // hash ending of string
+      l := 256;
+    end;
+    result := Hasher(0, pointer(Item^), l)
+  end
   else
     result := 0;
 end;
