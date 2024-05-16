@@ -5349,54 +5349,28 @@ end;
 
 var
   XML_ESC: TAnsiCharToByte;
+const
+  XML_ESCAPED: array[1..9] of string[7] = (
+    '&#x09;', '&#x0a;', '&#x0d;', '&lt;', '&gt;', '&amp;', '&quot;', '&apos;', '');
 
 procedure TTextWriter.AddXmlEscape(Text: PUtf8Char);
 var
-  i, beg: PtrInt;
+  beg: PUtf8Char;
   esc: PAnsiCharToByte;
 begin
   if Text = nil then
     exit;
   esc := @XML_ESC;
-  i := 0;
   repeat
-    if esc[Text[i]] = 0 then
-    begin
-      beg := i;
-      repeat // it is faster to handle all not-escaped chars at once
-        inc(i);
-      until esc[Text[i]] <> 0;
-      AddNoJsonEscape(Text + beg, i - beg);
-    end;
-    repeat
-      case Text[i] of
-        #0:
-          exit;
-        #1..#8, #11, #12, #14..#31:
-          ; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
-        #9, #10, #13:
-          begin
-            // characters below ' ', #9 e.g. -> // '&#x09;'
-            AddShorter('&#x');
-            AddByteToHex(ord(Text[i]));
-            AddDirect(';');
-          end;
-        '<':
-          AddShorter('&lt;');
-        '>':
-          AddShorter('&gt;');
-        '&':
-          AddShorter('&amp;');
-        '"':
-          AddShorter('&quot;');
-        '''':
-          AddShorter('&apos;');
-      else
-        break; // should match XML_ESC[] lookup table
-      end;
-      inc(i);
-    until false;
-  until false;
+    beg := Text;
+    while esc[Text^] = 0 do
+      inc(Text);
+    AddNoJsonEscape(beg, Text - beg);
+    if Text^ = #0 then
+      exit;
+    AddShorter(XML_ESCAPED[esc[Text^]]);
+    inc(Text);
+  until Text^ = #0;
 end;
 
 
@@ -10319,7 +10293,27 @@ begin
   end;
   for c := #0 to #127 do
   begin
-    XML_ESC[c] := ord(c in [#0..#31, '<', '>', '&', '"', '''']);
+    case c of // follow XML_ESCAPED[] content
+      #0, #9:
+        v := 1;
+      #10:
+        v := 2;
+      #13:
+        v := 3;
+      '<':
+        v := 4;
+      '>':
+        v := 5;
+      '&':
+        v := 6;
+      '"':
+        v := 7;
+      '''':
+        v := 8;
+      #1..#8, #11, #12, #14..#31:
+        v := 9; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
+    end;
+    XML_ESC[c] := v;
     case c of // HTML_ESCAPED: array[1..4] = '&lt;', '&gt;', '&amp;', '&quot;'
       #0,
       '<':
