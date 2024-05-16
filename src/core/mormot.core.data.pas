@@ -2620,7 +2620,10 @@ type
     /// returns the interned RawUtf8 value
     // - only allocates new aResult string if needed
     procedure UniqueFromBuffer(var aResult: RawUtf8;
-      aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
+      aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal); overload;
+    /// returns the interned RawUtf8 value with no pre-computed hash
+    procedure UniqueFromBuffer(var aResult: RawUtf8;
+      aText: PUtf8Char; aTextLen: PtrInt); overload;
     /// ensure the supplied RawUtf8 value is interned
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
     /// return the interned value, if any
@@ -4676,6 +4679,13 @@ begin
   aResult := fHash.Value[i];
   fSafe.WriteUnLock;
   aText[aTextLen] := c;
+end;
+
+procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
+  aText: PUtf8Char; aTextLen: PtrInt);
+begin
+  UniqueFromBuffer(aResult, aText, aTextLen,
+    InterningHasher(0, pointer(aText), aTextLen));
 end;
 
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);

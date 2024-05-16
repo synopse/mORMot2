@@ -3618,7 +3618,7 @@ begin
   if (Interning <> nil) and
      (PLen < 256) and
      not nointern then
-    Interning^.UniqueFromBuffer(res, P, PLen, InterningHasher(0, P, PLen))
+    Interning^.UniqueFromBuffer(res, P, PLen)
   else
     FastSetString(res, P, PLen);
 end;
