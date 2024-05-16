@@ -1101,11 +1101,11 @@ type
     function Flattened(Instance: TObject): TObject; virtual;
     /// redirect TOnDynArraySortCompare callback to case-sensitive CompareValue()
     function EventCompare(const A, B): integer;
-    /// redirect TOnDynArrayHashOne callback to case-sensitive GetHash()
+    /// redirect TOnDynArrayHashOne callback to case-sensitive GetHash() method
     function EventHash(const Elem): cardinal;
     /// redirect TOnDynArraySortCompare callback to case-insensitive CompareValue()
     function EventCompareI(const A, B): integer;
-    /// redirect TOnDynArrayHashOne to callback case-insensitive GetHash()
+    /// redirect TOnDynArrayHashOne to callback case-insensitive GetHash() method
     function EventHashI(const Elem): cardinal;
   end;
   POrmPropInfo = ^TOrmPropInfo;
@@ -3449,7 +3449,7 @@ begin
               W.AddShorter('[]),');
             end;
             W.AddShort(' unnest(?::int8[]) order by '); // last param is ID
-            W.Add(Decoder.FieldCount + 1); // order by ID to mimimize locks wait
+            W.AddU(Decoder.FieldCount + 1); // order by ID to mimimize locks wait
             W.AddShorter(') as v(');
             for f := 0 to Decoder.FieldCount - 1 do
             begin
@@ -4052,6 +4052,8 @@ end;
 
 const
   NULL_SHORTSTRING: string[1] = '';
+var
+  OrmHashSeed: cardinal; // random seed to avoid hash flooding
 
 function TOrmPropInfo.GetOrmFieldTypeName: PShortString;
 begin
@@ -4105,7 +4107,7 @@ var
   tmp: RawUtf8;
 begin
   GetValueVar(Instance, false, tmp, nil);
-  result := DefaultHasher(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(OrmHashSeed, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfo.GetJsonValues(Instance: TObject; W: TJsonWriter);
@@ -4119,7 +4121,7 @@ begin
     W.Add('"');
     if tmp <> '' then
       W.AddJsonEscape(pointer(tmp));
-    W.Add('"');
+    W.AddDirect('"');
   end
   else
     W.AddRawJson(tmp);
@@ -4611,7 +4613,7 @@ var
   v: integer;
 begin
   v := GetValueInt32(Instance);
-  result := DefaultHasher(0, @v, 4);
+  result := DefaultHasher(OrmHashSeed, @v, 4);
 end;
 
 procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TJsonWriter);
@@ -4911,7 +4913,7 @@ var
   V64: Int64;
 begin
   V64 := GetValueInt64(Instance);
-  result := DefaultHasher(0, @V64, SizeOf(V64));
+  result := DefaultHasher(OrmHashSeed, @V64, SizeOf(V64));
 end;
 
 procedure TOrmPropInfoRttiInt64.GetJsonValues(Instance: TObject; W: TJsonWriter);
@@ -5128,7 +5130,7 @@ var
   V: double;
 begin
   V := GetValueDouble(Instance);
-  result := DefaultHasher(0, @V, SizeOf(V));
+  result := DefaultHasher(OrmHashSeed, @V, SizeOf(V));
 end;
 
 procedure TOrmPropInfoRttiDouble.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -5257,7 +5259,7 @@ var
   V: currency;
 begin
   V := GetValueCurrency(Instance);
-  result := DefaultHasher(0, @V, SizeOf(V));
+  result := DefaultHasher(OrmHashSeed, @V, SizeOf(V));
 end;
 
 procedure TOrmPropInfoRttiCurrency.GetFieldSqlVar(Instance: TObject;
@@ -5314,7 +5316,7 @@ procedure TOrmPropInfoRttiDateTime.GetJsonValues(Instance: TObject; W: TJsonWrit
 begin
   W.Add('"');
   W.AddDateTime(GetValueDouble(Instance), fOrmFieldType = oftDateTimeMS);
-  W.Add('"');
+  W.AddDirect('"');
 end;
 
 function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
@@ -5520,7 +5522,7 @@ var
 begin
   // JSON is case-sensitive by design -> ignore CaseInsensitive parameter
   tmp := ObjectToJson(GetInstance(Instance));
-  result := DefaultHasher(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(OrmHashSeed, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfoRttiObject.NormalizeValue(var Value: RawUtf8);
@@ -5704,7 +5706,7 @@ begin
   fPropInfo.GetLongStrProp(Instance, tmp);
   if tmp <> '' then
     W.AddAnyAnsiString(tmp, twJsonEscape, fEngine.CodePage);
-  W.Add('"');
+  W.AddDirect('"');
 end;
 
 function TOrmPropInfoRttiAnsi.SetFieldSqlVar(Instance: TObject;
@@ -5773,7 +5775,7 @@ begin
     W.Add('"');
     if tmp <> nil then
       W.AddJsonEscape(tmp);
-    W.Add('"');
+    W.AddDirect('"');
   end;
   if fGetterIsFieldPropOffset = 0 then
     FastAssignNew(tmp);
@@ -5915,10 +5917,10 @@ var
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
   if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
+    result := DefaultHasher(OrmHashSeed, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value) shr 1) - {%H-}Up)
   else
-    result := DefaultHasher(0, pointer(Value), length(Value));
+    result := DefaultHasher(OrmHashSeed, pointer(Value), length(Value));
 end;
 
 procedure TOrmPropInfoRttiRawUnicode.GetValueVar(Instance: TObject;
@@ -5986,7 +5988,7 @@ var
 begin
   fPropInfo.GetLongStrProp(Instance, Value);
   // binary -> case sensitive hash
-  result := DefaultHasher(0, pointer(Value), length(Value));
+  result := DefaultHasher(OrmHashSeed, pointer(Value), length(Value));
 end;
 
 procedure TOrmPropInfoRttiRawBlob.GetJsonValues(Instance: TObject; W: TJsonWriter);
@@ -6123,10 +6125,10 @@ var
 begin
   fPropInfo.GetWideStrProp(Instance, Value);
   if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
+    result := DefaultHasher(OrmHashSeed, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
   else
-    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
+    result := DefaultHasher(OrmHashSeed, pointer(Value), length(Value) * 2);
 end;
 
 procedure TOrmPropInfoRttiWide.GetJsonValues(Instance: TObject; W: TJsonWriter);
@@ -6137,7 +6139,7 @@ begin
   fPropInfo.GetWideStrProp(Instance, Value);
   if pointer(Value) <> nil then
     W.AddJsonEscapeW(pointer(Value), 0);
-  W.Add('"');
+  W.AddDirect('"');
 end;
 
 procedure TOrmPropInfoRttiWide.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -6228,10 +6230,10 @@ var
 begin
   fPropInfo.GetUnicodeStrProp(Instance, Value);
   if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-},
+    result := DefaultHasher(OrmHashSeed, Up{%H-},
       UpperCopy255W(Up{%H-}, pointer(Value), length(Value)) - {%H-}Up)
   else
-    result := DefaultHasher(0, pointer(Value), length(Value) * 2);
+    result := DefaultHasher(OrmHashSeed, pointer(Value), length(Value) * 2);
 end;
 
 procedure TOrmPropInfoRttiUnicode.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -6253,7 +6255,7 @@ begin
   fPropInfo.GetUnicodeStrProp(Instance, tmp);
   if tmp <> '' then
     W.AddJsonEscapeW(pointer(tmp), 0);
-  W.Add('"');
+  W.AddDirect('"');
 end;
 
 function TOrmPropInfoRttiUnicode.CompareValue(Item1, Item2: TObject;
@@ -6418,7 +6420,7 @@ var
   tmp: RawByteString;
 begin
   Serialize(Instance, tmp, true);
-  result := DefaultHasher(0, pointer(tmp), length(tmp));
+  result := DefaultHasher(OrmHashSeed, pointer(tmp), length(tmp));
 end;
 
 procedure TOrmPropInfoRttiDynArray.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -6879,7 +6881,7 @@ var
   tmp: TSynTempBuffer;
 begin
   RecordSave(GetFieldAddr(Instance)^, tmp, fTypeInfo);
-  result := DefaultHasher(0, tmp.buf, tmp.len);
+  result := DefaultHasher(OrmHashSeed, tmp.buf, tmp.len);
   tmp.Done;
 end;
 
@@ -6994,7 +6996,7 @@ end;
 function TOrmPropInfoRecordFixedSize.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 begin
-  result := DefaultHasher(0, GetFieldAddr(Instance), fRecordSize);
+  result := DefaultHasher(OrmHashSeed, GetFieldAddr(Instance), fRecordSize);
 end;
 
 procedure TOrmPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
@@ -9073,9 +9075,9 @@ begin
         W.Add(f);
         W.AddShort('" rs:name="');
         W.AddString(fFieldNames[f]);
-        W.Add('"');
+        W.AddDirect('"');
         W.AddString(FIELDTYPE_TOXML[fFieldType[f].ContentDB]);
-        W.Add('/', '>');
+        W.AddDirect('/', '>');
       end;
       W.AddShort('</s:ElementType></s:Schema>');
       // write rows data
@@ -9090,14 +9092,14 @@ begin
           if U <> nil then
           begin
             W.Add('f');
-            W.Add(f);
-            W.Add('=', '"');
+            W.AddU(f);
+            W.AddDirect('=', '"');
             W.AddXmlEscape(U);
-            W.Add('"', ' ');
+            W.AddDirect('"', ' ');
           end;
           inc(o); // points to next value
         end;
-        W.Add('/', '>');
+        W.AddDirect('/', '>');
       end;
       W.AddShort('</rs:data>');
     end;
@@ -11599,6 +11601,7 @@ procedure InitializeUnit;
 var
   ptc: TRttiParserComplexType;
 begin
+  OrmHashSeed := Random32; // avoid hash flooding
   // manual set of OrmFieldTypeComp[] which are not exact TUtf8Compare match
   pointer(@OrmFieldTypeComp[oftAnsiText])   := @AnsiIComp;
   pointer(@OrmFieldTypeComp[oftUtf8Custom]) := @AnsiIComp;
