@@ -2415,6 +2415,7 @@ type
     fSetRandom: TRttiCustomRandom;
     fPrivateSlots: TObjectDynArray;
     fPrivateSlotsSafe: TLightLock;
+    fArrayFirstFieldSize: integer;
     // used by mormot.core.json.pas
     fBinarySize: integer;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
@@ -2593,6 +2594,9 @@ type
     // - equals ArrayRtti.Parser if ArrayRtti.Kind is not rkRecordTypes
     property ArrayFirstField: TRttiParserType
       read fArrayFirstField;
+    /// best guess of first field bytes size for a rkDynArray
+    property ArrayFirstFieldSize: integer
+      read fArrayFirstFieldSize;
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
     property BinarySize: integer
@@ -7862,10 +7866,13 @@ begin
            (fArrayFirstField = ptNone) then
           if fArrayRtti.Kind in rkRecordOrDynArrayTypes then
             // guess first field (using fProps[0] would break compatibility)
-            fArrayFirstField := GuessItemTypeFromDynArrayInfo(
-              aInfo, fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, dummy)
+            fArrayFirstField := GuessItemTypeFromDynArrayInfo(aInfo,
+              fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, fArrayFirstFieldSize)
           else
+          begin
             fArrayFirstField := fArrayRtti.Parser;
+            fArrayFirstFieldSize := fArrayRtti.Cache.Size;
+          end;
       end;
     rkArray:
       begin
