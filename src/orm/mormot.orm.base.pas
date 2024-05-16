@@ -1421,7 +1421,6 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): integer; override;
-    function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJsonValues(Instance: TObject; W: TJsonWriter); override;
   end;
 
@@ -5615,16 +5614,29 @@ function TOrmPropInfoRttiAnsi.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
 var
   Up: array[byte] of AnsiChar; // temp stack buffer (no heap allocation)
-  Value: RawByteString;
+  p, tmp: pointer;
+  l: PtrInt;
 begin
-  fPropInfo.GetLongStrProp(Instance, Value);
-  if CaseInsensitive then // 255 max chars is enough to avoid hashing collisions
-    if fEngine.CodePage = CP_WINANSI then
-      result := DefaultHasher(0, Up{%H-}, UpperCopyWin255(Up{%H-}, Value) - {%H-}Up)
-    else
-      result := DefaultHasher(0, Up, UpperCopy255Buf(Up, pointer(Value), length(Value)) - Up)
-  else
-    result := DefaultHasher(0, pointer(Value), length(Value));
+  GetValuePointer(Instance, tmp);
+  p := tmp;
+  l := PtrUInt(p);
+  if l <> 0 then
+  begin
+    l := PStrLen(PAnsiChar(p) - _STRLEN)^;
+    if CaseInsensitive then
+    begin
+      p := @Up;
+      if fEngine.CodePage = CP_WINANSI then
+        l := UpperCopyWin255(p, RawUtf8(tmp)) - p
+      else
+        l := UpperCopy255Buf(p, tmp, l) - p;
+    end
+    else if l > 256 then
+      l := 256; // 255 max chars is enough to avoid hashing collisions
+  end;
+  result := DefaultHasher(OrmHashSeed, p, l);
+  if fGetterIsFieldPropOffset = 0 then
+    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiAnsi.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -5746,21 +5758,6 @@ procedure TOrmPropInfoRttiRawUtf8.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
   CopySameClassPropRaw(Source, DestInfo, Dest);
-end;
-
-function TOrmPropInfoRttiRawUtf8.GetHash(Instance: TObject;
-  CaseInsensitive: boolean): cardinal;
-var
-  Up: array[byte] of AnsiChar; // avoid slow heap allocation
-  tmp: pointer;
-begin
-  GetValuePointer(Instance, tmp);
-  if CaseInsensitive then
-    result := DefaultHasher(0, Up{%H-}, Utf8UpperCopy255(Up{%H-}, RawUtf8(tmp)) - {%H-}Up)
-  else
-    result := DefaultHasher(0, tmp, length(RawUtf8(tmp)));
-  if fGetterIsFieldPropOffset = 0 then
-    FastAssignNew(tmp);
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.GetJsonValues(Instance: TObject; W: TJsonWriter);

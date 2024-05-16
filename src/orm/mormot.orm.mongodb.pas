@@ -1289,7 +1289,7 @@ var
           with fStoredClassRecordProps.Fields.List[Stmt.OrderByField[0] - 1] do
             if (OrmFieldType in [oftAnsiText, oftUtf8Text]) and
                not (aBinaryCollation in Attributes) then
-          // $orderby is case sensitive with MongoDB -> client-side sort
+          // $orderby is case sensitive (binary) with MongoDB -> client-side sort
           TextOrderByFirstField := fStoredClassMapping^.FieldNameByIndex(
             Stmt.OrderByField[0] - 1);
         if (TextOrderByFirstField = '') and
