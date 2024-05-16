@@ -1930,8 +1930,6 @@ const
   HASH_PO2 = 1 shl 18;
 {$endif DYNARRAYHASH_PO2}
 
-
-
 type
   /// function prototype to be used for hashing of a dynamic array element
   // - this function must use the supplied hasher on the Item data
@@ -2151,7 +2149,7 @@ type
     {$endif PUREMORMOT2}
     /// search for an element value inside the dynamic array using hashing
     // - Item should be of the type expected by both the hash function and
-    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // Compare/EventCompare methods: e.g. if the searched/hashed field contains
     // a string as first field, you can safely use a string variable as Item
     // - Item must refer to a variable: e.g. you can't write FindHashed(i+10)
     // - will call fHashItem(Item,fHasher) to compute the needed hash
@@ -2173,7 +2171,7 @@ type
     // add a void entry to the array if was not found (unless noAddEntry is set)
     // - this method will use hashing for fast retrieval
     // - Item should be of the type expected by both the hash function and
-    // Equals/Compare methods: e.g. if the searched/hashed field in a record is
+    // Compare/EventCompare methods: e.g. if the searched/hashed field contains
     // a string as first field, you can safely use a string variable as Item
     // - returns either the index in the dynamic array if found (and set wasAdded
     // to false), either the newly created index in the dynamic array (and set
@@ -2227,24 +2225,24 @@ type
     // add won't rehash all content - for even faster process (avoid rehash),
     // please set the Capacity property
     // - Item should be of the type expected by the dynamic array, since its
-    // content will be copied into the dynamic array, and it must refer to a
-    // variable: e.g. you can't write FindHashedAndUpdate(i+10)
+    // content will be copied into the dynamic array, and by design it must
+    // refer to a variable: e.g. you can't write FindHashedAndUpdate(i+10)
     function FindHashedAndUpdate(const Item; AddIfNotExisting: boolean): PtrInt;
     /// search for an element value inside the dynamic array using hashing, and
     // delete it if matchs
     // - return the index deleted (0..Count-1), or -1 if Item was not found
     // - can optionally copy the deleted item to FillDeleted^ before erased
-    // - Item should be of the type expected by both the hash function and
-    // Equals/Compare methods, and must refer to a variable: e.g. you can't
-    // write FindHashedAndDelete(i+10)
+    // - Item should be of the type expected by Compare/EventCompare (no need
+    // to supply a full array item), and by design must refer to a variable:
+    // e.g. you can't write FindHashedAndDelete(i+10)
     // - it won't call slow ForceReHash but refresh the hash table as needed
     function FindHashedAndDelete(const Item; FillDeleted: pointer = nil;
       noDeleteEntry: boolean = false): PtrInt;
     /// search for an element value inside the dynamic array without hashing
     // - is preferred to Find(), since EventCompare would be used if defined
-    // - Item should be of the type expected by both the hash function and
-    // Equals/Compare methods, and must refer to a variable: e.g. you can't
-    // write Scan(i+10)
+    // - Item should be of the type expected by Compare/EventCompare (no need
+    // to supply a full array item), and by design must refer to a variable:
+    // e.g. you can't write Scan(i+10)
     // - returns -1 if not found, or the index in the dynamic array if found
     function Scan(const Item): PtrInt;
     /// retrieve the hash value of a given item, from its index
@@ -2298,7 +2296,7 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the hash function corresponding to a given standard array type
-// - as used e.g. internally by TDynArrayHasher.Init
+// - as used internally by TDynArrayHasher.Init and exported here for testing
 function DynArrayHashOne(Kind: TRttiParserType;
   CaseInsensitive: boolean = false): TDynArrayHashOne;
 
