@@ -1969,7 +1969,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
-    procedure RaiseFatalCollision(const caller: shortstring; aHashCode: cardinal);
+    function RaiseFatalCollision(const caller: shortstring; aHashCode: cardinal): integer;
     procedure HashTableInit(aHasher: THasher);
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
     procedure SetEventHash(const Value: TOnDynArrayHashOne);
@@ -7178,12 +7178,9 @@ begin
   end;
   fCompare := PT_SORT[aCaseInsensitive, result];
   if not Assigned(fCompare) then
-    if result = ptVariant then
-      EDynArray.RaiseUtf8('TDynArray.SetParserType(%): missing mormot.core.json',
-        [Info.Name, ToText(result)^])
-    else if aKind <> ptNone then
-      EDynArray.RaiseUtf8('TDynArray.SetParserType(%) unsupported %',
-        [Info.Name, ToText(result)^]);
+    if aKind <> ptNone then
+      EDynArray.RaiseUtf8('TDynArray.SetParserType(%,%) unsupported %',
+        [ToText(aKind)^, fInfo.Name, ToText(result)^]);
 end;
 
 function TDynArray.ItemSize: PtrUInt;
@@ -9460,30 +9457,44 @@ begin
   result := PT_HASH[CaseInsensitive, Kind];
 end;
 
+function DynArrayHashSortType(info: TRttiCustom): TRttiParserType;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  size: integer;
+begin
+  result := info.ArrayFirstField;
+  if not (result in [ptNone, ptEnumeration, ptSet]) then
+    exit;
+  size := info.ArrayFirstFieldSize; // guess from (first field) item size
+  if size = 0 then
+  begin
+    size := info.Cache.Size;
+    info := info.ArrayRtti;
+    if info <> nil then
+      size := info.Cache.Size;
+  end;
+  result := ItemSizeToDynArrayKind(size);
+end;
+
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   const aEventHash: TOnDynArrayHashOne; aHasher: THasher;
   aCompare: TDynArraySortCompare; const aEventCompare: TOnDynArraySortCompare;
   aCaseInsensitive: boolean);
+var
+  pt: TRttiParserType;
 begin
   fDynArray := aDynArray;
+  pt := DynArrayHashSortType(aDynArray^.Info);
+  if not (Assigned(aHashItem) or
+          Assigned(aEventHash)) then
+    aHashItem := PT_HASH[aCaseInsensitive, pt];
   fHashItem := aHashItem;
   fEventHash := aEventHash;
-  if not (Assigned(fHashItem) or
-          Assigned(fEventHash)) then
-  begin
-    fHashItem := PT_HASH[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
-    if not Assigned(fHashItem) then
-      fEventHash := fDynArray^.Info.ValueFullHash;
-  end;
+  if not (Assigned(aCompare) or
+          Assigned(aEventCompare)) then
+    aCompare := PT_SORT[aCaseInsensitive, pt];
   fCompare := aCompare;
   fEventCompare := aEventCompare;
-  if not (Assigned(fCompare) or
-          Assigned(fEventCompare)) then
-  begin
-    fCompare := PT_SORT[aCaseInsensitive, fDynArray^.Info.ArrayFirstField];
-    if not Assigned(fCompare) then
-      fEventCompare := fDynArray^.Info.ValueFullCompare;
-  end;
   HashTableInit(aHasher);
 end;
 
@@ -9491,16 +9502,12 @@ procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray;
   aKind: TRttiParserType; aCaseInsensitive: boolean; aHasher: THasher);
 begin
   fDynArray := aDynArray;
+  if aKind in [ptNone, ptEnumeration, ptSet] then
+    aKind := DynArrayHashSortType(fDynArray^.Info); // use RTTI if not enough
   fHashItem := PT_HASH[aCaseInsensitive, aKind];
-  if Assigned(fHashItem) then
-    fEventHash := nil
-  else
-    fEventHash := aDynArray^.Info.ValueFullHash;
+  fEventHash := nil;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
-  if Assigned(fCompare) then
-    fEventCompare := nil
-  else
-    fEventCompare := aDynArray^.Info.ValueFullCompare;
+  fEventCompare := nil;
   HashTableInit(aHasher);
 end;
 
@@ -9515,7 +9522,7 @@ begin
      (Assigned(fCompare) or
       Assigned(fEventCompare)) then
   begin
-    // same logic than ReHash(true) with no data
+    // same logic than ReHash(true) with no data - default to 256 buckets
     fHashTableSize := 256;
     {$ifdef DYNARRAYHASH_16BIT}
     SetLength(fHashTableStore, 128 {$ifndef DYNARRAYHASH_PO2} + 1 {$endif});
@@ -9743,12 +9750,13 @@ function TDynArrayHasher.FindOrNewComp(aHashCode: cardinal; Item: pointer;
 var
   first, last, ndx: PtrInt;
 begin // cut-down version of FindOrNew()
-  if not Assigned(Comp) then
-    Comp := fCompare;
-  ndx := HashTableIndex(aHashCode);
-  first := ndx;
-  last := fHashTableSize;
   if hasHasher in fState then
+  begin
+    if not Assigned(Comp) then
+      Comp := fCompare;
+    ndx := HashTableIndex(aHashCode);
+    first := ndx;
+    last := fHashTableSize;
     repeat
       result := HashTableIndexToIndex(ndx) - 1; // index+1 was stored
       if (result < 0) or // void slot = not found, or return matching index
@@ -9757,7 +9765,7 @@ begin // cut-down version of FindOrNew()
         exit;
       inc(ndx); // hash or slot collision -> search next item
       if ndx = last then
-        if ndx= first then
+        if ndx = first then
           break
         else
         begin
@@ -9765,8 +9773,8 @@ begin // cut-down version of FindOrNew()
           last := first;
         end;
     until false;
-  result := 0; // make compiler happy
-  RaiseFatalCollision('FindOrNewComp', aHashCode);
+  end;
+  result := RaiseFatalCollision('FindOrNewComp', aHashCode);
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
@@ -9895,10 +9903,10 @@ begin
     result := -1;
 end;
 
-procedure TDynArrayHasher.RaiseFatalCollision(const caller: shortstring;
-  aHashCode: cardinal);
-begin
-  // a dedicated sub-procedure reduces code size
+function TDynArrayHasher.RaiseFatalCollision(const caller: shortstring;
+  aHashCode: cardinal): integer;
+begin   // a dedicated sub-procedure reduces code size
+  result := 0; // make compiler happy
   EDynArray.RaiseUtf8('TDynArrayHasher.% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), fHashTableSize, fDynArray^.Count,
@@ -9959,11 +9967,11 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
-type
+type // dedicated TFastReHash engine for better register allocation
   {$ifdef USERECORDWITHMETHODS}
   TFastReHash = record
   {$else}
-  TFastReHash = object // dedicated object for better register allocation
+  TFastReHash = object
   {$endif USERECORDWITHMETHODS}
   public
     hc: cardinal;
@@ -10049,15 +10057,13 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
         end;
       end;
       inc(ndx);
-      if ndx = last then
-        // reached the end -> search from HashTable[0] to HashTable[first-1]
-        if ndx = first then
-          Hasher.RaiseFatalCollision('ReHash', hc)
-        else
-        begin
-          ndx := 0;
-          last := first;
-        end;
+      if ndx <> last then
+        continue;
+      // reached the end -> search from HashTable[0] to HashTable[first-1]
+      if ndx = first then
+        Hasher.RaiseFatalCollision('ReHash', hc);
+      ndx := 0;
+      last := first;
     until false;
     inc(P, siz); // next item
     inc(ht);
