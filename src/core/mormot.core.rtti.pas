@@ -2086,6 +2086,8 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
   ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
+/// internal function used e.g. for enumerations and set
+function ItemSizeToDynArrayKind(size: integer): TRttiParserType;
 
 
 { ************** RTTI-based Registration for Custom JSON Parsing }
@@ -6718,8 +6720,7 @@ begin
   end;
 end;
 
-function SizeToDynArrayKind(size: integer): TRttiParserType;
-  {$ifdef HASINLINE}inline;{$endif}
+function ItemSizeToDynArrayKind(size: integer): TRttiParserType;
 begin  // rough estimation
   case size of
     1:
@@ -6809,7 +6810,7 @@ begin
       // guess from RTTI of nested record(s)
       if ElemInfo = nil then
       begin
-        result := SizeToDynArrayKind(ElemSize);
+        result := ItemSizeToDynArrayKind(ElemSize);
         if result = ptNone then
           FieldSize := ElemSize;
       end
@@ -6827,7 +6828,7 @@ begin
         offset := fields.Fields^.Offset;
         if offset <> 0 then
         begin
-          result := SizeToDynArrayKind(offset);
+          result := ItemSizeToDynArrayKind(offset);
           if result = ptNone then
             FieldSize := offset;
         end
