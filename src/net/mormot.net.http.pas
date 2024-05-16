@@ -2008,7 +2008,7 @@ type
     fOnSave: TOnHttpAnalyzerSave;
     fSuspendFile: TFileName;
     fState: THttpAnalyzerConsolidated;
-    fUniqueIPDepth: cardinal;
+    fUniqueIPDepth, fUniqueIPSeed: cardinal;
     fUniqueIP: array[THttpAnalyzerScope] of TByteDynArray;
     fToSave: record // protected by the main fSafe
       Count: integer;
@@ -5698,6 +5698,7 @@ begin
           fSafe.Lock;
           try
             fUniqueIPDepth := value;
+            fUniqueIPSeed := Random32; // avoid hash flooding
             Finalize(fUniqueIP);  // release up to 128KB with max value=65536
             value := value shr 3; // from bits to bytes
             if value <> 0 then
@@ -5987,7 +5988,8 @@ begin
   if (Context.RemoteIP <> nil) and // unique IP counting
      (fUniqueIPDepth <> 0) then
   begin // may use AesNiHash32
-    crc := DefaultHasher(0, Context.RemoteIP, length(RawUtf8(Context.RemoteIP)));
+    crc := DefaultHasher(fUniqueIPSeed,
+      Context.RemoteIP, length(RawUtf8(Context.RemoteIP)));
     crc := crc and (fUniqueIPDepth - 1); // power-of-two modulo
     if crc = 0 then
       crc := 1;
