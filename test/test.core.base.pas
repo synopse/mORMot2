@@ -6990,15 +6990,6 @@ begin
   end;
 end;
 
-function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
-begin
-  Item := PPointer(Item)^; // passed by reference
-  if Item = nil then
-    result := 0
-  else
-    result := Hasher(0, Item, PStrLen(Item - _STRLEN)^);
-end;
-
 {  TSynDictionary perf numbers on increasing integers or random guid strings
    with FPC 3.2.0 on x86_64 with our fpcx64mm - which is our main server target
 

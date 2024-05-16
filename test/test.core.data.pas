@@ -6468,7 +6468,8 @@ begin
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);
-    Check(not NeedsHtmlEscape(pointer(s), hfNone));
+    Check(not NeedsHtmlEscape(pointer(s), hfAnyWhere));
+    Check(not NeedsXmlEscape(pointer(s)));
     t := UrlEncode(s);
     Check(t <> '');
     CheckEqual(UrlDecode(t), s);
@@ -6506,21 +6507,30 @@ begin
     begin
       s := RandomIdentifier(i);
       Check(not NeedsHtmlEscape(pointer(s), hf));
-      Check(not NeedsHtmlEscape(pointer(s), hf));
-      Check(not NeedsHtmlEscape(pointer(s), hf));
       CheckEqual(HtmlEscape(s), s, 'HtmlEscape');
+      Check(not NeedsXmlEscape(pointer(s)));
+      CheckEqual(XmlEscape(s), s, 'XmlEscape');
     end;
     s := 'some &';
     Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    Check(NeedsXmlEscape(pointer(s)));
     s := '&';
     Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    Check(NeedsXmlEscape(pointer(s)));
     s := '& some';
     Check((hf = hfNone) or NeedsHtmlEscape(pointer(s), hf));
+    Check(NeedsXmlEscape(pointer(s)));
     t := HtmlEscape(s, hf);
     Check((t = s) <> (hf <> hfNone));
     if hf <> hfNone then
       CheckEqual(t, '&amp; some');
   end;
+  CheckEqual(XmlEscape('&'), '&amp;');
+  CheckEqual(XmlEscape(' &'), ' &amp;');
+  CheckEqual(XmlEscape('& '), '&amp; ');
+  CheckEqual(XmlEscape('& some'), '&amp; some');
+  CheckEqual(XmlEscape('<&>'), '&lt;&amp;&gt;');
+  CheckEqual(XmlEscape('a<b&c>d'), 'a&lt;b&amp;c&gt;d');
 end;
 
 procedure TTestCoreProcess._TSelectStatement;
