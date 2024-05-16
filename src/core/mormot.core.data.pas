@@ -4602,6 +4602,9 @@ end;
 
 { ************ RawUtf8 String Values Interning and TRawUtf8List }
 
+var // filled at startup with a 32-bit random value to avoid hash flooding
+  HashSeed: cardinal; // defined locally in this unit to avoid symbol export
+
 { TRawUtf8Hashed }
 
 procedure TRawUtf8Hashed.Init;
@@ -4685,7 +4688,7 @@ procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt);
 begin
   UniqueFromBuffer(aResult, aText, aTextLen,
-    InterningHasher(0, pointer(aText), aTextLen));
+    InterningHasher(HashSeed, pointer(aText), aTextLen));
 end;
 
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
@@ -4842,7 +4845,7 @@ begin
   else
   begin
     // inlined fPool[].Values.HashElement
-    hash := InterningHasher(0, pointer(aText), length(aText));
+    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(aResult, aText, hash);
   end;
 end;
@@ -4855,7 +4858,7 @@ begin
      (aText <> '') then
   begin
     // inlined fPool[].Values.HashElement
-    hash := InterningHasher(0, pointer(aText), length(aText));
+    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
     fPool[hash and fPoolLast].UniqueText(aText, hash);
   end;
 end;
@@ -4871,7 +4874,7 @@ begin
   else
   begin
     // inlined fPool[].Values.HashElement
-    hash := InterningHasher(0, pointer(aText), length(aText));
+    hash := InterningHasher(HashSeed, pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(result, aText, hash);
   end;
 end;
@@ -4883,7 +4886,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  hash := InterningHasher(0, pointer(aText), length(aText));
+  hash := InterningHasher(HashSeed, pointer(aText), length(aText));
   result := fPool[hash and fPoolLast].Existing(aText, hash);
 end;
 
@@ -4905,7 +4908,7 @@ begin
   else
   begin
     // inlined fPool[].Values.HashElement
-    hash := InterningHasher(0, pointer(aText), aTextLen);
+    hash := InterningHasher(HashSeed, pointer(aText), aTextLen);
     fPool[hash and fPoolLast].UniqueFromBuffer(aResult, aText, aTextLen, hash);
   end;
 end;
@@ -9168,7 +9171,7 @@ begin
       Item := @Item[l - 256]; // hash ending of string (more likely to vary)
       l := 256;
     end;
-    result := Hasher(0, Item, l);
+    result := Hasher(HashSeed, Item, l);
   end
   else
     result := 0;
@@ -9176,11 +9179,11 @@ end;
 
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
-  tmp: array[byte] of AnsiChar; // avoid slow heap allocation
+  tmp: array[byte] of AnsiChar; // avoid any slow heap allocation
 begin
   Item := PPointer(Item)^;
   if Item <> nil then
-    result := Hasher(0, tmp{%H-},
+    result := Hasher(HashSeed, tmp{%H-},
       UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp)
   else
     result := 0;
@@ -9198,7 +9201,7 @@ begin
       Item := @PAnsiChar(Item)[l - 256]; // hash ending of string
       l := 256;
     end;
-    result := Hasher(0, pointer(Item^), l)
+    result := Hasher(HashSeed, pointer(Item^), l)
   end
   else
     result := 0;
@@ -9209,7 +9212,7 @@ var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(0, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
+    result := Hasher(HashSeed, tmp{%H-}, UpperCopy255W(tmp{%H-}, Item^) - {%H-}tmp)
   else
     result := 0;
 end;
@@ -9218,7 +9221,7 @@ function HashWideString(Item: PWideString; Hasher: THasher): cardinal;
 begin
   // WideString internal size is in bytes, not WideChar
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(0, Pointer(Item^), Length(Item^) * 2)
+    result := Hasher(HashSeed, pointer(Item^), Length(Item^) * 2)
   else
     result := 0;
 end;
@@ -9228,7 +9231,7 @@ var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
   if PtrUInt(Item^) <> 0 then
-    result := Hasher(0, tmp{%H-},
+    result := Hasher(HashSeed, tmp{%H-},
       UpperCopy255W(tmp{%H-}, pointer(Item^), Length(Item^)) - {%H-}tmp)
   else
     result := 0;
@@ -9238,7 +9241,7 @@ function HashPUtf8Char(Item: PAnsiChar; Hasher: THasher): cardinal;
 begin
   Item := PPointer(Item)^; // passed by reference
   if Item <> nil then
-    result := Hasher(0, Item, StrLen(Item))
+    result := Hasher(HashSeed, Item, StrLen(Item))
   else
     result := 0;
 end;
@@ -9249,7 +9252,7 @@ var
 begin
   Item := PPointer(Item)^;
   if Item <> nil then
-    result := Hasher(0, tmp{%H-},
+    result := Hasher(HashSeed, tmp{%H-},
       UpperCopy255Buf(tmp{%H-}, Item, StrLen(Item)) - {%H-}tmp)
   else
     result := 0;
@@ -9257,42 +9260,42 @@ end;
 
 function HashByte(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(byte));
+  result := Hasher(HashSeed, Item, SizeOf(byte));
 end;
 
 function HashWord(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(word));
+  result := Hasher(HashSeed, Item, SizeOf(word));
 end;
 
 function HashInteger(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(integer));
+  result := Hasher(HashSeed, Item, SizeOf(integer));
 end;
 
 function HashInt64(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(Int64));
+  result := Hasher(HashSeed, Item, SizeOf(Int64));
 end;
 
 function HashExtended(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(TSynExtended));
+  result := Hasher(HashSeed, Item, SizeOf(TSynExtended));
 end;
 
 function Hash128(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(THash128));
+  result := Hasher(HashSeed, Item, SizeOf(THash128));
 end;
 
 function Hash256(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(THash256));
+  result := Hasher(HashSeed, Item, SizeOf(THash256));
 end;
 
 function Hash512(Item: pointer; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0, Item, SizeOf(THash512));
+  result := Hasher(HashSeed, Item, SizeOf(THash512));
 end;
 
 function VariantHash(const value: variant; CaseInsensitive: boolean;
@@ -9361,7 +9364,7 @@ begin
       len := UpperCopy255Buf(tmp, P, len) - tmp;
       P := @tmp;
     end;
-    result := Hasher(vt, P, len)
+    result := Hasher(vt xor HashSeed, P, len)
   end;
 end;
 
@@ -11438,6 +11441,7 @@ procedure InitializeUnit;
 var
   k: TRttiKind;
 begin
+  HashSeed := Random32; // to avoid hash flooding
   // initialize RTTI low-level comparison functions
   RTTI_ORD_COMPARE[roSByte]  := @_BC_SByte;
   RTTI_ORD_COMPARE[roUByte]  := @_BC_UByte;
