@@ -5512,15 +5512,15 @@ begin
       for i := fFamily.fRotateFileCount - 2 downto 1 do
         // e.g. xxx.8.synlz -> xxx.9.synlz
         RenameFile(FN[i - 1], FN[i]);
-      // compress the current .log file into FN[0] = xxx.1.synlz
+      // compress the current FN[0] .log file into xxx.1.log/.synlz
       if LogCompressAlgo = nil then
-        // no compression
+        // no compression: quickly rename FN[0] into xxx.1.log
         RenameFile(fFileName, FN[0])
       else if (AutoFlushThread <> nil) and
               (AutoFlushThread.fToCompress = '') and
               RenameFile(fFileName, FN[0]) then
       begin
-        // background compression
+        // background compression of FN[0] into xxx.1.synlz
         AutoFlushThread.fToCompress := FN[0];
         AutoFlushThread.fEvent.SetEvent;
       end
