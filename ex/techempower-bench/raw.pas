@@ -828,6 +828,9 @@ begin
   TSynLog.Family.HighResolutionTimestamp := true;
   TSynLog.Family.PerThreadLog := ptIdentifiedInOneFile;
   TSynLog.Family.AutoFlushTimeOut := 1;
+  TSynLog.Family.RotateFileCount := 10;
+  TSynLog.Family.RotateFileSizeKB := 500000;
+  LogCompressAlgo := nil; // keep 10 x 512MB uncompressed files
   {$else}
   {$ifdef USE_SQLITE3}
   TSynLog.Family.Level := LOG_STACKTRACE; // minimal debug logs on fatal errors
