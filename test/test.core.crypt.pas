@@ -979,6 +979,16 @@ begin
   finally
     j.Free;
   end;
+  j := TJwtCrypt.Create(caaES256, '-----BEGIN EC PRIVATE KEY-----'#13#10 +
+    'MHcCAQEEIP00000000000000000000000000000000000000000roAoGCCqGSM49'#13#10 +
+    'AwEHoUQDQgAEoIQ8m1iBHYoxrdLT1A6MH9naG+hk/ccw/Ij0p9Mk7JmNdzCUeEjz'#13#10 +
+    'lU5/E683I9PZaz2/5RFj1HfKPTgDkxQFkA=='#13#10 +
+    '-----END EC PRIVATE KEY-----'#13#10, [jrcAudience], ['aud'], 60);
+  try
+    CheckEqual(j.Algorithm, 'ES256');
+  finally
+    j.Free;
+  end;
   for i := 1 to 10 do
   begin
     secret := TEccCertificateSecret.CreateNew(nil); // self-signed certificate

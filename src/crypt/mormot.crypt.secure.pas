@@ -1719,7 +1719,7 @@ type
   ICryptPrivateKey = interface
     /// unserialized the private key from DER binary or PEM text
     // - this instance should be void, i.e. just created with no prior Load
-    // - will also ensure the private key do match the associated public key
+    // - also ensure the private key do match an associated public key (if not nil)
     // - is able to decode and potentially decrypt a serialized key, with a
     // PKCS#8 Password for OpenSSL, and our proprietary PrivateKeyDecrypt()
     function Load(Algorithm: TCryptKeyAlgo; const AssociatedKey: ICryptPublicKey;
