@@ -9124,9 +9124,9 @@ function EccPrivKeyToSeq(
 var
   oct: RawByteString;
 begin
+  // see PemDerRawToEcc() secp256r1/prime256v1 PKCS#8 PrivateKeyInfo
   oct := AsnSafeOct([Asn(1),
                      Asn(ASN1_OCTSTR, [rawecc])]);
-  // see PemDerRawToEcc() secp256r1/prime256v1 PKCS#8 PrivateKeyInfo
   result := AsnSeq([
               Asn(0), // version
               CkaToSeq(cka),
@@ -9143,7 +9143,8 @@ var
 begin
   result := '';
   if rfcpub <> nil then
-    rfcpub^ := '';// initial sequence decoding
+    rfcpub^ := '';
+  // initial sequence decoding
   pos := 1;
   if AsnNext(pos, seq) <> ASN1_SEQ then
     exit;
@@ -9151,10 +9152,9 @@ begin
   if vt = ASN1_INT then
     case vers of
       0: // PKCS#8 format
+        if (AsnNext(pos, seq) = ASN1_SEQ) and // privateKeyAlgorithm
+           (AsnNext(pos, seq, @oid) = ASN1_OBJID) then
         begin
-          if  (AsnNext(pos, seq) <> ASN1_SEQ) or            // privateKeyAlgorithm
-              (AsnNext(pos, seq, @oid) <> ASN1_OBJID) then
-            exit;
           // CkaToSeq() decoding
           case cka of
             ckaEcc256 .. ckaEcc256k:
@@ -9176,8 +9176,9 @@ begin
              (AsnNextRaw(posoct, oct, key) = ASN1_OCTSTR) then
             result := key;
         end;
-      1: // https://www.rfc-editor.org/rfc/rfc5915 format
-        if (AsnNextRaw(pos, seq, key) = ASN1_OCTSTR) then // privateKey
+      1: // https://www.rfc-editor.org/rfc/rfc5915 EC key pair alternate format
+       if (cka in CKA_ECC) and                           // Elliptic Curve only
+          (AsnNextRaw(pos, seq, key) = ASN1_OCTSTR) then // privateKey
        begin
          vt := AsnNext(pos, seq);
          if vt = ASN1_NULL then
@@ -9186,13 +9187,13 @@ begin
                  (AsnNext(pos, seq, @oid) = ASN1_OBJID) and
                  (oid = CKA_OID[cka]) then
          begin
-          result := key;
-          if (rfcpub <> nil) and       // [1] publicKey (optional)
-             (AsnNext(pos, seq) = ASN1_CTC1) and
-             (AsnNextRaw(pos, seq, key) = ASN1_BITSTR) then
-            rfcpub^ := key;
+           result := key;
+           if (rfcpub <> nil) and       // [1] publicKey (optional)
+              (AsnNext(pos, seq) = ASN1_CTC1) and
+              (AsnNextRaw(pos, seq, key) = ASN1_BITSTR) then
+             rfcpub^ := key;
         end;
-       end;
+      end;
     end;
   FillZero(oct);
   FillZero(key);
