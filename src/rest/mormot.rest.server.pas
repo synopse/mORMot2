@@ -2932,6 +2932,7 @@ begin
      (Server.fSessions <> nil) and
      not IsRemoteAdministrationExecute then
   begin
+    // some kind of requests may have been marked to by-pass authentication
     fSession := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     if // /auth + /timestamp are e.g. allowed methods without signature
        ((MethodIndex >= 0) and
@@ -2944,15 +2945,15 @@ begin
         (Method in Server.BypassOrmAuthentication)) then
       // no need to check the sessions
       exit;
+    // TAuthSession instance may have been stored at connection level
     if (rsoSessionInConnectionOpaque in Server.Options) and
        (Call^.LowLevelConnectionOpaque <> nil) then
     begin
-      // TAuthSession instance may have been stored at connection level
-      // to avoid signature parsing and session lookup
       s := pointer(Call^.LowLevelConnectionOpaque^.ValueInternal);
       if s <> nil then
         if s.InheritsFrom(Server.fSessionClass) then
         begin
+          // safely avoid signature parsing and session lookup
           SessionAssign(s);
           exit;
         end
@@ -5141,8 +5142,9 @@ begin
     if HexDisplayToBin(P + 8, @sign, SizeOf(sign)) and
        ({%H-}sign = expectedsign) then
     begin
-      if ts > result.fLastTimestamp then
-        result.fLastTimestamp := ts;
+      if not fNoTimestampCoherencyCheck then
+        if ts > result.fLastTimestamp then
+          result.fLastTimestamp := ts;
       exit;
     end
     else if Assigned(Ctxt.fLog) and
@@ -5154,7 +5156,7 @@ begin
   else if Assigned(Ctxt.fLog) and
           (sllUserAuth in fServer.fLogLevel) then
     Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
-      [minticks, Int64(ts)], self);
+      [Int64(minticks), Int64(ts)], self);
   result := nil; // indicates invalid signature
 end;
 

@@ -5623,16 +5623,22 @@ begin
   if l <> 0 then
   begin
     l := PStrLen(PAnsiChar(p) - _STRLEN)^;
-    if CaseInsensitive then
+    if not CaseInsensitive then
+    begin
+      if l > 256 then
+      begin
+        p := @PAnsiChar(p)[l - 256]; // hash ending of string
+        l := 256;
+      end;
+    end
+    else
     begin
       p := @Up;
       if fEngine.CodePage = CP_WINANSI then
         l := UpperCopyWin255(p, RawUtf8(tmp)) - p
       else
         l := UpperCopy255Buf(p, tmp, l) - p;
-    end
-    else if l > 256 then
-      l := 256; // 255 max chars is enough to avoid hashing collisions
+    end;
   end;
   result := DefaultHasher(OrmHashSeed, p, l);
   if fGetterIsFieldPropOffset = 0 then
