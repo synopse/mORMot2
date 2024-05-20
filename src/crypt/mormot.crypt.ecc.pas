@@ -5329,9 +5329,14 @@ begin
      (DigLen <> 0) then
     case fKeyAlgo of
       ckaEcc256:
-        if DerToEcc(Sig, SigLen, eccsig) then
+        begin
+          if SigLen = SizeOf(eccsig) then                // e.g. in JWT
+            MoveFast(Sig^, eccsig, SigLen)
+          else if not DerToEcc(Sig, SigLen, eccsig) then // e.g. in X.509 Cert
+            exit;
           // secp256r1 digital signature verification
           result := fEcc.Verify(Dig.Lo, eccsig); // thread-safe
+        end;
     end;
 end;
 
