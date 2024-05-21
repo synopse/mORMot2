@@ -37,7 +37,7 @@ uses
 { ***************** Low-Level ECC secp256r1 ECDSA and ECDH Functions }
 
 const
-  /// the size of the 256-bit memory structure used for secp256r1
+  /// the size of the 256-bit memory structure used for secp256r1 coordinates
   // - map 32 bytes of memory
   ECC_BYTES = SizeOf(THash256);
 
@@ -50,16 +50,16 @@ const
 type
   /// store a public key for ECC secp256r1 cryptography
   // - use Ecc256r1MakeKey() to generate such a key
-  // - stored in compressed form with its standard byte header, i.e. each
-  // public key consumes 33 bytes of memory
+  // - stored in single coordinate compressed form with its standard byte header,
+  // i.e. each public key consumes 33 bytes of memory
   TEccPublicKey = array[0..ECC_BYTES] of byte;
 
-  /// store a public key for ECC secp256r1 cryptography
+  /// store a public key for ECC secp256r1 cryptography as x,y coordinates
   // - use Ecc256r1Uncompress() to compute such a key from a TEccPublicKey
   // - stored in uncompressed form, consuming 64 bytes of memory
   TEccPublicKeyUncompressed = array[0..(ECC_BYTES * 2) - 1] of byte;
 
-  /// store a private key for ECC secp256r1 cryptography
+  /// store a private key for ECC secp256r1 cryptography as a single coordinate
   // - use Ecc256r1MakeKey() to generate such a key
   // - stored in compressed form, i.e. each private key consumes 32 bytes of memory
   TEccPrivateKey = array[0..ECC_BYTES - 1] of byte;

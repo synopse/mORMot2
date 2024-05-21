@@ -8613,9 +8613,6 @@ begin
             ({%H-}PrivKey <> '');
 end;
 
-const
-  DER_INTEGER  = #$02;
-
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
 var
   pos, prefix: PtrUInt;
@@ -8626,7 +8623,7 @@ begin
     inc(pos);
   dec(buflen, pos);
   prefix := buf[pos] shr 7; // detect if need to avoid two's complement storage
-  P[0] := DER_INTEGER;
+  P[0] := AnsiChar(ASN1_INT);
   P[1] := AnsiChar(buflen + prefix);
   P[2] := #$00; // prepend 0 to prevent stored as negative number (if prefix=1)
   inc(P, 2 + prefix);
@@ -8641,7 +8638,7 @@ begin
   result := nil;
   FillZero(buf^, buflen);
   if (P = nil) or
-     (P[0] <> DER_INTEGER) then
+     (P[0] <> AnsiChar(ASN1_INT)) then
     exit;
   pos := buflen - ord(P[1]);
   inc(P, 2);
@@ -9041,7 +9038,7 @@ function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
 var
   derlen: cardinal;
   der: PByteArray;
-  eccbytes, len: integer;
+  eccbytes, len: PtrUInt;
   buf: array [0..131] of AnsiChar;
 begin
   if algo in (CAA_RSA + [caaEdDSA]) then

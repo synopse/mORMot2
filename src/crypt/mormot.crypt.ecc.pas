@@ -2077,9 +2077,6 @@ begin
   end;
 end;
 
-const
-  DER_SEQUENCE = #$30;
-
 function EccToDer(const sign: TEccSignature): RawByteString;
 var
   der: array[0..511] of AnsiChar;
@@ -2091,7 +2088,7 @@ begin
   begin
     len := DerAppend(DerAppend(@der[2], @sign[0], ECC_BYTES),
                 @sign[ECC_BYTES], ECC_BYTES) - PAnsiChar(@der);
-    der[0] := DER_SEQUENCE;
+    der[0] := AnsiChar(ASN1_SEQ); // SEQ of ECDSA's R and S integers
     der[1] := AnsiChar(len - 2);
   end;
   FastSetRawByteString(result{%H-}, @der, len);
@@ -2107,7 +2104,7 @@ begin
   else
   begin
     len := DerAppend(@der[2], @priv, SizeOf(priv)) - PAnsiChar(@der);
-    der[0] := DER_SEQUENCE;
+    der[0] := AnsiChar(ASN1_SEQ);
     der[1] := AnsiChar(len - 2);
   end;
   FastSetRawByteString(result{%H-}, @der, len);
@@ -2123,7 +2120,7 @@ begin
   else
   begin
     len := DerAppend(@der[2], @pub, SizeOf(pub)) - PAnsiChar(@der);
-    der[0] := DER_SEQUENCE;
+    der[0] := AnsiChar(ASN1_SEQ);
     der[1] := AnsiChar(len - 2);
   end;
   FastSetRawByteString(result{%H-}, @der, len);
@@ -2132,7 +2129,7 @@ end;
 function DerToEcc(der: PByteArray; derlen: PtrInt; out sign: TEccSignature): boolean;
 begin
   if (derlen < 50) or
-     (der[0] <> ord(DER_SEQUENCE)) or
+     (der[0] <> ASN1_SEQ) or
      (der[1] > derlen - 2) then
     result := false
   else
@@ -2143,7 +2140,7 @@ end;
 function DerToEcc(der: PByteArray; derlen: PtrInt; out priv: TEccPrivateKey): boolean;
 begin
   if (derlen < 30) or
-     (der[0] <> ord(DER_SEQUENCE)) or
+     (der[0] <> ASN1_SEQ) or
      (der[1] > derlen - 2) then
     result := false
   else
@@ -2153,7 +2150,7 @@ end;
 function DerToEcc(der: PByteArray; derlen: PtrInt; out pub: TEccPublicKey): boolean;
 begin
   if (derlen < 30) or
-     (der[0] <> ord(DER_SEQUENCE)) or
+     (der[0] <> ASN1_SEQ) or
      (der[1] > derlen - 2) then
     result := false
   else
