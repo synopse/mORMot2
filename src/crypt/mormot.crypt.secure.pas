@@ -9093,7 +9093,7 @@ end;
 function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
   const rawsignature: RawUtf8): RawByteString;
 var
-  eccbytes: PtrUInt;
+  eccbytes: PtrInt;
 begin
   result := rawsignature;
   if (result = '') or

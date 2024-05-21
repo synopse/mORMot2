@@ -4181,7 +4181,7 @@ begin
   Check(fC.Sign(fSession, nil, 0, nil, reslen), 'Sign');
   SetLength(result, reslen);
   Check(fC.Sign(fSession, Data, Len, pointer(result), reslen), 'Sign');
-  if reslen <> length(result) then
+  if reslen <> PtrUInt(length(result)) then
     SetLength(result, reslen);
 end;
 
