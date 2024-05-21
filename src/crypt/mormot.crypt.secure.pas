@@ -3279,6 +3279,13 @@ function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
 function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
   const signature: RawByteString): RawUtf8;
 
+/// encode a raw digital signature into ASN.1/DER
+// - incoming comes e.g. from base-64 decoded JSON Web Token/Signature (JWT/JWS)
+// - output is compatible e.g. with ICryptCert.Verify or ICryptPublicKey.Verify
+// - ECC are encoded from their raw xy coordinates concatenation into ASN1_SEQ
+function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
+  const rawsignature: RawUtf8): RawByteString;
+
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
 
@@ -9047,7 +9054,7 @@ var
   eccbytes, len: PtrUInt;
   buf: array [0..131] of AnsiChar;
 begin
-  if algo in (CAA_RSA + [caaEdDSA]) then
+  if algo in CAA_RAWSIGNATURE then
   begin
     // no need to be decoded, since RSA and EdDSA have no SEQ
     result := BinToBase64uri(pointer(signature), length(signature));
@@ -9078,6 +9085,24 @@ begin
       exit;
   end;
   result := BinToBase64uri(@buf[0], eccbytes * 2);
+end;
+
+function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
+  const rawsignature: RawUtf8): RawByteString;
+var
+  eccbytes: PtrUInt;
+begin
+  result := rawsignature;
+  if (result = '') or
+     (algo in CAA_RAWSIGNATURE) then
+     // no need to be encoded, since RSA and EdDSA have no SEQ
+    exit;
+  eccbytes := CAA_SIZE[algo];
+  if length(result) = eccbytes * 2 then
+    result := AsnSeq([
+      AsnEncInt(@PByteArray(result)[0], eccbytes),
+      AsnEncInt(@PByteArray(result)[eccbytes], eccbytes)
+      ]);
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;
