@@ -9073,16 +9073,16 @@ begin
   eccbytes := CAA_SIZE[algo];
   if der[1] and $80 <> 0 then
   begin
-    // 2-byte length
-    assert((der[1] and $7f) = 1);
-    len := der[2];
+    if (der[1] and $7f) <> 1 then // 2-byte length (e.g. ES512)
+      exit;
+    len := der[2]; // length in 2nd byte
     if DerParse(DerParse(@der[3], @buf[0], eccbytes),
         @buf[eccbytes], eccbytes) <> PAnsiChar(@der[len + 3]) then
       exit;
   end
   else
   begin
-    len := der[1];
+    len := der[1]; // 1-byte length
     if DerParse(DerParse(@der[2], @buf[0], eccbytes),
         @buf[eccbytes], eccbytes) <> PAnsiChar(@der[len + 2]) then
       exit;
