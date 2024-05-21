@@ -491,6 +491,7 @@ type
     fGenBitsOrCurve: integer;
     fAlgoMd: PEVP_MD;
     fPrivKey, fPubKey: PEVP_PKEY;
+    fAsymAlgo: TCryptAsymAlgo;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
       var jwt: TJwtContent); override;
@@ -511,6 +512,9 @@ type
     /// the OpenSSL hash algorithm, as supplied to the constructor
     property HashAlgorithm: RawUtf8
       read fHashAlgorithm;
+    /// the asymmetric algorithm, as defined by inherted classes
+    property AsymAlgo: TCryptAsymAlgo
+      read fAsymAlgo;
   end;
 
   /// abstract parent for OpenSSL JWT algorithms - never use this plain class!
@@ -530,7 +534,7 @@ type
   // $ 100 EdDSA in 11.55ms i.e. 8.4K/s, aver. 115us
   TJwtAbstractOsl = class(TJwtOpenSsl)
   protected
-    // fAlgorithm+fHashAlgorithm+fGenEvpType+fGenBitsOrCurve from GetAsymAlgo
+    // fAlgorithm+fAsymAlgo+fHashAlgorithm+fGenEvpType+fGenBitsOrCurve from GetAsymAlgo
     procedure SetAlgorithms; virtual;
   public
     /// initialize the JWT processing instance calling SetAlgorithms abstract method
@@ -1709,24 +1713,27 @@ end;
 
 function TJwtOpenSsl.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
-  sign: RawByteString;
+  sig: RawByteString;
 begin
   if fPrivKey = nil then
     fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
-  sign := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
-  if sign = '' then
-    EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign failed [%]',
-      [self, SSL_error_short(ERR_get_error)]);
-  result := BinToBase64Uri(sign);
+  sig := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
+  if sig = '' then
+    EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign % failed [%]',
+      [self, fAlgorithm, SSL_error_short(ERR_get_error)]);
+  result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
 procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var jwt: TJwtContent);
+var
+  der: RawByteString;
 begin
   if fPubKey = nil then
     fPubKey := LoadPublicKey(fPublicKey, fPublicKeyPassword);
-  if fPubKey^.Verify(fAlgoMd, pointer(signature), pointer(headpayload),
-      length(signature), length(headpayload)) then
+  der := SetSignatureSecurityRaw(fAsymAlgo, signature);
+  if fPubKey^.Verify(fAlgoMd, pointer(der), pointer(headpayload),
+      length(der), length(headpayload)) then
     jwt.result := jwtValid
   else
     jwt.result := jwtInvalidSignature;
@@ -1741,14 +1748,12 @@ begin
 end;
 
 procedure TJwtAbstractOsl.SetAlgorithms;
-var
-  caa: TCryptAsymAlgo;
 begin
-  caa := GetAsymAlgo; // call overriden method
-  fAlgorithm := CAA_JWT[caa];
-  fHashAlgorithm := CAA_MD[caa];
-  fGenEvpType := CAA_EVPTYPE[caa];
-  fGenBitsOrCurve := CAA_BITSORCURVE[caa];
+  fAsymAlgo := GetAsymAlgo; // call overriden method
+  fAlgorithm := CAA_JWT[fAsymAlgo];
+  fHashAlgorithm := CAA_MD[fAsymAlgo];
+  fGenEvpType := CAA_EVPTYPE[fAsymAlgo];
+  fGenBitsOrCurve := CAA_BITSORCURVE[fAsymAlgo];
 end;
 
 constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
