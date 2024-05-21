@@ -1089,7 +1089,7 @@ begin
        not CompareMem(pointer(fHeaderB64), tok, headerlen) then
       exit;
   end;
-  // 2. extract the payload
+  // 2. extract the payload and signature
   Jwt.result := jwtWrongFormat;
   if toklen > JWT_MAXSIZE then
     exit;
@@ -1758,15 +1758,18 @@ begin
   sig := fPrivateKey.Sign(fAsymAlgo, headpayload); // = encrypt with private key
   if sig = '' then
     EJwtException.RaiseUtf8('%.ComputeSignature: % Sign failed', [self, fAlgorithm]);
-  result := BinToBase64Uri(pointer(sig), length(sig));
+  result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
 procedure TJwtCrypt.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var jwt: TJwtContent);
+var
+  der: RawByteString;
 begin
   if not Assigned(fPublicKey) then
     EJwtException.RaiseUtf8('%.CheckSignature requires a public key', [self]);
-  if fPublicKey.Verify(fAsymAlgo, headpayload, signature) then // = decrypt
+  der := SetSignatureSecurityRaw(fAsymAlgo, signature);
+  if fPublicKey.Verify(fAsymAlgo, headpayload, der) then // = decrypt
     jwt.result := jwtValid
   else
     jwt.result := jwtInvalidSignature;
