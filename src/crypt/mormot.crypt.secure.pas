@@ -8631,10 +8631,13 @@ var
   pos, prefix: PtrUInt;
 begin
   pos := 0;
-  while buf[pos] = 0 do
-    // ignore leading zeros
+  while buf[pos] = 0 do // ignore leading zeros
+  begin
     inc(pos);
-  dec(buflen, pos);
+    dec(buflen);
+    if buflen = 0 then
+      break;
+  end;
   prefix := buf[pos] shr 7; // detect if need to avoid two's complement storage
   P[0] := AnsiChar(ASN1_INT);
   P[1] := AnsiChar(buflen + prefix);
