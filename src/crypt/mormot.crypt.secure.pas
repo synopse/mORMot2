@@ -2795,6 +2795,9 @@ const
   /// the known asymmetric algorithms which implement RSA cryptography
   CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
 
+  /// the known asymmetric algorithms which expects no ASN1_SEQ in JWT/JWS
+  CAA_RAWSIGNATURE = CAA_RSA + [caaEdDSA];
+
   /// the known key algorithms which implement ECC cryptography
   CKA_ECC = [ckaEcc256, ckaEcc384, ckaEcc512, ckaEcc256k, ckaEdDSA];
 
@@ -3268,9 +3271,9 @@ function PrivateKeyDecrypt(const Input, Salt: RawByteString;
 // - e.g. 112 for RSA-2048, 128 for ECC-256
 function GetSignatureSecurityBits(a: TCryptAsymAlgo; len: integer): integer;
 
-/// extract the raw binary of a ASN.1/DER digital signature
+/// compute the base-64 encoding of the raw binary of a ASN.1/DER digital signature
 // - input comes e.g. from ICryptCert.Sign or ICryptPrivateKey.Sign content
-// - resulting raw binary can be used e.g. for JSON Web Signature (JWS) content
+// - base-64 encoded output can be used e.g. for JSON Web Token/Signature (JWT/JWS)
 // - RSA and EdDSA signatures are not encoded, so are returnde directly
 // - ECC are decoded from their ASN1_SEQ into their raw xy coordinates concatenation
 function GetSignatureSecurityRaw(algo: TCryptAsymAlgo;
@@ -3443,7 +3446,10 @@ const
   ASN1_NULL_VALUE: TAsnObject = RawByteString(#$05#$00);
 
 /// encode a 64-bit signed integer value into ASN.1 binary
-function AsnEncInt(Value: Int64): TAsnObject;
+function AsnEncInt(Value: Int64): TAsnObject; overload;
+
+/// encode a raw binary-encoded integer value into ASN.1 binary
+function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject; overload;
 
 /// encode a 64-bit unsigned OID integer value into ASN.1 binary
 // - append the encoded value into the Result shortstring existing content
@@ -9553,6 +9559,18 @@ begin
     p^ := tmp[n]; // stored as big endian
     inc(p);
   until n = 0;
+end;
+
+function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject;
+begin // same logic as DerAppend() but for any value size
+  FastSetRawByteString(result, Value, ValueLen);
+  while (result <> '') and
+        (PByte(result)^ = 0) do // ignore leading zeros
+    delete(result, 1, 1);
+  if (result <> '') and
+     (PByte(result)^ and $80 <> 0) then
+    Prepend(result, #0); // prevent storage as negative number (not)
+  result := Asn(ASN1_INT, [result]);
 end;
 
 function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
