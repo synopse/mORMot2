@@ -1698,7 +1698,7 @@ begin
                   AsnAdd(result, UnescapeHex(r), ASN1_CTX2);
                 result := Asn(ASN1_CTC4, [
                    Asn(l),
-                   AsnSeq(result)]);
+                   Asn(ASN1_SEQ, [result])]);
               end
               else
               begin
@@ -1733,7 +1733,7 @@ begin
               Asn(TimeLimit),
               ASN1_BOOLEAN_VALUE[TypesOnly],
               filt,
-              AsnSeq(AsnArr(Attributes))]);
+              Asn(ASN1_SEQ, [AsnArr(Attributes)])]);
 end;
 
 function RawLdapSearchParse(const Response: TAsnObject; MessageId: integer;
@@ -1872,7 +1872,7 @@ begin
     id := Random31;
     FormatUtf8('(&(DnsDomain=%)(NtVer=%))',
       [LdapEscapeName(DomainName), NTVER], filter);
-    req := AsnSeq([
+    req := Asn(ASN1_SEQ, [
              Asn(id),
              RawLdapSearch('', false, filter, ['NetLogon'])
            ]);
@@ -1999,7 +1999,7 @@ begin
   try
     sock.SetBroadcast(true);
     id := Random31;
-    req := AsnSeq([
+    req := Asn(ASN1_SEQ, [
              Asn(id),
              //Asn(''), // the RFC 1798 requires user, but MS AD does not :(
              RawLdapSearch('', false, '*', ['dnsHostName',
@@ -2072,7 +2072,7 @@ begin
       if sock[i] = nil then
         continue;
       sock[i].SetReceiveTimeout(1);
-      req := AsnSeq([
+      req := Asn(ASN1_SEQ, [
                Asn(777 + i),
                RawLdapSearch('', false, '*', ['dnsHostName'])
              ]);
@@ -2918,7 +2918,7 @@ end;
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
 begin
   inc(fSeq);
-  result := AsnSeq([
+  result := Asn(ASN1_SEQ, [
               Asn(fSeq),
               Asn1Data
             ]);
@@ -3449,10 +3449,10 @@ begin
     AsnAdd(query, Asn(Value.List[i]));
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
                    Asn(obj),
-                   AsnSeq(
-                     AsnSeq([
+                   Asn(ASN1_SEQ,
+                     Asn(ASN1_SEQ, [
                        Asn(ord(Op), ASN1_ENUM),
-                       AsnSeq([
+                       Asn(ASN1_SEQ, [
                          Asn(Value.AttributeName),
                          Asn(query, ASN1_SETOF)
                        ])
@@ -3479,14 +3479,14 @@ begin
     for j := 0 to attr.Count - 1 do
       AsnAdd(sub, Asn(attr.List[j]));
     Append(query,
-      AsnSeq([
+      Asn(ASN1_SEQ, [
         Asn(attr.AttributeName),
         Asn(ASN1_SETOF, [sub])
       ]));
   end;
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
                    Asn(obj),
-                   AsnSeq(query)]));
+                   Asn(ASN1_SEQ, query)]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
 
@@ -3617,7 +3617,7 @@ begin
     exit;
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),
-                   AsnSeq([
+                   Asn(ASN1_SEQ, [
                      Asn(TrimU(GetFirstCsvItem(AttributeValue, '='))),
                      Asn(TrimU(SeparateRight(AttributeValue, '=')))
                    ])
@@ -3650,10 +3650,10 @@ begin
     fSearchAliases, fSearchSizeLimit, fSearchTimeLimit);
   if fSearchPageSize > 0 then // https://www.rfc-editor.org/rfc/rfc2696
     Append(s, Asn(
-        AsnSeq([
+        Asn(ASN1_SEQ, [
            Asn(ASN1_OID_PAGEDRESULTS), // controlType: pagedresultsControl
            ASN1_BOOLEAN_VALUE[false],  // criticality: false
-           Asn(AsnSeq([
+           Asn(Asn(ASN1_SEQ, [
                  Asn(fSearchPageSize),
                  Asn(fSearchCookie)
                ]))
