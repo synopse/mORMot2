@@ -9102,7 +9102,7 @@ begin
     exit;
   eccbytes := CAA_SIZE[algo];
   if length(result) = eccbytes * 2 then
-    result := AsnSeq([
+    result := Asn(ASN1_SEQ, [
       AsnEncInt(@PByteArray(result)[0], eccbytes),
       AsnEncInt(@PByteArray(result)[eccbytes], eccbytes)
       ]);
@@ -9131,17 +9131,17 @@ function CkaToSeq(cka: TCryptKeyAlgo): RawByteString;
 begin
   case cka of
     ckaRsa:
-      result := AsnSeq([
+      result := Asn(ASN1_SEQ, [
                   AsnOid(pointer(CKA_OID[ckaRsa])),
                   ASN1_NULL_VALUE // optional
                 ]);
     ckaRsaPss,
     ckaEdDSA:
-      result := AsnSeq([
+      result := Asn(ASN1_SEQ, [
                   AsnOid(pointer(CKA_OID[cka]))
                 ]);
     ckaEcc256 .. ckaEcc256k:
-      result := AsnSeq([
+      result := Asn(ASN1_SEQ, [
                   AsnOid(ASN1_OID_X962_PUBLICKEY),
                   AsnOid(pointer(CKA_OID[cka]))
                 ]);
@@ -9158,7 +9158,7 @@ begin
   // see PemDerRawToEcc() secp256r1/prime256v1 PKCS#8 PrivateKeyInfo
   oct := AsnSafeOct([Asn(1),
                      Asn(ASN1_OCTSTR, [rawecc])]);
-  result := AsnSeq([
+  result := Asn(ASN1_SEQ, [
               Asn(0), // version
               CkaToSeq(cka),
               oct
@@ -9262,7 +9262,7 @@ end;
 function X509PubKeyToDer(Algorithm: TCryptKeyAlgo;
   const SubjectPublicKey: RawByteString): RawByteString;
 begin
-  result := AsnSeq([
+  result := Asn(ASN1_SEQ, [
               CkaToSeq(Algorithm),
               Asn(ASN1_BITSTR, [
                 SubjectPublicKey
@@ -9777,7 +9777,7 @@ var
   i: PtrInt;
   seq: RawByteString;
 begin
-  seq := AsnSeq(Content);
+  seq := Asn(ASN1_SEQ, Content);
   result := Asn(ASN1_OCTSTR, [seq]);
   FillZero(seq);
   for i := 0 to high(Content) do // wipe temporary "const" memory buffers

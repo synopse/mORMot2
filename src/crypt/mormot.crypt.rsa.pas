@@ -2173,8 +2173,8 @@ var
   h: RawByteString;
 begin
   FastSetRawByteString(h, Hash, HASH_SIZE[HashAlgo]);
-  result := AsnSeq([
-              AsnSeq([
+  result := Asn(ASN1_SEQ, [
+              Asn(ASN1_SEQ, [
                 AsnOid(pointer(ASN1_OID_HASH[HashAlgo])),
                 ASN1_NULL_VALUE
               ]),
@@ -2193,10 +2193,10 @@ begin
     result := ''
   else
     // see "A.1.1. RSA Public Key Syntax" of RFC 8017
-    result := AsnSeq([
+    result := Asn(ASN1_SEQ, [
                 CkaToSeq(ckaRsa),
                 Asn(ASN1_BITSTR, [
-                  AsnSeq([
+                  Asn(ASN1_SEQ, [
                     AsnBigInt(Modulus),
                     AsnBigInt(Exponent) // typically 65537
                   ])
@@ -2210,7 +2210,7 @@ begin
      (Exponent = '') then
     result := ''
   else
-    result := AsnSeq([
+    result := Asn(ASN1_SEQ, [
                 AsnBigInt(Modulus),
                 AsnBigInt(Exponent) // typically 65537
               ]);
@@ -2258,7 +2258,7 @@ begin
            AsnBigInt(Exponent2),
            AsnBigInt(Coefficient)
          ]);
-  result := AsnSeq([
+  result := Asn(ASN1_SEQ, [
               Asn(Version),
               CkaToSeq(ckaRsa),
               oct

@@ -1290,26 +1290,27 @@ function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
   case xsa of
     xsaNone:
-      result := AsnSeq([Asn(ASN1_OBJID, [])]); // e.g. for fUnsignedCrl
+      result := Asn(ASN1_SEQ, [
+                      Asn(ASN1_OBJID, [])]); // e.g. for fUnsignedCrl
     xsaSha256Rsa .. xsaSha512Rsa:
-      result := AsnSeq([
+      result := Asn(ASN1_SEQ, [
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
                   ASN1_NULL_VALUE // optional parameters
                 ]);
     xsaSha256RsaPss .. xsaSha512RsaPss:
       // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
       result :=
-        AsnSeq([
+        Asn(ASN1_SEQ, [
           AsnOid(pointer(CKA_OID[ckaRsaPss])),
-          AsnSeq([ // RSASSA-PSS-params - see RFC 8017 A.2.3
-            Asn(ASN1_CTC0, [AsnSeq([ // HashAlgorithm
+          Asn(ASN1_SEQ, [ // RSASSA-PSS-params - see RFC 8017 A.2.3
+            Asn(ASN1_CTC0, [Asn(ASN1_SEQ, [ // HashAlgorithm
                               AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
                               ASN1_NULL_VALUE
                               ])
                            ]),
-            Asn(ASN1_CTC1, [AsnSeq([ // MaskGenAlgorithm
+            Asn(ASN1_CTC1, [Asn(ASN1_SEQ, [ // MaskGenAlgorithm
                               AsnOid(ASN1_OID_PKCS1_MGF),
-                              AsnSeq([
+                              Asn(ASN1_SEQ, [
                                 AsnOid(pointer(ASN1_OID_SIGNATURE[xsa])),
                                 ASN1_NULL_VALUE
                               ])
@@ -1319,7 +1320,7 @@ begin
           ])
         ]);
     xsaSha256Ecc256 .. xsaSha512EdDSA:
-      result := AsnSeq([
+      result := Asn(ASN1_SEQ, [
                   AsnOid(pointer(ASN1_OID_SIGNATURE[xsa]))
                 ]);
   end;
@@ -1457,7 +1458,7 @@ begin
           one := '';
           repeat
             GetNextItemTrimed(p, ',', v);
-            Append(one, AsnSeq([
+            Append(one, Asn(ASN1_SEQ, [
                           Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
                           AsnText(v)
                         ]));
@@ -1468,12 +1469,12 @@ begin
       for o := 0 to high(Other) do
         with Other[o] do
           Append(tmp, Asn(ASN1_SETOF, [
-                        AsnSeq([
+                        Asn(ASN1_SEQ, [
                           Asn(ASN1_OBJID, [Oid]),
                           AsnText(Value)
                         ])
                       ]));
-      fCachedAsn := AsnSeq(tmp);
+      fCachedAsn := Asn(ASN1_SEQ, [tmp]);
     end;
   finally
     fSafe.UnLock;
@@ -1709,7 +1710,7 @@ end;
 procedure AddExt(var result: TAsnObject; xe: TXExtension;
   const value: RawByteString; critical: boolean = false);
 begin
-  Append(result, AsnSeq([
+  Append(result, Asn(ASN1_SEQ, [
                    Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
                    ASN1_BOOLEAN_NONE[critical],
                    Asn(ASN1_OCTSTR, [value])
@@ -1753,7 +1754,7 @@ begin
       include(xeku, XU[r]);
   // RFC 5280 #4.2.1.9
   AddExt(result, xeBasicConstraints,
-    AsnSeq(ASN1_BOOLEAN_NONE[cuCA in usages]), {critical=}true);
+    Asn(ASN1_SEQ, ASN1_BOOLEAN_NONE[cuCA in usages]), {critical=}true);
   // RFC 5280 #4.2.1.3
   if xku <> [] then
     AddExt(result, xeKeyUsage,
@@ -1761,7 +1762,7 @@ begin
   // RFC 5280 #4.2.1.12
   if xeku <> [] then
     AddExt(result, xeExtendedKeyUsage,
-      AsnSeq(XkuToOids(xeku)));
+      Asn(ASN1_SEQ, XkuToOids(xeku)));
   // ext[] RawUtf8 are used as source
   // - ExtensionOther[] and ExtensionRaw[] are ignored
   // RFC 5280 #4.2.1.2
@@ -1771,15 +1772,18 @@ begin
   // RFC 5280 #4.2.1.1
   if ext[xeAuthorityKeyIdentifier] <> '' then
     AddExt(result, xeAuthorityKeyIdentifier,
-      AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(ext[xeAuthorityKeyIdentifier])])));
+      Asn(ASN1_SEQ, [
+        Asn(ASN1_CTX0, [HumanHexToBin(ext[xeAuthorityKeyIdentifier])])]));
   // RFC 5280 #4.2.1.6
   if ext[xeSubjectAlternativeName] <> '' then
     AddExt(result, xeSubjectAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeSubjectAlternativeName]))));
+      Asn(ASN1_SEQ, [
+        CsvToDns(pointer(ext[xeSubjectAlternativeName]))]));
   // RFC 5280 #4.2.1.7
   if ext[xeIssuerAlternativeName] <> '' then
     AddExt(result, xeIssuerAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeIssuerAlternativeName]))));
+      Asn(ASN1_SEQ, [
+        CsvToDns(pointer(ext[xeIssuerAlternativeName]))]));
   // non-standard ext - but defined as TCryptCertFields.Comment
   if ext[xeNetscapeComment] <> '' then
     AddExt(result, xeNetscapeComment,
@@ -1808,14 +1812,14 @@ begin
       if Version >= 3 then
         // compute the X.509 v3 extensions block
         ext := Asn(ASN1_CTC3, [
-                 AsnSeq(ComputeExtensions)
+                 Asn(ASN1_SEQ, [ComputeExtensions])
                ]);
-      fCachedDer := AsnSeq([
+      fCachedDer := Asn(ASN1_SEQ, [
                       Asn(ASN1_CTC0, [{%H-}Asn(Version - 1)]),
                       Asn(ASN1_INT, [SerialNumber]),
                       XsaToSeq(Signature),
                       Issuer.ToBinary,
-                      AsnSeq([
+                      Asn(ASN1_SEQ, [
                         AsnTime(NotBefore),
                         AsnTime(NotAfter)
                       ]),
@@ -2291,7 +2295,7 @@ begin
     begin
       Finalize(fCachedHash);
       fCachedPeerInfo := '';
-      fCachedDer := AsnSeq([
+      fCachedDer := Asn(ASN1_SEQ, [
                       Signed.ToDer,
                       XsaToSeq(SignatureAlgorithm),
                       Asn(ASN1_BITSTR, [SignatureValue])
@@ -2573,22 +2577,27 @@ var
   ext: RawByteString;
 begin
   if not (ReasonCode in [crrUnspecified, crrNotRevoked]) then
-    ext := AsnSeq([AsnOid(ASN1_OID_X509_CRL_REASON),
-                   Asn(ASN1_OCTSTR, [Asn(ord(ReasonCode), ASN1_ENUM)])
+    ext := Asn(ASN1_SEQ, [
+             AsnOid(ASN1_OID_X509_CRL_REASON),
+             Asn(ASN1_OCTSTR, [Asn(ord(ReasonCode), ASN1_ENUM)])
            ]);
   if InvalidityDate <> 0 then
-    Append(ext, AsnSeq([AsnOid(ASN1_OID_X509_CRL_INVDATE),
-                        Asn(ASN1_OCTSTR, [AsnTime(InvalidityDate)])
+    Append(ext, Asn(ASN1_SEQ, [
+                  AsnOid(ASN1_OID_X509_CRL_INVDATE),
+                  Asn(ASN1_OCTSTR, [AsnTime(InvalidityDate)])
                 ]));
   if CertificateIssuerDN <> '' then
-    Append(ext, AsnSeq([AsnOid(ASN1_OID_X509_CRL_ISSUER),
-                        Asn(ASN1_OCTSTR, [Asn(ASN1_CTX2, [CertificateIssuerDN])])
+    Append(ext, Asn(ASN1_SEQ, [
+                  AsnOid(ASN1_OID_X509_CRL_ISSUER),
+                  Asn(ASN1_OCTSTR, [Asn(ASN1_CTX2, [CertificateIssuerDN])])
                 ]));
   if ext <> '' then
-    ext := AsnSeq(ext);
-  result := AsnSeq([Asn(ASN1_INT, [SerialNumber]),
-                    AsnTime(RevocationDate),
-                    ext]);
+    ext := Asn(ASN1_SEQ, [ext]);
+  result := Asn(ASN1_SEQ, [
+              Asn(ASN1_INT, [SerialNumber]),
+              AsnTime(RevocationDate),
+              ext
+            ]);
 end;
 
 function TXCrlRevokedCert.FromDer(const der: TCertDer): boolean;
@@ -2662,7 +2671,7 @@ end;
 procedure AddCrlExt(var result: TAsnObject; xce: TXCrlExtension;
   const value: RawByteString);
 begin
-  Append(result, AsnSeq([
+  Append(result, Asn(ASN1_SEQ, [
                    Asn(ASN1_OBJID, [XCE_OID_ASN[xce]]),
                    Asn(ASN1_OCTSTR, [value])
                  ]));
@@ -2682,23 +2691,26 @@ begin
   // export known extensions - no ExtensionRaw[] support yet
   if Extension[xceAuthorityKeyIdentifier] <> '' then
     AddCrlExt(ext, xceAuthorityKeyIdentifier,
-      AsnSeq(Asn(ASN1_CTX0, [HumanHexToBin(Extension[xceAuthorityKeyIdentifier])])));
+      Asn(ASN1_SEQ, [
+        Asn(ASN1_CTX0, [HumanHexToBin(Extension[xceAuthorityKeyIdentifier])
+      ])]));
   if Extension[xceIssuerAlternativeName] <> '' then
     AddCrlExt(ext, xceIssuerAlternativeName,
-      AsnSeq(CsvToDns(pointer(Extension[xceIssuerAlternativeName]))));
+      Asn(ASN1_SEQ, [
+        CsvToDns(pointer(Extension[xceIssuerAlternativeName]))]));
   if Extension[xceCrlNumber] <> '' then
     AddCrlExt(ext, xceCrlNumber,
       Asn(GetInt64(pointer(Extension[xceCrlNumber])))); // 63-bit resolution
   if ext <> '' then
-    ext := Asn(ASN1_CTC0, [AsnSeq(ext)]);
+    ext := Asn(ASN1_CTC0, [Asn(ASN1_SEQ, [ext])]);
   // generate the whole CRL DER content
-  result := AsnSeq([
+  result := Asn(ASN1_SEQ, [
               Asn(1),  // write X.509 CRL version 2, including extensions
               XsaToSeq(Signature),
               Issuer.ToBinary,
               AsnTime(ThisUpdate),
               nextup,
-              AsnSeq([
+              Asn(ASN1_SEQ, [
                 rev
               ]),
               ext
@@ -2873,7 +2885,7 @@ end;
 function TX509Crl.SaveToDer: TCertDer;
 begin
   if fCachedDer = '' then
-    fCachedDer := AsnSeq([
+    fCachedDer := Asn(ASN1_SEQ, [
                     Signed.ToDer,
                     XsaToSeq(SignatureAlgorithm),
                     Asn(ASN1_BITSTR, [SignatureValue])
@@ -3304,22 +3316,22 @@ begin
   if extreq <> '' then
     // extensionRequest (PKCS #9 via CRMF)
     extreq := Asn(ASN1_CTC0, [
-                AsnSeq([
+                Asn(ASN1_SEQ, [
                   AsnOid(ASN1_OID_PKCS9_EXTREQ),
                   Asn(ASN1_SETOF, [
-                    AsnSeq(extreq)
+                    Asn(ASN1_SEQ, [extreq])
                   ])
                 ])
               ]);
   // compute the main CSR body
-  der := AsnSeq([
+  der := Asn(ASN1_SEQ, [
            Asn(0), // version
            sub.ToBinary,
            X509PubKeyToDer(PrivateKey.KeyAlgo, pub),
            extreq
          ]);
   // sign and return the whole CSR as PEM
-  result := DerToPem(AsnSeq([
+  result := DerToPem(Asn(ASN1_SEQ, [
                       der,
                       XsaToSeq(Algorithm),
                       Asn(ASN1_BITSTR, [PrivateKey.Sign(caa, der)])
