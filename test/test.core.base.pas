@@ -6808,8 +6808,8 @@ procedure TTestCoreBase._TSynLogFile;
       Check(L.EventLevel[2] = sllLeave);
       if CheckFailed(L.LogProcCount = 1) then
         exit;
-      Check(L.LogProc[0].Index = 0);
-      Check(L.LogProc[0].Time = 10020006);
+      CheckEqual(L.LogProc[0].Index, 0);
+      CheckEqual(L.LogProc[0].Time, 10020006);
     finally
       L.Free;
     end;
