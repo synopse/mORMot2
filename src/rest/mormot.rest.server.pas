@@ -1800,6 +1800,7 @@ type
     fRouter: TRestRouter;
     fRouterSafe: TRWLightLock;
     fOnNotifyCallback: TOnRestServerClientCallback;
+    fServiceReleaseTimeoutMicrosec: integer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2227,6 +2228,11 @@ type
     // - NEVER set the abstract TRestServerUriContext class on this property
     property ServicesRouting: TRestServerUriContextClass
       read fServicesRouting write SetRoutingClass;
+    /// maximum time allowed to release an interface service instance
+    // - equals 500 microseconds by default - 0 would disable any measurement
+    // - should be enabled for each given interface by setting optFreeTimeout
+    property ServiceReleaseTimeoutMicrosec: integer
+      read fServiceReleaseTimeoutMicrosec write fServiceReleaseTimeoutMicrosec;
     /// retrieve detailed statistics about a method-based service use
     // - will return a reference to the actual alive item: caller should
     // not free the returned instance
@@ -6173,6 +6179,7 @@ begin
     fOptions := [rsoNoTableURI, rsoNoInternalState]; // no table/state to send
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   fServicesRouting := TRestServerRoutingRest;
+  fServiceReleaseTimeoutMicrosec := 500;
   UriPagingParameters := PAGINGPARAMETERS_YAHOO;
   fStats := TRestServerMonitor.Create(self);
   // initialize TRest
