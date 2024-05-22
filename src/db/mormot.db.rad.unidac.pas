@@ -641,7 +641,7 @@ begin
   if not P.InheritsFrom(TDAParam) then 
   begin
     inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
-    Exit;
+    exit;
   end;
   if fDatasetSupportBatchBinding then
     fBatchExecute := (aArrayIndex < 0) and

@@ -1004,7 +1004,7 @@ var
 begin
   result := nil;
   if Source = nil then // self=nil is OK below
-    Exit;
+    exit;
   R.Left := 0;
   R.Right := (Source.Width * ScaleX) div 100;
   R.Top := 0;

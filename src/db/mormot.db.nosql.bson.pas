@@ -2492,7 +2492,7 @@ var
     Reg := P;
     P := GotoNextNotSpace(Reg + RegLen + 1);
     if P^ <> ',' then
-      Exit; // $regex:"acme*.corp",$options:"i"}
+      exit; // $regex:"acme*.corp",$options:"i"}
     P := GotoNextNotSpace(P + 1);
     if P^ = '"' then
       inc(P);

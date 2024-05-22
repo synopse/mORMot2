@@ -4413,7 +4413,7 @@ begin
   begin
     ProcName := aProcName;
     SetSchemaNameToOwner(Owner);
-    Exit;
+    exit;
   end;
   case fDbms of
     dSQLite:

@@ -4272,7 +4272,7 @@ end;
 procedure TRestStorageInMemory.SetBinaryFile(aBinary: boolean);
 begin
   if aBinary = fBinaryFile then
-    Exit;
+    exit;
   fBinaryFile := aBinary;
   fModified := true;
 end;

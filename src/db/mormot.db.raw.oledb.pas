@@ -821,7 +821,7 @@ begin
     begin
       Pointer(Obj) := nil;
       result := E_NOINTERFACE;
-      Exit;
+      exit;
     end;
     if IsEqualGuid(@IID, @IID_IRowset) then
       IUnknown(Obj) := self

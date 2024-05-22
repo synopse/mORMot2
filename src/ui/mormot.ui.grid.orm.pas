@@ -1142,7 +1142,7 @@ var
   means: array of cardinal;
 begin
   if self = nil then
-    Exit;
+    exit;
   fMarkAllowed := aMarkAllowed;
   l := length(Lengths);
   if l = 0 then

@@ -3698,7 +3698,7 @@ begin
      (Dest = nil) then
   begin
     result := nil;
-    Exit;
+    exit;
   end
   else if (Source <> nil) and
           (SourceChars > 0) then

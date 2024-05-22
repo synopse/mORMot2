@@ -1588,7 +1588,7 @@ begin
     if ErrNum = 28001 then
       if Conn <> nil then
         if Conn.PasswordChange then
-          Exit;
+          exit;
     if LogLevelNoRaise <> sllNone then
       SynDBLog.Add.Log(LogLevelNoRaise, msg, self)
     else if Stmt = nil then

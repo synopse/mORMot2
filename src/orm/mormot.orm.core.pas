@@ -7968,7 +7968,7 @@ begin
     begin
       PWord(@aField[2])^ := ord('I') + ord('D') shl 8;
       if not AddField(nil) then
-        Exit; // try to add the ID field
+        exit; // try to add the ID field
       if Props.fSqlFillPrepareMany = '' then
       begin
         if {%H-}aSqlFields <> '' then
