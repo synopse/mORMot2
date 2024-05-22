@@ -6779,6 +6779,7 @@ procedure TTestCoreBase._TSynLogFile;
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
     L: TSynLogFile;
+    o: TLogProcSortOrder;
   begin
     L := TSynLogFile.Create(pointer(LOG), length(LOG));
     try
@@ -6810,6 +6811,8 @@ procedure TTestCoreBase._TSynLogFile;
         exit;
       CheckEqual(L.LogProc[0].Index, 0);
       CheckEqual(L.LogProc[0].Time, 10020006);
+      for o := low(o) to high(o) do
+        L.LogProcSort(o);
     finally
       L.Free;
     end;
