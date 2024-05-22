@@ -9591,10 +9591,13 @@ end;
 
 function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject;
 begin // same logic as DerAppend() but for any value size
+  while (ValueLen > 0) and
+        (PByte(Value)^ = 0) do
+  begin
+    inc(PByte(Value)); // ignore leading zeros
+    dec(ValueLen);
+  end;
   FastSetRawByteString(result, Value, ValueLen);
-  while (result <> '') and
-        (PByte(result)^ = 0) do // ignore leading zeros
-    delete(result, 1, 1);
   if (result <> '') and
      (PByte(result)^ and $80 <> 0) then
     Prepend(result, #0); // prevent storage as negative number (not)
