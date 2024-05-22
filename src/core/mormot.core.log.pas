@@ -6891,7 +6891,7 @@ begin
     SetLength(fLogProcNatural, fLogProcNaturalCount);
     fp := pointer(fLogProcNatural);
     fpe := @fLogProcNatural[fLogProcNaturalCount];
-    while fp < fpe do
+    while PAnsiChar(fp) < PAnsiChar(fpe) do
     begin
       if fp^.Time >= 99000000 then
       begin

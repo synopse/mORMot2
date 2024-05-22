@@ -3449,14 +3449,15 @@ begin
     AsnAdd(query, Asn(Value.List[i]));
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
                    Asn(obj),
-                   Asn(ASN1_SEQ,
+                   Asn(ASN1_SEQ, [
                      Asn(ASN1_SEQ, [
                        Asn(ord(Op), ASN1_ENUM),
                        Asn(ASN1_SEQ, [
                          Asn(Value.AttributeName),
                          Asn(query, ASN1_SETOF)
                        ])
-                     ]))
+                     ])
+                   ])
                  ]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;

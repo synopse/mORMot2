@@ -1762,7 +1762,7 @@ begin
   // RFC 5280 #4.2.1.12
   if xeku <> [] then
     AddExt(result, xeExtendedKeyUsage,
-      Asn(ASN1_SEQ, XkuToOids(xeku)));
+      Asn(ASN1_SEQ, [XkuToOids(xeku)]));
   // ext[] RawUtf8 are used as source
   // - ExtensionOther[] and ExtensionRaw[] are ignored
   // RFC 5280 #4.2.1.2
