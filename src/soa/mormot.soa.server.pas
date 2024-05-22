@@ -818,7 +818,6 @@ var
 begin
   if Obj <> nil then
   try
-    QueryPerformanceMicroSeconds(start);
     if (optFreeInMainThread in fAnyOptions) and
        (GetCurrentThreadID <> MainThreadID) then
       BackgroundExecuteInstanceRelease(Obj, nil)
@@ -844,12 +843,15 @@ begin
       end;
     end
     else
+    begin
+      QueryPerformanceMicroSeconds(start);
       IInterface(Obj)._Release;
-    QueryPerformanceMicroSeconds(stop);
-    dec(stop, start);
-    if stop > 500 then
-      fRestServer.Internallog('%.InstanceFree: I%._Release took %',
-        [ClassType, InterfaceUri, MicroSecToString(stop)], sllWarning);
+      QueryPerformanceMicroSeconds(stop);
+      dec(stop, start);
+      if stop > 500 then // multi threaded / unlocked release should be fast
+        fRestServer.Internallog('%.InstanceFree: I%._Release took %',
+          [ClassType, InterfaceUri, MicroSecToString(stop)], sllWarning);
+    end;
   except
     on E: Exception do
       fRestServer.Internallog('%.InstanceFree: ignored % exception ' +
