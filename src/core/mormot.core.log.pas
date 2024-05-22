@@ -6751,6 +6751,7 @@ var
   i: PtrInt;
   j, Level: integer;
   TSEnter, TSLeave: Int64;
+  fp, fpe: PSynLogFileProc;
   OK: boolean;
 begin
   // 1. calculate fLines[] + fCount and fLevels[] + fLogProcNatural[] from .log content
@@ -6883,12 +6884,15 @@ begin
     end;
     // 4. compute customer-side profiling
     SetLength(fLogProcNatural, fLogProcNaturalCount);
-    for i := 0 to fLogProcNaturalCount - 1 do
-      if fLogProcNatural[i].Time >= 99000000 then
+    fp := pointer(fLogProcNatural);
+    fpe := @fLogProcNatural[fLogProcNaturalCount];
+    while fp < fpe do
+    begin
+      if fp^.Time >= 99000000 then
       begin
-        // 99.xxx.xxx means over range -> compute
+        // 99.xxx.xxx means over range -> compute from nested calls
         Level := 0;
-        j := fLogProcNatural[i].index;
+        j := fp^.Index;
         repeat
           inc(j);
           if j = fCount then
@@ -6901,18 +6905,15 @@ begin
               begin
                 if fFreq = 0 then
                   // adjust huge seconds timing from date/time column
-                  fLogProcNatural[i].Time := Round(
-                    (EventDateTime(j) - EventDateTime(fLogProcNatural[i].index))
-                     * 86400000000.0) +
-                    fLogProcNatural[i].Time mod 1000000
+                  fp^.Time := Round(
+                    (EventDateTime(j) -
+                     EventDateTime(fp^.Index)) * 86400000000.0) +
+                    fp^.Time mod 1000000
                 else
                 begin
-                  HexDisplayToBin(fLines[fLogProcNatural[i].index],
-                    @TSEnter, SizeOf(TSEnter));
-                  HexDisplayToBin(fLines[j],
-                    @TSLeave, SizeOf(TSLeave));
-                  fLogProcNatural[i].Time :=
-                    ((TSLeave - TSEnter) * (1000 * 1000)) div fFreq;
+                  HexDisplayToBin(fLines[fp^.Index], @TSEnter, SizeOf(TSEnter));
+                  HexDisplayToBin(fLines[j],         @TSLeave, SizeOf(TSLeave));
+                  fp^.Time := ((TSLeave - TSEnter) * (1000 * 1000)) div fFreq;
                 end;
                 break;
               end
@@ -6921,6 +6922,8 @@ begin
           end;
         until false;
       end;
+      inc(fp);
+    end;
     i := 0;
     while i < fLogProcNaturalCount do
     begin
@@ -6992,18 +6995,22 @@ begin
 end;
 
 function TSynLogFile.LogProcSortComp(A, B: PtrInt): PtrInt;
+var
+  pa, pb: PSynLogFileProc;
 begin
+  pa := @LogProc[A];
+  pb := @LogProc[B];
   case fLogProcSortInternalOrder of
     soByName:
       result := StrICompLeftTrim(
-        PUtf8Char(fLines[LogProc[A].index]) + fLineTextOffset,
-        PUtf8Char(fLines[LogProc[B].index]) + fLineTextOffset);
+        PUtf8Char(fLines[pa^.Index]) + fLineTextOffset,
+        PUtf8Char(fLines[pb^.Index]) + fLineTextOffset);
     soByOccurrence:
-      result := LogProc[A].index - LogProc[B].index;
+      result := pa^.Index - pb^.Index;
     soByTime:
-      result := LogProc[B].Time - LogProc[A].Time;
+      result := pb^.Time - pa^.Time;
     soByProperTime:
-      result := LogProc[B].ProperTime - LogProc[A].ProperTime;
+      result := pb^.ProperTime - pa^.ProperTime;
   else
     result := A - B;
   end;
@@ -7362,8 +7369,8 @@ end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);
 var
-  i: integer;
-  P: ^TSynLogFileProc;
+  i: PtrInt;
+  P: PSynLogFileProc;
   O: TLogProcSortOrder;
 begin
   fLogProcIsMerged := Value;
@@ -7383,14 +7390,14 @@ begin
         with fLogProcMerged[fLogProcMergedCount] do
         begin
           repeat
-            index := P^.index;
+            index := P^.Index;
             inc(Time, P^.Time);
             inc(ProperTime, P^.ProperTime);
             inc(i);
             inc(P);
           until (i >= fLogProcNaturalCount) or
-            (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].index]) + 22,
-             PUtf8Char(fLines[P^.index]) + 22) <> 0);
+            (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].Index]) + 22,
+             PUtf8Char(fLines[P^.Index]) + 22) <> 0);
         end;
         inc(fLogProcMergedCount);
       until i >= fLogProcNaturalCount;
