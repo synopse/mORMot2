@@ -1565,16 +1565,17 @@ type
     fHeaderLinesCount: integer;
     fHeaders: RawUtf8;
     /// method profiling data
-    fLogProcCurrent: PSynLogFileProcArray;
     fLogProcCurrentCount: integer;
-    fLogProcNatural: TSynLogFileProcDynArray;
     fLogProcNaturalCount: integer;
+    fLogProcCurrent: PSynLogFileProcArray;
+    fLogProcNatural: TSynLogFileProcDynArray;
     fLogProcMerged: TSynLogFileProcDynArray;
     fLogProcMergedCount: integer;
     fLogProcIsMerged: boolean;
     fLogProcStack: array of array of cardinal;
     fLogProcStackCount: array of integer;
     fLogProcSortInternalOrder: TLogProcSortOrder;
+    fLogProcSortInternalComp: function(A, B: PtrInt): PtrInt of object;
     /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogLevel] of cardinal;
     fIntelCPU: TIntelCpuFeatures;
@@ -1590,7 +1591,11 @@ type
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
     procedure ProcessOneLine(LineBeg, LineEnd: PUtf8Char); override;
     /// called by LogProcSort method
-    function LogProcSortComp(A, B: PtrInt): PtrInt;
+    function LogProcSortCompByName(A, B: PtrInt): PtrInt;
+    function LogProcSortCompByOccurrence(A, B: PtrInt): PtrInt;
+    function LogProcSortCompByTime(A, B: PtrInt): PtrInt;
+    function LogProcSortCompByProperTime(A, B: PtrInt): PtrInt;
+    function LogProcSortCompDefault(A, B: PtrInt): PtrInt;
     procedure LogProcSortInternal(L, R: PtrInt);
   public
     /// initialize internal structure
@@ -6646,7 +6651,7 @@ begin
     if fLevels[i] <> sllNone then
     begin
       fLevels[aCount] := fLevels[i];
-      fLines[aCount] := fLines[i];
+      fLines[aCount]  := fLines[i];
       if fThreads <> nil then
         fThreads[aCount] := fThreads[i];
       if fLevels[i] = sllEnter then
@@ -6967,9 +6972,22 @@ procedure TSynLogFile.LogProcSort(Order: TLogProcSortOrder);
 begin
   if (fLogProcNaturalCount <= 1) or
      (Order = fLogProcSortInternalOrder) then
-    Exit;
+    exit;
   fLogProcSortInternalOrder := Order;
-  LogProcSortInternal(0, LogProcCount - 1);
+  case Order of
+    soByName:
+      fLogProcSortInternalComp := LogProcSortCompByName;
+    soByOccurrence:
+      fLogProcSortInternalComp := LogProcSortCompByOccurrence;
+    soByTime:
+      fLogProcSortInternalComp := LogProcSortCompByTime;
+    soByProperTime:
+      fLogProcSortInternalComp := LogProcSortCompByProperTime;
+  else
+    fLogProcSortInternalComp := LogProcSortCompDefault;
+  end;
+  LogProcSortInternal(0, fLogProcCurrentCount - 1);
+  fLogProcSortInternalComp := nil;
 end;
 
 function StrICompLeftTrim(Str1, Str2: PUtf8Char): PtrInt;
@@ -6988,32 +7006,37 @@ begin
     if (C1 <> C2) or
        (C1 < 32) then
       break;
-    Inc(Str1);
-    Inc(Str2);
+    inc(Str1);
+    inc(Str2);
   until false;
   result := C1 - C2;
 end;
 
-function TSynLogFile.LogProcSortComp(A, B: PtrInt): PtrInt;
-var
-  pa, pb: PSynLogFileProc;
+function TSynLogFile.LogProcSortCompByName(A, B: PtrInt): PtrInt;
 begin
-  pa := @LogProc[A];
-  pb := @LogProc[B];
-  case fLogProcSortInternalOrder of
-    soByName:
-      result := StrICompLeftTrim(
-        PUtf8Char(fLines[pa^.Index]) + fLineTextOffset,
-        PUtf8Char(fLines[pb^.Index]) + fLineTextOffset);
-    soByOccurrence:
-      result := pa^.Index - pb^.Index;
-    soByTime:
-      result := pb^.Time - pa^.Time;
-    soByProperTime:
-      result := pb^.ProperTime - pa^.ProperTime;
-  else
-    result := A - B;
-  end;
+  result := StrICompLeftTrim(
+    PUtf8Char(fLines[LogProc[A].Index]) + fLineTextOffset,
+    PUtf8Char(fLines[LogProc[B].Index]) + fLineTextOffset);
+end;
+
+function TSynLogFile.LogProcSortCompByOccurrence(A, B: PtrInt): PtrInt;
+begin
+  result := LogProc[A].Index - LogProc[B].Index;
+end;
+
+function TSynLogFile.LogProcSortCompByTime(A, B: PtrInt): PtrInt;
+begin
+  result := LogProc[B].Time - LogProc[A].Time;
+end;
+
+function TSynLogFile.LogProcSortCompByProperTime(A, B: PtrInt): PtrInt;
+begin
+  result := LogProc[B].ProperTime - LogProc[A].ProperTime;
+end;
+
+function TSynLogFile.LogProcSortCompDefault(A, B: PtrInt): PtrInt;
+begin
+  result := A - B;
 end;
 
 procedure LogProcSortExchg(var P1, P2: TSynLogFileProc);
@@ -7036,9 +7059,9 @@ begin
       J := R;
       P := (L + R) shr 1;
       repeat
-        while LogProcSortComp(I, P) < 0 do
+        while fLogProcSortInternalComp(I, P) < 0 do
           inc(I);
-        while LogProcSortComp(J, P) > 0 do
+        while fLogProcSortInternalComp(J, P) > 0 do
           dec(J);
         if I <= J then
         begin
@@ -7397,7 +7420,7 @@ begin
             inc(P);
           until (i >= fLogProcNaturalCount) or
             (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].Index]) + 22,
-             PUtf8Char(fLines[P^.Index]) + 22) <> 0);
+                              PUtf8Char(fLines[P^.Index]) + 22) <> 0);
         end;
         inc(fLogProcMergedCount);
       until i >= fLogProcNaturalCount;
