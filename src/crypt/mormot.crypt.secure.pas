@@ -9806,7 +9806,7 @@ begin
     if y = 0 then
     begin
       y := x div 40; // first byte = two first numbers modulo 40
-      x := x mod 40;
+      dec(x, y * 40);
       UInt32ToUtf8(y, result);
     end;
     Append(result, ['.', x]);

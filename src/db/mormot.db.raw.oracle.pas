@@ -1089,6 +1089,7 @@ end;
 procedure TOracleDate.From(const aValue: TDateTime);
 var
   T: TSynSystemTime;
+  c: cardinal;
 begin
   if aValue <= 0 then
   begin
@@ -1097,8 +1098,9 @@ begin
     exit; // supplied TDateTime value = 0 -> store as null date
   end;
   T.FromDateTime(aValue);
-  Cent := (T.Year div 100) + 100;
-  Year := (T.Year mod 100) + 100;
+  c := T.Year div 100;
+  Cent := c + 100;
+  Year := (T.Year - c * 100) + 100;
   Month := T.Month;
   Day := T.Day;
   if (T.Hour <> 0) or
@@ -1126,7 +1128,7 @@ procedure TOracleDate.From(aIso8601: PUtf8Char; Length: integer);
 var
   Value: QWord;
   Value32: cardinal absolute Value;
-  Y: cardinal;
+  Y, C: cardinal;
   NoTime: boolean;
 begin
   Value := Iso8601ToTimeLogPUtf8Char(aIso8601, Length, @NoTime);
@@ -1137,8 +1139,9 @@ begin
     exit; // invalid ISO-8601 text -> store as null date
   end;
   Y := Value shr (6 + 6 + 5 + 5 + 4);
-  Cent := (Y div 100) + 100;
-  Year := (Y mod 100) + 100;
+  C := Y div 100;
+  Cent := C + 100;
+  Year := (Y - C * 100) + 100;
   Month := ((Value32 shr (6 + 6 + 5 + 5)) and 15) + 1;
   Day := ((Value32 shr (6 + 6 + 5)) and 31) + 1;
   if NoTime then
