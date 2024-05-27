@@ -3569,10 +3569,9 @@ begin
       FreeAndNil(fHttp);
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
-        Uri.Server, Uri.Port, Uri.Https, Proxy, '', fTimeOut, fTimeOut, fTimeOut);
+        Uri.Server, Uri.Port, Uri.Https, Proxy, '',
+        fTimeOut, fTimeOut, fTimeOut, nlTcp, fUserAgent);
       fHttps.IgnoreTlsCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
-      if fUserAgent <> '' then
-        fHttps.UserAgent := fUserAgent;
     end;
     result := fHttps.Request(
       Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
