@@ -10,7 +10,7 @@ unit mormot.net.async;
    - Low-Level Non-blocking Connections
    - Client or Server Asynchronous Process
    - THttpAsyncServer Event-Driven HTTP Server
-   - THttpProxyCache HTTP Proxy with Cache
+   - THttpProxyCache HTTP Server With Proxy and Cache
 
   *****************************************************************************
 
@@ -1118,10 +1118,11 @@ type
   end;
 
 
-{ ******************** THttpProxyCache HTTP Proxy with Cache }
+{ ******************** THttpProxyCache HTTP Server With Proxy and Cache }
 
 type
-  /// define the caching settings of remote content source for THttpProxyCache
+  /// define the caching settings of content for THttpProxyCache
+  // - set the memory cache settings if used as exact THttpProxyMem class
   THttpProxyMem = class(TSynPersistent)
   protected
     fMaxSize: Int64;
@@ -1151,7 +1152,7 @@ type
       read fForceCsv write fForceCsv;
   end;
 
-  /// define disk cache settings of remote content source for THttpProxyCache
+  /// define disk cache settings of content for THttpProxyCache
   THttpProxyDisk = class(THttpProxyMem)
   protected
     fPath: TFileName;
@@ -1161,18 +1162,21 @@ type
       read fPath write fPath;
   end;
 
-  /// define one remote content source settings for THttpProxyCache
-  THttpProxySource = class(TSynAutoCreateFields)
+  /// define one content setting for THttpProxyCache URL
+  THttpProxyUrl = class(TSynAutoCreateFields)
   protected
-    fRemote, fLocal: RawUtf8;
+    fUrl, fSource: RawUtf8;
+    fFolder: TFileName;
     fDisabled: boolean;
     fMethods: TUriRouterMethods;
+    fSourced: (sUndefined, sFolder, sUri);
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
     fReject: TUriMatch;
+    fUri: TUri;
   public
-    /// setup the default values of this remote source
+    /// setup the default values of this URI
     constructor Create; override;
   published
     /// this source won't be processed if this property is set to true
@@ -1180,35 +1184,42 @@ type
       read fDisabled write fDisabled;
     /// the local URI prefix to use with the main HTTP(S) server of this instance
     // - a typical value is e.g. 'debian' or 'debian-security'
-    // - if not set the last folder of the Remote value will be used, e.g.
+    // - if not set the last folder of the Source value will be used, e.g.
     // 'debian' for 'http://ftp.debian.org/debian'
-    property Local: RawUtf8
-      read fLocal write fLocal;
-    /// which methods are relayed to the Remote server
-    // - equals by default [urmGet, urmHead]
-    property Methods: TUriRouterMethods
-      read fMethods write fMethods;
-    /// the full remote origin URL start to ask
-    // - the Local prefix will be removed from the client request, then appended
-    // to this remote URI, which is e.g. 'http://ftp.debian.org/debian' or
-    // 'http://security.debian.org/debian-security' matching Local 'debian' or
-    // 'debian-security' prefixes
-    property Remote: RawUtf8
-      read fRemote write fRemote;
-    /// overwrite the main MemCache setting to tune in-memory caching
-    property MemCache: THttpProxyMem
-      read fMemCache write fMemCache;
-    /// overwrite the main DiskCache setting to tune on-disk caching
-    property DiskCache: THttpProxyDisk
-      read fDiskCache write fDiskCache;
-    /// CSV list of GLOB file names to be rejected as not found
+    property Url: RawUtf8
+      read fUrl write fUrl;
+    /// CSV list of GLOB file or directly names to be rejected as not found
     // - e.g. '*.secret'
     property RejectCsv: RawUtf8
       read fRejectCsv write fRejectCsv;
+    /// a local folder name or remote origin URL to ask
+    // - if Source is a local folder (e.g. 'd:/mysite' or '/var/www/mysite'),
+    // the Url prefix chars will be removed from the client request, then used
+    // to locate the file to be served
+    // - if Source is a remote URI (like http://....), the Url prefix chars
+    // will be removed from the client request, then appended
+    // to this remote URI, which is e.g. 'http://ftp.debian.org/debian' or
+    // 'http://security.debian.org/debian-security' matching Local 'debian' or
+    // 'debian-security' prefixes, to compute a source remote URI
+    property Source: RawUtf8
+      read fSource write fSource;
+    /// which methods are applied to the local Source folder or relayed to
+    // the Remote server
+    // - equals by default [urmGet, urmOptions, urmHead]
+    property Methods: TUriRouterMethods
+      read fMethods write fMethods;
+    /// overwrite the main MemCache setting to tune in-memory caching
+    // - can be used for both local file or remote URI lookups
+    property MemCache: THttpProxyMem
+      read fMemCache write fMemCache;
+    /// overwrite the main DiskCache setting to tune on-disk caching
+    // - disk cache is available only for remote URI lookups
+    property DiskCache: THttpProxyDisk
+      read fDiskCache write fDiskCache;
   end;
 
   /// define one or several remote content source(s) for THttpProxyCache
-  THttpProxySourceObjArray = array of THttpProxySource;
+  THttpProxyUrlObjArray = array of THttpProxyUrl;
 
   /// the available options for THttpProxyServer/THttpProxyCache
   THttpProxyServerOption = (
@@ -1218,7 +1229,7 @@ type
   /// a set of available options for THttpProxyServer
   THttpProxyServerOptions = set of THttpProxyServerOption;
 
-  /// define the THttpProxyCache forward proxy HTTP(S) server settings
+  /// define the THttpProxyCache HTTP(S) server settings
   THttpProxyServer = class(TSynAutoCreateFields)
   protected
     fPort: TNetPort;
@@ -1240,7 +1251,8 @@ type
     property Options: THttpProxyServerOptions
       read fOptions write fOptions;
     /// the number of threads of the HTTP/HTTPS content delivery
-    // - default value is 4 sub-threads
+    // - default value is 4 sub-threads which is enough to scale well if no
+    // content is to be generated
     property ThreadCount: integer
       read fThreadCount write fThreadCount;
     /// optional HTTPS certificate file name
@@ -1264,12 +1276,12 @@ type
     fServer: THttpProxyServer;
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
-    fSource: THttpProxySourceObjArray;
+    fUrl: THttpProxyUrlObjArray;
   public
     /// initialize the default settings
     constructor Create; override;
-    /// append and own a given THttpProxySource definition at runtime
-    procedure AddSource(one: THttpProxySource);
+    /// append and own a given THttpProxyUrl definition at runtime
+    procedure AddUrl(one: THttpProxyUrl);
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServer
@@ -1283,11 +1295,11 @@ type
     property DiskCache: THttpProxyDisk
       read fDiskCache write fDiskCache;
     /// define the remote content sources
-    property Source: THttpProxySourceObjArray
-      read fSource;
+    property Url: THttpProxyUrlObjArray
+      read fUrl;
   end;
 
-  /// implements a HTTP forward proxy, with caching
+  /// implements a HTTP server with forward proxy and caching
   THttpProxyCache = class(TSynAutoCreateFields)
   protected
     fSettings: THttpProxySettings;
@@ -5051,12 +5063,12 @@ begin
 end;
 
 
-{ THttpProxySource }
+{ THttpProxyUrl }
 
-constructor THttpProxySource.Create;
+constructor THttpProxyUrl.Create;
 begin
   inherited Create;
-  fMethods := [urmGet, urmHead];
+  fMethods := [urmGet, urmOptions, urmHead];
 end;
 
 
@@ -5079,10 +5091,10 @@ begin
   fMemCache.TimeoutSec := 15 * SecsPerMin;
 end;
 
-procedure THttpProxySettings.AddSource(one: THttpProxySource);
+procedure THttpProxySettings.AddUrl(one: THttpProxyUrl);
 begin
   if one <> nil then
-    ObjArrayAdd(fSource, one);
+    ObjArrayAdd(fUrl, one);
 end;
 
 
@@ -5150,23 +5162,47 @@ end;
 procedure THttpProxyCache.AfterServerStarted;
 var
   new, old: TUriRouter;
-  one: THttpProxySource;
+  one: THttpProxyUrl;
   i: PtrInt;
 begin
   new := TUriRouter.Create(TUriTreeNode);
   try
-    for i := 0 to high(fSettings.Source) do
+    // compute all new routes from Settings[]
+    for i := 0 to high(fSettings.Url) do
     begin
-      one := fSettings.Source[i];
+      one := fSettings.Url[i];
       if one.Disabled then
         continue;
+      // validate source as local file folder or remote http server
+      one.fSourced := sUndefined;
+      if IsHttp(one.Url) then
+      begin
+        if one.fUri.From(one.Url) then
+          one.fSourced := sUri;
+      end
+      else
+      begin
+        Utf8ToFileName(one.Url, one.fFolder);
+        if DirectoryExists(one.fFolder) then
+        begin
+          one.fFolder := IncludeTrailingPathDelimiter(one.fFolder);
+          one.fSourced := sFolder;
+        end;
+      end;
+      if one.fSourced = sUndefined then
+      begin
+        fLog.Add.Log(sllWarning, 'AfterServerStarted: unexpected %', [one], self);
+        exit;
+      end;
+      // setup cache
       if one.MemCache.MaxSize < 0 then
         one.MemCache.MaxSize := fSettings.MemCache.MaxSize;
       if one.DiskCache.MaxSize < 0 then
         one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
-      new.Run(one.Methods, one.Local, OnExecute, one);
-      new.Run(one.Methods, one.Local + '/<path>', OnExecute, one);
+      new.Run(one.Methods, one.Url, OnExecute, one);
+      new.Run(one.Methods, one.Url + '/<path>', OnExecute, one);
     end;
+    // replace existing routes
     old := fServer.ReplaceRoute(new);
     new := nil; // is owned by fServer from now on
     if old <> nil then
@@ -5178,7 +5214,7 @@ end;
 
 function THttpProxyCache.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  one: THttpProxySource;
+  one: THttpProxyUrl;
   uri: TUriMatchName;
   forced, ignored: (cNone, cMem, cDisk);
 begin
@@ -5217,7 +5253,7 @@ end;
 initialization
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(
-    TypeInfo(THttpProxySourceObjArray), THttpProxySource);
+    TypeInfo(THttpProxyUrlObjArray), THttpProxyUrl);
   {$endif HASDYNARRAYTYPE}
 
 end.
