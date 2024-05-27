@@ -639,6 +639,7 @@ type
       Scheme: THttpRequestAuthentication;
     end;
     /// allow to customize the User-Agent header
+    // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
   end;
 
@@ -693,10 +694,12 @@ type
     // would use global HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT
     // and HTTP_DEFAULT_RECEIVETIMEOUT variable values
     // - *TimeOut parameters are currently ignored by TCurlHttp
+    // - aUserAgent is needed for TWinHttp, which requires this info at connection 
     constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
       const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
-      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp); overload; virtual;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp;
+      const aUserAgent: RawUtf8 = ''); overload; virtual;
     /// connect to the supplied URI
     // - is just a wrapper around TUri and the overloaded Create() constructor
     constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
@@ -1019,7 +1022,8 @@ type
     constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
       const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
-      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp); override;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp;
+      const aUserAgent: RawUtf8 = ''); override;
   end;
 
   /// WebSocket client implementation
@@ -2555,7 +2559,8 @@ end;
 
 constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
   const aProxyName: RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut,
-  SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
+  SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer;
+  const aUserAgent: RawUtf8);
 begin
   fLayer := aLayer;
   if fLayer <> nlUnix then
@@ -2571,7 +2576,10 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
-  fExtendedOptions.UserAgent := DefaultUserAgent(self);
+  if aUserAgent <> '' then
+    fExtendedOptions.UserAgent := aUserAgent
+  else
+    fExtendedOptions.UserAgent := DefaultUserAgent(self);
   if ConnectionTimeOut = 0 then
     ConnectionTimeOut := HTTP_DEFAULT_CONNECTTIMEOUT;
   if SendTimeout = 0 then
@@ -3232,10 +3240,11 @@ end;
 
 constructor TWinHttpUpgradeable.Create(const aServer, aPort: RawUtf8;
   aHttps: boolean; const aProxyName, aProxyByPass: RawUtf8;
-  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer;
+  const aUserAgent: RawUtf8);
 begin
   inherited Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
-    ConnectionTimeOut, SendTimeout, ReceiveTimeout, aLayer);
+    ConnectionTimeOut, SendTimeout, ReceiveTimeout, aLayer, aUserAgent);
 end;
 
 
