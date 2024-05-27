@@ -294,7 +294,7 @@ type
     // - this method could have been declared as protected, since it should
     // never be called outside the TRestServer.Uri() method workflow
     // - should set Call, and Method members
-    procedure Prepare(aServer: TRestServer; const aCall: TRestUriParams);
+    procedure Prepare(aServer: TRestServer; const aCall: TRestUriParams); virtual;
     /// finalize the execution context
     destructor Destroy; override;
 
