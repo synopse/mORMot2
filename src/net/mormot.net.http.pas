@@ -155,6 +155,9 @@ function IsOptions(const method: RawUtf8): boolean;
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// check if the supplied text start with http:// or https://
+function IsHttp(const text: RawUtf8): boolean;
+
 /// naive detection of most used bots from a HTTP User-Agent string
 // - meant to be fast, with potentially a lot of false negatives: please do not
 // hesitate to send us feedback as pull requests
@@ -2595,7 +2598,6 @@ begin
     ord('H') + ord('E') shl 8 + ord('A') shl 16 + ord('D') shl 24;
 end;
 
-
 function IsUrlFavIcon(P: PUtf8Char): boolean;
 begin
   result := (P <> nil) and
@@ -2606,6 +2608,16 @@ begin
         (PCardinalArray(P)[2] =
            ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
         (P[12] = #0);
+end;
+
+function IsHttp(const text: RawUtf8): boolean;
+begin
+  result := (length(text) > 5) and
+            (PCardinal(text)^ and $dfdfdfdf =
+               ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24) and
+            ((text[5] = ':') or
+             ((text[5] in ['s', 'S']) and
+              (text[6] = ':')));
 end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
