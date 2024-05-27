@@ -180,6 +180,17 @@ begin
   Check(IsPost('POST'));
   for met := low(met) to high(met) do
     Check(ToMethod(RawUtf8(ToText(met))) = met);
+  Check(IsOptions('OPTIONS'));
+  Check(not IsOptions('opTIONS'));
+  Check(IsUrlFavIcon('/favicon.ico'));
+  Check(not IsUrlFavIcon('/favicon.ice'));
+  Check(not IsHttp('http:'));
+  Check(IsHttp('https:'));
+  Check(IsHttp('http://toto'));
+  Check(IsHttp('https://titi'));
+  Check(not IsHttp('c:\'));
+  Check(not IsHttp('c:\toto'));
+  Check(not IsHttp('file://toto'));
 end;
 
 procedure TTestOrmCore._TRestServerFullMemory;
