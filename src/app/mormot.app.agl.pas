@@ -888,7 +888,7 @@ var
   n, w, msg: RawUtf8;
   P: PUtf8Char;
   fn: TFileName;
-  ishttp: boolean;
+  http: boolean;
   res: integer;
   mem: TMemoryInfo;
 begin
@@ -910,13 +910,12 @@ begin
     GetNextItemTrimed(P, ',', n);
     if n = '' then
       continue;
-    ishttp := IdemPChar(pointer(n), 'HTTP:') or
-              IdemPChar(pointer(n), 'HTTPS:');
+    http := IsHttp(n);
     n := StringReplaceAll(n, '%what%', w);
-    if ishttp then
+    if http then
       n := StringReplaceAll(n, '%urimsg%', UrlEncode(msg));
     n := fOwner.Expand(self, StringReplaceAll(n, '%msg%', msg), false);
-    if ishttp then
+    if http then
       res := fOwner.DoHttpGet(n)
     else if PosExChar('@', n) <> 0 then
       res := ord(fOwner.DoNotifyByEmail(self, w, n, msg))
