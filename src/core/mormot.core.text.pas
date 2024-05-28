@@ -1474,9 +1474,8 @@ function VariantToUtf8(const V: Variant; var Text: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any non-null Variant into UTF-8 encoded String
-// - empty and null variants will return false
+// - empty and null variants will return false (usable e.g. for mustache data)
 function VariantToText(const V: Variant; var Text: RawUtf8): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// save a variant value into a JSON content
 // - just a wrapper around the _VariantSaveJson procedure redirection
@@ -7668,8 +7667,14 @@ end;
 
 function VariantToText(const V: Variant; var Text: RawUtf8): boolean;
 begin
-  result := not VarIsEmptyOrNull(V) and
-            VariantToUtf8(V, Text);
+  result := false;
+  if VarIsEmptyOrNull(V) then
+  begin
+    FastAssignNew(Text);
+    exit;
+  end;
+  VariantToUtf8(V, Text);
+  result := Text <> '';
 end;
 
 function VariantSaveJson(const Value: variant; Escape: TTextWriterKind): RawUtf8;
