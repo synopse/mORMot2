@@ -184,7 +184,7 @@ type
   end;
 
   TIBXColumnsMeta = record
-    SQLType: Cardinal;
+    SQLType: cardinal;
     CodePage: TSystemCodePage;
     Scale: integer;
     Subtype: integer;

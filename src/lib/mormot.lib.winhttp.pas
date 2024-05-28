@@ -492,7 +492,7 @@ type
   HTTP_RESPONSE_INFO = record
     Typ: HTTP_RESPONSE_INFO_TYPE;
     Length: ULONG;
-    pInfo: Pointer;
+    pInfo: pointer;
   end;
 
   PHTTP_RESPONSE_INFO = ^HTTP_RESPONSE_INFO;
@@ -577,7 +577,7 @@ type
 
   HTTP_QOS_SETTING_INFO = record
     QosType: HTTP_QOS_SETTING_TYPE;
-    QosSetting: Pointer;
+    QosSetting: pointer;
   end;
 
   PHTTP_QOS_SETTING_INFO = ^HTTP_QOS_SETTING_INFO;
@@ -1060,8 +1060,8 @@ type
     /// sends entity-body data associated with an HTTP response.
     SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;
-      pEntityChunks: pointer; var pBytesSent: cardinal; pReserved1: Pointer = nil;
-      pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
+      pEntityChunks: pointer; var pBytesSent: cardinal; pReserved1: pointer = nil;
+      pReserved2: pointer = nil; pOverlapped: POverlapped = nil;
       pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
     /// set specified data, such as IP addresses or TLS Certificates, from the
     // HTTP Server API configuration store
@@ -1093,17 +1093,17 @@ type
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     // - replaces the HTTP version 1.0 CreateHttpHandle() function
     CreateRequestQueue: function(Version: HTTP_VERSION; pName: PWideChar;
-      pSecurityAttributes: Pointer; Flags: ULONG; var ReqQueueHandle: THandle): HRESULT; stdcall;
+      pSecurityAttributes: pointer; Flags: ULONG; var ReqQueueHandle: THandle): HRESULT; stdcall;
     /// sets a new server session property or modifies an existing property
     // on the specified server session
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     SetServerSessionProperty: function(ServerSessionId: HTTP_SERVER_SESSION_ID;
-      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
       PropertyInformationLength: ULONG): HRESULT; stdcall;
     /// queries a server property on the specified server session
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     QueryServerSessionProperty: function(ServerSessionId: HTTP_SERVER_SESSION_ID;
-      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
       PropertyInformationLength: ULONG; pReturnLength: PULONG = nil): HRESULT; stdcall;
     /// creates a URL Group under the specified server session
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
@@ -1130,26 +1130,26 @@ type
     // URL Group
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     SetUrlGroupProperty: function(UrlGroupId: HTTP_URL_GROUP_ID;
-      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
       PropertyInformationLength: ULONG): HRESULT; stdcall;
     /// queries a property on the specified URL Group
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     QueryUrlGroupProperty: function(UrlGroupId: HTTP_URL_GROUP_ID; aProperty:
-      HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
       PropertyInformationLength: ULONG; pReturnLength: PULONG = nil): HRESULT; stdcall;
     /// sets a new property or modifies an existing property on the request
     // queue identified by the specified handle
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     SetRequestQueueProperty: function(ReqQueueHandle: THandle; aProperty:
-      HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
-      PropertyInformationLength: ULONG; Reserved: ULONG; pReserved: Pointer): HRESULT; stdcall;
+      HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
+      PropertyInformationLength: ULONG; Reserved: ULONG; pReserved: pointer): HRESULT; stdcall;
     ///  queries a property of the request queue identified by the
     // specified handle
     // - available only for HTTP API 2.0 (since Windows Vista / Server 2008)
     QueryRequestQueueProperty: function(ReqQueueHandle: THandle;
-      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: Pointer;
+      aProperty: HTTP_SERVER_PROPERTY; pPropertyInformation: pointer;
       PropertyInformationLength: ULONG; Reserved: ULONG; pReturnLength: PULONG;
-      pReserved: Pointer): HRESULT; stdcall;
+      pReserved: pointer): HRESULT; stdcall;
   end;
 
 var
@@ -1420,7 +1420,7 @@ const
 
 type
   /// low-level API reference to a WebSocket session
-  WEB_SOCKET_HANDLE = Pointer;
+  WEB_SOCKET_HANDLE = pointer;
   /// WebSocket close status as defined by http://tools.ietf.org/html/rfc6455#section-7.4
 
   WEB_SOCKET_CLOSE_STATUS = Word;
@@ -1444,7 +1444,7 @@ type
     dwFlags: DWORD;
     dwAutoDetectFlags: DWORD;
     lpszAutoConfigUrl: PWideChar;
-    lpvReserved: Pointer;
+    lpvReserved: pointer;
     dwReserved: DWORD;
     fAutoLogonIfChallenged: BOOL;
   end;
@@ -1493,20 +1493,20 @@ type
       dwHeadersLength: DWORD; dwModifiers: DWORD): BOOL; stdcall;
     /// Sends the specified request to the HTTP server.
     SendRequest: function(hRequest: HINTERNET; pwszHeaders: PWideChar;
-      dwHeadersLength: DWORD; lpOptional: Pointer; dwOptionalLength: DWORD;
+      dwHeadersLength: DWORD; lpOptional: pointer; dwOptionalLength: DWORD;
       dwTotalLength: DWORD; dwContext: DWORD): BOOL; stdcall;
     /// Ends an HTTP request that is initiated by WinHttpSendRequest.
-    ReceiveResponse: function(hRequest: HINTERNET; lpReserved: Pointer): BOOL; stdcall;
+    ReceiveResponse: function(hRequest: HINTERNET; lpReserved: pointer): BOOL; stdcall;
     /// Retrieves header information associated with an HTTP request.
     QueryHeaders: function(hRequest: HINTERNET; dwInfoLevel: DWORD;
-      pwszName: PWideChar; lpBuffer: Pointer; var lpdwBufferLength,
+      pwszName: PWideChar; lpBuffer: pointer; var lpdwBufferLength,
       lpdwIndex: DWORD): BOOL; stdcall;
     /// Returns the amount of data, in bytes, available to be read with WinHttpReadData.
     QueryDataAvailable: function(hRequest: HINTERNET;
       var lpdwNumberOfBytesAvailable: DWORD): BOOL; stdcall;
     /// Retrieves some options about the current connection.
     QueryOption: function(hInet: HINTERNET; dwOption: DWORD;
-      lpBuffer: Pointer; var lpdwBufferLength: DWORD): BOOL; stdcall;
+      lpBuffer: pointer; var lpdwBufferLength: DWORD): BOOL; stdcall;
     /// Retrieves the low-level Proxy information for a given URI.
     GetProxyForUrl: function(hSession: HINTERNET; lpcwszUrl: LPCWSTR;
       pAutoProxyOptions: PWINHTTP_AUTOPROXY_OPTIONS;
@@ -1515,38 +1515,38 @@ type
     GetIEProxyConfigForCurrentUser: function(
       var pProxyInfo: WINHTTP_CURRENT_USER_IE_PROXY_CONFIG): BOOL; stdcall;
     /// Reads data from a handle opened by the WinHttpOpenRequest function.
-    ReadData: function(hRequest: HINTERNET; lpBuffer: Pointer;
+    ReadData: function(hRequest: HINTERNET; lpBuffer: pointer;
       dwNumberOfBytesToRead: DWORD; var lpdwNumberOfBytesRead: DWORD): BOOL; stdcall;
     /// Sets the various time-outs that are involved with HTTP transactions.
     SetTimeouts: function(hInternet: HINTERNET; dwResolveTimeout: DWORD;
       dwConnectTimeout: DWORD; dwSendTimeout: DWORD; dwReceiveTimeout: DWORD): BOOL; stdcall;
     /// Sets an Internet option.
-    SetOption: function(hInternet: HINTERNET; dwOption: DWORD; lpBuffer: Pointer;
+    SetOption: function(hInternet: HINTERNET; dwOption: DWORD; lpBuffer: pointer;
       dwBufferLength: DWORD): BOOL; stdcall;
     /// Passes the required authorization credentials to the server.
     SetCredentials: function(hRequest: HINTERNET; AuthTargets: DWORD;
       AuthScheme: DWORD; pwszUserName: PWideChar; pwszPassword: PWideChar;
-      pAuthParams: Pointer): BOOL; stdcall;
+      pAuthParams: pointer): BOOL; stdcall;
     /// Completes a WebSocket handshake started by WinHttpSendRequest.
     WebSocketCompleteUpgrade: function(hRequest: HINTERNET;
-      lpReserved: Pointer): HINTERNET; stdcall;
+      lpReserved: pointer): HINTERNET; stdcall;
     /// Closes a WebSocket connection.
     WebSocketClose: function(hWebSocket: HINTERNET; usStatus: Word;
-      pvReason: Pointer; dwReasonLength: DWORD): DWORD; stdcall;
+      pvReason: pointer; dwReasonLength: DWORD): DWORD; stdcall;
     /// Retrieves the close status sent by a server
     WebSocketQueryCloseStatus: function(hWebSocket: HINTERNET;
-      out usStatus: Word; pvReason: Pointer; dwReasonLength: DWORD;
+      out usStatus: Word; pvReason: pointer; dwReasonLength: DWORD;
       out dwReasonLengthConsumed: DWORD): DWORD; stdcall;
     /// Sends data over a WebSocket connection.
     WebSocketSend: function(hWebSocket: HINTERNET;
-      eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE; pvBuffer: Pointer;
+      eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE; pvBuffer: pointer;
       dwBufferLength: DWORD): DWORD; stdcall;
     /// Receives data from a WebSocket connection.
-    WebSocketReceive: function(hWebSocket: HINTERNET; pvBuffer: Pointer;
+    WebSocketReceive: function(hWebSocket: HINTERNET; pvBuffer: pointer;
       dwBufferLength: DWORD; out dwBytesRead: DWORD;
       out eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD; stdcall;
     /// Writes data to a handle opened by the WinHttpOpenRequest function.
-    WriteData: function(hRequest: HINTERNET; lpBuffer: Pointer;
+    WriteData: function(hRequest: HINTERNET; lpBuffer: pointer;
       dwNumberOfBytesToWrite: DWORD; var lpdwNumberOfBytesWritten: DWORD): BOOL; stdcall;
   end;
 
@@ -1671,7 +1671,7 @@ type
 
   WEB_SOCKET_PROPERTY = record
     PropType: WEB_SOCKET_PROPERTY_TYPE;
-    pvValue: Pointer;
+    pvValue: pointer;
     ulValueSize: ULONG;
   end;
 
@@ -1726,7 +1726,7 @@ type
       PWEB_SOCKET_HTTP_HEADER; out pulResponseHeaderCount: ULONG): HRESULT; stdcall;
     /// completes an action started by WebSocketGetAction
     CompleteAction: function(hWebSocket: WEB_SOCKET_HANDLE;
-      pvActionContext: Pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
+      pvActionContext: pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
     /// creates a client-side WebSocket session handle
     CreateClientHandle: function(const pProperties: PWEB_SOCKET_PROPERTY;
       ulPropertyCount: ULONG; out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
@@ -1745,19 +1745,19 @@ type
     EndServerHandshake: function(hWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
     /// returns an action from a call to WebSocketSend, WebSocketReceive or WebSocketCompleteAction
     GetAction: function(hWebSocket: WEB_SOCKET_HANDLE; eActionQueue:
-      WEB_SOCKET_ACTION_QUEUE; pDataBuffers: Pointer {WEB_SOCKET_BUFFER_DATA};
+      WEB_SOCKET_ACTION_QUEUE; pDataBuffers: pointer {WEB_SOCKET_BUFFER_DATA};
       var pulDataBufferCount: ULONG; var pAction: WEB_SOCKET_ACTION;
-      var pBufferType: WEB_SOCKET_BUFFER_TYPE; var pvApplicationContext: Pointer;
-      var pvActionContext: Pointer): HRESULT; stdcall;
+      var pBufferType: WEB_SOCKET_BUFFER_TYPE; var pvApplicationContext: pointer;
+      var pvActionContext: pointer): HRESULT; stdcall;
     /// gets a single WebSocket property
     GetGlobalProperty: function(eType: WEB_SOCKET_PROPERTY_TYPE;
-      pvValue: Pointer; var ulSize: ULONG): HRESULT; stdcall;
+      pvValue: pointer; var ulSize: ULONG): HRESULT; stdcall;
     /// adds a receive operation to the protocol component operation queue
-    Receive: function(hWebSocket: WEB_SOCKET_HANDLE; pBuffer: Pointer;
-      pvContext: Pointer): HRESULT; stdcall;
+    Receive: function(hWebSocket: WEB_SOCKET_HANDLE; pBuffer: pointer;
+      pvContext: pointer): HRESULT; stdcall;
     /// adds a send operation to the protocol component operation queue
     Send: function(hWebSocket: WEB_SOCKET_HANDLE; BufferType:
-      WEB_SOCKET_BUFFER_TYPE; pBuffer, Context: Pointer): HRESULT; stdcall;
+      WEB_SOCKET_BUFFER_TYPE; pBuffer, Context: pointer): HRESULT; stdcall;
   end;
 
   /// identify each TWebSocketApi late-binding API function
@@ -2537,7 +2537,7 @@ begin
     inc(h);
   end;
   FastSetString(result{%H-}, len);
-  d := Pointer(result);
+  d := pointer(result);
   h := aHeaders;
   for i := 1 to aHeadersCount do
   begin
@@ -2554,7 +2554,7 @@ begin
     end;
     inc(h);
   end;
-  Assert(d - Pointer(result) = len);
+  Assert(d - pointer(result) = len);
 end;
 
 

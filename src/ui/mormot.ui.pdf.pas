@@ -11549,7 +11549,7 @@ begin
             ImgRect.Right - ImgRect.Left, ImgRect.Bottom - ImgRect.Top, ImgName);
         end;
       pgcBeginMarkContent:
-        if Len = SizeOf(Pointer) then
+        if Len = SizeOf(pointer) then
           Canvas.BeginMarkedContent(PPointer(P)^);
       pgcEndMarkContent:
         Canvas.EndMarkedContent;

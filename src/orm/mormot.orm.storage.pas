@@ -2765,8 +2765,7 @@ begin
           case TOrmPropInfoRtti(P).PropRtti.Cache.Size of
             SizeOf(Byte):
               begin
-                // e.g. boolean property
-                b := PAnsiChar(@v)^;
+                b := PAnsiChar(@v)^; // 8-bit search (byte or boolean)
                 for i := 0 to fCount - 1 do
                   if (vp^[offs] = b) and
                      FoundOneAndReachedLimit then
@@ -2776,7 +2775,7 @@ begin
               end;
             SizeOf(Word):
               begin
-                w := PWord(@v)^;
+                w := PWord(@v)^; // 16-bit search
                 for i := 0 to fCount - 1 do
                   if (PWord(@vp^[offs])^ = w) and
                      FoundOneAndReachedLimit then
@@ -2786,8 +2785,7 @@ begin
               end;
             SizeOf(Cardinal):
               begin
-                // handle very common 32-bit integer field
-                c := PCardinal(@v)^;
+                c := PCardinal(@v)^; // 32-bit search (most common)
                 for i := 0 to fCount - 1 do
                   if (PCardinal(@vp^[offs])^ = c) and
                      FoundOneAndReachedLimit then

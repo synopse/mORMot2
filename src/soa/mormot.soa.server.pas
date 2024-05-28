@@ -1602,8 +1602,8 @@ type
     fLowLevelConnectionOpaque: PRestServerConnectionOpaque;
     fService: TServiceFactoryServer;
     fReleasedOnClientSide: boolean;
-    fFakeInterface: Pointer;
-    fOpaque: Pointer;
+    fFakeInterface: pointer;
+    fOpaque: pointer;
     fRaiseExceptionOnInvokeError: boolean;
     function CanLog: boolean;
     function CallbackInvoke(const aMethod: TInterfaceMethod;

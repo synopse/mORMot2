@@ -571,10 +571,10 @@ type
       aNoInit: boolean = false); overload;
     /// one-step digital signature of a buffer as lowercase hexadecimal string
     function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
-      aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+      aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step digital signature of a buffer with PBKDF2 derivation
     function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPbkdf2Round: integer; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+      aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec); overload;
@@ -639,7 +639,7 @@ type
     // - returns false on unknown/unsupported algorithm
     function Init(aAlgo: THashAlgo): boolean;
     /// hash the supplied memory buffer
-    procedure Update(aBuffer: Pointer; aLen: integer); overload;
+    procedure Update(aBuffer: pointer; aLen: integer); overload;
     /// hash the supplied string content
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -650,7 +650,7 @@ type
     /// set the resulting hash into a binary buffer, and the size as result
     function Final(out aDigest: THash512Rec): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
-    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+    function Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
     function Full(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
     /// one-step hash computation of several buffers as lowercase hexadecimal string
@@ -658,7 +658,7 @@ type
       var aResult: RawUtf8); overload;
     /// one-step hash computation of a buffer as a binary buffer
     // - returns the written aDigest size in bytes
-    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
+    function Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer;
       out aDigest: THash512Rec): integer; overload;
     /// fill a buffer with the MGF1 seed deriviation, following RFC 2437
     // - a Mask Generation Function expands aSeed/aSeedLen into aDestLen buffer
@@ -788,7 +788,7 @@ function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8Dy
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+function HashFull(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8; overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
 function HashFull(aAlgo: THashAlgo; const aBuffer: RawByteString): RawUtf8; overload;
@@ -3661,7 +3661,7 @@ begin
   end;
 end;
 
-procedure TSynHasher.Update(aBuffer: Pointer; aLen: integer);
+procedure TSynHasher.Update(aBuffer: pointer; aLen: integer);
 begin
   case fAlgo of
     hfMD5:
@@ -3732,7 +3732,7 @@ begin
   result := HASH_SIZE[fAlgo];
 end;
 
-function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8;
 begin
   result := '';
   if Init(aAlgo) then
@@ -3757,7 +3757,7 @@ begin
   Final(aResult);
 end;
 
-function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
+function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer;
   out aDigest: THash512Rec): integer;
 begin
   Init(aAlgo);
@@ -3923,7 +3923,7 @@ begin
 end;
 
 
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+function HashFull(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8;
 var
   hasher: TSynHasher;
 begin
@@ -4158,7 +4158,7 @@ begin
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
-  aBuffer: Pointer; aLen: integer): RawUtf8;
+  aBuffer: pointer; aLen: integer): RawUtf8;
 begin
   Init(aAlgo, aSecret);
   Update(aBuffer, aLen);
@@ -4166,7 +4166,7 @@ begin
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; aBuffer: Pointer; aLen: integer): RawUtf8;
+  aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8;
 begin
   Init(aAlgo, aSecret, aSalt, aSecretPbkdf2Round);
   Update(aBuffer, aLen);
@@ -9010,7 +9010,7 @@ begin
 end;
 
 const
-  CAA_SIZE: array[TCryptAsymAlgo] of Integer = (
+  CAA_SIZE: array[TCryptAsymAlgo] of integer = (
     32,  // caaES256
     48,  // caaES384
     66,  // caaES512

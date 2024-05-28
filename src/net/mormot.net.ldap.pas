@@ -363,7 +363,7 @@ type
   /// define one result for a server identified by CldapBroadcast()
   TCldapServer = record
     /// after how many microseconds this response has been received
-    TimeMicroSec: Integer;
+    TimeMicroSec: integer;
     /// the raw IP address where the UDP response came from
     IP: RawUtf8;
     /// the "dnsHostName" attribute returned by the server

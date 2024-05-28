@@ -129,7 +129,7 @@ type
       X, Y, Time: integer; FontColor: TColor; AlignLeft: boolean = false); overload;
     /// overridden method, Unicode ready
     function CalcHintRect(MaxWidth: integer; const AHint: RawUtf8;
-      AData: Pointer): TRect; reintroduce;
+      AData: pointer): TRect; reintroduce;
     /// the column number when the hint is displayed
     property Col: integer
       read fCol write fCol;
@@ -309,7 +309,7 @@ begin
 end;
 
 function THintWindowDelayed.CalcHintRect(MaxWidth: integer;
-  const AHint: RawUtf8; AData: Pointer): TRect;
+  const AHint: RawUtf8; AData: pointer): TRect;
 begin
   result := Rect(0, 0, MaxWidth, 0);
   DrawTextUtf8(self, Canvas, AHint, result, {calc=}true);

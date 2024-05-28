@@ -155,7 +155,7 @@ type
       var Value: TVarData; OwnValue: PPVarData): TSynMustacheSectionType; virtual;
     function GetHelperFromContext(ValueSpace: integer; const ValueName: RawUtf8;
       var Value: TVarData; OwnValue: PPVarData): TSynMustacheSectionType;
-    procedure TranslateBlock(Text: PUtf8Char; TextLen: Integer); virtual;
+    procedure TranslateBlock(Text: PUtf8Char; TextLen: integer); virtual;
     function GetVariantFromContext(const ValueName: RawUtf8): variant;
     procedure PopContext;
     // inherited class should override those methods used by RenderContext()
@@ -592,7 +592,7 @@ type
       read fTags;
     /// the maximum possible number of nested contexts
     // - i.e. the depth of nested {{#....}} {{/....}} sections
-    property SectionMaxCount: Integer
+    property SectionMaxCount: integer
       read fSectionMaxCount;
   end;
 
@@ -643,7 +643,7 @@ begin
     dec(fContextCount);
 end;
 
-procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: Integer);
+procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: integer);
 var
   s: string;
 begin
@@ -721,7 +721,7 @@ begin
           ',':
             begin
               // {{helper value,123,"constant"}}
-              p := Pointer(valnam);
+              p := pointer(valnam);
               if j = 1 then
                 inc(p); // for {{helper ,"constant1","constant2",123}}
               CsvToRawUtf8DynArray(p, names, ',', true);
@@ -2287,7 +2287,7 @@ begin
       L := i - 1;
       break;
     end;
-  RawUtf8ToVariant(Pointer(tmp), L, Result);
+  RawUtf8ToVariant(pointer(tmp), L, Result);
 end;
 
 class procedure TSynMustache.PowerOfTwo(const Value: variant;

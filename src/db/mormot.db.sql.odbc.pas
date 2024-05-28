@@ -396,7 +396,7 @@ begin
         fSqlDriverFullString[1] := #0;
         Len := 0;
         Check(self, nil,
-          SqlDriverConnectA(fDbc, GetDesktopWindow, Pointer(fDatabaseName),
+          SqlDriverConnectA(fDbc, GetDesktopWindow, pointer(fDatabaseName),
             length(fDatabaseName), pointer(fSqlDriverFullString), length(fSqlDriverFullString),
             Len, DRIVERCOMPLETION[fOdbcProperties.fSqlDriverConnectPrompt]),
           SQL_HANDLE_DBC, fDbc);
@@ -828,7 +828,7 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftCurrency, result);
   else
-    PInt64(@result)^ := StrToCurr64(Pointer(fColData[Col])); // as SQL_C_CHAR
+    PInt64(@result)^ := StrToCurr64(pointer(fColData[Col])); // as SQL_C_CHAR
   end;
 end;
 
@@ -840,7 +840,7 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftDate, result);
   else
-    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(
+    result := PSql_TIMESTAMP_STRUCT(pointer(fColData[Col]))^.ToDateTime(
       fColumns[Col].ColumnValueDBType);
   end;
 end;
@@ -853,7 +853,7 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftDouble, result);
   else
-    result := GetExtended(Pointer(fColData[Col])); // encoded as SQL_C_CHAR
+    result := GetExtended(pointer(fColData[Col])); // encoded as SQL_C_CHAR
   end;
 end;
 
@@ -865,7 +865,7 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftInt64, result);
   else
-    SetInt64(Pointer(fColData[Col]), result); // encoded as SQL_C_CHAR
+    SetInt64(pointer(fColData[Col]), result); // encoded as SQL_C_CHAR
   end;
 end;
 
@@ -891,18 +891,18 @@ begin
     else
       case ColumnType of
         ftInt64:
-          W.AddNoJsonEscape(Pointer(fColData[Col]));  // already as SQL_C_CHAR
+          W.AddNoJsonEscape(pointer(fColData[Col]));  // already as SQL_C_CHAR
         ftDouble,
         ftCurrency:
-          W.AddFloatStr(Pointer(fColData[Col]));      // already as SQL_C_CHAR
+          W.AddFloatStr(pointer(fColData[Col]));      // already as SQL_C_CHAR
         ftDate:
-          W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.
+          W.AddShort(@tmp, PSql_TIMESTAMP_STRUCT(pointer(fColData[Col]))^.
             ToIso8601(tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
         ftUtf8:
           begin
             W.Add('"');
             if ColumnDataSize > 1 then
-              W.AddJsonEscapeW(Pointer(fColData[Col]), ColumnDataSize shr 1);
+              W.AddJsonEscapeW(pointer(fColData[Col]), ColumnDataSize shr 1);
             W.AddDirect('"');
           end;
         ftBlob:

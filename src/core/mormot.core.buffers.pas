@@ -774,15 +774,15 @@ type
     function Next(DataLen: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
-    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
+    function NextSafe(out Data: pointer; DataLen: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
-    procedure Copy(Dest: Pointer; DataLen: PtrInt);
+    procedure Copy(Dest: pointer; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
-    function CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
+    function CopySafe(Dest: pointer; DataLen: PtrInt): boolean;
     /// retrieved cardinal values encoded with TBufferWriter.WriteVarUInt32Array
     // - Values[] will be resized only if it is not long enough, to spare heap
     // - returns decoded count in Values[], which may not be length(Values)
@@ -1774,13 +1774,13 @@ function GetMimeContentTypeFromExt(const FileName: TFileName;
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 
 /// retrieve the MIME content type from a supplied binary buffer
-function GetMimeContentTypeFromMemory(Content: Pointer; Len: PtrInt): TMimeType;
+function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 
 /// retrieve the MIME content type from a supplied binary buffer
 // - inspect the first bytes, to guess from standard known headers
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - returns DefaultContentType if the binary buffer has an unknown layout
-function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
+function GetMimeContentTypeFromBuffer(Content: pointer; Len: PtrInt;
   const DefaultContentType: RawUtf8; Mime: PMimeType = nil): RawUtf8;
 
 /// retrieve the MIME content type from its file name or a supplied binary buffer
@@ -1789,7 +1789,7 @@ function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
 // - default is DefaultContentType or 'application/octet-stream' (BINARY_CONTENT_TYPE)
 // or 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
-function GetMimeContentType(Content: Pointer; Len: PtrInt; const FileName: TFileName = '';
+function GetMimeContentType(Content: pointer; Len: PtrInt; const FileName: TFileName = '';
   const DefaultContentType: RawUtf8 = BINARY_CONTENT_TYPE; Mime: PMimeType = nil): RawUtf8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
@@ -1808,7 +1808,7 @@ const
 // - returns TRUE, if the header in binary buffer "may" be compressed (this
 // method can trigger false positives), e.g. begin with most common already
 // compressed zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
-function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
@@ -3365,7 +3365,7 @@ end;
 
 function GotoNextVarString(Source: PByte): pointer;
 begin
-  result := Pointer(PtrUInt(Source) + FromVarUInt32(Source));
+  result := pointer(PtrUInt(Source) + FromVarUInt32(Source));
 end;
 
 function FromVarString(var Source: PByte): RawUtf8;
@@ -3588,7 +3588,7 @@ begin
   inc(P, DataLen);
 end;
 
-function TFastReader.NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
+function TFastReader.NextSafe(out Data: pointer; DataLen: PtrInt): boolean;
 begin
   if P + DataLen > Last then
     result := false
@@ -3600,7 +3600,7 @@ begin
   end;
 end;
 
-procedure TFastReader.Copy(Dest: Pointer; DataLen: PtrInt);
+procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
 begin
   if P + DataLen > Last then
     ErrorOverflow;
@@ -3608,7 +3608,7 @@ begin
   inc(P, DataLen);
 end;
 
-function TFastReader.CopySafe(Dest: Pointer; DataLen: PtrInt): boolean;
+function TFastReader.CopySafe(Dest: pointer; DataLen: PtrInt): boolean;
 begin
   if P + DataLen > Last then
     result := false
@@ -5165,12 +5165,12 @@ end;
 
 class function TAlgoCompress.Algo(const Comp: RawByteString): TAlgoCompress;
 begin
-  result := Algo(Pointer(Comp), Length(Comp));
+  result := Algo(pointer(Comp), Length(Comp));
 end;
 
 class function TAlgoCompress.Algo(const Comp: TByteDynArray): TAlgoCompress;
 begin
-  result := Algo(Pointer(Comp), Length(Comp));
+  result := Algo(pointer(Comp), Length(Comp));
 end;
 
 class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress;
@@ -7672,7 +7672,7 @@ begin
       inc(i, length(boundary));
       if i = length(Body) then
         exit; // reached the (premature) end
-      P := PUtf8Char(Pointer(Body)) + i - 1;
+      P := PUtf8Char(pointer(Body)) + i - 1;
       Finalize(part);
       // decode section header
       repeat
@@ -7705,7 +7705,7 @@ begin
           exit;
       until PWord(P)^ = 13 + 10 shl 8;
       // decode section content
-      i := P - PUtf8Char(Pointer(Body)) + 3; // i = just after header
+      i := P - PUtf8Char(pointer(Body)) + 3; // i = just after header
       j := PosEx(boundary, Body, i);
       if j = 0 then
       begin
@@ -8575,7 +8575,7 @@ const
      mtZip, mtPdf, mtRar, mt7z, mtSQlite3, mtWma, mtWmv, mtPng, mtGif, mtFont,
      mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4);
 
-function GetMimeContentTypeFromMemory(Content: Pointer; Len: PtrInt): TMimeType;
+function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var
   i: PtrInt;
 begin
@@ -8660,7 +8660,7 @@ begin
   end;
 end;
 
-function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
+function GetMimeContentTypeFromBuffer(Content: pointer; Len: PtrInt;
   const DefaultContentType: RawUtf8; Mime: PMimeType): RawUtf8;
 var
   m: TMimeType;
@@ -8721,7 +8721,7 @@ begin
     FileExt^ := {%H-}ext;
 end;
 
-function GetMimeContentType(Content: Pointer; Len: PtrInt; const FileName: TFileName;
+function GetMimeContentType(Content: pointer; Len: PtrInt; const FileName: TFileName;
   const DefaultContentType: RawUtf8; Mime: PMimeType): RawUtf8;
 var
   ext: RawUtf8;
@@ -8755,7 +8755,7 @@ function GetMimeContentTypeHeader(const Content: RawByteString;
   const FileName: TFileName; Mime: PMimeType): RawUtf8;
 begin
   result := HEADER_CONTENT_TYPE + GetMimeContentType(
-      Pointer(Content), length(Content), FileName, BINARY_CONTENT_TYPE, Mime);
+      pointer(Content), length(Content), FileName, BINARY_CONTENT_TYPE, Mime);
 end;
 
 const
@@ -8790,7 +8790,7 @@ const
     $dbeeabed, // .rpm package file
     $e011cfd0); // msi = D0 CF 11 E0 A1 B1 1A E1
 
-function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
+function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 begin
   // see http://www.garykessler.net/library/file_sigs.html
   result := false;
@@ -9098,7 +9098,7 @@ begin
   L := length(Text);
   if L <> 0 then
   begin
-    MoveFast(Pointer(Text)^, Buffer^, L);
+    MoveFast(pointer(Text)^, Buffer^, L);
     inc(Buffer, L);
   end;
   result := Buffer;

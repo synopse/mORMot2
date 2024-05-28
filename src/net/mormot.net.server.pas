@@ -955,7 +955,7 @@ type
     // here aContext is a THttpServerSocket instance
     procedure Task(aCaller: TSynThreadPoolWorkThread;
       aContext: pointer); override;
-    procedure TaskAbort(aContext: Pointer); override;
+    procedure TaskAbort(aContext: pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
     // - Task() overridden method processs the HTTP request set by Push()
@@ -2047,7 +2047,7 @@ type
     fProtocol: THttpApiWebSocketServerProtocol;
     fOpaqueHTTPRequestId: HTTP_REQUEST_ID;
     fWSHandle: WEB_SOCKET_HANDLE;
-    fLastActionContext: Pointer;
+    fLastActionContext: pointer;
     fLastReceiveTickCount: Int64;
     fPrivateData: pointer;
     fBuffer: RawByteString;
@@ -2058,7 +2058,7 @@ type
     procedure WriteData(const WebsocketBufferData);
     procedure BeforeRead;
     procedure DoOnMessage(aBufferType: WEB_SOCKET_BUFFER_TYPE;
-      aBuffer: Pointer; aBufferSize: ULONG);
+      aBuffer: pointer; aBufferSize: ULONG);
     procedure DoOnConnect;
     procedure DoOnDisconnect;
     procedure InternalSend(aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
@@ -2072,10 +2072,10 @@ type
   public
     /// Send data to client
     procedure Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
-      aBuffer: Pointer; aBufferSize: ULONG);
+      aBuffer: pointer; aBufferSize: ULONG);
     /// Close connection
     procedure Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
-      aBuffer: Pointer; aBufferSize: ULONG);
+      aBuffer: pointer; aBufferSize: ULONG);
     /// Index of connection in protocol's connection list
     property Index: integer
       read fIndex;
@@ -2103,13 +2103,13 @@ type
     var Conn: THttpApiWebSocketConnection): boolean of object;
   /// Event handler on THttpApiWebSocketServerProtocol Message received
   TOnHttpApiWebSocketServerMessageEvent = procedure(var Conn: THttpApiWebSocketConnection;
-    aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG) of object;
+    aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG) of object;
   /// Event handler on THttpApiWebSocketServerProtocol connection
   TOnHttpApiWebSocketServerConnectEvent = procedure(
     var Conn: THttpApiWebSocketConnection) of object;
   /// Event handler on THttpApiWebSocketServerProtocol disconnection
   TOnHttpApiWebSocketServerDisconnectEvent = procedure(var Conn: THttpApiWebSocketConnection;
-    aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG) of object;
+    aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: pointer; aBufferSize: ULONG) of object;
 
   /// Protocol Handler of websocket endpoints events
   // - maintains a list of all WebSockets clients for a given protocol
@@ -2176,13 +2176,13 @@ type
 
     /// Send message to the WebSocket connection identified by its index
     function Send(index: integer; aBufferType: ULONG;
-      aBuffer: Pointer; aBufferSize: ULONG): boolean;
+      aBuffer: pointer; aBufferSize: ULONG): boolean;
     /// Send message to all connections of this protocol
     function Broadcast(aBufferType: ULONG;
-      aBuffer: Pointer; aBufferSize: ULONG): boolean;
+      aBuffer: pointer; aBufferSize: ULONG): boolean;
     /// Close WebSocket connection identified by its index
     function Close(index: integer; aStatus: WEB_SOCKET_CLOSE_STATUS;
-      aBuffer: Pointer; aBufferSize: ULONG): boolean;
+      aBuffer: pointer; aBufferSize: ULONG): boolean;
   end;
 
   THttpApiWebSocketServerProtocolDynArray =
@@ -2282,7 +2282,7 @@ type
     // aContext is a PHttpApiWebSocketConnection, or fServer.fServiceOverlaped
     // (SendServiceMessage) or fServer.fSendOverlaped (WriteData)
     procedure Task(aCaller: TSynThreadPoolWorkThread;
-      aContext: Pointer); override;
+      aContext: pointer); override;
   public
     /// initialize the thread pool
     constructor Create(Server: THttpApiWebSocketServer;
@@ -5038,7 +5038,7 @@ begin
     THttpServerSocket(aContext).TaskProcess(aCaller);
 end;
 
-procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: Pointer);
+procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: pointer);
 begin
   THttpServerSocket(aContext).Free;
 end;
@@ -7451,7 +7451,7 @@ begin
 end;
 
 function THttpApiWebSocketServerProtocol.Broadcast(
-  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer;
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer;
   aBufferSize: ULONG): boolean;
 var
   i: PtrInt;
@@ -7468,7 +7468,7 @@ begin
 end;
 
 function THttpApiWebSocketServerProtocol.Close(index: integer;
-  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: pointer; aBufferSize: ULONG): boolean;
 var
   conn: PHttpApiWebSocketConnection;
 begin
@@ -7560,7 +7560,7 @@ begin
         conn.fBuffer := sReason;
         conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
         conn.Close(WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS,
-          Pointer(conn.fBuffer), Length(conn.fBuffer));
+          pointer(conn.fBuffer), Length(conn.fBuffer));
 // IocpPostQueuedStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
       end;
     end;
@@ -7578,7 +7578,7 @@ begin
 end;
 
 function THttpApiWebSocketServerProtocol.Send(index: integer;
-  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG): boolean;
 var
   conn: PHttpApiWebSocketConnection;
 begin
@@ -7629,7 +7629,7 @@ begin
   reqhead := HttpSys2ToWebSocketHeaders(req^.headers);
   if aNeedHeader then
     result := WebSocketApi.BeginServerHandshake(fWSHandle,
-      Pointer(fProtocol.name), nil, 0, @reqhead[0], Length(reqhead), srvhead,
+      pointer(fProtocol.name), nil, 0, @reqhead[0], Length(reqhead), srvhead,
       srvheadcount) = S_OK
   else
     result := WebSocketApi.BeginServerHandshake(fWSHandle, nil, nil, 0,
@@ -7648,7 +7648,7 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.DoOnMessage(
-  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG);
 
   procedure PushFragmentIntoBuffer;
   var
@@ -7681,7 +7681,7 @@ begin
       else
       begin
         PushFragmentIntoBuffer;
-        fProtocol.OnMessage(self, aBufferType, Pointer(fBuffer), Length(fBuffer));
+        fProtocol.OnMessage(self, aBufferType, pointer(fBuffer), Length(fBuffer));
         fBuffer := '';
       end;
     end;
@@ -7699,7 +7699,7 @@ procedure THttpApiWebSocketConnection.DoOnDisconnect;
 begin
   if (fProtocol <> nil) and
      Assigned(fProtocol.OnDisconnect) then
-    fProtocol.OnDisconnect(self, fCloseStatus, Pointer(fBuffer), length(fBuffer));
+    fProtocol.OnDisconnect(self, fCloseStatus, pointer(fBuffer), length(fBuffer));
 end;
 
 function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
@@ -7831,8 +7831,8 @@ var
   bufcount: ULONG;
   buftyp: WEB_SOCKET_BUFFER_TYPE;
   action: WEB_SOCKET_ACTION;
-  appctxt: Pointer;
-  actctxt: Pointer;
+  appctxt: pointer;
+  actctxt: pointer;
   i: PtrInt;
   err: HRESULT;
 
@@ -7941,7 +7941,7 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
-  aBuffer: Pointer; aBufferSize: ULONG);
+  aBuffer: pointer; aBufferSize: ULONG);
 var
   buf: WEB_SOCKET_BUFFER_DATA;
 begin
@@ -7953,7 +7953,7 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
-  aBuffer: Pointer; aBufferSize: ULONG);
+  aBuffer: pointer; aBufferSize: ULONG);
 var
   buf: WEB_SOCKET_BUFFER_DATA;
 begin
@@ -8207,7 +8207,7 @@ begin
 end;
 
 procedure TSynThreadPoolHttpApiWebSocketServer.Task(
-  aCaller: TSynThreadPoolWorkThread; aContext: Pointer);
+  aCaller: TSynThreadPoolWorkThread; aContext: pointer);
 var
   conn: PHttpApiWebSocketConnection;
 begin
@@ -8238,7 +8238,7 @@ begin
   begin
     conn.DoOnDisconnect;
     if conn.fState = wsClosedByClient then
-      conn.Close(conn.fCloseStatus, Pointer(conn.fBuffer), length(conn.fBuffer));
+      conn.Close(conn.fCloseStatus, pointer(conn.fBuffer), length(conn.fBuffer));
     conn.Disconnect;
     EnterCriticalSection(conn.Protocol.fSafe);
     try

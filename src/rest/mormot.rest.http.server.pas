@@ -256,7 +256,7 @@ type
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetRestServer(Index: Integer): TRestServer;
+    function GetRestServer(Index: integer): TRestServer;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetRestServerAccessRight(Index: integer; Value: POrmAccessRights);
     procedure SetRestServer(aIndex: integer; aServer: TRestServer;
@@ -291,7 +291,7 @@ type
     // - see the overloaded constructors as alternatives with more options,
     // e.g. if you want to use http.sys on Windows or TLS mutual auth callbacks
     constructor Create(const aServers: array of TRestServer; const aPort: RawUtf8;
-      aThreadPoolCount: Integer = 32; aSecurity: TRestHttpServerSecurity = secNone;
+      aThreadPoolCount: integer = 32; aSecurity: TRestHttpServerSecurity = secNone;
       aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS;
       const CertificateFile: TFileName = ''; const PrivateKeyFile: TFileName = '';
       const PrivateKeyPassword: RawUtf8 = ''; const CACertificatesFile: TFileName = '');
@@ -328,7 +328,7 @@ type
     constructor Create(const aPort: RawUtf8;
       const aServers: array of TRestServer; const aDomainName: RawUtf8 = '+';
       aUse: TRestHttpServerUse = HTTP_DEFAULT_MODE;
-      aThreadPoolCount: Integer = 32;
+      aThreadPoolCount: integer = 32;
       aSecurity: TRestHttpServerSecurity = secNone;
       const aAdditionalUrl: RawUtf8 = ''; const aQueueName: SynUnicode = '';
       aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS;
@@ -340,7 +340,7 @@ type
       aServer: TRestServer; const aDomainName: RawUtf8 = '+';
       aUse: TRestHttpServerUse = HTTP_DEFAULT_MODE;
       aRestAccessRights: POrmAccessRights = nil;
-      aThreadPoolCount: Integer = 32;
+      aThreadPoolCount: integer = 32;
       aSecurity: TRestHttpServerSecurity = secNone;
       const aAdditionalUrl: RawUtf8 = ''; const aQueueName: SynUnicode = '';
       aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS);
@@ -722,7 +722,7 @@ begin
 end;
 
 constructor TRestHttpServer.Create(const aServers: array of TRestServer;
-  const aPort: RawUtf8; aThreadPoolCount: Integer;
+  const aPort: RawUtf8; aThreadPoolCount: integer;
   aSecurity: TRestHttpServerSecurity; aOptions: TRestHttpServerOptions;
   const CertificateFile: TFileName; const PrivateKeyFile: TFileName;
   const PrivateKeyPassword: RawUtf8; const CACertificatesFile: TFileName);
@@ -745,7 +745,7 @@ const
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aServers: array of TRestServer; const aDomainName: RawUtf8;
-  aUse: TRestHttpServerUse; aThreadPoolCount: Integer;
+  aUse: TRestHttpServerUse; aThreadPoolCount: integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
   const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions;
   TLS: PNetTlsContext);
@@ -911,7 +911,7 @@ end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
   const aDomainName: RawUtf8; aUse: TRestHttpServerUse;
-  aRestAccessRights: POrmAccessRights; aThreadPoolCount: Integer;
+  aRestAccessRights: POrmAccessRights; aThreadPoolCount: integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
   const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions);
 begin
@@ -962,7 +962,7 @@ begin
   end;
 end;
 
-function TRestHttpServer.GetRestServer(Index: Integer): TRestServer;
+function TRestHttpServer.GetRestServer(Index: integer): TRestServer;
 begin
   result := nil;
   if self = nil then

@@ -622,24 +622,24 @@ end;
 
 // inlined zutil.obj for Delphi Win32
 
-function zcalloc(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
+function zcalloc(AppData: pointer; Items, Size: cardinal): pointer; cdecl;
 begin
   // direct use of the (FastMM4) delphi heap for all zip memory allocation
   Getmem(result, Items * Size);
 end;
 
-procedure zcfree(AppData, Block: Pointer); cdecl;
+procedure zcfree(AppData, Block: pointer); cdecl;
 begin
   // direct use of the (FastMM4) delphi heap for all zip memory allocation
   FreeMem(Block);
 end;
 
-procedure memset(P: Pointer; B: integer; count: integer); cdecl;
+procedure memset(P: pointer; B: integer; count: integer); cdecl;
 begin
   FillCharFast(P^, count, B);
 end;
 
-procedure memcpy(dest, source: Pointer; count: integer); cdecl;
+procedure memcpy(dest, source: pointer; count: integer); cdecl;
 begin
   MoveFast(source^, dest^, count);
 end;
@@ -742,12 +742,12 @@ end;
 
 {$ifndef ZLIBPAS}
 
-function zlibAllocMem(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
+function zlibAllocMem(AppData: pointer; Items, Size: cardinal): pointer; cdecl;
 begin
   Getmem(result, Items * Size);
 end;
 
-procedure zlibFreeMem(AppData, Block: Pointer); cdecl;
+procedure zlibFreeMem(AppData, Block: pointer); cdecl;
 begin
   FreeMem(Block);
 end;
@@ -968,13 +968,13 @@ function libdeflate_crc32;                  external;
 
 // utils.c source is patched to directly use those functions
 
-function libdeflate_malloc(size: cardinal): Pointer;
+function libdeflate_malloc(size: cardinal): pointer;
   public name _PU + 'libdeflate_malloc'; cdecl;
 begin
   result := GetMem(size); // use Delphi/FPC RTL heap
 end;
 
-procedure libdeflate_free(P: Pointer);
+procedure libdeflate_free(P: pointer);
   public name _PU + 'libdeflate_free'; cdecl;
 begin
   FreeMem(P);

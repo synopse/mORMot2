@@ -1721,7 +1721,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 end;
 
 // Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
-procedure KeccakPermutationKernel(B, A, C: Pointer);
+procedure KeccakPermutationKernel(B, A, C: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         {$ifndef WIN64ABI}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         mov     r8, rdx
@@ -4202,7 +4202,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         call    @exp128
 end;
 
-procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
+procedure MakeDecrKeyAesNi(Rounds: integer; RK: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     eax, Rounds
         sub     eax, 9

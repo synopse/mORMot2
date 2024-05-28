@@ -3919,7 +3919,7 @@ begin
         // see e.g. TRestClientUri.EngineExecute
         if reSQL in fCall^.RestAccessRights^.AllowRemoteExecute then
           if (fCall^.InBody <> '') and
-             not (GotoNextNotSpace(Pointer(fCall^.InBody))^ in [#0, '[', '{']) and
+             not (GotoNextNotSpace(pointer(fCall^.InBody))^ in [#0, '[', '{']) and
              orm.EngineExecute(fCall^.InBody) then
             fCall^.OutStatus := HTTP_SUCCESS // 200 ok
           else
@@ -4187,7 +4187,7 @@ var
 begin
   value := GetInputUtf8OrVoid(ParamName);
   if (length(value) <> 8) or
-     not HexDisplayToBin(Pointer(value), @result, SizeOf(result)) then
+     not HexDisplayToBin(pointer(value), @result, SizeOf(result)) then
     result := 0;
 end;
 
@@ -4289,7 +4289,7 @@ begin
   value := GetInputUtf8OrVoid(ParamName);
   if value <> '' then
   begin
-    int := GetInteger(Pointer(value), err);
+    int := GetInteger(pointer(value), err);
     if err = 0 then
       result := true
     else

@@ -2240,7 +2240,7 @@ type
     dwMsgEncodingType: DWORD;
     pSigningCert: PCCERT_CONTEXT;
     HashAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
-    pvHashAuxInfo: Pointer;
+    pvHashAuxInfo: pointer;
     cMsgCert: DWORD;
     rgpMsgCert: PPCCERT_CONTEXT;
     cMsgCrl: DWORD;
@@ -2252,10 +2252,10 @@ type
     dwFlags: DWORD;
     dwInnerContentType: DWORD;
     HashEncryptionAlgorithm: CRYPT_ALGORITHM_IDENTIFIER;
-    pvHashEncryptionAuxInfo: Pointer;
+    pvHashEncryptionAuxInfo: pointer;
   end;
 
-  PFN_CRYPT_GET_SIGNER_CERTIFICATE = function(pvGetArg: Pointer;
+  PFN_CRYPT_GET_SIGNER_CERTIFICATE = function(pvGetArg: pointer;
     dwCertEncodingType: DWORD; pSignerId: PCERT_INFO;
     hMsgCertStore: HCERTSTORE): PCCERT_CONTEXT; stdcall;
   CRYPT_VERIFY_MESSAGE_PARA = record
@@ -2263,7 +2263,7 @@ type
     dwMsgAndCertEncodingType: DWORD;
     hCryptProv: HCRYPTPROV;
     pfnGetSignerCertificate: PFN_CRYPT_GET_SIGNER_CERTIFICATE;
-    pvGetArg: Pointer;
+    pvGetArg: pointer;
   end;
 
   /// direct access to the Windows CryptoApi
@@ -2306,7 +2306,7 @@ type
     /// fills a buffer with cryptographically random bytes
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
-    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
+    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: pointer): BOOL; stdcall;
     /// sign a message (not resolved yet - in crypt32.dll)
     SignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
       fDetachedSignature: BOOL; cToBeSigned: DWORD; rgpbToBeSigned: pointer;
@@ -4087,7 +4087,7 @@ procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
 
 {$ifdef CPUINTEL}
 /// low-level i386/x86_64 asm routine patch and redirection
-procedure RedirectCode(Func, RedirectFunc: Pointer);
+procedure RedirectCode(Func, RedirectFunc: pointer);
 {$endif CPUINTEL}
 
 
@@ -4501,8 +4501,8 @@ type
     procedure SetBool(Index: integer; const Value: boolean);
     function GetUnlockedInt64(Index: integer): Int64;
     procedure SetUnlockedInt64(Index: integer; const Value: Int64);
-    function GetPointer(Index: integer): Pointer;
-    procedure SetPointer(Index: integer; const Value: Pointer);
+    function GetPointer(Index: integer): pointer;
+    procedure SetPointer(Index: integer; const Value: pointer);
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
     function GetIsLocked: boolean;
@@ -4655,7 +4655,7 @@ type
     // - pointers will be stored internally as a varUnknown variant
     // - returns nil if the Index is out of range, or does not store a pointer
     // - allow concurrent thread reading if RWUse was set to uRWLock
-    property LockedPointer[Index: integer]: Pointer
+    property LockedPointer[Index: integer]: pointer
       read GetPointer write SetPointer;
     /// safe locked access to an UTF-8 string value
     // - you may store up to 7 variables, using an 0..6 index, shared with
@@ -5125,7 +5125,7 @@ type
 function OpenSCManagerW(lpMachineName, lpDatabaseName: PWideChar;
   dwDesiredAccess: cardinal): SC_HANDLE; stdcall; external advapi32;
 function ChangeServiceConfig2W(hService: SC_HANDLE; dwsInfoLevel: cardinal;
-  lpInfo: Pointer): BOOL; stdcall; external advapi32;
+  lpInfo: pointer): BOOL; stdcall; external advapi32;
 function StartServiceW(hService: SC_HANDLE; dwNumServiceArgs: cardinal;
   lpServiceArgVectors: PPWideChar): BOOL; stdcall; external advapi32;
 function CreateServiceW(hSCManager: SC_HANDLE;
@@ -5140,7 +5140,7 @@ function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advap
 function QueryServiceStatus(hService: SC_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function QueryServiceStatusEx(hService: SC_HANDLE;
-  InfoLevel: SC_STATUS_TYPE; lpBuffer: Pointer; cbBufSize: cardinal;
+  InfoLevel: SC_STATUS_TYPE; lpBuffer: pointer; cbBufSize: cardinal;
   var pcbBytesNeeded: cardinal): BOOL; stdcall; external advapi32;
 function ControlService(hService: SC_HANDLE; dwControl: cardinal;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
@@ -5336,8 +5336,8 @@ type
     fStatusRec: TServiceStatus;
     fArgsList: TRawUtf8DynArray;
     fStatusHandle: THandle;
-    function GetArgCount: Integer;
-    function GetArgs(Idx: Integer): RawUtf8;
+    function GetArgCount: integer;
+    function GetArgs(Idx: integer): RawUtf8;
     function GetInstalled: boolean;
     procedure SetStatus(const Value: TServiceStatus);
     procedure CtrlHandle(Code: cardinal);
@@ -5380,11 +5380,11 @@ type
     procedure Execute; virtual;
 
     /// Number of arguments passed to the service by the service controler
-    property ArgCount: Integer
+    property ArgCount: integer
       read GetArgCount;
     /// List of arguments passed to the service by the service controler
     // - Idx is in range 0..ArgCount - 1
-    property Args[Idx: Integer]: RawUtf8
+    property Args[Idx: integer]: RawUtf8
       read GetArgs;
     /// Any data You wish to associate with the service object
     property Data: cardinal
@@ -6551,7 +6551,7 @@ begin
 end;
 
 {$ifdef CPUINTEL}
-procedure RedirectCode(Func, RedirectFunc: Pointer);
+procedure RedirectCode(Func, RedirectFunc: pointer);
 var
   rel: PtrInt;
   NewJump: packed record
@@ -7871,7 +7871,7 @@ begin
     // nothing to be done on this platform
     exit;
   // toggle execution permission of memory to be able to write into memory
-  PageAlignedFakeStub := Pointer(
+  PageAlignedFakeStub := pointer(
     (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   if Exec then
     flags := PROT_READ OR PROT_EXEC
@@ -10124,7 +10124,7 @@ begin
   end;
 end;
 
-function TSynLocker.GetPointer(Index: integer): Pointer;
+function TSynLocker.GetPointer(Index: integer): pointer;
 begin
   if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
@@ -10147,7 +10147,7 @@ begin
     result := nil;
 end;
 
-procedure TSynLocker.SetPointer(Index: integer; const Value: Pointer);
+procedure TSynLocker.SetPointer(Index: integer; const Value: pointer);
 begin
   if cardinal(Index) <= high(Padding) then
   try

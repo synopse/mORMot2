@@ -785,7 +785,7 @@ const
     'ZHhnT2RzGDGHrq115yC+T8SwTo7/h5p/2AuO4fXWP6MWXMJcXUGs6MshY5vgH4QY'#13#10 +
     'BPyNxBYuEhvuYUZ3nJXJZZ0='#13#10 +
     '-----END PRIVATE KEY-----'#13#10;
-  _rsapub = // see _rsapriv defined above
+  _rsapub = // openssl rsa -pubout -in priv.pem -out pub.pem
     '-----BEGIN PUBLIC KEY-----'#13#10 +
     'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQ4/dhzEXlDpj71dwF3T'#13#10 +
     't1Sx/COvd6Y8R4kxgcLblmdt3BCmGAYgNS2yf0ORcGKse+wYLG+BV8rIT2zRPbrI'#13#10 +

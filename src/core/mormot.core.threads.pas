@@ -1166,7 +1166,7 @@ type
     /// process to be executed after notification
     procedure Task(aCaller: TSynThreadPoolWorkThread;
       aContext: pointer); virtual; abstract;
-    procedure TaskAbort(aContext: Pointer); virtual;
+    procedure TaskAbort(aContext: pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
@@ -3475,7 +3475,7 @@ begin
   result := true;
 end;
 
-procedure TSynThreadPool.TaskAbort(aContext: Pointer);
+procedure TSynThreadPool.TaskAbort(aContext: pointer);
 begin
 end;
 

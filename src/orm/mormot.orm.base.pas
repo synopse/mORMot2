@@ -5833,7 +5833,7 @@ begin
   fPropInfo.GetLongStrProp(Instance, temp);
   aValue.Options := [];
   aValue.VType := ftUtf8;
-  aValue.VText := Pointer(temp);
+  aValue.VText := pointer(temp);
 end;
 
 function TOrmPropInfoRttiRawUtf8.CompareValue(Item1, Item2: TObject;
@@ -6333,7 +6333,7 @@ begin
   RawUnicodeToUtf8(pointer(tmp), length(tmp), RawUtf8(temp));
   aValue.Options := [];
   aValue.VType := ftUtf8;
-  aValue.VText := Pointer(temp);
+  aValue.VText := pointer(temp);
 end;
 
 {$endif HASVARUSTRING}
@@ -7974,12 +7974,12 @@ end;
 
 function TOrmTableAbstract.FieldIndex(const FieldName: RawUtf8): PtrInt;
 begin
-  result := FieldIndex(Pointer(FieldName));
+  result := FieldIndex(pointer(FieldName));
 end;
 
 function TOrmTableAbstract.FieldIndexExisting(const FieldName: RawUtf8): PtrInt;
 begin
-  result := FieldIndex(Pointer(FieldName));
+  result := FieldIndex(pointer(FieldName));
   if result < 0 then
     EOrmTable.RaiseUtf8('%.FieldIndexExisting("%")', [self, FieldName]);
 end;

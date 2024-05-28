@@ -1808,7 +1808,7 @@ type
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
-    function ItemCopyFirstField(Source, Dest: Pointer): boolean;
+    function ItemCopyFirstField(Source, Dest: pointer): boolean;
     /// save an array element into a serialized binary content
     // - use the same layout as TDynArray.SaveTo, but for a single item
     // - you can use ItemLoad method later to retrieve its content
@@ -5530,7 +5530,7 @@ begin
     PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord(NameValueSep);
     table := @NormToUpperAnsi7;
     for result := 0 to fCount - 1 do
-      if IdemPChar(Pointer(fValue[result]), UpperName, table) then
+      if IdemPChar(pointer(fValue[result]), UpperName, table) then
         exit;
   end;
   result := -1;
@@ -7617,7 +7617,7 @@ begin
           P2 := P1 + n * 24;
           while P1 < P2 do
           begin
-            ExchgVariant(Pointer(P1), Pointer(P2));
+            ExchgVariant(pointer(P1), pointer(P2));
             inc(P1, 24);
             dec(P2, 24);
           end;
@@ -7828,7 +7828,7 @@ begin
   end;
 end;
 
-function TDynArray.ItemCopyFirstField(Source, Dest: Pointer): boolean;
+function TDynArray.ItemCopyFirstField(Source, Dest: pointer): boolean;
 var
   rtti: PRttiInfo;
 begin

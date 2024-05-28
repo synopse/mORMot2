@@ -811,40 +811,40 @@ end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
-  ST, LT: TSystemTime;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
+  systim, loctim: TSystemTime;
 begin
   if (FileName <> '') and
-     GetFileAttributesInternal(FileName, FA) and
-     FileTimeToSystemTime({%H-}FA.ftLastWriteTime, ST) and
-     SystemTimeToTzSpecificLocalTime(nil, ST, LT) then
-    result := SystemTimeToDateTime(LT)
+     GetFileAttributesInternal(FileName, fa) and
+     FileTimeToSystemTime({%H-}fa.ftLastWriteTime, systim) and
+     SystemTimeToTzSpecificLocalTime(nil, systim, loctim) then
+    result := SystemTimeToDateTime(loctim)
   else
     result := 0;
 end;
 
 function FileAgeToUnixTimeUtc(const FileName: TFileName; AllowDir: boolean): TUnixTime;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   if (FileName <> '') and
-     GetFileAttributesInternal(FileName, FA) and
-     (AllowDir or ({%H-}FA.dwFileAttributes and faDirectory = 0)) then
-    result := FileTimeToUnixTime(FA.ftLastWriteTime) // no local time conversion
+     GetFileAttributesInternal(FileName, fa) and
+     (AllowDir or ({%H-}fa.dwFileAttributes and faDirectory = 0)) then
+    result := FileTimeToUnixTime(fa.ftLastWriteTime) // no local time conversion
   else
     result := 0;
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
   ft: TFileTime;
 begin
   result := 0;
   if (FileName <> '') and
-     GetFileAttributesInternal(FileName, FA) and
-     ({%H-}FA.dwFileAttributes and faDirectory = 0) and
-     FileTimeToLocalFileTime(FA.ftLastWriteTime, ft) and
+     GetFileAttributesInternal(FileName, fa) and
+     ({%H-}fa.dwFileAttributes and faDirectory = 0) and
+     FileTimeToLocalFileTime(fa.ftLastWriteTime, ft) and
      not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
     result := 0;
 end;
@@ -856,19 +856,19 @@ end;
 
 function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean;
 var
-  D: THandle;
+  h: THandle;
   ft: TFileTime;
 begin
   result := false;
   if (Dest = '') or
      (Time = 0) then
     exit;
-  D := FileOpen(Dest, fmOpenWrite);
-  if not ValidHandle(D) then
+  h := FileOpen(Dest, fmOpenWrite);
+  if not ValidHandle(h) then
     exit;
   UnixTimeToFileTime(Time, ft);
-  result := SetFileTime(D, nil, nil, @ft);
-  FileClose(D);
+  result := SetFileTime(h, nil, nil, @ft);
+  FileClose(h);
 end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
@@ -959,46 +959,46 @@ end;
 
 function FileIsWritable(const FileName: TFileName): boolean;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   result := (FileName <> '') and
-            GetFileAttributesInternal(FileName, FA) and
-            (FA.dwFileAttributes and faReadOnly = 0);
+            GetFileAttributesInternal(FileName, fa) and
+            (fa.dwFileAttributes and faReadOnly = 0);
 end;
 
 function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean): boolean;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   result := (FileName <> '') and
-            GetFileAttributesInternal(FileName, FA, FollowLink) and
-            ((FA.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
+            GetFileAttributesInternal(FileName, fa, FollowLink) and
+            ((fa.dwFileAttributes and faDirectory <> 0) = CheckAsDir);
 end;
 
 function DirectoryExists(const FileName: TFileName; FollowLink: boolean): boolean;
 var
-  L: integer;
+  len: PtrInt;
 begin
-  L := length(FileName);
-  if L = 0 then
+  len := length(FileName);
+  if len = 0 then
     result := false
-  else if (L = 1) and
+  else if (len = 1) and
           (FileName[1] = '.') then
     result := true
-  else if FileName[L] <> '\' then
+  else if FileName[len] <> '\' then
     result := FileExists(FileName, FollowLink, {checkasdir=}true)
   else
-    result := FileExists(copy(FileName, 1, L - 1), FollowLink, true);
+    result := FileExists(copy(FileName, 1, len - 1), FollowLink, true);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   if (FileName <> '') and
-     GetFileAttributesInternal(FileName, FA) and
-     (FA.dwFileAttributes and faDirectory = 0) then
-    result := Qword(FA.nFileSizeHigh) shl 32 + FA.nFileSizeLow
+     GetFileAttributesInternal(FileName, fa) and
+     (fa.dwFileAttributes and faDirectory = 0) then
+    result := Qword(fa.nFileSizeHigh) shl 32 + fa.nFileSizeLow
   else
     result := 0;
 end;
@@ -1006,15 +1006,15 @@ end;
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
   out FileTimestampUtc: TUnixMSTime): boolean;
 var
-  FA: WIN32_FILE_ATTRIBUTE_DATA;
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
 begin
   result := (FileName <> '') and
-            GetFileAttributesInternal(FileName, FA);
+            GetFileAttributesInternal(FileName, fa);
   if not result then
     exit;
-  PInt64Rec(@FileSize)^.Lo := FA.nFileSizeLow;
-  PInt64Rec(@FileSize)^.Hi := FA.nFileSizeHigh;
-  FileTimestampUtc := FileTimeToUnixMSTime(FA.ftLastWriteTime) // no local time
+  PInt64Rec(@FileSize)^.Lo := fa.nFileSizeLow;
+  PInt64Rec(@FileSize)^.Hi := fa.nFileSizeHigh;
+  FileTimestampUtc := FileTimeToUnixMSTime(fa.ftLastWriteTime) // no local time
 end;
 
 function GetFileSizeEx(hFile: THandle; var FileSize: Int64): BOOL;
@@ -1099,20 +1099,20 @@ end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 var
-  FileTime: TFileTime;
-  D: THandle;
+  ft: TFileTime;
+  d: THandle;
 begin
   if (Dest = '') or
      not ValidHandle(SourceHandle) then
     result := false
   else
   begin
-    D := FileOpen(Dest, fmOpenWrite);
-    if ValidHandle(D) then
+    d := FileOpen(Dest, fmOpenWrite);
+    if ValidHandle(d) then
     begin
-      result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
-                SetFileTime(D, nil, nil, @FileTime);
-      FileClose(D);
+      result := GetFileTime(SourceHandle, nil, nil, @ft) and
+                SetFileTime(d, nil, nil, @ft);
+      FileClose(d);
     end
     else
       result := false;
@@ -1121,17 +1121,17 @@ end;
 
 function FileSetDateFrom(const Dest, Source: TFileName): boolean;
 var
-  S: THandle;
+  s: THandle;
 begin
   result := false;
   if (Dest = '') or
      (Source = '') then
     exit;
-  S := FileOpen(Source, fmOpenReadShared);
-  if not ValidHandle(S) then
+  s := FileOpen(Source, fmOpenReadShared);
+  if not ValidHandle(s) then
     exit;
-  result := FileSetDateFrom(Dest, S);
-  FileClose(S);
+  result := FileSetDateFrom(Dest, s);
+  FileClose(s);
 end;
 
 procedure FileSetAttr(const FileName: TFileName; Attr: integer);
@@ -1778,7 +1778,7 @@ var
   OldUnWindProc: pointer;
 
 procedure SynRtlUnwind(TargetFrame, TargetIp: pointer;
-  ExceptionRecord: PExceptionRecord; ReturnValue: Pointer); stdcall;
+  ExceptionRecord: PExceptionRecord; ReturnValue: pointer); stdcall;
 asm
         cmp     dword ptr _RawLogException, 0
         jz      @old
@@ -1893,7 +1893,7 @@ end;
 
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
-  S: PAnsiChar;
+  beg: PAnsiChar;
 begin
   result := '';
   while P^ <= ' ' do
@@ -1901,11 +1901,11 @@ begin
       exit
     else
       inc(P);
-  S := P;
+  beg := P;
   repeat
     inc(P);
   until P^ <= ' ';
-  FastSetString(result, S, P - S);
+  FastSetString(result, beg, P - beg);
 end;
 
 const
@@ -2367,7 +2367,7 @@ function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
 {
 // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root -> not used
 function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWord;
-  lpInBuffer: Pointer; nInBufferSize: DWord; lpOutBuffer: Pointer;
+  lpInBuffer: pointer; nInBufferSize: DWord; lpOutBuffer: pointer;
   nOutBufferSize: DWord; var lpBytesReturned: DWord;
   lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
 }
@@ -2612,25 +2612,25 @@ end;
 
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
-  Size, Size2: DWord;
-  Pt: Pointer;
-  Trans: PWordArray;
-  LanguageInfo: RawUtf8;
-  Info: ^TVSFixedFileInfo;
-  FileTime: TFILETIME;
-  SystemTime: TSYSTEMTIME;
+  siz, siz2: DWord;
+  pt: pointer;
+  trans: PWordArray;
+  lngnfo: RawUtf8;
+  nfo: ^TVSFixedFileInfo;
+  ft: TFILETIME;
+  st: TSYSTEMTIME;
   tmp: TW32Temp;
 
   function ReadResourceByName(const From: RawUtf8): RawUtf8;
   var
-    StrValPt: pointer;
+    str: pointer;
     sz: DWord;
     u: SynUnicode;
   begin
-    u := Utf8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
-    VerQueryValueW(Pt, pointer(u), StrValPt, sz);
+    u := Utf8Decode('\StringFileInfo\' + lngnfo + '\' + From);
+    VerQueryValueW(pt, pointer(u), str, sz);
     if sz > 0 then
-      Win32PWideCharToUtf8(StrValPt, result)
+      Win32PWideCharToUtf8(str, result)
     else
       result := '';
   end;
@@ -2641,15 +2641,15 @@ begin
     exit;
   // GetFileVersionInfo() modifies the filename parameter data while parsing
   // -> copy the FileName into local tmp buffer to create a writable copy
-  Size := GetFileVersionInfoSizeW(W32Copy(fFileName, tmp), Size2);
-  if Size > 0 then
+  siz := GetFileVersionInfoSizeW(W32Copy(fFileName, tmp), siz2);
+  if siz > 0 then
   begin
-    GetMem(Pt, Size);
+    GetMem(pt, siz);
     try
-      if GetFileVersionInfoW(W32Copy(fFileName, tmp), 0, Size, Pt) then
+      if GetFileVersionInfoW(W32Copy(fFileName, tmp), 0, siz, pt) then
       begin
-        VerQueryValueW(Pt, '\', pointer(Info), Size2);
-        with Info^ do
+        VerQueryValueW(pt, '\', pointer(nfo), siz2);
+        with nfo^ do
         begin
           SetVersion({major=}   dwFileVersionMS shr 16,
                      {minor=}   word(dwFileVersionMS),
@@ -2658,17 +2658,17 @@ begin
           if (dwFileDateLS <> 0) and
              (dwFileDateMS <> 0) then
           begin
-            FileTime.dwLowDateTime := dwFileDateLS; // built date from version info
-            FileTime.dwHighDateTime := dwFileDateMS;
-            FileTimeToSystemTime(FileTime, SystemTime);
+            ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
+            ft.dwHighDateTime := dwFileDateMS;
+            FileTimeToSystemTime(ft, st);
             fBuildDateTime := EncodeDate(
-              SystemTime.wYear, SystemTime.wMonth, SystemTime.wDay);
+              st.wYear, st.wMonth, st.wDay);
           end;
         end;
-        VerQueryValueW(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
-        if Size2 >= 4 then
+        VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2);
+        if siz2 >= 4 then
         begin
-          _fmt('%4.4x%4.4x', [Trans^[0], Trans^[1]], LanguageInfo);
+          _fmt('%4.4x%4.4x', [trans^[0], trans^[1]], lngnfo);
           CompanyName      := ReadResourceByName('CompanyName');
           FileDescription  := ReadResourceByName('FileDescription');
           FileVersion      := ReadResourceByName('FileVersion');
@@ -2682,7 +2682,7 @@ begin
         result := true;
       end;
     finally
-      Freemem(Pt);
+      Freemem(pt);
     end;
   end;
 end;
@@ -2791,10 +2791,10 @@ end;
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
-  RestoreProtection, Ignore: DWord;
+  restore, ignore: DWord;
   i: PtrInt;
 begin
-  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, RestoreProtection) then
+  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then
   begin
     if Backup <> nil then
       for i := 0 to Size - 1 do  // do not use Move() here
@@ -2802,7 +2802,7 @@ begin
     for i := 0 to Size - 1 do    // do not use Move() here
       PByteArray(Old)^[i] := PByteArray(New)^[i];
     if not LeaveUnprotected then
-      VirtualProtect(Old, Size, RestoreProtection, Ignore);
+      VirtualProtect(Old, Size, restore, ignore);
     FlushInstructionCache(GetCurrentProcess, Old, Size);
     if not CompareMemFixed(Old, New, Size) then
       raise Exception.Create('PatchCode?');
@@ -3306,7 +3306,8 @@ begin
     exit;
   nl := SizeOf(n);
   dl := SizeOf(d);
-  if LookupAccountSidW(Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
+  if LookupAccountSidW(
+       Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
   begin
     Win32PWideCharToUtf8(@n, name);
     Win32PWideCharToUtf8(@d, domain);
@@ -3567,8 +3568,8 @@ type
     RootDirectory: THandle;
     ObjectName: PUNICODE_STRING;
     Attributes: ULONG;
-    SecurityDescriptor: Pointer;       // Points to type SECURITY_DESCRIPTOR
-    SecurityQualityOfService: Pointer; // Points to type SECURITY_QUALITY_OF_SERVICE
+    SecurityDescriptor: pointer;       // Points to type SECURITY_DESCRIPTOR
+    SecurityQualityOfService: pointer; // Points to type SECURITY_QUALITY_OF_SERVICE
   end;
   POBJECT_ATTRIBUTES = ^OBJECT_ATTRIBUTES;
 
@@ -3622,8 +3623,8 @@ begin
   end;
 end;
 
-function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer;
-  lpBuffer: Pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
+function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: pointer;
+  lpBuffer: pointer; nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL;
     stdcall; external kernel32;
 
 function InternalGetProcessInfo(aPID: DWord; out aInfo: TWinProcessInfo): boolean;
@@ -3774,23 +3775,23 @@ const
     'CryptDecrypt',
     'CryptGenRandom');
 var
-  P: PPointer;
+  p: PPointer;
   i: PtrInt;
 begin
   Tested := true;
   Handle := GetModuleHandle('advapi32.dll');
   if Handle <> 0 then
   begin
-    P := @@AcquireContextA;
+    p := @@AcquireContextA;
     for i := 0 to high(NAMES) do
     begin
-      P^ := LibraryResolve(Handle, NAMES[i]);
-      if P^ = nil then
+      p^ := LibraryResolve(Handle, NAMES[i]);
+      if p^ = nil then
       begin
         PPointer(@@AcquireContextA)^ := nil;
         break;
       end;
-      inc(P);
+      inc(p);
     end;
   end;
   // note: CryptSignMessage and CryptVerifyMessageSignature are in crypt32.dll
@@ -3815,12 +3816,12 @@ const
   CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
 
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
     stdcall; external crypt32;
 
 function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
-  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWord;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
   var DataOut: DATA_BLOB): BOOL;
     stdcall; external crypt32;
 
@@ -4230,7 +4231,7 @@ var
 begin
   for i := 1 to ParamCount do
   begin
-    param := SysUtils.LowerCase(paramstr(i));
+    param := SysUtils.LowerCase(ParamStr(i));
     TService.DoLog(sllInfo,
       'Controling % with command [%]', [ServiceName, param], nil);
     if param = '/install' then
@@ -4421,12 +4422,12 @@ begin
   DoLog(sllTrace, '% Execute finished', [ServiceName], self);
 end;
 
-function TService.GetArgCount: Integer;
+function TService.GetArgCount: integer;
 begin
   result := length(fArgsList);
 end;
 
-function TService.GetArgs(Idx: Integer): RawUtf8;
+function TService.GetArgs(Idx: integer): RawUtf8;
 begin
   if cardinal(Idx) > cardinal(high(fArgsList)) then
     result := ''
@@ -4829,43 +4830,43 @@ end;
 
 type
   TJobObjectInfoClass = (
-    BasicLimitInformation = 2,
-    JobObjectBasicProcessIdList = 3,
-    BasicUIRestrictions = 4,
-    SecurityLimitInformation = 5,
-    EndOfJobTimeInformation = 6,
+    BasicLimitInformation              = 2,
+    JobObjectBasicProcessIdList        = 3,
+    BasicUIRestrictions                = 4,
+    SecurityLimitInformation           = 5,
+    EndOfJobTimeInformation            = 6,
     AssociateCompletionPortInformation = 7,
-    ExtendedLimitInformation = 9,
-    GroupInformation = 11);
+    ExtendedLimitInformation           = 9,
+    GroupInformation                   = 11);
 
   TJobObjectBasicLimitInformation = record
     PerProcessUserTimeLimit: LARGE_INTEGER;
-    PerJobUserTimeLimit: LARGE_INTEGER;
-    LimitFlags: DWord;
+    PerJobUserTimeLimit:     LARGE_INTEGER;
+    LimitFlags:            DWord;
     MinimumWorkingSetSize: PtrUInt;
     MaximumWorkingSetSize: PtrUInt;
-    ActiveProcessLimit: DWord;
-    Affinity: PtrUInt;
-    PriorityClass: DWord;
-    SchedulingClass: DWord;
+    ActiveProcessLimit:    DWord;
+    Affinity:              PtrUInt;
+    PriorityClass:         DWord;
+    SchedulingClass:       DWord;
   end;
 
   TIOCounter = record
-    ReadOperationCount: QWord;
+    ReadOperationCount:  QWord;
     WriteOperationCount: QWord;
     OtherOperationCount: QWord;
-    ReadTransferCount: QWord;
-    WriteTransferCount: QWord;
-    OtherTransferCount: QWord;
+    ReadTransferCount:   QWord;
+    WriteTransferCount:  QWord;
+    OtherTransferCount:  QWord;
   end;
 
   TJobObjectExtendedLimitInformation = record
     BasicLimitInformation: TJobObjectBasicLimitInformation;
-    IoInfo: TIOCounter;
-    ProcessMemoryLimit: PtrUInt;
-    JobMemoryLimit: PtrUInt;
+    IoInfo:                TIOCounter;
+    ProcessMemoryLimit:    PtrUInt;
+    JobMemoryLimit:        PtrUInt;
     PeakProcessMemoryUsed: PtrUInt;
-    PeakJobMemoryUsed: PtrUInt;
+    PeakJobMemoryUsed:     PtrUInt;
   end;
 
 const
@@ -4893,7 +4894,7 @@ function AssignProcessToJobObject(hJob, hProcess: THandle): BOOL;
 // redefined here so that we can share code with FPC and Delphi
 function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
    lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;
-   bInheritHandles: BOOL; dwCreationFlags: cardinal; lpEnvironment: Pointer;
+   bInheritHandles: BOOL; dwCreationFlags: cardinal; lpEnvironment: pointer;
    lpCurrentDirectory: PWideChar; const lpStartupInfo: TStartupInfo;
    out lpProcessInformation: TProcessInformation): BOOL;
   stdcall; external kernel32;
@@ -5307,7 +5308,7 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-function GetLocalTimeOffset: Integer; // not defined in oldest Delphi
+function GetLocalTimeOffset: integer; // not defined in oldest Delphi
 var
   tzi: TTimeZoneInformation;
 begin

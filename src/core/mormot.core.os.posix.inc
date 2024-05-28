@@ -2992,7 +2992,7 @@ end;
 {$endif OSBSDDARWIN}
 
 {$ifdef USEMPROTECT}
-function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
+function mprotect(Addr: pointer; Len: size_t; Prot: integer): integer;
   cdecl external clib name 'mprotect';
 {$endif USEMPROTECT}
 
@@ -3022,7 +3022,7 @@ begin
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := SystemInfo.dwPageSize;
   AlignedAddr :=
-    Pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
+    pointer((PtrUInt(Old) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   while PtrUInt(Old) + PtrUInt(Size) >= PtrUInt(AlignedAddr) + PageSize do
     inc(PageSize, SystemInfo.dwPageSize);
   ProtectedResult := SynMProtect(

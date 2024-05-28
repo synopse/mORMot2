@@ -4848,7 +4848,7 @@ begin
     FastNewRawByteString(aEncrypted, len + SizeOf(THash256)); // trailing MAC
     // encrypt the input
     fAes[true].EncryptPkcs7Buffer(
-      Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
+      pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
     // compute and store the MAC, calling IncKM(true)
     ComputeMac({encrypt=}true, pointer(aEncrypted), len,
       PHash256Rec(@PByteArray(aEncrypted)[len])^);
@@ -5093,7 +5093,7 @@ begin
     MsgOut := BinToBase64(@out1, SizeOf(out1));
     result := sprSuccess;
   end
-  else if Base64ToBin(Pointer(MsgIn), @in2, length(MsgIn), SizeOf(in2)) then
+  else if Base64ToBin(pointer(MsgIn), @in2, length(MsgIn), SizeOf(in2)) then
     result := ValidateHandshake(in2)
   else
     result := sprBadRequest;
@@ -5184,7 +5184,7 @@ var
   in1: TEcdheFrameClient;
   out1: TEcdheFrameServer;
 begin
-  if Base64ToBin(Pointer(MsgIn), @in1, length(MsgIn), SizeOf(in1)) then
+  if Base64ToBin(pointer(MsgIn), @in1, length(MsgIn), SizeOf(in1)) then
   begin
     result := ComputeHandshake(in1, out1);
     MsgOut := BinToBase64(@out1, SizeOf(out1));

@@ -72,7 +72,7 @@ type
   {$endif UNICODE}
 
   {$ifndef ISDELPHIXE4}
-  TValueBuffer = Pointer;
+  TValueBuffer = pointer;
   {$endif ISDELPHIXE4}
   
   PDateTimeRec = ^TDateTimeRec;
@@ -778,7 +778,7 @@ begin
             W.Add('"');
           {$ifndef UNICODE}
             if ColumnValueDBType = IsTWideStringField then
-              W.AddJsonEscapeW(Pointer(TWideStringField(ColumnAttr).Value))
+              W.AddJsonEscapeW(pointer(TWideStringField(ColumnAttr).Value))
             else
           {$endif UNICODE}
               W.AddJsonEscapeString(f.AsString);

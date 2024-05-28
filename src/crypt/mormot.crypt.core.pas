@@ -464,11 +464,11 @@ type
     // supplied buffer will be hashed using gf_mul_h()
     function Reset(pIV: pointer; IV_len: PtrInt): boolean;
     /// encrypt a buffer with AES-GCM, updating the associated authentication data
-    function Encrypt(ptp, ctp: Pointer; ILen: PtrInt): boolean;
+    function Encrypt(ptp, ctp: pointer; ILen: PtrInt): boolean;
     /// decrypt a buffer with AES-GCM, updating the associated authentication data
     // - also validate the GMAC with the supplied ptag/tlen if ptag<>nil,
     // and skip the AES-CTR phase if the authentication doesn't match
-    function Decrypt(ctp, ptp: Pointer; ILen: PtrInt;
+    function Decrypt(ctp, ptp: pointer; ILen: PtrInt;
       ptag: pointer = nil; tlen: PtrInt = 0): boolean;
     /// append some data to be authenticated, but not encrypted
     function Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
@@ -482,11 +482,11 @@ type
     /// single call AES-GCM encryption and authentication process
     function FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
       pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
-      ptp, ctp: Pointer; pLen: PtrInt; out tag: TAesBlock): boolean;
+      ptp, ctp: pointer; pLen: PtrInt; out tag: TAesBlock): boolean;
     /// single call AES-GCM decryption and verification process
     function FullDecryptAndVerify(const Key; KeyBits: PtrInt;
       pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt;
-      ctp, ptp: Pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
+      ctp, ptp: pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
   end;
 
   /// the AES chaining modes implemented by this unit
@@ -5016,7 +5016,7 @@ begin
   result := true;
 end;
 
-function TAesGcmEngine.Encrypt(ptp, ctp: Pointer; ILen: PtrInt): boolean;
+function TAesGcmEngine.Encrypt(ptp, ctp: pointer; ILen: PtrInt): boolean;
 begin
   if ILen > 0 then
   begin
@@ -5058,7 +5058,7 @@ begin
   result := true;
 end;
 
-function TAesGcmEngine.Decrypt(ctp, ptp: Pointer; ILen: PtrInt;
+function TAesGcmEngine.Decrypt(ctp, ptp: pointer; ILen: PtrInt;
   ptag: pointer; tlen: PtrInt): boolean;
 var
   tag: TAesBlock;
@@ -5190,7 +5190,7 @@ begin
 end;
 
 function TAesGcmEngine.FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
-  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: Pointer;
+  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ptp, ctp: pointer;
   pLen: PtrInt; out tag: TAesBlock): boolean;
 begin
   result := Init(Key, KeyBits) and
@@ -5202,7 +5202,7 @@ begin
 end;
 
 function TAesGcmEngine.FullDecryptAndVerify(const Key; KeyBits: PtrInt;
-  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ctp, ptp: Pointer;
+  pIV: pointer; IV_len: PtrInt; pAAD: pointer; aLen: PtrInt; ctp, ptp: pointer;
   pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
 begin
   result := Init(Key, KeyBits) and

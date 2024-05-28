@@ -109,18 +109,18 @@ type
   // - if the cell at FiieldIndex/RowIndex is to have a custom content,
   // shall set the Text variable content and return TRUE
   // - if returns FALSE, the default content will be displayed
-  TValueTextEvent = function(Sender: TOrmTable; FieldIndex, RowIndex: Integer;
+  TValueTextEvent = function(Sender: TOrmTable; FieldIndex, RowIndex: integer;
     var Text: string): boolean of object;
 
   /// kind of event used to change some text on the fly for popup hint
   // - expect RTL string Text, i.e. UnicodeString for Delphi 2009/2010,
   // ready to be used with the UI for all compilers
-  THintTextEvent = function(Sender: TOrmTable; FieldIndex, RowIndex: Integer;
+  THintTextEvent = function(Sender: TOrmTable; FieldIndex, RowIndex: integer;
     var Text: string): boolean of object;
 
   /// kind of event used to display a menu on a cell right click
   TRightClickCellEvent = procedure(Sender: TOrmTable;
-    ACol, ARow, MouseX, MouseY: Integer) of object;
+    ACol, ARow, MouseX, MouseY: integer) of object;
 
   /// the available alignments of a TOrmTableToGrid cell
   TOrmTableToGridAlign = (
@@ -207,19 +207,19 @@ type
     procedure DrawCell(Sender: TObject; ACol, ARow: integer; Rect: TRect;
       State: TGridDrawState);
     /// called by the owner TDrawGrid when a Cell is selected
-    procedure DrawGridSelectCell(Sender: TObject; ACol, ARow: Integer;
+    procedure DrawGridSelectCell(Sender: TObject; ACol, ARow: integer;
       var CanSelect: boolean);
     /// called by the owner TDrawGrid when a Cell is clicked by the mouse
     // - check if the first (fixed) row is clicked: then change sort order
     // - Ctrl + click to display its full unicode content (see HintText to customize it)
     procedure DrawGridMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
+      Shift: TShiftState; X, Y: integer);
     /// called by the owner TDrawGrid when the mouse is unclicked over a Cell
     procedure DrawGridMouseUp(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
+      Shift: TShiftState; X, Y: integer);
     /// called by the owner TDrawGrid when the mouse is over a Cell
     procedure DrawGridMouseMove(Sender: TObject;
-      Shift: TShiftState; X, Y: Integer);
+      Shift: TShiftState; X, Y: integer);
     /// called by the owner TDrawGrid when the user presses a key
     // - used for incremental key lookup
     procedure DrawGridKeyPress(Sender: TObject; var Key: Char);
@@ -667,7 +667,7 @@ begin
 end;
 
 procedure TOrmTableToGrid.DrawGridMouseDown(Sender: TObject;
-  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+  Button: TMouseButton; Shift: TShiftState; X, Y: integer);
 var
   c, r: integer;
   s: string; // RTL string type, for UI
@@ -740,7 +740,7 @@ begin
 end;
 
 procedure TOrmTableToGrid.DrawGridMouseMove(Sender: TObject; Shift: TShiftState;
-  X, Y: Integer);
+  X, Y: integer);
 var
   c, r: integer;
 begin
@@ -783,13 +783,13 @@ begin
 end;
 
 procedure TOrmTableToGrid.DrawGridMouseUp(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+  Shift: TShiftState; X, Y: integer);
 begin
   fMouseDownMarkedValue := markNone; // reset Marked[] checkbox state
 end;
 
 procedure TOrmTableToGrid.DrawGridSelectCell(Sender: TObject;
-  ACol, ARow: Integer; var CanSelect: boolean);
+  ACol, ARow: integer; var CanSelect: boolean);
 begin
   if NotDefined then // avoid any possible GPF
     exit;

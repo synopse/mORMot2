@@ -520,7 +520,7 @@ type
     {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
     easy_handle: TCurl;
     data: packed record case byte of
-      0: (whatever: Pointer);
+      0: (whatever: pointer);
       1: (result: TCurlResult);
     end;
   end;
@@ -660,7 +660,7 @@ type
     /// append a new empty part to the given mime context and return a handle to the created part
     mime_addpart: function(mime: TCurlMime): TCurlMimePart; cdecl;
     /// set mime/form part data
-    mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl;
+    mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl;
     /// sets a mime part name
     mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl;
     /// sets a mime part content type
@@ -835,7 +835,7 @@ implementation
   /// creates and appends a new empty part to the given mime structure
   function curl_mime_addpart(mime: TCurlMime): TCurlMimePart; cdecl; external;
   /// sets a mime part's body content from memory data
-  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: Integer): TCurlResult; cdecl; external;
+  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl; external;
   /// sets a mime part's name
   function curl_mime_name(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
   /// sets a mime part's content type

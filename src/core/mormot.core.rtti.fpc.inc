@@ -408,7 +408,7 @@ begin
     info := GetTypeData(init);
   Fields.Count := PRecInitData(info)^.ManagedFieldCount;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  Fields.Fields := AlignToPtr(Pointer(@PRecInitData(info)^.ManagedFieldCount) +
+  Fields.Fields := AlignToPtr(pointer(@PRecInitData(info)^.ManagedFieldCount) +
     SizeOf(PRecInitData(info)^.ManagedFieldCount));
   {$else}
   Fields.Fields := pointer(PAnsiChar(info) + SizeOf(PRecInitData(info)^));
@@ -526,7 +526,7 @@ function GetPublishedMethods(Instance: TObject;
   type
     TMethodInfo = packed record
       Name: PShortString;
-      Addr: Pointer;
+      Addr: pointer;
     end;
   var
     Table: PIntegerArray;
@@ -713,7 +713,7 @@ begin
   rel^ := jmp - PtrUInt(rel) - 4;
 end;
 
-procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
+procedure _ansistr_decr_ref(var p: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr [p]
         xor     edx, edx
@@ -904,7 +904,7 @@ begin
   fpc_freemem(p);
 end;
 
-procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
+procedure _dynarray_decr_ref(var p: pointer; info: pointer); nostackframe; assembler;
 asm
         mov     rax, qword ptr [p]
         test    rax, rax

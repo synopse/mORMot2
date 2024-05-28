@@ -412,7 +412,7 @@ type
   /// store a memory buffer during SChannel encryption
   TCryptDataBlob = record
     cbData: cardinal;
-    pbData: Pointer;
+    pbData: pointer;
   end;
 
   CTL_USAGE = record
@@ -1579,7 +1579,7 @@ var
   OutDesc: TSecBufferDesc;
   CtxReqAttr: cardinal;
   CtxAttr: cardinal;
-  Status: Integer;
+  Status: integer;
 begin
   InBuf.BufferType := SECBUFFER_TOKEN;
   InBuf.cbBuffer := Length(aInData);
@@ -1645,7 +1645,7 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
-  UserPos, TargetPos: Integer;
+  UserPos, TargetPos: integer;
   Domain, User, Password: SynUnicode;
   AuthIdentity: TSecWinntAuthIdentityW;
   TargetName: PWideChar;
@@ -1699,7 +1699,7 @@ var
   OutBuf: TSecBuffer;
   OutDesc: TSecBufferDesc;
   CtxAttr: cardinal;
-  Status: Integer;
+  Status: integer;
 begin
   InBuf.BufferType := SECBUFFER_TOKEN;
   InBuf.cbBuffer := Length(aInData);

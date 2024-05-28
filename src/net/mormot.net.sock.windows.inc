@@ -836,7 +836,7 @@ const
 type
   SOCKET_ADDRESS = record
     lpSockaddr: PSOCKADDR;
-    iSockaddrLength: Integer;
+    iSockaddrLength: integer;
   end;
 
   IP_PREFIX_ORIGIN = DWORD;
@@ -844,7 +844,7 @@ type
   IP_DAD_STATE = DWORD;
 
   IP_ADAPTER_UNION = record
-    case Integer of
+    case integer of
       0: (
         Alignment: QWord);
       1: (

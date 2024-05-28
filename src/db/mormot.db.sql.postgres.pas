@@ -477,12 +477,12 @@ begin
     result := OctToBin(P, pointer(P)); // in-place conversion
 end;
 
-procedure SynLogNoticeProcessor({%H-}arg: Pointer; message: PUtf8Char); cdecl;
+procedure SynLogNoticeProcessor({%H-}arg: pointer; message: PUtf8Char); cdecl;
 begin
   SynDBLog.Add.Log(sllTrace, 'PGINFO: %', [message], TObject(arg));
 end;
 
-procedure DummyNoticeProcessor({%H-}arg: Pointer; message: PUtf8Char); cdecl;
+procedure DummyNoticeProcessor({%H-}arg: pointer; message: PUtf8Char); cdecl;
 begin
 end;
 

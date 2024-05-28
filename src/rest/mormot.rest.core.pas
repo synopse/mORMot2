@@ -1197,6 +1197,7 @@ type
     // - warning: only ValueExternal is usable by end-user code
     LowLevelConnectionOpaque: PRestServerConnectionOpaque;
     /// pre-parsed Remote IP of the current connection
+    // - may equal '' if remote IP is the 127.0.0.1 loopback
     LowLevelRemoteIP: RawUtf8;
     /// pre-parsed "Bearer" HTTP header value
     LowLevelBearerToken: RawUtf8;

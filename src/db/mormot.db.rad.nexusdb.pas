@@ -508,8 +508,8 @@ begin
     ((Length(Prot) = 1) and // check for drive letter
      (Prot[1] in ['a'..'z', 'A'..'Z']) and DirectoryExists(TFileName(Prot[1]) + ':\')) or
       // ensure explicit root folder for safety 
-      IdemPChar(Pointer(aConnectionString), '.\') or
-      IdemPChar(Pointer(aConnectionString), '..\');
+      IdemPChar(pointer(aConnectionString), '.\') or
+      IdemPChar(pointer(aConnectionString), '..\');
   if IsPath then
   begin
     result := nxpFOLDER;

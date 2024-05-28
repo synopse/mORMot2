@@ -2080,14 +2080,14 @@ end;
 function TBsonObjectID.FromText(const Text: RawUtf8): boolean;
 begin
   if length(Text) = SizeOf(self) * 2 then
-    result := mormot.core.text.HexToBin(Pointer(Text), @self, SizeOf(self))
+    result := mormot.core.text.HexToBin(pointer(Text), @self, SizeOf(self))
   else
     result := false;
 end;
 
 function TBsonObjectID.FromText(Text: PUtf8Char): boolean;
 begin
-  result := mormot.core.text.HexToBin(Pointer(Text), @self, SizeOf(self));
+  result := mormot.core.text.HexToBin(pointer(Text), @self, SizeOf(self));
 end;
 
 function TBsonObjectID.FromVariant(const value: variant): boolean;

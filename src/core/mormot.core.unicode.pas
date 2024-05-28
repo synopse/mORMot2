@@ -4264,7 +4264,7 @@ function TSynAnsiUtf16.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: cardinal; NoTrailingZero: boolean): PWideChar;
 begin
   MoveFast(Source^, Dest^, SourceChars);
-  result := Pointer(PtrUInt(Dest) + SourceChars);
+  result := pointer(PtrUInt(Dest) + SourceChars);
   if not NoTrailingZero then
     result^ := #0;
 end;
@@ -4645,7 +4645,7 @@ begin
   end;
   result := Length(S);
   SetLength(Dest, result * 2 + 2);
-  result := Utf8ToWideChar(pointer(Dest), Pointer(S), result);
+  result := Utf8ToWideChar(pointer(Dest), pointer(S), result);
 end;
 
 function RawUnicodeToUtf8(const Unicode: RawUnicode): RawUtf8;
@@ -4821,7 +4821,7 @@ end;
 
 function StringToWinAnsi(const Text: string): WinAnsiString;
 begin
-  result := RawUnicodeToWinAnsi(Pointer(Text), Length(Text));
+  result := RawUnicodeToWinAnsi(pointer(Text), Length(Text));
 end;
 
 function StringBufferToUtf8(Dest: PUtf8Char; Source: PChar; SourceChars: PtrInt): PUtf8Char;
@@ -4878,7 +4878,7 @@ end;
 function RawUnicodeToString(const U: RawUnicode): string;
 begin
   // uses StrLenW() and not length(U) to handle case when was used as buffer
-  SetString(result, PWideChar(pointer(U)), StrLenW(Pointer(U)));
+  SetString(result, PWideChar(pointer(U)), StrLenW(pointer(U)));
 end;
 
 {$endif PUREMORMOT2}
@@ -5021,7 +5021,7 @@ end;
 function RawUnicodeToString(const U: RawUnicode): string;
 begin
   // uses StrLenW() and not length(U) to handle case when was used as buffer
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U), StrLenW(Pointer(U)));
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(pointer(U), StrLenW(pointer(U)));
 end;
 
 {$endif PUREMORMOT2}
@@ -5048,7 +5048,7 @@ end;
 
 function SynUnicodeToString(const U: SynUnicode): string;
 begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U), length(U));
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(pointer(U), length(U));
 end;
 
 function Utf8DecodeToString(P: PUtf8Char; L: integer): string;
@@ -7720,7 +7720,7 @@ end;
 procedure FillZero(var secret: RawByteString);
 begin
   if secret <> '' then
-    with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
+    with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
   FastAssignNew(secret); // dec refCnt
@@ -7740,7 +7740,7 @@ end;
 procedure FillZero(var secret: UnicodeString);
 begin
   if secret <> '' then
-    with PStrRec(Pointer(PtrInt(secret) - _STRRECSIZE))^ do
+    with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length * SizeOf(WideChar), 0);
   Finalize(secret); // dec refCnt
@@ -7750,7 +7750,7 @@ end;
 procedure FillZero(var secret: TBytes);
 begin
   if secret <> nil then
-    with PDynArrayRec(Pointer(PtrInt(secret) - _DARECSIZE))^ do
+    with PDynArrayRec(pointer(PtrInt(secret) - _DARECSIZE))^ do
       if refCnt = 1 then // avoid GPF if const
         FillCharFast(pointer(secret)^, length, 0);
   secret := nil; // dec refCnt
@@ -8378,13 +8378,13 @@ end;
 
 function TrimLeftLowerCase(const V: RawUtf8): PUtf8Char;
 begin
-  result := Pointer(V);
+  result := pointer(V);
   if result <> nil then
   begin
     while result^ in ['a'..'z'] do
       inc(result);
     if result^ = #0 then
-      result := Pointer(V);
+      result := pointer(V);
   end;
 end;
 
@@ -9134,7 +9134,7 @@ begin
   if result < n then
   begin
     n := (n - result) * SizeOf(pointer);
-    MoveFast(Pointer(Values[result]), Pointer(Values[result + 1]), n);
+    MoveFast(pointer(Values[result]), pointer(Values[result + 1]), n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues <> nil then
     begin
@@ -9165,7 +9165,7 @@ type
 procedure TQuickSortRawUtf8.Sort(Values: PPointerArray; L, R: PtrInt);
 var
   I, J, P: PtrInt;
-  tmp: Pointer;
+  tmp: pointer;
   int: integer;
 begin
   if L < R then

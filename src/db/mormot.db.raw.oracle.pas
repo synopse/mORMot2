@@ -46,7 +46,7 @@ type
   ub2     = Word;
   sb1     = ShortInt;
   ub1     = byte;
-  dvoid   = Pointer;
+  dvoid   = pointer;
   text    = PAnsiChar; // this conflicts with the standard text definition in FPC (and Delphi perhaps)
   OraText = PAnsiChar;
   size_T  = PtrUInt;
@@ -60,8 +60,8 @@ type
   pdvoid = ^dvoid;
 
   { Handle Types }
-  POCIHandle = Pointer;
-  PPOCIHandle = ^Pointer;
+  POCIHandle = pointer;
+  PPOCIHandle = ^pointer;
   POCIEnv = POCIHandle;
   POCIServer = POCIHandle;
   POCIError = POCIHandle;
@@ -74,7 +74,7 @@ type
   POCITrans = POCIHandle;
 
   { Descriptor Types }
-  POCIDescriptor = Pointer;
+  POCIDescriptor = pointer;
   PPOCIDescriptor = ^POCIDescriptor;
   POCISnapshot = POCIDescriptor;
   POCILobLocator = POCIDescriptor;
@@ -803,26 +803,26 @@ type
   public
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
-    EnvNlsCreate: function(var envhpp: pointer; mode: ub4; ctxp: Pointer;
-      malocfp: Pointer; ralocfp: Pointer; mfreefp: Pointer; xtramemsz: size_T;
+    EnvNlsCreate: function(var envhpp: pointer; mode: ub4; ctxp: pointer;
+      malocfp: pointer; ralocfp: pointer; mfreefp: pointer; xtramemsz: size_T;
       usrmempp: PPointer; charset, ncharset: ub2): sword; cdecl;
     HandleAlloc: function(parenth: POCIHandle; var hndlpp: pointer;
       atype: ub4; xtramem_sz: size_T = 0; usrmempp: PPointer = nil): sword; cdecl;
-    HandleFree: function(hndlp: Pointer; atype: ub4): sword; cdecl;
+    HandleFree: function(hndlp: pointer; atype: ub4): sword; cdecl;
     ServerAttach: function(srvhp: POCIServer; errhp: POCIError; dblink: text;
       dblink_len: sb4; mode: ub4): sword; cdecl;
     ServerDetach: function(srvhp: POCIServer; errhp: POCIError;
       mode: ub4): sword; cdecl;
     AttrGet: function(trgthndlp: POCIHandle; trghndltyp: ub4;
-      attributep: Pointer; sizep: Pointer; attrtype: ub4;
+      attributep: pointer; sizep: pointer; attrtype: ub4;
       errhp: POCIError): sword; cdecl;
     AttrSet: function(trgthndlp: POCIHandle; trghndltyp: ub4;
-      attributep: Pointer; size: ub4; attrtype: ub4; errhp: POCIError): sword; cdecl;
+      attributep: pointer; size: ub4; attrtype: ub4; errhp: POCIError): sword; cdecl;
     SessionBegin: function(svchp: POCISvcCtx; errhp: POCIError;
       usrhp: POCISession; credt: ub4; mode: ub4): sword; cdecl;
     SessionEnd: function(svchp: POCISvcCtx; errhp: POCIError;
       usrhp: POCISession; mode: ub4): sword; cdecl;
-    ErrorGet: function(hndlp: Pointer; recordno: ub4; sqlstate: text;
+    ErrorGet: function(hndlp: pointer; recordno: ub4; sqlstate: text;
       var errcodep: sb4; bufp: text; bufsiz: ub4; atype: ub4): sword; cdecl;
     StmtPrepare: function(stmtp: POCIStmt; errhp: POCIError; stmt: text;
       stmt_len: ub4; language:ub4; mode: ub4): sword; cdecl;
@@ -832,11 +832,11 @@ type
     StmtFetch: function(stmtp: POCIStmt; errhp: POCIError; nrows: ub4;
       orientation: ub2; mode: ub4): sword; cdecl;
     BindByPos: function(stmtp: POCIStmt; var bindpp: POCIBind;
-      errhp: POCIError; position: ub4; valuep: Pointer; value_sz: sb4; dty: ub2;
-      indp: Pointer; alenp: Pointer; rcodep: Pointer; maxarr_len: ub4;
-      curelep: Pointer; mode: ub4): sword; cdecl;
-    ParamGet: function(hndlp: Pointer; htype: ub4; errhp: POCIError;
-      var parmdpp: Pointer; pos: ub4): sword; cdecl;
+      errhp: POCIError; position: ub4; valuep: pointer; value_sz: sb4; dty: ub2;
+      indp: pointer; alenp: pointer; rcodep: pointer; maxarr_len: ub4;
+      curelep: pointer; mode: ub4): sword; cdecl;
+    ParamGet: function(hndlp: pointer; htype: ub4; errhp: POCIError;
+      var parmdpp: pointer; pos: ub4): sword; cdecl;
     TransStart: function(svchp: POCISvcCtx; errhp: POCIError; timeout: word;
       flags: ub4): sword; cdecl;
     TransRollback: function(svchp:POCISvcCtx; errhp:POCIError;
@@ -844,8 +844,8 @@ type
     TransCommit: function(svchp: POCISvcCtx; errhp: POCIError;
       flags: ub4) :sword; cdecl;
     DescriptorAlloc: function(parenth: POCIEnv; var descpp: pointer;
-      htype: ub4; xtramem_sz: integer; usrmempp: Pointer): sword; cdecl;
-    DescriptorFree: function(descp: Pointer; htype: ub4): sword; cdecl;
+      htype: ub4; xtramem_sz: integer; usrmempp: pointer): sword; cdecl;
+    DescriptorFree: function(descp: pointer; htype: ub4): sword; cdecl;
     DateTimeConstruct: function(hndl: POCIEnv; err: POCIError;
       datetime: POCIDateTime; year: sb2; month: ub1; day: ub1; hour: ub1;
       min: ub1; sec: ub1; fsec: ub4; timezone: text;
@@ -854,8 +854,8 @@ type
       const date: POCIDateTime; var year: sb2; var month: ub1;
       var day: ub1): sword; cdecl;
     DefineByPos: function(stmtp: POCIStmt; var defnpp: POCIDefine;
-      errhp: POCIError; position: ub4; valuep: Pointer; value_sz: sb4; dty: ub2;
-      indp: Pointer; rlenp: Pointer; rcodep: Pointer; mode: ub4): sword; cdecl;
+      errhp: POCIError; position: ub4; valuep: pointer; value_sz: sb4; dty: ub2;
+      indp: pointer; rlenp: pointer; rcodep: pointer; mode: ub4): sword; cdecl;
     LobGetLength: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; var lenp: ub4): sword; cdecl;
     LobGetChunkSize: function(svchp: POCISvcCtx; errhp: POCIError;
@@ -863,14 +863,14 @@ type
     LobOpen: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; mode: ub1): sword; cdecl;
     LobRead: function(svchp: POCISvcCtx; errhp: POCIError;
-      locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: Pointer; bufl: ub4;
-      ctxp: Pointer = nil; cbfp: Pointer = nil; csid: ub2 = 0;
+      locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: pointer; bufl: ub4;
+      ctxp: pointer = nil; cbfp: pointer = nil; csid: ub2 = 0;
       csfrm: ub1 = SQLCS_IMPLICIT): sword; cdecl;
     LobClose: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator): sword; cdecl;
     LobWrite: function(svchp: POCISvcCtx; errhp: POCIError;
-      locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: Pointer; buflen: ub4;
-      piece: ub1; ctxp: Pointer = nil; cbfp: Pointer = nil; csid: ub2 = 0;
+      locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: pointer; buflen: ub4;
+      piece: ub1; ctxp: pointer = nil; cbfp: pointer = nil; csid: ub2 = 0;
       csfrm: ub1 = SQLCS_IMPLICIT): sword; cdecl;
     NlsCharSetNameToID: function(env: POCIEnv; name: PUtf8Char): sword; cdecl;
     StmtPrepare2: function(svchp: POCISvcCtx; var stmtp: POCIStmt; errhp: POCIError;

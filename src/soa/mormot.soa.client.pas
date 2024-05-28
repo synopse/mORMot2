@@ -456,7 +456,7 @@ type
     procedure FakeCallGetJsonFromStack(
       var ctxt: TFakeCallContext; var Json: RawUtf8); override;
     procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
-      const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); override;
+      const aParamInfo: TInterfaceMethodArgument; aParamValue: pointer); override;
   public
     constructor Create(aClient: TServiceFactoryClient;
       const aInvoke: TOnFakeInstanceInvoke;
@@ -503,7 +503,7 @@ end;
 
 procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
-  aParamValue: Pointer);
+  aParamValue: pointer);
 begin
   W.Add(TRestClientUri(fClient.fClient).FakeCallbackRegister(
     fClient, aMethod, aParamInfo, aParamValue));
@@ -629,7 +629,7 @@ var
       // ParamsAsJsonObject won't apply to _signature_ e.g.
       if fParamsAsJsonObject and
          (clientDrivenID = '') then
-        sent := service^.ArgsArrayToObject(Pointer(sent), true);
+        sent := service^.ArgsArrayToObject(pointer(sent), true);
       if fNonBlockWithoutAnswer and
          (head = '') and
          (service^.ArgsOutputValuesCount = 0) then

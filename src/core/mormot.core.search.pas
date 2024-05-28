@@ -4446,7 +4446,7 @@ begin
         result := LoadFrom(P, PLen);
       bdDiff:
         if fStore <> '' then
-          result := ZeroDecompressOr(pointer(P), Pointer(fStore), PLen, head.size);
+          result := ZeroDecompressOr(pointer(P), pointer(fStore), PLen, head.size);
       bdUpToDate:
         result := true;
     end;
@@ -4687,7 +4687,7 @@ begin
   end
   else
   begin
-    sp := Pointer(ToVarUInt32(curlen, PByte(sp)));
+    sp := pointer(ToVarUInt32(curlen, PByte(sp)));
     PInteger(sp)^ := curofs;
     inc(sp, curofssize);
   end;

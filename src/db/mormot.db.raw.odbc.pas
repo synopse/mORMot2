@@ -424,7 +424,7 @@ type
   {$endif CPU64}
   PSqlLen = ^SqlLen;
 
-  SqlHandle = Pointer;
+  SqlHandle = pointer;
   SqlHEnv   = SqlHandle;
   SqlHDbc   = SqlHandle;
   SqlHStmt  = SqlHandle;

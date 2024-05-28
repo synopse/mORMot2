@@ -1576,7 +1576,7 @@ var
   tmp: RawUtf8;
 begin
   DateTimeToIso8601TextVar(DT, FirstChar, tmp, WithMS);
-  Ansi7ToString(Pointer(tmp), length(tmp), result);
+  Ansi7ToString(pointer(tmp), length(tmp), result);
 end;
 
 function DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUtf8Char;

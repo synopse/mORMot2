@@ -1355,8 +1355,8 @@ begin
       histidcount := n;
     if histidcount = 0 then
       exit; // nothing to compress
-    QuickSortInt64(Pointer(histid), 0, histidcount - 1);
-    where := Int64DynArrayToCsv(Pointer(histid), histidcount, 'RowID in (', ')');
+    QuickSortInt64(pointer(histid), 0, histidcount - 1);
+    where := Int64DynArrayToCsv(pointer(histid), histidcount, 'RowID in (', ')');
     { following SQL can be very slow with external tables, and won't work
       with TRestStorageInMemory -> manual process instead
     where := FormatUtf8('ModifiedRecord in (select ModifiedRecord from ' +

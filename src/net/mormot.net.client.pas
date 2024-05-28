@@ -2901,7 +2901,7 @@ procedure TWinHttp.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
      not WinHttpApi.AddRequestHeaders(FRequest,
-     Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
+     pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
     EWinHttp.RaiseFromLastError;
 end;
 
@@ -3079,7 +3079,7 @@ begin
     OpenType := INTERNET_OPEN_TYPE_PRECONFIG
   else
     OpenType := INTERNET_OPEN_TYPE_PROXY;
-  fSession := InternetOpenA(Pointer(fExtendedOptions.UserAgent), OpenType,
+  fSession := InternetOpenA(pointer(fExtendedOptions.UserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession = nil then
     EWinINet.RaiseFromLastError;
@@ -3110,7 +3110,7 @@ begin
     Flags := Flags or INTERNET_FLAG_KEEP_CONNECTION;
   if fHttps then
     Flags := Flags or INTERNET_FLAG_SECURE;
-  FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aUrl),
+  FRequest := HttpOpenRequestA(FConnection, pointer(aMethod), pointer(aUrl),
     nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
     EWinINet.RaiseFromLastError;
@@ -3128,7 +3128,7 @@ end;
 procedure TWinINet.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
-     not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
+     not HttpAddRequestHeadersA(fRequest, pointer(hdr), length(hdr),
        HTTP_ADDREQ_FLAG_COALESCE) then
     EWinINet.RaiseFromLastError;
 end;
@@ -3309,7 +3309,7 @@ begin
     result := ERROR_INVALID_HANDLE
   else
     result := WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS,
-      Pointer(aCloseReason), Length(aCloseReason));
+      pointer(aCloseReason), Length(aCloseReason));
   if result = 0 then
     fSocket := nil;
 end;
@@ -3326,9 +3326,9 @@ begin
   begin
     // todo: check result
     WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS,
-      Pointer(CloseReason), Length(CloseReason));
+      pointer(CloseReason), Length(CloseReason));
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
-    WinHttpApi.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
+    WinHttpApi.WebSocketQueryCloseStatus(fSocket, status, pointer(reason),
       WEB_SOCKET_MAX_CLOSE_REASON_LENGTH, reasonLength);
     WinHttpApi.CloseHandle(fSocket);
   end;

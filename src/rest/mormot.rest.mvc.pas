@@ -95,7 +95,7 @@ type
     fViewGenerationTimeTag: RawUtf8;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
-    procedure Render(methodIndex: Integer; const Context: variant;
+    procedure Render(methodIndex: integer; const Context: variant;
       var View: TMvcView); virtual; abstract;
     /// return the static file contents - from fViewStaticFolder by default
     // - called if cacheStatic has been defined
@@ -201,7 +201,7 @@ type
     /// return the template file date and time
     function GetTemplateAge(const aFileName: TFileName): TUnixTime; virtual;
     /// overriden implementations should return the rendered content
-    procedure Render(methodIndex: Integer; const Context: variant;
+    procedure Render(methodIndex: integer; const Context: variant;
       var View: TMvcView); override;
     // some helpers defined here to avoid mormot.crypt.core link
     class procedure md5(const Value: variant; out Result: variant);
@@ -441,7 +441,7 @@ type
       forcesError: boolean); virtual; abstract;
     function Redirects(const action: TMvcAction): boolean; virtual;
     procedure CommandError(const ErrorName: RawUtf8; const ErrorValue: variant;
-      ErrorCode: Integer); virtual;
+      ErrorCode: integer); virtual;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
     constructor Create(aApplication: TMvcApplication); reintroduce;
@@ -1383,7 +1383,7 @@ begin
   result := FileAgeToUnixTimeUtc(ViewTemplateFolder + aFileName);
 end;
 
-procedure TMvcViewsMustache.Render(methodIndex: Integer; const Context: variant;
+procedure TMvcViewsMustache.Render(methodIndex: integer; const Context: variant;
   var View: TMvcView);
 begin
   View.Content := GetRenderer(methodIndex, View).Render(
@@ -1593,7 +1593,7 @@ begin
 end;
 
 procedure TMvcRendererAbstract.CommandError(const ErrorName: RawUtf8;
-  const ErrorValue: variant; ErrorCode: Integer);
+  const ErrorValue: variant; ErrorCode: integer);
 var
   info, renderContext: variant;
 begin

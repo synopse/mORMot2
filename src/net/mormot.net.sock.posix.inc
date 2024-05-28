@@ -257,23 +257,23 @@ begin
   result := fpselect(nfds, readfds, writefds, exceptfds, timeout);
 end;
 
-function recv(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; inline;
+function recv(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; inline;
 begin
   result := fprecv(s, Buf, len, flags);
 end;
 
-function recvfrom(s: integer; Buf: Pointer; len: size_t; flags: integer;
+function recvfrom(s: integer; Buf: pointer; len: size_t; flags: integer;
    from: PSockAddr; fromlen: pSocklen): ssize_t; inline;
 begin
  result := fprecvfrom(s, Buf, len, flags, from, fromlen);
 end;
 
-function send(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; inline;
+function send(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; inline;
 begin
   result := fpsend(s, Buf, len, flags);
 end;
 
-function sendto(s: integer; Buf: Pointer; len: size_t; flags: integer;
+function sendto(s: integer; Buf: pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; inline;
 begin
  result := fpsendto(s, Buf, len, flags, addrto, tolen);
@@ -346,17 +346,17 @@ function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; cdecl;
   external clib name 'select' + LIBC_SUFFIX;
 
-function recv(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
+function recv(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; cdecl;
   external clib name 'recv' + LIBC_SUFFIX;
 
-function recvfrom(s: integer; Buf: Pointer; len: size_t; flags: integer;
+function recvfrom(s: integer; Buf: pointer; len: size_t; flags: integer;
    from: PSockAddr; fromlen: Pinteger): ssize_t; cdecl;
   external clib name 'recvfrom' + LIBC_SUFFIX;
 
-function send(s: integer; Buf: Pointer; len: size_t; flags: integer): ssize_t; cdecl;
+function send(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; cdecl;
   external clib name 'send' + LIBC_SUFFIX;
 
-function sendto(s: integer; Buf: Pointer; len: size_t; flags: integer;
+function sendto(s: integer; Buf: pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; cdecl;
   external clib name 'sendto' + LIBC_SUFFIX;
 
@@ -717,7 +717,7 @@ type
     // if IFF_BROADCAST is set, the broadcast address associated with ifa_addr
     ifa_broadaddr: Psockaddr;
     // address-family-specific data - e.g. statistics on AF_PACKET
-    ifa_data: Pointer;
+    ifa_data: pointer;
   end;
 
   {$ifdef OSBSDDARWIN} // from bsd/net/if_dl.h
@@ -745,7 +745,7 @@ type
   end;
   {$endif OSBSDDARWIN}
 
-function getifaddrs(var ifap: pifaddrs): Integer; cdecl;
+function getifaddrs(var ifap: pifaddrs): integer; cdecl;
   external clib name 'getifaddrs';
 
 procedure freeifaddrs(ifap: pifaddrs); cdecl;

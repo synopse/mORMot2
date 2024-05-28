@@ -1296,13 +1296,13 @@ begin
         B^.obStatus := PAnsiChar(@P^.VStatus) - pointer(fParams);
         BI^.dwFlags := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
         BI^.pwszName := nil; //unnamed parameters
-        BI^.pwszDataSourceType := Pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]);
+        BI^.pwszDataSourceType := pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]);
         BI^.ulParamSize := 0;
         PO^ := i;
         // check array binding
         if P.VArray <> nil then
         begin
-          BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
+          BI^.pwszDataSourceType := pointer(TABLE_PARAM_DATASOURCE);
           B^.wType := DBTYPE_TABLE;
           B^.cbMaxLen := SizeOf(IUnknown);
           B^.pObject := @dbObjTVP;
@@ -1360,7 +1360,7 @@ begin
                 begin
                   // mapping directly the WideString VText content
                   B^.wType := DBTYPE_BSTR; // DBTYPE_WSTR just doesn't work :(
-                  B^.cbMaxLen := SizeOf(Pointer);
+                  B^.cbMaxLen := SizeOf(pointer);
                   BI^.ulParamSize := length(P^.VText);
                 end;
               end;
@@ -1386,7 +1386,7 @@ begin
       SetLength(ParamsStatus, fParamCount);
       OleDBConnection.OleDBCheck(self,
         (fCommand as IAccessor).CreateAccessor(
-         DBACCESSOR_PARAMETERDATA, fParamCount, Pointer(fParamBindings), 0,
+         DBACCESSOR_PARAMETERDATA, fParamCount, pointer(fParamBindings), 0,
          fDBParams.HACCESSOR, pointer(ParamsStatus)), ParamsStatus);
       fDBParams.cParamSets := 1;
       fDBParams.pData := pointer(fParams);
@@ -1545,7 +1545,7 @@ begin
   if fRowStepHandleRetrieved <> 0 then
   begin
     fRowSet.ReleaseRows(
-      fRowStepHandleRetrieved, Pointer(fRowStepHandles), nil, nil, nil);
+      fRowStepHandleRetrieved, pointer(fRowStepHandles), nil, nil, nil);
     fRowStepHandleRetrieved := 0;
   end;
   fCurrentRow := 0;
@@ -1688,11 +1688,11 @@ begin
               // get huge content by pointer (includes DBTYPE_BYREF)
               fHasColumnValueByRef := true;
               Col^.ColumnValueInlined := false;
-              B^.cbMaxLen := SizeOf(Pointer); // value=pointer in fRowSetData[]
+              B^.cbMaxLen := SizeOf(pointer); // value=pointer in fRowSetData[]
               if fAlignBuffer then
                 inc(result, 8)
               else
-                inc(result, SizeOf(Pointer));
+                inc(result, SizeOf(pointer));
             end;
           end;
       else
@@ -1962,7 +1962,7 @@ begin
         IID_IDataInitialize, DataInitialize));
       if fConnectionString <> '' then
         DataInitialize.GetDataSource(nil, CLSCTX_INPROC_SERVER,
-          Pointer(fConnectionString), IID_IDBInitialize, DBInitialize)
+          pointer(fConnectionString), IID_IDBInitialize, DBInitialize)
       else
         DBInitialize := nil;
       res := DBPromptInitialize.PromptDataSource(nil, Parent,

@@ -1443,13 +1443,13 @@ end;
 {$ifdef FPC}
 // some WinSpool redefinitions to match Delphi signature
 function EnumPrinters(Flags: DWORD; Name: PChar; Level: DWORD;
-  pPrinterEnum: Pointer; cbBuf: DWORD; var pcbNeeded, pcReturned: DWORD): BOOL; stdcall;
+  pPrinterEnum: pointer; cbBuf: DWORD; var pcbNeeded, pcReturned: DWORD): BOOL; stdcall;
   external 'winspool.drv' name 'EnumPrintersA';
 function OpenPrinter(pPrinterName: PChar; var phPrinter: THandle;
   pDefault: PPrinterDefaults): BOOL; stdcall;
   external 'winspool.drv' name 'OpenPrinterA';
 function GetPrinterDriver(hPrinter: THandle; pEnvironment: PChar; Level: DWORD;
-  pDriverInfo: Pointer; cbBuf: DWORD; var pcbNeeded: DWORD): BOOL; stdcall;
+  pDriverInfo: pointer; cbBuf: DWORD; var pcbNeeded: DWORD): BOOL; stdcall;
   external 'winspool.drv' name 'GetPrinterDriverA';
 {$endif FPC}
 

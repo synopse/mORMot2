@@ -126,7 +126,7 @@ type
   /// a Uniscribe script item, after analysis of a unicode text
   TScriptItem = packed record
     /// Logical offset to first character in this item
-    iCharPos: Integer;
+    iCharPos: integer;
     /// corresponding Uniscribe script analysis
     a: TScriptAnalysis;
   end;
@@ -256,9 +256,9 @@ type
 // ! pItems[i+1].iCharPos - pItems[i].iCharPos;
 // - pcItems: Pointer to the number of SCRIPT_ITEM structures processed
 function ScriptItemize(
-    const pwcInChars: PWideChar; cInChars: Integer; cMaxItems: Integer;
+    const pwcInChars: PWideChar; cInChars: integer; cMaxItems: integer;
     const psControl: pointer; const psState: pointer;
-    pItems: PScriptItem; var pcItems: Integer): HRESULT;
+    pItems: PScriptItem; var pcItems: integer): HRESULT;
   stdcall; external Usp10;
 
 /// Uniscribe function to retrieve information about the current scripts
@@ -267,7 +267,7 @@ function ScriptItemize(
 // - piNumScripts: Pointer to the number of scripts. The valid range for this
 // value is 0 through piNumScripts-1.
 function ScriptGetProperties(out ppSp: PScriptPropertiesArray;
-  out piNumScripts: Integer): HRESULT;
+  out piNumScripts: integer): HRESULT;
   stdcall; external Usp10;
 
 /// Uniscribe function to convert an array of run embedding levels to a map
@@ -276,7 +276,7 @@ function ScriptGetProperties(out ppSp: PScriptPropertiesArray;
 // - pbLevel: Array of run embedding levels
 // - piVisualToLogical: List of run indices in visual order
 // - piLogicalToVisual: List of visual run positions
-function ScriptLayout(cRuns: Integer; const pbLevel: PByte;
+function ScriptLayout(cRuns: integer; const pbLevel: PByte;
     piVisualToLogical: PInteger; piLogicalToVisual: PInteger): HRESULT;
   stdcall; external Usp10;
 
@@ -292,15 +292,15 @@ function ScriptLayout(cRuns: Integer; const pbLevel: PByte;
 // - psva: Visual glyph attributes
 // - pcGlyphs: Count of glyphs generated
 function ScriptShape(hdc: HDC; var psc: pointer; const pwcChars: PWideChar;
-    cChars: Integer; cMaxGlyphs: Integer; psa: PScriptAnalysis;
+    cChars: integer; cMaxGlyphs: integer; psa: PScriptAnalysis;
     pwOutGlyphs: PWord; pwLogClust: PWord; psva: PScriptVisAttr;
-    var pcGlyphs: Integer): HRESULT;
+    var pcGlyphs: integer): HRESULT;
   stdcall; external Usp10;
 
 /// Uniscribe function to apply the specified digit substitution settings
 // to the specified script control and script state structures
 function ScriptApplyDigitSubstitution(
-    const psds: Pointer; const psControl: pointer;
+    const psds: pointer; const psControl: pointer;
     const psState: pointer): HRESULT;
   stdcall; external Usp10;
 
@@ -313,7 +313,7 @@ var
   // - you should first call HasCreateFontPackage to resolve this API dynamically
   CreateFontPackage: function(puchSrcBuffer: pointer; ulSrcBufferSize: cardinal;
     var puchFontPackageBuffer: PAnsiChar; var pulFontPackageBufferSize: cardinal;
-    var pulBytesWritten: Cardinal; usFlags, usTTCIndex, usSubsetFormat,
+    var pulBytesWritten: cardinal; usFlags, usTTCIndex, usSubsetFormat,
     usSubsetLanguage, usSubsetPlatform, usSubsetEncoding: word;
     pusSubsetKeepList: pointer; usSubsetKeepListCount: word;
     lpfnAllocate, lpfnReAllocate, lpfnFree, reserved: pointer): cardinal; cdecl;
@@ -323,8 +323,8 @@ function HasCreateFontPackage: boolean;
 
 // some low-level functions compatible with lpfnAllocate,lpfnReAllocate,lpfnFree
 // parameters of CreateFontPackage()
-function lpfnAllocate(Size: Integer): pointer; cdecl;
-function lpfnReAllocate(Buffer: pointer; Size: Integer): pointer; cdecl;
+function lpfnAllocate(Size: integer): pointer; cdecl;
+function lpfnReAllocate(Buffer: pointer; Size: integer): pointer; cdecl;
 procedure lpfnFree(Buffer: pointer); cdecl;
 
 
@@ -333,12 +333,12 @@ implementation
 
 { ****************** FontSub API for font sunset embedding }
 
-function lpfnAllocate(Size: Integer): pointer; cdecl;
+function lpfnAllocate(Size: integer): pointer; cdecl;
 begin
   GetMem(result, Size);
 end;
 
-function lpfnReAllocate(Buffer: pointer; Size: Integer): pointer; cdecl;
+function lpfnReAllocate(Buffer: pointer; Size: integer): pointer; cdecl;
 begin
   ReallocMem(Buffer, Size);
   result := Buffer;

@@ -679,15 +679,15 @@ type
     /// append some UTF-8 chars to the buffer
     // - input length is calculated from zero-ended char
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJsonEscape(P: Pointer); overload;
+    procedure AddNoJsonEscape(P: pointer); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
     // - called by inlined AddNoJsonEscape() if Len >= fTempBufSize
-    procedure AddNoJsonEscapeBig(P: Pointer; Len: PtrInt);
+    procedure AddNoJsonEscapeBig(P: pointer; Len: PtrInt);
     /// append some UTF-8 chars to the buffer - inlined for small content
     // - don't escapes chars according to the JSON RFC
-    procedure AddNoJsonEscape(P: Pointer; Len: PtrInt); overload;
+    procedure AddNoJsonEscape(P: pointer; Len: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars to the buffer
     // - don't escapes chars according to the JSON RFC
@@ -845,10 +845,10 @@ type
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName, IncludePointer: boolean);
     /// append some binary data as hexadecimal text conversion
-    procedure AddBinToHex(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean = false);
+    procedure AddBinToHex(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean = false);
     /// append some binary data as hexadecimal text conversion
     // - append its minimal chars, i.e. excluding last bytes containing 0
-    procedure AddBinToHexMinChars(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean = false);
+    procedure AddBinToHexMinChars(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean = false);
     /// fast conversion from binary data into hexa chars, ready to be displayed
     // - using this function with Bin^ as an integer value will serialize it
     // in big-endian order (most-significant byte first), as used by humans
@@ -2192,17 +2192,17 @@ function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
-function PointerToHex(aPointer: Pointer): RawUtf8; overload;
+function PointerToHex(aPointer: pointer): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
-procedure PointerToHex(aPointer: Pointer; var result: RawUtf8); overload;
+procedure PointerToHex(aPointer: pointer; var result: RawUtf8); overload;
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally DisplayMinChars() and BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
-function PointerToHexShort(aPointer: Pointer): TShort16; overload;
+function PointerToHexShort(aPointer: pointer): TShort16; overload;
 
 /// fast conversion from a cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -2419,7 +2419,7 @@ function IdemPCharAndGetNextItem(var source: PUtf8Char; const searchUp: RawUtf8;
   var Item: RawUtf8; Sep: AnsiChar): boolean;
 begin
   if source <> nil then
-    if IdemPChar(source, Pointer(searchUp)) then
+    if IdemPChar(source, pointer(searchUp)) then
     begin
       inc(source, Length(searchUp));
       GetNextItem(source, Sep, Item);
@@ -2806,7 +2806,7 @@ begin
     end
     else
     begin
-      MoveFast(Pointer(Value)^, P^, ValueLen);
+      MoveFast(pointer(Value)^, P^, ValueLen);
       inc(P, ValueLen);
     end;
     if i = Count then
@@ -2819,7 +2819,7 @@ begin
     end
     else if SepLen > 0 then
     begin
-      MoveFast(Pointer(Sep)^, P^, SepLen);
+      MoveFast(pointer(Sep)^, P^, SepLen);
       inc(P, SepLen);
       inc(i);
     end;
@@ -4401,7 +4401,7 @@ begin
   CancelLastComma;
 end;
 
-procedure TTextWriter.AddNoJsonEscapeBig(P: Pointer; Len: PtrInt);
+procedure TTextWriter.AddNoJsonEscapeBig(P: pointer; Len: PtrInt);
 var
   direct: PtrInt;
   D: PUtf8Char;
@@ -4442,7 +4442,7 @@ begin
     end;
 end;
 
-procedure TTextWriter.AddNoJsonEscape(P: Pointer; Len: PtrInt);
+procedure TTextWriter.AddNoJsonEscape(P: pointer; Len: PtrInt);
 begin
   if (P <> nil) and
      (Len > 0) then
@@ -4457,7 +4457,7 @@ begin
       AddNoJsonEscapeBig(P, Len); // big chunks (seldom used)
 end;
 
-procedure TTextWriter.AddNoJsonEscape(P: Pointer);
+procedure TTextWriter.AddNoJsonEscape(P: pointer);
 begin
   if P <> nil then
     AddNoJsonEscape(P, mormot.core.base.StrLen(PUtf8Char(P)));
@@ -4639,7 +4639,7 @@ end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUtf8);
 begin
-  AddProp(Pointer(FieldName), length(FieldName));
+  AddProp(pointer(FieldName), length(FieldName));
 end;
 
 procedure TTextWriter.AddQuotedFieldName(const FieldName, VoidPlaceHolder: RawUtf8);
@@ -5087,7 +5087,7 @@ begin
   AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
 end;
 
-procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt; LowerHex: boolean);
+procedure TTextWriter.AddBinToHex(Bin: pointer; BinBytes: PtrInt; LowerHex: boolean);
 var
   chunk: PtrInt;
 begin
@@ -5118,7 +5118,7 @@ begin
   dec(B); // allow CancelLastChar
 end;
 
-procedure TTextWriter.AddBinToHexMinChars(Bin: Pointer; BinBytes: PtrInt;
+procedure TTextWriter.AddBinToHexMinChars(Bin: pointer; BinBytes: PtrInt;
   LowerHex: boolean);
 begin
   if BinBytes > 0 then
@@ -9637,13 +9637,13 @@ begin
 end;
 {$endif UNICODE}
 
-procedure PointerToHex(aPointer: Pointer; var result: RawUtf8);
+procedure PointerToHex(aPointer: pointer; var result: RawUtf8);
 begin
-  FastSetString(result, SizeOf(Pointer) * 2);
-  BinToHexDisplay(@aPointer, pointer(result), SizeOf(Pointer));
+  FastSetString(result, SizeOf(pointer) * 2);
+  BinToHexDisplay(@aPointer, pointer(result), SizeOf(pointer));
 end;
 
-function PointerToHex(aPointer: Pointer): RawUtf8;
+function PointerToHex(aPointer: pointer): RawUtf8;
 begin
   PointerToHex(aPointer, result);
 end;
@@ -9672,7 +9672,7 @@ begin
   BinToHexDisplay(@aInt64, pointer(result), SizeOf(Int64));
 end;
 
-function PointerToHexShort(aPointer: Pointer): TShort16;
+function PointerToHexShort(aPointer: pointer): TShort16;
 begin
   result[0] := AnsiChar(DisplayMinChars(@aPointer, SizeOf(aPointer)) * 2);
   BinToHexDisplayLower(@aPointer, @result[1], ord(result[0]) shr 1);

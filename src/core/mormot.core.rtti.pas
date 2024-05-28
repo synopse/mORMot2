@@ -1248,7 +1248,7 @@ type
   /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
   // - defined here for proper Delphi inlining
   PropWrap = packed record
-    FillBytes: array [0 .. SizeOf(Pointer) - 2] of byte;
+    FillBytes: array [0 .. SizeOf(pointer) - 2] of byte;
     /// =$ff for a ptField address, or =$fe for a ptVirtual method
     Kind: byte;
   end;
@@ -3218,7 +3218,7 @@ begin
 end;
 
 procedure TRttiEnumType.AddCaptionStrings(Strings: TStrings;
-  UsedValuesBits: Pointer);
+  UsedValuesBits: pointer);
 var
   i, L: PtrInt;
   Line: array[byte] of AnsiChar;
@@ -3958,13 +3958,13 @@ end;
 
 function TRttiProp.GetterAddr(Instance: pointer): pointer;
 begin
-  result := Pointer(PtrUInt(Instance) +
+  result := pointer(PtrUInt(Instance) +
     PtrUInt(PPropInfo(@self)^.GetProc) {$ifdef ISDELPHI} and $00ffffff {$endif} );
 end;
 
 function TRttiProp.SetterAddr(Instance: pointer): pointer;
 begin
-  result := Pointer(PtrUInt(Instance) +
+  result := pointer(PtrUInt(Instance) +
     PtrUInt(PPropInfo(@self)^.SetProc) {$ifdef ISDELPHI} and $00ffffff {$endif} );
 end;
 
@@ -4140,8 +4140,8 @@ end;
 
 function TRttiProp.GetOrdProp(Instance: TObject): Int64;
 type
-  TGetProc = function: Pointer of object; // pointer result is a PtrInt register
-  TGetIndexed = function(Index: integer): Pointer of object;
+  TGetProc = function: pointer of object; // pointer result is a PtrInt register
+  TGetIndexed = function(Index: integer): pointer of object;
 var
   rpc: TRttiPropCall;
   call: TMethod;
@@ -7785,7 +7785,7 @@ begin
   Rtti.fHashTable[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
   {$else}
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
-  vmt := Pointer(PAnsiChar(aClass) + vmtAutoTable);
+  vmt := pointer(PAnsiChar(aClass) + vmtAutoTable);
   if vmt^ = nil then
     PatchCodePtrUInt(pointer(vmt), PtrUInt(self), {leaveunprotected=}true);
   if vmt^ <> self then

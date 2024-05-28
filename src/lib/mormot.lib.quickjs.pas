@@ -1940,19 +1940,19 @@ asm
   jmp libc_log // Delphi Win64 ln() is buggy -> redirect to msvcrt
 end;
 
-function memcpy(dest, src: Pointer; count: PtrInt): Pointer; cdecl;
+function memcpy(dest, src: pointer; count: PtrInt): pointer; cdecl;
 begin
   MoveFast(src^, dest^, count);
   result := dest;
 end;
 
-function memmove(dest, src: Pointer; count: PtrInt): Pointer; cdecl;
+function memmove(dest, src: pointer; count: PtrInt): pointer; cdecl;
 begin
   MoveFast(src^, dest^, count);
   result := dest;
 end;
 
-function memset(dest: Pointer; val: Integer; count: PtrInt): Pointer; cdecl;
+function memset(dest: pointer; val: integer; count: PtrInt): pointer; cdecl;
 begin
   FillCharFast(dest^, count, val);
   result := dest;

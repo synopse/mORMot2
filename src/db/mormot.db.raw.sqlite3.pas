@@ -1594,7 +1594,7 @@ type
     // - As part of the task of creating a new PSqlite3VTab structure, this method
     // must invoke sqlite3.declare_vtab() to tell the SQLite core about the
     // columns and datatypes in the virtual table
-    xCreate: function(DB: TSqlite3DB; pAux: Pointer;
+    xCreate: function(DB: TSqlite3DB; pAux: pointer;
       argc: integer; const argv: PPUtf8CharArray;
       var ppVTab: PSqlite3VTab; var pzErr: PUtf8Char): integer; cdecl;
     /// xConnect is called to establish a new connection to an existing virtual table,
@@ -1604,7 +1604,7 @@ type
     // has some kind of backing store that must be initialized the first time the
     // virtual table is created. The xCreate method creates and initializes the
     // backing store. The xConnect method just connects to an existing backing store.
-    xConnect: function(DB: TSqlite3DB; pAux: Pointer;
+    xConnect: function(DB: TSqlite3DB; pAux: pointer;
       argc: integer; const argv: PPUtf8CharArray;
       var ppVTab: PSqlite3VTab; var pzErr: PUtf8Char): integer; cdecl;
     /// Used to determine the best way to access the virtual table
@@ -1807,7 +1807,7 @@ type
     // lifetime of the pVTab object given in the first parameter.
     xFindFunction: function(var pVTab: TSqlite3VTab; nArg: integer;
       const zName: PUtf8Char; var pxFunc: TSqlFunctionFunc;
-      var ppArg: Pointer): integer; cdecl;
+      var ppArg: pointer): integer; cdecl;
     /// Provides notification that the virtual table implementation that the
     // virtual table will be given a new name
     // - If this method returns SQLITE_OK then SQLite renames the table.
@@ -1913,7 +1913,7 @@ type
   // - The 6th parameter to the authorizer callback is the name of the inner-most
   // trigger or view that is responsible for the access attempt or nil if this
   // access attempt is directly from top-level SQL code.
-  TSqlAuthorizerCallback = function(pUserData: Pointer; code: integer;
+  TSqlAuthorizerCallback = function(pUserData: pointer; code: integer;
     const zTab, zCol, zDb, zAuthContext: PUtf8Char): integer; cdecl;
 
   /// Callback function invoked for each new database connection that is created
@@ -1951,12 +1951,12 @@ type
   // - Invoking any of these routines from outside of a preupdate callback or with a database
   // connection pointer that is different from the one supplied to the preupdate callback
   // results in undefined and probably undesirable behavior.
-  TSqlPreUpdateCallback = procedure(pArg: Pointer; DB: TSqlite3DB;
+  TSqlPreUpdateCallback = procedure(pArg: pointer; DB: TSqlite3DB;
     op: integer; zDb, zName: PUtf8Char; iKey1, iKey2: Int64); cdecl;
 
   /// Callback function invoked wen running in shared-cache mode, a database operation
   // may fail with an SQLITE_LOCKED error after sqlite3.unlock_notify() registration
-  // - When an unlock-notify callback is registered, the application provides a single Pointer
+  // - When an unlock-notify callback is registered, the application provides a single pointer
   // that is passed to the callback when it is invoked. However, the signature of the callback
   // function allows SQLite to pass it an array of context pointers.
   // The first argument passed to an unlock-notify callback is a pointer to an array of pointers,
@@ -1986,7 +1986,7 @@ type
   // sqlite3.step() call that triggered the update hook. Note that
   // sqlite3.prepare_v2() and sqlite3.step() both modify their database
   // connections for the meaning of "modify" in this paragraph.
-  TSqlUpdateCallback = procedure(pUpdateArg: Pointer; op: integer;
+  TSqlUpdateCallback = procedure(pUpdateArg: pointer; op: integer;
     const zDb, zTbl: PUtf8Char; iRowID: Int64); cdecl;
 
   /// Commit And Rollback Notification Callback function after
@@ -2007,7 +2007,7 @@ type
   // constraint causes an implicit rollback to occur. The rollback callback
   // is not invoked if a transaction is automatically rolled back because the
   // database connection is closed.
-  TSqlCommitCallback = function(pArg: Pointer): integer; cdecl;
+  TSqlCommitCallback = function(pArg: pointer): integer; cdecl;
 
   /// SQLite3 callback to handle sqlite3.progress_handler()
   // - UserData is a copy of the user pointer which is the forth argument to sqlite3.progress_handler().
@@ -2073,7 +2073,7 @@ type
   // - This procedure will be invoked as each SQL statement finishes
   // - warning: sqlite3.profile() function is considered experimental and is
   // subject to change in future versions of SQLite
-  TSqlProfileCallback = procedure(ProfileArg: Pointer; Profile: PUtf8Char;
+  TSqlProfileCallback = procedure(ProfileArg: pointer; Profile: PUtf8Char;
     ProfileNanoSeconds: Int64); cdecl;
 
   /// Callback function registered by sqlite3.exec()
@@ -2344,7 +2344,7 @@ type
     // If ErrorMsg is not nil and no errors occur, then sqlite3.exec() sets it to nil
     // before returning.
     exec: function(DB: TSqlite3DB; SQL: PUtf8Char; Callback: TSqlExecCallback;
-      UserData: Pointer; var ErrorMsg: PUtf8Char): integer; cdecl;
+      UserData: pointer; var ErrorMsg: PUtf8Char): integer; cdecl;
 
     /// This function causes any pending database operation to abort and return at its
     // earliest opportunity.
@@ -2402,7 +2402,7 @@ type
     // - The default busy callback is nil.
     // - See sqlite3.busy_timeout() for setting a simple time-specific callback
     busy_handler: function(DB: TSqlite3DB;
-      CallbackPtr: TSqlBusyHandler; user: Pointer): integer;  cdecl;
+      CallbackPtr: TSqlBusyHandler; user: pointer): integer;  cdecl;
 
     /// Causes the callback function X to be invoked periodically during long running calls to
     // sqlite3.exec() and sqlite3.step() for database connection DB.
@@ -2434,7 +2434,7 @@ type
     // - Disable the authorizer by installing a nil callback
     // - The authorizer is disabled by default
     set_authorizer: function(DB: TSqlite3DB; xAuth: TSqlAuthorizerCallback;
-      pUserData: Pointer): integer; cdecl;
+      pUserData: pointer): integer; cdecl;
 
     /// Registers a callback function that is invoked prior to each INSERT, UPDATE,
     // and DELETE operation on a database table.
@@ -2560,7 +2560,7 @@ type
     // - If there is a blocking connection, then the extended error code is set to SQLITE_LOCKED_SHAREDCACHE.
     // - Otherwise, in the special "DROP TABLE/INDEX" case, the extended error code is just SQLITE_LOCKED.
     unlock_notify: function(pBlocked: TSqlite3DB; xNotify: TSqlUnlockNotify;
-      pArg: Pointer): Pointer; cdecl;
+      pArg: pointer): pointer; cdecl;
 
     /// Register Data Change Notification Callbacks
     // - The sqlite3.update_hook() interface registers a callback function with
@@ -2594,7 +2594,7 @@ type
     // previous call of the same function on the same database connection DB, or nil
     // for the first call for each function on DB.
     commit_hook: function(DB: TSqlite3DB; xCallback: TSqlCommitCallback;
-      pArg: Pointer): Pointer; cdecl;
+      pArg: pointer): pointer; cdecl;
 
     // Register Rollback Notification Callbacks
     // - The sqlite3.rollback_hook() interface registers a callback function to be
@@ -2606,7 +2606,7 @@ type
     // previous call of the same function on the same database connection D, or nil
     // for the first call for each function on D.
     rollback_hook: function(DB: TSqlite3DB;  xCallback: TSqlCommitCallback;
-      pArg: Pointer): Pointer; cdecl;
+      pArg: pointer): pointer; cdecl;
 
     /// Count The Number Of Rows Modified
     // - This function returns the number of database rows that were changed or
@@ -3207,7 +3207,7 @@ type
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_blob: procedure(Context: TSqlite3FunctionContext;
-      Value: Pointer; Value_bytes: integer = 0;
+      Value: pointer; Value_bytes: integer = 0;
       DestroyPtr: TSqlDestroyPtr = SQLITE_TRANSIENT); cdecl;
 
     /// Set the result of the application-defined function to be a BLOB containing all
@@ -3490,7 +3490,7 @@ type
     // destructor will also be invoked if call to sqlite3.create_module_v2() fails.
     create_module_v2: function(DB: TSqlite3DB;
       const zName: PUtf8Char; var p: TSqlite3Module;
-      pClientData: Pointer; xDestroy: TSqlDestroyPtr): integer; cdecl;
+      pClientData: pointer; xDestroy: TSqlDestroyPtr): integer; cdecl;
 
     /// Removes all virtual table modules from database connection DB except those named
     // on list azKeep.
@@ -3622,16 +3622,16 @@ type
 
     /// Returns a pointer to a block of memory at least N bytes in length
     // - should call native malloc() function, i.e. GetMem() in this unit
-    malloc: function(N: integer): Pointer; cdecl;
+    malloc: function(N: integer): pointer; cdecl;
 
     /// Attempts to resize a prior memory allocation
     // - should call native realloc() function, i.e. ReallocMem() in this unit
-    realloc: function(pOld: Pointer; N: integer): Pointer; cdecl;
+    realloc: function(pOld: pointer; N: integer): pointer; cdecl;
 
     /// Releases memory previously returned by sqlite3.malloc() or sqlite3.realloc()
     // - should call native free() function, i.e. FreeMem() in this unit
     // - renamed free_ in order not to override TObject.Free method
-    free_: procedure(p: Pointer); cdecl;
+    free_: procedure(p: pointer); cdecl;
 
     /// Returns the size of a memory allocation in bytes.
     // - The returned value might be larger than the number of bytes requested when
@@ -3640,7 +3640,7 @@ type
     // - If P points to something that is not the beginning of memory allocation,
     // or if it points to a formerly valid memory allocation that has now been freed,
     // then the behavior is undefined and possibly harmful.
-    msize: function(p: Pointer): Int64; cdecl;
+    msize: function(p: pointer): Int64; cdecl;
 
     /// Attempts to free N bytes of heap memory by deallocating non-essential memory
     // allocations held by the database library.
@@ -3724,7 +3724,7 @@ type
     // For these latter parameters nothing is written into pCurrent.
     // - Returns SQLITE_OK if successful, or an sqlite error code if an error occurs.
     status64: function(Operation: integer; pCurrent, pHighwater: PInt64;
-      resetFlag: integer): Integer; cdecl;
+      resetFlag: integer): integer; cdecl;
 
     /// Retrieve runtime status information about a single database connection, and
     // optionally to reset various highwater marks.
@@ -3734,7 +3734,7 @@ type
     // - If the resetFlag is true, then the highest record value is reset after
     // pHighwater is written.
     db_status: function(DB: TSqlite3DB; Operation: integer; pCurrent, pHighwater: PInteger;
-      resetFlag: integer): Integer; cdecl;
+      resetFlag: integer): integer; cdecl;
 
     /// If a write-transaction is open on database connection D when the sqlite3.db_cacheflush(DB)
     // interface invoked, any dirty pages in the pager-cache that are not currently in use are
@@ -3781,7 +3781,7 @@ type
     // then tracing is disabled
     // - parameters of the Callback functions depend of the TSqlTraceMask involved
     trace_v2: function(DB: TSqlite3DB; Mask: TSqlTraceMask;
-      Callback: TSqlTraceCallback; UserData: Pointer): Pointer; cdecl;
+      Callback: TSqlTraceCallback; UserData: pointer): pointer; cdecl;
 
     /// Allows the size of various constructs to be limited on a connection
     // by connection basis

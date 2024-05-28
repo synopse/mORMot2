@@ -7553,7 +7553,7 @@ begin
     // full cache support
     if result = nil then
     begin
-      iscacheable := fProperties.IsCacheable(Pointer(aSql));
+      iscacheable := fProperties.IsCacheable(pointer(aSql));
       if iscacheable and
          (stmt <> nil) then // RefCount > 1
       begin

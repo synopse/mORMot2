@@ -328,7 +328,7 @@ end;
 
 {$endif FPC_X86}
 
-function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=P1 edx=P2 ecx=Length

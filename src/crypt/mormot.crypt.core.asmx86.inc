@@ -436,7 +436,7 @@ end;
 {  MMX 32-bit assembler version based on optimized SHA-3 kernel by Eric Grange
    https://www.delphitools.info/2016/04/19/new-sha-3-permutation-kernel }
 
-procedure KeccakPermutationKernel(B, A, C: Pointer);
+procedure KeccakPermutationKernel(B, A, C: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         add     edx, 128
@@ -1496,7 +1496,7 @@ asm // eax=TAesContext ecx=len xmm7=IV esi=BufIn edi=BufOut
         jnz    @s
 end;
 
-procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
+procedure MakeDecrKeyAesNi(Rounds: integer; RK: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=Rounds edx=RK
         sub     eax, 9

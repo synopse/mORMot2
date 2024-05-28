@@ -531,7 +531,7 @@ begin
   TSynLog.DebuggerNotify(sllWarning, Format, Args);
 end;
 
-function vt_Create(DB: TSqlite3DB; pAux: Pointer; argc: integer;
+function vt_Create(DB: TSqlite3DB; pAux: pointer; argc: integer;
   const argv: PPUtf8CharArray; var ppVTab: PSqlite3VTab;
   var pzErr: PUtf8Char): integer; cdecl;
 var
@@ -1726,7 +1726,7 @@ end;
 
 function TRestOrmServerDB.PrepareVacuum(const aSql: RawUtf8): boolean;
 begin
-  result := not IdemPChar(Pointer(aSql), 'VACUUM');
+  result := not IdemPChar(pointer(aSql), 'VACUUM');
   if result then
     exit;
   // VACUUM is not compatible with SQLite3 virtual tables
@@ -2195,7 +2195,7 @@ begin
     whereid := -1 // update all
   else if IsRowID(pointer(WhereFieldName)) then
   begin
-    whereid := GetInt64(Pointer(WhereValue));
+    whereid := GetInt64(pointer(WhereValue));
     if whereid <= 0 then
       exit;
   end

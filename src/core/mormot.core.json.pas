@@ -855,7 +855,7 @@ type
     // - escapes chars according to the JSON RFC
     // - if Len is 0, writing will stop at #0 (default Len = 0 is slightly faster
     // than specifying Len>0 if you are sure P is zero-ended - e.g. from RawUtf8)
-    procedure AddJsonEscape(P: Pointer; Len: PtrInt = 0); overload;
+    procedure AddJsonEscape(P: pointer; Len: PtrInt = 0); overload;
     /// append some Unicode encoded chars to the buffer
     // - if Len is 0, Len is calculated from zero-ended widechar
     // - escapes chars according to the JSON RFC
@@ -878,7 +878,7 @@ type
     procedure AddJsonString(const Text: RawUtf8);
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
-    // ! AddJsonEscape(Pointer(fInternalJsonWriter.Text),0);
+    // ! AddJsonEscape(pointer(fInternalJsonWriter.Text),0);
     procedure AddJsonEscape(Source: TJsonWriter); overload;
     /// flush a supplied TJsonWriter, and write pending data as JSON escaped text
     // - may be used with InternalJsonWriter, as a faster alternative to
@@ -956,7 +956,7 @@ type
     Name: RawUtf8;
     /// the value of the Name/Value pair
     Value: RawUtf8;
-    /// any associated Pointer or numerical value
+    /// any associated pointer or numerical value
     Tag: PtrInt;
   end;
 
@@ -6904,7 +6904,7 @@ begin
   result := Json;
 end;
 
-procedure TJsonWriter.AddJsonEscape(P: Pointer; Len: PtrInt);
+procedure TJsonWriter.AddJsonEscape(P: pointer; Len: PtrInt);
 var
   i, start: PtrInt;
   {$ifdef CPUX86NOTPIC}
@@ -7104,7 +7104,7 @@ begin
   if Source.fTotalFileSize = 0 then
     AddJsonEscape(Source.fTempBuf, Source.B - Source.fTempBuf + 1)
   else
-    AddJsonEscape(Pointer(Source.Text));
+    AddJsonEscape(pointer(Source.Text));
 end;
 
 procedure TJsonWriter.AddNoJsonEscape(Source: TJsonWriter);
@@ -11458,7 +11458,7 @@ var
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
   if result then
-    JsonToObject(ObjectInstance, Pointer(tmp), result, nil, Options);
+    JsonToObject(ObjectInstance, pointer(tmp), result, nil, Options);
 end;
 
 function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;

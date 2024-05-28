@@ -461,7 +461,7 @@ type
   TRawByteStringArray = array[ 0 .. MaxInt div SizeOf(RawByteString) - 1 ] of RawByteString;
   PRawByteStringArray = ^TRawByteStringArray;
   PShortStringArray = array[ 0 .. MaxInt div SizeOf(pointer) - 1 ] of PShortString;
-  TPointerArray = array[ 0 .. MaxInt div SizeOf(Pointer) - 1 ] of Pointer;
+  TPointerArray = array[ 0 .. MaxInt div SizeOf(pointer) - 1 ] of pointer;
   PPointerArray = ^TPointerArray;
   TClassArray = array[ 0 .. MaxInt div SizeOf(TClass) - 1 ] of TClass;
   PClassArray = ^TClassArray;
@@ -1590,8 +1590,8 @@ function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): Ptr
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast O(log(n)) binary search of a Pointer value in a sorted array
-function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): PtrInt; overload;
+/// fast O(log(n)) binary search of a pointer value in a sorted array
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where to insert an integer value in a sorted integer array
@@ -2755,13 +2755,13 @@ var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
 
 /// Move() with one-by-one byte copy
 // - never redirect to MoveFast() so could be used when data overlaps
-procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveByOne(Source, Dest: pointer; Count: PtrUInt);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// perform a MoveFast then fill the Source buffer with zeros
 // - could be used e.g. to quickly move a managed record content into a newly
 // allocated stack variable with no reference counting
-procedure MoveAndZero(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveAndZero(Source, Dest: pointer; Count: PtrUInt);
 
 /// fill all bytes of a memory buffer with zero
 // - just redirect to FillCharFast(..,...,0)
@@ -2784,12 +2784,12 @@ function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 
 /// our fast version of CompareMem()
 // - tuned asm for x86, call MemCmpSse2 for x64, or fallback to tuned pascal
-function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef CPUX64}inline;{$endif}
 
 /// overload wrapper of MemCmp() to compare a RawByteString vs a memory buffer
 // - will first check length(P1)=P2Len then call MemCmp()
-function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): integer;
+function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// overload wrapper to SortDynArrayRawByteString(P1, P2)
@@ -2803,17 +2803,17 @@ function EqualBuf(const P1, P2: RawByteString): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef HASINLINE}
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
+function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean; inline;
 {$else}
 /// a CompareMem()-like function designed for small and fixed-sized content
 // - here, Length is expected to be a constant value - typically from SizeOf() -
 // so that inlining has better performance than calling the CompareMem() function
-var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): boolean = CompareMem;
+var CompareMemFixed: function(P1, P2: pointer; Length: PtrInt): boolean = CompareMem;
 {$endif HASINLINE}
 
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPUX86}
@@ -4463,8 +4463,8 @@ procedure FastAssignNew(var d; s: pointer);
 var
   sr: PStrRec; // local copy to use register
 begin
-  sr := Pointer(d);
-  Pointer(d) := s;
+  sr := pointer(d);
+  pointer(d) := s;
   if sr = nil then
     exit;
   dec(sr);
@@ -4477,8 +4477,8 @@ procedure FastAssignNewNotVoid(var d; s: pointer);
 var
   sr: PStrRec; // local copy to use register
 begin
-  sr := Pointer(d);
-  Pointer(d) := s;
+  sr := pointer(d);
+  pointer(d) := s;
   dec(sr);
   if (sr^.refcnt >= 0) and
      StrCntDecFree(sr^.refcnt) then
@@ -4693,7 +4693,7 @@ end;
 // CompareMemSmall/MoveByOne defined now for proper inlining below
 
 // warning: Delphi has troubles inlining goto/label
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
 var
   c: AnsiChar;
 begin
@@ -4711,7 +4711,7 @@ begin
   result := true;
 end;
 
-procedure MoveByOne(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveByOne(Source, Dest: pointer; Count: PtrUInt);
 var
   c: AnsiChar; // better code generation on FPC
 begin
@@ -4940,7 +4940,7 @@ zero:
 end;
 
 {$ifdef HASINLINE} // defined here for proper inlining
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
 label
   zero;
 begin
@@ -8895,7 +8895,7 @@ begin
   FillCharFast(dest, count, 0);
 end;
 
-procedure MoveAndZero(Source, Dest: Pointer; Count: PtrUInt);
+procedure MoveAndZero(Source, Dest: pointer; Count: PtrUInt);
 begin
   if Count = 0 then
     exit;
@@ -11101,12 +11101,12 @@ end;
 {$ifndef ASMX86} // those functions have their tuned x86 asm version
 
 {$ifdef CPUX64}
-function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
 begin
   result := MemCmp(P1, P2, Length) = 0; // use our SSE2 optimized asm
 end;
 {$else}
-function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
 label
   zero;
 begin
@@ -11216,7 +11216,7 @@ end;
 
 {$endif ASMX86}
 
-function CompareBuf(const P1: RawByteString; P2: Pointer; P2Len: PtrInt): integer;
+function CompareBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): integer;
 begin
   result := ComparePtrInt(length(P1), P2Len);
   if result = 0 then

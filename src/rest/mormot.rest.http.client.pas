@@ -158,7 +158,7 @@ type
     // - the aLogClass.Family will manage this TRestHttpClientGeneric instance
     // life time, until application is closed or Family.EchoRemoteStop is called
     constructor CreateForRemoteLogging(const aServer: RawUtf8;
-      aLogClass: TSynLogClass; aPort: Integer = 8091;
+      aLogClass: TSynLogClass; aPort: integer = 8091;
       const aRoot: RawUtf8 = 'LogService');
     /// save the TRestHttpClientGeneric properties into a persistent storage object
     // - CreateFrom() will expect Definition.ServerName to store the URI as
@@ -372,7 +372,7 @@ type
     /// used to handle an interface parameter as SOA callback
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-      ParamValue: Pointer): TRestClientCallbackID; override;
+      ParamValue: pointer): TRestClientCallbackID; override;
     /// used to finalize an interface parameter as SOA callback
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
       FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean; override;
@@ -633,7 +633,7 @@ begin
 end;
 
 constructor TRestHttpClientGeneric.CreateForRemoteLogging(const aServer: RawUtf8;
-  aLogClass: TSynLogClass; aPort: Integer; const aRoot: RawUtf8);
+  aLogClass: TSynLogClass; aPort: integer; const aRoot: RawUtf8);
 var
   aModel: TOrmModel;
 begin
@@ -676,7 +676,7 @@ var
 begin
   URI.From(aDefinition.ServerName);
   Create(URI.Server, URI.Port, aModel, URI.Https);
-  P := Pointer(aDefinition.DataBaseName);
+  P := pointer(aDefinition.DataBaseName);
   while P <> nil do
   begin
     if UrlDecodeCardinal(P, 'CONNECTTIMEOUT=', V) then
@@ -882,7 +882,7 @@ end;
 
 function TRestHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-  ParamValue: Pointer): TRestClientCallbackID;
+  ParamValue: pointer): TRestClientCallbackID;
 begin
   if WebSockets = nil then
     EServiceException.RaiseUtf8('Missing %.WebSocketsUpgrade() call ' +

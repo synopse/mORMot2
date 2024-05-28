@@ -392,7 +392,7 @@ begin
   if (fServerName <> '') and
      (PosExChar(':', fServerName) = 0) then
     fServerName := fServerName + ':';
-  if not IdemPChar(Pointer(aServerName), 'ZDBC:') then
+  if not IdemPChar(pointer(aServerName), 'ZDBC:') then
     fServerName := 'zdbc:' + fServerName;
   fUrl := TZURL.Create(Utf8ToString(fServerName));
   if fUrl.Database = '' then
@@ -1073,7 +1073,7 @@ begin
                   for j := 0 to fParamsArrayCount - 1 do
                     if not fNullArray[p][j] then
                       fBlobDynArray[n][j] := TZAbstractBlob.CreateWithData(
-                        Pointer(VArray[j]), length(VArray[j]));
+                        pointer(VArray[j]), length(VArray[j]));
                   fStatement.SetDataArray(p + FirstDbcIndex, fBlobDynArray[n],
                     stBinaryStream);
                 end;
@@ -1167,7 +1167,7 @@ begin
           {$endif ZEOS72UP}
         ftBlob:
           fStatement.SetBlob(i + FirstDbcIndex,stBinaryStream,
-            TZAbstractBlob.CreateWithData(Pointer(VData), length(VData)
+            TZAbstractBlob.CreateWithData(pointer(VData), length(VData)
             {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif ZEOS72UP}));
       else
         ESqlDBZeos.RaiseUtf8(
@@ -1427,9 +1427,9 @@ begin
             WR.AddDirect('"');
             if fDbms = dMSSQL then
             begin
-              P := Pointer(fResultSet.GetPWideChar(col + FirstDbcIndex, Len));
+              P := pointer(fResultSet.GetPWideChar(col + FirstDbcIndex, Len));
               if Len > 0 then // ZDBC returns P<>nil but Len=0 for ""
-                WR.AddJsonEscapeW(Pointer(P), Len);
+                WR.AddJsonEscapeW(pointer(P), Len);
             end
             else
             begin

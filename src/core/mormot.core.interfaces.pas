@@ -2249,7 +2249,7 @@ type
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); override;
     // should be overriden to support interface parameters (i.e. callbacks)
     procedure InterfaceWrite(W: TJsonWriter; const aMethod: TInterfaceMethod;
-      const aParamInfo: TInterfaceMethodArgument; aParamValue: Pointer); virtual;
+      const aParamInfo: TInterfaceMethodArgument; aParamValue: pointer); virtual;
   public
     /// create an instance, using the specified interface and factory
     constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
@@ -3551,7 +3551,7 @@ end;
 
 procedure TInterfacedObjectFake.InterfaceWrite(W: TJsonWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
-  aParamValue: Pointer);
+  aParamValue: pointer);
 begin
   EInterfaceFactory.RaiseUtf8('%: unhandled %.%(%: %) argument',
     [self, fFactory.fInterfaceName, aMethod.Uri, aParamInfo.ParamName^,
@@ -6377,7 +6377,7 @@ begin
   begin
     WR := TJsonWriter.CreateOwnedStream(temp);
     try
-      log := Pointer(fLogs);
+      log := pointer(fLogs);
       if asmndx < RESERVED_VTABLE_SLOTS then
         for i := 1 to fLogCount do
         begin
@@ -7700,7 +7700,7 @@ end;
 
 procedure SetWeak(aInterfaceField: PInterface; const aValue: IInterface);
 begin
-  PPointer(aInterfaceField)^ := Pointer(aValue);
+  PPointer(aInterfaceField)^ := pointer(aValue);
 end;
 
 

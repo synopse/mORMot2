@@ -4091,7 +4091,7 @@ begin
   result := libcrypto.X509_REQ_get_pubkey(req);
 end;
 
-function X509_REQ_set_pubkey(x: PX509_REQ; pkey: PEVP_PKEY): Integer;
+function X509_REQ_set_pubkey(x: PX509_REQ; pkey: PEVP_PKEY): integer;
 begin
   result := libcrypto.X509_REQ_set_pubkey(x, pkey);
 end;
@@ -6104,7 +6104,7 @@ function X509_REQ_get_subject_name(req: PX509_REQ): PX509_NAME; cdecl;
 function X509_REQ_get_pubkey(req: PX509_REQ): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_get_pubkey';
 
-function X509_REQ_set_pubkey(x: PX509_REQ; pkey: PEVP_PKEY): Integer; cdecl;
+function X509_REQ_set_pubkey(x: PX509_REQ; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_pubkey';
 
 function X509_getm_notBefore(x: PX509): PASN1_TIME; cdecl;
@@ -6671,7 +6671,7 @@ function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_ctrl';
 
 function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE;
-  key: PByte; iv: PByte; enc: Integer): Integer; cdecl;
+  key: PByte; iv: PByte; enc: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CipherInit_ex';
 
 function EVP_CipherInit_ex2(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
@@ -6681,10 +6681,10 @@ begin // redirect from OpenSSL 3 API into 1.1 call
 end;
 
 function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
-  _in: PByte; inl: Integer): Integer; cdecl;
+  _in: PByte; inl: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CipherUpdate';
 
-function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): Integer; cdecl;
+function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CipherFinal_ex';
 
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;

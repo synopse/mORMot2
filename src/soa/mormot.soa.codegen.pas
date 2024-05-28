@@ -626,7 +626,7 @@ begin
   if {%H-}desc = '' then
     ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
   if desc <> '' then
-    fDescriptions.InitJsonInPlace(Pointer(desc), JSON_FAST);
+    fDescriptions.InitJsonInPlace(pointer(desc), JSON_FAST);
   if aSourcePath <> '' then
   begin
     src := pointer(aSourcePath);

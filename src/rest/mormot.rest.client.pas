@@ -816,7 +816,7 @@ type
     // internal methods used by mormot.soa.client
     function FakeCallbackRegister(Sender: TServiceFactory;
       const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-      ParamValue: Pointer): TRestClientCallbackID; virtual;
+      ParamValue: pointer): TRestClientCallbackID; virtual;
     function FakeCallbackUnregister(Factory: TInterfaceFactory;
       FakeCallbackID: TRestClientCallbackID; Instance: pointer): boolean; virtual;
     property FakeCallbacks: TRestClientCallbacks
@@ -1488,8 +1488,8 @@ begin
   begin
     fSession.LastTick64 := GetTickCount64;
     nonce := CardinalToHexLower(fSession.LastTick64 shr 8); // 256 ms resolution
-    sign := Sender.fComputeSignature(fSession.PrivateKey, Pointer(nonce),
-      Pointer(blankURI), length(blankURI));
+    sign := Sender.fComputeSignature(fSession.PrivateKey, pointer(nonce),
+      pointer(blankURI), length(blankURI));
     Call.url := Call.url + fSession.IDHexa8 + nonce + CardinalToHexLower(sign);
   end;
 end;
@@ -2006,7 +2006,7 @@ end;
 
 function TRestClientUri.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
-  ParamValue: Pointer): TRestClientCallbackID;
+  ParamValue: pointer): TRestClientCallbackID;
 begin
   raise EServiceException.CreateUtf8('% does not support interface ' +
     'parameters for %.%(%: %): consider using another kind of client',

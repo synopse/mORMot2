@@ -521,14 +521,14 @@ begin
       fError);
     Check(self, nil,
       TypeByName(fEnv, fError, fContext,
-        Pointer(type_owner_name), length(type_owner_name),
-        Pointer(type_NymberListName), length(type_NymberListName),
+        pointer(type_owner_name), length(type_owner_name),
+        pointer(type_NymberListName), length(type_NymberListName),
         nil, 0, OCI_DURATION_SESSION, OCI_TYPEGET_HEADER, fType_numList),
       fError);
     Check(self, nil,
       TypeByName(fEnv, fError, fContext,
-        Pointer(type_owner_name), length(type_owner_name),
-        Pointer(type_Varchar2ListName), length(type_Varchar2ListName),
+        pointer(type_owner_name), length(type_owner_name),
+        pointer(type_Varchar2ListName), length(type_Varchar2ListName),
         nil, 0, OCI_DURATION_SESSION, OCI_TYPEGET_HEADER, fType_strList),
       fError);
     if fOCICharSet = 0 then
@@ -663,8 +663,8 @@ begin
         OCI.Check(Self, nil,
           OCI.PasswordChange(fContext, fError,
             pointer(Properties.UserID), Length(Properties.UserID),
-            Pointer(Properties.PassWord), Length(Properties.PassWord),
-            Pointer(password), Length(password),
+            pointer(Properties.PassWord), Length(Properties.PassWord),
+            pointer(password), Length(password),
             OCI_DEFAULT or OCI_AUTH),
           fError);
       TSqlDBOracleConnectionProperties(Properties).PasswordChanged(password);
@@ -985,7 +985,7 @@ begin
             with TSqlDBOracleConnection(Connection) do
               OCI.BlobFromDescriptor(self, fContext, fError,
                 PPOCIDescriptor(V)^, RawByteString(U));
-            W.WrBase64(Pointer(U), length(U), true);
+            W.WrBase64(pointer(U), length(U), true);
           end;
       else
         assert(false);
@@ -1462,7 +1462,7 @@ begin
                   begin
                     inc(oLength); // space for trailing #0
                     FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := Pointer(VData); // in-place quote removal in text
+                    oData := pointer(VData); // in-place quote removal in text
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
@@ -1473,15 +1473,15 @@ begin
                 SQLT_LVB:
                   begin
                     FastNewRawByteString(VData, oLength * fParamsArrayCount);
-                    oData := Pointer(VData);
+                    oData := pointer(VData);
                     oDataSTR := oData;
                     for j := 0 to fParamsArrayCount - 1 do
                     begin
                       {$ifdef FPC}
                       PInteger(oDataSTR)^ := length(VArray[j]);
-                      MoveFast(Pointer(VArray[j])^, oDataSTR[4], length(VArray[j]));
+                      MoveFast(pointer(VArray[j])^, oDataSTR[4], length(VArray[j]));
                       {$else} // Delphi has 32-bit length, just as OCI expects
-                      MoveFast(Pointer(PtrInt(VArray[j]) - 4)^, oDataSTR^,
+                      MoveFast(pointer(PtrInt(VArray[j]) - 4)^, oDataSTR^,
                         length(VArray[j]) + 4);
                       {$endif FPC}
                       inc(oDataSTR, oLength);
@@ -1686,7 +1686,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := Pointer(PtrInt(VData) - SizeOf(integer));
+                          oData := pointer(PtrInt(VData) - SizeOf(integer));
                           Inc(oLength, SizeOf(integer));
                         end;
                       end;

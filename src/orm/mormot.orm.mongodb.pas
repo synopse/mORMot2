@@ -123,7 +123,7 @@ type
       WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUtf8; Increment: Int64): boolean; override;
-    function EngineDeleteWhere(TableModelIndex: Integer;
+    function EngineDeleteWhere(TableModelIndex: integer;
       const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean; override;
     // BLOBs should be accessed directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -905,7 +905,7 @@ begin
   end;
 end;
 
-function TRestStorageMongoDB.EngineDeleteWhere(TableModelIndex: Integer;
+function TRestStorageMongoDB.EngineDeleteWhere(TableModelIndex: integer;
   const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 var
   i: PtrInt;
@@ -1008,7 +1008,7 @@ end;
 
 function TRestStorageMongoDB.RetrieveBlobFields(Value: TOrm): boolean;
 var
-  aID, f: Integer;
+  aID, f: integer;
   doc: variant;
   docv: PDocVariantData;
   blob: TVarData;
@@ -1188,7 +1188,7 @@ begin
 end;
 
 const
-  ORDERBY_FIELD: array[boolean] of Integer = (1, -1);
+  ORDERBY_FIELD: array[boolean] of integer = (1, -1);
 
 function TRestStorageMongoDB.EngineList(TableModelIndex: integer;
   const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;

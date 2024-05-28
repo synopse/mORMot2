@@ -276,7 +276,7 @@ type
 
   PDBParams = ^TDBParams;
   TDBParams = record
-    pData: Pointer;
+    pData: pointer;
     cParamSets: PtrUInt;
     HACCESSOR: HACCESSOR;
   end;
@@ -534,7 +534,7 @@ type
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HRESULT; stdcall;
     /// Retrieves data from the rowset's copy of the row
-    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; stdcall;
+    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: pointer): HRESULT; stdcall;
     /// Fetches rows sequentially, remembering the previous position
     // - this method has been modified from original OleDB.pas to allow direct
     // typecast of prghRows parameter to pointer(fRowStepHandles)
@@ -690,7 +690,7 @@ type
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HRESULT; stdcall;
     /// Retrieves data from the rowset's copy of the row
-    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; virtual; stdcall;
+    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: pointer): HRESULT; virtual; stdcall;
     /// Fetches rows sequentially, remembering the previous position
     // - this method has been modified from original OleDB.pas to allow direct
     // typecast of prghRows parameter to pointer(fRowStepHandles)
@@ -720,7 +720,7 @@ type
     constructor Create(arr: TRawUtf8DynArray; aType: TSqlDBFieldType);
 
     function Initialize(pIOpenRowset: IOpenRowset): HRESULT;
-    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; override; stdcall;
+    function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: pointer): HRESULT; override; stdcall;
     function SetupAccessors(pIAccessorIDList: IAccessor): HRESULT; override;
 
     procedure FillRowData(pCurrentRec:PIDListRec);
@@ -784,7 +784,7 @@ begin
 end;
 
 function TBaseAggregatingRowset.GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData:
-  Pointer): HResult;
+  pointer): HResult;
 begin
   result := S_OK;
 end;
@@ -819,7 +819,7 @@ begin
   begin
     if not Assigned(fUnkInnerSQLNCLIRowset) then
     begin
-      Pointer(Obj) := nil;
+      pointer(Obj) := nil;
       result := E_NOINTERFACE;
       exit;
     end;
@@ -933,7 +933,7 @@ begin
         begin
           tmp := UnQuoteSqlString(farr[curInd]);
           pCurrentRec.IDLen := (Length(tmp) + 1) * SizeOf(WideChar);
-          pCurrentRec.StrVal := Pointer(Utf8ToWideString(tmp));
+          pCurrentRec.StrVal := pointer(Utf8ToWideString(tmp));
         end
     else
       raise EOleDBException.CreateUtf8('Unsupported array parameter type %',
@@ -943,7 +943,7 @@ begin
 end;
 
 function TIDListRowset.GetData(HROW: HROW; HACCESSOR: HACCESSOR;
-  pData: Pointer): HResult;
+  pData: pointer): HResult;
 var
   currentRec: PIDListRec;
 begin

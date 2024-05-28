@@ -6,7 +6,7 @@
 }
 
 type
-  AlignToPtr = Pointer;
+  AlignToPtr = pointer;
 
 {$ifdef HASINLINE} // Delphi RTL TypInfo.GetTypeData() is awful on x86_64
 
@@ -207,7 +207,7 @@ end;
 
 function TRttiInterfaceTypeData.IntfParent: PRttiInfo;
 begin
-  result := Pointer(PTypeData(@self)^.IntfParent^);
+  result := pointer(PTypeData(@self)^.IntfParent^);
 end;
 
 function InterfaceEntryIsStandard(Entry: PInterfaceEntry): boolean;
@@ -562,7 +562,7 @@ function GetPublishedMethods(Instance: TObject;
   type
     TMethodInfo = packed record
       Len: Word;
-      Addr: Pointer;
+      Addr: pointer;
       Name: ShortString;
     end;
   var

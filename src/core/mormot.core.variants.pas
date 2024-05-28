@@ -227,14 +227,14 @@ type
     // - also circumvent FPC 3.2+ inverted parameters order
     {$ifdef FPC_VARIANTSETVAR}
     procedure DispInvoke(Dest: PVarData; var Source: TVarData;
-      CallDesc: PCallDesc; Params: Pointer); override;
+      CallDesc: PCallDesc; Params: pointer); override;
     {$else} // see http://mantis.freepascal.org/view.php?id=26773
     {$ifdef ISDELPHIXE7}
     procedure DispInvoke(Dest: PVarData; [ref] const Source: TVarData;
-      CallDesc: PCallDesc; Params: Pointer); override;
+      CallDesc: PCallDesc; Params: pointer); override;
     {$else}
     procedure DispInvoke(Dest: PVarData; const Source: TVarData;
-      CallDesc: PCallDesc; Params: Pointer); override;
+      CallDesc: PCallDesc; Params: pointer); override;
     {$endif ISDELPHIXE7}
     {$endif FPC_VARIANTSETVAR}
   public
@@ -4406,15 +4406,15 @@ var
 
 {$ifdef FPC_VARIANTSETVAR}
 procedure TSynInvokeableVariantType.DispInvoke(
-  Dest: PVarData; var Source: TVarData; CallDesc: PCallDesc; Params: Pointer);
+  Dest: PVarData; var Source: TVarData; CallDesc: PCallDesc; Params: pointer);
 {$else} // see http://mantis.freepascal.org/view.php?id=26773
   {$ifdef ISDELPHIXE7}
 procedure TSynInvokeableVariantType.DispInvoke(
   Dest: PVarData; [ref] const Source: TVarData; // why not just "var" ????
-  CallDesc: PCallDesc; Params: Pointer);
+  CallDesc: PCallDesc; Params: pointer);
   {$else}
 procedure TSynInvokeableVariantType.DispInvoke(
-  Dest: PVarData; const Source: TVarData; CallDesc: PCallDesc; Params: Pointer);
+  Dest: PVarData; const Source: TVarData; CallDesc: PCallDesc; Params: pointer);
   {$endif ISDELPHIXE7}
 {$endif FPC_VARIANTSETVAR}
 var
@@ -5638,7 +5638,7 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUtf8): integer;
 begin
-  result := GetValueIndex(Pointer(aName), Length(aName), IsCaseSensitive);
+  result := GetValueIndex(pointer(aName), Length(aName), IsCaseSensitive);
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -8217,7 +8217,7 @@ end;
 
 function TDocVariantData.Exists(const aName: RawUtf8): boolean;
 begin
-  result := GetValueIndex(Pointer(aName), Length(aName), IsCaseSensitive) >= 0;
+  result := GetValueIndex(pointer(aName), Length(aName), IsCaseSensitive) >= 0;
 end;
 
 function TDocVariantData.GetValueIndex(aName: PUtf8Char; aNameLen: PtrInt;
@@ -8713,7 +8713,7 @@ begin
   TDocVariant.NewFast(result);
   UpperCopy255(Up{%H-}, aStartName)^ := #0;
   for ndx := 0 to VCount - 1 do
-    if IdemPChar(Pointer(VName[ndx]), Up) then
+    if IdemPChar(pointer(VName[ndx]), Up) then
     begin
       name := VName[ndx];
       if TrimLeftStartName then
@@ -9054,7 +9054,7 @@ var
   json: RawUtf8; // temporary in-place modified buffer
 begin
   DocVariantType.ToJson(@self, json);
-  result := UrlEncodeJsonObject(UriRoot, Pointer(json), []);
+  result := UrlEncodeJsonObject(UriRoot, pointer(json), []);
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;
