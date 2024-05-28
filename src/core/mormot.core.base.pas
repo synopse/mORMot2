@@ -2819,13 +2819,13 @@ function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
 {$ifndef CPUX86}
 /// low-level efficient pure pascal function used when inlining PosEx()
 // - not to be called directly
-function PosExPas(pSub, p: PUtf8Char; Offset: PtrUInt): PtrInt;
+function PosExPas(sub, p: PUtf8Char; offset: PtrUInt): PtrInt;
 {$endif CPUX86}
 
 {$ifdef UNICODE}
 /// low-level efficient pure pascal function used when inlining PosExString()
 // - not to be called directly
-function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
+function PosExStringPas(sub, p: PChar; offset: PtrUInt): PtrInt;
 {$endif UNICODE}
 
 /// faster RawUtf8 Equivalent of standard StrUtils.PosEx
@@ -4308,16 +4308,16 @@ end;
 
 procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 var
-  Spare: PtrInt;
+  spare: PtrInt;
 begin
-  Spare := Value mod 100;
-  if Spare <> 0 then
-    if Spare > 50 then
-      {%H-}inc(Value, 100 - Spare)
-    else if Spare < -50 then
-      {%H-}dec(Value, 100 + Spare)
+  spare := Value mod 100;
+  if spare <> 0 then
+    if spare > 50 then
+      {%H-}inc(Value, 100 - spare)
+    else if spare < -50 then
+      {%H-}dec(Value, 100 + spare)
     else
-      dec(Value, Spare);
+      dec(Value, spare);
 end;
 
 function TwoDigits(const d: double): TShort31;
@@ -4325,7 +4325,7 @@ var
   v: Int64;
   m, L: PtrInt;
   tmp: array[0..23] of AnsiChar;
-  P: PAnsiChar;
+  p: PAnsiChar;
 begin
   v := trunc(d * CURR_RES);
   m := v mod 100;
@@ -4336,8 +4336,8 @@ begin
       {%H-}dec(v, 100 + m)
     else
       dec(v, m);
-  P := {%H-}StrInt64(@tmp[23], v);
-  L := @tmp[22] - P;
+  p := {%H-}StrInt64(@tmp[23], v);
+  L := @tmp[22] - p;
   m := PWord(@tmp[L - 2])^;
   if m = ord('0') or ord('0') shl 8 then
     // '300' -> '3'
@@ -4348,14 +4348,14 @@ begin
     PWord(@tmp[L - 1])^ := m;
     tmp[L - 2] := '.';
   end;
-  SetString(result, P, L);
+  SetString(result, p, L);
 end;
 
 function TruncTo2Digits(Value: Currency): Currency;
 var
-  V64: Int64 absolute Value; // to avoid any floating-point precision issues
+  v64: Int64 absolute Value; // to avoid any floating-point precision issues
 begin
-  dec(V64, V64 mod 100);
+  dec(v64, v64 mod 100);
   result := Value;
 end;
 
@@ -4489,29 +4489,29 @@ end;
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
 var
-  P: PStrRec;
+  rec: PStrRec;
 begin
   result := nil;
   if len > 0 then
   begin
     {$ifdef FPC}
-    P := GetMem(len + (_STRRECSIZE + 4));
-    result := PAnsiChar(P) + _STRRECSIZE;
+    rec := GetMem(len + (_STRRECSIZE + 4));
+    result := PAnsiChar(rec) + _STRRECSIZE;
     {$else}
     GetMem(result, len + (_STRRECSIZE + 4));
-    P := pointer(result);
+    rec := pointer(result);
     inc(PStrRec(result));
     {$endif FPC}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
     {$ifdef FPC}
-    P^.codePageElemSize := codepage + (1 shl 16);
+    rec^.codePageElemSize := codepage + (1 shl 16);
     {$else}
-    PCardinal(@P^.codePage)^ := codepage + (1 shl 16);
+    PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
     {$endif FPC}
     {$endif HASCODEPAGE}
-    P^.refCnt := 1;
-    P^.length := len;
-    PCardinal(PAnsiChar(P) + len + _STRRECSIZE)^ := 0; // ends with four #0
+    rec^.refCnt := 1;
+    rec^.length := len;
+    PCardinal(PAnsiChar(rec) + len + _STRRECSIZE)^ := 0; // ends with four #0
   end;
 end;
 
@@ -4875,31 +4875,31 @@ end;
 
 function PropNameEquals(P1, P2: PShortString): boolean;
 var
-  P1P2Len: PtrInt;
+  l: PtrInt;
 label
   zero;
 begin
-  P1P2Len := ord(P1^[0]);
-  if P1P2Len <> ord(P2^[0]) then
+  l := ord(P1^[0]);
+  if l <> ord(P2^[0]) then
     goto zero;
   inc(PByte(P1));
   inc(PByte(P2));
-  P1P2Len := PtrInt(@PByteArray(P1)[P1P2Len - SizeOf(cardinal)]); // 32-bit end
-  if P1P2Len >= PtrInt(PtrUInt(P1)) then
+  l := PtrInt(@PByteArray(P1)[l - SizeOf(cardinal)]); // 32-bit end
+  if l >= PtrInt(PtrUInt(P1)) then
     repeat // case-insensitive compare 4 bytes per loop
       if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf <> 0 then
         goto zero;
       inc(PCardinal(P1));
       inc(PCardinal(P2));
-    until P1P2Len < PtrInt(PtrUInt(P1));
-  inc(PCardinal(P1P2Len));
+    until l < PtrInt(PtrUInt(P1));
+  inc(PCardinal(l));
   dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < P1P2Len then
+  if PtrInt(PtrUInt(P1)) < l then
     repeat
       if (PByte(P1)^ xor PByteArray(P2)[PtrUInt(P1)]) and $df <> 0 then
         goto zero;
       inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= P1P2Len;
+    until PtrInt(PtrUInt(P1)) >= l;
   result := true;
   exit;
 zero:
@@ -4908,31 +4908,31 @@ end;
 
 function PropNameEquals(const P1, P2: RawUtf8): boolean;
 var
-  P1P2Len, _1, _2: PtrInt;
+  l, _1, _2: PtrInt;
 label
   zero;
 begin
-  P1P2Len := length(P1);
-  if P1P2Len <> length(P2) then
+  l := length(P1);
+  if l <> length(P2) then
     goto zero;
   _1 := PtrUInt(P1);
   _2 := PtrUInt(P2);
-  P1P2Len := PtrInt(@PByteArray(_1)[P1P2Len - SizeOf(cardinal)]); // 32-bit end
-  if P1P2Len >= _1 then
+  l := PtrInt(@PByteArray(_1)[l - SizeOf(cardinal)]); // 32-bit end
+  if l >= _1 then
     repeat // case-insensitive compare 4 bytes per loop
       if (PCardinal(_1)^ xor PCardinal(_2)^) and $dfdfdfdf <> 0 then
         goto zero;
       inc(PCardinal(_1));
       inc(PCardinal(_2));
-    until P1P2Len < _1;
-  inc(PCardinal(P1P2Len));
+    until l < _1;
+  inc(PCardinal(l));
   dec(_2, _1);
-  if _1 < P1P2Len then
+  if _1 < l then
     repeat
       if (PByte(_1)^ xor PByteArray(_2)[PtrUInt(_1)]) and $df <> 0 then
         goto zero;
       inc(PByte(_1));
-    until _1 >= P1P2Len;
+    until _1 >= l;
   result := true;
   exit;
 zero:
@@ -5060,7 +5060,7 @@ end;
 
 procedure ToHumanHex(var result: RawUtf8; bin: PByteArray; len: PtrInt);
 var
-  P: PAnsiChar;
+  p: PAnsiChar;
   i, c: PtrInt;
   tab: PAnsichar;
 begin
@@ -5072,24 +5072,24 @@ begin
   FastSetString(result, (len * 3) - 1);
   dec(len);
   tab := @HexCharsLower;
-  P := pointer(result);
+  p := pointer(result);
   i := 0;
   repeat
     c := bin[i];
-    P[0] := tab[c shr 4];
+    p[0] := tab[c shr 4];
     c := c and 15;
-    P[1] := tab[c];
+    p[1] := tab[c];
     if i = len then
       break;
-    P[2] := ':'; // to please (most) human limited hexadecimal capabilities
-    inc(P, 3);
+    p[2] := ':'; // to please (most) human limited hexadecimal capabilities
+    inc(p, 3);
     inc(i);
   until false;
 end;
 
 procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
 var
-  P: PAnsiChar;
+  p: PAnsiChar;
   i, c: PtrInt;
   tab: PAnsichar;
 begin
@@ -5100,18 +5100,18 @@ begin
   end;
   FastSetString(result, (len * 3) - 1);
   tab := @HexCharsLower;
-  P := pointer(result);
+  p := pointer(result);
   i := len;
   repeat
     dec(i);
     c := bin[i];
-    P[0] := tab[c shr 4];
+    p[0] := tab[c shr 4];
     c := c and 15;
-    P[1] := tab[c];
+    p[1] := tab[c];
     if i = 0 then
       break;
-    P[2] := ':';
-    inc(P, 3);
+    p[2] := ':';
+    inc(p, 3);
   until false;
 end;
 
@@ -6494,7 +6494,7 @@ end;
 
 procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
 var
-  last: integer;
+  last: PtrInt;
 begin
   last := high(Values);
   if FastFindInt64Sorted(pointer(Values), last, Value) >= 0 then
@@ -6628,49 +6628,49 @@ end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: integer;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
-        tmp := ID[P];
-        if ID[I] < tmp then
+        tmp := ID[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
-        if I <= J then
+            dec(j)
+          until ID[j] <= tmp;
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortInteger(ID, L, J);
-        L := I;
+        if L < j then
+          QuickSortInteger(ID, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortInteger(ID, I, R);
-        R := J;
+        if i < R then
+          QuickSortInteger(ID, i, R);
+        R := j;
       end;
     until L >= R;
 end;
@@ -6682,317 +6682,317 @@ end;
 
 procedure QuickSortInteger(ID, CoValues: PIntegerArray; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: integer;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
-        tmp := ID[P];
-        if ID[I] < tmp then
+        tmp := ID[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
-        if I <= J then
+            dec(j)
+          until ID[j] <= tmp;
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          tmp := CoValues[J];
-          CoValues[J] := CoValues[I];
-          CoValues[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          tmp := CoValues[j];
+          CoValues[j] := CoValues[i];
+          CoValues[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortInteger(ID, CoValues, L, J);
-        L := I;
+        if L < j then
+          QuickSortInteger(ID, CoValues, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortInteger(ID, CoValues, I, R);
-        R := J;
+        if i < R then
+          QuickSortInteger(ID, CoValues, i, R);
+        R := j;
       end;
     until L >= R;
 end;
 
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: word;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
-        tmp := ID[P];
-        if ID[I] < tmp then
+        tmp := ID[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
-        if I <= J then
+            dec(j)
+          until ID[j] <= tmp;
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortWord(ID, L, J);
-        L := I;
+        if L < j then
+          QuickSortWord(ID, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortWord(ID, I, R);
-        R := J;
+        if i < R then
+          QuickSortWord(ID, i, R);
+        R := j;
       end;
     until L >= R;
 end;
 
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: Int64;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
       {$ifdef CPU64}
-        tmp := ID^[P];
-        if ID[I] < tmp then
+        tmp := ID^[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
+            dec(j)
+          until ID[j] <= tmp;
       {$else}
-        while ID[I] < ID[P] do
-          inc(I);
-        while ID[J] > ID[P] do
-          dec(J);
+        while ID[i] < ID[p] do
+          inc(i);
+        while ID[j] > ID[p] do
+          dec(j);
       {$endif CPU64}
-        if I <= J then
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortInt64(ID, L, J);
-        L := I;
+        if L < j then
+          QuickSortInt64(ID, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortInt64(ID, I, R);
-        R := J;
+        if i < R then
+          QuickSortInt64(ID, i, R);
+        R := j;
       end;
     until L >= R;
 end;
 
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: QWord;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
       {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-        while CompareQWord(ID[I], ID[P]) < 0 do
-          inc(I);
-        while CompareQWord(ID[J], ID[P]) > 0 do
-          dec(J);
+        while CompareQWord(ID[i], ID[p]) < 0 do
+          inc(i);
+        while CompareQWord(ID[j], ID[p]) > 0 do
+          dec(j);
       {$else}
-        tmp := ID[P];
-        if ID[I] < tmp then
+        tmp := ID[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
+            dec(j)
+          until ID[j] <= tmp;
       {$endif CPUX86}
-        if I <= J then
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortQWord(ID, L, J);
-        L := I;
+        if L < j then
+          QuickSortQWord(ID, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortQWord(ID, I, R);
-        R := J;
+        if i < R then
+          QuickSortQWord(ID, i, R);
+        R := j;
       end;
     until L >= R;
 end;
 
 procedure QuickSortDouble(ID: PDoubleArray; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: double;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
-        tmp := ID[P];
-        while ID[I] < tmp do
-          inc(I);
-        while ID[J] > tmp do
-          dec(J);
-        if I <= J then
+        tmp := ID[p];
+        while ID[i] < tmp do
+          inc(i);
+        while ID[j] > tmp do
+          dec(j);
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortDouble(ID, L, J);
-        L := I;
+        if L < j then
+          QuickSortDouble(ID, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortDouble(ID, I, R);
-        R := J;
+        if i < R then
+          QuickSortDouble(ID, i, R);
+        R := j;
       end;
     until L >= R;
 end;
 
 procedure QuickSortInt64(ID, CoValues: PInt64Array; L, R: PtrInt);
 var
-  I, J, P: PtrInt;
+  i, j, p: PtrInt;
   tmp: Int64;
 begin
   if L < R then
     repeat
-      I := L;
-      J := R;
-      P := (L + R) shr 1;
+      i := L;
+      j := R;
+      p := (L + R) shr 1;
       repeat
       {$ifdef CPU64}
-        tmp := ID^[P];
-        if ID[I] < tmp then
+        tmp := ID^[p];
+        if ID[i] < tmp then
           repeat
-            inc(I)
-          until ID[I] >= tmp;
-        if ID[J] > tmp then
+            inc(i)
+          until ID[i] >= tmp;
+        if ID[j] > tmp then
           repeat
-            dec(J)
-          until ID[J] <= tmp;
+            dec(j)
+          until ID[j] <= tmp;
       {$else}
-        while ID[I] < ID[P] do
-          inc(I);
-        while ID[J] > ID[P] do
-          dec(J);
+        while ID[i] < ID[p] do
+          inc(i);
+        while ID[j] > ID[p] do
+          dec(j);
       {$endif CPU64}
-        if I <= J then
+        if i <= j then
         begin
-          tmp := ID[J];
-          ID[J] := ID[I];
-          ID[I] := tmp;
-          tmp := CoValues[J];
-          CoValues[J] := CoValues[I];
-          CoValues[I] := tmp;
-          if P = I then
-            P := J
-          else if P = J then
-            P := I;
-          inc(I);
-          dec(J);
+          tmp := ID[j];
+          ID[j] := ID[i];
+          ID[i] := tmp;
+          tmp := CoValues[j];
+          CoValues[j] := CoValues[i];
+          CoValues[i] := tmp;
+          if p = i then
+            p := j
+          else if p = j then
+            p := i;
+          inc(i);
+          dec(j);
         end;
-      until I > J;
-      if J - L < R - I then
+      until i > j;
+      if j - L < R - i then
       begin
         // use recursion only for smaller range
-        if L < J then
-          QuickSortInt64(ID, CoValues, L, J);
-        L := I;
+        if L < j then
+          QuickSortInt64(ID, CoValues, L, j);
+        L := i;
       end
       else
       begin
-        if I < R then
-          QuickSortInt64(ID, CoValues, I, R);
-        R := J;
+        if i < R then
+          QuickSortInt64(ID, CoValues, i, R);
+        R := j;
       end;
     until L >= R;
 end;
@@ -7088,7 +7088,7 @@ end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L {$ifndef CPUX86}, LL, RR{$endif CPUX86}: PtrInt;
+  L {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7110,12 +7110,12 @@ begin
       else
         R := result - 1;
       {$else}
-      RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      LL := result - 1;
+      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      ll := result - 1;
       if cmp < 0 then
-        L := RR
+        L := rr
       else
-        R := LL;
+        R := ll;
       {$endif CPUX86}
     until L > R;
     while (result >= 0) and
@@ -7127,7 +7127,7 @@ end;
 
 function FastSearchIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var
-  L {$ifndef CPUX86}, LL, RR{$endif CPUX86}: PtrInt;
+  L {$ifndef CPUX86}, ll, rr{$endif CPUX86}: PtrInt;
   cmp: integer;
 begin
   if R < 0 then
@@ -7146,12 +7146,12 @@ begin
       else
         R := result - 1;
       {$else}
-      RR := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
-      LL := result - 1;
+      rr := result + 1; // compile as 2 branchless cmovl/cmovge on FPC
+      ll := result - 1;
       if cmp < 0 then
-        L := RR
+        L := rr
       else
-        R := LL;
+        R := ll;
       {$endif CPUX86}
     until L > R;
     while (result >= 0) and
@@ -7201,14 +7201,14 @@ end;
 function AddSortedInteger(var Values: TIntegerDynArray; Value: integer;
   CoValues: PIntegerDynArray): PtrInt;
 var
-  ValuesCount: integer;
+  n: integer; // not PtrInt
 begin
-  ValuesCount := Length(Values);
-  result := FastLocateIntegerSorted(pointer(Values), ValuesCount - 1, Value);
+  n := Length(Values);
+  result := FastLocateIntegerSorted(pointer(Values), n - 1, Value);
   if result < 0 then
     exit; // Value exists -> fails and return -(foundindex+1)
-  SetLength(Values, ValuesCount + 1); // manual size increase
-  result := InsertInteger(Values, ValuesCount, Value, result, CoValues);
+  SetLength(Values, n + 1); // manual size increase
+  result := InsertInteger(Values, n, Value, result, CoValues);
 end;
 
 function InsertInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
@@ -8233,20 +8233,20 @@ end;
 
 function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
 var
-  P: PPtrInt;
+  p: PPtrInt;
   popcnt: function(value: PtrInt): PtrInt; // fast redirection within loop
 begin
-  P := @Bits;
+  p := @Bits;
   result := 0;
   popcnt := @GetBitsCountPtrInt;
   if Count >= POINTERBITS then
     repeat
       dec(Count, POINTERBITS);
-      inc(result, popcnt(P^)); // use SSE4.2 if available
-      inc(P);
+      inc(result, popcnt(p^)); // use SSE4.2 if available
+      inc(p);
     until Count < POINTERBITS;
   if Count > 0 then
-    inc(result, popcnt(P^ and ((PtrInt(1) shl Count) - 1)));
+    inc(result, popcnt(p^ and ((PtrInt(1) shl Count) - 1)));
 end;
 
 function GetAllBits(Bits, BitCount: cardinal): boolean;
@@ -8331,32 +8331,32 @@ begin
 end;
 
 // from A. Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform/compiler
-function PosExPas(pSub, p: PUtf8Char; Offset: PtrUInt): PtrInt;
+function PosExPas(sub, p: PUtf8Char; offset: PtrUInt): PtrInt;
 var
   len, lenSub: PtrInt;
   ch: AnsiChar;
-  pStart, pStop: PUtf8Char;
+  start, stop: PUtf8Char;
 label
   s2, s6, tt, t0, t1, t2, t3, t4, s0, s1, fnd, quit;
 begin
   result := 0;
   if (p = nil) or
-     (pSub = nil) or
-     (PtrInt(Offset) <= 0) then
+     (sub = nil) or
+     (PtrInt(offset) <= 0) then
     goto quit;
   len := PStrLen(p - _STRLEN)^;
-  lenSub := PStrLen(pSub - _STRLEN)^ - 1;
-  if (len < lenSub + PtrInt(Offset)) or
+  lenSub := PStrLen(sub - _STRLEN)^ - 1;
+  if (len < lenSub + PtrInt(offset)) or
      (lenSub < 0) then
     goto quit;
-  pStop := p + len;
+  stop := p + len;
   inc(p, lenSub);
-  inc(pSub, lenSub);
-  pStart := p;
-  p := @p[Offset + 3];
-  ch := pSub[0];
+  inc(sub, lenSub);
+  start := p;
+  p := @p[offset + 3];
+  ch := sub[0];
   lenSub := -lenSub;
-  if p < pStop then
+  if p < stop then
     goto s6;
   dec(p, 4);
   goto s2;
@@ -8374,10 +8374,10 @@ s2:if ch = p[0] then
 s1:if ch = p[1] then
     goto tt;
 s0:inc(p, 6);
-  if p < pStop then
+  if p < stop then
     goto s6;
   dec(p, 4);
-  if p >= pStop then
+  if p >= stop then
     goto quit;
   goto s2;
 t4:dec(p, 2);
@@ -8388,26 +8388,26 @@ t1:dec(p, 2);
 tt:len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len + 1]) or
-         (pSub[len + 1] <> p[len + 2]) then
+      if (sub[len] <> p[len + 1]) or
+         (sub[len + 1] <> p[len + 2]) then
         goto s0;
       inc(len, 2);
     until len >= 0;
   inc(p, 2);
-  if p <= pStop then
+  if p <= stop then
     goto fnd;
   goto quit;
 t0:len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len]) or
-         (pSub[len + 1] <> p[len + 1]) then
+      if (sub[len] <> p[len]) or
+         (sub[len + 1] <> p[len + 1]) then
         goto s1;
       inc(len, 2);
     until len >= 0;
   inc(p);
 fnd:
-  result := p - pStart;
+  result := p - start;
 quit:
 end;
 
@@ -8473,33 +8473,33 @@ begin
   result := PosExStringPas(pointer(SubStr), pointer(S), Offset);
 end;
 
-function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
+function PosExStringPas(sub, p: PChar; offset: PtrUInt): PtrInt;
 var
   len, lenSub: PtrInt;
   ch: char;
-  pStart, pStop: PChar;
+  start, stop: PChar;
 label
   Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
   AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
   if (p = nil) or
-     (pSub = nil) or
-     (PtrInt(Offset) <= 0) then
+     (sub = nil) or
+     (PtrInt(offset) <= 0) then
     goto Exit;
   len := PStrLen(PtrUInt(p) - _STRLEN)^;
-  lenSub := PStrLen(PtrUInt(pSub) - _STRLEN)^ - 1;
-  if (len < lenSub + PtrInt(Offset)) or
+  lenSub := PStrLen(PtrUInt(sub) - _STRLEN)^ - 1;
+  if (len < lenSub + PtrInt(offset)) or
      (lenSub < 0) then
     goto Exit;
-  pStop := p + len;
+  stop := p + len;
   inc(p, lenSub);
-  inc(pSub, lenSub);
-  pStart := p;
-  inc(p, Offset + 3);
-  ch := pSub[0];
+  inc(sub, lenSub);
+  start := p;
+  inc(p, offset + 3);
+  ch := sub[0];
   lenSub := -lenSub;
-  if p < pStop then
+  if p < stop then
     goto Loop6;
   dec(p, 4);
   goto Loop2;
@@ -8520,10 +8520,10 @@ AfterTest0:
     goto TestT;
 AfterTestT:
   inc(p, 6);
-  if p < pStop then
+  if p < stop then
     goto Loop6;
   dec(p, 4);
-  if p >= pStop then
+  if p >= stop then
     goto Exit;
   goto Loop2;
 Test4:
@@ -8539,27 +8539,27 @@ TestT:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len + 1]) or
-         (pSub[len + 1] <> p[len + 2]) then
+      if (sub[len] <> p[len + 1]) or
+         (sub[len + 1] <> p[len + 2]) then
         goto AfterTestT;
       inc(len, 2);
     until len >= 0;
   inc(p, 2);
-  if p <= pStop then
+  if p <= stop then
     goto Ret;
   goto Exit;
 Test0:
   len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (pSub[len] <> p[len]) or
-         (pSub[len + 1] <> p[len + 1]) then
+      if (sub[len] <> p[len]) or
+         (sub[len + 1] <> p[len + 1]) then
         goto AfterTest0;
       inc(len, 2);
     until len >= 0;
   inc(p);
 Ret:
-  result := p - pStart;
+  result := p - start;
 Exit:
 end;
 
@@ -8578,59 +8578,59 @@ end;
 
 function TrimU(const S: RawUtf8): RawUtf8;
 var
-  i, L: PtrInt;
+  i, len: PtrInt;
 begin
-  L := Length(S);
+  len := Length(S);
   i := 1;
-  while (i <= L) and
+  while (i <= len) and
         (S[i] <= ' ') do
     inc(i);
-  if i > L then
+  if i > len then
     FastAssignNew(result) // void string
   else if (i = 1) and
-          (S[L] > ' ') then
+          (S[len] > ' ') then
     result := S // nothing to trim: reference counted copy
   else
   begin
-    while S[L] <= ' ' do
-      dec(L);
+    while S[len] <= ' ' do
+      dec(len);
     dec(i);
-    FastSetString(result, @PByteArray(S)[i], L - i); // trim and allocate
+    FastSetString(result, @PByteArray(S)[i], len - i); // trim and allocate
   end;
 end;
 
 procedure TrimSelf(var S: RawUtf8);
 var
-  i, L: PtrInt;
+  i, len: PtrInt;
 begin
   if S = '' then
     exit;
-  L := PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^;
+  len := PStrLen(PAnsiChar(pointer(S)) - _STRLEN)^;
   i := 1;
-  while (i <= L) and
+  while (i <= len) and
         (S[i] <= ' ') do
     inc(i);
-  if i > L then
+  if i > len then
     FastAssignNew(S) // void string
   else if (i = 1) and
-          (S[L] > ' ') then
+          (S[len] > ' ') then
     exit // nothing to trim
   else
   begin
     // trim the UTF-8 string
-    while S[L] <= ' ' do
-      dec(L);
+    while S[len] <= ' ' do
+      dec(len);
     dec(i);
-    dec(L, i);
-    if (L <> 0) and
+    dec(len, i);
+    if (len <> 0) and
        (PStrCnt(PAnsiChar(pointer(S)) - _STRCNT)^ = 1) then
     begin
       if i <> 0 then
-        MoveFast(PByteArray(S)[i], pointer(S)^, L); // trim left: move in place
-      FakeLength(S, L); // after move, to properly set ending #0
+        MoveFast(PByteArray(S)[i], pointer(S)^, len); // trim left: move in place
+      FakeLength(S, len); // after move, to properly set ending #0
     end
     else
-      FastSetString(S, @PByteArray(S)[i], L); // allocate
+      FastSetString(S, @PByteArray(S)[i], len); // allocate
   end;
 end;
 
@@ -8644,31 +8644,31 @@ end;
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
   var result: RawUtf8); // faster alternative to TrimU(copy())
 var
-  L: PtrInt;
+  len: PtrInt;
 begin
   if count > 0 then
   begin
     if start <= 0 then
       start := 1;
-    L := Length(S);
-    while (start <= L) and
+    len := Length(S);
+    while (start <= len) and
           (S[start] <= ' ') do
     begin
       inc(start);
       dec(count);
     end;
     dec(start);
-    dec(L,start);
-    if count < L then
-      L := count;
-    while L > 0 do
-      if S[start + L] <= ' ' then
-        dec(L)
+    dec(len,start);
+    if count < len then
+      len := count;
+    while len > 0 do
+      if S[start + len] <= ' ' then
+        dec(len)
       else
         break;
-    if L > 0 then
+    if len > 0 then
     begin
-      FastSetString(result, @PByteArray(S)[start], L);
+      FastSetString(result, @PByteArray(S)[start], len);
       exit;
     end;
   end;
@@ -9212,19 +9212,19 @@ end;
 
 function MultiEventFind(const EventList; const Event: TMethod): PtrInt;
 var
-  Events: TMethodDynArray absolute EventList;
+  events: TMethodDynArray absolute EventList;
 begin
   if Event.Code <> nil then // callback assigned
-    for result := 0 to length(Events) - 1 do
-      if (Events[result].Code = Event.Code) and
-         (Events[result].Data = Event.Data) then
+    for result := 0 to length(events) - 1 do
+      if (events[result].Code = Event.Code) and
+         (events[result].Data = Event.Data) then
         exit;
   result := -1;
 end;
 
 function MultiEventAdd(var EventList; const Event: TMethod): boolean;
 var
-  Events: TMethodDynArray absolute EventList;
+  events: TMethodDynArray absolute EventList;
   n: PtrInt;
 begin
   result := false;
@@ -9232,9 +9232,9 @@ begin
   if n >= 0 then
     exit; // already registered
   result := true;
-  n := length(Events);
-  SetLength(Events, n + 1);
-  Events[n] := Event;
+  n := length(events);
+  SetLength(events, n + 1);
+  events[n] := Event;
 end;
 
 procedure MultiEventRemove(var EventList; const Event: TMethod);
@@ -9244,39 +9244,39 @@ end;
 
 procedure MultiEventRemove(var EventList; Index: integer);
 var
-  Events: TMethodDynArray absolute EventList;
+  events: TMethodDynArray absolute EventList;
   max: integer;
 begin
-  max := length(Events);
+  max := length(events);
   if cardinal(Index) < cardinal(max) then
   begin
     dec(max);
-    MoveFast(Events[Index + 1], Events[Index], (max - Index) * SizeOf(Events[Index]));
-    SetLength(Events, max);
+    MoveFast(events[Index + 1], events[Index], (max - Index) * SizeOf(events[Index]));
+    SetLength(events, max);
   end;
 end;
 
 procedure MultiEventMerge(var DestList; const ToBeAddedList);
 var
-  Dest: TMethodDynArray absolute DestList;
-  New: TMethodDynArray absolute ToBeAddedList;
+  dst: TMethodDynArray absolute DestList;
+  new: TMethodDynArray absolute ToBeAddedList;
   d, n: PtrInt;
 begin
-  d := length(Dest);
-  n := length(New);
+  d := length(dst);
+  n := length(new);
   if n = 0 then
     exit;
-  SetLength(Dest, d + n);
-  MoveFast(New[0], Dest[d], n * SizeOf(TMethod));
+  SetLength(dst, d + n);
+  MoveFast(new[0], dst[d], n * SizeOf(TMethod));
 end;
 
 function EventEquals(const eventA, eventB): boolean;
 var
-  A: TMethod absolute eventA;
-  B: TMethod absolute eventB;
+  a: TMethod absolute eventA;
+  b: TMethod absolute eventB;
 begin
-  result := (A.Code = B.Code) and
-            (A.Data = B.Data);
+  result := (a.Code = b.Code) and
+            (a.Data = b.Data);
 end;
 
 
@@ -10092,17 +10092,17 @@ end;
 
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  dst_beg,          // initial dst value
-  src_end,          // real last byte available in src
-  src_endmatch,     // last byte to try for hashing
+  dstbeg,          // initial dst value
+  srcend,          // real last byte available in src
+  srcendmatch,     // last byte to try for hashing
   o: PAnsiChar;
-  CWbit: byte;
-  CWpoint: PCardinal;
+  cwbit: byte;
+  cwpoint: PCardinal;
   v, h, cached, t, tmax: PtrUInt;
   offset: TOffsets;
   cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB for cpu64)
 begin
-  dst_beg := dst;
+  dstbeg := dst;
   // 1. store in_len
   if size >= $8000 then
   begin
@@ -10122,15 +10122,15 @@ begin
     inc(dst, 2);
   end;
   // 2. compress
-  src_end := src + size;
-  src_endmatch := src_end - (6 + 5);
-  CWbit := 0;
-  CWpoint := pointer(dst);
+  srcend := src + size;
+  srcendmatch := srcend - (6 + 5);
+  cwbit := 0;
+  cwpoint := pointer(dst);
   PCardinal(dst)^ := 0;
-  inc(dst, SizeOf(CWpoint^));
+  inc(dst, SizeOf(cwpoint^));
   FillCharFast(offset, SizeOf(offset), 0); // fast 16KB reset to 0
   // 1. main loop to search using hash[]
-  if src <= src_endmatch then
+  if src <= srcendmatch then
     repeat
       v := PCardinal(src)^;
       h := ((v shr 12) xor v) and 4095;
@@ -10142,11 +10142,11 @@ begin
          (o <> nil) and
          (src - o > 2) then
       begin
-        CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
+        cwpoint^ := cwpoint^ or (cardinal(1) shl cwbit);
         inc(src, 2);
         inc(o, 2);
         t := 1;
-        tmax := src_end - src - 1;
+        tmax := srcend - src - 1;
         if tmax >= (255 + 16) then
           tmax := (255 + 16);
         while (o[t] = src[t]) and
@@ -10176,36 +10176,36 @@ begin
         inc(src);
         inc(dst);
       end;
-      if CWbit < 31 then
+      if cwbit < 31 then
       begin
-        inc(CWbit);
-        if src <= src_endmatch then
+        inc(cwbit);
+        if src <= srcendmatch then
           continue
         else
           break;
       end
       else
       begin
-        CWpoint := pointer(dst);
+        cwpoint := pointer(dst);
         PCardinal(dst)^ := 0;
-        inc(dst, SizeOf(CWpoint^));
-        CWbit := 0;
-        if src <= src_endmatch then
+        inc(dst, SizeOf(cwpoint^));
+        cwbit := 0;
+        if src <= srcendmatch then
           continue
         else
           break;
       end;
     until false;
   // 2. store remaining bytes
-  if src < src_end then
+  if src < srcend then
     repeat
       dst^ := src^;
       inc(src);
       inc(dst);
-      if CWbit < 31 then
+      if cwbit < 31 then
       begin
-        inc(CWbit);
-        if src < src_end then
+        inc(cwbit);
+        if src < srcend then
           continue
         else
           break;
@@ -10214,14 +10214,14 @@ begin
       begin
         PCardinal(dst)^ := 0;
         inc(dst, 4);
-        CWbit := 0;
-        if src < src_end then
+        cwbit := 0;
+        if src < srcend then
           continue
         else
           break;
       end;
     until false;
-  result := dst - dst_beg;
+  result := dst - dstbeg;
 end;
 
 // better code generation with sub-functions for raw decoding
@@ -10231,19 +10231,19 @@ var
   {$ifdef CPU64}
   o: PAnsiChar;
   {$endif CPU64}
-  CW, CWbit: cardinal;
+  cw, cwbit: cardinal;
   v, t, h: PtrUInt;
 label
   nextCW;
 begin
   last_hashed := dst - 1;
 nextCW:
-  CW := PCardinal(src)^;
+  cw := PCardinal(src)^;
   inc(src, 4);
-  CWbit := 1;
+  cwbit := 1;
   if src < src_end then
     repeat
-      if CW and CWbit = 0 then
+      if cw and cwbit = 0 then
       begin
         dst^ := src^;
         inc(src);
@@ -10256,8 +10256,8 @@ nextCW:
           v := PCardinal(last_hashed)^;
           offset[((v shr 12) xor v) and 4095] := last_hashed;
         end;
-        CWbit := CWbit shl 1;
-        if CWbit <> 0 then
+        cwbit := cwbit shl 1;
+        if cwbit <> 0 then
           continue
         else
           goto nextCW;
@@ -10299,8 +10299,8 @@ nextCW:
           until last_hashed >= dst;
         inc(dst, t);
         last_hashed := dst - 1;
-        CWbit := CWbit shl 1;
-        if CWbit <> 0 then
+        cwbit := cwbit shl 1;
+        if cwbit <> 0 then
           continue
         else
           goto nextCW;
@@ -10311,9 +10311,9 @@ end;
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
   offset: TOffsets;
-  src_end: PAnsiChar;
+  srcend: PAnsiChar;
 begin
-  src_end := src + size;
+  srcend := src + size;
   result := PWord(src)^;
   if result = 0 then
     exit;
@@ -10323,14 +10323,14 @@ begin
     result := (result and $7fff) or (integer(PWord(src)^) shl 15);
     inc(src, 2);
   end;
-  SynLZdecompress1passub(src, src_end, dst, offset);
+  SynLZdecompress1passub(src, srcend, dst, offset);
 end;
 
 procedure SynLZdecompress1partialsub(src, dst, src_end, dst_end: PAnsiChar;
   var offset: TOffsets);
 var
-  last_hashed: PAnsiChar; // initial src and dst value
-  CWbit, CW: integer;
+  lasthashed: PAnsiChar; // initial src and dst value
+  cwbit, cw: integer;
   v, t, h: PtrUInt;
   {$ifdef CPU64}
   o: PAnsiChar;
@@ -10338,14 +10338,14 @@ var
 label
   nextCW;
 begin
-  last_hashed := dst - 1;
+  lasthashed := dst - 1;
 nextCW:
-  CW := PCardinal(src)^;
+  cw := PCardinal(src)^;
   inc(src, 4);
-  CWbit := 1;
+  cwbit := 1;
   if src < src_end then
     repeat
-      if CW and CWbit = 0 then
+      if cw and cwbit = 0 then
       begin
         dst^ := src^;
         inc(src);
@@ -10353,14 +10353,14 @@ nextCW:
         if (src >= src_end) or
            (dst >= dst_end) then
           break;
-        if last_hashed < dst - 3 then
+        if lasthashed < dst - 3 then
         begin
-          inc(last_hashed);
-          v := PCardinal(last_hashed)^;
-          offset[((v shr 12) xor v) and 4095] := last_hashed;
+          inc(lasthashed);
+          v := PCardinal(lasthashed)^;
+          offset[((v shr 12) xor v) and 4095] := lasthashed;
         end;
-        CWbit := CWbit shl 1;
-        if CWbit <> 0 then
+        cwbit := cwbit shl 1;
+        if cwbit <> 0 then
           continue
         else
           goto nextCW;
@@ -10398,16 +10398,16 @@ nextCW:
         {$endif CPU64}
         if src >= src_end then
           break;
-        if last_hashed < dst then
+        if lasthashed < dst then
           repeat
-            inc(last_hashed);
-            v := PCardinal(last_hashed)^;
-            offset[((v shr 12) xor v) and 4095] := last_hashed;
-          until last_hashed >= dst;
+            inc(lasthashed);
+            v := PCardinal(lasthashed)^;
+            offset[((v shr 12) xor v) and 4095] := lasthashed;
+          until lasthashed >= dst;
         inc(dst, t);
-        last_hashed := dst - 1;
-        CWbit := CWbit shl 1;
-        if CWbit <> 0 then
+        lasthashed := dst - 1;
+        cwbit := cwbit shl 1;
+        if cwbit <> 0 then
           continue
         else
           goto nextCW;
@@ -10419,9 +10419,9 @@ function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 var
   offset: TOffsets;
-  src_end: PAnsiChar;
+  srcend: PAnsiChar;
 begin
-  src_end := src + size;
+  srcend := src + size;
   result := PWord(src)^;
   if result = 0 then
     exit;
@@ -10434,39 +10434,39 @@ begin
   if maxDst < result then
     result := maxDst;
   if result > 0 then
-    SynLZdecompress1partialsub(src, dst, src_end, dst + result, offset);
+    SynLZdecompress1partialsub(src, dst, srcend, dst + result, offset);
 end;
 
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
 var
-  DataLen, len: integer;
-  P: PAnsiChar;
+  datalen, len: integer;
+  p: PAnsiChar;
   tmp: TSynTempBuffer;
 begin
-  DataLen := length(Data);
-  if DataLen <> 0 then // '' is compressed and uncompressed to ''
+  datalen := length(Data);
+  if datalen <> 0 then // '' is compressed and uncompressed to ''
     if Compress then
     begin
-      len := SynLZcompressdestlen(DataLen) + 8;
-      P := tmp.Init(len);
-      PCardinal(P)^ := Hash32(pointer(Data), DataLen);
-      len := SynLZcompress1(pointer(Data), DataLen, P + 8);
-      PCardinal(P + 4)^ := Hash32(pointer(P + 8), len);
-      FastSetRawByteString(Data, P, len + 8);
+      len := SynLZcompressdestlen(datalen) + 8;
+      p := tmp.Init(len);
+      PCardinal(p)^ := Hash32(pointer(Data), datalen);
+      len := SynLZcompress1(pointer(Data), datalen, p + 8);
+      PCardinal(p + 4)^ := Hash32(pointer(p + 8), len);
+      FastSetRawByteString(Data, p, len + 8);
       {%H-}tmp.Done;
     end
     else
     begin
       result := '';
-      P := pointer(Data);
-      if (DataLen <= 8) or
-         (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
+      p := pointer(Data);
+      if (datalen <= 8) or
+         (Hash32(pointer(p + 8), datalen - 8) <> PCardinal(p + 4)^) then
         exit;
-      len := SynLZdecompressdestlen(P + 8);
+      len := SynLZdecompressdestlen(p + 8);
       tmp.Init(len);
       if (len = 0) or
-         ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) = len) and
-          (Hash32(tmp.buf, len) = PCardinal(P)^)) then
+         ((SynLZDecompress1(p + 8, datalen - 8, tmp.buf) = len) and
+          (Hash32(tmp.buf, len) = PCardinal(p)^)) then
         FastSetRawByteString(Data, tmp.buf, len);
       {%H-}tmp.Done;
     end;
@@ -10475,16 +10475,16 @@ end;
 
 function CompressSynLZGetHash32(const Data: RawByteString): cardinal;
 var
-  DataLen: integer;
-  P: PAnsiChar;
+  datalen: integer;
+  p: PAnsiChar;
 begin
-  DataLen := length(Data);
-  P := pointer(Data);
-  if (DataLen <= 8) or
-     (Hash32(pointer(P + 8), DataLen - 8) <> PCardinal(P + 4)^) then
+  datalen := length(Data);
+  p := pointer(Data);
+  if (datalen <= 8) or
+     (Hash32(pointer(p + 8), datalen - 8) <> PCardinal(p + 4)^) then
     result := 0
   else
-    result := PCardinal(P)^;
+    result := PCardinal(p)^;
 end;
 
 const
@@ -10836,7 +10836,7 @@ end;
 
 function IsZero(P: pointer; Length: integer): boolean;
 var
-   n: integer;
+  n: integer;
 begin
   result := false;
   n := Length shr 4;
@@ -11024,7 +11024,7 @@ end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 var
-  i, j: integer;
+  i, j: PtrInt;
 begin
   result := $ffff;
   for i := 0 to Len - 1 do
@@ -11249,20 +11249,20 @@ end;
 
 function SameValue(const A, B: Double; DoublePrec: double): boolean;
 var
-  AbsA, AbsB, Res: double;
+  absA, absB, res: double;
 begin
   if PInt64(@DoublePrec)^ = 0 then
   begin
     // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
-    AbsA := Abs(A);
-    AbsB := Abs(B);
-    Res := 1E-12;
-    if AbsA < AbsB then
-      DoublePrec := AbsA * Res
+    absA := Abs(A);
+    absB := Abs(B);
+    res := 1E-12;
+    if absA < absB then
+      DoublePrec := absA * res
     else
-      DoublePrec := AbsB * Res;
-    if DoublePrec < Res then
-      DoublePrec := Res;
+      DoublePrec := absB * res;
+    if DoublePrec < res then
+      DoublePrec := res;
   end;
   if A < B then
     result := (B - A) <= DoublePrec
@@ -11272,20 +11272,20 @@ end;
 
 function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): boolean;
 var
-  AbsA, AbsB, Res: TSynExtended;
+  absA, absB, res: TSynExtended;
 begin
   if DoublePrec = 0 then
   begin
     // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
-    AbsA := Abs(A);
-    AbsB := Abs(B);
-    Res := 1E-12; // also for TSynExtended (FPC uses 1E-4!)
-    if AbsA < AbsB then
-      DoublePrec := AbsA * Res
+    absA := Abs(A);
+    absB := Abs(B);
+    res := 1E-12; // also for TSynExtended (FPC uses 1E-4!)
+    if absA < absB then
+      DoublePrec := absA * res
     else
-      DoublePrec := AbsB * Res;
-    if DoublePrec < Res then
-      DoublePrec := Res;
+      DoublePrec := absB * res;
+    if DoublePrec < res then
+      DoublePrec := res;
   end;
   if A < B then
     result := (B - A) <= DoublePrec
@@ -11741,15 +11741,15 @@ end;
 function VariantCompSimple(const A, B: variant): integer;
 var
   a64, b64: Int64;
-  af64, bf64: double;
+  af, bf: double;
 begin
   // directly handle ordinal and floating point values
   if VariantToInt64(A, a64) and
      VariantToInt64(B, b64) then
     result := CompareInt64(a64, b64)
-  else if VariantToDouble(A, af64) and
-          VariantToDouble(B, bf64) then
-    result := CompareFloat(af64, bf64)
+  else if VariantToDouble(A, af) and
+          VariantToDouble(B, bf) then
+    result := CompareFloat(af, bf)
   else
     // inlined VarCompareValue() for complex/mixed types
     if A = B then

@@ -1304,8 +1304,7 @@ type
 /// quickly parse the TFileVersion.UserAgent content
 // - identify e.g. 'myprogram/3.1.0.2W' or 'myprogram/3.1.0.2W32' text
 function UserAgentParse(const UserAgent: RawUtf8;
-  out ProgramName, ProgramVersion: RawUtf8;
-  out OS: TOperatingSystem): boolean;
+  out ProgramName, ProgramVersion: RawUtf8; out OS: TOperatingSystem): boolean;
 
 type
   /// the command line switches supported by TExecutableCommandLine
@@ -6712,16 +6711,16 @@ end;
 
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 var
-  YY, MM, DD, H, m, s, ms: word;
+  yy, mm, dd, h, m, s, ms: word;
 begin
-  DecodeDate(DateTime, YY, MM, DD);
+  DecodeDate(DateTime, yy, mm, dd);
   DecodeTime(DateTime, h, m, s, ms);
-  if (YY < 1980) or
-     (YY > 2099) then
+  if (yy < 1980) or
+     (yy > 2099) then
     result := 0
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
-      cardinal((DD shl 16) or (MM shl 21) or (cardinal(YY - 1980) shl 25));
+      cardinal((dd shl 16) or (mm shl 21) or (cardinal(yy - 1980) shl 25));
 end;
 
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
@@ -6747,21 +6746,21 @@ end;
 function DirectorySize(const FileName: TFileName; Recursive: boolean;
   const Mask: TFileName): Int64;
 var
-  SR: TSearchRec;
+  sr: TSearchRec;
   dir: TFileName;
 begin
   result := 0;
   dir := IncludeTrailingPathDelimiter(FileName);
-  if FindFirst(dir + Mask, faAnyFile, SR) <> 0 then
+  if FindFirst(dir + Mask, faAnyFile, sr) <> 0 then
     exit;
   repeat
-   if SearchRecValidFile(SR) then
-     inc(result, SR.Size)
+   if SearchRecValidFile(sr) then
+     inc(result, sr.Size)
    else if Recursive and
-           SearchRecValidFolder(SR) then
-     inc(result, DirectorySize(dir + SR.Name, true));
-  until FindNext(SR) <> 0;
-  FindClose(SR);
+           SearchRecValidFolder(sr) then
+     inc(result, DirectorySize(dir + sr.Name, true));
+  until FindNext(sr) <> 0;
+  FindClose(sr);
 end;
 
 function SafePathName(const Path: TFileName): boolean;
@@ -7038,7 +7037,7 @@ end;
 
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var
-  F: THandle;
+  h: THandle;
   size: Int64;
   read, pos: integer;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
@@ -7046,14 +7045,14 @@ begin
   result := '';
   if FileName = '' then
     exit;
-  F := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
-  if ValidHandle(F) then
+  h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
+  if ValidHandle(h) then
   begin
     if HasNoSize then
     begin
       pos := 0;
       repeat
-        read := FileRead(F, tmp, SizeOf(tmp)); // fill per 32KB local buffer
+        read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
         if read <= 0 then
           break;
         SetLength(result, pos + read); // in-place resize
@@ -7063,16 +7062,16 @@ begin
     end
     else
     begin
-      size := FileSize(F);
+      size := FileSize(h);
       if (size < MaxInt) and // 2GB seems big enough for a RawByteString
          (size > 0) then
       begin
         FastSetString(RawUtf8(result), size); // assume CP_UTF8 for FPC RTL bug
-        if not FileReadAll(F, pointer(result), size) then
+        if not FileReadAll(h, pointer(result), size) then
           result := ''; // error reading
       end;
     end;
-    FileClose(F);
+    FileClose(h);
   end;
 end;
 
@@ -7358,15 +7357,15 @@ end;
 
 function SortDynArrayFileName(const A, B): integer;
 var
-  Aname, Aext, Bname, Bext: TFileName;
+  an, ae, bn, be: TFileName;
 begin
   // code below is not very fast, but correct ;)
-  Aname := GetFileNameWithoutExt(string(A), @Aext);
-  Bname := GetFileNameWithoutExt(string(B), @Bext);
-  result := AnsiCompareFileName(Aext, Bext);
+  an := GetFileNameWithoutExt(string(A), @ae);
+  bn := GetFileNameWithoutExt(string(B), @be);
+  result := AnsiCompareFileName(ae, be);
   if result = 0 then
     // if both extensions matches, compare by filename
-    result := AnsiCompareFileName(Aname, Bname);
+    result := AnsiCompareFileName(an, bn);
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
@@ -7401,28 +7400,28 @@ end;
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
   DeleteOnlyFilesNotDirectory: boolean; DeletedCount: PInteger): boolean;
 var
-  F: TSearchRec;
-  Dir: TFileName;
+  f: TSearchRec;
   n: integer;
+  dir: TFileName;
 begin
   n := 0;
   result := true;
   if DirectoryExists(Directory) then
   begin
-    Dir := IncludeTrailingPathDelimiter(Directory);
-    if FindFirst(Dir + Mask, faAnyFile - faDirectory, F) = 0 then
+    dir := IncludeTrailingPathDelimiter(Directory);
+    if FindFirst(dir + Mask, faAnyFile - faDirectory, f) = 0 then
     begin
       repeat
-        if SearchRecValidFile(F) then
-          if DeleteFile(Dir + F.Name) then
+        if SearchRecValidFile(f) then
+          if DeleteFile(dir + f.Name) then
             inc(n)
           else
             result := false;
-      until FindNext(F) <> 0;
-      FindClose(F);
+      until FindNext(f) <> 0;
+      FindClose(f);
     end;
     if not DeleteOnlyFilesNotDirectory and
-       not RemoveDir(Dir) then
+       not RemoveDir(dir) then
       result := false;
   end;
   if DeletedCount <> nil then
@@ -7433,8 +7432,8 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
   TotalSize: PInt64): boolean;
 var
-  F: TSearchRec;
-  Dir: TFileName;
+  f: TSearchRec;
+  dir: TFileName;
   old: TDateTime;
 begin
   if not Recursive and
@@ -7444,25 +7443,25 @@ begin
   if (Directory = '') or
      not DirectoryExists(Directory) then
     exit;
-  Dir := IncludeTrailingPathDelimiter(Directory);
-  if FindFirst(Dir + Mask, faAnyFile, F) = 0 then
+  dir := IncludeTrailingPathDelimiter(Directory);
+  if FindFirst(dir + Mask, faAnyFile, f) = 0 then
   begin
     old := NowUtc - TimePeriod;
     repeat
-      if SearchRecValidFolder(F) then
+      if SearchRecValidFolder(f) then
       begin
         if Recursive then
           DirectoryDeleteOlderFiles(
-            Dir + F.Name, TimePeriod, Mask, true, TotalSize);
+            dir + f.Name, TimePeriod, Mask, true, TotalSize);
       end
-      else if SearchRecValidFile(F) and
-              (SearchRecToDateTimeUtc(F) < old) then
-        if not DeleteFile(Dir + F.Name) then
+      else if SearchRecValidFile(f) and
+              (SearchRecToDateTimeUtc(f) < old) then
+        if not DeleteFile(dir + f.Name) then
           result := false
         else if TotalSize <> nil then
-          inc(TotalSize^, F.Size);
-    until FindNext(F) <> 0;
-    FindClose(F);
+          inc(TotalSize^, f.Size);
+    until FindNext(f) <> 0;
+    FindClose(f);
   end;
 end;
 
@@ -7473,7 +7472,7 @@ function IsDirectoryWritable(const Directory: TFileName;
   Flags: TIsDirectoryWritable): boolean;
 var
   dir, last, fmt, fn: TFileName;
-  f: THandle;
+  h: THandle;
   retry: integer;
 begin
   // check the Directory itself
@@ -7518,14 +7517,14 @@ begin
       exit;
   until false;
   // ensure we can create this temporary file
-  f := FileCreate(fn);
-  if not ValidHandle(f) then
+  h := FileCreate(fn);
+  if not ValidHandle(h) then
     exit; // a file can't be created
   result := true;
   if (idwWriteSomeContent in flags) and // some pointers and hash
-     (FileWrite(f, Executable, SizeOf(Executable)) <> SizeOf(Executable)) then
+     (FileWrite(h, Executable, SizeOf(Executable)) <> SizeOf(Executable)) then
     result := false;
-  FileClose(f);
+  FileClose(h);
   if not DeleteFile(fn) then // success if the file can be created and deleted
     result := false
   else if result then
@@ -7621,7 +7620,7 @@ end;
 function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt;
   aCustomOffset: Int64; aFileOwned: boolean; aFileSize: Int64): boolean;
 var
-  Available: Int64;
+  available: Int64;
 begin
   fBuf := nil;
   fBufSize := 0;
@@ -7647,11 +7646,11 @@ begin
     fBufSize := fFileSize
   else
   begin
-    Available := fFileSize - aCustomOffset;
-    if Available < 0 then
+    available := fFileSize - aCustomOffset;
+    if available < 0 then
       exit;
-    if aCustomSize > Available then
-      fBufSize := Available;
+    if aCustomSize > available then
+      fBufSize := available;
     fBufSize := aCustomSize;
   end;
   fLoadedNotMapped := fBufSize < 1 shl 20;
@@ -7688,17 +7687,17 @@ end;
 
 function TMemoryMap.Map(const aFileName: TFileName): boolean;
 var
-  F: THandle;
+  h: THandle;
 begin
   result := false;
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
-  F := FileOpen(aFileName, fmOpenReadShared);
-  if not ValidHandle(F) then
+  h := FileOpen(aFileName, fmOpenReadShared);
+  if not ValidHandle(h) then
     exit;
-  result := Map(F);
+  result := Map(h);
   if not result then
-    FileClose(F);
+    FileClose(h);
   fFileLocal := result;
 end;
 
@@ -7864,20 +7863,20 @@ end;
 {$ifdef UNIX}
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 var
-  PageAlignedFakeStub: pointer;
+  aligned: pointer;
   flags: cardinal;
 begin
   if not MemoryProtection then
     // nothing to be done on this platform
     exit;
   // toggle execution permission of memory to be able to write into memory
-  PageAlignedFakeStub := pointer(
+  aligned := pointer(
     (PtrUInt(Reserved) div SystemInfo.dwPageSize) * SystemInfo.dwPageSize);
   if Exec then
     flags := PROT_READ OR PROT_EXEC
   else
     flags := PROT_READ or PROT_WRITE;
-  if SynMProtect(PageAlignedFakeStub, SystemInfo.dwPageSize shl 1, flags) < 0 then
+  if SynMProtect(aligned, SystemInfo.dwPageSize shl 1, flags) < 0 then
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 {$else}
@@ -7931,21 +7930,21 @@ end;
 function ConsoleReadBody: RawByteString;
 var
   len, n: integer;
-  P: PByte;
+  p: PByte;
 begin
   len := ConsoleStdInputLen;
   FastNewRawByteString(result, len);
-  P := pointer(result);
+  p := pointer(result);
   while len > 0 do
   begin
-    n := FileRead(StdInputHandle, P^, len);
+    n := FileRead(StdInputHandle, p^, len);
     if n <= 0 then
     begin
       result := ''; // read error
       break;
     end;
     dec(len, n);
-    inc(P, n);
+    inc(p, n);
   end;
 end;
 
@@ -7957,7 +7956,7 @@ var
 function TSynLibrary.Resolve(const Prefix, ProcName: RawUtf8; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
 var
-  P: PAnsiChar;
+  p: PAnsiChar;
   name, search: RawUtf8;
 {$ifdef OSPOSIX}
   dlinfo: dl_info;
@@ -7968,9 +7967,9 @@ begin
      (fHandle = 0) or
      (ProcName = '') then
     exit; // avoid GPF
-  P := pointer(ProcName);
+  p := pointer(ProcName);
   repeat
-    name := GetNextItem(P); // try all alternate names
+    name := GetNextItem(p); // try all alternate names
     if name = '' then
       break;
     if name[1] = '?' then
@@ -8122,14 +8121,14 @@ end;
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
 var
-  M, D: word;
+  m, d: word;
 begin
   fFileName := aFileName;
   SetVersion(aMajor, aMinor, aRelease, aBuild);
   if fBuildDateTime = 0 then // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
   if fBuildDateTime <> 0 then
-    DecodeDate(fBuildDateTime, BuildYear, M, D);
+    DecodeDate(fBuildDateTime, BuildYear, m, d);
 end;
 
 function TFileVersion.Version32: integer;
@@ -8220,8 +8219,7 @@ begin
 end;
 
 function UserAgentParse(const UserAgent: RawUtf8;
-  out ProgramName, ProgramVersion: RawUtf8;
-  out OS: TOperatingSystem): boolean;
+  out ProgramName, ProgramVersion: RawUtf8; out OS: TOperatingSystem): boolean;
 var
   i, v, vlen, o: PtrInt;
 begin
@@ -8252,13 +8250,13 @@ end;
 
 procedure SetExecutableVersion(const aVersionText: RawUtf8);
 var
-  P: PUtf8Char;
+  p: PUtf8Char;
   i: integer;
   ver: array[0 .. 3] of integer;
 begin
-  P := pointer(aVersionText);
+  p := pointer(aVersionText);
   for i := 0 to 3 do
-    ver[i] := GetNextUInt32(P);
+    ver[i] := GetNextUInt32(p);
   SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
@@ -10127,138 +10125,138 @@ end;
 function TSynLocker.GetPointer(Index: integer): pointer;
 begin
   if cardinal(Index) < cardinal(fPaddingUsedCount) then
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin
-  {$endif HASFASTTRYFINALLY}
-    RWLock(cReadOnly);
-    with Padding[Index] do
-      if VType = varUnknown then
-        result := VUnknown
-      else
-        result := nil;
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    RWUnLock(cReadOnly);
-  end
-  else
-    result := nil;
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
+      RWLock(cReadOnly);
+      with Padding[Index] do
+        if VType = varUnknown then
+          result := VUnknown
+        else
+          result := nil;
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      RWUnLock(cReadOnly);
+    end
+    else
+      result := nil;
 end;
 
 procedure TSynLocker.SetPointer(Index: integer; const Value: pointer);
 begin
   if cardinal(Index) <= high(Padding) then
-  try
-    RWLock(cWrite);
-    if Index >= fPaddingUsedCount then
-      fPaddingUsedCount := Index + 1;
-    with Padding[Index] do
-    begin
-      VarClearAndSetType(PVariant(@VType)^, varUnknown);
-      VUnknown := Value;
+    try
+      RWLock(cWrite);
+      if Index >= fPaddingUsedCount then
+        fPaddingUsedCount := Index + 1;
+      with Padding[Index] do
+      begin
+        VarClearAndSetType(PVariant(@VType)^, varUnknown);
+        VUnknown := Value;
+      end;
+    finally
+      RWUnLock(cWrite);
     end;
-  finally
-    RWUnLock(cWrite);
-  end;
 end;
 
 function TSynLocker.GetUtf8(Index: integer): RawUtf8;
 begin
   if cardinal(Index) < cardinal(fPaddingUsedCount) then
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin
-  {$endif HASFASTTRYFINALLY}
-    RWLock(cReadOnly);
-    VariantStringToUtf8(variant(Padding[Index]), result);
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    RWUnLock(cReadOnly);
-  end
-  else
-    result := '';
+    {$ifdef HASFASTTRYFINALLY}
+    try
+    {$else}
+    begin
+    {$endif HASFASTTRYFINALLY}
+      RWLock(cReadOnly);
+      VariantStringToUtf8(variant(Padding[Index]), result);
+    {$ifdef HASFASTTRYFINALLY}
+    finally
+    {$endif HASFASTTRYFINALLY}
+      RWUnLock(cReadOnly);
+    end
+    else
+      result := '';
 end;
 
 procedure TSynLocker.SetUtf8(Index: integer; const Value: RawUtf8);
 begin
   if cardinal(Index) <= high(Padding) then
-  try
-    RWLock(cWrite);
-    if Index >= fPaddingUsedCount then
-      fPaddingUsedCount := Index + 1;
-    RawUtf8ToVariant(Value, variant(Padding[Index]));
-  finally
-    RWUnLock(cWrite);
-  end;
+    try
+      RWLock(cWrite);
+      if Index >= fPaddingUsedCount then
+        fPaddingUsedCount := Index + 1;
+      RawUtf8ToVariant(Value, variant(Padding[Index]));
+    finally
+      RWUnLock(cWrite);
+    end;
 end;
 
 function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
 begin
   if cardinal(Index) <= high(Padding) then
-  try
-    RWLock(cWrite);
-    result := 0;
-    if Index < fPaddingUsedCount then
-      VariantToInt64(variant(Padding[Index]), result)
+    try
+      RWLock(cWrite);
+      result := 0;
+      if Index < fPaddingUsedCount then
+        VariantToInt64(variant(Padding[Index]), result)
+      else
+        fPaddingUsedCount := Index + 1;
+      variant(Padding[Index]) := Int64(result + Increment);
+    finally
+      RWUnLock(cWrite);
+    end
     else
-      fPaddingUsedCount := Index + 1;
-    variant(Padding[Index]) := Int64(result + Increment);
-  finally
-    RWUnLock(cWrite);
-  end
-  else
-    result := 0;
+      result := 0;
 end;
 
 function TSynLocker.LockedExchange(Index: integer; const Value: variant): variant;
 begin
   VarClear(result);
   if cardinal(Index) <= high(Padding) then
-  try
-    RWLock(cWrite);
-    with Padding[Index] do
-    begin
-      if Index < fPaddingUsedCount then
-        result := PVariant(@VType)^
-      else
-        fPaddingUsedCount := Index + 1;
-      PVariant(@VType)^ := Value;
+    try
+      RWLock(cWrite);
+      with Padding[Index] do
+      begin
+        if Index < fPaddingUsedCount then
+          result := PVariant(@VType)^
+        else
+          fPaddingUsedCount := Index + 1;
+        PVariant(@VType)^ := Value;
+      end;
+    finally
+      RWUnLock(cWrite);
     end;
-  finally
-    RWUnLock(cWrite);
-  end;
 end;
 
 function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
 begin
   if cardinal(Index) <= high(Padding) then
-  try
-    RWLock(cWrite);
-    with Padding[Index] do
-    begin
-      if Index < fPaddingUsedCount then
-        if VType = varUnknown then
-          result := VUnknown
+    try
+      RWLock(cWrite);
+      with Padding[Index] do
+      begin
+        if Index < fPaddingUsedCount then
+          if VType = varUnknown then
+            result := VUnknown
+          else
+          begin
+            VarClear(PVariant(@VType)^);
+            result := nil;
+          end
         else
         begin
-          VarClear(PVariant(@VType)^);
+          fPaddingUsedCount := Index + 1;
           result := nil;
-        end
-      else
-      begin
-        fPaddingUsedCount := Index + 1;
-        result := nil;
+        end;
+        VType := varUnknown;
+        VUnknown := Value;
       end;
-      VType := varUnknown;
-      VUnknown := Value;
-    end;
-  finally
-    RWUnLock(cWrite);
-  end
+    finally
+      RWUnLock(cWrite);
+    end
   else
     result := nil;
 end;
@@ -10585,7 +10583,7 @@ var
   n: PtrInt;
   state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
   c: AnsiChar;
-  D, P: PAnsiChar;
+  d, p: PAnsiChar;
 begin
   result := [pcInvalidCommand];
   if argv <> nil then
@@ -10595,22 +10593,22 @@ begin
   if cmd = '' then
     exit;
   if argv = nil then
-    D := nil
+    d := nil
   else
   begin
     if temp = nil then
       exit;
     SetLength(temp^, length(cmd));
-    D := pointer(temp^);
+    d := pointer(temp^);
   end;
   state := [];
   n := 0;
-  P := pointer(cmd);
+  p := pointer(cmd);
   repeat
-    c := P^;
-    if D <> nil then
-      D^ := c;
-    inc(P);
+    c := p^;
+    if d <> nil then
+      d^ := c;
+    inc(p);
     case c of
       #0:
         begin
@@ -10630,10 +10628,10 @@ begin
          if state = [sInArg] then
          begin
            state := [];
-           if D <> nil then
+           if d <> nil then
            begin
-             D^ := #0;
-             inc(D);
+             d^ := #0;
+             inc(d);
            end;
            continue;
          end;
@@ -10645,7 +10643,7 @@ begin
            (state * [sInSQ, sBslash] = []) then
           if sInDQ in state then
           begin
-            case P^ of
+            case p^ of
               '"', '\', '$', '`':
                 begin
                   include(state, sBslash);
@@ -10653,35 +10651,35 @@ begin
                 end;
             end;
           end
-          else if P^ = #0 then
+          else if p^ = #0 then
           begin
             include(result, pcHasEndingBackSlash);
             exit;
           end
           else
           begin
-            if D <> nil then
-              D^ := P^;
-            inc(P);
+            if d <> nil then
+              d^ := p^;
+            inc(p);
           end;
       '^':
         if not posix and
            (state * [sInSQ, sInDQ, sBslash] = []) then
-          if PWord(P)^ = $0a0d then
+          if PWord(p)^ = $0a0d then
           begin
-            inc(P, 2);
+            inc(p, 2);
             continue;
           end
-          else if P^ = #0 then
+          else if p^ = #0 then
           begin
             include(result, pcHasEndingBackSlash);
             exit;
           end
           else
           begin
-            if D <> nil then
-              D^ := P^;
-            inc(P);
+            if d <> nil then
+              d^ := p^;
+            inc(p);
           end;
       '''':
         if posix and
@@ -10695,7 +10693,7 @@ begin
           begin
             if argv <> nil then
             begin
-              argv[n] := D;
+              argv[n] := d;
               inc(n);
               if n = high(argv^) then
                 exit;
@@ -10719,7 +10717,7 @@ begin
           begin
             if argv <> nil then
             begin
-              argv[n] := D;
+              argv[n] := d;
               inc(n);
               if n = high(argv^) then
                 exit;
@@ -10772,21 +10770,21 @@ begin
     begin
       if argv <> nil then
       begin
-        argv[n] := D;
+        argv[n] := d;
         inc(n);
         if n = high(argv^) then
           exit;
       end;
       state := [sInArg];
     end;
-    if D <> nil then
-      inc(D);
+    if d <> nil then
+      inc(d);
   until false;
 end;
 
 procedure TrimDualSpaces(var s: RawUtf8);
 var
-  f, i: integer;
+  f, i: PtrInt;
 begin
   f := 1;
   repeat
