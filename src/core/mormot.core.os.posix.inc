@@ -4091,13 +4091,15 @@ begin
         if procid >= integer(SystemInfo.dwNumberOfProcessors) then
           procid := -1; // paranoid
       end
-    else if IdemPChar(beg, 'MODEL NAME') then
+    else if IdemPChar(beg, 'MODEL') then
       modname := ParseLine(beg)
     else if IdemPChar(beg, 'FEATURES') or
             IdemPChar(beg, 'FLAGS') then
       CpuInfoFeatures := ParseLine(beg)
     else if IdemPChar(beg, 'HARDWARE') then
       hw := ParseLine(beg)
+    else if IdemPChar(beg, 'SERIAL') then
+      _Smbios[sbiSerial] := TrimU(ParseLine(beg))
     else if IdemPChar(beg, 'CACHE SIZE') then
       cache := ParseLine(beg)
     {$ifdef CPUARM3264}
