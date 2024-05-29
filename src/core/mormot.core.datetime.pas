@@ -1148,7 +1148,7 @@ begin
     end;
     if y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
-    Div100(y, d100{%h-});
+    Div100(y, d100{%H-});
     unaligned(result) := (146097 * d100.d) shr 2 + (1461 * d100.m) shr 2 +
       (153 * m + 2) div 5 + d;
     unaligned(result) := unaligned(result) - 693900; // avoid sign issue
@@ -1174,7 +1174,7 @@ begin
     // one or more digits representing a decimal fraction of a second
     ms := ord(P[16]) * 100 - 4800;
     if L > 17 then
-      ms := ms {%h-}+ byte(P[17]) * 10 - 480;
+      ms := ms {%H-}+ byte(P[17]) * 10 - 480;
     if L > 18 then
       ms := ms + byte(P[18]) - 48;
     if ms > 1000 then
