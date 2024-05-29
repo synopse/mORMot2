@@ -1794,12 +1794,19 @@ type
 /// retrieve a genuine 128-bit UUID identifier for this computer
 // - first try GetSmbios(sbiUuid), i.e. the SMBIOS System UUID
 // - otherwise, will compute a genuine hash from known hardware information
-// (CPU, Bios, MAC) and store it in a local file for the next access, e.g. into
-// '/var/tmp/.synopse.uid' on POSIX
+// (CPU, Bios, MAC) and store it in a local file for the next access (if
+// disable is void), e.g. into '/var/tmp/.synopse.uid' on POSIX
 // - on Mac, include the mormot.core.os.mac unit to properly read this UUID
 // - note: some BIOS have no UUID, so we fallback to our hardware hash on those
 // - you can specify some HW sources to be ignored during the calculation
-procedure GetComputerUuid(out uuid: TGuid; disable: TGetComputerUuid = []);
+procedure GetComputerUuid(out uuid: TGuid; disable: TGetComputerUuid = []); overload;
+
+/// retrieve a genuine 128-bit UUID identifier for this computer
+// - returns GetSmbios(sbiUuid) if available
+// - if no GetSmbios(sbiUuid) is available, will compute a genuine hash from HW
+// and store it on a local file for the next access (if disable is void)
+// - you can specify some HW sources to be ignored during the calculation
+function GetComputerUuid(disable: TGetComputerUuid = []): RawUtf8; overload;
 
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
@@ -9281,6 +9288,25 @@ begin
     // note: RawSmbios.Data may not be genuine e.g. between VMs
     if FileFromBuffer(@u, SizeOf(u), fn) then
       FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
+end;
+
+var
+  _GetComputerUuid: RawUtf8;
+
+function GetComputerUuid(disable: TGetComputerUuid): RawUtf8;
+var
+  u: TGuid;
+begin
+  if disable = [] then
+  begin
+    result := _GetComputerUuid; // try from cache
+    if result <> '' then
+      exit;
+  end;
+  GetComputerUuid(u, disable);
+  result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
+  if disable <> [] then
+    _GetComputerUuid := result;
 end;
 
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
