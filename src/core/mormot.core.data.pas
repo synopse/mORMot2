@@ -1921,7 +1921,7 @@ type
 const
   /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
   // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
-  // limit is set to 262,144 hash table slots (=1MB), for Capacity=131,072 items
+  // limit is set to 262,144 hash table slots (=512KB), for Capacity=131,072 items
   // - above this limit, a set of increasing primes is used; using a prime as
   // hashtable modulo enhances its distribution, especially for a weak hash function
   // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
@@ -9538,10 +9538,10 @@ begin
     // same logic than ReHash(true) with no data - default to 256 buckets
     fHashTableSize := 256;
     {$ifdef DYNARRAYHASH_16BIT}
-    SetLength(fHashTableStore, 128 {$ifndef DYNARRAYHASH_PO2} + 1 {$endif});
+    SetLength(fHashTableStore, 129);
     fState := [hasHasher, hash16bit];
     {$else}
-    SetLength(fHashTableStore, 256);
+    SetLength(fHashTableStore, 257);
     byte(State) := 1 shl ord(hasHasher)
     {$endif DYNARRAYHASH_16BIT}
   end
@@ -10113,12 +10113,12 @@ begin
   if siz <= 1 shl 16 then
   begin
     include(fState, hash16bit); // we can store indexes as 16-bit word values
-    siz := (siz shr 1) {$ifndef DYNARRAYHASH_PO2} + 1 {$endif}; // 32-bit count
+    siz := siz shr 1; // 32-bit count
   end
   else
     exclude(fState, hash16bit);
   {$endif DYNARRAYHASH_16BIT}
-  SetLength(fHashTableStore, siz); // fill with 0 (void slot)
+  SetLength(fHashTableStore, siz + 1); // fill with 0 (void slot)
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   CountCollisionsCurrent := 0; // count collision for this HashTable[] only
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
