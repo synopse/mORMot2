@@ -4099,7 +4099,7 @@ begin
     else if IdemPChar(beg, 'HARDWARE') then
       hw := ParseLine(beg)
     else if IdemPChar(beg, 'SERIAL') then
-      _Smbios[sbiSerial] := TrimU(ParseLine(beg))
+      _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)))
     else if IdemPChar(beg, 'CACHE SIZE') then
       cache := ParseLine(beg)
     {$ifdef CPUARM3264}
