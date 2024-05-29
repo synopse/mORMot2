@@ -1779,6 +1779,18 @@ var
 function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+type
+  /// define how GetComputerUuid() computes its 128-bit UUID identifier
+  // - set of potential sources, which may be excluded from computation
+  TGetComputerUuid = set of (
+    gcuSmbios,
+    gcuSmbiosData,
+    gcuSmbiosText,
+    gcuCpuFeatures,
+    gcuCpuInfoText,
+    gcuBiosInfoText,
+    gcuMacAddress);
+
 /// retrieve a genuine 128-bit UUID identifier for this computer
 // - first try GetSmbios(sbiUuid), i.e. the SMBIOS System UUID
 // - otherwise, will compute a genuine hash from known hardware information
@@ -1786,7 +1798,8 @@ function GetSmbios(info: TSmbiosBasicInfo): RawUtf8;
 // '/var/tmp/.synopse.uid' on POSIX
 // - on Mac, include the mormot.core.os.mac unit to properly read this UUID
 // - note: some BIOS have no UUID, so we fallback to our hardware hash on those
-procedure GetComputerUuid(out uuid: TGuid);
+// - you can specify some HW sources to be ignored during the calculation
+procedure GetComputerUuid(out uuid: TGuid; disable: TGetComputerUuid = []);
 
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
@@ -9192,7 +9205,7 @@ begin
 end;
 {$endif ISDELPHI}
 
-procedure GetComputerUuid(out uuid: TGuid);
+procedure GetComputerUuid(out uuid: TGuid; disable: TGetComputerUuid);
 var
   n, i: PtrInt;
   u: THash128Rec absolute uuid;
@@ -9212,50 +9225,62 @@ begin
   // first try to retrieve the Machine BIOS UUID
   if not _SmbiosRetrieved then
     ComputeGetSmbios; // maybe from local SMB_CACHE file for non-root
-  if (_Smbios[sbiUuid] <> '') and
+  if not (gcuSmbios in disable) and
+     (_Smbios[sbiUuid] <> '') and
      TryStringToGUID('{' + string(_Smbios[sbiUuid]) + '}', uuid) then
     exit;
-  // did we already compute this UUID?
-  fn := UUID_CACHE;
-  s := StringFromFile(fn);
-  if length(s) = SizeOf(uuid) then
+  // did we already compute (and persist) this UUID?
+  if disable = [] then // we persist a fully-qualified UUID only
   begin
-    uuid := PGuid(s)^; // seems to be a valid UUID binary blob
-    exit;
+    fn := UUID_CACHE;
+    s := StringFromFile(fn);
+    if length(s) = SizeOf(uuid) then
+    begin
+      uuid := PGuid(s)^; // seems to be a valid UUID binary blob
+      exit;
+    end;
   end;
   // no known UUID: compute and store a 128-bit hash from HW specs
   // which should remain identical even between full OS reinstalls
   // note: /etc/machine-id is no viable alternative since it is from SW random
-  {$ifdef CPUINTELARM}
-  crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b);
-  {$else}
   s := CPU_ARCH_TEXT;
   crc128c(pointer(s), length(s), u.b); // rough starting point
+  {$ifdef CPUINTELARM}
+  if not (gcuCpuFeatures in disable) then
+    crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b); // override
   {$endif CPUINTELARM}
-  if RawSmbios.Data <> '' then // some bios have no uuid but some HW info
+  if (RawSmbios.Data <> '') and // some bios have no uuid but some HW info
+     not (gcuSmbiosData in disable) then
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
   n := 0;
-  for i := 0 to length(_Smbios) - 1 do // some of _Smbios[] may be set
-    crctext(PRawUtf8Array(@_Smbios)[i]);
-  crctext(CpuCacheText);
-  crctext(BiosInfoText);
-  crctext(CpuInfoText);
-  if Assigned(GetSystemMacAddress) then
+  if not (gcuSmbiosText in disable) then
+    for i := 0 to length(_Smbios) - 1 do // some of _Smbios[] may be set
+      crctext(PRawUtf8Array(@_Smbios)[i]);
+  if not (gcuCpuInfoText in disable) then
+    crctext(CpuCacheText);
+  if not (gcuBiosInfoText in disable) then
+    crctext(BiosInfoText);
+  if not (gcuCpuInfoText in disable) then
+    crctext(CpuInfoText);
+  if Assigned(GetSystemMacAddress) and
+     not (gcuMacAddress in disable) then
     // from mormot.net.sock or mormot.core.os.posix.inc for Linux only
     mac := GetSystemMacAddress;
   if mac <> nil then
-  begin
     // MAC should make it unique at least over the local network
     for i := 0 to high(mac) do
-      crctext(mac[i]);
+      crctext(mac[i])
+  else
+  begin
+    // unpersisted fallback if mormot.net.sock is not included (very unlikely)
+    crctext(Executable.Host);
+    exit; // unpersisted
+  end;
+  if fn <> '' then // disable = []
     // we have enough unique HW information to store it locally for next startup
     // note: RawSmbios.Data may not be genuine e.g. between VMs
     if FileFromBuffer(@u, SizeOf(u), fn) then
       FileSetSticky(fn); // use S_ISVTX so that file is not removed from /var/tmp
-  end
-  else
-    // unpersisted fallback if mormot.net.sock is not included (very unlikely)
-    crctext(Executable.Host);
 end;
 
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
