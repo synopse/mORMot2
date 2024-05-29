@@ -11004,11 +11004,11 @@ procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 var
   blocks: cardinal;
 begin
-  blocks := len shr 4;
+  blocks := len shr 4; // from bytes to blocks
   if blocks <> 0 then
   begin
     crcblocks(pointer(hash), pointer(buf), blocks);
-    blocks := blocks shl 4;
+    blocks := blocks shl 4; // from blocks to bytes
     inc(buf, blocks);
     dec(len, blocks);
   end;

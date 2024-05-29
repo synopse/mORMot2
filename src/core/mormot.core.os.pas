@@ -9306,7 +9306,10 @@ begin
   GetComputerUuid(u, disable);
   result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
   if disable <> [] then
-    _GetComputerUuid := result;
+    exit; // cache fully-qualified UUID only
+  GlobalLock;
+  _GetComputerUuid := result;
+  GlobalUnLock;
 end;
 
 procedure DecodeSmbiosUuid(src: PGuid; out dest: RawUtf8; const raw: TRawSmbiosInfo);
