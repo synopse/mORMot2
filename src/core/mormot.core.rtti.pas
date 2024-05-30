@@ -2402,11 +2402,10 @@ type
   TRttiCustom = class
   protected
     fCache: TRttiCache;
-    fParser: TRttiParserType;
-    fParserComplex: TRttiParserComplexType;
-    fValueRtlClass: TRttiValueClass;
-    fArrayFirstField: TRttiParserType;
-    fFlags: TRttiCustomFlags;
+    fParser: TRttiParserType;                 // 8-bit
+    fParserComplex: TRttiParserComplexType;   // 8-bit
+    fValueRtlClass: TRttiValueClass;          // 8-bit
+    fFlags: TRttiCustomFlags;                 // 32-bit
     fPrivateSlot: pointer;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
@@ -2415,10 +2414,8 @@ type
     fProps: TRttiCustomProps;
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     fSetRandom: TRttiCustomRandom;
-    fPrivateSlots: TObjectDynArray;
-    fPrivateSlotsSafe: TLightLock;
-    fArrayFirstFieldSize: integer;
     // used by mormot.core.json.pas
+    fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
@@ -2427,9 +2424,10 @@ type
     fAutoDestroyClasses,
     fAutoCreateObjArrays,
     fAutoResolveInterfaces: PRttiCustomPropDynArray;
-    // used by NoRttiSetAndRegister()
-    fNoRttiInfo: TByteDynArray;
-    // customize class process
+    fPrivateSlots: TObjectDynArray;
+    fPrivateSlotsSafe: TLightLock;
+    fNoRttiInfo: TByteDynArray; // used by NoRttiSetAndRegister()
+    // used to customize the class process
     fValueClass: TClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
@@ -2595,9 +2593,10 @@ type
     // - equals ArrayRtti.Parser if ArrayRtti.Kind is not rkRecordTypes
     property ArrayFirstField: TRttiParserType
       read fArrayFirstField;
-    /// best guess of first field bytes size for a rkDynArray
-    property ArrayFirstFieldSize: integer
-      read fArrayFirstFieldSize;
+    /// best guess of first field type for a rkDynArray
+    // - equals ArrayFirstField or an ordinal type matching the enum/set type
+    property ArrayFirstFieldSort: TRttiParserType
+      read fArrayFirstFieldSort;
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
     property BinarySize: byte
@@ -7817,7 +7816,7 @@ end;
 
 procedure TRttiCustom.FromRtti(aInfo: PRttiInfo);
 var
-  dummy: integer;
+  siz: integer;
   pt: TRttiParserType;
   pct: TRttiParserComplexType;
   item: PRttiInfo;
@@ -7852,7 +7851,7 @@ begin
           begin
             // on Delphi 7-2009, recognize at least the most common types
             pt := GuessItemTypeFromDynArrayInfo(aInfo, nil,
-              fCache.ItemSize, {exacttype=}true, dummy, @pct);
+              fCache.ItemSize, {exacttype=}true, siz, @pct);
             item := ParserTypeToTypeInfo(pt, pct);
           end
           else if item.Kind = rkClass then
@@ -7865,15 +7864,25 @@ begin
         fArrayRtti := Rtti.RegisterType(item);
         if (fArrayRtti <> nil) and
            (fArrayFirstField = ptNone) then
+        begin
           if fArrayRtti.Kind in rkRecordOrDynArrayTypes then
             // guess first field (using fProps[0] would break compatibility)
             fArrayFirstField := GuessItemTypeFromDynArrayInfo(aInfo,
-              fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, fArrayFirstFieldSize)
+              fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, siz)
           else
           begin
             fArrayFirstField := fArrayRtti.Parser;
-            fArrayFirstFieldSize := fArrayRtti.Cache.Size;
+            siz := fArrayRtti.Cache.Size;
           end;
+          if fArrayFirstField in [ptNone, ptEnumeration, ptSet] then
+          begin
+            if siz = 0 then
+              siz := fCache.Size;
+            fArrayFirstFieldSort := ItemSizeToDynArrayKind(siz);
+          end
+          else
+            fArrayFirstFieldSort := fArrayFirstField;
+        end;
       end;
     rkArray:
       begin
