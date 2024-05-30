@@ -4672,7 +4672,7 @@ begin
     exit;
   end;
   fSafe.ReadUnLock;
-  fSafe.WriteLock; // need to be added
+  fSafe.WriteLock; // need to be added in exclusive mode
   bak := fHash.Values.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := @SortDynArrayPUtf8Char;
   i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
@@ -9656,42 +9656,40 @@ var
   first, last, ndx, siz: PtrInt;
   P: PAnsiChar;
 begin
-  if not (hasHasher in fState) then
+  if hasHasher in fState then
   begin
-    result := -1;
-    exit;
-  end;
-  result := HashTableIndex(aHashCode);
-  first := result;
-  last := fHashTableSize;
-  P := fDynArray^.Value^;
-  siz := fDynArray^.Info.Cache.ItemSize;
-  repeat
-    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
-    if ndx < 0 then
-    begin
-      // found void entry
-      result := -(result + 1);
-      exit;
-    end
-    else if not aForAdd and
-            (HashOne(P + ndx * siz) = aHashCode) then
-    begin
-      result := ndx;
-      exit;
-    end;
-    inc(result); // try next entry on hash collision
-    if result = last then
-      // reached the end -> search once from HashTable[0] to HashTable[first-1]
-      if result = first then
-        break
-      else
+    result := HashTableIndex(aHashCode);
+    first := result;
+    last := fHashTableSize;
+    P := fDynArray^.Value^;
+    siz := fDynArray^.Info.Cache.ItemSize;
+    repeat
+      ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
+      if ndx < 0 then
       begin
-        result := 0;
-        last := first;
+        // found void entry
+        result := -(result + 1);
+        exit;
+      end
+      else if not aForAdd and
+              (HashOne(P + ndx * siz) = aHashCode) then
+      begin
+        result := ndx;
+        exit;
       end;
-  until false;
-  RaiseFatalCollision('Find', aHashCode);
+      inc(result); // try next entry on hash collision
+      if result = last then
+        // reached the end -> search once from HashTable[0] to HashTable[first-1]
+        if result = first then
+          break
+        else
+        begin
+          result := 0;
+          last := first;
+        end;
+    until false;
+  end;
+  result := RaiseFatalCollision('Find', aHashCode);
 end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
@@ -9703,59 +9701,57 @@ var
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
-  if not (hasHasher in fState) then
+  if hasHasher in fState then // we need comparison and hash functions
   begin
-    result := -1;
-    exit; // we need comparison and hash functions
-  end;
-  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-  collisions := 0;
-  {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  result := HashTableIndex(aHashCode);
-  first := result;
-  last := fHashTableSize;
-  repeat
-    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
-    if ndx < 0 then
-    begin
-      // not found: returns void index in HashTable[] as negative value
-      result := - (result + 1);
-      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-      inc(CountCollisions, collisions);
-      inc(CountCollisionsCurrent, collisions);
-      {$endif DYNARRAYHASHCOLLISIONCOUNT}
-      exit;
-    end;
-    // comparison with item is faster than hash e.g. for huge strings
-    with fDynArray^ do
-      P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
-    if ((not Assigned(fEventCompare)) and
-        (fCompare(P^, Item^) = 0)) or
-       (Assigned(fEventCompare) and
-        (fEventCompare(P^, Item^) = 0)) then
-    begin
-      // found: returns the matching index
-      if aHashTableIndex <> nil then
-        aHashTableIndex^ := result;
-      result := ndx;
-      exit;
-    end;
-    // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(collisions);
+    collisions := 0;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
-    inc(result);
-    if result = last then
-      // reached the end -> search once from HashTable[0] to HashTable[first-1]
-      if result = first then
-        break
-      else
+    result := HashTableIndex(aHashCode);
+    first := result;
+    last := fHashTableSize;
+    repeat
+      ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
+      if ndx < 0 then
       begin
-        result := 0;
-        last := first;
+        // not found: returns void index in HashTable[] as negative value
+        result := - (result + 1);
+        {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+        inc(CountCollisions, collisions);
+        inc(CountCollisionsCurrent, collisions);
+        {$endif DYNARRAYHASHCOLLISIONCOUNT}
+        exit;
       end;
-  until false;
-  RaiseFatalCollision('FindOrNew', aHashCode);
+      // comparison with item is faster than hash e.g. for huge strings
+      with fDynArray^ do
+        P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
+      if ((not Assigned(fEventCompare)) and
+          (fCompare(P^, Item^) = 0)) or
+         (Assigned(fEventCompare) and
+          (fEventCompare(P^, Item^) = 0)) then
+      begin
+        // found: returns the matching index
+        if aHashTableIndex <> nil then
+          aHashTableIndex^ := result;
+        result := ndx;
+        exit;
+      end;
+      // hash or slot collision -> search next item
+      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+      inc(collisions);
+      {$endif DYNARRAYHASHCOLLISIONCOUNT}
+      inc(result);
+      if result = last then
+        // reached the end -> search once from HashTable[0] to HashTable[first-1]
+        if result = first then
+          break
+        else
+        begin
+          result := 0;
+          last := first;
+        end;
+    until false;
+  end;
+  result := RaiseFatalCollision('FindOrNew', aHashCode);
 end;
 
 function TDynArrayHasher.FindOrNewComp(aHashCode: cardinal; Item: pointer;
@@ -9771,7 +9767,7 @@ begin // cut-down version of FindOrNew()
     first := ndx;
     last := fHashTableSize;
     repeat
-      result := HashTableIndexToIndex(ndx) - 1; // index+1 was stored
+      result := HashTableIndexToIndex(ndx) - 1; // Index+1 was stored
       if (result < 0) or // void slot = not found, or return matching index
          (Comp((PAnsiChar(fDynArray^.Value^) +
            result * fDynArray^.fInfo.Cache.ItemSize)^, Item^) = 0) then

@@ -2086,7 +2086,7 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
   ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
-/// internal function used e.g. for enumerations and set
+/// internal function used e.g. for enumerations and sets
 function ItemSizeToDynArrayKind(size: integer): TRttiParserType;
 
 
