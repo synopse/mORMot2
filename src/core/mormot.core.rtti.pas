@@ -9149,6 +9149,7 @@ function TRttiCustomList.RegisterFromText(DynArrayOrRecord: PRttiInfo;
   const RttiDefinition: RawUtf8): TRttiCustom;
 var
   P: PUtf8Char;
+  da, prop: TRttiCustom;
   rttisize: integer;
 begin
   if (DynArrayOrRecord = nil) or
@@ -9157,15 +9158,17 @@ begin
   RegisterSafe.Lock;
   try
     result := RegisterType(DynArrayOrRecord);
-    if result.Kind = rkDynArray then
-      if result.ArrayRtti = nil then
-      begin
-        result.fArrayRtti := RegisterFromText('', RttiDefinition);
-        result := result.fArrayRtti;
-        exit;
-      end
-      else
-        result := result.ArrayRtti;
+    da := result;
+    if result.Kind <> rkDynArray then
+      da := nil
+    else if result.ArrayRtti = nil then
+    begin
+      result.fArrayRtti := RegisterFromText('', RttiDefinition);
+      result := result.fArrayRtti;
+      exit;
+    end
+    else
+      result := result.ArrayRtti;
     result.PropsClear; // reset to the Base64 serialization if RttiDefinition=''
     P := pointer(RttiDefinition);
     if P <> nil then
@@ -9180,6 +9183,17 @@ begin
     else if result.Kind in rkRecordTypes then
       result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
     result.SetParserType(result.Parser, result.ParserComplex);
+    if (da <> nil) and
+       (da.fArrayFirstField = ptNone) and
+       (result.Props.Count <> 0) then
+    begin
+      prop := result.Props.List[0].Value;
+      da.fArrayFirstField := prop.Parser;
+      if prop.parser in [ptNone, ptEnumeration, ptSet] then
+        da.fArrayFirstFieldSort := ItemSizeToDynArrayKind(prop.Size);
+      if da.fArrayFirstFieldSort = ptNone then
+        da.fArrayFirstFieldSort := da.fArrayFirstField;
+    end;
   finally
     RegisterSafe.UnLock;
   end;
