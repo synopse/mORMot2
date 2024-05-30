@@ -2749,6 +2749,7 @@ type
     procedure Reserve(const WorkingBuffer: RawByteString); overload;
     /// similar to delete(fBuffer, 1, FirstBytes)
     procedure Remove(FirstBytes: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// move up to Count bytes from the internal Buffer into another place
     // - returns how many bytes were available to be copied into Dest^
     // - then remove the copied bytes from the internal Buffer/Len storage
@@ -11145,10 +11146,7 @@ end;
 procedure TRawByteStringBuffer.RawRealloc(needed: PtrInt);
 begin
   if fLen = 0 then // buffer from scratch (fBuffer may be '' or not)
-  begin
-    inc(needed, 128); // small overhead at first
-    FastSetString(fBuffer, needed); // no realloc
-  end
+    FastSetString(fBuffer, needed + 128) // no realloc + small initial overhead
   else
   begin
     inc(needed, needed shr 3 + 2048); // generous overhead on resize
