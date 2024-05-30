@@ -715,6 +715,8 @@ type
     Flags: TRttiCacheFlags;
     /// for rkHasRttiOrdTypes/rcfHasRttiOrd, equals Info^.RttiOrd
     RttiOrd: TRttiOrd;
+    /// if > 0, this type should be serialized as hexadecimal string
+    BinarySize: byte;
     /// corresponding TRttiVarData.VType
     // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
     // identified as varAny with TVarData.VAny pointing to the actual value, and
@@ -2417,7 +2419,6 @@ type
     fPrivateSlotsSafe: TLightLock;
     fArrayFirstFieldSize: integer;
     // used by mormot.core.json.pas
-    fBinarySize: integer;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
@@ -2437,7 +2438,7 @@ type
     procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo); virtual;
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
-    function SetBinaryType(BinarySize: integer): TRttiCustom;
+    function SetBinaryType(BinSize: integer): TRttiCustom;
     procedure SetPropsFromText(var P: PUtf8Char;
       ExpectedEnd: TRttiCustomFromTextExpectedEnd; NoRegister: boolean);
     // initialize from fProps, with no associated RTTI - and calls DoRegister()
@@ -2599,8 +2600,8 @@ type
       read fArrayFirstFieldSize;
     /// store the number of bytes for hexadecimal serialization for rcfBinary
     // - used when rcfBinary is defined in Flags; equals 0 if disabled (default)
-    property BinarySize: integer
-      read fBinarySize;
+    property BinarySize: byte
+      read fCache.BinarySize;
     /// store the class of this type, i.e. contains Cache.Info.RttiClass.RttiClass
     property ValueClass: TClass
       read fValueClass;
@@ -8251,24 +8252,26 @@ end;
 var
   RttiArrayCount: integer;
 
-function TRttiCustom.SetBinaryType(BinarySize: integer): TRttiCustom;
+function TRttiCustom.SetBinaryType(BinSize: integer): TRttiCustom;
 begin
   if self <> nil then
   begin
-    if BinarySize < 0 then
+    if BinSize < 0 then
     begin
-      BinarySize := 0;
+      BinSize := 0;
       exclude(fFlags, rcfBinary);
       if not (Kind in rkStringTypes) then
         exclude(fFlags, rcfJsonString);
     end
     else
     begin
-      if BinarySize = 0 then
-        BinarySize := fCache.Size;
+      if BinSize = 0 then
+        BinSize := fCache.Size;
       fFlags := fFlags + [rcfBinary, rcfJsonString];
     end;
-    fBinarySize := BinarySize;
+    if BinSize > high(fCache.BinarySize) then // stored as a byte
+      ERttiException.RaiseUtf8('%.SetBinaryType(%)', [self, BinSize]);
+    fCache.BinarySize := BinSize;
     SetParserType(Parser, ParserComplex); // notify format change (e.g. for json)
   end;
   result := self;

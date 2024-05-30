@@ -9470,42 +9470,20 @@ begin
   result := PT_HASH[CaseInsensitive, Kind];
 end;
 
-function DynArrayHashSortType(info: TRttiCustom): TRttiParserType;
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  size: integer;
-begin
-  result := info.ArrayFirstField;
-  if not (result in [ptNone, ptEnumeration, ptSet]) then
-    exit;
-  size := info.ArrayFirstFieldSize; // guess from (first field) item size
-  if size = 0 then
-  begin
-    size := info.Cache.Size;
-    info := info.ArrayRtti;
-    if info <> nil then
-      size := info.Cache.Size;
-  end;
-  result := ItemSizeToDynArrayKind(size);
-end;
-
 procedure TDynArrayHasher.Init(aDynArray: PDynArray; aHashItem: TDynArrayHashOne;
   const aEventHash: TOnDynArrayHashOne; aHasher: THasher;
   aCompare: TDynArraySortCompare; const aEventCompare: TOnDynArraySortCompare;
   aCaseInsensitive: boolean);
-var
-  pt: TRttiParserType;
 begin
   fDynArray := aDynArray;
-  pt := DynArrayHashSortType(aDynArray^.Info);
   if not (Assigned(aHashItem) or
           Assigned(aEventHash)) then
-    aHashItem := PT_HASH[aCaseInsensitive, pt];
+    aHashItem := PT_HASH[aCaseInsensitive, aDynArray^.Info.ArrayFirstFieldSort];
   fHashItem := aHashItem;
   fEventHash := aEventHash;
   if not (Assigned(aCompare) or
           Assigned(aEventCompare)) then
-    aCompare := PT_SORT[aCaseInsensitive, pt];
+    aCompare := PT_SORT[aCaseInsensitive, aDynArray^.Info.ArrayFirstFieldSort];
   fCompare := aCompare;
   fEventCompare := aEventCompare;
   HashTableInit(aHasher);
@@ -9516,7 +9494,7 @@ procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray;
 begin
   fDynArray := aDynArray;
   if aKind in [ptNone, ptEnumeration, ptSet] then
-    aKind := DynArrayHashSortType(fDynArray^.Info); // use RTTI if not enough
+    aKind := fDynArray^.Info.ArrayFirstFieldSort; // use RTTI if not enough
   fHashItem := PT_HASH[aCaseInsensitive, aKind];
   fEventHash := nil;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
