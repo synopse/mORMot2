@@ -4356,8 +4356,9 @@ begin
                   include(cltservsock.Http.HeaderFlags, hfConnectionClose);
                   Process(cltservsock, 0, self);
                 end;
-              grIntercepted:
-                ; // handled by OnHeaderParsed event -> no ban
+              grClosed,      // e.g. gracefully disconnected
+              grIntercepted: // handled by OnHeaderParsed event -> no ban
+                ;
             else
               if fBanned.BanIP(cltaddr.IP4) then // e.g. after grTimeout
                 IncStat(grBanned);
@@ -4597,7 +4598,8 @@ begin
         if Assigned(fServer.Sock.OnLog) then
           fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
               [ToText(aHeaderResult)^, fRemoteIP], self);
-        if fServer.fBanned.BanIP(fRemoteIP) then
+        if (aHeaderResult <> grClosed) and
+           fServer.fBanned.BanIP(fRemoteIP) then
           fServer.IncStat(grBanned);
       end;
     end;
@@ -4826,6 +4828,7 @@ procedure THttpServerResp.Execute;
     keepaliveendtix, beforetix, headertix, tix: Int64;
     pending: TCrtSocketPending;
     res: THttpServerSocketGetRequestResult;
+    banned: boolean;
   begin
     {$ifdef SYNCRTDEBUGLOW}
     try
@@ -4921,12 +4924,14 @@ procedure THttpServerResp.Execute;
                       exit;
                 else
                   begin
+                    banned := (res <> grClosed) and
+                              fServer.fBanned.BanIP(fServerSock.RemoteIP);
+                    if banned then
+                      fServer.IncStat(grBanned);
                     if Assigned(fServer.Sock.OnLog) then
                       fServer.Sock.OnLog(sllTrace,
-                        'Execute: close after GetRequest=% from %',
-                        [ToText(res)^, fServerSock.RemoteIP], self);
-                    if fServer.fBanned.BanIP(fServerSock.RemoteIP) then
-                      fServer.IncStat(grBanned);
+                        'Execute: close after GetRequest=% from % (ban=%)',
+                        [ToText(res)^, fServerSock.RemoteIP, banned], self);
                     exit;
                   end;
                 end;
