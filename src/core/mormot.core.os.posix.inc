@@ -1308,7 +1308,8 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 var
   st: TStat;
 begin
-  result := fpStat(pointer(FileName), st) = 0;
+  result := (FileName <> '') and
+            (fpStat(pointer(FileName), st) = 0);
   if not result then
     exit;
   FileSize := st.st_size;
@@ -1377,7 +1378,8 @@ function FileIsExecutable(const FileName: TFileName): boolean;
 var
   st: TStat;
 begin
-  result := (fpStat(pointer(FileName), st) = 0) and
+  result := (FileName <> '') and
+            (fpStat(pointer(FileName), st) = 0) and
             (st.st_mode and (S_IXUSR or S_IXGRP or S_IXOTH) <> 0) and
             not FpS_ISDIR(st.st_mode);
 end;
@@ -2303,32 +2305,32 @@ var
 
   procedure DoFolder(const subpath: TFileName);
   var
-    d: pDir;
-    e: pDirent;
-    pl, el: PtrInt;
+    dir: pDir;
+    ent: pDirent;
+    sublen, entlen: PtrInt;
     fn: RawUtf8;
   begin
-    d := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
-    if d = nil then
+    dir := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
+    if dir = nil then
       exit;
-    pl := length(subpath);
-    if pl <> 0 then
-      inc(pl);
+    sublen := length(subpath);
+    if sublen <> 0 then
+      inc(sublen);
     repeat
-      e := FpReaddir(d^); // FPC RTL use getdents64 syscall on Linux and BSD :)
-      if e = nil then
+      ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux and BSD :)
+      if ent = nil then
         break;
-      // fn := [subpath + '/'] + e^.d_name
-      el := StrLen(@e^.d_name);
-      FastSetString(fn, pl + el);
-      if pl <> 0 then
+      // fn := [subpath + '/'] + ent^.d_name
+      entlen := StrLen(@ent^.d_name);
+      FastSetString(fn, sublen + entlen);
+      if sublen <> 0 then
       begin
-        MoveFast(pointer(subpath)^, pointer(fn)^, pl - 1);
-        PByteArray(fn)[pl - 1] := ord('/');
+        MoveFast(pointer(subpath)^, pointer(fn)^, sublen - 1);
+        PByteArray(fn)[sublen - 1] := ord('/');
       end;
-      MoveFast(e^.d_name, PByteArray(fn)[pl], el);
+      MoveFast(ent^.d_name, PByteArray(fn)[sublen], entlen);
       // handle this entry
-      case e.d_type of
+      case ent.d_type of
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
           begin
@@ -2341,11 +2343,11 @@ var
           end;
         DT_DIR:
           if Recursive and
-             (e^.d_name[0] <> '.')  then
+             (ent^.d_name[0] <> '.')  then
             DoFolder(fn);
       end;
     until false;
-    FpClosedir(d^);
+    FpClosedir(dir^);
   end;
 
 begin
