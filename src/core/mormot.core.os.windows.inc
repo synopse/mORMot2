@@ -14,7 +14,7 @@ const
   // or by disabling the limitation in registry since Windows 10, version 1607
   // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
   // - extended-length path allows up to 32,767 widechars
-  // - but 2047 chars seems big enough in practice e.g. due to NTFS - POSIX uses 4096
+  // - but 2047 chars seems big enough in practice e.g. with NTFS - POSIX uses 4096
   W32_MAX = 2047;
 
 type
@@ -724,7 +724,7 @@ end;
 
 // some definitions missing on oldest Delphi
 const
-  FILE_ATTRIBUTE_REPARSE_POINT = $0000400;
+  FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink
 
 function FindFirstFileExW(lpfilename: PWideChar; fInfoLevelId: FINDEX_INFO_LEVELS;
    lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;
@@ -1017,6 +1017,15 @@ begin
   FileTimestampUtc := FileTimeToUnixMSTime(fa.ftLastWriteTime) // no local time
 end;
 
+function FileIsSymLink(const FileName: TFileName): boolean;
+var
+  fa: WIN32_FILE_ATTRIBUTE_DATA;
+begin
+  result := (FileName <> '') and
+            GetFileAttributesInternal(FileName, fa) and
+            (fa.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT <> 0);
+end;
+
 function GetFileSizeEx(hFile: THandle; var FileSize: Int64): BOOL;
   stdcall; external kernel32;
 
@@ -1215,6 +1224,34 @@ begin
     result := false
   else
     result := Windows.CopyFileW(W32(Source, s), W32(Target, t), FailIfExists);
+end;
+
+const
+  SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE = 2; // devmode
+var
+  CreateSymbolicLinkW: function(lpSymlinkFileName, lpTargetFileName: PWideChar;
+    dwFlags: DWORD): BOOL; stdcall;
+  CreateSymbolicLinkFlags: DWORD = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+
+function FileSymLink(const SymLink, Target: TFileName): boolean;
+var
+  s, t: TW32Temp;
+  sw, tw: PWideChar;
+begin
+  result := (SymLink <> '') and
+            Assigned(CreateSymbolicLinkW) and // Vista+
+            FileExists(Target);
+  if not result then
+    exit;
+  sw := W32(SymLink, s);
+  tw := W32(Target, t);
+  result := CreateSymbolicLinkW(sw, tw, CreateSymbolicLinkFlags);
+  if result or
+     (CreateSymbolicLinkFlags = 0) or
+     (GetLastError <> ERROR_INVALID_PARAMETER) then
+    exit;
+  CreateSymbolicLinkFlags := 0; // unsupported before Windows version 1703
+  result := CreateSymbolicLinkW(sw, tw, 0);
 end;
 
 function ValidHandle(Handle: THandle): boolean;
@@ -5365,13 +5402,14 @@ begin
   {$endif ASMX86}
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
-  GetTickCount64 := GetProcAddress(h, 'GetTickCount64');
-  if not Assigned(GetTickCount64) then // WinXP+
+  GetTickCount64 := GetProcAddress(h, 'GetTickCount64'); // Vista+
+  if not Assigned(GetTickCount64) then
     GetTickCount64 := @GetTickCount64ForXP;
   GetSystemTimePreciseAsFileTime :=
-    GetProcAddress(h, 'GetSystemTimePreciseAsFileTime');
-  if not Assigned(GetSystemTimePreciseAsFileTime) then // Win8+
+    GetProcAddress(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
+  if not Assigned(GetSystemTimePreciseAsFileTime) then
     GetSystemTimePreciseAsFileTime := @GetSystemTimeAsFileTime;
+  CreateSymbolicLinkW := GetProcAddress(h, 'CreateSymbolicLinkW'); // Vista+
   {$ifdef WITH_VECTOREXCEPT}
   AddVectoredExceptionHandler :=
     GetProcAddress(h, 'AddVectoredExceptionHandler');

@@ -3287,7 +3287,7 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 
 /// check if a file exists and can be written
 // - on POSIX, call fpaccess() and check for the W_OK attribute
-// - on Windows, supports aFileName longer than MAX_PATH
+// - on Windows, check faReadOnly and supports aFileName longer than MAX_PATH
 function FileIsWritable(const FileName: TFileName): boolean;
 
 /// reduce the visibility of a given file, and set its read/write attributes
@@ -3345,6 +3345,9 @@ function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
 // - will call fpStat() on POSIX to check the File and Executable bits
 function FileIsExecutable(const FileName: TFileName): boolean;
 
+/// check if a given file is a symbolic link
+function FileIsSymLink(const FileName: TFileName): boolean;
+
 /// compute the size of a directory's files, optionally with nested folders
 // - basic implementation using FindFirst/FindNext so won't be the fastest
 // available, nor fully accurate when files are actually (hard) links
@@ -3354,6 +3357,11 @@ function DirectorySize(const FileName: TFileName; Recursive: boolean = false;
 /// copy one file to another, similar to the Windows API
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
+
+/// create a symbolic link named SymLink pointing to the Target file
+// - won't work with directories, a non existing target file, or on Windows XP
+// - need specific (admin) priviledges on Windows, or developper mode enabled
+function FileSymLink(const SymLink, Target: TFileName): boolean;
 
 /// prompt the user for an error message to notify an unexpected issue
 // - in practice, text encoding is expected to be plain 7-bit ASCII

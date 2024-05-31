@@ -1382,6 +1382,16 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
+function FileIsSymLink(const FileName: TFileName): boolean;
+var
+  st: TStat;
+begin
+  result := (FileName <> '') and
+            (fpStat(pointer(FileName), st) = 0) and
+            fpS_ISLNK(st.st_mode) and
+            not FpS_ISDIR(st.st_mode);
+end;
+
 function GetExecutableName(aAddress: pointer): TFileName;
 var
   dlinfo: dl_info;
@@ -1419,6 +1429,13 @@ begin
   except
     result := false;
   end;
+end;
+
+function FileSymLink(const SymLink, Target: TFileName): boolean;
+begin
+  result := (SymLink <> '') and
+            FileExists(Target) and
+            (fpsymlink(pointer(Target), pointer(SymLink)) = 0);
 end;
 
 function ValidHandle(Handle: THandle): boolean;
