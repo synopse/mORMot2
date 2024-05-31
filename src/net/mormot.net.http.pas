@@ -921,6 +921,7 @@ type
     fSeconds, fMax, fWhiteIP: cardinal;
     fRejected, fTotal: Int64;
     function IsBannedRaw(ip4: cardinal): boolean;
+    procedure DoRotateRaw;
     procedure SetMax(Value: cardinal);
     procedure SetSeconds(Value: cardinal);
     procedure SetIP;
@@ -954,6 +955,7 @@ type
     // - if you call it at another pace (e.g. every minute), then the list
     // Time-To-Live will follow this unit of time instead of seconds
     procedure DoRotate;
+      {$ifdef HASINLINE} inline; {$endif}
     /// a 32-bit IP4 which should never be banned
     // - is set to cLocalhost32, i.e. 127.0.0.1, by default
     property WhiteIP: cardinal
@@ -4787,13 +4789,17 @@ begin
 end;
 
 procedure THttpAcceptBan.DoRotate;
+begin
+  if (self <> nil) and
+     (fCount <> 0) then
+    DoRotateRaw;
+end;
+
+procedure THttpAcceptBan.DoRotateRaw;
 var
   n: PtrInt;
   p: PCardinal;
 begin
-  if (self = nil) or
-     (fCount = 0) then
-    exit;
   fSafe.Lock; // very quick O(1) process
   try
     if fCount <> 0 then

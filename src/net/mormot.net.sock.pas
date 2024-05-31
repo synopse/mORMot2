@@ -3780,7 +3780,7 @@ begin
   FillCharFast(TLS, SizeOf(TLS), 0);
   TLS.IgnoreCertificateErrors := Server; // needed if no mutual auth is done
   TLS.CertificateFile := RawUtf8(CertificateFile); // RTL TFileName to RawUtf8
-  TLS.PrivateKeyFile := RawUtf8(PrivateKeyFile);
+  TLS.PrivateKeyFile  := RawUtf8(PrivateKeyFile);
   TLS.PrivatePassword := PrivateKeyPassword;
   TLS.CACertificatesFile := RawUtf8(CACertificatesFile);
   if Server then
