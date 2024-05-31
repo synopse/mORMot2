@@ -5877,7 +5877,7 @@ begin
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
   // always check if we don't already have this file cached locally
-  if not (pcoNoServer in fOwner.Settings.Options) and
+  if not (pcoNoServer in fSettings.Options) and
      (LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS) then
   begin
     l.Log(sllDebug, 'OnDownload: from local %', [fn], self);
