@@ -816,10 +816,10 @@ function GetMainMacAddress(out Mac: TMacAddress;
 
 type
   /// results of THttpServerSocket.GetRequest virtual method
-  // - return grError if the socket was not connected any more, or grException
-  // if any exception occurred during the process
+  // - grClosed is returned if the socket was disconnected/closed by the client
+  // - grException is returned if any exception occurred during the process
   // - grOversizedPayload is returned when MaximumAllowedContentLength is reached
-  // - grRejected is returned when OnBeforeBody returned not 200
+  // - grRejected on invalid input, or when OnBeforeBody returned not 200
   // - grIntercepted is returned e.g. from OnHeaderParsed as valid result
   // - grTimeout is returned when HeaderRetrieveAbortDelay is reached
   // - grHeaderReceived is returned for GetRequest({withbody=}false)
@@ -828,7 +828,7 @@ type
   // - grUpgraded indicates that this connection was upgraded e.g. as WebSockets
   // - grBanned is triggered by the hsoBan40xIP option
   THttpServerSocketGetRequestResult = (
-    grError,
+    grClosed,
     grException,
     grOversizedPayload,
     grRejected,
@@ -1166,9 +1166,9 @@ type
     /// if we should search for local .gz cached file when serving static files
     property RegisterCompressGzStatic: boolean
       read GetRegisterCompressGzStatic write SetRegisterCompressGzStatic;
-    /// how many invalid HTTP headers have been rejected
-    property StatHeaderErrors: integer
-      index grError read GetStat;
+    /// how many HTTP connections have been closed
+    property StatHeaderClosed: integer
+      index grClosed read GetStat;
     /// how many invalid HTTP headers raised an exception
     property StatHeaderException: integer
       index grException read GetStat;
@@ -4427,8 +4427,6 @@ begin
      Terminated then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
-if Assigned(ClientSock.OnLog) then
-ClientSock.OnLog(sllCustom1, 'Process: headers=%', [ClientSock.Http.Headers], self);
   // compute and send back the response
   if Assigned(fOnAfterResponse) then
     QueryPerformanceMicroSeconds(started);
@@ -4437,8 +4435,6 @@ ClientSock.OnLog(sllCustom1, 'Process: headers=%', [ClientSock.Http.Headers], se
   try
     // compute the response
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
-if Assigned(ClientSock.OnLog) then
-ClientSock.OnLog(sllCustom1, 'Process: DoRequest=%', [req], self);
     DoRequest(req);
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
@@ -4449,8 +4445,6 @@ ClientSock.OnLog(sllCustom1, 'Process: DoRequest=%', [req], self);
       exit;
     if hfConnectionClose in ClientSock.Http.HeaderFlags then
       ClientSock.fKeepAliveClient := false;
-if Assigned(ClientSock.OnLog) then
-ClientSock.OnLog(sllCustom1, 'Process=%: send back len=%', [req.RespStatus, output.Len], self);      
     if ClientSock.TrySndLow(output.Buffer, output.Len) then // header[+body]
       while not Terminated do
       begin
@@ -4636,11 +4630,11 @@ var
   status, tix32: cardinal;
   noheaderfilter, http10: boolean;
 begin
-  result := grError;
   try
     // use SockIn with 1KB buffer if not already initialized: 2x faster
     CreateSockIn;
     // abort now with no exception if socket is obviously broken
+    result := grClosed;
     if fServer <> nil then
     begin
       if (SockInPending(100) < 0) or
@@ -4655,9 +4649,10 @@ begin
     SockRecvLn(Http.CommandResp);
     P := pointer(Http.CommandResp);
     if P = nil then
-      exit; // broken
+      exit; // connection is likely to be broken or closed
     GetNextItem(P, ' ', Http.CommandMethod); // 'GET'
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
+    result := grRejected;
     if PCardinal(P)^ <>
          ord('H') + ord('T') shl 8 + ord('T') shl 16 + ord('P') shl 24 then
       exit;
@@ -4671,7 +4666,6 @@ begin
     begin
       SockSendFlush('HTTP/1.0 400 Bad Request'#13#10 +
         'Content-Length: 16'#13#10#13#10'Rejected Headers');
-      result := grRejected;
       exit;
     end;
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
