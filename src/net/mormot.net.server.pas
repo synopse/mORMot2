@@ -1411,7 +1411,7 @@ type
 
   /// each THttpPeerCacheSettings.Options item
   // - pcoCacheTempSubFolders will create 16 sub-folders (from first 0-9/a-z
-  // hash nibble) within CacheTempPath to reduce folder fragmentation
+  // hash nibble) within CacheTempPath to reduce filesystem fragmentation
   // - pcoUseFirstResponse will accept the first positive response, and don't
   // wait for the BroadcastTimeoutMS delay for all responses to be received
   // - pcoTryLastPeer will first check the latest peer with HTTP/TCP before
@@ -1419,14 +1419,16 @@ type
   // can be forced by TWGetAlternateOptions from a given WGet() call
   // - pcoBroadcastNotAlone will disable broadcasting for up to one second if
   // no response at all was received within BroadcastTimeoutMS delay
+  // - pcoNoServer disable the local UDP/HTTP servers and acts as a pure client
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
-  // (warning: this option should be set on all peers)
+  // (warning: this option should be set on all peers, clients and servers)
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
   THttpPeerCacheOption = (
     pcoCacheTempSubFolders,
     pcoUseFirstResponse,
     pcoTryLastPeer,
     pcoBroadcastNotAlone,
+    pcoNoServer,
     pcoSelfSignedHttps,
     pcoVerboseLog);
 
@@ -1511,7 +1513,8 @@ type
     /// location of the temporary cached files, available for remote requests
     // - the files are cached using their THttpPeerCacheHash values as filename
     // - this folder will be purged according to CacheTempMaxMB/CacheTempMaxMin
-    // - if this value is '', temporary caching would be disabled
+    // - if this value equals '', or pcoNoServer is defined in Options,
+    // temporary caching would be disabled
     property CacheTempPath: TFileName
       read fCacheTempPath write fCacheTempPath;
     /// above how many bytes the peer network should be asked for a temporary file
@@ -1534,7 +1537,8 @@ type
     /// location of the permanent cached files, available for remote requests
     // - in respect to CacheTempPath, this folder won't be purged
     // - the files are cached using their THttpPeerCacheHash values as filename
-    // - if this value is '', permanent caching would be disabled
+    // - if this value equals '', or pcoNoServer is defined in Options,
+    // permanent caching would be disabled
     property CachePermPath: TFileName
       read fCachePermPath write fCachePermPath;
     /// above how many bytes the peer network should be asked for a permanent file
@@ -5412,15 +5416,16 @@ begin
         begin
           fOwner.MessageInit(pcfResponseNone, fMsg.Seq, resp);
           resp.Hash := fMsg.Hash;
-          if integer(fOwner.fHttpServer.ConnectionsActive) >
-                      fOwner.Settings.LimitClientCount then
-            resp.Kind := pcfResponseOverloaded
-          else if fOwner.LocalFileName(
-                           fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
-            resp.Kind := pcfResponseFull
-          else if fOwner.PartialFileName(
-                           fMsg, nil, nil, @resp.Size) = HTTP_SUCCESS then
-            resp.Kind := pcfResponsePartial;
+          if not (pcoNoServer in fOwner.Settings.Options) then
+            if integer(fOwner.fHttpServer.ConnectionsActive) >
+                        fOwner.Settings.LimitClientCount then
+              resp.Kind := pcfResponseOverloaded
+            else if fOwner.LocalFileName(
+                             fMsg, [], nil, @resp.Size) = HTTP_SUCCESS then
+              resp.Kind := pcfResponseFull
+            else if fOwner.PartialFileName(
+                             fMsg, nil, nil, @resp.Size) = HTTP_SUCCESS then
+              resp.Kind := pcfResponsePartial;
           DoSendResponse;
         end;
       pcfPong,
@@ -5623,12 +5628,15 @@ begin
   if Assigned(log) then
     log.Log(sllTrace, 'Create: started %', [fUdpServer], self);
   // start the local HTTP/HTTPS server on this interface
-  StartHttpServer(aHttpServerClass, aHttpServerThreadCount, fIpPort);
-  fHttpServer.ServerName := Executable.ProgramName;
-  fHttpServer.OnBeforeBody := OnBeforeBody;
-  fHttpServer.OnRequest := OnRequest;
-  if Assigned(log) then
-    log.Log(sllDebug, 'Create: started %', [fHttpServer], self);
+  if not (pcoNoServer in fSettings.Options) then
+  begin
+    StartHttpServer(aHttpServerClass, aHttpServerThreadCount, fIpPort);
+    fHttpServer.ServerName := Executable.ProgramName;
+    fHttpServer.OnBeforeBody := OnBeforeBody;
+    fHttpServer.OnRequest := OnRequest;
+    if Assigned(log) then
+      log.Log(sllDebug, 'Create: started %', [fHttpServer], self);
+  end;
 end;
 
 procedure THttpPeerCache.StartHttpServer(
@@ -5666,7 +5674,10 @@ end;
 
 function THttpPeerCache.CurrentConnections: integer;
 begin
-  result := fHttpServer.ConnectionsActive;
+  if pcoNoServer in fSettings.Options then
+    result := 0
+  else
+    result := fHttpServer.ConnectionsActive;
 end;
 
 destructor THttpPeerCache.Destroy;
@@ -5845,7 +5856,6 @@ begin
   // validate WGet caller context
   if (self = nil) or
      (fSettings = nil) or
-     (fHttpServer = nil) or
      (Sender = nil) or
      (Params.Hash = '') or
      not Params.Hasher.InheritsFrom(TStreamRedirectSynHasher) or
@@ -5867,7 +5877,8 @@ begin
   req.RangeStart := Sender.RangeStart;
   req.RangeEnd := Sender.RangeEnd;
   // always check if we don't already have this file cached locally
-  if LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS then
+  if not (pcoNoServer in fOwner.Settings.Options) and
+     (LocalFileName(req, [lfnSetDate], @fn, @req.Size) = HTTP_SUCCESS) then
   begin
     l.Log(sllDebug, 'OnDownload: from local %', [fn], self);
     local := TFileStreamEx.Create(fn, fmOpenReadShared);
@@ -6040,6 +6051,8 @@ var
   i: PtrInt;
   dir: TFindFilesDynArray;
 begin
+  if pcoNoServer in fSettings.Options then
+    exit;
   // the supplied downloaded source file should be big enough
   sourcesize := FileSize(Partial);
   if (sourcesize = 0) or // paranoid
