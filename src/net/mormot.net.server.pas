@@ -4267,13 +4267,13 @@ var
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  banlen, tix, bantix: integer;
+  banlen, sec, bansec, i: integer;
   tix64: QWord;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   fExecuteState := esBinding;
   NotifyThreadStart(self);
-  bantix := 0;
+  bansec := 0;
   // main server process loop
   try
     // BIND + LISTEN (TLS is done later)
@@ -4308,15 +4308,15 @@ begin
       begin
         // call fBanned.DoRotate exactly every second
         tix64 := mormot.core.os.GetTickCount64;
-        tix := tix64 div 1000;
+        sec := tix64 div 1000;
+        if bansec <> 0 then
+          for i := bansec + 1 to sec do // as many DoRotate as elapsed seconds
+            fBanned.DoRotate // update internal THttpAcceptBan lists
         {$ifdef OSPOSIX} // Windows would require some activity - not an issue
-        if bantix = 0 then
-          fSock.ReceiveTimeout := 1000 // accept() to exit after one second
         else
-        {$endif OSPOSIX}
-        if bantix <> tix then
-          fBanned.DoRotate; // update internal THttpAcceptBan lists
-        bantix := tix;
+          fSock.ReceiveTimeout := 1000 // accept() to exit after one second
+        {$endif OSPOSIX};
+        bansec := sec;
       end;
       if res = nrRetry then // accept() timeout after 1 or 5 seconds
       begin
