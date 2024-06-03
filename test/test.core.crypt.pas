@@ -3023,6 +3023,8 @@ begin
       Check(c2.GetUsage = [cuDigitalSignature, cuKeyAgreement]);
     cv := c2.Verify(c1);
     CheckUtf8(cv = cvValidSelfSigned, '%:self1=%', [crt.AlgoName, ToText(cv)^]);
+    if cv <> cvValidSelfSigned then
+      ConsoleWrite(c2.Save(cccCertWithPrivateKey, '', ccfPem)); // for debug
     cv := c2.Verify(nil);
     CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
     c2.Sign(c1); // change signature
