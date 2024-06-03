@@ -711,9 +711,10 @@
   {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
-    {$if (CompilerVersion = 25.0) or
+    {$if (CompilerVersion = 23.0) or
+         (CompilerVersion = 25.0) or
          (CompilerVersion = 28.0) or 
-         (CompilerVersion = 29.0)}  // exactly XE4, XE7 or XE8 are known to GPF
+         (CompilerVersion = 29.0)}  // exactly XE2/XE4/XE7/XE8 are known to GPF
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}

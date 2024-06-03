@@ -625,7 +625,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
     procedure AddQ(Value: QWord);
-      {$ifdef CPU64}{$ifdef ASMINTEL}inline;{$endif}{$endif}
+      {$ifdef FPC_CPUX64}inline;{$endif} // URW1147 on Delphi XE2
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
