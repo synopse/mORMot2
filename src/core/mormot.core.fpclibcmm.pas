@@ -32,6 +32,7 @@ unit mormot.core.fpclibcmm;
     
   Then define either FPC_X64MM or FPC_LIBCMM conditional.
   If both are set, FPC_64MM will be used on x86_64, and FPC_LIBCMM otherwise.
+  Define FPC_LIBCMM_NOMSIZE to disable the malloc_usable_size() call on Linux.
   
   Note: we tried Intel TBB and jemalloc external libraries, but they consummed
   much more memory on heavy load (TBB seems not usable for server work).
@@ -116,7 +117,20 @@ end;
 // - note: the FPC RTL cmem unit triggers some errors during mormot2tests on
 // x86_64 (at least) whereas this unit won't
 
-{$ifdef LINUX}
+{$ifndef LINUX}
+  {$define FPC_LIBCMM_NOMSIZE}
+{$endif LINUX}
+
+{$ifdef FPC_LIBCMM_NOMSIZE}
+
+function _MemSize(p: pointer): PtrUInt;
+begin
+  result := 0;
+  // good enough in practice: FPC fpc_AnsiStr_SetLength() will reallocate
+  // and TSqlite3Library will detect it and use a prefix
+end;
+
+{$else}
 
 // any recent Linux glibc has this API call to retrieve a size from a pointer
 // - may be missing on other platforms, so this code is enabled only on LINUX
@@ -126,26 +140,19 @@ end;
 function msize(p: pointer): PtrUInt;
   cdecl; external 'c' name 'malloc_usable_size' + LIBC_SUFFIX;
 
-// enable paranoid memory checks - but for SINGLE/MAIN thread only
-// - see http://man7.org/linux/man-pages/man3/mcheck.3.html
-function mcheck(abort: pointer): integer;
-  cdecl external 'c' name 'mcheck' + LIBC_SUFFIX;
-
 function _MemSize(p: pointer): PtrUInt;
 begin
   result := msize(p); // nice and easy
 end;
 
-{$else}
+{
+// enable paranoid memory checks - but for SINGLE/MAIN thread only
+// - see http://man7.org/linux/man-pages/man3/mcheck.3.html
+function mcheck(abort: pointer): integer;
+  cdecl external 'c' name 'mcheck' + LIBC_SUFFIX;
+}
 
-function _MemSize(p: pointer): PtrUInt;
-begin
-  result := 0;
-  // good enough in practice: FPC fpc_AnsiStr_SetLength() will reallocate
-  // and TSqlite3Library will detect it and use a prefix
-end;
-
-{$endif LINUX}
+{$endif FPC_LIBCMM_NOMSIZE}
 
 
 function _GetHeapStatus: THeapStatus;
