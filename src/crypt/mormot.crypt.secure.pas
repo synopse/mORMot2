@@ -9146,7 +9146,10 @@ begin
                   AsnOid(pointer(CKA_OID[cka]))
                 ]);
   else
-    ECrypt.RaiseUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
+    begin
+      result := ''; // make compiler happy
+      ECrypt.RaiseUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
+    end;
   end;
 end;
 
