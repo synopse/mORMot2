@@ -7419,25 +7419,29 @@ var
   i, len: PtrInt;
 begin
   len := Length(S);
-  i := 1;
-  while (i <= len) and
-        (S[i] <= ' ') do
+  i := 0;
+  while (i < len) and
+        (PByteArray(S)[i] <= ord(' ')) do
     inc(i);
-  if i = 1 then
+  if i = 0 then
     result := S
   else
-    FastSetString(result, @PByteArray(S)[i - 1], len - i);
+    FastSetString(result, @PByteArray(S)[i], len - i);
 end;
 
 function TrimRight(const S: RawUtf8): RawUtf8;
 var
-  i: PtrInt;
+  i, len: PtrInt;
 begin
-  i := Length(S);
+  len := Length(S);
+  i := len;
   while (i > 0) and
         (S[i] <= ' ') do
     dec(i);
-  FastSetString(result, pointer(S), i);
+  if i = len then
+    result := S
+  else
+    FastSetString(result, pointer(S), i);
 end;
 
 procedure TrimLeftLines(var S: RawUtf8);
