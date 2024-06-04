@@ -4644,6 +4644,7 @@ const
   CHINESE_TEXT: array[0..8] of byte = (
     $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
 begin
+  // Trim*() functions
   CheckEqual(TrimU(''), '');
   CheckEqual(TrimU('a'), 'a');
   CheckEqual(TrimU(' a'), 'a');
@@ -4653,6 +4654,7 @@ begin
   CheckEqual(TrimU(' ab'), 'ab');
   CheckEqual(TrimU('ab '), 'ab');
   CheckEqual(TrimU(' ab '), 'ab');
+  CheckEqual(TrimU(' a b '), 'a b');
   CheckEqual(TrimLeft(''), '');
   CheckEqual(TrimLeft('a'), 'a');
   CheckEqual(TrimLeft(' a'), 'a');
@@ -4662,6 +4664,7 @@ begin
   CheckEqual(TrimLeft(' ab'), 'ab');
   CheckEqual(TrimLeft('ab '), 'ab ');
   CheckEqual(TrimLeft(' ab '), 'ab ');
+  CheckEqual(TrimLeft(' a b '), 'a b ');
   CheckEqual(TrimRight(''), '');
   CheckEqual(TrimRight('a'), 'a');
   CheckEqual(TrimRight(' a'), ' a');
@@ -4671,9 +4674,12 @@ begin
   CheckEqual(TrimRight(' ab'), ' ab');
   CheckEqual(TrimRight('ab '), 'ab');
   CheckEqual(TrimRight(' ab '), ' ab');
+  CheckEqual(TrimRight(' a b '), ' a b');
   CheckEqual(TrimChar('abcd', []), 'abcd');
   CheckEqual(TrimChar('abcd', ['e']), 'abcd');
   CheckEqual(TrimChar('abcd', ['a']), 'bcd');
+  CheckEqual(TrimChar('abcdabcd', ['b']), 'acdacd');
+  CheckEqual(TrimChar('abcdabcd', ['a']), 'bcdbcd');
   CheckEqual(TrimChar('abcd', ['b']), 'acd');
   CheckEqual(TrimChar('abcd', ['d', 'e']), 'abc');
   CheckEqual(TrimChar('abcd', ['a', 'b']), 'cd');
@@ -4683,6 +4689,7 @@ begin
   CheckEqual(TrimChar('baaaa', ['a', 'c']), 'b');
   CheckEqual(OnlyChar('abcd', ['a', 'b', 'c', 'd', 'e']), 'abcd');
   CheckEqual(OnlyChar('abcd', ['a', 'b', 'd', 'e']), 'abd');
+  CheckEqual(OnlyChar('abcdabcd', ['a', 'b', 'd', 'e']), 'abdabd');
   CheckEqual(OnlyChar('abcd', []), '');
   CheckEqual(OnlyChar('abcd', ['e']), '');
   CheckEqual(OnlyChar('abcd', ['a']), 'a');
@@ -4690,6 +4697,7 @@ begin
   CheckEqual(OnlyChar('abcd', ['d']), 'd');
   CheckEqual(OnlyChar('abcdz', ['d', 'z']), 'dz');
   CheckEqual(OnlyChar('abzcd', ['z']), 'z');
+  CheckEqual(OnlyChar('zabzcdz', ['z']), 'zzz');
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
   rb1 := rb2 + RawByteString('test');
