@@ -4644,6 +4644,33 @@ const
   CHINESE_TEXT: array[0..8] of byte = (
     $e4, $b8, $ad, $e6, $96, $87, $61, $62, $63);
 begin
+  CheckEqual(TrimU(''), '');
+  CheckEqual(TrimU('a'), 'a');
+  CheckEqual(TrimU(' a'), 'a');
+  CheckEqual(TrimU('a '), 'a');
+  CheckEqual(TrimU(' a '), 'a');
+  CheckEqual(TrimU('ab'), 'ab');
+  CheckEqual(TrimU(' ab'), 'ab');
+  CheckEqual(TrimU('ab '), 'ab');
+  CheckEqual(TrimU(' ab '), 'ab');
+  CheckEqual(TrimLeft(''), '');
+  CheckEqual(TrimLeft('a'), 'a');
+  CheckEqual(TrimLeft(' a'), 'a');
+  CheckEqual(TrimLeft('a '), 'a ');
+  CheckEqual(TrimLeft(' a '), 'a ');
+  CheckEqual(TrimLeft('ab'), 'ab');
+  CheckEqual(TrimLeft(' ab'), 'ab');
+  CheckEqual(TrimLeft('ab '), 'ab ');
+  CheckEqual(TrimLeft(' ab '), 'ab ');
+  CheckEqual(TrimRight(''), '');
+  CheckEqual(TrimRight('a'), 'a');
+  CheckEqual(TrimRight(' a'), ' a');
+  CheckEqual(TrimRight('a '), 'a');
+  CheckEqual(TrimRight(' a '), ' a');
+  CheckEqual(TrimRight('ab'), 'ab');
+  CheckEqual(TrimRight(' ab'), ' ab');
+  CheckEqual(TrimRight('ab '), 'ab');
+  CheckEqual(TrimRight(' ab '), ' ab');
   CheckEqual(TrimChar('abcd', []), 'abcd');
   CheckEqual(TrimChar('abcd', ['e']), 'abcd');
   CheckEqual(TrimChar('abcd', ['a']), 'bcd');
