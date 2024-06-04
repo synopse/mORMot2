@@ -1974,68 +1974,81 @@ end;
 {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in .inc / project options
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
-  VI: TVersionInfo;
-  TI: integer;
+  v: TVersionInfo;
+  i, j: integer;
+  key, value: string;
 begin
   result := false;
   if fFileName = '' then
     exit;
-  VI := TVersionInfo.Create;
+  v := TVersionInfo.Create;
   try
     try
-      // extract information - VI.Load() may raise EResNotFound
+      // extract information - v.Load() may raise EResNotFound
       if (fFileName <> '') and
          (fFileName <> ParamStr(0)) then
-        VI.Load(fFileName)
+        v.Load(fFileName)
       else
-        VI.Load(HInstance); // load info for currently running program
-      result := VI.FixedInfo.FileVersion[0] <> 0;
+        v.Load(HInstance); // load info for currently running program
+      result := v.FixedInfo.FileVersion[0] <> 0;
       // set extracted version numbers
-      SetVersion(VI.FixedInfo.FileVersion[0],
-                 VI.FixedInfo.FileVersion[1],
-                 VI.FixedInfo.FileVersion[2],
-                 VI.FixedInfo.FileVersion[3]);
+      SetVersion(v.FixedInfo.FileVersion[0],
+                 v.FixedInfo.FileVersion[1],
+                 v.FixedInfo.FileVersion[2],
+                 v.FixedInfo.FileVersion[3]);
       // detect translation
-      if VI.VarFileInfo.Count > 0 then
-        with VI.VarFileInfo.Items[0] do
+      if v.VarFileInfo.Count > 0 then
+        with v.VarFileInfo.Items[0] do
           LanguageInfo := _fmt('%.4x%.4x', [language, codepage]);
       if LanguageInfo = '' then
       begin
         // take first language
-        TI := 0;
-        if VI.StringFileInfo.Count > 0 then
-          LanguageInfo := VI.StringFileInfo.Items[0].Name
+        i := 0;
+        if v.StringFileInfo.Count > 0 then
+          LanguageInfo := v.StringFileInfo.Items[0].Name
       end
       else
       begin
         // look for language index
-        TI := VI.StringFileInfo.Count - 1;
-        while (TI >= 0) and
-              (CompareText(VI.StringFileInfo.Items[TI].Name, LanguageInfo) <> 0) do
-          dec(TI);
-        if TI < 0 then
+        i := v.StringFileInfo.Count - 1;
+        while (i >= 0) and
+              (CompareText(v.StringFileInfo.Items[i].Name, LanguageInfo) <> 0) do
+          dec(i);
+        if i < 0 then
         begin
-          TI := 0; // revert to first translation
-          LanguageInfo := VI.StringFileInfo.Items[TI].Name;
+          i := 0; // revert to first translation
+          LanguageInfo := v.StringFileInfo.Items[i].Name;
         end;
       end;
-      with VI.StringFileInfo.Items[TI] do
-      begin
-        CompanyName      := Values['CompanyName'];
-        FileDescription  := Values['FileDescription'];
-        FileVersion      := Values['FileVersion'];
-        InternalName     := Values['InternalName'];
-        LegalCopyright   := Values['LegalCopyright'];
-        OriginalFilename := Values['OriginalFilename'];
-        ProductName      := Values['ProductName'];
-        ProductVersion   := Values['ProductVersion'];
-        Comments         := Values['Comments'];
-      end;
+      with v.StringFileInfo.Items[i] do
+        for j := 0 to Count - 1 do
+        begin
+          key := Keys[j];
+          value := Trim(ValuesByIndex[j]);
+          if key = 'CompanyName' then
+            CompanyName := value
+          else if key = 'FileDescription' then
+            FileDescription := value
+          else if key = 'FileVersion' then
+            FileVersion := value
+          else if key = 'InternalName' then
+            InternalName := value
+          else if key = 'LegalCopyright' then
+            LegalCopyright := value
+          else if key = 'OriginalFilename' then
+            OriginalFilename := value
+          else if key = 'ProductName' then
+            ProductName := value
+          else if key = 'ProductVersion' then
+            ProductVersion := value
+          else if key = 'Comments' then
+            Comments := value;
+        end;
     except
-      // trap EResNotFound exception from VI.Load()
+      // trap EResNotFound exception from v.Load()
     end;
   finally
-    VI.Free;
+    v.Free;
   end;
 end;
 {$else}

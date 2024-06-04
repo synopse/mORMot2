@@ -90,7 +90,7 @@ begin
     if Option(['P', 'prompt'],
         'run in prompt mode (end on void input)') then
       result := gpPromptMode;
-    dest := MakePath([GetCurrentDir, ExtractResourceName(url)]);
+    dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
     p.DestFile := ParamS(['o', 'output'],
        'destination #filename or existing foldername', dest);
     p.Silent := Option(['s', 'silent'],
