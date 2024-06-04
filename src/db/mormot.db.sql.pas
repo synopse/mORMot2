@@ -3715,13 +3715,12 @@ begin
           begin
             // (found) commit/rollback
             dec(t^.RefCount);
-            if t^.RefCount = 0 then
-            begin
-              dec(n);
-              MoveFast(fSharedTransactions[i + 1], t^, (n - i) * SizeOf(t^));
-              SetLength(fSharedTransactions, n);
-              found := true;
-            end;
+            if t^.RefCount <> 0 then
+              exit; // nested transaction
+            dec(n);
+            MoveFast(fSharedTransactions[i + 1], t^, (n - i) * SizeOf(t^));
+            SetLength(fSharedTransactions, n);
+            found := true;
           end;
           break;
         end
