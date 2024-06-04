@@ -3644,10 +3644,10 @@ begin
     {$else}
     {$ifdef USELIBCURL}
     _MainHttpClass := TCurlHttp
-    {$else}
-    raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
     {$endif USELIBCURL}
     {$endif USEWININET}
+    if _MainHttpClass = nil then
+      raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
   end;
   result := _MainHttpClass;
 end;
