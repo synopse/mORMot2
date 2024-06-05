@@ -750,7 +750,10 @@ begin
           W.AddNull;
         mormot.db.core.ftInt64:
           if f.DataType = ftBoolean then
-            W.Add(ord(f.AsBoolean))
+            if f.AsBoolean then
+              W.Add('1') // normalize
+            else
+              W.Add('0')
           else
           {$ifdef UNICODE}
             W.Add(f.AsLargeInt);

@@ -5307,15 +5307,15 @@ begin
     {$ifdef OSWINDOWS}
     with SystemInfo, OSVersionInfo do
     begin
-      Add('*');
+      AddDirect('*');
       Add(wProcessorArchitecture);
-      Add('-');
+      AddDirect('-');
       Add(wProcessorLevel);
-      Add('-');
+      AddDirect('-');
       Add(wProcessorRevision);
     {$endif OSWINDOWS}
     {$ifdef CPUINTEL}
-      Add(':');
+      AddDirect(':');
       AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
     {$endif CPUINTEL}
     {$ifdef CPUARM3264}
@@ -5324,31 +5324,31 @@ begin
     {$endif CPUARM3264}
       AddShorter(' OS=');
     {$ifdef OSWINDOWS}
-      Add(ord(OSVersion));
-      Add('.');
+      AddB(ord(OSVersion));
+      AddDirect('.');
       Add(wServicePackMajor);
-      Add('=');
-      Add(dwMajorVersion);
-      Add('.');
-      Add(dwMinorVersion);
-      Add('.');
-      Add(dwBuildNumber);
+      AddDirect('=');
+      AddU(dwMajorVersion);
+      AddDirect('.');
+      AddU(dwMinorVersion);
+      AddDirect('.');
+      AddU(dwBuildNumber);
     end;
     {$else}
     AddString(OS_NAME[OS_KIND]);
-    Add('=');
+    AddDirect('=');
     AddTrimSpaces(pointer(SystemInfo.uts.sysname));
-    Add('-');
+    AddDirect('-');
     AddTrimSpaces(pointer(SystemInfo.uts.release));
     AddReplace(pointer(SystemInfo.uts.version), ' ', '-');
     {$endif OSWINDOWS}
     if OSVersionInfoEx <> '' then
     begin
-      Add('/');
+      AddDirect('/');
       AddTrimSpaces(OSVersionInfoEx);
     end;
     AddShorter(' Wow64=');
-    Add({$ifdef OSWINDOWS} integer(IsWow64) {$else} 0 {$endif});
+    AddB({$ifdef OSWINDOWS} ord(IsWow64) {$else} 0 {$endif});
     AddShort(' Freq=1000000'); // we use QueryPerformanceMicroSeconds()
     if IsLibrary then
     begin
@@ -5369,7 +5369,7 @@ begin
            (P^ <> '=') then
         begin
           AddNoJsonEscapeW(PWord(P), 0);
-          Add(#9);
+          AddDirect(#9);
         end;
         inc(P, L + 1);
       end;
@@ -5387,7 +5387,7 @@ begin
     if WithinEvents then
       fWriterEcho.AddEndOfLine(sllNone)
     else
-      Add(#10, #10);
+      AddDirect(#10, #10);
     FlushToStream;
     fWriterEcho.EchoReset; // header is not to be sent to console
   end;

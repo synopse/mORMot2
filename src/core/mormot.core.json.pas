@@ -5108,7 +5108,7 @@ var
   W: TJsonWriter;
 begin
   W := Ctxt.W;
-  W.AddU(Data^);
+  W.AddB(Data^);
 end;
 
 procedure _JS_SmallInt(Data: PSmallInt; const Ctxt: TJsonSaveContext);
@@ -5370,7 +5370,7 @@ begin
       Ctxt.Info.Cache.EnumInfo^.GetEnumNameAll(Ctxt.W.fBlockComment, '', true);
   end
   else
-    Ctxt.W.AddU(Data^);
+    Ctxt.W.AddB(Data^);
 end;
 
 procedure _JS_Set(Data: PCardinal; const Ctxt: TJsonSaveContext);
@@ -10825,7 +10825,7 @@ begin
         W.AddNoJsonEscapeW(PPWord(Data)^, 0);
     // unescaped (and unquoted) numbers, date/time, guid or hash
     ptByte:
-      W.AddU(PByte(Data)^);
+      W.AddB(PByte(Data)^);
     ptWord:
       W.AddU(PWord(Data)^);
     ptInteger:

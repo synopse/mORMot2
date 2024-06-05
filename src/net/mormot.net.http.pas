@@ -5494,7 +5494,7 @@ begin
         hlvHttp_State:
           wr.AddString(HTTP_STATE[Context.State]);
         hlvHttp_StateOrd:
-          wr.AddU(ord(Context.State));
+          wr.AddB(ord(Context.State));
         hlvHttps:
           if hsrHttps in Context.Flags then
             wr.AddShorter('on');
@@ -6408,9 +6408,9 @@ begin
       else
         t.AddIsoDateTime(w, {ms=}false); // true Iso-8601 date/time
       w.AddShorter('","p":');
-      w.AddU(ord(p^.Period));
+      w.AddB(ord(p^.Period));
       w.AddShorter(',"s":');
-      w.AddU(ord(p^.Scope));
+      w.AddB(ord(p^.Scope));
       w.AddShorter(',"c":');
       w.AddQ(p^.State.Count);
       w.AddShorter(',"t":');
