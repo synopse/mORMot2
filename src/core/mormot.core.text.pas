@@ -620,6 +620,9 @@ type
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: PtrUInt);
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
+    /// append an Unsigned integer <= 999 Value as a String
+    procedure AddB(Value: PtrUInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -664,11 +667,11 @@ type
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
     procedure AddChars(aChar: AnsiChar; aCount: PtrInt);
-    /// append an integer Value as a 2 digits text with comma
+    /// append an integer Value as fixed-length 2 digits text with comma
     procedure Add2(Value: PtrUInt);
-    /// append an integer Value as a 3 digits text without any comma
+    /// append an integer Value as fixed-length 3 digits text without any comma
     procedure Add3(Value: cardinal);
-    /// append an integer Value as a 4 digits text with comma
+    /// append an integer Value as fixed-length 4 digits text with comma
     procedure Add4(Value: PtrUInt);
     /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
     procedure AddMicroSec(MicroSec: cardinal);
@@ -4159,6 +4162,17 @@ begin
   end;
   MoveFast(P^, B[1], Len);
   inc(B, Len);
+end;
+
+procedure TTextWriter.AddB(Value: PtrUInt);
+var
+  P: PAnsiChar;
+begin
+  if B >= BEnd then
+    FlushToStream;
+  P := pointer(SmallUInt32Utf8[Value]); // caller ensured Value <= 999
+  PCardinal(B + 1)^ := PCardinal(P)^;
+  inc(B, PStrLen(P - _STRLEN)^);
 end;
 
 procedure TTextWriter.AddUHex(Value: cardinal; QuotedChar: AnsiChar);
