@@ -192,10 +192,11 @@ begin
   result := '';
   if not uri.From(u) then
     exit;
-  if (fClient <> nil) and
-     ((fClient.Server <> uri.Server) or
-      (fClient.Port <> uri.Port)) then // need a new connection
-    FreeAndNil(fClient);
+  if fClient <> nil then
+    if (fClient.TLS.Enabled <> uri.Https) or
+       (fClient.Server <> uri.Server) or
+       (fClient.Port <> uri.Port) then // need a new connection
+      FreeAndNil(fClient);
   if fClient = nil then  // try to reuse an existing connection
   begin
     fClient := THttpClientSocket.Create(fTcpTimeoutSec * 1000);
