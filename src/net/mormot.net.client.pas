@@ -3643,7 +3643,7 @@ begin
     _MainHttpClass := TWinHttp;
     {$else}
     {$ifdef USELIBCURL}
-    _MainHttpClass := TCurlHttp
+    _MainHttpClass := TCurlHttp;
     {$endif USELIBCURL}
     {$endif USEWININET}
     if _MainHttpClass = nil then
