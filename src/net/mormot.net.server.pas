@@ -1349,6 +1349,9 @@ type
     pcfBearer);
 
   /// store a hash value and its algorithm, for THttpPeerCacheMessage.Hash
+  // - we store and compare in our implementation the algorithm in addition to
+  // the hash, to avoid any potential attack about (unlikely) hash collisions
+  // between algorithms, and allow any change of algo restrictions in the future
   THttpPeerCacheHash = packed record
     /// the algorithm used for Hash
     Algo: THashAlgo;
@@ -1393,7 +1396,7 @@ type
     Timestamp: cardinal;
     /// number of background download connections currently on this server
     Connections: word;
-    /// the binary Hash (and algo) of the requested file content
+    /// up to 512-bit of binary Hash (and algo) of the requested file content
     Hash: THttpPeerCacheHash;
     /// the known full size of this file
     Size: Int64;
@@ -5099,7 +5102,7 @@ var
   n: cardinal;
 begin
   FillCharFast(aMsg, SizeOf(aMsg) - SizeOf(aMsg.Padding), 0);
-  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding));
+  RandomBytes(@aMsg.Padding, SizeOf(aMsg.Padding)); // Lecuyer is enough
   if aSeq = 0 then
     aSeq := InterlockedIncrement(fFrameSeq);
   aMsg.Seq := aSeq;
