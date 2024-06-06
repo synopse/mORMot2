@@ -580,25 +580,25 @@ type
       {$ifdef HASINLINE}inline;{$endif}
 
     /// append one ASCII char to the buffer
-    procedure Add(c: AnsiChar); overload;
+    procedure Add(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one ASCII char to the buffer with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
-    procedure AddDirect(c: AnsiChar); overload;
+    procedure AddDirect(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one ASCII char to the buffer with no buffer check
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
-    procedure AddDirect(c1, c2: AnsiChar); overload;
+    procedure AddDirect(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one comma (',') character
     // - to be called after a regular Add(), within the 16 bytes buffer overhead
     procedure AddComma;
       {$ifdef HASINLINE}inline;{$endif}
     /// append one ASCII char to the buffer, if not already there as LastChar
-    procedure AddOnce(c: AnsiChar); overload;
+    procedure AddOnce(const c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append two chars to the buffer
-    procedure Add(c1, c2: AnsiChar); overload;
+    procedure Add(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifdef CPU32} // already implemented by Add(Value: PtrInt) method on CPU64
     /// append a 64-bit signed integer Value as text
@@ -3668,7 +3668,7 @@ begin
   result := B - fTempBuf + 1;
 end;
 
-procedure TTextWriter.Add(c: AnsiChar);
+procedure TTextWriter.Add(const c: AnsiChar);
 begin
   if B >= BEnd then
     FlushToStream; // may rewind B -> not worth any local PUtf8Char variable
@@ -3676,13 +3676,13 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.AddDirect(c: AnsiChar);
+procedure TTextWriter.AddDirect(const c: AnsiChar);
 begin
   B[1] := c;
   inc(B);
 end;
 
-procedure TTextWriter.AddDirect(c1, c2: AnsiChar);
+procedure TTextWriter.AddDirect(const c1, c2: AnsiChar);
 begin
   PCardinal(B + 1)^ := byte(c1) + PtrUInt(byte(c2)) shl 8;
   inc(B, 2); // with proper constant propagation above when inlined
@@ -3694,7 +3694,7 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.Add(c1, c2: AnsiChar);
+procedure TTextWriter.Add(const c1, c2: AnsiChar);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -4042,7 +4042,7 @@ begin
     result := #0;
 end;
 
-procedure TTextWriter.AddOnce(c: AnsiChar);
+procedure TTextWriter.AddOnce(const c: AnsiChar);
 begin
   if (B >= fTempBuf) and
      (B^ = c) then
@@ -4719,7 +4719,7 @@ begin
     AddPointer(PtrUInt(Instance));
     AddDirect(')');
   end;
-  if SepChar<>#0 then
+  if SepChar <> #0 then
     AddDirect(SepChar);
 end;
 

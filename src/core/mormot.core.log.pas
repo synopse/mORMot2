@@ -5326,7 +5326,7 @@ begin
     {$ifdef OSWINDOWS}
       AddB(ord(OSVersion));
       AddDirect('.');
-      Add(wServicePackMajor);
+      AddU(wServicePackMajor);
       AddDirect('=');
       AddU(dwMajorVersion);
       AddDirect('.');
