@@ -844,6 +844,14 @@ type
     /// set the OutContent and OutContentType fields with the supplied text
     procedure SetOutText(const Fmt: RawUtf8; const Args: array of const;
       const ContentType: RawUtf8 = TEXT_CONTENT_TYPE);
+    /// set the OutContent and OutContentType fields to return a specific file
+    // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
+    // - if Handle304NotModified is TRUE, will check the file age to ensure
+    // that the file content will be sent back to the server only if it changed;
+    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
+      const ContentType: RawUtf8 = ''; CacheControlMaxAge: integer = 0;
+      FileSize: PInt64 = nil): integer;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -4611,6 +4619,37 @@ procedure THttpServerRequestAbstract.SetOutText(
 begin
   FormatUtf8(Fmt, Args, RawUtf8(fOutContent));
   fOutContentType := ContentType;
+end;
+
+function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
+  Handle304NotModified: boolean; const ContentType: RawUtf8;
+  CacheControlMaxAge: integer; FileSize: PInt64): integer;
+var
+  fs: Int64;
+  ts: TUnixMSTime;
+  ims: RawUtf8;
+begin
+  result := HTTP_NOTFOUND;
+  if not FileInfoByName(FileName, fs, ts) then
+    exit;
+  if FileSize <> nil then
+    FileSize^ := fs;
+  fOutContentType := ContentType;
+  if fOutContentType = '' then
+    fOutContentType := GetMimeContentTypeHeader('', FileName);
+  if CacheControlMaxAge <> 0 then
+    AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAge]);
+  if Handle304NotModified and
+     FindNameValue(fInHeaders, 'IF-MODIFIED-SINCE:', ims) and
+     IdemPropName(UnixMSTimeUtcToHttpDate(ts), pointer(ims), length(ims)) then
+  begin
+    result := HTTP_NOTMODIFIED;
+    exit;
+  end;
+  result := HTTP_SUCCESS;
+  AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, fOutContentType]);
+  fOutContentType := STATICFILE_CONTENT_TYPE;
+  StringToUtf8(FileName, RawUtf8(fOutContent));
 end;
 
 
