@@ -1012,8 +1012,13 @@ begin
             GetFileAttributesInternal(FileName, fa);
   if not result then
     exit;
-  PInt64Rec(@FileSize)^.Lo := fa.nFileSizeLow;
-  PInt64Rec(@FileSize)^.Hi := fa.nFileSizeHigh;
+  if fa.dwFileAttributes and faDirectory = 0 then
+  begin
+    PInt64Rec(@FileSize)^.Lo := fa.nFileSizeLow;
+    PInt64Rec(@FileSize)^.Hi := fa.nFileSizeHigh;
+  end
+  else
+    FileSize := -1; // FileName is a folder
   FileTimestampUtc := FileTimeToUnixMSTime(fa.ftLastWriteTime) // no local time
 end;
 

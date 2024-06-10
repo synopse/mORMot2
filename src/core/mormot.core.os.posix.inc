@@ -1312,7 +1312,10 @@ begin
             (fpStat(pointer(FileName), st) = 0);
   if not result then
     exit;
-  FileSize := st.st_size;
+  if FpS_ISDIR(st.st_mode) then
+    FileSize := -1
+  else
+    FileSize := st.st_size;
   StatTimeMS(st, FileTimestampUtc);
 end;
 
