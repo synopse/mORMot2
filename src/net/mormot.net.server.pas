@@ -2959,7 +2959,7 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
     progsizeHeader: RawUtf8; // for rfProgressiveStatic mode
     h: THandle;
   begin
-    ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
+    ExtractOutContentType;
     Utf8ToFileName(OutContent, fn);
     OutContent := '';
     ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, progsizeHeader);

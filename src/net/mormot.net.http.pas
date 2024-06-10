@@ -112,7 +112,7 @@ function PurgeHeaders(const headers: RawUtf8; trim: boolean = false;
   upIgnore: PPAnsiChar = nil): RawUtf8;
 
 /// search, copy and remove a given HTTP header
-// - FindNameValue() makes search&copy, but this function also REMOVES the header
+// - FindNameValue() makes search + copy, but this function also REMOVES the header
 procedure ExtractHeader(var headers: RawUtf8; const upname: RawUtf8;
   out res: RawUtf8);
 
@@ -789,6 +789,8 @@ type
     /// append some values to the OutCustomHeaders output parameter
     // - will maintain CRLF between lines, but not on the last line
     procedure AddOutHeader(const Values: array of const);
+    /// will extract the "content-type" from OutCustomHeaders into OutContentType
+    procedure ExtractOutContentType;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
@@ -4474,6 +4476,11 @@ end;
 procedure THttpServerRequestAbstract.AddOutHeader(const Values: array of const);
 begin
   AppendLine(fOutCustomHeaders, Values);
+end;
+
+procedure THttpServerRequestAbstract.ExtractOutContentType;
+begin
+  ExtractHeader(fOutCustomHeaders, 'CONTENT-TYPE:', fOutContentType);
 end;
 
 function THttpServerRequestAbstract.GetRouteValuePosLen(const Name: RawUtf8;
