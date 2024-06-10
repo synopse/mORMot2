@@ -4630,8 +4630,9 @@ var
   ims: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
-  if not FileInfoByName(FileName, fs, ts) then
-    exit;
+  if not FileInfoByName(FileName, fs, ts) or
+     (fs < 0) then
+    exit; // FileName does not exist or is a folder
   if FileSize <> nil then
     FileSize^ := fs;
   fOutContentType := ContentType;

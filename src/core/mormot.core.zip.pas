@@ -3245,8 +3245,9 @@ begin
     if aOldLogFileName = '' then
       // last call with '' to eventually close the current .zip
       FreeAndNilSafe(EventArchiveZipWrite)
-    else if not FileInfoByName(aOldLogFileName, fsize, ftime) then
-      // this file does not exist
+    else if not FileInfoByName(aOldLogFileName, fsize, ftime) or
+            (fsize < 0) then
+      // this file does not exist (or is a folder)
       exit
     else if fsize = 0 then
       // just delete a void aOldLogFileName (not from TSynLog, but anyway)

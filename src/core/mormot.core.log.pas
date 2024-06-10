@@ -6502,8 +6502,9 @@ var
 begin
   result := false;
   if (aOldLogFileName = '') or // last call is always with ''
-     not FileInfoByName(aOldLogFileName, fsize, ftime) then
-    // old log file does not exist
+     not FileInfoByName(aOldLogFileName, fsize, ftime) or
+     (fsize < 0) then
+    // old log file does not exist (or is a folder)
     exit
   else if fsize = 0 then
     // just delete a void .log file (not from TSynLog, but supported anyway)
