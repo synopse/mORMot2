@@ -5709,7 +5709,8 @@ begin
   // file name should include current timestamp if no rotation is involved
   if (fFileRotationSize = 0) and
      (fFileRotationDailyAtHourTix = 0) then
-    fFileName := FormatString('% %', [fFileName, NowToFileShort]);
+    fFileName := FormatString('% %',
+      [fFileName, NowToFileShort(fFamily.LocalTimestamp)]);
   {$ifdef OSWINDOWS}
   // include library name
   if IsLibrary and
