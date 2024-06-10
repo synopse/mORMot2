@@ -1169,7 +1169,7 @@ type
       read fPath write fPath;
   end;
 
-  /// define one content setting for THttpProxyServer URL
+  /// define one URL content setting for THttpProxyServer
   THttpProxyUrl = class(TSynAutoCreateFields)
   protected
     fUrl, fSource: RawUtf8;
@@ -1181,10 +1181,10 @@ type
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
-    fReject: TUriMatch;
     fLocalFolder: TFileName;
     fRemoteUri: TUri;
     fMemCached: TSynDictionary; // Uri:RawUtf8 / Content:RawByteString
+    fReject: TUriMatch;
   public
     /// setup the default values of this URL
     constructor Create; override;
@@ -1241,7 +1241,7 @@ type
   THttpProxyUrlObjArray = array of THttpProxyUrl;
 
   /// the available high-level options for THttpProxyServerMainSettings
-  THttpProxyServerSettingsOption = (
+  THttpProxyServerOption = (
     psoLogVerbose,
     psoExcludeDateHeader,
     psoHttpsSelfSigned,
@@ -1249,13 +1249,13 @@ type
     psoEnableLogging);
 
   /// a set of available options for THttpProxyServerMainSettings
-  THttpProxyServerSettingsOptions = set of THttpProxyServerSettingsOption;
+  THttpProxyServerOptions = set of THttpProxyServerOption;
 
   /// define the THttpProxyServer HTTP(S) server settings
   THttpProxyServerMainSettings = class(TSynAutoCreateFields)
   protected
     fPort: RawUtf8;
-    fOptions: THttpProxyServerSettingsOptions;
+    fOptions: THttpProxyServerOptions;
     fThreadCount: integer;
     fCertificateFile: TFileName;
     fCACertificatesFile: TFileName;
@@ -1273,7 +1273,7 @@ type
     property Port: RawUtf8
       read fPort write fPort;
     /// customize this proxy cache HTTP/HTTPS process
-    property Options: THttpProxyServerSettingsOptions
+    property Options: THttpProxyServerOptions
       read fOptions write fOptions;
     /// the number of threads of the HTTP/HTTPS content delivery
     // - default value is 4 sub-threads which is enough to scale well if no
@@ -1308,6 +1308,8 @@ type
     /// append and own a given THttpProxyUrl definition at runtime
     // - this instance will be stored and owned in Url[] array
     procedure AddUrl(one: THttpProxyUrl);
+    /// create a THttpProxyUrl definition to serve a local static folder
+    procedure AddFolder(const folder: TFileName; const uri: RawUtf8 = '');
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -1344,8 +1346,6 @@ type
     constructor Create(aSettings: THttpProxyServerSettings); reintroduce; virtual;
     /// finalize this class instance
     destructor Destroy; override;
-    /// create a THttpProxyUrl definition to serve a local static folder
-    procedure AddFolder(const folder: TFileName; const uri: RawUtf8 = '');
     /// actually start the HTTP/HTTPS server
     // - you can specify a private key password if not already in Settings
     // - may raise some exceptions if the HTTP server cannot be started
@@ -5160,7 +5160,21 @@ end;
 procedure THttpProxyServerSettings.AddUrl(one: THttpProxyUrl);
 begin
   if one <> nil then
-    ObjArrayAdd(fUrl, one);
+    if one.Source = '' then
+      one.Free
+    else
+      ObjArrayAdd(fUrl, one); // will be owned as fUri[]
+end;
+
+procedure THttpProxyServerSettings.AddFolder(
+  const folder: TFileName; const uri: RawUtf8);
+var
+  one: THttpProxyUrl;
+begin
+  one := THttpProxyUrl.Create;
+  one.Url := uri;
+  one.Source := StringToUtf8(EnsureDirectoryExists(folder));
+  AddUrl(one);
 end;
 
 
@@ -5188,16 +5202,6 @@ begin
     fSettings.Free;
   fSettings := nil; // notify background threads and event callbacks
   ObjArrayClear(fGC);
-end;
-
-procedure THttpProxyServer.AddFolder(const folder: TFileName; const uri: RawUtf8);
-var
-  one: THttpProxyUrl;
-begin
-  one := THttpProxyUrl.Create;
-  one.Url := uri;
-  one.Source := StringToUtf8(EnsureDirectoryExists(folder));
-  fSettings.AddUrl(one); // will be owned as fSettings.Uri[]
 end;
 
 procedure THttpProxyServer.Start(const aPrivateKeyPassword: SpiUtf8);
@@ -5237,7 +5241,8 @@ begin
       fServer.WaitStarted(30, @tls)
   else
     fServer.WaitStarted;
-  log.Log(sllDebug, 'Start: %', [fServer], self);
+  if Assigned(log) then
+    log.Log(sllDebug, 'Start: %', [fServer], self);
 end;
 
 procedure THttpProxyServer.Stop;
@@ -5311,7 +5316,8 @@ begin
       while (uri <> '') and
             (uri[length(uri)] in ['/', '\']) do
         SetLength(uri, length(uri) - 1);
-      new.Run(one.Methods, uri, OnExecute, one);
+      if uri <> '' then
+        new.Run(one.Methods, uri, OnExecute, one);
       new.Run(one.Methods, uri + '/*', OnExecute, one);
       fLog.Add.Log(sllDebug, 'AfterServerStarted: register % URI from %%',
         [uri, one.fLocalFolder, one.fRemoteUri.URI], self);
