@@ -8674,11 +8674,11 @@ end;
 const
   MIME_EXT: array[0..46] of PUtf8Char = ( // for IdemPPChar() start check
     'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',  'CSS',
-    'JSON', 'ICO',  'WOF', 'TXT', 'SVG',  'ATOM', 'RDF', 'RSS',
+    'JSON', 'ICO',  'WOF',  'TXT', 'SVG', 'ATOM', 'RDF',  'RSS',
     'WEBP', 'APPC', 'MANI', 'XML', 'JS',  'MJS',  'WOFF', 'OGG',
     'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG',
-    'GZ',  'WEBM', 'MKV',  'RAR',  '7Z',  'BZ2', 'WMA',  'WMV',
-    'AVI', 'PPT',  'XLS',  'PDF',  'SQLITE', 'DB3', nil);
+    'GZ',   'WEBM', 'MKV',  'RAR', '7Z',  'BZ2',  'WMA',  'WMV',
+    'AVI',  'PPT',  'XLS',  'PDF', 'SQLITE', 'DB3', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
