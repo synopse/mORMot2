@@ -1669,6 +1669,7 @@ begin
         [pointer(connection.fSocket), connection.Handle]);}
     // get sending buffer size from OS (once - if not already retrieved)
     if fSendBufferSize = 0 then
+    begin
       {$ifdef OSWINDOWS}
       // on Windows, default buffer is reported as 8KB by fSocket.SendBufferSize
       // but the actual value is much bigger and modified at runtime
@@ -1677,7 +1678,11 @@ begin
       {$else}
       // on Linux/POSIX, typical values are 2MB for TCP, 200KB on Unix Sockets
       fSendBufferSize := connection.fSocket.SendBufferSize;
+      if fSendBufferSize > 256 shl 10 then
+         // 256 KB seems good enough: no actual performance benefit
+         fSendBufferSize := 256 shl 10;
       {$endif OSWINDOWS}
+    end;
     // subscribe for incoming data (async for select/poll, immediate for epoll)
     if Assigned(fOnStart) then
       result := fOnStart(connection); // e.g. TAsyncConnections.ProcessClientStart
