@@ -3110,6 +3110,8 @@ begin
   Process.Reset;
   State := hrsNoStateMachine;
   HeaderFlags := [];
+  if rfContentStreamNeedFree in ResponseFlags then
+    ContentStream.Free; // ensure no leak on (reused) broken connection
   ResponseFlags := [];
   Options := [];
   FastAssignNew(Headers);
