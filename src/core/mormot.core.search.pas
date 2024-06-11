@@ -55,7 +55,7 @@ type
     Name: TFileName;
     /// the matching file attributes
     Attr: integer;
-    /// the matching file size
+    /// the matching file size, -1 for a folder if ffoIncludeFolder option is set
     Size: Int64;
     /// the matching file local date/time
     Timestamp: TDateTime;
@@ -65,6 +65,7 @@ type
     function ToText: ShortString;
   end;
   {$A+}
+  PFindFiles = ^TFindFiles;
 
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
@@ -73,10 +74,12 @@ type
   // - ffoSortByName will sort the result files by extension then name
   // - ffoExcludesDir won't include the path in TFindFiles.Name
   // - ffoSubFolder will search within nested folders
+  // - ffoIncludeFolder will add the nested folders
   TFindFilesOption = (
     ffoSortByName,
     ffoExcludesDir,
-    ffoSubFolder);
+    ffoSubFolder,
+    ffoIncludeFolder);
   /// the optional features of FindFiles()
   TFindFilesOptions = set of TFindFilesOption;
 
@@ -1577,23 +1580,41 @@ implementation
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
   Name := Directory + TFileName(F.Name);
-  {$ifdef OSWINDOWS}
-  {$ifdef HASINLINE} // FPC or Delphi 2006+
-  Size := F.Size;
-  {$else} // F.Size was limited to 32-bit on older Delphi
-  PInt64Rec(@Size)^.Lo := F.FindData.nFileSizeLow;
-  PInt64Rec(@Size)^.Hi := F.FindData.nFileSizeHigh;
-  {$endif HASINLINE}
-  {$else}
-  Size := F.Size;
-  {$endif OSWINDOWS}
   Attr := F.Attr;
+  if Attr and faDirectory <> 0 then
+    Size := -1
+  else
+  begin
+    {$ifdef OSWINDOWS}
+    {$ifdef HASINLINE} // FPC or Delphi 2006+
+    Size := F.Size;
+    {$else} // F.Size was limited to 32-bit on older Delphi
+    PInt64Rec(@Size)^.Lo := F.FindData.nFileSizeLow;
+    PInt64Rec(@Size)^.Hi := F.FindData.nFileSizeHigh;
+    {$endif HASINLINE}
+    {$else}
+    Size := F.Size;
+    {$endif OSWINDOWS}
+  end;
   Timestamp := SearchRecToDateTime(F);
 end;
 
 function TFindFiles.ToText: ShortString;
 begin
   FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
+end;
+
+function SortDynArrayFindFiles(const A, B): integer;
+begin
+  if TFindFiles(A).Size < 0 then
+    if TFindFiles(B).Size < 0 then
+      result := SortDynArrayFileName(A, B) // both are folders
+    else
+      result := -1                         // folders first
+  else if TFindFiles(B).Size < 0 then
+    result := 1                           // files last
+  else
+    result := SortDynArrayFileName(A, B); // both are files
 end;
 
 function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
@@ -1613,12 +1634,14 @@ var
   begin
     fold := dir + folder;
     name := fold + Mask;
-    if FindFirst(name, faAnyfile - faDirectory, F) = 0 then
+    if FindFirst(name, faAnyfile, F) = 0 then
     begin
       repeat
-        if SearchRecValidFile(F) and
-           ((IgnoreFileName = '') or
-            (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0)) then
+        if (SearchRecValidFile(F) and
+            ((IgnoreFileName = '') or
+             (AnsiCompareFileName(F.Name, IgnoreFileName) <> 0))) or
+           ((ffoIncludeFolder in Options) and
+            SearchRecValidFolder(F)) then
         begin
           if ffoExcludesDir in Options then
             ff.FromSearchRec(folder, F)
@@ -1669,7 +1692,7 @@ begin
     SearchFolder('');
     if (ffoSortByName in Options) and
        (da.Count > 1) then
-      da.Sort(SortDynArrayFileName);
+      da.Sort(SortDynArrayFindFiles);
   end;
   if count <> 0 then
     DynArrayFakeLength(result, count);
@@ -1684,8 +1707,9 @@ var
 {$endif OSPOSIX}
 begin
   {$ifdef OSPOSIX}
-  if (not (ffoSortByName in Options)) or
-     (PosExChar(';', Mask) = 0) then // sort on multi-mask not yet implemented
+  if (Options * [ffoIncludeFolder] = []) and
+     ((Options * [ffoSortByName] = []) or
+      (PosExChar(';', Mask) = 0)) then // sort on multi-mask not yet implemented
   begin
     // use much faster PosixFileNames() low-level function over TMatchDynArray
     cb := nil;
