@@ -1650,7 +1650,7 @@ begin
     CsvToRawUtf8DynArray(pointer(StringToUtf8(Mask)), masks, ';');
   if masks <> nil then
   begin
-    // recursive calls for each masks[]
+    // recursive calls for each masks[], optionally sorted by mask
     if ffoSortByName in Options then
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
@@ -1684,9 +1684,8 @@ var
 {$endif OSPOSIX}
 begin
   {$ifdef OSPOSIX}
-  if (Options * [ffoExcludesDir] = []) and
-     ((Options * [ffoSortByName] = []) or
-      (PosExChar(';', Mask) = 0)) then // some options not yet implemented
+  if (not (ffoSortByName in Options)) or
+     (PosExChar(';', Mask) = 0) then // sort on multi-mask not yet implemented
   begin
     // use much faster PosixFileNames() low-level function over TMatchDynArray
     cb := nil;
@@ -1695,7 +1694,8 @@ begin
       cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
       SetMatchs(Mask, {caseinsens=}false, m, ';');
     end;
-    result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m));
+    result := PosixFileNames(Directory,
+      ffoSubFolder in Options, cb, pointer(m), ffoExcludesDir in Options);
     if result = nil then
       exit;
     if IgnoreFileName <> '' then
