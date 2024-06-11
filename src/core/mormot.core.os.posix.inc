@@ -2339,7 +2339,7 @@ var
         break;
       entlen := StrLen(@ent^.d_name);
       if Assigned(OnFile) and
-         not OnFile(ent^.d_name, entlen, OnFileOpaque) then
+         not OnFile(OnFileOpaque, ent^.d_name, entlen) then
         continue;
       FastSetString(fn, sublen + entlen); // fn := [subpath + '/'] + ent^.d_name
       if sublen <> 0 then

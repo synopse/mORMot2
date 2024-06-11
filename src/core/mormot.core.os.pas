@@ -4027,8 +4027,9 @@ procedure ParseHex(p: PAnsiChar; b: PByte; n: integer);
 function WaitReadPending(fd, timeout: integer): boolean;
 
 type
-  TOnPosixFileName = function(name: PUtf8Char; namelen: PtrInt;
-    opaque: pointer): boolean;
+  /// optional callback used by PosixFileNames()
+  // - same signature as mormot.core.search MatchAnyP()
+  TOnPosixFileName = function(opaque: pointer; name: PUtf8Char; namelen: PtrInt): boolean;
 
 /// POSIX-only function calling directly getdents/getdents64 syscall
 // - could be used when FindFirst/FindNext are an overkill, e.g. to quickly
@@ -4038,6 +4039,8 @@ type
 // that Recursive is handled and only DT_REG files are retrieved; non-compliant
 // file systems (or Linux Kernel older than 2.6.4) won't support the Recursive
 // search, and may return some false positives, like symlinks or nested folders
+// - an optional callback can be supplied, used e.g. by the FileNames() function
+// in mormot.core.search to efficiently implement name mask search with a TMatch
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
   OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil): TRawUtf8DynArray;
 
