@@ -1892,7 +1892,10 @@ begin
       '<html>'#13#10'<head>'#13#10'<title>Index of /%</title>'#13#10'</head>'#13#10 +
       '<body>'#13#10'<h1>Index of /%</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
-      '<tr><th colspan="4"><hr></th></tr>'#13#10, [Path, Path]);
+      '<tr><th colspan="4"><hr></th></tr>'#13#10 +
+      '<tr><td>%</td><td><a href="%..">../</a></td><td></td>'#13#10 +
+      '<td align="right">-</td><tr>'#13#10,
+      [Path, Path, _DIR[false], p]);
     files := FindFiles(Folder, FILES_ALL, '',
       [ffoExcludesDir, ffoSortByName, ffoIncludeFolder]);
     f := pointer(files);
