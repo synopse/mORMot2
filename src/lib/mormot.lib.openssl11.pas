@@ -192,12 +192,16 @@ const
 
 var
   /// optional libcrypto location for OpenSslIsAvailable/OpenSslInitialize
-  // - you could also set OPENSSL_LIBPATH environment variable
+  // - you could also set OpenSslDefaultPath or OPENSSL_LIBPATH environment variable
   OpenSslDefaultCrypto: TFileName;
   /// optional libssl location for OpenSslIsAvailable/OpenSslInitialize
-  // - you could also set OPENSSL_LIBPATH environment variable
+  // - you could also set OpenSslDefaultPath or OPENSSL_LIBPATH environment variable
   OpenSslDefaultSsl: TFileName;
 
+  /// OpenSSL library path, if OPENSSL_LIBPATH environment variable is not set
+  // - will search for the default library names in this location
+  // - you can also set specific OpenSslDefaultCrypto and OpenSslDefaultSsl values
+  OpenSslDefaultPath: TFileName;
 
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. $1010106f
@@ -5585,6 +5589,8 @@ begin
       exit;
     // read and validate OPENSSL_LIBPATH environment variable
     libenv := GetEnvironmentVariable('OPENSSL_LIBPATH');
+    if libenv = '' then
+      libenv := OpenSslDefaultPath;
     if libenv <> '' then
       if DirectoryExists(libenv) then
         libenv := IncludeTrailingPathDelimiter(libenv)
@@ -10339,9 +10345,9 @@ begin
     end;
   end;
   if FileExists(TFileName(Context.CertificateFile)) then
-     EOpenSslNetTls.Check(self, 'CertificateFile',
-       SSL_CTX_use_certificate_file(
-         fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
+    EOpenSslNetTls.Check(self, 'CertificateFile',
+      SSL_CTX_use_certificate_file(
+        fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
   else if Context.CertificateRaw <> nil then
     EOpenSslNetTls.Check(self, 'CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
