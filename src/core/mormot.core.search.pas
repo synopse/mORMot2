@@ -88,7 +88,8 @@ function FindFiles(const Directory: TFileName;
   Options: TFindFilesOptions = []): TFindFilesDynArray;
 
 /// search for matching file names
-// - just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
+// - on Windows, just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
+// - on POSIX, calls faster PosixFileNames() if possible
 function FileNames(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
   const IgnoreFileName: TFileName = ''): TFileNameDynArray; overload;
@@ -1676,9 +1677,37 @@ end;
 
 function FileNames(const Directory, Mask: TFileName;
   Options: TFindFilesOptions; const IgnoreFileName: TFileName): TFileNameDynArray;
+{$ifdef OSPOSIX}
+var
+  m: TMatchDynArray;
+  cb: TOnPosixFileName;
+{$endif OSPOSIX}
 begin
-  result := FindFilesDynArrayToFileNames(
-    FindFiles(Directory, Mask, IgnoreFileName, Options));
+  {$ifdef OSPOSIX}
+  if (Options * [ffoExcludesDir] = []) and
+     ((Options * [ffoSortByName] = []) or
+      (PosExChar(';', Mask) = 0)) then // some options not yet implemented
+  begin
+    // use much faster PosixFileNames() low-level function over TMatchDynArray
+    cb := nil;
+    if Mask <> FILES_ALL then
+    begin
+      cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
+      SetMatchs(Mask, {caseinsens=}false, m, ';');
+    end;
+    result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m));
+    if result = nil then
+      exit;
+    if IgnoreFileName <> '' then
+      DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
+    if ffoSortByName in Options then
+      QuickSortRawUtf8(result, length(result));
+  end
+  else
+  {$endif OSPOSIX}
+    // use regular FindFirst/FindNext and transient TFindFilesDynArray resultset
+    result := FindFilesDynArrayToFileNames(
+      FindFiles(Directory, Mask, IgnoreFileName, Options));
 end;
 
 function FileNames(const Path: array of const; const Mask: TFileName;
