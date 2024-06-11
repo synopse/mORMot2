@@ -340,11 +340,12 @@ function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 function MatchNew(var Several: TMatchDynArray): PMatch;
 
 /// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
-function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean; overload;
+function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// returns TRUE if Match=nil or if any Match[].Match(Text, TextLen) is TRUE
-function MatchAny(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean; overload;
+// - same signature as the TOnPosixFileName callback
+function MatchAnyP(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean;
 
 /// apply the CSV-supplied glob patterns to an array of RawUtf8
 // - any text not matching the pattern will be deleted from the array
@@ -2977,9 +2978,9 @@ begin
   if Init.TryLock then // thread-safe init once from supplied csv
     DoInit(pointer(csv), caseinsensitive);
   result := ((Names <> nil) and
-             MatchAny(pointer(Names), uri.Name.Text, uri.Name.Len)) or
+             MatchAnyP(pointer(Names), uri.Name.Text, uri.Name.Len)) or
             ((Paths <> nil) and
-             MatchAny(pointer(Paths), uri.Path.Text, uri.Path.Len));
+             MatchAnyP(pointer(Paths), uri.Path.Text, uri.Path.Len));
 end;
 
 
@@ -3122,10 +3123,10 @@ end;
 
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 begin
-  result := MatchAny(pointer(Match), pointer(Text), length(Text));
+  result := MatchAnyP(pointer(Match), pointer(Text), length(Text));
 end;
 
-function MatchAny(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean;
+function MatchAnyP(Match: PMatch; Text: PUtf8Char; TextLen: PtrInt): boolean;
 var
   n: integer;
 begin
@@ -3134,7 +3135,7 @@ begin
     exit;
   if TextLen <= 0 then
     Text := nil;
-  n := PDALen(PAnsiChar(pointer(Match)) - _DALEN)^ + (_DAOFF - 1);
+  n := PDALen(PAnsiChar(pointer(Match)) - _DALEN)^ + _DAOFF;
   repeat
     // inlined Match^.Match() to avoid internal error on Delphi
     if Text <> nil then
