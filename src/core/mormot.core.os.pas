@@ -8433,7 +8433,7 @@ begin
         begin
           j := 50;
           for i := 50 downto 1 do
-            if param[i] = '|' then
+            if param[i] in [',', '|'] then
             begin
               j := i;
               break;

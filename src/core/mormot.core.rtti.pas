@@ -1572,9 +1572,9 @@ procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
   Value: PUtf8Char; ValueLen: PtrInt; var Result: QWord);
 
 /// helper to parse some CSV values into a set, returned as 64-bit
+// - CSV could be separated by any non identifier char, e.g. ',' ';' or '|'
 // - see also GetSetNameValue() in mormot.core.json.pas for parsing a JSON array
-function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char;
-  Sep: AnsiChar = ','): QWord;
+function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char): QWord;
 
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
@@ -5386,22 +5386,31 @@ begin
   // unknown enum names (i=-1) would just be ignored
 end;
 
-function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char;
-  Sep: AnsiChar): QWord;
+function GetSetCsvValue(aTypeInfo: PRttiInfo; Csv: PUtf8Char): QWord;
 var
-  v: shortstring;
+  start: PUtf8Char;
   names: PShortString;
   min, max: integer;
 begin
   result := 0;
   if (aTypeInfo <> nil) and
      (aTypeInfo^.Kind = rkSet) and
-     (aTypeInfo^.SetEnumType(names, min, max) <> nil) then
-    while Csv <> nil do
-    begin
-      GetNextItemShortString(Csv, @v, Sep);
-      SetNamesValue(names, min, max, @v[1], ord(v[0]), result);
-    end;
+     (aTypeInfo^.SetEnumType(names, min, max) <> nil) and
+     (Csv <> nil) then
+  repeat
+    start := Csv;
+    if Csv^ = '*' then
+      inc(Csv)
+    else
+      while tcIdentifier in TEXT_CHARS[Csv^] do
+        inc(Csv);
+    SetNamesValue(names, min, max, start, Csv - start, result);
+    while not (tcIdentifier in TEXT_CHARS[Csv^]) do
+      if Csv^ = #0 then
+        exit
+      else
+        inc(Csv); // ignore e.g. ',' ';' or '|'
+  until false;
 end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
@@ -9453,7 +9462,8 @@ begin
       if p^.Value.Kind in [rkEnumeration, rkSet] then
       begin
         p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
-        desc := StringReplaceChars(desc, ',', '|');
+        if p^.Value.Kind = rkEnumeration then
+          desc := StringReplaceChars(desc, ',', '|');
         if UpperCaseU(desc) = desc then
         begin
           dolower := true;
@@ -9477,7 +9487,7 @@ begin
               def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
             rkSet:
               if v64 <> 0 then
-                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, '|');
+                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, ',');
           else
             begin
               UInt64ToUtf8(v64, def);
