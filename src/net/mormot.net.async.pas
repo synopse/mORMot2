@@ -1246,7 +1246,8 @@ type
     psoExcludeDateHeader,
     psoHttpsSelfSigned,
     psoReusePort,
-    psoEnableLogging);
+    psoEnableLogging,
+    psoNoFolderHtmlIndex);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5375,38 +5376,43 @@ begin
       sLocalFolder:
         begin
           // get content from a local file
-          fn := FormatString('%%', [one.fLocalFolder, uri.Name.Text]);
+          uri.Path.ToUtf8(name);
+          fn := FormatString('%%', [one.fLocalFolder, name]);
           result := Ctxt.SetOutFile(fn, one.IfModifiedSince, '',
             one.CacheControlMaxAge, @siz);
-          if (result = HTTP_NOTFOUND) and
-             DirectoryExists(fn) then
-          begin
-            { TODO: optionally return the folder files info as HTML }
-            exit;
-          end;
-          if Assigned(one.fMemCached) and
-             (result <> HTTP_NOTMODIFIED) then
-          begin
-            pck := one.MemCache.FromUri(uri);
-            if not (pckIgnore in pck) then
-              if (pckForce in pck) or
-                 (siz <= one.MemCache.MaxSize) then
+          case result of
+            HTTP_SUCCESS:
+              if Assigned(one.fMemCached) then
               begin
-                uri.Path.ToUtf8(name);
-                case result of
-                  HTTP_SUCCESS:
+                pck := one.MemCache.FromUri(uri);
+                if not (pckIgnore in pck) then
+                  if (pckForce in pck) or
+                     (siz <= one.MemCache.MaxSize) then
+                  begin
+                    // use a memory cache
+                    if not one.fMemCached.FindAndCopy(name, cached) then
                     begin
-                      if not one.fMemCached.FindAndCopy(name, cached) then
-                      begin
-                        cached := StringFromFile(fn);
-                        one.fMemCached.Add(name, cached);
-                      end;
-                      Ctxt.ExtractOutContentType;
-                      Ctxt.OutContent := cached;
+                      cached := StringFromFile(fn);
+                      one.fMemCached.Add(name, cached);
                     end;
-                  HTTP_NOTFOUND:
-                    one.fMemCached.Delete(name);
+                    Ctxt.ExtractOutContentType;
+                    Ctxt.OutContent := cached;
+                  end;
+              end;
+            HTTP_NOTFOUND:
+              if (siz < 0) and
+                 not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
+              begin
+                // return the folder files info as cached HTML
+                if not one.fMemCached.FindAndCopy(name, cached) then
+                begin
+                  SetOutFolderHtmlIndex(fn, name, RawUtf8(cached));
+                  if Assigned(one.fMemCached) then
+                    one.fMemCached.Add(name, cached);
                 end;
+                result := HTTP_SUCCESS;
+                Ctxt.OutContent := cached;
+                Ctxt.OutContentType := HTML_CONTENT_TYPE;
               end;
           end;
           fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
