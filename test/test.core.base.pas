@@ -3983,7 +3983,7 @@ begin
   Check(MicroSecToString(1000001) = '1s');
   Check(MicroSecToString(2030001) = '2.03s');
   Check(MicroSecToString(200000070001) = '2d');
-  Check(KB(-123) = '-123 B');
+  Check(KB(-123) = '');
   Check(KB(0) = '0 B');
   Check(KB(123) = '123 B');
   Check(KB(1023) = '1 KB');

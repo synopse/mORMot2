@@ -9015,6 +9015,11 @@ var
   hi, rem: cardinal;
   u: TUnits;
 begin
+  if bytes < 0 then
+  begin
+    result[0] := #0;
+    exit;
+  end;
   if bytes < 1 shl 10 - (1 shl 10) div 10 then
   begin
     FormatShort16(TXT[nospace, b], [integer(bytes)], result);
