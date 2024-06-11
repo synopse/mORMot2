@@ -2315,7 +2315,7 @@ const
   DT_WHT      = 14;
 
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
-  OnFile: TOnPosixFileName; OnFileOpaque: pointer): TRawUtf8DynArray;
+  OnFile: TOnPosixFileName; OnFileOpaque: pointer; ExcludesDir: boolean): TRawUtf8DynArray;
 var
   n: PtrInt;
   root: TFileName;
@@ -2326,44 +2326,57 @@ var
     ent: pDirent;
     sublen, entlen: PtrInt;
     fn: RawUtf8;
+    withsub: boolean;
   begin
-    dir := FpOpendir(root + subpath); // (much) faster alternative to FindFirst()
+    dir := FpOpendir(root + subpath); // much faster alternative to FindFirst()
     if dir = nil then
       exit;
     sublen := length(subpath);
-    if sublen <> 0 then
-      inc(sublen);
     repeat
       ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux and BSD :)
       if ent = nil then
         break;
+      // handle this entry type
       entlen := StrLen(@ent^.d_name);
-      if Assigned(OnFile) and
-         not OnFile(OnFileOpaque, ent^.d_name, entlen) then
-        continue;
-      FastSetString(fn, sublen + entlen); // fn := [subpath + '/'] + ent^.d_name
-      if sublen <> 0 then
-      begin
-        MoveFast(pointer(subpath)^, pointer(fn)^, sublen - 1);
-        PByteArray(fn)[sublen - 1] := ord('/');
-      end;
-      MoveFast(ent^.d_name, PByteArray(fn)[sublen], entlen);
-      // handle this entry
       case ent.d_type of
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
-          begin
-            if n = 0 then // generous initial result capacity
-              SetLength(result, 128)
-            else if n = length(result) then
-              SetLength(result, NextGrow(n));
-            result[n] := fn;
-            inc(n);
-          end;
+          if Assigned(OnFile) and
+             not OnFile(OnFileOpaque, ent^.d_name, entlen) then
+            continue // e.g. no MatchAnyP()
+          else
+            withsub := not ExcludesDir;
         DT_DIR:
           if Recursive and
-             (ent^.d_name[0] <> '.')  then
-            DoFolder(fn);
+             (ent^.d_name[0] <> '.') then
+            withsub := true // DoFolder(fn) requires full nested path
+          else
+            continue;
+      else
+        continue; // not a real file (e.g. link, sysproc or blockdev)
+      end;
+      // compute file/folder name
+      if withsub and
+         (sublen <> 0) then // fn := subpath + '/' + d_name
+      begin
+        FastSetString(fn, sublen + entlen + 1);
+        MoveFast(pointer(subpath)^, pointer(fn)^, sublen);
+        PByteArray(fn)[sublen] := ord('/');
+        MoveFast(ent^.d_name, PByteArray(fn)[sublen + 1], entlen);
+      end
+      else
+        FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
+      // handle this entry
+      if ent.d_type = DT_DIR then
+        DoFolder(fn)
+      else
+      begin
+        if n = 0 then // generous initial result capacity
+          SetLength(result, 128)
+        else if n = length(result) then
+          SetLength(result, NextGrow(n));
+        result[n] := fn;
+        inc(n);
       end;
     until false;
     FpClosedir(dir^);

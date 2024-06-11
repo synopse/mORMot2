@@ -4042,7 +4042,8 @@ type
 // - an optional callback can be supplied, used e.g. by the FileNames() function
 // in mormot.core.search to efficiently implement name mask search with a TMatch
 function PosixFileNames(const Folder: TFileName; Recursive: boolean;
-  OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil): TRawUtf8DynArray;
+  OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil;
+  ExcludesDir: boolean = false): TRawUtf8DynArray;
 
 {$endif OSWINDOWS}
 
