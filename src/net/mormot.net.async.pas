@@ -1656,6 +1656,10 @@ begin
   inherited Destroy;
 end;
 
+const
+  // maximum/optimum socket output buffer is 128KB on 32-bit and 256KB on 64-bit
+  SENDBUF_MEM = 256 shl 10 {$ifdef CPU32} shr 1 {$endif CPU32};
+
 function TPollAsyncSockets.Start(connection: TPollAsyncConnection): boolean;
 begin
   result := false;
@@ -1673,14 +1677,13 @@ begin
       {$ifdef OSWINDOWS}
       // on Windows, default buffer is reported as 8KB by fSocket.SendBufferSize
       // but the actual value is much bigger and modified at runtime
-      fSendBufferSize := 256 shl 10; // just assume optimal 256KB on Windows
+      fSendBufferSize := SENDBUF_MEM; // just assume optimal 128/256KB on Windows
       // if direct Write() doesn't succeed, it will subscribe to ProcessWrite
       {$else}
       // on Linux/POSIX, typical values are 2MB for TCP, 200KB on Unix Sockets
       fSendBufferSize := connection.fSocket.SendBufferSize;
-      if fSendBufferSize > 256 shl 10 then
-         // 256 KB seems good enough: no actual performance benefit
-         fSendBufferSize := 256 shl 10;
+      if fSendBufferSize > SENDBUF_MEM then
+         fSendBufferSize := SENDBUF_MEM; // no benefit with anything bigger
       {$endif OSWINDOWS}
     end;
     // subscribe for incoming data (async for select/poll, immediate for epoll)
