@@ -1261,6 +1261,7 @@ type
     fCACertificatesFile: TFileName;
     fPrivateKeyFile: TFileName;
     fPrivateKeyPassword: SpiUtf8;
+    fServerName: RawUtf8;
   public
     /// initialize the default settings
     constructor Create; override;
@@ -1293,6 +1294,10 @@ type
     /// optional HTTPS private key file password
     property CACertificatesFile: TFileName
       read fCACertificatesFile write fCACertificatesFile;
+    /// optional Server name for HTTP/HTTPS
+    // - to overwrite the default value set by the framework e.g. 'mORMot2 (Linux)'
+    property ServerName: RawUtf8
+      read fServerName write fServerName;
   end;
 
   /// define the THttpProxyServer forward proxy process
@@ -5231,6 +5236,8 @@ begin
   // launch the HTTP(S) server
   fServer := THttpAsyncServer.Create(fSettings.Server.Port, nil, nil, '',
     fSettings.Server.ThreadCount, 30000, hso);
+  if fSettings.Server.ServerName <> '' then
+    fServer.ServerName := fSettings.Server.ServerName;
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability

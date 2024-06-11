@@ -3592,6 +3592,7 @@ begin
   begin
     FileFromString(PrivKeyCertPfx, certfile); // use pre-computed key
     keypass := 'pass';
+    // warning: will work with SSPI but NOT with OpenSSL
   end
   else
   begin
