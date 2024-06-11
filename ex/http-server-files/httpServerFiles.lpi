@@ -36,9 +36,8 @@
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="httpservermain.pas"/>
+        <Filename Value="httpServerMain.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="httpServerMain"/>
       </Unit1>
     </Units>
   </ProjectOptions>

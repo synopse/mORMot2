@@ -17,8 +17,12 @@ uses
   mormot.net.sock,
   mormot.net.http,
   mormot.net.server,
-  mormot.net.async;
+  mormot.net.async,
+  mormot.lib.openssl11,
+  mormot.crypt.openssl;
 
+var
+  silent: boolean;
 
 procedure Main;
 
@@ -29,8 +33,9 @@ procedure Main;
 var
   F: TSearchRec;
   fn: TFileName;
-  console, verbose, silent: boolean;
-  settingsfolder, folder, url: RawUtf8;
+  console, verbose: boolean;
+  settingsfolder, folder: TFileName;
+  url: RawUtf8;
   settings: THttpProxyServerSettings;
   one: THttpProxyUrl;
   server: THttpProxyServer;
@@ -44,10 +49,14 @@ begin
       verbose := Option(['v', 'logverbose'], 'enable verbose log');
       silent  := Option('silent', 'no output to the console');
       SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
-      settingsfolder := Param(['s', 'settings'], '#folder where *.json are located',
+      {$ifdef USE_OPENSSL}
+      OpenSslDefaultPath := ParamS(['LibSsl'], 'OpenSSL libraries #path');
+      if OpenSslInitialize then
+        RegisterOpenSsl;
+      {$endif USE_OPENSSL}
+      settingsfolder := ParamS(['s', 'settings'], '#folder where *.json are located',
         Executable.ProgramFilePath + 'sites-enabled');
-      folder := Param(['f', 'folder'], 'a local #foldername to serve',
-        Executable.ProgramFilePath + 'www');
+      folder := ParamS(['f', 'folder'], 'a local #foldername to serve');
       url := Param(['u', 'url'], 'a root #uri to serve this folder');
       if ConsoleHelpFailed('mORMot HTTP/HTTPS File Server') then
       begin
@@ -72,6 +81,7 @@ begin
       until FindNext(F) <> 0;
       FindClose(F);
     end;
+    // ensure we have something to serve (maybe from command line)
     if folder <> '' then
       settings.AddFolder(folder, url);
     if settings.Url = nil then
