@@ -108,6 +108,11 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 /// sort a FindFiles() result list by its TFindFiles[].Timestamp field
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
+/// compute the HTML index page corresponding to a local folder
+procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path: RawUtf8;
+  out Html: RawUtf8);
+
+
 type
   /// one optional feature of SynchFolders()
   // - process recursively nested folders if sfoSubFolder is included
@@ -1864,6 +1869,57 @@ begin
   until (FindNext(sr) <> 0);
   FindClose(sr);
 end;
+
+procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path: RawUtf8;
+  out Html: RawUtf8);
+const
+  _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
+var
+  w: TTextDateWriter;
+  tmp: TTextWriterStackBuffer;
+  files: TFindFilesDynArray;
+  f: PFindFiles;
+  i: integer;
+  isfile: boolean;
+  p: RawUtf8;
+begin
+  if (Path <> '') and
+     (Path[length(Path)] <> '/') then
+    p := ExtractNameU(Path) + '/';
+  w := TTextDateWriter.CreateOwnedStream(tmp);
+  try
+    w.Add('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">'#13#10 +
+      '<html>'#13#10'<head>'#13#10'<title>Index of /%</title>'#13#10'</head>'#13#10 +
+      '<body>'#13#10'<h1>Index of /%</h1>'#13#10'<table>'#13#10 +
+      '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
+      '<tr><th colspan="4"><hr></th></tr>'#13#10, [Path, Path]);
+    files := FindFiles(Folder, FILES_ALL, '',
+      [ffoExcludesDir, ffoSortByName, ffoIncludeFolder]);
+    f := pointer(files);
+    for i := 1 to length(files) do
+    begin
+      isfile := f^.Size >= 0;
+      w.Add('<tr><td>%</td><td><a href="%%">', [_DIR[isfile], p, f^.Name]);
+      w.AddHtmlEscapeString(f^.Name);
+      if not isfile then
+        w.AddDirect('/');
+      w.AddShort('</a></td><td>');
+      w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
+      w.AddShort('&nbsp;</td><td align="right">');
+      if isFile then
+        w.AddShort(KB(f^.Size))
+      else
+        w.AddDirect('-');
+      w.AddShort('</td><tr>'#13#10);
+      inc(f);
+    end;
+    w.AddShort('</table>'#13#10'</body>'#13#10'</html>');
+    w.SetText(Html);
+  finally
+    w.Free;
+  end;
+end;
+
 
 
 { ****************** ScanUtf8, GLOB and SOUNDEX Text Search }
