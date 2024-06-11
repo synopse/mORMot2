@@ -2338,7 +2338,7 @@ var
         break;
       // handle this entry type
       entlen := StrLen(@ent^.d_name);
-      case ent.d_type of
+      case ent^.d_type of
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
           if Assigned(OnFile) and
@@ -2367,7 +2367,7 @@ var
       else
         FastSetString(fn, @ent^.d_name, entlen); // fn := d_name
       // handle this entry
-      if ent.d_type = DT_DIR then
+      if ent^.d_type = DT_DIR then
         DoFolder(fn)
       else
       begin

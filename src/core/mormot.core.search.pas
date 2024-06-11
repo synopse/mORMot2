@@ -89,7 +89,7 @@ function FindFiles(const Directory: TFileName;
 
 /// search for matching file names
 // - on Windows, just a wrapper around FindFilesDynArrayToFileNames(FindFiles())
-// - on POSIX, calls faster PosixFileNames() if possible
+// - on POSIX, calls PosixFileNames() if possible, with fast TMatch mask lookup
 function FileNames(const Directory: TFileName;
   const Mask: TFileName = FILES_ALL; Options: TFindFilesOptions = [];
   const IgnoreFileName: TFileName = ''): TFileNameDynArray; overload;
