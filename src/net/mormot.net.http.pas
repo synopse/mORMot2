@@ -849,6 +849,7 @@ type
     // - if Handle304NotModified is TRUE, will check the file age to ensure
     // that the file content will be sent back to the server only if it changed;
     // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // - can optionally return FileSize^ (0 if not found, -1 if is a folder)
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAge: integer = 0;
       FileSize: PInt64 = nil): integer;
@@ -1510,6 +1511,7 @@ type
     property MimeTypeCount: integer
       read fMimeTypeCount;
   end;
+
 
 
 { ******************** HTTP Server Logging/Monitoring Processors }
@@ -4630,11 +4632,14 @@ var
   ims: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
-  if not FileInfoByName(FileName, fs, ts) or
-     (fs < 0) then
-    exit; // FileName does not exist or is a folder
+  if FileSize <> nil then
+    FileSize^ := 0;
+  if not FileInfoByName(FileName, fs, ts) then
+    exit; // FileName does not exist
   if FileSize <> nil then
     FileSize^ := fs;
+  if fs < 0 then
+    exit; // FileName is a folder
   fOutContentType := ContentType;
   if fOutContentType = '' then
     fOutContentType := GetMimeContentTypeHeader('', FileName);
@@ -4648,7 +4653,7 @@ begin
     exit;
   end;
   result := HTTP_SUCCESS;
-  AppendLine(fOutCustomHeaders, [HEADER_CONTENT_TYPE, fOutContentType]);
+  AppendLine(fOutCustomHeaders, [fOutContentType]);
   fOutContentType := STATICFILE_CONTENT_TYPE;
   StringToUtf8(FileName, RawUtf8(fOutContent));
 end;
