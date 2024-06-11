@@ -2314,7 +2314,8 @@ const
   DT_SOCK     = 12;
   DT_WHT      = 14;
 
-function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
+function PosixFileNames(const Folder: TFileName; Recursive: boolean;
+  OnFile: TOnPosixFileName; OnFileOpaque: pointer): TRawUtf8DynArray;
 var
   n: PtrInt;
   root: TFileName;
@@ -2336,9 +2337,11 @@ var
       ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux and BSD :)
       if ent = nil then
         break;
-      // fn := [subpath + '/'] + ent^.d_name
       entlen := StrLen(@ent^.d_name);
-      FastSetString(fn, sublen + entlen);
+      if Assigned(OnFile) and
+         not OnFile(ent^.d_name, entlen, OnFileOpaque) then
+        continue;
+      FastSetString(fn, sublen + entlen); // fn := [subpath + '/'] + ent^.d_name
       if sublen <> 0 then
       begin
         MoveFast(pointer(subpath)^, pointer(fn)^, sublen - 1);

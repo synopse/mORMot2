@@ -4026,6 +4026,10 @@ procedure ParseHex(p: PAnsiChar; b: PByte; n: integer);
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
 function WaitReadPending(fd, timeout: integer): boolean;
 
+type
+  TOnPosixFileName = function(name: PUtf8Char; namelen: PtrInt;
+    opaque: pointer): boolean;
+
 /// POSIX-only function calling directly getdents/getdents64 syscall
 // - could be used when FindFirst/FindNext are an overkill, e.g. to quickly
 // cache all file names of a folder in memory, optionally with its sub-folders
@@ -4034,7 +4038,8 @@ function WaitReadPending(fd, timeout: integer): boolean;
 // that Recursive is handled and only DT_REG files are retrieved; non-compliant
 // file systems (or Linux Kernel older than 2.6.4) won't support the Recursive
 // search, and may return some false positives, like symlinks or nested folders
-function PosixFileNames(const Folder: TFileName; Recursive: boolean): TRawUtf8DynArray;
+function PosixFileNames(const Folder: TFileName; Recursive: boolean;
+  OnFile: TOnPosixFileName = nil; OnFileOpaque: pointer = nil): TRawUtf8DynArray;
 
 {$endif OSWINDOWS}
 
