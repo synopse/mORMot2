@@ -4820,6 +4820,49 @@ begin
   CheckEqual(ExtractExtU('c:\var\toto.ext', true), 'ext');
   CheckEqual(ExtractExtU('/var/toto/'), '');
   CheckEqual(ExtractExtU('/var/toto'), '');
+  Check(NormalizeFileName('') = '');
+  Check(NormalizeFileName('toto.ext') = 'toto.ext');
+  {$ifdef OSWINDOWS}
+  Check(NormalizeFileName('var\toto.ext') = 'var\toto.ext');
+  Check(NormalizeFileName('\var\toto.ext') = '\var\toto.ext');
+  Check(NormalizeFileName('titi\var\toto.ext') = 'titi\var\toto.ext');
+  Check(NormalizeFileName('\var\') = '\var\');
+  Check(NormalizeFileName('var/toto.ext') = 'var\toto.ext');
+  Check(NormalizeFileName('/var/toto.ext') = '\var\toto.ext');
+  Check(NormalizeFileName('titi/var/toto.ext') = 'titi\var\toto.ext');
+  Check(NormalizeFileName('/var/') = '\var\');
+  Check(NormalizeFileName('\var/') = '\var\');
+  Check(NormalizeFileName('/var\') = '\var\');
+  U := '';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '');
+  U := '/var';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '\var');
+  U := '/var\';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '\var\');
+  {$else}
+  Check(NormalizeFileName('var\toto.ext') = 'var/toto.ext');
+  Check(NormalizeFileName('\var\toto.ext') = '/var/toto.ext');
+  Check(NormalizeFileName('titi\var\toto.ext') = 'titi/var/toto.ext');
+  Check(NormalizeFileName('\var\') = '/var/');
+  Check(NormalizeFileName('var/toto.ext') = 'var/toto.ext');
+  Check(NormalizeFileName('/var/toto.ext') = '/var/toto.ext');
+  Check(NormalizeFileName('titi/var/toto.ext') = 'titi/var/toto.ext');
+  Check(NormalizeFileName('/var/') = '/var/');
+  Check(NormalizeFileName('\var/') = '/var/');
+  Check(NormalizeFileName('/var\') = '/var/');
+  U := '';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '');
+  U := '/var';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '/var');
+  U := '/var\';
+  NormalizeFileNameU(U);
+  CheckEqual(U, '/var/');
+  {$endif OSWINDOWS}
   CaseFoldingTest;
   for i := 0 to high(ROWIDS) do
     Check(isRowID(ROWIDS[i]) = (i < 8));
