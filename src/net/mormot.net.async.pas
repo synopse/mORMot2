@@ -5385,6 +5385,8 @@ begin
         begin
           // get content from a local file
           uri.Path.ToUtf8(name);
+          if not SafePathNameU(name) then
+            exit;
           fn := FormatString('%%', [one.fLocalFolder, name]);
           result := Ctxt.SetOutFile(fn, one.IfModifiedSince, '',
             one.CacheControlMaxAgeSec, @siz);
