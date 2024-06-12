@@ -5392,6 +5392,7 @@ begin
         begin
           // get content from a local file
           UrlDecodeVar(uri.Path.Text, uri.Path.Len, name, {name=}true);
+          NormalizeFileNameU(name);
           if not SafePathNameU(name) then
             exit;
           fn := FormatString('%%', [one.fLocalFolder, name]);
