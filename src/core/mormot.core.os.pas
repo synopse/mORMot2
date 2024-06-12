@@ -3219,6 +3219,10 @@ function SafeFileNameU(const FileName: RawUtf8): boolean;
 // - see MakePath() from mormot.core.text.pas to concatenate path items
 function NormalizeFileName(const FileName: TFileName): TFileName;
 
+/// ensure all \ / path delimiters are normalized into the current OS expectation
+// - this function works in-place on an UTF-8 string instance
+procedure NormalizeFileNameU(var FileName: RawUtf8);
+
 /// add some " before and after if FileName has some space within
 // - could be used when generating command line parameters
 function QuoteFileName(const FileName: TFileName): TFileName;
@@ -6864,8 +6868,32 @@ begin
 end;
 
 function NormalizeFileName(const FileName: TFileName): TFileName;
+var
+  i, j: PtrInt;
 begin
-  result := StringReplace(FileName, InvertedPathDelim, PathDelim, [rfReplaceAll]);
+  result := FileName;
+  j := Pos(InvertedPathDelim, result);
+  if j <> 0 then
+    for i := j to length(result) do
+      if result[i] = InvertedPathDelim then
+        result[i] := PathDelim;
+end;
+
+procedure NormalizeFileNameU(var FileName: RawUtf8);
+var
+  i: PtrInt;
+  p: PAnsiChar;
+begin
+  i := PosExChar(InvertedPathDelim, FileName);
+  if i = 0 then
+    exit;
+  p := UniqueRawUtf8(FileName);
+  inc(p, i - 1);
+  repeat
+    if p^ = InvertedPathDelim then
+      p^ := PathDelim;
+    inc(p);
+  until p^ = #0;
 end;
 
 function QuoteFileName(const FileName: TFileName): TFileName;
