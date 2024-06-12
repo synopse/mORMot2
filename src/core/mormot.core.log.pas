@@ -2152,18 +2152,12 @@ end;
 
 procedure TDwarfReader.ReadString(var s: ShortString);
 var
-  temp: AnsiChar;
-  i: PtrUInt;
+  c: AnsiChar;
 begin
-  i := 0;
-  while read.NextByteSafe(@temp) and
-        ({%H-}temp <> #0) do
-  begin
-    inc(i);
-    if i <= 255 then
-      s[i] := temp;
-  end;
-  s[0] := AnsiChar(i);
+  s[0] := #0;
+  while read.NextByteSafe(@c) and
+        ({%H-}c <> #0) do
+    AppendShortChar(c, s);
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
