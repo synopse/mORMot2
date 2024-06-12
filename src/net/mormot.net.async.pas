@@ -5335,10 +5335,14 @@ begin
       // compute and register this URI
       uri := one.fUrl;
       while (uri <> '') and
-            (uri[length(uri)] in ['/', '\']) do
-        SetLength(uri, length(uri) - 1);
+            (uri[length(uri)] = '/') do
+         SetLength(uri, length(uri) - 1);
+      if (uri <> '') and
+         (uri[1] <> '/') then
+        insert('/', uri, 1);
       if uri <> '' then
         new.Run(one.Methods, uri, OnExecute, one);
+      new.Run(one.Methods, uri + '/', OnExecute, one);
       new.Run(one.Methods, uri + '/*', OnExecute, one);
       fLog.Add.Log(sllDebug, 'AfterServerStarted: register % URI from %%',
         [uri, one.fLocalFolder, one.fRemoteUri.URI], self);
