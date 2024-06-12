@@ -5114,10 +5114,10 @@ function THttpProxyMem.FromUri(const uri: TUriMatchName): THttpProxyCacheKind;
 begin
   result := [];
   if (fForceCsv <> '') and
-     fForce.Check(fForceCsv, uri, false) then
+     fForce.Check(fForceCsv, uri, PathCaseInsensitive) then
     include(result, pckForce);
   if (fIgnoreCsv <> '') and
-     fIgnore.CHeck(fIgnoreCsv, uri, false) then
+     fIgnore.CHeck(fIgnoreCsv, uri, PathCaseInsensitive) then
     include(result, pckIgnore);
 end;
 
@@ -5322,7 +5322,7 @@ begin
       if (one.MemCache.MaxSize > 0) and
          (one.MemCache.TimeoutSec > 0) then
         one.fMemCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
-          TypeInfo(TRawByteStringDynArray), {caseins=}true,
+          TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
           one.MemCache.TimeoutSec);
       if one.fSourced = sRemoteUri then
         if one.DiskCache.MaxSize < 0 then
@@ -5374,7 +5374,7 @@ begin
   uri.ParsePath; // compute uri.Name for file-level TUriMatch
   // ensure was not marked as rejected
   if (one.RejectCsv <> '') and
-     one.fReject.Check(one.RejectCsv, uri, {caseinsensitive=}false) then
+     one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
     exit;
   // actual request processing
   case met of
