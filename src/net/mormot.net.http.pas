@@ -848,10 +848,10 @@ type
     // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
     // - if Handle304NotModified is TRUE, will check the file age to ensure
     // that the file content will be sent back to the server only if it changed;
-    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     // - can optionally return FileSize^ (0 if not found, -1 if is a folder)
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
-      const ContentType: RawUtf8 = ''; CacheControlMaxAge: integer = 0;
+      const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0;
       FileSize: PInt64 = nil): integer;
   published
     /// input parameter containing the caller URI
@@ -4627,7 +4627,7 @@ end;
 
 function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
-  CacheControlMaxAge: integer; FileSize: PInt64): integer;
+  CacheControlMaxAgeSec: integer; FileSize: PInt64): integer;
 var
   fs: Int64;
   ts: TUnixMSTime;
@@ -4645,8 +4645,8 @@ begin
   fOutContentType := ContentType;
   if fOutContentType = '' then
     fOutContentType := GetMimeContentTypeHeader('', FileName);
-  if CacheControlMaxAge <> 0 then
-    AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAge]);
+  if CacheControlMaxAgeSec <> 0 then
+    AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   if Handle304NotModified and
      FindNameValue(fInHeaders, 'IF-MODIFIED-SINCE:', ims) and
      IdemPropName(UnixMSTimeUtcToHttpDate(ts), pointer(ims), length(ims)) then

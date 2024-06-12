@@ -1177,7 +1177,7 @@ type
     fIfModifiedSince: boolean;
     fMethods: TUriRouterMethods;
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
-    fCacheControlMaxAge: integer;
+    fCacheControlMaxAgeSec: integer;
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -1224,8 +1224,8 @@ type
       read fIfModifiedSince write fIfModifiedSince;
     /// support optional "Cache-Control: max-age=..." header timeout value
     // - default 0 value will disable this header transmission
-    property CacheControlMaxAge: integer
-      read fCacheControlMaxAge write fCacheControlMaxAge;
+    property CacheControlMaxAgeSec: integer
+      read fCacheControlMaxAgeSec write fCacheControlMaxAgeSec;
     /// overwrite the main MemCache setting to tune in-memory caching
     // - can be used for both local file or remote URI lookups
     property MemCache: THttpProxyMem
@@ -5387,7 +5387,7 @@ begin
           uri.Path.ToUtf8(name);
           fn := FormatString('%%', [one.fLocalFolder, name]);
           result := Ctxt.SetOutFile(fn, one.IfModifiedSince, '',
-            one.CacheControlMaxAge, @siz);
+            one.CacheControlMaxAgeSec, @siz);
           case result of
             HTTP_SUCCESS:
               if Assigned(one.fMemCached) then

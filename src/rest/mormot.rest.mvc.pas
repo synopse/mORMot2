@@ -653,7 +653,7 @@ type
     // with standard www-form
     property AllowedMethods: TUriMethods
       read fAllowedMethods;
-    /// optional "Cache-Control: max-age=###" header value for static content
+    /// optional "Cache-Control: max-age=###" header seconds value for static content
     property StaticCacheControlMaxAge: integer
       read fStaticCacheControlMaxAge write fStaticCacheControlMaxAge;
   end;

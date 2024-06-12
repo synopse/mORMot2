@@ -1411,10 +1411,10 @@ type
     // content will be hashed (using crc32c) and in case of no modification
     // will return HTTP_NOTMODIFIED to the browser, without the actual result
     // content (to save bandwidth)
-    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // - set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     procedure Returns(const result: RawUtf8; Status: integer = HTTP_SUCCESS;
       const CustomHeader: RawUtf8 = ''; Handle304NotModified: boolean = false;
-      HandleErrorAsRegularResult: boolean = false; CacheControlMaxAge: integer = 0;
+      HandleErrorAsRegularResult: boolean = false; CacheControlMaxAgeSec: integer = 0;
       const ServerHash: RawUtf8 = ''); overload;
     /// use this method to send back a JSON object to the caller
     // - this method will encode the supplied values e.g. as
@@ -1448,15 +1448,15 @@ type
     // from the supplied Blob binary buffer, and optional a file name
     // - by default, the HTTP_NOTMODIFIED process will take place, to minimize
     // bandwidth between the server and the client
-    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // - set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     procedure ReturnBlob(const Blob: RawByteString; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = true; const FileName: TFileName = '';
-      CacheControlMaxAge: integer = 0);
+      CacheControlMaxAgeSec: integer = 0);
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
     // that the file content will be sent back to the server only if it changed;
-    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     // - if ContentType is left to default '', method will guess the expected
     // mime-type from the file name extension
     // - if the file name does not exist, a generic 404 error page will be
@@ -1467,16 +1467,16 @@ type
     procedure ReturnFile(const FileName: TFileName;
       Handle304NotModified: boolean = false; const ContentType: RawUtf8 = '';
       const AttachmentFileName: RawUtf8 = ''; const Error404Redirect: RawUtf8 = '';
-      CacheControlMaxAge: integer = 0);
+      CacheControlMaxAgeSec: integer = 0);
     /// use this method to send back a file from a local folder to the caller
     // - this method will let the HTTP server return the file content
     // - if Handle304NotModified is TRUE, will check the file age to ensure
     // that the file content will be sent back to the server only if it changed
-    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     procedure ReturnFileFromFolder(const FolderName: TFileName;
       Handle304NotModified: boolean = true;
       const DefaultFileName: TFileName = 'index.html';
-      const Error404Redirect: RawUtf8 = ''; CacheControlMaxAge: integer = 0); virtual;
+      const Error404Redirect: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0); virtual;
     /// use this method notify the caller that the resource URI has changed
     // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
     // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
@@ -1492,10 +1492,10 @@ type
     // $ {"result":["One","two"]}
     // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
     // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS and/or
-    // set CacheControlMaxAge<>0 to include a Cache-Control: max-age=xxx header
+    // set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     procedure Results(const Values: array of const;
       Status: integer = HTTP_SUCCESS; Handle304NotModified: boolean = false;
-      CacheControlMaxAge: integer = 0);
+      CacheControlMaxAgeSec: integer = 0);
     /// use this method if the caller expect no data, just a status
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
@@ -1505,17 +1505,17 @@ type
     // - expects Status to not be HTTP_SUCCESS neither HTTP_CREATED,
     // and will send back a JSON error message to the caller, with the
     // supplied error text
-    // - set CacheControlMaxAge<>0 to include a Cache-Control: max-age = xxx header
+    // - set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age = xxx header
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
     procedure Error(const ErrorMessage: RawUtf8 = '';
       Status: integer = HTTP_BADREQUEST;
-      CacheControlMaxAge: integer = 0); overload; virtual;
+      CacheControlMaxAgeSec: integer = 0); overload; virtual;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUtf8(Format,Args))
     procedure Error(const Format: RawUtf8; const Args: array of const;
       Status: integer = HTTP_BADREQUEST;
-      CacheControlMaxAge: integer = 0); overload;
+      CacheControlMaxAgeSec: integer = 0); overload;
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
     procedure Error(E: Exception; const Format: RawUtf8;
@@ -3977,9 +3977,9 @@ begin
     fTix64 := result; // store in cache during the whole request flow
 end;
 
-procedure SetCacheControl(var Head: RawUtf8; CacheControlMaxAge: integer);
+procedure SetCacheControl(var Head: RawUtf8; CacheControlMaxAgeSec: integer);
 begin
-  AppendLine(Head, ['Cache-Control: max-age=', CacheControlMaxAge]);
+  AppendLine(Head, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
 end;
 
 procedure Process304NotModified(Call: PRestUriParams; const ServerHash: RawUtf8);
@@ -4004,7 +4004,7 @@ end;
 procedure TRestUriContext.Returns(const Result: RawUtf8;
   Status: integer; const CustomHeader: RawUtf8;
   Handle304NotModified, HandleErrorAsRegularResult: boolean;
-  CacheControlMaxAge: integer; const ServerHash: RawUtf8);
+  CacheControlMaxAgeSec: integer; const ServerHash: RawUtf8);
 begin
   if HandleErrorAsRegularResult or
      StatusCodeIsSuccess(Status) then
@@ -4015,8 +4015,8 @@ begin
       fCall^.OutHead := CustomHeader
     else if fCall^.OutHead = '' then
       fCall^.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
-    if CacheControlMaxAge > 0 then
-      SetCacheControl(fCall^.OutHead, CacheControlMaxAge);
+    if CacheControlMaxAgeSec > 0 then
+      SetCacheControl(fCall^.OutHead, CacheControlMaxAgeSec);
     if Handle304NotModified and
        (Status = HTTP_SUCCESS) and
        (Length(Result) > 64) then
@@ -4057,17 +4057,17 @@ end;
 
 procedure TRestUriContext.ReturnBlob(const Blob: RawByteString;
   Status: integer; Handle304NotModified: boolean; const FileName: TFileName;
-  CacheControlMaxAge: integer);
+  CacheControlMaxAgeSec: integer);
 begin
   if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     AddToCsv(GetMimeContentTypeHeader(Blob, FileName), fCall^.OutHead, #13#10);
-  Returns(Blob, Status, fCall^.OutHead, Handle304NotModified, false, CacheControlMaxAge);
+  Returns(Blob, Status, fCall^.OutHead, Handle304NotModified, false, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.ReturnFile(const FileName: TFileName;
   Handle304NotModified: boolean; const ContentType: RawUtf8;
   const AttachmentFileName: RawUtf8; const Error404Redirect: RawUtf8;
-  CacheControlMaxAge: integer);
+  CacheControlMaxAgeSec: integer);
 var
   unixfiletime: TUnixTime;
   clienthash, serverhash: RawUtf8;
@@ -4080,7 +4080,7 @@ begin
     if Error404Redirect <> '' then
       Redirect(Error404Redirect)
     else
-      Error('', HTTP_NOTFOUND, CacheControlMaxAge)
+      Error('', HTTP_NOTFOUND, CacheControlMaxAgeSec)
   else
   begin
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
@@ -4090,8 +4090,8 @@ begin
       else
         AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
     end;
-    if CacheControlMaxAge > 0 then
-      AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAge]);
+    if CacheControlMaxAgeSec > 0 then
+      AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
     fCall^.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then
     begin
@@ -4116,14 +4116,14 @@ end;
 procedure TRestUriContext.ReturnFileFromFolder(
   const FolderName: TFileName; Handle304NotModified: boolean;
   const DefaultFileName: TFileName; const Error404Redirect: RawUtf8;
-  CacheControlMaxAge: integer);
+  CacheControlMaxAgeSec: integer);
 var
   fileName: TFileName;
 begin
   if DefaultFileName <> '' then
     fileName := IncludeTrailingPathDelimiter(FolderName) + DefaultFileName;
   ReturnFile(fileName, Handle304NotModified, '', '', Error404Redirect,
-    CacheControlMaxAge);
+    CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Redirect(const NewLocation: RawUtf8;
@@ -4145,7 +4145,7 @@ begin
 end;
 
 procedure TRestUriContext.Results(const Values: array of const;
-  Status: integer; Handle304NotModified: boolean; CacheControlMaxAge: integer);
+  Status: integer; Handle304NotModified: boolean; CacheControlMaxAgeSec: integer);
 var
   i, h: PtrInt;
   result: RawUtf8;
@@ -4180,7 +4180,7 @@ begin
     finally
       Free;
     end;
-  Returns(result, Status, '', Handle304NotModified, false, CacheControlMaxAge);
+  Returns(result, Status, '', Handle304NotModified, false, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Success(Status: integer);
@@ -4192,12 +4192,12 @@ begin
 end;
 
 procedure TRestUriContext.Error(const Format: RawUtf8;
-  const Args: array of const; Status, CacheControlMaxAge: integer);
+  const Args: array of const; Status, CacheControlMaxAgeSec: integer);
 var
   msg: RawUtf8;
 begin
   FormatUtf8(Format, Args, msg);
-  Error(msg, Status, CacheControlMaxAge);
+  Error(msg, Status, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Error(E: Exception; const Format: RawUtf8;
@@ -4219,7 +4219,7 @@ begin
 end;
 
 procedure TRestUriContext.Error(const ErrorMessage: RawUtf8;
-  Status, CacheControlMaxAge: integer);
+  Status, CacheControlMaxAgeSec: integer);
 var
   msg: RawUtf8;
   temp: TTextWriterStackBuffer;
@@ -4229,10 +4229,10 @@ begin
   begin
     // not an error
     fCall^.OutBody := ErrorMessage;
-    if CacheControlMaxAge <> 0 then
+    if CacheControlMaxAgeSec <> 0 then
       // Cache-Control is ignored for errors
       fCall^.OutHead := 'Cache-Control: max-age=' +
-        UInt32ToUtf8(CacheControlMaxAge);
+        UInt32ToUtf8(CacheControlMaxAgeSec);
     exit;
   end;
   if ErrorMessage = '' then
