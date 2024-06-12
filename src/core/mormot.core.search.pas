@@ -1880,7 +1880,7 @@ var
   tmp: TTextWriterStackBuffer;
   files: TFindFilesDynArray;
   f: PFindFiles;
-  i: integer;
+  i: PtrInt;
   isfile: boolean;
   p: RawUtf8;
 begin
@@ -1894,9 +1894,18 @@ begin
       '<body>'#13#10'<h1>Index of /%</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
       '<tr><th colspan="4"><hr></th></tr>'#13#10, [Path, Path]);
-    if p <> '' then
-      W.Add('<tr><td>%</td><td><a href="%../">../</a></td><td></td>'#13#10 +
-            '<td align="right">-</td><tr>'#13#10, [_DIR[false], p]);
+    i := length(Path);
+    if i <> 0 then
+    begin
+      if Path[i] = '/' then
+        dec(i);
+      while (i > 0) and
+            (Path[i] <> '/') do
+        dec(i);
+      if i <> 0 then
+        W.Add('<tr><td>%</td><td><a href="/%">../</a></td><td></td>'#13#10 +
+          '<td align="right">-</td><tr>'#13#10, [_DIR[false], copy(Path, 1, i)]);
+    end;
     files := FindFiles(Folder, FILES_ALL, '',
       [ffoExcludesDir, ffoSortByName, ffoIncludeFolder]);
     f := pointer(files);
@@ -1904,7 +1913,7 @@ begin
     begin
       isfile := f^.Size >= 0; // folders size = -1
       w.Add('<tr><td>%</td><td><a href="%%%">',
-        [_DIR[isfile], p, f^.Name, _SLH[isfile]]);
+        [_DIR[isfile], p, UrlEncodeName(f^.Name), _SLH[isfile]]);
       w.AddHtmlEscapeString(f^.Name); // paranoid
       w.Add('%</a></td><td>', [_SLH[isfile]]);
       w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
