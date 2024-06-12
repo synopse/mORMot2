@@ -1247,7 +1247,8 @@ type
     psoHttpsSelfSigned,
     psoReusePort,
     psoEnableLogging,
-    psoNoFolderHtmlIndex);
+    psoNoFolderHtmlIndex,
+    psoNoFolderHtmlIndexCache);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5416,10 +5417,12 @@ begin
                  not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
               begin
                 // return the folder files info as cached HTML
-                if not one.fMemCached.FindAndCopy(name, cached) then
+                if (psoNoFolderHtmlIndexCache in fSettings.Server.Options) or
+                   not one.fMemCached.FindAndCopy(name, cached) then
                 begin
                   SetOutFolderHtmlIndex(fn, name, RawUtf8(cached));
-                  if Assigned(one.fMemCached) then
+                  if Assigned(one.fMemCached) and
+                     not (psoNoFolderHtmlIndexCache in fSettings.Server.Options) then
                     one.fMemCached.Add(name, cached);
                 end;
                 result := HTTP_SUCCESS;
