@@ -1658,7 +1658,7 @@ end;
 
 const
   // maximum/optimum socket output buffer is 128KB on 32-bit and 256KB on 64-bit
-  SENDBUF_MEM = 256 shl 10 {$ifdef CPU32} shr 1 {$endif CPU32};
+  SENDBUF_MEM = (256 shl 10) {$ifdef CPU32} shr 1 {$endif CPU32};
 
 function TPollAsyncSockets.Start(connection: TPollAsyncConnection): boolean;
 begin
@@ -5371,12 +5371,12 @@ begin
     exit;
   // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
-  uri.ParsePath; // compute uri.Name
+  uri.ParsePath; // compute uri.Name for file-level TUriMatch
   // ensure was not marked as rejected
   if (one.RejectCsv <> '') and
      one.fReject.Check(one.RejectCsv, uri, {caseinsensitive=}false) then
     exit;
-  // start the URI processing
+  // actual request processing
   case met of
     urmGet,
     urmHead:

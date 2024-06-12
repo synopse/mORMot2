@@ -4641,7 +4641,7 @@ begin
   if FileSize <> nil then
     FileSize^ := fs;
   if fs < 0 then
-    exit; // FileName is a folder
+    exit; // FileName is a folder: return FileSize^ = -1 and exit
   fOutContentType := ContentType;
   if fOutContentType = '' then
     fOutContentType := GetMimeContentTypeHeader('', FileName);
