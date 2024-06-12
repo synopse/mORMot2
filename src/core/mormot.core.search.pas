@@ -1882,7 +1882,7 @@ var
   f: PFindFiles;
   i: PtrInt;
   isfile: boolean;
-  p: RawUtf8;
+  p, n: RawUtf8;
 begin
   if (Path <> '') and
      (Path[length(Path)] <> '/') then
@@ -1903,18 +1903,19 @@ begin
             (Path[i] <> '/') do
         dec(i);
       if i <> 0 then
-        W.Add('<tr><td>%</td><td><a href="/%">../</a></td><td></td>'#13#10 +
-          '<td align="right">-</td><tr>'#13#10, [_DIR[false], copy(Path, 1, i)]);
+        W.Add('<tr><td>%</td><td><a href="/%">../</a></td><td></td><td ' +
+          'align="right">-</td><tr>'#13#10, [_DIR[false], copy(Path, 1, i)]);
     end;
     files := FindFiles(Folder, FILES_ALL, '',
       [ffoExcludesDir, ffoSortByName, ffoIncludeFolder]);
     f := pointer(files);
     for i := 1 to length(files) do
     begin
-      isfile := f^.Size >= 0; // folders size = -1
+      isfile := f^.Size >= 0; // size = -1 for folders
+      StringToUtf8(f^.Name, n);
       w.Add('<tr><td>%</td><td><a href="%%%">',
-        [_DIR[isfile], p, UrlEncodeName(f^.Name), _SLH[isfile]]);
-      w.AddHtmlEscapeString(f^.Name); // paranoid
+        [_DIR[isfile], p, UrlEncodeName(n), _SLH[isfile]]);
+      w.AddHtmlEscapeUtf8(n); // paranoid
       w.Add('%</a></td><td>', [_SLH[isfile]]);
       w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
       w.AddShort('&nbsp;</td><td align="right">');
