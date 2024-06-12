@@ -4122,8 +4122,8 @@ var
 begin
   if DefaultFileName <> '' then
     fileName := IncludeTrailingPathDelimiter(FolderName) + DefaultFileName;
-  ReturnFile(fileName, Handle304NotModified, '', '', Error404Redirect,
-    CacheControlMaxAgeSec);
+  ReturnFile(fileName,
+    Handle304NotModified, '', '', Error404Redirect, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Redirect(const NewLocation: RawUtf8;
@@ -4140,20 +4140,20 @@ procedure TRestUriContext.Returns(const NameValuePairs: array of const;
   Status: integer; Handle304NotModified, HandleErrorAsRegularResult: boolean;
   const CustomHeader: RawUtf8);
 begin
-  Returns(JsonEncode(NameValuePairs), Status, CustomHeader, Handle304NotModified,
-    HandleErrorAsRegularResult);
+  Returns(JsonEncode(NameValuePairs), Status, CustomHeader,
+    Handle304NotModified, HandleErrorAsRegularResult);
 end;
 
 procedure TRestUriContext.Results(const Values: array of const;
   Status: integer; Handle304NotModified: boolean; CacheControlMaxAgeSec: integer);
 var
   i, h: PtrInt;
-  result: RawUtf8;
+  json: RawUtf8;
   temp: TTextWriterStackBuffer;
 begin
   h := high(Values);
   if h < 0 then
-    result := '{"result":null}'
+    json := '{"result":null}'
   else
     with TJsonWriter.CreateOwnedStream(temp) do
     try
@@ -4176,11 +4176,11 @@ begin
         AddDirect(']');
       end;
       AddDirect('}');
-      SetText(result);
+      SetText(json);
     finally
       Free;
     end;
-  Returns(result, Status, '', Handle304NotModified, false, CacheControlMaxAgeSec);
+  Returns(json, Status, '', Handle304NotModified, false, CacheControlMaxAgeSec);
 end;
 
 procedure TRestUriContext.Success(Status: integer);

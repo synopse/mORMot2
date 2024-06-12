@@ -4637,11 +4637,11 @@ begin
   if FileSize <> nil then
     FileSize^ := 0;
   if not FileInfoByName(FileName, fs, ts) then
-    exit; // FileName does not exist
+    exit; // FileName does not exist: return false with FileSize^ = 0
   if FileSize <> nil then
     FileSize^ := fs;
   if fs < 0 then
-    exit; // FileName is a folder: return FileSize^ = -1 and exit
+    exit; // FileName is a folder: return false with FileSize^ = -1
   fOutContentType := ContentType;
   if fOutContentType = '' then
     fOutContentType := GetMimeContentTypeHeader('', FileName);
