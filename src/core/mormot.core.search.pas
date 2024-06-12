@@ -109,7 +109,7 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
 /// compute the HTML index page corresponding to a local folder
-procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path: RawUtf8;
+procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
   out Html: RawUtf8);
 
 
@@ -1870,7 +1870,7 @@ begin
   FindClose(sr);
 end;
 
-procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path: RawUtf8;
+procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
   out Html: RawUtf8);
 const
   _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
@@ -1886,26 +1886,17 @@ var
 begin
   if (Path <> '') and
      (Path[length(Path)] <> '/') then
-    p := ExtractNameU(Path) + '/';
+    p := Path + '/';
   w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.Add('<!DOCTYPE html>'#13#10'<html>'#13#10 +
       '<head>'#13#10'<title>Index of /%</title>'#13#10'</head>'#13#10 +
       '<body>'#13#10'<h1>Index of /%</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
-      '<tr><th colspan="4"><hr></th></tr>'#13#10, [Path, Path]);
-    i := length(Path);
-    if i <> 0 then
-    begin
-      if Path[i] = '/' then
-        dec(i);
-      while (i > 0) and
-            (Path[i] <> '/') do
-        dec(i);
-      if i <> 0 then
-        W.Add('<tr><td>%</td><td><a href="/%">../</a></td><td></td><td ' +
-          'align="right">-</td><tr>'#13#10, [_DIR[false], copy(Path, 1, i)]);
-    end;
+      '<tr><th colspan="4"><hr></th></tr>'#13#10, [Name, Name]);
+    if Name <> '' then
+      W.Add('<tr><td>%</td><td><a href="..">../</a></td><td></td><td ' +
+        'align="right">-</td><tr>'#13#10, [_DIR[false]]);
     files := FindFiles(Folder, FILES_ALL, '',
       [ffoExcludesDir, ffoSortByName, ffoIncludeFolder]);
     f := pointer(files);
