@@ -5371,6 +5371,8 @@ begin
     exit;
   // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
+  if uri.Path.Len > 512 then
+    exit;
   uri.ParsePath; // compute uri.Name for file-level TUriMatch
   // ensure was not marked as rejected
   if (one.RejectCsv <> '') and
@@ -5384,7 +5386,7 @@ begin
       sLocalFolder:
         begin
           // get content from a local file
-          uri.Path.ToUtf8(name);
+          UrlDecodeVar(uri.Path.Text, uri.Path.Len, name, {name=}true);
           if not SafePathNameU(name) then
             exit;
           fn := FormatString('%%', [one.fLocalFolder, name]);
