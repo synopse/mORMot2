@@ -1247,8 +1247,9 @@ type
     psoHttpsSelfSigned,
     psoReusePort,
     psoEnableLogging,
+    psoDisableMemCache,
     psoNoFolderHtmlIndex,
-    psoNoFolderHtmlIndexCache);
+    psoDisableFolderHtmlIndexCache);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -5316,18 +5317,21 @@ begin
         continue;
       end;
       // normalize cache settings
-      if one.MemCache.MaxSize < 0 then
-        one.MemCache.MaxSize := fSettings.MemCache.MaxSize;
-      if one.MemCache.TimeoutSec < 0 then
-        one.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
-      if (one.MemCache.MaxSize > 0) and
-         (one.MemCache.TimeoutSec > 0) then
-        one.fMemCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
-          TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
-          one.MemCache.TimeoutSec);
-      if one.fSourced = sRemoteUri then
-        if one.DiskCache.MaxSize < 0 then
-          one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
+      if not (psoDisableMemCache in fSettings.Server.Options) then
+      begin
+        if one.MemCache.MaxSize < 0 then
+          one.MemCache.MaxSize := fSettings.MemCache.MaxSize;
+        if one.MemCache.TimeoutSec < 0 then
+          one.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
+        if (one.MemCache.MaxSize > 0) and
+           (one.MemCache.TimeoutSec > 0) then
+          one.fMemCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+            TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
+            one.MemCache.TimeoutSec);
+        if one.fSourced = sRemoteUri then
+          if one.DiskCache.MaxSize < 0 then
+            one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
+      end;
       // compute and register this URI
       uri := one.fUrl;
       while (uri <> '') and
@@ -5417,12 +5421,12 @@ begin
                  not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
               begin
                 // return the folder files info as cached HTML
-                if (psoNoFolderHtmlIndexCache in fSettings.Server.Options) or
+                if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
                    not one.fMemCached.FindAndCopy(name, cached) then
                 begin
                   SetOutFolderHtmlIndex(fn, name, RawUtf8(cached));
                   if Assigned(one.fMemCached) and
-                     not (psoNoFolderHtmlIndexCache in fSettings.Server.Options) then
+                     not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
                     one.fMemCached.Add(name, cached);
                 end;
                 result := HTTP_SUCCESS;
