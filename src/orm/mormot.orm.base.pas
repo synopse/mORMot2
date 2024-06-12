@@ -2372,7 +2372,7 @@ type
     function GetODSDocument(withColumnTypes: boolean = false): RawByteString;
     /// append the table content as a HTML <table> ... </table>
     procedure GetHtmlTable(Dest: TJsonWriter); overload;
-    /// save the table as a <html><body><table> </table></body></html> content
+    /// save the table as a <!DOCTYPE html><html><body><table> </table></body></html> content
     function GetHtmlTable(const Header: RawUtf8 = '<head><style>table,th,td' +
       '{border: 1px solid black;border-collapse: collapse;}th,td{padding: 5px;' +
       'font-family: sans-serif;}</style></head>'#10): RawUtf8; overload;
@@ -9289,7 +9289,7 @@ var
 begin
   W := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.AddShorter('<html>');
+    W.AddShort('<!DOCTYPE html><html>');
     W.AddString(Header);
     W.AddShorter('<body>'#10);
     GetHtmlTable(W);

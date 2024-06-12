@@ -1401,7 +1401,7 @@ begin
     root := Ctxt.Server.Model.Root;
     if Ctxt.UriMethodPath = '' then
     begin
-      result := '<html><title>mORMot Wrappers</title>' +
+      result := '<!DOCTYPE html><html><title>mORMot Wrappers</title>' +
         '<body style="font-family:verdana;"><h1>Generated Code/Doc Wrappers</h1>' +
         '<hr><h2>Available Templates:</h2><ul>';
       repeat

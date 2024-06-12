@@ -6604,8 +6604,8 @@ var
     try
       resp^.SetStatus(StatusCode, outstat);
       logdata^.ProtocolStatus := StatusCode;
-      FormatUtf8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
-        [StatusCode, outstat], msg);
+      FormatUtf8('<!DOCTYPE html><html><body style="font-family:verdana;">' +
+        '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], msg);
       if E <> nil then
         msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
       msg := msg + HtmlEscape(ErrorMsg) + ('</p><p><small>' + XPOWEREDVALUE);
