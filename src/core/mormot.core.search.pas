@@ -1911,7 +1911,7 @@ begin
         if Path[length(Path)] <> '/' then
           w.AddDirect('/');
       end;
-      w.AddString(UrlEncodeName(n));
+      UrlEncodeName(w, n);
       if not isFile then
         w.AddDirect('/');
       w.AddDirect('"', '>');
