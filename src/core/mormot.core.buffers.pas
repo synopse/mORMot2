@@ -8059,7 +8059,7 @@ begin
     if (tcUriUnreserved in tab[c]) or
        (c = space2plus) then // =32 for parameter, =48 for URI
       continue;
-    inc(result, s - d);
+    inc(result, PAnsiChar(s) - PAnsiChar(d));
     if c = 0 then
       break;
     inc(result, 2);
