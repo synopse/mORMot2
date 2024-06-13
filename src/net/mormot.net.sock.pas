@@ -1691,7 +1691,7 @@ type
     // - CreatesSockIn is mandatory
     // - it first check and quickly return any data pending in SockIn^.Buffer
     // - if the buffer is void, will call InputSock to fill it
-    // - returns -1 in case of a socket error (e.g. broken/closed connection)
+    // - returns -1/-2 in case of a socket error (e.g. broken/closed connection)
     // - returns the number of bytes available in input buffers (SockIn or TLS):
     // there may be more waiting at the socket level
     function SockInPending(aTimeOutMS: integer): integer;
@@ -5553,9 +5553,10 @@ begin
           fTimeOut := backup;
         end;
       end;
-    cspSocketError,
+    cspSocketError:
+      result := -1; // indicates broken socket
     cspSocketClosed:
-      result := -1; // indicates broken/closed socket
+      result := -2; // indicates closed socket
   end; // cspNoData will leave result=0
 end;
 
