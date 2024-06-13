@@ -3596,7 +3596,8 @@ end;
 procedure TAsyncServer.Shutdown;
 begin
   inherited Shutdown;
-  fServer.Close; // shutdown the socket to unlock Accept() in Execute
+  if fServer <> nil then
+    fServer.Close; // shutdown the socket to unlock Accept() in Execute
 end;
 {$else}
 procedure TAsyncServer.Shutdown;
