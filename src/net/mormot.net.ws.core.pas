@@ -2684,7 +2684,7 @@ end;
 function TWebSocketProcess.ProcessLoopStepReceive(FrameProcessed: PBoolean): boolean;
 var
   request: TWebSocketFrame;
-  sockerror: integer;
+  error: integer;
 begin
   if FrameProcessed <> nil then
     FrameProcessed^ := false;
@@ -2692,8 +2692,8 @@ begin
   begin
     LockedInc32(@fProcessCount); // flag currently processing
     try
-      if CanGetFrame({timeout=}1, @sockerror) and
-         GetFrame(request, {blocking=}FrameProcessed = nil, @sockerror) then
+      if CanGetFrame({timeout=}1, @error) and
+         GetFrame(request, {blocking=}FrameProcessed = nil, @error) then
       begin
         // we received a full frame
         if FrameProcessed <> nil then
@@ -2703,10 +2703,10 @@ begin
       else if (fOwnerThread <> nil) and
               fOwnerThread.Terminated then
         fState := wpsClose
-      else if sockerror <> 0 then
+      else if error <> 0 then
       begin
         WebSocketLog.Add.Log(sllInfo, 'GetFrame error % on %',
-          [sockerror, fProtocol], self);
+          [error, fProtocol], self);
         fState := wpsClose;
       end;
     finally
@@ -3182,18 +3182,20 @@ begin
         if GetHeader then
           if (opcode <> focContinuation) and
              (opcode <> outputframe.opcode) then
+          begin
+            state := pfsError; // logic code
             if ErrorWithoutException <> nil then
             begin
               WebSocketLog.Add.Log(sllDebug, 'GetFrame: received %, expected %',
                 [_TWebSocketFrameOpCode[opcode]^,
                  _TWebSocketFrameOpCode[outputframe.opcode]^], process);
-              state := pfsError;
               break;
             end
             else
               EWebSockets.RaiseUtf8('%.GetFrame: received %, expected %',
                 [process, _TWebSocketFrameOpCode[opcode]^,
                  _TWebSocketFrameOpCode[outputframe.opcode]^])
+          end
           else
             state := pfsDataN
         else
