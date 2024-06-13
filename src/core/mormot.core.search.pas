@@ -1586,7 +1586,7 @@ procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchR
 begin
   Name := Directory + TFileName(F.Name);
   Attr := F.Attr;
-  if Attr and faDirectory <> 0 then
+  if Attr and faDirectory <> 0 then // may happen with ffoIncludeFolder option
     Size := -1
   else
   begin
@@ -1874,7 +1874,6 @@ procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUt
   out Html: RawUtf8);
 const
   _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
-  _SLH: array[boolean] of string[1] = ('/', '');
 var
   w: TTextDateWriter;
   tmp: TTextWriterStackBuffer;
@@ -1882,18 +1881,17 @@ var
   f: PFindFiles;
   i: PtrInt;
   isfile: boolean;
-  p, n: RawUtf8;
+  n: RawUtf8;
 begin
-  if (Path <> '') and
-     (Path[length(Path)] <> '/') then
-    p := Path + '/';
   w := TTextDateWriter.CreateOwnedStream(tmp);
   try
-    w.Add('<!DOCTYPE html>'#13#10'<html>'#13#10 +
-      '<head>'#13#10'<title>Index of /%</title>'#13#10'</head>'#13#10 +
-      '<body>'#13#10'<h1>Index of /%</h1>'#13#10'<table>'#13#10 +
+    w.AddShort('<!DOCTYPE html>'#13#10'<html>'#13#10'<head>'#13#10'<title>Index of /');
+    w.AddHtmlEscapeUtf8(Name); // paranoid
+    w.AddShort('</title>'#13#10'</head>'#13#10'<body>'#13#10'<h1>Index of /');
+    w.AddHtmlEscapeUtf8(Name);
+    w.AddShort('</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
-      '<tr><th colspan="4"><hr></th></tr>'#13#10, [Name, Name]);
+      '<tr><th colspan="4"><hr></th></tr>'#13#10);
     if Name <> '' then
       W.Add('<tr><td>%</td><td><a href="..">../</a></td><td></td><td ' +
         'align="right">-</td><tr>'#13#10, [_DIR[false]]);
@@ -1904,10 +1902,23 @@ begin
     begin
       isfile := f^.Size >= 0; // size = -1 for folders
       StringToUtf8(f^.Name, n);
-      w.Add('<tr><td>%</td><td><a href="%%%">',
-        [_DIR[isfile], p, UrlEncodeName(n), _SLH[isfile]]);
-      w.AddHtmlEscapeUtf8(n); // paranoid
-      w.Add('%</a></td><td>', [_SLH[isfile]]);
+      w.AddShorter('<tr><td>');
+      w.AddShorter(_DIR[isfile]);
+      w.AddShort('</td><td><a href="');
+      if Path <> '' then
+      begin
+        w.AddHtmlEscapeUtf8(Path);
+        if Path[length(Path)] <> '/' then
+          w.AddDirect('/');
+      end;
+      w.AddString(UrlEncodeName(n));
+      if not isFile then
+        w.AddDirect('/');
+      w.AddDirect('"', '>');
+      w.AddHtmlEscapeUtf8(n);
+      if not isFile then
+        w.AddDirect('/');
+      w.AddShort('</a></td><td>');
       w.AddDateTime(@f^.Timestamp, ' ', #0, false, true);
       w.AddShort('&nbsp;</td><td align="right">');
       if isFile then
