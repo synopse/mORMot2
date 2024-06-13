@@ -7763,11 +7763,19 @@ begin
   if n = 0 then
     exit;
   if aContinueOnException then
-    for i := n - 1 downto 0 do
+  begin
+    i := 0;
+    while i < n do
       try
-        a[i].Free;
+        while i < n do
+        begin
+          a[i].Free;
+          inc(i);
+        end;
       except
-      end
+        inc(i); // just catch exception and go to next instance
+      end;
+  end
   else
     RawObjectsClear(pointer(a), n);
   a := nil; // finalize the dynamic array itself
