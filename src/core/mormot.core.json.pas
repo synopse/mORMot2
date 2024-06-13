@@ -4592,15 +4592,17 @@ function UrlEncodeJsonObject(const UriName: RawUtf8; ParametersJson: PUtf8Char;
 var
   i, j: PtrInt;
   sep: AnsiChar;
+  w: TTextWriter;
   Params: TNameValuePUtf8CharDynArray;
   temp: TTextWriterStackBuffer;
 begin
   if ParametersJson = nil then
     result := UriName
   else
-    with TTextWriter.CreateOwnedStream(temp) do
+  begin
+    w := TTextWriter.CreateOwnedStream(temp);
     try
-      AddString(UriName);
+      w.AddString(UriName);
       if (JsonDecode(ParametersJson, Params, true) <> nil) and
          (Params <> nil) then
       begin
@@ -4617,18 +4619,19 @@ begin
             if Name.Len = 0 then
               continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
-              AddDirect(sep);
-            AddShort(Name.Text, Name.Len);
-            AddDirect('=');
-            AddString(UrlEncode(Value.Text));
+              w.AddDirect(sep);
+            w.AddShort(Name.Text, Name.Len);
+            w.AddDirect('=');
+            UrlEncode(w, Value.Text, Value.Len);
             sep := '&';
             IncludeQueryDelimiter := true;
           end;
       end;
-      SetText(result);
+      w.SetText(result);
     finally
-      Free;
+      w.Free;
     end;
+  end;
 end;
 
 function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
