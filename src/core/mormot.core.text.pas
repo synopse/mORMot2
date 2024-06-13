@@ -914,10 +914,13 @@ type
     /// write some #0 ended UTF-8 text, according to the specified format
     // - use overriden TJsonWriter version instead!
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
+    /// prepare direct access to the internal output buffer
+    // - return nil if Len is too big to fit in the current buffer size
+    // - return the position to write text, and increase the instance position
+    function AddPrepare(Len: PtrInt): pointer;
     /// write some data Base64 encoded
     // - use overriden TJsonWriter version instead!
     procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
-
     /// serialize as JSON the given object
     // - use overriden TJsonWriter version instead!
     procedure WriteObject(Value: TObject;
@@ -3790,6 +3793,17 @@ begin
     FlushToStream;
   PCardinal(B + 1)^ := NULL_LOW;
   inc(B, 4);
+end;
+
+function TTextWriter.AddPrepare(Len: PtrInt): pointer;
+begin
+  result := nil;
+  if Len >= fTempBufSize - 16 then
+    exit;
+  if BEnd - B <= Len then
+    FlushToStream;
+  result := B + 1;
+  inc(B, Len);
 end;
 
 procedure TTextWriter.WriteObject(Value: TObject;
