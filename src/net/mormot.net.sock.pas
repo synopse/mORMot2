@@ -1782,9 +1782,6 @@ type
     // - return false on any error, true on success
     // - bypass the SockSend() buffers
     function TrySndLow(P: pointer; Len: integer): boolean;
-    /// returns the low-level error number
-    // - i.e. returns WSAGetLastError
-    class function LastLowSocketError: integer;
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
@@ -5951,11 +5948,6 @@ begin
       exit;
   until false;
   result := true;
-end;
-
-class function TCrtSocket.LastLowSocketError: integer;
-begin
-  result := sockerrno;
 end;
 
 function TCrtSocket.AcceptIncoming(
