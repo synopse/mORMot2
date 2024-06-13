@@ -1536,20 +1536,32 @@ function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 { ***************** URI-Encoded Text Buffer Process }
 
 /// encode a string as URI parameter encoding, i.e. ' ' as '+'
-function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function UrlEncode(const Text: RawUtf8): RawUtf8; overload;
 
 /// encode a string as URI parameter encoding, i.e. ' ' as '+'
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 
+/// append a string as URI parameter encoding, i.e. ' ' as '+'
+procedure UrlEncode(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt); overload;
+
+/// append a string as URI parameter encoding, i.e. ' ' as '+'
+procedure UrlEncode(W: TTextWriter; const Text: RawUtf8); overload;
+
 /// encode a string as URI network name encoding, i.e. ' ' as %20
 // - only parameters - i.e. after '?' - should replace spaces by '+'
-function UrlEncodeName(const svar: RawUtf8): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function UrlEncodeName(const Text: RawUtf8): RawUtf8; overload;
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
 // - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(Text: PUtf8Char): RawUtf8; overload;
+
+/// append a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
+procedure UrlEncodeName(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt); overload;
+
+/// append a string as URI network name encoding, i.e. ' ' as %20
+// - only parameters - i.e. after '?' - should replace spaces by '+'
+procedure UrlEncodeName(W: TTextWriter; const Text: RawUtf8); overload;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -1569,11 +1581,11 @@ function UrlDecode(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
 // - only parameters - i.e. after '?' - should replace spaces by '+'
-function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
+function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
 
 /// decode a UrlEncodeName() URI encoded network name into its original value
 // - only parameters - i.e. after '?' - should replace spaces by '+'
-function UrlDecodeName(const s: RawUtf8): RawUtf8; overload;
+function UrlDecodeName(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a UrlEncode/UrlEncodeName() URI encoded string into its original value
 // - name=false for parameters (after ?), to replace spaces by '+'
@@ -7998,23 +8010,15 @@ end;
 
 { ***************** URI-Encoded Text Buffer Process }
 
-function UrlEncode(const svar: RawUtf8): RawUtf8;
-begin
-  result := UrlEncode(pointer(svar));
-end;
+// some local sub-functions for better code generation of UrlEncode()
 
-function UrlEncodeName(const svar: RawUtf8): RawUtf8;
-begin
-  result := UrlEncodeName(pointer(svar));
-end;
-
-// two sub-functions for better code generation of UrlEncode()
-
-procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet; space2plus: cardinal);
+procedure _UrlEncode_Write(s, d: PByte; tab: PTextByteSet; space2plus: cardinal);
 var
   c: cardinal;
   hex: PByteToWord;
 begin
+  if d = nil then
+    exit;
   hex := @TwoDigitsHexWB;
   repeat
     c := s^;
@@ -8022,62 +8026,101 @@ begin
     if tcUriUnreserved in tab[c] then
     begin
       // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
-      p^ := c;
-      inc(p);
+      d^ := c;
+      inc(d);
     end
     else if c = 0 then
       exit
     else if c = space2plus then // space2plus=32 for parameter, =48 for URI
     begin
-      p^ := ord('+');
-      inc(p);
+      d^ := ord('+');
+      inc(d);
     end
     else
     begin
-      p^ := ord('%');
-      inc(p);
-      PWord(p)^ := hex[c];
-      inc(p, 2);
+      d^ := ord('%');
+      inc(d);
+      PWord(d)^ := hex[c];
+      inc(d, 2);
     end;
   until false;
 end;
 
-function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet; space2plus: cardinal): PtrInt;
+function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet; space2plus: byte): PtrInt;
 var
-  c: cardinal;
+  c: byte;
+  d: PByte;
 begin
   result := 0;
+  d := s;
   repeat
     c := s^;
     inc(s);
     if (tcUriUnreserved in tab[c]) or
        (c = space2plus) then // =32 for parameter, =48 for URI
-    begin
-      inc(result);
       continue;
-    end;
+    inc(result, s - d);
     if c = 0 then
-      exit;
-    inc(result, 3);
+      break;
+    inc(result, 2);
+    d := s;
   until false;
+  dec(result); // don't include last #0 in result Len
+end;
+
+procedure _UrlEncode(Text: pointer; space2plus: cardinal; out result: RawUtf8);
+begin
+  if Text = nil then
+    exit;
+  FastSetString(result, _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus));
+  _UrlEncode_Write(Text, pointer(result), @TEXT_BYTES, space2plus);
+end;
+
+procedure _UrlEncodeW(W: TTextWriter; Text: pointer; TextLen: PtrInt; space2plus: cardinal);
+begin
+  if Text <> nil then
+    _UrlEncode_Write(Text, W.AddPrepare(_UrlEncode_ComputeLen(
+      Text, @TEXT_BYTES, space2plus)), @TEXT_BYTES, space2plus);
+end;
+
+function UrlEncode(const Text: RawUtf8): RawUtf8;
+begin
+  _UrlEncode(pointer(Text), 32, result);
 end;
 
 function UrlEncode(Text: PUtf8Char): RawUtf8;
 begin
-  result := '';
-  if Text = nil then
-    exit;
-  FastSetString(result, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 32));
-  _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 32);
+  _UrlEncode(Text, 32, result);
+end;
+
+procedure UrlEncode(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt);
+begin
+  _UrlEncodeW(W, Text, TextLen, 32);
+end;
+
+procedure UrlEncode(W: TTextWriter; const Text: RawUtf8);
+begin
+  _UrlEncodeW(W, pointer(Text), length(Text), 32);
+end;
+
+function UrlEncodeName(const Text: RawUtf8): RawUtf8;
+begin
+  _UrlEncode(pointer(Text), 48, result);
 end;
 
 function UrlEncodeName(Text: PUtf8Char): RawUtf8;
 begin
-  result := '';
-  if Text = nil then
-    exit;
-  FastSetString(result, _UrlEncode_ComputeLen(pointer(Text), @TEXT_CHARS, 48));
-  _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES, 48);
+  _UrlEncode(Text, 48, result);
+end;
+
+procedure UrlEncodeName(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt);
+begin
+  _UrlEncodeW(W, Text, TextLen, 48);
+end;
+
+procedure UrlEncodeName(W: TTextWriter; const Text: RawUtf8);
+begin
+  _UrlEncodeW(W, pointer(Text), length(Text), 48);
 end;
 
 function UrlEncode(const NameValuePairs: array of const;
@@ -8090,26 +8133,25 @@ var
 begin
   result := '';
   n := high(NameValuePairs);
-  if (n > 0) and
-     (n and 1 = 1) then
+  if (n < 0) or
+     (n and 1 <> 1) then // n should be = 1,3,5,7,..
+    exit;
+  for a := 0 to n shr 1 do
   begin
-    for a := 0 to n shr 1 do
-    begin
-      VarRecToUtf8(NameValuePairs[a * 2], name);
-      if not IsUrlValid(pointer(name)) then
-        continue; // just skip invalid names
-      p := @NameValuePairs[a * 2 + 1];
-      if p^.VType = vtObject then
-        value := ObjectToJson(p^.VObject, [])
-      else
-        VarRecToUtf8(p^, value);
-      result := result + '&' + name + '=' + UrlEncode(value);
-    end;
-    if TrimLeadingQuestionMark then
-      delete(result, 1, 1)
+    VarRecToUtf8(NameValuePairs[a * 2], name);
+    if not IsUrlValid(pointer(name)) then
+      continue; // just skip invalid names
+    p := @NameValuePairs[a * 2 + 1];
+    if p^.VType = vtObject then
+      value := ObjectToJson(p^.VObject, []) // VarRecToUtf8(vtObject)=ClassName
     else
-      result[1] := '?';
+      VarRecToUtf8(p^, value);
+    result := result + '&' + name + '=' + UrlEncode(value);
   end;
+  if TrimLeadingQuestionMark then
+    delete(result, 1, 1)
+  else
+    result[1] := '?';
 end;
 
 function IsUrlValid(P: PUtf8Char): boolean;
