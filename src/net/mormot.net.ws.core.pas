@@ -3183,7 +3183,7 @@ begin
           if (opcode <> focContinuation) and
              (opcode <> outputframe.opcode) then
           begin
-            state := pfsError; // logic code
+            state := pfsError; // logic error in the websockets state machine
             if ErrorWithoutException <> nil then
             begin
               WebSocketLog.Add.Log(sllDebug, 'GetFrame: received %, expected %',
