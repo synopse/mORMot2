@@ -1887,7 +1887,8 @@ begin
   try
     w.AddShort('<!DOCTYPE html>'#13#10'<html>'#13#10'<head>'#13#10'<title>Index of /');
     w.AddHtmlEscapeUtf8(Name); // paranoid
-    w.AddShort('</title>'#13#10'</head>'#13#10'<body>'#13#10'<h1>Index of /');
+    w.AddShort('</title>'#13#10'</head>'#13#10 +
+      '<body style="font-family:verdana">'#13#10'<h1>Index of /');
     w.AddHtmlEscapeUtf8(Name);
     w.AddShort('</h1>'#13#10'<table>'#13#10 +
       '<tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>'#13#10 +
