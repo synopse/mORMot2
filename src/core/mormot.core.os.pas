@@ -7105,40 +7105,39 @@ function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteS
 var
   h: THandle;
   size: Int64;
-  read, pos: integer;
+  read, pos: PtrInt;
   tmp: array[0..$7fff] of AnsiChar; // 32KB stack buffer
 begin
   result := '';
   if FileName = '' then
     exit;
   h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
-  if ValidHandle(h) then
+  if not ValidHandle(h) then
+    exit;
+  if HasNoSize then
   begin
-    if HasNoSize then
+    pos := 0;
+    repeat
+      read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
+      if read <= 0 then
+        break;
+      SetLength(result, pos + read); // in-place resize
+      MoveFast(tmp, PByteArray(result)^[pos], read);
+      inc(pos, read);
+    until false;
+  end
+  else
+  begin
+    size := FileSize(h);
+    if (size < MaxInt) and // 2GB seems big enough for a RawByteString
+       (size > 0) then
     begin
-      pos := 0;
-      repeat
-        read := FileRead(h, tmp, SizeOf(tmp)); // fill per 32KB local buffer
-        if read <= 0 then
-          break;
-        SetLength(result, pos + read); // in-place resize
-        MoveFast(tmp, PByteArray(result)^[pos], read);
-        inc(pos, read);
-      until false;
-    end
-    else
-    begin
-      size := FileSize(h);
-      if (size < MaxInt) and // 2GB seems big enough for a RawByteString
-         (size > 0) then
-      begin
-        FastSetString(RawUtf8(result), size); // assume CP_UTF8 for FPC RTL bug
-        if not FileReadAll(h, pointer(result), size) then
-          result := ''; // error reading
-      end;
+      FastSetString(RawUtf8(result), size); // assume CP_UTF8 for FPC RTL bug
+      if not FileReadAll(h, pointer(result), size) then
+        result := ''; // error reading
     end;
-    FileClose(h);
   end;
+  FileClose(h);
 end;
 
 function StringFromFirstFile(const FileName: array of TFileName): RawByteString;
