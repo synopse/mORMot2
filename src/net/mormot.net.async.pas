@@ -1265,6 +1265,7 @@ type
     fPrivateKeyFile: TFileName;
     fPrivateKeyPassword: SpiUtf8;
     fServerName: RawUtf8;
+    fLogFormat: RawUtf8;
     fFaviconFile: TFileName;
   public
     /// initialize the default settings
@@ -1285,6 +1286,10 @@ type
     // content is to be generated
     property ThreadCount: integer
       read fThreadCount write fThreadCount;
+    /// custom log format for the psoEnableLogging option
+    // - to override default LOGFORMAT_COMBINED output
+    property LogFormat: RawUtf8
+      read fLogFormat write fLogFormat;
     /// optional HTTPS certificate file name
     // - should also set PrivateKeyFile and PrivateKeyPassword
     property CertificateFile: TFileName
@@ -5257,7 +5262,10 @@ begin
   fServer := THttpAsyncServer.Create(fSettings.Server.Port, nil, nil, '',
     fSettings.Server.ThreadCount, 30000, hso);
   if fSettings.Server.ServerName <> '' then
-    fServer.ServerName := fSettings.Server.ServerName;
+    fServer.ServerName := fSettings.Server.ServerName; // override 'mORMot (OS)'
+  if (fServer.Logger <> nil) and
+     (fSettings.Server.LogFormat <> '') then
+    fServer.Logger.Format := fSettings.Server.LogFormat; // override default
   fServer.SetFavIcon(StringFromFile(fSettings.Server.FaviconFile)); // do once
   // setup the URI routes
   AfterServerStarted;
