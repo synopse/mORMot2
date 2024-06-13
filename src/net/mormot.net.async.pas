@@ -5433,7 +5433,8 @@ begin
                 if (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) or
                    not one.fMemCached.FindAndCopy(name, cached) then
                 begin
-                  SetOutFolderHtmlIndex(fn, Ctxt.Url, name, RawUtf8(cached));
+                  SetOutFolderHtmlIndex(fn, Ctxt.Url,
+                    StringReplaceChars(name, PathDelim, '/'), RawUtf8(cached));
                   if Assigned(one.fMemCached) and
                      not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
                     one.fMemCached.Add(name, cached);
