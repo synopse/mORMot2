@@ -3211,6 +3211,8 @@ begin
   result := nil;
   if self = nil then
     exit;
+  if fFavIconRouted then
+    another.Get('/favicon.ico', GetFavIcon); // let SetFavIcon() continue
   GlobalLock; // paranoid thread-safety
   try
     result := fRoute;
@@ -3240,10 +3242,13 @@ function THttpServerGeneric.GetFavIcon(Ctxt: THttpServerRequestAbstract): cardin
 begin
   if fFavIcon = '' then
     result := HTTP_NOTFOUND
+  else if FindNameValue(pointer(Ctxt.InHeaders), 'IF-NONE-MATCH:') <> nil then
+    result := HTTP_NOTMODIFIED
   else
   begin
     Ctxt.OutContent := fFavIcon;
     Ctxt.OutContentType := 'image/x-icon';
+    Ctxt.OutCustomHeaders := 'Etag: ok';
     result := HTTP_SUCCESS;
   end;
 end;

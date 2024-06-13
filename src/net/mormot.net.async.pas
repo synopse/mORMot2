@@ -5253,6 +5253,7 @@ begin
     fSettings.Server.ThreadCount, 30000, hso);
   if fSettings.Server.ServerName <> '' then
     fServer.ServerName := fSettings.Server.ServerName;
+  fServer.SetFavIcon; // once is ok
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability
