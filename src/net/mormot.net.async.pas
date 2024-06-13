@@ -1265,6 +1265,7 @@ type
     fPrivateKeyFile: TFileName;
     fPrivateKeyPassword: SpiUtf8;
     fServerName: RawUtf8;
+    fFaviconFile: TFileName;
   public
     /// initialize the default settings
     constructor Create; override;
@@ -1297,6 +1298,9 @@ type
     /// optional HTTPS private key file password
     property CACertificatesFile: TFileName
       read fCACertificatesFile write fCACertificatesFile;
+    /// optional favicon.ico file content
+    property FaviconFile: TFileName
+      read fFaviconFile write fFaviconFile;
     /// optional Server name for HTTP/HTTPS
     // - to overwrite the default value set by the framework e.g. 'mORMot2 (Linux)'
     property ServerName: RawUtf8
@@ -5253,7 +5257,7 @@ begin
     fSettings.Server.ThreadCount, 30000, hso);
   if fSettings.Server.ServerName <> '' then
     fServer.ServerName := fSettings.Server.ServerName;
-  fServer.SetFavIcon; // once is ok
+  fServer.SetFavIcon(StringFromFile(fSettings.Server.FaviconFile)); // do once
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability
