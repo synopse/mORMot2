@@ -930,7 +930,7 @@ type
     hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
-    st: TWebProcessInFrameState;
+    state: TWebProcessInFrameState;
     process: TWebSocketProcess;
     outputframe: PWebSocketFrame;
     len: integer;
@@ -2986,7 +2986,7 @@ begin
     else
       // not blocking process
       f.Step(ErrorWithoutException);
-    result := f.st = pfsDone;
+    result := f.state = pfsDone;
   finally
     LeaveCriticalSection(fSafeIn);
   end;
@@ -3050,13 +3050,13 @@ begin
   if pending < 0 then // socket error
     if ErrorWithoutException <> nil then
     begin
-      ErrorWithoutException^ := fSocket.LastLowSocketError;
+      ErrorWithoutException^ := pending; // -1 or -2
       result := false;
       exit;
     end
     else
       EWebSockets.RaiseUtf8('SockInPending() Error % on %:% - from %',
-        [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
+        [pending, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
   result := (pending > 0); // assume if we got 1 byte, we are likely to have two
 end;
 
@@ -3079,7 +3079,7 @@ procedure TWebProcessInFrame.Init(owner: TWebSocketProcess; output: PWebSocketFr
 begin
   process := owner;
   outputframe := output;
-  st := pfsHeader1;
+  state := pfsHeader1;
   len := 0;
 end;
 
@@ -3157,13 +3157,13 @@ end;
 function TWebProcessInFrame.Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
 begin
   while true do // process as much incoming data as possible
-    case st of
+    case state of
       pfsHeader1:
         if GetHeader then
         begin
           outputframe.opcode := opcode;
           outputframe.content := [];
-          st := pfsData1;
+          state := pfsData1;
         end
         else
           break; // quit when not enough data is available from input
@@ -3172,9 +3172,9 @@ begin
         begin
           outputframe.payload := data;
           if hdr.first and FRAME_OPCODE_FIN = 0 then
-            st := pfsHeaderN
+            state := pfsHeaderN
           else
-            st := pfsDone;
+            state := pfsDone;
         end
         else
           break; // not enough input yet
@@ -3182,22 +3182,20 @@ begin
         if GetHeader then
           if (opcode <> focContinuation) and
              (opcode <> outputframe.opcode) then
-          begin
-            st := pfsError;
             if ErrorWithoutException <> nil then
             begin
               WebSocketLog.Add.Log(sllDebug, 'GetFrame: received %, expected %',
                 [_TWebSocketFrameOpCode[opcode]^,
                  _TWebSocketFrameOpCode[outputframe.opcode]^], process);
-              ErrorWithoutException^ := -1;
+              state := pfsError;
+              break;
             end
             else
               EWebSockets.RaiseUtf8('%.GetFrame: received %, expected %',
                 [process, _TWebSocketFrameOpCode[opcode]^,
-                 _TWebSocketFrameOpCode[outputframe.opcode]^]);
-          end
+                 _TWebSocketFrameOpCode[outputframe.opcode]^])
           else
-            st := pfsDataN
+            state := pfsDataN
         else
           break; // not enough input yet
       pfsDataN:
@@ -3205,9 +3203,9 @@ begin
         begin
           outputframe.payload := outputframe.payload + data;
           if hdr.first and FRAME_OPCODE_FIN = 0 then
-            st := pfsHeaderN
+            state := pfsHeaderN
           else
-            st := pfsDone;
+            state := pfsDone;
         end
         else
           break; // not enough input yet
@@ -3228,7 +3226,11 @@ begin
     else
       break; // e.g. pfsError
     end;
-  result := st;
+  if state = pfsError then
+    if (ErrorWithoutException <> nil) and
+       (ErrorWithoutException^ = 0) then
+      ErrorWithoutException^ := -3; // logic error should close the socket
+  result := state;
 end;
 
 
