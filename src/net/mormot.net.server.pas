@@ -3158,7 +3158,7 @@ begin
     if fLogger = nil then // <> nil from THttpApiServer.CreateClone
     begin
       fLogger := THttpLogger.Create;
-      fLogger.Format := LOGFORMAT_COMBINED; // same default output as nginx
+      fLogger.Parse(LOGFORMAT_COMBINED); // default nginx-like format
     end;
     fOnAfterResponse := fLogger.Append;   // redirect requests to the logger
   end;
@@ -3248,7 +3248,7 @@ begin
   begin
     Ctxt.OutContent := fFavIcon;
     Ctxt.OutContentType := 'image/x-icon';
-    Ctxt.OutCustomHeaders := 'Etag: ok';
+    Ctxt.OutCustomHeaders := 'Etag: "ok"';
     result := HTTP_SUCCESS;
   end;
 end;

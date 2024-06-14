@@ -1716,6 +1716,71 @@ type
   /// dynamic array used by THttpLogger to store its per-host log writers
   THttpLoggerWriterDynArray = array of THttpLoggerWriter;
 
+  /// settings class as used by THttpLogger
+  // - defined as a sub-class for easy definition in a main settings class
+  THttpLoggerSettings = class(TSynPersistent)
+  protected
+    fFormat: RawUtf8;
+    fDestFolder, fDestMainFile, fDestErrorFile: TFileName;
+    fLineFeed: TLineFeed;
+    fDefaultRotate: THttpRotaterTrigger;
+    fDefaultRotateFiles: integer;
+  public
+    /// set default settings values
+    constructor Create; override;
+  published
+    /// direct access to the log output format
+    // - if not supplied in Create() you can assign a format at runtime via this
+    // property to call Parse() - raising EHttpLogger on error
+    // - recognized $variable names match trimmed THttpLogVariable enumeration,
+    // so will follow most of nginx log module naming convention with some
+    // welcome additions
+    // - equals by default LOGFORMAT_COMBINED, i.e. the "combined" log format
+    // - can NOT be set once the server started its logging process
+    property Format: RawUtf8
+      read fFormat write fFormat;
+    /// customize the log line feed pattern
+    // - matches the operating system value by default (CR or CRLF)
+    property LineFeed: TLineFeed
+      read fLineFeed write fLineFeed;
+    /// where the log files will be stored, if not supplied in CreateWithFile()
+    // - one main DestFolder + DestMainLog - 'access.log' by default - (rotated)
+    // file will be maintained
+    // - if not defined, GetSystemPath(spLog) will be used
+    // - DefineHost() could generate additional per Host (rotated) log file
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    // - can NOT be set once the server started its logging process
+    property DestFolder: TFileName
+      read fDestFolder write fDestFolder;
+    /// the log file name to be used in DestFolder for the main log file
+    // - equals 'access.log' by default, just like nginx
+    // - DefineHost() will use the 'hostname.log' pattern for its own log files
+    property DestMainFile: TFileName
+      read fDestMainFile write fDestMainFile;
+    /// the log file name to be used in DestFolder for the error log file
+    // - equals 'error.log' by default, just like nginx
+    // - this log file will consist in the THttpRequestState error text
+    // followed by the regular log output Format of the request (as access.log)
+    property DestErrorFile: TFileName
+      read fDestErrorFile write fDestErrorFile;
+    /// define when/how log file rotation should occur
+    // - default value is hrtAfter10MB
+    // - if set to hrtDisabled, no rotation will happen at all - but be aware
+    // that the log file may exhaust all your disk space
+    // - see also the DefineHost() optional aRotate parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotate: THttpRotaterTrigger
+      read fDefaultRotate write fDefaultRotate;
+    /// how many log files are kept by default, including the main file
+    // - default value is 9, i.e. generating 'xxx.1.gz' up to 'xxx.9.gz' backups
+    // - setting 0 would disable the whole rotation process and just delete the
+    // main file everytime the DefaultRotate condition is met
+    // - see also the DefineHost() optional aRotateFiles parameter
+    // - not used if CreateWithWriter or CreateWithFile constructors were called
+    property DefaultRotateFiles: integer
+      read fDefaultRotateFiles write fDefaultRotateFiles;
+  end;
+
   /// HTTP server responses log format parser and interpreter
   // - Format, DestFolder and DefineHost() allow to setup the logging process
   // - once parsed, log can be emitted by Append() with very high performance
@@ -1727,17 +1792,13 @@ type
     fWriterSingle: TTextDateWriter; // from CreateWithWriter/CreateWithFile
     fWriterHostSafe: TLightLock;
     fWriterHost: THttpLoggerWriterDynArray; // from Create + DefineHost
+    fSettings: THttpLoggerSettings;
     fWriterHostLast, fWriterHostMain, fWriterHostError: TTextDateWriter;
-    fFormat, fLineFeed: RawUtf8;
     fVariable: THttpLogVariableDynArray;
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
-    fDestFolder, fDestMainLog, fDestErrorLog: TFileName;
     fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
-    fDefaultRotate: THttpRotaterTrigger;
-    fDefaultRotateFiles: integer;
     fVariables: THttpLogVariables;
-    procedure SetFormat(const aFormat: RawUtf8);
-    procedure SetDestFolder(const aFolder: TFileName);
+    procedure SetSettings(aSettings: THttpLoggerSettings);
     function GetWriterFileName(const aHost: RawUtf8; aError: boolean): TFileName; virtual;
     procedure CreateMainWriters;
     function GetWriter(Tix10: cardinal; const Host: RawUtf8;
@@ -1780,10 +1841,6 @@ type
     procedure Append(var Context: TOnHttpServerAfterResponseContext); override;
     /// retrieve the main parameters from another THttpLogger instance
     procedure CopyParams(Another: THttpLogger);
-    /// customize the log line feed pattern
-    // - matches the operating system value by default (CR or CRLF)
-    property LineFeed: RawUtf8
-      read fLineFeed write fLineFeed;
     /// low-level access to the parsed log format state machine
     // - mainly used for internal testing purposes
     property Variable: THttpLogVariableDynArray
@@ -1802,52 +1859,10 @@ type
     property WriterHost: THttpLoggerWriterDynArray
       read fWriterHost;
   published
-    /// direct access to the log output format
-    // - if not supplied in Create() you can assign a format at runtime via this
-    // property to call Parse() - raising EHttpLogger on error
-    // - recognized $variable names match trimmed THttpLogVariable enumeration,
-    // so will follow most of nginx log module naming convention with some
-    // welcome additions
-    // - equals by default LOGFORMAT_COMBINED, i.e. the "combined" log format
-    // - can NOT be set once the server started its logging process
-    property Format: RawUtf8
-      read fFormat write SetFormat;
-    /// where the log files will be stored, if not supplied in CreateWithFile()
-    // - one main DestFolder + DestMainLog - 'access.log' by default - (rotated)
-    // file will be maintained
-    // - if not defined, GetSystemPath(spLog) will be used
-    // - DefineHost() could generate additional per Host (rotated) log file
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    // - can NOT be set once the server started its logging process
-    property DestFolder: TFileName
-      read fDestFolder write SetDestFolder;
-    /// the log file name to be used in DestFolder for the main log file
-    // - equals 'access.log' by default, just like nginx
-    // - DefineHost() will use the 'hostname.log' pattern for its own log files
-    property DestMainLog: TFileName
-      read fDestMainLog write fDestMainLog;
-    /// the log file name to be used in DestFolder for the error log file
-    // - equals 'error.log' by default, just like nginx
-    // - this log file will consist in the THttpRequestState error text
-    // followed by the regular log output Format of the request (as access.log)
-    property DestErrorLog: TFileName
-      read fDestErrorLog write fDestErrorLog;
-    /// define when/how log file rotation should occur
-    // - default value is hrtAfter10MB
-    // - if set to hrtDisabled, no rotation will happen at all - but be aware
-    // that the log file may exhaust all your disk space
-    // - see also the DefineHost() optional aRotate parameter
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DefaultRotate: THttpRotaterTrigger
-      read fDefaultRotate write fDefaultRotate;
-    /// how many log files are kept by default, including the main file
-    // - default value is 9, i.e. generating 'xxx.1.gz' up to 'xxx.9.gz' backups
-    // - setting 0 would disable the whole rotation process and just delete the
-    // main file everytime the DefaultRotate condition is met
-    // - see also the DefineHost() optional aRotateFiles parameter
-    // - not used if CreateWithWriter or CreateWithFile constructors were called
-    property DefaultRotateFiles: integer
-      read fDefaultRotateFiles write fDefaultRotateFiles;
+    /// the associated settings, owned by this instance
+    // - if you change the settings fields directly, call
+    property Settings: THttpLoggerSettings
+      read fSettings write SetSettings;
   end;
 
   /// exception raised by THttpAnalyzer related classes
@@ -5122,16 +5137,24 @@ begin
 end;
 
 
+{ THttpLoggerSettings }
+
+constructor THttpLoggerSettings.Create;
+begin
+  inherited Create;
+  fDefaultRotate := hrtAfter10MB;
+  fDefaultRotateFiles := 9;
+  fDestMainFile  := 'access.log';
+  fDestErrorFile := 'error.log';
+end;
+
+
 { THttpLogger }
 
 constructor THttpLogger.Create;
 begin
   inherited Create;  // fSafe.Init
-  fLineFeed := CRLF; // default operating-system dependent Line Feed
-  fDefaultRotate := hrtAfter10MB;
-  fDefaultRotateFiles := 9;
-  fDestMainLog := 'access.log';
-  fDestErrorLog := 'error.log';
+  fSettings := THttpLoggerSettings.Create;
 end;
 
 constructor THttpLogger.CreateWithWriter(aWriter: TTextDateWriter;
@@ -5166,6 +5189,7 @@ begin
     FreeAndNilSafe(fWriterSingle);
   for i := 0 to high(fWriterHost) do
     FreeAndNilSafe(fWriterHost[i]);
+  FreeAndNil(fSettings);
 end;
 
 procedure THttpLogger.OnIdle(tix64: Int64);
@@ -5204,13 +5228,13 @@ end;
 function THttpLogger.GetWriterFileName(
   const aHost: RawUtf8; aError: boolean): TFileName;
 begin
-  if fDestFolder = '' then
-    fDestFolder := GetSystemPath(spLog); // default if not customized
-  result := fDestFolder;
+  if fSettings.DestFolder = '' then
+    fSettings.DestFolder := GetSystemPath(spLog); // default if not customized
+  result := fSettings.DestFolder;
   if aError then
-    result := result + fDestErrorLog
+    result := result + fSettings.DestErrorFile
   else if aHost = '' then
-    result := result + fDestMainLog
+    result := result + fSettings.DestMainFile
   else
     result := FormatString('%%.log', [result, LowerCase(aHost)]);
 end;
@@ -5218,12 +5242,12 @@ end;
 procedure THttpLogger.CreateMainWriters;
 begin
   // caller made fWriterHostSafe.Lock
-  fWriterHostMain := THttpLoggerWriter.Create(
-    self, '', {error=}false, fDefaultRotate, fDefaultRotateFiles);
+  fWriterHostMain := THttpLoggerWriter.Create(self, '',
+    {error=}false, fSettings.DefaultRotate, fSettings.DefaultRotateFiles);
   ObjArrayAdd(fWriterHost, fWriterHostMain);
   // DefineHost() filters '!' so error.log has a fake name for debugging
-  fWriterHostError := THttpLoggerWriter.Create(
-    self, '!error.log!', {error=}true, fDefaultRotate, fDefaultRotateFiles);
+  fWriterHostError := THttpLoggerWriter.Create(self, '!error.log!',
+    {error=}true, fSettings.DefaultRotate, fSettings.DefaultRotateFiles);
   ObjArrayAdd(fWriterHost, fWriterHostError);
 end;
 
@@ -5340,9 +5364,9 @@ begin
       end;
     // add a new definition for this specific host
     if aRotate = hrtUndefined then
-      aRotate := fDefaultRotate;
+      aRotate := fSettings.DefaultRotate;
     if aRotateFiles < 0 then
-      aRotateFiles := fDefaultRotateFiles;
+      aRotateFiles := fSettings.DefaultRotateFiles;
     w := THttpLoggerWriter.Create(self, h, {err=}false, aRotate, aRotateFiles);
     ObjArrayAdd(fWriterHost, w);
     include(fFlags, ffHadDefineHost);
@@ -5351,25 +5375,29 @@ begin
   end;
 end;
 
-procedure THttpLogger.SetFormat(const aFormat: RawUtf8);
+procedure THttpLogger.SetSettings(aSettings: THttpLoggerSettings);
 var
-  err: RawUtf8;
-begin
-  if aFormat = fFormat then
-    exit;
-  err := Parse(aFormat);
-  if err <> '' then
-    EHttpLogger.RaiseUtf8('%.SetFormat: % in [%]', [self, err, aFormat]);
-end;
-
-procedure THttpLogger.SetDestFolder(const aFolder: TFileName);
+  prev, err: RawUtf8;
 begin
   if (fWriterHost <> nil) or
      (fWriterSingle <> nil) then
-    EHttpLogger.RaiseUtf8('Impossible to set %.DestFolder once started', [self]);
-  fDestFolder := EnsureDirectoryExists(aFolder, EHttpLogger);
-  if not IsDirectoryWritable(fDestFolder, [idwExcludeWinSys]) then
-    EHttpLogger.RaiseUtf8('Not writable %.DestFolder = %', [self, aFolder]);
+    EHttpLogger.RaiseUtf8('Impossible to change %.Settings once started', [self]);
+  prev := fSettings.Format;
+  CopyObject(aSettings, fSettings);
+  if fSettings.Format = '' then
+    fSettings.Format := LOGFORMAT_COMBINED;
+  if fSettings.DestFolder <> '' then
+  begin
+    fSettings.DestFolder := EnsureDirectoryExists(fSettings.DestFolder, EHttpLogger);
+    if not IsDirectoryWritable(fSettings.DestFolder, [idwExcludeWinSys]) then
+      EHttpLogger.RaiseUtf8('Read-only %.Settings.DestFolder = %',
+        [self, fSettings.DestFolder]);
+  end;
+  if fSettings.Format <> prev then
+    err := Parse(fSettings.Format);
+  if err <> '' then
+    EHttpLogger.RaiseUtf8('%.SetSettings Format: % in [%]',
+      [self, err, fSettings.Format]);
 end;
 
 function THttpLogger.Parse(const aFormat: RawUtf8): RawUtf8;
@@ -5395,7 +5423,7 @@ begin
   fVariables := [];
   fUnknownPosLen := nil;
   // parse the input format using RTTI for $variable names
-  fFormat := aFormat;
+  fSettings.Format := aFormat;
   p := pointer(aFormat);
   repeat
     start := p;
@@ -5424,7 +5452,7 @@ begin
     include(fVariables, THttpLogVariable(v));
   until false;
   // reset internal state on error parsing
-  fFormat := '';
+  fSettings.Format := '';
   fVariable := nil;
   fVariables := [];
   fUnknownPosLen := nil;
@@ -5499,7 +5527,8 @@ begin
       case v^ of // compile as a fast lookup table jump on FPC
         hlvUnknown: // plain text
           begin
-            wr.AddNoJsonEscape(@PByteArray(fFormat)[poslen^[0]], poslen^[1]);
+            wr.AddNoJsonEscape(
+              @PByteArray(fSettings.Format)[poslen^[0]], poslen^[1]);
             poslen := @poslen^[2]; // next pos,len pair
           end;
         hlvBody_Bytes_Sent, // no body size by now
@@ -5608,7 +5637,7 @@ begin
       inc(v);
       dec(n);
     until n = 0;
-    wr.AddString(fLineFeed);
+    wr.AddShorter(LINE_FEED[fSettings.LineFeed]);
     if (fWriterSingle = nil) and
        (THttpLoggerWriter(wr).fLastWriteToStreamTix10 <> tix10) then
       wr.FlushFinal; // force write to disk at least every second
@@ -5626,11 +5655,7 @@ begin
      (fWriterHost <> nil) or // too late
      (fWriterSingle <> nil) then
     exit;
-  SetDestFolder(Another.DestFolder);
-  SetFormat(Another.Format);
-  LineFeed := Another.LineFeed;
-  DefaultRotate := Another.DefaultRotate;
-  DefaultRotateFiles := Another.DefaultRotateFiles;
+  SetSettings(Another.Settings);
 end;
 
 
