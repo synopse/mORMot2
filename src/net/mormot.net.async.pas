@@ -5456,11 +5456,9 @@ begin
                      not (psoDisableFolderHtmlIndexCache in fSettings.Server.Options) then
                     one.fMemCached.Add(name, cached);
                 end;
-                result := HTTP_SUCCESS;
-                Ctxt.OutContent := cached;
-                Ctxt.OutContentType := HTML_CONTENT_TYPE;
+                result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
               end;
-          end;
+          end; // may be e.g. HTTP_NOTMODIFIED (304)
           fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
             [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
         end;
