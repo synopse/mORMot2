@@ -8623,6 +8623,25 @@ begin
   if (Content <> nil) and
      (Len > 4) then
   begin
+    if PAnsiChar(Content)^ = '<' then
+      case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
+        ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+          begin
+            result := mtHtml;
+            exit;
+          end;
+        ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
+          begin
+            if IdemPChar(PAnsiChar(Content) + 5, 'TYPE HTML') then
+              result := mtHtml;
+            exit;
+          end;
+        ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
+          begin
+            result := mtXml;
+            exit;
+          end;
+      end;
     i := IntegerScanIndex(@MIME_MAGIC, length(MIME_MAGIC), PCardinal(Content)^ + 1);
     // + 1 to avoid finding it in the exe - may use SSE2
     if i >= 0 then
