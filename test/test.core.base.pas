@@ -6746,6 +6746,20 @@ begin
     CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
     CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
   end;
+  s := '<?xml';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
+  s := '<html><body>';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  s := '<!doctype html><html><body>';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  s := '<!doctype note>';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
+  s := '<?XML';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
+  s := '<HTML><body>';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  s := '<!DocType HTML<html><body>';
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   // mime multipart encoding
   for rfc2388 := false to true do
   begin
