@@ -1265,7 +1265,7 @@ type
     fPrivateKeyFile: TFileName;
     fPrivateKeyPassword: SpiUtf8;
     fServerName: RawUtf8;
-    fLogFormat: RawUtf8;
+    fLog: THttpLoggerSettings;
     fFaviconFile: TFileName;
   public
     /// initialize the default settings
@@ -1286,10 +1286,10 @@ type
     // content is to be generated
     property ThreadCount: integer
       read fThreadCount write fThreadCount;
-    /// custom log format for the psoEnableLogging option
-    // - to override default LOGFORMAT_COMBINED output
-    property LogFormat: RawUtf8
-      read fLogFormat write fLogFormat;
+    /// custom log settings for the psoEnableLogging option
+    // - e.g. to override default LOGFORMAT_COMBINED output, or rotation settings
+    property Log: THttpLoggerSettings
+      read fLog write fLog;
     /// optional HTTPS certificate file name
     // - should also set PrivateKeyFile and PrivateKeyPassword
     property CertificateFile: TFileName
@@ -5263,9 +5263,8 @@ begin
     fSettings.Server.ThreadCount, 30000, hso);
   if fSettings.Server.ServerName <> '' then
     fServer.ServerName := fSettings.Server.ServerName; // override 'mORMot (OS)'
-  if (fServer.Logger <> nil) and
-     (fSettings.Server.LogFormat <> '') then
-    fServer.Logger.Format := fSettings.Server.LogFormat; // override default
+  if fServer.Logger <> nil then
+    fServer.Logger.Settings := fSettings.Server.Log; // override default
   fServer.SetFavIcon(StringFromFile(fSettings.Server.FaviconFile)); // do once
   // setup the URI routes
   AfterServerStarted;
