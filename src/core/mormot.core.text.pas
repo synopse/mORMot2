@@ -2188,6 +2188,10 @@ function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: PtrInt): TShort16;
 procedure BinBitsToHexDisplayLowerShort16(Bin: Int64; BinBits: PtrInt;
   var Result: TShort16);
 
+/// trim right '0' chars in a text buffer - e.g. from BinToHexLower()
+function TrimMinDisplayHex(Text: PUtf8Char; TextLen: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast conversion from binary data into hexa lowercase chars, ready to be
 // used as a convenient TFileName prefix
 function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: PtrInt): TFileName;
@@ -9669,6 +9673,14 @@ begin
   BinToHexDisplayLower(Bin, pointer(result), BinBytes);
 end;
 {$endif UNICODE}
+
+function TrimMinDisplayHex(Text: PUtf8Char; TextLen: PtrInt): PtrInt;
+begin
+  while (TextLen <> 0) and
+        (Text[TextLen - 1] = '0') do
+    dec(TextLen);
+  result := TextLen;
+end;
 
 procedure PointerToHex(aPointer: pointer; var result: RawUtf8);
 begin

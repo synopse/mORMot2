@@ -3881,10 +3881,10 @@ end;
 
 procedure InitializeUnit;
 begin
-  AlgoDeflate := TAlgoDeflate.Create;
+  AlgoDeflate     := TAlgoDeflate.Create;
   AlgoDeflateFast := TAlgoDeflateFast.Create;
-  AlgoGZ := TAlgoGZ.Create;
-  AlgoGZFast := TAlgoGZFast.Create;
+  AlgoGZ          := TAlgoGZ.Create;
+  AlgoGZFast      := TAlgoGZFast.Create;
   // libdeflate: when memory is cheap, use it rather than the CPU
   {$ifdef LIBDEFLATESTATIC}
   {$ifdef CPU64}
