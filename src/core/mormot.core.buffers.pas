@@ -8632,7 +8632,7 @@ begin
           end;
         ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
           begin
-            if IdemPChar(PAnsiChar(Content) + 5, 'TYPE HTML') then
+            if IdemPChar(PUtf8Char(Content) + 5, 'TYPE HTML') then
               result := mtHtml;
             exit;
           end;

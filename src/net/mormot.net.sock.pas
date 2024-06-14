@@ -4982,7 +4982,7 @@ const
     'open', 'bind');
   BINDMSG: array[boolean] of string = (
     'Is a server available on this address:port?',
-    'Another process may be currently listening to this port!');
+    'Port may be invalid or already bound by another process!');
 
 constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
   aTimeOut: integer; aReusePort: boolean);
