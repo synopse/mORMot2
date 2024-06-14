@@ -661,7 +661,7 @@ const
     '%-%-%%%:%:%.%%');
 
 /// compute an Etag: xxxx value from 64-bit of information, as '"xxxxxx...xxxx"' text
-procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort31);
+procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort23);
 
 /// handle HTTP_NOTMODIFIED (304) process against raw file information
 // - decode both 'if-none-match' and 'if-modified-since' input headers
@@ -2856,7 +2856,7 @@ begin
   T.ToFileShort(result);
 end;
 
-procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort31);
+procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort23);
 begin
   Etag[1] := '"';
   BinToHexLower(@Value, @Etag[2], SizeOf(Value));
@@ -2867,7 +2867,7 @@ end;
 function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
   const InHeaders: RawUtf8; var OutHeaders: RawUtf8): boolean;
 var
-  etag: TShort31;
+  etag: TShort23;
   hdr: RawUtf8;
 begin
   result := true; // return true as HTTP_NOTMODIFIED (304) status code
@@ -2884,7 +2884,7 @@ end;
 function ContentHttp304NotModified(const Content, InHeaders: RawUtf8;
   var OutHeaders: RawUtf8): boolean;
 var
-  etag: TShort31;
+  etag: TShort23;
   hdr: RawUtf8;
 begin
   result := true;

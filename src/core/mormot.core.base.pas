@@ -502,6 +502,10 @@ type
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
+  /// used e.g. by Int64ToHttpEtag
+  TShort23 = string[23];
+  PShort23 = ^TShort23;
+
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
   // - such result type would avoid a string allocation on heap, so are highly
   // recommended e.g. when logging small pieces of information
@@ -1132,7 +1136,7 @@ procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 /// no banker rounding into text, with two digits after the decimal point
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
 // - this function will only allow 2 digits in the returned text
-function TwoDigits(const d: double): TShort31;
+function TwoDigits(const d: double): TShort23;
 
 /// truncate a currency value to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -4320,7 +4324,7 @@ begin
       dec(Value, spare);
 end;
 
-function TwoDigits(const d: double): TShort31;
+function TwoDigits(const d: double): TShort23;
 var
   v: Int64;
   m, L: PtrInt;
