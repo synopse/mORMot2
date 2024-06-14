@@ -43,6 +43,13 @@ uses
 
 { ****************** Some Cross-System Type and Constant Definitions }
 
+type
+  /// allow to customize the possible line feeds
+  TLineFeed = (
+    lfSystem,
+    lfCR,
+    lfCRLF);
+
 const
   {$ifdef OSWINDOWS}
   /// operating-system dependent Line Feed characters (#13#10 or #10)
@@ -63,6 +70,8 @@ const
   /// operating-system dependent boolean if paths are case-insensitive
   PathCaseInsensitive = false;
   {$endif OSWINDOWS}
+  /// convert a TLineFeed value into its UTF-8 text representation
+  LINE_FEED: array[TLineFeed] of string[3] = (CRLF, #10, #13#10);
 
   /// human-friendly alias to open a file for exclusive writing
   fmShareRead      = fmShareDenyWrite;
