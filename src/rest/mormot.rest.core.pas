@@ -4069,20 +4069,27 @@ procedure TRestUriContext.ReturnFile(const FileName: TFileName;
   const AttachmentFileName: RawUtf8; const Error404Redirect: RawUtf8;
   CacheControlMaxAgeSec: integer);
 var
-  unixfiletime: TUnixTime;
-  clienthash, serverhash: RawUtf8;
+  size: Int64;
+  time: TUnixMSTime;
 begin
-  if FileName = '' then
-    unixfiletime := 0
-  else
-    unixfiletime := FileAgeToUnixTimeUtc(FileName); // fast API call
-  if unixfiletime = 0 then
+  if not FileInfoByName(FileName, size, time) or
+     (size < 0) then // -1 if FileName is a folder
     if Error404Redirect <> '' then
       Redirect(Error404Redirect)
     else
       Error('', HTTP_NOTFOUND, CacheControlMaxAgeSec)
   else
   begin
+    if CacheControlMaxAgeSec > 0 then
+      AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
+    fCall^.OutStatus := HTTP_SUCCESS;
+    if Handle304NotModified and
+       FileHttp304NotModified(size, time, fCall^.InHead, fCall^.OutHead) then
+    begin
+      fCall^.OutStatus := HTTP_NOTMODIFIED;
+      exit;
+    end;
+    // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
     if not ExistsIniName(pointer(fCall^.OutHead), HEADER_CONTENT_TYPE_UPPER) then
     begin
       if ContentType <> '' then
@@ -4090,21 +4097,6 @@ begin
       else
         AppendLine(fCall^.OutHead, [GetMimeContentTypeHeader('', FileName)]);
     end;
-    if CacheControlMaxAgeSec > 0 then
-      AppendLine(fCall^.OutHead, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
-    fCall^.OutStatus := HTTP_SUCCESS;
-    if Handle304NotModified then
-    begin
-      FindNameValue(fCall^.InHead, 'IF-NONE-MATCH:', clienthash);
-      UInt64ToUtf8(unixfiletime, serverhash);
-      AppendLine(fCall^.OutHead, ['ETag: ', serverhash]);
-      if clienthash = serverhash then
-      begin
-        fCall^.OutStatus := HTTP_NOTMODIFIED;
-        exit;
-      end;
-    end;
-    // Content-Type: appears twice: 1st to notify static file, 2nd for mime type
     Prepend(fCall^.OutHead, [STATICFILE_CONTENT_TYPE_HEADER + #13#10]);
     StringToUtf8(FileName, fCall^.OutBody); // body=filename for STATICFILE_CONTENT
     if AttachmentFileName <> '' then
