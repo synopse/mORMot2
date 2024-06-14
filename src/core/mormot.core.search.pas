@@ -109,7 +109,7 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 procedure FindFilesSortByTimestamp(var Files: TFindFilesDynArray);
 
 /// compute the HTML index page corresponding to a local folder
-procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
+procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
   out Html: RawUtf8);
 
 
@@ -1870,7 +1870,7 @@ begin
   FindClose(sr);
 end;
 
-procedure SetOutFolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
+procedure FolderHtmlIndex(const Folder: TFileName; const Path, Name: RawUtf8;
   out Html: RawUtf8);
 const
   _DIR: array[boolean] of string[7] = ('[dir]', '&nbsp;');
