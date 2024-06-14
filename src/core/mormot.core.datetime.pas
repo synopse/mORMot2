@@ -660,6 +660,21 @@ const
     '%%%%%%%%%',
     '%-%-%%%:%:%.%%');
 
+/// compute an Etag: xxxx value from 64-bit of information, as '"xxxxxx...xxxx"' text
+procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort31);
+
+/// handle HTTP_NOTMODIFIED (304) process against raw file information
+// - decode both 'if-none-match' and 'if-modified-since' input headers
+// - returns true if 304 status code is to be returned
+function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
+  const InHeaders: RawUtf8; var OutHeaders: RawUtf8): boolean;
+
+/// handle HTTP_NOTMODIFIED (304) process against raw body content
+// - decode 'if-none-match' input header against the supplied Content
+// - returns true if 304 status code is to be returned
+function ContentHttp304NotModified(const Content, InHeaders: RawUtf8;
+  var OutHeaders: RawUtf8): boolean;
+
 
 
 { ************ TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time }
@@ -2839,6 +2854,47 @@ var
 begin
   T.FromNow(localtime);
   T.ToFileShort(result);
+end;
+
+procedure Int64ToHttpEtag(Value: Int64; out Etag: TShort31);
+begin
+  Etag[1] := '"';
+  BinToHexLower(@Value, @Etag[2], SizeOf(Value));
+  Etag[0] := AnsiChar(TrimMinDisplayHex(@Etag[1], 17) + 1);
+  Etag[ord(Etag[0])] := '"';
+end;
+
+function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
+  const InHeaders: RawUtf8; var OutHeaders: RawUtf8): boolean;
+var
+  etag: TShort31;
+  hdr: RawUtf8;
+begin
+  result := true; // return true as HTTP_NOTMODIFIED (304) status code
+  Int64ToHttpEtag((Size shl 16) xor (Time shr 9), Etag); // 512ms resolution
+  if (FindNameValue(InHeaders, 'IF-NONE-MATCH:', hdr) and
+      IdemPropName(etag, pointer(hdr), length(hdr))) or
+     (FindNameValue(InHeaders, 'IF-MODIFIED-SINCE:', hdr) and
+      IdemPropName(UnixMSTimeUtcToHttpDate(Time), pointer(hdr), length(hdr))) then
+    exit;
+  result := false;
+  AppendLine(OutHeaders, ['Etag: ', etag]);
+end;
+
+function ContentHttp304NotModified(const Content, InHeaders: RawUtf8;
+  var OutHeaders: RawUtf8): boolean;
+var
+  etag: TShort31;
+  hdr: RawUtf8;
+begin
+  result := true;
+  Int64ToHttpEtag(Int64(crc32c(0, pointer(Content), length(Content))) shl 8
+                    xor length(Content), etag);
+  if FindNameValue(InHeaders, 'IF-NONE-MATCH:', hdr) and
+     IdemPropName(etag, pointer(hdr), length(hdr)) then
+    exit;
+  result := false;
+  AppendLine(OutHeaders, ['Etag: ', etag]);
 end;
 
 
