@@ -846,13 +846,19 @@ type
       const ContentType: RawUtf8 = TEXT_CONTENT_TYPE);
     /// set the OutContent and OutContentType fields to return a specific file
     // - returning status 200 with the STATICFILE_CONTENT_TYPE constant marker
-    // - if Handle304NotModified is TRUE, will check the file age to ensure
-    // that the file content will be sent back to the server only if it changed;
-    // set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
+    // - Handle304NotModified = TRUE will check the file age and size and return
+    // status HTTP_NOTMODIFIED (304) if the file did not change
+    // - set CacheControlMaxAgeSec<>0 to include a Cache-Control: max-age=xxx header
     // - can optionally return FileSize^ (0 if not found, -1 if is a folder)
     function SetOutFile(const FileName: TFileName; Handle304NotModified: boolean;
       const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0;
       FileSize: PInt64 = nil): integer;
+    /// set the OutContent and OutContentType fields to return a specific file
+    // - returning status 200 with the supplied Content (and optional ContentType)
+    // - Handle304NotModified = TRUE will check the supplied content and return
+    // status HTTP_NOTMODIFIED (304) if it did not change
+    function SetOutContent(const Content: RawByteString; Handle304NotModified: boolean;
+      const ContentType: RawUtf8 = ''; CacheControlMaxAgeSec: integer = 0): integer;
   published
     /// input parameter containing the caller URI
     property Url: RawUtf8
@@ -1549,7 +1555,7 @@ type
       read fOnContinue write fOnContinue;
   end;
 
-  /// supported THttpLoger place holders
+  /// supported THttpLoger place holders (stored as a 64-bit set)
   // - uses RTTI to parse the actual variable names e.g. '$uri' into hlvUri
   // or '$uri_hash' into hlvUri_Hash
   // - matches nginx log module naming, with some additional fields
@@ -4646,7 +4652,6 @@ function THttpServerRequestAbstract.SetOutFile(const FileName: TFileName;
 var
   fs: Int64;
   ts: TUnixMSTime;
-  ims: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
   if FileSize <> nil then
@@ -4657,22 +4662,38 @@ begin
     FileSize^ := fs;
   if fs < 0 then
     exit; // FileName is a folder: return false with FileSize^ = -1
-  fOutContentType := ContentType;
-  if fOutContentType = '' then
-    fOutContentType := GetMimeContentTypeHeader('', FileName);
   if CacheControlMaxAgeSec <> 0 then
     AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
   if Handle304NotModified and
-     FindNameValue(fInHeaders, 'IF-MODIFIED-SINCE:', ims) and
-     IdemPropName(UnixMSTimeUtcToHttpDate(ts), pointer(ims), length(ims)) then
+     FileHttp304NotModified(fs, ts, fInHeaders, fOutCustomHeaders) then
   begin
     result := HTTP_NOTMODIFIED;
     exit;
   end;
-  result := HTTP_SUCCESS;
+  fOutContentType := ContentType;
+  if fOutContentType = '' then
+    fOutContentType := GetMimeContentTypeHeader('', FileName);
   AppendLine(fOutCustomHeaders, [fOutContentType]);
   fOutContentType := STATICFILE_CONTENT_TYPE;
   StringToUtf8(FileName, RawUtf8(fOutContent));
+  result := HTTP_SUCCESS;
+end;
+
+function THttpServerRequestAbstract.SetOutContent(const Content: RawByteString;
+  Handle304NotModified: boolean; const ContentType: RawUtf8;
+  CacheControlMaxAgeSec: integer): integer;
+begin
+  if CacheControlMaxAgeSec <> 0 then
+    AppendLine(fOutCustomHeaders, ['Cache-Control: max-age=', CacheControlMaxAgeSec]);
+  result := HTTP_NOTMODIFIED;
+  if Handle304NotModified and
+     ContentHttp304NotModified(Content, fInHeaders, fOutCustomHeaders) then
+    exit;
+  fOutContentType := ContentType;
+  if fOutContentType = '' then
+    fOutContentType := GetMimeContentType(pointer(Content), length(Content));
+  fOutContent := Content;
+  result := HTTP_SUCCESS;
 end;
 
 
