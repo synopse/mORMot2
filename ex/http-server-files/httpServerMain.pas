@@ -48,16 +48,17 @@ begin
       console := Option(['c', 'console'],    'debug output to the console');
       verbose := Option(['v', 'logverbose'], 'enable verbose log');
       silent  := Option('silent', 'no output to the console');
+      settingsfolder := ParamS(['s', 'settings'], '#folder where *.json are located',
+        Executable.ProgramFilePath + 'sites-enabled');
+      folder := ParamS(['f', 'folder'], 'a local #foldername to serve');
+      url := Param(['u', 'url'], 'a root #uri to serve this folder');
       SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
+      SetObjectFromExecutableCommandLine(settings.Server.Log, 'Log', ' for EnableLogging');
       {$ifdef USE_OPENSSL}
       OpenSslDefaultPath := ParamS(['LibSsl'], 'OpenSSL libraries #path');
       if OpenSslInitialize then
         RegisterOpenSsl;
       {$endif USE_OPENSSL}
-      settingsfolder := ParamS(['s', 'settings'], '#folder where *.json are located',
-        Executable.ProgramFilePath + 'sites-enabled');
-      folder := ParamS(['f', 'folder'], 'a local #foldername to serve');
-      url := Param(['u', 'url'], 'a root #uri to serve this folder');
       if ConsoleHelpFailed('mORMot HTTP/HTTPS File Server') then
       begin
         ExitCode := 1;
@@ -86,7 +87,8 @@ begin
       settings.AddFolder(folder, url);
     if settings.Url = nil then
     begin
-      ConsoleWrite('No folder to serve', ccLightRed);
+      ConsoleWrite('No folder to serve'#10, ccLightRed);
+      ConsoleWrite(Executable.Command.FullDescription);
       ExitCode := 2;
       exit;
     end;
@@ -108,17 +110,18 @@ begin
         PerThreadLog := ptIdentifiedInOneFile;
         HighResolutionTimestamp := true;
         AutoFlushTimeOut := 1;
-
       end;
     // run the server
     server := THttpProxyServer.Create(settings);
     try
       if not silent then
-        ConsoleWrite(['Bind server at ', settings.Server.Port]);
+        ConsoleWrite(['Bind server ', settings.Server.Port]);
       server.Start;
+      if not silent then
+        ConsoleWrite('Server running. Press [Enter] or Ctrl+C to quit.');
       ConsoleWaitForEnterKey;
       if not silent then
-        ConsoleWrite('Server shuting down');
+        ConsoleWrite('Server shutting down...');
     finally
       server.Free;
     end;
