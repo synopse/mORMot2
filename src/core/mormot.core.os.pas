@@ -8836,7 +8836,10 @@ begin
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
         if clk = clkArg then
-          result := result + 'Missing <' + fDescArg[i] + '> argument' + fLineFeed
+          if fDescArg = nil then
+            result := result + 'Unexpected "' + fRawParams[i] + '" argument' + fLineFeed
+          else
+            result := result + 'Missing <' + fDescArg[i]+ '> argument' + fLineFeed
         else
         begin
           result := result + 'Unexpected ' + SwitchAsText(fNames[clk][i]) + ' ';
