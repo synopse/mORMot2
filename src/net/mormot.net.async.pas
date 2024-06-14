@@ -5239,6 +5239,7 @@ var
   {%H-}log: ISynLog;
   hso: THttpServerOptions;
   tls: TNetTlsContext;
+  fav: RawByteString;
 begin
   log := fLog.Enter('Start %', [fSettings], self);
   // compute options from settings
@@ -5265,7 +5266,10 @@ begin
     fServer.ServerName := fSettings.Server.ServerName; // override 'mORMot (OS)'
   if fServer.Logger <> nil then
     fServer.Logger.Settings := fSettings.Server.Log; // override default
-  fServer.SetFavIcon(StringFromFile(fSettings.Server.FaviconFile)); // do once
+  fav := StringFromFile(fSettings.Server.FaviconFile);
+  if fav = '' then
+    fav := 'default';
+  fServer.SetFavIcon(fav); // do once
   // setup the URI routes
   AfterServerStarted;
   // wait for actual server availability
