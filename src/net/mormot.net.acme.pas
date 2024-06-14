@@ -1300,7 +1300,7 @@ begin
     if hsoEnableLogging in opt then
     begin
       fHttpServer.Logger.CopyParams(fHttpServer.Logger);
-      fHttpServer.Logger.DestMainLog := 'access80.log';
+      fHttpServer.Logger.Settings.DestMainFile := 'access80.log';
     end;
   end;
   // setup the ACME configuration
