@@ -9334,7 +9334,7 @@ begin
     result := nil
   else
   begin
-    result := Rtti.RegisterClass(aFrom.ClassType).ClassNewInstance;
+    result := Rtti.RegisterClass(aFrom).ClassNewInstance;
     CopyObject(aFrom, result);
   end;
 end;
@@ -9389,7 +9389,7 @@ var
 begin
   if Value = nil then
     exit;
-  rc := Rtti.RegisterClass(Value.ClassType);
+  rc := Rtti.RegisterClass(Value);
   p := pointer(rc.Props.List);
   for i := 1 to rc.Props.Count do
   begin
@@ -9420,7 +9420,7 @@ begin
   if Value <> nil then
   begin
     result := false;
-    rc := Rtti.RegisterClass(Value.ClassType);
+    rc := Rtti.RegisterClass(Value);
     if (rc.ValueRtlClass <> vcNone) and
        (rc.ValueIterateCount(@Value) > 0) then
       exit; // e.g. TObjectList.Count or TCollection.Count
@@ -9450,7 +9450,7 @@ begin
     exit;
   if CommandLine = nil then
     CommandLine := Executable.Command;
-  rc := Rtti.RegisterClass(Value.ClassType);
+  rc := Rtti.RegisterClass(Value);
   p := pointer(rc.Props.List);
   for i := 1 to rc.Props.Count do
   begin

@@ -2758,7 +2758,7 @@ begin
     if c.fLastOperation <= oldms then // AddGC() set c.fLastOperation as ms
     begin
       // release after timeout
-      if d >= length(dst.Items) then
+      if d = length(dst.Items) then
         SetLength(dst.Items, NextGrow(d));
       dst.Items[d] := c;
       inc(d);
