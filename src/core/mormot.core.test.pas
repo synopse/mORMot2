@@ -352,20 +352,20 @@ type
   TSynTests = class(TSynTest)
   protected
     /// any number not null assigned to this field will display a "../sec" stat
-    fRunConsoleOccurrenceNumber: cardinal;
     fTestCaseClass: array of TSynTestCaseClass;
     fAssertions: integer;
     fAssertionsFailed: integer;
+    fRunConsoleOccurrenceNumber: cardinal;
     fCurrentMethodInfo: PSynTestMethodInfo;
-    fSaveToFile: System.Text;
     fSafe: TSynLocker;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
     fNotifyProgressLineLen: integer;
     fNotifyProgress: RawUtf8;
+    fSaveToFileBeforeExternal: THandle;
+    procedure EndSaveToFileExternal;
     function GetFailedCount: integer;
     function GetFailed(Index: integer): TSynTestFailed;
-    procedure CreateSaveToFile; virtual;
     /// low-level output on the console - use TSynTestCase.AddConsole instead
     procedure DoText(const value: RawUtf8); overload; virtual;
     /// low-level output on the console - use TSynTestCase.AddConsole instead
@@ -426,9 +426,8 @@ type
       options: TSynTestOptions = []; const workdir: TFileName = ''); virtual;
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
+    // - will also redirect the main StdOut variable into the specified file
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName = '');
-    /// save the debug messages into an existing Text file
-    procedure SaveToText(var aDest: System.Text);
     /// register a specified Test case from its class name
     // - an instance of the supplied class will be created during Run
     // - the published methods of the children must call this method in order
@@ -496,7 +495,7 @@ type
   protected
     fLogFile: TSynLog;
     fConsoleDup: RawUtf8;
-    procedure CreateSaveToFile; override;
+    procedure CustomConsoleOutput(const value: RawUtf8);
     /// called when a test case failed: log into the file
     procedure AddFailed(const msg: string); override;
     /// this method is called before every run
@@ -1157,46 +1156,49 @@ begin
   fSafe.Init;
 end;
 
+procedure TSynTests.EndSaveToFileExternal;
+begin
+  if fSaveToFileBeforeExternal = 0 then
+    exit;
+  FileClose(StdOut);
+  StdOut := fSaveToFileBeforeExternal;
+  fSaveToFileBeforeExternal := 0;
+end;
+
 destructor TSynTests.Destroy;
 begin
-  if TTextRec(fSaveToFile).Handle <> 0 then
-    Close(fSaveToFile);
+  EndSaveToFileExternal;
   inherited Destroy;
   fSafe.Done;
 end;
 
-{$I-}
-
 procedure TSynTests.DoColor(aColor: TConsoleColor);
 begin
-  if (StdOut <> 0) and
-     (THandle(TTextRec(fSaveToFile).Handle) = StdOut) then
+  if fSaveToFileBeforeExternal = 0 then
     TextColor(aColor);
 end;
 
 procedure TSynTests.DoText(const value: RawUtf8);
 begin
-  write(fSaveToFile, value);
+  ConsoleWrite(value, ccLightGray, {nolf=}true, {nocolor=}true);
   if Assigned(CustomOutput) then
     CustomOutput(value);
 end;
 
 procedure TSynTests.DoText(const values: array of const);
 var
-  i: PtrInt;
   s: RawUtf8;
 begin
-  for i := 0 to high(values) do
-  begin
-    VarRecToUtf8(values[i], s);
-    DoText(s);
-  end;
+  Make(values, s);
+  DoText(s);
 end;
 
 procedure TSynTests.DoTextLn(const values: array of const);
+var
+  s: RawUtf8;
 begin
-  DoText(values);
-  DoText(CRLF);
+  Make(values, s, {includelast=}CRLF);
+  DoText(s);
 end;
 
 procedure TSynTests.DoNotifyProgress(const value: RawUtf8; cc: TConsoleColor);
@@ -1231,13 +1233,6 @@ begin
     TSynLogTestLog.DebuggerNotify(Level, TextFmt, TextArgs)
   else
     TSynLogTestLog.Add.Log(level, TextFmt, TextArgs, self);
-end;
-
-procedure TSynTests.CreateSaveToFile;
-begin
-  System.Assign(fSaveToFile, '');
-  Rewrite(fSaveToFile);
-  StdOut := TTextRec(fSaveToFile).Handle;
 end;
 
 procedure TSynTests.AddFailed(const msg: string);
@@ -1283,8 +1278,6 @@ var
   started: boolean;
   {%H-}log: IUnknown;
 begin
-  if TTextRec(fSaveToFile).Handle = 0 then
-    CreateSaveToFile;
   DoColor(ccLightCyan);
   DoTextLn([CRLF + '   ', Ident,
             CRLF + '  ', RawUtf8OfChar('-', length(Ident) + 2)]);
@@ -1491,29 +1484,25 @@ procedure TSynTests.SaveToFile(const DestPath: TFileName;
   const FileName: TFileName);
 var
   FN: TFileName;
+  h: THandle;
 begin
-  if TTextRec(fSaveToFile).Handle <> 0 then
-    Close(fSaveToFile);
+  EndSaveToFileExternal;
   if FileName = '' then
-    FN := DestPath + Ident + '.txt'
+    if (Ident <> '') and
+       SafeFileName(Ident) then
+      FN := DestPath + Ident + '.txt'
+    else
+      FN := DestPath + Utf8ToString(Executable.ProgramName) + '.txt'
   else
     FN := DestPath + FileName;
   if ExtractFilePath(FN) = '' then
     FN := Executable.ProgramFilePath + FN;
-  system.assign(fSaveToFile, FN);
-  rewrite(fSaveToFile);
-  if IOResult <> 0 then
-    FillCharFast(fSaveToFile, SizeOf(fSaveToFile), 0);
+  h := FileCreate(FN);
+  if not ValidHandle(h) then
+    exit;
+  fSaveToFileBeforeExternal := StdOut; // backup
+  StdOut := h;
 end;
-
-procedure TSynTests.SaveToText(var aDest: System.Text);
-begin
-  if TTextRec(fSaveToFile).Handle <> 0 then
-    Close(fSaveToFile);
-  TTextRec(fSaveToFile) := TTextRec(aDest);
-end;
-
-{$I+}
 
 class procedure TSynTests.RunAsConsole(const CustomIdent: string;
   withLogs: TSynLogLevels; options: TSynTestOptions; const workdir: TFileName);
@@ -1569,10 +1558,9 @@ begin
     tests.Restrict := restrict;
     if redirect <> '' then
     begin
+      // minimal console output during blind regression tests
+      tests.DoTextLn([tests.Ident, CRLF + CRLF + ' Running tests... please wait']);
       tests.SaveToFile(redirect); // export to file if named on command line
-      {$I-} // minimal console output during blind regression tests
-      Writeln(tests.Ident, CRLF + CRLF + ' Running tests... please wait');
-      {$I+}
     end;
     tests.Run;
   finally
@@ -1582,7 +1570,7 @@ begin
   if ParamCount = 0 then
   begin
     // direct exit if an external file was generated
-    WriteLn(CRLF + 'Done - Press ENTER to Exit');
+    ConsoleWrite(CRLF + 'Done - Press ENTER to Exit');
     ConsoleWaitForEnterKey;
   end;
   {$endif OSPOSIX}
@@ -1610,32 +1598,12 @@ begin
       AutoFlushTimeOut := 2;
     fLogFile := Add;
   end;
+  CustomOutput := CustomConsoleOutput; // redirect lines to the log
 end;
 
-function SynTestsTextOut(var t: TTextRec): integer;
+procedure TSynTestsLogged.CustomConsoleOutput(const value: RawUtf8);
 begin
-  if t.BufPos = 0 then
-    result := 0
-  else
-  begin
-    if FileWrite(t.Handle, t.BufPtr^, t.BufPos) <> integer(t.BufPos) then
-      result := GetLastError
-    else
-      result := 0;
-    Append(PPRawUtf8(@t.UserData)^^, t.BufPtr, t.Bufpos);
-    t.BufPos := 0;
-  end;
-end;
-
-procedure TSynTestsLogged.CreateSaveToFile;
-begin
-  inherited;
-  with TTextRec(fSaveToFile) do
-  begin
-    InOutFunc := @SynTestsTextOut;
-    FlushFunc := @SynTestsTextOut;
-    PPRawUtf8(@UserData)^ := @fConsoleDup;
-  end;
+  Append(fConsoleDup, value);
 end;
 
 destructor TSynTestsLogged.Destroy;
