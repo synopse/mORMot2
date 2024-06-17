@@ -2778,7 +2778,8 @@ type
   /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
   TOSLightMutex = pointer;
 
-/// a wrapper around FileTimeToLocalFileTime/FileTimeToSystemTime Windows APIs
+/// a wrapper calling SystemTimeToTzSpecificLocalTime Windows API
+// - note: FileTimeToLocalFileTime is not to be involved here
 // - only used by mormot.lib.static for proper SQlite3 linking on Windows
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 
@@ -3378,9 +3379,9 @@ function CopyFile(const Source, Target: TFileName;
 function FileSymLink(const SymLink, Target: TFileName): boolean;
 
 /// prompt the user for an error message to notify an unexpected issue
-// - in practice, text encoding is expected to be plain 7-bit ASCII
-// - on Windows, will use Writeln() on a (newly allocated if needed) console
-// - on POSIX, will use Writeln(StdErr)
+// - in practice, text encoding is better to be plain 7-bit ASCII
+// - on Windows, will allocate a console if needed and write to STD_ERROR_HANDLE
+// - on POSIX, will send the output to StdErrorHandle (=2)
 procedure DisplayFatalError(const title, msg: RawUtf8);
 
 /// prompt the user for an error message to notify an unexpected issue
@@ -3392,7 +3393,6 @@ procedure DisplayError(const fmt: string; const args: array of const);
 // - the returned timestamp is in local time, not UTC
 // - this method would use the F.Timestamp field available since Delphi XE2
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// get a file UTC date and time, from a FindFirst/FindNext search
 // - SearchRecToDateTime(), SearchRecToWindowsTime() and F.TimeStamp, which have
@@ -6915,21 +6915,29 @@ begin
     result := FileName;
 end;
 
+procedure DisplayFatalError(const title, msg: RawUtf8);
+const
+  CRLFU: RawUtf8 = CRLF; // avoid any unexpected code page issue
+var
+  u: RawUtf8;
+begin
+  if title <> '' then
+  begin
+    SetLength(u, length(Title) + 1);
+    FillCharFast(pointer(u)^, length(u), ord('-'));
+    u := CRLFU + title + CRLFU + u + CRLFU + CRLFU + msg + CRLFU;
+  end
+  else
+    u := msg + CRLFU;
+  ConsoleErrorWrite(u);
+end;
+
 procedure DisplayError(const fmt: string; const args: array of const);
 var
   msg: string;
 begin
   msg := Format(fmt, args);
   DisplayFatalError('', RawUtf8(msg));
-end;
-
-function SearchRecToDateTime(const F: TSearchRec): TDateTime;
-begin
-  {$ifdef ISDELPHIXE}
-  result := F.Timestamp; // use new API
-  {$else}
-  result := FileDateToDateTime(F.Time);
-  {$endif ISDELPHIXE}
 end;
 
 function SearchRecToDateTimeUtc(const F: TSearchRec): TDateTime;

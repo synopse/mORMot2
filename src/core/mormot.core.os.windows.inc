@@ -405,25 +405,21 @@ begin
     StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
 end;
 
-{$I-}
-procedure DisplayFatalError(const title, msg: RawUtf8);
+procedure ConsoleErrorWrite(const text: RawUtf8);
+var
+  err: THandle;
+  txt: RawByteString;
 begin
   // better than a MessageBox() especially for services
-  AllocConsole; // will create one black window console if none
-  if title <> '' then
-  begin
-    TextColor(ccWhite);
-    writeln(#13#10, title);
-    writeln(StringOfChar('-', length(title) + 1), #13#10);
-    TextColor(ccLightRed);
-    writeln(msg);
-    TextColor(ccLightGray);
-  end
-  else
-    writeln(msg);
-  ioresult;
+  if not HasConsole then
+    AllocConsole; // will create one black window console if none
+  err := GetStdHandle(STD_ERROR_HANDLE);
+  if (err = INVALID_HANDLE_VALUE) or
+     (err = 0) then
+    exit;
+  txt := Utf8ToConsole(text);
+  FileWriteAll(err, pointer(txt), length(txt));
 end;
-{$I+}
 
 function IsSharedViolation(ErrorCode: integer): boolean;
 begin

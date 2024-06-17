@@ -1226,6 +1226,11 @@ begin
   result := DateTimeToWindowsFileTime(FileDateToDateTime(F.Time));
 end;
 
+function SearchRecToDateTime(const F: TSearchRec): TDateTime;
+begin
+  result := FileDateToDateTime(F.Time);
+end;
+
 function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
 begin
   result := F.Time; // raw POSIX FileDate is already in UTC seconds
@@ -1459,18 +1464,10 @@ begin
   result := FpPoll(@p, 1, timeout) > 0;
 end;
 
-{$I-}
-procedure DisplayFatalError(const title, msg: RawUtf8);
-var
-  err: ^Text;
+procedure ConsoleErrorWrite(const text: RawUtf8);
 begin
-  err := @StdErr;
-  if title <> '' then
-    writeln(err^, Executable.ProgramName, ': ', title);
-  writeln(err^, Executable.ProgramName, ': ', msg);
-  ioresult;
+  FileWriteAll(StdErrorHandle, pointer(Text), length(Text)); // assume UTF-8
 end;
-{$I+}
 
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 begin
