@@ -250,8 +250,8 @@ begin
 end;
 
 const
-  SecsPerFileTime = 10000000;
   MilliSecsPerFileTime = 10000;
+  SecsPerFileTime      = 10000000;
 
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
@@ -267,13 +267,27 @@ begin
   FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
 end;
 
+// To account for daylight saving time when converting a file time to a local
+// time, use the following function in place of using FileTimeToLocalFileTime:
+// https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-filetimetolocalfiletime
+
+function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boolean;
+var
+  st: TSystemTime;
+begin
+  FillCharFast(lt, SizeOf(lt), 0);
+  result := FileTimeToSystemTime(ft, st);
+  if result then
+    if not SystemTimeToTzSpecificLocalTime(nil, st, lt) then
+      lt := st;
+end;
+
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 var
-  ft, lt: TFileTime;
+  lft: TFileTime;
 begin
-  UnixTimeToFileTime(I64, ft);
-  FileTimeToLocalFileTime(ft, lt);
-  FileTimeToSystemTime(lt, Local);
+  UnixTimeToFileTime(I64, lft);
+  FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
 end;
 
 function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
@@ -831,18 +845,26 @@ begin
     result := 0;
 end;
 
+function FileTimeToDosTime(const ft: FILETIME): integer;
+var
+  lst: TSystemTime;
+  lft: TFileTime;
+begin
+  result := 0;
+  if FileTimeToLocalSystemTime(ft, lst) and // no FileTimeToLocalFileTime
+     SystemTimeToFileTime(lst, lft) then
+    FileTimeToDosDateTime(lft, LongRec(result).Hi, LongRec(result).Lo);
+end;
+
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 var
   fa: WIN32_FILE_ATTRIBUTE_DATA;
-  ft: TFileTime;
 begin
   result := 0;
   if (FileName <> '') and
      GetFileAttributesInternal(FileName, fa) and
-     ({%H-}fa.dwFileAttributes and faDirectory = 0) and
-     FileTimeToLocalFileTime(fa.ftLastWriteTime, ft) and
-     not FileTimeToDosDateTime(ft, LongRec(result).Hi, LongRec(result).Lo) then
-    result := 0;
+     ({%H-}fa.dwFileAttributes and faDirectory = 0) then
+    result := FileTimeToDosTime(fa.ftLastWriteTime);
 end;
 
 function FileSetDateFromWindowsTime(const Dest: TFileName; WinTime: integer): boolean;
@@ -868,8 +890,18 @@ begin
 end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
-begin
-  result := F.Time; // already in the expected legacy format
+begin // don't use F.Time since latest Delphi (and FPC) RTL deprecated it
+ result := FileTimeToDosTime(F.FindData.ftLastWriteTime);
+end;
+
+function SearchRecToDateTime(const F: TSearchRec): TDateTime;
+var
+  lst: TSystemTime;
+begin // don't use F.Time since latest Delphi (and FPC) RTL deprecated it
+  if FileTimeToLocalSystemTime(F.FindData.ftLastWriteTime, lst) then
+    result := SystemTimeToDateTime(lst) // no FileTimeToLocalFileTime
+  else
+    result := 0;
 end;
 
 function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
