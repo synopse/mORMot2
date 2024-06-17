@@ -6024,20 +6024,20 @@ var
 
   procedure CheckAgainst(const full: TSmbiosInfo; const os: TSmbiosBasicInfos);
   begin
-    CheckEqual(full.Bios.VendorName, os[sbiBiosVendor]);
-    CheckEqual(full.Bios.Version, os[sbiBiosVersion]);
-    CheckEqual(full.Bios.Release, os[sbiBiosRelease]);
-    CheckEqual(full.Bios.Firmware, os[sbiBiosFirmware]);
-    CheckEqual(full.Bios.BuildDate, os[sbiBiosDate]);
-    CheckEqual(full.System.ProductName, os[sbiProductName]);
-    CheckEqual(full.System.Version, os[sbiVersion]);
-    CheckEqual(full.System.Uuid, os[sbiUuid]);
+    CheckEqualTrim(full.Bios.VendorName,    os[sbiBiosVendor], 'vend');
+    CheckEqualTrim(full.Bios.Version,       os[sbiBiosVersion], 'vers');
+    CheckEqualTrim(full.Bios.Release,       os[sbiBiosRelease], 'rel');
+    CheckEqualTrim(full.Bios.Firmware,      os[sbiBiosFirmware], 'firm');
+    CheckEqualTrim(full.Bios.BuildDate,     os[sbiBiosDate], 'date');
+    CheckEqualTrim(full.System.ProductName, os[sbiProductName], 'pname');
+    CheckEqualTrim(full.System.Version,     os[sbiVersion], 'vers');
+    CheckEqualTrim(full.System.Uuid,        os[sbiUuid], 'uuid');
     if full.Processor <> nil then
-      CheckEqual(full.Processor[0].Manufacturer, os[sbiCpuManufacturer]);
+      CheckEqualTrim(full.Processor[0].Manufacturer, os[sbiCpuManufacturer], 'proc');
     if full.Battery <> nil then
-      CheckEqual(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer]);
+      CheckEqualTrim(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer], 'batt');
     if full.Oem <> nil then
-      CheckEqual(full.Oem[0], os[sbiOem]);
+      CheckEqualTrim(full.Oem[0], os[sbiOem], 'oem');
   end;
 
 begin
