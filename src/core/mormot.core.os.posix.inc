@@ -1891,7 +1891,7 @@ var
 begin
   TextColorCmd(Color, c);
   if c[0] <> #0 then
-    fpwrite(StdOutputHandle, @c[1], ord(c[0])); // single syscall
+    fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
 end;
 
 procedure TextBackground(Color: TConsoleColor);
@@ -1919,7 +1919,7 @@ begin
     TextColorAppend(ccLightGray, s);
   // display whole line in a single syscall
   ConsoleCriticalSection.Lock;
-  FileWriteAll(StdOutputHandle, pointer(s), length(s)); // UTF-8 console
+  FileWriteAll(StdOut, pointer(s), length(s)); // UTF-8 console
   ConsoleCriticalSection.UnLock;
 end;
 
