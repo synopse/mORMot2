@@ -1786,7 +1786,7 @@ begin
     8, secNone, '', '', opt);
   try
     if withlog then
-      HTTPServer.HttpServer.Logger.DefaultRotate := hrtAfter1MB;
+      HTTPServer.HttpServer.Logger.Settings.DefaultRotate := hrtAfter1MB;
     FillCharFast(Inst, SizeOf(Inst), 0); // all Expected..ID=0
     HTTPClient := TRestHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT, fModel);
     try
