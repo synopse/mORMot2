@@ -622,15 +622,16 @@ type
     // (100ms) and are used to avoid GPF or confusion on still active connections;
     // the second has a TTL of 2 seconds and will be used by ConnectionCreate to
     // recycle e.g. THttpAsyncConnection instances between HTTP/1.0 calls
-    fGC: array[1..2] of TPollAsyncConnections;
+    fGC1, fGC2: TPollAsyncConnections;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
       Count, Timeout: integer;
       Address, Port: RawUtf8;
     end;
     function AllThreadsStarted: boolean; virtual;
-    procedure AddGC(aConnection: TPollAsyncConnection);
+    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
     procedure DoGC;
+    procedure FreeGC(var conn: TPollAsyncConnections);
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
@@ -2731,15 +2732,21 @@ begin
   result := true;
 end;
 
-procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection);
+{.$define GCVERBOSE} // help debugging
+
+procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
 begin
   if Terminated then
     exit;
+  {$ifdef GCVERBOSE}
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'AddGC %', [aContext], aConnection);
+  {$endif GCVERBOSE}
   (aConnection as TAsyncConnection).fLastOperation := fLastOperationMS; // in ms
   with fClients.fWaitingWrite do
     if Count <> 0 then
       PtrArrayDelete(Items, aConnection, Safe, @Count);
-  with fGC[1] do // add to 1st generation
+  with fGC1 do // add to 1st generation
     ObjArrayAdd(Items, aConnection, Safe, @Count);
 end;
 
@@ -2777,38 +2784,71 @@ begin
   dst.Count := d;
 end;
 
+procedure TAsyncConnections.FreeGC(var conn: TPollAsyncConnections);
+var
+  i: PtrInt;
+  c: TPollAsyncConnection;
+begin
+  i := conn.Count - 1;
+  while i >= 0 do // don't use ObjArrayClear() to have verbose debug logging
+    try
+      while i >= 0 do
+      begin
+        c := conn.Items[i];
+        {$ifdef GCVERBOSE}
+        if Assigned(fLog) then
+          fLog.Add.Log(sllTrace, 'DoGC #% %', [i, pointer(c)], self);
+        {$endif GCVERBOSE}
+        c.Free;
+        dec(i);
+      end;
+    except
+      on E: Exception do
+      begin
+        if Assigned(fLog) then
+          fLog.Add.Log(sllWarning, 'DoGC: %.Free failed as %',
+            [pointer(c), E.ClassType], self);
+        dec(i); // just ignore this entry
+      end;
+    end;
+  conn.Count := 0;
+  conn.Items := nil;
+end;
+
 procedure TAsyncConnections.DoGC;
 var
   tofree: TPollAsyncConnections;
   n1, n2: integer;
 begin
+  // retrieve the connection instances to be released
   if Terminated or
-     (fGC[1].Count + fGC[2].Count = 0) then
+     (fGC1.Count + fGC2.Count = 0) then
     exit;
   tofree.Count := 0;
-  SetLength(tofree.Items, 128); // good initial provisioning
-  fGC[2].Safe.Lock;
+  SetLength(tofree.Items, 32); // good initial provisioning
+  fGC2.Safe.Lock;
   try
-    fGC[1].Safe.Lock;
+    fGC1.Safe.Lock;
     try
       // keep in first generation GC for 100 ms by default
-      n1 := OneGC(fGC[1], fGC[2], fLastOperationMS, fKeepConnectionInstanceMS);
+      n1 := OneGC(fGC1, fGC2, fLastOperationMS, fKeepConnectionInstanceMS);
     finally
-      fGC[1].Safe.UnLock;
+      fGC1.Safe.UnLock;
     end;
     // wait 2 seconds until no pending event is in queue and free instances
-    n2 := OneGC(fGC[2], tofree, fLastOperationMS, 2000);
+    n2 := OneGC(fGC2, tofree, fLastOperationMS, 2000);
   finally
-    fGC[2].Safe.UnLock;
+    fGC2.Safe.UnLock;
   end;
   if n1 + n2 + tofree.Count = 0 then
     exit;
   // np := fClients.fRead.DeleteSeveralPending(pointer(gc), ngc); always 0
+  // actually release the connection instances
   if Assigned(fLog) then
-    fLog.Add.Log(sllTrace,  'DoGC #1=% #2=% free=% client=%',
+    fLog.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
       [n1, n2, tofree.Count, fClients.Count], self);
-  if tofree.Count <> 0 then
-    ObjArrayClear(tofree.Items, {continueonexc=}true, @tofree.Count);
+  if tofree.Count > 0 then
+    FreeGC(tofree);
 end;
 
 procedure TAsyncConnections.Shutdown;
@@ -2864,13 +2904,8 @@ begin
     ObjArrayClear(fThreads, {continueonexception=}true);
   end;
   // there may be some trailing connection instances to be released
-  for i := low(fGC) to high(fGC) do
-    with fGC[i] do
-      if Count <> 0 then
-      begin
-        DoLog(sllTrace, 'Shutdown GC#%=%', [i, Count], self);
-        ObjArrayClear(Items, {continueonexception=}true, @Count);
-      end;
+  FreeGC(fGC1);
+  FreeGC(fGC2);
 end;
 
 destructor TAsyncConnections.Destroy;
@@ -3048,7 +3083,7 @@ begin
   else
   begin
     aConnection := nil;
-    with fGC[2] do // recycle 2nd gen instances e.g. for short-living HTTP/1.0
+    with fGC2 do // recycle 2nd gen instances e.g. for short-living HTTP/1.0
       if (Count > 0) and
          Safe.TryLock then
       begin
@@ -3117,7 +3152,7 @@ begin
       DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
         [aConnection, aIndex, n, MicroSecFrom(start)], self);
     aConnection.fSocket := nil;   // ensure is known as disabled
-    AddGC(aConnection); // will be released once processed
+    AddGC(aConnection, 'LockedConnectionDelete'); // delayed released
     result := true;
   except
     result := false;
@@ -3174,7 +3209,7 @@ begin
     // this connection was not part of fConnection[] list nor subscribed
     // e.g. HTTP/1.0 short request
     // -> explicit GC - Free is unstable here
-    AddGC(aConnection);
+    AddGC(aConnection, 'ConnectionDelete');
     result := true;
     exit;
   end;
@@ -3362,7 +3397,7 @@ begin
   if acoNoConnectionTrack in fOptions then
   begin
     connection.fSocket := nil;
-    AddGC(connection); // will be released once processed
+    AddGC(connection, 'EndConnection'); // delayed released
     InterlockedDecrement(fConnectionCount);
   end
   else
@@ -3681,11 +3716,11 @@ begin
     EAsyncConnections.RaiseUtf8('Unexpected %.OnFirstReadDoTls', [self]);
   if not fServer.TLS.Enabled then  // if not already done in WaitStarted()
   begin
-    fGC[1].Safe.Lock; // load certificates once from first connected thread
+    fGC1.Safe.Lock; // load certificates once from first connected thread
     try
       fServer.DoTlsAfter(cstaBind);  // validate certificates now
     finally
-      fGC[1].Safe.UnLock;
+      fGC1.Safe.UnLock;
     end;
   end;
   // TAsyncServer.Execute made Accept(async=false) from acoEnableTls
@@ -5072,7 +5107,7 @@ begin
           if (fCallbackSendDelay <> nil) and // typically = 10ms
              (tix = lasttix) then
             msidle := fCallbackSendDelay^ // delayed SendFrames gathering
-          else if (fAsync.fGC[1].Count = 0) or
+          else if (fAsync.fGC1.Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
             msidle := 500 // idle server
           else
