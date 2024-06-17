@@ -160,9 +160,9 @@ type
   TSynDaemon = class(TSynPersistent)
   protected
     fConsoleMode: boolean;
-    fShowExceptionWaitEnter: boolean; // ignored on POSIX
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonAbstractSettings;
+    procedure BeforeCreate(const aWorkFolder: TFileName); virtual;
     /// by default, calls fSettings.SetLog() if not running from tests
     // - could be overriden to change this default behavior
     procedure AfterCreate; virtual;
@@ -185,7 +185,13 @@ type
       const aSettingsExt: TFileName = '.settings';
       const aSettingsName: TFileName = '';
       aSettingsOptions: TSynJsonFileSettingsOptions = [];
-      const aSectionName: RawUtf8 = 'Main'); reintroduce;
+      const aSectionName: RawUtf8 = 'Main'); reintroduce; overload;
+    /// initialize the daemon, with an existing settings instance
+    // - the supplied aSettings will be owned by this main TSynDaemon
+    // - useful if you don't need to use our JSON settings persistence
+    // - calls AfterCreate to call SetLog() by default
+    constructor Create(aSettings: TSynDaemonSettings;
+      const aWorkFolder: TFileName = ''); reintroduce; overload;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean = true);
@@ -199,7 +205,7 @@ type
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process
-    // - should do nothing if the daemon was already stopped
+    // - should do nothing if the daemon was not running (e.g. already stopped)
     procedure Stop; virtual; abstract;
     /// inherited class should override this abstract method with proper process
     // - do nothing by default, but could handle SERVICE_CONTROL_CONTINUE signal
@@ -296,11 +302,7 @@ constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
 var
   fn: TFileName;
 begin
-  inherited Create; // may have been overriden
-  if aWorkFolder = '' then
-    fWorkFolderName := Executable.ProgramFilePath
-  else
-    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, EDaemon);
+  BeforeCreate(aWorkFolder);
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;
@@ -320,8 +322,24 @@ begin
         {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := NormalizeDirectoryExists(aLogFolder);
-  fShowExceptionWaitEnter := true; // default/legacy behavior - ignored on POSIX
   AfterCreate; // call fSettings.SetLog(TSynLog) by default
+end;
+
+constructor TSynDaemon.Create(aSettings: TSynDaemonSettings;
+  const aWorkFolder: TFileName);
+begin
+  BeforeCreate(aWorkFolder);
+  fSettings := aSettings;
+  AfterCreate; // call fSettings.SetLog(TSynLog) by default
+end;
+
+procedure TSynDaemon.BeforeCreate(const aWorkFolder: TFileName);
+begin
+  inherited Create; // may have been overriden
+  if aWorkFolder = '' then
+    fWorkFolderName := Executable.ProgramFilePath
+  else
+    fWorkFolderName := NormalizeDirectoryExists(aWorkFolder, EDaemon);
 end;
 
 procedure TSynDaemon.AfterCreate;
@@ -630,7 +648,7 @@ begin
     on E: Exception do
     begin
       if cmd <> cSilentKill then
-        ConsoleShowFatalException(E, fShowExceptionWaitEnter);
+        ConsoleShowFatalException(E, {waitforenterkey=} false);
       ExitCode := 1; // notify failure on executing process
     end;
   end;

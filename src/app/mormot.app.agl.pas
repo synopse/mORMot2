@@ -993,7 +993,6 @@ begin
   inherited Create(TSynAngelizeSettings,
     aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName,
     aSettingsOptions, aSectionName);
-  fShowExceptionWaitEnter := false; // allow silent mode
   {$ifdef OSWINDOWS}
   WindowsServiceLog := fSettings.LogClass.DoLog;
   {$endif OSWINDOWS}
