@@ -2377,6 +2377,7 @@ procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
 begin
   fLockMax := false;
   fFlags := [fFromGC, fWasActive];
+  fInternalFlags := [];
   fRd.Reset;
   fWr.Reset;
   FillCharFast(fRW, SizeOf(fRW), 0);
