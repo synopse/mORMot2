@@ -206,6 +206,9 @@ type
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
+    /// used by the published methods to run test assertion against UTF-8 strings
+    // - if Trim(a)<>Trim(b), will fail and include '#<>#' text before the supplied msg
+    function CheckEqualTrim(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
     function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
@@ -766,6 +769,11 @@ begin
   if not result or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
+end;
+
+function TSynTestCase.CheckEqualTrim(const a, b, msg: RawUtf8): boolean;
+begin
+  CheckEqual(TrimU(a), TrimU(b), msg);
 end;
 
 function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUtf8): boolean;
