@@ -1751,7 +1751,8 @@ function FormatVariant(const Format: RawUtf8; const Args: array of const): varia
 function Make(const Args: array of const): RawUtf8; overload;
 
 /// concatenate several arguments into an UTF-8 string
-procedure Make(const Args: array of const; var Result: RawUtf8); overload;
+procedure Make(const Args: array of const; var Result: RawUtf8;
+  const IncludeLast: RawUtf8 = ''); overload;
 
 /// concatenate several arguments into a RTL string
 function MakeString(const Args: array of const): string;
@@ -8545,11 +8546,11 @@ end;
 procedure TFormatUtf8.DoAdd(Arg: PVarRec; ArgCount: integer);
 begin
   L := 0;
-  if ArgCount <= 0 then
-    exit
-  else if ArgCount > length(blocks) then
-    TooManyArgs;
   last := @blocks;
+  if ArgCount <= 0 then
+    exit;
+  if ArgCount > length(blocks) then
+    TooManyArgs;
   repeat
     inc(L, VarRecToTempUtf8(Arg^, last^));
     inc(Arg);
@@ -8919,11 +8920,14 @@ begin
   f.Write(pointer(result));
 end;
 
-procedure Make(const Args: array of const; var Result: RawUtf8);
+procedure Make(const Args: array of const; var Result: RawUtf8;
+  const IncludeLast: RawUtf8);
 var
   f: TFormatUtf8;
 begin
   {%H-}f.DoAdd(@Args[0], length(Args));
+  if IncludeLast <> '' then
+    f.Add(IncludeLast);
   FastSetString(result, f.L);
   f.Write(pointer(result));
 end;
