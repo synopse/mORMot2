@@ -113,8 +113,8 @@ type
     fLockMax: boolean;
     /// low-level flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// used e.g. for IOCP
-    fInternalFlags: set of (ifWriteWait);
+    /// used e.g. for IOCP or to mark AddGC()
+    fInternalFlags: set of (ifWriteWait, ifInGC);
     /// the current (reusable) read data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) write data buffer of this connection
@@ -2736,8 +2736,11 @@ end;
 
 procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: shortstring);
 begin
-  if Terminated then
+  if Terminated or
+     (aConnection = nil) or
+     (ifInGC in aConnection.fInternalFlags) then
     exit;
+  include(aConnection.fInternalFlags, ifInGC); // ensure AddGC() done once
   {$ifdef GCVERBOSE}
   if Assigned(fLog) then
     fLog.Add.Log(sllTrace, 'AddGC %', [aContext], aConnection);
