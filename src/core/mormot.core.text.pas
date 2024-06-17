@@ -9002,7 +9002,7 @@ procedure ConsoleWrite(const Args: array of const;
 var
   tmp: RawUtf8;
 begin
-  Append(tmp, Args);
+  Make(Args, tmp);
   ConsoleWrite(tmp, Color, NoLineFeed);
 end;
 
