@@ -5774,7 +5774,6 @@ end;
 function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
   sepChar: AnsiChar): integer;
 begin
-  result := -1;
   if (p <> nil) and
      (high(extup) > 0) then
     result := IdemPCharArray(FileExt(p, sepChar), extup)
