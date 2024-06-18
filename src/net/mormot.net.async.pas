@@ -1178,14 +1178,18 @@ type
     fIfModifiedSince: boolean;
     fMethods: TUriRouterMethods;
     fSourced: (sUndefined, sLocalFolder, sRemoteUri);
+    fAlgos: THashAlgos;
     fCacheControlMaxAgeSec: integer;
     fMemCache: THttpProxyMem;
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
     fLocalFolder: TFileName;
     fRemoteUri: TUri;
-    fMemCached: TSynDictionary; // Uri:RawUtf8 / Content:RawByteString
+    fMemCached: TSynDictionary;  // Uri:RawUtf8 / Content:RawByteString
+    fHashCached: TSynDictionary; // Uri: RawUtf8 / sha256+md5: TRawUtf8DynArray
     fReject: TUriMatch;
+    function ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
+      const name: RawUtf8; var fn: TFileName): integer;
   public
     /// setup the default values of this URL
     constructor Create; override;
@@ -1250,7 +1254,9 @@ type
     psoEnableLogging,
     psoDisableMemCache,
     psoNoFolderHtmlIndex,
-    psoDisableFolderHtmlIndexCache);
+    psoDisableFolderHtmlIndexCache,
+    psoPublishSha256,
+    psoPublishMd5);
 
   /// a set of available options for THttpProxyServerMainSettings
   THttpProxyServerOptions = set of THttpProxyServerOption;
@@ -1347,6 +1353,8 @@ type
     property Url: THttpProxyUrlObjArray
       read fUrl;
   end;
+
+  EHttpProxyServer = class(ESynException);
 
   /// implements a HTTP server with forward proxy and caching
   THttpProxyServer = class(TSynAutoCreateFields)
@@ -5191,6 +5199,47 @@ destructor THttpProxyUrl.Destroy;
 begin
   inherited Destroy;
   FreeAndNil(fMemCached);
+  FreeAndNil(fHashCached);
+end;
+
+function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract; h: THashAlgo;
+  const name: RawUtf8; var fn: TFileName): integer;
+var
+  i: PtrInt;
+  a: THashAlgo;
+  hashes: TRawUtf8DynArray;
+begin
+  result := HTTP_NOTFOUND;
+  if not (h in fAlgos) then
+    exit;
+  if not fHashCached.FindAndCopy(name, hashes) then
+  begin
+    i := length(fn);
+    while i > 0 do
+      if fn[i] = '.' then
+        break
+      else
+        dec(i);
+    if i = 0 then
+      exit;
+    SetLength(fn, i - 1); // xxx.ext.md5 -> xxx.ext
+    hashes := HashFileRaw(fn, fAlgos);
+    if hashes = nil then
+      exit; // no such file
+    fHashCached.Add(name, hashes);
+  end;
+  i := 0;
+  for a := low(a) to high(a) do
+    if a in fAlgos then
+      if a = h then
+      begin
+        ctxt.OutContent := hashes[i];
+        ctxt.OutContentType := TEXT_CONTENT_TYPE;
+        result := HTTP_SUCCESS;
+        exit;
+      end
+      else
+        inc(i);
 end;
 
 
@@ -5248,7 +5297,7 @@ begin
   one := THttpProxyUrl.Create;
   one.Url := uri;
   if RaiseExceptionOnNonExistingFolder = nil then
-    RaiseExceptionOnNonExistingFolder := EHttpServer;
+    RaiseExceptionOnNonExistingFolder := EHttpProxyServer;
   one.Source := StringToUtf8(EnsureDirectoryExists(
     folder, RaiseExceptionOnNonExistingFolder));
   AddUrl(one);
@@ -5289,6 +5338,8 @@ var
   fav: RawByteString;
 begin
   log := fLog.Enter('Start %', [fSettings], self);
+  if fServer <> nil then
+    EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute options from settings
   hso := [hsoNoXPoweredHeader,
           hsoIncludeDateHeader,
@@ -5360,6 +5411,7 @@ begin
     begin
       one := fSettings.Url[i];
       FreeAndNil(one.fMemCached);
+      FreeAndNil(one.fHashCached);
       if one.Disabled or
          (one.Source = '') then
         continue;
@@ -5400,6 +5452,14 @@ begin
           if one.DiskCache.MaxSize < 0 then
             one.DiskCache.MaxSize := fSettings.DiskCache.MaxSize;
       end;
+      one.fAlgos := [];
+      if psoPublishSha256 in fSettings.Server.Options then
+        include(one.fAlgos, hfSha256);
+      if psoPublishMd5 in fSettings.Server.Options then
+        include(one.fAlgos, hfMd5);
+      if one.fAlgos <> [] then
+        one.fHashCached := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+          TypeInfo(TRawUtf8DynArrayDynArray), PathCaseInsensitive, SecsPerHour);
       // compute and register this URI
       uri := one.fUrl;
       while (uri <> '') and
@@ -5432,7 +5492,8 @@ var
   fn: TFileName;
   name: RawUtf8;
   cached: RawByteString;
-  siz: Int64;
+  siz, tix: Int64;
+  ext: PUtf8Char;
   met: TUriRouterMethod;
   pck: THttpProxyCacheKind;
 begin
@@ -5455,6 +5516,10 @@ begin
   if (one.RejectCsv <> '') and
      one.fReject.Check(one.RejectCsv, uri, PathCaseInsensitive) then
     exit;
+  // delete any deprecated cached content
+  tix := GetTickCount64;
+  one.fMemCached.DeleteDeprecated(tix);
+  one.fHashCached.DeleteDeprecated(tix);
   // actual request processing
   case met of
     urmGet,
@@ -5504,7 +5569,19 @@ begin
                     one.fMemCached.Add(name, cached);
                 end;
                 result := Ctxt.SetOutContent(cached, {304=}true, HTML_CONTENT_TYPE);
-              end;
+              end
+              else if siz = 0 then
+                if Assigned(one.fHashCached) then
+                begin
+                  ext := ExtractExtP(name, {withoutdot:}true);
+                  if ext <> nil then
+                    case PCardinal(ext)^ of
+                      ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+                        result := one.ReturnHash(Ctxt, hfSHA256, name, fn);
+                      ord('m') + ord('d') shl 8 + ord('5') shl 16:
+                        result := one.ReturnHash(Ctxt, hfMd5, name, fn);
+                    end;
+                end;
           end; // may be e.g. HTTP_NOTMODIFIED (304)
           fLog.Add.Log(sllTrace, 'OnExecute: % % fn=% status=% size=% cached=%',
             [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
