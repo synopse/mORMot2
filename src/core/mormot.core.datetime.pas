@@ -731,6 +731,10 @@ function UnixTimePeriodToString(const UnixTime: TUnixTime;
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
+// - in respect to plain  UnixMSTimeToDateTime(), will return 0 when input is also 0
+function UnixMSTimeToDateTimeZ(const UnixMSTime: TUnixMSTime): TDateTime;
+
 /// convert a TDateTime into a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
 // - if AValue is 0, will return 0 (since is likely to be an error constant)
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
@@ -2954,6 +2958,14 @@ end;
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
   result := UnixMSTime / MSecsPerDay + UnixDateDelta;
+end;
+
+function UnixMSTimeToDateTimeZ(const UnixMSTime: TUnixMSTime): TDateTime;
+begin
+  if UnixMSTime = 0 then
+    result := 0
+  else
+    result := UnixMSTimeToDateTime(UnixMSTime);
 end;
 
 function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
