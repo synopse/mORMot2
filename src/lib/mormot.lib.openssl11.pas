@@ -10625,7 +10625,41 @@ finalization
 
 {$else}
 
+// some default void globals to avoid most $ifdef USE_OPENSSL ... $endif
+var
+  OpenSslDefaultCrypto, OpenSslDefaultSsl, OpenSslDefaultPath: string;
+  OpenSslVersion: cardinal;
+  OpenSslVersionHexa: string;
+
+// some global functions doing nothing or returning false
+function OpenSslInitialize(const libcryptoname: string = '';
+  const libsslname: string = ''; const libprefix: Utf8String = ''): boolean;
+function OpenSslIsAvailable: boolean;
+function OpenSslIsLoaded: boolean;
+procedure RegisterOpenSsl;
+
+
 implementation
+
+function OpenSslInitialize(const libcryptoname, libsslname: string;
+  const libprefix: Utf8String): boolean;
+begin
+  result := false;
+end;
+
+function OpenSslIsAvailable: boolean;
+begin
+  result := false;
+end;
+
+function OpenSslIsLoaded: boolean;
+begin
+  result := false;
+end;
+
+procedure RegisterOpenSsl;
+begin
+end;
 
 {$endif USE_OPENSSL}
 
