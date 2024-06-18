@@ -2792,6 +2792,7 @@ var
   i: PtrInt;
   c: TPollAsyncConnection;
 begin
+  c := nil; // make compiler happy
   i := conn.Count - 1;
   while i >= 0 do // don't use ObjArrayClear() to have verbose debug logging
     try
@@ -4337,11 +4338,9 @@ begin
   inherited Recycle(aRemoteIP);
   fHttp.Reset;
   if fServer <> nil then
-  begin
     if fServer.fServerKeepAliveTimeOutSec <> 0 then
       fKeepAliveSec := fServer.Async.fLastOperationSec +
                        fServer.fServerKeepAliveTimeOutSec;
-  end;
 end;
 
 function THttpAsyncServerConnection.GetConnectionOpaque: PHttpServerConnectionOpaque;
