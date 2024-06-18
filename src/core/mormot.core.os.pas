@@ -3343,7 +3343,7 @@ function FileSeek64(Handle: THandle; const Offset: Int64;
 // - if FileName is a folder/directory, then returned FileSize equals -1
 // - use a single Operating System call, so is faster than FileSize + FileAge
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
-  out FileTimestampUtc: TUnixMSTime): boolean;
+  out FileTimestampUtc: TUnixMSTime): boolean; overload;
 
 /// get low-level file information, in a cross-platform way
 // - returns true on success
@@ -3354,6 +3354,12 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
   LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+
+/// get low-level file information, in a cross-platform way
+// - is a wrapper around FileInfoByHandle() function
+// - returns true on success
+function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean; overload;
 
 /// check if a given file is likely to be an executable
 // - will check the DOS/WinPE executable header in its first bytes on Windows
@@ -6792,6 +6798,19 @@ const
 function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
 begin
   result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
+end;
+
+function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+var
+  h: THandle;
+begin
+  result := false;
+  h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
+  if not ValidHandle(h) then
+    exit;
+  result := FileInfoByHandle(h, FileId, FileSize, LastWriteAccess, FileCreateDateTime);
+  FileClose(h);
 end;
 
 function DirectorySize(const FileName: TFileName; Recursive: boolean;
