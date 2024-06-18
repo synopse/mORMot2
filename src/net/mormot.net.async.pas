@@ -1327,7 +1327,9 @@ type
     // - this instance will be stored and owned in Url[] array
     procedure AddUrl(one: THttpProxyUrl);
     /// create a THttpProxyUrl definition to serve a local static folder
-    procedure AddFolder(const folder: TFileName; const uri: RawUtf8 = '');
+    // - if optional ExceptionClass is supplied, the local folder should exist
+    procedure AddFolder(const folder: TFileName; const uri: RawUtf8 = '';
+      RaiseExceptionOnNonExistingFolder: ExceptionClass = nil);
   published
     /// define the HTTP/HTTPS server configuration
     property Server: THttpProxyServerMainSettings
@@ -5234,14 +5236,21 @@ begin
       ObjArrayAdd(fUrl, one); // will be owned as fUri[]
 end;
 
-procedure THttpProxyServerSettings.AddFolder(
-  const folder: TFileName; const uri: RawUtf8);
+procedure THttpProxyServerSettings.AddFolder(const folder: TFileName;
+  const uri: RawUtf8; RaiseExceptionOnNonExistingFolder: ExceptionClass);
 var
   one: THttpProxyUrl;
 begin
+  if RaiseExceptionOnNonExistingFolder <> nil then
+    if not DirectoryExists(folder) then
+      raise RaiseExceptionOnNonExistingFolder.CreateFmt(
+        '%s.AddFolder: %s does not exist', [ClassNameShort(self)^, folder]);
   one := THttpProxyUrl.Create;
   one.Url := uri;
-  one.Source := StringToUtf8(EnsureDirectoryExists(folder));
+  if RaiseExceptionOnNonExistingFolder = nil then
+    RaiseExceptionOnNonExistingFolder := EHttpServer;
+  one.Source := StringToUtf8(EnsureDirectoryExists(
+    folder, RaiseExceptionOnNonExistingFolder));
   AddUrl(one);
 end;
 
