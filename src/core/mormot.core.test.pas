@@ -773,7 +773,7 @@ end;
 
 function TSynTestCase.CheckEqualTrim(const a, b, msg: RawUtf8): boolean;
 begin
-  CheckEqual(TrimU(a), TrimU(b), msg);
+  result := CheckEqual(TrimU(a), TrimU(b), msg);
 end;
 
 function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUtf8): boolean;
