@@ -2160,6 +2160,11 @@ type
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
+  /// store several 256-bit hash map variable records
+  THash256RecDynArray = array of THash256Rec;
+
+  /// store several 384-bit hash values
+  THash384DynArray = array of THash384;
 
   /// map an infinite array of 512-bit hash values
   // - each item consumes 64 bytes of memory
@@ -2207,6 +2212,8 @@ type
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
+  /// store several 256-bit hash map variable records
+  THash512RecDynArray = array of THash512Rec;
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block

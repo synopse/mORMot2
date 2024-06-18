@@ -5751,43 +5751,35 @@ begin
   result := -1;
 end;
 
+function FileExt(p: PUtf8Char; sepChar: AnsiChar): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := nil;
+  repeat
+    if p^ = sepChar then
+      result := p; // get last '.' position from p into ext
+    inc(p);
+  until p^ = #0;
+end;
+
 function IdemFileExt(p: PUtf8Char; extup: PAnsiChar; sepChar: AnsiChar): boolean;
-var
-  ext: PUtf8Char;
 begin
   if (p <> nil) and
      (extup <> nil) then
-  begin
-    ext := nil;
-    repeat
-      if p^ = sepChar then
-        ext := p; // get last '.' position from p into ext
-      inc(p);
-    until p^ = #0;
-    result := IdemPChar(ext, extup);
-  end
+    result := IdemPChar(FileExt(p, sepChar), extup)
   else
     result := false;
 end;
 
 function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
   sepChar: AnsiChar): integer;
-var
-  ext: PUtf8Char;
 begin
   result := -1;
   if (p <> nil) and
      (high(extup) > 0) then
-  begin
-    ext := nil;
-    repeat
-      if p^ = sepChar then
-        ext := p; // get last '.' position from p into ext
-      inc(p);
-    until p^ = #0;
-    if ext <> nil then
-      result := IdemPCharArray(ext, extup);
-  end;
+    result := IdemPCharArray(FileExt(p, sepChar), extup)
+  else
+    result := -1;
 end;
 
 function PosCharAny(Str: PUtf8Char; Characters: PAnsiChar): PUtf8Char;
