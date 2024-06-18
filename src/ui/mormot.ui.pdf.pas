@@ -975,11 +975,11 @@ type
     constructor Create(AObjectMgr: TPdfObjectMgr; AArray: PWordArray;
       AArrayCount: integer); reintroduce; overload;
     /// create an array of PDF objects, with some specified TPdfName values
-    constructor CreateNames(AObjectMgr: TPdfObjectMgr; const AArray: array of
-      PdfString); reintroduce; overload;
+    constructor CreateNames(AObjectMgr: TPdfObjectMgr;
+      const AArray: array of PdfString); reintroduce; overload;
     /// create an array of PDF objects, with some specified TPdfReal values
-    constructor CreateReals(AObjectMgr: TPdfObjectMgr; const AArray: array of
-      double); reintroduce; overload;
+    constructor CreateReals(AObjectMgr: TPdfObjectMgr;
+      const AArray: array of double); reintroduce; overload;
     /// release the instance memory, and all embedded objects instances
     destructor Destroy; override;
     /// Add a PDF object to the array
@@ -1514,7 +1514,7 @@ type
     // - you can specify a clipping rectangle region as ClipRc parameter
     function CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox = nil;
       ClipRc: PPdfBox = nil): PdfString;
-    // create a new optional content group (layer)
+    /// create a new optional content group (layer)
     // - returns a TPdfOptionalContentGroup needed for
     // TPdfCanvas.BeginMarkedContent
     // - if ParentContentGroup is not nil, the new content group is a
@@ -1523,12 +1523,19 @@ type
     // - Visible controls the initial state of the content group
     function CreateOptionalContentGroup(ParentContentGroup: TPdfOptionalContentGroup;
       const Title: string; Visible: boolean = true): TPdfOptionalContentGroup;
-    // create a Radio Optional ContentGroup
+    /// create a Radio Optional ContentGroup
     // - ContentGroups is a array of TPdfOptionalContentGroups which should behave like
     // radiobuttons, i.e. only one active at a time
     // - visibility must be set with CreateOptionalContentGroup, only one group should be visible
     procedure CreateOptionalContentRadioGroup(
       const ContentGroups: array of TPdfOptionalContentGroup);
+    /// create an attached file from its name
+    function CreateFileAttachment(const AttachFile: TFileName;
+      const Description: string = ''): TPdfDictionary;
+    /// create an attached file from its buffer content
+    function CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
+      const Title, Description, MimeType: string;
+      CreationDate, ModDate: TDateTime): TPdfDictionary;
     /// retrieve the current PDF Canvas, associated to the current page
     property Canvas: TPdfCanvas
       read fCanvas;
@@ -7820,6 +7827,77 @@ begin
       end;
     end;
   end;
+end;
+
+function TPdfDocument.CreateFileAttachment(const AttachFile: TFileName;
+  const Description: string): TPdfDictionary;
+var
+  lw, fc: TUnixMSTime;
+  buf: RawByteString;
+begin
+  result := nil;
+  if not FileInfoByName(AttachFile, nil, nil, @lw, @fc) then
+    exit;
+  buf := StringFromFile(AttachFile);
+  if buf <> '' then
+    result := CreateFileAttachmentFromBuffer(buf, ExtractFileName(AttachFile),
+      Description, '', UnixMSTimeToDateTimeZ(lw), UnixMSTimeToDateTimeZ(fc));
+end;
+
+function TPdfDocument.CreateFileAttachmentFromBuffer(const Buffer: RawByteString;
+  const Title, Description, MimeType: string; CreationDate, ModDate: TDateTime): TPdfDictionary;
+var
+  fs, ef, ndic, efdic, parms: TPdfDictionary;
+  arr: TPdfArray;
+  str: TPdfStream;
+  txt: TPdfTextString;
+  mime: RawUtf8;
+begin
+  // create embedded file stream with main attributes
+  str := TPdfStream.Create(Self);
+  str.Writer.Add(pointer(Buffer), length(Buffer));
+  str.Attributes.AddItem('Type', 'EmbeddedFile');
+  if MimeType <> '' then
+    StringToUtf8(MimeType, mime)
+  else if Pos('.', Description) <> 0 then      
+    mime := GetMimeContentType(pointer(Buffer), length(Buffer), Description)
+  else
+    mime := GetMimeContentType(pointer(Buffer), length(Buffer));
+  str.Attributes.AddItem('Subtype', mime);
+  // file Params attribute
+  parms := TPdfDictionary.Create(fXref);
+  parms.AddItem('Size', length(Buffer));
+  if CreationDate <> 0 then
+    parms.AddItemText('CreationDate', DateTimeToPdfDate(CreationDate));
+  if ModDate <> 0 then
+    parms.AddItemText('ModDate', DateTimeToPdfDate(ModDate));
+  str.Attributes.AddItem('Params', parms);
+  // create Filespec
+  fs := TPdfDictionary.Create(fXref);
+  fXref.AddObject(fs);
+  fs.AddItem('Type', 'Filespec');
+  fs.AddItemTextString('F', Title);
+  fs.AddItemTextString('UF', Title);
+  fs.AddItemTextString('Desc', Description);
+  fs.AddItem('AFRelationship', 'Alternative'); // alternative or source
+  ef := TPdfDictionary.Create(fXref);
+  ef.AddItem('F', str);
+  ef.AddItem('UF', str);
+  fs.AddItem('EF', ef);
+  // set title and Filespec as Names array 
+  arr := TPdfArray.Create(fXref);
+  txt := TPdfTextString.Create(Title);
+  arr.AddItem(txt);
+  arr.AddItem(fs);
+  // create EmbeddedFiles with Names 
+  ndic := TPdfDictionary.Create(fXref);
+  ndic.AddItem('Names', arr);
+  // create the main returned dictionary
+  efdic := TPdfDictionary.Create(fXref);
+  efdic.AddItem('EmbeddedFiles', ndic);
+  result := efdic;
+  // register to the main catalog
+  Root.Data.AddItem('Names', efdic);
 end;
 
 procedure TPdfDocument.SetUseOptionalContent(Value: boolean);
