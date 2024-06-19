@@ -2436,7 +2436,7 @@ begin
     // avoid negative or div per 0 in case of incorrect Start/Stop sequence
     result := 0
   else
-    result := (Count * 1000000) div fTime;
+    result := (Count * MicroSecsPerSec) div fTime;
 end;
 
 function TPrecisionTimer.SizePerSec(Size: QWord): ShortString;
@@ -2530,7 +2530,7 @@ begin
   {$endif FPC}
     result := 0
   else // avoid negative or div per 0
-    result := (Count * 1000000) div fMicroSeconds;
+    result := (Count * MicroSecsPerSec) div fMicroSeconds;
 end;
 
 
@@ -2550,7 +2550,7 @@ begin
   {$endif FPC}
     result := 0
   else
-    result := (Count * QWord(1000000)) div fMicroSeconds;
+    result := (Count * QWord(MicroSecsPerSec)) div fMicroSeconds;
 end;
 
 

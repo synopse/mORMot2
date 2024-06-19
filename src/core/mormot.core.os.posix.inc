@@ -586,20 +586,6 @@ end;
 {$endif NODIRECTTHREADMANAGER}
 
 const
-  HoursPerDay = 24;
-  MinsPerHour = 60;
-  SecsPerMin  = 60;
-  MinsPerDay  = HoursPerDay * MinsPerHour;
-  SecsPerDay  = MinsPerDay  * SecsPerMin;
-  SecsPerHour = MinsPerHour * SecsPerMin;
-  MilliSecsPerSec = 1000;
-  MicroSecsPerSec = 1000000;
-  MicroSecsPerMilliSec = 1000;
-  NanoSecsPerMicroSec  = 1000;
-  NanoSecsPerMilliSec  = 1000000;
-  NanoSecsPerSec       = 1000000000;
-
-const
   // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D0 = 1461;
   D1 = 146097;

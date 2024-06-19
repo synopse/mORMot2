@@ -9156,12 +9156,12 @@ end;
 
 function SecToString(S: QWord): TShort16;
 begin
-  MicroSecToString(S * 1000000, result);
+  MicroSecToString(S * MicroSecsPerSec, result);
 end;
 
 function MilliSecToString(MS: QWord): TShort16;
 begin
-  MicroSecToString(MS * 1000, result);
+  MicroSecToString(MS * MicroSecsPerMilliSec, result);
 end;
 
 function MicroSecToString(Micro: QWord): TShort16;

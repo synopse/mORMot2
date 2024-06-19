@@ -702,7 +702,7 @@ begin
   if _QueryPerformanceFrequencyPer10 then
     Value := QWord(v) div 10 // faster div by a constant (especially on FPC_64)
   else
-    Value := QWord((QWord(v) * 1000000) div _QueryPerformanceFrequency);
+    Value := QWord((QWord(v) * MicroSecsPerSec) div _QueryPerformanceFrequency);
 end;
 
 var

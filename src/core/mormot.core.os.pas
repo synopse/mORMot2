@@ -91,8 +91,8 @@ const
 
   /// a convenient array constant to open a file for writing without exclusion
   fmCreateOrRewrite: array[{rewrite=}boolean] of cardinal = (
-   fmCreateShared,
-   fmOpenWriteShared);
+    fmCreateShared,
+    fmOpenWriteShared);
 
 const
   /// void HTTP Status Code (not a standard value, for internal use only)
@@ -540,6 +540,20 @@ function SidToKnown(const text: RawUtf8): TWellKnownSid; overload;
 
 /// recognize some well-known SIDs from the supplied SID dynamic array
 function SidToKnownGroups(const sids: PSids): TWellKnownSids;
+
+const { some time converion constants redefined here from RTL }
+  HoursPerDay = 24;
+  MinsPerHour = 60;
+  SecsPerMin  = 60;
+  MinsPerDay  = HoursPerDay * MinsPerHour;
+  SecsPerDay  = MinsPerDay  * SecsPerMin;
+  SecsPerHour = MinsPerHour * SecsPerMin;
+  MilliSecsPerSec = 1000;
+  MicroSecsPerSec = 1000000;
+  MicroSecsPerMilliSec = 1000;
+  NanoSecsPerMicroSec  = 1000;
+  NanoSecsPerMilliSec  = 1000000;
+  NanoSecsPerSec       = 1000000000;
 
 
 { ****************** Gather Operating System Information }

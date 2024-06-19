@@ -817,7 +817,7 @@ begin
   else
   begin
     DecodeTime(DateTime, Hour, Minute, Second, MS);
-    Fraction := SqlUInteger(MS) * 1000000;
+    Fraction := SqlUInteger(MS) * NanoSecsPerMilliSec;
   end;
   if PInt64(@Hour)^ = 0 then
   begin
