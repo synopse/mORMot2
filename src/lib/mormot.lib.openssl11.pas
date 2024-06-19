@@ -10654,7 +10654,7 @@ var
   OpenSslDefaultCrypto, OpenSslDefaultSsl, OpenSslDefaultPath: string;
   OpenSslVersion: cardinal;
   OpenSslVersionHexa: string;
-  OpenSslVersionText: RawUtf8;
+  OpenSslVersionText: Utf8String;
 
 // some global functions doing nothing or returning false
 function OpenSslInitialize(const libcryptoname: string = '';
