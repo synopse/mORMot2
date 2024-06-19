@@ -3320,7 +3320,7 @@ begin
   der := PemToDer(Cert);
   if not AsnDecChunk(der) then // basic input validation
     exit;
-  x := LoadCertificate(Cert);
+  x := LoadCertificate(der);
   if x <> nil then
     result := CryptCertOpenSsl[X509Algo(x)].FromHandle(x);
 end;
