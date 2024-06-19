@@ -16,6 +16,9 @@ unit mormot.crypt.openssl;
 
   *****************************************************************************
 
+  Warning: on Windows, you need to define the USE_OPENSSL conditional in YOUR
+   project options to have this code actually link to the OpenSSL library.
+
   TL;DR: On x86_64, our mormot.crypt.core.pas asm is stand-alone and faster
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
          For ECC/RSA, mormot.crypt.ecc/rsa are slower than OpenSSL so this

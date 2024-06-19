@@ -98,6 +98,8 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
 - JWT Implementation using any OpenSSL Algorithm
 - Register *OpenSSL* to our General Cryptography Catalog
 
+**Warning**: on Windows, you need to define the `USE_OPENSSL` conditional in YOUR project options to have this code actually link to the OpenSSL library.
+
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
 For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*, but fully stand-alone.
 

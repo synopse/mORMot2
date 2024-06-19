@@ -22,7 +22,10 @@ unit mormot.lib.openssl11;
 
   *****************************************************************************
 
-   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+  Warning: on Windows, you need to define the USE_OPENSSL conditional in YOUR
+   project options to have this code actually link to the OpenSSL library.
+
+  Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
    to any restriction about the use of cryptographic software in your country.
 }
 
