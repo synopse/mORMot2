@@ -226,7 +226,7 @@ end;
 type
   TProxySocket = class(THttpServerSocket)
   protected
-    fExpires: cardinal;
+    fExpires: cardinal; // shr MilliSecsPerSecShl
   published
     property Method;
     property URL;
@@ -282,7 +282,7 @@ begin
         fPendingGet.Safe.WriteLock;
         try
           found := -1;
-          now := GetTickCount64 shr 10;
+          now := GetTickCount64 shr MilliSecsPerSecShl;
           for i := fPendingGet.Count - 1 downto 0 do
           begin
             old := fPendingGet.ObjectPtr[i];

@@ -388,12 +388,12 @@ end;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'gettimeofday'; {$else} export; {$endif}
 var
-  now, sec: QWord;
+  ms, sec: QWord;
 begin
-  now := UnixMSTimeUtcFast;
-  sec := now div 1000;
+  ms := UnixMSTimeUtcFast;
+  sec := ms div MilliSecsPerSec;
   tv.sec := sec;
-  tv.usec := (now - sec * 1000) * 1000;
+  tv.usec := (ms - sec * MilliSecsPerSec) * MicroSecsPerMilliSec;
   result := 0;
 end;
 

@@ -1196,7 +1196,7 @@ begin
       ms := ms {%H-}+ byte(P[17]) * 10 - 480;
     if L > 18 then
       ms := ms + byte(P[18]) - 48;
-    if ms > 1000 then
+    if ms > MilliSecsPerSec then
       ms := 0;
   end
   else
@@ -1204,8 +1204,9 @@ begin
   if (h < 24) and
      (mi < 60) and
      (ss < 60) then // inlined EncodeTime()
-    result := result + (h * (MinsPerHour * SecsPerMin * MSecsPerSec) +
-      mi * (SecsPerMin * MSecsPerSec) + ss * MSecsPerSec + ms) / MSecsPerDay;
+    result := result + (h * MilliSecsPerHour +
+                        mi * MilliSecsPerMin +
+                        ss * MilliSecsPerSec + ms) / MilliSecsPerDay;
 end;
 
 function Iso8601CheckAndDecode(P: PUtf8Char; L: integer;
@@ -1244,8 +1245,9 @@ var
   H, MI, SS, MS: cardinal;
 begin
   if Iso8601ToTimePUtf8Char(P, L, H, MI, SS, MS) then
-    result := (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
-      MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec + MS) / MSecsPerDay
+    result := (H * MilliSecsPerHour +
+               MI * MilliSecsPerMin +
+               SS * MilliSecsPerSec + MS) / MilliSecsPerDay
   else
     result := 0;
 end;
@@ -1288,7 +1290,7 @@ begin
   if (H < 24) and
      (M < 60) and
      (S < 60) and
-     (MS < 1000) then
+     (MS < MilliSecsPerSec) then
     result := true;
 end;
 
@@ -2118,7 +2120,7 @@ end;
 
 procedure TSynSystemTime.FromUnixMsTime(ut: TUnixMsTime);
 begin
-  FromDateTime(ut / MSecsPerDay + UnixDateDelta); // via a temp TDateTime
+  FromDateTime(ut / MilliSecsPerDay + UnixDateDelta); // via a temp TDateTime
 end;
 
 procedure TSynSystemTime.FromDate(const dt: TDateTime);
@@ -2152,22 +2154,22 @@ end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
 begin
-  FromMS(QWord(round(abs(dt) * MSecsPerDay)) mod MSecsPerDay);
+  FromMS(QWord(round(abs(dt) * MilliSecsPerDay)) mod MilliSecsPerDay);
 end;
 
 procedure TSynSystemTime.FromMS(ms: PtrUInt);
 var
   t: PtrUInt;
 begin
-  t := ms div 3600000;
+  t := ms div MilliSecsPerHour;
   Hour := t;
-  dec(ms, t * 3600000);
-  t := ms div 60000;
+  dec(ms, t * MilliSecsPerHour);
+  t := ms div MilliSecsPerMin;
   Minute := t;
-  dec(ms, t * 60000);
-  t := ms div 1000;
+  dec(ms, t * MilliSecsPerMin);
+  t := ms div MilliSecsPerSec;
   Second := t;
-  dec(ms, t * 1000);
+  dec(ms, t * MilliSecsPerSec);
   MilliSecond := ms;
 end;
 
@@ -2601,9 +2603,9 @@ procedure TSynSystemTime.Normalize;
 
 begin
   DayOfWeek := 0;
-  while MilliSecond >= 1000 do
+  while MilliSecond >= MilliSecsPerSec do
   begin
-    dec(MilliSecond, 1000);
+    dec(MilliSecond, MilliSecsPerSec);
     inc(Second);
   end;
   while Second >= 60 do
@@ -2792,7 +2794,7 @@ var
   T: TSynSystemTime;
   now: shortstring; // use a temp variable for _HttpDateNowUtc atomic set
 begin
-  c := GetTickCount64 shr 10;
+  c := GetTickCount64 shr MilliSecsPerSecShl;
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
@@ -2943,7 +2945,7 @@ end;
 
 function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
 begin
-  UnixTimeToFileShort(UnixMSTime div MSecsPerSec, result);
+  UnixTimeToFileShort(UnixMSTime div MilliSecsPerSec, result);
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime;
@@ -2957,7 +2959,7 @@ end;
 
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
-  result := UnixMSTime / MSecsPerDay + UnixDateDelta;
+  result := UnixMSTime / MilliSecsPerDay + UnixDateDelta;
 end;
 
 function UnixMSTimeToDateTimeZ(const UnixMSTime: TUnixMSTime): TDateTime;
@@ -2971,11 +2973,11 @@ end;
 function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
   FirstTimeChar: AnsiChar): RawUtf8;
 begin
-  if UnixMSTime < MSecsPerDay then
-    result := TimeToIso8601(UnixMSTime / MSecsPerDay, true,
-                            FirstTimeChar, UnixMSTime < 1000)
+  if UnixMSTime < MilliSecsPerDay then
+    result := TimeToIso8601(UnixMSTime / MilliSecsPerDay, true,
+                            FirstTimeChar, UnixMSTime < MilliSecsPerSec)
   else
-    result := DaysToIso8601(UnixMSTime div MSecsPerDay, true);
+    result := DaysToIso8601(UnixMSTime div MilliSecsPerDay, true);
 end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
@@ -2983,7 +2985,7 @@ begin
   if AValue = 0 then
     result := 0
   else
-    result := Round((AValue - UnixDateDelta) * MSecsPerDay);
+    result := Round((AValue - UnixDateDelta) * MilliSecsPerDay);
 end;
 
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
@@ -2993,7 +2995,7 @@ begin
   if UnixMSTime <= 0 then
     result := ''
   else
-    result := DateTimeMSToString(UnixMSTime / MSecsPerDay + UnixDateDelta,
+    result := DateTimeMSToString(UnixMSTime / MilliSecsPerDay + UnixDateDelta,
                                  Expanded, FirstTimeChar, TZD);
 end;
 
@@ -3211,7 +3213,7 @@ end;
 
 function TTimeLogBits.ToUnixMSTime: TUnixMSTime;
 begin
-  result := ToUnixTime * MSecsPerSec;
+  result := ToUnixTime * MilliSecsPerSec;
 end;
 
 function TTimeLogBits.Text(Dest: PUtf8Char; Expanded: boolean;
@@ -3512,7 +3514,7 @@ var
   dt: TDateTime;
 begin
   // inlined UnixMSTimeToDateTime()
-  dt := Value^ / MSecsPerDay + UnixDateDelta;
+  dt := Value^ / MilliSecsPerDay + UnixDateDelta;
   AddDateTime(@dt, 'T', QuoteChar, WithMS, {dateandtime=}true);
 end;
 

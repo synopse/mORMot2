@@ -3785,7 +3785,7 @@ var
   waitms, tix10: cardinal;
   files: TSynLogDynArray;
 begin
-  waitms := 1000;
+  waitms := MilliSecsPerSec;
   repeat
     fEvent.WaitFor(waitms);
     if Terminated then
@@ -3822,7 +3822,7 @@ begin
       end;
       if files <> nil then
       begin
-        tix10 := mormot.core.os.GetTickCount64 shr 10; // second resolution
+        tix10 := mormot.core.os.GetTickCount64 shr MilliSecsPerSecShl;
         for i := 0 to high(files) do
           with files[i] do
             if Terminated or
@@ -4449,7 +4449,7 @@ begin
   if (fFileRotationDailyAtHourTix <> 0) and
      (GetTickCount64 >= fFileRotationDailyAtHourTix) then
   begin
-    inc(fFileRotationDailyAtHourTix, MSecsPerDay); // next day, same hour
+    inc(fFileRotationDailyAtHourTix, MilliSecsPerDay); // next day, same hour
     PerformRotation;
   end
   else if (fFileRotationSize > 0) and
@@ -5697,7 +5697,7 @@ begin
         hourRotate := hourRotate + 1; // will happen tomorrow
       timeBeforeRotate := hourRotate - timeNow;
       fFileRotationDailyAtHourTix :=
-        GetTickCount64 + trunc(timeBeforeRotate * MSecsPerDay);
+        GetTickCount64 + trunc(timeBeforeRotate * MilliSecsPerDay);
     end;
   end;
   // file name should include current timestamp if no rotation is involved
@@ -5787,7 +5787,7 @@ procedure TSynLog.OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
 begin
   fNextFlushTix10 := fFamily.AutoFlushTimeOut;
   if fNextFlushTix10 <> 0 then
-    inc(fNextFlushTix10, GetTickCount64 shr 10);
+    inc(fNextFlushTix10, GetTickCount64 shr MilliSecsPerSecShl);
 end;
 
 function TSynLog.GetFileSize: Int64;
@@ -6514,7 +6514,7 @@ begin
       dest := FormatString('%%.log%', [folder, UnixMSTimeToFileShort(ftime), ext]);
       if not FileExists(dest) then
         break;
-      inc(ftime, MSecsPerSec); // ensure unique
+      inc(ftime, MilliSecsPerSec); // ensure unique
       dec(i);
       if i = 0 then // paranoid
         raise ESynLogException.Create('LogCompressAlgoArchive infinite loop');
@@ -7494,7 +7494,7 @@ begin
       end
       else
       begin
-        tim := IntToStr(trunc(elapsed * MSecsPerDay * 1000) mod 1000);
+        tim := IntToStr(trunc(elapsed * MilliSecsPerDay * 1000) mod 1000);
         result := StringOfChar('0', 3 - length(tim)) + tim + #13#10 + result;
         DateTimeToString(tim, TIME_FORMAT, elapsed);
         result := tim + '.' + result;

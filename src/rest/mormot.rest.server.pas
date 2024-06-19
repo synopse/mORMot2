@@ -4744,7 +4744,7 @@ end;
 procedure TAuthSession.ComputeProtectedValues(tix: Int64);
 begin
   // here User.GroupRights and fPrivateKey should have been set
-  fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout) * (1000 * 60)) shr 10;
+  fTimeOutShr10 := User.GroupRights.SessionTimeout * (MilliSecsPerMin shr 10);
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
   FormatUtf8('%+%', [fID, fPrivateKey], fPrivateSalt);
@@ -5140,7 +5140,7 @@ begin
   minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
   if HexDisplayToBin(P, @ts, SizeOf(ts)) and
      (fNoTimestampCoherencyCheck or
-      (integer(minticks) < 0) or // <0 just after login
+      (integer(minticks) < 0) or // <0 just after computer startup
       ({%H-}ts >= minticks)) then
   begin
     expectedsign := fComputeSignature(result.fPrivateSaltHash,

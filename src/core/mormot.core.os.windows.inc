@@ -333,7 +333,7 @@ begin
   if PInt64(@FT)^ = 0 then
     result := 0
   else // inlined UnixTimeToDateTime()
-    result := FileTimeToUnixMSTime(FT) / MSecsPerDay + UnixDateDelta;
+    result := FileTimeToUnixMSTime(FT) / MilliSecsPerDay + UnixDateDelta;
 end;
 
 procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
@@ -1346,7 +1346,7 @@ end;
 
 function GetUptimeSec: cardinal;
 begin
-  result := GetTickCount64 div MSecsPerSec; // good enough
+  result := GetTickCount64 div MilliSecsPerSec; // good enough
 end;
 
 procedure SleepHiRes(ms: cardinal);

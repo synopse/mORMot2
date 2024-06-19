@@ -1397,7 +1397,7 @@ begin
       if fTimeoutSec = 0 then
         continue;
       if currentSec = 0 then
-        currentSec := GetTickCount64 shr 10;
+        currentSec := GetTickCount64 shr MilliSecsPerSecShl;
       if currentSec > item^.tix then
         Delete(i);
     end;
@@ -1416,7 +1416,7 @@ begin
   if fTimeoutSec <= 0 then
     currentSec := 0
   else if currentSec = 0 then
-    currentSec := GetTickCount64 shr 10;
+    currentSec := GetTickCount64 shr MilliSecsPerSecShl;
   Safe.Lock;
   try
     n := Count;
@@ -2894,7 +2894,7 @@ begin
       // 2 seconds minimal wait
       max := 2000;
     inc(max, start);
-    while not fIncoming.Pop(fProtocol, head, answer, tix shr 10) do
+    while not fIncoming.Pop(fProtocol, head, answer, tix shr MilliSecsPerSecShl) do
       if fState in [wpsDestroy, wpsClose] then
       begin
         WebSocketLog.Add.Log(sllError,

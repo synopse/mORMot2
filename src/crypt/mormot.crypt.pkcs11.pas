@@ -574,7 +574,7 @@ procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
 var
   endtix: Int64;
 begin // caller did "if not fConfigRetrieved then EnsureRetrieveConfig"
-  endtix := GetTickCount64 + 60000; // never wait forever
+  endtix := GetTickCount64 + MilliSecsPerMin; // never wait forever
   repeat
     SleepHiRes(100);
     if fConfigRetrieved then

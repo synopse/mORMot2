@@ -4125,7 +4125,7 @@ begin
   if fProgressiveID = 0 then
     exit; // abort
   // prepare to wait for the data to be available
-  tix := GetTickCount64 shr 10;
+  tix := GetTickCount64 shr MilliSecsPerSecShl;
   if fProgressiveTix = 0 then
     fProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first call
   // check if ChangeProgressiveFileName() did notify the switch to a final file
@@ -5107,7 +5107,7 @@ end;
 procedure THttpLoggerWriter.WriteToStream(data: pointer; len: PtrUInt);
 begin
   // no need of THttpLogger.OnIdle to flush this log file within this second
-  fLastWriteToStreamTix10 := GetTickCount64 shr 10;
+  fLastWriteToStreamTix10 := GetTickCount64 shr MilliSecsPerSecShl;
   // perform the actual flush to disk
   inherited WriteToStream(data, len);
 end;
@@ -5233,7 +5233,7 @@ begin
     else if (fWriterHost <> nil) and
             fWriterHostSafe.TryLock then
       try
-        tix10 := tix64 shr 10;
+        tix10 := tix64 shr MilliSecsPerSecShl;
         for i := 0 to length(fWriterHost) - 1 do
           with fWriterHost[i] do
             if fLastWriteToStreamTix10 <> tix10 then
@@ -5499,7 +5499,7 @@ begin
   // retrieve the output stream for the expected .log file
   if Context.Tix64 = 0 then
     Context.Tix64 := GetTickCount64;
-  tix10 := Context.Tix64 shr 10;
+  tix10 := Context.Tix64 shr MilliSecsPerSecShl;
   wr := GetWriter(tix10, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
   if (wr = nil) or
      (wr.Stream = nil) then

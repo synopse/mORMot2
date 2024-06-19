@@ -539,7 +539,7 @@ begin
     fRetryEvent.SetEvent; // unlock WaitFor(pause) below
 end;
 
-function ComputePause(tix: Int64; var lastunstable: Int64): integer;
+function ComputePauseSec(tix: Int64; var lastunstable: Int64): integer;
 var
   min: integer;
 begin
@@ -548,7 +548,7 @@ begin
     lastunstable := tix
   else
   begin
-    min := (tix - lastunstable) div 60000;
+    min := (tix - lastunstable) div MilliSecsPerMin;
     if min > 0 then    // retry every 2 sec until 1 min
       if min < 5 then
         result := 15   // retry every 15 sec until 5 min
@@ -582,7 +582,7 @@ var
 
 begin
   log := fLog.Add;
-  timeout := fService.RetryStableSec * 1000;
+  timeout := fService.RetryStableSec shl MilliSecsPerSecShl;
   sn := fService.Name;
   se := fService.AbortExitCodes;
   notifytix := false;
@@ -639,7 +639,7 @@ begin
         if tix - start < timeout then
         begin
           // it did not last RetryStableSec: seems not stable - pause and retry
-          pause := ComputePause(tix, lastunstable);
+          pause := ComputePauseSec(tix, lastunstable);
           if fService <> nil then
           begin
             fService.DoNotify(doExitRetry,
@@ -839,7 +839,7 @@ begin
       // any exception on DoOne() should break the starting
       fOwner.DoOne(log, self, acDoStart, fStart[a]);
   if fWatch <> nil then
-    fNextWatch := GetTickCount64 + fWatchDelaySec * 1000;
+    fNextWatch := GetTickCount64 + fWatchDelaySec * MilliSecsPerSec;
 end;
 
 function TSynAngelizeService.DoStop(log: TSynLog): boolean;
@@ -1499,7 +1499,7 @@ begin
             else
               sec := sec * 3; // wait up to 3 gracefull ending phases
             Log.Log(sllTrace, 'Stop: % wait for ending up to % sec', [p, sec], Sender);
-            endtix := GetTickCount64 + sec * 1000;
+            endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
             repeat
               SleepHiRes(10);
               if Service.fRunner = nil then
@@ -1800,7 +1800,7 @@ begin
   begin
     log.Log(sllTrace, 'StartServices: wait % sec for level #% start',
       [sec, level], self);
-    endtix := GetTickCount64 + sec * 1000;
+    endtix := GetTickCount64 + sec shl MilliSecsPerSecShl;
     for i := 0 to high(fStarted) do
     begin
       s := fStarted[i];
@@ -1859,7 +1859,7 @@ begin
   begin
     log.Log(sllTrace, 'StartWatching', self);
     fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
-      WatchEverySecond, 1000, nil, log.Family.OnThreadEnded);
+      WatchEverySecond, MilliSecsPerSec, nil, log.Family.OnThreadEnded);
   end
   else
     log.Log(sllTrace, 'StartWatching: no need to watch', self);
@@ -1899,7 +1899,7 @@ begin
             [s.Name, s.fWatch[a], E.ClassType], self);
       end;
     tix := GetTickCount64; // may have changed during DoWatch() progress
-    s.fNextWatch := tix + s.WatchDelaySec * 1000;
+    s.fNextWatch := tix + s.WatchDelaySec * MilliSecsPerSec;
   end;
 end;
 

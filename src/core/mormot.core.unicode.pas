@@ -9330,7 +9330,7 @@ begin
     exit;
   if tix64 = 0 then
     tix64 := GetTickCount64;
-  if tix64 shr 10 < fNextTix then
+  if tix64 shr MilliSecsPerSecShl < fNextTix then
     exit;
   fSafe.WriteLock;
   try
@@ -9376,7 +9376,7 @@ begin
           aReadMs^ := stop - start;
         end;
         if fFlushSeconds <> 0 then
-          fNextTix := (GetTickCount64 shr 10) + fFlushSeconds;
+          fNextTix := (GetTickCount64 shr MilliSecsPerSecShl) + fFlushSeconds;
       end;
     finally
       fSafe.WriteUnLock;

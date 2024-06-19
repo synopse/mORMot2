@@ -445,7 +445,7 @@ begin
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
   len := length(aFrame.payload);
-  tix := GetTickCount64 shr 10;
+  tix := GetTickCount64 shr MilliSecsPerSecShl;
   fWebSocketConnections.Safe.ReadOnlyLock;
   try
     ws := pointer(fWebSocketConnections.List);

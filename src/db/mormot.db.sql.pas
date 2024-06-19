@@ -3614,12 +3614,12 @@ end;
 
 procedure TSqlDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
 begin
-  fConnectionTimeOutTicks := minutes * 60000; // minutes to ms conversion
+  fConnectionTimeOutTicks := minutes * MilliSecsPerMin;
 end;
 
 function TSqlDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
 begin
-  result := fConnectionTimeOutTicks div 60000;
+  result := fConnectionTimeOutTicks div MilliSecsPerMin;
 end;
 
 function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;

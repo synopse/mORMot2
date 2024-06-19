@@ -1413,7 +1413,7 @@ begin
      (fRenewBeforeEndDays <= 0) or
      (Tix64 < fNextCheckTix) then
     exit;
-  fNextCheckTix := Tix64 + (MSecsPerDay shr 1); // retry every half a day
+  fNextCheckTix := Tix64 + (MilliSecsPerDay shr 1); // retry every half a day
   CheckCertificatesBackground; // launch a dedicated background thread
 end;
 

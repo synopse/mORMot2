@@ -5321,7 +5321,7 @@ end;
 function TOrmPropInfoRttiDateTime.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 const
-  PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MSecsPerDay);
+  PRECISION: array[boolean] of double = (1 / SecsPerDay, 1 / MilliSecsPerDay);
 var
   V1, V2: double;
 begin
@@ -10425,7 +10425,7 @@ begin
         n := fCount;
       end;
       fID[n] := aID;
-      fTix[n] := GetTickCount64 shr 10;
+      fTix[n] := GetTickCount64 shr MilliSecsPerSecShl;
       inc(fCount);
     finally
       fSafe.WriteUnLock;
@@ -10510,7 +10510,7 @@ begin
      (fCount = 0) or
      (MinutesFromNow = 0) then
     exit; // nothing to purge
-  old := GetTickCount64 shr 10; // as seconds
+  old := GetTickCount64 shr MilliSecsPerSecShl; // as seconds
   if old - fLastPurge < 60 then
     exit; // no need to purge more than once per minute
   fLastPurge := old;

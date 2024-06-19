@@ -9230,7 +9230,7 @@ begin
   if Int64(Nano) <= 0 then
     PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
   else if Nano > 9900 then
-    MicroSecToString(Nano div 1000, result)
+    MicroSecToString(Nano div NanoSecsPerMicroSec, result)
   else if Nano >= 1000 then
     By100ToTwoDigitString(
       {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)

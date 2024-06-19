@@ -2126,7 +2126,7 @@ begin
     exit;
   end;
   fCacheCurrent := noCache;
-  fCacheCurrentSec := GetTickCount64 div 1000;
+  fCacheCurrentSec := GetTickCount64 div MilliSecsPerSec;
   fRun.fCacheLocker.Enter;
   try
     if cardinal(aMethodIndex) < cardinal(Length(fRun.fCache)) then

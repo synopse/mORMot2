@@ -1520,7 +1520,7 @@ begin
     raise ERsaException.Create('TBigInt.FillPrime: unsupported size');
   // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
   if EndTix <= 0 then
-    EndTix := GetTickCount64 + 60000; // worst time on Intel is around 1 sec
+    EndTix := GetTickCount64 + MilliSecsPerMin; // time on Intel is around 1 sec
   // compute number of Miller-Rabin rounds for 2^-112 error probability
   min := FipsMinIterations(n shl HALF_SHR);
   if Iterations < min then // ensure at least FIPS recommendation
@@ -2426,7 +2426,7 @@ begin
     exit;                  // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
   if TimeOutMS <= 0 then
-    TimeOutMS := 60000; // blocking 1 minute seems fair enough
+    TimeOutMS := MilliSecsPerMin; // blocking 1 minute seems fair enough
   endtix := GetTickCount64 + TimeOutMS;
   // setup local variables
   fModulusBits := Bits;

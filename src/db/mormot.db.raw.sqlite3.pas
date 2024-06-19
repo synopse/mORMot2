@@ -6365,7 +6365,7 @@ begin
        (V2 = 0) then
       // any invalid date -> compare as UTF-8 strings
       result := Utf8ILComp(s1, s2, s1Len, s2Len)
-    else if SameValue(V1, V2, 1 / MSecsPerDay) then
+    else if SameValue(V1, V2, 1 / MilliSecsPerDay) then
       result := 0
     else if V1 < V2 then
       result := -1
@@ -7427,7 +7427,7 @@ begin
     TimeOutSeconds := 60;
   fLog.Add.Log(sllDB,'BackupBackgroundWaitUntilFinished(%) wait on % - %',
     [TimeOutSeconds, FileNameWithoutPath, StepAsText], self);
-  endtix := GetTickCount64 + TimeOutSeconds * 1000;
+  endtix := GetTickCount64 + TimeOutSeconds shl MilliSecsPerSecShl;
   repeat
     // wait for "natural" process ending
     SleepHiRes(10);
@@ -7441,7 +7441,7 @@ begin
     // notify Execute to force loop abortion
     fBackupBackgroundInProcess.Terminate;
   UnLock;
-  endtix := GetTickCount64 + TimeOutSeconds * 1000;
+  endtix := GetTickCount64 + TimeOutSeconds shl MilliSecsPerSecShl;
   repeat
     // wait for the background process to be actually aborted
     SleepHiRes(10);

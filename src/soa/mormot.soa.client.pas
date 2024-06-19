@@ -436,7 +436,7 @@ begin
       if Terminated then
         exit;
     except
-      SleepOrTerminated(fRetryPeriodSeconds * 1000); // wait before retry
+      SleepOrTerminated(fRetryPeriodSeconds * MilliSecsPerSec); // wait before retry
     end;
     if Terminated then
       exit;
@@ -945,7 +945,7 @@ begin
   if SendNotificationsPending <> 0 then
     with fClient.LogClass.Enter do
     begin
-      timeOut := GetTickCount64 + aTimeOutSeconds * 1000;
+      timeOut := GetTickCount64 + aTimeOutSeconds shl MilliSecsPerSecShl;
       repeat
         SleepHiRes(5);
         if SendNotificationsPending = 0 then

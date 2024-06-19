@@ -1804,7 +1804,7 @@ begin
             (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dstfn))) then
           continue;
         FileFromString(s, dstfn);
-        FileSetDateFromUnixUtc(dstfn, reftime div MSecsPerSec);
+        FileSetDateFromUnixUtc(dstfn, reftime div MilliSecsPerSec);
         inc(result);
         if sfoWriteFileNameToConsole in Options then
           ConsoleWrite('synched %', [dstfn]);
@@ -4474,7 +4474,7 @@ begin
     if fSnapShotAfterMinutes = 0 then
       fSnapshotTimestamp := 0
     else
-      fSnapshotTimestamp := GetTickCount64 + fSnapShotAfterMinutes * 60000;
+      fSnapshotTimestamp := GetTickCount64 + fSnapShotAfterMinutes * MilliSecsPerMin;
   finally
     fSafe.WriteUnLock;
   end;

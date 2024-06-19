@@ -275,7 +275,8 @@ var
 begin
   // this code is not blocking and very quick most of the time
   result := false;
-  delaysec := TWebSocketAsyncServer(fServer).fSettings.HeartbeatDelay shr 10;
+  delaysec := TWebSocketAsyncServer(fServer).
+    fSettings.HeartbeatDelay shr MilliSecsPerSecShl;
   if nowsec < delaysec + fLastOperation then
     exit; // nothing to send (most common case)
   // it is time to notify the other end that we are still alive

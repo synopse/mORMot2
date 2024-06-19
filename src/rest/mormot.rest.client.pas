@@ -2142,7 +2142,7 @@ begin
        (isDestroying in fInternalState) then
       exit;
     retry := 0;
-    max := fConnectRetrySeconds * 1000;
+    max := fConnectRetrySeconds * MilliSecsPerSec;
     if max = 0 then
       started := 0
     else

@@ -1999,7 +1999,7 @@ end;
 procedure TSqlDBHttpConnectionPropertiesAbstract.SetServerName(
   const aServerName: RawUtf8);
 begin
-  fKeepAliveMS := 60000;
+  fKeepAliveMS := MilliSecsPerMin;
   if not fUri.From(aServerName) then
     ESqlDBRemote.RaiseUtf8(
       '%.Create: expect a valid URI in aServerName=[%]',

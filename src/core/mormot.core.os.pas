@@ -541,19 +541,18 @@ function SidToKnown(const text: RawUtf8): TWellKnownSid; overload;
 /// recognize some well-known SIDs from the supplied SID dynamic array
 function SidToKnownGroups(const sids: PSids): TWellKnownSids;
 
-const { some time converion constants redefined here from RTL }
-  HoursPerDay = 24;
-  MinsPerHour = 60;
-  SecsPerMin  = 60;
-  MinsPerDay  = HoursPerDay * MinsPerHour;
-  SecsPerDay  = MinsPerDay  * SecsPerMin;
-  SecsPerHour = MinsPerHour * SecsPerMin;
-  MilliSecsPerSec = 1000;
-  MicroSecsPerSec = 1000000;
+const // some time conversion constants with Milli/Micro/NanoSec resolution
+  SecsPerHour          = 60;   // missing in oldest Delphi
+  MilliSecsPerSec      = 1000;
+  MilliSecsPerSecShl   = 10; // 1 shl 10 = 1024 = rough approximation of 1000
+  MilliSecsPerMin      = MilliSecsPerSec  * SecsPerMin;
+  MilliSecsPerHour     = MilliSecsPerMin  * MinsPerHour;
+  MilliSecsPerDay      = MilliSecsPerHour * HoursPerDay;
   MicroSecsPerMilliSec = 1000;
+  MicroSecsPerSec      = MicroSecsPerMilliSec * MilliSecsPerSec;
   NanoSecsPerMicroSec  = 1000;
-  NanoSecsPerMilliSec  = 1000000;
-  NanoSecsPerSec       = 1000000000;
+  NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
+  NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
 
 
 { ****************** Gather Operating System Information }
@@ -6777,7 +6776,7 @@ end;
 
 function NowUtc: TDateTime;
 begin
-  result := UnixMSTimeUtcFast / Int64(MSecsPerDay) + Int64(UnixDelta);
+  result := UnixMSTimeUtcFast / Int64(MilliSecsPerDay) + Int64(UnixDelta);
 end;
 
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;

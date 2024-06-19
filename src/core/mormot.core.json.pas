@@ -9280,7 +9280,7 @@ begin
     Reset;
   if fTimeoutSeconds > 0 then
   begin
-    tix := GetTickCount64 shr 10;
+    tix := GetTickCount64 shr MilliSecsPerSecShl;
     if fTimeoutTix > tix then
       Reset;
     fTimeoutTix := tix + fTimeoutSeconds;
@@ -9406,7 +9406,7 @@ function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result <> 0 then
-    result := cardinal(GetTickCount64 shr 10) + result;
+    result := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + result;
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -9464,7 +9464,7 @@ begin
     exit;
   if tix64 = 0 then
     tix64 := GetTickCount64;
-  now := tix64 shr 10;
+  now := tix64 shr MilliSecsPerSecShl;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
     exit; // no need to search more often than every second
   fSafe.ReadWriteLock; // would upgrade to cWrite only if needed
@@ -9731,7 +9731,7 @@ begin
     begin
       tim := fSafe.Padding[DIC_TIMESEC].VInteger;
       if tim > 0 then // inlined fTimeout[result] := GetTimeout
-        fTimeout[result] := cardinal(GetTickCount64 shr 10) + tim;
+        fTimeout[result] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
     end;
   end;
 end;
@@ -9758,7 +9758,7 @@ var
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim <> 0 then
-    tim := cardinal(GetTickCount64 shr 10) + tim;
+    tim := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
   ndx := fKeys.FindHashedForAdding(aKey, added);
   if added then
   begin
@@ -10003,7 +10003,7 @@ begin
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then
-    fTimeOut[aIndex] := cardinal(GetTickCount64 shr 10) + tim;
+    fTimeOut[aIndex] := cardinal(GetTickCount64 shr MilliSecsPerSecShl) + tim;
 end;
 
 function TSynDictionary.Count: integer;

@@ -5942,7 +5942,7 @@ begin
   if (pcoBroadcastNotAlone in fSettings.Options) or
      (waoBroadcastNotAlone in Params.AlternateOptions) then
   begin
-    tix := (GetTickCount64 shr 10) + 1; // 1024 ms resolution
+    tix := (GetTickCount64 shr MilliSecsPerSecShl) + 1; // 1024 ms resolution
     brdcst := (fBroadcastTix <> tix);   // reenable broadcasting after 1s delay
   end;
   if brdcst then

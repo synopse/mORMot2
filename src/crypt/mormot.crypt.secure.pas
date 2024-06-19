@@ -4643,7 +4643,7 @@ begin
   if Tix64 = 0 then
     Tix64 := GetTickCount64;
   created := created and pred(QWord(1) shl 48);
-  if Tix64 - created > NonceExpSec shl 10 then
+  if Tix64 - created > NonceExpSec shl MilliSecsPerSecShl then
     exit;
   // fast challenge against the 64-bit Opaque value (typically a connection ID)
   DefaultHasher128(@nonce128, @Opaque, SizeOf(Opaque)); // see DigestServerInit
