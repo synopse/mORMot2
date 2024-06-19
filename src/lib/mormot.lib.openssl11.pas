@@ -207,12 +207,14 @@ var
   OpenSslDefaultPath: TFileName;
 
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
-  // - equals e.g. $1010106f
+  // - equals e.g. $1010106f or $300000b0
   // - "if OpenSslVersion >= OPENSSL3_VERNUM then" to detect OpenSSL 3.x
   OpenSslVersion: cardinal;
   /// hexadecimal OpenSSL library version loaded e.g. after OpenSslIsAvailable call
-  // - equals e.g. '1010106F'
+  // - equals e.g. '1010106F' or '300000B0'
   OpenSslVersionHexa: string;
+  /// high-level OpenSSL text description, e.g. 'OpenSSL 3.0.11 19 Sep 2023'
+  OpenSslVersionText: RawUtf8;
 
   /// internal PSSL data reference slot - for SSL_get_ex_data/SSL_set_ex_data
   OpenSslExIndexSsl: integer;
@@ -301,6 +303,12 @@ function OpenSslInitialize(
 
 const
   OPENSSLSUCCESS = 1;
+
+  OPENSSL_VERSION_ = 0;
+  OPENSSL_CFLAGS   = 1;
+  OPENSSL_BUILT_ON = 2;
+  OPENSSL_PLATFORM = 3;
+  OPENSSL_DIR      = 4;
 
   CRYPTO_EX_INDEX_SSL = 0;
   CRYPTO_EX_INDEX_SSL_CTX = 1;
@@ -2416,6 +2424,7 @@ function d2i_PKCS8PrivateKey_bio(bp: PBIO; x: PPEVP_PKEY;
 function EVP_aes_256_cbc(): PEVP_CIPHER; cdecl;
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 function OpenSSL_version_num(): cardinal; cdecl;
+function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
@@ -3385,12 +3394,13 @@ type
     EVP_aes_256_cbc: function(): PEVP_CIPHER; cdecl;
     PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
     OpenSSL_version_num: function(): cardinal; cdecl;
+    OpenSSL_version: function(typ: integer): PUtf8Char; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..334] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..335] of RawUtf8 = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3725,6 +3735,7 @@ const
     'EVP_aes_256_cbc',
     'PEM_write_bio_PUBKEY',
     'OpenSSL_version_num',
+    'OpenSSL_version',
     'X509_print');
 
 var
@@ -5498,6 +5509,11 @@ begin
   result := libcrypto.OpenSSL_version_num();
 end;
 
+function OpenSSL_version(typ: integer): PUtf8Char;
+begin
+  result := libcrypto.OpenSSL_version(typ);
+end;
+
 function X509_print(bp: PBIO; x: PX509): integer;
 begin
   result := libcrypto.X509_print(bp, x);
@@ -5688,10 +5704,11 @@ begin
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
       OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
+      OpenSslVersionText := RawUtf8(libcrypto.OpenSSL_version(OPENSSL_VERSION_));
       if OpenSslVersion and $ffffff00 < LIB_MIN then // paranoid check
         raise EOpenSsl.CreateFmt(
-          'Incorrect OpenSSL version %s in %s - expects ' + LIB_TXT,
-          [OpenSslVersionHexa, libcrypto.LibraryPath]);
+          'Incorrect %s version in %s - expects ' + LIB_TXT,
+          [OpenSslVersionText, libcrypto.LibraryPath]);
       OpenSslExIndexSsl := SSL_get_ex_new_index(0, nil, nil, nil, nil);
       openssl_initialize_errormsg := ''; // no error with these lib paths
     except
@@ -6938,6 +6955,9 @@ function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 function OpenSSL_version_num(): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'OpenSSL_version_num';
 
+function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
+  external LIB_CRYPTO name _PU + 'OpenSSL_version';
+
 function X509_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print';
 
@@ -6961,6 +6981,7 @@ function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
 begin
   OpenSslVersion := OpenSSL_version_num;
   OpenSslVersionHexa := IntToHex(OpenSslVersion, 8);
+  OpenSslVersionText := RawUtf8(OpenSSL_version(OPENSSL_VERSION_));
   OpenSslExIndexSsl := SSL_get_ex_new_index(0, nil, nil, nil, nil);
   result := true;
 end;
@@ -10633,6 +10654,7 @@ var
   OpenSslDefaultCrypto, OpenSslDefaultSsl, OpenSslDefaultPath: string;
   OpenSslVersion: cardinal;
   OpenSslVersionHexa: string;
+  OpenSslVersionText: RawUtf8;
 
 // some global functions doing nothing or returning false
 function OpenSslInitialize(const libcryptoname: string = '';

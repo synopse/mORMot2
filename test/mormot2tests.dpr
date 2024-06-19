@@ -106,8 +106,7 @@ end;
 
 function TIntegrationTests.Run: boolean;
 var
-  cp, ssl: shortstring;
-  mem: TMemoryInfo;
+  ssl: shortstring;
 begin
   ssl[0] := #0;
   {$ifdef USE_OPENSSL}
@@ -115,21 +114,13 @@ begin
   RegisterOpenSsl;
   RegisterX509; // enable the additional CryptPublicKey[] algorithms for X.509
   if OpenSslIsAvailable then
-    FormatShort(' and OpenSSL %', [OpenSslVersionHexa], ssl);
+    FormatShort(' and %', [OpenSslVersionText], ssl);
   {$endif USE_OPENSSL}
-  case Unicode_CodePage of
-    CP_UTF8:
-      cp := 'utf8';
-    CODEPAGE_US:
-      cp := 'WinAnsi';
-  else
-    FormatShort('cp%', [Unicode_CodePage], cp);
-  end;
-  GetMemoryInfo(mem, false);
   CustomVersions := Format(CRLF + CRLF + '%s [%s %s %x]'+ CRLF +
     '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s%s'+ CRLF + '    %s',
-    [OSVersionText, cp, KBNoSpace(mem.memtotal), OSVersionInt32, CpuInfoText,
-     BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION, ssl, sqlite3.Version]);
+    [OSVersionText, CodePageToText(Unicode_CodePage), KBNoSpace(SystemMemorySize),
+     OSVersionInt32, CpuInfoText, BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
+     ssl, sqlite3.Version]);
   result := inherited Run;
 end;
 

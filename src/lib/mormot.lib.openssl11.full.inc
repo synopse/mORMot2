@@ -62,7 +62,7 @@ const
   CRYPTO_R_ODD_NUMBER_OF_DIGITS = 103;
   
   SSLEAY_VERSION_NUMBER = OPENSSL_VERSION_NUMBER; 
-  //OPENSSL_VERSION = 0;
+  OPENSSL_VERSION = 0;
   OPENSSL_CFLAGS = 1;
   SSLEAY_CFLAGS = OPENSSL_CFLAGS;
   OPENSSL_BUILT_ON = 2;
@@ -11306,9 +11306,6 @@ function OPENSSL_hexchar2int(c: Byte): integer; cdecl;
 
 function SSLeay(): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'OpenSSL_version_num';
-
-function OpenSSL_version(typ: integer): PUtf8Char; cdecl;
-  external LIB_CRYPTO name _PU + 'OpenSSL_version';
 
 function SSLeay_version(typ: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'OpenSSL_version';
