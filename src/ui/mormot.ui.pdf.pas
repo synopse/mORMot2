@@ -3059,7 +3059,7 @@ begin
   for i := 3 to 7 do
     PWordArray(pointer(result))^[i] := TwoDigitLookupW[D[i]];
   PByteArray(result)[16] := ord('Z');
-//  Assert(abs(_PdfDateToDateTime(result)-ADate)<MSecsPerSec);
+//  Assert(abs(_PdfDateToDateTime(result)-ADate)<MilliSecsPerSec);
 end;
 
 function PdfDateToDateTime(const AText: TPdfDate; out AValue: TDateTime): boolean;
@@ -3080,8 +3080,9 @@ begin
   if (H < 24) and
     (MI < 60) and
     (SS < 60) then // inlined EncodeTime()
-    AValue := AValue + (H * (MinsPerHour * SecsPerMin * MSecsPerSec) +
-              MI * (SecsPerMin * MSecsPerSec) + SS * MSecsPerSec) / MSecsPerDay
+    AValue := AValue + (H * MilliSecsPerHour +
+                        MI * MilliSecsPerMin +
+                        SS * MilliSecsPerSec) / MilliSecsPerDay
   else
     exit;
   result := true;
