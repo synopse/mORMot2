@@ -2775,7 +2775,7 @@ end;
 {$else} // pure Linux
 
 const
-  // note: reading some of the /sys/class/dmi/id/* files may require root access
+  // read some of the /sys/class/dmi/id/* files (may require root access)
   _KNOWN: array[0..15] of record
     id: TSmbiosBasicInfo;
     fn: string;
