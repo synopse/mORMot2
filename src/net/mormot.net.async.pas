@@ -1307,7 +1307,7 @@ type
     /// optional HTTPS private key file password
     property PrivateKeyPassword: SpiUtf8
       read fPrivateKeyPassword write fPrivateKeyPassword;
-    /// optional HTTPS private key file password
+    /// optional HTTPS certificates authorities file
     property CACertificatesFile: TFileName
       read fCACertificatesFile write fCACertificatesFile;
     /// optional favicon.ico file content
