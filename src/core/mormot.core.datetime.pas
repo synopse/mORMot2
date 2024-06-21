@@ -584,6 +584,12 @@ function NowToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' ';
 function NowUtcToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' '): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// retrieve the current local date into '19 Sep 2023' English-readable text
+function NowTextDateShort(UtcDate: boolean): TShort15;
+
+/// convert a TUnixTime date into '19 Sep 2023' English-readable text
+function UnixTimeToTextDateShort(Date: TUnixTime): TShort15;
+
 /// convert some date/time to the ISO 8601 text layout, including milliseconds
 // - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
@@ -2695,6 +2701,22 @@ end;
 function NowUtcToString(Expanded: boolean; FirstTimeChar: AnsiChar): RawUtf8;
 begin
   result := NowToString(Expanded, FirstTimeChar, {UTC=}true);
+end;
+
+function NowTextDateShort(UtcDate: boolean): TShort15;
+var
+  T: TSynSystemTime;
+begin
+  T.FromNow(not UtcDate);
+  T.ToTextDateShort(result);
+end;
+
+function UnixTimeToTextDateShort(Date: TUnixTime): TShort15;
+var
+  T: TSynSystemTime;
+begin
+  T.FromUnixTime(Date);
+  T.ToTextDateShort(result);
 end;
 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
