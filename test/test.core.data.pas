@@ -6822,8 +6822,8 @@ begin
   s := n.Text(true);
   id2 := id.ToTimeLog;
   s2 := id.Text(true);
-  Check(id2 = now);
-  Check(s2 = s);
+  CheckEqual(id2, now, 'id');
+  CheckEqual(s2, s, 's');
   for i := 1 to 200 do
   begin
     n.From(n.ToDateTime + RandomDouble * 50);
@@ -6835,8 +6835,8 @@ begin
     id.SetTime(mugHour, n.Hour);
     id2 := id.ToTimeLog;
     s2 := id.Text(true);
-    Check(id2 = now);
-    Check(s2 = s);
+    CheckEqual(id2, now, 'id#');
+    CheckEqual(s2, s, 's#');
     Check(id.Granularity = mugHour);
     id.From(n.Year, n.Month, n.Day);
     Check(id.Granularity = mugDay);
