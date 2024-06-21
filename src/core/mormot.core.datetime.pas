@@ -509,8 +509,11 @@ type
     procedure ToHttpDate(out text: RawUtf8; const tz: RawUtf8 = 'GMT';
       const prefix: RawUtf8 = '');
     /// convert the stored date and time to its text in HTTP-like format
+    // - e.g. "Tue, 15 Nov 1994 12:45:26 GMT"
     procedure ToHttpDateShort(var text: shortstring; const tz: RawUtf8 = 'GMT';
       const prefix: RawUtf8 = '');
+    /// convert the stored date into its '19 Sep 2023' English-readable date text
+    procedure ToTextDateShort(var text: TShort15);
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
     procedure ToIsoDateTimeShort(var text: shortstring; FirstTimeChar: AnsiChar = 'T');
     /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
@@ -2469,6 +2472,13 @@ begin
     UInt2DigitsToShortFast(Minute),
     UInt2DigitsToShortFast(Second),
     tz], text);
+end;
+
+procedure TSynSystemTime.ToTextDateShort(var text: TShort15);
+begin
+  FormatShort16('% % %', [SmallUInt32Utf8[Day],
+                          HTML_MONTH_NAMES[Month],
+                          UInt4DigitsToShort(Year)], text);
 end;
 
 procedure TSynSystemTime.ToIsoDateTime(out text: RawUtf8; FirstTimeChar: AnsiChar);

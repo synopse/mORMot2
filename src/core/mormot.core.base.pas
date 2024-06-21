@@ -512,6 +512,10 @@ type
   TShort16 = string[16];
   PShort16 = ^TShort16;
 
+  /// used e.g. by TSynSystemTime.ToTextDateShort
+  TShort15 = string[15];
+  PShort15 = ^TShort15;
+
   /// used e.g. for TTextWriter.AddShorter small text constants
   TShort8 = string[8];
   PShort8 = ^TShort8;
