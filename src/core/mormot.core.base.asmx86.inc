@@ -1279,30 +1279,30 @@ asm
         mov     ebp, esp
         {$endif FPC}
         mov     ecx, eax
-        mov     eax, dword ptr [ebp+8H]
-        mul     dword ptr [ebp+10H]
+        mov     eax, dword ptr [ebp + 8H]
+        mul     dword ptr [ebp + 10H]
         mov     dword ptr [ecx], eax
-        mov     dword ptr [ebp-4H], edx
-        mov     eax, dword ptr [ebp+8H]
-        mul     dword ptr [ebp+14H]
-        add     eax, dword ptr [ebp-4H]
+        mov     dword ptr [ebp - 4H], edx
+        mov     eax, dword ptr [ebp + 8H]
+        mul     dword ptr [ebp + 14H]
+        add     eax, dword ptr [ebp - 4H]
         adc     edx, 0
-        mov     dword ptr [ebp-10H], eax
-        mov     dword ptr [ebp-0CH], edx
-        mov     eax, dword ptr [ebp+0CH]
-        mul     dword ptr [ebp+10H]
-        add     eax, dword ptr [ebp-10H]
+        mov     dword ptr [ebp - 10H], eax
+        mov     dword ptr [ebp - 0CH], edx
+        mov     eax, dword ptr [ebp + 0CH]
+        mul     dword ptr [ebp + 10H]
+        add     eax, dword ptr [ebp - 10H]
         adc     edx, 0
-        mov     dword ptr [ecx+4H], eax
-        mov     dword ptr [ebp-14H], edx
-        mov     eax, dword ptr [ebp+0CH]
-        mul     dword ptr [ebp+14H]
-        add     eax, dword ptr [ebp-0CH]
+        mov     dword ptr [ecx + 4H], eax
+        mov     dword ptr [ebp - 14H], edx
+        mov     eax, dword ptr [ebp + 0CH]
+        mul     dword ptr [ebp + 14H]
+        add     eax, dword ptr [ebp - 0CH]
         adc     edx, 0
-        add     eax, dword ptr [ebp-14H]
+        add     eax, dword ptr [ebp - 14H]
         adc     edx, 0
-        mov     dword ptr [ecx+8H], eax
-        mov     dword ptr [ecx+0CH], edx
+        mov     dword ptr [ecx + 8H], eax
+        mov     dword ptr [ecx + 0CH], edx
         {$ifdef FPC}
         pop     ebp
         {$endif FPC}
