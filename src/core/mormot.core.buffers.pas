@@ -1811,6 +1811,8 @@ function GetMimeContentType(Content: pointer; Len: PtrInt; const FileName: TFile
 function GetMimeContentTypeHeader(const Content: RawByteString;
   const FileName: TFileName = ''; Mime: PMimeType = nil): RawUtf8;
 
+function ToText(t: TMimeType): PShortString; overload;
+
 const
   /// the "magic" number used to identify .log.synlz compressed files, as
   // created by EventArchiveSynLZ / EventArchiveLizard callbacks
@@ -8814,6 +8816,11 @@ function GetMimeContentTypeHeader(const Content: RawByteString;
 begin
   result := HEADER_CONTENT_TYPE + GetMimeContentType(
       pointer(Content), length(Content), FileName, BINARY_CONTENT_TYPE, Mime);
+end;
+
+function ToText(t: TMimeType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TMimeType), ord(t));
 end;
 
 const

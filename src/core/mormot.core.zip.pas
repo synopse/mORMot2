@@ -2714,7 +2714,7 @@ begin
   if Size < WorkingMem then
     WorkingMem := Size; // up to 1MB by default
   if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
-    ESynZip.RaiseUtf8('%.Create: No ZIP header found %', [self, fFileName]);
+    ESynZip.RaiseUtf8('%.Create: void ZIP file %', [self, fFileName]);
   FastNewRawByteString(fSourceBuffer, WorkingMem);
   P := pointer(fSourceBuffer);
   // search for the first zip file local header
@@ -2795,7 +2795,8 @@ begin
       end;
     inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
   until read <> WorkingMem;
-  ESynZip.RaiseUtf8('%.Create: No ZIP header found %', [self, fFileName]);
+  ESynZip.RaiseUtf8('%.Create: No ZIP header found in % %',
+    [self, KBNoSpace(Size), fFileName]);
 end;
 
 constructor TZipRead.Create(const aFileName: TFileName;
