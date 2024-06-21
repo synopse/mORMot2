@@ -117,9 +117,10 @@ begin
     FormatShort(' and %', [OpenSslVersionText], ssl);
   {$endif USE_OPENSSL}
   CustomVersions := Format(CRLF + CRLF + '%s [%s %s %x]'+ CRLF +
-    '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s%s'+ CRLF + '    %s',
+    '    %s' + CRLF + '    on %s'+ CRLF + 'Using mORMot %s %s%s'+ CRLF + '    %s',
     [OSVersionText, CodePageToText(Unicode_CodePage), KBNoSpace(SystemMemorySize),
      OSVersionInt32, CpuInfoText, BiosInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
+     UnixTimeToTextDateShort(FileAgeToUnixTimeUtc(Executable.ProgramFileName)),
      ssl, sqlite3.Version]);
   result := inherited Run;
 end;
