@@ -24,6 +24,7 @@ uses
   mormot.core.os,
   mormot.core.text,
   mormot.core.unicode,
+  mormot.core.datetime,
   mormot.core.log,
   mormot.core.test,
   mormot.db.raw.sqlite3, // for the SQLite3 version below
