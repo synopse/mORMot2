@@ -298,12 +298,15 @@ begin
               Rec.YearOfBirth := 1000 + i;
               Rec.YearOfDeath := 1040 + i;
               fIDs[i] := Rest[r].Orm.Add(Rec, true);
+              if fIDs[i] = 0 then
+              begin
+                fTest.CheckUtf8(false, 'Rest[%].Add[%]', [r, i]);
+                break;
+              end;
               if r = high(Rest) then
                 r := 0
               else
                 inc(r);
-              if fTest.CheckFailed(fIDs[i] <> 0, 'Rest.Add') then
-                break;
               inc(n);
             end;
             fTest.CheckEqual(n, fIterationCount, 'Rest.Add');
