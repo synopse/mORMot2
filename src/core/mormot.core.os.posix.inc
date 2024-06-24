@@ -3171,11 +3171,9 @@ begin
     else
       text := 'SIG';
     end;
-     // abort after panic
-    level := sllExceptionOS;
+    level := sllExceptionOS; // abort after panic
     if Sig = SIGTERM then
-      // polite quit
-      level := sllInfo;
+      level := sllInfo;      // polite quit
     si_code := 0;
     if Info <> nil then
       try
@@ -3203,7 +3201,7 @@ begin
       exit;
     SynDaemonInterceptLog := onlog;
     FillCharFast(sa, SizeOf(sa), 0);
-    sa.sa_flags := SA_SIGINFO;
+    sa.sa_flags := SA_SIGINFO; // sa_handler() 3-params signature
     sa.sa_handler := @DoShutDown;
     fpSigaction(SIGQUIT, @sa, nil);
     fpSigaction(SIGTERM, @sa, nil);

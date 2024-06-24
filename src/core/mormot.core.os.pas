@@ -3629,11 +3629,11 @@ function AnsiCompareFileName(const S1, S2 : TFileName): integer;
 // - returns the full expanded directory name, including trailing path delimiter
 // - returns '' on error, unless RaiseExceptionOnCreationFailure is set
 function EnsureDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
 
 /// just a wrapper around EnsureDirectoryExists(NormalizeFileName(Directory))
 function NormalizeDirectoryExists(const Directory: TFileName;
-  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion

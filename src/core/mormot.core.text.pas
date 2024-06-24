@@ -1810,6 +1810,14 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
   Delim: AnsiChar = PathDelim): TFileName;
 
+/// just a wrapper around EnsureDirectoryExists(MakePath([Part]))
+function EnsureDirectoryExists(const Part: array of const;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
+
+/// just a wrapper around EnsureDirectoryExists(NormalizeFileName(MakePath([Part])))
+function NormalizeDirectoryExists(const Part: array of const;
+  RaiseExceptionOnCreationFailure: ExceptionClass = nil): TFileName; overload;
+
 /// MakePath() variant which can handle the file extension specifically
 function MakeFileName(const Part: array of const; LastIsExt: boolean = true): TFileName;
 
@@ -8947,6 +8955,19 @@ var
 begin
   {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
   f.WriteString(string(result));
+end;
+
+function EnsureDirectoryExists(const Part: array of const;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
+begin
+  result := EnsureDirectoryExists(MakePath(Part), RaiseExceptionOnCreationFailure);
+end;
+
+function NormalizeDirectoryExists(const Part: array of const;
+  RaiseExceptionOnCreationFailure: ExceptionClass): TFileName;
+begin
+  result := EnsureDirectoryExists(NormalizeFileName(MakePath(Part)),
+    RaiseExceptionOnCreationFailure);
 end;
 
 function MakeFileName(const Part: array of const; LastIsExt: boolean): TFileName;
