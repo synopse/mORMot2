@@ -117,12 +117,13 @@ type
   /// X.509 Certificate Extended Key Usage - see RFC 5280 Section 4.2.1.12
   TXExtendedKeyUsage = (
     xkuNone,
-    xkuServerAuth,         // 1
-    xkuClientAuth,         // 2
-    xkuCodeSigning,        // 3
-    xkuEmailProtection,    // 4
-    xkuTimeStamping,       // 8
-    xkuOcspSigning);       // 9
+    xkuServerAuth,         // 1.3.6.1.5.5.7.3.1
+    xkuClientAuth,         // 1.3.6.1.5.5.7.3.2
+    xkuCodeSigning,        // 1.3.6.1.5.5.7.3.3
+    xkuEmailProtection,    // 1.3.6.1.5.5.7.3.4
+    xkuTimeStamping,       // 1.3.6.1.5.5.7.3.8
+    xkuOcspSigning,        // 1.3.6.1.5.5.7.3.9
+    xkuMsPublisher);       // 1.3.6.1.4.1.311.76.8.1
 
   /// set of X.509 Certificate Extended Key Usage - see RFC 5280 Section 4.2.1.12
   TXExtendedKeyUsages = set of TXExtendedKeyUsage;
@@ -409,13 +410,14 @@ const
 
   /// the OID of all known X.509 Certificate Extended Key Usage
   XKU_OID: array[TXExtendedKeyUsage] of PUtf8Char = (
-    '',                    // xkuNone
-    '1.3.6.1.5.5.7.3.1',   // xkuServerAuth
-    '1.3.6.1.5.5.7.3.2',   // xkuClientAuth
-    '1.3.6.1.5.5.7.3.3',   // xkuCodeSigning
-    '1.3.6.1.5.5.7.3.4',   // xkuEmailProtection
-    '1.3.6.1.5.5.7.3.8',   // xkuTimeStamping
-    '1.3.6.1.5.5.7.3.9');  // xkuOcspSigning
+    '',                        // xkuNone
+    '1.3.6.1.5.5.7.3.1',       // xkuServerAuth
+    '1.3.6.1.5.5.7.3.2',       // xkuClientAuth
+    '1.3.6.1.5.5.7.3.3',       // xkuCodeSigning
+    '1.3.6.1.5.5.7.3.4',       // xkuEmailProtection
+    '1.3.6.1.5.5.7.3.8',       // xkuTimeStamping
+    '1.3.6.1.5.5.7.3.9',       // xkuOcspSigning
+    '1.3.6.1.4.1.311.76.8.1'); // xkuMsPublisher
 
   /// the OID of all known X.509 Signature Algorithms
   // - RSA-PSS store CKA_OID[ckaRsaPss] with the THashAlgo as parameters
