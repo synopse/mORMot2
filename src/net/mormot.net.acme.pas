@@ -425,7 +425,7 @@ begin
      (fStatus <> HTTP_CREATED) and
      (fStatus <> HTTP_NOCONTENT) then
   begin
-    err := JsonDecode(pointer(fBody), 'detail', nil, false);
+    err := JsonDecode(pointer(fBody), 'detail', nil, {handlejsonobjarr=} false);
     if err = '' then
       StatusCodeToReason(fStatus, err);
     raise EJwsHttp.CreateUtf8(
@@ -465,6 +465,7 @@ begin
     // no key identifier, need to provide JSON Web Key
     if not fCert.HasPrivateSecret then
       raise EJwsHttp.Create('No private key');
+    // compute JWK JSON object - e.g. '{"e":..,"kty":"RSA","n":..}' for RSA
     jwk := fCert.JwkCompute;
     // the thumbprint of a JWK is computed with no whitespace or line breaks
     // before or after any syntaxic elements and with the required members
@@ -608,7 +609,7 @@ begin
   JsonDecode(pointer(resp), [
     'newNonce',
     'newAccount',
-    'newOrder'], @v, true);
+    'newOrder'], @v, {handlejsonobjarr=} true);
   v[0].ToUtf8(fNewNonce);
   v[1].ToUtf8(fNewAccount);
   v[2].ToUtf8(fNewOrder);
@@ -628,7 +629,7 @@ begin
   resp := fHttpClient.Post(fNewAccount,
     ['termsOfServiceAgreed', true,
      'contact',              _ArrFast([fContact])]);
-  status := JsonDecode(pointer(resp), 'status', nil, true);
+  status := JsonDecode(pointer(resp), 'status', nil, {handlejsonobjarr=} true);
   if AcmeTextToStatus(pointer(status)) <> asValid then
     EAcmeClient.RaiseUtf8('% returned status % (expected "valid")',
       [fNewAccount, status]);
@@ -651,7 +652,7 @@ begin
   JsonDecode(pointer(r1), [
     'status',
     'finalize',
-    'authorizations'], @v1, true);
+    'authorizations'], @v1, {handleJsonObjectsOrArray=}true);
   result := AcmeTextToStatus(v1[0].Text);
   if result = asInvalid then
     EAcmeClient.RaiseUtf8('% returned "%" (expected "pending" or "ready")',
@@ -670,11 +671,11 @@ begin
     JsonDecode(pointer(r2), [
       'status',
       'identifier',
-      'challenges'], @v1, true);
+      'challenges'], @v1, {handlejsonobjarr=} true);
     ch^.Status := AcmeTextToStatus(v1[0].Text);
     JsonDecode(v1[1].Text, [
       'type',
-      'value'], @v2, false);
+      'value'], @v2, {handlejsonobjarr=} false);
     v2[0].ToUtf8(ch^.SubjectType);
     v2[1].ToUtf8(ch^.SubjectValue);
     if ch^.Status = asPending then
@@ -689,7 +690,7 @@ begin
         JsonDecode(chs[j], [
           'type',
           'url',
-          'token'], @v2, false);
+          'token'], @v2, {handlejsonobjarr=} false);
         // support only HTTP validation by now
         if v2[0].Idem('HTTP-01') then
         begin
@@ -724,7 +725,7 @@ begin
     if fChallenges[i].Status = asPending then
     begin
       resp := fHttpClient.Post(fChallenges[i].Url, aJson);
-      status := JsonDecode(pointer(resp), 'status', nil, false);
+      status := JsonDecode(pointer(resp), 'status', nil, {handleobjarr=} false);
       fChallenges[i].Status := AcmeTextToStatus(pointer(status));
       inc(result, ord(fChallenges[i].Status = asPending));
     end;
@@ -823,7 +824,7 @@ begin
       'csr', BinToBase64uri(csr)]);
     JsonDecode(pointer(resp), [
       'status',
-      'certificate'], @v, true);
+      'certificate'], @v, {handlejsonobjarr=} true);
     result := AcmeTextToStatus(v[0].Text);
     if result = asValid then
     begin
