@@ -542,7 +542,7 @@ function SidToKnown(const text: RawUtf8): TWellKnownSid; overload;
 function SidToKnownGroups(const sids: PSids): TWellKnownSids;
 
 const // some time conversion constants with Milli/Micro/NanoSec resolution
-  SecsPerHour          = 60;   // missing in oldest Delphi
+  SecsPerHour = SecsPerMin * MinsPerHour; // missing in oldest Delphi
   MilliSecsPerSec      = 1000;
   MilliSecsPerSecShl   = 10; // 1 shl 10 = 1024 = rough approximation of 1000
   MilliSecsPerMin      = MilliSecsPerSec  * SecsPerMin;
