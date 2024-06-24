@@ -1310,7 +1310,7 @@ type
     /// optional HTTPS certificates authorities file
     property CACertificatesFile: TFileName
       read fCACertificatesFile write fCACertificatesFile;
-    /// optional favicon.ico file content
+    /// optional alternate favicon.ico file name
     property FaviconFile: TFileName
       read fFaviconFile write fFaviconFile;
     /// optional Server name for HTTP/HTTPS

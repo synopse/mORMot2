@@ -791,6 +791,7 @@ type
     procedure AddOutHeader(const Values: array of const);
     /// will extract the "content-type" from OutCustomHeaders into OutContentType
     procedure ExtractOutContentType;
+      {$ifdef HASINLINE} inline; {$endif}
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
