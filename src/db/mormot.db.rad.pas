@@ -257,7 +257,7 @@ type
     procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
   end;
 
-  ///	implements a statement via the DB.pas TDataSet/TQuery-like connection
+  /// implements a statement via the DB.pas TDataSet/TQuery-like connection
   // - you should not use this abstract class directly, but one inherited
   // implementation with overridden Dataset*() protected methods to handle the
   // internal fQuery: TDataSet property

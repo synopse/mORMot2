@@ -4433,6 +4433,8 @@ var
   r: RawUtf8;
 begin
   // validate we have some LDAP server to safely connect to
+  if aLdapSettings = nil then
+    ELdap.RaiseUtf8('%.Create(nil)', [self]);
   fLdapSettings := aLdapSettings;
   fLdapSettings.ValidateTargetHostOrLoadDefault({trykerberos=}false);
   r := aRealm;
