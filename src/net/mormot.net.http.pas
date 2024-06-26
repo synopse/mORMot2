@@ -1867,7 +1867,8 @@ type
       read fWriterHost;
   published
     /// the associated settings, owned by this instance
-    // - if you change the settings fields directly, call
+    // - if a whole instance is assigned to this property, proper
+    // values copy will be done, including string format parsing
     property Settings: THttpLoggerSettings
       read fSettings write SetSettings;
   end;

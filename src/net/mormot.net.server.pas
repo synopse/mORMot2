@@ -3044,7 +3044,7 @@ begin
     h^.Append(StatusCodeToText(fRespStatus)^);
     h^.AppendCRLF;
   end;
-  // append (and sanitize) custom headers from Request() method
+  // append (and sanitize CRLF) custom headers from Request() method
   P := pointer(OutCustomHeaders);
   if P <> nil then
   begin
