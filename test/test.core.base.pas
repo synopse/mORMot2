@@ -43,6 +43,10 @@ const
   {$endif OSWINDOWS}
 
 
+{$ifdef FPC_EXTRECORDRTTI}
+  {$rtti explicit fields([vcPublic])} // mantadory :(
+{$endif FPC_EXTRECORDRTTI}
+
 type
   /// a test class, used by TTestServiceOrientedArchitecture
   // - to test TPersistent objects used as parameters for remote service calls
@@ -1785,7 +1789,7 @@ begin
   for i := 0 to 1000 do
   begin
     Fill(F, i);
-    Check(RecordEquals(F, AF[i], AFP.Info.Cache.ItemInfo));
+    Check(RecordEquals(F, AF[i], AFP.Info.Cache.ItemInfoRaw));
   end;
   for i := 0 to 1000 do
   begin

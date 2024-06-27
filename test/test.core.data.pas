@@ -105,6 +105,10 @@ uses
   mormot.net.ldap,
   test.core.base;
 
+{$ifdef FPC_EXTRECORDRTTI}
+  {$rtti explicit fields([vcPublic])} // mantadory :(
+{$endif FPC_EXTRECORDRTTI}
+
 type
   /// this test case will test most high-level functions, classes and types
   // defined and implemented in the mormot.core.*.pas units
