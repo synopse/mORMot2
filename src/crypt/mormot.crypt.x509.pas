@@ -4208,11 +4208,11 @@ begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
     fTrust.SaveToPem(W, {WithExplanatoryText=}true);
-    W.AddCR;
+    w.AddCR;
     fSignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
-    W.AddCR;
+    w.AddCR;
     fUnsignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
-    W.SetText(RawUtf8(result));
+    w.SetText(RawUtf8(result));
   finally
     w.Free;
   end;

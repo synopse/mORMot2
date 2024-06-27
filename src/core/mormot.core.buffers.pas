@@ -4276,7 +4276,7 @@ begin
         until (n = 0) or
               (chunk >= chunkend);
       else
-        ErrorData('ReadVarUInt64Array got kind=%', [ord(k)]);
+        ErrorData('ReadVarUInt64Array got kind=%', [ord(k)]){%H-};
     end;
   until n = 0;
 end;
@@ -6104,7 +6104,7 @@ begin
           result := SynLZDecompress1Partial(src, srcLen, dst, dstLen);
       end;
   else
-    result := 0;
+    result := 0{%H-};
   end;
 end;
 
@@ -6140,7 +6140,7 @@ begin
     doUncompressPartial:
       result := RleUnCompressPartial(src, dst, srcLen, dstLen);
   else
-    result := 0;
+    result := 0{%H-};
   end;
 end;
 

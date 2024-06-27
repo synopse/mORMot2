@@ -10252,7 +10252,7 @@ end;
 
 const
   // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
-  WinAnsiToUp: array[138..255] of byte = (
+  {%H-}WinAnsiToUp: array[138..255] of byte = (
     83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
     153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
     168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
