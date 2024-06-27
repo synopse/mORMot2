@@ -5,7 +5,7 @@
    FPC specific definitions used by mormot.core.rtti.pas implementation
 }
 
-{$ifdef HASDIRECTTYPEINFO}
+{$ifdef HASDIRECTTYPEINFO} // FPC VER3_0 had no redirection
 
 type
   DeRef = pointer;
@@ -457,12 +457,40 @@ end;
 
 {$endif FPC_NEWRTTI}
 
+{$ifdef HASEXTRECORDRTTI} // read enhanced RTTI available since latest trunk
+
+function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
+var
+  tab: PExtendedFieldTable;
+  ent: PExtendedFieldEntry;
+  i: integer;
+begin
+  result := nil; // reset any previous list
+  tab := PRecordData(GetTypeData(@self))^.ExtendedFields;
+  if tab = nil then
+    exit; // no extended RTTI
+  SetLength(result, tab^.FieldCount);
+  for i := 0 to tab^.FieldCount - 1 do
+  begin
+    ent := tab^.Field[i];
+    with result[i] do
+    begin
+      TypeInfo := DeRef(ent^.FieldType);
+      Offset := ent^.FieldOffset;
+      Name := ent^.Name;
+    end;
+  end;
+end;
+
+{$else}
 
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
   RecSize := RecordSize;
-  Finalize(result{%H-}); // enhanced RTTI not available yet on FPC
+  result := nil; // extended record information available on latest trunk only
 end;
+
+{$endif HASEXTRECORDRTTI}
 
 function TRttiInfo.IsQWord: boolean;
 begin

@@ -205,11 +205,12 @@
       {$define HASTTHREADTERMINATESET}
     {$endif VER3_2_3}
   {$endif VER3_2}
-  {$ifdef VER3_3} // trunk before 3.2
+  {$ifdef VER3_3} // trunk before 3.4
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$define HASEXTRECORDRTTI}     // latest trunk has extended record RTTI
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
@@ -220,6 +221,7 @@
     {$define STRCNT32}               // 32-bit TAnsiRec.Ref even on 64-bit CPU
     // see https://gitlab.com/freepascal.org/fpc/source/-/issues/38018
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$define HASEXTRECORDRTTI}       // extended record RTTI
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
