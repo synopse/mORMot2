@@ -47,6 +47,7 @@ type
 
   /// define one TSynAngelizeService action
   // - depending on the context, as "method:param" pair
+  // - may contain e.g. 'exec:/path/to/file', 'start:%run%' or even 'start'
   TSynAngelizeAction = type RawUtf8;
 
   /// define one or several TSynAngelizeService action(s)
@@ -1879,6 +1880,7 @@ begin
   tix := GetTickCount64;
   for i := 0 to high(fService) do // ordered by s.Level
   begin
+    // check the services for any pending "watch" task
     s := fService[i];
     if (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
