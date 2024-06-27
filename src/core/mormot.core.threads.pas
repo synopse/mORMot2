@@ -1602,7 +1602,7 @@ begin
     fLast := n - 1;
     fValues.Count := n;
     p := fValues.Value^;
-    info := fValues.Info.Cache.ItemInfo;
+    info := fValues.Info.Cache.ItemInfoManaged;
     if info <> nil then // nil for unmanaged items
     begin
       load := RTTI_BINARYLOAD[info^.Kind];
@@ -1651,7 +1651,7 @@ begin
     aWriter.WriteVarUInt32(n);
     if n = 0 then
       exit;
-    info := fValues.Info.Cache.ItemInfo;
+    info := fValues.Info.Cache.ItemInfoManaged;
     if info <> nil then
       sav := RTTI_BINARYSAVE[info^.Kind]
     else

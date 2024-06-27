@@ -1787,13 +1787,13 @@ type
       ClearBeforeCopy: boolean = false);
       {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
-    // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
-    // if available - and fallbacks to binary comparison
+    // - use the Compare() property function (if set) or using
+    // Info.Cache.ItemInfoManaged if available - and fallbacks to binary comparison
     function ItemEquals(A, B: pointer; CaseInSensitive: boolean = false): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two items, returning -1, 0 or +1s
-    // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
-    // if available - and fallbacks to binary comparison
+    // - use the Compare() property function (if set) or using
+    // Info.Cache.ItemInfoManaged if available - and fallbacks to binary comparison
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     // - i.e. release any managed type memory, and fill Item with zeros
@@ -1876,8 +1876,8 @@ type
     property Value: PPointer
       read fValue;
     /// low-level extended RTTI access
-    // - use e.g. Info.ArrayRtti to access the item RTTI, or Info.Cache.ItemInfo
-    // to get the managed item TypeInfo()
+    // - use e.g. Info.ArrayRtti to access the item RTTI, or
+    // Info.Cache.ItemInfoManaged to get the managed item TypeInfo()
     property Info: TRttiCustom
       read fInfo;
     /// low-level direct access to the external count (if defined at Init)
@@ -6030,7 +6030,7 @@ var
 label
   raw;
 begin
-  Info := Info^.DynArrayItemType(itemsize);
+  Info := Info^.DynArrayItemType(itemsize); // nil if unmanaged
   Dest.Write1(0); // warning: store itemsize=0 (mORMot 1 ignores it anyway)
   Dest.Write1(DelphiType(Info));
   Data := PPointer(Data)^; // de-reference pointer to array data
@@ -6096,28 +6096,28 @@ end;
 
 function _BL_DynArray(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 var
-  n, itemsize: PtrInt;
-  iteminfo: PRttiInfo;
+  n, siz: PtrInt;
+  nfo: PRttiInfo;
   load: TRttiBinaryLoad;
 label
   raw;
 begin
-  iteminfo := Info^.DynArrayItemType(itemsize); // nil for unmanaged items
-  n := DynArrayLoadHeader(Source, Info, iteminfo);
+  nfo := Info^.DynArrayItemType(siz); // nil for unmanaged items
+  n := DynArrayLoadHeader(Source, Info, nfo);
   if PPointer(Data)^ <> nil then
-    FastDynArrayClear(pointer(Data), iteminfo);
+    FastDynArrayClear(pointer(Data), nfo);
   if n > 0 then
   begin
-    DynArrayNew(pointer(Data), n, itemsize); // allocate zeroed  memory
+    DynArrayNew(pointer(Data), n, siz); // allocate zeroed  memory
     Data := PPointer(Data)^; // point to first item
-    if iteminfo = nil then
-raw:  Source.Copy(Data, itemsize * n)
+    if nfo = nil then
+raw:  Source.Copy(Data, siz * n)
     else
     begin
-      load := RTTI_BINARYLOAD[iteminfo^.Kind];
+      load := RTTI_BINARYLOAD[nfo^.Kind];
       if Assigned(load) then
         repeat
-          inc(Data, load(Data, Source, iteminfo));
+          inc(Data, load(Data, Source, nfo));
           dec(n);
         until n = 0
       else
@@ -6380,7 +6380,7 @@ label
   raw;
 begin
   Info := Info^.ArrayItemType(n, result);
-  if Info = nil then
+  if Info = nil then // unmanaged
 raw:Dest.Write(Data, result)
   else
   begin
@@ -6403,7 +6403,7 @@ label
   raw;
 begin
   Info := Info^.ArrayItemType(n, result);
-  if Info = nil then
+  if Info = nil then // unmanaged
 raw:Source.Copy(Data, result)
   else
   begin
@@ -6422,7 +6422,7 @@ function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrIn
 var
   n: PtrInt;
 begin
-  Info := Info^.ArrayItemType(n, result);
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
   Compared := BinaryCompare(A, B, Info, n, {CaseInSensitive=}false);
 end;
 
@@ -6430,7 +6430,7 @@ function _BCI_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrI
 var
   n: PtrInt;
 begin
-  Info := Info^.ArrayItemType(n, result);
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
   Compared := BinaryCompare(A, B, Info, n, {CaseInSensitive=}true);
 end;
 
@@ -7276,21 +7276,21 @@ var
   comp: TRttiCompare;
   rtti: PRttiInfo;
 label
-  bin;
+  raw;
 begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin: // fast binary comparison with length
-     result := MemCmp(A, B, fInfo.Cache.ItemSize)
+     // fast binary comparison with length
+raw: result := MemCmp(A, B, fInfo.Cache.ItemSize)
   else
   begin
-    rtti := fInfo.Cache.ItemInfo; // <> nil for managed items
+    rtti := fInfo.Cache.ItemInfoRaw;
     comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
     if Assigned(comp) then
       comp(A, B, rtti, result)
     else
-      goto bin;
+      goto raw;
   end;
 end;
 
@@ -7647,7 +7647,7 @@ begin
     if not (rcfArrayItemManaged in fInfo.Flags) then
       FillCharFast(fValue^^, n * fInfo.Cache.ItemSize, 0) // e.g. THash256
     else
-      FillZeroRtti(fInfo.Cache.ItemInfo, fValue^^);
+      FillZeroRtti(fInfo.Cache.ItemInfoRaw, fValue^^);
 end;
 
 procedure TDynArray.SaveTo(W: TBufferWriter);
@@ -8650,7 +8650,7 @@ var
 begin
   if (aSource <> nil) and
      (aSource^.fValue <> nil) and
-     (fInfo.Cache.ItemInfo = aSource^.Info.Cache.ItemInfo) then
+     (fInfo.Cache.ItemInfoRaw = aSource^.Info.Cache.ItemInfoRaw) then
   begin
     // check supplied aCount paramter with (external) Source.Count
     SourceCount := aSource^.Count;
@@ -8677,7 +8677,7 @@ begin
   result := n - B.Count;
   if (result = 0) and
      (n <> 0) then
-    if fInfo.Cache.ItemInfo <> B.Info.Cache.ItemInfo then
+    if fInfo.Cache.ItemInfoRaw <> B.Info.Cache.ItemInfoRaw then
       result := ComparePointer(fValue^, B.fValue^)
     else if Assigned(fCompare) and
        not ignorecompare then
@@ -8702,14 +8702,14 @@ begin
       // binary comparison with length (always CaseSensitive)
       result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
     else
-      result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfo, n,
+      result := BinaryCompare(fValue^, B.fValue^, fInfo.Cache.ItemInfoRaw, n,
         not CaseSensitive);
 end;
 
 procedure TDynArray.Copy(Source: PDynArray; ObjArrayByRef: boolean);
 begin
   if (fValue = nil) or
-     (fInfo.Cache.ItemInfo <> Source.Info.Cache.ItemInfo) then
+     (fInfo.Cache.ItemInfoRaw <> Source.Info.Cache.ItemInfoRaw) then
     exit;
   if not ObjArrayByRef and
      (rcfObjArray in fInfo.Flags) then
@@ -8769,7 +8769,7 @@ begin
 bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
     else
     begin
-      rtti := fInfo.Cache.ItemInfo;
+      rtti := fInfo.Cache.ItemInfoManaged;
       if rtti = nil then
         goto bin; // unmanaged items
       cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
@@ -8817,7 +8817,7 @@ begin
         if (OldLength <> 0) and
            not fNoFinalize then
           if rcfArrayItemManaged in fInfo.Flags then
-            FastFinalizeArray(fValue^, fInfo.Cache.ItemInfo, OldLength)
+            FastFinalizeArray(fValue^, fInfo.Cache.ItemInfoManaged, OldLength)
           else if rcfObjArray in fInfo.Flags then
             RawObjectsClear(fValue^, OldLength);
         FreeMem(p);
@@ -8851,7 +8851,7 @@ begin
         // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
-            fInfo.Cache.ItemInfo, OldLength - NewLength)
+            fInfo.Cache.ItemInfoManaged, OldLength - NewLength)
         else if rcfObjArray in fInfo.Flags then // FreeAndNil() of resized objects
           RawObjectsClear(pointer(PAnsiChar(p) + NeededSize), OldLength - NewLength);
       ReallocMem(p, NeededSize);
@@ -8862,7 +8862,7 @@ begin
       minLength := OldLength;
       if minLength > NewLength then
         minLength := NewLength;
-      if fInfo.Cache.ItemInfo = nil then // unmanaged items
+      if fInfo.Cache.ItemInfoManaged = nil then // unmanaged items
       begin
         GetMem(p, NeededSize);
         MoveFast(fValue^^, PByteArray(p)[SizeOf(TDynArrayRec)],
@@ -8873,13 +8873,13 @@ begin
         p := AllocMem(NeededSize);
         OldLength := NewLength;    // no FillcharFast() below
         CopySeveral(@PByteArray(p)[SizeOf(TDynArrayRec)], fValue^,
-          minLength, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+          minLength, fInfo.Cache.ItemInfoManaged, fInfo.Cache.ItemSize);
       end;
       // for thread safety, adjust the refcount after data copy
       if fNoFinalize then
         FastDynArrayClear(fValue, nil)
       else // note: rcfObjArray should never appear with refcnt>1
-        FastDynArrayClear(fValue, fInfo.Cache.ItemInfo);
+        FastDynArrayClear(fValue, fInfo.Cache.ItemInfoManaged);
     end;
   end;
   // set refCnt=1 and new length to the heap header
@@ -9011,7 +9011,7 @@ begin
   dst.SetCapacity(Limit);
   CopySeveral(pointer(Dest),
     @(PByteArray(fValue^)[Offset * cardinal(fInfo.Cache.ItemSize)]),
-    Limit, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+    Limit, fInfo.Cache.ItemInfoManaged, fInfo.Cache.ItemSize);
 end;
 
 procedure TDynArray.SliceAsDynArray(Dest: PPointer; Offset, Limit: integer);
@@ -9019,8 +9019,8 @@ var
   p: PDynArrayRec;
   n: integer;
 begin
-  if dest^ <> nil then
-    FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
+  if dest^ <> nil then // reset Dest variable slot
+    FastDynArrayClear(dest, fInfo.Cache.ItemInfoManaged);
   n := GetCount;
   if Offset < 0 then
   begin
@@ -9082,13 +9082,13 @@ begin
   s := fInfo.Cache.ItemSize;
   PS := PAnsiChar(DynArrayVar) + aStartIndex * s;
   PD := PAnsiChar(fValue^) + n * s;
-  CopySeveral(PD, PS, aCount, fInfo.Cache.ItemInfo, s);
+  CopySeveral(PD, PS, aCount, fInfo.Cache.ItemInfoManaged, s);
 end;
 
 function TDynArray.ItemLoadMem(Source, SourceMax: PAnsiChar): RawByteString;
 begin
   if (Source <> nil) and
-     (fInfo.Cache.ItemInfo = nil) then // unmanaged items
+     (fInfo.Cache.ItemInfoManaged = nil) then // unmanaged items
     FastSetRawByteString(result, Source, fInfo.Cache.ItemSize)
   else
   begin
@@ -9101,14 +9101,14 @@ end;
 procedure TDynArray.ItemLoad(Source, SourceMax: PAnsiChar; Item: pointer);
 begin
   if Source <> nil then // avoid GPF
-    if fInfo.Cache.ItemInfo = nil then
+    if fInfo.Cache.ItemInfoManaged = nil then
     begin
       if {$ifndef PUREMORMOT2} (SourceMax = nil) or {$endif}
          (Source + fInfo.Cache.ItemSize <= SourceMax) then
         MoveFast(Source^, Item^, fInfo.Cache.ItemSize);
     end
     else
-      BinaryLoad(Item, Source, fInfo.Cache.ItemInfo, nil, SourceMax, rkAllTypes);
+      BinaryLoad(Item, Source, fInfo.Cache.ItemInfoManaged, nil, SourceMax, rkAllTypes);
 end;
 
 procedure TDynArray.ItemLoadMemClear(var ItemTemp: RawByteString);
@@ -9119,10 +9119,10 @@ end;
 
 function TDynArray.ItemSave(Item: pointer): RawByteString;
 begin
-  if fInfo.Cache.ItemInfo = nil then
+  if fInfo.Cache.ItemInfoManaged = nil then
     FastSetRawByteString(result, Item, fInfo.Cache.ItemSize)
   else
-    result := BinarySave(Item, fInfo.Cache.ItemInfo, rkAllTypes);
+    result := BinarySave(Item, fInfo.Cache.ItemInfoManaged, rkAllTypes);
 end;
 
 function TDynArray.ItemLoadFind(Source, SourceMax: PAnsiChar): integer;
@@ -9134,12 +9134,12 @@ begin
   if (Source = nil) or
      (fInfo.Cache.ItemSize > SizeOf(tmp)) then
     exit;
-  if fInfo.Cache.ItemInfo = nil then // nil for unmanaged items
+  if fInfo.Cache.ItemInfoManaged = nil then // nil for unmanaged items
     data := Source
   else
   begin
     FillCharFast(tmp, fInfo.Cache.ItemSize, 0);
-    BinaryLoad(@tmp, Source, fInfo.Cache.ItemInfo, nil, SourceMax, rkAllTypes);
+    BinaryLoad(@tmp, Source, fInfo.Cache.ItemInfoManaged, nil, SourceMax, rkAllTypes);
     if Source = nil then
       exit;
     data := @tmp;

@@ -537,7 +537,8 @@ begin
   end;
 end;
 
-function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+function TRttiInfo.ArrayItemTypeExtended(
+  out aDataCount, aDataSize: PtrInt): PRttiInfo;
 var
   nfo: PArrayInfo;
 begin

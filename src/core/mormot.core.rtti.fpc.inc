@@ -467,7 +467,8 @@ var
 begin
   result := nil; // reset any previous list
   tab := PRecordData(GetTypeData(@self))^.ExtendedFields;
-  if tab = nil then
+  if (tab = nil) or
+     (tab^.FieldCount = 0) then
     exit; // no extended RTTI
   SetLength(result, tab^.FieldCount);
   for i := 0 to tab^.FieldCount - 1 do
@@ -478,6 +479,8 @@ begin
       TypeInfo := DeRef(ent^.FieldType);
       Offset := ent^.FieldOffset;
       Name := ent^.Name;
+      if Name = nil then
+        Name := @NULCHAR; // avoid unexpected GPF on unsufficient RTTI
     end;
   end;
 end;
@@ -511,7 +514,7 @@ end;
 
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
-  result := DeRef(GetTypeData(@self)^.elTypeRef);
+  result := DeRef(GetTypeData(@self)^.elTypeRef); // nil for unmanaged types
 end;
 
 function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;
@@ -525,18 +528,15 @@ begin
   end;
 end;
 
-function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+function TRttiInfo.ArrayItemTypeExtended(out aDataCount, aDataSize: PtrInt): PRttiInfo;
 var
   info: ^TArrayTypeData;
 begin
+  // nfo^.DimCount=1 is not tested explicitly -> assume single dimension array
   info := @GetTypeData(@self)^.ArrayData;
   aDataCount := info^.ElCount;
   aDataSize := info^.Size {$ifdef VER2_6} * info^.ElCount {$endif};
-  result := DeRef(info^.ElTypeRef);
-  if (info^.DimCount <> 1) or
-     (result = nil) or
-     not (result^.Kind in rkManagedTypes) then
-    result := nil;
+  result := DeRef(info^.ElTypeRef); // may be nil for old Delphi unmanaged types
 end;
 
 function TRttiInfo.ArraySize: PtrInt;

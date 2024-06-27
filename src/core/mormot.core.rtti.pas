@@ -742,7 +742,8 @@ type
         EnumList: PShortString);
       rkDynArray,
       rkArray: (
-        ItemInfo: PRttiInfo; // = nil for unmanaged types
+        ItemInfoManaged: PRttiInfo; // = nil for unmanaged types
+        ItemInfoRaw: PRttiInfo;  // from RTTI, likely <> nil for unmanaged types
         ItemSize: integer;
         ItemCount: integer;  // rkArray only
       );
@@ -882,6 +883,7 @@ type
     // - caller should ensure the type is indeed a dynamic array
     function DynArrayItemTypeExtended: PRttiInfo;
     /// for rkDynArray: get the dynamic array type information of the stored item
+    // - returns nil if the item has no managed field
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
     function DynArrayItemType(out aDataSize: PtrInt): PRttiInfo; overload;
@@ -890,12 +892,17 @@ type
     function DynArrayItemSize: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkArray: get the static array type information of the stored item
-    // - returns nil if the array type is unmanaged (i.e. behave like Delphi)
+    // - may returns nil if the array type is unmanaged on old Delphi revisions
     // - aDataSize is the size in bytes of all aDataCount static items (not
     // the size of each item)
     // - caller should ensure the type is indeed a static array
-    function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+    function ArrayItemTypeExtended(out aDataCount, aDataSize: PtrInt): PRttiInfo;
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// for rkArray: get the static array type information of the stored item
+    // - same as ArrayItemTypeExtended() but, always returns nil if the array
+    // type is unmanaged (i.e. like old Delphi)
+    // - used e.g. for static array binary-level process in mormot.core.data
+    function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
     /// for rkArray: get the size in bytes of all the static array items
     // - caller should ensure the type is indeed a static array
     function ArraySize: PtrInt;
@@ -3572,6 +3579,14 @@ begin
   DynArrayItemType(result); // fast enough (not used internally)
 end;
 
+function TRttiInfo.ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+begin
+  result := ArrayItemTypeExtended(aDataCount, aDataSize);
+  if (result <> nil) and
+     not (result^.Kind in rkManagedTypes) then
+    result := nil;
+end;
+
 function TRttiInfo.RttiSize: PtrInt;
 begin
   case Kind of
@@ -3752,12 +3767,16 @@ begin
       end;
     rkDynArray:
       begin
-        Cache.ItemInfo := DynArrayItemType(siz); // nil for unmanaged items
+        Cache.ItemInfoManaged := DynArrayItemType(siz); // nil if unmanaged
+        Cache.ItemInfoRaw := DynArrayItemTypeExtended;
         Cache.ItemSize := siz;
       end;
     rkArray:
       begin
-        Cache.ItemInfo := ArrayItemType(cnt, siz);
+        Cache.ItemInfoRaw := ArrayItemTypeExtended(cnt, siz);
+        if (Cache.ItemInfoRaw <> nil) and
+           (Cache.ItemInfoRaw^.Kind in rkManagedTypes) then
+          Cache.ItemInfoManaged := Cache.ItemInfoRaw; // nil if unmanaged
         if (cnt = 0) or
            (siz mod cnt <> 0) then
           ERttiException.RaiseUtf8('ComputeCache(%): array siz=% cnt=%',
@@ -5942,12 +5961,12 @@ end;
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 var
-  n, itemsize: PtrInt;
-  iteminfo: PRttiInfo;
+  n, siz: PtrInt;
+  nfo: PRttiInfo;
 begin
-  iteminfo := Info^.DynArrayItemType(itemsize); // nil for unmanaged items
+  nfo := Info^.DynArrayItemType(siz); // nil for unmanaged items
   if Dest^ <> nil then
-    FastDynArrayClear(Dest, iteminfo);
+    FastDynArrayClear(Dest, nfo);
   Source := Source^;
   if Source <> nil then
   begin
@@ -5955,8 +5974,8 @@ begin
       n := SourceExtCount^
     else
       n := PDALen(PAnsiChar(Source) - _DALEN)^ + _DAOFF;
-    DynArrayNew(Dest, n, itemsize); // allocate zeroed memory
-    CopySeveral(Dest^, pointer(Source), n, iteminfo, itemsize);
+    DynArrayNew(Dest, n, siz); // allocate zeroed memory
+    CopySeveral(Dest^, pointer(Source), n, nfo, siz);
   end;
 end;
 
@@ -6076,7 +6095,7 @@ var
   fin: TRttiFinalizer;
 begin
   Info := Info^.ArrayItemType(n, result);
-  if Info = nil then
+  if Info = nil then // nil for unmanaged type
     FillCharFast(V^, result, 0)
   else
   begin
@@ -7586,10 +7605,10 @@ begin
   if (RecordInfo = nil) or
      not (RecordInfo^.Kind in rkRecordTypes) then
     exit;
-  all := RecordInfo^.RecordAllFields(dummy);
   InternalClear;
+  all := RecordInfo^.RecordAllFields(dummy);
   if all = nil then
-    // enhanced RTTI is available since Delphi 2010
+    // enhanced RTTI is available since Delphi 2010 and latest FPC trunk
     exit;
   Count := length(all);
   SetLength(List, Count);
@@ -7851,7 +7870,7 @@ begin
         include(fFlags, rcfSpi);
     rkDynArray:
       begin
-        item := fCache.ItemInfo;
+        item := fCache.ItemInfoManaged;
         if item = nil then // unmanaged types
         begin
           // try to guess the actual type, e.g. a TGuid or an integer
@@ -7877,7 +7896,7 @@ begin
           if fArrayRtti.Kind in rkRecordOrDynArrayTypes then
             // guess first field (using fProps[0] would break compatibility)
             fArrayFirstField := GuessItemTypeFromDynArrayInfo(aInfo,
-              fCache.ItemInfo, fCache.ItemSize, {exacttype=}false, siz)
+              fCache.ItemInfoRaw, fCache.ItemSize, {exacttype=}false, siz)
           else
           begin
             fArrayFirstField := fArrayRtti.Parser;
@@ -7895,7 +7914,7 @@ begin
       end;
     rkArray:
       begin
-        fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
+        fArrayRtti := Rtti.RegisterType(fCache.ItemInfoRaw);
         if (fArrayRtti = nil) or
            not (rcfIsManaged in fArrayRtti.Flags) then
           // a static array is as managed as its nested items
@@ -7960,9 +7979,10 @@ begin
         fCache.Kind := rkDynArray;
         fCache.Size := SizeOf(pointer);
         fArrayRtti := DynArrayElemType;
+        fCache.ItemInfoRaw := DynArrayElemType.Info;
         if (DynArrayElemType.Info <> nil) and
            DynArrayElemType.Info.IsManaged then
-          fCache.ItemInfo := DynArrayElemType.Info; // as regular dynarray RTTI
+          fCache.ItemInfoManaged := DynArrayElemType.Info; // as regular dynarray RTTI
         fCache.ItemSize := DynArrayElemType.Size;
       end;
     ptClass:
@@ -8245,7 +8265,7 @@ begin
   if (self <> nil) and
      (Kind = rkDynArray) and
      (fCache.ItemSize = SizeOf(pointer)) and
-     (fCache.ItemInfo = nil) then
+     (fCache.ItemInfoManaged = nil) then
   begin
     fObjArrayClass := Item;
     if Item = nil then
@@ -8947,7 +8967,10 @@ begin
   k^.Safe.WriteLock; // needed when resizing k^.HashInfo/HashName[]
   try
     AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX]);
-    AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
+    {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
+    if Info.RawName[0] <> #0 then
+    {$endif FPC}
+      AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
     inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally

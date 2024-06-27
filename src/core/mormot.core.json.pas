@@ -8419,7 +8419,7 @@ begin
     until false;
     if n <> cap then
       if n = 0 then
-        FastDynArrayClear(arr^, arrinfo.Cache.ItemInfo)
+        FastDynArrayClear(arr^, arrinfo.Cache.ItemInfoManaged)
       else
         DynArrayFakeLength(arr^, n); // faster than SetLength()
     Ctxt.Info := arrinfo; // restore
