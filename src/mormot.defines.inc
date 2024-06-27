@@ -216,7 +216,7 @@
     {$define ISFPC30}
     {$define ISFPC32}
     {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
-    {$define HASEXTRECORDRTTI}     // latest trunk has extended record RTTI
+    {$define HASEXTRECORDRTTI}       // latest trunk has extended record RTTI
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
@@ -236,6 +236,14 @@
     {$define STRCNT32} // new trunk feature: 32-bit TAnsiRec.Ref even on 64-bit CPU
   {$ifend}
 
+  {$ifdef NEWRTTINOTUSED}
+    {$undef HASEXTRECORDRTTI}  // explictly disabled
+  {$else}
+    {$ifdef HASEXTRECORDRTTI}
+      //{$modeswitch advancedrecords} // not needed
+      {$define FPC_EXTRECORDRTTI}
+    {$endif HASEXTRECORDRTTI}
+  {$endif NEWRTTINOTUSED}
 
   // -----------
   // -- identify Operating Systems
