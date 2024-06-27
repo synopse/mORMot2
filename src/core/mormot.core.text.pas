@@ -3593,7 +3593,7 @@ begin
   fTempBufSize := aBufSize;
   fTempBuf := aBuf;
   dec(aBuf);
-  B := aBuf; // Add() methods will append at B+1
+  B := aBuf;   // Add() methods will append at B+1
   BEnd := @aBuf[aBufSize - 15]; // BEnd := B-16 to avoid overwrite/overread
   {$ifndef PUREMORMOT2}
   if DefaultTextWriterTrimEnum then
@@ -4310,7 +4310,8 @@ procedure TTextWriter.AddCRAndIndent;
 var
   ntabs: cardinal;
 begin
-  if B^ = #9 then
+  if (B >= fTempBuf) and
+     (B^ = #9) then
     // we just already added an indentation level - do it once
     exit;
   ntabs := fHumanReadableLevel;
