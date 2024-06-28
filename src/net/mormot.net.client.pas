@@ -2375,7 +2375,7 @@ begin
       begin
         if Assigned(OnLog) then
           OnLog(sllDebug,
-            'WGet %: wrong hash after resume -> reset and retry', [url]);
+            'WGet %: wrong hash after resume -> reset and retry', [url], self);
         DeletePartAndResetDownload('resume'); // get rid of wrong file
         NewStream(fmCreate);                  // setup a new output stream
         requrl := url;                        // reset any redirection
@@ -2393,7 +2393,7 @@ begin
     if cached <> '' then
     begin
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached]);
+        OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached], self);
       CopyFile(part, cached, {failsexist=}false);
     end;
     // notify e.g. THttpPeerCache of the newly downloaded file
@@ -2420,6 +2420,9 @@ begin
       if (FileSize(part) < 32768) or // not worth it, and maybe HTML error msg
          not params.Resume then      // resume is not enabled
         DeleteFile(part); // force next attempt from scratch
+    if Assigned(OnLog) and
+       (params.OutSteps <> []) then
+      OnLog(sllTrace, 'WGet %: %', [url, ToText(params.OutSteps)], self);
   end;
 end;
 
