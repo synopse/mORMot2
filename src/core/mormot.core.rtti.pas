@@ -1568,7 +1568,8 @@ function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
-function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
+function GetSetName(aTypeInfo: PRttiInfo; const value;
+  trimmed: boolean = false): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
@@ -3767,8 +3768,8 @@ begin
       end;
     rkDynArray:
       begin
-        Cache.ItemInfoManaged := DynArrayItemType(siz); // nil if unmanaged
         Cache.ItemInfoRaw := DynArrayItemTypeExtended;
+        Cache.ItemInfoManaged := DynArrayItemType(siz); // nil if unmanaged
         Cache.ItemSize := siz;
       end;
     rkArray:
@@ -5348,9 +5349,9 @@ begin
   aTypeInfo^.EnumBaseType^.SetEnumFromOrdinal(Value, Ordinal);
 end;
 
-function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
+function GetSetName(aTypeInfo: PRttiInfo; const value; trimmed: boolean): RawUtf8;
 begin
-  result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value);
+  result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value, trimmed);
 end;
 
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
