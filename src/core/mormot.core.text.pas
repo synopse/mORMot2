@@ -8924,6 +8924,11 @@ function Make(const Args: array of const): RawUtf8;
 var
   f: TFormatUtf8;
 begin
+  if high(Args) = 0 then
+  begin
+    VarRecToUtf8(Args[0], result); // can be returned e.g. by reference
+    exit;
+  end;
   {%H-}f.DoAdd(@Args[0], length(Args));
   FastSetString(result, f.L);
   f.Write(pointer(result));
