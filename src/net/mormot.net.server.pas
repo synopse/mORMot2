@@ -1605,8 +1605,9 @@ type
     fRespCount: integer;
     fCurrentSeq: cardinal;
     fBroadcastEvent: TSynEvent;   // <> nil for pcoUseFirstResponse
-    fAddr: TNetAddr;              // from fBroadcastIP4 + fSettings.Port
+    fBroadcastAddr: TNetAddr;     // from fBroadcastIP4 + fSettings.Port
     fBroadcastSafe: TOSLightLock; // non-rentrant, to serialize Broadcast()
+    fBroadcastIpPort: RawUtf8;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override;
     procedure OnShutdown; override; // = Destroy
@@ -1680,7 +1681,7 @@ type
     // - OutStream.LimitPerSecond will be overriden during the call
     // - could return 0 to fallback to a regular GET (e.g. not cached)
     function OnDownload(Sender: THttpClientSocket;
-      const Params: THttpClientSocketWGet; const Url: RawUtf8;
+      var Params: THttpClientSocketWGet; const Url: RawUtf8;
       ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer; virtual;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
@@ -5324,7 +5325,8 @@ constructor THttpPeerCacheThread.Create(Owner: THttpPeerCache);
 begin
   fBroadcastSafe.Init;
   fOwner := Owner;
-  fAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
+  fBroadcastAddr.SetIP4Port(fOwner.fBroadcastIP4, fOwner.Settings.Port);
+  fBroadcastIpPort := fBroadcastAddr.IPWithPort;
   if pcoUseFirstResponse in fOwner.Settings.Options then
     fBroadcastEvent := TSynEvent.Create;
   // POSIX requires to bind to the broadcast address to receive brodcasted frames
@@ -5368,9 +5370,9 @@ var
     frame := fOwner.MessageEncode(resp);
     // respond on main UDP port and on broadcast (POSIX) or local (Windows) IP
     if fMsg.Os.os = osWindows then
-      remote.SetPort(fAddr.Port) // local IP is good enough on Windows
+      remote.SetPort(fBroadcastAddr.Port) // local IP is good enough on Windows
     else
-      remote.SetIP4Port(fOwner.fBroadcastIP4, fAddr.Port); // need to broadcast
+      remote.SetIP4Port(fOwner.fBroadcastIP4, fBroadcastAddr.Port); // need to broadcast
     sock := remote.NewSocket(nlUdp);
     res := sock.SendTo(pointer(frame), length(frame), remote);
     sock.Close;
@@ -5480,15 +5482,15 @@ begin
     fCurrentSeq := aReq.Seq; // ignore any other responses
     fResponses := 0;         // reset counter for this fCurrentSeq (not late)
     // broadcast request over the UDP sub-net of the selected network interface
-    sock := fAddr.NewSocket(nlUdp);
+    sock := fBroadcastAddr.NewSocket(nlUdp);
     if sock = nil then
       exit;
     try
       sock.SetBroadcast(true);
-      res := sock.SendTo(pointer(frame), length(frame), fAddr);
+      res := sock.SendTo(pointer(frame), length(frame), fBroadcastAddr);
       if fOwner.fVerboseLog then
         fOwner.fLog.Add.Log(sllTrace, 'Broadcast: % % = %',
-          [fAddr.IPShort({withport=}true), ToText(aReq), ToText(res)^], self);
+          [fBroadcastIpPort, ToText(aReq), ToText(res)^], self);
       if res <> nrOk then
         exit;
     finally
@@ -5848,7 +5850,7 @@ begin
 end;
 
 function THttpPeerCache.OnDownload(Sender: THttpClientSocket;
-  const Params: THttpClientSocketWGet; const Url: RawUtf8;
+  var Params: THttpClientSocketWGet; const Url: RawUtf8;
   ExpectedFullSize: Int64; OutStream: TStreamRedirect): integer;
 var
   req: THttpPeerCacheMessage;
@@ -5857,7 +5859,7 @@ var
   u: RawUtf8;
   local: TFileStreamEx;
   tix: cardinal;
-  brdcst, alone: boolean;
+  alone: boolean;
   log: ISynLog;
   l: TSynLog;
 begin
@@ -5912,6 +5914,7 @@ begin
       result := HTTP_PARTIALCONTENT
     else
       result := HTTP_SUCCESS;
+    Params.SetStep(wgsAlternateFromCache, [fn]);
     exit;
   end;
   // ensure the file is big enough for broadcasting
@@ -5931,32 +5934,33 @@ begin
       FillZero(resp[0].Uuid); // OnRequest() returns HTTP_NOCONTENT if not found
       result := SendRespToClient(req, resp[0], u, OutStream, {aRetry=}true);
       if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+      begin
+        Params.SetStep(wgsAlternateLastPeer, [fClient.Server]);
         exit; // successful direct downloading from last peer
+      end;
       result := 0; // may be HTTP_NOCONTENT if not found on this peer
     finally
       fClientSafe.UnLock;
     end;
   // broadcast the request over UDP
   tix := 0;
-  brdcst := true;
   if (pcoBroadcastNotAlone in fSettings.Options) or
      (waoBroadcastNotAlone in Params.AlternateOptions) then
   begin
     tix := (GetTickCount64 shr MilliSecsPerSecShl) + 1; // 1024 ms resolution
-    brdcst := (fBroadcastTix <> tix);   // reenable broadcasting after 1s delay
+    if fBroadcastTix = tix then  // disable broadcasting within up to 1s delay
+      exit;
   end;
-  if brdcst then
+  Params.SetStep(wgsAlternateBroadcast, [fUdpServer.fBroadcastIpPort]);
+  resp := fUdpServer.Broadcast(req, alone);
+  if resp = nil then
   begin
-    resp := fUdpServer.Broadcast(req, alone);
-    if resp = nil then
-    begin
-      if (tix <> 0) and // pcoBroadcastNotAlone
-         alone then
-        fBroadcastTix := tix; // no broadcast within the next second
-      exit; // no match
-    end;
-    fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
+    if (tix <> 0) and // pcoBroadcastNotAlone
+       alone then
+      fBroadcastTix := tix; // no broadcast within the next second
+    exit; // no match
   end;
+  fBroadcastTix := 0; // resp<>nil -> broadcasting seems fine
   // select the best response
   if length(resp) <> 1 then
   begin
@@ -5965,6 +5969,7 @@ begin
     DynArray(TypeInfo(THttpPeerCacheMessageDynArray), resp).
       Sort(SortMessagePerPriority);
   end;
+  Params.SetStep(wgsAlternateGet, [IP4ToShort(@resp[0].IP4)]);
   // make the HTTP/HTTPS request corresponding to this response
   fClientSafe.Lock;
   try
