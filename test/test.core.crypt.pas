@@ -2696,6 +2696,7 @@ var
   str: TCryptStoreAlgo;
   st1, st2, st3: ICryptStore;
   cpe: TCryptCertPerUsage;
+  crr: TCryptCertRevocationReason;
   alg: TCryptAlgos;
   fmt: TCryptCertFormat;
   cv: TCryptCertValidity;
@@ -3257,7 +3258,8 @@ begin
     end;
     // validate CRL on certificates
     Check(st2.Revoke(c3, crrWithdrawn));
-    Check(st2.IsRevoked(c3) = crrWithdrawn);
+    crr := st2.IsRevoked(c3);
+    CheckUtf8(crr = crrWithdrawn, 'wdw %', [ToText(crr)^]);
     // note: st2.Save fails with OpenSSL because the CRL is not signed
     // ensure new certs are not recognized by previous stores
     if st3 <> nil then
