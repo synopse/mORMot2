@@ -2538,7 +2538,6 @@ procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
 var
   txt: RawByteString;
   l: PtrInt;
-  written: cardinal;
 begin
   if not HasConsole then
     exit;
@@ -2554,7 +2553,7 @@ begin
   try
     if not NoColor then
       TextColor(Color);
-    WriteFile(StdOut, pointer(txt)^, l, written, nil);
+    FileWriteAll(StdOut, pointer(txt), l);
     // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
   finally
     ConsoleCriticalSection.UnLock;
