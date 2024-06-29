@@ -204,8 +204,7 @@ type
     wgsProgressiveFailed,
     wgsGet,
     wgsSetDate,
-    wgsLastMod,
-    rwgs9);
+    wgsLastMod);
   /// which steps have been performed during THttpClientSocket.WGet() process
   TWGetSteps = set of TWGetStep;
 
