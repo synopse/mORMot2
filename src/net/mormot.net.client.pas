@@ -1642,7 +1642,7 @@ end;
 
 function ToText(wgs: TWGetSteps; trimmed: boolean): RawUtf8;
 begin
-  result := GetSetName(TypeInfo(TWGetStep), wgs, trimmed);
+  result := GetSetName(TypeInfo(TWGetSteps), wgs, trimmed);
 end;
 
 var
