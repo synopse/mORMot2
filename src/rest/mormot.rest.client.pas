@@ -538,11 +538,12 @@ type
     function FindAndRelease(aID: TRestClientCallbackID): boolean;
   end;
 
-  /// a generic REpresentational State Transfer (REST) client with URI
+  /// abstract REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   // - never call this abstract class, but inherit and override the
   // InternalUri/InternalIsOpen/InternalOpen/InternalClose virtual abstract methods
+  // - do NOT use this abstract class, but one of its fully implemented children
   TRestClientUri = class(TRest)
   protected
     fClient: IRestOrmClient;
@@ -2212,6 +2213,10 @@ end;
 
 constructor TRestClientUri.Create(aModel: TOrmModel);
 begin
+  // avoid coder confusion if this abstract class is instantiated
+  if PClass(self)^ = TRestClientUri then
+    ERestException.RaiseUtf8('Abstract %.Create: use an inherited class', [self]);
+  // setup this client class
   inherited Create(aModel);
   fMaximumAuthentificationRetry := 1;
   fComputeSignature := TRestClientAuthenticationSignedUri.ComputeSignatureCrc32;

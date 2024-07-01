@@ -434,11 +434,12 @@ type
   /// a dynamic array of TRest instances, owning the instances
   TRestObjArray = array of TRest;
 
-  /// a generic REpresentational State Transfer (REST) client/server class
+  /// abstract REpresentational State Transfer (REST) client/server class
   // - see Orm: IRestOrm, Services: TServiceContainer and Run: TRestRunThreads
   // main properties for its actual REST-oriented process
   // - in PUREMORMOT2 mode, all direct ORM or threading methods are hidden
   // - is a TInterfaceResolver so is able to resolve IRestOrm
+  // - do NOT use this abstract class, but one of its fully implemented children
   TRest = class(TInterfaceResolver)
   protected
     fOrm: IRestOrm;
@@ -2161,6 +2162,8 @@ constructor TRest.Create(aModel: TOrmModel);
 var
   cmd: TRestServerUriContextCommand;
 begin
+  if PClass(self)^ = TRest then
+    ERestException.RaiseUtf8('Abstract %.Create', [self]);
   fPrivateGarbageCollector := TSynObjectList.Create;
   fModel := aModel;
   for cmd := Low(cmd) to high(cmd) do

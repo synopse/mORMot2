@@ -1750,10 +1750,12 @@ type
   TOnInternalInfo = procedure(Sender: TRestUriContext;
     var Info: TDocVariantData) of object;
 
-  /// a generic/abstract REpresentational State Transfer (REST) server
-  // - descendent must implement the protected EngineList() Retrieve() Add()
-  // Update() Delete() methods - so if you want a REST server with no ORM
-  // (e.g. for a pure SOA server), use (or inherit) TRestServerFullMemory
+  /// abstract REpresentational State Transfer (REST) server
+  // - don't use this abstract class, but override and implement the protected
+  // EngineList() Retrieve() Add() Update() Delete() methods
+  // - so if you want a REST server with no ORM (e.g. for a pure SOA server),
+  // use (or inherit) TRestServerFullMemory; if you want a REST server with
+  // tied ORM (with SQLite3 or any external DB), use TRestServerDB
   // - automatic call of this methods by a generic Uri() RESTful function
   // - any published method of descendants must match TOnRestServerCallBack
   // prototype, and is expected to be thread-safe
@@ -6148,9 +6150,13 @@ end;
 
 constructor TRestServer.Create(aModel: TOrmModel; aHandleUserAuthentication: boolean);
 begin
+  // avoid coder confusion if this abstract class is instantiated
+  if PClass(self)^ = TRestServer then
+    ERestException.RaiseUtf8(
+      'Abstract %.Create: use TRestServerFullMemory or TRestServerDB', [self]);
+  // setup the associated ORM model
   if aModel = nil then
     EOrmException.RaiseUtf8('%.Create(Model=nil)', [self]);
-  // setup the associated ORM model
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fAuthUserClass := TAuthUser;
   fAuthGroupClass := TAuthGroup;

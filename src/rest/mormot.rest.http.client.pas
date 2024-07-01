@@ -104,6 +104,7 @@ type
   /// abstract HTTP/1.1 RESTful JSON mORMot Client class
   // - this class, and other inherited classes defined in this unit, are
   // thread-safe, since each of their Uri() method is protected by a giant lock
+  // - do NOT use this abstract class, but one of its fully implemented child
   TRestHttpClientGeneric = class(TRestClientUri)
   protected
     fKeepAliveMS: cardinal;
@@ -228,8 +229,7 @@ type
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
   // WinHttp or libcurl API
-  // - not to be called directly, but via TRestHttpClientWinINet or (even
-  // better) TRestHttpClientWinHttp overridden classes under Windows
+  // - do NOT use this abstract class, but one of its fully implemented children
   TRestHttpClientRequest = class(TRestHttpClientGeneric)
   protected
     fRequest: THttpRequest;
