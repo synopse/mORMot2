@@ -1187,15 +1187,13 @@ begin
     idDenied:
       begin
         i := FastFindIntegerSorted(SortedID, ID);
-        if i >= 0 then
-        begin
-          DeleteInteger(SortedID, i);
-          if SortedID = nil then
-            StateID := idAllowAll;
-          exit;
-        end;
-        EServiceException.RaiseUtf8(
-          'TServiceFactoryServer: Allow(%) after no matching Deny()', [ID]);
+        if i < 0 then
+          EServiceException.RaiseUtf8(
+            'TServiceFactoryServer: Allow(%) after no matching Deny()', [ID]);
+        DeleteInteger(SortedID, i);
+        if SortedID = nil then
+          StateID := idAllowAll;
+        exit;
       end;
   end;
   AddSortedInteger(SortedID, ID)
@@ -1216,15 +1214,13 @@ begin
     idAllowed:
       begin
         i := FastFindIntegerSorted(SortedID, ID);
-        if i >= 0 then
-        begin
-          DeleteInteger(SortedID, i);
-          if SortedID = nil then
-            StateID := idDenyAll;
-          exit;
-        end;
-        EServiceException.RaiseUtf8(
-          'TServiceFactoryServer: Deny(%) after no matching Allow()', [ID]);
+        if i < 0 then
+          EServiceException.RaiseUtf8(
+            'TServiceFactoryServer: Deny(%) after no matching Allow()', [ID]);
+        DeleteInteger(SortedID, i);
+        if SortedID = nil then
+          StateID := idDenyAll;
+        exit;
       end;
   end;
   AddSortedInteger(SortedID, ID)
