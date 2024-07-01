@@ -243,7 +243,7 @@ type
     procedure InternalClose; override;
     /// set the fWinAPI class
     // - the overridden implementation should set the expected fWinAPIClass
-    procedure InternalSetClass; virtual; abstract;
+    procedure InternalSetClass; virtual;
   public
     /// internal class instance used for the connection
     // - will return either a TWinINet, a TWinHttp or a TCurlHttp class instance
@@ -792,11 +792,16 @@ begin
   result := fRequest <> nil;
 end;
 
+procedure TRestHttpClientRequest.InternalSetClass;
+begin
+  ERestHttpClient.RaiseUtf8('Abstract %: use inherited class', [self]);
+end;
+
 procedure TRestHttpClientRequest.InternalOpen;
 begin
   InternalSetClass;
   if fRequestClass = nil then
-    ERestHttpClient.RaiseUtf8('fRequestClass=nil for %', [self]);
+    ERestHttpClient.RaiseUtf8('Unsupported %.InternalOpen', [self]);
   fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
     fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
   fRequest.ExtendedOptions := fExtendedOptions;
