@@ -200,6 +200,9 @@ type
     wgsAlternateSuccess,
     wgsAlternateFailed,
     wgsAlternateReset,
+    wgsAlternateAlreadyInCache,
+    wgsAlternateWrongSizeInCache,
+    wgsAlternateCopiedInCache,
     wgsProgressive,
     wgsProgressiveFailed,
     wgsGet,
@@ -321,7 +324,7 @@ type
     // pcfResponsePartial with the new file name
     // - this method is called after any file has been successfully downloaded
     // - Params.Hasher/Hash are expected to be populated
-    procedure OnDowloaded(const Params: THttpClientSocketWGet;
+    procedure OnDowloaded(var Params: THttpClientSocketWGet;
       const Partial: TFileName; OnDownloadingID: THttpPartialID);
     /// notify the alternate download implementation that the data supplied
     // by OnDownload() was incorrect

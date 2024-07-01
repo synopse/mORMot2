@@ -1686,7 +1686,7 @@ type
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - if a file has been downloaded from the main repository, this method
     // should be called to copy the content into this instance files cache
-    procedure OnDowloaded(const Params: THttpClientSocketWGet;
+    procedure OnDowloaded(var Params: THttpClientSocketWGet;
       const Partial: TFileName; PartialID: integer); virtual;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
     // - OnDownload() may have returned corrupted data: local cache file is
@@ -6056,7 +6056,7 @@ begin
   end;
 end;
 
-procedure THttpPeerCache.OnDowloaded(const Params: THttpClientSocketWGet;
+procedure THttpPeerCache.OnDowloaded(var Params: THttpClientSocketWGet;
   const Partial: TFileName; PartialID: integer);
 var
   local: TFileName;
@@ -6089,6 +6089,11 @@ begin
     // size mismatch may happen on race condition (hash collision is unlikely)
     if PartialID <> 0 then
       fPartials.ChangeFile(PartialID, local); // switch to the local file
+    if localsize = sourcesize then
+      Params.SetStep(wgsAlternateAlreadyInCache, [local])
+    else
+      Params.SetStep(wgsAlternateWrongSizeInCache,
+        [local, ' ', localsize, '<>', sourcesize]); // paranaoid
     exit;
   end;
   QueryPerformanceMicroSeconds(start);
@@ -6142,6 +6147,7 @@ begin
     end;
     // actually copy the source file into the local cache folder
     ok := CopyFile(Partial, local, {failsifexists=}false);
+    Params.SetStep(wgsAlternateCopiedInCache, [local]);
     if ok and istemp then
       // force timestamp = now within the temporary folder
       FileSetDateFromUnixUtc(local, UnixTimeUtc)
