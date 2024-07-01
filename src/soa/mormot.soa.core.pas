@@ -195,6 +195,39 @@ type
     moaInclude,
     moaExclude);
 
+  /// used by TServiceAuthorization to stored its authorizations
+  TServiceAuthorizationState = (
+    idAllowAll,
+    idDenyAll,
+    idAllowed,
+    idDenied);
+
+  /// used by TServiceFactoryExecution to store its authorizations
+  {$ifdef USERECORDWITHMETHODS}
+  TServiceAuthorization = record
+  {$else}
+  TServiceAuthorization = object
+  {$endif USERECORDWITHMETHODS}
+    /// set if all TAuthGroup ID(s) should be defined for this factory
+    // - used on server side within TRestServerUriContext.ExecuteSoaByInterface
+    // - idAllowed, idDenied define what ID[] are storing
+    // - default is idAllowAll
+    StateID: TServiceAuthorizationState;
+    /// the sorted list of allowed/denied TAuthGroup ID(s)
+    // - used on server side within TRestServerUriContext.ExecuteSoaByInterface
+    // - IDs should be in 32-bit range, to reduce memory/cache size
+    // - idAllowed, idDenied define what ID[] are storing
+    SortedID: TIntegerDynArray;
+    /// quickly check if this TAuthGroup ID can execute this method
+    function IsDenied(const ID: TID): boolean;
+    /// define either idAllowAll or idDenyAll for this method
+    procedure All(state: TServiceAuthorizationState);
+    /// deny one TAuthGroup ID for this method
+    procedure Deny(const ID: TID);
+    /// allow one TAuthGroup ID for this method
+    procedure Allow(const ID: TID);
+  end;
+
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TAuthGroup ID(s)
@@ -369,7 +402,6 @@ const
   /// the Server-side instance implementation patterns without any ID
   // - so imFree won't be supported
   SERVICE_IMPLEMENTATION_NOID = [sicSingle, sicShared];
-
 
 function ToText(si: TServiceInstanceImplementation): PShortString; overload;
 
@@ -1122,10 +1154,92 @@ end;
 
 { ************ TServiceFactoryServerAbstract Abstract Service Provider }
 
-function TServiceFactoryServerAbstract.GetAuthGroupIDs(
-  const aGroup: array of RawUtf8; out IDs: TIDDynArray): boolean;
+{ TServiceAuthorization }
+
+function TServiceAuthorization.IsDenied(const ID: TID): boolean;
+begin
+  result := true;
+  if (ID > 0) and
+     (ID <= MaxInt) then
+    case StateID of
+      idAllowAll:
+        result := false;
+      idAllowed: // branchless x86_64 asm
+        result := FastFindIntegerSorted(SortedID, ID) < 0;
+      idDenied:
+        result := FastFindIntegerSorted(SortedID, ID) >= 0;
+    end;
+end;
+
+procedure TServiceAuthorization.All(state: TServiceAuthorizationState);
+begin
+  SortedID := nil;
+  StateID := state;
+end;
+
+procedure TServiceAuthorization.Allow(const ID: TID);
 var
   i: PtrInt;
+begin
+  if (ID <= 0) or
+     (ID > MaxInt) then
+    EServiceException.RaiseUtf8('TServiceFactoryServer: Unexpected Allow(%)', [ID]);
+  case StateID of
+    idAllowAll:
+      exit;
+    idDenyAll:
+      StateID := idAllowed;
+    idDenied:
+      begin
+        i := FastFindIntegerSorted(SortedID, ID);
+        if i >= 0 then
+        begin
+          DeleteInteger(SortedID, i);
+          if SortedID = nil then
+            StateID := idAllowAll;
+          exit;
+        end;
+        EServiceException.RaiseUtf8(
+          'TServiceFactoryServer: Allow(%) after no matching Deny()', [ID]);
+      end;
+  end;
+  AddSortedInteger(SortedID, ID)
+end;
+
+procedure TServiceAuthorization.Deny(const ID: TID);
+var
+  i: PtrInt;
+begin
+  if (ID <= 0) or
+     (ID > MaxInt) then
+    EServiceException.RaiseUtf8('TServiceFactoryServer: Unexpected Deny(%)', [ID]);
+  case StateID of
+    idDenyAll:
+      exit;
+    idAllowAll:
+      StateID := idDenied;
+    idAllowed:
+      begin
+        i := FastFindIntegerSorted(SortedID, ID);
+        if i >= 0 then
+        begin
+          DeleteInteger(SortedID, i);
+          if SortedID = nil then
+            StateID := idDenyAll;
+          exit;
+        end;
+        EServiceException.RaiseUtf8(
+          'TServiceFactoryServer: Deny(%) after no matching Allow()', [ID]);
+      end;
+  end;
+  AddSortedInteger(SortedID, ID)
+end;
+
+
+{ TServiceFactoryServerAbstract }
+
+function TServiceFactoryServerAbstract.GetAuthGroupIDs(
+  const aGroup: array of RawUtf8; out IDs: TIDDynArray): boolean;
 begin
   result := (self <> nil) and
     fOrm.MainFieldIDs(
