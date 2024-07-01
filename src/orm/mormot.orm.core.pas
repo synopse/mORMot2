@@ -8650,7 +8650,7 @@ begin
       with DynArrayFields[f] do
         if PropNameEquals(Name, DynArrayFieldName) then
         begin
-          GetDynArray(self, result);
+          GetDynArray(self, result{%H-});
           exit;
         end;
   result.Void;
@@ -8666,7 +8666,7 @@ begin
         with DynArrayFields[f] do
           if DynArrayIndex = DynArrayFieldIndex then
           begin
-            GetDynArray(self, result);
+            GetDynArray(self, result{%H-});
             exit;
           end;
   result.Void;

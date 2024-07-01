@@ -372,12 +372,9 @@ type
     case VKind: TBsonElementType of
       betObjectID:
         (
-      {$ifdef fpc} {$push} {$endif} {$hints off}
-        // does not complain if Filler is declared but void
-        VFiller: array[1..SizeOf(TVarData) - SizeOf(TVarType)
-          - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID)] of byte;
-      {$ifdef fpc} {$pop} {$else} {$hints on} {$endif}
-        VObjectID: TBsonObjectID);
+        VObjectID: TBsonObjectID;
+        VPaddingToVarData: array[1..SizeOf(TVarData) - SizeOf(TVarType)
+          - SizeOf(TBsonElementType) - SizeOf(TBsonObjectID)] of byte;);
       betBinary,
       betDoc,
       betArray,

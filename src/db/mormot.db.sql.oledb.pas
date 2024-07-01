@@ -938,17 +938,17 @@ end;
 
 function TSqlDBOleDBStatement.ColumnCurrency(Col: integer): currency;
 begin
-  GetCol64(Col, ftCurrency, result);
+  GetCol64(Col, ftCurrency, result{%H-});
 end;
 
 function TSqlDBOleDBStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
-  GetCol64(Col, ftDate, result);
+  GetCol64(Col, ftDate, result{%H-});
 end;
 
 function TSqlDBOleDBStatement.ColumnDouble(Col: integer): double;
 begin
-  GetCol64(Col, ftDouble, result);
+  GetCol64(Col, ftDouble, result{%H-});
 end;
 
 function TSqlDBOleDBStatement.ColumnIndex(const aColumnName: RawUtf8): integer;
@@ -965,7 +965,7 @@ end;
 
 function TSqlDBOleDBStatement.ColumnInt(Col: integer): Int64;
 begin
-  GetCol64(Col, ftInt64, result);
+  GetCol64(Col, ftInt64, result{%H-});
 end;
 
 function TSqlDBOleDBStatement.ColumnName(Col: integer): RawUtf8;
