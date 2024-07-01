@@ -863,7 +863,7 @@ end;
 function TSynPELoader.GetImageDataDirectory(DirectoryId: cardinal): PImageDataDirectory;
 begin
   if DirectoryId >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES then
-    raise EPeCoffLoader.CreateUtf8('%.ImageDataDirectory[%]', [self, DirectoryID]);
+    EPeCoffLoader.RaiseUtf8('%.ImageDataDirectory[%]', [self, DirectoryID]);
   if Is64 then
     result := @PEHeader64^.OptionalHeader.DataDirectory[DirectoryId]
   else

@@ -3407,11 +3407,9 @@ begin
     if (fStatement <> nil) and
        fStatement.Connection.Properties.LogSqlStatementOnException then
       try
-        fMessageUtf8 := fMessageUtf8 + ' - ' +
-          fStatement.GetSqlWithInlinedParams;
-      except
-        fMessageUtf8 := fMessageUtf8 + ' - ' +
-          fStatement.Sql; // if parameter access failed -> append with ?
+        Append(fMessageUtf8, [' - ', fStatement.GetSqlWithInlinedParams]);
+      except // if parameter access failed -> append with ?
+        Append(fMessageUtf8, [' - ', fStatement.Sql]);
       end;
   end;
   {$endif SYNDB_SILENCE}
