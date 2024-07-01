@@ -3022,7 +3022,7 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
             EWinHttp.RaiseFromLastError;
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
-            raise EWinHttp.CreateUtf8('%: OnUpload canceled %', [self, aMethod]);
+            EWinHttp.RaiseUtf8('%: OnUpload canceled %', [self, aMethod]);
         end;
       end;
     end
@@ -3362,7 +3362,7 @@ begin
     if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then
       fSocket := _http.fSocket
     else
-      raise EWinHttp.CreateUtf8('%.Create: % handshake failed', [self, _http]);
+      EWinHttp.RaiseUtf8('%.Create: % handshake failed', [self, _http]);
   finally
     _http.Free;
   end;

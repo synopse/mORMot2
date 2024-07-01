@@ -6876,7 +6876,7 @@ begin
     exit;
   end
   else if fAesAead in fFlags then
-    raise ECrypt.CreateUtf8('%.Process(TBytes) is unsupported for %',
+    ECrypt.RaiseUtf8('%.Process(TBytes) is unsupported for %',
       [self, fCryptAlgo.AlgoName]) // MacAndCrypt() requires RawByteString
   // standard encryption with no AEAD/checksum
   else if fEncrypt in fFlags then

@@ -277,7 +277,7 @@ begin
   {$ifndef ZEOSTRANS}
   if (fInternalTransaction <> nil) and
      fInternalTransaction.InTransaction then
-    raise ESqlDBIbx.CreateUtf8('Invalid Internal %.StartTransaction: ' +
+    ESqlDBIbx.RaiseUtf8('Invalid Internal %.StartTransaction: ' +
       'Transaction is Started/InTransactions', [self]);
   {$endif ZEOSTRANS}
   if fInternalTransaction <> nil then
@@ -321,7 +321,7 @@ end;
 
 procedure TSqlDBIbxStatement.ErrorColAndRowset(const Col: integer);
 begin
-  raise ESqlDBIbx.CreateUtf8('%.ColumnInt(%) ResultSet=%',
+  ESqlDBIbx.RaiseUtf8('%.ColumnInt(%) ResultSet=%',
     [self, Col, fResultSet]);
 end;
 
@@ -403,7 +403,7 @@ begin
   SQLLogBegin(sllDB);
   if (fStatement <> nil) or
      (fResultSet <> nil) then
-    raise ESqlDBIbx.CreateUtf8('%.Prepare() shall be called once', [self]);
+    ESqlDBIbx.RaiseUtf8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fReadOnlyTransaction := IdemPChar(pointer(fSQL), 'SELECT');
   con := (fConnection as TSqlDBIbxConnection);
@@ -575,7 +575,7 @@ var
                 ftBlob:
                   farrParams[iP].SetAsString(VArray[iA]);
               else
-                raise ESqlDBIbx.CreateUtf8(
+                ESqlDBIbx.RaiseUtf8(
                   '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
               end;
             end
@@ -640,20 +640,20 @@ var
       iParams := newStatement.GetSQLParams;
       ndx := fParamCount * (iEnd - iStart + 1);
       if iParams.Count <> ndx then
-        raise ESqlDBIbx.CreateUtf8(
+        ESqlDBIbx.RaiseUtf8(
           '%.ExecutePrepared expected % bound parameters, got %',
           [self, iParams.Count, fParamCount * ndx]);
       for iP := 0 to fParamCount - 1 do
       begin
         if fParams[iP].VInt64 <> fParamsArrayCount then
-          raise ESqlDBIbx.CreateUtf8(
+          ESqlDBIbx.RaiseUtf8(
             '%.ExecutePrepared: #% parameter expected array count %, got %',
             [self, iP, fParamsArrayCount, fParams[iP].VInt64]);
         with fParams[iP] do
         begin
           case VType of
             ftUnknown:
-              raise ESqlDBIbx.CreateUtf8(
+              ESqlDBIbx.RaiseUtf8(
                 '%.ExecutePrepared: Unknown type array parameter #%',
                 [self, iP]);
             ftNull:
@@ -684,7 +684,7 @@ var
                   ftBlob:
                     iParam.SetAsString(VArray[ndx]);
                   else
-                    raise ESqlDBIbx.CreateUtf8(
+                    ESqlDBIbx.RaiseUtf8(
                       '%.ExecutePrepared: Invalid type parameter #%', [self, ndx]);
                 end;
               end;
@@ -757,7 +757,7 @@ begin
   SQLLogBegin(sllSQL);
   inherited ExecutePrepared;
   if fStatement = nil then
-    raise ESqlDBIbx.CreateUtf8('%.ExecutePrepared() invalid call', [self]);
+    ESqlDBIbx.RaiseUtf8('%.ExecutePrepared() invalid call', [self]);
   con := (fConnection as TSqlDBIbxConnection);
   fAutoStartCommitTrans := (con.fTransaction=nil) or
                            not con.fTransaction.GetInTransaction;
@@ -776,11 +776,11 @@ begin
   if fParamsArrayCount > 0 then      // Array Bindings
   begin
     if fIbxParams.Count <> fParamCount then
-      raise ESqlDBIbx.CreateUtf8(
+      ESqlDBIbx.RaiseUtf8(
         '%.ExecutePrepared expected % bound parameters, got %',
         [self, fIbxParams.Count, fParamCount]);
     if fExpectResults then
-      raise ESqlDBIbx.CreateUtf8(
+      ESqlDBIbx.RaiseUtf8(
         '%.ExecutePrepared cant ExpectResults with ArrayParams', [self]);
     if fStatement.HasBatchMode and
        (fStatement.GetSQLStatementType in [SQLInsert,SQLUpdate]) then
@@ -791,7 +791,7 @@ begin
   else
   begin
     if fIbxParams.Count <> fParamCount then
-      raise ESqlDBIbx.CreateUtf8(
+      ESqlDBIbx.RaiseUtf8(
         '%.ExecutePrepared expected % bound parameters, got %',
         [self, fIbxParams.Count, fParamCount]);
     for i := 0 to fParamCount - 1 do
@@ -816,7 +816,7 @@ begin
           ftBlob:
             farrParams[i].SetAsString(VData);
         else
-          raise ESqlDBIbx.CreateUtf8(
+          ESqlDBIbx.RaiseUtf8(
             '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
         end;
       end;
@@ -1124,7 +1124,7 @@ begin
   with aProperties as TSqlDBIbxConnectionProperties do
   begin
     if DatabaseName = '' then
-       raise ESqlDBIbx.CreateUtf8('% DatabaseName=''''', [self]);
+       ESqlDBIbx.RaiseUtf8('% DatabaseName=''''', [self]);
     fFbLibraryPathName := FirebirdLibraryPathName;
     fCreateDbIfNotExists := CreateIfNotExists;
     fDBParams.Assign(IbxDBParams);
@@ -1212,7 +1212,7 @@ var
         isc_dpb_quit_log:
           DPBItem.SetAsByte(0);
       else
-        raise ESqlDBIbx.CreateUtf8(
+        ESqlDBIbx.RaiseUtf8(
           '%.Connect() on % failed - IDPBItem type unsupported: %',
           [self, fProperties.ServerName, DPBItem.getParamTypeName]);
       end;
@@ -1222,7 +1222,7 @@ var
 begin
   log := SynDBLog.Enter(self, 'Connect');
   if fAttachment<>nil then
-     raise ESqlDBIbx.CreateUtf8(
+     ESqlDBIbx.RaiseUtf8(
        '%.Connect() on % failed: Attachment<>nil',
        [self, fProperties.ServerName]);
   DPB := GenerateDPB;
@@ -1247,7 +1247,7 @@ begin
       end;
     end;
     if fAttachment = nil then
-      raise ESqlDBIbx.CreateUtf8(
+      ESqlDBIbx.RaiseUtf8(
         '%.Connect() on % failed - SQLErrorCode: %, FbErrorCode: % ',
         [self, fDBName, Status.Getsqlcode, Status.GetIBErrorCode]);
   end;
@@ -1293,17 +1293,17 @@ var
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then
-    raise ESqlDBIbx.CreateUtf8('Invalid %.StartTransaction: nested ' +
+    ESqlDBIbx.RaiseUtf8('Invalid %.StartTransaction: nested ' +
       'transactions are not supported/implemented', [self]);
   try
     inherited StartTransaction;
     if (fAttachment = nil) or
        not IsConnected then
-      raise ESqlDBIbx.CreateUtf8('Invalid %.StartTransaction: ' +
+      ESqlDBIbx.RaiseUtf8('Invalid %.StartTransaction: ' +
         'Database not connected', [self]);
     if (fTransaction <> nil) and
        fTransaction.InTransaction then
-      raise ESqlDBIbx.CreateUtf8('Invalid %.StartTransaction: ' +
+      ESqlDBIbx.RaiseUtf8('Invalid %.StartTransaction: ' +
         'Transaction is Started/InTransactions', [self]);
     if fTransaction <> nil then
       fTransaction.Start
@@ -1327,7 +1327,7 @@ procedure TSqlDBIbxConnection.Commit;
 begin
   inherited Commit;
   if fTransaction = nil then
-    raise ESqlDBIbx.CreateUtf8('Invalid %.Commit call', [self]);
+    ESqlDBIbx.RaiseUtf8('Invalid %.Commit call', [self]);
   try
     if fTransaction.InTransaction then
        fTransaction.Commit;
@@ -1341,7 +1341,7 @@ procedure TSqlDBIbxConnection.Rollback;
 begin
   inherited Rollback;
   if fTransaction = nil then
-    raise ESqlDBIbx.CreateUtf8('Invalid %.Rollback call', [self]);
+    ESqlDBIbx.RaiseUtf8('Invalid %.Rollback call', [self]);
   try
     if InTransaction then
        fTransaction.Rollback;

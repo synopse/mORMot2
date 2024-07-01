@@ -1964,7 +1964,7 @@ begin
 end;
 
 var
-  LastDbError: TLastError; // store last error texts
+  LastDbError: TLastError; // store per-thread last error texts
 
 threadvar // do not publish for compilation within Delphi packages
   LastDbErrorID: TLastErrorID; // 32-bit error text identifier for each thread
@@ -3978,7 +3978,7 @@ procedure TJsonObjectDecoder.AddFieldValue(const FieldName, FieldValue: RawUtf8;
   FieldType: TJsonObjectDecoderFieldType);
 begin
   if FieldCount = MAX_SQLFIELDS then
-    raise EJsonObjectDecoder.CreateUtf8(
+    EJsonObjectDecoder.RaiseUtf8(
       'Too many fields for TJsonObjectDecoder.AddField(%) max=%',
       [FieldName, MAX_SQLFIELDS]);
   FieldNames[FieldCount] := pointer(FieldName); // so FieldName should remain available

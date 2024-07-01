@@ -11758,7 +11758,7 @@ end;
 function TDocDict.Pop(const key: RawUtf8): variant;
 begin
   if not PopAt(key, @result) then
-    raise EDocDict.CreateUtf8('Pop with unknown key [%]', [key]);
+    EDocDict.RaiseUtf8('Pop with unknown key [%]', [key]);
 end;
 
 function TDocDict.Pop(const key: RawUtf8; const default: variant): variant;

@@ -3000,7 +3000,7 @@ begin
     JS_TAG_UNDEFINED:
       begin
         if raiseIfNotFound then
-          raise EQuickJS.CreateUtf8('GetValue(%) not found', [prop]);
+          EQuickJS.RaiseUtf8('GetValue(%) not found', [prop]);
         result := false;
       end;
     JS_TAG_EXCEPTION:
@@ -3534,7 +3534,7 @@ begin
     vtObject:
       FromClass(val.VObject, result);
   else
-    raise EQuickJS.CreateUtf8('Unhandled JSContext.From(VType=%)', [val.VType]);
+    EQuickJS.RaiseUtf8('Unhandled JSContext.From(VType=%)', [val.VType]);
   end;
 end;
 

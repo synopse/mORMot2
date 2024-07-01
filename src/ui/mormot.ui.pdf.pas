@@ -9785,7 +9785,7 @@ begin
   fPermissions := aPermissions;
   fUserPassword := aUserPassword;
   if aOwnerPassword = '' then
-    raise EPdfInvalidOperation.CreateUtf8(
+    EPdfInvalidOperation.RaiseUtf8(
       '% expect a non void owner password', [self]);
   fOwnerPassword := aOwnerPassword;
 end;

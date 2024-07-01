@@ -544,7 +544,7 @@ var
   Log: ISynLog;
 begin
   if fDatabase = nil then
-    raise ESqlDBUniDAC.CreateUtf8('%.Connect(%): Database=nil', [self,
+    ESqlDBUniDAC.RaiseUtf8('%.Connect(%): Database=nil', [self,
       fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
@@ -815,7 +815,7 @@ begin
             P.AsString := VData
           {$endif UNICODE}
         else
-          raise ESQLDBUniDAC.CreateUTF8(
+          ESqlDBUniDAC.RaiseUtf8(
             '%.DataSetBindSQLParam: invalid type % on bound parameter #%',
             [Self, ord(VType), aParamIndex + 1]);
       end;

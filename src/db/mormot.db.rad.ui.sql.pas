@@ -381,7 +381,7 @@ var
 begin // only execute writes in current implementation
   StringToUtf8(ASQL, sql);
   if fConnection = nil then
-    raise ESqlDataSet.CreateUtf8(
+    ESqlDataSet.RaiseUtf8(
       '%.PSExecuteStatement with Connection=nil [%]', [self, sql]);
   stmt := fConnection.NewThreadSafeStatementPrepared(sql, false);
   if stmt <> nil then

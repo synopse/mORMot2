@@ -801,7 +801,7 @@ begin
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
     if ErrMsg <> '' then
-      raise ERestHttpServer.CreateUtf8(
+      ERestHttpServer.RaiseUtf8(
         '%.Create(% ): %', [self, fRestServerNames, ErrMsg]);
     TrimSelf(fRestServerNames);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
@@ -874,7 +874,7 @@ begin
       fHttpServer := HTTPSERVERSOCKETCLASS[aUse].Create(fPort, HttpThreadStart,
         HttpThreadTerminate, TrimU(fRestServerNames), aThreadPoolCount, 30000, hso)
     else
-      raise ERestHttpServer.CreateUtf8('%.Create(% ): unsupported %',
+      ERestHttpServer.RaiseUtf8('%.Create(% ): unsupported %',
         [self, fRestServerNames, ToText(aUse)^]);
     if aSecurity = secTLSSelfSigned then
       THttpServerSocketGeneric(fHttpServer).WaitStartedHttps({sec=}30)
@@ -1079,7 +1079,7 @@ begin
         ' (you need to register the URI - try to use useHttpApiRegisteringURI)';
   fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
-    raise ERestHttpServer.CreateUtf8('%: %', [self, result]);
+    ERestHttpServer.RaiseUtf8('%: %', [self, result]);
 end;
 {$else}
 begin
@@ -1534,7 +1534,7 @@ var
   thrdcnt: integer;
 begin
   if aDefinition = nil then
-    raise ERestHttpServer.CreateUtf8('%.Create(aDefinition=nil)', [self]);
+    ERestHttpServer.RaiseUtf8('%.Create(aDefinition=nil)', [self]);
   if aDefinition.WebSocketPassword <> '' then
     aForcedUse := WEBSOCKETS_DEFAULT_MODE; //= useBidirAsync
   if aDefinition.ThreadCount = 0 then

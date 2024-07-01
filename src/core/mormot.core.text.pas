@@ -8718,7 +8718,7 @@ begin
     VarRecToUtf8(Args[0], result)
   else
   begin
-    f.Parse(Format, @Args[0], length(Args));
+    f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
     FastSetString(result, f.L);
     f.Write(pointer(result));
   end;

@@ -5657,8 +5657,8 @@ begin
   SetParameters(aParameters); // should parse the JSON-encoded parameters
 end;
 
-constructor TSynFilterOrValidate.CreateUtf8(const Format: RawUtf8; const Args,
-  Params: array of const);
+constructor TSynFilterOrValidate.CreateUtf8(const Format: RawUtf8;
+  const Args, Params: array of const);
 begin
   Create(FormatJson(Format, Args, Params));
 end;

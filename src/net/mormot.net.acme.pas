@@ -428,8 +428,7 @@ begin
     err := JsonDecode(pointer(fBody), 'detail', nil, {handlejsonobjarr=} false);
     if err = '' then
       StatusCodeToReason(fStatus, err);
-    raise EJwsHttp.CreateUtf8(
-      'Error % [%] while querying %', [fStatus, err, fUri]);
+    EJwsHttp.RaiseUtf8('Error % [%] while querying %', [fStatus, err, fUri]);
   end;
   result := fBody;
 end;
@@ -939,8 +938,7 @@ begin
   dom.A['subjects'].ToRawUtf8DynArray(s);
   cc := Cert(fOwner.fAlgo);
   if cc = nil then
-    raise EAcmeLetsEncrypt.CreateUtf8(
-      '%.Create: unsupported %', [self, fOwner.fAlgo]);
+    EAcmeLetsEncrypt.RaiseUtf8('%.Create: unsupported %', [self, fOwner.fAlgo]);
   if not FileExists(fSignedCert) or
      not FileExists(fPrivKey) or
      not cc.LoadFromFile(fReferenceCert, cccCertWithPrivateKey) then
