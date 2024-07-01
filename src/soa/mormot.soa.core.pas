@@ -230,15 +230,10 @@ type
 
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
-    /// the list of denied TAuthGroup ID(s)
-    // - used on server side within TRestServerUriContext.ExecuteSoaByInterface
-    // - bit 0 for client TAuthGroup.ID=1 and so on...
-    // - is therefore able to store IDs up to 256 (maximum bit of 255 is a
-    // limitation of the pascal compiler itself)
-    // - void by default, i.e. no denial = all groups allowed for this method
-    Denied: set of 0..255;
     /// execution options for this method (about thread safety or logging)
     Options: TInterfaceMethodOptions;
+    /// store the current defined authorization of this method
+    Auth: TServiceAuthorization;
     /// where execution information should be written as TOrmServiceLog
     // - is a weak pointer to a IRestOrm instance to avoid reference counting
     LogRest: pointer;
@@ -1244,12 +1239,6 @@ begin
   result := (self <> nil) and
     fOrm.MainFieldIDs(
       fOrm.Model.GetTableInherited(DefaultTAuthGroupClass), aGroup, IDs);
-  if result then
-    for i := 0 to high(IDs) do
-      // fExecution[].Denied set is able to store IDs up to 256 only
-      if IDs[i] > 255 then
-        EServiceException.RaiseUtf8(
-          'Unsupported %.Allow/Deny with GroupID=% >255', [self, IDs[i]]);
 end;
 
 function TServiceFactoryServerAbstract.AllowAll: TServiceFactoryServerAbstract;
@@ -1258,7 +1247,7 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      FillcharFast(fExecution[m].Denied, SizeOf(fExecution[m].Denied), 0);
+      fExecution[m].Auth.All(idAllowAll);
   result := self;
 end;
 
@@ -1269,9 +1258,8 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      with fExecution[m] do
-        for g := 0 to high(aGroupID) do
-          exclude(Denied, aGroupID[g] - 1);
+      for g := 0 to high(aGroupID) do
+        fExecution[m].Auth.Allow(aGroupID[g]);
   result := self;
 end;
 
@@ -1291,7 +1279,7 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      FillcharFast(fExecution[m].Denied, SizeOf(fExecution[m].Denied), 255);
+      fExecution[m].Auth.All(idDenyAll);
   result := self;
 end;
 
@@ -1302,9 +1290,8 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      with fExecution[m] do
-        for g := 0 to high(aGroupID) do
-          include(Denied, aGroupID[g] - 1);
+      for g := 0 to high(aGroupID) do
+        fExecution[m].Auth.Deny(aGroupID[g]);
   result := self;
 end;
 
@@ -1325,9 +1312,7 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      FillcharFast(
-        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
-        SizeOf(fExecution[0].Denied), 0);
+      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.All(idAllowAll);
   result := self;
 end;
 
@@ -1336,13 +1321,15 @@ function TServiceFactoryServerAbstract.AllowByID(
   const aGroupID: array of TID): TServiceFactoryServerAbstract;
 var
   m, g: PtrInt;
+  e: PServiceFactoryExecution;
 begin
   if self <> nil then
-    if high(aGroupID) >= 0 then
-      for m := 0 to high(aMethod) do
-        with fExecution[fInterface.CheckMethodIndex(aMethod[m])] do
-          for g := 0 to high(aGroupID) do
-            exclude(Denied, aGroupID[g] - 1);
+    for m := 0 to high(aMethod) do
+    begin
+      e := @fExecution[fInterface.CheckMethodIndex(aMethod[m])];
+      for g := 0 to high(aGroupID) do
+        e^.Auth.Allow(aGroupID[g]);
+    end;
   result := self;
 end;
 
@@ -1364,9 +1351,7 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      FillcharFast(
-        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Denied,
-        SizeOf(fExecution[0].Denied), 255);
+      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.All(idDenyAll);
   result := self;
 end;
 
@@ -1375,12 +1360,15 @@ function TServiceFactoryServerAbstract.DenyByID(
   const aGroupID: array of TID): TServiceFactoryServerAbstract;
 var
   m, g: PtrInt;
+  e: PServiceFactoryExecution;
 begin
   if self <> nil then
-    for m := 0 to high(aMethod) do
-      with fExecution[fInterface.CheckMethodIndex(aMethod[m])] do
-        for g := 0 to high(aGroupID) do
-          include(Denied, aGroupID[g] - 1);
+  for m := 0 to high(aMethod) do
+    begin
+      e := @fExecution[fInterface.CheckMethodIndex(aMethod[m])];
+      for g := 0 to high(aGroupID) do
+        e^.Auth.Deny(aGroupID[g]);
+    end;
   result := self;
 end;
 

@@ -1962,7 +1962,7 @@ begin
       @fake.fService.fInterface.Methods[Ctxt.ServiceMethodIndex];
     Ctxt.ServiceExecution :=
       @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
-    Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
+    Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options; // transient copy
     Ctxt.Service := fake.fService;
     Ctxt.ServiceMethodIndex := Ctxt.ServiceMethodIndex + SERVICE_PSEUDO_METHOD_COUNT;
     FormatUtf8('[%,"%"]',
