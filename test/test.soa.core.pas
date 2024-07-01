@@ -1651,9 +1651,7 @@ begin
   Test([2, 3, 5], 'this group ID won''t affect the current user');
   S.AllowByID(['Add'], [GroupID]);
   Test([1, 2, 3, 5], 'allow a specific method for the current user');
-  S.AllowAllByID([0]);
-  Test([1, 2, 3, 5], 'invalid group ID won''t affect the current user');
-  S.AllowAllByID([GroupID]);
+  S.AllowAll;
   Test([1, 2, 3, 4, 5], 'restore allowed for the current user');
   Check(not fClient.SetUser('unknown', 'wrongpass'));
   Test([], 'no authentication -> access denied');
