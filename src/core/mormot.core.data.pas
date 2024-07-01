@@ -2397,6 +2397,10 @@ procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt;
   MaxStart: integer = -1): integer;
 
+/// find the maximum 64-bit integer in Values[]
+function MaxInt64(const Values: TInt64DynArray; ValuesCount: PtrInt;
+  MaxStart: Int64 = -1): Int64;
+
 /// sum all 32-bit integers in Values[]
 function SumInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt): integer;
 
@@ -10912,15 +10916,39 @@ end;
 
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: PtrInt; MaxStart: integer): integer;
 var
-  i: PtrInt;
+  p: PInteger;
   v: integer;
 begin
   result := MaxStart;
-  for i := 0 to ValuesCount - 1 do
+  if ValuesCount > 0 then
   begin
-    v := Values[i];
-    if v > result then
-      result := v; // movca branchless opcode on FPC
+    p := pointer(Values);
+    repeat
+      v := p^;
+      if v > result then
+        result := v; // movca branchless opcode on FPC
+      inc(p);
+      dec(ValuesCount);
+    until ValuesCount = 0;
+  end;
+end;
+
+function MaxInt64(const Values: TInt64DynArray; ValuesCount: PtrInt; MaxStart: Int64): Int64;
+var
+  p: PInt64;
+  v: Int64;
+begin
+  result := MaxStart;
+  if ValuesCount > 0 then
+  begin
+    p := pointer(Values);
+    repeat
+      v := p^;
+      if v > result then
+        result := v; // movca branchless opcode on FPC
+      inc(p);
+      dec(ValuesCount);
+    until ValuesCount = 0;
   end;
 end;
 
