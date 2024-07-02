@@ -1674,7 +1674,8 @@ type
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
       aHttpServerThreadCount: integer = 2;
-      aLogClass: TSynLogClass = nil); reintroduce;
+      aLogClass: TSynLogClass = nil;
+      const aUuid: RawUtf8 = ''); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -5272,7 +5273,8 @@ var
   key: THash256Rec;
 begin
   // setup internal processing status
-  GetComputerUuid(fUuid);
+  if IsNullGuid(fUuid) then
+    GetComputerUuid(fUuid);
   fFrameSeqLow := Random32 shr 1; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
@@ -5284,8 +5286,9 @@ begin
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
   if Assigned(fLog) then
-    fLog.Add.Log(sllTrace, 'Create: SecretFingerPrint=%, Seq=#%',
-      [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
+    fLog.Add.Log(sllTrace, 'Create: Uuid=% SecretFingerPrint=%, Seq=#%',
+      [GuidToShort(fUuid), key.b[0], CardinalToHexShort(fFrameSeq)], self);
+      // log includes safe 8-bit fingerprint
   FillZero(key.b);
 end;
 
@@ -5582,7 +5585,8 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer; aLogClass: TSynLogClass);
+  aHttpServerThreadCount: integer;
+  aLogClass: TSynLogClass; const aUuid: RawUtf8);
 var
   log: ISynLog;
   avail, existing: Int64;
@@ -5593,6 +5597,9 @@ begin
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
+  if (aUuid <> '') and
+     not RawUtf8ToGuid(aUuid, fUuid) then // allow UUID customization
+    EHttpPeerCache.RaiseUtf8('Invalid %.Create(uuid=%)', [self, aUuid]);
   inherited Create(aSharedSecret);
   // setup the processing options
   if aSettings = nil then
