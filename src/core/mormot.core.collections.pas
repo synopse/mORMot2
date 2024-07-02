@@ -593,8 +593,8 @@ type
     function GetKeyTypeInfo: PRttiInfo;
     function GetValueTypeInfo: PRttiInfo;
     procedure AddOne(key, value: pointer);
-    procedure GetDefault(value: pointer);
-    procedure GetDefaultAndUnlock(value: pointer);
+    procedure GetDefaultOrRaise(value: pointer);
+    procedure GetDefaultOrUnlockAndRaise(value: pointer);
     function GetCapacity: integer;
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -1373,7 +1373,7 @@ begin
     EIKeyValue.RaiseUtf8('%.Add: duplicated key', [self]);
 end;
 
-procedure TIKeyValueParent.GetDefault(value: pointer);
+procedure TIKeyValueParent.GetDefaultOrRaise(value: pointer);
 begin
   if kvoDefaultIfNotFound in fOptions then
     fData.Values.ItemClear(value)
@@ -1381,7 +1381,7 @@ begin
     EIKeyValue.RaiseUtf8('%.GetItem: key not found', [self]);
 end;
 
-procedure TIKeyValueParent.GetDefaultAndUnlock(value: pointer);
+procedure TIKeyValueParent.GetDefaultOrUnlockAndRaise(value: pointer);
 begin
   if kvoDefaultIfNotFound in fOptions then
     fData.Values.ItemClear(value)
@@ -1453,7 +1453,7 @@ function TIKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
 {$ifdef SMALLGENERICS}
 begin
   if not fData.FindAndCopy(key, result, fHasTimeout) then
-    GetDefault(@result)
+    GetDefaultOrRaise(@result)
 end;
 {$else}
 var
@@ -1463,9 +1463,9 @@ begin
     fData.Safe^.ReadLock;
   ndx := fData.Find(key, fHasTimeout);
   if ndx < 0 then
-    GetDefaultAndUnlock(@result) // may ReadUnLock and raise EIKeyValue
+    GetDefaultOrUnlockAndRaise(@result) // may ReadUnLock and raise EIKeyValue
   else
-    result := TArray<TValue>(fData.Values.Value^)[ndx]; // very efficient
+    result := TArray<TValue>(fData.Values.Value^)[ndx]; // more efficient
   if fHasLock then
     fData.Safe^.ReadUnLock;
 end;
