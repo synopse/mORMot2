@@ -1423,6 +1423,8 @@ type
   // - pcoBroadcastNotAlone will disable broadcasting for up to one second if
   // no response at all was received within BroadcastTimeoutMS delay
   // - pcoNoServer disable the local UDP/HTTP servers and acts as a pure client
+  // - pcoNoBanIP disable the 4 seconds IP banishment mechanism at HTTP level;
+  // set RejectInstablePeersMin = 0 to disable banishment at UDP level
   // - pcoSelfSignedHttps enables HTTPS communication with a self-signed server
   // (warning: this option should be set on all peers, clients and servers)
   // - pcoVerboseLog will log all details, e.g. raw UDP frames
@@ -1432,6 +1434,7 @@ type
     pcoTryLastPeer,
     pcoBroadcastNotAlone,
     pcoNoServer,
+    pcoNoBanIP,
     pcoSelfSignedHttps,
     pcoVerboseLog);
 
@@ -1497,7 +1500,8 @@ type
     // which sent invalid UDP frames or HTTP/HTTPS requests
     // - should be a positive small power of two <= 128
     // - default is 4, for a 4 minutes time-to-live of IP banishments
-    // - you may set 0 to disable the whole safety mechanism
+    // - you may set 0 to disable the whole IP ban safety mechanism at UDP level
+    // - use pcoNoBanIP option to disable the IP ban mechanism at HTTP level
     property RejectInstablePeersMin: integer
       read fRejectInstablePeersMin write fRejectInstablePeersMin;
     /// how many milliseconds UDP broadcast should wait for a response
@@ -5093,9 +5097,10 @@ begin
   UInt32ToUtf8(fSettings.Port, fPort);
   FormatUtf8('%:%', [fMac.IP, fPort], fIpPort); // UDP/TCP bound to this network
   if fSettings.RejectInstablePeersMin > 0 then
+  begin
     fInstable := THttpAcceptBan.Create(fSettings.RejectInstablePeersMin);
-  if fInstable <> nil then
     fInstable.WhiteIP := fIP4; // from localhost: only hsoBan40xIP (4 seconds)
+  end;
   fLog.Add.Log(sllDebug, 'Create: network="%" as % (broadcast=%) %',
     [fMac.Name, fIpPort, fMac.Broadcast, fMac.Address], self);
 end;
@@ -5462,7 +5467,7 @@ begin
         if not late then
           inc(fResponses);
     end
-  else if fOwner.fInstable<> nil then // RejectInstablePeersMin
+  else if fOwner.fInstable <> nil then // RejectInstablePeersMin
     fOwner.fInstable.BanIP(remote.IP4);
 end;
 
@@ -5668,8 +5673,10 @@ var
   opt: THttpServerOptions;
 begin
   if aHttpServerClass = nil then
-    aHttpServerClass := THttpServer;
-  opt := [hsoBan40xIP, hsoNoXPoweredHeader, hsoThreadSmooting];
+    aHttpServerClass := THttpServer; // classic per-thread client is good enough
+  opt := [hsoNoXPoweredHeader, hsoThreadSmooting];
+  if not (pcoNoBanIP in fSettings.Options) then // RejectInstablePeersMin = UDP
+    include(opt, hsoBan40xIP);
   if fVerboseLog then
     include(opt, hsoLogVerbose);
   if pcoSelfSignedHttps in fSettings.Options then
