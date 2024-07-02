@@ -1673,7 +1673,8 @@ type
     constructor Create(aSettings: THttpPeerCacheSettings;
       const aSharedSecret: RawByteString;
       aHttpServerClass: THttpServerSocketGenericClass = nil;
-      aHttpServerThreadCount: integer = 2); reintroduce;
+      aHttpServerThreadCount: integer = 2;
+      aLogClass: TSynLogClass = nil); reintroduce;
     /// finalize this peer-to-peer cache instance
     destructor Destroy; override;
     /// IWGetAlternate main processing method, as used by THttpClientSocketWGet
@@ -5282,8 +5283,9 @@ begin
   fAesDec := fAesEnc.Clone as TAesGcmAbstract; // two AES-GCM-128 instances
   HmacSha256(key.b, '2b6f48c3ffe847b9beb6d8de602c9f25', key.b); // paranoid
   fSharedMagic := key.h.c3; // 32-bit derivation for anti-fuzzing checksum
-  TSynLog.Add.Log(sllTrace, 'Create: SecretFingerPrint=%, Seq=#%',
-    [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
+  if Assigned(fLog) then
+    fLog.Add.Log(sllTrace, 'Create: SecretFingerPrint=%, Seq=#%',
+      [key.b[0], CardinalToHexShort(fFrameSeq)], self); // safe 8-bit fingerprint
   FillZero(key.b);
 end;
 
@@ -5580,12 +5582,14 @@ end;
 constructor THttpPeerCache.Create(aSettings: THttpPeerCacheSettings;
   const aSharedSecret: RawByteString;
   aHttpServerClass: THttpServerSocketGenericClass;
-  aHttpServerThreadCount: integer);
+  aHttpServerThreadCount: integer; aLogClass: TSynLogClass);
 var
   log: ISynLog;
   avail, existing: Int64;
 begin
-  fLog := TSynLog;
+  fLog := aLogClass;
+  if fLog = nil then
+    fLog := TSynLog;
   log := fLog.Enter('Create threads=%', [aHttpServerThreadCount], self);
   fFilesSafe.Init;
   // intialize the cryptographic state in inherited THttpPeerCrypt.Create
