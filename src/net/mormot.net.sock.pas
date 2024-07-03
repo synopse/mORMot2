@@ -5413,21 +5413,21 @@ begin
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
   fSockInEofError := 0;
   ioresult; // reset readln/writeln value
-  if SockIn <> nil then
+  if fSockIn <> nil then
   begin
-    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer, but keep allocated
-    PTextRec(SockIn)^.BufEnd := 0;
+    PTextRec(fSockIn)^.BufPos := 0;  // reset input buffer, but keep allocated
+    PTextRec(fSockIn)^.BufEnd := 0;
   end;
   {$ifndef PUREMORMOT2}
-  if SockOut <> nil then
+  if fSockOut <> nil then
   begin
-    PTextRec(SockOut)^.BufPos := 0; // reset output buffer
-    PTextRec(SockOut)^.BufEnd := 0;
+    PTextRec(fSockOut)^.BufPos := 0; // reset output buffer
+    PTextRec(fSockOut)^.BufEnd := 0;
   end;
   {$endif PUREMORMOT2}
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  // perform the TLS shutdown and release the TLS execution interface
+  // perform the TLS shutdown on socket and release the TLS execution interface
   fSecure := nil; // will depend on the actual implementation class
   // note: ResetNetTlsContext(TLS) is done in OpenBind()
   // actually close the socket and mark it as not SockIsDefined (<0)
