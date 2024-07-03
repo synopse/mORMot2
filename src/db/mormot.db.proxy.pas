@@ -567,8 +567,8 @@ type
     // - you can optionally register one user credential
     // - parameter aHttps is ignored by this class
     // - is implemented via a THttpServer instance, which will maintain one
-    // thread per client connection, which is as expected by some DB drivers e.g.
-    // for transaction consistency
+    // thread per client connection, which is as expected by some DB drivers,
+    // e.g. for transaction consistency
     constructor Create(aProperties: TSqlDBConnectionProperties;
       const aDatabaseName: RawUtf8; const aPort: RawUtf8 = SYNDB_DEFAULT_HTTP_PORT;
       const aUserName: RawUtf8 = ''; const aPassword: RawUtf8 = '';
@@ -581,7 +581,8 @@ type
   {$ifdef USEHTTPSYS}
 
   /// implements a mormot.db.proxy HTTP server using fast http.sys kernel-mode server
-  // - under Windows, this class is faster and more stable than TSqlDBServerSockets
+  // - under Windows, this class may be more integrated with the operating system
+  // than plain TSqlDBServerSockets
   TSqlDBServerHttpApi = class(TSqlDBServerAbstract)
   protected
   public
@@ -599,14 +600,13 @@ type
       aAuthenticate: TSynAuthenticationAbstract = nil); override;
   end;
 
-  /// the default mormot.db.proxy HTTP server class on each platform
-  TSqlDBServerRemote = TSqlDBServerHttpApi;
-
-  {$else}
-
-  TSqlDBServerRemote = TSqlDBServerSockets;
-
   {$endif USEHTTPSYS}
+
+
+  /// the default mormot.db.proxy HTTP server class on each platform
+  // - won't default to TSqlDBServerHttpApi on Windows, because even if this
+  // class seems more "native", it won't maintain one thread per client
+  TSqlDBServerRemote = TSqlDBServerSockets;
 
 
 { ************ HTTP Client Classes for Remote Access }
