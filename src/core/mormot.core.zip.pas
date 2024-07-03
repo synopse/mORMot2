@@ -1737,7 +1737,7 @@ begin
   fInfo.OnProgress := OnInfoProgress;
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
   if ValidHandle(h) then
-  try
+  begin
     // we need fDest for WriteRawHeader below
     Create(h, aFileName);
     // read the existing .zip directory
@@ -1837,9 +1837,6 @@ begin
     finally
       R.Free;
     end;
-  except
-    FileClose(h);
-    raise;
   end
   else
     // we need to create a new .zip file
@@ -2443,8 +2440,23 @@ begin
   filename := SynUnicodeToString(utf16);
 end;
 
-
-{ TZipRead }
+function IsZipStart(P: PCardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  // we need to check more than the signature because of false positives
+  case P^ + 1 of
+    FIRSTHEADER_SIGNATURE_INC:
+      with PLocalFileHeader(P)^.fileInfo do
+        result := (ToByte(neededVersion) in [10, 20, 45]) and
+                  (zzipMethod in [Z_STORED, Z_DEFLATED]) and
+                  (extraLen < 100) and
+                  (nameLen < 512);
+    LASTHEADER_SIGNATURE_INC:
+      result := PInt64(@PLastHeader(P)^.totalFiles)^ = 0; // *Disk=0
+  else
+    result := false;
+  end;
+end;
 
 function LocateLastHeader(BufZip: PByteArray; var Size: PtrInt;
   Offset: Int64; out head64: PLastHeader64): PLastHeader;
@@ -2452,57 +2464,60 @@ var
   i: PtrInt;
   loc64: PLocator64;
 begin
-  if (BufZip = nil) or
-     (Size < SizeOf(TLastHeader)) then
-     raise ESynZip.Create('TZipRead.Create(nil)');
-  for i := 0 to 127 do
-  begin
-    // resources size may be rounded up -> search in trailing 128 bytes
-    result := @BufZip[Size - SizeOf(TLastHeader)];
-    if result^.signature + 1 = LASTHEADER_SIGNATURE_INC then
+  if (BufZip <> nil) and
+     (Size >= SizeOf(TLastHeader)) then
+    for i := 0 to 127 do
     begin
-      if (result^.thisFiles = ZIP32_MAXFILE) or
-         (result^.totalFiles = ZIP32_MAXFILE) or
-         (result^.headerSize = ZIP32_MAXSIZE) or
-         (result^.headerOffset = ZIP32_MAXSIZE) then
+      // resources size may be rounded up -> search in trailing 128 bytes
+      result := @BufZip[Size - SizeOf(TLastHeader)];
+      if result^.signature + 1 = LASTHEADER_SIGNATURE_INC then
       begin
-        // validate zip64 trailer
-        loc64 := pointer(result);
-        dec(loc64);
-        if (PtrUInt(loc64) < PtrUInt(BufZip)) or
-           (loc64^.signature + 1 <> LASTHEADERLOCATOR64_SIGNATURE_INC) or
-           (loc64^.headerOffset + SizeOf({%H-}head64^) >= QWord(Offset + Size)) then
-          raise ESynZip.Create('zip64 header signature not found');
-        head64 := @BufZip[loc64^.headerOffset - QWord(Offset)];
-        if head64^.signature + 1 <> LASTHEADER64_SIGNATURE_INC then
-          raise ESynZip.Create('zip64 trailer signature not found');
-      end
-      else
-        // regular zip 2.0 trailer
-        head64 := nil;
-      exit;
+        if (result^.thisFiles = ZIP32_MAXFILE) or
+           (result^.totalFiles = ZIP32_MAXFILE) or
+           (result^.headerSize = ZIP32_MAXSIZE) or
+           (result^.headerOffset = ZIP32_MAXSIZE) then
+        begin
+          // validate zip64 trailer
+          loc64 := pointer(result);
+          dec(loc64);
+          if (PtrUInt(loc64) < PtrUInt(BufZip)) or
+             (loc64^.signature + 1 <> LASTHEADERLOCATOR64_SIGNATURE_INC) or
+             (loc64^.headerOffset + SizeOf({%H-}head64^) >= QWord(Offset + Size)) then
+            break;
+          head64 := @BufZip[loc64^.headerOffset - QWord(Offset)];
+          if head64^.signature + 1 <> LASTHEADER64_SIGNATURE_INC then
+            break;
+        end
+        else
+          // regular zip 2.0 trailer
+          head64 := nil;
+        exit;
+      end;
+      dec(Size);
+      if Size < SizeOf(TLastHeader) then
+        break;
     end;
-    dec(Size);
-    if Size < SizeOf(TLastHeader) then
-      break;
-  end;
   result := nil;
 end;
 
 function LocateCentralDirectoryOffset(BufZip: PByteArray; Size: PtrInt;
-  Offset: Int64): Int64;
+  Offset: Int64; const FileName: TFileName): Int64;
 var
   lh32: PLastHeader;
   lh64: PLastHeader64;
 begin
   lh32 := LocateLastHeader(BufZip, Size, Offset, lh64);
   if lh32 = nil then
-    raise ESynZip.Create('zip trailer signature not found');
+    ESynZip.RaiseUtf8(
+      'TZipRead.Create(%): zip trailer signature not found', [FileName]);
   if lh64 <> nil then
     result := lh64^.headerOffset
   else
     result := lh32^.headerOffset;
 end;
+
+
+{ TZipRead }
 
 constructor TZipRead.Create(BufZip: PByteArray; Size: PtrInt; Offset: Int64);
 var
@@ -2684,31 +2699,8 @@ constructor TZipRead.Create(Instance: TLibHandle;
 // resources are memory maps of the executable -> direct access
 begin
   if fResource.Open(ResName, ResType, Instance) then
-  try
     // warning: resources size may be aligned rounded up -> handled in Create()
     Create(fResource.Buffer, fResource.Size);
-  except
-    fResource.Close;
-    raise;
-  end;
-end;
-
-function IsZipStart(P: PCardinal): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  // we need to check more than the signature because of false positives
-  case P^ + 1 of
-    FIRSTHEADER_SIGNATURE_INC:
-      with PLocalFileHeader(P)^.fileInfo do
-        result := (ToByte(neededVersion) in [10, 20, 45]) and
-                  (zzipMethod in [Z_STORED, Z_DEFLATED]) and
-                  (extraLen < 100) and
-                  (nameLen < 512);
-    LASTHEADER_SIGNATURE_INC:
-      result := PInt64(@PLastHeader(P)^.totalFiles)^ = 0; // *Disk=0
-  else
-    result := false;
-  end;
 end;
 
 constructor TZipRead.Create(aFile: THandle;
@@ -2719,8 +2711,11 @@ var
   local: TLocalFileHeader;
   centraldirsize: Int64;
 begin
+  // initialize source stream - released (possibly with handle) on ESynZip below
   if not ValidHandle(aFile) then
     exit;
+  fSource := TFileStreamFromHandle.Create(aFile);
+  TFileStreamFromHandle(fSource).DontReleaseHandle := DontReleaseHandle;
   // prepare the internal buffer - contains at least the central directory
   if Size = 0 then
     Size := FileSize(aFile);
@@ -2729,92 +2724,86 @@ begin
   if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
     ESynZip.RaiseUtf8('%.Create: % is not a zip file', [self, fFileName]);
   FastNewRawByteString(fSourceBuffer, WorkingMem);
-  fSource := TFileStreamFromHandle.Create(aFile);
-  try
-    // search for the first zip file local header
-    P := pointer(fSourceBuffer);
-    TFileStreamFromHandle(fSource).DontReleaseHandle := DontReleaseHandle;
-    if ZipStartOffset = 0 then
+  // search for the first zip file local header
+  P := pointer(fSourceBuffer);
+  if ZipStartOffset = 0 then
+  begin
+    fSource.Seek(0, soBeginning);
+    if WorkingMem = SizeOf(TLastHeader) then
     begin
-      fSource.Seek(0, soBeginning);
-      if WorkingMem = SizeOf(TLastHeader) then
+      fSource.Read(P^, WorkingMem);
+      Create(P, WorkingMem); // void .zip
+      exit;
+    end;
+    if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
+       IsZipStart(@local) then
+    begin
+      // it seems to be a regular .zip -> read WorkingMem trailing content
+      fSource.Seek(Size - WorkingMem, soBeginning);
+      fSource.ReadBuffer(P^, WorkingMem);
+      centraldirsize := Int64(Size) -
+        LocateCentralDirectoryOffset(P, WorkingMem, Size - WorkingMem, fFileName);
+      if centraldirsize > Int64(WorkingMem) then
       begin
-        fSource.Read(P^, WorkingMem);
-        Create(P, WorkingMem); // void .zip
-        exit;
-      end;
-      if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
-         IsZipStart(@local) then
-      begin
-        // it seems to be a regular .zip -> read WorkingMem trailing content
+        // 1MB of WorkingMem was not enough (a lot of files indeed!)
+        WorkingMem := centraldirsize + 1024;
+        if WorkingMem > Size then
+          WorkingMem := Size;
+        FastNewRawByteString(fSourceBuffer, WorkingMem); // alloc bigger
+        P := pointer(fSourceBuffer);
         fSource.Seek(Size - WorkingMem, soBeginning);
         fSource.ReadBuffer(P^, WorkingMem);
-        centraldirsize := Int64(Size) - LocateCentralDirectoryOffset(
-          P, WorkingMem, Size - WorkingMem);
-        if centraldirsize > Int64(WorkingMem) then
-        begin
-          // 1MB of WorkingMem was not enough (a lot of files indeed!)
-          WorkingMem := centraldirsize + 1024;
-          if WorkingMem > Size then
-            WorkingMem := Size;
-          FastNewRawByteString(fSourceBuffer, WorkingMem); // alloc bigger
-          P := pointer(fSourceBuffer);
-          fSource.Seek(Size - WorkingMem, soBeginning);
-          fSource.ReadBuffer(P^, WorkingMem);
-        end;
-        Create(P, WorkingMem, Size - WorkingMem);
-        exit;
+      end;
+      Create(P, WorkingMem, Size - WorkingMem);
+      exit;
+    end;
+  end;
+  // search FileAppendSignature() mark from the trailing bytes
+  fSource.Seek(Size - WorkingMem, soBeginning);
+  fSource.ReadBuffer(P^, WorkingMem);
+  for i := WorkingMem - 16 downto WorkingMem - 32 do
+    if (i >= 0) and  // expects magic4+offset8+magic4 pattern
+       (PCardinal(@P[i])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
+       (PCardinal(@P[i + 12])^ + 1 = FILEAPPEND_SIGNATURE_INC) then
+    begin
+      fSourceOffset := PQWord(@P[i + 4])^;
+      if (fSourceOffset > 0) and
+         (fSourceOffset < Size - 16) then
+      begin
+         fSource.Seek(fSourceOffset, soBeginning);
+         if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
+            IsZipStart(@local) then
+         begin
+           Create(P, i, Size - WorkingMem - fSourceOffset);
+           exit;
+         end;
       end;
     end;
-    // search FileAppendSignature() mark from the trailing bytes
-    fSource.Seek(Size - WorkingMem, soBeginning);
-    fSource.ReadBuffer(P^, WorkingMem);
-    for i := WorkingMem - 16 downto WorkingMem - 32 do
-      if (i >= 0) and  // expects magic4+offset8+magic4 pattern
-         (PCardinal(@P[i])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
-         (PCardinal(@P[i + 12])^ + 1 = FILEAPPEND_SIGNATURE_INC) then
+  // manual search of the first zip local file header
+  repeat
+    fSource.Seek(ZipStartOffset, soBeginning);
+    read := fSource.Read(P^, WorkingMem);
+    for i := 0 to read - SizeOf(TLocalFileHeader) do
+      if IsZipStart(@P[i]) then
       begin
-        fSourceOffset := PQWord(@P[i + 4])^;
-        if (fSourceOffset > 0) and
-           (fSourceOffset < Size - 16) then
+        fSourceOffset := ZipStartOffset + Qword(i);
+        if Size = WorkingMem then
+          // small files could reuse the existing buffer
+          Create(@P[i], read - i, 0)
+        else
         begin
-           fSource.Seek(fSourceOffset, soBeginning);
-           if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
-              IsZipStart(@local) then
-           begin
-             Create(P, i, Size - WorkingMem - fSourceOffset);
-             exit;
-           end;
+          // big files need to read the last WorkingMem
+          fSource.Seek(Size - WorkingMem, soBeginning);
+          fSource.ReadBuffer(P^, WorkingMem);
+          Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
         end;
+        exit;
       end;
-    // manual search of the first zip local file header
-    repeat
-      fSource.Seek(ZipStartOffset, soBeginning);
-      read := fSource.Read(P^, WorkingMem);
-      for i := 0 to read - SizeOf(TLocalFileHeader) do
-        if IsZipStart(@P[i]) then
-        begin
-          fSourceOffset := ZipStartOffset + Qword(i);
-          if Size = WorkingMem then
-            // small files could reuse the existing buffer
-            Create(@P[i], read - i, 0)
-          else
-          begin
-            // big files need to read the last WorkingMem
-            fSource.Seek(Size - WorkingMem, soBeginning);
-            fSource.ReadBuffer(P^, WorkingMem);
-            Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
-          end;
-          exit;
-        end;
-      inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
-    until read <> WorkingMem;
-    ESynZip.RaiseUtf8('%.Create: No ZIP header found in % %',
-      [self, KBNoSpace(Size), fFileName]);
-  except
-    FreeAndNil(fSource); // unlock file
-    raise;
-  end;
+    inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
+  until read <> WorkingMem;
+  // if we reached here, we found no ZIP marker anywhere
+  ESynZip.RaiseUtf8('%.Create: No ZIP header found in % %',
+    [self, KBNoSpace(Size), fFileName]);
 end;
 
 constructor TZipRead.Create(const aFileName: TFileName;
@@ -2826,12 +2815,7 @@ begin
   h := FileOpen(aFileName, fmOpenReadShared);
   if not ValidHandle(h) then
     ESynZip.RaiseUtf8('%.Create(%): no such zip file', [self, aFileName]);
-  try
-    Create(h, ZipStartOffset, Size, WorkingMem);
-  except
-    FileClose(h);
-    raise;
-  end;
+  Create(h, ZipStartOffset, Size, WorkingMem);
 end;
 
 destructor TZipRead.Destroy;
