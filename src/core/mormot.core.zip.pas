@@ -3338,21 +3338,21 @@ end;
 
 function ZipTest(const ZipName: TFileName; NoTestAll: boolean): boolean;
 var
-  ZR: TZipRead;
+  zr: TZipRead;
 begin
   if FileExists(ZipName) then
     try
-      ZR := TZipRead.Create(ZipName);
+      zr := TZipRead.Create(ZipName);
       try
-        result := NoTestAll or ZR.TestAll;
+        result := NoTestAll or zr.TestAll;
       finally
-        ZR.Free;
+        zr.Free;
       end;
     except
       result := false; // TZipRead.Create exception means wrong .zip format
     end
   else
-    result := false;
+    result := false; // clearly not a .zip file
 end;
 
 procedure FileAppendSignature(O: TStream; APos: Int64);
@@ -3369,21 +3369,21 @@ end;
 
 procedure FileAppend(const MainFile, AppendFile: TFileName);
 var
-  M, A: TStream;
+  m, a: TStream;
   pos: Int64;
 begin
-  M := TFileStreamEx.Create(MainFile, fmOpenReadWrite);
+  m := TFileStreamEx.Create(MainFile, fmOpenReadWrite);
   try
-    pos := M.Seek(0, soEnd);
-    A := TFileStreamEx.Create(AppendFile, fmOpenReadShared);
+    pos := m.Seek(0, soEnd);
+    a := TFileStreamEx.Create(AppendFile, fmOpenReadShared);
     try
-      StreamCopyUntilEnd(A, M); // faster than M.CopyFrom(A, 0);
-      FileAppendSignature(M, pos);
+      StreamCopyUntilEnd(a, m); // faster than m.CopyFrom(a, 0);
+      FileAppendSignature(m, pos);
     finally
-      A.Free;
+      a.Free;
     end;
   finally
-    M.Free;
+    m.Free;
   end;
 end;
 
