@@ -1385,21 +1385,23 @@ begin
     MoveFast(Reader^, fDataCurrentRowNull[0], fDataCurrentRowNullLen);
     inc(Reader, fDataCurrentRowNullLen);
   end;
-  fDataCurrentRowValuesStart := Reader;
+  fDataCurrentRowValuesStart := Reader; // remember raw binary position
   for F := 0 to fColumnCount - 1 do
     if GetBitPtr(pointer(fDataCurrentRowNull), F) then
       fDataCurrentRowValues[F] := nil
     else
     begin
+      // get column type and data
       ft := fColumns[F].ColumnType;
-      if ft < ftInt64 then
+      if ft < ftInt64 then // ftUnknown or ftNull should not appear here
       begin
         // per-row column type (SQLite3 only)
         ft := TSqlDBFieldType(Reader^);
         inc(Reader);
       end;
       fDataCurrentRowColTypes[F] := ft;
-      fDataCurrentRowValues[F] := Reader;
+      fDataCurrentRowValues[F] := Reader; // per reference
+      // go to next column
       case ft of
         ftInt64:
           Reader := GotoNextVarInt(Reader);
@@ -1901,7 +1903,7 @@ end;
 
 destructor TSqlDBServerAbstract.Destroy;
 begin
-  inherited;
+  inherited Destroy;
   fServer.Free;
   fProtocol.Free;
   fSafe.Done;
