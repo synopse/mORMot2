@@ -571,10 +571,11 @@ type
 
 /// returns the HTTP User-Agent header value of a mORMot client including
 // the Instance class name in its minified/uppercase-only translation
-// - typical value is "Mozilla/5.0 (Linux x64; mORMot) HCS/2.0 Tests/3"
+// - typical value is "Mozilla/5.0 (Linux x64; mORMot) HCS/2 Tests/3"
 // for THttpClientSocket from a Tests.exe application in version 3.x
 // - note: the framework would identify the 'mORMot' pattern in the user-agent
 // header to enable advanced behavior e.g. about JSON transmission
+// - framework is identified as '/2' with no release number, for security reasons
 function DefaultUserAgent(Instance: TObject): RawUtf8;
 
 /// create a THttpClientSocket, returning nil on error
@@ -1572,9 +1573,8 @@ begin
   vers[0] := #0;
   if Executable.Version.Major <> 0 then
     FormatShort16('/%', [Executable.Version.Major], vers);
-  result := FormatUtf8(
-    'Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/% %%',
-    [name, copy(SYNOPSE_FRAMEWORK_VERSION, 1, 3), Executable.ProgramName, vers]);
+  FormatUtf8('Mozilla/5.0 (' + OS_TEXT + ' ' + CPU_ARCH_TEXT + '; mORMot) %/2 %%',
+    [name, Executable.ProgramName, vers], result);
 end;
 
 
@@ -2677,7 +2677,7 @@ begin
     SendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
   if ReceiveTimeout = 0 then
     ReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
-  InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise an exception on error
+  InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise exception on error
 end;
 
 constructor THttpRequest.Create(const aUri: RawUtf8; const aProxyName: RawUtf8;
