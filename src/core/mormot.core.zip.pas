@@ -1625,6 +1625,7 @@ begin
 end;
 
 function IsFolder(const zipName: TFileName): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := (zipName <> '') and
             (ord(zipName[length(zipName)]) in [ord('\'), ord('/')]);
@@ -2520,7 +2521,7 @@ begin
   Create;
   if (BufZip = nil) or
      (Size < SizeOf(TLastHeader)) then
-     ESynZip.RaiseUtf8('%.Create(nil)', [self]);
+     ESynZip.RaiseUtf8('%.Create(nil): not a zip file %', [self, fFileName]);
   lh32 := LocateLastHeader(BufZip, Size, Offset, lh64);
   if lh32 = nil then
     ESynZip.RaiseUtf8('%.Create(%): zip trailer signature not found',
@@ -2558,7 +2559,7 @@ begin
     hnext := pointer(PtrUInt(h) + SizeOf(h^) + h^.fileInfo.NameLen +
       h^.fileInfo.extraLen + h^.commentLen);
     if PtrUInt(hnext) >= PtrUInt(@BufZip[Size]) then
-      ESynZip.RaiseUtf8('%: corrupted header in %', [self, fFileName]);
+      ESynZip.RaiseUtf8('%.Create: corrupted header in %', [self, fFileName]);
     e^.dir := h;
     e^.storedName := PAnsiChar(h) + SizeOf(h^);
     SetString(tmp, e^.storedName, h^.fileInfo.nameLen); // better for FPC
@@ -2623,7 +2624,7 @@ begin
     if e^.dir^.fileInfo.zfullSize = ZIP32_MAXSIZE then
     begin
       if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 FS format error for % in %',
+        ESynZip.RaiseUtf8('zip64 FullSize format error for % in %',
           [e^.zipName, fFileName]);
       e^.fileinfo.zfullSize := p64^;
       inc(p64); // go to the next field
@@ -2633,7 +2634,7 @@ begin
     if e^.dir^.fileInfo.zzipSize = ZIP32_MAXSIZE then
     begin
       if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 ZS format error for % in %',
+        ESynZip.RaiseUtf8('zip64 ZipSize format error for % in %',
           [e^.zipName, fFileName]);
       e^.fileinfo.zzipSize := p64^;
       inc(p64);
@@ -2642,7 +2643,7 @@ begin
       e^.fileinfo.zzipSize := e^.dir^.fileInfo.zzipSize;
     if e^.dir^.localHeadOff = ZIP32_MAXSIZE then
       if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 HO format error for % in %',
+        ESynZip.RaiseUtf8('zip64 LocalHeadOff format error for % in %',
           [e^.zipName, fFileName])
       else
         e^.fileinfo.offset := p64^
@@ -2726,7 +2727,7 @@ begin
   if Size < WorkingMem then
     WorkingMem := Size; // up to 1MB by default
   if WorkingMem < SizeOf(TLastHeader) then // minimal void .zip file is 22 bytes
-    ESynZip.RaiseUtf8('%.Create: void ZIP file %', [self, fFileName]);
+    ESynZip.RaiseUtf8('%.Create: % is not a zip file', [self, fFileName]);
   FastNewRawByteString(fSourceBuffer, WorkingMem);
   fSource := TFileStreamFromHandle.Create(aFile);
   try
@@ -2823,6 +2824,8 @@ var
 begin
   fFileName := aFileName;
   h := FileOpen(aFileName, fmOpenReadShared);
+  if not ValidHandle(h) then
+    ESynZip.RaiseUtf8('%.Create(%): no such zip file', [self, aFileName]);
   try
     Create(h, ZipStartOffset, Size, WorkingMem);
   except
