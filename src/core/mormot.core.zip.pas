@@ -1687,6 +1687,7 @@ begin
     until i = L;
 end;
 
+
 { TZipWrite }
 
 constructor TZipWrite.Create(aDest: TStream);
@@ -1697,6 +1698,9 @@ end;
 
 constructor TZipWrite.Create(aDest: THandle; const aDestFileName: TFileName);
 begin
+  if not ValidHandle(aDest) then
+    ESynZip.RaiseUtf8('%.Create(%): invalid dest handle %',
+      [self, {%H-}pointer(aDest), aDestFileName]);
   fFileName := aDestFileName;
   fDestOwned := true;
   Create(TFileStreamFromHandle.Create(aDest));
@@ -1732,7 +1736,7 @@ begin
   fInfo.OnProgress := OnInfoProgress;
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
   if ValidHandle(h) then
-  begin
+  try
     // we need fDest for WriteRawHeader below
     Create(h, aFileName);
     // read the existing .zip directory
@@ -1740,7 +1744,7 @@ begin
     try
       if (R.fSourceOffset <> 0) or
          (fAppendOffset <> 0) then
-        ESynZip.RaiseUtf8('%.CreateFrom: % not a plain .zip file',
+        ESynZip.RaiseUtf8('%.CreateFrom: % is not a plain .zip file',
           [self, aFileName]);
       SetLength(fEntry, R.Count + 10);
       writepos := 0; // where to add new files
@@ -1832,6 +1836,9 @@ begin
     finally
       R.Free;
     end;
+  except
+    FileClose(h);
+    raise;
   end
   else
     // we need to create a new .zip file
