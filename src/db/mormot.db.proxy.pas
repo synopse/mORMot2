@@ -285,6 +285,9 @@ type
     procedure Commit; override;
     /// discard changes of a Transaction for this connection
     procedure Rollback; override;
+    /// low-level direct access to the actual associated TSqlDBConnectionProperties
+    property Proxy: TSqlDBProxyConnectionPropertiesAbstract
+      read fProxy;
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
