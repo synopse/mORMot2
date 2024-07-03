@@ -7228,7 +7228,8 @@ begin
     finally
       Free;
     end;
-    Check(ZipTest(FN2), 'zipjson1');
+    Check(ZipTest(FN2), 'zipjson1a');
+    Check(ZipTest(FN2, {notestall=}true), 'zipjson1b');
     for i := 0 to high(json) do
       json[i] := WorkDir + json[i];
     ZipAppendFiles(DataFile, FN2, TFileNameDynArray(json), false, 1);

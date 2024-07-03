@@ -779,8 +779,8 @@ function EventArchiveZip(
   const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
 /// check the content of a .zip file, decompressing and checking all crc
-// - just a wrapper around TZipRead.TestAll
-function ZipTest(const ZipName: TFileName): boolean;
+// - just a wrapper around TZipRead.Create and TZipRead.TestAll
+function ZipTest(const ZipName: TFileName; NoTestAll: boolean = false): boolean;
 
 /// add AppendFile after the end of MainFile with a magic markup for its position
 // - the magic will be used as trailer to locate the offset of appended data
@@ -3336,7 +3336,7 @@ begin
   end;
 end;
 
-function ZipTest(const ZipName: TFileName): boolean;
+function ZipTest(const ZipName: TFileName; NoTestAll: boolean): boolean;
 var
   ZR: TZipRead;
 begin
@@ -3344,12 +3344,12 @@ begin
     try
       ZR := TZipRead.Create(ZipName);
       try
-        result := ZR.TestAll;
+        result := NoTestAll or ZR.TestAll;
       finally
         ZR.Free;
       end;
     except
-      result := false; // interpret exception as wrong .zip format
+      result := false; // TZipRead.Create exception means wrong .zip format
     end
   else
     result := false;
