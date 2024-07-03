@@ -7892,12 +7892,11 @@ end;
 
 procedure TExecutableResource.Close;
 begin
-  if HGlobal <> 0 then
-  begin
-    UnlockResource(HGlobal); // only needed outside of Windows
-    FreeResource(HGlobal);
-    HGlobal := 0;
-  end;
+  if HGlobal = 0 then
+    exit;
+  UnlockResource(HGlobal); // only needed outside of Windows
+  FreeResource(HGlobal);
+  HGlobal := 0;
 end;
 
 
