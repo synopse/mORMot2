@@ -220,11 +220,15 @@ type
     SortedID: TIntegerDynArray;
     /// quickly check if this TAuthGroup ID can execute this method
     function IsDenied(const ID: TID): boolean;
-    /// define either idAllowAll or idDenyAll for this method
-    procedure All(state: TServiceAuthorizationState);
-    /// deny one TAuthGroup ID for this method
+    /// define idAllowAll for this method, and remove any previous SortedID
+    procedure AllowAll;
+    /// define idDenyAll for this method, and remove any previous SortedID
+    procedure DenyAll;
+    /// deny one TAuthGroup ID for this method, likely to use idDenied state
+    // - can also remove a previous Allow(ID) during idAllowed state
     procedure Deny(const ID: TID);
-    /// allow one TAuthGroup ID for this method
+    /// allow one TAuthGroup ID for this method, likely to use idAllowed state
+    // - can also remove a previous Deny(ID) during idDenied state
     procedure Allow(const ID: TID);
   end;
 
@@ -1159,17 +1163,23 @@ begin
     case StateID of
       idAllowAll:
         result := false;
-      idAllowed: // branchless x86_64 asm
+      idAllowed: // FastFindIntegerSorted() has branchless x86_64 asm
         result := FastFindIntegerSorted(SortedID, ID) < 0;
       idDenied:
         result := FastFindIntegerSorted(SortedID, ID) >= 0;
     end;
 end;
 
-procedure TServiceAuthorization.All(state: TServiceAuthorizationState);
+procedure TServiceAuthorization.AllowAll;
 begin
   SortedID := nil;
-  StateID := state;
+  StateID := idAllowAll;
+end;
+
+procedure TServiceAuthorization.DenyAll;
+begin
+  SortedID := nil;
+  StateID := idDenyAll;
 end;
 
 procedure TServiceAuthorization.Allow(const ID: TID);
@@ -1243,7 +1253,7 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      fExecution[m].Auth.All(idAllowAll);
+      fExecution[m].Auth.AllowAll;
   result := self;
 end;
 
@@ -1275,7 +1285,7 @@ var
 begin
   if self <> nil then
     for m := 0 to fInterface.MethodsCount - 1 do
-      fExecution[m].Auth.All(idDenyAll);
+      fExecution[m].Auth.DenyAll;
   result := self;
 end;
 
@@ -1308,7 +1318,7 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.All(idAllowAll);
+      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.AllowAll;
   result := self;
 end;
 
@@ -1347,7 +1357,7 @@ var
 begin
   if self <> nil then
     for m := 0 to high(aMethod) do
-      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.All(idDenyAll);
+      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Auth.DenyAll;
   result := self;
 end;
 
