@@ -393,6 +393,24 @@ type
     acDoWatch
   );
 
+  /// handle internal set of services definitions
+  {$ifdef USERECORDWITHMETHODS}
+  TSynAngelizeSet = record
+  {$else}
+  TSynAngelizeSet = object
+  {$endif USERECORDWITHMETHODS}
+    /// access to the internal services lists
+    Service: array of TSynAngelizeService;
+    /// the levels used by the services
+    Levels: TIntegerDynArray;
+    /// if any service needs actually some watching practice
+    HasWatchs: boolean;
+    /// fill the fields from Owner.Settings.Folder files content
+    function LoadServices(Owner: TSynAngelize): integer;
+    /// quick check a service from its internal name
+    function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
+  end;
+
   /// can run a set of executables as sub-process(es) from *.service definitions
   // - agl ("angelize") is an alternative to NSSM / SRVANY / WINSW
   // - at OS level, there will be a single agl daemon or service
@@ -405,12 +423,11 @@ type
     fAdditionalParams: TFileName;
     fServiceClass: TSynAngelizeServiceClass;
     fExpandLevel: byte;
-    fHasWatchs: boolean;
     fServiceStarted: boolean;
     fLastUpdateServicesFromSettingsFolder: cardinal;
+    fSet: TSynAngelizeSet;
     fSectionName: RawUtf8;
-    fService, fStarted: array of TSynAngelizeService;
-    fLevels: TIntegerDynArray;
+    fStarted: array of TSynAngelizeService;
     fLastGetServicesStateFile: RawByteString;
     fWatchThread: TSynBackgroundThreadProcess;
     fRunJob: THandle; // a single Windows Job to rule them all
@@ -429,7 +446,6 @@ type
     procedure WatchEverySecond(Sender: TSynBackgroundThreadProcess);
     procedure StopWatching;
     // sub-service support
-    function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
     procedure ComputeServicesStateFiles;
     procedure ComputeServicesHtmlFile;
     function DoExpand(aService: TSynAngelizeService;
@@ -970,6 +986,83 @@ end;
 
 { ************ TSynAngelize Main Service Launcher and Watcher }
 
+{ TSynAngelizeSet }
+
+function TSynAngelizeSet.FindService(const ServiceName: RawUtf8): TSynAngelizeService;
+var
+  i: PtrInt;
+begin
+  if ServiceName <> '' then
+    for i := 0 to high(Service) do
+      if PropNameEquals(Service[i].Name, ServiceName) then
+      begin
+        result := Service[i];
+        exit;
+      end;
+  result := nil;
+end;
+
+function SortByLevel(const A, B): integer; // run and display by increasing Level
+begin
+  result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
+  if result = 0 then
+    result := StrIComp( // display by name within each level
+      pointer(TSynAngelizeService(A).Name), pointer(TSynAngelizeService(B).Name));
+end;
+
+function TSynAngelizeSet.LoadServices(Owner: TSynAngelize): integer;
+var
+  fn: TFileName;
+  r: TSearchRec;
+  s, exist: TSynAngelizeService;
+  sas: TSynAngelizeSettings;
+begin
+  ObjArrayClear(Service);
+  Finalize(Levels);
+  HasWatchs := false;
+  sas := Owner.fSettings as TSynAngelizeSettings;
+  // browse folder for settings files and generates fService[]
+  sas.Folder := IncludeTrailingPathDelimiter(sas.Folder);
+  fn := sas.Folder + '*' + sas.Ext;
+  if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
+  begin
+    repeat
+      if SearchRecValidFile(r) then
+      begin
+        s := Owner.fServiceClass.Create;
+        s.fOwner := Owner;
+        s.SettingsOptions := sas.SettingsOptions; // share ini/json format
+        fn := sas.Folder + r.Name;
+        if s.LoadFromFile(fn) and
+           (s.Name <> '') then
+          if s.Level > 0 then
+          begin
+            exist := FindService(s.Name);
+            if exist <> nil then
+              ESynAngelize.RaiseUtf8('GetServices: duplicated % name in % and %',
+                [s.Name, s.FileName, exist.FileName]);
+            // seems like a valid .service file
+            ObjArrayAdd(Service, s);
+            AddSortedInteger(Levels, s.Level);
+            if s.fWatch <> nil then
+              HasWatchs := true;
+            s := nil; // don't Free - will be owned by fService[]
+          end
+          else // s.Level <= 0
+            Owner.fSettings.LogClass.Add.Log(sllDebug,
+              'GetServices: disabled % (Level=%)', [r.Name, s.Level], Owner)
+        else
+          ESynAngelize.RaiseUtf8('GetServices: invalid % content', [r.Name]);
+        s.Free;
+      end;
+    until FindNext(r) <> 0;
+    FindClose(r);
+  end;
+  ObjArraySort(Service, SortByLevel);
+  result := length(Service);
+end;
+
+
 { TSynAngelizeSettings }
 
 constructor TSynAngelizeSettings.Create;
@@ -1024,7 +1117,7 @@ destructor TSynAngelize.Destroy;
 begin
   inherited Destroy;
   RunAbortTimeoutSecs := 0; // force RunRedirect() hard termination now
-  ObjArrayClear(fService);
+  ObjArrayClear(fSet.Service);
   fSettings.Free;
   {$ifdef OSWINDOWS}
   if fRunJob <> 0 then
@@ -1085,81 +1178,9 @@ end;
 
 // sub-service support
 
-function TSynAngelize.FindService(const ServiceName: RawUtf8): TSynAngelizeService;
-var
-  i: PtrInt;
-begin
-  if ServiceName <> '' then
-    for i := 0 to high(fService) do
-      if PropNameEquals(fService[i].Name, ServiceName) then
-      begin
-        result := fService[i];
-        exit;
-      end;
-  result := nil;
-end;
-
-const
-  _STATEMAGIC = $5131e3a6;
-
-function SortByLevel(const A, B): integer; // run and display by increasing Level
-begin
-  result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
-  if result = 0 then
-    result := StrIComp( // display by name within each level
-      pointer(TSynAngelizeService(A).Name), pointer(TSynAngelizeService(B).Name));
-end;
-
 function TSynAngelize.LoadServicesFromSettingsFolder: integer;
-var
-  fn: TFileName;
-  r: TSearchRec;
-  s, exist: TSynAngelizeService;
-  sas: TSynAngelizeSettings;
 begin
-  ObjArrayClear(fService);
-  Finalize(fLevels);
-  fHasWatchs := false;
-  sas := fSettings as TSynAngelizeSettings;
-  // browse folder for settings files and generates fService[]
-  sas.Folder := IncludeTrailingPathDelimiter(sas.Folder);
-  fn := sas.Folder + '*' + sas.Ext;
-  if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
-  begin
-    repeat
-      if SearchRecValidFile(r) then
-      begin
-        s := fServiceClass.Create;
-        s.fOwner := self;
-        s.SettingsOptions := sas.SettingsOptions; // share ini/json format
-        fn := sas.Folder + r.Name;
-        if s.LoadFromFile(fn) and
-           (s.Name <> '') then
-          if s.Level > 0 then
-          begin
-            exist := FindService(s.Name);
-            if exist <> nil then
-              ESynAngelize.RaiseUtf8('GetServices: duplicated % name in % and %',
-                [s.Name, s.FileName, exist.FileName]);
-            // seems like a valid .service file
-            ObjArrayAdd(fService, s);
-            AddSortedInteger(fLevels, s.Level);
-            if s.fWatch <> nil then
-              fHasWatchs := true;
-            s := nil; // don't Free - will be owned by fService[]
-          end
-          else // s.Level <= 0
-            fSettings.LogClass.Add.Log(sllDebug,
-              'GetServices: disabled % (Level=%)', [r.Name, s.Level], self)
-        else
-          ESynAngelize.RaiseUtf8('GetServices: invalid % content', [r.Name]);
-        s.Free;
-      end;
-    until FindNext(r) <> 0;
-    FindClose(r);
-  end;
-  ObjArraySort(fService, SortByLevel);
-  result := length(fService);
+  result := fSet.LoadServices(self);
 end;
 
 procedure TSynAngelize.ComputeServicesHtmlFile;
@@ -1185,14 +1206,17 @@ begin
     '<tr><th style="width:15%">Name</th>' +
     '<th style="width:15%">State</th>' +
     '<th>Info</th></tr></thead><tbody>',
-    [ident, ident, NowToString, length(fService)], html);
-  for i := 0 to high(fService) do
-    with fService[i] do
+    [ident, ident, NowToString, length(fSet.Service)], html);
+  for i := 0 to high(fSet.Service) do
+    with fSet.Service[i] do
       html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
         [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
   html := html + '</tbody></table></body></html>';
   FileFromString(html, sas.StateFile + '.html');
 end;
+
+const
+  _STATEMAGIC = $5131e3a6;
 
 procedure TSynAngelize.ComputeServicesStateFiles;
 var
@@ -1207,10 +1231,10 @@ begin
   if sas.StateFile = '' then
     exit;
   // compute main binary state file
-  SetLength(state.Service, length(fService));
-  for i := 0 to high(fService) do
+  SetLength(state.Service, length(fSet.Service));
+  for i := 0 to high(fSet.Service) do
   begin
-    s := fService[i];
+    s := fSet.Service[i];
     state.Service[i].Name := s.Name;
     state.Service[i].State := s.State;
     state.Service[i].Info := copy(s.StateMessage, 1, 80); // truncate on display
@@ -1701,7 +1725,7 @@ begin
   sn := TrimU(StringToUtf8(paramstr(2)));
   if sn = '' then
     ESynAngelize.RaiseUtf8('/new: invalid servicename "%"', [sn]);
-  if FindService(sn) <> nil then
+  if fSet.FindService(sn) <> nil then
     ESynAngelize.RaiseUtf8('/new: duplicated servicename "%"', [sn]);
   exe := sysutils.Trim(paramstr(3));
   {$ifdef OSWINDOWS}
@@ -1727,7 +1751,7 @@ begin
         break;
       end;
     end;
-  if fService = nil then
+  if fSet.Service = nil then
     sas.fServiceName := sn; // name the main service from the first added
   new := fServiceClass.Create;
   try
@@ -1772,19 +1796,19 @@ begin
   end;
   {$endif OSWINDOWS}
   // start sub-services following their Level order
-  for l := 0 to high(fLevels) do
+  for l := 0 to high(fSet.Levels) do
   begin
-    fStarted := nil;
-    for i := 0 to high(fService) do
+    fStarted := nil; // reset WaitStarted() list
+    for i := 0 to high(fSet.Service) do
     begin
       // launch all services of this level
-      s := fService[i];
-      if (s.Level = fLevels[l]) and
+      s := fSet.Service[i];
+      if (s.Level = fSet.Levels[l]) and
          MatchOS(s.OS) then
         s.DoStart(one);
     end;
     // wait for all services of this level to be running
-    WaitStarted(one, fLevels[l]);
+    WaitStarted(one, fSet.Levels[l]);
   end;
   ComputeServicesStateFiles; // save initial state before any watchdog
 end;
@@ -1836,11 +1860,11 @@ begin
   else
     one := nil;
   // stop sub-services following their reverse Level order
-  for l := high(fLevels) downto 0 do
-    for i := 0 to high(fService) do
+  for l := high(fSet.Levels) downto 0 do
+    for i := 0 to high(fSet.Service) do
     begin
-      s := fService[i];
-      if s.Level = fLevels[l] then
+      s := fSet.Service[i];
+      if s.Level = fSet.Levels[l] then
         s.DoStop(one);
     end;
   // finalize state files
@@ -1856,7 +1880,7 @@ var
   log: TSynLog;
 begin
   log := fSettings.LogClass.Add;
-  if fHasWatchs then
+  if fSet.HasWatchs then
   begin
     log.Log(sllTrace, 'StartWatching', self);
     fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
@@ -1878,10 +1902,10 @@ begin
   // previous command is watched in its monitoring thread, not here
   one := nil;
   tix := GetTickCount64;
-  for i := 0 to high(fService) do // ordered by s.Level
+  for i := 0 to high(fSet.Service) do // ordered by s.Level
   begin
     // check the services for any pending "watch" task
-    s := fService[i];
+    s := fSet.Service[i];
     if (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
       continue;
@@ -1922,7 +1946,7 @@ begin
     exit;
   fServiceStarted := true;
   ClearServicesState;
-  if fService = nil then
+  if fSet.Service = nil then
     LoadServicesFromSettingsFolder;
   StartServices;
   StartWatching;
@@ -1942,8 +1966,8 @@ var
   i: PtrInt;
 begin
   // from /retry /resume or Windows SERVICE_CONTROL_CONTINUE control
-  for i := 0 to high(fService) do
-    with fService[i] do
+  for i := 0 to high(fSet.Service) do
+    with fSet.Service[i] do
       if (fRunner <> nil) and
          (State = ssPaused) then
       begin
