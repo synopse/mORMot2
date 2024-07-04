@@ -573,9 +573,9 @@ type
 // the Instance class name in its minified/uppercase-only translation
 // - typical value is "Mozilla/5.0 (Linux x64; mORMot) HCS/2 Tests/3"
 // for THttpClientSocket from a Tests.exe application in version 3.x
+// - framework is identified as '/2' with no release number, for security
 // - note: the framework would identify the 'mORMot' pattern in the user-agent
 // header to enable advanced behavior e.g. about JSON transmission
-// - framework is identified as '/2' with no release number, for security reasons
 function DefaultUserAgent(Instance: TObject): RawUtf8;
 
 /// create a THttpClientSocket, returning nil on error
