@@ -123,6 +123,7 @@ type
     fState: TServiceState;
     fStartOptions: TStartOptions;
     fOS: TOperatingSystem;
+    fDisabled: boolean;
     fLevel, fStopRunAbortTimeoutSec: integer;
     fWatchDelaySec, fWatchCountRestart, fWatchCount: integer;
     fRetryStableSec: integer;
@@ -154,6 +155,10 @@ type
     property StateMessage: RawUtf8
       read fStateMessage;
   published
+    /// if true, this service definition will be ignored
+    // - is set e.g. after /new --new
+    property Disabled: boolean
+      read fDisabled write fDisabled;
     /// computer-friendly case-insensitive identifier of this sub-service
     // - as used internally by TSynAngelize to identify this instance
     // - should be a short, if possible ASCII and pascal-compatible, identifier
@@ -994,12 +999,12 @@ var
   i: PtrInt;
 begin
   if ServiceName <> '' then
-    for i := 0 to high(Service) do
-      if PropNameEquals(Service[i].Name, ServiceName) then
-      begin
-        result := Service[i];
+    for i := 0 to length(Service) - 1 do
+    begin
+      result := Service[i];
+      if PropNameEquals(result.Name, ServiceName) then
         exit;
-      end;
+    end;
   result := nil;
 end;
 
@@ -1021,7 +1026,7 @@ begin
   ObjArrayClear(Service);
   Finalize(Levels);
   HasWatchs := false;
-  // browse folder for settings files and generates fService[]
+  // browse folder for settings files and generates Service[]
   Owner.fSas.Folder := IncludeTrailingPathDelimiter(Owner.fSas.Folder);
   fn := Owner.fSas.Folder + '*' + Owner.fSas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
@@ -1046,7 +1051,7 @@ begin
             AddSortedInteger(Levels, s.Level);
             if s.fWatch <> nil then
               HasWatchs := true;
-            s := nil; // don't Free - will be owned by fService[]
+            s := nil; // don't Free - will be owned by Service[]
           end
           else // s.Level <= 0
             Owner.fSettings.LogClass.Add.Log(sllDebug,
@@ -1205,8 +1210,9 @@ begin
     [ident, ident, NowToString, length(fSet.Service)], html);
   for i := 0 to high(fSet.Service) do
     with fSet.Service[i] do
-      html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
-        [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
+      if not Disabled then
+        html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
+          [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
   html := html + '</tbody></table></body></html>';
   FileFromString(html, fSas.StateFile + '.html');
 end;
@@ -1219,20 +1225,27 @@ var
   s: TSynAngelizeService;
   state: TSynAngelizeState;
   bin: RawByteString;
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   // ensure not disabled
   if fSas.StateFile = '' then
     exit;
   // compute main binary state file
   SetLength(state.Service, length(fSet.Service));
-  for i := 0 to high(fSet.Service) do
+  n := 0;
+  for i := 0 to length(fSet.Service) - 1 do
   begin
     s := fSet.Service[i];
-    state.Service[i].Name := s.Name;
-    state.Service[i].State := s.State;
-    state.Service[i].Info := copy(s.StateMessage, 1, 80); // truncate on display
+    if not s.Disabled then
+      with state.Service[n] do
+      begin
+        Name := s.Name;
+        State := s.State;
+        Info := copy(s.StateMessage, 1, 80); // truncate on display
+        inc(n);
+      end;
   end;
+  SetLength(state.Service, n);
   bin := 'xxxx' + RecordSave(state, TypeInfo(TSynAngelizeState));
   PCardinal(bin)^ := _STATEMAGIC;
   if bin <> fLastGetServicesStateFile then
@@ -1767,6 +1780,7 @@ begin
     fSas.fServiceName := sn; // name the main service from the first added
   new := fServiceClass.Create;
   try
+    new.Disabled := true;
     new.SettingsOptions := fSas.SettingsOptions; // share ini/json format
     new.FileName := fn;
     new.fName := sn;
@@ -1815,7 +1829,9 @@ begin
     begin
       // launch all services of this level
       s := fSet.Service[i];
-      if (s.Level = fSet.Levels[l]) and
+      if (not s.Disabled) and
+         (s.Level = fSet.Levels[l]) and
+         (s.State <> ssRunning) and
          MatchOS(s.OS) then
         s.DoStart(one);
     end;
@@ -1874,7 +1890,8 @@ begin
     for i := 0 to high(fSet.Service) do
     begin
       s := fSet.Service[i];
-      if s.Level = fSet.Levels[l] then
+      if (not s.Disabled) and
+         (s.Level = fSet.Levels[l]) then
         s.DoStop(one);
     end;
   // finalize state files
@@ -1916,7 +1933,8 @@ begin
   begin
     // check the services for any pending "watch" task
     s := fSet.Service[i];
-    if (s.fNextWatch = 0) or
+    if s.Disabled or
+       (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
       continue;
     if {%H-}log = nil then
@@ -1978,7 +1996,8 @@ begin
   // from /retry /resume or Windows SERVICE_CONTROL_CONTINUE control
   for i := 0 to high(fSet.Service) do
     with fSet.Service[i] do
-      if (fRunner <> nil) and
+      if (not Disabled) and
+         (fRunner <> nil) and
          (State = ssPaused) then
       begin
         ConsoleWriteRaw(['Retry ', Name]);
