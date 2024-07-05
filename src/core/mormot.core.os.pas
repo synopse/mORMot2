@@ -4003,6 +4003,10 @@ var
 // - on Windows, will call the corresponding API, and set StdOut global variable
 procedure AllocConsole;
 
+/// always true on POSIX, may be false for a plain Windows GUI application
+function HasConsole: boolean;
+  {$ifdef OSPOSIX} inline; {$endif OSPOSIX}
+
 /// change the console text writing color
 procedure TextColor(Color: TConsoleColor);
 

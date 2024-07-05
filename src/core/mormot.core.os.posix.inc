@@ -1845,6 +1845,11 @@ begin
   StdOut := StdOutputHandle;
 end;
 
+function HasConsole: boolean;
+begin
+  result := true;
+end;
+
 var
   TextAttr: integer = 255; // always change the color at startup
 
