@@ -1375,8 +1375,9 @@ type
     function GetType: integer;
     procedure ToUtf8(out result: RawUtf8;
       flags: cardinal = ASN1_STRFLGS_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
-    procedure ToHex(out result: RawUtf8);
-    function Equals(const another: asn1_string_st): boolean;
+    procedure ToHex(out result: RawUtf8); overload;
+    function ToHex: RawUtf8; overload;
+    function Equals(another: pointer): boolean;
   end;
   ASN1_STRING = asn1_string_st;
   PASN1_STRING = ^ASN1_STRING;
@@ -8532,7 +8533,7 @@ begin
     for i := 0 to rev^.Count - 1 do
     begin
       r := rev.GetItem(i);
-      if X509_REVOKED_get0_serialNumber(r).Equals(serial^) then
+      if X509_REVOKED_get0_serialNumber(r).Equals(serial) then
       begin
         result := r.Reason;
         if (result >= 0) and
@@ -9210,13 +9211,19 @@ begin
     ToHumanHex(result, Data, Len);
 end;
 
-function asn1_string_st.Equals(const another: asn1_string_st): boolean;
-var
-  n: integer;
+function asn1_string_st.ToHex: RawUtf8;
 begin
-  n := Len;
-  result := (n = another.Len) and
-            CompareMem(Data, another.Data, n);
+  ToHex(result);
+end;
+
+function asn1_string_st.Equals(another: pointer): boolean;
+var
+  n1, n2: PtrInt;
+begin
+  n1 := Len;
+  n2 := PASN1_STRING(another).Len;
+  result := (n1 = n2) and
+            CompareMem(Data, PASN1_STRING(another).Data, n1);
 end;
 
 
