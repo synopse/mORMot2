@@ -1569,6 +1569,7 @@ type
   PPX509_CRL = ^PX509_CRL;
   Pstack_st_X509_CRL = POPENSSL_STACK;
   PPstack_st_X509_CRL = ^Pstack_st_X509_CRL;
+  PX509_CRLDynArray = array of PX509_CRL;
   PX509_REVOKED = ^X509_REVOKED;
   PPX509_REVOKED = ^PX509_REVOKED;
   PX509_CRL_METHOD = pointer;
@@ -1675,8 +1676,12 @@ type
   public
     function CertificateCount: integer;
     function CrlCount: integer;
-    function Certificates: PX509DynArray;
-    function MainCrl: PX509_CRL;
+    function MainCrlAcquired: PX509_CRL; // eventual result.Free
+    function CertificatesLocked: PX509DynArray; // eventual Unlock
+    function CrlsLocked: PX509_CRLDynArray;     // eventual Unlock
+    procedure Lock;
+    procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
     function StackX509(addref: boolean = true): Pstack_st_X509;
     function StackX509_CRL(addref: boolean = true): Pstack_st_X509_CRL;
     // caller should make result.Free once done (to decrease refcount)
@@ -8509,7 +8514,7 @@ begin
   rev := Revoked;
   for i := 0 to rev^.Count - 1 do
   begin
-    r := rev.GetItem(i);
+    r := rev.Items[i];
     if r.SerialNumber = serialnumber then
     begin
       result := r.Reason;
@@ -8532,7 +8537,7 @@ begin
     rev := Revoked;
     for i := 0 to rev^.Count - 1 do
     begin
-      r := rev.GetItem(i);
+      r := rev.Items[i];
       if X509_REVOKED_get0_serialNumber(r).Equals(serial) then
       begin
         result := r.Reason;
@@ -8558,7 +8563,7 @@ begin
   if rev^.Count = 0 then
     exit;
   for i := 0 to rev^.Count - 1 do
-    if X509_CRL_add0_revoked(@self, rev.GetItem(i)) = OPENSSLSUCCESS then
+    if X509_CRL_add0_revoked(@self, rev.Items[i]) = OPENSSLSUCCESS then
       inc(result);
   if result <> 0 then
     X509_CRL_sort(@self);
@@ -8598,7 +8603,7 @@ begin
   X509_gmtime_adj(tm, SecsPerDay * nextUpdateDays);
   X509_CRL_set_nextUpdate(@self, tm);
   ASN1_TIME_free(tm);
-  if reason = 0 then
+  if reason = CRL_REASON_UNSPECIFIED then
     reason := CRL_REASON_SUPERSEDED;
   rev.SetReason(reason);
   if X509_CRL_add0_revoked(@self, rev) = OPENSSLSUCCESS then
@@ -8636,7 +8641,7 @@ begin
   ext := Extensions;
   SetLength(result, ext.Count);
   for i := 0 to length(result) - 1 do
-    result[i].SetExtension(ext.GetItem(i));
+    result[i].SetExtension(ext.Items[i]);
 end;
 
 function X509_CRL.Extension(nid: integer): PX509_EXTENSION;
@@ -8647,7 +8652,7 @@ begin
   ext := Extensions;
   for i := 0 to ext.Count - 1 do
   begin
-    result := ext.GetItem(i);
+    result := ext.Items[i];
     if OBJ_obj2nid(X509_EXTENSION_get_object(result)) = nid then
       exit;
   end;
@@ -8661,7 +8666,11 @@ end;
 
 function X509_CRL.ToPem: RawUtf8;
 begin
-  result := BioSave(@self, @PEM_write_bio_X509_CRL, CP_UTF8);
+  try
+    result := BioSave(@self, @PEM_write_bio_X509_CRL, CP_UTF8);
+  except
+    result := ''; // EOpenSSL if the CRL is not signed -> ignore
+  end;
 end;
 
 function X509_CRL.ToText: RawUtf8;
@@ -8722,6 +8731,18 @@ end;
 
 { X509_STORE }
 
+procedure X509_STORE.Lock;
+begin
+  if @self <> nil then
+    X509_STORE_lock(@self);
+end;
+
+procedure X509_STORE.UnLock;
+begin
+  if @self <> nil then
+    X509_STORE_unlock(@self);
+end;
+
 function CountObjects(store: PX509_STORE; crl: boolean): integer;
 var
   i: integer; // no PtrInt here for integer C API parameters
@@ -8735,7 +8756,7 @@ begin
   obj := X509_STORE_get0_objects(store);
   for i := 0 to obj^.Count - 1 do
   begin
-    p := obj^.GetItem(i);
+    p := obj^.Items[i];
     if crl then
       p := X509_OBJECT_get0_X509_CRL(p)
     else
@@ -8745,31 +8766,36 @@ begin
   X509_STORE_unlock(store);
 end;
 
-function GetObjects(store: PX509_STORE; crl: boolean): TPointerDynArray;
+function GetObjectsLocked(store: PX509_STORE; crl: boolean): TPointerDynArray;
 var
-  i, n: integer; // no PtrInt here for integer C API parameters
+  i, n: PtrInt;
   p: pointer;    // either PX509 or PX509_CRL
   obj: Pstack_st_X509_OBJECT;
 begin
   result := nil;
   if store = nil then
     exit;
-  n := 0;
   X509_STORE_lock(store);
   obj := X509_STORE_get0_objects(store);
-  for i := 0 to obj^.Count - 1 do
+  SetLength(result, obj^.Count);
+  n := 0;
+  for i := 0 to length(result) - 1 do
   begin
-    p := obj^.GetItem(i);
+    p := obj^.Items[i];
     if crl then
       p := X509_OBJECT_get0_X509_CRL(p)
     else
       p := X509_OBJECT_get0_X509(p);
-    if p <> nil then
-      PtrArrayAdd(result, p, n); // store by reference with no Acquire
+    if p = nil then
+      continue; // this object is not of the expected type
+    result[n] := p;  // store by reference with no Acquire
+    inc(n);
   end;
-  X509_STORE_unlock(store);
-  if n <> 0 then
+  if n = 0 then
+    result := nil
+  else
     DynArrayFakeLength(result, n);
+  // caller should eventually run store.UnLock
 end;
 
 // our own version of X509_STORE_get1_all_certs() - not exported on oldest API
@@ -8786,7 +8812,7 @@ begin
   obj := X509_STORE_get0_objects(store);
   for i := 0 to obj^.Count - 1 do
   begin
-    p := obj^.GetItem(i);
+    p := obj^.Items[i];
     if crl then
       p := X509_OBJECT_get0_X509_CRL(p)
     else
@@ -8815,9 +8841,16 @@ begin
   result := CountObjects(@self, {crl=}true);
 end;
 
-function X509_STORE.Certificates: PX509DynArray;
+function X509_STORE.CertificatesLocked: PX509DynArray;
 begin
-  result := PX509DynArray(GetObjects(@self, {crl=}false));
+  result := PX509DynArray(GetObjectsLocked(@self, {crl=}false));
+  // caller should eventually run UnLock
+end;
+
+function X509_STORE.CrlsLocked: PX509_CRLDynArray;
+begin
+  result := PX509_CRLDynArray(GetObjectsLocked(@self, {crl=}true));
+  // caller should eventually run UnLock
 end;
 
 function X509_STORE.StackX509(addref: boolean): Pstack_st_X509;
@@ -8830,23 +8863,36 @@ begin
   result := StackObjects(@self, {crl=}true, addref);
 end;
 
-function X509_STORE.MainCrl: PX509_CRL;
+function X509_STORE.MainCrlAcquired: PX509_CRL;
 var
   i: integer; // no PtrInt here for integer C API parameters
   obj: Pstack_st_X509_OBJECT;
 begin
+  result := nil;
+  if @self = nil then
+    exit;
+  X509_STORE_lock(@self);
   obj := X509_STORE_get0_objects(@self);
   for i := 0 to obj^.Count - 1 do
   begin
-    result := X509_OBJECT_get0_X509_CRL(obj^.GetItem(i));
-    if result <> nil then
-      exit; // just return the first registered CRL instance
+    result := X509_OBJECT_get0_X509_CRL(obj^.Items[i]);
+    if result = nil then
+      continue; // not a CRL
+    result.Acquire;
+    break;
   end;
-  result := NewCertificateCrl;
-  if AddCrl(result) then
-    exit;
-  result.Free;
-  result := nil;
+  X509_STORE_unlock(@self);
+  if result = nil then
+  begin
+    result := NewCertificateCrl; // set a first CRL
+    if not AddCrl(result) then
+    begin
+      result.Free;
+      result := nil;
+    end
+    else
+      result.Acquire;
+  end;
 end;
 
 function X509_STORE.BySerial(const serial: RawUtf8): PX509;
@@ -8854,15 +8900,18 @@ var
   i: PtrInt;
   c: PX509DynArray;
 begin
-  c := Certificates;
+  result := nil;
+  if serial = '' then
+    exit;
+  c := CertificatesLocked;
   for i := 0 to length(c) - 1 do
     if c[i].SerialNumber = serial then
     begin
       result := c[i];
       result.Acquire;
-      exit;
+      break;
     end;
-  result := nil;
+  Unlock;
 end;
 
 function X509_STORE.BySkid(const id: RawUtf8): PX509;
@@ -8870,15 +8919,18 @@ var
   i: PtrInt;
   c: PX509DynArray;
 begin
-  c := Certificates;
+  result := nil;
+  if id = '' then
+    exit;
+  c := CertificatesLocked;
   for i := 0 to length(c) - 1 do
     if c[i].SubjectKeyIdentifier = id then
     begin
       result := c[i];
       result.Acquire;
-      exit;
+      break;
     end;
-  result := nil;
+  UnLock;
 end;
 
 function X509_STORE.HasSerial(serial: PASN1_INTEGER): boolean;
@@ -8886,54 +8938,62 @@ var
   i: PtrInt;
   c: PX509DynArray;
 begin
-  if (@self <> nil) and
-     (serial <> nil) then
-  begin
-    result := true;
-    c := Certificates;
-    for i := 0 to length(c) - 1 do
-      if c[i].GetSerial = serial then
-        exit;
-  end;
   result := false;
+  if (@self = nil) or
+     (serial = nil) then
+    exit;
+  c := CertificatesLocked;
+  for i := 0 to length(c) - 1 do
+    if c[i].GetSerial = serial then
+    begin
+      result := true;
+      break;
+    end;
+  UnLock;
 end;
 
 function X509_STORE.IsRevoked(const serial: RawUtf8): integer;
 var
   i: PtrInt;
-  c: Pstack_st_X509_CRL;
+  rev: integer;
+  c: PX509_CRLDynArray;
 begin
-  c := StackX509_CRL;
-  try
-    for i := 0 to c.Count - 1 do
-    begin
-      result := PX509_CRL(c.GetItem(i)).IsRevoked(serial);
-      if result >= 0 then
-        exit;
-    end;
-    result := CRL_REASON_NONE; // -1 if not revoked
-  finally
-    c.Free;
+  result := CRL_REASON_NONE; // -1 if not revoked
+  if (@self = nil) or
+     (serial = '') then
+    exit;
+  c := CrlsLocked;
+  for i := 0 to length(c) - 1 do
+  begin
+    rev := c[i].IsRevoked(serial);
+    if rev < 0 then
+      continue;
+    result := rev;
+    break;
   end;
+  UnLock;
 end;
 
 function X509_STORE.IsRevoked(serial: PASN1_INTEGER): integer;
 var
   i: PtrInt;
-  c: Pstack_st_X509_CRL;
+  rev: integer;
+  c: PX509_CRLDynArray;
 begin
-  c := StackX509_CRL;
-  try
-    for i := 0 to c.Count - 1 do
-    begin
-      result := PX509_CRL(c.GetItem(i)).IsRevoked(serial);
-      if result >= 0 then
-        exit;
-    end;
-    result := CRL_REASON_NONE; // -1 if not revoked
-  finally
-    c.Free;
+  result := CRL_REASON_NONE; // -1 if not revoked
+  if (@self = nil) or
+     (serial = nil) then
+    exit;
+  c := CrlsLocked;
+  for i := 0 to length(c) - 1 do
+  begin
+    rev := c[i].IsRevoked(serial);
+    if rev < 0 then
+      continue;
+    result := rev;
+    break;
   end;
+  UnLock;
 end;
 
 function X509_STORE.SetDefaultPaths: boolean;
