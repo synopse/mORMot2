@@ -1831,12 +1831,22 @@ function MakeCsv(const Value: array of const; EndWithComma: boolean = false;
 function StringToConsole(const S: string): RawByteString;
 
 /// write some text to the console using a given color
+// - redirect to mormot.core.os ConsoleWrite() with proper thread safety
 procedure ConsoleWrite(const Fmt: RawUtf8; const Args: array of const;
   Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
 
 /// write some text to the console using a given color
+// - redirect to mormot.core.os ConsoleWrite() with proper thread safety
 procedure ConsoleWrite(const Args: array of const;
   Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false); overload;
+
+/// write some text to the console using the current color
+// - similar to writeln() but redirect to ConsoleWrite() with proper thread safety
+procedure ConsoleWriteRaw(const Args: array of const; NoLineFeed: boolean = false); overload;
+
+/// append a line feed to the console
+// - similar to writeln but redirect to ConsoleWrite() with proper thread safety
+procedure ConsoleWriteLn;
 
 /// could be used in the main program block of a console application to
 // handle unexpected fatal exceptions
@@ -9031,6 +9041,19 @@ var
 begin
   Make(Args, tmp);
   ConsoleWrite(tmp, Color, NoLineFeed);
+end;
+
+procedure ConsoleWriteRaw(const Args: array of const; NoLineFeed: boolean);
+var
+  tmp: RawUtf8;
+begin
+  Make(Args, tmp);
+  ConsoleWrite(tmp, ccLightGray, NoLineFeed, {nocolor=}true);
+end;
+
+procedure ConsoleWriteLn;
+begin
+  ConsoleWrite(CRLF, ccLightGray, {nolinefeed=}true, {nocolor=}true);
 end;
 
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
