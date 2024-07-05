@@ -2554,6 +2554,8 @@ begin
     if not NoColor then
       TextColor(Color);
     FileWriteAll(StdOut, pointer(txt), l);
+    if not NoColor then
+      TextColor(ccLightGray);
     // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
   finally
     ConsoleCriticalSection.UnLock;

@@ -8908,7 +8908,6 @@ begin
     exit;
   ConsoleWrite(FullDescription(exedescription));
   ConsoleWrite(err, ccLightRed);
-  TextColor(ccLightGray);
 end;
 
 function TExecutableCommandLine.ConsoleHelpFailed(

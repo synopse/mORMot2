@@ -1896,14 +1896,20 @@ var
   s: RawUtf8;
 begin
   // pre-compute the whole chars to be sent to the console
-  if not NoColor then
-    TextColorAppend(Color, s);
-  RawUtf8Append(s, pointer(Text), length(Text));
-  if not NoLineFeed then
-    RawUtf8Append(s, @PosixLineFeed, 1);
-  if not NoColor then
-    TextColorAppend(ccLightGray, s);
-  // display whole line in a single syscall
+  if NoColor and
+     NoLineFeed then
+    s := Text
+  else
+  begin
+    if not NoColor then
+      TextColorAppend(Color, s);
+    RawUtf8Append(s, pointer(Text), length(Text));
+    if not NoLineFeed then
+      RawUtf8Append(s, @PosixLineFeed, 1);
+    if not NoColor then
+      TextColorAppend(ccLightGray, s);
+  end;
+  // display whole line in a single syscall, and within our global lock
   ConsoleCriticalSection.Lock;
   FileWriteAll(StdOut, pointer(s), length(s)); // UTF-8 console
   ConsoleCriticalSection.UnLock;
