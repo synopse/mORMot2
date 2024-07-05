@@ -4014,6 +4014,10 @@ procedure TextBackground(Color: TConsoleColor);
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
 
+/// write some text to the console using the current color
+// - similar to writeln() but redirect to ConsoleWrite(NoColor=true)
+procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); overload;
+
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, will call Synchronize() for proper work e.g. with
 // interface-based service implemented as optExecInMainThread
@@ -8043,6 +8047,11 @@ begin
      GetMemoryInfoText, _oskb(avail), _oskb(total),
      {$ifdef OSPOSIX} RetrieveLoadAvg, {$endif} Executable.Version.VersionInfo,
      OSVersionText, CpuInfoText, BiosInfoText]);
+end;
+
+procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
+begin
+  ConsoleWrite(Text, ccLightGray, NoLineFeed, {nocolor=}true);
 end;
 
 function ConsoleReadBody: RawByteString;

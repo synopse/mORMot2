@@ -1898,7 +1898,7 @@ begin
   // pre-compute the whole chars to be sent to the console
   if NoColor and
      NoLineFeed then
-    s := Text
+    s := Text // no memory allocation needed
   else
   begin
     if not NoColor then
