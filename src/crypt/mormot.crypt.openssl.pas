@@ -2957,26 +2957,29 @@ end;
 function TCryptStoreOpenSsl.Save: RawByteString;
 var
   x: PX509DynArray;
-  crl: Pstack_st_X509_CRL;
+  c: PX509_CRLDynArray;
   i: PtrInt;
   tmp: TTextWriterStackBuffer;
 begin
   // since DER has no simple binary array format, use PEM serialization
   with TTextWriter.CreateOwnedStream(tmp) do
   try
-    x := fStore.Certificates;
+    // first write any X.509 certificates
+    x := fStore.CertificatesLocked;
     for i := 0 to length(x) - 1 do
     begin
       AddString(x[i].ToPem);
       AddShorter(CRLF);
     end;
-    crl := fStore.StackX509_CRL;
-    for i := 0 to crl.Count - 1 do
+    fStore.UnLock;
+    // followed by X.509 CRLs
+    c := fStore.CrlsLocked;
+    for i := 0 to length(c) - 1 do
     begin
-      AddString(PX509_CRL(crl.Items[i]).ToPem); // raise EOpenSsl (not signed)
+      AddString(c[i].ToPem); // raise EOpenSsl (not signed)
       AddShorter(CRLF);
     end;
-    crl.Free;
+    fStore.UnLock;
     SetText(RawUtf8(result));
   finally
     Free;
@@ -3135,6 +3138,7 @@ function TCryptStoreOpenSsl.Revoke(const Cert: ICryptCert;
   Reason: TCryptCertRevocationReason; RevocationDate: TDateTime): boolean;
 var
   r, days: integer;
+  c: PX509_CRL;
 begin
   result := false;
   if Cert = nil then
@@ -3143,16 +3147,22 @@ begin
   if r = CRL_REASON_NONE then
     raise EOpenSslCert.CreateFmt(
       'TCryptStoreOpenSsl.Revoke: unsupported %s', [ToText(Reason)^]);
-  if RevocationDate = 0 then
-    days := 0 // revoke now
-  else
-  begin
-    days :=  trunc(RevocationDate - Now);
-    if days < 0 then
-      days := 0;
-  end;
-  result := fStore.MainCrl.AddRevokedCertificate(
-    (cert.Instance as TCryptCertOpenSsl).fX509, nil, r, days);
+  c := fStore.MainCrlAcquired;
+  if c <> nil then
+    try
+      if RevocationDate = 0 then
+        days := 0 // revoke now
+      else
+      begin
+        days :=  trunc(RevocationDate - Now);
+        if days < 0 then
+          days := 0;
+      end;
+      result := c.AddRevokedCertificate(
+        (cert.Instance as TCryptCertOpenSsl).fX509, nil, r, days);
+    finally
+      c.Free;
+    end;
 end;
 
 function ToValidity(err: integer): TCryptCertValidity;
