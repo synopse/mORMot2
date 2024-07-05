@@ -404,8 +404,6 @@ begin
   result := '';
 end;
 
-{$I-} // no error raised during write/writeln
-
 procedure TSynDaemon.WriteCopyright;
 var
   msg, name, copyright: string;
@@ -420,14 +418,10 @@ begin
     name := copy(msg, 1, i - 1);
     copyright := copy(msg, i + 3, 1000);
   end;
-  TextColor(ccLightGreen);
-  writeln(' ', name);
-  writeln(StringOfChar('-', length(name) + 2));
-  TextColor(ccGreen);
+  ConsoleWrite([' ', name, CRLF, RawUtf8OfChar('-', length(name) + 2)], ccLightGreen);
   if {%H-}copyright <> '' then
-    writeln(' ', copyright);
-  writeln;
-  TextColor(ccLightGray);
+    ConsoleWrite([' ', copyright], ccGreen);
+  ConsoleWriteLn;
 end;
 
 procedure TSynDaemon.Command(cmd: TExecuteCommandLineCmd; aAutoStart: boolean;
@@ -442,29 +436,30 @@ var
 
   procedure ShowState(state: TServiceState);
   begin
-    writeln(Utf8ToConsole(fSettings.ServiceName), ' State=', ToText(state)^);
+    ConsoleWriteRaw([fSettings.ServiceName, ' State=', ToText(state)^]);
     ExitCode := ord(state); // transmit result to caller e.g. from a batch
   end;
 
   procedure Syntax;
   var
-    spaces, custom: string;
+    spaces: RawUtf8;
+    custom: string;
   begin
     WriteCopyright;
-    writeln('Try with one of the switches:');
-    spaces := StringOfChar(' ', length(Executable.ProgramName) + 4);
+    ConsoleWriteRaw('Try with one of the switches:');
+    spaces := RawUtf8OfChar(' ', length(Executable.ProgramName) + 4);
     {$ifdef OSWINDOWS}
-    writeln('   ', Executable.ProgramName,
-            ' /console -c /verbose /help -h /version');
-    writeln(spaces, '/install /uninstall /start /stop /state');
+    ConsoleWriteRaw(['   ', Executable.ProgramName,
+      ' /console -c /verbose /help -h /version', CRLF,
+      spaces, '/install /uninstall /start /stop /state']);
     {$else}
-    writeln(' ./', Executable.ProgramName,
-            ' --console -c --verbose --help -h --version');
-    writeln(spaces, '--run -r --fork -f --kill -k --silentkill --state');
+    ConsoleWriteRaw([' ./', Executable.ProgramName,
+      ' --console -c --verbose --help -h --version', CRLF,
+      spaces, '--run -r --fork -f --kill -k --silentkill --state']);
     {$endif OSWINDOWS}
     custom := CustomCommandLineSyntax;
     if custom <> '' then
-      writeln(spaces, custom);
+      ConsoleWriteRaw([spaces, custom]);
   end;
 
   function cmdText: RawUtf8;
@@ -476,18 +471,19 @@ var
   var
     msg: RawUtf8;
     error: integer;
+    cc: TConsoleColor;
   begin
     WriteCopyright;
     if Success then
     begin
       msg := 'Successfully executed';
-      TextColor(ccWhite);
+      cc := ccWhite;
     end
     else
     begin
       error := GetLastError;
       FormatUtf8('Error % [%] occurred with', [error, GetErrorText(error)], msg);
-      TextColor(ccLightRed);
+      cc := ccLightRed;
       ExitCode := 1; // notify error to caller batch
     end;
     if param = '' then
@@ -496,8 +492,7 @@ var
     else
       msg := FormatUtf8('% [%] (%) on Service ''%''',
         [msg, param, cmdText, fSettings.ServiceName]);
-    writeln(Utf8ToConsole(msg));
-    TextColor(ccLightGray);
+    ConsoleWrite(msg, cc);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
   end;
 
@@ -514,21 +509,21 @@ begin
       begin
         WriteCopyright;
         exe := StringFromFile(Executable.ProgramFileName);
-        writeln(' ', Utf8ToConsole(fSettings.ServiceName),
-          #13#10' Size:       ', length(exe), ' bytes (', KB(exe), ')' +
-          #13#10' Build date: ', Executable.Version.BuildDateTimeString,
-          #13#10' MD5:        ', Md5(exe),
-          #13#10' SHA256:     ', Sha256(exe));
-        writeln(' Running OS: ', OSVersionText);
+        ConsoleWriteRaw([' ', fSettings.ServiceName, CRLF +
+             ' Size:       ', length(exe), ' bytes (', KB(exe), ')' + CRLF +
+             ' Build date: ', Executable.Version.BuildDateTimeString, CRLF +
+             ' MD5:        ', Md5(exe), CRLF +
+             ' SHA256:     ', Sha256(exe), CRLF +
+             ' Running OS: ', OSVersionText]);
         if Executable.Version.Version32 <> 0 then
-          writeln(' Version:    ', Executable.Version.Detailed);
+          ConsoleWriteRaw([
+             ' Version:    ', Executable.Version.Detailed]);
       end;
     cConsole,
     cVerbose:
       begin
         WriteCopyright;
-        writeln('Launched in ', cmdText, ' mode'#10);
-        TextColor(ccLightGray);
+        ConsoleWriteRaw(['Launched in ', cmdText, ' mode'#10]);
         log := fSettings.fLogClass.Add;
         if (cmd = cVerbose) and
            (log <> nil) then
@@ -541,12 +536,10 @@ begin
             Executable.Version.DetailedOrVoid], self);
           fConsoleMode := true;
           Start;
-          writeln('Press [Enter] or Ctrl+C to quit');
-          ioresult;
+          ConsoleWriteRaw('Press [Enter] or Ctrl+C to quit');
           ConsoleWaitForEnterKey;
-          writeln('Shutting down server');
+          ConsoleWriteRaw('Shutting down server');
         finally
-          ioresult;
           log.Log(sllNewRun, 'Stop /%', [cmdText], self);
           Stop;
         end;
@@ -557,10 +550,7 @@ begin
       if cmd = cNone then
         Syntax
       else
-      begin
-        TextColor(ccLightRed);
-        writeln('No ServiceName specified - please fix the settings');
-      end
+        ConsoleWrite('No ServiceName specified - please fix the settings', ccLightRed)
     else
     case cmd of
       cNone:
@@ -633,8 +623,8 @@ begin
       if RunUntilSigTerminatedForKill then
       begin
         if cmd <> cSilentKill then
-          writeln('Forked process ',
-            Executable.ProgramName, ' killed successfully');
+          ConsoleWriteRaw(['Forked process ',
+            Executable.ProgramName, ' killed successfully']);
       end
       else
         raise EDaemon.Create('No forked process found to be killed');
@@ -652,9 +642,6 @@ begin
       ExitCode := 1; // notify failure on executing process
     end;
   end;
-  if cmd <> cSilentKill then
-    TextColor(ccLightGray);
-  ioresult;
 end;
 
 function TSynDaemon.CurrentState: TServiceState;
@@ -719,10 +706,7 @@ begin
       // allow e.g. --fork switch (idem to /f -f /fork -fork)
       inc(p);
     if CustomParseCmd(p) then
-    begin
-      TextColor(ccLightGray); // like Command()
       exit; // command has been identified and processed in overriden method
-    end;
     cmd := ParseCmd(p);
   end;
   Command(cmd, aAutoStart, param);

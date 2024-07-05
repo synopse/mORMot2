@@ -155,9 +155,10 @@ type
       Color: TConsoleColor = ccLightGray);
     /// returns the UTF-8 text as inserted by Text() calls
     // - line feeds will be included to the ConsoleLines[] values
-    function ConsoleText(const LineFeed: RawUtf8 = sLineBreak): RawUtf8;
+    function ConsoleText(const LineFeed: RawUtf8 = CRLF): RawUtf8;
     /// low-level access to the internal switches storage
-    property Values: TDocVariantData read fValues;
+    property Values: TDocVariantData
+      read fValues;
     /// if Text() should be redirected to ConsoleText internal storage
     // - and don't write anything to the console
     // - should be associated with NoProperty = TRUE property
@@ -295,7 +296,8 @@ begin
   end;
   result := Default;
   if fNoPrompt or
-     (Prompt = '') then
+     (Prompt = '') or
+     not HasConsole then
     exit;
   TextColor(ccLightGray);
   {$I-}

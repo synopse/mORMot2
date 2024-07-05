@@ -9049,19 +9049,17 @@ end;
 
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
-  ConsoleWrite(#13#10'Fatal exception ', ccLightRed, true);
+  ConsoleWrite(CRLF + 'Fatal exception ', ccLightRed, true);
   ConsoleWrite('%', [E.ClassType], ccWhite, true);
   ConsoleWrite(' raised with message ', ccLightRed);
   ConsoleWrite('  %', [E.Message], ccLightMagenta);
-  TextColor(ccLightGray);
-  if WaitForEnterKey then
-  begin
-    ConsoleWrite(#13#10'Program will now abort');
-    {$ifndef OSPOSIX}
-    ConsoleWrite('Press [Enter] to quit');
-    ConsoleWaitForEnterKey;
-    {$endif OSPOSIX}
-  end;
+  if not WaitForEnterKey then
+    exit;
+  ConsoleWriteRaw(CRLF + 'Program will now abort');
+  {$ifndef OSPOSIX}
+  ConsoleWriteRaw('Press [Enter] to quit');
+  ConsoleWaitForEnterKey;
+  {$endif OSPOSIX}
 end;
 
 

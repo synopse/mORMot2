@@ -1904,12 +1904,13 @@ type
     procedure Execute;
   end;
 
-{$I-}
-
 procedure TServiceClientCommandLine.ToConsole(const Fmt: RawUtf8;
   const Args: array of const; Color: TConsoleColor; NoLineFeed: boolean);
+var
+  txt: RawUtf8;
 begin
-  ConsoleWrite(FormatUtf8(Fmt, Args), Color, NoLineFeed, cloNoColor in fOptions);
+  FormatUtf8(Fmt, Args, txt);
+  ConsoleWrite(txt, Color, NoLineFeed, cloNoColor in fOptions);
 end;
 
 function TServiceClientCommandLine.Find(const name: RawUtf8;
@@ -1968,7 +1969,7 @@ begin
         delete(line, j, 1);
         i := k;
       until false;
-      writeln(line);
+      ConsoleWriteRaw(line);
     end;
   until P = nil;
 end;
@@ -2199,8 +2200,6 @@ begin
   end;
   ToConsole('', [], ccDarkGray);
 end;
-
-{$I+}
 
 
 procedure ExecuteFromCommandLine(const aServices: array of TGuid;

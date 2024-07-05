@@ -1807,7 +1807,7 @@ begin
         FileSetDateFromUnixUtc(dstfn, reftime div MilliSecsPerSec);
         inc(result);
         if sfoWriteFileNameToConsole in Options then
-          ConsoleWrite('synched %', [dstfn]);
+          ConsoleWriteRaw(['synched ', dstfn]);
       end
       else if (sfoSubFolder in Options) and
               SearchRecValidFolder(fdst) then
@@ -1865,7 +1865,7 @@ begin
       break;
     inc(result);
     if sfoWriteFileNameToConsole in Options then
-      ConsoleWrite('copied %', [reffn]);
+      ConsoleWriteRaw(['copied ', reffn]);
   until (FindNext(sr) <> 0);
   FindClose(sr);
 end;

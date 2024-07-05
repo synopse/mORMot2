@@ -420,7 +420,7 @@ type
   // to retrieve the state of services
   TSynAngelize = class(TSynDaemon)
   protected
-    fAdditionalParams: TFileName;
+    fAdditionalParams: TFileName; // not yet implemented
     fServiceClass: TSynAngelizeServiceClass;
     fSas: TSynAngelizeSettings; // = fSettings
     fExpandLevel: byte;
@@ -1143,7 +1143,7 @@ begin
     1: // --settings
       begin
         WriteCopyright;
-        ConsoleWrite('Found %', [Plural('setting', LoadServicesFromSettingsFolder)]);
+        ConsoleWriteRaw(['Found ', Plural('setting', LoadServicesFromSettingsFolder)]);
       end;
     2: // --new
       NewService;
@@ -1154,7 +1154,7 @@ begin
         {$ifdef OSWINDOWS}
         with TServiceController.CreateOpenService('', '', fSettings.ServiceName) do
           try
-            ConsoleWrite('Sending SERVICE_CONTROL_CONTINUE = ', [BOOL_STR[Resume]]);
+            ConsoleWriteRaw(['Sending SERVICE_CONTROL_CONTINUE = ', BOOL_STR[Resume]]);
           finally
             Free;
           end;
@@ -1685,11 +1685,38 @@ begin
       begin
         ConsoleWrite('% %', [Name, ToText(State)^], SERVICESTATE_COLOR[State]);
         if Info <> '' then
-          ConsoleWrite('  %', [Info], ccLightGray);
+          ConsoleWriteRaw(['  ', Info]);
       end
   else
     ConsoleWrite('Unknown service state', ccMagenta);
-  TextColor(ccLightGray);
+end;
+
+const
+  ENDI: array[boolean] of string[3] = ('en', 'dis');
+
+procedure TSynAngelize.ServiceChangeState(disable: boolean);
+var
+  sn: RawUtf8;
+  sas: TSynAngelizeService;
+  log: ISynLog;
+begin
+  // /enable <servicename>   or  /disable <servicename>
+  log := fSettings.LogClass.Enter(self, 'NewService');
+  WriteCopyright;
+  if ParamCount < 2 then
+    ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
+      [Executable.ProgramName, ENDI[disable]]);
+  LoadServicesFromSettingsFolder; // raise ESynAngelize on error
+  sn := TrimU(StringToUtf8(paramstr(2)));
+  sas := fSet.FindService(sn);
+  if sas = nil then
+    ESynAngelize.RaiseUtf8('/%able: unknown service "%"', [ENDI[disable], sn]);
+  if sas.Disabled = disable then
+  begin
+//    ConsoleWrite();
+    exit;
+  end;
+
 end;
 
 procedure TSynAngelize.NewService;
@@ -1954,7 +1981,7 @@ begin
       if (fRunner <> nil) and
          (State = ssPaused) then
       begin
-        ConsoleWrite('Retry %', [Name]);
+        ConsoleWriteRaw(['Retry ', Name]);
         fRunner.RetryNow;
       end;
 end;
