@@ -4018,6 +4018,10 @@ procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
 // - similar to writeln() but redirect to ConsoleWrite(NoColor=true)
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); overload;
 
+/// append a line feed to the console
+// - similar to writeln but redirect to ConsoleWrite() with proper thread safety
+procedure ConsoleWriteLn;
+
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, will call Synchronize() for proper work e.g. with
 // interface-based service implemented as optExecInMainThread
@@ -8052,6 +8056,11 @@ end;
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
 begin
   ConsoleWrite(Text, ccLightGray, NoLineFeed, {nocolor=}true);
+end;
+
+procedure ConsoleWriteLn;
+begin
+  ConsoleWrite(CRLF, ccLightGray, {nolinefeed=}true, {nocolor=}true);
 end;
 
 function ConsoleReadBody: RawByteString;
