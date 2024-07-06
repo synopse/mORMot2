@@ -621,6 +621,7 @@ var
 
   procedure DoClientCall;
   begin
+    // adapt request content according to SOA routing and options
     uri := baseuri;
     rcu.ServicesRouting.ClientSideInvoke(
       uri, ctxt, aMethod, aParams, clientDrivenID, sent, head);
@@ -635,7 +636,11 @@ var
          (service^.ArgsOutputValuesCount = 0) then
         rcu.CallbackNonBlockingSetHeader(head);
     end;
+    // makes the actual HTTP/HTTPS call
     status := rcu.Uri(uri, 'POST', @resp, @head, @sent);
+    // allow to customize the response
+    rcu.ServicesRouting.ClientSideInvoked(
+      uri, ctxt, aMethod, aParams, clientDrivenID, sent, head, status);
   end;
 
 begin
