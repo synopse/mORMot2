@@ -1704,34 +1704,6 @@ begin
     ConsoleWrite('Unknown service state', ccMagenta);
 end;
 
-const
-  ENDI: array[boolean] of string[3] = ('en', 'dis');
-
-procedure TSynAngelize.ServiceChangeState(disable: boolean);
-var
-  sn: RawUtf8;
-  sas: TSynAngelizeService;
-  log: ISynLog;
-begin
-  // /enable <servicename>   or  /disable <servicename>
-  log := fSettings.LogClass.Enter(self, 'NewService');
-  WriteCopyright;
-  if ParamCount < 2 then
-    ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
-      [Executable.ProgramName, ENDI[disable]]);
-  LoadServicesFromSettingsFolder; // raise ESynAngelize on error
-  sn := TrimU(StringToUtf8(paramstr(2)));
-  sas := fSet.FindService(sn);
-  if sas = nil then
-    ESynAngelize.RaiseUtf8('/%able: unknown service "%"', [ENDI[disable], sn]);
-  if sas.Disabled = disable then
-  begin
-//    ConsoleWrite();
-    exit;
-  end;
-
-end;
-
 procedure TSynAngelize.NewService;
 var
   sn, id, id2: RawUtf8;
