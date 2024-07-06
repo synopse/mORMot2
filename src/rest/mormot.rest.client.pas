@@ -406,6 +406,13 @@ type
       ctxt: TRestClientSideInvoke;
       const method, params, clientDrivenID: RawUtf8;
       out sent, head: RawUtf8); virtual; abstract;
+    /// at Client Side, adjust STATUS and BODY according to the routing scheme
+    // - this method does nothing by default
+    // - could be used to adapt to custom BODY output, e.g. on error handling
+    class procedure ClientSideInvoked(const uri: RawUtf8;
+      ctxt: TRestClientSideInvoke;
+      const method, params, clientDrivenID: RawUtf8;
+      var sent, head: RawUtf8; var status: integer); virtual;
     /// could be overriden to notify advances routing features
     // - default returns [] but TRestClientRoutingRest includes csiAsOctetStream
     class function Supports: TRestClientSideInvoke; virtual;
@@ -1642,6 +1649,13 @@ end;
 { ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
 { TRestClientRouting }
+
+class procedure TRestClientRouting.ClientSideInvoked(const uri: RawUtf8;
+  ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
+  var sent, head: RawUtf8; var status: integer);
+begin
+  // nothing to do by default
+end;
 
 class function TRestClientRouting.Supports: TRestClientSideInvoke;
 begin
