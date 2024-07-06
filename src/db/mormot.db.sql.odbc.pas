@@ -1357,7 +1357,7 @@ begin
   // stored UserID is used by SqlSplitProcedureName
   if aUserID = '' then
     FUserID := FindIniNameValue(pointer(UpperCase(StringReplaceAll(
-      aDatabaseName, ';', sLineBreak))), 'UID=');
+      aDatabaseName, ';', CRLF))), 'UID=');
 end;
 
 function TSqlDBOdbcConnectionProperties.NewConnection: TSqlDBConnection;
@@ -1677,7 +1677,7 @@ var
   pwd: RawUtf8;
 begin
   pwd := FindIniNameValue(pointer(StringReplaceAll(
-    fDatabaseName, ';', sLineBreak)), 'PWD=');
+    fDatabaseName, ';', CRLF)), 'PWD=');
   result := StringReplaceAll(fDatabaseName, pwd, '***');
 end;
 
