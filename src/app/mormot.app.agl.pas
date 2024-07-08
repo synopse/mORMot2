@@ -331,7 +331,7 @@ type
   /// define the main TSynAngelize daemon/service behavior
   TSynAngelizeSettings = class(TSynDaemonSettings)
   protected
-    fFolder, fExt, fStateFile: TFileName;
+    fFolder, fExt, fStateFile, fCommandFile: TFileName;
     fHtmlStateFileIdentifier, fSmtp, fSmtpFrom: RawUtf8;
     fHttpTimeoutMS, fStartDelayMS, fStartTimeoutSec: integer;
   public
@@ -355,6 +355,13 @@ type
     // - default is a TemporaryFileName instance
     property StateFile: TFileName
       read fStateFile write fStateFile;
+    /// the local file used to communicate from command line
+    // - currently only the 'reload' command is available from /reload --reload
+    // - whole feature is disabled if void
+    // - if no directory is specified, the Folder *.service directory is used
+    // - default 'cmd' will use a file in this Folder
+    property CommandFile: TFileName
+      read fCommandFile write fCommandFile;
     /// if set, will generate a StateFile+'.html' content
     // - with a HTML page with this text as description, followed by a <table>
     // of the current services states
@@ -438,6 +445,7 @@ type
     fWatchThread: TSynBackgroundThreadProcess;
     fRunJob: THandle; // a single Windows Job to rule them all
     fSmtp: TSmtpConnection;
+    fCommandFile: TFileName;
     // TSynDaemon command line methods
     function CustomParseCmd(P: PUtf8Char): boolean; override;
     function CustomCommandLineSyntax: string; override;
@@ -451,6 +459,7 @@ type
     procedure StopServices;
     procedure StartWatching;
     procedure WatchEverySecond(Sender: TSynBackgroundThreadProcess);
+    procedure ReloadSettings;
     procedure StopWatching;
     // sub-service support
     procedure ComputeServicesStateFiles;
@@ -1028,7 +1037,6 @@ begin
   Finalize(Levels);
   HasWatchs := false;
   // browse folder for settings files and generates Service[]
-  Owner.fSas.Folder := IncludeTrailingPathDelimiter(Owner.fSas.Folder);
   fn := Owner.fSas.Folder + '*' + Owner.fSas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
   begin
@@ -1077,6 +1085,7 @@ begin
   fHttpTimeoutMS := 200;
   fFolder := IncludeTrailingPathDelimiter(Executable.ProgramFilePath + 'services');
   fExt := '.service';
+  fCommandFile := 'cmd';
 end;
 
 
@@ -1100,6 +1109,7 @@ begin
   // allow %agl.xxx% in the initial Folder setting
   if PosExString('%', fSas.Folder) <> 0 then
     fSas.Folder := FileNameExpand(fSas.Folder); // is likely to be persisted back
+  fSas.Folder := IncludeTrailingPathDelimiter(fSas.Folder);
   // validate state file name used for /list display
   if fSas.StateFile = '' then
     // if no StateFile supplied, set something
@@ -1111,6 +1121,14 @@ begin
       fSas.StateFile := FormatString('%%-state', [fWorkFolderName, fSas.ServiceName])
   else
     fSas.StateFile := ExpandFileName(FileNameExpand(fSas.StateFile)); // with %agl.xx%
+  // validate command file name used e.g. for /reload
+  if fSas.CommandFile <> '' then
+    if PosExString('%', fSas.CommandFile) <> 0 then
+      fSas.CommandFile := ExpandFileName(FileNameExpand(fSas.CommandFile))
+    else if ExtractFilePath(fSas.CommandFile) = '' then
+      fSas.CommandFile := fSas.Folder + fSas.CommandFile
+    else
+      fSas.CommandFile := ExpandFileName(fSas.CommandFile);
   // default title for HTML content
   if fSas.HtmlStateFileIdentifier = '' then
     fSas.HtmlStateFileIdentifier :=
@@ -1924,9 +1942,15 @@ var
   log: TSynLog;
 begin
   log := fSettings.LogClass.Add;
-  if fSet.HasWatchs then
+  if fSet.HasWatchs or
+     (fSas.CommandFile <> '') then
   begin
-    log.Log(sllTrace, 'StartWatching', self);
+    log.Log(sllTrace, 'StartWatching: %', [ord(fSet.HasWatchs)], self);
+    if fSas.CommandFile <> '' then
+    begin
+      DeleteFile(fSas.CommandFile);
+      log.Log(sllTrace, 'StartWatching: CommandFile=%', [fSas.CommandFile], self);
+    end;
     fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
       WatchEverySecond, MilliSecsPerSec, nil, log.Family.OnThreadEnded);
   end
@@ -1939,13 +1963,25 @@ var
   i, a: PtrInt;
   tix: Int64;
   s: TSynAngelizeService;
+  cmd: RawUtf8;
   log: ISynLog;
   one: TSynLog;
+
+  procedure GetLog;
+  begin
+    if {%H-}log <> nil then
+      exit;
+    log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
+    if Assigned(log) then
+      one := log.Instance;
+  end;
+
 begin
   // note that a process monitored from a "Start": [ "start:/path/to/file" ]
   // previous command is watched in its monitoring thread, not here
   one := nil;
   tix := GetTickCount64;
+  // check all pending watch steps
   for i := 0 to high(fSet.Service) do // ordered by s.Level
   begin
     // check the services for any pending "watch" task
@@ -1954,12 +1990,7 @@ begin
        (s.fNextWatch = 0) or
        (tix < s.fNextWatch) then
       continue;
-    if {%H-}log = nil then
-    begin
-      log := fSettings.LogClass.Enter(self, 'WatchEverySecond');
-      if Assigned(log) then
-        one := log.Instance;
-    end;
+    GetLog;
     // execute all "Watch":[...,...,...] actions
     for a := 0 to high(s.fWatch) do
       try
@@ -1972,6 +2003,24 @@ begin
     tix := GetTickCount64; // may have changed during DoWatch() progress
     s.fNextWatch := tix + s.WatchDelaySec * MilliSecsPerSec;
   end;
+  // command line support
+  if FileExists(fSas.CommandFile) then
+  try
+    cmd := TrimU(StringFromFile(fSas.CommandFile));
+    GetLog;
+    one.Log(sllTrace, 'WatchEverySecond: [%] from %', [cmd, fSas.CommandFile], self);
+    case FindPropName(['reload'], cmd) of
+      0: // --reload
+        ReloadSettings;
+    end;
+  finally
+    DeleteFile(fSas.CommandFile);
+  end;
+end;
+
+procedure TSynAngelize.ReloadSettings;
+begin
+
 end;
 
 procedure TSynAngelize.StopWatching;
