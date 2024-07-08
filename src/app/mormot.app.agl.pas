@@ -445,6 +445,7 @@ type
     function LoadServicesState(out state: TSynAngelizeState): boolean;
     procedure ListServices;
     procedure NewService;
+    procedure ServiceChangeState(disable: boolean);
     procedure StartServices;
     procedure WaitStarted(log: TSynLog; level: integer);
     procedure StopServices;
@@ -1131,12 +1132,14 @@ end;
 // TSynDaemon command line methods
 
 const
-  AGL_CMD: array[0..5] of PAnsiChar = (
+  AGL_CMD: array[0..7] of PAnsiChar = (
     'LIST',
     'SETTINGS',
     'NEW',
     'RETRY', // Windows Services API only
     'RESUME',
+    'DISABLE',
+    'ENABLE',
     nil);
 
 function TSynAngelize.CustomParseCmd(P: PUtf8Char): boolean;
@@ -1165,6 +1168,10 @@ begin
           end;
         {$endif OSWINDOWS}
       end;
+    5: // --disable <servicename>
+      ServiceChangeState({disable=}true);
+    6: // --enable <servicename>
+      ServiceChangeState({disable=}false);
   else
     result := false; // display syntax
   end;
@@ -1702,6 +1709,41 @@ begin
       end
   else
     ConsoleWrite('Unknown service state', ccMagenta);
+end;
+
+const
+  ENDI: array[boolean] of string[3] = ('en', 'dis');
+
+procedure TSynAngelize.ServiceChangeState(disable: boolean);
+var
+  sn: RawUtf8;
+  fn: TFileName;
+  sas: TSynAngelizeService;
+  log: ISynLog;
+begin
+  // /enable <servicename>   or  /disable <servicename>
+  log := fSettings.LogClass.Enter(self, 'NewService');
+  WriteCopyright;
+  if ParamCount < 2 then
+    ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
+      [Executable.ProgramName, ENDI[disable]]);
+  LoadServicesFromSettingsFolder; // raise ESynAngelize on error
+  sn := TrimU(StringToUtf8(paramstr(2)));
+  sas := fSet.FindService(sn);
+  if sas = nil then
+    ESynAngelize.RaiseUtf8('/%able: unknown service "%"', [ENDI[disable], sn]);
+  fn := ExtractFileName(sas.FileName);
+  if sas.Disabled = disable then
+  begin
+    ConsoleWrite('"%" is already %abled in %.', [sn, ENDI[disable], fn], ccLightBlue);
+    exit;
+  end;
+  sas.Disabled := disable;
+  if sas.SaveIfNeeded then
+    ConsoleWrite('"%" is now %abled in % file.' + CRLF +
+      'Please restart the services.', [sn, ENDI[disable], fn], ccLightGreen)
+  else
+    ConsoleWrite('Impossible to update % file.', [fn], ccLightRed);
 end;
 
 procedure TSynAngelize.NewService;
