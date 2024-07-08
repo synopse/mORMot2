@@ -7127,7 +7127,7 @@ begin
     fOutputIntents := TPdfArray.Create(fXRef);
     dic := TPdfDictionary.Create(fXRef);
     dic.AddItem('Type', 'OutputIntent');
-    dic.AddItem('S', 'GTS_PdfA1'); // there is no GTS_PdfA2 or GTS_PdfA3
+    dic.AddItem('S', 'GTS_PDFA1'); // there is no GTS_PdfA2 or GTS_PdfA3
     dic.AddItemText('OutputConditionIdentifier', 'sRGB');
     dic.AddItemText('RegistryName', 'http://www.color.org');
     rgb := TPdfStream.Create(self);
