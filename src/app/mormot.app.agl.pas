@@ -1716,13 +1716,13 @@ const
 
 procedure TSynAngelize.ServiceChangeState(disable: boolean);
 var
-  sn: RawUtf8;
+  sn, msg: RawUtf8;
   fn: TFileName;
   sas: TSynAngelizeService;
   log: ISynLog;
 begin
   // /enable <servicename>   or  /disable <servicename>
-  log := fSettings.LogClass.Enter(self, 'NewService');
+  log := fSettings.LogClass.Enter(self, 'ServiceChangeState');
   WriteCopyright;
   if ParamCount < 2 then
     ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
@@ -1734,16 +1734,19 @@ begin
     ESynAngelize.RaiseUtf8('/%able: unknown service "%"', [ENDI[disable], sn]);
   fn := ExtractFileName(sas.FileName);
   if sas.Disabled = disable then
-  begin
-    ConsoleWrite('"%" is already %abled in %.', [sn, ENDI[disable], fn], ccLightBlue);
-    exit;
-  end;
-  sas.Disabled := disable;
-  if sas.SaveIfNeeded then
-    ConsoleWrite('"%" is now %abled in % file.' + CRLF +
-      'Please restart the services.', [sn, ENDI[disable], fn], ccLightGreen)
+    FormatUtf8('"%" is already %abled in %.', [sn, ENDI[disable], fn], msg)
   else
-    ConsoleWrite('Impossible to update % file.', [fn], ccLightRed);
+  begin
+    sas.Disabled := disable;
+    if sas.SaveIfNeeded then
+      FormatUtf8('"%" is now %abled in % file.' + CRLF +
+        'Please restart the services.', [sn, ENDI[disable], fn], msg)
+    else
+      FormatUtf8('Impossible to update % file.', [fn], msg);
+  end;
+  ConsoleWriteRaw(msg);
+  if Assigned(log) then
+    log.Log(sllDebug, 'ServiceChangeState(%): %', [disable, msg], self);
 end;
 
 procedure TSynAngelize.NewService;
