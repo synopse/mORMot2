@@ -640,7 +640,7 @@ var
     status := rcu.Uri(uri, 'POST', @resp, @head, @sent);
     // allow to customize the response
     rcu.ServicesRouting.ClientSideInvoked(
-      uri, ctxt, aMethod, aParams, clientDrivenID, sent, head, status);
+      uri, ctxt, aMethod, aParams, clientDrivenID, resp, head, status);
   end;
 
 begin

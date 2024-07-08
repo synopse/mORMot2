@@ -88,16 +88,17 @@ type
   // session_signature parameter value for a given URI
   // - by default, suaCRC32 will compute fast but not cryptographically secure
   // ! crc32(crc32(privatesalt, timestamp, 8), url, urllen)
-  // - suaCRC32C and suaXXHASH will be faster and slightly safer
+  // - suaCRC32C and suaXXHASH are similar non-cryptographic alternatives
   // - but you can select other stronger alternatives, which result will be
   // reduced to 32-bit hexadecimal - suaMD5 will be the fastest cryptographic
-  // hash available on all platforms, for enhanced security, by calling e.g.
+  // hash available on all platforms (but if SHA-NI is available), for enhanced
+  // security, by calling e.g.
   // ! (aServer.AuthenticationRegister(TRestClientAuthenticationDefault) as
   // !   TRestServerAuthenticationDefault).Algorithm := suaMD5;
-  // - suaSHA1, suaSHA256, suaSHA512 and suaSHA3 will be the slowest, to provide
+  // - suaSHA1, suaSHA256, suaSHA512 and suaSHA3 will be slower, and may provide
   // additional level of trust, depending on your requirements: note that
   // since the hash is reduced to 32-bit resolution, those may not provide
-  // higher security than suaMD5
+  // higher security than suaMD5 or suaSHA1
   // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
   TRestAuthenticationSignedUriAlgo = (
     suaCRC32,
@@ -412,7 +413,7 @@ type
     class procedure ClientSideInvoked(const uri: RawUtf8;
       ctxt: TRestClientSideInvoke;
       const method, params, clientDrivenID: RawUtf8;
-      var sent, head: RawUtf8; var status: integer); virtual;
+      var resp, head: RawUtf8; var status: integer); virtual;
     /// could be overriden to notify advances routing features
     // - default returns [] but TRestClientRoutingRest includes csiAsOctetStream
     class function Supports: TRestClientSideInvoke; virtual;
@@ -1652,7 +1653,7 @@ end;
 
 class procedure TRestClientRouting.ClientSideInvoked(const uri: RawUtf8;
   ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
-  var sent, head: RawUtf8; var status: integer);
+  var resp, head: RawUtf8; var status: integer);
 begin
   // nothing to do by default
 end;
