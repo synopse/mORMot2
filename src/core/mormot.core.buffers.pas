@@ -8508,11 +8508,11 @@ begin
     inc(U, length(Upper));
     if U^ = '-' then
     begin
-      sign := 1;
+      sign := -1;
       inc(U);
     end
     else
-      sign := -1;
+      sign := 1;
     if U^ in ['0'..'9'] then
     begin
       v := 0;
