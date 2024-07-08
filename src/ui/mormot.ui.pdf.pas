@@ -2529,7 +2529,7 @@ type
     procedure CreateAssociatedUnicodeFont;
     // update font description from used chars
     procedure PrepareForSaving;
-    // low level adding of a glyph (returns the real glyph index found, 0 if none)
+    // low level add glyph (returns the real glyph index found, aGlyph if none)
     function GetAndMarkGlyphAsUsed(aGlyph: word): word;
   public
     /// create the TrueType font object instance
@@ -6004,9 +6004,9 @@ end;
 
 function TPdfFontTrueType.GetAndMarkGlyphAsUsed(aGlyph: word): word;
 var
-  i: integer;
+  i: PtrInt;
 begin
-  result := aGlyph;
+  result := aGlyph; // fallback to raw glyph index if nothing explicit
   // 1. check if not already registered as used
   with WinAnsiFont do // WinAnsiFont.fUsedWide[] = glyphs used by ShowText
     for i := 0 to fUsedWideChar.Count - 1 do
@@ -6021,7 +6021,6 @@ begin
           WideChar(fUsedWideChar.Values[i]))].Glyph;
         exit; // result may be 0 if this glyph doesn't exist in the CMAP content
       end;
-  result := 0; // returns 0 if not found
 end;
 
 constructor TPdfFontTrueType.Create(ADoc: TPdfDocument; AFontIndex: integer;
@@ -7154,9 +7153,9 @@ begin
     P[0] := '<';
     mormot.core.text.BinToHex(PAnsiChar(@fFileID), P + 1, 16);
     P[SizeOf(fFileID) * 2 + 1] := '>';
-    ID := TPdfArray.Create(fXRef);
-    ID.AddItem(TPdfRawText.Create(hexFileID));
-    ID.AddItem(TPdfRawText.Create(hexFileID));
+    ID := TPdfArray.Create(fXRef); // array of 2 strings, as file identifier
+    ID.AddItem(TPdfRawText.Create(hexFileID)); // creation ID
+    ID.AddItem(TPdfRawText.Create(hexFileID)); // modified ID
     fTrailer.Attributes.AddItem('ID', ID);
   end;
   {$ifdef USE_PDFSECURITY}
