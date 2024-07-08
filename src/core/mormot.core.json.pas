@@ -2575,6 +2575,7 @@ type
     fFileName: TFileName;
     fLoadedAsIni: boolean;
     fSettingsOptions: TSynJsonFileSettingsOptions;
+    fInitialFileHash: cardinal;
     // could be overriden to validate the content coherency and/or clean fields
     function AfterLoad: boolean; virtual;
   public
@@ -2597,6 +2598,10 @@ type
     /// allow to customize the storing process
     property SettingsOptions: TSynJsonFileSettingsOptions
       read fSettingsOptions write fSettingsOptions;
+    /// can be used to compare two instances original file content
+    // - will use DefaultHasher, so hash could change after process restart
+    property InitialFileHash: cardinal
+      read fInitialFileHash write fInitialFileHash;
   end;
   /// meta-class definition of TSynJsonFileSettings
   TSynJsonFileSettingsClass = class of TSynJsonFileSettings;
@@ -11863,9 +11868,12 @@ function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName;
 begin
   fFileName := aFileName;
   fInitialJsonContent := RawUtf8FromFile(aFileName); // may detect BOM
+  fInitialFileHash := DefaultHash(fInitialJsonContent);
   result := LoadFromJson(fInitialJsonContent, aSectionName);
-  if not result then
-    fInitialJsonContent := ''; // file was neither valid JSON nor INI: ignore
+  if result then
+    exit; // success
+  fInitialJsonContent := ''; // file was neither valid JSON nor INI: ignore
+  fInitialFileHash := 0;
 end;
 
 function TSynJsonFileSettings.FolderName: TFileName;
@@ -11892,8 +11900,10 @@ begin
   if saved = fInitialJsonContent then
     exit;
   result := FileFromString(saved, fFileName);
-  if result then
-    fInitialJsonContent := saved;
+  if not result then
+    exit;
+  fInitialJsonContent := saved;
+  fInitialFileHash := DefaultHash(saved);
 end;
 
 
