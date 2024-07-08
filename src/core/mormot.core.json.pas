@@ -11891,9 +11891,9 @@ begin
     saved := ObjectToJson(self, SETTINGS_WRITEOPTIONS);
   if saved = fInitialJsonContent then
     exit;
-  FileFromString(saved, fFileName);
-  fInitialJsonContent := saved;
-  result := true;
+  result := FileFromString(saved, fFileName);
+  if result then
+    fInitialJsonContent := saved;
 end;
 
 
