@@ -2523,6 +2523,7 @@ begin
   result := false;
   if Len < 0 then // Pos^ = '?par=val&par=val&...'
   begin
+    include(req.fInternalFlags, ifUrlParamPosSet);
     req.fUrlParamPos := Pos; // for faster req.UrlParam()
     exit;
   end;
@@ -2934,6 +2935,7 @@ begin
   fOutContentType := '';
   fOutCustomHeaders := '';
   fAuthenticationStatus := hraNone;
+  fInternalFlags := [];
   fAuthenticatedUser := '';
   fErrorMessage := '';
   fUrlParamPos := nil;

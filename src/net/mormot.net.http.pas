@@ -760,6 +760,7 @@ type
     fConnectionID: THttpServerConnectionID;
     fConnectionFlags: THttpServerRequestFlags;
     fAuthenticationStatus: THttpServerRequestAuthentication;
+    fInternalFlags: set of (ifUrlParamPosSet);
     fRespStatus: integer;
     fConnectionThread: TThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
@@ -771,6 +772,8 @@ type
     function GetRouteValuePosLen(const Name: RawUtf8;
       var Value: TValuePUtf8Char): boolean;
     function GetRouteValue(const Name: RawUtf8): RawUtf8;
+      {$ifdef HASINLINE} inline; {$endif}
+    function EnsureUrlParamPosExists: PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// prepare an incoming request from a parsed THttpRequestContext
@@ -4604,28 +4607,33 @@ begin
   result := true;
 end;
 
+function THttpServerRequestAbstract.EnsureUrlParamPosExists: PUtf8Char;
+begin
+  result := fUrlParamPos;
+  if (result <> nil) or // may have been set by TUriTreeNode.LookupParam
+     (ifUrlParamPosSet in fInternalFlags) then
+    exit;
+  include(fInternalFlags, ifUrlParamPosSet); // call PosChar() once
+  result := PosChar(pointer(Url), '?');
+  fUrlParamPos := result;
+end;
+
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: RawUtf8): boolean;
 begin
-  if fUrlParamPos = nil then // may have been set by TUriTreeNode.LookupParam
-    fUrlParamPos := PosChar(pointer(Url), '?');
-  result := UrlDecodeParam(fUrlParamPos, UpperName, Value);
+  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: cardinal): boolean;
 begin
-  if fUrlParamPos = nil then
-    fUrlParamPos := PosChar(pointer(Url), '?');
-  result := UrlDecodeParam(fUrlParamPos, UpperName, Value);
+  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
 end;
 
 function THttpServerRequestAbstract.UrlParam(const UpperName: RawUtf8;
   out Value: Int64): boolean;
 begin
-  if fUrlParamPos = nil then
-    fUrlParamPos := PosChar(pointer(Url), '?');
-  result := UrlDecodeParam(fUrlParamPos, UpperName, Value);
+  result := UrlDecodeParam(EnsureUrlParamPosExists, UpperName, Value);
 end;
 
 procedure THttpServerRequestAbstract.SetOutJson(const Json: RawUtf8);

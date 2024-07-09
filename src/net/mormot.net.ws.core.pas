@@ -2219,24 +2219,27 @@ function TWebSocketProtocolList.CloneByName(
   const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: PtrInt;
-  uri: RawUtf8;
+  u: RawUtf8;
+  p: TWebSocketProtocol;
 begin
   result := nil;
   if self = nil then
     exit;
-  uri := Split(aClientUri, '?'); // ignore parameters
+  u := Split(aClientUri, '?'); // ignore parameters
   fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      with fProtocols[i] do
-        if ((fUri = '') or
-            PropNameEquals(fUri, uri)) and
-           SetSubprotocol(aProtocolName) then
-        begin
-          result := fProtocols[i].Clone(uri);
-          result.fName := aProtocolName;
-          exit;
-        end;
+    begin
+      p := fProtocols[i];
+      if ((p.fUri = '') or
+          PropNameEquals(p.fUri, u)) and
+         p.SetSubprotocol(aProtocolName) then
+      begin
+        result := p.Clone(u);
+        result.fName := aProtocolName;
+        exit;
+      end;
+    end;
   finally
     fSafe.ReadUnLock;
   end;
@@ -2246,19 +2249,19 @@ function TWebSocketProtocolList.CloneByUri(
   const aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: PtrInt;
-  uri: RawUtf8;
+  u: RawUtf8;
 begin
   result := nil;
-  uri := Split(aClientUri, '?');
+  u := Split(aClientUri, '?');
   if (self = nil) or
-     (uri = '') then
+     (u = '') then
     exit;
   fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      if PropNameEquals(fProtocols[i].fUri, uri) then
+      if PropNameEquals(fProtocols[i].fUri, u) then
       begin
-        result := fProtocols[i].Clone(uri);
+        result := fProtocols[i].Clone(u);
         exit;
       end;
   finally
