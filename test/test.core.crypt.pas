@@ -3025,7 +3025,7 @@ begin
     cv := c2.Verify(c1);
     CheckUtf8(cv = cvValidSelfSigned, '%:self1=%', [crt.AlgoName, ToText(cv)^]);
     if cv <> cvValidSelfSigned then
-      ConsoleWrite(c2.Save(cccCertWithPrivateKey, '', ccfPem)); // for debug
+      ConsoleWriteRaw(c2.Save(cccCertWithPrivateKey, '', ccfPem)); // for debug
     cv := c2.Verify(nil);
     CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
     c2.Sign(c1); // change signature
@@ -3257,7 +3257,7 @@ begin
       Check(st2.Verify(s, pointer(r), length(r)) = cvValidSigned, 's2e');
     end;
     // validate CRL on certificates
-    Check(st2.Revoke(c3, crrWithdrawn));
+    Check(st2.Revoke(c3, crrWithdrawn), 'rev');
     crr := st2.IsRevoked(c3);
     CheckUtf8(crr = crrWithdrawn, 'wdw %', [ToText(crr)^]);
     // note: st2.Save fails with OpenSSL because the CRL is not signed
