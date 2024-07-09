@@ -2204,6 +2204,7 @@ type
   // as Unicode if necessary
   TPdfInfo = class(TPdfDictionaryWrapper)
   private
+    fCustomMetadata: RawUtf8;
     function GetAuthor: string;
     procedure SetAuthor(const Value: string);
     function GetCreationDate: TDateTime;
@@ -2240,6 +2241,10 @@ type
     /// the PDF document title
     property Title: string
       read GetTitle write SetTitle;
+    /// allow to add some custom XMP metadata for PDFA/1
+    // - may be used e.g. to generate ZUGFeRD-PDF content
+    property CustomMetadata: RawUtf8
+     read fCustomMetadata write fCustomMetadata;
   end;
 
   /// a dictionary wrapper class for the PDF document catalog fields
@@ -7306,8 +7311,9 @@ begin
       '<dc:description><rdf:Alt><rdf:li xml:lang="x-default">').
       AddS(Info.Subject).
       Add('</rdf:li></rdf:Alt></dc:description>' +
-      '</rdf:Description>' +
-      '<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">' +
+      '</rdf:Description>').
+      Add(Info.CustomMetadata).
+      Add('<rdf:Description rdf:about="" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">' +
       '<pdf:Keywords>').
       AddS(Info.Keywords).
       Add('</pdf:Keywords>' +
