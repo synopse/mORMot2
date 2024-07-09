@@ -591,7 +591,8 @@ type
     /// finalize the list storage
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
-    function CloneByName(const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
+    function CloneByName(
+      const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
     /// create a new protocol instance, from the internal list
     function CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
     /// how many protocols are stored
@@ -2214,23 +2215,25 @@ end;
 
 { TWebSocketProtocolList }
 
-function TWebSocketProtocolList.CloneByName(const aProtocolName,
-  aClientUri: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByName(
+  const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: PtrInt;
+  uri: RawUtf8;
 begin
   result := nil;
   if self = nil then
     exit;
+  uri := Split(aClientUri, '?'); // ignore parameters
   fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
         if ((fUri = '') or
-            PropNameEquals(fUri, aClientUri)) and
+            PropNameEquals(fUri, uri)) and
            SetSubprotocol(aProtocolName) then
         begin
-          result := fProtocols[i].Clone(aClientUri);
+          result := fProtocols[i].Clone(uri);
           result.fName := aProtocolName;
           exit;
         end;
@@ -2243,17 +2246,19 @@ function TWebSocketProtocolList.CloneByUri(
   const aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: PtrInt;
+  uri: RawUtf8;
 begin
   result := nil;
+  uri := Split(aClientUri, '?');
   if (self = nil) or
-     (aClientUri = '') then
+     (uri = '') then
     exit;
   fSafe.ReadLock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      if PropNameEquals(fProtocols[i].fUri, aClientUri) then
+      if PropNameEquals(fProtocols[i].fUri, uri) then
       begin
-        result := fProtocols[i].Clone(aClientUri);
+        result := fProtocols[i].Clone(uri);
         exit;
       end;
   finally
