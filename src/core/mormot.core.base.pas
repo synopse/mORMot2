@@ -1819,11 +1819,17 @@ function PtrArrayAddOnce(var aPtrArray; aItem: pointer;
 function PtrArrayInsert(var aPtrArray; aItem: pointer; aIndex: PtrInt;
   var aPtrArrayCount: integer): PtrInt; overload;
 
-/// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil): PtrInt; overload;
+type
+  /// used by PtrArrayDelete() to finalize an item
+  TPtrArrayKind = (pakPointer, pakClass, pakClassSafe, pakInterface);
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil); overload;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger = nil;
+  aKind: TPtrArrayKind = pakPointer): PtrInt; overload;
+
+/// wrapper to delete an item from a array of pointer dynamic array storage
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger = nil;
+  aKind: TPtrArrayKind = pakPointer); overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -1916,7 +1922,8 @@ function ObjArrayNotNilCount(const aObjArray): integer;
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - do nothing if the index is out of range in the dynamic array
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
-  aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
+  const aContinueOnException: boolean = false; aCount: PInteger = nil); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -1928,7 +1935,8 @@ function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
-function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+function ObjArrayDelete(var aObjArray; var aCount: integer; aItem: TObject): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
 // - for proper serialization on Delphi 7-2009, use Rtti.RegisterObjArray()
@@ -1998,10 +2006,12 @@ function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrIn
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
 function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - do nothing if the item is not found in the dynamic array
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 
 { ************ Low-level Types Mapping Binary Structures }
@@ -3143,7 +3153,7 @@ procedure MultiEventRemove(var EventList; const Event: TMethod); overload;
 /// low-level wrapper to remove a callback from a dynamic list of events
 // - same as the same overloaded procedure, but accepting an EventList[] index
 // to identify the Event to be suppressed
-procedure MultiEventRemove(var EventList; Index: integer); overload;
+procedure MultiEventRemove(var EventList; Index: PtrInt); overload;
 
 /// low-level wrapper to check if a callback is in a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -7392,7 +7402,7 @@ procedure TSortedWordArray.SetArray(out aValues: TWordDynArray);
 begin
   if Count = 0 then
     exit;
-  DynArrayFakeLength(Values, Count); // no realloc needed
+  DynArrayFakeLength(pointer(Values), Count); // no realloc needed
   aValues := Values;
 end;
 
@@ -7426,7 +7436,7 @@ procedure TSortedIntegerArray.SetArray(out aValues: TIntegerDynArray);
 begin
   if Count = 0 then
     exit;
-  DynArrayFakeLength(Values, Count); // no realloc needed
+  DynArrayFakeLength(pointer(Values), Count); // no realloc needed
   aValues := Values;
 end;
 
@@ -7495,7 +7505,8 @@ begin
   result := aIndex;
 end;
 
-procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger);
+procedure PtrArrayDelete(var aPtrArray; aIndex: PtrInt; aCount: PInteger;
+  aKind: TPtrArrayKind);
 var
   a: TPointerDynArray absolute aPtrArray;
   n: PtrInt;
@@ -7506,24 +7517,35 @@ begin
     n := aCount^;
   if PtrUInt(aIndex) >= PtrUInt(n) then
     exit; // out of range
+  case aKind of
+    pakPointer:
+      ; // nothing to release (faster if explicit)
+    pakClass:
+      TObject(a[aIndex]).Free;
+    pakClassSafe:
+      FreeAndNilSafe(a[aIndex]);
+    pakInterface:
+      PInterface(@a[aIndex])^ := nil;
+  end;
   dec(n);
   if n > aIndex then
     MoveFast(a[aIndex + 1], a[aIndex], (n - aIndex) * SizeOf(pointer));
   a[n] := nil; // better safe than sorry
   if aCount = nil then
-    if n and 255 <> 0 then
-      DynArrayFakeLength(a, n) // call ReallocMem() once every 256 deletes
+    if n and 127 <> 0 then // call ReallocMem() once every 128 deletions
+      DynArrayFakeLength(pointer(a), n)
     else
-      SetLength(a, n) // finalize if n = 0
+      SetLength(a, n) // ReallocMem() or finalize if n = 0
   else
   begin
-    aCount^ := n;
+    aCount^ := n; // no ReallocMem()
     if n = 0 then
       Finalize(a);
   end;
 end;
 
-function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger): PtrInt;
+function PtrArrayDelete(var aPtrArray; aItem: pointer; aCount: PInteger;
+  aKind: TPtrArrayKind): PtrInt;
 var
   a: TPointerDynArray absolute aPtrArray;
   n: PtrInt;
@@ -7533,20 +7555,8 @@ begin
   else
     n := aCount^;
   result := PtrUIntScanIndex(pointer(a), n, PtrUInt(aItem));
-  if result < 0 then
-    exit;
-  dec(n);
-  if n > result then
-    MoveFast(a[result + 1], a[result], (n - result) * SizeOf(pointer));
-  a[n] := nil; // better safe than sorry
-  if aCount = nil then
-    SetLength(a, n)
-  else
-  begin
-    aCount^ := n;
-    if n = 0 then
-      Finalize(a);
-  end;
+  if result >= 0 then
+    PtrArrayDelete(aPtrArray, result, aCount, aKind);
 end;
 
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -7616,7 +7626,7 @@ begin
       d[result] := s[i];
       inc(result);
     end;
-  DynArrayFakeLength(d, result);
+  SetLength(d, result);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
@@ -7646,48 +7656,29 @@ begin
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
-  aContinueOnException: boolean; aCount: PInteger);
+  const aContinueOnException: boolean; aCount: PInteger);
 var
-  n: PtrInt;
-  a: TObjectDynArray absolute aObjArray;
+  pak: TPtrArrayKind;
 begin
-  if aCount = nil then
-    n := length(a)
-  else
-    n := aCount^;
-  if cardinal(aItemIndex) >= cardinal(n) then
-    exit; // out of range
   if aContinueOnException then
-    try
-      a[aItemIndex].Free;
-    except
-    end
+    pak := pakClassSafe
   else
-    a[aItemIndex].Free;
-  dec(n);
-  if n > aItemIndex then
-    MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(TObject));
-  if aCount = nil then
-    if n = 0 then
-      Finalize(a)
-    else
-      DynArrayFakeLength(a, n)
-  else
-    aCount^ := n;
+    pak := pakClass;
+  PtrArrayDelete(aObjArray, aItemIndex, aCount, pak);
 end;
 
 function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt;
+var
+  a: TObjectDynArray absolute aObjArray;
 begin
-  result := PtrUIntScanIndex(pointer(aObjArray), length(TObjectDynArray(aObjArray)), PtrUInt(aItem));
+  result := PtrUIntScanIndex(pointer(a), length(a), PtrUInt(aItem));
   if result >= 0 then
-    ObjArrayDelete(aObjArray, result);
+    PtrArrayDelete(a, result, nil, pakClass);
 end;
 
-function ObjArrayDelete(var aObjArray; aCount: integer; aItem: TObject): PtrInt; overload;
+function ObjArrayDelete(var aObjArray; var aCount: integer; aItem: TObject): PtrInt;
 begin
-  result := PtrUIntScanIndex(pointer(aObjArray), aCount, PtrUInt(aItem));
-  if result >= 0 then
-    ObjArrayDelete(aObjArray, result, false, @aCount);
+  result := PtrArrayDelete(aObjArray, aItem, @aCount, pakClass);
 end;
 
 procedure RawObjectsClear(o: PObject; n: integer);
@@ -7861,29 +7852,13 @@ begin
 end;
 
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt);
-var
-  n: PtrInt;
-  a: TInterfaceDynArray absolute aInterfaceArray;
 begin
-  n := length(a);
-  if PtrUInt(aItemIndex) >= PtrUInt(n) then
-    exit; // out of range
-  a[aItemIndex] := nil;
-  dec(n);
-  if n > aItemIndex then
-    MoveFast(a[aItemIndex + 1], a[aItemIndex], (n - aItemIndex) * SizeOf(IInterface));
-  TPointerDynArray(aInterfaceArray)[n] := nil; // avoid GPF in SetLength()
-  if n = 0 then
-    Finalize(a)
-  else
-    DynArrayFakeLength(a, n);
+  PtrArrayDelete(aInterfaceArray, aItemIndex, nil, pakInterface);
 end;
 
 function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 begin
-  result := InterfaceArrayFind(aInterfaceArray, aItem);
-  if result >= 0 then
-    InterfaceArrayDelete(aInterfaceArray, result);
+  result := PtrArrayDelete(aInterfaceArray, pointer(aItem), nil, pakInterface);
 end;
 
 
@@ -9265,18 +9240,17 @@ begin
   MultiEventRemove(EventList, MultiEventFind(EventList, Event));
 end;
 
-procedure MultiEventRemove(var EventList; Index: integer);
+procedure MultiEventRemove(var EventList; Index: PtrInt);
 var
   events: TMethodDynArray absolute EventList;
-  max: integer;
+  max: PtrInt;
 begin
   max := length(events);
-  if cardinal(Index) < cardinal(max) then
-  begin
-    dec(max);
-    MoveFast(events[Index + 1], events[Index], (max - Index) * SizeOf(events[Index]));
-    SetLength(events, max);
-  end;
+  if PtrUInt(Index) >= PtrUInt(max) then
+    exit;
+  dec(max);
+  MoveFast(events[Index + 1], events[Index], (max - Index) * SizeOf(TMethod));
+  SetLength(events, max);
 end;
 
 procedure MultiEventMerge(var DestList; const ToBeAddedList);
