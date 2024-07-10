@@ -421,6 +421,8 @@ type
     function LoadServices(Owner: TSynAngelize): integer;
     /// quick check a service from its internal name
     function FindService(const ServiceName: RawUtf8): TSynAngelizeService;
+    /// release all stored data
+    procedure Done;
   end;
 
   /// can run a set of executables as sub-process(es) from *.service definitions
@@ -1018,6 +1020,13 @@ begin
   result := nil;
 end;
 
+procedure TSynAngelizeSet.Done;
+begin
+  ObjArrayClear(Service);
+  Finalize(Levels);
+  HasWatchs := false;
+end;
+
 function SortByLevel(const A, B): integer; // run and display by increasing Level
 begin
   result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
@@ -1033,9 +1042,7 @@ var
   s, exist: TSynAngelizeService;
 begin
   // reset internal state
-  ObjArrayClear(Service);
-  Finalize(Levels);
-  HasWatchs := false;
+  Done;
   // browse folder for settings files and generates Service[]
   fn := Owner.fSas.Folder + '*' + Owner.fSas.Ext;
   if FindFirst(fn, faAnyFile - faDirectory, r) = 0 then
@@ -1139,7 +1146,7 @@ destructor TSynAngelize.Destroy;
 begin
   inherited Destroy;
   RunAbortTimeoutSecs := 0; // force RunRedirect() hard termination now
-  ObjArrayClear(fSet.Service);
+  fSet.Done;
   fSettings.Free;
   {$ifdef OSWINDOWS}
   if fRunJob <> 0 then
@@ -2019,8 +2026,26 @@ begin
 end;
 
 procedure TSynAngelize.ReloadSettings;
+var
+  curr: TSynAngelizeSet;
+  s, c: TSynAngelizeService;
+  i: PtrInt;
 begin
+  curr.LoadServices(self);
+  try
+    for i := 0 to high(fSet.Service) do
+    begin
+      s := fSet.Service[i];
+      c := curr.FindService(s.Name);
+      if (c = nil) or
+         (c.InitialFileHash <> s.InitialFileHash) then
+      begin
 
+      end;
+    end;
+  finally
+    curr.Done;
+  end;
 end;
 
 procedure TSynAngelize.StopWatching;
