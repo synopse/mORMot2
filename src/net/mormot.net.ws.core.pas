@@ -12,6 +12,7 @@ unit mormot.net.ws.core;
    - WebSockets Asynchronous Frames Parsing
    - WebSockets Client and Server Shared Process
    - TWebSocketProtocolChat Simple Protocol
+   - Sockets.IO / Engine.IO Raw Protocols
 
   *****************************************************************************
 
@@ -1016,6 +1017,79 @@ var
   /// the allowed maximum size, in MB, of a WebSockets frame
   WebSocketsMaxFrameMB: cardinal = 256;
 
+
+{ ****************** Sockets.IO / Engine.IO Raw Protocols }
+
+type
+  /// define the Engine.IO available packet types
+  // - defined in their numeric order, so ord() would give the proper ID number
+  TEngineIOPacket = (
+   eioOpen,
+   eioClose,
+   eioPing,
+   eioPong,
+   eioMessage,
+   eioUpgrade,
+   eioNoop);
+
+  /// define the Socket.IO available packet types
+  // - defined in their numeric order, so ord() would give the proper ID number
+  // - such packets are likely to be nested in a eioMessage frame
+  TSocketIOPacket = (
+    sioOpen,
+    sioDisconnect,
+    sioEvent,
+    sioAck,
+    sioConnectError,
+    sioBinaryEvent,
+    sioBinaryAck);
+
+
+/// compute the URI for a WebSocket-only Engine.IO upgrade
+// - server should respond with a HTTP_SWITCHINGPROTOCOLS = 101 response,
+// followed with a eioOpen response frame
+// - PollingUpgradeSid can be used from an upgrade on a long-polling connection
+function SocketIOHandshakeUri(const Root: RawUtf8 = '/engine.io';
+  const PollingUpgradeSid: RawUtf8 = ''): RawUtf8;
+
+type
+  /// abstract parent for client side and server side Engine.IO sessions support
+  // - several Socket.IO namespaces are maintained over this main Engine.IO session
+  TEngineIOSessionsAbstract = class(TSynPersistentLock)
+  protected
+    fEngineSid: RawUtf8;
+    fPingInterval, fPingTimeout, fMaxPayload: integer;
+  public
+    /// the associated Engine.IO Session ID
+    // - as computed on the server side, and received on client side
+    property EngineSid: RawUtf8
+      read fEngineSid;
+    /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
+    property PingInterval: integer
+      read fPingInterval write fPingInterval;
+    /// the ping timeout, used in Engine.IO heartbeat mechanism (in milliseconds)
+    property PingTimeout: integer
+      read fPingTimeout write fPingTimeout;
+    /// optional number of bytes per chunk, used in Engine.IO payloads mechanism
+    property MaxPayload: integer
+      read fMaxPayload write fMaxPayload;
+  end;
+
+  /// abstract parent for one client side and server side Socket.IO session
+  // - each session has its own namespace
+  TSocketIOSessionAbstract = class(TSynPersistentLock)
+  protected
+    fOwner: TEngineIOSessionsAbstract;
+    fSid, fNameSpace: RawUtf8;
+  public
+  published
+    /// the associated Sockets.IO Session ID, as computed on the server side
+    property Sid: RawUtf8
+      read fSid;
+    /// the associated Sockets.IO Session ID, as computed on the server side
+    property NameSpace: RawUtf8
+      read fNameSpace;
+  end;
 
 
 implementation
@@ -3308,6 +3382,22 @@ begin
   result := Sender.SendFrame(frame)
 end;
 
+
+{ ****************** Sockets.IO / Engine.IO Raw Protocols }
+
+// reference: https://sockjs.com/docs/v4/socket-io-protocol/
+
+function SocketIOHandshakeUri(const Root, PollingUpgradeSid: RawUtf8): RawUtf8;
+begin
+  // EIO        4          Mandatory, the version of the protocol.
+  // transport  websocket  Mandatory, the name of the transport.
+  // sid        <sid>      None here - direct websockets, not from HTTP polling.
+  // t          <random>   Ensure that the request is not cached by the browser.
+  FormatUtf8('%?EIO=4&transport=websocket&t=%',
+    [Root, CardinalToHexShort(Random32)], result);
+  if PollingUpgradeSid <> '' then
+    Append(result, '&sid=', PollingUpgradeSid);
+end;
 
 
 initialization

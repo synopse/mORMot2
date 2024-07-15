@@ -7731,7 +7731,7 @@ begin
         OnAfterUri(ctxt);
       except
       end;
-    tix := ctxt.TickCount64;
+    tix := ctxt.TickCount64; // retrieve the (cached) value before Free
     ctxt.Free;
   end;
   // 11. trigger post-request periodic process

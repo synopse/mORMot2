@@ -8840,7 +8840,7 @@ var
   l, a1, a2: PtrInt;
 begin
   l := length(Text);
-  a1 := length(Added1);
+  a1 := length(Added1); // no automatic UTF-8 conversion involved
   a2 := length(Added2);
   SetLength(Text, l + a1 + a2);
   MoveFast(pointer(Added1)^, PByteArray(Text)[l], a1);
