@@ -9,6 +9,7 @@ unit mormot.net.ws.server;
     WebSockets Bidirectional Server
     - TWebSocketProcessServer Processing Class
     - TWebSocketServerRest Bidirectional REST Server
+    - Sockets.IO / Engine.IO Server Protocol over WebSockets
 
   *****************************************************************************
 
@@ -223,6 +224,9 @@ type
     function Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal;
       override;
   end;
+
+
+{ ******************** Sockets.IO / Engine.IO Server Protocol over WebSockets }
 
 
 
@@ -557,6 +561,8 @@ begin
     result := HTTP_NOTFOUND;
 end;
 
+
+{ ******************** Sockets.IO / Engine.IO Server Protocol over WebSockets }
 
 
 end.

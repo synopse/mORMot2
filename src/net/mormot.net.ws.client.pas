@@ -9,6 +9,7 @@ unit mormot.net.ws.client;
     WebSockets Bidirectional Client
     - TWebSocketProcessClient Processing Class
     - THttpClientWebSockets Bidirectional REST Client
+    - Sockets.IO / Engine.IO Client Protocol over WebSockets
 
   *****************************************************************************
 
@@ -179,6 +180,9 @@ type
 
 
 function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
+
+
+{ ******************** Sockets.IO / Engine.IO Client Protocol over WebSockets }
 
 
 
@@ -539,6 +543,9 @@ end;
 {$ifdef ISDELPHI20062007}
   {$warnings on}
 {$endif ISDELPHI20062007}
+
+
+{ ******************** Sockets.IO / Engine.IO Client Protocol over WebSockets }
 
 
 end.
