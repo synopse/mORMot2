@@ -4419,13 +4419,12 @@ end;
 function TRestServerUriContext.AuthenticationBearerToken: RawUtf8;
 begin
   result := inherited AuthenticationBearerToken;
-  if (result = '') and
-     not (rsoAuthenticationUriDisable in Server.Options) then
-  begin
-    result := GetInputUtf8OrVoid('authenticationbearer');
-    if result <> '' then
-      fCall^.LowLevelBearerToken := result;
-  end;
+  if (result <> '') or
+     (rsoAuthenticationUriDisable in Server.Options) then
+    exit;
+  result := GetInputUtf8OrVoid('authenticationbearer');
+  if result <> '' then
+    fCall^.LowLevelBearerToken := result;
 end;
 
 function TRestServerUriContext.AuthenticationCheck(jwt: TJwtAbstract): boolean;
