@@ -1055,16 +1055,18 @@ function SocketIOHandshakeUri(const Root: RawUtf8 = '/engine.io';
 type
   /// abstract parent for client side and server side Engine.IO sessions support
   // - several Socket.IO namespaces are maintained over this main Engine.IO session
-  TEngineIOSessionsAbstract = class(TSynPersistentLock)
+  TEngineIOSessionsAbstract = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fEngineSid: RawUtf8;
     fPingInterval, fPingTimeout, fMaxPayload: integer;
-  public
+  published
     /// the associated Engine.IO Session ID
     // - as computed on the server side, and received on client side
     property EngineSid: RawUtf8
       read fEngineSid;
     /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
+    // - ping packets are now sent by the server, since protocol v4
     property PingInterval: integer
       read fPingInterval write fPingInterval;
     /// the ping timeout, used in Engine.IO heartbeat mechanism (in milliseconds)
@@ -1077,11 +1079,11 @@ type
 
   /// abstract parent for one client side and server side Socket.IO session
   // - each session has its own namespace
-  TSocketIOSessionAbstract = class(TSynPersistentLock)
+  TSocketIOSessionAbstract = class(TSynPersistent)
   protected
+    fSafe: TLightLock;
     fOwner: TEngineIOSessionsAbstract;
     fSid, fNameSpace: RawUtf8;
-  public
   published
     /// the associated Sockets.IO Session ID, as computed on the server side
     property Sid: RawUtf8
