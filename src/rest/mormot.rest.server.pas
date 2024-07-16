@@ -268,11 +268,6 @@ type
     /// process authentication
     // - return FALSE in case of invalid signature, TRUE if authenticated
     function Authenticate: boolean; virtual;
-    /// method called in case of authentication failure
-    // - the failure origin is stated by the Reason parameter
-    // - this default implementation will just set OutStatus := HTTP_FORBIDDEN
-    // and call TRestServer.OnAuthenticationFailed event (if any)
-    procedure AuthenticationFailed(Reason: TOnAuthenticationFailedReason); virtual;
     /// direct launch of a method-based service
     // - Uri() will ensure that MethodIndex>=0 before calling it
     procedure ExecuteSoaByMethod; virtual;
@@ -433,12 +428,18 @@ type
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - overriden to support TRestServer.JwtForUnauthenticatedRequestWhiteIP()
     function AuthenticationCheck(jwt: TJwtAbstract): boolean; override;
+    /// method called in case of authentication failure
+    // - the failure origin is stated by the Reason parameter
+    // - this default implementation will just set OutStatus := HTTP_FORBIDDEN
+    // and call TRestServer.OnAuthenticationFailed event (if any)
+    // - is used internally
+    procedure AuthenticationFailed(Reason: TOnAuthenticationFailedReason); virtual;
     /// low-level access to the associated Session
     // - may be nil depending on the context: you should NOT use it, but the
     // safe Session, SessionGroup, SessionUser, SessionUserName fields instead
     // - is used internally
     property AuthSession: TAuthSession
-      read fAuthSession;
+      read fAuthSession write fAuthSession;
     /// the associated routing class on the client side
     class function ClientRouting: TRestClientRoutingClass; virtual;
     /// identify if the request is about a Table containing nested objects or
@@ -630,24 +631,24 @@ type
     // - equals 1 (CONST_AUTHENTICATION_NOT_USED) if authentication mode
     // is not enabled - i.e. if TRestServer.HandleAuthentication = FALSE
     property Session: cardinal
-      read fSession;
+      read fSession write fSession;
     /// the corresponding TAuthSession.User.GroupRights.ID value
     // - is undefined if Session is 0 or 1 (no authentication running)
     property SessionGroup: TID
-      read fSessionGroup;
+      read fSessionGroup write fSessionGroup;
     /// the corresponding TAuthSession.User.ID value
     // - is undefined if Session is 0 or 1 (no authentication running)
     property SessionUser: TID
-      read fSessionUser;
+      read fSessionUser write fSessionUser;
     /// the corresponding TAuthSession.User.LogonName value
     // - is undefined if Session is 0 or 1 (no authentication running)
     property SessionUserName: RawUtf8
-      read fSessionUserName;
+      read fSessionUserName write fSessionUserName;
     /// the corresponding TAuthSession.RemoteOsVersion
     // - is undefined if Session is 0 or 1 (no authentication running) or if
     // the client was not using TRestClientAuthenticationDefault scheme
     property SessionOS: TOperatingSystemVersion
-      read fSessionOS;
+      read fSessionOS write fSessionOS;
     /// the static instance corresponding to the associated Table (if any)
     property StaticOrm: TRestOrm
       read fStaticOrm;
