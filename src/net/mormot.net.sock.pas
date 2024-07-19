@@ -1426,7 +1426,7 @@ type
   TUri = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// if the server is accessible via https:// and not plain http://
+    /// if the server is accessible via https:// wss:// and not plain http://
     Https: boolean;
     /// either nlTcp for HTTP/HTTPS or nlUnix for Unix socket URI
     Layer: TNetLayer;
@@ -4790,7 +4790,8 @@ begin
   if PInteger(s)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
   begin
     FastSetString(Scheme, p, s - p);
-    if NetStartWith(pointer(p), 'HTTPS') then
+    if NetStartWith(pointer(p), 'HTTPS') or
+       NetStartWith(pointer(p), 'WSS') then // wss: is just an upgraded https:
       Https := true
     else if NetStartWith(pointer(p), 'UDP') then
       layer := nlUdp; // 'udp://server:port';
