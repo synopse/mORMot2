@@ -1058,21 +1058,32 @@ type
   TEngineIOSessionsAbstract = class(TSynPersistent)
   protected
     fSafe: TLightLock;
+    fVersion: integer;
     fEngineSid: RawUtf8;
     fPingInterval, fPingTimeout, fMaxPayload: integer;
+  public
+    /// initialize this class instance with some default values
+    constructor Create; override;
   published
     /// the associated Engine.IO Session ID
     // - as computed on the server side, and received on client side
     property EngineSid: RawUtf8
       read fEngineSid;
+    /// the protocol version used by this class, as used for EIO=? parmeter
+    // - is currently fixed to 4
+    property Version: integer
+      read fVersion;
     /// the ping interval, used in Engine.IO heartbeat mechanism (in milliseconds)
     // - ping packets are now sent by the server, since protocol v4
+    // - default value is 20000, i.e. 20 seconds
     property PingInterval: integer
       read fPingInterval write fPingInterval;
     /// the ping timeout, used in Engine.IO heartbeat mechanism (in milliseconds)
+    // - default value is 25000, i.e. 25 seconds
     property PingTimeout: integer
       read fPingTimeout write fPingTimeout;
     /// optional number of bytes per chunk, used in Engine.IO payloads mechanism
+    // - default value is 0, meaning no
     property MaxPayload: integer
       read fMaxPayload write fMaxPayload;
   end;
@@ -1085,10 +1096,10 @@ type
     fOwner: TEngineIOSessionsAbstract;
     fSid, fNameSpace: RawUtf8;
   published
-    /// the associated Sockets.IO Session ID, as computed on the server side
+    /// the associated Socket.IO Session ID, as computed on the server side
     property Sid: RawUtf8
       read fSid;
-    /// the associated Sockets.IO Session ID, as computed on the server side
+    /// the associated Socket.IO Session ID, as computed on the server side
     property NameSpace: RawUtf8
       read fNameSpace;
   end;
@@ -3399,6 +3410,17 @@ begin
     [Root, CardinalToHexShort(Random32)], result);
   if PollingUpgradeSid <> '' then
     Append(result, '&sid=', PollingUpgradeSid);
+end;
+
+
+{ TEngineIOSessionsAbstract }
+
+constructor TEngineIOSessionsAbstract.Create;
+begin
+  inherited Create;
+  fVersion := 4;
+  fPingTimeout := 20000;
+  fPingInterval := 25000;
 end;
 
 
