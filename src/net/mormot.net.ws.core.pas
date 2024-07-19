@@ -12,7 +12,7 @@ unit mormot.net.ws.core;
    - WebSockets Asynchronous Frames Parsing
    - WebSockets Client and Server Shared Process
    - TWebSocketProtocolChat Simple Protocol
-   - Sockets.IO / Engine.IO Raw Protocols
+   - Socket.IO / Engine.IO Raw Protocols
 
   *****************************************************************************
 
@@ -1018,7 +1018,7 @@ var
   WebSocketsMaxFrameMB: cardinal = 256;
 
 
-{ ****************** Sockets.IO / Engine.IO Raw Protocols }
+{ ****************** Socket.IO / Engine.IO Raw Protocols }
 
 type
   /// define the Engine.IO available packet types
@@ -3385,7 +3385,7 @@ begin
 end;
 
 
-{ ****************** Sockets.IO / Engine.IO Raw Protocols }
+{ ****************** Socket.IO / Engine.IO Raw Protocols }
 
 // reference: https://sockjs.com/docs/v4/socket-io-protocol/
 

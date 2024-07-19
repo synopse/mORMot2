@@ -9,7 +9,7 @@ unit mormot.net.ws.server;
     WebSockets Bidirectional Server
     - TWebSocketProcessServer Processing Class
     - TWebSocketServerRest Bidirectional REST Server
-    - Sockets.IO / Engine.IO Server Protocol over WebSockets
+    - Socket.IO / Engine.IO Server Protocol over WebSockets
 
   *****************************************************************************
 
@@ -226,7 +226,7 @@ type
   end;
 
 
-{ ******************** Sockets.IO / Engine.IO Server Protocol over WebSockets }
+{ ******************** Socket.IO / Engine.IO Server Protocol over WebSockets }
 
 
 
@@ -562,7 +562,7 @@ begin
 end;
 
 
-{ ******************** Sockets.IO / Engine.IO Server Protocol over WebSockets }
+{ ******************** Socket.IO / Engine.IO Server Protocol over WebSockets }
 
 
 end.

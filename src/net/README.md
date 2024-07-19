@@ -73,21 +73,21 @@ WebSockets Abstract Processing for Client and Server
 - WebSockets Asynchronous Frames Parsing
 - WebSockets Client and Server Shared Process
 - `TWebSocketProtocolChat` Simple Protocol
-- Sockets.IO / Engine.IO Raw Protocols
+- Socket.IO / Engine.IO Raw Protocols
 
 ### mormot.net.ws.client
 
 WebSockets Bidirectional Client
 - `TWebSocketProcessClient` Processing Class
 - `THttpClientWebSockets` Bidirectional REST Client
-- Sockets.IO / Engine.IO Client Protocol over WebSockets
+- Socket.IO / Engine.IO Client Protocol over WebSockets
 
 ### mormot.net.ws.server
 
 WebSockets Bidirectional Server
 - `TWebSocketProcessServer` Processing Class
 - `TWebSocketServerSocket` Bidirectional REST Server
-- Sockets.IO / Engine.IO Server Protocol over WebSockets
+- Socket.IO / Engine.IO Server Protocol over WebSockets
 
 ### mormot.net.ws.async
 
