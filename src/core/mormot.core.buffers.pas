@@ -1824,6 +1824,9 @@ const
 // compressed zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
 function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 
+/// recognize e.g. 'text/css' or 'application/json' as compressible
+function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
 // - returns TRUE if the buffer is likely to be a JPEG picture, and set the
@@ -8884,6 +8887,37 @@ begin
             result := true;
         end;
       end;
+end;
+
+const
+  _CONTENT: array[0..3] of PUtf8Char = (
+    'TEXT/',
+    'IMAGE/',
+    'APPLICATION/',
+    nil);
+  _CONTENT_IMG: array[0..2] of PUtf8Char = (
+    'SVG',
+    'X-ICO',
+    nil);
+  _CONTENT_APP: array[0..4] of PUtf8Char = (
+    'JSON',
+    'XML',
+    'JAVASCRIPT',
+    'VND.API+JSON',
+    nil);
+
+function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
+begin
+  case IdemPPChar(ContentType, @_CONTENT) of
+    0: // text/*
+      result := true;
+    1: // image/*
+      result := IdemPPChar(ContentType + 6, @_CONTENT_IMG) >= 0;
+    2: // application/*
+      result := IdemPPChar(ContentType + 12, @_CONTENT_APP) >= 0;
+  else
+    result := false;
+  end;
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
