@@ -139,6 +139,19 @@ const
   PGFMT_TEXT = 0;
   PGFMT_BIN  = 1;
 
+  PG_DIAG_SEVERITY           = ord('S');
+  PG_DIAG_SQLSTATE           = ord('C');
+  PG_DIAG_MESSAGE_PRIMARY    = ord('M');
+  PG_DIAG_MESSAGE_DETAIL     = ord('D');
+  PG_DIAG_MESSAGE_HINT       = ord('H');
+  PG_DIAG_STATEMENT_POSITION = ord('P');
+  PG_DIAG_INTERNAL_POSITION  = ord('p');
+  PG_DIAG_INTERNAL_QUERY     = ord('q');
+  PG_DIAG_CONTEXT            = ord('W');
+  PG_DIAG_SOURCE_FILE        = ord('F');
+  PG_DIAG_SOURCE_LINE        = ord('L');
+  PG_DIAG_SOURCE_FUNCTION    = ord('R');
+
 /// compute the PostgreSQL raw binary to encode an array of (integer) parameters
 function ToArrayOid(Values: PByte; ArrayOid, ValueCount, ValueSize: integer;
   var Bin: RawByteString): boolean;
@@ -412,16 +425,16 @@ procedure TSqlDBPostgresLib.RaiseError(conn: PPGconn; const ctxt: ShortString;
   res: PPGresult);
 var
   errMsg, errCode: PUtf8Char;
+  msg: string;
 begin
   errMsg := ErrorMessage(conn);
+  errCode := nil;
   if res <> nil then
-  begin
-    errCode := ResultErrorField(res, ord('C'){PG_DIAG_SQLSTATE});
+    errCode := ResultErrorField(res, PG_DIAG_SQLSTATE);
+  FormatString('% % failed: % [%]', [self, ctxt, errCode, errMsg], msg);
+  if res <> nil then
     Clear(res);
-  end
-  else
-    errCode := nil;
-  ESqlDBPostgres.RaiseUtf8('% % failed: % [%]', [self, ctxt, errCode, errMsg]);
+  raise ESqlDBPostgres.Create(msg);
 end;
 
 procedure TSqlDBPostgresLib.Check(conn: PPGconn; const ctxt: ShortString;
