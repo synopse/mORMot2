@@ -10349,9 +10349,9 @@ begin
         fNewInstance := @_New_PersistentWithCustomCreate
       else if C = TObjectWithCustomCreate then
       begin
+        // e.g. TSynPersistent, TOrm or TObjectWithID
         fNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
-        // - is used e.g. by TOrm or TObjectWithID
         n := Props.Count;
         TObjectWithCustomCreateRttiCustomSetParser(
           TObjectWithCustomCreateClass(fValueClass), self);
@@ -10390,7 +10390,7 @@ begin
       else if C = TList then
         fNewInstance := @_New_List
       else if C = TObject then
-        fNewInstance := @_New_Object
+        fNewInstance := @_New_Object // fallback to plain TObject.Create
       else
       begin
         // customize JSON serialization

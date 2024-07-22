@@ -61,6 +61,7 @@ type
     /// a priority on which the compression is applied - highest is favored
     Priority: integer;
   end;
+  PHttpSocketCompressRec = ^THttpSocketCompressRec;
 
   /// list of known compression algorithms
   THttpSocketCompressRecDynArray = array of THttpSocketCompressRec;
@@ -2750,59 +2751,35 @@ begin
   result := algo;
 end;
 
-const
-  _CONTENTCOMP: array[0..3] of PUtf8Char = (
-    'TEXT/',
-    'IMAGE/',
-    'APPLICATION/',
-    nil);
-  _CONTENTIMG: array[0..2] of PUtf8Char = (
-    'SVG',
-    'X-ICO',
-    nil);
-  _CONTENTAPP: array[0..4] of PUtf8Char = (
-    'JSON',
-    'XML',
-    'JAVASCRIPT',
-    'VND.API+JSON',
-    nil);
-
 procedure CompressContent(Accepted: THttpSocketCompressSet;
   const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
   var OutContent: RawByteString; var OutContentEncoding: RawUtf8);
 var
-  i, OutContentLen: integer;
+  i, len: integer;
   compressible: boolean;
-  OutContentTypeP: PUtf8Char absolute OutContentType;
+  h: PHttpSocketCompressRec;
 begin
-  if (integer(Accepted) <> 0) and
-     (OutContentType <> '') and
-     (Handled <> nil) then
-  begin
-    OutContentLen := length(OutContent);
-    case IdemPPChar(OutContentTypeP, @_CONTENTCOMP) of
-      0: // text/*
-        compressible := true;
-      1: // image/*
-        compressible := IdemPPChar(OutContentTypeP + 6, @_CONTENTIMG) >= 0;
-      2: // aplication/*
-        compressible := IdemPPChar(OutContentTypeP + 12, @_CONTENTAPP) >= 0;
-    else
-      compressible := false;
-    end;
-    for i := 0 to length(Handled) - 1 do
-      if i in Accepted then
-        with Handled[i] do
-          if (CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
-             (compressible and
-              (OutContentLen >= CompressMinSize)) then
-          begin
-            // compression of the OutContent + update header
-            OutContentEncoding := Func(OutContent, true);
-            exit; // first in fCompress[] is prefered
-          end;
-  end;
   OutContentEncoding := '';
+  if (integer(Accepted) = 0) or
+     (OutContentType = '') or
+     (Handled = nil) then
+    exit;
+  compressible := IsContentTypeCompressible(pointer(OutContentType));
+  len := length(OutContent);
+  h := pointer(Handled);
+  for i := 1 to length(Handled) do
+  begin
+    if i in Accepted then
+      if (h^.CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
+         (compressible and
+          (len >= h^.CompressMinSize)) then
+      begin
+        // compression of the OutContent + update header
+        OutContentEncoding := h^.Func(OutContent, {compress=}true);
+        exit; // first in fCompress[] is prefered
+      end;
+    inc(h);
+  end;
 end;
 
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
