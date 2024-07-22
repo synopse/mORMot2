@@ -273,11 +273,11 @@ type
     fClients, fServer: TWebSocketServer;
     fServerConnected: TWebSocketProcess;
     fServerConnectedToLocalHost: boolean;
-    fStatCache: RawJson;
     fStatTix: integer;
-    function OnServerBeforeBody(var aUrl, aMethod, aInHeaders, aInContentType,
-      aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
-      aFlags: THttpServerRequestFlags): cardinal;
+    fStatCache: RawJson;
+    function OnServerBeforeBody(
+      var aUrl, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
+      aContentLength: Int64; aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function GetStats: RawJson;
@@ -563,7 +563,9 @@ begin
   fOwner.Safe.Lock;
   try
     case Frame.opcode of
-      focContinuation, focText, focBinary:
+      focContinuation,
+      focText,
+      focBinary:
         if fOwner.fServerConnected = nil then
           ERelayProtocol.RaiseUtf8(
             '%.ProcessIncomingFrame: No server to relay to', [self]);
@@ -707,7 +709,8 @@ begin
           [self, connection, ToText(Frame.opcode)^]);
       end;
     case Frame.opcode of
-      focBinary, focText:
+      focBinary,
+      focText:
         if not server.WebSockets.SendFrame(Frame) then
           log.Log(sllWarning, 'ProcessIncomingFrame: SendFrame failed', self);
       focConnectionClose:
