@@ -8023,9 +8023,15 @@ end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
 begin
-  raise ERttiException.CreateUtf8('%.ClassNewInstance(%:%) not implemented -> ' +
-    'please include mormot.core.json unit to register TRttiJson',
-    [Rtti, Rtti.Name, ToText(Rtti.Kind)^]);
+  if Rtti = nil then
+    raise ERttiException.Create('Unexpected ClassNewInstance(nil)')
+  else if Rtti.Kind <> rkClass then
+     raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not available for %',
+       [Rtti, Rtti.Name, ToText(Rtti.Kind)^])
+  else
+    raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
+      'please include mormot.core.json unit to register TRttiJson',
+      [Rtti, Rtti.Name]);
 end;
 
 function TRttiCustom.SetParserType(aParser: TRttiParserType;
