@@ -86,7 +86,7 @@ type
     fLastError: integer;
     class function GetOpenSsl: string;
     class procedure CheckFailed(caller: TObject; const method: shortstring;
-      errormsg: PRawUtf8; ssl: pointer);
+      errormsg: PRawUtf8; ssl: pointer; sslrecode: integer);
     class procedure TryNotAvailable(caller: TClass; const method: shortstring);
   public
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
@@ -94,10 +94,8 @@ type
       res: integer; errormsg: PRawUtf8 = nil; ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
-    class procedure Check(res: integer; const method: shortstring = ''); overload;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// wrapper around ERR_get_error/ERR_error_string_n if res if false
-    class procedure Check(res: boolean; const method: shortstring = ''); overload;
+    class procedure Check(res: integer; const method: shortstring = '';
+      ssl: pointer = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: shortstring);
@@ -1156,9 +1154,7 @@ type
     function PeerCertificates(acquire: boolean = false): PX509DynArray;
     function PeerCertificatesAsPEM: RawUtf8;
     function PeerCertificatesAsText: RawUtf8;
-    function IsVerified: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
-    function VerificationErrorMessage: RawUtf8;
+    function IsVerified(msg: PRawUtf8 = nil): boolean;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -7366,22 +7362,17 @@ begin
   result := PX509DynArrayToText(PeerCertificates);
 end;
 
-function SSL.IsVerified: boolean;
-begin
-  result := (@self <> nil) and
-            (SSL_get_verify_result(@self) = X509_V_OK);
-end;
-
-function SSL.VerificationErrorMessage: RawUtf8;
+function SSL.IsVerified(msg: PRawUtf8): boolean;
 var
   res: integer;
 begin
-  result := '';
-  if @self = nil then
-    exit;
-  res := SSL_get_verify_result(@self);
-  if res <> X509_V_OK then
-    result := RawUtf8(format('%s #%d', [X509_verify_cert_error_string(res), res]));
+  res := X509_V_OK;
+  if @self <> nil then
+    res := SSL_get_verify_result(@self);
+  result := (res = X509_V_OK); // not yet verified, or peer verification failed
+  if (msg <> nil) and
+     not result then
+    msg^ := RawUtf8(format('%s (%s #%d)', [msg^, X509_verify_cert_error_string(res), res]));
 end;
 
 procedure SSL.Free;
@@ -10082,29 +10073,27 @@ class procedure EOpenSsl.Check(caller: TObject; const method: shortstring;
   res: integer; errormsg: PRawUtf8; ssl: pointer);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(caller, method, errormsg, ssl);
+    CheckFailed(caller, method, errormsg, ssl, res);
 end;
 
-class procedure EOpenSsl.Check(res: integer; const method: shortstring);
+class procedure EOpenSsl.Check(res: integer; const method: shortstring;
+  ssl: pointer);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(nil, method, nil, nil);
-end;
-
-class procedure EOpenSsl.Check(res: boolean; const method: shortstring);
-begin
-  if not res then
-    CheckFailed(nil, method, nil, nil);
+    CheckFailed(nil, method, nil, ssl, res);
 end;
 
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: shortstring;
-  errormsg: PRawUtf8; ssl: pointer);
+  errormsg: PRawUtf8; ssl: pointer; sslrecode: integer);
 var
   res: integer;
-  msg: RawUtf8;
+  msg, err: RawUtf8;
   exc: EOpenSsl;
 begin
-  res := ERR_get_error;
+  if ssl = nil then
+    res := ERR_get_error
+  else
+    res := SSL_get_error(ssl, sslrecode);
   SSL_error(res, msg);
   if errormsg <> nil then
   begin
@@ -10113,8 +10102,8 @@ begin
     errormsg^ := msg;
   end;
   if (ssl <> nil) and
-     not PSSL(ssl).IsVerified then
-    msg := msg + ' (' + PSSL(ssl).VerificationErrorMessage + ')';
+     not PSSL(ssl).IsVerified(@err) then
+    msg := msg + err;
   if caller = nil then
     exc := CreateFmt('OpenSSL %s error %d [%s]', [OpenSslVersionHexa, res, msg])
   else
@@ -10180,6 +10169,8 @@ type
     fPeer: PX509;
     fCipherName: RawUtf8;
     fDoSslShutdown: boolean;
+    procedure Check(const method: shortstring; res: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
   public
     destructor Destroy; override;
@@ -10258,6 +10249,12 @@ begin
   end;
 end;
 
+procedure TOpenSslNetTls.Check(const method: shortstring; res: integer);
+begin
+  if res <> OPENSSLSUCCESS then
+    EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res);
+end;
+
 const
   // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
   SAFE_CIPHERLIST: array[ {aes=} boolean ] of PUtf8Char = (
@@ -10310,18 +10307,14 @@ begin
     if GetNextCsv(P, h) then
     begin
       SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-      EOpenSslNetTls.Check(self, 'AfterConnection set1host',
-        SSL_set1_host(fSsl, pointer(h)), @Context.LastError);
+      Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
       while GetNextCsv(P, h) do
-        EOpenSslNetTls.Check(self, 'AfterConnection add1host',
-          SSL_add1_host(fSsl, pointer(h)), @Context.LastError);
+        Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
     end;
   end;
-  EOpenSslNetTls.Check(self, 'AfterConnection setfd',
-    SSL_set_fd(fSsl, Socket.Socket), @Context.LastError);
+  Check('AfterConnection set_fd', SSL_set_fd(fSsl, Socket.Socket));
   // client TLS negotiation with server
-  EOpenSslNetTls.Check(self, 'AfterConnection connect',
-    SSL_connect(fSsl), @Context.LastError, fSsl);
+  Check('AfterConnection connect', SSL_connect(fSsl));
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
   Context.CipherName := GetCipherName;
   // writeln(Context.CipherName);
@@ -10340,8 +10333,7 @@ begin
     //PX509DynArrayFree(x);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
-      EOpenSslNetTls.Check(self, 'AfterConnection getpeercertificate',
-        0, @Context.LastError);
+      Check('AfterConnection get_peer_certificate', 0);
     try
       if fPeer <> nil then
       begin
@@ -10351,7 +10343,8 @@ begin
         Context.PeerSubject := fPeer.SubjectName;
         if Context.WithPeerInfo or
            (not Context.IgnoreCertificateErrors and
-            not fSsl.IsVerified) then // include full peer info on failure
+            not fSsl.IsVerified(@Context.LastError)) then
+          // include full peer info on certificate verification failure
           Context.PeerInfo := fPeer.PeerInfo;
         {
         writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
@@ -10436,11 +10429,11 @@ begin
     end;
   end;
   if FileExists(TFileName(Context.CertificateFile)) then
-    EOpenSslNetTls.Check(self, 'CertificateFile',
+    EOpenSslNetTls.Check(self, 'SetupCtx CertificateFile',
       SSL_CTX_use_certificate_file(
         fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM))
   else if Context.CertificateRaw <> nil then
-    EOpenSslNetTls.Check(self, 'CertificateRaw',
+    EOpenSslNetTls.Check(self, 'SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: CertificateFile required');
@@ -10453,20 +10446,20 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    EOpenSslNetTls.Check(self, 'check_private_key',
+    EOpenSslNetTls.Check(self, 'SetupCtx check_private_key file',
       SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end
   else if Context.PrivateKeyRaw <> nil then
   begin
     SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
-    EOpenSslNetTls.Check(self, 'check_private_key',
+    EOpenSslNetTls.Check(self, 'SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx), @Context.LastError);
   end
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKeyFile required');
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
-  EOpenSslNetTls.Check(self, 'setcipherlist',
+  EOpenSslNetTls.Check(self, 'SetupCtx set_cipher_list',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
     @Context.LastError);
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
@@ -10522,17 +10515,15 @@ begin
   fContext := @BoundContext; // may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
-  // safe and simple context for the callbacks
+  // safe and naive (but working) context for the callbacks
   _PeerVerify := self;
   // prepare TLS connection properties from AfterBind() global context
   if BoundContext.AcceptCert = nil then
     raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
   fSsl := SSL_new(BoundContext.AcceptCert);
-  EOpenSslNetTls.Check(self, 'AfterAccept setfd',
-    SSL_set_fd(fSsl, Socket.Socket), LastError);
+  Check('AfterAccept set_fd', SSL_set_fd(fSsl, Socket.Socket));
   // server TLS negotiation with server
-  EOpenSslNetTls.Check(self, 'AfterAccept accept',
-    SSL_accept(fSsl), LastError, fSsl);
+  Check('AfterAccept accept', SSL_accept(fSsl));
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
   if CipherName <> nil then
     CipherName^ := GetCipherName;
@@ -10586,12 +10577,12 @@ begin
       else
         begin
           result := nrFatalError;
-          fDoSslShutdown := false;
+          fDoSslShutdown := false; // connection is likely to be broken
         end;
     end;
     if (result <> nrRetry) and
        (fLastError <> nil) then
-      SSL_error(err, fLastError^);
+      SSL_error(err, fLastError^); // retrieve as human-readable text
   end
   else // return value is number of bytes actually read from the TLS connection
   begin
