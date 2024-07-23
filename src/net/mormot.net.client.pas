@@ -1763,25 +1763,23 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
          [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.Retry]], self);
-    if rMain in ctxt.Retry then
-    begin
+    if fAborted then
+      ctxt.Status := HTTP_NOTFOUND
+    else if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
-      ctxt.Status := FatalError;
-      exit;
-    end;
-    // recreate the connection and try again
-    Close;
-    //if Assigned(OnLog) then
-    //   OnLog(sllTrace, 'DoRetry after close', [], self);
-    try
-      OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
-      HttpStateReset;
-      include(ctxt.Retry, rMain);
-      RequestInternal(ctxt);
-    except
-      on Exception do
-        ctxt.Status := FatalError;
-    end;
+      ctxt.Status := FatalError
+    else
+      try
+        // recreate the connection and try again
+        Close;
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
+        HttpStateReset;
+        include(ctxt.Retry, rMain);
+        RequestInternal(ctxt);
+      except
+        on Exception do
+          ctxt.Status := FatalError;
+      end;
   end;
 
 var
@@ -1801,8 +1799,10 @@ begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Http.Content := '';
-  if (hfConnectionClose in Http.HeaderFlags) or
-     not SockIsDefined then
+  if fAborted then
+    ctxt.Status := HTTP_NOTFOUND
+  else if (hfConnectionClose in Http.HeaderFlags) or
+          not SockIsDefined then
     DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
     DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
@@ -2025,6 +2025,8 @@ begin
     repeat
       // sub-method to handle the actual request, with proper retrial
       RequestInternal(ctxt);
+      if fAborted then
+        break;
       // handle optional (proxy) authentication callbacks
       if (ctxt.Status = HTTP_UNAUTHORIZED) and
           Assigned(fOnAuthorize) then
@@ -2098,7 +2100,7 @@ begin
       else
         fRedirected := ctxt.Url;
       inc(ctxt.Redirected);
-    until false;
+    until fAborted;
     if Assigned(fOnAfterRequest) then
       fOnAfterRequest(self, ctxt);
   end;

@@ -1576,7 +1576,7 @@ type
     fBytesOut: Int64;
     fSecure: INetTls;
     fSockInEofError: integer;
-    fWasBind: boolean;
+    fWasBind, fAborted: boolean;
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
     // updated by every SockSend() call
@@ -1678,6 +1678,9 @@ type
     procedure Close; virtual;
     /// close the opened socket, and corresponding SockIn/SockOut
     destructor Destroy; override;
+    /// mark the internal Aborted flag to let any blocking loop abort ASAP
+    // - will also close any associated socket at OS level
+    procedure Abort; virtual;
     /// read Length bytes from SockIn buffer + Sock if necessary
     // - if SockIn is available, it first gets data from SockIn^.Buffer,
     // then directly receive data from socket if UseOnlySockIn = false
@@ -1855,6 +1858,10 @@ type
     property SockOut: PTextFile
       read fSockOut;
     {$endif PUREMORMOT2}
+    /// equals true when the Abort method has been called
+    // - could be used to abort any blocking process ASAP
+    property Aborted: boolean
+      read fAborted;
   published
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TNetLayer
@@ -5457,6 +5464,18 @@ begin
   {$endif OSPOSIX}
 end;
 
+procedure TCrtSocket.Abort;
+begin
+  if (self = nil) or
+     fAborted then
+    exit;
+  fAborted := true; // global flag checked within most recv/send loops
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'Abort socket=%', [fSock.Socket], self);
+  if SockIsDefined then
+    fSock.Close; // to abort any pending OS call in another thread
+end;
+
 destructor TCrtSocket.Destroy;
 begin
   Close;
@@ -5493,7 +5512,8 @@ begin
           dec(Length, len);
           inc(result, len);
         end;
-        if Length = 0 then
+        if fAborted or
+           (Length = 0) then
           exit; // we got everything we wanted
         if not UseOnlySockIn then
           break;
@@ -5822,8 +5842,8 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'TrySockRecv: timeout after %ms)', [TimeOut], self);
       exit; // identify read timeout as error
-    until false;
-    result := true;
+    until fAborted;
+    result := not fAborted;
   end;
 end;
 
@@ -5865,7 +5885,7 @@ procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
         end
         else
           inc(P);
-    until false;
+    until fAborted;
   end;
 
 var
@@ -5905,7 +5925,8 @@ begin
   else
     repeat
       SockRecv(@c, 1);
-    until c = #10;
+    until fAborted or
+          (c = #10);
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
@@ -5952,8 +5973,8 @@ begin
     if (neError in events) or
        not (neWrite in events) then // identify timeout as error
       exit;
-  until false;
-  result := true;
+  until fAborted;
+  result := not fAborted;
 end;
 
 function TCrtSocket.AcceptIncoming(
