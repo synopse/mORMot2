@@ -350,6 +350,10 @@ type
     procedure SetTimeOut(aSeconds: integer);
   end;
 
+
+/// internal very low-level function retrieving the latest socket OS error code
+function RawSocketErrNo: integer; {$ifdef OSWINDOWS} stdcall; {$endif}
+
 /// internal low-level function retrieving the latest socket error information
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: system.PInteger = nil): TNetResult;
@@ -1968,7 +1972,7 @@ function NetLastError(AnotherNonFatal: integer; Error: system.PInteger): TNetRes
 var
   err: integer;
 begin
-  err := sockerrno;
+  err := RawSocketErrNo;
   if Error <> nil then
     Error^ := err;
   case err of
@@ -2823,7 +2827,7 @@ end;
 
 function TNetSocketWrap.GetName(out addr: TNetAddr): TNetResult;
 var
-  len: tsocklen;
+  len: TSockLen;
 begin
   FillCharFast(addr, SizeOf(addr), 0);
   if @self = nil then
@@ -2837,7 +2841,7 @@ end;
 
 function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
 var
-  len: tsocklen;
+  len: TSockLen;
 begin
   FillCharFast(addr, SizeOf(addr), 0);
   if @self = nil then
@@ -5282,7 +5286,7 @@ begin
       result := WSAECONNABORTED
     else
     begin
-      result := -sockerrno; // ioresult = low-level socket error as negative
+      result := -RawSocketErrNo; // ioresult = low-level socket error as negative
       if result = 0 then
         result := WSAETIMEDOUT;
     end;

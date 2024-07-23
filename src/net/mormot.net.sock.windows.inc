@@ -32,7 +32,7 @@ type
   // - and we also use PtrInt for our TNetSocketWrap cast
   TSocket = PtrInt;
 
-  tsocklen = integer;
+  TSockLen = integer;
 
   PFDSet = ^TFDSet;
   TFDSet = record
@@ -412,7 +412,7 @@ function WSAStartup(wVersionRequired: word; var WSData: TWSAData): integer; stdc
 function WSACleanup: integer; stdcall;
   external ws2 name 'WSACleanup';
 
-function sockerrno: integer; stdcall;
+function RawSocketErrNo: integer; stdcall;
   external ws2 name 'WSAGetLastError';
 
 function getaddrinfo(NodeName, ServName: PAnsiChar; Hints: PAddrInfo;
@@ -723,7 +723,7 @@ begin
   if res < 0 then
   begin
     if loerr <> nil then
-      loerr^ := sockerrno;
+      loerr^ := RawSocketErrNo;
     exit; // returning [neError]
   end;
   result := [];
@@ -1558,7 +1558,7 @@ begin
         tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
         fOnLog(sllWarning, 'leak sock=% over=% recv=% %',
           [pointer(sub^.socket), PtrUInt(sub^.over[wieRecv].overlapped.Internal),
-           tmplen, sockerrno], self);
+           tmplen, RawSocketErrNo], self);
       end;
       if wioUnsubscribeShutdownSocket in fOptions then
         TNetSocket(sub^.socket).ShutdownAndClose({rdwr=}false);
@@ -1647,13 +1647,13 @@ begin
       // and work with regular sockets recv() calls like TPollSocketAbstract
       result := // WSARecv=NO_ERROR if there is something to recv()
         (WSARecv(o^.socket, oe^.buf, 1, bytes, flags, @oe^.overlapped) = NO_ERROR) or
-        (sockerrno = WSAIOPENDING); // WSAIOPENDING = wait for incoming data
+        (RawSocketErrNo = WSAIOPENDING); // WSAIOPENDING = wait for incoming data
     wieSend:
       // from mormot.net.async: overlapped write with buf/buflen = connection.fWr
       // to avoid GetNext returning with no delay (and save a syscall)
       result :=
         (WSASend(o^.socket, oe^.buf, 1, bytes, 0, @oe^.overlapped) = NO_ERROR) or
-        (sockerrno = WSAIOPENDING);
+        (RawSocketErrNo = WSAIOPENDING);
     wieAccept:
       // overlapped AcceptEx() to be followed by GetNextAcceptAndPrepare()
       // from mormot.net.async: not used, unless IOCP_ACCEPTEX is defined
@@ -1670,7 +1670,7 @@ begin
           result := acceptex(
                      o^.Socket, TSocket(netsock), pointer(fAcceptExBuf), 0,
                      ACCEPTEX_SIZE, ACCEPTEX_SIZE, bytes, @oe^.overlapped) or
-                    (sockerrno = WSAIOPENDING)
+                    (RawSocketErrNo = WSAIOPENDING)
         end
         else
           err := 'concurrent wieAccept'
@@ -1687,7 +1687,7 @@ begin
             if bind(TSocket(netsock), PSockAddr(buf), buflen) = NO_ERROR then
               result := connectex(TSocket(netsock), PSockAddr(buf), buflen,
                           nil, 0, bytes, @oe^.overlapped) or
-                        (sockerrno = WSAIOPENDING)
+                        (RawSocketErrNo = WSAIOPENDING)
             else
               err := 'bind error'
           else
@@ -1932,7 +1932,7 @@ end;
 function CheckSocket(const ctx: shortstring; res: integer): cardinal;
 begin
   if res = SOCKET_ERROR then
-    raise ESChannel.CreateFmt('%s: Socket Error %d', [ctx, sockerrno]);
+    raise ESChannel.CreateFmt('%s: Socket Error %d', [ctx, RawSocketErrNo]);
   if res = 0 then
     raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
   result := res;

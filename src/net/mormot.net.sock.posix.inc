@@ -215,17 +215,17 @@ begin
   result := fpclose(s);
 end;
 
-function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
-   hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
+function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
+   hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; cdecl;
   external clib name 'getnameinfo' + LIBC_SUFFIX;
   // no syscall available from FPC
 
-function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; inline;
+function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; inline;
 begin
   result := fpbind(s, addr, namelen);
 end;
 
-function getsockname(s: integer; name: PSockAddr; var namelen: tsocklen): integer; inline;
+function getsockname(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
 begin
   result := fpgetsockname(s, name, @namelen);
 end;
@@ -235,18 +235,18 @@ begin
   result := fplisten(s, backlog);
 end;
 
-function accept(s: integer; addr: PSockAddr; var addrlen: tsocklen): integer; inline;
+function accept(s: integer; addr: PSockAddr; var addrlen: TSockLen): integer; inline;
 begin
   result := fpaccept(s, addr, @addrlen);
 end;
 
 {$ifdef HASACCEPT4}
-function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer; cdecl;
+function accept4(s: integer; addr: PSockAddr; var addrlen: TSockLen; flags: integer): integer; cdecl;
   external clib name 'accept4';
   // no syscall available from FPC
 {$endif HASACCEPT4}
 
-function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; inline;
+function connect(s: integer; name: PSockAddr; namelen: TSockLen): integer; inline;
   begin
     result := fpconnect(s, name, namelen);
   end;
@@ -279,7 +279,7 @@ begin
  result := fpsendto(s, Buf, len, flags, addrto, tolen);
 end;
 
-function getpeername(s: integer; name: PSockAddr; var namelen: tsocklen): integer; inline;
+function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
 begin
   result := fpgetpeername(s, name, @namelen);
 end;
@@ -313,33 +313,33 @@ function shutdown(s: integer; how: integer): integer; cdecl;
 function closesocket(s: integer): integer; cdecl;
   external clib name 'close' + LIBC_SUFFIX;
 
-function getnameinfo(addr: PSockAddr; namelen: tsocklen; host: PAnsiChar;
-   hostlen: tsocklen; serv: PAnsiChar; servlen: tsocklen; flags: integer): integer; cdecl;
+function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
+   hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; cdecl;
   external clib name 'getnameinfo' + LIBC_SUFFIX;
 
-function bind(s: integer; addr: PSockAddr; namelen: tsocklen): integer; cdecl;
+function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; cdecl;
   external clib name 'bind' + LIBC_SUFFIX;
 
-function getsockname(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
+function getsockname(s: integer; name: PSockAddr; var namelen: TSockLen): integer; cdecl;
   external clib name 'getsockname' + LIBC_SUFFIX;
 
 function listen(s: integer; backlog: integer): integer; cdecl;
   external clib name 'listen' + LIBC_SUFFIX;
 
-function accept(s: integer; addr: PSockAddr; var addrlen: tsocklen): integer; cdecl;
+function accept(s: integer; addr: PSockAddr; var addrlen: TSockLen): integer; cdecl;
   external clib name 'accept' + LIBC_SUFFIX;
 
 {$undef ACCEPT4_SYSCALL}
 
 {$ifdef HASACCEPT4}
 
-function accept4(s: integer; addr: PSockAddr; var addrlen: tsocklen; flags: integer): integer;
+function accept4(s: integer; addr: PSockAddr; var addrlen: TSockLen; flags: integer): integer;
   cdecl; external clib name 'accept4'  // no LIBC_SUFFIX: libc 2.10 is required
     {$ifdef OSLINUXINTEL} + '@GLIBC_2.10' {$endif} ;
 
 {$endif HASACCEPT4}
 
-function connect(s: integer; name: PSockAddr; namelen: tsocklen): integer; cdecl;
+function connect(s: integer; name: PSockAddr; namelen: TSockLen): integer; cdecl;
   external clib name 'connect' + LIBC_SUFFIX;
 
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
@@ -360,7 +360,7 @@ function sendto(s: integer; Buf: pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; cdecl;
   external clib name 'sendto' + LIBC_SUFFIX;
 
-function getpeername(s: integer; name: PSockAddr; var namelen: tsocklen): integer; cdecl;
+function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): integer; cdecl;
   external clib name 'getpeername' + LIBC_SUFFIX;
 
 {$endif SOCKDIRECTSYSCALL}
@@ -376,9 +376,9 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
-function sockerrno: integer; inline;
+function RawSocketErrNo: integer;
 begin
-  result := cerrno; // from libc
+  result := cerrno; // thread-locale variable from libc
 end;
 
 {$ifdef HASACCEPT4}
@@ -388,7 +388,7 @@ var
 
 function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
 var
-  len: tsocklen;
+  len: TSockLen;
 begin
   len := SOCKADDR_SIZE;
   {$ifdef HASACCEPT4}
@@ -607,7 +607,7 @@ begin
   res := poll(@p, 1, ms);
   if res < 0 then
   begin
-    res := sockerrno;
+    res := RawSocketErrNo;
     if loerr <> nil then
       loerr^ := res;
     if res = ESysEAGAIN then

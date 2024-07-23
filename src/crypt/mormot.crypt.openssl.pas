@@ -1723,7 +1723,7 @@ begin
   sig := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sig = '' then
     EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign % failed [%]',
-      [self, fAlgorithm, SSL_error_short(ERR_get_error)]);
+      [self, fAlgorithm, OpenSSL_error_short(ERR_get_error)]);
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
