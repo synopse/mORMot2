@@ -698,8 +698,7 @@ type
     // - if the first Args[0] is a TSqlDBStatement class instance, the current
     // SQL statement will be part of the exception message
     // - will also call SetDbError() with the resulting message text
-    constructor CreateUtf8(const Format: RawUtf8; const Args: array of const);
-      override;
+    constructor CreateUtf8(const Format: RawUtf8; const Args: array of const); override;
   published
     /// associated TSqlDBStatement instance, if supplied as first parameter
     property Statement: TSqlDBStatement

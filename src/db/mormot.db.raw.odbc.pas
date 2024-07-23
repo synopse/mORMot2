@@ -1109,7 +1109,7 @@ begin
   if LogLevelNoRaise <> sllNone then
   begin
     SynDBLog.Add.Log(LogLevelNoRaise, msg);
-    SetDbError(msg);
+    SetDbError(msg); // silent failure without exception, but GetDbError text
   end
   else if Stmt = nil then
     EOdbcException.RaiseUtf8('% error: %', [self, msg])

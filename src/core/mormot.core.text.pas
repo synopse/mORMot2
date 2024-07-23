@@ -1985,6 +1985,8 @@ type
   protected
     fRaisedAt: pointer;
     fMessageUtf8: RawUtf8;
+    // internal method called by the constructor when fMessageUtf8 was just set
+    // - this virtual method will redirect to Create(Utf8ToString(fMessageUtf8))
     procedure CreateAfterSetMessageUtf8; virtual;
   public
     /// constructor which will use FormatUtf8() instead of Format()

@@ -406,6 +406,7 @@ type
   // - CreateUtf8() will also call SetDbError() with the resulting message text
   ECoreDBException = class(ESynException)
   protected
+    // internal method called by the constructor when fMessageUtf8 was just set
     procedure CreateAfterSetMessageUtf8; override;
   end;
 
@@ -1925,8 +1926,8 @@ begin
   try
     if Seq = nil then
     begin // first time this slot is used
-      SetLength(Seq, 128);
-      SetLength(Msg, 128);
+      SetLength(Seq, 256);
+      SetLength(Msg, 256);
     end;
     inc(CurrentID);
     if CurrentID < 0 then
@@ -1987,7 +1988,7 @@ begin
   if id = 0 then
     result := '' // no error
   else if not LastDbError.GetMsg(id, result) then
-    FormatUtf8('Too many DB errors: id % is far behind', [id], result);
+    FormatUtf8('Too many DB errors - #% is outdated', [id], result);
 end;
 
 function HasDbError: boolean;
@@ -2001,7 +2002,7 @@ end;
 procedure ECoreDBException.CreateAfterSetMessageUtf8;
 begin
   SetDbError(fMessageUtf8);
-  inherited CreateAfterSetMessageUtf8;
+  inherited CreateAfterSetMessageUtf8; // call Create(Utf8ToString(fMessageUtf8))
 end;
 
 
