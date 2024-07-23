@@ -1637,10 +1637,12 @@ function TRestOrmServer.AfterDeleteForceCoherency(aTableIndex: integer;
       exit;
     Int64ToUtf8(Where, W);
     if Ref^.CascadeDelete then
+      // ON DELETE CASCADE
       cascadeOK := Delete(fModel.Tables[Ref^.TableIndex],
         Ref^.FieldType.Name + '=:(' + W + '):')
     else
     begin
+      // ON DELETE SET DEFAULT = set 0 to each associated field
       rest := GetStaticTableIndex(Ref^.TableIndex);
       if rest <> nil then
         // fast direct call
@@ -1664,8 +1666,7 @@ begin
   begin
     for i := 1 to length(fModel.RecordReferences) do
     begin
-      if ref^.FieldTableIndex = -2 then
-        // lazy initialization
+      if ref^.FieldTableIndex = -2 then  // lazy initialization
         ref^.FieldTableIndex := fModel.GetTableIndexSafe(ref^.FieldTable, false);
       case ref^.FieldType.OrmFieldType of
         oftRecord:

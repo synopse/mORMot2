@@ -155,6 +155,7 @@ type
     // Rtti.RegisterClass list, e.g. in TOrmModel.Create, so that e.g.
     // 'TOrmClientID' type name will match TOrmClient
     // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
+    // to implement a 'ON DELETE CASCADE'-like behavior
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;
     /// the TOrm class associated to this TID
@@ -168,7 +169,7 @@ type
     // !   ...
     // then this OrderedBy property will be tied to the TOrmClient class
     // of the corresponding model, and the field value will be reset to 0 when
-    // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
+    // the targetting record is deleted (emulating ON DELETE SET DEFAULT)
     // - equals TOrm for plain TID field
     // - equals nil if T*ID type name doesn't match any registered class
     property RecordClass: TOrmClass
@@ -3997,13 +3998,13 @@ type
   TOrmModelReference = record
     /// refers to the source TOrmClass as model Tables[] index
     TableIndex: integer;
-    /// the property
+    /// the property information
     FieldType: TOrmPropInfo;
     /// the target TOrmClass of the field
     FieldTable: TOrmClass;
     /// the target TOrmClass of the field, from its Tables[] index
     FieldTableIndex: integer;
-    /// TRUE if this field is a TRecordReferenceToBeDeleted
+    /// TRUE if this field is a TRecordReferenceToBeDeleted / TOrm*ToBeDeletedID
     CascadeDelete: boolean;
   end;
 
@@ -9533,7 +9534,7 @@ var
   procedure RegisterTableForRecordReference(aFieldType: TOrmPropInfo;
     aFieldTable: TClass);
   var
-    R: integer;
+    R: PtrInt;
   begin
     if (aFieldTable = nil) or
        (aFieldTable = TOrm) or

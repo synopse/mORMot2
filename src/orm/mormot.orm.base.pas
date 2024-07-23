@@ -90,8 +90,8 @@ type
   // - use TRest.Retrieve(Reference) to get a record value
   // - don't change associated TOrmModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
-  // - when the pointed record will be deleted, this property will be set to 0
-  // by TRestOrmServer.AfterDeleteForceCoherency()
+  // - when the pointed record will be deleted, this property will be set to 0 by
+  // TRestOrmServer.AfterDeleteForceCoherency(), as SQL 'ON DELETE SET DEFAULT'
   // - could be defined as value in a TOrm property as such:
   // ! property AnotherRecord: TRecordReference read fAnotherRecord write fAnotherRecord;
   TRecordReference = type Int64;
@@ -104,7 +104,8 @@ type
   // - don't change associated TOrmModel tables order, since TRecordReference
   // depends on it to store the Table type in its highest bits
   // - when the pointed record will be deleted, any record containg a matching
-  // property will be deleted by TRestOrmServer.AfterDeleteForceCoherency()
+  // property will be deleted by TRestOrmServer.AfterDeleteForceCoherency(),
+  // as SQL 'ON DELETE CASCADE'
   // - could be defined as value in a TOrm property as such:
   // ! property AnotherRecord: TRecordReferenceToBeDeleted
   // !   read fAnotherRecord write fAnotherRecord;
