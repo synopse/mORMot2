@@ -2670,31 +2670,30 @@ type
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
 
-  /// thread-safe reusable set of constant RawByteString instances
-  // - all RawByteString will be constant (RefCnt=-2) with the very same length
-  // - use internally its own TLockedList O(1) efficient structure
+  /// thread-safe reusable set of constant RawByteString/RawUtf8 instances
+  // - all RawByteString will be constant (RefCnt=-2) with some max length
+  // - maintain internally its own TLockedList O(1) set of instances
   // - warning: any call to New() should manually be followed by one Release()
-  TRawByteStringCached = class
+  TRawByteStringHeap = class
   protected
-    fLength: TStrLen;
+    fMaxLength: TStrLen;
     fOne: TLockedList;
   public
-    /// initialize the internal cache for a given length
-    constructor Create(aLength: integer);
-    /// return a new RawByteString of a given length, with refcount = -2
-    // - may be allocated or returned from its internal cache
-    procedure New(var aDest: RawByteString;
-      aCodePage: integer = CP_RAWBYTESTRING); overload;
+    /// initialize the internal cache for a given maximum length
+    constructor Create(aMaxLength: integer);
+    /// return a new RawByteString of a given length, with refcount=-2
+    // - if aTextLen is its default 0, MaxLength will be used
+    // - returned from its internal cache, unless aTextLen>MaxLength, which will
+    // allocate a regular RawByteString from heap
+    procedure New(var aDest: RawByteString; aText: PUtf8Char = nil;
+      aTextLen: TStrLen = 0; aCodePage: integer = CP_RAWBYTESTRING); overload;
     /// return a new RawUtf8 of a given length, with refcount = -2
-    procedure New(var aDest: RawUtf8; aText: PUtf8Char = nil); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// return a new RawUtf8 of a given length into a pointer, with refcount = -2
-    procedure NewUtf8(var aDest: pointer);
+    procedure New(var aDest: RawUtf8; aText: PUtf8Char; aTextLen: TStrLen); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// put back a RawByteString acquired from New() into the internal cache
-    procedure Release(var aDest: RawByteString; aSafeFlush: boolean = false); overload;
+    procedure Release(var aDest: RawByteString); overload;
     /// put back a RawUtf8 acquired from New() into the internal cache
-    procedure Release(var aDest: RawUtf8; aSafeFlush: boolean = false); overload;
+    procedure Release(var aDest: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// put back a RawByteString acquired from NewUtf8() into the internal cache
     procedure Release(var aDest: pointer); overload;
@@ -2708,9 +2707,9 @@ type
     /// how many New() calls are currently active
     property Count: integer
       read fOne.Count;
-    /// the length() of RawByteString returned by New()
-    property Length: integer
-      read fLength;
+    /// the maximum length() of RawByteString returned by New()
+    property MaxLength: TStrLen
+      read fMaxLength;
   end;
 
   /// store one RawByteString content with an associated length
@@ -11141,88 +11140,90 @@ begin
 end;
 
 
-{ TRawByteStringCached }
+{ TRawByteStringHeap }
 
 type
-  TRawByteStringCacheOne = record
+  TRawByteStringHeapOne = record
     header: TLockedListOne;
     strrec: TStrRec;
-  end;
-  PRawByteStringCacheOne = ^TRawByteStringCacheOne;
+  end; // followed by the text content
+  PRawByteStringHeapOne = ^TRawByteStringHeapOne;
 
-constructor TRawByteStringCached.Create(aLength: integer);
+const
+  REFCNT_CACHE = -2; // will be handled as constant (released only by our class)
+
+constructor TRawByteStringHeap.Create(aMaxLength: integer);
 begin
-  fLength := aLength;
-  fOne.Init(aLength + (SizeOf(TRawByteStringCacheOne) + 1));
+  fMaxLength := aMaxLength;
+  fOne.Init(aMaxLength + (SizeOf(TRawByteStringHeapOne) + 1));
 end;
 
-procedure TRawByteStringCached.New(var aDest: RawByteString; aCodePage: integer);
+procedure TRawByteStringHeap.New(var aDest: RawByteString;
+  aText: PUtf8Char; aTextLen: TStrLen; aCodePage: integer);
 var
-  one: PRawByteStringCacheOne;
+  one: PRawByteStringHeapOne;
 begin
+  if aTextLen <= 0 then
+    aTextLen := fMaxLength
+  else if aTextLen > fMaxLength then
+  begin // too big for our cached instances -> manual allocation
+    FastSetStringCP(aDest, aText, aTextLen, aCodePage);
+    exit;
+  end;
   one := fOne.New;
   {$ifdef HASCODEPAGE}
   one^.strrec.codePage := aCodePage;
   one^.strrec.elemSize := 1;
   {$endif HASCODEPAGE}
-  one^.strrec.refCnt := -2;
-  one^.strrec.length := fLength;
+  one^.strrec.refCnt := REFCNT_CACHE;
+  one^.strrec.length := aTextLen;
   inc(one);
-  PByteArray(one)[fLength] := 0; // like a regular AnsiString
+  PByteArray(one)[aTextLen] := 0; // like a regular AnsiString
+  if aText <> nil then
+    MoveFast(aText^, one^, aTextLen);
   FastAssignNew(aDest, one);
 end;
 
-procedure TRawByteStringCached.New(var aDest: RawUtf8; aText: PUtf8Char);
+procedure TRawByteStringHeap.New(var aDest: RawUtf8; aText: PUtf8Char; aTextLen: TStrLen);
 begin
-  New(RawByteString(aDest), CP_UTF8);
-  if aText <> nil then
-    MoveFast(aText^, pointer(aDest)^, fLength);
+  New(RawByteString(aDest), aText, aTextLen, CP_UTF8);
 end;
 
-procedure TRawByteStringCached.NewUtf8(var aDest: pointer);
-begin
-  New(PRawByteString(@aDest)^, CP_UTF8);
-end;
-
-procedure TRawByteStringCached.Release(var aDest: RawByteString; aSafeFlush: boolean);
+procedure TRawByteStringHeap.Release(var aDest: RawByteString);
 var
-  one: PRawByteStringCacheOne;
+  one: PRawByteStringHeapOne;
 begin
   if self <> nil then
   begin
     one := pointer(aDest);
     dec(one);
-    if (one^.strrec.refCnt = -2) and
-       (one^.strrec.length = TStrLen(fLength)) then
+    if (one^.strrec.refCnt = REFCNT_CACHE) and
+       (one^.strrec.length = fMaxLength) and
+       fOne.Free(one) then
     begin
-      if aSafeFlush then // ensure previous content is flushed
-        FillCharFast(PByteArray(one)[SizeOf(one^)], fLength, 0);
-      if fOne.Free(one) then
-      begin
-        pointer(aDest) := nil;
-        exit;
-      end;
+      pointer(aDest) := nil;
+      exit;
     end;
   end;
   FastAssignNew(aDest) // this was a regular RawByteString
 end;
 
-procedure TRawByteStringCached.Release(var aDest: RawUtf8; aSafeFlush: boolean);
+procedure TRawByteStringHeap.Release(var aDest: RawUtf8);
 begin
-  Release(RawByteString(aDest), aSafeFlush);
+  Release(RawByteString(aDest));
 end;
 
-procedure TRawByteStringCached.Release(var aDest: pointer);
+procedure TRawByteStringHeap.Release(var aDest: pointer);
 begin
   Release(PRawByteString(@aDest)^);
 end;
 
-function TRawByteStringCached.Clean: PtrInt;
+function TRawByteStringHeap.Clean: PtrInt;
 begin
   result := fOne.EmptyBin * fOne.Size;
 end;
 
-destructor TRawByteStringCached.Destroy;
+destructor TRawByteStringHeap.Destroy;
 begin
   fOne.Done;
   inherited Destroy;
