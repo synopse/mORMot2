@@ -300,7 +300,7 @@ function OpenSslInitialize(
 { ******************** OpenSSL Library Constants }
 
 const
-  OPENSSLSUCCESS = 1;
+  OPENSSLSUCCESS = 1; // API returns usually 0 or <0 on error
 
   OPENSSL_VERSION_ = 0;
   OPENSSL_CFLAGS   = 1;
@@ -7371,7 +7371,7 @@ begin
     res := SSL_get_verify_result(@self);
   result := (res = X509_V_OK); // not yet verified, or peer verification failed
   if (msg <> nil) and
-     not result then
+     not result then // append '(text #error)' to msg^
     msg^ := RawUtf8(format('%s (%s #%d)', [msg^, X509_verify_cert_error_string(res), res]));
 end;
 
@@ -7530,8 +7530,8 @@ begin
   end;
 end;
 
-function EVP_PKEY.Verify(Algo: PEVP_MD; Sig, Msg: pointer;
-  SigLen, MsgLen: integer): boolean;
+function EVP_PKEY.Verify(Algo: PEVP_MD;
+  Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
 var
   ctx: PEVP_MD_CTX;
 begin
@@ -10087,7 +10087,7 @@ class procedure EOpenSsl.CheckFailed(caller: TObject; const method: shortstring;
   errormsg: PRawUtf8; ssl: pointer; sslrecode: integer);
 var
   res: integer;
-  msg, err: RawUtf8;
+  msg: RawUtf8;
   exc: EOpenSsl;
 begin
   if ssl = nil then
@@ -10101,9 +10101,8 @@ begin
       msg := msg + errormsg^;
     errormsg^ := msg;
   end;
-  if (ssl <> nil) and
-     not PSSL(ssl).IsVerified(@err) then
-    msg := msg + err;
+  if ssl <> nil then
+    PSSL(ssl).IsVerified(@msg); // append error text to msg if needed
   if caller = nil then
     exc := CreateFmt('OpenSSL %s error %d [%s]', [OpenSslVersionHexa, res, msg])
   else
