@@ -2182,6 +2182,31 @@ function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
 type
+  TTimeZoneName = array[0..31] of WideChar;
+  TTimeZoneInformation = record
+    Bias: integer;
+    StandardName: TTimeZoneName;
+    StandardDate: TSystemTime;
+    StandardBias: integer;
+    DaylightName: TTimeZoneName;
+    DaylightDate: TSystemTime;
+    DaylightBias: integer;
+  end;
+
+  TDynamicTimeZoneInformation = record
+    TimeZone: TTimeZoneInformation; // XP information
+    TimeZoneKeyName: array[0..127] of WideChar;
+    DynamicDaylightTimeDisabled: boolean;
+  end;
+
+/// allow to change the current system time zone on Windows
+// - don't use this low-level function but the high-level mormot.core.search
+// TSynTimeZone.ChangeOperatingSystemTimeZone method
+// - will use the proper API before and after Vista, if needed
+// - raise EOSException on failure
+procedure SetSystemTimeZone(const info: TDynamicTimeZoneInformation);
+
+type
   HCRYPTPROV = pointer;
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
