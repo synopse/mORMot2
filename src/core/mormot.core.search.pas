@@ -1418,8 +1418,8 @@ type
   {$A-} { make all records packed for cross-platform binary serialization }
 
   /// used to store Time Zone bias in TSynTimeZone
-  // - map how low-level information is stored in the Windows Registry
-  TTimeZoneInfo = record
+  // - map low-level information as stored in the Windows Registry 'TZI' entry
+  TTimeZoneInfo = packed record
     Bias: integer;
     bias_std: integer;
     bias_dlt: integer;
@@ -1430,6 +1430,8 @@ type
 
   /// text identifier of a Time Zone, following Microsoft Windows naming
   TTimeZoneID = type RawUtf8;
+
+  {$A-} { make object packed for cross-platform binary serialization }
 
   /// used to store Time Zone information for a single area in TSynTimeZone
   // - Delphi "object" is buggy on stack -> also defined as record with methods
@@ -1448,6 +1450,8 @@ type
     end;
     /// search for the TTimeZoneInfo of a given year
     function GetTziFor(year: integer): PTimeZoneInfo;
+    /// erase all fields of this structure
+    procedure Clear;
   end;
 
   /// used to store the Time Zone information of a TSynTimeZone class
@@ -6107,6 +6111,11 @@ begin
   end;
 end;
 
+procedure TTimeZoneData.Clear;
+begin
+  Finalize(self);
+  FillcharFast(tzi, SizeOf(tzi), 0);
+end;
 
 
 { TSynTimeZone }
@@ -6233,10 +6242,9 @@ begin
     fZones.Capacity := n;
     for i := 0 to n - 1 do
     begin
-      Finalize(item);
-      FillcharFast(item.tzi, SizeOf(item.tzi), 0);
       if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
       begin
+        item.Clear;
         item.id := keys[i]; // registry keys are genuine by definition
         item.display := reg.ReadString('Display');
         reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
