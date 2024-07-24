@@ -1415,8 +1415,6 @@ function IsValidEmail(P: PUtf8Char): boolean;
 { ***************** Cross-Platform TSynTimeZone Time Zones }
 
 type
-  {$A-} { make all records packed for cross-platform binary serialization }
-
   /// used to store Time Zone bias in TSynTimeZone
   // - map low-level information as stored in the Windows Registry 'TZI' entry
   TTimeZoneInfo = packed record
@@ -1544,6 +1542,9 @@ type
     /// direct access to the wrapper over the time zone information array
     property Zones: TDynArrayHashed
       read fZones;
+    /// the number of items in Zone[] Ids[] and Displays[]
+    property Count: integer
+      read fZoneCount;
     /// returns a TStringList of all TzID values
     // - could be used to fill any UI component to select the time zone
     // - order in Ids[] array follows the Zone[].id information
@@ -6222,14 +6223,15 @@ end;
 
 {$ifdef OSWINDOWS}
 
-procedure TSynTimeZone.LoadFromRegistry;
 const
   REGKEY = 'Software\Microsoft\Windows NT\CurrentVersion\Time Zones\';
+
+procedure TSynTimeZone.LoadFromRegistry;
 var
   reg: TWinRegistry;
   keys: TRawUtf8DynArray;
   i, first, last, year, n: integer;
-  item: TTimeZoneData;
+  z: TTimeZoneData;
 begin
   fSafe.WriteLock;
   try
@@ -6241,13 +6243,12 @@ begin
     n := length(keys);
     fZones.Capacity := n;
     for i := 0 to n - 1 do
-    begin
       if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
       begin
-        item.Clear;
-        item.id := keys[i]; // registry keys are genuine by definition
-        item.display := reg.ReadString('Display');
-        reg.ReadBuffer('TZI', @item.tzi, SizeOf(item.tzi));
+        z.Clear;
+        z.id := keys[i]; // registry keys are genuine by definition
+        z.display := reg.ReadString('Display');
+        reg.ReadBuffer('TZI', @z.tzi, SizeOf(z.tzi));
         if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
         begin
           // warning: never defined on XP/2003, and not for all entries
@@ -6257,20 +6258,20 @@ begin
              (last >= first) then
           begin
             n := 0;
-            SetLength(item.dyn, last - first + 1);
+            SetLength(z.dyn, last - first + 1);
             for year := first to last do
               if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
-                @item.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
+                @z.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
               begin
-                item.dyn[n].year := year;
+                z.dyn[n].year := year;
                 inc(n);
               end;
-            SetLength(item.dyn, n);
+            SetLength(z.dyn, n);
           end;
         end;
-        fZones.Add(item);
+        fZones.Add(z);
       end;
-    end;
+    SetLength(fZone, fZoneCount);
     reg.Close;
     fZones.ForceReHash;
     FreeAndNil(fIds);
