@@ -5473,7 +5473,13 @@ begin
   if Assigned(OnLog) then
     OnLog(sllTrace, 'Abort socket=%', [fSock.Socket], self);
   if SockIsDefined then
-    fSock.Close; // to abort any pending OS call in another thread
+    {$ifdef OSWINDOWS}
+    // closing will abort any pending Windows recv/send call in another thread
+    fSock.Close;
+    {$else}
+    // shutdown should do the trick on Linux, without messing the file descriptor
+    shutdown(fSock.Socket, SHUT_RDWR);
+    {$endif OSWINDOWS}
 end;
 
 destructor TCrtSocket.Destroy;
