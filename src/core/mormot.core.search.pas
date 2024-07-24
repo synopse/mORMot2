@@ -1498,6 +1498,16 @@ type
     {$ifdef OSWINDOWS}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
+    /// change the current OS time zone from its Zones[] Ids[] Displays[] index
+    // - currently only available on Windows
+    // - this method is not thread-safe, because it uses an index
+    procedure ChangeOperatingSystemTimeZone(Index: PtrInt); overload;
+    /// change the current Operating System time zone to a given TzId
+    // - currently only available on Windows
+    // - could be used e.g. as
+    // ! TSynTimeZone.Default.ChangeOperatingSystemTimeZone('UTC');
+    // ! TSynTimeZone.Default.ChangeOperatingSystemTimeZone('Romance Standard Time');
+    procedure ChangeOperatingSystemTimeZone(const TzId: TTimeZoneID); overload;
     {$endif OSWINDOWS}
     /// read time zone information from a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be used
@@ -6279,6 +6289,56 @@ begin
   finally
     fSafe.WriteUnLock;
   end;
+end;
+
+procedure TSynTimeZone.ChangeOperatingSystemTimeZone(const TzId: TTimeZoneID);
+var
+  i: PtrInt;
+begin
+  fSafe.WriteLock;
+  try
+    i := LockedFindZoneIndex(TzId);
+    if (i < 0) and
+       (TzId = 'UTC') then
+      i := LockedFindZoneIndex('GMT Standard Time'); // e.g. for XP
+    if i < 0 then
+      ESynException.RaiseUtf8(
+        'Unknown %.ChangeOperatingSystemTimeZone(%)', [self, TzId]);
+    ChangeOperatingSystemTimeZone(i);
+  finally
+    fSafe.WriteUnLock;
+  end;
+end;
+
+procedure TSynTimeZone.ChangeOperatingSystemTimeZone(Index: PtrInt);
+var
+  info: TDynamicTimeZoneInformation;
+  z: ^TTimeZoneData;
+  reg: TWinRegistry;
+begin
+  if PtrUInt(Index) >= PtrUInt(fZoneCount) then
+    ESynException.RaiseUtf8(
+      'Unexpected %.ChangeOperatingSystemTimeZone(%)', [self, Index]);
+  // use the existing information for this zone
+  z := @fZone[Index];
+  FillCharFast(info, SizeOf(info), 0);
+  info.TimeZone.Bias := z^.tzi.Bias;
+  info.TimeZone.StandardDate := TSystemTime(z^.tzi.change_time_std);
+  info.TimeZone.DaylightDate := TSystemTime(z^.tzi.change_time_dlt);
+  info.TimeZone.StandardBias := z^.tzi.bias_std;
+  info.TimeZone.DaylightBias := z^.tzi.bias_dlt;
+  Utf8ToWideChar(@info.TimeZoneKeyName, pointer(z^.id), 128, length(z^.id), true);
+  // we need to retrieve additional information from the registry
+  if not reg.ReadOpen(wrLocalMachine, REGKEY + z^.id) then
+    ESynException.RaiseUtf8('%.ChangeOperatingSystemTimeZone: missing % key',
+      [self, z^.id]);
+  try
+    reg.ReadMax('Std', @info.TimeZone.StandardName, 32 * 2);
+    reg.ReadMax('Dlt', @info.TimeZone.DaylightName, 32 * 2);
+  finally
+    reg.Close;
+  end;
+  SetSystemTimeZone(info); // may raise EOSException
 end;
 
 {$endif OSWINDOWS}
