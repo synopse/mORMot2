@@ -650,15 +650,15 @@ begin
     [ModuleName, code, string(WinErrorText(code, ModuleName))]);
 end;
 
-procedure RaiseLastError(const Context: shortstring; RaisedException: ExceptClass);
-var
-  code: integer;
+procedure RaiseLastError(const Context: shortstring;
+  RaisedException: ExceptClass; Code: integer);
 begin
-  code := GetLastError;
+  if Code = 0 then
+    Code := GetLastError;
   if RaisedException = nil then
     RaisedException := EOSException;
   raise RaisedException.CreateFmt('%s error %x (%s)',
-    [Context, code, string(WinErrorText(code, nil))])
+    [Context, Code, string(WinErrorText(Code, nil))])
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;

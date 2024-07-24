@@ -3067,7 +3067,7 @@ function WinErrorConstant(Code: cardinal): PUtf8Char;
 
 /// raise an EOSException from the last system error using WinErrorText()
 procedure RaiseLastError(const Context: shortstring;
-  RaisedException: ExceptClass = nil);
+  RaisedException: ExceptClass = nil; Code: integer = 0);
 
 /// raise an Exception from the last module error using WinErrorText()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
