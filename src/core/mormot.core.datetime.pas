@@ -1711,9 +1711,10 @@ begin
     exit;
   P := GotoNextNotSpace(P);
   s := P;
-  if PCardinal(s)^ and $ffffff = // most common case (always for HTTP dates)
+  if PCardinal(s)^ and $ffffff =
        ord('G') + ord('M') shl 8 + ord('T') shl 16 then
   begin
+    // GMT is the most common case (always for HTTP dates)
     P := GotoNextNotSpace(s + 3);
     Zone := 0;
     result := true;
@@ -1721,6 +1722,7 @@ begin
   else if (s^ = '+') or
           (s^ = '-') then
   begin
+    // +xxx -xxx numbers
     if not (s[1] in ['0'..'9']) or
        not (s[2] in ['0'..'9']) or
        not (s[3] in ['0'..'9']) or

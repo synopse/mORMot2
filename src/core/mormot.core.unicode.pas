@@ -2709,7 +2709,7 @@ var
   c: cardinal;
   begd: PWideChar;
   endSource: PUtf8Char;
-  endDest: PWideChar;
+  endDest: PWord;
   i, extra: integer;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
@@ -2734,17 +2734,18 @@ begin
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
   endSource := source + sourceBytes;
-  endDest := dest + MaxDestChars;
+  endDest := @dest[MaxDestChars];
   begd := dest;
   repeat
     c := byte(source^);
     inc(source);
     if c <= 127 then
     begin
+      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+        break; // avoid buffer overflow before writing
       PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
       inc(dest);
-      if (source < endSource) and
-         (dest < endDest) then
+      if source < endSource then
         continue
       else
         break;
@@ -2769,20 +2770,22 @@ begin
     end;
     if c <= $ffff then
     begin
+      if PtrUInt(@dest[1]) >= PtrUInt(endDest) then
+        break;
       PWord(dest)^ := c;
       inc(dest);
-      if (source < endSource) and
-         (dest < endDest) then
+      if source < endSource then
         continue
       else
         break;
     end;
     dec(c, $10000); // store as UTF-16 surrogates
+    if PtrUInt(@dest[2]) >= PtrUInt(endDest) then
+      break;
     PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
     PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
     inc(dest, 2);
-    if (source >= endSource) or
-       (dest >= endDest) then
+    if source >= endSource then
       break;
   until false;
 Quit:
