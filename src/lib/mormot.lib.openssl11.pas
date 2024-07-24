@@ -10614,6 +10614,7 @@ begin
   case err of
     SSL_ERROR_WANT_READ,
     SSL_ERROR_WANT_WRITE:
+      // note that want_read may appear during recv, and want_write during send
       result := nrRetry;
     SSL_ERROR_ZERO_RETURN:
       // peer issued an SSL_shutdown -> keep fDoSslShutdown=true
