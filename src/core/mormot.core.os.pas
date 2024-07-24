@@ -1890,7 +1890,10 @@ type
     function ReadQword(const entry: SynUnicode): QWord;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
-    function ReadBuffer(const entry: SynUnicode; Data: pointer; DataLen: DWORD): boolean;
+    function ReadBuffer(const entry: SynUnicode; data: pointer; datalen: DWORD): boolean;
+    /// read a Windows Registry content as length-specified buffer after ReadOpen()
+    // - returns the number of bytes written to Data
+    function ReadMax(const entry: SynUnicode; data: pointer; maxdatalen: DWORD): DWORD;
     /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
     // - returns -1 if the entry is not found
     function ReadSize(const entry: SynUnicode): integer;

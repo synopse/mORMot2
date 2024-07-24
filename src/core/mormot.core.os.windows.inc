@@ -2966,9 +2966,23 @@ begin
 end;
 
 function TWinRegistry.ReadBuffer(const entry: SynUnicode;
-  Data: pointer; DataLen: DWord): boolean;
+  data: pointer; datalen: DWord): boolean;
 begin
-  result := RegQueryValueExW(key, pointer(entry), nil, nil, Data, @DataLen) = 0;
+  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = 0;
+end;
+
+function TWinRegistry.ReadMax(const entry: SynUnicode;
+  Data: pointer; MaxDataLen: DWORD): DWORD;
+var
+  tmp: RawByteString;
+begin
+  tmp := ReadData(entry); // we need to read the whole entry
+  result := length(tmp);
+  if result = 0 then
+    exit;
+  if result > MaxDataLen then
+    result := MaxDataLen;
+  MoveFast(pointer(tmp)^, Data^, result);
 end;
 
 function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
