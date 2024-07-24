@@ -7133,6 +7133,7 @@ begin
     dic.AddItem('Type', 'OutputIntent');
     dic.AddItem('S', 'GTS_PDFA1'); // there is no GTS_PdfA2 or GTS_PdfA3
     dic.AddItemText('OutputConditionIdentifier', 'sRGB');
+    dic.AddItemText('Info', 'sRGB'); // to show the output intents on Acrobat-Reader tab "standards"
     dic.AddItemText('RegistryName', 'http://www.color.org');
     rgb := TPdfStream.Create(self);
     rgb.Attributes.AddItem('N', 3);
