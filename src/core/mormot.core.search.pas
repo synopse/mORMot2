@@ -1475,6 +1475,8 @@ type
     fIds: TStringList;
     fDisplays: TStringList;
     function LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
+    procedure SetIDs;
+    procedure SetDisplays;
   public
     /// initialize the internal storage
     // - but no data is available, until Load* methods are called
@@ -1542,10 +1544,12 @@ type
     // - could be used to fill any UI component to select the time zone
     // - order in Ids[] array follows the Zone[].id information
     function Ids: TStrings;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns a TStringList of all Display text values
     // - could be used to fill any UI component to select the time zone
     // - order in Displays[] array follows the Zone[].display information
     function Displays: TStrings;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
 
 /// retrieve the time bias (in minutes) for a given date/time on a TzId
@@ -6104,7 +6108,8 @@ begin
 end;
 
 
-{ TTimeZoneInformation }
+
+{ TSynTimeZone }
 
 constructor TSynTimeZone.Create;
 begin
@@ -6395,33 +6400,45 @@ begin
   end;
 end;
 
-function TSynTimeZone.Ids: TStrings;
+procedure TSynTimeZone.SetIDs;
 var
   i: PtrInt;
 begin
+  fSafe.WriteLock;
   if fIDs = nil then
   begin
     fIDs := TStringList.Create;
-    fSafe.ReadLock;
     for i := 0 to length(fZone) - 1 do
       fIDs.Add(Utf8ToString(RawUtf8(fZone[i].id)));
-    fSafe.ReadUnLock;
   end;
+  fSafe.WriteUnLock;
+end;
+
+procedure TSynTimeZone.SetDisplays;
+var
+  i: PtrInt;
+begin
+  fSafe.WriteLock;
+  if fDisplays = nil then
+  begin
+    fDisplays := TStringList.Create;
+    for i := 0 to length(fZone) - 1 do
+      fDisplays.Add(Utf8ToString(fZone[i].display));
+  end;
+  fSafe.WriteUnLock;
+end;
+
+function TSynTimeZone.Ids: TStrings;
+begin
+  if fIDs = nil then
+    SetIDs;
   result := fIDs;
 end;
 
 function TSynTimeZone.Displays: TStrings;
-var
-  i: PtrInt;
 begin
   if fDisplays = nil then
-  begin
-    fDisplays := TStringList.Create;
-    fSafe.ReadLock;
-    for i := 0 to length(fZone) - 1 do
-      fDisplays.Add(Utf8ToString(fZone[i].display));
-    fSafe.ReadUnLock;
-  end;
+    SetDisplays;
   result := fDisplays;
 end;
 
