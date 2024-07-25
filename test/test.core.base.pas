@@ -2630,6 +2630,19 @@ begin
     CheckHash(c.DetectUnknown, $5EA096A5);
     CheckHash(c.FullDescription('this is test #3 executable', 'exename'), $DFE40A21);
 //writeln(c.FullDescription('this is test #3 executable', 'exename'));
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('-o file.txt --y -v -t 1', ' ');
+    c.Parse(#10, '-', '--');
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Options), 2);
+    CheckEqual(length(c.Names), 2);
+    CheckEqual(length(c.Values), length(c.Names));
+    Check(c.Option('y'));
+    Check(c.Option('v'));
+    Check(c.Get('o', f));
+    CheckEqual(f, 'file.txt');
+    Check(c.Get('t', t));
+    CheckEqual(t, 1);
   finally
     c.Free;
   end;

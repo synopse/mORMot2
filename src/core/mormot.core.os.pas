@@ -1509,7 +1509,8 @@ type
     property LineFeed: RawUtf8
       read fLineFeed write fLineFeed;
     /// map ParamStr(1 .. ParamCount) values, encoded as RawUtf8
-    // - may be used e.g. for regression tests instead of ParamStr()
+    // - may be used e.g. for regression tests instead of ParamStr():
+    // ! c.RawParams := CsvToRawUtf8DynArray('-o file.txt --y -v -t 1', ' ');
     property RawParams: TRawUtf8DynArray
       read fRawParams write fRawParams;
   end;
