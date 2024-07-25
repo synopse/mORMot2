@@ -6131,6 +6131,9 @@ end;
 
 { TSynTimeZone }
 
+// a somewhat-official per-country list between IANA and Microsoft names online:
+// https://github.com/unicode-org/cldr/blob/main/common/supplemental/windowsZones.xml
+
 constructor TSynTimeZone.Create;
 begin
   fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),
