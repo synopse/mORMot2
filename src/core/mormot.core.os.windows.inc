@@ -3597,16 +3597,6 @@ const
 type
   _PPS_POST_PROCESS_INIT_ROUTINE = ULONG;
 
-  PUNICODE_STRING = ^UNICODE_STRING;
-  UNICODE_STRING = packed record
-    Length: word;
-    MaximumLength: word;
-    {$ifdef CPUX64}
-    _align: array[0..3] of byte;
-    {$endif CPUX64}
-    Buffer: PWideChar;
-  end;
-
   PMS_PEB_LDR_DATA = ^MS_PEB_LDR_DATA;
   MS_PEB_LDR_DATA = packed record
     Reserved1: array[0..7] of byte;

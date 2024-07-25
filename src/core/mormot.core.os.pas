@@ -2341,6 +2341,16 @@ type
     pvGetArg: pointer;
   end;
 
+  PUNICODE_STRING = ^UNICODE_STRING;
+  UNICODE_STRING = packed record
+    Length: word;
+    MaximumLength: word;
+    {$ifdef CPUX64}
+    _align: array[0..3] of byte;
+    {$endif CPUX64}
+    Buffer: PWideChar;
+  end;
+
   /// direct access to the Windows CryptoApi
   {$ifdef USERECORDWITHMETHODS}
   TWinCryptoApi = record
