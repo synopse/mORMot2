@@ -317,7 +317,9 @@ const
   SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
 
   SCHANNEL_SHUTDOWN = 1;
+
   SCHANNEL_CRED_VERSION = 4;
+  SCH_CREDENTIALS_VERSION = 5;
 
   SCH_CRED_NO_SYSTEM_MAPPER                    = $00000002;
   SCH_CRED_NO_SERVERNAME_CHECK                 = $00000004;
@@ -337,6 +339,7 @@ const
   SCH_CRED_MEMORY_STORE_CERT                   = $00010000;
   SCH_CRED_CACHE_ONLY_URL_RETRIEVAL_ON_CREATE  = $00020000;
   SCH_SEND_ROOT_CERT                           = $00040000;
+  SCH_USE_STRONG_CRYPTO                        = $00400000;
 
 function SspiResToText(res: cardinal): TShort31;
 
@@ -390,11 +393,10 @@ function FreeCredentialsHandle(phCredential: PSecHandle): integer; stdcall;
 type
   _HMAPPER = pointer;
 
-  /// SChannel credential information
-  TSChannelCred = record
-    dwVersion: cardinal;
+  /// SChannel credential information as SCHANNEL_CRED legacy format
+  TSChannelCredOld = record
     cCreds: cardinal;
-    paCred: PCCERT_CONTEXT;
+    paCred: PPCCERT_CONTEXT;
     hRootStore: HCERTSTORE;
     cMappers: cardinal;
     aphMappers: _HMAPPER;
@@ -407,8 +409,43 @@ type
     dwFlags: cardinal;
     dwCredFormat: cardinal;
   end;
-  /// pointer to SChannel credential information
-  PSChannelCred = ^TSChannelCred;
+
+  /// SChannel TLS information within new Win10+ SCH_CREDENTIALS
+  TSChannelCredTls = record
+    cAlpnIds: cardinal;
+    rgstrAlpnIds: PUNICODE_STRING;
+    grbitDisabledProtocols: cardinal;
+    cDisabledCrypto: cardinal;
+    pDisabledCrypto: pointer;
+    dwFlags: cardinal;
+  end;
+  PSChannelCredTls = ^TSChannelCredTls;
+
+  /// SChannel credential information as Win10+ SCH_CREDENTIALS
+  TSChannelCredNew = record
+    dwCredFormat: cardinal;
+    cCreds: cardinal;
+    paCred: PPCCERT_CONTEXT;
+    hRootStore: HCERTSTORE;
+    cMappers: cardinal;
+    aphMappers: _HMAPPER;
+    dwSessionLifespan: cardinal;
+    dwFlags: cardinal;
+    cTlsParameters: cardinal;
+    pTlsParameters: PSChannelCredTls;
+  end;
+
+  /// SChannel credential information, in legacy or Win11 format
+  TSChannelCred = record
+    case dwVersion: cardinal of
+      SCHANNEL_CRED_VERSION: (
+        Old: TSChannelCredOld;
+      );
+      SCH_CREDENTIALS_VERSION: (
+        New: TSChannelCredNew;
+        Tls: TSChannelCredTls; // within New.pTlsParameters
+      );
+  end;
 
   /// store a memory buffer during SChannel encryption
   TCryptDataBlob = record
