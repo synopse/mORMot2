@@ -1971,18 +1971,53 @@ begin
   buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
-procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS: boolean);
+// TLS 1.3 is supported starting in Windows 11 and Windows Server 2022.
+// Enabling TLS 1.3 on earlier versions of Windows is not a safe configuration.
+// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
+
+procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS: boolean;
+  dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
-  cred.dwVersion := SCHANNEL_CRED_VERSION;
-  cred.grbitEnabledProtocols :=
-      SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_3_CLIENT or
-      SP_PROT_TLS1_2_SERVER or SP_PROT_TLS1_3_SERVER;
-  if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
-     AllowDeprecatedTls then
-    cred.grbitEnabledProtocols := cred.grbitEnabledProtocols or
-      SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
-      SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
+  {if (OSVersion in [wEleven, wEleven_64]) or
+     (OSVersion >= wServer2022_64) then
+  begin
+    // require SCH_CREDENTIALS structure in order to use TLS 1.3 with schannel
+    cred.dwVersion := SCH_CREDENTIALS_VERSION;
+    cred.New.dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
+    if not AllowDeprecatedTLS then
+    begin
+      cred.New.cTlsParameters := 1;
+      cred.New.pTlsParameters := @cred.Tls;
+      cred.Tls.grbitDisabledProtocols :=
+        SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
+        SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
+    end;
+    if paServCred <> nil then
+    begin
+      cred.New.cCreds := 1;
+      cred.New.paCred := paServCred;
+    end;
+  end  // not yet enabled: still fail on SEC_I_RENEGOTIATE
+  else}
+  begin
+    // SCHANNEL_CRED structure has been deprecated since Windows 10, 1809
+    cred.dwVersion := SCHANNEL_CRED_VERSION;
+    cred.Old.grbitEnabledProtocols :=
+        SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_3_CLIENT or
+        SP_PROT_TLS1_2_SERVER or SP_PROT_TLS1_3_SERVER;
+    if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
+       AllowDeprecatedTls then
+      cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
+        SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
+        SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
+    cred.old.dwFlags := dwFlags;
+    if paServCred <> nil then
+    begin
+      cred.Old.cCreds := 1;
+      cred.Old.paCred := paServCred;
+    end;
+  end;
 end;
 
 procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
@@ -2001,12 +2036,13 @@ begin
   trial := 0;
   while true do
     try
-      CredInit(cred, Context.AllowDeprecatedTLS);
       if Context.IgnoreCertificateErrors then
-        cred.dwFlags := SCH_CRED_MANUAL_CRED_VALIDATION
+        f := SCH_CRED_MANUAL_CRED_VALIDATION or
+             SCH_CRED_NO_DEFAULT_CREDS
       else
-        cred.dwFlags := SCH_CRED_REVOCATION_CHECK_CHAIN or
-                        SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+        f := SCH_CRED_REVOCATION_CHECK_CHAIN or
+             SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+      CredInit(cred, Context.AllowDeprecatedTLS, f, nil);
       CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
         nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
       fDataPos := 0;
@@ -2122,9 +2158,7 @@ begin
   // prepare TLS connection properties from AfterBind() global certificate
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
-  CredInit(cred, BoundContext.AllowDeprecatedTls);
-  cred.cCreds := 1;
-  cred.paCred := @BoundContext.AcceptCert;
+  CredInit(cred, BoundContext.AllowDeprecatedTls, 0, @BoundContext.AcceptCert);
   CheckSEC_E_OK('AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
