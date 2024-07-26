@@ -5072,7 +5072,7 @@ begin
   except
     on E: Exception do
     begin
-      fSecure := nil;
+      fSecure := nil; // reset TLS context
       raise ENetSock.CreateFmt('%s.DoTlsAfter: TLS failed [%s %s]',
         [ClassNameShort(self)^, ClassNameShort(E)^, E.Message]);
     end;

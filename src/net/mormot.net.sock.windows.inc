@@ -1891,6 +1891,7 @@ type
     function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
     function FreeAndCheckSocket(const ctx: shortstring; res: integer;
       tofree: pointer): cardinal;
+    function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop;
     procedure FinalizeCredCtxt;
   public
@@ -2186,57 +2187,54 @@ begin
   result := @fCtxt; // return as PCtxtHandle
 end;
 
-procedure TSChannelNetTls.HandshakeLoop;
-
-  function ComputeAndSendAnswer: cardinal;
-  var
-    f: cardinal;
-    buf: THandshakeBuf;
-    LInCtxPtr: PSecHandle;
+function TSChannelNetTls.HandshakeStep(buf: PByteArray; var len: integer): cardinal;
+var
+  f: cardinal;
+  b: THandshakeBuf;
+  LInCtxPtr: PSecHandle;
+begin
+  //writeln(fSocket.Socket,' Handshake STEP ', len);
+  HandshakeBufInit(b);
+  b.buf[0].pvBuffer := buf; // SECBUFFER_TOKEN
+  b.buf[0].cbBuffer := len;
+  f := 0;
+  if fAccept then // server side
   begin
-    HandshakeBufInit(buf);
-    buf.buf[0].cbBuffer := fDataCount; // SECBUFFER_TOKEN
-    buf.buf[0].pvBuffer := pointer(fData);
-    f := 0;
-    if fAccept then
-    begin
-      if (fCtxt.dwLower = 0) and (fCtxt.dwUpper = 0) then
-        LInCtxPtr := nil
-      else
-        LInCtxPtr := @fCtxt;
-      result := AcceptSecurityContext(
-        @fCred, LInCtxPtr, @buf.input, fFlags, 0, @fCtxt, @buf.output, f, nil);
-    end
+    if (fCtxt.dwLower = 0) and
+       (fCtxt.dwUpper = 0) then
+      LInCtxPtr := nil
     else
-      result := InitializeSecurityContextW(
-        @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
-        @buf.input, 0, nil, @buf.output, f, nil);
-    //writeln(IntToHex(result, 8),' [',SspiResToText(result),'] tosend=',buf.buf[2].cbBuffer);
-    if (result = SEC_E_OK) or
-       (result = SEC_I_CONTINUE_NEEDED) or
-       ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
-      if (buf.buf[2].cbBuffer <> 0) and
-         (buf.buf[2].pvBuffer <> nil) then
-      begin
-        // need to send back something to the server
-        CheckSocket('send', mormot.net.sock.Send(
-          fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-        CheckSEC_E_OK('FreeContextBuffer',
-          FreeContextBuffer(buf.buf[2].pvBuffer));
-      end;
-    if (buf.buf[1].BufferType = SECBUFFER_EXTRA) and
-       (buf.buf[1].cbBuffer <> 0) then
-    begin
-      // reuse pending bytes - avoid unexpected SEC_E_INVALID_TOKEN
-      //writeln('SECBUFFER_EXTRA=',buf.buf[1].cbBuffer,' / ',fDataCount);
-      MoveFast(PByteArray(fData)[cardinal(fDataCount) - buf.buf[1].cbBuffer],
-               PByteArray(fData)[0], buf.buf[1].cbBuffer);
-      fDataCount := buf.buf[1].cbBuffer;
-    end
-    else if result <> SEC_E_INCOMPLETE_MESSAGE then
-      fDataCount := 0;
-  end;
+      LInCtxPtr := @fCtxt;
+    result := AcceptSecurityContext(
+      @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
+  end
+  else // client side
+    result := InitializeSecurityContextW(
+      @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
+      @b.input, 0, nil, @b.output, f, nil);
+  //writeln(fSocket.Socket,' ',SspiResToText(result),' tosend=',b.buf[2].cbBuffer);
+  if (result = SEC_E_OK) or
+     (result = SEC_I_CONTINUE_NEEDED) or
+     ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
+    if (b.buf[2].cbBuffer <> 0) and
+       (b.buf[2].pvBuffer <> nil) then
+      // need to send back something to the server
+      FreeAndCheckSocket('send', mormot.net.sock.Send(
+        fSocket.Socket, b.buf[2].pvBuffer, b.buf[2].cbBuffer, 0),
+        b.buf[2].pvBuffer);
+  if (b.buf[1].BufferType = SECBUFFER_EXTRA) and
+     (b.buf[1].cbBuffer <> 0) then
+  begin
+    // reuse pending bytes - avoid unexpected SEC_E_INVALID_TOKEN
+    //writeln(fSocket.Socket,' SECBUFFER_EXTRA=',b.buf[1].cbBuffer,'/',len);
+    MoveFast(buf[cardinal(len) - b.buf[1].cbBuffer], buf[0], b.buf[1].cbBuffer);
+    len := b.buf[1].cbBuffer;
+  end
+  else if result <> SEC_E_INCOMPLETE_MESSAGE then
+    len := 0;
+end;
 
+procedure TSChannelNetTls.HandshakeLoop;
 var
   res: cardinal;
 begin
@@ -2245,13 +2243,14 @@ begin
     inc(fDataCount, FreeAndCheckSocket('recv',
       recv(fSocket.Socket,
         @PByteArray(fData)[fDataCount], length(fData) - fDataCount, 0), nil));
-    res := ComputeAndSendAnswer;
+    res := HandshakeStep(pointer(fData), fDataCount);
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
-      res := ComputeAndSendAnswer; // run twice to let the handshake pass
+      // run twice to let the handshake pass
+      res := HandshakeStep(pointer(fData), fDataCount);
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
-  CheckSEC_E_OK('Handshake.ComputeAndSendAnswer', res);
+  CheckSEC_E_OK('HandshakeStep', res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
   fCipherName := ''; // will be retrieved if needed
   if fInputSize = 0 then
