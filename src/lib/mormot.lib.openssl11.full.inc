@@ -12973,7 +12973,7 @@ function ASN1_INTEGER_get_int64(pr: PInt64; a: PASN1_INTEGER): integer; cdecl;
 function ASN1_INTEGER_set_int64(a: PASN1_INTEGER; r: Int64): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_set_int64';
 
-function ASN1_INTEGER_get_uint64(pr: PQword; a: PASN1_INTEGER): integer; cdecl;
+function ASN1_INTEGER_get_uint64(pr: PQWord; a: PASN1_INTEGER): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_get_uint64';
 
 function ASN1_INTEGER_set_uint64(a: PASN1_INTEGER; r: Qword): integer; cdecl;

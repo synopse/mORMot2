@@ -5012,7 +5012,7 @@ var
   V64: Int64;
 begin
   if fIsQWord then
-    SetQWord(Value, PQword(@V64)^)
+    SetQWord(Value, PQWord(@V64)^)
   else
     SetInt64(Value, V64{%H-});
   SetValueInt64(Instance, V64);

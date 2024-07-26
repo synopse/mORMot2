@@ -6860,7 +6860,7 @@ begin
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
             ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
               req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
-              {out} ctxt.fRemoteIP, PQword(@ctxt.fConnectionID)^);
+              {out} ctxt.fRemoteIP, PQWord(@ctxt.fConnectionID)^);
             // retrieve any SetAuthenticationSchemes() information
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
               // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
