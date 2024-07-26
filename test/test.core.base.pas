@@ -2629,7 +2629,6 @@ begin
     CheckEqual(f, '');
     CheckHash(c.DetectUnknown, $5EA096A5);
     CheckHash(c.FullDescription('this is test #3 executable', 'exename'), $DFE40A21);
-//writeln(c.FullDescription('this is test #3 executable', 'exename'));
     c.Clear;
     c.RawParams := CsvToRawUtf8DynArray('-o file.txt --y -v -t 1', ' ');
     c.Parse(#10, '-', '--');
@@ -2646,7 +2645,6 @@ begin
   finally
     c.Free;
   end;
-//ConsoleWaitForEnterKey;
 end;
 
 procedure TTestCoreBase._IsMatch;
@@ -6783,6 +6781,22 @@ begin
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!DocType HTML<html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
+  Check(not IsContentTypeCompressible('anything'));
+  Check(not IsContentTypeCompressible('toto/plain'));
+  Check(IsContentTypeCompressible('text/plain'));
+  Check(IsContentTypeCompressible('text/xml'));
+  Check(IsContentTypeCompressible('text/css'));
+  Check(not IsContentTypeCompressible('texto/xml'));
+  Check(IsContentTypeCompressible('application/json'));
+  Check(IsContentTypeCompressibleU('APPLICATION/JSON'));
+  Check(IsContentTypeCompressible('application/xml'));
+  Check(IsContentTypeCompressible('application/javascript'));
+  Check(IsContentTypeCompressible('application/VND.API+JSON'));
+  Check(not IsContentTypeCompressible('application/plain'));
+  Check(IsContentTypeCompressible('image/svg'));
+  Check(IsContentTypeCompressible('image/X-ico'));
+  Check(IsContentTypeCompressible('image/X-ICO'));
+  Check(not IsContentTypeCompressible('image/png'));
   // mime multipart encoding
   for rfc2388 := false to true do
   begin
