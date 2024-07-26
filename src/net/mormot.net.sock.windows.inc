@@ -1914,12 +1914,14 @@ type
 procedure TSChannelNetTls.ESChannelRaiseLastError(
   const ctx: shortstring; res: cardinal);
 var
-  syserr: integer;
+  sys: integer;
+  msg: string;
 begin
-  syserr := GetLastError;
-  raise ESChannel.CreateFmt('<%s>: %s returned %x [%s], System Error %d [%s]',
-    [fServerAddressW, ctx, res, SspiResToText(res), syserr,
-     string(GetErrorText(syserr))]);
+  sys := GetLastError;
+  msg := format('<%s>: %s returned %x [%s], System Error %d [%s]',
+    [fServerAddressW, ctx, res, SspiResToText(res), sys, GetErrorText(sys)]);
+  //writeln(fSocket.Socket,' ',msg);
+  raise ESChannel.Create(msg);
 end;
 
 function TSChannelNetTls.CheckSEC_E_OK(
@@ -1934,6 +1936,7 @@ end;
 function TSChannelNetTls.FreeAndCheckSocket(const ctx: shortstring;
   res: integer; tofree: pointer): cardinal;
 begin
+  //writeln(fSocket.Socket,' ',ctx,'=',res);
   if tofree <> nil then
     CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
   if res = SOCKET_ERROR then
@@ -2237,6 +2240,7 @@ procedure TSChannelNetTls.HandshakeLoop;
 var
   res: cardinal;
 begin
+  //writeln(fSocket.Socket,' Handshake IN');
   repeat
     inc(fDataCount, FreeAndCheckSocket('recv',
       recv(fSocket.Socket,
@@ -2249,7 +2253,7 @@ begin
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK('Handshake.ComputeAndSendAnswer', res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
-  fCipherName := ''; // will be retrieved if needed 
+  fCipherName := ''; // will be retrieved if needed
   if fInputSize = 0 then
   begin
     // retrieve the TLS field sizes during first handshake
@@ -2262,6 +2266,7 @@ begin
     SetLength(fInput, fInputSize);
     fInputCount := 0;
   end;
+  //writeln(fSocket.Socket,' Handshake OUT inputsize=',fInputSize);
 end;
 
 destructor TSChannelNetTls.Destroy;
@@ -2380,6 +2385,7 @@ begin
     until res <> SEC_E_INCOMPLETE_MESSAGE;
     needsRenegotiate := false;
     repeat
+//if res <> SEC_E_OK then writeln(fSocket.Socket,' res=',SspiResToText(res));
       case res of
         SEC_I_RENEGOTIATE:
           needsRenegotiate := true;
