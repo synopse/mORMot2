@@ -1827,6 +1827,10 @@ function IsContentCompressed(Content: pointer; Len: PtrInt): boolean;
 /// recognize e.g. 'text/css' or 'application/json' as compressible
 function IsContentTypeCompressible(ContentType: PUtf8Char): boolean;
 
+/// recognize e.g. 'text/css' or 'application/json' as compressible
+function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast guess of the size, in pixels, of a JPEG memory buffer
 // - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
 // - returns TRUE if the buffer is likely to be a JPEG picture, and set the
@@ -8918,6 +8922,11 @@ begin
   else
     result := false;
   end;
+end;
+
+function IsContentTypeCompressibleU(const ContentType: RawUtf8): boolean;
+begin
+  result := IsContentTypeCompressible(pointer(ContentType));
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
