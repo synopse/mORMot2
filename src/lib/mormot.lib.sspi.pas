@@ -174,6 +174,7 @@ type
     dwExchStrength: cardinal;
     /// retrieve some decoded text representation of this raw information
     // - typically 'ECDHE256-AES128-SHA256 TLSv1.2'
+    // - used only on XP, where SECPKG_ATTR_CIPHER_INFO is not available
     function ToText: RawUtf8;
   end;
   PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
@@ -1130,16 +1131,19 @@ begin
     dwProtocol := 3;
 end;
 
-function TSecPkgConnectionInfo.ToText: RawUtf8;
+function TSecPkgConnectionInfo.ToText: RawUtf8;  // fallback on XP
 var
   h: byte;
   alg, hsh, xch: string[5];
 begin
+  // see https://learn.microsoft.com/en-us/windows/win32/seccrypto/alg-id                       
   FixProtocol(dwProtocol);
   if aiCipher and $1f in [14..17] then
     alg := 'AES'
   else if aiCipher = $6801 then
     alg := 'RC4-'
+  else if aiCipher = $6603 then
+    alg := '3DES-'
   else
     str(aiCipher and $1f, alg);
   h := aiHash and $1f;
