@@ -1980,42 +1980,43 @@ begin
   buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
-// TLS 1.3 is supported starting in Windows 11 and Windows Server 2022.
-// Enabling TLS 1.3 on earlier versions of Windows is not a safe configuration.
-// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
-
 procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS: boolean;
   dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
-  {if (OSVersion in [wEleven, wEleven_64]) or
+  // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
+  // Enabling TLS 1.3 on earlier versions of Windows is possible through the
+  // registry, but is explictly documented as unsafe by Microsoft.
+  // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
+  if (OSVersion in [wEleven, wEleven_64]) or
      (OSVersion >= wServer2022_64) then
   begin
-    // require SCH_CREDENTIALS structure in order to use TLS 1.3 with schannel
+    // require new SCH_CREDENTIALS structure in order to enable TLS 1.3
     cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
-    cred.New.dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
     if not AllowDeprecatedTLS then
     begin
+      dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
-      cred.Tls.grbitDisabledProtocols := cardinal(not (SP_PROT_TLS1_2 or SP_PROT_TLS1_3));
+      cred.Tls.grbitDisabledProtocols := cardinal(not SP_PROT_TLS_SAFE);
     end;
+    cred.New.dwFlags := dwFlags;
     if paServCred <> nil then
     begin
       cred.New.cCreds := 1;
       cred.New.paCred := paServCred;
     end;
-  end  // not yet enabled: still fail on SEC_I_RENEGOTIATE
-  else}
+  end
+  else
   begin
     // legacy SCHANNEL_CRED structure - deprecated since Windows 10, 1809
     cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
-    cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_2; // MS said: no TLS 1.3
+    cred.Old.dwFlags := dwFlags;
+    cred.Old.grbitEnabledProtocols := SP_PROT_TLS_SAFE;
     if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
        AllowDeprecatedTls then
       cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
         SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
-    cred.Old.dwFlags := dwFlags;
     if paServCred <> nil then
     begin
       cred.Old.cCreds := 1;
@@ -2330,7 +2331,6 @@ var
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
   read, i, newlen: integer;
-  needsRenegotiate: boolean;
 
   function DecryptInput: cardinal;
   var
@@ -2382,12 +2382,11 @@ begin
       inc(fInputCount, read);
       res := DecryptInput;
     until res <> SEC_E_INCOMPLETE_MESSAGE;
-    needsRenegotiate := false;
     repeat
 //if res <> SEC_E_OK then writeln(fSocket.Socket,' res=',SspiResToText(res));
       case res of
         SEC_I_RENEGOTIATE:
-          needsRenegotiate := true;
+          ; // appears with TLS 1.3
         SEC_I_CONTEXT_EXPIRED:
           fSessionClosed := true;
         SEC_E_INCOMPLETE_MESSAGE:
@@ -2396,7 +2395,7 @@ begin
           CheckSEC_E_OK('DecryptInput', res);
       end;
       fInputCount := 0;
-      for i := 1 to 3 do
+      for i := 1 to 3 do // i=0 for SECBUFFER_DATA input
         case buf[i].BufferType of
           SECBUFFER_DATA:
             begin
@@ -2412,15 +2411,17 @@ begin
               fInputCount := buf[i].cbBuffer;
             end;
         end;
+      if res = SEC_I_RENEGOTIATE then
+// https://learn.microsoft.com/en-us/windows/win32/secauthn/decryptmessage--schannel#remarks
+        HandshakeStep(pointer(fInput), fInputCount);
       if fInputCount = 0 then
         break;
       res := DecryptInput;
     until false;
-    if needsRenegotiate then
-      HandshakeLoop;
   except
+    // catch any socket/SChannel exception for the caller to shutdown the socket
     result := nrFatalError;
-    exit; // shutdown the connection on ESChannel fatal error
+    exit;
   end;
   read := fDataCount;
   if Length < read then
@@ -2466,7 +2467,7 @@ begin
     buf[3].BufferType := SECBUFFER_EMPTY;
     buf[3].pvBuffer := nil;
     if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
-      exit; // shutdown the connection on SChannel error
+      exit; // caller would shutdown the connection on SChannel error
     len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
     sent := 0;
     repeat
