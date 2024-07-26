@@ -5962,22 +5962,18 @@ begin
   Check(not SameValue(dt, NowUtc),
     'NowUtc should not truncate time (e.g. to 5 sec resolution)');
   // validate zones taken from Windows registry or mormot.tz.res on POSIX
-  tz := TSynTimeZone.CreateDefault;
-  try
-    local := tz.UtcToLocal(dt, 'UTC');
-    check(SameValue(local, dt));
-    check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
-    check(bias = 0);
-    check(not hdl);
-    local := tz.UtcToLocal(dt, 'Romance Standard Time');
-    check(not SameValue(local, dt), 'Paris never aligns with London');
-    check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
-    check(hdl);
-    check(bias < 0, 'Paris is always ahead of London');
-    buf := tz.SaveToBuffer;
-  finally
-    tz.Free;
-  end;
+  tz := TSynTimeZone.Default;
+  local := tz.UtcToLocal(dt, 'UTC');
+  check(SameValue(local, dt));
+  check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
+  check(bias = 0);
+  check(not hdl);
+  local := tz.UtcToLocal(dt, 'Romance Standard Time');
+  check(not SameValue(local, dt), 'Perfide Albion never matches the continent');
+  check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
+  check(hdl);
+  check(bias < 0, 'Paris is always ahead of London');
+  buf := tz.SaveToBuffer;
   tz := TSynTimeZone.Create;
   try
     tz.LoadFromBuffer(buf);
