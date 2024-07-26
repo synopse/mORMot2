@@ -397,6 +397,7 @@ type
 
   /// SChannel credential information as SCHANNEL_CRED legacy format
   TSChannelCredOld = record
+    dwVersion: cardinal;
     cCreds: cardinal;
     paCred: PPCCERT_CONTEXT;
     hRootStore: HCERTSTORE;
@@ -425,6 +426,7 @@ type
 
   /// SChannel credential information as Win10+ SCH_CREDENTIALS
   TSChannelCredNew = record
+    dwVersion: cardinal;
     dwCredFormat: cardinal;
     cCreds: cardinal;
     paCred: PPCCERT_CONTEXT;
@@ -439,13 +441,13 @@ type
 
   /// SChannel credential information, in legacy or Win11 format
   TSChannelCred = record
-    case dwVersion: cardinal of
+    case integer of // not a true dwVersion field to avoid Win64 alignment issue
       SCHANNEL_CRED_VERSION: (
         Old: TSChannelCredOld;
       );
       SCH_CREDENTIALS_VERSION: (
         New: TSChannelCredNew;
-        Tls: TSChannelCredTls; // within New.pTlsParameters
+        Tls: TSChannelCredTls; // refered from New.pTlsParameters
       );
   end;
 
@@ -464,18 +466,18 @@ type
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
-  SP_PROT_TLS1          = $0C0;
-  SP_PROT_TLS1_SERVER   = $040;
-  SP_PROT_TLS1_CLIENT   = $080;
-  SP_PROT_TLS1_1        = $300;
+  SP_PROT_TLS1_0_SERVER = $040;
+  SP_PROT_TLS1_0_CLIENT = $080;
   SP_PROT_TLS1_1_SERVER = $100;
   SP_PROT_TLS1_1_CLIENT = $200;
-  SP_PROT_TLS1_2        = $C00;
   SP_PROT_TLS1_2_SERVER = $400;
   SP_PROT_TLS1_2_CLIENT = $800;
-  SP_PROT_TLS1_3        = $3000; // Windows Server 2022 ;)
-  SP_PROT_TLS1_3_SERVER = $1000;
+  SP_PROT_TLS1_3_SERVER = $1000; // Windows 11 or Windows Server 2022 ;)
   SP_PROT_TLS1_3_CLIENT = $2000;
+  SP_PROT_TLS1_0 = SP_PROT_TLS1_0_CLIENT or SP_PROT_TLS1_0_SERVER;
+  SP_PROT_TLS1_1 = SP_PROT_TLS1_1_CLIENT or SP_PROT_TLS1_1_SERVER;
+  SP_PROT_TLS1_2 = SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_2_SERVER;
+  SP_PROT_TLS1_3 = SP_PROT_TLS1_3_CLIENT or SP_PROT_TLS1_3_SERVER;
 
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
 
@@ -1118,7 +1120,7 @@ end;
 
 procedure FixProtocol(var dwProtocol: cardinal);
 begin
-  if dwProtocol and SP_PROT_TLS1 <> 0 then
+  if dwProtocol and SP_PROT_TLS1_0 <> 0 then
     dwProtocol := 0
   else if dwProtocol and SP_PROT_TLS1_1 <> 0 then
     dwProtocol := 1

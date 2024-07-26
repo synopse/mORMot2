@@ -1988,15 +1988,13 @@ begin
      (OSVersion >= wServer2022_64) then
   begin
     // require SCH_CREDENTIALS structure in order to use TLS 1.3 with schannel
-    cred.dwVersion := SCH_CREDENTIALS_VERSION;
+    cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
     cred.New.dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
     if not AllowDeprecatedTLS then
     begin
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
-      cred.Tls.grbitDisabledProtocols :=
-        SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
-        SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
+      cred.Tls.grbitDisabledProtocols := cardinal(not (SP_PROT_TLS1_2 or SP_PROT_TLS1_3));
     end;
     if paServCred <> nil then
     begin
@@ -2006,17 +2004,14 @@ begin
   end  // not yet enabled: still fail on SEC_I_RENEGOTIATE
   else}
   begin
-    // SCHANNEL_CRED structure has been deprecated since Windows 10, 1809
-    cred.dwVersion := SCHANNEL_CRED_VERSION;
-    cred.Old.grbitEnabledProtocols :=
-        SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_3_CLIENT or
-        SP_PROT_TLS1_2_SERVER or SP_PROT_TLS1_3_SERVER;
+    // legacy SCHANNEL_CRED structure - deprecated since Windows 10, 1809
+    cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
+    cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_2; // MS said: no TLS 1.3
     if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
        AllowDeprecatedTls then
       cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
-        SP_PROT_TLS1_CLIENT or SP_PROT_TLS1_1_CLIENT or
-        SP_PROT_TLS1_SERVER or SP_PROT_TLS1_1_SERVER;
-    cred.old.dwFlags := dwFlags;
+        SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
+    cred.Old.dwFlags := dwFlags;
     if paServCred <> nil then
     begin
       cred.Old.cCreds := 1;
