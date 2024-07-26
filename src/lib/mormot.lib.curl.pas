@@ -159,6 +159,8 @@ type
     coSourceQuote          = 10133,
     coFTPAccount           = 10134,
     coCookieList           = 10135,
+    coSSHPublicKeyfile     = 10152,
+    coSSHPrivateKeyfile    = 10153,
     coUserName             = 10173,
     coPassword             = 10174,    
     coMailFrom             = 10186,
