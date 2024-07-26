@@ -1474,6 +1474,7 @@ type
     fZones: TDynArrayHashed;
     fLastZone: TTimeZoneID;
     fLastIndex: integer;
+    fCurrentIndex: integer;
     fIds: TStringList;
     fDisplays: TStringList;
     function LockedFindZoneIndex(const TzId: TTimeZoneID): PtrInt;
@@ -1498,6 +1499,11 @@ type
     {$ifdef OSWINDOWS}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
+    /// the current OS time zone as Zones[] Ids[] Displays[] index
+    // - as retrieved by LoadFromRegistry
+    // - equals -1 if was not retrieved
+    property CurrentIndex: integer
+      read fCurrentIndex;
     /// change the current OS time zone from its Zones[] Ids[] Displays[] index
     // - currently only available on Windows
     // - this method is not thread-safe, because it uses an index
@@ -6136,6 +6142,7 @@ end;
 
 constructor TSynTimeZone.Create;
 begin
+  fCurrentIndex := -1;
   fZones.InitSpecific(TypeInfo(TTimeZoneDataDynArray),
     fZone, ptRawUtf8, @fZoneCount);
 end;
@@ -6241,13 +6248,22 @@ const
 
 procedure TSynTimeZone.LoadFromRegistry;
 var
+  info: TTimeZoneInformation;
+  current: RawUtf8;
   reg: TWinRegistry;
   keys: TRawUtf8DynArray;
   i, first, last, year, n: integer;
   z: TTimeZoneData;
 begin
+  // retrieve current selected system time zone
+  FillCharFast(info, SizeOf(info), 0);
+  GetTimeZoneInformation(info);
+  if info.StandardName[0] <> #0 then
+    current := UnicodeBufferToUtf8(info.StandardName);
+  // read all time zones information from registry
   fSafe.WriteLock;
   try
+    fCurrentIndex := -1;
     fZones.Clear;
     if reg.ReadOpen(wrLocalMachine, REGKEY) then
       keys := reg.ReadEnumEntries
@@ -6262,6 +6278,10 @@ begin
         z.id := keys[i]; // registry keys are genuine by definition
         z.display := reg.ReadString('Display');
         reg.ReadBuffer('TZI', @z.tzi, SizeOf(z.tzi));
+        if (fCurrentIndex < 0) and
+           (current <> '') and
+           (reg.ReadString('Std') = current) then
+          fCurrentIndex := fZoneCount;
         if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
         begin
           // warning: never defined on XP/2003, and not for all entries
@@ -6335,7 +6355,7 @@ begin
   if not reg.ReadOpen(wrLocalMachine, REGKEY + z^.id) then
     ESynException.RaiseUtf8('%.ChangeOperatingSystemTimeZone: missing % key',
       [self, z^.id]);
-  try
+  try // direct copy of the UTF-16 buffer from registry
     reg.ReadMax('Std', @info.TimeZone.StandardName, 32 * 2);
     reg.ReadMax('Dlt', @info.TimeZone.DaylightName, 32 * 2);
   finally

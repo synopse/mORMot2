@@ -2182,6 +2182,8 @@ function ReadRegString(Key: THandle; const Path, Value: string): string;
 function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
+{ some Windows API redefined here for Delphi and FPC consistency }
+
 type
   TTimeZoneName = array[0..31] of WideChar;
   TTimeZoneInformation = record
@@ -2199,6 +2201,9 @@ type
     TimeZoneKeyName: array[0..127] of WideChar;
     DynamicDaylightTimeDisabled: boolean;
   end;
+
+function GetTimeZoneInformation(var info: TTimeZoneInformation): DWORD;
+  stdcall; external kernel32;
 
 /// allow to change the current system time zone on Windows
 // - don't use this low-level function but the high-level mormot.core.search

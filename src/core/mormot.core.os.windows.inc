@@ -5412,9 +5412,6 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-function GetTimeZoneInformation(var info: TTimeZoneInformation): DWORD;
-  stdcall; external kernel32;
-
 function GetLocalTimeOffset: integer; // not defined in oldest Delphi
 var
   tzi: TTimeZoneInformation;
