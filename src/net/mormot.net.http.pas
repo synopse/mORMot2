@@ -2767,7 +2767,7 @@ begin
   compressible := IsContentTypeCompressible(pointer(OutContentType));
   len := length(OutContent);
   h := pointer(Handled);
-  for i := 1 to length(Handled) do
+  for i := 0 to length(Handled) - 1 do // start at 0 for "i in Accept" below
   begin
     if i in Accepted then
       if (h^.CompressMinSize = 0) or // 0 means "always" (e.g. for encryption)
