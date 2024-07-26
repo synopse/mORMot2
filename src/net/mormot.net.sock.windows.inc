@@ -828,9 +828,9 @@ const
   IF_TYPE_IEEE80211         = 71; // Vista+
   IF_TYPE_TUNNEL            = 131;
 
-  MAX_HOSTNAME_LEN = 128;
-  MAX_DOMAIN_NAME_LEN = 128;
-  MAX_SCOPE_ID_LEN = 256;
+  MAX_HOSTNAME_LEN        = 128;
+  MAX_DOMAIN_NAME_LEN     = 128;
+  MAX_SCOPE_ID_LEN        = 256;
   MAX_ADAPTER_ADDRESS_LEN = 8;
 
 type
@@ -1889,6 +1889,8 @@ type
     fAcceptCertStore: HCERTSTORE;
     procedure ESChannelRaiseLastError(const ctx: shortstring; res: cardinal);
     function CheckSEC_E_OK(const ctx: shortstring; res: integer): cardinal;
+    function FreeAndCheckSocket(const ctx: shortstring; res: integer;
+      tofree: pointer): cardinal;
     procedure HandshakeLoop;
     procedure FinalizeCredCtxt;
   public
@@ -1929,8 +1931,11 @@ begin
   result := res;
 end;
 
-function CheckSocket(const ctx: shortstring; res: integer): cardinal;
+function TSChannelNetTls.FreeAndCheckSocket(const ctx: shortstring;
+  res: integer; tofree: pointer): cardinal;
 begin
+  if tofree <> nil then
+    CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
   if res = SOCKET_ERROR then
     raise ESChannel.CreateFmt('%s: Socket Error %d', [ctx, RawSocketErrNo]);
   if res = 0 then
@@ -2061,10 +2066,9 @@ begin
       if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
          (buf.buf[2].pvBuffer = nil) then
         raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
-      CheckSocket('send', mormot.net.sock.Send(
-        fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-      CheckSEC_E_OK('FreeContextBuffer',
-        FreeContextBuffer(buf.buf[2].pvBuffer));
+      FreeAndCheckSocket('send', mormot.net.sock.Send(
+        fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0),
+        buf.buf[2].pvBuffer);
       // make TLS handshake and prepare for process
       HandshakeLoop;
       break; // we are connected
@@ -2239,16 +2243,16 @@ var
   res: cardinal;
 begin
   repeat
-    inc(fDataCount, CheckSocket('recv',
+    inc(fDataCount, FreeAndCheckSocket('recv',
       recv(fSocket.Socket,
-        @PByteArray(fData)[fDataCount], length(fData) - fDataCount, 0)));
+        @PByteArray(fData)[fDataCount], length(fData) - fDataCount, 0), nil));
     res := ComputeAndSendAnswer;
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
       res := ComputeAndSendAnswer; // run twice to let the handshake pass
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
-  CheckSEC_E_OK('ComputeAndSendAnswer', res);
+  CheckSEC_E_OK('Handshake.ComputeAndSendAnswer', res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
   fCipherName := ''; // will be retrieved if needed 
   if fInputSize = 0 then
