@@ -7087,7 +7087,7 @@ begin
     end; // non-fatal SSL_ERROR_WANT_* codes are unexpected here
   end
   else
-    str(get_error, result); // paranoid / undocumented
+    str(get_error, AnsiString(result)); // paranoid / undocumented
   result := 'SSL_ERROR_' + result;
 end;
 
