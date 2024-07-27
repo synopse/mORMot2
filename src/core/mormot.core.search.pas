@@ -6164,27 +6164,26 @@ class function TSynTimeZone.LoadDefault: TSynTimeZone;
 begin
   GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
   try
-    if SharedSynTimeZone = nil then
-    begin
-      result := TSynTimeZone.Create;
-      {$ifdef OSWINDOWS}
-      result.LoadFromRegistry;
-      {$else}
-      result.LoadFromResource; // first try if bound to the executable
-      if result.fZoneCount = 0 then
-        result.LoadFromFile;   // first try for a local .tz file
-      {$endif OSWINDOWS}
-      SharedSynTimeZone := RegisterGlobalShutdownRelease(result);
-    end;
+    result := SharedSynTimeZone;
+    if result <> nil then
+      exit;
+    result := TSynTimeZone.Create;
+    {$ifdef OSWINDOWS}
+    result.LoadFromRegistry; // use official Windows registry as reference
+    {$else}
+    result.LoadFromResource; // first try if bound to the executable
+    if result.fZoneCount = 0 then
+      result.LoadFromFile;   // fallback search for a local .tz file
+    {$endif OSWINDOWS}
+    SharedSynTimeZone := RegisterGlobalShutdownRelease(result);
   finally
     GlobalUnLock;
   end;
-  result := SharedSynTimeZone;
 end;
 
 class function TSynTimeZone.Default: TSynTimeZone;
 begin
-  result := SharedSynTimeZone;
+  result := SharedSynTimeZone; // efficiently inlined
   if result = nil then
     result := LoadDefault;
 end;
