@@ -15,10 +15,11 @@ program mormot2tests;
 {$endif OSWINDOWS}
 
 uses
-  {$I ..\src\mormot.uses.inc} // may include mormot.core.fpcx64mm.pas
+  {$I ..\src\mormot.uses.inc} // follow FPC_X64MM or FPC_LIBCMM conditionals
   {$ifdef UNIX}
   cwstring, // needed as fallback if ICU is not available
   {$endif UNIX}
+  classes,
   sysutils,
   mormot.core.base,
   mormot.core.os,

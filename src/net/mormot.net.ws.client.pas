@@ -107,7 +107,7 @@ type
   public
     /// low-level client WebSockets connection factory for host and port
     // - calls Open() then WebSocketsUpgrade() for a given protocol
-    // - with proper error interception and optional logging, returning nil
+    // - with error interception and optional logging, returning nil on error
     class function WebSocketsConnect(const aHost, aPort: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
       const aLogContext: RawUtf8 = ''; const aUri: RawUtf8 = '';
@@ -116,7 +116,7 @@ type
     /// low-level client WebSockets connection factory for a given URI
     // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
     // - calls Open() then WebSocketsUpgrade() for a given protocol
-    // - with proper error interception and optional logging, returning nil
+    // - with error interception and optional logging, returning nil on error
     class function WebSocketsConnect(const aUri: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
       const aLogContext: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';

@@ -12,6 +12,8 @@ Anyway, https://github.com/synopse/mORMot2/releases will maintain a list of offi
 
 Note that on POSIX systems, you may want to download and decompress `mormot2static.tgz` instead of `mormot2static.7z`, which is smaller, but less native.
 
+For safety, the SHA-256 checksums of the current version of the downloaded binary files, as published in our https://synopse.info/files server, are available in [the `dev.sha256` file of this folder](dev.sha256).
+
 
 ## Static Linking
 
