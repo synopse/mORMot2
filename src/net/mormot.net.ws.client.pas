@@ -325,6 +325,8 @@ begin
       aUri, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
       FreeAndNil(result);
+    if Assigned(aLog) then
+      result.OnLog := aLog.DoLog;
   except
     on E: Exception do
     begin
@@ -352,8 +354,7 @@ begin
      not uri.From(aUri) then
     EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   result := WebSocketsConnect(uri.Server, uri.Port, aProtocol,
-    aLog, aLogContext, uri.Address, aCustomHeaders,
-    IdemPropNameU(uri.Scheme, 'WSS'), aTLSContext);
+    aLog, aLogContext, uri.Address, aCustomHeaders, uri.Https, aTLSContext);
 end;
 
 destructor THttpClientWebSockets.Destroy;

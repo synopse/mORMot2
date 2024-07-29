@@ -419,7 +419,9 @@ end;
 { TNetAddr }
 
 var
-  _gethostbynamesafe: TOSLightLock; // gethostbyname() result is NOT thread-safe
+  _gethostbynamesafe: TOSLightLock;
+  // gethostbyname() result is NOT thread-safe: we need to protect its calls;
+  // since this may take some time, we use a pthread mutex, not a TLightLock
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
