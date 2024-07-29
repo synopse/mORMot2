@@ -23,7 +23,7 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.text,
+  mormot.core.os.mac,
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.log,
