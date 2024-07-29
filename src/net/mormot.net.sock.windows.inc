@@ -2518,20 +2518,24 @@ procedure InitializeUnit;
 var
   sock: TSocket;
 begin
+  // the Windows Sockets API (WSA) needs explicit initialization
   WSAStartup($0202, WsaDataOnce);
   SocketAPIVersion := RawUtf8(Format('%s.%d',
     [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
+  // get some low-level extended functions for IOCP
   sock := socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
   acceptex := GetExtensionFunc(sock, WSAID_ACCEPTEX);
   getacceptexsockaddrs := GetExtensionFunc(sock, WSAID_GETACCEPTEXSOCKADDRS);
   connectex := GetExtensionFunc(sock, WSAID_CONNECTEX);
   //transmitfile := GetExtensionFunc(sock, WSAID_TRANSMITFILE);
   closesocket(sock);
+  // we can use SChannel for TLS support (including TLS 1.3 on Windows 11)
   NewNetTls := NewSChannelNetTls;
 end;
 
 procedure FinalizeUnit;
 begin
+  // the Windows Sockets API (WSA) needs explicit finalization
   WSACleanup;
 end;
 

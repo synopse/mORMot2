@@ -909,8 +909,10 @@ type
   end;
 
   /// abstract definition of the TLS encrypted layer
-  // - is implemented e.g. by the SChannel API on Windows, or OpenSSL on POSIX
-  // if you include mormot.lib.openssl11 to your project
+  // - is implemented e.g. by the SChannel API on Windows by this unit, or
+  // OpenSSL on POSIX if you include mormot.lib.openssl11 to your project
+  // - on Windows, you can define USE_OPENSSL and FORCE_OPENSSL conditionals
+  // in YOUR project options to switch to OpenSSL instead of SChannel
   INetTls = interface
     /// method called once to attach the socket from the client side
     // - should make the proper client-side TLS handshake and create a session
@@ -980,6 +982,15 @@ var
   // HTTP-01 challenges associated with the OnNetTlsAcceptServerName callback
   OnNetTlsAcceptChallenge: TOnNetTlsAcceptChallenge;
 
+
+{$ifdef OSWINDOWS}
+/// SChannel TLS layer communication factory - as expected by this unit
+// - TLS 1.3 will be available since Windows 11
+// - can be used at runtime to override another implementation e.g.
+// @NewOpenSslNetTls from mormot.lib.openssl11 by executing:
+// ! @NewNetTls := @NewSChannelNetTls;
+function NewSChannelNetTls: INetTls;
+{$endif OSWINDOWS}
 
 
 { ******************** Efficient Multiple Sockets Polling }
