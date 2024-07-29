@@ -536,6 +536,7 @@ var
     pTransmitBuffers: PTransmitFileBuffers; dwFlags: DWORD): BOOL; stdcall;
   }
 
+
 { ******** TNetSocket Cross-Platform Wrapper }
 
 { TNetAddr }

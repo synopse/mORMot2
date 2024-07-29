@@ -3968,7 +3968,7 @@ begin
         else
           exit;
     size := FileSize(F);
-    tempsize := 1 shl 20; // 1MB temporary buffer for reading
+    tempsize := 1 shl 20; // 1MB temporary buffer for reading seems good enough
     if tempsize > size then
       tempsize := size;
     SetLength(temp, tempsize);
@@ -5950,7 +5950,7 @@ begin
   // initial random session ID, small enough to remain 31-bit > 0
   SessionSequence := Random32 and $07ffffff;
   SessionSequenceStart := SessionSequence;
-  // temporary secret for checksum
+  // temporary secret for checksum  (Lecuyer is good enough for 32-bit)
   Secret := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
@@ -6831,8 +6831,8 @@ begin
   result := c;
 end;
 
-function TCryptAesCipher.Process(const src: RawByteString; out dst: RawByteString;
-  const aeadinfo: RawByteString): boolean;
+function TCryptAesCipher.Process(const src: RawByteString;
+  out dst: RawByteString; const aeadinfo: RawByteString): boolean;
 begin
   result := false;
   if src = '' then
@@ -7010,8 +7010,8 @@ end;
 
 { TCryptPublicKey }
 
-function TCryptPublicKey.VerifyDigest(Sig: pointer; Dig: THash512Rec; SigLen,
-  DigLen: integer; Hash: THashAlgo): boolean;
+function TCryptPublicKey.VerifyDigest(Sig: pointer; Dig: THash512Rec;
+  SigLen, DigLen: integer; Hash: THashAlgo): boolean;
 begin
   result := false; // to be overriden if needed (not for OpenSSL)
 end;
@@ -7031,7 +7031,8 @@ end;
 function TCryptPublicKey.Verify(Algorithm: TCryptAsymAlgo;
   const Data, Sig: RawByteString): boolean;
 begin
-  result := Verify(Algorithm, pointer(Data), pointer(Sig), length(Data), length(Sig));
+  result := Verify(Algorithm,
+    pointer(Data), pointer(Sig), length(Data), length(Sig));
 end;
 
 
@@ -9407,19 +9408,19 @@ end;
 
 procedure WinInfoToParse(const c: TWinCertInfo; out Info: TX509Parsed);
 begin
-  Info.Serial := c.Serial;
+  Info.Serial    := c.Serial;
   Info.SubjectDN := c.SubjectName;
-  Info.IssuerDN := c.IssuerName;
-  Info.SubjectAltNames := ''; // not yet part of TwinCertInfo
+  Info.IssuerDN  := c.IssuerName;
+  Info.SubjectAltNames := ''; // not yet part of TWinCertInfo
   Info.SubjectID := c.SubjectID;
-  Info.IssuerID := c.IssuerID;
-  Info.SigAlg := c.AlgorithmName;
-  Info.PubAlg := c.PublicKeyAlgorithmName;
-  Info.Usage := TCryptCertUsages(c.Usage); // match TWinCertUsages 16-bit
+  Info.IssuerID  := c.IssuerID;
+  Info.SigAlg    := c.AlgorithmName;
+  Info.PubAlg    := c.PublicKeyAlgorithmName;
+  Info.Usage     := TCryptCertUsages(c.Usage); // match TWinCertUsages 16-bit
   Info.NotBefore := c.NotBefore;
-  Info.NotAfter := c.NotAfter;
-  Info.PubKey := c.PublicKeyContent;
-  Info.PeerInfo := ParsedToText(Info); // should be the last
+  Info.NotAfter  := c.NotAfter;
+  Info.PubKey    := c.PublicKeyContent;
+  Info.PeerInfo  := ParsedToText(Info); // should be the last
 end;
 
 function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;

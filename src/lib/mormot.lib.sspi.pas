@@ -48,7 +48,6 @@ type
   end;
   PTimeStamp = ^TTimeStamp;
 
-
   ALG_ID = cardinal;
   TALG_IDs = array[word] of ALG_ID;
   PALG_IDs = ^TALG_IDs;
@@ -475,6 +474,7 @@ const
   SP_PROT_TLS1_2_CLIENT = $800;
   SP_PROT_TLS1_3_SERVER = $1000; // Windows 11 or Windows Server 2022 ;)
   SP_PROT_TLS1_3_CLIENT = $2000;
+
   SP_PROT_TLS1_0   = SP_PROT_TLS1_0_CLIENT or SP_PROT_TLS1_0_SERVER;
   SP_PROT_TLS1_1   = SP_PROT_TLS1_1_CLIENT or SP_PROT_TLS1_1_SERVER;
   SP_PROT_TLS1_2   = SP_PROT_TLS1_2_CLIENT or SP_PROT_TLS1_2_SERVER;
@@ -1220,24 +1220,22 @@ end;
 
 procedure FreeSecurityContext(var handle: TSecHandle);
 begin
-  if (handle.dwLower <> -1) or
-     (handle.dwUpper <> -1) then
-  begin
-    DeleteSecurityContext(@handle);
-    handle.dwLower := -1;
-    handle.dwUpper := -1;
-  end;
+  if (handle.dwLower = -1) and
+     (handle.dwUpper = -1) then
+    exit;
+  DeleteSecurityContext(@handle);
+  handle.dwLower := -1;
+  handle.dwUpper := -1;
 end;
 
 procedure FreeCredentialsContext(var handle: TSecHandle);
 begin
-  if (handle.dwLower <> -1) or
-     (handle.dwUpper <> -1) then
-  begin
-    FreeCredentialsHandle(@handle);
-    handle.dwLower := -1;
-    handle.dwUpper := -1;
-  end;
+  if (handle.dwLower = -1) and
+     (handle.dwUpper = -1) then
+    exit;
+  FreeCredentialsHandle(@handle);
+  handle.dwLower := -1;
+  handle.dwUpper := -1;
 end;
 
 procedure FreeSecContext(var aSecContext: TSecContext);
@@ -1785,8 +1783,8 @@ begin
   OutDesc.cBuffers := 1;
   OutDesc.pBuffers := @OutBuf;
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
-      ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
-      SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
+    ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
+    SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, nil);
   result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
