@@ -112,6 +112,8 @@ Please submit pull requests for non-validated versions.
   - Start from an example, and follow the [documentation](https://synopse.info/files/doc/mORMot2.html).
   - Feel free to contribute by posting enhancements and patches to this quickly evolving project.
 
+For safety, the SHA-256 checksums of the current version of the downloaded binary files, as published in our https://synopse.info/files server, are available in [this repository `static/dev.sha256` file](static/dev.sha256).
+
 ## Coming From Version 2
 
 ### Why Rewrite a Working Solution?
