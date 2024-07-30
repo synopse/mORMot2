@@ -25,6 +25,7 @@ uses
   mormot.core.os,
   mormot.core.os.mac,
   mormot.core.unicode,
+  mormot.core.text,
   mormot.core.datetime,
   mormot.core.log,
   mormot.core.test,
