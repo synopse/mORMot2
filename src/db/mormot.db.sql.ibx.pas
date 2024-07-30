@@ -966,7 +966,8 @@ var
   data: PByte;
 begin
   CheckColAndRowset(Col);
-  if fColumnsMeta[Col].CodePage = CP_UTF8 then
+  if (fColumnsMeta[Col].CodePage = CP_UTF8) and
+     (fColumnsMeta[Col].SqlType <> SQL_BLOB) then // blob requires GetAsString
   begin
     fResults.GetData(Col, nul, len, data);
     FastSetString(result, data, len);
