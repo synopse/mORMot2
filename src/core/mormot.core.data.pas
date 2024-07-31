@@ -778,7 +778,8 @@ type
   // - dvoInternNames and dvoInternValues will use shared TRawUtf8Interning
   // instances to maintain a list of RawUtf8 names/values for all TDocVariant,
   // so that redundant text content will be allocated only once on heap
-  // - see JSON_[TDocVariantModel] and all JSON_* constants as useful sets
+  // - see JSON_[TDocVariantModel] and all JSON_* constants as useful sets, and
+  // TDocVariantData.IsObject/IsArray/IsCaseSensitive/Has wrapper methods
   TDocVariantOption = (
     dvoIsArray,
     dvoIsObject,
@@ -800,6 +801,8 @@ type
   // JSON_FAST_FLOAT) as potential values
   // - when specifying the options, you should not include dvoIsArray nor
   // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
+  // - see TDocVariantData.IsObject/IsArray/IsCaseSensitive/Has wrapper methods
+  // which are faster than 16-bit "if dvo* in VOptions" on Intel
   TDocVariantOptions = set of TDocVariantOption;
 
   /// pointer to a set of options for a TDocVariant storage
@@ -9166,7 +9169,7 @@ function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
 var
   l: PtrInt;
 begin
-  Item := PPointer(Item)^; // passed by reference
+  Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
   begin
     l := PStrLen(Item - _STRLEN)^;
@@ -9185,7 +9188,7 @@ function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid any slow heap allocation
 begin
-  Item := PPointer(Item)^;
+  Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
     result := Hasher(HashSeed, tmp{%H-},
       UpperCopy255Buf(tmp{%H-}, Item, PStrLen(Item - _STRLEN)^) - {%H-}tmp)
@@ -9243,7 +9246,7 @@ end;
 
 function HashPUtf8Char(Item: PAnsiChar; Hasher: THasher): cardinal;
 begin
-  Item := PPointer(Item)^; // passed by reference
+  Item := PPointer(Item)^; // passed as non-nil PPAnsiChar reference
   if Item <> nil then
     result := Hasher(HashSeed, Item, StrLen(Item))
   else
@@ -9254,7 +9257,7 @@ function HashPUtf8CharI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
-  Item := PPointer(Item)^;
+  Item := PPointer(Item)^; // passed as non-nil PPUtf8Char reference
   if Item <> nil then
     result := Hasher(HashSeed, tmp{%H-},
       UpperCopy255Buf(tmp{%H-}, Item, StrLen(Item)) - {%H-}tmp)

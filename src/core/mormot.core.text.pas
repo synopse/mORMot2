@@ -1208,6 +1208,7 @@ var
   // especially during multi-threaded execution
   // - noticeable when strings are used as array indexes (e.g.
   // in mormot.db.nosql.bson)
+  // - less noticeable without any allocation: StrInt32() is faster on a buffer
   // - is defined globally, since may be used from an inlined function
   SmallUInt32Utf8: array[0..999] of RawUtf8;
 
