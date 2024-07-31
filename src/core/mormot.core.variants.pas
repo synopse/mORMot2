@@ -5134,6 +5134,44 @@ begin
   end;
 end;
 
+function TDocVariant.InternNames: TRawUtf8Interning;
+begin
+  result := fInternNames;
+  if result = nil then
+    result := CreateInternNames;
+end;
+
+function TDocVariant.CreateInternNames: TRawUtf8Interning;
+begin
+  fInternSafe.Lock;
+  try
+    if fInternNames = nil then
+      fInternNames := TRawUtf8Interning.Create;
+  finally
+    fInternSafe.UnLock;
+  end;
+  result := fInternNames;
+end;
+
+function TDocVariant.InternValues: TRawUtf8Interning;
+begin
+  result := fInternValues;
+  if fInternValues = nil then
+    result := CreateInternValues;
+end;
+
+function TDocVariant.CreateInternValues: TRawUtf8Interning;
+begin
+  fInternSafe.Lock;
+  try
+    if fInternValues = nil then
+      fInternValues := TRawUtf8Interning.Create;
+  finally
+    fInternSafe.UnLock;
+  end;
+  result := fInternValues;
+end;
+
 class procedure TDocVariant.New(out aValue: variant;
   aOptions: TDocVariantOptions);
 begin
@@ -5646,44 +5684,6 @@ begin
   result := length(VValue);
 end;
 
-function TDocVariant.InternNames: TRawUtf8Interning;
-begin
-  result := fInternNames;
-  if result = nil then
-    result := CreateInternNames;
-end;
-
-function TDocVariant.CreateInternNames: TRawUtf8Interning;
-begin
-  fInternSafe.Lock;
-  try
-    if fInternNames = nil then
-      fInternNames := TRawUtf8Interning.Create;
-  finally
-    fInternSafe.UnLock;
-  end;
-  result := fInternNames;
-end;
-
-function TDocVariant.InternValues: TRawUtf8Interning;
-begin
-  result := fInternValues;
-  if fInternValues = nil then
-    result := CreateInternValues;
-end;
-
-function TDocVariant.CreateInternValues: TRawUtf8Interning;
-begin
-  fInternSafe.Lock;
-  try
-    if fInternValues = nil then
-      fInternValues := TRawUtf8Interning.Create;
-  finally
-    fInternSafe.UnLock;
-  end;
-  result := fInternValues;
-end;
-
 procedure TDocVariantData.InternalUniqueValueAt(aIndex: PtrInt);
 begin
   DocVariantType.InternValues.UniqueVariant(VValue[aIndex]);
@@ -6015,7 +6015,7 @@ begin
 end;
 
 function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
-  aCount: integer; const aItems): PRttiVarData;
+  aCount: integer; const aItems): PRttiVarData; // internal local factory
 begin
   if aCount < 0 then
     aCount := length(TByteDynArray(aItems));
@@ -6159,7 +6159,7 @@ var
   info: TGetJsonField;
   dv: PDocVariantData;
   val: PVariant;
-  proto: TDocVariantData;
+  proto: TDocVariantData; // object prototype with reused VName[]
 begin
   result := false;
   Init(aOptions, dvArray);
@@ -6221,7 +6221,7 @@ begin
     SetLength(VValue, capa);
     dv := pointer(VValue);
     dv^ := proto;
-    // 2. get values (assume fieldcount are always the same as in the first object)
+    // 2. get values (assume fields are always the same as in the first object)
     repeat
       J := info.Json;
       while (J^ <> '{') and
