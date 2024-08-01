@@ -1137,6 +1137,9 @@ var
   oututf8: RawUtf8                            absolute Output;
   outnamevalue: TSynNameValue                 absolute Output;
 begin
+  if fProtocol = nil then
+    ESqlDBRemote.RaiseUtf8('%.Process(%) with no connection',
+      [self, ToText(Command)^]);
   // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   header.Magic := REMOTE_MAGIC;
   header.SessionID := fCurrentSession;

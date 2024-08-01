@@ -1628,7 +1628,7 @@ begin
       0:
         result := SmallUInt32Utf8[0];
       1:
-        UInt32ToUtf8(Value[0], result);
+        UInt32ToUtf8(Value[0], result); // word or cardinal
     else
       begin
         if noclone then
