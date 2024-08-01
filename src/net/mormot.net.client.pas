@@ -664,13 +664,16 @@ procedure RegisterNetClientProtocol(
 { ******************** THttpRequest Abstract HTTP client class }
 
 type
+  THttpRequest = class;
+
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHttp class yet
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
     wraDigest,
-    wraNegotiate);
+    wraNegotiate,
+    wraBearer);
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
@@ -684,12 +687,19 @@ type
     Auth: record
       UserName: SynUnicode;
       Password: SynUnicode;
+      Token: SpiUtf8;
       Scheme: THttpRequestAuthentication;
     end;
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
   end;
+
+  /// event callback to track up/download progress
+  TOnHttpRequest = procedure(Sender: THttpRequest;
+    Done: Boolean) of object;
+  TOnHttpRequestProgress = procedure(Sender: THttpRequest;
+    Current, Total: Int64) of object;
 
   {$M+} // to have existing RTTI for published properties
   /// abstract class to handle HTTP/1.1 request
@@ -711,6 +721,10 @@ type
     fCompressAcceptHeader: THttpSocketCompressSet;
     fExtendedOptions: THttpRequestExtendedOptions;
     fTag: PtrInt;
+    fOnUpload: TOnHttpRequest;
+    fOnUploadProgress: TOnHttpRequestProgress;
+    fOnDownload: TOnHttpRequest;
+    fOnDownloadProgress: TOnHttpRequestProgress;
     class function InternalREST(const url, method: RawUtf8;
       const data: RawByteString; const header: RawUtf8;
       aIgnoreTlsCertificateErrors: boolean; timeout: integer;
@@ -836,6 +850,7 @@ type
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme
       write fExtendedOptions.Auth.Scheme;
+    // TODO move uername and password from SynUnicode to SpiUtf8
     /// optional User Name for Authentication
     property AuthUserName: SynUnicode
       read fExtendedOptions.Auth.UserName
@@ -844,6 +859,10 @@ type
     property AuthPassword: SynUnicode
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
+    /// optional Token for Authentication
+    property AuthToken: SpiUtf8
+      read fExtendedOptions.Auth.Token
+      write fExtendedOptions.Auth.Token;
     /// custom HTTP "User Agent:" header value
     property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent
@@ -873,6 +892,15 @@ type
     // constructor
     property ProxyByPass: RawUtf8
       read fProxyByPass;
+
+    property OnUpload: TOnHttpRequest
+      read fOnUpload write fOnUpload;
+    property OnUploadProgress: TOnHttpRequestProgress
+      read fOnUploadProgress write fOnUploadProgress;
+    property OnDownload: TOnHttpRequest
+      read fOnDownload write fOnDownload;
+    property OnDownloadProgress: TOnHttpRequestProgress
+      read fOnDownloadProgress write fOnDownloadProgress;
   end;
   {$M-}
 
@@ -1112,7 +1140,15 @@ var
 
 type
   /// libcurl exception type
-  ECurlHttp = class(ExceptionWithProps);
+  ECurlHttp = class(ExceptionWithProps)
+  protected
+    fError: TCurlResult;
+  public
+    constructor Create(error: TCurlResult; const Msg: string; const Args: array of const); overload;
+  published
+    property Error: TCurlResult
+      read fError;
+  end;
 
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
@@ -1127,6 +1163,8 @@ type
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
   TCurlHttp = class(THttpRequest)
+  private
+    lastdltotal, lastdlnow, lastultotal, lastulnow: Int64;
   protected
     fHandle: pointer;
     fRootURL: RawUtf8;
@@ -2702,6 +2740,7 @@ var
   aData: RawByteString;
   aDataEncoding, aAcceptEncoding, aUrl: RawUtf8;
   i: integer;
+  upload: boolean;
 begin
   if (url = '') or
      (url[1] <> '/') then
@@ -2726,10 +2765,19 @@ begin
     end;
     if fCompressAcceptEncoding <> '' then
       InternalAddHeader(fCompressAcceptEncoding);
+    upload:= IsPost(method) or IsPut(method);
     // send request to remote server
+    if assigned(fOnUpload) and upload then
+      fOnUpload(self, false)
+    else if assigned(fOnDownload) and not upload then
+      fOnDownload(self, false);
     InternalSendRequest(method, aData);
     // retrieve status and headers
     result := InternalRetrieveAnswer(OutHeader, aDataEncoding, aAcceptEncoding, OutData);
+    if assigned(fOnUpload) and upload then
+      fOnUpload(self, true)
+    else if assigned(fOnDownload) and not upload then
+      fOnDownload(self, true);
     // handle incoming answer compression
     if OutData <> '' then
     begin
@@ -3435,6 +3483,12 @@ end;
 
 { TCurlHttp }
 
+constructor ECurlHttp.Create(error: TCurlResult; const Msg: string; const Args: array of const);
+begin
+  inherited CreateFmt(Msg, Args);
+  fError:= error;
+end;
+
 procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
@@ -3443,7 +3497,7 @@ const
     's');
 begin
   if not IsAvailable then
-    raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
+    raise EOSException.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
@@ -3557,7 +3611,39 @@ end;
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
+var
+  username: RawUtf8;
+  password: SpiUtf8;
 begin
+  username:= SynUnicodeToUtf8(AuthUserName);
+  password:= SynUnicodeToUtf8(AuthPassword);
+  if AuthScheme in [wraBasic, wraDigest, wraNegotiate] then
+  begin
+    curl.easy_setopt(fHandle, coUserName, pointer(username));
+    curl.easy_setopt(fHandle, coPassword, pointer(password));
+    curl.easy_setopt(fHandle, coXOAuth2Bearer, nil);
+  end;
+  if AuthScheme in [wraNone, wraBearer] then
+  begin
+    curl.easy_setopt(fHandle, coUserName, nil);
+    curl.easy_setopt(fHandle, coPassword, nil);
+  end;
+  if AuthScheme in [wraBearer] then
+    curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
+  case AuthScheme of
+    wraNone:
+      curl.easy_setopt(fHandle, coHttpAuth, cauNone);
+    wraBasic:
+      curl.easy_setopt(fHandle, coHttpAuth, cauBasic);
+    wraDigest:
+      curl.easy_setopt(fHandle, coHttpAuth, cauDigest);
+    wraNegotiate:
+      curl.easy_setopt(fHandle, coHttpAuth, cauNegotiate);
+    wraBearer:
+      curl.easy_setopt(fHandle, coHttpAuth, cauBearer);
+    else
+      raise Exception.CreateFmt('%: unsupported AuthScheme=%', [self, ord(AuthScheme)]);
+  end;
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if HttpMethodWithNoBody(fIn.Method) then
     // the only verbs which do not expect body in answer are HEAD and OPTIONS
@@ -3568,12 +3654,33 @@ begin
   curl.easy_setopt(fHandle, coPostFields, pointer(aData));
   curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
   curl.easy_setopt(fHandle, coHttpHeader, fIn.Headers);
-  curl.easy_setopt(fHandle, coFile, @fOut.Data);
+  curl.easy_setopt(fHandle, coWriteData, @fOut.Data);
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 
 function TCurlHttp.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
   RawUtf8; var Data: RawByteString): integer;
+
+  function xfer_info(clientp: pointer; dltotal, dlnow, ultotal, ulnow: Int64): integer; cdecl;
+  var
+    s: TCurlHttp;
+  begin
+    s:= TCurlHttp(clientp);
+    if Assigned(s.OnUploadProgress) and ((ulnow <> s.lastulnow) or (ultotal <> s.lastultotal)) then
+    begin
+      s.OnUploadProgress(s, ulnow, ultotal);
+      s.lastultotal:= ultotal;
+      s.lastulnow:= ulnow;
+    end;
+    if Assigned(s.OnDownloadProgress) and ((dlnow <> s.lastdlnow) or (dltotal <> s.lastdltotal)) then
+    begin
+      s.OnDownloadProgress(s, dlnow, dltotal);
+      s.lastdltotal:= dltotal;
+      s.lastdlnow:= dlnow;
+    end;
+    Result:= 0;
+  end;
+
 var
   res: TCurlResult;
   P: PUtf8Char;
@@ -3581,9 +3688,23 @@ var
   i: integer;
   rc: PtrInt; // needed on Linux x86-64
 begin
+  if Assigned(OnUploadProgress) or Assigned(OnDownloadProgress) then
+  begin
+    lastdltotal:= -1;
+    lastdlnow:= -1;
+    lastultotal:= -1;
+    lastulnow:= -1;
+    curl.easy_setopt(fHandle, coXferInfoData, Self);
+    curl.easy_setopt(fHandle, coXferInfoFunction, @xfer_info);
+    curl.easy_setopt(fHandle, coNoProgress, 0);
+  end else
+    curl.easy_setopt(fHandle, coNoProgress, 1);
   res := curl.easy_perform(fHandle);
+  curl.easy_setopt(fHandle, coNoProgress, 1);
+  curl.easy_setopt(fHandle, coXferInfoFunction, nil);
+  curl.easy_setopt(fHandle, coXferInfoData, nil);
   if res <> crOK then
-    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s',
+    raise ECurlHttp.Create(res, 'libcurl error %d (%s) on %s %s',
       [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
