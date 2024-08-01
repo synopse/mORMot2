@@ -1552,7 +1552,8 @@ var
   d: curl_lock_data;
 begin
   result := csrOK;
-  if curl.globalShare = nil then
+  if (curl = nil) or
+     (curl.globalShare = nil) then
     exit; // already disabled
   result := curl.share_cleanup(curl.globalShare);
   if result = csrOK then
@@ -1565,7 +1566,8 @@ end;
 destructor TLibCurl.Destroy;
 begin
   CurlDisableGlobalShare;
-  curl.global_cleanup;
+  if curl <> nil then
+    curl.global_cleanup;
 end;
 {$endif LIBCURLSTATIC}
 
