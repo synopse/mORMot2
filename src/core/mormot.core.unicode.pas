@@ -8218,8 +8218,8 @@ eol:      if P^ <= #13 then
         end
         else if P^ <> #0 then
         begin
-          inc(p);
-          continue; // e.g. #9
+          inc(P); // e.g. #9
+          continue;
         end;
 eof:    result := nil; // reached P^=#0 -> not found
         exit;
