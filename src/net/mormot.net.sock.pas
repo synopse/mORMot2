@@ -5241,6 +5241,12 @@ begin
   {$endif OSLINUX}
 end;
 
+function TCrtSocket.SockIsDefined: boolean;
+begin
+  result := (self <> nil) and
+            ({%H-}PtrInt(fSock) > 0);
+end;
+
 const
   SOCKMINBUFSIZE = 1024; // big enough for headers (content will be read directly)
 
@@ -5556,12 +5562,6 @@ begin
   FastSetString(RawUtf8(result), Length); // assume CP_UTF8 for FPC RTL bug
   if SockInRead(pointer(result), Length, UseOnlySockIn) <> Length then
     result := '';
-end;
-
-function TCrtSocket.SockIsDefined: boolean;
-begin
-  result := (self <> nil) and
-            ({%H-}PtrInt(fSock) > 0);
 end;
 
 function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
