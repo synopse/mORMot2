@@ -901,12 +901,14 @@ type
     property OnUpload: TOnHttpRequest
       read fOnUpload write fOnUpload;
     /// called during Upload progression
+    // - only implemented by TCurlHttp yet
     property OnUploadProgress: TOnHttpRequestProgress
       read fOnUploadProgress write fOnUploadProgress;
     /// called before and after Download process
     property OnDownload: TOnHttpRequest
       read fOnDownload write fOnDownload;
     /// called during Download progression
+    // - only implemented by TCurlHttp yet
     property OnDownloadProgress: TOnHttpRequestProgress
       read fOnDownloadProgress write fOnDownloadProgress;
   end;
@@ -3640,13 +3642,14 @@ var
   username: RawUtf8;
   password: SpiUtf8;
 begin
-  username:= SynUnicodeToUtf8(AuthUserName);
-  password:= SynUnicodeToUtf8(AuthPassword);
   if AuthScheme in [wraBasic, wraDigest, wraNegotiate] then
   begin
+    username := SynUnicodeToUtf8(AuthUserName);
+    password := SynUnicodeToUtf8(AuthPassword);
     curl.easy_setopt(fHandle, coUserName, pointer(username));
     curl.easy_setopt(fHandle, coPassword, pointer(password));
     curl.easy_setopt(fHandle, coXOAuth2Bearer, nil);
+    FillZero(password);
   end;
   if AuthScheme in [wraNone, wraBearer] then
   begin
@@ -3683,29 +3686,32 @@ begin
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 
+function xfer_info(clientp: pointer;
+  dltotal, dlnow, ultotal, ulnow: Int64): integer; cdecl;
+// should be a separated function for FPC
+var
+  s: TCurlHttp;
+begin
+  s := TCurlHttp(clientp);
+  if Assigned(s.OnUploadProgress) and
+     ((ulnow <> s.fLast.ulNow) or (ultotal <> s.fLast.ulTotal)) then
+  begin
+    s.OnUploadProgress(s, ulnow, ultotal);
+    s.fLast.ulTotal := ultotal;
+    s.fLast.ulNow := ulnow;
+  end;
+  if Assigned(s.OnDownloadProgress) and
+     ((dlnow <> s.fLast.dlNow) or (dltotal <> s.fLast.dlTotal)) then
+  begin
+    s.OnDownloadProgress(s, dlnow, dltotal);
+    s.fLast.dlTotal := dltotal;
+    s.fLast.dlNow := dlnow;
+  end;
+  result := 0;
+end;
+
 function TCurlHttp.InternalRetrieveAnswer(
   var Header, Encoding, AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
-
-  function xfer_info(clientp: pointer; dltotal, dlnow, ultotal, ulnow: Int64): integer; cdecl;
-  var
-    s: TCurlHttp;
-  begin readme
-    s:= TCurlHttp(clientp);
-    if Assigned(s.OnUploadProgress) and ((ulnow <> s.lastulnow) or (ultotal <> s.lastultotal)) then
-    begin
-      s.OnUploadProgress(s, ulnow, ultotal);
-      s.lastultotal:= ultotal;
-      s.lastulnow:= ulnow;
-    end;
-    if Assigned(s.OnDownloadProgress) and ((dlnow <> s.lastdlnow) or (dltotal <> s.lastdltotal)) then
-    begin
-      s.OnDownloadProgress(s, dlnow, dltotal);
-      s.lastdltotal:= dltotal;
-      s.lastdlnow:= dlnow;
-    end;
-    Result:= 0;
-  end;
-
 var
   res: TCurlResult;
   P: PUtf8Char;
@@ -3716,14 +3722,15 @@ begin
   if Assigned(OnUploadProgress) or
      Assigned(OnDownloadProgress) then
   begin
-    lastdltotal:= -1;
-    lastdlnow:= -1;
-    lastultotal:= -1;
-    lastulnow:= -1;
-    curl.easy_setopt(fHandle, coXferInfoData, Self);
+    fLast.dlTotal := -1;
+    fLast.dlNow := -1;
+    fLast.ulTotal := -1;
+    fLast.ulNow := -1;
+    curl.easy_setopt(fHandle, coXferInfoData, pointer(self));
     curl.easy_setopt(fHandle, coXferInfoFunction, @xfer_info);
     curl.easy_setopt(fHandle, coNoProgress, 0);
-  end else
+  end
+  else
     curl.easy_setopt(fHandle, coNoProgress, 1);
   res := curl.easy_perform(fHandle);
   curl.easy_setopt(fHandle, coNoProgress, 1);
