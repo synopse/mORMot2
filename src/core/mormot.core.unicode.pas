@@ -1830,10 +1830,8 @@ procedure FillZero(var secret: SpiUtf8); overload;
 // (i.e. has refcount = 1), to avoid zeroing still-used values
 procedure FillZero(var secret: TBytes); overload;
 
-{$ifdef HASVARUSTRING}
 /// fill all bytes of this UTF-16 string with zeros, i.e. 'toto' -> #0#0#0#0
-procedure FillZero(var secret: UnicodeString); overload;
-{$endif HASVARUSTRING}
+procedure FillZero(var secret: SynUnicode); overload;
 
 /// actual replacement function called by StringReplaceAll() on first match
 // - not to be called as such, but defined globally for proper inlining
@@ -7714,10 +7712,11 @@ end;
 
 procedure FillZero(var secret: RawByteString);
 begin
-  if secret <> '' then
-    with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
-      if refCnt = 1 then // avoid GPF if const
-        FillCharFast(pointer(secret)^, length, 0);
+  if secret = '' then
+    exit;
+  with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
+    if refCnt = 1 then // avoid GPF if const
+      FillCharFast(pointer(secret)^, length, 0);
   FastAssignNew(secret); // dec refCnt
 end;
 
@@ -7731,16 +7730,19 @@ begin
   FillZero(RawByteString(secret));
 end;
 
-{$ifdef HASVARUSTRING}
-procedure FillZero(var secret: UnicodeString);
+procedure FillZero(var secret: SynUnicode);
 begin
-  if secret <> '' then
-    with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
-      if refCnt = 1 then // avoid GPF if const
-        FillCharFast(pointer(secret)^, length * SizeOf(WideChar), 0);
-  Finalize(secret); // dec refCnt
+  if secret = '' then
+    exit;
+  {$ifdef HASVARUSTRING}
+  with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
+    if refCnt = 1 then // avoid GPF if constant UnicodeString
+      FillCharFast(pointer(secret)^, length * SizeOf(WideChar), 0);
+  {$else} // BSTR have no reference counting
+  FillCharFast(pointer(secret)^, length(secret) * SizeOf(WideChar), 0);
+  {$endif HASVARUSTRING}
+  secret := '';
 end;
-{$endif HASVARUSTRING}
 
 procedure FillZero(var secret: TBytes);
 begin
