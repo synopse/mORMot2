@@ -605,16 +605,20 @@ function ConvertToEmfPlus(Source: HENHMETAFILE; Width, Height: integer;
 
 /// draw an EMF metafile handle using GDI+ anti-aliased rendering
 // - will fallback to plain GDI drawing if GDI+ is not available
-// - these procedures are thread-safe (protected by Gdip.Lock/UnLock)
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 procedure DrawAntiAliased(Source: HENHMETAFILE; Width, Height: integer;
   Dest: HDC; DestRect: TRect; ConvertOptions: TEmfConvertOptions = [];
   Smoothing: TSmoothingMode = smAntiAlias;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit); overload;
+
+/// draw an EMF metafile handle using GDI+ anti-aliased rendering
+// - will fallback to plain GDI drawing if GDI+ is not available
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 procedure DrawAntiAliased(Source: HENHMETAFILE; SourceRect: TRect;
   Dest: HDC; DestRect: TRect; ConvertOptions: TEmfConvertOptions = [];
   Smoothing: TSmoothingMode = smAntiAlias;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit;
-  u: TUnit=uPixel; attributes: TImageAttributes=nil); overload;
+  u: TUnit = uPixel; attributes: TImageAttributes = nil); overload;
 
 /// low-level internal function used e.g. by ConvertToEmfPlus()
 function MetaFileToIStream(Source: HENHMETAFILE): IStream;
@@ -2135,19 +2139,19 @@ begin
   end
   else
     if Assigned(attributes) then
-      ia:= attributes.Attr
+      ia := attributes.Attr
     else
-      ia:= nil;
+      ia := nil;
     try
       // use GDI+ 1.0/1.1 anti-aliased rendering
       _Gdip.Lock;
       _Gdip.CreateFromHDC(Dest, gr);
       try
         with DestRect do
-          _Gdip.DrawImageRectRect(gr, img,
-             DestRect.Left, DestRect.Top, DestRect.Right - DestRect.Left, DestRect.Bottom - DestRect.Top,
-             SourceRect.Left, SourceRect.Top, SourceRect.Right - SourceRect.Left, SourceRect.Bottom - SourceRect.Top,
-             u, ia);
+          _Gdip.DrawImageRectRect(gr, img, DestRect.Left, DestRect.Top, 
+             DestRect.Right - DestRect.Left, DestRect.Bottom - DestRect.Top,
+             SourceRect.Left, SourceRect.Top, SourceRect.Right - SourceRect.Left,
+             SourceRect.Bottom - SourceRect.Top, u, ia);
       finally
         _Gdip.DeleteGraphics(gr);
       end;

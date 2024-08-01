@@ -212,15 +212,19 @@ procedure RegisterSynPictures;
 
 /// draw an EMF TMetaFile using GDI+ anti-aliased rendering
 // - will fallback to plain GDI drawing if GDI+ is not available
-// - these procedures are thread-safe (protected by Gdip.Lock/UnLock)
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 procedure DrawAntiAliased(Source: TMetafile; Dest: HDC; const DestRect: TRect;
   ConvertOptions: TEmfConvertOptions = []; Smoothing: TSmoothingMode = smAntiAlias;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit); overload;
+
+/// draw an EMF TMetaFile using GDI+ anti-aliased rendering
+// - will fallback to plain GDI drawing if GDI+ is not available
+// - this procedure is thread-safe (protected by Gdip.Lock/UnLock)
 procedure DrawAntiAliased(Source: TMetafile; const SourceRect: TRect;
   Dest: HDC; const DestRect: TRect;
   ConvertOptions: TEmfConvertOptions = []; Smoothing: TSmoothingMode = smAntiAlias;
   TextRendering: TTextRenderingHint = trhClearTypeGridFit;
-  u: TUnit=uPixel; attributes: TImageAttributes=nil); overload;
+  u: TUnit = uPixel; attributes: TImageAttributes = nil); overload;
 
 /// draw the corresponding EMF metafile into a bitmap created by the method
 // - this default TGdiplus implementation uses GDI drawing only
@@ -1002,9 +1006,8 @@ begin
 end;
 
 procedure DrawAntiAliased(Source: TMetafile; const SourceRect: TRect;
-  Dest: HDC; const DestRect: TRect;
-  ConvertOptions: TEmfConvertOptions; Smoothing: TSmoothingMode;
-  TextRendering: TTextRenderingHint;
+  Dest: HDC; const DestRect: TRect; ConvertOptions: TEmfConvertOptions;
+  Smoothing: TSmoothingMode; TextRendering: TTextRenderingHint;
   u: TUnit; attributes: TImageAttributes);
 begin
   DrawAntiAliased(Source.Handle, SourceRect, Dest, DestRect,
