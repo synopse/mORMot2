@@ -7134,7 +7134,8 @@ begin
         end;
         inc(s);
       until s = p;
-    end else if Period = hapMinute then
+    end
+    else if Period = hapMinute then
     begin
       // hapMinute: direct O(n) search within ndxStart < ndxStop range
       s := @v[ndxStart];

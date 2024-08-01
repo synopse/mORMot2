@@ -2487,8 +2487,9 @@ begin
     if not Ecc256r1Verify( // OpenSSL compressed is faster than uncompressed
              Authority.Signed.PublicKey, hash, fContent.Head.Signature) then
       result := ecvInvalidSignature;
-  end else if not Ecc256r1VerifyUncomp(
-              Authority.fUncompressed, hash, fContent.Head.Signature) then
+  end
+  else if not Ecc256r1VerifyUncomp(
+                Authority.fUncompressed, hash, fContent.Head.Signature) then
       result := ecvInvalidSignature;
 end;
 

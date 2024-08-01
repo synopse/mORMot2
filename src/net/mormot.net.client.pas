@@ -667,7 +667,8 @@ type
   THttpRequest = class;
 
   /// the supported authentication schemes which may be used by HTTP clients
-  // - supported only by TWinHttp class yet
+  // - supported only by TWinHttp class yet, and TCurlHttp
+  // - wraBearer is only supported by TCurlHttp
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
@@ -684,6 +685,7 @@ type
     /// allow HTTP authentication to take place at connection
     // - Auth.Scheme and UserName/Password properties are handled
     // by the TWinHttp class only by now
+    // - Auth.Token is only handled by TCurlHttp
     Auth: record
       UserName: SynUnicode;
       Password: SynUnicode;
@@ -695,9 +697,9 @@ type
     UserAgent: RawUtf8;
   end;
 
+  /// event callback to track up/download process
+  TOnHttpRequest = procedure(Sender: THttpRequest; Done: Boolean) of object;
   /// event callback to track up/download progress
-  TOnHttpRequest = procedure(Sender: THttpRequest;
-    Done: Boolean) of object;
   TOnHttpRequestProgress = procedure(Sender: THttpRequest;
     Current, Total: Int64) of object;
 
@@ -859,7 +861,7 @@ type
     property AuthPassword: SynUnicode
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
-    /// optional Token for Authentication
+    /// optional Token for TCurlHttp Authentication
     property AuthToken: SpiUtf8
       read fExtendedOptions.Auth.Token
       write fExtendedOptions.Auth.Token;
@@ -892,13 +894,16 @@ type
     // constructor
     property ProxyByPass: RawUtf8
       read fProxyByPass;
-
+    /// called before and after Upload process
     property OnUpload: TOnHttpRequest
       read fOnUpload write fOnUpload;
+    /// called during Upload progression
     property OnUploadProgress: TOnHttpRequestProgress
       read fOnUploadProgress write fOnUploadProgress;
+    /// called before and after Download process
     property OnDownload: TOnHttpRequest
       read fOnDownload write fOnDownload;
+    /// called during Download progression
     property OnDownloadProgress: TOnHttpRequestProgress
       read fOnDownloadProgress write fOnDownloadProgress;
   end;
@@ -1139,12 +1144,13 @@ var
 {$ifdef USELIBCURL}
 
 type
-  /// libcurl exception type
+  /// TCurlHttp exception type
   ECurlHttp = class(ExceptionWithProps)
   protected
     fError: TCurlResult;
   public
-    constructor Create(error: TCurlResult; const Msg: string; const Args: array of const); overload;
+    constructor Create(error: TCurlResult; const Msg: string;
+      const Args: array of const); overload;
   published
     property Error: TCurlResult
       read fError;
@@ -1163,8 +1169,6 @@ type
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
   TCurlHttp = class(THttpRequest)
-  private
-    lastdltotal, lastdlnow, lastultotal, lastulnow: Int64;
   protected
     fHandle: pointer;
     fRootURL: RawUtf8;
@@ -1180,6 +1184,9 @@ type
     end;
     fTls: record
       CertFile, CACertFile, KeyName, PassPhrase: RawUtf8;
+    end;
+    fLast: record
+      dlTotal, dlNow, ulTotal, ulNow: Int64;
     end;
     procedure InternalConnect(
       ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
@@ -2767,16 +2774,20 @@ begin
       InternalAddHeader(fCompressAcceptEncoding);
     upload:= IsPost(method) or IsPut(method);
     // send request to remote server
-    if assigned(fOnUpload) and upload then
+    if assigned(fOnUpload) and
+       upload then
       fOnUpload(self, false)
-    else if assigned(fOnDownload) and not upload then
+    else if assigned(fOnDownload) and
+            not upload then
       fOnDownload(self, false);
     InternalSendRequest(method, aData);
     // retrieve status and headers
     result := InternalRetrieveAnswer(OutHeader, aDataEncoding, aAcceptEncoding, OutData);
-    if assigned(fOnUpload) and upload then
+    if assigned(fOnUpload) and
+       upload then
       fOnUpload(self, true)
-    else if assigned(fOnDownload) and not upload then
+    else if assigned(fOnDownload) and
+            not upload then
       fOnDownload(self, true);
     // handle incoming answer compression
     if OutData <> '' then
@@ -3481,13 +3492,17 @@ end;
 
 {$ifdef USELIBCURL}
 
-{ TCurlHttp }
+{ ECurlHttp }
 
-constructor ECurlHttp.Create(error: TCurlResult; const Msg: string; const Args: array of const);
+constructor ECurlHttp.Create(error: TCurlResult;
+  const Msg: string; const Args: array of const);
 begin
   inherited CreateFmt(Msg, Args);
   fError:= error;
 end;
+
+
+{ TCurlHttp }
 
 procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
@@ -3658,13 +3673,13 @@ begin
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 
-function TCurlHttp.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
-  RawUtf8; var Data: RawByteString): integer;
+function TCurlHttp.InternalRetrieveAnswer(
+  var Header, Encoding, AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
 
   function xfer_info(clientp: pointer; dltotal, dlnow, ultotal, ulnow: Int64): integer; cdecl;
   var
     s: TCurlHttp;
-  begin
+  begin readme
     s:= TCurlHttp(clientp);
     if Assigned(s.OnUploadProgress) and ((ulnow <> s.lastulnow) or (ultotal <> s.lastultotal)) then
     begin
@@ -3688,7 +3703,8 @@ var
   i: integer;
   rc: PtrInt; // needed on Linux x86-64
 begin
-  if Assigned(OnUploadProgress) or Assigned(OnDownloadProgress) then
+  if Assigned(OnUploadProgress) or
+     Assigned(OnDownloadProgress) then
   begin
     lastdltotal:= -1;
     lastdlnow:= -1;

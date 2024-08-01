@@ -620,7 +620,7 @@ type
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: PtrUInt);
       {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
-    /// append an Unsigned integer <= 999 Value as a String
+    /// append an Unsigned integer <= 255 < 999 Value as a String
     procedure AddB(Value: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
@@ -1206,7 +1206,7 @@ var
   // - use around 16KB of heap (since each item consumes 16 bytes), but increase
   // overall performance and reduce memory allocation (and fragmentation),
   // especially during multi-threaded execution
-  // - noticeable when strings are used as array indexes (e.g.
+  // - noticeable when RawUtf8 strings are used as array indexes (e.g.
   // in mormot.db.nosql.bson)
   // - less noticeable without any allocation: StrInt32() is faster on a buffer
   // - is defined globally, since may be used from an inlined function
@@ -4206,7 +4206,7 @@ var
 begin
   if B >= BEnd then
     FlushToStream;
-  P := pointer(SmallUInt32Utf8[Value]); // caller ensured Value <= 999
+  P := pointer(SmallUInt32Utf8[Value]); // caller ensured Value <= 255 < 999
   PCardinal(B + 1)^ := PCardinal(P)^;
   inc(B, PStrLen(P - _STRLEN)^);
 end;

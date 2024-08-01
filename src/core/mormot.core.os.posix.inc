@@ -4192,7 +4192,8 @@ begin
       BiosInfoText := prod
     else
       BiosInfoText := BiosInfoText + ' (' + prod + ')';
-  end else if BiosInfoText = '' then
+  end
+  else if BiosInfoText = '' then
     BiosInfoText := 'Generic ' + CPU_ARCH_TEXT + ' system'; // noname computer
   if cache <> nil then
   begin

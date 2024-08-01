@@ -4442,7 +4442,8 @@ begin
       if not cert.IsSelfSigned then
         result := cvValidSigned;
       exit;
-    end else if result <> cvValidSigned then
+    end
+    else if result <> cvValidSigned then
       exit;
     // continue to the next level
     skid := akid;
