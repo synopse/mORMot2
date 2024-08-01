@@ -664,7 +664,9 @@ procedure RegisterNetClientProtocol(
 { ******************** THttpRequest Abstract HTTP client class }
 
 type
+  {$M+} // to have existing RTTI for published properties
   THttpRequest = class;
+  {$M-}
 
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHttp class yet, and TCurlHttp
@@ -770,6 +772,8 @@ type
       const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
       aIgnoreTlsCertificateErrors: boolean = false); overload;
+    /// finalize this instance
+    destructor Destroy; override;
 
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
@@ -852,7 +856,6 @@ type
     property AuthScheme: THttpRequestAuthentication
       read fExtendedOptions.Auth.Scheme
       write fExtendedOptions.Auth.Scheme;
-    // TODO move uername and password from SynUnicode to SpiUtf8
     /// optional User Name for Authentication
     property AuthUserName: SynUnicode
       read fExtendedOptions.Auth.UserName
@@ -2740,6 +2743,13 @@ begin
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
 end;
 
+destructor THttpRequest.Destroy;
+begin
+  inherited Destroy;
+  FillZero(fExtendedOptions.Auth.Password);
+  FillZero(fExtendedOptions.Auth.Token);
+end;
+
 function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
   const InHeader: RawUtf8; const InData: RawByteString; const InDataType: RawUtf8;
   out OutHeader: RawUtf8; out OutData: RawByteString): integer;
@@ -3740,9 +3750,9 @@ begin
   begin
     s := GetNextLine(P, P);
     if IdemPChar(pointer(s), 'ACCEPT-ENCODING:') then
-      trimcopy(s, 17, 100, AcceptEncoding)
+      TrimCopy(s, 17, 100, AcceptEncoding)
     else if IdemPChar(pointer(s), 'CONTENT-ENCODING:') then
-      trimcopy(s, 18, 100, Encoding);
+      TrimCopy(s, 18, 100, Encoding);
   end;
   Data := fOut.Data;
 end;
