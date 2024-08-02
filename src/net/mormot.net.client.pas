@@ -3636,48 +3636,42 @@ begin
   result := CurlIsAvailable;
 end;
 
+const
+  WRA2CAU: array[THttpRequestAuthentication] of TCurlAuths = (
+    [],             // wraNone
+    [cauBasic],     // wraBasic
+    [cauDigest],    // wraDigest
+    [cauNegotiate], // wraNegotiate
+    [cauBearer]);   // wraBearer
+
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
 var
   username: RawUtf8;
-  password: SpiUtf8;
+  password, tok: SpiUtf8;
 begin
-  if AuthScheme in [wraBasic, wraDigest, wraNegotiate] then
-  begin
-    username := SynUnicodeToUtf8(AuthUserName);
-    password := SynUnicodeToUtf8(AuthPassword);
-    curl.easy_setopt(fHandle, coUserName, pointer(username));
-    curl.easy_setopt(fHandle, coPassword, pointer(password));
-    curl.easy_setopt(fHandle, coXOAuth2Bearer, nil);
-    FillZero(password);
-  end;
-  if AuthScheme in [wraNone, wraBearer] then
-  begin
-    curl.easy_setopt(fHandle, coUserName, nil);
-    curl.easy_setopt(fHandle, coPassword, nil);
-  end;
-  if AuthScheme in [wraBearer] then
-    curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
+  // 1. handle authentication
   case AuthScheme of
-    wraNone:
-      curl.easy_setopt(fHandle, coHttpAuth, cauNone);
-    wraBasic:
-      curl.easy_setopt(fHandle, coHttpAuth, cauBasic);
-    wraDigest:
-      curl.easy_setopt(fHandle, coHttpAuth, cauDigest);
+    wraBasic,
+    wraDigest,
     wraNegotiate:
-      curl.easy_setopt(fHandle, coHttpAuth, cauNegotiate);
+      begin
+        // expect user/password credentials
+        username := SynUnicodeToUtf8(AuthUserName);
+        password := SynUnicodeToUtf8(AuthPassword);
+      end;
     wraBearer:
-      curl.easy_setopt(fHandle, coHttpAuth, cauBearer);
-    else
-      raise Exception.CreateFmt('%: unsupported AuthScheme=%', [self, ord(AuthScheme)]);
+      tok := AuthToken;
   end;
+  curl.easy_setopt(fHandle, coUserName, pointer(username));
+  curl.easy_setopt(fHandle, coPassword, pointer(password));
+  curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(tok));
+  curl.easy_setopt(fHandle, coHttpAuth, integer(WRA2CAU[AuthScheme]));
+  FillZero(password);
+  // 2. main request options
+  // the only verbs which do not expect body in answer are HEAD and OPTIONS
+  curl.easy_setopt(fHandle, coNoBody, ord(HttpMethodWithNoBody(fIn.Method)));
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  if HttpMethodWithNoBody(fIn.Method) then
-    // the only verbs which do not expect body in answer are HEAD and OPTIONS
-    curl.easy_setopt(fHandle, coNoBody, 1)
-  else
-    curl.easy_setopt(fHandle, coNoBody, 0);
   curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
   curl.easy_setopt(fHandle, coPostFields, pointer(aData));
   curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
