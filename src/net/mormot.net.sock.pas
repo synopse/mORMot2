@@ -140,10 +140,19 @@ const
   nlIP = [nlTcp, nlUdp];
 
 type
-  /// end-user code should use this TNetSocket type to hold a socket reference
+  /// end-user code should use this TNetSocket type to hold a socket handle
   // - then its methods will allow cross-platform access to the connection
   TNetSocket = ^TNetSocketWrap;
+
+  /// pointer reference to a cross-platformsocket handle
   PNetSocket = ^TNetSocket;
+
+  /// dynamic array of socket handles
+  TNetSocketDynArray = array of TNetSocket;
+
+  /// pointer reference to a dynamic array of socket handles
+  // - used e.g. as optional parameter to GetReachableNetAddr()
+  PNetSocketDynArray = ^TNetSocketDynArray;
 
   /// internal mapping of an address, in any supported socket layer
   {$ifdef USERECORDWITHMETHODS}
@@ -211,13 +220,11 @@ type
     function SocketBind(socket: TNetSocket): TNetResult;
   end;
 
-  /// pointer to a socket address mapping
+  /// pointer reference to a socket address mapping
   PNetAddr = ^TNetAddr;
 
+  /// dynamic array of socket addresses
   TNetAddrDynArray = array of TNetAddr;
-
-  TNetSocketDynArray = array of TNetSocket;
-  PNetSocketDynArray = ^TNetSocketDynArray;
 
   PTerminated = ^boolean; // on FPC system.PBoolean doesn't exist :(
 

@@ -437,9 +437,10 @@ begin
   if layer = nlUnix then
   begin
     if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
-      // avoid buffer overflow
+      // avoid buffer overflow or truncated socket name
       result := nrFatalError
     else
+      // socket file name is just copied to the address struct
       with psockaddr_un(@Addr)^ do
       begin
         sun_family := AF_UNIX;
