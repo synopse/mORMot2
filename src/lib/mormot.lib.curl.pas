@@ -583,21 +583,20 @@ type
     chv3Only = 31
   );
 
-  /// low-level parameter for coHttpAuth
+  /// items of low-level parameter for coHttpAuth
   TCurlAuth = (
-    cauNone      = 0,
-    cauBasic     = 1 shl 0,
-    cauDigest    = 1 shl 1,
-    cauNegotiate = 1 shl 2,
-    cauNtlm      = 1 shl 3,
-    cauDigest_IE = 1 shl 4,
-    cauNtlm_WB   = 1 shl 5,
-    cauBearer    = 1 shl 6,
-    cauAws_SigV4 = 1 shl 7,
-    cauOnly      = 1 shl 31,
-    cauAny       = not (1 shl 4), // cauDigest_IE
-    cauAnySafe   = not (1 shl 0 or 1 shl 4) // cauBasic or cauDigest_IE
-  );
+    cauBasic     = 0,
+    cauDigest    = 1,
+    cauNegotiate = 2,
+    cauNtlm      = 3,
+    cauDigest_IE = 4,
+    cauNtlm_WB   = 5,
+    cauBearer    = 6,
+    cauAws_SigV4 = 7,
+    cauOnly      = 31);
+
+  /// low-level parameter for coHttpAuth
+  TCurlAuths = set of TCurlAuth;
 
   /// low-level parameter for coUseSsl
   TCurlUseSsl = (
@@ -726,13 +725,51 @@ type
     CURLFORM_CONTENTLEN // added in 7.46.0, provide a curl_off_t 64-bit size
   );
 
+  /// low-level items for TCurlVersionInfo.features
+  TCurlVersionFeature = (
+    cvfIPv6,
+    cvfKerberos4,
+    cvfSsl,
+    cvfLibz,
+    cvfNtlm,
+    cvfGssNegotiate,
+    cvfDebug,
+    cvfAsynchDns,
+    cvfSpNego,
+    cvfLargefile,
+    cvfIDN,
+    cvfSspi,
+    cvfConv,
+    cvfCurlDebug,
+    cvfTlsAuthSrp,
+    cvfNtlmWB,
+    cvfHttp2,
+    cvfGssApi,
+    cvfKerberos5,
+    cvfUnixSockets,
+    cvfPsl,
+    cvfHttpSProxy,
+    cvfMultiSsl,
+    cvfBrotli,
+    cvfAltSvc,
+    cvfHttp3,
+    cvfZstd,
+    cvfUnicode,
+    cvfHsts,
+    cvfGSasl,
+    cvfThreadsafe
+  );
+  /// low-level set for TCurlVersionInfo.features
+  TCurlVersionFeatures = set of TCurlVersionFeature;
+
   /// low-level version information for libcurl library (in its cv11 layout)
+  // - you need to check the actual version before accessing any of its members
   TCurlVersionInfo = record
     age: TCurlVersion;
     version: PAnsiChar;
     version_num: cardinal;
     host: PAnsiChar;
-    features: integer;
+    features: TCurlVersionFeatures;
     ssl_version: PAnsiChar;
     ssl_version_num: PAnsiChar;
     libz_version: PAnsiChar;
@@ -757,41 +794,6 @@ type
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
 
-  /// low-level bits for TCurlVersionInfo.features
-  TCurlVersionFeature = (
-    cvfIPv6         = 1 shl 0,
-    cvfKerberos4    = 1 shl 1,
-    cvfSsl          = 1 shl 2,
-    cvfLibz         = 1 shl 3,
-    cvfNtlm         = 1 shl 4,
-    cvfGssNegotiate = 1 shl 5,
-    cvfDebug        = 1 shl 6,
-    cvfAsynchDns    = 1 shl 7,
-    cvfSpNego       = 1 shl 8,
-    cvfLargefile    = 1 shl 9,
-    cvfIDN          = 1 shl 10,
-    cvfSspi         = 1 shl 11,
-    cvfConv         = 1 shl 12,
-    cvfCurlDebug    = 1 shl 13,
-    cvfTlsAuthSRP   = 1 shl 14,
-    cvfNtlmWB       = 1 shl 15,
-    cvfHttp2        = 1 shl 16,
-    cvfGssApi       = 1 shl 17,
-    cvfKerberos5    = 1 shl 18,
-    cvfUnixSockets  = 1 shl 19,
-    cvfPSL          = 1 shl 20,
-    cvfHttpSProxy   = 1 shl 21,
-    cvfMultiSsl     = 1 shl 22,
-    cvfBrotli       = 1 shl 23,
-    cvfAltSvc       = 1 shl 24,
-    cvfHttp3        = 1 shl 25,
-    cvfZstd         = 1 shl 26,
-    cvfUnicode      = 1 shl 27,
-    cvfHsts         = 1 shl 28,
-    cvfGSasl        = 1 shl 29,
-    cvfThreadsafe   = 1 shl 30
-  );
-
   /// low-level access to the libcurl library instance
   TCurl = type pointer;
 
@@ -806,6 +808,8 @@ type
 
   /// low-level access to the libcurl mime interface
   TCurlMime = type pointer;
+
+  /// low-level access to the libcurl mime part interface
   TCurlMimePart = type pointer;
 
   /// low-level access to the libcurl library instance in "multi" mode
@@ -816,12 +820,15 @@ type
 
   /// low-level certificate information for libcurl library API
   TCurlCertInfo = packed record
+    /// count of items in certinfo[]
     num_of_certs: integer;
     {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
+    /// actual list of certificates
     certinfo: PPCurlSListArray;
   end;
   PCurlCertInfo = ^TCurlCertInfo;
 
+  /// pointer reference to the next multipart/formdata HTTP POST section
   PCurlHttpPost = ^TCurlHttpPost;
 
   /// defines a multipart/formdata HTTP POST section
@@ -847,7 +854,7 @@ type
     contentheader: PPCurlSListArray;
     /// if one field name has more than one file, this link should link to following files
     more: PCurlHttpPost;
-    /// as defined below
+    /// some associated flags
     flags: integer;
     /// file name to show. If not set, the actual file name will be used (if this is a file part)
     showfilename: PAnsiChar;
@@ -857,7 +864,6 @@ type
     // - added in 7.46.0 - is defined as POSIX off_t
     contentlen: Int64;
   end;
-
 
   /// low-level message information for libcurl library API
   TCurlMsgRec = packed record
@@ -917,6 +923,11 @@ type
 const
   // coErrorBuffer must be at least CURL_ERROR_SIZE bytes big
   CURL_ERROR_SIZE = 256;
+
+  cauNone: TCurlAuths = [];
+  cauAll = [low(TCurlAuth) .. high(TCurlAuth)];
+  cauAny = cauAll - [cauDigest_IE];
+  cauAnySafe = cauAll - [cauBasic, cauDigest_IE];
 
   // aliases for removed/repurposed/obsolete values
   crURLMalformatUser         = crNotBuiltIn;
@@ -1492,10 +1503,10 @@ begin
     res := curl.global_init_mem(engines, @curl_malloc_callback, @curl_free_callback,
       @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
     if res <> crOK then
-        raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
+      raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
     curl.info := curl.version_info(cv11); // direct static assign
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info^.version]);
-    if curl.info.ssl_version <> nil then
+    if curl.info^.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info^.ssl_version]);
     curl_initialized := true; // should be set last but before CurlEnableGlobalShare
 
@@ -1574,6 +1585,7 @@ end;
 
 initialization
   assert(ord(crUnrecoverablePoll) = 99); // CURLE_UNRECOVERABLE_POLL
+  assert(ord(cvfThreadsafe) = 30);
 
 finalization
   {$ifdef LIBCURLSTATIC}
