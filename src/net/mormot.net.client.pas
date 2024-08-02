@@ -399,6 +399,7 @@ type
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnProtocolRequest: TOnHttpClientRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
+    fOnRedirect: TOnHttpClientSocketRequest;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif DOMAINRESTAUTH}
@@ -550,6 +551,11 @@ type
     /// optional callback called after each Request()
     property OnAfterRequest: TOnHttpClientSocketRequest
       read fOnAfterRequest write fOnAfterRequest;
+    /// optional callback called before a Request() internal redirection
+    // - ctxt.Status contains e.g. 301 (HTTP_MOVEDPERMANENTLY)
+    // - ctxt.Url contains the redirected URI retrieved from 'Location:' header
+    property OnRedirect: TOnHttpClientSocketRequest
+      read fOnRedirect write fOnRedirect;
   published
     /// by default, the client is identified as IE 5.5, which is very
     // friendly welcome by most servers :(
@@ -2130,6 +2136,9 @@ begin
       end;
       if assigned(OnLog) then
         OnLog(sllTrace, 'Request % % redirected to %', [ctxt.Method, url, ctxt.Url], self);
+      if Assigned(fOnRedirect) then
+        if not fOnRedirect(self, ctxt) then
+          break;
       if IdemPChar(pointer(ctxt.Url), 'HTTP') and
          newuri.From(ctxt.Url) then
       begin
