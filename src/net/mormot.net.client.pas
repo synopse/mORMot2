@@ -1647,6 +1647,8 @@ begin
   try
     s.RedirectMax := redirectmax;
     result := s.WGet(u, destfile, self);
+    if tls <> nil then
+      tls^ := s.TLS; // copy peer info to the TLS context (may be redirected)
   finally
     s.Free;
   end;
