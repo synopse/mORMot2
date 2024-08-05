@@ -779,8 +779,8 @@ var
   // and for default User Interface Query (see TRest.QueryIsTrue() method)
   // - some functions do not match exactly the TUtf8Compare signature, so will
   // be set in the initialization section of this unit
-  OrmFieldTypeComp: array[TOrmFieldType] of TUtf8Compare  =
-   (nil,                 // unknown
+  OrmFieldTypeComp: array[TOrmFieldType] of TUtf8Compare  = (
+    nil,                 // unknown
     nil,                 // AnsiText = AnsiIComp (in initialization below)
     Utf8IComp,           // Utf8Text, 8-bit case insensitive compared
     Utf8CompareUInt32,   // Enumerate
@@ -7599,7 +7599,7 @@ begin
   T := @CLASSORMFIELDTYPELIST;
   result := oftUnknown;
   repeat
-    // unrolled several InheritsFrom() calls
+    // unrolled several InheritsFrom() calls with late-binding TypeInfo()
     C := CT^.RttiClass;
     if C = T[0] then         // TObject
       break; // loop over all parent classes until root TObject is reached
@@ -7636,177 +7636,88 @@ begin
 end;
 
 function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
-begin // very fast, thanks to the TypeInfo() compiler-generated function
+begin
   case Info^.Kind of
     rkInteger:
-      begin
-        result := oftInteger; // works also for otSQWord,otUQWord
-        exit; // direct exit is faster in generated asm code
-      end;
+      result := oftInteger; // works also for otSQWord,otUQWord
     rkInt64:
       if (Info = TypeInfo(TRecordReference)) or
          (Info = TypeInfo(TRecordReferenceToBeDeleted)) then
-      begin
-        result := oftRecord;
-        exit;
-      end
+        result := oftRecord
       else if Info = TypeInfo(TCreateTime) then
-      begin
-        result := oftCreateTime;
-        exit;
-      end
+        result := oftCreateTime
       else if Info = TypeInfo(TModTime) then
-      begin
-        result := oftModTime;
-        exit;
-      end
+        result := oftModTime
       else if Info = TypeInfo(TTimeLog) then
-      begin
-        result := oftTimeLog;
-        exit;
-      end
+        result := oftTimeLog
       else if Info = TypeInfo(TUnixTime) then
-      begin
-        result := oftUnixTime;
-        exit;
-      end
+        result := oftUnixTime
       else if Info = TypeInfo(TUnixMSTime) then
-      begin
-        result := oftUnixMSTime;
-        exit;
-      end
+        result := oftUnixMSTime
       else if Info = TypeInfo(TID) then
-      begin
-        result := oftTID;
-        exit;
-      end
+        result := oftTID
       else if Info = TypeInfo(TSessionUserID) then
-      begin
-        result := oftSessionUserID;
-        exit;
-      end
+        result := oftSessionUserID
       else if Info = TypeInfo(TRecordVersion) then
-      begin
-        result := oftRecordVersion;
-        exit;
-      end
+        result := oftRecordVersion
       else if (ord(Info^.RawName[1]) and $df = ord('T')) and
         // T...ID pattern in type name -> TID
         (PWord(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf =
            ord('I') + ord('D') shl 8) then
-      begin
-        result := oftTID;
-        exit;
-      end
+        result := oftTID
       else
-      begin
         result := oftInteger;
-        exit;
-      end;
     {$ifdef FPC}
     rkBool:
-      begin
-        result := oftBoolean;
-        exit;
-      end;
+      result := oftBoolean;
     rkQWord:
-      begin
-        result := oftInteger;
-        exit;
-      end;
+      result := oftInteger;
     {$endif FPC}
     rkSet:
-      begin
-        result := oftSet;
-        exit;
-      end;
+      result := oftSet;
     rkEnumeration:
-      if Info.IsBoolean then
-      begin // also circumvent a Delphi RTTI bug
-        result := oftBoolean;
-        exit;
-      end
+      if Info.IsBoolean then // also circumvent a Delphi RTTI bug
+        result := oftBoolean
       else
-      begin
         result := oftEnumerate;
-        exit;
-      end;
     rkFloat:
       if Info.IsCurrency then
-      begin
-        result := oftCurrency;
-        exit;
-      end
+        result := oftCurrency
       else if Info = TypeInfo(TDateTime) then
-      begin
-        result := oftDateTime;
-        exit;
-      end
+        result := oftDateTime
       else if Info = TypeInfo(TDateTimeMS) then
-      begin
-        result := oftDateTimeMS;
-        exit;
-      end
+        result := oftDateTimeMS
       else
-      begin
         result := oftFloat;
-        exit;
-      end;
     rkLString:
       // do not use AnsiStringCodePage since AnsiString = GetAcp may change
       if (Info = TypeInfo(RawBlob)) or
          (Info = TypeInfo(RawByteString)) then
-      begin
-        result := oftBlob;
-        exit;
-      end
+        result := oftBlob
       else if Info = TypeInfo(WinAnsiString) then
-      begin
-        result := oftAnsiText;
-        exit;
-      end
+        result := oftAnsiText
       else
-      begin
         result := oftUtf8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
-        exit;
-      end;
     {$ifdef HASVARUSTRING} rkUString, {$endif}
     rkChar,
     rkWChar,
     rkWString:
-      begin
-        result := oftUtf8Text;
-        exit;
-      end;
+      result := oftUtf8Text;
     rkDynArray:
-      begin
-        result := oftBlobDynArray;
-        exit;
-      end;
+      result := oftBlobDynArray;
     {$ifdef PUBLISHRECORD}
     {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
     rkRecord:
-      begin
-        result := oftUtf8Custom;
-        exit;
-      end;
+      result := oftUtf8Custom;
     {$endif PUBLISHRECORD}
     rkVariant:
-      begin // this function does not need to handle oftNullable
-        result := oftVariant;
-        exit;
-      end;
+      // this function does not need to handle oftNullable
+      result := oftVariant;
     rkClass:
-      begin
-        result := ClassOrmFieldType(Info);
-        exit;
-      end;
+      result := ClassOrmFieldType(Info); // use dedicated sub function
     // note: tkString (ShortString) and tkInterface not handled
   else
-    begin
-      result := oftUnknown;
-      exit;
-    end;
+    result := oftUnknown;
   end;
 end;
 
@@ -8114,13 +8025,11 @@ end;
 
 function TOrmTableAbstract.DeleteRow(Row: PtrInt): boolean;
 begin
+  result := false;
   if (self = nil) or
      (Row < 1) or
      (Row > fRowCount) then
-  begin
-    result := false;
     exit; // out of range
-  end;
   if Row < fRowCount then
   begin
     Row := Row * FieldCount; // convert row index into position in fData[Offset]
