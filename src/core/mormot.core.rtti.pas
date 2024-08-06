@@ -1437,6 +1437,10 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
+type
+  /// customize CopyObject() overloaded functions
+  TCopyObjectOptions = set of (
+    cooExactType);
 
 /// copy object properties
 // - copy integer, Int64, enumerates (including boolean), variant, records,
@@ -1446,12 +1450,12 @@ function GetPublishedMethods(Instance: TObject;
 // TOrm children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular classes
-procedure CopyObject(aFrom, aTo: TObject); overload;
+procedure CopyObject(aFrom, aTo: TObject; aOptions: TCopyObjectOptions = []); overload;
 
 /// create a new object instance, from an existing one
 // - will create a new instance of the same class, then call the overloaded
 // CopyObject() procedure to copy its values
-function CopyObject(aFrom: TObject): TObject; overload;
+function CopyObject(aFrom: TObject; aOptions: TCopyObjectOptions = []): TObject; overload;
 
 /// copy two TStrings instances
 // - will just call Dest.Assign(Source) in practice
@@ -9309,7 +9313,7 @@ begin
     Dest.Assign(Source); // will do the copy RTL-style
 end;
 
-procedure CopyObject(aFrom, aTo: TObject);
+procedure CopyObject(aFrom, aTo: TObject; aOptions: TCopyObjectOptions);
 var
   cf: TRttiCustom;
   rf, rt: PRttiCustomProps;
@@ -9346,7 +9350,9 @@ begin
         if pf^.Name <> '' then
         begin
           pt := rt.Find(pf^.Name);
-          if pt <> nil then
+          if (pt <> nil) and
+             ((not (cooExactType in aOptions)) or
+              (pt^.Value = pf^.Value)) then
           begin
             pf^.GetValue(pointer(aFrom), rvd);
             pt^.SetValue(pointer(aTo), rvd, {andclear=}true);
@@ -9358,14 +9364,14 @@ begin
   end;
 end;
 
-function CopyObject(aFrom: TObject): TObject;
+function CopyObject(aFrom: TObject; aOptions: TCopyObjectOptions): TObject;
 begin
   if aFrom = nil then
     result := nil
   else
   begin
     result := Rtti.RegisterClass(aFrom).ClassNewInstance;
-    CopyObject(aFrom, result);
+    CopyObject(aFrom, result, aOptions);
   end;
 end;
 
