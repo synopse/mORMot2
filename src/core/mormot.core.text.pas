@@ -4978,12 +4978,9 @@ begin
 end;
 
 procedure TTextWriter.AddString(const Text: RawUtf8);
-var
-  L: PtrInt;
 begin
-  L := PtrInt(Text);
-  if L <> 0 then
-    AddNoJsonEscape(pointer(L), PStrLen(L - _STRLEN)^);
+  if Text <> '' then
+    AddNoJsonEscape(pointer(Text), PStrLen(PtrInt(Text) - _STRLEN)^);
 end;
 
 procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);

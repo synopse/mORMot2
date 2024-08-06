@@ -2226,7 +2226,6 @@ begin
   {$endif ASMX64}
 end;
 
-procedure TTestCoreBase._RecordCopy;
 type
   TR = record
     One: integer;
@@ -2247,11 +2246,54 @@ type
     LicenceDate: TDate;
     ProductName: RawUtf8;
   end;
+  TPeople2 = class(TSynPersistent)
+  private
+    fFirstName: string;
+    fLastName: RawUtf8;
+    fYearOfBirth: Int64;
+    fYearOfDeath: integer;
+  published
+    property FirstName: string
+      read fFirstName write fFirstName;
+    property LastName: RawUtf8
+      read fLastName write fLastName;
+    property YearOfBirth: Int64
+      read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: integer
+      read fYearOfDeath write fYearOfDeath;
+  end;
+
+procedure TTestCoreBase._RecordCopy;
 var
   A, B, C: TR;
   i, j: PtrInt;
   lic: TLicenseData;
+  o1: TOrmPeople;
+  o2: TPeople2;
 begin
+  o1 := TOrmPeople.Create;
+  o1.FirstName := 'toto';
+  o1.LastName := 'titi';
+  o1.YearOfBirth := 1926;
+  o1.YearOfDeath := 2010;
+  o2 := TPeople2.Create;
+  CopyObject(o1, o2, []);
+  CheckEqual(o1.FirstName, 'toto');
+  Check(o2.FirstName = 'toto');
+  CheckEqual(o1.LastName, 'titi');
+  CheckEqual(o1.LastName, o2.LastName);
+  CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
+  CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
+  o2.Free;
+  o2 := TPeople2.Create;
+  CopyObject(o1, o2, [cooExactType]);
+  CheckEqual(o1.FirstName, 'toto');
+  Check(o2.FirstName = '');
+  CheckEqual(o1.LastName, o2.LastName);
+  CheckEqual(o2.YearOfBirth, 0);
+  CheckEqual(o2.YearOfDeath, 0);
+  o2.Free;
+  o1.Free;
   CheckEqual(lic.CustomerName, '');
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
