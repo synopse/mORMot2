@@ -2239,6 +2239,7 @@ type
     Dyn: array of integer;
     Bulk: array[0..19] of byte;
   end;
+
   TLicenseData = record
     CustomerNum: Integer;
     CustomerName: RawUtf8;
@@ -2246,6 +2247,7 @@ type
     LicenceDate: TDate;
     ProductName: RawUtf8;
   end;
+
   TPeople2 = class(TSynPersistent)
   private
     fFirstName: string;
@@ -2271,29 +2273,6 @@ var
   o1: TOrmPeople;
   o2: TPeople2;
 begin
-  o1 := TOrmPeople.Create;
-  o1.FirstName := 'toto';
-  o1.LastName := 'titi';
-  o1.YearOfBirth := 1926;
-  o1.YearOfDeath := 2010;
-  o2 := TPeople2.Create;
-  CopyObject(o1, o2, []);
-  CheckEqual(o1.FirstName, 'toto');
-  Check(o2.FirstName = 'toto');
-  CheckEqual(o1.LastName, 'titi');
-  CheckEqual(o1.LastName, o2.LastName);
-  CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
-  CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
-  o2.Free;
-  o2 := TPeople2.Create;
-  CopyObject(o1, o2, [cooExactType]);
-  CheckEqual(o1.FirstName, 'toto');
-  Check(o2.FirstName = '');
-  CheckEqual(o1.LastName, o2.LastName);
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  o2.Free;
-  o1.Free;
   CheckEqual(lic.CustomerName, '');
   FillZeroRtti(TypeInfo(TLicenseData), lic);
   CheckEqual(lic.CustomerName, '');
@@ -2359,18 +2338,41 @@ begin
   B.Three := 3;
   B.Dyn[0] := 10;
   RecordCopy(C, B, TypeInfo(TR)); // mORMot 2 doesn't overload RecordCopy()
-  Check(A.One = C.One);
+  CheckEqual(A.One, C.One);
   Check(A.S1 = C.S1);
-  Check(C.Three = 3);
+  CheckEqual(C.Three, 3);
   Check(A.S2 = C.S2);
   Check(A.Five = C.Five);
-  Check(A.V = C.V);
+  Check(A.v = C.v);
   Check(Int64(A.R) = Int64(C.R));
   Check(A.Arr[5] = C.Arr[5]);
   Check(A.Arr[0] = C.Arr[0]);
-  Check(A.Dyn[9] = C.Dyn[9]);
+  CheckEqual(A.Dyn[9], C.Dyn[9]);
   {Check(A.Dyn[0]=0) bug in original VCL?}
-  Check(C.Dyn[0] = 10);
+  CheckEqual(C.Dyn[0], 10);
+  o1 := TOrmPeople.Create;
+  o1.FirstName := 'toto';
+  o1.LastName := 'titi';
+  o1.YearOfBirth := 1926;
+  o1.YearOfDeath := 2010;
+  o2 := TPeople2.Create;
+  CopyObject(o1, o2, []);
+  CheckEqual(o1.FirstName, 'toto');
+  Check(o2.FirstName = 'toto');
+  CheckEqual(o1.LastName, 'titi');
+  CheckEqual(o1.LastName, o2.LastName);
+  CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
+  CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
+  o2.Free;
+  o2 := TPeople2.Create;
+  CopyObject(o1, o2, [cooExactType]);
+  CheckEqual(o1.FirstName, 'toto');
+  Check(o2.FirstName = '');
+  CheckEqual(o1.LastName, o2.LastName);
+  CheckEqual(o2.YearOfBirth, 0);
+  CheckEqual(o2.YearOfDeath, 0);
+  o2.Free;
+  o1.Free;
 end;
 
 procedure TTestCoreBase._TSynList;
