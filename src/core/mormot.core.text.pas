@@ -4983,7 +4983,7 @@ var
 begin
   L := PtrInt(Text);
   if L <> 0 then
-    AddNoJsonEscape(pointer(Text), PStrLen(L - _STRLEN)^);
+    AddNoJsonEscape(pointer(L), PStrLen(L - _STRLEN)^);
 end;
 
 procedure TTextWriter.AddSpaced(Text: PUtf8Char; TextLen, Width: PtrInt);
