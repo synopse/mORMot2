@@ -9321,45 +9321,44 @@ var
   i: integer;
   rvd: TRttiVarData;
 begin
-  if (aFrom <> nil) and
-     (aTo <> nil) then
-  begin
-    cf := Rtti.RegisterClass(PClass(aFrom)^);
-    if (cf.ValueRtlClass = vcCollection) and
-       (PClass(aFrom)^ = PClass(aTo)^)  then
-      // specific process of TCollection items
-      CopyCollection(TCollection(aFrom), TCollection(aTo))
-    else if (cf.ValueRtlClass = vcStrings) and
-            PClass(aTo)^.InheritsFrom(TStrings) then
-      // specific process of TStrings items using RTL-style copy
-      TStrings(aTo).Assign(TStrings(aFrom))
-    else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
-      // fast copy from RTTI properties of the common (or same) hierarchy
-      if Assigned(cf.CopyObject) then
-        cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
-      else
-        cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
+  if (aFrom = nil) or
+     (aTo = nil) then
+    exit;
+  cf := Rtti.RegisterClass(PClass(aFrom)^);
+  if (cf.ValueRtlClass = vcCollection) and
+     (PClass(aFrom)^ = PClass(aTo)^)  then
+    // specific process of TCollection items
+    CopyCollection(TCollection(aFrom), TCollection(aTo))
+  else if (cf.ValueRtlClass = vcStrings) and
+          PClass(aTo)^.InheritsFrom(TStrings) then
+    // specific process of TStrings items using RTL-style copy
+    TStrings(aTo).Assign(TStrings(aFrom))
+  else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
+    // fast copy from RTTI properties of the common (or same) hierarchy
+    if Assigned(cf.CopyObject) then
+      cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
     else
+      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
+  else
+  begin
+    // no common inheritance -> lookup by property name (slower)
+    rf := @cf.Props;
+    rt := @Rtti.RegisterClass(PClass(aTo)^).Props;
+    pf := pointer(rf.List);
+    for i := 1 to rf.Count do
     begin
-      // no common inheritance -> slower lookup by property name
-      rf := @cf.Props;
-      rt := @Rtti.RegisterClass(PClass(aTo)^).Props;
-      pf := pointer(rf.List);
-      for i := 1 to rf.Count do
+      if pf^.Name <> '' then
       begin
-        if pf^.Name <> '' then
+        pt := rt.Find(pf^.Name);
+        if (pt <> nil) and
+           ((not (cooExactType in aOptions)) or
+            (pt^.Value = pf^.Value)) then
         begin
-          pt := rt.Find(pf^.Name);
-          if (pt <> nil) and
-             ((not (cooExactType in aOptions)) or
-              (pt^.Value = pf^.Value)) then
-          begin
-            pf^.GetValue(pointer(aFrom), rvd);
-            pt^.SetValue(pointer(aTo), rvd, {andclear=}true);
-          end;
+          pf^.GetValue(pointer(aFrom), rvd);
+          pt^.SetValue(pointer(aTo), rvd, {andclear=}true);
         end;
-        inc(pf);
       end;
+      inc(pf);
     end;
   end;
 end;
