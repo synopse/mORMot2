@@ -3855,55 +3855,55 @@ type
 function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compare two "array of boolean" elements
+/// compare two "array of boolean" 8-bit elements
 function SortDynArrayBoolean(const A, B): integer;
 
-/// compare two "array of shortint" elements
+/// compare two "array of shortint" 8-bit elements
 function SortDynArrayShortint(const A, B): integer;
 
-/// compare two "array of byte" elements
+/// compare two "array of byte" 8-bit elements
 function SortDynArrayByte(const A, B): integer;
 
-/// compare two "array of smallint" elements
+/// compare two "array of smallint" 16-bit elements
 function SortDynArraySmallint(const A, B): integer;
 
-/// compare two "array of word" elements
+/// compare two "array of word" 16-bit elements
 function SortDynArrayWord(const A, B): integer;
 
-/// compare two "array of integer" elements
+/// compare two "array of integer" 32-bit elements
 function SortDynArrayInteger(const A, B): integer;
 
-/// compare two "array of cardinal" elements
+/// compare two "array of cardinal" 32-bit elements
 function SortDynArrayCardinal(const A, B): integer;
 
-/// compare two "array of Int64" or "array of Currency" elements
+/// compare two "array of Int64" or "array of Currency" 64-bit elements
 function SortDynArrayInt64(const A, B): integer;
 
-/// compare two "array of QWord" elements
+/// compare two "array of QWord" 64-bit elements
 // - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
 // should better use this function or CompareQWord() to properly compare two
 // QWord values over CPUX86
 function SortDynArrayQWord(const A, B): integer;
 
-/// compare two "array of THash128" elements
+/// compare two "array of THash128" 128-bit elements
 function SortDynArray128(const A, B): integer;
 
-/// compare two "array of THash256" elements
+/// compare two "array of THash256" 256-bit elements
 function SortDynArray256(const A, B): integer;
 
-/// compare two "array of THash512" elements
+/// compare two "array of THash512" 512-bit elements
 function SortDynArray512(const A, B): integer;
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A, B): integer;
 
-/// compare two "array of single" elements
+/// compare two "array of single" 32-bit elements
 function SortDynArraySingle(const A, B): integer;
 
-/// compare two "array of double" elements
+/// compare two "array of double" 64-bit elements
 function SortDynArrayDouble(const A, B): integer;
 
-/// compare two "array of extended" elements
+/// compare two "array of TSynExtended" 64/80-bit elements
 function SortDynArrayExtended(const A, B): integer;
 
 /// compare two "array of AnsiString" elements, with case sensitivity
