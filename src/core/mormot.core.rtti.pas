@@ -1437,7 +1437,7 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
-/// copy object properties
+/// copy class published properties via names using RTTI
 // - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding ShortString)
 // - TCollection items can be copied also, if they are of the same exact class
@@ -2255,18 +2255,16 @@ type
     // ! if rvd.NeedsClear then VarClearProc(rvd.Data);
     procedure GetValue(Data: pointer; out RVD: TRttiVarData);
       {$ifdef HASINLINE}inline;{$endif}
-    /// set a field value to a given TVarData-like content
-    // - optionally check and apply RVD.NeedsClear flag (leave it as true if
-    // RVD comes from GetValue)
-    // - use a temporary text conversion for a record field (Prop=nil)
-    procedure SetValue(Data: pointer; var RVD: TRttiVarData;
-      andclear: boolean = true);
-    /// retrieve any field vlaue as a variant instance
+    /// retrieve any field value as a variant instance
     // - will generate a stand-alone variant value, not an internal TRttiVarData
     // - complex values can be returned as TDocVariant after JSON conversion,
     // using e.g. @JSON_[mFastFloat] as optional Options parameter
     procedure GetValueVariant(Data: pointer; out Dest: TVarData;
       Options: pointer{PDocVariantOptions} = nil);
+    /// set a field value to a given variant content
+    // - use a temporary text conversion for a record field (Prop=nil)
+    // - Source is eventually cleared via VarClearProc()
+    procedure SetValueVariant(Data: pointer; var Source: TVarData);
     /// set a field value from its UTF-8 text
     // - will convert the Text into proper ordinal or float if needed
     // - also implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
@@ -2284,7 +2282,7 @@ type
     function CompareValue(Data, Other: pointer; const OtherRtti: TRttiCustomProp;
       CaseInsensitive: boolean): integer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// low-level copy of of two properties values
+    /// low-level copy of two properties values
     procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
@@ -4073,7 +4071,7 @@ begin
   else if k = rkFloat then
   begin
     if not VariantToDouble(Value, f) then
-      if Assigned(_Iso8601ToDateTime) and
+      if Assigned(_Iso8601ToDateTime) and // may be a TDateTime
          VariantToText(Value, u) then
         if u = '' then
           f := 0
@@ -6993,23 +6991,24 @@ begin
   end;
 end;
 
-procedure TRttiCustomProp.SetValue(Data: pointer; var RVD: TRttiVarData;
-  andclear: boolean);
+procedure TRttiCustomProp.SetValueVariant(Data: pointer; var Source: TVarData);
 var
   u: pointer;
 begin
   if Prop <> nil then
-    Prop.SetValue(TObject(Data), variant(RVD)) // for class properties
+    Prop.SetValue(TObject(Data), variant(Source)) // for class properties
   else
   begin
     u := nil; // use a temp UTF-8 conversion with records
-    VariantToUtf8(variant(RVD), RawUtf8(u));
-    SetValueText(Data, RawUtf8(u));
+    if Source.VType > varNull then
+    begin
+      VariantToUtf8(variant(Source), RawUtf8(u));
+      if not SetValueText(Data, RawUtf8(u)) then
+        ClearValue(Data, {freenestedobjects=}true);
+    end;
     FastAssignNew(u);
   end;
-  if andclear and
-     RVD.NeedsClear then
-    VarClearProc(RVD.Data);
+  VarClearProc(Source);
 end;
 
 function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boolean;
@@ -7168,7 +7167,7 @@ begin
     // varString, varVariant, varOleStr, varUString are returned by reference
     begin
       RVD.Data.VAny := Data; // return the pointer to the value
-      RVD.VType := RVD.VType or varByRef // and access it by reference
+      RVD.VType := RVD.VType or varByRef // standard variant access by reference
     end;
   end;
 end;
@@ -7324,7 +7323,7 @@ end;
 
 procedure TRttiCustomProp.CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
 var
-  v: TRttiVarData;
+  v: TVarData;
   d, s: PPointer;
 begin
   if (Dest = nil) or
@@ -7337,8 +7336,8 @@ begin
      (DestRtti^.Value <> Value) then
   begin
     // getter or a setter, or diverse types -> use local temp value
-    GetValue(Source, v);
-    DestRtti^.SetValue(Dest, v, {andclear=}true);
+    GetValueVariant(Source, v);
+    DestRtti^.SetValueVariant(Dest, v);
     exit;
   end;
   d := pointer(Dest + DestRtti^.OffsetSet);
