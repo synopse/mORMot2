@@ -1437,11 +1437,6 @@ type
 function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
-type
-  /// customize CopyObject() overloaded functions
-  TCopyObjectOptions = set of (
-    cooExactType);
-
 /// copy object properties
 // - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding ShortString)
@@ -1450,12 +1445,13 @@ type
 // TOrm children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular classes
-procedure CopyObject(aFrom, aTo: TObject; aOptions: TCopyObjectOptions = []); overload;
+procedure CopyObject(aFrom, aTo: TObject); overload;
 
 /// create a new object instance, from an existing one
 // - will create a new instance of the same class, then call the overloaded
 // CopyObject() procedure to copy its values
-function CopyObject(aFrom: TObject; aOptions: TCopyObjectOptions = []): TObject; overload;
+// - caller should use "CopyObject(...) as TDestClass" for safety
+function CopyObject(aFrom: TObject): TObject; overload;
 
 /// copy two TStrings instances
 // - will just call Dest.Assign(Source) in practice
@@ -9329,13 +9325,27 @@ begin
     Dest.Assign(Source); // will do the copy RTL-style
 end;
 
-procedure CopyObject(aFrom, aTo: TObject; aOptions: TCopyObjectOptions);
+procedure CopyInternal(f, t: pointer; rf, rt: PRttiCustomProps);
+var
+  pf, pt: PRttiCustomProp;
+  n: integer;
+begin
+  pf := pointer(rf.List);
+  if pf = nil then
+    exit;
+  n := rf.Count;
+  repeat  // copy with lookup by property name
+    pt := rt.Find(pf^.Name);
+    if pt <> nil then // property name found
+      pf^.CopyValue(t, f, pt);
+    inc(pf);
+    dec(n);
+  until n = 0;
+end;
+
+procedure CopyObject(aFrom, aTo: TObject);
 var
   cf: TRttiCustom;
-  rf, rt: PRttiCustomProps;
-  pf, pt: PRttiCustomProp;
-  i: integer;
-  rvd: TRttiVarData;
 begin
   if (aFrom = nil) or
      (aTo = nil) then
@@ -9356,37 +9366,19 @@ begin
     else
       cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
   else
-  begin
     // no common inheritance -> lookup by property name (slower)
-    rf := @cf.Props;
-    rt := @Rtti.RegisterClass(PClass(aTo)^).Props;
-    pf := pointer(rf.List);
-    for i := 1 to rf.Count do
-    begin
-      if pf^.Name <> '' then
-      begin
-        pt := rt.Find(pf^.Name);
-        if (pt <> nil) and
-           ((not (cooExactType in aOptions)) or
-            (pt^.Value = pf^.Value)) then
-        begin
-          pf^.GetValue(pointer(aFrom), rvd);
-          pt^.SetValue(pointer(aTo), rvd, {andclear=}true);
-        end;
-      end;
-      inc(pf);
-    end;
-  end;
+    CopyInternal(pointer(aFrom), pointer(aTo),
+      @cf.Props, @Rtti.RegisterClass(PClass(aTo)^).Props);
 end;
 
-function CopyObject(aFrom: TObject; aOptions: TCopyObjectOptions): TObject;
+function CopyObject(aFrom: TObject): TObject;
 begin
   if aFrom = nil then
     result := nil
   else
   begin
     result := Rtti.RegisterClass(aFrom).ClassNewInstance;
-    CopyObject(aFrom, result, aOptions);
+    CopyObject(aFrom, result);
   end;
 end;
 
