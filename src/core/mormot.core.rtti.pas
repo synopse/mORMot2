@@ -2332,7 +2332,9 @@ type
     function Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// locate a property/field index by name
-    function FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt;
+    function FindIndex(PropName: PUtf8Char; PropNameLen: PtrInt): PtrInt; overload;
+    /// locate a property/field index by name
+    function FindIndex(const PropName: RawUtf8): PtrInt; overload;
     /// customize a property/field name
     // - New is expected to be only plain pascal identifier, i.e.
     // A-Z a-z 0-9 and _ characters, up to 63 in length
@@ -7432,6 +7434,11 @@ begin
         inc(p);
   end;
   result := -1;
+end;
+
+function TRttiCustomProps.FindIndex(const PropName: RawUtf8): PtrInt;
+begin
+  result := FindIndex(pointer(PropName), length(PropName));
 end;
 
 function FromNames(p: PRttiCustomProp; n: integer; out names: RawUtf8): integer;
