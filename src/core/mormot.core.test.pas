@@ -687,7 +687,7 @@ procedure TSynTestCase.Check(condition: boolean; const msg: string);
 begin
   if self = nil then
     exit;
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
@@ -702,7 +702,7 @@ begin
     result := false;
     exit;
   end;
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
     AddLog(condition, msg);
@@ -739,7 +739,7 @@ end;
 procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
   const args: array of const);
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, msg, args);
@@ -747,7 +747,7 @@ end;
 
 procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, '%', [msg]);
@@ -755,7 +755,7 @@ end;
 
 function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := a = b;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -764,7 +764,7 @@ end;
 
 function TSynTestCase.CheckEqual(const a, b, msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := SortDynArrayRawByteString(a, b) = 0;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -778,7 +778,7 @@ end;
 
 function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := a = b;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -787,7 +787,7 @@ end;
 
 function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := a <> b;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -796,7 +796,7 @@ end;
 
 function TSynTestCase.CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := SortDynArrayRawByteString(a, b) <> 0;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -805,7 +805,7 @@ end;
 
 function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := a <> b;
   if not result or
      (tcoLogEachCheck in fOptions) then
@@ -815,7 +815,7 @@ end;
 function TSynTestCase.CheckSame(const Value1, Value2, Precision: double;
   const msg: string): boolean;
 begin
-  inc(fAssertions);
+  LockedInc32(@fAssertions);
   result := SameValue(Value1, Value2, Precision);
   if not result or
      (tcoLogEachCheck in fOptions) then
