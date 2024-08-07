@@ -2276,6 +2276,8 @@ type
     function CompareValue(Data, Other: pointer; const OtherRtti: TRttiCustomProp;
       CaseInsensitive: boolean): integer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// low-level copy of of two properties values
+    procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TTextWriter; Data: pointer;
@@ -7303,6 +7305,45 @@ begin
     result := CompareValueComplex(Data, Other, @OtherRtti, CaseInsensitive);
 end;
 
+// TRttiCustom method defined here for proper inlining
+procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
+begin
+  if Assigned(fCopy) then
+    fCopy(Dest, Source, fCache.Info)
+  else
+    MoveFast(Source^, Dest^, fCache.Size);
+end;
+
+procedure TRttiCustomProp.CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
+var
+  v: TRttiVarData;
+  d, s: PPointer;
+begin
+  if (Dest = nil) or
+     (Source = nil) then
+    exit; // avoid GPF
+  if DestRtti = nil then
+    DestRtti := @self;
+  if (OffsetGet < 0) or
+     (DestRtti^.OffsetSet < 0) or
+     (DestRtti^.Value <> Value) then
+  begin
+    // getter or a setter, or diverse types -> use local temp value
+    GetValue(Source, v);
+    DestRtti^.SetValue(Dest, v, {andclear=}true);
+    exit;
+  end;
+  d := pointer(Dest + DestRtti^.OffsetSet);
+  s := pointer(Source + OffsetGet);
+  if Value.Kind = rkClass then
+    if Assigned(Value.CopyObject) then
+      Value.CopyObject(d^, s^) // set e.g. by TOrm.RttiCustomSetParser
+    else
+      Value.Props.CopyProperties(d^, s^)
+  else
+    Value.ValueCopy(d, s); // direct copy from the fields memory buffers
+end;
+
 
 { TRttiCustomProps }
 
@@ -7706,15 +7747,6 @@ begin
     until n = 0;
 end;
 
-// TRttiCustom method defined here for proper inlining
-procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
-begin
-  if Assigned(fCopy) then
-    fCopy(Dest, Source, fCache.Info)
-  else
-    MoveFast(Source^, Dest^, fCache.Size);
-end;
-
 procedure TRttiCustomProps.CopyRecord(Dest, Source: PAnsiChar);
 var
   pp: PPRttiCustomProp;
@@ -7752,42 +7784,19 @@ procedure TRttiCustomProps.CopyProperties(Dest, Source: PAnsiChar);
 var
   p: PRttiCustomProp;
   n: integer;
-  v: TRttiVarData;
-  d, s: pointer;
 begin
   if (Dest = nil) or
      (Source = nil) then
     exit; // avoid GPF
   p := pointer(List); // all published properties, not only Managed[]
-  if p <> nil then
-  begin
-    n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
-    repeat
-      with p^ do
-        if (OffsetGet < 0) or
-           (OffsetSet < 0) then
-        begin
-          // there is a getter or a setter -> use local temporary value
-          GetValue(Source, v);
-          SetValue(Dest, v, {andclear=}true);
-        end
-        else
-        begin
-          d := Dest + OffsetSet;
-          s := Source + OffsetGet;
-          if p^.Value.Kind = rkClass then
-            if Assigned(Value.CopyObject) then
-              Value.CopyObject(PPointer(d)^, PPointer(s)^)
-            else
-              Value.Props.CopyProperties(PPointer(d)^, PPointer(s)^)
-          else
-            // direct content copy from the fields memory buffers
-            Value.ValueCopy(d, s);
-        end;
-      inc(p);
-      dec(n);
-    until n = 0;
-  end;
+  if p = nil then
+    exit;
+  n := Count;
+  repeat
+    p^.CopyValue(Dest, Source, p);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 
