@@ -2254,15 +2254,20 @@ type
     fLastName: RawUtf8;
     fYearOfBirth: Int64;
     fYearOfDeath: integer;
-  published
-    property FirstName: string
-      read fFirstName write fFirstName;
-    property LastName: RawUtf8
-      read fLastName write fLastName;
+  published // properties are in another order
     property YearOfBirth: Int64
       read fYearOfBirth write fYearOfBirth;
+    property LastName: RawUtf8
+      read fLastName write fLastName;
+    property FirstName: string
+      read fFirstName write fFirstName;
     property YearOfDeath: integer
       read fYearOfDeath write fYearOfDeath;
+  end;
+
+  TPeopleR = packed record
+    LastName, FirstName: RawUtf8;
+    YearOfBirth, Unused: integer;
   end;
 
 procedure TTestCoreBase._RecordCopy;
@@ -2272,6 +2277,8 @@ var
   lic: TLicenseData;
   o1: TOrmPeople;
   o2: TPeople2;
+  r: TPeopleR;
+  p: TRecordPeople;
 begin
   CheckEqual(lic.CustomerName, '');
   FillZeroRtti(TypeInfo(TLicenseData), lic);
@@ -2350,25 +2357,72 @@ begin
   CheckEqual(A.Dyn[9], C.Dyn[9]);
   {Check(A.Dyn[0]=0) bug in original VCL?}
   CheckEqual(C.Dyn[0], 10);
+  // TPeople2 <--> TOrmPeople class mapping
   o1 := TOrmPeople.Create;
+  o2 := TPeople2.Create;
   o1.FirstName := 'toto';
   o1.LastName := 'titi';
   o1.YearOfBirth := 1926;
   o1.YearOfDeath := 2010;
-  o2 := TPeople2.Create;
-  CopyObject(o1, o2, []);
+  CopyObject(o1, o2);
   CheckEqual(o1.FirstName, 'toto');
   Check(o2.FirstName = 'toto');
   CheckEqual(o1.LastName, 'titi');
   CheckEqual(o1.LastName, o2.LastName);
   CheckEqual(o1.YearOfBirth, o2.YearOfBirth);
   CheckEqual(o1.YearOfDeath, o2.YearOfDeath);
-  o2.Free;
-  o2 := TPeople2.Create;
-  CopyObject(o1, o2, [cooExactType]);
-  CheckEqual(o1.FirstName, 'toto');
+  // TRecordPeople <--> TOrmPeople record/class mapping
+  p.YearOfBirth := -1;
+  CheckEqual(p.YearOfBirth, -1);
+  RecordZero(@p, TypeInfo(TRecordPeople));
+  CheckEqual(p.FirstName, '');
+  CheckEqual(p.LastName, '');
+  CheckEqual(p.YearOfBirth, 0);
+  CheckEqual(p.YearOfDeath, 0);
+  ObjectToRecord(o2, p, TypeInfo(TRecordPeople));
+  CheckEqual(p.FirstName, 'toto');
+  CheckEqual(p.LastName, 'titi');
+  CheckEqual(p.YearOfBirth, o2.YearOfBirth);
+  CheckEqual(p.YearOfDeath, o2.YearOfDeath);
+  ClearObject(o2);
   Check(o2.FirstName = '');
-  CheckEqual(o1.LastName, o2.LastName);
+  CheckEqual(o2.LastName, '');
+  CheckEqual(o2.YearOfBirth, 0);
+  CheckEqual(o2.YearOfDeath, 0);
+  RecordToObject(p, o2, TypeInfo(TRecordPeople));
+  Check(o2.FirstName = 'toto');
+  CheckEqual(o2.LastName, 'titi');
+  CheckEqual(o2.YearOfBirth, p.YearOfBirth);
+  CheckEqual(o2.YearOfDeath, p.YearOfDeath);
+  // TPeopleR <--> TOrmPeople record/class mapping
+  Rtti.RegisterFromText(TypeInfo(TPeopleR),
+    'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer');
+  r.YearOfBirth := -1;
+  CheckEqual(r.YearOfBirth, -1);
+  RecordZero(@r, TypeInfo(TPeopleR));
+  CheckEqual(r.FirstName, '');
+  CheckEqual(r.LastName, '');
+  CheckEqual(r.YearOfBirth, 0);
+  CheckEqual(r.Unused, 0);
+  ObjectToRecord(o2, r, TypeInfo(TPeopleR));
+  CheckEqual(r.FirstName, 'toto');
+  CheckEqual(r.LastName, 'titi');
+  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+  CheckEqual(r.Unused, 0);
+  ClearObject(o2);
+  Check(o2.FirstName = '');
+  CheckEqual(o2.LastName, '');
+  CheckEqual(o2.YearOfBirth, 0);
+  CheckEqual(o2.YearOfDeath, 0);
+  CheckEqual(r.Unused, 0);
+  RecordToObject(r, o2, TypeInfo(TPeopleR));
+  Check(o2.FirstName = 'toto');
+  CheckEqual(o2.LastName, 'titi');
+  CheckEqual(o2.YearOfBirth, r.YearOfBirth);
+  CheckEqual(o2.YearOfDeath, 0);
+  ClearObject(o2);
+  Check(o2.FirstName = '');
+  CheckEqual(o2.LastName, '');
   CheckEqual(o2.YearOfBirth, 0);
   CheckEqual(o2.YearOfDeath, 0);
   o2.Free;
