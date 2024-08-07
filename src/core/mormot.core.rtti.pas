@@ -376,7 +376,7 @@ type
 
 type
   /// pointer to low-level RTTI of a type definition, as returned by TypeInfo()
-  // system function
+  // compiler function over a type
   // - equivalency to PTypeInfo as defined in TypInfo RTL unit and old mORMot.pas
   // - this is the main entry point of all the information exposed by this unit
   PRttiInfo = ^TRttiInfo;
@@ -2250,7 +2250,7 @@ type
     /// set a field value to a given TVarData-like content
     // - optionally check and apply RVD.NeedsClear flag (leave it as true if
     // RVD comes from GetValue)
-    // - not implemented for Prop = nil (i.e. rkRecord/rkObject nested field)
+    // - use a temporary text conversion for a record field (Prop=nil)
     procedure SetValue(Data: pointer; var RVD: TRttiVarData;
       andclear: boolean = true);
     /// retrieve any field vlaue as a variant instance
@@ -2531,7 +2531,7 @@ type
     function ValueByPath(var Data: pointer; Path: PUtf8Char; var Temp: TVarData;
       PathDelim: AnsiChar = '.'): TRttiCustom; virtual;
     /// set a property value from a text value
-    // - handle all kind of fields, e.g. converting from text into ordinal or floats
+    // - handle most kind of fields, e.g. converting from text into ordinal or floats
     function ValueSetText(Data: pointer; const Text: RawUtf8): boolean;
     /// serialize a value into (HTML) text
     // - implemented in TRttiJson for proper knowledge of complex types
@@ -6985,14 +6985,21 @@ end;
 
 procedure TRttiCustomProp.SetValue(Data: pointer; var RVD: TRttiVarData;
   andclear: boolean);
+var
+  u: pointer;
 begin
   if Prop <> nil then
-    Prop.SetValue(TObject(Data), variant(RVD));
+    Prop.SetValue(TObject(Data), variant(RVD)) // for class properties
+  else
+  begin
+    u := nil; // use a temp UTF-8 conversion with records
+    VariantToUtf8(variant(RVD), RawUtf8(u));
+    SetValueText(Data, RawUtf8(u));
+    FastAssignNew(u);
+  end;
   if andclear and
      RVD.NeedsClear then
     VarClearProc(RVD.Data);
-  if Prop = nil then // raise exception after NeedsClear to avoid memory leak
-    ERttiException.RaiseUtf8('TRttiCustomProp.SetValue: with Prop=nil', []);
 end;
 
 function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boolean;
