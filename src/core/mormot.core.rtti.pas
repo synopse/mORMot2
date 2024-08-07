@@ -1453,6 +1453,18 @@ procedure CopyObject(aFrom, aTo: TObject); overload;
 // - caller should use "CopyObject(...) as TDestClass" for safety
 function CopyObject(aFrom: TObject): TObject; overload;
 
+/// copy record properties into an object instance
+// - handle properties of the same exact type, searched by name
+// - copy integer, Int64, enumerates (including boolean), variant, records,
+// dynamic arrays, classes and any string properties (excluding ShortString)
+procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
+
+/// copy an object instance properties into a record
+// - handle properties of the same exact type, searched by name
+// - copy integer, Int64, enumerates (including boolean), variant, records,
+// dynamic arrays, classes and any string properties (excluding ShortString)
+procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
+
 /// copy two TStrings instances
 // - will just call Dest.Assign(Source) in practice
 procedure CopyStrings(Source, Dest: TStrings);
@@ -9380,6 +9392,26 @@ begin
     result := Rtti.RegisterClass(aFrom).ClassNewInstance;
     CopyObject(aFrom, result);
   end;
+end;
+
+procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
+begin
+  if (@aFrom <> nil) and
+     (aFromType <> nil) and
+     (aFromType^.Kind in rkRecordTypes) and
+     (aTo <> nil) then
+    CopyInternal(@aFrom, aTo, @Rtti.RegisterType(aFromType).Props,
+      @Rtti.RegisterClass(PClass(aTo)^).Props);
+end;
+
+procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
+begin
+  if (aFrom <> nil) and
+     (@aTo <> nil) and
+     (aToType <> nil) and
+     (aToType^.Kind in rkRecordTypes) then
+    CopyInternal(aFrom, @aTo, @Rtti.RegisterClass(PClass(aFrom)^).Props,
+      @Rtti.RegisterType(aToType).Props);
 end;
 
 procedure SetDefaultValuesObject(Instance: TObject);
