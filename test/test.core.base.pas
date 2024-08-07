@@ -2248,12 +2248,15 @@ type
     ProductName: RawUtf8;
   end;
 
+  TEnum = (e0, e1, e2, e3, e4);
+
   TPeople2 = class(TSynPersistent)
   private
     fFirstName: string;
     fLastName: RawUtf8;
     fYearOfBirth: Int64;
     fYearOfDeath: integer;
+    fEnum: TEnum;
   published // properties are in another order
     property YearOfBirth: Int64
       read fYearOfBirth write fYearOfBirth;
@@ -2263,11 +2266,14 @@ type
       read fFirstName write fFirstName;
     property YearOfDeath: integer
       read fYearOfDeath write fYearOfDeath;
+    property Enum: TEnum
+      read fEnum write fEnum;
   end;
 
   TPeopleR = packed record
     LastName, FirstName: RawUtf8;
     YearOfBirth, Unused: integer;
+    Enum: TEnum;
   end;
 
 procedure TTestCoreBase._RecordCopy;
@@ -2279,6 +2285,7 @@ var
   o2: TPeople2;
   r: TPeopleR;
   p: TRecordPeople;
+  m: TRttiMap;
 begin
   CheckEqual(lic.CustomerName, '');
   FillZeroRtti(TypeInfo(TLicenseData), lic);
@@ -2395,8 +2402,12 @@ begin
   CheckEqual(o2.YearOfBirth, p.YearOfBirth);
   CheckEqual(o2.YearOfDeath, p.YearOfDeath);
   // TPeopleR <--> TOrmPeople record/class mapping
+  o2.Enum := e4;
+  {$ifndef HASEXTRECORDRTTI} // oldest Delphi or FPC
+  Rtti.RegisterType(TypeInfo(TEnum));
   Rtti.RegisterFromText(TypeInfo(TPeopleR),
-    'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer');
+    'LastName,FirstName:RawUtf8 YearOfBirth,Unused:integer Enum:TEnum');
+  {$endif HASEXTRECORDRTTI}
   r.YearOfBirth := -1;
   CheckEqual(r.YearOfBirth, -1);
   RecordZero(@r, TypeInfo(TPeopleR));
@@ -2404,29 +2415,69 @@ begin
   CheckEqual(r.LastName, '');
   CheckEqual(r.YearOfBirth, 0);
   CheckEqual(r.Unused, 0);
+  Check(r.Enum = e0);
   ObjectToRecord(o2, r, TypeInfo(TPeopleR));
   CheckEqual(r.FirstName, 'toto');
   CheckEqual(r.LastName, 'titi');
   CheckEqual(r.YearOfBirth, o2.YearOfBirth);
   CheckEqual(r.Unused, 0);
+  Check(r.Enum = e4);
   ClearObject(o2);
   Check(o2.FirstName = '');
   CheckEqual(o2.LastName, '');
   CheckEqual(o2.YearOfBirth, 0);
   CheckEqual(o2.YearOfDeath, 0);
-  CheckEqual(r.Unused, 0);
+  Check(o2.Enum = e0);
   RecordToObject(r, o2, TypeInfo(TPeopleR));
   Check(o2.FirstName = 'toto');
   CheckEqual(o2.LastName, 'titi');
   CheckEqual(o2.YearOfBirth, r.YearOfBirth);
   CheckEqual(o2.YearOfDeath, 0);
-  ClearObject(o2);
-  Check(o2.FirstName = '');
-  CheckEqual(o2.LastName, '');
-  CheckEqual(o2.YearOfBirth, 0);
-  CheckEqual(o2.YearOfDeath, 0);
-  o2.Free;
+  Check(o2.Enum = e4);
+  // TPeople2 <--> TPeopleR class/record mapping with TRttiMap
+  m.Init(TPeople2, TypeInfo(TPeopleR)).AutoMap;
+  RecordZero(@r, TypeInfo(TPeopleR));
+  CheckEqual(r.FirstName, '');
+  CheckEqual(r.LastName, '');
+  CheckEqual(r.YearOfBirth, 0);
+  CheckEqual(r.Unused, 0);
+  Check(r.Enum = e0);
+  m.ToB(o2, @r); // from class to DTO
+  CheckEqual(r.FirstName, 'toto');
+  CheckEqual(r.LastName, 'titi');
+  CheckEqual(r.YearOfBirth, o2.YearOfBirth);
+  CheckEqual(r.Unused, 0);
+  Check(r.Enum = e4);
+  // TPeople2 <--> TPeopleR class/record custom fields mapping with TRttiMap
+  m.Init(TPeople2, TypeInfo(TPeopleR)).Map([
+    'firstName', 'lastname',   // inverted
+    'lastname', 'firstName',
+    'YearOfBirth', 'Unused']); // moved
+  RecordZero(@r, TypeInfo(TPeopleR));
+  CheckEqual(r.FirstName, '');
+  CheckEqual(r.LastName, '');
+  CheckEqual(r.YearOfBirth, 0);
+  CheckEqual(r.Unused, 0);
+  m.ToB(o2, @r); // from class to DTO
+  CheckEqual(r.LastName, 'toto');
+  CheckEqual(r.FirstName, 'titi');
+  CheckEqual(r.YearOfBirth, 0);
+  CheckEqual(r.Unused, o2.YearOfBirth);
+  Check(r.Enum = e0);
+  // TOrmPeople <--> TRecordPeople class/record fields mapping with TRttiMap
+  m.Init(TypeInfo(TOrmPeople), TypeInfo(TRecordPeople)).AutoMap;
+  CheckEqual(p.FirstName, 'toto');
+  CheckEqual(p.LastName, 'titi');
+  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
   o1.Free;
+  o1 := m.ToA(@p); // from DTO to class
+  CheckEqual(o1.FirstName, 'toto');
+  CheckEqual(o1.LastName, 'titi');
+  CheckEqual(p.YearOfBirth, o1.YearOfBirth);
+  CheckEqual(p.YearOfDeath, o1.YearOfDeath);
+  o1.Free;
+  o2.Free;
 end;
 
 procedure TTestCoreBase._TSynList;
