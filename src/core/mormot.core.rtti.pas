@@ -2284,6 +2284,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level copy of two properties values
     procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
+    /// low-level initialization of one property value
+    procedure ClearValue(Data: pointer; FreeAndNilNestedObjects: boolean);
     /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TTextWriter; Data: pointer;
@@ -7312,13 +7314,16 @@ begin
     result := CompareValueComplex(Data, Other, @OtherRtti, CaseInsensitive);
 end;
 
-// TRttiCustom method defined here for proper inlining
-procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
+procedure TRttiCustomProp.ClearValue(Data: pointer; FreeAndNilNestedObjects: boolean);
 begin
-  if Assigned(fCopy) then
-    fCopy(Dest, Source, fCache.Info)
+  if not FreeAndNilNestedObjects and
+     (Value.Kind = rkClass) then // recursive clear of nested properties
+    ClearObject(Prop.GetObjProp(Data), false)
+  else if OffsetSet >= 0 then
+    // for rkClass, _ObjClear() mimics FreeAndNil()
+    Value.ValueFinalizeAndClear(PAnsiChar(Data) + OffsetSet)
   else
-    MoveFast(Source^, Dest^, fCache.Size);
+    Prop^.SetValue(Data, Null);
 end;
 
 procedure TRttiCustomProp.CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
