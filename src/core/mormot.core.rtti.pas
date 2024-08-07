@@ -5268,6 +5268,286 @@ begin
 end;
 
 
+procedure CopyCollection(Source, Dest: TCollection);
+var
+  i: integer; // Items[] uses an integer
+begin
+  if (Source = nil) or
+     (Dest = nil) or
+     (Source.ClassType <> Dest.ClassType) then
+    exit;
+  Dest.BeginUpdate;
+  try
+    Dest.Clear;
+    for i := 0 to Source.Count - 1 do
+      CopyObject(Source.Items[i], Dest.Add); // Assign() fails for most objects
+  finally
+    Dest.EndUpdate;
+  end;
+end;
+
+procedure CopyStrings(Source, Dest: TStrings);
+begin
+  if (Source <> nil) and
+     (Dest <> nil) then
+    Dest.Assign(Source); // will do the copy RTL-style
+end;
+
+procedure CopyInternal(f, t: pointer; rf, rt: PRttiCustomProps);
+var
+  pf, pt: PRttiCustomProp;
+  n: integer;
+begin
+  pf := pointer(rf.List);
+  if pf = nil then
+    exit;
+  n := rf.Count;
+  repeat  // copy with lookup by property name
+    pt := rt.Find(pf^.Name);
+    if pt <> nil then // property name found
+      pf^.CopyValue(t, f, pt);
+    inc(pf);
+    dec(n);
+  until n = 0;
+end;
+
+procedure CopyObject(aFrom, aTo: TObject);
+var
+  cf: TRttiCustom;
+begin
+  if (aFrom = nil) or
+     (aTo = nil) then
+    exit;
+  cf := Rtti.RegisterClass(PClass(aFrom)^);
+  if (cf.ValueRtlClass = vcCollection) and
+     (PClass(aFrom)^ = PClass(aTo)^)  then
+    // specific process of TCollection items
+    CopyCollection(TCollection(aFrom), TCollection(aTo))
+  else if (cf.ValueRtlClass = vcStrings) and
+          PClass(aTo)^.InheritsFrom(TStrings) then
+    // specific process of TStrings items using RTL-style copy
+    TStrings(aTo).Assign(TStrings(aFrom))
+  else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
+    // fast copy from RTTI properties of the common (or same) hierarchy
+    if Assigned(cf.CopyObject) then
+      cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
+    else
+      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
+  else
+    // no common inheritance -> lookup by property name (slower)
+    CopyInternal(pointer(aFrom), pointer(aTo),
+      @cf.Props, @Rtti.RegisterClass(PClass(aTo)^).Props);
+end;
+
+function CopyObject(aFrom: TObject): TObject;
+begin
+  if aFrom = nil then
+    result := nil
+  else
+  begin
+    result := Rtti.RegisterClass(aFrom).ClassNewInstance;
+    CopyObject(aFrom, result);
+  end;
+end;
+
+procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
+begin
+  if (@aFrom <> nil) and
+     (aFromType <> nil) and
+     (aFromType^.Kind in rkRecordTypes) and
+     (aTo <> nil) then
+    CopyInternal(@aFrom, aTo, @Rtti.RegisterType(aFromType).Props,
+      @Rtti.RegisterClass(PClass(aTo)^).Props);
+end;
+
+procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
+begin
+  if (aFrom <> nil) and
+     (@aTo <> nil) and
+     (aToType <> nil) and
+     (aToType^.Kind in rkRecordTypes) then
+    CopyInternal(aFrom, @aTo, @Rtti.RegisterClass(PClass(aFrom)^).Props,
+      @Rtti.RegisterType(aToType).Props);
+end;
+
+procedure SetDefaultValuesObject(Instance: TObject);
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  if Instance = nil then
+    exit;
+  rc := Rtti.RegisterClass(Instance);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
+  begin
+    if p^.Value.Kind = rkClass then
+      SetDefaultValuesObject(p^.Prop.GetObjProp(Instance))
+    else if p^.OrdinalDefault <> NO_DEFAULT then
+      p^.Prop.SetInt64Value(Instance, p^.OrdinalDefault);
+    inc(p);
+  end;
+end;
+
+function GetInstanceByPath(var Instance: TObject; const Path: RawUtf8;
+  out Prop: PRttiCustomProp; PathDelim: AnsiChar): boolean;
+begin
+  result := false;
+  if (Instance = nil) or
+     (Path = '') then
+    exit;
+  Prop := Rtti.RegisterClass(Instance).
+    PropFindByPath(pointer(Instance), pointer(Path), PathDelim);
+  result := (Prop <> nil) and
+            (Instance <> nil);
+end;
+
+function SetValueObject(Instance: TObject; const Path: RawUtf8;
+  const Value: variant): boolean;
+var
+  p: PRttiCustomProp;
+begin
+  result := GetInstanceByPath(Instance, Path, p) and
+            p^.Prop^.SetValue(Instance, Value);
+end;
+
+procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  if Value = nil then
+    exit;
+  rc := Rtti.RegisterClass(PClass(Value)^);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
+  begin
+    p^.ClearValue(Value, FreeAndNilNestedObjects);
+    inc(p);
+  end;
+end;
+
+procedure FinalizeObject(Value: TObject);
+begin
+  if Value <> nil then
+    Value.CleanupInstance;
+end;
+
+function IsObjectDefaultOrVoid(Value: TObject): boolean;
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  if Value <> nil then
+  begin
+    result := false;
+    rc := Rtti.RegisterClass(Value);
+    if (rc.ValueRtlClass <> vcNone) and
+       (rc.ValueIterateCount(@Value) > 0) then
+      exit; // e.g. TObjectList.Count or TCollection.Count
+    p := pointer(rc.Props.List);
+    for i := 1 to rc.Props.Count do
+      if p^.ValueIsVoid(Value) then
+        inc(p)
+      else
+        exit;
+  end;
+  result := true;
+end;
+
+function SetObjectFromExecutableCommandLine(Value: TObject;
+  const SwitchPrefix, DescriptionSuffix: RawUtf8;
+  CommandLine: TExecutableCommandLine): boolean;
+var
+  rc: TRttiCustom;
+  p: PRttiCustomProp;
+  v, desc, def, typ: RawUtf8;
+  dolower: boolean;
+  i: integer;
+  v64: QWord;
+begin
+  result := false;
+  if Value = nil then
+    exit;
+  if CommandLine = nil then
+    CommandLine := Executable.Command;
+  rc := Rtti.RegisterClass(Value);
+  p := pointer(rc.Props.List);
+  for i := 1 to rc.Props.Count do
+  begin
+    if (p^.Name <> '') and
+       not (p^.Value.Kind in rkComplexTypes) then
+    begin
+      desc := '';
+      dolower := false;
+      if p^.Value.Kind in [rkEnumeration, rkSet] then
+      begin
+        p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
+        if p^.Value.Kind = rkEnumeration then
+          desc := StringReplaceChars(desc, ',', '|');
+        if UpperCaseU(desc) = desc then
+        begin
+          dolower := true;
+          desc := LowerCaseU(desc); // cosmetic
+        end;
+        if p^.Value.Kind = rkSet then // see TExecutableCommandLine.Describe
+          desc := ' - values: set of ' + desc
+        else
+          desc := ' - values: ' + desc;
+      end;
+      desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
+      if not p.ValueIsDefault(Value) then
+      begin
+        def := '';
+        typ := '';
+        if p^.Value.Kind in rkOrdinalTypes then
+        begin
+          v64 := p^.Prop^.GetInt64Value(Value);
+          case p^.Value.Kind of
+            rkEnumeration:
+              def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
+            rkSet:
+              if v64 <> 0 then
+                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, ',');
+          else
+            begin
+              UInt64ToUtf8(v64, def);
+              typ := 'integer';
+            end;
+          end;
+          if dolower then
+            def := LowerCaseU(def);
+        end
+        else
+        begin
+          def := p^.Prop^.GetValueText(Value);
+          if p^.Value.Name = 'TFileName' then
+            if (PosEx('Folder', p^.Prop^.NameUtf8) <> 0) or
+               (PosEx('Path', p^.Prop^.NameUtf8) <> 0) then
+            typ := 'folder'
+          else
+            typ := 'filename'
+          else if (p^.Value.Kind = rkLString) and
+                  (p^.Value.Cache.CodePage <> CP_RAWBYTESTRING) then
+            typ := 'text';
+        end;
+        if typ <> '' then
+          desc := FormatUtf8('##% %', [typ, desc]); // ##typename to be trimmed
+        if def <> '' then
+          desc := FormatUtf8('% (default: %)', [desc, def]);
+      end;
+      if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
+         p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
+        result := true;
+    end;
+    inc(p);
+  end;
+end;
+
+
 { *************** Enumerations RTTI }
 
 function GetEnumType(aTypeInfo: PRttiInfo; out List: PShortString): integer;
@@ -6903,6 +7183,39 @@ end;
 
 { ************** RTTI-based Registration for Custom JSON Parsing }
 
+// TRttiCustom methods  defined here for proper inlining
+
+procedure TRttiCustom.ValueFinalize(Data: pointer);
+begin
+  if Assigned(fFinalize) then
+    // handle any kind of value from RTTI, including T*ObjArray
+    fFinalize(Data, fCache.Info)
+  else if rcfWithoutRtti in fFlags then
+    // was defined from text
+    if ArrayRtti <> nil then
+      // static or dynamic array (not T*ObjArray)
+      NoRttiArrayFinalize(Data)
+    else if rcfHasNestedManagedProperties in fFlags then
+      // rcfWithoutRtti records
+      fProps.FinalizeManaged(Data);
+end;
+
+procedure TRttiCustom.ValueFinalizeAndClear(Data: pointer);
+begin
+  ValueFinalize(Data);
+  if not (rcfIsManaged in fFlags) then // managed fields are already set to nil
+    FillCharFast(Data^, fCache.Size, 0);
+end;
+
+procedure TRttiCustom.ValueCopy(Dest, Source: pointer);
+begin
+  if Assigned(fCopy) then
+    fCopy(Dest, Source, fCache.Info)
+  else
+    MoveFast(Source^, Dest^, fCache.Size);
+end;
+
+
 { TRttiCustomProp }
 
 function TRttiCustomProp.InitFrom(RttiProp: PRttiProp): PtrInt;
@@ -7700,22 +8013,6 @@ begin
     end;
 end;
 
-// TRttiCustom method defined here for proper inlining
-procedure TRttiCustom.ValueFinalize(Data: pointer);
-begin
-  if Assigned(fFinalize) then
-    // handle any kind of value from RTTI, including T*ObjArray
-    fFinalize(Data, fCache.Info)
-  else if rcfWithoutRtti in fFlags then
-    // was defined from text
-    if ArrayRtti <> nil then
-      // static or dynamic array (not T*ObjArray)
-      NoRttiArrayFinalize(Data)
-    else if rcfHasNestedManagedProperties in fFlags then
-      // rcfWithoutRtti records
-      fProps.FinalizeManaged(Data);
-end;
-
 procedure TRttiCustomProps.FinalizeManaged(Data: PAnsiChar);
 var
   pp: PPRttiCustomProp;
@@ -8124,13 +8421,6 @@ begin
   until n = 0;
   if mem <> nil then
     FreeMem(mem);
-end;
-
-procedure TRttiCustom.ValueFinalizeAndClear(Data: pointer);
-begin
-  ValueFinalize(Data);
-  if not (rcfIsManaged in fFlags) then // managed fields are already set to nil
-    FillCharFast(Data^, fCache.Size, 0);
 end;
 
 function TRttiCustom.ValueIsVoid(Data: PAnsiChar): boolean;
