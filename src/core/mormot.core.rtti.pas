@@ -2983,7 +2983,7 @@ type
     /// use RTTI field names to map the content
     function AutoMap: PRttiMap;
     /// map two fields by name
-    // - if any field A or B name if '', this field will be ignored
+    // - if any field A or B name is '', this field will be ignored
     function Map(const A, B: RawUtf8): PRttiMap; overload;
     /// map fields by A,B pairs of names
     function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;

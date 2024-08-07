@@ -535,6 +535,7 @@ type
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
     // returns  flagIdle if acquired, flagDestroying if terminated
     function AcquireThread: TSynBackgroundThreadProcessStep;
+    // wait and propage any thread-local exception
     procedure WaitForFinished(start: Int64; const onmainthreadidle: TNotifyEvent);
     /// called by Execute method when fProcessParams<>nil and fEvent is notified
     procedure Process; virtual; abstract;
@@ -930,7 +931,8 @@ type
 
 type
   /// callback implementing some parallelized process for TSynParallelProcess
-  // - if 0<=IndexStart<=IndexStop, it should execute some process
+  // - if 0<=IndexStart<=IndexStop, it should execute the corresponding process
+  // - this Method execution time is expected to be fair according to its indexes
   TOnSynParallelProcess = procedure(IndexStart, IndexStop: integer) of object;
 
   /// thread executing process for TSynParallelProcess
@@ -947,7 +949,7 @@ type
 
   /// allow parallel execution of an index-based process in a thread pool
   // - will create its own thread pool, then execute any method by spliting the
-  // work into each thread
+  // work over each thread, so Method execution time is expected to be fair
   TSynParallelProcess = class(TSynPersistentLock)
   protected
     fThreadName: RawUtf8;
@@ -970,7 +972,8 @@ type
     /// finalize the thread pool
     destructor Destroy; override;
     /// run a method in parallel, and wait for the execution to finish
-    // - will split Method[0..MethodCount-1] execution over the threads
+    // - will split ahead Method[0..MethodCount-1] execution over the threads,
+    // so the Method execution time is expected to be fair
     // - in case of any exception during process, an ESynParallel
     // exception would be raised by this method
     // - if OnMainThreadIdle is set, the current thread (which is expected to be
