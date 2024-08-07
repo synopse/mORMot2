@@ -1445,24 +1445,28 @@ function GetPublishedMethods(Instance: TObject;
 // TOrm children (in this case, these are not class instances, but
 // INTEGER reference to records, so only the integer value is copied), that is
 // for regular classes
+// - see also TRttiMap for custom mapping between classes
 procedure CopyObject(aFrom, aTo: TObject); overload;
 
 /// create a new object instance, from an existing one
 // - will create a new instance of the same class, then call the overloaded
 // CopyObject() procedure to copy its values
 // - caller should use "CopyObject(...) as TDestClass" for safety
+// - see also TRttiMap for custom mapping between classes
 function CopyObject(aFrom: TObject): TObject; overload;
 
 /// copy record properties into an object instance
 // - handle properties of the same exact type, searched by name
 // - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding ShortString)
+// - see also TRttiMap for custom mapping between class and record
 procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
 
 /// copy an object instance properties into a record
 // - handle properties of the same exact type, searched by name
 // - copy integer, Int64, enumerates (including boolean), variant, records,
 // dynamic arrays, classes and any string properties (excluding ShortString)
+// - see also TRttiMap for custom mapping between class and record
 procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
 
 /// copy two TStrings instances
@@ -2950,6 +2954,54 @@ var
 
   /// direct lookup to the TRttiCustom of TRttiParserComplexType values
   PTC_RTTI: array[TRttiParserComplexType] of TRttiCustom;
+
+type
+  /// pointer to a TRttiMap reference, for fluid-interface initialization
+  PRttiMap = ^TRttiMap;
+  /// customizable field mapping between classes and records
+  // - Init/Map overloaded methods return self to allow proper fluid-calling
+  // - records should have field-level extended RTTI (since Delphi 2010), or have
+  // been properly defined with Rtti.RegisterFromText() on FPC or oldest Delphi
+  // - allow RTTI or custom mapping, e.g. with Data Transfer Objects (DTO)
+  {$ifdef USERECORDWITHMETHODS}
+  TRttiMap = record
+  {$else}
+  TRttiMap = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    aRtti, bRtti: TRttiCustom;
+    a2b, b2a: PRttiCustomPropDynArray;
+    function _Init(A, B: TRttiCustom): PRttiMap;
+    function _Map(A, B: PtrInt): PRttiMap;
+  public
+    /// initialize fields mapping between two class instances
+    function Init(A, B: TClass): PRttiMap; overload;
+    /// initialize fields mapping between a class instance and a record
+    function Init(A: TClass; B: PRttiInfo): PRttiMap; overload;
+    /// initialize fields mapping between two record instances
+    function Init(A, B: PRttiInfo): PRttiMap; overload;
+    /// use RTTI field names to map the content
+    function AutoMap: PRttiMap;
+    /// map two fields by name
+    // - if any field A or B name if '', this field will be ignored
+    function Map(const A, B: RawUtf8): PRttiMap; overload;
+    /// map fields by A,B pairs of names
+    function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;
+    /// copy B fields values into A
+    // - A and B are either a TObject instance or a @record pointer, depending on Init()
+    procedure ToA(A, B: pointer); overload;
+    /// copy A fields values into B
+    // - A and B are either a TObject instance or a @record pointer, depending on Init()
+    procedure ToB(A, B: pointer); overload;
+    /// create a new A class instance, copying field values from B
+    // - returned A is a newly allocated instance of the TClass specified to Init()
+    // - B is either a TObject instance or a @record pointer, depending on Init()
+    function ToA(B: pointer): pointer; overload;
+    /// create a new B class instance, copying field values from A
+    // - A is either a TObject instance or a @record pointer, depending on Init()
+    // - returned B is a newly allocated instance of the TClass specified to Init()
+    function ToB(A: pointer): pointer; overload;
+  end;
 
 
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
@@ -9613,290 +9665,124 @@ begin
 end;
 
 
-procedure CopyCollection(Source, Dest: TCollection);
-var
-  i: integer; // Items[] uses an integer
+{ TRttiMap }
+
+function TRttiMap._Init(A, B: TRttiCustom): PRttiMap;
 begin
-  if (Source = nil) or
-     (Dest = nil) or
-     (Source.ClassType <> Dest.ClassType) then
-    exit;
-  Dest.BeginUpdate;
-  try
-    Dest.Clear;
-    for i := 0 to Source.Count - 1 do
-      CopyObject(Source.Items[i], Dest.Add); // Assign() fails for most objects
-  finally
-    Dest.EndUpdate;
-  end;
+  if A.Props.Count = 0 then
+    ERttiException.RaiseUtf8('Unexpected TRttiMap.Init(A: %)', [A.Name]);
+  if B.Props.Count = 0 then
+    ERttiException.RaiseUtf8('Unexpected TRttiMap.Init(B: %)', [B.Name]);
+  aRtti := A;
+  bRtti := B;
+  a2b := nil;
+  b2a := nil;
+  SetLength(a2b, A.Props.Count);
+  SetLength(b2a, B.Props.Count);
+  result := @self;
 end;
 
-procedure CopyStrings(Source, Dest: TStrings);
+function TRttiMap.Init(A, B: TClass): PRttiMap;
 begin
-  if (Source <> nil) and
-     (Dest <> nil) then
-    Dest.Assign(Source); // will do the copy RTL-style
+  result := _Init(Rtti.RegisterClass(A), Rtti.RegisterClass(B));
 end;
 
-procedure CopyInternal(f, t: pointer; rf, rt: PRttiCustomProps);
+function TRttiMap.Init(A: TClass; B: PRttiInfo): PRttiMap;
+begin
+  result := _Init(Rtti.RegisterClass(A), Rtti.RegisterType(B));
+end;
+
+function TRttiMap.Init(A, B: PRttiInfo): PRttiMap;
+begin
+  result := _Init(Rtti.RegisterType(A), Rtti.RegisterType(B));
+end;
+
+function TRttiMap._Map(A, B: PtrInt): PRttiMap;
+begin
+  if A >= 0 then
+    if B < 0 then
+      a2b[A] := nil
+    else
+      a2b[A] := @bRtti.Props.List[B];
+  if B >= 0 then
+    if A < 0 then
+      b2a[B] := nil
+    else
+      b2a[B] := @aRtti.Props.List[A];
+  result := @self;
+end;
+
+function TRttiMap.AutoMap: PRttiMap;
 var
-  pf, pt: PRttiCustomProp;
+  a: PtrInt;
+begin
+  for a := 0 to aRtti.Props.Count - 1 do
+    _Map(a, bRtti.Props.FindIndex(aRtti.Props.List[a].Name));
+  result := @self;
+end;
+
+function TRttiMap.Map(const A, B: RawUtf8): PRttiMap;
+begin
+  result := _Map(aRtti.Props.FindIndex(A), bRtti.Props.FindIndex(B));
+end;
+
+function TRttiMap.Map(const ABPairs: array of RawUtf8): PRttiMap;
+var
+  i: PtrInt;
+begin
+  if (high(ABPairs) > 0) and
+     (high(ABPairs) and 1 = 1) then // should be supplied as A,B pairs
+    for i := 0 to high(ABPairs) shr 1 do
+      Map(ABPairs[i * 2], ABPairs[i * 2 + 1]);
+  result := @self;
+end;
+
+procedure TRttiMap.ToA(A, B: pointer);
+var
   n: integer;
+  pa: PPRttiCustomProp;
+  pb: PRttiCustomProp;
 begin
-  pf := pointer(rf.List);
-  if pf = nil then
-    exit;
-  n := rf.Count;
-  repeat  // copy with lookup by property name
-    pt := rt.Find(pf^.Name);
-    if pt <> nil then // property name found
-      pf^.CopyValue(t, f, pt);
-    inc(pf);
+  pa := pointer(b2a);
+  pb := pointer(bRtti.Props.List); // always <> nil
+  n := bRtti.Props.Count;          // always > 0
+  repeat
+    if pa^ <> nil then
+      pb^.CopyValue(A, B, pa^); // copy this mapped property value
+    inc(pa);
+    inc(pb);
     dec(n);
   until n = 0;
 end;
 
-procedure CopyObject(aFrom, aTo: TObject);
+procedure TRttiMap.ToB(A, B: pointer);
 var
-  cf: TRttiCustom;
+  n: integer;
+  pa: PRttiCustomProp;
+  pb: PPRttiCustomProp;
 begin
-  if (aFrom = nil) or
-     (aTo = nil) then
-    exit;
-  cf := Rtti.RegisterClass(PClass(aFrom)^);
-  if (cf.ValueRtlClass = vcCollection) and
-     (PClass(aFrom)^ = PClass(aTo)^)  then
-    // specific process of TCollection items
-    CopyCollection(TCollection(aFrom), TCollection(aTo))
-  else if (cf.ValueRtlClass = vcStrings) and
-          PClass(aTo)^.InheritsFrom(TStrings) then
-    // specific process of TStrings items using RTL-style copy
-    TStrings(aTo).Assign(TStrings(aFrom))
-  else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
-    // fast copy from RTTI properties of the common (or same) hierarchy
-    if Assigned(cf.CopyObject) then
-      cf.CopyObject(aTo, aFrom) // overriden e.g. for TOrm
-    else
-      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
-  else
-    // no common inheritance -> lookup by property name (slower)
-    CopyInternal(pointer(aFrom), pointer(aTo),
-      @cf.Props, @Rtti.RegisterClass(PClass(aTo)^).Props);
+  pa := pointer(aRtti.Props.List);
+  pb := pointer(a2b);
+  n := aRtti.Props.Count;
+  repeat
+    if pb^ <> nil then
+      pa^.CopyValue(B, A, pb^);
+    inc(pa);
+    inc(pb);
+    dec(n);
+  until n = 0;
 end;
 
-function CopyObject(aFrom: TObject): TObject;
+function TRttiMap.ToA(B: pointer): pointer;
 begin
-  if aFrom = nil then
-    result := nil
-  else
-  begin
-    result := Rtti.RegisterClass(aFrom).ClassNewInstance;
-    CopyObject(aFrom, result);
-  end;
+  result := aRtti.ClassNewInstance;
+  ToA(result, B);
 end;
 
-procedure RecordToObject(const aFrom; aTo: TObject; aFromType: PRttiInfo);
+function TRttiMap.ToB(A: pointer): pointer;
 begin
-  if (@aFrom <> nil) and
-     (aFromType <> nil) and
-     (aFromType^.Kind in rkRecordTypes) and
-     (aTo <> nil) then
-    CopyInternal(@aFrom, aTo, @Rtti.RegisterType(aFromType).Props,
-      @Rtti.RegisterClass(PClass(aTo)^).Props);
-end;
-
-procedure ObjectToRecord(aFrom: TObject; var aTo; aToType: PRttiInfo);
-begin
-  if (aFrom <> nil) and
-     (@aTo <> nil) and
-     (aToType <> nil) and
-     (aToType^.Kind in rkRecordTypes) then
-    CopyInternal(aFrom, @aTo, @Rtti.RegisterClass(PClass(aFrom)^).Props,
-      @Rtti.RegisterType(aToType).Props);
-end;
-
-procedure SetDefaultValuesObject(Instance: TObject);
-var
-  rc: TRttiCustom;
-  p: PRttiCustomProp;
-  i: integer;
-begin
-  if Instance = nil then
-    exit;
-  rc := Rtti.RegisterClass(Instance);
-  p := pointer(rc.Props.List);
-  for i := 1 to rc.Props.Count do
-  begin
-    if p^.Value.Kind = rkClass then
-      SetDefaultValuesObject(p^.Prop.GetObjProp(Instance))
-    else if p^.OrdinalDefault <> NO_DEFAULT then
-      p^.Prop.SetInt64Value(Instance, p^.OrdinalDefault);
-    inc(p);
-  end;
-end;
-
-function GetInstanceByPath(var Instance: TObject; const Path: RawUtf8;
-  out Prop: PRttiCustomProp; PathDelim: AnsiChar): boolean;
-begin
-  result := false;
-  if (Instance = nil) or
-     (Path = '') then
-    exit;
-  Prop := Rtti.RegisterClass(Instance).
-    PropFindByPath(pointer(Instance), pointer(Path), PathDelim);
-  result := (Prop <> nil) and
-            (Instance <> nil);
-end;
-
-function SetValueObject(Instance: TObject; const Path: RawUtf8;
-  const Value: variant): boolean;
-var
-  p: PRttiCustomProp;
-begin
-  result := GetInstanceByPath(Instance, Path, p) and
-            p^.Prop^.SetValue(Instance, Value);
-end;
-
-procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean);
-var
-  rc: TRttiCustom;
-  p: PRttiCustomProp;
-  i: integer;
-begin
-  if Value = nil then
-    exit;
-  rc := Rtti.RegisterClass(Value);
-  p := pointer(rc.Props.List);
-  for i := 1 to rc.Props.Count do
-  begin
-    if not FreeAndNilNestedObjects and
-       (p^.Value.Kind = rkClass) then
-      ClearObject(p^.Prop.GetObjProp(Value), false)
-    else if p^.OffsetSet >= 0 then
-      // for rkClass, _ObjClear() mimics FreeAndNil()
-      p^.Value.ValueFinalizeAndClear(PAnsiChar(Value) + p^.OffsetSet)
-    else
-      p^.SetValue(pointer(Value), PRttiVarData(@NullVarData)^, {andclear=}false);
-    inc(p);
-  end;
-end;
-
-procedure FinalizeObject(Value: TObject);
-begin
-  if Value <> nil then
-    Value.CleanupInstance;
-end;
-
-function IsObjectDefaultOrVoid(Value: TObject): boolean;
-var
-  rc: TRttiCustom;
-  p: PRttiCustomProp;
-  i: integer;
-begin
-  if Value <> nil then
-  begin
-    result := false;
-    rc := Rtti.RegisterClass(Value);
-    if (rc.ValueRtlClass <> vcNone) and
-       (rc.ValueIterateCount(@Value) > 0) then
-      exit; // e.g. TObjectList.Count or TCollection.Count
-    p := pointer(rc.Props.List);
-    for i := 1 to rc.Props.Count do
-      if p^.ValueIsVoid(Value) then
-        inc(p)
-      else
-        exit;
-  end;
-  result := true;
-end;
-
-function SetObjectFromExecutableCommandLine(Value: TObject;
-  const SwitchPrefix, DescriptionSuffix: RawUtf8;
-  CommandLine: TExecutableCommandLine): boolean;
-var
-  rc: TRttiCustom;
-  p: PRttiCustomProp;
-  v, desc, def, typ: RawUtf8;
-  dolower: boolean;
-  i: integer;
-  v64: QWord;
-begin
-  result := false;
-  if Value = nil then
-    exit;
-  if CommandLine = nil then
-    CommandLine := Executable.Command;
-  rc := Rtti.RegisterClass(Value);
-  p := pointer(rc.Props.List);
-  for i := 1 to rc.Props.Count do
-  begin
-    if (p^.Name <> '') and
-       not (p^.Value.Kind in rkComplexTypes) then
-    begin
-      desc := '';
-      dolower := false;
-      if p^.Value.Kind in [rkEnumeration, rkSet] then
-      begin
-        p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
-        if p^.Value.Kind = rkEnumeration then
-          desc := StringReplaceChars(desc, ',', '|');
-        if UpperCaseU(desc) = desc then
-        begin
-          dolower := true;
-          desc := LowerCaseU(desc); // cosmetic
-        end;
-        if p^.Value.Kind = rkSet then // see TExecutableCommandLine.Describe
-          desc := ' - values: set of ' + desc
-        else
-          desc := ' - values: ' + desc;
-      end;
-      desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
-      if not p.ValueIsDefault(Value) then
-      begin
-        def := '';
-        typ := '';
-        if p^.Value.Kind in rkOrdinalTypes then
-        begin
-          v64 := p^.Prop^.GetInt64Value(Value);
-          case p^.Value.Kind of
-            rkEnumeration:
-              def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
-            rkSet:
-              if v64 <> 0 then
-                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, ',');
-          else
-            begin
-              UInt64ToUtf8(v64, def);
-              typ := 'integer';
-            end;
-          end;
-          if dolower then
-            def := LowerCaseU(def);
-        end
-        else
-        begin
-          def := p^.Prop^.GetValueText(Value);
-          if p^.Value.Name = 'TFileName' then
-            if (PosEx('Folder', p^.Prop^.NameUtf8) <> 0) or
-               (PosEx('Path', p^.Prop^.NameUtf8) <> 0) then
-            typ := 'folder'
-          else
-            typ := 'filename'
-          else if (p^.Value.Kind = rkLString) and
-                  (p^.Value.Cache.CodePage <> CP_RAWBYTESTRING) then
-            typ := 'text';
-        end;
-        if typ <> '' then
-          desc := FormatUtf8('##% %', [typ, desc]); // ##typename to be trimmed
-        if def <> '' then
-          desc := FormatUtf8('% (default: %)', [desc, def]);
-      end;
-      if CommandLine.Get([SwitchPrefix + p^.Name], v, desc) and
-         p^.Prop^.SetValueText(Value, v) then // supports also enums and sets
-        result := true;
-    end;
-    inc(p);
-  end;
+  result := bRtti.ClassNewInstance;
+  ToB(A, result);
 end;
 
 
