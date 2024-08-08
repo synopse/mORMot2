@@ -3770,11 +3770,12 @@ var
   enum: PRttiEnumType;
   siz, cnt: PtrInt;
 begin
-  // caller ensured Cache is filled with zeros (e.g. TRttiCustom.fCache prop)
-  FillCharFast(Cache, SizeOf(Cache), 0); // paranoid
+  FillCharFast(Cache, SizeOf(Cache), 0); // paranoid for TRttiCustom.fCache slot
   Cache.Info := @self;
   Cache.Size := RttiSize;
   Cache.Kind := Kind;
+  Cache.VarDataVType := RTTI_TO_VARTYPE[Kind];
+  Cache.RttiVarDataVType := Cache.VarDataVType;
   if Kind in rkOrdinalTypes then
   begin
     if Kind in rkHasRttiOrdTypes then
@@ -3786,8 +3787,8 @@ begin
       include(Cache.Flags, rcfQword);
     if IsBoolean then
     begin
-      Cache.RttiVarDataVType := varBoolean; // no rkBool on Delphi
       include(Cache.Flags, rcfBoolean);
+      Cache.RttiVarDataVType := varBoolean; // no rkBool on Delphi
     end;
   end;
   if Kind in rkNumberTypes then
@@ -3796,22 +3797,20 @@ begin
     include(Cache.Flags, rcfGetOrdProp)
   else if Kind in rkGetInt64PropTypes then
     include(Cache.Flags, rcfGetInt64Prop);
-  Cache.RttiVarDataVType := RTTI_TO_VARTYPE[Kind];
-  Cache.VarDataVType := Cache.RttiVarDataVType;
   case Kind of
     rkFloat:
       begin
         Cache.RttiFloat := RttiFloat;
         if IsCurrency then
         begin
-          Cache.RttiVarDataVType := varCurrency;
           Cache.VarDataVType := varCurrency;
+          Cache.RttiVarDataVType := varCurrency;
         end
         else if IsDate then
         begin
-          Cache.RttiVarDataVType := varDate;
-          Cache.VarDataVType := varDate;
           Cache.IsDateTime := true;
+          Cache.VarDataVType := varDate;
+          Cache.RttiVarDataVType := varDate;
         end
         else if Cache.RttiFloat = rfSingle then
         begin
@@ -3822,7 +3821,7 @@ begin
     rkEnumeration,
     rkSet:
       begin
-        Cache.VarDataVType := varInt64; // no need of the varAny TypeInfo marker
+        Cache.VarDataVType := varInt64; // no varAny for regular variants
         if Kind = rkEnumeration then
           enum := Cache.Info.EnumBaseType
         else
