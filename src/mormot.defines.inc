@@ -516,7 +516,7 @@
       {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
-      {$define HASEXTRECORDRTTI}
+      {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
       {$define HASIMPLICITOPERATOR}  // Delphi 2010+ "implicit operator" is ok
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}

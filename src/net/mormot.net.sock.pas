@@ -189,6 +189,8 @@ type
     function IP(localasvoid: boolean = false): RawUtf8; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// convert this address into its 32-bit IPv4 value, 0 on IPv6/nlUnix
+    // - may return cLocalhost32 for 127.0.0.1
+    // - returns 0 (i.e. 0.0.0.0) for AF_INET6 or AF_UNIX
     function IP4: cardinal;
       {$ifdef FPC}inline;{$endif}
     /// convert this address into its shortstring IPv4/IPv6 textual representation
@@ -2277,7 +2279,7 @@ begin
       PCardinal(@sin_addr)^ := cardinal(-1) // 255.255.255.255
     else if (address = cAnyHost) or
             (address = c6AnyHost) then
-      // keep 0.0.0.0
+      // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
     else if NetIsIP4(pointer(address), @sin_addr) or
             GetKnownHost(address, PCardinal(@sin_addr)^) or
             NetAddrCache.SafeFind(address, PCardinal(@sin_addr)^) then
