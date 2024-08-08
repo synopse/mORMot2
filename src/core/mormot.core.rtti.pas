@@ -7365,18 +7365,17 @@ var
 begin
   if Prop <> nil then
     Prop.SetValue(TObject(Data), variant(Source)) // for class properties
+  else if Source.VType <= varNull then // avoid VariantToUtf8(null)='null'
+    ClearValue(Data, {freenestedobjects=}true)
   else
   begin
     u := nil; // use a temp UTF-8 conversion with records
-    if Source.VType > varNull then
-    begin
-      VariantToUtf8(variant(Source), RawUtf8(u));
-      if not SetValueText(Data, RawUtf8(u)) then
-        ClearValue(Data, {freenestedobjects=}true);
-    end;
+    VariantToUtf8(variant(Source), RawUtf8(u));
+    if not SetValueText(Data, RawUtf8(u)) then
+      ClearValue(Data, {freenestedobjects=}true);
     FastAssignNew(u);
   end;
-  VarClearProc(Source);
+  VarClearProc(Source); // supplied TVarData is always cleared
 end;
 
 function TRttiCustomProp.SetValueText(Data: pointer; const Text: RawUtf8): boolean;
