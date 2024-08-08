@@ -717,15 +717,15 @@ type
     RttiOrd: TRttiOrd;
     /// if > 0, this type should be serialized as hexadecimal string
     BinarySize: byte;
-    /// corresponding TRttiVarData.VType
-    // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
-    // identified as varAny with TVarData.VAny pointing to the actual value, and
-    // will be handled as expected by TJsonWriter.AddRttiVarData
-    RttiVarDataVType: word;
     /// corresponding TVarData.VType
     // - in respect to RttiVarDataVType, rkEnumeration and rkSet are varInt64
     // since we don't need the RTTI information as for TRttiVarData
     VarDataVType: word;
+    /// pre-computed TRttiVarData.VType for TRttiCustomProp.GetRttiVarData
+    // - rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkArray are
+    // identified as varAny with TVarData.VAny pointing to the actual value, and
+    // will be handled as expected by TJsonWriter.AddRttiVarData
+    RttiVarDataVType: word;
     /// type-specific information
     case TRttiKind of
       rkFloat: (
@@ -2130,13 +2130,12 @@ type
   PRttiCustomProp = ^TRttiCustomProp;
   PPRttiCustomProp = ^PRttiCustomProp;
 
-  /// variant-like value as returned by TRttiCustomProp.GetValueDirect and
-  // GetValueGetter methods
+  /// variant-like value as returned by TRttiCustomProp.GetRttiVarData
   // - simple values (integers, floats, strings or variant) are set into Data
   // - rkEnumeration, rkSet, rkDynArray, rkClass, rkInterface, rkRecord and
   // rkObject are stored as varAny/PropValue pointer to the field value (for
-  // GetValueDirect) or Instance (for GetValueGetter if PropValueIsInstance=true),
-  // and Prop to the corresponding property RTTI
+  // GetRttiVarDataDirect) or Instance (for GetRttiVarDataGetter if
+  // PropValueIsInstance is true), and Prop to the corresponding property RTTI
   // - will be properly handled by TJsonWriter.AddVariant/AddRttiVarData
   // - can be casted as a variant value, but contains RTTI and clear flag:
   // ! if rvd.NeedsClear then VarClearProc(rvd.Data);
@@ -2223,8 +2222,8 @@ type
     fOrigName: RawUtf8; // as set by InternalAdd()
     function InitFrom(RttiProp: PRttiProp): PtrInt;
     function ValueIsVoidGetter(Data: pointer): boolean;
-    procedure GetValueDirect(Data: PByte; out RVD: TRttiVarData);
-    procedure GetValueGetter(Instance: TObject; out RVD: TRttiVarData);
+    procedure GetRttiVarDataDirect(Data: PByte; out RVD: TRttiVarData);
+    procedure GetRttiVarDataGetter(Instance: TObject; out RVD: TRttiVarData);
     function CompareValueComplex(Data, Other: pointer;
       OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
   public
@@ -2253,11 +2252,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// very fast retrieval of any field value into a TVarData-like mapping
     // - works if Prop is defined or not, calling any getter method if needed
+    // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex
     // - complex TRttiVarData with varAny pointer will be properly handled by
     // TJsonWriter.AddVariant/AddRttiVarData (e.g. rkEnumeration or rkDynArray)
     // - rvd can be casted to a variant, but contains RTTI Info and clear flag:
     // ! if rvd.NeedsClear then VarClearProc(rvd.Data);
-    procedure GetValue(Data: pointer; out RVD: TRttiVarData);
+    procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve any field value as a variant instance
     // - will generate a stand-alone variant value, not an internal TRttiVarData
@@ -2291,7 +2291,7 @@ type
     /// low-level initialization of one property value
     procedure ClearValue(Data: pointer; FreeAndNilNestedObjects: boolean);
     /// append the field value as JSON with proper getter method call
-    // - wrap GetValue() + AddVariant() over a temp TRttiVarData
+    // - wrap GetRttiVarData() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TTextWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions; K: TTextWriterKind = twNone);
     /// a wrapper calling AddValueJson()
@@ -2558,7 +2558,7 @@ type
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
     function ClassNewInstance: pointer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// allow low-level customization of the fClassNewInstance pointer
+    /// allow low-level customization of the fNewInstance pointer
     procedure SetClassNewInstance(FactoryMethod: TRttiCustomNewInstance);
     /// check if this type has ClassNewInstance information
     function HasClassNewInstance: boolean;
@@ -7322,15 +7322,15 @@ begin // inlined IdemPropNameUSameLenNotNull()
   result := true;
 end;
 
-procedure TRttiCustomProp.GetValue(Data: pointer; out RVD: TRttiVarData);
+procedure TRttiCustomProp.GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
 begin
   if (Prop = nil) or
      (OffsetGet >= 0 ) then
     // direct memory access of the value (classes and records)
-    GetValueDirect(Data, RVD)
+    GetRttiVarDataDirect(Data, RVD)
   else
     // need a class property getter
-    GetValueGetter(Data, RVD);
+    GetRttiVarDataGetter(Data, RVD);
 end;
 
 procedure TRttiCustomProp.GetValueVariant(Data: pointer; out Dest: TVarData;
@@ -7342,7 +7342,7 @@ begin
      (OffsetGet >= 0) then
     Value.ValueToVariant(PAnsiChar(Data) + OffsetGet, Dest, Options)
   else if Value.Cache.RttiVarDataVType <> varAny then
-    GetValueGetter(Data, TRttiVarData(Dest)) // not TRttiVarData specific
+    GetRttiVarDataGetter(Data, TRttiVarData(Dest)) // not TRttiVarData specific
   else if Value.Cache.VarDataVType = varInt64 then // rkEnumeration, rkSet
   begin
     Dest.VType := varInt64;
@@ -7396,7 +7396,7 @@ procedure TRttiCustomProp.AddValueJson(W: TTextWriter; Data: pointer;
 var
   rvd: TRttiVarData;
 begin
-  GetValue(Data, rvd);
+  GetRttiVarData(Data, rvd);
   if K <> twOnSameLine then
     if Value.Parser = ptRawJson then
       K := twNone
@@ -7460,7 +7460,7 @@ begin
     result := IsObjectDefaultOrVoid(Prop.GetObjProp(Data))
   else
   begin
-    GetValueGetter(Data, rvd);
+    GetRttiVarDataGetter(Data, rvd);
     case cardinal(rvd.DataType) of
       varEmpty,
       varNull:
@@ -7490,48 +7490,48 @@ begin
   end;
 end;
 
-procedure TRttiCustomProp.GetValueDirect(Data: PByte; out RVD: TRttiVarData);
+procedure TRttiCustomProp.GetRttiVarDataDirect(Data: PByte; out RVD: TRttiVarData);
 begin
   inc(Data, OffsetGet);
   RVD.VType := Value.Cache.RttiVarDataVType; // reset NeedsClear/ValueIsInstance
   case RVD.VType of
-  varEmpty:
-    // void Data or unsupported TRttiKind
-    exit;
-  varInt64,
-  varBoolean:
-    // rkInteger, rkBool using VInt64 for proper cardinal support
-    RVD.Data.VInt64 := RTTI_FROM_ORD[Value.Cache.RttiOrd](Data);
-  varWord64:
-    // rkInt64, rkQWord
-    begin
-      if not (rcfQWord in Value.Cache.Flags) then
-        RVD.VType := varInt64;
+    varEmpty:
+      // void Data or unsupported TRttiKind
+      exit;
+    varInt64,
+    varBoolean:
+      // rkInteger, rkBool using VInt64 for proper cardinal support
+      RVD.Data.VInt64 := RTTI_FROM_ORD[Value.Cache.RttiOrd](Data);
+    varWord64:
+      // rkInt64, rkQWord
+      begin
+        if not (rcfQWord in Value.Cache.Flags) then
+          RVD.VType := varInt64;
+        RVD.Data.VInt64 := PInt64(Data)^;
+      end;
+    varSingle:
+      // copy this 32-bit type at binary level
+      RVD.Data.VInteger := PInteger(Data)^;
+    varDate,
+    varDouble,
+    varCurrency:
+      // copy those 64-bit types at binary level
       RVD.Data.VInt64 := PInt64(Data)^;
-    end;
-  varSingle:
-    // copy this 32-bit type at binary level
-    RVD.Data.VInteger := PInteger(Data)^;
-  varDate,
-  varDouble,
-  varCurrency:
-    // copy those 64-bit types at binary level
-    RVD.Data.VInt64 := PInt64(Data)^;
-  varAny:
-    begin
-      // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
-      RVD.PropValue := Data; // keeping RVD.PropValueIsInstance=false
-      RVD.Prop := @self;
-      // varAny/Value handled by TJsonWriter.AddVariant/AddRttiVarData
-    end;
-  varUnknown:
-    // rkChar, rkWChar, rkSString converted into temporary RawUtf8
-    begin
-      RVD.VType := varString;
-      RVD.NeedsClear := true;
-      RVD.Data.VAny := nil; // avoid GPF
-      Value.Info.StringToUtf8(Data, RawUtf8(RVD.Data.VAny));
-    end;
+    varAny:
+      begin
+        // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
+        RVD.PropValue := Data; // keeping RVD.PropValueIsInstance=false
+        RVD.Prop := @self;
+        // varAny/Value handled by TJsonWriter.AddVariant/AddRttiVarData
+      end;
+    varUnknown:
+      // rkChar, rkWChar, rkSString converted into temporary RawUtf8
+      begin
+        RVD.VType := varString;
+        RVD.NeedsClear := true;
+        RVD.Data.VAny := nil; // avoid GPF
+        Value.Info.StringToUtf8(Data, RawUtf8(RVD.Data.VAny));
+      end;
   else
     // varString, varVariant, varOleStr, varUString are returned by reference
     begin
@@ -7541,7 +7541,7 @@ begin
   end;
 end;
 
-procedure TRttiCustomProp.GetValueGetter(Instance: TObject;
+procedure TRttiCustomProp.GetRttiVarDataGetter(Instance: TObject;
   out RVD: TRttiVarData);
 begin
   RVD.VType := Value.Cache.RttiVarDataVType; // reset NeedsClear/ValueIsInstance
@@ -7644,8 +7644,8 @@ begin
   else
   // comparison using temporary TRttiVarData (using varByRef if possible)
   begin
-    GetValue(Data, v1);
-    OtherRtti.GetValue(Other, v2);
+    GetRttiVarData(Data, v1);
+    OtherRtti.GetRttiVarData(Other, v2);
     if (v1.Data.VType <> varAny) and
        (v2.Data.VType <> varAny) then
       // standard variant comparison function (from mormot.core.variants)
@@ -10069,7 +10069,7 @@ begin
       ERttiException.RaiseUtf8('Unexpected RTTI_FINALIZE[%]', [ToText(k)^]);
     if Assigned(RTTI_MANAGEDCOPY[k]) <> (k in rkManagedTypes) then
       ERttiException.RaiseUtf8('Unexpected RTTI_MANAGEDCOPY[%]', [ToText(k)^]);
-    // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetValueDirect/GetValueGetter
+    // TJsonWriter.AddRttiVarData for TRttiCustomProp.GetRttiVarData
     case k of
       rkEnumeration,
       rkSet,

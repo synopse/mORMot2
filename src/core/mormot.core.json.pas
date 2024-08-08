@@ -674,7 +674,7 @@ type
     fInternalJsonWriter: TJsonWriter;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
       AnsiToWide: PWordArray; Escape: TTextWriterKind);
-    // called after TRttiCustomProp.GetValueDirect/GetValueGetter
+    // called for varAny after TRttiCustomProp.GetRttiVarData
     procedure AddRttiVarData(const Value: TRttiVarData; Escape: TTextWriterKind;
       WriteOptions: TTextWriterWriteObjectOptions);
   public
@@ -783,7 +783,7 @@ type
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
     /// append a variant content as number or string
     // - this overriden version will properly handle JSON escape
-    // - properly handle Value as a TRttiVarData from TRttiProp.GetValue
+    // - properly handle varAny from TRttiCustomProp.GetRttiVarData
     procedure AddVariant(const Value: variant; Escape: TTextWriterKind = twJsonEscape;
       WriteOptions: TTextWriterWriteObjectOptions = []); override;
     /// append complex types as JSON content using raw TypeInfo()
@@ -6524,7 +6524,7 @@ begin
       AddTextW(v^.VAny, Escape);
     varAny:
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
-      // from TRttiCustomProp.GetValueDirect/GetValueGetter
+      // from TRttiCustomProp.GetRttiVarData
       AddRttiVarData(PRttiVarData(v)^, Escape, WriteOptions);
     varVariantByRef:
       AddVariant(PVariant(v^.VPointer)^, Escape, WriteOptions);
@@ -6605,7 +6605,7 @@ var
 begin
   if Value.PropValueIsInstance then
   begin
-    // from TRttiCustomProp.GetValueGetter
+    // from TRttiCustomProp.GetRttiVarDataGetter
     if rcfGetOrdProp in Value.Prop.Value.Cache.Flags then
     begin
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface
@@ -6618,7 +6618,7 @@ begin
         [self, Value.Prop.Value.Name, ToText(Value.Prop.Value.Kind)^]);
   end
   else
-    // from TRttiCustomProp.GetValueDirect
+    // from TRttiCustomProp.GetRttiVarDataDirect
     AddRttiCustomJson(Value.PropValue, Value.Prop.Value, Escape, WriteOptions);
 end;
 
@@ -10490,7 +10490,7 @@ var
   vt: cardinal;
   ctx: TGetJsonField;
 begin
-  // see TRttiCustomProp.GetValueDirect
+  // see TRttiCustomProp.GetRttiVarDataDirect
   vt := Cache.VarDataVType;
   TRttiVarData(Dest).VType := vt;
   case vt of
