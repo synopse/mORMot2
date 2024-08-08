@@ -3803,7 +3803,7 @@ begin
         Cache.RttiFloat := RttiFloat;
         if IsCurrency then
         begin
-          Cache.VarDataVType := varCurrency;
+          Cache.VarDataVType := varCurrency; // overwrite default varDouble
           Cache.RttiVarDataVType := varCurrency;
         end
         else if IsDate then
@@ -3814,8 +3814,8 @@ begin
         end
         else if Cache.RttiFloat = rfSingle then
         begin
-          Cache.RttiVarDataVType := varSingle;
           Cache.VarDataVType := varSingle;
+          Cache.RttiVarDataVType := varSingle;
         end;
       end;
     rkEnumeration,
