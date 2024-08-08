@@ -7694,7 +7694,6 @@ end;
 procedure TRttiCustomProp.CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
 var
   v: TVarData;
-  d, s: PPointer;
 begin
   if (Dest = nil) or
      (Source = nil) then
@@ -7710,15 +7709,15 @@ begin
     DestRtti^.SetValueVariant(Dest, v);
     exit;
   end;
-  d := pointer(Dest + DestRtti^.OffsetSet);
-  s := pointer(Source + OffsetGet);
+  inc(Dest, DestRtti^.OffsetSet);
+  inc(Source, OffsetGet);
   if Value.Kind = rkClass then
-    if Assigned(Value.CopyObject) then
-      Value.CopyObject(d^, s^) // set e.g. by TOrm.RttiCustomSetParser
+    if Assigned(Value.CopyObject) then // set e.g. by TOrm.RttiCustomSetParser
+      Value.CopyObject(PPointer(Dest)^, PPointer(Source)^)
     else
-      Value.Props.CopyProperties(d^, s^)
+      Value.Props.CopyProperties(PPointer(Dest)^, PPointer(Source)^)
   else
-    Value.ValueCopy(d, s); // direct copy from the fields memory buffers
+    Value.ValueCopy(Dest, Source); // direct copy from the fields memory buffers
 end;
 
 
@@ -7917,13 +7916,11 @@ var
   i, n: PtrInt;
   p: PRttiCustomProp;
 begin
+  result := [];
+  Managed := nil;
   CountNonVoid := FromNames(pointer(List), Count, NamesAsJsonArray);
   if Count = 0 then
-  begin
-    result := [];
-    Managed := nil;
     exit;
-  end;
   result := [rcfHasNestedProperties, rcfHasOffsetSetJsonLoadProperties];
   SetLength(Managed, Count);
   n := 0;
@@ -9773,7 +9770,7 @@ end;
 
 function TRttiMap.ToA(B: pointer): pointer;
 begin
-  result := aRtti.ClassNewInstance;
+  result := aRtti.ClassNewInstance; // raise ERttiException if not a class
   ToA(result, B);
 end;
 
