@@ -112,9 +112,14 @@ type
 
 
 const
-  // some binaries may be retrieved from https://github.com/grijjy/DelphiOpenSsl
-  // or http://wiki.overbyte.eu/wiki/index.php/ICS_Download (more up-to-date)
-  // - on Windows, we found out that ICS OpenSSL 3 is slower than OpenSSL 1.1
+  { some binaries may be retrieved from
+    - on Windows, try http://wiki.overbyte.eu/wiki/index.php/ICS_Download
+      or https://slproweb.com/products/Win32OpenSSL.html (which is WinXP ready)
+    - on Mac, you could try our https://synopse.info/files/OpenSSLMacX64.tgz
+      or the now deprecated https://github.com/grijjy/DelphiOpenSsl
+    - in practice, we found out that OpenSSL 3.0 seems slower than OpenSSL 1.1
+      not in its raw process, but due to some API overhead (small blocks)
+  }
   {$ifdef OSWINDOWS}
     {$ifdef CPU32}
     LIB_CRYPTO1 = 'libcrypto-1_1.dll';
@@ -169,7 +174,7 @@ const
           LIB_SSL1 = 'libssl.1.1.dylib';
           _PU = '';
         {$endif CPUINTEL}
-        // regular OpenSSL 3 dylib - to be supplied
+        // regular OpenSSL 3 from https://synopse.info/files/OpenSSLMacX64.tgz
         // the system dylib fails as "xxx is loading libcrypto in an unsafe way"
         // because Apple deprecates its OS lib since 10.7 days (2011) so we
         // won't try to load plain libcrypto/libssl.dylib
