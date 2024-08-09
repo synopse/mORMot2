@@ -10291,7 +10291,7 @@ begin
   if cardinal(Index) < cardinal(TOrmTableRowVariantData(V).VTable.fRowCount) then
     Dest := V
   else
-    TRttiVarData(Dest).VType := varEmpty;
+    TSynVarData(Dest).VType := varEmpty;
 end;
 
 

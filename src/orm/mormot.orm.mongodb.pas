@@ -498,7 +498,7 @@ var
   rtti: TRttiJson;
   js, RecordVersionName: RawUtf8;
   MissingID: boolean;
-  V: PRttiVarData;
+  V: PSynVarData;
 begin
   // parse input JSON
   Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);

@@ -3525,12 +3525,12 @@ const
 
 function TDocVariantData.GetKind: TDocVariantKind;
 begin // [dvoIsArray]=1 [dvoIsObject]=2 -> dvUndefined=0 dvArray=1 dvObject=2
-  result := TDocVariantKind((TRttiVarData(self).VType shr 16) and _DVO);
+  result := TDocVariantKind((TSynVarData(self).VType shr 16) and _DVO);
 end;
 
 function TDocVariantData.Has(dvo: TDocVariantOption): boolean;
 begin // faster equivalency to "result := dvo in VOptions;"
-  result := (TRttiVarData(self).VType and (1 shl (ord(dvo) + 16))) <> 0;
+  result := (TSynVarData(self).VType and (1 shl (ord(dvo) + 16))) <> 0;
 end;
 
 function TDocVariantData.IsObject: boolean;
@@ -3550,7 +3550,7 @@ end;
 
 procedure TDocVariantData.ClearFast;
 begin
-  TRttiVarData(self).VType := 0; // clear VType and VOptions
+  TSynVarData(self).VType := 0; // clear VType and VOptions
   Void;
 end;
 
@@ -3667,7 +3667,7 @@ begin
     TVarData(Dest) := TVarData(Source)
   else if not SetVariantUnRefSimpleValue(Source, TVarData(Dest)) then
   begin
-    TRttiVarData(Dest).VType := varVariantByRef;
+    TSynVarData(Dest).VType := varVariantByRef;
     TVarData(Dest).VPointer := @Source;
   end;
 end;
@@ -3740,7 +3740,7 @@ end;
 
 procedure FillZero(var value: variant);
 begin
-  if TRttiVarData(value).VType and $ffff = varString then
+  if TSynVarData(value).VType and $ffff = varString then
     FillZero(RawByteString(TVarData(value).VAny));
   VarClear(value);
 end;
@@ -3911,7 +3911,7 @@ end;
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   VarClear(result{%H-});
-  with TRttiVarData(result) do
+  with TSynVarData(result) do
     case V.VType of
       vtPointer:
         VType := varNull;
@@ -4174,7 +4174,7 @@ begin
         result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     end
     else if at = varStringByRef then
-      // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
+      // e.g. from TSynVarData / TRttiCustomProp.CompareValue
       result := _CMP2SORT[_VARDATACMP[varString, caseInsensitive]](
         PPointer(A^.VAny)^, PPointer(B^.VAny)^)
     else if at = varSynUnicode or varByRef then
@@ -4476,12 +4476,12 @@ begin
       end;
       if CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0 then
       begin
-        TRttiVarData(v^).VType := t or varByRef;
+        TSynVarData(v^).VType := t or varByRef;
         v^.VPointer := PPointer(a)^;
       end
       else
       begin
-        TRttiVarData(v^).VType := t;
+        TSynVarData(v^).VType := t;
         case t of
           varError:
             begin
@@ -4670,7 +4670,7 @@ var
   vt: cardinal;
   n: ShortString;
 begin
-  TRttiVarData(Dest).VType := varEmpty; // left to Unassigned if not found
+  TSynVarData(Dest).VType := varEmpty; // left to Unassigned if not found
   v := Instance;
   repeat
     vt := v.VType;
@@ -4692,7 +4692,7 @@ begin
         exit;
     end;
     tmp := v; // v will be modified in-place
-    TRttiVarData(v).VType := varEmpty; // IntGet() would clear it otherwise!
+    TSynVarData(v).VType := varEmpty; // IntGet() would clear it otherwise!
     if not handler.IntGet(v, tmp, @n[1], ord(n[0]), {noexc=}true) then
       exit; // property not found (no exception should be raised in Lookup)
     repeat
@@ -4704,7 +4704,7 @@ begin
     if (vt = DocVariantVType) and
        (TDocVariantData(v).VCount = 0) then
       // recognize void TDocVariant as null
-      v.VType := varNull; // do not use PCardinal/TRttiVarData(v).VType here
+      v.VType := varNull; // do not use PCardinal/TSynVarData(v).VType here
   until FullName = nil;
   Dest := v;
 end;
@@ -4900,7 +4900,7 @@ begin // note: IterateCount() may accept IsObject values[]
   if cardinal(Index) < cardinal(Data.VCount) then
     Dest := TVarData(Data.VValue[Index])
   else
-    TRttiVarData(Dest).VType := varEmpty;
+    TSynVarData(Dest).VType := varEmpty;
 end;
 
 function TDocVariant.IsVoid(const V: TVarData): boolean;
@@ -5702,7 +5702,7 @@ end;
 
 procedure TDocVariantData.InitClone(const CloneFrom: TDocVariantData);
 begin
-  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType and not (_DVO shl 16);
+  TSynVarData(self).VType := TSynVarData(CloneFrom).VType and not (_DVO shl 16);
   VCount := 0;
   pointer(VName)  := nil; // to avoid GPF
   pointer(VValue) := nil;
@@ -5711,7 +5711,7 @@ end;
 function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
   CloneValues, MakeUnique: boolean): PVariant;
 begin
-  TRttiVarData(self).VType := TRttiVarData(CloneFrom).VType; // VType+VOptions
+  TSynVarData(self).VType := TSynVarData(CloneFrom).VType; // VType+VOptions
   VCount := CloneFrom.VCount;
   if MakeUnique then             // new array, but byref names
     DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray))
@@ -5729,7 +5729,7 @@ end;
 
 procedure TDocVariantData.Init(const aOptions: TDocVariantOptions);
 begin
-  TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
+  TSynVarData(self).VType := DocVariantVType + // VType+VOptions
     cardinal(word(aOptions) and not _DVO) shl 16;
   VCount := 0;
   pointer(VName)  := nil; // to avoid GPF when mapped within a TVarData/variant
@@ -5739,7 +5739,7 @@ end;
 procedure TDocVariantData.Init(const aOptions: TDocVariantOptions;
   aKind: TDocVariantKind);
 begin // dvUndefined=0 dvArray=1 dvObject=2 -> [dvoIsArray]=1 [dvoIsObject]=2
-  TRttiVarData(self).VType := DocVariantVType + // VType+VOptions
+  TSynVarData(self).VType := DocVariantVType + // VType+VOptions
     cardinal((word(aOptions) and not _DVO) + ord(aKind)) shl 16;
   VCount := 0;
   pointer(VName)  := nil; // to avoid GPF
@@ -5795,7 +5795,7 @@ end;
 
 procedure TDocVariantData.Include(dvo: TDocVariantOption);
 begin
-  TRttiVarData(self).VType := TRttiVarData(self).VType or
+  TSynVarData(self).VType := TSynVarData(self).VType or
                               cardinal(1 shl (ord(dvo) + 16));
 end;
 
@@ -5901,7 +5901,7 @@ procedure TDocVariantData.InitArrayFromVariants(const aItems: TVariantDynArray;
   aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean; aCount: integer);
 begin
   if aItems = nil then
-    TRttiVarData(self).VType := varNull
+    TSynVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
@@ -5923,7 +5923,7 @@ begin
   if _SafeObject(aObject, dv) then
     InitArrayFromVariants(dv^.Values, aOptions, aItemsCopiedByReference, dv^.Count)
   else
-    TRttiVarData(self).VType := varNull;
+    TSynVarData(self).VType := varNull;
 end;
 
 procedure TDocVariantData.InitArrayFromObjectNames(const aObject: variant;
@@ -5934,7 +5934,7 @@ begin
   if _SafeObject(aObject, dv) then
     InitArrayFrom(dv^.Names, aOptions, dv^.Count)
   else
-    TRttiVarData(self).VType := varNull;
+    TSynVarData(self).VType := varNull;
 end;
 
 procedure TDocVariantData.InitArrayFromCsv(const aCsv: RawUtf8;
@@ -6015,13 +6015,13 @@ begin
 end;
 
 function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
-  aCount: integer; const aItems): PRttiVarData; // internal local factory
+  aCount: integer; const aItems): PSynVarData; // internal local factory
 begin
   if aCount < 0 then
     aCount := length(TByteDynArray(aItems));
   if aCount = 0 then
   begin
-    TRttiVarData(aDest).VType := varNull;
+    TSynVarData(aDest).VType := varNull;
     result := nil;
     exit;
   end;
@@ -6047,7 +6047,7 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TRawUtf8DynArray;
   aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
-  v: PRttiVarData;
+  v: PSynVarData;
 begin
   v := _InitArray(self, aOptions, aCount, aItems);
   for ndx := 0 to VCount - 1 do
@@ -6062,7 +6062,7 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TIntegerDynArray;
   aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
-  v: PRttiVarData;
+  v: PSynVarData;
 begin
   v := _InitArray(self, aOptions, aCount, aItems);
   for ndx := 0 to VCount - 1 do
@@ -6077,7 +6077,7 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TInt64DynArray;
   aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
-  v: PRttiVarData;
+  v: PSynVarData;
 begin
   v := _InitArray(self, aOptions, aCount, aItems);
   for ndx := 0 to VCount - 1 do
@@ -6092,7 +6092,7 @@ procedure TDocVariantData.InitArrayFrom(const aItems: TDoubleDynArray;
   aOptions: TDocVariantOptions; aCount: integer);
 var
   ndx: PtrInt;
-  v: PRttiVarData;
+  v: PSynVarData;
 begin
   v := _InitArray(self, aOptions, aCount, aItems);
   for ndx := 0 to VCount - 1 do
@@ -6286,7 +6286,7 @@ procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUtf8DynArray;
 begin
   if (aNames = nil) or
      (length(aValues) <> PDALen(PAnsiChar(aNames) - _DALEN)^ + _DAOFF) then
-    TRttiVarData(self).VType := varNull
+    TSynVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvObject);
@@ -6315,7 +6315,7 @@ begin
         right, aValue, aOptions, aPathDelim);
     exit;
   end;
-  TRttiVarData(self).VType := varNull;
+  TSynVarData(self).VType := varNull;
 end;
 
 function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
@@ -7783,11 +7783,11 @@ begin
   ReduceFilter(k, v, m, aCompare, aLimit, aPathDelim, result);
 end;
 
-procedure ToSingle(result: PRttiVarData);
+procedure ToSingle(result: PSynVarData);
 var
   tmp: TDocVariantData;
 begin
-  PRttiVarData(@tmp)^ := result^; // main dvArray to be finalized at exit
+  PSynVarData(@tmp)^ := result^; // main dvArray to be finalized at exit
   result^.VType := varEmpty;
   if tmp.VCount <> 0 then
     PVariant(result)^ := tmp.VValue[0]; // return the first (and unique) item
@@ -8011,7 +8011,7 @@ begin
     pointer(k[n]) := nil; // avoid GPF
   end;
   MoveFast(v[1], v[0], n * SizeOf(variant));
-  TRttiVarData(v[n]).VType := varEmpty; // avoid GPF
+  TSynVarData(v[n]).VType := varEmpty; // avoid GPF
 end;
 
 function TDocVariantData.Extract(aIndex: integer; var aValue: variant;
@@ -8027,8 +8027,8 @@ begin
   EnsureUnique(VValue);
   VarClear(aValue);
   v := @VValue[aIndex];
-  PRttiVarData(@aValue)^ := PRttiVarData(v)^; // no refcount
-  PRttiVarData(v)^.VType := varEmpty;         // no VarClear(v^)
+  PSynVarData(@aValue)^ := PSynVarData(v)^; // no refcount
+  PSynVarData(v)^.VType := varEmpty;         // no VarClear(v^)
   if aName <> nil then
     if VName = nil then
       FastAssignNew(aName^)
@@ -8606,7 +8606,7 @@ begin
   if (cardinal(res^.VType) = VType) and
      (PDocVariantData(res)^.VCount = 0) then
     // return void TDocVariant as null
-    TRttiVarData(result).VType := varNull
+    TSynVarData(result).VType := varNull
   else
     // copy found value
     result := PVariant(found)^;
@@ -9408,18 +9408,18 @@ begin
   if (Json = nil) or
      ((PInteger(Json)^ = NULL_LOW) and
       (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then
-    TRttiVarData(Value).VType := varNull
+    TSynVarData(Value).VType := varNull
   else if (PInteger(Json)^ = FALSE_LOW) and
           (Json[4] = 'e') and
           (jcEndOfJsonValueField in JSON_CHARS[Json[5]]) then
   begin
-    TRttiVarData(Value).VType := varBoolean;
+    TSynVarData(Value).VType := varBoolean;
     Value.VInteger := ord(false);
   end
   else if (PInteger(Json)^ = TRUE_LOW) and
           (jcEndOfJsonValueField in JSON_CHARS[Json[4]]) then
   begin
-    TRttiVarData(Value).VType := varBoolean;
+    TSynVarData(Value).VType := varBoolean;
     Value.VInteger := ord(true);
   end
   else
@@ -9543,7 +9543,7 @@ parse:    Info.GetJsonField;
 parsed:   if Info.WasString or
              not GetVariantFromNotStringJson(Info.Value, V, AllowDouble) then
           begin
-astext:     TRttiVarData(V).VType := varString;
+astext:     TSynVarData(V).VType := varString;
             V.VAny := nil; // avoid GPF below
             FastSetString(RawUtf8(V.VAny), Info.Value, Info.Valuelen);
           end;
@@ -9555,7 +9555,7 @@ astext:     TRttiVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
         Info.Value := J;
-        TRttiVarData(V).VType := varNull;
+        TSynVarData(V).VType := varNull;
         inc(J, 4);
         goto endobj;
       end;
@@ -9564,7 +9564,7 @@ astext:     TRttiVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[5]]) then
       begin
         Info.Value := J;
-        TRttiVarData(V).VType := varBoolean;
+        TSynVarData(V).VType := varBoolean;
         V.VInteger := ord(false);
         inc(J, 5);
         goto endobj;
@@ -9574,7 +9574,7 @@ astext:     TRttiVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
         Info.Value := J;
-        TRttiVarData(V).VType := varBoolean;
+        TSynVarData(V).VType := varBoolean;
         V.VInteger := ord(true);
         inc(J, 4);
         goto endobj;
@@ -9893,15 +9893,15 @@ begin
     // return an integer or Int64 value
     Value.VInt64 := v64;
     if remdigit <= 9 then
-      TRttiVarData(Value).VType := varInt64
+      TSynVarData(Value).VType := varInt64
     else
-      TRttiVarData(Value).VType := varInteger;
+      TSynVarData(Value).VType := varInteger;
   end
   else if (frac < 0) and
           (frac >= -4) then
   begin
     // currency as ###.0123
-    TRttiVarData(Value).VType := varCurrency;
+    TSynVarData(Value).VType := varCurrency;
     Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
   end
   else if AllowVarDouble and
@@ -9919,7 +9919,7 @@ begin
     else
       d := HugePower10Neg(frac, PPow10(exp));  // .. -32
     Value.VDouble := d * v64;
-    TRttiVarData(Value).VType := varDouble;
+    TSynVarData(Value).VType := varDouble;
   end
   else
     exit;
@@ -10005,7 +10005,7 @@ begin
      not GetVariantFromNotStringJson(Json, V, AllowDouble) then
   begin
     // found no numerical value -> return a string in the expected format
-    TRttiVarData(Value).VType := varString;
+    TSynVarData(Value).VType := varString;
     V.VString := nil; // avoid GPF below
     if JsonLen = 0 then
       JsonLen := StrLen(Json);
@@ -10703,7 +10703,7 @@ begin
         SetLength(result, n); // allocate only when needed
       v := TDocDict.CreateOwned;
       v.fValueOwned := PVarData(dv)^; // raw copy with no refcount
-      PRttiVarData(dv)^.VType := varEmpty; // not in main any more
+      PSynVarData(dv)^.VType := varEmpty; // not in main any more
       result[i] := v;
       inc(i);
     end;
@@ -10797,7 +10797,7 @@ begin
   fValue := @fValueOwned;
   if opt = nil then
     opt := @JSON_[DocAnyDefaultModel];
-  TRttiVarData(fValueOwned).VType := DocVariantVType +
+  TSynVarData(fValueOwned).VType := DocVariantVType +
     cardinal(PWord(opt)^ + 1 shl ord(added)) shl 16; // VType+VOptions
 end;
 
@@ -11128,7 +11128,7 @@ end;
 
 function TDocList.Count(const value: RawUtf8): integer;
 var
-  v: TRttiVarData;
+  v: TSynVarData;
 begin
   v.VType := varString;
   v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
@@ -11153,7 +11153,7 @@ end;
 
 function TDocList.Index(const value: RawUtf8; caseinsensitive: boolean): integer;
 var
-  v: TRttiVarData;
+  v: TSynVarData;
 begin
   v.VType := varString;
   v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
@@ -11895,7 +11895,7 @@ begin
     NewDispInvoke(Dest, PVarData(Source.VPointer)^, calldesc, params)
   else
   begin
-    TRttiVarData(v).VType := varEmpty;
+    TSynVarData(v).VType := varEmpty;
     vp := @v;
     if Dest = nil then
       vp := nil;

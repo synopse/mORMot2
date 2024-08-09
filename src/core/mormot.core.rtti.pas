@@ -2164,6 +2164,17 @@ type
   end;
   PRttiVarData = ^TRttiVarData;
 
+  /// a TVarData-like overlapped structure with a 32-bit VType field
+  // - 32-bit VType is faster for initialization than 16-bit TVarData.VType
+  TSynVarData = packed record
+    case integer of
+    varUnknown: (
+      VType: cardinal);    // maps DataType + NeedsClear + PropValueIsInstance
+    varVariant: (
+      Data: TVarData);
+  end;
+  PSynVarData = ^TSynVarData;
+
   /// define specific behavior for a given TypeInfo/PRttIinfo
   // - rcfIsManaged is set if a value of this type expects finalization
   // - rcfObjArray is for T*ObjArray dynamic arrays
@@ -4210,7 +4221,7 @@ end;
 function TRttiProp.GetValueText(Instance: TObject): RawUtf8;
 var
   k: TRttiKind;
-  v: TRttiVarData;
+  v: TSynVarData;
 begin
   result := '';
   if (@self = nil) or
@@ -6533,7 +6544,7 @@ begin
 end;
 {$endif HASVARUSTRING}
 
-procedure _VariantRandom(V: PRttiVarData; RC: TRttiCustom);
+procedure _VariantRandom(V: PSynVarData; RC: TRttiCustom);
 begin
   VarClearAndSetType(Variant(V^), varEmpty);
   V^.Data.VInt64 := SharedRandom.Next;
@@ -10185,6 +10196,7 @@ begin
   {$endif FPC_CPUX64}
   // validate some redefined RTTI structures with compiler definitions
   assert(SizeOf(TRttiVarData) = SizeOf(TVarData));
+  assert(SizeOf(TSynVarData) = SizeOf(TVarData));
   assert(@PRttiVarData(nil)^.PropValue = @PVarData(nil)^.VAny);
   {$ifdef FPC_OR_UNICODE}
   assert(SizeOf(TRttiRecordField) = SizeOf(TManagedField));

@@ -256,7 +256,7 @@ type
       Info: TRttiCustom;
       ListCount: integer;
       ListCurrent: integer;
-      Temp: TRttiVarData;
+      Temp: TSynVarData;
     end;
     fOnGetGlobalData: TOnGetGlobalData;
     procedure PushContext(Value: pointer; Rtti: TRttiCustom);
@@ -694,7 +694,7 @@ var
   j, k, n: PtrInt;
 begin
   valnam := Copy(ValueName, space + 1, maxInt);
-  TRttiVarData(val).VType := varEmpty;
+  TSynVarData(val).VType := varEmpty;
   valFree := fGetVarDataFromContextNeedsFree;
   if valnam <> '' then
   begin

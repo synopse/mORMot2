@@ -5760,7 +5760,7 @@ procedure JsonToSQlite3Context(json: PUtf8Char;
   Context: TSqlite3FunctionContext);
 var
   info: TGetJsonField;
-  tmp: TRttiVarData;
+  tmp: TSynVarData;
 begin
   if json = nil then
     sqlite3.result_null(Context)
@@ -8472,7 +8472,7 @@ var
   p: PUtf8Char;
   b: pointer;
   blen: integer;
-  d: TRttiVarData absolute Value;
+  d: TSynVarData absolute Value;
 begin
   if cardinal(Col) >= cardinal(FieldCount) then
     sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldVariant');

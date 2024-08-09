@@ -10492,7 +10492,7 @@ var
 begin
   // see TRttiCustomProp.GetRttiVarDataDirect
   vt := Cache.VarDataVType;
-  TRttiVarData(Dest).VType := vt;
+  TSynVarData(Dest).VType := vt;
   case vt of
     varInt64,
     varBoolean:
@@ -10502,7 +10502,7 @@ begin
       // rkInt64, rkQWord
       begin
         if not (rcfQWord in Cache.Flags) then
-          TRttiVarData(Dest).VType := varInt64; // fix VType
+          TSynVarData(Dest).VType := varInt64; // fix VType
         Dest.VInt64 := PInt64(Data)^;
       end;
     varSingle:
@@ -10537,7 +10537,7 @@ begin
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
-        TRttiVarData(Dest).VType := varString;
+        TSynVarData(Dest).VType := varString;
         Dest.VAny := nil; // avoid GPF
         Info.StringToUtf8(Data, RawUtf8(Dest.VAny));
       end;
@@ -10545,7 +10545,7 @@ begin
      begin
        tmp := nil; // use temporary JSON conversion
        SaveJson(Data^, Info, [], RawUtf8(tmp)); // =TJsonWriter.AddTypedJson()
-       TRttiVarData(Dest).VType := varEmpty;
+       TSynVarData(Dest).VType := varEmpty;
        ctx.Json := tmp;
        JsonToAnyVariant(variant(Dest), ctx, Options, true);
        FastAssignNew(tmp);
@@ -10740,7 +10740,7 @@ begin
         // try TDocVariant/TBsonVariant name lookup
         if DocVariantType.FindSynVariantType(PVarData(Data)^.VType, vt) then
         begin
-          TRttiVarData(v).VType := varEmpty; // IntGet() would clear it
+          TSynVarData(v).VType := varEmpty; // IntGet() would clear it
           vt.IntGet(v, PVarData(Data)^, @n[1], ord(n[0]), {noexc=}true);
           if v.VType = varEmpty then
             break;
