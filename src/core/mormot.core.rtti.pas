@@ -7363,6 +7363,8 @@ procedure TRttiCustomProp.SetValueVariant(Data: pointer; var Source: TVarData);
 var
   u: pointer;
 begin
+  if Source.VType = varAny then // paranoid
+    exit;
   if Prop <> nil then
     Prop.SetValue(TObject(Data), variant(Source)) // for class properties
   else if Source.VType <= varNull then // avoid VariantToUtf8(null)='null'
