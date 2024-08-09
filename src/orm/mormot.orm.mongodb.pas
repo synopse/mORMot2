@@ -536,7 +536,7 @@ begin
       // using the ORM/pascal declared types
       info := fStoredClassRecordProps.Fields.List[ndx];
       V := @Doc.Values[i];
-      case V^.VType of
+      case V^.Data.VType of // 32-bit overlapped V^.VType is not correct here
         varInteger:
           // normalize 32-bit integer values into MongoDB boolean or date/time
           case info.OrmFieldType of
