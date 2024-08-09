@@ -5649,7 +5649,7 @@ var
   tmp: ShortString;
 begin
   for i := 0 to high(Values) do
-    with Values[i] do
+    with Values[i] do // only most common arguments are supported
       case VType of
         vtString:
           SockSend(@VString^[1], PByte(VString)^);
@@ -5680,6 +5680,9 @@ begin
             Str(VInt64^, tmp);
             SockSend(@tmp[1], Length(tmp));
           end;
+      else
+        raise ENetSock.CreateFmt('%s.SockSend: unsupported VType=%d',
+          [ClassNameShort(self)^, VType]); // paranoid
       end;
   SockSendCRLF;
 end;
