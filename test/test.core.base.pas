@@ -2257,6 +2257,8 @@ type
     fYearOfBirth: Int64;
     fYearOfDeath: integer;
     fEnum: TEnum;
+    function GetEnum: TEnum;
+    procedure SetEnum(const Value: TEnum);
   published // properties are in another order
     property YearOfBirth: Int64
       read fYearOfBirth write fYearOfBirth;
@@ -2267,7 +2269,7 @@ type
     property YearOfDeath: integer
       read fYearOfDeath write fYearOfDeath;
     property Enum: TEnum
-      read fEnum write fEnum;
+      read GetEnum write SetEnum;
   end;
 
   TPeopleR = packed record
@@ -2275,6 +2277,16 @@ type
     YearOfBirth, Unused: integer;
     Enum: TEnum;
   end;
+
+function TPeople2.GetEnum: TEnum;
+begin
+  result := fEnum;
+end;
+
+procedure TPeople2.SetEnum(const Value: TEnum);
+begin
+  fEnum := Value;
+end;
 
 procedure TTestCoreBase._RecordCopy;
 var
@@ -2391,11 +2403,13 @@ begin
   CheckEqual(p.LastName, 'titi');
   CheckEqual(p.YearOfBirth, o2.YearOfBirth);
   CheckEqual(p.YearOfDeath, o2.YearOfDeath);
+  o2.Enum := e1;
   ClearObject(o2);
   Check(o2.FirstName = '');
   CheckEqual(o2.LastName, '');
   CheckEqual(o2.YearOfBirth, 0);
   CheckEqual(o2.YearOfDeath, 0);
+  Check(o2.Enum = e0);
   RecordToObject(p, o2, TypeInfo(TRecordPeople));
   Check(o2.FirstName = 'toto');
   CheckEqual(o2.LastName, 'titi');
