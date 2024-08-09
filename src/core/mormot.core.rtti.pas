@@ -2164,12 +2164,13 @@ type
   end;
   PRttiVarData = ^TRttiVarData;
 
-  /// a TVarData-like overlapped structure with a 32-bit VType field
+  /// a variant/TVarData overlapped structure with a 32-bit VType field
   // - 32-bit VType is faster for initialization than 16-bit TVarData.VType
+  // - it is safe to transtype this as plain variant or TVarData
   TSynVarData = packed record
     case integer of
     varUnknown: (
-      VType: cardinal);    // maps DataType + NeedsClear + PropValueIsInstance
+      VType: cardinal);
     varVariant: (
       Data: TVarData);
   end;
@@ -2240,6 +2241,18 @@ type
     procedure GetRttiVarDataGetter(Instance: TObject; RVD: PRttiVarData);
     function CompareValueComplex(Data, Other: pointer;
       OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
+    /// retrieve any field value into a custom/non-standard TRttiVarData mapping
+    // - this method was made private since it is for internal use only
+    // - TRttiVarData may contain non-standard varAny for rkEnumeration/rkDynArray,
+    // so you should NOT use this TRttiVarData as a plain variant, e.g. calling
+    // SetValueVariant(RVD.Data) or transtyping variant(RVD)
+    // - works if Prop is defined or not, calling any getter method if needed
+    // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex
+    // (handled in TJsonWriter.AddVariant/AddRttiVarData methods)
+    // - TRttiVarData contains additional non-standard RTTI Info and clear flag:
+    // ! if RVD.NeedsClear then VarClearProc(RVD.Data);
+    procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// contains standard TypeInfo/PRttiInfo of this field/property
     // - for instance, Value.Size contains its memory size in bytes
@@ -2263,17 +2276,6 @@ type
     Stored: TRttiPropStored;
     /// case-insensitive compare the supplied name/len with the Name property
     function NameMatch(P: PUtf8Char; Len: PtrInt): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve any field value into a custom/non-standard TRttiVarData mapping
-    // - TRttiVarData may contain non-standard varAny for rkEnumeration/rkDynArray,
-    // so you should NOT use this TRttiVarData as a plain variant, e.g. calling
-    // SetValueVariant(RVD.Data) or transtyping variant(RVD)
-    // - works if Prop is defined or not, calling any getter method if needed
-    // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex
-    // (handled in TJsonWriter.AddVariant/AddRttiVarData methods)
-    // - TRttiVarData contains additional non-standard RTTI Info and clear flag:
-    // ! if RVD.NeedsClear then VarClearProc(RVD.Data);
-    procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve any field value as a variant instance
     // - will generate a stand-alone variant value, not an internal TRttiVarData
@@ -7414,7 +7416,7 @@ procedure TRttiCustomProp.AddValueJson(W: TTextWriter; Data: pointer;
 var
   rvd: TRttiVarData;
 begin
-  GetRttiVarData(Data, rvd);
+  GetRttiVarData(Data, rvd); // internal specific method
   if K <> twOnSameLine then
     if Value.Parser = ptRawJson then
       K := twNone
@@ -7422,7 +7424,7 @@ begin
       K := twJsonEscape;
   W.AddVariant(variant(rvd), K, Options);
   if rvd.NeedsClear then
-    VarClearProc(rvd.Data);
+    VarClearProc(rvd.Data); // release temporary varString or varVariant
 end;
 
 procedure TRttiCustomProp.GetValueJson(Data: pointer; out Result: RawUtf8);
@@ -7505,7 +7507,7 @@ begin
       result := false;
     end;
     if rvd.NeedsClear then
-      VarClearProc(rvd.Data);
+      VarClearProc(rvd.Data); // release temporary varString or varVariant
   end;
 end;
 
@@ -7542,6 +7544,7 @@ begin
         RVD^.PropValue := Data; // keeping RVD.PropValueIsInstance=false
         RVD^.Prop := @self;
         // varAny/Value handled by TJsonWriter.AddVariant/AddRttiVarData
+        // and TRttiCustomProp.AddValueJson/CompareValueComplex
       end;
     varUnknown:
       // rkChar, rkWChar, rkSString converted into temporary RawUtf8
@@ -7623,7 +7626,7 @@ begin
             exit;
           end;
       end;
-      RVD^.NeedsClear := RVD^.Data.VAny <> nil;
+      RVD^.NeedsClear := RVD^.Data.VAny <> nil; // if a string was allocated
     end;
   end;
 end;
@@ -7678,7 +7681,7 @@ begin
       // we don't know much about those fields: just compare the pointers
       result := ComparePointer(v1.PropValue, v2.PropValue);
     if v1.NeedsClear then
-      VarClearProc(v1.Data);
+      VarClearProc(v1.Data); // release temporary varString or varVariant
     if v2.NeedsClear then
       VarClearProc(v2.Data);
     exit;
