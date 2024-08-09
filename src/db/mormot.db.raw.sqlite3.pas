@@ -8484,30 +8484,30 @@ begin
     SQLITE_INTEGER:
       begin
         d.VType := varInt64;
-        d.Data.VInt64 := sqlite3.value_int64(v);
+        d.VInt64 := sqlite3.value_int64(v);
       end;
     SQLITE_FLOAT:
       begin
         d.VType := varDouble;
-        d.Data.VDouble := sqlite3.value_double(v);
+        d.VDouble := sqlite3.value_double(v);
       end;
     SQLITE_TEXT:
       begin
         d.VType := varString;
-        d.Data.VString := nil; // avoid GPF below
+        d.VString := nil; // avoid GPF below
         p := sqlite3.value_text(v);
-        FastSetString(RawUtf8(d.Data.VString), p, StrLen(p));
+        FastSetString(RawUtf8(d.VString), p, StrLen(p));
       end;
     SQLITE_BLOB:
       begin
         d.VType := varString;
-        d.Data.VString := nil; // avoid GPF below
+        d.VString := nil; // avoid GPF below
         b := sqlite3.value_blob(v);
         blen := sqlite3.value_bytes(v);
         if BlobNoMagic then
-          FastSetRawByteString(RawByteString(d.Data.VString), b, blen)
+          FastSetRawByteString(RawByteString(d.VString), b, blen)
         else
-          BinToBase64WithMagic(b, blen, RawUtf8(d.Data.VString));
+          BinToBase64WithMagic(b, blen, RawUtf8(d.VString));
       end;
     // SQLITE_NULL will left Value as null value
   end;

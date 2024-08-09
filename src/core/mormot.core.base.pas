@@ -3620,6 +3620,26 @@ procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: Ptr
 type
   PVarType = ^TVarType;
 
+  /// a variant/TVarData overlapped structure with a 32-bit VType field
+  // - 32-bit VType is faster for initialization than 16-bit TVarData.VType
+  // - it is safe to transtype this as plain variant or TVarData
+  TSynVarData = packed record
+    case integer of
+      0: (
+        VType: cardinal;
+        case padding: cardinal of // access the most used TVarData value members
+          varInteger: (VInteger: integer);
+          varDouble:  (VDouble:  double);
+          varDate:    (VDate:    TDateTime);
+          varInt64:   (VInt64:   Int64);
+          varString:  (VString:  pointer);
+          varAny:     (VAny:     pointer);
+          );
+      1: (
+        Data: TVarData); // access to all standard value members
+  end;
+  PSynVarData = ^TSynVarData;
+
 const
   /// unsigned 64bit integer variant type
   // - currently called varUInt64 in Delphi (not defined in older versions),
@@ -4211,33 +4231,19 @@ uses
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
 procedure VarClearAndSetType(var v: variant; vtype: integer);
-var
-  p: PInteger; // more efficient generated asm with an explicit temp variable
 begin
-  p := @v;
-  {$if defined(OSBSDDARWIN) and defined(ARM3264)}
-  if PVarData(p)^.VType and VTYPE_STATIC <> 0 then // just like in Variants.pas
-  {$else}
-  if p^ and VTYPE_STATIC <> 0 then
-  {$ifend}
-    VarClearProc(PVarData(p)^);
-  p^ := vtype;
+  if TSynVarData(v).VType and VTYPE_STATIC <> 0 then
+    VarClearProc(TVarData(v));
+  TSynVarData(v).VType := vtype;
 end;
 
 {$ifdef HASINLINE}
 procedure VarClear(var v: variant); // defined here for proper inlining
-var
-  p: PInteger; // more efficient generated asm with an explicit temp variable
 begin
-  p := @v;
-  {$if defined(OSBSDDARWIN) and defined(ARM3264)}
-  if PVarData(p)^.VType and VTYPE_STATIC = 0 then // just like in Variants.pas
-  {$else}
-  if p^ and VTYPE_STATIC = 0 then
-  {$ifend}
-    p^ := 0
+  if TSynVarData(v).VType and VTYPE_STATIC <> 0 then
+    VarClearProc(TVarData(v))
   else
-    VarClearProc(PVarData(p)^);
+    TSynVarData(v).VType := 0;
 end;
 {$endif HASINLINE}
 
@@ -12222,6 +12228,7 @@ end;
 procedure InitializeUnit;
 begin
   assert(ord(high(TSynLogLevel)) = 31);
+  assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
   // initialize internal constants
   crc32tabInit(2197175160, crc32ctab); // crc32c() reversed polynom
   crc32tabInit(3988292384, crc32tab);  // crc32() = zlib's reversed polynom

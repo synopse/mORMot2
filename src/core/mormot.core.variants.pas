@@ -3658,56 +3658,57 @@ end;
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 var
   vt: cardinal;
+  s: TSynVarData absolute Source;
+  d: TSynVarData absolute Dest;
 begin
-  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
-    VarClear(Dest);
-  vt := TVarData(Source).VType;
+  if d.VType <> 0 then
+    VarClearProc(d.Data);
+  vt := s.Data.VType;
   if ((vt and varByRef) <> 0) or
      (vt in VTYPE_SIMPLE) then
-    TVarData(Dest) := TVarData(Source)
-  else if not SetVariantUnRefSimpleValue(Source, TVarData(Dest)) then
+    d := s // simple types can be weakly copied by value
+  else if not SetVariantUnRefSimpleValue(Source, d.Data) then
   begin
-    TSynVarData(Dest).VType := varVariantByRef;
-    TVarData(Dest).VPointer := @Source;
+    d.VType := varVariantByRef;
+    d.VAny := @Source; // copy complex values by reference
   end;
 end;
 
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 var
   s: PVarData;
-  d: TVarData absolute Dest;
-  dt: cardinal absolute Dest;
+  d: TSynVarData absolute Dest;
   vt: cardinal;
   ct: TSynInvokeableVariantType;
 begin
   s := @Source;
-  if PInteger(@Dest)^ <> 0 then // VarClear() is not always inlined :(
-    VarClear(Dest);
-  vt := s^.VType;
-  while vt = varVariantByRef do
-  begin
-    s := s^.VPointer;
+  if d.VType <> 0 then
+    VarClearProc(d.Data);
+  repeat
     vt := s^.VType;
-  end;
+    if vt <> varVariantByRef then
+      break;
+    s := s^.VPointer; // retrieve original value
+  until false;
   case vt of
     varEmpty..varDate,
     varBoolean,
     varShortInt..varWord64:
       begin
-        dt := vt;
-        d.VInt64 := s^.VInt64;
+        d.VType := vt;
+        d.VInt64 := s^.VInt64; // copy up to 64-bit of value
       end;
     varString:
       begin
-        dt := varString;
+        d.VType := varString;
         d.VAny := nil;
-        RawByteString(d.VAny) := RawByteString(s^.VAny);
+        RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
       end;
     varStringByRef:
       begin
-        dt := varString;
+        d.VType := varString;
         d.VAny := nil;
-        RawByteString(d.VAny) := PRawByteString(s^.VAny)^;
+        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // assign
       end;
     {$ifdef HASVARUSTRING}
     varUString,
@@ -3716,15 +3717,15 @@ begin
     varOleStr,
     varOleStrByRef:
       begin
-        dt := varString;
+        d.VType := varString;
         d.VAny := nil;
-        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store as RawUtf8
+        VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // normalize as RawUtf8
       end;
   else // note: varVariant should not happen here
     if DocVariantType.FindSynVariantType(vt, ct) then
-      ct.CopyByValue(d, s^) // needed e.g. for TBsonVariant
+      ct.CopyByValue(d.Data, s^) // needed e.g. for TBsonVariant
     else
-      SetVariantUnRefSimpleValue(PVariant(s)^, d);
+      SetVariantUnRefSimpleValue(PVariant(s)^, d.Data);
   end;
 end;
 
@@ -3923,12 +3924,12 @@ begin
       vtInteger:
         begin
           VType := varInteger;
-          Data.VInteger := V.VInteger;
+          VInteger := V.VInteger;
         end;
       vtInt64:
         begin
           VType := varInt64;
-          Data.VInt64 := V.VInt64^;
+          VInt64 := V.VInt64^;
         end;
       {$ifdef FPC}
       vtQWord:
@@ -3940,21 +3941,21 @@ begin
       vtCurrency:
         begin
           VType := varCurrency;
-          Data.VInt64 := PInt64(V.VCurrency)^;
+          VInt64 := PInt64(V.VCurrency)^;
         end;
       vtExtended:
         begin
           VType := varDouble;
-          Data.VDouble := V.VExtended^;
+          VDouble := V.VExtended^;
         end;
       vtVariant:
-        result := V.VVariant^;
+        result := V.VVariant^; // make a copy
       // warning: use varStringByRef makes GPF -> safe and fast refcount
       vtAnsiString:
         begin
           VType := varString;
-          Data.VAny := nil;
-          RawByteString(Data.VAny) := RawByteString(V.VAnsiString);
+          VAny := nil;
+          RawByteString(VAny) := RawByteString(V.VAnsiString);
         end;
       {$ifdef HASVARUSTRING}
       vtUnicodeString,
@@ -3967,8 +3968,8 @@ begin
       vtClass:
         begin
           VType := varString;
-          Data.VString := nil; // avoid GPF on next line
-          VarRecToUtf8(V, RawUtf8(Data.VString)); // decode as new RawUtf8
+          VString := nil; // avoid GPF on next line
+          VarRecToUtf8(V, RawUtf8(VString)); // decode as new RawUtf8
         end;
       vtObject:
         // class instance will be serialized as a TDocVariant
@@ -4898,7 +4899,7 @@ var
   Data: TDocVariantData absolute V;
 begin // note: IterateCount() may accept IsObject values[]
   if cardinal(Index) < cardinal(Data.VCount) then
-    Dest := TVarData(Data.VValue[Index])
+    Dest := TVarData(Data.VValue[Index]) // make weak value copy
   else
     TSynVarData(Dest).VType := varEmpty;
 end;
@@ -6053,7 +6054,7 @@ begin
   for ndx := 0 to VCount - 1 do
   begin
     v^.VType := varString;
-    RawUtf8(v^.Data.VAny) := aItems[ndx];
+    RawUtf8(v^.VAny) := aItems[ndx];
     inc(v);
   end;
 end;
@@ -6068,7 +6069,7 @@ begin
   for ndx := 0 to VCount - 1 do
   begin
     v^.VType := varInteger;
-    v^.Data.VInteger := aItems[ndx];
+    v^.VInteger := aItems[ndx];
     inc(v);
   end;
 end;
@@ -6083,7 +6084,7 @@ begin
   for ndx := 0 to VCount - 1 do
   begin
     v^.VType := varInt64;
-    v^.Data.VInt64 := aItems[ndx];
+    v^.VInt64 := aItems[ndx];
     inc(v);
   end;
 end;
@@ -6098,7 +6099,7 @@ begin
   for ndx := 0 to VCount - 1 do
   begin
     v^.VType := varDouble;
-    v^.Data.VDouble := aItems[ndx];
+    v^.VDouble := aItems[ndx];
     inc(v);
   end;
 end;
@@ -9467,7 +9468,7 @@ end;
 procedure JsonToAnyVariant(var Value: variant; var Info: TGetJsonField;
   Options: PDocVariantOptions; AllowDouble: boolean);
 var
-  V: TVarData absolute Value;
+  V: TSynVarData absolute Value;
   n: integer;
   t: ^TSynInvokeableVariantType;
   J, J2: PUtf8Char;
@@ -9476,8 +9477,8 @@ var
 label
   parse, parsed, astext, endobj;
 begin
-  if PInteger(@V)^ <> 0 then
-    VarClearProc(V);
+  if V.VType <> 0 then
+    VarClearProc(V.Data);
   if Info.Json = nil then
     exit;
   Info.EndOfObject := ' ';
@@ -9493,7 +9494,7 @@ begin
     jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
       begin
         Info.Value := J;
-        J := GetNumericVariantFromJson(J, V, AllowDouble);
+        J := GetNumericVariantFromJson(J, V.Data, AllowDouble);
         if J = nil then
         begin
           // not a supported number
@@ -9541,9 +9542,9 @@ endobj: Info.ValueLen := J - Info.Value;
           // parse string/numerical values (or true/false/null constants)
 parse:    Info.GetJsonField;
 parsed:   if Info.WasString or
-             not GetVariantFromNotStringJson(Info.Value, V, AllowDouble) then
+             not GetVariantFromNotStringJson(Info.Value, V.Data, AllowDouble) then
           begin
-astext:     TSynVarData(V).VType := varString;
+astext:     V.VType := varString;
             V.VAny := nil; // avoid GPF below
             FastSetString(RawUtf8(V.VAny), Info.Value, Info.Valuelen);
           end;
@@ -9555,7 +9556,7 @@ astext:     TSynVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
         Info.Value := J;
-        TSynVarData(V).VType := varNull;
+        V.VType := varNull;
         inc(J, 4);
         goto endobj;
       end;
@@ -9564,7 +9565,7 @@ astext:     TSynVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[5]]) then
       begin
         Info.Value := J;
-        TSynVarData(V).VType := varBoolean;
+        V.VType := varBoolean;
         V.VInteger := ord(false);
         inc(J, 5);
         goto endobj;
@@ -9574,7 +9575,7 @@ astext:     TSynVarData(V).VType := varString;
          (jcEndOfJsonValueField in JSON_CHARS[J[4]]) then
       begin
         Info.Value := J;
-        TSynVarData(V).VType := varBoolean;
+        V.VType := varBoolean;
         V.VInteger := ord(true);
         inc(J, 4);
         goto endobj;
@@ -9983,7 +9984,7 @@ procedure GetVariantFromJsonField(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions;
   AllowDouble: boolean; JsonLen: integer);
 var
-  V: TVarData absolute Value;
+  V: TSynVarData absolute Value;
   info: TGetJsonField;
 begin
   // first handle any strict-Json syntax objects or arrays into custom variants
@@ -10002,10 +10003,10 @@ begin
   VarClear(Value);
   // try any numerical or true/false/null value
   if wasString or
-     not GetVariantFromNotStringJson(Json, V, AllowDouble) then
+     not GetVariantFromNotStringJson(Json, V.Data, AllowDouble) then
   begin
     // found no numerical value -> return a string in the expected format
-    TSynVarData(Value).VType := varString;
+    V.VType := varString;
     V.VString := nil; // avoid GPF below
     if JsonLen = 0 then
       JsonLen := StrLen(Json);
@@ -11131,7 +11132,7 @@ var
   v: TSynVarData;
 begin
   v.VType := varString;
-  v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
+  v.VAny := pointer(value); // direct set to our RawUtf8 searched value
   result := fValue^.CountItemByValue(variant(v));
 end;
 
@@ -11156,7 +11157,7 @@ var
   v: TSynVarData;
 begin
   v.VType := varString;
-  v.Data.VAny := pointer(value); // direct set to our RawUtf8 searched value
+  v.VAny := pointer(value); // direct set to our RawUtf8 searched value
   result := fValue^.SearchItemByValue(variant(v), caseinsensitive);
 end;
 

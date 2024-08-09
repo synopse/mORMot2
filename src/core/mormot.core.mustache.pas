@@ -1083,11 +1083,11 @@ begin
              ord('I') shl 8 + ord('N') shl 16 + ord('D') shl 24 then
         begin
           // {{-index}} pseudo name
-          d := @Temp.Data.VInteger;
-          rc := PT_RTTI[ptInteger];
-          PInteger(d)^ := ListCurrent;
+          Temp.VInteger := ListCurrent;
           if ValueName[7] <> '0' then
-            inc(PInteger(d)^);
+            inc(Temp.VInteger);
+          d := @Temp.VInteger;
+          rc := PT_RTTI[ptInteger];
           exit;
         end
         else

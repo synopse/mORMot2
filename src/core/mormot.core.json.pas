@@ -8453,7 +8453,7 @@ end;
 // defined here to have _JL_RawJson and _JL_Variant known
 procedure TJsonParserContext.ParsePropComplex(Data: pointer);
 var
-  v: TRttiVarData;
+  v: TSynVarData;
   tmp: TObject;
 begin
   // handle special cases of a setter method
@@ -8466,39 +8466,39 @@ begin
         begin
           tmp := TRttiJson(Info).fNewInstance(Info);
           try
-            v.Prop := Prop; // JsonLoad() would reset Prop := nil
+            v.VAny := Prop.Prop; // JsonLoad() could reset Prop := nil
             TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
             if not Valid then
               FreeAndNil(tmp)
             else
             begin
-              v.Prop.Prop.SetOrdProp(Data, PtrInt(tmp));
+              PRttiProp(v.VAny).SetOrdProp(Data, PtrInt(tmp));
               if jpoSetterExpectsToFreeTempInstance in Options then
                 FreeAndNil(tmp);
             end;
           except
             on Exception do
-              tmp.Free;
+              tmp.Free; // avoid memory leak on parsing erro
           end;
         end;
       end;
     ptRawJson: // TRttiProp.SetValue() assume RawUtf8 -> dedicated RawJson code
       begin
-        v.Data.VAny := nil;
+        v.VAny := nil;
         try
-          _JL_RawJson(@v.Data.VAny, self);
+          _JL_RawJson(@v.VAny, self);
           if Valid then
-            Prop^.Prop.SetLongStrProp(Data, RawJson(v.Data.VAny));
+            Prop^.Prop.SetLongStrProp(Data, RawJson(v.VAny));
         finally
-          FastAssignNew(v.Data.VAny);
+          FastAssignNew(v.VAny);
         end;
       end;
     ptSet: // use a local temp variable before calling the setter
       begin
-        v.Data.VInt64 := 0;
-        _JL_Set(@v.Data.VInt64, self);
+        v.VInt64 := 0;
+        _JL_Set(@v.VInt64, self);
         if Valid then
-          Prop^.Prop.SetOrdProp(Data, v.Data.VInt64);
+          Prop^.Prop.SetOrdProp(Data, v.VInt64);
       end;
   else // call the getter via TRttiProp.SetValue() of a transient TRttiVarData
     begin
