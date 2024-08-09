@@ -4906,7 +4906,7 @@ end;
 
 function TDocVariant.IsVoid(const V: TVarData): boolean;
 begin
-  result := TDocVariantData(V).Count > 0;
+  result := TDocVariantData(V).Count = 0;
 end;
 
 function TDocVariant.DoProcedure(const V: TVarData; const Name: string;
