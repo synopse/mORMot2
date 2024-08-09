@@ -4420,7 +4420,7 @@ procedure TSynInvokeableVariantType.DispInvoke(
 {$endif FPC_VARIANTSETVAR}
 var
   name: string;
-  res: TVarData;
+  res: TSynVarData;
   namelen, i, asize, n: PtrInt;
   nameptr, a: PAnsiChar;
   v: PVarData;
@@ -4540,12 +4540,12 @@ begin
       end
       else if not DoProcedure(Source, name, args) then
       begin
-        PCardinal(@res)^ := varEmpty;
+        res.VType := varEmpty; // we can't use Dest=nil here
         try
-          if not DoFunction(Dest^, Source, name, args) then
+          if not DoFunction(res.Data, Source, name, args) then
             RaiseInvalid;
         finally
-          VarClearProc(res);
+          VarClearProc(res.Data);
         end;
       end;
     DISPATCH_PROPERTYGET:
