@@ -4652,7 +4652,7 @@ type
     // - if you want to access those array values, ensure you protect them
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
     // and maintain the PaddingUsedCount property accurately
-    Padding: array[0..6] of TVarData;
+    Padding: array[0..6] of TSynVarData;
     /// initialize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
@@ -10127,8 +10127,8 @@ var
   i: PtrInt;
 begin
   for i := 0 to fPaddingUsedCount - 1 do
-    if not (integer(Padding[i].VType) in VTYPE_SIMPLE) then
-      VarClearProc(Padding[i]);
+    if Padding[i].VType and VTYPE_STATIC <> 0 then
+      VarClearProc(Padding[i].Data);
   DeleteCriticalSection(fSection);
   fInitialized := false;
 end;
@@ -10252,7 +10252,7 @@ begin
   begin
   {$endif HASFASTTRYFINALLY}
     RWLock(cReadOnly);
-    result := variant(Padding[Index]);
+    result := variant(Padding[Index]); // safe copy
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -10302,6 +10302,7 @@ end;
 
 function TSynLocker.GetBool(Index: integer): boolean;
 begin
+  result := false;
   if cardinal(Index) < cardinal(fPaddingUsedCount) then
   {$ifdef HASFASTTRYFINALLY}
   try
@@ -10315,9 +10316,7 @@ begin
   finally
   {$endif HASFASTTRYFINALLY}
     RWUnLock(cReadOnly);
-  end
-  else
-    result := false;
+  end;
 end;
 
 procedure TSynLocker.SetBool(Index: integer; const Value: boolean);
@@ -10334,35 +10333,31 @@ end;
 
 procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
 begin
-  if cardinal(Index) <= high(Padding) then
-  begin
-    if Index >= fPaddingUsedCount then
-      fPaddingUsedCount := Index + 1;
-    variant(Padding[Index]) := Value;
-  end;
+  if cardinal(Index) >= high(Padding) then
+    exit;
+  if Index >= fPaddingUsedCount then
+    fPaddingUsedCount := Index + 1;
+  variant(Padding[Index]) := Value;
 end;
 
 function TSynLocker.GetPointer(Index: integer): pointer;
 begin
+  result := nil;
   if cardinal(Index) < cardinal(fPaddingUsedCount) then
-    {$ifdef HASFASTTRYFINALLY}
-    try
-    {$else}
-    begin
-    {$endif HASFASTTRYFINALLY}
-      RWLock(cReadOnly);
-      with Padding[Index] do
-        if VType = varUnknown then
-          result := VUnknown
-        else
-          result := nil;
-    {$ifdef HASFASTTRYFINALLY}
-    finally
-    {$endif HASFASTTRYFINALLY}
-      RWUnLock(cReadOnly);
-    end
-    else
-      result := nil;
+  {$ifdef HASFASTTRYFINALLY}
+  try
+  {$else}
+  begin
+  {$endif HASFASTTRYFINALLY}
+    RWLock(cReadOnly);
+    with Padding[Index].Data do
+      if VType = varUnknown then
+        result := VUnknown;
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    RWUnLock(cReadOnly);
+  end;
 end;
 
 procedure TSynLocker.SetPointer(Index: integer; const Value: pointer);
@@ -10374,8 +10369,8 @@ begin
         fPaddingUsedCount := Index + 1;
       with Padding[Index] do
       begin
-        VarClearAndSetType(PVariant(@VType)^, varUnknown);
-        VUnknown := Value;
+        VarClearAndSetType(variant(Data), varUnknown);
+        VAny := Value;
       end;
     finally
       RWUnLock(cWrite);
@@ -10416,20 +10411,21 @@ end;
 
 function TSynLocker.LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
 begin
+  result := 0;
   if cardinal(Index) <= high(Padding) then
     try
       RWLock(cWrite);
-      result := 0;
-      if Index < fPaddingUsedCount then
-        VariantToInt64(variant(Padding[Index]), result)
-      else
-        fPaddingUsedCount := Index + 1;
-      variant(Padding[Index]) := Int64(result + Increment);
+      with Padding[Index] do
+      begin
+        if Index < fPaddingUsedCount then
+          VariantToInt64(variant(Data), result)
+        else
+          fPaddingUsedCount := Index + 1;
+        variant(Data) := Int64(result + Increment);
+      end;
     finally
       RWUnLock(cWrite);
-    end
-    else
-      result := 0;
+    end;
 end;
 
 function TSynLocker.LockedExchange(Index: integer; const Value: variant): variant;
@@ -10441,10 +10437,10 @@ begin
       with Padding[Index] do
       begin
         if Index < fPaddingUsedCount then
-          result := PVariant(@VType)^
+          result := variant(Data)
         else
           fPaddingUsedCount := Index + 1;
-        PVariant(@VType)^ := Value;
+        variant(Data) := Value;
       end;
     finally
       RWUnLock(cWrite);
@@ -10453,6 +10449,7 @@ end;
 
 function TSynLocker.LockedPointerExchange(Index: integer; Value: pointer): pointer;
 begin
+  result := nil;
   if cardinal(Index) <= high(Padding) then
     try
       RWLock(cWrite);
@@ -10460,25 +10457,17 @@ begin
       begin
         if Index < fPaddingUsedCount then
           if VType = varUnknown then
-            result := VUnknown
+            result := VAny
           else
-          begin
-            VarClear(PVariant(@VType)^);
-            result := nil;
-          end
+            VarClearProc(Data)
         else
-        begin
           fPaddingUsedCount := Index + 1;
-          result := nil;
-        end;
         VType := varUnknown;
-        VUnknown := Value;
+        VAny := Value;
       end;
     finally
       RWUnLock(cWrite);
-    end
-  else
-    result := nil;
+    end;
 end;
 
 
