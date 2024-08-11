@@ -619,6 +619,7 @@
 
 // -----------
 // -- about pascal code expectations
+// DO NOT CHANGE ANYTHING BELOW: our code REQUIRES those values to work properly
 
   {$H+} // we use long strings
   {$R-} // disable Range checking in our code
