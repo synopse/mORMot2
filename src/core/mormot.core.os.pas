@@ -7395,9 +7395,7 @@ begin
   // fast cross-platform implementation
   folder := GetSystemPath(spTemp);
   if _TmpCounter = 0 then
-    repeat
-      _TmpCounter := integer(Random32);
-    until _TmpCounter>0;
+      _TmpCounter := Random31;
   retry := 10;
   repeat
     // thread-safe unique file name generation
