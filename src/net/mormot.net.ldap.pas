@@ -33,6 +33,7 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.variants,
   mormot.core.data,
   mormot.core.log,
   mormot.lib.sspi, // do-nothing units on non compliant OS
@@ -477,6 +478,11 @@ type
     /// retrieve a value as its inital value stored with Add()
     // - return '' if the index is out of range, or the attribute is void
     function GetRaw(index: PtrInt = 0): RawByteString;
+    /// retrieve this attribute value(s) as a variant
+    // - return nil if there is no value (self=nil or Count=0)
+    // - if there is a single value, return it as a single variant text
+    // - if Count > 0, return a TDocVariant array with all texts
+    function GetVariant: variant;
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
@@ -933,6 +939,10 @@ type
     /// retrieve all entries that match a given set of criteria
     // - will generate as many requests/responses as needed to retrieve all
     // the information into the SearchResult property
+    // - if paging has been enabled (e.g. with SearchBegin), you should call
+    // and process the SearchResult several times, until SearchCookie is ''
+    // - by default, all attributes would be retrieved, unless a specific set
+    // of Attributes is supplied; if you want no attribute, use ['']
     function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
     /// retrieve all entries that match a given set of criteria
@@ -2266,6 +2276,17 @@ begin
     result := ''
   else
     result := fList[index];
+end;
+
+function TLdapAttribute.GetVariant: variant;
+begin
+  SetVariantNull(result);
+  if (self <> nil) and
+     (fCount > 0) then
+    if fCount = 1 then
+      RawUtf8ToVariant(GetReadable, result)
+    else
+      TDocVariantData(result).InitArrayFrom(GetAllReadable, JSON_FAST);
 end;
 
 
