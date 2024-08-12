@@ -1492,7 +1492,8 @@ var
       CheckEqual(Length(CA.Ints), 20000, 'calen2');
       CheckEqual(Length(CA.TimeLog), CA.Str.Count, 'cacount');
       for i := 0 to high(CA.Ints) do
-        CheckEqual(CA.Ints[i], i, 'caints2');
+        if CheckFailed(CA.Ints[i] = i, 'caints2') then
+          break; // do not put too many errors in the log
       for i := 0 to high(CA.TimeLog) do
         CheckEqual(CA.TimeLog[i], TLNow + i and 31, 'catl');
       DA.Init(TypeInfo(TFVs), CA.fFileVersions);
