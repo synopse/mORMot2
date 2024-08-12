@@ -5070,6 +5070,7 @@ begin
   EnvironmentCacheLock.UnLock;
 end;
 
+{$ifdef OSWINDOWS}
 function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
   options: TRunOptions; waitfordelayms: cardinal; processhandle: PHandle;
   redirected: PRawByteString; const onoutput: TOnRedirect;
@@ -5082,6 +5083,7 @@ begin
   if processhandle <> nil then
     processhandle^ := PI.hProcess;
 end;
+{$endif OSWINDOWS}
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName; options: TRunOptions;
