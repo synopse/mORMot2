@@ -1734,7 +1734,8 @@ type
     mtBz2,
     mtPdf,
     mtSQlite3,
-    mtXcomp);
+    mtXcomp,
+    mtDicom);
   PMimeType = ^TMimeType;
 
 const
@@ -1776,7 +1777,8 @@ const
     'application/bzip2',             // mtBz2
     'application/pdf',               // mtPdf
     'application/x-sqlite3',         // mtSQlite3
-    'application/x-compress');       // mtXcomp
+    'application/x-compress',        // mtXcomp
+    'application/dicom');            // mtDicom
 
 /// retrieve the MIME content type from its file name
 function GetMimeContentTypeFromExt(const FileName: TFileName;
@@ -8615,15 +8617,15 @@ end;
 { *********** Basic MIME Content Types Support }
 
 const
-  MIME_MAGIC: array[0..17] of cardinal = (
+  MIME_MAGIC: array[0..18] of cardinal = (
      $04034b50 + 1, $46445025 + 1, $21726152 + 1, $afbc7a37 + 1,
      $694c5153 + 1, $75b22630 + 1, $9ac6cdd7 + 1, $474e5089 + 1,
      $38464947 + 1, $46464f77 + 1, $a3df451a + 1, $002a4949 + 1,
      $2a004d4d + 1, $2b004d4d + 1, $46464952 + 1, $e011cfd0 + 1,
-     $5367674f + 1, $1c000000 + 1);
+     $5367674f + 1, $1c000000 + 1, $4D434944 + 1);
   MIME_MAGIC_TYPE: array[0..high(MIME_MAGIC)] of TMimeType = (
      mtZip, mtPdf, mtRar, mt7z, mtSQlite3, mtWma, mtWmv, mtPng, mtGif, mtFont,
-     mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4);
+     mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4, mtDicom);
 
 function GetMimeContentTypeFromMemory(Content: pointer; Len: PtrInt): TMimeType;
 var
@@ -8672,6 +8674,10 @@ begin
           case PWord(Content)^ of
             $4D42:
               result := mtBmp; // 42 4D
+            else
+              if (Len > 132) and
+              (PCardinalArray(Content)^[32] = $4D434944) then //at offset 128
+              result := mtDicom;
           end;
         end;
       mtWebp:
@@ -8744,20 +8750,20 @@ begin
 end;
 
 const
-  MIME_EXT: array[0..46] of PUtf8Char = ( // for IdemPPChar() start check
+  MIME_EXT: array[0..48] of PUtf8Char = ( // for IdemPPChar() start check
     'PNG',  'GIF',  'TIF',  'JP',  'BMP', 'DOC',  'HTM',  'CSS',
     'JSON', 'ICO',  'WOF',  'TXT', 'SVG', 'ATOM', 'RDF',  'RSS',
     'WEBP', 'APPC', 'MANI', 'XML', 'JS',  'MJS',  'WOFF', 'OGG',
     'OGV',  'MP4',  'M2V',  'M2P', 'MP3', 'H264', 'TEXT', 'LOG',
     'GZ',   'WEBM', 'MKV',  'RAR', '7Z',  'BZ2',  'WMA',  'WMV',
-    'AVI',  'PPT',  'XLS',  'PDF', 'SQLITE', 'DB3', nil);
+    'AVI',  'PPT',  'XLS',  'PDF', 'DCM', 'DICOM', 'SQLITE', 'DB3', nil);
   MIME_EXT_TYPE: array[0 .. high(MIME_EXT) - 1] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtFont, mtOgg,
     mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
     mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
-    mtAvi,  mtPpt,  mtXls,  mtPdf,   mtSQlite3, mtSQlite3);
+    mtAvi,  mtPpt,  mtXls,  mtPdf, mtdicom, mtdicom, mtSQlite3, mtSQlite3);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
