@@ -587,6 +587,11 @@ type
     function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
     /// return all Items[].Attributes.Get(AttributeName) as a sorted array
     function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
+    /// add all result as a TDocVariant object nested tree
+    // - the full CN will be used as path, and any attribute included with
+    // each object itself
+    procedure AppendTo(var Dvo: TDocVariantData;
+      const ObjectAttributeField: RawUtf8);
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump: RawUtf8;
@@ -969,6 +974,12 @@ type
     // - Returns nil if the object is not found or if the search failed
     function SearchObject(const ObjectDN, Filter, Attribute: RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
+    /// retrieve all pages of entries into a TDocVariant instance
+    // - will contain the nested results as an object, generated from then
+    // CN of the returned object names
+    function SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
+      const Filter: RawUtf8; const Attributes: array of RawUtf8;
+      const ObjectAttributeField: RawUtf8 = '_attr'; SortByName: boolean = true): variant;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -2543,6 +2554,40 @@ begin
   end;
 end;
 
+procedure TLdapResultList.AppendTo(var Dvo: TDocVariantData;
+  const ObjectAttributeField: RawUtf8);
+var
+  i, j: PtrInt;
+  res: TLdapResult;
+  attr: TLdapAttribute;
+  cn: RawUtf8;
+  o, a: TDocVariantData;
+begin
+  for i := 0 to Count - 1 do
+  begin
+    res := Items[i];
+    cn := DNToCN(res.ObjectName);
+    if cn = '' then
+      continue;
+    o.Init(mNameValue, dvObject);
+    if (ObjectAttributeField <> '') and
+       (res.Attributes.Count <> 0) then
+    begin
+      a.Init(mNameValue, dvObject);
+      a.Capacity := res.Attributes.Count;
+      for j := 0 to res.Attributes.Count - 1 do
+      begin
+        attr := res.Attributes.Items[j];
+        a.AddValue(attr.AttributeName, attr.GetVariant);
+      end;
+      o.AddValue(ObjectAttributeField, variant(a), {owned=}true);
+      a.Clear;
+    end;
+    Dvo.SetValueByPath(cn, variant(o), {create=}true, '/', {update=}true);
+    o.Clear;
+  end;
+end;
+
 
 { **************** LDAP Client Class }
 
@@ -3802,6 +3847,23 @@ begin
   root := SearchObject(ObjectDN, Filter, [Attribute], Scope);
   if root <> nil then
     result := root.Attributes.Find(Attribute);
+end;
+
+function TLdapClient.SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
+  const Filter: RawUtf8; const Attributes: array of RawUtf8;
+  const ObjectAttributeField: RawUtf8; SortByName: boolean): variant;
+begin
+  VarClear(result);
+  TDocVariantData(result).Init(mNameValue, dvObject);
+  SearchCookie := '';
+  repeat
+    if not Search(BaseDN, TypesOnly, Filter, Attributes) then
+      break;
+    SearchResult.AppendTo(TDocVariantData(result), ObjectAttributeField);
+  until SearchCookie = '';
+  SearchCookie := '';
+  if SortByName then
+    TDocVariantData(result).SortByName(nil, {reverse=}false, {nested=}true);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
