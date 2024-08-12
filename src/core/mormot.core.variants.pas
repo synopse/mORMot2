@@ -1913,7 +1913,7 @@ type
     // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
     // methods for much faster O(log(n)) binary search
     procedure SortByName(SortCompare: TUtf8Compare = nil;
-      SortCompareReversed: boolean = false);
+      SortCompareReversed: boolean = false; SortNested: boolean = false);
     /// sort the document object values by value using a comparison function
     // - work for both dvObject and dvArray documents
     // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
@@ -7420,12 +7420,15 @@ begin
 end;
 
 procedure TDocVariantData.SortByName(
-  SortCompare: TUtf8Compare; SortCompareReversed: boolean);
+  SortCompare: TUtf8Compare; SortCompareReversed, SortNested: boolean);
 var
   qs: TQuickSortDocVariant;
+  p: PVariant;
+  v: PDocVariantData;
+  n: integer;
 begin
   if (not IsObject) or
-     (VCount <= 1) then
+     (VCount <= 0) then
     exit;
   if Assigned(SortCompare) then
     qs.nameCompare := SortCompare
@@ -7438,6 +7441,17 @@ begin
   else
     qs.reversed := 1;
   qs.SortByName(0, VCount - 1);
+  if not SortNested then
+    exit;
+  n := VCount;
+  p := pointer(VValue);
+  repeat
+    if _SafeObject(p^, v) and
+       (v^.VCount > 0) then
+      v^.SortByName(SortCompare, SortCompareReversed, true);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TDocVariantData.SortByValue(SortCompare: TVariantCompare;
