@@ -5829,6 +5829,14 @@ var
   RunAbortTimeoutSecs: integer = 5;
 
 {$ifdef OSWINDOWS}
+
+/// Windows-specific RunCommand() function returning raw TProcessInformation
+function RunCommandWin(const cmd: TFileName; waitfor: boolean;
+  var processinfo: TProcessInformation; const env: TFileName = '';
+  options: TRunOptions = []; waitfordelayms: cardinal = INFINITE;
+  redirected: PRawByteString = nil; const onoutput: TOnRedirect = nil;
+  const wrkdir: TFileName = ''): integer;
+
 type
   /// how RunRedirect() or RunCommand() should try to gracefully terminate
   // - ramCtrlC calls CancelProcess(), i.e. send CTRL_C_EVENT

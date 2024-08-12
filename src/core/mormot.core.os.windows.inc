@@ -5075,8 +5075,21 @@ function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName
   redirected: PRawByteString; const onoutput: TOnRedirect;
   const wrkdir: TFileName): integer;
 var
-  startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
+begin
+  result := RunCommandWin(cmd, waitfor, processinfo, env, options,
+    waitfordelayms, redirected, onoutput, wrkdir);
+  if processhandle <> nil then
+    processhandle^ := processinfo.hProcess;
+end;
+
+function RunCommandWin(const cmd: TFileName; waitfor: boolean;
+  var processinfo: TProcessInformation; const env: TFileName;
+  options: TRunOptions; waitfordelayms: cardinal;
+  redirected: PRawByteString; const onoutput: TOnRedirect;
+  const wrkdir: TFileName): integer;
+var
+  startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   security: TSecurityAttributes;
   exe, path: TFileName;
   rd, wr, job: THandle;
@@ -5134,6 +5147,7 @@ var
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   result := -1;
+  FillCharFast(processinfo, SizeOf(processinfo), 0);
   // extract path and exe from cmd input
   if cmd = '' then
     exit;
@@ -5203,7 +5217,6 @@ begin
     else
       rd := 0;
   // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
-  FillCharFast(processinfo, SizeOf(processinfo), 0);
   flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE;
   if not (roWinNoProcessDetach in options) then
     flags := flags or (DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP);
@@ -5233,8 +5246,6 @@ begin
     exit;
   end;
   // setup the newly created process
-  if processhandle <> nil then
-    processhandle^ := processinfo.hProcess;
   if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
   begin
     job := CreateJobToClose(processinfo.dwProcessID);
