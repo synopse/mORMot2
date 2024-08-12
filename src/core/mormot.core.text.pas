@@ -70,7 +70,7 @@ procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
 
 /// return next CRLF separated value string from P, ending #10 or #13#10 trimmed
 // - any kind of line feed (CRLF or LF) will be handled, on all operating systems
-// - as used e.g. by TSynNameValue.InitFromCsv and TDocVariantData.InitCsv
+// - as used e.g. by TSynNameValue.InitFromCsv and TDocVariantData.InitFromPairs
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimedCRLF(var P: PUtf8Char; var result: RawUtf8);
 

@@ -8043,7 +8043,7 @@ var
 begin
   FindCount := 0;
   result := nil;
-  if not FastLocateSorted(Item, found) then
+  if not FastLocateSorted(Item, found) then // O(log(n)) locate a matching item
     exit;
   P := fValue^;
   limit := P;
@@ -8055,13 +8055,13 @@ begin
     inc(FindCount);
     dec(P, siz);
   until (P < limit) or
-        (fCompare(P^, fnd^) <> 0);
+        (fCompare(P^, fnd^) <> 0); // search all matches before located item
   inc(limit, GetCount * siz);
   P := fnd;
   repeat
     inc(P, siz);
     if (P >= limit) or
-       (fCompare(P^, fnd^) <> 0) then
+       (fCompare(P^, fnd^) <> 0) then // search after
       break;
     inc(FindCount);
   until false;
@@ -8102,7 +8102,7 @@ begin
         cmp := fCompare(Item, P[i * fInfo.Cache.ItemSize]);
         if cmp = 0 then
         begin
-          // returns true + index of existing Item
+          // returns true + index of (first found) existing Item
           Index := i;
           result := true;
           exit;
