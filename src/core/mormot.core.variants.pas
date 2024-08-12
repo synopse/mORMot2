@@ -973,14 +973,13 @@ type
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
       aPreviousIndex: PInteger): boolean;
     function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
-    procedure InternalSetValue(aIndex: PtrInt; const aValue: variant);
+    function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalSetVarRec(aIndex: PtrInt; const aValue: TVarRec);
       {$ifdef HASSAFEINLINE}inline;{$endif}
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
-      out aLen: PtrInt): PtrInt;
-      {$ifdef FPC}inline;{$endif}
+      out aLen: PtrInt): PtrInt; {$ifdef FPC}inline;{$endif}
     procedure InternalNotFound(var Dest: variant; aName: PUtf8Char); overload;
     procedure InternalNotFound(var Dest: variant; aIndex: integer); overload;
     function InternalNotFound(aName: PUtf8Char): PVariant; overload;
@@ -1722,11 +1721,13 @@ type
     /// set a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - aCreateIfNotExisting=true will force missing nested objects creation
-    // - returns FALSE if there is no item to be set at the supplied aPath
-    // - returns TRUE and set the found value in aValue
+    // - aMergeExisting=true will merge aValue object with any existing object
+    // - returns nil if there is no item to be set at the supplied aPath
+    // - returns the address of the found or created value in aValue
     // - you can set e.g. aPathDelim = '/' to search e.g. for 'parent/child'
     function SetValueByPath(const aPath: RawUtf8; const aValue: variant;
-      aCreateIfNotExisting: boolean = false; aPathDelim: AnsiChar = '.'): boolean;
+      aCreateIfNotExisting: boolean = false; aPathDelim: AnsiChar = '.';
+      aMergeExisting: boolean = false): PVariant;
 
     /// add a value in this document
     // - if aName is set, if dvoCheckForDuplicatedNames option is set, any
@@ -3556,11 +3557,13 @@ begin
   Void;
 end;
 
-procedure TDocVariantData.InternalSetValue(aIndex: PtrInt; const aValue: variant);
+function TDocVariantData.InternalSetValue(
+  aIndex: PtrInt; const aValue: variant): PVariant;
 begin
-  SetVariantByValue(aValue, VValue[aIndex]); // caller ensured that aIndex is OK
+  result := @VValue[aIndex];
+  SetVariantByValue(aValue, result^); // caller ensured that aIndex is OK
   if Has(dvoInternValues) then
-    InternalUniqueValueAt(aIndex);
+    DocVariantType.InternValues.UniqueVariant(result^);
 end;
 
 function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
@@ -8532,7 +8535,7 @@ begin
         break;
       ndx := PDocVariantData(result)^.InternalNextPath(csv, aPathDelim, namelen);
       if ndx < 0 then
-        break;
+        break; // this nested level in path does not exist
       inc(csv, namelen);
       result := @PDocVariantData(result)^.VValue[ndx];
       if csv^ = #0 then
@@ -8734,13 +8737,14 @@ begin
 end;
 
 function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
-  const aValue: variant; aCreateIfNotExisting: boolean; aPathDelim: AnsiChar): boolean;
+  const aValue: variant; aCreateIfNotExisting: boolean; aPathDelim: AnsiChar;
+  aMergeExisting: boolean): PVariant;
 var
   csv: PUtf8Char;
-  v: PDocVariantData;
+  v, d: PDocVariantData;
   ndx, namelen: PtrInt;
 begin
-  result := false;
+  result := nil;
   if IsArray then
     exit;
   csv := pointer(aPath);
@@ -8764,8 +8768,17 @@ begin
   until false;
   if ndx < 0 then
     ndx := v^.InternalAddBuf(csv, namelen);
-  v^.InternalSetValue(ndx, aValue);
-  result := true;
+  if aMergeExisting and
+     (ndx >= 0) then
+  begin
+    result := @v^.VValue[ndx];
+    if _Safe(result^, d) then
+    begin
+      d^.AddOrUpdateFrom(aValue);
+      exit;
+    end;
+  end;
+  result := v^.InternalSetValue(ndx, aValue);
 end;
 
 procedure TDocVariantData.RetrieveNameOrRaiseException(
@@ -9165,7 +9178,7 @@ var
 begin
   ndx := GetOrAddIndexByName(aName);
   result := _Safe(VValue[ndx]);
-  if result^.Kind <> aKind then
+  if result^.Kind <> aKind then // GPF "if = aKind then exit" in -O3
   begin
     result := @VValue[ndx];
     VarClear(PVariant(result)^);
@@ -11477,7 +11490,7 @@ begin
   if fPathDelim = #0 then
     result := fValue^.AddOrUpdateValue(key, value) >= 0
   else
-    result := fValue^.SetValueByPath(key, value, {create=}true, fPathDelim);
+    result := fValue^.SetValueByPath(key, value, {create=}true, fPathDelim) <> nil;
   if result then
     fSorted := nil;
 end;

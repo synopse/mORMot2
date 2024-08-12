@@ -5755,9 +5755,9 @@ begin
   CheckEqual(VariantSaveJson(V1), '[1.5,1.7]');
   V2 := _obj(['id', 0]);
   Check(VariantSaveJson(V2) = '{"id":0}');
-  Check(_Safe(V2)^.SetValueByPath('id', 1));
+  Check(_Safe(V2)^.SetValueByPath('id', 1) <> nil);
   Check(VariantSaveJson(V2) = '{"id":1}');
-  Check(not _Safe(V2)^.SetValueByPath('id.name', 'toto'));
+  Check(_Safe(V2)^.SetValueByPath('id.name', 'toto') = nil);
   V1.Add(V2);
   Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1}]');
   s := 'abc';
@@ -5772,10 +5772,10 @@ begin
   Doc.Clear;
   Doc.InitObjectFromPath('people.age', 30);
   check(Doc.ToJson = '{"people":{"age":30}}');
-  Check(Doc.SetValueByPath('people.age', 31));
-  Check(not Doc.SetValueByPath('people2.name', 'toto'));
+  Check(Doc.SetValueByPath('people.age', 31) <> nil);
+  Check(Doc.SetValueByPath('people2.name', 'toto') = nil);
   check(Doc.ToJson = '{"people":{"age":31}}');
-  Check(Doc.SetValueByPath('people2.name', 'toto', {create=}true));
+  Check(Doc.SetValueByPath('people2.name', 'toto', {create=}true) <> nil);
   check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"}}');
   check(not Doc.GetDocVariantByPath('Peopl2', dv));
   check(Doc.GetDocVariantByPath('People2', dv));
@@ -5792,7 +5792,7 @@ begin
   check(Doc.O['people2'].ToJson = 'null');
   Doc.O_['people2'].AddValue('name', 'titi');
   check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"titi"}}');
-  Check(Doc.SetValueByPath('people2.name', 'toto'));
+  Check(Doc.SetValueByPath('people2.name', 'toto') <> nil);
   check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"}}');
   check(Doc.A['arr'].ToJson = 'null');
   Doc.A_['arr'].AddItems([1, 2.2, '3']);
