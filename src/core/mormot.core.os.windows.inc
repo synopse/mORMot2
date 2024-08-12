@@ -5075,6 +5075,24 @@ function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName
   redirected: PRawByteString; const onoutput: TOnRedirect;
   const wrkdir: TFileName): integer;
 var
+  PI: TProcessInformation;
+begin
+  Result := RunCommand(cmd, waitfor, env, options, waitfordelayms, PProcessInformation(@PI),
+    redirected, onoutput, wrkdir);
+  if processhandle <> nil then
+    processhandle^ := PI.hProcess;
+end;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; options: TRunOptions;
+  {$ifdef OSWINDOWS}
+  waitfordelayms: cardinal; processinformation: PProcessInformation;
+  redirected: PRawByteString; const onoutput: TOnRedirect;
+  const wrkdir: TFileName
+  {$else}
+  parsed: PParseCommands = nil
+  {$endif OSWINDOWS}): integer;
+var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
   security: TSecurityAttributes;
@@ -5233,8 +5251,8 @@ begin
     exit;
   end;
   // setup the newly created process
-  if processhandle <> nil then
-    processhandle^ := processinfo.hProcess;
+  if ProcessInformation <> nil then
+    ProcessInformation^ := processinfo;
   if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
   begin
     job := CreateJobToClose(processinfo.dwProcessID);
@@ -5345,7 +5363,7 @@ begin
     redir := @result
   else
     redir := nil;
-  res := RunCommand(cmd, true, env, options, waitfordelayms, nil,
+  res := RunCommand(cmd, true, env, options, waitfordelayms, PHandle(nil),
     redir, onoutput, wrkdir);
   if exitcode <> nil then
     exitcode^ := res;

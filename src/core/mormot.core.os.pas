@@ -5802,7 +5802,20 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
   const wrkdir: TFileName = ''
   {$else}
   parsed: PParseCommands = nil
-  {$endif OSWINDOWS}): integer;
+  {$endif OSWINDOWS}): integer; overload;
+
+/// Overloaded RunCommand, return PProcessInformation instead of process PHandle.
+// - if waitfor=false, then process handle is of no use, because the handle
+// is closed when leaving RunCommand without waiting.
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; options: TRunOptions;
+  {$ifdef OSWINDOWS}
+  waitfordelayms: cardinal; processinformation: PProcessInformation;
+  redirected: PRawByteString; const onoutput: TOnRedirect;
+  const wrkdir: TFileName
+  {$else}
+  parsed: PParseCommands = nil
+  {$endif OSWINDOWS}): integer; overload;
 
 /// execute a command, returning its output console as UTF-8 text
 // - calling CreateProcessW on Windows (i.e. our RunCommand), and FPC RTL
