@@ -8640,18 +8640,24 @@ begin
       case PCardinal(PAnsiChar(Content) + 1)^ or $20202020 of
         ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24:
           begin
-            result := mtHtml;
+            result := mtHtml; // legacy HTML document
             exit;
           end;
         ord('!') + ord('d') shl 8 + ord('o') shl 16 + ord('c') shl 24:
           begin
-            if IdemPChar(PUtf8Char(Content) + 5, 'TYPE HTML') then
-              result := mtHtml;
+            if (PCardinal(PAnsiChar(Content) + 5)^ or $20202020 =
+               ord('t') + ord('y') shl 8 + ord('p') shl 16 + ord('e') shl 24) and
+               (PAnsiChar(Content)[9] = ' ') then
+              if (PCardinal(PAnsiChar(Content) + 10)^ or $20202020 =
+                 ord('h') + ord('t') shl 8 + ord('m') shl 16 + ord('l') shl 24) then
+                result := mtHtml // HTML5 markup
+              else
+                result := mtXml; // malformed XML document
             exit;
           end;
         ord('?') + ord('x') shl 8 + ord('m') shl 16 + ord('l') shl 24:
           begin
-            result := mtXml;
+            result := mtXml; // "well formed" XML document
             exit;
           end;
       end;
@@ -8675,7 +8681,7 @@ begin
             $4D42:
               result := mtBmp; // 42 4D
             else
-              if (Len > 132) and // DICOM prefix may appear at offset 128
+              if (Len > 132) and // 'DICOM' prefix may appear at offset 128
                  (PCardinalArray(Content)^[32] = $4d434944) then
               result := mtDicom;
           end;
@@ -8763,7 +8769,7 @@ const
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS,   mtFont, mtOgg,
     mtOgg,  mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText,
     mtGzip, mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv,
-    mtAvi,  mtPpt,  mtXls,  mtPdf, mtdicom, mtdicom, mtSQlite3, mtSQlite3);
+    mtAvi,  mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var

@@ -6933,7 +6933,7 @@ begin
   s := '<!doctype html><html><body>';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtHtml);
   s := '<!doctype note>';
-  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtUnknown);
+  Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
   s := '<?XML';
   Check(GetMimeContentTypeFromMemory(pointer(s), length(s)) = mtXml);
   s := '<HTML><body>';
