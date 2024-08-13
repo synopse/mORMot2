@@ -990,7 +990,8 @@ type
     // ObjectAttributeField is '*', and attributes are written as no sub-field
     function SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
-      const ObjectAttributeField: RawUtf8 = '_attr'; SortByName: boolean = true): variant;
+      const ObjectAttributeField: RawUtf8 = '_attr'; MaxCount: integer = 0;
+      SortByName: boolean = true): variant;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -3892,16 +3893,23 @@ end;
 
 function TLdapClient.SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
   const Filter: RawUtf8; const Attributes: array of RawUtf8;
-  const ObjectAttributeField: RawUtf8; SortByName: boolean): variant;
+  const ObjectAttributeField: RawUtf8; MaxCount: integer;
+  SortByName: boolean): variant;
+var
+  n: integer;
 begin
   VarClear(result);
-  TDocVariantData(result).Init(mNameValue, dvObject);
+  TDocVariantData(result).Init(mNameValue, dvObject); // case sensitive names
+  n := 0;
   SearchCookie := '';
   repeat
     if not Search(BaseDN, TypesOnly, Filter, Attributes) then
       break;
     SearchResult.AppendTo(TDocVariantData(result), ObjectAttributeField);
-  until SearchCookie = '';
+    inc(n, SearchResult.Count);
+  until (SearchCookie = '') or
+        ((MaxCount > 0) and
+         (n > MaxCount));
   SearchCookie := '';
   if SortByName then
     TDocVariantData(result).SortByName(nil, {reverse=}false, {nested=}true);
