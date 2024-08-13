@@ -1499,7 +1499,7 @@ begin
     begin
       value := LdapUnescape(value); // may need some (un)escape
       if ValueEscapeCN then
-        value := LdapEscapeCN(value);
+        value := EscapeChar(value , LDAP_CN, '\'); // inlined LdapEscapeCN()
     end;
     case PCardinal(kind)^ and $ffdfdf of
       ord('D') + ord('C') shl 8:

@@ -9196,7 +9196,7 @@ begin
   begin
     result := @VValue[ndx];
     VarClear(PVariant(result)^);
-    result^.Init(VOptions, aKind);
+    result^.Init(VOptions, aKind); // replace with a void doc
   end;
 end;
 
