@@ -8622,7 +8622,7 @@ const
      $694c5153 + 1, $75b22630 + 1, $9ac6cdd7 + 1, $474e5089 + 1,
      $38464947 + 1, $46464f77 + 1, $a3df451a + 1, $002a4949 + 1,
      $2a004d4d + 1, $2b004d4d + 1, $46464952 + 1, $e011cfd0 + 1,
-     $5367674f + 1, $1c000000 + 1, $4D434944 + 1);
+     $5367674f + 1, $1c000000 + 1, $4d434944 + 1);
   MIME_MAGIC_TYPE: array[0..high(MIME_MAGIC)] of TMimeType = (
      mtZip, mtPdf, mtRar, mt7z, mtSQlite3, mtWma, mtWmv, mtPng, mtGif, mtFont,
      mtWebm, mtTiff, mtTiff, mtTiff, mtWebp{=riff}, mtDoc, mtOgg, mtMp4, mtDicom);
@@ -8675,8 +8675,8 @@ begin
             $4D42:
               result := mtBmp; // 42 4D
             else
-              if (Len > 132) and
-              (PCardinalArray(Content)^[32] = $4D434944) then //at offset 128
+              if (Len > 132) and // DICOM prefix may appear at offset 128
+                 (PCardinalArray(Content)^[32] = $4d434944) then
               result := mtDicom;
           end;
         end;
