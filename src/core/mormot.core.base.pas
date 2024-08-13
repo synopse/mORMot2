@@ -3035,6 +3035,10 @@ function Random32: cardinal; overload;
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random31: integer;
 
+/// compute of a 31-bit random value <> 0, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function Random31Not0: integer;
+
 /// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random64: QWord;
@@ -9161,6 +9165,14 @@ end;
 function Random31: integer;
 begin
   result := _Lecuyer.Next shr 1;
+end;
+
+function Random31Not0: integer;
+begin
+  with _Lecuyer do
+    repeat
+      result := Next shr 1;
+    until result <> 0;
 end;
 
 function Random32(max: cardinal): cardinal;

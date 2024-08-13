@@ -1902,13 +1902,6 @@ end;
 const
   NTVER: RawByteString = #6#0#0#0; // '\00\00\00\06' does NOT work on CLDAP
 
-function Random31: cardinal;
-begin
-  repeat
-    result := Random32 shr 1;
-  until result <> 0;
-end;
-
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
   const DomainName, LdapServerAddress, LdapServerPort: RawUtf8): boolean;
 var
@@ -1927,7 +1920,7 @@ begin
   sock := addr.NewSocket(nlUdp);
   if sock <> nil then
   try
-    id := Random31;
+    id := Random31Not0;
     FormatUtf8('(&(DnsDomain=%)(NtVer=%))',
       [LdapEscapeName(DomainName), NTVER], filter);
     req := Asn(ASN1_SEQ, [
@@ -2056,7 +2049,7 @@ begin
   if sock <> nil then
   try
     sock.SetBroadcast(true);
-    id := Random31;
+    id := Random31Not0;
     req := Asn(ASN1_SEQ, [
              Asn(id),
              //Asn(''), // the RFC 1798 requires user, but MS AD does not :(
