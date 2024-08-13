@@ -24,7 +24,7 @@ interface
 uses
   sysutils,
   classes,
-  variants,
+  variants, // circular reference? see https://github.com/synopse/mORMot2/issues/240
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
