@@ -2596,34 +2596,36 @@ var
   i, j: PtrInt;
   res: TLdapResult;
   attr: TLdapAttribute;
-  cn: RawUtf8;
-  o, a: TDocVariantData;
+  dc, ou, cn: TRawUtf8DynArray;
+  a: TDocVariantData;
+  v: PDocVariantData;
 begin
   for i := 0 to Count - 1 do
   begin
     res := Items[i];
-    cn := DNToCN(res.ObjectName);
-    if cn = '' then
+    ParseDN(res.ObjectName, dc, ou, cn);
+    if dc = nil then
       continue;
-    o.Init(mNameValue, dvObject);
-    if ObjectAttributeField <> '' then
+    v := Dvo.O_[RawUtf8ArrayToCsv(dc, '.')];
+    for j := high(ou) downto 0 do
+      v := v^.O_[ou[j]];
+    for j := high(cn) downto 0 do
+      v := v^.O_[cn[j]];
+    if ObjectAttributeField = '' then
+      continue; // no attribute
+    a.Init(mNameValue, dvObject);
+    a.Capacity := res.Attributes.Count + 1;
+    a.AddValueFromText('objectName', res.ObjectName);
+    for j := 0 to res.Attributes.Count - 1 do
     begin
-      a.Init(mNameValue, dvObject);
-      a.Capacity := res.Attributes.Count + 1;
-      a.AddValueFromText('objectName', res.ObjectName);
-      for j := 0 to res.Attributes.Count - 1 do
-      begin
-        attr := res.Attributes.Items[j];
-        a.AddValue(attr.AttributeName, attr.GetVariant);
-      end;
-      if ObjectAttributeField = '*' then
-        o.AddOrUpdateFrom(variant(a), {onlymissing=}true)
-      else
-        o.AddValue(ObjectAttributeField, variant(a), {owned=}true);
-      a.Clear;
+      attr := res.Attributes.Items[j];
+      a.AddValue(attr.AttributeName, attr.GetVariant);
     end;
-    Dvo.SetValueByPath(cn, variant(o), {create=}true, '/', {update=}true);
-    o.Clear;
+    if ObjectAttributeField = '*' then
+      v^.AddOrUpdateFrom(variant(a), {onlymissing=}true)
+    else
+      v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
+    a.Clear;
   end;
 end;
 
