@@ -664,6 +664,10 @@ begin
   CheckEqual(DNToCN(
     'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
     'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
+  CheckEqual(DNToCN(
+    'OU=d..zaf(fds )da\,z \"\"((''\\/ df\3D\3Dez,OU=test_wapt,OU=computers,' +
+    'OU=tranquilit,DC=ad,DC=tranquil,DC=it'),
+    'ad.tranquil.it/tranquilit/computers/test_wapt/d\.\.zaf(fds )da,z ""((''\\\/ df==ez');
   // validate LDAP escape/unescape
   for c := 0 to 200 do
   begin
