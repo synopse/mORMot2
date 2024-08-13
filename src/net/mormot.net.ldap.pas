@@ -52,6 +52,10 @@ uses
 // 'xyz.local/London/Users/User1'
 function DNToCN(const DN: RawUtf8): RawUtf8;
 
+/// low-level parse a Distinguished Name text into its DC= OU= CN= parts
+procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray);
+
+
 const
   // LDAP result codes
   LDAP_RES_SUCCESS                        = 0;
@@ -1464,36 +1468,56 @@ end;
 
 { **************** LDAP Protocol Definitions }
 
-function DNToCN(const DN: RawUtf8): RawUtf8;
+procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray);
 var
   p: PUtf8Char;
-  dc, ou, cn, kind, value: RawUtf8;
+  kind, value: RawUtf8;
+  dcn, oun, cnn: integer;
 begin
-  result := '';
   p := pointer(DN);
   if p = nil then
     exit;
+  dcn := 0;
+  oun := 0;
+  cnn := 0;
   repeat
-    GetNextItemTrimed(p, '=', kind);
-    GetNextItemTrimed(p, ',', value);
+    GetNextItemTrimedEscaped(p, '=', '\', kind);
+    GetNextItemTrimedEscaped(p, ',', '\', value);
     if (kind = '') or
        (value = '') then
-      ELdap.RaiseUtf8('DNToCN(%): invalid Distinguished Name', [DN]);
+      ELdap.RaiseUtf8('ParsDN(%): invalid Distinguished Name', [DN]);
     if not PropNameValid(pointer(value)) then // simple alphanum is just fine
       value := LdapEscapeCN(LdapUnescape(value)); // may need some (un)escape
-    LowerCaseSelf(kind);
-    if kind = 'dc' then
-    begin
-      if dc <> '' then
-        dc := dc + '.';
-      dc := dc + value;
-    end
-    else if kind = 'ou' then
-      Prepend(ou, ['/', value])
-    else if kind = 'cn' then
-      Prepend(cn, ['/', value]);
+    case PCardinal(kind)^ and $ffdfdf of
+      ord('D') + ord('C') shl 8:
+        AddRawUtf8(dc, dcn, value);
+      ord('O') + ord('U') shl 8:
+        AddRawUtf8(ou, oun, value);
+      ord('C') + ord('N') shl 8:
+        AddRawUtf8(cn, cnn, value);
+    end;
   until p = nil;
-  result := dc + ou + cn;
+  if dc <> nil then
+    DynArrayFakeLength(dc, dcn);
+  if ou <> nil then
+    DynArrayFakeLength(ou, oun);
+  if cn <> nil then
+    DynArrayFakeLength(cn, cnn);
+end;
+
+function DNToCN(const DN: RawUtf8): RawUtf8;
+var
+  dc, ou, cn: TRawUtf8DynArray;
+begin
+  result := '';
+  if DN = '' then
+    exit;
+  ParseDN(DN, dc, ou, cn);
+  result := RawUtf8ArrayToCsv(dc, '.');
+  if ou <> nil then
+    Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(ou, '/', -1, {reverse=}true));
+  if cn <> nil then
+    Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true));
 end;
 
 function RawLdapErrorString(ErrorCode: integer): RawUtf8;
