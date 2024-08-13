@@ -53,7 +53,8 @@ uses
 function DNToCN(const DN: RawUtf8): RawUtf8;
 
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
-procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray);
+procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
+  ValueEscapeCN: boolean = false);
 
 
 const
@@ -1474,7 +1475,8 @@ end;
 
 { **************** LDAP Protocol Definitions }
 
-procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray);
+procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
+  ValueEscapeCN: boolean);
 var
   p: PUtf8Char;
   kind, value: RawUtf8;
@@ -1493,7 +1495,11 @@ begin
        (value = '') then
       ELdap.RaiseUtf8('ParsDN(%): invalid Distinguished Name', [DN]);
     if not PropNameValid(pointer(value)) then // simple alphanum is just fine
-      value := LdapEscapeCN(LdapUnescape(value)); // may need some (un)escape
+    begin
+      value := LdapUnescape(value); // may need some (un)escape
+      if ValueEscapeCN then
+        value := LdapEscapeCN(value);
+    end;
     case PCardinal(kind)^ and $ffdfdf of
       ord('D') + ord('C') shl 8:
         AddRawUtf8(dc, dcn, value);
