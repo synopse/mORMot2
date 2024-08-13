@@ -68,6 +68,11 @@ function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 
+/// return trimmed next CSV string from P, ignoring any Escaped char
+// - P=nil after call when end of text is reached
+procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
+  var result: RawUtf8);
+
 /// return next CRLF separated value string from P, ending #10 or #13#10 trimmed
 // - any kind of line feed (CRLF or LF) will be handled, on all operating systems
 // - as used e.g. by TSynNameValue.InitFromCsv and TDocVariantData.InitFromPairs
@@ -2544,6 +2549,38 @@ begin
     S := P;
     while (S^ <> #0) and
           (S^ <> Sep) do
+      inc(S);
+    E := S;
+    while (E > P) and
+          (E[-1] in [#1..' ']) do
+      dec(E); // trim right
+    FastSetString(result, P, E - P);
+    if S^ <> #0 then
+      P := S + 1
+    else
+      P := nil;
+  end;
+end;
+
+procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
+  var result: RawUtf8);
+var
+  S, E: PUtf8Char;
+begin
+  if (P = nil) or
+     (Sep <= ' ') or
+     (Esc = #0) then
+    result := ''
+  else
+  begin
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P); // trim left
+    S := P;
+    while (S^ <> #0) and
+          ((S^ <> Sep) or
+           ((S > P) and
+            (S[-1] = Esc))) do // ignore e.g. \. if Sep='.' and Esc='\'
       inc(S);
     E := S;
     while (E > P) and
