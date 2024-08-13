@@ -592,8 +592,11 @@ type
     /// return all Items[].Attributes.Get(AttributeName) as a sorted array
     function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
     /// add all result as a TDocVariant object nested tree
-    // - the full CN will be used as path, and any attribute included with
-    // each object itself
+    // - the full CN will be used as path
+    // - attributes would be included as ObjectAttributeField (e.g. '_attr')
+    // fields (including the "objectName" value), unless ObjectAttributeField
+    // is '', and no attribute will be set; if ObjectAttributeField is '*' no
+    // sub-field will be generated, and attributes will be written directly
     procedure AppendTo(var Dvo: TDocVariantData;
       const ObjectAttributeField: RawUtf8);
     /// dump the result of a LDAP search into human readable form
@@ -981,6 +984,9 @@ type
     /// retrieve all pages of entries into a TDocVariant instance
     // - will contain the nested results as an object, generated from then
     // CN of the returned object names
+    // - attributes would be added as ObjectAttributeField (e.g. '_attr') fields,
+    // unless ObjectAttributeField is '', and no attribute will be added, or
+    // ObjectAttributeField is '*', and attributes are written as no sub-field
     function SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
       const ObjectAttributeField: RawUtf8 = '_attr'; SortByName: boolean = true): variant;
@@ -2256,7 +2262,7 @@ begin
         end;
       end;
   end;
-  // fallback to hexa if the input is not valid UTF-8 (as expected LDAP v3)
+  // fallback to hexa if the input is not valid UTF-8 (as expected with LDAP v3)
   if IsValidUtf8(s) then
     EnsureRawUtf8(s)
   else
@@ -2594,8 +2600,7 @@ begin
     if cn = '' then
       continue;
     o.Init(mNameValue, dvObject);
-    if (ObjectAttributeField <> '') and
-       (res.Attributes.Count <> 0) then
+    if ObjectAttributeField <> '' then
     begin
       a.Init(mNameValue, dvObject);
       a.Capacity := res.Attributes.Count + 1;
@@ -2605,7 +2610,10 @@ begin
         attr := res.Attributes.Items[j];
         a.AddValue(attr.AttributeName, attr.GetVariant);
       end;
-      o.AddValue(ObjectAttributeField, variant(a), {owned=}true);
+      if ObjectAttributeField = '*' then
+        o.AddOrUpdateFrom(variant(a), {onlymissing=}true)
+      else
+        o.AddValue(ObjectAttributeField, variant(a), {owned=}true);
       a.Clear;
     end;
     Dvo.SetValueByPath(cn, variant(o), {create=}true, '/', {update=}true);
