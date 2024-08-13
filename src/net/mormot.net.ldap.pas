@@ -2598,7 +2598,8 @@ begin
        (res.Attributes.Count <> 0) then
     begin
       a.Init(mNameValue, dvObject);
-      a.Capacity := res.Attributes.Count;
+      a.Capacity := res.Attributes.Count + 1;
+      a.AddValueFromText('objectName', res.ObjectName);
       for j := 0 to res.Attributes.Count - 1 do
       begin
         attr := res.Attributes.Items[j];
