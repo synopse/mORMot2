@@ -7425,7 +7425,6 @@ procedure TDocVariantData.SortByName(
   SortCompare: TUtf8Compare; SortCompareReversed, SortNested: boolean);
 var
   qs: TQuickSortDocVariant;
-  p: PVariant;
   v: PDocVariantData;
   n: integer;
 begin
@@ -7446,12 +7445,11 @@ begin
   if not SortNested then
     exit;
   n := VCount;
-  p := pointer(VValue);
   repeat
-    if _SafeObject(p^, v) and
+    if _SafeObject(qs.values[0], v) and
        (v^.VCount > 0) then
-      v^.SortByName(SortCompare, SortCompareReversed, true);
-    inc(p);
+      v^.SortByName(SortCompare, SortCompareReversed, {nested=}true); // recursive
+    inc(PVariant(qs.values));
     dec(n);
   until n = 0;
 end;

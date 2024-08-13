@@ -3385,7 +3385,7 @@ end;
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
   HighValues: integer; Reverse: boolean): RawUtf8;
 var
-  i, len, seplen, L, last: integer;
+  i, len, seplen, L: integer;
   P: PAnsiChar;
 begin
   result := '';
