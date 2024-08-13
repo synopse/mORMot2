@@ -229,7 +229,8 @@ function CsvToRawUtf8DynArray(const Csv: RawUtf8; const Sep: RawUtf8 = ',';
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
-  const Sep: RawUtf8 = ','; HighValues: integer = -1): RawUtf8;
+  const Sep: RawUtf8 = ','; HighValues: integer = -1;
+  Reverse: boolean = false): RawUtf8;
 
 /// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
@@ -3382,9 +3383,9 @@ begin
 end;
 
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8; const Sep: RawUtf8;
-  HighValues: integer): RawUtf8;
+  HighValues: integer; Reverse: boolean): RawUtf8;
 var
-  i, len, seplen, L: integer;
+  i, len, seplen, L, last: integer;
   P: PAnsiChar;
 begin
   result := '';
@@ -3399,6 +3400,11 @@ begin
   FastSetString(result, len); // allocate the result buffer as once
   P := pointer(result);
   i := 0;
+  if Reverse then
+  begin
+    i := HighValues;
+    HighValues := 0;
+  end;
   repeat
     L := length(Values[i]);
     if L > 0 then
@@ -3413,7 +3419,10 @@ begin
       MoveFast(pointer(Sep)^, P^, seplen);
       inc(P, seplen);
     end;
-    inc(i);
+    if Reverse then
+      dec(i)
+    else
+      inc(i);
   until false;
 end;
 
