@@ -168,7 +168,7 @@ Purpose=List {\i Failure Modes and Effects Analysis} (FMEA)
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -235,7 +235,7 @@ Purpose=Interpret design inputs and specify software design features
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -295,7 +295,7 @@ Purpose=Perform a risk assessment of the SWRS implementation
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -448,6 +448,7 @@ Feel free to give your feedback at @https://synopse.info/forum asking new questi
 {\b All the objects seem non-VCL components, meaning need code each property and remember them all well.}\line This is indeed... a feature. The framework is not @*RAD@, but fully object-oriented. Thanks to the {\i Delphi} IDE, you can access all properties description via auto-completion and/or code navigation.  We tried to make the documentation exhaustive and accurate. Then you can still use RAD for UI design, but let business be abstracted in pure code. See e.g. the {\f1\fs20 mORMotVCL.pas} unit which can publish any ORM result as {\f1\fs2 TDataSource} for your UI.
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} will be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see below - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see below or @72@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see below - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See below for more details, and discovering a sample "blog" application.
+{\b I got a "Circular unit reference to 'variants' error" in recent Delphi.}\line This is a bug in the IDE, when importing a project: remove any {\f1\fs20 mormot.core} in  the "Unit-Prefix" entry of your project options - see @https://github.com/synopse/mORMot2/issues/240
 {\b Why is this framework named {\i mORMot}?}\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our computers are designed not to be isolated;\line - Because even if they are cute little rodents eating greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 : Quick start
@@ -462,7 +463,7 @@ SourceFile=mormot2tests.dpr;mormot.*.pas
 ; mormot.*.pas will find all official mORMot units in all IncludePath folders :)
 SourceIgnoreSymbol=select,check,open,connect,send,sqlite3,mORMot,JavaScript,cypher,execute,cache
 SourceIgnoreSymbolByUnit=SynCrossPlatformJSON,SynCrossPlatformREST,SynCrossPlatformSpecific,SynCrossPlatformTests
-Version=2.1
+Version=2.2
 TitleOffset=0
 DisplayName=mORMot2
 
@@ -479,7 +480,7 @@ Purpose=Summarize the software DI implementation for QA review
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -520,7 +521,7 @@ Purpose=Define the testing required for the updates to the mORMot Framework soft
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -580,7 +581,7 @@ Purpose=Describe all Test protocols with specific pass/fail criteria
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -665,7 +666,7 @@ ItemName=SCRS
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial Version
 ; Revision* multiple revision Table: ignored values are taken from current, older below
@@ -700,7 +701,7 @@ Purpose=Present all software modifications introduced in the current release
 PreparedBy=Arnaud Bouchez
 ReviewedBy=
 ApprovedBy=
-Revision=2.1
+Revision=2.2
 RevisionDate=
 RevisionDescription=Initial version
 ; Revision* multiple revision Table: ignored values are taken from current
