@@ -3350,8 +3350,10 @@ type
     function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
     /// sorts the dictionary content by their key names
     // - follow dvoNameCaseSensitive option by default, or supplied keycompare
+    // - can optionnaly sort the nested dictionaries of the dictionary
     // - once sorted, key lookup will use O(log(n)) - faster than default O(n)
-    procedure Sort(reverse: boolean = false; keycompare: TUtf8Compare = nil);
+    procedure Sort(reverse: boolean = false; keycompare: TUtf8Compare = nil;
+      nestedDict: boolean = false);
     /// updates (or inserts) the specified key/value pair
     procedure Update(const key: RawUtf8; const value: variant); overload;
     /// updates (or inserts) the specified key/value pairs
@@ -10382,7 +10384,7 @@ type
     function Reduce(const keys: array of RawUtf8): IDocDict;
     function SetDefault(const key: RawUtf8): variant; overload;
     function SetDefault(const key: RawUtf8; const default: variant): variant; overload;
-    procedure Sort(reverse: boolean; keycompare: TUtf8Compare);
+    procedure Sort(reverse: boolean; keycompare: TUtf8Compare; nestedDict: boolean);
     procedure Update(const key: RawUtf8; const value: variant); overload;
     procedure Update(const keyvalues: array of const); overload;
     procedure Update(const source: IDocDict; addonlymissing: boolean); overload;
@@ -11822,11 +11824,12 @@ begin
   result := default;
 end;
 
-procedure TDocDict.Sort(reverse: boolean; keycompare: TUtf8Compare);
+procedure TDocDict.Sort(reverse: boolean; keycompare: TUtf8Compare;
+  nestedDict: boolean);
 begin
   if not Assigned(keycompare) then
     keycompare := StrCompByCase[fValue^.IsCaseSensitive];
-  fValue^.SortByName(keycompare, reverse);
+  fValue^.SortByName(keycompare, reverse, nestedDict);
   if reverse then
     fSorted := nil
   else
