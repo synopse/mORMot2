@@ -1524,7 +1524,7 @@ begin
   result := '';
   if DN = '' then
     exit;
-  ParseDN(DN, dc, ou, cn);
+  ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true);
   result := RawUtf8ArrayToCsv(dc, '.');
   if ou <> nil then
     Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(ou, '/', -1, {reverse=}true));
