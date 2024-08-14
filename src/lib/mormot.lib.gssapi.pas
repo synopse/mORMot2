@@ -183,7 +183,7 @@ const
     elements: @gss_mech_krb5);
   GSS_C_MECH_KRB5: gss_OID = @gss_mech_krb5_desc;
 
-  // raw 1.3.6.1.5.5.2 OID
+  // raw 1.3.6.1.5.5.2 OID for SPNEGO Simple and Protected Negotiation Mechanism
   // {iso(1) org(3) dod(6) internet(1) security(5) mechanisms(5) snego(2)}
   gss_mech_spnego: array [0..5] of byte = (
     43, 6, 1, 5, 5, 2);
@@ -191,6 +191,17 @@ const
     length: SizeOf(gss_mech_spnego);
     elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
+
+  // raw 1.3.6.1.4.1.311.2.2.10 OID for GS2-NTLM (NTLM) Mechanism
+  // {iso(1) identified-organization(3) dod(6) internet(1) private(4)
+  //  enterprise(1) 311 2 2 10}
+  gss_mech_ntlm: array [0..9] of byte = (
+    $2b, $06, $01, $04, $01, $82, $37, $02, $02, $0a);
+  gss_mech_ntlm_desc: gss_OID_desc = (
+    length: SizeOf(gss_mech_ntlm);
+    elements: @gss_mech_ntlm);
+  GSS_C_MECH_NTLM: gss_OID = @gss_mech_ntlm_desc;
+
 
 type
   TGssApi = class(TSynLibrary)
