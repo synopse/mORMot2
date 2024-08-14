@@ -84,7 +84,7 @@ type
 
 const
   GSS_C_NO_NAME = nil;
-  GSS_C_NO_OID = nil;
+  GSS_C_NO_OID  = nil;
 
   GSS_C_GSS_CODE  = 1;
   GSS_C_MECH_CODE = 2;
@@ -95,9 +95,18 @@ const
   GSS_C_INITIATE  = 1;
   GSS_C_ACCEPT    = 2;
 
-  GSS_C_MUTUAL_FLAG = 2;
-  GSS_C_CONF_FLAG   = 16;
-  GSS_C_INTEG_FLAG  = 32;
+  // Request that remote peer authenticate itself
+  GSS_C_MUTUAL_FLAG   = 2;
+  // Enable replay detection for messages protected with gss_wrap or gss_get_mic
+  GSS_C_REPLAY_FLAG   = 4;
+  // Enable detection of out-of-sequence protected messages
+  GSS_C_SEQUENCE_FLAG = 8;
+  // Request that confidentiality service be made available (via gss_wrap).
+  GSS_C_CONF_FLAG     = 16;
+  // Request that integrity service be made available (via gss_wrap or gss_get_mic)
+  GSS_C_INTEG_FLAG    = 32;
+  // Do not reveal the initiator's identity to the acceptor
+  GSS_C_ANON_FLAG     = 64;
 
   GSS_C_CALLING_ERROR_OFFSET = 24;
   GSS_C_ROUTINE_ERROR_OFFSET = 16;
@@ -113,14 +122,57 @@ const
   GSS_S_UNSEQ_TOKEN     = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 3);
   GSS_S_GAP_TOKEN       = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 4);
 
-  // raw 1.3.6.1.5.5.2 OID
-  // {iso(1) org(3) dod(6) internet(1) security(5) mechanisms(5) snego(2)}
-  gss_mech_spnego: array [0..5] of byte = (
-    43, 6, 1, 5, 5, 2);
-  gss_mech_spnego_desc: gss_OID_desc = (
-    length: SizeOf(gss_mech_spnego);
-    elements: @gss_mech_spnego);
-  GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
+  // https://github.com/krb5/krb5/blob/master/src/lib/gssapi/generic/gssapi_generic.c#L35
+
+  // raw 1.2.840.113554.1.2.1.1 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
+  //  generic(1) user-name(1)}
+  gss_nt_user_name: array [0..9] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
+  gss_nt_user_name_desc: gss_OID_desc = (
+    length: SizeOf(gss_nt_user_name);
+    elements: @gss_nt_user_name);
+  GSS_C_NT_USER_NAME: gss_OID = @gss_nt_user_name_desc;
+
+  // raw 1.2.840.113554.1.2.1.2 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
+  //  generic(1) machine_uid_name(2)}
+  gss_nt_machine_name: array [0..9] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 1, 2);
+  gss_nt_machine_name_desc: gss_OID_desc = (
+    length: SizeOf(gss_nt_machine_name);
+    elements: @gss_nt_machine_name);
+  GSS_C_NT_MACHINE_UID_NAME: gss_OID = @gss_nt_machine_name_desc;
+
+  // raw 1.2.840.113554.1.2.1.3 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
+  //  generic(1) string_uid_name(3)}
+  gss_nt_stringuidname_name: array [0..9] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 1, 3);
+  gss_nt_stringuidname_name_desc: gss_OID_desc = (
+    length: SizeOf(gss_nt_stringuidname_name);
+    elements: @gss_nt_stringuidname_name);
+  GSS_C_NT_STRING_UID_NAME: gss_OID = @gss_nt_stringuidname_name_desc;
+
+  // raw 1.2.840.113554.1.2.1.2 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
+  //  generic(1) service_name(4)}
+  gss_nt_hostbased_name: array [0..9] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 1, 4);
+  gss_nt_hostbased_name_desc: gss_OID_desc = (
+    length: SizeOf(gss_nt_hostbased_name);
+    elements: @gss_nt_hostbased_name);
+  GSS_C_NT_HOSTBASED_SERVICE: gss_OID = @gss_nt_hostbased_name_desc;
+
+  // raw 1.2.840.113554.1.2.2.1 OID
+  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2)
+  //  krb5(2) krb5-name(1)}
+  gss_nt_krb5_name: array [0..9] of byte = (
+    42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
+  gss_nt_krb5_name_desc: gss_OID_desc = (
+    length: SizeOf(gss_nt_krb5_name);
+    elements: @gss_nt_krb5_name);
+  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
 
   // raw 1.2.840.113554.1.2.2 OID
   // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) krb5(2)}
@@ -131,24 +183,14 @@ const
     elements: @gss_mech_krb5);
   GSS_C_MECH_KRB5: gss_OID = @gss_mech_krb5_desc;
 
-  // raw 1.2.840.113554.1.2.2.1 OID
-  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) krb5(2) krb5-name(1)}
-  gss_nt_krb5_name: array [0..9] of byte = (
-    42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
-  gss_nt_krb5_name_desc: gss_OID_desc = (
-    length: SizeOf(gss_nt_krb5_name);
-    elements: @gss_nt_krb5_name);
-  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
-
-  // raw 1.2.840.113554.1.2.1.1 OID
-  // {iso(1) member-body(2) us(840) mit(113554) infosys(1) gssapi(2) generic(1) user-name(1)}
-  gss_nt_user_name: array [0..9] of byte = (
-    42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
-  gss_nt_user_name_desc: gss_OID_desc = (
-    length: SizeOf(gss_nt_user_name);
-    elements: @gss_nt_user_name);
-  GSS_C_NT_USER_NAME: gss_OID = @gss_nt_user_name_desc;
-
+  // raw 1.3.6.1.5.5.2 OID
+  // {iso(1) org(3) dod(6) internet(1) security(5) mechanisms(5) snego(2)}
+  gss_mech_spnego: array [0..5] of byte = (
+    43, 6, 1, 5, 5, 2);
+  gss_mech_spnego_desc: gss_OID_desc = (
+    length: SizeOf(gss_mech_spnego);
+    elements: @gss_mech_spnego);
+  GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
 
 type
   TGssApi = class(TSynLibrary)
@@ -751,7 +793,7 @@ begin
         SetLength(oid^[i], length + SizeOf(gss_OID_desc));
         o := pointer(oid^[i]);
         o^.length := length;
-        o^.elements := PAnsiChar(o) + SizeOf(o^);
+        o^.elements := PAnsiChar(o) + SizeOf(o^); // points just after oid_desc
         MoveFast(elements^, o^.elements^, length);
       end;
     GssApi.gss_inquire_saslname_for_mech(
