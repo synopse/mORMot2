@@ -846,8 +846,6 @@ begin
     InBuf.value := pointer(aInData);
     OutBuf.length := 0;
     OutBuf.value := nil;
-    if aMech = nil then
-      aMech := GSS_C_MECH_SPNEGO;
     MajStatus := GssApi.gss_init_sec_context(MinStatus, aSecContext.CredHandle,
       aSecContext.CtxHandle, TargetName, aMech,
       CtxReqAttr, GSS_C_INDEFINITE, nil, @InBuf, nil, @OutBuf, @CtxAttr, nil);
@@ -862,16 +860,13 @@ begin
   end;
 end;
 
-function CredMech(var mech: gss_OID; var tmp: gss_OID_set_desc): gss_OID_set;
+procedure SetCredMech(var mech: gss_OID; var mechs: gss_OID_set_desc);
 begin
+  RequireGssApi;
   if mech = nil then
-    result := nil
-  else
-  begin
-    result := @tmp;
-    tmp.count := 1;
-    tmp.elements := @mech;
-  end;
+    mech := GSS_C_MECH_SPNEGO;
+  mechs.count := 1;
+  mechs.elements := pointer(mech);
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
@@ -880,15 +875,15 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 var
   MajStatus, MinStatus: cardinal;
   SecKerberosSpn: RawUtf8;
-  tmp: gss_OID_set_desc;
+  mechs: gss_OID_set_desc;
 begin
-  RequireGssApi;
+  SetCredMech(aMech, mechs);
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for the current user
     aSecContext.CreatedTick64 := GetTickCount64();
     MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
-    CredMech(aMech, tmp), GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      @mechs, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
@@ -909,9 +904,9 @@ var
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
   SecKerberosSpn: RawUtf8;
-  tmp: gss_OID_set_desc;
+  mechs: gss_OID_set_desc;
 begin
-  RequireGssApi;
+  SetCredMech(aMech, mechs);
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for those credentials
