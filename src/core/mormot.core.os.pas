@@ -4382,9 +4382,9 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
-    {$ifndef FPC_ASMX64}
+    {$ifndef ASMX64}
     procedure ReadOnlyLockSpin;
-    {$endif FPC_ASMX64}
+    {$endif ASMX64}
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -4404,7 +4404,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
-      {$ifdef HASINLINE} {$ifndef FPC_ASMX64} inline; {$endif} {$endif}
+      {$ifdef HASINLINE} {$ifndef ASMX64} inline; {$endif} {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -9805,10 +9805,13 @@ begin
 end;
 
 // dedicated asm for this most simple (and used) method
-{$ifdef FPC_ASMX64} // some Delphi version was reported to fail with no clue why
+{$ifdef ASMX64}
 
 procedure TRWLock.ReadOnlyLock;
-asm     // stack frame is required since we may call SwitchToThread
+// stack frame is required (at least on Windows) since it may call SwitchToThread
+var
+  backup: pointer; // better than push/pop since we have a stack frame
+asm
         {$ifdef SYSVABI}
         mov     rcx, rdi      // rcx = self
         {$endif SYSVABI}
@@ -9821,9 +9824,9 @@ asm     // stack frame is required since we may call SwitchToThread
         pause
         dec     r8d
         jnz     @spin
-        push    rcx
+        mov     qword ptr [backup], rcx
         call    SwitchToThread
-        pop     rcx
+        mov     rcx, qword ptr [backup] // restore for the wait loop
         jmp     @retry
 @done:  // restore the stack frame
 end;
@@ -9852,7 +9855,7 @@ begin
         LockedExc(Flags, f + 4, f);
 end;
 
-{$endif FPC_ASMX64}
+{$endif ASMX64}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin

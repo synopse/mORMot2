@@ -7615,7 +7615,7 @@ begin
     P := pointer(result);
     P[0] := 'X';
     P[1] := '''';
-    BinToHex(RawBlob, P + 2, RawBlobLength);
+    mormot.core.text.BinToHex(RawBlob, P + 2, RawBlobLength);
     P[RawBlobLength * 2 + 2] := '''';
   end;
 end;
