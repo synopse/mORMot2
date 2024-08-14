@@ -62,6 +62,8 @@ type
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
+    /// validate THttpProxyCache process
+    procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -778,7 +780,9 @@ begin
                 one.Settings.TargetPort := LDAP_TLS_PORT; // force TLS
                 if not one.Bind then
                 begin
-                  CheckUtf8(false, 'ldaps:%', [clients[j]]);
+                  CheckUtf8(false, 'Bind % %:% tls=% res=% [%]',
+                    [one.Settings.TargetUri, one.Sock.RemoteIP, one.Sock.Port,
+                     one.Sock.TLS.Enabled, one.ResultCode, one.ResultString]);
                   continue;
                 end;
               end
