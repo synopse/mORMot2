@@ -89,12 +89,13 @@ begin
     ExeDescription := 'mORMot '+ SYNOPSE_FRAMEWORK_VERSION + ' Regression Tests';
     Param('dns', 'a DNS #server name/IP for LDAP tests via Kerberos ' +
       {$ifdef OSWINDOWS}
-      'with current logged user');
+      'with current logged user or --ldapusr/--ldappwd');
       {$else}
-      'after kinit');
+      'after kinit user or --ldapusr/--ldappwd');
       {$endif OSWINDOWS}
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
+    Option('ldaps', 'force LDAPS connection + plain auth instead of Kerberos');
     Param('ntp', 'a NTP/SNTP #server name/IP to use instead of time.google.com');
     Option('nontp', 'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}

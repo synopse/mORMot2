@@ -772,22 +772,30 @@ begin
             begin
               one.Settings.UserName := usr;
               one.Settings.Password := pwd;
-              {$ifdef OSPOSIX}
-              // a valid current kinit session seems mandatory on GSSAPI,
-              // which makes Kerberos password authentication pointless
-              one.Settings.TargetPort := LDAP_TLS_PORT; // TLS needed for safety
-              if not one.Bind then
-              {$else}
-              //  Windows allow a kerberos connection from an unrolled computer
-              if not one.BindSaslKerberos then
-              {$endif OSPOSIX}
+              if Executable.Command.Option('ldaps') then
               begin
-                CheckUtf8(false, 'ldap:%', [clients[j]]);
-                continue;
+                // plain over TLS
+                one.Settings.TargetPort := LDAP_TLS_PORT; // force TLS
+                if not one.Bind then
+                begin
+                  CheckUtf8(false, 'ldaps:%', [clients[j]]);
+                  continue;
+                end;
+              end
+              else
+              begin
+                // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
+                if not one.BindSaslKerberos then
+                begin
+                  CheckUtf8(false, 'ldap:%', [clients[j]]);
+                  continue;
+                end;
               end;
             end
-            else if not one.BindSaslKerberos then
-              continue;
+            else
+              // Windows/SSPI and POSIX/GSSAPI with a prior loggued user (kinit)
+              if not one.BindSaslKerberos then
+                continue;
             txt := '';
             if clients[j] = main then
               txt := ' (main)';
