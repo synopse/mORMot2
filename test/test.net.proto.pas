@@ -62,8 +62,6 @@ type
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
-    /// validate THttpProxyCache process
-    procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients (and NTP/SNTP)
