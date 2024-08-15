@@ -3232,7 +3232,7 @@ begin
   for i := 0 to high(c) do
     c[i] := Random32;
   QuickSortInteger(@c, 0, high(c));
-  for i := 1 to high(c) do
+  for i := 0 to high(c) - 1 do
     Check(c[i + 1] <> c[i], 'unique Random32');
   timer.Start;
   Check(Random32(0) = 0);
