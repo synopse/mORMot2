@@ -322,8 +322,8 @@ type
     // - Objects[] will be filled with pointer(ID)
     // - call internally ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
-    // - if IDToIndex is set, its value will be replaced with the index in
-    // Strings.Objects[] where ID=IDToIndex^
+    // - if IDToIndex is set (to a true TID variable, not an integer), its value
+    // will be replaced with the index in Strings.Objects[] where ID=IDToIndex^
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function OneFieldValues(Table: TOrmClass; const FieldName, WhereClause: RawUtf8;
       Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
@@ -628,6 +628,7 @@ type
     // as a true array of values (in contrast to the RetrieveListJson method)
     // - warning: under FPC, we observed that assigning the result of this
     // method to a local variable may circumvent a memory leak FPC bug
+    // - warning: FirstRecordID/LastRecordID should be true TID variables, not integer
     function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName, FieldsCsv: RawUtf8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
@@ -650,6 +651,7 @@ type
     // as a true array of values (in contrast to the RetrieveListJson method)
     // - warning: under FPC, we observed that assigning the result of this
     // method to a local variable may circumvent a memory leak FPC bug
+    // - warning: FirstRecordID/LastRecordID should be true TID variables, not integer
     function RetrieveDocVariantArray(Table: TOrmClass;
       const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8;
       const BoundsSqlWhere: array of const; const FieldsCsv: RawUtf8;
@@ -744,6 +746,8 @@ type
     // and fields renaming, so the JSON result may not be what you would expect
     // - return a result set as JSON on success, '' on failure
     // - will call EngineList() abstract method to retrieve its JSON content
+    // - note that ReturnedRowCount should be either nil or a true PtrInt variable
+    // (not a plain integer nor Int64) to avoid GPF or invalid numbers
     function ExecuteJson(const Tables: array of TOrmClass;
       const SQL: RawUtf8; ForceAjax: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJson;
@@ -1259,7 +1263,8 @@ type
     // - return true if Data is updated successfully, or false on any error
     // during data retrieval from server (e.g. if the TOrm has been deleted)
     // - if Data contains only one TOrmTableJson, PCurrentRow can point to the
-    // current selected row of this table, in order to refresh its value
+    // current selected row of this table, in order to refresh its value (use
+    // a true integer variable here, not a PtrInt nor Int64)
     // - use this method to refresh the client UI, e.g. via a timer
     // - is defined here and not in IRestOrmClient since it is very specific
     function UpdateFromServer(const Data: array of TObject; out Refreshed: boolean;
@@ -1948,8 +1953,8 @@ type
     //  if the custom validation failed, or '' if the validation was successful:
     //  in this later case, all default registered TSynValidate are processed
     // - the default aFields parameter will process all fields
-    // - if aInvalidFieldIndex is set, it will contain the first invalid field
-    //  index found
+    // - if aInvalidFieldIndex (should be a plain integer, not PtrInt nor Int64)
+    // is set, it will contain the first invalid field index found
     // - caller SHOULD always call the Filter() method before calling Validate()
     function Validate(const aRest: IRestOrm;
       const aFields: TFieldBits = [0.. MAX_SQLFIELDS - 1];
@@ -1959,7 +1964,8 @@ type
     // - this version will call the overloaded Validate() method above
     // - returns '' if all field names were correct and processed, or an
     // explicit error message (translated in the current language) on error
-    // - if aInvalidFieldIndex is set, it will contain the first invalid field index
+    // - if aInvalidFieldIndex (should be a plain integer, not PtrInt nor Int64)
+    // is set, it will contain the first invalid field index
     function Validate(const aRest: IRestOrm; const aFields: array of PUtf8Char;
       aInvalidFieldIndex: PInteger = nil; aValidator: PSynValidate = nil): string; overload;
     /// filter (transform) then validate the specified fields values of the TOrm
@@ -2963,7 +2969,8 @@ type
     /// search a text value inside the table data in all fields
     // - the text value must already be uppercased 7-bits ANSI encoded
     // - return the Row on success, 0 on error
-    // - search on all fields, returning field found in FieldIndex (if not nil)
+    // - search on all fields, returning field found in FieldIndex (if not nil) -
+    // it should point to a plain integer variable, not PtrInt nor Int64
     // - you can specify a Soundex pronunciation to use, or leave as sndxNone for
     // standard case insensitive character match; aUpperValue can optional
     // indicate a Soundex search, by predeceding the searched text with % for
@@ -3113,6 +3120,7 @@ type
     // - call SortFields() if was already done for this TOrmTable
     // - the conversion into PPUtf8CharArray is made inplace and is very fast
     // (only one memory buffer is allocated for the whole data)
+    // - optional PCurrentRow should be a true integer variable, not PtrInt/Int64
     function UpdateFrom(const aJson: RawUtf8; var Refreshed: boolean;
       PCurrentRow: PInteger): boolean;
 
@@ -4065,8 +4073,9 @@ type
     /// release associated memory
     destructor Destroy; override;
     /// add the class if it doesn't exist yet
-    // - return index in Tables[] if not existing yet and successfully added (in this case,
-    // aTableIndexCreated^ is set to the newly created index in Tables[])
+    // - return index in Tables[] if not existing yet and successfully added  -in
+    // this case, aTableIndexCreated^ (which should be a true integer variable,
+    // not PtrInt nor Int64) is set to the newly created index in Tables[]
     // - supplied class will be redefined as non-virtual: VirtualTableExternalRegister
     // explicit call is to be made if table should be managed as external
     // - return FALSE if already present, or TRUE if was added to the internal list
