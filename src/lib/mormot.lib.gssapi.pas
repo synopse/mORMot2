@@ -489,8 +489,10 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - you can specify an optional Mechanism OID - default is SPNEGO
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
-// - on MacOS, the system GSSAPI library fails to initialize with user credentials:
-// the workaround is to provide your own libgssapi_krb5.dylib in GssLib_Custom
+// - warning: on MacOS, the system GSSAPI library seems to create a session-wide
+// token (as if a kinit was made), whereas it should only create a transient
+// token in memory, so it is pretty unsafe to use; a workaround is to provide
+// your own libgssapi_krb5.dylib in GssLib_Custom
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
@@ -947,18 +949,28 @@ var
   MajStatus, MinStatus: cardinal;
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
-  SecKerberosSpn: RawUtf8;
+  SecKerberosSpn, n , p, u: RawUtf8;
   m: gss_OID_set;
   mechs: gss_OID_set_desc;
 begin
   m := SetCredMech(aMech, mechs);
+  if aSecKerberosSpn <> '' then
+    SecKerberosSpn := aSecKerberosSpn
+  else
+    SecKerberosSpn := ForceSecKerberosSpn;
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for those credentials
     UserName := nil;
     aSecContext.CreatedTick64 := GetTickCount64;
-    InBuf.length := Length(aUserName);
-    InBuf.value := pointer(aUserName);
+    u := aUserName;
+    Split(u, '@', n, p);
+    if p = '' then
+      p := SplitRight(SecKerberosSpn, '@'); // try to extract the SPN
+    if p <> '' then
+      u := n + '@' + UpperCase(p); // force upcase to avoid enduser confusion
+    InBuf.length := Length(u);
+    InBuf.value := pointer(u);
     MajStatus := GssApi.gss_import_name(
       MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, UserName);
     GccCheck(MajStatus, MinStatus, 'Failed to import UserName');
@@ -979,10 +991,6 @@ begin
     GccCheck(MajStatus, MinStatus,
       'Failed to acquire credentials for specified user');
   end;
-  if aSecKerberosSpn <> '' then
-    SecKerberosSpn := aSecKerberosSpn
-  else
-    SecKerberosSpn := ForceSecKerberosSpn;
   result := ClientSspiAuthWorker(
     aSecContext, aInData, SecKerberosSpn, aOutData, aMech);
 end;
