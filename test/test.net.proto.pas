@@ -781,9 +781,8 @@ begin
                 one.Settings.TargetPort := LDAP_TLS_PORT; // force TLS
                 if not one.Bind then
                 begin
-                  CheckUtf8(false, 'Bind % %:% tls=% res=% [%]%',
-                    [one.Settings.TargetUri, one.Sock.RemoteIP, one.Sock.Port,
-                     one.Sock.TLS.Enabled, one.ResultCode, one.ResultString, txt]);
+                  CheckUtf8(false, 'Bind % res=% [%]%',
+                    [one.Settings.TargetUri, one.ResultCode, one.ResultString, txt]);
                   continue;
                 end;
               end
@@ -792,7 +791,8 @@ begin
                 // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
                 if not one.BindSaslKerberos then
                 begin
-                  CheckUtf8(false, '%@ldap:%%', [usr, clients[j], txt]);
+                  CheckUtf8(false, '%@ldap:% [%]%',
+                    [usr, clients[j], one.ResultString, txt]);
                   continue;
                 end;
               end;
@@ -801,7 +801,8 @@ begin
               // Windows/SSPI and POSIX/GSSAPI with a prior loggued user (kinit)
               if not one.BindSaslKerberos then
               begin
-                CheckUtf8(false, 'currentuser@ldap:%%', [clients[j], txt]);
+                CheckUtf8(false, 'currentuser@ldap:% [%]%',
+                  [clients[j], one.ResultString, txt]);
                 continue;
               end;
             Check(one.NetbiosDN <> '', 'NetbiosDN');
