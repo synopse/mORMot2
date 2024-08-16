@@ -599,7 +599,7 @@ var
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
-  ntp, usr, pwd, main, txt: RawUtf8;
+  ntp, usr, pwd, ku, main, txt: RawUtf8;
   hasinternet: boolean;
 begin
   CheckEqual(1 shl ord(uacPartialSecretsRodc), $04000000, 'uacHigh');
@@ -779,7 +779,10 @@ begin
               begin
                 // plain over TLS
                 one.Settings.TargetPort := LDAP_TLS_PORT; // force TLS
-                if not one.Bind then
+                if one.Bind then
+                  AddConsole('connected to % with TLS + plain Bind',
+                    [one.Settings.TargetUri])
+                else
                 begin
                   CheckUtf8(false, 'Bind % res=% [%]%',
                     [one.Settings.TargetUri, one.ResultCode, one.ResultString, txt]);
@@ -787,21 +790,25 @@ begin
                 end;
               end
               else
-              begin
                 // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
-                if not one.BindSaslKerberos then
+                if one.BindSaslKerberos('', @ku) then
+                  AddConsole('connected to % with specific user % = %',
+                    [one.Settings.TargetUri, usr, ku])
+                else
                 begin
-                  CheckUtf8(false, '%@ldap:% [%]%',
+                  CheckUtf8(false, '% on ldap:% [%]%',
                     [usr, clients[j], one.ResultString, txt]);
                   continue;
                 end;
-              end;
             end
             else
               // Windows/SSPI and POSIX/GSSAPI with a prior loggued user (kinit)
-              if not one.BindSaslKerberos then
+              if one.BindSaslKerberos('', @ku) then
+                AddConsole('connected to % with current Kerberos user %',
+                  [one.Settings.TargetUri, ku])
+              else
               begin
-                CheckUtf8(false, 'currentuser@ldap:% [%]%',
+                CheckUtf8(false, 'currentuser on ldap:% [%]%',
                   [clients[j], one.ResultString, txt]);
                 continue;
               end;
