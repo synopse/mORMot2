@@ -1164,9 +1164,11 @@ begin
       idAllowAll:
         result := false;
       idAllowed: // FastFindIntegerSorted() has branchless x86_64 asm
-        result := FastFindIntegerSorted(SortedID, ID) < 0;
+        result := FastFindIntegerSorted(
+                    pointer(SortedID), length(SortedID) - 1, ID) < 0;
       idDenied:
-        result := FastFindIntegerSorted(SortedID, ID) >= 0;
+        result := FastFindIntegerSorted(
+                    pointer(SortedID), length(SortedID) - 1, ID) >= 0;
     end;
 end;
 
@@ -1196,7 +1198,7 @@ begin
       StateID := idAllowed;
     idDenied:
       begin
-        i := FastFindIntegerSorted(SortedID, ID);
+        i := FastFindIntegerSorted(pointer(SortedID), length(SortedID) - 1, ID);
         if i < 0 then
           EServiceException.RaiseUtf8(
             'TServiceFactoryServer: Allow(%) after no matching Deny()', [ID]);
@@ -1223,7 +1225,7 @@ begin
       StateID := idDenied;
     idAllowed:
       begin
-        i := FastFindIntegerSorted(SortedID, ID);
+        i := FastFindIntegerSorted(pointer(SortedID), length(SortedID) - 1, ID);
         if i < 0 then
           EServiceException.RaiseUtf8(
             'TServiceFactoryServer: Deny(%) after no matching Allow()', [ID]);
