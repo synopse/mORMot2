@@ -880,13 +880,21 @@ begin
   end;
 end;
 
-procedure SetCredMech(var mech: gss_OID; var mechs: gss_OID_set_desc);
+function SetCredMech(var mech: gss_OID; var mechs: gss_OID_set_desc): gss_OID_set;
 begin
   RequireGssApi;
   if mech = nil then
     mech := GSS_C_MECH_SPNEGO;
+  {$ifdef OSDARWIN}
+  if copy(GssApi.LibraryPath, 1, 8) = '/System/' then
+  begin
+    result := nil; // circumvent weird MacOS system library limitation
+    exit;
+  end;
+  {$endif OSDARWIN}
   mechs.count := 1;
   mechs.elements := pointer(mech);
+  result := @mechs;
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
@@ -895,15 +903,16 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 var
   MajStatus, MinStatus: cardinal;
   SecKerberosSpn: RawUtf8;
+  m: gss_OID_set;
   mechs: gss_OID_set_desc;
 begin
-  SetCredMech(aMech, mechs);
+  m := SetCredMech(aMech, mechs);
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for the current user
     aSecContext.CreatedTick64 := GetTickCount64();
     MajStatus := GssApi.gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE,
-      @mechs, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
+      m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     GccCheck(MajStatus, MinStatus,
       'ClientSspiAuth: Failed to acquire credentials for current user');
   end;
@@ -924,9 +933,10 @@ var
   InBuf: gss_buffer_desc;
   UserName: gss_name_t;
   SecKerberosSpn: RawUtf8;
+  m: gss_OID_set;
   mechs: gss_OID_set_desc;
 begin
-  SetCredMech(aMech, mechs);
+  m := SetCredMech(aMech, mechs);
   if aSecContext.CredHandle = nil then
   begin
     // first call: create the needed context for those credentials
@@ -940,13 +950,13 @@ begin
     if aPassword = '' then
       // force the UserName
       MajStatus := GssApi.gss_acquire_cred(MinStatus, UserName,
-        GSS_C_INDEFINITE, @mechs, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil)
+        GSS_C_INDEFINITE, m, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil)
     else
     begin
       InBuf.length := Length(aPassword);
       InBuf.value := pointer(aPassword);
       MajStatus := GssApi.gss_acquire_cred_with_password(
-        MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, @mechs,
+        MinStatus, UserName, @InBuf, GSS_C_INDEFINITE, m,
         GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
     end;
     if UserName <> nil then
