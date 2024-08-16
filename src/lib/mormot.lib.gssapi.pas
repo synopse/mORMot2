@@ -341,6 +341,18 @@ type
   end;
 
 
+const
+  {$ifdef OSDARWIN}
+  GssMitDef     = 'libgssapi_krb5.dylib';
+  GssHeimdalDef = 'libgssapi.dylib';
+  GssOSDef      = '/System/Library/Frameworks/GSS.framework/GSS';
+  {$else}
+  GssMitDef     = 'libgssapi_krb5.so.2';
+  GssHeimdalDef = 'libgssapi.so.3';
+  GssOSDef      = '';
+  {$endif OSDARWIN}
+
+
 var
   /// access to the low-level libgssapi
   GssApi: TGssApi;
@@ -353,29 +365,27 @@ var
   // proper user/password credential without any previous kinit or logged user
   GssLib_Custom: TFileName = '';
 
-  /// library name of the system implementation of GSSAPI
-  // - only used on MacOS by default (GSS is available since 10.7 Lion in 2011)
-  // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
-  // LoadGssApi again
-  {$ifdef OSDARWIN}
-  GssLib_OS: TFileName = '/System/Library/Frameworks/GSS.framework/GSS';
-  {$else}
-  GssLib_OS: TFileName = '';
-  {$endif OSDARWIN}
-
   /// library name of the MIT implementation of GSSAPI
   // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
   // LoadGssApi again
-  GssLib_MIT: TFileName = 'libgssapi_krb5.so.2';
+  GssLib_MIT: TFileName = GssMitDef;
 
   /// library name of the Heimdal implementation of GSSAPI
   // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
   // LoadGssApi again
-  GssLib_Heimdal: TFileName = 'libgssapi.so.3';
+  GssLib_Heimdal: TFileName = GssHeimdalDef;
+
+  /// library name of the system implementation of GSSAPI
+  // - only used on MacOS by default (GSS is available since 10.7 Lion in 2011)
+  // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
+  // LoadGssApi again
+  GssLib_OS: TFileName = GssOSDef;
 
 
 /// dynamically load GSSAPI library
 // - do nothing if the library is already loaded
+// - will try LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal and
+// GssLib_OS in this specific order, and maybe from the executable folder
 procedure LoadGssApi(const LibraryName: TFileName = '');
 
 /// check whether GSSAPI library is loaded or not
@@ -640,19 +650,20 @@ var
   i: PtrInt;
   P: PPointerArray;
   api: TGssApi; // local instance for thread-safe load attempt
-  tried: RawUtf8;
+  tried: TFileName;
 begin
   if GssApi <> nil then
     // already loaded
     exit;
-  tried := LibraryName + GssLib_Custom + GssLib_OS + GssLib_MIT + GssLib_Heimdal;
+  tried := LibraryName + GssLib_Custom + GssLib_MIT + GssLib_Heimdal + GssLib_OS;
   if GssApiTried = tried then
     // try LoadLibrary() only if any of the .so names changed
     exit;
   GssApiTried := tried;
   api := TGssApi.Create;
+  api.TryFromExecutableFolder := true; // good idea to check local first
   if api.TryLoadLibrary(
-      [LibraryName, GssLib_Custom, GssLib_OS, GssLib_MIT, GssLib_Heimdal], nil) then
+      [LibraryName, GssLib_Custom, GssLib_MIT, GssLib_Heimdal, GssLib_OS], nil) then
   begin
     P := @@api.gss_import_name;
     for i := 0 to high(GSS_NAMES) do
