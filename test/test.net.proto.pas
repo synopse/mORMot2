@@ -762,6 +762,9 @@ begin
       end;
       for j := 0 to high(clients) do
       begin
+        txt := '';
+        if clients[j] = main then
+          txt := ' (main)';
         one := TLdapClient.Create;
         try
           one.Settings.TargetUri := clients[j];
@@ -778,9 +781,9 @@ begin
                 one.Settings.TargetPort := LDAP_TLS_PORT; // force TLS
                 if not one.Bind then
                 begin
-                  CheckUtf8(false, 'Bind % %:% tls=% res=% [%]',
+                  CheckUtf8(false, 'Bind % %:% tls=% res=% [%]%',
                     [one.Settings.TargetUri, one.Sock.RemoteIP, one.Sock.Port,
-                     one.Sock.TLS.Enabled, one.ResultCode, one.ResultString]);
+                     one.Sock.TLS.Enabled, one.ResultCode, one.ResultString, txt]);
                   continue;
                 end;
               end
@@ -789,7 +792,7 @@ begin
                 // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
                 if not one.BindSaslKerberos then
                 begin
-                  CheckUtf8(false, 'ldap:%', [clients[j]]);
+                  CheckUtf8(false, '%@ldap:%%', [usr, clients[j], txt]);
                   continue;
                 end;
               end;
@@ -797,10 +800,10 @@ begin
             else
               // Windows/SSPI and POSIX/GSSAPI with a prior loggued user (kinit)
               if not one.BindSaslKerberos then
+              begin
+                CheckUtf8(false, 'currentuser@ldap:%%', [clients[j], txt]);
                 continue;
-            txt := '';
-            if clients[j] = main then
-              txt := ' (main)';
+              end;
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
             Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
