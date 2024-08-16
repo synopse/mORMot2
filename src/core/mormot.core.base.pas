@@ -1573,7 +1573,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return index of Values[result]=Value
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif} // GPF on older Delphi
 
 /// fast O(log(n)) binary search of a 16-bit unsigned integer value in a sorted array
 // - use branchless asm on x86_64
