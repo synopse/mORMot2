@@ -349,6 +349,8 @@ var
   // - tried before OS/MIT/Heimdal standard alternatives
   // - you can overwrite with a custom value, make FreeAndNil(GssApi) and call
   // LoadGssApi again
+  // - may be used on MacOS e.g. with '/full/path/to/libgssapi_krb5.dylib' for
+  // proper user/password credential without any previous kinit or logged user
   GssLib_Custom: TFileName = '';
 
   /// library name of the system implementation of GSSAPI
@@ -477,6 +479,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // - you can specify an optional Mechanism OID - default is SPNEGO
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
+// - on MacOS, the system GSSAPI library fails to initialize with user credentials:
+// the workaround is to provide your own libgssapi_krb5.dylib in GssLib_Custom
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
