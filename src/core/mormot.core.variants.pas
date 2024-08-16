@@ -8755,7 +8755,7 @@ function TDocVariantData.SetValueByPath(const aPath: RawUtf8;
   aMergeExisting: boolean): PVariant;
 var
   csv: PUtf8Char;
-  v, d: PDocVariantData;
+  v, v2: PDocVariantData;
   ndx, namelen: PtrInt;
 begin
   result := nil;
@@ -8786,9 +8786,9 @@ begin
      (ndx >= 0) then
   begin
     result := @v^.VValue[ndx];
-    if _Safe(result^, d) then
+    if _Safe(result^, v2) then
     begin
-      d^.AddOrUpdateFrom(aValue);
+      v2^.AddOrUpdateFrom(aValue);
       exit;
     end;
   end;
