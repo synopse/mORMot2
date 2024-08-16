@@ -47,6 +47,7 @@ uses
   //mormot.db.rad.nexusdb,
   {$endif FPC}
   mormot.lib.openssl11,
+  mormot.lib.gssapi,
   mormot.crypt.x509,
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
@@ -100,11 +101,12 @@ begin
     Option('nontp', 'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
     // refine the OpenSSL library path - RegisterOpenSsl is done in Run method
-    OpenSslDefaultCrypto := Utf8ToString(
-      Param('libcrypto', 'the OpenSSL libcrypto #filename'));
-    OpenSslDefaultSsl := Utf8ToString(
-      Param('libssl', 'the OpenSSL libssl #filename'));
+    OpenSslDefaultCrypto := ParamS(['libcrypto'], 'the OpenSSL libcrypto #filename');
+    OpenSslDefaultSsl := ParamS(['libssl'], 'the OpenSSL libssl #filename');
     {$endif USE_OPENSSL}
+    {$ifdef OSPOSIX}
+    GssLib_Custom := ParamS(['libkrb5'], 'the Kerberos libgssapi #filename');
+    {$endif OSPOSIX}
   end;
 end;
 
