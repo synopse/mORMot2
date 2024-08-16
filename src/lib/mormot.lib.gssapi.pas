@@ -43,38 +43,37 @@ type
   gss_name_t_ptr = ^gss_name_t;
   gss_cred_id_t = pointer;
   gss_ctx_id_t = pointer;
+
+  // we need to circumvent non-standard definitions of MacOS
   {$ifdef OSDARWIN}
-  gss_length_t = cardinal; // no OM_STRING/xom.h on MacOS - see gssapi.hin
+  gss_length_t = cardinal; // no OM_STRING/xom.h on MacOS - OM_uint32 in gssapi.hin
   {$ifdef CPUINTEL}
   // #if defined(__APPLE__) && (defined(__ppc__) || defined(__ppc64__) || defined(__i386__) || defined(__x86_64__))
   {$A2} // #pragma pack(push,2)
   {$endif CPUINTEL}
-  gss_OID_desc = record
-    length: gss_length_t;
-    elements: pointer;
-  end;
   {$else}
   gss_length_t = PtrUInt;
+  {$endif OSDARWIN}
+
   gss_OID_desc = record
     length: gss_length_t;
     elements: pointer;
   end;
-  {$endif OSDARWIN}
-
   gss_OID = ^gss_OID_desc;
   gss_OID_ptr = ^gss_OID;
+
   gss_OID_array = array[word] of gss_OID_desc;
   gss_OID_descs = ^gss_OID_array;
 
   gss_OID_set_desc = record
-    count: PtrUInt;
+    count: PtrUInt; // size_t in all platforms
     elements: gss_OID_descs;
   end;
   gss_OID_set = ^gss_OID_set_desc;
   gss_OID_set_ptr = ^gss_OID_set;
 
   gss_buffer_desc = record
-    length: PtrUInt;
+    length: PtrUInt; // size_t in all platforms
     value: pointer;
   end;
   gss_buffer_t = ^gss_buffer_desc;
@@ -89,6 +88,7 @@ const
   GSS_C_GSS_CODE  = 1;
   GSS_C_MECH_CODE = 2;
 
+  // Expiration time of 2^32-1 seconds means infinite lifetime
   GSS_C_INDEFINITE = $FFFFFFFF;
 
   GSS_C_BOTH      = 0;
