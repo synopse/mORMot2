@@ -12,6 +12,7 @@ unit mormot.lib.sspi;
    - Middle-Level SSPI Wrappers
    - High-Level Client and Server Authentication using SSPI
    - Lan Manager Access Functions
+   - Windows Application Installation and Servicing (msi)
 
   *****************************************************************************
 
@@ -1017,6 +1018,29 @@ function GetLocalGroups(const server: RawUtf8 = ''): TRawUtf8DynArray;
 function GetLocalGroupMembers(const server, group: RawUtf8): TRawUtf8DynArray;
 
 
+{ ****************** Windows Application Installation and Servicing (msi) }
+
+{ some low-level msi.dll API definitions }
+
+type
+  TMsiHandle = type cardinal;
+
+function MsiOpenProductW(szProduct: PWideChar; out hProduct: TMsiHandle): cardinal; stdcall;
+function MsiGetProductPropertyW(hProduct: TMsiHandle; szProperty, lpValueBuf: PWideChar;
+  pcchValueBuf: PCardinal): cardinal; stdcall;
+function MsiSetInternalUI(dwUILevel: cardinal; var phWnd: HWND): cardinal; stdcall;
+function MsiEnumProductA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
+function MsiOpenDatabaseW(DatabasePath, Persist: PWideChar; out hDb: TMsiHandle): cardinal; stdcall;
+function MsiDatabaseOpenView(hdb: TMsiHandle; query: PWideChar; out hView: TMsiHandle): cardinal; stdcall;
+function MsiViewExecute(hView, hReword: TMsiHandle): cardinal; stdcall;
+function MsiViewFetch(hView: TMsiHandle; out hReword: TMsiHandle): cardinal; stdcall;
+function MsiViewClose(hView: TMsiHandle): cardinal; stdcall;
+function MsiRecordGetStringW(hRecord: TMsiHandle; iField: cardinal;
+  szValueBuf: PWideChar; var pcchValueBuf: cardinal): cardinal; stdcall;
+function MsiCloseHandle(hAny: TMsiHandle): cardinal; stdcall;
+
+
+
 implementation
 
 
@@ -1102,8 +1126,7 @@ function CryptFindOIDInfo;                  external crypt32;
 
 { TSecBuffer }
 
-procedure TSecBuffer.Init(aType: cardinal; aData: pointer;
-  aSize: cardinal);
+procedure TSecBuffer.Init(aType: cardinal; aData: pointer; aSize: cardinal);
 begin
   BufferType := aType;
   pvBuffer := aData;
@@ -2094,6 +2117,24 @@ begin
   srv.Done;
   grp.Done;
 end;
+
+
+{ ****************** Windows Application Installation and Servicing (msi) }
+
+const
+  msidll = 'msi.dll';
+
+function MsiOpenProductW;        external msidll;
+function MsiGetProductPropertyW; external msidll;
+function MsiSetInternalUI;       external msidll;
+function MsiEnumProductA;        external msidll;
+function MsiOpenDatabaseW;       external msidll;
+function MsiDatabaseOpenView;    external msidll;
+function MsiViewExecute;         external msidll;
+function MsiViewFetch;           external msidll;
+function MsiViewClose;           external msidll;
+function MsiRecordGetStringW;    external msidll;
+function MsiCloseHandle;         external msidll;
 
 
 initialization
