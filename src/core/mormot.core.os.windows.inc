@@ -137,6 +137,11 @@ begin
   tmp.Done;
 end;
 
+procedure DoWin32PWideCharToFileName(P: PWideChar; var fn: TFileName);
+begin
+  fn := TFileName(SynUnicode(P)); // let the RTL do the conversion (if needed)
+end;
+
 // local RTL wrapper functions to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
 var
@@ -982,7 +987,7 @@ begin
            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
     exit;
   GetModuleFileNameW(hm, tmp, SizeOf(tmp));
-  result := string(SynUnicode(tmp));
+  DoWin32PWideCharToFileName(tmp, result);
 end;
 
 function FileIsWritable(const FileName: TFileName): boolean;
@@ -2805,7 +2810,7 @@ var
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
   // - late binding also ensure that we load libraries only when needed
-  SHGetFolderPath: function(hwnd: hwnd; csidl: integer; hToken: THandle;
+  SHGetFolderPathW: function(hwnd: hwnd; csidl: integer; hToken: THandle;
     dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
 
 const
@@ -2838,7 +2843,7 @@ const
     'TEMP',            // spTemp
     '');               // spLog
 var
-  tmp: array[0..MAX_PATH] of char;
+  tmp: array[0..MAX_PATH] of WideChar;
 begin
   result := '';
   case kind of
@@ -2860,18 +2865,18 @@ begin
     spTemp:
       begin
         // typically 'C:\Users\<user>\AppData\Local\Temp'
-        if GetTempPath(MAX_PATH, @tmp) <> 0 then
-          result := tmp; // retrieve from dedicated standard API
+        if GetTempPathW(MAX_PATH, @tmp) <> 0 then // first try Windows API
+          DoWin32PWideCharToFileName(tmp, result);
         if result = '' then
           result := GetEnvironmentVariable(_ENV[spTemp]); // fallback
       end;
   else
     if (CSIDL[kind] <> 0) and
-       DelayedProc(SHGetFolderPath, SHFolderDll, 'SHFolder.dll',
-         'SHGetFolderPath' + _AW) and
-       (SHGetFolderPath(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
+       DelayedProc(SHGetFolderPathW, SHFolderDll, 'SHFolder.dll',
+         'SHGetFolderPathW') and
+       (SHGetFolderPathW(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
       // retrieved from official CSIDL
-      result := tmp
+      DoWin32PWideCharToFileName(tmp, result)
     else
     begin
       // fallback to environment variables (very unlikely)

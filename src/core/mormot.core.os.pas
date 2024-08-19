@@ -1157,13 +1157,18 @@ function GetDelphiCompilerVersion: RawUtf8; deprecated;
 const
   /// a global constant to be appended for Windows Ansi or Wide API names
   // - match the Wide API on Delphi, since String=UnicodeString
+  // - you should not use this suffix, but the 'W' API everywhere, with proper
+  // conversion into RawUtf8 or TFileName/string
   _AW = 'W';
 
 {$else}
 
 const
   /// a global constant to be appended for Windows Ansi or Wide API names
-  // - match the Ansi API on FPC or oldest Delphi, where String=AnsiString
+  // - match the Ansi API oldest Delphi, where String=AnsiString
+  // - but DO NOT march the Ansi API on FPC, because Lazarus forces CP_UTF8, so
+  // you should NOT use this suffix, but the '*W' API everywhere, with proper
+  // conversion into RawUtf8 or TFileName/string
   _AW = 'A';
 
 type
@@ -4103,7 +4108,7 @@ function Utf8ToWin32PWideChar(const Text: RawUtf8;
   var dest: TSynTempBuffer): PWideChar;
 
 /// ask the Operating System to convert a file URL to a local file path
-// - only Windows has a such a PathCreateFromUrl() API
+// - only Windows has a such a PathCreateFromUrlW() API
 // - POSIX define this in mormot.net.http.pas, where TUri is available
 // - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
 function GetFileNameFromUrl(const Uri: string): TFileName;
