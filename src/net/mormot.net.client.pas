@@ -391,9 +391,9 @@ type
     fRedirected: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
-    fDigestAuthUserName: RawUtf8;
-    fDigestAuthPassword: SpiUtf8;
-    fDigestAuthAlgo: TDigestAlgo;
+    fAuthUserName: RawUtf8; // credentials used for DIGEST or SSPI
+    fAuthPassword: SpiUtf8;
+    fAuthDigestAlgo: TDigestAlgo;
     fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
@@ -479,6 +479,15 @@ type
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
       Algo: TDigestAlgo = daMD5_Sess);
     {$ifdef DOMAINRESTAUTH}
+    /// setup web authentication using Kerberos/NTLM via SSPI/GSSAPI for this instance
+    // - will store the user/paswword credentials, and set AuthorizeSspi callback
+    // - if Password is '', will search for an existing Kerberos token on UserName
+    // - an in-memory token will be used to authenticate the connection
+    // - WARNING: on MacOS, the default system GSSAPI stack seems to create a
+    // session-wide token (like kinit), not a transient token in memory - you
+    // may prefer to load a proper libgssapi_krb5.dylib instead
+    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
+      const KerberosSpn: RawUtf8 = '');
     /// web authentication callback of the current logged user using Kerberos/NTLM
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
@@ -1788,7 +1797,7 @@ end;
 
 destructor THttpClientSocket.Destroy;
 begin
-  FillZero(fDigestAuthPassword);
+  FillZero(fAuthPassword); // DIGEST and SSPI
   inherited Destroy;
 end;
 
@@ -2526,9 +2535,9 @@ end;
 procedure THttpClientSocket.AuthorizeDigest(const UserName: RawUtf8;
   const Password: SpiUtf8; Algo: TDigestAlgo);
 begin
-  fDigestAuthUserName := UserName;
-  fDigestAuthPassword := Password;
-  fDigestAuthAlgo := Algo;
+  fAuthUserName := UserName;
+  fAuthPassword := Password;
+  fAuthDigestAlgo := Algo;
   if (UserName = '') or
      (Algo = daUndefined) then
     OnAuthorize := nil
@@ -2545,8 +2554,8 @@ begin
   p := pointer(Authenticate);
   if IdemPChar(p, 'DIGEST ') then
   begin
-    auth := DigestClient(fDigestAuthAlgo, p + 7, Context.method, Context.url,
-      fDigestAuthUserName, fDigestAuthPassword);
+    auth := DigestClient(fAuthDigestAlgo, p + 7, Context.method, Context.url,
+      fAuthUserName, fAuthPassword);
     if auth <> '' then
     begin
       auth := 'Authorization: Digest ' + auth;
@@ -2581,7 +2590,11 @@ begin
     repeat
       FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
       datain := Base64ToBin(TrimU(datain));
-      ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
+      if Sender.fAuthUserName <> '' then // from AuthorizeSspiUser()
+        ClientSspiAuthWithPassword(sc, datain, Sender.fAuthUserName,
+          Sender.fAuthPassword, Sender.AuthorizeSspiSpn, dataout)
+      else                               // use current logged user
+        ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
       if dataout = '' then
         break;
       Context.header := OutHeader + BinToBase64(dataout);
@@ -2607,6 +2620,19 @@ begin
       'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
       'Authorization: ' + SECPKGNAMEHTTP + ' ');
   result := false; // final RequestInternal() was done within DoSspi()
+end;
+
+procedure THttpClientSocket.AuthorizeSspiUser(const UserName: RawUtf8;
+  const Password: SpiUtf8; const KerberosSpn: RawUtf8);
+begin
+  if not InitializeDomainAuth then
+    EHttpSocket.RaiseUtf8('%.AuthorizeSspiUser: no % available on this system',
+      [self, SECPKGNAMEAPI]);
+  fAuthUserName := UserName;
+  fAuthPassword := Password;
+  if KerberosSpn <> '' then
+    fAuthorizeSspiSpn := KerberosSpn;
+  fOnAuthorize := AuthorizeSspi;
 end;
 
 class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
