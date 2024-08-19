@@ -1166,9 +1166,9 @@ const
 const
   /// a global constant to be appended for Windows Ansi or Wide API names
   // - match the Ansi API oldest Delphi, where String=AnsiString
-  // - but DO NOT march the Ansi API on FPC, because Lazarus forces CP_UTF8, so
-  // you should NOT use this suffix, but the '*W' API everywhere, with proper
-  // conversion into RawUtf8 or TFileName/string
+  // - but won't always match the Ansi API on FPC, because Lazarus forces
+  // CP_UTF8, so you should NOT use this suffix, but the '*W' API everywhere,
+  // with proper conversion into RawUtf8 or TFileName/string
   _AW = 'A';
 
 type

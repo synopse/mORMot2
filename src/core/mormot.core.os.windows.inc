@@ -726,8 +726,9 @@ begin
   len := MAX_PATH;
   if DelayedProc(PathCreateFromUrlW, shlwapiDll, 'shlwapi.dll',
        'PathCreateFromUrlW') and
-     (PathCreateFromUrlW(@u, @fn, len, 0) = S_OK) then
+     (PathCreateFromUrlW(u.buf, @fn, len, 0) = S_OK) then
     DoWin32PWideCharToFileName(fn, result);
+  u.Done;
 end;
 
 const
