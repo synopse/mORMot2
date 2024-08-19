@@ -712,20 +712,22 @@ end;
 
 var
   shlwapiDll: THandle; // lazy loading (only by TNetClientProtocolFile)
-  PathCreateFromUrl: function(pszUrl, pszPath: PChar; var pcchPath: cardinal;
-    dwFlags: cardinal): HRESULT; stdcall;
+  PathCreateFromUrlW: function(pszUrl, pszPath: PWideChar;
+    var pcchPath: cardinal; dwFlags: cardinal): HRESULT; stdcall;
 
-function GetFileNameFromUrl(const Uri: string): TFileName;
+function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
   len: DWORD;
-  tmp: array[0..MAX_PATH] of char;
+  u: TSynTempBuffer;
+  fn: array[0..MAX_PATH] of WideChar;
 begin
   result := '';
+  Utf8ToWin32PWideChar(Uri, u);
   len := MAX_PATH;
-  if DelayedProc(PathCreateFromUrl, shlwapiDll, 'shlwapi.dll',
-       'PathCreateFromUrl' + _AW) and
-     (PathCreateFromUrl(pointer(Uri), @tmp, len, 0) = S_OK) then
-    result := tmp;
+  if DelayedProc(PathCreateFromUrlW, shlwapiDll, 'shlwapi.dll',
+       'PathCreateFromUrlW') and
+     (PathCreateFromUrlW(@u, @fn, len, 0) = S_OK) then
+    DoWin32PWideCharToFileName(fn, result);
 end;
 
 const

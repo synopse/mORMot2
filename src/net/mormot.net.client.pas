@@ -1610,7 +1610,7 @@ var
   fn: TFileName;
 begin
   // try PathCreateFromUrl() API on Windows, or parse using TUri on POSIX
-  fn := GetFileNameFromUrl(Utf8ToString(http.CommandResp));
+  fn := GetFileNameFromUrl(http.CommandResp);
   result := http.ContentFromFile(fn, -1); // into http.Content/ContentStream
   http.Headers := ''; // no custom headers
 end;

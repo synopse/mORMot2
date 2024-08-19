@@ -1127,11 +1127,6 @@ var
 
 {$endif NOEXCEPTIONINTERCEPT}
 
-function GetFileNameFromUrl(const Uri: string): TFileName;
-begin
-  result := ''; // no such native API on POSIX
-end;
-
 const
   faInvalidFile   = faDirectory;
   faDirectoryMask = faDirectory;

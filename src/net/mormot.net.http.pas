@@ -187,7 +187,7 @@ function UrlDecodeParam(P: PUtf8Char; const UpperName: RawUtf8;
 /// convert a file URL to a local file path using our TUri parser
 // - mormot.core.os.pas implements this on Windows via PathCreateFromUrl() API
 // - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
-function GetFileNameFromUrl(const Uri: string): TFileName;
+function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 
 {$endif OSPOSIX}
 
@@ -2889,12 +2889,12 @@ end;
 
 {$ifdef OSPOSIX}
 
-function GetFileNameFromUrl(const Uri: string): TFileName;
+function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
   u: TUri;
 begin
   result := '';
-  u.From(RawUtf8(Uri));
+  u.From(Uri);
   if (u.Server = '') or
      PropNameEquals(u.Server, 'localhost') or
      IsLocalHost(pointer(u.Server)) then // supports only local files

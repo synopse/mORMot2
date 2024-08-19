@@ -4111,7 +4111,7 @@ function Utf8ToWin32PWideChar(const Text: RawUtf8;
 // - only Windows has a such a PathCreateFromUrlW() API
 // - POSIX define this in mormot.net.http.pas, where TUri is available
 // - used e.g. by TNetClientProtocolFile to implement the 'file://' protocol
-function GetFileNameFromUrl(const Uri: string): TFileName;
+function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 
 {$else}
 
