@@ -295,8 +295,9 @@ type
   {$ifdef DOMAINRESTAUTH}
   { will use mormot.lib.sspi/gssapi units depending on the OS }
 
-  /// authentication of the current logged user using Windows Security Support
-  // Provider Interface (SSPI) or GSSAPI library on Linux
+  /// authentication of the current logged user using Kerberos or NTLM
+  // - calling the Security Support Provider Interface (SSPI) API on Windows,
+  // or GSSAPI on Linux
   // - is able to authenticate the currently logged user on the client side,
   // using either NTLM (Windows only) or Kerberos - it will allow to safely
   // authenticate on a mORMot server without prompting the user to enter its
@@ -309,6 +310,9 @@ type
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
+  // - WARNING: on MacOS, the default system GSSAPI stack seems to create a
+  // session-wide token (like kinit), not a transient token in memory - you
+  // may prefer to load a proper libgssapi_krb5.dylib instead
   TRestClientAuthenticationSspi = class(TRestClientAuthenticationSignedUri)
   protected
     class function ClientComputeSessionKey(Sender: TRestClientUri;

@@ -355,7 +355,7 @@ type
   // - could e.g. set Sender.AuthBearer/BasicAuthUserPassword then return
   // true to let the caller try again with the new headers
   // - if you return false, nothing happens and the 401 is reported back
-  // - more complex schemes (like SSPI) could be implemented within the
+  // - more complex schemes (like SSPI/Kerberos) could be implemented within the
   // callback - see e.g. THttpClientSocket.AuthorizeSspi class method
   TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
     var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean of object;
@@ -479,14 +479,16 @@ type
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
       Algo: TDigestAlgo = daMD5_Sess);
     {$ifdef DOMAINRESTAUTH}
-    /// web authentication of the current logged user using Windows Security
-    // Support Provider Interface (SSPI) or GSSAPI library on Linux
+    /// web authentication callback of the current logged user using Kerberos/NTLM
+    // - calling the Security Support Provider Interface (SSPI) API on Windows,
+    // or GSSAPI on Linux (only Kerboros)
     // - match the OnAuthorize: TOnHttpClientSocketAuthorize callback signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class function AuthorizeSspi(Sender: THttpClientSocket;
       var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
-    /// web authentication of the current logged user using Windows Security
-    // Support Provider Interface (SSPI) or GSSAPI library on Linux
+    /// proxy authentication callback of the current logged user using Kerberos/NTLM
+    // - calling the Security Support Provider Interface (SSPI) API on Windows,
+    // or GSSAPI on Linux (only Kerboros)
     // - match the OnProxyAuthorize: TOnHttpClientSocketAuthorize signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class function ProxyAuthorizeSspi(Sender: THttpClientSocket;

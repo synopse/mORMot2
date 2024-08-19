@@ -749,7 +749,7 @@ type
   // - at this point, Context.CipherName is set, but PeerInfo, PeerIssuer and
   // PeerSubject are not - it is up to the event to compute the PeerInfo value
   // - TLS is an opaque structure, typically an OpenSSL PSSL pointer, so you
-  // could use e.g. PSSL(TLS).PeerCertificates array
+  // could use e.g. PSSL(TLS).PeerCertificate or PSSL(TLS).PeerCertificates array
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
 
