@@ -802,6 +802,9 @@ function InitializeDomainAuth: boolean;
 
 
 const
+  /// the API available on this system to implement Kerberos/NTLM
+  SECPKGNAMEAPI = 'SSPI';
+
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '\';
 

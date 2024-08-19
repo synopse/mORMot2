@@ -531,6 +531,9 @@ procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 procedure ServerForceKeytab(const aKeytab: RawUtf8);
 
 const
+  /// the API available on this system to implement Kerberos
+  SECPKGNAMEAPI = 'GSSAPI';
+
   /// HTTP Challenge name
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
   SECPKGNAMEHTTP: RawUtf8 = 'Negotiate';
