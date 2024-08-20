@@ -688,6 +688,7 @@ type
     /// the X509 extensions of this certificate
     Extension: array of TWinCertExtension;
   end;
+  PWinCertInfo = ^TWinCertInfo;
 
 const
   WIN_CERT_USAGE: array[wkuCrlSign .. wkuDigitalSignature] of byte = (
@@ -1044,6 +1045,9 @@ function MsiRecordGetFieldCount(hRecord: TMsiHandle): cardinal; stdcall;
 function MsiRecordGetStringW(hRecord: TMsiHandle; iField: cardinal;
   szValueBuf: PWideChar; var pcchValueBuf: cardinal): cardinal; stdcall;
 function MsiCloseHandle(hAny: TMsiHandle): cardinal; stdcall;
+function MsiGetFileSignatureInformationW(szSignedObjectPath: PWideChar;
+  dwFlags: cardinal; var ppcCertContext: PCCERT_CONTEXT; pbHashData: PByte;
+  pcbHashData: PCardinal): HRESULT; stdcall;
 
 const
   /// read-only MsiOpenDatabaseW(), no persistent changes
@@ -1057,6 +1061,10 @@ const
   /// MsiOpenDatabaseW() creates new database, direct mode read/write
   MSIDBOPEN_CREATEDIRECT = PWideChar(4);
 
+  /// flag set for MsiGetFileSignatureInformationW() to return a fatal error
+  // for an invalid hash
+  MSI_INVALID_HASH_IS_FATAL = 1;
+
 /// low-level return a .msi record field value as UTF-8 text
 function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): boolean;
 
@@ -1068,6 +1076,13 @@ function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): bo
 function MsiExecuteQuery(const MsiFile: TFileName;
   out Records: TRawUtf8DynArrayDynArray;
   const Query: SynUnicode = 'SELECT * FROM Property'): string;
+
+/// verify a signed .msi or .exe file digital signature
+// - returns '' on success (valid signature), or an error message
+// - can optionally return the associated certificate decoded information
+// - warning: this complex API function may be slow (up to a few seconds)
+function MsiVerify(const MsiExeFile: TFileName;
+  Certificate: PWinCertInfo = nil; HashIgnore: boolean = false): string;
 
 
 implementation
@@ -2165,6 +2180,7 @@ function MsiViewClose;           external msidll;
 function MsiRecordGetFieldCount; external msidll;
 function MsiRecordGetStringW;    external msidll;
 function MsiCloseHandle;         external msidll;
+function MsiGetFileSignatureInformationW; external msidll;
 
 function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): boolean;
 var
@@ -2226,6 +2242,28 @@ begin
   else
     result := WinLastError('MsiExecuteQuery: unable to open file', res);
 end;
+
+function MsiVerify(const MsiExeFile: TFileName; Certificate: PWinCertInfo; HashIgnore: boolean): string;
+var
+  cc: PCCERT_CONTEXT;
+  res, flags: integer;
+begin
+  flags := 0;
+  if not HashIgnore then
+    flags := MSI_INVALID_HASH_IS_FATAL;
+  cc := nil;
+  res := MsiGetFileSignatureInformationW(pointer(SynUnicode(MsiExeFile)), Flags, cc, nil, nil);
+  if res <> NO_ERROR then
+  begin
+    result := WinLastError('MsiVerify: ', res);
+    exit;
+  end;
+  if Certificate <> nil then
+    WinCertCtxtDecode(cc, Certificate^);
+  CertFreeCertificateContext(cc);
+  result := '';
+end;
+
 
 
 initialization

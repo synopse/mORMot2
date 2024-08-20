@@ -9737,7 +9737,7 @@ begin
     else
       break;
     end;
-  result := ASN1_UTF8STRING;
+  result := ASN1_UTF8STRING; // need UTF-8 encoding
 end;
 
 function AsnText(const Text: RawUtf8): TAsnObject;
