@@ -1184,6 +1184,12 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitObjectFromVariants(const aNames: TRawUtf8DynArray;
        const aValues: TVariantDynArray; aOptions: TDocVariantOptions = []);
+    /// initialize a variant instance to store a document-based object from
+    // name/value arrays of RawUtf8
+    // - each aItems[] is expected to be of two items, as name/value pair
+    // - as returned e.g. by MsiExecuteQuery() from mormot.lib.sspi.pas
+    procedure InitObjectFromDual(const aItems: TRawUtf8DynArrayDynArray;
+      aOptions: TDocVariantOptions = JSON_FAST_FLOAT);
     /// initialize a variant instance to store a document-based object with a
     // single property
     // - the supplied path could be 'Main.Second.Third', to create nested
@@ -6309,6 +6315,26 @@ begin
     VName := aNames; // fast by-reference copy of VName[] and VValue[]
     VValue := aValues;
   end;
+end;
+
+procedure TDocVariantData.InitObjectFromDual(
+  const aItems: TRawUtf8DynArrayDynArray; aOptions: TDocVariantOptions);
+var
+  n: integer;
+  p: PRawUtf8DynArray;
+begin
+  Init(aOptions, dvObject);
+  n := length(aItems);
+  if n = 0 then
+    exit;
+  SetCapacity(n);
+  p := pointer(aItems);
+  repeat
+    if length(p^) = 2 then
+      AddValueFromText(p^[0], p^[1]);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TDocVariantData.InitObjectFromPath(const aPath: RawUtf8;
