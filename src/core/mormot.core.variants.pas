@@ -953,6 +953,8 @@ type
     procedure SetRawUtf8ByName(const aName, aValue: RawUtf8);
     function GetStringByName(const aName: RawUtf8): string;
     procedure SetStringByName(const aName: RawUtf8; const aValue: string);
+    function GetWideByName(const aName: RawUtf8): SynUnicode;
+    procedure SetWideByName(const aName: RawUtf8; const aValue: SynUnicode);
     function GetInt64ByName(const aName: RawUtf8): Int64;
     procedure SetInt64ByName(const aName: RawUtf8; const aValue: Int64);
     function GetBooleanByName(const aName: RawUtf8): boolean;
@@ -2159,6 +2161,11 @@ type
     // - S['prop'] := 'value' would add a new property, or overwrite an existing
     property S[const aName: RawUtf8]: string
       read GetStringByName write SetStringByName;
+    /// direct unicode string access to a dvObject UTF-8 stored property value from its name
+    // - just a wrapper around U[] property, to avoid a compilation warning when
+    // using UnicodeString/SynUnicode variables
+    property W[const aName: RawUtf8]: SynUnicode
+      read GetWideByName write SetWideByName;
     /// direct access to a dvObject integer stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
@@ -9136,6 +9143,11 @@ begin
   result := VariantToString(GetPVariantByName(aName)^);
 end;
 
+function TDocVariantData.GetWideByName(const aName: RawUtf8): SynUnicode;
+begin
+  Utf8ToSynUnicode(GetRawUtf8ByName(aName), result);
+end;
+
 procedure TDocVariantData.SetInt64ByName(const aName: RawUtf8;
   const aValue: Int64);
 begin
@@ -9151,6 +9163,12 @@ procedure TDocVariantData.SetStringByName(const aName: RawUtf8;
   const aValue: string);
 begin
   StringToVariant(aValue, GetOrAddPVariantByName(aName)^);
+end;
+
+procedure TDocVariantData.SetWideByName(const aName: RawUtf8;
+  const aValue: SynUnicode);
+begin
+  SetRawUtf8ByName(aName, SynUnicodeToUtf8(aValue));
 end;
 
 function TDocVariantData.GetBooleanByName(const aName: RawUtf8): boolean;
