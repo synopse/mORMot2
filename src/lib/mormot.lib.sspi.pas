@@ -1071,8 +1071,8 @@ function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): bo
 /// execute a query on a given .msi file
 // - return '' and the resultset as one array of record text fields on success
 // - or return a text error message
-// - default 'SELECT * FROM Property' query Records could be converted directly
-// via TDocVariantData.InitObjectFromDual()
+// - default 'SELECT * FROM Property' query result Records could be converted
+// directly via TDocVariantData.InitObjectFromDual()
 function MsiExecuteQuery(const MsiFile: TFileName;
   out Records: TRawUtf8DynArrayDynArray;
   const Query: SynUnicode = 'SELECT * FROM Property'): string;
@@ -2235,6 +2235,7 @@ begin
     finally
       MsiCloseHandle(h);
     end;
+    result := ''; // success
   except
     on E: Exception do
       result := E.Message;
@@ -2243,7 +2244,8 @@ begin
     result := WinLastError('MsiExecuteQuery: unable to open file', res);
 end;
 
-function MsiVerify(const MsiExeFile: TFileName; Certificate: PWinCertInfo; HashIgnore: boolean): string;
+function MsiVerify(const MsiExeFile: TFileName; Certificate: PWinCertInfo;
+  HashIgnore: boolean): string;
 var
   cc: PCCERT_CONTEXT;
   res, flags: integer;
@@ -2252,16 +2254,17 @@ begin
   if not HashIgnore then
     flags := MSI_INVALID_HASH_IS_FATAL;
   cc := nil;
-  res := MsiGetFileSignatureInformationW(pointer(SynUnicode(MsiExeFile)), Flags, cc, nil, nil);
+  res := MsiGetFileSignatureInformationW(
+    pointer(SynUnicode(MsiExeFile)), flags, cc, nil, nil);
   if res <> NO_ERROR then
   begin
-    result := WinLastError('MsiVerify: ', res);
+    result := WinLastError('MsiVerify:', res);
     exit;
   end;
   if Certificate <> nil then
     WinCertCtxtDecode(cc, Certificate^);
   CertFreeCertificateContext(cc);
-  result := '';
+  result := ''; // success
 end;
 
 
