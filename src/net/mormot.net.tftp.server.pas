@@ -95,6 +95,12 @@ type
 
 { ******************** TTftpServerThread Server Class }
 
+  /// event signature of the TTftpServerThread.OnConnect optional callback
+  // - you can change e.g. Context.FileName/FileNameFull
+  // - should return teNoError to continue the process
+  TOnTftpConnect = function(Sender: TTftpServerThread;
+    var Context: TTftpContext): TTftpError of object;
+
   /// server thread handling several TFTP connections
   // - this main thread binds the supplied UDP address:port, then process any
   // incoming requests from UDP packets and create TTftpConnectionThread instances
@@ -112,11 +118,12 @@ type
     {$ifdef OSPOSIX}
     fPosixFileNames: TPosixFileCaseInsensitive; // ttoCaseInsensitiveFileName
     {$endif OSPOSIX}
+    fOnConnect: TOnTftpConnect;
     function GetConnectionCount: integer;
     function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
-    function GetFileName(const FileName: RawUtf8): TFileName; virtual;
+    function GetFileName(const RequestedFileName: RawUtf8): TFileName; virtual;
     function SetRrqStream(var Context: TTftpContext): TTftpError; virtual;
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
@@ -137,6 +144,10 @@ type
     /// notify the server thread(s) to be terminated, and wait for pending
     // threads to actually abort their background process
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
+    /// this method is called when a request is received, just before creating
+    // the processing thread
+    property OnConnect: TOnTftpConnect
+      read fOnConnect write fOnConnect;
   published
     /// how many requests are currently used
     property ConnectionCount: integer
@@ -219,9 +230,9 @@ var
   fn: RawUtf8;
 begin
   tix := mormot.core.os.GetTickCount64;
-  fLog.Log(sllDebug, 'DoExecute % % %',
+  fLog.Log(sllDebug, 'DoExecute % % % as %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
-     fContext.FileName], self);
+     fContext.FileName, fContext.FileNameFull], self);
   StringToUtf8(ExtractFileName(Utf8ToString(fContext.FileName)), fn);
   fContext.RetryCount := fOwner.MaxRetry;
   fContext.Sock.SetReceiveTimeout(1000); // check fTerminated every second
@@ -435,7 +446,7 @@ begin
   {$endif OSPOSIX}
 end;
 
-function TTftpServerThread.GetFileName(const FileName: RawUtf8): TFileName;
+function TTftpServerThread.GetFileName(const RequestedFileName: RawUtf8): TFileName;
 var
   fn: TFileName;
   {$ifdef OSPOSIX}
@@ -443,7 +454,7 @@ var
   {$endif OSPOSIX}
 begin
   result := '';
-  fn := NormalizeFileName(Utf8ToString(FileName));
+  fn := NormalizeFileName(Utf8ToString(RequestedFileName));
   if fn = '' then
     exit;
   while (fn[1] = '/') or
@@ -478,32 +489,33 @@ const
 function TTftpServerThread.SetRrqStream(var Context: TTftpContext): TTftpError;
 var
   fsize: Int64;
-  fn: TFileName;
   cached: RawByteString;
 begin
   if ttoRrq in fOptions then
   begin
     result := teFileNotFound;
-    fn := GetFileName(Context.FileName);
-    if fn = '' then
+    if Context.FileNameFull = '' then // if not set by OnConnect() callback
+      Context.FileNameFull := GetFileName(Context.FileName);
+    if Context.FileNameFull = '' then
       exit;
-    fsize := FileSize(fn);
+    fsize := FileSize(Context.FileNameFull);
     if (fsize = 0) or
        (fsize >= RRQ_FILE_MAX) then
       exit;
     if Assigned(fFileCache) and
        (fsize < RRQ_CACHE_MAX) then
-      if (not fFileCache.FindAndCopy(fn, cached)) or
+      if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
          (fsize <> length(cached)) then
       begin
         // not yet available in cache, or changed on disk
-        cached := StringFromFile(fn);
-        fFileCache.AddOrUpdate(fn, cached);
+        cached := StringFromFile(Context.FileNameFull);
+        fFileCache.AddOrUpdate(Context.FileNameFull, cached);
       end;
     if cached <> '' then
       Context.FileStream := TRawByteStringStream.Create(cached)
     else
-      Context.FileStream := TBufferedStreamReader.Create(fn, RRQ_MEM_CHUNK);
+      Context.FileStream := TBufferedStreamReader.Create(
+                              Context.FileNameFull, RRQ_MEM_CHUNK);
     result := teNoError;
   end
   else
@@ -511,17 +523,16 @@ begin
 end;
 
 function TTftpServerThread.SetWrqStream(var Context: TTftpContext): TTftpError;
-var
-  fn: TFileName;
 begin
   if ttoWrq in fOptions then
   begin
     result := teFileAlreadyExists;
-    fn := GetFileName(Context.FileName);
-    if (fn = '') or
-       FileExists(fn) then
+    if Context.FileNameFull = '' then // if not set by OnConnect() callback
+      Context.FileNameFull := GetFileName(Context.FileName);
+    if (Context.FileNameFull = '') or
+       FileExists(Context.FileNameFull) then
       exit;
-    Context.FileStream := TFileStreamEx.Create(fn, fmCreate);
+    Context.FileStream := TFileStreamEx.Create(Context.FileNameFull, fmCreate);
     result := teNoError;
   end
   else
@@ -604,6 +615,10 @@ begin
   c.Remote := remote;
   c.Frame := pointer(fFrame);
   res := c.ParseRequestFileName(len, GetContextOptions);
+  // allow any kind of customization (e.g. c.FileNameFull)
+  if Assigned(fOnConnect) and
+     (res = teNoError) then
+    res := fOnConnect(self, c);
   if res = teNoError then
   begin
     // create the associated TStream to read to or write from
@@ -615,7 +630,7 @@ begin
       // compute the toAck/toOck response
       res := c.ParseRequestOptions;
   end;
-  // send back error frame if needed
+  // send back error frame and abort if needed
   if res <> teNoError then
   begin
     c.SendErrorAndShutdown(res, fLog, self, 'OnFrameReceived');
