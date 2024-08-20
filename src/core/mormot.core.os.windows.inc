@@ -655,15 +655,27 @@ begin
     [ModuleName, code, string(WinErrorText(code, ModuleName))]);
 end;
 
-procedure RaiseLastError(const Context: shortstring;
-  RaisedException: ExceptClass; Code: integer);
+function WinLastError(const Context: shortstring; Code: integer): string;
 begin
   if Code = 0 then
     Code := GetLastError;
+  result := Format('%s error %x (%s)',
+    [Context, Code, string(WinErrorText(Code, nil))]);
+end;
+
+procedure RaiseLastError(const Context: shortstring;
+  RaisedException: ExceptClass; Code: integer);
+begin
   if RaisedException = nil then
     RaisedException := EOSException;
-  raise RaisedException.CreateFmt('%s error %x (%s)',
-    [Context, Code, string(WinErrorText(Code, nil))])
+  raise RaisedException.Create(WinLastError(Context, Code))
+end;
+
+procedure WinCheck(const Context: shortstring; Code: integer;
+  RaisedException: ExceptClass);
+begin
+  if Code <> NO_ERROR then
+    RaiseLastError(Context, RaisedException, Code);
 end;
 
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
@@ -2938,7 +2950,7 @@ begin
     Close;
   key := 0;
   result := RegOpenKeyExW(
-    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = 0;
+    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
   tmp.Done;
 end;
 
@@ -2956,15 +2968,12 @@ begin
   result := '';
   rsize := {%H-}tmp.Init; // most of the time, a single call is enough
   res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
-  if res <> 0 then
-    if res = ERROR_MORE_DATA then
-    begin
-      tmp.Init(rsize); // more than 4KB of data (unlikely)
-      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.buf, @rsize);
-    end
+  if res <> NO_ERROR then
+    if res = ERROR_MORE_DATA then // more than 4KB of data (unlikely)
+      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.Init(rsize), @rsize)
     else
       exit;
-  if res = 0 then
+  if res = NO_ERROR then
   begin
     case rtype of
       REG_SZ,
@@ -2983,10 +2992,10 @@ var
   rsize: DWord;
 begin
   result := '';
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> 0 then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> NO_ERROR then
     exit;
   SetLength(result, rsize);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> 0 then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> NO_ERROR then
     result := '';
 end;
 
@@ -3005,7 +3014,7 @@ end;
 function TWinRegistry.ReadBuffer(const entry: SynUnicode;
   data: pointer; datalen: DWord): boolean;
 begin
-  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = 0;
+  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = NO_ERROR;
 end;
 
 function TWinRegistry.ReadMax(const entry: SynUnicode;
@@ -3024,7 +3033,7 @@ end;
 
 function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @result) <> 0 then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @result) <> NO_ERROR then
     result := -1;
 end;
 
@@ -3036,7 +3045,7 @@ begin
   result := nil;
   count := 0;
   if (RegQueryInfoKeyW(key, nil, nil, nil, @count, @maxlen,
-       nil, nil, nil, nil, nil, nil) <> 0) or
+       nil, nil, nil, nil, nil, nil) <> NO_ERROR) or
      (count = 0) then
     exit;
   SetLength(result, count);
@@ -3045,7 +3054,7 @@ begin
   for i := 0 to count - 1 do
   begin
     len := maxlen;
-    if RegEnumKeyExW(key, i, tmp.buf, len, nil, nil, nil, nil) = 0 then
+    if RegEnumKeyExW(key, i, tmp.buf, len, nil, nil, nil, nil) = NO_ERROR then
       Win32PWideCharToUtf8(tmp.buf, len, result[i]);
   end;
   tmp.Done;

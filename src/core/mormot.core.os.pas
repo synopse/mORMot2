@@ -2416,7 +2416,7 @@ type
   end;
 
 const
-  NO_ERROR  = Windows.NO_ERROR;
+  NO_ERROR  = Windows.NO_ERROR; // = ERROR_SUCCESS
 
   ERROR_ACCESS_DENIED      = Windows.ERROR_ACCESS_DENIED;
   ERROR_INVALID_PARAMETER  = Windows.ERROR_INVALID_PARAMETER;
@@ -3087,8 +3087,18 @@ function WinErrorText(Code: cardinal; ModuleName: PChar): RawUtf8;
 function WinErrorConstant(Code: cardinal): PUtf8Char;
 
 /// raise an EOSException from the last system error using WinErrorText()
+// - if Code is kept to its default 0, GetLastError is called
 procedure RaiseLastError(const Context: shortstring;
   RaisedException: ExceptClass = nil; Code: integer = 0);
+
+/// return a RaiseLastError-like error message using WinErrorText()
+// - if Code is kept to its default 0, GetLastError is called
+function WinLastError(const Context: shortstring; Code: integer = 0): string;
+
+/// call RaiseLastError(Code) if Code <> NO_ERROR = ERROR_SUCCESS
+procedure WinCheck(const Context: shortstring; Code: integer;
+  RaisedException: ExceptClass = nil);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// raise an Exception from the last module error using WinErrorText()
 procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
