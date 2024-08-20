@@ -1189,7 +1189,7 @@ type
     // - each aItems[] is expected to be of two items, as name/value pair
     // - as returned e.g. by MsiExecuteQuery() from mormot.lib.sspi.pas
     procedure InitObjectFromDual(const aItems: TRawUtf8DynArrayDynArray;
-      aOptions: TDocVariantOptions = JSON_FAST_FLOAT);
+      aOptions: TDocVariantOptions = JSON_FAST);
     /// initialize a variant instance to store a document-based object with a
     // single property
     // - the supplied path could be 'Main.Second.Third', to create nested
@@ -6321,18 +6321,18 @@ procedure TDocVariantData.InitObjectFromDual(
   const aItems: TRawUtf8DynArrayDynArray; aOptions: TDocVariantOptions);
 var
   n: integer;
-  p: PRawUtf8DynArray;
+  one: PRawUtf8DynArray;
 begin
   Init(aOptions, dvObject);
   n := length(aItems);
   if n = 0 then
     exit;
   SetCapacity(n);
-  p := pointer(aItems);
+  one := pointer(aItems);
   repeat
-    if length(p^) = 2 then
-      AddValueFromText(p^[0], p^[1]);
-    inc(p);
+    if length(one^) = 2 then
+      AddValueFromText(one^[0], one^[1]);
+    inc(one);
     dec(n);
   until n = 0;
 end;
@@ -8701,7 +8701,7 @@ var
   n: integer;
   nam: PPUtf8Char;
   val: PVariant;
-  W: TJsonWriter;
+  wr: TJsonWriter;
 begin
   if (not IsObject) or
      (VCount = 0) then
@@ -8710,9 +8710,9 @@ begin
     exit;
   end;
   UpperCopy255(Up, aStartName)^ := #0;
-  W := TJsonWriter.CreateOwnedStream(temp);
+  wr := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.AddDirect('{');
+    wr.AddDirect('{');
     n := VCount;
     nam := pointer(VName);
     val := pointer(VValue);
@@ -8721,16 +8721,16 @@ begin
       begin
         if Has(dvoSerializeAsExtendedJson) and
            JsonPropNameValid(nam^) then
-          W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
+          wr.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
         else
         begin
-          W.AddDirect('"');
-          W.AddJsonEscape(nam^);
-          W.AddDirect('"');
+          wr.AddDirect('"');
+          wr.AddJsonEscape(nam^);
+          wr.AddDirect('"');
         end;
-        W.AddDirect(':');
-        W.AddVariant(val^, twJsonEscape);
-        W.AddComma;
+        wr.AddDirect(':');
+        wr.AddVariant(val^, twJsonEscape);
+        wr.AddComma;
       end;
       dec(n);
       if n = 0 then
@@ -8738,10 +8738,10 @@ begin
       inc(nam);
       inc(val);
     until false;
-    W.CancelLastComma('}');
-    W.SetText(result);
+    wr.CancelLastComma('}');
+    wr.SetText(result);
   finally
-    W.Free;
+    wr.Free;
   end;
 end;
 
@@ -8957,18 +8957,18 @@ end;
 procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
 var
   F: TStream;
-  W: TJsonWriter;
+  wr: TJsonWriter;
 begin
   if cardinal(VType) <> DocVariantVType then
     exit;
   F := TFileStreamEx.Create(FileName, fmCreate);
   try
-    W := TJsonWriter.Create(F, 65536);
+    wr := TJsonWriter.Create(F, 65536);
     try
-      DocVariantType.ToJson(W, @self);
-      W.FlushFinal;
+      DocVariantType.ToJson(wr, @self);
+      wr.FlushFinal;
     finally
-      W.Free;
+      wr.Free;
     end;
   finally
     F.Free;
@@ -8979,7 +8979,7 @@ function TDocVariantData.ToNonExpandedJson: RawUtf8;
 var
   field: TRawUtf8DynArray;
   fieldCount, r, f: PtrInt;
-  W: TJsonWriter;
+  wr: TJsonWriter;
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
@@ -9002,14 +9002,14 @@ begin
     end;
   if fieldCount = 0 then
     raise EDocVariant.Create('ToNonExpandedJson: Value[0] is not an object');
-  W := TJsonWriter.CreateOwnedStream(temp);
+  wr := TJsonWriter.CreateOwnedStream(temp);
   try
-    W.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
+    wr.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
     for f := 0 to fieldCount - 1 do
     begin
-      W.AddDirect('"');
-      W.AddJsonEscape(pointer(field[f]));
-      W.AddDirect('"', ',');
+      wr.AddDirect('"');
+      wr.AddJsonEscape(pointer(field[f]));
+      wr.AddDirect('"', ',');
     end;
     for r := 0 to VCount - 1 do
     begin
@@ -9025,15 +9025,15 @@ begin
             [r, row^.VName[f], field[f]])
         else
         begin
-          W.AddVariant(row^.VValue[f], twJsonEscape);
-          W.AddComma;
+          wr.AddVariant(row^.VValue[f], twJsonEscape);
+          wr.AddComma;
         end;
     end;
-    W.CancelLastComma;
-    W.AddDirect(']', '}');
-    W.SetText(result);
+    wr.CancelLastComma;
+    wr.AddDirect(']', '}');
+    wr.SetText(result);
   finally
-    W.Free;
+    wr.Free;
   end;
 end;
 
