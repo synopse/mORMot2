@@ -96,7 +96,7 @@ type
 { ******************** TTftpServerThread Server Class }
 
   /// event signature of the TTftpServerThread.OnConnect optional callback
-  // - you can change e.g. Context.FileName/FileNameFull
+  // - you can change e.g. Context.FileName/FileNameFull/FileStream
   // - should return teNoError to continue the process
   TOnTftpConnect = function(Sender: TTftpServerThread;
     var Context: TTftpContext): TTftpError of object;
@@ -493,29 +493,32 @@ var
 begin
   if ttoRrq in fOptions then
   begin
-    result := teFileNotFound;
-    if Context.FileNameFull = '' then // if not set by OnConnect() callback
-      Context.FileNameFull := GetFileName(Context.FileName);
-    if Context.FileNameFull = '' then
-      exit;
-    fsize := FileSize(Context.FileNameFull);
-    if (fsize = 0) or
-       (fsize >= RRQ_FILE_MAX) then
-      exit;
-    if Assigned(fFileCache) and
-       (fsize < RRQ_CACHE_MAX) then
-      if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
-         (fsize <> length(cached)) then
-      begin
-        // not yet available in cache, or changed on disk
-        cached := StringFromFile(Context.FileNameFull);
-        fFileCache.AddOrUpdate(Context.FileNameFull, cached);
-      end;
-    if cached <> '' then
-      Context.FileStream := TRawByteStringStream.Create(cached)
-    else
-      Context.FileStream := TBufferedStreamReader.Create(
-                              Context.FileNameFull, RRQ_MEM_CHUNK);
+    if Context.FileStream = nil then
+    begin
+      result := teFileNotFound;
+      if Context.FileNameFull = '' then // if not set by OnConnect() callback
+        Context.FileNameFull := GetFileName(Context.FileName);
+      if Context.FileNameFull = '' then
+        exit;
+      fsize := FileSize(Context.FileNameFull);
+      if (fsize = 0) or
+         (fsize >= RRQ_FILE_MAX) then
+        exit;
+      if Assigned(fFileCache) and
+         (fsize < RRQ_CACHE_MAX) then
+        if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
+           (fsize <> length(cached)) then
+        begin
+          // not yet available in cache, or changed on disk
+          cached := StringFromFile(Context.FileNameFull);
+          fFileCache.AddOrUpdate(Context.FileNameFull, cached);
+        end;
+      if cached <> '' then
+        Context.FileStream := TRawByteStringStream.Create(cached)
+      else
+        Context.FileStream := TBufferedStreamReader.Create(
+                                Context.FileNameFull, RRQ_MEM_CHUNK);
+    end;
     result := teNoError;
   end
   else
@@ -526,13 +529,16 @@ function TTftpServerThread.SetWrqStream(var Context: TTftpContext): TTftpError;
 begin
   if ttoWrq in fOptions then
   begin
-    result := teFileAlreadyExists;
-    if Context.FileNameFull = '' then // if not set by OnConnect() callback
-      Context.FileNameFull := GetFileName(Context.FileName);
-    if (Context.FileNameFull = '') or
-       FileExists(Context.FileNameFull) then
-      exit;
-    Context.FileStream := TFileStreamEx.Create(Context.FileNameFull, fmCreate);
+    if Context.FileStream = nil then
+    begin
+      result := teFileAlreadyExists;
+      if Context.FileNameFull = '' then // if not set by OnConnect() callback
+        Context.FileNameFull := GetFileName(Context.FileName);
+      if (Context.FileNameFull = '') or
+         FileExists(Context.FileNameFull) then
+        exit;
+      Context.FileStream := TFileStreamEx.Create(Context.FileNameFull, fmCreate);
+    end;
     result := teNoError;
   end
   else

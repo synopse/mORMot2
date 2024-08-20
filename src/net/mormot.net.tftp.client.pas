@@ -224,7 +224,9 @@ type
     TimeoutTix: Int64;
     /// the transmitted file name, UTF-8 encoded
     FileName: RawUtf8;
-    /// the transmitted file content, as a TStream
+    /// the full file name, as resolved locally on the file system
+    FileNameFull: TFileName;
+    /// the actual transmitted file content, as a TStream
     FileStream: TStream;
     /// the UDP/IP connection to be used by SendFrame() method
     Sock: TNetSocket;
