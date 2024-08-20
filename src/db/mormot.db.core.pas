@@ -3141,7 +3141,7 @@ var
   function GetWhereValues(var Where: TSelectStatementWhere): boolean;
   var
     v: TSelectStatementWhereDynArray;
-    n, w: integer;
+    n, ndx: integer;
     tmp: RawUtf8;
   begin
     result := false;
@@ -3169,8 +3169,8 @@ var
     with TDocVariantData(Where.ValueVariant) do
     begin
       InitFast(n, dvArray);
-      for w := 0 to n - 1 do
-        AddItem(v[w].ValueVariant);
+      for ndx := 0 to n - 1 do
+        AddItem(v[ndx].ValueVariant);
       Where.Value := ToJson;
     end;
     result := true;

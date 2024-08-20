@@ -3117,7 +3117,7 @@ function TRestStorageInMemory.GetJsonValues(Stream: TStream; Expand: boolean;
 var
   ndx, KnownRowsCount, j: PtrInt;
   id: Int64;
-  W: TOrmWriter;
+  wr: TOrmWriter;
   IsNull: boolean;
   Prop: TOrmPropInfo;
   bits: TFieldBits;
@@ -3146,21 +3146,21 @@ begin
   else
     KnownRowsCount := 0;
   Stmt.SelectFieldBits(bits, withID);
-  W := fStoredClassRecordProps.CreateJsonWriter(
+  wr := fStoredClassRecordProps.CreateJsonWriter(
     Stream, Expand, withID, bits, KnownRowsCount, 65500, tmp);
-  if W <> nil then
+  if wr <> nil then
   try
     if Expand then
-      W.Add('[');
+      wr.Add('[');
     if Stmt.Where = nil then
     begin
       // no WHERE statement -> all rows
       for ndx := 0 to KnownRowsCount - 1 do
       begin
         if Expand then
-          W.AddCR; // for better readability
-        fValue[ndx].GetJsonValues(W);
-        W.AddComma;
+          wr.AddCR; // for better readability
+        fValue[ndx].GetJsonValues(wr);
+        wr.AddComma;
       end;
       result := KnownRowsCount;
     end
@@ -3168,7 +3168,7 @@ begin
       case Stmt.Where[0].Operation of
         opEqualTo:
           result := FindWhereEqual(Stmt.Where[0].Field, Stmt.Where[0].Value,
-            GetJsonValuesEvent, W, Stmt.Limit, Stmt.Offset);
+            GetJsonValuesEvent, wr, Stmt.Limit, Stmt.Offset);
         opNotEqualTo,
         opLessThan,
         opLessThanOrEqualTo,
@@ -3176,7 +3176,7 @@ begin
         opGreaterThanOrEqualTo:
           with Stmt.Where[0] do
             result := FindWhere(Field, Value, Operation,
-              GetJsonValuesEvent, W, Stmt.Limit, Stmt.Offset);
+              GetJsonValuesEvent, wr, Stmt.Limit, Stmt.Offset);
         opIn:
           // only handle  ID IN (..)  syntax by now
           if (Stmt.Where[0].Field <> 0) or
@@ -3190,8 +3190,8 @@ begin
                   j := IDToIndex(id);
                   if j >= 0 then
                   begin
-                    fValue[j].GetJsonValues(W);
-                    W.AddComma;
+                    fValue[j].GetJsonValues(wr);
+                    wr.AddComma;
                     inc(result);
                     if (Stmt.Limit > 0) and
                        (result >= Stmt.Limit) then
@@ -3209,8 +3209,8 @@ begin
             for ndx := 0 to fCount - 1 do
               if Prop.IsValueVoid(fValue[ndx]) = IsNull then
               begin
-                fValue[ndx].GetJsonValues(W);
-                W.AddComma;
+                fValue[ndx].GetJsonValues(wr);
+                wr.AddComma;
                 inc(result);
                 if (Stmt.Limit > 0) and
                   (result >= Stmt.Limit) then
@@ -3221,22 +3221,22 @@ begin
             goto err;
       else
         begin
-err:      W.CancelAll;
+err:      wr.CancelAll;
           result := 0;
           exit;
         end;
       end;
     if (result = 0) and
-       W.Expand then
+       wr.Expand then
     begin
       // we want the field names at least, even with no data
-      W.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
-      W.CancelAll;
-      fStoredClassRecordProps.SetJsonWriterColumnNames(W, 0);
+      wr.Expand := false; //  {"fieldCount":2,"values":["col1","col2"]}
+      wr.CancelAll;
+      fStoredClassRecordProps.SetJsonWriterColumnNames(wr, 0);
     end;
-    W.EndJsonObject(KnownRowsCount, result);
+    wr.EndJsonObject(KnownRowsCount, result);
   finally
-    W.Free;
+    wr.Free;
   end;
 end;
 

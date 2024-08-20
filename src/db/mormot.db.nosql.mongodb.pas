@@ -3758,7 +3758,7 @@ end;
 
 procedure TMongoClient.AfterOpen;
 var
-  w: integer;
+  mw: integer;
   c: TDocVariantData;
   compression: PDocVariantData;
 begin
@@ -3805,8 +3805,8 @@ begin
         GetAsInteger('maxBsonObjectSize', fServerMaxBsonObjectSize);
         GetAsInteger('maxMessageSizeBytes', fServerMaxMessageSizeBytes);
         GetAsInteger('maxWriteBatchSize', fServerMaxWriteBatchSize);
-        GetAsInteger('maxWireVersion', w);
-        byte(fServerMaxWireVersion) := w;
+        GetAsInteger('maxWireVersion', mw);
+        byte(fServerMaxWireVersion) := mw;
         GetAsBoolean('readOnly', fServerReadOnly);
         if mcoZlibCompressor in fOptions then
           if (not GetAsArray('compression', compression)) or
