@@ -1071,8 +1071,9 @@ function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): bo
 /// execute a query on a given .msi file
 // - return '' and the resultset as one array of record text fields on success
 // - or return a text error message
-// - default 'SELECT * FROM Property' query result Records could be converted
-// directly via TDocVariantData.InitObjectFromDual()
+// - default 'SELECT * FROM Property' query could be converted directly via
+// TDocVariantData.InitObjectFromDual(Record) into an object document of all
+// file properties
 function MsiExecuteQuery(const MsiFile: TFileName;
   out Records: TRawUtf8DynArrayDynArray;
   const Query: SynUnicode = 'SELECT * FROM Property'): string;

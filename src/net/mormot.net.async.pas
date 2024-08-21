@@ -4384,7 +4384,7 @@ end;
 function THttpAsyncServerConnection.FlushPipelinedWrite: TPollAsyncSocketOnReadWrite;
 var
   P: PByte;
-  PLen: integer;
+  PLen: integer; // should be exact integer, not PtrInt
 begin
   result := soContinue;
   fPipelinedWrite := false;
