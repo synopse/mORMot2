@@ -732,10 +732,10 @@ type
     // - our TAesC64, TAesCfc, TAesOfc, TAesCtc custom algorithms
     // use non-standard trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g.
     // as 'aes-256-cfc'
-    function AlgoName: TShort16; overload;
+    function AlgoName: TShort15; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// OpenSSL-like Cipher name encoding of this AES engine
-    procedure AlgoName(out Result: TShort16); overload;
+    procedure AlgoName(out Result: TShort15); overload;
     /// the chaining mode of this AES engine
     property AlgoMode: TAesMode
       read fAlgoMode;
@@ -1472,9 +1472,9 @@ function ToText(algo: TAesMode): PShortString; overload;
 function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8; overload;
 
 /// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
-// - returned TShort16 is #0 ended so @Result[1] can be transtyped to a PUtf8Char
+// - returned TShort15 is #0 ended so @Result[1] can be transtyped to a PUtf8Char
 procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
-  out Result: TShort16); overload;
+  out Result: TShort15); overload;
 
 /// OpenSSL-like Cipher name decoding into mormot.crypt.core AES engines
 // - input AesAlgoName length should be already checked as 11
@@ -5293,12 +5293,12 @@ begin
   result := true;
 end;
 
-function TAesAbstract.AlgoName: TShort16;
+function TAesAbstract.AlgoName: TShort15;
 begin
   AlgoName(Result);
 end;
 
-procedure TAesAbstract.AlgoName(out Result: TShort16);
+procedure TAesAbstract.AlgoName(out Result: TShort15);
 begin
   if self = nil then
     PCardinal(@Result)^ := 0
@@ -7271,7 +7271,7 @@ const
     'ecb'#0'cbc'#0'cfb'#0'ofb'#0'c64'#0'ctr'#0'cfc'#0'ofc'#0'ctc'#0'gcm'#0;
 
 procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
-  out Result: TShort16);
+  out Result: TShort15);
 begin
   case KeyBits of
     128,
@@ -7292,7 +7292,7 @@ end;
 
 function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8;
 var
-  tmp: TShort16;
+  tmp: TShort15;
 begin
   AesAlgoNameEncode(Mode, KeyBits, tmp);
   FastSetString(result, @tmp[1], ord(tmp[0]));
