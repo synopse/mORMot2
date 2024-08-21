@@ -2933,7 +2933,7 @@ end;
 type
   // extra header for IV and plain text / key size storage
   // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
-  // from mormot.lib.openssl11
+  // from mormot.lib.openssl11.pas, which is fully compatible with this unit
   TRsaSealHeader = packed record
     iv: TAesBlock;
     plainlen: integer;
@@ -2943,7 +2943,8 @@ type
   PRsaSealHeader = ^TRsaSealHeader;
 
 // this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
-// algorithm, so that the Message encoding should stay compatible
+// algorithm, so that RSA Message encoding would stay compatible
+// - see also the matching python code as comment in mormot.crypt.openssl
 
 function TRsa.Seal(Cipher: TAesAbstractClass; AesBits: integer;
   const Message: RawByteString): RawByteString;
@@ -2984,7 +2985,7 @@ begin
     MoveFast(pointer(enckey)^, PByteArray(result)[SizeOf(head)], length(enckey));
     MoveFast(pointer(encmsg)^, PByteArray(result)[msgpos], length(encmsg));
   finally
-    FillZero(key);
+    FillZero(key); // anti-forensic
   end;
 end;
 
@@ -3014,19 +3015,18 @@ begin
   key := Pkcs1Decrypt(@input[SizeOf(head^)]);
   if key <> '' then
     try
-      if length(key) = AesBits shr 3 then
-      begin
-        a := Cipher.Create(pointer(key)^, AesBits);
-        try
-          a.IV := head^.iv;
-          result := a.DecryptPkcs7Buffer(@input[msgpos], msglen - msgpos,
-            {ivatbeg=}false, {raiseerror=}false);
-        finally
-          a.Free;
-        end;
+      if length(key) <> AesBits shr 3 then
+        exit;
+      a := Cipher.Create(pointer(key)^, AesBits);
+      try
+        a.IV := head^.iv;
+        result := a.DecryptPkcs7Buffer(@input[msgpos], msglen - msgpos,
+          {ivatbeg=}false, {raiseerror=}false);
+      finally
+        a.Free;
       end;
     finally
-      FillZero(key);
+      FillZero(key); // anti-forensic
     end;
 end;
 
