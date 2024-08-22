@@ -9041,7 +9041,7 @@ begin
     rs2 := 8;
   if rs3 < 16 then
     rs3 := 16;
-  seedcount := 1; // will reseet after 16 GB, i.e. 2^32 of output data
+  seedcount := 1; // will reseed after 16 GB, i.e. 2^32 of output data
 end;
 
 function TLecuyer.RawNext: cardinal;
@@ -9432,8 +9432,8 @@ begin
     ERMSB_MIN_SIZE_BWD := 0; // in both directions to bypass the SSE2 code
     {$endif FPC_X86}
   end
-    // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
-    // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
+  // but MoveFast/SynLz are likely to abort -> recompile with HASNOSSE2 conditional
+  // note: mormot.core.os.pas InitializeSpecificUnit will notify it on console
   else if cfERMS in CpuFeatures then
     ERMSB_MIN_SIZE_FWD := 4096; // "on 32-bit strings have to be at least 4KB"
     // backward rep movsd has no ERMS optimization so degrades performance
