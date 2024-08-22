@@ -926,6 +926,7 @@ type
     property Https: boolean
       read fHttps;
     /// the remote server optional proxy, as specified to the class constructor
+    // - you may set 'none' to disable any Proxy, or keep '' to use the OS proxy
     property ProxyName: RawUtf8
       read fProxyName;
     /// the remote server optional proxy by-pass list, as specified to the class
@@ -1821,8 +1822,10 @@ end;
 
 function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
 begin
-  if (proxy <> '') and
-     temp.From(proxy) then
+  if IsNone(proxy) then
+    result := nil
+  else if (proxy <> '') and
+          temp.From(proxy) then
     result := @temp
   else if DefaultHttpClientSocketProxy.Server <> '' then
     result := @DefaultHttpClientSocketProxy
@@ -3137,7 +3140,9 @@ var
 begin
   WinHttpApiInitialize;
   Utf8ToSynUnicode(fExtendedOptions.UserAgent, ua);
-  if fProxyName = '' then
+  if IsNone(fProxyName) then
+    access := WINHTTP_ACCESS_TYPE_NO_PROXY
+  else if fProxyName = '' then
     if (OSVersion >= wEightOne) or
        WinHttpForceProxyDetection then
       access := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY // Windows 8.1 and newer
@@ -3145,8 +3150,11 @@ begin
       access := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
     access := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  Utf8ToSynUnicode(fProxyName, pn);
-  Utf8ToSynUnicode(fProxyByPass, pb);
+  if access <> WINHTTP_ACCESS_TYPE_NO_PROXY then
+  begin
+    Utf8ToSynUnicode(fProxyName, pn);
+    Utf8ToSynUnicode(fProxyByPass, pb);
+  end;
   fSession := WinHttpApi.Open(pointer(ua), access, pointer(pn), pointer(pb), 0);
   if (fSession = nil) and
      WinHttpForceProxyDetection and
@@ -3347,7 +3355,7 @@ begin
     EWinHttp.RaiseFromLastError;
 end;
 
-function TWinHttp.InternalReadData(var Data: RawByteString; Read: integer;
+function TWinHttp.InternalReadData(var Data: RawByteString; Read: PtrInt;
   Size: cardinal): cardinal;
 begin
   if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
@@ -3394,7 +3402,9 @@ procedure TWinINet.InternalConnect(
 var
   OpenType: integer;
 begin
-  if fProxyName = '' then
+  if IsNone(fProxyName) then
+    OpenType := INTERNET_OPEN_TYPE_DIRECT
+  else if fProxyName = '' then
     OpenType := INTERNET_OPEN_TYPE_PRECONFIG
   else
     OpenType := INTERNET_OPEN_TYPE_PROXY;
@@ -3671,15 +3681,11 @@ end;
 
 { TCurlHttp }
 
-procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
-  ReceiveTimeout: cardinal);
-const
-  HTTPS: array[boolean] of string[1] = (
-    '',
-    's');
+procedure TCurlHttp.InternalConnect(
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 begin
   if not IsAvailable then
-    raise EOSException.CreateFmt('No available %s', [LIBCURL_DLL]);
+    raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
@@ -3693,7 +3699,7 @@ begin
     // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := 'http://localhost'
   else
-    FormatUtf8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
+    FormatUtf8('http%://%:%', [TLS_TEXT[fHttps], fServer, fPort], fRootURL);
 end;
 
 destructor TCurlHttp.Destroy;
@@ -3732,7 +3738,8 @@ begin
   if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
   curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
-  if fProxyName <> '' then
+  if (fProxyName <> '') and
+     not IsNone(fProxyName) then
     curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
   if fHttps then
     if IgnoreTlsCertificateErrors then
