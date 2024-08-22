@@ -1410,26 +1410,23 @@ type
     fUri: TUri;
     fClient: TSimpleHttpClient;
     fKeepAlive: integer;
-    fTokenHeader: RawUtf8;
+    fOnlyUseClientSocket: boolean;
     fCache: TSynDictionary;
   public
     /// initialize the cache for a given server
-    // - once set, you can change the request URI using the Address property
+    // - will call LoadFromUri(aUri, aToken) if aUri <> ''
     // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
     // - an internal cache will be maintained, and entries will be flushed after
     // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
     // the client-side cache content
-    // - aToken is an optional token which will be transmitted as HTTP header:
-    // $ Authorization: Bearer <aToken>
-    // - TWinHttp will be used by default under Windows, unless you specify
-    // another class
     constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
       aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
     // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
-    /// connect to a new server
+    /// specify a new server and an optional authentication token
+    // - won't actually connect until Get() is called
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
     function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = ''): boolean;
@@ -1446,6 +1443,9 @@ type
     property URI: TUri
       read fUri;
     /// access to the underlying HTTP client connection class
+    // - you can change e.g. Client.Options^ or Client.Tls^ members before Get()
+    // - warning: don't assign this instance to a IHttpClient because it is NOT
+    // reference counted, and is local to this THttpRequestCached
     property Client: TSimpleHttpClient
       read fClient;
   end;
@@ -4148,10 +4148,11 @@ constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
 begin
   inherited Create; // may have been overriden
   fKeepAlive := aKeepAliveSeconds * 1000;
+  fOnlyUseClientSocket := aOnlyUseClientSocket;
   if aTimeOutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeOutSeconds);
-  fClient := TSimpleHttpClient.Create(aOnlyUseClientSocket);
+  fClient := TSimpleHttpClient.Create(fOnlyUseClientSocket);
   if aUri <> '' then
     if not LoadFromUri(aUri, aToken) then
       ESynException.RaiseUtf8('%.Create: invalid aUri=%', [self, aUri]);
@@ -4159,11 +4160,10 @@ end;
 
 procedure THttpRequestCached.Clear;
 begin
-  FreeAndNil(fClient);
+  fClient.Close;
   if fCache <> nil then
     fCache.DeleteAll;
   fUri.Clear;
-  fTokenHeader := '';
 end;
 
 destructor THttpRequestCached.Destroy;
@@ -4182,25 +4182,20 @@ var
   modified: boolean;
 begin
   result := '';
-  if fClient = nil then // either fHttp or fSocket is used
-    exit;
   if (fCache <> nil) and
      fCache.FindAndCopy(aAddress, cache) then
     FormatUtf8('If-None-Match: %', [cache.Tag], headin);
-  if fTokenHeader <> '' then
-    AppendLine(headin, [fTokenHeader]);
+  fUri.Address := aAddress;
   status := fClient.RawRequest(fUri, 'GET', headin, '', '', fKeepAlive);
   modified := true;
   case status of
     HTTP_SUCCESS:
-      if fCache <> nil then
+      if (fCache <> nil) and
+         FindNameValue(fClient.Headers, 'ETAG:', cache.Tag) and
+         (cache.Tag <> '')  then
       begin
-        FindNameValue(fClient.Headers, 'ETAG:', cache.Tag);
-        if cache.Tag <> '' then
-        begin
-          cache.Content := result;
-          fCache.AddOrUpdate(aAddress, cache);
-        end;
+        cache.Content := result;
+        fCache.AddOrUpdate(aAddress, cache);
       end;
     HTTP_NOTMODIFIED:
       begin
@@ -4218,10 +4213,16 @@ function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8): boolean;
 begin
   result := false;
   if (self = nil) or
-     (fClient = nil) or
      not fUri.From(aUri) then
     exit;
-  fTokenHeader := AuthorizationBearer(aToken);
+  Clear;
+  if aToken <> '' then
+  begin
+    fClient.fOptions.Auth.Scheme := wraBearer;
+    fClient.fOptions.Auth.Token := aToken;
+  end
+  else
+    fClient.fOptions.Auth.Scheme := wraNone;
   result := true;
 end;
 
