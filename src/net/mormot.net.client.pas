@@ -808,6 +808,10 @@ type
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
       ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp;
       const aUserAgent: RawUtf8 = ''); overload; virtual;
+    /// connect to the supplied URI, supplied as TUri
+    // - overloaded constructor to accept optional THttpRequestExtendedOptions
+    constructor Create(const aUri: TUri;
+      aOptions: PHttpRequestExtendedOptions = nil); overload;
     /// connect to the supplied URI
     // - is just a wrapper around TUri and the overloaded Create() constructor
     constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
@@ -2880,9 +2884,9 @@ begin
 end;
 
 constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
-  const aProxyName: RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut,
-  SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer;
-  const aUserAgent: RawUtf8);
+  const aProxyName, aProxyByPass: RawUtf8;
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal;
+  aLayer: TNetLayer; const aUserAgent: RawUtf8);
 begin
   fLayer := aLayer;
   if fLayer <> nlUnix then
@@ -2898,10 +2902,11 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
-  if aUserAgent <> '' then
-    fExtendedOptions.UserAgent := aUserAgent
-  else
-    fExtendedOptions.UserAgent := DefaultUserAgent(self);
+  if fExtendedOptions.UserAgent = '' then
+    if aUserAgent <> '' then
+      fExtendedOptions.UserAgent := aUserAgent
+    else
+      fExtendedOptions.UserAgent := DefaultUserAgent(self);
   if ConnectionTimeOut = 0 then
     ConnectionTimeOut := HTTP_DEFAULT_CONNECTTIMEOUT;
   if SendTimeout = 0 then
@@ -2911,9 +2916,9 @@ begin
   InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise exception on error
 end;
 
-constructor THttpRequest.Create(const aUri: RawUtf8; const aProxyName: RawUtf8;
-  const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
-  ReceiveTimeout: cardinal; aIgnoreTlsCertificateErrors: boolean);
+constructor THttpRequest.Create(const aUri, aProxyName, aProxyByPass: RawUtf8;
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal;
+  aIgnoreTlsCertificateErrors: boolean);
 var
   uri: TUri;
 begin
@@ -2922,6 +2927,16 @@ begin
   IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
   Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
+end;
+
+constructor THttpRequest.Create(
+  const aUri: TUri; aOptions: PHttpRequestExtendedOptions);
+begin
+  if aOptions <> nil then
+    fExtendedOptions := aOptions^; // to be set before Create=InternalConnect
+  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy, {bypass=}'',
+    fExtendedOptions.CreateTimeoutMS, fExtendedOptions.CreateTimeoutMS,
+    fExtendedOptions.CreateTimeoutMS, aUri.Layer);
 end;
 
 destructor THttpRequest.Destroy;
@@ -3221,7 +3236,7 @@ begin
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
      ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
     EWinHttp.RaiseFromLastError;
-  if fHTTPS then
+  if fHttps then
   begin
     protocols := InternalGetProtocols;
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
@@ -3333,13 +3348,13 @@ begin
         winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
     else
       raise EWinHttp.CreateUtf8(
-        '%: unsupported AuthScheme=%', [self, ord(AuthScheme)]);
+        '%: unsupported AuthScheme=%', [self, ToText(AuthScheme)^]);
     end;
     if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
        winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
       EWinHttp.RaiseFromLastError;
   end;
-  if fHTTPS and
+  if fHttps and
      IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
@@ -3348,7 +3363,7 @@ begin
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success
-  if fHTTPS and
+  if fHttps and
      (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
      IgnoreTlsCertificateErrors and
      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
