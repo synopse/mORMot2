@@ -159,6 +159,9 @@ function IsUrlFavIcon(P: PUtf8Char): boolean;
 /// check if the supplied text start with 'http://' or 'https://'
 function IsHttp(const text: RawUtf8): boolean;
 
+/// true if the supplied text is case-insensitive 'none'
+function IsNone(const text: RawUtf8): boolean;
+
 /// naive detection of most used bots from a HTTP User-Agent string
 // - meant to be fast, with potentially a lot of false negatives: please do not
 // hesitate to send us feedback as pull requests
@@ -2659,6 +2662,13 @@ begin
             ((text[5] = ':') or
              ((text[5] in ['s', 'S']) and
               (text[6] = ':')));
+end;
+
+function IsNone(const text: RawUtf8): boolean;
+begin
+  result := (length(text) = 4) and
+            (PCardinal(text)^ and $dfdfdfdf =
+              ord('N') + ord('O') shl 8 + ord('N') shl 16 + ord('E') shl 24);
 end;
 
 function IsHttpUserAgentBot(const UserAgent: RawUtf8): boolean;
