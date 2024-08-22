@@ -226,6 +226,7 @@ type
 
   TRestHttpClientGenericClass = class of TRestHttpClientGeneric;
 
+  {$ifdef USEHTTPREQUEST}
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
   // WinHttp or libcurl API
@@ -265,6 +266,8 @@ type
 
   /// meta-class of TRestHttpClientRequest types
   TRestHttpClientRequestClass = class of TRestHttpClientRequest;
+
+  {$endif USEHTTPREQUEST}
 
 
 { ************ TRestHttpClientSocket REST Client Class over Sockets }
@@ -783,7 +786,7 @@ begin
 end;
 
 
-
+{$ifdef USEHTTPREQUEST}
 
 { TRestHttpClientRequest }
 
@@ -843,6 +846,7 @@ begin
   end;
 end;
 
+{$endif USEHTTPREQUEST}
 
 
 { ************ TRestHttpClientWebsockets REST Client Class over WebSockets }

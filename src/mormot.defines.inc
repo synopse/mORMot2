@@ -805,4 +805,10 @@
 
 {$endif OSPOSIX}
 
+{$ifdef USEWININET}
+  {$define USEHTTPREQUEST}
+{$endif USEWININET}
+{$ifdef USELIBCURL}
+  {$define USEHTTPREQUEST}
+{$endif USELIBCURL}
 

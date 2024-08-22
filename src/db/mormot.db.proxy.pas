@@ -662,6 +662,8 @@ type
   end;
 
 
+  {$ifdef USEHTTPREQUEST}
+
   /// implements an abstract HTTP client via THttpRequest abstract class,
   // able to access remotely any mormot.db.sql
   // - never instantiate this class, but rather TSqlDBWinHttpConnectionProperties
@@ -677,6 +679,8 @@ type
     property Client: THttpRequest
       read fClient;
   end;
+
+  {$endif USEHTTPREQUEST}
 
   {$ifdef USELIBCURL}
 
@@ -2073,6 +2077,8 @@ begin
 end;
 
 
+{$ifdef USEHTTPREQUEST}
+
 { TSqlDBHttpRequestConnectionProperties }
 
 destructor TSqlDBHttpRequestConnectionProperties.Destroy;
@@ -2097,6 +2103,7 @@ begin
   FindNameValue(head, HEADER_CONTENT_TYPE_UPPER, RawUtf8(DataType));
 end;
 
+{$endif USEHTTPREQUEST}
 
 {$ifdef USEWININET}
 

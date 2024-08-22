@@ -680,11 +680,9 @@ procedure RegisterNetClientProtocol(
 
 { ******************** THttpRequest Abstract HTTP client class }
 
-type
-  {$M+} // to have existing RTTI for published properties
-  THttpRequest = class;
-  {$M-}
+ { some high-level definitions, which may be shared outside THttpRequest }
 
+type
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHttp class yet, and TCurlHttp
   // - wraBearer is only supported by TCurlHttp
@@ -715,6 +713,14 @@ type
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
   end;
+
+
+{$ifdef USEHTTPREQUEST} // as set in mormot.defines.inc
+
+type
+  {$M+} // to have existing RTTI for published properties
+  THttpRequest = class;
+  {$M-}
 
   /// event callback to track up/download process
   TOnHttpRequest = procedure(Sender: THttpRequest; Done: Boolean) of object;
@@ -937,10 +943,22 @@ type
 
   THttpRequestClass = class of THttpRequest;
 
+/// returns the best THttpRequest class, depending on the system it runs on
+// - i.e. TWinHttp or TCurlHttp, or raise an EHttpSocket exception
+// - consider using TSimpleHttpClient if you just need a simple connection
+function MainHttpClass: THttpRequestClass;
 
-{$ifdef USEWININET}
+/// low-level forcing of another THttpRequest class
+// - could be used if we found out that the current MainHttpClass failed (which
+// could easily happen with TCurlHttp if the library is missing or deprecated)
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+
+{$endif USEHTTPREQUEST}
+
 
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
+
+{$ifdef USEWININET}
 
 type
   TWinHttpApi = class;
@@ -1238,6 +1256,15 @@ type
   end;
 
 {$endif USELIBCURL}
+
+
+const
+  /// true if TWinHttp or TCurlHttp is available on this system
+  // - i.e. if MainHttpClass would raise an EHttpSocket
+  HAS_HTTP_REQUEST = {$ifdef USEHTTPREQUEST} true {$else} false {$endif};
+
+  /// true if neither TWinHttp nor TCurlHttp are not available on this system
+  ONLY_CLIENT_SOCKET = not HAS_HTTP_REQUEST;
 
 
 { ******************** TSimpleHttpClient Wrapper Class }
@@ -2735,6 +2762,8 @@ end;
 
 { ******************** THttpRequest Abstract HTTP client class }
 
+{$ifdef USEHTTPREQUEST}
+
 { THttpRequest }
 
 class function THttpRequest.InternalREST(const url, method: RawUtf8;
@@ -2927,10 +2956,37 @@ begin
 end;
 
 
+var
+  _MainHttpClass: THttpRequestClass;
 
-{$ifdef USEWININET}
+function MainHttpClass: THttpRequestClass;
+begin
+  if _MainHttpClass = nil then
+  begin
+    {$ifdef USEWININET}
+    _MainHttpClass := TWinHttp;
+    {$else}
+    {$ifdef USELIBCURL}
+    _MainHttpClass := TCurlHttp;
+    {$endif USELIBCURL}
+    {$endif USEWININET}
+    if _MainHttpClass = nil then
+      raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
+  end;
+  result := _MainHttpClass;
+end;
+
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+begin
+  _MainHttpClass := aClass;
+end;
+
+{$endif USEHTTPREQUEST}
+
 
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
+
+{$ifdef USEWININET}
 
 { TWinHttpApi }
 
@@ -3915,7 +3971,11 @@ end;
 
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
-  fOnlyUseClientSocket := aOnlyUseClientSocket;
+  {$ifdef USEHTTPREQUEST}
+  fOnlyUseClientSocket := aOnlyUseClientSocket or
+                          ((_MainHttpClass = nil) and ONLY_CLIENT_SOCKET) or
+                          not MainHttpClass.IsAvailable;
+  {$endif USEHTTPREQUEST}
   fTimeOut := 5000;
   inherited Create;
 end;
@@ -3923,7 +3983,9 @@ end;
 destructor TSimpleHttpClient.Destroy;
 begin
   FreeAndNil(fHttp);
+  {$ifdef USEHTTPREQUEST}
   FreeAndNil(fHttps);
+  {$endif USEHTTPREQUEST}
   inherited Destroy;
 end;
 
@@ -3934,8 +3996,9 @@ var
   tempproxy: TUri;
 begin
   result := 0;
+  {$ifdef USEHTTPREQUEST}
   if (Uri.Https or
-      (Proxy <> '')) and
+      (fProxy <> '')) and
      not fOnlyUseClientSocket then
   try
     if (fHttps = nil) or
@@ -3945,9 +4008,9 @@ begin
       FreeAndNil(fHttp);
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
-        Uri.Server, Uri.Port, Uri.Https, Proxy, '',
+        Uri.Server, Uri.Port, Uri.Https, fProxy, '',
         fTimeOut, fTimeOut, fTimeOut, nlTcp, fUserAgent);
-      fHttps.IgnoreTlsCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
+      fHttps.IgnoreTlsCertificateErrors := fSocketTls.IgnoreCertificateErrors;
     end;
     result := fHttps.Request(
       Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
@@ -3957,13 +4020,16 @@ begin
   except
     FreeAndNil(fHttps);
   end;
+  {$endif USEHTTPREQUEST}
   // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
   try
     if (fHttp = nil) or
        (fHttp.Server <> Uri.Server) or
        (fHttp.Port <> Uri.Port) then
     begin
+      {$ifdef USEHTTPREQUEST}
       FreeAndNil(fHttps);
+      {$endif USEHTTPREQUEST}
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
         Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTls,
