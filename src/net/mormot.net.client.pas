@@ -1295,14 +1295,9 @@ type
   // - is implemented e.g. by our TSimpleHttpClient class in this unit
   // - may eventually be implemented by any class, even non-mORMot classes from
   // the RTL or Indy
+  // - instances of this interface could be used to make HTTP requests on one
+  // or several servers
   IHttpClient = interface
-    // some property wrapper methods
-    function GetUserAgent: RawUtf8;
-    procedure SetUserAgent(const Agent: RawUtf8);
-    function GetTimeOut: integer;
-    procedure SetTimeOut(TimeOut: integer);
-    function GetProxy: RawUtf8;
-    procedure SetProxy(const Proxy: RawUtf8);
     /// simple-to-use entry point of this instance
     // - will adapt to the full Uri (e.g. 'https://synopse.info/forum') and
     // open the proper connection if needed
@@ -1312,36 +1307,38 @@ type
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     /// finalize any existing HTTP/HTTPS connection
     procedure Close;
-    /// access to the raw TLS settings for THttpClientSocket
+    /// access to the raw connection options
+    // - we define a pointer to the record and not directly a record property
+    // to allow direct modification of any property of the record, e.g. as
+    // ! client.connectOptions^.UserAgent := 'MyOwnClient 1.2';
+    // ! client.connectOptions^.Tls.IgnoreTlsCertificateErrors := false;
+    function Options: PHttpRequestExtendedOptions;
+    /// access to the raw TLS settings, i.e. @Options^.TLS
     // - we define a pointer to the record and not directly a record property
     // to allow direct modification of any property of the record, e.g. as:
-    // ! client.SocketTls^.IgnoreTlsCertificateErrors := false
-    function SocketTls: PNetTlsContext;
+    // ! client.Tls^.IgnoreTlsCertificateErrors := false
+    function Tls: PNetTlsContext;
     /// returns the HTTP body as returned by a previous call to Request()
     function Body: RawByteString;
-    /// returns the HTTP status code after a Request() call
+    /// returns the HTTP status code after the last Request() call
     function Status: integer;
     /// returns the HTTP headers as returned by a previous call to Request()
     function Headers: RawUtf8;
-    /// allows to customize the user-agent header
-    property UserAgent: RawUtf8
-      read GetUserAgent write SetUserAgent;
-    /// allows to customize HTTPS connection and allow weak certificates
-    /// set the timeout value for RawRequest/Request, in milliseconds
-    property TimeOut: integer
-      read GetTimeOut write SetTimeOut;
-    /// alows to customize the connection using a proxy
-    property Proxy: RawUtf8
-      read GetProxy write SetProxy;
+    /// retrieve a HTTP header text value after the last Request() call
+    function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
+    /// retrieve a HTTP header numerical value after the last Request() call
+    function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
 
   /// abstract implementation class of IHttpClient
   THttpClientAbstract = class(TInterfacedObject, IHttpClient)
   protected
-    fUri, fProxy, fHeaders, fUserAgent: RawUtf8;
+    // the options to be used for connection and authentication
+    fOptions: THttpRequestExtendedOptions;
+    // request-specific values
+    fUri, fHeaders: RawUtf8;
     fBody: RawByteString;
-    fTimeOut, fStatus: integer;
-    fSocketTls: TNetTlsContext;
+    fStatus: integer;
   public
     /// finalize the connection
     destructor Destroy; override;
@@ -1349,21 +1346,24 @@ type
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; virtual; abstract;
+    /// read/write access to the HTTP User-Agent to be used
+    property UserAgent: RawUtf8
+      read fOptions.UserAgent write fOptions.UserAgent;
+    /// read/write access to the Proxy text address to be used
+    property Proxy: RawUtf8
+      read fOptions.Proxy write fOptions.Proxy;
     // IHttpClient methods, redirecting to the internal properties or methods
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     procedure Close; virtual; abstract;
-    function SocketTls: PNetTlsContext;
+    function Options: PHttpRequestExtendedOptions;
+    function Tls: PNetTlsContext;
     function Body: RawByteString;
     function Status: integer;
     function Headers: RawUtf8;
-    function GetUserAgent: RawUtf8;
-    procedure SetUserAgent(const Agent: RawUtf8);
-    function GetTimeOut: integer;
-    procedure SetTimeOut(TimeOut: integer);
-    function GetProxy: RawUtf8;
-    procedure SetProxy(const Proxy: RawUtf8);
+    function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
+    function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
 
   /// simple wrapper around THttpClientSocket/THttpRequest instances
@@ -4023,42 +4023,39 @@ begin
   result := fHeaders;
 end;
 
-function THttpClientAbstract.GetUserAgent: RawUtf8;
+function THttpClientAbstract.Header(
+  const Name: RawUtf8; out Value: RawUtf8): boolean;
+var
+  up: array[byte] of AnsiChar;
 begin
-  result := fUserAgent;
+  result := false;
+  if Name = '' then
+    exit;
+  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
+  result := FindNameValue(fHeaders, @up, Value);
 end;
 
-procedure THttpClientAbstract.SetUserAgent(const Agent: RawUtf8);
+function THttpClientAbstract.Header(
+  const Name: RawUtf8; out Value: Int64): boolean;
+var
+  v: RawUtf8;
+  err: integer;
 begin
-  fUserAgent := Agent;
+  result := Header(Name, v);
+  if not result then
+    exit;
+  Value := GetInt64(pointer(v), err);
+  result := err = 0;
 end;
 
-function THttpClientAbstract.GetTimeOut: integer;
+function THttpClientAbstract.Options: PHttpRequestExtendedOptions;
 begin
-  result := fTimeOut;
+  result := @fOptions;
 end;
 
-procedure THttpClientAbstract.SetTimeOut(TimeOut: integer);
+function THttpClientAbstract.Tls: PNetTlsContext;
 begin
-  fTimeout := TimeOut;
-end;
-
-function THttpClientAbstract.GetProxy: RawUtf8;
-begin
-  result := fProxy;
-end;
-
-procedure THttpClientAbstract.SetProxy(const Proxy: RawUtf8);
-begin
-  fProxy := Proxy;
-end;
-
-function THttpClientAbstract.SocketTls: PNetTlsContext;
-begin
-  if self = nil then
-    result := nil
-  else
-    result := @fSocketTls;
+  result := @fOptions.TLS;
 end;
 
 function THttpClientAbstract.Request(const Uri, Method, Header: RawUtf8;
@@ -4100,54 +4097,44 @@ function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
 begin
   result := 0;
-  {$ifdef USEHTTPREQUEST}
-  if (Uri.Https or
-      (fProxy <> '')) and
-     not fOnlyUseClientSocket then
   try
-    if (fHttps = nil) or
-       (fHttps.Server <> Uri.Server) or
-       (fHttps.Port <> Uri.PortInt) then
+    {$ifdef USEHTTPREQUEST}
+    if (Uri.Https or
+        (fOptions.Proxy <> '')) and
+       not fOnlyUseClientSocket then
     begin
-      Close; // need a new HTTPS connection
-      fHttps := MainHttpClass.Create(
-        Uri.Server, Uri.Port, Uri.Https, fProxy, '',
-        fTimeOut, fTimeOut, fTimeOut, nlTcp, fUserAgent);
-      fHttps.IgnoreTlsCertificateErrors := fSocketTls.IgnoreCertificateErrors;
-    end;
-    result := fHttps.Request(
-      Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
-    if KeepAlive = 0 then
-      FreeAndNil(fHttps);
-    exit;
-  except
-    FreeAndNil(fHttps);
-  end;
-  {$endif USEHTTPREQUEST}
-  // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
-  try
-    if (fHttp = nil) or
-       (fHttp.Server <> Uri.Server) or
-       (fHttp.Port <> Uri.Port) then
-    begin
-      Close;
-      fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTls,
-        GetSystemProxyUri(Uri.Address, fProxy, tempproxy));
-      if fUserAgent <> '' then
-        fHttp.UserAgent := fUserAgent;
-    end;
-    if not fHttp.SockConnected then
-      exit
+      if (fHttps = nil) or
+         (fHttps.Server <> Uri.Server) or
+         (fHttps.Port <> Uri.PortInt) then
+      begin
+        Close; // need a new HTTPS connection
+        fHttps := MainHttpClass.Create(Uri, @fOptions); // connect
+      end;
+      result := fHttps.Request(
+        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
+    end
     else
+    {$endif USEHTTPREQUEST}
+    begin
+      // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
+      if (fHttp = nil) or
+         (fHttp.Server <> Uri.Server) or
+         (fHttp.Port <> Uri.Port) then
+      begin
+        Close;
+        fHttp := THttpClientSocket.OpenOptions(Uri, fOptions); // connect
+      end;
+      if not fHttp.SockConnected then
+        exit;
       result := fHttp.Request(
-        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, true);
-    fBody := fHttp.Http.Content;
-    fHeaders := fHttp.Http.Headers;
+        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, {retry=}true);
+      fBody := fHttp.Http.Content;
+      fHeaders := fHttp.Http.Headers;
+    end;
     if KeepAlive = 0 then
-      FreeAndNil(fHttp);
+      Close; // force HTTP/1.0 scheme
   except
-    FreeAndNil(fHttp);
+    Close;
   end;
 end;
 
