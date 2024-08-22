@@ -3396,9 +3396,6 @@ end;
 
 constructor TMongoClient.Create(const Host: RawUtf8; Port: integer;
   aOptions: TMongoClientOptions; const SecondaryHostCsv, SecondaryPortCsv: RawUtf8);
-const
-  PROT: array[boolean] of string[1] = (
-    '', 's');
 var
   secHost: TRawUtf8DynArray;
   secPort: TIntegerDynArray;
@@ -3417,7 +3414,7 @@ begin
   fServerMaxWriteBatchSize := 100000;
   fLogReplyEventMaxSize := 1024;
   fGracefulReconnect.Enabled := true;
-  FormatUtf8('mongodb%://%:%', [PROT[mcoTls in Options], Host, Port],
+  FormatUtf8('mongodb%://%:%', [TLS_TEXT[mcoTls in Options], Host, Port],
     fConnectionString);
   CsvToRawUtf8DynArray(pointer(SecondaryHostCsv), secHost);
   nHost := length(secHost);

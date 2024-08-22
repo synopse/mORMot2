@@ -1526,6 +1526,9 @@ const
   /// the default TCP port as integer, as DEFAULT_PORT_INT[Https]
   DEFAULT_PORT_INT: array[boolean] of TNetPort = (
     80, 443);
+  /// can be used to generate e.g. http:// or https:// constants
+  TLS_TEXT: array[boolean] of string[1] = (
+    '', 's');
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address

@@ -156,7 +156,7 @@ function IsOptions(const method: RawUtf8): boolean;
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// check if the supplied text start with http:// or https://
+/// check if the supplied text start with 'http://' or 'https://'
 function IsHttp(const text: RawUtf8): boolean;
 
 /// naive detection of most used bots from a HTTP User-Agent string

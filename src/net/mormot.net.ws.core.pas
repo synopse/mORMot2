@@ -968,8 +968,7 @@ type
   // - then any incoming focText/focBinary events will trigger this callback
   // - eventually, a focConnectionClose will notify the connection ending
   TOnWebSocketProtocolChatIncomingFrame = procedure(
-    Sender: TWebSocketProcess;
-    const Frame: TWebSocketFrame) of object;
+    Sender: TWebSocketProcess; const Frame: TWebSocketFrame) of object;
 
   /// simple chatting protocol, allowing to receive and send WebSocket frames
   // - you can use this protocol to implement simple asynchronous communication
