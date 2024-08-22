@@ -37,7 +37,6 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json, // TSynDictionary for THttpRequestCached
-  mormot.core.perf,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
@@ -125,6 +124,55 @@ type
 
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
+
+{ high-level definitions, shared with both THttpRequest and THttpClientSocket }
+
+type
+  /// the supported authentication schemes which may be used by HTTP clients
+  // - supported only by TWinHttp class yet, and TCurlHttp
+  // - wraBearer is only supported by TCurlHttp
+  THttpRequestAuthentication = (
+    wraNone,
+    wraBasic,
+    wraDigest,
+    wraNegotiate,
+    wraBearer);
+
+  /// a record to set some extended options for HTTP clients
+  // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
+  // the actual mormot.net.http's THttpRequest implementation class
+  {$ifdef USERECORDWITHMETHODS}
+  THttpRequestExtendedOptions = record
+  {$else}
+  THttpRequestExtendedOptions = object
+  {$endif USERECORDWITHMETHODS}
+    /// allow to customize the HTTPS process
+    TLS: TNetTlsContext;
+    /// allow HTTP/HTTPS authentication to take place at server request
+    // - Scheme=wraBearer with Auth.Token is not handled by TWinHttp yet
+    Auth: record
+      UserName: SynUnicode;
+      Password: SynUnicode;
+      Token: SpiUtf8;
+      Scheme: THttpRequestAuthentication;
+    end;
+    /// the timeout to be used for the whole connection, as set in Create()
+    CreateTimeoutMS: integer;
+    /// allow to customize the User-Agent header
+    // - for TWinHttp, should be set at constructor level
+    UserAgent: RawUtf8;
+    /// optional Proxy URI
+    // - if kept to its default '', will try to use the system PROXY
+    // - if set to 'none', won't use any proxy
+    // - otherwise, will use this value as explicit proxy server name
+    Proxy: RawUtf8;
+    /// may be used to initialize this record on stack
+    procedure Init;
+  end;
+  /// pointer to some extended options for HTTP clients
+  PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
+
+function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
 var
   /// THttpRequest timeout default value for DNS resolution
@@ -390,9 +438,8 @@ type
     fProcessName: RawUtf8;
     fRedirected: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
-    fBasicAuthUserPassword, fAuthBearer: RawUtf8;
-    fAuthUserName: RawUtf8; // credentials used for DIGEST or SSPI
-    fAuthPassword: SpiUtf8;
+    fAuthUserName: RawUtf8; // credentials used for wraDigest or wraNegotiate
+    fAuthPassword, fBasicAuthUserPassword, fAuthBearer: SpiUtf8;
     fAuthDigestAlgo: TDigestAlgo;
     fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
@@ -535,7 +582,7 @@ type
     property Redirected: RawUtf8
       read fRedirected;
     /// optional Authorization: Basic header, encoded as 'User:Password' text
-    property BasicAuthUserPassword: RawUtf8
+    property BasicAuthUserPassword: SpiUtf8
       read fBasicAuthUserPassword write fBasicAuthUserPassword;
     /// optional Authorization: Bearer header value
     property AuthBearer: RawUtf8
@@ -680,41 +727,6 @@ procedure RegisterNetClientProtocol(
 
 { ******************** THttpRequest Abstract HTTP client class }
 
- { some high-level definitions, which may be shared outside THttpRequest }
-
-type
-  /// the supported authentication schemes which may be used by HTTP clients
-  // - supported only by TWinHttp class yet, and TCurlHttp
-  // - wraBearer is only supported by TCurlHttp
-  THttpRequestAuthentication = (
-    wraNone,
-    wraBasic,
-    wraDigest,
-    wraNegotiate,
-    wraBearer);
-
-  /// a record to set some extended options for HTTP clients
-  // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
-  // the actual mormot.net.http's THttpRequest implementation class
-  THttpRequestExtendedOptions = record
-    /// customize HTTPS process
-    TLS: TNetTlsContext;
-    /// allow HTTP authentication to take place at connection
-    // - Auth.Scheme and UserName/Password properties are handled
-    // by the TWinHttp class only by now
-    // - Auth.Token is only handled by TCurlHttp
-    Auth: record
-      UserName: SynUnicode;
-      Password: SynUnicode;
-      Token: SpiUtf8;
-      Scheme: THttpRequestAuthentication;
-    end;
-    /// allow to customize the User-Agent header
-    // - for TWinHttp, should be set at constructor level
-    UserAgent: RawUtf8;
-  end;
-
-
 {$ifdef USEHTTPREQUEST} // as set in mormot.defines.inc
 
 type
@@ -738,8 +750,8 @@ type
     fProxyByPass: RawUtf8;
     fPort: TNetPort;
     fLayer: TNetLayer;
-    fHttps: boolean;
     fKeepAlive: cardinal;
+    fHttps: boolean;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -1114,7 +1126,7 @@ type
     function InternalGetInfo(Info: cardinal): RawUtf8; override;
     function InternalGetInfo32(Info: cardinal): cardinal; override;
     function InternalQueryDataAvailable: cardinal; override;
-    function InternalReadData(var Data: RawByteString; Read: integer;
+    function InternalReadData(var Data: RawByteString; Read: PtrInt;
       Size: cardinal): cardinal; override;
   public
     /// relase the connection
@@ -1348,6 +1360,7 @@ type
   TSimpleHttpClient = class(THttpClientAbstract)
   protected
     fHttp: THttpClientSocket;
+    fHttpOptions: THttpRequestExtendedOptions;
     {$ifdef USEHTTPREQUEST}
     fHttps: THttpRequest;
     fOnlyUseClientSocket: boolean;
@@ -1776,7 +1789,7 @@ begin
 end;
 
 var
-  _PROXYSET: boolean; // retrieve environment variables only once
+  _PROXYSETFROMENV: boolean; // retrieve environment variables only once
   _PROXYSAFE: TLightLock;
   _PROXY: array[{https:}boolean] of RawUtf8;
 
@@ -1786,14 +1799,14 @@ var
   pi: TProxyInfo;
 {$endif USEWININET}
 begin
-  if not _PROXYSET then
+  if not _PROXYSETFROMENV then
   begin
     _PROXYSAFE.Lock;
     StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'),  _PROXY[false]);
     StringToUtf8(GetEnvironmentVariable('HTTPS_PROXY'), _PROXY[true]);
     if _PROXY[true] = '' then
       _PROXY[true] := _PROXY[false];
-    _PROXYSET := true;
+    _PROXYSETFROMENV := true;
     _PROXYSAFE.UnLock;
   end;
   result := _PROXY[IdemPChar(pointer(uri), 'HTTPS://')];
@@ -1855,7 +1868,9 @@ end;
 
 destructor THttpClientSocket.Destroy;
 begin
-  FillZero(fAuthPassword); // DIGEST and SSPI
+  FillZero(fBasicAuthUserPassword); // wraBasic
+  FillZero(fAuthPassword);          // wraDigest or wraNegotiate
+  FillZero(fAuthBearer);            // wraBearer
   inherited Destroy;
 end;
 
@@ -2765,6 +2780,20 @@ end;
 
 
 { ******************** THttpRequest Abstract HTTP client class }
+
+{ THttpRequestExtendedOptions }
+
+procedure THttpRequestExtendedOptions.Init;
+begin
+  Finalize(self);
+  FillCharFast(self, SizeOf(self), 0);
+end;
+
+function ToText(wra: THttpRequestAuthentication): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpRequestAuthentication), ord(wra));
+end;
+
 
 {$ifdef USEHTTPREQUEST}
 
@@ -3985,7 +4014,6 @@ begin
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
   {$endif USEHTTPREQUEST}
-  fTimeOut := 5000;
   inherited Create;
 end;
 
@@ -4000,8 +4028,6 @@ end;
 function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
-var
-  tempproxy: TUri;
 begin
   result := 0;
   {$ifdef USEHTTPREQUEST}
