@@ -1608,15 +1608,16 @@ end;
 
 procedure TXName.FromFields(const fields: TCryptCertFields);
 begin
-  Name[xaC]  := TrimU(fields.Country);
-  Name[xaST] := TrimU(fields.State);
-  Name[xaL]  := TrimU(fields.Locality);
-  Name[xaO]  := TrimU(fields.Organization);
-  Name[xaOU] := TrimU(fields.OrgUnit);
-  Name[xaCN] := TrimU(fields.CommonName);
-  Name[xaE]  := TrimU(fields.EmailAddress);
-  Name[xaSN] := TrimU(fields.SurName);
-  Name[xaGN] := TrimU(fields.GivenName);
+  Name[xaC]   := TrimU(fields.Country);
+  Name[xaST]  := TrimU(fields.State);
+  Name[xaL]   := TrimU(fields.Locality);
+  Name[xaO]   := TrimU(fields.Organization);
+  Name[xaOU]  := TrimU(fields.OrgUnit);
+  Name[xaCN]  := TrimU(fields.CommonName);
+  Name[xaE]   := TrimU(fields.EmailAddress);
+  Name[xaSN]  := TrimU(fields.SurName);
+  Name[xaGN]  := TrimU(fields.GivenName);
+  Name[xaSER] := TrimU(fields.SerialNumber);
 end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;

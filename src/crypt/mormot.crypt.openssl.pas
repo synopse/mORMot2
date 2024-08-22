@@ -2283,7 +2283,7 @@ begin
       if CommonName <> '' then
         cn := CommonName;
       name.AddEntries(Country, State, Locality, Organization, OrgUnit,
-        cn, EmailAddress, SurName, GivenName);
+        cn, EmailAddress, SurName, GivenName, SerialNumber);
     end
     else
       name.AddEntry('CN', cn);

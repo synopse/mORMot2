@@ -1541,8 +1541,8 @@ type
     procedure ToUtf8(out result: RawUtf8;
       flags: cardinal = XN_FLAG_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure AddEntry(const Name, Value: RawUtf8);
-    procedure AddEntries(const Country, State, Locality,
-      Organization, OrgUnit, CommonName, EmailAddress, SurName, GivenName: RawUtf8);
+    procedure AddEntries(const Country, State, Locality, Organization, OrgUnit,
+      CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
     procedure SetEntry(const Name, Value: RawUtf8);
     procedure DeleteEntry(NID: integer); overload;
     procedure DeleteEntry(const Name: RawUtf8); overload;
@@ -8318,7 +8318,7 @@ begin
 end;
 
 procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
-  OrgUnit, CommonName, EmailAddress, SurName, GivenName: RawUtf8);
+  OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
 begin
   // warning: don't check for duplicates
   AddEntry('C',  Country);
@@ -8330,6 +8330,7 @@ begin
   AddEntry('emailAddress', EmailAddress);
   AddEntry('SN', Surname);
   AddEntry('GN', GivenName);
+  AddEntry('SER', SerialNumber);
 end;
 
 procedure X509_NAME.SetEntry(const Name, Value: RawUtf8);
