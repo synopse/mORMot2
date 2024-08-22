@@ -1243,29 +1243,18 @@ type
 { ******************** TSimpleHttpClient Wrapper Class }
 
 type
-  /// simple wrapper around THttpClientSocket/THttpRequest instances
-  // - this class will reuse the previous connection if possible, and select the
-  // best connection class available on this platform for a given URI
-  TSimpleHttpClient = class
-  protected
-    fHttp: THttpClientSocket;
-    fHttps: THttpRequest;
-    fUri, fProxy, fHeaders, fUserAgent: RawUtf8;
-    fBody: RawByteString;
-    fSocketTLS: TNetTlsContext;
-    fOnlyUseClientSocket: boolean;
-    fTimeOut, fStatus: integer;
-  public
-    /// initialize the instance
-    // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
-    constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
-    /// finalize the connection
-    destructor Destroy; override;
-    /// low-level entry point of this instance, using an TUri as input
-    // - rather use the Request() more usable method
-    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
-      const Data: RawByteString; const DataMimeType: RawUtf8;
-      KeepAlive: cardinal): integer; overload;
+  /// an interface to make HTTP client requests
+  // - is implemented e.g. by our TSimpleHttpClient class in this unit
+  // - may eventually be implemented by any class, even non-mORMot classes from
+  // the RTL or Indy
+  IHttpClient = interface
+    // some property wrapper methods
+    function GetUserAgent: RawUtf8;
+    procedure SetUserAgent(const Agent: RawUtf8);
+    function GetTimeOut: integer;
+    procedure SetTimeOut(TimeOut: integer);
+    function GetProxy: RawUtf8;
+    procedure SetProxy(const Proxy: RawUtf8);
     /// simple-to-use entry point of this instance
     // - use Body and Headers properties to retrieve the HTTP body and headers
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
@@ -1273,41 +1262,77 @@ type
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     /// access to the raw TLS settings for THttpClientSocket
     // - we define a pointer to the record and not directly a record property
-    // to allow direct modification of any property of the record
-    function SocketTLS: PNetTlsContext;
-      {$ifdef HASINLINE} inline; {$endif}
+    // to allow direct modification of any property of the record, e.g. as:
+    // ! client.SocketTls^.IgnoreTlsCertificateErrors := false
+    function SocketTls: PNetTlsContext;
     /// returns the HTTP body as returned by a previous call to Request()
-    property Body: RawByteString
-      read fBody;
+    function Body: RawByteString;
     /// returns the HTTP status code after a Request() call
-    property Status: integer
-      read fStatus;
+    function Status: integer;
     /// returns the HTTP headers as returned by a previous call to Request()
-    property Headers: RawUtf8
-      read fHeaders;
+    function Headers: RawUtf8;
     /// allows to customize the user-agent header
     property UserAgent: RawUtf8
-      read fUserAgent write fUserAgent;
+      read GetUserAgent write SetUserAgent;
     /// allows to customize HTTPS connection and allow weak certificates
-    property IgnoreTlsCertificateErrors: boolean
-      read fSocketTLS.IgnoreCertificateErrors write fSocketTLS.IgnoreCertificateErrors;
     /// set the timeout value for RawRequest/Request, in milliseconds
     property TimeOut: integer
-      read fTimeOut write fTimeOut;
+      read GetTimeOut write SetTimeOut;
     /// alows to customize the connection using a proxy
     property Proxy: RawUtf8
-      read fProxy write fProxy;
+      read GetProxy write SetProxy;
   end;
 
-/// returns the best THttpRequest class, depending on the system it runs on
-// - e.g. TWinHttp or TCurlHttp
-// - consider using TSimpleHttpClient if you just need a simple connection
-function MainHttpClass: THttpRequestClass;
+  /// abstract implementation class of IHttpClient
+  THttpClientAbstract = class(TInterfacedObject, IHttpClient)
+  protected
+    fUri, fProxy, fHeaders, fUserAgent: RawUtf8;
+    fBody: RawByteString;
+    fTimeOut, fStatus: integer;
+    fSocketTls: TNetTlsContext;
+  public
+    /// abstract low-level entry point of this class, using an TUri as input
+    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
+      const Data: RawByteString; const DataMimeType: RawUtf8;
+      KeepAlive: cardinal): integer; virtual; abstract;
+    // IHttpClient methods, redirecting to the internal properties or
+    function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
+      const Header: RawUtf8 = ''; const Data: RawByteString = '';
+      const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    function SocketTls: PNetTlsContext;
+    function Body: RawByteString;
+    function Status: integer;
+    function Headers: RawUtf8;
+    function GetUserAgent: RawUtf8;
+    procedure SetUserAgent(const Agent: RawUtf8);
+    function GetTimeOut: integer;
+    procedure SetTimeOut(TimeOut: integer);
+    function GetProxy: RawUtf8;
+    procedure SetProxy(const Proxy: RawUtf8);
+  end;
 
-/// low-level forcing of another THttpRequest class
-// - could be used if we found out that the current MainHttpClass failed (which
-// could easily happen with TCurlHttp if the library is missing or deprecated)
-procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+  /// simple wrapper around THttpClientSocket/THttpRequest instances
+  // - this class will reuse the previous connection if possible, and select the
+  // best connection class available on this platform for a given URI
+  TSimpleHttpClient = class(THttpClientAbstract)
+  protected
+    fHttp: THttpClientSocket;
+    {$ifdef USEHTTPREQUEST}
+    fHttps: THttpRequest;
+    fOnlyUseClientSocket: boolean;
+    {$endif USEHTTPREQUEST}
+  public
+    /// initialize the instance
+    // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
+    constructor Create(aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
+    /// finalize the connection
+    destructor Destroy; override;
+    /// low-level entry point of this instance, using an TUri as input
+    // - rather use the Request() more usable method
+    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
+      const Data: RawByteString; const DataMimeType: RawUtf8;
+      KeepAlive: cardinal): integer; override;
+  end;
 
 
 { ************** Cached HTTP Connection to a Remote Server }
@@ -1344,7 +1369,7 @@ type
     // another class
     constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
-      aOnlyUseClientSocket: boolean = false); reintroduce;
+      aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
     // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
@@ -3816,6 +3841,75 @@ end;
 
 { ******************** TSimpleHttpClient Wrapper Class }
 
+{ THttpClientAbstract }
+
+function THttpClientAbstract.Body: RawByteString;
+begin
+  result := fBody;
+end;
+
+function THttpClientAbstract.Status: integer;
+begin
+  result := fStatus;
+end;
+
+function THttpClientAbstract.Headers: RawUtf8;
+begin
+  result := fHeaders;
+end;
+
+function THttpClientAbstract.GetUserAgent: RawUtf8;
+begin
+  result := fUserAgent;
+end;
+
+procedure THttpClientAbstract.SetUserAgent(const Agent: RawUtf8);
+begin
+  fUserAgent := Agent;
+end;
+
+function THttpClientAbstract.GetTimeOut: integer;
+begin
+  result := fTimeOut;
+end;
+
+procedure THttpClientAbstract.SetTimeOut(TimeOut: integer);
+begin
+  fTimeout := TimeOut;
+end;
+
+function THttpClientAbstract.GetProxy: RawUtf8;
+begin
+  result := fProxy;
+end;
+
+procedure THttpClientAbstract.SetProxy(const Proxy: RawUtf8);
+begin
+  fProxy := Proxy;
+end;
+
+function THttpClientAbstract.SocketTls: PNetTlsContext;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := @fSocketTls;
+end;
+
+function THttpClientAbstract.Request(const Uri, Method, Header: RawUtf8;
+  const Data: RawByteString; const DataMimeType: RawUtf8;
+  KeepAlive: cardinal): integer;
+var
+  u: TUri;
+begin
+  fUri := Uri;
+  if u.From(Uri) then
+    result := RawRequest(u, Method, Header, Data, DataMimeType, KeepAlive)
+  else
+    result := HTTP_NOTFOUND;
+  fStatus := result;
+end;
+
 
 { TSimpleHttpClient }
 
@@ -3837,7 +3931,7 @@ function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
 var
-  temp: TUri;
+  tempproxy: TUri;
 begin
   result := 0;
   if (Uri.Https or
@@ -3872,8 +3966,8 @@ begin
       FreeAndNil(fHttps);
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTLS,
-        GetSystemProxyUri(Uri.Address, Proxy, temp));
+        Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTls,
+        GetSystemProxyUri(Uri.Address, fProxy, tempproxy));
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;
@@ -3889,54 +3983,6 @@ begin
   except
     FreeAndNil(fHttp);
   end;
-end;
-
-function TSimpleHttpClient.Request(const Uri: RawUtf8; const Method: RawUtf8;
-  const Header: RawUtf8; const Data: RawByteString; const DataMimeType: RawUtf8;
-  KeepAlive: cardinal): integer;
-var
-  u: TUri;
-begin
-  fUri := Uri;
-  if u.From(Uri) then
-    result := RawRequest(u, Method, Header, Data, DataMimeType, KeepAlive)
-  else
-    result := HTTP_NOTFOUND;
-  fStatus := result;
-end;
-
-function TSimpleHttpClient.SocketTLS: PNetTlsContext;
-begin
-  if self = nil then
-    result := nil
-  else
-    result := @fSocketTLS;
-end;
-
-
-var
-  _MainHttpClass: THttpRequestClass;
-
-function MainHttpClass: THttpRequestClass;
-begin
-  if _MainHttpClass = nil then
-  begin
-    {$ifdef USEWININET}
-    _MainHttpClass := TWinHttp;
-    {$else}
-    {$ifdef USELIBCURL}
-    _MainHttpClass := TCurlHttp;
-    {$endif USELIBCURL}
-    {$endif USEWININET}
-    if _MainHttpClass = nil then
-      raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!');
-  end;
-  result := _MainHttpClass;
-end;
-
-procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
-begin
-  _MainHttpClass := aClass;
 end;
 
 
