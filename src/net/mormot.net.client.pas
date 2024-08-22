@@ -1272,6 +1272,8 @@ type
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     /// access to the raw TLS settings for THttpClientSocket
+    // - we define a pointer to the record and not directly a record property
+    // to allow direct modification of any property of the record
     function SocketTLS: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
     /// returns the HTTP body as returned by a previous call to Request()

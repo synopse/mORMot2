@@ -888,6 +888,8 @@ type
     procedure GetByAccountType(AT, Uac, unUac: integer;
       const BaseDN, CustomFilter, Match, AttributeName: RawUtf8;
       out Res: TRawUtf8DynArray);
+    function GetTlsContext: PNetTlsContext;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1098,11 +1100,13 @@ type
     property FullResult: TAsnObject
       read fFullResult;
     /// optional advanced options for FullTls = true
-    // - by default, IgnoreCertificateErrors is set to true by Create
-    // - but you can change these default settings to validate the server
-    // certificate if needed
-    property TlsContext: TNetTlsContext
-      read fTlsContext write fTlsContext;
+    // - we define a pointer to the record and not directly a record property
+    // to allow direct modification of any property of the record
+    // - by default, IgnoreCertificateErrors is set to true by Create - you can
+    // change these default settings, for instance as such:
+    // ! TlsContext^.IgnoreCertificateErrors := false;
+    property TlsContext: PNetTlsContext
+      read GetTlsContext;
     /// sequence number of the last LDAP command
     // - incremented with any LDAP command
     property Seq: integer
@@ -3014,6 +3018,11 @@ begin
     end;
   if fResultString = '' then
     fResultString := 'Connect: failed';
+end;
+
+function TLdapClient.GetTlsContext: PNetTlsContext;
+begin
+  result := @fTlsContext;
 end;
 
 function TLdapClient.BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
