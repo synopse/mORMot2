@@ -8283,17 +8283,15 @@ begin
   begin
     FastSetString(Value, p, len);
     result := true;
-  end
-  else
-  begin
-    if not KeepNotFoundValue then
-      {$ifdef FPC}
-      FastAssignNew(Value);
-      {$else}
-      Value := '';
-      {$endif FPC}
-    result := false;
+    exit;
   end;
+  if not KeepNotFoundValue then
+    {$ifdef FPC}
+    FastAssignNew(Value);
+    {$else}
+    Value := '';
+    {$endif FPC}
+  result := false;
 end;
 
 function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
