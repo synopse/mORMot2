@@ -469,6 +469,13 @@ type
     constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
       aTLSContext: PNetTlsContext = nil); override;
+    /// constructor to create a client connection to a given TUri and options
+    // - will use specified options, including TLS and Auth members, just like
+    // the overloaded THttpRequest.Create(TUri,PHttpRequestExtendedOptions)
+    // - raise an exception on connection error
+    // - as used e.g. by TSimpleHttpClient
+    constructor OpenOptions(const aUri: TUri;
+      var aOptions: THttpRequestExtendedOptions);
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, or an http
@@ -1896,6 +1903,47 @@ begin
     inherited OpenUri(aUri, aAddress, aTunnel, aTimeOut, aTLSContext);
 end;
 
+constructor THttpClientSocket.OpenOptions(const aUri: TUri;
+  var aOptions: THttpRequestExtendedOptions);
+var
+  usr, pwd: RawUtf8;
+  temp: TUri;
+  pu: PUri;
+begin
+  Create(aOptions.CreateTimeoutMS);
+  // setup the proper options before any connection
+  if aOptions.UserAgent <> '' then
+    fUserAgent := aOptions.UserAgent;
+  if aOptions.Auth.Scheme <> wraNone then
+  begin
+    usr := SynUnicodeToUtf8(aOptions.Auth.UserName);
+    pwd := SynUnicodeToUtf8(aOptions.Auth.Password);
+    case aOptions.Auth.Scheme of
+      wraBasic:
+        fBasicAuthUserPassword := Make([usr, ':', pwd]);
+      wraDigest:
+        AuthorizeDigest(usr, pwd);
+      {$ifdef DOMAINRESTAUTH}
+      wraNegotiate:
+        AuthorizeSspiUser(usr, pwd);
+      {$endif DOMAINRESTAUTH}
+      wraBearer:
+        fAuthBearer := aOptions.Auth.Token;
+    else
+      EHttpSocket.RaiseUtf8('SetClientSocketOptions(%): unsupported %',
+        [self, ToText(aOptions.Auth.Scheme)^]);
+    end;
+    FillZero(pwd);
+  end;
+  pu := GetSystemProxyUri(aUri.URI, aOptions.Proxy, temp);
+  if pu <> nil then
+    Tunnel := pu^;
+  TLS := aOptions.TLS;
+  // actually connect to the server (inlined TCrtSock.Open)
+  OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
+  aOptions.TLS := TLS; // copy back Peer information after connection
+end;
+
 procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
 
   procedure DoRetry(FatalError: integer;
@@ -2616,9 +2664,9 @@ begin
   fAuthDigestAlgo := Algo;
   if (UserName = '') or
      (Algo = daUndefined) then
-    OnAuthorize := nil
+    fOnAuthorize := nil
   else
-    OnAuthorize := OnAuthorizeDigest;
+    fOnAuthorize := OnAuthorizeDigest;
 end;
 
 function THttpClientSocket.OnAuthorizeDigest(Sender: THttpClientSocket;
