@@ -592,7 +592,7 @@ type
     property BasicAuthUserPassword: SpiUtf8
       read fBasicAuthUserPassword write fBasicAuthUserPassword;
     /// optional Authorization: Bearer header value
-    property AuthBearer: RawUtf8
+    property AuthBearer: SpiUtf8
       read fAuthBearer write fAuthBearer;
     /// contain the body data retrieved from the server - from inherited Http
     property Content: RawByteString
@@ -1031,8 +1031,8 @@ type
     function InternalGetInfo(Info: cardinal): RawUtf8; virtual; abstract;
     function InternalGetInfo32(Info: cardinal): cardinal; virtual; abstract;
     function InternalQueryDataAvailable: cardinal; virtual; abstract;
-    function InternalReadData(var Data: RawByteString; Read: integer;
-      Size: cardinal): cardinal; virtual; abstract;
+    function InternalReadData(var Data: RawByteString;
+      Read: PtrInt; Size: cardinal): cardinal; virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
       var Data: RawByteString): integer; override;
   public
@@ -1084,8 +1084,8 @@ type
     function InternalGetInfo(Info: cardinal): RawUtf8; override;
     function InternalGetInfo32(Info: cardinal): cardinal; override;
     function InternalQueryDataAvailable: cardinal; override;
-    function InternalReadData(var Data: RawByteString; Read: integer;
-      Size: cardinal): cardinal; override;
+    function InternalReadData(var Data: RawByteString;
+      Read: PtrInt; Size: cardinal): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -1138,8 +1138,8 @@ type
     function InternalGetInfo(Info: cardinal): RawUtf8; override;
     function InternalGetInfo32(Info: cardinal): cardinal; override;
     function InternalQueryDataAvailable: cardinal; override;
-    function InternalReadData(var Data: RawByteString; Read: PtrInt;
-      Size: cardinal): cardinal; override;
+    function InternalReadData(var Data: RawByteString;
+      Read: PtrInt; Size: cardinal): cardinal; override;
   public
     /// relase the connection
     destructor Destroy; override;
@@ -3418,8 +3418,8 @@ begin
     EWinHttp.RaiseFromLastError;
 end;
 
-function TWinHttp.InternalReadData(var Data: RawByteString; Read: PtrInt;
-  Size: cardinal): cardinal;
+function TWinHttp.InternalReadData(var Data: RawByteString;
+  Read: PtrInt; Size: cardinal): cardinal;
 begin
   if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
     EWinHttp.RaiseFromLastError;
@@ -3598,8 +3598,8 @@ begin
     EWinINet.RaiseFromLastError;
 end;
 
-function TWinINet.InternalReadData(var Data: RawByteString; Read: integer; Size:
-  cardinal): cardinal;
+function TWinINet.InternalReadData(var Data: RawByteString;
+  Read: PtrInt; Size: cardinal): cardinal;
 begin
   if not InternetReadFile(fRequest, @PByteArray(Data)[Read], Size, result) then
     EWinINet.RaiseFromLastError;
