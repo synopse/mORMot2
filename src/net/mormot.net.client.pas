@@ -12,7 +12,7 @@ unit mormot.net.client;
    - Additional Client Protocols Support
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHttp
-   - TSimpleHttpClient Wrapper Class
+   - IHttpClient / TSimpleHttpClient Wrappers
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
    - DNS Resolution Cache for mormot.net.sock NewSocket()
@@ -1259,15 +1259,12 @@ type
 
 
 const
-  /// true if TWinHttp or TCurlHttp is available on this system
-  // - i.e. if MainHttpClass would raise an EHttpSocket
-  HAS_HTTP_REQUEST = {$ifdef USEHTTPREQUEST} true {$else} false {$endif};
-
   /// true if neither TWinHttp nor TCurlHttp are not available on this system
-  ONLY_CLIENT_SOCKET = not HAS_HTTP_REQUEST;
+  // - i.e. if MainHttpClass would raise an EHttpSocket
+  ONLY_CLIENT_SOCKET = {$ifdef USEHTTPREQUEST} false {$else} true {$endif};
 
 
-{ ******************** TSimpleHttpClient Wrapper Class }
+{ ******************** IHttpClient / TSimpleHttpClient Wrappers }
 
 type
   /// an interface to make HTTP client requests
@@ -1283,10 +1280,14 @@ type
     function GetProxy: RawUtf8;
     procedure SetProxy(const Proxy: RawUtf8);
     /// simple-to-use entry point of this instance
+    // - will adapt to the full Uri (e.g. 'https://synopse.info/forum') and
+    // open the proper connection if needed
     // - use Body and Headers properties to retrieve the HTTP body and headers
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// finalize any existing HTTP/HTTPS connection
+    procedure Close;
     /// access to the raw TLS settings for THttpClientSocket
     // - we define a pointer to the record and not directly a record property
     // to allow direct modification of any property of the record, e.g. as:
@@ -1318,14 +1319,17 @@ type
     fTimeOut, fStatus: integer;
     fSocketTls: TNetTlsContext;
   public
+    /// finalize the connection
+    destructor Destroy; override;
     /// abstract low-level entry point of this class, using an TUri as input
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; virtual; abstract;
-    // IHttpClient methods, redirecting to the internal properties or
+    // IHttpClient methods, redirecting to the internal properties or methods
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    procedure Close; virtual; abstract;
     function SocketTls: PNetTlsContext;
     function Body: RawByteString;
     function Status: integer;
@@ -1352,13 +1356,13 @@ type
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
     constructor Create(aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
-    /// finalize the connection
-    destructor Destroy; override;
     /// low-level entry point of this instance, using an TUri as input
     // - rather use the Request() more usable method
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; override;
+    // IHttpClient methods
+    procedure Close; override;
   end;
 
 
@@ -3895,9 +3899,15 @@ end;
 {$endif USELIBCURL}
 
 
-{ ******************** TSimpleHttpClient Wrapper Class }
+{ ******************** IHttpClient / TSimpleHttpClient Wrappers }
 
 { THttpClientAbstract }
+
+destructor THttpClientAbstract.Destroy;
+begin
+  Close;
+  inherited Destroy;
+end;
 
 function THttpClientAbstract.Body: RawByteString;
 begin
@@ -3973,20 +3983,18 @@ constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
-                          ((_MainHttpClass = nil) and ONLY_CLIENT_SOCKET) or
                           not MainHttpClass.IsAvailable;
   {$endif USEHTTPREQUEST}
   fTimeOut := 5000;
   inherited Create;
 end;
 
-destructor TSimpleHttpClient.Destroy;
+procedure TSimpleHttpClient.Close;
 begin
   FreeAndNil(fHttp);
   {$ifdef USEHTTPREQUEST}
   FreeAndNil(fHttps);
   {$endif USEHTTPREQUEST}
-  inherited Destroy;
 end;
 
 function TSimpleHttpClient.RawRequest(const Uri: TUri;
@@ -4005,8 +4013,7 @@ begin
        (fHttps.Server <> Uri.Server) or
        (fHttps.Port <> Uri.PortInt) then
     begin
-      FreeAndNil(fHttp);
-      FreeAndNil(fHttps); // need a new HTTPS connection
+      Close; // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
         Uri.Server, Uri.Port, Uri.Https, fProxy, '',
         fTimeOut, fTimeOut, fTimeOut, nlTcp, fUserAgent);
@@ -4027,10 +4034,7 @@ begin
        (fHttp.Server <> Uri.Server) or
        (fHttp.Port <> Uri.Port) then
     begin
-      {$ifdef USEHTTPREQUEST}
-      FreeAndNil(fHttps);
-      {$endif USEHTTPREQUEST}
-      FreeAndNil(fHttp); // need a new HTTP connection
+      Close;
       fHttp := THttpClientSocket.Open(
         Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTls,
         GetSystemProxyUri(Uri.Address, fProxy, tempproxy));
@@ -4050,7 +4054,6 @@ begin
     FreeAndNil(fHttp);
   end;
 end;
-
 
 
 { ************** Cached HTTP Connection to a Remote Server }
