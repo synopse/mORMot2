@@ -38,6 +38,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json, // TSynDictionary for THttpRequestCached
+  mormot.core.variants,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}  // as set in mormot.defines.inc
@@ -1308,6 +1309,11 @@ type
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// main entry point of this instance
+    // - the overloaded Request() method will call TUri.From() then this method
+    function Request(const Uri: TUri; const Method, Header: RawUtf8;
+      const Data: RawByteString; const DataMimeType: RawUtf8;
+      KeepAlive: cardinal): integer; overload;
     /// quickly check if we can connect to the corresponding server
     // - Server.Address is not used bu this method
     // - return '' on success, or any raised Exception error message
@@ -1350,10 +1356,6 @@ type
   public
     /// finalize the connection
     destructor Destroy; override;
-    /// abstract low-level entry points of this class, using an TUri as input
-    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
-      const Data: RawByteString; const DataMimeType: RawUtf8;
-      KeepAlive: cardinal): integer; virtual; abstract;
     /// abstract low-level connection method of this class, using an TUri as input
     // - should raise an Exception on issue
     procedure RawConnect(const Server: TUri); virtual; abstract;
@@ -1364,6 +1366,9 @@ type
     property Proxy: RawUtf8
       read fOptions.Proxy write fOptions.Proxy;
     // IHttpClient methods, redirecting to the internal properties or methods
+    function Request(const Uri: TUri; const Method, Header: RawUtf8;
+      const Data: RawByteString; const DataMimeType: RawUtf8;
+      KeepAlive: cardinal): integer; overload; virtual; abstract;
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
@@ -1395,7 +1400,7 @@ type
     constructor Create(aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
     /// low-level entry point of this instance, using an TUri as input
     // - rather use the Request() more usable method
-    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
+    function Request(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; override;
     /// low-level connection point of this instance, using an TUri as input
@@ -1418,7 +1423,10 @@ type
   {$endif USERECORDWITHMETHODS}
     /// the raw HTTP response status code
     Status: integer;
-    /// the queried URL, without its server part, e.g. '/api/hypervisors'
+    /// the queried HTTP verb, e.g. 'GET' or 'POST'
+    Method: RawUtf8;
+    /// the queried URL, e.g. '/api/hypervisors'
+    // - i.e. without its server part, and excluding any ?parameters=...
     Url: RawUtf8;
     /// the raw HTTP response headers (if any)
     Headers: RawUtf8;
@@ -1426,8 +1434,8 @@ type
     Content: RawByteString;
     /// reset the content of this response structure
     procedure Init;
-    /// raise EJsonClient if the Status is an error (code >= 400)
-    procedure RaiseForStatus;
+    /// set the content of this response structure from previous aClient.Request
+    procedure InitFrom(const aMethod, aUrl: RawUtf8; const aClient: IHttpClient);
     /// retrieve a HTTP header text value
     function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
     /// retrieve a HTTP header 64-bit integer value
@@ -1446,6 +1454,145 @@ type
     /// low-level access to the raw response context
     property Response: TJsonResponse
       read fResponse;
+  end;
+
+  /// an interface to make thread-safe JSON client requests
+  // - is implemented e.g. by our TJsonClient class in this unit
+  // - don't know anything about the HTTP connection itself but it is connected,
+  // so could be actually not using HTTP at all (even run in-process)
+  // - can use RTTI for automated input/output JSON serialization of records
+  // or dynamic arrays - Request() methods are just wrapper to RttiRequest()
+  // - all those methods are thread-safe, protected by an OS mutex/lock
+  IJsonClient = interface
+    /// check if the client is actually connected to the server
+    // - return '' on success, or a text error (typically an Exception.Message)
+    function Connected: string;
+    /// Request execution, with no JSON parsing using RTTI
+    procedure Request(const Method, Action: RawUtf8); overload;
+    /// Request execution, with output only JSON parsing using RTTI
+    procedure Request(const Method, Action: RawUtf8;
+      var Res; ResInfo: PRttiInfo); overload;
+    /// parameterized Request execution, with no JSON parsing using RTTI
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const); overload;
+    /// parameterized Request execution, with output only JSON parsing using RTTI
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const;
+      var Res; ResInfo: PRttiInfo); overload;
+    /// parameterized Request execution, with input/output JSON parsing using RTTI
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const;
+      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo); overload;
+    /// main Request execution, with optional input/output JSON parsing using RTTI
+    // - if Payload/PayloadInfo or Res/ResInfo is nil, corresponding input
+    // Payload or output Res variable will be ignored
+    procedure RttiRequest(const Method, Action: RawUtf8;
+      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo);
+    /// low-level HTTP request execution
+    // - won't raise any exception on HTTP error, nor do any parsing
+    // - is called by RttiRequest(), and implemented e.g. in TJsonClient
+    procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
+      var Response: TJsonResponse);
+  end;
+
+  /// event signature for an error callback on TJsonClientAbstract
+  TOnJsonClientError = procedure(const Sender: IJsonClient;
+    const Response: TJsonResponse);
+
+  /// customize how TJsonClientAbstract handle its process, e.g. its parsing
+  TJsonClientOptions = set of (
+    jcoLogFullRequest,
+    jcoResultNoClear,
+    jcoHttpExceptionIntercept,
+    jcoHttpErrorRaise,
+    jcoParseTolerant,
+    jcoParseErrorClear,
+    jcoParseErrorRaise);
+
+  /// abstract thread-safe generic JSON client class
+  // - will implement all JSON and RTTI featured methods, without any actual
+  // HTTP connection, which is abstracted to Connected and RawRequest() methods
+  TJsonClientAbstract = class(TInterfacedObjectLocked, IJsonClient)
+  protected
+    fOnHttpError: TOnJsonClientError;
+    fUrlEncoder: TUrlEncoder;
+    fOptions: TJsonClientOptions;
+    fOnLog: TSynLogProc;
+    function CheckRequestError(const Response: TJsonResponse): boolean;
+  public
+    // IJsonClient thread-safe methods
+    function Connected: string; virtual; abstract;
+    procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
+      var Response: TJsonResponse); virtual; abstract;
+    procedure RttiRequest(const Method, Action: RawUtf8;
+      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo); overload;
+    procedure Request(const Method, Action: RawUtf8); overload;
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const); overload;
+    procedure Request(const Method, Action: RawUtf8;
+      var Res; ResInfo: PRttiInfo); overload;
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const;
+      var Res; ResInfo: PRttiInfo); overload;
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const;
+      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo); overload;
+    /// allow to customize any HTTP error
+    // - if no event is set, TJsonResponse.RaiseForStatus will be called
+    property OnHttpError: TOnJsonClientError
+      read fOnHttpError write fOnHttpError;
+    /// allow to customize the URL encoding of parameters
+    // - by default, contains [ueEncodeNames, ueSkipVoidString]
+    property UrlEncoder: TUrlEncoder
+      read fUrlEncoder write fUrlEncoder;
+    /// allow to customize the process
+    property Options: TJsonClientOptions
+      read fOptions write fOptions;
+    /// optional log of the client side process
+    // - could be assigned to the TSynLog.DoLog class method
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
+  end;
+
+  /// thread-safe generic JSON client class over HTTP
+  TJsonClient = class(TJsonClientAbstract)
+  protected
+    fHttp: IHttpClient;
+    fServerUri: TUri;
+    fBaseUri, fDefaultHeaders, fCookies, fInHeaders: RawUtf8;
+    fKeepAlive: integer;
+    procedure SetInHeaders;
+    procedure SetCookies(const Value: RawUtf8);
+    procedure SetDefaultHeaders(const Value: RawUtf8);
+  public
+    /// initialize the instance, over a HTTP server
+    // - you can then set the needed HttpOptions^, then call the Connected method
+    // to check if it is actually connected
+    constructor Create(const aServerAddress: RawUtf8; const aBaseUri: RawUtf8 = '';
+      aKeepAlive: integer = 5000); reintroduce; virtual;
+    /// finalize the instance, and its associated lock
+    destructor Destroy; override;
+    /// raw access to the HTTP options for the connection, e.g. TLS or Auth
+    function HttpOptions: PHttpRequestExtendedOptions;
+    // IJsonClient thread-safe methods
+    function Connected: string; override;
+    procedure RawRequest(const Action, Method, InType, InBody, InHeaders: RawUtf8;
+      var Response: TJsonResponse); override;
+    /// raw access to the HTTP client itself
+    // - direct access of this interface methods is not thread-safe
+    property Http: IHttpClient
+      read fHttp;
+    /// raw access to the base URI text prepended to each request
+    property BaseUri: RawUtf8
+      read fBaseUri write fBaseUri;
+    /// can specify a cookie value to the HTTP request
+    // - is void by default
+    property Cookies: RawUtf8
+      read fCookies write SetCookies;
+    /// can specify a default header to the HTTP request
+    // - contains 'Accept: application/json' by default
+    property DefaultHeaders: RawUtf8
+      read fDefaultHeaders write SetDefaultHeaders;
   end;
 
 
@@ -2415,7 +2562,7 @@ var
     params.SetStep(wgsNewStream, [redirected]);
   end;
 
-  procedure DoRequestAndFreeStream;
+  procedure RttiRequestAndFreeStream;
   begin
     // prepare TStreamRedirect context
     stream.Context := urlfile;
@@ -2626,7 +2773,7 @@ begin
   end;
   // actual file retrieval
   try
-    DoRequestAndFreeStream;
+    RttiRequestAndFreeStream;
     if (params.Hash <> '') and
        (parthash <> '') then
     begin
@@ -2640,7 +2787,7 @@ begin
         DeletePartAndResetDownload('resume'); // get rid of wrong file
         NewStream(fmCreate);                  // setup a new output stream
         requrl := url;                        // reset any redirection
-        DoRequestAndFreeStream;               // try again without any resume
+        RttiRequestAndFreeStream;               // try again without any resume
       end;
       // now the hash should be correct
       if not PropNameEquals(parthash, params.Hash) then
@@ -4109,7 +4256,7 @@ var
 begin
   fUri := Uri;
   if u.From(Uri) then
-    result := RawRequest(u, Method, Header, Data, DataMimeType, KeepAlive)
+    result := Request(u, Method, Header, Data, DataMimeType, KeepAlive)
   else
     result := HTTP_NOTFOUND;
   fStatus := result;
@@ -4178,7 +4325,7 @@ begin
   {$endif USEHTTPREQUEST}
 end;
 
-function TSimpleHttpClient.RawRequest(const Uri: TUri;
+function TSimpleHttpClient.Request(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
 begin
@@ -4204,6 +4351,7 @@ begin
   except
     Close; // keeping result = 0
   end;
+  fStatus := result;
 end;
 
 
@@ -4226,12 +4374,14 @@ begin
   RecordZero(@self, TypeInfo(TJsonResponse));
 end;
 
-procedure TJsonResponse.RaiseForStatus;
+procedure TJsonResponse.InitFrom(const aMethod, aUrl: RawUtf8;
+  const aClient: IHttpClient);
 begin
-  if (Status <> 0) and
-     not StatusCodeIsSuccess(Status) then
-    raise EJsonClient.CreateResp('% on % - %',
-      [StatusCodeToShort(Status), Url, ContentToShort(Content)], self);
+  Url := aUrl;
+  Method := aMethod;
+  Status := aClient.Status;
+  Headers := aClient.Headers;
+  Content := aClient.Body;
 end;
 
 function TJsonResponse.Header(const Name: RawUtf8; out Value: RawUtf8): boolean;
@@ -4245,21 +4395,155 @@ begin
 end;
 
 
+{ TJsonClientAbstract }
+
+function TJsonClientAbstract.CheckRequestError(const Response: TJsonResponse): boolean;
+var
+  err: ShortString;
+begin
+  result := (Response.Status <> 0) and
+            not StatusCodeIsSuccess(Response.Status);
+  if not result then
+    exit;
+  // HTTP error
+  FormatShort('Request: % on % % - %', [StatusCodeToShort(Response.Status),
+    Response.Method, Response.Url, ContentToShort(Response.Content)], err);
+  if Assigned(fOnLog) then
+    fOnLog(sllHTTP, '%', [err], self);
+  if Assigned(fOnHttpError) then
+    fOnHttpError(self, Response)
+  else if jcoHttpErrorRaise in fOptions then
+    raise EJsonClient.CreateResp('%.%', [self, err], Response);
+end;
+
+const
+  FMT_REQ: array[{full=}boolean] of RawUtf8 = (
+    'Request % %', 'Request % % %');
+
+procedure TJsonClientAbstract.RttiRequest(const Method, Action: RawUtf8;
+  Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo);
+var
+  r: TJsonResponse;
+  b: RawUtf8;
+  j: TRttiJson;
+  u: PUtf8Char;
+  err: ShortString;
+begin
+  if (Payload <> nil) and
+     (PayloadInfo <> nil) then
+    SaveJson(Payload^, PayloadInfo, [], b);
+  if Assigned(fOnLog) then
+    fOnLog(sllServiceCall, FMT_REQ[((jcoLogFullRequest in fOptions) or
+      (length(b) < 1024))], [Method, Action, b], self);
+  j := nil;
+  if Res <> nil then
+    j := pointer(Rtti.RegisterType(ResInfo));
+  if (j <> nil) and
+     not (jcoResultNoClear in fOptions) then
+    j.ValueFinalizeAndClear(Res); // clear result before request or parsing
+  try
+    RawRequest(Method, Action, '', b, '', r); // blocking thread-safe request
+  except
+    on E: Exception do
+    begin
+      if Assigned(fOnLog) then
+        fOnLog(sllFail, FMT_REQ[true], [Method, Action, E], self);
+      if not (jcoHttpExceptionIntercept in fOptions) then
+        raise; // propagate HTTP low-level exception
+      r.Status := HTTP_CLIENTERROR; // 666 = fake error
+      r.Content := ObjectToJsonDebug(E);
+    end;
+  end;
+  if CheckRequestError(r) or // HTTP status error
+     (j = nil) then          // no response JSON to parse
+    exit;
+  u := pointer(r.Content); // parse in-place the returned body
+  j.ValueLoadJson(Res, u, nil,
+    JSONPARSER_DEFAULTORTOLERANTOPTIONS[jcoParseTolerant in fOptions],
+    @JSON_[mFastFloat], nil, nil);
+  if u <> nil then
+    exit; // JSON parsing success
+  FormatShort('Request: % % failure parsing %', [Method, r.Url, j.Name], err);
+  if Assigned(fOnLog) then
+    fOnLog(sllServiceReturn, '%', [err], self);
+  if jcoParseErrorClear in fOptions then
+    j.ValueFinalizeAndClear(Res);
+  if jcoParseErrorRaise in fOptions then
+    raise EJsonClient.CreateUtf8('%.%', [self, err]);
+end;
+
+procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8);
+begin
+  RttiRequest(Method, Action, nil, nil, nil, nil); // all nil: no in/out RTTI
+end;
+
+procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8;
+  var Res; ResInfo: PRttiInfo);
+begin
+  RttiRequest(Method, Action, {Payload=}nil, @Res, {PayloadInfo=}nil, ResInfo);
+end;
+
+procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
+  const ActionArgs, NameValueParams: array of const);
+begin
+  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    nil, nil, nil, nil);
+end;
+
+procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
+  const ActionArgs, NameValueParams: array of const;
+  var Res; ResInfo: PRttiInfo);
+begin
+  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    nil, @Res, nil, ResInfo);
+end;
+
+procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
+  const ActionArgs, NameValueParams: array of const;
+  const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo);
+begin
+  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    @Payload, @Res, PayloadInfo, ResInfo);
+end;
+
+
 { TJsonClient }
 
 constructor TJsonClient.Create(const aServerAddress: RawUtf8;
-  const aBaseUri: RawUtf8);
+  const aBaseUri: RawUtf8; aKeepAlive: integer);
 begin
   inherited Create;
   if not fServerUri.From(aServerAddress) then
     EJsonClient.RaiseUtf8('Unexpected %.Create(%)', [self, aServerAddress]);
-  fBaseUri := aBaseUri;
+  fBaseUri := IncludeTrailingUriDelimiter(aBaseUri);
+  fKeepAlive := aKeepAlive;
   fHttp := TSimpleHttpClient.Create;
+  fDefaultHeaders := 'Accept: ' + JSON_CONTENT_TYPE;
+  fUrlEncoder := [ueEncodeNames, ueSkipVoidString];
+  fOptions := [jcoParseTolerant];
 end;
 
 destructor TJsonClient.Destroy;
 begin
   inherited Destroy;
+end;
+
+procedure TJsonClient.SetInHeaders;
+begin
+  fInHeaders := fDefaultHeaders;
+  AppendLine(fInHeaders, ['Cookie: ', fCookies]);
+end;
+
+procedure TJsonClient.SetCookies(const Value: RawUtf8);
+begin
+  fCookies := Value;
+  SetInHeaders;
+end;
+
+procedure TJsonClient.SetDefaultHeaders(const Value: RawUtf8);
+begin
+  fDefaultHeaders := Value;
+  SetInHeaders;
 end;
 
 function TJsonClient.HttpOptions: PHttpRequestExtendedOptions;
@@ -4277,10 +4561,35 @@ begin
   end;
 end;
 
-procedure TJsonClient.RawRequest(const Action, Method, InType, InHeaders: RawUtf8;
-  out Response: TJsonResponse);
+procedure TJsonClient.RawRequest(const Action, Method,
+  InType, InBody, InHeaders: RawUtf8; var Response: TJsonResponse);
+var
+  t, b, h: RawUtf8;
 begin
-
+  h := fInHeaders; // pre-computed from Cookies and DefaultHeaders properties
+  if InHeaders <> '' then
+    AppendLine(h, [InHeaders]);
+  if (InBody <> '') and
+     not HttpMethodWithNoBody(Method) then
+  begin
+    b := InBody;
+    t := InType;
+    if t = '' then
+      t := JSON_CONTENT_TYPE_VAR;
+  end;
+  Response.Init;
+  Response.Method := Method;
+  fSafe.Lock; // blocking thread-safe HTTP request
+  try
+    fServerUri.Address := fBaseUri + Action;
+    Response.Url := fServerUri.Root; // excluding ?parameters=...
+    fHttp.Request(fServerUri, Method, h, b, t, fKeepAlive);
+    Response.Status := fHttp.Status;
+    Response.Content := fHttp.Body;
+  finally
+    fServerUri.Address := ''; // reset
+    fSafe.UnLock;
+  end;
 end;
 
 
@@ -4331,7 +4640,7 @@ begin
      fCache.FindAndCopy(aAddress, cache) then
     FormatUtf8('If-None-Match: %', [cache.Tag], headin);
   fUri.Address := aAddress;
-  status := fClient.RawRequest(fUri, 'GET', headin{%H-}, '', '', fKeepAlive);
+  status := fClient.Request(fUri, 'GET', headin{%H-}, '', '', fKeepAlive);
   modified := true;
   case status of
     HTTP_SUCCESS:
