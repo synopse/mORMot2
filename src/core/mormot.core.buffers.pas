@@ -1581,6 +1581,10 @@ type
 function UrlEncode(const NameValuePairs: array of const;
   Options: TUrlEncoder = []): RawUtf8; overload;
 
+/// encode a full URI with prefix and parameters
+function UrlEncode(const PrefixFmt: RawUtf8; const PrefixArgs,
+  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8; overload;
+
 /// decode a UrlEncode() URI encoded parameter into its original value
 function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 
@@ -8147,44 +8151,68 @@ begin
 end;
 
 function UrlEncode(const NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
-// (['select','*','where','ID=12','offset',23,'object',aObject]);
+begin
+  result := UrlEncode('', [], NameValuePairs, Options);
+end;
+
+function UrlEncode(const PrefixFmt: RawUtf8; const PrefixArgs,
+  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8; overload;
 var
   a, n: PtrInt;
   name, value: RawUtf8;
   p: PVarRec;
+  w: TTextWriter;
+  possibleDirect, valueDirect, hasContent: boolean;
+  tmp: TTextWriterStackBuffer;
 begin
-  result := '';
-  n := high(NameValuePairs);
-  if (n < 0) or
-     (n and 1 <> 1) then // n should be = 1,3,5,7,..
-    exit;
-  for a := 0 to n shr 1 do
-  begin
-    VarRecToUtf8(NameValuePairs[a * 2], name);
-    if not IsUrlValid(pointer(name)) then
-      if ueEncodeNames in Options then
-        name := UrlEncodeName(name)
-      else
-        continue; // just skip invalid names
-    p := @NameValuePairs[a * 2 + 1];
-    if (ueSkipVoidValue in Options) and
-       VarRecIsVoid(p^) then
-      continue // skip e.g. '' or 0
-    else if p^.VType = vtObject then
-      value := ObjectToJson(p^.VObject, []) // VarRecToUtf8(vtObject)=ClassName
-    else
-    begin
-      VarRecToUtf8(p^, value);
-      if (ueSkipVoidString in Options) and
-         (value = '') then
-        continue; // skip ''
-    end;
-    Append(result, ['&', name, '=', UrlEncode(value)]);
+  hasContent := false;
+  possibleDirect := DefaultJsonWriter <> TTextWriter;
+  w := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    if PrefixFmt <> '' then
+      w.Add(PrefixFmt, PrefixArgs);
+    n := high(NameValuePairs);
+    if (n > 0) and
+       (n and 1 = 1) then // n should be = 1,3,5,7,..
+      for a := 0 to n shr 1 do
+      begin
+        p := @NameValuePairs[a * 2];
+        VarRecToUtf8(p^, name);
+        if not IsUrlValid(pointer(name)) then
+          if ueEncodeNames in Options then
+            name := UrlEncodeName(name)
+          else
+            continue; // just skip invalid names
+        inc(p);
+        valueDirect := possibleDirect and (p^.VType in vtNotString);
+        if (ueSkipVoidValue in Options) and
+           VarRecIsVoid(p^) then
+          continue // skip e.g. '' or 0
+        else if p^.VType = vtObject then // avoid VarRecToUtf8(vtObject)=ClassName
+          value := ObjectToJson(p^.VObject, [])
+        else if not valueDirect then
+        begin
+          VarRecToUtf8(p^, value);
+          if (ueSkipVoidString in Options) and
+             (value = '') then
+            continue; // skip ''
+        end;
+        if hasContent then
+          w.Add('&')
+        else if not (ueTrimLeadingQuestionMark in Options) then
+          w.Add('?');
+        hasContent := true;
+        w.AddString(name);
+        w.Add('=');
+        if valueDirect then
+          w.Add(p^) // requires TJsonWriter
+        else
+          UrlEncode(w, value);
+      end;
+    w.SetText(result);
+  finally
+    w.Free;
   end;
-  if ueTrimLeadingQuestionMark in Options then
-    delete(result, 1, 1)
-  else
-    result[1] := '?';
 end;
 
 function IsUrlValid(P: PUtf8Char): boolean;

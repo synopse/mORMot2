@@ -899,7 +899,7 @@ type
     // - string values may be escaped, depending on the supplied parameter
     // - very fast (avoid most temporary storage)
     procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
-      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); override;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aWriter.AddJsonEscape(['name','John','year',1972]);
