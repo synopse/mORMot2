@@ -878,11 +878,11 @@ begin
         fX509.Signed.SerialNumber := HexToBin(fX509.Signed.SerialNumberHex);
         fX509.Signed.CertUsages := Pkcs11FlagsToCertUsages(o^.StorageFlags);
         FormatUtf8('%-%', [aSlotID, o^.StorageID], fX509.Signed.Issuer.Name[xaDC]);
-        fX509.Signed.Issuer.Name[xaCN] := o^.StorageLabel;
+        fX509.Signed.Issuer.Name[xaCN]  := o^.StorageLabel;
         fX509.Signed.Issuer.Name[xaSER] := tok^.Serial;
-        fX509.Signed.Issuer.Name[xaO] := tok^.Manufacturer;
-        fX509.Signed.Issuer.Name[xaOU] := tok^.Model;
-        fX509.Signed.Issuer.Name[xaN] := tok^.Name;
+        fX509.Signed.Issuer.Name[xaO]   := tok^.Manufacturer;
+        fX509.Signed.Issuer.Name[xaOU]  := tok^.Model;
+        fX509.Signed.Issuer.Name[xaN]   := tok^.Name;
         fX509.Signed.Subject := fX509.Signed.Issuer; // emulate self-signed
       end
       else if fX509.Signed.SubjectPublicKey <> ValuePubToSub then

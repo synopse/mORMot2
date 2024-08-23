@@ -8330,7 +8330,7 @@ begin
   AddEntry('emailAddress', EmailAddress);
   AddEntry('SN', Surname);
   AddEntry('GN', GivenName);
-  AddEntry('SER', SerialNumber);
+  AddEntry('serialNumber', SerialNumber);
 end;
 
 procedure X509_NAME.SetEntry(const Name, Value: RawUtf8);
