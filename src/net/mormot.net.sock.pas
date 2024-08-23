@@ -2083,7 +2083,9 @@ begin
     msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
     if errnumber <> nil then
       msg := format('%s sys=%d (%s)', [msg, errnumber^, GetErrorText(errnumber^)]);
-  end;
+  end
+  else
+    fLastError := nrUnknownError;
   inherited CreateFmt(msg, args);
 end;
 
