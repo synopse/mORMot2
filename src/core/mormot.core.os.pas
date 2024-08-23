@@ -168,6 +168,8 @@ const
   /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
+  /// a fake response code, generated for client side panic failure
+  HTTP_CLIENTERROR = 666;
   /// clearly wrong response code, used by THttpServerRequest.SetAsyncResponse
   // - for internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
@@ -5898,7 +5900,7 @@ implementation
 const
   // StatusCodeToReason() StatusCodeToText() table to avoid memory allocations
   // - roughly sorted by actual usage order for WordScanIndex()
-  HTTP_REASON: array[0..43] of RawUtf8 = (
+  HTTP_REASON: array[0..44] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
    'No Content',                        // HTTP_NOCONTENT
    'Temporary Redirect',                // HTTP_TEMPORARYREDIRECT
@@ -5942,9 +5944,11 @@ const
    'Gateway Timeout',                   // HTTP_GATEWAYTIMEOUT
    'HTTP Version Not Supported',        // HTTP_HTTPVERSIONNONSUPPORTED
    'Network Authentication Required',   // 511
-   'Invalid Request');                  // 513 - should be last
+   'Client side Exception',             // HTTP_CLIENTERROR = 666
+   'Invalid Request');                  // 513 - should be last as fallback
 
-  HTTP_CODE: array[0..43] of word = (
+
+  HTTP_CODE: array[0..high(HTTP_REASON)] of word = (
     HTTP_SUCCESS,
     HTTP_NOCONTENT,
     HTTP_TEMPORARYREDIRECT,
@@ -5988,6 +5992,7 @@ const
     HTTP_GATEWAYTIMEOUT,
     HTTP_HTTPVERSIONNONSUPPORTED,
     511,
+    HTTP_CLIENTERROR,
     513);
 
 function StatusCodeToText(Code: cardinal): PRawUtf8;
