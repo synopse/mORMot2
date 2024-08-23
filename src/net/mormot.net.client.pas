@@ -1789,8 +1789,7 @@ end;
 
 procedure THttpClientSocketWGet.Clear;
 begin
-  Finalize(self);
-  FillCharFast(self, SizeOf(self), 0);
+  RecordZero(@self, TypeInfo(THttpClientSocketWGet));
 end;
 
 function THttpClientSocketWGet.WGet(const url: RawUtf8;
@@ -2898,8 +2897,7 @@ end;
 
 procedure THttpRequestExtendedOptions.Init;
 begin
-  Finalize(self);
-  FillCharFast(self, SizeOf(self), 0);
+  RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
 end;
 
 function ToText(wra: THttpRequestAuthentication): PShortString;
