@@ -1302,12 +1302,17 @@ type
   IHttpClient = interface
     /// simple-to-use entry point of this instance
     // - will adapt to the full Uri (e.g. 'https://synopse.info/forum') and
-    // open the proper connection if needed
+    // (re)open the proper connection if needed
     // - use Body and Headers properties to retrieve the HTTP body and headers
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// quickly check if we can connect to the corresponding server
+    // - Server.Address is not used bu this method
+    // - return '' on success, or any raised Exception error message
+    function Connected(const Server: TUri): string;
     /// finalize any existing HTTP/HTTPS connection
+    // - the connection will be reestablished on the next Request()
     procedure Close;
     /// access to the raw connection options
     // - we define a pointer to the record and not directly a record property
@@ -1337,17 +1342,20 @@ type
   protected
     // the options to be used for connection and authentication
     fOptions: THttpRequestExtendedOptions;
-    // request-specific values
+    // last request values
     fUri, fHeaders: RawUtf8;
     fBody: RawByteString;
     fStatus: integer;
   public
     /// finalize the connection
     destructor Destroy; override;
-    /// abstract low-level entry point of this class, using an TUri as input
+    /// abstract low-level entry points of this class, using an TUri as input
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; virtual; abstract;
+    /// abstract low-level connection method of this class, using an TUri as input
+    // - should raise an Exception on issue
+    procedure RawConnect(const Server: TUri); virtual; abstract;
     /// read/write access to the HTTP User-Agent to be used
     property UserAgent: RawUtf8
       read fOptions.UserAgent write fOptions.UserAgent;
@@ -1358,6 +1366,7 @@ type
     function Request(const Uri: RawUtf8; const Method: RawUtf8 = 'GET';
       const Header: RawUtf8 = ''; const Data: RawByteString = '';
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    function Connected(const Server: TUri): string; virtual;
     procedure Close; virtual; abstract;
     function Options: PHttpRequestExtendedOptions;
     function Tls: PNetTlsContext;
@@ -1388,6 +1397,9 @@ type
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; override;
+    /// low-level connection point of this instance, using an TUri as input
+    // - rather use the Connected() more usable method
+    procedure RawConnect(const Server: TUri); override;
     // IHttpClient methods
     procedure Close; override;
   end;
@@ -4075,6 +4087,20 @@ begin
   fStatus := result;
 end;
 
+function THttpClientAbstract.Connected(const Server: TUri): string;
+begin
+  try
+    RawConnect(Server);
+    result := ''; // success
+  except
+    on E: Exception do
+    begin
+      result := E.Message;
+      Close;
+    end;
+  end;
+end;
+
 
 { TSimpleHttpClient }
 
@@ -4086,6 +4112,34 @@ begin
                           not MainHttpClass.IsAvailable;
   {$endif USEHTTPREQUEST}
   inherited Create;
+end;
+
+procedure TSimpleHttpClient.RawConnect(const Server: TUri);
+begin
+  {$ifdef USEHTTPREQUEST}
+  if (Server.Https or
+      (fOptions.Proxy <> '')) and
+     not fOnlyUseClientSocket then
+  begin
+    if (fHttps = nil) or
+       (fHttps.Server <> Server.Server) or
+       (fHttps.Port <> Server.PortInt) then
+    begin
+      Close; // need a new HTTPS connection
+      fHttps := MainHttpClass.Create(Server, @fOptions); // connect
+    end;
+  end
+  else
+  {$endif USEHTTPREQUEST}
+  // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
+  if (fHttp = nil) or
+     (fHttp.Server <> Server.Server) or
+     (fHttp.Port <> Server.Port) or
+     not fHttp.SockConnected then
+  begin
+    Close;
+    fHttp := THttpClientSocket.OpenOptions(Server, fOptions); // connect
+  end;
 end;
 
 procedure TSimpleHttpClient.Close;
@@ -4102,34 +4156,16 @@ function TSimpleHttpClient.RawRequest(const Uri: TUri;
 begin
   result := 0;
   try
+    RawConnect(Uri); // raise an exception on connection issue
     {$ifdef USEHTTPREQUEST}
-    if (Uri.Https or
-        (fOptions.Proxy <> '')) and
-       not fOnlyUseClientSocket then
-    begin
-      if (fHttps = nil) or
-         (fHttps.Server <> Uri.Server) or
-         (fHttps.Port <> Uri.PortInt) then
-      begin
-        Close; // need a new HTTPS connection
-        fHttps := MainHttpClass.Create(Uri, @fOptions); // connect
-      end;
+    if fHttps <> nil then
       result := fHttps.Request(
-        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody);
-    end
+        Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, fHeaders, fBody)
     else
     {$endif USEHTTPREQUEST}
+    if fHttp <> nil then // paranoid
     begin
       // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
-      if (fHttp = nil) or
-         (fHttp.Server <> Uri.Server) or
-         (fHttp.Port <> Uri.Port) then
-      begin
-        Close;
-        fHttp := THttpClientSocket.OpenOptions(Uri, fOptions); // connect
-      end;
-      if not fHttp.SockConnected then
-        exit;
       result := fHttp.Request(
         Uri.Address, Method, KeepAlive, Header, Data, DataMimeType, {retry=}true);
       fBody := fHttp.Http.Content;
@@ -4138,7 +4174,7 @@ begin
     if KeepAlive = 0 then
       Close; // force HTTP/1.0 scheme
   except
-    Close;
+    Close; // keeping result = 0
   end;
 end;
 
