@@ -13,6 +13,7 @@ unit mormot.net.client;
    - THttpRequest Abstract HTTP client class
    - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHttp
    - IHttpClient / TSimpleHttpClient Wrappers
+   - TJsonClient JSON requests over HTTP
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
    - DNS Resolution Cache for mormot.net.sock NewSocket()
@@ -1405,6 +1406,43 @@ type
   end;
 
 
+{ ******************** TJsonClient JSON requests over HTTP }
+
+type
+  /// transient structure used to store a raw IJsonClient response
+  // - using such a structure allow the response to be thread-safe processed
+  {$ifdef USERECORDWITHMETHODS}
+  TJsonResponse = record
+  {$else}
+  TJsonResponse = object
+  {$endif USERECORDWITHMETHODS}
+    /// the raw HTTP response status code
+    Status: integer;
+    /// the queried URL, without its server part, e.g. '/api/hypervisors'
+    Url: RawUtf8;
+    /// the raw HTTP response headers (if any)
+    Headers: RawUtf8;
+    /// the raw HTTP response body
+    Content: RawByteString;
+    /// raise EJsonClient if the status is an error (code >= 400)
+    procedure RaiseForStatus;
+  end;
+  PJsonResponse = ^TJsonResponse;
+
+  /// exception class raised by TJsonClient instances
+  EJsonClient = class(EHttpSocket)
+  protected
+    fResponse: TJsonResponse;
+  public
+    /// dedicated constructor
+    constructor CreateResp(const Format: RawUtf8; const Args: array of const;
+      const Resp: TJsonResponse);
+    /// low-level access to the raw response context
+    property Response: TJsonResponse
+      read fResponse;
+  end;
+
+
 { ************** Cached HTTP Connection to a Remote Server }
 
 type
@@ -1553,7 +1591,6 @@ function SendEmailSubject(const Text: string): RawUtf8;
 
 
 implementation
-
 
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
@@ -4177,6 +4214,30 @@ begin
     Close; // keeping result = 0
   end;
 end;
+
+
+{ ******************** TJsonClient JSON requests over HTTP }
+
+{ EJsonClient }
+
+constructor EJsonClient.CreateResp(const Format: RawUtf8;
+  const Args: array of const; const Resp: TJsonResponse);
+begin
+  CreateUtf8(Format, Args);
+  fResponse := Resp;
+end;
+
+
+{ TJsonResponse }
+
+procedure TJsonResponse.RaiseForStatus;
+begin
+  if (Status <> 0) and
+     not StatusCodeIsSuccess(Status) then
+    raise EJsonClient.CreateResp('% on % - %',
+      [StatusCodeToShort(Status), Url, ContentToShort(Content)], self);
+end;
+
 
 
 { ************** Cached HTTP Connection to a Remote Server }
