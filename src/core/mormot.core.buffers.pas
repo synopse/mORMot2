@@ -2038,6 +2038,8 @@ function EscapeToShort(const source: RawByteString): ShortString; overload;
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
 procedure EscapeToShort(const source: RawByteString; var result: ShortString); overload;
 
+/// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
+function ContentToShort(const source: RawByteString): ShortString;
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -9374,6 +9376,14 @@ procedure EscapeToShort(const source: RawByteString; var result: ShortString);
 begin
   result[0] := AnsiChar(
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
+end;
+
+function ContentToShort(const source: RawByteString): ShortString;
+begin
+  if IsValidUtf8(source) then
+    Ansi7StringToShortString(source, result)
+  else
+    EscapeToShort(source, result);
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;

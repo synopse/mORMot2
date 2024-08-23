@@ -2013,7 +2013,8 @@ type
     constructor CreateLastOSError(const Format: RawUtf8; const Args: array of const;
       const Trailer: ShortString = 'OSError');
     /// a wrapper function around raise CreateUtf8()
-    class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const);
+    // - generated executable code could be slightly shorter
+    class procedure RaiseUtf8(const Format: RawUtf8; const Args: array of const); overload;
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the TSynLogExceptionToStrCustom
