@@ -1563,15 +1563,23 @@ procedure UrlEncodeName(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt); overl
 // - only parameters - i.e. after '?' - should replace spaces by '+'
 procedure UrlEncodeName(W: TTextWriter; const Text: RawUtf8); overload;
 
+type
+  /// some options for UrlEncode()
+  TUrlEncoder = set of (
+    ueTrimLeadingQuestionMark,
+    ueEncodeNames,
+    ueSkipVoidString,
+    ueSkipVoidValue);
+
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
 // ! url := UrlEncode(['select','*','where','ID=12','offset',23,'object',aObject]);
 // - parameters names should be plain ASCII-7 RFC compatible identifiers
-// (0..9a..zA..Z_.~), otherwise their values are skipped
+// (0..9a..zA..Z_.~), otherwise they are skipped unless ueEncodeNames is set
 // - parameters values can be either textual, integer or extended, or any TObject
 // - TObject serialization into UTF-8 will be processed with ObjectToJson()
 function UrlEncode(const NameValuePairs: array of const;
-  TrimLeadingQuestionMark: boolean = false): RawUtf8; overload;
+  Options: TUrlEncoder = []): RawUtf8; overload;
 
 /// decode a UrlEncode() URI encoded parameter into its original value
 function UrlDecode(U: PUtf8Char): RawUtf8; overload;
@@ -8138,8 +8146,7 @@ begin
   _UrlEncodeW(W, pointer(Text), length(Text), 48);
 end;
 
-function UrlEncode(const NameValuePairs: array of const;
-  TrimLeadingQuestionMark: boolean): RawUtf8;
+function UrlEncode(const NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var
   a, n: PtrInt;
@@ -8155,15 +8162,26 @@ begin
   begin
     VarRecToUtf8(NameValuePairs[a * 2], name);
     if not IsUrlValid(pointer(name)) then
-      continue; // just skip invalid names
+      if ueEncodeNames in Options then
+        name := UrlEncodeName(name)
+      else
+        continue; // just skip invalid names
     p := @NameValuePairs[a * 2 + 1];
-    if p^.VType = vtObject then
+    if (ueSkipVoidValue in Options) and
+       VarRecIsVoid(p^) then
+      continue // skip e.g. '' or 0
+    else if p^.VType = vtObject then
       value := ObjectToJson(p^.VObject, []) // VarRecToUtf8(vtObject)=ClassName
     else
+    begin
       VarRecToUtf8(p^, value);
-    result := result + '&' + name + '=' + UrlEncode(value);
+      if (ueSkipVoidString in Options) and
+         (value = '') then
+        continue; // skip ''
+    end;
+    Append(result, ['&', name, '=', UrlEncode(value)]);
   end;
-  if TrimLeadingQuestionMark then
+  if ueTrimLeadingQuestionMark in Options then
     delete(result, 1, 1)
   else
     result[1] := '?';

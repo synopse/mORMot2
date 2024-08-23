@@ -920,6 +920,10 @@ type
     /// write some #0 ended UTF-8 text, according to the specified format
     // - use overriden TJsonWriter version instead!
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
+    /// append an open array constant value to the buffer
+    // - use overriden TJsonWriter version instead!
+    procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
     // - return the position to write text, and increase the instance position
@@ -1640,10 +1644,10 @@ procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   var wasString: boolean);
 
 const
-  /// which TVarRec.VType are numbers, i.e. don't need to be quoted
-  // - vtVariant is a number by default, unless detected e.g. by VariantToUtf8()
+  /// which TVarRec.VType are numbers, e.g. don't need to be quoted as JSON
+  // - vtVariant may be a string or a complex type
   vtNotString = [vtBoolean, vtInteger, vtInt64, {$ifdef FPC} vtQWord, {$endif}
-                 vtCurrency, vtExtended, vtVariant];
+                 vtCurrency, vtExtended];
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
@@ -3845,10 +3849,15 @@ begin
     '%.Add(..,Escape: TTextWriterKind) unimplemented: use TJsonWriter', [self]);
 end;
 
+procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
+  WriteObjectOptions: TTextWriterWriteObjectOptions);
+begin
+  ESynException.RaiseUtf8('%.Add(TVarRec) unimplemented: use TJsonWriter', [self]);
+end;
+
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 begin
-  ESynException.RaiseUtf8(
-    '%.WrBase64() unimplemented: use TJsonWriter', [self]);
+  ESynException.RaiseUtf8('%.WrBase64() unimplemented: use TJsonWriter', [self]);
 end;
 
 procedure TTextWriter.AddShorter(const Short8: TShort8);

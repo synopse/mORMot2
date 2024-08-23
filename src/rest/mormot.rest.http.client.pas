@@ -663,10 +663,10 @@ begin
   Definition.DatabaseName := UrlEncode([
     'IgnoreTlsCertificateErrors', ord(fExtendedOptions.TLS.IgnoreCertificateErrors),
     'ConnectTimeout', fConnectTimeout,
-    'SendTimeout', fSendTimeout,
+    'SendTimeout',    fSendTimeout,
     'ReceiveTimeout', fReceiveTimeout,
-    'ProxyName', fProxyName,
-    'ProxyByPass', fProxyByPass], {TrimLeadingQuestionMark=}true);
+    'ProxyName',   fProxyName,
+    'ProxyByPass', fProxyByPass], [ueTrimLeadingQuestionMark]);
 end;
 
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
