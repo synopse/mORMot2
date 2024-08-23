@@ -1334,7 +1334,7 @@ type
     function Headers: RawUtf8;
     /// retrieve a HTTP header text value after the last Request() call
     function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
-    /// retrieve a HTTP header numerical value after the last Request() call
+    /// retrieve a HTTP header 64-bit integer value after the last Request() call
     function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
 
@@ -1424,8 +1424,14 @@ type
     Headers: RawUtf8;
     /// the raw HTTP response body
     Content: RawByteString;
-    /// raise EJsonClient if the status is an error (code >= 400)
+    /// reset the content of this response structure
+    procedure Init;
+    /// raise EJsonClient if the Status is an error (code >= 400)
     procedure RaiseForStatus;
+    /// retrieve a HTTP header text value
+    function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
+    /// retrieve a HTTP header 64-bit integer value
+    function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
   PJsonResponse = ^TJsonResponse;
 
@@ -1434,7 +1440,7 @@ type
   protected
     fResponse: TJsonResponse;
   public
-    /// dedicated constructor
+    /// dedicated constructor, setting the associated TJsonResponse
     constructor CreateResp(const Format: RawUtf8; const Args: array of const;
       const Resp: TJsonResponse);
     /// low-level access to the raw response context
@@ -4077,27 +4083,14 @@ end;
 
 function THttpClientAbstract.Header(
   const Name: RawUtf8; out Value: RawUtf8): boolean;
-var
-  up: array[byte] of AnsiChar;
 begin
-  result := false;
-  if Name = '' then
-    exit;
-  PWord(UpperCopy255Buf(@up, pointer(Name), length(Name)))^ := ord(':');
-  result := FindNameValue(fHeaders, @up, Value);
+  result := GetHeader(fHeaders, Name, Value);
 end;
 
 function THttpClientAbstract.Header(
   const Name: RawUtf8; out Value: Int64): boolean;
-var
-  v: RawUtf8;
-  err: integer;
 begin
-  result := Header(Name, v);
-  if not result then
-    exit;
-  Value := GetInt64(pointer(v), err);
-  result := err = 0;
+  result := GetHeader(fHeaders, Name, Value);
 end;
 
 function THttpClientAbstract.Options: PHttpRequestExtendedOptions;
@@ -4230,6 +4223,11 @@ end;
 
 { TJsonResponse }
 
+procedure TJsonResponse.Init;
+begin
+  RecordZero(@self, TypeInfo(TJsonResponse));
+end;
+
 procedure TJsonResponse.RaiseForStatus;
 begin
   if (Status <> 0) and
@@ -4238,6 +4236,54 @@ begin
       [StatusCodeToShort(Status), Url, ContentToShort(Content)], self);
 end;
 
+function TJsonResponse.Header(const Name: RawUtf8; out Value: RawUtf8): boolean;
+begin
+  result := GetHeader(Headers, Name, Value);
+end;
+
+function TJsonResponse.Header(const Name: RawUtf8; out Value: Int64): boolean;
+begin
+  result := GetHeader(Headers, Name, Value);
+end;
+
+
+{ TJsonClient }
+
+constructor TJsonClient.Create(const aServerAddress: RawUtf8;
+  const aBaseUri: RawUtf8);
+begin
+  inherited Create;
+  if not fServerUri.From(aServerAddress) then
+    EJsonClient.RaiseUtf8('Unexpected %.Create(%)', [self, aServerAddress]);
+  fBaseUri := aBaseUri;
+  fHttp := TSimpleHttpClient.Create;
+end;
+
+destructor TJsonClient.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TJsonClient.HttpOptions: PHttpRequestExtendedOptions;
+begin
+  result := fHttp.Options;
+end;
+
+function TJsonClient.Connected: string;
+begin
+  fSafe.Lock;
+  try
+    result := fHttp.Connected(fServerUri);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TJsonClient.RawRequest(const Action, Method, InType, InHeaders: RawUtf8;
+  out Response: TJsonResponse);
+begin
+
+end;
 
 
 { ************** Cached HTTP Connection to a Remote Server }
