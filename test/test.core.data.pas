@@ -6483,9 +6483,9 @@ begin
     [ueEncodeNames, ueSkipVoidString]), '?wh%20ere=0');
   CheckEqual(UrlEncode(['select', '', 'where', 0],
     [ueEncodeNames, ueSkipVoidValue]), '');
-  CheckEqual(UrlEncode('prefix%', [0], ['select', '', 'where', 0],
+  CheckEqual(UrlEncodeFull('prefix%', [0], ['select', '', 'where', 0],
     [ueEncodeNames, ueSkipVoidValue]), 'prefix0');
-  CheckEqual(UrlEncode(
+  CheckEqual(UrlEncodeFull(
     '/api/templates/%/vms/', ['uuid'],
     ['owner', 'own', 'name', 'aname', 'os', 'mos', 'os_version', 123,
      'os_pretty_name', '', 'architecture', 'arch64'],

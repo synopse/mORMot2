@@ -1582,8 +1582,8 @@ function UrlEncode(const NameValuePairs: array of const;
   Options: TUrlEncoder = []): RawUtf8; overload;
 
 /// encode a full URI with prefix and parameters
-function UrlEncode(const PrefixFmt: RawUtf8; const PrefixArgs,
-  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8; overload;
+function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
+  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 
 /// decode a UrlEncode() URI encoded parameter into its original value
 function UrlDecode(U: PUtf8Char): RawUtf8; overload;
@@ -8152,11 +8152,11 @@ end;
 
 function UrlEncode(const NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 begin
-  result := UrlEncode('', [], NameValuePairs, Options);
+  result := UrlEncodeFull('', [], NameValuePairs, Options);
 end;
 
-function UrlEncode(const PrefixFmt: RawUtf8; const PrefixArgs,
-  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8; overload;
+function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
+  NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 var
   a, n: PtrInt;
   name, value: RawUtf8;
