@@ -1729,7 +1729,7 @@ type
     // - just a wrapper around PtrInt(fSock)>0
     function SockIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// check the connection status of the socket
+    /// check the connection status of the socket using getpeername()
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
     // - useful on multi-treaded environnement (as in THttpServer.Process)
@@ -5619,7 +5619,7 @@ var
   addr: TNetAddr;
 begin
   result := SockIsDefined and
-            (fSock.GetPeer(addr) = nrOK);
+            (fSock.GetPeer(addr) = nrOK); // OS may return ENOTCONN/WSAENOTCONN
 end;
 
 procedure TCrtSocket.SockSend(P: pointer; Len: integer);
