@@ -1702,6 +1702,9 @@ function VarRecAsChar(const V: TVarRec): integer;
 /// check if a supplied "array of const" argument is an instance of a given class
 function VarRecAs(const aArg: TVarRec; aClass: TClass): pointer;
 
+/// check if a supplied "array of const" argument is a void value
+function VarRecIsVoid(const V: TVarRec): boolean;
+
 /// fast Format() function replacement, optimized for RawUtf8
 // - only supported token is %, which will be written in the resulting string
 // according to each Args[] supplied items - so you will never get any exception
@@ -7940,6 +7943,46 @@ begin
     result := aArg.VObject
   else
     result := nil;
+end;
+
+function VarRecIsVoid(const V: TVarRec): boolean;
+begin
+  case V.VType of
+    vtString:
+      result := V.VString^[0] = #0;
+    vtAnsiString,
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString,
+    {$endif HASVARUSTRING}
+    vtWideString,
+    vtPChar,
+    vtPWideChar,
+    vtPointer,
+    vtObject,
+    vtClass,
+    vtInterface:
+      result := V.VPointer = nil; // void pointer value
+    vtChar:
+      result := V.VChar = #0;
+    vtWideChar:
+      result := V.VWideChar = #0;
+    vtBoolean:
+      result := false; // never void by design
+    vtInteger:
+      result := V.VInteger = 0;
+    {$ifdef FPC}
+    vtQWord,
+    {$endif FPC}
+    vtCurrency,
+    vtInt64:
+      result := V.VInt64^ = 0;
+    vtExtended:
+      result := V.VExtended^ = 0;
+    vtVariant:
+      result := VarIsEmptyOrNull(V.VVariant^);
+  else
+    result := false;
+  end;
 end;
 
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
