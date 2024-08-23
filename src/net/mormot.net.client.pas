@@ -158,6 +158,8 @@ type
     end;
     /// the timeout to be used for the whole connection, as set in Create()
     CreateTimeoutMS: integer;
+    /// how many times THttpClientSocket should redirect 30x responses
+    RedirectMax: integer;
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
@@ -1916,6 +1918,7 @@ var
 begin
   Create(aOptions.CreateTimeoutMS);
   // setup the proper options before any connection
+  fRedirectMax := aOptions.RedirectMax;
   if aOptions.UserAgent <> '' then
     fUserAgent := aOptions.UserAgent;
   if aOptions.Auth.Scheme <> wraNone then
@@ -4077,6 +4080,7 @@ end;
 
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
+  fOptions.RedirectMax := 4; // seems fair enough
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
@@ -4186,7 +4190,7 @@ begin
      fCache.FindAndCopy(aAddress, cache) then
     FormatUtf8('If-None-Match: %', [cache.Tag], headin);
   fUri.Address := aAddress;
-  status := fClient.RawRequest(fUri, 'GET', headin, '', '', fKeepAlive);
+  status := fClient.RawRequest(fUri, 'GET', headin{%H-}, '', '', fKeepAlive);
   modified := true;
   case status of
     HTTP_SUCCESS:
