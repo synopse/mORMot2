@@ -142,11 +142,24 @@ type
     function ToRttiRegisterDefinitions: RawUtf8; override;
   end;
 
+  TFpcEnum = class(TFpcCustomType)
+  private
+    fName: RawUtf8;
+    fPrefix: RawUtf8;
+    fChoices: TDocVariantData;
+  public
+    constructor Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
+
+    function ToTypeDefinition: RawUtf8; override;
+    function ToArrayTypeName(AllowArrayType: Boolean = True): RawUtf8; override;
+  end;
+
   TOpenApiParser = class
   private
     fSpecs: TDocVariantData;
 
     fRecords: IKeyValue<RawUtf8, TFpcRecord>;
+    fEnums: IKeyValue<RawUtf8, TFpcEnum>;
 
     function GetSpecs: POpenApiSpecs;
   public
@@ -174,10 +187,55 @@ implementation
 uses
   mormot.core.unicode;
 
+constructor TFpcEnum.Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
+var
+  c: Char;
+begin
+  inherited Create('T' + SchemaName);
+  fName := SchemaName;
+  fChoices.InitCopy(Variant(Schema^.Enum^), JSON_FAST);
+  fChoices.AddItem('None', 0);
+
+  fPrefix := '';
+  for c in SchemaName do
+  begin
+    // TODO: Find a IsUpperChar method somewhere in mORMot
+    if c <> LowerCase(c) then
+      Append(fPrefix, LowerCase(c));
+  end;
+end;
+
+function TFpcEnum.ToTypeDefinition: RawUtf8;
+var
+  Choice: RawUtf8;
+  i: Integer;
+begin
+  result := FormatUtf8('% = (', [FpcName]);
+
+  for i := 0 to fChoices.Count - 1 do
+  begin
+    if i > 0 then
+      Append(result,  ', ');
+
+    Choice := StringReplaceAll(VariantToUtf8(fChoices[i]), ' ', '');
+    Choice[1] := UpCase(Choice[1]);
+    Append(Result, fPrefix, Choice);
+  end;
+  Append(result, ');'#10, ToArrayTypeDefinition);
+end;
+
+function TFpcEnum.ToArrayTypeName(AllowArrayType: Boolean): RawUtf8;
+begin
+  if AllowArrayType then
+    result := FormatUtf8('%Set', [FpcName])
+  else
+    result := FormatUtf8('set of %', [FpcName]);
+end;
+
 
 function TFpcType.IsBuiltin: Boolean;
 begin
-  Result := not Assigned(fCustomType);
+  result := not Assigned(fCustomType);
 end;
 
 function TFpcType.GetSchema: POpenApiSchema;
@@ -190,8 +248,7 @@ end;
 
 function TFpcType.IsEnum: Boolean;
 begin
-  raise ENotImplemented.Create('FpcEnum class');
-  result := false;
+  result := Assigned(fCustomType) and (fCustomType is TFpcEnum);
 end;
 
 function TFpcType.IsRecord: Boolean;
@@ -227,7 +284,6 @@ class function TFpcType.LoadFromSchema(Schema: POpenApiSchema;
 var
   Rec: TFpcRecord;
 begin
-  // TODO: Enum
   if (Schema^.Reference <> '') or Assigned(Schema^.AllOf) then
   begin
     if Assigned(Schema^.AllOf) then
@@ -244,6 +300,16 @@ begin
     // TODO: Handle array of arrays
     result := LoadFromSchema(Schema^.Items, Parser);
     result.IsArray := True;
+  end
+  else if Schema^.IsNamedEnum then
+  begin
+    if not Parser.fEnums.ContainsKey(Schema^._Format) then
+    begin
+      result := TFpcType.CreateCustom(TFpcEnum.Create(Schema^._Format, Schema));
+      Parser.fEnums.Add(Schema^._Format, result.CustomType as TFpcEnum);
+    end
+    else
+      result := TFpcType.CreateCustom(Parser.fEnums.GetItem(Schema^._Format));
   end
   else
     result := TFpcType.CreateBuiltin(GetBuiltinType(Schema), Schema);
@@ -389,10 +455,14 @@ constructor TOpenApiParser.Create;
 begin
   fSpecs.FillZero;
   fRecords := Collections.NewKeyValue<RawUtf8, TFpcRecord>;
+  fEnums := Collections.NewKeyValue<RawUtf8, TFpcEnum>;
 end;
 
 destructor TOpenApiParser.Destroy;
 begin
+  // TODO: Free all FpcTypes
+  fRecords := nil;
+  fEnums := nil;
   inherited Destroy;
 end;
 
