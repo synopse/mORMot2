@@ -6470,6 +6470,27 @@ begin
   CheckEqual(UnescapeHex('12345\6'), '123456');
   CheckEqual(UnescapeHex('123\'#10'456'), '123456');
   CheckEqual(UnescapeHex('12\'#13#10#13#10'3456'), '123456');
+  CheckEqual(UrlEncode(['select', 'int', 'where', 0]), '?select=int&where=0');
+  CheckEqual(UrlEncode(['select', 'int', 'where', 0],
+    [ueEncodeNames, ueSkipVoidValue]), '?select=int');
+  CheckEqual(UrlEncode(['select', 'int', 'where', 0],
+    [ueEncodeNames]), '?select=int&where=0');
+  CheckEqual(UrlEncode(['select', '', 'where', 0],
+    [ueEncodeNames]), '?select=&where=0');
+  CheckEqual(UrlEncode(['select', '', 'where', 0],
+    [ueEncodeNames, ueSkipVoidString]), '?where=0');
+  CheckEqual(UrlEncode(['select', '', 'wh ere', 0],
+    [ueEncodeNames, ueSkipVoidString]), '?wh%20ere=0');
+  CheckEqual(UrlEncode(['select', '', 'where', 0],
+    [ueEncodeNames, ueSkipVoidValue]), '');
+  CheckEqual(UrlEncode('prefix%', [0], ['select', '', 'where', 0],
+    [ueEncodeNames, ueSkipVoidValue]), 'prefix0');
+  CheckEqual(UrlEncode(
+    '/api/templates/%/vms/', ['uuid'],
+    ['owner', 'own', 'name', 'aname', 'os', 'mos', 'os_version', 123,
+     'os_pretty_name', '', 'architecture', 'arch64'],
+    [ueSkipVoidString]), '/api/templates/uuid/vms/?owner=own&name=aname&os=mos' +
+    '&os_version=123&architecture=arch64');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);
@@ -6492,7 +6513,13 @@ begin
     CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     CheckEqual(UrlEncode(['seleCT', s, 'where', i]), '?' + d);
-    CheckEqual(UrlEncode(['seleCT', s, 'where', i], {trimlead=}true), d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i], [ueTrimLeadingQuestionMark]), d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i],
+      [ueTrimLeadingQuestionMark, ueEncodeNames]), d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i],
+      [ueTrimLeadingQuestionMark, ueEncodeNames, ueSkipVoidValue]), d);
+    CheckEqual(UrlEncode(['seleCT', s, 'where', i],
+      [ueTrimLeadingQuestionMark, ueEncodeNames, ueSkipVoidString]), d);
     t := EscapeHex(s, LDAP_ESC[true]);
     Check(t <> '');
     if length(t) = length(s) then
