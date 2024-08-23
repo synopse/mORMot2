@@ -8184,11 +8184,11 @@ begin
           else
             continue; // just skip invalid names
         inc(p);
-        valueDirect := possibleDirect and (p^.VType in vtNotString);
+        valueDirect := possibleDirect and (byte(p^.VType) in vtNotString);
         if (ueSkipVoidValue in Options) and
            VarRecIsVoid(p^) then
           continue // skip e.g. '' or 0
-        else if p^.VType = vtObject then // avoid VarRecToUtf8(vtObject)=ClassName
+        else if p^.VType = vtObject then // no VarRecToUtf8(vtObject)=ClassName
           value := ObjectToJson(p^.VObject, [])
         else if not valueDirect then
         begin
