@@ -2033,6 +2033,10 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): ShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a ShortString with the (hexadecimal) chars of the input text/binary
+procedure EscapeToShort(const source: RawByteString; var result: ShortString); overload;
 
 
 /// generate some pascal source code holding some data binary as constant
@@ -9362,6 +9366,11 @@ begin
 end;
 
 function EscapeToShort(const source: RawByteString): ShortString;
+begin
+  EscapeToShort(source, result);
+end;
+
+procedure EscapeToShort(const source: RawByteString; var result: ShortString);
 begin
   result[0] := AnsiChar(
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
