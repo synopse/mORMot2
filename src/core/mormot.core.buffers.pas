@@ -9416,12 +9416,16 @@ begin
 end;
 
 function ContentToShort(const source: RawByteString): ShortString;
+var
+  l: PtrInt;
 begin
-  if IsValidUtf8(source) then
-    Ansi7StringToShortString(source, result)
+  l := length(source);
+  if (l = 0) or
+     IsValidUtf8(source) then
+    SetString(result, PAnsiChar(pointer(source)), l)
   else
     result[0] := AnsiChar(
-      EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
+      EscapeBuffer(pointer(source), l, @result[1], 255) - @result[1]);
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
