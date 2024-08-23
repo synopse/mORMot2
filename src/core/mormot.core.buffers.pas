@@ -2033,10 +2033,6 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): ShortString; over
 
 /// fill a ShortString with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(const source: RawByteString): ShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// fill a ShortString with the (hexadecimal) chars of the input text/binary
-procedure EscapeToShort(const source: RawByteString; var result: ShortString); overload;
 
 /// if source is not UTF-8 calls EscapeToShort, otherwise return it directly
 function ContentToShort(const source: RawByteString): ShortString;
@@ -9369,11 +9365,6 @@ end;
 
 function EscapeToShort(const source: RawByteString): ShortString;
 begin
-  EscapeToShort(source, result);
-end;
-
-procedure EscapeToShort(const source: RawByteString; var result: ShortString);
-begin
   result[0] := AnsiChar(
     EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
 end;
@@ -9383,7 +9374,8 @@ begin
   if IsValidUtf8(source) then
     Ansi7StringToShortString(source, result)
   else
-    EscapeToShort(source, result);
+    result[0] := AnsiChar(
+      EscapeBuffer(pointer(source), length(source), @result[1], 255) - @result[1]);
 end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;

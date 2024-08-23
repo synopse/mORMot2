@@ -152,10 +152,10 @@ type
     /// allow HTTP/HTTPS authentication to take place at server request
     // - Scheme=wraBearer with Auth.Token is not handled by TWinHttp yet
     Auth: record
+      Scheme: THttpRequestAuthentication;
       UserName: SynUnicode;
       Password: SynUnicode;
       Token: SpiUtf8;
-      Scheme: THttpRequestAuthentication;
     end;
     /// the timeout to be used for the whole connection, as set in Create()
     CreateTimeoutMS: integer;
