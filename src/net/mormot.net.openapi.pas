@@ -10,7 +10,8 @@ uses
   mormot.core.base,
   mormot.core.variants,
   mormot.core.text,
-  mormot.core.collections;
+  mormot.core.collections,
+  mormot.rest.core;
 
 const
   SCHEMA_TYPE_ARRAY: RawUtf8 = 'array';
@@ -47,7 +48,6 @@ type
     property Example: Variant read GetExample;
     property Reference: RawUtf8 read GetReference;
     property AllOf: PDocVariantData read GetAllOf;
-  // allOf, schema ?
 
     property Items: POpenApiSchema read GetItems;
     property Properties: PDocVariantData read GetProperties;
@@ -59,19 +59,128 @@ type
     function IsNamedEnum: Boolean;
   end;
 
+  TOpenApiResponse = record
+  private
+    function GetDescription: RawUtf8;
+    function GetDV: PDocVariantData;
+    function GetSchema: POpenApiSchema;
+  public
+    property DocVariant: PDocVariantData read GetDV;
+
+    property Description: RawUtf8 read GetDescription;
+    property Schema: POpenApiSchema read GetSchema;
+  end;
+  POpenApiResponse = ^TOpenApiResponse;
+
+  TOpenApiParameter = record
+  private
+    function GetAllowEmptyValues: Boolean;
+    function GetAsSchema: POpenApiSchema;
+    function GetDefault: PVariant;
+    function GetDV: PDocVariantData;
+    function GetIn: RawUtf8;
+    function GetName: RawUtf8;
+    function GetRequired: Boolean;
+    function GetSchema: POpenApiSchema;
+  public
+    property DocVariant: PDocVariantData read GetDV;
+    property AsSchema: POpenApiSchema read GetAsSchema;
+    function AsFpcName: RawUtf8;
+
+    property Name: RawUtf8 read GetName;
+    property _In: RawUtf8 read GetIn;
+    property Required: Boolean read GetRequired;
+    property AllowEmptyValues: Boolean read GetAllowEmptyValues;
+    property Default: PVariant read GetDefault;
+    property Schema: POpenApiSchema read GetSchema;
+  end;
+  POpenApiParameter = ^TOpenApiParameter;
+  POpenApiParameterDynArray = array of POpenApiParameter;
+
+  TOpenApiOperation = record
+  private
+    function GetDeprecated: Boolean;
+    function GetDescription: RawUtf8;
+    function GetDV: PDocVariantData;
+    function GetId: RawUtf8;
+    function GetParameterByIndex(aIndex: Integer): POpenApiParameter;
+    function GetParameters: PDocVariantData;
+    function GetPayloadParameter: POpenApiParameter;
+    function GetResponseForStatusCode(aStatusCode: Integer): POpenApiResponse;
+    function GetResponses: PDocVariantData;
+    function GetSummary: RawUtf8;
+    function GetTags: PDocVariantData;
+  public
+    property DocVariant: PDocVariantData read GetDV;
+
+    property Id: RawUtf8 read GetId;
+    property Summary: RawUtf8 read GetSummary;
+    property Description: RawUtf8 read GetDescription;
+    property Tags: PDocVariantData read GetTags;
+    property Deprecated: Boolean read GetDeprecated;
+
+    property Parameters: PDocVariantData read GetParameters;
+    property Parameter[aIndex: Integer]: POpenApiParameter read GetParameterByIndex;
+    property PayloadParameter: POpenApiParameter read GetPayloadParameter;
+
+    property Responses: PDocVariantData read GetResponses;
+    property Response[aStatusCode: Integer]: POpenApiResponse read GetResponseForStatusCode;
+  end;
+  POpenApiOperation = ^TOpenApiOperation;
+
+  TOpenApiPathItem = record
+  private
+    function GetDescription: RawUtf8;
+    function GetDV: PDocVariantData;
+    function GetOperationByMethod(aMethod: TUriMethod): POpenApiOperation;
+    function GetParameterByIndex(aIndex: Integer): POpenApiParameter;
+    function GetParameters: PDocVariantData;
+    function GetSummary: RawUtf8;
+  public
+    property DocVariant: PDocVariantData read GetDV;
+
+    property Summary: RawUtf8 read GetSummary;
+    property Description: RawUtf8 read GetDescription;
+
+    property Method[aMethod: TUriMethod]: POpenApiOperation read GetOperationByMethod;
+    property Parameters: PDocVariantData read GetParameters;
+    property Parameter[aIndex: Integer]: POpenApiParameter read GetParameterByIndex;
+  end;
+  POpenApiPathItem = ^TOpenApiPathItem;
+
+  TOpenApiTag = record
+  private
+    function GetDescription: RawUtf8;
+    function GetDV: PDocVariantData;
+    function GetName: RawUtf8;
+  public
+    property DocVariant: PDocVariantData read GetDV;
+
+    property Name: RawUtf8 read GetName;
+    property Description: RawUtf8 read GetDescription;
+  end;
+  POpenApiTag = ^TOpenApiTag;
 
   TOpenApiSpecs = record
   private
+    function GetBasePath: RawUtf8;
     function GetDefinitionByName(aName: RawUtf8): POpenApiSchema;
     function GetDefinitions: PDocVariantData;
     function GetDV: PDocVariantData;
+    function GetPathItemByName(aPath: RawUtf8): POpenApiPathItem;
+    function GetPaths: PDocVariantData;
+    function GetTags: PDocVariantData;
     function GetVersion: RawUtf8;
   public
     property DocVariant: PDocVariantData read GetDV;
 
     property Definitions: PDocVariantData read GetDefinitions;
     property Definition[aName: RawUtf8]: POpenApiSchema read GetDefinitionByName;
+    property Paths: PDocVariantData read GetPaths;
+    property Path[aPath: RawUtf8]: POpenApiPathItem read GetPathItemByName;
     property Version: RawUtf8 read GetVersion;
+    property BasePath: RawUtf8 read GetBasePath;
+    property Tags: PDocVariantData read GetTags;
   end;
   POpenApiSpecs = ^TOpenApiSpecs;
 
@@ -112,6 +221,7 @@ type
 
     // TODO: Handle RecordArrayType in RTTI definition
     function ToFpcName(AllowArrayType: Boolean = True; NoRecordArrayTypes: Boolean = False): RawUtf8;
+    function ToFormatUtf8Arg(FpcVarName: RawUtf8): RawUtf8;
 
 
 
@@ -174,12 +284,36 @@ type
     function ToConstTextArray: RawUtf8;
   end;
 
+  TFpcOperation = class
+  private
+    fPath: RawUtf8;
+    fPathItem: POpenApiPathItem;
+    fOperation: POpenApiOperation;
+    fMethod: TUriMethod;
+    fPayloadParameterType: TFpcType;
+    fSuccessResponseCode: Integer;
+    fSuccessResponseType: TFpcType;
+  public
+    constructor Create(aPath: RawUtf8; aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
+
+    // Resolve parameters/responses types
+    procedure ResolveTypes(Parser: TOpenApiParser);
+
+    function GetAllParameters: POpenApiParameterDynArray;
+    function Documentation(LineIndent: RawUtf8 = ''): RawUtf8;
+    function Declaration(ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
+    function Body(ClassName: RawUtf8; BasePath: RawUtf8; Parser: TOpenApiParser): RawUtf8;
+    function FunctionName: RawUtf8;
+  end;
+  TFpcOperationDynArray = array of TFpcOperation;
+
   TOpenApiParser = class
   private
     fSpecs: TDocVariantData;
 
     fRecords: IKeyValue<RawUtf8, TFpcRecord>;
     fEnums: IKeyValue<RawUtf8, TFpcEnum>;
+    fOperations: TFpcOperationDynArray;
 
     function GetSpecs: POpenApiSpecs;
   public
@@ -189,12 +323,15 @@ type
     procedure Clear;
     procedure Parse(aSpecs: TDocVariantData);
     function ParseDefinition(aDefinitionName: RawUtf8): TFpcRecord;
+    procedure ParsePath(aPath: RawUtf8);
 
     function GetRecord(aRecordName: RawUtf8; NameIsReference: Boolean = False): TFpcRecord;
     function GetOrderedRecords: TFpcRecordDynArray;
+    function GetOperationsByTag: IKeyValue<POpenApiTag, IList<TFpcOperation>>;
 
     procedure Dump;
     function GetDtosUnit(UnitName: RawUtf8): RawUtf8;
+    function GetClientUnit(UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
 
     property Specs: POpenApiSpecs read GetSpecs;
   end;
@@ -220,6 +357,425 @@ const
     'program', 'property', 'protected', 'public', 'published', 'raise', 'read',
     'reintroduce', 'repeat', 'self', 'shl', 'shr', 'threadvar', 'to', 'try','type',
     'unit', 'uses', 'var', 'virtual', 'while', 'with', 'write', 'xor');
+
+function TOpenApiTag.GetDescription: RawUtf8;
+begin
+  result := DocVariant^.U['description'];
+end;
+
+function TOpenApiTag.GetDV: PDocVariantData;
+begin
+  result := PDocVariantData(@self);
+end;
+
+function TOpenApiTag.GetName: RawUtf8;
+begin
+  result := DocVariant^.U['name'];
+end;
+
+constructor TFpcOperation.Create(aPath: RawUtf8; aPathItem: POpenApiPathItem;
+  aOperation: POpenApiOperation; aMethod: TUriMethod);
+begin
+  fPath := aPath;
+  fPathItem := aPathItem;
+  fOperation := aOperation;
+  fMethod := aMethod;
+end;
+
+procedure TFpcOperation.ResolveTypes(Parser: TOpenApiParser);
+var
+  PayloadParam: POpenApiParameter;
+  StatusCode: PRawUtf8;
+  StatusCodeInt: Int64;
+begin
+  PayloadParam := fOperation^.PayloadParameter;
+  if Assigned(PayloadParam) then
+    fPayloadParameterType := TFpcType.LoadFromSchema(PayloadParam^.Schema, Parser);
+
+  for StatusCode in fOperation.Responses^.FieldNames do
+  begin
+    StatusCodeInt := StrToInt64Def(StatusCode^, 0);
+    if (StatusCode^ = 'default') or ((StatusCodeInt >= 200) and (StatusCodeInt < 400)) then
+    begin
+      fSuccessResponseCode := StatusCodeInt;
+      fSuccessResponseType := TFpcType.LoadFromSchema(fOperation.Response[fSuccessResponseCode]^.Schema, Parser);
+    end;
+  end;
+end;
+
+function TFpcOperation.GetAllParameters: POpenApiParameterDynArray;
+var
+  i, PathItemParamsCount: Integer;
+begin
+  PathItemParamsCount := fPathItem^.Parameters^.Count;
+  SetLength(result, PathItemParamsCount + fOperation^.Parameters^.Count);
+
+  for i := 0 to PathItemParamsCount - 1 do
+    result[i] := fPathItem^.Parameter[i];
+  for i := 0 to fOperation^.Parameters^.Count - 1 do
+    result[i + PathItemParamsCount] := fOperation^.Parameter[i];
+end;
+
+function TFpcOperation.Documentation(LineIndent: RawUtf8): RawUtf8;
+var
+  Parameters: POpenApiParameterDynArray;
+  Param: POpenApiParameter;
+  ResponsesDv: PDocVariantData;
+  StatusCode: PRawUtf8;
+  StatusCodeInt: Int64;
+  Response: POpenApiResponse;
+begin
+  result := FormatUtf8('%// [%] %%', [LineIndent, ToText(fMethod), fPath, LINE_END]);
+
+  // Summary
+  if fOperation^.Summary <> '' then
+    Append(result, [LineIndent, '// Summary: ', fOperation^.Summary, LINE_END]);
+  // Description
+  if fOperation^.Description <> '' then
+    Append(result, [LineIndent, '// Description:', LINE_END,
+      LineIndent, '//   ', StringReplaceAll(fOperation^.Description, LINE_END, FormatUtf8('%%//   ', [LINE_END + LineIndent])), LINE_END]);
+
+  // Parameters
+  Parameters := GetAllParameters;
+  if Assigned(Parameters) then
+  begin
+    Append(result, [LineIndent, '//', LINE_END,
+                    LineIndent, '// Parameters:', LINE_END]);
+    for Param in  Parameters do
+    begin
+      Append(result, [LineIndent, '// - [', Param^._In, '] ', Param^.AsFpcName]);
+      if Param^.Required then
+        Append(result, '*');
+      if Assigned(Param^.Default) then
+        Append(result, [' (default=', VariantToUtf8(Param^.Default^), ')']);
+      if Param^.AsSchema^.Description <> '' then
+        Append(result, ': ', Param^.AsSchema^.Description);
+      Append(result, LINE_END);
+    end;
+  end;
+
+  // Responses: TODO order by incremental status code
+  ResponsesDv := fOperation^.Responses;
+  if ResponsesDv^.Count > 0 then
+  begin
+    Append(result, [LineIndent, '//', LINE_END,
+                    LineIndent, '// Responses:', LINE_END]);
+    for StatusCode in ResponsesDv^.FieldNames do
+    begin
+      StatusCodeInt := StrToInt64Def(StatusCode^, 0);
+      Append(result, [LineIndent, '// - ', StatusCode^]);
+      if StatusCodeInt = fSuccessResponseCode then
+        Append(result, '*');
+      Response := POpenApiResponse(ResponsesDv^.O[StatusCode^]);
+      if Response^.Description <> '' then
+        Append(result, [': ', Response^.Description, LINE_END])
+      else
+        Append(result, ': No Description', LINE_END);
+    end;
+  end;
+end;
+
+function TFpcOperation.Declaration(ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
+var
+  Parameters: POpenApiParameterDynArray;
+  Param: POpenApiParameter;
+  ParamType: TFpcType;
+  i, FctParamIndex: Integer;
+begin
+  if Assigned(fSuccessResponseType) then
+    result := 'function '
+  else
+    result := 'procedure ';
+
+  if ClassName <> '' then
+    Append(Result, ClassName, '.');
+  Append(result, FunctionName, '(');
+
+  Parameters := GetAllParameters;
+  FctParamIndex := 0;
+  for i := 0 to Length(Parameters) - 1 do
+  begin
+    Param := Parameters[i];
+    if (Param^._In = 'path') or (Param^._In = 'query') then
+    begin
+      if FctParamIndex > 0 then
+        Append(result, '; ');
+      ParamType := TFpcType.LoadFromSchema(Param^.AsSchema, Parser);
+      Append(result, [Param^.AsFpcName, ': ', ParamType.ToFpcName]);
+      Inc(FctParamIndex);
+    end;
+  end;
+
+  if Assigned(fPayloadParameterType) then
+  begin
+    if Length(Parameters) > 0 then
+      Append(result, '; const payload: ', fPayloadParameterType.ToFpcName)
+    else
+      Append(result, 'const payload: ', fPayloadParameterType.ToFpcName);
+  end;
+
+  if Assigned(fSuccessResponseType) then
+    Append(result, ['): ', fSuccessResponseType.ToFpcName, ';'])
+  else
+    Append(result, ');');
+end;
+
+function TFpcOperation.Body(ClassName: RawUtf8; BasePath: RawUtf8;
+  Parser: TOpenApiParser): RawUtf8;
+var
+  Action: RawUtf8;
+  ActionArgs: TRawUtf8DynArray;
+  i: Integer;
+  QueryParameters: TDocVariantData;
+  Parameters: POpenApiParameterDynArray;
+  Param: POpenApiParameter;
+  ParamType: TFpcType;
+begin
+  Action := BasePath + fPath;
+  ActionArgs := nil;
+  QueryParameters.InitObject([], JSON_FAST);
+  Parameters := GetAllParameters;
+
+  for Param in Parameters do
+  begin
+    ParamType := TFpcType.LoadFromSchema(Param^.AsSchema, Parser);
+    if Param^._In = 'path' then
+    begin
+      Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
+      SetLength(ActionArgs, Length(ActionArgs) + 1);
+      ActionArgs[Length(ActionArgs) - 1] := ParamType.ToFormatUtf8Arg(Param^.AsFpcName);
+    end
+    else if Param^._In = 'query' then
+    begin
+      QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsFpcName));
+    end;
+  end;
+
+   result := FormatUtf8('%%begin%  Client.Request(''%'', ''%''', [Declaration(ClassName, Parser), LINE_END, LINE_END, ToText(fMethod), Action]);
+   // Path parameters
+   if Length(ActionArgs) > 0 then
+   begin
+     Append(result, ', [');
+     for i := 0 to Length(ActionArgs) - 1 do
+     begin
+       if i > 0 then
+         Append(result, ', ');
+       Append(result, ActionArgs[i]);
+     end;
+     Append(result, ']');
+   end;
+
+   // Query parameters
+   if QueryParameters.Count > 0 then
+   begin
+     Append(result, ', [', LINE_END);
+     for i := 0 to QueryParameters.Count - 1 do
+     //for QueryParam in QueryParameters.Fields do
+     begin
+       if i > 0 then
+         Append(result, ',', LINE_END);
+       Append(result, ['    ''', QueryParameters.Names[i], ''', ', VariantToUtf8(QueryParameters.Values[i])]);
+     end;
+     Append(result, LINE_END, '    ]');
+   end;
+
+   // Payload if any
+   if Assigned(fPayloadParameterType) then
+   begin
+     Append(result, ', Payload, ');
+     if Assigned(fSuccessResponseType) then
+       Append(result, 'Result, ')
+     else
+       Append(result, '{Not used, but need to send a pointer}Self, ');
+
+     Append(result, ['TypeInfo(', fPayloadParameterType.ToFpcName, '), ']);
+     if Assigned(fSuccessResponseType) then
+       Append(result, ['TypeInfo(', fSuccessResponseType.ToFpcName, ')'])
+     else
+       Append(result, 'nil');
+   end
+   // Response type if any
+   else if Assigned(fSuccessResponseType) then
+   begin
+     Append(result, [', Result, TypeInfo(', fSuccessResponseType.ToFpcName, ')']);
+   end;
+
+  Append(result, [');', LINE_END, 'end;', LINE_END]);
+end;
+
+function TFpcOperation.FunctionName: RawUtf8;
+begin
+  Result := fOperation^.Id;
+end;
+
+function TOpenApiPathItem.GetDescription: RawUtf8;
+begin
+  result := DocVariant^.U['description'];
+end;
+
+function TOpenApiPathItem.GetDV: PDocVariantData;
+begin
+  result := PDocVariantData(@self);
+end;
+
+function TOpenApiPathItem.GetOperationByMethod(aMethod: TUriMethod
+  ): POpenApiOperation;
+begin
+  if not DocVariant^.GetAsObject(ToText(aMethod), PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiPathItem.GetParameterByIndex(aIndex: Integer
+  ): POpenApiParameter;
+begin
+  result := POpenApiParameter(@Parameters^.Values[aIndex]);
+end;
+
+function TOpenApiPathItem.GetParameters: PDocVariantData;
+begin
+  result := DocVariant^.A['parameters'];
+end;
+
+function TOpenApiPathItem.GetSummary: RawUtf8;
+begin
+  result := DocVariant^.U['summary'];
+end;
+
+function TOpenApiOperation.GetDeprecated: Boolean;
+begin
+  result := DocVariant^.B['deprecated'];
+end;
+
+function TOpenApiOperation.GetDescription: RawUtf8;
+begin
+  result := DocVariant^.U['description'];
+end;
+
+function TOpenApiOperation.GetDV: PDocVariantData;
+begin
+  result := PDocVariantData(@self);
+end;
+
+function TOpenApiOperation.GetId: RawUtf8;
+begin
+  result := DocVariant^.U['operationId'];
+end;
+
+function TOpenApiOperation.GetParameterByIndex(aIndex: Integer
+  ): POpenApiParameter;
+begin
+  result := POpenApiParameter(@Parameters.Values[aIndex]);
+end;
+
+function TOpenApiOperation.GetParameters: PDocVariantData;
+begin
+  result := DocVariant^.A['parameters'];
+end;
+
+function TOpenApiOperation.GetPayloadParameter: POpenApiParameter;
+var
+  p: PVariant;
+begin
+  result := nil;
+  if Assigned(Parameters) then
+    for p in Parameters^.Items do
+    begin
+      result := POpenApiParameter(p);
+      if (result^._In = 'body') and (result^.Name = 'payload') then
+        exit;
+    end;
+  result := nil;
+end;
+
+function TOpenApiOperation.GetResponseForStatusCode(aStatusCode: Integer
+  ): POpenApiResponse;
+var
+  StatusUtf8: RawUtf8;
+begin
+  if aStatusCode = 0 then
+    StatusUtf8 := 'default'
+  else
+    StatusUtf8 := ToUtf8(aStatusCode);
+  if not Responses^.GetAsObject(StatusUtf8, PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiOperation.GetResponses: PDocVariantData;
+begin
+  result := DocVariant^.O['responses'];
+end;
+
+function TOpenApiOperation.GetSummary: RawUtf8;
+begin
+  result := DocVariant^.U['summary'];
+end;
+
+function TOpenApiOperation.GetTags: PDocVariantData;
+begin
+  result := DocVariant^.A['tags'];
+end;
+
+function TOpenApiParameter.GetAllowEmptyValues: Boolean;
+begin
+  Result := DocVariant^.B['allowEmptyValue'];
+end;
+
+function TOpenApiParameter.GetAsSchema: POpenApiSchema;
+begin
+  result := POpenApiSchema(@self);
+end;
+
+function TOpenApiParameter.GetDefault: PVariant;
+begin
+  // TODO: Check this
+  result := DocVariant.GetPVariantByPath('default');
+end;
+
+function TOpenApiParameter.GetDV: PDocVariantData;
+begin
+  result := PDocVariantData(@self);
+end;
+
+function TOpenApiParameter.GetIn: RawUtf8;
+begin
+  result := DocVariant^.U['in'];
+end;
+
+function TOpenApiParameter.GetName: RawUtf8;
+begin
+  result := DocVariant^.U['name'];
+end;
+
+function TOpenApiParameter.GetRequired: Boolean;
+begin
+  result := DocVariant^.B['required'];
+end;
+
+function TOpenApiParameter.GetSchema: POpenApiSchema;
+begin
+  if not DocVariant^.GetAsObject('schema', PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiParameter.AsFpcName: RawUtf8;
+begin
+  result := TFpcProperty.SanitizePropertyName(Name);
+end;
+
+function TOpenApiResponse.GetDescription: RawUtf8;
+begin
+  result := DocVariant^.U['description'];
+end;
+
+function TOpenApiResponse.GetDV: PDocVariantData;
+begin
+  result := PDocVariantData(@self);
+end;
+
+function TOpenApiResponse.GetSchema: POpenApiSchema;
+begin
+  result := POpenApiSchema(DocVariant.O['schema']);
+end;
 
 constructor TFpcProperty.Create(aName: RawUtf8; aSchema: POpenApiSchema;
   aType: TFpcType);
@@ -468,6 +1024,16 @@ begin
   end;
 end;
 
+function TFpcType.ToFormatUtf8Arg(FpcVarName: RawUtf8): RawUtf8;
+begin
+  if IsBuiltin and (fBuiltinTypeName = 'TGuid') then
+    result := FormatUtf8('ToUtf8(%)', [FpcVarName])
+  else if IsEnum then
+    result := FormatUtf8('%[%]', [(fCustomType as TFpcEnum).ToConstTextArrayName, FpcVarName])
+  else
+    result := FpcVarName;
+end;
+
 function TFpcRecord.GetSchema: POpenApiSchema;
 begin
   Result := fSchema;
@@ -583,7 +1149,7 @@ end;
 
 procedure TOpenApiParser.Parse(aSpecs: TDocVariantData);
 var
-  DefinitionName: PRawUtf8;
+  DefinitionName, PathName: PRawUtf8;
 begin
   Clear;
   fSpecs.InitCopy(Variant(aSpecs), JSON_FAST);
@@ -593,6 +1159,9 @@ begin
     if not fRecords.ContainsKey(DefinitionName^) then
       fRecords.SetItem(DefinitionName^, ParseDefinition(DefinitionName^));
   end;
+
+  for PathName in Specs^.Paths^.FieldNames do
+    ParsePath(PathName^);
 end;
 
 function TOpenApiParser.ParseDefinition(aDefinitionName: RawUtf8): TFpcRecord;
@@ -640,6 +1209,27 @@ begin
     else if aSchema^.IsObject then
       for PropertyName in aSchema^.Properties^.FieldNames do
         result.fProperties.Add(PropertyName^, TFpcProperty.CreateFromSchema(PropertyName^, aSchema^._Property[PropertyName^], Self));
+  end;
+end;
+
+procedure TOpenApiParser.ParsePath(aPath: RawUtf8);
+var
+  Method: TUriMethod;
+  PathItem: POpenApiPathItem;
+  OperationSchema: POpenApiOperation;
+  Operation: TFpcOperation;
+begin
+  PathItem := Specs^.Path[aPath];
+
+  for Method in TUriMethod do
+  begin
+    OperationSchema := PathItem^.Method[method];
+    if not Assigned(OperationSchema) or OperationSchema^.Deprecated then
+      continue;
+    Operation := TFpcOperation.Create(aPath, PathItem, OperationSchema, Method);
+    Operation.ResolveTypes(Self);
+    SetLength(fOperations, Length(fOperations) + 1);
+    fOperations[Length(fOperations) - 1] := Operation;
   end;
 end;
 
@@ -715,6 +1305,31 @@ begin
       end;
     end;
     UnresolvedDependencies := Missings;
+  end;
+end;
+
+function TOpenApiParser.GetOperationsByTag: IKeyValue<POpenApiTag, IList<TFpcOperation>>;
+var
+  TagByName: IKeyValue<RawUtf8, POpenApiTag>;
+  tag, opTag: PVariant;
+  Op: TFpcOperation;
+  json: RawUtf8;
+begin
+  // TODO: Juse use TDocVariant copying by reference ?
+  TagByName := Collections.NewKeyValue<RawUtf8, POpenApiTag>;
+  result := Collections.NewKeyValue<POpenApiTag, IList<TFpcOperation>>;
+
+  for tag in Specs^.Tags^.Items do
+  begin
+    TagByName.Add(POpenApiTag(tag)^.Name, POpenApiTag(tag));
+    result.Add(POpenApiTag(tag), Collections.NewList<TFpcOperation>);
+  end;
+
+  for Op in fOperations do
+  begin
+    json := op.fOperation^.DocVariant^.ToJson ;
+    for opTag in op.fOperation^.Tags^.Items do
+      result.GetItem(TagByName.GetItem(VariantToUtf8(opTag^))).Add(Op);
   end;
 end;
 
@@ -798,6 +1413,92 @@ begin
   '  RegisterRecordsRttis;', LINE_END,
   LINE_END,
   'end.', LINE_END]);
+end;
+
+function TOpenApiParser.GetClientUnit(UnitName, ClientClassName,
+  DtoUnitName: RawUtf8): RawUtf8;
+var
+  OperationsByTag: IKeyValue<POpenApiTag, IList<TFpcOperation>>;
+  DeclaredOperations: TRawUtf8DynArray;
+  TagOperations: TPair<POpenApiTag, IList<TFpcOperation>>;
+  BannerLength: SizeInt;
+  Operation: TFpcOperation;
+begin
+  result := '';
+  Append(result, [
+    'unit ', UnitName, ';', LINE_END,
+    LINE_END,
+    '{$mode ObjFPC}{$H+}', LINE_END,
+    LINE_END,
+    'interface', LINE_END,
+    LINE_END,
+    'uses', LINE_END,
+    '  Classes,', LINE_END,
+    '  SysUtils,', LINE_END,
+    '  mormot.core.base,', LINE_END,
+    '  mormot.core.variants,', LINE_END,
+    '  mormot.net.client,', LINE_END,
+    '  ', DtoUnitName, ';', LINE_END,
+    LINE_END,
+    'type',
+    LINE_END,
+    '  ', ClientClassName, ' = class', LINE_END,
+    '  private', LINE_END,
+    '    fClient: IJsonClient;', LINE_END,
+    '    function GetJsonClient: IJsonClient;', LINE_END,
+    '  public', LINE_END,
+    '    constructor Create(aClient: IJsonClient = nil);', LINE_END,
+    '    destructor Destroy; override;', LINE_END]);
+
+  OperationsByTag := GetOperationsByTag;
+  DeclaredOperations := [];
+
+  for TagOperations in OperationsByTag do
+  begin
+    BannerLength := 18 + Length(TagOperations.Key^.Name) + Length(TagOperations.Key^.Description);
+    Append(result, [LINE_END, LINE_END, LINE_END,
+      '    ////', StringOfChar('/', BannerLength), LINE_END,
+      '    //// ---- ', TagOperations.Key^.Name, ': ', TagOperations.Key^.Description, ' ---- ////', LINE_END,
+      '    ////', StringOfChar('/', BannerLength), LINE_END, LINE_END]);
+
+    for Operation in TagOperations.Value do
+    begin
+      // Operations can be in multiple tags but can't be defined multiple times in same class
+      if FindRawUtf8(DeclaredOperations, Operation.fOperation^.Id) <> -1 then
+        continue;
+      SetLength(DeclaredOperations, Length(DeclaredOperations) + 1);
+      DeclaredOperations[Length(DeclaredOperations) - 1] := Operation.fOperation^.Id;
+
+      Append(result, Operation.Documentation('    '));
+      Append(result, ['    ', Operation.Declaration(ClientClassName, Self), LINE_END]);
+    end;
+  end;
+
+  Append(result, [LINE_END, LINE_END,
+    '    property JsonClient: IJsonClient read fClient write fClient;', LINE_END,
+    '  end;', LINE_END,
+    LINE_END,
+    'implementation', LINE_END,
+    LINE_END,
+    'uses', LINE_END,
+    '  mormot.core.text,', LINE_END,
+    '  mormot.core.rtti;', LINE_END,
+    LINE_END,
+    'constructor ', ClientClassName, '.Create(aClient: IJsonClient);', LINE_END,
+    'begin', LINE_END,
+    '  fClient := aClient;', LINE_END,
+    'end;', LINE_END,
+    LINE_END,
+    'destructor ', ClientClassName, '.Destroy;', LINE_END,
+    'begin', LINE_END,
+    '  fClient := nil;', LINE_END,
+    '  inherited Destroy;', LINE_END,
+    'end;', LINE_END, LINE_END]);
+
+  for Operation in fOperations do
+    Append(result, Operation.Body(ClientClassName, Specs^.BasePath, Self), LINE_END);
+
+  Append(result, LINE_END, 'end.');
 end;
 
 function TOpenApiSchema.GetAllOf: PDocVariantData;
@@ -889,6 +1590,11 @@ begin
   Result := Assigned(Enum) and (_Format <> '');
 end;
 
+function TOpenApiSpecs.GetBasePath: RawUtf8;
+begin
+  Result := DocVariant^.U['basePath'];
+end;
+
 function TOpenApiSpecs.GetDefinitionByName(aName: RawUtf8): POpenApiSchema;
 begin
   if not Definitions^.GetAsObject(aName, PDocVariantData(result)) then
@@ -903,6 +1609,22 @@ end;
 function TOpenApiSpecs.GetDV: PDocVariantData;
 begin
   result := PDocVariantData(@self);
+end;
+
+function TOpenApiSpecs.GetPathItemByName(aPath: RawUtf8): POpenApiPathItem;
+begin
+  if not Paths^.GetAsObject(aPath, PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiSpecs.GetPaths: PDocVariantData;
+begin
+  result := DocVariant^.O['paths'];
+end;
+
+function TOpenApiSpecs.GetTags: PDocVariantData;
+begin
+  result := DocVariant^.A['tags'];
 end;
 
 function TOpenApiSpecs.GetVersion: RawUtf8;
