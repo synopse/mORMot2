@@ -15,6 +15,7 @@ uses
 const
   SCHEMA_TYPE_ARRAY: RawUtf8 = 'array';
   SCHEMA_TYPE_OBJECT: RawUtf8 = 'object';
+  LINE_END: RawUtf8 = #10;
 
 type
 
@@ -84,10 +85,9 @@ type
   public
     constructor Create(aFpcName: RawUtf8 = '');
 
-    function ToTypeDefinition: RawUtf8; virtual; abstract;
+    function ToTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; virtual; abstract;
     function ToArrayTypeName(AllowArrayType: Boolean = True): RawUtf8; virtual;
-    function ToArrayTypeDefinition: RawUtf8; virtual;
-    function ToRttiRegisterDefinitions: RawUtf8; virtual;
+    function ToArrayTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; virtual;
 
     property FpcName: RawUtf8 read fFpcName;
     property Schema: POpenApiSchema read GetSchema;
@@ -125,12 +125,25 @@ type
     property Schema: POpenApiSchema read GetSchema;
   end;
 
+  TFpcProperty = class
+  private
+    fType: TFpcType;
+    fSchema: POpenApiSchema;
+    fName: RawUtf8;
+    fFpcName: RawUtf8;
+  public
+    constructor Create(aName: RawUtf8; aSchema: POpenApiSchema; aType: TFpcType);
+    constructor CreateFromSchema(aName: RawUtf8; aSchema: POpenApiSchema; Parser: TOpenApiParser; ParentField: Boolean = False);
+
+    class function SanitizePropertyName(aName: RawUtf8): RawUtf8;
+  end;
+
   // Find a better name for this class
   TFpcRecord = class(TFpcCustomType)
   private
     fName: RawUtf8;
     fSchema: POpenApiSchema;
-    fProperties: IKeyValue<RawUtf8, TFpcType>;
+    fProperties: IKeyValue<RawUtf8, TFpcProperty>;
     fDependencies: TRawUtf8DynArray;
 
     function GetSchema: POpenApiSchema; override;
@@ -138,20 +151,27 @@ type
     constructor Create(SchemaName: RawUtf8; Schema: POpenApiSchema = nil);
 
 
-    function ToTypeDefinition: RawUtf8; override;
-    function ToRttiRegisterDefinitions: RawUtf8; override;
+    function ToTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; override;
+    function ToRttiTextRepresentation(WithClassName: Boolean = True): RawUtf8;
+    function ToRttiRegisterDefinitions: RawUtf8;
   end;
+  TFpcRecordDynArray = array of TFpcRecord;
 
   TFpcEnum = class(TFpcCustomType)
   private
+    fSchema: POpenApiSchema;
     fName: RawUtf8;
     fPrefix: RawUtf8;
     fChoices: TDocVariantData;
-  public
-    constructor Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
 
-    function ToTypeDefinition: RawUtf8; override;
+    function GetSchema: POpenApiSchema; override;
+  public
+    constructor Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
+
+    function ToTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; override;
     function ToArrayTypeName(AllowArrayType: Boolean = True): RawUtf8; override;
+    function ToConstTextArrayName: RawUtf8;
+    function ToConstTextArray: RawUtf8;
   end;
 
   TOpenApiParser = class
@@ -171,8 +191,10 @@ type
     function ParseDefinition(aDefinitionName: RawUtf8): TFpcRecord;
 
     function GetRecord(aRecordName: RawUtf8; NameIsReference: Boolean = False): TFpcRecord;
+    function GetOrderedRecords: TFpcRecordDynArray;
 
     procedure Dump;
+    function GetDtosUnit(UnitName: RawUtf8): RawUtf8;
 
     property Specs: POpenApiSpecs read GetSpecs;
   end;
@@ -187,13 +209,59 @@ implementation
 uses
   mormot.core.unicode;
 
-constructor TFpcEnum.Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
+const
+  FPC_RESERVED_KEYWORDS: array[0..73] of RawUtf8 = (
+    'absolute', 'and', 'array', 'as', 'asm', 'begin', 'case', 'const', 'constructor',
+    'destructor', 'div', 'do', 'else', 'end', 'except', 'exports', 'external', 'false',
+    'true', 'far', 'file', 'finalization', 'finally', 'for', 'forward', 'function',
+    'goto', 'if', 'then', 'implementation', 'in', 'inherited', 'initialization',
+    'interface', 'is', 'label', 'library', 'mod', 'near', 'new', 'nil', 'not',
+    'object', 'of', 'on', 'operator', 'or', 'override', 'packed', 'procedure',
+    'program', 'property', 'protected', 'public', 'published', 'raise', 'read',
+    'reintroduce', 'repeat', 'self', 'shl', 'shr', 'threadvar', 'to', 'try','type',
+    'unit', 'uses', 'var', 'virtual', 'while', 'with', 'write', 'xor');
+
+constructor TFpcProperty.Create(aName: RawUtf8; aSchema: POpenApiSchema;
+  aType: TFpcType);
+begin
+  fName := aName;
+  fSchema := aSchema;
+  fType := aType;
+  fFpcName := SanitizePropertyName(fName);
+end;
+
+constructor TFpcProperty.CreateFromSchema(aName: RawUtf8;
+  aSchema: POpenApiSchema; Parser: TOpenApiParser; ParentField: Boolean);
+begin
+  fType := TFpcType.LoadFromSchema(aSchema, Parser);
+  fType.fIsParent := ParentField;
+  fName := aName;
+  fSchema := aSchema;
+  fFpcName := SanitizePropertyName(fName);
+end;
+
+class function TFpcProperty.SanitizePropertyName(aName: RawUtf8): RawUtf8;
+begin
+  CamelCase(aName, result);
+  result[1] := UpCase(result[1]);
+
+  if FindRawUtf8(FPC_RESERVED_KEYWORDS, result, False) <> -1 then
+    result := '_' + result;
+end;
+
+function TFpcEnum.GetSchema: POpenApiSchema;
+begin
+  Result := fSchema;
+end;
+
+constructor TFpcEnum.Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
 var
   c: Char;
 begin
   inherited Create('T' + SchemaName);
   fName := SchemaName;
-  fChoices.InitCopy(Variant(Schema^.Enum^), JSON_FAST);
+  fSchema := aSchema;
+  fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0);
 
   fPrefix := '';
@@ -205,12 +273,12 @@ begin
   end;
 end;
 
-function TFpcEnum.ToTypeDefinition: RawUtf8;
+function TFpcEnum.ToTypeDefinition(LineIndentation: RawUtf8): RawUtf8;
 var
   Choice: RawUtf8;
   i: Integer;
 begin
-  result := FormatUtf8('% = (', [FpcName]);
+  result := FormatUtf8('%% = (', [LineIndentation, FpcName]);
 
   for i := 0 to fChoices.Count - 1 do
   begin
@@ -221,7 +289,7 @@ begin
     Choice[1] := UpCase(Choice[1]);
     Append(Result, fPrefix, Choice);
   end;
-  Append(result, ');'#10, ToArrayTypeDefinition);
+  Append(result, [');', LINE_END, ToArrayTypeDefinition(LineIndentation)]);
 end;
 
 function TFpcEnum.ToArrayTypeName(AllowArrayType: Boolean): RawUtf8;
@@ -230,6 +298,26 @@ begin
     result := FormatUtf8('%Set', [FpcName])
   else
     result := FormatUtf8('set of %', [FpcName]);
+end;
+
+function TFpcEnum.ToConstTextArrayName: RawUtf8;
+begin
+  result := FormatUtf8('%_2TXT', [UpperCase(fName)]);
+end;
+
+function TFpcEnum.ToConstTextArray: RawUtf8;
+var
+  i: Integer;
+begin
+  result := FormatUtf8('%: array[%] of RawUtf8 = (', [ToConstTextArrayName, FpcName]);
+  for i := 0 to fChoices.Count - 1 do
+  begin
+    if i = 0 then
+      Append(result, '''''') // None entry
+    else
+      Append(result, [', ''', StringReplaceAll(VariantToUtf8(fChoices[i]), ' ', ''), '''']);
+  end;
+  Append(result, ');');
 end;
 
 
@@ -299,6 +387,7 @@ begin
   begin
     // TODO: Handle array of arrays
     result := LoadFromSchema(Schema^.Items, Parser);
+    result.fBuiltinSchema := Schema;
     result.IsArray := True;
   end
   else if Schema^.IsNamedEnum then
@@ -388,30 +477,53 @@ constructor TFpcRecord.Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
 begin
   fName := SchemaName;
   fSchema := Schema;
-  fProperties := Collections.NewKeyValue<RawUtf8, TFpcType>;
+  fProperties := Collections.NewKeyValue<RawUtf8, TFpcProperty>;
   fDependencies := nil;
   inherited Create('T' + fName);
 end;
 
-function TFpcRecord.ToTypeDefinition: RawUtf8;
+function TFpcRecord.ToTypeDefinition(LineIndentation: RawUtf8): RawUtf8;
 var
-  aProp: TPair<RawUtf8, TFpcType>;
+  aProp: TPair<RawUtf8, TFpcProperty>;
   PropSchema: POpenApiSchema;
 begin
-  result := FormatUtf8('% = packed record'#10, [FpcName]);
-  for aProp in fProperties.GetEnumerator do
+  result := LineIndentation;
+  Append(result, [FpcName, ' = packed record', LINE_END]);
+  for aProp in fProperties do
   begin
-    PropSchema := aProp.Value.Schema;
-    if Assigned(PropSchema) and (PropSchema.Description <> '') then
-      Append(result, FormatUtf8('/// %'#10, [PropSchema^.Description]));
-    Append(result, FormatUtf8('%: %;'#10, [aProp.Key, aProp.Value.ToFpcName]));
+    PropSchema := aProp.Value.fSchema;
+    if Assigned(PropSchema) and (PropSchema^.Description <> '') then
+      Append(result, [LineIndentation, '  /// ', PropSchema^.Description, LINE_END]);
+    Append(result, [LineIndentation, '  ', aProp.Value.fFpcName, ': ', aProp.Value.fType.ToFpcName, ';', LINE_END]);
   end;
-  Append(result, 'end;'#10, ToArrayTypeDefinition);
+  Append(result, [LineIndentation, 'end;', LINE_END, ToArrayTypeDefinition(LineIndentation)]);
+end;
+
+function TFpcRecord.ToRttiTextRepresentation(WithClassName: Boolean): RawUtf8;
+var
+  aProp: TPair<RawUtf8, TFpcProperty>;
+begin
+  if WithClassName then
+    result := FormatUtf8('_% = ''', [FpcName])
+  else
+    result := '';
+
+  for aProp in fProperties do
+  begin
+    // Only records can be parent types
+    if aProp.Value.fType.IsParent then
+      Append(result, (aProp.Value.fType.CustomType as TFpcRecord).ToRttiTextRepresentation(False))
+    else
+      Append(result, [aProp.Key, ': ', aProp.Value.fType.ToFpcName(True, True), '; ']);
+  end;
+
+  if WithClassName then
+    Append(result, ''';');
 end;
 
 function TFpcRecord.ToRttiRegisterDefinitions: RawUtf8;
 begin
-  Result:=inherited ToRttiRegisterDefinitions;
+  result := FormatUtf8('TypeInfo(%), _%', [FpcName, FpcName]);
 end;
 
 function TFpcCustomType.GetSchema: POpenApiSchema;
@@ -433,17 +545,13 @@ begin
     result := FormatUtf8('array of %', [FpcName]);
 end;
 
-function TFpcCustomType.ToArrayTypeDefinition: RawUtf8;
+function TFpcCustomType.ToArrayTypeDefinition(LineIndentation: RawUtf8
+  ): RawUtf8;
 begin
   if fRequiresArrayDefinition then
-    result := FormatUtf8('% = %;'#10, [ToArrayTypeName(True), ToArrayTypeName(False)])
+    result := FormatUtf8('%% = %;'#10, [LineIndentation, ToArrayTypeName(True), ToArrayTypeName(False)])
   else
     result := '';
-end;
-
-function TFpcCustomType.ToRttiRegisterDefinitions: RawUtf8;
-begin
-  result := FormatUtf8('TypeInfo(%)', [FpcName]);
 end;
 
 function TOpenApiParser.GetSpecs: POpenApiSpecs;
@@ -489,13 +597,13 @@ end;
 
 function TOpenApiParser.ParseDefinition(aDefinitionName: RawUtf8): TFpcRecord;
 var
-  Schema, aSchemaDV: POpenApiSchema;
+  Schema: POpenApiSchema;
   PropertyName: PRawUtf8;
-  ParentCounts: Integer;
-  Schemas: TDocVariantData;
-  aSchema: PVariant;
+  ParentCounts, i: Integer;
+  Schemas: array of POpenApiSchema;
   ParentRecord: TFpcRecord;
   ParentPropName: String;
+  aSchema: POpenApiSchema;
 begin
   Schema := Specs^.Definition[aDefinitionName];
   if not Assigned(Schema) then
@@ -506,26 +614,32 @@ begin
 
   ParentCounts := 0;
   if Assigned(result.Schema^.AllOf) then
-    Schemas.InitCopy(Variant(Schema.AllOf^), JSON_FAST)
-  else
-    Schemas.InitArray([Variant(Schema^.DocVariant^)], JSON_FAST);
-
-  for aSchema in Schemas.Items do
   begin
-    aSchemaDV := POpenApiSchema(_Safe(aSchema^));
-    if aSchemaDV^.Reference <> '' then
+    SetLength(Schemas, Schema.AllOf^.Count);
+    for i := 0 to Schema.AllOf^.Count - 1 do
+      Schemas[i] := POpenApiSchema(@Schema.AllOf^.Values[i]);
+  end
+  else
+  begin
+    SetLength(Schemas, 1);
+    Schemas[0] := Schema;
+  end;
+
+  for aSchema in Schemas do
+  begin
+    if aSchema^.Reference <> '' then
     begin
-      ParentRecord := GetRecord(aSchemaDV^.Reference, True);
+      ParentRecord := GetRecord(aSchema^.Reference, True);
       if ParentCounts = 0 then
         ParentPropName := 'base'
       else
         ParentPropName := FormatUtf8('base_%', [ParentCounts]);
       Inc(ParentCounts);
-      result.fProperties.Add(ParentPropName, TFpcType.CreateCustom(ParentRecord, False, True));
+      result.fProperties.Add(ParentPropName, TFpcProperty.CreateFromSchema(ParentPropName, aSchema, Self, True));
     end
-    else if Schema^.IsObject then
-      for PropertyName in Schema^.Properties^.FieldNames do
-        result.fProperties.Add(PropertyName^, TFpcType.LoadFromSchema(Schema^._Property[PropertyName^], Self));
+    else if aSchema^.IsObject then
+      for PropertyName in aSchema^.Properties^.FieldNames do
+        result.fProperties.Add(PropertyName^, TFpcProperty.CreateFromSchema(PropertyName^, aSchema^._Property[PropertyName^], Self));
   end;
 end;
 
@@ -542,14 +656,148 @@ begin
     result := fRecords.GetItem(aRecordName);
 end;
 
+function TOpenApiParser.GetOrderedRecords: TFpcRecordDynArray;
+var
+  UnresolvedDependencies, Missings: TFpcRecordDynArray;
+  Rec: TPair<RawUtf8, TFpcRecord>;
+  UnresolvedRec: TFpcRecord;
+
+  function HasDependencies(Sources: TFpcRecordDynArray; Searched: TRawUtf8DynArray): Boolean;
+  var
+    RecName: RawUtf8;
+    r: TFpcRecord;
+    RecResolved: Boolean;
+  begin
+    result := False;
+    for RecName in Searched do
+    begin
+      RecResolved := False;
+      for r in Sources do
+        if r.fName = RecName then
+          RecResolved := True;
+      if not RecResolved then
+        exit;
+    end;
+    result := True;
+  end;
+
+begin
+  result := nil;
+  UnresolvedDependencies := nil;
+
+  for Rec in fRecords do
+  begin
+    if not Assigned(Rec.Value.fDependencies) or HasDependencies(result, Rec.Value.fDependencies) then
+    begin
+      SetLength(result, Length(result) + 1);
+      result[Length(result) - 1] := Rec.Value;
+    end else
+    begin
+      SetLength(UnresolvedDependencies, Length(UnresolvedDependencies) + 1);
+      UnresolvedDependencies[Length(UnresolvedDependencies) - 1] := Rec.Value;
+    end;
+  end;
+
+  while Length(UnresolvedDependencies) > 0 do
+  begin
+    Missings := nil;
+    for UnresolvedRec in UnresolvedDependencies do
+    begin
+      if HasDependencies(result, UnresolvedRec.fDependencies) then
+      begin
+        SetLength(result, Length(result) + 1);
+        result[Length(result) - 1] := UnresolvedRec;
+
+      end else
+      begin
+        SetLength(Missings, Length(Missings) + 1);
+        Missings[Length(Missings) - 1] := UnresolvedRec;
+      end;
+    end;
+    UnresolvedDependencies := Missings;
+  end;
+end;
+
 procedure TOpenApiParser.Dump;
 var
-  rec: TPair<RawUtf8, TFpcRecord>;
+  OrderedRecs: TFpcRecordDynArray;
+  rec: TFpcRecord;
 begin
-  for rec in fRecords do
+  OrderedRecs := GetOrderedRecords;
+  for rec in OrderedRecs do
   begin
-    WriteLn(rec.Value.ToTypeDefinition);
+    WriteLn(rec.ToTypeDefinition);
   end;
+end;
+
+function TOpenApiParser.GetDtosUnit(UnitName: RawUtf8): RawUtf8;
+var
+  OrderedRecords: TFpcRecordDynArray;
+  e: TPair<RawUtf8, TFpcEnum>;
+  rec: TFpcRecord;
+  i: Integer;
+begin
+  OrderedRecords := GetOrderedRecords;
+
+  result := '';
+  Append(result, [
+    'unit ', UnitName, ';', LINE_END , LINE_END,
+    '{$mode ObjFPC}{$H+}', LINE_END ,
+    '{$modeSwitch advancedRecords}', LINE_END ,
+    LINE_END,
+    'interface', LINE_END,
+    LINE_END,
+    'uses', LINE_END,
+    '  Classes,', LINE_END,
+    '  SysUtils,', LINE_END,
+    '  mormot.core.base,', LINE_END,
+    '  mormot.core.variants;', LINE_END,
+    LINE_END,
+    'type', LINE_END, LINE_END, LINE_END]);
+
+  for e in fEnums do
+    Append(result, e.Value.ToTypeDefinition('  '));
+  if fEnums.Count > 0 then
+    Append(result, LINE_END, LINE_END);
+
+  for rec in OrderedRecords do
+    Append(result, rec.ToTypeDefinition('  '), LINE_END);
+
+  if self.fEnums.Count > 0 then
+  begin
+    Append(result, [LINE_END, LINE_END, 'const', LINE_END, LINE_END]);
+    for e in fEnums do
+      Append(result, ['  ', e.Value.ToConstTextArray, LINE_END]);
+  end;
+
+  Append(result, [LINE_END, LINE_END,
+  'implementation', LINE_END, LINE_END,
+  'uses', LINE_END,
+  '  mormot.core.rtti;', LINE_END, LINE_END,
+  'const', LINE_END]);
+
+  for rec in OrderedRecords do
+    Append(result, ['  ', rec.ToRttiTextRepresentation, LINE_END]);
+
+  Append(result, [LINE_END, LINE_END,
+  'procedure RegisterRecordsRttis;', LINE_END,
+  'begin', LINE_END,
+  '  Rtti.RegisterFromText([', LINE_END]);
+
+  for i := 0 to Length(OrderedRecords) - 1 do
+  begin
+    if i > 0 then
+      Append(result, ',', LINE_END);
+    Append(result, '    ', OrderedRecords[i].ToRttiRegisterDefinitions);
+  end;
+
+  Append(result, [']);', LINE_END,
+  'end;', LINE_END,
+  LINE_END,
+  'initialization', LINE_END,
+  '  RegisterRecordsRttis;', LINE_END,
+  LINE_END,
+  'end.', LINE_END]);
 end;
 
 function TOpenApiSchema.GetAllOf: PDocVariantData;
