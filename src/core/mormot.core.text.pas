@@ -926,7 +926,8 @@ type
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
-    // - return the position to write text, and increase the instance position
+    // - return the position to write text
+    // - but WON'T increase the instance position: caller should do inc(B, ...)
     function AddPrepare(Len: PtrInt): pointer;
     /// write some data Base64 encoded
     // - use overriden TJsonWriter version instead!
@@ -3892,7 +3893,6 @@ begin
   if BEnd - B <= Len then
     FlushToStream;
   result := B + 1;
-  inc(B, Len);
 end;
 
 procedure TTextWriter.WriteObject(Value: TObject;
