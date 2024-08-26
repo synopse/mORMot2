@@ -477,7 +477,7 @@ type
   // LastErrorMessage properties
   // - if the error comes from an Exception, it will be supplied as parameter
   // - the REST context (if any) will be supplied within the Call parameter,
-  // and in this case Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken
+  // and in this case Call^.OutStatus=HTTP_CLIENTERROR indicates a broken
   // connection
   TOnClientFailed = procedure(Sender: TRestClientUri; E: Exception;
     Call: PRestUriParams) of object;
@@ -573,7 +573,7 @@ type
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
     fServiceRoutingSupports: TRestClientSideInvoke;
-    fInternalState: set of (isDestroying, isInAuth, isNotImplemented);
+    fInternalState: set of (isDestroying, isInAuth, isClientError);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
@@ -1003,7 +1003,7 @@ type
       read fOnError write fOnError;
     /// this Event is called if Uri() was not successful
     // - the callback will have all needed information
-    // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
+    // - e.g. Call^.OutStatus=HTTP_CLIENTERROR indicates a broken connection
     property OnFailed: TOnClientFailed
       read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
@@ -1980,17 +1980,18 @@ begin
   if ((Sender = nil) or OnIdleBackgroundThreadActive) and
      not (isDestroying in fInternalState) then
   begin
-    if (Call^.OutStatus = HTTP_NOTIMPLEMENTED) and
-       not (isNotImplemented in fInternalState) then
+    if (Call^.OutStatus = HTTP_CLIENTERROR) and // was client-side exception
+       not (isClientError in fInternalState) then
     begin
-      InternalClose; // force recreate connection
-      Include(fInternalState, isNotImplemented);
+      InternalLog('OnBackgroundProcess: recreate connection', sllDebug);
+      InternalClose;
+      Include(fInternalState, isClientError);
       if (Sender = nil) or
          OnIdleBackgroundThreadActive then
         InternalUri(Call^); // try request again
     end;
-    if Call^.OutStatus <> HTTP_NOTIMPLEMENTED then
-      Exclude(fInternalState, isNotImplemented);
+    if Call^.OutStatus <> HTTP_CLIENTERROR then
+      Exclude(fInternalState, isClientError);
   end;
   if Assigned(fOnAfterCall) then
     if not fOnAfterCall(self, Call^) then
@@ -2473,7 +2474,7 @@ begin
         Ctxt.OutBody := WR.Text;
       end
       else
-        Ctxt.OutStatus := HTTP_SERVERERROR;
+        Ctxt.OutStatus := HTTP_CLIENTERROR; // ExecuteJson() failed
       if frames = '[1]' then
         // call CurrentFrame(isLast=true) after the last method of the jumbo frame
         Call(callback.Factory.MethodIndexCurrentFrameCallback, frames, nil);
@@ -2485,7 +2486,7 @@ begin
     begin
       Ctxt.OutHead := '';
       ObjectToJson(E, Ctxt.OutBody, TEXTWRITEROPTIONS_DEBUG);
-      Ctxt.OutStatus := HTTP_SERVERERROR;
+      Ctxt.OutStatus := HTTP_CLIENTERROR;
     end;
   end;
 end;
@@ -2516,7 +2517,7 @@ var
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
           OnIdle, FormatUtf8('% % background', [self, fModel.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
-        Call.OutStatus := HTTP_UNAVAILABLE;
+        Call.OutStatus := HTTP_CLIENTERROR;
     end
     else
       OnBackgroundProcess({SenderThread=}nil, @Call);
@@ -2533,8 +2534,8 @@ var
 begin
   if self = nil then
   begin
-    result := HTTP_UNAVAILABLE;
-    SetLastException(nil, HTTP_UNAVAILABLE);
+    result := HTTP_CLIENTERROR;
+    SetLastException(nil, HTTP_CLIENTERROR);
     exit;
   end;
   fLastErrorMessage := '';
@@ -2543,7 +2544,7 @@ begin
   begin
     if not ServerTimestampSynchronize then
     begin
-      result := HTTP_UNAVAILABLE;
+      result := HTTP_CLIENTERROR;
       exit; // if Timestamp is not available, server is down!
     end;
   end;
@@ -2586,7 +2587,7 @@ begin
       if Assigned(fOnError) and
          fOnError(self, Call) then
       begin
-        CallInternalUri; // retry once
+        CallInternalUri; // retry once - e.g. after HTTP_CLIENTERROR
         if StatusCodeIsSuccess(Call.OutStatus) then
           exit;
       end;
@@ -2604,8 +2605,8 @@ begin
   except
     on E: Exception do
     begin
-      result := HTTP_NOTIMPLEMENTED; // 501
-      SetLastException(E, HTTP_NOTIMPLEMENTED, @Call);
+      result := HTTP_CLIENTERROR; // 666 is better than NOT IMPLEMENTED 501
+      SetLastException(E, HTTP_CLIENTERROR, @Call);
       exit;
     end;
   end;
@@ -2619,7 +2620,7 @@ var
   log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if self = nil then
-    result := HTTP_UNAVAILABLE
+    result := HTTP_CLIENTERROR
   else
   begin
     url := fModel.GetUriCallBack(aMethodName, aTable, aID);
@@ -2668,7 +2669,7 @@ var
 begin
   if (self = nil) or
      (method = mNone) then
-    result := HTTP_UNAVAILABLE
+    result := HTTP_CLIENTERROR
   else
   begin
     u := fModel.GetUriCallBack(aMethodName, aTable, aID);
@@ -3010,7 +3011,7 @@ begin
   fRequest := LibraryResolve(h, 'LibraryRequest');
   call.Init;
   InternalUri(call);
-  if call.OutStatus <> HTTP_NOTFOUND then
+  if call.OutStatus <> HTTP_NOTFOUND then // by design: void request = 404
   begin
     @fRequest := nil;
     LibraryClose(h);
@@ -3044,8 +3045,8 @@ var
 begin
   if @fRequest = nil then
   begin
-    // 501 (no valid application or library)
-    Call.OutStatus := HTTP_NOTIMPLEMENTED;
+    // client-side error (no valid application or library)
+    Call.OutStatus := HTTP_CLIENTERROR;
     exit;
   end;
   call.LowLevelRemoteIP := '127.0.0.1';

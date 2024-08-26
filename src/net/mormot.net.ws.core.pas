@@ -2980,7 +2980,7 @@ begin
             continue;
           self.Log(request, 'NotifyCallback AnswerToIgnore TIMEOUT -> ' +
             'abort connection', sllInfo);
-          result := HTTP_NOTIMPLEMENTED; // 501 will force recreate connection
+          result := HTTP_CLIENTERROR; // to force recreate connection
           exit;
         until false;
       end;

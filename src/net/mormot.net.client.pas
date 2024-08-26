@@ -2165,7 +2165,7 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
        OnLog(sllTrace, 'DoRetry % socket=% fatal=% retry=%',
          [msg, fSock.Socket, FatalError, BOOL_STR[rMain in ctxt.Retry]], self);
     if fAborted then
-      ctxt.Status := HTTP_NOTFOUND
+      ctxt.Status := HTTP_CLIENTERROR
     else if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
       ctxt.Status := FatalError
@@ -2201,12 +2201,12 @@ begin
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Http.Content := '';
   if fAborted then
-    ctxt.Status := HTTP_NOTFOUND
+    ctxt.Status := HTTP_CLIENTERROR
   else if (hfConnectionClose in Http.HeaderFlags) or
           not SockIsDefined then
-    DoRetry(HTTP_NOTFOUND, 'connection closed (keepalive timeout or max)', [])
+    DoRetry(HTTP_CLIENTERROR, 'connection closed (keepalive timeout or max)', [])
   else if not fSock.Available(@loerr) then
-    DoRetry(HTTP_NOTFOUND, 'connection broken (socketerror=%)', [loerr])
+    DoRetry(HTTP_CLIENTERROR, 'connection broken (socketerror=%)', [loerr])
   else
   try
     // send request - we use SockSend because writeln() is calling flush()
@@ -2250,7 +2250,7 @@ begin
           end;
       else // cspSocketError, cspSocketClosed
         begin
-          DoRetry(HTTP_NOTFOUND, '% % waiting %ms for headers',
+          DoRetry(HTTP_CLIENTERROR, '% % waiting %ms for headers',
             [ToText(pending)^, CardinalToHexShort(loerr), TimeOut]);
           exit;
         end;
@@ -2265,7 +2265,7 @@ begin
         if (ctxt.Status < 200) or
            (ctxt.Status > 599) then
         begin
-          ctxt.Status := HTTP_HTTPVERSIONNONSUPPORTED;
+          ctxt.Status := HTTP_CLIENTERROR;
           exit;
         end;
       end
@@ -2273,7 +2273,7 @@ begin
       begin
         // error on reading answer -> 505=wrong format
         if Http.CommandResp = '' then
-          DoRetry(HTTP_NOTFOUND, 'Broken Link - timeout=%ms', [TimeOut])
+          DoRetry(HTTP_CLIENTERROR, 'Broken Link - timeout=%ms', [TimeOut])
         else
           DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Http.CommandResp]);
         exit;
@@ -2313,7 +2313,7 @@ begin
         if E.InheritsFrom(ENetSock) or
            E.InheritsFrom(EHttpSocket) then
           // network layer problem - typically EHttpSocket
-          DoRetry(HTTP_NOTFOUND, '% raised after % [%]',
+          DoRetry(HTTP_CLIENTERROR, '% raised after % [%]',
             [E, ToText(ENetSock(E).LastError)^, E.Message])
         else
           // propagate custom exceptions to the caller (e.g. from progression)
@@ -2495,7 +2495,7 @@ begin
           try
             OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
           except
-            ctxt.Status := HTTP_NOTFOUND;
+            ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
           end;
           HttpStateReset;
           ctxt.Url := newuri.Address;

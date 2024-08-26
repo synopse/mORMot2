@@ -587,7 +587,7 @@ begin
     Call.OutBody := Content;
   end
   else
-    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
+    Call.OutStatus := HTTP_CLIENTERROR; // indicates no socket
   if log <> nil then
     with Call do
       log.Log(sllClient, '% % status=% len=% state=%',
@@ -834,7 +834,7 @@ var
   OutData: RawByteString;
 begin
   if fRequest = nil then
-    result.Lo := HTTP_NOTIMPLEMENTED
+    result.Lo := HTTP_CLIENTERROR // better than 501 NOT IMPLEMENTED
   else
   begin
     result.Lo := fRequest.Request(url, method, KeepAliveMS, Header,

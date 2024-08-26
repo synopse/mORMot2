@@ -2460,7 +2460,7 @@ begin
     except
       on Exception do
         // e.g. error during TRestServer.BatchSend()
-        result := HTTP_SERVERERROR;
+        result := HTTP_CLIENTERROR;
     end;
 end;
 

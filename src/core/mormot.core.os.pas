@@ -168,9 +168,9 @@ const
   /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
-  /// a fake response code, generated for client side panic failure
+  /// a fake response code, generated for client side panic failure/exception
   HTTP_CLIENTERROR = 666;
-  /// clearly wrong response code, used by THttpServerRequest.SetAsyncResponse
+  /// a fake response code, used by THttpServerRequest.SetAsyncResponse
   // - for internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
 

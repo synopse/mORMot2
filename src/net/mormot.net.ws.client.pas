@@ -420,8 +420,8 @@ begin
     if fProcess.fClientThread.fThreadState = sCreate then
       sleep(10); // paranoid warmup of TWebSocketProcessClientThread.Execute
     if fProcess.fClientThread.fThreadState <> sRun then
-      // WebSockets closed by server side
-      result := HTTP_NOTIMPLEMENTED
+      // WebSockets closed by server side: notify client-side error
+      result := HTTP_CLIENTERROR
     else
     begin
       // send the REST request over WebSockets - both ends use NotifyCallback()
