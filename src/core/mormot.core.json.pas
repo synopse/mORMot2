@@ -6399,7 +6399,7 @@ begin
         break;
       inc(F);
     until false;
-    AddNoJsonEscape(S, F - S);
+    AddNoJsonEscape(S, F - S); // append Format content with no escaping
     if F^ = #0 then
       exit;
     // add next value as text instead of F^='%' placeholder

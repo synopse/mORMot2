@@ -1582,10 +1582,14 @@ function UrlEncode(const NameValuePairs: array of const;
   Options: TUrlEncoder = []): RawUtf8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
-// - may be used e.g. when appending to an existing URI, as such:
-// ! MyUri := MyUri + UrlEncode(MyArrayOfConst,  MyUri[length(MyUri)] in ['?','&'])
+// - consider using UrlAppend() if you just need to append some parameters
 function UrlEncode(const NameValuePairs: array of const;
   TrimLeadingQuestionMark: boolean): RawUtf8; overload;
+
+/// append some encoded Name,Value pairs parameters to an existing URI
+// - will check if Uri does already end with '?' or '&'
+function UrlAppend(const Uri: RawUtf8; const NameValuePairs: array of const;
+  Options: TUrlEncoder = []): RawUtf8;
 
 /// encode a full URI with prefix and parameters
 function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
@@ -8174,6 +8178,14 @@ function UrlEncode(const NameValuePairs: array of const;
   TrimLeadingQuestionMark: boolean): RawUtf8;
 begin
   result := UrlEncodeFull('', [], NameValuePairs, _UE_OPT[TrimLeadingQuestionMark]);
+end;
+
+function UrlAppend(const Uri: RawUtf8; const NameValuePairs: array of const;
+  Options: TUrlEncoder): RawUtf8;
+begin
+  if (Uri <> '') and (Uri[length(Uri)] in ['?', '&']) then
+    include(Options, ueTrimLeadingQuestionMark);
+  result := UrlEncodeFull(Uri, [], NameValuePairs, Options);
 end;
 
 function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
