@@ -947,6 +947,9 @@ type
     // - see TextLength for the total number of bytes, on both stream and memory
     function PendingBytes: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
+      /// how many bytes are currently available in the internal memory buffer
+    function AvailableBytes: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// how many bytes were currently written on disk/stream
     // - excluding the bytes in the internal buffer (see PendingBytes)
     // - see TextLength for the total number of bytes, on both stream and memory
@@ -3745,6 +3748,11 @@ end;
 function TTextWriter.PendingBytes: PtrUInt;
 begin
   result := B - fTempBuf + 1;
+end;
+
+function TTextWriter.AvailableBytes: PtrUInt;
+begin
+  result := BEnd - B;
 end;
 
 procedure TTextWriter.Add(const c: AnsiChar);
