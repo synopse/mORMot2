@@ -8039,11 +8039,12 @@ end;
 
 // some local sub-functions for better code generation of UrlEncode()
 
-procedure _UrlEncode_Write(s, d: PByte; tab: PTextByteSet; space2plus: cardinal);
+function _UrlEncode_Write(s, d: PByte; tab: PTextByteSet; space2plus: cardinal): PtrUInt;
 var
   c: cardinal;
   hex: PByteToWord;
 begin
+  result := PtrUInt(d);
   if d = nil then
     exit;
   hex := @TwoDigitsHexWB;
@@ -8057,7 +8058,7 @@ begin
       inc(d);
     end
     else if c = 0 then
-      exit
+      break
     else if c = space2plus then // space2plus=32 for parameter, =48 for URI
     begin
       d^ := ord('+');
@@ -8071,6 +8072,7 @@ begin
       inc(d, 2);
     end;
   until false;
+  result := PtrUInt(d) - result; // return the number of written bytes
 end;
 
 function _UrlEncode_ComputeLen(s: PByte; tab: PTextByteSet; space2plus: byte): PtrInt;
@@ -8105,9 +8107,13 @@ end;
 
 procedure _UrlEncodeW(W: TTextWriter; Text: pointer; TextLen: PtrInt; space2plus: cardinal);
 begin
-  if Text <> nil then
-    _UrlEncode_Write(Text, W.AddPrepare(_UrlEncode_ComputeLen(
-      Text, @TEXT_BYTES, space2plus)), @TEXT_BYTES, space2plus);
+  if (Text = nil) or
+     (W = nil) then
+    exit;
+  TextLen := TextLen * 3; // worse case
+  if TextLen > W.BEnd - W.B then // need to compute exact length
+    TextLen := _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus);
+  inc(W.B, _UrlEncode_Write(Text, W.AddPrepare(TextLen), @TEXT_BYTES, space2plus));
 end;
 
 function UrlEncode(const Text: RawUtf8): RawUtf8;
@@ -8198,16 +8204,16 @@ begin
             continue; // skip ''
         end;
         if hasContent then
-          w.Add('&')
+          w.AddDirect('&')
         else if not (ueTrimLeadingQuestionMark in Options) then
-          w.Add('?');
+          w.AddDirect('?');
         hasContent := true;
         w.AddString(name);
-        w.Add('=');
+        w.AddDirect('=');
         if valueDirect then
           w.Add(p^) // requires TJsonWriter
         else
-          UrlEncode(w, value);
+          _UrlEncodeW(w, pointer(value), length(value), 32); // = UrlEncode(W)
       end;
     w.SetText(result);
   finally
