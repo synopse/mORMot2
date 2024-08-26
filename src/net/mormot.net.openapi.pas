@@ -21,6 +21,7 @@ uses
   sysutils,
   classes,
   mormot.core.base,
+  mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.variants,
@@ -352,6 +353,7 @@ type
     procedure Dump;
     function GetDtosUnit(UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
+    procedure ExportToDirectory(Name: RawUtf8; DirectoryName: RawUtf8 = './'; UnitPrefix: RawUtf8 = '');
 
     property Specs: POpenApiSpecs read GetSpecs;
   end;
@@ -838,7 +840,7 @@ begin
 
   if Assigned(fPayloadParameterType) then
   begin
-    if Length(Parameters) > 0 then
+    if FctParamIndex > 0 then
       Append(result, '; const payload: ', fPayloadParameterType.ToFpcName)
     else
       Append(result, 'const payload: ', fPayloadParameterType.ToFpcName);
@@ -881,7 +883,7 @@ begin
     end;
   end;
 
-   result := FormatUtf8('%%begin%  Client.Request(''%'', ''%''', [Declaration(ClassName, Parser), LINE_END, LINE_END, ToText(fMethod), Action]);
+   result := FormatUtf8('%%begin%  JsonClient.Request(''%'', ''%''', [Declaration(ClassName, Parser), LINE_END, LINE_END, ToText(fMethod), Action]);
    // Path parameters
    if Length(ActionArgs) > 0 then
    begin
@@ -893,7 +895,10 @@ begin
        Append(result, ActionArgs[i]);
      end;
      Append(result, ']');
-   end;
+   end
+   // Either ActionArgs and QueryArgs or None of them (for Request parameters)
+   else if (QueryParameters.Count > 0) or Assigned(fPayloadParameterType) then
+     Append(result, ', []');
 
    // Query parameters
    if QueryParameters.Count > 0 then
@@ -907,7 +912,10 @@ begin
        Append(result, ['    ''', QueryParameters.Names[i], ''', ', VariantToUtf8(QueryParameters.Values[i])]);
      end;
      Append(result, LINE_END, '    ]');
-   end;
+   end
+   // Either ActionArgs and QueryArgs or None of them (for Request parameters)
+   else if (Length(ActionArgs) > 0) or Assigned(fPayloadParameterType) then
+     Append(result, ', []');
 
    // Payload if any
    if Assigned(fPayloadParameterType) then
@@ -1474,7 +1482,6 @@ var
   TagByName: IKeyValue<RawUtf8, POpenApiTag>;
   tag, opTag: PVariant;
   Op: TFpcOperation;
-  json: RawUtf8;
 begin
   // TODO: Juse use TDocVariant copying by reference ?
   TagByName := Collections.NewKeyValue<RawUtf8, POpenApiTag>;
@@ -1488,7 +1495,6 @@ begin
 
   for Op in fOperations do
   begin
-    json := op.fOperation^.DocVariant^.ToJson ;
     for opTag in op.fOperation^.Tags^.Items do
       result.GetItem(TagByName.GetItem(VariantToUtf8(opTag^))).Add(Op);
   end;
@@ -1557,8 +1563,23 @@ begin
 
   Append(result, [LINE_END, LINE_END,
   'procedure RegisterRecordsRttis;', LINE_END,
-  'begin', LINE_END,
-  '  Rtti.RegisterFromText([', LINE_END]);
+  'begin', LINE_END]);
+
+  if self.fEnums.Count > 0 then
+  begin
+    Append(result, '  Rtti.RegisterTypes([', LINE_END);
+    for i := 0 to fEnums.Count - 1 do
+    begin
+      if i > 0 then
+        Append(result, ',', LINE_END);
+      Append(result, ['    TypeInfo(', fEnums.GetValue(i).FpcName, ')']);
+      if fEnums.GetValue(i).fRequiresArrayDefinition then
+        Append(result, [',', LINE_END, '    TypeInfo(', fEnums.GetValue(i).ToArrayTypeName, ')']);
+    end;
+    Append(result, LINE_END, '  ]);');
+  end;
+
+  Append(result, [LINE_END, '  Rtti.RegisterFromText([', LINE_END]);
 
   for i := 0 to Length(OrderedRecords) - 1 do
   begin
@@ -1606,7 +1627,6 @@ begin
     '  ', ClientClassName, ' = class', LINE_END,
     '  private', LINE_END,
     '    fClient: IJsonClient;', LINE_END,
-    '    function GetJsonClient: IJsonClient;', LINE_END,
     '  public', LINE_END,
     '    constructor Create(aClient: IJsonClient = nil);', LINE_END,
     '    destructor Destroy; override;', LINE_END]);
@@ -1631,7 +1651,7 @@ begin
       DeclaredOperations[Length(DeclaredOperations) - 1] := Operation.fOperation^.Id;
 
       Append(result, Operation.Documentation('    '));
-      Append(result, ['    ', Operation.Declaration(ClientClassName, Self), LINE_END]);
+      Append(result, ['    ', Operation.Declaration('', Self), LINE_END]);
     end;
   end;
 
@@ -1660,6 +1680,21 @@ begin
     Append(result, Operation.Body(ClientClassName, Specs^.BasePath, Self), LINE_END);
 
   Append(result, LINE_END, 'end.');
+end;
+
+procedure TOpenApiParser.ExportToDirectory(Name: RawUtf8;
+  DirectoryName: RawUtf8; UnitPrefix: RawUtf8);
+var
+  DtoUnitName, ClientUnitName: RawUtf8;
+  DtoUnitPath, ClientUnitPath: TFileName;
+begin
+  DtoUnitName := FormatUtf8('%%Dtos', [UnitPrefix, Name]);
+  DtoUnitPath := MakePath([DirectoryName, DtoUnitName + '.pas']);
+  ClientUnitName := FormatUtf8('%%Client', [UnitPrefix, Name]);
+  ClientUnitPath := MakePath([DirectoryName, ClientUnitName + '.pas']);
+
+  FileFromString(GetDtosUnit(DtoUnitName), DtoUnitPath);
+  FileFromString(GetClientUnit(ClientUnitName, FormatUtf8('T%Client', [Name]), DtoUnitName), ClientUnitPath);
 end;
 
 
