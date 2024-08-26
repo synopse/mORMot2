@@ -265,6 +265,7 @@ type
   public
     constructor Create(aName: RawUtf8; aSchema: POpenApiSchema; aType: TFpcType);
     constructor CreateFromSchema(aName: RawUtf8; aSchema: POpenApiSchema; Parser: TOpenApiParser; ParentField: Boolean = False);
+    destructor Destroy; override;
 
     class function SanitizePropertyName(aName: RawUtf8): RawUtf8;
   end;
@@ -316,6 +317,7 @@ type
     fSuccessResponseType: TFpcType;
   public
     constructor Create(aPath: RawUtf8; aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
+    destructor Destroy; override;
 
     // Resolve parameters/responses types
     procedure ResolveTypes(Parser: TOpenApiParser);
@@ -480,7 +482,6 @@ end;
 
 function TOpenApiParameter.Default: PVariant;
 begin
-  // TODO: Check this
   result := Data.GetPVariantByPath('default');
 end;
 
@@ -714,6 +715,13 @@ begin
   fMethod := aMethod;
 end;
 
+destructor TFpcOperation.Destroy;
+begin
+  fPayloadParameterType.Free;
+  fSuccessResponseType.Free;
+  inherited Destroy;
+end;
+
 procedure TFpcOperation.ResolveTypes(Parser: TOpenApiParser);
 var
   PayloadParam: POpenApiParameter;
@@ -833,8 +841,12 @@ begin
       if FctParamIndex > 0 then
         Append(result, '; ');
       ParamType := TFpcType.LoadFromSchema(Param^.AsSchema, Parser);
-      Append(result, [Param^.AsFpcName, ': ', ParamType.ToFpcName]);
-      Inc(FctParamIndex);
+      try
+        Append(result, [Param^.AsFpcName, ': ', ParamType.ToFpcName]);
+        Inc(FctParamIndex);
+      finally
+        ParamType.Free;
+      end;
     end;
   end;
 
@@ -871,15 +883,17 @@ begin
   for Param in Parameters do
   begin
     ParamType := TFpcType.LoadFromSchema(Param^.AsSchema, Parser);
-    if Param^._In = 'path' then
-    begin
-      Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
-      SetLength(ActionArgs, Length(ActionArgs) + 1);
-      ActionArgs[Length(ActionArgs) - 1] := ParamType.ToFormatUtf8Arg(Param^.AsFpcName);
-    end
-    else if Param^._In = 'query' then
-    begin
-      QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsFpcName));
+    try
+      if Param^._In = 'path' then
+      begin
+        Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
+        SetLength(ActionArgs, Length(ActionArgs) + 1);
+        ActionArgs[Length(ActionArgs) - 1] := ParamType.ToFormatUtf8Arg(Param^.AsFpcName);
+      end
+      else if Param^._In = 'query' then
+        QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsFpcName));
+    finally
+      ParamType.Free;
     end;
   end;
 
@@ -964,6 +978,12 @@ begin
   fName := aName;
   fSchema := aSchema;
   fFpcName := SanitizePropertyName(fName);
+end;
+
+destructor TFpcProperty.Destroy;
+begin
+  fType.Free;
+  inherited Destroy;
 end;
 
 class function TFpcProperty.SanitizePropertyName(aName: RawUtf8): RawUtf8;
@@ -1303,15 +1323,21 @@ end;
 
 destructor TOpenApiParser.Destroy;
 begin
-  // TODO: Free all FpcTypes
+  Clear;
   fRecords := nil;
   fEnums := nil;
   inherited Destroy;
 end;
 
 procedure TOpenApiParser.Clear;
+var
+  op: TFpcOperation;
 begin
   fRecords.Clear;
+  fEnums.Clear;
+  for op in fOperations do
+    op.Free;
+  fOperations := nil;
   if not fSpecs.IsVoid then
     fSpecs.Clear;
 end;
@@ -1483,14 +1509,18 @@ var
   tag, opTag: PVariant;
   Op: TFpcOperation;
 begin
-  // TODO: Juse use TDocVariant copying by reference ?
+  // Tried with TDocVariantData instead of allocating a new IKeyValue but
+  // Variant of pointers doesn't seem to be robust so let's stick with this
+  // It doesn't run often so it's not that bad, I think ?
   TagByName := Collections.NewKeyValue<RawUtf8, POpenApiTag>;
   result := Collections.NewKeyValue<POpenApiTag, IList<TFpcOperation>>;
 
   for tag in Specs^.Tags^.Items do
   begin
     TagByName.Add(POpenApiTag(tag)^.Name, POpenApiTag(tag));
-    result.Add(POpenApiTag(tag), Collections.NewList<TFpcOperation>);
+    // The list are made with NoFinalize because it is a view, ie not owning the TFpcOperation
+    // This avoids double free with fOperations, owned by the TOpenApiParser itself
+    result.Add(POpenApiTag(tag), Collections.NewList<TFpcOperation>([loNoFinalize]));
   end;
 
   for Op in fOperations do
