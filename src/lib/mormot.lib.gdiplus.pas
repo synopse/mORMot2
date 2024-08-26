@@ -2138,17 +2138,18 @@ begin
     PlayEnhMetaFile(Dest, Source, DestRect);
   end
   else
-    if Assigned(attributes) then
-      ia := attributes.Attr
-    else
-      ia := nil;
+  begin
     try
+      if Assigned(attributes) then
+        ia := attributes.Attr
+      else
+        ia := nil;
       // use GDI+ 1.0/1.1 anti-aliased rendering
       _Gdip.Lock;
       _Gdip.CreateFromHDC(Dest, gr);
       try
         with DestRect do
-          _Gdip.DrawImageRectRect(gr, img, DestRect.Left, DestRect.Top, 
+          _Gdip.DrawImageRectRect(gr, img, DestRect.Left, DestRect.Top,
              DestRect.Right - DestRect.Left, DestRect.Bottom - DestRect.Top,
              SourceRect.Left, SourceRect.Top, SourceRect.Right - SourceRect.Left,
              SourceRect.Bottom - SourceRect.Top, u, ia);
@@ -2159,6 +2160,7 @@ begin
       _Gdip.DisposeImage(img);
       _Gdip.UnLock;
     end;
+  end;
 end;
 
 {$endif OSPOSIX}
