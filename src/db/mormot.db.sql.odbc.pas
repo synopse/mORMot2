@@ -26,10 +26,10 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.data,
+  mormot.core.rtti,
   mormot.core.json,
   mormot.core.perf,
   mormot.core.log,
-  {$ifdef HASINLINE} mormot.core.rtti, {$endif}
   mormot.db.core,
   mormot.db.sql;
 

@@ -2700,7 +2700,7 @@ begin
     exit; // leading zero
   count := 2;
   padding := 0;
-  if Verify then
+  if verify then
   begin
     if p[1] <> 1 then
       exit; // block type 1
