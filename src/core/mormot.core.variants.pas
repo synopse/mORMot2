@@ -1400,7 +1400,7 @@ type
     function FieldValues: TDocVariantItemsEnumerator;
     /// an enumerator able to compile "for .. in dv.Items do" for arrays
     // - returns a PVariant over all Values[] of a document array
-    // - don't iterate if the document is an object
+    // - would work also with a document object, to return its properties values
     // - for instance:
     // ! var v: PVariant;
     // ! ...
@@ -1411,8 +1411,8 @@ type
     function Items: TDocVariantItemsEnumerator;
     /// an enumerator able to compile "for .. dv.Objects do" for array of objects
     // - returns all Values[] of a document array which are a TDocVariantData
-    // - don't iterate if the document is an object, or if an item is not a
-    // TDocVariantData:
+    // - would work also with a document object, to return its object properties
+    // - will ignore any item which is not a TDocVariantData:
     // ! var d: PDocVariantData;
     // ! ...
     // !    dv.InitJson('[{a:1,b:1},1,"no object",{a:2,b:2}]');
@@ -6971,18 +6971,18 @@ end;
 
 function TDocVariantData.Items: TDocVariantItemsEnumerator;
 begin
-  if IsObject then
+  if VCount = 0 then
     result{%H-}.State.Void
   else
-    result.State.Init(pointer(Values), VCount);
+    result.State.Init(pointer(Values), VCount); // arrays or objects
 end;
 
 function TDocVariantData.Objects: TDocVariantObjectsEnumerator;
 begin
-  if IsObject then
+  if VCount = 0 then
     result{%H-}.State.Void
   else
-    result.State.Init(pointer(Values), VCount);
+    result.State.Init(pointer(Values), VCount); // arrays or objects
 end;
 
 function TDocVariantData.Fields: TDocVariantFieldsEnumerator;

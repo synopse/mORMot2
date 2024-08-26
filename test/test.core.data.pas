@@ -5317,6 +5317,7 @@ var
     d: PDocVariantData;
     f: TDocVariantFields;
     j, j2: RawUtf8;
+    n: integer;
   begin
     vd.InitArray([1, 2, 3, 4]);
     for f in vd do
@@ -5368,8 +5369,15 @@ var
     end;
     CheckEqual(vd.ToJson, v2.ToJson);
     Check(vd.Equals(v2));
+    writeln(vd.ToJson);
+    n := 1;
     for v in vd.Items do
-      Check(v = nil); // should not iterate
+    begin
+      Check(v <> nil); // should iterate over values (1, 2, 3)
+      CheckEqual(VariantToIntegerDef(v^, 0), n);
+      inc(n);
+    end;
+    CheckEqual(n, 4);
     for f in vd.Fields do
     begin
       CheckEqual(f.Name^, v2.Names[0]);
