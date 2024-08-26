@@ -8226,9 +8226,11 @@ begin
   repeat
     if tcUriUnreserved in tab[P^] then
       inc(P) // was  ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
+    else if P^ = #0 then
+      break
     else
       exit;
-  until P^ = #0;
+  until false;
   result := true;
 end;
 
