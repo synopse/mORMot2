@@ -501,10 +501,10 @@
         <Filename Value="../../src/crypt/mormot.crypt.x509.pas"/>
         <UnitName Value="mormot.crypt.x509"/>
       </Item113>
-      <Item115>
+      <Item114>
         <Filename Value="../../src/net/mormot.net.openapi.pas"/>
         <UnitName Value="mormot.net.openapi"/>
-      </Item115>
+      </Item114>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
