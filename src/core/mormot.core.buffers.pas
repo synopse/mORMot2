@@ -1581,6 +1581,12 @@ type
 function UrlEncode(const NameValuePairs: array of const;
   Options: TUrlEncoder = []): RawUtf8; overload;
 
+/// encode supplied parameters to be compatible with URI encoding
+// - may be used e.g. when appending to an existing URI, as such:
+// ! MyUri := MyUri + UrlEncode(MyArrayOfConst,  MyUri[length(MyUri)] in ['?','&'])
+function UrlEncode(const NameValuePairs: array of const;
+  TrimLeadingQuestionMark: boolean): RawUtf8; overload;
+
 /// encode a full URI with prefix and parameters
 function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
   NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
@@ -8159,6 +8165,15 @@ end;
 function UrlEncode(const NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 begin
   result := UrlEncodeFull('', [], NameValuePairs, Options);
+end;
+
+const
+  _UE_OPT: array[boolean] of TUrlEncoder = ([], [ueTrimLeadingQuestionMark]);
+
+function UrlEncode(const NameValuePairs: array of const;
+  TrimLeadingQuestionMark: boolean): RawUtf8;
+begin
+  result := UrlEncodeFull('', [], NameValuePairs, _UE_OPT[TrimLeadingQuestionMark]);
 end;
 
 function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
