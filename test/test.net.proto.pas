@@ -85,12 +85,18 @@ type
 
 implementation
 
+const
+  // use reference from https://github.com/OAI/OpenAPI-Specification
+  OpenApiRef: array[0..1] of RawUtf8 = (
+    'v2.0/json/petstore-simple.json',
+    'v3.0/petstore.json');
 
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u, pets: RawUtf8;
+  u: RawUtf8;
+  pets: TRawUtf8DynArray;
   oa: TOpenApiParser;
 begin
   for i := 1 to high(RESERVED_KEYWORDS) do
@@ -108,25 +114,31 @@ begin
     Check(not IsReservedKeyWord(u));
     Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
   end;
-  fn := WorkDir + 'petstore.json';
-  pets := StringFromFile(fn);
-  if pets = '' then
+  SetLength(pets, length(OpenApiRef));
+  for i := 0 to high(OpenApiRef) do
   begin
-    pets := HttpGet('https://raw.githubusercontent.com/OAI/' +
-      'OpenAPI-Specification/main/examples/v3.0/petstore.json');
-    if pets <> '' then
-      FileFromString(pets, fn);
-  end;
-  if pets <> '' then
-  begin
-    oa := TOpenApiParser.Create;
-    try
-      oa.ParseJson(pets);
-
-    finally
-      oa.Free;
+    fn := FormatString('%petstore%.json', [WorkDir, i + 1]);
+    pets[i] := StringFromFile(fn);
+    if pets[i] = '' then
+    begin
+      pets[i] := HttpGet('https://raw.githubusercontent.com/OAI/' +
+        'OpenAPI-Specification/main/examples/' + OpenApiRef[i]);
+      if pets[i] <> '' then
+        FileFromString(pets[i], fn);
     end;
   end;
+  for i := 0 to high(pets) do
+    if pets[i] <> '' then
+    begin
+      oa := TOpenApiParser.Create;
+      try
+        oa.ParseJson(pets[i]);
+        //ConsoleWrite(oa.GetDtosUnit('pets.dto.pas'));
+        //ConsoleWrite(oa.GetClientUnit('pets.client.pas', 'TPets', 'pets.dto.pas'));
+      finally
+        oa.Free;
+      end;
+    end;
 end;
 
 procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
