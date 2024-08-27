@@ -603,7 +603,7 @@ begin
   YYear := XYear div D0;
   Temp := (((XYear - (YYear * D0) + 4) shr 2) * 5) - 3;
   TempMonth := Temp div 153;
-  result.Day := ((Temp - (TempMonth * 153)) + 5) div 5;
+  result.Day := PtrUInt((Temp - (TempMonth * 153)) + 5) div 5;
   if TempMonth >= 10 then
   begin
     inc(YYear);

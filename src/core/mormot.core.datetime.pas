@@ -2142,24 +2142,23 @@ begin
   PInt64(@Year)^ := 0; // quickly reset all Date fields
   t := Trunc(dt);
   t := (t + 693900) * 4 - 1;
-  if PtrInt(t) >= 0 then
+  if PtrInt(t) < 0 then
+    exit;
+  t3 := t div 146097;
+  t2 := (t - t3 * 146097) and not 3;
+  t := PtrUInt(t2 + 3) div 1461; // PtrUInt() needed for FPC i386
+  Year := t3 * 100 + t;
+  t2 := ((t2 + 7 - t * 1461) shr 2) * 5;
+  t3 := PtrUInt(t2 - 3) div 153;
+  Day := PtrUInt(t2 + 2 - t3 * 153) div 5;
+  if t3 < 10 then
+    inc(t3, 3)
+  else
   begin
-    t3 := t div 146097;
-    t2 := (t - t3 * 146097) and not 3;
-    t := PtrUInt(t2 + 3) div 1461; // PtrUInt() needed for FPC i386
-    Year := t3 * 100 + t;
-    t2 := ((t2 + 7 - t * 1461) shr 2) * 5;
-    t3 := PtrUInt(t2 - 3) div 153;
-    Day := PtrUInt(t2 + 2 - t3 * 153) div 5;
-    if t3 < 10 then
-      inc(t3, 3)
-    else
-    begin
-      dec(t3, 9);
-      inc(Year);
-    end;
-    Month := t3;
+    dec(t3, 9);
+    inc(Year);
   end;
+  Month := t3;
 end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
