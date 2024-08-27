@@ -302,6 +302,7 @@ type
     class function SanitizePropertyName(const aName: RawUtf8): RawUtf8;
     constructor Create(const aName: RawUtf8;
       aSchema: POpenApiSchema; aType: TPascalType);
+    destructor Destroy; override;
     constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema; ParentField: boolean = false);
     property PropType: TPascalType
@@ -351,11 +352,12 @@ type
     fOperation: POpenApiOperation;
     fMethod: TUriMethod;
     fPayloadParameterType: TPascalType;
-    fSuccessResponseCode: integer;
     fSuccessResponseType: TPascalType;
+    fSuccessResponseCode: integer;
   public
     constructor Create(const aPath: RawUtf8; aPathItem: POpenApiPathItem;
       aOperation: POpenApiOperation; aMethod: TUriMethod);
+    destructor Destroy; override;
     // Resolve parameters/responses types
     procedure ResolveTypes(Parser: TOpenApiParser);
     function GetAllParameters: POpenApiParameterDynArray;
@@ -783,6 +785,13 @@ begin
   fMethod := aMethod;
 end;
 
+destructor TPascalOperation.Destroy;
+begin
+  fPayloadParameterType.Free;
+  fSuccessResponseType.Free;
+  inherited Destroy;
+end;
+
 procedure TPascalOperation.ResolveTypes(Parser: TOpenApiParser);
 var
   p: POpenApiParameter;
@@ -823,7 +832,8 @@ begin
     result[pn + i] := o^.Parameter[i];
 end;
 
-function TPascalOperation.Documentation(const LineEnd, LineIndent: RawUtf8): RawUtf8;
+function TPascalOperation.Documentation(const LineEnd: RawUtf8;
+  const LineIndent: RawUtf8): RawUtf8;
 var
   params: POpenApiParameterDynArray;
   p: POpenApiParameter;
@@ -973,14 +983,18 @@ begin
   begin
     Param := Parameters[i];
     ParamType := TPascalType.LoadFromSchema(Parser, Param^.AsSchema);
-    if Param^._In = 'path' then
-    begin
-      Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
-      AddRawUtf8(ActionArgs, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
-    end
-    else if Param^._In = 'query' then
-    begin
-      QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
+    try
+      if Param^._In = 'path' then
+      begin
+        Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
+        AddRawUtf8(ActionArgs, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
+      end
+      else if Param^._In = 'query' then
+      begin
+        QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
+      end;
+    finally
+      ParamType.Free;
     end;
   end;
 
@@ -1060,6 +1074,12 @@ begin
   fSchema := aSchema;
   fType := aType;
   fPascalName := SanitizePropertyName(fName);
+end;
+
+destructor TPascalProperty.Destroy;
+begin
+  fType.Free;
+  inherited Destroy;
 end;
 
 constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
@@ -1213,8 +1233,8 @@ begin
     if Schema^.AllOf <> nil then
     begin
       if Schema^.AllOf^.Count <> 1 then
-        EOpenApi.RaiseUtf8('TPascalType.LoadFromSchema with "allOf".Count=%',
-          [Schema^.AllOf^.Count]);
+        EOpenApi.RaiseUtf8('%.LoadFromSchema with "allOf".Count=%',
+          [self, Schema^.AllOf^.Count]);
       Rec := Parser.GetRecord(POpenApiSchema(@Schema^.AllOf^.Values[0])^.Reference, true);
     end
     else
