@@ -6097,7 +6097,9 @@ var
 begin
   v1 := GetInt64(Str1, err);
   if err = 0 then
-    v2 := GetInt64(Str2, err);
+    v2 := GetInt64(Str2, err)
+  else
+    v2 := 0; // to please the Delphi compiler
   if err = 0 then
     result := CompareInt64(v1, v2)
   else
