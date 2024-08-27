@@ -71,6 +71,7 @@ type
     function IsArray: boolean;
     function IsObject: boolean;
     function IsNamedEnum: boolean;
+    function BuiltinType: RawUtf8;
   end;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Response
@@ -229,29 +230,9 @@ type
 
 type
   TOpenApiParser = class;
+  TPascalCustomType = class;
 
-  /// abstract parent class holder for complex types
-  TPascalCustomType = class
-  private
-    fName: RawUtf8;
-    fPascalName: RawUtf8;
-    fSchema: POpenApiSchema;
-    fParser: TOpenApiParser;
-    fRequiresArrayDefinition: boolean;
-  public
-    constructor Create(aOwner: TOpenApiParser; const aPascalName: RawUtf8 = '');
-    function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual; abstract;
-    function ToArrayTypeName(AllowArrayType: boolean = true): RawUtf8; virtual;
-    function ToArrayTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual;
-    property Name: RawUtf8
-      read fName;
-    property PascalName: RawUtf8
-      read fPascalName;
-    property Schema: POpenApiSchema
-      read fSchema;
-  end;
-
-  /// define a Pascal type
+  /// define any Pascal type, as basic type of custom type
   TPascalType = class
   private
     fBuiltinSchema: POpenApiSchema;
@@ -269,7 +250,6 @@ type
 
     class function LoadFromSchema(Parser: TOpenApiParser;
       Schema: POpenApiSchema): TPascalType;
-    class function GetBuiltinType(Schema: POpenApiSchema): RawUtf8;
 
     // TODO: Handle RecordArrayType in RTTI definition
     function ToPascalName(AllowArrayType: boolean = true;
@@ -311,6 +291,27 @@ type
       read fSchema;
     property Name: RawUtf8
       read fName;
+  end;
+
+  /// abstract parent class holder for complex types
+  TPascalCustomType = class
+  private
+    fName: RawUtf8;
+    fPascalName: RawUtf8;
+    fSchema: POpenApiSchema;
+    fParser: TOpenApiParser;
+    fRequiresArrayDefinition: boolean;
+  public
+    constructor Create(aOwner: TOpenApiParser; const aPascalName: RawUtf8 = '');
+    function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual; abstract;
+    function ToArrayTypeName(AllowArrayType: boolean = true): RawUtf8; virtual;
+    function ToArrayTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual;
+    property Name: RawUtf8
+      read fName;
+    property PascalName: RawUtf8
+      read fPascalName;
+    property Schema: POpenApiSchema
+      read fSchema;
   end;
 
   /// define a Pascal data structure, as a packed record with RTTI
@@ -401,9 +402,11 @@ type
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
 
     procedure Dump;
+    function GetDescription(const UnitDescription: RawUtf8): RawUtf8;
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
     function Specs: POpenApiSpecs;
+    function Info: PDocVariantData;
     property LineEnd: RawUtf8
       read fLineEnd;
   end;
@@ -488,7 +491,7 @@ begin
     result := nil;
 end;
 
-function TOpenApiSchema.Example: Variant;
+function TOpenApiSchema.Example: variant;
 begin
   result := Data.Value['example'];
 end;
@@ -517,6 +520,41 @@ function TOpenApiSchema.IsNamedEnum: boolean;
 begin
   result := (Enum <> nil) and
             (_Format <> '');
+end;
+
+function TOpenApiSchema.BuiltinType: RawUtf8;
+var
+  t, f: RawUtf8;
+begin
+  t := _Type;
+  f := _Format;
+  if t = 'integer' then
+    if f = 'int64' then
+      result := 'Int64'
+    else
+      result := 'integer'
+  else if t = 'number' then
+    if f = 'float' then
+      result := 'Single'
+    else
+      result := 'Double'
+  else if t = 'string' then
+    if f = 'date' then
+      result := 'TDate'
+    else if f = 'date-time' then
+      result := 'TDateTime'
+    else if f = 'uuid' then
+      result := 'TGuid'
+    else if f = 'binary' then
+      result := 'RawByteString'
+    else if f = 'password' then
+      result := 'SpiUtf8'
+    else
+      result := 'RawUtf8'
+  else if t = 'boolean' then
+    result := 'boolean'
+  else
+    result := 'TDocVariantData';
 end;
 
 
@@ -1162,7 +1200,7 @@ begin
   result := FormatUtf8('%: array[%] of RawUtf8 = (', [ToConstTextArrayName, PascalName]);
   for i := 0 to fChoices.Count - 1 do
     if i = 0 then
-      Append(result, '''''') // None entry
+      Append(result, '''''') // first entry is for None/Default
     else
       Append(result, [', ''',
         StringReplaceAll(VariantToUtf8(fChoices.Values[i]), ' ', ''), '''']);
@@ -1259,42 +1297,7 @@ begin
     end;
   end
   else
-    result := TPascalType.CreateBuiltin(GetBuiltinType(Schema), Schema);
-end;
-
-class function TPascalType.GetBuiltinType(Schema: POpenApiSchema): RawUtf8;
-var
-  t, f: RawUtf8;
-begin
-  t := Schema._Type;
-  f := Schema._Format;
-  if t = 'integer' then
-    if f = 'int64' then
-      result := 'Int64'
-    else
-      result := 'integer'
-  else if t = 'number' then
-    if f = 'float' then
-      result := 'Single'
-    else
-      result := 'Double'
-  else if t = 'string' then
-    if f = 'date' then
-      result := 'TDate'
-    else if f = 'date-time' then
-      result := 'TDateTime'
-    else if f = 'uuid' then
-      result := 'TGuid'
-    else if f = 'binary' then
-      result := 'RawByteString'
-    else if f = 'password' then
-      result := 'SpiUtf8'
-    else
-      result := 'RawUtf8'
-  else if t = 'boolean' then
-    result := 'boolean'
-  else
-    result := 'TDocVariantData';
+    result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema);
 end;
 
 function TPascalType.ToPascalName(AllowArrayType, NoRecordArrayTypes: boolean): RawUtf8;
@@ -1307,7 +1310,7 @@ begin
     result := fBuiltinTypeName;
   if not AllowArrayType or
      (NoRecordArrayTypes and (result = 'TDocVariantData')) then
-    result := 'Variant';
+    result := 'variant';
   if IsArray then
   begin
     if Assigned(CustomType) then
@@ -1425,7 +1428,7 @@ begin
     if p.fType.IsParent then
       Append(result, (p.fType.CustomType as TPascalRecord).ToRttiTextRepresentation(false))
     else
-      Append(result, [fProperties.Names[i], ': ', p.fType.ToPascalName(true, true), '; ']);
+      Append(result, [fProperties[i], ': ', p.fType.ToPascalName(true, true), '; ']);
   end;
   if WithClassName then
     Append(result, ''';');
@@ -1464,6 +1467,11 @@ end;
 function TOpenApiParser.Specs: POpenApiSpecs;
 begin
   result := POpenApiSpecs(@fSpecs);
+end;
+
+function TOpenApiParser.Info: PDocVariantData;
+begin
+  result := fSpecs.O['info'];
 end;
 
 procedure TOpenApiParser.Parse(const aSpecs: TDocVariantData);
@@ -1674,6 +1682,22 @@ begin
     ConsoleWrite(OrderedRecs[i].ToTypeDefinition);
 end;
 
+function TOpenApiParser.GetDescription(const UnitDescription: RawUtf8): RawUtf8;
+var
+  nfo: PDocVariantData;
+  u: RawUtf8;
+  v: variant;
+begin
+  nfo := Info;
+  result := FormatUtf8('/// % %%', [UnitDescription, nfo^.U['title'], LineEnd]);
+  if nfo^.GetAsRawUtf8('description', u) then
+    Append(result, ['// - ', u, LineEnd]);
+  if nfo^.GetAsRawUtf8('version', u) then
+    Append(result, ['// - version ', u, LineEnd]);
+  if nfo^.GetValueByPath('license.name', v) then
+    Append(result, ['// - Licensed under ', v, ' terms', LineEnd]);
+end;
+
 function TOpenApiParser.GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
 var
   rec: TPascalRecordDynArray;
@@ -1684,6 +1708,7 @@ begin
 
   result := '';
   Append(result, [
+    GetDescription('DTOs for'),
     'unit ', UnitName, ';', LineEnd , LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
@@ -1696,7 +1721,7 @@ begin
     '  mormot.core.rtti,', LineEnd,
     '  mormot.core.variants;', LineEnd,
     LineEnd,
-    'type', LineEnd, LineEnd, LineEnd]);
+    'type', LineEnd, LineEnd]);
 
   for i := 0 to fEnums.Count - 1 do
     Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition('  '));
@@ -1721,7 +1746,7 @@ begin
     Append(result, ['  ', rec[i].ToRttiTextRepresentation, LineEnd]);
 
   Append(result, [LineEnd, LineEnd,
-    'procedure RegisterRecordsRttis;', LineEnd,
+    'procedure RegisterRtti;', LineEnd,
     'begin', LineEnd]);
 
   if fEnums.Count > 0 then
@@ -1752,7 +1777,7 @@ begin
     'end;', LineEnd,
     LineEnd,
     'initialization', LineEnd,
-    '  RegisterRecordsRttis;', LineEnd,
+    '  RegisterRtti;', LineEnd,
     LineEnd,
     'end.', LineEnd]);
 end;
@@ -1768,6 +1793,7 @@ var
 begin
   result := '';
   Append(result, [
+    GetDescription('Client unit for'),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
     '{$mode ObjFPC}{$H+}', LineEnd,
