@@ -453,8 +453,6 @@ end;
 
 function TOpenApiSchema.Properties: PDocVariantData;
 begin
-  if not IsObject then
-    EOpenApi.RaiseUtf8('Trying to access properties field on a non object schema: %', [_Type]);
   if not Data.GetAsObject('properties', result) then
     result := nil;
 end;
@@ -1520,10 +1518,12 @@ begin
   Schema := Specs^.Definition[aDefinitionName];
   if not Assigned(Schema) then
     EOpenApi.RaiseUtf8('Cannot parse missing definition: %', [aDefinitionName]);
+  if not Schema^.IsObject then
+    EOpenApi.RaiseUtf8('% is not of type: object', [aDefinitionName]);
 
   result := TPascalRecord.Create(self, aDefinitionName, Schema);
 
-  v := result.Schema^.AllOf;
+  v := Schema^.AllOf;
   if v <> nil then
   begin
     SetLength(Schemas, v^.Count);
@@ -1540,6 +1540,7 @@ begin
   for i := 0 to high(Schemas) do
   begin
     Schema := Schemas[i];
+    // append $ref as 'base###:' nested field
     if Schema^.Reference <> '' then
     begin
       if ParentCounts = 0 then
@@ -1549,14 +1550,13 @@ begin
       inc(ParentCounts);
       result.fProperties.AddObject(ParentPropName,
         TPascalProperty.CreateFromSchema(self, ParentPropName, Schema, {parent=}true));
-    end
-    else if Schema^.IsObject then
-    begin
-      v := Schema^.Properties;
+    end;
+    // append specific fields
+    v := Schema^.Properties;
+    if v <> nil then
       for j := 0 to v^.Count - 1 do
         result.fProperties.AddObject(v^.Names[j],
           TPascalProperty.CreateFromSchema(self, v^.Names[j], @v^.Values[j]));
-    end;
   end;
 end;
 
@@ -1584,6 +1584,7 @@ function TOpenApiParser.GetRecord(aRecordName: RawUtf8;
   NameIsReference: boolean): TPascalRecord;
 begin
   if NameIsReference then
+    // #/definitions/NewPet -> NewPet
     aRecordName := SplitRight(aRecordName, '/');
   result := fRecords.GetObjectFrom(aRecordName);
   if result <> nil then
@@ -1695,7 +1696,7 @@ begin
   if nfo^.GetAsRawUtf8('version', u) then
     Append(result, ['// - version ', u, LineEnd]);
   if nfo^.GetValueByPath('license.name', v) then
-    Append(result, ['// - Licensed under ', v, ' terms', LineEnd]);
+    Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
 end;
 
 function TOpenApiParser.GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
@@ -1801,8 +1802,8 @@ begin
     'interface', LineEnd,
     LineEnd,
     'uses', LineEnd,
-    '  Classes,', LineEnd,
-    '  SysUtils,', LineEnd,
+    '  classes,', LineEnd,
+    '  sysutils,', LineEnd,
     '  mormot.core.base,', LineEnd,
     '  mormot.core.text,', LineEnd,
     '  mormot.core.rtti;', LineEnd,
