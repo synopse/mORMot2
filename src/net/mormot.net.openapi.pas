@@ -114,92 +114,95 @@ type
   /// a dynamic array of pointers wrapper to OpenAPI Parameter(s)
   POpenApiParameterDynArray = array of POpenApiParameter;
 
-  TOpenApiOperation = record
-  private
-    function GetDeprecated: Boolean;
-    function GetDescription: RawUtf8;
-    function GetDV: PDocVariantData;
-    function GetId: RawUtf8;
-    function GetParameterByIndex(aIndex: Integer): POpenApiParameter;
-    function GetParameters: PDocVariantData;
-    function GetPayloadParameter: POpenApiParameter;
-    function GetResponseForStatusCode(aStatusCode: Integer): POpenApiResponse;
-    function GetResponses: PDocVariantData;
-    function GetSummary: RawUtf8;
-    function GetTags: PDocVariantData;
-  public
-    property DocVariant: PDocVariantData read GetDV;
-
-    property Id: RawUtf8 read GetId;
-    property Summary: RawUtf8 read GetSummary;
-    property Description: RawUtf8 read GetDescription;
-    property Tags: PDocVariantData read GetTags;
-    property Deprecated: Boolean read GetDeprecated;
-
-    property Parameters: PDocVariantData read GetParameters;
-    property Parameter[aIndex: Integer]: POpenApiParameter read GetParameterByIndex;
-    property PayloadParameter: POpenApiParameter read GetPayloadParameter;
-
-    property Responses: PDocVariantData read GetResponses;
-    property Response[aStatusCode: Integer]: POpenApiResponse read GetResponseForStatusCode;
-  end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Operation
   POpenApiOperation = ^TOpenApiOperation;
-
-  TOpenApiPathItem = record
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Operation
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenApiOperation = record
+  {$else}
+  TOpenApiOperation = object
+  {$endif USERECORDWITHMETHODS}
   private
-    function GetDescription: RawUtf8;
-    function GetDV: PDocVariantData;
+    function GetParameterByIndex(aIndex: Integer): POpenApiParameter;
+    function GetResponseForStatusCode(aStatusCode: Integer): POpenApiResponse;
+  public
+    /// transtype the POpenApiOperation pointer into a TDocVariantData content
+    Data: TDocVariantData;
+    // access to the OpenAPI Operation information
+    function Id: RawUtf8;
+    function Summary: RawUtf8;
+    function Description: RawUtf8;
+    function Tags: PDocVariantData;
+    function Deprecated: Boolean;
+    function Parameters: PDocVariantData;
+    property Parameter[aIndex: Integer]: POpenApiParameter read GetParameterByIndex;
+    function Responses: PDocVariantData;
+    property Response[aStatusCode: Integer]: POpenApiResponse read GetResponseForStatusCode;
+    // high-level OpenAPI Schema Helpers
+    function PayloadParameter: POpenApiParameter;
+  end;
+
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI PathItem
+  POpenApiPathItem = ^TOpenApiPathItem;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI PathItem
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenApiPathItem = record
+  {$else}
+  TOpenApiPathItem = object
+  {$endif USERECORDWITHMETHODS}
+  private
     function GetOperationByMethod(aMethod: TUriMethod): POpenApiOperation;
     function GetParameterByIndex(aIndex: Integer): POpenApiParameter;
-    function GetParameters: PDocVariantData;
-    function GetSummary: RawUtf8;
   public
-    property DocVariant: PDocVariantData read GetDV;
-
-    property Summary: RawUtf8 read GetSummary;
-    property Description: RawUtf8 read GetDescription;
-
+    /// transtype the POpenApiPathItem pointer into a TDocVariantData content
+    Data: TDocVariantData;
+    // access to the OpenAPI PathItem information
+    function Summary: RawUtf8;
+    function Description: RawUtf8;
     property Method[aMethod: TUriMethod]: POpenApiOperation read GetOperationByMethod;
-    property Parameters: PDocVariantData read GetParameters;
+    function Parameters: PDocVariantData;
     property Parameter[aIndex: Integer]: POpenApiParameter read GetParameterByIndex;
   end;
-  POpenApiPathItem = ^TOpenApiPathItem;
 
-  TOpenApiTag = record
-  private
-    function GetDescription: RawUtf8;
-    function GetDV: PDocVariantData;
-    function GetName: RawUtf8;
-  public
-    property DocVariant: PDocVariantData read GetDV;
-
-    property Name: RawUtf8 read GetName;
-    property Description: RawUtf8 read GetDescription;
-  end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Tag
   POpenApiTag = ^TOpenApiTag;
-
-  TOpenApiSpecs = record
-  private
-    function GetBasePath: RawUtf8;
-    function GetDefinitionByName(aName: RawUtf8): POpenApiSchema;
-    function GetDefinitions: PDocVariantData;
-    function GetDV: PDocVariantData;
-    function GetPathItemByName(aPath: RawUtf8): POpenApiPathItem;
-    function GetPaths: PDocVariantData;
-    function GetTags: PDocVariantData;
-    function GetVersion: RawUtf8;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Tag
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenApiTag = record
+  {$else}
+  TOpenApiTag = object
+  {$endif USERECORDWITHMETHODS}
   public
-    property DocVariant: PDocVariantData read GetDV;
-
-    property Definitions: PDocVariantData read GetDefinitions;
-    property Definition[aName: RawUtf8]: POpenApiSchema read GetDefinitionByName;
-    property Paths: PDocVariantData read GetPaths;
-    property Path[aPath: RawUtf8]: POpenApiPathItem read GetPathItemByName;
-    property Version: RawUtf8 read GetVersion;
-    property BasePath: RawUtf8 read GetBasePath;
-    property Tags: PDocVariantData read GetTags;
+    /// transtype the POpenApiTag pointer into a TDocVariantData content
+    Data: TDocVariantData;
+    // access to the OpenAPI Tag information
+    function Name: RawUtf8;
+    function Description: RawUtf8;
   end;
+
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Specifications
   POpenApiSpecs = ^TOpenApiSpecs;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Specifications
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenApiSpecs = record
+  {$else}
+  TOpenApiSpecs = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    function GetDefinitionByName(aName: RawUtf8): POpenApiSchema;
+    function GetPathItemByName(aPath: RawUtf8): POpenApiPathItem;
+  public
+    /// transtype the POpenApiSpecs pointer into a TDocVariantData content
+    Data: TDocVariantData;
+    // access to the OpenAPI Specifications information
+    function Definitions: PDocVariantData;
+    property Definition[aName: RawUtf8]: POpenApiSchema read GetDefinitionByName;
+    function Paths: PDocVariantData;
+    property Path[aPath: RawUtf8]: POpenApiPathItem read GetPathItemByName;
+    function Version: RawUtf8; // Read 'swagger' field for 2.x or 'openapi' for 3.x 
+    function BasePath: RawUtf8;
+    function Tags: PDocVariantData;
+  end;
 
 
 { ************************************ FPC/Delphi Pascal Code Generation }
@@ -512,90 +515,22 @@ begin
 end;
 
 
-const
-  FPC_RESERVED_KEYWORDS: array[0..73] of RawUtf8 = (
-    'absolute', 'and', 'array', 'as', 'asm', 'begin', 'case', 'const', 'constructor',
-    'destructor', 'div', 'do', 'else', 'end', 'except', 'exports', 'external', 'false',
-    'true', 'far', 'file', 'finalization', 'finally', 'for', 'forward', 'function',
-    'goto', 'if', 'then', 'implementation', 'in', 'inherited', 'initialization',
-    'interface', 'is', 'label', 'library', 'mod', 'near', 'new', 'nil', 'not',
-    'object', 'of', 'on', 'operator', 'or', 'override', 'packed', 'procedure',
-    'program', 'property', 'protected', 'public', 'published', 'raise', 'read',
-    'reintroduce', 'repeat', 'self', 'shl', 'shr', 'threadvar', 'to', 'try','type',
-    'unit', 'uses', 'var', 'virtual', 'while', 'with', 'write', 'xor');
-
-function TOpenApiTag.GetDescription: RawUtf8;
-begin
-  result := DocVariant^.U['description'];
-end;
-
-function TOpenApiTag.GetDV: PDocVariantData;
-begin
-  result := PDocVariantData(@self);
-end;
-
-function TOpenApiTag.GetName: RawUtf8;
-begin
-  result := DocVariant^.U['name'];
-end;
-
-
-{ TOpenApiPathItem }
-
-function TOpenApiPathItem.GetDescription: RawUtf8;
-begin
-  result := DocVariant^.U['description'];
-end;
-
-function TOpenApiPathItem.GetDV: PDocVariantData;
-begin
-  result := PDocVariantData(@self);
-end;
-
-function TOpenApiPathItem.GetOperationByMethod(aMethod: TUriMethod
-  ): POpenApiOperation;
-begin
-  if not DocVariant^.GetAsObject(ToText(aMethod), PDocVariantData(result)) then
-    result := nil;
-end;
-
-function TOpenApiPathItem.GetParameterByIndex(aIndex: Integer
-  ): POpenApiParameter;
-begin
-  result := POpenApiParameter(@Parameters^.Values[aIndex]);
-end;
-
-function TOpenApiPathItem.GetParameters: PDocVariantData;
-begin
-  result := DocVariant^.A['parameters'];
-end;
-
-function TOpenApiPathItem.GetSummary: RawUtf8;
-begin
-  result := DocVariant^.U['summary'];
-end;
-
 
 { TOpenApiOperation }
 
-function TOpenApiOperation.GetDeprecated: Boolean;
+function TOpenApiOperation.Deprecated: Boolean;
 begin
-  result := DocVariant^.B['deprecated'];
+  result := Data.B['deprecated'];
 end;
 
-function TOpenApiOperation.GetDescription: RawUtf8;
+function TOpenApiOperation.Description: RawUtf8;
 begin
-  result := DocVariant^.U['description'];
+  result := Data.U['description'];
 end;
 
-function TOpenApiOperation.GetDV: PDocVariantData;
+function TOpenApiOperation.Id: RawUtf8;
 begin
-  result := PDocVariantData(@self);
-end;
-
-function TOpenApiOperation.GetId: RawUtf8;
-begin
-  result := DocVariant^.U['operationId'];
+  result := Data.U['operationId'];
 end;
 
 function TOpenApiOperation.GetParameterByIndex(aIndex: Integer
@@ -604,12 +539,12 @@ begin
   result := POpenApiParameter(@Parameters.Values[aIndex]);
 end;
 
-function TOpenApiOperation.GetParameters: PDocVariantData;
+function TOpenApiOperation.Parameters: PDocVariantData;
 begin
-  result := DocVariant^.A['parameters'];
+  result := Data.A['parameters'];
 end;
 
-function TOpenApiOperation.GetPayloadParameter: POpenApiParameter;
+function TOpenApiOperation.PayloadParameter: POpenApiParameter;
 var
   p: PVariant;
 begin
@@ -637,27 +572,74 @@ begin
     result := nil;
 end;
 
-function TOpenApiOperation.GetResponses: PDocVariantData;
+function TOpenApiOperation.Responses: PDocVariantData;
 begin
-  result := DocVariant^.O['responses'];
+  result := Data.O['responses'];
 end;
 
-function TOpenApiOperation.GetSummary: RawUtf8;
+function TOpenApiOperation.Summary: RawUtf8;
 begin
-  result := DocVariant^.U['summary'];
+  result := Data.U['summary'];
 end;
 
-function TOpenApiOperation.GetTags: PDocVariantData;
+function TOpenApiOperation.Tags: PDocVariantData;
 begin
-  result := DocVariant^.A['tags'];
+  result := Data.A['tags'];
 end;
+
+
+
+{ TOpenApiPathItem }
+
+function TOpenApiPathItem.Description: RawUtf8;
+begin
+  result := Data.U['description'];
+end;
+
+function TOpenApiPathItem.GetOperationByMethod(aMethod: TUriMethod
+  ): POpenApiOperation;
+begin
+  if not Data.GetAsObject(ToText(aMethod), PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiPathItem.GetParameterByIndex(aIndex: Integer
+  ): POpenApiParameter;
+begin
+  result := POpenApiParameter(@Parameters^.Values[aIndex]);
+end;
+
+function TOpenApiPathItem.Parameters: PDocVariantData;
+begin
+  result := Data.A['parameters'];
+end;
+
+function TOpenApiPathItem.Summary: RawUtf8;
+begin
+  result := Data.U['summary'];
+end;
+
+
+
+{ TOpenApiTag }
+
+function TOpenApiTag.Description: RawUtf8;
+begin
+  result := Data.U['description'];
+end;
+
+function TOpenApiTag.Name: RawUtf8;
+begin
+  result := Data.U['name'];
+end;
+
 
 
 { TOpenApiSpecs }
 
-function TOpenApiSpecs.GetBasePath: RawUtf8;
+function TOpenApiSpecs.BasePath: RawUtf8;
 begin
-  Result := DocVariant^.U['basePath'];
+  Result := Data.U['basePath'];
 end;
 
 function TOpenApiSpecs.GetDefinitionByName(aName: RawUtf8): POpenApiSchema;
@@ -666,14 +648,9 @@ begin
     result := nil;
 end;
 
-function TOpenApiSpecs.GetDefinitions: PDocVariantData;
+function TOpenApiSpecs.Definitions: PDocVariantData;
 begin
-  Result := DocVariant^.O['definitions'];
-end;
-
-function TOpenApiSpecs.GetDV: PDocVariantData;
-begin
-  result := PDocVariantData(@self);
+  Result := Data.O['definitions'];
 end;
 
 function TOpenApiSpecs.GetPathItemByName(aPath: RawUtf8): POpenApiPathItem;
@@ -682,24 +659,35 @@ begin
     result := nil;
 end;
 
-function TOpenApiSpecs.GetPaths: PDocVariantData;
+function TOpenApiSpecs.Paths: PDocVariantData;
 begin
-  result := DocVariant^.O['paths'];
+  result := Data.O['paths'];
 end;
 
-function TOpenApiSpecs.GetTags: PDocVariantData;
+function TOpenApiSpecs.Tags: PDocVariantData;
 begin
-  result := DocVariant^.A['tags'];
+  result := Data.A['tags'];
 end;
 
-function TOpenApiSpecs.GetVersion: RawUtf8;
+function TOpenApiSpecs.Version: RawUtf8;
 begin
-  if DocVariant.Exists('swagger') then
-    result := DocVariant.U['swagger']
+  if Data.Exists('swagger') then
+    result := Data.U['swagger']
   else
-    result := DocVariant.U['openapi'];
+    result := Data.U['openapi'];
 end;
 
+const
+  FPC_RESERVED_KEYWORDS: array[0..73] of RawUtf8 = (
+    'absolute', 'and', 'array', 'as', 'asm', 'begin', 'case', 'const', 'constructor',
+    'destructor', 'div', 'do', 'else', 'end', 'except', 'exports', 'external', 'false',
+    'true', 'far', 'file', 'finalization', 'finally', 'for', 'forward', 'function',
+    'goto', 'if', 'then', 'implementation', 'in', 'inherited', 'initialization',
+    'interface', 'is', 'label', 'library', 'mod', 'near', 'new', 'nil', 'not',
+    'object', 'of', 'on', 'operator', 'or', 'override', 'packed', 'procedure',
+    'program', 'property', 'protected', 'public', 'published', 'raise', 'read',
+    'reintroduce', 'repeat', 'self', 'shl', 'shr', 'threadvar', 'to', 'try','type',
+    'unit', 'uses', 'var', 'virtual', 'while', 'with', 'write', 'xor');
 
 
 { ************************************ FPC/Delphi Pascal Code Generation }
@@ -1178,6 +1166,10 @@ begin
       result := 'TDateTime'
     else if _Format = 'uuid' then
       result := 'TGuid'
+    else if _Format = 'binary' then
+      result := 'RawByteString'
+    else if _Format = 'password' then
+      result := 'SpiUtf8'
     else
       result := 'RawUtf8';
   end
