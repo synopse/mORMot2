@@ -1400,7 +1400,7 @@ function StrCompL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
 function StrCompIL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// our fast version of StrIComp(), to be used with PUtf8Char/PAnsiChar
+/// our fast version of StrIComp(), to be used with PUtf8Char/PAnsiChar as TUtf8Compare
 function StrIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1425,6 +1425,9 @@ type
 var
   /// a quick wrapper to StrComp or StrIComp comparison functions
   StrCompByCase: array[{CaseInsensitive=}boolean] of TUtf8Compare;
+
+/// comparison function first by Int64 value, then by text, for TUtf8Compare
+function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
 /// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
@@ -6054,7 +6057,6 @@ begin
   until result = L;
 end;
 
-
 function StrIComp(Str1, Str2: pointer): PtrInt;
 var
   c1, c2: byte; // integer/PtrInt are actually slower on FPC
@@ -6086,6 +6088,20 @@ begin
     else
       // Str1=''
       result := -1;
+end;
+
+function StrCompByNumber(Str1, Str2: pointer): PtrInt;
+var
+  v1, v2: Int64;
+  err: integer;
+begin
+  v1 := GetInt64(Str1, err);
+  if err = 0 then
+    v2 := GetInt64(Str2, err);
+  if err = 0 then
+    result := CompareInt64(v1, v2)
+  else
+    result := StrComp(Str1, Str2);
 end;
 
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
