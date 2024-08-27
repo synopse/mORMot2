@@ -20,6 +20,7 @@ interface
 uses
   sysutils,
   classes,
+  Variants,
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -110,6 +111,9 @@ type
     function Default: PVariant;
     function Required: Boolean;
     function Schema: POpenApiSchema;
+    // high-level OpenAPI Schema Helpers
+    // Returns True if there is a 'default' or if 'required' is false
+    function HasDefaultValue: Boolean;
   end;
   /// a dynamic array of pointers wrapper to OpenAPI Parameter(s)
   POpenApiParameterDynArray = array of POpenApiParameter;
@@ -248,6 +252,7 @@ type
     // TODO: Handle RecordArrayType in RTTI definition
     function ToFpcName(AllowArrayType: Boolean = True; NoRecordArrayTypes: Boolean = False): RawUtf8;
     function ToFormatUtf8Arg(FpcVarName: RawUtf8): RawUtf8;
+    function ToDefaultParameterValue(aParam: POpenApiParameter): RawUtf8;
 
 
 
@@ -500,6 +505,11 @@ function TOpenApiParameter.Schema: POpenApiSchema;
 begin
   if not Data.GetAsObject('schema', PDocVariantData(result)) then
     result := nil;
+end;
+
+function TOpenApiParameter.HasDefaultValue: Boolean;
+begin
+  result := not Required or Assigned(Default);
 end;
 
 function TOpenApiParameter.AsFpcName: RawUtf8;
@@ -802,6 +812,9 @@ var
   Param: POpenApiParameter;
   ParamType: TFpcType;
   i, FctParamIndex: Integer;
+  // Used to have default values at the end of the function
+  ParametersWithDefault: TRawUtf8DynArray;
+  DefaultParam: RawUtf8;
 begin
   if Assigned(fSuccessResponseType) then
     result := 'function '
@@ -819,12 +832,24 @@ begin
     Param := Parameters[i];
     if (Param^._In = 'path') or (Param^._In = 'query') then
     begin
-      if FctParamIndex > 0 then
-        Append(result, '; ');
+      // Append this parameter right now
+      if not Param^.HasDefaultValue then
+      begin
+        if (FctParamIndex > 0) then
+          Append(result, '; ');
+        Inc(FctParamIndex);
+      end;
+
       ParamType := TFpcType.LoadFromSchema(Param^.AsSchema, Parser);
       try
-        Append(result, [Param^.AsFpcName, ': ', ParamType.ToFpcName]);
-        Inc(FctParamIndex);
+        if Param^.HasDefaultValue then
+        begin
+          SetLength(ParametersWithDefault, Length(ParametersWithDefault) + 1);
+          ParametersWithDefault[Length(ParametersWithDefault) - 1] :=
+            FormatUtf8('%: % = %', [Param^.AsFpcName, ParamType.ToFpcName, ParamType.ToDefaultParameterValue(Param)]);
+        end
+        else
+          Append(result, [Param^.AsFpcName, ': ', ParamType.ToFpcName]);
       finally
         ParamType.Free;
       end;
@@ -837,6 +862,15 @@ begin
       Append(result, '; const payload: ', fPayloadParameterType.ToFpcName)
     else
       Append(result, 'const payload: ', fPayloadParameterType.ToFpcName);
+    Inc(FctParamIndex);
+  end;
+
+  for DefaultParam in ParametersWithDefault do
+  begin
+    if (FctParamIndex > 0) then
+      Append(result, '; ');
+    Append(result, DefaultParam);
+    Inc(FctParamIndex);
   end;
 
   if Assigned(fSuccessResponseType) then
@@ -1199,6 +1233,44 @@ begin
     result := FormatUtf8('%[%]', [(fCustomType as TFpcEnum).ToConstTextArrayName, FpcVarName])
   else
     result := FpcVarName;
+end;
+
+function TFpcType.ToDefaultParameterValue(aParam: POpenApiParameter): RawUtf8;
+var
+  DefaultValue: PVariant;
+begin
+  DefaultValue := aParam^.Default;
+  // Explicit default
+  if Assigned(DefaultValue) then
+  begin
+    if VarIsNull(DefaultValue^) then
+    begin
+      if IsEnum then
+        result := (CustomType as TFpcEnum).fPrefix + 'None'
+      else
+        result := 'nil';
+    end
+    else if VarIsBool(DefaultValue^) then
+      result := BoolToStr(DefaultValue^, 'True', 'False')
+    else
+    begin
+      result := VariantToUtf8(DefaultValue^);
+      if VarIsStr(DefaultValue^) then
+        result := FormatUtf8('''%''', [result]);
+    end;
+  end
+  else
+  begin
+    if aParam^.AsSchema^._Type = 'string' then
+      result := ''''''
+    else if (aParam^.AsSchema^._Type = 'number') or
+            (aParam^.AsSchema^._Type = 'integer') then
+      result := '0'
+    else if aParam^.AsSchema^._Type = 'boolean' then
+      result := 'False'
+    else
+      result := 'nil';
+  end;
 end;
 
 constructor TFpcRecord.Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
