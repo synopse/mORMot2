@@ -326,6 +326,8 @@ type
     function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; override;
     function ToRttiTextRepresentation(WithClassName: boolean = true): RawUtf8;
     function ToRttiRegisterDefinitions: RawUtf8;
+    property Properties: TRawUtf8List
+      read fProperties;
   end;
   TPascalRecordDynArray = array of TPascalRecord;
 
@@ -362,7 +364,7 @@ type
     // Resolve parameters/responses types
     procedure ResolveTypes(Parser: TOpenApiParser);
     function GetAllParameters: POpenApiParameterDynArray;
-    function Documentation(const LineEnd: RawUtf8; const LineIndent: RawUtf8 = ''): RawUtf8;
+    function Documentation(const LineEnd, LineIndent: RawUtf8): RawUtf8;
     function Declaration(const ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function Body(const ClassName, BasePath: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function FunctionName: RawUtf8;
@@ -370,6 +372,7 @@ type
   TPascalOperationDynArray = array of TPascalOperation;
 
   TPascalOperationsByTag = record
+    TagName: RawUtf8;
     Tag: POpenApiTag;
     Operations: TPascalOperationDynArray;
   end;
@@ -402,11 +405,12 @@ type
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
 
     procedure Dump;
-    function GetDescription(const UnitDescription: RawUtf8): RawUtf8;
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
     function Specs: POpenApiSpecs;
     function Info: PDocVariantData;
+    property Operations: TPascalOperationDynArray
+      read fOperations;
     property LineEnd: RawUtf8
       read fLineEnd;
   end;
@@ -623,7 +627,10 @@ end;
 
 function TOpenApiTag.Description: RawUtf8;
 begin
-  result := Data.U['description'];
+  if @self = nil then
+    result := ''
+  else
+    result := Data.U['description'];
 end;
 
 function TOpenApiTag.Name: RawUtf8;
@@ -1013,8 +1020,8 @@ begin
   Action := BasePath + fPath;
   ActionArgs := nil;
   QueryParameters.InitObject([], JSON_FAST);
-  Parameters := GetAllParameters;
 
+  Parameters := GetAllParameters;
   for i := 0 to high(Parameters) do
   begin
     Param := Parameters[i];
@@ -1098,6 +1105,8 @@ end;
 function TPascalOperation.FunctionName: RawUtf8;
 begin
   result := fOperation^.Id;
+  if result <> '' then
+    result[1] := UpCase(result[1]); // as in regular Pascal
 end;
 
 
@@ -1509,50 +1518,50 @@ end;
 
 function TOpenApiParser.ParseDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
 var
-  Schema: POpenApiSchema;
-  ParentCounts, i, j: PtrInt;
-  Schemas: array of POpenApiSchema;
-  ParentPropName: RawUtf8;
+  s: POpenApiSchema;
+  n, i, j: PtrInt;
+  def: array of POpenApiSchema;
+  propname: RawUtf8;
   v: PDocVariantData;
 begin
-  Schema := Specs^.Definition[aDefinitionName];
-  if not Assigned(Schema) then
+  s := Specs^.Definition[aDefinitionName];
+  if not Assigned(s) then
     EOpenApi.RaiseUtf8('Cannot parse missing definition: %', [aDefinitionName]);
-  if not Schema^.IsObject then
+  if not s^.IsObject then
     EOpenApi.RaiseUtf8('% is not of type: object', [aDefinitionName]);
 
-  result := TPascalRecord.Create(self, aDefinitionName, Schema);
-
-  v := Schema^.AllOf;
+  result := TPascalRecord.Create(self, aDefinitionName, s);
+  // fill def[] with all needed schemas
+  v := s^.AllOf;
   if v <> nil then
   begin
-    SetLength(Schemas, v^.Count);
+    SetLength(def, v^.Count);
     for i := 0 to v^.Count - 1 do
-      Schemas[i] := @v^.Values[i];
+      def[i] := @v^.Values[i];
   end
   else
   begin
-    SetLength(Schemas, 1);
-    Schemas[0] := Schema;
+    SetLength(def, 1);
+    def[0] := s;
   end;
-
-  ParentCounts := 0;
-  for i := 0 to high(Schemas) do
+  // append all fields to result.Properties
+  n := 0;
+  for i := 0 to high(def) do
   begin
-    Schema := Schemas[i];
+    s := def[i];
     // append $ref as 'base###:' nested field
-    if Schema^.Reference <> '' then
+    if s^.Reference <> '' then
     begin
-      if ParentCounts = 0 then
-        ParentPropName := 'base'
+      if n = 0 then
+        propname := 'base'
       else
-        ParentPropName := FormatUtf8('base_%', [ParentCounts]);
-      inc(ParentCounts);
-      result.fProperties.AddObject(ParentPropName,
-        TPascalProperty.CreateFromSchema(self, ParentPropName, Schema, {parent=}true));
+        propname := FormatUtf8('base_%', [n]); // avoid duplicates
+      inc(n);
+      result.fProperties.AddObject(propname,
+        TPascalProperty.CreateFromSchema(self, propname, s, {parent=}true));
     end;
     // append specific fields
-    v := Schema^.Properties;
+    v := s^.Properties;
     if v <> nil then
       for j := 0 to v^.Count - 1 do
         result.fProperties.AddObject(v^.Names[j],
@@ -1562,21 +1571,21 @@ end;
 
 procedure TOpenApiParser.ParsePath(const aPath: RawUtf8);
 var
-  Method: TUriMethod;
-  PathItem: POpenApiPathItem;
-  OperationSchema: POpenApiOperation;
-  Operation: TPascalOperation;
+  m: TUriMethod;
+  p: POpenApiPathItem;
+  s: POpenApiOperation;
+  op: TPascalOperation;
 begin
-  PathItem := Specs^.Path[aPath];
-  for Method := low(Method) to high(Method) do
+  p := Specs^.Path[aPath];
+  for m := low(m) to high(m) do
   begin
-    OperationSchema := PathItem^.Method[method];
-    if not Assigned(OperationSchema) or
-       OperationSchema^.Deprecated then
+    s := p^.Method[m];
+    if not Assigned(s) or
+       s^.Deprecated then
       continue;
-    Operation := TPascalOperation.Create(aPath, PathItem, OperationSchema, Method);
-    Operation.ResolveTypes(self);
-    ObjArrayAdd(fOperations, Operation);
+    op := TPascalOperation.Create(aPath, p, s, m);
+    op.ResolveTypes(self);
+    ObjArrayAdd(fOperations, op);
   end;
 end;
 
@@ -1596,22 +1605,22 @@ end;
 function HasDependencies(const Sources: TPascalRecordDynArray;
   const Searched: TRawUtf8DynArray): boolean;
 var
-  RecName: RawUtf8;
-  RecResolved: boolean;
+  found: boolean;
+  name: RawUtf8;
   i, j: PtrInt;
 begin
   result := false;
   for i := 0 to high(Searched) do
   begin
-    RecName := Searched[i];
-    RecResolved := false;
+    name := Searched[i];
+    found := false;
     for j := 0 to high(Sources) do
-      if Sources[j].Name = RecName then
+      if Sources[j].Name = name then
       begin
-        RecResolved := true;
+        found := true;
         break;
       end;
-    if not RecResolved then
+    if not found then
       exit;
   end;
   result := true;
@@ -1619,83 +1628,105 @@ end;
 
 function TOpenApiParser.GetOrderedRecords: TPascalRecordDynArray;
 var
-  UnresolvedDependencies, Missings: TPascalRecordDynArray;
-  Rec: TPascalRecord;
+  pending, missing: TPascalRecordDynArray;
+  r: TPascalRecord;
   i: PtrInt;
 begin
   result := nil;
-  UnresolvedDependencies := nil;
-
+  // direct resolution
   for i := 0 to fRecords.Count - 1 do
   begin
-    Rec := fRecords.ObjectPtr[i];
-    if not Assigned(Rec.fDependencies) or
-           HasDependencies(result, Rec.fDependencies) then
-      ObjArrayAdd(result, Rec)
+    r := fRecords.ObjectPtr[i];
+    if not Assigned(r.fDependencies) or
+           HasDependencies(result, r.fDependencies) then
+      ObjArrayAdd(result, r)
     else
-      ObjArrayAdd(UnresolvedDependencies, Rec);
+      ObjArrayAdd(pending, r);
   end;
-
-  while UnresolvedDependencies <> nil do
+  // nested resolution
+  while pending <> nil do
   begin
-    Missings := nil;
-    for i := 0 to high(UnresolvedDependencies) do
-      if HasDependencies(result, UnresolvedDependencies[i].fDependencies) then
-        ObjArrayAdd(result, UnresolvedDependencies[i])
+    missing := nil;
+    for i := 0 to high(pending) do
+      if HasDependencies(result, pending[i].fDependencies) then
+        ObjArrayAdd(result, pending[i])
       else
-        ObjArrayAdd(Missings, UnresolvedDependencies[i]);
-    UnresolvedDependencies := Missings;
+        ObjArrayAdd(missing, pending[i]);
+    pending := missing;
   end;
 end;
 
 function TOpenApiParser.GetOperationsByTag: TPascalOperationsByTagDynArray;
 var
-  tags: PDocVariantData;
-  tag: POpenApiTag;
-  n: RawUtf8;
-  optags: TRawUtf8DynArrayDynArray;
-  i, j: PtrInt;
+  main: PDocVariantData;
+  tag: TRawUtf8DynArray;
+  i, j, k, count, ndx: PtrInt;
 begin
-  SetLength(optags, length(fOperations));
-  for i := 0 to length(optags) - 1 do
-    optags[i] := fOperations[i].fOperation^.Tags;
-  tags := Specs^.Tags;
   result := nil;
-  SetLength(result, tags^.Count);
-  for i := 0 to tags^.Count - 1 do
+  if fOperations = nil then
+    exit;
+  // regroup operations per tags, eventually with result[0].Tag=nil
+  count := 1;
+  SetLength(result, length(fOperations) + 1);
+  main := Specs^.Tags;
+  for i := 0 to length(fOperations) - 1 do
   begin
-    tag := @tags^.Values[i];
-    n := tag^.Name;
-    result[i].Tag := tag;
-    for j := 0 to length(fOperations) - 1 do
-      if FindRawUtf8(optags[j], n) >= 0 then
-        PtrArrayAdd(result[i].Operations, fOperations[j]);
+    tag := fOperations[i].fOperation^.Tags;
+    if tag <> nil then
+    begin
+      // add to all tags by name in result[1..]
+      for j := 0 to high(tag) do
+      begin
+        ndx := -1;
+        for k := 1 to count - 1 do
+          if result[k].TagName = tag[j] then
+          begin
+            ndx := k;
+            break;
+          end;
+        if ndx < 0 then
+        begin
+          ndx := count;
+          inc(count);
+          result[ndx].TagName := tag[j];
+          main.GetAsObject(tag[j], PDocVariantData(result[ndx].Tag)); // maybe nil
+        end;
+        ObjArrayAdd(result[ndx].Operations, fOperations[i]);
+      end;
+    end
+    else
+      // if not tag involved, just append in result[0]
+      ObjArrayAdd(result[0].Operations, fOperations[i]);
   end;
+  SetLength(result, count);
+  // caller will ensure a single fOperations[] method will be generated
 end;
 
 procedure TOpenApiParser.Dump;
 var
-  OrderedRecs: TPascalRecordDynArray;
+  rec: TPascalRecordDynArray;
   i: PtrInt;
 begin
-  OrderedRecs := GetOrderedRecords;
-  for i := 0 to high(OrderedRecs) do
-    ConsoleWrite(OrderedRecs[i].ToTypeDefinition);
+  rec := GetOrderedRecords;
+  for i := 0 to high(rec) do
+    ConsoleWrite(rec[i].ToTypeDefinition);
 end;
 
-function TOpenApiParser.GetDescription(const UnitDescription: RawUtf8): RawUtf8;
+function GetDescription(Info: PDocVariantData;
+  const UnitDescription, LineEnd: RawUtf8): RawUtf8;
 var
-  nfo: PDocVariantData;
   u: RawUtf8;
   v: variant;
 begin
-  nfo := Info;
-  result := FormatUtf8('/// % %%', [UnitDescription, nfo^.U['title'], LineEnd]);
-  if nfo^.GetAsRawUtf8('description', u) then
+  result := '';
+  if Info = nil then
+    exit;
+  result := FormatUtf8('/// % %%', [UnitDescription, Info^.U['title'], LineEnd]);
+  if Info^.GetAsRawUtf8('description', u) then
     Append(result, ['// - ', u, LineEnd]);
-  if nfo^.GetAsRawUtf8('version', u) then
+  if Info^.GetAsRawUtf8('version', u) then
     Append(result, ['// - version ', u, LineEnd]);
-  if nfo^.GetValueByPath('license.name', v) then
+  if Info^.GetValueByPath('license.name', v) then
     Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
 end;
 
@@ -1705,11 +1736,10 @@ var
   enum: TPascalEnum;
   i: PtrInt;
 begin
-  rec := GetOrderedRecords;
-
   result := '';
+  // unit common definitions
   Append(result, [
-    GetDescription('DTOs for'),
+    GetDescription(Info, 'DTOs for', LineEnd),
     'unit ', UnitName, ';', LineEnd , LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
@@ -1723,33 +1753,40 @@ begin
     '  mormot.core.variants;', LineEnd,
     LineEnd,
     'type', LineEnd, LineEnd]);
-
-  for i := 0 to fEnums.Count - 1 do
-    Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition('  '));
+  // append all enumeration types
   if fEnums.Count > 0 then
+  begin
+    for i := 0 to fEnums.Count - 1 do
+      Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition('  '));
     Append(result, LineEnd, LineEnd);
-
+  end;
+  // append all records
+  rec := GetOrderedRecords;
   for i := 0 to high(rec) do
     Append(result, rec[i].ToTypeDefinition('  '), LineEnd);
-
+  // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
     Append(result, [LineEnd, LineEnd, 'const', LineEnd, LineEnd]);
     for i := 0 to fEnums.Count - 1 do
       Append(result, ['  ', TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
   end;
-
+  // start implementation section
   Append(result, [LineEnd, LineEnd,
-    'implementation', LineEnd, LineEnd,
-    'const', LineEnd]);
-
-  for i := 0 to high(rec) do
-    Append(result, ['  ', rec[i].ToRttiTextRepresentation, LineEnd]);
-
+    'implementation', LineEnd, LineEnd]);
+  // output the text representation of all records
+  // with proper json names (overriding the RTTI definitions)
+  if rec <> nil then
+  begin
+    Append(result, ['const', LineEnd]);
+    for i := 0 to high(rec) do
+      Append(result, ['  ', rec[i].ToRttiTextRepresentation, LineEnd]);
+  end;
+  // define the RTTI registratoin procedure
   Append(result, [LineEnd, LineEnd,
     'procedure RegisterRtti;', LineEnd,
     'begin', LineEnd]);
-
+  // register all needed enum types RTTI
   if fEnums.Count > 0 then
   begin
     Append(result, '  Rtti.RegisterTypes([', LineEnd);
@@ -1762,21 +1799,24 @@ begin
       if enum.fRequiresArrayDefinition then
         Append(result, [',', LineEnd, '    TypeInfo(', enum.ToArrayTypeName, ')']);
     end;
-    Append(result, LineEnd, '  ]);');
+    Append(result, [LineEnd, '  ]);', LineEnd]);
   end;
-
-  Append(result, [LineEnd, '  Rtti.RegisterFromText([', LineEnd]);
-
-  for i := 0 to high(rec) do
+  // register all record types RTTI
+  if rec <> nil then
   begin
-    if i > 0 then
-      Append(result, ',', LineEnd);
-    Append(result, '    ', rec[i].ToRttiRegisterDefinitions);
-  end;
+    Append(result, ['  Rtti.RegisterFromText([', LineEnd]);
 
-  Append(result, [']);', LineEnd,
-    'end;', LineEnd,
-    LineEnd,
+    for i := 0 to high(rec) do
+    begin
+      if i > 0 then
+        Append(result, ',', LineEnd);
+      Append(result, '    ', rec[i].ToRttiRegisterDefinitions);
+    end;
+    Append(result, [']);', LineEnd,
+      'end;', LineEnd, LineEnd]);
+  end;
+  // finish the unit
+  Append(result, [
     'initialization', LineEnd,
     '  RegisterRtti;', LineEnd,
     LineEnd,
@@ -1786,15 +1826,17 @@ end;
 function TOpenApiParser.GetClientUnit(
   const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
 var
-  OperationsByTag: TPascalOperationsByTagDynArray;
-  DeclaredOperations: TRawUtf8DynArray;
-  Ops: TPascalOperationsByTag;
-  Op: TPascalOperation;
-  BannerLength, i, j: PtrInt;
+  bytag: TPascalOperationsByTagDynArray;
+  done: TRawUtf8DynArray;
+  ops: TPascalOperationsByTag;
+  op: TPascalOperation;
+  id, desc, u: RawUtf8;
+  bannerlen, i, j: PtrInt;
 begin
   result := '';
+  // unit common definitions
   Append(result, [
-    GetDescription('Client unit for'),
+    GetDescription(Info, 'Client unit for', LineEnd),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
     '{$mode ObjFPC}{$H+}', LineEnd,
@@ -1817,62 +1859,70 @@ begin
     '  private', LineEnd,
     '    fClient: IJsonClient;', LineEnd,
     '  public', LineEnd,
+    '    // initialize with an associated HTTP/JSON request', LineEnd,
     '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
-
-  OperationsByTag := GetOperationsByTag;
-
-  for i := 0 to high(OperationsByTag) do
+  // append all methods, regrouped per tag (if any)
+  bytag := GetOperationsByTag;
+  for i := 0 to high(bytag) do
   begin
-    Ops := OperationsByTag[i];
-    BannerLength := 18 + Length(Ops.Tag^.Name) + Length(Ops.Tag^.Description);
-    Append(result, [LineEnd, LineEnd, LineEnd,
-      '    ////', RawUtf8OfChar('/', BannerLength), LineEnd,
-      '    //// ---- ', Ops.Tag^.Name, ': ', Ops.Tag^.Description, ' ---- ////', LineEnd,
-      '    ////', RawUtf8OfChar('/', BannerLength), LineEnd, LineEnd]);
-    for j := 0 to high(Ops.Operations) do
+    ops := bytag[i];
+    if ops.Operations = nil then
+      continue; // nothing to add (e.g. i=0)
+    bannerlen := 0;
+    for j := 0 to high(ops.Operations) do
     begin
-      // Operations can be in multiple tags but can't be defined multiple times in same class
-      Op := Ops.Operations[j];
-      if FindRawUtf8(DeclaredOperations, Op.fOperation^.Id) <> -1 then
+      op := ops.Operations[j];
+      id := op.fOperation^.Id;
+      if FindRawUtf8(done, id) >= 0 then
+        // Operations can be in multiple tags but can't be defined multiple times in same class
         continue;
-      AddRawUtf8(DeclaredOperations, Op.fOperation^.Id);
-      Append(result, Op.Documentation('    '));
-      Append(result, ['    ', Op.Declaration(ClientClassName, self), LineEnd]);
+      AddRawUtf8(done, id);
+      if (bannerlen = 0) and
+         (ops.TagName <> '') then // regrouped by tag, if any
+      begin
+        desc := ops.Tag^.Description;
+        bannerlen := 18 + Length(ops.TagName) + Length(desc);
+        u := RawUtf8OfChar('/', bannerlen);
+        Append(result, [LineEnd, LineEnd,
+          '    ////', u, LineEnd,
+          '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
+          '    ////', u, LineEnd, LineEnd]);
+      end;
+      Append(result, op.Documentation(LineEnd, '    '));
+      Append(result, ['    ', op.Declaration(ClientClassName, self), LineEnd]);
     end;
   end;
-
-  Append(result, [LineEnd, LineEnd,
+  // finalize the class definition and start the implementation section
+  Append(result, [LineEnd,
+    '    // access to the associated HTTP/JSON request', LineEnd,
     '    property JsonClient: IJsonClient', LineEnd,
     '      read fClient write fClient;', LineEnd,
     '  end;', LineEnd,
     LineEnd,
-    'implementation', LineEnd,
-    LineEnd,
-    LineEnd,
+    'implementation', LineEnd, LineEnd, LineEnd,
+    '{ ', ClientClassName, '}', LineEnd, LineEnd,
     'constructor ', ClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
     'begin', LineEnd,
     '  fClient := aClient;', LineEnd,
     'end;', LineEnd, LineEnd]);
-
-  for i := 0 to high(fOperations) do
-    Append(result, fOperations[i].Body(ClientClassName, Specs^.BasePath, self), LineEnd);
-
+  // append all methods, in native order (no need to follow tag ordering)
+  for i := 0 to high(Operations) do
+    Append(result, Operations[i].Body(ClientClassName, Specs^.BasePath, self), LineEnd);
   Append(result, LineEnd, 'end.');
 end;
 
 procedure TOpenApiParser.ExportToDirectory(Name: RawUtf8;
   DirectoryName: RawUtf8; UnitPrefix: RawUtf8);
 var
-  DtoUnitName, ClientUnitName: RawUtf8;
-  DtoUnitPath, ClientUnitPath: TFileName;
+  dtounit, clientunit: RawUtf8;
+  dtofn, clientfn: TFileName;
 begin
-  DtoUnitName := FormatUtf8('%%Dtos', [UnitPrefix, Name]);
-  DtoUnitPath := MakePath([DirectoryName, DtoUnitName + '.pas']);
-  ClientUnitName := FormatUtf8('%%Client', [UnitPrefix, Name]);
-  ClientUnitPath := MakePath([DirectoryName, ClientUnitName + '.pas']);
-
-  FileFromString(GetDtosUnit(DtoUnitName), DtoUnitPath);
-  FileFromString(GetClientUnit(ClientUnitName, FormatUtf8('T%Client', [Name]), DtoUnitName), ClientUnitPath);
+  dtounit := FormatUtf8('%%Dtos', [UnitPrefix, Name]);
+  dtofn := MakePath([DirectoryName, dtounit + '.pas']);
+  clientunit := FormatUtf8('%%Client', [UnitPrefix, Name]);
+  clientfn := MakePath([DirectoryName, clientunit + '.pas']);
+  FileFromString(GetDtosUnit(dtounit), dtofn);
+  FileFromString(GetClientUnit(clientunit, FormatUtf8('T%Client', [Name]), dtounit), clientfn);
 end;
 
 
