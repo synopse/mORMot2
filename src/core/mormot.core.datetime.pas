@@ -447,7 +447,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// fill fields from the given value - but not DayOfWeek
     procedure FromDateTime(const dt: TDateTime);
-    /// fill Year/Month/Day fields from the given value - but not DayOfWeek
+    /// fill Year/Month/Day fields from the given value
+    // - but do not compute DayOfWeek, nor touch the time fields
     // - faster than the RTL DecodeDate() function
     procedure FromDate(const dt: TDateTime);
     /// fill fields from the given value - but not DayOfWeek
@@ -2100,7 +2101,7 @@ end;
 function TSynSystemTime.IsDateEqual(const date: TSynDate): boolean;
 begin
   result := (PCardinal(@Year)^ = PCardinal(@TSynDate(date).Year)^) and // +Month
-            (Day = TSynDate(date).Day);
+            (Day = TSynDate(date).Day); // just ignore DayOfWeek
 end;
 
 procedure TSynSystemTime.FromNowUtc;
@@ -2138,6 +2139,7 @@ procedure TSynSystemTime.FromDate(const dt: TDateTime);
 var
   t, t2, t3: PtrUInt;
 begin
+  PInt64(@Year)^ := 0; // quickly reset all Date fields
   t := Trunc(dt);
   t := (t + 693900) * 4 - 1;
   if PtrInt(t) >= 0 then
@@ -2157,10 +2159,7 @@ begin
       inc(Year);
     end;
     Month := t3;
-    DayOfWeek := 0; // not set by default
-  end
-  else
-    PInt64(@Year)^ := 0;
+  end;
 end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
