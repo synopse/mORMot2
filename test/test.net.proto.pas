@@ -27,8 +27,10 @@ uses
   mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.http,
+  mormot.net.client,
   mormot.net.server,
   mormot.net.async,
+  mormot.net.openapi,
   mormot.net.ldap,
   mormot.net.dns,
   mormot.net.rtsphttp,
@@ -62,11 +64,13 @@ type
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
   published
+    /// validate mormot.net.openapi unit
+    procedure OpenAPI;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
     /// validate DNS and LDAP clients (and NTP/SNTP)
     procedure DNSAndLDAP;
-    /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
+    /// RTSP over HTTP, as implemented in mormot.net.rtsphttp unit
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;
@@ -80,6 +84,50 @@ type
 
 
 implementation
+
+
+procedure TNetworkProtocols.OpenAPI;
+var
+  i: PtrInt;
+  fn: TFileName;
+  u, pets: RawUtf8;
+  oa: TOpenApiParser;
+begin
+  for i := 1 to high(RESERVED_KEYWORDS) do
+    CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
+      pointer(RESERVED_KEYWORDS[i])) < 0, RESERVED_KEYWORDS[i]);
+  for i := 0 to high(RESERVED_KEYWORDS) do
+  begin
+    u := RESERVED_KEYWORDS[i];
+    Check(IsReservedKeyWord(u));
+    u[1] := UpCase(u[1]);
+    Check(IsReservedKeyWord(u));
+    UpperCaseSelf(u);
+    Check(IsReservedKeyWord(u));
+    u := u + 's';
+    Check(not IsReservedKeyWord(u));
+    Check(not IsReservedKeyWord(UInt32ToUtf8(i)));
+  end;
+  fn := WorkDir + 'petstore.json';
+  pets := StringFromFile(fn);
+  if pets = '' then
+  begin
+    pets := HttpGet('https://raw.githubusercontent.com/OAI/' +
+      'OpenAPI-Specification/main/examples/v3.0/petstore.json');
+    if pets <> '' then
+      FileFromString(pets, fn);
+  end;
+  if pets <> '' then
+  begin
+    oa := TOpenApiParser.Create;
+    try
+      oa.ParseJson(pets);
+
+    finally
+      oa.Free;
+    end;
+  end;
+end;
 
 procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
   clientcount, steps: integer);
