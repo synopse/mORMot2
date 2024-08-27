@@ -212,18 +212,20 @@ type
 
   TFpcCustomType = class
   private
+    fSchema: POpenApiSchema;
     fRequiresArrayDefinition: Boolean;
+    fName: RawUtf8;
     fFpcName: RawUtf8;
-    function GetSchema: POpenApiSchema; virtual;
   public
-    constructor Create(aFpcName: RawUtf8 = '');
+    constructor Create(SchemaName: RawUtf8 = ''; aSchema: POpenApiSchema = nil);
 
     function ToTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; virtual; abstract;
     function ToArrayTypeName(AllowArrayType: Boolean = True): RawUtf8; virtual;
     function ToArrayTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; virtual;
 
+    property Name: RawUtf8 read fName;
     property FpcName: RawUtf8 read fFpcName;
-    property Schema: POpenApiSchema read GetSchema;
+    property Schema: POpenApiSchema read fSchema;
   end;
 
   TFpcType = class
@@ -276,15 +278,10 @@ type
   // Find a better name for this class
   TFpcRecord = class(TFpcCustomType)
   private
-    fName: RawUtf8;
-    fSchema: POpenApiSchema;
     fProperties: IKeyValue<RawUtf8, TFpcProperty>;
     fDependencies: TRawUtf8DynArray;
-
-    function GetSchema: POpenApiSchema; override;
   public
-    constructor Create(SchemaName: RawUtf8; Schema: POpenApiSchema = nil);
-
+    constructor Create(SchemaName: RawUtf8; aSchema: POpenApiSchema = nil);
 
     function ToTypeDefinition(LineIndentation: RawUtf8 = ''): RawUtf8; override;
     function ToRttiTextRepresentation(WithClassName: Boolean = True): RawUtf8;
@@ -294,12 +291,8 @@ type
 
   TFpcEnum = class(TFpcCustomType)
   private
-    fSchema: POpenApiSchema;
-    fName: RawUtf8;
     fPrefix: RawUtf8;
     fChoices: TDocVariantData;
-
-    function GetSchema: POpenApiSchema; override;
   public
     constructor Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
 
@@ -982,18 +975,11 @@ begin
     result := '_' + result;
 end;
 
-function TFpcEnum.GetSchema: POpenApiSchema;
-begin
-  Result := fSchema;
-end;
-
 constructor TFpcEnum.Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
 var
   c: Char;
 begin
-  inherited Create('T' + SchemaName);
-  fName := SchemaName;
-  fSchema := aSchema;
+  inherited Create(SchemaName, aSchema);
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0);
 
@@ -1062,7 +1048,7 @@ end;
 function TFpcType.GetSchema: POpenApiSchema;
 begin
   if Assigned(CustomType) then
-    result := CustomType.GetSchema
+    result := CustomType.Schema
   else
     result := fBuiltinSchema;
 end;
@@ -1215,18 +1201,11 @@ begin
     result := FpcVarName;
 end;
 
-function TFpcRecord.GetSchema: POpenApiSchema;
+constructor TFpcRecord.Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
 begin
-  Result := fSchema;
-end;
-
-constructor TFpcRecord.Create(SchemaName: RawUtf8; Schema: POpenApiSchema);
-begin
-  fName := SchemaName;
-  fSchema := Schema;
+  inherited Create(SchemaName, aSchema);
   fProperties := Collections.NewKeyValue<RawUtf8, TFpcProperty>;
   fDependencies := nil;
-  inherited Create('T' + fName);
 end;
 
 function TFpcRecord.ToTypeDefinition(LineIndentation: RawUtf8): RawUtf8;
@@ -1273,14 +1252,11 @@ begin
   result := FormatUtf8('TypeInfo(%), _%', [FpcName, FpcName]);
 end;
 
-function TFpcCustomType.GetSchema: POpenApiSchema;
+constructor TFpcCustomType.Create(SchemaName: RawUtf8; aSchema: POpenApiSchema);
 begin
-  Result := nil;
-end;
-
-constructor TFpcCustomType.Create(aFpcName: RawUtf8);
-begin
-  fFpcName := aFpcName;
+  fName := SchemaName;
+  fFpcName := 'T' + Name;
+  fSchema := aSchema;
   fRequiresArrayDefinition := False;
 end;
 
