@@ -2410,6 +2410,12 @@ function RawUtf8ToGuid(const text: RawByteString): TGuid; overload;
 // '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
 function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean; overload;
 
+/// convert some UTF-8 encoded text into a TGuid
+// - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// or '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {}) or even
+// '3F2504E04F8911D39A0C0305E82C3301' following TGuid order (not HexToBin)
+function RawUtf8ToGuid(text: PUtf8Char; textlen: PtrInt; out guid: TGuid): boolean; overload;
+
 /// trim any space and '{' '-' '}' chars from input to get a 32-char TGuid hexa
 // - change in-place the text into lowercase hexadecimal
 // - returns true if resulting text is a 128-bit cleaned hexa, false otherwise
@@ -10336,16 +10342,21 @@ end;
 
 function RawUtf8ToGuid(const text: RawByteString; out guid: TGuid): boolean;
 begin
+  result := RawUtf8ToGuid(pointer(text), length(text), guid);
+end;
+
+function RawUtf8ToGuid(text: PUtf8Char; textlen: PtrInt; out guid: TGuid): boolean; overload;
+begin
   result := true;
-  case length(text) of
+  case textlen of
     32, // '3F2504E04F8911D39A0C0305E82C3301' TextToGuid() order, not HexToBin()
     36: // '3F2504E0-4F89-11D3-9A0C-0305E82C3301' JSON compatible layout
-      if TextToGuid(pointer(text), @guid) <> nil then
+      if TextToGuid(text, @guid) <> nil then
         exit;
     38: // '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' regular layout
-      if (text[1] <> '{') or
-         (text[38] <> '}') or
-         (TextToGuid(@text[2], @guid) <> nil) then
+      if (text[0] = '{') and
+         (text[37] = '}') and
+         (TextToGuid(@text[1], @guid) <> nil) then
         exit;
   end;
   result := false;
