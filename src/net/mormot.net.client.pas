@@ -1458,9 +1458,9 @@ type
 
   IJsonClient = interface;
 
-  /// event signature for an error callback on IJsonClient.OnError
+  /// event signature for error callbacks during IJsonClient.Request()
   TOnJsonClientError = procedure(const Sender: IJsonClient;
-    const Response: TJsonResponse);
+    const Response: TJsonResponse; const ErrorMsg: shortstring);
 
   /// an interface to make thread-safe JSON client requests
   // - is implemented e.g. by our TJsonClient class in this unit
@@ -1468,6 +1468,8 @@ type
   // so could be actually not using HTTP at all (even run in-process)
   // - can use RTTI for automated input/output JSON serialization of records
   // or dynamic arrays - Request() methods are just wrapper to RttiRequest()
+  // - errors are handled as TOnJsonClientError callbacks, either for each
+  // Request(), or globally via the OnError property
   // - all those methods are thread-safe, protected by an OS mutex/lock
   IJsonClient = interface
     // some property helpers
@@ -1477,32 +1479,42 @@ type
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
     /// Request execution, with no JSON parsing using RTTI
-    procedure Request(const Method, Action: RawUtf8); overload;
+    procedure Request(const Method, Action: RawUtf8;
+      const CustomError: TOnJsonClientError = nil); overload;
     /// Request execution, with output only JSON parsing using RTTI
     procedure Request(const Method, Action: RawUtf8;
-      var Res; ResInfo: PRttiInfo); overload;
+      var Res; ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with no JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const); overload;
+      const ActionArgs, NameValueParams: array of const;
+      const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with output only JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
       const ActionArgs, NameValueParams: array of const;
-      var Res; ResInfo: PRttiInfo); overload;
+      var Res; ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with input/output JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
       const ActionArgs, NameValueParams: array of const;
-      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo); overload;
+      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
     /// main Request execution, with optional input/output JSON parsing using RTTI
     // - if Payload/PayloadInfo or Res/ResInfo is nil, corresponding input
     // Payload or output Res variable will be ignored
+    // - will optionally call CustomError, to thread-safely handle errors
+    // dedicated to this actual request - with fallback to OnError global property
     procedure RttiRequest(const Method, Action: RawUtf8;
-      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo);
+      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError);
     /// low-level HTTP request execution
-    // - won't raise any exception on HTTP error, nor do any parsing
+    // - won't raise any exception on HTTP error, nor do any parsing - so could
+    // be used manually if you need to send a raw request to the server
     // - is called by RttiRequest(), and implemented e.g. in TJsonClient
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse);
-    /// allow to customize any HTTP error
+    /// allow to customize globally any HTTP error
+    // - used if CustomError parameter is not set in Request() overloads
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
     property OnError: TOnJsonClientError
       read GetOnError write SetOnError;
@@ -1527,31 +1539,37 @@ type
     fUrlEncoder: TUrlEncoder;
     fOptions: TJsonClientOptions;
     fOnLog: TSynLogProc;
-    function CheckRequestError(const Response: TJsonResponse): boolean;
+    function CheckRequestError(const Response: TJsonResponse;
+      const CustomError: TOnJsonClientError): boolean;
   public
     // IJsonClient thread-safe methods
+    function GetOnError: TOnJsonClientError;
+    procedure SetOnError(const Event: TOnJsonClientError); virtual;
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
     procedure RttiRequest(const Method, Action: RawUtf8;
-      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo); overload;
-    procedure Request(const Method, Action: RawUtf8); overload;
-    procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const); overload;
+      Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError); overload;
     procedure Request(const Method, Action: RawUtf8;
-      var Res; ResInfo: PRttiInfo); overload;
+      const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, ActionFmt: RawUtf8;
       const ActionArgs, NameValueParams: array of const;
-      var Res; ResInfo: PRttiInfo); overload;
+      const CustomError: TOnJsonClientError = nil); overload;
+    procedure Request(const Method, Action: RawUtf8;
+      var Res; ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, ActionFmt: RawUtf8;
       const ActionArgs, NameValueParams: array of const;
-      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo); overload;
-    function GetOnError: TOnJsonClientError;
-    procedure SetOnError(const Event: TOnJsonClientError); virtual;
-    /// allow to customize any HTTP error
+      var Res; ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
+    procedure Request(const Method, ActionFmt: RawUtf8;
+      const ActionArgs, NameValueParams: array of const;
+      const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
+      const CustomError: TOnJsonClientError = nil); overload;
+    /// allow to globally customize any HTTP error
+    // - used if CustomError parameter is not set in Request() overloads
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
-    // - a client could raise a proper Exception class with the returned
-    // information, decoded from its JSON content in Response
     property OnError: TOnJsonClientError
       read GetOnError write SetOnError;
     /// allow to customize the URL encoding of parameters
@@ -4410,7 +4428,8 @@ end;
 
 { TJsonClientAbstract }
 
-function TJsonClientAbstract.CheckRequestError(const Response: TJsonResponse): boolean;
+function TJsonClientAbstract.CheckRequestError(const Response: TJsonResponse;
+  const CustomError: TOnJsonClientError): boolean;
 var
   err: ShortString;
 begin
@@ -4423,8 +4442,10 @@ begin
     Response.Method, Response.Url, ContentToShort(Response.Content)], err);
   if Assigned(fOnLog) then
     fOnLog(sllHTTP, '%', [err], self);
-  if Assigned(fOnError) then
-    fOnError(self, Response)
+  if Assigned(CustomError) then
+    CustomError(self, Response, err)
+  else if Assigned(fOnError) then
+    fOnError(self, Response, err)
   else if jcoHttpErrorRaise in fOptions then
     raise EJsonClient.CreateResp('%.%', [self, err], Response);
 end;
@@ -4434,7 +4455,8 @@ const
     'Request % %', 'Request % % %');
 
 procedure TJsonClientAbstract.RttiRequest(const Method, Action: RawUtf8;
-  Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo);
+  Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
+  const CustomError: TOnJsonClientError);
 var
   r: TJsonResponse;
   b: RawUtf8;
@@ -4467,7 +4489,7 @@ begin
       r.Content := ObjectToJsonDebug(E);
     end;
   end;
-  if CheckRequestError(r) or // HTTP status error
+  if CheckRequestError(r, CustomError) or // HTTP status error
      (j = nil) then          // no response JSON to parse
     exit;
   u := pointer(r.Content); // parse in-place the returned body
@@ -4485,38 +4507,41 @@ begin
     raise EJsonClient.CreateUtf8('%.%', [self, err]);
 end;
 
-procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8);
+procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8;
+  const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, Action, nil, nil, nil, nil); // all nil: no in/out RTTI
+  RttiRequest(Method, Action, nil, nil, nil, nil, CustomError); // nil = no RTTI
 end;
 
 procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8;
-  var Res; ResInfo: PRttiInfo);
+  var Res; ResInfo: PRttiInfo; const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, Action, {Payload=}nil, @Res, {PayloadInfo=}nil, ResInfo);
-end;
-
-procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
-  const ActionArgs, NameValueParams: array of const);
-begin
-  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
-    nil, nil, nil, nil);
+  RttiRequest(Method, Action, {Payload=}nil, @Res, {PayloadInfo=}nil, ResInfo, CustomError);
 end;
 
 procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
   const ActionArgs, NameValueParams: array of const;
-  var Res; ResInfo: PRttiInfo);
+  const CustomError: TOnJsonClientError);
 begin
   RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
-    nil, @Res, nil, ResInfo);
+    nil, nil, nil, nil, CustomError);
 end;
 
 procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
   const ActionArgs, NameValueParams: array of const;
-  const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo);
+  var Res; ResInfo: PRttiInfo; const CustomError: TOnJsonClientError);
 begin
   RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
-    @Payload, @Res, PayloadInfo, ResInfo);
+    nil, @Res, nil, ResInfo, CustomError);
+end;
+
+procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
+  const ActionArgs, NameValueParams: array of const;
+  const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
+  const CustomError: TOnJsonClientError);
+begin
+  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    @Payload, @Res, PayloadInfo, ResInfo, CustomError);
 end;
 
 function TJsonClientAbstract.GetOnError: TOnJsonClientError;
