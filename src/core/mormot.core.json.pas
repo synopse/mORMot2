@@ -7837,9 +7837,11 @@ end;
 procedure _JL_GUID(Data: PGuid; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    Ctxt.Valid := (Ctxt.ValueLen = 0) or // "" will keep 0000
-                  (Ctxt.Value = nil) or  // null will keep 0000
-                  RawUtf8ToGuid(Ctxt.Value, Ctxt.ValueLen, Data^);
+    if (Ctxt.ValueLen = 0) or
+       (Ctxt.Value = nil) then  // "" or null fill TGuid with zeros
+      FillZero(Data^)
+    else
+      Ctxt.Valid := RawUtf8ToGuid(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 
 procedure _JL_Hash(Data: PByte; var Ctxt: TJsonParserContext);
