@@ -86,7 +86,7 @@ type
 implementation
 
 const
-  // use reference from https://github.com/OAI/OpenAPI-Specification
+  // some reference from https://github.com/OAI/OpenAPI-Specification
   OpenApiRef: array[0..1] of RawUtf8 = (
     'v2.0/json/petstore-simple.json',
     'v3.0/petstore.json');
@@ -95,7 +95,7 @@ procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u: RawUtf8;
+  u, ud, uc: RawUtf8;
   pets: TRawUtf8DynArray;
   oa: TOpenApiParser;
 begin
@@ -106,9 +106,9 @@ begin
   begin
     u := RESERVED_KEYWORDS[i];
     Check(IsReservedKeyWord(u));
-    u[1] := UpCase(u[1]);
+    inc(u[1], 32); // lowercase
     Check(IsReservedKeyWord(u));
-    UpperCaseSelf(u);
+    LowerCaseSelf(u);
     Check(IsReservedKeyWord(u));
     u := u + 's';
     Check(not IsReservedKeyWord(u));
@@ -133,8 +133,10 @@ begin
       oa := TOpenApiParser.Create;
       try
         oa.ParseJson(pets[i]);
-        //ConsoleWrite(oa.GetDtosUnit('pets.dto.pas'));
-        //ConsoleWrite(oa.GetClientUnit('pets.client.pas', 'TPets', 'pets.dto.pas'));
+        ud := FormatUtf8('pets%.dto.pas', [i + 1]);
+        uc := FormatUtf8('pets%.client.pas', [i + 1]);
+        //ConsoleWrite(oa.GetDtosUnit(ud));
+        //ConsoleWrite(oa.GetClientUnit(uc, 'TPets', ud));
       finally
         oa.Free;
       end;

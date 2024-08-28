@@ -420,16 +420,16 @@ type
 const
   // published for unit testing (e.g. if properly sorted)
   RESERVED_KEYWORDS: array[0..73] of RawUtf8 = (
-    'absolute', 'and', 'array', 'as', 'asm', 'begin', 'case', 'const',
-    'constructor', 'destructor', 'div', 'do', 'else', 'end', 'except',
-    'exports', 'external', 'false', 'far', 'file', 'finalization', 'finally',
-    'for', 'forward', 'function', 'goto', 'if', 'implementation', 'in',
-    'inherited', 'initialization', 'interface', 'is', 'label',
-    'library', 'mod', 'near', 'new', 'nil', 'not', 'object', 'of', 'on',
-    'operator', 'or', 'override', 'packed', 'procedure', 'program', 'property',
-    'protected', 'public', 'published', 'raise', 'read', 'reintroduce',
-    'repeat', 'self', 'shl', 'shr', 'then', 'threadvar', 'to', 'true', 'try',
-    'type', 'unit', 'uses', 'var', 'virtual', 'while', 'with', 'write', 'xor');
+    'ABSOLUTE', 'AND', 'ARRAY', 'AS', 'ASM', 'BEGIN', 'CASE', 'CONST',
+    'CONSTRUCTOR', 'DESTRUCTOR', 'DIV', 'DO', 'ELSE', 'END', 'EXCEPT',
+    'EXPORTS', 'EXTERNAL', 'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY',
+    'FOR', 'FORWARD', 'FUNCTION', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN',
+    'INHERITED', 'INITIALIZATION', 'INTERFACE', 'IS', 'LABEL',
+    'LIBRARY', 'MOD', 'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON',
+    'OPERATOR', 'OR', 'OVERRIDE', 'PACKED', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
+    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'REINTRODUCE',
+    'REPEAT', 'SELF', 'SHL', 'SHR', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY',
+    'TYPE', 'UNIT', 'USES', 'VAR', 'VIRTUAL', 'WHILE', 'WITH', 'WRITE', 'XOR');
 
 /// quickly check if a text is a case-insensitive pascal code keyword
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
@@ -1139,9 +1139,12 @@ begin
 end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
+var
+  up: array[byte] of AnsiChar;
 begin
-  result := FastFindPUtf8CharSorted(@RESERVED_KEYWORDS, high(RESERVED_KEYWORDS),
-      pointer(LowerCaseU(aName))) >= 0;
+  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
+  result := FastFindPUtf8CharSorted(
+    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
 end;
 
 class function TPascalProperty.SanitizePropertyName(const aName: RawUtf8): RawUtf8;
