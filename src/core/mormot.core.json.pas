@@ -7834,10 +7834,10 @@ begin
       Data^ := GetExtended(Ctxt.Value); // was propbably stored as double
 end;
 
-procedure _JL_GUID(Data: PByteArray; var Ctxt: TJsonParserContext);
+procedure _JL_GUID(Data: PGuid; var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
-    Ctxt.Valid := TextToGuid(Ctxt.Value, Data) <> nil;
+    Ctxt.Valid := RawUtf8ToGuid(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 
 procedure _JL_Hash(Data: PByte; var Ctxt: TJsonParserContext);
