@@ -395,7 +395,8 @@ type
     procedure ParseFile(const aJsonFile: TFileName);
     procedure ParseJson(const aJson: RawUtf8);
     procedure Parse(const aSpecs: TDocVariantData);
-    procedure ExportToDirectory(Name: RawUtf8; DirectoryName: RawUtf8 = './'; UnitPrefix: RawUtf8 = '');
+    procedure ExportToDirectory(const Name: RawUtf8;
+      const DirectoryName: TFileName = './'; const UnitPrefix: RawUtf8 = '');
     function ParseDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8);
 
@@ -1891,10 +1892,6 @@ begin
           '    ////', u, LineEnd, LineEnd]);
       end;
       Append(result, op.Documentation(LineEnd, '    '));
-      // We send an empty classname because this is the declaration, we want format:
-      // function fctName(fctParams): Result;
-      // Not
-      // function TClassName.fctName(fctParams): Result;
       Append(result, ['    ', op.Declaration('', self), LineEnd]);
     end;
   end;
@@ -1917,15 +1914,15 @@ begin
   Append(result, LineEnd, 'end.');
 end;
 
-procedure TOpenApiParser.ExportToDirectory(Name: RawUtf8;
-  DirectoryName: RawUtf8; UnitPrefix: RawUtf8);
+procedure TOpenApiParser.ExportToDirectory(const Name: RawUtf8;
+  const DirectoryName: TFileName; const UnitPrefix: RawUtf8);
 var
   dtounit, clientunit: RawUtf8;
   dtofn, clientfn: TFileName;
 begin
-  dtounit := FormatUtf8('%%Dtos', [UnitPrefix, Name]);
+  dtounit := FormatUtf8('%%.dto', [UnitPrefix, Name]);
   dtofn := MakePath([DirectoryName, dtounit + '.pas']);
-  clientunit := FormatUtf8('%%Client', [UnitPrefix, Name]);
+  clientunit := FormatUtf8('%%.client', [UnitPrefix, Name]);
   clientfn := MakePath([DirectoryName, clientunit + '.pas']);
   FileFromString(GetDtosUnit(dtounit), dtofn);
   FileFromString(GetClientUnit(clientunit, FormatUtf8('T%Client', [Name]), dtounit), clientfn);
