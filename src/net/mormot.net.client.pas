@@ -2276,7 +2276,13 @@ begin
           include(Http.HeaderFlags, hfConnectionClose); // socket is closed
         cspNoData:
           begin
-            ctxt.Status := HTTP_TIMEOUT; // no retry on real timeout
+            // timeout may happen not because the server took its time, but
+            // because the network is down: sadly, the socket is still reported
+            // as OK by the OS (on both Windows and POSIX)
+            // -> no need to retry
+            ctxt.Status := HTTP_TIMEOUT;
+            // -> close the socket, since this HTTP request is clearly aborted
+            include(Http.HeaderFlags, hfConnectionClose);
             exit;
           end;
       else // cspSocketError, cspSocketClosed
