@@ -1271,6 +1271,7 @@ class function TPascalType.LoadFromSchema(Parser: TOpenApiParser;
 var
   Rec: TPascalRecord;
   fmt: RawUtf8;
+  enumType: TPascalEnum;
 begin
   if (Schema^.Reference <> '') or
      (Schema^.AllOf <> nil) then
@@ -1296,12 +1297,13 @@ begin
   else if Schema^.IsNamedEnum then
   begin
     fmt := Schema^._Format;
-    result := Parser.fEnums.GetObjectFrom(fmt);
-    if result = nil then
+    enumType := Parser.fEnums.GetObjectFrom(fmt);
+    if enumType = nil then
     begin
-      result := TPascalType.CreateCustom(TPascalEnum.Create(Parser, fmt, Schema));
-      Parser.fEnums.AddObject(fmt, result.CustomType);
+      enumType := TPascalEnum.Create(Parser, fmt, Schema);
+      Parser.fEnums.AddObject(fmt, enumType);
     end;
+    result := TPascalType.CreateCustom(enumType);
   end
   else
     result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema);
@@ -1848,7 +1850,7 @@ begin
     '  sysutils,', LineEnd,
     '  mormot.core.base,', LineEnd,
     '  mormot.core.text,', LineEnd,
-    '  mormot.core.rtti;', LineEnd,
+    '  mormot.core.rtti,', LineEnd,
     '  mormot.core.variants,', LineEnd,
     '  mormot.net.client,', LineEnd,
     '  ', DtoUnitName, ';', LineEnd,
@@ -1889,7 +1891,11 @@ begin
           '    ////', u, LineEnd, LineEnd]);
       end;
       Append(result, op.Documentation(LineEnd, '    '));
-      Append(result, ['    ', op.Declaration(ClientClassName, self), LineEnd]);
+      // We send an empty classname because this is the declaration, we want format:
+      // function fctName(fctParams): Result;
+      // Not
+      // function TClassName.fctName(fctParams): Result;
+      Append(result, ['    ', op.Declaration('', self), LineEnd]);
     end;
   end;
   // finalize the class definition and start the implementation section

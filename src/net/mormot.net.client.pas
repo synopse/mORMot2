@@ -1576,7 +1576,7 @@ type
     function HttpOptions: PHttpRequestExtendedOptions;
     // IJsonClient thread-safe methods
     function Connected: string; override;
-    procedure RawRequest(const Action, Method, InType, InBody, InHeaders: RawUtf8;
+    procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); override;
     /// raw access to the HTTP client itself
     // - direct access of this interface methods is not thread-safe
@@ -4561,7 +4561,7 @@ begin
   end;
 end;
 
-procedure TJsonClient.RawRequest(const Action, Method,
+procedure TJsonClient.RawRequest(const Method, Action,
   InType, InBody, InHeaders: RawUtf8; var Response: TJsonResponse);
 var
   t, b, h: RawUtf8;
