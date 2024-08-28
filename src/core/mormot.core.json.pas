@@ -6383,12 +6383,6 @@ var
 begin
   if Format = '' then
     exit;
-  if (Format = '%') and
-     (high(Values) >= 0) then
-  begin
-    Add(Values[0], Escape);
-    exit;
-  end;
   ValuesIndex := 0;
   F := pointer(Format);
   repeat
