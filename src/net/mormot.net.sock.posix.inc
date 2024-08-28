@@ -852,6 +852,7 @@ begin
           with result[n] do
           begin
             Name := info^.ifa_name; // e.g. 'eth0' on Linux
+            AdapterName := Name;
             Address := mac;
             if info^.ifa_addr <> nil then
             begin

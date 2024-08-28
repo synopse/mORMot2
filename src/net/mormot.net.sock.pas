@@ -618,6 +618,11 @@ type
     // fixed by "ip link set eth0 alias somename"
     // - not available on Android or BSD
     FriendlyName: RawUtf8;
+    ///  name of the adapter with which these addresses are associated
+    // - unlike FriendlyName, it can't be renamed by the end user
+    // - e.g. on Windows: '{1C7CAE9E-3256-4784-8CA4-B721D3B5A00F}'
+    // - equals Name on POSIX
+    AdapterName: RawUtf8;
     /// the hardware MAC address of this adapter
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     // - may equal '00:00:00:00:00:00' for a non-physical interface (makSoftware)

@@ -1044,6 +1044,7 @@ begin
       begin
         Win32PWideCharToUtf8(p^.Description, Name);
         Win32PWideCharToUtf8(p^.FriendlyName, FriendlyName);
+        FastSetString(AdapterName, p^.AdapterName, StrLen(p^.AdapterName));
         Win32PWideCharToUtf8(p^.DnsSuffix, DnsSuffix);
         Address := MacToText(@p^.PhysicalAddress);
         Mtu := p^.Mtu;
