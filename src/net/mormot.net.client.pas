@@ -1456,6 +1456,12 @@ type
       read fResponse;
   end;
 
+  IJsonClient = interface;
+
+  /// event signature for an error callback on IJsonClient.OnError
+  TOnJsonClientError = procedure(const Sender: IJsonClient;
+    const Response: TJsonResponse);
+
   /// an interface to make thread-safe JSON client requests
   // - is implemented e.g. by our TJsonClient class in this unit
   // - don't know anything about the HTTP connection itself but it is connected,
@@ -1464,6 +1470,9 @@ type
   // or dynamic arrays - Request() methods are just wrapper to RttiRequest()
   // - all those methods are thread-safe, protected by an OS mutex/lock
   IJsonClient = interface
+    // some property helpers
+    function GetOnError: TOnJsonClientError;
+    procedure SetOnError(const Event: TOnJsonClientError);
     /// check if the client is actually connected to the server
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
@@ -1493,11 +1502,11 @@ type
     // - is called by RttiRequest(), and implemented e.g. in TJsonClient
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse);
+    /// allow to customize any HTTP error
+    // - if no event is set, TJsonResponse.RaiseForStatus will be called
+    property OnError: TOnJsonClientError
+      read GetOnError write SetOnError;
   end;
-
-  /// event signature for an error callback on TJsonClientAbstract
-  TOnJsonClientError = procedure(const Sender: IJsonClient;
-    const Response: TJsonResponse);
 
   /// customize how TJsonClientAbstract handle its process, e.g. its parsing
   TJsonClientOptions = set of (
@@ -1514,7 +1523,7 @@ type
   // HTTP connection, which is abstracted to Connected and RawRequest() methods
   TJsonClientAbstract = class(TInterfacedObjectLocked, IJsonClient)
   protected
-    fOnHttpError: TOnJsonClientError;
+    fOnError: TOnJsonClientError;
     fUrlEncoder: TUrlEncoder;
     fOptions: TJsonClientOptions;
     fOnLog: TSynLogProc;
@@ -1537,10 +1546,14 @@ type
     procedure Request(const Method, ActionFmt: RawUtf8;
       const ActionArgs, NameValueParams: array of const;
       const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo); overload;
+    function GetOnError: TOnJsonClientError;
+    procedure SetOnError(const Event: TOnJsonClientError); virtual;
     /// allow to customize any HTTP error
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
-    property OnHttpError: TOnJsonClientError
-      read fOnHttpError write fOnHttpError;
+    // - a client could raise a proper Exception class with the returned
+    // information, decoded from its JSON content in Response
+    property OnError: TOnJsonClientError
+      read GetOnError write SetOnError;
     /// allow to customize the URL encoding of parameters
     // - by default, contains [ueEncodeNames, ueSkipVoidString]
     property UrlEncoder: TUrlEncoder
@@ -4410,8 +4423,8 @@ begin
     Response.Method, Response.Url, ContentToShort(Response.Content)], err);
   if Assigned(fOnLog) then
     fOnLog(sllHTTP, '%', [err], self);
-  if Assigned(fOnHttpError) then
-    fOnHttpError(self, Response)
+  if Assigned(fOnError) then
+    fOnError(self, Response)
   else if jcoHttpErrorRaise in fOptions then
     raise EJsonClient.CreateResp('%.%', [self, err], Response);
 end;
@@ -4504,6 +4517,16 @@ procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
 begin
   RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
     @Payload, @Res, PayloadInfo, ResInfo);
+end;
+
+function TJsonClientAbstract.GetOnError: TOnJsonClientError;
+begin
+  result := fOnError;
+end;
+
+procedure TJsonClientAbstract.SetOnError(const Event: TOnJsonClientError);
+begin
+  fOnError := Event;
 end;
 
 
