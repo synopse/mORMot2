@@ -5369,7 +5369,6 @@ var
     end;
     CheckEqual(vd.ToJson, v2.ToJson);
     Check(vd.Equals(v2));
-    writeln(vd.ToJson);
     n := 1;
     for v in vd.Items do
     begin

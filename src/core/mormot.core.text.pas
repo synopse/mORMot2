@@ -2385,6 +2385,7 @@ procedure GuidToShort(const
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {}) but
 // will ignore internal '-' so '3F2504E04F8911D39A0C0305E82C3301' is also fine
 // - note: TGuid binary order does not follow plain HexToBin or HexDisplayToBin
+// - warning: P should be not nil, and point to the first hexadecimal character
 // - return nil if the supplied text buffer is not a valid TGuid
 // - this will be the format used for JSON encoding, e.g.
 // $ { "Uid": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
@@ -10345,7 +10346,7 @@ begin
   result := RawUtf8ToGuid(pointer(text), length(text), guid);
 end;
 
-function RawUtf8ToGuid(text: PUtf8Char; textlen: PtrInt; out guid: TGuid): boolean; overload;
+function RawUtf8ToGuid(text: PUtf8Char; textlen: PtrInt; out guid: TGuid): boolean;
 begin
   result := true;
   case textlen of
