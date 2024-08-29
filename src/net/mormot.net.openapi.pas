@@ -32,7 +32,7 @@ uses
 { ************************************ OpenAPI Document Wrappers }
 
 const
-  SCHEMA_TYPE_ARRAY: RawUtf8 = 'array';
+  SCHEMA_TYPE_ARRAY:  RawUtf8 = 'array';
   SCHEMA_TYPE_OBJECT: RawUtf8 = 'object';
 
 type

@@ -5570,17 +5570,17 @@ begin
     for i := 0 to Doc.Count - 1 do
       Check(VariantCompare(Doc.Values[i], Doc.Value[i]) = 0);
   end;
-  Check(Doc.ToJson = '["one",2,3]');
+  CheckEqual(Doc.ToJson, '["one",2,3]');
   Check(Variant(Doc)._Json = '["one",2,3]');
   Doc.ToArrayOfConst(vr);
   s := FormatJson('[?,?,?]', [], vr);
-  check(s = '["one",2,3]');
+  CheckEqual(s, '["one",2,3]');
   s := FormatJson('[%,%,%]', vr, []);
-  check(s = '[one,2,3]');
+  CheckEqual(s, '[one,2,3]');
   s := FormatJson('[?,?,?]', [], Doc.ToArrayOfConst);
-  check(s = '["one",2,3]');
+  CheckEqual(s, '["one",2,3]');
   s := FormatJson('[%,%,%]', Doc.ToArrayOfConst, []);
-  check(s = '[one,2,3]');
+  CheckEqual(s, '[one,2,3]');
   V := _Json(' [ "one" ,2,3 ]   ');
   Check(V._count = 3);
   with TDocVariantData(V) do
@@ -5775,15 +5775,15 @@ begin
   Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name', 'toto');
-  check(Doc.ToJson = '{"name":"toto"}');
+  CheckEqual(Doc.ToJson, '{"name":"toto"}');
   Doc.Clear;
   Doc.InitObjectFromPath('people.age', 30);
-  check(Doc.ToJson = '{"people":{"age":30}}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":30}}');
   Check(Doc.SetValueByPath('people.age', 31) <> nil);
   Check(Doc.SetValueByPath('people2.name', 'toto') = nil);
-  check(Doc.ToJson = '{"people":{"age":31}}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":31}}');
   Check(Doc.SetValueByPath('people2.name', 'toto', {create=}true) <> nil);
-  check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"}}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":31},"people2":{"name":"toto"}}');
   check(not Doc.GetDocVariantByPath('Peopl2', dv));
   check(Doc.GetDocVariantByPath('People2', dv));
   checkEqual(dv^.ToJson, '{"name":"toto"}');
@@ -5798,12 +5798,12 @@ begin
   check(Doc.O['people'].ToJson = '{"age":31}');
   check(Doc.O['people2'].ToJson = 'null');
   Doc.O_['people2'].AddValue('name', 'titi');
-  check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"titi"}}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":31},"people2":{"name":"titi"}}');
   Check(Doc.SetValueByPath('people2.name', 'toto') <> nil);
-  check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"}}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":31},"people2":{"name":"toto"}}');
   check(Doc.A['arr'].ToJson = 'null');
   Doc.A_['arr'].AddItems([1, 2.2, '3']);
-  check(Doc.ToJson = '{"people":{"age":31},"people2":{"name":"toto"},"arr":[1,2.2,"3"]}');
+  CheckEqual(Doc.ToJson, '{"people":{"age":31},"people2":{"name":"toto"},"arr":[1,2.2,"3"]}');
   Doc.Clear;
   check(Doc.A['test'].ToJson = 'null');
   Doc.A_['test']^.AddItems([1, 2]);
@@ -5811,21 +5811,29 @@ begin
   check(j = '{"test":[1,2]}');
   check(Doc.A['test'].ToJson = '[1,2]');
   Doc.A_['test']^.AddItems([3, 4]);
-  check(Doc.ToJson = '{"test":[1,2,3,4]}');
+  CheckEqual(Doc.ToJson, '{"test":[1,2,3,4]}');
   check(Doc.A['test'].ToJson = '[1,2,3,4]');
   Doc.Clear;
   check(not Doc.FlattenAsNestedObject('wrong'));
   Doc.InitJson('{"p.a1":5,"p.a2":"dfasdfa"}');
   check(not Doc.FlattenAsNestedObject('wrong'));
-  check(Doc.ToJson = '{"p.a1":5,"p.a2":"dfasdfa"}');
+  CheckEqual(Doc.ToJson, '{"p.a1":5,"p.a2":"dfasdfa"}');
   check(Doc.FlattenAsNestedObject('p'));
-  check(Doc.ToJson = '{"p":{"a1":5,"a2":"dfasdfa"}}');
+  CheckEqual(Doc.ToJson, '{"p":{"a1":5,"a2":"dfasdfa"}}');
   check(not Doc.FlattenAsNestedObject('p'));
   Doc.Clear;
   Doc.InitJson('{"pa1":5,"pa2":"dfasdfa"}');
   check(not Doc.FlattenAsNestedObject('p'));
   check(Doc.FlattenAsNestedObject('p', #0));
-  check(Doc.ToJson = '{"p":{"a1":5,"a2":"dfasdfa"}}');
+  CheckEqual(Doc.ToJson, '{"p":{"a1":5,"a2":"dfasdfa"}}');
+  Doc.Clear;
+  Doc.InitJson('{"a":{"b":1,"c":1},d:3}');
+  Check(Doc.FlattenFromNestedObjects('.'));
+  CheckEqual(Doc.ToJson, '{"a.b":1,"a.c":1,"d":3}');
+  Doc.Clear;
+  Doc.InitJson('{a:{b:1,b:10},d:3}');
+  Check(Doc.FlattenFromNestedObjects('.'));
+  CheckEqual(Doc.ToJson, '{"a.b":1,"a.b2":10,"d":3}');
   s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
   V := _Json(s);
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below
@@ -5842,9 +5850,9 @@ begin
   Doc.I['ID'] := 2;
   Doc.Delete('CustomNotation');
   s := Doc.ToJson;
-  check(s = '{"ID":2,"Notation":"ABC","Price":10.1}');
+  CheckEqual(s, '{"ID":2,"Notation":"ABC","Price":10.1}');
   s := VariantSaveJson(V);
-  check(s = '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
+  CheckEqual(s, '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
   {$ifdef HASITERATORS}
   DoEnumerators;
   {$endif HASITERATORS}
@@ -5884,14 +5892,6 @@ begin
   finally
     lTable.Free;
   end;
-  Doc.Clear;
-  Doc.InitJson('{"a":{"b":1,"c":1},d:3}');
-  Check(Doc.FlattenFromNestedObjects('.'));
-  CheckEqual(Doc.ToJson, '{"a.b":1,"a.c":1,"d":3}');
-  Doc.Clear;
-  Doc.InitJson('{a:{b:1,b:10},d:3}');
-  Check(Doc.FlattenFromNestedObjects('.'));
-  CheckEqual(Doc.ToJson, '{"a.b":1,"a.b2":10,"d":3}');
   Doc.Clear;
   Check(Doc.InitJson(TEST_DATA_2));
   s := Doc.U['raw_licence'];
@@ -7545,7 +7545,7 @@ begin
       s := zin.Extract('B.1mb');
       Check(s = Data, 'b');
       s := zin.Extract('C.1mb');
-      Check(s = '', 'c');
+      CheckEqual(s, '', 'c');
       zin := nil; // so that we could change the file
       zout := nil;
       zout := New7zWriter(newfile1, fhUndefined, lib);
@@ -7575,7 +7575,7 @@ begin
       s := zin.Extract('C.1mb');
       Check(s = Data, 'uc');
       s := zin.Extract('void.txt');
-      Check(s = '', 'uv');
+      CheckEqual(s, '', 'uv');
       zin := nil; // so that we could delete the file
       Check(DeleteFile(newfile1));
       Check(DeleteFile(newfile2));
