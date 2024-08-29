@@ -2034,14 +2034,19 @@ type
     // return the Names[] instance with no memory (re)allocation
     // - if the document is not a dvObject, will return nil
     function GetNames: TRawUtf8DynArray;
-    /// map {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
+    /// map in-place {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
     // - the supplied aObjectPropName should match the incoming dotted value
-    // of all properties (e.g. 'obj' for "obj.prop1")
+    // of ALL properties (e.g. 'obj' for "obj.prop1")
     // - if any of the incoming property is not of "obj.prop#" form, the
     // whole process would be ignored
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened
     function FlattenAsNestedObject(const aObjectPropName: RawUtf8): boolean;
+    /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
+    // - any name collision will append a counter to make it unique
+    // - return FALSE if the TDocVariant did not change
+    // - return TRUE if the TDocVariant has been flattened
+    function FlattenFromNestedObjects(aSepChar: AnsiChar = '.'): boolean;
 
     /// how this document will behave
     // - those options are set when creating the instance
@@ -8030,7 +8035,7 @@ var
   Up: array[byte] of AnsiChar;
   nested: TDocVariantData;
 begin
-  // {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
+  // {"p.a1":5,"p.a2":"dfasdfa"} into {"p":{"a1":5,"a2":"dfasdfa"}}
   result := false;
   if (VCount = 0) or
      (aObjectPropName = '') or
@@ -8045,8 +8050,46 @@ begin
     system.delete(VName[ndx], 1, len);
   nested := self;
   ClearFast;
-  InitObject([aObjectPropName, variant(nested)]);
+  InitObject([aObjectPropName, variant(nested)], nested.Options);
   result := true;
+end;
+
+function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar): boolean;
+var
+  n1, n2: PtrInt;
+  n: PRawUtf8;
+  v: PVariant;
+  o: PDocVariantData;
+  nested: TDocVariantData;
+begin
+  // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
+  result := false;
+  if (VCount = 0) or
+     (aSepChar = #0) or
+     (not IsObject) then
+    exit;
+  nested.InitClone(self);
+  nested.Capacity := VCount;
+  n := pointer(VName);
+  v := pointer(VValue);
+  for n1 := 1 to Count do
+  begin
+    if _SafeObject(v^, o) then
+    begin
+      result := true; // was flattened
+      for n2 := 0 to o^.Count - 1 do
+        nested.AddValue(nested.EnsureUniqueName(
+          Make([n^, aSepChar, o^.Names[n2]])), o^.Values[n2]);
+    end
+    else
+      nested.AddValue(n^, v^); // just insert regular functions
+    inc(n);
+    inc(v);
+  end;
+  if not result then
+    exit;
+  ClearFast;
+  self := nested;
 end;
 
 function TDocVariantData.Delete(Index: PtrInt): boolean;
