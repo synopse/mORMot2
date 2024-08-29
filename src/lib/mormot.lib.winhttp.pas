@@ -1901,9 +1901,6 @@ uses
 { ************  http.sys / HTTP Server API low-level direct access }
 
 function RegURL(aRoot, aPort: RawUtf8; Https: boolean; aDomainName: RawUtf8): SynUnicode;
-const
-  Prefix: array[boolean] of RawUtf8 = (
-    'http://', 'https://');
 begin
   if aPort = '' then
     aPort := DEFAULT_PORT[Https];
@@ -1923,7 +1920,7 @@ begin
   end
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'
-  aRoot := Prefix[Https] + aDomainName + ':' + aPort + aRoot;
+  aRoot := NetConcat([HTTPS_TEXT[Https], aDomainName, ':', aPort, aRoot]);
   Utf8ToSynUnicode(aRoot, result);
 end;
 

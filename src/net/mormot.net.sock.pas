@@ -1488,6 +1488,10 @@ type
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
+    /// compute the normalized URI of the server and port
+    // - e.g. 'https://Server:Port/' or 'http://unix:/Server:/'
+    // - i.e. URI result without the Address part
+    function ServerPort: RawUtf8;
     /// the server port, as integer value
     function PortInt: TNetPort;
     /// compute the root resource Address, without any URI-encoded parameter
@@ -1531,9 +1535,12 @@ const
   /// the default TCP port as integer, as DEFAULT_PORT_INT[Https]
   DEFAULT_PORT_INT: array[boolean] of TNetPort = (
     80, 443);
-  /// can be used to generate e.g. http:// or https:// constants
+  /// can be used to generate e.g. http:// ws:// or https:// wss:// constants
   TLS_TEXT: array[boolean] of string[1] = (
     '', 's');
+  /// quick access to http:// or https:// constants
+  HTTPS_TEXT: array[boolean] of RawUtf8 = (
+    'http://', 'https://');
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
@@ -4809,8 +4816,8 @@ end;
 procedure TUri.Clear;
 begin
   Https := false;
-  layer := nlTcp;
-  Finalize(self);
+  Layer := nlTcp;
+  Finalize(self); // reset all RawUtf8 fields
 end;
 
 function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
@@ -4835,14 +4842,14 @@ begin
        NetStartWith(pointer(p), 'WSS') then // wss: is just an upgraded https:
       Https := true
     else if NetStartWith(pointer(p), 'UDP') then
-      layer := nlUdp; // 'udp://server:port';
+      Layer := nlUdp; // 'udp://server:port';
     p := s + 3;
   end;
   // parse Server
   if NetStartWith(pointer(p), 'UNIX:') then
   begin
     inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
-    layer := nlUnix;
+    Layer := nlUnix;
     s := p;
     while not (s^ in [#0, ':']) do
       inc(s); // Server='path/to/socket.sock'
@@ -4896,34 +4903,36 @@ begin
 end;
 
 function TUri.URI: RawUtf8;
-const
-  Prefix: array[boolean] of RawUtf8 = (
-    'http://', 'https://');
+begin
+  result := NetConcat([ServerPort, Address]);
+end;
+
+function TUri.ServerPort: RawUtf8;
 begin
   if layer = nlUnix then
-    result := NetConcat(['http://unix:', Server, ':/', address])
-  else if (port = '') or
-          (port = '0') or
-          (port = DEFAULT_PORT[Https]) then
-    result := NetConcat([Prefix[Https], Server, '/', address])
+    result := NetConcat(['http://unix:', Server, ':/'])
+  else if (Port = '') or
+          (Port = '0') or
+          (Port = DEFAULT_PORT[Https]) then
+    result := NetConcat([HTTPS_TEXT[Https], Server, '/'])
   else
-    result := NetConcat([Prefix[Https], Server, ':', port, '/', address]);
+    result := NetConcat([HTTPS_TEXT[Https], Server, ':', Port, '/']);
 end;
 
 function TUri.PortInt: TNetPort;
 begin
-  result := GetCardinal(pointer(port));
+  result := GetCardinal(pointer(Port));
 end;
 
 function TUri.Root: RawUtf8;
 var
   i: PtrInt;
 begin
-  i := PosExChar('?', address);
+  i := PosExChar('?', Address);
   if i = 0 then
-    Root := address
+    result := Address
   else
-    Root := copy(address, 1, i - 1);
+    result := copy(Address, 1, i - 1);
 end;
 
 function TUri.ResourceName: RawUtf8;
