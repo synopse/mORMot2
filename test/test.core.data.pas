@@ -920,7 +920,7 @@ begin
       mustacheJson := HttpGet(
        'https://raw.githubusercontent.com/mustache/spec/' +
        'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json',
-       '', nil, false, nil, 0, false, {ignoreTlsCertError=}true);
+       '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
     RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
@@ -3208,7 +3208,7 @@ begin
   begin
     discogsJson := HttpGet(
       'https://api.discogs.com/artists/45/releases?page=1&per_page=100',
-       '', nil, false, nil, 0, false, {ignoreTlsCertError=}true);
+       '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
     FileFromString(discogsJson, WorkDir + discogsFileName);
   end;
   Check(IsValidJson(discogsJson), 'discogsJson');
@@ -3217,7 +3217,7 @@ begin
   begin
     zendframeworkJson := HttpGet(
       'https://api.github.com/users/zendframework/repos',
-      '', nil, false, nil, 0, false, {ignoreTlsCertError=}true);
+      '', nil, false, nil, 0, {forcesocket:}true, {ignorecerterror:}true);
     FileFromString(zendframeworkJson, WorkDir + zendframeworkFileName);
   end;
   Check(IsValidJson(zendframeworkJson), 'zendJson');
@@ -5804,6 +5804,13 @@ begin
   check(Doc.A['arr'].ToJson = 'null');
   Doc.A_['arr'].AddItems([1, 2.2, '3']);
   CheckEqual(Doc.ToJson, '{"people":{"age":31},"people2":{"name":"toto"},"arr":[1,2.2,"3"]}');
+  Check(Doc.Equals(_Safe(Doc.GetValuesByStartName(''))^));
+  CheckEqual(_Safe(Doc.GetValuesByStartName('xxx'))^.Count, 0);
+  CheckEqual(_Safe(Doc.GetValuesByStartName('people'))^.Count, 2);
+  v := Doc.GetValuesByStartName('people2');
+  CheckEqual(_Safe(v)^.Count, 1);
+  CheckEqual(_Safe(v).ToJson, '{"people2":{"name":"toto"}}');
+  CheckEqual(_Safe(Doc.GetValuesByStartName('arr'))^.Count, 1);
   Doc.Clear;
   check(Doc.A['test'].ToJson = 'null');
   Doc.A_['test']^.AddItems([1, 2]);

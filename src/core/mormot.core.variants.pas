@@ -6838,23 +6838,21 @@ var
 begin
   if IsObject then
     if Another.IsObject then // compare Object, possibly by specified fields
-    begin
       if high(ObjFields) < 0 then
+        result := Compare(Another, CaseInsensitive)
+      else
       begin
-        result := Compare(Another, CaseInsensitive);
-        exit;
-      end;
-      for f := 0 to high(ObjFields) do
-      begin
-        prev := -1; // optimistic: fields may be in the same position
-        GetObjectProp(ObjFields[f], v1, @prev);
-        Another.GetObjectProp(ObjFields[f], v2, @prev);
-        result := FastVarDataComp(pointer(v1), pointer(v2), CaseInsensitive);
-        if result <> 0 then // each value should match
-          exit;
-      end;
-      result := 0; // all supplied fields did match
-    end
+        for f := 0 to high(ObjFields) do
+        begin
+          prev := -1; // optimistic: fields may be in the same position
+          GetObjectProp(ObjFields[f], v1, @prev);
+          Another.GetObjectProp(ObjFields[f], v2, @prev);
+          result := FastVarDataComp(pointer(v1), pointer(v2), CaseInsensitive);
+          if result <> 0 then // each value should match
+            exit;
+        end;
+        result := 0; // all supplied fields did match
+      end
     else
       result := 1   // Object, not Object
   else if Another.IsObject then
@@ -8403,7 +8401,7 @@ var
 begin
   if (cardinal(VType) <> DocVariantVType) or
      not GetObjectProp(aName, v{%H-}, nil) then
-   VarClear(result{%H-})
+    VarClear(result{%H-})
   else
     SetVariantByValue(v^, result);
 end;
@@ -8823,26 +8821,25 @@ var
   name: RawUtf8;
 begin
   if aStartName = '' then
-  begin
-    result := Variant(self);
-    exit;
-  end;
+    result := Variant(self)
+  else
   if (not IsObject) or
      (VCount = 0) then
+    SetVariantNull(result{%H-})
+  else
   begin
-    SetVariantNull(result{%H-});
-    exit;
+    VarClear(result{%H-});
+    TDocVariant.NewFast(result);
+    UpperCopy255(Up{%H-}, aStartName)^ := #0;
+    for ndx := 0 to VCount - 1 do
+      if IdemPChar(pointer(VName[ndx]), Up) then
+      begin
+        name := VName[ndx];
+        if TrimLeftStartName then
+          system.delete(name, 1, length(aStartName));
+        TDocVariantData(result).AddValue(name, VValue[ndx]);
+      end;
   end;
-  TDocVariant.NewFast(result);
-  UpperCopy255(Up{%H-}, aStartName)^ := #0;
-  for ndx := 0 to VCount - 1 do
-    if IdemPChar(pointer(VName[ndx]), Up) then
-    begin
-      name := VName[ndx];
-      if TrimLeftStartName then
-        system.delete(name, 1, length(aStartName));
-      TDocVariantData(result).AddValue(name, VValue[ndx]);
-    end;
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer;
