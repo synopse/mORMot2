@@ -1206,7 +1206,8 @@ type
     // - call GetUserDN() to retrieve the user's distinguishedName and
     // primaryGroupID attributes from User sAMAccountName or userPrincipalName
     // - will check if primaryGroupID matches any registered groups SID, then
-    // call GetIsMemberOf() to search for registered groups
+    // call GetIsMemberOf() to search for registered groups (following
+    // GroupNested property to walk the chain of ancestries)
     // - optionally return the matching sAMAccountName in GroupsAN[]
     function Authorize(const User: RawUtf8;
       GroupsAN: PRawUtf8DynArray = nil): boolean;
@@ -1234,6 +1235,8 @@ type
     property GroupCustomFilter: RawUtf8
       read fGroupCustomFilter write fGroupCustomFilter;
     /// allow to enable the 1.2.840.113556.1.4.1941 recursive search flag
+    // - true by default; as documented by Microsoft: "walks the chain of
+    // ancestry in objects all the way to the root until it finds a match"
     property GroupNested: boolean
       read fGroupNested write fGroupNested;
     /// after how many seconds the internal cache should be flushed
