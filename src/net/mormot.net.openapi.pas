@@ -370,6 +370,21 @@ type
       read fPrefix;
   end;
 
+  // define a Pascal Exception type (used for 4xx responses)
+  TPascalException = class(TPascalCustomType)
+  private
+    fResponse: POpenApiResponse;
+    fErrorType: TPascalType;
+  public
+    constructor Create(aOwner: TOpenApiParser; aResponse: POpenApiResponse = nil);
+    destructor Destroy; override;
+    function ToTypeDefinition: RawUtf8; override;
+    property Response: POpenApiResponse
+      read fResponse;
+    property ErrorType: TPascalType
+      read fErrorType;
+  end;
+
   /// define a Pascal method matching an OpenAPI operation
   TPascalOperation = class
   private
@@ -406,8 +421,9 @@ type
   private
     fVersion: TOpenApiVersion;
     fSpecs: TDocVariantData;
-    fRecords: TRawUtf8List; // objects are owned TPascalRecord
-    fEnums: TRawUtf8List;   // objects are owned TPascalEnum
+    fRecords: TRawUtf8List;    // objects are owned TPascalRecord
+    fEnums: TRawUtf8List;      // objects are owned TPascalEnum
+    fExceptions: TRawUtf8List; // objects are owned TPascalException
     fOperations: TPascalOperationDynArray;
     fLineEnd: RawUtf8;
     fLineIndent: RawUtf8;
@@ -946,6 +962,8 @@ var
   v: PDocVariantData;
   i: PtrInt;
   rbSchema: POpenApiSchema;
+  e: TPascalException;
+  eType: Pointer;
 begin
   rbSchema := fOperation^.BodySchema(Parser);
   if Assigned(rbSchema) then
@@ -962,6 +980,15 @@ begin
       fSuccessResponseType := TPascalType.LoadFromSchema(
         Parser, POpenApiResponse(@v^.Values[i])^.Schema(Parser));
       break; // use the first success
+    end else
+    begin
+      // We don't have name until the exception is parsed :/
+      e := TPascalException.Create(Parser, POpenApiResponse(@v^.Values[i]));
+      eType := Parser.fExceptions.GetObjectFrom(e.PascalName);
+      if eType = nil then
+        Parser.fExceptions.AddObject(e.PascalName, e)
+      else
+        e.Free;
     end;
   end;
 end;
@@ -991,6 +1018,8 @@ var
   r: POpenApiResponse;
   i: PtrInt;
   rb: POpenApiRequestBody;
+  rs: POpenApiSchema;
+  e: TPascalException;
 begin
   result := FormatUtf8('%// [%] %%', [Parser.LineIndent, ToText(fMethod), fPath, Parser.LineEnd]);
 
@@ -1046,9 +1075,16 @@ begin
       status := v^.Names[i];
       code := Utf8ToInteger(status, 0);
       Append(result, [Parser.LineIndent, '// - ', status]);
-      if code = fSuccessResponseCode then
-        Append(result, '*');
       r := @v^.Values[i];
+      rs := r^.Schema(Parser);
+      if code = fSuccessResponseCode then
+        Append(result, '*')
+      else if Assigned(rs) then
+      begin
+        e := TPascalException.Create(Parser, r);
+        Append(result, [' [', e.PascalName, ']']);
+        e.Free;
+      end;
       if r^.Description <> '' then
         Append(result, [': ', r^.Description, Parser.LineEnd])
       else
@@ -1571,12 +1607,59 @@ begin
 end;
 
 
+{ TPascalException }
+
+constructor TPascalException.Create(aOwner: TOpenApiParser;
+  aResponse: POpenApiResponse);
+var
+  scjson: RawUtf8;
+begin
+  fResponse := aResponse;
+  scjson := Response^.Schema(aOwner)^.Data.tojson;
+  fErrorType := TPascalType.LoadFromSchema(aOwner, Response^.Schema(aOwner));
+
+  if Assigned(fErrorType.CustomType) then
+    fPascalName := 'E' + fErrorType.CustomType.Name
+  else
+    fPascalName := 'E' + fErrorType.fBuiltinTypeName;
+  inherited Create(aOwner, fPascalName);
+end;
+
+destructor TPascalException.Destroy;
+begin
+  fErrorType.Free;
+  inherited Destroy;
+end;
+
+function TPascalException.ToTypeDefinition: RawUtf8;
+var
+  errorTypeName: RawUtf8;
+begin
+  errorTypeName := fErrorType.ToPascalName;
+
+  // TODO: Define which parent Exception class
+  result := fParser.LineIndent;
+  Append(result, [
+    PascalName, ' = class(Exception)', fParser.LineEnd,
+    fParser.LineIndent, 'private', fParser.LineEnd,
+    fParser.LineIndent, '  fError: ', errorTypeName, ';', fParser.LineEnd,
+    fParser.LineIndent, 'public', fParser.LineEnd,
+    // TODO: Add http response to constructor ?
+    fParser.LineIndent, '  constructor Create(aError: ', errorTypeName, ');', fParser.LineEnd,
+    fParser.LineEnd,
+    fParser.LineIndent, '  property Error: ', errorTypeName, fParser.LineEnd,
+    fParser.LineIndent, '    read fError;', fParser.LineEnd,
+    fParser.LineIndent, 'end;', fParser.LineEnd]);
+end;
+
+
 { TOpenApiParser }
 
 constructor TOpenApiParser.Create;
 begin
   fRecords := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
+  fExceptions := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fLineEnd := CRLF; // default to OS value
 end;
 
@@ -1584,6 +1667,7 @@ destructor TOpenApiParser.Destroy;
 begin
   fRecords.Free;
   fEnums.Free;
+  fExceptions.Free;
   ObjArrayClear(fOperations);
   inherited Destroy;
 end;
@@ -1591,7 +1675,9 @@ end;
 procedure TOpenApiParser.Clear;
 begin
   fRecords.Clear;
+  fEnums.Clear;
   fSpecs.Clear;
+  fExceptions.Clear;
   ObjArrayClear(fOperations);
 end;
 
@@ -1893,6 +1979,9 @@ begin
   rec := GetOrderedRecords;
   for i := 0 to high(rec) do
     Append(result, rec[i].ToTypeDefinition, LineEnd);
+  // custom exceptions
+  for i := 0 to fExceptions.Count - 1 do
+    Append(result, TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition, LineEnd);
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
