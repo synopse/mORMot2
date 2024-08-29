@@ -5834,6 +5834,10 @@ begin
   Doc.InitJson('{a:{b:1,b:10},d:3}');
   Check(Doc.FlattenFromNestedObjects('.'));
   CheckEqual(Doc.ToJson, '{"a.b":1,"a.b2":10,"d":3}');
+  Doc.Clear;
+  Doc.InitJson('{a:{b:1,b:10},d:3}');
+  Check(Doc.FlattenFromNestedObjects(#0));
+  CheckEqual(Doc.ToJson, '{"ab":1,"ab2":10,"d":3}');
   s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
   V := _Json(s);
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below

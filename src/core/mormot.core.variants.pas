@@ -2038,7 +2038,7 @@ type
     // - the supplied aObjectPropName should match the incoming dotted value
     // of ALL properties (e.g. 'obj' for "obj.prop1"); i.e. if any of the incoming
     // property is not of "obj.prop#" form, the whole process would be ignored
-    // - if aSepChar is #0, no separation character will be necessary, so
+    // - if aSepChar is #0, no separation dot/character will be necessary, so
     // FlattenAsNestedObject('obj', #0) would match {"objprop1"..,"objprop2":..}
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened
@@ -2046,6 +2046,7 @@ type
       aSepChar: AnsiChar = '.'): boolean;
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
+    // - if aSepChar is #0, no separation dot/character will be appended
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened
     function FlattenFromNestedObjects(aSepChar: AnsiChar = '.'): boolean;
@@ -8062,6 +8063,7 @@ function TDocVariantData.FlattenFromNestedObjects(aSepChar: AnsiChar): boolean;
 var
   n1, n2: PtrInt;
   n: PRawUtf8;
+  prefix: RawUtf8;
   v: PVariant;
   o: PDocVariantData;
   nested: TDocVariantData;
@@ -8069,7 +8071,6 @@ begin
   // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   result := false;
   if (VCount = 0) or
-     (aSepChar = #0) or
      (not IsObject) then
     exit;
   nested.InitClone(self);
@@ -8081,9 +8082,12 @@ begin
     if _SafeObject(v^, o) then
     begin
       result := true; // was flattened
+      prefix := n^;
+      if aSepChar <> #0 then
+        Append(prefix, aSepChar); // #0 = no char appended
       for n2 := 0 to o^.Count - 1 do
-        nested.AddValue(nested.EnsureUniqueName(
-          Make([n^, aSepChar, o^.Names[n2]])), o^.Values[n2]);
+        nested.AddValue(nested.EnsureUniqueName(prefix + o^.Names[n2]),
+          o^.Values[n2]);
     end
     else
       nested.AddValue(n^, v^); // just insert regular functions
@@ -8091,7 +8095,7 @@ begin
     inc(v);
   end;
   if not result then
-    exit;
+    exit; // nothing changed
   ClearFast;
   self := nested;
 end;
