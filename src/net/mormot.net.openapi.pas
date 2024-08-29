@@ -235,6 +235,7 @@ type
     /// transtype the POpenApiSpecs pointer into a TDocVariantData content
     Data: TDocVariantData;
     // access to the OpenAPI Specs information
+    function Info: PDocVariantData;
     function BasePath: RawUtf8;
     function Definitions: PDocVariantData;
     function Paths: PDocVariantData;
@@ -325,9 +326,9 @@ type
     fRequiresArrayDefinition: boolean;
   public
     constructor Create(aOwner: TOpenApiParser; const aPascalName: RawUtf8 = '');
-    function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual; abstract;
+    function ToTypeDefinition: RawUtf8; virtual; abstract;
     function ToArrayTypeName(AllowArrayType: boolean = true): RawUtf8; virtual;
-    function ToArrayTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; virtual;
+    function ToArrayTypeDefinition: RawUtf8; virtual;
     property Name: RawUtf8
       read fName;
     property PascalName: RawUtf8
@@ -345,7 +346,7 @@ type
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
     destructor Destroy; override;
-    function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; override;
+    function ToTypeDefinition: RawUtf8; override;
     function ToRttiTextRepresentation(WithClassName: boolean = true): RawUtf8;
     function ToRttiRegisterDefinitions: RawUtf8;
     property Properties: TRawUtf8List
@@ -361,7 +362,7 @@ type
   public
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       aSchema: POpenApiSchema);
-    function ToTypeDefinition(const LineIndentation: RawUtf8 = ''): RawUtf8; override;
+    function ToTypeDefinition: RawUtf8; override;
     function ToArrayTypeName(AllowArrayType: boolean = true): RawUtf8; override;
     function ToConstTextArrayName: RawUtf8;
     function ToConstTextArray: RawUtf8;
@@ -386,7 +387,7 @@ type
     // Resolve parameters/responses types
     procedure ResolveTypes(Parser: TOpenApiParser);
     function GetAllParameters: POpenApiParameterDynArray;
-    function Documentation(const LineEnd, LineIndent: RawUtf8; Parser: TOpenApiParser): RawUtf8;
+    function Documentation(Parser: TOpenApiParser): RawUtf8;
     function Declaration(const ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function Body(const ClassName, BasePath: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function FunctionName: RawUtf8;
@@ -409,7 +410,9 @@ type
     fEnums: TRawUtf8List;   // objects are owned TPascalEnum
     fOperations: TPascalOperationDynArray;
     fLineEnd: RawUtf8;
+    fLineIndent: RawUtf8;
     procedure ParseSpecs;
+    function GetUnitDescription(const UnitDescription: RawUtf8): RawUtf8;
   public
     constructor Create;
     destructor Destroy; override;
@@ -437,7 +440,10 @@ type
       read fOperations;
     property LineEnd: RawUtf8
       read fLineEnd;
-    property Version: TOpenApiVersion read fVersion;
+    property LineIndent: RawUtf8
+      read fLineIndent;
+    property Version: TOpenApiVersion
+      read fVersion;
   end;
 
 
@@ -825,6 +831,11 @@ begin
     result := nil;
 end;
 
+function TOpenApiSpecs.Info: PDocVariantData;
+begin
+  result := Data.O['info'];
+end;
+
 function TOpenApiSpecs.BasePath: RawUtf8;
 begin
   result := Data.U['basePath'];
@@ -874,7 +885,7 @@ end;
 
 function TOpenApiSpecs.Schemas: PDocVariantData;
 begin
-  if not IsOpenApiVersion then
+  if VersionEnum = oav2 then
     result := Definitions
   else
     result := Components.O['schemas'];
@@ -901,11 +912,11 @@ begin
     result := FormatUtf8('array of %', [PascalName]);
 end;
 
-function TPascalCustomType.ToArrayTypeDefinition(const LineIndentation: RawUtf8): RawUtf8;
+function TPascalCustomType.ToArrayTypeDefinition: RawUtf8;
 begin
   if fRequiresArrayDefinition then
-    result := FormatUtf8('%% = %;'#10, [LineIndentation,
-    ToArrayTypeName(true), ToArrayTypeName(false)])
+    result := FormatUtf8('%% = %;%', [fParser.LineIndent,
+    ToArrayTypeName(true), ToArrayTypeName(false), fParser.LineEnd])
   else
     result := '';
 end;
@@ -970,8 +981,7 @@ begin
     result[pn + i] := o^.Parameter[i];
 end;
 
-function TPascalOperation.Documentation(const LineEnd, LineIndent: RawUtf8;
-  Parser: TOpenApiParser): RawUtf8;
+function TPascalOperation.Documentation(Parser: TOpenApiParser): RawUtf8;
 var
   params: POpenApiParameterDynArray;
   p: POpenApiParameter;
@@ -982,67 +992,67 @@ var
   i: PtrInt;
   rb: POpenApiRequestBody;
 begin
-  result := FormatUtf8('%// [%] %%', [LineIndent, ToText(fMethod), fPath, LineEnd]);
+  result := FormatUtf8('%// [%] %%', [Parser.LineIndent, ToText(fMethod), fPath, Parser.LineEnd]);
 
   // Summary
   if fOperation^.Summary <> '' then
-    Append(result, [LineIndent, '// Summary: ', fOperation^.Summary, LineEnd]);
+    Append(result, [Parser.LineIndent, '// Summary: ', fOperation^.Summary, Parser.LineEnd]);
   // Description
   if fOperation^.Description <> '' then
-    Append(result, [LineIndent, '// Description:', LineEnd,
-      LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
-        FormatUtf8(#10'%//   ', [LineIndent])), LineEnd]);
+    Append(result, [Parser.LineIndent, '// Description:', Parser.LineEnd,
+      Parser.LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
+        FormatUtf8(#10'%//   ', [Parser.LineIndent])), Parser.LineEnd]);
   // params
   params := GetAllParameters;
   rb := fOperation^.RequestBody(Parser);
   if (params <> nil) or (Assigned(rb) and Assigned(rb^.Schema(Parser))) then
   begin
-    Append(result, [LineIndent, '//', LineEnd,
-                    LineIndent, '// params:', LineEnd]);
+    Append(result, [Parser.LineIndent, '//', Parser.LineEnd,
+                    Parser.LineIndent, '// params:', Parser.LineEnd]);
     for i := 0 to high(params) do
     begin
       p := params[i];
       // Handled below
       if p^._In = 'body' then
         continue;
-      Append(result, [LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
+      Append(result, [Parser.LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
       if p^.Required then
         Append(result, '*');
       if p^.Default <> nil then
         Append(result, [' (default=', p^.Default^, ')']);
       if p^.Description <> '' then
         Append(result, ': ', p^.Description);
-      Append(result, LineEnd);
+      Append(result, Parser.LineEnd);
     end;
 
     // Request body
     if Assigned(rb) then
     begin
-      Append(result, LineIndent, '// - [body] Payload*');
+      Append(result, Parser.LineIndent, '// - [body] Payload*');
       if rb^.Description <> '' then
         Append(result, ': ', rb^.Description);
-      Append(result, LineEnd);
+      Append(result, Parser.LineEnd);
     end;
   end;
   // Responses
   v := fOperation^.Responses;
   if v^.Count > 0 then
   begin
-    Append(result, [LineIndent, '//', LineEnd,
-                    LineIndent, '// Responses:', LineEnd]);
+    Append(result, [Parser.LineIndent, '//', Parser.LineEnd,
+                    Parser.LineIndent, '// Responses:', Parser.LineEnd]);
     v^.SortByName(@StrCompByNumber); // sort by status number
     for i := 0 to v^.Count - 1 do
     begin
       status := v^.Names[i];
       code := Utf8ToInteger(status, 0);
-      Append(result, [LineIndent, '// - ', status]);
+      Append(result, [Parser.LineIndent, '// - ', status]);
       if code = fSuccessResponseCode then
         Append(result, '*');
       r := @v^.Values[i];
       if r^.Description <> '' then
-        Append(result, [': ', r^.Description, LineEnd])
+        Append(result, [': ', r^.Description, Parser.LineEnd])
       else
-        Append(result, ': No Description', LineEnd);
+        Append(result, ': No Description', Parser.LineEnd);
     end;
   end;
 end;
@@ -1282,12 +1292,12 @@ begin
   LowerCaseSelf(fPrefix);
 end;
 
-function TPascalEnum.ToTypeDefinition(const LineIndentation: RawUtf8): RawUtf8;
+function TPascalEnum.ToTypeDefinition: RawUtf8;
 var
   Choice: RawUtf8;
   i: PtrInt;
 begin
-  result := FormatUtf8('%% = (', [LineIndentation, PascalName]);
+  result := FormatUtf8('%% = (', [fParser.LineIndent, PascalName]);
   for i := 0 to fChoices.Count - 1 do
   begin
     if i > 0 then
@@ -1296,7 +1306,7 @@ begin
     Choice[1] := UpCase(Choice[1]);
     Append(result, fPrefix, Choice);
   end;
-  Append(result, [');', fParser.LineEnd, ToArrayTypeDefinition(LineIndentation)]);
+  Append(result, [');', fParser.LineEnd, ToArrayTypeDefinition]);
 end;
 
 function TPascalEnum.ToArrayTypeName(AllowArrayType: boolean): RawUtf8;
@@ -1512,13 +1522,13 @@ begin
   inherited Destroy;
 end;
 
-function TPascalRecord.ToTypeDefinition(const LineIndentation: RawUtf8): RawUtf8;
+function TPascalRecord.ToTypeDefinition: RawUtf8;
 var
   i: PtrInt;
   p: TPascalProperty;
   s: POpenApiSchema;
 begin
-  result := LineIndentation;
+  result := fParser.LineIndent;
   Append(result, [PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
@@ -1526,12 +1536,11 @@ begin
     s := p.fSchema;
     if Assigned(s) and
        (s^.Description <> '') then
-      Append(result, [LineIndentation, '  /// ', s^.Description, fParser.LineEnd]);
-    Append(result, [LineIndentation, '  ', p.fPascalName, ': ',
+      Append(result, [fParser.LineIndent, '  /// ', s^.Description, fParser.LineEnd]);
+    Append(result, [fParser.LineIndent, '  ', p.fPascalName, ': ',
       p.fType.ToPascalName, ';', fParser.LineEnd]);
   end;
-  Append(result, [LineIndentation, 'end;', fParser.LineEnd,
-    ToArrayTypeDefinition(LineIndentation)]);
+  Append(result, [fParser.LineIndent, 'end;', fParser.LineEnd, ToArrayTypeDefinition]);
 end;
 
 function TPascalRecord.ToRttiTextRepresentation(WithClassName: boolean): RawUtf8;
@@ -1630,6 +1639,25 @@ begin
   v := Specs^.Paths;
   for i := 0 to v^.Count - 1 do
     ParsePath(v^.Names[i]);
+end;
+
+function TOpenApiParser.GetUnitDescription(const UnitDescription: RawUtf8): RawUtf8;
+var
+  u: RawUtf8;
+  v: variant;
+  Info: PDocVariantData;
+begin
+  result := '';
+  Info := Specs^.Info;
+  if Info = nil then
+    exit;
+  result := FormatUtf8('/// % %%', [UnitDescription, Info^.U['title'], LineEnd]);
+  if Info^.GetAsRawUtf8('description', u) then
+    Append(result, ['// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
+  if Info^.GetAsRawUtf8('version', u) then
+    Append(result, ['// - version ', u, LineEnd]);
+  if Info^.GetValueByPath('license.name', v) then
+    Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
 end;
 
 function TOpenApiParser.ParseDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
@@ -1828,24 +1856,6 @@ begin
     ConsoleWrite(rec[i].ToTypeDefinition);
 end;
 
-function GetDescription(Info: PDocVariantData;
-  const UnitDescription, LineEnd: RawUtf8): RawUtf8;
-var
-  u: RawUtf8;
-  v: variant;
-begin
-  result := '';
-  if Info = nil then
-    exit;
-  result := FormatUtf8('/// % %%', [UnitDescription, Info^.U['title'], LineEnd]);
-  if Info^.GetAsRawUtf8('description', u) then
-    Append(result, ['// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
-  if Info^.GetAsRawUtf8('version', u) then
-    Append(result, ['// - version ', u, LineEnd]);
-  if Info^.GetValueByPath('license.name', v) then
-    Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
-end;
-
 function TOpenApiParser.GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
 var
   rec: TPascalRecordDynArray;
@@ -1855,7 +1865,7 @@ begin
   result := '';
   // unit common definitions
   Append(result, [
-    GetDescription(Info, 'DTOs for', LineEnd),
+    GetUnitDescription('DTOs for'),
     'unit ', UnitName, ';', LineEnd , LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
@@ -1869,23 +1879,26 @@ begin
     '  mormot.core.variants;', LineEnd,
     LineEnd,
     'type', LineEnd, LineEnd]);
+
+  fLineIndent := '  ';
+
   // append all enumeration types
   if fEnums.Count > 0 then
   begin
     for i := 0 to fEnums.Count - 1 do
-      Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition('  '));
+      Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition);
     Append(result, LineEnd, LineEnd);
   end;
   // append all records
   rec := GetOrderedRecords;
   for i := 0 to high(rec) do
-    Append(result, rec[i].ToTypeDefinition('  '), LineEnd);
+    Append(result, rec[i].ToTypeDefinition, LineEnd);
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
     Append(result, [LineEnd, LineEnd, 'const', LineEnd, LineEnd]);
     for i := 0 to fEnums.Count - 1 do
-      Append(result, ['  ', TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
+      Append(result, [LineIndent, TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
   end;
   // start implementation section
   Append(result, [LineEnd, LineEnd,
@@ -1896,7 +1909,7 @@ begin
   begin
     Append(result, ['const', LineEnd]);
     for i := 0 to high(rec) do
-      Append(result, ['  ', rec[i].ToRttiTextRepresentation, LineEnd]);
+      Append(result, [LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
   end;
   // define the RTTI registratoin procedure
   Append(result, [LineEnd, LineEnd,
@@ -1952,7 +1965,7 @@ begin
   result := '';
   // unit common definitions
   Append(result, [
-    GetDescription(Info, 'Client unit for', LineEnd),
+    GetUnitDescription('Client unit for'),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
     '{$mode ObjFPC}{$H+}', LineEnd,
@@ -1977,6 +1990,8 @@ begin
     '  public', LineEnd,
     '    // initialize with an associated HTTP/JSON request', LineEnd,
     '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
+
+  fLineIndent := '    ';
   // append all methods, regrouped per tag (if any)
   bytag := GetOperationsByTag;
   for i := 0 to high(bytag) do
@@ -2004,8 +2019,8 @@ begin
           '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
           '    ////', u, LineEnd, LineEnd]);
       end;
-      Append(result, op.Documentation(LineEnd, '    ', Self));
-      Append(result, ['    ', op.Declaration('', self), LineEnd]);
+      Append(result, op.Documentation(Self));
+      Append(result, [LineIndent, op.Declaration('', self), LineEnd]);
     end;
   end;
   // finalize the class definition and start the implementation section
