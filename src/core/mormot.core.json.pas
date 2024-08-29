@@ -10448,7 +10448,7 @@ begin
         fJsonSave := @_JS_RttiCustom;
      if (not Assigned(fJsonLoad)) and
         (Flags * [rcfWithoutRtti, rcfHasNestedProperties] <> []) then
-      fJsonLoad := @_JL_RttiCustom
+       fJsonLoad := @_JL_RttiCustom
     end;
   end;
   // TRttiJson.RegisterCustomSerializer() custom callbacks have priority

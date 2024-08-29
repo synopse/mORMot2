@@ -5880,6 +5880,14 @@ begin
     lTable.Free;
   end;
   Doc.Clear;
+  Doc.InitJson('{"a":{"b":1,"c":1},d:3}');
+  Check(Doc.FlattenFromNestedObjects('.'));
+  CheckEqual(Doc.ToJson, '{"a.b":1,"a.c":1,"d":3}');
+  Doc.Clear;
+  Doc.InitJson('{a:{b:1,b:10},d:3}');
+  Check(Doc.FlattenFromNestedObjects('.'));
+  CheckEqual(Doc.ToJson, '{"a.b":1,"a.b2":10,"d":3}');
+  Doc.Clear;
   Check(Doc.InitJson(TEST_DATA_2));
   s := Doc.U['raw_licence'];
   Check(s <> '');
