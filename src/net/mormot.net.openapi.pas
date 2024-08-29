@@ -38,10 +38,13 @@ const
 type
   /// exception class raised by this Unit
   EOpenApi = class(ESynException);
+  /// Parser class used as a Schema context, to access version or already parsed types
+  TOpenApiParser = class;
+
+  TOpenApiVersion = (oavUnknown, oav2, oav3);
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Schema
   POpenApiSchema = ^TOpenApiSchema;
-
   /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiSchema = record
@@ -87,7 +90,24 @@ type
     Data: TDocVariantData;
     // access to the OpenAPI Response information
     function Description: RawUtf8;
-    function Schema: POpenApiSchema;
+    function Schema(Parser: TOpenApiParser): POpenApiSchema;
+  end;
+
+
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI RequestBody
+  POpenApiRequestBody = ^TOpenApiRequestBody;
+  /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content (OpenApi >= 3.x only)
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenApiRequestBody = record
+  {$else}
+  TOpenApiRequestBody = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// transtype the POpenApiRequestBody pointer into a TDocVariantData content
+    Data: TDocVariantData;
+    // access to the OpenAPI RequestBody information
+    function Description: RawUtf8;
+    function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
@@ -102,8 +122,8 @@ type
     /// transtype the POpenApiParameter pointer into a TDocVariantData content
     Data: TDocVariantData;
     // access to the OpenAPI Parameter information
-    function AsSchema: POpenApiSchema;
     function Name: RawUtf8;
+    function Description: RawUtf8;
     function AsPascalName: RawUtf8;
     function _In: RawUtf8;
     function AllowEmptyValues: boolean;
@@ -111,7 +131,7 @@ type
     /// true if Default or not Required
     function HasDefaultValue: boolean;
     function Required: boolean;
-    function Schema: POpenApiSchema;
+    function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
   /// a dynamic array of pointers wrapper to OpenAPI Parameter(s)
   POpenApiParameterDynArray = array of POpenApiParameter;
@@ -156,7 +176,8 @@ type
     function Tags: TRawUtf8DynArray;
     function Deprecated: boolean;
     function Parameters: POpenApiParameters;
-    function PayloadParameter: POpenApiParameter;
+    function RequestBody(Parser: TOpenApiParser): POpenApiRequestBody;
+    function BodySchema(Parser: TOpenApiParser): POpenApiSchema;
     function Responses: PDocVariantData;
     property Response[aStatusCode: integer]: POpenApiResponse
       read GetResponseForStatusCode;
@@ -208,8 +229,8 @@ type
   TOpenApiSpecs = object
   {$endif USERECORDWITHMETHODS}
   private
-    function GetDefinitionByName(const aName: RawUtf8): POpenApiSchema;
     function GetPathItemByName(const aPath: RawUtf8): POpenApiPathItem;
+    function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
   public
     /// transtype the POpenApiSpecs pointer into a TDocVariantData content
     Data: TDocVariantData;
@@ -219,17 +240,18 @@ type
     function Paths: PDocVariantData;
     function Tags: PDocVariantData;
     function Version: RawUtf8;
-    property Definition[const aName: RawUtf8]: POpenApiSchema
-      read GetDefinitionByName;
+    function VersionEnum: TOpenApiVersion;
     property Path[const aPath: RawUtf8]: POpenApiPathItem
       read GetPathItemByName;
+    function Components: PDocVariantData;
+    function Schemas: PDocVariantData;
+    property Schema[const aName: RawUtf8]: POpenApiSchema
+      read GetSchemaByName;
   end;
 
 
 { ************************************ FPC/Delphi Pascal Client Code Generation }
 
-type
-  TOpenApiParser = class;
   TPascalCustomType = class;
 
   /// define any Pascal type, as basic type of custom type
@@ -255,7 +277,7 @@ type
     function ToPascalName(AllowArrayType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
     function ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
-    function ToDefaultParameterValue(aParam: POpenApiParameter): RawUtf8;
+    function ToDefaultParameterValue(aParam: POpenApiParameter; Parser: TOpenApiParser): RawUtf8;
 
     function IsBuiltin: boolean;
     function IsEnum: boolean;
@@ -364,7 +386,7 @@ type
     // Resolve parameters/responses types
     procedure ResolveTypes(Parser: TOpenApiParser);
     function GetAllParameters: POpenApiParameterDynArray;
-    function Documentation(const LineEnd, LineIndent: RawUtf8): RawUtf8;
+    function Documentation(const LineEnd, LineIndent: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function Declaration(const ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function Body(const ClassName, BasePath: RawUtf8; Parser: TOpenApiParser): RawUtf8;
     function FunctionName: RawUtf8;
@@ -381,6 +403,7 @@ type
   /// the main OpenAPI parser and pascal code generator class
   TOpenApiParser = class
   private
+    fVersion: TOpenApiVersion;
     fSpecs: TDocVariantData;
     fRecords: TRawUtf8List; // objects are owned TPascalRecord
     fEnums: TRawUtf8List;   // objects are owned TPascalEnum
@@ -414,6 +437,7 @@ type
       read fOperations;
     property LineEnd: RawUtf8
       read fLineEnd;
+    property Version: TOpenApiVersion read fVersion;
   end;
 
 
@@ -568,9 +592,31 @@ begin
   result := Data.U['description'];
 end;
 
-function TOpenApiResponse.Schema: POpenApiSchema;
+function TOpenApiResponse.Schema(Parser: TOpenApiParser): POpenApiSchema;
 begin
-  result := POpenApiSchema(Data.O['schema']);
+  if Parser.Version = oav2 then
+    result := POpenApiSchema(Data.O['schema'])
+  else
+    // We only handle application/json
+    result := POpenApiSchema(Data.O['content']^.O[JSON_CONTENT_TYPE].O['schema'])
+end;
+
+
+
+{ TOpenApiRequestBody }
+
+function TOpenApiRequestBody.Description: RawUtf8;
+begin
+  result := Data.U['description'];
+end;
+
+function TOpenApiRequestBody.Schema(Parser: TOpenApiParser): POpenApiSchema;
+begin
+  if Parser.Version = oav3 then
+    result := POpenApiSchema(Data.GetPVariantByPath('content.application/json.schema'))
+  // Note: Self is actually a POpenApiParameter since RequestBody appeared in version 3
+  else if not Data.GetAsObject('schema', PDocVariantData(result)) then
+    result := nil;
 end;
 
 
@@ -582,9 +628,9 @@ begin
   result := Data.B['allowEmptyValue'];
 end;
 
-function TOpenApiParameter.AsSchema: POpenApiSchema;
+function TOpenApiParameter.Description: RawUtf8;
 begin
-  result := POpenApiSchema(@self);
+  result := Data.U['description'];
 end;
 
 function TOpenApiParameter.Default: PVariant;
@@ -612,9 +658,11 @@ begin
   result := Data.B['required'];
 end;
 
-function TOpenApiParameter.Schema: POpenApiSchema;
+function TOpenApiParameter.Schema(Parser: TOpenApiParser): POpenApiSchema;
 begin
-  if not Data.GetAsObject('schema', PDocVariantData(result)) then
+  if Parser.Version = oav2 then
+    result := POpenApiSchema(@Self)
+  else if not Data.GetAsObject('schema', PDocVariantData(result)) then
     result := nil;
 end;
 
@@ -701,21 +749,37 @@ begin
   result := POpenApiParameters(Data.A['parameters']);
 end;
 
-function TOpenApiOperation.PayloadParameter: POpenApiParameter;
+function TOpenApiOperation.RequestBody(Parser: TOpenApiParser
+  ): POpenApiRequestBody;
 var
   p: POpenApiParameters;
-  i: PtrInt;
+  i: Integer;
 begin
-  p := Parameters;
-  if p <> nil then
-    for i := 0 to p.Count - 1 do
-    begin
-      result := p.Parameter[i];
-      if (result^._In = 'body') and
-         (result^.Name = 'payload') then
-        exit;
-    end;
-  result := nil;
+  if Parser.Version = oav2 then
+  begin
+    p := Parameters;
+    if p <> nil then
+      for i := 0 to p.Count - 1 do
+      begin
+        result := POpenApiRequestBody(p.Parameter[i]);
+        if POpenApiParameter(result)^._In = 'body' then
+          exit;
+      end;
+    result := nil;
+  end
+  else if not Data.GetAsObject('requestBody', PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiOperation.BodySchema(Parser: TOpenApiParser): POpenApiSchema;
+var
+  rb: POpenApiRequestBody;
+begin
+  rb := RequestBody(Parser);
+  if Assigned(rb) then
+    result := rb^.Schema(Parser)
+  else
+    result := nil;
 end;
 
 function TOpenApiOperation.GetResponseForStatusCode(
@@ -749,15 +813,15 @@ end;
 
 { TOpenApiSpecs }
 
-function TOpenApiSpecs.GetDefinitionByName(const aName: RawUtf8): POpenApiSchema;
-begin
-  if not Definitions^.GetAsObject(aName, PDocVariantData(result)) then
-    result := nil;
-end;
-
 function TOpenApiSpecs.GetPathItemByName(const aPath: RawUtf8): POpenApiPathItem;
 begin
   if not Paths^.GetAsObject(aPath, PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiSpecs.GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
+begin
+  if not Schemas^.GetAsObject(aName, PDocVariantData(result)) then
     result := nil;
 end;
 
@@ -785,6 +849,35 @@ function TOpenApiSpecs.Version: RawUtf8;
 begin
   if not Data.GetAsRawUtf8('swagger', result) then
     result := Data.U['openapi'];
+end;
+
+function TOpenApiSpecs.VersionEnum: TOpenApiVersion;
+var
+  aVersion: RawUtf8;
+begin
+  result := oavUnknown;
+  aVersion := Version;
+
+  if aVersion <> '' then
+  begin
+    if aVersion[1] = '2' then
+      result := oav2
+    else if aVersion[1] = '3' then
+      result := oav3;
+  end;
+end;
+
+function TOpenApiSpecs.Components: PDocVariantData;
+begin
+  result := Data.O['components'];
+end;
+
+function TOpenApiSpecs.Schemas: PDocVariantData;
+begin
+  if not IsOpenApiVersion then
+    result := Definitions
+  else
+    result := Components.O['schemas'];
 end;
 
 
@@ -838,14 +931,15 @@ end;
 
 procedure TPascalOperation.ResolveTypes(Parser: TOpenApiParser);
 var
-  p: POpenApiParameter;
   cod: integer;
   v: PDocVariantData;
   i: PtrInt;
+  rbSchema: POpenApiSchema;
 begin
-  p := fOperation^.PayloadParameter;
-  if Assigned(p) then
-    fPayloadParameterType := TPascalType.LoadFromSchema(Parser, p^.Schema);
+  rbSchema := fOperation^.BodySchema(Parser);
+  if Assigned(rbSchema) then
+    fPayloadParameterType := TPascalType.LoadFromSchema(Parser, rbSchema);
+
   v := fOperation.Responses;
   for i := 0 to v^.Count - 1 do
   begin
@@ -855,7 +949,7 @@ begin
     begin
       fSuccessResponseCode := cod;
       fSuccessResponseType := TPascalType.LoadFromSchema(
-        Parser, POpenApiResponse(@v^.Values[i])^.Schema);
+        Parser, POpenApiResponse(@v^.Values[i])^.Schema(Parser));
       break; // use the first success
     end;
   end;
@@ -876,8 +970,8 @@ begin
     result[pn + i] := o^.Parameter[i];
 end;
 
-function TPascalOperation.Documentation(const LineEnd: RawUtf8;
-  const LineIndent: RawUtf8): RawUtf8;
+function TPascalOperation.Documentation(const LineEnd, LineIndent: RawUtf8;
+  Parser: TOpenApiParser): RawUtf8;
 var
   params: POpenApiParameterDynArray;
   p: POpenApiParameter;
@@ -886,6 +980,7 @@ var
   code: integer;
   r: POpenApiResponse;
   i: PtrInt;
+  rb: POpenApiRequestBody;
 begin
   result := FormatUtf8('%// [%] %%', [LineIndent, ToText(fMethod), fPath, LineEnd]);
 
@@ -895,24 +990,37 @@ begin
   // Description
   if fOperation^.Description <> '' then
     Append(result, [LineIndent, '// Description:', LineEnd,
-      LineIndent, '//   ', StringReplaceAll(fOperation^.Description, LineEnd,
-        FormatUtf8('%%//   ', [LineEnd + LineIndent])), LineEnd]);
+      LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
+        FormatUtf8(#10'%//   ', [LineIndent])), LineEnd]);
   // params
   params := GetAllParameters;
-  if params <> nil then
+  rb := fOperation^.RequestBody(Parser);
+  if (params <> nil) or (Assigned(rb) and Assigned(rb^.Schema(Parser))) then
   begin
     Append(result, [LineIndent, '//', LineEnd,
                     LineIndent, '// params:', LineEnd]);
     for i := 0 to high(params) do
     begin
       p := params[i];
+      // Handled below
+      if p^._In = 'body' then
+        continue;
       Append(result, [LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
       if p^.Required then
         Append(result, '*');
       if p^.Default <> nil then
         Append(result, [' (default=', p^.Default^, ')']);
-      if p^.AsSchema^.Description <> '' then
-        Append(result, ': ', p^.AsSchema^.Description);
+      if p^.Description <> '' then
+        Append(result, ': ', p^.Description);
+      Append(result, LineEnd);
+    end;
+
+    // Request body
+    if Assigned(rb) then
+    begin
+      Append(result, LineIndent, '// - [body] Payload*');
+      if rb^.Description <> '' then
+        Append(result, ': ', rb^.Description);
       Append(result, LineEnd);
     end;
   end;
@@ -971,11 +1079,11 @@ begin
           Append(result, '; ');
         inc(ndx);
       end;
-      pt := TPascalType.LoadFromSchema(Parser, p^.AsSchema);
+      pt := TPascalType.LoadFromSchema(Parser, p^.Schema(Parser));
       try
         if p^.HasDefaultValue then
           AddRawUtf8(def, FormatUtf8('%: % = %', [p^.AsPascalName,
-              pt.ToPascalName, pt.ToDefaultParameterValue(p)]))
+              pt.ToPascalName, pt.ToDefaultParameterValue(p, Parser)]))
         else
           Append(result, [p^.AsPascalName, ': ', pt.ToPascalName]);
       finally
@@ -1026,7 +1134,7 @@ begin
   for i := 0 to high(Parameters) do
   begin
     Param := Parameters[i];
-    ParamType := TPascalType.LoadFromSchema(Parser, Param^.AsSchema);
+    ParamType := TPascalType.LoadFromSchema(Parser, Param^.Schema(Parser));
     try
       if Param^._In = 'path' then
       begin
@@ -1350,7 +1458,8 @@ begin
     result := VarName;
 end;
 
-function TPascalType.ToDefaultParameterValue(aParam: POpenApiParameter): RawUtf8;
+function TPascalType.ToDefaultParameterValue(aParam: POpenApiParameter;
+  Parser: TOpenApiParser): RawUtf8;
 var
   DefaultValue: PVariant;
   t: RawUtf8;
@@ -1372,7 +1481,7 @@ begin
   else
   begin
     // default from type
-    t := aParam^.AsSchema^._Type;
+    t := aParam^.Schema(Parser)^._Type;
     if t = 'string' then
       result := ''''''
     else if (t = 'number') or
@@ -1513,7 +1622,8 @@ var
   v: PDocVariantData;
   i: PtrInt;
 begin
-  v := Specs^.Definitions;
+  fVersion := Specs^.VersionEnum;
+  v := Specs^.Schemas;
   for i := 0 to v^.Count - 1 do
     if not fRecords.Exists(v^.Names[i]) then
       fRecords.AddObject(v^.Names[i], ParseDefinition(v^.Names[i]));
@@ -1530,7 +1640,7 @@ var
   propname: RawUtf8;
   v: PDocVariantData;
 begin
-  s := Specs^.Definition[aDefinitionName];
+  s := Specs^.Schema[aDefinitionName];
   if not Assigned(s) then
     EOpenApi.RaiseUtf8('Cannot parse missing definition: %', [aDefinitionName]);
   if not s^.IsObject then
@@ -1729,7 +1839,7 @@ begin
     exit;
   result := FormatUtf8('/// % %%', [UnitDescription, Info^.U['title'], LineEnd]);
   if Info^.GetAsRawUtf8('description', u) then
-    Append(result, ['// - ', u, LineEnd]);
+    Append(result, ['// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
   if Info^.GetAsRawUtf8('version', u) then
     Append(result, ['// - version ', u, LineEnd]);
   if Info^.GetValueByPath('license.name', v) then
@@ -1894,7 +2004,7 @@ begin
           '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
           '    ////', u, LineEnd, LineEnd]);
       end;
-      Append(result, op.Documentation(LineEnd, '    '));
+      Append(result, op.Documentation(LineEnd, '    ', Self));
       Append(result, ['    ', op.Declaration('', self), LineEnd]);
     end;
   end;
