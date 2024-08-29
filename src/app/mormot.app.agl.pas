@@ -1654,7 +1654,7 @@ function TSynAngelize.DoHttpGet(const aUri: RawUtf8): integer;
 begin
   result := 0;
   try
-    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS, true);
+    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS, {forcesocket:}true);
   except
     result := -500; // e.g. on TCP or TLS connection error
   end;

@@ -125,8 +125,7 @@ begin
       if not IdemPChar(pointer(url), 'HTTP:') then
         url := 'https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/' + url;
-      pets[i] := HttpGet(url, nil, false, nil, 0,
-        {forcesocket=}true, {ignorecerterror:}true);
+      pets[i] := HttpGet(url, nil, false, nil, 0, {forcesock:}true, {igncerterr:}true);
       if pets[i] <> '' then
         FileFromString(pets[i], fn);
     end;
