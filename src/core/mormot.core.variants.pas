@@ -1356,6 +1356,9 @@ type
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
     function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer; 
+    /// quickly search if aName does already exist in Names[] and make it
+    // unique by adding a counter, if needed
+    function EnsureUniqueName(const aName: RawUtf8): RawUtf8;
     {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in dv do" statements
     // - returns pointers over all Names[] and Values[]
@@ -6953,6 +6956,22 @@ begin
     DocVariantType.InternNames.Unique(VName[result], aName)
   else
     VName[result] := aName;
+end;
+
+function TDocVariantData.EnsureUniqueName(const aName: RawUtf8): RawUtf8;
+var
+  suffix: integer;
+begin
+  result := aName;
+  if GetValueIndex(result) < 0 then
+    exit; // unique
+  for suffix := 2 to 100 do // keep it rational
+  begin
+    Make([aName, suffix], result);
+    if GetValueIndex(result) < 0 then
+      exit;
+  end;
+  EDocVariant.RaiseUtf8('EnsureUniqueName(%) failed', [aName]); // paranoid
 end;
 
 {$ifdef HASITERATORS}
