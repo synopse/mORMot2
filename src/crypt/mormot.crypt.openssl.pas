@@ -874,7 +874,7 @@ end;
 
 procedure TAesAbstractOsl.AfterCreate;
 var
-  nam: TShort16;
+  nam: TShort15;
 begin
   AlgoName(nam); // always #0 terminated
   fAes.Init(self, pointer(@nam[1]));
@@ -961,7 +961,7 @@ end;
 
 function TAesGcmOsl.AesGcmInit: boolean;
 var
-  nam: TShort16;
+  nam: TShort15;
 begin
   AlgoName(nam); // always #0 terminated
   fAes.Init(self, pointer(@nam[1]));

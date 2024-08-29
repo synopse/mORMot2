@@ -8065,7 +8065,7 @@ var
   n: PRawUtf8;
   prefix: RawUtf8;
   v: PVariant;
-  o: PDocVariantData;
+  obj: PDocVariantData;
   nested: TDocVariantData;
 begin
   // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
@@ -8079,15 +8079,15 @@ begin
   v := pointer(VValue);
   for n1 := 1 to Count do
   begin
-    if _SafeObject(v^, o) then
+    if _SafeObject(v^, obj) then
     begin
       result := true; // was flattened
       prefix := n^;
       if aSepChar <> #0 then
         Append(prefix, aSepChar); // #0 = no char appended
-      for n2 := 0 to o^.Count - 1 do
-        nested.AddValue(nested.EnsureUniqueName(prefix + o^.Names[n2]),
-          o^.Values[n2]);
+      for n2 := 0 to obj^.Count - 1 do
+        nested.AddValue(nested.EnsureUniqueName(prefix + obj^.Names[n2]),
+          obj^.Values[n2]);
     end
     else
       nested.AddValue(n^, v^); // just insert regular functions
