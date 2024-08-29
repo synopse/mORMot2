@@ -5022,6 +5022,23 @@ begin
   result := Data.Has(dvoReturnNullForUnknownProperty); // to avoid error
 end;
 
+procedure AddNameValueJson(w: TJsonWriter; nam: PPUtf8Char; val: PVariant;
+  checkExtendedPropName: boolean);
+begin
+  if checkExtendedPropName and
+     JsonPropNameValid(nam^) then
+    w.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
+  else
+  begin
+    w.AddDirect('"');
+    w.AddJsonEscape(nam^);
+    w.AddDirect('"');
+  end;
+  w.AddDirect(':');
+  w.AddVariant(val^, twJsonEscape);
+  w.AddComma;
+end;
+
 procedure TDocVariant.ToJson(W: TJsonWriter; Value: PVarData);
 var
   forced: TTextWriterOptions;
@@ -5030,6 +5047,7 @@ var
   vt: cardinal;
   n: integer;
   checkExtendedPropName: boolean;
+  dv: PDocVariantData absolute Value;
 begin
   repeat
     vt := Value^.VType;
@@ -5045,42 +5063,31 @@ begin
   forced := [];
   if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
   begin
-    if PDocVariantData(Value)^.Has(dvoSerializeAsExtendedJson) then
+    if dv^.Has(dvoSerializeAsExtendedJson) then
       forced := [twoForceJsonExtended]
     else
       forced := [twoForceJsonStandard];
     W.CustomOptions := W.CustomOptions + forced;
   end;
-  n := PDocVariantData(Value)^.VCount;
-  val := pointer(PDocVariantData(Value)^.VValue);
-  if PDocVariantData(Value)^.IsObject then
+  n := dv^.VCount;
+  val := pointer(dv^.VValue);
+  if dv^.IsObject then
   begin
     checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
     W.Add('{');
-    nam := pointer(PDocVariantData(Value)^.VName);
+    nam := pointer(dv^.VName);
     if n <> 0 then
       repeat
-        if checkExtendedPropName and
-           JsonPropNameValid(nam^) then
-          W.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
-        else
-        begin
-          W.AddDirect('"');
-          W.AddJsonEscape(nam^);
-          W.AddDirect('"');
-        end;
-        W.AddDirect(':');
-        W.AddVariant(val^, twJsonEscape);
+        AddNameValueJson(W, nam, val, checkExtendedPropName);
         dec(n);
         if n = 0 then
           break;
-        W.AddComma;
         inc(nam);
         inc(val);
       until false;
-    W.AddDirect('}');
+    W.CancelLastComma('}');
   end
-  else if PDocVariantData(Value)^.IsArray then
+  else if dv^.IsArray then
   begin
     W.Add('[');
     if n <> 0 then
@@ -8767,6 +8774,7 @@ var
   Up: array[byte] of AnsiChar;
   temp: TTextWriterStackBuffer;
   n: integer;
+  checkExtendedPropName: boolean;
   nam: PPUtf8Char;
   val: PVariant;
   wr: TJsonWriter;
@@ -8780,26 +8788,14 @@ begin
   UpperCopy255(Up, aStartName)^ := #0;
   wr := TJsonWriter.CreateOwnedStream(temp);
   try
+    checkExtendedPropName := Has(dvoSerializeAsExtendedJson);
     wr.AddDirect('{');
     n := VCount;
     nam := pointer(VName);
     val := pointer(VValue);
     repeat
       if IdemPChar(nam^, Up) then
-      begin
-        if Has(dvoSerializeAsExtendedJson) and
-           JsonPropNameValid(nam^) then
-          wr.AddShort(nam^, PStrLen(nam^ - _STRLEN)^)
-        else
-        begin
-          wr.AddDirect('"');
-          wr.AddJsonEscape(nam^);
-          wr.AddDirect('"');
-        end;
-        wr.AddDirect(':');
-        wr.AddVariant(val^, twJsonEscape);
-        wr.AddComma;
-      end;
+        AddNameValueJson(wr, nam, val, checkExtendedPropName);
       dec(n);
       if n = 0 then
         break;
@@ -9023,14 +9019,15 @@ end;
 
 procedure TDocVariantData.SaveToJsonFile(const FileName: TFileName);
 var
-  F: TStream;
+  f: TStream;
   wr: TJsonWriter;
+  temp: TTextWriterStackBuffer;
 begin
   if cardinal(VType) <> DocVariantVType then
     exit;
-  F := TFileStreamEx.Create(FileName, fmCreate);
+  f := TFileStreamEx.Create(FileName, fmCreate);
   try
-    wr := TJsonWriter.Create(F, 65536);
+    wr := TJsonWriter.Create(f, @temp, SizeOf(temp));
     try
       DocVariantType.ToJson(wr, @self);
       wr.FlushFinal;
@@ -9038,7 +9035,7 @@ begin
       wr.Free;
     end;
   finally
-    F.Free;
+    f.Free;
   end;
 end;
 
@@ -9111,12 +9108,11 @@ var
 begin
   if IsObject then
     raise EDocVariant.Create('ToRawUtf8DynArray expects a dvArray');
-  if IsArray then
-  begin
-    SetLength(Result, VCount);
-    for ndx := 0 to VCount - 1 do
-      VariantToUtf8(VValue[ndx], Result[ndx], wasString);
-  end;
+  if not IsArray then
+    exit;
+  SetLength(Result, VCount);
+  for ndx := 0 to VCount - 1 do
+    VariantToUtf8(VValue[ndx], Result[ndx], wasString);
 end;
 
 function TDocVariantData.ToRawUtf8DynArray: TRawUtf8DynArray;
@@ -10282,6 +10278,7 @@ begin
     TextBufferToVariant(GotoNextNotSpace(Expression), {allowdouble=}true, Value^);
   result := true;
 end;
+
 
 { ************** Variant Binary Serialization }
 
@@ -11545,8 +11542,6 @@ end;
 {$endif HASIMPLICITOPERATOR}
 
 
-
-
 { EDocDict }
 
 class procedure EDocDict.Error(method: AnsiChar; const key: RawUtf8; const v: variant);
@@ -12003,13 +11998,13 @@ end;
 
 {$endif HASIMPLICITOPERATOR}
 
+
 procedure InitializeVariantsJson;
 begin
   // called from mormot.core.json once TRttiJson is set as global RTTI class
   TDocList.RegisterToRtti(TypeInfo(IDocList));
   TDocDict.RegisterToRtti(TypeInfo(IDocDict));
 end;
-
 
 var
   // naive but efficient type cache - e.g. for TBsonVariant or TQuickJsVariant
