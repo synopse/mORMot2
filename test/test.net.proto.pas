@@ -95,7 +95,7 @@ procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
   fn: TFileName;
-  u, ud, uc: RawUtf8;
+  u, ud, uc, url: RawUtf8;
   pets: TRawUtf8DynArray;
   oa: TOpenApiParser;
 begin
@@ -121,8 +121,12 @@ begin
     pets[i] := StringFromFile(fn);
     if pets[i] = '' then
     begin
-      pets[i] := HttpGet('https://raw.githubusercontent.com/OAI/' +
-        'OpenAPI-Specification/main/examples/' + OpenApiRef[i]);
+      url := OpenApiRef[i];
+      if not IdemPChar(pointer(url), 'HTTP:') then
+        url := 'https://raw.githubusercontent.com/OAI/' +
+                 'OpenAPI-Specification/main/examples/' + url;
+      pets[i] := HttpGet(url, nil, false, nil, 0,
+        {forcesocket=}true, {ignorecerterror:}true);
       if pets[i] <> '' then
         FileFromString(pets[i], fn);
     end;
