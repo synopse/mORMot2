@@ -2036,12 +2036,14 @@ type
     function GetNames: TRawUtf8DynArray;
     /// map in-place {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
     // - the supplied aObjectPropName should match the incoming dotted value
-    // of ALL properties (e.g. 'obj' for "obj.prop1")
-    // - if any of the incoming property is not of "obj.prop#" form, the
-    // whole process would be ignored
+    // of ALL properties (e.g. 'obj' for "obj.prop1"); i.e. if any of the incoming
+    // property is not of "obj.prop#" form, the whole process would be ignored
+    // - if aSepChar is #0, no separation character will be necessary, so
+    // FlattenAsNestedObject('obj', #0) would match {"objprop1"..,"objprop2":..}
     // - return FALSE if the TDocVariant did not change
     // - return TRUE if the TDocVariant has been flattened
-    function FlattenAsNestedObject(const aObjectPropName: RawUtf8): boolean;
+    function FlattenAsNestedObject(const aObjectPropName: RawUtf8;
+      aSepChar: AnsiChar = '.'): boolean;
     /// map in-place {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
     // - any name collision will append a counter to make it unique
     // - return FALSE if the TDocVariant did not change
@@ -8029,7 +8031,7 @@ begin
 end;
 
 function TDocVariantData.FlattenAsNestedObject(
-  const aObjectPropName: RawUtf8): boolean;
+  const aObjectPropName: RawUtf8; aSepChar: AnsiChar): boolean;
 var
   ndx, len: PtrInt;
   Up: array[byte] of AnsiChar;
@@ -8041,11 +8043,13 @@ begin
      (aObjectPropName = '') or
      (not IsObject) then
     exit;
-  PWord(UpperCopy255(Up{%H-}, aObjectPropName))^ := ord('.'); // e.g. 'P.'
+  PWord(UpperCopy255(Up{%H-}, aObjectPropName))^ := ord(aSepChar); // e.g. 'P.'
   for ndx := 0 to Count - 1 do
     if not IdemPChar(pointer(VName[ndx]), Up) then
       exit; // all fields should match "p.####"
-  len := length(aObjectPropName) + 1;
+  len := length(aObjectPropName);
+  if aSepChar <> #0 then
+    inc(len); // #0 would match {"pa1":5,"pa2":"dfasdfa"}
   for ndx := 0 to Count - 1 do
     system.delete(VName[ndx], 1, len);
   nested := self;

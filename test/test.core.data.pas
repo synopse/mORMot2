@@ -5821,6 +5821,11 @@ begin
   check(Doc.FlattenAsNestedObject('p'));
   check(Doc.ToJson = '{"p":{"a1":5,"a2":"dfasdfa"}}');
   check(not Doc.FlattenAsNestedObject('p'));
+  Doc.Clear;
+  Doc.InitJson('{"pa1":5,"pa2":"dfasdfa"}');
+  check(not Doc.FlattenAsNestedObject('p'));
+  check(Doc.FlattenAsNestedObject('p', #0));
+  check(Doc.ToJson = '{"p":{"a1":5,"a2":"dfasdfa"}}');
   s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
   V := _Json(s);
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below
