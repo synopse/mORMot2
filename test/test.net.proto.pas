@@ -122,10 +122,12 @@ begin
     if pets[i] = '' then
     begin
       url := OpenApiRef[i];
-      if not IdemPChar(pointer(url), 'HTTP:') then
+      if not IdemPChar(pointer(url), 'HTTP') then
         url := 'https://raw.githubusercontent.com/OAI/' +
                  'OpenAPI-Specification/main/examples/' + url;
-      pets[i] := HttpGet(url, nil, false, nil, 0, {forcesock:}true, {igncerterr:}true);
+       JsonBufferReformat(pointer(
+        HttpGet(url, nil, false, nil, 0, {forcesock:}true, {igncerterr:}true)),
+        pets[i]);
       if pets[i] <> '' then
         FileFromString(pets[i], fn);
     end;

@@ -46,6 +46,8 @@ type
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Schema
   POpenApiSchema = ^TOpenApiSchema;
+  /// a dynamic array of pointers wrapper to OpenAPI Schema definition(s)
+  POpenApiSchemaDynArray = array of POpenApiSchema;
   /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiSchema = record
@@ -66,7 +68,7 @@ type
     function Description: RawUtf8;
     function Example: variant;
     function Reference: RawUtf8;
-    function AllOf: PDocVariantData;
+    function AllOf: POpenApiSchemaDynArray;
     function Items: POpenApiSchema;
     function Properties: PDocVariantData;
     property _Property[const aName: RawUtf8]: POpenApiSchema
@@ -97,7 +99,7 @@ type
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI RequestBody
   // - share the very same fields as TOpenApiResponse
-  POpenApiRequestBody = {$ifdef USERECORDWITHMETHODS} type {$endif} POpenApiResponse;
+  POpenApiRequestBody = {$ifdef USERECORDWITHMETHODS} type {$endif}POpenApiResponse;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
   POpenApiParameter = ^TOpenApiParameter;
@@ -256,8 +258,7 @@ type
   public
     constructor CreateBuiltin(const aBuiltinTypeName: RawUtf8;
       aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
-    constructor CreateCustom(aCustomType: TPascalCustomType;
-      aIsArray: boolean = false); overload;
+    constructor CreateCustom(aCustomType: TPascalCustomType); overload;
 
     class function LoadFromSchema(Parser: TOpenApiParser;
       Schema: POpenApiSchema; const SchemaName: RawUtf8 = ''): TPascalType;
@@ -289,7 +290,6 @@ type
     fPascalName: RawUtf8;
     fTypeOwned: boolean;
   public
-    class function SanitizePropertyName(const aName: RawUtf8): RawUtf8;
     constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     constructor CreateFrom(another: TPascalProperty);
@@ -441,12 +441,10 @@ type
     function ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8);
 
-    function GetRecord(aRecordName: RawUtf8;
-      NameIsReference: boolean = false): TPascalRecord;
+    function GetRecord(aRecordName: RawUtf8; NameIsReference: boolean = false): TPascalRecord;
     function GetOrderedRecords: TPascalRecordDynArray;
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
 
-    procedure Dump;
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
     function Specs: POpenApiSpecs;
@@ -479,6 +477,9 @@ const
 /// quickly check if a text is a case-insensitive pascal code keyword
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 
+/// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
+function SanitizePascalName(const aName: RawUtf8): RawUtf8;
+
 
 implementation
 
@@ -487,10 +488,17 @@ implementation
 
 { TOpenApiSchema }
 
-function TOpenApiSchema.AllOf: PDocVariantData;
+function TOpenApiSchema.AllOf: POpenApiSchemaDynArray;
+var
+  all: PDocVariantData;
+  i: PtrInt;
 begin
-  if not Data.GetAsArray('allOf', result) then
-    result := nil;
+  result := nil;
+  if not Data.GetAsArray('allOf', all) then
+    exit;
+  SetLength(result, all^.Count);
+  for i := 0 to high(result) do
+    result[i] := pointer(_Safe(all^.Values[i]));
 end;
 
 function TOpenApiSchema.Items: POpenApiSchema;
@@ -602,7 +610,7 @@ begin
   else if t = 'boolean' then
     result := 'boolean'
   else
-    result := 'TDocVariantData';
+    result := 'variant'; // typically a TDocVariantData
 end;
 
 
@@ -670,7 +678,7 @@ end;
 
 function TOpenApiParameter.AsPascalName: RawUtf8;
 begin
-  result := TPascalProperty.SanitizePropertyName(Name);
+  result := SanitizePascalName(Name);
 end;
 
 
@@ -887,6 +895,24 @@ end;
 
 { ************************************ FPC/Delphi Pascal Code Generation }
 
+function IsReservedKeyWord(const aName: RawUtf8): boolean;
+var
+  up: array[byte] of AnsiChar;
+begin
+  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
+  result := FastFindPUtf8CharSorted(
+    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
+end;
+
+function SanitizePascalName(const aName: RawUtf8): RawUtf8;
+begin
+  CamelCase(aName, result);
+  result[1] := UpCase(result[1]);
+  if IsReservedKeyWord(result) then
+    result := '_' + result;
+end;
+
+
 { TPascalCustomType }
 
 constructor TPascalCustomType.Create(aOwner: TOpenApiParser;
@@ -937,17 +963,17 @@ var
   code: integer;
   v: PDocVariantData;
   i: PtrInt;
-  status: RawUtf8;
-  rbSchema: POpenApiSchema;
-  e, existing: TPascalException;
+  status, json: RawUtf8;
+  resp: POpenApiSchema;
 begin
-  rbSchema := fOperation^.BodySchema(Parser);
-  if Assigned(rbSchema) then
-    fPayloadParameterType := TPascalType.LoadFromSchema(Parser, rbSchema);
+  resp := fOperation^.BodySchema(Parser);
+  if Assigned(resp) then
+    fPayloadParameterType := TPascalType.LoadFromSchema(Parser, resp);
   v := fOperation.Responses;
   for i := 0 to v^.Count - 1 do
   begin
     status := v^.Names[i];
+    resp := POpenApiResponse(@v^.Values[i])^.Schema(Parser);
     code := Utf8ToInteger(status, 0);
     if StatusCodeIsSuccess(code) or
        ((fSuccessResponseType = nil) and
@@ -956,19 +982,16 @@ begin
       if fSuccessResponseType = nil then // handle the first success
       begin
         fSuccessResponseCode := code;
-        fSuccessResponseType := TPascalType.LoadFromSchema(
-          Parser, POpenApiResponse(@v^.Values[i])^.Schema(Parser));
+        fSuccessResponseType := TPascalType.LoadFromSchema(Parser, resp);
       end;
     end
     else // generate a custom EJsonClient exception class for 4xx errors
     begin
-      // we don't know PascalName until it is parsed :/
-      e := TPascalException.Create(Parser, status, @v^.Values[i]);
-      existing := Parser.fExceptions.GetObjectFrom(e.PascalName);
-      if existing = nil then
-        Parser.fExceptions.AddObject(e.PascalName, e)
-      else
-        e.Free;
+      // we don't know PascalName until it is parsed so we use the json
+      json := resp^.Data.ToJson;
+      if Parser.fExceptions.GetObjectFrom(json) = nil then
+        Parser.fExceptions.AddObject(json,
+          TPascalException.Create(Parser, status, @v^.Values[i]));
     end;
   end;
 end;
@@ -1001,8 +1024,10 @@ var
   rs: POpenApiSchema;
   e: TPascalException;
 begin
-  result := FormatUtf8('%// [%] %%', [Parser.LineIndent, ToText(fMethod), fPath, Parser.LineEnd]);
-
+  // Request Definition
+  result := FormatUtf8('%// % [%] %%%//%%',
+    [Parser.LineIndent, fOperation^.Id, ToText(fMethod), fPath, Parser.LineEnd,
+     Parser.LineIndent, Parser.LineEnd]);
   // Summary
   if fOperation^.Summary <> '' then
     Append(result, [Parser.LineIndent, '// Summary: ', fOperation^.Summary, Parser.LineEnd]);
@@ -1017,7 +1042,7 @@ begin
   if (params <> nil) or (Assigned(rb) and Assigned(rb^.Schema(Parser))) then
   begin
     Append(result, [Parser.LineIndent, '//', Parser.LineEnd,
-                    Parser.LineIndent, '// params:', Parser.LineEnd]);
+                    Parser.LineIndent, '// Params:', Parser.LineEnd]);
     for i := 0 to high(params) do
     begin
       p := params[i];
@@ -1061,9 +1086,9 @@ begin
         Append(result, ' (main)')
       else if Assigned(rs) then
       begin
-        e := TPascalException.Create(Parser, status, r); // need parsing
-        Append(result, [' [', e.PascalName, ']']);
-        e.Free;
+        e := Parser.fExceptions.GetObjectFrom(rs^.Data.ToJson);
+        if e <> nil then // no need to parse, just recognize schema
+          Append(result, [' [', e.PascalName, ']']);
       end;
       if r^.Description <> '' then
         Append(result, [': ', r^.Description, Parser.LineEnd])
@@ -1241,7 +1266,8 @@ function TPascalOperation.FunctionName: RawUtf8;
 begin
   result := fOperation^.Id;
   if result <> '' then
-    result[1] := UpCase(result[1]); // as in regular Pascal
+    result := SanitizePascalName(result);
+    //result[1] := UpCase(result[1]); // as in regular Pascal
 end;
 
 
@@ -1250,18 +1276,18 @@ end;
 constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
   const aName: RawUtf8; aSchema: POpenApiSchema);
 begin
-  fType := TPascalType.LoadFromSchema(aOwner, aSchema, aName);
+  fType := TPascalType.LoadFromSchema(aOwner, aSchema, '');
   fTypeOwned := true;
   fName := aName;
   fSchema := aSchema;
-  fPascalName := SanitizePropertyName(fName);
+  fPascalName := SanitizePascalName(fName);
 end;
 
 constructor TPascalProperty.CreateFrom(another: TPascalProperty);
 begin
+  fType := another.PropType; // weak copy (keep fTypeOwned=false)
   fName := another.Name;
   fSchema := another.Schema;
-  fType := another.PropType; // weak copy (keep fTypeOwned=false)
   fPascalName := another.PascalName;
 end;
 
@@ -1272,28 +1298,11 @@ begin
   inherited Destroy;
 end;
 
-function IsReservedKeyWord(const aName: RawUtf8): boolean;
-var
-  up: array[byte] of AnsiChar;
-begin
-  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
-  result := FastFindPUtf8CharSorted(
-    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
-end;
-
-class function TPascalProperty.SanitizePropertyName(const aName: RawUtf8): RawUtf8;
-begin
-  CamelCase(aName, result);
-  result[1] := UpCase(result[1]);
-  if IsReservedKeyWord(result) then
-    result := '_' + result;
-end;
-
 
 { TPascalEnum }
 
-constructor TPascalEnum.Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
-  aSchema: POpenApiSchema);
+constructor TPascalEnum.Create(aOwner: TOpenApiParser;
+  const SchemaName: RawUtf8; aSchema: POpenApiSchema);
 var
   i: PtrInt;
 begin
@@ -1396,19 +1405,21 @@ begin
   IsArray := aIsArray;
 end;
 
-constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType;
-  aIsArray: boolean);
+constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
 begin
   fCustomType := aCustomType;
-  SetArray(aIsArray);
 end;
 
 class function TPascalType.LoadFromSchema(Parser: TOpenApiParser;
   Schema: POpenApiSchema; const SchemaName: RawUtf8): TPascalType;
 var
+  all: POpenApiSchemaDynArray;
   ref, fmt: RawUtf8;
   enumType: TPascalEnum;
 begin
+  all := Schema^.AllOf;
+  if length(all) = 1 then
+    Schema := all[0]; // typically a single "$ref": "..." entry
   ref := Schema^.Reference;
   if ref <> '' then
   begin
@@ -1419,9 +1430,12 @@ begin
       EOpenApi.RaiseUtf8('%.LoadFromSchema: unknown $ref=%', [self, ref]);
     result := LoadFromSchema(Parser, Schema, ref);
   end
-  else if Schema^.IsObject then
-    result := TPascalType.CreateCustom(
-      Parser.GetRecord(SchemaName, {isref=}false))
+  else if (all <> nil) or
+          Schema^.IsObject then
+    if SchemaName = '' then
+      result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema)
+    else
+      result := TPascalType.CreateCustom(Parser.GetRecord(SchemaName))
   else if Schema^.IsArray then
   begin
     // TODO: Handle array of arrays?
@@ -1452,9 +1466,6 @@ begin
     result := CustomType.PascalName
   else
     result := fBuiltinTypeName;
-  if not AsFinalType or
-     (NoRecordArrayTypes and (result = 'TDocVariantData')) then
-    result := 'variant';
   if IsArray then
   begin
     if Assigned(CustomType) then
@@ -1526,7 +1537,7 @@ begin
   fName := SchemaName;
   fSchema := Schema;
   fProperties := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
-  inherited Create(aOwner, 'T' + fName);
+  inherited Create(aOwner, 'T' + SanitizePascalName(fName));
 end;
 
 destructor TPascalRecord.Destroy;
@@ -1660,9 +1671,9 @@ end;
 
 procedure TOpenApiParser.Clear;
 begin
+  fSpecs.Clear;
   fRecords.Clear;
   fEnums.Clear;
-  fSpecs.Clear;
   fExceptions.Clear;
   ObjArrayClear(fOperations);
 end;
@@ -1707,7 +1718,7 @@ begin
   v := Specs^.Schemas;
   for i := 0 to v^.Count - 1 do
     if POpenApiSchema(@v^.Values[i])^.IsObject then
-      if not fRecords.Exists(v^.Names[i]) then
+      if not fRecords.Exists(v^.Names[i]) then // was not parsed as nested type
         fRecords.AddObject(v^.Names[i], ParseRecordDefinition(v^.Names[i]));
   v := Specs^.Paths;
   for i := 0 to v^.Count - 1 do
@@ -1739,37 +1750,32 @@ function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8): T
 var
   s: POpenApiSchema;
   i, j: PtrInt;
-  def: array of POpenApiSchema;
+  def: POpenApiSchemaDynArray;
   ref: RawUtf8;
   v: PDocVariantData;
 begin
+  // setup the new TPascalRecord instance
   s := Specs^.Schema[aDefinitionName];
   if not Assigned(s) then
     EOpenApi.RaiseUtf8('%.ParseRecordDefinition: no % definition in schema',
       [self, aDefinitionName]);
-  if not s^.IsObject then
-    EOpenApi.RaiseUtf8('%.ParseRecordDefinition: % is %, not object',
-      [self, aDefinitionName, s^._Type]);
-
   result := TPascalRecord.Create(self, aDefinitionName, s);
-  // fill def[] with all needed schemas
-  v := s^.AllOf;
-  if v <> nil then
-  begin
-    SetLength(def, v^.Count);
-    for i := 0 to v^.Count - 1 do
-      def[i] := @v^.Values[i];
-  end
-  else
-  begin
-    SetLength(def, 1);
-    def[0] := s;
-  end;
+  // aggregate all needed information
+  def := s^.AllOf;
+  if def = nil then
+    if not s^.IsObject then
+      EOpenApi.RaiseUtf8('%.ParseRecordDefinition: % is %, not object',
+        [self, aDefinitionName, s^._Type])
+    else
+    begin
+      SetLength(def, 1);
+      def[0] := s;
+    end;
   // append all fields to result.Properties
   for i := 0 to high(def) do
   begin
     s := def[i];
-    // append $ref properties first - making new copy of each property
+    // append $ref properties first - making copy of each TPascalProperty
     ref := s^.Reference;
     if ref <> '' then
       GetRecord(ref, {isref=}true).CopyProperties(result.fProperties);
@@ -1778,7 +1784,8 @@ begin
     if v <> nil then
       for j := 0 to v^.Count - 1 do
         result.fProperties.AddObject(v^.Names[j],
-          TPascalProperty.CreateFromSchema(self, v^.Names[j], @v^.Values[j]));
+          TPascalProperty.CreateFromSchema(self, v^.Names[j], @v^.Values[j]),
+          {raise=}false, {free=}nil, {replaceexisting=}true);
   end;
 end;
 
@@ -1915,16 +1922,6 @@ begin
   // caller will ensure a single fOperations[] method will be generated
 end;
 
-procedure TOpenApiParser.Dump;
-var
-  rec: TPascalRecordDynArray;
-  i: PtrInt;
-begin
-  rec := GetOrderedRecords;
-  for i := 0 to high(rec) do
-    ConsoleWrite(rec[i].ToTypeDefinition);
-end;
-
 function TOpenApiParser.GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
 var
   rec: TPascalRecordDynArray;
@@ -2041,7 +2038,7 @@ begin
     GetDescription('Client unit for', ''),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
-    '{$mode ObjFPC}{$H+}', LineEnd,
+    '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
     'interface', LineEnd,
     LineEnd,
@@ -2097,7 +2094,7 @@ begin
           '    ////', u, LineEnd, LineEnd]);
       end;
       Append(result, op.Documentation(Self));
-      Append(result, [LineIndent, op.Declaration('', self), LineEnd]);
+      Append(result, [LineIndent, op.Declaration('', self), LineEnd, LineEnd]);
     end;
   end;
   // finalize the class definition and start the implementation section
