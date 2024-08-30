@@ -527,7 +527,8 @@ type
     // - consider using the safer TryGetValue() or Items[] instead
     function FindKeyIndex(const key: TKey): PtrInt;
     /// returns the number of key/value pairs actually stored
-    // - this is not thread-safe so to be protected by ReadLock/ReadUnLock
+    // - this is not thread-safe so to be protected by ReadLock/ReadUnLock if
+    // you want to use the Key[] Value[] indexed properties
     function Count: integer;
     /// high-level access to the stored values from their associated keys
     // - GetItem() raise an EIKeyValue if the key is not available, unless

@@ -437,7 +437,7 @@ type
     fLineEnd: RawUtf8;
     fLineIndent: RawUtf8;
     procedure ParseSpecs;
-    function GetUnitDescription(const UnitDescription: RawUtf8): RawUtf8;
+    function GetDescription(const Described, Indent: RawUtf8): RawUtf8;
   public
     constructor Create;
     destructor Destroy; override;
@@ -1589,7 +1589,11 @@ begin
     Append(result, [fParser.LineIndent, '  ', p.fPascalName, ': ',
       p.fType.ToPascalName, ';', fParser.LineEnd]);
   end;
-  Append(result, [fParser.LineIndent, 'end;', fParser.LineEnd, ToArrayTypeDefinition]);
+  Append(result,
+    [fParser.LineIndent, 'end;', fParser.LineEnd,
+     fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
+       ' = ^', PascalName, ';', fParser.LineEnd,
+     ToArrayTypeDefinition]);
 end;
 
 function TPascalRecord.ToRttiTextRepresentation(WithClassName: boolean): RawUtf8;
@@ -1736,7 +1740,7 @@ begin
     ParsePath(v^.Names[i]);
 end;
 
-function TOpenApiParser.GetUnitDescription(const UnitDescription: RawUtf8): RawUtf8;
+function TOpenApiParser.GetDescription(const Described, Indent: RawUtf8): RawUtf8;
 var
   u: RawUtf8;
   v: variant;
@@ -1746,11 +1750,13 @@ begin
   Info := Specs^.Info;
   if Info = nil then
     exit;
-  result := FormatUtf8('/// % %%', [UnitDescription, Info^.U['title'], LineEnd]);
+  result := FormatUtf8('%/// % %%', [Indent, Described, Info^.U['title'], LineEnd]);
   if Info^.GetAsRawUtf8('description', u) then
-    Append(result, ['// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
+    Append(result, [Indent, '// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
+  if Indent <> '' then
+    exit;
   if Info^.GetAsRawUtf8('version', u) then
-    Append(result, ['// - version ', u, LineEnd]);
+    Append(result, [Indent, '// - version ', u, LineEnd]);
   if Info^.GetValueByPath('license.name', v) then
     Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
 end;
@@ -1962,7 +1968,7 @@ begin
   result := '';
   // unit common definitions
   Append(result, [
-    GetUnitDescription('DTOs for'),
+    GetDescription('DTOs for', ''),
     'unit ', UnitName, ';', LineEnd , LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
@@ -2062,7 +2068,7 @@ begin
   result := '';
   // unit common definitions
   Append(result, [
-    GetUnitDescription('Client unit for'),
+    GetDescription('Client unit for', ''),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
     '{$mode ObjFPC}{$H+}', LineEnd,
@@ -2081,7 +2087,7 @@ begin
     LineEnd,
     'type',
     LineEnd,
-    '  // ', Specs^.Info^.U['title'], LineEnd,
+    GetDescription('Client class for', '  '),
     '  ', ClientClassName, ' = class', LineEnd,
     '  private', LineEnd,
     '    fClient: IJsonClient;', LineEnd,
