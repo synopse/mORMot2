@@ -24,6 +24,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.data, // for TRawUtf8List
   mormot.core.variants,
   mormot.rest.core;
@@ -424,6 +425,7 @@ type
     fOperations: TPascalOperationDynArray;
     fLineEnd: RawUtf8;
     fLineIndent: RawUtf8;
+    fGeneratedBy, fGeneratedByLine: RawUtf8;
     procedure ParseSpecs;
     function GetDescription(const Described, Indent: RawUtf8): RawUtf8;
   public
@@ -1642,6 +1644,9 @@ begin
   fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fExceptions := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fLineEnd := CRLF; // default to OS value
+  FormatUtf8('Generated % by % via % - DO NOT MODIFY BY HAND!',
+    [NowTextDateShort, Executable.User, Executable.ProgramName], fGeneratedBy);
+  fGeneratedByLine := RawUtf8OfChar('-', length(fGeneratedBy));
 end;
 
 destructor TOpenApiParser.Destroy;
@@ -1935,6 +1940,10 @@ begin
     LineEnd,
     'interface', LineEnd,
     LineEnd,
+    '// ', fGeneratedByLine, LineEnd,
+    '// ', fGeneratedBy, LineEnd,
+    '// ', fGeneratedByLine, LineEnd,
+    LineEnd,
     'uses', LineEnd,
     '  classes,', LineEnd,
     '  sysutils,', LineEnd,
@@ -2035,6 +2044,10 @@ begin
     '{$mode ObjFPC}{$H+}', LineEnd,
     LineEnd,
     'interface', LineEnd,
+    LineEnd,
+    '// ', fGeneratedByLine, LineEnd,
+    '// ', fGeneratedBy, LineEnd,
+    '// ', fGeneratedByLine, LineEnd,
     LineEnd,
     'uses', LineEnd,
     '  classes,', LineEnd,
