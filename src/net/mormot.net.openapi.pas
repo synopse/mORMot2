@@ -96,7 +96,7 @@ type
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI RequestBody
   // - share the very same fields as TOpenApiResponse
-  POpenApiRequestBody = type POpenApiResponse;
+  POpenApiRequestBody = {$ifdef USERECORDWITHMETHODS} type {$endif} POpenApiResponse;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
   POpenApiParameter = ^TOpenApiParameter;
