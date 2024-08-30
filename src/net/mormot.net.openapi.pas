@@ -354,7 +354,7 @@ type
     fPrefix: RawUtf8;
     fChoices: TDocVariantData;
   public
-    constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
+    constructor Create(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     function ToTypeDefinition: RawUtf8; override;
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; override;
@@ -1302,18 +1302,18 @@ end;
 { TPascalEnum }
 
 constructor TPascalEnum.Create(aOwner: TOpenApiParser;
-  const SchemaName: RawUtf8; aSchema: POpenApiSchema);
+  const aName: RawUtf8; aSchema: POpenApiSchema);
 var
   i: PtrInt;
 begin
-  inherited Create(aOwner, 'T' + SchemaName);
-  fName := SchemaName;
+  inherited Create(aOwner, 'T' + aName);
+  fName := aName;
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0);
-  for i := 0 to length(SchemaName) - 1 do
-    if SchemaName[i] in ['A' .. 'Z'] then
-      Append(fPrefix, SchemaName[i]);
+  for i := 1 to length(aName) do
+    if aName[i] in ['A' .. 'Z'] then
+      Append(fPrefix, aName[i]);
   LowerCaseSelf(fPrefix);
 end;
 
@@ -1414,7 +1414,8 @@ class function TPascalType.LoadFromSchema(Parser: TOpenApiParser;
   Schema: POpenApiSchema; const SchemaName: RawUtf8): TPascalType;
 var
   all: POpenApiSchemaDynArray;
-  ref, fmt: RawUtf8;
+  ref, fmt, nam: RawUtf8;
+  enum: PDocVariantData;
   enumType: TPascalEnum;
 begin
   all := Schema^.AllOf;
@@ -1443,19 +1444,34 @@ begin
     result.fBuiltinSchema := Schema;
     result.IsArray := true;
   end
-  else if Schema^.IsNamedEnum then
-  begin
-    fmt := Schema^._Format;
-    enumType := Parser.fEnums.GetObjectFrom(fmt);
-    if enumType = nil then
-    begin
-      enumType := TPascalEnum.Create(Parser, fmt, Schema);
-      Parser.fEnums.AddObject(fmt, enumType);
-    end;
-    result := TPascalType.CreateCustom(enumType);
-  end
   else
+  begin
+    enum := Schema^.Enum;
+    if enum <> nil then
+    begin
+      fmt := Schema^._Format;
+      if (fmt = '') and // if no "format" type name is
+         (Schema^._Type = 'string') then
+      begin
+        fmt := enum^.ToJson;
+        nam := SanitizePascalName(Schema^.Description);
+      end
+      else
+        nam := fmt;
+      if fmt <> '' then
+      begin
+        enumType := Parser.fEnums.GetObjectFrom(fmt);
+        if enumType = nil then
+        begin
+          enumType := TPascalEnum.Create(Parser, nam, Schema);
+          Parser.fEnums.AddObject(fmt, enumType);
+        end;
+        result := TPascalType.CreateCustom(enumType);
+        exit;
+      end;
+    end;
     result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema);
+  end;
 end;
 
 function TPascalType.ToPascalName(AsFinalType, NoRecordArrayTypes: boolean): RawUtf8;
