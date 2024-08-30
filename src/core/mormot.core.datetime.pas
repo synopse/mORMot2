@@ -586,7 +586,7 @@ function NowUtcToString(Expanded: boolean = true; FirstTimeChar: AnsiChar = ' ')
   {$ifdef HASINLINE} inline; {$endif}
 
 /// retrieve the current local date into '19 Sep 2023' English-readable text
-function NowTextDateShort(UtcDate: boolean): TShort15;
+function NowTextDateShort(UtcDate: boolean = false): TShort15;
 
 /// convert a TUnixTime date into '19 Sep 2023' English-readable text
 function UnixTimeToTextDateShort(Date: TUnixTime): TShort15;

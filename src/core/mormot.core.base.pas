@@ -9229,12 +9229,16 @@ end;
 function MultiEventFind(const EventList; const Event: TMethod): PtrInt;
 var
   events: TMethodDynArray absolute EventList;
+  e: PMethod;
 begin
+  e := pointer(events);
   if Event.Code <> nil then // callback assigned
     for result := 0 to length(events) - 1 do
-      if (events[result].Code = Event.Code) and
-         (events[result].Data = Event.Data) then
-        exit;
+      if (e^.Code = Event.Code) and
+         (e^.Data = Event.Data) then
+        exit
+      else
+        inc(e);
   result := -1;
 end;
 
