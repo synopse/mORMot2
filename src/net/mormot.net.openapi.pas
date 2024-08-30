@@ -262,14 +262,13 @@ type
     fBuiltinTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
     fIsArray: boolean;
-    fIsParent: boolean;
     function GetSchema: POpenApiSchema;
     procedure SetArray(AValue: boolean);
   public
     constructor CreateBuiltin(const aBuiltinTypeName: RawUtf8;
       aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
     constructor CreateCustom(aCustomType: TPascalCustomType;
-      aIsArray: boolean = false; aIsParent: boolean = false); overload;
+      aIsArray: boolean = false); overload;
 
     class function LoadFromSchema(Parser: TOpenApiParser;
       Schema: POpenApiSchema; const SchemaName: RawUtf8 = ''): TPascalType;
@@ -285,8 +284,6 @@ type
     function IsRecord: boolean;
     property IsArray: boolean
       read fIsArray write SetArray;
-    property IsParent: boolean
-      read fIsParent;
 
     property CustomType: TPascalCustomType
       read fCustomType;
@@ -301,19 +298,21 @@ type
     fSchema: POpenApiSchema;
     fName: RawUtf8;
     fPascalName: RawUtf8;
+    fTypeOwned: boolean;
   public
     class function SanitizePropertyName(const aName: RawUtf8): RawUtf8;
-    constructor Create(const aName: RawUtf8;
-      aSchema: POpenApiSchema; aType: TPascalType);
-    destructor Destroy; override;
     constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
-      aSchema: POpenApiSchema; ParentField: boolean = false);
+      aSchema: POpenApiSchema);
+    constructor CreateFrom(another: TPascalProperty);
+    destructor Destroy; override;
     property PropType: TPascalType
       read fType;
     property Schema: POpenApiSchema
       read fSchema;
     property Name: RawUtf8
       read fName;
+    property PascalName: RawUtf8
+      read fPascalName;
   end;
 
   /// abstract parent class holder for complex types
@@ -346,6 +345,7 @@ type
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
     destructor Destroy; override;
+    procedure CopyProperties(aDest: TRawUtf8List);
     function ToTypeDefinition: RawUtf8; override;
     function ToRttiTextRepresentation(WithClassName: boolean = true): RawUtf8;
     function ToRttiRegisterDefinitions: RawUtf8;
@@ -1282,29 +1282,29 @@ end;
 
 { TPascalProperty }
 
-constructor TPascalProperty.Create(const aName: RawUtf8;
-  aSchema: POpenApiSchema; aType: TPascalType);
+constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
+  const aName: RawUtf8; aSchema: POpenApiSchema);
 begin
+  fType := TPascalType.LoadFromSchema(aOwner, aSchema, aName);
+  fTypeOwned := true;
   fName := aName;
   fSchema := aSchema;
-  fType := aType;
   fPascalName := SanitizePropertyName(fName);
+end;
+
+constructor TPascalProperty.CreateFrom(another: TPascalProperty);
+begin
+  fName := another.Name;
+  fSchema := another.Schema;
+  fType := another.PropType; // weak copy (keep fTypeOwned=false)
+  fPascalName := another.PascalName;
 end;
 
 destructor TPascalProperty.Destroy;
 begin
-  fType.Free;
+  if fTypeOwned then
+    fType.Free;
   inherited Destroy;
-end;
-
-constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
-  const aName: RawUtf8; aSchema: POpenApiSchema; ParentField: boolean);
-begin
-  fType := TPascalType.LoadFromSchema(aOwner, aSchema, aName);
-  fType.fIsParent := ParentField;
-  fName := aName;
-  fSchema := aSchema;
-  fPascalName := SanitizePropertyName(fName);
 end;
 
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
@@ -1432,10 +1432,9 @@ begin
 end;
 
 constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType;
-  aIsArray: boolean; aIsParent: boolean);
+  aIsArray: boolean);
 begin
   fCustomType := aCustomType;
-  fIsParent := aIsParent;
   SetArray(aIsArray);
 end;
 
@@ -1586,8 +1585,8 @@ begin
     if Assigned(s) and
        (s^.Description <> '') then
       Append(result, [fParser.LineIndent, '  /// ', s^.Description, fParser.LineEnd]);
-    Append(result, [fParser.LineIndent, '  ', p.fPascalName, ': ',
-      p.fType.ToPascalName, ';', fParser.LineEnd]);
+    Append(result, [fParser.LineIndent, '  ', p.PascalName, ': ',
+      p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
   Append(result,
     [fParser.LineIndent, 'end;', fParser.LineEnd,
@@ -1608,11 +1607,7 @@ begin
   for i := 0 to fProperties.Count - 1 do
   begin
     p := fProperties.ObjectPtr[i];
-    // Only records can be parent types
-    if p.fType.IsParent then
-      Append(result, (p.fType.CustomType as TPascalRecord).ToRttiTextRepresentation(false))
-    else
-      Append(result, [fProperties[i], ': ', p.fType.ToPascalName(true, true), '; ']);
+    Append(result, [fProperties[i], ': ', p.PropType.ToPascalName(true, true), '; ']);
   end;
   if WithClassName then
     Append(result, ''';');
@@ -1621,6 +1616,17 @@ end;
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
 begin
   result := FormatUtf8('TypeInfo(%), _%', [PascalName, PascalName]);
+end;
+
+procedure TPascalRecord.CopyProperties(aDest: TRawUtf8List);
+var
+  i: PtrInt;
+begin
+  if (self <> nil) and
+     (aDest <> nil) then
+    for i := 0 to fProperties.Count - 1 do
+      aDest.AddObject(fProperties[i],
+        TPascalProperty.CreateFrom(fProperties.ObjectPtr[i]));
 end;
 
 
@@ -1764,9 +1770,9 @@ end;
 function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
 var
   s: POpenApiSchema;
-  n, i, j: PtrInt;
+  i, j: PtrInt;
   def: array of POpenApiSchema;
-  propname: RawUtf8;
+  ref: RawUtf8;
   v: PDocVariantData;
 begin
   s := Specs^.Schema[aDefinitionName];
@@ -1792,21 +1798,13 @@ begin
     def[0] := s;
   end;
   // append all fields to result.Properties
-  n := 0;
   for i := 0 to high(def) do
   begin
     s := def[i];
-    // append $ref as 'base###:' nested field
-    if s^.Reference <> '' then
-    begin
-      if n = 0 then
-        propname := 'base'
-      else
-        propname := FormatUtf8('base_%', [n]); // avoid duplicates
-      inc(n);
-      result.fProperties.AddObject(propname,
-        TPascalProperty.CreateFromSchema(self, propname, s, {parent=}true));
-    end;
+    // append $ref properties first - making new copy of each property
+    ref := s^.Reference;
+    if ref <> '' then
+      GetRecord(ref, {isref=}true).CopyProperties(result.fProperties);
     // append specific fields
     v := s^.Properties;
     if v <> nil then
