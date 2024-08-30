@@ -195,7 +195,7 @@ function StatusCodeToShort(Code: cardinal): TShort47;
 // - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
 // PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
 // - any HTTP status not part of this range will be identified as erronous
-// request in the internal server statistics
+// request e.g. in the web server statistics
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
