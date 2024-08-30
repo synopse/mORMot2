@@ -95,20 +95,8 @@ type
 
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI RequestBody
-  POpenApiRequestBody = ^TOpenApiRequestBody;
-  /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content (OpenApi >= 3.x only)
-  {$ifdef USERECORDWITHMETHODS}
-  TOpenApiRequestBody = record
-  {$else}
-  TOpenApiRequestBody = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// transtype the POpenApiRequestBody pointer into a TDocVariantData content
-    Data: TDocVariantData;
-    // access to the OpenAPI RequestBody information
-    function Description: RawUtf8;
-    function Schema(Parser: TOpenApiParser): POpenApiSchema;
-  end;
+  // - share the very same fields as TOpenApiResponse
+  POpenApiRequestBody = type POpenApiResponse;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
   POpenApiParameter = ^TOpenApiParameter;
@@ -631,31 +619,6 @@ begin
     // we only support application/json in our wrapper classes
     result := POpenApiSchema(Data.O['content']^.O[JSON_CONTENT_TYPE].O['schema'])
 end;
-
-
-
-{ TOpenApiRequestBody }
-
-function TOpenApiRequestBody.Description: RawUtf8;
-begin
-  result := Data.U['description'];
-end;
-
-function TOpenApiRequestBody.Schema(Parser: TOpenApiParser): POpenApiSchema;
-var
-  ca: PDocVariantdata;
-begin
-  result := nil;
-  if Parser.Version = oav3 then
-  begin
-    if Data.GetAsObject('content.application', ca) then
-       ca^.GetAsObject('json.schema', PDocVariantData(result));
-  end
-  else
-    // Note: self is actually a POpenApiParameter since RequestBody appeared in oav3
-    Data.GetAsObject('schema', PDocVariantData(result));
-end;
-
 
 
 { TOpenApiParameter }
