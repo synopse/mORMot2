@@ -5395,7 +5395,7 @@ begin
    with Ctxt.Info.Cache do
      if (Data^ >= EnumMin) and
         (Data^ <= EnumMax) then
-       Ctxt.W.AddString(EnumCustomText[Data^]);
+       Ctxt.W.AddJsonEscape(pointer(EnumCustomText^[Data^]), {len=}0);
    Ctxt.W.AddDirect('"');
 end;
 
@@ -5466,7 +5466,7 @@ end;
 procedure _JS_SetCustom(Data: PCardinal; const Ctxt: TJsonSaveContext);
 var
   i: cardinal;
-  p: PRawUtf8;
+  p: PPUtf8Char;
 begin
   Ctxt.W.Add('[');
   with Ctxt.Info.Cache do
@@ -5475,11 +5475,12 @@ begin
     if p <> nil then
       for i := 0 to EnumMax do
       begin
-        if (i >= EnumMin) and
+        if (p^ <> nil) and
+           (i >= EnumMin) and
            GetBitPtr(Data, i) then
         begin
           Ctxt.W.AddDirect('"');
-          Ctxt.W.AddString(p^);
+          Ctxt.W.AddJsonEscape(p^, {len=}0);
           Ctxt.W.AddDirect('"', ',');
         end;
         inc(p); // next
