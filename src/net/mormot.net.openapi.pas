@@ -478,7 +478,7 @@ const
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 
 /// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
-// - if aName is void, will use a 'Any###' global counter
+// - if aName is void after camel-casing, will raise an EOpenApi
 function SanitizePascalName(const aName: RawUtf8): RawUtf8;
 
 
@@ -905,19 +905,11 @@ begin
     @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
 end;
 
-var
-  GlobalCounter: integer;
-
 function SanitizePascalName(const aName: RawUtf8): RawUtf8;
 begin
-  if aName <> '' then
-    CamelCase(aName, result);
+  CamelCase(aName, result);
   if result = '' then
-  begin
-    inc(GlobalCounter);
-    FormatUtf8('Any%', [GlobalCounter], result);
-    exit;
-  end;
+    EOpenApi.RaiseUtf8('Unexpected SanitizePascalName(%)', [aName]);
   result[1] := UpCase(result[1]);
   if IsReservedKeyWord(result) then
     Prepend(RawByteString(result), '_');
@@ -1278,7 +1270,6 @@ begin
   result := fOperation^.Id;
   if result <> '' then
     result := SanitizePascalName(result);
-    //result[1] := UpCase(result[1]); // as in regular Pascal
 end;
 
 
