@@ -478,6 +478,7 @@ const
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 
 /// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
+// - if aName is void, will use a 'Any###' global counter
 function SanitizePascalName(const aName: RawUtf8): RawUtf8;
 
 
@@ -904,12 +905,22 @@ begin
     @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
 end;
 
+var
+  GlobalCounter: integer;
+
 function SanitizePascalName(const aName: RawUtf8): RawUtf8;
 begin
-  CamelCase(aName, result);
+  if aName <> '' then
+    CamelCase(aName, result);
+  if result = '' then
+  begin
+    inc(GlobalCounter);
+    FormatUtf8('Any%', [GlobalCounter], result);
+    exit;
+  end;
   result[1] := UpCase(result[1]);
   if IsReservedKeyWord(result) then
-    result := '_' + result;
+    Prepend(RawByteString(result), '_');
 end;
 
 
@@ -1450,10 +1461,10 @@ begin
     if enum <> nil then
     begin
       fmt := Schema^._Format;
-      if (fmt = '') and // if no "format" type name is
+      if (fmt = '') and // if no "format" type name is supplied
          (Schema^._Type = 'string') then
       begin
-        fmt := enum^.ToJson;
+        fmt := enum^.ToJson; // use string values to make it genuine
         nam := SanitizePascalName(Schema^.Description);
       end
       else
