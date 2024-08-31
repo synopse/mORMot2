@@ -4773,7 +4773,7 @@ begin
 end;
 
 procedure TTextWriter.AddQuotedFieldName(
-   FieldName: PUtf8Char; FieldNameLen: PtrInt; const VoidPlaceHolder: RawUtf8);
+  FieldName: PUtf8Char; FieldNameLen: PtrInt; const VoidPlaceHolder: RawUtf8);
 begin
   if FieldNameLen = 0 then
   begin

@@ -739,7 +739,8 @@ type
         EnumMin,
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
-        EnumList: PShortString);
+        EnumList: PShortString;
+        EnumCustomText: PRawUtf8Array);
       rkDynArray,
       rkArray: (
         ItemInfoManaged: PRttiInfo; // = nil for unmanaged types
