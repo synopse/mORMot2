@@ -1957,9 +1957,14 @@ type
     // - the supplied CustomText should point to a constant array of text values:
     // ! type  TMyEnum = (meOne, meTwo);
     // ! const MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('one', 'and 2');
-    // !   Rtti.RegisterCustomEnumValues(TypeInfo(TMyEnum), nil, @MYENUM2TXT);
+    // !   TRttiJson.RegisterCustomEnumValues(TypeInfo(TMyEnum), nil, @MYENUM2TXT);
     class procedure RegisterCustomEnumValues(EnumInfo, SetInfo: PRttiInfo;
-      CustomText: PRawUtf8Array);
+      CustomText: PRawUtf8Array); overload;
+    /// register custom JSON serialization of several enum and/or set from text
+    // - just a wrapper around the overload method, supplied as trios of
+    // EnumInfo,SetInfo,CustomText pointers
+    class procedure RegisterCustomEnumValues(
+        const EnumSetTextTrios: array of pointer); overload;
     /// define an additional set of unserialization JSON options
     // - is included for this type to the supplied TJsonParserOptions
     property IncludeReadOptions: TJsonParserOptions
@@ -11064,6 +11069,19 @@ begin
     r.fCache.EnumCustomText := CustomText;
     r.fJsonSave := @_JS_SetCustom; // keep fJsonLoad := _JL_Set
   end;
+end;
+
+class procedure TRttiJson.RegisterCustomEnumValues(
+  const EnumSetTextTrios: array of pointer);
+var
+  i, n: PtrInt;
+begin
+  n := length(EnumSetTextTrios);
+  if (n <> 0) and
+     (n mod 3 = 0) then
+    for i := 0 to (n div 3) - 1 do
+      RegisterCustomEnumValues(EnumSetTextTrios[i * 3],
+        EnumSetTextTrios[i * 3 + 1], EnumSetTextTrios[i * 3 + 2]);
 end;
 
 procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
