@@ -2098,7 +2098,10 @@ function FindRawUtf8(const Values: array of RawUtf8; const Value: RawUtf8;
 
 /// true if Value was added successfully in Values[]
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
-  NoDuplicates: boolean = false; CaseSensitive: boolean = true): boolean; overload;
+  NoDuplicates: boolean; CaseSensitive: boolean = true): boolean; overload;
+
+/// return the newly added Value index at the end of Values[]
+function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8): PtrInt; overload;
 
 /// add the Value to Values[], with an external count variable, for performance
 function AddRawUtf8(var Values: TRawUtf8DynArray; var ValuesCount: integer;
@@ -8778,23 +8781,21 @@ begin
     result := FindRawUtf8(@Values[0], Value, result + 1, CaseSensitive);
 end;
 
+function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8): PtrInt;
+begin
+  result := length(Values);
+  SetLength(Values, result + 1);
+  Values[result] := Value;
+end;
+
 function AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8;
   NoDuplicates, CaseSensitive: boolean): boolean;
-var
-  i: PtrInt;
 begin
+  result := false;
   if NoDuplicates then
-  begin
-    i := FindRawUtf8(Values, Value, CaseSensitive);
-    if i >= 0 then
-    begin
-      result := false;
+    if FindRawUtf8(Values, Value, CaseSensitive) >= 0 then
       exit;
-    end;
-  end;
-  i := length(Values);
-  SetLength(Values, i + 1);
-  Values[i] := Value;
+  AddRawUtf8(Values, Value);
   result := true;
 end;
 
