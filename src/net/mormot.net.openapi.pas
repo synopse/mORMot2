@@ -479,7 +479,7 @@ function IsReservedKeyWord(const aName: RawUtf8): boolean;
 
 /// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
 // - if aName is void after camel-casing, will raise an EOpenApi
-function SanitizePascalName(const aName: RawUtf8): RawUtf8;
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
 
 
 implementation
@@ -679,7 +679,7 @@ end;
 
 function TOpenApiParameter.AsPascalName: RawUtf8;
 begin
-  result := SanitizePascalName(Name);
+  result := SanitizePascalName(Name, {keywordcheck:}true);
 end;
 
 
@@ -905,13 +905,14 @@ begin
     @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
 end;
 
-function SanitizePascalName(const aName: RawUtf8): RawUtf8;
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
 begin
   CamelCase(aName, result);
   if result = '' then
     EOpenApi.RaiseUtf8('Unexpected SanitizePascalName(%)', [aName]);
   result[1] := UpCase(result[1]);
-  if IsReservedKeyWord(result) then
+  if KeyWordCheck and
+     IsReservedKeyWord(result) then
     Prepend(RawByteString(result), '_');
 end;
 
@@ -1269,7 +1270,7 @@ function TPascalOperation.FunctionName: RawUtf8;
 begin
   result := fOperation^.Id;
   if result <> '' then
-    result := SanitizePascalName(result);
+    result := SanitizePascalName(result, {keywordcheck:}true);
 end;
 
 
@@ -1282,7 +1283,7 @@ begin
   fTypeOwned := true;
   fName := aName;
   fSchema := aSchema;
-  fPascalName := SanitizePascalName(fName);
+  fPascalName := SanitizePascalName(fName, {keywordcheck:}true);
 end;
 
 constructor TPascalProperty.CreateFrom(another: TPascalProperty);
@@ -1308,7 +1309,7 @@ constructor TPascalEnum.Create(aOwner: TOpenApiParser;
 var
   i: PtrInt;
 begin
-  inherited Create(aOwner, 'T' + aName);
+  inherited Create(aOwner, 'T' + SanitizePascalName(aName, {keywordcheck:}false));
   fName := aName;
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
@@ -1346,7 +1347,7 @@ end;
 
 function TPascalEnum.ToConstTextArrayName: RawUtf8;
 begin
-  result := FormatUtf8('%_2TXT', [UpperCase(fName)]);
+  result := FormatUtf8('%2TXT', [UpperCase(copy(PascalName, 2, 100))]);
 end;
 
 function TPascalEnum.ToConstTextArray: RawUtf8;
@@ -1404,7 +1405,7 @@ constructor TPascalType.CreateBuiltin(const aBuiltinTypeName: RawUtf8;
 begin
   fBuiltinTypeName := aBuiltinTypeName;
   fBuiltinSchema := aSchema;
-  IsArray := aIsArray;
+  SetArray(aIsArray);
 end;
 
 constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
@@ -1456,7 +1457,7 @@ begin
          (Schema^._Type = 'string') then
       begin
         fmt := enum^.ToJson; // use string values to make it genuine
-        nam := SanitizePascalName(Schema^.Description);
+        nam := Schema^.Description;
       end
       else
         nam := fmt;
@@ -1555,7 +1556,7 @@ begin
   fName := SchemaName;
   fSchema := Schema;
   fProperties := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
-  inherited Create(aOwner, 'T' + SanitizePascalName(fName));
+  inherited Create(aOwner, 'T' + SanitizePascalName(fName, {keywordcheck:}false));
 end;
 
 destructor TPascalRecord.Destroy;
