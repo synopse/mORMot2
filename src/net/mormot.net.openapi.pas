@@ -1654,22 +1654,26 @@ begin
      ToArrayTypeDefinition]);
 end;
 
-function TPascalRecord.ToRttiTextRepresentation(WithClassName: boolean): RawUtf8;
+function TPascalRecord.ToRttiTextRepresentation: RawUtf8;
 var
   i: PtrInt;
   p: TPascalProperty;
+  line: RawUtf8;
 begin
-  if WithClassName then
-    FormatUtf8('_% = ''', [PascalName], result)
-  else
-    result := '';
+  result := '';
+  FormatUtf8('_% = ''', [PascalName], line);
   for i := 0 to fProperties.Count - 1 do
   begin
+    if length(line) > 70 then // Delphi IDE is limited to 255 chars per line
+    begin
+      Append(result, [line, ''' +', fParser.LineEnd, '    ''']);
+      line := '';
+    end;
     p := fProperties.ObjectPtr[i];
-    Append(result, [fProperties[i], ': ', p.PropType.ToPascalName(true, true), '; ']);
+    Append(line, [fProperties[i], ':', p.PropType.ToPascalName(true, true), ' ']);
   end;
-  if WithClassName then
-    Append(result, ''';');
+  line[length(line)] := '''';
+  Append(result, line, ';');
 end;
 
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
@@ -2062,7 +2066,8 @@ begin
   // with proper json names (overriding the RTTI definitions)
   if rec <> nil then
   begin
-    Append(result, ['const', LineEnd]);
+    Append(result, ['const', LineEnd,
+      '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
     for i := 0 to high(rec) do
       Append(result, [LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
   end;
