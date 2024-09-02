@@ -397,6 +397,7 @@ type
     fPayloadParameterType: TPascalType;
     fSuccessResponseType: TPascalType;
     fSuccessResponseCode: integer;
+    fOnErrorIndex: integer;
     fParameters: POpenApiParameterDynArray;
     fParameterTypes: TPascalTypeObjArray;
   public
@@ -430,6 +431,7 @@ type
     fRecords: TRawUtf8List;    // objects are owned TPascalRecord
     fEnums: TRawUtf8List;      // objects are owned TPascalEnum
     fExceptions: TRawUtf8List; // objects are owned TPascalException
+    fErrorHandler: TRawUtf8DynArray;
     fOperations: TPascalOperationDynArray;
     fLineEnd: RawUtf8;
     fLineIndent: RawUtf8;
@@ -1036,20 +1038,22 @@ var
   code: integer;
   v: PDocVariantData;
   i: PtrInt;
-  status, json: RawUtf8;
+  e: TPascalException;
+  status, err, deferr, json: RawUtf8;
   resp: POpenApiSchema;
 begin
   resp := fOperation^.BodySchema(fParser);
   if Assigned(resp) then
     fPayloadParameterType := fParser.NewPascalTypeFromSchema(resp);
   v := fOperation.Responses;
+  v^.SortByName(@StrCompByNumber); // sort in-place by status number
   for i := 0 to v^.Count - 1 do
   begin
     status := v^.Names[i];
     code := Utf8ToInteger(status, 0);
     resp := POpenApiResponse(@v^.Values[i])^.Schema(fParser);
     if StatusCodeIsSuccess(code) or
-       ((fSuccessResponseType = nil) and
+       ((fSuccessResponseCode = 0) and
         (status = 'default')) then
     begin
       if fSuccessResponseType = nil then // handle the first success
@@ -1059,15 +1063,31 @@ begin
           fSuccessResponseType := fParser.NewPascalTypeFromSchema(resp);
       end;
     end
-    else if resp <> nil then
+    else if Assigned(resp) then
     begin
       // generate a custom EJsonClient exception class for 4xx errors
       json := resp^.Data.ToJson;
       // we don't know PascalName until it is parsed so is json-indexed
-      if fParser.fExceptions.GetObjectFrom(json) = nil then
-        fParser.fExceptions.AddObject(json,
-          TPascalException.Create(fParser, status, @v^.Values[i]));
+      e := fParser.fExceptions.GetObjectFrom(json);
+      if e = nil then
+      begin
+        e := TPascalException.Create(fParser, status, @v^.Values[i]);
+        fParser.fExceptions.AddObject(json, e);
+      end;
+      if code <> 0 then // generate "case of" block
+        Append(err, ['    ', code, ':', fParser.LineEnd,
+                     '      e := ',e.PascalName, ';', fParser.LineEnd])
+      else if status = 'default' then
+        Append(deferr, ['  else', fParser.LineEnd,
+                     '    e := ',e.PascalName, ';', fParser.LineEnd])
     end;
+  end;
+  err := err + deferr;
+  if err <> '' then
+  begin
+    fOnErrorIndex := FindRawUtf8(fParser.fErrorHandler, err) + 1;
+    if fOnErrorIndex = 0 then // new TOnJsonClientError
+      fOnErrorIndex := AddRawUtf8(fParser.fErrorHandler, err) + 1;
   end;
 end;
 
@@ -1131,7 +1151,6 @@ begin
   begin
     Append(result, [fParser.LineIndent, '//', fParser.LineEnd,
                     fParser.LineIndent, '// Responses:', fParser.LineEnd]);
-    v^.SortByName(@StrCompByNumber); // sort by status number
     for i := 0 to v^.Count - 1 do
     begin
       status := v^.Names[i];
@@ -1296,12 +1315,12 @@ begin
    else if (urlArgs <> nil) or
            Assigned(fPayloadParameterType) then
      Append(result, ', []');
-   Append(result, [',', fParser.LineEnd, '    ']);
 
    // Payload if any
    if Assigned(fPayloadParameterType) then
    begin
-     Append(result, 'Payload, ');
+     Append(result, [',', fParser.LineEnd,
+       '    Payload, ']);
      if Assigned(fSuccessResponseType) then
        Append(result, 'result')
      else
@@ -1315,9 +1334,10 @@ begin
    end
    // Response type if any
    else if Assigned(fSuccessResponseType) then
-     Append(result, [
-       'result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
-
+     Append(result, [',', fParser.LineEnd,
+       '    result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
+  if fOnErrorIndex <> 0 then
+    Append(result, [', OnError', fOnErrorIndex]);
   Append(result, [');', fParser.LineEnd, 'end;', fParser.LineEnd]);
 end;
 
@@ -1499,7 +1519,7 @@ begin
   begin
     // #/definitions/NewPet -> NewPet
     src := SplitRight(ref, '/');
-    aSchema := Schema[src];
+    aSchema := Schema[src]; // resolve from main Specs
     if aSchema = nil then
       EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
     result := NewPascalTypeFromSchema(aSchema, src);
@@ -1796,6 +1816,7 @@ begin
   fEnums.Clear;
   fExceptions.Clear;
   fSchemas := nil;
+  fErrorHandler := nil;
   ObjArrayClear(fOperations);
 end;
 
@@ -2157,7 +2178,7 @@ var
   done: TRawUtf8DynArray;
   ops: TPascalOperationsByTag;
   op: TPascalOperation;
-  id, desc, u: RawUtf8;
+  id, desc, err, u: RawUtf8;
   bannerlen, i, j: PtrInt;
 begin
   // unit common definitions
@@ -2196,7 +2217,17 @@ begin
     GetDescription('Client class for', '  '),
     '  ', ClientClassName, ' = class', LineEnd,
     '  private', LineEnd,
-    '    fClient: IJsonClient;', LineEnd,
+    '    fClient: IJsonClient;', LineEnd]);
+  // status responses to exception events
+  if fErrorHandler <> nil then
+  begin
+    Append(result, '    // TOnJsonClientError event handlers', LineEnd);
+    for i := 0 to high(fErrorHandler) do
+      Append(result, [
+        '    procedure OnError', i + 1, '(const Sender: IJsonClient;', LineEnd,
+        '      const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
+  end;
+  Append(result, [
     '  public', LineEnd, LineEnd,
     '    // initialize this Client with an associated HTTP/JSON request', LineEnd,
     '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
@@ -2248,6 +2279,7 @@ begin
     for i := 0 to fExceptions.Count - 1 do
       Append(result, TPascalException(fExceptions.ObjectPtr[i]).Body, LineEnd);
   end;
+  // main client class implementation
   fLineIndent := '';
   Append(result, [LineEnd,
     '{ ************ Main ', ClientClassName, ' Client Class }', LineEnd, LineEnd,
@@ -2256,6 +2288,38 @@ begin
     'begin', LineEnd,
     '  fClient := aClient;', LineEnd,
     'end;', LineEnd, LineEnd]);
+  // status responses to exception events
+  for i := 0 to high(fErrorHandler) do
+  begin
+    Append(result, [
+      'procedure ', ClientClassName, '.OnError', i + 1, '(const Sender: IJsonClient;', LineEnd,
+      '  const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
+    err := fErrorHandler[i];
+    j := PosEx('  else', err);
+    if j = 1 then
+      Append(result, [ // single default exception
+        'begin', LineEnd,
+        '  raise', Split(SplitRight(err, '='), ';')]) // extract class name
+    else
+    begin
+      Append(result, [
+        'var', LineEnd,
+        '  e: EJsonClientClass;', LineEnd,
+        'begin', LineEnd,
+        '  case Response.Status of', LineEnd,
+        err]); // exception block
+      if j = 0 then
+        Append(result, [
+          '  else', LineEnd,
+          '    e := EJsonClient;', LineEnd]); // no default exception class
+      Append(result, [
+        '  end;', LineEnd,
+        '  raise e']);
+    end;
+    Append(result, [
+      '.CreateResp(''%.%'', [self, ErrorMsg], Response);', LineEnd,
+      'end;', LineEnd, LineEnd]);
+  end;
   // append all methods, in native order (no need to follow tag ordering)
   for i := 0 to high(Operations) do
     Append(result, Operations[i].Body(ClientClassName, fSpecs.BasePath), LineEnd);
