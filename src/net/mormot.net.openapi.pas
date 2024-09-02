@@ -258,7 +258,7 @@ type
     fBuiltinSchema: POpenApiSchema;
     fBuiltinTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
-    fIsArray: boolean;
+    fIsArray, fNoConst: boolean;
     function GetSchema: POpenApiSchema;
     procedure SetArray(AValue: boolean);
   public
@@ -273,7 +273,8 @@ type
     function ToPascalName(AsFinalType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
     function ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
-    function ToDefaultParameterValue(aParam: POpenApiParameter; Parser: TOpenApiParser): RawUtf8;
+    function ToDefaultParameterValue(aParam: POpenApiParameter;
+      Parser: TOpenApiParser): RawUtf8;
 
     function IsBuiltin: boolean;
     function IsEnum: boolean;
@@ -286,6 +287,7 @@ type
     property Schema: POpenApiSchema
       read GetSchema;
   end;
+  TPascalTypeObjArray = array of TPascalType;
 
   /// define a Pascal property
   TPascalProperty = class
@@ -357,14 +359,13 @@ type
   /// define a Pascal enumeration type
   TPascalEnum = class(TPascalCustomType)
   private
-    fPrefix: RawUtf8;
+    fPrefix, fConstTextArrayName: RawUtf8;
     fChoices: TDocVariantData;
   public
     constructor Create(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     function ToTypeDefinition: RawUtf8; override;
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; override;
-    function ToConstTextArrayName: RawUtf8;
     function ToConstTextArray: RawUtf8;
     property Prefix: RawUtf8
       read fPrefix;
@@ -394,6 +395,7 @@ type
   /// define a Pascal method matching an OpenAPI operation
   TPascalOperation = class
   private
+    fParser: TOpenApiParser;
     fPath: RawUtf8;
     fPathItem: POpenApiPathItem;
     fOperation: POpenApiOperation;
@@ -401,17 +403,20 @@ type
     fPayloadParameterType: TPascalType;
     fSuccessResponseType: TPascalType;
     fSuccessResponseCode: integer;
+    fParameters: POpenApiParameterDynArray;
+    fParameterTypes: TPascalTypeObjArray;
   public
-    constructor Create(const aPath: RawUtf8; aPathItem: POpenApiPathItem;
-      aOperation: POpenApiOperation; aMethod: TUriMethod);
+    constructor Create(aParser: TOpenApiParser; const aPath: RawUtf8;
+      aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
     destructor Destroy; override;
-    // Resolve parameters/responses types
-    procedure ResolveTypes(Parser: TOpenApiParser);
-    function GetAllParameters: POpenApiParameterDynArray;
-    function Documentation(Parser: TOpenApiParser): RawUtf8;
-    function Declaration(const ClassName: RawUtf8; Parser: TOpenApiParser): RawUtf8;
-    function Body(const ClassName, BasePath: RawUtf8; Parser: TOpenApiParser): RawUtf8;
+    procedure ResolveResponseTypes;
+    function Documentation: RawUtf8;
+    function Declaration(const ClassName: RawUtf8; InImplementation: boolean): RawUtf8;
+    function Body(const ClassName, BasePath: RawUtf8): RawUtf8;
+    function ParameterType(aIndex: integer): TPascalType;
     function FunctionName: RawUtf8;
+    property Parameters: POpenApiParameterDynArray
+      read fParameters;
   end;
   TPascalOperationDynArray = array of TPascalOperation;
 
@@ -987,23 +992,54 @@ end;
 
 { TPascalOperation }
 
-constructor TPascalOperation.Create(const aPath: RawUtf8;
-  aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
+constructor TPascalOperation.Create(aParser: TOpenApiParser;
+  const aPath: RawUtf8; aPathItem: POpenApiPathItem;
+  aOperation: POpenApiOperation; aMethod: TUriMethod);
+var
+  p, o: POpenApiParameters;
+  pn, i: integer;
 begin
+  fParser := aParser;
   fPath := aPath;
   fPathItem := aPathItem;
   fOperation := aOperation;
   fMethod := aMethod;
+  p := fPathItem^.Parameters;
+  pn := p.Count;
+  o := fOperation^.Parameters;
+  SetLength(fParameters, pn + o.Count);
+  for i := 0 to pn - 1 do
+    fParameters[i] := p^.Parameter[i];
+  for i := 0 to o.Count - 1 do
+    fParameters[pn + i] := o^.Parameter[i];
 end;
 
 destructor TPascalOperation.Destroy;
 begin
   fPayloadParameterType.Free;
   fSuccessResponseType.Free;
+  ObjArrayClear(fParameterTypes);
   inherited Destroy;
 end;
 
-procedure TPascalOperation.ResolveTypes(Parser: TOpenApiParser);
+function TPascalOperation.ParameterType(aIndex: integer): TPascalType;
+var
+  i: PtrInt;
+begin
+  if fParameterTypes = nil then // late on-demand resolution
+  begin
+    SetLength(fParameterTypes, length(fParameters));
+    for i := 0 to length(fParameters) - 1 do
+      fParameterTypes[i] := TPascalType.LoadFromSchema(
+        fParser, fParameters[i]^.Schema(fParser));
+  end;
+  if (aIndex < 0) or
+     (aIndex >= length(fParameterTypes)) then
+    EOpenApi.RaiseUtf8('%.ParameterType(%)?', [self, aIndex]);
+  result := fParameterTypes[aIndex];
+end;
+
+procedure TPascalOperation.ResolveResponseTypes;
 var
   code: integer;
   v: PDocVariantData;
@@ -1011,14 +1047,14 @@ var
   status, json: RawUtf8;
   resp: POpenApiSchema;
 begin
-  resp := fOperation^.BodySchema(Parser);
+  resp := fOperation^.BodySchema(fParser);
   if Assigned(resp) then
-    fPayloadParameterType := TPascalType.LoadFromSchema(Parser, resp);
+    fPayloadParameterType := TPascalType.LoadFromSchema(fParser, resp);
   v := fOperation.Responses;
   for i := 0 to v^.Count - 1 do
   begin
     status := v^.Names[i];
-    resp := POpenApiResponse(@v^.Values[i])^.Schema(Parser);
+    resp := POpenApiResponse(@v^.Values[i])^.Schema(fParser);
     code := Utf8ToInteger(status, 0);
     if StatusCodeIsSuccess(code) or
        ((fSuccessResponseType = nil) and
@@ -1027,38 +1063,22 @@ begin
       if fSuccessResponseType = nil then // handle the first success
       begin
         fSuccessResponseCode := code;
-        fSuccessResponseType := TPascalType.LoadFromSchema(Parser, resp);
+        fSuccessResponseType := TPascalType.LoadFromSchema(fParser, resp);
       end;
     end
     else // generate a custom EJsonClient exception class for 4xx errors
     begin
       // we don't know PascalName until it is parsed so we use the json
       json := resp^.Data.ToJson;
-      if Parser.fExceptions.GetObjectFrom(json) = nil then
-        Parser.fExceptions.AddObject(json,
-          TPascalException.Create(Parser, status, @v^.Values[i]));
+      if fParser.fExceptions.GetObjectFrom(json) = nil then
+        fParser.fExceptions.AddObject(json,
+          TPascalException.Create(fParser, status, @v^.Values[i]));
     end;
   end;
 end;
 
-function TPascalOperation.GetAllParameters: POpenApiParameterDynArray;
+function TPascalOperation.Documentation: RawUtf8;
 var
-  p, o: POpenApiParameters;
-  pn, i: integer;
-begin
-  p := fPathItem^.Parameters;
-  pn := p.Count;
-  o := fOperation^.Parameters;
-  SetLength(result, pn + o.Count);
-  for i := 0 to pn - 1 do
-    result[i] := p^.Parameter[i];
-  for i := 0 to o.Count - 1 do
-    result[pn + i] := o^.Parameter[i];
-end;
-
-function TPascalOperation.Documentation(Parser: TOpenApiParser): RawUtf8;
-var
-  params: POpenApiParameterDynArray;
   p: POpenApiParameter;
   v: PDocVariantData;
   status: RawUtf8;
@@ -1071,183 +1091,185 @@ var
 begin
   // Request Definition
   result := FormatUtf8('%// % [%] %%%//%%',
-    [Parser.LineIndent, fOperation^.Id, ToText(fMethod), fPath, Parser.LineEnd,
-     Parser.LineIndent, Parser.LineEnd]);
+    [fParser.LineIndent, fOperation^.Id, ToText(fMethod), fPath, fParser.LineEnd,
+     fParser.LineIndent, fParser.LineEnd]);
   // Summary
   if fOperation^.Summary <> '' then
-    Append(result, [Parser.LineIndent, '// Summary: ', fOperation^.Summary, Parser.LineEnd]);
+    Append(result, [fParser.LineIndent, '// Summary: ', fOperation^.Summary, fParser.LineEnd]);
   // Description
   if fOperation^.Description <> '' then
-    Append(result, [Parser.LineIndent, '// Description:', Parser.LineEnd,
-      Parser.LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
-        FormatUtf8(#10'%//   ', [Parser.LineIndent])), Parser.LineEnd]);
+    Append(result, [fParser.LineIndent, '// Description:', fParser.LineEnd,
+      fParser.LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
+        FormatUtf8(#10'%//   ', [fParser.LineIndent])), fParser.LineEnd]);
   // params
-  params := GetAllParameters;
-  rb := fOperation^.RequestBody(Parser);
-  if (params <> nil) or (Assigned(rb) and Assigned(rb^.Schema(Parser))) then
+  rb := fOperation^.RequestBody(fParser);
+  if (fParameters <> nil) or
+     (Assigned(rb) and Assigned(rb^.Schema(fParser))) then
   begin
-    Append(result, [Parser.LineIndent, '//', Parser.LineEnd,
-                    Parser.LineIndent, '// Params:', Parser.LineEnd]);
-    for i := 0 to high(params) do
+    Append(result, [fParser.LineIndent, '//', fParser.LineEnd,
+                    fParser.LineIndent, '// Params:', fParser.LineEnd]);
+    for i := 0 to high(fParameters) do
     begin
-      p := params[i];
-      // Handled below
+      p := fParameters[i];
       if p^._In = 'body' then
-        continue;
-      Append(result, [Parser.LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
+        continue; // handled below
+      Append(result, [fParser.LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
       if p^.Required then
         Append(result, '*');
       if p^.Default <> nil then
         Append(result, [' (default=', p^.Default^, ')']);
       if p^.Description <> '' then
         Append(result, ': ', p^.Description);
-      Append(result, Parser.LineEnd);
+      Append(result, fParser.LineEnd);
     end;
-
     // Request body
     if Assigned(rb) then
     begin
-      Append(result, Parser.LineIndent, '// - [body] Payload*');
+      Append(result, fParser.LineIndent, '// - [body] Payload*');
       if rb^.Description <> '' then
         Append(result, ': ', rb^.Description);
-      Append(result, Parser.LineEnd);
+      Append(result, fParser.LineEnd);
     end;
   end;
   // Responses
   v := fOperation^.Responses;
   if v^.Count > 0 then
   begin
-    Append(result, [Parser.LineIndent, '//', Parser.LineEnd,
-                    Parser.LineIndent, '// Responses:', Parser.LineEnd]);
+    Append(result, [fParser.LineIndent, '//', fParser.LineEnd,
+                    fParser.LineIndent, '// Responses:', fParser.LineEnd]);
     v^.SortByName(@StrCompByNumber); // sort by status number
     for i := 0 to v^.Count - 1 do
     begin
       status := v^.Names[i];
       code := Utf8ToInteger(status, 0);
-      Append(result, [Parser.LineIndent, '// - ', status]);
+      Append(result, [fParser.LineIndent, '// - ', status]);
       r := @v^.Values[i];
-      rs := r^.Schema(Parser);
+      rs := r^.Schema(fParser);
       if code = fSuccessResponseCode then
         Append(result, ' (main)')
       else if Assigned(rs) then
       begin
-        e := Parser.fExceptions.GetObjectFrom(rs^.Data.ToJson);
+        e := fParser.fExceptions.GetObjectFrom(rs^.Data.ToJson);
         if e <> nil then // no need to parse, just recognize schema
           Append(result, [' [', e.PascalName, ']']);
       end;
       if r^.Description <> '' then
-        Append(result, [': ', r^.Description, Parser.LineEnd])
+        Append(result, [': ', r^.Description, fParser.LineEnd])
       else
-        Append(result, ': No Description', Parser.LineEnd);
+        Append(result, ': No Description', fParser.LineEnd);
     end;
   end;
 end;
 
+const
+  _CONST: array[boolean] of string[7] = ('const ', '');
+
 function TPascalOperation.Declaration(const ClassName: RawUtf8;
-  Parser: TOpenApiParser): RawUtf8;
+  InImplementation: boolean): RawUtf8;
 var
-  params: POpenApiParameterDynArray;
   p: POpenApiParameter;
   pt: TPascalType;
   i, ndx: PtrInt;
+  line: RawUtf8;
+  hasdefault: boolean;
   def: TRawUtf8DynArray;
-begin
-  if Assigned(fSuccessResponseType) then
-    result := 'function '
-  else
-    result := 'procedure ';
 
-  if ClassName <> '' then
-    Append(result, ClassName, '.');
-  Append(result, FunctionName, '(');
-
-  params := GetAllParameters;
-  ndx := 0;
-  for i := 0 to Length(params) - 1 do
+  procedure AppLine(const Args: array of const);
   begin
-    p := params[i];
+    if length(line) > 70 then
+    begin
+      Append(result, TrimRight(line), fParser.LineEnd);
+      line := fParser.LineIndent + '  ';
+    end;
+    Append(line, Args);
+  end;
+
+begin
+  result := '';
+  if Assigned(fSuccessResponseType) then
+    line := 'function '
+  else
+    line := 'procedure ';
+  if ClassName <> '' then
+    Append(line, ClassName, '.');
+  Append(line, FunctionName, '(');
+
+  ndx := 0;
+  for i := 0 to Length(fParameters) - 1 do
+  begin
+    p := fParameters[i];
     if (p^._In = 'path') or
        (p^._In = 'query') then
     begin
-      if not p^.HasDefaultValue then
+      hasdefault := (not InImplementation) and p^.HasDefaultValue;
+      if not hasdefault then
       begin
         if (ndx > 0) then
-          Append(result, '; ');
+          Append(line, '; ');
         inc(ndx);
       end;
-      pt := TPascalType.LoadFromSchema(Parser, p^.Schema(Parser));
-      try
-        if p^.HasDefaultValue then
-          AddRawUtf8(def, FormatUtf8('%: % = %', [p^.AsPascalName,
-              pt.ToPascalName, pt.ToDefaultParameterValue(p, Parser)]))
-        else
-          Append(result, [p^.AsPascalName, ': ', pt.ToPascalName]);
-      finally
-        pt.Free;
-      end;
+      pt := ParameterType(i);
+      if hasdefault then
+        AddRawUtf8(def, FormatUtf8('%%: % = %', [_CONST[pt.fNoConst],
+          p^.AsPascalName, pt.ToPascalName, pt.ToDefaultParameterValue(p, fParser)]))
+      else
+        AppLine([_CONST[pt.fNoConst], p^.AsPascalName, ': ', pt.ToPascalName]);
     end;
   end;
 
   if Assigned(fPayloadParameterType) then
   begin
     if ndx > 0 then
-      Append(result, '; const payload: ', fPayloadParameterType.ToPascalName)
-    else
-      Append(result, 'const payload: ', fPayloadParameterType.ToPascalName);
+      Append(line, '; ');
+    AppLine(['const Payload: ', fPayloadParameterType.ToPascalName]);
     inc(ndx);
   end;
 
   for i := 0 to high(def) do
   begin
     if ndx <> 0 then
-      Append(result, '; ');
-    Append(result, def[i]);
+      Append(line, '; ');
+    AppLine([def[i]]);
     inc(ndx);
   end;
 
   if Assigned(fSuccessResponseType) then
-    Append(result, ['): ', fSuccessResponseType.ToPascalName, ';'])
+    Append(line, ['): ', fSuccessResponseType.ToPascalName, ';'])
   else
-    Append(result, ');');
+    Append(line, ');');
+  Append(result, Line);
 end;
 
-function TPascalOperation.Body(const ClassName, BasePath: RawUtf8;
-  Parser: TOpenApiParser): RawUtf8;
+function TPascalOperation.Body(const ClassName, BasePath: RawUtf8): RawUtf8;
 var
   Action: RawUtf8;
   ActionArgs: TRawUtf8DynArray;
   i: PtrInt;
   QueryParameters: TDocVariantData;
-  Parameters: POpenApiParameterDynArray;
   Param: POpenApiParameter;
-  ParamType: TPascalType;
+  pt: TPascalType;
 begin
   Action := BasePath + fPath;
   ActionArgs := nil;
   QueryParameters.InitObject([], JSON_FAST);
 
-  Parameters := GetAllParameters;
-  for i := 0 to high(Parameters) do
+  for i := 0 to high(fParameters) do
   begin
-    Param := Parameters[i];
-    ParamType := TPascalType.LoadFromSchema(Parser, Param^.Schema(Parser));
-    try
-      if Param^._In = 'path' then
-      begin
-        Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
-        AddRawUtf8(ActionArgs, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
-      end
-      else if Param^._In = 'query' then
-      begin
-        QueryParameters.AddValue(Param^.Name, ParamType.ToFormatUtf8Arg(Param^.AsPascalName));
-      end;
-    finally
-      ParamType.Free;
+    Param := fParameters[i];
+    pt := ParameterType(i);
+    if Param^._In = 'path' then
+    begin
+      Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
+      AddRawUtf8(ActionArgs, pt.ToFormatUtf8Arg(Param^.AsPascalName));
+    end
+    else if Param^._In = 'query' then
+    begin
+      QueryParameters.AddValue(Param^.Name, pt.ToFormatUtf8Arg(Param^.AsPascalName));
     end;
   end;
 
    result := FormatUtf8('%%begin%  fClient.Request(''%'', ''%''',
-     [Declaration(ClassName, Parser), Parser.LineEnd, Parser.LineEnd,
+     [Declaration(ClassName, {implem=}true), fParser.LineEnd, fParser.LineEnd,
       ToText(fMethod), Action]);
    // Path parameters
    if Length(ActionArgs) > 0 then
@@ -1268,31 +1290,32 @@ begin
    // Query parameters
    if QueryParameters.Count > 0 then
    begin
-     Append(result, ', [', Parser.LineEnd);
+     Append(result, ', [', fParser.LineEnd);
      for i := 0 to QueryParameters.Count - 1 do
      begin
        if i > 0 then
-         Append(result, ',', Parser.LineEnd);
+         Append(result, ',', fParser.LineEnd);
        Append(result, ['    ''', QueryParameters.Names[i], ''', ',
          VariantToUtf8(QueryParameters.Values[i])]);
      end;
-     Append(result, Parser.LineEnd, '    ]');
+     Append(result, fParser.LineEnd, '    ]');
    end
    // Either ActionArgs and QueryArgs or None of them (for Request parameters)
    else if (ActionArgs <> nil) or
            Assigned(fPayloadParameterType) then
      Append(result, ', []');
+   Append(result, [',', fParser.LineEnd, '    ']);
 
    // Payload if any
    if Assigned(fPayloadParameterType) then
    begin
-     Append(result, ', Payload, ');
+     Append(result, 'Payload, ');
      if Assigned(fSuccessResponseType) then
-       Append(result, 'Result, ')
+       Append(result, 'result')
      else
-       Append(result, '{Not used, but need to send a pointer}self, ');
+       Append(result, '{notused:}self');
 
-     Append(result, ['TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
+     Append(result, [', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
      if Assigned(fSuccessResponseType) then
        Append(result, ['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
      else
@@ -1300,11 +1323,10 @@ begin
    end
    // Response type if any
    else if Assigned(fSuccessResponseType) then
-   begin
-     Append(result, [', Result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
-   end;
+     Append(result, [
+       'result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
 
-  Append(result, [');', Parser.LineEnd, 'end;', Parser.LineEnd]);
+  Append(result, [');', fParser.LineEnd, 'end;', fParser.LineEnd]);
 end;
 
 function TPascalOperation.FunctionName: RawUtf8;
@@ -1359,6 +1381,7 @@ begin
     if fPascalName[i] in ['A' .. 'Z'] then
       Append(fPrefix, fPascalName[i]);
   LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
+  FormatUtf8('%2TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
 end;
 
 function TPascalEnum.ToTypeDefinition: RawUtf8;
@@ -1401,17 +1424,12 @@ begin
     result := FormatUtf8('set of %', [PascalName]);
 end;
 
-function TPascalEnum.ToConstTextArrayName: RawUtf8;
-begin
-  result := FormatUtf8('%2TXT', [UpperCase(copy(PascalName, 2, 100))]);
-end;
-
 function TPascalEnum.ToConstTextArray: RawUtf8;
 var
   i: integer;
 begin
   result := FormatUtf8('%: array[%] of RawUtf8 = (%    ''''',
-              [ToConstTextArrayName, PascalName, fParser.LineEnd]);
+              [fConstTextArrayName, PascalName, fParser.LineEnd]);
   for i := 1 to fChoices.Count - 1 do // first entry is for None/Default
     Append(result, ', ',
       mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i])));
@@ -1459,6 +1477,9 @@ constructor TPascalType.CreateBuiltin(const aBuiltinTypeName: RawUtf8;
 begin
   fBuiltinTypeName := aBuiltinTypeName;
   fBuiltinSchema := aSchema;
+  fNoConst := (not aIsArray) and
+    (FindPropName(['integer', 'Int64', 'boolean',
+      'Single', 'Double', 'TDate', 'TDateTime'], fBuiltinTypeName) >= 0);
   SetArray(aIsArray);
 end;
 
@@ -1560,7 +1581,7 @@ begin
     result := FormatUtf8('ToUtf8(%)', [VarName])
   else if IsEnum then
     result := FormatUtf8('%[%]',
-      [(fCustomType as TPascalEnum).ToConstTextArrayName, VarName])
+      [(fCustomType as TPascalEnum).fConstTextArrayName, VarName])
   else
     result := VarName;
 end;
@@ -1568,23 +1589,21 @@ end;
 function TPascalType.ToDefaultParameterValue(aParam: POpenApiParameter;
   Parser: TOpenApiParser): RawUtf8;
 var
-  DefaultValue: PVariant;
+  def: PVariant;
   t: RawUtf8;
 begin
-  DefaultValue := aParam^.Default;
-  if Assigned(DefaultValue) then
+  def := aParam^.Default;
+  if Assigned(def) and
+     not VarIsEmptyOrNull(def^) then
   begin
     // explicit default value
-    if VarIsEmptyOrNull(DefaultValue^) then
-      if IsEnum then
-        result := (CustomType as TPascalEnum).Prefix + 'None'
-      else
-        result := 'nil'
-    else if PVarData(DefaultValue)^.VType = varBoolean then
-      result := BOOL_UTF8[PVarData(DefaultValue)^.VBoolean]
-    else if VariantToUtf8(DefaultValue^, result) then
+    if PVarData(def)^.VType = varBoolean then
+      result := BOOL_UTF8[PVarData(def)^.VBoolean]
+    else if VariantToUtf8(def^, result) then
       result := QuotedStr(result);
   end
+  else if IsEnum then
+    result := (CustomType as TPascalEnum).Prefix + 'None'
   else
   begin
     // default from type
@@ -1904,8 +1923,8 @@ begin
     if not Assigned(s) or
        s^.Deprecated then
       continue;
-    op := TPascalOperation.Create(aPath, p, s, m);
-    op.ResolveTypes(self);
+    op := TPascalOperation.Create(self, aPath, p, s, m);
+    op.ResolveResponseTypes;
     ObjArrayAdd(fOperations, op);
   end;
 end;
@@ -2103,7 +2122,7 @@ begin
         Append(result, [', TypeInfo(', enum.ToArrayTypeName, ')'])
       else
         Append(result, ', nil');
-      Append(result, ', @', enum.ToConstTextArrayName);
+      Append(result, ', @', enum.fConstTextArrayName);
     end;
     Append(result, ']);', LineEnd);
   end;
@@ -2206,8 +2225,9 @@ begin
           '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
           '    ////', u, LineEnd, LineEnd]);
       end;
-      Append(result, op.Documentation(Self));
-      Append(result, [LineIndent, op.Declaration('', self), LineEnd, LineEnd]);
+      Append(result, op.Documentation);
+      Append(result, [LineIndent,
+        op.Declaration('', {implem=}false), LineEnd, LineEnd]);
     end;
   end;
   // finalize the class definition and start the implementation section
@@ -2234,7 +2254,7 @@ begin
     'end;', LineEnd, LineEnd]);
   // append all methods, in native order (no need to follow tag ordering)
   for i := 0 to high(Operations) do
-    Append(result, Operations[i].Body(ClientClassName, Specs^.BasePath, self), LineEnd);
+    Append(result, Operations[i].Body(ClientClassName, Specs^.BasePath), LineEnd);
   Append(result, LineEnd, 'end.');
 end;
 
