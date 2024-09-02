@@ -1630,8 +1630,20 @@ begin
     p := fProperties.ObjectPtr[i];
     s := p.fSchema;
     if Assigned(s) and
-       (s^.Description <> '') then
-      Append(result, [fParser.LineIndent, '  /// ', s^.Description, fParser.LineEnd]);
+       not s.HasDescription then
+      s := pointer(s.ItemsOrNil); // fallback to enum "description"
+    if Assigned(s) and
+       s^.HasDescription then
+    begin
+      Append(result, [fParser.LineIndent,
+          '  /// ', s^.Description, fParser.LineEnd]);
+      if s^.HasExample then
+        Append(result, [fParser.LineIndent,
+          '  // - Example: ', s^.ExampleAsText, fParser.LineEnd]);
+      if s^.HasPattern then
+        Append(result, [fParser.LineIndent,
+          '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
+    end;
     Append(result, [fParser.LineIndent, '  ', p.PascalName, ': ',
       p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
