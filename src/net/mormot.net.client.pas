@@ -1450,7 +1450,7 @@ type
   public
     /// dedicated constructor, setting the associated TJsonResponse
     constructor CreateResp(const Format: RawUtf8; const Args: array of const;
-      const Resp: TJsonResponse);
+      const Resp: TJsonResponse); virtual;
     /// low-level access to the raw response context
     property Response: TJsonResponse
       read fResponse;
