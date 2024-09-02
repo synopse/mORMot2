@@ -2047,8 +2047,7 @@ begin
     '  sysutils,', LineEnd,
     '  mormot.core.base,', LineEnd,
     '  mormot.core.rtti,', LineEnd,
-    '  mormot.core.json,', LineEnd,
-    '  mormot.net.client;', LineEnd,
+    '  mormot.core.json;', LineEnd,
     LineEnd,
     'type', LineEnd, LineEnd]);
   // append all enumeration types
@@ -2065,13 +2064,6 @@ begin
   rec := GetOrderedRecords;
   for i := 0 to high(rec) do
     Append(result, rec[i].ToTypeDefinition, LineEnd);
-  // custom exceptions definitions
-  if fExceptions.Count > 0 then
-  begin
-    Append(result, [LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
-    for i := 0 to fExceptions.Count - 1 do
-      Append(result, TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition, LineEnd);
-  end;
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
@@ -2082,15 +2074,8 @@ begin
   end;
   // start implementation section
   Append(result, [LineEnd, LineEnd,
-    'implementation', LineEnd, LineEnd]);
-  // custom exceptions implementations
-  if fExceptions.Count > 0 then
-  begin
-    Append(result, [LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
-    for i := 0 to fExceptions.Count - 1 do
-      Append(result, TPascalException(fExceptions.ObjectPtr[i]).Body, LineEnd);
-  end;
-  Append(result, [LineEnd, '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
+    'implementation', LineEnd, LineEnd,
+    '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
   // output the text representation of all records
   // with proper json names (overriding the RTTI definitions)
   if rec <> nil then
@@ -2153,9 +2138,8 @@ var
   id, desc, u: RawUtf8;
   bannerlen, i, j: PtrInt;
 begin
-  result := '';
   // unit common definitions
-  Append(result, [
+  Make([
     GetDescription('Client unit for', ''),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
@@ -2175,16 +2159,24 @@ begin
     '  mormot.core.rtti,', LineEnd,
     '  mormot.core.variants,', LineEnd,
     '  mormot.net.client,', LineEnd,
-    '  ', DtoUnitName, ';', LineEnd,
-    LineEnd,
-    'type',
-    LineEnd,
+    '  ', DtoUnitName, ';', LineEnd, LineEnd,
+    'type', LineEnd], result);
+  // custom exceptions definitions
+  if fExceptions.Count > 0 then
+  begin
+    Append(result, [LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+    for i := 0 to fExceptions.Count - 1 do
+      Append(result, TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition, LineEnd);
+  end;
+  // main client class definition
+  Append(result, [LineEnd,
+    '{ ************ Main ', ClientClassName, 'Client Class }', LineEnd, LineEnd,
     GetDescription('Client class for', '  '),
     '  ', ClientClassName, ' = class', LineEnd,
     '  private', LineEnd,
     '    fClient: IJsonClient;', LineEnd,
-    '  public', LineEnd,
-    '    // initialize with an associated HTTP/JSON request', LineEnd,
+    '  public', LineEnd, LineEnd,
+    '    // initialize this Client with an associated HTTP/JSON request', LineEnd,
     '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
   // append all methods, regrouped per tag (if any)
   fLineIndent := '    ';
@@ -2224,8 +2216,17 @@ begin
     '    property JsonClient: IJsonClient', LineEnd,
     '      read fClient write fClient;', LineEnd,
     '  end;', LineEnd,
-    LineEnd,
-    'implementation', LineEnd, LineEnd, LineEnd,
+    LineEnd, LineEnd,
+    'implementation', LineEnd, LineEnd, LineEnd]);
+  // custom exceptions implementations
+  if fExceptions.Count > 0 then
+  begin
+    Append(result, ['{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+    for i := 0 to fExceptions.Count - 1 do
+      Append(result, TPascalException(fExceptions.ObjectPtr[i]).Body, LineEnd);
+  end;
+  Append(result, [LineEnd,
+    '{ ************ Main ', ClientClassName, ' Client Class }', LineEnd, LineEnd,
     '{ ', ClientClassName, '}', LineEnd, LineEnd,
     'constructor ', ClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
     'begin', LineEnd,
