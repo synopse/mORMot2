@@ -740,13 +740,13 @@ type
         EnumMax:  cardinal;
         EnumInfo: PRttiEnumType;
         EnumList: PShortString;
-        EnumCustomText: PRawUtf8Array);
+        EnumCustomText: PRawUtf8Array); // TRttiJson.RegisterCustomEnumValues
       rkDynArray,
       rkArray: (
         ItemInfoManaged: PRttiInfo; // = nil for unmanaged types
-        ItemInfoRaw: PRttiInfo;  // from RTTI, likely <> nil for unmanaged types
+        ItemInfoRaw: PRttiInfo;   // from RTTI, likely <> nil for unmanaged types
         ItemSize: integer;
-        ItemCount: integer;  // rkArray only
+        ItemCount: integer;    // rkArray only
       );
       rkClass: (
         SerializableInterface: pointer; // = TRttiCustom of the rkInterface

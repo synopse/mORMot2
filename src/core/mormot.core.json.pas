@@ -8583,10 +8583,14 @@ begin
           FastAssignNew(v.VAny);
         end;
       end;
-    ptSet: // use a local temp variable before calling the setter
-      begin
+    ptEnumeration,
+    ptSet:   // unserialize into a local variable before calling the setter
+      begin  // _JL_Set/_JL_Enumeration work also with EnumCustomText <> nil
         v.VInt64 := 0;
-        _JL_Set(@v.VInt64, self);
+        if Info.Parser = ptSet then
+          _JL_Set(@v.VInt64, self)
+        else
+          _JL_Enumeration(@v.VInt64, self);
         if Valid then
           Prop^.Prop.SetOrdProp(Data, v.VInt64);
       end;
@@ -11050,7 +11054,8 @@ begin
    begin
      r := Rtti.RegisterType(EnumInfo) as TRttiJson;
      r.fCache.EnumCustomText := CustomText;
-     r.fJsonSave := @_JS_EnumerationCustom; // keep fJsonLoad := _JL_Enumeration
+     r.fJsonSave := @_JS_EnumerationCustom;
+     // keep fJsonLoad := _JL_Enumeration (will also work with setters)
    end;
   if (SetInfo <> nil) and
      (SetInfo^.Kind = rkSet) then
