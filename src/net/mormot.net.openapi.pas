@@ -1352,28 +1352,43 @@ begin
   fName := aName;
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
-  fChoices.AddItem('None', 0);
-  for i := 1 to length(aName) do
-    if aName[i] in ['A' .. 'Z'] then
-      Append(fPrefix, aName[i]);
-  LowerCaseSelf(fPrefix);
+  fChoices.AddItem('None', 0); // alwyas prepend a first void item
+  for i := 2 to length(fPascalName) do
+    if fPascalName[i] in ['A' .. 'Z'] then
+      Append(fPrefix, fPascalName[i]);
+  LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
 end;
 
 function TPascalEnum.ToTypeDefinition: RawUtf8;
 var
-  Choice: RawUtf8;
+  item: RawUtf8;
+  items: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  result := FormatUtf8('%% = (', [fParser.LineIndent, PascalName]);
+  result := '';
+  if fSchema^.HasDescription then
+    Append(result, [fParser.LineIndent, '/// ', fSchema^.Description, fParser.LineEnd]);
+  Append(result, [fParser.LineIndent, PascalName, ' = ', fParser.LineEnd,
+    fParser.LineIndent, '  ']);
   for i := 0 to fChoices.Count - 1 do
   begin
-    if i > 0 then
+    if i = 0 then
+      item := 'None'
+    else
+    begin
       Append(result,  ', ');
-    Choice := StringReplaceAll(VariantToUtf8(fChoices.Values[i]), ' ', '');
-    Choice[1] := UpCase(Choice[1]);
-    Append(result, fPrefix, Choice);
+      CamelCase(ToUtf8(fChoices.Values[i]), item);
+      if item <> '' then
+        item[1] := UpCase(item[1]);
+      if (item = '') or
+         (FindPropName(items, item) >= 0) then
+        Append(item, [i]); // duplicated, or no ascii within -> make unique
+    end;
+    AddRawUtf8(items, item);
+    Append(result, fPrefix, item);
   end;
-  Append(result, [');', fParser.LineEnd, ToArrayTypeDefinition]);
+  Append(result, [');', fParser.LineEnd,
+    ToArrayTypeDefinition]);
 end;
 
 function TPascalEnum.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
@@ -1393,13 +1408,11 @@ function TPascalEnum.ToConstTextArray: RawUtf8;
 var
   i: integer;
 begin
-  result := FormatUtf8('%: array[%] of RawUtf8 = (', [ToConstTextArrayName, PascalName]);
-  for i := 0 to fChoices.Count - 1 do
-    if i = 0 then
-      Append(result, '''''') // first entry is for None/Default
-    else
-      Append(result, [', ''',
-        StringReplaceAll(VariantToUtf8(fChoices.Values[i]), ' ', ''), '''']);
+  result := FormatUtf8('%: array[%] of RawUtf8 = (%    ''''',
+              [ToConstTextArrayName, PascalName, fParser.LineEnd]);
+  for i := 1 to fChoices.Count - 1 do // first entry is for None/Default
+    Append(result, ', ',
+      mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i])));
   Append(result, ');');
 end;
 
@@ -2025,7 +2038,8 @@ begin
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
-    Append(result, [LineEnd, LineEnd, 'const', LineEnd, LineEnd]);
+    Append(result, [LineEnd, LineEnd, 'const', LineEnd,
+      '  // define how enums/sets are actually transmitted as JSON array of string', LineEnd]);
     for i := 0 to fEnums.Count - 1 do
       Append(result, [LineIndent, TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
   end;
@@ -2047,17 +2061,20 @@ begin
   // register all needed enum types RTTI
   if fEnums.Count > 0 then
   begin
-    Append(result, '  Rtti.RegisterTypes([', LineEnd);
+    Append(result, '  TRttiJson.RegisterCustomEnumValues([', LineEnd);
     for i := 0 to fEnums.Count - 1 do
     begin
-      if i <> 0 then
+      if i > 0 then
         Append(result, ',', LineEnd);
       enum := fEnums.ObjectPtr[i];
       Append(result, ['    TypeInfo(', enum.PascalName, ')']);
       if enum.fRequiresArrayDefinition then
-        Append(result, [',', LineEnd, '    TypeInfo(', enum.ToArrayTypeName, ')']);
+        Append(result, [', TypeInfo(', enum.ToArrayTypeName, ')'])
+      else
+        Append(result, ', nil');
+      Append(result, ', @', enum.ToConstTextArrayName);
     end;
-    Append(result, [LineEnd, '  ]);', LineEnd]);
+    Append(result, ']);', LineEnd);
   end;
   // register all record types RTTI
   if rec <> nil then
