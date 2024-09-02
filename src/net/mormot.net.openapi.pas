@@ -24,6 +24,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.data, // for TRawUtf8List
   mormot.core.variants,
@@ -438,7 +439,8 @@ type
     fGeneratedBy, fGeneratedByLine: RawUtf8;
     procedure ParseSpecs;
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
-    function GetDescription(const Described, Indent: RawUtf8): RawUtf8;
+    function GetDescription(const Described: RawUtf8): RawUtf8;
+    function Comment(const Args: array of const): RawUtf8;
   public
     constructor Create;
     destructor Destroy; override;
@@ -1091,11 +1093,31 @@ begin
   end;
 end;
 
+function TOpenApiParser.Comment(const Args: array of const): RawUtf8;
+var
+  line, feed: RawUtf8;
+  i, o: PtrInt;
+begin
+  line := Make(Args);
+  o := 0;
+  while length(line) - o > 80 do // insert line feeds on huge comment
+  begin
+    i := PosEx(' ', line, o + 75);
+    if i = 0 then
+      break;
+    if feed = '' then
+      feed := Make([LineEnd, LineIndent, '//']);
+    insert(feed, line, i);
+    o := i + length(feed);
+  end;
+  result := Make([LineIndent, line, LineEnd]);
+end;
+
 function TPascalOperation.Documentation: RawUtf8;
 var
   p: POpenApiParameter;
   v: PDocVariantData;
-  status: RawUtf8;
+  status, line: RawUtf8;
   code: integer;
   r: POpenApiResponse;
   i: PtrInt;
@@ -1109,7 +1131,7 @@ begin
      fParser.LineIndent, fParser.LineEnd]);
   // Summary
   if fOperation^.Summary <> '' then
-    Append(result, [fParser.LineIndent, '// Summary: ', fOperation^.Summary, fParser.LineEnd]);
+    Append(result, fParser.Comment(['// Summary: ', fOperation^.Summary]));
   // Description
   if fOperation^.Description <> '' then
     Append(result, [fParser.LineIndent, '// Description:', fParser.LineEnd,
@@ -1127,22 +1149,22 @@ begin
       p := fParameters[i];
       if p^._In = 'body' then
         continue; // handled below
-      Append(result, [fParser.LineIndent, '// - [', p^._In, '] ', p^.AsPascalName]);
+      line := Make(['// - [', p^._In, '] ', p^.AsPascalName]);
       if p^.Required then
-        Append(result, '*');
+        Append(line, '*');
       if p^.Default <> nil then
-        Append(result, [' (default=', p^.Default^, ')']);
+        Append(line, [' (default=', p^.Default^, ')']);
       if p^.Description <> '' then
-        Append(result, ': ', p^.Description);
-      Append(result, fParser.LineEnd);
+        Append(line, ': ', p^.Description);
+      Append(result, fParser.Comment([line]));
     end;
     // Request body
     if Assigned(rb) then
     begin
-      Append(result, fParser.LineIndent, '// - [body] Payload*');
+      line := '// - [body] Payload*';
       if rb^.Description <> '' then
-        Append(result, ': ', rb^.Description);
-      Append(result, fParser.LineEnd);
+        Append(line, ': ', rb^.Description);
+      Append(result, fParser.Comment([line]));
     end;
   end;
   // Responses
@@ -1155,21 +1177,20 @@ begin
     begin
       status := v^.Names[i];
       code := Utf8ToInteger(status, 0);
-      Append(result, [fParser.LineIndent, '// - ', status]);
       r := @v^.Values[i];
       rs := r^.Schema(fParser);
+      line := Make(['// - ', status]);
       if code = fSuccessResponseCode then
-        Append(result, ' (main)')
+        Append(line, ' (main)')
       else if Assigned(rs) then
       begin
         e := fParser.fExceptions.GetObjectFrom(rs^.Data.ToJson);
         if e <> nil then // no need to parse, just recognize schema
-          Append(result, [' [', e.PascalName, ']']);
+          Append(line, [' [', e.PascalName, ']']);
       end;
       if r^.Description <> '' then
-        Append(result, [': ', r^.Description, fParser.LineEnd])
-      else
-        Append(result, ': No Description', fParser.LineEnd);
+        Append(line, ': ', r^.Description);
+      Append(result, fParser.Comment([line]));
     end;
   end;
 end;
@@ -1869,7 +1890,7 @@ begin
     result := nil;
 end;
 
-function TOpenApiParser.GetDescription(const Described, Indent: RawUtf8): RawUtf8;
+function TOpenApiParser.GetDescription(const Described: RawUtf8): RawUtf8;
 var
   u: RawUtf8;
   v: variant;
@@ -1879,15 +1900,15 @@ begin
   Info := fSpecs.Info;
   if Info = nil then
     exit;
-  result := FormatUtf8('%/// % %%', [Indent, Described, Info^.U['title'], LineEnd]);
+  result := Comment(['/// ', Described, ' ', Info^.U['title']]);
   if Info^.GetAsRawUtf8('description', u) then
-    Append(result, [Indent, '// - ', StringReplaceAll(u, #10, #10'//   '), LineEnd]);
-  if Indent <> '' then
+    Append(result, Comment(['// - ', StringReplaceAll(u, #10, #10'//   ')]));
+  if LineIndent <> '' then
     exit;
   if Info^.GetAsRawUtf8('version', u) then
-    Append(result, [Indent, '// - version ', u, LineEnd]);
+    Append(result, Comment(['// - version ', u]));
   if Info^.GetValueByPath('license.name', v) then
-    Append(result, ['// - OpenAPI definition licensed under ', v, ' terms', LineEnd]);
+    Append(result, Comment(['// - OpenAPI definition licensed under ', v, ' terms']));
 end;
 
 function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
@@ -2074,13 +2095,15 @@ var
 begin
   result := '';
   // unit common definitions
+  fLineIndent := '';
   Append(result, [
-    GetDescription('DTOs for', ''),
+    GetDescription('DTOs for'),
     'unit ', UnitName, ';', LineEnd , LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
     'interface', LineEnd,
     LineEnd,
+    '// ', Info^.U['title'], ' DTOs', LineEnd,
     '// ', fGeneratedByLine, LineEnd,
     '// ', fGeneratedBy, LineEnd,
     '// ', fGeneratedByLine, LineEnd,
@@ -2182,14 +2205,16 @@ var
   bannerlen, i, j: PtrInt;
 begin
   // unit common definitions
+  fLineIndent := '';
   Make([
-    GetDescription('Client unit for', ''),
+    GetDescription('Client unit for'),
     'unit ', UnitName, ';', LineEnd,
     LineEnd,
     '{$I mormot.defines.inc}', LineEnd ,
     LineEnd,
     'interface', LineEnd,
     LineEnd,
+    '// ', Info^.U['title'], ' Client', LineEnd,
     '// ', fGeneratedByLine, LineEnd,
     '// ', fGeneratedBy, LineEnd,
     '// ', fGeneratedByLine, LineEnd,
@@ -2204,6 +2229,7 @@ begin
     '  mormot.net.client,', LineEnd,
     '  ', DtoUnitName, ';', LineEnd, LineEnd,
     'type', LineEnd], result);
+  fLineIndent := '  ';
   // custom exceptions definitions
   if fExceptions.Count > 0 then
   begin
@@ -2214,14 +2240,15 @@ begin
   // main client class definition
   Append(result, [LineEnd,
     '{ ************ Main ', ClientClassName, 'Client Class }', LineEnd, LineEnd,
-    GetDescription('Client class for', '  '),
+    GetDescription('Client class for'),
     '  ', ClientClassName, ' = class', LineEnd,
     '  private', LineEnd,
     '    fClient: IJsonClient;', LineEnd]);
   // status responses to exception events
   if fErrorHandler <> nil then
   begin
-    Append(result, '    // TOnJsonClientError event handlers', LineEnd);
+    Append(result, ['    // TOnJsonClientError event handler',
+      PLURAL_FORM[length(fErrorHandler) > 1], LineEnd]);
     for i := 0 to high(fErrorHandler) do
       Append(result, [
         '    procedure OnError', i + 1, '(const Sender: IJsonClient;', LineEnd,
@@ -2257,9 +2284,9 @@ begin
         Append(result, [LineEnd, LineEnd,
           '    ////', u, LineEnd,
           '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
-          '    ////', u, LineEnd, LineEnd]);
+          '    ////', u, LineEnd]);
       end;
-      Append(result, op.Documentation);
+      Append(result, [LineEnd, op.Documentation]);
       Append(result, [LineIndent,
         op.Declaration('', {implem=}false), LineEnd, LineEnd]);
     end;
