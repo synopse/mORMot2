@@ -1357,6 +1357,7 @@ type
   TSimpleEnum = (enTest, enTest2);
   TEnumSet = set of TSimpleEnum;
 
+  // validate enums and sets with setter methods
   TSimpleExample = class(TSynPersistent)
   private
     fFullName: string;
@@ -1389,6 +1390,9 @@ begin
   fEnum := Value;
 end;
 
+const
+  SIMPLEENUM2TXT: array[TSimpleEnum] of RawUtf8 = (
+    'un', 'd\eux');
 
 procedure TTestCoreProcess.EncodeDecodeJSON;
 var
@@ -1730,6 +1734,29 @@ var
       JsonToObject(x2, pointer(j), ok);
       Check(ok);
       Check(ObjectEquals(x1, x2));
+      TRttiJson.RegisterCustomEnumValues(TypeInfo(TSimpleEnum),
+        TypeInfo(TEnumSet), @SIMPLEENUM2TXT);
+      j := ObjectToJson(x1, []);
+      Check(IsValidJson(j));
+      CheckEqual(j, '{"FullName":"ABC","EnumSet":["d\\eux"],"Enum":"d\\eux"}');
+      x1.Enum := enTest;
+      x1.EnumSet := [enTest, enTest2];
+      CheckEqual(ObjectToJson(x1, []),
+        '{"FullName":"ABC","EnumSet":["un","d\\eux"],"Enum":"un"}');
+      ClearObject(x2);
+      CheckEqual(ObjectToJson(x2, []),
+        '{"FullName":"","EnumSet":[],"Enum":"un"}');
+      ok := false;
+      JsonToObject(x2, pointer(j), ok);
+      Check(ok);
+      Check(x2.FullName = 'ABC', 'FullName');
+      Check(x2.Enum = enTest2, 'Enum');
+      Check(x2.EnumSet = [enTest2], 'EnumSet');
+      Check(not ObjectEquals(x1, x2));
+      TRttiJson.UnRegisterCustomSerializer(TypeInfo(TSimpleEnum));
+      TRttiJson.UnRegisterCustomSerializer(TypeInfo(TEnumSet));
+      CheckEqual(ObjectToJson(x1, []), '{"FullName":"ABC","EnumSet":3,"Enum":0}');
+      CheckEqual(ObjectToJson(x2, []), '{"FullName":"ABC","EnumSet":2,"Enum":1}');
     finally
       x2.Free;
       x1.Free;
