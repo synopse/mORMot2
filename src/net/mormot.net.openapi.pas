@@ -262,9 +262,6 @@ type
       aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
     constructor CreateCustom(aCustomType: TPascalCustomType); overload;
 
-    class function LoadFromSchema(Parser: TOpenApiParser;
-      Schema: POpenApiSchema; const SchemaName: RawUtf8 = ''): TPascalType;
-
     // TODO: Handle RecordArrayType in RTTI definition
     function ToPascalName(AsFinalType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
@@ -313,6 +310,7 @@ type
   private
     fName: RawUtf8;
     fPascalName: RawUtf8;
+    fFromRef: RawUtf8;
     fSchema: POpenApiSchema;
     fParser: TOpenApiParser;
     fRequiresArrayDefinition: boolean;
@@ -452,6 +450,8 @@ type
     function ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8);
 
+    function NewPascalTypeFromSchema(aSchema: POpenApiSchema;
+      const aSchemaName: RawUtf8 = ''): TPascalType;
     function GetRecord(aRecordName: RawUtf8; NameIsReference: boolean = false): TPascalRecord;
     function GetOrderedRecords: TPascalRecordDynArray;
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
@@ -675,7 +675,9 @@ begin
     result := POpenApiSchema(Data.O['schema'])
   else
     // we only support application/json in our wrapper classes
-    result := POpenApiSchema(Data.O['content']^.O[JSON_CONTENT_TYPE].O['schema'])
+    result := POpenApiSchema(Data.O['content']^.O[JSON_CONTENT_TYPE].O['schema']);
+  if result^.Data.Count = 0 then
+    result := nil; // no such schema
 end;
 
 
@@ -1020,8 +1022,8 @@ begin
   begin
     SetLength(fParameterTypes, length(fParameters));
     for i := 0 to length(fParameters) - 1 do
-      fParameterTypes[i] := TPascalType.LoadFromSchema(
-        fParser, fParameters[i]^.Schema(fParser));
+      fParameterTypes[i] := fParser.NewPascalTypeFromSchema(
+        fParameters[i]^.Schema(fParser));
   end;
   if (aIndex < 0) or
      (aIndex >= length(fParameterTypes)) then
@@ -1039,13 +1041,13 @@ var
 begin
   resp := fOperation^.BodySchema(fParser);
   if Assigned(resp) then
-    fPayloadParameterType := TPascalType.LoadFromSchema(fParser, resp);
+    fPayloadParameterType := fParser.NewPascalTypeFromSchema(resp);
   v := fOperation.Responses;
   for i := 0 to v^.Count - 1 do
   begin
     status := v^.Names[i];
-    resp := POpenApiResponse(@v^.Values[i])^.Schema(fParser);
     code := Utf8ToInteger(status, 0);
+    resp := POpenApiResponse(@v^.Values[i])^.Schema(fParser);
     if StatusCodeIsSuccess(code) or
        ((fSuccessResponseType = nil) and
         (status = 'default')) then
@@ -1053,13 +1055,15 @@ begin
       if fSuccessResponseType = nil then // handle the first success
       begin
         fSuccessResponseCode := code;
-        fSuccessResponseType := TPascalType.LoadFromSchema(fParser, resp);
+        if resp <> nil then
+          fSuccessResponseType := fParser.NewPascalTypeFromSchema(resp);
       end;
     end
-    else // generate a custom EJsonClient exception class for 4xx errors
+    else if resp <> nil then
     begin
-      // we don't know PascalName until it is parsed so we use the json
+      // generate a custom EJsonClient exception class for 4xx errors
       json := resp^.Data.ToJson;
+      // we don't know PascalName until it is parsed so is json-indexed
       if fParser.fExceptions.GetObjectFrom(json) = nil then
         fParser.fExceptions.AddObject(json,
           TPascalException.Create(fParser, status, @v^.Values[i]));
@@ -1330,7 +1334,7 @@ end;
 constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
   const aName: RawUtf8; aSchema: POpenApiSchema);
 begin
-  fType := TPascalType.LoadFromSchema(aOwner, aSchema, '');
+  fType := aOwner.NewPascalTypeFromSchema(aSchema, '');
   fTypeOwned := true;
   fName := aName;
   fSchema := aSchema;
@@ -1456,8 +1460,8 @@ procedure TPascalType.SetArray(AValue: boolean);
 begin
   fIsArray := AValue;
   if AValue and
-     Assigned(CustomType) then
-    CustomType.fRequiresArrayDefinition := true;
+     Assigned(fCustomType) then
+    fCustomType.fRequiresArrayDefinition := true;
 end;
 
 constructor TPascalType.CreateBuiltin(const aBuiltinTypeName: RawUtf8;
@@ -1465,8 +1469,8 @@ constructor TPascalType.CreateBuiltin(const aBuiltinTypeName: RawUtf8;
 begin
   fBuiltinTypeName := aBuiltinTypeName;
   fBuiltinSchema := aSchema;
-  fNoConst := (not aIsArray) and
-    (FindPropName(['integer', 'Int64', 'boolean',
+  if not aIsArray then
+    fNoConst := (FindPropName(['integer', 'Int64', 'boolean',
       'Single', 'Double', 'TDate', 'TDateTime'], fBuiltinTypeName) >= 0);
   SetArray(aIsArray);
 end;
@@ -1474,69 +1478,75 @@ end;
 constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
 begin
   fCustomType := aCustomType;
+  fNoConst := IsEnum;
 end;
 
-class function TPascalType.LoadFromSchema(Parser: TOpenApiParser;
-  Schema: POpenApiSchema; const SchemaName: RawUtf8): TPascalType;
+function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
+  const aSchemaName: RawUtf8): TPascalType;
 var
   all: POpenApiSchemaDynArray;
-  ref, fmt, nam: RawUtf8;
+  ref, src, fmt, nam: RawUtf8;
   enum: PDocVariantData;
   enumType: TPascalEnum;
 begin
-  all := Schema^.AllOf;
+  if aSchema = nil then
+    EOpenApi.RaiseUtf8('NewPascalTypeFromSchema(%): aSchema=nil', [aSchemaName]);
+  all := aSchema^.AllOf;
   if length(all) = 1 then
-    Schema := all[0]; // typically a single "$ref": "..." entry
-  ref := Schema^.Reference;
+    aSchema := all[0]; // typically a single "$ref": "..." entry
+  ref := aSchema^.Reference;
   if ref <> '' then
   begin
     // #/definitions/NewPet -> NewPet
-    ref := SplitRight(ref, '/');
-    Schema := Parser.Schema[ref];
-    if Schema = nil then
-      EOpenApi.RaiseUtf8('%.LoadFromSchema: unknown $ref=%', [self, ref]);
-    result := LoadFromSchema(Parser, Schema, ref);
+    src := SplitRight(ref, '/');
+    aSchema := Schema[src];
+    if aSchema = nil then
+      EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
+    result := NewPascalTypeFromSchema(aSchema, src);
+    if (result.CustomType <> nil) and
+       (result.CustomType.fFromRef = '') then
+      result.CustomType.fFromRef := ref;
   end
   else if (all <> nil) or
-          Schema^.IsObject then
-    if SchemaName = '' then
-      result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema)
+          aSchema^.IsObject then
+    if aSchemaName = '' then
+      result := TPascalType.CreateBuiltin(aSchema.BuiltinType, aSchema)
     else
-      result := TPascalType.CreateCustom(Parser.GetRecord(SchemaName))
-  else if Schema^.IsArray then
+      result := TPascalType.CreateCustom(GetRecord(aSchemaName))
+  else if aSchema^.IsArray then
   begin
     // TODO: Handle array of arrays?
-    result := LoadFromSchema(Parser, Schema^.Items, SchemaName);
-    result.fBuiltinSchema := Schema;
+    result := NewPascalTypeFromSchema(aSchema^.Items, aSchemaName);
+    result.fBuiltinSchema := aSchema;
     result.IsArray := true;
   end
   else
   begin
-    enum := Schema^.Enum;
+    enum := aSchema^.Enum;
     if enum <> nil then
     begin
-      fmt := Schema^._Format;
+      fmt := aSchema^._Format;
       if (fmt = '') and // if no "format" type name is supplied
-         (Schema^._Type = 'string') then
+         (aSchema^._Type = 'string') then
       begin
         fmt := enum^.ToJson; // use string values to make it genuine
-        nam := Schema^.Description;
+        nam := aSchema^.Description;
       end
       else
         nam := fmt;
       if fmt <> '' then
       begin
-        enumType := Parser.fEnums.GetObjectFrom(fmt);
+        enumType := fEnums.GetObjectFrom(fmt);
         if enumType = nil then
         begin
-          enumType := TPascalEnum.Create(Parser, nam, Schema);
-          Parser.fEnums.AddObject(fmt, enumType);
+          enumType := TPascalEnum.Create(self, nam, aSchema);
+          fEnums.AddObject(fmt, enumType);
         end;
         result := TPascalType.CreateCustom(enumType);
         exit;
       end;
     end;
-    result := TPascalType.CreateBuiltin(Schema.BuiltinType, Schema);
+    result := TPascalType.CreateBuiltin(aSchema.BuiltinType, aSchema);
   end;
 end;
 
@@ -1633,6 +1643,8 @@ var
   s: POpenApiSchema;
 begin
   result := fParser.LineIndent;
+  if fFromRef <> '' then
+    Append(result, ['/// from ', fFromRef, fParser.LineEnd, fParser.LineIndent]);
   Append(result, [PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
@@ -1709,7 +1721,7 @@ constructor TPascalException.Create(aOwner: TOpenApiParser; const aCode: RawUtf8
 begin
   fErrorCode := aCode;
   fResponse := aResponse;
-  fErrorType := TPascalType.LoadFromSchema(aOwner, aResponse^.Schema(aOwner));
+  fErrorType := aOwner.NewPascalTypeFromSchema(aResponse^.Schema(aOwner));
   if Assigned(fErrorType.CustomType) then
   begin
     fPascalName := fErrorType.CustomType.PascalName;
@@ -2236,6 +2248,7 @@ begin
     for i := 0 to fExceptions.Count - 1 do
       Append(result, TPascalException(fExceptions.ObjectPtr[i]).Body, LineEnd);
   end;
+  fLineIndent := '';
   Append(result, [LineEnd,
     '{ ************ Main ', ClientClassName, ' Client Class }', LineEnd, LineEnd,
     '{ ', ClientClassName, '}', LineEnd, LineEnd,
