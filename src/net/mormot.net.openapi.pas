@@ -375,12 +375,14 @@ type
   private
     fResponse: POpenApiResponse;
     fErrorType: TPascalType;
+    fErrorTypeName: RawUtf8;
     fErrorCode: RawUtf8;
   public
     constructor Create(aOwner: TOpenApiParser; const aCode: RawUtf8;
       aResponse: POpenApiResponse = nil);
     destructor Destroy; override;
     function ToTypeDefinition: RawUtf8; override;
+    function Body: RawUtf8;
     property Response: POpenApiResponse
       read fResponse;
     property ErrorType: TPascalType
@@ -1244,7 +1246,7 @@ begin
     end;
   end;
 
-   result := FormatUtf8('%%begin%  JsonClient.Request(''%'', ''%''',
+   result := FormatUtf8('%%begin%  fClient.Request(''%'', ''%''',
      [Declaration(ClassName, Parser), Parser.LineEnd, Parser.LineEnd,
       ToText(fMethod), Action]);
    // Path parameters
@@ -1702,9 +1704,13 @@ begin
   fResponse := aResponse;
   fErrorType := TPascalType.LoadFromSchema(aOwner, aResponse^.Schema(aOwner));
   if Assigned(fErrorType.CustomType) then
-    fPascalName := 'E' + fErrorType.CustomType.Name
+  begin
+    fPascalName := fErrorType.CustomType.PascalName;
+    fPascalName[1] := 'E'; // Txxxx -> Exxxx
+  end
   else
-    fPascalName := 'E' + fErrorType.fBuiltinTypeName;
+    fPascalName := 'E' + fErrorType.fBuiltinTypeName; // paranoid
+  fErrorTypeName := fErrorType.ToPascalName;
   inherited Create(aOwner, fPascalName);
 end;
 
@@ -1715,22 +1721,30 @@ begin
 end;
 
 function TPascalException.ToTypeDefinition: RawUtf8;
-var
-  typ: RawUtf8;
 begin
-  typ := fErrorType.ToPascalName;
   result := fParser.LineIndent;
   Append(result, [
     '/// exception raised on ', fResponse.Description, ' (', fErrorCode, ')', fParser.LineEnd,
     fParser.LineIndent, PascalName, ' = class(EJsonClient)', fParser.LineEnd,
     fParser.LineIndent, 'protected', fParser.LineEnd,
-    fParser.LineIndent, '  fError: ', typ, ';', fParser.LineEnd,
+    fParser.LineIndent, '  fError: ', fErrorTypeName, ';', fParser.LineEnd,
     fParser.LineIndent, 'public', fParser.LineEnd,
-    fParser.LineIndent, '  constructor Create(const aError: ', typ, ',', fParser.LineEnd,
-    fParser.LineIndent, '    const Response: TJsonResponse; const ErrorMsg: shortstring);', fParser.LineEnd,
-    fParser.LineIndent, '  property Error: ', typ, fParser.LineEnd,
+    fParser.LineIndent, '  constructor CreateResp(const Format: RawUtf8; const Args: array of const;', fParser.LineEnd,
+    fParser.LineIndent, '    const Resp: TJsonResponse); override;', fParser.LineEnd,
+    fParser.LineIndent, '  property Error: ', fErrorTypeName, fParser.LineEnd,
     fParser.LineIndent, '    read fError;', fParser.LineEnd,
     fParser.LineIndent, 'end;', fParser.LineEnd]);
+end;
+
+function TPascalException.Body: RawUtf8;
+begin
+  Make(['{ ', PascalName, ' }', fParser.LineEnd, fParser.LineEnd,
+    'constructor ', PascalName, '.CreateResp(const Format: RawUtf8;', fParser.LineEnd,
+    '  const Args: array of const; const Resp: TJsonResponse);', fParser.LineEnd,
+    'begin', fParser.LineEnd,
+    '  inherited CreateResp(Format, Args, Resp);', fParser.LineEnd,
+    '  LoadJson(fError, Resp.Content, TypeInfo(', fErrorTypeName,'));', fParser.LineEnd,
+    'end;', fParser.LineEnd], result);
 end;
 
 
@@ -2033,24 +2047,31 @@ begin
     '  sysutils,', LineEnd,
     '  mormot.core.base,', LineEnd,
     '  mormot.core.rtti,', LineEnd,
-    '  mormot.core.variants;', LineEnd,
+    '  mormot.core.json,', LineEnd,
+    '  mormot.net.client;', LineEnd,
     LineEnd,
     'type', LineEnd, LineEnd]);
   // append all enumeration types
   fLineIndent := '  ';
   if fEnums.Count > 0 then
   begin
+    Append(result, ['{ ************ Enumerations and Sets }', LineEnd, LineEnd]);
     for i := 0 to fEnums.Count - 1 do
       Append(result, TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition);
     Append(result, LineEnd, LineEnd);
   end;
   // append all records
+  Append(result, ['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
   rec := GetOrderedRecords;
   for i := 0 to high(rec) do
     Append(result, rec[i].ToTypeDefinition, LineEnd);
-  // custom exceptions
-  for i := 0 to fExceptions.Count - 1 do
-    Append(result, TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition, LineEnd);
+  // custom exceptions definitions
+  if fExceptions.Count > 0 then
+  begin
+    Append(result, [LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+    for i := 0 to fExceptions.Count - 1 do
+      Append(result, TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition, LineEnd);
+  end;
   // enumeration-to-text constants
   if fEnums.Count > 0 then
   begin
@@ -2062,6 +2083,14 @@ begin
   // start implementation section
   Append(result, [LineEnd, LineEnd,
     'implementation', LineEnd, LineEnd]);
+  // custom exceptions implementations
+  if fExceptions.Count > 0 then
+  begin
+    Append(result, [LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+    for i := 0 to fExceptions.Count - 1 do
+      Append(result, TPascalException(fExceptions.ObjectPtr[i]).Body, LineEnd);
+  end;
+  Append(result, [LineEnd, '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
   // output the text representation of all records
   // with proper json names (overriding the RTTI definitions)
   if rec <> nil then
