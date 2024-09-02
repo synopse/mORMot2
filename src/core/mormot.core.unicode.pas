@@ -1866,17 +1866,17 @@ function StringReplaceTabs(const Source, TabText: RawUtf8): RawUtf8;
 /// UTF-8 dedicated (and faster) alternative to StringOfChar((Ch,Count))
 function RawUtf8OfChar(Ch: AnsiChar; Count: integer): RawUtf8;
 
-/// format a text content with SQL-like quotes
+/// format a text content with SQL/pascal-like quotes
 // - this function implements what is specified in the official SQLite3
 // documentation: "A string constant is formed by enclosing the string in single
 // quotes ('). A single quote within the string can be encoded by putting two
 // single quotes in a row - as in Pascal."
 function QuotedStr(const S: RawUtf8; Quote: AnsiChar = ''''): RawUtf8; overload;
 
-/// format a text content with SQL-like quotes
+/// format a text content with SQL/pascal-like quotes
 procedure QuotedStr(const S: RawUtf8; Quote: AnsiChar; var result: RawUtf8); overload;
 
-/// format a text buffer with SQL-like quotes
+/// format a text buffer with SQL/pascal-like quotes
 procedure QuotedStr(P: PUtf8Char; PLen: PtrInt; Quote: AnsiChar;
   var result: RawUtf8); overload;
 
