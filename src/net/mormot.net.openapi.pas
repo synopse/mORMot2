@@ -66,10 +66,12 @@ type
     function Enum: PDocVariantData;
     function Nullable: boolean;
     function Description: RawUtf8;
-    function Example: variant;
+    function ExampleAsText: RawUtf8;
+    function PatternAsText: RawUtf8;
     function Reference: RawUtf8;
     function AllOf: POpenApiSchemaDynArray;
     function Items: POpenApiSchema;
+    function ItemsOrNil: POpenApiSchema;
     function Properties: PDocVariantData;
     property _Property[const aName: RawUtf8]: POpenApiSchema
       read GetPropertyByName;
@@ -78,6 +80,10 @@ type
     function IsObject: boolean;
     function IsNamedEnum: boolean;
     function BuiltinType: RawUtf8;
+    function HasDescription: boolean;
+    function HasItems: boolean;
+    function HasExample: boolean;
+    function HasPattern: boolean;
   end;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Response
@@ -336,7 +342,7 @@ type
     destructor Destroy; override;
     procedure CopyProperties(aDest: TRawUtf8List);
     function ToTypeDefinition: RawUtf8; override;
-    function ToRttiTextRepresentation(WithClassName: boolean = true): RawUtf8;
+    function ToRttiTextRepresentation: RawUtf8;
     function ToRttiRegisterDefinitions: RawUtf8;
     property Properties: TRawUtf8List
       read fProperties;
@@ -510,6 +516,19 @@ begin
     result := nil;
 end;
 
+function TOpenApiSchema.ItemsOrNil: POpenApiSchema;
+begin
+  if not IsArray or
+     not Data.GetAsObject('items', PDocVariantData(result)) then
+    result := nil;
+end;
+
+function TOpenApiSchema.HasItems: boolean;
+begin
+  result := IsArray and
+            Data.Exists('items');
+end;
+
 function TOpenApiSchema.Properties: PDocVariantData;
 begin
   if not Data.GetAsObject('properties', result) then
@@ -542,15 +561,35 @@ begin
   result := Data.U['description']
 end;
 
+function TOpenApiSchema.HasDescription: boolean;
+begin
+  result := Data.Exists('description');
+end;
+
 function TOpenApiSchema.Enum: PDocVariantData;
 begin
   if not Data.GetAsArray('enum', result) then
     result := nil;
 end;
 
-function TOpenApiSchema.Example: variant;
+function TOpenApiSchema.ExampleAsText: RawUtf8;
 begin
-  result := Data.Value['example'];
+  result := VariantSaveJson(Data.Value['example']);
+end;
+
+function TOpenApiSchema.PatternAsText: RawUtf8;
+begin
+  result := VariantSaveJson(Data.Value['pattern']);
+end;
+
+function TOpenApiSchema.HasExample: boolean;
+begin
+  result := Data.Exists('example');
+end;
+
+function TOpenApiSchema.HasPattern: boolean;
+begin
+  result := Data.Exists('pattern');
 end;
 
 function TOpenApiSchema._Format: RawUtf8;
