@@ -1455,6 +1455,8 @@ type
     property Response: TJsonResponse
       read fResponse;
   end;
+  /// meta-class of the exceptions raised by TJsonClient instances
+  EJsonClientClass = class of EJsonClient;
 
   IJsonClient = interface;
 
