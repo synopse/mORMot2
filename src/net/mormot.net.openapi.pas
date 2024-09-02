@@ -227,14 +227,12 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     function GetPathItemByName(const aPath: RawUtf8): POpenApiPathItem;
-    function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
   public
     /// transtype the POpenApiSpecs pointer into a TDocVariantData content
     Data: TDocVariantData;
     // access to the OpenAPI Specs information
     function Info: PDocVariantData;
     function BasePath: RawUtf8;
-    function Definitions: PDocVariantData;
     function Paths: PDocVariantData;
     function Tags: PDocVariantData;
     function Version: RawUtf8;
@@ -242,9 +240,7 @@ type
     property Path[const aPath: RawUtf8]: POpenApiPathItem
       read GetPathItemByName;
     function Components: PDocVariantData;
-    function Schemas: PDocVariantData;
-    property Schema[const aName: RawUtf8]: POpenApiSchema
-      read GetSchemaByName;
+    function Schemas(aVersion: TOpenApiVersion): PDocVariantData;
   end;
 
 
@@ -431,7 +427,8 @@ type
   TOpenApiParser = class
   private
     fVersion: TOpenApiVersion;
-    fSpecs: TDocVariantData;
+    fSpecs: TOpenApiSpecs;
+    fSchemas: PDocVariantData;
     fRecords: TRawUtf8List;    // objects are owned TPascalRecord
     fEnums: TRawUtf8List;      // objects are owned TPascalEnum
     fExceptions: TRawUtf8List; // objects are owned TPascalException
@@ -440,6 +437,7 @@ type
     fLineIndent: RawUtf8;
     fGeneratedBy, fGeneratedByLine: RawUtf8;
     procedure ParseSpecs;
+    function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
     function GetDescription(const Described, Indent: RawUtf8): RawUtf8;
   public
     constructor Create;
@@ -460,8 +458,11 @@ type
 
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
-    function Specs: POpenApiSpecs;
     function Info: PDocVariantData;
+    property Specs: TOpenApiSpecs
+      read fSpecs;
+    property Schema[const aName: RawUtf8]: POpenApiSchema
+      read GetSchemaByName;
     property Operations: TPascalOperationDynArray
       read fOperations;
     property LineEnd: RawUtf8
@@ -875,12 +876,6 @@ begin
     result := nil;
 end;
 
-function TOpenApiSpecs.GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
-begin
-  if not Schemas^.GetAsObject(aName, PDocVariantData(result)) then
-    result := nil;
-end;
-
 function TOpenApiSpecs.Info: PDocVariantData;
 begin
   result := Data.O['info'];
@@ -889,11 +884,6 @@ end;
 function TOpenApiSpecs.BasePath: RawUtf8;
 begin
   result := Data.U['basePath'];
-end;
-
-function TOpenApiSpecs.Definitions: PDocVariantData;
-begin
-  result := Data.O['definitions'];
 end;
 
 function TOpenApiSpecs.Paths: PDocVariantData;
@@ -930,10 +920,10 @@ begin
   result := Data.O['components'];
 end;
 
-function TOpenApiSpecs.Schemas: PDocVariantData;
+function TOpenApiSpecs.Schemas(aVersion: TOpenApiVersion): PDocVariantData;
 begin
-  if VersionEnum = oav2 then
-    result := Definitions
+  if aVersion = oav2 then
+    result := Data.O['definitions']
   else
     result := Components.O['schemas'];
 end;
@@ -1242,66 +1232,64 @@ end;
 
 function TPascalOperation.Body(const ClassName, BasePath: RawUtf8): RawUtf8;
 var
-  Action: RawUtf8;
-  ActionArgs: TRawUtf8DynArray;
+  url: RawUtf8;
+  urlArgs: TRawUtf8DynArray;
   i: PtrInt;
-  QueryParameters: TDocVariantData;
-  Param: POpenApiParameter;
+  queryParams: TDocVariantData;
+  p: POpenApiParameter;
   pt: TPascalType;
 begin
-  Action := BasePath + fPath;
-  ActionArgs := nil;
-  QueryParameters.InitObject([], JSON_FAST);
+  url := BasePath + fPath;
+  queryParams.InitObject([], JSON_FAST);
 
   for i := 0 to high(fParameters) do
   begin
-    Param := fParameters[i];
+    p := fParameters[i];
     pt := ParameterType(i);
-    if Param^._In = 'path' then
+    if p^._In = 'path' then
     begin
-      Action := StringReplaceAll(Action, FormatUtf8('{%}', [Param^.Name]), '%');
-      AddRawUtf8(ActionArgs, pt.ToFormatUtf8Arg(Param^.AsPascalName));
+      url := StringReplaceAll(url, FormatUtf8('{%}', [p^.Name]), '%');
+      AddRawUtf8(urlArgs, pt.ToFormatUtf8Arg(p^.AsPascalName));
     end
-    else if Param^._In = 'query' then
-    begin
-      QueryParameters.AddValue(Param^.Name, pt.ToFormatUtf8Arg(Param^.AsPascalName));
-    end;
+    else if p^._In = 'query' then
+      queryParams.AddValue(p^.Name, pt.ToFormatUtf8Arg(p^.AsPascalName));
   end;
 
    result := FormatUtf8('%%begin%  fClient.Request(''%'', ''%''',
      [Declaration(ClassName, {implem=}true), fParser.LineEnd, fParser.LineEnd,
-      ToText(fMethod), Action]);
+      ToText(fMethod), url]);
    // Path parameters
-   if Length(ActionArgs) > 0 then
+   if Length(urlArgs) > 0 then
    begin
      Append(result, ', [');
-     for i := 0 to Length(ActionArgs) - 1 do
+     for i := 0 to Length(urlArgs) - 1 do
      begin
        if i > 0 then
          Append(result, ', ');
-       Append(result, ActionArgs[i]);
+       Append(result, urlArgs[i]);
      end;
      Append(result, ']');
    end
-   // Either ActionArgs and QueryArgs or None of them (for Request parameters)
-   else if (QueryParameters.Count > 0) or Assigned(fPayloadParameterType) then
+   // Either urlArgs and QueryArgs or None of them (for Request parameters)
+   else if (queryParams.Count > 0) or
+           Assigned(fPayloadParameterType) then
      Append(result, ', []');
 
    // Query parameters
-   if QueryParameters.Count > 0 then
+   if queryParams.Count > 0 then
    begin
      Append(result, ', [', fParser.LineEnd);
-     for i := 0 to QueryParameters.Count - 1 do
+     for i := 0 to queryParams.Count - 1 do
      begin
        if i > 0 then
          Append(result, ',', fParser.LineEnd);
-       Append(result, ['    ''', QueryParameters.Names[i], ''', ',
-         VariantToUtf8(QueryParameters.Values[i])]);
+       Append(result, ['    ''', queryParams.Names[i], ''', ',
+         VariantToUtf8(queryParams.Values[i])]);
      end;
      Append(result, fParser.LineEnd, '    ]');
    end
-   // Either ActionArgs and QueryArgs or None of them (for Request parameters)
-   else if (ActionArgs <> nil) or
+   // Either urlArgs and QueryArgs or None of them (for Request parameters)
+   else if (urlArgs <> nil) or
            Assigned(fPayloadParameterType) then
      Append(result, ', []');
    Append(result, [',', fParser.LineEnd, '    ']);
@@ -1504,7 +1492,7 @@ begin
   begin
     // #/definitions/NewPet -> NewPet
     ref := SplitRight(ref, '/');
-    Schema := Parser.Specs^.Schema[ref];
+    Schema := Parser.Schema[ref];
     if Schema = nil then
       EOpenApi.RaiseUtf8('%.LoadFromSchema: unknown $ref=%', [self, ref]);
     result := LoadFromSchema(Parser, Schema, ref);
@@ -1616,7 +1604,7 @@ begin
     else if t = 'boolean' then
       result := 'false'
     else
-      result := 'nil';
+      result := 'null';
   end;
 end;
 
@@ -1791,58 +1779,61 @@ end;
 
 procedure TOpenApiParser.Clear;
 begin
-  fSpecs.Clear;
+  fSpecs.Data.Clear;
   fRecords.Clear;
   fEnums.Clear;
   fExceptions.Clear;
+  fSchemas := nil;
   ObjArrayClear(fOperations);
-end;
-
-function TOpenApiParser.Specs: POpenApiSpecs;
-begin
-  result := POpenApiSpecs(@fSpecs);
 end;
 
 function TOpenApiParser.Info: PDocVariantData;
 begin
-  result := fSpecs.O['info'];
+  result := fSpecs.Data.O['info'];
 end;
 
 procedure TOpenApiParser.Parse(const aSpecs: TDocVariantData);
 begin
   Clear;
-  fSpecs.InitCopy(Variant(aSpecs), JSON_FAST);
+  fSpecs.Data.InitCopy(Variant(aSpecs), JSON_FAST);
   ParseSpecs;
 end;
 
 procedure TOpenApiParser.ParseJson(const aJson: RawUtf8);
 begin
   Clear;
-  fSpecs.InitJson(aJson, JSON_FAST);
+  fSpecs.Data.InitJson(aJson, JSON_FAST);
   ParseSpecs;
 end;
 
 procedure TOpenApiParser.ParseFile(const aJsonFile: TFileName);
 begin
   Clear;
-  fSpecs.InitJsonFromFile(aJsonFile, JSON_FAST);
+  fSpecs.Data.InitJsonFromFile(aJsonFile, JSON_FAST);
   ParseSpecs;
 end;
 
 procedure TOpenApiParser.ParseSpecs;
 var
-  v: PDocVariantData;
   i: PtrInt;
+  v: PDocVariantData;
 begin
-  fVersion := Specs^.VersionEnum;
-  v := Specs^.Schemas;
-  for i := 0 to v^.Count - 1 do
-    if POpenApiSchema(@v^.Values[i])^.IsObject then
-      if not fRecords.Exists(v^.Names[i]) then // was not parsed as nested type
-        fRecords.AddObject(v^.Names[i], ParseRecordDefinition(v^.Names[i]));
-  v := Specs^.Paths;
+  fVersion := fSpecs.VersionEnum;
+  fSchemas := fSpecs.Schemas(fVersion);
+  for i := 0 to fSchemas^.Count - 1 do
+    if POpenApiSchema(@fSchemas^.Values[i])^.IsObject then
+      if not fRecords.Exists(fSchemas^.Names[i]) then // parse object once
+        fRecords.AddObject(
+          fSchemas^.Names[i], ParseRecordDefinition(fSchemas^.Names[i]));
+  v := fSpecs.Paths;
   for i := 0 to v^.Count - 1 do
     ParsePath(v^.Names[i]);
+end;
+
+function TOpenApiParser.GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
+begin
+  if not fSchemas^.GetAsObject(aName, PDocVariantData(result)) then
+    result := nil;
 end;
 
 function TOpenApiParser.GetDescription(const Described, Indent: RawUtf8): RawUtf8;
@@ -1852,7 +1843,7 @@ var
   Info: PDocVariantData;
 begin
   result := '';
-  Info := Specs^.Info;
+  Info := fSpecs.Info;
   if Info = nil then
     exit;
   result := FormatUtf8('%/// % %%', [Indent, Described, Info^.U['title'], LineEnd]);
@@ -1875,7 +1866,7 @@ var
   v: PDocVariantData;
 begin
   // setup the new TPascalRecord instance
-  s := Specs^.Schema[aDefinitionName];
+  s := Schema[aDefinitionName];
   if not Assigned(s) then
     EOpenApi.RaiseUtf8('%.ParseRecordDefinition: no % definition in schema',
       [self, aDefinitionName]);
@@ -1916,7 +1907,7 @@ var
   s: POpenApiOperation;
   op: TPascalOperation;
 begin
-  p := Specs^.Path[aPath];
+  p := fSpecs.Path[aPath];
   for m := low(m) to high(m) do
   begin
     s := p^.Method[m];
@@ -2008,7 +1999,7 @@ begin
   // regroup operations per tags, eventually with result[0].Tag=nil
   count := 1;
   SetLength(result, length(fOperations) + 1);
-  main := Specs^.Tags;
+  main := fSpecs.Tags;
   for i := 0 to length(fOperations) - 1 do
   begin
     tag := fOperations[i].fOperation^.Tags;
@@ -2254,7 +2245,7 @@ begin
     'end;', LineEnd, LineEnd]);
   // append all methods, in native order (no need to follow tag ordering)
   for i := 0 to high(Operations) do
-    Append(result, Operations[i].Body(ClientClassName, Specs^.BasePath), LineEnd);
+    Append(result, Operations[i].Body(ClientClassName, fSpecs.BasePath), LineEnd);
   Append(result, LineEnd, 'end.');
 end;
 
