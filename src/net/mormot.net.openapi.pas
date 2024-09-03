@@ -448,11 +448,24 @@ type
   end;
   TPascalOperationsByTagDynArray = array of TPascalOperationsByTag;
 
+  /// allow to customize TOpenApiParser process
+  TOpenApiParserOption = (
+    opoDtoNoDescription,
+    opoDtoNoRefFrom,
+    opoDtoNoExample,
+    opoDtoNoPattern,
+    opoClientExcludeDeprecated,
+    opoClientNoDescription,
+    opoClientNoException,
+    opoClientOnlySummary);
+  TOpenApiParserOptions = set of TOpenApiParserOption;
+
   /// the main OpenAPI parser and pascal code generator class
   TOpenApiParser = class
   private
     fVersion: TOpenApiVersion;
     fSpecs: TOpenApiSpecs;
+    fInfo: PDocVariantData;
     fSchemas: PDocVariantData;
     fRecords: TRawUtf8List;    // objects are owned TPascalRecord
     fEnums: TRawUtf8List;      // objects are owned TPascalEnum
@@ -461,13 +474,14 @@ type
     fOperations: TPascalOperationDynArray;
     fLineEnd: RawUtf8;
     fLineIndent: RawUtf8;
-    fGeneratedBy, fGeneratedByLine: RawUtf8;
+    fTitle, fGeneratedBy, fGeneratedByLine: RawUtf8;
+    fOptions: TOpenApiParserOptions;
     procedure ParseSpecs;
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const);
   public
-    constructor Create;
+    constructor Create(aOptions: TOpenApiParserOptions = []);
     destructor Destroy; override;
 
     procedure Clear;
@@ -487,7 +501,8 @@ type
 
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
-    function Info: PDocVariantData;
+    property Options: TOpenApiParserOptions
+      read fOptions write fOptions;
     property Specs: TOpenApiSpecs
       read fSpecs;
     property Schema[const aName: RawUtf8]: POpenApiSchema
@@ -1080,7 +1095,8 @@ begin
           fSuccessResponseType := fParser.NewPascalTypeFromSchema(resp);
       end;
     end
-    else if Assigned(resp) then
+    else if Assigned(resp) and
+            not (opoClientNoException in fParser.Options) then
     begin
       // generate a custom EJsonClient exception class for 4xx errors
       json := resp^.Data.ToJson;
@@ -1151,9 +1167,11 @@ var
   e: TPascalException;
 begin
   // Request Definition
-  w.AddStrings([
-     fParser.LineIndent, '// ', fOperation^.Id, ' [', ToText(fMethod), '] ',
-       fPath, fParser.LineEnd,
+  w.AddStrings([fParser.LineEnd, fParser.LineIndent, '// ']);
+  if fOperation^.Deprecated then
+     w.AddShort('[DEPRECATED] ');
+   w.AddStrings([
+     fOperationId, ' [', ToText(fMethod), '] ', fPath, fParser.LineEnd,
      fParser.LineIndent, '//', fParser.LineEnd]);
   // Summary
   if fOperation^.Summary <> '' then
@@ -1213,7 +1231,8 @@ begin
       line := Make(['// - ', status]);
       if code = fSuccessResponseCode then
         Append(line, ' (main)')
-      else if Assigned(rs) then
+      else if Assigned(rs) and
+              not (opoClientNoException in fParser.Options) then
       begin
         e := fParser.fExceptions.GetObjectFrom(rs^.Data.ToJson);
         if e <> nil then // no need to parse, just recognize schema
@@ -1480,7 +1499,8 @@ var
   items: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  if fSchema^.HasDescription then
+  if fSchema^.HasDescription and
+     not (opoDtoNoDescription in fParser.Options) then
     fParser.Comment(W, ['/// ', fSchema^.Description]);
   w.AddStrings([fParser.LineIndent, PascalName, ' = (', fParser.LineEnd,
     fParser.LineIndent, '  ']);
@@ -1800,35 +1820,41 @@ var
   p: TPascalProperty;
   s: POpenApiSchema;
 begin
-  if fFromRef <> '' then
+  if (fFromRef <> '') and
+     (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
     fParser.Comment(w, ['/// from ', fFromRef]);
   w.AddStrings([fParser.LineIndent, PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
     p := fProperties.ObjectPtr[i];
-    s := p.fSchema;
-    if Assigned(s) and
-       not s.HasDescription then
-      s := pointer(s.ItemsOrNil); // fallback to enum "description"
-    if Assigned(s) and
-       s^.HasDescription then
+    if not (opoDtoNoDescription in fParser.Options) then
     begin
-      w.AddStrings([fParser.LineIndent,
-          '  /// ', s^.Description, fParser.LineEnd]);
-      if s^.HasExample then
+      s := p.fSchema;
+      if Assigned(s) and
+         not s.HasDescription then
+        s := pointer(s.ItemsOrNil); // fallback to enum "description"
+      if Assigned(s) and
+         s^.HasDescription then
+      begin
         w.AddStrings([fParser.LineIndent,
-          '  // - Example: ', s^.ExampleAsText, fParser.LineEnd]);
-      if s^.HasPattern then
-        w.AddStrings([fParser.LineIndent,
-          '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
+            '  /// ', s^.Description, fParser.LineEnd]);
+        if (not (opoDtoNoExample in fParser.Options)) and
+           s^.HasExample then
+          w.AddStrings([fParser.LineIndent,
+            '  // - Example: ', s^.ExampleAsText, fParser.LineEnd]);
+        if (not (opoDtoNoPattern in fParser.Options)) and
+           s^.HasPattern then
+          w.AddStrings([fParser.LineIndent,
+            '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
+      end;
     end;
     w.AddStrings([fParser.LineIndent, '  ', p.PascalName, ': ',
       p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
   w.AddStrings([fParser.LineIndent, 'end;', fParser.LineEnd,
-         fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
-           ' = ^', PascalName, ';', fParser.LineEnd,
-         ToArrayTypeDefinition, fParser.LineEnd]);
+    fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
+      ' = ^', PascalName, ';', fParser.LineEnd,
+    ToArrayTypeDefinition, fParser.LineEnd]);
 end;
 
 function TPascalRecord.ToRttiTextRepresentation: RawUtf8;
@@ -1897,7 +1923,8 @@ end;
 
 procedure TPascalException.ToTypeDefinition(W: TTextWriter);
 begin
-  fParser.Comment(w, [
+  if not (opoClientNoDescription in fParser.Options) then
+    fParser.Comment(w, [
       '/// exception raised on ', fResponse.Description, ' (', fErrorCode, ')']);
   w.AddStrings([
     fParser.LineIndent, PascalName, ' = class(EJsonClient)', fParser.LineEnd,
@@ -1925,8 +1952,9 @@ end;
 
 { TOpenApiParser }
 
-constructor TOpenApiParser.Create;
+constructor TOpenApiParser.Create(aOptions: TOpenApiParserOptions);
 begin
+  fOptions := aOptions;
   fRecords := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fExceptions := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
@@ -1956,11 +1984,6 @@ begin
   ObjArrayClear(fOperations);
 end;
 
-function TOpenApiParser.Info: PDocVariantData;
-begin
-  result := fSpecs.Data.O['info'];
-end;
-
 procedure TOpenApiParser.Parse(const aSpecs: TDocVariantData);
 begin
   Clear;
@@ -1988,6 +2011,8 @@ var
   v: PDocVariantData;
 begin
   fVersion := fSpecs.VersionEnum;
+  fInfo := fSpecs.Info;
+  fTitle := fInfo^.U['title'];
   fSchemas := fSpecs.Schemas(fVersion);
   for i := 0 to fSchemas^.Count - 1 do
     if POpenApiSchema(@fSchemas^.Values[i])^.IsObject then
@@ -2009,19 +2034,17 @@ procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
 var
   u: RawUtf8;
   v: variant;
-  nfo: PDocVariantData;
 begin
-  nfo := fSpecs.Info;
-  if nfo = nil then
+  if opoClientNoDescription in fOptions then
     exit;
-  Comment(w, ['/// ', Described, ' ', nfo^.U['title']]);
-  if nfo^.GetAsRawUtf8('description', u) then
+  Comment(w, ['/// ', Described, ' ', fTitle]);
+  if fInfo^.GetAsRawUtf8('description', u) then
     Comment(w, ['// - ', StringReplaceAll(u, #10, #10'//   ')]);
   if LineIndent <> '' then
     exit;
-  if nfo^.GetAsRawUtf8('version', u) then
+  if fInfo^.GetAsRawUtf8('version', u) then
     Comment(w, ['// - version ', u]);
-  if nfo^.GetValueByPath('license.name', v) then
+  if fInfo^.GetValueByPath('license.name', v) then
     Comment(w, ['// - OpenAPI definition licensed under ', v, ' terms']);
 end;
 
@@ -2080,7 +2103,8 @@ begin
   begin
     s := p^.Method[m];
     if not Assigned(s) or
-       s^.Deprecated then
+       ((opoClientExcludeDeprecated in fOptions) and
+        s^.Deprecated) then
       continue;
     op := TPascalOperation.Create(self, aPath, p, s, m);
     op.ResolveResponseTypes;
@@ -2220,10 +2244,12 @@ begin
       LineEnd,
       'interface', LineEnd,
       LineEnd,
-      '// ', Info^.U['title'], ' DTOs', LineEnd,
-      '// ', fGeneratedByLine, LineEnd,
-      '// ', fGeneratedBy, LineEnd,
-      '// ', fGeneratedByLine, LineEnd,
+      '{', LineEnd,
+      '  ', fGeneratedByLine, LineEnd,
+      '  ', UpperCaseU(fTitle), ' DTOs', LineEnd, LineEnd,
+      '  ', fGeneratedBy, LineEnd,
+      '  ', fGeneratedByLine, LineEnd,
+      '}', LineEnd,
       LineEnd,
       'uses', LineEnd,
       '  classes,', LineEnd,
@@ -2316,8 +2342,9 @@ var
   done: TRawUtf8DynArray;
   ops: TPascalOperationsByTag;
   op: TPascalOperation;
-  id, desc, err, u: RawUtf8;
-  bannerlen, i, j: PtrInt;
+  desc, dots, err: RawUtf8;
+  i, j: PtrInt;
+  banner: boolean;
   temp: TTextWriterStackBuffer;
   w: TTextWriter;
 begin
@@ -2333,10 +2360,12 @@ begin
       LineEnd,
       'interface', LineEnd,
       LineEnd,
-      '// ', Info^.U['title'], ' Client as ', ClientClassName, ' class', LineEnd,
-      '// ', fGeneratedByLine, LineEnd,
-      '// ', fGeneratedBy, LineEnd,
-      '// ', fGeneratedByLine, LineEnd,
+      '{', LineEnd,
+      '  ', fGeneratedByLine, LineEnd,
+      '  ', UpperCaseU(fTitle), ' client as ', ClientClassName, ' class', LineEnd, LineEnd,
+      '  ', fGeneratedBy, LineEnd,
+      '  ', fGeneratedByLine, LineEnd,
+      '}', LineEnd,
       LineEnd,
       'uses', LineEnd,
       '  classes,', LineEnd,
@@ -2390,28 +2419,43 @@ begin
       ops := bytag[i];
       if ops.Operations = nil then
         continue; // nothing to add (e.g. i=0)
-      bannerlen := 0;
+      banner := false;
       for j := 0 to high(ops.Operations) do
       begin
         op := ops.Operations[j];
-        id := op.OperationId;
-        if FindRawUtf8(done, id) >= 0 then
+        if FindRawUtf8(done, op.OperationId) >= 0 then
           // operations can be in multiple tags but should be written once
           continue;
-        AddRawUtf8(done, id);
-        if (bannerlen = 0) and
-           (ops.TagName <> '') then // regrouped by tag, if any
+        AddRawUtf8(done, op.OperationId);
+        if not banner then
         begin
-          desc := ops.Tag^.Description;
-          bannerlen := 18 + Length(ops.TagName) + Length(desc);
-          u := RawUtf8OfChar('/', bannerlen);
-          w.AddStrings([LineEnd, LineEnd,
-            '    ////', u, LineEnd,
-            '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
-            '    ////', u, LineEnd]);
+          banner := true;
+          desc := ops.TagName;
+          if desc = '' then
+            desc := fTitle;
+          if opoClientNoDescription in fOptions then // minimal comment
+             w.AddStrings([LineEnd, '    // ', desc, ' methods', LineEnd])
+          else
+          begin
+            if not (opoClientOnlySummary in fOptions) then
+              FormatUtf8('    // %%',
+                [RawUtf8OfChar('-', length(desc) + 10), LineEnd], dots);
+            w.AddStrings([LineEnd, LineEnd, dots,
+              '    //  ', UpperCaseU(desc), ' METHODS', LineEnd, dots]);
+            desc := ops.Tag^.Description;
+            if desc <> '' then
+              Comment(w, ['// - ', desc, LineEnd]);
+          end;
         end;
-        w.AddString(LineEnd);
-        op.Documentation(w);
+        if not (opoClientNoDescription in fOptions) then
+          if opoClientOnlySummary in fOptions then
+          begin
+            desc := op.Operation^.Summary;
+            if desc <> '' then
+              Comment(w, ['// ', desc]);
+          end
+          else
+            op.Documentation(w);
         w.AddString(LineIndent);
         op.Declaration(w, '', {implem=}false);
         w.AddString(LineEnd);
