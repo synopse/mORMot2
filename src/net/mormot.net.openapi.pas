@@ -1308,67 +1308,97 @@ procedure TPascalOperation.Body(W: TTextWriter;
   const ClassName, BasePath: RawUtf8);
 var
   url: RawUtf8;
-  urlArgs: TRawUtf8DynArray;
-  i: PtrInt;
-  queryParams: TDocVariantData;
+  urlName: TRawUtf8DynArray;
+  urlParam, queryParam: TIntegerDynArray;
+  i, j, o: PtrInt;
   p: POpenApiParameter;
   pt: TPascalType;
 begin
-  url := BasePath + fPath;
-  queryParams.InitObject([], JSON_FAST);
-
+  // parse the URI and extract parameter names
+  url := BasePath;
+  o := 1;
+  repeat // /pets/{petId}/  -> /pets/%/
+    i := PosEx('{', fPath, o);
+    if i = 0 then
+      break;
+    j := PosEx('}', fPath, i);
+    if j = 0 then
+      EOpenApi.RaiseUtf8('%.Body: missing } in [%]', [self, fPath]);
+    AddRawUtf8(urlName, copy(fPath, i + 1, j - i - 1));
+    Append(url, [copy(fPath, o, i - o), '%']);
+    o := j + 1;
+  until false;
+  Append(url, copy(fPath, o, 255));
+  if length(urlName) > 1 then
+    url := url;
+  SetLength(urlParam, length(urlName));
+  for i := 0 to high(urlParam) do
+    urlParam[i] := -1;
+  // recognize supplied parameters
   for i := 0 to high(fParameters) do
   begin
     p := fParameters[i];
-    pt := ParameterType(i);
     if p^._In = 'path' then
     begin
-      url := StringReplaceAll(url, FormatUtf8('{%}', [p^.Name]), '%');
-      AddRawUtf8(urlArgs, pt.ToFormatUtf8Arg(p^.AsPascalName));
+      j := FindPropName(urlName, p^.Name);
+      if j < 0 then
+        EOpenApi.RaiseUtf8('%.Body: unknown % in [%]', [self, p^.Name, fPath]);
+      urlParam[j] := i;
     end
     else if p^._In = 'query' then
-      queryParams.AddValue(p^.Name, pt.ToFormatUtf8Arg(p^.AsPascalName));
+      AddInteger(queryParam, i);
   end;
-
-  Declaration(w, ClassName, {implem=}true);
+  for i := 0 to high(urlParam) do
+    if urlParam[i] < 0 then
+      EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
+  // generate the corresponding pascal code
+  Declaration(w, ClassName, {implemtation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', ToText(fMethod), ''', ''', url, '''']);
    // Path parameters
-   if Length(urlArgs) > 0 then
+   if urlName <> nil then
    begin
      w.AddShorter(', [');
-     for i := 0 to Length(urlArgs) - 1 do
+     for i := 0 to Length(urlName) - 1 do
      begin
+       j := urlParam[i];
+       if j < 0 then
+         EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
        if i > 0 then
          w.AddShorter(', ');
-       w.AddString(urlArgs[i]);
+       w.AddString(ParameterType(j).ToFormatUtf8Arg(fParameters[j].AsPascalName));
      end;
      w.AddDirect(']');
    end
-   // Either urlArgs and QueryArgs or None of them (for Request parameters)
-   else if (queryParams.Count > 0) or
+   // either urlParam and queryParam or None of them (for Request parameters)
+   else if (queryParam <> nil) or
            Assigned(fPayloadParameterType) then
      w.AddShorter(', []');
 
    // Query parameters
-   if queryParams.Count > 0 then
+   if queryParam <> nil then
    begin
      w.AddStrings([', [', fParser.LineEnd]);
-     for i := 0 to queryParams.Count - 1 do
+     for i := 0 to high(queryParam) do
      begin
+       j := queryParam[i];
+       p := fParameters[j];
        if i > 0 then
          w.AddStrings([',', fParser.LineEnd]);
-       w.AddStrings(['    ''', queryParams.Names[i], ''', ',
-         VariantToUtf8(queryParams.Values[i])]);
+       w.AddShorter('    ''');
+       pt := ParameterType(j);
+       if pt.IsArray then
+         w.AddDirect('*'); // value is supplied as CSV
+       w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
      end;
      w.AddStrings([fParser.LineEnd, '    ]']);
    end
-   // Either urlArgs and QueryArgs or None of them (for Request parameters)
-   else if (urlArgs <> nil) or
+   // either urlParam and queryParam or none of them (for Request parameters)
+   else if (urlParam <> nil) or
            Assigned(fPayloadParameterType) then
      w.AddShorter(', []');
 
-   // Payload if any
+   // Payload and potentially result
    if Assigned(fPayloadParameterType) then
    begin
      w.AddStrings([',', fParser.LineEnd,
@@ -1377,14 +1407,13 @@ begin
        w.AddShorter('result')
      else
        w.AddShort('{notused:}self');
-
      w.AddStrings([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
      if Assigned(fSuccessResponseType) then
        w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
      else
        w.AddShorter('nil');
    end
-   // Response type if any
+   // result with no Payload
    else if Assigned(fSuccessResponseType) then
      w.AddStrings([',', fParser.LineEnd,
        '    result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
