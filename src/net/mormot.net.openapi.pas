@@ -1261,7 +1261,7 @@ begin
     if (p^._In = 'path') or
        (p^._In = 'query') then
     begin
-      hasdefault := (not InImplementation) and p^.HasDefaultValue;
+      hasdefault := p^.HasDefaultValue;
       if not hasdefault then
       begin
         if (ndx > 0) then
@@ -1270,8 +1270,12 @@ begin
       end;
       pt := ParameterType(i);
       if hasdefault then
-        AddRawUtf8(def, FormatUtf8('%%: % = %', [_CONST[pt.fNoConst],
-          p^.AsPascalName, pt.ToPascalName, pt.ToDefaultParameterValue(p, fParser)]))
+        if InImplementation then // same order, but no "= default" statement
+          AddRawUtf8(def, FormatUtf8('%%: %',
+            [_CONST[pt.fNoConst], p^.AsPascalName, pt.ToPascalName]))
+        else
+          AddRawUtf8(def, FormatUtf8('%%: % = %', [_CONST[pt.fNoConst],
+            p^.AsPascalName, pt.ToPascalName, pt.ToDefaultParameterValue(p, fParser)]))
       else
         AppLine([_CONST[pt.fNoConst], p^.AsPascalName, ': ', pt.ToPascalName]);
     end;
