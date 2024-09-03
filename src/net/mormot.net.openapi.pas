@@ -423,11 +423,11 @@ type
       aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
     destructor Destroy; override;
     procedure ResolveResponseTypes;
+    procedure ResolveParameters;
     procedure Documentation(W: TTextWriter);
     procedure Declaration(W: TTextWriter; const ClassName: RawUtf8;
       InImplementation: boolean);
     procedure Body(W: TTextWriter; const ClassName, BasePath: RawUtf8);
-    function ParameterType(aIndex: integer): TPascalType;
     function FunctionName: RawUtf8;
     property Parameters: POpenApiParameterDynArray
       read fParameters;
@@ -1039,23 +1039,6 @@ begin
   inherited Destroy;
 end;
 
-function TPascalOperation.ParameterType(aIndex: integer): TPascalType;
-var
-  i: PtrInt;
-begin
-  if fParameterTypes = nil then // late on-demand resolution
-  begin
-    SetLength(fParameterTypes, length(fParameters));
-    for i := 0 to length(fParameters) - 1 do
-      fParameterTypes[i] := fParser.NewPascalTypeFromSchema(
-        fParameters[i]^.Schema(fParser));
-  end;
-  if (aIndex < 0) or
-     (aIndex >= length(fParameterTypes)) then
-    EOpenApi.RaiseUtf8('%.ParameterType(%)?', [self, aIndex]);
-  result := fParameterTypes[aIndex];
-end;
-
 procedure TPascalOperation.ResolveResponseTypes;
 var
   code: integer;
@@ -1105,13 +1088,23 @@ begin
                      '    e := ',e.PascalName, ';', fParser.LineEnd])
     end;
   end;
-  err := err + deferr;
+  err := err + deferr; // for proper OnError## callback generation
   if err <> '' then
   begin
     fOnErrorIndex := FindRawUtf8(fParser.fErrorHandler, err) + 1;
     if fOnErrorIndex = 0 then // new TOnJsonClientError
       fOnErrorIndex := AddRawUtf8(fParser.fErrorHandler, err) + 1;
   end;
+end;
+
+procedure TPascalOperation.ResolveParameters;
+var
+  i: PtrInt;
+begin
+  SetLength(fParameterTypes, length(fParameters));
+  for i := 0 to length(fParameters) - 1 do
+    fParameterTypes[i] := fParser.NewPascalTypeFromSchema(
+      fParameters[i]^.Schema(fParser));
 end;
 
 procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const);
@@ -1268,7 +1261,7 @@ begin
           Append(line, '; ');
         inc(ndx);
       end;
-      pt := ParameterType(i);
+      pt := fParameterTypes[i];
       if hasdefault then
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, FormatUtf8('%%: %',
@@ -1366,7 +1359,7 @@ begin
          EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
        if i > 0 then
          w.AddShorter(', ');
-       w.AddString(ParameterType(j).ToFormatUtf8Arg(fParameters[j].AsPascalName));
+       w.AddString(fParameterTypes[j].ToFormatUtf8Arg(fParameters[j].AsPascalName));
      end;
      w.AddDirect(']');
    end
@@ -1383,15 +1376,15 @@ begin
      begin
        j := queryParam[i];
        p := fParameters[j];
+       pt := fParameterTypes[j];
        if i > 0 then
          w.AddStrings([',', fParser.LineEnd]);
        w.AddShorter('    ''');
-       pt := ParameterType(j);
        if pt.IsArray then
-         w.AddDirect('*'); // value is supplied as CSV
+         w.AddDirect('*'); // ueStarNameIsCsv
        w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
      end;
-     w.AddStrings([fParser.LineEnd, '    ]']);
+     w.AddDirect(']');
    end
    // either urlParam and queryParam or none of them (for Request parameters)
    else if (urlParam <> nil) or
@@ -2087,6 +2080,7 @@ begin
       continue;
     op := TPascalOperation.Create(self, aPath, p, s, m);
     op.ResolveResponseTypes;
+    op.ResolveParameters;
     ObjArrayAdd(fOperations, op);
   end;
 end;
