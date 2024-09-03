@@ -1644,11 +1644,12 @@ begin
       if (fmt = '') and // if no "format" type name is supplied
          (aSchema^._Type = 'string') then
       begin
-        fmt := enum^.ToJson; // use string values to make it genuine
+        enum^.SortByValue;  // won't care about the actual order, just the values
+        fmt := enum^.ToCsv; // use string values to make it genuine
         nam := aSchema^.Description;
       end
       else
-        nam := fmt;
+        nam := fmt; // we have an explicit type name
       if fmt <> '' then
       begin
         enumType := fEnums.GetObjectFrom(fmt);
