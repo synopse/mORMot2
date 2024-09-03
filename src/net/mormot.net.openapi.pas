@@ -1684,22 +1684,62 @@ begin
     result := fBuiltinTypeName;
     if not IsArray then
       exit;
-    if result[1] <> 'T' then
-      insert('T', result, 1);
-    Append(result, 'DynArray'); // use mormot.core.base arrays
+    if AsFinalType then
+    begin
+      if result[1] <> 'T' then
+      begin
+        result[1] := UpCase(result[1]);
+        insert('T', result, 1);
+      end;
+      Append(result, 'DynArray'); // use mormot.core.base arrays
+    end
+    else
+      result := Make(['array of ', result]);
   end;
 end;
 
 function TPascalType.ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
+var
+  func: RawUtf8;
 begin
-  if IsBuiltin and
-     IdemPropNameU(fBuiltinTypeName, 'TGuid') then
-    result := FormatUtf8('ToUtf8(%)', [VarName])
+  result := VarName; // default to direct value
+  if IsBuiltin then
+    if IsArray then
+      case fBuiltinType of
+        obtInteger:
+          func := 'IntegerDynArrayToCsv(%)';
+        obtInt64:
+          func := 'Int64DynArrayToCsv(%)';
+        obtRawUtf8,
+        obtSpiUtf8:
+          func := 'RawUtf8ArrayToCsv(%)';
+        obtGuid:
+          func := 'GuidArrayToCsv(%)';
+        // other types would just fail to compile
+      end
+    else
+    case fBuiltinType of
+      obtDate:
+        func := 'DateToIso8601(%, true)';
+      obtDateTime:
+        func := 'DateTimeToIso8601(%, true)';
+      obtGuid:
+        func := 'ToUtf8(%)';
+      obtRawByteString:
+        func := 'mormot.core.buffers.BinToBase64(%)';
+    end
   else if IsEnum then
-    result := FormatUtf8('%[%]',
-      [(fCustomType as TPascalEnum).fConstTextArrayName, VarName])
-  else
-    result := VarName;
+  begin
+    func := (fCustomType as TPascalEnum).fConstTextArrayName;
+    if IsArray then
+      FormatUtf8('GetSetNameCustom(TypeInfo(%), %, @%)',
+        [(fCustomType as TPascalEnum).PascalName, VarName, func], result)
+    else
+      FormatUtf8('%[%]', [func, VarName], result);
+    exit;
+  end;
+  if func <> '' then
+    FormatUtf8(func, [VarName], result);
 end;
 
 function TPascalType.ToDefaultParameterValue(aParam: POpenApiParameter;
@@ -2304,6 +2344,8 @@ begin
       '  sysutils,', LineEnd,
       '  mormot.core.base,', LineEnd,
       '  mormot.core.text,', LineEnd,
+      '  mormot.core.buffers,', LineEnd,
+      '  mormot.core.datetime,', LineEnd,
       '  mormot.core.rtti,', LineEnd,
       '  mormot.core.json,', LineEnd,
       '  mormot.core.variants,', LineEnd,
