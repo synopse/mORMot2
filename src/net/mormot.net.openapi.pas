@@ -45,6 +45,21 @@ type
     oav2,
     oav3);
 
+  /// define the native built-in pascal types
+  TOpenApiBuiltInType = (
+    obtVariant,
+    obtInteger,
+    obtInt64,
+    obtBoolean,
+    obtSingle,
+    obtDouble,
+    obtDate,
+    obtDateTime,
+    obtGuid,
+    obtRawUtf8,
+    obtSpiUtf8,
+    obtRawByteString);
+
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Schema
   POpenApiSchema = ^TOpenApiSchema;
   /// a dynamic array of pointers wrapper to OpenAPI Schema definition(s)
@@ -80,7 +95,7 @@ type
     function IsArray: boolean;
     function IsObject: boolean;
     function IsNamedEnum: boolean;
-    function BuiltinType: RawUtf8;
+    function BuiltinType: TOpenApiBuiltInType;
     function HasDescription: boolean;
     function HasItems: boolean;
     function HasExample: boolean;
@@ -255,11 +270,12 @@ type
     fBuiltinSchema: POpenApiSchema;
     fBuiltinTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
+    fBuiltinType: TOpenApiBuiltInType;
     fIsArray, fNoConst: boolean;
     function GetSchema: POpenApiSchema;
     procedure SetArray(AValue: boolean);
   public
-    constructor CreateBuiltin(const aBuiltinTypeName: RawUtf8;
+    constructor CreateBuiltin(aBuiltinType: TOpenApiBuiltInType;
       aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
     constructor CreateCustom(aCustomType: TPascalCustomType); overload;
 
@@ -635,7 +651,7 @@ begin
             (_Format <> '');
 end;
 
-function TOpenApiSchema.BuiltinType: RawUtf8;
+function TOpenApiSchema.BuiltinType: TOpenApiBuiltInType;
 var
   t, f: RawUtf8;
 begin
@@ -643,31 +659,31 @@ begin
   f := _Format;
   if t = 'integer' then
     if f = 'int64' then
-      result := 'Int64'
+      result := obtInt64
     else
-      result := 'integer'
+      result := obtInteger
   else if t = 'number' then
     if f = 'float' then
-      result := 'Single'
+      result := obtSingle
     else
-      result := 'Double'
+      result := obtDouble
   else if t = 'string' then
     if f = 'date' then
-      result := 'TDate'
+      result := obtDate
     else if f = 'date-time' then
-      result := 'TDateTime'
+      result := obtDateTime
     else if f = 'uuid' then
-      result := 'TGuid'
+      result := obtGuid
     else if f = 'binary' then
-      result := 'RawByteString'
+      result := obtRawByteString
     else if f = 'password' then
-      result := 'SpiUtf8'
+      result := obtSpiUtf8
     else
-      result := 'RawUtf8'
+      result := obtRawUtf8
   else if t = 'boolean' then
-    result := 'boolean'
+    result := obtBoolean
   else
-    result := 'variant'; // typically a TDocVariantData
+    result := obtVariant; // typically a TDocVariantData
 end;
 
 
@@ -1436,7 +1452,7 @@ var
 begin
   if fSchema^.HasDescription then
     fParser.Comment(W, ['/// ', fSchema^.Description]);
-  w.AddStrings([fParser.LineIndent, PascalName, ' = ', fParser.LineEnd,
+  w.AddStrings([fParser.LineIndent, PascalName, ' = (', fParser.LineEnd,
     fParser.LineIndent, '  ']);
   for i := 0 to fChoices.Count - 1 do
   begin
@@ -1525,14 +1541,19 @@ begin
     fCustomType.fRequiresArrayDefinition := true;
 end;
 
-constructor TPascalType.CreateBuiltin(const aBuiltinTypeName: RawUtf8;
+const
+  OBT2TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
+    'variant', 'integer', 'Int64', 'boolean', 'single', 'double',
+    'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
+
+constructor TPascalType.CreateBuiltin(aBuiltinType: TOpenApiBuiltInType;
   aSchema: POpenApiSchema; aIsArray: boolean);
 begin
-  fBuiltinTypeName := aBuiltinTypeName;
+  fBuiltinType := aBuiltinType;
+  fBuiltinTypeName := OBT2TXT[aBuiltinType];
   fBuiltinSchema := aSchema;
   if not aIsArray then
-    fNoConst := (FindPropName(['integer', 'Int64', 'boolean',
-      'Single', 'Double', 'TDate', 'TDateTime'], fBuiltinTypeName) >= 0);
+    fNoConst := aBuiltinType in [obtInteger .. obtDateTime];
   SetArray(aIsArray);
 end;
 
@@ -1792,7 +1813,7 @@ begin
     fPascalName[1] := 'E'; // Txxxx -> Exxxx
   end
   else
-    fPascalName := 'E' + fErrorType.fBuiltinTypeName; // paranoid
+    fPascalName := 'E' + fErrorType.fBuiltinTypeName; // should never happen
   fErrorTypeName := fErrorType.ToPascalName;
   inherited Create(aOwner, fPascalName);
 end;
