@@ -482,17 +482,20 @@ type
 
 const
   // published for unit testing (e.g. if properly sorted)
-  RESERVED_KEYWORDS: array[0..73] of RawUtf8 = (
-    'ABSOLUTE', 'AND', 'ARRAY', 'AS', 'ASM', 'BEGIN', 'CASE', 'CONST',
-    'CONSTRUCTOR', 'DESTRUCTOR', 'DIV', 'DO', 'ELSE', 'END', 'EXCEPT',
-    'EXPORTS', 'EXTERNAL', 'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY',
-    'FOR', 'FORWARD', 'FUNCTION', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN',
-    'INHERITED', 'INITIALIZATION', 'INTERFACE', 'IS', 'LABEL',
-    'LIBRARY', 'MOD', 'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON',
-    'OPERATOR', 'OR', 'OVERRIDE', 'PACKED', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
-    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'REINTRODUCE',
-    'REPEAT', 'SELF', 'SHL', 'SHR', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY',
-    'TYPE', 'UNIT', 'USES', 'VAR', 'VIRTUAL', 'WHILE', 'WITH', 'WRITE', 'XOR');
+  RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
+    'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
+    'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
+    'DIV', 'DO', 'DOWNTO', 'ELSE', 'END', 'EXCEPT', 'EXPORT', 'EXTERNAL',
+    'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY', 'FOR', 'FORWARD',
+    'FUNCTION', 'GENERIC', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN', 'INHERITED',
+    'INITIALIZATION', 'INLINE', 'INTERFACE', 'IS', 'LABEL', 'LIBRARY', 'MOD',
+    'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON', 'OPERATOR', 'OR', 'OUT',
+    'OVERRIDE', 'PACKED', 'PRIVATE', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
+    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'RECORD',
+    'REINTRODUCE', 'REPEAT', 'RESOURCESTRING', 'SELF', 'SET', 'SHL', 'SHR',
+    'STATIC', 'STRING', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY', 'TYPE',
+    'UNIT', 'UNTIL', 'USES', 'VAR', 'VARIANT', 'VIRTUAL', 'WHILE', 'WITH',
+    'WRITE', 'WRITELN', 'XOR');
 
 /// quickly check if a text is a case-insensitive pascal code keyword
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
