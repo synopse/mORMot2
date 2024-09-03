@@ -1589,6 +1589,12 @@ function GetSetName(aTypeInfo: PRttiInfo; const value;
   trimmed: boolean = false): RawUtf8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
+// - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
+// ! const MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('one', 'and 2');
+function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
+  CustomText: PRawUtf8Array; const SepChar: RawUtf8 = ','): RawUtf8;
+
+/// helper to retrieve the CSV text of all enumerate items defined in a set
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
   out result: ShortString; trimlowercase: boolean = false);
 
@@ -5712,6 +5718,25 @@ begin
   result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value, trimmed);
 end;
 
+function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
+  CustomText: PRawUtf8Array; const SepChar: RawUtf8): RawUtf8;
+var
+  info: PRttiEnumType;
+  i: PtrInt;
+begin
+  result := '';
+  info := aTypeInfo^.SetEnumType;
+  if (info = nil) or
+     (@value = nil) or
+     (CustomText = nil) then
+    exit;
+  for i := info^.MinValue to info^.MaxValue do
+    if GetBitPtr(@value, i) then
+      Append(result, CustomText^[i], SepChar);
+  if result <> '' then
+    FakeSetLength(result, length(result) - 1); // cancel last comma
+end;
+
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value;
   out result: ShortString; trimlowercase: boolean);
 var
@@ -5732,7 +5757,7 @@ begin
     inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
   if result[0] <> #0 then
-    dec(result[0]);
+    dec(result[0]); // cancel last comma
 end;
 
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
