@@ -1462,7 +1462,7 @@ type
 
   /// event signature for error callbacks during IJsonClient.Request()
   TOnJsonClientError = procedure(const Sender: IJsonClient;
-    const Response: TJsonResponse; const ErrorMsg: shortstring);
+    const Response: TJsonResponse; const ErrorMsg: shortstring) of object;
 
   /// an interface to make thread-safe JSON client requests
   // - is implemented e.g. by our TJsonClient class in this unit
@@ -4531,7 +4531,8 @@ procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
   const ActionArgs, NameValueParams: array of const;
   const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+  RttiRequest(Method,
+    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
     nil, nil, nil, nil, CustomError);
 end;
 
@@ -4539,7 +4540,8 @@ procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
   const ActionArgs, NameValueParams: array of const;
   var Res; ResInfo: PRttiInfo; const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+  RttiRequest(Method,
+    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
     nil, @Res, nil, ResInfo, CustomError);
 end;
 
@@ -4548,7 +4550,8 @@ procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
   const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
   const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+  RttiRequest(Method,
+    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
     @Payload, @Res, PayloadInfo, ResInfo, CustomError);
 end;
 
