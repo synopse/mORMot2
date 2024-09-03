@@ -2213,7 +2213,8 @@ begin
           ndx := count;
           inc(count);
           result[ndx].TagName := tag[j];
-          main.GetAsObject(tag[j], PDocVariantData(result[ndx].Tag)); // maybe nil
+          main.GetDocVariantByProp('name', tag[j], {casesens:}true,
+            PDocVariantData(result[ndx].Tag)); // maybe nil
         end;
         ObjArrayAdd(result[ndx].Operations, fOperations[i]);
       end;
