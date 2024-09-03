@@ -1477,6 +1477,8 @@ type
     // some property helpers
     function GetOnError: TOnJsonClientError;
     procedure SetOnError(const Event: TOnJsonClientError);
+    function GetUrlEncoder: TUrlEncoder;
+    procedure SetUrlEncoder(Value: TUrlEncoder);
     /// check if the client is actually connected to the server
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
@@ -1520,6 +1522,10 @@ type
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
     property OnError: TOnJsonClientError
       read GetOnError write SetOnError;
+    /// allow to customize the URL encoding of parameters
+    // - by default, contains [ueEncodeNames, ueSkipVoidString]
+    property UrlEncoder: TUrlEncoder
+      read GetUrlEncoder write SetUrlEncoder;
   end;
 
   /// customize how TJsonClientAbstract handle its process, e.g. its parsing
@@ -1547,6 +1553,8 @@ type
     // IJsonClient thread-safe methods
     function GetOnError: TOnJsonClientError;
     procedure SetOnError(const Event: TOnJsonClientError); virtual;
+    function GetUrlEncoder: TUrlEncoder;
+    procedure SetUrlEncoder(Value: TUrlEncoder);
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
@@ -1577,7 +1585,7 @@ type
     /// allow to customize the URL encoding of parameters
     // - by default, contains [ueEncodeNames, ueSkipVoidString]
     property UrlEncoder: TUrlEncoder
-      read fUrlEncoder write fUrlEncoder;
+      read GetUrlEncoder write SetUrlEncoder;
     /// allow to customize the process
     property Options: TJsonClientOptions
       read fOptions write fOptions;
@@ -4458,6 +4466,26 @@ begin
     raise EJsonClient.CreateResp('%.%', [self, err], Response);
 end;
 
+function TJsonClientAbstract.GetOnError: TOnJsonClientError;
+begin
+  result := fOnError;
+end;
+
+procedure TJsonClientAbstract.SetOnError(const Event: TOnJsonClientError);
+begin
+  fOnError := Event;
+end;
+
+function TJsonClientAbstract.GetUrlEncoder: TUrlEncoder;
+begin
+  result := fUrlEncoder;
+end;
+
+procedure TJsonClientAbstract.SetUrlEncoder(Value: TUrlEncoder);
+begin
+  fUrlEncoder := Value;
+end;
+
 const
   FMT_REQ: array[{full=}boolean] of RawUtf8 = (
     'Request % %', 'Request % % %');
@@ -4553,16 +4581,6 @@ begin
   RttiRequest(Method,
     UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
     @Payload, @Res, PayloadInfo, ResInfo, CustomError);
-end;
-
-function TJsonClientAbstract.GetOnError: TOnJsonClientError;
-begin
-  result := fOnError;
-end;
-
-procedure TJsonClientAbstract.SetOnError(const Event: TOnJsonClientError);
-begin
-  fOnError := Event;
 end;
 
 
