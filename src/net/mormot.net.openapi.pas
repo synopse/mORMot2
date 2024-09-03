@@ -360,6 +360,7 @@ type
     constructor Create(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     procedure ToTypeDefinition(W: TTextWriter); override;
+    procedure ToRegisterCustom(W: TTextWriter);
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; override;
     function ToConstTextArray: RawUtf8;
     property Prefix: RawUtf8
@@ -1111,14 +1112,14 @@ begin
     insert(feed, line, i);
     o := i + length(feed);
   end;
-  w.Add([LineIndent, line, LineEnd]);
+  w.AddStrings([LineIndent, line, LineEnd]);
 end;
 
 procedure TPascalOperation.Documentation(W: TTextWriter);
 var
   p: POpenApiParameter;
   v: PDocVariantData;
-  status, line: RawUtf8;
+  status, desc, line: RawUtf8;
   code: integer;
   r: POpenApiResponse;
   i: PtrInt;
@@ -1127,7 +1128,7 @@ var
   e: TPascalException;
 begin
   // Request Definition
-  w.Add([
+  w.AddStrings([
      fParser.LineIndent, '// ', fOperation^.Id, ' [', ToText(fMethod), '] ',
        fPath, fParser.LineEnd,
      fParser.LineIndent, '//', fParser.LineEnd]);
@@ -1135,16 +1136,21 @@ begin
   if fOperation^.Summary <> '' then
     fParser.Comment(w, ['// Summary: ', fOperation^.Summary]);
   // Description
-  if fOperation^.Description <> '' then
-    w.Add([fParser.LineIndent, '// Description:', fParser.LineEnd,
-      fParser.LineIndent, '//   ', StringReplaceAll(fOperation^.Description, #10,
-        FormatUtf8(#10'%//   ', [fParser.LineIndent])), fParser.LineEnd]);
+  desc := fOperation^.Description;
+  if desc <> '' then
+  begin
+    desc := StringReplaceAll(StringReplaceAll(desc, #10,
+      FormatUtf8('%%//   ', [fParser.LineEnd, fParser.LineIndent])), #13, '');
+    w.AddStrings([
+      fParser.LineIndent, '// Description:', fParser.LineEnd,
+      fParser.LineIndent, '//   ', desc, fParser.LineEnd]);
+  end;
   // params
   rb := fOperation^.RequestBody(fParser);
   if (fParameters <> nil) or
      (Assigned(rb) and Assigned(rb^.Schema(fParser))) then
   begin
-    w.Add([fParser.LineIndent, '//', fParser.LineEnd,
+    w.AddStrings([fParser.LineIndent, '//', fParser.LineEnd,
            fParser.LineIndent, '// Params:', fParser.LineEnd]);
     for i := 0 to high(fParameters) do
     begin
@@ -1173,7 +1179,7 @@ begin
   v := fOperation^.Responses;
   if v^.Count > 0 then
   begin
-    w.Add([fParser.LineIndent, '//', fParser.LineEnd,
+    w.AddStrings([fParser.LineIndent, '//', fParser.LineEnd,
            fParser.LineIndent, '// Responses:', fParser.LineEnd]);
     for i := 0 to v^.Count - 1 do
     begin
@@ -1214,7 +1220,7 @@ var
   begin
     if length(line) > 70 then
     begin
-      w.Add([TrimRight(line), fParser.LineEnd]);
+      w.AddStrings([TrimRight(line), fParser.LineEnd]);
       line := fParser.LineIndent + '  ';
     end;
     Append(line, Args);
@@ -1302,7 +1308,7 @@ begin
   end;
 
   Declaration(w, ClassName, {implem=}true);
-  w.Add([fParser.LineEnd, 'begin', fParser.LineEnd,
+  w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', ToText(fMethod), ''', ''', url, '''']);
    // Path parameters
    if Length(urlArgs) > 0 then
@@ -1312,7 +1318,7 @@ begin
      begin
        if i > 0 then
          w.AddShorter(', ');
-       w.Add(urlArgs[i]);
+       w.AddString(urlArgs[i]);
      end;
      w.AddDirect(']');
    end
@@ -1324,15 +1330,15 @@ begin
    // Query parameters
    if queryParams.Count > 0 then
    begin
-     w.Add([', [', fParser.LineEnd]);
+     w.AddStrings([', [', fParser.LineEnd]);
      for i := 0 to queryParams.Count - 1 do
      begin
        if i > 0 then
-         w.Add([',', fParser.LineEnd]);
-       w.Add(['    ''', queryParams.Names[i], ''', ',
+         w.AddStrings([',', fParser.LineEnd]);
+       w.AddStrings(['    ''', queryParams.Names[i], ''', ',
          VariantToUtf8(queryParams.Values[i])]);
      end;
-     w.Add([fParser.LineEnd, '    ]']);
+     w.AddStrings([fParser.LineEnd, '    ]']);
    end
    // Either urlArgs and QueryArgs or None of them (for Request parameters)
    else if (urlArgs <> nil) or
@@ -1342,26 +1348,26 @@ begin
    // Payload if any
    if Assigned(fPayloadParameterType) then
    begin
-     w.Add([',', fParser.LineEnd,
+     w.AddStrings([',', fParser.LineEnd,
        '    Payload, ']);
      if Assigned(fSuccessResponseType) then
        w.AddShorter('result')
      else
        w.AddShort('{notused:}self');
 
-     w.Add([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
+     w.AddStrings([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
      if Assigned(fSuccessResponseType) then
-       w.Add(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
+       w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
      else
        w.AddShorter('nil');
    end
    // Response type if any
    else if Assigned(fSuccessResponseType) then
-     w.Add([',', fParser.LineEnd,
+     w.AddStrings([',', fParser.LineEnd,
        '    result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
   if fOnErrorIndex <> 0 then
-    w.Add([', OnError', SmallUInt32Utf8[fOnErrorIndex]]);
-  w.Add([');', fParser.LineEnd, 'end;', fParser.LineEnd, fParser.LineEnd]);
+    w.AddStrings([', OnError', SmallUInt32Utf8[fOnErrorIndex]]);
+  w.AddStrings([');', fParser.LineEnd, 'end;', fParser.LineEnd, fParser.LineEnd]);
 end;
 
 function TPascalOperation.FunctionName: RawUtf8;
@@ -1427,7 +1433,7 @@ var
 begin
   if fSchema^.HasDescription then
     fParser.Comment(W, ['/// ', fSchema^.Description]);
-  w.Add([fParser.LineIndent, PascalName, ' = ', fParser.LineEnd,
+  w.AddStrings([fParser.LineIndent, PascalName, ' = ', fParser.LineEnd,
     fParser.LineIndent, '  ']);
   for i := 0 to fChoices.Count - 1 do
   begin
@@ -1444,10 +1450,20 @@ begin
         Append(item, [i]); // duplicated, or no ascii within -> make unique
     end;
     AddRawUtf8(items, item);
-    w.Add([fPrefix, item]);
+    w.AddStrings([fPrefix, item]);
   end;
-  w.Add([');', fParser.LineEnd,
+  w.AddStrings([');', fParser.LineEnd,
     ToArrayTypeDefinition]);
+end;
+
+procedure TPascalEnum.ToRegisterCustom(W: TTextWriter);
+begin
+  w.AddStrings(['    TypeInfo(', fPascalName, ')']);
+  if fRequiresArrayDefinition then
+    w.AddStrings([', TypeInfo(', ToArrayTypeName, ')'])
+  else
+    w.AddShorter(', nil');
+  w.AddStrings([', @', fConstTextArrayName]);
 end;
 
 function TPascalEnum.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
@@ -1686,7 +1702,7 @@ var
 begin
   if fFromRef <> '' then
     fParser.Comment(w, ['/// from ', fFromRef]);
-  w.Add([fParser.LineIndent, PascalName, ' = packed record', fParser.LineEnd]);
+  w.AddStrings([fParser.LineIndent, PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
     p := fProperties.ObjectPtr[i];
@@ -1697,19 +1713,19 @@ begin
     if Assigned(s) and
        s^.HasDescription then
     begin
-      w.Add([fParser.LineIndent,
+      w.AddStrings([fParser.LineIndent,
           '  /// ', s^.Description, fParser.LineEnd]);
       if s^.HasExample then
-        w.Add([fParser.LineIndent,
+        w.AddStrings([fParser.LineIndent,
           '  // - Example: ', s^.ExampleAsText, fParser.LineEnd]);
       if s^.HasPattern then
-        w.Add([fParser.LineIndent,
+        w.AddStrings([fParser.LineIndent,
           '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
     end;
-    w.Add([fParser.LineIndent, '  ', p.PascalName, ': ',
+    w.AddStrings([fParser.LineIndent, '  ', p.PascalName, ': ',
       p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
-  w.Add([fParser.LineIndent, 'end;', fParser.LineEnd,
+  w.AddStrings([fParser.LineIndent, 'end;', fParser.LineEnd,
          fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
            ' = ^', PascalName, ';', fParser.LineEnd,
          ToArrayTypeDefinition, fParser.LineEnd]);
@@ -1783,7 +1799,7 @@ procedure TPascalException.ToTypeDefinition(W: TTextWriter);
 begin
   fParser.Comment(w, [
       '/// exception raised on ', fResponse.Description, ' (', fErrorCode, ')']);
-  w.Add([
+  w.AddStrings([
     fParser.LineIndent, PascalName, ' = class(EJsonClient)', fParser.LineEnd,
     fParser.LineIndent, 'protected', fParser.LineEnd,
     fParser.LineIndent, '  fError: ', fErrorTypeName, ';', fParser.LineEnd,
@@ -1797,7 +1813,7 @@ end;
 
 procedure TPascalException.Body(W: TTextWriter);
 begin
-  w.Add(['{ ', PascalName, ' }', fParser.LineEnd, fParser.LineEnd,
+  w.AddStrings(['{ ', PascalName, ' }', fParser.LineEnd, fParser.LineEnd,
     'constructor ', PascalName, '.CreateResp(const Format: RawUtf8;', fParser.LineEnd,
     '  const Args: array of const; const Resp: TJsonResponse);', fParser.LineEnd,
     'begin', fParser.LineEnd,
@@ -2088,7 +2104,6 @@ end;
 function TOpenApiParser.GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
 var
   rec: TPascalRecordDynArray;
-  enum: TPascalEnum;
   i: PtrInt;
   temp: TTextWriterStackBuffer;
   w: TTextWriter;
@@ -2098,7 +2113,7 @@ begin
     // unit common definitions
     fLineIndent := '';
     Description(w, 'DTOs for');
-    w.Add([
+    w.AddStrings([
       'unit ', UnitName, ';', LineEnd , LineEnd,
       '{$I mormot.defines.inc}', LineEnd ,
       LineEnd,
@@ -2121,74 +2136,68 @@ begin
     fLineIndent := '  ';
     if fEnums.Count > 0 then
     begin
-      w.Add(['{ ************ Enumerations and Sets }', LineEnd, LineEnd]);
+      w.AddStrings(['{ ************ Enumerations and Sets }', LineEnd, LineEnd]);
       for i := 0 to fEnums.Count - 1 do
         TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition(w);
-      w.Add([LineEnd, LineEnd]);
+      w.AddStrings([LineEnd, LineEnd]);
     end;
     // append all records
-    w.Add(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
+    w.AddStrings(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
     rec := GetOrderedRecords;
     for i := 0 to high(rec) do
       rec[i].ToTypeDefinition(w);
     // enumeration-to-text constants
     if fEnums.Count > 0 then
     begin
-      w.Add([LineEnd, LineEnd, 'const', LineEnd,
+      w.AddStrings([LineEnd, LineEnd, 'const', LineEnd,
         '  // define how enums/sets are actually transmitted as JSON array of string', LineEnd]);
       for i := 0 to fEnums.Count - 1 do
-        w.Add([LineIndent, TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
+        w.AddStrings([LineIndent, TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
     end;
     // start implementation section
-    w.Add([LineEnd, LineEnd,
+    w.AddStrings([LineEnd, LineEnd,
       'implementation', LineEnd, LineEnd,
       '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
     // output the text representation of all records
     // with proper json names (overriding the RTTI definitions)
     if rec <> nil then
     begin
-      w.Add(['const', LineEnd,
+      w.AddStrings(['const', LineEnd,
         '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
       for i := 0 to high(rec) do
-        w.Add([LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
+        w.AddStrings([LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
     end;
     // define the RTTI registratoin procedure
-    w.Add([LineEnd, LineEnd,
+    w.AddStrings([LineEnd, LineEnd,
       'procedure RegisterRtti;', LineEnd,
       'begin', LineEnd]);
     // register all needed enum types RTTI
     if fEnums.Count > 0 then
     begin
-      w.Add(['  TRttiJson.RegisterCustomEnumValues([', LineEnd]);
+      w.AddStrings(['  TRttiJson.RegisterCustomEnumValues([', LineEnd]);
       for i := 0 to fEnums.Count - 1 do
       begin
         if i > 0 then
-          w.Add([',', LineEnd]);
-        enum := fEnums.ObjectPtr[i];
-        w.Add(['    TypeInfo(', enum.PascalName, ')']);
-        if enum.fRequiresArrayDefinition then
-          w.Add([', TypeInfo(', enum.ToArrayTypeName, ')'])
-        else
-          w.AddShorter(', nil');
-        w.Add([', @', enum.fConstTextArrayName]);
+          w.AddStrings([',', LineEnd]);
+        TPascalEnum(fEnums.ObjectPtr[i]).ToRegisterCustom(w);
       end;
-      w.Add([']);', LineEnd]);
+      w.AddStrings([']);', LineEnd]);
     end;
     // register all record types RTTI
     if rec <> nil then
     begin
-      w.Add(['  Rtti.RegisterFromText([', LineEnd]);
+      w.AddStrings(['  Rtti.RegisterFromText([', LineEnd]);
       for i := 0 to high(rec) do
       begin
         if i > 0 then
-          w.Add([',', LineEnd]);
-        w.Add(['    ', rec[i].ToRttiRegisterDefinitions]);
+          w.AddStrings([',', LineEnd]);
+        w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
       end;
-      w.Add([']);', LineEnd,
+      w.AddStrings([']);', LineEnd,
         'end;', LineEnd, LineEnd]);
     end;
     // finish the unit
-    w.Add([
+    w.AddStrings([
       'initialization', LineEnd,
       '  RegisterRtti;', LineEnd,
       LineEnd,
@@ -2216,7 +2225,7 @@ begin
     // unit common definitions
     fLineIndent := '';
     Description(w, 'Client unit for');
-    w.Add([
+    w.AddStrings([
       'unit ', UnitName, ';', LineEnd,
       LineEnd,
       '{$I mormot.defines.inc}', LineEnd ,
@@ -2242,30 +2251,30 @@ begin
     // custom exceptions definitions
     if fExceptions.Count > 0 then
     begin
-      w.Add([LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+      w.AddStrings([LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
       for i := 0 to fExceptions.Count - 1 do
         TPascalException(fExceptions.ObjectPtr[i]).ToTypeDefinition(w);
     end;
     // main client class definition
-    w.Add([LineEnd,
+    w.AddStrings([LineEnd,
       '{ ************ Main ', ClientClassName, ' Class }', LineEnd, LineEnd]);
     Description(w,'Client class for');
-    w.Add([
+    w.AddStrings([
       '  ', ClientClassName, ' = class', LineEnd,
       '  private', LineEnd,
       '    fClient: IJsonClient;', LineEnd]);
     // status responses to exception events
     if fErrorHandler <> nil then
     begin
-      w.Add(['    // TOnJsonClientError event handler',
+      w.AddStrings(['    // TOnJsonClientError event handler',
         PLURAL_FORM[length(fErrorHandler) > 1], LineEnd]);
       for i := 0 to high(fErrorHandler) do
-        w.Add([
+        w.AddStrings([
           '    procedure OnError', SmallUInt32Utf8[i + 1],
           '(const Sender: IJsonClient;', LineEnd,
           '      const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
     end;
-    w.Add([
+    w.AddStrings([
       '  public', LineEnd, LineEnd,
       '    // initialize this Client with an associated HTTP/JSON request', LineEnd,
       '    constructor Create(const aClient: IJsonClient = nil);', LineEnd]);
@@ -2292,7 +2301,7 @@ begin
           desc := ops.Tag^.Description;
           bannerlen := 18 + Length(ops.TagName) + Length(desc);
           u := RawUtf8OfChar('/', bannerlen);
-          w.Add([LineEnd, LineEnd,
+          w.AddStrings([LineEnd, LineEnd,
             '    ////', u, LineEnd,
             '    //// ---- ', ops.TagName, ': ', desc, ' ---- ////', LineEnd,
             '    ////', u, LineEnd]);
@@ -2305,7 +2314,7 @@ begin
       end;
     end;
     // finalize the class definition and start the implementation section
-    w.Add([LineEnd,
+    w.AddStrings([LineEnd,
       '    // access to the associated HTTP/JSON request', LineEnd,
       '    property JsonClient: IJsonClient', LineEnd,
       '      read fClient write fClient;', LineEnd,
@@ -2315,13 +2324,13 @@ begin
     // custom exceptions implementations
     if fExceptions.Count > 0 then
     begin
-      w.Add(['{ ************ Custom Exceptions }', LineEnd, LineEnd]);
+      w.AddStrings(['{ ************ Custom Exceptions }', LineEnd, LineEnd]);
       for i := 0 to fExceptions.Count - 1 do
         TPascalException(fExceptions.ObjectPtr[i]).Body(w);
     end;
     // main client class implementation
     fLineIndent := '';
-    w.Add([LineEnd,
+    w.AddStrings([LineEnd,
       '{ ************ Main ', ClientClassName, ' Class }', LineEnd, LineEnd,
       '{ ', ClientClassName, '}', LineEnd, LineEnd,
       'constructor ', ClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
@@ -2331,40 +2340,40 @@ begin
     // status responses to exception events
     for i := 0 to high(fErrorHandler) do
     begin
-      w.Add([
+      w.AddStrings([
         'procedure ', ClientClassName, '.OnError', SmallUInt32Utf8[i + 1],
             '(const Sender: IJsonClient;', LineEnd,
         '  const Response: TJsonResponse; const ErrorMsg: shortstring);', LineEnd]);
       err := fErrorHandler[i];
       j := PosEx('  else', err);
       if j = 1 then
-        w.Add([ // single default exception
+        w.AddStrings([ // single default exception
           'begin', LineEnd,
           '  raise', Split(SplitRight(err, '='), ';')]) // extract class name
       else
       begin
-        w.Add([
+        w.AddStrings([
           'var', LineEnd,
           '  e: EJsonClientClass;', LineEnd,
           'begin', LineEnd,
           '  case Response.Status of', LineEnd,
           err]); // exception block
         if j = 0 then
-          w.Add([
+          w.AddStrings([
             '  else', LineEnd,
             '    e := EJsonClient;', LineEnd]); // no default exception class
-        w.Add([
+        w.AddStrings([
           '  end;', LineEnd,
           '  raise e']);
       end;
-      w.Add([
+      w.AddStrings([
         '.CreateResp(''%.%'', [self, ErrorMsg], Response);', LineEnd,
         'end;', LineEnd, LineEnd]);
     end;
     // append all methods, in native order (no need to follow tag ordering)
     for i := 0 to high(Operations) do
       Operations[i].Body(w, ClientClassName, fSpecs.BasePath);
-    w.Add([LineEnd, 'end.']);
+    w.AddStrings([LineEnd, 'end.']);
     w.SetText(result);
   finally
     w.Free;
