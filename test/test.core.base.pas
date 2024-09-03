@@ -2557,6 +2557,12 @@ begin
   Check(IsEqualGuid(RawUtf8ToGuid(s), Guid));
   Check(TrimGuid(s));
   CheckEqual(s, 'c9a646d39c614cb7bfcdee2522c8f633');
+  FillZero(g);
+  CheckEqual(GuidArrayToCsv([]), '');
+  CheckEqual(GuidArrayToCsv([g]), '00000000-0000-0000-0000-000000000000');
+  CheckEqual(GuidArrayToCsv([Guid, g, g2]),
+    'C9A646D3-9C61-4CB7-BFCD-EE2522C8F633,00000000-0000-0000-0000-000000000000,' +
+    'C9A646D3-9C61-4CB7-BFCD-EE2522C8F633');
   CheckEqual(MacTextFromHex(''), '');
   CheckEqual(MacTextFromHex('1'), '');
   CheckEqual(MacTextFromHex('12'), '12');

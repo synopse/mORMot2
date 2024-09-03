@@ -2357,6 +2357,11 @@ function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
 function ToUtf8(const guid: TGuid): RawUtf8; overload;
 
+/// convert one or several TGuid into 36 chars encoded CSV text
+// - will return e.g.
+// ! '3F2504E0-4F89-11D3-9A0C-0305E82C3301,C595476E-73D1-4B9C-9725-308C4A72DEC8'
+function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ','): RawUtf8;
+
 /// convert a TGuid into into 38 chars encoded { text } as RTL string
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
@@ -10247,6 +10252,31 @@ function ToUtf8(const guid: TGuid): RawUtf8;
 begin
   FastSetString(result, 36);
   GuidToText(pointer(result), @Guid);
+end;
+
+function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar): RawUtf8;
+var
+  n: integer;
+  g: PGuid;
+  P: PUtf8Char;
+begin
+  result := '';
+  n := length(guid);
+  if n = 0 then
+    exit;
+  FastSetString(result, (37 * n) - 1);
+  g := @guid[0];
+  p := pointer(result);
+  repeat
+    GuidToText(p, pointer(g));
+    dec(n);
+    if n = 0 then
+      exit;
+    inc(p, 36);
+    p^ := SepChar;
+    inc(p);
+    inc(g);
+  until false;
 end;
 
 function GuidToShort(const guid: TGuid): TGuidShortString;
