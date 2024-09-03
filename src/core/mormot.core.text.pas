@@ -737,7 +737,7 @@ type
     /// append an UTF-8 String, with no JSON escaping
     procedure AddString(const Text: RawUtf8);
     /// append several UTF-8 strings
-    procedure AddStrings(const Text: array of RawUtf8); overload;
+    procedure AddStrings(const Values: array of RawUtf8); overload;
     /// append an UTF-8 string several times
     procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
     /// append a ShortString
@@ -924,8 +924,6 @@ type
     // - use overriden TJsonWriter version instead!
     procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
-    /// append an open array constant content to the buffer as unescaped text
-    procedure Add(const Values: array of RawUtf8); overload;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
     // - return the position to write text
@@ -3873,20 +3871,6 @@ begin
   ESynException.RaiseUtf8('%.Add(TVarRec) unimplemented: use TJsonWriter', [self]);
 end;
 
-procedure TTextWriter.Add(const Values: array of RawUtf8);
-var
-  i: PtrInt;
-  p: PPUtf8Char;
-begin
-  p := @Values[0];
-  for i := 0 to high(Values) do
-  begin
-    if p^ <> nil then
-      AddNoJsonEscape(p^, PStrLen(p^ - _STRLEN)^);
-    inc(p);
-  end;
-end;
-
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
 begin
   ESynException.RaiseUtf8('%.WrBase64() unimplemented: use TJsonWriter', [self]);
@@ -5132,12 +5116,18 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddStrings(const Text: array of RawUtf8);
+procedure TTextWriter.AddStrings(const Values: array of RawUtf8);
 var
   i: PtrInt;
+  p: PPUtf8Char;
 begin
-  for i := 0 to high(Text) do
-    AddString(Text[i]);
+  p := @Values[0];
+  for i := 0 to high(Values) do
+  begin
+    if p^ <> nil then
+      AddNoJsonEscape(p^, PStrLen(p^ - _STRLEN)^);
+    inc(p);
+  end;
 end;
 
 procedure TTextWriter.AddStrings(const Text: RawUtf8; count: PtrInt);
