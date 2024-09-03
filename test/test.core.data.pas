@@ -6549,6 +6549,10 @@ begin
      'os_pretty_name', '', 'architecture', 'arch64'],
     [ueSkipVoidString]), '/api/templates/uuid/vms/?owner=own&name=aname&os=mos' +
     '&os_version=123&architecture=arch64');
+  CheckEqual(UrlEncodeFull('', [], ['select', '', '*where', '1,"2",and three'],
+    [ueStarNameIsCsv]), '?select=&where=1&where=2&where=and+three');
+  CheckEqual(UrlEncodeFull('', [], ['select', '', '*where', ''],
+    [ueStarNameIsCsv, ueSkipVoidString]), '');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);

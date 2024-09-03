@@ -1568,6 +1568,7 @@ type
   TUrlEncoder = set of (
     ueTrimLeadingQuestionMark,
     ueEncodeNames,
+    ueStarNameIsCsv,
     ueSkipVoidString,
     ueSkipVoidValue);
 
@@ -8192,14 +8193,16 @@ function UrlEncodeFull(const PrefixFmt: RawUtf8; const PrefixArgs,
   NameValuePairs: array of const; Options: TUrlEncoder): RawUtf8;
 var
   a, n: PtrInt;
-  name, value: RawUtf8;
+  name, value, one: RawUtf8;
   p: PVarRec;
   w: TTextWriter;
-  possibleDirect, valueDirect, hasContent: boolean;
+  csv: PUtf8Char;
+  flags: set of (possibleDirect, valueDirect, valueIsCsv, hasContent);
   tmp: TTextWriterStackBuffer;
 begin
-  hasContent := false;
-  possibleDirect := DefaultJsonWriter <> TTextWriter;
+  flags := [];
+  if DefaultJsonWriter <> TTextWriter then
+    include(flags, possibleDirect);
   w := DefaultJsonWriter.CreateOwnedStream(tmp);
   try
     if PrefixFmt <> '' then
@@ -8211,33 +8214,65 @@ begin
       begin
         p := @NameValuePairs[a * 2];
         VarRecToUtf8(p^, name);
+        if name = '' then
+          continue;
+        flags := flags - [valueDirect, valueIsCsv];
+        if (ueStarNameIsCsv in Options) and
+           (name[1] = '*') then
+        begin
+          include(flags, valueIsCsv);
+          delete(name, 1, 1);
+        end;
         if not IsUrlValid(pointer(name)) then
           if ueEncodeNames in Options then
             name := UrlEncodeName(name)
           else
             continue; // just skip invalid names
         inc(p);
-        valueDirect := possibleDirect and (byte(p^.VType) in vtNotString);
+        if (possibleDirect in flags) and
+           (not (valueIsCsv in flags)) and
+           (byte(p^.VType) in vtNotString) then
+          include(flags, valuedirect);
         if (ueSkipVoidValue in Options) and
            VarRecIsVoid(p^) then
           continue // skip e.g. '' or 0
         else if p^.VType = vtObject then // no VarRecToUtf8(vtObject)=ClassName
           value := ObjectToJson(p^.VObject, [])
-        else if not valueDirect then
+        else if not (valueDirect in flags) then
         begin
           VarRecToUtf8(p^, value);
           if (ueSkipVoidString in Options) and
              (value = '') then
             continue; // skip ''
         end;
-        if hasContent then
+        if hasContent in flags then
           w.AddDirect('&')
-        else if not (ueTrimLeadingQuestionMark in Options) then
-          w.AddDirect('?');
-        hasContent := true;
+        else
+        begin
+          include(flags, hasContent);
+          if not (ueTrimLeadingQuestionMark in Options) then
+            w.AddDirect('?');
+        end;
+        if valueIsCsv in flags then
+        begin
+          csv := pointer(value); // '*tag', 't1,"t2",t3'
+          repeat
+            GetNextItem(csv, ',', '"', one);
+            if (ueSkipVoidString in Options) and
+               (one = '') then
+              continue;
+            if not (valueIsCsv in flags) then
+              w.AddDirect('&'); // ? or & has been written before the first item
+            exclude(flags, valueIsCsv);
+            w.AddString(name); // 'tag=t1&tag=t2&tag=t3'
+            w.AddDirect('=');
+            _UrlEncodeW(w, pointer(one), length(one), 32);
+          until csv = nil;
+          continue;
+        end;
         w.AddString(name);
         w.AddDirect('=');
-        if valueDirect then
+        if valueDirect in flags then
           w.Add(p^) // requires TJsonWriter
         else
           _UrlEncodeW(w, pointer(value), length(value), 32); // = UrlEncode(W)
