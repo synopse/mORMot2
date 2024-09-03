@@ -1171,7 +1171,7 @@ begin
         continue; // handled below
       line := Make(['// - [', p^._In, '] ', p^.AsPascalName]);
       if p^.Required then
-        Append(line, '*');
+        Append(line, '  (required)');
       if p^.Default <> nil then
         Append(line, [' (default=', p^.Default^, ')']);
       if p^.Description <> '' then
@@ -2436,6 +2436,8 @@ begin
       'constructor ', ClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
       'begin', LineEnd,
       '  fClient := aClient;', LineEnd,
+      '  fClient.UrlEncoder :=', LineEnd,
+      '    [ueEncodeNames, ueSkipVoidString, ueSkipVoidValue, ueStarNameIsCsv];', LineEnd,
       'end;', LineEnd, LineEnd]);
     // status responses to exception events
     for i := 0 to high(fErrorHandler) do
