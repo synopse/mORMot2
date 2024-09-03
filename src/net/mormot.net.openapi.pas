@@ -949,7 +949,7 @@ var
 begin
   UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
   result := FastFindPUtf8CharSorted(
-    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0;
+    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0; // O(log(n)) search
 end;
 
 function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
@@ -1616,20 +1616,23 @@ var
   finaltype: boolean;
 begin
   if Assigned(CustomType) then
-    result := CustomType.PascalName
-  else
-    result := fBuiltinTypeName;
-  if IsArray then
   begin
-    if Assigned(CustomType) then
-    begin
-      finaltype := AsFinalType;
-      if NoRecordArrayTypes and AsFinalType and IsRecord then
-        finaltype := false;
-      result := CustomType.ToArrayTypeName(finaltype);
-    end
-    else
-      result := FormatUtf8('array of %', [result]);
+    result := CustomType.PascalName;
+    if not IsArray then
+      exit;
+    finaltype := AsFinalType;
+    if NoRecordArrayTypes and AsFinalType and IsRecord then
+      finaltype := false;
+    result := CustomType.ToArrayTypeName(finaltype);
+  end
+  else
+  begin
+    result := fBuiltinTypeName;
+    if not IsArray then
+      exit;
+    if result[1] <> 'T' then
+      insert('T', result, 1);
+    Append(result, 'DynArray'); // use mormot.core.base arrays
   end;
 end;
 
@@ -1657,12 +1660,14 @@ begin
   begin
     // explicit default value
     if PVarData(def)^.VType = varBoolean then
-      result := BOOL_UTF8[PVarData(def)^.VBoolean]
+      result := BOOL_UTF8[PVarData(def)^.VBoolean] // normalize
     else if VariantToUtf8(def^, result) then
       result := QuotedStr(result);
   end
   else if IsEnum then
     result := (CustomType as TPascalEnum).Prefix + 'None'
+  else if IsArray then
+    result := 'nil'
   else
   begin
     // default from type
@@ -2246,6 +2251,7 @@ begin
       '  mormot.core.base,', LineEnd,
       '  mormot.core.text,', LineEnd,
       '  mormot.core.rtti,', LineEnd,
+      '  mormot.core.json,', LineEnd,
       '  mormot.core.variants,', LineEnd,
       '  mormot.net.client,', LineEnd,
       '  ', DtoUnitName, ';', LineEnd, LineEnd,
