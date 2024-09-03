@@ -924,6 +924,8 @@ type
     // - use overriden TJsonWriter version instead!
     procedure Add(const V: TVarRec; Escape: TTextWriterKind = twNone;
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
+    /// append an open array constant content to the buffer as unescaped text
+    procedure Add(const Values: array of RawUtf8); overload;
     /// prepare direct access to the internal output buffer
     // - return nil if Len is too big to fit in the current buffer size
     // - return the position to write text
@@ -3869,6 +3871,20 @@ procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
   WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
   ESynException.RaiseUtf8('%.Add(TVarRec) unimplemented: use TJsonWriter', [self]);
+end;
+
+procedure TTextWriter.Add(const Values: array of RawUtf8);
+var
+  i: PtrInt;
+  p: PPUtf8Char;
+begin
+  p := @Values[0];
+  for i := 0 to high(Values) do
+  begin
+    if p^ <> nil then
+      AddNoJsonEscape(p^, PStrLen(p^ - _STRLEN)^);
+    inc(p);
+  end;
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
