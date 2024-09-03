@@ -408,6 +408,8 @@ type
   TPascalOperation = class
   private
     fParser: TOpenApiParser;
+    fOperationId: RawUtf8;
+    fFunctionName: RawUtf8;
     fPath: RawUtf8;
     fPathItem: POpenApiPathItem;
     fOperation: POpenApiOperation;
@@ -428,7 +430,12 @@ type
     procedure Declaration(W: TTextWriter; const ClassName: RawUtf8;
       InImplementation: boolean);
     procedure Body(W: TTextWriter; const ClassName, BasePath: RawUtf8);
-    function FunctionName: RawUtf8;
+    property Operation: POpenApiOperation
+      read fOperation;
+    property OperationId: RawUtf8
+      read fOperationId;
+    property FunctionName: RawUtf8
+      read fFunctionName;
     property Parameters: POpenApiParameterDynArray
       read fParameters;
   end;
@@ -1029,6 +1036,10 @@ begin
     fParameters[i] := p^.Parameter[i];
   for i := 0 to o.Count - 1 do
     fParameters[pn + i] := o^.Parameter[i];
+  fOperationId := fOperation^.Id;
+  fFunctionName := SanitizePascalName(fOperationId, {keywordcheck:}true);
+  if fOperation^.Deprecated then
+    Append(fFunctionName, '_deprecated');
 end;
 
 destructor TPascalOperation.Destroy;
@@ -1399,7 +1410,7 @@ begin
      if Assigned(fSuccessResponseType) then
        w.AddShorter('result')
      else
-       w.AddShort('{notused:}self');
+       w.AddShort('{dummy:}self');
      w.AddStrings([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
      if Assigned(fSuccessResponseType) then
        w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
@@ -1413,13 +1424,6 @@ begin
   if fOnErrorIndex <> 0 then
     w.AddStrings([', OnError', SmallUInt32Utf8[fOnErrorIndex]]);
   w.AddStrings([');', fParser.LineEnd, 'end;', fParser.LineEnd, fParser.LineEnd]);
-end;
-
-function TPascalOperation.FunctionName: RawUtf8;
-begin
-  result := fOperation^.Id;
-  if result <> '' then
-    result := SanitizePascalName(result, {keywordcheck:}true);
 end;
 
 
@@ -2167,7 +2171,7 @@ begin
   main := fSpecs.Tags;
   for i := 0 to length(fOperations) - 1 do
   begin
-    tag := fOperations[i].fOperation^.Tags;
+    tag := fOperations[i].Operation^.Tags;
     if tag <> nil then
     begin
       // add to all tags by name in result[1..]
@@ -2390,7 +2394,7 @@ begin
       for j := 0 to high(ops.Operations) do
       begin
         op := ops.Operations[j];
-        id := op.fOperation^.Id;
+        id := op.OperationId;
         if FindRawUtf8(done, id) >= 0 then
           // operations can be in multiple tags but should be written once
           continue;
