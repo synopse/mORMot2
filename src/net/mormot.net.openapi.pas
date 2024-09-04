@@ -730,13 +730,29 @@ begin
 end;
 
 function TOpenApiResponse.Schema(Parser: TOpenApiParser): POpenApiSchema;
+var
+  ref: RawUtf8;
+  c, o: PDocVariantData;
 begin
-  if Parser.Version = oav2 then
+  if @self = nil then
+    result := nil
+  else if Data.GetAsRawUtf8('$ref', ref) then
+    result := POpenApiResponse(Parser.GetRef(ref)).Schema(Parser)
+  else if Parser.Version = oav2 then
     result := POpenApiSchema(Data.O['schema'])
   else
+  begin
     // we only support application/json in our wrapper classes
-    result := POpenApiSchema(Data.O['content']^.O[JSON_CONTENT_TYPE].O['schema']);
-  if result^.Data.Count = 0 then
+    result := nil;
+    c := Data.O['content'];
+    c.Options := c.Options - [dvoNameCaseSensitive];
+    if c.GetAsObject(JSON_CONTENT_TYPE, o) or
+       c.GetAsObject('*/*', o) or
+       c.GetAsObject('application/jwt', o) then // seen in the wild :(
+      result := POpenApiSchema(o.O['schema']);
+  end;
+  if (result <> nil) and
+     (result^.Data.Count = 0) then
     result := nil; // no such schema
 end;
 
