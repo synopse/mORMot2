@@ -485,6 +485,7 @@ type
     fOptions: TOpenApiParserOptions;
     procedure ParseSpecs;
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
+    function GetRef(const aRef: RawUtf8): pointer;
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const);
   public
@@ -1656,7 +1657,7 @@ begin
   begin
     // #/definitions/NewPet -> NewPet
     src := SplitRight(ref, '/');
-    aSchema := Schema[src]; // resolve from main Specs
+    aSchema := GetRef(ref); // resolve from main Specs
     if aSchema = nil then
       EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
     result := NewPascalTypeFromSchema(aSchema, src);
@@ -2056,6 +2057,17 @@ function TOpenApiParser.GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
 begin
   if not fSchemas^.GetAsObject(aName, PDocVariantData(result)) then
     result := nil;
+end;
+
+function TOpenApiParser.GetRef(const aRef: RawUtf8): pointer;
+begin
+  // e.g. "$ref": "#/components/parameters/JobID"
+  result := nil;
+  if (aRef = '') or
+     (aRef[1] <> '#') or
+     (aRef[2] <> '/') then
+    exit;
+  fSpecs.Data.GetDocVariantByPath(copy(aRef, 3, 100), PDocVariantData(result), '/');
 end;
 
 procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
