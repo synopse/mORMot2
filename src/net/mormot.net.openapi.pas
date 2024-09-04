@@ -720,9 +720,47 @@ end;
 
 function TOpenApiSchema.BuiltInType(Parser: TOpenApiParser): TOpenApiBuiltInType;
 var
-  t, f: RawUtf8;
+  t, f, ref: RawUtf8;
+  oo: PDocVariantData;
+  s: POpenApiSchema;
+  r: TPascalRecord;
+  i: PtrInt;
 begin
+  result := obtVariant; // fallback type: anything up to TDocVariantData
   t := _Type;
+  if t = '' then
+  begin
+    if Data.GetAsArray('oneOf', oo) then
+    begin
+      s := @oo^.Values[0];
+      result := s^.BuiltInType(Parser);
+      if result = obtVariant then
+      begin
+        if (s^.Reference = '') or
+           (Description <> '') then
+          exit;
+        for i := 0 to oo^.Count - 1 do
+        begin
+          ref := POpenApiSchema(@oo^.Values[i])^.Reference;
+          if ref = '' then
+            continue;
+          r := Parser.GetRecord(ref, nil, {isref=}true);
+          if r <> nil then
+            Append(t, r.PascalName, ' ');
+        end;
+        if t <> '' then
+          Data.U['description'] := Make(['From the JSON of ', t]);
+      end
+      else
+        for i := 1 to oo^.Count - 1 do
+          if POpenApiSchema(@oo^.Values[i])^.BuiltInType(Parser) <> result then
+          begin
+            result := obtVariant; // all simple "type" should match
+            exit;
+          end;
+    end;
+    exit;
+  end;
   f := _Format;
   if t = 'integer' then
     if f = 'int64' then
@@ -734,25 +772,24 @@ begin
       result := obtSingle
     else
       result := obtDouble
+  else if t = 'boolean' then
+    result := obtBoolean
   else if t = 'string' then
   begin
     result := obtRawUtf8;
-    if f = 'uuid' then
-      result := obtGuid
-    else if f = 'binary' then
-      result := obtRawByteString
-    else if f = 'password' then
-      result := obtSpiUtf8
-    else if not (opoNoDateTime in Parser.Options) then
-      if f = 'date' then
-        result := obtDate
-      else if f = 'date-time' then
-        result := obtDateTime;
+    if f <> '' then
+      if f = 'uuid' then
+        result := obtGuid
+      else if f = 'binary' then
+        result := obtRawByteString
+      else if f = 'password' then
+        result := obtSpiUtf8
+      else if not (opoNoDateTime in Parser.Options) then
+        if f = 'date' then
+          result := obtDate
+        else if f = 'date-time' then
+          result := obtDateTime;
   end
-  else if t = 'boolean' then
-    result := obtBoolean
-  else
-    result := obtVariant; // typically a TDocVariantData
 end;
 
 
