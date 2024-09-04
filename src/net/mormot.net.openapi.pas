@@ -354,6 +354,7 @@ type
   private
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
     fDependencies: TRawUtf8DynArray;
+    fRttiTextRepresentation: RawUtf8;
   public
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
@@ -1875,7 +1876,9 @@ var
   p: TPascalProperty;
   line: RawUtf8;
 begin
-  result := '';
+  result := fRttiTextRepresentation;
+  if result <> '' then
+    exit;
   FormatUtf8('_% = ''', [PascalName], line);
   for i := 0 to fProperties.Count - 1 do
   begin
@@ -1889,6 +1892,7 @@ begin
   end;
   line[length(line)] := '''';
   Append(result, line, ';');
+  fRttiTextRepresentation := result;
 end;
 
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
