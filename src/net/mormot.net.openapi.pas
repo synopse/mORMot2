@@ -426,6 +426,7 @@ type
     fOnErrorIndex: integer;
     fParameters: POpenApiParameterDynArray;
     fParameterTypes: TPascalTypeObjArray;
+    procedure ResolveParameter(var p: POpenApiParameter);
   public
     constructor Create(aParser: TOpenApiParser; const aPath: RawUtf8;
       aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
@@ -1064,7 +1065,11 @@ begin
     fParameters[i] := p^.Parameter[i];
   for i := 0 to o.Count - 1 do
     fParameters[pn + i] := o^.Parameter[i];
+  for i := 0 to high(fParameters) do
+    ResolveParameter(fParameters[i]);
   fOperationId := fOperation^.Id;
+  if fOperationId = '' then // fallback of the poor to have something <> ''
+    fOperationId := TrimChar(fOperation^.Description, [#0 .. #31]);
   fFunctionName := SanitizePascalName(fOperationId, {keywordcheck:}true);
   if fOperation^.Deprecated then
     Append(fFunctionName, '_deprecated');
@@ -1076,6 +1081,13 @@ begin
   fSuccessResponseType.Free;
   ObjArrayClear(fParameterTypes);
   inherited Destroy;
+end;
+
+procedure TPascalOperation.ResolveParameter(var p: POpenApiParameter);
+begin
+  if (p.Data.Count = 1) and
+     (p.Data.Names[0] = '$ref') then
+    p := fParser.GetRef(ToUtf8(p.Data.Values[0])); // resolve as reference
 end;
 
 procedure TPascalOperation.ResolveResponseTypes;
