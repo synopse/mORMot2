@@ -179,5 +179,4 @@ In Respect to existing OpenAPI wrappers in Delphi (or FPC):
 - Tunable engine, with plenty of generation options (e.g. about verbosity)
 - Leverage the mORMot RTTI and JSON kernel for its internal plumbing
 - Compatible with FPC and oldest Delphi (7-2007)
-- Tested with several Swagger 2 and OpenAPI 3 reference content
-But still not fully compliant to all existing files: feedback is welcome!
+- Tested with several Swagger 2 and OpenAPI 3 reference content, but still not fully compliant to all existing files: feedback is welcome!

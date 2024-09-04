@@ -2121,7 +2121,7 @@ function TPascalRecord.ToRttiTextRepresentation: RawUtf8;
 var
   i: PtrInt;
   p: TPascalProperty;
-  line: RawUtf8;
+  line, name: RawUtf8;
 begin
   if fProperties.Count = 0 then
     // this is no real record
@@ -2137,8 +2137,11 @@ begin
       Append(result, [line, ''' +', fParser.LineEnd, '    ''']);
       line := '';
     end;
+    name := fProperties[i];
+    if not PropNameValid(pointer(name)) then
+      name := QuotedStr(name, '"');
     p := fProperties.ObjectPtr[i];
-    Append(line, [fProperties[i], ':', p.PropType.ToPascalName(true, true), ' ']);
+    Append(line, [name, ':', p.PropType.ToPascalName(true, true), ' ']);
   end;
   if NeedDummyField then
     Append(line, '_:variant''')
