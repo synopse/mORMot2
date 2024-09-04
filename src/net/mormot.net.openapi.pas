@@ -487,7 +487,8 @@ type
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
     function GetRef(const aRef: RawUtf8): pointer;
     procedure Description(W: TTextWriter; const Described: RawUtf8);
-    procedure Comment(W: TTextWriter; const Args: array of const);
+    procedure Comment(W: TTextWriter; const Args: array of const;
+      const Desc: RawUtf8 = '');
   public
     constructor Create(aOptions: TOpenApiParserOptions = []);
     destructor Destroy; override;
@@ -1179,16 +1180,20 @@ var
 begin
   SetLength(fParameterTypes, length(fParameters));
   for i := 0 to length(fParameters) - 1 do
-    fParameterTypes[i] := fParser.NewPascalTypeFromSchema(
-      fParameters[i]^.Schema(fParser));
+    fParameterTypes[i] :=
+      fParser.NewPascalTypeFromSchema(fParameters[i]^.Schema(fParser));
 end;
 
-procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const);
+procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
+  const Desc: RawUtf8);
 var
   line, feed: RawUtf8;
   i, o: PtrInt;
 begin
-  line := Make(Args);
+  line := TrimU(Make(Args));
+  if Desc <> '' then
+    Append(line, ': ', Desc);
+  line := StringReplaceChars(line, #10, ' ');
   o := 0;
   while length(line) - o > 80 do // insert line feeds on huge comment
   begin
@@ -1223,8 +1228,9 @@ begin
      fOperationId, ' [', ToText(fMethod), '] ', fPath, fParser.LineEnd,
      fParser.LineIndent, '//', fParser.LineEnd]);
   // Summary
-  if fOperation^.Summary <> '' then
-    fParser.Comment(w, ['// Summary: ', fOperation^.Summary]);
+  desc := fOperation^.Summary;
+  if desc <> '' then
+    fParser.Comment(w, ['// Summary: ', desc]);
   // Description
   desc := fOperation^.Description;
   if desc <> '' then
@@ -1252,17 +1258,13 @@ begin
         Append(line, '  (required)');
       if p^.Default <> nil then
         Append(line, [' (default=', p^.Default^, ')']);
-      if p^.Description <> '' then
-        Append(line, ': ', p^.Description);
-      fParser.Comment(w, [line]);
+      fParser.Comment(w, [line], p^.Description);
     end;
     // Request body
     if Assigned(rb) then
     begin
       line := '// - [body] Payload*';
-      if rb^.Description <> '' then
-        Append(line, ': ', rb^.Description);
-      fParser.Comment(w, [line]);
+      fParser.Comment(w, [line], rb^.Description);
     end;
   end;
   // Responses
@@ -1287,9 +1289,7 @@ begin
         if e <> nil then // no need to parse, just recognize schema
           Append(line, [' [', e.PascalName, ']']);
       end;
-      if r^.Description <> '' then
-        Append(line, ': ', r^.Description);
-      fParser.Comment(w, [line]);
+      fParser.Comment(w, [line], r^.Description);
     end;
   end;
 end;
@@ -1975,7 +1975,8 @@ end;
 
 procedure TPascalException.ToTypeDefinition(W: TTextWriter);
 begin
-  if not (opoClientNoDescription in fParser.Options) then
+  if (fErrorCode <> '') and
+     not (opoClientNoDescription in fParser.Options) then
     fParser.Comment(w, [
       '/// exception raised on ', fResponse.Description, ' (', fErrorCode, ')']);
   w.AddStrings([
@@ -2102,7 +2103,7 @@ begin
     exit;
   Comment(w, ['/// ', Described, ' ', fTitle]);
   if fInfo^.GetAsRawUtf8('description', u) then
-    Comment(w, ['// - ', StringReplaceAll(u, #10, #10'//   ')]);
+    Comment(w, ['// - ', u]);
   if LineIndent <> '' then
     exit;
   if fInfo^.GetAsRawUtf8('version', u) then
@@ -2508,7 +2509,10 @@ begin
               '    //  ', UpperCaseU(desc), ' METHODS', LineEnd, dots]);
             desc := ops.Tag^.Description;
             if desc <> '' then
-              Comment(w, ['// - ', desc, LineEnd]);
+            begin
+              Comment(w, ['// - ', desc]);
+              w.AddString(LineEnd);
+            end;
           end;
         end;
         if not (opoClientNoDescription in fOptions) then
