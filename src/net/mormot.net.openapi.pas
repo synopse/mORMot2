@@ -861,7 +861,8 @@ end;
 
 function TOpenApiParameter.HasDefaultValue: boolean;
 begin
-  result := (Default <> nil) or not Required;
+  result := (Default <> nil) or
+            not Required;
 end;
 
 function TOpenApiParameter._In: RawUtf8;
@@ -1436,14 +1437,16 @@ begin
     if (p^._In = 'path') or
        (p^._In = 'query') then
     begin
-      hasdefault := p^.HasDefaultValue;
+      pt := fParameterTypes[i];
+      hasdefault := p^.HasDefaultValue and
+                    (pt.IsArray or
+                     not (pt.fBuiltInType in [obtVariant, obtRecord, obtGuid]));
       if not hasdefault then
       begin
         if (ndx > 0) then
           Append(line, '; ');
         inc(ndx);
       end;
-      pt := fParameterTypes[i];
       if hasdefault then
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, FormatUtf8('%%: %',
@@ -2015,7 +2018,7 @@ begin
     else if t = 'boolean' then
       result := 'false'
     else
-      result := 'null';
+      EOpenApi.RaiseUtf8('Unsupported %.ToDefaultParameterValue(%)', [self, t]);
   end;
 end;
 
