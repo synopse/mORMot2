@@ -12,6 +12,18 @@ unit mormot.net.openapi;
 
   *****************************************************************************
 
+  In Respect to existing OpenAPI wrappers:
+   - Translate HTTP status error codes into high-level pascal Exceptions
+   - Use records and dynamic arrays for DTOs
+   - Support "allOf" attribute, with proper properties inheritance/overloading
+   - Support of nested "$ref" for objects, parameters or types
+   - Generated source code units are very small and easy to read
+   - Generate very detailed comment documentation in the unit source code
+   - Compatible with FPC and oldest Delphi (7-2007)
+   - Tested with several Swagger 2 and OpenAPI 3 reference content
+   - Tunable engine, with plenty of generation options (e.g. about verbosity)
+  But still not fully compliant to all existing files: feedback is welcome!
+
   TODO:  - operation: "in": "header" in "parameters"
          - operation: "multipart/form-data" in "consumes"
          - authentification in global "securityDefinitions"
@@ -1978,8 +1990,9 @@ begin
       if Assigned(s) and
          s^.HasDescription then
       begin
-        w.AddStrings([fParser.LineIndent,
-            '  /// ', s^.Description, fParser.LineEnd]);
+        fParser.fLineIndent := fParser.fLineIndent + '  ';
+        fParser.Comment(w, ['/// ', s^.Description]);
+        SetLength(fParser.fLineIndent, length(fParser.fLineIndent) - 2);
         if (not (opoDtoNoExample in fParser.Options)) and
            s^.HasExample then
           w.AddStrings([fParser.LineIndent,
