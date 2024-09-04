@@ -2098,17 +2098,24 @@ end;
 procedure TOpenApiParser.ParseSpecs;
 var
   i: PtrInt;
+  s: POpenApiSchema;
+  n: RawUtf8;
   v: PDocVariantData;
 begin
   fVersion := fSpecs.VersionEnum;
   fInfo := fSpecs.Info;
   fTitle := fInfo^.U['title'];
   fSchemas := fSpecs.Schemas(fVersion);
+  // generate all main DTOs - is not mandatory, but may help
   for i := 0 to fSchemas^.Count - 1 do
-    if POpenApiSchema(@fSchemas^.Values[i])^.IsObject then
-      if not fRecords.Exists(fSchemas^.Names[i]) then // parse object once
-        fRecords.AddObject(
-          fSchemas^.Names[i], ParseRecordDefinition(fSchemas^.Names[i]));
+  begin
+    s := @fSchemas^.Values[i];
+    n := fSchemas^.Names[i];
+    if s^.IsObject then
+      if not fRecords.Exists(n) then // parse object once
+        fRecords.AddObject(n, ParseRecordDefinition(n, s));
+  end;
+  // parse all operations
   v := fSpecs.Paths;
   for i := 0 to v^.Count - 1 do
     ParsePath(v^.Names[i]);
