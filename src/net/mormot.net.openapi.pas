@@ -12,16 +12,21 @@ unit mormot.net.openapi;
 
   *****************************************************************************
 
-  In Respect to existing OpenAPI wrappers:
+  In Respect to existing OpenAPI wrappers in Delphi (or FPC):
    - Translate HTTP status error codes into high-level pascal Exceptions
-   - Use records and dynamic arrays for DTOs
-   - Support "allOf" attribute, with proper properties inheritance/overloading
+   - Use high-level pascal records and dynamic arrays for DTOs
+   - Use high-level pascal enumerations and sets for "enum" values
+   - Recognize similar "properties" or "enum" to reuse the same pascal type
    - Support of nested "$ref" for objects, parameters or types
-   - Generated source code units are very small and easy to read
+   - Support "allOf" attribute, with proper properties inheritance/overloading
+   - Support "oneOf" attribute, for strings or alternate record types
+   - Fallback to variant pascal type for "oneOf" or "anyOf" JSON values
+   - Generated source code units are very small and easy to use, read and debug
    - Generate very detailed comment documentation in the unit source code
+   - Tunable engine, with plenty of generation options (e.g. about verbosity)
+   - Leverage the mORMot RTTI and JSON kernel for its internal plumbing
    - Compatible with FPC and oldest Delphi (7-2007)
    - Tested with several Swagger 2 and OpenAPI 3 reference content
-   - Tunable engine, with plenty of generation options (e.g. about verbosity)
   But still not fully compliant to all existing files: feedback is welcome!
 
   TODO:  - operation: "in": "header" in "parameters"
