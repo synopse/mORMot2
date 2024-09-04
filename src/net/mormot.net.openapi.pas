@@ -42,6 +42,7 @@ uses
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.rtti,
   mormot.core.data, // for TRawUtf8List
   mormot.core.variants,
   mormot.rest.core;
@@ -397,7 +398,7 @@ type
     procedure ToTypeDefinition(W: TTextWriter); override;
     procedure ToRegisterCustom(W: TTextWriter);
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; override;
-    function ToConstTextArray: RawUtf8;
+    procedure ToConstTextArray(W: TTextWriter);
     property Prefix: RawUtf8
       read fPrefix;
   end;
@@ -528,6 +529,7 @@ type
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const;
       const Desc: RawUtf8 = '');
+    procedure Code(W: TTextWriter; var Line: RawUtf8; const Args: array of const);
   public
     /// initialize this parser instance
     // - the supplied aTypeSuffix will be used when generating TDto### and
@@ -567,6 +569,8 @@ type
       read fVersion;
   end;
 
+
+function ToText(t: TOpenApiBuiltInType): PShortString; overload;
 
 const
   // published for unit testing (e.g. if properly sorted)
@@ -1093,6 +1097,11 @@ end;
 
 { ************************************ FPC/Delphi Pascal Code Generation }
 
+function ToText(t: TOpenApiBuiltInType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TOpenApiBuiltInType), ord(t));
+end;
+
 function IsReservedKeyWord(const aName: RawUtf8): boolean;
 var
   up: array[byte] of AnsiChar;
@@ -1246,8 +1255,8 @@ begin
         Append(err, ['    ', code, ':', fParser.LineEnd,
                      '      e := ',e.PascalName, ';', fParser.LineEnd])
       else if status = 'default' then
-        deferr := Make(['  else', fParser.LineEnd,
-                        '    e := ', e.PascalName, ';', fParser.LineEnd]);
+        Make(['  else', fParser.LineEnd,
+              '    e := ', e.PascalName, ';', fParser.LineEnd], deferr);
     end;
   end;
   err := err + deferr; // for proper OnError## callback generation
@@ -1275,25 +1284,42 @@ end;
 procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
   const Desc: RawUtf8);
 var
-  line, feed: RawUtf8;
+  all, line, feed: RawUtf8;
+  p: PUtf8Char;
   i, o: PtrInt;
 begin
-  line := TrimU(Make(Args));
+  all := TrimU(Make(Args));
   if Desc <> '' then
-    Append(line, ': ', Desc);
-  line := StringReplaceChars(line, #10, ' ');
-  o := 0;
-  while length(line) - o > 80 do // insert line feeds on huge comment
+    Append(all, ': ', Desc);
+  p := pointer(all);
+  repeat
+    line := GetNextLine(p, p, {trim=}true);
+    if line = '' then
+      continue;
+    o := 0;
+    while length(line) - o > 80 do // insert line feeds on huge comment
+    begin
+      i := PosEx(' ', line, o + 75);
+      if i = 0 then
+        break;
+      if feed = '' then
+        Make([LineEnd, LineIndent, '//'], feed);
+      insert(feed, line, i);
+      o := i + length(feed);
+    end;
+    w.AddStrings([LineIndent, '// ', line, LineEnd]);
+  until p = nil;
+end;
+
+procedure TOpenApiParser.Code(W: TTextWriter; var Line: RawUtf8;
+  const Args: array of const);
+begin
+  if length(Line) > 70 then
   begin
-    i := PosEx(' ', line, o + 75);
-    if i = 0 then
-      break;
-    if feed = '' then
-      feed := Make([LineEnd, LineIndent, '//']);
-    insert(feed, line, i);
-    o := i + length(feed);
+    W.AddStrings([TrimRight(Line), LineEnd]);
+    Line := LineIndent + '  ';
   end;
-  w.AddStrings([LineIndent, line, LineEnd]);
+  Append(Line, Args);
 end;
 
 procedure TPascalOperation.Documentation(W: TTextWriter);
@@ -1318,7 +1344,7 @@ begin
   // Summary
   desc := fOperation^.Summary;
   if desc <> '' then
-    fParser.Comment(w, ['// Summary: ', desc]);
+    fParser.Comment(w, ['Summary: ', desc]);
   // Description
   desc := fOperation^.Description;
   if desc <> '' then
@@ -1341,7 +1367,7 @@ begin
       p := fParameters[i];
       if p^._In = 'body' then
         continue; // handled below
-      line := Make(['// - [', p^._In, '] ', p^.AsPascalName]);
+      Make(['- [', p^._In, '] ', p^.AsPascalName], line);
       if p^.Required then
         Append(line, '  (required)');
       if p^.Default <> nil then
@@ -1351,7 +1377,7 @@ begin
     // Request body
     if Assigned(rb) then
     begin
-      line := '// - [body] Payload*';
+      line := '- [body] Payload*';
       fParser.Comment(w, [line], rb^.Description);
     end;
   end;
@@ -1360,14 +1386,14 @@ begin
   if v^.Count > 0 then
   begin
     w.AddStrings([fParser.LineIndent, '//', fParser.LineEnd,
-           fParser.LineIndent, '// Responses:', fParser.LineEnd]);
+                  fParser.LineIndent, '// Responses:', fParser.LineEnd]);
     for i := 0 to v^.Count - 1 do
     begin
       status := v^.Names[i];
       code := Utf8ToInteger(status, 0);
       r := @v^.Values[i];
       rs := r^.Schema(fParser);
-      line := Make(['// - ', status]);
+      Make(['- ', status], line);
       if code = fSuccessResponseCode then
         Append(line, ' (main)')
       else if Assigned(rs) and
@@ -1394,17 +1420,6 @@ var
   line: RawUtf8;
   hasdefault: boolean;
   def: TRawUtf8DynArray;
-
-  procedure AppLine(const Args: array of const);
-  begin
-    if length(line) > 70 then
-    begin
-      w.AddStrings([TrimRight(line), fParser.LineEnd]);
-      line := fParser.LineIndent + '  ';
-    end;
-    Append(line, Args);
-  end;
-
 begin
   if Assigned(fSuccessResponseType) then
     line := 'function '
@@ -1437,7 +1452,8 @@ begin
           AddRawUtf8(def, FormatUtf8('%%: % = %', [_CONST[pt.fNoConst],
             p^.AsPascalName, pt.ToPascalName, pt.ToDefaultParameterValue(p, fParser)]))
       else
-        AppLine([_CONST[pt.fNoConst], p^.AsPascalName, ': ', pt.ToPascalName]);
+        fParser.Code(W, line,
+          [_CONST[pt.fNoConst], p^.AsPascalName, ': ', pt.ToPascalName]);
     end;
   end;
 
@@ -1445,7 +1461,8 @@ begin
   begin
     if ndx > 0 then
       Append(line, '; ');
-    AppLine(['const Payload: ', fPayloadParameterType.ToPascalName]);
+    fParser.Code(W, line,
+      ['const Payload: ', fPayloadParameterType.ToPascalName]);
     inc(ndx);
   end;
 
@@ -1453,7 +1470,7 @@ begin
   begin
     if ndx <> 0 then
       Append(line, '; ');
-    AppLine([def[i]]);
+    fParser.Code(W, line, [def[i]]);
     inc(ndx);
   end;
 
@@ -1649,13 +1666,13 @@ end;
 
 procedure TPascalEnum.ToTypeDefinition(W: TTextWriter);
 var
-  item: RawUtf8;
+  line, item: RawUtf8;
   items: TRawUtf8DynArray;
   i: PtrInt;
 begin
   if fSchema^.HasDescription and
      not (opoDtoNoDescription in fParser.Options) then
-    fParser.Comment(W, ['/// ', fSchema^.Description]);
+    fParser.Comment(W, [fSchema^.Description]);
   w.AddStrings([fParser.LineIndent, PascalName, ' = (', fParser.LineEnd,
     fParser.LineIndent, '  ']);
   for i := 0 to fChoices.Count - 1 do
@@ -1664,7 +1681,7 @@ begin
       item := 'None'
     else
     begin
-      w.AddShorter( ', ');
+      Append(line, ', ');
       CamelCase(ToUtf8(fChoices.Values[i]), item);
       if item <> '' then
         item[1] := UpCase(item[1]);
@@ -1673,9 +1690,9 @@ begin
         Append(item, [i]); // duplicated, or no ascii within -> make unique
     end;
     AddRawUtf8(items, item);
-    w.AddStrings([fPrefix, item]);
+    fParser.Code(w, line, [fPrefix, item]);
   end;
-  w.AddStrings([');', fParser.LineEnd,
+  w.AddStrings([line, ');', fParser.LineEnd,
     ToArrayTypeDefinition]);
 end;
 
@@ -1697,16 +1714,23 @@ begin
     result := FormatUtf8('set of %', [PascalName]);
 end;
 
-function TPascalEnum.ToConstTextArray: RawUtf8;
+procedure TPascalEnum.ToConstTextArray(W: TTextWriter);
 var
   i: integer;
+  line, item: RawUtf8;
 begin
-  result := FormatUtf8('%: array[%] of RawUtf8 = (%    ''''',
-              [fConstTextArrayName, PascalName, fParser.LineEnd]);
-  for i := 1 to fChoices.Count - 1 do // first entry is for None/Default
-    Append(result, ', ',
-      mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i])));
-  Append(result, ');');
+  w.AddStrings([
+    fParser.LineIndent, fConstTextArrayName,
+      ': array[', PascalName, '] of RawUtf8 = (', fParser.LineEnd]);
+  line := fParser.LineIndent + '  '''', ';  // first entry is for None/Default
+  for i := 1 to fChoices.Count - 1 do
+  begin
+    item := mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i]));
+    if i < fChoices.Count - 1 then
+      Append(item, ', ');
+    fParser.Code(w, line, [item]);
+  end;
+  w.AddStrings([line, ');', fParser.LineEnd]);
 end;
 
 
@@ -1746,7 +1770,7 @@ begin
 end;
 
 const
-  OBT2TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
+  OBT_TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
     'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
     'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
 
@@ -1754,7 +1778,9 @@ constructor TPascalType.CreateBuiltin(aBuiltInType: TOpenApiBuiltInType;
   aSchema: POpenApiSchema; aIsArray: boolean);
 begin
   fBuiltInType := aBuiltInType;
-  fBuiltInTypeName := OBT2TXT[aBuiltInType];
+  fBuiltInTypeName := OBT_TXT[aBuiltInType];
+  if fBuiltInTypeName = '' then
+    EOpenApi.RaiseUtf8('Unexpected %.CreateBuiltin(%)', [self, ToText(aBuiltInType)^]);
   fBuiltinSchema := aSchema;
   if not aIsArray then
     fNoConst := aBuiltInType in [obtInteger .. obtDateTime];
@@ -1813,7 +1839,7 @@ begin
         result := TPascalType.CreateBuiltin(obtVariant, aSchema);
         exit;
       end;
-      nam := RawUtf8ArrayToCsv(props^.GetNames, '_');
+      nam := '#' + RawUtf8ArrayToCsv(props^.GetNames, '_'); // unique
       aSchemaName := nam;
       for i := 2 to 20 do // try if this type does not already exist as such
       begin
@@ -1831,7 +1857,7 @@ begin
           result := TPascalType.CreateCustom(rec);
           exit;
         end;
-        aSchemaName := Make([nam, i]);
+        Make([nam, i], aSchemaName);
       end;
     end;
     result := TPascalType.CreateCustom(GetRecord(aSchemaName, aSchema));
@@ -1996,20 +2022,6 @@ end;
 
 { TPascalRecord }
 
-function TPascalRecord.NeedDummyField: boolean;
-var
-  i: PtrInt;
-begin
-  result := false;
-  if not (opoGenerateOldDelphiCompatible in fParser.Options) then
-    exit;
-  // oldest Delphi require a managed field in the record to have a TypeInfo()
-  if fTypes = [] then
-    for i := 0 to fProperties.Count - 1 do
-      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltInType);
-  result := fTypes - [obtInteger .. obtGuid] = [];
-end;
-
 constructor TPascalRecord.Create(aOwner: TOpenApiParser;
   const SchemaName: RawUtf8; Schema: POpenApiSchema);
 begin
@@ -2033,7 +2045,7 @@ var
 begin
   if (fFromRef <> '') and
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
-    fParser.Comment(w, ['/// from ', fFromRef]);
+    fParser.Comment(w, ['from ', fFromRef]);
   // generate the record type definition
   w.AddStrings([fParser.LineIndent, PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
@@ -2049,7 +2061,7 @@ begin
          s^.HasDescription then
       begin
         fParser.fLineIndent := fParser.fLineIndent + '  ';
-        fParser.Comment(w, ['/// ', s^.Description]);
+        fParser.Comment(w, [s^.Description]);
         SetLength(fParser.fLineIndent, length(fParser.fLineIndent) - 2);
         if (not (opoDtoNoExample in fParser.Options)) and
            s^.HasExample then
@@ -2148,7 +2160,7 @@ begin
   if (fErrorCode <> '') and
      not (opoClientNoDescription in fParser.Options) then
     fParser.Comment(w, [
-      '/// exception raised on ', fResponse.Description, ' (', fErrorCode, ')']);
+      'exception raised on ', fResponse.Description, ' (', fErrorCode, ')']);
   w.AddStrings([
     fParser.LineIndent, PascalName, ' = class(EJsonClient)', fParser.LineEnd,
     fParser.LineIndent, 'protected', fParser.LineEnd,
@@ -2285,15 +2297,15 @@ var
 begin
   if opoClientNoDescription in fOptions then
     exit;
-  Comment(w, ['/// ', Described, ' ', fTitle]);
+  Comment(w, [Described, ' ', fTitle]);
   if fInfo^.GetAsRawUtf8('description', u) then
-    Comment(w, ['// - ', u]);
+    Comment(w, [' - ', u]);
   if LineIndent <> '' then
     exit;
   if fInfo^.GetAsRawUtf8('version', u) then
-    Comment(w, ['// - version ', u]);
+    Comment(w, ['- version ', u]);
   if fInfo^.GetValueByPath('license.name', v) then
-    Comment(w, ['// - OpenAPI definition licensed under ', v, ' terms']);
+    Comment(w, ['- OpenAPI definition licensed under ', v, ' terms']);
 end;
 
 function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8;
@@ -2533,7 +2545,7 @@ begin
       w.AddStrings([LineEnd, LineEnd, 'const', LineEnd,
         '  // define how enums/sets are actually transmitted as JSON array of string', LineEnd]);
       for i := 0 to fEnums.Count - 1 do
-        w.AddStrings([LineIndent, TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray, LineEnd]);
+        TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray(w);
     end;
     // start implementation section
     w.AddStrings([LineEnd, LineEnd,
@@ -2699,7 +2711,7 @@ begin
             desc := ops.Tag^.Description;
             if desc <> '' then
             begin
-              Comment(w, ['// - ', desc]);
+              Comment(w, ['- ', desc]);
               w.AddString(LineEnd);
             end;
           end;
@@ -2709,7 +2721,7 @@ begin
           begin
             desc := op.Operation^.Summary;
             if desc <> '' then
-              Comment(w, ['// ', desc]);
+              Comment(w, [desc]);
           end
           else
             op.Documentation(w);
