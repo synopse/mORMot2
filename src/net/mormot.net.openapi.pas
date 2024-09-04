@@ -11,6 +11,10 @@ unit mormot.net.openapi;
   - FPC/Delphi Pascal Client Code Generation
 
   *****************************************************************************
+
+  TODO:  - operation: "in": "header" in "parameters"
+         - operation: "multipart/form-data" in "consumes"
+         - "petstore_auth" in global "securityDefinitions"
 }
 
 interface
@@ -98,6 +102,7 @@ type
     function BuiltinType: TOpenApiBuiltInType;
     function HasDescription: boolean;
     function HasItems: boolean;
+    function HasProperties: boolean;
     function HasExample: boolean;
     function HasPattern: boolean;
   end;
@@ -584,6 +589,11 @@ begin
             Data.Exists('items');
 end;
 
+function TOpenApiSchema.HasProperties: boolean;
+begin
+  result := Data.Exists('properties');
+end;
+
 function TOpenApiSchema.Properties: PDocVariantData;
 begin
   if not Data.GetAsObject('properties', result) then
@@ -613,12 +623,12 @@ end;
 
 function TOpenApiSchema.Description: RawUtf8;
 begin
-  result := Data.U['description']
+  result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiSchema.HasDescription: boolean;
 begin
-  result := Data.Exists('description');
+  result := Description <> '';
 end;
 
 function TOpenApiSchema.Enum: PDocVariantData;
@@ -713,7 +723,7 @@ end;
 
 function TOpenApiResponse.Description: RawUtf8;
 begin
-  result := Data.U['description'];
+  result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiResponse.Schema(Parser: TOpenApiParser): POpenApiSchema;
@@ -737,7 +747,7 @@ end;
 
 function TOpenApiParameter.Description: RawUtf8;
 begin
-  result := Data.U['description'];
+  result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiParameter.Default: PVariant;
@@ -775,7 +785,9 @@ end;
 
 function TOpenApiParameter.AsPascalName: RawUtf8;
 begin
-  result := SanitizePascalName(Name, {keywordcheck:}true);
+  result := Name;
+  if result <> '' then
+    result := SanitizePascalName(result, {keywordcheck:}true);
 end;
 
 
@@ -786,7 +798,7 @@ begin
   if @self = nil then
     result := ''
   else
-    result := Data.U['description'];
+    result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiTag.Name: RawUtf8;
@@ -799,7 +811,7 @@ end;
 
 function TOpenApiPathItem.Description: RawUtf8;
 begin
-  result := Data.U['description'];
+  result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiPathItem.GetOperationByMethod(aMethod: TUriMethod): POpenApiOperation;
@@ -843,7 +855,7 @@ end;
 
 function TOpenApiOperation.Description: RawUtf8;
 begin
-  result := Data.U['description'];
+  result := TrimU(Data.U['description']);
 end;
 
 function TOpenApiOperation.Id: RawUtf8;
@@ -908,7 +920,7 @@ end;
 
 function TOpenApiOperation.Summary: RawUtf8;
 begin
-  result := Data.U['summary'];
+  result := TrimU(Data.U['summary']);
 end;
 
 function TOpenApiOperation.Tags: TRawUtf8DynArray;
