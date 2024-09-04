@@ -469,6 +469,7 @@ type
   TPascalOperationsByTagDynArray = array of TPascalOperationsByTag;
 
   /// allow to customize TOpenApiParser process
+  // - opoNoEnum disables any pascal enumeration type generation
   // - opoNoDateTime disables any pascal TDate/TDateTime type generation
   // - opoDtoNoDescription generates no Description comment for the DTOs
   // - opoDtoNoRefFrom generates no 'from #/....' comment for the DTOs
@@ -481,6 +482,7 @@ type
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
   TOpenApiParserOption = (
+    opoNoEnum,
     opoNoDateTime,
     opoDtoNoDescription,
     opoDtoNoRefFrom,
@@ -1790,7 +1792,8 @@ begin
   begin
     // return a TPascalEnum custom type
     enum := aSchema^.Enum;
-    if enum <> nil then
+    if (enum <> nil) and
+       not (opoNoEnum in fOptions) then
     begin
       fmt := aSchema^._Format;
       if (fmt = '') and // if no "format" type name is supplied
