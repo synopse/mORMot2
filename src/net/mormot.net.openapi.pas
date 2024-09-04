@@ -1113,6 +1113,7 @@ var
   v: PDocVariantData;
   i: PtrInt;
   e: TPascalException;
+  allexceptions: array of TPascalException;
   status, err, deferr, json: RawUtf8;
   resp: POpenApiSchema;
 begin
@@ -1148,18 +1149,24 @@ begin
       begin
         e := TPascalException.Create(fParser, status, @v^.Values[i]);
         fParser.fExceptions.AddObject(json, e);
-      end;
+      end
+      else if e.ErrorCode <> status then
+        e.fErrorcode := ''; // exception reused between status codes
+      PtrArrayAddOnce(allexceptions, e);
       if code <> 0 then // generate "case of" block
         Append(err, ['    ', code, ':', fParser.LineEnd,
                      '      e := ',e.PascalName, ';', fParser.LineEnd])
       else if status = 'default' then
-        Append(deferr, ['  else', fParser.LineEnd,
-                     '    e := ',e.PascalName, ';', fParser.LineEnd])
+        deferr := Make(['  else', fParser.LineEnd,
+                        '    e := ', e.PascalName, ';', fParser.LineEnd]);
     end;
   end;
   err := err + deferr; // for proper OnError## callback generation
   if err <> '' then
   begin
+    if (length(allexceptions) = 1) and
+       (deferr <> '') then
+      err := deferr; // all codes pointed to the same default exception
     fOnErrorIndex := FindRawUtf8(fParser.fErrorHandler, err) + 1;
     if fOnErrorIndex = 0 then // new TOnJsonClientError
       fOnErrorIndex := AddRawUtf8(fParser.fErrorHandler, err) + 1;
