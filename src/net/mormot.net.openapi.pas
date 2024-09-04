@@ -499,12 +499,14 @@ type
     procedure Parse(const aSpecs: TDocVariantData);
     procedure ExportToDirectory(const Name: RawUtf8;
       const DirectoryName: TFileName = './'; const UnitPrefix: RawUtf8 = '');
-    function ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
+    function ParseRecordDefinition(const aDefinitionName: RawUtf8;
+      aSchema: POpenApiSchema): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8);
 
     function NewPascalTypeFromSchema(aSchema: POpenApiSchema;
-      const aSchemaName: RawUtf8 = ''): TPascalType;
-    function GetRecord(aRecordName: RawUtf8; NameIsReference: boolean = false): TPascalRecord;
+      aSchemaName: RawUtf8 = ''): TPascalType;
+    function GetRecord(aRecordName: RawUtf8; aSchema: POpenApiSchema;
+      NameIsReference: boolean = false): TPascalRecord;
     function GetOrderedRecords: TPascalRecordDynArray;
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
 
@@ -1224,8 +1226,8 @@ begin
   w.AddStrings([fParser.LineEnd, fParser.LineIndent, '// ']);
   if fOperation^.Deprecated then
      w.AddShort('[DEPRECATED] ');
-   w.AddStrings([
-     fOperationId, ' [', ToText(fMethod), '] ', fPath, fParser.LineEnd,
+   w.AddStrings([ // do not use fOperationID here because may = Description
+     fOperation^.Id, ' [', ToText(fMethod), '] ', fPath, fParser.LineEnd,
      fParser.LineIndent, '//', fParser.LineEnd]);
   // Summary
   desc := fOperation^.Summary;
@@ -1663,11 +1665,13 @@ begin
 end;
 
 function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
-  const aSchemaName: RawUtf8): TPascalType;
+  aSchemaName: RawUtf8): TPascalType;
 var
   all: POpenApiSchemaDynArray;
   ref, src, fmt, nam: RawUtf8;
-  enum: PDocVariantData;
+  i: integer;
+  rec, rectemp: TPascalRecord;
+  enum, props: PDocVariantData;
   enumType: TPascalEnum;
 begin
   if aSchema = nil then
@@ -1689,20 +1693,53 @@ begin
       result.CustomType.fFromRef := ref;
   end
   else if (all <> nil) or
-          aSchema^.IsObject then
+          aSchema^.IsObject or
+          aSchema^.HasProperties then
+  begin
+    // return a TPascalRecord custom type
     if aSchemaName = '' then
-      result := TPascalType.CreateBuiltin(aSchema.BuiltinType, aSchema)
-    else
-      result := TPascalType.CreateCustom(GetRecord(aSchemaName))
+    begin
+      // not from a $ref: need to compute a schema/type name from the properties
+      props := aSchema^.Properties;
+      if (props = nil) or
+         (props^.Count = 0) then
+      begin // object, but no properties: use a plain TDocVariant
+        result := TPascalType.CreateBuiltin(obtVariant, aSchema);
+        exit;
+      end;
+      nam := RawUtf8ArrayToCsv(props^.GetNames, '_');
+      aSchemaName := nam;
+      for i := 2 to 20 do // try if this type does not already exist as such
+      begin
+        rec := fRecords.GetObjectFrom(aSchemaName);
+        if rec = nil then
+          break;
+        if fmt = '' then
+        begin
+          rectemp := ParseRecordDefinition(aSchemaName, aSchema);
+          fmt := rectemp.ToRttiTextRepresentation; // just field names and types
+          rectemp.Free;
+        end;
+        if rec.ToRttiTextRepresentation = fmt then // same raw pascal definition
+        begin
+          result := TPascalType.CreateCustom(rec);
+          exit;
+        end;
+        aSchemaName := Make([nam, i]);
+      end;
+    end;
+    result := TPascalType.CreateCustom(GetRecord(aSchemaName, aSchema));
+  end
   else if aSchema^.IsArray then
   begin
-    // TODO: Handle array of arrays?
+    // retrieve the main item type but apply the "IsArray" flag
     result := NewPascalTypeFromSchema(aSchema^.Items, aSchemaName);
     result.fBuiltinSchema := aSchema;
     result.IsArray := true;
   end
   else
   begin
+    // return a TPascalEnum custom type
     enum := aSchema^.Enum;
     if enum <> nil then
     begin
@@ -2112,41 +2149,43 @@ begin
     Comment(w, ['// - OpenAPI definition licensed under ', v, ' terms']);
 end;
 
-function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8): TPascalRecord;
+function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8;
+  aSchema: POpenApiSchema): TPascalRecord;
 var
-  s: POpenApiSchema;
   i, j: PtrInt;
   def: POpenApiSchemaDynArray;
   ref: RawUtf8;
   v: PDocVariantData;
 begin
   // setup the new TPascalRecord instance
-  s := Schema[aDefinitionName];
-  if not Assigned(s) then
+  if aSchema = nil then
+    aSchema := Schema[aDefinitionName];
+  if aSchema = nil then
     EOpenApi.RaiseUtf8('%.ParseRecordDefinition: no % definition in schema',
       [self, aDefinitionName]);
-  result := TPascalRecord.Create(self, aDefinitionName, s);
+  result := TPascalRecord.Create(self, aDefinitionName, aSchema);
   // aggregate all needed information
-  def := s^.AllOf;
+  def := aSchema^.AllOf;
   if def = nil then
-    if not s^.IsObject then
+    if not (aSchema^.IsObject or
+            aSchema^.HasProperties) then
       EOpenApi.RaiseUtf8('%.ParseRecordDefinition: % is %, not object',
-        [self, aDefinitionName, s^._Type])
+        [self, aDefinitionName, aSchema^._Type])
     else
     begin
       SetLength(def, 1);
-      def[0] := s;
+      def[0] := aSchema;
     end;
   // append all fields to result.Properties
   for i := 0 to high(def) do
   begin
-    s := def[i];
+    aSchema := def[i];
     // append $ref properties first - making copy of each TPascalProperty
-    ref := s^.Reference;
+    ref := aSchema^.Reference;
     if ref <> '' then
-      GetRecord(ref, {isref=}true).CopyProperties(result.fProperties);
+      GetRecord(ref, nil, {isref=}true).CopyProperties(result.fProperties);
     // append specific fields
-    v := s^.Properties;
+    v := aSchema^.Properties;
     if v <> nil then
       for j := 0 to v^.Count - 1 do
         result.fProperties.AddObject(v^.Names[j],
@@ -2177,7 +2216,7 @@ begin
   end;
 end;
 
-function TOpenApiParser.GetRecord(aRecordName: RawUtf8;
+function TOpenApiParser.GetRecord(aRecordName: RawUtf8; aSchema: POpenApiSchema;
   NameIsReference: boolean): TPascalRecord;
 begin
   if NameIsReference then
@@ -2186,7 +2225,7 @@ begin
   result := fRecords.GetObjectFrom(aRecordName);
   if result <> nil then
     exit;
-  result := ParseRecordDefinition(aRecordName);
+  result := ParseRecordDefinition(aRecordName, aSchema);
   fRecords.AddObject(aRecordName, result);
 end;
 
