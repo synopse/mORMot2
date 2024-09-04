@@ -14,7 +14,7 @@ unit mormot.net.openapi;
 
   TODO:  - operation: "in": "header" in "parameters"
          - operation: "multipart/form-data" in "consumes"
-         - "petstore_auth" in global "securityDefinitions"
+         - authentification in global "securityDefinitions"
 }
 
 interface
@@ -341,7 +341,7 @@ type
     fParser: TOpenApiParser;
     fRequiresArrayDefinition: boolean;
   public
-    constructor Create(aOwner: TOpenApiParser; const aPascalName: RawUtf8 = '');
+    constructor Create(aOwner: TOpenApiParser);
     procedure ToTypeDefinition(W: TTextWriter); virtual; abstract;
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; virtual;
     function ToArrayTypeDefinition: RawUtf8; virtual;
@@ -1050,11 +1050,13 @@ end;
 
 { TPascalCustomType }
 
-constructor TPascalCustomType.Create(aOwner: TOpenApiParser;
-  const aPascalName: RawUtf8);
+constructor TPascalCustomType.Create(aOwner: TOpenApiParser);
 begin
+  // inheriting constructor should have set fName
   fParser := aOwner;
-  fPascalName := aPascalName;
+  fPascalName := 'T' + SanitizePascalName(fName, {keywordcheck:}false);
+  if length(fPascalName) > 50 then // ensure type name is not too long
+    fPascalName := Make([copy(fPascalName, 1, 40), '_', crc32cUtf8ToHex(fName)]);
 end;
 
 function TPascalCustomType.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
@@ -1553,8 +1555,8 @@ constructor TPascalEnum.Create(aOwner: TOpenApiParser;
 var
   i: PtrInt;
 begin
-  inherited Create(aOwner, 'T' + SanitizePascalName(aName, {keywordcheck:}false));
   fName := aName;
+  inherited Create(aOwner);
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0); // alwyas prepend a first void item
@@ -1773,7 +1775,7 @@ begin
          (aSchema^._Type = 'string') then
       begin
         enum^.SortByValue;  // won't care about the actual order, just the values
-        fmt := enum^.ToCsv; // use string values to make it genuine
+        fmt := enum^.ToCsv('_'); // use string values to make it genuine
         nam := aSchema^.Description;
       end
       else
@@ -1930,7 +1932,7 @@ begin
   fName := SchemaName;
   fSchema := Schema;
   fProperties := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
-  inherited Create(aOwner, 'T' + SanitizePascalName(fName, {keywordcheck:}false));
+  inherited Create(aOwner);
 end;
 
 destructor TPascalRecord.Destroy;
@@ -2042,14 +2044,12 @@ begin
   fResponse := aResponse;
   fErrorType := aOwner.NewPascalTypeFromSchema(aResponse^.Schema(aOwner));
   if Assigned(fErrorType.CustomType) then
-  begin
-    fPascalName := fErrorType.CustomType.PascalName;
-    fPascalName[1] := 'E'; // Txxxx -> Exxxx
-  end
+    fName := fErrorType.CustomType.Name
   else
-    fPascalName := 'E' + fErrorType.fBuiltinTypeName; // should never happen
+    EOpenApi.RaiseUtf8('%.Create: no schema for %', [self, aResponse^.Data.ToJson]);
   fErrorTypeName := fErrorType.ToPascalName;
-  inherited Create(aOwner, fPascalName);
+  inherited Create(aOwner);
+  fPascalName[1] := 'E'; // Txxxx -> Exxxx
 end;
 
 destructor TPascalException.Destroy;
