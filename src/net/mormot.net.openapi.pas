@@ -2060,6 +2060,12 @@ var
   p: TPascalProperty;
   s: POpenApiSchema;
 begin
+  if fProperties.Count = 0 then
+  begin
+    // this is no real record
+    fPascalName := 'variant';
+    exit;
+  end;
   if (fFromRef <> '') and
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
     fParser.Comment(w, ['from ', fFromRef]);
@@ -2110,6 +2116,9 @@ var
   p: TPascalProperty;
   line: RawUtf8;
 begin
+  if fProperties.Count = 0 then
+    // this is no real record
+    fPascalName := 'variant';
   result := fRttiTextRepresentation;
   if result <> '' then
     exit;
@@ -2575,7 +2584,8 @@ begin
       w.AddStrings(['const', LineEnd,
         '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
       for i := 0 to high(rec) do
-        w.AddStrings([LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
+        if rec[i].Properties.Count <> 0 then
+          w.AddStrings([LineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
     end;
     // define the RTTI registratoin procedure
     w.AddStrings([LineEnd, LineEnd,
@@ -2598,11 +2608,12 @@ begin
     begin
       w.AddStrings(['  Rtti.RegisterFromText([', LineEnd]);
       for i := 0 to high(rec) do
-      begin
-        if i > 0 then
-          w.AddStrings([',', LineEnd]);
-        w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
-      end;
+        if rec[i].Properties.Count <> 0 then
+        begin
+          if i > 0 then
+            w.AddStrings([',', LineEnd]);
+          w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
+        end;
       w.AddStrings([']);', LineEnd,
         'end;', LineEnd, LineEnd]);
     end;
