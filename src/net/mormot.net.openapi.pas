@@ -113,7 +113,7 @@ type
     function IsArray: boolean;
     function IsObject: boolean;
     function IsNamedEnum: boolean;
-    function BuiltinType: TOpenApiBuiltInType;
+    function BuiltInType(Parser: TOpenApiParser): TOpenApiBuiltInType;
     function HasDescription: boolean;
     function HasItems: boolean;
     function HasProperties: boolean;
@@ -287,14 +287,14 @@ type
   TPascalType = class
   private
     fBuiltinSchema: POpenApiSchema;
-    fBuiltinTypeName: RawUtf8;
+    fBuiltInTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
-    fBuiltinType: TOpenApiBuiltInType;
+    fBuiltInType: TOpenApiBuiltInType;
     fIsArray, fNoConst: boolean;
     function GetSchema: POpenApiSchema;
     procedure SetArray(AValue: boolean);
   public
-    constructor CreateBuiltin(aBuiltinType: TOpenApiBuiltInType;
+    constructor CreateBuiltin(aBuiltInType: TOpenApiBuiltInType;
       aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
     constructor CreateCustom(aCustomType: TPascalCustomType); overload;
 
@@ -331,7 +331,7 @@ type
       aSchema: POpenApiSchema);
     constructor CreateFrom(aAnother: TPascalProperty);
     constructor CreateBuiltin(const aName, aPascalName: RawUtf8;
-      aBuiltinType: TOpenApiBuiltInType);
+      aBuiltInType: TOpenApiBuiltInType);
     destructor Destroy; override;
     property PropType: TPascalType
       read fType;
@@ -469,6 +469,7 @@ type
   TPascalOperationsByTagDynArray = array of TPascalOperationsByTag;
 
   /// allow to customize TOpenApiParser process
+  // - opoNoDateTime disables any pascal TDate/TDateTime type generation
   // - opoDtoNoDescription generates no Description comment for the DTOs
   // - opoDtoNoRefFrom generates no 'from #/....' comment for the DTOs
   // - opoDtoNoExample generates no 'Example:' comment for the DTOs
@@ -480,6 +481,7 @@ type
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
   TOpenApiParserOption = (
+    opoNoDateTime,
     opoDtoNoDescription,
     opoDtoNoRefFrom,
     opoDtoNoExample,
@@ -714,7 +716,7 @@ begin
             (_Format <> '');
 end;
 
-function TOpenApiSchema.BuiltinType: TOpenApiBuiltInType;
+function TOpenApiSchema.BuiltInType(Parser: TOpenApiParser): TOpenApiBuiltInType;
 var
   t, f: RawUtf8;
 begin
@@ -731,18 +733,20 @@ begin
     else
       result := obtDouble
   else if t = 'string' then
-    if f = 'date' then
-      result := obtDate
-    else if f = 'date-time' then
-      result := obtDateTime
-    else if f = 'uuid' then
+  begin
+    result := obtRawUtf8;
+    if f = 'uuid' then
       result := obtGuid
     else if f = 'binary' then
       result := obtRawByteString
     else if f = 'password' then
       result := obtSpiUtf8
-    else
-      result := obtRawUtf8
+    else if not (opoNoDateTime in Parser.Options) then
+      if f = 'date' then
+        result := obtDate
+      else if f = 'date-time' then
+        result := obtDateTime;
+  end
   else if t = 'boolean' then
     result := obtBoolean
   else
@@ -1545,9 +1549,9 @@ begin
 end;
 
 constructor TPascalProperty.CreateBuiltin(const aName, aPascalName: RawUtf8;
-  aBuiltinType: TOpenApiBuiltInType);
+  aBuiltInType: TOpenApiBuiltInType);
 begin
-  fType := TPascalType.CreateBuiltin(aBuiltinType);
+  fType := TPascalType.CreateBuiltin(aBuiltInType);
   fTypeOwned := true;
   fName := aName;
   fPascalName := aPascalName;
@@ -1689,14 +1693,14 @@ const
     'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
     'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
 
-constructor TPascalType.CreateBuiltin(aBuiltinType: TOpenApiBuiltInType;
+constructor TPascalType.CreateBuiltin(aBuiltInType: TOpenApiBuiltInType;
   aSchema: POpenApiSchema; aIsArray: boolean);
 begin
-  fBuiltinType := aBuiltinType;
-  fBuiltinTypeName := OBT2TXT[aBuiltinType];
+  fBuiltInType := aBuiltInType;
+  fBuiltInTypeName := OBT2TXT[aBuiltInType];
   fBuiltinSchema := aSchema;
   if not aIsArray then
-    fNoConst := aBuiltinType in [obtInteger .. obtDateTime];
+    fNoConst := aBuiltInType in [obtInteger .. obtDateTime];
   SetArray(aIsArray);
 end;
 
@@ -1705,9 +1709,9 @@ begin
   fCustomType := aCustomType;
   fNoConst := IsEnum;
   if fNoConst then
-    fBuiltinType := obtEnumerationOrSet
+    fBuiltInType := obtEnumerationOrSet
   else if IsRecord then
-    fBuiltinType := obtRecord;
+    fBuiltInType := obtRecord;
 end;
 
 function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
@@ -1818,7 +1822,7 @@ begin
         exit;
       end;
     end;
-    result := TPascalType.CreateBuiltin(aSchema.BuiltinType, aSchema);
+    result := TPascalType.CreateBuiltin(aSchema.BuiltInType(self), aSchema);
   end;
 end;
 
@@ -1838,7 +1842,7 @@ begin
   end
   else
   begin
-    result := fBuiltinTypeName;
+    result := fBuiltInTypeName;
     if not IsArray then
       exit;
     if AsFinalType then
@@ -1862,7 +1866,7 @@ begin
   result := VarName; // default to direct value
   if IsBuiltin then
     if IsArray then
-      case fBuiltinType of
+      case fBuiltInType of
         obtInteger:
           func := 'IntegerDynArrayToCsv(%)';
         obtInt64:
@@ -1875,7 +1879,7 @@ begin
         // other types would just fail to compile
       end
     else
-    case fBuiltinType of
+    case fBuiltInType of
       obtDate:
         func := 'DateToIso8601(%, true)';
       obtDateTime:
@@ -1948,7 +1952,7 @@ begin
   // oldest Delphi require a managed field in the record to have a TypeInfo()
   if fTypes = [] then
     for i := 0 to fProperties.Count - 1 do
-      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltinType);
+      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltInType);
   result := fTypes - [obtInteger .. obtGuid] = [];
 end;
 
