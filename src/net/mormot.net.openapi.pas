@@ -498,7 +498,7 @@ type
     fEnumCounter: integer;
     procedure ParseSpecs;
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
-    function GetRef(const aRef: RawUtf8): pointer;
+    function GetRef(aRef: RawUtf8): pointer;
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const;
       const Desc: RawUtf8 = '');
@@ -1702,7 +1702,7 @@ function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
   aSchemaName: RawUtf8): TPascalType;
 var
   all: POpenApiSchemaDynArray;
-  ref, src, fmt, nam: RawUtf8;
+  ref, fmt, nam: RawUtf8;
   i: integer;
   rec, rectemp: TPascalRecord;
   enum, props: PDocVariantData;
@@ -1717,11 +1717,10 @@ begin
   if ref <> '' then
   begin
     // #/definitions/NewPet -> NewPet
-    src := SplitRight(ref, '/');
     aSchema := GetRef(ref); // resolve from main Specs
     if aSchema = nil then
       EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
-    result := NewPascalTypeFromSchema(aSchema, src);
+    result := NewPascalTypeFromSchema(aSchema, SplitRight(ref, '/'));
     if (result.CustomType <> nil) and
        (result.CustomType.fFromRef = '') then
       result.CustomType.fFromRef := ref;
@@ -2190,15 +2189,18 @@ begin
     result := nil;
 end;
 
-function TOpenApiParser.GetRef(const aRef: RawUtf8): pointer;
+function TOpenApiParser.GetRef(aRef: RawUtf8): pointer;
 begin
   // e.g. "$ref": "#/components/parameters/JobID"
   result := nil;
   if (aRef = '') or
-     (aRef[1] <> '#') or
-     (aRef[2] <> '/') then
+     (aRef[1] <> '#') then
     exit;
-  fSpecs.Data.GetDocVariantByPath(copy(aRef, 3, 100), PDocVariantData(result), '/');
+  if aRef[2] = '/' then
+    delete(aRef, 1, 2)
+  else
+    delete(aRef, 1, 1); // malformed "#components/parameters/JobID" link
+  fSpecs.Data.GetDocVariantByPath(aRef, PDocVariantData(result), '/');
 end;
 
 procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
