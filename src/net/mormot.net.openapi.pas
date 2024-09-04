@@ -495,6 +495,7 @@ type
     fLineIndent: RawUtf8;
     fTitle, fGeneratedBy, fGeneratedByLine: RawUtf8;
     fOptions: TOpenApiParserOptions;
+    fEnumCounter: integer;
     procedure ParseSpecs;
     function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
     function GetRef(const aRef: RawUtf8): pointer;
@@ -1560,9 +1561,15 @@ begin
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0); // alwyas prepend a first void item
-  for i := 2 to length(fPascalName) do
-    if fPascalName[i] in ['A' .. 'Z'] then
-      Append(fPrefix, fPascalName[i]);
+  if StartWithExact(aName, 'Enum') and
+     (aName[5]  in ['1' .. '9']) then
+    fPrefix := 'e' + copy(aName, 5, 3) // TEnum2 = (e2None, e2...);
+  else
+    for i := 2 to length(fPascalName) do
+      if length(fPrefix) >= 4 then
+        break
+      else if fPascalName[i] in ['A' .. 'Z'] then
+        Append(fPrefix, fPascalName[i]);
   LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
   FormatUtf8('%2TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
 end;
@@ -1777,6 +1784,9 @@ begin
         enum^.SortByValue;  // won't care about the actual order, just the values
         fmt := enum^.ToCsv('_'); // use string values to make it genuine
         nam := aSchema^.Description;
+        if (nam = '') or
+           (length(nam) > 30) then
+          nam := '';
       end
       else
         nam := fmt; // we have an explicit type name
@@ -1785,6 +1795,11 @@ begin
         enumType := fEnums.GetObjectFrom(fmt);
         if enumType = nil then
         begin
+          if nam = '' then
+          begin
+            inc(fEnumCounter);
+            FormatUtf8('Enum%', [fEnumCounter], nam); // TEnum### seems easier
+          end;
           enumType := TPascalEnum.Create(self, nam, aSchema);
           fEnums.AddObject(fmt, enumType);
         end;
