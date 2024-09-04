@@ -8025,7 +8025,8 @@ end;
 
 function TDocVariantData.GetNames: TRawUtf8DynArray;
 begin
-  if IsObject and
+  if (@self <> nil) and
+     IsObject and
      (VCount > 0) then
   begin
     DynArrayFakeLength(VName, VCount);
@@ -8561,7 +8562,8 @@ function TDocVariantData.GetVarData(const aName: RawUtf8;
 var
   ndx: PtrInt;
 begin
-  if (cardinal(VType) <> DocVariantVType) or
+  if (@self = nil) or
+     (cardinal(VType) <> DocVariantVType) or
      (not IsObject) or
      (VCount = 0) or
      (aName = '') then

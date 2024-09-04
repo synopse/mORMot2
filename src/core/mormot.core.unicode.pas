@@ -1427,6 +1427,7 @@ var
   StrCompByCase: array[{CaseInsensitive=}boolean] of TUtf8Compare;
 
 /// comparison function first by Int64 value, then by text, for TUtf8Compare
+// - so plain numbers will appear first, then case-sensitive text values
 function StrCompByNumber(Str1, Str2: pointer): PtrInt;
 
 /// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
