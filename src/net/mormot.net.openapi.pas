@@ -497,8 +497,9 @@ type
 
   /// the main OpenAPI parser and pascal code generator class
   TOpenApiParser = class
-  private
-    fVersion: TOpenApiVersion;
+  protected
+    fLineEnd: RawUtf8;
+    fLineIndent: RawUtf8;
     fSpecs: TOpenApiSpecs;
     fInfo: PDocVariantData;
     fSchemas: PDocVariantData;
@@ -507,40 +508,49 @@ type
     fExceptions: TRawUtf8List; // objects are owned TPascalException
     fErrorHandler: TRawUtf8DynArray;
     fOperations: TPascalOperationDynArray;
-    fLineEnd: RawUtf8;
-    fLineIndent: RawUtf8;
+    fTypeSuffix: RawUtf8;
     fTitle, fGeneratedBy, fGeneratedByLine: RawUtf8;
+    fVersion: TOpenApiVersion;
     fOptions: TOpenApiParserOptions;
-    fEnumCounter: integer;
+    fEnumCounter, fDtoCounter: integer;
     procedure ParseSpecs;
-    function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
-    function GetRef(aRef: RawUtf8): pointer;
-    procedure Description(W: TTextWriter; const Described: RawUtf8);
-    procedure Comment(W: TTextWriter; const Args: array of const;
-      const Desc: RawUtf8 = '');
-  public
-    constructor Create(aOptions: TOpenApiParserOptions = []);
-    destructor Destroy; override;
-
-    procedure Clear;
-    procedure ParseFile(const aJsonFile: TFileName);
-    procedure ParseJson(const aJson: RawUtf8);
-    procedure Parse(const aSpecs: TDocVariantData);
-    procedure ExportToDirectory(const Name: RawUtf8;
-      const DirectoryName: TFileName = './'; const UnitPrefix: RawUtf8 = '');
     function ParseRecordDefinition(const aDefinitionName: RawUtf8;
       aSchema: POpenApiSchema): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8);
-
     function NewPascalTypeFromSchema(aSchema: POpenApiSchema;
       aSchemaName: RawUtf8 = ''): TPascalType;
     function GetRecord(aRecordName: RawUtf8; aSchema: POpenApiSchema;
       NameIsReference: boolean = false): TPascalRecord;
     function GetOrderedRecords: TPascalRecordDynArray;
     function GetOperationsByTag: TPascalOperationsByTagDynArray;
+    function GetSchemaByName(const aName: RawUtf8): POpenApiSchema;
+    function GetRef(aRef: RawUtf8): pointer;
+    procedure Description(W: TTextWriter; const Described: RawUtf8);
+    procedure Comment(W: TTextWriter; const Args: array of const;
+      const Desc: RawUtf8 = '');
+  public
+    /// initialize this parser instance
+    // - the supplied aTypeSuffix will be used when generating TDto### and
+    // TEnum### types, to avoid any conflict at RTTI level between the names
+    constructor Create(const aTypeSuffix: RawUtf8; aOptions: TOpenApiParserOptions = []);
+    /// finalize this parser instance
+    destructor Destroy; override;
+
+    /// clear all internal information of this parser instance
+    procedure Clear;
+    /// parse a JSON Swagger/OpenAPI file content
+    procedure ParseFile(const aJsonFile: TFileName);
+    /// parse a JSON Swagger/OpenAPI content
+    procedure ParseJson(const aJson: RawUtf8);
+    /// parse a Swagger/OpenAPI content from an existing TDocVariant
+    procedure Parse(const aSpecs: TDocVariantData);
+    /// generate the dto and client unit .pas file in a given direction
+    procedure ExportToDirectory(const Name: RawUtf8;
+      const DirectoryName: TFileName = './'; const UnitPrefix: RawUtf8 = '');
 
     function GetDtosUnit(const UnitName: RawUtf8): RawUtf8;
     function GetClientUnit(const UnitName, ClientClassName, DtoUnitName: RawUtf8): RawUtf8;
+
     property Options: TOpenApiParserOptions
       read fOptions write fOptions;
     property Specs: TOpenApiSpecs
@@ -1109,10 +1119,16 @@ end;
 constructor TPascalCustomType.Create(aOwner: TOpenApiParser);
 begin
   // inheriting constructor should have set fName
+  if fName = '' then
+    EOpenApi.RaiseUtf8('%.Create(name?)', [self]);
   fParser := aOwner;
-  fPascalName := 'T' + SanitizePascalName(fName, {keywordcheck:}false);
-  if length(fPascalName) > 50 then // ensure type name is not too long
-    fPascalName := Make([copy(fPascalName, 1, 40), '_', crc32cUtf8ToHex(fName)]);
+  if fName[1] = '#' then // ensure type name is not too long
+  begin
+    inc(fParser.fDtoCounter); // TDto### is simple and convenient
+    Make(['TDto', fParser.fTypeSuffix, fParser.fDtoCounter], fPascalName);
+  end
+  else
+    fPascalName := 'T' + SanitizePascalName(fName, {keywordcheck:}false);
 end;
 
 function TPascalCustomType.ToArrayTypeName(AsFinalType: boolean): RawUtf8;
@@ -1615,10 +1631,12 @@ begin
   inherited Create(aOwner);
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
-  fChoices.AddItem('None', 0); // alwyas prepend a first void item
+  fChoices.AddItem('None', 0); // always prepend a first void item
   if StartWithExact(aName, 'Enum') and
-     (aName[5]  in ['1' .. '9']) then
-    fPrefix := 'e' + copy(aName, 5, 3) // TEnum2 = (e2None, e2...);
+     (aName[5 + length(fParser.fTypeSuffix)]  in ['1' .. '9']) then
+    // TEnumXxxxx2 = (ex2None, ex2...);
+    Make(['e', LowerCase(copy(fParser.fTypeSuffix, 1, 1)),
+          copy(aName, 5 + length(fParser.fTypeSuffix), 5)], fPrefix)
   else
     for i := 2 to length(fPascalName) do
       if length(fPrefix) >= 4 then
@@ -1626,7 +1644,7 @@ begin
       else if fPascalName[i] in ['A' .. 'Z'] then
         Append(fPrefix, fPascalName[i]);
   LowerCaseSelf(fPrefix); // TUserRole -> 'ur'
-  FormatUtf8('%2TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
+  FormatUtf8('%_TXT', [UpperCase(copy(fPascalName, 2, 100))], fConstTextArrayName);
 end;
 
 procedure TPascalEnum.ToTypeDefinition(W: TTextWriter);
@@ -1838,10 +1856,6 @@ begin
       begin
         enum^.SortByValue;  // won't care about the actual order, just the values
         fmt := enum^.ToCsv('_'); // use string values to make it genuine
-        nam := aSchema^.Description;
-        if (nam = '') or
-           (length(nam) > 30) then
-          nam := '';
       end
       else
         nam := fmt; // we have an explicit type name
@@ -1852,8 +1866,8 @@ begin
         begin
           if nam = '' then
           begin
-            inc(fEnumCounter);
-            FormatUtf8('Enum%', [fEnumCounter], nam); // TEnum### seems easier
+            inc(fEnumCounter); // TEnum### seems easier
+            Make(['Enum', fTypeSuffix, fEnumCounter], nam);
           end;
           enumType := TPascalEnum.Create(self, nam, aSchema);
           fEnums.AddObject(fmt, enumType);
@@ -2161,8 +2175,12 @@ end;
 
 { TOpenApiParser }
 
-constructor TOpenApiParser.Create(aOptions: TOpenApiParserOptions);
+constructor TOpenApiParser.Create(const aTypeSuffix: RawUtf8;
+  aOptions: TOpenApiParserOptions);
 begin
+  fTypeSuffix := aTypeSuffix;
+  if fTypeSuffix <> '' then
+    fTypeSuffix[1] := UpCase(fTypeSuffix[1]);
   fOptions := aOptions;
   fRecords := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
