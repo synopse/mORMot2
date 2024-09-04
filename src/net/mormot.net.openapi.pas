@@ -52,9 +52,11 @@ type
   /// define the native built-in pascal types
   TOpenApiBuiltInType = (
     obtVariant,
+    obtRecord,
     obtInteger,
     obtInt64,
     obtBoolean,
+    obtEnumerationOrSet,
     obtSingle,
     obtDouble,
     obtDate,
@@ -315,7 +317,9 @@ type
   public
     constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
-    constructor CreateFrom(another: TPascalProperty);
+    constructor CreateFrom(aAnother: TPascalProperty);
+    constructor CreateBuiltin(const aName, aPascalName: RawUtf8;
+      aBuiltinType: TOpenApiBuiltInType);
     destructor Destroy; override;
     property PropType: TPascalType
       read fType;
@@ -355,6 +359,8 @@ type
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
     fDependencies: TRawUtf8DynArray;
     fRttiTextRepresentation: RawUtf8;
+    fTypes: set of TOpenApiBuiltInType;
+    function NeedDummyField: boolean;
   public
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
@@ -367,11 +373,6 @@ type
       read fProperties;
   end;
   TPascalRecordDynArray = array of TPascalRecord;
-
-  /// define a Pascal data array
-  TPascalArray = class(TPascalCustomType)
-
-  end;
 
   /// define a Pascal enumeration type
   TPascalEnum = class(TPascalCustomType)
@@ -456,6 +457,16 @@ type
   TPascalOperationsByTagDynArray = array of TPascalOperationsByTag;
 
   /// allow to customize TOpenApiParser process
+  // - opoDtoNoDescription generates no Description comment for the DTOs
+  // - opoDtoNoRefFrom generates no 'from #/....' comment for the DTOs
+  // - opoDtoNoExample generates no 'Example:' comment for the DTOs
+  // - opoDtoNoPattern generates no 'Pattern:' comment for the DTOs
+  // - opoClientExcludeDeprecated removes any operation marked as deprecated
+  // - opoClientNoDescription generates only the minimal comments for the client
+  // - opoClientNoException won't generate any exception, and fallback to EJsonClient
+  // - opoClientOnlySummary will reduce the verbosity of operation comments
+  // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
+  // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
   TOpenApiParserOption = (
     opoDtoNoDescription,
     opoDtoNoRefFrom,
@@ -464,7 +475,8 @@ type
     opoClientExcludeDeprecated,
     opoClientNoDescription,
     opoClientNoException,
-    opoClientOnlySummary);
+    opoClientOnlySummary,
+    opoGenerateOldDelphiCompatible);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
   /// the main OpenAPI parser and pascal code generator class
@@ -1509,12 +1521,21 @@ begin
   fPascalName := SanitizePascalName(fName, {keywordcheck:}true);
 end;
 
-constructor TPascalProperty.CreateFrom(another: TPascalProperty);
+constructor TPascalProperty.CreateFrom(aAnother: TPascalProperty);
 begin
-  fType := another.PropType; // weak copy (keep fTypeOwned=false)
-  fName := another.Name;
-  fSchema := another.Schema;
-  fPascalName := another.PascalName;
+  fType := aAnother.PropType; // weak copy (keep fTypeOwned=false)
+  fName := aAnother.Name;
+  fSchema := aAnother.Schema;
+  fPascalName := aAnother.PascalName;
+end;
+
+constructor TPascalProperty.CreateBuiltin(const aName, aPascalName: RawUtf8;
+  aBuiltinType: TOpenApiBuiltInType);
+begin
+  fType := TPascalType.CreateBuiltin(aBuiltinType);
+  fTypeOwned := true;
+  fName := aName;
+  fPascalName := aPascalName;
 end;
 
 destructor TPascalProperty.Destroy;
@@ -1644,7 +1665,7 @@ end;
 
 const
   OBT2TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
-    'variant', 'integer', 'Int64', 'boolean', 'single', 'double',
+    'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
     'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
 
 constructor TPascalType.CreateBuiltin(aBuiltinType: TOpenApiBuiltInType;
@@ -1662,6 +1683,10 @@ constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
 begin
   fCustomType := aCustomType;
   fNoConst := IsEnum;
+  if fNoConst then
+    fBuiltinType := obtEnumerationOrSet
+  else if IsRecord then
+    fBuiltinType := obtRecord;
 end;
 
 function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
@@ -1885,6 +1910,20 @@ end;
 
 { TPascalRecord }
 
+function TPascalRecord.NeedDummyField: boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if not (opoGenerateOldDelphiCompatible in fParser.Options) then
+    exit;
+  // oldest Delphi require a managed field in the record to have a TypeInfo()
+  if fTypes = [] then
+    for i := 0 to fProperties.Count - 1 do
+      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltinType);
+  result := fTypes - [obtInteger .. obtGuid] = [];
+end;
+
 constructor TPascalRecord.Create(aOwner: TOpenApiParser;
   const SchemaName: RawUtf8; Schema: POpenApiSchema);
 begin
@@ -1909,6 +1948,7 @@ begin
   if (fFromRef <> '') and
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
     fParser.Comment(w, ['/// from ', fFromRef]);
+  // generate the record type definition
   w.AddStrings([fParser.LineIndent, PascalName, ' = packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
@@ -1937,6 +1977,11 @@ begin
     w.AddStrings([fParser.LineIndent, '  ', p.PascalName, ': ',
       p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
+  if NeedDummyField then
+    w.AddStrings([
+      fParser.LineIndent, '  // for Delphi 7-2007 compatibility', fParser.LineEnd,
+      fParser.LineIndent, '  dummy_: variant;', fParser.LineEnd]);
+  // associated pointer (and dynamic array if needed) definitions
   w.AddStrings([fParser.LineIndent, 'end;', fParser.LineEnd,
     fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
       ' = ^', PascalName, ';', fParser.LineEnd,
@@ -1963,7 +2008,10 @@ begin
     p := fProperties.ObjectPtr[i];
     Append(line, [fProperties[i], ':', p.PropType.ToPascalName(true, true), ' ']);
   end;
-  line[length(line)] := '''';
+  if NeedDummyField then
+    Append(line, '_:variant''')
+  else
+    line[length(line)] := '''';
   Append(result, line, ';');
   fRttiTextRepresentation := result;
 end;
@@ -2161,8 +2209,9 @@ function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8;
 var
   i, j: PtrInt;
   def: POpenApiSchemaDynArray;
-  ref: RawUtf8;
+  ref, n: RawUtf8;
   v: PDocVariantData;
+  p: TPascalProperty;
 begin
   // setup the new TPascalRecord instance
   if aSchema = nil then
@@ -2195,9 +2244,11 @@ begin
     v := aSchema^.Properties;
     if v <> nil then
       for j := 0 to v^.Count - 1 do
-        result.fProperties.AddObject(v^.Names[j],
-          TPascalProperty.CreateFromSchema(self, v^.Names[j], @v^.Values[j]),
-          {raise=}false, {free=}nil, {replaceexisting=}true);
+      begin
+        n := v^.Names[j];
+        p := TPascalProperty.CreateFromSchema(self, n, @v^.Values[j]);
+        result.fProperties.AddObject(n, p, {raise=}false, {free=}nil, {replace=}true);
+      end;
   end;
 end;
 
