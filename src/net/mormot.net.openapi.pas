@@ -2037,6 +2037,20 @@ begin
   inherited Destroy;
 end;
 
+function TPascalRecord.NeedDummyField: boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if not (opoGenerateOldDelphiCompatible in fParser.Options) then
+    exit;
+  // oldest Delphi require a managed field in the record to have a TypeInfo()
+  if fTypes = [] then
+    for i := 0 to fProperties.Count - 1 do
+      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltInType);
+  result := fTypes - [obtInteger .. obtGuid] = [];
+end;
+
 procedure TPascalRecord.ToTypeDefinition(W: TTextWriter);
 var
   i: PtrInt;
