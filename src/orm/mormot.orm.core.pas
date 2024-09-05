@@ -10356,13 +10356,7 @@ var
   i, j: PtrInt;
 begin
   for i := 0 to fTablesMax do
-    { TableProps[i] may be = nil if constructor failed with exception,
-      e.g. because some property type cannot be handled by ORM,
-      e.g. if it is "Single".
-      In this case, we want the destructor to continue gracefully,
-      and not cause another exception (like "Access Violation" because destructor
-      tried to access a nil pointer) that would obscure the original one. }
-    if TableProps[i] <> nil then
+    if TableProps[i] <> nil then // may be nil if constructor raise an exception
       with TableProps[i].Props do
       begin
         fSafe.Lock; // may be called from several threads at once

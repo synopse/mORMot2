@@ -145,7 +145,7 @@
   {$WARN 6058 off} // call to subroutine marked as inline is not inlined
   {$ifndef VER3_2} // this warning appeared in FPC 3.3.1
     {$WARN 6060 off} // case statement does not handle all possible cases
-  {$endif}
+  {$endif VER3_2}
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
