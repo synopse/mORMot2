@@ -20,6 +20,7 @@ unit mormot.net.openapi;
    - Support of nested "$ref" for objects, parameters or types
    - Support "allOf" attribute, with proper properties inheritance/overloading
    - Support "oneOf" attribute, for strings or alternate record types
+   - Support of "in":"header" and "in":"cookie" parameter attributes
    - Fallback to variant pascal type for "oneOf" or "anyOf" JSON values
    - Generated source code units are very small and easy to use, read and debug
    - Can generate very detailed comment documentation in the unit source code
@@ -29,9 +30,9 @@ unit mormot.net.openapi;
    - Tested with several Swagger 2 and OpenAPI 3 reference content
   But still not fully compliant to all existing files: feedback is welcome!
 
-  TODO:  - operation: "in": "header" in "parameters"
-         - operation: "multipart/form-data" in "consumes"
-         - authentification in global "securityDefinitions"
+  REFERENCE: https://swagger.io/docs/specification
+  TODO:  - operation: "multipart/form-data" in "consumes" and "in":"formdata"
+         - authentification as in global "securityDefinitions"
 }
 
 interface
@@ -1338,10 +1339,10 @@ begin
       fParser.LineIndent, '// Description:', fParser.LineEnd,
       fParser.LineIndent, '//   ', desc, fParser.LineEnd]);
   end;
-  // params
   if (fParameters <> nil) or
      (fRequestBodySchema <> nil) then
   begin
+    // Parameters
     w.AddStrings([fParser.LineIndent, '//', fParser.LineEnd,
            fParser.LineIndent, '// Params:', fParser.LineEnd]);
     for i := 0 to high(fParameters) do
@@ -1350,16 +1351,21 @@ begin
         continue; // fRequestBodySchema is handled below
       p := fParameters[i];
       Make(['- [', p^._In, '] ', p^.AsPascalName], line);
-      if p^.Required then
-        Append(line, '  (required)');
-      if p^.Default <> nil then
-        Append(line, [' (default=', p^.Default^, ')']);
+      if fParameterLocation[i] in [oplUnsupported, oplFormData] then
+        Append(line, ' (unsupported)')
+      else
+      begin
+        if p^.Required then
+          Append(line, ' (required)');
+        if p^.Default <> nil then
+          Append(line, [' (default=', p^.Default^, ')']);
+      end;
       fParser.Comment(w, [line], p^.Description);
     end;
     // Request body
     if Assigned(fRequestBodySchema) then
     begin
-      line := '- [body] Payload (required)';
+      line := '- [body] Payload  (required)';
       fParser.Comment(w, [line], fRequestBodySchema^.Description);
     end;
   end;
@@ -1425,7 +1431,7 @@ begin
   for i := 0 to Length(fParameters) - 1 do
   begin
     p := fParameters[i];
-    if fParameterLocation[i] in [oplPath, oplQuery, oplHeader] then
+    if fParameterLocation[i] in [oplPath, oplQuery, oplHeader, oplCookie] then
     begin
       pt := fParameterTypes[i];
       hasdefault := p^.HasDefaultValue and
@@ -1464,9 +1470,10 @@ var
   i, j, o: PtrInt;
   p: POpenApiParameter;
 
-  procedure AppendParams(const params: TIntegerDynArray; opl: TOpenApiParamLocation);
+  procedure AppendParams(const params: TIntegerDynArray);
   var
     i, j: PtrInt;
+    opl: TOpenApiParamLocation;
     p: POpenApiParameter;
     pt: TPascalType;
   begin
@@ -1478,6 +1485,7 @@ var
         j := params[i];
         p := fParameters[j];
         pt := fParameterTypes[j];
+        opl := fParameterLocation[j];
         if i > 0 then
           w.AddStrings([',', fParser.LineEnd]);
         w.AddShorter('    ''');
@@ -1486,6 +1494,9 @@ var
             if pt.IsArray then
               w.AddDirect('*'); // ueStarNameIsCsv
           // oplHeader uses natively CSV in OpenAPI default "simple" style
+          oplCookie:
+            w.AddShorter('Cookie: ');
+            // warning: arrays are not yet properly written in cookies
         end;
         w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
       end;
@@ -1529,7 +1540,8 @@ begin
         end;
       oplQuery:
         AddInteger(queryParam, i);
-      oplHeader:
+      oplHeader,
+      oplCookie:
         AddInteger(headerParam, i);
     end;
   for i := 0 to high(urlParam) do
@@ -1552,8 +1564,8 @@ begin
   end;
   w.AddDirect(']');
   // Query and Header parameters
-  AppendParams(queryParam,  oplQuery);
-  AppendParams(headerParam, oplHeader);
+  AppendParams(queryParam);
+  AppendParams(headerParam);
   // Payload and potentially result
   if Assigned(fPayloadParameterType) then
   begin

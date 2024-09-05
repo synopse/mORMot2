@@ -173,6 +173,7 @@ In Respect to existing OpenAPI wrappers in Delphi (or FPC):
 - Support of nested "$ref" for objects, parameters or types
 - Support "allOf" attribute, with proper properties inheritance/overloading
 - Support "oneOf" attribute, for strings or alternate record types
+- Support of "in":"header" and "in":"cookie" parameter attributes
 - Fallback to variant pascal type for "oneOf" or "anyOf" JSON values
 - Generated source code units are very small and easy to use, read and debug
 - Can generate very detailed comment documentation in the unit source code
