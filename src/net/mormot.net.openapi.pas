@@ -988,11 +988,11 @@ begin
     p := Parameters;
     if p <> nil then
       for i := 0 to p.Count - 1 do
-      begin
-        result := POpenApiRequestBody(p.Parameter[i]);
-        if POpenApiParameter(result)^._In = 'body' then
+        if p.Parameter[i]._In = 'body' then
+        begin
+          result := POpenApiRequestBody(p.Parameter[i]);
           exit;
-      end;
+        end;
     result := nil;
   end
   else if not Data.GetAsObject('requestBody', PDocVariantData(result)) then
@@ -1163,7 +1163,7 @@ begin
   fFunctionName := SanitizePascalName(fOperationId, {keywordcheck:}true);
   if fOperation^.Deprecated then
     Append(fFunctionName, '_deprecated');
-  fRequestBody := fOperation.RequestBody(fParser);
+  fRequestBody := fOperation^.RequestBody(fParser);
   if fRequestBody <> nil then
     fRequestBodySchema := fRequestBody^.Schema(fParser);
   if fRequestBodySchema <> nil then
@@ -1425,7 +1425,7 @@ begin
   for i := 0 to Length(fParameters) - 1 do
   begin
     p := fParameters[i];
-    if fParameterLocation[i] in [oplPath, oplQuery] then
+    if fParameterLocation[i] in [oplPath, oplQuery, oplHeader] then
     begin
       pt := fParameterTypes[i];
       hasdefault := p^.HasDefaultValue and
@@ -1460,10 +1460,41 @@ procedure TPascalOperation.Body(W: TTextWriter;
 var
   url: RawUtf8;
   urlName: TRawUtf8DynArray;
-  urlParam, queryParam: TIntegerDynArray;
+  urlParam, queryParam, headerParam: TIntegerDynArray;
   i, j, o: PtrInt;
   p: POpenApiParameter;
-  pt: TPascalType;
+
+  procedure AppendParams(const params: TIntegerDynArray; opl: TOpenApiParamLocation);
+  var
+    i, j: PtrInt;
+    p: POpenApiParameter;
+    pt: TPascalType;
+  begin
+    if params <> nil then
+    begin
+      w.AddStrings([', [', fParser.LineEnd]);
+      for i := 0 to high(params) do
+      begin
+        j := params[i];
+        p := fParameters[j];
+        pt := fParameterTypes[j];
+        if i > 0 then
+          w.AddStrings([',', fParser.LineEnd]);
+        w.AddShorter('    ''');
+        case opl of
+          oplQuery:
+            if pt.IsArray then
+              w.AddDirect('*'); // ueStarNameIsCsv
+          // oplHeader uses natively CSV in OpenAPI default "simple" style
+        end;
+        w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
+      end;
+      w.AddDirect(']');
+    end
+    else
+      w.AddShorter(', []');
+  end;
+
 begin
   // parse the URI and extract parameter names
   url := BasePath;
@@ -1498,79 +1529,56 @@ begin
         end;
       oplQuery:
         AddInteger(queryParam, i);
+      oplHeader:
+        AddInteger(headerParam, i);
     end;
   for i := 0 to high(urlParam) do
     if urlParam[i] < 0 then
       EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
-  // generate the corresponding pascal code
+  // emit the body block with its declaration and Request() call
   Declaration(w, ClassName, {implemtation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
          '  fClient.Request(''', ToText(fMethod), ''', ''', url, '''']);
-   // Path parameters
-   if urlName <> nil then
-   begin
-     w.AddShorter(', [');
-     for i := 0 to Length(urlName) - 1 do
-     begin
-       j := urlParam[i];
-       if j < 0 then
-         EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
-       if i > 0 then
-         w.AddShorter(', ');
-       w.AddString(fParameterTypes[j].ToFormatUtf8Arg(fParameters[j].AsPascalName));
-     end;
-     w.AddDirect(']');
-   end
-   // either urlParam and queryParam or None of them (for Request parameters)
-   else if (queryParam <> nil) or
-           Assigned(fPayloadParameterType) then
-     w.AddShorter(', []');
-
-   // Query parameters
-   if queryParam <> nil then
-   begin
-     w.AddStrings([', [', fParser.LineEnd]);
-     for i := 0 to high(queryParam) do
-     begin
-       j := queryParam[i];
-       p := fParameters[j];
-       pt := fParameterTypes[j];
-       if i > 0 then
-         w.AddStrings([',', fParser.LineEnd]);
-       w.AddShorter('    ''');
-       if pt.IsArray then
-         w.AddDirect('*'); // ueStarNameIsCsv
-       w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
-     end;
-     w.AddDirect(']');
-   end
-   // either urlParam and queryParam or none of them (for Request parameters)
-   else if (urlParam <> nil) or
-           Assigned(fPayloadParameterType) then
-     w.AddShorter(', []');
-
-   // Payload and potentially result
-   if Assigned(fPayloadParameterType) then
-   begin
-     w.AddStrings([',', fParser.LineEnd,
-       '    Payload, ']);
-     if Assigned(fSuccessResponseType) then
-       w.AddShorter('result')
-     else
-       w.AddShort('{dummy:}self');
-     w.AddStrings([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
-     if Assigned(fSuccessResponseType) then
-       w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
-     else
-       w.AddShorter('nil');
-   end
-   // result with no Payload
-   else if Assigned(fSuccessResponseType) then
-     w.AddStrings([',', fParser.LineEnd,
-       '    result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
+  // Path parameters
+  w.AddShorter(', [');
+  for i := 0 to Length(urlName) - 1 do
+  begin
+    j := urlParam[i];
+    if j < 0 then
+      EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
+    if i > 0 then
+      w.AddShorter(', ');
+    w.AddString(fParameterTypes[j].ToFormatUtf8Arg(fParameters[j].AsPascalName));
+  end;
+  w.AddDirect(']');
+  // Query and Header parameters
+  AppendParams(queryParam,  oplQuery);
+  AppendParams(headerParam, oplHeader);
+  // Payload and potentially result
+  if Assigned(fPayloadParameterType) then
+  begin
+    w.AddStrings([',', fParser.LineEnd,
+      '    Payload, ']);
+    if Assigned(fSuccessResponseType) then
+      w.AddShorter('result')
+    else
+      w.AddShort('{dummy:}self');
+    w.AddStrings([', TypeInfo(', fPayloadParameterType.ToPascalName, '), ']);
+    if Assigned(fSuccessResponseType) then
+      w.AddStrings(['TypeInfo(', fSuccessResponseType.ToPascalName, ')'])
+    else
+      w.AddShorter('nil');
+  end
+  // result with no Payload
+  else if Assigned(fSuccessResponseType) then
+    w.AddStrings([',', fParser.LineEnd,
+      '    result, TypeInfo(', fSuccessResponseType.ToPascalName, ')']);
+  // custom Exception error callback
   if fOnErrorIndex <> 0 then
     w.AddStrings([', OnError', SmallUInt32Utf8[fOnErrorIndex]]);
-  w.AddStrings([');', fParser.LineEnd, 'end;', fParser.LineEnd, fParser.LineEnd]);
+  // end body block
+  w.AddStrings([');', fParser.LineEnd,
+                'end;', fParser.LineEnd, fParser.LineEnd]);
 end;
 
 
