@@ -5953,7 +5953,7 @@ var
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
   case length(method) of
-    4 .. 7:
+    3 .. 7:
       result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
         (PCardinal(method)^) and $dfdfdfdf) + 1);
   else
