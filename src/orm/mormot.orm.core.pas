@@ -10356,23 +10356,30 @@ var
   i, j: PtrInt;
 begin
   for i := 0 to fTablesMax do
-    with TableProps[i].Props do
-    begin
-      fSafe.Lock; // may be called from several threads at once
-      try
-        for j := 0 to fModelMax do
-          if fModel[j].Model = self then
-          begin
-            // un-associate this TOrm with this model
-            MoveFast(fModel[j + 1], fModel[j], (fModelMax - j) * SizeOf(fModel[j]));
-            dec(fModelMax);
-            break;
-          end;
-        TableProps[i].Free;
-      finally
-        fSafe.UnLock;
+    { TableProps[i] may be = nil if constructor failed with exception,
+      e.g. because some property type cannot be handled by ORM,
+      e.g. if it is "Single".
+      In this case, we want the destructor to continue gracefully,
+      and not cause another exception (like "Access Violation" because destructor
+      tried to access a nil pointer) that would obscure the original one. }
+    if TableProps[i] <> nil then
+      with TableProps[i].Props do
+      begin
+        fSafe.Lock; // may be called from several threads at once
+        try
+          for j := 0 to fModelMax do
+            if fModel[j].Model = self then
+            begin
+              // un-associate this TOrm with this model
+              MoveFast(fModel[j + 1], fModel[j], (fModelMax - j) * SizeOf(fModel[j]));
+              dec(fModelMax);
+              break;
+            end;
+          TableProps[i].Free;
+        finally
+          fSafe.UnLock;
+        end;
       end;
-    end;
   ObjArrayClear(fIDGenerator);
   inherited;
 end;
