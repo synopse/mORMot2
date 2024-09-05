@@ -1315,7 +1315,7 @@ type
       const Data: RawByteString; const DataMimeType: RawUtf8;
       KeepAlive: cardinal): integer; overload;
     /// quickly check if we can connect to the corresponding server
-    // - Server.Address is not used bu this method
+    // - Server.Address is not used by this method
     // - return '' on success, or any raised Exception error message
     function Connected(const Server: TUri): string;
     /// finalize any existing HTTP/HTTPS connection
@@ -1479,6 +1479,15 @@ type
     procedure SetOnError(const Event: TOnJsonClientError);
     function GetUrlEncoder: TUrlEncoder;
     procedure SetUrlEncoder(Value: TUrlEncoder);
+    function GetCookies: RawUtf8;
+    procedure SetCookies(const Value: RawUtf8);
+    function GetDefaultHeaders: RawUtf8;
+    procedure SetDefaultHeaders(const Value: RawUtf8);
+    /// raw access to the HTTP client itself
+    // - Http.Options^ could be used e.g. to tune the connection (proxy or TLS),
+    // or to change the authentication method
+    // - direct access to this interface methods is not thread-safe
+    function Http: IHttpClient;
     /// check if the client is actually connected to the server
     // - return '' on success, or a text error (typically an Exception.Message)
     function Connected: string;
@@ -1517,6 +1526,14 @@ type
     // - is called by RttiRequest(), and implemented e.g. in TJsonClient
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse);
+    /// can specify a cookie value to the HTTP request
+    // - is void by default
+    property Cookies: RawUtf8
+      read GetCookies write SetCookies;
+    /// can specify a default header to the HTTP request
+    // - contains 'Accept: application/json' by default
+    property DefaultHeaders: RawUtf8
+      read GetDefaultHeaders write SetDefaultHeaders;
     /// allow to customize globally any HTTP error
     // - used if CustomError parameter is not set in Request() overloads
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
@@ -1555,6 +1572,11 @@ type
     procedure SetOnError(const Event: TOnJsonClientError); virtual;
     function GetUrlEncoder: TUrlEncoder;
     procedure SetUrlEncoder(Value: TUrlEncoder);
+    function GetCookies: RawUtf8; virtual; abstract;
+    procedure SetCookies(const Value: RawUtf8); virtual; abstract;
+    function GetDefaultHeaders: RawUtf8; virtual; abstract;
+    procedure SetDefaultHeaders(const Value: RawUtf8); virtual; abstract;
+    function Http: IHttpClient; virtual; abstract;
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
@@ -1603,8 +1625,6 @@ type
     fBaseUri, fDefaultHeaders, fCookies, fInHeaders: RawUtf8;
     fKeepAlive: integer;
     procedure SetInHeaders;
-    procedure SetCookies(const Value: RawUtf8);
-    procedure SetDefaultHeaders(const Value: RawUtf8);
   public
     /// initialize the instance, over a HTTP server
     // - you can then set the needed HttpOptions^, then call the Connected method
@@ -1616,24 +1636,17 @@ type
     /// raw access to the HTTP options for the connection, e.g. TLS or Auth
     function HttpOptions: PHttpRequestExtendedOptions;
     // IJsonClient thread-safe methods
+    function GetCookies: RawUtf8; override;
+    procedure SetCookies(const Value: RawUtf8); override;
+    function GetDefaultHeaders: RawUtf8; override;
+    procedure SetDefaultHeaders(const Value: RawUtf8); override;
+    function Http: IHttpClient; override;
     function Connected: string; override;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); override;
-    /// raw access to the HTTP client itself
-    // - direct access of this interface methods is not thread-safe
-    property Http: IHttpClient
-      read fHttp;
     /// raw access to the base URI text prepended to each request
     property BaseUri: RawUtf8
       read fBaseUri write fBaseUri;
-    /// can specify a cookie value to the HTTP request
-    // - is void by default
-    property Cookies: RawUtf8
-      read fCookies write SetCookies;
-    /// can specify a default header to the HTTP request
-    // - contains 'Accept: application/json' by default
-    property DefaultHeaders: RawUtf8
-      read fDefaultHeaders write SetDefaultHeaders;
   end;
 
 
@@ -4611,6 +4624,11 @@ begin
   AppendLine(fInHeaders, ['Cookie: ', fCookies]);
 end;
 
+function TJsonClient.GetCookies: RawUtf8;
+begin
+  result := fCookies;
+end;
+
 procedure TJsonClient.SetCookies(const Value: RawUtf8);
 begin
   fCookies := Value;
@@ -4623,9 +4641,19 @@ begin
   SetInHeaders;
 end;
 
+function TJsonClient.GetDefaultHeaders: RawUtf8;
+begin
+  result := fDefaultHeaders;
+end;
+
 function TJsonClient.HttpOptions: PHttpRequestExtendedOptions;
 begin
   result := fHttp.Options;
+end;
+
+function TJsonClient.Http: IHttpClient;
+begin
+  result := fHttp;
 end;
 
 function TJsonClient.Connected: string;
