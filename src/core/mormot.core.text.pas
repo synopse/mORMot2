@@ -8711,7 +8711,10 @@ begin
   L := length(Text);
   c := @blocks;
   if (Text <> '') and
-     (Separator[0] <> #0) then
+     (Separator[0] <> #0) and
+     (ord(Separator[0]) <= L) and // not already terminated by the Separator
+     not CompareMemSmall(@PByteArray(Text)[L - ord(Separator[0])],
+       @Separator[1], ord(Separator[0])) then
   begin
     c^.Len := ord(Separator[0]);
     inc(L, c^.Len);

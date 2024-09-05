@@ -1588,7 +1588,7 @@ type
     function CheckRequestError(const Response: TJsonResponse;
       const CustomError: TOnJsonClientError): boolean;
   public
-    // IJsonClient thread-safe methods
+    // IJsonClient methods
     function GetOnError: TOnJsonClientError;
     procedure SetOnError(const Event: TOnJsonClientError); virtual;
     function GetOnBefore: TOnJsonClientBefore;
@@ -1666,7 +1666,7 @@ type
     destructor Destroy; override;
     /// raw access to the HTTP options for the connection, e.g. TLS or Auth
     function HttpOptions: PHttpRequestExtendedOptions;
-    // IJsonClient thread-safe methods
+    // IJsonClient methods
     function GetCookies: RawUtf8; override;
     procedure SetCookies(const Value: RawUtf8); override;
     function GetDefaultHeaders: RawUtf8; override;

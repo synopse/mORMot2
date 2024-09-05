@@ -5303,6 +5303,9 @@ begin
   CheckEqual(U, 'a1'#13#10'2345');
   AppendLine(U, ['bcdef']);
   CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef');
+  Append(U, #13#10);
+  AppendLine(U, ['ghij']);
+  CheckEqual(U, 'a1'#13#10'2345'#13#10'bcdef'#13#10'ghij');
   U := QuotedStr('', '"');
   CheckEqual(U, '""');
   U := QuotedStr('abc', '"');
