@@ -378,12 +378,12 @@ type
     fDependencies: TRawUtf8DynArray;
     fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
-    function NeedDummyField: boolean;
+    fNeedsDummyField: boolean;
   public
     constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
     destructor Destroy; override;
-    procedure CopyProperties(aDest: TRawUtf8List);
+    procedure CopyProperties(aDest: TPascalRecord);
     procedure ToTypeDefinition(W: TTextWriter); override;
     function ToRttiTextRepresentation: RawUtf8;
     function ToRttiRegisterDefinitions: RawUtf8;
@@ -2047,20 +2047,6 @@ begin
   inherited Destroy;
 end;
 
-function TPascalRecord.NeedDummyField: boolean;
-var
-  i: PtrInt;
-begin
-  result := false;
-  if not (opoGenerateOldDelphiCompatible in fParser.Options) then
-    exit;
-  // oldest Delphi require a managed field in the record to have a TypeInfo()
-  if fTypes = [] then
-    for i := 0 to fProperties.Count - 1 do
-      include(fTypes, TPascalProperty(fProperties.ObjectPtr[i]).fType.fBuiltInType);
-  result := fTypes - [obtInteger .. obtGuid] = [];
-end;
-
 procedure TPascalRecord.ToTypeDefinition(W: TTextWriter);
 var
   i: PtrInt;
@@ -2069,7 +2055,7 @@ var
 begin
   if fProperties.Count = 0 then
   begin
-    // this is no real record
+    // this is no fixed record, but maybe a "oneOf" or "anyOf" object
     fPascalName := 'variant';
     exit;
   end;
@@ -2106,10 +2092,10 @@ begin
     w.AddStrings([fParser.LineIndent, '  ', p.PascalName, ': ',
       p.PropType.ToPascalName, ';', fParser.LineEnd]);
   end;
-  if NeedDummyField then
+  if fNeedsDummyField then
     w.AddStrings([
       fParser.LineIndent, '  // for Delphi 7-2007 compatibility', fParser.LineEnd,
-      fParser.LineIndent, '  dummy_: variant;', fParser.LineEnd]);
+      fParser.LineIndent, '  dummy_: RawUtf8;', fParser.LineEnd]);
   // associated pointer (and dynamic array if needed) definitions
   w.AddStrings([fParser.LineIndent, 'end;', fParser.LineEnd,
     fParser.LineIndent, 'P', copy(PascalName, 2, length(PascalName)),
@@ -2143,8 +2129,8 @@ begin
     p := fProperties.ObjectPtr[i];
     Append(line, [name, ':', p.PropType.ToPascalName(true, true), ' ']);
   end;
-  if NeedDummyField then
-    Append(line, '_:variant''')
+  if fNeedsDummyField then
+    Append(line, '_:RawUtf8''')
   else
     line[length(line)] := '''';
   Append(result, line, ';');
@@ -2156,15 +2142,19 @@ begin
   result := FormatUtf8('TypeInfo(%), _%', [PascalName, PascalName]);
 end;
 
-procedure TPascalRecord.CopyProperties(aDest: TRawUtf8List);
+procedure TPascalRecord.CopyProperties(aDest: TPascalRecord);
 var
   i: PtrInt;
+  p: TPascalProperty;
 begin
   if (self <> nil) and
      (aDest <> nil) then
     for i := 0 to fProperties.Count - 1 do
-      aDest.AddObject(fProperties[i],
-        TPascalProperty.CreateFrom(fProperties.ObjectPtr[i]));
+    begin
+      p := fProperties.ObjectPtr[i];
+      include(aDest.fTypes, p.fType.fBuiltInType);
+      aDest.fProperties.AddObject(fProperties[i], TPascalProperty.CreateFrom(p));
+    end;
 end;
 
 
@@ -2379,7 +2369,7 @@ begin
     // append $ref properties first - making copy of each TPascalProperty
     ref := aSchema^.Reference;
     if ref <> '' then
-      GetRecord(ref, nil, {isref=}true).CopyProperties(result.fProperties);
+      GetRecord(ref, nil, {isref=}true).CopyProperties(result);
     // append specific fields
     v := aSchema^.Properties;
     if v <> nil then
@@ -2387,9 +2377,12 @@ begin
       begin
         n := v^.Names[j];
         p := TPascalProperty.CreateFromSchema(self, n, @v^.Values[j]);
+        include(result.fTypes, p.fType.fBuiltInType);
         result.fProperties.AddObject(n, p, {raise=}false, {free=}nil, {replace=}true);
       end;
   end;
+  result.fNeedsDummyField := (opoGenerateOldDelphiCompatible in fOptions) and
+                             (result.fTypes - [obtInteger .. obtGuid] = []);
 end;
 
 procedure TOpenApiParser.ParsePath(const aPath: RawUtf8);
