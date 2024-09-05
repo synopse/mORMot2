@@ -5957,7 +5957,7 @@ begin
       result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
         (PCardinal(method)^) and $dfdfdfdf) + 1);
   else
-    result := mNone
+    result := mNone;
   end;
 end;
 

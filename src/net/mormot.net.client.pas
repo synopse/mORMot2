@@ -1500,16 +1500,16 @@ type
       const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with no JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with output only JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       var Res; ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
     /// parameterized Request execution, with input/output JSON parsing using RTTI
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
     /// main Request execution, with optional input/output JSON parsing using RTTI
@@ -1517,7 +1517,7 @@ type
     // Payload or output Res variable will be ignored
     // - will optionally call CustomError, to thread-safely handle errors
     // dedicated to this actual request - with fallback to OnError global property
-    procedure RttiRequest(const Method, Action: RawUtf8;
+    procedure RttiRequest(const Method, Action, Headers: RawUtf8;
       Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError);
     /// low-level HTTP request execution
@@ -1580,23 +1580,23 @@ type
     function Connected: string; virtual; abstract;
     procedure RawRequest(const Method, Action, InType, InBody, InHeaders: RawUtf8;
       var Response: TJsonResponse); virtual; abstract;
-    procedure RttiRequest(const Method, Action: RawUtf8;
+    procedure RttiRequest(const Method, Action, Headers: RawUtf8;
       Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError); overload;
     procedure Request(const Method, Action: RawUtf8;
       const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, Action: RawUtf8;
       var Res; ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       var Res; ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
     procedure Request(const Method, ActionFmt: RawUtf8;
-      const ActionArgs, NameValueParams: array of const;
+      const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
     /// allow to globally customize any HTTP error
@@ -4503,7 +4503,7 @@ const
   FMT_REQ: array[{full=}boolean] of RawUtf8 = (
     'Request % %', 'Request % % %');
 
-procedure TJsonClientAbstract.RttiRequest(const Method, Action: RawUtf8;
+procedure TJsonClientAbstract.RttiRequest(const Method, Action, Headers: RawUtf8;
   Payload, Res: pointer; PayloadInfo, ResInfo: PRttiInfo;
   const CustomError: TOnJsonClientError);
 var
@@ -4526,7 +4526,7 @@ begin
      not (jcoResultNoClear in fOptions) then
     j.ValueFinalizeAndClear(Res); // clear result before request or parsing
   try
-    RawRequest(Method, Action, '', b, '', r); // blocking thread-safe request
+    RawRequest(Method, Action, '', b, Headers, r); // blocking thread-safe request
   except
     on E: Exception do
     begin
@@ -4559,40 +4559,90 @@ end;
 procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8;
   const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, Action, nil, nil, nil, nil, CustomError); // nil = no RTTI
+  RttiRequest(Method, Action, {Headers=}'',
+    nil, nil, nil, nil, CustomError); // nil = no RTTI
 end;
 
 procedure TJsonClientAbstract.Request(const Method, Action: RawUtf8;
   var Res; ResInfo: PRttiInfo; const CustomError: TOnJsonClientError);
 begin
-  RttiRequest(Method, Action, {Payload=}nil, @Res, {PayloadInfo=}nil, ResInfo, CustomError);
+  RttiRequest(Method, Action, {Headers=}'',
+    {Payload=}nil, @Res, {PayloadInfo=}nil, ResInfo, CustomError);
+end;
+
+procedure DoHeadersEncode(const NameValuePairs: array of const;
+  var OutHeaders: RawUtf8);
+var
+  a: PtrInt;
+  name, value: RawUtf8;
+  p: PVarRec;
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  w := nil;
+  try
+    p := @NameValuePairs[0];
+    for a := 0 to high(NameValuePairs) shr 1 do
+    begin
+      VarRecToUtf8(p^, name);
+      inc(p);
+      VarRecToUtf8(p^, value);
+      if (name = '') or
+         (value = '') then
+        continue;
+      // append name='X-MyHeader'/value='5' as 'X-MyHeader: 5'#13#10
+      if w = nil then
+        w := DefaultJsonWriter.CreateOwnedStream(tmp);
+      w.AddString(name);
+      if PosExChar(':', name) = 0 then // if name is e.g. 'Cookie: id='
+        w.AddDirect(':', ' ');
+      w.AddString(value); // OpenAPI "simple" style is just a CSV
+      w.AddCR; // CR+LF
+      inc(p);
+    end;
+    if w <> nil then
+      w.SetText(OutHeaders);
+  finally
+    w.Free;
+  end;
+end;
+
+function HeadersEncode(const NameValuePairs: array of const): RawUtf8;
+begin
+  result := '';
+  if (high(NameValuePairs) >= 0) and
+     (high(NameValuePairs) and 1 = 1) then // n should be = 1,3,5,7,..
+    DoHeadersEncode(NameValuePairs, result);
 end;
 
 procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
-  const ActionArgs, NameValueParams: array of const;
+  const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
   const CustomError: TOnJsonClientError);
 begin
   RttiRequest(Method,
-    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    UrlEncodeFull(ActionFmt, ActionArgs, QueryNameValueParams, fUrlEncoder),
+    HeadersEncode(HeaderNameValueParams),
     nil, nil, nil, nil, CustomError);
 end;
 
 procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
-  const ActionArgs, NameValueParams: array of const;
+  const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
   var Res; ResInfo: PRttiInfo; const CustomError: TOnJsonClientError);
 begin
   RttiRequest(Method,
-    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    UrlEncodeFull(ActionFmt, ActionArgs, QueryNameValueParams, fUrlEncoder),
+    HeadersEncode(HeaderNameValueParams),
     nil, @Res, nil, ResInfo, CustomError);
 end;
 
 procedure TJsonClientAbstract.Request(const Method, ActionFmt: RawUtf8;
-  const ActionArgs, NameValueParams: array of const;
+  const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
   const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
   const CustomError: TOnJsonClientError);
 begin
   RttiRequest(Method,
-    UrlEncodeFull(ActionFmt, ActionArgs, NameValueParams, fUrlEncoder),
+    UrlEncodeFull(ActionFmt, ActionArgs, QueryNameValueParams, fUrlEncoder),
+    HeadersEncode(HeaderNameValueParams),
     @Payload, @Res, PayloadInfo, ResInfo, CustomError);
 end;
 
