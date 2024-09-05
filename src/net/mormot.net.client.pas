@@ -1464,6 +1464,14 @@ type
   TOnJsonClientError = procedure(const Sender: IJsonClient;
     const Response: TJsonResponse; const ErrorMsg: shortstring) of object;
 
+  /// event signature for a callback run before each IJsonClient.Request()
+  TOnJsonClientBefore = procedure(const Sender: IJsonClient;
+    const Method, Action, Body: RawUtf8) of object;
+
+  /// event signature for a callback run after each IJsonClient.Request()
+  TOnJsonClientAfter = procedure(const Sender: IJsonClient;
+    const Response: TJsonResponse) of object;
+
   /// an interface to make thread-safe JSON client requests
   // - is implemented e.g. by our TJsonClient class in this unit
   // - don't know anything about the HTTP connection itself but it is connected,
@@ -1477,6 +1485,10 @@ type
     // some property helpers
     function GetOnError: TOnJsonClientError;
     procedure SetOnError(const Event: TOnJsonClientError);
+    function GetOnBefore: TOnJsonClientBefore;
+    procedure SetOnBefore(const Event: TOnJsonClientBefore);
+    function GetOnAfter: TOnJsonClientAfter;
+    procedure SetOnAfter(const Event: TOnJsonClientAfter);
     function GetUrlEncoder: TUrlEncoder;
     procedure SetUrlEncoder(Value: TUrlEncoder);
     function GetCookies: RawUtf8;
@@ -1534,6 +1546,13 @@ type
     // - contains 'Accept: application/json' by default
     property DefaultHeaders: RawUtf8
       read GetDefaultHeaders write SetDefaultHeaders;
+    /// event optionally called before any HTTP request
+    property OnBefore: TOnJsonClientBefore
+      read GetOnBefore write SetOnBefore;
+    /// event optionally called after any HTTP request
+    // - is called even in case of error, i.e. just before OnError
+    property OnAfter: TOnJsonClientAfter
+      read GetOnAfter write SetOnAfter;
     /// allow to customize globally any HTTP error
     // - used if CustomError parameter is not set in Request() overloads
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
@@ -1560,9 +1579,11 @@ type
   // HTTP connection, which is abstracted to Connected and RawRequest() methods
   TJsonClientAbstract = class(TInterfacedObjectLocked, IJsonClient)
   protected
-    fOnError: TOnJsonClientError;
     fUrlEncoder: TUrlEncoder;
     fOptions: TJsonClientOptions;
+    fOnError: TOnJsonClientError;
+    fOnBefore: TOnJsonClientBefore;
+    fOnAfter: TOnJsonClientAfter;
     fOnLog: TSynLogProc;
     function CheckRequestError(const Response: TJsonResponse;
       const CustomError: TOnJsonClientError): boolean;
@@ -1570,6 +1591,10 @@ type
     // IJsonClient thread-safe methods
     function GetOnError: TOnJsonClientError;
     procedure SetOnError(const Event: TOnJsonClientError); virtual;
+    function GetOnBefore: TOnJsonClientBefore;
+    procedure SetOnBefore(const Event: TOnJsonClientBefore); virtual;
+    function GetOnAfter: TOnJsonClientAfter;
+    procedure SetOnAfter(const Event: TOnJsonClientAfter); virtual;
     function GetUrlEncoder: TUrlEncoder;
     procedure SetUrlEncoder(Value: TUrlEncoder);
     function GetCookies: RawUtf8; virtual; abstract;
@@ -1599,6 +1624,12 @@ type
       const ActionArgs, QueryNameValueParams, HeaderNameValueParams: array of const;
       const Payload; var Res; PayloadInfo, ResInfo: PRttiInfo;
       const CustomError: TOnJsonClientError = nil); overload;
+    /// event optionally called before any HTTP request
+    property OnBefore: TOnJsonClientBefore
+      read GetOnBefore write SetOnBefore;
+    /// event optionally called after any HTTP request
+    property OnAfter: TOnJsonClientAfter
+      read GetOnAfter write SetOnAfter;
     /// allow to globally customize any HTTP error
     // - used if CustomError parameter is not set in Request() overloads
     // - if no event is set, TJsonResponse.RaiseForStatus will be called
@@ -4489,6 +4520,26 @@ begin
   fOnError := Event;
 end;
 
+function TJsonClientAbstract.GetOnBefore: TOnJsonClientBefore;
+begin
+  result := fOnBefore;
+end;
+
+procedure TJsonClientAbstract.SetOnBefore(const Event: TOnJsonClientBefore);
+begin
+  fOnBefore := Event;
+end;
+
+function TJsonClientAbstract.GetOnAfter: TOnJsonClientAfter;
+begin
+  result := fOnAfter;
+end;
+
+procedure TJsonClientAbstract.SetOnAfter(const Event: TOnJsonClientAfter);
+begin
+  fOnAfter := Event;
+end;
+
 function TJsonClientAbstract.GetUrlEncoder: TUrlEncoder;
 begin
   result := fUrlEncoder;
@@ -4519,6 +4570,8 @@ begin
   if Assigned(fOnLog) then
     fOnLog(sllServiceCall, FMT_REQ[((jcoLogFullRequest in fOptions) or
       (length(b) < 1024))], [Method, Action, b], self);
+  if Assigned(fOnBefore) then
+    fOnBefore(self, Method, Action, b);
   j := nil;
   if Res <> nil then
     j := pointer(Rtti.RegisterType(ResInfo));
@@ -4538,6 +4591,8 @@ begin
       r.Content := ObjectToJsonDebug(E);
     end;
   end;
+  if Assigned(fOnAfter) then
+    fOnAfter(self, r);
   if CheckRequestError(r, CustomError) or // HTTP status error
      (j = nil) then          // no response JSON to parse
     exit;
