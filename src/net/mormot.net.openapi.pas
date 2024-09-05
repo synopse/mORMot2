@@ -509,6 +509,8 @@ type
   // - opoClientNoDescription generates only the minimal comments for the client
   // - opoClientNoException won't generate any exception, and fallback to EJsonClient
   // - opoClientOnlySummary will reduce the verbosity of operation comments
+  // - opoGenerateSingleApiUnit will let GenerateClient return a single
+  // {name}.api unit, containing both the needed DTOs and the client class
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
   TOpenApiParserOption = (
@@ -522,6 +524,7 @@ type
     opoClientNoDescription,
     opoClientNoException,
     opoClientOnlySummary,
+    opoGenerateSingleApiUnit,
     opoGenerateOldDelphiCompatible);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
@@ -544,6 +547,7 @@ type
     fOptions: TOpenApiParserOptions;
     fEnumCounter, fDtoCounter: integer;
     fDtoUnitName, fClientUnitName, fClientClassName: RawUtf8;
+    fOrderedRecords: TPascalRecordDynArray;
     function ParseRecordDefinition(const aDefinitionName: RawUtf8;
       aSchema: POpenApiSchema): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8; aPathItem: POpenApiPathItem);
@@ -561,6 +565,8 @@ type
     procedure Code(W: TTextWriter; var Line: RawUtf8; const Args: array of const);
     // main internal parsing function
     procedure ParseSpecs;
+    procedure GenerateDtoInterface(w: TTextWriter);
+    procedure GenerateDtoImplementation(w: TTextWriter);
   public
     /// initialize this parser instance
     // - aName is a short identifier used for naming the units and types
@@ -580,8 +586,10 @@ type
     /// generate the DTO unit content
     function GenerateDtoUnit: RawUtf8;
     /// generate the main Client unit content
+    // - including all DTOs if the opoGenerateSingleApiUnit option is defined
     function GenerateClientUnit: RawUtf8;
     /// generate the DTO and main Client unit .pas files in a given folder
+    // - no DTO unit is written if the opoGenerateSingleApiUnit option is defined
     procedure ExportToDirectory(const DirectoryName: TFileName = '');
 
     /// allow to customize the code generation
@@ -598,11 +606,12 @@ type
     property Name: RawUtf8
       read fName write fName;
     /// the unit identifier name used for the DTO unit, without the '.pas' extension
-    // - default value will be lowercase '{Name}.dto'
+    // - default value will be lowercase '{name}.dto'
     property DtoUnitName: RawUtf8
       read fDtoUnitName write fDtoUnitName;
     /// the unit identifier name used for the Client unit, without the '.pas' extension
-    // - default value will be lowercase '{Name}.client'
+    // - default value will be lowercase '{name}.client' or '{name}.api' if
+    // the opoGenerateSingleApiUnit option is defined
     property ClientUnitName: RawUtf8
       read fClientUnitName write fClientUnitName;
     /// the class identifier name, by default 'T{Name}Client'
@@ -2260,6 +2269,7 @@ begin
   fInfo := nil;
   fSchemas := nil;
   fErrorHandler := nil;
+  fOrderedRecords := nil;
   fTitle := '';
   fEnumCounter := 0;
   fDtoCounter := 0;
@@ -2469,7 +2479,9 @@ var
   r: TPascalRecord;
   i: PtrInt;
 begin
-  result := nil;
+  result := fOrderedRecords;
+  if result <> nil then
+    exit;
   // direct resolution
   for i := 0 to fRecords.Count - 1 do
   begin
@@ -2491,6 +2503,8 @@ begin
         ObjArrayAdd(missing, pending[i]);
     pending := missing;
   end;
+  // store in cache
+  fOrderedRecords := result;
 end;
 
 function TOpenApiParser.GetOperationsByTag: TPascalOperationsByTagDynArray;
@@ -2540,10 +2554,94 @@ begin
   // caller will ensure a single fOperations[] method will be generated
 end;
 
-function TOpenApiParser.GenerateDtoUnit: RawUtf8;
+procedure TOpenApiParser.GenerateDtoInterface(w: TTextWriter);
 var
   rec: TPascalRecordDynArray;
   i: PtrInt;
+begin
+  // append all enumeration types
+  fLineIndent := '  ';
+  w.AddStrings(['type', LineEnd, LineEnd]);
+  if fEnums.Count > 0 then
+  begin
+    w.AddStrings(['{ ************ Enumerations and Sets }', LineEnd, LineEnd]);
+    for i := 0 to fEnums.Count - 1 do
+      TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition(w);
+    w.AddStrings([LineEnd, LineEnd]);
+  end;
+  // append all records
+  w.AddStrings(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
+  rec := GetOrderedRecords;
+  for i := 0 to high(rec) do
+    rec[i].ToTypeDefinition(w);
+  // enumeration-to-text constants
+  if fEnums.Count > 0 then
+  begin
+    w.AddStrings([LineEnd, LineEnd, 'const', LineEnd,
+      '  // define how enums/sets are actually transmitted as JSON array of string', LineEnd]);
+    for i := 0 to fEnums.Count - 1 do
+      TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray(w);
+  end;
+end;
+
+procedure TOpenApiParser.GenerateDtoImplementation(w: TTextWriter);
+var
+  rec: TPascalRecordDynArray;
+  i: PtrInt;
+begin
+  w.AddStrings([LineEnd,
+    '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
+  fLineIndent := '  ';
+  // output the text representation of all records
+  // with proper json names (overriding the RTTI definitions)
+  rec := GetOrderedRecords;
+  if rec <> nil then
+  begin
+    w.AddStrings(['const', LineEnd,
+      '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
+    for i := 0 to high(rec) do
+      if rec[i].Properties.Count <> 0 then
+        w.AddStrings([fLineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
+  end;
+  // define the private RTTI registration procedure
+  w.AddStrings([LineEnd, LineEnd,
+    'procedure RegisterRtti;', LineEnd,
+    'begin', LineEnd]);
+  // register all needed enum types RTTI
+  if fEnums.Count > 0 then
+  begin
+    w.AddStrings(['  TRttiJson.RegisterCustomEnumValues([', LineEnd]);
+    for i := 0 to fEnums.Count - 1 do
+    begin
+      if i > 0 then
+        w.AddStrings([',', LineEnd]);
+      TPascalEnum(fEnums.ObjectPtr[i]).ToRegisterCustom(w);
+    end;
+    w.AddStrings([']);', LineEnd]);
+  end;
+  // register all record types RTTI
+  if rec <> nil then
+  begin
+    w.AddStrings(['  Rtti.RegisterFromText([', LineEnd]);
+    for i := 0 to high(rec) do
+      if rec[i].Properties.Count <> 0 then
+      begin
+        if i > 0 then
+          w.AddStrings([',', LineEnd]);
+        w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
+      end;
+    w.AddStrings([']);', LineEnd,
+      'end;', LineEnd, LineEnd]);
+  end;
+  // initialization
+  w.AddStrings([
+    'initialization', LineEnd,
+    '  RegisterRtti;', LineEnd, LineEnd,
+    'end.', LineEnd]);
+end;
+
+function TOpenApiParser.GenerateDtoUnit: RawUtf8;
+var
   temp: TTextWriterStackBuffer;
   w: TTextWriter;
 begin
@@ -2551,7 +2649,7 @@ begin
     Make([LowerCaseU(fName), '.dto'], fDtoUnitName);
   w := TTextWriter.CreateOwnedStream(temp);
   try
-    // unit common definitions
+    // header section
     fLineIndent := '';
     Description(w, 'DTOs for');
     w.AddStrings([
@@ -2573,80 +2671,13 @@ begin
       '  mormot.core.base,', LineEnd,
       '  mormot.core.rtti,', LineEnd,
       '  mormot.core.json;', LineEnd,
-      LineEnd,
-      'type', LineEnd, LineEnd]);
-    // append all enumeration types
-    fLineIndent := '  ';
-    if fEnums.Count > 0 then
-    begin
-      w.AddStrings(['{ ************ Enumerations and Sets }', LineEnd, LineEnd]);
-      for i := 0 to fEnums.Count - 1 do
-        TPascalEnum(fEnums.ObjectPtr[i]).ToTypeDefinition(w);
-      w.AddStrings([LineEnd, LineEnd]);
-    end;
-    // append all records
-    w.AddStrings(['{ ************ Data Transfert Objects }', LineEnd, LineEnd]);
-    rec := GetOrderedRecords;
-    for i := 0 to high(rec) do
-      rec[i].ToTypeDefinition(w);
-    // enumeration-to-text constants
-    if fEnums.Count > 0 then
-    begin
-      w.AddStrings([LineEnd, LineEnd, 'const', LineEnd,
-        '  // define how enums/sets are actually transmitted as JSON array of string', LineEnd]);
-      for i := 0 to fEnums.Count - 1 do
-        TPascalEnum(fEnums.ObjectPtr[i]).ToConstTextArray(w);
-    end;
-    // start implementation section
+      LineEnd]);
+    // interface section
+    GenerateDtoInterface(w);
+    // implementation section
     w.AddStrings([LineEnd, LineEnd,
-      'implementation', LineEnd, LineEnd,
-      '{ ************ Custom RTTI/JSON initialization }', LineEnd, LineEnd]);
-    // output the text representation of all records
-    // with proper json names (overriding the RTTI definitions)
-    if rec <> nil then
-    begin
-      w.AddStrings(['const', LineEnd,
-        '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
-      for i := 0 to high(rec) do
-        if rec[i].Properties.Count <> 0 then
-          w.AddStrings([fLineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
-    end;
-    // define the RTTI registratoin procedure
-    w.AddStrings([LineEnd, LineEnd,
-      'procedure RegisterRtti;', LineEnd,
-      'begin', LineEnd]);
-    // register all needed enum types RTTI
-    if fEnums.Count > 0 then
-    begin
-      w.AddStrings(['  TRttiJson.RegisterCustomEnumValues([', LineEnd]);
-      for i := 0 to fEnums.Count - 1 do
-      begin
-        if i > 0 then
-          w.AddStrings([',', LineEnd]);
-        TPascalEnum(fEnums.ObjectPtr[i]).ToRegisterCustom(w);
-      end;
-      w.AddStrings([']);', LineEnd]);
-    end;
-    // register all record types RTTI
-    if rec <> nil then
-    begin
-      w.AddStrings(['  Rtti.RegisterFromText([', LineEnd]);
-      for i := 0 to high(rec) do
-        if rec[i].Properties.Count <> 0 then
-        begin
-          if i > 0 then
-            w.AddStrings([',', LineEnd]);
-          w.AddStrings(['    ', rec[i].ToRttiRegisterDefinitions]);
-        end;
-      w.AddStrings([']);', LineEnd,
-        'end;', LineEnd, LineEnd]);
-    end;
-    // finish the unit
-    w.AddStrings([
-      'initialization', LineEnd,
-      '  RegisterRtti;', LineEnd,
-      LineEnd,
-      'end.', LineEnd]);
+      'implementation', LineEnd]);
+    GenerateDtoImplementation(w);
     w.SetText(result);
   finally
     w.Free;
@@ -2665,8 +2696,12 @@ var
   temp: TTextWriterStackBuffer;
   w: TTextWriter;
 begin
+  if opoGenerateSingleApiUnit in fOptions then
+    desc := '.api'
+  else
+    desc := '.client';
   if fClientUnitName = '' then
-    Make([LowerCaseU(fName), '.client'], fClientUnitName);
+    Make([LowerCase(fName), desc], fClientUnitName);
   if fClientClassName = '' then
     Make(['T', fName, 'Client'], fClientClassName);
   w := TTextWriter.CreateOwnedStream(temp);
@@ -2698,11 +2733,18 @@ begin
       '  mormot.core.rtti,', LineEnd,
       '  mormot.core.json,', LineEnd,
       '  mormot.core.variants,', LineEnd,
-      '  mormot.net.client,', LineEnd,
-      '  ', fDtoUnitName, ';', LineEnd, LineEnd,
-      'type', LineEnd]);
-    fLineIndent := '  ';
+      '  mormot.net.client']);
+    // include DTO definitions within this single API unit or as external unit
+    if opoGenerateSingleApiUnit in fOptions then
+    begin
+      w.AddStrings([';', LineEnd, LineEnd]);
+      GenerateDtoInterface(w)
+    end
+    else
+      w.AddStrings([',', LineEnd, '  ', fDtoUnitName, ';', LineEnd]);
+    w.AddStrings([LineEnd, 'type', LineEnd]);
     // custom exceptions definitions
+    fLineIndent := '  ';
     if fExceptions.Count > 0 then
     begin
       w.AddStrings([LineEnd, '{ ************ Custom Exceptions }', LineEnd, LineEnd]);
@@ -2847,7 +2889,11 @@ begin
     // append all methods, in native order (no need to follow tag ordering)
     for i := 0 to high(Operations) do
       Operations[i].Body(w, fClientClassName, fSpecs.BasePath);
-    w.AddStrings([LineEnd, 'end.']);
+    // include DTOs registration for single API unit
+    if opoGenerateSingleApiUnit in fOptions then
+      GenerateDtoImplementation(w)
+    else
+      w.AddStrings([LineEnd, 'end.']);
     w.SetText(result);
   finally
     w.Free;
@@ -2858,9 +2904,12 @@ procedure TOpenApiParser.ExportToDirectory(const DirectoryName: TFileName);
 var
   dto, client: RawUtf8;
 begin
-  dto := GenerateDtoUnit;
+  if not (opoGenerateSingleApiUnit in fOptions) then
+  begin
+    dto := GenerateDtoUnit;
+    FileFromString(dto, MakePath([DirectoryName, fDtoUnitName + '.pas']));
+  end;
   client := GenerateClientUnit;
-  FileFromString(dto, MakePath([DirectoryName, fDtoUnitName + '.pas']));
   FileFromString(client, MakePath([DirectoryName, fClientUnitName + '.pas']));
 end;
 
