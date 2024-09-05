@@ -166,7 +166,7 @@ OpenAPI Language-agnostic Interface to HTTP APIs
 - FPC/Delphi Pascal Client Code Generation
 
 In Respect to existing OpenAPI wrappers in Delphi (or FPC):
-- Use high-level pascal records and dynamic arrays for DTOs
+- Use high-level pascal records and dynamic arrays for "object" DTOs
 - Use high-level pascal enumerations and sets for "enum" values
 - Translate HTTP status error codes into high-level pascal Exceptions
 - Recognize similar "properties" or "enum" to reuse the same pascal type
@@ -179,5 +179,5 @@ In Respect to existing OpenAPI wrappers in Delphi (or FPC):
 - Can generate very detailed comment documentation in the unit source code
 - Tunable engine, with plenty of generation options (e.g. about verbosity)
 - Leverage the mORMot RTTI and JSON kernel for its internal plumbing
-- Compatible with FPC and oldest Delphi (7-2007)
+- Compatible with FPC and oldest Delphi (7-2009)
 - Tested with several Swagger 2 and OpenAPI 3 reference content, but still not fully compliant to all existing files: feedback is welcome!
