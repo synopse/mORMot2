@@ -135,13 +135,15 @@ begin
   for i := 0 to high(pets) do
     if pets[i] <> '' then
     begin
-      oa := TOpenApiParser.Create;
+      oa := TOpenApiParser.Create(FormatUtf8('Pets%', [i + 1]));
       try
         oa.ParseJson(pets[i]);
-        ud := FormatUtf8('pets%.dto.pas', [i + 1]);
-        uc := FormatUtf8('pets%.client.pas', [i + 1]);
-        //ConsoleWrite(oa.GetDtosUnit(ud));
-        //ConsoleWrite(oa.GetClientUnit(uc, 'TPets', ud));
+        ud := oa.GenerateDtoUnit;
+        Check(ud <> '', 'DTO');
+        uc := oa.GenerateClientUnit;
+        Check(uc <> '', 'CLIENT');
+        //ConsoleWrite(ud);
+        //ConsoleWrite(uc);
       finally
         oa.Free;
       end;
