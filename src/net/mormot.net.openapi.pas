@@ -587,6 +587,9 @@ type
     /// allow to customize the code generation
     property Options: TOpenApiParserOptions
       read fOptions write fOptions;
+    /// the line feed content to be used for code generation
+    property LineEnd: RawUtf8
+      read fLineEnd;
     /// short identifier of a few chars, used as prefix for code generation
     // - used e.g. for computing the default unit names
     // - also used when generating TDto### and TEnum### types, to avoid any
@@ -605,21 +608,22 @@ type
     /// the class identifier name, by default 'T{Name}Client'
     property ClientClassName: RawUtf8
       read fClientClassName write fClientClassName;
+
     /// main storage of the whole OpenAPI specifications tree
     property Specs: TOpenApiSpecs
       read fSpecs;
-    /// the layout version of the stored specifications
+    /// the layout version of the parsed specifications
     property Version: TOpenApiVersion
       read fVersion;
+    /// the main title, as stored in the parsed specifications
+    property Title: RawUtf8
+      read fTitle;
     /// resolve a given Schema by its name
     property Schema[const aName: RawUtf8]: POpenApiSchema
       read GetSchemaByName;
-    /// list all operations (aka Pascal methods) stored in the schema
+    /// list all operations (aka Pascal methods) stored in the parsed specifications
     property Operations: TPascalOperationDynArray
       read fOperations;
-    /// the line feed content to be used for code generation
-    property LineEnd: RawUtf8
-      read fLineEnd;
   end;
 
 
@@ -2252,13 +2256,16 @@ begin
   fRecords.Clear;
   fEnums.Clear;
   fExceptions.Clear;
+  ObjArrayClear(fOperations);
   fInfo := nil;
   fSchemas := nil;
   fErrorHandler := nil;
   fTitle := '';
   fEnumCounter := 0;
   fDtoCounter := 0;
-  ObjArrayClear(fOperations);
+  fDtoUnitName := '';
+  fClientUnitName := '';
+  fClientClassName := '';
 end;
 
 procedure TOpenApiParser.ParseSpecs;
