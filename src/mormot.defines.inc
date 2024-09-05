@@ -143,7 +143,9 @@
   {$WARN 5094 off} // function result variable of a managed uninitialized 2
   {$WARN 6018 off} // unreachable code
   {$WARN 6058 off} // call to subroutine marked as inline is not inlined
-  {$WARN 6060 off} // case statement does not handle all possible cases
+  {$ifndef VER3_2} // this warning appeared in FPC 3.3.1
+    {$WARN 6060 off} // case statement does not handle all possible cases
+  {$endif}
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
@@ -730,7 +732,7 @@
   {$ifdef CPUX64}
     {$if (CompilerVersion = 23.0) or
          (CompilerVersion = 25.0) or
-         (CompilerVersion = 28.0) or 
+         (CompilerVersion = 28.0) or
          (CompilerVersion = 29.0)}  // exactly XE2/XE4/XE7/XE8 are known to GPF
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
