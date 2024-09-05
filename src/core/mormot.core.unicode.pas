@@ -2060,6 +2060,30 @@ procedure CamelCase(const text: RawUtf8; var s: RawUtf8;
   const isWord: TSynByteSet = [ord('0')..ord('9'), ord('a')..ord('z'), ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  // published for unit testing (e.g. if properly sorted)
+  RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
+    'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
+    'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
+    'DIV', 'DO', 'DOWNTO', 'ELSE', 'END', 'EXCEPT', 'EXPORT', 'EXTERNAL',
+    'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY', 'FOR', 'FORWARD',
+    'FUNCTION', 'GENERIC', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN', 'INHERITED',
+    'INITIALIZATION', 'INLINE', 'INTERFACE', 'IS', 'LABEL', 'LIBRARY', 'MOD',
+    'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON', 'OPERATOR', 'OR', 'OUT',
+    'OVERRIDE', 'PACKED', 'PRIVATE', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
+    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'RECORD',
+    'REINTRODUCE', 'REPEAT', 'RESOURCESTRING', 'SELF', 'SET', 'SHL', 'SHR',
+    'STATIC', 'STRING', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY', 'TYPE',
+    'UNIT', 'UNTIL', 'USES', 'VAR', 'VARIANT', 'VIRTUAL', 'WHILE', 'WITH',
+    'WRITE', 'WRITELN', 'XOR');
+
+/// quickly check if a text is a case-insensitive pascal code keyword
+function IsReservedKeyWord(const aName: RawUtf8): boolean;
+
+/// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
+// - if aName is void after camel-casing, will raise an EOpenApi
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
+
 var
   /// these procedure type must be defined if a default system.pas is used
   // - expect generic "string" type, i.e. UnicodeString for Delphi 2009+
@@ -8695,6 +8719,26 @@ end;
 procedure CamelCase(const text: RawUtf8; var s: RawUtf8; const isWord: TSynByteSet);
 begin
   CamelCase(pointer(text), length(text), s, isWord);
+end;
+
+function IsReservedKeyWord(const aName: RawUtf8): boolean;
+var
+  up: array[byte] of AnsiChar;
+begin
+  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
+  result := FastFindPUtf8CharSorted(
+    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0; // O(log(n)) search
+end;
+
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
+begin
+  CamelCase(aName, result);
+  if result = '' then
+    raise ESynUnicode.CreateFmt('Unexpected SanitizePascalName(%s)', [aName]);
+  result[1] := UpCase(result[1]);
+  if KeyWordCheck and
+     IsReservedKeyWord(result) then
+    result := '_' + result; // avoid identifier name collision
 end;
 
 procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);

@@ -578,30 +578,6 @@ type
 
 function ToText(t: TOpenApiBuiltInType): PShortString; overload;
 
-const
-  // published for unit testing (e.g. if properly sorted)
-  RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
-    'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
-    'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
-    'DIV', 'DO', 'DOWNTO', 'ELSE', 'END', 'EXCEPT', 'EXPORT', 'EXTERNAL',
-    'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY', 'FOR', 'FORWARD',
-    'FUNCTION', 'GENERIC', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN', 'INHERITED',
-    'INITIALIZATION', 'INLINE', 'INTERFACE', 'IS', 'LABEL', 'LIBRARY', 'MOD',
-    'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON', 'OPERATOR', 'OR', 'OUT',
-    'OVERRIDE', 'PACKED', 'PRIVATE', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
-    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'RECORD',
-    'REINTRODUCE', 'REPEAT', 'RESOURCESTRING', 'SELF', 'SET', 'SHL', 'SHR',
-    'STATIC', 'STRING', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY', 'TYPE',
-    'UNIT', 'UNTIL', 'USES', 'VAR', 'VARIANT', 'VIRTUAL', 'WHILE', 'WITH',
-    'WRITE', 'WRITELN', 'XOR');
-
-/// quickly check if a text is a case-insensitive pascal code keyword
-function IsReservedKeyWord(const aName: RawUtf8): boolean;
-
-/// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
-// - if aName is void after camel-casing, will raise an EOpenApi
-function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
-
 
 implementation
 
@@ -1076,14 +1052,14 @@ end;
 
 function TOpenApiSpecs.VersionEnum: TOpenApiVersion;
 var
-  aVersion: RawUtf8;
+  v: RawUtf8;
 begin
   result := oavUnknown;
-  aVersion := Version;
-  if aVersion <> '' then
-    if aVersion[1] = '2' then
+  v := Version;
+  if v <> '' then
+    if v[1] = '2' then
       result := oav2  // Swagger 2.0 layout
-    else if aVersion[1] = '3' then
+    else if v[1] = '3' then
       result := oav3; // OpenAPI 3.x layout
 end;
 
@@ -1107,26 +1083,6 @@ end;
 function ToText(t: TOpenApiBuiltInType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TOpenApiBuiltInType), ord(t));
-end;
-
-function IsReservedKeyWord(const aName: RawUtf8): boolean;
-var
-  up: array[byte] of AnsiChar;
-begin
-  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
-  result := FastFindPUtf8CharSorted(
-    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0; // O(log(n)) search
-end;
-
-function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
-begin
-  CamelCase(aName, result);
-  if result = '' then
-    EOpenApi.RaiseUtf8('Unexpected SanitizePascalName(%)', [aName]);
-  result[1] := UpCase(result[1]);
-  if KeyWordCheck and
-     IsReservedKeyWord(result) then
-    Prepend(RawByteString(result), '_');
 end;
 
 

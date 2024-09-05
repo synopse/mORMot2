@@ -123,7 +123,6 @@ type
 /// convert a string HTTP verb into its TUriMethod enumerate
 // - conversion is case-insensitive
 function ToMethod(const method: RawUtf8): TUriMethod;
-  {$ifdef FPC}inline;{$endif}
 
 /// convert a TUriMethod enumerate to its #0 terminated uppercase text
 function ToText(m: TUriMethod): PUtf8Char; overload;
@@ -5953,11 +5952,13 @@ var
 
 function ToMethod(const method: RawUtf8): TUriMethod;
 begin
-  if length(method) < 3 then
-    result := mNone
+  case length(method) of
+    4 .. 7:
+      result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
+        (PCardinal(method)^) and $dfdfdfdf) + 1);
   else
-    result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
-      (PCardinal(method)^) and $dfdfdfdf) + 1);
+    result := mNone
+  end;
 end;
 
 function ToText(m: TUriMethod): PUtf8Char;
