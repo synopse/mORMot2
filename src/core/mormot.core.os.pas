@@ -94,6 +94,40 @@ const
     fmCreateShared,
     fmOpenWriteShared);
 
+type
+  /// the available HTTP methods transmitted between client and server
+  // - remote ORM supports non-standard mLOCK/mUNLOCK/mABORT/mSTATE verbs
+  // - not all IANA verbs are available, because our TRestRouter will only
+  // support mGET .. mOPTIONS verbs anyway
+  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
+  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
+  TUriMethod = (
+    mNone,
+    mGET,
+    mPOST,
+    mPUT,
+    mDELETE,
+    mHEAD,
+    mBEGIN,
+    mEND,
+    mABORT,
+    mLOCK,
+    mUNLOCK,
+    mSTATE,
+    mPATCH,
+    mOPTIONS);
+
+  /// set of available HTTP methods transmitted between client and server
+  TUriMethods = set of TUriMethod;
+
+/// convert a string HTTP verb into its TUriMethod enumerate
+// - conversion is case-insensitive
+function ToMethod(const method: RawUtf8): TUriMethod;
+  {$ifdef FPC}inline;{$endif}
+
+/// convert a TUriMethod enumerate to its #0 terminated uppercase text
+function ToText(m: TUriMethod): PUtf8Char; overload;
+
 const
   /// void HTTP Status Code (not a standard value, for internal use only)
   HTTP_NONE = 0;
@@ -202,7 +236,6 @@ function StatusCodeIsSuccess(Code: integer): boolean;
 /// check the supplied HTTP header to not contain more than one EOL
 // - to avoid unexpected HTTP body injection, e.g. from unsafe business code
 function IsInvalidHttpHeader(head: PUtf8Char; headlen: PtrInt): boolean;
-
 
 const
   /// HTTP header name for the content type, as defined in the corresponding RFC
@@ -5898,6 +5931,45 @@ implementation
 { ****************** Some Cross-System Type and Constant Definitions }
 
 const
+  // sorted by occurrence for in-order O(n) search via IntegerScanIndex()
+  METHODNAME: array[TUriMethod] of PUtf8Char = (
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'HEAD',
+    'BEGIN',
+    'END',
+    'ABORT',
+    'LOCK',
+    'UNLOCK',
+    'STATE',
+    'PATCH',
+    'OPTIONS',
+    '');
+var
+  // quick O(n) search of the first 4 characters within L1 cache (56 bytes)
+  METHODNAME32: array[TUriMethod] of cardinal;
+
+function ToMethod(const method: RawUtf8): TUriMethod;
+begin
+  if length(method) < 3 then
+    result := mNone
+  else
+    result := TUriMethod(IntegerScanIndex(@METHODNAME32, length(METHODNAME32) - 1,
+      (PCardinal(method)^) and $dfdfdfdf) + 1);
+end;
+
+function ToText(m: TUriMethod): PUtf8Char;
+begin
+  dec(m); // METHODNAME[] has no mNone entry
+  if cardinal(m) < cardinal(ord(high(METHODNAME))) then
+    result := METHODNAME[m]
+  else
+    result := nil;
+end;
+
+const
   // StatusCodeToReason() StatusCodeToText() table to avoid memory allocations
   // - roughly sorted by actual usage order for WordScanIndex()
   HTTP_REASON: array[0..44] of RawUtf8 = (
@@ -11042,6 +11114,8 @@ end;
 
 
 procedure InitializeUnit;
+var
+  m: TUriMethod;
 begin
   {$ifdef ISFPC27}
   SetMultiByteConversionCodePage(CP_UTF8);
@@ -11061,6 +11135,8 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
+  for m := low(METHODNAME32) to pred(high(METHODNAME32)) do
+    METHODNAME32[m] := PCardinal(METHODNAME[m])^;
   // minimal stubs which will be properly implemented in mormot.core.log.pas
   GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;

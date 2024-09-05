@@ -49,8 +49,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.data, // for TRawUtf8List
-  mormot.core.variants,
-  mormot.rest.core;
+  mormot.core.variants;
 
 
 { ************************************ OpenAPI Document Wrappers }
