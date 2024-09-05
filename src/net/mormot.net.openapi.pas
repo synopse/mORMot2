@@ -98,6 +98,7 @@ type
   POpenApiSchema = ^TOpenApiSchema;
   /// a dynamic array of pointers wrapper to OpenAPI Schema definition(s)
   POpenApiSchemaDynArray = array of POpenApiSchema;
+
   /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiSchema = record
@@ -137,8 +138,6 @@ type
     function HasPattern: boolean;
   end;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Response
-  POpenApiResponse = ^TOpenApiResponse;
   /// high-level OpenAPI Schema wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiResponse = record
@@ -152,14 +151,13 @@ type
     function Description: RawUtf8;
     function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
-
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Response
+  POpenApiResponse = ^TOpenApiResponse;
 
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI RequestBody
   // - share the very same fields as TOpenApiResponse
   POpenApiRequestBody = {$ifdef USERECORDWITHMETHODS} type {$endif}POpenApiResponse;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
-  POpenApiParameter = ^TOpenApiParameter;
   /// high-level OpenAPI Parameter wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiParameter = record
@@ -177,16 +175,12 @@ type
     function Location: TOpenApiParamLocation;
     function AllowEmptyValues: boolean;
     function Default: PVariant;
-    /// true if Default or not Required
-    function HasDefaultValue: boolean;
     function Required: boolean;
     function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
-  /// a dynamic array of pointers wrapper to OpenAPI Parameter(s)
-  POpenApiParameterDynArray = array of POpenApiParameter;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
+  POpenApiParameter = ^TOpenApiParameter;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameters
-  POpenApiParameters = ^TOpenApiParameters;
   /// high-level OpenAPI Parameter wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiParameters = record
@@ -204,9 +198,9 @@ type
     property Parameter[aIndex: integer]: POpenApiParameter
       read GetParameterByIndex;
   end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameters
+  POpenApiParameters = ^TOpenApiParameters;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Operation
-  POpenApiOperation = ^TOpenApiOperation;
   /// high-level OpenAPI Operation wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiOperation = record
@@ -230,9 +224,9 @@ type
     property Response[aStatusCode: integer]: POpenApiResponse
       read GetResponseForStatusCode;
   end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Operation
+  POpenApiOperation = ^TOpenApiOperation;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Path Item
-  POpenApiPathItem = ^TOpenApiPathItem;
   /// high-level OpenAPI Path Item wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiPathItem = record
@@ -251,9 +245,9 @@ type
     property Method[aMethod: TUriMethod]: POpenApiOperation
       read GetOperationByMethod;
   end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Path Item
+  POpenApiPathItem = ^TOpenApiPathItem;
 
-  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Tag
-  POpenApiTag = ^TOpenApiTag;
   /// high-level OpenAPI Tag wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiTag = record
@@ -267,10 +261,10 @@ type
     function Description: RawUtf8;
     function Name: RawUtf8;
   end;
+  /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Tag
+  POpenApiTag = ^TOpenApiTag;
 
-  /// pointer wrapper to TDocVariantData / variant content of OpenAPI Specs
-  POpenApiSpecs = ^TOpenApiSpecs;
-  /// high-level OpenAPI Specs wrapper to TDocVariantData / variant content
+  /// high-level OpenAPI Specations wrapper to TDocVariantData / variant content
   {$ifdef USERECORDWITHMETHODS}
   TOpenApiSpecs = record
   {$else}
@@ -281,7 +275,7 @@ type
   public
     /// transtype the POpenApiSpecs pointer into a TDocVariantData content
     Data: TDocVariantData;
-    // access to the OpenAPI Specs information
+    // access to the main OpenAPI Specifications information
     function Info: PDocVariantData;
     function BasePath: RawUtf8;
     function Paths: PDocVariantData;
@@ -293,15 +287,18 @@ type
     function Components: PDocVariantData;
     function Schemas(aVersion: TOpenApiVersion): PDocVariantData;
   end;
+  /// pointer wrapper to TDocVariantData / variant content of OpenAPI Specs
+  POpenApiSpecs = ^TOpenApiSpecs;
 
 
 { ************************************ FPC/Delphi Pascal Client Code Generation }
 
   TPascalCustomType = class;
+  TPascalParameter = class;
 
   /// define any Pascal type, as basic type of custom type
   TPascalType = class
-  private
+  protected
     fBuiltinSchema: POpenApiSchema;
     fBuiltInTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
@@ -318,7 +315,7 @@ type
     function ToPascalName(AsFinalType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
     function ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
-    function ToDefaultParameterValue(aParam: POpenApiParameter;
+    function ToDefaultParameterValue(aParam: TPascalParameter;
       Parser: TOpenApiParser): RawUtf8;
 
     function IsBuiltin: boolean;
@@ -334,13 +331,25 @@ type
   end;
   TPascalTypeObjArray = array of TPascalType;
 
-  /// define a Pascal property
-  TPascalProperty = class
-  private
-    fType: TPascalType;
-    fSchema: POpenApiSchema;
+  /// abstract parent class to define Pascal grammar items
+  TPascalAbstract = class
+  protected
     fName: RawUtf8;
     fPascalName: RawUtf8;
+    fSchema: POpenApiSchema;
+  public
+    property Name: RawUtf8
+      read fName;
+    property PascalName: RawUtf8
+      read fPascalName;
+    property Schema: POpenApiSchema
+      read fSchema;
+  end;
+
+  /// define a Pascal property
+  TPascalProperty = class(TPascalAbstract)
+  private
+    fType: TPascalType;
     fTypeOwned: boolean;
   public
     constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
@@ -351,21 +360,12 @@ type
     destructor Destroy; override;
     property PropType: TPascalType
       read fType;
-    property Schema: POpenApiSchema
-      read fSchema;
-    property Name: RawUtf8
-      read fName;
-    property PascalName: RawUtf8
-      read fPascalName;
   end;
 
   /// abstract parent class holder for complex types
-  TPascalCustomType = class
-  private
-    fName: RawUtf8;
-    fPascalName: RawUtf8;
+  TPascalCustomType = class(TPascalAbstract)
+  protected
     fFromRef: RawUtf8;
-    fSchema: POpenApiSchema;
     fParser: TOpenApiParser;
     fRequiresArrayDefinition: boolean;
   public
@@ -373,12 +373,6 @@ type
     procedure ToTypeDefinition(W: TTextWriter); virtual; abstract;
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; virtual;
     function ToArrayTypeDefinition: RawUtf8; virtual;
-    property Name: RawUtf8
-      read fName;
-    property PascalName: RawUtf8
-      read fPascalName;
-    property Schema: POpenApiSchema
-      read fSchema;
   end;
 
   /// define a Pascal data structure, as a packed record with RTTI
@@ -439,6 +433,27 @@ type
       read fErrorCode;
   end;
 
+  /// define a Pascal method parameter matching an OpenAPI operation parameter
+  TPascalParameter = class(TPascalAbstract)
+  protected
+    fParser: TOpenApiParser;
+    fParameter: POpenApiParameter;
+    fLocation: TOpenApiParamLocation;
+    fType: TPascalType;
+    fRequired: boolean;
+    fDefault: PVariant;
+  public
+    constructor Create(aParser: TOpenApiParser; aParam: POpenApiParameter);
+    destructor Destroy; override;
+    property Parameter: POpenApiParameter
+      read fParameter;
+    property Location: TOpenApiParamLocation
+      read fLocation;
+    property ParamType: TPascalType
+      read fType;
+  end;
+  TPascalParameterDynArray = array of TPascalParameter;
+
   /// define a Pascal method matching an OpenAPI operation
   TPascalOperation = class
   private
@@ -455,16 +470,12 @@ type
     fSuccessResponseType: TPascalType;
     fSuccessResponseCode: integer;
     fOnErrorIndex: integer;
-    fParameters: POpenApiParameterDynArray;
-    fParameterLocation: array of TOpenApiParamLocation;
-    fParameterTypes: TPascalTypeObjArray;
-    procedure ResolveParameter(var p: POpenApiParameter);
+    fParameters: TPascalParameterDynArray;
   public
     constructor Create(aParser: TOpenApiParser; const aPath: RawUtf8;
       aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
     destructor Destroy; override;
     procedure ResolveResponseTypes;
-    procedure ResolveParameters;
     procedure Documentation(W: TTextWriter);
     procedure Declaration(W: TTextWriter; const ClassName: RawUtf8;
       InImplementation: boolean);
@@ -475,7 +486,7 @@ type
       read fOperationId;
     property FunctionName: RawUtf8
       read fFunctionName;
-    property Parameters: POpenApiParameterDynArray
+    property Parameters: TPascalParameterDynArray
       read fParameters;
   end;
   TPascalOperationDynArray = array of TPascalOperation;
@@ -855,12 +866,6 @@ begin
   result := Data.GetPVariantByPath('default');
 end;
 
-function TOpenApiParameter.HasDefaultValue: boolean;
-begin
-  result := (Default <> nil) or
-            not Required;
-end;
-
 function TOpenApiParameter._In: RawUtf8;
 begin
   result := Data.U['in'];
@@ -1134,6 +1139,32 @@ begin
 end;
 
 
+{ TPascalParameter }
+
+constructor TPascalParameter.Create(aParser: TOpenApiParser;
+  aParam: POpenApiParameter);
+begin
+  fParser := aParser;
+  if (aParam.Data.Count = 1) and
+     (aParam.Data.Names[0] = '$ref') then // resolve as reference
+    aParam := fParser.GetRef(ToUtf8(aParam.Data.Values[0]));
+  fParameter := aParam;
+  fName := aParam.Name;
+  fPascalName := aParam.AsPascalName;
+  fLocation := aParam.Location;
+  fRequired := aParam.Required;
+  fDefault := aParam.Default;
+  fSchema := aParam.Schema(fParser);
+  fType := fParser.NewPascalTypeFromSchema(aParam.Schema(fParser));
+end;
+
+destructor TPascalParameter.Destroy;
+begin
+  fType.Free;
+  inherited Destroy;
+end;
+
+
 { TPascalOperation }
 
 constructor TPascalOperation.Create(aParser: TOpenApiParser;
@@ -1153,11 +1184,9 @@ begin
   o := fOperation^.Parameters;
   SetLength(fParameters, pn + o.Count);
   for i := 0 to pn - 1 do
-    fParameters[i] := p^.Parameter[i];
+    fParameters[i] := TPascalParameter.Create(fParser, p^.Parameter[i]);
   for i := 0 to o.Count - 1 do
-    fParameters[pn + i] := o^.Parameter[i];
-  for i := 0 to high(fParameters) do
-    ResolveParameter(fParameters[i]);
+    fParameters[pn + i] := TPascalParameter.Create(fParser, o^.Parameter[i]);
   fOperationId := fOperation^.Id;
   if fOperationId = '' then // fallback of the poor to have something <> ''
     fOperationId := TrimChar(fOperation^.Description, [#0 .. #31]);
@@ -1175,15 +1204,8 @@ destructor TPascalOperation.Destroy;
 begin
   fPayloadParameterType.Free;
   fSuccessResponseType.Free;
-  ObjArrayClear(fParameterTypes);
+  ObjArrayClear(fParameters);
   inherited Destroy;
-end;
-
-procedure TPascalOperation.ResolveParameter(var p: POpenApiParameter);
-begin
-  if (p.Data.Count = 1) and
-     (p.Data.Names[0] = '$ref') then
-    p := fParser.GetRef(ToUtf8(p.Data.Values[0])); // resolve as reference
 end;
 
 procedure TPascalOperation.ResolveResponseTypes;
@@ -1251,21 +1273,6 @@ begin
   end;
 end;
 
-procedure TPascalOperation.ResolveParameters;
-var
-  n, i: PtrInt;
-begin
-  n := length(fParameters);
-  SetLength(fParameterTypes, n);
-  SetLength(fParameterLocation, n);
-  for i := 0 to n - 1 do
-    with fParameters[i]^ do
-    begin
-      fParameterTypes[i] := fParser.NewPascalTypeFromSchema(Schema(fParser));
-      fParameterLocation[i] := Location;
-    end;
-end;
-
 procedure TOpenApiParser.Comment(W: TTextWriter; const Args: array of const;
   const Desc: RawUtf8);
 var
@@ -1309,7 +1316,7 @@ end;
 
 procedure TPascalOperation.Documentation(W: TTextWriter);
 var
-  p: POpenApiParameter;
+  p: TPascalParameter;
   v: PDocVariantData;
   status, desc, line: RawUtf8;
   code: integer;
@@ -1347,20 +1354,20 @@ begin
            fParser.LineIndent, '// Params:', fParser.LineEnd]);
     for i := 0 to high(fParameters) do
     begin
-      if fParameterLocation[i] = oplBody then
-        continue; // fRequestBodySchema is handled below
       p := fParameters[i];
-      Make(['- [', p^._In, '] ', p^.AsPascalName], line);
-      if fParameterLocation[i] in [oplUnsupported, oplFormData] then
+      if p.Location = oplBody then
+        continue; // fRequestBodySchema is handled below
+      Make(['- [', p.fParameter^._In, '] ', p.PascalName], line);
+      if p.Location in [oplUnsupported, oplFormData] then
         Append(line, ' (unsupported)')
       else
       begin
-        if p^.Required then
+        if p.fRequired then
           Append(line, ' (required)');
-        if p^.Default <> nil then
-          Append(line, [' (default=', p^.Default^, ')']);
+        if p.fDefault <> nil then
+          Append(line, [' (default=', p.fDefault^, ')']);
       end;
-      fParser.Comment(w, [line], p^.Description);
+      fParser.Comment(w, [line], p.Parameter^.Description);
     end;
     // Request body
     if Assigned(fRequestBodySchema) then
@@ -1402,8 +1409,7 @@ const
 procedure TPascalOperation.Declaration(W: TTextWriter; const ClassName: RawUtf8;
   InImplementation: boolean);
 var
-  p: POpenApiParameter;
-  pt: TPascalType;
+  p: TPascalParameter;
   i: PtrInt;
   decl, line: RawUtf8;
   prev, hasdefault: boolean;
@@ -1431,18 +1437,18 @@ begin
   for i := 0 to Length(fParameters) - 1 do
   begin
     p := fParameters[i];
-    if fParameterLocation[i] in [oplPath, oplQuery, oplHeader, oplCookie] then
+    if p.Location in [oplPath, oplQuery, oplHeader, oplCookie] then
     begin
-      pt := fParameterTypes[i];
-      hasdefault := p^.HasDefaultValue and
-                    (pt.IsArray or
-                     not (pt.fBuiltInType in [obtVariant, obtRecord, obtGuid]));
-      Make([_CONST[pt.fNoConst], p^.AsPascalName, ': ', pt.ToPascalName], decl);
+      hasdefault := ((p.fDefault <> nil) or
+                     not p.fRequired) and
+                    (p.fType.IsArray or
+                     not (p.fType.fBuiltInType in [obtVariant, obtRecord, obtGuid]));
+      Make([_CONST[p.fType.fNoConst], p.PascalName, ': ', p.fType.ToPascalName], decl);
       if hasdefault then
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, decl)
         else
-          AddRawUtf8(def, Make([decl, ' = ', pt.ToDefaultParameterValue(p, fParser)]))
+          AddRawUtf8(def, Make([decl, ' = ', p.fType.ToDefaultParameterValue(p, fParser)]))
       else
         AddParam([decl]);
     end;
@@ -1468,14 +1474,12 @@ var
   urlName: TRawUtf8DynArray;
   urlParam, queryParam, headerParam: TIntegerDynArray;
   i, j, o: PtrInt;
-  p: POpenApiParameter;
+  p: TPascalParameter;
 
   procedure AppendParams(const params: TIntegerDynArray);
   var
     i, j: PtrInt;
-    opl: TOpenApiParamLocation;
-    p: POpenApiParameter;
-    pt: TPascalType;
+    p: TPascalParameter;
   begin
     if params <> nil then
     begin
@@ -1484,21 +1488,19 @@ var
       begin
         j := params[i];
         p := fParameters[j];
-        pt := fParameterTypes[j];
-        opl := fParameterLocation[j];
         if i > 0 then
           w.AddStrings([',', fParser.LineEnd]);
         w.AddShorter('    ''');
-        case opl of
+        case p.Location of
           oplQuery:
-            if pt.IsArray then
+            if p.ParamType.IsArray then
               w.AddDirect('*'); // ueStarNameIsCsv
           // oplHeader uses natively CSV in OpenAPI default "simple" style
           oplCookie:
             w.AddShorter('Cookie: ');
             // warning: arrays are not yet properly written in cookies
         end;
-        w.AddStrings([p.Name, ''', ', pt.ToFormatUtf8Arg(p.AsPascalName)]);
+        w.AddStrings([p.Name, ''', ', p.ParamType.ToFormatUtf8Arg(p.PascalName)]);
       end;
       w.AddDirect(']');
     end
@@ -1507,7 +1509,7 @@ var
   end;
 
 begin
-  // parse the URI and extract parameter names
+  // parse the URI and extract all {parameter} names
   url := BasePath;
   o := 1;
   repeat // /pets/{petId}/  -> /pets/%/
@@ -1529,13 +1531,14 @@ begin
     urlParam[i] := -1;
   // recognize supplied parameters
   for i := 0 to high(fParameters) do
-    case fParameterLocation[i] of
+  begin
+    p := fParameters[i];
+    case p.Location of
       oplPath:
         begin
-          p := fParameters[i];
-          j := FindPropName(urlName, p^.Name);
+          j := FindPropName(urlName, p.Name);
           if j < 0 then
-            EOpenApi.RaiseUtf8('%.Body: unknown % in [%]', [self, p^.Name, fPath]);
+            EOpenApi.RaiseUtf8('%.Body: unknown % in [%]', [self, p.Name, fPath]);
           urlParam[j] := i;
         end;
       oplQuery:
@@ -1544,6 +1547,7 @@ begin
       oplCookie:
         AddInteger(headerParam, i);
     end;
+  end;
   for i := 0 to high(urlParam) do
     if urlParam[i] < 0 then
       EOpenApi.RaiseUtf8('%.Body: missing {%} in [%]', [self, urlName[i], fPath]);
@@ -1558,9 +1562,10 @@ begin
     j := urlParam[i];
     if j < 0 then
       EOpenApi.RaiseUtf8('%.Body: unknown {%} in [%]', [self, urlName[i], fPath]);
+    p := fParameters[j];
     if i > 0 then
       w.AddShorter(', ');
-    w.AddString(fParameterTypes[j].ToFormatUtf8Arg(fParameters[j].AsPascalName));
+    w.AddString(p.ParamType.ToFormatUtf8Arg(p.PascalName));
   end;
   w.AddDirect(']');
   // Query and Header parameters
@@ -1977,13 +1982,13 @@ begin
     FormatUtf8(func, [VarName], result);
 end;
 
-function TPascalType.ToDefaultParameterValue(aParam: POpenApiParameter;
+function TPascalType.ToDefaultParameterValue(aParam: TPascalParameter;
   Parser: TOpenApiParser): RawUtf8;
 var
   def: PVariant;
   t: RawUtf8;
 begin
-  def := aParam^.Default;
+  def := aParam.fDefault;
   if Assigned(def) and
      not VarIsEmptyOrNull(def^) then
   begin
@@ -2000,7 +2005,7 @@ begin
   else
   begin
     // default from type
-    t := aParam^.Schema(Parser)^._Type;
+    t := aParam.fSchema^._Type;
     if t = 'string' then
       result := ''''''
     else if (t = 'number') or
@@ -2369,24 +2374,22 @@ begin
                              (result.fTypes - [obtInteger .. obtGuid] = []);
 end;
 
-procedure TOpenApiParser.ParsePath(const aPath: RawUtf8);
+procedure TOpenApiParser.ParsePath(
+  const aPath: RawUtf8; aPathItem: POpenApiPathItem);
 var
   m: TUriMethod;
-  p: POpenApiPathItem;
   s: POpenApiOperation;
   op: TPascalOperation;
 begin
-  p := fSpecs.Path[aPath];
   for m := low(m) to high(m) do
   begin
-    s := p^.Method[m];
+    s := aPathItem^.Method[m];
     if not Assigned(s) or
        ((opoClientExcludeDeprecated in fOptions) and
         s^.Deprecated) then
       continue;
-    op := TPascalOperation.Create(self, aPath, p, s, m);
+    op := TPascalOperation.Create(self, aPath, aPathItem, s, m);
     op.ResolveResponseTypes;
-    op.ResolveParameters;
     ObjArrayAdd(fOperations, op);
   end;
 end;

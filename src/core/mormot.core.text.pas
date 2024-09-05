@@ -8647,13 +8647,13 @@ begin
     begin
       c := @blocks;
       repeat
-        inc(L, VarRecToTempUtf8(Arg^, c^));
+        inc(L, VarRecToTempUtf8(Arg^, c^)); // add param
         inc(Arg);
         if (EndWithDelim and
             (ArgCount = 1)) or
            ((ArgCount <> 1) and
             (c^.Len <> 0) and
-            (c^.Text[c^.Len - 1] <> Delim)) then
+            (c^.Text[c^.Len - 1] <> Delim)) then // append delimiter
         begin
           inc(c);
           c^.Len := 1;
