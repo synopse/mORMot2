@@ -82,6 +82,7 @@ type
     obtGuid,
     obtRawUtf8,
     obtSpiUtf8,
+    obtString,
     obtRawByteString);
 
   /// define the location of an OpenAPI parameter ('"in" field)
@@ -511,6 +512,7 @@ type
   // - opoClientOnlySummary will reduce the verbosity of operation comments
   // - opoGenerateSingleApiUnit will let GenerateClient return a single
   // {name}.api unit, containing both the needed DTOs and the client class
+  // - opoGenerateStringType will generate plain string types instead of RawUtf8
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
@@ -526,6 +528,7 @@ type
     opoClientNoException,
     opoClientOnlySummary,
     opoGenerateSingleApiUnit,
+    opoGenerateStringType,
     opoGenerateOldDelphiCompatible);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
@@ -825,37 +828,42 @@ begin
             exit;
           end;
     end;
-    exit;
-  end;
-  f := _Format;
-  if t = 'integer' then
-    if f = 'int64' then
-      result := obtInt64
-    else
-      result := obtInteger
-  else if t = 'number' then
-    if f = 'float' then
-      result := obtSingle
-    else
-      result := obtDouble
-  else if t = 'boolean' then
-    result := obtBoolean
-  else if t = 'string' then
-  begin
-    result := obtRawUtf8;
-    if f <> '' then
-      if f = 'uuid' then
-        result := obtGuid
-      else if f = 'binary' then
-        result := obtRawByteString
-      else if f = 'password' then
-        result := obtSpiUtf8
-      else if not (opoNoDateTime in Parser.Options) then
-        if f = 'date' then
-          result := obtDate
-        else if f = 'date-time' then
-          result := obtDateTime;
   end
+  else
+  begin
+    f := _Format;
+    if t = 'integer' then
+      if f = 'int64' then
+        result := obtInt64
+      else
+        result := obtInteger
+    else if t = 'number' then
+      if f = 'float' then
+        result := obtSingle
+      else
+        result := obtDouble
+    else if t = 'boolean' then
+      result := obtBoolean
+    else if t = 'string' then
+    begin
+      result := obtRawUtf8;
+      if f <> '' then
+        if f = 'uuid' then
+          result := obtGuid
+        else if f = 'binary' then
+          result := obtRawByteString
+        else if f = 'password' then
+          result := obtSpiUtf8
+        else if not (opoNoDateTime in Parser.Options) then
+          if f = 'date' then
+            result := obtDate
+          else if f = 'date-time' then
+            result := obtDateTime;
+    end;
+  end;
+  if opoGenerateStringType in Parser.Options then
+    if result in [obtRawUtf8, obtSpiUtf8] then
+      result := obtString;
 end;
 
 
@@ -1819,7 +1827,7 @@ end;
 const
   OBT_TXT: array[TOpenApiBuiltInType] of RawUtf8 = (
     'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
-    'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
+    'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'string', 'RawByteString');
 
 constructor TPascalType.CreateBuiltin(aParser: TOpenApiParser;
   aBuiltInType: TOpenApiBuiltInType; aSchema: POpenApiSchema; aIsArray: boolean);
@@ -1894,6 +1902,8 @@ begin
         obtRawUtf8,
         obtSpiUtf8:
           func := 'RawUtf8ArrayToCsv(%)';
+        obtString:
+          func := 'RawUtf8ArrayToCsv(StringDynArrayToRawUtf8DynArray(%))';
         obtGuid:
           func := 'GuidArrayToCsv(%)';
         // other types would just fail to compile
@@ -1908,6 +1918,9 @@ begin
         func := 'ToUtf8(%)';
       obtRawByteString:
         func := 'mormot.core.buffers.BinToBase64(%)';
+      obtString:
+        if opoGenerateOldDelphiCompatible in fParser.Options then
+          func := 'StringToUtf8(%)'; // not needed if has a codepage
     end
   else if IsEnum then
   begin
@@ -2747,6 +2760,7 @@ begin
       '  classes,', LineEnd,
       '  sysutils,', LineEnd,
       '  mormot.core.base,', LineEnd,
+      '  mormot.core.unicode,', LineEnd,
       '  mormot.core.text,', LineEnd,
       '  mormot.core.buffers,', LineEnd,
       '  mormot.core.datetime,', LineEnd,
