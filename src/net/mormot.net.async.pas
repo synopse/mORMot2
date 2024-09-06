@@ -597,6 +597,7 @@ type
     fConnectionHigh: integer;
     fThreadPoolCount: integer;
     fLastConnectionFind: integer;
+    fThreadPollingWakeupSafe: TLightLock; // topmost to ensure aarch64 alignment
     fLastHandle: integer;
     fOptions: TAsyncConnectionsOptions;
     fLog: TSynLogClass;
@@ -611,7 +612,6 @@ type
     fIocpAccept: PWinIocpSubscription;
     {$else}
     fThreadReadPoll: TAsyncConnectionsThread;
-    fThreadPollingWakeupSafe: TLightLock;
     fThreadPollingWakeupLoad: integer;
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingAwakeCount: integer;

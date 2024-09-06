@@ -997,13 +997,13 @@ type
   /// abstract parent class for both THttpServer and THttpAsyncServer
   THttpServerSocketGeneric = class(THttpServerGeneric)
   protected
+    fSafe: TLightLock; // topmost to ensure proper aarch64 alignment
     fServerKeepAliveTimeOut: cardinal;
     fServerKeepAliveTimeOutSec: cardinal;
     fHeaderRetrieveAbortDelay: cardinal;
     fCompressGz: integer; // >=0 if GZ is activated
     fSockPort: RawUtf8;
     fSock: TCrtSocket;
-    fSafe: TLightLock;
     fExecuteMessage: RawUtf8;
     fNginxSendFileFrom: array of TFileName;
     fAuthorize: THttpServerRequestAuthentication;
@@ -1560,15 +1560,15 @@ type
   /// abstract parent to THttpPeerCache for its cryptographic core
   THttpPeerCrypt = class(TInterfacedObjectWithCustomCreate)
   protected
+    fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
+    fClientSafe: TLightLock;
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
     fIP4, fMaskIP4, fBroadcastIP4, fClientIP4: cardinal;
-    fAesSafe: TLightLock;
     fAesEnc, fAesDec: TAesGcmAbstract;
     fLog: TSynLogClass;
     fPort, fIpPort: RawUtf8;
-    fClientSafe: TLightLock;
     fClient: THttpClientSocket;
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;

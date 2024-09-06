@@ -2903,22 +2903,22 @@ type
   TOrmPropertiesAbstract = class
   protected
     fTableRtti: TRttiJson;
-    fHasNotSimpleFields: boolean;
-    fDynArrayFieldsHasObjArray: boolean;
-    fHasTypeFields: TOrmFieldTypes;
     fFields: TOrmPropInfoList;
     fSimpleFields: TOrmPropInfoObjArray;
-    fSqlTableName: RawUtf8;
     fCopiableFields: TOrmPropInfoObjArray;
     fDynArrayFields: TOrmPropInfoRttiDynArrayObjArray;
     fBlobCustomFields: TOrmPropInfoCustomDynArray;
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
-    fManyFields: TOrmPropInfoRttiManyObjArray;
+    fSqlTableName: RawUtf8;
+    fLastFieldsSafe: TLightLock; // topmost to ensure proper aarch64 alignment
     fSafe: TOSLightLock;
+    fHasNotSimpleFields: boolean;
+    fDynArrayFieldsHasObjArray: boolean;
+    fHasTypeFields: TOrmFieldTypes;
+    fManyFields: TOrmPropInfoRttiManyObjArray;
     fRecordManySourceProp: TOrmPropInfoRttiInstance;
     fRecordManyDestProp: TOrmPropInfoRttiInstance;
     fSqlTableNameUpperWithDot: RawUtf8;
-    fLastFieldsSafe: TLightLock;
     fLastFieldsCsv: RawUtf8;
     fLastFieldsCsvBits: TFieldBits;
     fSqlFillPrepareMany: RawUtf8;

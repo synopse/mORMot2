@@ -138,6 +138,7 @@ type
   // other overridden class
   TSynMustacheContext = class
   protected
+    fReuse: TLightLock; // topmost to ensure aarch64 alignment
     fContextCount: integer;
     fEscapeInvert: boolean;
     fOwnWriter: boolean;
@@ -149,7 +150,6 @@ type
     fTempProcessHelper: TVariantDynArray;
     fOnStringTranslate: TOnStringTranslate;
     fOwner: TSynMustache;
-    fReuse: TLightLock;
     // some variant support is needed for the helpers
     function ProcessHelper(const ValueName: RawUtf8; space, helper: PtrInt;
       var Value: TVarData; OwnValue: PPVarData): TSynMustacheSectionType; virtual;

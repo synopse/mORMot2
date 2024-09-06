@@ -3696,11 +3696,11 @@ type
   // cross-platform / cross-compiler TThread-based flush
   TAutoFlushThread = class(TThread)
   protected
+    fToConsoleSafe: TLightLock; // topmost to ensure aarch64 alignment
     fEvent: TSynEvent;
     fToCompress: TFileName;
     fStartTix: Int64;
     fSecondElapsed: cardinal;
-    fToConsoleSafe: TLightLock; // very short protection of fToConsole RRD store
     fToConsole: TAutoFlushThreadToConsole;
     procedure Execute; override;
     procedure AddToConsole(const s: RawUtf8; c: TConsoleColor);

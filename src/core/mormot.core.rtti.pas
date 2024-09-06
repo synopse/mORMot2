@@ -2456,6 +2456,7 @@ type
     fCopy: TRttiCopier;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
+    fPrivateSlotsSafe: TLightLock; // topmost position to force aarch64 alignment
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     fSetRandom: TRttiCustomRandom;
     // used by mormot.core.json.pas
@@ -2469,7 +2470,6 @@ type
     fAutoCreateObjArrays,
     fAutoResolveInterfaces: PRttiCustomPropDynArray;
     fPrivateSlots: TObjectDynArray;
-    fPrivateSlotsSafe: TLightLock;
     fNoRttiInfo: TByteDynArray; // used by NoRttiSetAndRegister()
     // used to customize the class process
     fValueClass: TClass;

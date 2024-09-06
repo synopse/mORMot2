@@ -94,13 +94,13 @@ type
   /// implements TRest.ORM process for abstract REST client/server
   TRestOrm = class(TRestOrmParent, IRestOrm)
   protected
+    fTempJsonWriterLock: TLightLock; // topmost to ensure proper aarch64 align
     fRest: TRest;
     fModel: TOrmModel; // owned by the TRest associated instance
     fCache: TOrmCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TOrmClass;
     fTempJsonWriter: TJsonWriter;
-    fTempJsonWriterLock: TLightLock;
     /// compute SELECT ... FROM TABLE WHERE ...
     function SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
       const FieldNames, WhereClause: RawUtf8): RawUtf8;

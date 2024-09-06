@@ -1256,6 +1256,7 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
+    fSharedTransactionsSafe: TLightLock; // topmost to ensure aarch64 alignment
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
     fConnectionTimeOutTicks: Int64;
@@ -1278,7 +1279,6 @@ type
     fStatementCacheReplicates: integer;
     fSqlCreateFieldMax: cardinal;
     fSqlCreateField: TSqlDBFieldTypeDefinition;
-    fSharedTransactionsSafe: TLightLock;
     fSharedTransactions: array of TSqlDBConnectionTransaction;
     fExecuteWhenConnected: TRawUtf8DynArray;
     fForeignKeys: TSynNameValue;

@@ -709,11 +709,11 @@ type
 
   /// used by TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTask = record
+    MsgSafe: TLightLock; // protect Msg[] list - topmost to ensure aarch64 align
     OnProcess: TOnSynBackgroundTimerProcess;
     Secs: cardinal;
     NextTix: Int64;
     Msg: TRawUtf8DynArray;
-    MsgSafe: TLightLock; // protect Msg[] list
   end;
 
   /// stores TSynBackgroundTimer internal registration list

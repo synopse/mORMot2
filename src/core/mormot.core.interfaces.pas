@@ -2235,11 +2235,11 @@ type
   // - as used e.g. by TInterfaceFactoryClient.CreateFakeInstance
   TInterfacedObjectFake = class(TInterfacedObjectFakeRaw)
   protected
+    fParamsSafe: TLightLock;  // thread-safe fParams - topmost for aarch64 align
     fFakeID: TInterfacedObjectFakeID;
     fOptions: TInterfacedObjectFakeOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fServiceFactory: TObject; // holds a TServiceFactory instance
-    fParamsSafe: TLightLock;  // thread-safe acquisition of fParams
     fParams: TJsonWriter;     // reused if possible between calls
     fNotifyDestroy: TOnFakeInstanceDestroy;
     // the JITed asm stubs will redirect to these JSON-oriented process

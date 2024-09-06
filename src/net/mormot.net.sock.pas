@@ -1150,10 +1150,12 @@ type
   // - call GetOne from a main thread, optionally GetOnePending from sub-threads
   TPollSockets = class(TPollAbstract)
   protected
+    fMergeSubscribeEventsLock: TLightLock; // topmost to ensure aarch64 alignment
+    fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
+    fPendingSafe: TOSLightLock; // TLightLock seems less stable on high-end HW
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
-    fPendingSafe: TOSLightLock; // TLightLock seems less stable on high-end HW
     fPollIndex: integer;
     fGettingOne: integer;
     fTerminated: boolean;
@@ -1163,9 +1165,7 @@ type
     fOnGetOneIdle: TOnPollSocketsIdle;
     // used for select/poll (FollowEpoll=false) with multiple thread-unsafe fPoll[]
     fSubscription: TPollSocketsSubscription;
-    fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
     fPollLock: TOSLightLock;
-    fMergeSubscribeEventsLock: TLightLock;
     // note: $ifdef POLLSOCKETEPOLL is not possible here
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
