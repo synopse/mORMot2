@@ -4461,12 +4461,10 @@ function FindCustomEnum(const CustomText: array of RawUtf8;
 begin
   if (Value <> '') and
      (high(CustomText) > 0) then
-  begin
-    result := FindRawUtf8(@CustomText[0], Value, high(CustomText) + 1, {casesens=}true);
-    if result >= 0 then
-      exit;
-  end;
-  result := 0;
+    // we can just ignore CustomText[0] which is supposed to be ''
+    result := FindRawUtf8(@CustomText[1], Value, high(CustomText), {casesens=}true) + 1
+  else
+    result := 0;
 end;
 
 

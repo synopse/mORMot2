@@ -85,6 +85,11 @@ type
 
 implementation
 
+type
+   TMyEnum = (eNone, e1, e2);
+const
+  MYENUM2TXT: array[TMyEnum] of RawUtf8 = ('', 'one', 'and 2');
+
 const
   // some reference from https://github.com/OAI/OpenAPI-Specification
   OpenApiRef: array[0..1] of RawUtf8 = (
@@ -99,6 +104,10 @@ var
   pets: TRawUtf8DynArray;
   oa: TOpenApiParser;
 begin
+  CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 2'), 2);
+  CheckEqual(FindCustomEnum(MYENUM2TXT, 'one'), 1);
+  CheckEqual(FindCustomEnum(MYENUM2TXT, ''), 0);
+  CheckEqual(FindCustomEnum(MYENUM2TXT, 'and 3'), 0);
   for i := 1 to high(RESERVED_KEYWORDS) do
     CheckUtf8(StrComp(pointer(RESERVED_KEYWORDS[i - 1]),
       pointer(RESERVED_KEYWORDS[i])) < 0, RESERVED_KEYWORDS[i]);
