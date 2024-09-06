@@ -10605,6 +10605,8 @@ begin
         v := 8;
       #1..#8, #11, #12, #14..#31:
         v := 9; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
+    else
+      v := 0;
     end;
     XML_ESC[c] := v;
     case c of // HTML_ESCAPED: array[1..4] = '&lt;', '&gt;', '&amp;', '&quot;'

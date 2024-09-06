@@ -773,7 +773,6 @@ function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime;
   FirstTimeChar: AnsiChar = 'T'): RawUtf8;
 
 
-
 { ************ TTimeLog efficient 64-bit custom date/time encoding }
 
 type
