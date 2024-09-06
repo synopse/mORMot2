@@ -460,20 +460,19 @@ type
     fParser: TOpenApiParser;
     fOperationId: RawUtf8;
     fFunctionName: RawUtf8;
-    fPath: RawUtf8;
+    fMethod, fPath: RawUtf8;
     fPathItem: POpenApiPathItem;
     fOperation: POpenApiOperation;
     fRequestBody: POpenApiRequestBody;
     fRequestBodySchema: POpenApiSchema;
-    fMethod: TUriMethod;
     fPayloadParameterType: TPascalType;
     fSuccessResponseType: TPascalType;
     fSuccessResponseCode: integer;
     fOnErrorIndex: integer;
     fParameters: TPascalParameterDynArray;
   public
-    constructor Create(aParser: TOpenApiParser; const aPath: RawUtf8;
-      aPathItem: POpenApiPathItem; aOperation: POpenApiOperation; aMethod: TUriMethod);
+    constructor Create(aParser: TOpenApiParser; const aMethod, aPath: RawUtf8;
+      aPathItem: POpenApiPathItem; aOperation: POpenApiOperation);
     destructor Destroy; override;
     procedure ResolveResponseTypes;
     procedure Documentation(W: TTextWriter);
@@ -580,7 +579,7 @@ type
     procedure ParseFile(const aJsonFile: TFileName);
     /// parse a JSON Swagger/OpenAPI content
     procedure ParseJson(const aJson: RawUtf8);
-    /// parse a Swagger/OpenAPI content from an existing TDocVariant
+    /// parse a Swagger/OpenAPI content tree from an existing TDocVariant
     procedure ParseData(const aSpecs: TDocVariantData);
     /// clear all internal information of this parser instance
     procedure Clear;
@@ -1214,8 +1213,8 @@ end;
 { TPascalOperation }
 
 constructor TPascalOperation.Create(aParser: TOpenApiParser;
-  const aPath: RawUtf8; aPathItem: POpenApiPathItem;
-  aOperation: POpenApiOperation; aMethod: TUriMethod);
+  const aMethod, aPath: RawUtf8; aPathItem: POpenApiPathItem;
+  aOperation: POpenApiOperation);
 var
   p, o: POpenApiParameters;
   pn, i: integer;
@@ -1376,7 +1375,7 @@ begin
   if fOperation^.Deprecated then
      w.AddShort('[DEPRECATED] ');
    w.AddStrings([ // do not use fOperationID here because may = Description
-     fOperation^.Id, ' [', ToText(fMethod), '] ', fPath, fParser.LineEnd,
+     fOperation^.Id, ' [', fMethod, '] ', fPath, fParser.LineEnd,
      fParser.fLineIndent, '//', fParser.LineEnd]);
   // Summary
   desc := fOperation^.Summary;
@@ -1600,7 +1599,7 @@ begin
   // emit the body block with its declaration and Request() call
   Declaration(w, ClassName, {implemtation=}true);
   w.AddStrings([fParser.LineEnd, 'begin', fParser.LineEnd,
-         '  fClient.Request(''', ToText(fMethod), ''', ''', url, '''']);
+         '  fClient.Request(''', UpperCase(fMethod), ''', ''', url, '''']);
   // Path parameters
   w.AddShorter(', [');
   for i := 0 to Length(urlName) - 1 do
@@ -2430,18 +2429,24 @@ end;
 procedure TOpenApiParser.ParsePath(
   const aPath: RawUtf8; aPathItem: POpenApiPathItem);
 var
-  m: TUriMethod;
+  i: PtrInt;
+  n: RawUtf8;
   s: POpenApiOperation;
   op: TPascalOperation;
 begin
-  for m := low(m) to high(m) do
+  // https://swagger.io/docs/specification/paths-and-operations
+  for i := 0 to aPathItem^.Data.Count - 1 do
   begin
-    s := aPathItem^.Method[m];
-    if not Assigned(s) or
-       ((opoClientExcludeDeprecated in fOptions) and
-        s^.Deprecated) then
-      continue;
-    op := TPascalOperation.Create(self, aPath, aPathItem, s, m);
+    n := aPathItem^.Data.Names[i];
+    // OpenAPI does not support all our TUriMethod, but its own set
+    if FindPropName(['get', 'post', 'put',
+                     'patch', 'delete', 'head', 'options', 'trace'], n) < 0 then
+      continue; // e.g. "parameters" may also appear here
+    s := @aPathItem^.Data.Values[i];
+    if (opoClientExcludeDeprecated in fOptions) and
+       s^.Deprecated then
+       continue;
+    op := TPascalOperation.Create(self, n, aPath, aPathItem, s);
     op.ResolveResponseTypes;
     ObjArrayAdd(fOperations, op);
   end;
