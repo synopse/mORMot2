@@ -83,6 +83,8 @@ type
     nrRefused,
     nrTimeout,
     nrInvalidParameter);
+  /// a pointer to a TNetSocket error
+  PNetResult = ^TNetResult;
 
   /// exception class raised by this unit
   ENetSock = class(ExceptionWithProps)
@@ -1792,13 +1794,14 @@ type
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
-    // - return false on any fatal socket error, true on success
+    // - return true on success, or false on any fatal socket error - NetResult^
+    // (if not nil) would contain the actual socket error
     // - call Close if the socket is identified as shutdown from the other side
     // - you may optionally set StopBeforeLength = true, then the read bytes count
     // are set in Length, even if not all expected data has been received - in
     // this case, Close method won't be called
     function TrySockRecv(Buffer: pointer; var Length: integer;
-      StopBeforeLength: boolean = false): boolean;
+      StopBeforeLength: boolean = false; NetResult: PNetResult = nil): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one if needed
     // - use TimeOut milliseconds wait for incoming data
@@ -1822,9 +1825,10 @@ type
     // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
     procedure SndLow(const Data: RawByteString); overload;
     /// direct send data through network
-    // - return false on any error, true on success
+    // - return true on success, or false on any fatal socket error - NetResult^
+    // (if not nil) would contain the actual socket error
     // - bypass the SockSend() buffers
-    function TrySndLow(P: pointer; Len: integer): boolean;
+    function TrySndLow(P: pointer; Len: integer; NetResult: PNetResult = nil): boolean;
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
@@ -5726,6 +5730,7 @@ end;
 procedure TCrtSocket.SockSendFlush(const aBody: RawByteString);
 var
   body: integer;
+  res: TNetResult;
 begin
   body := Length(aBody);
   if (body > 0) and
@@ -5746,11 +5751,11 @@ begin
   end;
   {$endif SYNCRTDEBUGLOW}
   if fSndBufLen > 0 then
-    if TrySndLow(pointer(fSndBuf), fSndBufLen) then
+    if TrySndLow(pointer(fSndBuf), fSndBufLen, @res) then
       fSndBufLen := 0
     else
       raise ENetSock.CreateLastError('%s.SockSendFlush(%s) len=%d',
-        [ClassNameShort(self)^, fServer, fSndBufLen]);
+        [ClassNameShort(self)^, fServer, fSndBufLen], res);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
 end;
@@ -5760,6 +5765,7 @@ var
   chunk: RawByteString;
   rd: integer;
   pos: Int64;
+  res: TNetResult;
 begin
   SetLength(chunk, ChunkSize);
   pos := 0;
@@ -5767,10 +5773,10 @@ begin
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
       break;
-    if not TrySndLow(pointer(chunk), rd) then
+    if not TrySndLow(pointer(chunk), rd, @res) then
       raise ENetSock.CreateLastError(
         '%s.SockSendStream(%s,%d) rd=%d pos=%d to %s:%s', [ClassNameShort(self)^,
-        ClassNameShort(Stream)^, ChunkSize, rd, pos, fServer, fPort]);
+        ClassNameShort(Stream)^, ChunkSize, rd, pos, fServer, fPort], res);
     inc(pos, rd);
   until false;
 end;
@@ -5778,12 +5784,13 @@ end;
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
 var
   read: integer;
+  res: TNetResult;
 begin
   read := Length;
-  if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or
+  if not TrySockRecv(Buffer, read, {StopBeforeLength=}false, @res) or
      (Length <> read) then
     raise ENetSock.CreateLastError('%s.SockRecv(%d) read=%d',
-      [ClassNameShort(self)^, Length, read]);
+      [ClassNameShort(self)^, Length, read], res);
 end;
 
 function TCrtSocket.SockRecv(Length: integer): RawByteString;
@@ -5839,13 +5846,13 @@ begin
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
-  StopBeforeLength: boolean): boolean;
+  StopBeforeLength: boolean; NetResult: PNetResult): boolean;
 var
   expected, read, pending: integer;
   events: TNetEvents;
   res: TNetResult;
 begin
-  result := false;
+  res := nrInvalidParameter;
   if SockIsDefined and
      (Buffer <> nil) and
      (Length > 0) then
@@ -5860,19 +5867,26 @@ begin
         res := fSecure.Receive(Buffer, read)
       else
         res := fSock.Recv(Buffer, read);
-      if res <> nrOK then
-      begin
-        // no more to read, or socket closed/broken
-        {$ifdef SYNCRTDEBUGLOW}
-        if Assigned(OnLog) then
-          OnLog(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
-            [fSock.Socket, read, SocketErrorMessage], self);
-        {$endif SYNCRTDEBUGLOW}
-        if StopBeforeLength and
-           (res = nrRetry) then // no more to read
+      {$ifdef SYNCRTDEBUGLOW}
+      if (res <> nrOk) and
+         Assigned(OnLog) then
+        OnLog(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
+          [fSock.Socket, read, SocketErrorMessage], self);
+      {$endif SYNCRTDEBUGLOW}
+      case res of
+        nrOk:
+          ;
+        nrRetry:
+          begin
+            read := 0; // call RecvPending/WaitFor and retry Recv
+            res := nrOk;
+          end
+      else
+        begin
+          // no more to read, or socket closed/broken
+          Close; // connection broken or socket closed gracefully
           break;
-        Close; // connection broken or socket closed gracefully
-        exit;
+        end;
       end;
       inc(fBytesIn, read);
       inc(Length, read);
@@ -5886,17 +5900,23 @@ begin
       events := fSock.WaitFor(TimeOut, [neRead, neError]); // select() or poll()
       if neError in events then
       begin
+        res := nrUnknownError;
         Close; // connection broken or socket closed gracefully
-        exit;
+        break;
       end
       else if neRead in events then
-        continue;
+        continue; // retry Recv()
       if Assigned(OnLog) then
         OnLog(sllTrace, 'TrySockRecv: timeout after %ms)', [TimeOut], self);
-      exit; // identify read timeout as error
+      res := nrTimeout;  // identify read timeout as error
+      break;
     until fAborted;
-    result := not fAborted;
   end;
+  if fAborted then
+    res := nrClosed;
+  if NetResult <> nil then
+    NetResult^ := res;
+  result := (res = nrOK);
 end;
 
 procedure TCrtSocket.SockRecvLn(out Line: RawUtf8; CROnly: boolean);
@@ -5982,10 +6002,12 @@ begin
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
+var
+  res: TNetResult;
 begin
-  if not TrySndLow(P, Len) then
+  if not TrySndLow(P, Len, @res) then
     raise ENetSock.CreateLastError('%s.SndLow(%s) len=%d',
-      [ClassNameShort(self)^, fServer, Len]);
+      [ClassNameShort(self)^, fServer, Len], res);
 end;
 
 procedure TCrtSocket.SndLow(const Data: RawByteString);
@@ -5993,17 +6015,17 @@ begin
   SndLow(pointer(Data), Length(Data));
 end;
 
-function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
+function TCrtSocket.TrySndLow(P: pointer; Len: integer; NetResult: PNetResult): boolean;
 var
   sent: integer;
   events: TNetEvents;
   res: TNetResult;
 begin
-  result := Len = 0;
-  if not SockIsDefined or
-     (Len <= 0) or
-     (P = nil) then
-    exit;
+  if Len = 0 then
+    res := nrOk
+  else if SockIsDefined and
+          (Len > 0) and
+          (P <> nil) then
   repeat
     sent := Len;
     if fSecure <> nil then
@@ -6018,15 +6040,26 @@ begin
         break; // data successfully sent
       inc(PByte(P), sent);
     end
-    else if (res <> nrOK) and
-            (res <> nrRetry) then
-      exit; // fatal socket error
+    else if not (res in [nrOK, nrRetry]) then
+      break; // fatal socket error
     events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
-    if (neError in events) or
-       not (neWrite in events) then // identify timeout as error
-      exit;
+    if neError in events then
+    begin
+      res := nrUnknownError;
+      break;
+    end
+    else if neWrite in events then
+      continue; // retry Send()
+    if Assigned(OnLog) then
+      OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
+    res := nrTimeout;  // identify write timeout as error
+    break;
   until fAborted;
-  result := not fAborted;
+  if fAborted then
+    res := nrClosed;
+  if NetResult <> nil then
+    NetResult^ := res;
+  result := (res = nrOK);
 end;
 
 function TCrtSocket.AcceptIncoming(
