@@ -81,7 +81,7 @@ type
     nrUnknownError,
     nrTooManyConnections,
     nrRefused,
-    nrConnectTimeout,
+    nrTimeout,
     nrInvalidParameter);
 
   /// exception class raised by this unit
@@ -93,7 +93,8 @@ type
     constructor Create(msg: string; const args: array of const;
       error: TNetResult = nrOK; errnumber: system.PInteger = nil); reintroduce;
     /// reintroduced constructor with NetLastError call
-    constructor CreateLastError(const msg: string; const args: array of const);
+    constructor CreateLastError(const msg: string; const args: array of const;
+      error: TNetResult = nrOk);
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const context: ShortString;
       errnumber: system.PInteger = nil);
@@ -2093,7 +2094,9 @@ begin
   begin
     fLastError := error;
     msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
-    if errnumber <> nil then
+    if (errnumber <> nil) and
+       (error <> nrTimeout) and
+       (errnumber^ <> NO_ERROR) then
       msg := format('%s sys=%d (%s)', [msg, errnumber^, GetErrorText(errnumber^)]);
   end
   else
@@ -2101,15 +2104,16 @@ begin
   inherited CreateFmt(msg, args);
 end;
 
-constructor ENetSock.CreateLastError(const msg: string; const args: array of const);
+constructor ENetSock.CreateLastError(const msg: string; const args: array of const;
+  error: TNetResult);
 var
-  res: TNetResult;
   err: integer;
 begin
-  res := NetLastError(NO_ERROR, @err);
-  if res in [nrOK, nrRetry] then
-     res := nrUnknownError;
-  Create(msg, args, res, @err);
+  if error in [nrOk, nrUnknownError] then
+    error := NetLastError(NO_ERROR, @err)
+  else
+    err := NO_ERROR;
+  Create(msg, args, error, @err);
 end;
 
 class procedure ENetSock.Check(res: TNetResult; const context: ShortString;
@@ -2499,7 +2503,7 @@ begin
     SleepHiRes(1);
   until (tix = 0) or
         (mormot.core.os.GetTickCount64 > tix);
-  result := nrConnectTimeout;
+  result := nrTimeout;
 end;
 
 function TNetAddr.SocketBind(socket: TNetSocket): TNetResult;
