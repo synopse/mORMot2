@@ -498,6 +498,7 @@ type
   end;
   TPascalOperationsByTagDynArray = array of TPascalOperationsByTag;
 
+
   /// allow to customize TOpenApiParser process
   // - opoNoEnum disables any pascal enumeration type generation
   // - opoNoDateTime disables any pascal TDate/TDateTime type generation
@@ -513,6 +514,7 @@ type
   // {name}.api unit, containing both the needed DTOs and the client class
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
   // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
+  // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
     opoNoDateTime,
@@ -634,6 +636,15 @@ type
     property Operations: TPascalOperationDynArray
       read fOperations;
   end;
+
+
+const
+  /// TOpenApiParser options to generate a single, simple and undocumented unit
+  // - if the default two-units setup with full documentation seems too verbose
+  OPENAPI_CONCISE = [
+    opoGenerateSingleApiUnit,
+    opoDtoNoDescription,
+    opoClientNoDescription];
 
 
 function ToText(t: TOpenApiBuiltInType): PShortString; overload;
