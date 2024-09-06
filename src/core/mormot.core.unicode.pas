@@ -2153,8 +2153,12 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray;
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
-procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
-  var result: TRawUtf8DynArray);
+procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
+  var result: TRawUtf8DynArray); overload;
+
+/// convert the string dynamic array into a dynamic array of UTF-8 strings
+function StringDynArrayToRawUtf8DynArray(
+  const Source: array of string): TRawUtf8DynArray; overload;
 
 /// convert the string list into a dynamic array of UTF-8 strings
 procedure StringListToRawUtf8DynArray(Source: TStringList;
@@ -8913,7 +8917,7 @@ begin
   Values[result] := Value;
 end;
 
-procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
+procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
   var Result: TRawUtf8DynArray);
 var
   i: PtrInt;
@@ -8922,6 +8926,12 @@ begin
   SetLength(Result, length(Source));
   for i := 0 to length(Source) - 1 do
     StringToUtf8(Source[i], Result[i]);
+end;
+
+function StringDynArrayToRawUtf8DynArray(
+  const Source: array of string): TRawUtf8DynArray;
+begin
+  StringDynArrayToRawUtf8DynArray(Source, result);
 end;
 
 procedure StringListToRawUtf8DynArray(Source: TStringList; var Result: TRawUtf8DynArray);
