@@ -5855,7 +5855,8 @@ begin
   res := nrInvalidParameter;
   if SockIsDefined and
      (Buffer <> nil) and
-     (Length > 0) then
+     (Length > 0) and
+     not fAborted then
   begin
     expected := Length;
     Length := 0;
@@ -5897,6 +5898,8 @@ begin
       if (fSock.RecvPending(pending) = nrOk) and
          (pending > 0) then
         continue; // no need to call WaitFor()
+      if fAborted then
+        break;
       events := fSock.WaitFor(TimeOut, [neRead, neError]); // select() or poll()
       if neError in events then
       begin
@@ -6025,36 +6028,41 @@ begin
     res := nrOk
   else if SockIsDefined and
           (Len > 0) and
-          (P <> nil) then
-  repeat
-    sent := Len;
-    if fSecure <> nil then
-      res := fSecure.Send(P, sent)
-    else
-      res := fSock.Send(P, sent);
-    if sent > 0 then
-    begin
-      inc(fBytesOut, sent);
-      dec(Len, sent);
-      if Len <= 0 then
-        break; // data successfully sent
-      inc(PByte(P), sent);
-    end
-    else if not (res in [nrOK, nrRetry]) then
-      break; // fatal socket error
-    events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
-    if neError in events then
-    begin
-      res := nrUnknownError;
+          (P <> nil) and
+          not fAborted then
+    repeat
+      sent := Len;
+      if fSecure <> nil then
+        res := fSecure.Send(P, sent)
+      else
+        res := fSock.Send(P, sent);
+      if sent > 0 then
+      begin
+        inc(fBytesOut, sent);
+        dec(Len, sent);
+        if Len <= 0 then
+          break; // data successfully sent
+        inc(PByte(P), sent);
+      end
+      else if not (res in [nrOK, nrRetry]) then
+        break; // fatal socket error
+      if fAborted then
+        break;
+      events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
+      if neError in events then
+      begin
+        res := nrUnknownError;
+        break;
+      end
+      else if neWrite in events then
+        continue; // retry Send()
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
+      res := nrTimeout;  // identify write timeout as error
       break;
-    end
-    else if neWrite in events then
-      continue; // retry Send()
-    if Assigned(OnLog) then
-      OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
-    res := nrTimeout;  // identify write timeout as error
-    break;
-  until fAborted;
+    until fAborted
+  else
+    res := nrInvalidParameter;
   if fAborted then
     res := nrClosed;
   if NetResult <> nil then
