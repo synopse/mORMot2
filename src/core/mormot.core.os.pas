@@ -1117,27 +1117,7 @@ const
   // - e.g. 'Delphi 10.3 Rio', 'Delphi 2010' or 'Free Pascal 3.3.1'
   COMPILER_VERSION: RawUtf8 =
   {$ifdef FPC}
-    'Free Pascal'
-    {$ifdef VER2_6_4} + ' 2.6.4'{$endif}
-    {$ifdef VER3_0}   + ' 3.0'
-      {$ifdef VER3_0_4}   + '.4' {$else}
-        {$ifdef VER3_0_2} + '.2' {$endif}
-      {$endif VER3_0_4}
-    {$endif VER3_0}
-    {$ifdef VER3_1}   + ' 3.1'
-       {$ifdef VER3_1_1} + '.1' {$endif}
-    {$endif VER3_1}
-    {$ifdef VER3_2}   + ' 3.2'
-      {$ifdef VER3_2_4}     + '.4' {$else}
-        {$ifdef VER3_2_3}   + '.3' {$else}
-          {$ifdef VER3_2_2} + '.2' {$endif}
-        {$endif VER3_2_3}
-      {$endif VER3_2_4}
-    {$endif VER3_2}
-    {$ifdef VER3_3}   + ' 3.3'
-       {$ifdef VER3_3_1} + '.1' {$endif}
-    {$endif VER3_3}
-    {$ifdef VER3_4}   + ' 3.4'  {$endif}
+    'Free Pascal ' + {$I %FPCVERSION%}
   {$else}
     'Delphi'
     {$if     defined(VER140)} + ' 6'
