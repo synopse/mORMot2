@@ -299,6 +299,7 @@ type
   /// define any Pascal type, as basic type of custom type
   TPascalType = class
   protected
+    fParser: TOpenApiParser;
     fBuiltinSchema: POpenApiSchema;
     fBuiltInTypeName: RawUtf8;
     fCustomType: TPascalCustomType;
@@ -307,16 +308,16 @@ type
     function GetSchema: POpenApiSchema;
     procedure SetArray(AValue: boolean);
   public
-    constructor CreateBuiltin(aBuiltInType: TOpenApiBuiltInType;
-      aSchema: POpenApiSchema = nil; aIsArray: boolean = false); overload;
+    constructor CreateBuiltin(aParser: TOpenApiParser;
+      aBuiltInType: TOpenApiBuiltInType; aSchema: POpenApiSchema = nil;
+      aIsArray: boolean = false); overload;
     constructor CreateCustom(aCustomType: TPascalCustomType); overload;
 
     // TODO: Handle RecordArrayType in RTTI definition
     function ToPascalName(AsFinalType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
     function ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
-    function ToDefaultParameterValue(aParam: TPascalParameter;
-      Parser: TOpenApiParser): RawUtf8;
+    function ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 
     function IsBuiltin: boolean;
     function IsEnum: boolean;
@@ -336,6 +337,7 @@ type
   protected
     fName: RawUtf8;
     fPascalName: RawUtf8;
+    fParser: TOpenApiParser;
     fSchema: POpenApiSchema;
   public
     property Name: RawUtf8
@@ -352,10 +354,10 @@ type
     fType: TPascalType;
     fTypeOwned: boolean;
   public
-    constructor CreateFromSchema(aOwner: TOpenApiParser; const aName: RawUtf8;
+    constructor CreateFromSchema(aParser: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     constructor CreateFrom(aAnother: TPascalProperty);
-    constructor CreateBuiltin(const aName, aPascalName: RawUtf8;
+    constructor CreateBuiltin(aParser: TOpenApiParser; const aName, aPascalName: RawUtf8;
       aBuiltInType: TOpenApiBuiltInType);
     destructor Destroy; override;
     property PropType: TPascalType
@@ -366,10 +368,9 @@ type
   TPascalCustomType = class(TPascalAbstract)
   protected
     fFromRef: RawUtf8;
-    fParser: TOpenApiParser;
     fRequiresArrayDefinition: boolean;
   public
-    constructor Create(aOwner: TOpenApiParser);
+    constructor Create(aParser: TOpenApiParser);
     procedure ToTypeDefinition(W: TTextWriter); virtual; abstract;
     function ToArrayTypeName(AsFinalType: boolean = true): RawUtf8; virtual;
     function ToArrayTypeDefinition: RawUtf8; virtual;
@@ -384,7 +385,7 @@ type
     fTypes: set of TOpenApiBuiltInType;
     fNeedsDummyField: boolean;
   public
-    constructor Create(aOwner: TOpenApiParser; const SchemaName: RawUtf8;
+    constructor Create(aParser: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
     destructor Destroy; override;
     procedure CopyProperties(aDest: TPascalRecord);
@@ -402,7 +403,7 @@ type
     fPrefix, fConstTextArrayName: RawUtf8;
     fChoices: TDocVariantData;
   public
-    constructor Create(aOwner: TOpenApiParser; const aName: RawUtf8;
+    constructor Create(aParser: TOpenApiParser; const aName: RawUtf8;
       aSchema: POpenApiSchema);
     procedure ToTypeDefinition(W: TTextWriter); override;
     procedure ToRegisterCustom(W: TTextWriter);
@@ -420,7 +421,7 @@ type
     fErrorTypeName: RawUtf8;
     fErrorCode: RawUtf8;
   public
-    constructor Create(aOwner: TOpenApiParser; const aCode: RawUtf8;
+    constructor Create(aParser: TOpenApiParser; const aCode: RawUtf8;
       aResponse: POpenApiResponse = nil);
     destructor Destroy; override;
     procedure ToTypeDefinition(W: TTextWriter); override;
@@ -436,7 +437,6 @@ type
   /// define a Pascal method parameter matching an OpenAPI operation parameter
   TPascalParameter = class(TPascalAbstract)
   protected
-    fParser: TOpenApiParser;
     fParameter: POpenApiParameter;
     fLocation: TOpenApiParamLocation;
     fType: TPascalType;
@@ -1151,12 +1151,12 @@ end;
 
 { TPascalCustomType }
 
-constructor TPascalCustomType.Create(aOwner: TOpenApiParser);
+constructor TPascalCustomType.Create(aParser: TOpenApiParser);
 begin
   // inheriting constructor should have set fName
   if fName = '' then
     EOpenApi.RaiseUtf8('%.Create(name?)', [self]);
-  fParser := aOwner;
+  fParser := aParser;
   if fName[1] = '#' then // ensure type name is not too long
   begin
     inc(fParser.fDtoCounter); // TDto### is simple and convenient
@@ -1493,7 +1493,7 @@ begin
         if InImplementation then // same order, but no "= default" statement
           AddRawUtf8(def, decl)
         else
-          AddRawUtf8(def, Make([decl, ' = ', p.fType.ToDefaultParameterValue(p, fParser)]))
+          AddRawUtf8(def, Make([decl, ' = ', p.fType.ToDefaultParameterValue(p)]))
       else
         AddParam([decl]);
     end;
@@ -1646,10 +1646,11 @@ end;
 
 { TPascalProperty }
 
-constructor TPascalProperty.CreateFromSchema(aOwner: TOpenApiParser;
+constructor TPascalProperty.CreateFromSchema(aParser: TOpenApiParser;
   const aName: RawUtf8; aSchema: POpenApiSchema);
 begin
-  fType := aOwner.NewPascalTypeFromSchema(aSchema, '');
+  fParser := aParser;
+  fType := aParser.NewPascalTypeFromSchema(aSchema, '');
   fTypeOwned := true;
   fName := aName;
   fSchema := aSchema;
@@ -1658,16 +1659,18 @@ end;
 
 constructor TPascalProperty.CreateFrom(aAnother: TPascalProperty);
 begin
+  fParser := aAnother.fParser;
   fType := aAnother.PropType; // weak copy (keep fTypeOwned=false)
   fName := aAnother.Name;
   fSchema := aAnother.Schema;
   fPascalName := aAnother.PascalName;
 end;
 
-constructor TPascalProperty.CreateBuiltin(const aName, aPascalName: RawUtf8;
-  aBuiltInType: TOpenApiBuiltInType);
+constructor TPascalProperty.CreateBuiltin(aParser: TOpenApiParser;
+  const aName, aPascalName: RawUtf8; aBuiltInType: TOpenApiBuiltInType);
 begin
-  fType := TPascalType.CreateBuiltin(aBuiltInType);
+  fParser := aParser;
+  fType := TPascalType.CreateBuiltin(aParser, aBuiltInType);
   fTypeOwned := true;
   fName := aName;
   fPascalName := aPascalName;
@@ -1683,13 +1686,13 @@ end;
 
 { TPascalEnum }
 
-constructor TPascalEnum.Create(aOwner: TOpenApiParser;
+constructor TPascalEnum.Create(aParser: TOpenApiParser;
   const aName: RawUtf8; aSchema: POpenApiSchema);
 var
   i: PtrInt;
 begin
   fName := aName;
-  inherited Create(aOwner);
+  inherited Create(aParser);
   fSchema := aSchema;
   fChoices.InitCopy(Variant(aSchema^.Enum^), JSON_FAST);
   fChoices.AddItem('None', 0); // always prepend a first void item
@@ -1818,9 +1821,10 @@ const
     'variant', '', 'integer', 'Int64', 'boolean', '', 'single', 'double',
     'TDate', 'TDateTime', 'TGuid', 'RawUtf8', 'SpiUtf8', 'RawByteString');
 
-constructor TPascalType.CreateBuiltin(aBuiltInType: TOpenApiBuiltInType;
-  aSchema: POpenApiSchema; aIsArray: boolean);
+constructor TPascalType.CreateBuiltin(aParser: TOpenApiParser;
+  aBuiltInType: TOpenApiBuiltInType; aSchema: POpenApiSchema; aIsArray: boolean);
 begin
+  fParser := aParser;
   fBuiltInType := aBuiltInType;
   fBuiltInTypeName := OBT_TXT[aBuiltInType];
   if fBuiltInTypeName = '' then
@@ -1833,121 +1837,13 @@ end;
 
 constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
 begin
+  fParser := aCustomType.fParser;
   fCustomType := aCustomType;
   fNoConst := IsEnum;
   if fNoConst then
     fBuiltInType := obtEnumerationOrSet
   else if IsRecord then
     fBuiltInType := obtRecord;
-end;
-
-function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
-  aSchemaName: RawUtf8): TPascalType;
-var
-  all: POpenApiSchemaDynArray;
-  ref, fmt, nam: RawUtf8;
-  i: integer;
-  rec, rectemp: TPascalRecord;
-  enum, props: PDocVariantData;
-  enumType: TPascalEnum;
-begin
-  if aSchema = nil then
-    EOpenApi.RaiseUtf8('NewPascalTypeFromSchema(%): aSchema=nil', [aSchemaName]);
-  all := aSchema^.AllOf;
-  if length(all) = 1 then
-    aSchema := all[0]; // typically a single "$ref": "..." entry
-  ref := aSchema^.Reference;
-  if ref <> '' then
-  begin
-    // #/definitions/NewPet -> NewPet
-    aSchema := GetRef(ref); // resolve from main Specs
-    if aSchema = nil then
-      EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
-    result := NewPascalTypeFromSchema(aSchema, SplitRight(ref, '/'));
-    if (result.CustomType <> nil) and
-       (result.CustomType.fFromRef = '') then
-      result.CustomType.fFromRef := ref;
-  end
-  else if (all <> nil) or
-          aSchema^.IsObject or
-          aSchema^.HasProperties then
-  begin
-    // return a TPascalRecord custom type
-    if aSchemaName = '' then
-    begin
-      // not from a $ref: need to compute a schema/type name from the properties
-      props := aSchema^.Properties;
-      if (props = nil) or
-         (props^.Count = 0) then
-      begin // object, but no properties: use a plain TDocVariant
-        result := TPascalType.CreateBuiltin(obtVariant, aSchema);
-        exit;
-      end;
-      nam := '#' + RawUtf8ArrayToCsv(props^.GetNames, '_'); // unique
-      aSchemaName := nam;
-      for i := 2 to 20 do // try if this type does not already exist as such
-      begin
-        rec := fRecords.GetObjectFrom(aSchemaName);
-        if rec = nil then
-          break;
-        if fmt = '' then
-        begin
-          rectemp := ParseRecordDefinition(aSchemaName, aSchema);
-          fmt := rectemp.ToRttiTextRepresentation; // just field names and types
-          rectemp.Free;
-        end;
-        if rec.ToRttiTextRepresentation = fmt then // same raw pascal definition
-        begin
-          result := TPascalType.CreateCustom(rec);
-          exit;
-        end;
-        Make([nam, i], aSchemaName);
-      end;
-    end;
-    result := TPascalType.CreateCustom(GetRecord(aSchemaName, aSchema));
-  end
-  else if aSchema^.IsArray then
-  begin
-    // retrieve the main item type but apply the "IsArray" flag
-    result := NewPascalTypeFromSchema(aSchema^.Items, aSchemaName);
-    result.fBuiltinSchema := aSchema;
-    result.IsArray := true;
-  end
-  else
-  begin
-    // return a TPascalEnum custom type
-    enum := aSchema^.Enum;
-    if (enum <> nil) and
-       not (opoNoEnum in fOptions) then
-    begin
-      fmt := aSchema^._Format;
-      if (fmt = '') and // if no "format" type name is supplied
-         (aSchema^._Type = 'string') then
-      begin
-        enum^.SortByValue;  // won't care about the actual order, just the values
-        fmt := enum^.ToCsv('_'); // use string values to make it genuine
-      end
-      else
-        nam := fmt; // we have an explicit type name
-      if fmt <> '' then
-      begin
-        enumType := fEnums.GetObjectFrom(fmt);
-        if enumType = nil then
-        begin
-          if nam = '' then
-          begin
-            inc(fEnumCounter); // TEnum### seems easier
-            Make(['Enum', fName, fEnumCounter], nam);
-          end;
-          enumType := TPascalEnum.Create(self, nam, aSchema);
-          fEnums.AddObject(fmt, enumType);
-        end;
-        result := TPascalType.CreateCustom(enumType);
-        exit;
-      end;
-    end;
-    result := TPascalType.CreateBuiltin(aSchema.BuiltInType(self), aSchema);
-  end;
 end;
 
 function TPascalType.ToPascalName(AsFinalType, NoRecordArrayTypes: boolean): RawUtf8;
@@ -2027,8 +1923,7 @@ begin
     FormatUtf8(func, [VarName], result);
 end;
 
-function TPascalType.ToDefaultParameterValue(aParam: TPascalParameter;
-  Parser: TOpenApiParser): RawUtf8;
+function TPascalType.ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 var
   def: PVariant;
   t: RawUtf8;
@@ -2066,13 +1961,13 @@ end;
 
 { TPascalRecord }
 
-constructor TPascalRecord.Create(aOwner: TOpenApiParser;
+constructor TPascalRecord.Create(aParser: TOpenApiParser;
   const SchemaName: RawUtf8; Schema: POpenApiSchema);
 begin
   fName := SchemaName;
   fSchema := Schema;
   fProperties := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
-  inherited Create(aOwner);
+  inherited Create(aParser);
 end;
 
 destructor TPascalRecord.Destroy;
@@ -2194,18 +2089,18 @@ end;
 
 { TPascalException }
 
-constructor TPascalException.Create(aOwner: TOpenApiParser; const aCode: RawUtf8;
+constructor TPascalException.Create(aParser: TOpenApiParser; const aCode: RawUtf8;
   aResponse: POpenApiResponse);
 begin
   fErrorCode := aCode;
   fResponse := aResponse;
-  fErrorType := aOwner.NewPascalTypeFromSchema(aResponse^.Schema(aOwner));
+  fErrorType := aParser.NewPascalTypeFromSchema(aResponse^.Schema(aParser));
   if Assigned(fErrorType.CustomType) then
     fName := fErrorType.CustomType.Name
   else
     EOpenApi.RaiseUtf8('%.Create: no schema for %', [self, aResponse^.Data.ToJson]);
   fErrorTypeName := fErrorType.ToPascalName;
-  inherited Create(aOwner);
+  inherited Create(aParser);
   fPascalName[1] := 'E'; // Txxxx -> Exxxx
 end;
 
@@ -2355,6 +2250,115 @@ begin
   else
     delete(aRef, 1, 1); // malformed "#components/parameters/JobID" link
   fSpecs.Data.GetDocVariantByPath(aRef, PDocVariantData(result), '/');
+end;
+
+function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
+  aSchemaName: RawUtf8): TPascalType;
+var
+  all: POpenApiSchemaDynArray;
+  ref, fmt, nam: RawUtf8;
+  i: integer;
+  rec, rectemp: TPascalRecord;
+  enum, props: PDocVariantData;
+  enumType: TPascalEnum;
+begin
+  if aSchema = nil then
+    EOpenApi.RaiseUtf8('NewPascalTypeFromSchema(%): aSchema=nil', [aSchemaName]);
+  all := aSchema^.AllOf;
+  if length(all) = 1 then
+    aSchema := all[0]; // typically a single "$ref": "..." entry
+  ref := aSchema^.Reference;
+  if ref <> '' then
+  begin
+    // #/definitions/NewPet -> NewPet
+    aSchema := GetRef(ref); // resolve from main Specs
+    if aSchema = nil then
+      EOpenApi.RaiseUtf8('NewPascalTypeFromSchema: unknown $ref=%', [ref]);
+    result := NewPascalTypeFromSchema(aSchema, SplitRight(ref, '/'));
+    if (result.CustomType <> nil) and
+       (result.CustomType.fFromRef = '') then
+      result.CustomType.fFromRef := ref;
+  end
+  else if (all <> nil) or
+          aSchema^.IsObject or
+          aSchema^.HasProperties then
+  begin
+    // return a TPascalRecord custom type
+    if aSchemaName = '' then
+    begin
+      // not from a $ref: need to compute a schema/type name from the properties
+      props := aSchema^.Properties;
+      if (props = nil) or
+         (props^.Count = 0) then
+      begin // object, but no properties: use a plain TDocVariant
+        result := TPascalType.CreateBuiltin(self, obtVariant, aSchema);
+        exit;
+      end;
+      nam := '#' + RawUtf8ArrayToCsv(props^.GetNames, '_'); // unique
+      aSchemaName := nam;
+      for i := 2 to 20 do // try if this type does not already exist as such
+      begin
+        rec := fRecords.GetObjectFrom(aSchemaName);
+        if rec = nil then
+          break;
+        if fmt = '' then
+        begin
+          rectemp := ParseRecordDefinition(aSchemaName, aSchema);
+          fmt := rectemp.ToRttiTextRepresentation; // just field names and types
+          rectemp.Free;
+        end;
+        if rec.ToRttiTextRepresentation = fmt then // same raw pascal definition
+        begin
+          result := TPascalType.CreateCustom(rec);
+          exit;
+        end;
+        Make([nam, i], aSchemaName);
+      end;
+    end;
+    result := TPascalType.CreateCustom(GetRecord(aSchemaName, aSchema));
+  end
+  else if aSchema^.IsArray then
+  begin
+    // retrieve the main item type but apply the "IsArray" flag
+    result := NewPascalTypeFromSchema(aSchema^.Items, aSchemaName);
+    result.fBuiltinSchema := aSchema;
+    result.IsArray := true;
+  end
+  else
+  begin
+    // return a TPascalEnum custom type
+    enum := aSchema^.Enum;
+    if (enum <> nil) and
+       not (opoNoEnum in fOptions) then
+    begin
+      fmt := aSchema^._Format;
+      if (fmt = '') and // if no "format" type name is supplied
+         (aSchema^._Type = 'string') then
+      begin
+        enum^.SortByValue;  // won't care about the actual order, just the values
+        fmt := enum^.ToCsv('_'); // use string values to make it genuine
+      end
+      else
+        nam := fmt; // we have an explicit type name
+      if fmt <> '' then
+      begin
+        enumType := fEnums.GetObjectFrom(fmt);
+        if enumType = nil then
+        begin
+          if nam = '' then
+          begin
+            inc(fEnumCounter); // TEnum### seems easier
+            Make(['Enum', fName, fEnumCounter], nam);
+          end;
+          enumType := TPascalEnum.Create(self, nam, aSchema);
+          fEnums.AddObject(fmt, enumType);
+        end;
+        result := TPascalType.CreateCustom(enumType);
+        exit;
+      end;
+    end;
+    result := TPascalType.CreateBuiltin(self, aSchema.BuiltInType(self), aSchema);
+  end;
 end;
 
 procedure TOpenApiParser.Description(W: TTextWriter; const Described: RawUtf8);
