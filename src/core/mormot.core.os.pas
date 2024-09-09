@@ -8767,7 +8767,7 @@ function TExecutableCommandLine.ArgString(index: integer;
 begin
   result := '';
   if Arg(index, description, optional) then
-    result := string(Args[0]);
+    result := string(Args[index]);
 end;
 
 function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
