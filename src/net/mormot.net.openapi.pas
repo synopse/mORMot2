@@ -2158,6 +2158,8 @@ end;
 constructor TOpenApiParser.Create(const aName: RawUtf8; aOptions: TOpenApiParserOptions);
 begin
   fName := aName;
+  if fName <> '' then
+    fName[1] := UpCase(fName[1]);
   fOptions := aOptions;
   fRecords := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
   fEnums := TRawUtf8List.CreateEx([fObjectsOwned, fCaseSensitive, fNoDuplicate]);
@@ -2203,8 +2205,6 @@ var
   n: RawUtf8;
   v: PDocVariantData;
 begin
-  if fName <> '' then
-    fName[1] := UpCase(fName[1]);
   fVersion := fSpecs.VersionEnum;
   fInfo := fSpecs.Info;
   fTitle := fInfo^.U['title'];
