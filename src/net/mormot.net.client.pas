@@ -1880,7 +1880,7 @@ begin
   begin
     // compute multipart content type with the main random boundary
     fBound := MultiPartFormDataNewBound(fBounds);
-    fMultipartContentType  := 'multipart/form-data; boundary=' + fBound;
+    fMultipartContentType  := NetConcat(['multipart/form-data; boundary=', fBound]);
   end;
   if filename = '' then
     // simple form field
@@ -1957,7 +1957,7 @@ begin
   if fBounds = nil then
     exit;
   for i := length(fBounds) - 1 downto 0 do
-    s := {%H-}s + '--' + fBounds[i] + '--'#13#10;
+    mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
   Append(s);
   inherited Flush; // compute fSize
 end;
@@ -2988,13 +2988,7 @@ begin
     auth := DigestClient(fAuthDigestAlgo, p + 7, Context.method, Context.url,
       fAuthUserName, fAuthPassword);
     if auth <> '' then
-    begin
-      auth := 'Authorization: Digest ' + auth;
-      if Context.header <> '' then
-        Context.header := auth + #13#10 + Context.header
-      else
-        Context.header := auth;
-    end;
+      AppendLine(Context.header, ['Authorization: Digest ', auth]);
   end;
   result := true;
 end;
@@ -3030,7 +3024,7 @@ begin
         break;
       Context.header := OutHeader + BinToBase64(dataout);
       if bak <> '' then
-        Context.header := Context.header + #13#10 + bak;
+        Append(Context.header, #13#10, bak);
       Sender.RequestInternal(Context);
     until Context.status <> unauthstatus;
     // here Context is the final answer (success or auth error) from the server
@@ -3268,7 +3262,7 @@ begin
     // common headers
     InternalAddHeader(InHeader);
     if InDataType <> '' then
-      InternalAddHeader(RawUtf8('Content-Type: ') + InDataType);
+      InternalAddHeader(NetConcat(['Content-Type: ', InDataType]));
     // handle custom compression
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
@@ -3276,7 +3270,7 @@ begin
       CompressContent(fCompressAcceptHeader, fCompress, InDataType,
         aData, aDataEncoding);
       if aDataEncoding <> '' then
-        InternalAddHeader(RawUtf8('Content-Encoding: ') + aDataEncoding);
+        InternalAddHeader(NetConcat(['Content-Encoding: ', aDataEncoding]));
     end;
     if fCompressAcceptEncoding <> '' then
       InternalAddHeader(fCompressAcceptEncoding);
@@ -5034,7 +5028,7 @@ var
 
   procedure Exec(const Command, answer: RawUtf8);
   begin
-    sock.SockSendFlush(Command + #13#10);
+    sock.SockSendFlush(NetConcat([Command, #13#10]));
     if ioresult <> 0 then
       ESendEmail.RaiseUtf8('Write error for %', [Command]);
     Expect(answer)
@@ -5075,9 +5069,9 @@ begin
         rec := '<' + rec + '>';
       Exec('RCPT TO:' + rec, '25');
       if {%H-}ToList = '' then
-        ToList := #13#10'To: ' + rec
+        ToList := NetConcat([#13#10'To: ', rec])
       else
-        ToList := ToList + ', ' + rec;
+        Append(ToList, ', ', rec);
     until P = nil;
     Exec('DATA', '354');
     sock.SockSend([
