@@ -3640,22 +3640,25 @@ var
   winAuth: cardinal;
 begin
   if AuthScheme <> wraNone then
-  begin
-    case AuthScheme of
-      wraBasic:
-        winAuth := WINHTTP_AUTH_SCHEME_BASIC;
-      wraDigest:
-        winAuth := WINHTTP_AUTH_SCHEME_DIGEST;
-      wraNegotiate:
-        winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
+    if AuthScheme = wraBearer then
+      InternalAddHeader(AuthorizationBearer(AuthToken))
     else
-      raise EWinHttp.CreateUtf8(
-        '%: unsupported AuthScheme=%', [self, ToText(AuthScheme)^]);
+    begin
+      case AuthScheme of
+        wraBasic:
+          winAuth := WINHTTP_AUTH_SCHEME_BASIC;
+        wraDigest:
+          winAuth := WINHTTP_AUTH_SCHEME_DIGEST;
+        wraNegotiate:
+          winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
+      else
+        raise EWinHttp.CreateUtf8(
+          '%: unsupported AuthScheme=%', [self, ToText(AuthScheme)^]);
+      end;
+      if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
+         winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
+        EWinHttp.RaiseFromLastError;
     end;
-    if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
-       winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
-      EWinHttp.RaiseFromLastError;
-  end;
   if fHttps and
      IgnoreTlsCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
