@@ -484,9 +484,30 @@ type
   TObjectListClass = class of TObjectList;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
+
+  /// meta-class of all Exception class types
   ExceptionClass = class of Exception;
+
   {$M+}
-  ExceptionWithProps = class(Exception); // not as good as ESynException
+  /// a parent Exception class with RTTI generated for its published properties
+  // - not as good as ESynException, but could be used without mormot.core.text
+  ExceptionWithProps = class(Exception);
+
+  /// a parent TObject class with a virtual constructor and RTTI generated
+  // for its published properties
+  // - lighter than TPersistent and TObjectWithCustomCreate or TSynPersistent,
+  // which both inherit from it
+  TObjectWithProps = class(TObject)
+  public
+    /// virtual constructor called at instance creation
+    // - is declared as virtual so that inherited classes may have a root
+    // constructor to override
+    // - is recognized by our RTTI serialization/initialization process
+    constructor Create; overload; virtual;
+  end;
+  /// used to determine the exact class type of a TObjectWithProps
+  // - allow to create instances using its virtual constructor
+  TObjectWithPropsClass = class of TObjectWithProps;
   {$M-}
 
 type
@@ -5149,6 +5170,13 @@ begin
     inc(p, 3);
   until false;
 end;
+
+{ TObjectWithProps}
+
+constructor TObjectWithProps.Create;
+begin // do nothing by default but may be overriden
+end;
+
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }

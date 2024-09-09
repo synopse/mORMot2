@@ -3023,12 +3023,11 @@ type
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
 
 type
-  {$M+}
   /// abstract parent class with published properties and a virtual constructor
   // - is the parent of both TSynPersistent and TOrm classes
   // - will ensure the class type is registered to the Rtti global list
   // - also features some protected virtual methods for custom RTTI/JSON process
-  TObjectWithCustomCreate = class(TObject)
+  TObjectWithCustomCreate = class(TObjectWithProps)
   protected
     /// called by TRttiJson.SetParserType when this class is registered
     // - used e.g. to register TOrm.ID field which is not published as RTTI
@@ -3074,11 +3073,6 @@ type
     // - triggered if RttiCustomSetParser defined the rcfHookRead flag
     procedure RttiAfterReadObject; virtual;
   public
-    /// virtual constructor called at instance creation
-    // - is declared as virtual so that inherited classes may have a root
-    // constructor to override
-    // - is recognized by our RTTI serialization/initialization process
-    constructor Create; virtual;
     /// optimized initialization code
     // - will also register the class type to the Rtti global list
     // - somewhat faster than the regular RTL implementation
@@ -3096,7 +3090,6 @@ type
   {$M-}
 
   /// used to determine the exact class type of a TObjectWithCustomCreate
-  // - allow to create instances using its virtual constructor
   TObjectWithCustomCreateClass = class of TObjectWithCustomCreate;
 
   /// root class of an object with a 64-bit ID primary key
@@ -9824,10 +9817,6 @@ end;
 { *********** High Level TObjectWithID and TObjectWithCustomCreate Class Types }
 
 { TObjectWithCustomCreate }
-
-constructor TObjectWithCustomCreate.Create;
-begin // do nothing by default but may be overriden
-end;
 
 class function TObjectWithCustomCreate.RttiCustom: TRttiCustom;
 begin
