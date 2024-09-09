@@ -49,6 +49,7 @@ type
   end;
 
 var
+  c: TExecutableCommandLine;
   o: TOptions;
   oa: TOpenApiParser;
   name: RawUtf8;
@@ -58,22 +59,19 @@ begin
   o := TOptions.Create;
   try
     // validate command line parameters
-    with Executable.Command do
+    c := Executable.Command;
+    source := c.ArgFile(0, 'Source json #filename', {optional=}false);
+    name := TrimControlChars(c.ArgU(1, 'Short description #name of the service'));
+    SetObjectFromExecutableCommandLine(o, '', '');
+    if o.DestinationFolder <> '' then
+      o.DestinationFolder := c.CheckFileName(o.DestinationFolder, {folder=}true);
+    if c.Option('concise', 'Generate a single API unit') then
+      o.Options :=  o.Options + OPENAPI_CONCISE;
+    if c.ConsoleHelpFailed('mORMot ' + SYNOPSE_FRAMEWORK_VERSION +
+                                 ' OpenAPI/Swagger Code Generator') then
     begin
-      //RawParams := CsvToRawUtf8DynArray('OpenApiAuth.json'); Parse;
-      source := ArgFile(0, 'Source json #filename', {optional=}false);
-      name := TrimControlChars(ArgU(1, 'Short description #name of the service'));
-      SetObjectFromExecutableCommandLine(o, '', '');
-      if o.DestinationFolder <> '' then
-        o.DestinationFolder := CheckFileName(o.DestinationFolder, {folder=}true);
-      if Option('concise', 'Generate a single API unit') then
-        o.Options :=  o.Options + OPENAPI_CONCISE;
-      if ConsoleHelpFailed('mORMot ' + SYNOPSE_FRAMEWORK_VERSION +
-                                   ' OpenAPI/Swagger Code Generator') then
-      begin
-        ExitCode := 1;
-        exit;
-      end;
+      ExitCode := 1;
+      exit;
     end;
     if name = '' then
     begin
@@ -101,7 +99,10 @@ begin
       end;
     except
       on E: Exception do
-        ConsoleShowFatalException(E);
+      begin
+        ConsoleShowFatalException(E, {waitforenterkey=}false);
+        ExitCode := 2; // interrupted
+      end;
     end;
   finally
     o.Free;

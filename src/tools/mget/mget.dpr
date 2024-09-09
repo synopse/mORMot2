@@ -53,6 +53,7 @@ uses
 
 
 type
+  // reflects the command line switches internal state after parsing parameters
   TGetParameters = (
     gpHelp,
     gpFailed,
@@ -61,6 +62,7 @@ type
 
 function GetParameters(p: TMGetProcess; out url: RawUtf8): TGetParameters;
 var
+  c: TExecutableCommandLine;
   mac: TMacAddress;
   logfolder: TFileName;
   dest: RawUtf8;
@@ -78,51 +80,49 @@ begin
   if GetMainMacAddress(mac, [mafLocalOnly, mafRequireBroadcast]) then
     p.PeerSettings.InterfaceName := mac.IP; // default interface by IP (easy)
   // define main processing switches
-  with Executable.Command do
+  c := Executable.Command;
+  c.CaseSensitiveNames := true;
+  c.ExeDescription := FormatUtf8('mget %: retrieve files - and more' +
+    '%proudly using mORMot 2 - synopse.info',
+    [SYNOPSE_FRAMEWORK_VERSION, c.LineFeed]);
+  if c.Arg(0, '[hash@]#http://uri resource address to retrieve') then
+    url := c.Args[0];
+  result := gpWithUrl;
+  if c.Option(['P', 'prompt'],
+      'run in prompt mode (end on void input)') then
+    result := gpPromptMode;
+  dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
+  p.DestFile := c.ParamS(['o', 'output'],
+     'destination #filename or existing foldername', dest);
+  p.Silent := c.Option(['s', 'silent'],
+     'generate no console output');
+  p.NoResume := c.Option(['n', 'noresume'],
+     'disable auto-resume of interrupted partial download');
+  p.Cache := c.Option(['c', 'cache'],
+     'enable local Cache in --cachePath');
+  p.Peer := c.Option(['p', 'peer'],
+     'enable peer Cache process - see --peer* params');
+  p.TlsCertFile := c.ParamS(['t', 'tlsCert'],
+     'optional client Certificate #filename');
+  logfolder := c.ParamS(['logFolder'],
+     '#folder to be used for --log output', logfolder);
+  p.CacheFolder := c.ParamS(['cachePath'],
+     '#folder to be used for local (not peer) --cache', p.CacheFolder);
+  p.TlsIgnoreErrors  := c.Option(['w', 'weakTls'],
+     'ignore TLS certificate errors');
+  if c.Option(['l', 'log'],
+     'enable logging in --logFolder') then
+    p.Log := TSynLog;
+  if c.Option('debug', 'raw debugging on the console') then
   begin
-    CaseSensitiveNames := true;
-    ExeDescription := FormatUtf8('mget %: retrieve files - and more' +
-      '%proudly using mORMot 2 - synopse.info',
-      [SYNOPSE_FRAMEWORK_VERSION, LineFeed]);
-    if Arg(0, '[hash@]#http://uri resource address to retrieve') then
-      url := Args[0];
-    result := gpWithUrl;
-    if Option(['P', 'prompt'],
-        'run in prompt mode (end on void input)') then
-      result := gpPromptMode;
-    dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
-    p.DestFile := ParamS(['o', 'output'],
-       'destination #filename or existing foldername', dest);
-    p.Silent := Option(['s', 'silent'],
-       'generate no console output');
-    p.NoResume := Option(['n', 'noresume'],
-       'disable auto-resume of interrupted partial download');
-    p.Cache := Option(['c', 'cache'],
-       'enable local Cache in --cachePath');
-    p.Peer := Option(['p', 'peer'],
-       'enable peer Cache process - see --peer* params');
-    p.TlsCertFile := ParamS(['t', 'tlsCert'],
-       'optional client Certificate #filename');
-    logfolder := ParamS(['logFolder'],
-       '#folder to be used for --log output', logfolder);
-    p.CacheFolder := ParamS(['cachePath'],
-       '#folder to be used for local (not peer) --cache', p.CacheFolder);
-    p.TlsIgnoreErrors  := Option(['w', 'weakTls'],
-       'ignore TLS certificate errors');
-    if Option(['l', 'log'],
-       'enable logging in --logFolder') then
-      p.Log := TSynLog;
-    if Option('debug', 'raw debugging on the console') then
-    begin
-      p.Log := TSynLog; // force logging even if -l was not specified
-      p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];
-    end;
-    if Option(['?', 'help'], 'display this message') then
-      result := gpHelp
-    else if (result = gpWithUrl) and
-            (Url = '') then
-      result := gpFailed;
+    p.Log := TSynLog; // force logging even if -l was not specified
+    p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];
   end;
+  if c.Option(['?', 'help'], 'display this message') then
+    result := gpHelp
+  else if (result = gpWithUrl) and
+          (Url = '') then
+    result := gpFailed;
   // add Main and PeerCache params after all main settings using RTTI
   SetObjectFromExecutableCommandLine(p, '', ' for main process');
   SetObjectFromExecutableCommandLine(p.PeerSettings, 'peer', ' for peer Cache');
@@ -130,7 +130,7 @@ begin
   case result of
     gpHelp:
       begin
-        p.ToConsole('%', [Executable.Command.FullDescription]);
+        p.ToConsole('%', [c.FullDescription]);
         port := p.PeerSettings.Port;
         p.ToConsole('For peer Cache to work, please open TCP+UDP port %.', [port]);
         {$ifdef OSLINUX}
@@ -148,10 +148,9 @@ begin
         {$endif OSWINDOWS}
       end;
     gpFailed:
-      with Executable.Command do
-        p.ToConsole('%', [FullDescription('', '', LineFeed + 'mget ' +
-          SwitchAsText('help') + ' to display full usage description')]);
-  else if Executable.Command.ConsoleWriteUnknown then
+      p.ToConsole('%', [c.FullDescription('', '', c.LineFeed + 'mget ' +
+        c.SwitchAsText('help') + ' to display full usage description')]);
+  else if c.ConsoleWriteUnknown then
     result := gpFailed;
   end;
   if result = gpFailed then
