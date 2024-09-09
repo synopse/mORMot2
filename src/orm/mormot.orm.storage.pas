@@ -4698,14 +4698,14 @@ type
 constructor TOrmVirtualTableLog.Create(aModule: TOrmVirtualTableModule;
   const aTableName: RawUtf8; FieldCount: integer; Fields: PPUtf8CharArray);
 var
-  aFileName: TFileName;
+  fn: TFileName;
 begin
   inherited Create(aModule, aTableName, FieldCount, Fields);
   if FieldCount = 1 then
-    Utf8ToFileName(Fields[0], aFileName)
+    Utf8ToFileName(Fields[0], fn)
   else
-    aFileName := aModule.FileName(aTableName);
-  fLogFile := TSynLogFile.Create(aFileName);
+    fn := aModule.FileName(aTableName);
+  fLogFile := TSynLogFile.Create(fn);
 end;
 
 destructor TOrmVirtualTableLog.Destroy;
