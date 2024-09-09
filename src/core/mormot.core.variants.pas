@@ -8614,7 +8614,8 @@ var
   Dest: TVarData;
 begin
   VarClear(result{%H-});
-  if (cardinal(VType) <> DocVariantVType) or
+  if (@self = nil) or
+     (cardinal(VType) <> DocVariantVType) or
      (VCount = 0) then
     exit;
   DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
@@ -8628,7 +8629,8 @@ var
   Dest: TVarData;
 begin
   result := false;
-  if (cardinal(VType) <> DocVariantVType) or
+  if (@self = nil) or
+     (cardinal(VType) <> DocVariantVType) or
      (VCount = 0) then
     exit;
   DocVariantType.Lookup(Dest, TVarData(self), pointer(aPath), aPathDelim);
@@ -8647,7 +8649,8 @@ var
 begin
   result := @self;
   csv := pointer(aPath);
-  if aPath <> '' then
+  if (result <> nil) and
+     (aPath <> '') then
     repeat
       repeat
         vt := PVarData(result)^.VType; // inlined dv := _Safe(result^)
