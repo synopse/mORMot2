@@ -2381,6 +2381,8 @@ var
 begin
   if opoClientNoDescription in fOptions then
     exit;
+  if fTitle = '' then
+    fTitle := fName;
   Comment(w, [Described, ' ', fTitle]);
   if fInfo^.GetAsRawUtf8('description', u) then
     Comment(w, [' - ', u]);
