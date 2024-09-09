@@ -49,12 +49,13 @@ Those last two features are quite unique and efficient.
 
 ### mopenapi
 
-This [mopenapi command-Line tool](./mopenapi) can generate Delphi/FPC client .pas units from OpenAPI/Swagger .json specifications.
+[The *mORMot OpenAPI* (`mopenapi`) command-Line tool](./mopenapi) can generate Delphi/FPC client .pas units from OpenAPI/Swagger .json specifications.
 
 Example of usage:
 ```
    ./mopenapi --help
    mopenapi swagger.json PetStore
    mopenapi OpenApiAuth.json /concise
+   ./mopenapi test.json --options=DtoNoExample,DtoNoPattern
 ```
 See [our corresponding Blog entry](https://blog.synopse.info/?post/2024/09/06/Swagger/OpenAPI-Client-Generator-for-Delphi-and-FPC).

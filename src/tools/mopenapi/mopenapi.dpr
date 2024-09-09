@@ -7,9 +7,10 @@ program mopenapi;
   *****************************************************************************
 
   Command-Line Tool to Generate client .pas from OpenAPI/Swagger .json specs
-  - e.g.   mopenapi swagger.json PetStore
-           mopenapi --help
-           mopenapi OpenApiAuth.json --options=GenerateSingleApiUnit,DtoNoDescription,ClientNoDescription
+  - e.g.   ./mopenapi --help
+           mopenapi swagger.json PetStore
+           mopenapi OpenApiAuth.json /concise
+           ./mopenapi test.json --options=DtoNoExample,DtoNoPattern
   
   *****************************************************************************
 }
