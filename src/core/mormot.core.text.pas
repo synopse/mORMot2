@@ -1994,12 +1994,11 @@ function DefaultSynLogExceptionToStr(WR: TTextWriter;
 
 
 type
-  {$M+}
   /// generic parent class of all custom Exception types of this unit
   // - all our classes inheriting from ESynException are serializable,
   // so you could use ObjectToJsonDebug(any ESynException) to retrieve some
   // extended information
-  ESynException = class(Exception)
+  ESynException = class(ExceptionWithProps)
   protected
     fRaisedAt: pointer;
     fMessageUtf8: RawUtf8;
@@ -2052,7 +2051,6 @@ type
     /// the Exception Message string, as defined in parent Exception class
     property Message;
   end;
-  {$M-}
 
   /// meta-class of the ESynException hierarchy
   ESynExceptionClass = class of ESynException;

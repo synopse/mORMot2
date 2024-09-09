@@ -1526,8 +1526,7 @@ begin
   {$ifndef OSPOSIX}
   Executable.Command.Option('noenter', 'do not wait for ENTER key on exit');
   {$endif OSPOSIX}
-  if Executable.Command.Arg(0, '#filename to redirect the console output') then
-    Utf8ToFileName(Executable.Command.Args[0], redirect);
+  redirect := Executable.Command.ArgFile(0, '#filename to redirect the console output');
   Executable.Command.Get(['test'], restrict,
     'the #class.method name(s) to restrict the tests');
   DescribeCommandLine; // may be overriden to define additional parameters
