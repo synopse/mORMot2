@@ -79,7 +79,7 @@ type
   // you would better use an external .dbg file then convert it into a .mab
   // - on FPC, you don't need to specifly the -gl compiler switch
   // - location of a source code information from its address is below 10us
-  TDebugFile = class(TSynPersistent)
+  TDebugFile = class(TObjectWithProps)
   protected
     fDebugFile: TFileName;
     fSymbol: TDebugSymbolDynArray;

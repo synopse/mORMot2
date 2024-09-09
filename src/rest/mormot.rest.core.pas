@@ -1512,7 +1512,6 @@ type
 { ************ TRestThread Background Process of a REST instance }
 
 type
-  {$M+}
   /// a simple TThread for doing some process within the context of a REST instance
   // - inherited classes should override InternalExecute abstract method
   TRestThread = class(TThreadAbstract)
@@ -1569,7 +1568,6 @@ type
     property Executing: boolean
       read fExecuting;
   end;
-  {$M-}
 
 
 

@@ -538,7 +538,6 @@ type
   /// callback expected by TRestHttpRemoteLogServer to notify about a received log
   TRemoteLogReceivedOne = procedure(const Text: RawUtf8) of object;
 
-  {$M+}
   /// limited HTTP server which is will receive remote log notifications
   // - this will create a simple in-memory mORMot server, which will trigger
   // a supplied callback when a remote log is received
@@ -564,7 +563,6 @@ type
     // - expecting PUT with text as body, at http://server/root/RemoteLog
     procedure RemoteLog(Ctxt: TRestServerUriContext);
   end;
-  {$M-}
 
 
 // backward compatibility types redirections

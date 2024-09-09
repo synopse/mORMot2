@@ -813,7 +813,6 @@ type
     evTimeOut,
     evRaised);
 
-  {$M+}
   /// a semaphore used to wait for some process to be finished
   // - used e.g. by TBlockingCallback in mormot.rest.server.pas
   // - once created, process would block via a WaitFor call, which would be
@@ -871,7 +870,6 @@ type
     property TimeOutMs: integer
       read fTimeOutMS;
   end;
-  {$M-}
 
   /// used to identify each TBlockingProcessPool call
   // - allow to match a given TBlockingProcessPoolItem semaphore
@@ -898,7 +896,7 @@ type
   // - to be used to emulate e.g. blocking execution from an asynchronous
   // event-driven DDD process
   // - it would also allow to re-use TEvent system resources
-  TBlockingProcessPool = class(TSynPersistent)
+  TBlockingProcessPool = class(TObjectWithProps)
   protected
     fClass: TBlockingProcessPoolItemClass;
     fPool: TSynObjectListLightLocked;

@@ -1869,12 +1869,11 @@ function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
 { ************* Text Memory Buffers and Files }
 
 type
-  {$M+}
   /// able to read a UTF-8 text file using memory map
   // - much faster than TStringList.LoadFromFile()
   // - will ignore any trailing UTF-8 BOM in the file content, but will not
   // expect one either
-  TMemoryMapText = class
+  TMemoryMapText = class(TObjectWithProps)
   protected
     fLines: PPointerArray;
     fLinesMax: integer;
@@ -1896,10 +1895,6 @@ type
     // avoid reading the entire file more than once
     procedure ProcessOneLine(LineBeg, LineEnd: PUtf8Char); virtual;
   public
-    /// initialize the memory mapped text file
-    // - this default implementation just do nothing but is called by overloaded
-    // constructors so may be overriden to initialize an inherited class
-    constructor Create; overload; virtual;
     /// read an UTF-8 encoded text file
     // - every line beginning is stored into LinePointers[]
     constructor Create(const aFileName: TFileName); overload;
@@ -1960,7 +1955,6 @@ type
     property Count: integer
       read fCount;
   end;
-  {$M-}
 
 {$ifndef PUREMORMOT2} // just redirect to mormot.core.text Append(...) overloads
 procedure AppendBufferToRawByteString(var Content: RawByteString;
@@ -9105,10 +9099,6 @@ end;
 { ************* Text Memory Buffers and Files }
 
 { TMemoryMapText }
-
-constructor TMemoryMapText.Create;
-begin
-end;
 
 constructor TMemoryMapText.Create(aFileContent: PUtf8Char; aFileSize: integer);
 begin

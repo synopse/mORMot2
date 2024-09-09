@@ -1940,7 +1940,7 @@ type
   /// abstract connection created from TSqlDBConnectionProperties
   // - more than one TSqlDBConnection instance can be run for the same
   // TSqlDBConnectionProperties
-  TSqlDBConnection = class(TSynPersistent)
+  TSqlDBConnection = class(TObjectWithProps)
   protected
     fProperties: TSqlDBConnectionProperties;
     fErrorException: ExceptClass;

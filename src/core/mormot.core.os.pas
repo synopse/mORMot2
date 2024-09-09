@@ -1246,8 +1246,6 @@ var
   // - equals TMemoryInfo.memtotal as retrieved from GetMemoryInfo() at startup
   SystemMemorySize: PtrUInt;
 
-{$M+} // to have existing RTTI for published properties
-
 type
   /// used to retrieve version information from any EXE
   // - under Linux, all version numbers are set to 0 by default, unless
@@ -1256,7 +1254,7 @@ type
   // - for the main executable, do not create once instance of this class, but
   // call GetExecutableVersion / SetExecutableVersion and access the Executable
   // global variable
-  TFileVersion = class
+  TFileVersion = class(TObjectWithProps)
   protected
     fDetailed: string;
     fFileName: TFileName;
@@ -1305,7 +1303,7 @@ type
     // GetExecutableVersion / SetExecutableVersion and access the Executable
     // global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
-      aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0);
+      aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0); reintroduce;
     /// open and extract file information from the executable FileName
     // - note that resource extraction is not available on POSIX, unless the
     // FPCUSEVERSIONINFO conditional has been specified in the project options
@@ -1344,8 +1342,6 @@ type
     property BuildDateTime: TDateTime
       read fBuildDateTime write fBuildDateTime;
   end;
-
-{$M-}
 
 /// quickly parse the TFileVersion.UserAgent content
 // - identify e.g. 'myprogram/3.1.0.2W' or 'myprogram/3.1.0.2W32' text
@@ -4881,13 +4877,13 @@ type
   // - only limitation is that we don't know if WaitFor is signaled or timeout,
   // but this is not a real problem in practice since most code don't need this
   // information or has already its own flag in its implementation logic
-  TSynEvent = class
+  TSynEvent = class(TObjectWithProps)
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
     fFD: integer;     // for eventfd()
   public
     /// initialize an instance of cross-platform event
-    constructor Create;
+    constructor Create; override;
     /// finalize this instance of cross-platform event
     destructor Destroy; override;
     /// ignore any pending events, so that WaitFor will be set on next SetEvent
@@ -4918,18 +4914,16 @@ type
 function NewSynLocker: PSynLocker;
 
 type
-  {$M+}
-
   /// a persistent-agnostic alternative to TSynPersistentLock
   // - can be used as base class when custom JSON persistence is not needed
   // - consider a TRWLock field as a lighter multi read / exclusive write option
-  TSynLocked = class
+  TSynLocked = class(TObjectWithProps)
   protected
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
     /// initialize the instance, and its associated lock
     // - is defined as virtual, just like TObjectWithCustomCreate/TSynPersistent
-    constructor Create; virtual;
+    constructor Create; override;
     /// finalize the instance, and its associated lock
     destructor Destroy; override;
     /// access to the associated instance critical section
@@ -4937,11 +4931,6 @@ type
     property Safe: PSynLocker
       read fSafe;
   end;
-
-  {$M-}
-
-  /// meta-class definition of the TSynLocked hierarchy
-  TSynLockedClass = class of TSynLocked;
 
   /// a thread-safe Pierre L'Ecuyer software random generator
   // - just wrap TLecuyer with a TLighLock
@@ -5464,9 +5453,7 @@ type
       const Dependencies: RawUtf8 = '');
   end;
 
-  {$M+}
   TService = class;
-  {$M-}
 
   /// callback procedure for Windows Service Controller
   TServiceControlHandler = procedure(CtrlCode: cardinal); stdcall;
@@ -5479,7 +5466,7 @@ type
 
   /// abstract class to let an executable implement a Windows Service
   // - do not use this class directly, but TServiceSingle
-  TService = class
+  TService = class(TObjectWithProps)
   protected
     fServiceName: RawUtf8;
     fDisplayName: RawUtf8;

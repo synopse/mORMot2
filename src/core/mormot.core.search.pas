@@ -255,7 +255,7 @@ type
   TMatchStoreDynArray = array of TMatchStore;
 
   /// stores several TMatch instances, from a set of glob patterns
-  TMatchs = class(TSynPersistent)
+  TMatchs = class(TObjectWithProps)
   protected
     fMatch: TMatchStoreDynArray;
     fMatchCount: integer;
@@ -527,7 +527,7 @@ type
   TParserAbstract = class;
 
   /// stores an expression search engine node, as used by TExprParser
-  TExprNode = class(TSynPersistent)
+  TExprNode = class(TObjectWithProps)
   protected
     fNext: TExprNode;
     fNodeType: TExprNodeType;
@@ -565,7 +565,7 @@ type
   TExprNodeWordClass = class of TExprNodeWordAbstract;
 
   /// parent class of TExprParserAbstract
-  TParserAbstract = class(TSynPersistent)
+  TParserAbstract = class(TObjectWithProps)
   protected
     fExpression, fCurrentWord, fAndWord, fOrWord, fNotWord: RawUtf8;
     fCurrent: PUtf8Char;
@@ -668,7 +668,7 @@ type
   // used, with some random seed values, to simulate several hashing functions;
   // you can customize the hash function if needed
   // - all methods are thread-safe, and MayExist can be concurrent (via a TRWLock)
-  TSynBloomFilter = class(TSynPersistent)
+  TSynBloomFilter = class(TObjectWithProps)
   private
     fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
     fHasher: THasher;

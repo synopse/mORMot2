@@ -1122,7 +1122,7 @@ type
   // internal JSON format (which is faster than a query to the SQLite3 engine)
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
-  TSynCache = class(TSynPersistent)
+  TSynCache = class(TObjectWithProps)
   protected
     fNameValue: TSynNameValue;
     fRamUsed: cardinal;
@@ -10310,11 +10310,6 @@ begin
   result := TSynObjectListClass(Rtti.ValueClass).Create({ownobjects=}true);
 end;
 
-function _New_SynLocked(Rtti: TRttiCustom): pointer;
-begin
-  result := TSynLockedClass(Rtti.ValueClass).Create;
-end;
-
 function _New_InterfacedCollection(Rtti: TRttiCustom): pointer;
 begin
   result := TInterfacedCollectionClass(Rtti.ValueClass).Create;
@@ -10467,8 +10462,6 @@ begin
         fJsonSave := @_JS_TSynObjectList;
         fJsonLoad := @_JL_TSynObjectList;
       end
-      else if C = TSynLocked then
-        fNewInstance := @_New_SynLocked
       else if C = TComponent then
         fNewInstance := @_New_Component
       else if C = TInterfacedCollection then

@@ -278,7 +278,7 @@ type
   /// store one Big Integer computation context for RSA
   // - will maintain its own set of reference-counted Big Integer values,
   // for fast thread-local reuse and automated safe anti-forensic wipe
-  TRsaContext = class(TObjectWithCustomCreate)
+  TRsaContext = class(TObjectWithProps)
   private
     /// list of released PBigInt instance, ready to be re-used by Allocate()
     fFreeList: PBigInt;

@@ -2133,7 +2133,6 @@ type
     pAppData: pointer;
   end;
 
-  {$M+}
   /// wrapper around all SQLite3 library API calls
   // - abstract class allowing direct binding of static sqlite3.obj
   // (TSqlite3LibrayStatic) or with an external library (TSqlite3LibraryDynamic)
@@ -2141,7 +2140,7 @@ type
   // you should call sqlite3.open() instead of sqlite3_open() for instance
   // - if your project refers to mormot.db.raw.sqlite3.static unit, it will
   // initialize a TSqlite3LibrayStatic instance
-  TSqlite3Library = class
+  TSqlite3Library = class(TObjectWithProps)
   protected
     fUseInternalMM: boolean;
     fVersionNumber: cardinal;
@@ -4067,7 +4066,7 @@ type
     snapshot_free: function(DB: TSqlite3DB; Snapshot: PSqlite3Snapshot): integer; cdecl;
 
     /// Initialize the internal version numbers and call AfterInitialization
-    constructor Create; virtual;
+    constructor Create; override;
     /// this method is called by Create after SQlite3 is loaded, but before
     // sqlite3_initialize is called
     // - will set SQLITE_CONFIG_MULTITHREAD, i.e. application is responsible for
@@ -4102,7 +4101,6 @@ type
     property Version: RawUtf8
       read GetVersion;
   end;
-  {$M-}
 
   /// allow access to an external SQLite3 library engine
   // - you can e.g. replace the main sqlite3 engine with any external library:
@@ -4419,10 +4417,7 @@ type
     lcVariableNumber,
     lcTriggerDepth);
 
-  {$M+}
   TSqlDatabase = class;
-  {$M-}
-
   TSqlBlobStream = class;
 
   PSqlRequest = ^TSqlRequest;
