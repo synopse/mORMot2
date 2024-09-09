@@ -1373,7 +1373,7 @@ type
     fDescArg: TRawUtf8DynArray;
     fCaseSensitiveNames: boolean;
     fSwitch: array[{long=}boolean] of RawUtf8;
-    fLineFeed, fExeDescription: RawUtf8;
+    fLineFeed, fExeDescription, fUnknown: RawUtf8;
     procedure Describe(const v: array of RawUtf8;
       k: TExecutableCommandLineKind; d, def: RawUtf8; argindex: integer);
     function Find(const v: array of RawUtf8;
@@ -1383,9 +1383,19 @@ type
     /// mark and describe an "arg" value by 0-based index in Args[]
     function Arg(index: integer; const description: RawUtf8 = '';
       optional: boolean = true): boolean; overload;
+    /// mark and describe an "arg" value by 0-based index in Args[]
+    function ArgU(index: integer; const description: RawUtf8 = '';
+      optional: boolean = true): RawUtf8;
     /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
     function ArgString(index: integer; const description: RawUtf8 = '';
       optional: boolean = true): string;
+    /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
+    // - if set, will fail in DetectUnknown if the file (or the folder) does not exist
+    function ArgFile(index: integer; const description: RawUtf8 = '';
+      optional: boolean = true; isFolder: boolean = false): TFileName;
+    /// will fail in DetectUnknown if the file or folder name does not exist
+    // - also calls and return ExpandFileName() on the supplied file or folder name
+    function CheckFileName(const name: TFileName; isFolder: boolean = false): TFileName;
     /// mark and describe an "arg" value in Args[]
     function Arg(const name: RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
@@ -8762,12 +8772,45 @@ begin
   Describe([], clkArg, description, '', index + 1);
 end;
 
+function TExecutableCommandLine.ArgU(index: integer; const description: RawUtf8;
+  optional: boolean): RawUtf8;
+begin
+  result := '';
+  if Arg(index, description, optional) then
+    result := Args[index];
+end;
+
 function TExecutableCommandLine.ArgString(index: integer;
   const description: RawUtf8; optional: boolean): string;
 begin
   result := '';
   if Arg(index, description, optional) then
     result := string(Args[index]);
+end;
+
+function TExecutableCommandLine.ArgFile(index: integer;
+  const description: RawUtf8; optional, isFolder: boolean): TFileName;
+begin
+  result := ArgString(index, description, optional);
+  if result <> '' then
+    result := CheckFileName(result, isFolder);
+end;
+
+const
+  FD: array[boolean] of string[7] = ('File', 'Folder');
+
+function TExecutableCommandLine.CheckFileName(const name: TFileName;
+  isFolder: boolean): TFileName;
+begin
+  result := ExpandFileName(name);
+  if isFolder then
+  begin
+    if DirectoryExists(result) then
+      exit;
+  end
+  else if FileExists(result) then
+    exit;
+  _fmt('%s%s %s does not exist%s', [fUnknown, FD[isFolder], result, fLineFeed], fUnknown);
 end;
 
 function TExecutableCommandLine.Arg(const name, description: RawUtf8): boolean;
@@ -9012,7 +9055,7 @@ var
   clk: TExecutableCommandLineKind;
   i: PtrInt;
 begin
-  result := '';
+  result := fUnknown;
   for clk := low(fRetrieved) to high(fRetrieved) do
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
