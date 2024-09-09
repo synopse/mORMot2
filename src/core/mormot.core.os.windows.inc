@@ -590,6 +590,12 @@ begin
       11003:
         result := 'WSATRY_AGAIN';
       // some security-related HRESULT errors
+      $80092010:
+        result := 'CRYPT_E_REVOKED';
+      $80092012:
+        result := 'CRYPT_E_NO_REVOCATION_CHECK';
+      $80092013:
+        result := 'CRYPT_E_REVOCATION_OFFLINE';
       $80096010:
         result := 'TRUST_E_BAD_DIGEST';
       $800b0100:
