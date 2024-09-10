@@ -194,18 +194,20 @@ const
   ASN1_OID_PAGEDRESULTS = '1.2.840.113556.1.4.319';
 
   /// OID of namingContexts attribute in the root DSE
-  ASN1_OID_DSE_NAMINGCONTEXTS = '1.3.6.1.4.1.1466.101.120.5';
+  ASN1_OID_DSE_NAMINGCONTEXTS       = '1.3.6.1.4.1.1466.101.120.5';
   /// OID of altServer attribute in the root DSE
-  ASN1_OID_DSE_ALTSERVER = '1.3.6.1.4.1.1466.101.120.6';
+  ASN1_OID_DSE_ALTSERVER            = '1.3.6.1.4.1.1466.101.120.6';
   /// OID of supportedExtension attribute in the root DSE
-  ASN1_OID_DSE_SUPPORTEDEXTENSION = '1.3.6.1.4.1.1466.101.120.7';
+  ASN1_OID_DSE_SUPPORTEDEXTENSION   = '1.3.6.1.4.1.1466.101.120.7';
   /// OID of supportedControl attribute in the root DSE
-  ASN1_OID_DSE_SUPPORTEDCONTROL = '1.3.6.1.4.1.1466.101.120.13';
+  ASN1_OID_DSE_SUPPORTEDCONTROL     = '1.3.6.1.4.1.1466.101.120.13';
   /// OID of supportedLDAPVersion attribute in the root DSE
   ASN1_OID_DSE_SUPPORTEDLDAPVERSION = '1.3.6.1.4.1.1466.101.120.15';
 
-  /// OID of LDAPv3 Extended Operation Password Modify operation (RFC 3062)
-  ASN1_OID_PASSWDMODIFYOID = '1.3.6.1.4.1.4203.1.11.1';
+  /// OID of LDAPv3 Password Modify extended operation (RFC 3062)
+  ASN1_OID_PASSWDMODIFY = '1.3.6.1.4.1.4203.1.11.1';
+  /// OID of LDAPv3 Who Am I extended operation (RFC 4532)
+  ASN1_OID_WHOAMI       = '1.3.6.1.4.1.4203.1.11.3';
 
 type
   /// define possible operations for LDAP MODIFY operations
@@ -884,7 +886,7 @@ type
     fSearchResult: TLdapResultList;
     fDefaultDN, fRootDN, fConfigDN: RawUtf8;
     fNetbiosDN: RawUtf8;
-    fMechanisms: TRawUtf8DynArray;
+    fMechanisms, fControls, fExtensions: TRawUtf8DynArray;
     fSecContext: TSecContext;
     fBoundUser: RawUtf8;
     fSockBuffer: RawByteString;
@@ -937,9 +939,23 @@ type
     // - returns e.g. ['GSSAPI','GSS-SPNEGO','EXTERNAL','DIGEST-MD5']
     // - use an internal cache for fast retrieval
     function Mechanisms: TRawUtf8DynArray;
+    /// the controls supported on this LDAP server
+    // - the OIDs are returned sorted, and de-duplicated
+    // - use an internal cache for fast retrieval
+    function Controls: TRawUtf8DynArray;
+    /// the LDAP v3 extensions supported on this LDAP server
+    // - the OIDs are returned sorted, and de-duplicated
+    // - use an internal cache for fast retrieval
+    function Extensions: TRawUtf8DynArray;
     /// search if the server supports a given authentication mechanism by name
     // - a typical value to search is e.g. 'GSSAPI' or 'DIGEST-MD5'
-    function Supports(const MechanismName: RawUtf8): boolean;
+    function SupportsMech(const MechanismName: RawUtf8): boolean;
+    /// search if the server supports a given LDAP control by name
+    // - a typical value to search is e.g. '1.2.840.113556.1.4.319'
+    function SupportsControl(const ControlName: RawUtf8): boolean;
+    /// search if the server supports a given LDAP v3 extension by name
+    // - a typical value to search is e.g. ASN1_OID_WHOAMI
+    function SupportsExt(const ExtensionName: RawUtf8): boolean;
     /// retrieve al well known object DN or CN as a single convenient record
     // - use an internal cache for fast retrieval
     function WellKnownObjects(AsCN: boolean = false): PLdapKnownCommonNames;
@@ -3068,8 +3084,8 @@ begin
      fBound and
      fSock.SockConnected then
     fNetbiosDN := SearchObject('CN=Partitions,' + ConfigDN,
-      FormatUtf8('(&(nETBIOSName=*)(nCName=%))',
-        [DefaultDN]), 'nETBIOSName', lssWholeSubtree).GetReadable;
+      FormatUtf8('(&(nETBIOSName=*)(nCName=%))', [DefaultDN]),
+      'nETBIOSName', lssWholeSubtree).GetReadable;
   result := fNetbiosDN;
 end;
 
@@ -3110,7 +3126,29 @@ begin
   result := fMechanisms;
 end;
 
-function TLdapClient.Supports(const MechanismName: RawUtf8): boolean;
+function TLdapClient.Controls: TRawUtf8DynArray;
+begin
+  if (fControls = nil) and
+     fSock.SockConnected then
+  begin
+    fControls := SearchObject('', '*', 'supportedControl').GetAllReadable;
+    DeduplicateRawUtf8(fControls);
+  end;
+  result := fControls;
+end;
+
+function TLdapClient.Extensions: TRawUtf8DynArray;
+begin
+  if (fExtensions = nil) and
+     fSock.SockConnected then
+  begin
+    fExtensions := SearchObject('', '*', 'supportedExtension').GetAllReadable;
+    DeduplicateRawUtf8(fExtensions);
+  end;
+  result := fExtensions;
+end;
+
+function TLdapClient.SupportsMech(const MechanismName: RawUtf8): boolean;
 var
   i: PtrInt;
 begin
@@ -3120,6 +3158,22 @@ begin
       if PropNameEquals(fMechanisms[i], MechanismName) then
         exit;
   result := false;
+end;
+
+function TLdapClient.SupportsControl(const ControlName: RawUtf8): boolean;
+begin
+  result := (Controls <> nil) and
+    (ControlName <> '') and
+    (FastFindPUtf8CharSorted(
+      pointer(fControls), high(fControls), pointer(ControlName)) >= 0);
+end;
+
+function TLdapClient.SupportsExt(const ExtensionName: RawUtf8): boolean;
+begin
+  result := (Extensions <> nil) and
+    (ExtensionName <> '') and
+    (FastFindPUtf8CharSorted(
+      pointer(fExtensions), high(fExtensions), pointer(ExtensionName)) >= 0);
 end;
 
 procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
@@ -3964,7 +4018,7 @@ begin
           RespName^ := v;
       ASN1_CTX11:
         if RespValue <> nil then
-          RespValue^ := v
+          RespValue^ := v;
     else
       break;
     end;
