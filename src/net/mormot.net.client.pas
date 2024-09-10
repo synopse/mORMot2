@@ -452,16 +452,13 @@ type
   // - don't forget to use Free procedure when you are finished
   THttpClientSocket = class(THttpSocket)
   protected
-    fUserAgent: RawUtf8;
+    fExtendedOptions: THttpRequestExtendedOptions;
     fReferer: RawUtf8;
     fAccept: RawUtf8;
     fProcessName: RawUtf8;
     fRedirected: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
-    fAuthUserName: RawUtf8; // credentials used for wraDigest or wraNegotiate
-    fAuthPassword, fBasicAuthUserPassword, fAuthBearer: SpiUtf8;
     fAuthDigestAlgo: TDigestAlgo;
-    fRedirectMax: integer;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnProtocolRequest: TOnHttpClientRequest;
@@ -470,6 +467,7 @@ type
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif DOMAINRESTAUTH}
+    procedure SetAuthBearer(const Value: SpiUtf8);
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
     function OnAuthorizeDigest(Sender: THttpClientSocket;
@@ -549,6 +547,8 @@ type
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer;
+    /// setup web authentication using the Basic access algorithm
+    procedure AuthorizeBasic(const UserName: RawUtf8; const Password: SpiUtf8);
     /// setup web authentication using the Digest access algorithm
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
       Algo: TDigestAlgo = daMD5_Sess);
@@ -604,16 +604,13 @@ type
     /// how many 3xx status code redirections are allowed
     // - default is 0 - i.e. no redirection
     property RedirectMax: integer
-      read fRedirectMax write fRedirectMax;
+      read fExtendedOptions.RedirectMax write fExtendedOptions.RedirectMax;
     /// the effective 'Location:' URI after 3xx redirection(s) of Request()
     property Redirected: RawUtf8
       read fRedirected;
-    /// optional Authorization: Basic header, encoded as 'User:Password' text
-    property BasicAuthUserPassword: SpiUtf8
-      read fBasicAuthUserPassword write fBasicAuthUserPassword;
     /// optional Authorization: Bearer header value
     property AuthBearer: SpiUtf8
-      read fAuthBearer write fAuthBearer;
+      read fExtendedOptions.Auth.Token write SetAuthBearer;
     /// contain the body data retrieved from the server - from inherited Http
     property Content: RawByteString
       read Http.Content;
@@ -622,7 +619,9 @@ type
       read Http.Headers;
     /// optional authorization callback
     // - is triggered by Request() on HTTP_UNAUTHORIZED (401) status
-    // - see e.g. THttpClientSocket.AuthorizeSspi class method for SSPI auth
+    // - as set by AuthorizeDigest() AuthorizeSspiUser()
+    // - as reset by AuthorizeBasic()
+    // - see e.g. THttpClientSocket.OnAuthorizeSspi class method for SSPI auth
     property OnAuthorize: TOnHttpClientSocketAuthorize
       read fOnAuthorize write fOnAuthorize;
     /// optional proxy authorization callback
@@ -646,7 +645,7 @@ type
     // friendly welcome by most servers :(
     // - you can specify a custom value here
     property UserAgent: RawUtf8
-      read fUserAgent write fUserAgent;
+      read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
     /// contain the body data length retrieved from the server
     property ContentLength: Int64
       read Http.ContentLength;
@@ -2188,15 +2187,14 @@ begin
   if aTimeOut = 0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
   inherited Create(aTimeOut);
-  fUserAgent := DefaultUserAgent(self);
+  if fExtendedOptions.UserAgent = '' then
+    fExtendedOptions.UserAgent := DefaultUserAgent(self);
   fAccept := '*/*';
 end;
 
 destructor THttpClientSocket.Destroy;
 begin
-  FillZero(fBasicAuthUserPassword); // wraBasic
-  FillZero(fAuthPassword);          // wraDigest or wraNegotiate
-  FillZero(fAuthBearer);            // wraBearer
+  fExtendedOptions.Clear;
   inherited Destroy;
 end;
 
@@ -2222,40 +2220,25 @@ end;
 constructor THttpClientSocket.OpenOptions(const aUri: TUri;
   var aOptions: THttpRequestExtendedOptions);
 var
-  usr, pwd: RawUtf8;
   temp: TUri;
   pu: PUri;
 begin
-  Create(aOptions.CreateTimeoutMS);
   // setup the proper options before any connection
-  fRedirectMax := aOptions.RedirectMax;
-  if aOptions.UserAgent <> '' then
-    fUserAgent := aOptions.UserAgent;
-  if aOptions.Auth.Scheme <> wraNone then
-  begin
-    usr := SynUnicodeToUtf8(aOptions.Auth.UserName);
-    pwd := SynUnicodeToUtf8(aOptions.Auth.Password);
-    case aOptions.Auth.Scheme of
-      wraBasic:
-        fBasicAuthUserPassword := Make([usr, ':', pwd]);
-      wraDigest:
-        AuthorizeDigest(usr, pwd);
-      {$ifdef DOMAINRESTAUTH}
-      wraNegotiate:
-        AuthorizeSspiUser(usr, pwd);
-      {$endif DOMAINRESTAUTH}
-      wraBearer:
-        fAuthBearer := aOptions.Auth.Token;
-    else
-      EHttpSocket.RaiseUtf8('SetClientSocketOptions(%): unsupported %',
-        [self, ToText(aOptions.Auth.Scheme)^]);
-    end;
-    FillZero(pwd);
+  fExtendedOptions := aOptions;
+  Create(fExtendedOptions.CreateTimeoutMS);
+  case fExtendedOptions.Auth.Scheme of
+    wraDigest:
+      begin
+        fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
+        fAuthDigestAlgo := daMD5_Sess;
+      end;
+    wraNegotiate:
+      fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
   end;
-  pu := GetSystemProxyUri(aUri.URI, aOptions.Proxy, temp);
+  TLS := fExtendedOptions.TLS;
+  pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
   if pu <> nil then
     Tunnel := pu^;
-  TLS := aOptions.TLS;
   // actually connect to the server (inlined TCrtSock.Open)
   OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
   aOptions.TLS := TLS; // copy back Peer information after connection
@@ -2469,15 +2452,19 @@ begin
       SockSend(['Range: bytes=', fRangeStart, '-', fRangeEnd])
     else
       SockSend(['Range: bytes=', fRangeStart, '-']);
-  if fAuthBearer <> '' then
-    SockSend(['Authorization: Bearer ', fAuthBearer]);
-  if fBasicAuthUserPassword <> '' then
-    SockSend(['Authorization: Basic ', BinToBase64(fBasicAuthUserPassword)]);
+  with fExtendedOptions.Auth do
+    case Scheme of
+      wraBasic:
+        SockSend(['Authorization: Basic ',
+          mormot.core.buffers.BinToBase64(Make([UserName, ':', Password]))]);
+      wraBearer:
+        SockSend(['Authorization: Bearer ', Token]);
+    end; // other Scheme values would have set OnAuthorize
   if fReferer <> '' then
     SockSend(['Referer: ', fReferer]);
   if fAccept <> '' then
     SockSend(['Accept: ', fAccept]);
-  SockSend(['User-Agent: ', UserAgent]);
+  SockSend(['User-Agent: ', fExtendedOptions.UserAgent]);
 end;
 
 procedure THttpClientSocket.RequestClear;
@@ -2572,7 +2559,7 @@ begin
       if (ctxt.Status < 300) or              // 300..399 are redirections
          (ctxt.Status = HTTP_NOTMODIFIED) or // but 304 is not
          (ctxt.Status > 399) or              // 400.. are errors
-         (ctxt.Redirected >= fRedirectMax) then
+         (ctxt.Redirected >= fExtendedOptions.RedirectMax) then
         break;
       if retry then
         ctxt.Retry := [rMain]
@@ -2981,17 +2968,28 @@ begin
   result := Request(url, 'DELETE', KeepAlive, header);
 end;
 
+procedure THttpClientSocket.SetAuthBearer(const Value: SpiUtf8);
+begin
+  fOnAuthorize := nil;
+  fExtendedOptions.AuthorizeBearer(Value);
+end;
+
+procedure THttpClientSocket.AuthorizeBasic(const UserName: RawUtf8;
+  const Password: SpiUtf8);
+begin
+  fOnAuthorize := nil;
+  fExtendedOptions.AuthorizeBasic(UserName, Password);
+end;
+
 procedure THttpClientSocket.AuthorizeDigest(const UserName: RawUtf8;
   const Password: SpiUtf8; Algo: TDigestAlgo);
 begin
-  fAuthUserName := UserName;
-  fAuthPassword := Password;
+  fOnAuthorize := nil;
+  fExtendedOptions.AuthorizeDigest(UserName, Password);
+  if UserName = '' then
+    exit;
+  fOnAuthorize := OnAuthorizeDigest;
   fAuthDigestAlgo := Algo;
-  if (UserName = '') or
-     (Algo = daUndefined) then
-    fOnAuthorize := nil
-  else
-    fOnAuthorize := OnAuthorizeDigest;
 end;
 
 function THttpClientSocket.OnAuthorizeDigest(Sender: THttpClientSocket;
@@ -3004,7 +3002,7 @@ begin
   if IdemPChar(p, 'DIGEST ') then
   begin
     auth := DigestClient(fAuthDigestAlgo, p + 7, Context.method, Context.url,
-      fAuthUserName, fAuthPassword);
+      fExtendedOptions.Auth.UserName, fExtendedOptions.Auth.Password);
     if auth <> '' then
       AppendLine(Context.header, ['Authorization: Digest ', auth]);
   end;
@@ -3033,9 +3031,9 @@ begin
     repeat
       FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
       datain := Base64ToBin(TrimU(datain));
-      if Sender.fAuthUserName <> '' then // from AuthorizeSspiUser()
-        ClientSspiAuthWithPassword(sc, datain, Sender.fAuthUserName,
-          Sender.fAuthPassword, Sender.AuthorizeSspiSpn, dataout)
+      if Sender.fExtendedOptions.Auth.UserName <> '' then // from AuthorizeSspiUser()
+        ClientSspiAuthWithPassword(sc, datain, Sender.fExtendedOptions.Auth.UserName,
+          Sender.fExtendedOptions.Auth.Password, Sender.AuthorizeSspiSpn, dataout)
       else                               // use current logged user
         ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
       if dataout = '' then
@@ -3071,11 +3069,13 @@ begin
   if not InitializeDomainAuth then
     EHttpSocket.RaiseUtf8('%.AuthorizeSspiUser: no % available on this system',
       [self, SECPKGNAMEAPI]);
-  fAuthUserName := UserName;
-  fAuthPassword := Password;
+  fOnAuthorize := nil;
+  fExtendedOptions.AuthorizeSspiUser(UserName, Password);
+  if UserName = '' then
+    exit;
+  fOnAuthorize := OnAuthorizeSspi;
   if KerberosSpn <> '' then
     fAuthorizeSspiSpn := KerberosSpn;
-  fOnAuthorize := OnAuthorizeSspi;
 end;
 
 class function THttpClientSocket.OnProxyAuthorizeSspi(Sender: THttpClientSocket;
