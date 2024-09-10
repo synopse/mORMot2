@@ -147,29 +147,47 @@ type
   {$else}
   THttpRequestExtendedOptions = object
   {$endif USERECORDWITHMETHODS}
+  private
+    procedure AuthorizeUserPassword(const UserName, Password: RawUtf8;
+      Scheme: THttpRequestAuthentication);
+  public
     /// allow to customize the HTTPS process
+    // - used only during initial connection
     TLS: TNetTlsContext;
+    /// optional Proxy URI
+    // - if kept to its default '', will try to use the system PROXY
+    // - if set to 'none', won't use any proxy
+    // - otherwise, will use this value as explicit proxy server name
+    // - used only during initial connection
+    Proxy: RawUtf8;
+    /// the timeout to be used for the whole connection, as set in Create()
+    CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
     Auth: record
       Scheme: THttpRequestAuthentication;
-      UserName: SynUnicode;
-      Password: SynUnicode;
+      UserName: RawUtf8;
+      Password: SpiUtf8;
       Token: SpiUtf8;
     end;
-    /// the timeout to be used for the whole connection, as set in Create()
-    CreateTimeoutMS: integer;
     /// how many times THttpClientSocket should redirect 30x responses
     RedirectMax: integer;
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
-    /// optional Proxy URI
-    // - if kept to its default '', will try to use the system PROXY
-    // - if set to 'none', won't use any proxy
-    // - otherwise, will use this value as explicit proxy server name
-    Proxy: RawUtf8;
     /// may be used to initialize this record on stack
     procedure Init;
+    /// reset this record, calling FillZero() on Password/Token SpiUtf8 values
+    procedure Clear;
+    /// setup web authentication using the Basic access algorithm
+    procedure AuthorizeBasic(const UserName: RawUtf8; const Password: SpiUtf8);
+    /// setup web authentication using the Digest access algorithm
+    procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8);
+    /// setup web authentication using Kerberos/NTLM via SSPI/GSSAPI and credentials
+    // - if you want to authenticate with the current logged user, just set
+    // ! Auth.Scheme := wraNegotiate;
+    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
+    /// setup web authentication using a given Bearer in the request headers
+    procedure AuthorizeBearer(const Value: SpiUtf8);
   end;
   /// pointer to some extended options for HTTP clients
   PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
@@ -905,11 +923,11 @@ type
       read fExtendedOptions.Auth.Scheme
       write fExtendedOptions.Auth.Scheme;
     /// optional User Name for Authentication
-    property AuthUserName: SynUnicode
+    property AuthUserName: RawUtf8
       read fExtendedOptions.Auth.UserName
       write fExtendedOptions.Auth.UserName;
     /// optional Password for Authentication
-    property AuthPassword: SynUnicode
+    property AuthPassword: SpiUtf8
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
     /// optional Token for TCurlHttp Authentication
@@ -2475,6 +2493,7 @@ var
   ctxt: THttpClientRequest;
   newuri: TUri;
 begin
+  // prepare the execution
   ctxt.Url := url;
   if (url = '') or
      (url[1] <> '/') then
@@ -2499,6 +2518,7 @@ begin
     ctxt.Retry := [rMain]
   else
     ctxt.Retry := [];
+  // execute the request
   if (not Assigned(fOnBeforeRequest)) or
      fOnBeforeRequest(self, ctxt) then
   begin
@@ -3138,6 +3158,54 @@ begin
   RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
 end;
 
+procedure THttpRequestExtendedOptions.Clear;
+begin
+  FillZero(Auth.Password);
+  FillZero(Auth.Token);
+  Init;
+end;
+
+procedure THttpRequestExtendedOptions.AuthorizeUserPassword(
+  const UserName, Password: RawUtf8; Scheme: THttpRequestAuthentication);
+begin
+  Auth.UserName := UserName;
+  Auth.Password := Password;
+  Auth.Token := '';
+  if UserName = '' then
+    Scheme := wraNone;
+  Auth.Scheme := Scheme;
+end;
+
+procedure THttpRequestExtendedOptions.AuthorizeBasic(const UserName: RawUtf8;
+  const Password: SpiUtf8);
+begin
+  AuthorizeUserPassword(UserName, Password, wraBasic);
+end;
+
+procedure THttpRequestExtendedOptions.AuthorizeDigest(const UserName: RawUtf8;
+  const Password: SpiUtf8);
+begin
+  AuthorizeUserPassword(UserName, Password, wraDigest);
+end;
+
+procedure THttpRequestExtendedOptions.AuthorizeSspiUser(
+  const UserName: RawUtf8; const Password: SpiUtf8);
+begin
+  AuthorizeUserPassword(UserName, Password, wraNegotiate);
+end;
+
+procedure THttpRequestExtendedOptions.AuthorizeBearer(const Value: SpiUtf8);
+begin
+  Auth.UserName := '';
+  Auth.Password := '';
+  Auth.Token := Value;
+  if Value = '' then
+    Auth.Scheme := wraNone
+  else
+    Auth.Scheme := wraBearer;
+end;
+
+
 function ToText(wra: THttpRequestAuthentication): PShortString;
 begin
   result := GetEnumName(TypeInfo(THttpRequestAuthentication), ord(wra));
@@ -3236,8 +3304,7 @@ end;
 destructor THttpRequest.Destroy;
 begin
   inherited Destroy;
-  FillZero(fExtendedOptions.Auth.Password);
-  FillZero(fExtendedOptions.Auth.Token);
+  fExtendedOptions.Clear;
 end;
 
 function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
@@ -3630,6 +3697,7 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
 var
   L: integer;
   winAuth: cardinal;
+  usr, pwd: SynUnicode;
 begin
   if AuthScheme <> wraNone then
     if AuthScheme = wraBearer then
@@ -3647,9 +3715,15 @@ begin
         raise EWinHttp.CreateUtf8(
           '%: unsupported AuthScheme=%', [self, ToText(AuthScheme)^]);
       end;
-      if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
-         winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
-        EWinHttp.RaiseFromLastError;
+      Utf8ToSynUnicode(AuthUserName, usr);
+      Utf8ToSynUnicode(AuthPassword, pwd);
+      try
+        if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
+           winAuth, pointer(usr), pointer(pwd), nil) then
+          EWinHttp.RaiseFromLastError;
+      finally
+        FillZero(pwd);
+      end;
     end;
   if fHttps and
      IgnoreTlsCertificateErrors then
@@ -4168,28 +4242,12 @@ const
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
-var
-  username: RawUtf8;
-  password, tok: SpiUtf8;
 begin
   // 1. handle authentication
-  case AuthScheme of
-    wraBasic,
-    wraDigest,
-    wraNegotiate:
-      begin
-        // expect user/password credentials
-        username := SynUnicodeToUtf8(AuthUserName);
-        password := SynUnicodeToUtf8(AuthPassword);
-      end;
-    wraBearer:
-      tok := AuthToken;
-  end;
-  curl.easy_setopt(fHandle, coUserName, pointer(username));
-  curl.easy_setopt(fHandle, coPassword, pointer(password));
-  curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(tok));
+  curl.easy_setopt(fHandle, coUserName, pointer(AuthUserName));
+  curl.easy_setopt(fHandle, coPassword, pointer(AuthPassword));
+  curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
   curl.easy_setopt(fHandle, coHttpAuth, integer(WRA2CAU[AuthScheme]));
-  FillZero(password);
   // 2. main request options
   // the only verbs which do not expect body in answer are HEAD and OPTIONS
   curl.easy_setopt(fHandle, coNoBody, ord(HttpMethodWithNoBody(fIn.Method)));

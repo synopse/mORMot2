@@ -255,11 +255,11 @@ type
       read fExtendedOptions.Auth.Scheme
       write fExtendedOptions.Auth.Scheme;
     /// optional User Name for Authentication
-    property AuthUserName: SynUnicode
+    property AuthUserName: RawUtf8
       read fExtendedOptions.Auth.UserName
       write fExtendedOptions.Auth.UserName;
     /// optional Password for Authentication
-    property AuthPassword: SynUnicode
+    property AuthPassword: SpiUtf8
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
   end;
