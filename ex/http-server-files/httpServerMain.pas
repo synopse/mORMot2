@@ -45,13 +45,13 @@ begin
     // command line switches
     with Executable.Command do
     begin
-      console := Option(['c', 'console'],    'debug output to the console');
-      verbose := Option(['v', 'logverbose'], 'enable verbose log');
+      console := Option('&console',    'debug output to the console');
+      verbose := Option('log&verbose', 'enable verbose log');
       silent  := Option('silent', 'no output to the console');
-      settingsfolder := ParamS(['s', 'settings'], '#folder where *.json are located',
+      settingsfolder := ParamS('&settings', '#folder where *.json are located',
         Executable.ProgramFilePath + 'sites-enabled');
-      folder := ParamS(['f', 'folder'], 'a local #foldername to serve');
-      url := Param(['u', 'url'], 'a root #uri to serve this folder');
+      folder := ParamS('&folder', 'a local #foldername to serve');
+      url := Param('&url', 'a root #uri to serve this folder');
       SetObjectFromExecutableCommandLine(settings.Server, '', ' for HTTP/HTTPS');
       SetObjectFromExecutableCommandLine(settings.Server.Log, 'Log', ' for EnableLogging');
       {$ifdef USE_OPENSSL}
