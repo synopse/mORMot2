@@ -946,15 +946,22 @@ type
     /// the LDAP v3 extensions supported on this LDAP server
     // - the OIDs are returned sorted, and de-duplicated
     // - use an internal cache for fast retrieval
+    // - note that SambaAD/OpenLDAP seems to not publish anything under the
+    // 'supportedExtension' attribute, as it should
     function Extensions: TRawUtf8DynArray;
     /// search if the server supports a given authentication mechanism by name
     // - a typical value to search is e.g. 'GSSAPI' or 'DIGEST-MD5'
+    // - search is case-insensitive
     function SupportsMech(const MechanismName: RawUtf8): boolean;
     /// search if the server supports a given LDAP control by name
     // - a typical value to search is e.g. '1.2.840.113556.1.4.319'
+    // - use a very fast O(log(n)) binary search inside the memory cache
     function SupportsControl(const ControlName: RawUtf8): boolean;
     /// search if the server supports a given LDAP v3 extension by name
     // - a typical value to search is e.g. ASN1_OID_WHOAMI
+    // - use a very fast O(log(n)) binary search inside the memory cache
+    // - note that SambaAD/OpenLDAP seems to not publish anything under the
+    // 'supportedExtension' attribute, as it should
     function SupportsExt(const ExtensionName: RawUtf8): boolean;
     /// retrieve al well known object DN or CN as a single convenient record
     // - use an internal cache for fast retrieval
@@ -3707,7 +3714,7 @@ begin
   // If the search failed, we exit with the error message
   if ResultCode <> LDAP_RES_SUCCESS then
   begin
-    ErrorMessage := FormatUtf8('Search failed: %', [RawLdapErrorString(ResultCode)]);
+    FormatUtf8('AddComputer.Search failed: %', [fResultString], ErrorMessage);
     exit;
   end;
   // Computer with the same sAMAccountName is already existing
@@ -3724,7 +3731,7 @@ begin
     // Unable to delete the computer (probably insufficient access rights)
     if not result then
     begin
-      ErrorMessage := FormatUtf8('Delete failed: %', [RawLdapErrorString(ResultCode)]);
+      FormatUtf8('AddComputer.Delete failed: %', [fResultString], ErrorMessage);
       exit;
     end;
   end;
@@ -3745,7 +3752,7 @@ begin
     end;
     result := Add(ComputerDN, Attributes);
     if not result then
-      ErrorMessage := FormatUtf8('Add failed: %', [RawLdapErrorString(ResultCode)]);
+      FormatUtf8('AddComputer.Add failed: %', [fResultString], ErrorMessage);
   finally
     Attributes.Free;
     FillZero(PwdU8);
@@ -4017,7 +4024,7 @@ begin
     exit;
   // https://www.rfc-editor.org/rfc/rfc2251#section-4.12
   pos := 1;
-  while true do
+  while pos < length(decoded) do
     case AsnNext(pos, decoded, @v) of
       ASN1_CTX10:
         if RespName <> nil then
@@ -4025,8 +4032,6 @@ begin
       ASN1_CTX11:
         if RespValue <> nil then
           RespValue^ := v;
-    else
-      break;
     end;
 end;
 
