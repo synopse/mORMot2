@@ -1348,6 +1348,10 @@ type
 function UserAgentParse(const UserAgent: RawUtf8;
   out ProgramName, ProgramVersion: RawUtf8; out OS: TOperatingSystem): boolean;
 
+/// detect any & character, and extract it as part of the result array
+// - e.g. UnAmp('alter&nate') returns ['n', 'alternate']
+function UnAmp(const name: RawUtf8): TRawUtf8DynArray;
+
 type
   /// the command line switches supported by TExecutableCommandLine
   // - clkArg is for "exename arg1 arg2 arg3" main indexed arguments
@@ -1381,43 +1385,58 @@ type
       const def: RawUtf8 = ''; f: PtrInt = 0): PtrInt;
   public
     /// mark and describe an "arg" value by 0-based index in Args[]
+    // - if true, you can access the value from Args[index]
     function Arg(index: integer; const description: RawUtf8 = '';
       optional: boolean = true): boolean; overload;
     /// mark and describe an "arg" value by 0-based index in Args[]
+    // - if existing, returns the value from Args[index] - otherwise returns ''
     function ArgU(index: integer; const description: RawUtf8 = '';
       optional: boolean = true): RawUtf8;
     /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
+    // - if existing, returns Args[index] as string - otherwise returns ''
     function ArgString(index: integer; const description: RawUtf8 = '';
       optional: boolean = true): string;
-    /// mark and describe a string/TFileName "arg" value by 0-based index in Args[]
-    // - if set, will fail in DetectUnknown if the file (or the folder) does not exist
+    /// mark and describe an existing TFileName "arg" value by 0-based index in Args[]
+    // - if set, will fail in DetectUnknown if the file (or the folder) does not
+    // exist, or returns Args[index] file/folder name as string
     function ArgFile(index: integer; const description: RawUtf8 = '';
       optional: boolean = true; isFolder: boolean = false): TFileName;
     /// will fail in DetectUnknown if the file or folder name does not exist
     // - also calls and return ExpandFileName() on the supplied file or folder name
     function CheckFileName(const name: TFileName; isFolder: boolean = false): TFileName;
     /// mark and describe an "arg" value in Args[]
+    // - e.g. returns true if the name appears in Args[]
     function Arg(const name: RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
     /// mark and describe or or several "arg" value(s) in Args[]
+    // - e.g. returns true if any of the name(s) appears in Args[]
     function Arg(const name: array of RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
-    /// search for "-optionname" switches in Options[]
+    /// search for a -xxxx switch in Options[]
+    // - returns true if '-name' or '--name' or '/name' do appear
+    // - if name contains a & character, will also register the following char,
+    // e.g. Option('&concise') is the same as Option(['c', 'concise'])
     function Option(const name: RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
-    /// search for "-optionname" switches in Options[]
+    /// search for one or severl -xxxx switches in Options[]
+    // - returns true if any '-name' or '--name' or '/name' do appear
     function Option(const name: array of RawUtf8;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    // - returns true if '-name' or '--name' or '/name' do appear with a value
+    // - if name contains a & character, will also register the following char,
+    // e.g. Get('&concise') is the same as Get(['c', 'concise'])
     function Get(const name: RawUtf8; out value: RawUtf8;
       const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its RawUtf8 "parametervalue"
+    // - returns true if any '-name' or '--name' or '/name' do appear with a value
     function Get(const name: array of RawUtf8; out value: RawUtf8;
       const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return all RawUtf8 "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
+    // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
@@ -1427,15 +1446,18 @@ type
     function Get(const name: array of RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
+    // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: TStringDynArray;
       const description: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
+    // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: integer;
       const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
     function Get(const name: array of RawUtf8; out value: integer;
       const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
+    // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; min, max: integer; out value: integer;
       const description: RawUtf8 = ''; default: integer = maxInt): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
@@ -1443,10 +1465,12 @@ type
       out value: integer; const description: RawUtf8 = '';
       default: integer = -1): boolean; overload;
     /// search for "-parametername" parameter in Names[]
+    // - if name contains a & character, will also search the following char
     function Has(const name: RawUtf8): boolean; overload;
     /// search for "-parametername" parameter in Names[]
     function Has(const name: array of RawUtf8): boolean; overload;
     /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
+    // - if name contains a & character, will also register the following char
     function Param(const name: RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
     /// search for "-parametername" and return '' or its string "parametervalue"
@@ -1456,6 +1480,7 @@ type
     function Param(const name: array of RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
     /// search for "-parametername" and return its integer "parametervalue" or default
+    // - if name contains a & character, will also register the following char
     function Param(const name: RawUtf8; default: integer;
       const description: RawUtf8 = ''): integer; overload;
     /// search for "-parametername" and return its integer "parametervalue" or default
@@ -1466,10 +1491,10 @@ type
     // - the parameter <name> would be extracted from any #word in the
     // description text,
     // - for instance:
-    // ! with Executable.Command do
+    // ! with Executable.Command do // you may better use a local variable
     // ! begin
     // !   ExeDescription := 'An executable to test mORMot Execute.Command';
-    // !   verbose := Option(['v', 'verbose'], 'generate verbose output');
+    // !   verbose := Option('&verbose', 'generate verbose output');
     // !   Get(['t', 'threads'], threads, '#number of threads to run', 5);
     // !   ConsoleWrite(FullDescription);
     // ! end;
@@ -1631,7 +1656,6 @@ var
   // - this unit will include a simple parser of /sys/class/net/* for Linux only
   // - as used e.g. by GetComputerUuid() fallback if SMBIOS is not available
   GetSystemMacAddress: function: TRawUtf8DynArray;
-
 
 type
   /// identify an operating system folder for GetSystemPath()
@@ -8824,9 +8848,23 @@ begin
   result := Find(name, clkArg, description) >= 0;
 end;
 
+function UnAmp(const name: RawUtf8): TRawUtf8DynArray;
+var
+  i: PtrInt;
+begin
+  i := PosExChar('&', name);
+  SetLength(result, ord(i <> 0) + 1);
+  result[0] := name;
+  if i = 0 then
+    exit;
+  delete(result[0], i, 1);
+  result[1] := result[0]; // &# char first
+  result[0] := copy(name, i + 1, 1);
+end;
+
 function TExecutableCommandLine.Option(const name, description: RawUtf8): boolean;
 begin
-  result := Find([name], clkOption, description) >= 0;
+  result := Find(UnAmp(name), clkOption, description) >= 0
 end;
 
 function TExecutableCommandLine.Option(const name: array of RawUtf8;
@@ -8838,7 +8876,7 @@ end;
 function TExecutableCommandLine.Get(const name: RawUtf8; out value: RawUtf8;
   const description, default: RawUtf8): boolean;
 begin
-  result := Get([name], value, description, default);
+  result := Get(UnAmp(name), value, description, default);
 end;
 
 procedure AddRawUtf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
@@ -8894,7 +8932,7 @@ end;
 function TExecutableCommandLine.Get(const name: RawUtf8; out value: string;
   const description: RawUtf8; const default: string): boolean;
 begin
-  result := Get([name], value, description, default);
+  result := Get(UnAmp(name), value, description, default);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
@@ -8912,7 +8950,7 @@ end;
 function TExecutableCommandLine.Get(const name: RawUtf8;
   out value: TStringDynarray; const description: RawUtf8): boolean;
 begin
-  result := Get([name], value, description);
+  result := Get(UnAmp(name), value, description);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
@@ -8930,7 +8968,7 @@ end;
 function TExecutableCommandLine.Get(const name: RawUtf8;
   out value: integer; const description: RawUtf8; default: integer): boolean;
 begin
-  result := Get([name], value, description, default);
+  result := Get(UnAmp(name), value, description, default);
 end;
 
 function defI(default: integer): RawUtf8;
@@ -8960,7 +8998,7 @@ end;
 function TExecutableCommandLine.Get(const name: RawUtf8; min, max: integer;
   out value: integer; const description: RawUtf8; default: integer): boolean;
 begin
-  result := Get([name], min, max, value, description, default);
+  result := Get(UnAmp(name), min, max, value, description, default);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
@@ -8974,7 +9012,7 @@ end;
 
 function TExecutableCommandLine.Has(const name: RawUtf8): boolean;
 begin
-  result := Find([name], clkParam) >= 0;
+  result := Find(UnAmp(name), clkParam) >= 0;
 end;
 
 function TExecutableCommandLine.Has(const name: array of RawUtf8): boolean;
@@ -8985,7 +9023,7 @@ end;
 function TExecutableCommandLine.Param(
   const name, description, default: RawUtf8): RawUtf8;
 begin
-  Get([name], result, description, default);
+  Get(UnAmp(name), result, description, default);
 end;
 
 function TExecutableCommandLine.Param(const name: array of RawUtf8;
@@ -9003,7 +9041,7 @@ end;
 function TExecutableCommandLine.Param(const name: RawUtf8;
   default: integer; const description: RawUtf8): integer;
 begin
-  Get([name], result, description, default);
+  Get(UnAmp(name), result, description, default);
 end;
 
 function TExecutableCommandLine.Param(const name: array of RawUtf8;
