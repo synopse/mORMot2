@@ -3363,6 +3363,7 @@ function WinX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean
 type
   /// we defined our own type to hold an ASN object binary
   TAsnObject = RawByteString;
+  PAsnObject = ^TAsnObject;
 
 { $define ASNDEBUG}
 // enable low-level debugging of the LDAP transmitted frames on the console
@@ -3426,6 +3427,12 @@ const
   ASN1_CTX7  = $87;
   ASN1_CTX8  = $88;
   ASN1_CTX9  = $89;
+  ASN1_CTX10 = $8a;
+  ASN1_CTX11 = $8b;
+  ASN1_CTX12 = $8c;
+  ASN1_CTX13 = $8d;
+  ASN1_CTX14 = $8e;
+  ASN1_CTX15 = $8f;
 
   //  context-specific class, constructed, tag #n
   ASN1_CTC0  = $a0;
@@ -3438,6 +3445,12 @@ const
   ASN1_CTC7  = $a7;
   ASN1_CTC8  = $a8;
   ASN1_CTC9  = $a9;
+  ASN1_CTC10 = $aa;
+  ASN1_CTC11 = $ab;
+  ASN1_CTC12 = $ac;
+  ASN1_CTC13 = $ad;
+  ASN1_CTC14 = $ae;
+  ASN1_CTC15 = $af;
 
   /// encode a boolean value into ASN.1 binary
   ASN1_BOOLEAN_VALUE: array[boolean] of TAsnObject = (
