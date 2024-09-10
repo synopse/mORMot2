@@ -475,7 +475,8 @@ begin
   fHttps := true;
   _TRestHttpServer;
   DataBase.ServiceMethodRegister('testauth', TestAuth);
-  InitNetTlsContext(tls, true);
+  InitNetTlsContext(tls);
+  tls.IgnoreCertificateErrors := true;
   cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 30000, @tls);
   try
     with Server.HttpServer as THttpServerSocketGeneric do
@@ -489,7 +490,7 @@ begin
       Check(cli.Content <> '{"url":"1"}');
       cli.Free; // HTTP_UNAUTHORIZED did close the connection
       cli := OpenHttp('127.0.0.1', HTTP_DEFAULTPORT, fHttps, nlTcp, '', 0, @tls);
-      cli.BasicAuthUserPassword := 'usr:pwd';
+      cli.AuthorizeBasic('usr', 'pwd');
       CheckEqual(cli.Get('root/testauth/1', 10000), HTTP_SUCCESS);
       CheckEqual(cli.Content, '{"url":"1"}');
       CheckEqual(cli.Get('/root/testauth/2', 10000), HTTP_SUCCESS);
