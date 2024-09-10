@@ -132,7 +132,6 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - supported only by TWinHttp class yet, and TCurlHttp
-  // - wraBearer is only supported by TCurlHttp
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
@@ -151,7 +150,6 @@ type
     /// allow to customize the HTTPS process
     TLS: TNetTlsContext;
     /// allow HTTP/HTTPS authentication to take place at server request
-    // - Scheme=wraBearer with Auth.Token is not handled by TWinHttp yet
     Auth: record
       Scheme: THttpRequestAuthentication;
       UserName: SynUnicode;
