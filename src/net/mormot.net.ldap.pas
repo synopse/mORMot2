@@ -882,8 +882,6 @@ type
     fSearchPageSize: integer;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
-    fExtName: RawUtf8;
-    fExtValue: RawUtf8;
     fDefaultDN, fRootDN, fConfigDN: RawUtf8;
     fNetbiosDN: RawUtf8;
     fMechanisms: TRawUtf8DynArray;
@@ -1038,9 +1036,11 @@ type
     function Delete(const Obj: RawUtf8; DeleteChildren: boolean = false): boolean;
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttributeValue: RawUtf8): boolean;
-    /// call any LDAP v3 extended operations
-    // - e.g. StartTLS, cancel, transactions
-    function Extended(const Oid, Value: RawUtf8): boolean;
+    /// low-level call of LDAP v3 extended operations
+    // - e.g. StartTLS, cancel, transactions, user password change
+    // - called e.g. by ModifyUserPassword()
+    function Extended(const Oid: RawUtf8; const Value: TAsnObject;
+      RespName: PRawUtf8; RespValue: PAsnObject): boolean;
     /// retrieve all Group names in the LDAP Server
     // - you can refine your query via CustomFilter or TGroupTypes
     // - Match allow to search as a (AttributeName=Match) filter
@@ -1170,12 +1170,6 @@ type
     /// each LDAP operation on server can return some referals URLs
     property Referals: TRawUtf8List
       read fReferals;
-    /// on Extended operation, here is the result Name asreturned by server
-    property ExtName: RawUtf8
-      read fExtName;
-    /// on Extended operation, here is the result Value as returned by server
-    property ExtValue: RawUtf8
-      read fExtValue;
     /// raw TCP socket used by all LDAP operations
     property Sock: TCrtSocket
       read fSock;
@@ -3941,9 +3935,10 @@ begin
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
-function TLdapClient.Extended(const Oid, Value: RawUtf8): boolean;
+function TLdapClient.Extended(const Oid: RawUtf8; const Value: TAsnObject;
+  RespName: PRawUtf8; RespValue: PAsnObject): boolean;
 var
-  query, decoded: TAsnObject;
+  query, decoded, v: TAsnObject;
   pos: integer;
 begin
   result := false;
@@ -3954,12 +3949,21 @@ begin
     AsnAdd(query, Asn(Value, ASN1_CTX1));
   decoded := SendAndReceive(Asn(query, LDAP_ASN1_EXT_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
-  if result then
-  begin
-    pos := 1;
-    AsnNext(pos, decoded, @fExtName);
-    AsnNext(pos, decoded, @fExtValue);
-  end;
+  if not result then
+    exit;
+  // https://www.rfc-editor.org/rfc/rfc2251#section-4.12
+  pos := 1;
+  while true do
+    case AsnNext(pos, decoded, @v) of
+      ASN1_CTX10:
+        if RespName <> nil then
+          RespName^ := v;
+      ASN1_CTX11:
+        if RespValue <> nil then
+          RespValue^ := v
+    else
+      break;
+    end;
 end;
 
 const
