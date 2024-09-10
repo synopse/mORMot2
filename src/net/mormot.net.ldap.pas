@@ -1069,7 +1069,24 @@ type
     // - the BoundUser property is the value supplied at connection, whereas
     // this value is an authzId returned by the server (e.g. 'u:xxyyz@EXAMPLE.NET')
     // as defined in https://www.rfc-editor.org/rfc/rfc4513#section-5.2.1.8
+    // - If the client is authenticated as a Windows security principal, the
+    // authzId returned in the response will contain the string 'u:' followed
+    // by either (1) the NetBIOS domain name, followed by a backslash (\),
+    // followed by the sAMAccountName of the security principal, or (2) the
+    // SID of the security principal, in SDDL SID string format
+    // - If the client is authenticated as an AD LDS security principal, the
+    // returned authzId will contain the string 'dn:' followed by the DN of
+    // the security principal
+    // - If the client has not authenticated, the returned authzId will be
+    // the empty string
     function WhoAmI: RawUtf8;
+    /// change a user's password
+    // - call Extended() as defined in https://www.rfc-editor.org/rfc/rfc3062
+    // - raise ELdap if the connection is anonymous or not encrypted
+    // - UserDN is typically 'uid=jdoe,ou=People,dc=example,dc=com'
+    // - UserDN, OldPassword and NewPassword should not be void
+    function ModifyUserPassword(const UserDN: RawUtf8;
+      const OldPassword, NewPassword: SpiUtf8): boolean;
     /// retrieve all Group names in the LDAP Server
     // - you can refine your query via CustomFilter or TGroupTypes
     // - Match allow to search as a (AttributeName=Match) filter
@@ -4039,6 +4056,32 @@ function TLdapClient.WhoAmI: RawUtf8;
 begin
   if not Extended(ASN1_OID_WHOAMI, '', nil, @result) then
     result := '';
+end;
+
+function TLdapClient.ModifyUserPassword(const UserDN: RawUtf8;
+  const OldPassword, NewPassword: SpiUtf8): boolean;
+begin
+  // the RFC states that ASN1_OID_PASSWDMODIFY supportedExtension SHOULD be
+  // verified in server root DSE - but OpenLDAP does not have this list :(
+  result := false;
+  if (UserDN = '') or
+     (OldPassword = '') or
+     (NewPassword = '') then
+    exit;
+  result := OldPassword = NewPassword;
+  if result then
+    exit; // nothing to change
+  if Transmission <> lctEncrypted then
+    ELdap.RaiseUtf8('%.ModifyUserPassword requires encryption', [self]);
+  if BoundUser = '' then
+    ELdap.RaiseUtf8('%.ModifyUserPassword cannot be anonymous', [self]);
+  result := Extended(ASN1_OID_PASSWDMODIFY,
+                     Asn(ASN1_SEQ, [
+                       Asn(UserDN,      ASN1_CTX0),
+                       Asn(OldPassword, ASN1_CTX1),
+                       Asn(NewPassword, ASN1_CTX2)
+                     ]), nil, nil);
+  // we don't need to decode anything from the response message
 end;
 
 const
