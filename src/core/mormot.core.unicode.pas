@@ -2253,6 +2253,9 @@ procedure QuickSortRawUtf8(var Values: TRawUtf8DynArray; ValuesCount: integer;
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
   caseInsensitive: boolean = false); overload;
 
+/// sort and remove any duplicated RawUtf8 from Values[]
+procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
+
 {$ifdef OSPOSIX}
 type
   /// monitor a POSIX folder for all its file names, and allow efficient
@@ -9310,6 +9313,51 @@ begin
   qs.Compare := StrCompByCase[caseInsensitive];
   qs.CoValues := nil;
   qs.Sort(pointer(Values), L, R);
+end;
+
+function DeduplicateRawUtf8Sorted(val: PPointerArray; last: PtrInt): PtrInt;
+var
+  i: PtrInt;
+begin
+  // sub-function for better code generation
+  i := 0;
+  repeat // here last>0 so i<last
+    if SortDynArrayAnsiString(val[i], val[i + 1]) = 0 then
+      break;
+    inc(i);
+    if i <> last then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i = last then
+    exit;
+  repeat
+    if SortDynArrayAnsiString(val[i], val[i + 1]) <> 0 then
+    begin
+      FastAssignNew(val[result], val[i]);
+      val[i] := nil;
+      inc(result);
+    end;
+    inc(i);
+  until i = last;
+  FastAssignNew(val[result], val[i]);
+  val[i] := nil;
+end;
+
+procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
+var
+  c, n: PtrInt;
+begin
+  c := length(Values);
+  if c = 0 then
+    exit;
+  QuickSortRawUtf8(Values, c);
+  n := DeduplicateRawUtf8Sorted(pointer(Values), c - 1) + 1;
+  if n <> c then
+    SetLength(Values, n);
 end;
 
 procedure MakeUniqueArray(var Values: TRawUtf8DynArray);
