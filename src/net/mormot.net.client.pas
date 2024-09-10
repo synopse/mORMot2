@@ -424,7 +424,7 @@ type
   // true to let the caller try again with the new headers
   // - if you return false, nothing happens and the 401 is reported back
   // - more complex schemes (like SSPI/Kerberos) could be implemented within the
-  // callback - see e.g. THttpClientSocket.AuthorizeSspi class method
+  // callback - see e.g. THttpClientSocket.OnAuthorizeSspi class method
   TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
     var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean of object;
 
@@ -554,7 +554,7 @@ type
       Algo: TDigestAlgo = daMD5_Sess);
     {$ifdef DOMAINRESTAUTH}
     /// setup web authentication using Kerberos/NTLM via SSPI/GSSAPI for this instance
-    // - will store the user/paswword credentials, and set AuthorizeSspi callback
+    // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
     // - an in-memory token will be used to authenticate the connection
     // - WARNING: on MacOS, the default system GSSAPI stack seems to create a
@@ -567,18 +567,18 @@ type
     // or GSSAPI on Linux (only Kerboros)
     // - match the OnAuthorize: TOnHttpClientSocketAuthorize callback signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
-    class function AuthorizeSspi(Sender: THttpClientSocket;
+    class function OnAuthorizeSspi(Sender: THttpClientSocket;
       var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
     /// proxy authentication callback of the current logged user using Kerberos/NTLM
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
     // - match the OnProxyAuthorize: TOnHttpClientSocketAuthorize signature
     // - see also ClientForceSpn() and AuthorizeSspiSpn property
-    class function ProxyAuthorizeSspi(Sender: THttpClientSocket;
+    class function OnProxyAuthorizeSspi(Sender: THttpClientSocket;
       var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-    // - used by class procedure AuthorizeSspi/ProxyAuthorizeSspi callbacks
+    // - used by class procedure OnAuthorizeSspi/OnProxyAuthorizeSspi callbacks
     // - on Linux/GSSAPI either this property or ClientForceSpn() is mandatory
     property AuthorizeSspiSpn: RawUtf8
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
@@ -627,7 +627,7 @@ type
       read fOnAuthorize write fOnAuthorize;
     /// optional proxy authorization callback
     // - is triggered by Request() on HTTP_PROXYAUTHREQUIRED (407) status
-    // - see e.g. THttpClientSocket.ProxyAuthorizeSspi class method for SSPI auth
+    // - see e.g. THttpClientSocket.OnProxyAuthorizeSspi class method for SSPI auth
     property OnProxyAuthorize: TOnHttpClientSocketAuthorize
       read fOnProxyAuthorize write fOnProxyAuthorize;
     /// optional callback called before each Request()
@@ -3054,7 +3054,7 @@ begin
   end;
 end;
 
-class function THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
+class function THttpClientSocket.OnAuthorizeSspi(Sender: THttpClientSocket;
   var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
 begin
   if InitializeDomainAuth then
@@ -3075,10 +3075,10 @@ begin
   fAuthPassword := Password;
   if KerberosSpn <> '' then
     fAuthorizeSspiSpn := KerberosSpn;
-  fOnAuthorize := AuthorizeSspi;
+  fOnAuthorize := OnAuthorizeSspi;
 end;
 
-class function THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
+class function THttpClientSocket.OnProxyAuthorizeSspi(Sender: THttpClientSocket;
   var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
 begin
   if InitializeDomainAuth then
