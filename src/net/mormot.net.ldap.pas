@@ -1057,6 +1057,12 @@ type
     // - called e.g. by ModifyUserPassword()
     function Extended(const Oid: RawUtf8; const Value: TAsnObject;
       RespName: PRawUtf8; RespValue: PAsnObject): boolean;
+    /// retrieves the current authorization identity for the client connection
+    // - call Extended() as defined in https://www.rfc-editor.org/rfc/rfc4532
+    // - the BoundUser property is the value supplied at connection, whereas
+    // this value is an authzId returned by the server (e.g. 'u:xxyyz@EXAMPLE.NET')
+    // as defined in https://www.rfc-editor.org/rfc/rfc4513#section-5.2.1.8
+    function WhoAmI: RawUtf8;
     /// retrieve all Group names in the LDAP Server
     // - you can refine your query via CustomFilter or TGroupTypes
     // - Match allow to search as a (AttributeName=Match) filter
@@ -4022,6 +4028,12 @@ begin
     else
       break;
     end;
+end;
+
+function TLdapClient.WhoAmI: RawUtf8;
+begin
+  if not Extended(ASN1_OID_WHOAMI, '', nil, @result) then
+    result := '';
 end;
 
 const
