@@ -189,6 +189,24 @@ const
     'ldap://',
     'ldaps://');
 
+const
+  /// OID of pagedresultsControl attribute
+  ASN1_OID_PAGEDRESULTS = '1.2.840.113556.1.4.319';
+
+  /// OID of namingContexts attribute in the root DSE
+  ASN1_OID_DSE_NAMINGCONTEXTS = '1.3.6.1.4.1.1466.101.120.5';
+  /// OID of altServer attribute in the root DSE
+  ASN1_OID_DSE_ALTSERVER = '1.3.6.1.4.1.1466.101.120.6';
+  /// OID of supportedExtension attribute in the root DSE
+  ASN1_OID_DSE_SUPPORTEDEXTENSION = '1.3.6.1.4.1.1466.101.120.7';
+  /// OID of supportedControl attribute in the root DSE
+  ASN1_OID_DSE_SUPPORTEDCONTROL = '1.3.6.1.4.1.1466.101.120.13';
+  /// OID of supportedLDAPVersion attribute in the root DSE
+  ASN1_OID_DSE_SUPPORTEDLDAPVERSION = '1.3.6.1.4.1.1466.101.120.15';
+
+  /// OID of LDAPv3 Extended Operation Password Modify operation (RFC 3062)
+  ASN1_OID_PASSWDMODIFYOID = '1.3.6.1.4.1.4203.1.11.1';
+
 type
   /// define possible operations for LDAP MODIFY operations
   TLdapModifyOp = (
@@ -3740,9 +3758,6 @@ begin
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
-
-const
-  ASN1_OID_PAGEDRESULTS = '1.2.840.113556.1.4.319';
 
 function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
   const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
