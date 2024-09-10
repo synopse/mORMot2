@@ -1363,7 +1363,7 @@ type
   THttpClientAbstract = class(TInterfacedObject, IHttpClient)
   protected
     // the options to be used for connection and authentication
-    fOptions: THttpRequestExtendedOptions;
+    fConnectOptions: THttpRequestExtendedOptions;
     // last request values
     fUri, fHeaders: RawUtf8;
     fBody: RawByteString;
@@ -1374,12 +1374,6 @@ type
     /// abstract low-level connection method of this class, using an TUri as input
     // - should raise an Exception on issue
     procedure RawConnect(const Server: TUri); virtual; abstract;
-    /// read/write access to the HTTP User-Agent to be used
-    property UserAgent: RawUtf8
-      read fOptions.UserAgent write fOptions.UserAgent;
-    /// read/write access to the Proxy text address to be used
-    property Proxy: RawUtf8
-      read fOptions.Proxy write fOptions.Proxy;
     // IHttpClient methods, redirecting to the internal properties or methods
     function Request(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataMimeType: RawUtf8;
@@ -1389,7 +1383,7 @@ type
       const DataMimeType: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     function Connected(const Server: TUri): string; virtual;
     procedure Close; virtual; abstract;
-    function Options: PHttpRequestExtendedOptions;
+    function Options: PHttpRequestExtendedOptions; virtual; abstract;
     function Tls: PNetTlsContext;
     function Body: RawByteString;
     function Status: integer;
@@ -1404,7 +1398,6 @@ type
   TSimpleHttpClient = class(THttpClientAbstract)
   protected
     fHttp: THttpClientSocket;
-    fHttpOptions: THttpRequestExtendedOptions;
     {$ifdef USEHTTPREQUEST}
     fHttps: THttpRequest;
     fOnlyUseClientSocket: boolean;
@@ -1413,6 +1406,8 @@ type
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
     constructor Create(aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
     /// low-level entry point of this instance, using an TUri as input
     // - rather use the Request() more usable method
     function Request(const Uri: TUri; const Method, Header: RawUtf8;
@@ -1423,6 +1418,7 @@ type
     procedure RawConnect(const Server: TUri); override;
     // IHttpClient methods
     procedure Close; override;
+    function Options: PHttpRequestExtendedOptions; override;
   end;
 
 
@@ -4390,14 +4386,9 @@ begin
   result := GetHeader(fHeaders, Name, Value);
 end;
 
-function THttpClientAbstract.Options: PHttpRequestExtendedOptions;
-begin
-  result := @fOptions;
-end;
-
 function THttpClientAbstract.Tls: PNetTlsContext;
 begin
-  result := @fOptions.TLS;
+  result := @fConnectOptions.TLS;
 end;
 
 function THttpClientAbstract.Request(const Uri, Method, Header: RawUtf8;
@@ -4433,7 +4424,7 @@ end;
 
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
-  fOptions.RedirectMax := 4; // seems fair enough
+  fConnectOptions.RedirectMax := 4; // seems fair enough
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
@@ -4441,19 +4432,25 @@ begin
   inherited Create;
 end;
 
+destructor TSimpleHttpClient.Destroy;
+begin
+  fConnectOptions.Clear;
+  inherited Destroy;
+end;
+
 procedure TSimpleHttpClient.RawConnect(const Server: TUri);
 begin
   {$ifdef USEHTTPREQUEST}
   if (Server.Https or
-      (fOptions.Proxy <> '')) and
+      (fConnectOptions.Proxy <> '')) and
      not fOnlyUseClientSocket then
   begin
     if (fHttps = nil) or
        (fHttps.Server <> Server.Server) or
        (fHttps.Port <> Server.PortInt) then
     begin
-      Close; // need a new HTTPS connection
-      fHttps := MainHttpClass.Create(Server, @fOptions); // connect
+      Close; // need a new https connection
+      fHttps := MainHttpClass.Create(Server, @fConnectOptions); // connect
     end;
   end
   else
@@ -4465,16 +4462,33 @@ begin
      not fHttp.SockConnected then
   begin
     Close;
-    fHttp := THttpClientSocket.OpenOptions(Server, fOptions); // connect
+    fHttp := THttpClientSocket.OpenOptions(Server, fConnectOptions); // connect
   end;
 end;
 
 procedure TSimpleHttpClient.Close;
 begin
+  if fHttp <> nil then
+    fConnectOptions := fHttp.fExtendedOptions; // for the next RawConnect()
   FreeAndNil(fHttp);
   {$ifdef USEHTTPREQUEST}
+  if fHttps <> nil then
+    fConnectOptions := fHttps.fExtendedOptions;
   FreeAndNil(fHttps);
   {$endif USEHTTPREQUEST}
+end;
+
+function TSimpleHttpClient.Options: PHttpRequestExtendedOptions;
+begin
+  {$ifdef USEHTTPREQUEST}
+  if fHttps <> nil then
+    result := @fHttps.fExtendedOptions
+  else
+  {$endif USEHTTPREQUEST}
+  if fHttp <> nil then
+    result := @fHttp.fExtendedOptions
+  else
+    result := @fConnectOptions; // used outside an actual connection
 end;
 
 function TSimpleHttpClient.Request(const Uri: TUri;
@@ -4954,12 +4968,7 @@ begin
     exit;
   Clear;
   if aToken <> '' then
-  begin
-    fClient.fOptions.Auth.Scheme := wraBearer;
-    fClient.fOptions.Auth.Token := aToken;
-  end
-  else
-    fClient.fOptions.Auth.Scheme := wraNone;
+    fClient.Options^.AuthorizeBearer(aToken);
   result := true;
 end;
 
