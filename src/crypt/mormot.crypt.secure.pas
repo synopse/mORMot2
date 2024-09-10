@@ -3365,9 +3365,6 @@ type
   TAsnObject = RawByteString;
   PAsnObject = ^TAsnObject;
 
-{ $define ASNDEBUG}
-// enable low-level debugging of the LDAP transmitted frames on the console
-
 const
   /// constructed class type bitmask
   ASN1_CL_CTR   = $20;

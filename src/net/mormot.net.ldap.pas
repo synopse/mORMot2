@@ -1374,6 +1374,10 @@ type
 implementation
 
 
+{.$define ASNDEBUG}
+// enable low-level debugging of the LDAP transmitted frames on the console
+
+
 {****** Support procedures and functions }
 
 function SeparateRight(const Value: RawUtf8; Delimiter: AnsiChar): RawUtf8;
