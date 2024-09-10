@@ -88,32 +88,25 @@ begin
   if c.Arg(0, '[hash@]#http://uri resource address to retrieve') then
     url := c.Args[0];
   result := gpWithUrl;
-  if c.Option(['P', 'prompt'],
-      'run in prompt mode (end on void input)') then
+  if c.Option(['P', 'prompt'], 'run in prompt mode (end on void input)') then
     result := gpPromptMode;
   dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
-  p.DestFile := c.ParamS(['o', 'output'],
-     'destination #filename or existing foldername', dest);
-  p.Silent := c.Option(['s', 'silent'],
-     'generate no console output');
-  p.NoResume := c.Option(['n', 'noresume'],
+  p.DestFile := c.ParamS('&output',
+    'destination #filename or existing foldername', dest);
+  p.Silent := c.Option('&silent, 'generate no console output');
+  p.NoResume := c.Option('&noresume',
      'disable auto-resume of interrupted partial download');
-  p.Cache := c.Option(['c', 'cache'],
-     'enable local Cache in --cachePath');
-  p.Peer := c.Option(['p', 'peer'],
-     'enable peer Cache process - see --peer* params');
-  p.TlsCertFile := c.ParamS(['t', 'tlsCert'],
-     'optional client Certificate #filename');
+  p.Cache := c.Option('&cache', 'enable local Cache in --cachePath');
+  p.Peer := c.Option(['&peer'], 'enable peer Cache process - see --peer* params');
+  p.TlsCertFile := c.ParamS('&tlsCert', 'optional client Certificate #filename');
   logfolder := c.ParamS(['logFolder'],
      '#folder to be used for --log output', logfolder);
   p.CacheFolder := c.ParamS(['cachePath'],
      '#folder to be used for local (not peer) --cache', p.CacheFolder);
-  p.TlsIgnoreErrors  := c.Option(['w', 'weakTls'],
-     'ignore TLS certificate errors');
-  if c.Option(['l', 'log'],
-     'enable logging in --logFolder') then
+  p.TlsIgnoreErrors  := c.Option('&weakTls', 'ignore TLS certificate errors');
+  if c.Option('&log', 'enable logging in --logFolder') then
     p.Log := TSynLog;
-  if c.Option('debug', 'raw debugging on the console') then
+  if c.Option('&debug', 'raw debugging on the console') then
   begin
     p.Log := TSynLog; // force logging even if -l was not specified
     p.Log.Family.EchoToConsole := LOG_VERBOSE; // - [sllTrace];

@@ -872,12 +872,12 @@ begin
   // parse command line parameters
   with Executable.Command do
   begin
-    if Option(['p', 'pin'], 'pin each server to a CPU') then
+    if Option('&pin', 'pin each server to a CPU') then
       pinServers2Cores := true;
     if Option('nopin', 'disable the CPU pinning') then
       pinServers2Cores := false; // no option would keep the default boolean
-    Get(['s', 'servers'], servers, '#count of servers (listener sockets)', servers);
-    Get(['t', 'threads'], threads, 'per-server thread pool #size', threads);
+    Get('&servers', servers, '#count of servers (listener sockets)', servers);
+    Get('&threads', threads, 'per-server thread pool #size', threads);
     if ConsoleHelpFailed('TFB Server using mORMot 2') then
       exit;
   end;

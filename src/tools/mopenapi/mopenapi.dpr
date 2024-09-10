@@ -65,10 +65,10 @@ begin
     SetObjectFromExecutableCommandLine(o, '', '');
     if o.DestinationFolder <> '' then
       o.DestinationFolder := c.CheckFileName(o.DestinationFolder, {folder=}true);
-    if c.Option('concise', 'Generate a single API unit') then
+    if c.Option('&concise', 'Generate a single API unit') then
       o.Options :=  o.Options + OPENAPI_CONCISE;
     if c.ConsoleHelpFailed('mORMot ' + SYNOPSE_FRAMEWORK_VERSION +
-                                 ' OpenAPI/Swagger Code Generator') then
+                           ' OpenAPI/Swagger Code Generator') then
     begin
       ExitCode := 1;
       exit;

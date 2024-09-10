@@ -2773,11 +2773,11 @@ begin
     Check(c.Arg(1, 'the #directory name to process'));
     Check(c.Arg(2, 'some #comment text to add'));
     CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $DDDDB7D4);
-    Check(not c.Option(['v', 'verbose'], 'generate verbose output'));
+    Check(not c.Option('&verbose', 'generate verbose output'));
     CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $2293B264);
     Check(not c.Get('logfolder', f, 'optional log #folder to write to'));
     Check(not c.Option('log', 'log the process to a local file'));
-    Check(not c.Get(['t', 'threads'], t, '#number of threads to run'));
+    Check(not c.Get('&threads', t, '#number of threads to run'));
     CheckEqual(c.DetectUnknown, '');
     CheckHash(c.FullDescription('this is test #2 executable', 'exename'), $3CFE0EB3);
     c.Clear;
@@ -2787,10 +2787,10 @@ begin
     CheckEqual(length(c.Options), 2);
     CheckEqual(length(c.Names), 3);
     CheckEqual(length(c.Values), length(c.Names));
-    Check(c.Option(['v', 'verbose'], 'generate verbose output'));
+    Check(c.Option('&verbose', 'generate verbose output'));
     Check(not c.Option('log', 'log the process to a local file'));
     t := 0;
-    Check(c.Get(['t', 'threads'], t, '#number of threads to run', 5));
+    Check(c.Get('&threads', t, '#number of threads to run', 5));
     CheckEqual(t, 10);
     f := c.Param('dest', 'destination #folder', 'c:\');
     CheckEqual(f, 'toto');
