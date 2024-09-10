@@ -5544,7 +5544,8 @@ begin
     begin
       desc := '';
       dolower := false;
-      if p^.Value.Kind in [rkEnumeration, rkSet] then
+      if (p^.Value.Kind in [rkEnumeration, rkSet]) and
+         not (rcfBoolean in p^.Value.Cache.Flags) then
       begin
         p^.Value.Cache.EnumInfo^.GetEnumNameTrimedAll(desc);
         if p^.Value.Kind = rkEnumeration then
@@ -5560,25 +5561,33 @@ begin
           desc := ' - values: ' + desc;
       end;
       desc := FormatUtf8('%%%', [UnCamelCase(p^.Name), DescriptionSuffix, desc]);
-      if not p.ValueIsDefault(Value) then
+      if (rcfBoolean in p^.Value.Cache.Flags) or
+         not p.ValueIsDefault(Value) then
       begin
         def := '';
         typ := '';
         if p^.Value.Kind in rkOrdinalTypes then
         begin
           v64 := p^.Prop^.GetInt64Value(Value);
-          case p^.Value.Kind of
-            rkEnumeration:
-              def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
-            rkSet:
-              if v64 <> 0 then
-                def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, ',');
+          if rcfBoolean in p^.Value.Cache.Flags then
+          begin
+            if v64 <> 0 then
+              def := 'true';
+            typ := 'boolean';
+          end
           else
-            begin
-              UInt64ToUtf8(v64, def);
-              typ := 'integer';
+            case p^.Value.Kind of
+              rkEnumeration:
+                def := p^.Value.Cache.EnumInfo.GetEnumNameTrimed(v64);
+              rkSet:
+                if v64 <> 0 then
+                  def := p^.Value.Cache.EnumInfo.GetSetName(v64, {trim=}true, ',');
+            else
+              begin
+                UInt64ToUtf8(v64, def);
+                typ := 'integer';
+              end;
             end;
-          end;
           if dolower then
             def := LowerCaseU(def);
         end
