@@ -888,7 +888,7 @@ type
     fNetbiosDN: RawUtf8;
     fMechanisms: TRawUtf8DynArray;
     fSecContext: TSecContext;
-    fSecContextUser: RawUtf8;
+    fBoundUser: RawUtf8;
     fSockBuffer: RawByteString;
     fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNamesDual;
@@ -1112,6 +1112,10 @@ type
     /// true after a successful call to Bind or BindSaslKerberos
     property Bound: boolean
       read fBound;
+    /// contains the connected user, after Bind or BindSaslKerberos
+    // - an anonymous connection will return ''
+    property BoundUser: RawUtf8
+      read fBoundUser;
     /// binary string of the last full response from LDAP server
     // - This string is encoded by ASN.1 BER encoding
     // - You need this only for debugging
@@ -3303,7 +3307,8 @@ end;
 function TLdapClient.Bind: boolean;
 begin
   result := false;
-  if not Connect then
+  if fBound or
+     not Connect then
     exit;
   if (fSettings.Password <> '') and
      not fSettings.Tls and
@@ -3313,8 +3318,11 @@ begin
                    Asn(fVersion),
                    Asn(fSettings.UserName),
                    Asn(fSettings.Password, ASN1_CTX0)]));
-  result := fResultCode = LDAP_RES_SUCCESS;
-  fBound := result;
+  if fResultCode <> LDAP_RES_SUCCESS then
+    exit; // binding error
+  fBound := true;
+  fBoundUser := fSettings.UserName;
+  result := true;
 end;
 
 const
@@ -3351,25 +3359,26 @@ begin
                 Asn(''),
                 Asn(ASN1_CTC3, [
                   Asn(DIGEST_ALGONAME[Algo])])]);
-    t := SendAndReceive(digreq);
+    s := SendAndReceive(digreq);
+    if fResultCode <> LDAP_RES_SASL_BIND_IN_PROGRESS then
+      exit;
+    x := 1;
+    AsnNext(x, s, @t);
+    dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
+      fSettings.UserName, fSettings.Password, 'digest-uri');
+    SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+                     Asn(fVersion),
+                     Asn(''),
+                     Asn(ASN1_CTC3, [
+                       Asn(DIGEST_ALGONAME[Algo]),
+                       Asn(dig)])]));
     if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
-    begin
-      s := t;
-      x := 1;
-      AsnNext(x, s, @t);
-      dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
-        fSettings.UserName, fSettings.Password, 'digest-uri');
-      SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
-                       Asn(fVersion),
-                       Asn(''),
-                       Asn(ASN1_CTC3, [
-                         Asn(DIGEST_ALGONAME[Algo]),
-                         Asn(dig)])]));
-      if fResultCode = LDAP_RES_SASL_BIND_IN_PROGRESS then
-        SendAndReceive(digreq);
-      result := fResultCode = LDAP_RES_SUCCESS;
-      fBound := result;
-    end;
+      SendAndReceive(digreq);
+    if fResultCode <> LDAP_RES_SUCCESS then
+      exit; // binding error
+    fBound := true;
+    fBoundUser := fSettings.UserName;
+    result := true;
   end;
 end;
 
@@ -3423,7 +3432,6 @@ begin
     exit;
   end;
   needencrypt := false;
-  fSecContextUser := '';
   if (fSettings.KerberosSpn = '') and
      (fSettings.KerberosDN <> '') then
     fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost + {noport}
@@ -3527,21 +3535,17 @@ begin
                   Asn(dataout)])]);
       t := SendAndReceive(req2);
     until not (fResultCode in [LDAP_RES_SUCCESS, LDAP_RES_SASL_BIND_IN_PROGRESS]);
-    result := fResultCode = LDAP_RES_SUCCESS;
-    if result then
-    begin
-      ServerSspiAuthUser(fSecContext, fSecContextUser);
-      if KerberosUser <> nil then
-        KerberosUser^ := fSecContextUser;
-    end;
-    fBound := result;
+    if fResultCode <> LDAP_RES_SUCCESS then
+      exit; // error
+    ServerSspiAuthUser(fSecContext, fBoundUser);
+    if KerberosUser <> nil then
+      KerberosUser^ := fBoundUser;
+    fBound := true;
     fSecContextEncrypt := needencrypt;
+    result := true;
   finally
     if not result then
-    begin
-      fSecContextEncrypt := false;
       FreeSecContext(fSecContext);
-    end;
   end;
 end;
 
@@ -3562,6 +3566,7 @@ begin
     FreeSecContext(fSecContext);
   fSecContextEncrypt := false;
   fBound := false;
+  fBoundUser := '';
   fRootDN := '';
   fDefaultDN := '';
   fConfigDN := '';
