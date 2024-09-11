@@ -550,10 +550,10 @@ type
     /// number of TLdapAttribute objects in this list
     function Count: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    /// allocate and a new TLdapAttribute object and its value to the list
+    /// search or allocate a new TLdapAttribute object and its value to the list
     function Add(const AttributeName: RawUtf8;
       const AttributeValue: RawByteString): TLdapAttribute; overload;
-    /// allocate and a new TLdapAttribute object to the list
+    /// search or allocate a new TLdapAttribute object to the list
     function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
     /// search or allocate "unicodePwd" TLdapAttribute value to the list
     function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
@@ -565,9 +565,6 @@ type
     /// find and return attribute with the requested name
     // - returns nil if not found
     function Find(const AttributeName: RawUtf8): TLdapAttribute;
-    /// add an attribute value to the list, reusing any existing TLdapAttribute
-    function FindAdd(const AttributeName: RawUtf8;
-      const AttributeValue: RawByteString): TLdapAttribute;
     /// Find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
@@ -2563,8 +2560,22 @@ begin
 end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
+var
+  i: PtrInt;
+  n: RawUtf8;
 begin
-  result := TLdapAttribute.Create(fInterning.Unique(AttributeName));
+  if AttributeName = '' then
+    ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
+  // search for existing TLdapAttribute instance
+  if not fInterning.Unique(n, AttributeName) then // n = existing name
+    for i := 0 to length(fItems) - 1 do // fast pointer search as in Find()
+    begin
+      result := fItems[i];
+      if pointer(result.AttributeName) = pointer(n) then
+        exit;
+    end;
+  // need to add a new TLdapAttribute with this unique name
+  result := TLdapAttribute.Create(n);
   ObjArrayAdd(fItems, result);
 end;
 
@@ -2573,20 +2584,13 @@ function TLdapAttributeList.Add(const AttributeName: RawUtf8;
 begin
   result := Add(AttributeName);
   result.Add(AttributeValue);
+  if pointer(result.AttributeName) = pointer(_unicodePwd) then // pointer search
+    result.fKnownType := latUnicodePwd;
 end;
 
 function TLdapAttributeList.AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
 begin
   result := Add(_unicodePwd, LdapUnicodePwd(aPassword));
-end;
-
-function TLdapAttributeList.FindAdd(const AttributeName: RawUtf8;
-  const AttributeValue: RawByteString): TLdapAttribute;
-begin
-  result := Find(AttributeName);
-  if result = nil then
-    result := Add(AttributeName); // first time this attribute is used
-  result.Add(AttributeValue);
 end;
 
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
