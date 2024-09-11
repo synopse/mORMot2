@@ -148,7 +148,7 @@ Automatic Certificate Management Environment (ACME v2) Client
 
 Simple LDAP Protocol Client
 - LDAP Protocol Definitions
-- LDAP Attributes Definitions
+- LDAP Attribute Types Definitions
 - CLDAP Client Functions
 - LDAP Response Storage
 - LDAP Client Class

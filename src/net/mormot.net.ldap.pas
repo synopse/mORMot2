@@ -8,7 +8,7 @@ unit mormot.net.ldap;
 
    Simple LDAP Protocol Client
     - LDAP Protocol Definitions
-    - LDAP Attributes Definitions
+    - LDAP Attribute Types Definitions
     - CLDAP Client Functions
     - LDAP Response Storage
     - LDAP Client Class
@@ -308,9 +308,25 @@ function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
 /// encode a "unicodePwd" binary value from a UTF-8 password
 function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
 
+const
+  // Well-Known LDAP Objects GUID
+  // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
+  //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
+  LDAP_GUID_COMPUTERS                 = 'AA312825768811D1ADED00C04FD8D5CD';
+  LDAP_GUID_DELETED_OBJECTS           = '18E2EA80684F11D2B9AA00C04F79F805';
+  LDAP_GUID_DOMAIN_CONTROLLERS        = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
+  LDAP_GUID_FOREIGNSECURITYPRINCIPALS = '22B70C67D56E4EFB91E9300FCA3DC1AA';
+  LDAP_GUID_INFRASTRUCTURE            = '2FBAC1870ADE11D297C400C04FD8D5CD';
+  LDAP_GUID_LOSTANDFOUND              = 'AB8153B7768811D1ADED00C04FD8D5CD';
+  LDAP_GUID_MICROSOFT_PROGRAM_DATA    = 'F4BE92A4C777485E878E9421D53087DB';
+  LDAP_GUID_NTDS_QUOTAS               = '6227F0AF1FC2410D8E3BB10615BB5B0F';
+  LDAP_GUID_PROGRAM_DATA              = '09460C08AE1E4A4EA0F64AEE7DAA1E5A';
+  LDAP_GUID_SYSTEMS                   = 'AB1D30F3768811D1ADED00C04FD8D5CD';
+  LDAP_GUID_USERS                     = 'A9D1CA15768811D1ADED00C04FD8D5CD';
+  LDAP_GUID_MANAGED_SERVICE_ACCOUNTS  = '1EB93889E40C45DF9F0C64D23BBB6237';
 
 
-{ **************** LDAP Attribute Definitions }
+{ **************** LDAP Attribute Types Definitions }
 
 type
   /// common Attribute Types, as stored in TLdapAttribute.AttributeName
@@ -588,23 +604,6 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 
 { **************** LDAP Response Storage }
 
-const
-  // Well-Known LDAP Objects GUID
-  // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
-  //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
-  LDAP_GUID_COMPUTERS                 = 'AA312825768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_DELETED_OBJECTS           = '18E2EA80684F11D2B9AA00C04F79F805';
-  LDAP_GUID_DOMAIN_CONTROLLERS        = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
-  LDAP_GUID_FOREIGNSECURITYPRINCIPALS = '22B70C67D56E4EFB91E9300FCA3DC1AA';
-  LDAP_GUID_INFRASTRUCTURE            = '2FBAC1870ADE11D297C400C04FD8D5CD';
-  LDAP_GUID_LOSTANDFOUND              = 'AB8153B7768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_MICROSOFT_PROGRAM_DATA    = 'F4BE92A4C777485E878E9421D53087DB';
-  LDAP_GUID_NTDS_QUOTAS               = '6227F0AF1FC2410D8E3BB10615BB5B0F';
-  LDAP_GUID_PROGRAM_DATA              = '09460C08AE1E4A4EA0F64AEE7DAA1E5A';
-  LDAP_GUID_SYSTEMS                   = 'AB1D30F3768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_USERS                     = 'A9D1CA15768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_MANAGED_SERVICE_ACCOUNTS  = '1EB93889E40C45DF9F0C64D23BBB6237';
-
 type
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
@@ -645,6 +644,9 @@ type
     /// name of this LDAP attribute
     property AttributeName: RawUtf8
       read fAttributeName;
+    /// the common LDAP Attribute Type corresponding to this AttributeName
+    property KnownType: TLdapAttributeType
+      read fKnownType;
   end;
   /// dynamic array of LDAP attribute, as stored in TLdapAttributeList
   TLdapAttributeDynArray = array of TLdapAttribute;
@@ -655,8 +657,9 @@ type
   TLdapAttributeList = class
   private
     fItems: TLdapAttributeDynArray;
-    fInterning: TRawUtf8Interning; // global hash table of attribute names
+    fInterning: TRawUtf8Interning; // hash table of names, from TLdapResultList
     fLastFound: PtrInt;
+    fKnownTypes: TLdapAttributeTypes;
   public
     /// finalize the list
     destructor Destroy; override;
@@ -681,18 +684,34 @@ type
     procedure Delete(const AttributeName: RawUtf8);
     /// find and return attribute index with the requested name
     // - returns -1 if not found
-    function FindIndex(const AttributeName: RawUtf8): PtrInt;
+    function FindIndex(const AttributeName: RawUtf8): PtrInt; overload;
     /// find and return attribute with the requested name
     // - returns nil if not found
-    function Find(const AttributeName: RawUtf8): TLdapAttribute;
+    function Find(const AttributeName: RawUtf8): TLdapAttribute; overload;
     /// Find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
-    function Get(const AttributeName: RawUtf8): RawUtf8;
+    function Get(const AttributeName: RawUtf8): RawUtf8; overload;
+    /// find and return attribute index with the requested attribute type
+    // - returns -1 if not found
+    // - faster than overloaded FindIndex(AttributeName)
+    function FindIndex(AttributeType: TLdapAttributeType): PtrInt; overload;
+    /// find and return attribute with the requested attribute type
+    // - returns nil if not found
+    // - faster than overloaded Find(AttributeName)
+    function Find(AttributeType: TLdapAttributeType): TLdapAttribute; overload;
+    /// Find and return first attribute value with the requested type
+    // - calls GetReadable(0) on the found attribute
+    // - returns empty string if not found
+    // - faster than overloaded Get(AttributeName)
+    function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
     /// access to the internal list of TLdapAttribute objects
     // - note that length(Items) = Count for this class
     property Items: TLdapAttributeDynArray
       read fItems;
+    /// the common Attribute Types currently stored in this list
+    property KnownTypes: TLdapAttributeTypes
+      read fKnownTypes;
   end;
 
   /// store one LDAP result, i.e. one object name and associated attributes
@@ -728,7 +747,7 @@ type
     fItems: TLdapResultObjArray;
     fSearchTimeMicroSec: Int64;
     fCount: integer;
-    fInterning: TRawUtf8Interning; // injected to TLdapResult by Add
+    fInterning: TRawUtf8Interning; // injected to TLdapAttributeList by Add
   public
     /// initialize the result list
     constructor Create; reintroduce;
@@ -2120,9 +2139,9 @@ begin
 end;
 
 
-{ **************** LDAP Attribute Definitions }
+{ **************** LDAP Attribute Types Definitions }
 
-// internal function: search by fast AttrName interned pointer
+// internal function: search by fast AttrName interned pointers
 function _AttributeNameType(AttrName: pointer): TLdapAttributeType;
 var
   i: PtrInt;
@@ -2675,6 +2694,33 @@ begin
   result := Find(AttributeName).GetReadable(0);
 end;
 
+function TLdapAttributeList.FindIndex(AttributeType: TLdapAttributeType): PtrInt;
+begin
+  if (self <> nil) and
+     (AttributeType <> atUndefined) and
+     (AttributeType in fKnownTypes) then // worth searching it
+    for result := 0 to length(fItems) - 1 do
+      if fItems[result].KnownType = AttributeType then
+        exit;
+  result := -1;
+end;
+
+function TLdapAttributeList.Find(AttributeType: TLdapAttributeType): TLdapAttribute;
+var
+  i: PtrInt;
+begin
+  i := FindIndex(AttributeType);
+  if i >= 0 then
+    result := fItems[i]
+  else
+    result := nil;
+end;
+
+function TLdapAttributeList.Get(AttributeType: TLdapAttributeType): RawUtf8;
+begin
+  result := Find(AttributeType).GetReadable(0);
+end;
+
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
 var
   i: PtrInt;
@@ -2693,6 +2739,7 @@ begin
   // need to add a new TLdapAttribute with this interned name
   result := TLdapAttribute.Create(n, _AttributeNameType(pointer(n)));
   ObjArrayAdd(fItems, result);
+  include(fKnownTypes, result.KnownType);
 end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8;
@@ -2792,7 +2839,7 @@ var
   v: RawUtf8;
 begin
   fInterning := TRawUtf8Interning.Create;
-  // register all our common names for quick search as pointer()
+  // register all our common Attribute Types names for quick search as pointer()
   for t := succ(low(t)) to high(t) do
     if not fInterning.Unique(v, AttrTypeName[t]) then
       ELdap.RaiseUtf8('%.Create: dup %', [self, v]); // paranoid
@@ -2963,19 +3010,19 @@ begin
     for j := 0 to res.Attributes.Count - 1 do
     begin
       attr := res.Attributes.Items[j];
-      a.AddValue(attr.AttributeName, attr.GetVariant);
+      a.AddValue(attr.AttributeName, attr.GetVariant); // benefit from fInterning
     end;
     if ObjectAttributeField = '*' then
       v^.AddOrUpdateFrom(variant(a), {onlymissing=}true)
     else
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
-    a.Clear;
+    a.Clear; // mandatory to prepare the next a.Init in this loop
   end;
 end;
 
 function TLdapResultList.AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 begin
-  result := _AttributeNameType(fInterning.Existing(AttrName));
+  result := _AttributeNameType(fInterning.Existing(AttrName)); // very fast
 end;
 
 
@@ -3170,16 +3217,16 @@ var
   n, c, i: PtrInt;
   a: TLdapAttribute;
 begin
-  sAMAccountName := Attributes.Get('sAMAccountName');
-  distinguishedName := Attributes.Get('distinguishedName');
+  sAMAccountName := Attributes.Get(atSAMAccountName);
+  distinguishedName := Attributes.Get(atDistinguishedName);
   canonicalName := DNToCN(distinguishedName);
-  name := Attributes.Get('name');
-  CN := Attributes.Get('cn');
-  description := Attributes.Get('description');
-  objectSid := Attributes.Get('objectSid');
-  objectGUID := Attributes.Get('objectGUID');
-  whenCreated := LdapToDate(Attributes.Get('whenCreated'));
-  whenChanged := LdapToDate(Attributes.Get('whenChanged'));
+  name := Attributes.Get(atName);
+  CN := Attributes.Get(atCommonName);
+  description := Attributes.Get(atDescription);
+  objectSid := Attributes.Get(atObjectSid);
+  objectGUID := Attributes.Get(atObjectGUID);
+  whenCreated := LdapToDate(Attributes.Get(atWhenCreated));
+  whenChanged := LdapToDate(Attributes.Get(atWhenChanged));
   n := length(CustomAttributes);
   if n = 0 then
     exit;
@@ -3228,10 +3275,10 @@ var
 begin
   Fill(Attributes, CustomAttributes);
   ToCardinal(SplitRight(objectSID, '-'), PrimaryGroupID);
-  if ToInteger(Attributes.Get('groupType'), uac) then
+  if ToInteger(Attributes.Get(atGroupType), uac) then
     groupType := TGroupTypes(uac);
   if WithMember then
-    member := Attributes.Find('member').GetAllReadable;
+    member := Attributes.Find(atMember).GetAllReadable;
 end;
 
 
@@ -3243,15 +3290,15 @@ var
   uac: integer;
 begin
   Fill(Attributes, CustomAttributes);
-  userPrincipalName := Attributes.Get('userPrincipalName');
-  displayName := Attributes.Get('displayName');
-  mail := Attributes.Get('mail');
-  pwdLastSet := LdapToDate(Attributes.Get('pwdLastSet'));
-  lastLogon := LdapToDate(Attributes.Get('lastLogon'));
-  ToCardinal(Attributes.Get('primaryGroupID'), primaryGroupID);
+  userPrincipalName := Attributes.Get(atUserPrincipalName);
+  displayName := Attributes.Get(atDisplayName);
+  mail := Attributes.Get(atMail);
+  pwdLastSet := LdapToDate(Attributes.Get(atPwdLastSet));
+  lastLogon := LdapToDate(Attributes.Get(atLastLogon));
+  ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
   if WithMemberOf then
-    memberOf := Attributes.Find('memberOf').GetAllReadable;
-  if ToInteger(Attributes.Get('userAccountControl'), uac) then
+    memberOf := Attributes.Find(atMemberOf).GetAllReadable;
+  if ToInteger(Attributes.Get(atUserAccountControl), uac) then
     userAccountControl := TUserAccountControls(uac);
 end;
 
@@ -4430,7 +4477,7 @@ begin
   if Search(DefaultDN(BaseDN), false,
        InfoFilter(AT_GROUP, AN, '', '', CustomFilter), ['distinguishedName']) and
      (SearchResult.Count = 1) then
-    result := SearchResult.Items[0].Attributes.Get('distinguishedName')
+    result := SearchResult.Items[0].Attributes.Get(atDistinguishedName)
   else
     result := '';
 end;
@@ -4445,7 +4492,7 @@ begin
        InfoFilter(AT_GROUP, AN, DN, '', CustomFilter), ['objectSid']) and
      (SearchResult.Count = 1) then
   begin
-    last := SplitRight(SearchResult.Items[0].Attributes.Get('objectSid'), '-');
+    last := SplitRight(SearchResult.Items[0].Attributes.Get(atObjectSid), '-');
     result := (last <> '') and
               ToCardinal(last, PrimaryGroupID);
   end;
@@ -4479,11 +4526,11 @@ begin
      (SearchResult.Count = 1) then
     with SearchResult.Items[0].Attributes do
     begin
-      result := Get('distinguishedName');
+      result := Get(atDistinguishedName);
       if PrimaryGroupID <> nil then
-        ToCardinal(Get('primaryGroupID'), PrimaryGroupID^);
+        ToCardinal(Get(atPrimaryGroupID), PrimaryGroupID^);
       if ObjectSid <> nil then
-        ObjectSid^ := Get('objectSid');
+        ObjectSid^ := Get(atObjectSid);
     end
     else
       result := '';
