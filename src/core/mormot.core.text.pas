@@ -453,8 +453,8 @@ type
     hfOutsideAttributes,
     hfWithinAttributes);
 
-  /// the available JSON format, for TTextWriter.AddJsonReformat() and its
-  // JsonBufferReformat() and JsonReformat() wrappers
+  /// the available JSON/JSON-like formats, for TTextWriter.AddJsonReformat()
+  // and its JsonBufferReformat() and JsonReformat() wrappers
   // - jsonCompact is the default machine-friendly single-line layout
   // - jsonHumanReadable will add line feeds and indentation, for a more
   // human-friendly result

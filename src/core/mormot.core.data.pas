@@ -2621,9 +2621,10 @@ type
   public
     /// initialize the RawUtf8 slot (and its Safe mutex)
     procedure Init;
-    /// returns the interned RawUtf8 value
-    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8;
-      aTextHash: cardinal);
+    /// computes one interned RawUtf8 value
+    // - returns true if aText was added to the list, or false if was existing
+    function Unique(var aResult: RawUtf8; const aText: RawUtf8;
+      aTextHash: cardinal): boolean;
     /// returns the interned RawUtf8 value
     // - only allocates new aResult string if needed
     procedure UniqueFromBuffer(var aResult: RawUtf8;
@@ -2679,7 +2680,8 @@ type
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
-    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8); overload;
+    // - returns true if aText was added to the list, or false if was existing
+    function Unique(var aResult: RawUtf8; const aText: RawUtf8): boolean; overload;
     /// return a RawUtf8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -4628,11 +4630,10 @@ begin
   fHash.Init;
 end;
 
-procedure TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
-  const aText: RawUtf8; aTextHash: cardinal);
+function TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
+  const aText: RawUtf8; aTextHash: cardinal): boolean;
 var
   i: PtrInt;
-  added: boolean;
 begin
   fSafe.ReadLock; // a TRWLightLock is faster here than an upgradable TRWLock
   i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
@@ -4640,12 +4641,13 @@ begin
   begin
     aResult := fHash.Value[i]; // return unified string instance
     fSafe.ReadUnLock;
+    result := false;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added within the write lock
-  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
-  if added then
+  i := fHash.Values.FindHashedForAdding(aText, {added=}result, aTextHash);
+  if result then
   begin
     fHash.Value[i] := aText; // copy new value to the pool
     aResult := aText;
@@ -4841,10 +4843,11 @@ begin
       inc(result, fPool[i].Count);
 end;
 
-procedure TRawUtf8Interning.Unique(var aResult: RawUtf8; const aText: RawUtf8);
+function TRawUtf8Interning.Unique(var aResult: RawUtf8; const aText: RawUtf8): boolean;
 var
   hash: cardinal;
 begin
+  result := false; // not added
   if aText = '' then
     aResult := ''
   else if self = nil then
@@ -4853,7 +4856,7 @@ begin
   begin
     // inlined fPool[].Values.HashElement
     hash := InterningHasher(HashSeed, pointer(aText), length(aText));
-    fPool[hash and fPoolLast].Unique(aResult, aText, hash);
+    result := fPool[hash and fPoolLast].Unique(aResult, aText, hash); // maybe added
   end;
 end;
 
