@@ -555,6 +555,8 @@ type
       const AttributeValue: RawByteString): TLdapAttribute; overload;
     /// search or allocate a new TLdapAttribute object to the list
     function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
+    /// search or allocate TLdapAttribute object(s) from name/value pairs to the list
+    procedure Add(const NameValuePairs: array of RawUtf8); overload;
     /// search or allocate "unicodePwd" TLdapAttribute value to the list
     function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
     /// remove one TLdapAttribute object from the list
@@ -2586,6 +2588,17 @@ begin
   result.Add(AttributeValue);
   if pointer(result.AttributeName) = pointer(_unicodePwd) then // pointer search
     result.fKnownType := latUnicodePwd;
+end;
+
+procedure TLdapAttributeList.Add(const NameValuePairs: array of RawUtf8);
+var
+  i, n: PtrInt;
+begin
+  n := length(NameValuePairs);
+  if (n <> 0) and
+     (n and 1 = 0) then
+    for i := 0 to (n shr 1) - 1 do
+      Add(NameValuePairs[i * 2], NameValuePairs[i * 2 + 1]);
 end;
 
 function TLdapAttributeList.AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
