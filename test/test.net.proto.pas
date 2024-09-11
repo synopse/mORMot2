@@ -674,6 +674,9 @@ var
   guid: TGuid;
   i, j, k: PtrInt;
   dns, clients: TRawUtf8DynArray;
+  rl: TLdapResultList;
+  r: TLdapResult;
+  at: TLdapAttributeType;
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
@@ -771,6 +774,28 @@ begin
   Check(not LdapSafe('abc)'));
   Check(not LdapSafe('*'));
   Check(not LdapSafe('()'));
+  // validate LDAP resultset and LDIF content
+  rl := TLdapResultList.Create;
+  try
+    for at := low(at) to high(at) do
+      CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
+    for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do
+      CheckUtf8(AttributeNameType(AttrTypeNameAlt[i]) = AttrTypeAltType[i],
+        AttrTypeNameAlt[i]);
+    CheckEqual(rl.Dump({noTime=}true), 'results: 0'#13#10);
+    CheckEqual(rl.ExportToLdifContent,
+      'version: 1'#$0A'# total number of entries: 0'#$0A);
+    r := rl.Add;
+    r.ObjectName := 'cn=foo, ou=bar';
+    r.Attributes.Add('objectClass', 'person');
+    r.Attributes.Add(['cn', 'John Doe',
+                      'cn', 'John E Do'#$c3#$a9, // UTF-8 'e'acute
+                      'sn', 'Doe']);
+    CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
+    CheckHash(rl.ExportToLdifContent, $A91F23A7, 'hashLdif');
+  finally
+    rl.Free;
+  end;
   // validate LDAP settings
   l := TLdapClientSettings.Create;
   try
