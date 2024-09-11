@@ -381,79 +381,23 @@ type
   /// set of common Attribute Types
   TLdapAttributeTypes = set of TLdapAttributeType;
 
-const
+var
   /// the standard NAME of our common Attribute Types
-  // - these value will be interned and recognized as pointer(_unicodePwd)
-  AttrTypeName: array[TLdapAttributeType] of RawUtf8 = (
-    '', // atUndefined
-    'distinguishedName',           // atDistinguishedName
-    'objectClass',                 // atObjectClass
-    'alias',                       // atAlias
-    'name',                        // atName
-    'cn',                          // atCommonName
-    'sn',                          // atSurName
-    'gn',                          // atGivenName
-    'displayName',                 // atDisplayName
-    'userPrincipalName',           // atUserPrincipalName
-    'userAccountControl',          // atUserAccountControl
-    'sAMAccountName',              // atSAMAccountName
-    'description',                 // atDescription
-    'generationQualifier',         // atGenerationQualifier
-    'initials',                    // atInitials
-    'o',                           // atOrganizationName
-    'ou',                          // atOrganizationUnitName
-    'mail',                        // atMail
-    'memberOf',                    // atMemberOf
-    'c',                           // atCountryName
-    'l',                           // atLocalityName
-    'st',                          // atStateName
-    'street',                      // atStreetAddress
-    'telephoneNumber',             // atTelephoneNumber
-    'title',                       // atTitle
-    'serialNumber',                // atSerialNumber
-    'member',                      // atMember
-    'owner',                       // atOwner
-    'groupType',                   // atGroupType
-    'primaryGroupID',              // atPrimaryGroupID
-    'objectSid',                   // atObjectSid
-    'objectGUID',                  // atObjectGuid
-    'accountExpires',              // atAccountExpires
-    'badPasswordTime',             // atBadPasswordTime
-    'lastLogon',                   // atLastLogon
-    'lastLogonTimestamp',          // atLastLogonTimestamp
-    'lastLogoff',                  // atLastLogoff
-    'lockoutTime',                 // atLockoutTime
-    'pwdLastSet',                  // atPwdLastSet
-    'ms-MCS-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
-    'whenCreated',                 // atWhenCreated
-    'whenChanged',                 // atWhenChanged
-    'unicodePwd');                 // atUnicodePwd
+  // - these value will be interned and recognized internal as raw pointer()
+  AttrTypeName: array[TLdapAttributeType] of RawUtf8;
 
-  /// alternative full standard NAME of our common Attribute Types
-  // - we store the shortest names in AttrTypeName[] and the longest in
-  // AttrTypeNameAlt[], following this array exact order
-  AttrTypeAltType: array[0..8] of TLdapAttributeType = (
-    atCommonName,
-    atSurName,
-    atCountryName,
-    atLocalityName,
-    atStateName,
-    atStreetAddress,
-    atOrganizationName,
-    atOrganizationUnitName,
-    atGivenName);
+  /// alternate standard NAME of our common Attribute Types
+  // - defined for unit testing purpose only
+  AttrTypeNameAlt: array[0 .. 8] of RawUtf8;
 
-  /// the standard NAME of alternative AttrTypeAltType[] common Attribute Types
-  AttrTypeNameAlt: array[0..high(AttrTypeAltType)] of RawUtf8 = (
-    'commonName',
-    'surname',
-    'countryName',
-    'localityName',
-    'stateOrProvinceName',
-    'streetAddress',
-    'organizationName',
-    'organizationalUnitName',
-    'givenName');
+const
+  /// AttrTypeNameAlt[] types - defined for unit testing purpose only
+  AttrTypeAltType: array[0 .. high(AttrTypeNameAlt)] of TLdapAttributeType = (
+    atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
+    atStreetAddress, atOrganizationName, atOrganizationUnitName, atGivenName);
+
+/// recognize our common Attribute Types from their standard NAME text
+function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
 /// convert a raw attribute value into human-readable text
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
@@ -657,7 +601,6 @@ type
   TLdapAttributeList = class
   private
     fItems: TLdapAttributeDynArray;
-    fInterning: TRawUtf8Interning; // hash table of names, from TLdapResultList
     fLastFound: PtrInt;
     fKnownTypes: TLdapAttributeTypes;
   public
@@ -747,10 +690,7 @@ type
     fItems: TLdapResultObjArray;
     fSearchTimeMicroSec: Int64;
     fCount: integer;
-    fInterning: TRawUtf8Interning; // injected to TLdapAttributeList by Add
   public
-    /// initialize the result list
-    constructor Create; reintroduce;
     /// finalize the list
     destructor Destroy; override;
     /// create and add new TLdapResult object to the list
@@ -779,9 +719,6 @@ type
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump(NoTime: boolean = false): RawUtf8;
-    /// recognize our common Attribute Types
-    // - is part of TLdapResultList, to use its string interning
-    function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
     /// access to the TLdapResult objects
     // - you can write e.g. "for res in Items do writeln(res.ObjectName)"
     property Items: TLdapResultObjArray
@@ -2143,7 +2080,103 @@ end;
 
 { **************** LDAP Attribute Types Definitions }
 
-// internal function: search by fast AttrName interned pointers
+// private copy from constant to global variables because of Delphi which makes
+// a new RefCnt > 0 copy when assigning a RefCnt = -1 constant to a variable :(
+const
+  // reference names to fill the global AttrTypeName[]
+  _AttrTypeName: array[TLdapAttributeType] of RawUtf8 = (
+    '',                            // atUndefined
+    'distinguishedName',           // atDistinguishedName
+    'objectClass',                 // atObjectClass
+    'alias',                       // atAlias
+    'name',                        // atName
+    'cn',                          // atCommonName
+    'sn',                          // atSurName
+    'gn',                          // atGivenName
+    'displayName',                 // atDisplayName
+    'userPrincipalName',           // atUserPrincipalName
+    'userAccountControl',          // atUserAccountControl
+    'sAMAccountName',              // atSAMAccountName
+    'description',                 // atDescription
+    'generationQualifier',         // atGenerationQualifier
+    'initials',                    // atInitials
+    'o',                           // atOrganizationName
+    'ou',                          // atOrganizationUnitName
+    'mail',                        // atMail
+    'memberOf',                    // atMemberOf
+    'c',                           // atCountryName
+    'l',                           // atLocalityName
+    'st',                          // atStateName
+    'street',                      // atStreetAddress
+    'telephoneNumber',             // atTelephoneNumber
+    'title',                       // atTitle
+    'serialNumber',                // atSerialNumber
+    'member',                      // atMember
+    'owner',                       // atOwner
+    'groupType',                   // atGroupType
+    'primaryGroupID',              // atPrimaryGroupID
+    'objectSid',                   // atObjectSid
+    'objectGUID',                  // atObjectGuid
+    'accountExpires',              // atAccountExpires
+    'badPasswordTime',             // atBadPasswordTime
+    'lastLogon',                   // atLastLogon
+    'lastLogonTimestamp',          // atLastLogonTimestamp
+    'lastLogoff',                  // atLastLogoff
+    'lockoutTime',                 // atLockoutTime
+    'pwdLastSet',                  // atPwdLastSet
+    'ms-MCS-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
+    'whenCreated',                 // atWhenCreated
+    'whenChanged',                 // atWhenChanged
+    'unicodePwd');                 // atUnicodePwd
+
+  // reference names to fill the global AttrTypeNameAlt[]
+  _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
+    'commonName',
+    'surname',
+    'countryName',
+    'localityName',
+    'stateOrProvinceName',
+    'streetAddress',
+    'organizationName',
+    'organizationalUnitName',
+    'givenName');
+
+var
+  _LdapIntern: TRawUtf8Interning;
+  // allow fast linear search in L1 CPU cache
+  _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of pointer;
+  _LdapInternType: array[0 .. high(_LdapInternAll)] of TLdapAttributeType;
+
+procedure InitializeUnit;
+var
+  t: TLdapAttributeType;
+  i, n: PtrInt;
+begin
+  _LdapIntern := TRawUtf8Interning.Create;
+  RegisterGlobalShutdownRelease(_LdapIntern);
+  // register all our common Attribute Types names for quick search as pointer()
+  n := 0;
+  for t := succ(low(t)) to high(t) do
+    if _LdapIntern.Unique(AttrTypeName[t], _AttrTypeName[t]) then
+    begin
+      _LdapInternAll[n] := pointer(AttrTypeName[t]);
+      _LdapInternType[n] := t;
+      inc(n);
+    end
+    else
+      ELdap.RaiseUtf8('dup %', [_AttrTypeName[t]]); // paranoid
+  for i := 0 to high(_AttrTypeNameAlt) do
+    if _LdapIntern.Unique(AttrTypeNameAlt[i], _AttrTypeNameAlt[i]) then
+    begin
+      _LdapInternAll[n] := pointer(AttrTypeNameAlt[i]);
+      _LdapInternType[n] := AttrTypeAltType[i];
+      inc(n);
+    end
+    else
+      ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
+end;
+
+// internal function: fast O(n) search of AttrName interned pointer
 function _AttributeNameType(AttrName: pointer): TLdapAttributeType;
 var
   i: PtrInt;
@@ -2151,17 +2184,14 @@ begin
   result := atUndefined;
   if AttrName = nil then
     exit;
-  i := PtrUIntScanIndex(
-    @AttrTypeName[succ(atUndefined)], length(AttrTypeName) - 1, PtrUInt(AttrName));
+  i := PtrUIntScanIndex(@_LdapInternAll, length(_LdapInternAll), PtrUInt(AttrName));
   if i >= 0 then
-  begin
-    result := TLdapAttributeType(i + 1);
-    exit;
-  end;
-  i := PtrUIntScanIndex(
-    @AttrTypeNameAlt[0], length(AttrTypeNameAlt), PtrUInt(AttrName));
-  if i >= 0 then
-    result := AttrTypeAltType[i];
+    result := _LdapInternType[i];
+end;
+
+function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
+begin
+  result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
 end;
 
 procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
@@ -2667,7 +2697,7 @@ begin
     end
     else
     begin
-      existing := fInterning.Existing(AttributeName); // fast pointer search
+      existing := _LdapIntern.Existing(AttributeName); // fast pointer search
       if existing <> nil then // no need to search if we know it won't be there
         for result := 0 to result do
           if pointer(fItems[result].AttributeName) = existing then
@@ -2731,14 +2761,14 @@ begin
   if AttributeName = '' then
     ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
   // search for existing TLdapAttribute instance
-  if not fInterning.Unique(n, AttributeName) then // n = existing name
+  if not _LdapIntern.Unique(n, AttributeName) then // n = existing name
     for i := 0 to length(fItems) - 1 do // fast pointer search as in Find()
     begin
       result := fItems[i];
       if pointer(result.AttributeName) = pointer(n) then
         exit;
     end;
-  // need to add a new TLdapAttribute with this interned name
+  // need to add a new TLdapAttribute with this interned attribute name
   result := TLdapAttribute.Create(n, _AttributeNameType(pointer(n)));
   ObjArrayAdd(fItems, result);
   include(fKnownTypes, result.KnownType);
@@ -2834,27 +2864,10 @@ end;
 
 { TLdapResultList }
 
-constructor TLdapResultList.Create;
-var
-  t: TLdapAttributeType;
-  i: PtrInt;
-  v: RawUtf8;
-begin
-  fInterning := TRawUtf8Interning.Create;
-  // register all our common Attribute Types names for quick search as pointer()
-  for t := succ(low(t)) to high(t) do
-    if not fInterning.Unique(v, AttrTypeName[t]) then
-      ELdap.RaiseUtf8('%.Create: dup %', [self, v]); // paranoid
-  for i := 0 to high(AttrTypeNameAlt) do
-    if not fInterning.Unique(v, AttrTypeNameAlt[i]) then
-      ELdap.RaiseUtf8('%.Create: dup alt %', [self, v]);
-end;
-
 destructor TLdapResultList.Destroy;
 begin
   Clear;
   inherited Destroy;
-  fInterning.Free;
 end;
 
 procedure TLdapResultList.Clear;
@@ -2941,7 +2954,6 @@ end;
 function TLdapResultList.Add: TLdapResult;
 begin
   result := TLdapResult.Create;
-  result.fAttributes.fInterning := fInterning;
   ObjArrayAddCount(fItems, result, fCount);
 end;
 
@@ -3045,11 +3057,6 @@ begin
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
     a.Clear; // mandatory to prepare the next a.Init in this loop
   end;
-end;
-
-function TLdapResultList.AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
-begin
-  result := _AttributeNameType(fInterning.Existing(AttrName)); // very fast
 end;
 
 
@@ -5110,6 +5117,7 @@ end;
 
 
 initialization
+  InitializeUnit;
   assert((1 shl ord(uacPartialSecretsRodc)) = $04000000);
 
 end.
