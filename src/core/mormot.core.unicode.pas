@@ -9322,7 +9322,7 @@ begin
   // sub-function for better code generation
   i := 0;
   repeat // here last>0 so i<last
-    if SortDynArrayAnsiString(val[i], val[i + 1]) = 0 then
+    if RawUtf8(val[i]) = RawUtf8(val[i + 1]) then
       break;
     inc(i);
     if i <> last then
@@ -9335,7 +9335,7 @@ begin
   if i = last then
     exit;
   repeat
-    if SortDynArrayAnsiString(val[i], val[i + 1]) <> 0 then
+    if RawUtf8(val[i]) <> RawUtf8(val[i + 1]) then
     begin
       FastAssignNew(val[result], val[i]);
       val[i] := nil;
