@@ -774,14 +774,15 @@ begin
   Check(not LdapSafe('abc)'));
   Check(not LdapSafe('*'));
   Check(not LdapSafe('()'));
+  // validate LDAP attributes definitions
+  for at := low(at) to high(at) do
+    CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
+  for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do
+    CheckUtf8(AttributeNameType(AttrTypeNameAlt[i]) = AttrTypeAltType[i],
+      AttrTypeNameAlt[i]);
   // validate LDAP resultset and LDIF content
   rl := TLdapResultList.Create;
   try
-    for at := low(at) to high(at) do
-      CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
-    for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do
-      CheckUtf8(AttributeNameType(AttrTypeNameAlt[i]) = AttrTypeAltType[i],
-        AttrTypeNameAlt[i]);
     CheckEqual(rl.Dump({noTime=}true), 'results: 0'#13#10);
     CheckEqual(rl.ExportToLdifContent,
       'version: 1'#$0A'# total number of entries: 0'#$0A);

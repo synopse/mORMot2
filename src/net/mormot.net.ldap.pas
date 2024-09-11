@@ -337,6 +337,7 @@ type
     atUndefined,
     atDistinguishedName,
     atObjectClass,
+    atObjectCategory,
     atAlias,
     atName,
     atCommonName,
@@ -346,6 +347,7 @@ type
     atUserPrincipalName,
     atUserAccountControl,
     atSAMAccountName,
+    atAdminCount,
     atDescription,
     atGenerationQualifier,
     atInitials,
@@ -376,6 +378,8 @@ type
     atMcsAdmPwdExpirationTime,
     atWhenCreated,
     atWhenChanged,
+    atOperatingSystem,
+    atServicePrincipalName,
     atUnicodePwd);
 
   /// set of common Attribute Types
@@ -2088,6 +2092,7 @@ const
     '',                            // atUndefined
     'distinguishedName',           // atDistinguishedName
     'objectClass',                 // atObjectClass
+    'objectCategory',              // otObjectCategory
     'alias',                       // atAlias
     'name',                        // atName
     'cn',                          // atCommonName
@@ -2097,6 +2102,7 @@ const
     'userPrincipalName',           // atUserPrincipalName
     'userAccountControl',          // atUserAccountControl
     'sAMAccountName',              // atSAMAccountName
+    'adminCount',                  // atAdminCount
     'description',                 // atDescription
     'generationQualifier',         // atGenerationQualifier
     'initials',                    // atInitials
@@ -2127,6 +2133,8 @@ const
     'ms-MCS-AdmPwdExpirationTime', // atMcsAdmPwdExpirationTime
     'whenCreated',                 // atWhenCreated
     'whenChanged',                 // atWhenChanged
+    'operatingSystem',             // atOperatingSystem
+    'servicePrincipalName',        // atServicePrincipalName
     'unicodePwd');                 // atUnicodePwd
 
   // reference names to fill the global AttrTypeNameAlt[]
