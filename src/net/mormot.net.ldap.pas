@@ -763,7 +763,9 @@ type
     /// return all Items[].ObjectName as a sorted array
     function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
     /// return all Items[].Attributes.Get(AttributeName) as a sorted array
-    function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
+    function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray; overload;
+    /// return all Items[].Attributes.Get(AttrType) as a sorted array
+    function ObjectAttributes(AttrType: TLdapAttributeType): TRawUtf8DynArray; overload;
     /// add all results as a TDocVariant object nested tree
     // - the full CN will be used as path
     // - attributes would be included as ObjectAttributeField (e.g. '_attr')
@@ -2905,6 +2907,31 @@ begin
   QuickSortRawUtf8(result, n);
 end;
 
+function TLdapResultList.ObjectAttributes(AttrType: TLdapAttributeType): TRawUtf8DynArray;
+var
+  i, n: PtrInt;
+  attr: TLdapAttributeList;
+begin
+  result := nil;
+  if (self = nil) or
+     (fCount = 0) or
+     (AttrType = atUndefined) then
+    exit;
+  n := 0;
+  SetLength(result, fCount);
+  for i := 0 to fCount - 1 do
+  begin
+    attr := fItems[i].Attributes;
+    if not (AttrType in attr.KnownTypes) then
+      continue; // no need to search
+    result[n] := attr.Get(AttrType);
+    inc(n);
+  end;
+  if n <> fCount then
+    SetLength(result, n);
+  QuickSortRawUtf8(result, n);
+end;
+
 procedure TLdapResultList.AfterAdd;
 begin
   if fItems <> nil then
@@ -4582,7 +4609,7 @@ begin
      (SearchResult.Count > 0) then
   begin
     if GroupsAN <> nil then
-      GroupsAN^ := SearchResult.ObjectAttributes('sAMAccountName');
+      GroupsAN^ := SearchResult.ObjectAttributes(atSAMAccountName);
     result := true;
   end;
 end;
