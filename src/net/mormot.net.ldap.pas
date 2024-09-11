@@ -204,9 +204,9 @@ const
   /// OID of supportedLDAPVersion attribute in the root DSE
   ASN1_OID_DSE_SUPPORTEDLDAPVERSION = '1.3.6.1.4.1.1466.101.120.15';
 
-  /// OID of LDAPv3 Password Modify extended operation (RFC 3062)
+  /// OID of LDAPv3 "Password Modify" extended operation (RFC 3062)
   ASN1_OID_PASSWDMODIFY = '1.3.6.1.4.1.4203.1.11.1';
-  /// OID of LDAPv3 Who Am I extended operation (RFC 4532)
+  /// OID of LDAPv3 "Who Am I" extended operation (RFC 4532)
   ASN1_OID_WHOAMI       = '1.3.6.1.4.1.4203.1.11.3';
 
 type
@@ -508,6 +508,8 @@ type
     // - if there is a single value, return it as a single variant text
     // - if Count > 0, return a TDocVariant array with all texts
     function GetVariant: variant;
+    /// add all attributes to a "dn: ###" entry of a ldif-content buffer
+    procedure ExportToLdif(w: TTextWriter);
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
@@ -586,6 +588,8 @@ type
     /// Copy the 'objectGUID' attribute if present
     // - Return true on success
     function CopyObjectGUID(out objectGUID: TGuid): boolean;
+    /// add a "dn: ###" entry to a ldif-content buffer
+    procedure ExportToLdif(w: TTextWriter);
   end;
   TLdapResultObjArray = array of TLdapResult;
 
@@ -612,7 +616,7 @@ type
     function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
     /// return all Items[].Attributes.Get(AttributeName) as a sorted array
     function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
-    /// add all result as a TDocVariant object nested tree
+    /// add all results as a TDocVariant object nested tree
     // - the full CN will be used as path
     // - attributes would be included as ObjectAttributeField (e.g. '_attr')
     // fields (including the "objectName" value), unless ObjectAttributeField
@@ -620,6 +624,8 @@ type
     // sub-field will be generated, and attributes will be written directly
     procedure AppendTo(var Dvo: TDocVariantData;
       const ObjectAttributeField: RawUtf8);
+    /// export all results in the RFC 2234 ldif-content output
+    function ExportToLdifContent: RawUtf8;
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
     function Dump: RawUtf8;
@@ -2537,6 +2543,18 @@ begin
   end;
 end;
 
+procedure TLdapResult.ExportToLdif(w: TTextWriter);
+var
+  i: PtrInt;
+begin
+  w.AddShorter('dn:');
+  AddLdif(w, pointer(fObjectName), length(fObjectName));
+  w.AddDirect(#10);
+  for i := 0 to fAttributes.Count - 1 do
+    fAttributes.Items[i].ExportToLdif(w);
+  w.AddDirect(#10);
+end;
+
 
 { TLdapResultList }
 
@@ -2615,7 +2633,25 @@ begin
   ObjArrayAddCount(fItems, result, fCount);
 end;
 
-function TLdapResultList.Dump: RawUtf8;
+function TLdapResultList.ExportToLdifContent: RawUtf8;
+var
+  tmp: TTextWriterStackBuffer;
+  w: TTextWriter;
+  i: PtrInt;
+begin
+  w := DefaultJsonWriter.CreateOwnedStream(tmp);
+  try
+    W.AddShort('version: 1'#10);
+    for i := 0 to Count - 1 do
+      Items[i].ExportToLdif(w);
+    W.Add('# total number of entries: %'#10, [Count]);
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+function TLdapResultList.Dump(NoTime: boolean): RawUtf8;
 var
   i, j, k: PtrInt;
   res: TLdapResult;
