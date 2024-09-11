@@ -304,6 +304,13 @@ function LdapUnescape(const Text: RawUtf8): RawUtf8;
 /// escape the . / \ characters as expected by LDAP filters
 function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
 
+var
+  /// this value will be interned and recognized as pointer(_unicodePwd)
+  _unicodePwd: RawUtf8 = 'unicodePwd';
+
+/// encode a "unicodePwd" binary value from a UTF-8 password
+function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
+
 
 { **************** CLDAP Client Functions }
 
@@ -472,7 +479,8 @@ type
     latObjectSid,
     latObjectGuid,
     latIsoTime,
-    latFileTime);
+    latFileTime,
+    latUnicodePwd);
 
 /// recognize some non-textual attributes by name
 // - as used by TLdapAttribute.Create
@@ -493,6 +501,8 @@ type
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8);
+    /// finalize the attribute(s) storage
+    destructor Destroy; override;
     /// include a new value to this list
     // - IsBinary values will be stored base-64 encoded
     procedure Add(const aValue: RawByteString);
@@ -545,6 +555,8 @@ type
       const AttributeValue: RawByteString): TLdapAttribute; overload;
     /// allocate and a new TLdapAttribute object to the list
     function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
+    /// search or allocate "unicodePwd" TLdapAttribute value to the list
+    function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
     /// remove one TLdapAttribute object from the list
     procedure Delete(const AttributeName: RawUtf8);
     /// find and return attribute index with the requested name
@@ -1975,6 +1987,18 @@ begin
     result := EscapeChar(Text, LDAP_CN, '\');
 end;
 
+function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
+var
+  u8: SpiUtf8;
+begin
+  try
+    u8 := NetConcat(['"', aPassword, '"']);
+    result := Utf8DecodeToUnicodeRawByteString(u8);
+  finally
+    FillZero(u8);
+  end;
+end;
+
 
 { **************** CLDAP Client Functions }
 
@@ -2359,6 +2383,16 @@ begin
   SetLength(fList, 1); // optimized for a single value (most used case)
 end;
 
+destructor TLdapAttribute.Destroy;
+var
+  i: PtrInt;
+begin
+  if fKnownType = latUnicodePwd then
+    for i := 0 to fCount - 1 do
+      FillZero(fList[i]); // anti-forensic measure
+  inherited Destroy;
+end;
+
 procedure TLdapAttribute.Add(const aValue: RawByteString);
 begin
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
@@ -2407,6 +2441,56 @@ begin
       RawUtf8ToVariant(GetReadable, result)
     else
       TDocVariantData(result).InitArrayFrom(GetAllReadable, JSON_FAST);
+end;
+
+function IsLdifSafe(p: PUtf8Char; l: integer): boolean; // RFC 2849
+begin
+  if p <> nil then
+  begin
+    result := false;
+    if p^ in [#0 .. ' ', ':', '<', #128 .. #255] then // SAFE-INIT-CHAR
+      exit;
+    inc(p);
+    dec(l);
+    if l <> 0 then
+      repeat
+        if p^ in [#0, #10, #13, #128 .. #255] then    // SAFE-CHAR
+          exit;
+        inc(p);
+        dec(l);
+      until l = 0;
+    if p[-1] = ' ' then
+      exit; // "should not end with a space" RFC 2849 point 8)
+  end;
+  result := true;
+end;
+
+procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
+begin
+  if IsLdifSafe(p, l) then
+  begin
+    w.AddDirect(' ');
+    w.AddNoJsonEscape(p, l);
+  end
+  else
+  begin
+    // UTF-8 or binary content is just stored as name:: <base64>
+    w.AddDirect(':', ' ');
+    w.WrBase64(pointer(p), l, {withmagic=}false);
+  end;
+end;
+
+procedure TLdapAttribute.ExportToLdif(w: TTextWriter);
+var
+  i: PtrInt;
+begin
+  for i := 0 to fCount - 1 do
+  begin
+    w.AddString(fAttributeName); // is either OID or plain alphanum
+    w.AddDirect(':');
+    AddLdif(w, pointer(fList[i]), length(fList[i]));
+    w.AddDirect(#10);
+  end;
 end;
 
 
@@ -2491,6 +2575,11 @@ begin
   result.Add(AttributeValue);
 end;
 
+function TLdapAttributeList.AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
+begin
+  result := Add(_unicodePwd, LdapUnicodePwd(aPassword));
+end;
+
 function TLdapAttributeList.FindAdd(const AttributeName: RawUtf8;
   const AttributeValue: RawByteString): TLdapAttribute;
 begin
@@ -2561,6 +2650,7 @@ end;
 constructor TLdapResultList.Create;
 begin
   fInterning := TRawUtf8Interning.Create;
+  fInterning.Unique(_unicodePwd, _unicodePwd); // quick search as pointer()
 end;
 
 destructor TLdapResultList.Destroy;
@@ -3749,9 +3839,7 @@ function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
   out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean;
   UserAccount: TUserAccountControls): boolean;
 var
-  PwdU8: SpiUtf8;
   ComputerSafe, ComputerDN, ComputerSam: RawUtf8;
-  PwdU16: RawByteString;
   Attributes: TLdapAttributeList;
   ComputerObject: TLdapResult;
 begin
@@ -3796,20 +3884,12 @@ begin
     Attributes.Add('sAMAccountName', ComputerSam);
     Attributes.Add('userAccountControl', UInt32ToUtf8(cardinal(UserAccount)));
     if Password <> '' then
-    begin
-      PwdU8 := NetConcat(['"', Password, '"']);
-      PwdU16 := Utf8DecodeToUnicodeRawByteString(PwdU8);
-      Attributes.Add('unicodePwd', PwdU16);
-      FillZero(PwdU8);
-      FillZero(PwdU16);
-    end;
+      Attributes.AddUnicodePwd(Password);
     result := Add(ComputerDN, Attributes);
     if not result then
       FormatUtf8('AddComputer.Add failed: %', [fResultString], ErrorMessage);
   finally
     Attributes.Free;
-    FillZero(PwdU8);
-    FillZero(PwdU16);
   end;
 end;
 
