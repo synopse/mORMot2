@@ -391,10 +391,10 @@ type
   // - this definition is not detailed on oldest Delphi, and not available on
   // POSIX, whereas it makes sense to also have it, e.g. for server process
   TSid = packed record
-     Revision: byte;
-     SubAuthorityCount: byte;
-     IdentifierAuthority: TSidAuth;
-     SubAuthority: array[byte] of cardinal;
+    Revision: byte;
+    SubAuthorityCount: byte;
+    IdentifierAuthority: TSidAuth;
+    SubAuthority: array[byte] of cardinal;
   end;
   PSid = ^TSid;
   PSids = array of PSid;

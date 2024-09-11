@@ -148,8 +148,9 @@ Automatic Certificate Management Environment (ACME v2) Client
 
 Simple LDAP Protocol Client
 - LDAP Protocol Definitions
-- LDAP Response Storage
+- LDAP Attributes Definitions
 - CLDAP Client Functions
+- LDAP Response Storage
 - LDAP Client Class
 - HTTP BASIC Authentication via LDAP or Kerberos
 
