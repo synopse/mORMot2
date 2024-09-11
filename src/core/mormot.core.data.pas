@@ -4639,7 +4639,7 @@ begin
   i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText);
   if i >= 0 then
   begin
-    aResult := fHash.Value[i]; // return unified string instance
+    aResult := fHash.Value[i]; // return the interned value
     fSafe.ReadUnLock;
     result := false;
     exit;
@@ -4647,13 +4647,9 @@ begin
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added within the write lock
   i := fHash.Values.FindHashedForAdding(aText, {added=}result, aTextHash);
-  if result then
-  begin
+  if result then // was not added in a background thread
     fHash.Value[i] := aText; // copy new value to the pool
-    aResult := aText;
-  end
-  else
-    aResult := fHash.Value[i]; // was added in a background thread
+  aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
 end;
 
@@ -4675,7 +4671,7 @@ begin
   i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
   if i >= 0 then
   begin
-    aResult := fHash.Value[i]; // return unified string instance
+    aResult := fHash.Value[i]; // return the interned value
     fSafe.ReadUnLock;
     aText[aTextLen] := c;
     exit;
@@ -4688,7 +4684,7 @@ begin
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := bak;
   if added then
     FastSetString(fHash.Value[i], aText, aTextLen); // new value to the pool
-  aResult := fHash.Value[i];
+  aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
   aText[aTextLen] := c;
 end;
