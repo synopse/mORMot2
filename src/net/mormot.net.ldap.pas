@@ -640,7 +640,7 @@ type
     function ExportToLdifContent: RawUtf8;
     /// dump the result of a LDAP search into human readable form
     // - used for debugging
-    function Dump: RawUtf8;
+    function Dump(NoTime: boolean = false): RawUtf8;
     /// access to the TLdapResult objects
     // - you can write e.g. "for res in Items do writeln(res.ObjectName)"
     property Items: TLdapResultObjArray
@@ -2753,8 +2753,11 @@ begin
   try
     w.AddShort('results: ');
     w.Add(count);
-    w.AddShorter(' in ');
-    w.AddShort(MicroSecToString(fSearchTimeMicroSec));
+    if not NoTime then
+    begin
+      w.AddShorter(' in ');
+      w.AddShort(MicroSecToString(fSearchTimeMicroSec));
+    end;
     w.AddCR;
     for i := 0 to Count - 1 do
     begin
