@@ -632,8 +632,8 @@ type
     procedure Add(const aValue: RawByteString;
       Option: TLdapAddOption = aoAlways); overload;
     /// include a new formatted text value to this list
-    procedure Add(const aValueFmt: RawUtf8; const aValueArgs: array of const;
-      Option: TLdapAddOption = aoAlways); overload;
+    procedure AddFmt(const aValueFmt: RawUtf8; const aValueArgs: array of const;
+      Option: TLdapAddOption = aoAlways); 
     /// retrieve a value as human-readable text
     // - a wrapper around AttributeValueMakeReadable() and the known type
     function GetReadable(index: PtrInt = 0): RawUtf8;
@@ -694,8 +694,8 @@ type
     function Add(const AttributeName: RawUtf8; const AttributeValue: RawByteString;
       Option: TLdapAddOption = aoAlways): TLdapAttribute; overload;
     /// search or allocate TLdapAttribute object(s) from name/value pairs to the list
-    procedure Add(const NameValuePairs: array of RawUtf8;
-      Option: TLdapAddOption = aoAlways); overload;
+    procedure AddPairs(const NameValuePairs: array of RawUtf8;
+      Option: TLdapAddOption = aoAlways); 
     /// search or allocate a new TLdapAttribute object to the list
     function Add(AttributeType: TLdapAttributeType): TLdapAttribute; overload;
     /// search or allocate a new TLdapAttribute object and its value to the list
@@ -1218,10 +1218,6 @@ type
     // - returns nil if no result is found or if the search failed
     function SearchFirst(const BaseDN, Filter: RawUtf8;
       const Attributes: array of RawUtf8): TLdapResult; overload;
-    /// retrieve all entries a given set of criteria and return the first result
-    // - overloaded method using convenient TLdapAttributeTypes for Attributes
-    function SearchFirst(const Attributes: TLdapAttributeTypes;
-      const Filter: RawUtf8; const BaseDN: RawUtf8 = ''): TLdapResult; overload;
     /// retrieve the entry matching the given ObjectDN
     // - will call Search method, therefore SearchResult will contains all the results
     // - returns nil if the object is not found or if the search failed
@@ -1255,8 +1251,12 @@ type
     /// retrieve all entries a given set of criteria and return the first result
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function SearchFirst(const Attributes: TLdapAttributeTypes;
+      const Filter: RawUtf8; const BaseDN: RawUtf8 = ''): TLdapResult; overload;
+    /// retrieve all entries a given set of criteria and return the first result
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchFirstFmt(const Attributes: TLdapAttributeTypes;
       const FilterFmt: RawUtf8; const FilterArgs: array of const;
-      const BaseDN: RawUtf8 = ''): TLdapResult; overload;
+      const BaseDN: RawUtf8 = ''): TLdapResult;
     /// retrieve the entry matching the given ObjectDN
     // - overloaded method using convenient TLdapAttributeTypes for Attributes
     function SearchObject(const Attributes: TLdapAttributeTypes;
@@ -2619,7 +2619,7 @@ begin
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
 end;
 
-procedure TLdapAttribute.Add(const aValueFmt: RawUtf8;
+procedure TLdapAttribute.AddFmt(const aValueFmt: RawUtf8;
   const aValueArgs: array of const; Option: TLdapAddOption);
 begin
   Add(FormatUtf8(aValueFmt, aValueArgs), Option);
@@ -2859,7 +2859,7 @@ begin
   result.Add(AttributeValue, Option);
 end;
 
-procedure TLdapAttributeList.Add(const NameValuePairs: array of RawUtf8;
+procedure TLdapAttributeList.AddPairs(const NameValuePairs: array of RawUtf8;
   Option: TLdapAddOption);
 var
   i, n: PtrInt;
@@ -4489,7 +4489,7 @@ begin
   result := SearchFirst(DefaultDN(BaseDN), Filter, ToText(Attributes));
 end;
 
-function TLdapClient.SearchFirst(const Attributes: TLdapAttributeTypes;
+function TLdapClient.SearchFirstFmt(const Attributes: TLdapAttributeTypes;
   const FilterFmt: RawUtf8; const FilterArgs: array of const;
   const BaseDN: RawUtf8): TLdapResult;
 begin
@@ -4652,7 +4652,8 @@ begin
   ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ComputerParentDN]);
   ComputerSam := NetConcat([UpperCase(ComputerSafe), '$']);
   // Search Computer object in the domain
-  ComputerObject := SearchFirst([atSAMAccountName], '(sAMAccountName=%)', [ComputerSam]);
+  ComputerObject :=
+    SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [ComputerSam]);
   // If the search failed, we exit with the error message
   if ResultCode <> LDAP_RES_SUCCESS then
   begin
