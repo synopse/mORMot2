@@ -851,7 +851,8 @@ type
   TLdapObject = object
   private
     procedure FillObject(Attributes: TLdapAttributeList;
-      const CustomAttributes: TRawUtf8DynArray);
+      const CustomAttributes: TRawUtf8DynArray; CustomTypes: TLdapAttributeTypes);
+    procedure CustomAdd(Attr: TLdapAttribute);
   public
     sAMAccountName, distinguishedName, canonicalName: RawUtf8;
     name, CN, description: RawUtf8;
@@ -871,7 +872,7 @@ type
     groupType: TGroupTypes;
     member: TRawUtf8DynArray;
     procedure FillGroup(Attributes: TLdapAttributeList; WithMember: boolean;
-      const CustomAttributes: TRawUtf8DynArray);
+      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
   end;
 
   /// high-level information of a User in the LDAP database
@@ -887,7 +888,7 @@ type
     userAccountControl: TUserAccountControls;
     primaryGroupID: cardinal;
     procedure FillUser(Attributes: TLdapAttributeList; WithMemberOf: boolean;
-      const CustomAttributes: TRawUtf8DynArray);
+      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
   end;
   PLdapUser = ^TLdapUser;
 
@@ -1309,7 +1310,8 @@ type
     // - could lookup by sAMAccountName or distinguishedName
     function GetGroupInfo(const AN, DN: RawUtf8; out Info: TLdapGroup;
       const BaseDN: RawUtf8 = ''; WithMember: boolean = false;
-      const CustomAttributes: TRawUtf8DynArray = nil): boolean;
+      const CustomAttributes: TRawUtf8DynArray = nil;
+      const CustomTypes: TLdapAttributeTypes = []): boolean;
     /// retrieve the distinguishedName of a Group from its sAMAccountName
     function GetGroupDN(const AN: RawUtf8; const BaseDN: RawUtf8 = '';
       const CustomFilter: RawUtf8 = ''): RawUtf8;
@@ -1323,7 +1325,8 @@ type
     // - could lookup by sAMAccountName, distinguishedName or userPrincipalName
     function GetUserInfo(const AN, DN, UPN: RawUtf8; out Info: TLdapUser;
       const BaseDN: RawUtf8 = ''; WithMemberOf: boolean = false;
-      const CustomAttributes: TRawUtf8DynArray = nil): boolean;
+      const CustomAttributes: TRawUtf8DynArray = nil;
+      const CustomTypes: TLdapAttributeTypes = []): boolean;
     /// retrieve the distinguishedName of a User from its sAMAccountName
     // or userPrincipalName
     // - can optionally return its primaryGroupID attribute, which is
@@ -3458,11 +3461,24 @@ end;
 
 { TLdapObject }
 
-procedure TLdapObject.FillObject(Attributes: TLdapAttributeList;
-  const CustomAttributes: TRawUtf8DynArray);
+procedure TLdapObject.CustomAdd(Attr: TLdapAttribute);
 var
-  n, c, i: PtrInt;
-  a: TLdapAttribute;
+  n: PtrInt;
+begin
+  if Attr = nil then
+    exit;
+  n := length(customNames);
+  SetLength(customNames, n + 1);
+  customNames[n] := Attr.AttributeName;
+  SetLength(customValues, n + 1);
+  customValues[n] := Attr.GetReadable;
+end;
+
+procedure TLdapObject.FillObject(Attributes: TLdapAttributeList;
+  const CustomAttributes: TRawUtf8DynArray; CustomTypes: TLdapAttributeTypes);
+var
+  i: PtrInt;
+  t: TLdapAttributeType;
 begin
   sAMAccountName := Attributes.Get(atSAMAccountName);
   distinguishedName := Attributes.Get(atDistinguishedName);
@@ -3474,29 +3490,17 @@ begin
   objectGUID := Attributes.Get(atObjectGUID);
   whenCreated := LdapToDate(Attributes.Get(atWhenCreated));
   whenChanged := LdapToDate(Attributes.Get(atWhenChanged));
-  n := length(CustomAttributes);
-  if n = 0 then
-    exit;
-  c := 0;
-  for i := 0 to n - 1 do
-  begin
-    a := Attributes.Find(CustomAttributes[i]);
-    if a = nil then
-      continue;
-    if c = 0 then
-    begin
-      dec(n, i);
-      SetLength(customNames, n);
-      SetLength(customValues, n);
-    end;
-    customNames[c] := a.AttributeName; // assign the interned name
-    customValues[c] := a.GetReadable;
-    inc(c);
-  end;
-  if c = 0 then
-    exit;
-  DynArrayFakeLength(customNames, c);
-  DynArrayFakeLength(customValues, c);
+  for i := 0 to length(CustomAttributes) - 1 do
+    CustomAdd(Attributes.Find(CustomAttributes[i]));
+  if CustomTypes <> [] then
+    for t := succ(low(t)) to high(t) do
+      if t in CustomTypes then
+      begin
+        CustomAdd(Attributes.Find(t));
+        exclude(CustomTypes, t);
+        if CustomTypes = [] then
+          break;
+      end;
 end;
 
 function TLdapObject.Custom(const AttributeName: RawUtf8): RawUtf8;
@@ -3516,11 +3520,11 @@ end;
 { TLdapGroup }
 
 procedure TLdapGroup.FillGroup(Attributes: TLdapAttributeList; WithMember: boolean;
-  const CustomAttributes: TRawUtf8DynArray);
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 var
   uac: integer;
 begin
-  FillObject(Attributes, CustomAttributes);
+  FillObject(Attributes, CustomAttributes, CustomTypes);
   ToCardinal(SplitRight(objectSID, '-'), PrimaryGroupID);
   if ToInteger(Attributes.Get(atGroupType), uac) then
     groupType := TGroupTypes(uac);
@@ -3532,9 +3536,9 @@ end;
 { TLdapUser }
 
 procedure TLdapUser.FillUser(Attributes: TLdapAttributeList; WithMemberOf: boolean;
-  const CustomAttributes: TRawUtf8DynArray);
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
-  FillObject(Attributes, CustomAttributes);
+  FillObject(Attributes, CustomAttributes, CustomTypes);
   userPrincipalName := Attributes.Get(atUserPrincipalName);
   displayName := Attributes.Get(atDisplayName);
   mail := Attributes.Get(atMail);
@@ -3543,7 +3547,7 @@ begin
   ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
   if WithMemberOf then
     memberOf := Attributes.Find(atMemberOf).GetAllReadable;
-  userAccountControl := Attributes.GetUserAccountControl;
+  userAccountControl := Attributes.UserAccountControl;
 end;
 
 
@@ -4858,13 +4862,13 @@ const
 
 function TLdapClient.GetGroupInfo(const AN, DN: RawUtf8;
   out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean;
-  const CustomAttributes: TRawUtf8DynArray): boolean;
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
 var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapGroup));
-  attrs := LDAPGROUP_ATTR;
+  attrs := LDAPGROUP_ATTR + CustomTypes;
   if WithMember then
     include(attrs, atMember);
   attr := ToText(attrs);
@@ -4873,7 +4877,8 @@ begin
               InfoFilter(AT_GROUP, AN, DN, '', ''), attr) and
             (SearchResult.Count = 1);
   if result then
-    Info.FillGroup(SearchResult.Items[0].Attributes, WithMember, CustomAttributes);
+    Info.FillGroup(SearchResult.Items[0].Attributes, WithMember,
+      CustomAttributes, CustomTypes);
 end;
 
 function TLdapClient.GetGroupDN(const AN, BaseDN, CustomFilter: RawUtf8): RawUtf8;
@@ -4902,13 +4907,13 @@ end;
 
 function TLdapClient.GetUserInfo(const AN, DN, UPN: RawUtf8;
   out Info: TLdapUser; const BaseDN: RawUtf8; WithMemberOf: boolean;
-  const CustomAttributes: TRawUtf8DynArray): boolean;
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
 var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
 begin
   FastRecordClear(@Info, TypeInfo(TLdapUser));
-  attrs := LDAPUSER_ATTR;
+  attrs := LDAPUSER_ATTR + CustomTypes;
   if WithMemberOf then
     include(attrs, atMemberOf);
   attr := ToText(attrs);
@@ -4917,7 +4922,8 @@ begin
               InfoFilter(AT_USER, AN, DN, UPN, ''), attr) and
             (SearchResult.Count = 1);
   if result then
-    Info.FillUser(SearchResult.Items[0].Attributes, WithMemberOf, CustomAttributes);
+    Info.FillUser(SearchResult.Items[0].Attributes,
+      WithMemberOf, CustomAttributes, CustomTypes);
 end;
 
 function TLdapClient.GetUserDN(const AN, UPN, BaseDN, CustomFilter: RawUtf8;
