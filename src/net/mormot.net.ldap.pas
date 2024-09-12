@@ -2442,13 +2442,19 @@ begin
   result := GetEnumName(TypeInfo(TSamAccountType), ord(sat));
 end;
 
+var
+  // traditionnally, computer sAMAccountName ends with $ on computers
+  MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
+
 function InfoFilter(AccountType: TSamAccountType; const AccountName,
   DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
 begin
   result := '';
   if AccountName <> '' then
-    FormatUtf8('(sAMAccountName=%)',
-      [LdapEscapeName(AccountName)], result);
+    FormatUtf8('(sAMAccountName=%%)',
+      [LdapEscapeName(AccountName),
+       MACHINE_CHAR[(AccountType = satMachineAccount) and
+                    (AccountName[length(AccountName)] <> '$')]], result);
   if DistinguishedName <> '' then
     result := FormatUtf8('%(distinguishedName=%)',
       [result, LdapValidDistinguishedName(DistinguishedName)]); // no escape
