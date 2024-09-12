@@ -57,7 +57,6 @@ function DNToCN(const DN: RawUtf8): RawUtf8;
 procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
   ValueEscapeCN: boolean = false);
 
-
 const
   // LDAP result codes
   LDAP_RES_SUCCESS                        = 0;
@@ -308,22 +307,6 @@ function LdapEscapeCN(const Text: RawUtf8): RawUtf8;
 /// encode a "unicodePwd" binary value from a UTF-8 password
 function LdapUnicodePwd(const aPassword: SpiUtf8): RawByteString;
 
-const
-  // Well-Known LDAP Objects GUID
-  // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
-  //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
-  LDAP_GUID_COMPUTERS                 = 'AA312825768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_DELETED_OBJECTS           = '18E2EA80684F11D2B9AA00C04F79F805';
-  LDAP_GUID_DOMAIN_CONTROLLERS        = 'A361B2FFFFD211D1AA4B00C04FD7D83A';
-  LDAP_GUID_FOREIGNSECURITYPRINCIPALS = '22B70C67D56E4EFB91E9300FCA3DC1AA';
-  LDAP_GUID_INFRASTRUCTURE            = '2FBAC1870ADE11D297C400C04FD8D5CD';
-  LDAP_GUID_LOSTANDFOUND              = 'AB8153B7768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_MICROSOFT_PROGRAM_DATA    = 'F4BE92A4C777485E878E9421D53087DB';
-  LDAP_GUID_NTDS_QUOTAS               = '6227F0AF1FC2410D8E3BB10615BB5B0F';
-  LDAP_GUID_PROGRAM_DATA              = '09460C08AE1E4A4EA0F64AEE7DAA1E5A';
-  LDAP_GUID_SYSTEMS                   = 'AB1D30F3768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_USERS                     = 'A9D1CA15768811D1ADED00C04FD8D5CD';
-  LDAP_GUID_MANAGED_SERVICE_ACCOUNTS  = '1EB93889E40C45DF9F0C64D23BBB6237';
 
 
 { **************** LDAP Attribute Types Definitions }
@@ -858,21 +841,23 @@ type
 type
   ELdap = class(ESynException);
 
+  /// well-known LDAP Objects, as defined from their GUID by Microsoft
+  TLdapKnownObject = (
+    lkoComputers,
+    lkoDeletedObjects,
+    lkoDomainControllers,
+    lkoForeignSecurityPrincipals,
+    lkoInfrastructure,
+    lkoLostAndFound,
+    lkoMicrosoftProgramData,
+    lkoNtdsQuotas,
+    lkoProgramData,
+    lkoSystems,
+    lkoUsers,
+    lkoManagedServiceAccounts);
+
   /// the resultset of TLdapClient.GetWellKnownObjects()
-  TLdapKnownCommonNames = record
-    Computers: RawUtf8;
-    DeletedObjects: RawUtf8;
-    DomainControllers: RawUtf8;
-    ForeignSecurityPrincipals: RawUtf8;
-    Infrastructure: RawUtf8;
-    LostAndFound: RawUtf8;
-    MicrosoftProgramData: RawUtf8;
-    NtdsQuotas: RawUtf8;
-    ProgramData: RawUtf8;
-    Systems: RawUtf8;
-    Users: RawUtf8;
-    ManagedServiceAccounts: RawUtf8;
-  end;
+  TLdapKnownCommonNames = array [TLdapKnownObject] of RawUtf8;
   PLdapKnownCommonNames = ^TLdapKnownCommonNames;
   TLdapKnownCommonNamesDual = array[boolean] of TLdapKnownCommonNames;
 
@@ -1053,7 +1038,7 @@ type
     fReferals: TRawUtf8List;
     fVersion: integer;
     fBound: boolean;
-    fSecContextEncrypt: boolean;
+    fFlags: set of (fSecContextEncrypt, fWellKnownObjectsCached);
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
     fSearchSizeLimit: integer;
@@ -1069,7 +1054,6 @@ type
     fSockBuffer: RawByteString;
     fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNamesDual;
-    fWellKnownObjectsCached: boolean;
     // protocol methods
     function GetTlsContext: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3854,10 +3838,30 @@ begin
       pointer(fExtensions), high(fExtensions), pointer(ExtensionName)) >= 0);
 end;
 
+const
+  // Well-Known LDAP Objects GUID
+  // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/
+  //   5a00c890-6be5-4575-93c4-8bf8be0ca8d8
+  LDAP_GUID: array [TLdapKnownObject] of RawUtf8 = (
+    'AA312825768811D1ADED00C04FD8D5CD',
+    '18E2EA80684F11D2B9AA00C04F79F805',
+    'A361B2FFFFD211D1AA4B00C04FD7D83A',
+    '22B70C67D56E4EFB91E9300FCA3DC1AA',
+    '2FBAC1870ADE11D297C400C04FD8D5CD',
+    'AB8153B7768811D1ADED00C04FD8D5CD',
+    'F4BE92A4C777485E878E9421D53087DB',
+    '6227F0AF1FC2410D8E3BB10615BB5B0F',
+    '09460C08AE1E4A4EA0F64AEE7DAA1E5A',
+    'AB1D30F3768811D1ADED00C04FD8D5CD',
+    'A9D1CA15768811D1ADED00C04FD8D5CD',
+    '1EB93889E40C45DF9F0C64D23BBB6237');
+
 function TLdapClient.RetrieveWellKnownObjects(const DN: RawUtf8;
   out Dual: TLdapKnownCommonNamesDual): boolean;
 var
   tmp: TRawUtf8DynArray;
+  o: TLdapKnownObject;
+  u: RawUtf8;
   i: PtrInt;
 
   function One(const guid: RawUtf8): RawUtf8;
@@ -3882,7 +3886,7 @@ var
 begin
   result := false;
   if not Connected or
-     (DN = '') then
+     (DN= '') then
     exit;
   tmp := SearchObject(DN, '', 'wellKnownObjects').GetAllReadable;
   if tmp = nil then
@@ -3891,43 +3895,19 @@ begin
   for i := 0 to high(tmp) do
     if not NetStartWith(pointer(tmp[i]), 'B:32:') then
       tmp[i] := '';
-  with Dual[{asCN=}false] do
+  for o := low(o) to high(o) do
   begin
-    Computers                 := One(LDAP_GUID_COMPUTERS);
-    DeletedObjects            := One(LDAP_GUID_DELETED_OBJECTS);
-    DomainControllers         := One(LDAP_GUID_DOMAIN_CONTROLLERS);
-    ForeignSecurityPrincipals := One(LDAP_GUID_FOREIGNSECURITYPRINCIPALS);
-    Infrastructure            := One(LDAP_GUID_INFRASTRUCTURE);
-    LostAndFound              := One(LDAP_GUID_LOSTANDFOUND);
-    MicrosoftProgramData      := One(LDAP_GUID_MICROSOFT_PROGRAM_DATA);
-    NtdsQuotas                := One(LDAP_GUID_NTDS_QUOTAS);
-    ProgramData               := One(LDAP_GUID_PROGRAM_DATA);
-    Systems                   := One(LDAP_GUID_SYSTEMS);
-    Users                     := One(LDAP_GUID_USERS);
-    ManagedServiceAccounts    := One(LDAP_GUID_MANAGED_SERVICE_ACCOUNTS);
-  end;
-  with Dual[{asCN=}true] do
-  begin
-    Computers                 := DNToCn(Dual[false].Computers);
-    DeletedObjects            := DNToCn(Dual[false].DeletedObjects);
-    DomainControllers         := DNToCn(Dual[false].DomainControllers);
-    ForeignSecurityPrincipals := DNToCn(Dual[false].ForeignSecurityPrincipals);
-    Infrastructure            := DNToCn(Dual[false].Infrastructure);
-    LostAndFound              := DNToCn(Dual[false].LostAndFound);
-    MicrosoftProgramData      := DNToCn(Dual[false].MicrosoftProgramData);
-    NtdsQuotas                := DNToCn(Dual[false].NtdsQuotas);
-    ProgramData               := DNToCn(Dual[false].ProgramData);
-    Systems                   := DNToCn(Dual[false].Systems);
-    Users                     := DNToCn(Dual[false].Users);
-    ManagedServiceAccounts    := DNToCn(Dual[false].ManagedServiceAccounts);
+    u := One(LDAP_GUID[o]);
+    Dual[{asCN=}false][o] := u;
+    Dual[{asCN=}true][o] := DNToCn(u);
   end;
 end;
 
 function TLdapClient.WellKnownObjects(AsCN: boolean): PLdapKnownCommonNames;
 begin
-  if not fWellKnownObjectsCached then
+  if not (fWellKnownObjectsCached in fFlags) then
     if RetrieveWellKnownObjects(DefaultDN, fWellKnownObjects) then
-        fWellKnownObjectsCached := true;
+      include(fFlags, fWellKnownObjectsCached);
   result := @fWellKnownObjects[AsCN];
 end;
 
@@ -3941,7 +3921,7 @@ begin
               Asn(fSeq),
               Asn1Data
             ]);
-  if not fSecContextEncrypt then
+  if not (fSecContextEncrypt in fFlags) then
     exit;
   result := SecEncrypt(fSecContext, result);
   insert('0000', result, 1);
@@ -3952,7 +3932,7 @@ procedure TLdapClient.SendPacket(const Asn1Data: TAsnObject);
 begin
   {$ifdef ASNDEBUG}
   {$I-} write('------'#10'Sending ');
-  if fSecContextEncrypt then writeln('(encrypted) =') else writeln('=');
+  if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
   writeln(AsnDump(Asn1Data));
   {$endif ASNDEBUG}
   if fSock <> nil then
@@ -3965,7 +3945,7 @@ var
   ciphered: RawByteString;
 begin
   fSockBufferPos := 0;
-  if fSecContextEncrypt then
+  if fSecContextEncrypt in fFlags then
   begin
     // through Kerberos encryption (sealing)
     saslLen := 0;
@@ -4055,7 +4035,7 @@ begin
   fFullResult := result;
   {$ifdef ASNDEBUG}
   {$I-} write('------'#10'Received ');
-  if fSecContextEncrypt then writeln('(encrypted) =') else writeln('=');
+  if fSecContextEncrypt in fFlags then writeln('(encrypted) =') else writeln('=');
   writeln(AsnDump(result));
   {$endif ASNDEBUG}
 end;
@@ -4368,7 +4348,8 @@ begin
     if KerberosUser <> nil then
       KerberosUser^ := fBoundUser;
     fBound := true;
-    fSecContextEncrypt := needencrypt;
+    if needencrypt then
+      include(fFlags, fSecContextEncrypt);
     result := true;
   finally
     if not result then
@@ -4390,7 +4371,7 @@ begin
      not fSock.SockConnected then
     result := lctNone
   else if fSettings.Tls or
-          fSecContextEncrypt then
+          (fSecContextEncrypt in fFlags) then
     result := lctEncrypted
   else
     result := lctPlain;
@@ -4408,15 +4389,14 @@ begin
       result := false;
     end;
   FreeAndNil(fSock);
-  if fSecContextEncrypt then
+  if fSecContextEncrypt in fFlags then
     FreeSecContext(fSecContext);
-  fSecContextEncrypt := false;
+  fFlags := [];
   fBound := false;
   fBoundUser := '';
   fRootDN := '';
   fDefaultDN := '';
   fConfigDN := '';
-  fWellKnownObjectsCached := false;
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
