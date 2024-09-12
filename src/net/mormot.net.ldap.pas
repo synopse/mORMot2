@@ -1100,30 +1100,53 @@ type
     // - by default, all attributes would be retrieved, unless a specific set
     // of Attributes is supplied; if you want no attribute, use ['']
     function Search(const BaseDN: RawUtf8; TypesOnly: boolean;
-      const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
+      const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean; overload;
+    /// retrieve all entries that match a given set of criteria
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function Search(const BaseDN: RawUtf8; const Filter: RawUtf8 = '';
+      const Attributes: TLdapAttributeTypes = []; TypesOnly: boolean = false): boolean; overload;
     /// retrieve all entries that match a given set of criteria
     // - here the filter is generated using FormatUtf8()
     function SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
       const FilterFmt: RawUtf8; const FilterArgs: array of const;
-      const Attributes: array of RawUtf8): boolean;
+      const Attributes: array of RawUtf8): boolean; overload;
+    /// retrieve all entries that match a given set of criteria
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchFmt(const BaseDN, FilterFmt: RawUtf8; const FilterArgs: array of const;
+      const Attributes: TLdapAttributeTypes = []; TypesOnly: boolean = false): boolean; overload;
     /// finalize paging for the searches
     // - is just a wrapper to reset SearchPageSize and the SearchCookie
     procedure SearchEnd;
     /// retrieve all entries that match a given set of criteria and return the
     // first result
-    // - Will call Search method, therefore SearchResult will contains all the results
-    // - Returns nil if no result is found or if the search failed
-    function SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
-      const Attributes: array of RawUtf8): TLdapResult;
+    // - will call Search method, therefore SearchResult will contains all the results
+    // - returns nil if no result is found or if the search failed
+    function SearchFirst(const BaseDN, Filter: RawUtf8;
+      const Attributes: array of RawUtf8): TLdapResult; overload;
+    /// retrieve all entries that match a given set of criteria and return the
+    // first result
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchFirst(const Attributes: TLdapAttributeTypes;
+      const BaseDN, Filter: RawUtf8): TLdapResult; overload;
     /// retrieve the entry matching the given ObjectDN
-    // - Will call Search method, therefore SearchResult will contains all the results
-    // - Returns nil if the object is not found or if the search failed
+    // - will call Search method, therefore SearchResult will contains all the results
+    // - returns nil if the object is not found or if the search failed
     function SearchObject(const ObjectDN, Filter: RawUtf8;
       const Attributes: array of RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapResult; overload;
-    /// retrieve the entry matching the given ObjectDN and Attribute
-    // - Returns nil if the object is not found or if the search failed
+    /// retrieve the entry matching the given ObjectDN
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchObject(const Attributes: TLdapAttributeTypes;
+      const ObjectDN, Filter: RawUtf8;
+      Scope: TLdapSearchScope = lssBaseObject): TLdapResult; overload;
+    /// retrieve the attribute matching the given ObjectDN and Attribute
+    // - returns nil if the object is not found or if the search failed
     function SearchObject(const ObjectDN, Filter, Attribute: RawUtf8;
+      Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
+    /// retrieve the attribute matching the given ObjectDN and Attribute
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchObject(Attribute: TLdapAttributeType;
+      const ObjectDN, Filter: RawUtf8;
       Scope: TLdapSearchScope = lssBaseObject): TLdapAttribute; overload;
     /// retrieve all pages of entries into a TDocVariant instance
     // - will contain the nested results as an object, generated from then
@@ -1134,7 +1157,13 @@ type
     function SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
       const Filter: RawUtf8; const Attributes: array of RawUtf8;
       const ObjectAttributeField: RawUtf8 = '_attr'; MaxCount: integer = 0;
-      SortByName: boolean = true): variant;
+      SortByName: boolean = true): variant; overload;
+    /// retrieve all pages of entries into a TDocVariant instance
+    // - overloaded method using convenient TLdapAttributeTypes for Attributes
+    function SearchAll(const BaseDN, Filter: RawUtf8;
+      const Attributes: TLdapAttributeTypes;
+      const ObjectAttributeField: RawUtf8 = '_attr'; MaxCount: integer = 0;
+      SortByName: boolean = true; TypesOnly: boolean = false): variant; overload;
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// Add a new computer in the domain
@@ -4175,7 +4204,7 @@ begin
     // Obj had children and DeleteChildren is True
     try
       SearchScope := lssSingleLevel;
-      Search(Obj, false, '', []);
+      Search(Obj);
       Children := fSearchResult.ObjectNames;
       for i := 0 to high(Children) do
         if not Delete(Children[i], {DeleteChildren=}true) then
@@ -4326,11 +4355,25 @@ begin
   fSearchResult.fSearchTimeMicroSec := stop - start;
 end;
 
+function TLdapClient.Search(const BaseDN, Filter: RawUtf8;
+  const Attributes: TLdapAttributeTypes; TypesOnly: boolean): boolean;
+begin
+  result := Search(BaseDN, TypesOnly, Filter, ToText(Attributes));
+end;
+
 function TLdapClient.SearchFmt(const BaseDN: RawUtf8; TypesOnly: boolean;
   const FilterFmt: RawUtf8; const FilterArgs: array of const;
   const Attributes: array of RawUtf8): boolean;
 begin
-  result := Search(BaseDN, TypesOnly, FormatUtf8(FilterFmt, FilterArgs), Attributes);
+  result := Search(BaseDN, TypesOnly,
+    FormatUtf8(FilterFmt, FilterArgs), Attributes);
+end;
+
+function TLdapClient.SearchFmt(const BaseDN,
+  FilterFmt: RawUtf8; const FilterArgs: array of const;
+  const Attributes: TLdapAttributeTypes; TypesOnly: boolean): boolean;
+begin
+  result := Search(BaseDN, FormatUtf8(FilterFmt, FilterArgs), Attributes, TypesOnly);
 end;
 
 procedure TLdapClient.SearchBegin(PageSize: integer);
@@ -4344,13 +4387,19 @@ begin
   SearchBegin(0);
 end;
 
-function TLdapClient.SearchFirst(const BaseDN: RawUtf8; Filter: RawUtf8;
+function TLdapClient.SearchFirst(const BaseDN, Filter: RawUtf8;
   const Attributes: array of RawUtf8): TLdapResult;
 begin
   result := nil;
   if Search(BaseDN, false, Filter, Attributes) and
      (SearchResult.Count > 0) then
     result := SearchResult.Items[0];
+end;
+
+function TLdapClient.SearchFirst(const Attributes: TLdapAttributeTypes;
+  const BaseDN, Filter: RawUtf8): TLdapResult;
+begin
+  result := SearchFirst(BaseDN, Filter, ToText(Attributes));
 end;
 
 function TLdapClient.SearchObject(const ObjectDN, Filter: RawUtf8;
@@ -4367,6 +4416,12 @@ begin
   end;
 end;
 
+function TLdapClient.SearchObject(const Attributes: TLdapAttributeTypes;
+  const ObjectDN, Filter: RawUtf8; Scope: TLdapSearchScope): TLdapResult;
+begin
+  result := SearchObject(ObjectDN, Filter, ToText(Attributes), Scope);
+end;
+
 function TLdapClient.SearchObject(const ObjectDN, Filter, Attribute: RawUtf8;
   Scope: TLdapSearchScope): TLdapAttribute;
 var
@@ -4376,6 +4431,15 @@ begin
   root := SearchObject(ObjectDN, Filter, [Attribute], Scope);
   if root <> nil then
     result := root.Attributes.Find(Attribute);
+end;
+
+function TLdapClient.SearchObject(Attribute: TLdapAttributeType;
+  const ObjectDN, Filter: RawUtf8; Scope: TLdapSearchScope): TLdapAttribute;
+begin
+  if Attribute = atUndefined then
+    result := nil
+  else
+    result := SearchObject(ObjectDN, Filter, AttrTypeName[Attribute], Scope);
 end;
 
 function TLdapClient.SearchAll(const BaseDN: RawUtf8; TypesOnly: boolean;
@@ -4400,6 +4464,14 @@ begin
   SearchCookie := '';
   if SortByName then
     TDocVariantData(result).SortByName(nil, {reverse=}false, {nested=}true);
+end;
+
+function TLdapClient.SearchAll(const BaseDN, Filter: RawUtf8;
+  const Attributes: TLdapAttributeTypes; const ObjectAttributeField: RawUtf8;
+  MaxCount: integer; SortByName, TypesOnly: boolean): variant;
+begin
+  result := SearchAll(BaseDN, TypesOnly, Filter, ToText(Attributes),
+              ObjectAttributeField, MaxCount, SortByName);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-extended
