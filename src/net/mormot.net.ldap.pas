@@ -814,6 +814,8 @@ type
     fItems: TLdapResultObjArray;
     fSearchTimeMicroSec: Int64;
     fCount: integer;
+    procedure GetAttributes(const AttrName: RawUtf8; AttrType: TLdapAttributeType;
+      ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
   public
     /// finalize the list
     destructor Destroy; override;
@@ -825,11 +827,18 @@ type
     /// clear all TLdapResult objects in list
     procedure Clear;
     /// return all Items[].ObjectName as a sorted array
-    function ObjectNames(asCN: boolean = false): TRawUtf8DynArray;
-    /// return all Items[].Attributes.Get(AttributeName) as a sorted array
-    function ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray; overload;
-    /// return all Items[].Attributes.Get(AttrType) as a sorted array
-    function ObjectAttributes(AttrType: TLdapAttributeType): TRawUtf8DynArray; overload;
+    function ObjectNames(asCN: boolean = false;
+      noSort: boolean = false): TRawUtf8DynArray;
+    /// return all Items[].Attributes.Get(AttributeName)
+    // - as a sorted array by default
+    // - or as an unsorted array, but with all corresponding ObjectName values
+    function ObjectAttributes(const AttributeName: RawUtf8;
+      ObjectNames: PRawUtf8DynArray = nil): TRawUtf8DynArray; overload;
+    /// return all Items[].Attributes.Get(AttrType)
+    // - as a sorted array by default
+    // - or as an unsorted array, but with all corresponding ObjectName values
+    function ObjectAttributes(AttrType: TLdapAttributeType;
+      ObjectNames: PRawUtf8DynArray = nil): TRawUtf8DynArray; overload;
     /// add all results as a TDocVariant object nested tree
     // - the full CN will be used as path
     // - attributes would be included as ObjectAttributeField (e.g. '_attr')
@@ -3231,7 +3240,7 @@ begin
   fSearchTimeMicroSec := 0;
 end;
 
-function TLdapResultList.ObjectNames(asCN: boolean): TRawUtf8DynArray;
+function TLdapResultList.ObjectNames(asCN, noSort: boolean): TRawUtf8DynArray;
 var
   i: PtrInt;
 begin
@@ -3246,58 +3255,66 @@ begin
     if asCN then
       result[i] := DNToCN(result[i]);
   end;
-  QuickSortRawUtf8(result, fCount);
+  if not noSort then
+    QuickSortRawUtf8(result, fCount);
 end;
 
-function TLdapResultList.ObjectAttributes(const AttributeName: RawUtf8): TRawUtf8DynArray;
+procedure TLdapResultList.GetAttributes(
+  const AttrName: RawUtf8; AttrType: TLdapAttributeType;
+  ObjectNames: PRawUtf8DynArray; out Values: TRawUtf8DynArray);
 var
   i, n: PtrInt;
+  r: TLdapResult;
   a: RawUtf8;
 begin
-  result := nil;
+  if ObjectNames <> nil then
+    ObjectNames^ := nil;
   if (self = nil) or
      (fCount = 0) or
-     (AttributeName = '') then
+     ((AttrName = '') and
+      (AttrType = atUndefined)) then
     exit;
   n := 0;
-  SetLength(result, fCount);
   for i := 0 to fCount - 1 do
   begin
-    a := fItems[i].Attributes.Get(AttributeName);
+    r := fItems[i];
+    if AttrType = atUndefined then
+      a := r.Attributes.Get(AttrName)
+    else
+      a := r.Attributes.Get(AttrType);
     if a = '' then
       continue;
-    result[n] := a;
+    if Values = nil then
+    begin
+      SetLength(Values, fCount - i);
+      if ObjectNames <> nil then
+        SetLength(ObjectNames^, fCount - i);
+    end;
+    Values[n] := a;
+    if ObjectNames <> nil then
+      ObjectNames^[n] := r.ObjectName;
     inc(n);
   end;
   if n <> fCount then
-    SetLength(result, n);
-  QuickSortRawUtf8(result, n);
+  begin
+    DynArrayFakeLength(Values, n);
+    if ObjectNames <> nil then
+      DynArrayFakeLength(ObjectNames^, n);
+  end;
+  if ObjectNames = nil then
+    QuickSortRawUtf8(Values, n);
 end;
 
-function TLdapResultList.ObjectAttributes(AttrType: TLdapAttributeType): TRawUtf8DynArray;
-var
-  i, n: PtrInt;
-  attr: TLdapAttributeList;
+function TLdapResultList.ObjectAttributes(const AttributeName: RawUtf8;
+  ObjectNames: PRawUtf8DynArray): TRawUtf8DynArray;
 begin
-  result := nil;
-  if (self = nil) or
-     (fCount = 0) or
-     (AttrType = atUndefined) then
-    exit;
-  n := 0;
-  for i := 0 to fCount - 1 do
-  begin
-    attr := fItems[i].Attributes;
-    if not (AttrType in attr.KnownTypes) then
-      continue; // no need to search
-    if result = nil then
-      SetLength(result, fCount - i);
-    result[n] := attr.Get(AttrType);
-    inc(n);
-  end;
-  if n <> fCount then
-    SetLength(result, n);
-  QuickSortRawUtf8(result, n);
+  GetAttributes(AttributeName, atUndefined, ObjectNames, result);
+end;
+
+function TLdapResultList.ObjectAttributes(AttrType: TLdapAttributeType;
+  ObjectNames: PRawUtf8DynArray): TRawUtf8DynArray;
+begin
+  GetAttributes('', AttrType, ObjectNames, result);
 end;
 
 procedure TLdapResultList.AfterAdd;
