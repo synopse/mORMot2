@@ -1117,7 +1117,7 @@ const
   // - e.g. 'Delphi 10.3 Rio', 'Delphi 2010' or 'Free Pascal 3.3.1'
   COMPILER_VERSION: RawUtf8 =
   {$ifdef FPC}
-    'Free Pascal ' + {$I %FPCVERSION%}
+    'Free Pascal ' + {$I %FPCVERSION%} // FPC makes it simple
   {$else}
     'Delphi'
     {$if     defined(VER140)} + ' 6'
@@ -1148,8 +1148,9 @@ const
       {$if declared(RTLVersion111)} + '.1' {$ifend} {$ifend} {$ifend}
                               + ' Alexandria'
     {$elseif defined(VER360)} + ' 12'
+      {$if declared(RTLVersion123)} + '.3' {$else}
       {$if declared(RTLVersion122)} + '.2' {$else}
-      {$if declared(RTLVersion121)} + '.1' {$ifend} {$ifend}
+      {$if declared(RTLVersion121)} + '.1' {$ifend} {$ifend} {$ifend}
                               + ' Athens'
     {$elseif defined(VER370)} + ' 13 Next'
     {$ifend}
