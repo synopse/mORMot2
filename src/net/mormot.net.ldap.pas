@@ -619,6 +619,8 @@ type
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
     /// finalize the attribute(s) storage
     destructor Destroy; override;
+    /// clear all the internal fields
+    procedure Clear;
     /// include a new value to this list
     // - IsBinary values will be stored base-64 encoded
     procedure Add(const aValue: RawByteString);
@@ -635,21 +637,24 @@ type
     // - if there is a single value, return it as a single variant text
     // - if Count > 0, return a TDocVariant array with all texts
     function GetVariant: variant;
+    /// search for a given value within this list
+    function FindIndex(const aValue: RawByteString): PtrInt;
     /// add all attributes to a "dn: ###" entry of a ldif-content buffer
     procedure ExportToLdif(w: TTextWriter);
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
-    /// access to the individual rwas
-    // - note that length(List) = capacity - use Count property instead
-    property List: TRawByteStringDynArray
-      read fList;
     /// name of this LDAP attribute
     property AttributeName: RawUtf8
       read fAttributeName;
     /// the common LDAP Attribute Type corresponding to this AttributeName
     property KnownType: TLdapAttributeType
       read fKnownType;
+    /// raw direct access to the individual values
+    // - note that length(List) = capacity - use Count property instead, and
+    // don't iterate on this array as "for u in attribute.List do..."
+    property List: TRawByteStringDynArray
+      read fList;
   end;
   /// dynamic array of LDAP attribute, as stored in TLdapAttributeList
   TLdapAttributeDynArray = array of TLdapAttribute;
@@ -2655,13 +2660,22 @@ begin
 end;
 
 destructor TLdapAttribute.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TLdapAttribute.Clear;
 var
   i: PtrInt;
 begin
+  if fCount = 0 then
+    exit;
   if fKnownType = atUnicodePwd then
     for i := 0 to fCount - 1 do
       FillZero(fList[i]); // anti-forensic measure
-  inherited Destroy;
+  StringClearSeveral(pointer(fList), fCount); // remove values, but keep capacity
+  fCount := 0;
 end;
 
 procedure TLdapAttribute.Add(const aValue: RawByteString);
@@ -2712,6 +2726,15 @@ begin
       RawUtf8ToVariant(GetReadable, result)
     else
       TDocVariantData(result).InitArrayFrom(GetAllReadable, JSON_FAST);
+end;
+
+function TLdapAttribute.FindIndex(const aValue: RawByteString): PtrInt;
+begin
+  if (self <> nil) and
+     (fCount > 0) then
+    result := FindRawUtf8(pointer(fList), aValue, fCount, {casesens=}true)
+  else
+    result := -1;
 end;
 
 function IsLdifSafe(p: PUtf8Char; l: integer): boolean; // RFC 2849
