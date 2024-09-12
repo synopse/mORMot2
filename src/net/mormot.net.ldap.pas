@@ -633,8 +633,11 @@ type
     /// clear all the internal fields
     procedure Clear;
     /// include a new value to this list
-    // - NoDupValue will search for AttributeValue, to avoid any duplicate
-    procedure Add(const aValue: RawByteString; Option: TLdapAddOption = aoAlways);
+    procedure Add(const aValue: RawByteString;
+      Option: TLdapAddOption = aoAlways); overload;
+    /// include a new formatted text value to this list
+    procedure Add(const aValueFmt: RawUtf8; const aValueArgs: array of const;
+      Option: TLdapAddOption = aoAlways); overload;
     /// retrieve a value as human-readable text
     // - a wrapper around AttributeValueMakeReadable() and the known type
     function GetReadable(index: PtrInt = 0): RawUtf8;
@@ -1263,7 +1266,7 @@ type
     /// change an entry DN
     // - it can be used to rename the entry (by changing its RDN), move it to a
     // different location in the DIT (by specifying a new parent entry), or both
-    function ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
+    function ModifyDN(const Obj, NewRdn, NewSuperior: RawUtf8;
       DeleteOldRdn: boolean): boolean;
     ///  remove an entry from the directory server
     // - if the object has children and DeleteChildren is false, the deletion
@@ -2713,6 +2716,12 @@ begin
         exit;
   end;
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
+end;
+
+procedure TLdapAttribute.Add(const aValueFmt: RawUtf8;
+  const aValueArgs: array of const; Option: TLdapAddOption);
+begin
+  Add(FormatUtf8(aValueFmt, aValueArgs), Option);
 end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
@@ -4433,7 +4442,7 @@ begin
                   while n < seqend do
                   begin
                     AsnNext(n, resp, @u);
-                    a.Add(u);
+                    a.Add(u, aoAlways);
                   end;
               end;
             end;
@@ -4651,7 +4660,7 @@ begin
   for i := 0 to Value.Count -1 do
     AsnAdd(values, Asn(Value.List[i]));
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
-                   Asn(obj),
+                   Asn(Obj),
                    Asn(ASN1_SEQ, [
                      Asn(ASN1_SEQ, [
                        Asn(ord(Op), ASN1_ENUM),
@@ -4667,7 +4676,7 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify-dn
 
-function TLdapClient.ModifyDN(const obj, newRdn, newSuperior: RawUtf8;
+function TLdapClient.ModifyDN(const Obj, NewRdn, NewSuperior: RawUtf8;
   DeleteOldRdn: boolean): boolean;
 var
   query: TAsnObject;
@@ -4675,10 +4684,10 @@ begin
   result := false;
   if not Connected then
     exit;
-  query := Asn(obj);
-  Append(query, [Asn(newRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]]);
-  if newSuperior <> '' then
-    AsnAdd(query, Asn(newSuperior, ASN1_CTX0));
+  query := Asn(Obj);
+  Append(query, [Asn(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]]);
+  if NewSuperior <> '' then
+    AsnAdd(query, Asn(NewSuperior, ASN1_CTX0));
   SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
@@ -4744,7 +4753,6 @@ begin
   // Computer with the same sAMAccountName is already existing
   if Assigned(ComputerObject) then
   begin
-    result := true;
     // We don't want to delete it
     if not DeleteIfPresent then
     begin
@@ -4760,12 +4768,12 @@ begin
     end;
   end;
   // Create the new computer object
-  Attributes := TLDAPAttributeList.Create;
+  Attributes := TLdapAttributeList.Create;
   try
-    Attributes.Add('objectClass', 'computer');
-    Attributes.Add('cn', ComputerSafe);
-    Attributes.Add('sAMAccountName', ComputerSam);
-    Attributes.Add('userAccountControl', UInt32ToUtf8(cardinal(UserAccount)));
+    Attributes.Add(atObjectClass, 'computer');
+    Attributes.Add(atCommonName, ComputerSafe);
+    Attributes.Add(atSAMAccountName, ComputerSam);
+    Attributes.UserAccountControl := UserAccount;
     if Password <> '' then
       Attributes.AddUnicodePwd(Password);
     result := Add(ComputerDN, Attributes);
