@@ -407,6 +407,8 @@ function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
 
+/// convert a set of common Attribute Types into their array text representation
+function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray; overload;
 
 
 { **************** CLDAP Client Functions }
@@ -2250,6 +2252,23 @@ begin
     EnsureRawUtf8(s)
   else
     s := BinToHexLower(s);
+end;
+
+function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray;
+var
+  n, i: PtrInt;
+  t: TLdapAttributeType;
+begin
+  exclude(Attributes, atUndefined);
+  n := GetBitsCount(Attributes, {bits=}SizeOf(Attributes) shl 3);
+  SetLength(result, n);
+  n := 0;
+  for t := succ(atUndefined) to high(t) do
+    if GetBitPtr(@Attributes, ord(t)) then
+    begin
+      result[n] := AttrTypeName[t];
+      inc(n);
+    end;
 end;
 
 

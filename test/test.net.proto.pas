@@ -673,10 +673,11 @@ var
   withntp: boolean;
   guid: TGuid;
   i, j, k: PtrInt;
-  dns, clients: TRawUtf8DynArray;
+  dns, clients, a: TRawUtf8DynArray;
   rl: TLdapResultList;
   r: TLdapResult;
   at: TLdapAttributeType;
+  ats: TLdapAttributeTypes;
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
@@ -776,10 +777,25 @@ begin
   Check(not LdapSafe('()'));
   // validate LDAP attributes definitions
   for at := low(at) to high(at) do
+  begin
     CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
+    ats := [at];
+    a := ToText(ats);
+    if at = low(at) then
+      Check(a = nil)
+    else
+    begin
+      CheckEqual(length(a), 1);
+      CheckEqual(a[0], AttrTypeName[at]);
+    end;
+  end;
   for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do
     CheckUtf8(AttributeNameType(AttrTypeNameAlt[i]) = AttrTypeAltType[i],
       AttrTypeNameAlt[i]);
+  ats := [];
+  Check(ToText(ats) = nil);
+  a := ToText([atOrganizationUnitName, atObjectClass, atCommonName]);
+  CheckEqual(RawUtf8ArrayToCsv(a), 'objectClass,cn,ou');
   // validate LDAP resultset and LDIF content
   rl := TLdapResultList.Create;
   try
