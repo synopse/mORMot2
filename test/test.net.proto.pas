@@ -678,6 +678,7 @@ var
   r: TLdapResult;
   at: TLdapAttributeType;
   ats: TLdapAttributeTypes;
+  sat: TSamAccountType;
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
@@ -797,6 +798,12 @@ begin
   Check(ToText(ats) = nil);
   a := ToText([atOrganizationUnitName, atObjectClass, atCommonName]);
   CheckEqual(RawUtf8ArrayToCsv(a), 'objectClass,cn,ou');
+  for sat := low(sat) to high(sat) do
+  begin
+    u := SamAccountTypeValue(sat);
+    Check((u = '') = (sat = satUnknown));
+    Check(SamAccountType(u) = sat);
+  end;
   // validate LDAP resultset and LDIF content
   rl := TLdapResultList.Create;
   try
@@ -808,9 +815,9 @@ begin
     PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute
     r.ObjectName := 'cn=foo, ou=bar';
     r.Attributes.Add('objectClass', 'person');
-    r.Attributes.Add(['cn', 'John Doe',
-                      'cn', v,
-                      'sn', 'Doe']);
+    r.Attributes.AddPairs(['cn', 'John Doe',
+                           'cn', v,
+                           'sn', 'Doe']);
     CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
     CheckHash(rl.ExportToLdifContent, $A91F23A7, 'hashLdif');
   finally
@@ -937,7 +944,7 @@ begin
               end;
             Check(one.NetbiosDN <> '', 'NetbiosDN');
             Check(one.ConfigDN <> '', 'ConfigDN');
-            Check(one.Search(one.WellKnownObjects.Users, {typesonly=}false,
+            Check(one.Search(one.WellKnownObjects[lkoUsers], {typesonly=}false,
                   '(cn=users)', ['*']), 'Search');
             Check(one.SearchResult.Count <> 0, 'SeachResult');
             AddConsole('%% = % search=%', [one.Settings.TargetHost, txt,
