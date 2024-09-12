@@ -421,6 +421,47 @@ function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray; overload;
 function ToText(Attribute: TLdapAttributeType): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+type
+  /// the decoded fields of TLdapGroup.groupType
+  // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-grouptype
+  TGroupType = (
+    gtBuiltIn,
+    gtGlobal,
+    gtDomainLocal,
+    gtUniversal,
+    gtAppBasic,
+    gtAppQuery,
+    gtSecurity = 31);
+  TGroupTypes = set of TGroupType;
+
+  /// the decoded fields of TLdapUser.userAccountControl
+  // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
+  TUserAccountControl = (
+    uacScript,                            //       1
+    uacAccountDisable,                    //       2
+    uacHomeDirRequired = 3,               //       8
+    uacLockedOut,                         //      10
+    uacPasswordNotRequired,               //      20
+    uacPasswordCannotChange,              //      40
+    uacPasswordUnencrypted,               //      80
+    uacTempDuplicateAccount,              //     100
+    uacNormalAccount,                     //     200
+    uacInterDomainTrusted = 11,           //     800
+    uacWorkstationTrusted,                //    1000
+    uacServerTrusted,                     //    2000
+    uacPasswordDonotExpire = 16,          //   10000
+    uacLogonAccount,                      //   20000
+    uacSmartcardRequired,                 //   40000
+    uacKerberosTrustedForDelegation,      //   80000
+    uacKerberosNotDelegated,              //  100000
+    uacKerberosDesOnly,                   //  200000
+    uacKerberosRequirePreAuth,            //  400000
+    uacPasswordExpired,                   //  800000
+    uacKerberosTrustedToDelegate,         // 1000000
+    uacKerberosNoPac,                     // 2000000
+    uacPartialSecretsRodc);               // 4000000
+  TUserAccountControls = set of TUserAccountControl;
+
 
 { **************** CLDAP Client Functions }
 
@@ -621,6 +662,8 @@ type
     fItems: TLdapAttributeDynArray;
     fLastFound: PtrInt;
     fKnownTypes: TLdapAttributeTypes;
+    function GetUserAccountControl: TUserAccountControls;
+    procedure SetUserAccountControl(Value: TUserAccountControls);
   public
     /// finalize the list
     destructor Destroy; override;
@@ -666,6 +709,9 @@ type
     // - returns empty string if not found
     // - faster than overloaded Get(AttributeName)
     function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
+    /// access a atUserAccountControl attribute value with proper decode/encode
+    property UserAccountControl: TUserAccountControls
+      read GetUserAccountControl write SetUserAccountControl;
     /// access to the internal list of TLdapAttribute objects
     // - note that length(Items) = Count for this class
     property Items: TLdapAttributeDynArray
@@ -775,48 +821,11 @@ type
   PLdapKnownCommonNames = ^TLdapKnownCommonNames;
   TLdapKnownCommonNamesDual = array[boolean] of TLdapKnownCommonNames;
 
-  /// the decoded fields of TLdapGroup.groupType
-  // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-grouptype
-  TGroupType = (
-    gtBuiltIn,
-    gtGlobal,
-    gtDomainLocal,
-    gtUniversal,
-    gtAppBasic,
-    gtAppQuery,
-    gtSecurity = 31);
-  TGroupTypes = set of TGroupType;
-
-  /// the decoded fields of TLdapUser.userAccountControl
-  // - https://learn.microsoft.com/en-us/windows/win32/adschema/a-useraccountcontrol
-  TUserAccountControl = (
-    uacScript,                            //       1
-    uacAccountDisable,                    //       2
-    uacHomeDirRequired = 3,               //       8
-    uacLockedOut,                         //      10
-    uacPasswordNotRequired,               //      20
-    uacPasswordCannotChange,              //      40
-    uacPasswordUnencrypted,               //      80
-    uacTempDuplicateAccount,              //     100
-    uacNormalAccount,                     //     200
-    uacInterDomainTrusted = 11,           //     800
-    uacWorkstationTrusted,                //    1000
-    uacServerTrusted,                     //    2000
-    uacPasswordDonotExpire = 16,          //   10000
-    uacLogonAccount,                      //   20000
-    uacSmartcardRequired,                 //   40000
-    uacKerberosTrustedForDelegation,      //   80000
-    uacKerberosNotDelegated,              //  100000
-    uacKerberosDesOnly,                   //  200000
-    uacKerberosRequirePreAuth,            //  400000
-    uacPasswordExpired,                   //  800000
-    uacKerberosTrustedToDelegate,         // 1000000
-    uacKerberosNoPac,                     // 2000000
-    uacPartialSecretsRodc);               // 4000000
-  TUserAccountControls = set of TUserAccountControl;
-
   /// high-level information of a User or Group object in the LDAP database
   TLdapObject = object
+  private
+    procedure FillObject(Attributes: TLdapAttributeList;
+      const CustomAttributes: TRawUtf8DynArray);
   public
     sAMAccountName, distinguishedName, canonicalName: RawUtf8;
     name, CN, description: RawUtf8;
@@ -825,8 +834,6 @@ type
     customNames: TRawUtf8DynArray;
     customValues: TRawUtf8DynArray;
     function Custom(const AttributeName: RawUtf8): RawUtf8;
-    procedure Fill(Attributes: TLdapAttributeList;
-      const CustomAttributes: TRawUtf8DynArray);
   end;
 
   /// high-level information of a Group in the LDAP database
@@ -2911,6 +2918,21 @@ begin
   ObjArrayDelete(fItems, FindIndex(AttributeName));
 end;
 
+function TLdapAttributeList.GetUserAccountControl: TUserAccountControls;
+var
+  uac: integer;
+begin
+  if ToInteger(Get(atUserAccountControl), uac) then
+    result := TUserAccountControls(uac)
+  else
+    result := [];
+end;
+
+procedure TLdapAttributeList.SetUserAccountControl(Value: TUserAccountControls);
+begin
+  Add(atUserAccountControl, ToUtf8(integer(Value)), aoReplaceValue);
+end;
+
 
 { TLdapResult }
 
@@ -3346,7 +3368,7 @@ end;
 
 { TLdapObject }
 
-procedure TLdapObject.Fill(Attributes: TLdapAttributeList;
+procedure TLdapObject.FillObject(Attributes: TLdapAttributeList;
   const CustomAttributes: TRawUtf8DynArray);
 var
   n, c, i: PtrInt;
@@ -3408,7 +3430,7 @@ procedure TLdapGroup.FillGroup(Attributes: TLdapAttributeList; WithMember: boole
 var
   uac: integer;
 begin
-  Fill(Attributes, CustomAttributes);
+  FillObject(Attributes, CustomAttributes);
   ToCardinal(SplitRight(objectSID, '-'), PrimaryGroupID);
   if ToInteger(Attributes.Get(atGroupType), uac) then
     groupType := TGroupTypes(uac);
@@ -3421,10 +3443,8 @@ end;
 
 procedure TLdapUser.FillUser(Attributes: TLdapAttributeList; WithMemberOf: boolean;
   const CustomAttributes: TRawUtf8DynArray);
-var
-  uac: integer;
 begin
-  Fill(Attributes, CustomAttributes);
+  FillObject(Attributes, CustomAttributes);
   userPrincipalName := Attributes.Get(atUserPrincipalName);
   displayName := Attributes.Get(atDisplayName);
   mail := Attributes.Get(atMail);
@@ -3433,8 +3453,7 @@ begin
   ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
   if WithMemberOf then
     memberOf := Attributes.Find(atMemberOf).GetAllReadable;
-  if ToInteger(Attributes.Get(atUserAccountControl), uac) then
-    userAccountControl := TUserAccountControls(uac);
+  userAccountControl := Attributes.GetUserAccountControl;
 end;
 
 
