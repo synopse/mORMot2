@@ -607,6 +607,17 @@ function DnsLdapControlersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 { **************** LDAP Response Storage }
 
 type
+  /// customize the TLdapAttributeList.Add(name, value) process
+  // - default aoAlways will append the name/value pair to the existing content
+  // - aoReplaceValue: if name already exists, replace its value
+  // - aoKeepExisting: if name already exists, keep it and ignore the supplied value
+  // - aoNoDuplicateValue: if value already exists as such, don't add it again
+  TLdapAddOption = (
+    aoAlways,
+    aoReplaceValue,
+    aoKeepExisting,
+    aoNoDuplicateValue);
+
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
   private
@@ -622,8 +633,8 @@ type
     /// clear all the internal fields
     procedure Clear;
     /// include a new value to this list
-    // - IsBinary values will be stored base-64 encoded
-    procedure Add(const aValue: RawByteString);
+    // - NoDupValue will search for AttributeValue, to avoid any duplicate
+    procedure Add(const aValue: RawByteString; Option: TLdapAddOption = aoAlways);
     /// retrieve a value as human-readable text
     // - a wrapper around AttributeValueMakeReadable() and the known type
     function GetReadable(index: PtrInt = 0): RawUtf8;
@@ -667,6 +678,7 @@ type
     fItems: TLdapAttributeDynArray;
     fLastFound: PtrInt;
     fKnownTypes: TLdapAttributeTypes;
+    function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
   public
@@ -677,16 +689,22 @@ type
     /// number of TLdapAttribute objects in this list
     function Count: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    /// search or allocate a new TLdapAttribute object and its value to the list
-    function Add(const AttributeName: RawUtf8;
-      const AttributeValue: RawByteString): TLdapAttribute; overload;
-    /// search or allocate a new TLdapAttribute object and its value to the list
-    function Add(AttributeType: TLdapAttributeType;
-      const AttributeValue: RawByteString): TLdapAttribute; overload;
     /// search or allocate a new TLdapAttribute object to the list
     function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
+    /// search or allocate a new TLdapAttribute object and its value to the list
+    function Add(const AttributeName: RawUtf8; const AttributeValue: RawByteString;
+      Option: TLdapAddOption = aoAlways): TLdapAttribute; overload;
     /// search or allocate TLdapAttribute object(s) from name/value pairs to the list
-    procedure Add(const NameValuePairs: array of RawUtf8); overload;
+    procedure Add(const NameValuePairs: array of RawUtf8;
+      Option: TLdapAddOption = aoAlways); overload;
+    /// search or allocate a new TLdapAttribute object to the list
+    function Add(AttributeType: TLdapAttributeType): TLdapAttribute; overload;
+    /// search or allocate a new TLdapAttribute object and its value to the list
+    function Add(AttributeType: TLdapAttributeType; const AttributeValue: RawByteString;
+      Option: TLdapAddOption = aoAlways): TLdapAttribute; overload;
+    /// search or allocate TLdapAttribute object(s) from type/value to the list
+    procedure Add(const Types: array of TLdapAttributeType;
+      const Values: array of RawByteString; Option: TLdapAddOption = aoAlways); overload;
     /// search or allocate "unicodePwd" TLdapAttribute value to the list
     function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
     /// remove one TLdapAttribute object from the list
@@ -697,7 +715,7 @@ type
     /// find and return attribute with the requested name
     // - returns nil if not found
     function Find(const AttributeName: RawUtf8): TLdapAttribute; overload;
-    /// Find and return first attribute value with requested name
+    /// find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
     function Get(const AttributeName: RawUtf8): RawUtf8; overload;
@@ -709,7 +727,7 @@ type
     // - returns nil if not found
     // - faster than overloaded Find(AttributeName)
     function Find(AttributeType: TLdapAttributeType): TLdapAttribute; overload;
-    /// Find and return first attribute value with the requested type
+    /// find and return first attribute value with the requested type
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
     // - faster than overloaded Get(AttributeName)
@@ -2678,8 +2696,22 @@ begin
   fCount := 0;
 end;
 
-procedure TLdapAttribute.Add(const aValue: RawByteString);
+procedure TLdapAttribute.Add(const aValue: RawByteString; Option: TLdapAddOption);
 begin
+  case Option of
+    aoReplaceValue:
+      if (fCount = 1) and
+         (fList[0] = aValue) then
+        exit // nothing to replace
+      else
+        Clear; // replace existing by adding aValue as single item
+    aoKeepExisting:
+      if fCount > 0 then
+        exit;
+    aoNoDuplicateValue:
+      if FindIndex(aValue) >= 0 then
+        exit;
+  end;
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
 end;
 
@@ -2883,6 +2915,14 @@ begin
   result := Find(AttributeType).GetReadable(0);
 end;
 
+function TLdapAttributeList.DoAdd(const aName: RawUtf8;
+  aType: TLdapAttributeType): TLdapAttribute;
+begin
+  include(fKnownTypes, aType);
+  result := TLdapAttribute.Create(aName, aType);
+  ObjArrayAdd(fItems, result);
+end;
+
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
 var
   i: PtrInt;
@@ -2890,7 +2930,7 @@ var
 begin
   if AttributeName = '' then
     ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
-  // search for existing TLdapAttribute instance
+  // search for existing TLdapAttribute instance during the name interning step
   if not _LdapIntern.Unique(n, AttributeName) then // n = existing name
     for i := 0 to length(fItems) - 1 do // fast pointer search as in Find()
     begin
@@ -2899,19 +2939,18 @@ begin
         exit;
     end;
   // need to add a new TLdapAttribute with this interned attribute name
-  result := TLdapAttribute.Create(n, _AttributeNameType(pointer(n)));
-  ObjArrayAdd(fItems, result);
-  include(fKnownTypes, result.KnownType);
+  result := DoAdd(n, _AttributeNameType(pointer(n)));
 end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8;
-  const AttributeValue: RawByteString): TLdapAttribute;
+  const AttributeValue: RawByteString; Option: TLdapAddOption): TLdapAttribute;
 begin
   result := Add(AttributeName);
-  result.Add(AttributeValue);
+  result.Add(AttributeValue, Option);
 end;
 
-procedure TLdapAttributeList.Add(const NameValuePairs: array of RawUtf8);
+procedure TLdapAttributeList.Add(const NameValuePairs: array of RawUtf8;
+  Option: TLdapAddOption);
 var
   i, n: PtrInt;
 begin
@@ -2919,16 +2958,35 @@ begin
   if (n <> 0) and
      (n and 1 = 0) then
     for i := 0 to (n shr 1) - 1 do
-      Add(NameValuePairs[i * 2], NameValuePairs[i * 2 + 1]);
+      Add(NameValuePairs[i * 2], NameValuePairs[i * 2 + 1], Option);
 end;
 
-function TLdapAttributeList.Add(AttributeType: TLdapAttributeType;
-  const AttributeValue: RawByteString): TLdapAttribute;
+function TLdapAttributeList.Add(AttributeType: TLdapAttributeType): TLdapAttribute;
 begin
   if AttributeType = atUndefined then
     ELdap.RaiseUtf8('%.Add(atUndefined)', [self]);
-  result := TLdapAttribute.Create(AttrTypeName[AttributeType], AttributeType);
-  result.Add(AttributeValue);
+  result := Find(AttributeType);
+  if result = nil then
+    result := DoAdd(AttrTypeName[AttributeType], AttributeType);
+end;
+
+function TLdapAttributeList.Add(AttributeType: TLdapAttributeType;
+  const AttributeValue: RawByteString; Option: TLdapAddOption): TLdapAttribute;
+begin
+  result := Add(AttributeType);
+  result.Add(AttributeValue, Option);
+end;
+
+procedure TLdapAttributeList.Add(const Types: array of TLdapAttributeType;
+  const Values: array of RawByteString; Option: TLdapAddOption);
+var
+  i: PtrInt;
+begin
+  if high(Types) = high(Values) then
+    for i := 0 to high(Types) do
+      Add(Types[i], Values[i], Option)
+  else
+    ELdap.RaiseUtf8('Inconsistent %.Add', [self]);
 end;
 
 function TLdapAttributeList.AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
