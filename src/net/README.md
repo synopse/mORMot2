@@ -147,9 +147,10 @@ Automatic Certificate Management Environment (ACME v2) Client
 ### mormot.net.ldap
 
 Simple LDAP Protocol Client
-- LDAP Protocol Definitions
-- LDAP Attribute Types Definitions
 - CLDAP Client Functions
+- LDIF Data Interchange Format
+- LDAP Protocol Definitions
+- LDAP Attributes Definitions
 - LDAP Response Storage
 - LDAP Client Class
 - HTTP BASIC Authentication via LDAP or Kerberos
