@@ -778,7 +778,8 @@ begin
   // validate LDAP attributes definitions
   for at := low(at) to high(at) do
   begin
-    CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, AttrTypeName[at]);
+    CheckEqual(ToText(at), AttrTypeName[at]);
+    CheckUtf8(AttributeNameType(AttrTypeName[at]) = at, ToText(at));
     ats := [at];
     a := ToText(ats);
     if at = low(at) then
@@ -786,7 +787,7 @@ begin
     else
     begin
       CheckEqual(length(a), 1);
-      CheckEqual(a[0], AttrTypeName[at]);
+      CheckEqual(a[0], ToText(at));
     end;
   end;
   for i := low(AttrTypeNameAlt) to high(AttrTypeNameAlt) do

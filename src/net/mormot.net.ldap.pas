@@ -387,7 +387,9 @@ type
 
 var
   /// the standard NAME of our common Attribute Types
-  // - these value will be interned and recognized internal as raw pointer()
+  // - these value will be interned and recognized internally as raw pointer()
+  // - e.g. AttrTypeName[atOrganizationUnitName] = 'ou'
+  // - by design, atUndefined would return ''
   AttrTypeName: array[TLdapAttributeType] of RawUtf8;
 
   /// alternate standard NAME of our common Attribute Types
@@ -408,7 +410,12 @@ function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
 
 /// convert a set of common Attribute Types into their array text representation
+// - by design, atUndefined would be excluded from the list
 function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray; overload;
+
+/// just a convenient redirection to AttrTypeName[Attribute]
+function ToText(Attribute: TLdapAttributeType): RawUtf8; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 { **************** CLDAP Client Functions }
@@ -2285,7 +2292,7 @@ end;
 
 function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray;
 var
-  n, i: PtrInt;
+  n: PtrInt;
   t: TLdapAttributeType;
 begin
   exclude(Attributes, atUndefined);
@@ -2298,6 +2305,11 @@ begin
       result[n] := AttrTypeName[t];
       inc(n);
     end;
+end;
+
+function ToText(Attribute: TLdapAttributeType): RawUtf8;
+begin
+  result := AttrTypeName[Attribute];
 end;
 
 
