@@ -347,6 +347,7 @@ type
     atUserPrincipalName,
     atUserAccountControl,
     atSAMAccountName,
+    atSAMAccountType,
     atAdminCount,
     atDescription,
     atGenerationQualifier,
@@ -462,6 +463,18 @@ type
     uacPartialSecretsRodc);               // 4000000
   TUserAccountControls = set of TUserAccountControl;
 
+  /// known sAMAccountType values
+  TSamAccountType = (
+    satUnknown,
+    satGroup,
+    satNonSecurityGroup,
+    satAlias,
+    satNonSecurityAlias,
+    satUserAccount,
+    satMachineAccount,
+    satTrustAccount,
+    satAppBasicGroup,
+    satAppQueryGroup);
 
 { **************** CLDAP Client Functions }
 
@@ -735,6 +748,10 @@ type
     // - returns empty string if not found
     // - faster than overloaded Get(AttributeName)
     function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
+    /// access a atSAMAccountType attribute value with proper decoding
+    function AccountType: TSamAccountType;
+    /// access a atGroupType attribute value with proper decoding
+    function GroupTypes: TGroupTypes;
     /// access a atUserAccountControl attribute value with proper decode/encode
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
@@ -747,6 +764,18 @@ type
       read fKnownTypes;
   end;
 
+/// recognize the integer value stored in a LDAP atSAMAccountType entry as TSamAccountType
+function SamAccountType(const value: RawUtf8): TSamAccountType;
+
+/// convert a TSamAccountType as integer value stored in a LDAP atSAMAccountType entry
+function SamAccountTypeValue(sat: TSamAccountType): RawUtf8;
+
+function ToText(sat: TSamAccountType): PShortString; overload;
+
+
+{ **************** LDAP Response Storage }
+
+type
   /// store one LDAP result, i.e. one object name and associated attributes
   TLdapResult = class
   private
@@ -1805,7 +1834,7 @@ begin
   if DN = '' then
     exit;
   ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true);
-  result := RawUtf8ArrayToCsv(dc, '.');
+  result := RawUtf8ArrayToCsv(dc, '.', -1, {reverse=}false);
   if ou <> nil then
     Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(ou, '/', -1, {reverse=}true));
   if cn <> nil then
@@ -2208,6 +2237,7 @@ const
     'userPrincipalName',           // atUserPrincipalName
     'userAccountControl',          // atUserAccountControl
     'sAMAccountName',              // atSAMAccountName
+    'sAMAccountType',              // atSAMAccountType
     'adminCount',                  // atAdminCount
     'description',                 // atDescription
     'generationQualifier',         // atGenerationQualifier
@@ -2378,6 +2408,44 @@ end;
 function ToText(Attribute: TLdapAttributeType): RawUtf8;
 begin
   result := AttrTypeName[Attribute];
+end;
+
+const
+  // see https://ldapwiki.com/wiki/Wiki.jsp?page=SAMAccountType
+  AT_VALUE: array[TSamAccountType] of cardinal = (
+    $00000000,  // satUnknown
+    $10000000,  // satGroup          = 268435456
+    $10000002,  // satNonSecurityGroup
+    $20000000,  // satAlias
+    $20000001,  // satNonSecurityAlias
+    $30000000,  // satUserAccount    = 805306368
+    $30000001,  // satMachineAccount = 805306369 = objectCategory=computer
+    $30000002,  // satTrustAccount
+    $40000000,  // satAppBasicGroup
+    $40000001); // satAppQueryGroup
+
+function SamAccountType(const value: RawUtf8): TSamAccountType;
+var
+  sat: cardinal;
+begin
+  if ToCardinal(value, sat) then
+    result := TSamAccountType(IntegerScanIndex(
+      @AT_VALUE[satGroup], length(AT_VALUE) - 1, sat) + 1)
+  else
+    result := satUnknown;
+end;
+
+function SamAccountTypeValue(sat: TSamAccountType): RawUtf8;
+begin
+  if sat = satUnknown then
+    result := ''
+  else
+    UInt32ToUtf8(AT_VALUE[sat], result);
+end;
+
+function ToText(sat: TSamAccountType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSamAccountType), ord(sat));
 end;
 
 
@@ -3011,6 +3079,21 @@ begin
   ObjArrayDelete(fItems, FindIndex(AttributeName));
 end;
 
+function TLdapAttributeList.AccountType: TSamAccountType;
+begin
+  result := SamAccountType(Get(atSAMAccountType));
+end;
+
+function TLdapAttributeList.GroupTypes: TGroupTypes;
+var
+  v: cardinal;
+begin
+  if ToCardinal(Get(atGroupType), v) then
+    result := TGroupTypes(v)
+  else
+    result := [];
+end;
+
 function TLdapAttributeList.GetUserAccountControl: TUserAccountControls;
 var
   uac: integer;
@@ -3526,8 +3609,7 @@ var
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
   ToCardinal(SplitRight(objectSID, '-'), PrimaryGroupID);
-  if ToInteger(Attributes.Get(atGroupType), uac) then
-    groupType := TGroupTypes(uac);
+  groupType := Attributes.GroupTypes;
   if WithMember then
     member := Attributes.Find(atMember).GetAllReadable;
 end;
@@ -5002,8 +5084,8 @@ var
   pos: integer;
 begin
   // the RFC states that ASN1_OID_PASSWDMODIFY supportedExtension SHOULD be
-  // verified in server root DSE - but OpenLDAP does not have this list
-  // and this OID is not listed on MSAD :(
+  // verified in server root DSE - but OpenLDAP does not have this list, nor seem
+  // to actually implement this extension, and this OID is not listed by MSAD :(
   result := '';
   if UserDN = '' then
     exit;
