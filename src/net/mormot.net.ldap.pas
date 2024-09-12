@@ -330,9 +330,9 @@ const
 
 type
   /// common Attribute Types, as stored in TLdapAttribute.AttributeName
-  // - so that the most used could be specified as enumerate
-  // - so that most complex binary types (like SID/GUID/FileTime) could be
-  // recognized and properly made readable
+  // - so that the most useful types could be specified as convenient enumerate
+  // - allow complex binary types (like SID/GUID/FileTime) to be recognized and
+  // properly decoded / made readable
   TLdapAttributeType = (
     atUndefined,
     atDistinguishedName,
@@ -393,11 +393,13 @@ var
   AttrTypeName: array[TLdapAttributeType] of RawUtf8;
 
   /// alternate standard NAME of our common Attribute Types
+  // - e.g. AttrTypeNameAlt[6] = 'organizationName' and
+  // AttrTypeNameAlt[6] = atOrganizationUnitName
   // - defined for unit testing purpose only
   AttrTypeNameAlt: array[0 .. 8] of RawUtf8;
 
 const
-  /// AttrTypeNameAlt[] types - defined for unit testing purpose only
+  // AttrTypeNameAlt[] types - defined for unit testing purpose only
   AttrTypeAltType: array[0 .. high(AttrTypeNameAlt)] of TLdapAttributeType = (
     atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
     atStreetAddress, atOrganizationName, atOrganizationUnitName, atGivenName);
@@ -405,8 +407,10 @@ const
 /// recognize our common Attribute Types from their standard NAME text
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
-/// convert a raw attribute value into human-readable text
+/// convert in-place a raw attribute value into human-readable text
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
+// - will detect SID, GUID, FileTime and text date/time known fields
+// - if s is not truly UTF-8 encoded, will return its hexadecimal representation
 procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
 
 /// convert a set of common Attribute Types into their array text representation
@@ -578,6 +582,7 @@ type
     // - IsBinary values will be stored base-64 encoded
     procedure Add(const aValue: RawByteString);
     /// retrieve a value as human-readable text
+    // - a wrapper around AttributeValueMakeReadable() and the known type
     function GetReadable(index: PtrInt = 0): RawUtf8;
     /// retrieve all values as human-readable text
     function GetAllReadable: TRawUtf8DynArray;
@@ -2177,15 +2182,15 @@ const
 
   // reference names to fill the global AttrTypeNameAlt[]
   _AttrTypeNameAlt: array[0 .. high(AttrTypeNameAlt)] of RawUtf8 = (
-    'commonName',
-    'surname',
-    'countryName',
-    'localityName',
-    'stateOrProvinceName',
-    'streetAddress',
-    'organizationName',
-    'organizationalUnitName',
-    'givenName');
+    'commonName',                  // cn
+    'surname',                     // sn
+    'countryName',                 // c
+    'localityName',                // l
+    'stateOrProvinceName',         // st
+    'streetAddress',               // street
+    'organizationName',            // o
+    'organizationalUnitName',      // ou
+    'givenName');                  // gn
 
 var
   _LdapIntern: TRawUtf8Interning;

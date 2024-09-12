@@ -804,10 +804,12 @@ begin
     CheckEqual(rl.ExportToLdifContent,
       'version: 1'#$0A'# total number of entries: 0'#$0A);
     r := rl.Add;
+    v := 'John E Doxx';
+    PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute
     r.ObjectName := 'cn=foo, ou=bar';
     r.Attributes.Add('objectClass', 'person');
     r.Attributes.Add(['cn', 'John Doe',
-                      'cn', 'John E Do'#$c3#$a9, // UTF-8 'e'acute
+                      'cn', v,
                       'sn', 'Doe']);
     CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
     CheckHash(rl.ExportToLdifContent, $A91F23A7, 'hashLdif');
