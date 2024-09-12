@@ -1101,7 +1101,7 @@ type
       out Dual: TLdapKnownCommonNamesDual): boolean;
     procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
-      out Res: TRawUtf8DynArray);
+      out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1325,7 +1325,7 @@ type
     // - If DeleteIfPresent is false and there is already a computer with this
     // name in the domain, the operation fail
     // - ErrorMessage contains the failure reason (if the operation failed)
-    // - Return false if the operation failed
+    // - return false if the operation failed
     function AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
       out ErrorMessage: RawUtf8; const Password: SpiUtf8 = '';
       DeleteIfPresent : boolean = false;
@@ -1336,19 +1336,22 @@ type
     /// retrieve all Group names in the LDAP Server
     // - you can refine your query via CustomFilter or TGroupTypes
     // - Match allow to search as a (AttributeName=Match) filter
-    // - returns the sAMAccountName by default, but could be 'distinguishedName'
+    // - returns the sAMAccountName values by default, optionally with the
+    // associated atDistinguishedName values
     function GetGroups(FilterUac: TGroupTypes = [];
       UnFilterUac: TGroupTypes = []; const Match: RawUtf8 = '';
       const CustomFilter: RawUtf8 = ''; const BaseDN: RawUtf8 = '';
+      ObjectNames: PRawUtf8DynArray = nil;
       Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
     /// retrieve all User names in the LDAP Server
     // - you can refine your query via CustomFilter or TUserAccountControls
     // - Match allow to search as a (AttributeName=Match) filter
-    // - returns the sAMAccountName by default, but could be 'distinguishedName'
+    // - returns the sAMAccountName values by default, optionally with the
+    // associated atDistinguishedName values
     function GetUsers(FilterUac: TUserAccountControls = [];
       UnFilterUac: TUserAccountControls = [uacAccountDisable];
       const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
-      const BaseDN: RawUtf8 = '';
+      const BaseDN: RawUtf8 = ''; ObjectNames: PRawUtf8DynArray = nil;
       Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
     /// retrieve the basic information of a LDAP Group
     // - could lookup by sAMAccountName or distinguishedName
@@ -4911,7 +4914,7 @@ const
 
 procedure TLdapClient.GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
   const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
-  out Res: TRawUtf8DynArray);
+  out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
 var
   f, filter, uacname: RawUtf8;
 begin
@@ -4937,23 +4940,23 @@ begin
     filter := FormatUtf8('(&%%)', [filter, f]);
   if Search([Attribute], filter, BaseDN) and
      (SearchResult.Count > 0) then
-    Res := SearchResult.ObjectAttributes(Attribute);
+    Res := SearchResult.ObjectAttributes(Attribute, ObjectNames);
 end;
 
 function TLdapClient.GetGroups(FilterUac, UnFilterUac: TGroupTypes;
-  const Match, CustomFilter, BaseDN: RawUtf8;
+  const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
   GetByAccountType(satGroup, integer(FilterUac), integer(UnFilterUac),
-    BaseDN, CustomFilter, Match, Attribute, result);
+    BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
 function TLdapClient.GetUsers(FilterUac, UnFilterUac: TUserAccountControls;
-  const Match, CustomFilter, BaseDN: RawUtf8;
+  const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
   GetByAccountType(satUserAccount, integer(FilterUac), integer(UnFilterUac),
-    BaseDN, CustomFilter, Match, Attribute, result);
+    BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
 const
