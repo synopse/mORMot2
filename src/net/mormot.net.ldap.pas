@@ -3229,7 +3229,9 @@ procedure TLdapResult.ExportToLdif(w: TTextWriter);
 var
   i: PtrInt;
 begin
-  w.AddShorter('dn:');
+  w.AddDirect('#', ' ');
+  w.AddString(DNToCN(fObjectName));
+  w.AddShorter(#10'dn:');
   AddLdif(w, pointer(fObjectName), length(fObjectName));
   w.AddDirect(#10);
   for i := 0 to fAttributes.Count - 1 do
