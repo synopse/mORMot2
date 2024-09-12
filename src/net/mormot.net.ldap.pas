@@ -1320,6 +1320,16 @@ type
 
     { high-level computer methods }
 
+    /// retrieve all User names in the LDAP Server
+    // - you can refine your query via CustomFilter or TUserAccountControls
+    // - Match allow to search as a (AttributeName=Match) filter
+    // - returns the sAMAccountName values by default, optionally with the
+    // associated atDistinguishedName values
+    function GetComputers(FilterUac: TUserAccountControls = [];
+      UnFilterUac: TUserAccountControls = [uacAccountDisable];
+      const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
+      const BaseDN: RawUtf8 = ''; ObjectNames: PRawUtf8DynArray = nil;
+      Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
     /// Add a new computer in the domain
     // - If password is empty, it isn't set in the attributes
     // - If DeleteIfPresent is false and there is already a computer with this
@@ -4846,6 +4856,14 @@ end;
 
 // **** TLdapClient high-level Computer methods
 
+function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
+  const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
+  Attribute: TLdapAttributeType): TRawUtf8DynArray;
+begin
+  GetByAccountType(satMachineAccount, integer(FilterUac), integer(UnFilterUac),
+    BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
+end;
+
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
   out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean;
   UserAccount: TUserAccountControls): boolean;
@@ -4921,7 +4939,10 @@ begin
   case AT of
     satGroup:
       uacname := 'groupType';
-    satUserAccount:
+    satUserAccount,
+    satAlias,
+    satMachineAccount,
+    satTrustAccount:
       uacname := 'userAccountControl';
   else
     ELdap.RaiseUtf8('Unexpected %.GetByAccountType(%)', [self, ToText(AT)^]);
