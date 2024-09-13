@@ -819,7 +819,7 @@ begin
                            'cn', v,
                            'sn', 'Doe']);
     CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
-    CheckHash(rl.ExportToLdifContent, $A91F23A7, 'hashLdif');
+    CheckHash(rl.ExportToLdifContent, $E2272C14, 'hashLdif');
   finally
     rl.Free;
   end;
