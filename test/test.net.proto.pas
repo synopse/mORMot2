@@ -679,13 +679,16 @@ var
   at: TLdapAttributeType;
   ats: TLdapAttributeTypes;
   sat: TSamAccountType;
+  gt: TGroupType;
+  gts: TGroupTypes;
+  ua: TUserAccountControl;
+  uas: TUserAccountControls;
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   hasinternet: boolean;
 begin
-  CheckEqual(1 shl ord(uacPartialSecretsRodc), $04000000, 'uacHigh');
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
     ntp := NTP_DEFAULT_SERVER;
@@ -798,11 +801,36 @@ begin
   Check(ToText(ats) = nil);
   a := ToText([atOrganizationUnitName, atObjectClass, atCommonName]);
   CheckEqual(RawUtf8ArrayToCsv(a), 'objectClass,cn,ou');
+  // validate LDAP attributes values and high-level recognition
   for sat := low(sat) to high(sat) do
   begin
-    u := SamAccountTypeValue(sat);
-    Check((u = '') = (sat = satUnknown));
-    Check(SamAccountType(u) = sat);
+    c := SamAccountTypeValue(sat);
+    Check((c = 0) = (sat = satUnknown));
+    Check(SamAccountTypeFromText(UInt32ToUtf8(c)) = sat);
+  end;
+  for gt := low(gt) to high(gt) do
+  begin
+    gts := [gt];
+    Check(GroupTypesFromInteger(GroupTypesValue(gts)) = gts);
+  end;
+  gts := [];
+  Check(GroupTypesValue(gts) = 0);
+  for gt := low(gt) to high(gt) do
+  begin
+    include(gts, gt);
+    Check(GroupTypesFromInteger(GroupTypesValue(gts)) = gts);
+  end;
+  for ua := low(ua) to high(ua) do
+  begin
+    uas := [ua];
+    Check(UserAccountControlsFromInteger(UserAccountControlsValue(uas)) = uas);
+  end;
+  uas := [];
+  Check(UserAccountControlsValue(uas) = 0);
+  for ua := low(ua) to high(ua) do
+  begin
+    include(uas, ua);
+    Check(UserAccountControlsFromInteger(UserAccountControlsValue(uas)) = uas);
   end;
   // validate LDAP resultset and LDIF content
   rl := TLdapResultList.Create;
