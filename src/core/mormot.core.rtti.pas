@@ -581,6 +581,9 @@ type
     /// get the enumeration names corresponding to a set value as CSV
     function GetSetName(const value; trimmed: boolean = false;
       const sep: RawUtf8 = ','): RawUtf8;
+    /// get the enumeration names corresponding to a set value as a RawUtf8 rray
+    procedure GetSetNameArray(const value; var res: TRawUtf8DynArray;
+      trimmed: boolean = false);
     /// get the enumeration names corresponding to a set value as JSON array
     function GetSetNameJsonArray(Value: cardinal; SepChar: AnsiChar = ',';
       FullSetsAsStar: boolean = false): RawUtf8; overload;
@@ -1587,6 +1590,10 @@ procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 function GetSetName(aTypeInfo: PRttiInfo; const value;
   trimmed: boolean = false): RawUtf8;
+
+/// retrieve the text of all enumerate items defined in a set as dynamic array
+function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
+  trimmed: boolean = false): TRawUtf8DynArray;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 // - expects CustomText in the TRttiJson.RegisterCustomEnumValues() format, e.g.
@@ -3503,6 +3510,40 @@ begin
   end;
   if result <> '' then
     FakeLength(result, length(result) - length(sep)); // trim last separator
+end;
+
+procedure TRttiEnumType.GetSetNameArray(const value; var res: TRawUtf8DynArray;
+  trimmed: boolean);
+var
+  n, j: PtrInt;
+  PS: PShortString;
+  d: PRawUtf8;
+begin
+  res := nil;
+  if (@self = nil) or
+     (@value = nil) then
+    exit;
+  n := GetBitsCount(value, {bits=}SizeInStorageAsSet shl 3);
+  if n = 0 then
+    exit;
+  SetLength(res, n);
+  d := pointer(res);
+  PS := NameList;
+  for j := MinValue to MaxValue do
+  begin
+    if GetBitPtr(@value, j) then
+    begin
+      if trimmed then
+        TrimLeftLowerCaseShort(PS, d^)
+      else
+        FastSetString(d^, @PS^[1], PByte(PS)^);
+      dec(n);
+      if n = 0 then
+        exit;
+      inc(d);
+    end;
+    inc(PByte(PS), PByte(PS)^ + 1); // next
+  end;
 end;
 
 procedure TRttiEnumType.GetSetNameJsonArray(W: TTextWriter; Value: cardinal;
@@ -5718,6 +5759,12 @@ end;
 function GetSetName(aTypeInfo: PRttiInfo; const value; trimmed: boolean): RawUtf8;
 begin
   result := aTypeInfo^.SetEnumType^.EnumBaseType.GetSetName(value, trimmed);
+end;
+
+function GetSetNameArray(aTypeInfo: PRttiInfo; const value;
+  trimmed: boolean): TRawUtf8DynArray;
+begin
+  aTypeInfo^.SetEnumType^.EnumBaseType.GetSetNameArray(value, result, trimmed);
 end;
 
 function GetSetNameCustom(aTypeInfo: PRttiInfo; const value;
