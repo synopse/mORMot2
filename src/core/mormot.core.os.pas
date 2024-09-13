@@ -537,7 +537,11 @@ procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 procedure SidToTextShort(sid: PSid; var result: shortstring);
 
 /// convert a Security IDentifier as text, following the standard representation
-function SidToText(sid: PSid): RawUtf8;
+function SidToText(sid: PSid): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a Security IDentifier as text, following the standard representation
+procedure SidToText(sid: PSid; var text: RawUtf8); overload;
 
 /// convert several Security IDentifier as text dynamic array
 function SidsToText(sids: PSids): TRawUtf8DynArray;
@@ -6151,12 +6155,15 @@ begin
   result[ord(result[0])] := 'B';
 end;
 
+const
+  SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
+
 function SidLength(sid: PSid): PtrInt;
 begin
   if sid = nil then
     result := 0
   else
-    result := integer(sid^.SubAuthorityCount) shl 2 + 8;
+    result := PtrInt(sid^.SubAuthorityCount) shl 2 + SID_MINLEN;
 end;
 
 function SidCompare(a, b: PSid): integer;
@@ -6199,7 +6206,7 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
     result := 'S-1-';
     AppendShortCardinal(bswap32(PCardinal(@a^[2])^), result);
   end;
-  for i := 0 to integer(sid^.SubAuthorityCount) - 1 do
+  for i := 0 to PtrInt(sid^.SubAuthorityCount) - 1 do
   begin
     AppendShortChar('-', result);
     AppendShortCardinal(sid^.SubAuthority[i], result);
@@ -6207,11 +6214,16 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
 end;
 
 function SidToText(sid: PSid): RawUtf8;
+begin
+  SidToText(sid, result);
+end;
+
+procedure SidToText(sid: PSid; var text: RawUtf8);
 var
   tmp: shortstring;
 begin
   SidToTextShort(sid, tmp);
-  FastSetString(result, @tmp[1], ord(tmp[0]));
+  FastSetString(text, @tmp[1], ord(tmp[0]));
 end;
 
 function SidsToText(sids: PSids): TRawUtf8DynArray;
@@ -6228,9 +6240,9 @@ function IsValidRawSid(const sid: RawSid): boolean;
 var
   l: PtrInt;
 begin
-  l := length(sid);
-  result := (l >= SizeOf(TSidAuth) + 2) and
-            (SidLength(pointer(sid)) = l)
+  l := length(sid) - SID_MINLEN;
+  result := (l >= 0) and
+            (PtrInt(PSid(sid)^.SubAuthorityCount) shl 2 = l); // SidLength()
 end;
 
 function HasSid(const sids: PSids; sid: PSid): boolean;
@@ -6953,7 +6965,7 @@ begin
   DecodeDate(DateTime, yy, mm, dd);
   DecodeTime(DateTime, h, m, s, ms);
   if (yy < 1980) or
-     (yy > 2099) then
+     (yy > 2099) then // hard limit is 2108, but WinAPI up to 2099/12/31
     result := 0
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
@@ -6965,11 +6977,11 @@ var
   date, time: TDateTime;
 begin
   with PLongRec(@WinTime)^ do
-  if TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
-     TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) then
-    result := date + time
-  else
-    result := 0;
+    if TryEncodeDate(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, date) and
+       TryEncodeTime(Lo shr 11, Lo shr 5 and 63, Lo and 31 shl 1, 0, time) then
+      result := date + time
+    else
+      result := 0;
 end;
 
 const

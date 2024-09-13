@@ -797,11 +797,13 @@ procedure FastAssignNewNotVoid(var d; s: pointer); overload;
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// ensure the supplied variable will have a CP_UTF8 - making it unique if needed
+/// ensure the supplied variable will have a CP_UTF8 code page
+// - making it unique if needed
 procedure EnsureRawUtf8(var s: RawByteString); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// ensure the supplied variable will have a CP_UTF8 - making it unique if needed
+/// ensure the supplied variable will have a CP_UTF8 code page
+// - making it unique if needed
 procedure EnsureRawUtf8(var s: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
