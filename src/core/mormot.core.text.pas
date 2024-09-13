@@ -2201,6 +2201,10 @@ function BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt): RawUtf8; overload;
 /// fast conversion from binary data into lowercase hexa chars
 procedure BinToHexLower(Bin: PAnsiChar; BinBytes: PtrInt; var result: RawUtf8); overload;
 
+/// fast in-place conversion from binary data into lowercase hexa chars
+// - a dedicated procedure avoid any temporary stack RawUtf8 string allocation
+procedure BinToHexLowerSelf(var Bin: RawByteString);
+
 /// fast conversion from binary data into lowercase hexa chars
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
 // enough space for at least BinBytes*2 chars
@@ -2354,6 +2358,11 @@ function GuidToRawUtf8(const guid: TGuid): RawUtf8;
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GuidToRawUtf8() function instead
 function ToUtf8(const guid: TGuid): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TGuid into 36 chars encoded text as RawUtf8
+// - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
+procedure ToUtf8(const guid: TGuid; var text: RawUtf8); overload;
 
 /// convert one or several TGuid into 36 chars encoded CSV text
 // - will return e.g.
@@ -9770,6 +9779,15 @@ begin
   BinToHexLower(Bin, BinBytes, result);
 end;
 
+procedure BinToHexLowerSelf(var Bin: RawByteString);
+var
+  hexa: RawUtf8;
+begin
+  FastSetString(hexa, length(Bin) * 2);
+  BinToHexLower(pointer(Bin), length(Bin), hexa);
+  Bin := hexa;
+end;
+
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
 var
   {$ifdef CPUX86NOTPIC}
@@ -10251,8 +10269,13 @@ end;
 
 function ToUtf8(const guid: TGuid): RawUtf8;
 begin
-  FastSetString(result, 36);
-  GuidToText(pointer(result), @Guid);
+  ToUtf8(guid, result);
+end;
+
+procedure ToUtf8(const guid: TGuid; var text: RawUtf8); overload;
+begin
+  FastSetString(text, 36);
+  GuidToText(pointer(text), @guid);
 end;
 
 function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar): RawUtf8;
