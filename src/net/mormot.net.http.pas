@@ -6994,7 +6994,7 @@ var
   tmp: array[0..4095] of AnsiChar; // first 4KB should be enough (with metadata)
   unc: array[0..6143] of AnsiChar; // partially decompressed content
 begin
-  FastRecordClear(@Info, TypeInfo(THttpMetricsHeader));
+  RecordZero(@Info, TypeInfo(THttpMetricsHeader));
   result := false;
   // read (and decompress if needed) the first file chunk
   f := FileOpen(FileName, fmOpenReadShared);
