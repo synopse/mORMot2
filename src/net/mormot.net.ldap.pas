@@ -835,6 +835,9 @@ type
     // - returns empty string if not found
     // - faster than overloaded Get(AttributeName)
     function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
+    /// find and return first attribute value with the requested type
+    // - calls GetAllReadable on the found attribute
+    function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
     /// access a atSAMAccountType attribute value with proper decoding
     function AccountType: TSamAccountType;
     /// access a atGroupType attribute value with proper decoding
@@ -3142,14 +3145,15 @@ end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
 begin
-  if (self = nil) or
-     (index >= fCount) then
-    result := ''
-  else
+  if (self <> nil) and
+     (index < fCount) then
   begin
     result := fList[index];
-    AttributeValueMakeReadable(result, fKnownType);
-  end;
+    if not (fKnownTypeStorage in ATS_READABLE) then
+      AttributeValueMakeReadable(result, fKnownTypeStorage);
+  end
+  else
+    result := '';
 end;
 
 function TLdapAttribute.GetAllReadable: TRawUtf8DynArray;
@@ -3160,9 +3164,19 @@ begin
   if (self = nil) or
      (fCount = 0) then
     exit;
+  if fKnownTypeStorage in ATS_READABLE then
+  begin
+    // no need to make any conversion, nor any allocation
+    DynArrayFakeLength(fList, fCount);
+    result := TRawUtf8DynArray(fList);
+    exit;
+  end;
   SetLength(result, fCount);
   for i := 0 to fCount - 1 do
-    result[i] := GetReadable(i);
+  begin
+    result[i] := fList[i];
+    AttributeValueMakeReadable(result[i], fKnownTypeStorage);
+  end;
 end;
 
 function TLdapAttribute.GetRaw(index: PtrInt): RawByteString;
@@ -3391,6 +3405,11 @@ end;
 function TLdapAttributeList.Get(AttributeType: TLdapAttributeType): RawUtf8;
 begin
   result := Find(AttributeType).GetReadable(0);
+end;
+
+function TLdapAttributeList.GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
+begin
+  result := Find(AttributeType).GetAllReadable;
 end;
 
 function TLdapAttributeList.DoAdd(const aName: RawUtf8;
