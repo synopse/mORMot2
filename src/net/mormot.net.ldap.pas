@@ -998,6 +998,7 @@ type
     userAccountControl: TUserAccountControls;
     primaryGroupID, logonCount, badPwdCount: cardinal;
     dNSHostName, operatingSystem, operatingSystemVersion: RawUtf8;
+    servicePrincipalName: TRawUtf8DynArray;
     procedure Fill(Attributes: TLdapAttributeList;
       const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
   end;
@@ -3814,6 +3815,7 @@ begin
   dNSHostName := Attributes.Get(atDnsHostName);
   operatingSystem := Attributes.Get(atOperatingSystem);
   operatingSystemVersion := Attributes.Get(atOperatingSystemVersion);
+  servicePrincipalName := Attributes.GetAll(atServicePrincipalName);
 end;
 
 
@@ -5016,7 +5018,8 @@ const
     atBadPwdCount,
     atDnsHostName,
     atOperatingSystem,
-    atOperatingSystemVersion];
+    atOperatingSystemVersion,
+    atServicePrincipalName];
   // TLdapGroup attributes
   LDAPGROUP_ATTR = LDAPOBJECT_ATTR + [
     atGroupType];
