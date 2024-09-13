@@ -774,8 +774,9 @@ function ToText(sat: TSamAccountType): PShortString; overload;
 /// compute a TLdapClient.Search filter for a given account
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
 // - and also per sAMAccountType and a custom filter
-function InfoFilter(AccountType: TSamAccountType; const AccountName,
-  DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
+function InfoFilter(AccountType: TSamAccountType;
+  const AccountName: RawUtf8 = ''; const DistinguishedName: RawUtf8 = '';
+  const UserPrincipalName: RawUtf8 = ''; const CustomFilter: RawUtf8 = ''): RawUtf8;
 
 
 { **************** LDAP Response Storage }
@@ -1830,7 +1831,7 @@ var
   sock: TNetSocket;
   tmp: array[0..1999] of byte; // big enough for a UDP frame
 begin
-  FastRecordClear(@Info, TypeInfo(TCldapDomainInfo));
+  RecordZero(@Info, TypeInfo(TCldapDomainInfo));
   result := false;
   if addr.SetFrom(LdapServerAddress, LdapServerPort, nlUdp) <> nrOk then
     exit;
@@ -2836,11 +2837,6 @@ begin
   if UserPrincipalName <> '' then
     result := FormatUtf8('%(userPrincipalName=%)',
       [result, LdapEscapeName(UserPrincipalName)]);
-  if result = '' then
-  begin
-    result := '(cn=)'; // return no answer whatsoever
-    exit;
-  end;
   if ord(AccountName <> '') +
      ord(DistinguishedName <> '') +
      ord(UserPrincipalName <> '') > 1 then
@@ -5012,14 +5008,16 @@ var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
 begin
-  FastRecordClear(@Info, TypeInfo(TLdapGroup));
+  RecordZero(@Info, TypeInfo(TLdapGroup));
   attrs := LDAPGROUP_ATTR + CustomTypes;
   if WithMember then
     include(attrs, atMember);
   attr := ToText(attrs);
   AddRawUtf8(attr, CustomAttributes);
-  result := Search(DefaultDN(BaseDN), false,
-              InfoFilter(satGroup, AccountName, DistinguishedName, '', ''), attr) and
+  result := ((AccountName <> '') or
+             (DistinguishedName <> '')) and
+            Search(DefaultDN(BaseDN), false, InfoFilter(
+              satGroup, AccountName, DistinguishedName), attr) and
             (SearchResult.Count = 1);
   if result then
     Info.FillGroup(SearchResult.Items[0].Attributes, WithMember,
@@ -5028,7 +5026,8 @@ end;
 
 function TLdapClient.GetGroupDN(const AccountName, BaseDN, CustomFilter: RawUtf8): RawUtf8;
 begin
-  if Search([atDistinguishedName],
+  if (AccountName <> '') and
+     Search([atDistinguishedName],
        InfoFilter(satGroup, AccountName, '', '', CustomFilter)) and
      (SearchResult.Count = 1) then
     result := SearchResult.Items[0].Attributes.Get(atDistinguishedName)
@@ -5042,8 +5041,10 @@ var
   last: RawUtf8;
 begin
   result := false;
-  if Search([atObjectSid],
-       InfoFilter(satGroup, AccountName, DistinguishedName, '', CustomFilter)) and
+  if ((AccountName <> '') or
+      (DistinguishedName <> '')) and
+     Search([atObjectSid], InfoFilter(
+       satGroup, AccountName, DistinguishedName, '', CustomFilter)) and
      (SearchResult.Count = 1) then
   begin
     last := SplitRight(SearchResult.Items[0].Attributes.Get(atObjectSid), '-');
@@ -5060,15 +5061,17 @@ var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
 begin
-  FastRecordClear(@Info, TypeInfo(TLdapUser));
+  RecordZero(@Info, TypeInfo(TLdapUser));
   attrs := LDAPUSER_ATTR + CustomTypes;
   if WithMemberOf then
     include(attrs, atMemberOf);
   attr := ToText(attrs);
   AddRawUtf8(attr, CustomAttributes);
-  result := Search(DefaultDN(BaseDN), false,
-              InfoFilter(satUserAccount,
-                AccountName, DistinguishedName, UserPrincipalName, ''), attr) and
+  result := ((AccountName <> '') or
+             (DistinguishedName <> '') or
+             (UserPrincipalName <> '')) and
+            Search(DefaultDN(BaseDN), false, InfoFilter(satUserAccount,
+              AccountName, DistinguishedName, UserPrincipalName), attr) and
             (SearchResult.Count = 1);
   if result then
     Info.FillUser(SearchResult.Items[0].Attributes,
@@ -5079,7 +5082,9 @@ function TLdapClient.GetUserDN(
   const AccountName, UserPrincipalName, BaseDN, CustomFilter: RawUtf8;
   PrimaryGroupID: PCardinal; ObjectSid: PRawUtf8): RawUtf8;
 begin
-  if Search([atDistinguishedName, atPrimaryGroupID, atObjectSid],
+  if ((AccountName <> '') or
+      (UserPrincipalName <> '')) and
+     Search([atDistinguishedName, atPrimaryGroupID, atObjectSid],
        InfoFilter(satUserAccount,
          AccountName, '', UserPrincipalName, CustomFilter)) and
      (SearchResult.Count = 1) then

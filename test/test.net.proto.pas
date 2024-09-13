@@ -812,7 +812,7 @@ begin
       'version: 1'#$0A'# total number of entries: 0'#$0A);
     r := rl.Add;
     v := 'John E Doxx';
-    PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute
+    PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute (Delphi)
     r.ObjectName := 'cn=foo, ou=bar';
     r.Attributes.Add('objectClass', 'person');
     r.Attributes.AddPairs(['cn', 'John Doe',
