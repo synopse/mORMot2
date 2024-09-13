@@ -716,6 +716,8 @@ type
     fCount: integer;
     fKnownType: TLdapAttributeType;
     fKnownTypeStorage: TLdapAttributeTypeStorage;
+    procedure SetVariantOne(var v: TVarData; const s: RawUtf8);
+    procedure SetVariantArray(var v: TDocVariantData);
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
@@ -742,6 +744,10 @@ type
     // - if there is a single value, return it as a single variant text
     // - if Count > 0, return a TDocVariant array with all texts
     function GetVariant: variant;
+    /// retrieve this attribute value(s) as a variant
+    // - expects v to be void (e.g. just allocated from an array of variant)
+    // - as called by GetVariant()
+    procedure SetNewVariant(var v: variant);
     /// search for a given value within this list
     function FindIndex(const aValue: RawByteString): PtrInt;
     /// add all attributes to a "dn: ###" entry of a ldif-content buffer
@@ -3168,15 +3174,105 @@ begin
     result := fList[index];
 end;
 
+procedure TLdapAttribute.SetVariantOne(var v: TVarData; const s: RawUtf8);
+var
+  i: integer;
+  uac: TUserAccountControls;
+  gt: TGroupTypes;
+  sat: TSamAccountType;
+begin
+  case fKnownTypeStorage of
+    atsAny,
+    atsInteger:
+      if ToInt64(s, v.VInt64) then
+      begin
+        v.VType := varInt64;
+        exit;
+      end
+      else
+      begin
+        v.VInt64 := 0; // avoid GPF below
+        if fKnownTypeStorage = atsAny then
+          if s = 'FALSE' then
+          begin
+            v.VType := varBoolean;
+            exit;
+          end
+          else if s = 'TRUE' then
+          begin
+            v.VType := varBoolean;
+            v.VInteger := ord(true);
+            exit;
+          end;
+      end;
+    atsIntegerUserAccountControl:
+      if ToInteger(s, i) then
+      begin
+        uac := UserAccountControlsFromInteger(i);
+        TDocVariantData(v).InitArrayFromSet(
+          TypeInfo(TUserAccountControls), uac, JSON_FAST, {trimmed=}true);
+        exit;
+      end;
+    atsIntegerGroupType:
+      if ToInteger(s, i) then
+      begin
+        gt := GroupTypesFromInteger(i);
+        TDocVariantData(v).InitArrayFromSet(
+          TypeInfo(TGroupTypes), gt, JSON_FAST, {trimmed=}true);
+        exit;
+      end;
+    atsIntegerSamAccountType:
+      if ToInteger(s, i) then
+      begin
+        sat := SamAccountTypeFromInteger(i);
+        if sat <> satUnknown then
+        begin
+          v.VType := varString;
+          ToTextTrimmed(sat, RawUtf8(v.VAny));
+        end
+        else
+        begin
+          v.VType := varInteger; // store satUnknown as integer
+          v.VInteger := i;
+        end;
+        exit;
+      end;
+    atsFileTime:
+      if s = '0' then
+        exit; // 0 = null
+  end;
+  v.VType := varString;
+  RawUtf8(v.VAny) := s;
+  if not (fKnownTypeStorage in ATS_READABLE) then
+    AttributeValueMakeReadable(RawUtf8(v.VAny), fKnownTypeStorage);
+end;
+
+procedure TLdapAttribute.SetVariantArray(var v: TDocVariantData);
+var
+  i: PtrInt;
+begin // avoid implit try..finally in TLdapAttribute.GetVariant
+  v.InitFast(fCount, dvArray);
+  v.SetCount(fCount);
+  for i := 0 to fCount - 1 do
+    SetVariantOne(PVarData(@v.Values[i])^, fList[i]);
+end;
+
+procedure TLdapAttribute.SetNewVariant(var v: variant);
+begin
+  if fCount = 1 then
+    SetVariantOne(TVarData(v), fList[0])
+  else if fKnownTypeStorage = atsRawUtf8 then
+    TDocVariantData(v).InitArrayFrom(TRawUtf8DynArray(fList), JSON_FAST, fCount)
+  else
+    SetVariantArray(TDocVariantData(v));
+end;
+
 function TLdapAttribute.GetVariant: variant;
 begin
   SetVariantNull(result);
   if (self <> nil) and
      (fCount > 0) then
-    if fCount = 1 then
-      RawUtf8ToVariant(GetReadable, result)
-    else
-      TDocVariantData(result).InitArrayFrom(GetAllReadable, JSON_FAST);
+    SetNewVariant(result);
 end;
 
 function TLdapAttribute.FindIndex(const aValue: RawByteString): PtrInt;
@@ -3628,7 +3724,7 @@ procedure TLdapResultList.AppendTo(var Dvo: TDocVariantData;
 var
   i, j: PtrInt;
   res: TLdapResult;
-  attr: TLdapAttribute;
+  attr: ^TLdapAttribute;
   dc, ou, cn: TRawUtf8DynArray;
   a: TDocVariantData;
   v: PDocVariantData;
@@ -3647,12 +3743,16 @@ begin
     if ObjectAttributeField = '' then
       continue; // no attribute
     a.Init(mNameValue, dvObject);
-    a.Capacity := res.Attributes.Count + 1;
-    a.AddValueFromText('objectName', res.ObjectName);
-    for j := 0 to res.Attributes.Count - 1 do
+    a.SetCount(res.Attributes.Count + 1);
+    a.Capacity := a.Count;
+    a.Names[0] := 'objectName';
+    RawUtf8ToVariant(res.ObjectName, a.Values[0]);
+    attr := pointer(res.Attributes.Items);
+    for j := 1 to res.Attributes.Count do
     begin
-      attr := res.Attributes.Items[j];
-      a.AddValue(attr.AttributeName, attr.GetVariant); // benefit from fInterning
+      a.Names[j] := attr^.AttributeName; // use TRawUtf8Interning
+      attr^.SetNewVariant(a.Values[j]);
+      inc(attr);
     end;
     if ObjectAttributeField = '*' then
       v^.AddOrUpdateFrom(variant(a), {onlymissing=}true)
