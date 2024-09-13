@@ -857,11 +857,15 @@ type
     /// find and return first attribute value with the requested type
     // - calls GetAllReadable on the found attribute
     function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
-    /// access a atSAMAccountType attribute value with proper decoding
+    /// access atSAMAccountType attribute value with proper decoding
     function AccountType: TSamAccountType;
-    /// access a atGroupType attribute value with proper decoding
+    /// access atGroupType attribute value with proper decoding
     function GroupTypes: TGroupTypes;
-    /// access a atUserAccountControl attribute value with proper decode/encode
+    /// access atSAMAccountType attribute value with proper decoding
+    function SamAccountType: TSamAccountType;
+    /// access atSystemFlags attribute value with proper decoding
+    function SystemFlags: TSystemFlags;
+    /// access atUserAccountControl attribute value with proper decoding/encoding
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
     /// access to the internal list of TLdapAttribute objects
@@ -3583,6 +3587,16 @@ end;
 function TLdapAttributeList.GroupTypes: TGroupTypes;
 begin
   result := GroupTypesFromText(Get(atGroupType));
+end;
+
+function TLdapAttributeList.SamAccountType: TSamAccountType;
+begin
+  result := SamAccountTypeFromText(Get(atSAMAccountType));
+end;
+
+function TLdapAttributeList.SystemFlags: TSystemFlags;
+begin
+  result := SystemFlagsFromText(Get(atSystemFlags));
 end;
 
 function TLdapAttributeList.GetUserAccountControl: TUserAccountControls;
