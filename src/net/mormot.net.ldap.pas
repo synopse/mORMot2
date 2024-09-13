@@ -504,6 +504,9 @@ type
     atPrimaryGroupID,
     atObjectSid,
     atObjectGuid,
+    atLogonCount,
+    atBadPwdCount,
+    atDnsHostName,
     atAccountExpires,
     atBadPasswordTime,
     atLastLogon,
@@ -515,6 +518,7 @@ type
     atWhenCreated,
     atWhenChanged,
     atOperatingSystem,
+    atOperatingSystemVersion,
     atServicePrincipalName,
     atUnicodePwd);
 
@@ -909,6 +913,18 @@ type
     function Custom(const AttributeName: RawUtf8): RawUtf8;
   end;
 
+  /// high-level information of a Computer in the LDAP database
+  TLdapComputer = object(TLdapObject)
+  public
+    pwdLastSet, lastLogonTimestamp, admPwdExpirationTime: TDateTime;
+    userAccountControl: TUserAccountControls;
+    primaryGroupID, logonCount, badPwdCount: cardinal;
+    dNSHostName, operatingSystem, operatingSystemVersion: RawUtf8;
+    procedure Fill(Attributes: TLdapAttributeList;
+      const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
+  end;
+  PLdapComputer = ^TLdapComputer;
+
   /// high-level information of a Group in the LDAP database
   // - note that "member" array won't include nested groups - use rather the
   // TLdapClient.GetIsMemberOf() method or TLdapCheckMember class instead
@@ -917,12 +933,11 @@ type
     primaryGroupID: cardinal;
     groupType: TGroupTypes;
     member: TRawUtf8DynArray;
-    procedure FillGroup(Attributes: TLdapAttributeList; WithMember: boolean;
+    procedure Fill(Attributes: TLdapAttributeList; WithMember: boolean;
       const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
   end;
 
   /// high-level information of a User in the LDAP database
-  // - inherit from TLdapGroup to share some common fields
   // - some of the fields are only populated if the User matches the logged one
   // - note that "memberof" array won't include nested groups - use rather the
   // TLdapClient.GetIsMemberOf() method or TLdapCheckMember class instead
@@ -933,7 +948,7 @@ type
     memberof: TRawUtf8DynArray;
     userAccountControl: TUserAccountControls;
     primaryGroupID: cardinal;
-    procedure FillUser(Attributes: TLdapAttributeList; WithMemberOf: boolean;
+    procedure Fill(Attributes: TLdapAttributeList; WithMemberOf: boolean;
       const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
   end;
   PLdapUser = ^TLdapUser;
@@ -1331,6 +1346,12 @@ type
       const Match: RawUtf8 = ''; const CustomFilter: RawUtf8 = '';
       const BaseDN: RawUtf8 = ''; ObjectNames: PRawUtf8DynArray = nil;
       Attribute: TLdapAttributeType = atSAMAccountName): TRawUtf8DynArray;
+    /// retrieve the basic information of a LDAP Computer
+    // - could lookup by sAMAccountName or distinguishedName
+    function GetComputerInfo(const AccountName, DistinguishedName: RawUtf8;
+      out Info: TLdapComputer; const BaseDN: RawUtf8 = '';
+      const CustomAttributes: TRawUtf8DynArray = nil;
+      const CustomTypes: TLdapAttributeTypes = []): boolean;
     /// Add a new computer in the domain
     // - If password is empty, it isn't set in the attributes
     // - If DeleteIfPresent is false and there is already a computer with this
@@ -2629,6 +2650,9 @@ const
     'primaryGroupID',              // atPrimaryGroupID
     'objectSid',                   // atObjectSid
     'objectGUID',                  // atObjectGuid
+    'logonCount',                  // atLogonCount
+    'badPwdCount',                 // atBadPwdCount
+    'dNSHostName',                 // atDnsHostName
     'accountExpires',              // atAccountExpires
     'badPasswordTime',             // atBadPasswordTime
     'lastLogon',                   // atLastLogon
@@ -2640,6 +2664,7 @@ const
     'whenCreated',                 // atWhenCreated
     'whenChanged',                 // atWhenChanged
     'operatingSystem',             // atOperatingSystem
+    'operatingSystemVersion',      // atOperatingSystemVersion
     'servicePrincipalName',        // atServicePrincipalName
     'unicodePwd');                 // atUnicodePwd
 
@@ -3649,7 +3674,7 @@ end;
 
 { TLdapGroup }
 
-procedure TLdapGroup.FillGroup(Attributes: TLdapAttributeList; WithMember: boolean;
+procedure TLdapGroup.Fill(Attributes: TLdapAttributeList; WithMember: boolean;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
@@ -3662,7 +3687,7 @@ end;
 
 { TLdapUser }
 
-procedure TLdapUser.FillUser(Attributes: TLdapAttributeList; WithMemberOf: boolean;
+procedure TLdapUser.Fill(Attributes: TLdapAttributeList; WithMemberOf: boolean;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
@@ -3675,6 +3700,25 @@ begin
   if WithMemberOf then
     memberOf := Attributes.Find(atMemberOf).GetAllReadable;
   userAccountControl := Attributes.UserAccountControl;
+end;
+
+
+{ TLdapComputer }
+
+procedure TLdapComputer.Fill(Attributes: TLdapAttributeList;
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
+begin
+  FillObject(Attributes, CustomAttributes, CustomTypes);
+  pwdLastSet := LdapToDate(Attributes.Get(atPwdLastSet));
+  lastLogonTimestamp := LdapToDate(Attributes.Get(atLastLogon));
+  admPwdExpirationTime := LdapToDate(Attributes.Get(atMcsAdmPwdExpirationTime));
+  userAccountControl := Attributes.UserAccountControl;
+  ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
+  ToCardinal(Attributes.Get(atLogonCount), logonCount);
+  ToCardinal(Attributes.Get(atBadPwdCount), badPwdCount);
+  dNSHostName := Attributes.Get(atDnsHostName);
+  operatingSystem := Attributes.Get(atOperatingSystem);
+  operatingSystemVersion := Attributes.Get(atOperatingSystemVersion);
 end;
 
 
@@ -4854,12 +4898,68 @@ end;
 
 // **** TLdapClient high-level Computer methods
 
+const
+  // TLdapObject attributes, common to TLdapComputer, TLdapGroup and TLdapUser
+  LDAPOBJECT_ATTR = [
+    atSAMAccountName,
+    atDistinguishedName,
+    atName,
+    atCommonName,
+    atDescription,
+    atObjectSid,
+    atObjectGuid,
+    atWhenCreated,
+    atWhenChanged];
+  // TLdapComputer attributes
+  LDAPMACHINE_ATTR = LDAPOBJECT_ATTR + [
+    atPwdLastSet,
+    atLastLogonTimestamp,
+    atMcsAdmPwdExpirationTime,
+    atUserAccountControl,
+    atPrimaryGroupID,
+    atLogonCount,
+    atBadPwdCount,
+    atDnsHostName,
+    atOperatingSystem,
+    atOperatingSystemVersion];
+  // TLdapGroup attributes
+  LDAPGROUP_ATTR = LDAPOBJECT_ATTR + [
+    atGroupType];
+  // TLdapUser attributes
+  LDAPUSER_ATTR  = LDAPOBJECT_ATTR + [
+    atUserPrincipalName,
+    atDisplayName,
+    atMail,
+    atPwdLastSet,
+    atLastLogon,
+    atUserAccountControl,
+    atPrimaryGroupID];
+
 function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
   GetByAccountType(satMachineAccount, integer(FilterUac), integer(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
+end;
+
+function TLdapClient.GetComputerInfo(const AccountName, DistinguishedName: RawUtf8;
+  out Info: TLdapComputer; const BaseDN: RawUtf8;
+  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
+var
+  attr: TRawUtf8DynArray;
+begin
+  RecordZero(@Info, TypeInfo(TLdapComputer));
+  attr := ToText(LDAPMACHINE_ATTR + CustomTypes);
+  AddRawUtf8(attr, CustomAttributes);
+  result := ((AccountName <> '') or
+             (DistinguishedName <> '')) and
+            Search(DefaultDN(BaseDN), false, InfoFilter(
+              satMachineAccount, AccountName, DistinguishedName), attr) and
+            (SearchResult.Count = 1);
+  if result then
+    Info.Fill(SearchResult.Items[0].Attributes,
+      CustomAttributes, CustomTypes);
 end;
 
 function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
@@ -4978,29 +5078,6 @@ begin
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
-const
-  // TLdapObject attributes, common to TLdapGroup and TLdapUser
-  LDAPOBJECT_ATTR = [
-    atSAMAccountName,
-    atDistinguishedName,
-    atName,
-    atCommonName,
-    atDescription,
-    atObjectSid,
-    atObjectGuid,
-    atWhenCreated,
-    atWhenChanged];
-  LDAPGROUP_ATTR = LDAPOBJECT_ATTR + [
-    atGroupType];
-  LDAPUSER_ATTR  = LDAPOBJECT_ATTR + [
-    atUserPrincipalName,
-    atDisplayName,
-    atMail,
-    atPwdLastSet,
-    atLastLogon,
-    atUserAccountControl,
-    atPrimaryGroupID];
-
 function TLdapClient.GetGroupInfo(const AccountName, DistinguishedName: RawUtf8;
   out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
@@ -5020,7 +5097,7 @@ begin
               satGroup, AccountName, DistinguishedName), attr) and
             (SearchResult.Count = 1);
   if result then
-    Info.FillGroup(SearchResult.Items[0].Attributes, WithMember,
+    Info.Fill(SearchResult.Items[0].Attributes, WithMember,
       CustomAttributes, CustomTypes);
 end;
 
@@ -5074,7 +5151,7 @@ begin
               AccountName, DistinguishedName, UserPrincipalName), attr) and
             (SearchResult.Count = 1);
   if result then
-    Info.FillUser(SearchResult.Items[0].Attributes,
+    Info.Fill(SearchResult.Items[0].Attributes,
       WithMemberOf, CustomAttributes, CustomTypes);
 end;
 
