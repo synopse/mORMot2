@@ -1138,7 +1138,7 @@ type
     procedure InitArrayFrom(const aItems: TDynArray;
       aOptions: TDocVariantOptions = JSON_FAST_FLOAT); overload;
     /// initialize a variant instance to store RawUtf8 array content from RTTI
-    procedure InitArrayFromSet(aTypeInfo: PRttiInfo; const value;
+    procedure InitArrayFromSet(aTypeInfo: PRttiInfo; const aSetValue;
       aOptions: TDocVariantOptions; trimmed: boolean = false); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
@@ -6193,10 +6193,10 @@ begin
   end;
 end;
 
-procedure TDocVariantData.InitArrayFromSet(aTypeInfo: PRttiInfo; const value;
+procedure TDocVariantData.InitArrayFromSet(aTypeInfo: PRttiInfo; const aSetValue;
   aOptions: TDocVariantOptions; trimmed: boolean);
 begin
-  InitArrayFrom(GetSetNameArray(aTypeInfo, value, trimmed), aOptions);
+  InitArrayFrom(GetSetNameArray(aTypeInfo, aSetValue, trimmed), aOptions);
 end;
 
 function TDocVariantData.InitArrayFromResults(Json: PUtf8Char; JsonLen: PtrInt;
