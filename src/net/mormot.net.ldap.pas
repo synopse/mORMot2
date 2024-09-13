@@ -464,6 +464,20 @@ function LdapToDate(const Text: RawUtf8): TDateTime;
 { **************** LDAP Attributes Definitions }
 
 type
+  /// define how a TLdapAttributeType is actually stored in the LDAP raw value
+  TLdapAttributeTypeStorage = (
+    atsAny,
+    atsRawUtf8,
+    atsInteger,
+    atsIntegerUserAccountControl,
+    atsIntegerGroupType,
+    atsIntegerSamAccountType,
+    atsFileTime,
+    atsTextTime,
+    atsSid,
+    atsGuid,
+    atsUnicodePwd);
+
   /// common Attribute Types, as stored in TLdapAttribute.AttributeName
   // - so that the most useful types could be specified as convenient enumerate
   // - allow complex binary types (like SID/GUID/FileTime) to be recognized and
@@ -502,21 +516,21 @@ type
     atOwner,
     atGroupType,
     atPrimaryGroupID,
-    atObjectSid,
-    atObjectGuid,
+    atObjectSid,                   // encoded as binary RawSid
+    atObjectGuid,                  // encoded as binary TGuid
     atLogonCount,
     atBadPwdCount,
     atDnsHostName,
-    atAccountExpires,
+    atAccountExpires,              // first 64-bit FileTime
     atBadPasswordTime,
     atLastLogon,
     atLastLogonTimestamp,
     atLastLogoff,
     atLockoutTime,
     atPwdLastSet,
-    atMcsAdmPwdExpirationTime,
-    atWhenCreated,
-    atWhenChanged,
+    atMcsAdmPwdExpirationTime,     // last 64-bit FileTime
+    atWhenCreated,                 // first date/time text
+    atWhenChanged,                 // last date/time text
     atOperatingSystem,
     atOperatingSystemVersion,
     atServicePrincipalName,
@@ -544,6 +558,66 @@ const
     atCommonName, atSurName, atCountryName, atLocalityName, atStateName,
     atStreetAddress, atOrganizationName, atOrganizationUnitName, atGivenName);
 
+  /// how all TLdapAttributeType are actually stored in the LDAP raw value
+  AttrTypeStorage: array[TLdapAttributeType] of TLdapAttributeTypeStorage = (
+    atsAny,                         // atUndefined
+    atsRawUtf8,                     // atDistinguishedName
+    atsRawUtf8,                     // atObjectClass
+    atsRawUtf8,                     // otObjectCategory
+    atsRawUtf8,                     // atAlias
+    atsRawUtf8,                     // atName
+    atsRawUtf8,                     // atCommonName
+    atsRawUtf8,                     // atSurName
+    atsRawUtf8,                     // atGivenName
+    atsRawUtf8,                     // atDisplayName
+    atsRawUtf8,                     // atUserPrincipalName
+    atsIntegerUserAccountControl,   // atUserAccountControl
+    atsRawUtf8,                     // atSAMAccountName
+    atsIntegerSamAccountType,       // atSAMAccountType
+    atsInteger,                     // atAdminCount
+    atsRawUtf8,                     // atDescription
+    atsRawUtf8,                     // atGenerationQualifier
+    atsRawUtf8,                     // atInitials
+    atsRawUtf8,                     // atOrganizationName
+    atsRawUtf8,                     // atOrganizationUnitName
+    atsRawUtf8,                     // atMail
+    atsRawUtf8,                     // atMemberOf
+    atsRawUtf8,                     // atCountryName
+    atsRawUtf8,                     // atLocalityName
+    atsRawUtf8,                     // atStateName
+    atsRawUtf8,                     // atStreetAddress
+    atsRawUtf8,                     // atTelephoneNumber
+    atsRawUtf8,                     // atTitle
+    atsRawUtf8,                     // atSerialNumber
+    atsRawUtf8,                     // atMember
+    atsRawUtf8,                     // atOwner
+    atsIntegerGroupType,            // atGroupType
+    atsInteger,                     // atPrimaryGroupID
+    atsSid,                         // atObjectSid
+    atsGuid,                        // atObjectGuid
+    atsInteger,                     // atLogonCount
+    atsInteger,                     // atBadPwdCount
+    atsRawUtf8,                     // atDnsHostName
+    atsFileTime,                    // atAccountExpires
+    atsFileTime,                    // atBadPasswordTime
+    atsFileTime,                    // atLastLogon
+    atsFileTime,                    // atLastLogonTimestamp
+    atsFileTime,                    // atLastLogoff
+    atsFileTime,                    // atLockoutTime
+    atsFileTime,                    // atPwdLastSet
+    atsFileTime,                    // atMcsAdmPwdExpirationTime
+    atsTextTime,                    // atWhenCreated
+    atsTextTime,                    // atWhenChanged
+    atsRawUtf8,                     // atOperatingSystem
+    atsRawUtf8,                     // atOperatingSystemVersion
+    atsRawUtf8,                     // atServicePrincipalName
+    atsUnicodePwd);                 // atUnicodePwd
+
+  /// the LDAP raw values stored as UTF-8, which do not require any conversion
+  ATS_READABLE = [atsRawUtf8 .. atsIntegerSamAccountType];
+  /// the LDAP raw values stored as integer
+  ATS_INTEGER = [atsInteger .. atsIntegerSamAccountType];
+
 /// recognize our common Attribute Types from their standard NAME text
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
@@ -551,7 +625,7 @@ function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 // - will detect SID, GUID, FileTime and text date/time known fields
 // - if s is not truly UTF-8 encoded, will return its hexadecimal representation
-procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
+procedure AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage);
 
 /// convert a set of common Attribute Types into their array text representation
 // - by design, atUndefined would be excluded from the list
@@ -641,6 +715,7 @@ type
     fAttributeName: RawUtf8;
     fCount: integer;
     fKnownType: TLdapAttributeType;
+    fKnownTypeStorage: TLdapAttributeTypeStorage;
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
@@ -655,7 +730,7 @@ type
     procedure AddFmt(const aValueFmt: RawUtf8; const aValueArgs: array of const;
       Option: TLdapAddOption = aoAlways); 
     /// retrieve a value as human-readable text
-    // - a wrapper around AttributeValueMakeReadable() and the known type
+    // - wraps AttributeValueMakeReadable() and the known storage type
     function GetReadable(index: PtrInt = 0): RawUtf8;
     /// retrieve all values as human-readable text
     function GetAllReadable: TRawUtf8DynArray;
@@ -663,7 +738,7 @@ type
     // - return '' if the index is out of range, or the attribute is void
     function GetRaw(index: PtrInt = 0): RawByteString;
     /// retrieve this attribute value(s) as a variant
-    // - return nil if there is no value (self=nil or Count=0)
+    // - return null if there is no value (self=nil or Count=0)
     // - if there is a single value, return it as a single variant text
     // - if Count > 0, return a TDocVariant array with all texts
     function GetVariant: variant;
@@ -680,6 +755,9 @@ type
     /// the common LDAP Attribute Type corresponding to this AttributeName
     property KnownType: TLdapAttributeType
       read fKnownType;
+    /// the common LDAP Attribute Type Storage corresponding to this AttributeName
+    property KnownTypeStorage: TLdapAttributeTypeStorage
+      read fKnownTypeStorage;
     /// raw direct access to the individual values
     // - note that length(List) = capacity - use Count property instead, and
     // don't iterate on this array as "for u in attribute.List do..."
@@ -690,7 +768,7 @@ type
   TLdapAttributeDynArray = array of TLdapAttribute;
 
   /// list one or several TLdapAttribute
-  // - will use TLdapResultList.fInterning as hashed list of names to minimize
+  // - will use a global TRawUtf8Interning as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
   TLdapAttributeList = class
   private
@@ -2733,27 +2811,35 @@ begin
   result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
 end;
 
-procedure AttributeValueMakeReadable(var s: RawUtf8; lat: TLdapAttributeType);
+procedure AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage);
 var
   ft: QWord;
-  err: integer;
-  ts: TTimeLogBits;
+  guid: TGuid;
+  err: integer absolute guid;
+  ts: TTimeLogBits absolute guid;
 begin
-  // handle the special encoding of our recognized attribute types
-  case lat of
-    atObjectSid:
+  // handle the storage kind of our recognized attribute types
+  case ats of
+    atsRawUtf8, // most used - LDAP v3 requires UTF-8 encoding
+    atsInteger,
+    atsIntegerUserAccountControl,
+    atsIntegerGroupType,
+    atsIntegerSamAccountType:
+      exit; // no need to make any conversion since is true UTF-8 or number
+    atsSid:
       if IsValidRawSid(s) then
       begin
-        s := SidToText(pointer(s));
+        SidToText(pointer(s), s);
         exit;
       end;
-    atObjectGuid:
+    atsGuid:
       if length(s) = SizeOf(TGuid) then
       begin
-        s := ToUtf8(PGuid(s)^); // e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+        guid := PGuid(s)^; // temp copy to avoid issues with s content
+        ToUtf8(guid, s);  // e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
         exit;
       end;
-    atAccountExpires .. atMcsAdmPwdExpirationTime: // 64-bit FileTime
+    atsFileTime: // 64-bit FileTime
       begin
         ft := GetQWord(pointer(s), err);
         if (err = 0) and
@@ -2762,25 +2848,33 @@ begin
           if ft >= $7FFFFFFFFFFFFFFF then
             s := 'Never expires'
           else
-            s := UnixMSTimeToString(WindowsFileTime64ToUnixMSTime(ft));
+          begin
+            ts.FromUnixMSTime(WindowsFileTime64ToUnixMSTime(ft));
+            ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
+          end;
           exit;
         end;
       end;
-    atWhenCreated .. atWhenChanged: // some date/time text
+    atsTextTime: // some date/time text
       begin
         ts.From(pointer(s), length(s) - 3);
         if ts.Value <> 0 then
         begin
-          s := ts.Text({expanded=}true); // normalize as pure ISO-8601
+          ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
           exit;
         end;
       end;
+    atsUnicodePwd:
+      begin
+        s := 'xxxxxxxx'; // anti-forensic measure
+        exit;
+      end;
   end;
-  // fallback to hexa if the input is not valid UTF-8 (as expected with LDAP v3)
+  // atsAny or not expected format: check valid UTF-8, or fallback to hexa
   if IsValidUtf8(s) then
     EnsureRawUtf8(s)
   else
-    s := BinToHexLower(s);
+    BinToHexLowerSelf(RawByteString(s));
 end;
 
 function ToText(Attributes: TLdapAttributeTypes): TRawUtf8DynArray;
@@ -2882,6 +2976,7 @@ begin
   inherited Create;
   fAttributeName := AttrName;
   fKnownType := AttrType;
+  fKnownTypeStorage := AttrTypeStorage[AttrType];
   SetLength(fList, 1); // optimized for a single value (most used case)
 end;
 
