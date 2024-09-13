@@ -2239,36 +2239,42 @@ begin
   DateToIso8601PChar(PUtf8Char(pointer(result)) + 3, True, Year, Month, Day);
 end;
 
+procedure MagicDate(var result: RawUtf8; const iso: RawUtf8);
 var
-  JSON_SQLDATE_MAGIC_TEXT: RawUtf8;
+  l: PtrInt;
+begin
+  l := length(iso);
+  FastSetString(result, l + 3);
+  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC_C;
+  MoveFast(pointer(iso)^, PByteArray(result)^[3], l);
+end;
 
 function DateTimeToSql(DT: TDateTime; WithMS: boolean): RawUtf8;
 begin
   if DT <= 0 then
     result := ''
+  else if frac(DT) = 0 then
+    MagicDate(result, DateToIso8601(DT, true))
+  else if trunc(DT) = 0 then
+    MagicDate(result, TimeToIso8601(DT, true, 'T', WithMS))
   else
-  begin
-    if frac(DT) = 0 then
-      result := JSON_SQLDATE_MAGIC_TEXT + DateToIso8601(DT, true)
-    else if trunc(DT) = 0 then
-      result := JSON_SQLDATE_MAGIC_TEXT + TimeToIso8601(DT, true, 'T', WithMS)
-    else
-      result := JSON_SQLDATE_MAGIC_TEXT + DateTimeToIso8601(DT, true, 'T', WithMS);
-  end;
+    MagicDate(result, DateTimeToIso8601(DT, true, 'T', WithMS));
 end;
 
 function TimeLogToSql(const Timestamp: TTimeLog): RawUtf8;
+var
+  t: TTimeLogBits absolute Timestamp; // circumvent Delphi 2009 bug
 begin
   if Timestamp = 0 then
     result := ''
   else
-    result := JSON_SQLDATE_MAGIC_TEXT + PTimeLogBits(@Timestamp)^.Text(true);
+    MagicDate(result, t.Text(true, 'T'));
 end;
 
 function Iso8601ToSql(const S: RawByteString): RawUtf8;
 begin
   if IsIso8601(pointer(S), length(S)) then
-    result := JSON_SQLDATE_MAGIC_TEXT + S
+    MagicDate(result, S)
   else
     result := '';
 end;
@@ -4190,7 +4196,6 @@ procedure InitializeUnit;
 var
   i, j: PtrInt;
 begin
-  ShortStringToAnsi7String(JSON_SQLDATE_MAGIC_STR, JSON_SQLDATE_MAGIC_TEXT);
   ID_TXT := 'ID'; // avoid reallocation
   ROWID_TXT := 'RowID';
   for j := 1 to high(MAX_SQLFIELDS_INDEX) do
