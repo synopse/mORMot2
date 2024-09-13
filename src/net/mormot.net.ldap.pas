@@ -653,7 +653,7 @@ type
     gtUniversal,
     gtAppBasic,
     gtAppQuery,
-    gtSecurity = 31);
+    gtSecurity);
   TGroupTypes = set of TGroupType;
 
   /// the decoded fields of TLdapUser.userAccountControl
@@ -661,17 +661,17 @@ type
   TUserAccountControl = (
     uacScript,                            //       1
     uacAccountDisable,                    //       2
-    uacHomeDirRequired = 3,               //       8
+    uacHomeDirRequired,                   //       8
     uacLockedOut,                         //      10 = 16
     uacPasswordNotRequired,               //      20 = 32
     uacPasswordCannotChange,              //      40 = 64
     uacPasswordUnencrypted,               //      80 = 128
     uacTempDuplicateAccount,              //     100 = 256
     uacNormalAccount,                     //     200 = 512
-    uacInterDomainTrusted = 11,           //     800 = 2048
+    uacInterDomainTrusted,                //     800 = 2048
     uacWorkstationTrusted,                //    1000 = 4096
     uacServerTrusted,                     //    2000 = 8192
-    uacPasswordDonotExpire = 16,          //   10000 = 65536
+    uacPasswordDoNotExpire,               //   10000 = 65536
     uacLogonAccount,                      //   20000 = 131072
     uacSmartcardRequired,                 //   40000 = 262144
     uacKerberosTrustedForDelegation,      //   80000 = 524288
@@ -846,12 +846,28 @@ type
   end;
 
 /// recognize the integer value stored in a LDAP atSAMAccountType entry as TSamAccountType
-function SamAccountType(const value: RawUtf8): TSamAccountType;
+function SamAccountTypeFromText(const value: RawUtf8): TSamAccountType;
+function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 
 /// convert a TSamAccountType as integer value stored in a LDAP atSAMAccountType entry
-function SamAccountTypeValue(sat: TSamAccountType): RawUtf8;
+function SamAccountTypeValue(sat: TSamAccountType): integer;
+
+/// recognize the integer value stored in a LDAP atGroupType entry
+function GroupTypesFromText(const value: RawUtf8): TGroupTypes;
+function GroupTypesFromInteger(value: integer): TGroupTypes;
+
+/// compute the integer value stored in a LDAP atGroupType entry
+function GroupTypesValue(gt: TGroupTypes): integer;
+
+/// recognize the integer value stored in a LDAP atUserAccountControl entry
+function UserAccountControlsFromText(const value: RawUtf8): TUserAccountControls;
+function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
+
+/// compute the integer value stored in a LDAP atUserAccountControl entry
+function UserAccountControlsValue(uac: TUserAccountControls): integer;
 
 function ToText(sat: TSamAccountType): PShortString; overload;
+procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
 
 /// compute a TLdapClient.Search filter for a given account
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
@@ -2914,28 +2930,121 @@ const
     $40000000,  // satAppBasicGroup
     $40000001); // satAppQueryGroup
 
-function SamAccountType(const value: RawUtf8): TSamAccountType;
-var
-  sat: cardinal;
+  // see https://ldapwiki.com/wiki/Wiki.jsp?page=GroupType
+  GT_VALUE: array[TGroupType] of integer = (
+    1, 2, 4, 8, 16, 32, integer($80000000));
+
+  // see https://ldapwiki.com/wiki/Wiki.jsp?page=userAccountControl
+  UAC_VALUE: array[TUserAccountControl] of integer = (
+    1, 2, 8, 16, 32, 64, 128, 256, 512, 2048, 4096, 8192, 65536,
+    131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216,
+    33554432, 67108864);
+
+function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 begin
-  if ToCardinal(value, sat) then
-    result := TSamAccountType(IntegerScanIndex(
-      @AT_VALUE[satGroup], length(AT_VALUE) - 1, sat) + 1)
+  result := TSamAccountType(IntegerScanIndex(
+    @AT_VALUE[succ(low(result))], length(AT_VALUE) - 1, value) + 1)
+end;
+
+function SamAccountTypeFromText(const value: RawUtf8): TSamAccountType;
+var
+  c: cardinal;
+begin
+  if ToCardinal(value, c) then
+    result := SamAccountTypeFromInteger(c)
   else
     result := satUnknown;
 end;
 
-function SamAccountTypeValue(sat: TSamAccountType): RawUtf8;
+function SamAccountTypeValue(sat: TSamAccountType): integer;
 begin
-  if sat = satUnknown then
-    result := ''
-  else
-    UInt32ToUtf8(AT_VALUE[sat], result);
+  result := AT_VALUE[sat];
+end;
+
+function GroupTypesFromInteger(value: integer): TGroupTypes;
+var
+  g: TGroupType;
+  f: integer;
+begin
+  result := [];
+  if value <> 0 then
+    for g := low(g) to high(g) do
+    begin
+      f := GT_VALUE[g];
+      if value and f = 0 then
+        continue;
+      include(result, g);
+      dec(value, f);
+      if value = 0 then
+        break;
+    end;
+end;
+
+function GroupTypesFromText(const value: RawUtf8): TGroupTypes;
+var
+  v: integer;
+begin
+  result := [];
+  if ToInteger(value, v) then
+    result := GroupTypesFromInteger(v);
+end;
+
+function GroupTypesValue(gt: TGroupTypes): integer;
+var
+  g: TGroupType;
+begin
+  result := 0;
+  for g := low(g) to high(g) do
+    if g in gt then
+      result := result or GT_VALUE[g];
+end;
+
+function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
+var
+  uac: TUserAccountControl;
+  f: integer;
+begin
+  result := [];
+  if value <> 0 then
+    for uac := low(uac) to high(uac) do
+    begin
+      f := UAC_VALUE[uac];
+      if value and f = 0 then
+        continue;
+      include(result, uac);
+      dec(value, f);
+      if value = 0 then
+        break;
+    end;
+end;
+
+function UserAccountControlsFromText(const value: RawUtf8): TUserAccountControls;
+var
+  v: integer;
+begin
+  result := [];
+  if ToInteger(value, v) then
+    result := UserAccountControlsFromInteger(v);
+end;
+
+function UserAccountControlsValue(uac: TUserAccountControls): integer;
+var
+  u: TUserAccountControl;
+begin
+  result := 0;
+  for u := low(u) to high(u) do
+    if u in uac then
+      result := result or UAC_VALUE[u];
 end;
 
 function ToText(sat: TSamAccountType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSamAccountType), ord(sat));
+end;
+
+procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
+begin
+  TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSamAccountType), ord(sat)), text);
 end;
 
 var
@@ -3274,32 +3383,22 @@ end;
 
 function TLdapAttributeList.AccountType: TSamAccountType;
 begin
-  result := SamAccountType(Get(atSAMAccountType));
+  result := SamAccountTypeFromText(Get(atSAMAccountType));
 end;
 
 function TLdapAttributeList.GroupTypes: TGroupTypes;
-var
-  v: cardinal;
 begin
-  if ToCardinal(Get(atGroupType), v) then
-    result := TGroupTypes(v)
-  else
-    result := [];
+  result := GroupTypesFromText(Get(atGroupType));
 end;
 
 function TLdapAttributeList.GetUserAccountControl: TUserAccountControls;
-var
-  uac: integer;
 begin
-  if ToInteger(Get(atUserAccountControl), uac) then
-    result := TUserAccountControls(uac)
-  else
-    result := [];
+  result := UserAccountControlsFromText(Get(atUserAccountControl));
 end;
 
 procedure TLdapAttributeList.SetUserAccountControl(Value: TUserAccountControls);
 begin
-  Add(atUserAccountControl, ToUtf8(integer(Value)), aoReplaceValue);
+  Add(atUserAccountControl, ToUtf8(UserAccountControlsValue(Value)), aoReplaceValue);
 end;
 
 
@@ -5037,7 +5136,8 @@ function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satMachineAccount, integer(FilterUac), integer(UnFilterUac),
+  GetByAccountType(satMachineAccount,
+    UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
@@ -5164,7 +5264,8 @@ function TLdapClient.GetGroups(FilterUac, UnFilterUac: TGroupTypes;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satGroup, integer(FilterUac), integer(UnFilterUac),
+  GetByAccountType(satGroup,
+    GroupTypesValue(FilterUac), GroupTypesValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
@@ -5172,7 +5273,8 @@ function TLdapClient.GetUsers(FilterUac, UnFilterUac: TUserAccountControls;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
 begin
-  GetByAccountType(satUserAccount, integer(FilterUac), integer(UnFilterUac),
+  GetByAccountType(satUserAccount,
+    UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
@@ -5756,7 +5858,6 @@ end;
 
 initialization
   InitializeUnit;
-  assert((1 shl ord(uacPartialSecretsRodc)) = $04000000);
 
 end.
 
