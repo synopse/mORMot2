@@ -779,7 +779,7 @@ type
   /// pointer to a memory structure for direct access to a TTimeLog type value
   PTimeLogBits = ^TTimeLogBits;
 
-  /// internal memory structure for direct access to a TTimeLog type value
+  /// internal memory structure for direct access to a 64-bit TTimeLog type value
   // - most of the time, you should not use this object, but higher level
   // TimeLogFromDateTime/TimeLogToDateTime/TimeLogNow/Iso8601ToTimeLog functions
   // - since TTimeLogBits.Value is bit-oriented, you can't just add or substract
@@ -805,10 +805,13 @@ type
     /// extract the date and time content in Value into individual values
     procedure Expand(out Date: TSynSystemTime);
     /// convert to Iso-8601 encoded text, truncated to date/time only if needed
-    function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUtf8; overload;
+    function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
     /// convert to Iso-8601 encoded text, truncated to date/time only if needed
-    function Text(Dest: PUtf8Char; Expanded: boolean;
-      FirstTimeChar: AnsiChar = 'T'; QuoteChar: AnsiChar = #0): PUtf8Char; overload;
+    procedure SetText(var Dest: RawUtf8; Expanded: boolean; FirstTimeChar: AnsiChar = 'T');
+    /// convert to Iso-8601 encoded text, truncated to date/time only if needed
+    function FillText(Dest: PUtf8Char; Expanded: boolean;
+      FirstTimeChar: AnsiChar = 'T'; QuoteChar: AnsiChar = #0): PUtf8Char;
     /// convert to Iso-8601 encoded text with date and time part
     // - never truncate to date/time nor return '' as Text() does
     function FullText(Expanded: boolean; FirstTimeChar: AnsiChar = 'T';
@@ -3247,7 +3250,7 @@ begin
   result := ToUnixTime * MilliSecsPerSec;
 end;
 
-function TTimeLogBits.Text(Dest: PUtf8Char; Expanded: boolean;
+function TTimeLogBits.FillText(Dest: PUtf8Char; Expanded: boolean;
   FirstTimeChar, QuoteChar: AnsiChar): PUtf8Char;
 var
   lo: PtrUInt;
@@ -3303,14 +3306,19 @@ begin
 end;
 
 function TTimeLogBits.Text(Expanded: boolean; FirstTimeChar: AnsiChar): RawUtf8;
+begin
+  SetText(result, Expanded, FirstTimeChar);
+end;
+
+procedure TTimeLogBits.SetText(var Dest: RawUtf8; Expanded: boolean; FirstTimeChar: AnsiChar);
 var
   tmp: array[0..31] of AnsiChar;
 begin
   if Value = 0 then
-    result := ''
+    FastAssignNew(Dest)
   else
-    FastSetString(result, @tmp,
-      Text(@tmp, Expanded, FirstTimeChar) - PUtf8Char(@tmp));
+    FastSetString(Dest, @tmp,
+      FillText(@tmp, Expanded, FirstTimeChar) - PUtf8Char(@tmp));
 end;
 
 function TTimeLogBits.FullText(Dest: PUtf8Char; Expanded: boolean;
@@ -3527,7 +3535,7 @@ procedure TTextDateWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
 begin
   if BEnd - B <= 31 then
     FlushToStream;
-  B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
+  B := PTimeLogBits(Value)^.FillText(B + 1, true, 'T', QuoteChar) - 1;
 end;
 
 procedure TTextDateWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
