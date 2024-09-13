@@ -5675,7 +5675,7 @@ begin
           oftUnixMSTime: // seconds resolution is enough for value search
             ValTimeLog.FromUnixMSTime(Val64);
         end;
-        ValTimeLog.Text(tmp{%H-}, true, ' ')^ := #0;
+        ValTimeLog.FillText(tmp{%H-}, true, ' ')^ := #0;
         if FindAnsi(tmp, Search) then
           exit;
       end;

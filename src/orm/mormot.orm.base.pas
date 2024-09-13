@@ -7955,7 +7955,7 @@ begin
   f := fFieldIndexID;
   if f < 0 then // no ID column available
     exit;
-  n := GetBitsCount(Bits, fRowCount);
+  n := GetBitsCount(Bits, {bits=}fRowCount);
   if n = 0 then
     exit;
   SetLength(IDs, n);
