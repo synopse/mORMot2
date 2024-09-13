@@ -1204,17 +1204,17 @@ end;
 
 function SearchRecToWindowsTime(const F: TSearchRec): integer;
 begin
-  result := DateTimeToWindowsFileTime(FileDateToDateTime(F.Time));
+  result := DateTimeToWindowsFileTime(FileDateToDateTime(F.{%H-}Time));
 end;
 
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
-  result := FileDateToDateTime(F.Time);
+  result := FileDateToDateTime(F.{%H-}Time);
 end;
 
 function SearchRecToUnixTimeUtc(const F: TSearchRec): TUnixTime;
 begin
-  result := F.Time; // raw POSIX FileDate is already in UTC seconds
+  result := F.{%H-}Time; // raw POSIX FileDate is already in UTC seconds
 end;
 
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
