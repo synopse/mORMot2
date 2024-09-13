@@ -683,6 +683,8 @@ var
   gts: TGroupTypes;
   ua: TUserAccountControl;
   uas: TUserAccountControls;
+  sf: TSystemFlag;
+  sfs: TSystemFlags;
   l: TLdapClientSettings;
   one: TLdapClient;
   utc1, utc2: TDateTime;
@@ -831,6 +833,18 @@ begin
   begin
     include(uas, ua);
     Check(UserAccountControlsFromInteger(UserAccountControlsValue(uas)) = uas);
+  end;
+  for sf := low(sf) to high(sf) do
+  begin
+    sfs := [sf];
+    Check(SystemFlagsFromInteger(SystemFlagsValue(sfs)) = sfs);
+  end;
+  sfs := [];
+  Check(SystemFlagsValue(sfs) = 0);
+  for sf := low(sf) to high(sf) do
+  begin
+    include(sfs, sf);
+    Check(SystemFlagsFromInteger(SystemFlagsValue(sfs)) = sfs);
   end;
   // validate LDAP resultset and LDIF content
   rl := TLdapResultList.Create;

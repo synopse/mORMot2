@@ -470,6 +470,7 @@ type
     atsRawUtf8,
     atsInteger,
     atsIntegerUserAccountControl,
+    atsIntegerSystemFlags,
     atsIntegerGroupType,
     atsIntegerSamAccountType,
     atsFileTime,
@@ -495,6 +496,7 @@ type
     atDisplayName,
     atUserPrincipalName,
     atUserAccountControl,
+    atSystemFlags,
     atSAMAccountName,
     atSAMAccountType,
     atAdminCount,
@@ -572,6 +574,7 @@ const
     atsRawUtf8,                     // atDisplayName
     atsRawUtf8,                     // atUserPrincipalName
     atsIntegerUserAccountControl,   // atUserAccountControl
+    atsIntegerSystemFlags,          // atSystemFlags
     atsRawUtf8,                     // atSAMAccountName
     atsIntegerSamAccountType,       // atSAMAccountType
     atsInteger,                     // atAdminCount
@@ -696,6 +699,22 @@ type
     satTrustAccount,
     satAppBasicGroup,
     satAppQueryGroup);
+
+  /// known systemFlags values
+  TSystemFlag = (
+    sfAttrNotReplicated,          // 1
+    sfAttrReqPartialSetMember,    // 2
+    sfAttrIsConstructed,          // 4
+    sfAttrIsOperational,          // 8
+    sfSchemaBaseObject,           // 10
+    sfAttrIsRdn,                  // 20
+    sfDomainDisallowMove,         // 400000
+    sfDomainDisallowRename,       // 800000
+    sfConfigAllowLimitedMove,     // 1000000
+    sfConfigAllowMove,            // 2000000
+    sfConfigAllowRename,          // 4000000
+    sfConfigAllowDelete);         // 8000000
+  TSystemFlags = set of TSystemFlag;
 
   /// customize the TLdapAttributeList.Add(name, value) process
   // - default aoAlways will append the name/value pair to the existing content
@@ -874,6 +893,13 @@ function UserAccountControlsFromInteger(value: integer): TUserAccountControls;
 
 /// compute the integer value stored in a LDAP atUserAccountControl entry
 function UserAccountControlsValue(uac: TUserAccountControls): integer;
+
+/// recognize the integer value stored in a LDAP atSystemFlags entry
+function SystemFlagsFromInteger(value: integer): TSystemFlags;
+function SystemFlagsFromText(const value: RawUtf8): TSystemFlags;
+
+/// compute the integer value stored in a LDAP atSystemFlags entry
+function SystemFlagsValue(sf: TSystemFlags): integer;
 
 function ToText(sat: TSamAccountType): PShortString; overload;
 procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
@@ -2731,6 +2757,7 @@ const
     'displayName',                 // atDisplayName
     'userPrincipalName',           // atUserPrincipalName
     'userAccountControl',          // atUserAccountControl
+    'systemFlags',                 // atSystemFlags
     'sAMAccountName',              // atSAMAccountName
     'sAMAccountType',              // atSAMAccountType
     'adminCount',                  // atAdminCount
@@ -2849,6 +2876,7 @@ begin
     atsRawUtf8, // most used - LDAP v3 requires UTF-8 encoding
     atsInteger,
     atsIntegerUserAccountControl,
+    atsIntegerSystemFlags,
     atsIntegerGroupType,
     atsIntegerSamAccountType:
       exit; // no need to make any conversion since is true UTF-8 or number
@@ -2949,6 +2977,10 @@ const
     131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216,
     33554432, 67108864);
 
+  // see https://ldapwiki.com/wiki/Wiki.jsp?page=X-SYSTEMFLAGS
+  SF_VALUE: array[TSystemFlag] of integer = (
+    1, 2, 4, 8, 16, 32, 64, 4194304, 8388608, 16777216, 33554432, 67108864);
+
 function SamAccountTypeFromInteger(value: cardinal): TSamAccountType;
 begin
   result := TSamAccountType(IntegerScanIndex(
@@ -3044,6 +3076,44 @@ begin
   for u := low(u) to high(u) do
     if u in uac then
       result := result or UAC_VALUE[u];
+end;
+
+function SystemFlagsFromInteger(value: integer): TSystemFlags;
+var
+  sf: TSystemFlag;
+  f: integer;
+begin
+  result := [];
+  if value <> 0 then
+    for sf := low(sf) to high(sf) do
+    begin
+      f := SF_VALUE[sf];
+      if value and f = 0 then
+        continue;
+      include(result, sf);
+      dec(value, f);
+      if value = 0 then
+        break;
+    end;
+end;
+
+function SystemFlagsFromText(const value: RawUtf8): TSystemFlags;
+var
+  v: integer;
+begin
+  result := [];
+  if ToInteger(value, v) then
+    result := SystemFlagsFromInteger(v);
+end;
+
+function SystemFlagsValue(sf: TSystemFlags): integer;
+var
+  f: TSystemFlag;
+begin
+  result := 0;
+  for f := low(f) to high(f) do
+    if f in sf then
+      result := result or SF_VALUE[f];
 end;
 
 function ToText(sat: TSamAccountType): PShortString;
@@ -3194,6 +3264,7 @@ var
   uac: TUserAccountControls;
   gt: TGroupTypes;
   sat: TSamAccountType;
+  sf: TSystemFlags;
 begin
   case fKnownTypeStorage of
     atsAny,
@@ -3225,6 +3296,14 @@ begin
         uac := UserAccountControlsFromInteger(i);
         TDocVariantData(v).InitArrayFromSet(
           TypeInfo(TUserAccountControls), uac, JSON_FAST, {trimmed=}true);
+        exit;
+      end;
+    atsIntegerSystemFlags:
+      if ToInteger(s, i) then
+      begin
+        sf := SystemFlagsFromInteger(i);
+        TDocVariantData(v).InitArrayFromSet(
+          TypeInfo(TSystemFlags), sf, JSON_FAST, {trimmed=}true);
         exit;
       end;
     atsIntegerGroupType:
