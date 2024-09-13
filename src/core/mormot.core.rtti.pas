@@ -599,8 +599,8 @@ type
     /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
-    /// compute how many bytes (1, 2, 4) this type will use to be stored as a set
-    // - consider using TRttiInfo.SetEnumSize if ISFPC32 conditional is defined
+    /// compute how many bytes (1, 2, 4, 8) this type will use to be stored as a set
+    // - if ISFPC32 conditional is defined, will execute in O(1)
     function SizeInStorageAsSet: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// store an enumeration value from its ordinal representation
@@ -842,8 +842,8 @@ type
       out Min, Max: integer): PRttiEnumType; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// for rkSet: in how many bytes this type is stored
-    // - is very efficient on latest FPC only - i.e. ifdef ISFPC32
-    function SetEnumSize: PtrInt; {$ifdef ISFPC32} inline; {$endif}
+    function SetEnumSize: PtrInt;
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// compute in how many bytes this type is stored
     // - will use Kind (and RttiOrd/RttiFloat) to return the exact value
     function RttiSize: PtrInt;
@@ -3273,6 +3273,7 @@ function TRttiEnumType.SizeInStorageAsSet: integer;
 begin
   if @self <> nil then
   begin
+    // PTypeData(@self)^.SetSize on ISFPC32 fails from base enum type
     result := MaxValue;
     if result < 8 then
       result := SizeOf(byte)
@@ -3645,12 +3646,11 @@ begin
   result := TRttiFloat(GetTypeData(@self)^.FloatType);
 end;
 
-{$ifndef ISFPC32}
 function TRttiInfo.SetEnumSize: PtrInt;
 begin
-  result := SetEnumType^.SizeInStorageAsSet;
+  // PTypeData(@self)^.SetSize on ISFPC32 fails fails from base enum type
+  result := SetEnumType^.SizeInStorageAsSet; // compute from MaxValue
 end;
-{$endif ISFPC32}
 
 function TRttiInfo.DynArrayItemSize: PtrInt;
 begin

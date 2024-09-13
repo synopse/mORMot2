@@ -388,13 +388,6 @@ begin
     result := GetTypeData(@self)^.RecSize;
 end;
 
-{$ifdef ISFPC32}
-function TRttiInfo.SetEnumSize: PtrInt;
-begin
-  result := GetTypeData(@self)^.SetSize; // newer FPC have direct size field :)
-end;
-{$endif ISFPC32}
-
 {$ifdef FPC_NEWRTTI}
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
