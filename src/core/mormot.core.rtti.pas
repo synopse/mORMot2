@@ -3373,7 +3373,7 @@ begin
   for i := 0 to max do
   begin
     if TrimLeftLowerCase then
-      result[i] := TrimLeftLowerCaseShort(V)
+      TrimLeftLowerCaseShort(V, result[i])
     else
       ShortStringToAnsi7String(V^, result[i]);
     inc(PByte(V), length(V^) + 1);
@@ -3472,7 +3472,7 @@ end;
 
 function TRttiEnumType.GetEnumNameTrimed(const Value): RawUtf8;
 begin
-  result := TrimLeftLowerCaseShort(GetEnumName(Value));
+  TrimLeftLowerCaseShort(GetEnumName(Value), result);
 end;
 
 function TRttiEnumType.GetSetName(const value; trimmed: boolean;
@@ -5631,7 +5631,7 @@ end;
 
 function GetEnumNameTrimed(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
 begin
-  result := TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex));
+  TrimLeftLowerCaseShort(GetEnumName(aTypeInfo, aIndex), result);
 end;
 
 function GetEnumNameUnCamelCase(aTypeInfo: PRttiInfo; aIndex: integer): RawUtf8;
@@ -5670,7 +5670,7 @@ begin
     p := info^.NameList;
     for i := info^.MinValue to info^.MaxValue do
     begin
-      aDest^ := TrimLeftLowerCaseShort(p);
+      TrimLeftLowerCaseShort(p, aDest^);
       p := @PByteArray(p)^[ord(p^[0]) + 1];
       inc(aDest);
     end;

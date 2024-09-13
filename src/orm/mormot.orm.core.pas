@@ -5639,8 +5639,8 @@ begin
     P := PRttiEnumType(info.ContentTypeInfo)^.NameList;
     for i := 0 to PRttiEnumType(info.ContentTypeInfo)^.MaxValue do
     begin
-      EnumValue := TrimLeftLowerCaseShort(P);
-      GetCaptionFromPCharLen(pointer(EnumValue), s);
+      TrimLeftLowerCaseShort(P, EnumValue);
+      GetCaptionFromPCharLen(pointer(EnumValue), s); // translate
       StringToUtf8(s, EnumValue);
       if ((Lang <> sndxNone) and Soundex.Utf8(pointer(EnumValue))) or
          ((Lang = sndxNone) and FindUtf8(pointer(EnumValue), Search)) then

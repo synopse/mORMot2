@@ -1989,7 +1989,11 @@ function TrimLeftLowerCase(const V: RawUtf8): PUtf8Char;
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return an RawUtf8 string: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
-function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
+function TrimLeftLowerCaseShort(V: PShortString): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// trim first lowercase chars ('otDone' will return 'Done' e.g.)
+procedure TrimLeftLowerCaseShort(V: PShortString; var U: RawUtf8); overload;
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
@@ -8464,22 +8468,30 @@ begin
 end;
 
 function TrimLeftLowerCaseShort(V: PShortString): RawUtf8;
+begin
+  TrimLeftLowerCaseShort(V, result);
+end;
+
+procedure TrimLeftLowerCaseShort(V: PShortString; var U: RawUtf8);
 var
   p: PAnsiChar;
   len: PtrInt;
 begin
   len := length(V^);
   p := @V^[1];
-  while (len > 0) and
-        (p^ in ['a'..'z']) do
-  begin
-    inc(p);
-    dec(len);
-  end;
-  if len = 0 then
-    FastSetString(result, @V^[1], length(V^))
-  else
-    FastSetString(result, p, len);
+  if len > 0 then
+    while p^ in ['a'..'z'] do
+    begin
+      inc(p);
+      dec(len);
+      if len = 0 then
+      begin
+        p := @V^[1]; // nothing to trim
+        len := length(V^);
+        break;
+      end;
+    end;
+  FastSetString(U, p, len);
 end;
 
 procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString;
