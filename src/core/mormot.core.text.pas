@@ -681,6 +681,9 @@ type
     procedure Add4(Value: PtrUInt);
     /// append a time period, specified in micro seconds, in 00.000.000 TSynLog format
     procedure AddMicroSec(MicroSec: cardinal);
+    /// append an array of RawUtf8 as CSV
+    procedure AddCsvStrings(const Values: array of RawUtf8;
+      const Sep: RawUtf8 = ','; HighValues: PtrInt = -1; Reverse: boolean = false);
     /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer);
     /// append an array of doubles as CSV
@@ -4331,6 +4334,24 @@ begin
   AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
 end;
 
+procedure TTextWriter.AddShort(Text: PUtf8Char; TextLen: PtrInt);
+begin
+  if TextLen <= 0 then
+    exit;
+  if BEnd - B <= TextLen then
+    FlushToStream;
+  MoveFast(Text^, B[1], TextLen);
+  inc(B, TextLen);
+end;
+
+procedure TTextWriter.AddShort(const Text: ShortString);
+begin
+  if BEnd - B <= 255 then
+    FlushToStream;
+  MoveFast(Text[1], B[1], ord(Text[0]));
+  inc(B, ord(Text[0]));
+end;
+
 procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
 var
   tmp: ShortString;
@@ -4508,6 +4529,34 @@ begin
     MicroSec := W[MicroSec];
   PWord(B)^ := MicroSec;
   inc(B, 9);
+end;
+
+procedure TTextWriter.AddCsvStrings(const Values: array of RawUtf8;
+  const Sep: RawUtf8; HighValues: PtrInt; Reverse: boolean);
+var
+  i: PtrInt;
+begin
+  if HighValues < 0 then
+    HighValues := high(Values);
+  if HighValues < 0 then
+    exit;
+  i := 0;
+  if Reverse then
+  begin
+    i := HighValues;
+    HighValues := 0;
+  end;
+  repeat
+    AddString(Values[i]); // fast enough
+    if i = HighValues then
+      break;
+    if Sep <> '' then
+      AddShort(pointer(Sep), PStrLen(PtrInt(Sep) - _STRLEN)^);
+    if Reverse then
+      dec(i)
+    else
+      inc(i);
+  until false;
 end;
 
 procedure TTextWriter.AddCsvInteger(const Integers: array of integer);
@@ -4844,24 +4893,6 @@ begin
   end;
   if SepChar <> #0 then
     AddDirect(SepChar);
-end;
-
-procedure TTextWriter.AddShort(Text: PUtf8Char; TextLen: PtrInt);
-begin
-  if TextLen <= 0 then
-    exit;
-  if BEnd - B <= TextLen then
-    FlushToStream;
-  MoveFast(Text^, B[1], TextLen);
-  inc(B, TextLen);
-end;
-
-procedure TTextWriter.AddShort(const Text: ShortString);
-begin
-  if BEnd - B <= 255 then
-    FlushToStream;
-  MoveFast(Text[1], B[1], ord(Text[0]));
-  inc(B, ord(Text[0]));
 end;
 
 procedure TTextWriter.AddLine(const Text: ShortString);
