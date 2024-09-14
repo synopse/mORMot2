@@ -218,8 +218,8 @@ procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
 function DNToCN(const DN: RawUtf8): RawUtf8;
 
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
-procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
-  ValueEscapeCN: boolean = false);
+function ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
+  ValueEscapeCN: boolean = false; NoRaise: boolean = false): boolean;
 
 const
   // LDAP result codes
@@ -360,6 +360,9 @@ const
   ASN1_OID_WHOAMI       = '1.3.6.1.4.1.4203.1.11.3';
 
 type
+  /// exception class raised by this unit
+  ELdap = class(ESynException);
+
   /// define possible operations for LDAP MODIFY operations
   TLdapModifyOp = (
     lmoAdd,
@@ -1008,8 +1011,6 @@ type
 { **************** LDAP Client Class }
 
 type
-  ELdap = class(ESynException);
-
   /// well-known LDAP Objects, as defined from their GUID by Microsoft
   TLdapKnownObject = (
     lkoComputers,
@@ -2301,13 +2302,14 @@ end;
 
 { **************** LDAP Protocol Definitions }
 
-procedure ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
-  ValueEscapeCN: boolean);
+function ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
+  ValueEscapeCN, NoRaise: boolean): boolean;
 var
   p: PUtf8Char;
   kind, value: RawUtf8;
   dcn, oun, cnn: integer;
 begin
+  result := false;
   p := pointer(DN);
   if p = nil then
     exit;
@@ -2319,12 +2321,15 @@ begin
     GetNextItemTrimedEscaped(p, ',', '\', value);
     if (kind = '') or
        (value = '') then
-      ELdap.RaiseUtf8('ParsDN(%): invalid Distinguished Name', [DN]);
+      if NoRaise then
+        exit
+      else
+        ELdap.RaiseUtf8('ParseDN(%): invalid Distinguished Name', [DN]);
     if not PropNameValid(pointer(value)) then // simple alphanum is just fine
     begin
       value := LdapUnescape(value); // may need some (un)escape
       if ValueEscapeCN then
-        value := EscapeChar(value , LDAP_CN, '\'); // inlined LdapEscapeCN()
+        value := EscapeChar(value, LDAP_CN, '\'); // inlined LdapEscapeCN()
     end;
     case PCardinal(kind)^ and $ffdfdf of
       ord('D') + ord('C') shl 8:
@@ -2333,6 +2338,11 @@ begin
         AddRawUtf8(ou, oun, value);
       ord('C') + ord('N') shl 8:
         AddRawUtf8(cn, cnn, value);
+    else
+      if NoRaise then
+        exit
+      else
+        ELdap.RaiseUtf8('ParseDN(%): unexpected %= field', [DN, kind]);
     end;
   until p = nil;
   if dc <> nil then
@@ -2341,6 +2351,30 @@ begin
     DynArrayFakeLength(ou, oun);
   if cn <> nil then
     DynArrayFakeLength(cn, cnn);
+  result := true;
+end;
+
+function DNsToCN(const dc, ou, cn: TRawUtf8DynArray): RawUtf8;
+var
+  w: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  w := TTextWriter.CreateOwnedStream(tmp);
+  try
+    w.AddCsvStrings(dc, '.', -1, {reverse=}false);
+    w.AddDirect('/');
+    if ou <> nil then
+      w.AddCsvStrings(ou, '/', -1, {reverse=}true);
+    if cn <> nil then
+    begin
+      if ou <> nil then
+        w.AddDirect('/');
+      w.AddCsvStrings(cn, '/', -1, {reverse=}true);
+    end;
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
 end;
 
 function DNToCN(const DN: RawUtf8): RawUtf8;
@@ -2351,11 +2385,7 @@ begin
   if DN = '' then
     exit;
   ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true);
-  result := RawUtf8ArrayToCsv(dc, '.', -1, {reverse=}false);
-  if ou <> nil then
-    Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(ou, '/', -1, {reverse=}true));
-  if cn <> nil then
-    Append(result, RawUtf8('/'), RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true));
+  result := DNsToCN(dc, ou, cn);
 end;
 
 function RawLdapErrorString(ErrorCode: integer): RawUtf8;
@@ -3131,7 +3161,7 @@ begin
 end;
 
 var
-  // traditionnally, computer sAMAccountName ends with $ on computers
+  // traditionally, computer sAMAccountName ends with $
   MACHINE_CHAR: array[boolean] of string[1] = ('', '$');
 
 function InfoFilter(AccountType: TSamAccountType; const AccountName,
