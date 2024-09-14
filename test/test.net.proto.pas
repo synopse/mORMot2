@@ -756,6 +756,7 @@ begin
     'OU=d..zaf(fds )da\,z \"\"((''\\/ df\3D\3Dez,OU=test_wapt,OU=computers,' +
     'OU=tranquilit,DC=ad,DC=tranquil,DC=it'),
     'ad.tranquil.it/tranquilit/computers/test_wapt/d\.\.zaf(fds )da,z ""((''\\\/ df==ez');
+  CheckEqual(DNToCN('cn=foo, ou=bar'), '/bar/foo');
   // validate LDAP escape/unescape
   for c := 0 to 200 do
   begin
@@ -852,6 +853,7 @@ begin
     CheckEqual(rl.Dump({noTime=}true), 'results: 0'#13#10);
     CheckEqual(rl.ExportToLdifContent,
       'version: 1'#$0A'# total number of entries: 0'#$0A);
+    CheckEqual(rl.GetJson, '{}');
     r := rl.Add;
     v := 'John E Doxx';
     PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute (Delphi)
@@ -860,6 +862,14 @@ begin
     r.Attributes.AddPairs(['cn', 'John Doe',
                            'cn', v,
                            'sn', 'Doe']);
+    //writeln(rl.GetJson([]));
+    CheckHash(rl.GetJson([]), $A33AF44F);
+    CheckHash(rl.GetJson([roNoObjectName]), $6A4853FA);
+    CheckHash(rl.GetJson([roCanonicalNameAtRoot]), $39E6602D);
+    CheckHash(rl.GetJson([roObjectNameAtRoot]), $336A53E4);
+    CheckHash(rl.GetJson([roCommonNameAtRoot]), $0565ED3D);
+    CheckHash(rl.GetJson([roObjectNameWithoutDCAtRoot, roNoObjectName]), $F41233F2);
+    CheckHash(rl.GetJson([roNoObjectName]), $6A4853FA);
     CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
     CheckHash(rl.ExportToLdifContent, $E2272C14, 'hashLdif');
   finally
