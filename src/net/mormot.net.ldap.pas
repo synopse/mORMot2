@@ -1004,6 +1004,14 @@ type
     // - as called by TLdapResultList.GetVariant and TLdapClient.SearchAll
     procedure AppendTo(var Dvo: TDocVariantData; Options: TLdapResultOptions;
       const ObjectAttributeField: RawUtf8);
+    /// export all results as a TDocVariant object variant
+    function GetVariant(Options: TLdapResultOptions = [];
+      const ObjectAttributeField: RawUtf8 = '*'): variant;
+    /// export all results as a JSON object
+    // - use a transient TDocVariant for the conversion
+    function GetJson(Options: TLdapResultOptions = [];
+      const ObjectAttributeField: RawUtf8 = '*';
+      Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// export all results in the RFC 2234 ldif-content output
     function ExportToLdifContent: RawUtf8;
     /// dump the result of a LDAP search into human readable form
@@ -3979,6 +3987,23 @@ begin
       v^.AddValue(ObjectAttributeField, variant(a), {owned=}true);
     a.Clear; // mandatory to prepare the next a.Init in this loop
   end;
+end;
+
+function TLdapResultList.GetVariant(Options: TLdapResultOptions;
+  const ObjectAttributeField: RawUtf8): variant;
+begin
+  VarClear(result);
+  TDocVariantData(result).Init(mNameValue, dvObject); // case sensitive names
+  AppendTo(TDocVariantData(result), Options, ObjectAttributeField);
+end;
+
+function TLdapResultList.GetJson(Options: TLdapResultOptions;
+  const ObjectAttributeField: RawUtf8; Format: TTextWriterJsonFormat): RawUtf8;
+var
+  v: variant;
+begin
+  v := GetVariant(Options, ObjectAttributeField);
+  DocVariantType.ToJson(@v, result, '', '', Format);
 end;
 
 
