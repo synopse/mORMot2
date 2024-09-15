@@ -2229,7 +2229,11 @@ begin
         fAuthDigestAlgo := daMD5_Sess;
       end;
     wraNegotiate:
+      {$ifdef DOMAINRESTAUTH}
       fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
+      {$else}
+      EHttpSocket.RaiseUtf8('%.Open: unsupported wraNegotiate', [self]);
+      {$endif DOMAINRESTAUTH}
   end;
   TLS := fExtendedOptions.TLS;
   pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
