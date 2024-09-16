@@ -93,7 +93,7 @@ begin
   dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
   p.DestFile := c.ParamS('&output',
     'destination #filename or existing foldername', dest);
-  p.Silent := c.Option('&silent, 'generate no console output');
+  p.Silent := c.Option('&silent', 'generate no console output');
   p.NoResume := c.Option('&noresume',
      'disable auto-resume of interrupted partial download');
   p.Cache := c.Option('&cache', 'enable local Cache in --cachePath');
