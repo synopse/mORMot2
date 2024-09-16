@@ -888,12 +888,16 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a value as human-readable text
     // - wraps AttributeValueMakeReadable() and the known storage type
-    function GetReadable(index: PtrInt = 0): RawUtf8;
+    function GetReadable(index: PtrInt = 0): RawUtf8; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve a value as human-readable text
+    procedure GetReadable(index: PtrInt; var Value: RawUtf8); overload;
     /// retrieve all values as human-readable text
     function GetAllReadable: TRawUtf8DynArray;
     /// retrieve a value as its inital value stored with Add()
     // - return '' if the index is out of range, or the attribute is void
     function GetRaw(index: PtrInt = 0): RawByteString;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve this attribute value(s) as a variant
     // - return null if there is no value (self=nil or Count=0)
     // - if there is a single value, return it as a single variant text
@@ -911,6 +915,8 @@ type
     property Count: integer
       read fCount;
     /// name of this LDAP attribute
+    // - this string instance has been interned to this unit, to reduce memory
+    // allocation and enhance the lookup speed
     property AttributeName: RawUtf8
       read fAttributeName;
     /// the common LDAP Attribute Type corresponding to this AttributeName
@@ -3361,15 +3367,20 @@ end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
 begin
-  if (self <> nil) and
-     (index < fCount) then
+  GetReadable(index, result);
+end;
+
+procedure TLdapAttribute.GetReadable(index: PtrInt; var Value: RawUtf8);
+begin
+  if (self = nil) or
+     (index >= fCount) then
   begin
-    result := fList[index];
-    if not (fKnownTypeStorage in ATS_READABLE) then
-      AttributeValueMakeReadable(result, fKnownTypeStorage);
-  end
-  else
-    result := '';
+    FastAssignNew(Value);
+    exit;
+  end;
+  Value := fList[index];
+  if not (fKnownTypeStorage in ATS_READABLE) then
+    AttributeValueMakeReadable(Value, fKnownTypeStorage);
 end;
 
 function TLdapAttribute.GetAllReadable: TRawUtf8DynArray;
@@ -3624,7 +3635,7 @@ end;
 
 function TLdapAttributeList.Get(const AttributeName: RawUtf8): RawUtf8;
 begin
-  result := Find(AttributeName).GetReadable(0);
+  Find(AttributeName).GetReadable(0, result);
 end;
 
 function TLdapAttributeList.FindIndex(AttributeType: TLdapAttributeType): PtrInt;
@@ -3651,7 +3662,7 @@ end;
 
 function TLdapAttributeList.Get(AttributeType: TLdapAttributeType): RawUtf8;
 begin
-  result := Find(AttributeType).GetReadable(0);
+  Find(AttributeType).GetReadable(0, result);
 end;
 
 function TLdapAttributeList.GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
@@ -4247,7 +4258,7 @@ begin
   SetLength(customNames, n + 1);
   customNames[n] := Attr.AttributeName;
   SetLength(customValues, n + 1);
-  customValues[n] := Attr.GetReadable;
+  Attr.GetReadable(0, customValues[n]);
 end;
 
 procedure TLdapObject.FillObject(Attributes: TLdapAttributeList;
