@@ -445,8 +445,12 @@ const
     LDAP_ASN1_EXT_RESPONSE];
 
 const
-  /// OID of pagedresultsControl attribute
-  ASN1_OID_PAGEDRESULTS = '1.2.840.113556.1.4.319';
+  /// the OID used to specify TLdapClient.SearchPageSize
+  // - https://ldapwiki.com/wiki/Wiki.jsp?page=Simple%20Paged%20Results%20Control
+  LDAP_PAGED_RESULT_OID_STRING    = '1.2.840.113556.1.4.319';
+  /// the OID used to specify TLdapClient.SearchSDFlags
+  // - https://ldapwiki.com/wiki/Wiki.jsp?page=LDAP_SERVER_SD_FLAGS_OID
+  LDAP_SERVER_SD_FLAGS_OID = '1.2.840.113556.1.4.801';
 
   /// OID of namingContexts attribute in the root DSE
   ASN1_OID_DSE_NAMINGCONTEXTS       = '1.3.6.1.4.1.1466.101.120.5';
@@ -1291,6 +1295,14 @@ type
     lctPlain,
     lctEncrypted);
 
+  /// define possible values for TLdapClient.SearchSDFlags
+  // - LDAP_SERVER_SD_FLAGS_OID control
+  TLdapSearchSDFlags = set of (
+    lsfOwnerSecurityInformation,
+    lsfGroupSecurityInformation,
+    lsfDaclSecurityInformation,
+    lsfSaclSecurityInformation);
+
   /// store the authentication and connection settings of a TLdapClient instance
   TLdapClientSettings = class(TSynPersistent)
   protected
@@ -1409,6 +1421,7 @@ type
     fSearchSizeLimit: integer;
     fSearchTimeLimit: integer;
     fSearchPageSize: integer;
+    fSearchSDFlags: TLdapSearchSDFlags;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
     fDefaultDN, fRootDN, fConfigDN: RawUtf8;
@@ -1488,6 +1501,8 @@ type
     function SupportsMech(const MechanismName: RawUtf8): boolean;
     /// search if the server supports a given LDAP control by name
     // - a typical value to search is e.g. '1.2.840.113556.1.4.319'
+    // (LDAP_PAGED_RESULT_OID_STRING) or '1.2.840.113556.1.4.801'
+    // (LDAP_SERVER_SD_FLAGS_OID)
     // - use a very fast O(log(n)) binary search inside the memory cache
     function SupportsControl(const ControlName: RawUtf8): boolean;
     /// search if the server supports a given LDAP v3 extension by name
@@ -1805,21 +1820,28 @@ type
       read fSearchTimeLimit write fSearchTimeLimit;
     /// number of results to return per search request
     // - default 0 means no paging
-    // - you may rather call SearchBegin/SearchEnd wrapper functions
+    // - you may rather call SearchBegin/SearchEnd or SearchAll wrapper functions
+    // - if not [], append a LDAP_PAGED_RESULT_OID_STRING control to each Search()
     // - note: if you expect a single result row, settting 1 won't necessary
     // reduce the data stream, because it would include an additional block with
     // a SearchCookie, and is likely to use more server resource for paging
     property SearchPageSize: integer
       read fSearchPageSize write fSearchPageSize;
-    /// cookie returned by paged search results
+    /// cookie returned by paged search results, i.e. for SearchPageSize > 0
     // - use an empty string for the first search request
     // - if not empty, you should call Search() again for the next page until it
     // is eventually empty
     // - you can force to an empty string to reset the pagination or for a new
     // Search()
-    // - you may rather call SearchBegin/SearchEnd wrapper functions
+    // - you may rather call SearchBegin/SearchEnd or SearchAll wrapper functions
     property SearchCookie: RawUtf8
       read fSearchCookie write fSearchCookie;
+    /// the optional security flags to include in the response
+    // - default [] means no atNTSecurityDescriptor
+    // - if not [], append a LDAP_SERVER_SD_FLAGS_OID control to each Search(),
+    // so that atNTSecurityDescriptor will contain the specified flags
+    property SearchSDFlags: TLdapSearchSDFlags
+      read fSearchSDFlags write fSearchSDFlags;
     /// result of the search command
     property SearchResult: TLdapResultList
       read fSearchResult;
@@ -5308,7 +5330,7 @@ end;
 function TLdapClient.Search(const BaseDN: RawUtf8; TypesOnly: boolean;
   const Filter: RawUtf8; const Attributes: array of RawUtf8): boolean;
 var
-  s, resp, packet: TAsnObject;
+  s, resp, packet, controls: TAsnObject;
   start, stop: Int64;
   u: RawUtf8;
   x, n, seqend: integer;
@@ -5318,22 +5340,37 @@ begin
   result := false;
   if not fSock.SockConnected then
     exit;
+  // compute the main request
   QueryPerformanceMicroSeconds(start);
   fSearchResult.Clear;
   fReferals.Clear;
   s := RawLdapSearch(BaseDN, TypesOnly, Filter, Attributes, fSearchScope,
     fSearchAliases, fSearchSizeLimit, fSearchTimeLimit);
+  // append optional control extensions
   if fSearchPageSize > 0 then // https://www.rfc-editor.org/rfc/rfc2696
-    Append(s, Asn(
-        Asn(ASN1_SEQ, [
-           Asn(ASN1_OID_PAGEDRESULTS), // controlType: pagedresultsControl
-           ASN1_BOOLEAN_VALUE[false],  // criticality: false
-           Asn(Asn(ASN1_SEQ, [
-                 Asn(fSearchPageSize),
-                 Asn(fSearchCookie)
-               ]))
-        ]), LDAP_ASN1_CONTROLS));
+    controls :=
+      Asn(ASN1_SEQ, [
+         Asn(LDAP_PAGED_RESULT_OID_STRING), // controlType: pagedresultsControl
+         ASN1_BOOLEAN_VALUE[false],         // criticality: false
+         Asn(Asn(ASN1_SEQ, [
+               Asn(fSearchPageSize),
+               Asn(fSearchCookie)
+             ]))
+      ]);
+  if fSearchSDFlags <> [] then
+    Append(controls,
+      Asn(ASN1_SEQ, [
+         Asn(LDAP_SERVER_SD_FLAGS_OID), // controlType: SDFlagsRequestValue
+         ASN1_BOOLEAN_VALUE[false],     // criticality: false
+         Asn(Asn(ASN1_SEQ, [
+               Asn(byte(fSearchSDFlags))
+             ]))
+      ]));
+  if controls <> '' then
+    Append(s, Asn(controls, LDAP_ASN1_CONTROLS));
+  // actually send the request
   SendPacket(s);
+  // receive and parse the response
   x := 1;
   repeat
     if x >= length(packet) then
@@ -5389,7 +5426,7 @@ begin
     if AsnNext(n, resp) = ASN1_SEQ then
     begin
       AsnNext(n, resp, @s);
-      if s = ASN1_OID_PAGEDRESULTS then
+      if s = LDAP_PAGED_RESULT_OID_STRING then
       begin
         AsnNext(n, resp, @s); // searchControlValue
         n := 1;
@@ -5609,7 +5646,7 @@ begin
   if not Connected then
     exit;
   query := Asn(Obj);
-  Append(query, [Asn(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]]);
+  Append(query, Asn(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
   if NewSuperior <> '' then
     AsnAdd(query, Asn(NewSuperior, ASN1_CTX0));
   SendAndReceive(Asn(query, LDAP_ASN1_MODIFYDN_REQUEST));
@@ -5771,7 +5808,7 @@ begin
      not LdapEscapeName(ComputerName, cSafe) then
     exit;
   cDn := NormalizeDN(NetConcat(['CN=', cSafe, ',', ComputerParentDN]));
-  cSam := NetConcat([UpperCase(cSafe), '$']); // tradition is upper with end $
+  cSam := NetConcat([UpperCase(cSafe), '$']); // traditional upper with ending $
   // Search Computer object in the domain
   cExisting := SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [cSam]);
   // If the search failed, we exit with the error message
