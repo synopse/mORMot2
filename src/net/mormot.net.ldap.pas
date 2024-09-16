@@ -2978,6 +2978,7 @@ var
   // allow fast linear search in L1 CPU cache
   _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of pointer;
   _LdapInternType: array[0 .. high(_LdapInternAll)] of TLdapAttributeType;
+  sObjectName, sCanonicalName: RawUtf8;
 
 procedure InitializeUnit;
 var
@@ -3007,6 +3008,8 @@ begin
     end
     else
       ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
+  _LdapIntern.Unique(sObjectName, 'objectName');
+  _LdapIntern.Unique(sCanonicalName, 'canonicalName');
 end;
 
 // internal function: fast O(n) search of AttrName interned pointer
@@ -4097,7 +4100,7 @@ begin
   begin
     res := Items[i];
     if res.ObjectName = '' then
-      continue; // malformed data
+      continue; // malformed data - a primary key is required
     v := @Dvo;
     if (roObjectNameAtRoot in Options) or
        not ParseDN(res.ObjectName, dc, ou, cn, {esc=}false, {noraise=}true) then
@@ -4138,13 +4141,13 @@ begin
     k := 0;
     if not(roNoObjectName in options) then
     begin
-      a.Names[0] := 'objectName';
+      a.Names[0] := sObjectName;
       RawUtf8ToVariant(res.ObjectName, a.Values[0]);
       inc(k);
     end;
     if roWithCanonicalName in options then
     begin
-      a.Names[k] := 'canonicalName';
+      a.Names[k] := sCanonicalName;
       RawUtf8ToVariant(ComputeCanonicalName, a.Values[k]);
       inc(k);
     end;
@@ -5535,7 +5538,7 @@ begin
       ]));
   end;
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
-                   Asn(obj),
+                   Asn(Obj),
                    Asn(ASN1_SEQ, query)]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
