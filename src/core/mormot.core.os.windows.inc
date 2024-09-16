@@ -5619,9 +5619,13 @@ begin
       inc(Vers, 2); // e.g. wEight -> wServer2012
       if Vers = wServer2016 then
         // we identify only LTSC server versions
-        if OSVersionInfo.dwBuildNumber >= 17763 then
-          if OSVersionInfo.dwBuildNumber >= 20285 then // released as 20348
-            Vers := wServer2022_64
+        // see e.g. https://betawiki.net/wiki/Windows_Server_2025
+        if OSVersionInfo.dwBuildNumber >= 177609 then    // up to 17763 RTM
+          if OSVersionInfo.dwBuildNumber >= 19504 then   // up to 20348 Preview
+            if OSVersionInfo.dwBuildNumber >= 25871 then // up to 26100 Preview
+              Vers := wServer2025_64
+            else
+              Vers := wServer2022_64
           else
             Vers := wServer2019_64;
     end

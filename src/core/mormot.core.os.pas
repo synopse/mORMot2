@@ -676,7 +676,8 @@ type
     wEleven,
     wEleven_64,
     wServer2019_64,
-    wServer2022_64);
+    wServer2022_64,
+    wServer2025_64);
 
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
@@ -693,7 +694,7 @@ type
 const
   /// the recognized MacOS versions, as plain text
   // - indexed from OSVersion32.utsrelease[2] kernel revision
-  MACOS_NAME: array[8 .. 24] of RawUtf8 = (
+  MACOS_NAME: array[8 .. 25] of RawUtf8 = (
     '10.4 Tiger',
     '10.5 Leopard',
     '10.6 Snow Leopard',
@@ -710,7 +711,8 @@ const
     '12 Monterey',
     '13 Ventura',
     '14 Sonoma',
-    '15 Glow'); // use known internal codename for upcoming version
+    '15 Sequoia',
+    '16 Next');
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
@@ -744,7 +746,8 @@ const
     '11',
     '11 64bit',
     'Server 2019 64bit',
-    'Server 2022 64bit');
+    'Server 2022 64bit',
+    'Server 2025 64bit');
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
