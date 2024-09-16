@@ -217,6 +217,10 @@ procedure AddLdif(w: TTextWriter; p: PUtf8Char; l: integer);
 // 'xyz.local/London/Users/User1'
 function DNToCN(const DN: RawUtf8): RawUtf8;
 
+/// normalize a Distinguished Name into its standard layout
+// - trim spaces, and use CN= OU= DC= specifiers
+function NormalizeDN(const DN: RawUtf8): RawUtf8;
+
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
 function ParseDN(const DN: RawUtf8; out dc, ou, cn: TRawUtf8DynArray;
   ValueEscapeCN: boolean = false; NoRaise: boolean = false): boolean;
@@ -2411,6 +2415,24 @@ begin
     exit;
   ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true);
   result := DNsToCN(dc, ou, cn);
+end;
+
+function NormalizeDN(const DN: RawUtf8): RawUtf8;
+var
+  dc, ou, cn: TRawUtf8DynArray;
+  i: PtrInt;
+begin
+  result := '';
+  if (DN = '') or
+     not ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, {noraise=}true) then
+    exit;
+  for i := 0 to length(cn) - 1 do
+    Append(result, ',CN=', cn[i]);
+  for i := 0 to length(ou) - 1 do
+    Append(result, ',OU=', ou[i]);
+  for i := 0 to length(dc) - 1 do
+    Append(result, ',DC=', dc[i]);
+  delete(result, 1, 1); // trim leading ','
 end;
 
 function RawLdapErrorString(ErrorCode: integer): RawUtf8;
