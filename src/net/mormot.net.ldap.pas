@@ -590,6 +590,7 @@ type
     atsTextTime,
     atsSid,
     atsGuid,
+    atsSecurityDescriptor,
     atsUnicodePwd);
 
   /// common Attribute Types, as stored in TLdapAttribute.AttributeName
@@ -631,6 +632,7 @@ type
     atOwner,
     atGroupType,
     atPrimaryGroupID,
+    atNTSecurityDescriptor,
     atObjectSid,                   // encoded as binary RawSid
     atObjectGuid,                  // encoded as binary TGuid
     atLogonCount,
@@ -709,6 +711,7 @@ const
     atsRawUtf8,                     // atOwner
     atsIntegerGroupType,            // atGroupType
     atsInteger,                     // atPrimaryGroupID
+    atsSecurityDescriptor,          // atNTSecurityDescriptor
     atsSid,                         // atObjectSid
     atsGuid,                        // atObjectGuid
     atsInteger,                     // atLogonCount
@@ -2941,6 +2944,7 @@ const
     'owner',                       // atOwner
     'groupType',                   // atGroupType
     'primaryGroupID',              // atPrimaryGroupID
+    'ntSecurityDescriptor',        // atNTSecurityDescriptor
     'objectSid',                   // atObjectSid
     'objectGUID',                  // atObjectGuid
     'logonCount',                  // atLogonCount
@@ -3047,16 +3051,22 @@ begin
     atsIntegerAccountType:
       exit; // no need to make any conversion for ATS_READABLE content
     atsSid:
-      if IsValidRawSid(s) then
+      if IsValidRawSid(s) then // stored as binary SID
       begin
         SidToText(pointer(s), s);
         exit;
       end;
     atsGuid:
-      if length(s) = SizeOf(TGuid) then
+      if length(s) = SizeOf(TGuid) then // stored as binary GUID
       begin
         guid := PGuid(s)^; // temp copy to avoid issues with s content
         ToUtf8(guid, s);  // e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+        exit;
+      end;
+    atsSecurityDescriptor:
+      if IsValidNdr(s) then // stored as binary NDR
+      begin
+        NdrToText(pointer(s), length(s), s);
         exit;
       end;
     atsFileTime: // 64-bit FileTime
