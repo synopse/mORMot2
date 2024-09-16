@@ -5841,14 +5841,12 @@ begin
       exit;
     end;
   end;
-  // Create the new computer object
-  attrs := TLdapAttributeList.Create;
+  // Create the new computer entry
+  attrs := TLdapAttributeList.Create(
+    [atObjectClass, atCommonName, atName, atSAMAccountName],
+    ['computer',    cSafe,        cSafe,  cSam]);
   try
-    attrs.Add(atObjectClass, 'computer');
-    attrs.Add(atCommonName, cSafe);
-    attrs.Add(atName, cSafe);
-    attrs.Add(atSAMAccountName, cSam);
-    attrs.AccountType := satMachineAccount;
+    attrs.AccountType        := satMachineAccount;
     attrs.UserAccountControl := UserAccount;
     if Password <> '' then
       attrs.AddUnicodePwd(Password);
