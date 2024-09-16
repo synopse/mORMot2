@@ -943,7 +943,7 @@ type
   /// list one or several TLdapAttribute
   // - will use a global TRawUtf8Interning as hashed list of names to minimize
   // memory allocation, and makes efficient lookup
-  TLdapAttributeList = class
+  TLdapAttributeList = class(TObjectWithProps)
   private
     fItems: TLdapAttributeDynArray;
     fCount: integer;
@@ -956,6 +956,9 @@ type
     function GetAccountType: TSamAccountType;
     procedure SetAccountType(Value: TSamAccountType);
   public
+    /// initialize the attribute list with some type/value pairs
+    constructor Create(const Types: array of TLdapAttributeType;
+                       const Values: array of const); overload;
     /// finalize the list
     destructor Destroy; override;
     /// clear the list
@@ -975,7 +978,7 @@ type
       Option: TLdapAddOption = aoAlways): TLdapAttribute; overload;
     /// search or allocate TLdapAttribute object(s) from type/value to the list
     procedure Add(const Types: array of TLdapAttributeType;
-      const Values: array of RawByteString; Option: TLdapAddOption = aoAlways); overload;
+      const Values: array of const; Option: TLdapAddOption = aoAlways); overload;
     /// search or allocate "unicodePwd" TLdapAttribute value to the list
     function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
     /// remove one TLdapAttribute object from the list
@@ -3618,6 +3621,13 @@ end;
 
 { TLdapAttributeList }
 
+constructor TLdapAttributeList.Create(
+  const Types: array of TLdapAttributeType; const Values: array of const);
+begin
+  inherited Create;
+  Add(Types, Values);
+end;
+
 destructor TLdapAttributeList.Destroy;
 begin
   Clear;
@@ -3775,13 +3785,17 @@ begin
 end;
 
 procedure TLdapAttributeList.Add(const Types: array of TLdapAttributeType;
-  const Values: array of RawByteString; Option: TLdapAddOption);
+  const Values: array of const; Option: TLdapAddOption);
 var
   i: PtrInt;
+  v: RawUtf8;
 begin
   if high(Types) = high(Values) then
     for i := 0 to high(Types) do
-      Add(Types[i], Values[i], Option)
+    begin
+      VarRecToUtf8(Values[i], v); // typically RawUtf8 or integer value
+      Add(Types[i], v, Option)
+    end
   else
     ELdap.RaiseUtf8('Inconsistent %.Add', [self]);
 end;
