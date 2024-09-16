@@ -585,7 +585,7 @@ type
     atsIntegerUserAccountControl,
     atsIntegerSystemFlags,
     atsIntegerGroupType,
-    atsIntegerSamAccountType,
+    atsIntegerAccountType,
     atsFileTime,
     atsTextTime,
     atsSid,
@@ -689,7 +689,7 @@ const
     atsIntegerUserAccountControl,   // atUserAccountControl
     atsIntegerSystemFlags,          // atSystemFlags
     atsRawUtf8,                     // atSAMAccountName
-    atsIntegerSamAccountType,       // atSAMAccountType
+    atsIntegerAccountType,          // atSAMAccountType
     atsInteger,                     // atAdminCount
     atsRawUtf8,                     // atDescription
     atsRawUtf8,                     // atGenerationQualifier
@@ -730,11 +730,12 @@ const
     atsUnicodePwd);                 // atUnicodePwd
 
   /// the LDAP raw values stored as UTF-8, which do not require any conversion
-  ATS_READABLE = [atsRawUtf8 .. atsIntegerSamAccountType];
+  ATS_READABLE = [atsRawUtf8 .. atsIntegerAccountType];
   /// the LDAP raw values stored as integer
-  ATS_INTEGER = [atsInteger .. atsIntegerSamAccountType];
+  ATS_INTEGER = [atsInteger .. atsIntegerAccountType];
 
 /// recognize our common Attribute Types from their standard NAME text
+// - allow to use e.g. AttrTypeStorage[AttributeNameType(AttrName)]
 function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 
 /// convert in-place a raw attribute value into human-readable text
@@ -3461,10 +3462,10 @@ begin
             TypeInfo(TGroupTypes), gt, JSON_FAST, {trimmed=}true);
           exit;
         end;
-    atsIntegerSamAccountType:
+    atsIntegerAccountType:
       if ToInteger(s, i) then
       begin
-        if roRawSamAccountType in options then
+        if roRawAccountType in options then
           sat := satUnknown
         else
           sat := SamAccountTypeFromInteger(i);
@@ -4369,6 +4370,7 @@ begin
   result := fSock <> nil;
   if result then
     exit; // socket was already connected
+  fResultError := leUnknown;
   fResultString := '';
   if fSettings.TargetHost = '' then
   begin
@@ -4761,6 +4763,7 @@ var
 begin
   result := '';
   fResultCode := -1;
+  fResultError := leUnknown;
   fResultString := '';
   fResponseCode := LDAP_ASN1_ERROR;
   fResponseDN := '';
@@ -4777,7 +4780,7 @@ begin
     AsnNext(Pos, Asn1Response, @fResultString); // diagnosticMessage
     if not (fResultCode in LDAP_RES_NOERROR) then
     begin
-      errmsg := RawLdapErrorString(fResultCode);
+      errmsg := RawLdapErrorString(fResultCode, fResultError);
       if fResultString = '' then
         fResultString := errmsg
       else
