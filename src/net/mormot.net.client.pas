@@ -2643,7 +2643,7 @@ var
     res := Head(requrl, params.KeepAlive, params.Header);
     params.SetStep(wgsHead, [requrl, '=', res]);
     if not (res in HTTP_GET_OK) then
-      EHttpSocket.RaiseUtf8('%.WGet: %:%/% failed as %',
+      EHttpSocket.RaiseUtf8('%.WGet: HEAD %:%/% failed as %',
         [self, fServer, fPort, requrl, StatusCodeToShort(res)]);
     expsize := Http.ContentLength;
     result := expsize > 0;
