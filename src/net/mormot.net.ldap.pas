@@ -1085,6 +1085,31 @@ function InfoFilter(AccountType: TSamAccountType;
   const AccountName: RawUtf8 = ''; const DistinguishedName: RawUtf8 = '';
   const UserPrincipalName: RawUtf8 = ''; const CustomFilter: RawUtf8 = ''): RawUtf8;
 
+/// compute a sequence of modifications from its raw encoded attribute(s) sequence
+function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject; overload;
+
+/// compute a sequence of modifications of a given attribute and its raw value
+// - as used by TLdapClient.Modify(Obj, Op, AttrType, AttrValue)
+// - the AttrValue should be properly encoded, as expected by the LDAP server
+function Modifier(Op: TLdapModifyOp; AttrType: TLdapAttributeType;
+  const AttrValue: RawByteString): TAsnObject; overload;
+
+/// compute a sequence of modifications of a given attribute and its raw value
+// - the AttrValue should be properly encoded, as expected by the LDAP server
+function Modifier(Op: TLdapModifyOp; const AttrName: RawUtf8;
+  const AttrValue: RawByteString): TAsnObject; overload;
+
+/// compute a sequence of modifications of several attribute/raw value pairs
+// - the Values should be properly encoded, as expected by the LDAP server
+function Modifier(Op: TLdapModifyOp; const Types: array of TLdapAttributeType;
+  const Values: array of const): TAsnObject; overload;
+
+/// compute a sequence of modifications of several attribute/raw value pairs
+// - here the modified attribute names are specified as text
+function Modifier(Op: TLdapModifyOp;
+  const NameValuePairs: array of RawUtf8): TAsnObject; overload;
+
+
 
 { **************** LDAP Response Storage }
 
@@ -1658,9 +1683,27 @@ type
 
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
+    /// make one or more changes to an entry
+    // - the Modifications are one or several Modifier() operations
+    // - is the main modification method, called by other Modify() overloads
+    function Modify(const Obj: RawUtf8;
+      const Modifications: array of TAsnObject): boolean; overload;
+    /// make one change as specified by attribute type and raw value
+    // - the AttrValue should be properly encoded, as expected by the LDAP server
+    function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+      AttrType: TLdapAttributeType; const AttrValue: RawByteString): boolean; overload;
+    /// make one change as specified by attribute type and raw value
+    // - the AttrValue should be properly encoded, as expected by the LDAP server
+    function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+      const AttrName: RawUtf8; const AttrValue: RawByteString): boolean; overload;
+    /// make one or more changes with several attribute/raw value pairs
+    // - the Values should be properly encoded, as expected by the LDAP server
+    function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+      const Types: array of TLdapAttributeType;
+      const Values: array of const): boolean; overload;
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
-      Value: TLdapAttribute): boolean;
+      Attribute: TLdapAttribute): boolean; overload;
     /// change an entry Distinguished Name
     // - it can be used to rename the entry (by changing its RDN), move it to a
     // different location in the DIT (by specifying a new parent entry), or both
@@ -3362,6 +3405,71 @@ begin
       [AT_VALUE[AccountType], result, CustomFilter])
   else if CustomFilter <> '' then
     result := FormatUtf8('(&%%)', [result, CustomFilter])
+end;
+
+function Modifier(Op: TLdapModifyOp; const Sequence: TAsnObject): TAsnObject;
+begin
+  result := Asn(ASN1_SEQ, [
+              Asn(ord(Op), ASN1_ENUM), // modification type as enum
+              Sequence]);              // attribute(s) sequence
+end;
+
+function Modifier(Op: TLdapModifyOp; AttrType: TLdapAttributeType;
+  const AttrValue: RawByteString): TAsnObject;
+begin
+  result := Modifier(Op, AttrTypeName[AttrType], AttrValue);
+end;
+
+function Modifier(Op: TLdapModifyOp; const AttrName: RawUtf8;
+  const AttrValue: RawByteString): TAsnObject;
+begin
+  result := Modifier(Op,
+              Asn(ASN1_SEQ, [                   // attribute sequence
+                Asn(AttrName),                  // attribute description
+                Asn(Asn(AttrValue), ASN1_SETOF) // attribute value set
+              ]));
+end;
+
+function Modifier(Op: TLdapModifyOp; const Types: array of TLdapAttributeType;
+  const Values: array of const): TAsnObject;
+var
+  i, n: PtrInt;
+  v: RawUtf8;
+begin
+  result := '';
+  n := high(Types);
+  if (n < 0) or
+     (n <> length(Values)) then
+    exit;
+  for i := 0 to n - 1 do // see TLdapAttribute.ToAsnSeq
+    if Types[i] <> atUndefined then
+    begin
+      VarRecToUtf8(Values[i], v); // Values[] are typically RawUtf8 or integer
+      Append(result,
+        Asn(AttrTypeName[Types[i]]), // attribute description
+        Asn(Asn(v), ASN1_SETOF));    // attribute value set
+    end;
+  if result <> '' then
+    result := Modifier(Op, Asn(result, ASN1_SEQ));
+end;
+
+function Modifier(Op: TLdapModifyOp;
+  const NameValuePairs: array of RawUtf8): TAsnObject;
+var
+  i, n: PtrInt;
+begin
+  result := '';
+  n := length(NameValuePairs);
+  if (n = 0) or
+     (n and 1 <> 0) then
+    exit;
+  for i := 0 to (n shr 1) - 1 do
+    Append(result,
+      Asn(NameValuePairs[i * 2]),                       // attribute description
+      Asn(Asn(NameValuePairs[i * 2 + 1]), ASN1_SETOF)); // attribute value set
+  result := Asn(ASN1_SEQ, [
+              Asn(ord(Op), ASN1_ENUM),  // modification type as enum
+              Asn(result, ASN1_SEQ)]);  // attribute(s) sequence
 end;
 
 
@@ -5619,28 +5727,46 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify
 
-function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
-  Value: TLdapAttribute): boolean;
-var
-  values: TAsnObject;
-  i: integer;
+function TLdapClient.Modify(const Obj: RawUtf8;
+  const Modifications: array of TAsnObject): boolean;
 begin
-  for i := 0 to Value.Count -1 do
-    AsnAdd(values, Asn(Value.List[i]));
+  result := false;
+  if (high(Modifications) < 0) or
+     ((high(Modifications) = 0) and
+      (Modifications[0] = '')) then
+    exit;
   SendAndReceive(Asn(LDAP_ASN1_MODIFY_REQUEST, [
-                   Asn(Obj),
-                   Asn(ASN1_SEQ, [
-                     Asn(ASN1_SEQ, [
-                       Asn(ord(Op), ASN1_ENUM),
-                       Asn(ASN1_SEQ, [
-                         Asn(Value.AttributeName),
-                         Asn(values, ASN1_SETOF)
-                       ])
-                     ])
-                   ])
+                   Asn(Obj),                    // the DN of the entry to modify
+                   Asn(ASN1_SEQ, Modifications) // sequence of modifications
                  ]));
   result := fResultCode = LDAP_RES_SUCCESS;
 end;
+
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  AttrType: TLdapAttributeType; const AttrValue: RawByteString): boolean;
+begin
+  result := (AttrType <> atUndefined) and
+            Modify(Obj, [Modifier(Op, AttrTypeName[AttrType], AttrValue)]);
+end;
+
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  const AttrName: RawUtf8; const AttrValue: RawByteString): boolean;
+begin
+  result := Modify(Obj, [Modifier(Op, AttrName, AttrValue)]);
+end;
+
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  const Types: array of TLdapAttributeType; const Values: array of const): boolean;
+begin
+  result := Modify(Obj, [Modifier(Op, Types, Values)]);
+end;
+
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  Attribute: TLdapAttribute): boolean;
+begin
+  result := Modify(Obj, [Modifier(Op, Attribute.ToAsnSeq)]);
+end;
+
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify-dn
 
