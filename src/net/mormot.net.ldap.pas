@@ -1838,6 +1838,7 @@ type
   end;
 
   /// a LDAP client instance dedicated to validate user group membership
+  // - properly checking group membership is a complex issue, worth its own class
   // - will maintain a connection to the LDAP server, e.g. to efficiently
   // implement a "search and bind" pattern for TBasicAuthServerExternal
   // - is able to automatically re-connect to the LDAP server if needed
@@ -1851,7 +1852,6 @@ type
     fGroupAN, fGroupDN, fGroupIDAN: TRawUtf8DynArray;
     fGroupID: TIntegerDynArray;
     fUserBaseDN, fGroupBaseDN, fUserCustomFilter, fGroupCustomFilter: RawUtf8;
-    fGroupNested: boolean;
     fLastConnectedTix32: cardinal;
     // naive but efficient O(n) cache of valid and invalid Users
     fCacheTimeoutSeconds: integer;
@@ -1859,6 +1859,7 @@ type
     fCacheOKGroupsAN: TRawUtf8DynArrayDynArray;
     fCacheOKCount, fCacheKOCount: integer;
     fCacheTimeoutTix: Int64;
+    fGroupNested: boolean;
     procedure CacheClear(tix: Int64);
   public
     /// initialize this inherited LDAP client instance
@@ -6000,14 +6001,14 @@ begin
       (fGroupID = nil)) or
      not LdapValidName(User) then
     exit;
-  tix := GetTickCount64;
   if not fBound and
-     (fLastConnectedTix32 = tix shr 12) then
-    exit; // too soon to retry re-connect (quick exit outside of the lock)
+     (fLastConnectedTix32 = GetTickCount64 shr 12) then // retry every 4 seconds
+    exit; // too soon to re-connect (quick exit outside of the lock)
   try
     fSafe.Lock;
     try
       // first check from cache
+      tix := GetTickCount64; // lock may have taken some time
       fromcachendx := -1;
       if fCacheTimeoutSeconds <> 0 then
         if (tix > fCacheTimeoutTix) or
