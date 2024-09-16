@@ -447,10 +447,10 @@ const
 const
   /// the OID used to specify TLdapClient.SearchPageSize
   // - https://ldapwiki.com/wiki/Wiki.jsp?page=Simple%20Paged%20Results%20Control
-  LDAP_PAGED_RESULT_OID_STRING    = '1.2.840.113556.1.4.319';
+  LDAP_PAGED_RESULT_OID_STRING = '1.2.840.113556.1.4.319';
   /// the OID used to specify TLdapClient.SearchSDFlags
   // - https://ldapwiki.com/wiki/Wiki.jsp?page=LDAP_SERVER_SD_FLAGS_OID
-  LDAP_SERVER_SD_FLAGS_OID = '1.2.840.113556.1.4.801';
+  LDAP_SERVER_SD_FLAGS_OID     = '1.2.840.113556.1.4.801';
 
   /// OID of namingContexts attribute in the root DSE
   ASN1_OID_DSE_NAMINGCONTEXTS       = '1.3.6.1.4.1.1466.101.120.5';
@@ -879,6 +879,7 @@ type
       options: TLdapResultOptions);
     procedure SetVariantArray(var v: TDocVariantData;
       options: TLdapResultOptions);
+    function ToAsnSeq: TAsnObject;
   public
     /// initialize the attribute(s) storage
     constructor Create(const AttrName: RawUtf8; AttrType: TLdapAttributeType);
@@ -3618,6 +3619,22 @@ begin
     SetNewVariant(result, options);
 end;
 
+function TLdapAttribute.ToAsnSeq: TAsnObject;
+var
+  i: PtrInt;
+begin
+  result := '';
+  if (self = nil) or
+     (fCount = 0) then
+    exit;
+  for i := 0 to fCount - 1 do
+    AsnAdd(result, Asn(fList[i]));
+  result := Asn(ASN1_SEQ, [            // attribute(s) sequence
+              Asn(fAttributeName),     // attribute description
+              Asn(result, ASN1_SETOF)  // attribute value set
+            ]);
+end;
+
 function TLdapAttribute.FindIndex(const aValue: RawByteString): PtrInt;
 begin
   if (self <> nil) and
@@ -5585,25 +5602,15 @@ end;
 
 function TLdapClient.Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
 var
-  query, sub: TAsnObject;
-  attr: TLdapAttribute;
-  i, j: PtrInt;
+  query: TAsnObject;
+  i: PtrInt;
 begin
   result := false;
-  if not Connected then
+  if (Value = nil) or
+     not Connected then
     exit;
   for i := 0 to Value.Count - 1 do
-  begin
-    attr := Value.Items[i];
-    sub := '';
-    for j := 0 to attr.Count - 1 do
-      AsnAdd(sub, Asn(attr.List[j]));
-    Append(query,
-      Asn(ASN1_SEQ, [
-        Asn(attr.AttributeName),
-        Asn(ASN1_SETOF, [sub])
-      ]));
-  end;
+    Append(query, Value.Items[i].ToAsnSeq);
   SendAndReceive(Asn(LDAP_ASN1_ADD_REQUEST, [
                    Asn(Obj),
                    Asn(ASN1_SEQ, query)]));
