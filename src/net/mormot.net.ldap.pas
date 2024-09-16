@@ -947,14 +947,13 @@ type
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
+    function GetAccountType: TSamAccountType;
+    procedure SetAccountType(Value: TSamAccountType);
   public
     /// finalize the list
     destructor Destroy; override;
     /// clear the list
     procedure Clear;
-    /// number of TLdapAttribute objects in this list
-    function Count: integer;
-      {$ifdef HASINLINE} inline; {$endif}
     /// search or allocate a new TLdapAttribute object to the list
     function Add(const AttributeName: RawUtf8): TLdapAttribute; overload;
     /// search or allocate a new TLdapAttribute object and its value to the list
@@ -974,7 +973,7 @@ type
     /// search or allocate "unicodePwd" TLdapAttribute value to the list
     function AddUnicodePwd(const aPassword: SpiUtf8): TLdapAttribute;
     /// remove one TLdapAttribute object from the list
-    procedure Delete(const AttributeName: RawUtf8);
+    procedure Delete(const AttributeName: RawUtf8); overload;
     /// find and return attribute index with the requested name
     // - returns -1 if not found
     function FindIndex(const AttributeName: RawUtf8): PtrInt; overload;
@@ -985,6 +984,8 @@ type
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
     function Get(const AttributeName: RawUtf8): RawUtf8; overload;
+    /// remove one TLdapAttribute object from the list
+    procedure Delete(AttributeType: TLdapAttributeType); overload;
     /// find and return attribute index with the requested attribute type
     // - returns -1 if not found
     // - faster than overloaded FindIndex(AttributeName)
@@ -1004,11 +1005,10 @@ type
     // - calls GetAllReadable on the found attribute
     function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
     /// access atSAMAccountType attribute value with proper decoding
-    function AccountType: TSamAccountType;
+    property AccountType: TSamAccountType
+      read GetAccountType write SetAccountType;
     /// access atGroupType attribute value with proper decoding
     function GroupTypes: TGroupTypes;
-    /// access atSAMAccountType attribute value with proper decoding
-    function SamAccountType: TSamAccountType;
     /// access atSystemFlags attribute value with proper decoding
     function SystemFlags: TSystemFlags;
     /// access atUserAccountControl attribute value with proper decoding/encoding
@@ -3758,19 +3758,24 @@ begin
   PtrArrayDelete(fItems, FindIndex(AttributeName), @fCount, pakClass);
 end;
 
-function TLdapAttributeList.AccountType: TSamAccountType;
+procedure TLdapAttributeList.Delete(AttributeType: TLdapAttributeType);
+begin
+  PtrArrayDelete(fItems, FindIndex(AttributeType), @fCount, pakClass);
+end;
+
+function TLdapAttributeList.GetAccountType: TSamAccountType;
 begin
   result := SamAccountTypeFromText(Get(atSAMAccountType));
+end;
+
+procedure TLdapAttributeList.SetAccountType(Value: TSamAccountType);
+begin
+  Add(atSAMAccountType, ToUtf8(SamAccountTypeValue(Value)), aoReplaceValue);
 end;
 
 function TLdapAttributeList.GroupTypes: TGroupTypes;
 begin
   result := GroupTypesFromText(Get(atGroupType));
-end;
-
-function TLdapAttributeList.SamAccountType: TSamAccountType;
-begin
-  result := SamAccountTypeFromText(Get(atSAMAccountType));
 end;
 
 function TLdapAttributeList.SystemFlags: TSystemFlags;
