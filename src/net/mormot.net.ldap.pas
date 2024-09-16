@@ -1020,9 +1020,15 @@ type
     /// access atUserAccountControl attribute value with proper decoding/encoding
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
+    /// access any attribute value from its known type
+    // - calls GetReadable(0) on the found attribute
+    // - returns empty string if not found
+    // - is defined as the default property for conveniency
+    property Attr[AttributeType: TLdapAttributeType]: RawUtf8
+      read Get; default;
     /// access to the internal list of TLdapAttribute objects
     // - note that length(Items) may be <> Count for this class, if AfterAdd has not
-    // been called, so so you should NOT use an enumerate "for a in list.Items do" loop
+    // been called, so you should NOT use an enumerate "for a in list.Items do" loop
     property Items: TLdapAttributeDynArray
       read fItems;
     /// number of TLdapAttribute objects in this list
