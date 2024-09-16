@@ -5625,94 +5625,6 @@ const
     atUserAccountControl,
     atPrimaryGroupID];
 
-function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
-  const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
-  Attribute: TLdapAttributeType): TRawUtf8DynArray;
-begin
-  GetByAccountType(satMachineAccount,
-    UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
-    BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
-end;
-
-function TLdapClient.GetComputerInfo(const AccountName, DistinguishedName: RawUtf8;
-  out Info: TLdapComputer; const BaseDN: RawUtf8;
-  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
-var
-  attr: TRawUtf8DynArray;
-begin
-  RecordZero(@Info, TypeInfo(TLdapComputer));
-  attr := ToText(LDAPMACHINE_ATTR + CustomTypes);
-  AddRawUtf8(attr, CustomAttributes);
-  result := ((AccountName <> '') or
-             (DistinguishedName <> '')) and
-            Search(DefaultDN(BaseDN), false, InfoFilter(
-              satMachineAccount, AccountName, DistinguishedName), attr) and
-            (SearchResult.Count = 1);
-  if result then
-    Info.Fill(SearchResult.Items[0].Attributes,
-      CustomAttributes, CustomTypes);
-end;
-
-function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
-  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean;
-  UserAccount: TUserAccountControls): boolean;
-var
-  ComputerSafe, ComputerDN, ComputerSam: RawUtf8;
-  Attributes: TLdapAttributeList;
-  ComputerObject: TLdapResult;
-begin
-  result := false;
-  if not Connected or
-     not LdapEscapeName(ComputerName, ComputerSafe) then
-    exit;
-  ComputerDN := NetConcat(['CN=', ComputerSafe, ',', ComputerParentDN]);
-  ComputerSam := NetConcat([UpperCase(ComputerSafe), '$']);
-  // Search Computer object in the domain
-  ComputerObject :=
-    SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [ComputerSam]);
-  // If the search failed, we exit with the error message
-  if ResultCode <> LDAP_RES_SUCCESS then
-  begin
-    FormatUtf8('AddComputer.Search failed: %', [fResultString], ErrorMessage);
-    exit;
-  end;
-  // Computer with the same sAMAccountName is already existing
-  if Assigned(ComputerObject) then
-  begin
-    // We don't want to delete it
-    if not DeleteIfPresent then
-    begin
-      ErrorMessage := 'Computer is already present';
-      exit;
-    end;
-    result := Delete(ComputerObject.ObjectName);
-    // Unable to delete the computer (probably insufficient access rights)
-    if not result then
-    begin
-      FormatUtf8('AddComputer.Delete failed: %', [fResultString], ErrorMessage);
-      exit;
-    end;
-  end;
-  // Create the new computer object
-  Attributes := TLdapAttributeList.Create;
-  try
-    Attributes.Add(atObjectClass, 'computer');
-    Attributes.Add(atCommonName, ComputerSafe);
-    Attributes.Add(atSAMAccountName, ComputerSam);
-    Attributes.UserAccountControl := UserAccount;
-    if Password <> '' then
-      Attributes.AddUnicodePwd(Password);
-    result := Add(ComputerDN, Attributes);
-    if not result then
-      FormatUtf8('AddComputer.Add failed: %', [fResultString], ErrorMessage);
-  finally
-    Attributes.Free;
-  end;
-end;
-
-
-// **** TLdapClient high-level User/Group methods
-
 const
   // https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax
   AND_FLAG = ':1.2.840.113556.1.4.803:';
@@ -5753,6 +5665,96 @@ begin
     Res := SearchResult.ObjectAttributes(Attribute, ObjectNames);
 end;
 
+function TLdapClient.GetComputers(FilterUac, UnFilterUac: TUserAccountControls;
+  const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
+  Attribute: TLdapAttributeType): TRawUtf8DynArray;
+begin
+  GetByAccountType(satMachineAccount,
+    UserAccountControlsValue(FilterUac), UserAccountControlsValue(UnFilterUac),
+    BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
+end;
+
+function TLdapClient.GetComputerInfo(
+  const AccountName, DistinguishedName: RawUtf8; out Info: TLdapComputer;
+  const BaseDN: RawUtf8; const CustomAttributes: TRawUtf8DynArray;
+  const CustomTypes: TLdapAttributeTypes): boolean;
+var
+  attr: TRawUtf8DynArray;
+begin
+  RecordZero(@Info, TypeInfo(TLdapComputer));
+  attr := ToText(LDAPMACHINE_ATTR + CustomTypes);
+  AddRawUtf8(attr, CustomAttributes);
+  result := ((AccountName <> '') or
+             (DistinguishedName <> '')) and
+            Search(DefaultDN(BaseDN), false, InfoFilter(
+              satMachineAccount, AccountName, DistinguishedName), attr) and
+            (SearchResult.Count = 1);
+  if result then
+    Info.Fill(SearchResult.Items[0].Attributes,
+      CustomAttributes, CustomTypes);
+end;
+
+function TLdapClient.AddComputer(const ComputerParentDN, ComputerName: RawUtf8;
+  out ErrorMessage: RawUtf8; const Password: SpiUtf8; DeleteIfPresent: boolean;
+  UserAccount: TUserAccountControls): boolean;
+var
+  cSafe, cDn, cSam: RawUtf8;
+  attrs: TLdapAttributeList;
+  cExisting: TLdapResult;
+begin
+  result := false;
+  if not Connected or
+     not LdapEscapeName(ComputerName, cSafe) then
+    exit;
+  cDn := NormalizeDN(NetConcat(['CN=', cSafe, ',', ComputerParentDN]));
+  cSam := NetConcat([UpperCase(cSafe), '$']); // tradition is upper with end $
+  // Search Computer object in the domain
+  cExisting := SearchFirstFmt([atSAMAccountName], '(sAMAccountName=%)', [cSam]);
+  // If the search failed, we exit with the error message
+  if ResultCode <> LDAP_RES_SUCCESS then
+  begin
+    FormatUtf8('AddComputer.Search failed: %', [fResultString], ErrorMessage);
+    exit;
+  end;
+  // Computer with the same sAMAccountName is already existing
+  if Assigned(cExisting) then
+  begin
+    // We don't want to delete it
+    if not DeleteIfPresent then
+    begin
+      ErrorMessage := 'Computer is already present';
+      exit;
+    end;
+    result := Delete(cExisting.ObjectName);
+    // Unable to delete the computer (probably insufficient access rights)
+    if not result then
+    begin
+      FormatUtf8('AddComputer.Delete failed: %', [fResultString], ErrorMessage);
+      exit;
+    end;
+  end;
+  // Create the new computer object
+  attrs := TLdapAttributeList.Create;
+  try
+    attrs.Add(atObjectClass, 'computer');
+    attrs.Add(atCommonName, cSafe);
+    attrs.Add(atName, cSafe);
+    attrs.Add(atSAMAccountName, cSam);
+    attrs.AccountType := satMachineAccount;
+    attrs.UserAccountControl := UserAccount;
+    if Password <> '' then
+      attrs.AddUnicodePwd(Password);
+    result := Add(cDn, attrs);
+    if not result then
+      FormatUtf8('AddComputer.Add failed: %', [fResultString], ErrorMessage);
+  finally
+    attrs.Free;
+  end;
+end;
+
+
+// **** TLdapClient high-level User/Group methods
+
 function TLdapClient.GetGroups(FilterUac, UnFilterUac: TGroupTypes;
   const Match, CustomFilter, BaseDN: RawUtf8; ObjectNames: PRawUtf8DynArray;
   Attribute: TLdapAttributeType): TRawUtf8DynArray;
@@ -5771,9 +5773,11 @@ begin
     BaseDN, CustomFilter, Match, Attribute, result, ObjectNames);
 end;
 
-function TLdapClient.GetGroupInfo(const AccountName, DistinguishedName: RawUtf8;
-  out Info: TLdapGroup; const BaseDN: RawUtf8; WithMember: boolean;
-  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
+function TLdapClient.GetGroupInfo(
+  const AccountName, DistinguishedName: RawUtf8; out Info: TLdapGroup;
+  const BaseDN: RawUtf8; WithMember: boolean;
+  const CustomAttributes: TRawUtf8DynArray;
+  const CustomTypes: TLdapAttributeTypes): boolean;
 var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
@@ -5794,18 +5798,20 @@ begin
       CustomAttributes, CustomTypes);
 end;
 
-function TLdapClient.GetGroupDN(const AccountName, BaseDN, CustomFilter: RawUtf8): RawUtf8;
+function TLdapClient.GetGroupDN(
+  const AccountName, BaseDN, CustomFilter: RawUtf8): RawUtf8;
 begin
   if (AccountName <> '') and
      Search([atDistinguishedName],
        InfoFilter(satGroup, AccountName, '', '', CustomFilter)) and
      (SearchResult.Count = 1) then
-    result := SearchResult.Items[0].Attributes.Get(atDistinguishedName)
+    result := SearchResult.Items[0].Get(atDistinguishedName)
   else
     result := '';
 end;
 
-function TLdapClient.GetGroupPrimaryID(const AccountName, DistinguishedName: RawUtf8;
+function TLdapClient.GetGroupPrimaryID(
+  const AccountName, DistinguishedName: RawUtf8;
   out PrimaryGroupID: cardinal; const BaseDN, CustomFilter: RawUtf8): boolean;
 var
   last: RawUtf8;
@@ -5817,7 +5823,7 @@ begin
        satGroup, AccountName, DistinguishedName, '', CustomFilter)) and
      (SearchResult.Count = 1) then
   begin
-    last := SplitRight(SearchResult.Items[0].Attributes.Get(atObjectSid), '-');
+    last := SplitRight(SearchResult.Items[0].Get(atObjectSid), '-');
     result := (last <> '') and
               ToCardinal(last, PrimaryGroupID);
   end;
@@ -5826,7 +5832,8 @@ end;
 function TLdapClient.GetUserInfo(
   const AccountName, DistinguishedName, UserPrincipalName: RawUtf8;
   out Info: TLdapUser; const BaseDN: RawUtf8; WithMemberOf: boolean;
-  const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes): boolean;
+  const CustomAttributes: TRawUtf8DynArray;
+  const CustomTypes: TLdapAttributeTypes): boolean;
 var
   attr: TRawUtf8DynArray;
   attrs: TLdapAttributeTypes;
