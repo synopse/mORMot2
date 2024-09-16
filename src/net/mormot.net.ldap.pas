@@ -846,16 +846,18 @@ type
 
   /// customize TLdapResult.SearchAll/TLdapResultList.AppendTo output
   TLdapResultOptions = set of (
+    roNoDCAtRoot,
     roObjectNameAtRoot,
     roObjectNameWithoutDCAtRoot,
     roCanonicalNameAtRoot,
     roCommonNameAtRoot,
     roNoObjectName,
+    roWithCanonicalName,
     roRawBoolean,
     roRawUac,
     roRawFlags,
     roRawGroupType,
-    roRawSamAccountType);
+    roRawAccountType);
 
   /// store a named LDAP attribute with the list of its values
   TLdapAttribute = class
@@ -4065,41 +4067,53 @@ var
   dc, ou, cn, lastdc: TRawUtf8DynArray;
   a: TDocVariantData;
   v, last: PDocVariantData;
+
+  function ComputeCanonicalName: RawUtf8;
+  begin
+    if res.fCanonicalName = '' then
+      res.fCanonicalName := DNsToCN(dc, ou, cn);
+    result := res.fCanonicalName;
+  end;
+
 begin
-  if ord(roObjectNameAtRoot in Options) +
+  if ord(roNoDCAtRoot in Options) +
+     ord(roObjectNameAtRoot in Options) +
      ord(roObjectNameWithoutDCAtRoot in Options) +
      ord(roCanonicalNameAtRoot in Options) +
      ord(roCommonNameAtRoot in Options) > 1 then
-    ELdap.RaiseUtf8('%.AppendTo: roNoRoot, roObjectNameAtRoot, ' +
-      'roCanonicalNameAtRoot and roCommonNameAtRoot are exclusive', [self]);
+    ELdap.RaiseUtf8('%.AppendTo: roNoDCAtRoot, roObjectNameAtRoot, ' +
+      'roObjectNameWithoutDCAtRoot, roCanonicalNameAtRoot and ' +
+      'roCommonNameAtRoot are exclusive', [self]);
   last := nil;
   for i := 0 to Count - 1 do
   begin
     res := Items[i];
-    if roObjectNameAtRoot in Options then
-      v := Dvo.O_[res.ObjectName]
+    if res.ObjectName = '' then
+      continue; // malformed data
+    v := @Dvo;
+    if (roObjectNameAtRoot in Options) or
+       not ParseDN(res.ObjectName, dc, ou, cn, {esc=}false, {noraise=}true) then
+      v := v^.O_[res.ObjectName]
     else
     begin
-      if not ParseDN(res.ObjectName, dc, ou, cn, {esc=}false, {noraise=}true) then
-        continue;
       if roObjectNameWithoutDCAtRoot in Options then
-        v := Dvo.O_[DNsToCN(nil, ou, cn)]
+        v := v^.O_[DNsToCN(nil, ou, cn)]
       else if roCanonicalNameAtRoot in Options then
-        v := Dvo.O_[DNsToCN(dc, ou, cn)]
+        v := v^.O_[ComputeCanonicalName]
       else if roCommonNameAtRoot in Options then
-        v := Dvo.O_[RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true)]
+        v := v^.O_[RawUtf8ArrayToCsv(cn, '/', -1, {reverse=}true)]
       else
       begin
-        if dc = nil then
-          v := @Dvo
-        else if RawUtf8DynArrayEquals(dc, lastdc) then
-          v := last
-        else
-        begin
-          v := Dvo.O_[RawUtf8ArrayToCsv(dc, '.')];
-          lastdc := dc;
-          last := v;
-        end;
+        if dc <> nil then
+          if not (roNoDCAtRoot in Options) then
+            if RawUtf8DynArrayEquals(dc, lastdc) then
+              v := last // no need to check the path
+            else
+            begin
+              v := v^.O_[RawUtf8ArrayToCsv(dc, '.')];
+              lastdc := dc;
+              last := v;
+            end;
         for j := high(ou) downto 0 do
           v := v^.O_[ou[j]];
         for j := high(cn) downto 0 do
@@ -4109,13 +4123,22 @@ begin
     if ObjectAttributeField = '' then
       continue; // no attribute
     a.Init(mNameValue, dvObject);
-    k := ord(not(roNoObjectName in options));
-    a.SetCount(res.Attributes.Count + k);
+    a.SetCount(res.Attributes.Count +
+               ord(not(roNoObjectName in options)) +
+               ord(roWithCanonicalName in options));
     a.Capacity := a.Count;
-    if k <> 0 then
+    k := 0;
+    if not(roNoObjectName in options) then
     begin
       a.Names[0] := 'objectName';
       RawUtf8ToVariant(res.ObjectName, a.Values[0]);
+      inc(k);
+    end;
+    if roWithCanonicalName in options then
+    begin
+      a.Names[k] := 'canonicalName';
+      RawUtf8ToVariant(ComputeCanonicalName, a.Values[k]);
+      inc(k);
     end;
     attr := pointer(res.Attributes.Items);
     for j := k to k + res.Attributes.Count - 1 do
