@@ -1479,11 +1479,15 @@ type
     function Param(const name: RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
     /// search for "-parametername" and return '' or its string "parametervalue"
-    function ParamS(const name: array of RawUtf8; const description: RawUtf8 = '';
-      const default: string = ''): string;
+    // - if name contains a & character, will also register the following char
+    function ParamS(const name: RawUtf8; const description: RawUtf8 = '';
+      const default: string = ''): string; overload;
     /// search for "-parametername" and return '' or its RawUtf8 "parametervalue"
     function Param(const name: array of RawUtf8; const description: RawUtf8 = '';
       const default: RawUtf8 = ''): RawUtf8; overload;
+    /// search for "-parametername" and return '' or its string "parametervalue"
+    function ParamS(const name: array of RawUtf8; const description: RawUtf8 = '';
+      const default: string = ''): string; overload;
     /// search for "-parametername" and return its integer "parametervalue" or default
     // - if name contains a & character, will also register the following char
     function Param(const name: RawUtf8; default: integer;
@@ -9053,6 +9057,12 @@ end;
 
 function TExecutableCommandLine.Param(const name: RawUtf8;
   default: integer; const description: RawUtf8): integer;
+begin
+  Get(UnAmp(name), result, description, default);
+end;
+
+function TExecutableCommandLine.ParamS(const name: RawUtf8;
+  const description: RawUtf8; const default: string): string;
 begin
   Get(UnAmp(name), result, description, default);
 end;
