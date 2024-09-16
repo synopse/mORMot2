@@ -1249,41 +1249,43 @@ function GetTypeData(TypeInfo: pointer): PTypeData; inline;
 
 {$endif HASINLINE}
 
-{$ifdef ISDELPHI}// Delphi requires those definitions for proper inlining
+{$ifdef ISDELPHI}  // Delphi requires those definitions for proper inlining
 
 const
   NO_INDEX = integer($80000000);
 
-  ptField = $ff;
+  ptField   = $ff;
   ptVirtual = $fe;
 
 type
-  /// used to map a TPropInfo.GetProc/SetProc and retrieve its kind
-  // - defined here for proper Delphi inlining
+  /// used to map a TPropInfo.GetProc/SetProc pointer and retrieve its kind
+  // - published here for proper Delphi inlining
   PropWrap = packed record
     FillBytes: array [0 .. SizeOf(pointer) - 2] of byte;
     /// =$ff for a ptField address, or =$fe for a ptVirtual method
     Kind: byte;
   end;
 
-  /// PPropData not defined in Delphi 7/2007 TypInfo
-  // - defined here for proper Delphi inlining
+  /// rkClass RTTI fields
+  // - published here for proper Delphi inlining
   TPropData = packed record
     PropCount: word;
     PropList: record end;
   end;
+  /// rkClass RTTI fields PPropData was not defined in Delphi 7/2007 TypInfo
   PPropData = ^TPropData;
 
-  /// rkRecord RTTI is not defined in Delphi 7/2007 TTypeData
-  // - defined here for proper Delphi inlining
+  /// rkRecord RTTI fields
+  // - published here for proper Delphi inlining
   TRecordInfo = packed record
     RecSize: integer;
     ManagedFldCount: integer;
   end;
+  /// rkRecord RTTI fields were not defined in Delphi 7/2007 TTypeData
   PRecordInfo = ^TRecordInfo;
 
-  /// rkArray RTTI not defined in Delphi 7/2007 TTypeData
-  // - defined here for proper Delphi inlining
+  /// rkArray RTTI fields
+  // - published here for proper Delphi inlining
   TArrayInfo = packed record
     ArraySize: integer;
     ElCount: integer;
@@ -1291,6 +1293,7 @@ type
     DimCount: byte;
     Dims: array[0..255 {DimCount-1}] of PPRttiInfo;
   end;
+  /// rkArray RTTI fields  published here for proper Delphi inlining
   PArrayInfo = ^TArrayInfo;
 
 {$endif ISDELPHI}

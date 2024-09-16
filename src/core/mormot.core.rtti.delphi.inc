@@ -156,7 +156,7 @@ asm     // eax=aTypeInfo edx=aIndex
         test    edx, edx
         jz      @z
         push    edx
-        shr     edx, 2 // fast by-four scanning
+        shr     edx, 2 // fast by-four scanning in L1 CPU cache
         jz      @1
 @4:     movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
