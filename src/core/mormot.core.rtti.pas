@@ -1552,7 +1552,9 @@ procedure GetEnumNames(aTypeInfo: PRttiInfo; aDest: PPShortString);
 
 /// helper to retrieve all trimmed texts of an enumerate
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
-procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8); overload;
+// - can optionally generate the un-camelcased text of the enumerate values
+procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
+  aUnCamelCase: boolean = false); overload;
 
 /// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
 // - typical usage is the following:
@@ -5702,7 +5704,8 @@ begin
   end;
 end;
 
-procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8);
+procedure GetEnumTrimmedNames(aTypeInfo: PRttiInfo; aDest: PRawUtf8;
+  aUnCamelCase: boolean);
 var
   info: PRttiEnumType;
   p: PShortString;
@@ -5715,6 +5718,8 @@ begin
     for i := info^.MinValue to info^.MaxValue do
     begin
       TrimLeftLowerCaseShort(p, aDest^);
+      if aUnCamelCase then
+        aDest^ := UnCamelCase(aDest^);
       p := @PByteArray(p)^[ord(p^[0]) + 1];
       inc(aDest);
     end;
