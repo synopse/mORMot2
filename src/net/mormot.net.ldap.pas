@@ -1072,25 +1072,37 @@ type
   /// store one LDAP result, i.e. one object name and associated attributes
   TLdapResult = class
   private
-    fObjectName: RawUtf8;
+    fObjectName, fCanonicalName: RawUtf8;
     fAttributes: TLdapAttributeList;
+    procedure SetObjectName(const Value: RawUtf8);
   public
     /// initialize the instance
     constructor Create; reintroduce;
     /// finalize the instance
     destructor Destroy; override;
-    /// Name of this LDAP object
+    /// the Distinguised Name of this LDAP object
+    // - will call NormalizeDN() if this property is manually set
     property ObjectName: RawUtf8
-      read fObjectName write fObjectName;
-    /// Here is list of object attributes
+      read fObjectName write SetObjectName;
+    /// return the Canonical Name of this LDAP object
+    function CanonicalName: RawUtf8;
+    /// find and return first attribute value with the requested type
+    // - just a wrapper around Attributes.Get()
+    function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+      /// find and return first attribute value with the requested type
+    function Get(AttributeType: TLdapAttributeType;
+      out Value: RawUtf8): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// direct raw access to the internal list of attributes
     property Attributes: TLdapAttributeList
       read fAttributes;
-    /// Copy the 'objectSid' attribute if present
-    // - Return true on success
+    /// copy the 'objectSid' attribute if present
+    // - return true on success
     function CopyObjectSid(out objectSid: RawUtf8): boolean;
-    /// Copy the 'objectGUID' attribute if present
-    // - Return true on success
-    function CopyObjectGUID(out objectGUID: TGuid): boolean;
+    /// copy the binary 'objectGUID' attribute if present
+    // - return true on success
+    function CopyObjectGuid(out objectGUID: TGuid): boolean;
     /// add a "dn: ###" entry to a ldif-content buffer
     procedure ExportToLdif(w: TTextWriter);
   end;
@@ -3810,9 +3822,37 @@ begin
   inherited Destroy;
 end;
 
+procedure TLdapResult.SetObjectName(const Value: RawUtf8);
+begin
+  fObjectName := NormalizeDN(Value);
+end;
+
+function TLdapResult.CanonicalName: RawUtf8;
+begin
+  if fCanonicalName = '' then
+    fCanonicalName := DNToCN(fObjectName);
+  result := fCanonicalName;
+end;
+
+function TLdapResult.Get(AttributeType: TLdapAttributeType): RawUtf8;
+begin
+  fAttributes.Find(AttributeType).GetReadable(0, result);
+end;
+
+function TLdapResult.Get(AttributeType: TLdapAttributeType;
+  out value: RawUtf8): boolean;
+var
+  a: TLdapAttribute;
+begin
+  a := fAttributes.Find(AttributeType);
+  if a <> nil then
+    a.GetReadable(0, Value);
+  result := a <> nil;
+end;
+
 function TLdapResult.CopyObjectSid(out objectSid: RawUtf8): boolean;
 begin
-  objectSid := RawSidToText(Attributes.Find('objectSid').GetRaw);
+  objectSid := RawSidToText(Attributes.Find(atObjectSid).GetRaw);
   result := objectSid <> '';
 end;
 
@@ -3822,7 +3862,7 @@ var
   GuidBinary: RawByteString;
 begin
   result := false;
-  GuidAttr := Attributes.Find('objectGUID');
+  GuidAttr := Attributes.Find(atObjectSid);
   if GuidAttr = nil then
     exit;
   GuidBinary := GuidAttr.GetRaw;
