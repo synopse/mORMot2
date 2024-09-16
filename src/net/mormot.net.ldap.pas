@@ -943,6 +943,7 @@ type
     fCount: integer;
     fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
+    fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
@@ -988,10 +989,12 @@ type
     // - returns -1 if not found
     // - faster than overloaded FindIndex(AttributeName)
     function FindIndex(AttributeType: TLdapAttributeType): PtrInt; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// find and return attribute with the requested attribute type
     // - returns nil if not found
     // - faster than overloaded Find(AttributeName)
     function Find(AttributeType: TLdapAttributeType): TLdapAttribute; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// find and return first attribute value with the requested type
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
@@ -3641,12 +3644,11 @@ end;
 function TLdapAttributeList.FindIndex(AttributeType: TLdapAttributeType): PtrInt;
 begin
   if (self <> nil) and
-     (AttributeType <> atUndefined) and
-     (AttributeType in fKnownTypes) then // worth searching it
-    for result := 0 to length(fItems) - 1 do
-      if fItems[result].KnownType = AttributeType then
-        exit;
-  result := -1;
+     (AttributeType <> atUndefined) then
+    result := fIndexTypes[AttributeType]  // O(1) lookup - stored as index + 1
+  else
+    result := 0;
+  dec(result);
 end;
 
 function TLdapAttributeList.Find(AttributeType: TLdapAttributeType): TLdapAttribute;
@@ -3676,6 +3678,8 @@ begin
   include(fKnownTypes, aType);
   result := TLdapAttribute.Create(aName, aType);
   PtrArrayAdd(fItems, result, fCount);
+  if fCount <= 255 then // paranoid
+    fIndexTypes[aType] := fCount; // store index + 1
 end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
