@@ -3565,6 +3565,7 @@ end;
 function TLdapAttribute.GetVariant(options: TLdapResultOptions): variant;
 begin
   SetVariantNull(result);
+  TVarData(result).VAny := nil; // as required by SetNewVariant()
   if (self <> nil) and
      (fCount > 0) then
     SetNewVariant(result, options);
