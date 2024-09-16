@@ -832,11 +832,14 @@ type
 
   /// customize the TLdapAttributeList.Add(name, value) process
   // - default aoAlways will append the name/value pair to the existing content
+  // - aoAlwaysFast always append the name/value, and do not resize the fList,
+  // so you should call AfterAdd once done
   // - aoReplaceValue: if name already exists, replace its value
   // - aoKeepExisting: if name already exists, keep it and ignore the supplied value
   // - aoNoDuplicateValue: if value already exists as such, don't add it again
   TLdapAddOption = (
     aoAlways,
+    aoAlwaysFast,
     aoReplaceValue,
     aoKeepExisting,
     aoNoDuplicateValue);
@@ -879,6 +882,10 @@ type
     /// include a new formatted text value to this list
     procedure AddFmt(const aValueFmt: RawUtf8; const aValueArgs: array of const;
       Option: TLdapAddOption = aoAlways); 
+    /// ensure Count = length(fItems) to allow proper "for res in Items do"
+    // - is called e.g. by TLdapClient.Search after all its Add()
+    procedure AfterAdd;
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve a value as human-readable text
     // - wraps AttributeValueMakeReadable() and the known storage type
     function GetReadable(index: PtrInt = 0): RawUtf8;
@@ -927,7 +934,8 @@ type
   TLdapAttributeList = class
   private
     fItems: TLdapAttributeDynArray;
-    fLastFound: PtrInt;
+    fCount: integer;
+    fLastFound: integer;
     fKnownTypes: TLdapAttributeTypes;
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
     function GetUserAccountControl: TUserAccountControls;
@@ -998,9 +1006,13 @@ type
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
     /// access to the internal list of TLdapAttribute objects
-    // - note that length(Items) = Count for this class
+    // - note that length(Items) may be <> Count for this class, if AfterAdd has not
+    // been called, so so you should NOT use an enumerate "for a in list.Items do" loop
     property Items: TLdapAttributeDynArray
       read fItems;
+    /// number of TLdapAttribute objects in this list
+    property Count: integer
+      read fCount;
     /// the common Attribute Types currently stored in this list
     property KnownTypes: TLdapAttributeTypes
       read fKnownTypes;
@@ -1091,6 +1103,7 @@ type
     /// ensure Count = length(fItems) to allow proper "for res in Items do"
     // - is called e.g. by TLdapClient.Search after all its Add()
     procedure AfterAdd;
+      {$ifdef HASINLINE} inline; {$endif}
     /// clear all TLdapResult objects in list
     procedure Clear;
     /// return all Items[].ObjectName as a sorted array
@@ -3003,8 +3016,8 @@ begin
     atsIntegerUserAccountControl,
     atsIntegerSystemFlags,
     atsIntegerGroupType,
-    atsIntegerSamAccountType:
-      exit; // no need to make any conversion since is true UTF-8 or number
+    atsIntegerAccountType:
+      exit; // no need to make any conversion for ATS_READABLE content
     atsSid:
       if IsValidRawSid(s) then
       begin
@@ -3273,7 +3286,7 @@ begin
   if ord(AccountName <> '') +
      ord(DistinguishedName <> '') +
      ord(UserPrincipalName <> '') > 1 then
-    result := FormatUtf8('(|%)', [result]);
+    result := FormatUtf8('(|%)', [result]); // "or" between identifiers
   if AccountType <> satUnknown then
     result := FormatUtf8('(&(sAMAccountType=%)%%)',
       [AT_VALUE[AccountType], result, CustomFilter])
@@ -3330,12 +3343,20 @@ begin
         exit;
   end;
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
+  if Option <> aoAlwaysFast then
+    DynArrayFakeLength(fList, fCount);
 end;
 
 procedure TLdapAttribute.AddFmt(const aValueFmt: RawUtf8;
   const aValueArgs: array of const; Option: TLdapAddOption);
 begin
   Add(FormatUtf8(aValueFmt, aValueArgs), Option);
+end;
+
+procedure TLdapAttribute.AfterAdd;
+begin
+  if fList <> nil then
+    DynArrayFakeLength(fList, fCount);
 end;
 
 function TLdapAttribute.GetReadable(index: PtrInt): RawUtf8;
@@ -3547,18 +3568,13 @@ end;
 
 destructor TLdapAttributeList.Destroy;
 begin
-  ObjArrayClear(fItems);
+  Clear;
   inherited Destroy;
 end;
 
 procedure TLdapAttributeList.Clear;
 begin
-  ObjArrayClear(fItems);
-end;
-
-function TLdapAttributeList.Count: integer;
-begin
-  result := length(fItems);
+  ObjArrayClear(fItems, fCount);
 end;
 
 function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
@@ -3568,7 +3584,7 @@ begin
   if (self <> nil) and
      (fItems <> nil) then
   begin
-    result := length(fItems) - 1;
+    result := fCount - 1;
     if result = 0 then // very common case for single attribute lookup
     begin
       if fItems[0].AttributeName = AttributeName then
@@ -3648,7 +3664,7 @@ function TLdapAttributeList.DoAdd(const aName: RawUtf8;
 begin
   include(fKnownTypes, aType);
   result := TLdapAttribute.Create(aName, aType);
-  ObjArrayAdd(fItems, result);
+  PtrArrayAdd(fItems, result, fCount);
 end;
 
 function TLdapAttributeList.Add(const AttributeName: RawUtf8): TLdapAttribute;
@@ -3660,7 +3676,7 @@ begin
     ELdap.RaiseUtf8('Unexpected %.Add('''')', [self]);
   // search for existing TLdapAttribute instance during the name interning step
   if not _LdapIntern.Unique(n, AttributeName) then // n = existing name
-    for i := 0 to length(fItems) - 1 do // fast pointer search as in Find()
+    for i := 0 to fCount - 1 do // fast interned pointer search as in Find()
     begin
       result := fItems[i];
       if pointer(result.AttributeName) = pointer(n) then
@@ -3724,7 +3740,7 @@ end;
 
 procedure TLdapAttributeList.Delete(const AttributeName: RawUtf8);
 begin
-  ObjArrayDelete(fItems, FindIndex(AttributeName));
+  PtrArrayDelete(fItems, FindIndex(AttributeName), @fCount, pakClass);
 end;
 
 function TLdapAttributeList.AccountType: TSamAccountType;
@@ -5208,7 +5224,7 @@ begin
         begin
           r := fSearchResult.Add;
           n := 1;
-          AsnNext(n, resp, @r.ObjectName);
+          AsnNext(n, resp, @r.fObjectName);
           if AsnNext(n, resp) = ASN1_SEQ then
           begin
             while n < length(resp) do
@@ -5218,11 +5234,14 @@ begin
                 AsnNext(n, resp, @u);
                 a := r.Attributes.Add(u);
                 if AsnNext(n, resp) = ASN1_SETOF then
+                begin
                   while n < seqend do
                   begin
                     AsnNext(n, resp, @u);
-                    a.Add(u, aoAlways);
+                    a.Add(u, aoAlwaysFast); // with eventual AfterAdd
                   end;
+                  a.AfterAdd; // allow "for a in attr.List do"
+                end;
               end;
             end;
           end;
