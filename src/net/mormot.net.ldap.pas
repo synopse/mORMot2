@@ -853,6 +853,7 @@ type
     roCommonNameAtRoot,
     roNoObjectName,
     roWithCanonicalName,
+    roRawValues,
     roRawBoolean,
     roRawUac,
     roRawFlags,
@@ -906,7 +907,7 @@ type
     // - if Count > 0, return a TDocVariant array with all texts
     function GetVariant(options: TLdapResultOptions = []): variant;
     /// retrieve this attribute value(s) as a variant
-    // - expects v to be void (e.g. just allocated from an array of variant)
+    // - expects v to be fully zeroed (e.g. just allocated from a variant array)
     // - as called by GetVariant()
     procedure SetNewVariant(var v: variant; options: TLdapResultOptions);
     /// search for a given value within this list
@@ -3442,102 +3443,104 @@ var
   sat: TSamAccountType;
   sf: TSystemFlags;
 begin
-  case fKnownTypeStorage of
-    atsAny,
-    atsInteger:
-      if ToInt64(s, v.VInt64) then
-      begin
-        v.VType := varInt64;
-        exit;
-      end
-      else
-      begin
-        v.VInt64 := 0; // avoid GPF below
-        if (fKnownTypeStorage = atsAny) and
-           not (roRawBoolean in options) then
-          if s = 'FALSE' then
+  if not (roRawValues in options) then
+    case fKnownTypeStorage of
+      atsAny,
+      atsInteger:
+        if ToInt64(s, v.VInt64) then
+        begin
+          v.VType := varInt64;
+          exit;
+        end
+        else
+        begin
+          v.VInt64 := 0; // avoid GPF below
+          if (fKnownTypeStorage = atsAny) and
+             not (roRawBoolean in options) then
+            if s = 'FALSE' then
+            begin
+              v.VType := varBoolean;
+              exit;
+            end
+            else if s = 'TRUE' then
+            begin
+              v.VType := varBoolean;
+              v.VInteger := ord(true);
+              exit;
+            end;
+        end;
+      atsIntegerUserAccountControl:
+        if ToInteger(s, i) then
+          if roRawUac in options then
           begin
-            v.VType := varBoolean;
+            v.VType := varInteger;
+            v.VInteger := i;
             exit;
           end
-          else if s = 'TRUE' then
+          else
           begin
-            v.VType := varBoolean;
-            v.VInteger := ord(true);
+            uac := UserAccountControlsFromInteger(i);
+            TDocVariantData(v).InitArrayFromSet(
+              TypeInfo(TUserAccountControls), uac, JSON_FAST, {trimmed=}true);
             exit;
           end;
-      end;
-    atsIntegerUserAccountControl:
-      if ToInteger(s, i) then
-        if roRawUac in options then
+      atsIntegerSystemFlags:
+        if ToInteger(s, i) then
+          if roRawFlags in options then
+          begin
+            v.VType := varInteger;
+            v.VInteger := i;
+            exit;
+          end
+          else
+          begin
+            sf := SystemFlagsFromInteger(i);
+            TDocVariantData(v).InitArrayFromSet(
+              TypeInfo(TSystemFlags), sf, JSON_FAST, {trimmed=}true);
+            exit;
+          end;
+      atsIntegerGroupType:
+        if ToInteger(s, i) then
+          if roRawGroupType in options then
+          begin
+            v.VType := varInteger;
+            v.VInteger := i;
+            exit;
+          end
+          else
+          begin
+            gt := GroupTypesFromInteger(i);
+            TDocVariantData(v).InitArrayFromSet(
+              TypeInfo(TGroupTypes), gt, JSON_FAST, {trimmed=}true);
+            exit;
+          end;
+      atsIntegerAccountType:
+        if ToInteger(s, i) then
         begin
-          v.VType := varInteger;
-          v.VInteger := i;
-          exit;
-        end
-        else
-        begin
-          uac := UserAccountControlsFromInteger(i);
-          TDocVariantData(v).InitArrayFromSet(
-            TypeInfo(TUserAccountControls), uac, JSON_FAST, {trimmed=}true);
+          if roRawAccountType in options then
+            sat := satUnknown
+          else
+            sat := SamAccountTypeFromInteger(i);
+          if sat <> satUnknown then
+          begin
+            v.VType := varString;
+            ToTextTrimmed(sat, RawUtf8(v.VAny));
+          end
+          else
+          begin
+            v.VType := varInteger; // store satUnknown as integer
+            v.VInteger := i;
+          end;
           exit;
         end;
-    atsIntegerSystemFlags:
-      if ToInteger(s, i) then
-        if roRawFlags in options then
-        begin
-          v.VType := varInteger;
-          v.VInteger := i;
-          exit;
-        end
-        else
-        begin
-          sf := SystemFlagsFromInteger(i);
-          TDocVariantData(v).InitArrayFromSet(
-            TypeInfo(TSystemFlags), sf, JSON_FAST, {trimmed=}true);
-          exit;
-        end;
-    atsIntegerGroupType:
-      if ToInteger(s, i) then
-        if roRawGroupType in options then
-        begin
-          v.VType := varInteger;
-          v.VInteger := i;
-          exit;
-        end
-        else
-        begin
-          gt := GroupTypesFromInteger(i);
-          TDocVariantData(v).InitArrayFromSet(
-            TypeInfo(TGroupTypes), gt, JSON_FAST, {trimmed=}true);
-          exit;
-        end;
-    atsIntegerAccountType:
-      if ToInteger(s, i) then
-      begin
-        if roRawAccountType in options then
-          sat := satUnknown
-        else
-          sat := SamAccountTypeFromInteger(i);
-        if sat <> satUnknown then
-        begin
-          v.VType := varString;
-          ToTextTrimmed(sat, RawUtf8(v.VAny));
-        end
-        else
-        begin
-          v.VType := varInteger; // store satUnknown as integer
-          v.VInteger := i;
-        end;
-        exit;
-      end;
-    atsFileTime:
-      if s = '0' then
-        exit; // 0 = null
-  end;
+      atsFileTime:
+        if s = '0' then
+          exit; // 0 = null
+    end;
   v.VType := varString;
   RawUtf8(v.VAny) := s;
-  if not (fKnownTypeStorage in ATS_READABLE) then
+  if not (fKnownTypeStorage in ATS_READABLE) and
+     not (roRawValues in options) then
     AttributeValueMakeReadable(RawUtf8(v.VAny), fKnownTypeStorage);
 end;
 
@@ -4085,6 +4088,10 @@ begin
     ELdap.RaiseUtf8('%.AppendTo: roNoDCAtRoot, roObjectNameAtRoot, ' +
       'roObjectNameWithoutDCAtRoot, roCanonicalNameAtRoot and ' +
       'roCommonNameAtRoot are exclusive', [self]);
+  if (roRawValues in options) and
+     (options * [roRawBoolean .. roRawAccountType] <> []) then
+    ELdap.RaiseUtf8('%.AppendTo: roRawValues and other roRaw* options ' +
+      'are exclusive', [self]);
   last := nil;
   for i := 0 to Count - 1 do
   begin
