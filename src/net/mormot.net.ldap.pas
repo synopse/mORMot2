@@ -308,6 +308,107 @@ const
     LDAP_RES_COMPARE_TRUE,
     LDAP_RES_SASL_BIND_IN_PROGRESS];
 
+type
+  /// high level LDAP result codes
+  // - use RawLdapError() and RawLdapErrorString() to decode a LDAP result code
+  // or LDAP_RES_CODE[] and LDAP_ERROR_TEXT[] to their integer/text value
+  TLdapError = (
+    leUnknown,
+    leSuccess,
+    leOperationsError,
+    leProtocolError,
+    leTimeLimitExceeded,
+    leSizeLimitExceeded,
+    leCompareFalse,
+    leCompareTrue,
+    leAuthMethodNotSupported,
+    leStrongAuthRequired,
+    leReferral,
+    leAdminLimitExceeded,
+    leUnavailableCriticalExtension,
+    leConfidentalityRequired,
+    leSASLBindInProgress,
+    leNoSuchAttribute,
+    leUndefinedAttributeType,
+    leInappropriateMatching,
+    leConstraintViolation,
+    leAttributeOrValueExists,
+    leInvalidAttributeSyntax,
+    leNoSuchObject,
+    leAliasProblem,
+    leInvalidDNSyntax,
+    leAliasDereferencingProblem,
+    leInappropriateAuthentication,
+    leInvalidCredentials,
+    leInsufficientAccessRights,
+    leBusy,
+    leUnavailable,
+    leUnwillingToPerform,
+    leLoopDetect,
+    leNamingViolation,
+    leObjectClassViolation,
+    leNotAllowedOnNonLeaf,
+    leNotAllowedOnRDN,
+    leEntryAlreadyExists,
+    leObjectClassModsProhibited,
+    leAffectsMultipleDSAS,
+    leNotSupported,
+    leTimeout,
+    leAuthorizationDenied);
+  PLdapError = ^TLdapError;
+
+var
+  /// human friendly text of all TLdapError items
+  // - are the un-camel-cased trimed text of all TLdapError identifiers
+  // - see RawLdapErrorString() to decode a LDAP result code into a full message
+  LDAP_ERROR_TEXT: array[TLdapError] of RawUtf8;
+
+const
+  /// raw LDAP result codes of all TLdapError items
+  // - use RawLdapError() or RawLdapErrorString() to decode a LDAP result code
+  LDAP_RES_CODE: array[succ(low(TLdapError)) .. high(TLdapError)] of byte = (
+    LDAP_RES_SUCCESS,
+    LDAP_RES_OPERATIONS_ERROR,
+    LDAP_RES_PROTOCOL_ERROR,
+    LDAP_RES_TIME_LIMIT_EXCEEDED,
+    LDAP_RES_SIZE_LIMIT_EXCEEDED,
+    LDAP_RES_COMPARE_FALSE,
+    LDAP_RES_COMPARE_TRUE,
+    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED,
+    LDAP_RES_STRONGER_AUTH_REQUIRED,
+    LDAP_RES_REFERRAL,
+    LDAP_RES_ADMIN_LIMIT_EXCEEDED,
+    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION,
+    LDAP_RES_CONFIDENTIALITY_REQUIRED,
+    LDAP_RES_SASL_BIND_IN_PROGRESS,
+    LDAP_RES_NO_SUCH_ATTRIBUTE,
+    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE,
+    LDAP_RES_INAPPROPRIATE_MATCHING,
+    LDAP_RES_CONSTRAINT_VIOLATION,
+    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS,
+    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX,
+    LDAP_RES_NO_SUCH_OBJECT,
+    LDAP_RES_ALIAS_PROBLEM,
+    LDAP_RES_INVALID_DN_SYNTAX,
+    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM,
+    LDAP_RES_INAPPROPRIATE_AUTHENTICATION,
+    LDAP_RES_INVALID_CREDENTIALS,
+    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS,
+    LDAP_RES_BUSY,
+    LDAP_RES_UNAVAILABLE,
+    LDAP_RES_UNWILLING_TO_PERFORM,
+    LDAP_RES_LOOP_DETECT,
+    LDAP_RES_NAMING_VIOLATION,
+    LDAP_RES_OBJECT_CLASS_VIOLATION,
+    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF,
+    LDAP_RES_NOT_ALLOWED_ON_RDN,
+    LDAP_RES_ENTRY_ALREADY_EXISTS,
+    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED,
+    LDAP_RES_AFFECTS_MULTIPLE_DSAS,
+    LDAP_RES_NOT_SUPPORTED,
+    LDAP_RES_TIMEOUT,
+    LDAP_RES_AUTHORIZATION_DENIED);
+
 const
   // LDAP ASN.1 types
   LDAP_ASN1_BIND_REQUEST      = $60;
@@ -389,8 +490,13 @@ type
     lsaAlways
   );
 
+/// translate a LDAP_RES_* integer result code into our TLdapError enumerate
+function RawLdapError(ErrorCode: integer): TLdapError;
+
 /// translate a LDAP_RES_* integer result code into some human-readable text
-function RawLdapErrorString(ErrorCode: integer): RawUtf8;
+// - searching for the ErrorCode within LDAP_RES_CODE[] values
+// - see LDAP_ERROR_TEXT[RawLdapError(] if you only need the error text
+function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
 
 /// encode a LDAP search filter text into an ASN.1 binary
 // - as used by CldapBroadcast() and TLdapClient.Search()
@@ -930,7 +1036,7 @@ function SystemFlagsValue(sf: TSystemFlags): integer;
 function ToText(sat: TSamAccountType): PShortString; overload;
 procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
 
-/// compute a TLdapClient.Search filter for a given account
+/// compute a TLdapClient.Search filter for a given account type
 // - specify the entry by AccountName, DistinguishedName or UserPrincipalName
 // - and also per sAMAccountType and a custom filter
 function InfoFilter(AccountType: TSamAccountType;
@@ -1241,9 +1347,8 @@ type
     fSeq: integer;
     fResultCode: integer;
     fResultString: RawUtf8;
-    fFullResult: TAsnObject;
-    fTlsContext: TNetTlsContext;
     fResponseCode: integer;
+    fResultError: TLdapError;
     fResponseDN: RawUtf8;
     fReferals: TRawUtf8List;
     fVersion: integer;
@@ -1262,6 +1367,8 @@ type
     fSecContext: TSecContext;
     fBoundUser: RawUtf8;
     fSockBuffer: RawByteString;
+    fFullResult: TAsnObject;
+    fTlsContext: TNetTlsContext;
     fSockBufferPos: integer;
     fWellKnownObjects: TLdapKnownCommonNamesDual;
     // protocol methods
@@ -1616,8 +1723,8 @@ type
     property BoundUser: RawUtf8
       read fBoundUser;
     /// binary string of the last full response from LDAP server
-    // - This string is encoded by ASN.1 BER encoding
-    // - You need this only for debugging
+    // - this string is encoded by ASN.1 BER encoding
+    // - only needed for debugging
     property FullResult: TAsnObject
       read fFullResult;
     /// optional advanced options for FullTls = true
@@ -1681,10 +1788,16 @@ type
     property Version: integer
       read fVersion write fVersion default 3;
     /// contains the result code of the last LDAP operation
-    // - could be e.g. LDAP_RES_SUCCESS or an error code - see ResultString
+    // - could be e.g. LDAP_RES_SUCCESS or an error code
+    // - see also ResultString text and ResultError enumerate
     property ResultCode: integer
       read fResultCode;
+    /// contains the high-level result enumerate of the last LDAP operation
+    // - see also ResultCode raw integer and ResultString text
+    property ResultError: TLdapError
+      read fResultError;
     /// human readable description of the last LDAP operation
+    // - see also ResultCode raw integer and ResultError enumerate
     property ResultString: RawUtf8
       read fResultString;
   end;
@@ -2435,91 +2548,20 @@ begin
   delete(result, 1, 1); // trim leading ','
 end;
 
-function RawLdapErrorString(ErrorCode: integer): RawUtf8;
+function RawLdapError(ErrorCode: integer): TLdapError;
 begin
-  case ErrorCode of
-    LDAP_RES_SUCCESS:
-      result := 'Success';
-    LDAP_RES_OPERATIONS_ERROR:
-      result := 'Operations error';
-    LDAP_RES_PROTOCOL_ERROR:
-      result := 'Protocol error';
-    LDAP_RES_TIME_LIMIT_EXCEEDED:
-      result := 'Time limit Exceeded';
-    LDAP_RES_SIZE_LIMIT_EXCEEDED:
-      result := 'Size limit Exceeded';
-    LDAP_RES_COMPARE_FALSE:
-      result := 'Compare false';
-    LDAP_RES_COMPARE_TRUE:
-      result := 'Compare true';
-    LDAP_RES_AUTH_METHOD_NOT_SUPPORTED:
-      result := 'Auth method not supported';
-    LDAP_RES_STRONGER_AUTH_REQUIRED:
-      result := 'Strong auth required';
-    LDAP_RES_REFERRAL:
-      result := 'Referral';
-    LDAP_RES_ADMIN_LIMIT_EXCEEDED:
-      result := 'Admin limit exceeded';
-    LDAP_RES_UNAVAILABLE_CRITICAL_EXTENSION:
-      result := 'Unavailable critical extension';
-    LDAP_RES_CONFIDENTIALITY_REQUIRED:
-      result := 'Confidentality required';
-    LDAP_RES_SASL_BIND_IN_PROGRESS:
-      result := 'Sasl bind in progress';
-    LDAP_RES_NO_SUCH_ATTRIBUTE:
-      result := 'No such attribute';
-    LDAP_RES_UNDEFINED_ATTRIBUTE_TYPE:
-      result := 'Undefined attribute type';
-    LDAP_RES_INAPPROPRIATE_MATCHING:
-      result := 'Inappropriate matching';
-    LDAP_RES_CONSTRAINT_VIOLATION:
-      result := 'Constraint violation';
-    LDAP_RES_ATTRIBUTE_OR_VALUE_EXISTS:
-      result := 'Attribute or value exists';
-    LDAP_RES_INVALID_ATTRIBUTE_SYNTAX:
-      result := 'Invalid attribute syntax';
-    LDAP_RES_NO_SUCH_OBJECT:
-      result := 'No such object';
-    LDAP_RES_ALIAS_PROBLEM:
-      result := 'Alias problem';
-    LDAP_RES_INVALID_DN_SYNTAX:
-      result := 'Invalid DN syntax';
-    LDAP_RES_ALIAS_DEREFERENCING_PROBLEM:
-      result := 'Alias dereferencing problem';
-    LDAP_RES_INAPPROPRIATE_AUTHENTICATION:
-      result := 'Inappropriate authentication';
-    LDAP_RES_INVALID_CREDENTIALS:
-      result := 'Invalid credentials';
-    LDAP_RES_INSUFFICIENT_ACCESS_RIGHTS:
-      result := 'Insufficient access rights';
-    LDAP_RES_BUSY:
-      result := 'Busy';
-    LDAP_RES_UNAVAILABLE:
-      result := 'Unavailable';
-    LDAP_RES_UNWILLING_TO_PERFORM:
-      result := 'Unwilling to perform';
-    LDAP_RES_LOOP_DETECT:
-      result := 'Loop detect';
-    LDAP_RES_NAMING_VIOLATION:
-      result := 'Naming violation';
-    LDAP_RES_OBJECT_CLASS_VIOLATION:
-      result := 'Object class violation';
-    LDAP_RES_NOT_ALLOWED_ON_NON_LEAF:
-      result := 'Not allowed on non leaf';
-    LDAP_RES_NOT_ALLOWED_ON_RDN:
-      result := 'Not allowed on RDN';
-    LDAP_RES_ENTRY_ALREADY_EXISTS:
-      result := 'Entry already exists';
-    LDAP_RES_OBJECT_CLASS_MODS_PROHIBITED:
-      result := 'Object class mods prohibited';
-    LDAP_RES_AFFECTS_MULTIPLE_DSAS:
-      result := 'Affects multiple DSAs';
-    LDAP_RES_OTHER:
-      result := 'Other';
+  if (ErrorCode < 0) or
+     (ErrorCode > LDAP_RES_AUTHORIZATION_DENIED) then
+    result := leUnknown
   else
-    result := 'Unknown';
-  end;
-  result := FormatUtf8('% (#%)', [result, ErrorCode]);
+    result := TLdapError(ByteScanIndex(
+      @LDAP_RES_CODE, length(LDAP_RES_CODE), ErrorCode) + 1);
+end;
+
+function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
+begin
+  Enum := RawLdapError(ErrorCode);
+  FormatUtf8('% (#%)', [LDAP_ERROR_TEXT[Enum], ErrorCode], result);
 end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-search
@@ -2903,6 +2945,7 @@ var
   t: TLdapAttributeType;
   i, n: PtrInt;
 begin
+  GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
   _LdapIntern := TRawUtf8Interning.Create;
   RegisterGlobalShutdownRelease(_LdapIntern);
   // register all our common Attribute Types names for quick search as pointer()
