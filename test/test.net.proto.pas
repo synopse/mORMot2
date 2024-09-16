@@ -674,6 +674,7 @@ var
   guid: TGuid;
   i, j, k: PtrInt;
   dns, clients, a: TRawUtf8DynArray;
+  le: TLdapError;
   rl: TLdapResultList;
   r: TLdapResult;
   at: TLdapAttributeType;
@@ -757,6 +758,20 @@ begin
     'OU=tranquilit,DC=ad,DC=tranquil,DC=it'),
     'ad.tranquil.it/tranquilit/computers/test_wapt/d\.\.zaf(fds )da,z ""((''\\\/ df==ez');
   CheckEqual(DNToCN('cn=foo, ou=bar'), '/bar/foo');
+  CheckEqual(NormalizeDN('cn=foo, ou = bar'), 'CN=foo,OU=bar');
+  // validate LDAP error recognition
+  Check(RawLdapError(-1) = leUnknown);
+  Check(RawLdapError(LDAP_RES_TOO_LATE) = leUnknown);
+  Check(RawLdapError(10000) = leUnknown);
+  Check(RawLdapError(LDAP_RES_AUTHORIZATION_DENIED) = leAuthorizationDenied);
+  for le := low(le) to high(le) do
+  begin
+    Check(LDAP_ERROR_TEXT[le] <> '');
+    if le <> leUnknown then
+      CheckUtf8(RawLdapError(LDAP_RES_CODE[le]) = le, LDAP_ERROR_TEXT[le]);
+  end;
+  CheckEqual(LDAP_ERROR_TEXT[leUnknown], 'Unknown');
+  CheckEqual(LDAP_ERROR_TEXT[leCompareTrue], 'Compare true');
   // validate LDAP escape/unescape
   for c := 0 to 200 do
   begin
@@ -853,25 +868,43 @@ begin
     CheckEqual(rl.Dump({noTime=}true), 'results: 0'#13#10);
     CheckEqual(rl.ExportToLdifContent,
       'version: 1'#$0A'# total number of entries: 0'#$0A);
+    CheckEqual(rl.Count, 0);
     CheckEqual(rl.GetJson, '{}');
     r := rl.Add;
+    r.ObjectName := 'cn=foo, ou=bar';
+    CheckEqual(r.ObjectName, 'CN=foo,OU=bar', 'normalized');
+    CheckEqual(r.Attributes.Count, 0);
     v := 'John E Doxx';
     PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute (Delphi)
-    r.ObjectName := 'cn=foo, ou=bar';
     r.Attributes.Add('objectClass', 'person');
+    CheckEqual(r.Attributes.Count, 1);
     r.Attributes.AddPairs(['cn', 'John Doe',
                            'cn', v,
                            'sn', 'Doe']);
-    //writeln(rl.GetJson([]));
-    CheckHash(rl.GetJson([]), $A33AF44F);
+    CheckEqual(r.Attributes.Count, 3);
+    CheckHash(rl.GetJson([]), $8AAB69D2);
+    CheckHash(rl.GetJson([roRawValues]), $8AAB69D2);
+    CheckHash(rl.GetJson([roNoDCAtRoot]), $8AAB69D2);
     CheckHash(rl.GetJson([roNoObjectName]), $6A4853FA);
-    CheckHash(rl.GetJson([roCanonicalNameAtRoot]), $39E6602D);
-    CheckHash(rl.GetJson([roObjectNameAtRoot]), $336A53E4);
-    CheckHash(rl.GetJson([roCommonNameAtRoot]), $0565ED3D);
+    CheckHash(rl.GetJson([roCanonicalNameAtRoot]), $20AF5125);
+    CheckHash(rl.GetJson([roObjectNameAtRoot]), $92FE1BFD);
+    CheckHash(rl.GetJson([roCommonNameAtRoot]), $047EED2F);
     CheckHash(rl.GetJson([roObjectNameWithoutDCAtRoot, roNoObjectName]), $F41233F2);
-    CheckHash(rl.GetJson([roNoObjectName]), $6A4853FA);
-    CheckHash(rl.Dump({noTime=}true), $31FDA4D3, 'hashDump');
-    CheckHash(rl.ExportToLdifContent, $E2272C14, 'hashLdif');
+    CheckHash(rl.GetJson([roWithCanonicalName]), $C4BA2ED3);
+    CheckHash(rl.GetJson([roNoObjectName, roWithCanonicalName]), $0BCFC3BC);
+    CheckHash(rl.Dump({noTime=}true), $DF59A0A9, 'hashDump');
+    CheckHash(rl.ExportToLdifContent, $4A97B4B2, 'hashLdif');
+    r.Attributes.Delete(atCommonName);
+    CheckEqual(r.Attributes.Count, 2);
+    v := rl.GetJson([roNoObjectName]);
+    CheckEqual(v, '{"bar":{"foo":{"objectClass":"person","sn":"Doe"}}}');
+    r.ObjectName := 'cn=foo, ou=bar, dc=toto, dc=it';
+    //writeln(rl.GetJson([roNoDCAtRoot, roNoObjectName]));
+    CheckHash(rl.GetJson([]), $DF03674D);
+    CheckHash(rl.GetJson([roRawValues]), $DF03674D);
+    CheckHash(rl.GetJson([roNoDCAtRoot]), $DB4EF1DC);
+    CheckEqual(rl.GetJson([roNoObjectName, roNoDCAtRoot]), v);
+    CheckHash(rl.ExportToLdifContent, $31A4283C, 'hashLdif');
   finally
     rl.Free;
   end;
