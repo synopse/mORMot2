@@ -541,6 +541,7 @@ function SidToText(sid: PSid): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Security IDentifier as text, following the standard representation
+// - this function is able to convert into itself, i.e. sid=pointer(text)
 procedure SidToText(sid: PSid; var text: RawUtf8); overload;
 
 /// convert several Security IDentifier as text dynamic array

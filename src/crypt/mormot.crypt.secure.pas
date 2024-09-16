@@ -18,6 +18,7 @@ unit mormot.crypt.secure;
     - Minimal PEM/DER Encoding/Decoding
     - Basic ASN.1 Support
     - Windows Executable Digital Signature Stuffing
+    - Cross-Platform Decode some Windows Security Structures
 
    Uses optimized mormot.crypt.core.pas for its actual cryptographic process.
 
@@ -3637,6 +3638,15 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
 // - this function does not require mormot.crypt.openssl
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
 
+
+{ ************** Cross-Platform Decode some Windows Security Structures }
+
+/// check if a binary buffer seems to be a valid NDR
+function IsValidNdr(const ndr: RawByteString): boolean;
+
+/// convert a NDR as text, following the standard representation
+// - this function is able to convert into itself, i.e. ndr=pointer(text)
+procedure NdrToText(ndr: pointer; len: PtrInt; var text: RawUtf8);
 
 
 implementation
@@ -10186,6 +10196,21 @@ begin
   finally
     w.Free;
   end;
+end;
+
+{ ************** Cross-Platform Decode some Windows Security Structures }
+
+function IsValidNdr(const ndr: RawByteString): boolean;
+begin
+  result := true; // TODO
+end;
+
+procedure NdrToText(ndr: pointer; len: PtrInt; var text: RawUtf8);
+var
+  tmp: RawUtf8; // should be able to convert into itself, i.e. ndr=pointer(text)
+begin
+  ToHumanHex(tmp, ndr, len); // TODO
+  text := tmp;
 end;
 
 
