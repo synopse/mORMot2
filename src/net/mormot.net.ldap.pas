@@ -1652,7 +1652,7 @@ type
       const BaseDN: RawUtf8 = ''; MaxCount: integer = 0;
       SortByName: boolean = true; TypesOnly: boolean = false): variant; overload;
     /// determine whether a given entry has a specified attribute value
-    function Compare(const Obj, AttributeValue: RawUtf8): boolean;
+    function Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 
     { write methods }
 
@@ -5580,7 +5580,7 @@ end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-compare
 
-function TLdapClient.Compare(const Obj, AttributeValue: RawUtf8): boolean;
+function TLdapClient.Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
 begin
   result := false;
   if not Connected(False) then
@@ -5588,8 +5588,8 @@ begin
   SendAndReceive(Asn(LDAP_ASN1_COMPARE_REQUEST, [
                    Asn(obj),
                    Asn(ASN1_SEQ, [
-                     Asn(TrimU(GetFirstCsvItem(AttributeValue, '='))),
-                     Asn(TrimU(SeparateRight(AttributeValue, '=')))
+                     Asn(AttrName),
+                     Asn(AttrValue)
                    ])
                  ]));
   result := fResultCode = LDAP_RES_COMPARE_TRUE;
