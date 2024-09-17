@@ -599,8 +599,162 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
 
+type
+  /// standard and generic access rights in TSecAceAccessMask.Flags
+  TSecAccess = (
+    samDelete,
+    samReadControl,
+    samWriteDac,
+    samWriteOwner,
+    samSynchronize,
+    sam21, sam22, sam23,
+    samAccessSystemSecurity,
+    samMaximumAllowed,
+    sam26, sam27,
+    samGenericAll,
+    samGenericExecute,
+    samGenericWrite,
+    samGenericRead);
+  TSecAccessMask = set of TSecAccess;
 
-/// convert a Windows SecurityDescriptor buffer as text (SDDL or hexa)
+  /// custom binary buffer type used as Windows self-relative Security Descriptor
+  RawSecurityDescriptor = type RawByteString;
+
+  TSecControl = (
+    scOwnerDefaulted,
+    scGroupDefaulted,
+    scDaclPresent,
+    scDaclDefaulted,
+    scSaclPresent,
+    scSaclDefaulted,
+    sc6, sc7,
+    scDaclAutoInheritReq,
+    scSaclAutoInheritReq,
+    scDaclAutoInherit,
+    scSaclAutoInherit,
+    scDaclProtected,
+    scSaclProtected,
+    scRmControlValid,
+    scSelfRelative);
+  TSecControls = set of TSecControl;
+
+  /// high-level supported ACE kinds in TSecAce.AceType
+  TSecAceType = (
+    satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
+    satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
+    satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
+    satAlarm,                         // AL 3  SYSTEM_ALARM_ACE_TYPE
+    satCompoundAllowed,               //    4  ACCESS_ALLOWED_COMPOUND_ACE_TYPE
+    satObjectAccessAllowed,           // OA 5  ACCESS_ALLOWED_OBJECT_ACE_TYPE
+    satObjectAccessDenied,            // OD 6  ACCESS_DENIED_OBJECT_ACE_TYPE
+    satObjectAudit,                   // OU 7  SYSTEM_AUDIT_OBJECT_ACE_TYPE
+    satObjectAlarm,                   // OL 8  SYSTEM_ALARM_OBJECT_ACE_TYPE
+    satCallbackAccessAllowed,         // XA 9  ACCESS_ALLOWED_CALLBACK_ACE_TYPE
+    satCallbackAccessDenied,          // XD 10 ACCESS_DENIED_CALLBACK_ACE_TYPE
+    satCallbackObjectAccessAllowed,   // ZA 11 ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAccessDenied,    //    12 ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackAudit,                 // XU 13 SYSTEM_AUDIT_CALLBACK_ACE_TYPE
+    satCallbackAlarm,                 //    14 SYSTEM_ALARM_CALLBACK_ACE_TYPE
+    satCallbackObjectAudit,           //    15 SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAlarm,           //    16 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
+    satMandatoryLabel,                // ML 17 SYSTEM_MANDATORY_LABEL_ACE_TYPE
+    satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
+    satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
+    satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
+    satAccessFilter,                  // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
+    satUnknown);                      //    22 unknown = for internal use
+
+  /// high-level supported ACE flags in TSecAce.Flags
+  TSecAceFlag = (
+    safObjectInherit,        // OI
+    safContainerInherit,     // CI
+    safNoPropagateInherit,   // NP
+    safInheritOnly,          // IO
+    safInherited,            // ID
+    saf5,
+    safSuccessfulAccess,     // SA
+    safFailedAccess);        // FA
+
+  /// high-level supported ACE flags in TSecAce.Flags
+  TSecAceFlags = set of TSecAceFlag;
+
+  /// 32-bit to define standard, specific and generic rights in ACEs
+  TSecAceAccessMask = record
+    /// contains the access mask specific to this object type
+    Bits: word;
+    /// standard and generic rights
+    Flags: TSecAccessMask;
+  end;
+
+  /// define one discretionary/system access control, as stored in TSecDesc.Dacl[]
+  TSecAce = record
+    /// high-level supported ACE kinds
+    AceType: TSecAceType;
+    /// the raw ACE identifier - typically = ord(AceType)
+    RawType: byte;
+    // the ACE flags
+    Flags: TSecAceFlags;
+    /// contains the associated access mask
+    Mask: TSecAceAccessMask;
+    /// contains an associated SID
+    Sid: RawSid;
+    /// some optional opaque callback/resource data, stored after the Sid
+    Opaque: RawByteString;
+    /// the associated Object Type GUID (satObject only)
+    ObjectType: TGuid;
+    /// the inherited Object Type GUID  (satObject only)
+    InheritedObjectType: TGuid;
+  end;
+  /// define a discretionary access control list (DACL)
+  TSecAces = array of TSecAce;
+
+  /// high-level cross-platform support of Windows Security Descriptors
+  {$ifdef USERECORDWITHMETHODS}
+  TSecDesc = record
+  {$else}
+  TSecDesc = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the owner security identifier (SID)
+    Owner: RawSid;
+    /// the primary group SID
+    Group: RawSid;
+    /// discretionary access control list
+    Dacl: TSecAces;
+    /// system access control list
+    Sacl: TSecAces;
+    /// control flags of this Security Descriptor
+    Flags: TSecControls;
+    /// decode a self-relative binary Security Descriptor buffer
+    function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
+    /// decode a self-relative binary Security Descriptor buffer
+    function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
+    /// decode this Security Descriptor into its standard textual representation
+    // - i.e. following Security Descriptor Definition Language (SDDL)
+    function ToText: RawUtf8;
+  end;
+
+const
+  satCommon = [satAccessAllowed, satAccessDenied, satAudit,  satAlarm,
+               satCallbackAccessAllowed, satCallbackAccessDenied,
+               satCallbackAudit,  satCallbackAlarm,
+               satMandatoryLabel, satResourceAttribute,
+               satScoppedPolicy,  satAccessFilter];
+  satObject = [satObjectAccessAllowed, satObjectAccessDenied,
+               satObjectAudit, satObjectAlarm,
+               satCallbackObjectAccessAllowed, satCallbackObjectAccessDenied,
+               satCallbackObjectAudit, satCallbackObjectAlarm];
+  safInheritanceFlags = [safObjectInherit, safContainerInherit,
+                         safNoPropagateInherit, safInheritOnly];
+  safAuditFlags = [safSuccessfulAccess, safFailedAccess];
+
+function KnownSidToSddl(wks: TWellKnownSid): TShort8; // for unit tests only
+
+/// check the conformity of a self-relative binary Security Descriptor buffer
+// - only check the TSecDesc main fields consistency
+function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
+
+/// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
 // - returns true if the conversion succeeded
 // - this function is able to convert into itself, i.e. allows sd=pointer(text)
 // - on Linux, will return true and call ToHumanHex()
@@ -9996,7 +10150,7 @@ begin
       exit;
   end;
   GetComputerUuid(u, disable);
-  result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
+  result := UuidToText(u);
   if disable <> [] then
     exit; // cache fully-qualified UUID only
   GlobalLock;
@@ -10030,7 +10184,7 @@ begin
     uid.D2 := swap(uid.D2);
     uid.D3 := swap(uid.D3);
   end;
-  dest := RawUtf8(UpperCase(copy(GUIDToString(uid), 2, 36)));
+  dest := UuidToText(uid);
 end;
 
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
