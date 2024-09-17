@@ -1043,9 +1043,9 @@ begin
                 FillZero(guid);
                 Check(CopyObjectGUID(guid), 'objectGUID');
                 Check(not IsNullGuid(guid));
-                Check(IdemPropNameU(Attributes.Get('cn'), 'users'), 'cn');
-                Check(Attributes.Get('name') <> '', 'name');
-                Check(Attributes.Get('distinguishedName') <> '', 'distinguishedName');
+                Check(IdemPropNameU(Attributes.Get(atCommonName), 'users'), 'cn');
+                Check(Attributes.GetByName('name') <> '', 'name');
+                Check(Attributes.Get(atDistinguishedName) <> '', 'distinguishedName');
               end;
               //writeln(one.SearchResult.Dump);
           except

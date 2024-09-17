@@ -997,7 +997,7 @@ type
     /// find and return first attribute value with requested name
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
-    function Get(const AttributeName: RawUtf8): RawUtf8; overload;
+    function GetByName(const AttributeName: RawUtf8): RawUtf8; 
     /// remove one TLdapAttribute object from the list
     procedure Delete(AttributeType: TLdapAttributeType); overload;
     /// find and return attribute index with the requested attribute type
@@ -1014,7 +1014,7 @@ type
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
     // - faster than overloaded Get(AttributeName)
-    function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
+    function Get(AttributeType: TLdapAttributeType): RawUtf8; 
     /// find and return first attribute value with the requested type
     // - calls GetAllReadable on the found attribute
     function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
@@ -3828,7 +3828,7 @@ begin
     result := nil;
 end;
 
-function TLdapAttributeList.Get(const AttributeName: RawUtf8): RawUtf8;
+function TLdapAttributeList.GetByName(const AttributeName: RawUtf8): RawUtf8;
 begin
   Find(AttributeName).GetReadable(0, result);
 end;
@@ -4126,7 +4126,7 @@ begin
   begin
     r := fItems[i];
     if AttrType = atUndefined then
-      a := r.Attributes.Get(AttrName)
+      a := r.Attributes.GetByName(AttrName)
     else
       a := r.Attributes.Get(AttrType);
     if a = '' then
