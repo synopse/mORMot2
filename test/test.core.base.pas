@@ -6276,10 +6276,8 @@ begin
   CheckAgainst(dec, os);
   CheckHash(BinarySave(@dec.Bios,
     TypeInfo(TSmbiosBios), rkRecordTypes), $9362A439, 'Bios');
-  {$ifndef OSDARWIN}
   CheckHash(BinarySave(@dec.System,
-    TypeInfo(TSmbiosSystem), rkRecordTypes), $A5E69307, 'System');
-  {$endif OSDARWIN}
+    TypeInfo(TSmbiosSystem), rkRecordTypes), $E9451367, 'System');
   CheckHash(BinarySave(@dec.Board[0],
     TypeInfo(TSmbiosBoard), rkRecordTypes), $25B6CB6C, 'Board');
   CheckHash(BinarySave(@dec.Chassis[0],
@@ -6305,12 +6303,10 @@ begin
     TypeInfo(TSmbiosSlot), rkRecordTypes), $0BE08E2D, 'Slot');
   CheckHash(BinarySave(@dec.Battery[0],
     TypeInfo(TSmbiosBattery), rkRecordTypes), $7FDA54A0, 'Battery');
-  {$ifndef OSDARWIN}
   CheckHash(BinarySave(@dec,
-    TypeInfo(TSmbiosInfo), rkRecordTypes), $807823B2, 'BinarySave1');
+    TypeInfo(TSmbiosInfo), rkRecordTypes), $C038E432, 'BinarySave1');
   SaveJson(dec, TypeInfo(TSmbiosInfo), [twoIgnoreDefaultInRecord], s);
-  CheckHash(s, $7A3BEEB8, 'BinarySave2');
-  {$endif OSDARWIN}
+  CheckHash(s, $87F82F78, 'BinarySave2');
 end;
 
 {$ifdef OSWINDOWS}
