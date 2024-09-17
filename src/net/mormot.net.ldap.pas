@@ -1147,7 +1147,7 @@ type
     function CopyObjectSid(out objectSid: RawUtf8): boolean;
     /// copy the binary 'objectGUID' attribute if present
     // - return true on success
-    function CopyObjectGuid(out objectGUID: TGuid): boolean;
+    function CopyObjectGuid(out objectGuid: TGuid): boolean;
     /// add a "dn: ###" entry to a ldif-content buffer
     procedure ExportToLdif(w: TTextWriter);
   end;
@@ -4043,19 +4043,19 @@ begin
   result := objectSid <> '';
 end;
 
-function TLdapResult.CopyObjectGUID(out objectGUID: TGuid): boolean;
+function TLdapResult.CopyObjectGuid(out objectGuid: TGuid): boolean;
 var
-  GuidAttr: TLdapAttribute;
-  GuidBinary: RawByteString;
+  attr: TLdapAttribute;
+  bin: RawByteString;
 begin
   result := false;
-  GuidAttr := Attributes.Find(atObjectSid);
-  if GuidAttr = nil then
+  attr := Attributes.Find(atObjectGuid);
+  if attr = nil then
     exit;
-  GuidBinary := GuidAttr.GetRaw;
-  if length(GuidBinary) = SizeOf(TGuid) then
+  bin := attr.GetRaw;
+  if length(bin) = SizeOf(TGuid) then
   begin
-    objectGUID := PGuid(GuidBinary)^;
+    objectGuid := PGuid(bin)^;
     result := true;
   end;
 end;
