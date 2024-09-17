@@ -163,6 +163,15 @@ begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
+function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
+var
+  tmp: RawUtf8; // should be able to convert into itself, i.e. sd=pointer(text)
+begin
+  ToHumanHex(tmp, sd, len); // temporary fallback on POSIX
+  text := tmp;
+  result := true;
+end;
+
 
 { ****************** Unicode, Time, File process }
 

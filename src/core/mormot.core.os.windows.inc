@@ -2360,6 +2360,27 @@ begin
     RandomBytes(pointer(Buffer), Len);
 end;
 
+const
+  SDDL_REVISION_1 = 1;
+  ALL_INFO = OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or
+             DACL_SECURITY_INFORMATION  or SACL_SECURITY_INFORMATION;
+
+function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
+var
+  txt: PAnsiChar;
+begin
+  txt := nil;
+  result := false;
+  if (sd = nil) or
+     not CryptoApi.Available or
+     not CryptoApi.ConvertSecurityDescriptorToStringSecurityDescriptorA(
+       sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
+    exit;
+  FastSetString(text, txt, StrLen(txt));
+  LocalFree(HLOCAL(txt));
+  result := true;
+end;
+
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);
@@ -3905,7 +3926,7 @@ end;
 
 procedure TWinCryptoApi.Resolve;
 const
-  NAMES: array[0..7] of PAnsiChar = (
+  NAMES: array[0..8] of PAnsiChar = (
     'CryptAcquireContextA',
     'CryptReleaseContext',
     'CryptImportKey',
@@ -3913,7 +3934,8 @@ const
     'CryptDestroyKey',
     'CryptEncrypt',
     'CryptDecrypt',
-    'CryptGenRandom');
+    'CryptGenRandom',
+    'ConvertSecurityDescriptorToStringSecurityDescriptorA');
 var
   p: PPointer;
   i: PtrInt;

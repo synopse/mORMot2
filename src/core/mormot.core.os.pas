@@ -541,7 +541,7 @@ function SidToText(sid: PSid): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Security IDentifier as text, following the standard representation
-// - this function is able to convert into itself, i.e. sid=pointer(text)
+// - this function is able to convert into itself, i.e. allows sid=pointer(text)
 procedure SidToText(sid: PSid; var text: RawUtf8); overload;
 
 /// convert several Security IDentifier as text dynamic array
@@ -597,6 +597,14 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   NanoSecsPerMicroSec  = 1000;
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
+
+
+/// convert a Windows SecurityDescriptor buffer as text (SDDL or hexa)
+// - returns true if the conversion succeeded
+// - this function is able to convert into itself, i.e. allows sd=pointer(text)
+// - on Linux, will return true and call ToHumanHex()
+// - on Windows, will call the OS API to return a SDDL representaiton
+function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
 
 
 { ****************** Gather Operating System Information }
@@ -2459,6 +2467,11 @@ type
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: pointer): BOOL; stdcall;
+    /// converts a security descriptor to a string format
+    ConvertSecurityDescriptorToStringSecurityDescriptorA: function(
+      SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWORD;
+      SecurityInformation: DWORD; var StringSecurityDescriptor: PAnsiChar;
+      StringSecurityDescriptorLen: LPDWORD): BOOL; stdcall;
     /// sign a message (not resolved yet - in crypt32.dll)
     SignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
       fDetachedSignature: BOOL; cToBeSigned: DWORD; rgpbToBeSigned: pointer;

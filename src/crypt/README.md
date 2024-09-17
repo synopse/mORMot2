@@ -49,7 +49,6 @@ Authentication and Security types shared by all framework units.
 - Minimal `PEM`/`DER` Encoding/Decoding
 - Basic ASN.1 Support
 - Windows Executable Digital Signature Stuffing
-- Cross-Platform Decode some Windows Security Structures
 
 ### mormot.crypt.ecc256r1
 

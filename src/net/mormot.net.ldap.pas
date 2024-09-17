@@ -3139,11 +3139,8 @@ begin
         exit;
       end;
     atsSecurityDescriptor:
-      if IsValidNdr(s) then // stored as binary NDR
-      begin
-        NdrToText(pointer(s), length(s), s);
-        exit;
-      end;
+      if SecurityDescriptorToText(pointer(s), length(s), s) then
+        exit; // use WinAPI or hexa representation
     atsFileTime: // 64-bit FileTime
       begin
         ft := GetQWord(pointer(s), err);
