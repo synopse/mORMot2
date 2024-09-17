@@ -6232,6 +6232,7 @@ var
   raw: TRawSmbiosInfo;
   os:  TSmbiosBasicInfos;
   dec: TSmbiosInfo;
+  bak: byte;
   s: RawUtf8;
   b: RawByteString;
 
@@ -6272,7 +6273,10 @@ begin
     exit;
   PCardinal(@raw)^ := $010003ff;
   CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
+  bak := PByte(@_SmbiosDecodeUuid)^;
+  _SmbiosDecodeUuid := sduVersion; // consistent UUID decoding on all platforms
   Check(DecodeSmbiosInfo(raw, dec), 'DecodeSmbiosInfo');
+  PByte(@_SmbiosDecodeUuid)^ := bak;
   CheckAgainst(dec, os);
   CheckHash(BinarySave(@dec.Bios,
     TypeInfo(TSmbiosBios), rkRecordTypes), $9362A439, 'Bios');
