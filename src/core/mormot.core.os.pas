@@ -403,103 +403,103 @@ type
   // - for instance, wksBuiltinAdministrators is set for local administrators
   // - warning: does not exactly match winnt.h WELL_KNOWN_SID_TYPE enumeration
   TWellKnownSid = (
-    wksNull,
-    wksWorld,
-    wksLocal,
-    wksConsoleLogon,
-    wksCreatorOwner,
-    wksCreatorGroup,
-    wksCreatorOwnerServer,
-    wksCreatorGroupServer,
-    wksIntegrityUntrusted,
-    wksIntegrityLow,
-    wksIntegrityMedium,
-    wksIntegrityMediumPlus,
-    wksIntegrityHigh,
-    wksIntegritySystem,
-    wksIntegrityProtectedProcess,
-    wksIntegritySecureProcess,
-    wksAuthenticationAuthorityAsserted,
-    wksAuthenticationServiceAsserted,
-    wksAuthenticationFreshKeyAuth,
-    wksAuthenticationKeyTrust,
-    wksAuthenticationKeyPropertyMfa,
-    wksAuthenticationKeyPropertyAttestation,
-    wksNtAuthority,
-    wksDialup,
-    wksNetwork,
-    wksBatch,
-    wksInteractive,
-    wksService,
-    wksAnonymous,
-    wksProxy,
-    wksEnterpriseControllers,
-    wksSelf,
-    wksAuthenticatedUser,
-    wksRestrictedCode,
-    wksTerminalServer,
-    wksRemoteLogonId,
-    wksThisOrganisation,
-    wksIisUser,
-    wksLocalSystem,
-    wksLocalService,
-    wksNetworkService,
-    wksLocalAccount,
-    wksLocalAccountAndAdministrator,
-    wksBuiltinDomain,
-    wksBuiltinAdministrators,
-    wksBuiltinUsers,
-    wksBuiltinGuests,
-    wksBuiltinPowerUsers,
-    wksBuiltinAccountOperators,
-    wksBuiltinSystemOperators,
-    wksBuiltinPrintOperators,
-    wksBuiltinBackupOperators,
-    wksBuiltinReplicator,
-    wksBuiltinRasServers,
-    wksBuiltinPreWindows2000CompatibleAccess,
-    wksBuiltinRemoteDesktopUsers,
-    wksBuiltinNetworkConfigurationOperators,
-    wksBuiltinIncomingForestTrustBuilders,
-    wksBuiltinPerfMonitoringUsers,
-    wksBuiltinPerfLoggingUsers,
-    wksBuiltinAuthorizationAccess,
-    wksBuiltinTerminalServerLicenseServers,
-    wksBuiltinDcomUsers,
-    wksBuiltinIUsers,
-    wksBuiltinCryptoOperators,
-    wksBuiltinUnknown,
-    wksBuiltinCacheablePrincipalsGroups,
-    wksBuiltinNonCacheablePrincipalsGroups,
-    wksBuiltinEventLogReadersGroup,
-    wksBuiltinCertSvcDComAccessGroup,
-    wksBuiltinRdsRemoteAccessServers,
-    wksBuiltinRdsEndpointServers,
-    wksBuiltinRdsManagementServers,
-    wksBuiltinHyperVAdmins,
-    wksBuiltinAccessControlAssistanceOperators,
-    wksBuiltinRemoteManagementUsers,
-    wksBuiltinDefaultSystemManagedGroup,
-    wksBuiltinStorageReplicaAdmins,
-    wksBuiltinDeviceOwners,
-    wksBuiltinWriteRestrictedCode,
-    wksCapabilityInternetClient,
-    wksCapabilityInternetClientServer,
-    wksCapabilityPrivateNetworkClientServer,
-    wksCapabilityPicturesLibrary,
-    wksCapabilityVideosLibrary,
-    wksCapabilityMusicLibrary,
-    wksCapabilityDocumentsLibrary,
-    wksCapabilityEnterpriseAuthentication,
-    wksCapabilitySharedUserCertificates,
-    wksCapabilityRemovableStorage,
-    wksCapabilityAppointments,
-    wksCapabilityContacts,
-    wksBuiltinAnyPackage,
-    wksBuiltinAnyRestrictedPackage,
-    wksNtlmAuthentication,
-    wksSChannelAuthentication,
-    wksDigestAuthentication);
+    wksNull,                                      // S-1-0-0
+    wksWorld,                                     // S-1-1-0      WD
+    wksLocal,                                     // S-1-2-0
+    wksConsoleLogon,                              // S-1-2-1
+    wksCreatorOwner,                              // S-1-3-0      CO
+    wksCreatorGroup,                              // S-1-3-1      CG
+    wksCreatorOwnerServer,                        // S-1-3-2
+    wksCreatorGroupServer,                        // S-1-3-3
+    wksIntegrityUntrusted,                        // S-1-16-0
+    wksIntegrityLow,                              // S-1-16-4096
+    wksIntegrityMedium,                           // S-1-16-8192
+    wksIntegrityMediumPlus,                       // S-1-16-8448
+    wksIntegrityHigh,                             // S-1-16-12288
+    wksIntegritySystem,                           // S-1-16-16384
+    wksIntegrityProtectedProcess,                 // S-1-16-20480
+    wksIntegritySecureProcess,                    // S-1-16-28672
+    wksAuthenticationAuthorityAsserted,           // S-1-18-1
+    wksAuthenticationServiceAsserted,             // S-1-18-2
+    wksAuthenticationFreshKeyAuth,                // S-1-18-3
+    wksAuthenticationKeyTrust,                    // S-1-18-4
+    wksAuthenticationKeyPropertyMfa,              // S-1-18-5
+    wksAuthenticationKeyPropertyAttestation,      // S-1-18-6
+    wksNtAuthority,                               // S-1-5
+    wksDialup,                                    // S-1-5-1
+    wksNetwork,                                   // S-1-5-2       NU
+    wksBatch,                                     // S-1-5-3
+    wksInteractive,                               // S-1-5-4       IU
+    wksService,                                   // S-1-5-6       SU
+    wksAnonymous,                                 // S-1-5-7       AN
+    wksProxy,                                     // S-1-5-8
+    wksEnterpriseControllers,                     // S-1-5-9
+    wksSelf,                                      // S-1-5-10      PS
+    wksAuthenticatedUser,                         // S-1-5-11      AU
+    wksRestrictedCode,                            // S-1-5-12      RC
+    wksTerminalServer,                            // S-1-5-13
+    wksRemoteLogonId,                             // S-1-5-14
+    wksThisOrganisation,                          // S-1-5-15
+    wksIisUser,                                   // S-1-5-17
+    wksLocalSystem,                               // S-1-5-18      SY
+    wksLocalService,                              // S-1-5-19
+    wksNetworkService,                            // S-1-5-20
+    wksLocalAccount,                              // S-1-5-113
+    wksLocalAccountAndAdministrator,              // S-1-5-114
+    wksBuiltinDomain,                             // S-1-5-32
+    wksBuiltinAdministrators,                     // S-1-5-32-544  BA
+    wksBuiltinUsers,                              // S-1-5-32-545  BU
+    wksBuiltinGuests,                             // S-1-5-32-546  BG
+    wksBuiltinPowerUsers,                         // S-1-5-32-547  PU
+    wksBuiltinAccountOperators,                   // S-1-5-32-548  AO
+    wksBuiltinSystemOperators,                    // S-1-5-32-549  SO
+    wksBuiltinPrintOperators,                     // S-1-5-32-550  PO
+    wksBuiltinBackupOperators,                    // S-1-5-32-551  BO
+    wksBuiltinReplicator,                         // S-1-5-32-552  RE
+    wksBuiltinRasServers,                         // S-1-5-32-553  RS
+    wksBuiltinPreWindows2000CompatibleAccess,     // S-1-5-32-554  RU
+    wksBuiltinRemoteDesktopUsers,                 // S-1-5-32-555  RD
+    wksBuiltinNetworkConfigurationOperators,      // S-1-5-32-556  NO
+    wksBuiltinIncomingForestTrustBuilders,        // S-1-5-32-557
+    wksBuiltinPerfMonitoringUsers,                // S-1-5-32-558  MU
+    wksBuiltinPerfLoggingUsers,                   // S-1-5-32-559  LU
+    wksBuiltinAuthorizationAccess,                // S-1-5-32-560
+    wksBuiltinTerminalServerLicenseServers,       // S-1-5-32-561
+    wksBuiltinDcomUsers,                          // S-1-5-32-562
+    wksBuiltinIUsers,                             // S-1-5-32-568  IS
+    wksBuiltinCryptoOperators,                    // S-1-5-32-569  CY
+    wksBuiltinUnknown,                            // S-1-5-32-570
+    wksBuiltinCacheablePrincipalsGroups,          // S-1-5-32-571
+    wksBuiltinNonCacheablePrincipalsGroups,       // S-1-5-32-572
+    wksBuiltinEventLogReadersGroup,               // S-1-5-32-573  ER
+    wksBuiltinCertSvcDComAccessGroup,             // S-1-5-32-574  CD
+    wksBuiltinRdsRemoteAccessServers,             // S-1-5-32-575  RA
+    wksBuiltinRdsEndpointServers,                 // S-1-5-32-576  ES
+    wksBuiltinRdsManagementServers,               // S-1-5-32-577
+    wksBuiltinHyperVAdmins,                       // S-1-5-32-578  HA
+    wksBuiltinAccessControlAssistanceOperators,   // S-1-5-32-579  AA
+    wksBuiltinRemoteManagementUsers,              // S-1-5-32-580
+    wksBuiltinDefaultSystemManagedGroup,          // S-1-5-32-581
+    wksBuiltinStorageReplicaAdmins,               // S-1-5-32-582
+    wksBuiltinDeviceOwners,                       // S-1-5-32-583
+    wksBuiltinWriteRestrictedCode,                // S-1-5-33      WR
+    wksCapabilityInternetClient,                  // S-1-15-3-1
+    wksCapabilityInternetClientServer,            // S-1-15-3-2
+    wksCapabilityPrivateNetworkClientServer,      // S-1-15-3-3
+    wksCapabilityPicturesLibrary,                 // S-1-15-3-4
+    wksCapabilityVideosLibrary,                   // S-1-15-3-5
+    wksCapabilityMusicLibrary,                    // S-1-15-3-6
+    wksCapabilityDocumentsLibrary,                // S-1-15-3-7
+    wksCapabilityEnterpriseAuthentication,        // S-1-15-3-8
+    wksCapabilitySharedUserCertificates,          // S-1-15-3-9
+    wksCapabilityRemovableStorage,                // S-1-15-3-10
+    wksCapabilityAppointments,                    // S-1-15-3-11
+    wksCapabilityContacts,                        // S-1-15-3-12
+    wksBuiltinAnyPackage,                         // S-1-15-2-1
+    wksBuiltinAnyRestrictedPackage,               // S-1-15-2-2
+    wksNtlmAuthentication,                        // S-1-5-64-10
+    wksSChannelAuthentication,                    // S-1-5-64-14
+    wksDigestAuthentication);                     // S-1-5-64-21
 
   /// define a set of well-known SID
   TWellKnownSids = set of TWellKnownSid;
@@ -6589,6 +6589,342 @@ begin
     if k <> wksNull then
       include(result, k);
   end;
+end;
+
+{ TODO: include those domain-specific RID values as TWellKnownRid
+
+  DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS   RO  0x000001F2
+  DOMAIN_USER_RID_ADMIN  LA  0x000001F4
+  DOMAIN_USER_RID_GUEST  LG  0x000001F5
+  DOMAIN_GROUP_RID_ADMINS DA 0x00000200
+  DOMAIN_GROUP_RID_USERS DU 0x00000201
+  DOMAIN_GROUP_RID_GUESTS DG 0x00000202
+  DOMAIN_GROUP_RID_COMPUTERS DC 0x00000203
+  DOMAIN_GROUP_RID_CONTROLLERS DD 0x00000204
+  DOMAIN_GROUP_RID_CERT_ADMINS     CA   0x00000205
+  DOMAIN_GROUP_RID_SCHEMA_ADMINS   SA   0x00000206
+  DOMAIN_GROUP_RID_ENTERPRISE_ADMINS EA 0x00000207
+  DOMAIN_GROUP_RID_POLICY_ADMINS  PA    0x00000208
+  DOMAIN_GROUP_RID_CLONEABLE_CONTROLLERS CN 0x0000020A
+  DOMAIN_GROUP_RID_PROTECTED_USERS AP  0x0000020D
+  DOMAIN_GROUP_RID_KEY_ADMINS  KA   0x0000020E
+  DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK  0x0000020F
+
+  SECURITY_MANDATORY_LOW_RID    LW  0x00001000
+  SECURITY_MANDATORY_MEDIUM_RID ME  0x00002000
+  SECURITY_MANDATORY_MEDIUM_PLUS_RID MP  0x00002100
+  SECURITY_MANDATORY_HIGH_RID   HI  0X00003000
+  SECURITY_MANDATORY_SYSTEM_RID SI  0x00004000
+  SECURITY_MANDATORY_PROTECTED_PROCESS_RID   0x00005000
+
+  SECURITY_LOCAL_SERVICE_RID         LS
+  SECURITY_NETWORK_SERVICE_RID       NS
+  SECURITY_CREATOR_OWNER_RIGHTS_RID  OW
+  SECURITY_AUTHENTICATION_SERVICE_ASSERTED_RID SS
+  SECURITY_USERMODEDRIVERHOST_ID_BASE_RID UD
+
+  SECURITY_WRITE_RESTRICTED_CODE_RID  S-1-5-33  WR
+}
+
+{ TSecDesc }
+
+type
+  // Access Control List header
+  TACL = record
+    AclRevision: byte;
+    Sbz1: byte;
+    AclSize: word; // including TACL header + all ACEs
+    AceCount: word;
+    Sbz2: word;
+  end;
+  PACL = ^TACL;
+  // Access Control Entry
+  TACE = record
+    // ACE header
+    AceType: byte;
+    AceFlags: TSecAceFlags;
+    AceSize: word;
+    Mask: TSecAceAccessMask;
+    case integer of
+      0: (CommonSid: cardinal);
+      1: (ObjectFlags: cardinal;
+          ObjectStart: cardinal);
+  end;
+  PACE = ^TACE;
+  // struct _SECURITY_DESCRIPTOR in self-relative state
+  TSD = record
+    Revision: byte;
+    Sbz1: byte;
+    Control: TSecControls;
+    Owner: cardinal; // not pointer, but self-relative position
+    Group: cardinal;
+    Sacl: cardinal;
+    Dacl: cardinal;
+  end;
+  PSD = ^TSD;
+
+function ToAces(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
+var
+  hdr: PACL;
+  ace: PACE;
+  i, opaquelen, sidlen: integer;
+  max: PtrUInt;
+  sid: pointer;
+  a: ^TSecAce;
+begin
+  result := offset = 0;
+  if result then
+    exit; // no DACL/SACL
+  hdr := @p[offset];
+  if (hdr^.Sbz1 <> 0) or
+     not (hdr^.AclRevision in [2, 4]) then
+    exit;
+  if hdr^.AceCount <> 0 then
+  begin
+    max := PtrUInt(@p[offset + hdr^.AclSize]);
+    SetLength(res, hdr^.AceCount);
+    a := pointer(res);
+    ace := @p[offset + SizeOf(hdr^)];
+    for i := 1 to hdr^.AceCount do
+    begin
+      // unserialize each entry
+      if PtrUInt(ace) + ace^.AceSize > max then
+        exit; // avoid buffer overflow
+      a^.RawType := ace^.AceType;
+      a^.AceType := TSecAceType(ace^.AceType);
+      a^.Flags := ace^.AceFlags;
+      a^.Mask := ace^.Mask;
+      sid := nil;
+      if a^.AceType in satCommon then
+        sid := @ace^.CommonSid
+      else if a^.AceType in satObject then
+      begin
+        sid := @ace^.ObjectStart;
+        if ace^.ObjectFlags and 1 <> 0 then // ACE_OBJECT_TYPE_PRESENT
+        begin
+          a^.ObjectType := PGuid(sid)^;
+          inc(PGuid(sid));
+        end;
+        if ace^.ObjectFlags and 2 <> 0 then // ACE_INHERITED_OBJECT_TYPE_PRESENT
+        begin
+          a^.InheritedObjectType := PGuid(sid)^;
+          inc(PGuid(sid));
+        end;
+      end
+      else if a^.AceType >= satUnknown then
+        a^.AceType := satUnknown; // unsupported
+      if sid <> nil then
+      begin
+        sidlen := SidLength(sid) + 8;
+        opaquelen := integer(ace^.AceSize) - sidlen;
+        if opaquelen < 0 then
+          exit;
+        ToRawSid(sid, a^.Sid);
+        if opaquelen <> 0 then
+        begin
+          inc(PByte(sid), sidlen - 8);
+          FastSetRawByteString(a^.Opaque, sid, opaquelen);
+        end;
+      end;
+      inc(PByte(ace), ace^.AceSize);
+      inc(a);
+    end;
+  end;
+  result := true;
+end;
+
+function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
+begin
+  result := (p <> nil) and
+            (len > SizeOf(TSD)) and
+            (PSD(p)^.Revision = 1) and
+            (PSD(p)^.Sbz1 = 0) and
+            (scSelfRelative in PSD(p)^.Control) and
+            (PSD(p)^.Owner < len) and
+            (cardinal(SidLength(@p[PSD(p)^.Owner])) + PSD(p)^.Owner <= len) and
+            (PSD(p)^.Group < len) and
+            (cardinal(SidLength(@p[PSD(p)^.Group])) + PSD(p)^.Group  <= len) and
+            (PSD(p)^.Sacl < len) and
+            (PSD(p)^.Dacl < len) and
+            ((PSD(p)^.Dacl <> 0) = (scDaclPresent in PSD(p)^.Control)) and
+            ((PSD(p)^.Dacl = 0) or
+             (PACL(@p[PSD(p)^.Dacl])^.AclSize + PSD(p)^.Dacl <= len)) and
+            ((PSD(p)^.Sacl <> 0) = (scSaclPresent in PSD(p)^.Control)) and
+            ((PSD(p)^.Sacl = 0) or
+             (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
+end;
+
+function TSecDesc.FromBinary(p: PByteArray; len: cardinal): boolean;
+begin
+  Finalize(self);
+  result := false;
+  if not IsValidSecurityDescriptor(p, len) then
+    exit;
+  ToRawSid(@p[PSD(p)^.Owner], Owner);
+  ToRawSid(@p[PSD(p)^.Group], Group);
+  Flags := PSD(p)^.Control;
+  result := ToAces(p, PSD(p)^.Dacl, Dacl) and
+            ToAces(p, PSD(p)^.Sacl, Sacl);
+end;
+
+function TSecDesc.FromBinary(const Bin: RawSecurityDescriptor): boolean;
+begin
+  result := FromBinary(pointer(Bin), length(Bin));
+end;
+
+const
+  wksLastSddl = wksBuiltinWriteRestrictedCode;
+  WKS_SDDL: array[0.. ord(wksLastSddl) * 2 + 1] of AnsiChar =
+    '  WD    COCG                                    NU  ' +
+    'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
+    '      ISCY      ERCDRAES  HAAA        WR';
+
+function KnownSidToSddl(wks: TWellKnownSid): TShort8;
+var
+  c: cardinal;
+begin
+  result[0] := #0;
+  if (wks = wksNull) or
+     (wks > wksLastSddl) then
+    exit;
+  c := PWordArray(@WKS_SDDL)^[ord(wks)];
+  if c = $2020 then
+    exit;
+  result[0] := #2;
+  PWord(@result[1])^ := c;
+end;
+
+procedure SddlAppendSid(var s: shortstring; sid: PSid);
+var
+  k: TWellKnownSid;
+  c: cardinal;
+  tmp: shortstring;
+begin
+  if sid = nil then
+    exit;
+  k := SidToKnown(sid);
+  if (k <> wksNull) and
+     (k <= wksLastSddl) then
+  begin
+    c := PWordArray(@WKS_SDDL)^[ord(k)];
+    if c <> $2020 then
+    begin
+      AppendShortBuffer(@c, 2, s);
+      exit;
+    end;
+  end;
+  SidToTextShort(sid, tmp);
+  AppendShort(tmp, s);
+end;
+
+const // some cross-platform definition of 32-bit Windows file access rights
+  FILE_ALL_ACCESS      = $f0000 or $100000 or $1FF;
+  FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
+  FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
+  FILE_GENERIC_EXECUTE = $20000 or $0080 or $0020 or $100000;
+
+  SAT_SDDL: array[TSecAceType] of string[2] = (
+    'A', 'D', 'AU', 'AL', '', 'OA', 'OD', 'OU', 'OL', 'XA', 'XD', 'ZA', '',
+    'XU', '', '', '', 'ML', 'RA', 'SP', 'TL', 'FL', '');
+  SAF_SDDL: array[TSecAceFlag] of string[2] = (
+    'OI', 'CI', 'NP', 'IO', 'ID', '', 'SA', 'FA');
+  {SAM_SDDL: array[TSecAccess] of string[2] = (
+    'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');}
+
+function UuidToText(const u: TGuid): RawUtf8;
+begin
+  result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
+end;
+
+procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
+var
+  f: TSecAceFlag;
+  c: cardinal;
+begin
+  AppendShort(SAT_SDDL[ace.AceType], s);
+  AppendShortChar(';', s);
+  for f := low(f) to high(f) do
+    if f in ace.Flags then
+      AppendShort(SAF_SDDL[f], s);
+  AppendShortChar(';', s);
+  c := cardinal(ace.Mask);
+  if c <> 0 then
+    if c = FILE_ALL_ACCESS then
+      AppendShort('FA', s)
+    else if c = FILE_GENERIC_READ then
+      AppendShort('FR', s)
+    else if c = FILE_GENERIC_WRITE then
+      AppendShort('FW', s)
+    else if c = FILE_GENERIC_EXECUTE then
+      AppendShort('FX', s)
+    else
+    begin
+      AppendShort('0x', s);
+      AppendShortIntHex(c, s);
+      // TODO: recognize SAM_SDDL
+    end;
+  if ace.AceType in satObject then
+  begin
+    AppendShortChar(';', s);
+    if not IsNullGuid(ace.ObjectType) then
+      AppendShortAnsi7String(UuidToText(ace.ObjectType), s);
+    AppendShortChar(';', s);
+    if not IsNullGuid(ace.InheritedObjectType) then
+      AppendShortAnsi7String(UuidToText(ace.InheritedObjectType), s);
+    AppendShortChar(';', s);
+  end
+  else
+    AppendShort(';;;', s);
+  SddlAppendSid(s, pointer(ace.Sid));
+end;
+
+function TSecDesc.ToText: RawUtf8;
+var
+  tmp: shortstring;
+
+  procedure AppendTmp;
+  var
+    n: PtrInt;
+  begin
+    n := length(result);
+    SetLength(result, n + ord(tmp[0]));
+    MoveFast(tmp[1], PByteArray(result)[n], ord(tmp[0]));
+  end;
+
+  procedure AppendAces(const aces: TSecAces; p, ar, ai: TSecControl);
+  var
+    i: Ptrint;
+  begin
+    if aces = nil then
+      exit;
+    if p in Flags then
+      AppendShortChar('P', tmp);
+    if ar in Flags then
+      AppendShort('AR', tmp);
+    if ai in Flags then
+      AppendShort('AI', tmp);
+    for i := 0 to length(aces) - 1 do
+      if SAT_SDDL[aces[i].AceType][0] <> #0 then
+      begin
+        AppendShortChar('(', tmp);
+        SddlAppendAce(tmp, aces[i]);
+        AppendShortChar(')', tmp);
+        AppendTmp;
+        tmp[0] := #0;
+      end;
+  end;
+
+begin
+  result := '';
+  tmp := 'O:';
+  SddlAppendSid(tmp, pointer(Owner));
+  AppendShort('G:', tmp);
+  SddlAppendSid(tmp, pointer(Group));
+  AppendTmp;
+  tmp := 'D:';
+  AppendAces(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
+  tmp := 'S:';
+  AppendAces(Sacl, scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit);
 end;
 
 
