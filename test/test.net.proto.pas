@@ -688,6 +688,7 @@ var
   sfs: TSystemFlags;
   l: TLdapClientSettings;
   one: TLdapClient;
+  res: TLdapResult;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   hasinternet: boolean;
@@ -876,7 +877,7 @@ begin
     CheckEqual(r.Attributes.Count, 0);
     v := 'John E Doxx';
     PWord(PAnsiChar(UniqueRawUtf8(v)) + 9)^ := $a9c3; // UTF-8 'e'acute (Delphi)
-    r.Attributes.Add('objectClass', 'person');
+    r.Attributes[atObjectClass] := 'person';
     CheckEqual(r.Attributes.Count, 1);
     r.Attributes.AddPairs(['cn', 'John Doe',
                            'cn', v,
@@ -1035,17 +1036,20 @@ begin
             AddConsole('%% = % search=%', [one.Settings.TargetHost, txt,
               one.NetbiosDN, one.SearchResult.Count]);
             for k := 0 to one.SearchResult.Count - 1 do
-              with one.SearchResult.Items[k] do
               begin
+                res := one.SearchResult.Items[k];
+                Check(res.ObjectName <> '', 'objectName');
+                Check(res[atDistinguishedName] <> '', 'distinguishedName');
                 sid := '';
-                if CopyObjectSid(sid) then
+                if res.CopyObjectSid(sid) then
                   Check(sid <> '');
                 FillZero(guid);
-                Check(CopyObjectGUID(guid), 'objectGUID');
+                Check(res.CopyObjectGUID(guid), 'objectGUID');
                 Check(not IsNullGuid(guid));
-                Check(IdemPropNameU(Attributes.Get(atCommonName), 'users'), 'cn');
-                Check(Attributes.GetByName('name') <> '', 'name');
-                Check(Attributes.Get(atDistinguishedName) <> '', 'distinguishedName');
+                CheckEqual(res.CanonicalName, DNToCN(res.ObjectName));
+                Check(IdemPropNameU(res.Attributes[atCommonName], 'users'), 'cn');
+                Check(res.Attributes.GetByName('name') <> '', 'name');
+                Check(res.Attributes.SystemFlags <> [], 'sf');
               end;
               //writeln(one.SearchResult.Dump);
           except

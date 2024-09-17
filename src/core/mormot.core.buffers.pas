@@ -8116,7 +8116,7 @@ begin
      (W = nil) then
     exit;
   TextLen := TextLen * 3; // worse case
-  if TextLen > W.BEnd - W.B then // need to compute exact length
+  if TextLen > W.BEnd - W.B then // need to compute exact length (very unlikely)
     TextLen := _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus);
   inc(W.B, _UrlEncode_Write(Text, W.AddPrepare(TextLen), @TEXT_BYTES, space2plus));
 end;

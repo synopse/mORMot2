@@ -956,6 +956,8 @@ type
     fKnownTypes: TLdapAttributeTypes;
     fIndexTypes: array[TLdapAttributeType] of byte; // index in fItems[] + 1
     function DoAdd(const aName: RawUtf8; aType: TLdapAttributeType): TLdapAttribute;
+    procedure SetAttr(AttributeType: TLdapAttributeType; const Value: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
     function GetAccountType: TSamAccountType;
@@ -1029,11 +1031,11 @@ type
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
     /// access any attribute value from its known type
-    // - calls GetReadable(0) on the found attribute
+    // - calls GetReadable(0) to read, or Add(aoReplaceValue) to write
     // - returns empty string if not found
     // - is defined as the default property for conveniency
     property Attr[AttributeType: TLdapAttributeType]: RawUtf8
-      read Get; default;
+      read Get write SetAttr; default;
     /// access to the internal list of TLdapAttribute objects
     // - note that length(Items) may be <> Count for this class, if AfterAdd has not
     // been called, so you should NOT use an enumerate "for a in list.Items do" loop
@@ -1120,6 +1122,7 @@ type
     fObjectName, fCanonicalName: RawUtf8;
     fAttributes: TLdapAttributeList;
     procedure SetObjectName(const Value: RawUtf8);
+    function GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
   public
     /// initialize the instance
     constructor Create; reintroduce;
@@ -1131,17 +1134,18 @@ type
       read fObjectName write SetObjectName;
     /// return the Canonical Name of this LDAP object
     function CanonicalName: RawUtf8;
-    /// find and return first attribute value with the requested type
-    // - just a wrapper around Attributes.Get()
-    function Get(AttributeType: TLdapAttributeType): RawUtf8; overload;
-      {$ifdef HASINLINE} inline; {$endif}
       /// find and return first attribute value with the requested type
     function Get(AttributeType: TLdapAttributeType;
-      out Value: RawUtf8): boolean; overload;
-      {$ifdef HASINLINE} inline; {$endif}
+      out Value: RawUtf8): boolean;
     /// direct raw access to the internal list of attributes
     property Attributes: TLdapAttributeList
       read fAttributes;
+    /// access any attribute value from its known type
+    // - calls GetReadable(0) on the found attribute
+    // - returns empty string if not found
+    // - is defined as the default property for conveniency
+    property Attr[AttributeType: TLdapAttributeType]: RawUtf8
+      read GetAttr; default;
     /// copy the 'objectSid' attribute if present
     // - return true on success
     function CopyObjectSid(out objectSid: RawUtf8): boolean;
@@ -3508,10 +3512,10 @@ begin
       if (fCount = 1) and
          (fList[0] = aValue) then
         exit // nothing to replace
-      else
+      else if fCount <> 0 then
         Clear; // replace existing by adding aValue as single item
     aoKeepExisting:
-      if fCount > 0 then
+      if fCount <> 0 then
         exit;
     aoNoDuplicateValue:
       if FindIndex(aValue) >= 0 then
@@ -3959,6 +3963,12 @@ begin
   PtrArrayDelete(fItems, FindIndex(AttributeType), @fCount, pakClass);
 end;
 
+procedure TLdapAttributeList.SetAttr(
+  AttributeType: TLdapAttributeType; const Value: RawUtf8);
+begin
+  Add(AttributeType, Value, aoReplaceValue);
+end;
+
 function TLdapAttributeList.GetAccountType: TSamAccountType;
 begin
   result := SamAccountTypeFromText(Get(atSAMAccountType));
@@ -4018,7 +4028,7 @@ begin
   result := fCanonicalName;
 end;
 
-function TLdapResult.Get(AttributeType: TLdapAttributeType): RawUtf8;
+function TLdapResult.GetAttr(AttributeType: TLdapAttributeType): RawUtf8;
 begin
   fAttributes.Find(AttributeType).GetReadable(0, result);
 end;
@@ -4525,16 +4535,16 @@ var
   i: PtrInt;
   t: TLdapAttributeType;
 begin
-  sAMAccountName := Attributes.Get(atSAMAccountName);
-  distinguishedName := Attributes.Get(atDistinguishedName);
+  sAMAccountName := Attributes[atSAMAccountName];
+  distinguishedName := Attributes[atDistinguishedName];
   canonicalName := DNToCN(distinguishedName);
-  name := Attributes.Get(atName);
-  CN := Attributes.Get(atCommonName);
-  description := Attributes.Get(atDescription);
-  objectSid := Attributes.Get(atObjectSid);
-  objectGUID := Attributes.Get(atObjectGUID);
-  whenCreated := LdapToDate(Attributes.Get(atWhenCreated));
-  whenChanged := LdapToDate(Attributes.Get(atWhenChanged));
+  name := Attributes[atName];
+  CN := Attributes[atCommonName];
+  description := Attributes[atDescription];
+  objectSid := Attributes[atObjectSid];
+  objectGUID := Attributes[atObjectGuid];
+  whenCreated := LdapToDate(Attributes[atWhenCreated]);
+  whenChanged := LdapToDate(Attributes[atWhenChanged]);
   for i := 0 to length(CustomAttributes) - 1 do
     CustomAdd(Attributes.Find(CustomAttributes[i]));
   if CustomTypes <> [] then
@@ -4581,12 +4591,12 @@ procedure TLdapUser.Fill(Attributes: TLdapAttributeList; WithMemberOf: boolean;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
-  userPrincipalName := Attributes.Get(atUserPrincipalName);
-  displayName := Attributes.Get(atDisplayName);
-  mail := Attributes.Get(atMail);
-  pwdLastSet := LdapToDate(Attributes.Get(atPwdLastSet));
-  lastLogon := LdapToDate(Attributes.Get(atLastLogon));
-  ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
+  userPrincipalName := Attributes[atUserPrincipalName];
+  displayName := Attributes[atDisplayName];
+  mail := Attributes[atMail];
+  pwdLastSet := LdapToDate(Attributes[atPwdLastSet]);
+  lastLogon := LdapToDate(Attributes[atLastLogon]);
+  ToCardinal(Attributes[atPrimaryGroupID], primaryGroupID);
   if WithMemberOf then
     memberOf := Attributes.Find(atMemberOf).GetAllReadable;
   userAccountControl := Attributes.UserAccountControl;
@@ -4599,16 +4609,16 @@ procedure TLdapComputer.Fill(Attributes: TLdapAttributeList;
   const CustomAttributes: TRawUtf8DynArray; const CustomTypes: TLdapAttributeTypes);
 begin
   FillObject(Attributes, CustomAttributes, CustomTypes);
-  pwdLastSet := LdapToDate(Attributes.Get(atPwdLastSet));
-  lastLogonTimestamp := LdapToDate(Attributes.Get(atLastLogon));
-  admPwdExpirationTime := LdapToDate(Attributes.Get(atMcsAdmPwdExpirationTime));
+  pwdLastSet := LdapToDate(Attributes[atPwdLastSet]);
+  lastLogonTimestamp := LdapToDate(Attributes[atLastLogon]);
+  admPwdExpirationTime := LdapToDate(Attributes[atMcsAdmPwdExpirationTime]);
   userAccountControl := Attributes.UserAccountControl;
-  ToCardinal(Attributes.Get(atPrimaryGroupID), primaryGroupID);
-  ToCardinal(Attributes.Get(atLogonCount), logonCount);
-  ToCardinal(Attributes.Get(atBadPwdCount), badPwdCount);
-  dNSHostName := Attributes.Get(atDnsHostName);
-  operatingSystem := Attributes.Get(atOperatingSystem);
-  operatingSystemVersion := Attributes.Get(atOperatingSystemVersion);
+  ToCardinal(Attributes[atPrimaryGroupID], primaryGroupID);
+  ToCardinal(Attributes[atLogonCount], logonCount);
+  ToCardinal(Attributes[atBadPwdCount], badPwdCount);
+  dNSHostName := Attributes[atDnsHostName];
+  operatingSystem := Attributes[atOperatingSystem];
+  operatingSystemVersion := Attributes[atOperatingSystemVersion];
   servicePrincipalName := Attributes.GetAll(atServicePrincipalName);
 end;
 
@@ -6034,7 +6044,7 @@ begin
      Search([atDistinguishedName],
        InfoFilter(satGroup, AccountName, '', '', CustomFilter)) and
      (SearchResult.Count = 1) then
-    result := SearchResult.Items[0].Get(atDistinguishedName)
+    result := SearchResult.Items[0][atDistinguishedName]
   else
     result := '';
 end;
@@ -6052,7 +6062,7 @@ begin
        satGroup, AccountName, DistinguishedName, '', CustomFilter)) and
      (SearchResult.Count = 1) then
   begin
-    last := SplitRight(SearchResult.Items[0].Get(atObjectSid), '-');
+    last := SplitRight(SearchResult.Items[0][atObjectSid], '-');
     result := (last <> '') and
               ToCardinal(last, PrimaryGroupID);
   end;
