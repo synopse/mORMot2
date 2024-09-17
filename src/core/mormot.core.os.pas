@@ -482,6 +482,7 @@ type
     wksBuiltinDefaultSystemManagedGroup,
     wksBuiltinStorageReplicaAdmins,
     wksBuiltinDeviceOwners,
+    wksBuiltinWriteRestrictedCode,
     wksCapabilityInternetClient,
     wksCapabilityInternetClientServer,
     wksCapabilityPrivateNetworkClientServer,
@@ -6408,6 +6409,8 @@ begin
       sid.SubAuthority[0] := ord(wks) - (ord(wksNtAuthority) - 2)
     else if wks <= wksLocalAccountAndAdministrator then //  S-1-5-113
       sid.SubAuthority[0] := ord(wks) - (ord(wksLocalAccount) - 113)
+    else if wks = wksBuiltinWriteRestrictedCode then
+      sid.SubAuthority[0] := 33
     else
     begin
       sid.SubAuthority[0] := 32;
@@ -6510,6 +6513,8 @@ begin
                 result := TWellKnownSid((ord(wksIisUser) - 17) + c);
               32:
                 result := wksBuiltinDomain;
+              33:
+                result := wksBuiltinWriteRestrictedCode;
               113 .. 114:
                 result := TWellKnownSid(integer(ord(wksLocalAccount) - 113) + c);
             end;
