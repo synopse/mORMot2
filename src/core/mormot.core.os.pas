@@ -2472,14 +2472,7 @@ type
       SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWORD;
       SecurityInformation: DWORD; var StringSecurityDescriptor: PAnsiChar;
       StringSecurityDescriptorLen: LPDWORD): BOOL; stdcall;
-    /// sign a message (not resolved yet - in crypt32.dll)
-    SignMessage: function(var pSignPara: CRYPT_SIGN_MESSAGE_PARA;
-      fDetachedSignature: BOOL; cToBeSigned: DWORD; rgpbToBeSigned: pointer;
-      var rgcbToBeSigned: DWORD; pbSignedBlob: pointer; var pcbSignedBlob: DWORD): BOOL; stdcall;
-    /// verify a signed message (not resolved yet - in crypt32.dll)
-    VerifyMessageSignature: function(var pVerifyPara: CRYPT_VERIFY_MESSAGE_PARA;
-      dwSignerIndex: DWORD; pbSignedBlob: PByte; cbSignedBlob: DWORD;
-      pbDecoded: PByte; pcbDecoded: LPDWORD; ppSignerCert: PPCCERT_CONTEXT): BOOL; stdcall;
+
     /// try to load the CryptoApi on this system
     function Available: boolean;
       {$ifdef HASINLINE}inline;{$endif}

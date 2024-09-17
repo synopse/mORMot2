@@ -3956,7 +3956,6 @@ begin
       inc(p);
     end;
   end;
-  // note: CryptSignMessage and CryptVerifyMessageSignature are in crypt32.dll
 end;
 
 type
