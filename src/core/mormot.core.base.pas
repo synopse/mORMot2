@@ -884,6 +884,12 @@ procedure AppendShortInt64(value: Int64; var dest: ShortString);
 procedure AppendShortChar(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
+/// simple concatenation of hexadecimal binary buffer into a shorstring
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
+
+/// simple concatenation of an integer as hexadecimal into a shorstring
+procedure AppendShortIntHex(value: PtrUInt; var dest: ShortString);
+
 /// simple concatenation of a byte as hexadecimal into a shorstring
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
 
@@ -4844,8 +4850,26 @@ begin
   dest[0] := AnsiChar(len);
 end;
 
+procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
+var
+  dlen, v: PtrInt;
+begin
+  dlen := ord(dest[0]);
+  if (len > 0) and
+     (dlen + len * 2 < 254) then
+    repeat
+      v := value^;
+      inc(value);
+      dest[dlen + 1] := HexCharsLower[v shr 4];
+      inc(dlen, 2);
+      v := v and $0f;
+      dest[dlen] := HexCharsLower[v];
+      dec(len);
+    until len = 0;
+  dest[0] := AnsiChar(dlen);
+end;
+
 procedure AppendShortTemp24(value, temp: PAnsiChar; dest: PAnsiChar);
-  {$ifdef HASINLINE} inline; {$endif}
 var
   valuelen, destlen, newlen: PtrInt;
 begin
@@ -4856,6 +4880,23 @@ begin
     exit;
   dest[0] := AnsiChar(newlen);
   MoveFast(value^, dest[destlen + 1], valuelen);
+end;
+
+procedure AppendShortIntHex(value: PtrUInt; var dest: ShortString);
+var
+  tmp: array[0..23] of AnsiChar;
+  i: PtrInt;
+begin
+  for i := (POINTERBYTES * 2) - 1 downto 0 do
+  begin
+    tmp[i] := HexCharsLower[value and 15];
+    value := value shr 4;
+  end;
+  i := 0;
+  while (i < (POINTERBYTES * 2) - 1) and  // trim left 0
+        (tmp[i] = '0') do
+    inc(i);
+  AppendShortTemp24(@tmp[i], @tmp[POINTERBYTES * 2], @dest);
 end;
 
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
