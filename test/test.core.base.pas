@@ -2814,6 +2814,31 @@ begin
   finally
     c.Free;
   end;
+  {$ifdef OSWINDOWS}
+  Check(IsSystemFolder('c:\program files'));
+  Check(IsSystemFolder('c:\program Files\toto'));
+  Check(IsSystemFolder('c:\Program files (x86)'));
+  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
+  Check(IsSystemFolder('c:\windows'));
+  Check(IsSystemFolder('c:\windows\toto'));
+  Check(not IsSystemFolder('c:\program file'));
+  Check(not IsSystemFolder('c:\program files other\toto'));
+  Check(not IsSystemFolder('c:\windowstorage'));
+  if IsUacVirtualizationEnabled then
+  begin
+    Check(IsUacVirtualFolder('c:\program files'));
+    Check(IsUacVirtualFolder('c:\program Files\toto'));
+    Check(IsUacVirtualFolder('c:\Program files (x86)'));
+    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
+    Check(IsUacVirtualFolder('c:\windows'));
+    Check(IsUacVirtualFolder('c:\windows\toto'));
+    Check(not IsUacVirtualFolder('c:\program file'));
+    Check(not IsUacVirtualFolder('c:\program files other\toto'));
+    Check(not IsUacVirtualFolder('c:\windowstorage'));
+  end
+  else
+    Check(not IsUacVirtualFolder('c:\program files'));
+  {$endif OSWINDOWS}
 end;
 
 procedure TTestCoreBase._IsMatch;
@@ -6305,6 +6330,7 @@ var
   sids: TRawUtf8DynArray;
   {$endif OSWINDOWS}
 begin
+  // validate cross-platform SID process
   CheckEqual(SizeOf(TSid), 1032, 'TSid');
   for k := low(k) to high(k) do
   begin
@@ -6318,6 +6344,7 @@ begin
     CheckEqual(s, RawSidToText(s2));
     CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
   end;
+  // validate Windows specific SID function, especially about the current user
   {$ifdef OSWINDOWS}
   CurrentRawSid(s1, wttProcess);
   CurrentRawSid(s2, wttThread);
@@ -6341,29 +6368,6 @@ begin
     else
       CheckUtf8(not CurrentUserHasGroup(s), s);
   end;
-  Check(IsSystemFolder('c:\program files'));
-  Check(IsSystemFolder('c:\program Files\toto'));
-  Check(IsSystemFolder('c:\Program files (x86)'));
-  Check(IsSystemFolder('d:\Program Files (X86)\toto'));
-  Check(IsSystemFolder('c:\windows'));
-  Check(IsSystemFolder('c:\windows\toto'));
-  Check(not IsSystemFolder('c:\program file'));
-  Check(not IsSystemFolder('c:\program files other\toto'));
-  Check(not IsSystemFolder('c:\windowstorage'));
-  if IsUacVirtualizationEnabled then
-  begin
-    Check(IsUacVirtualFolder('c:\program files'));
-    Check(IsUacVirtualFolder('c:\program Files\toto'));
-    Check(IsUacVirtualFolder('c:\Program files (x86)'));
-    Check(IsUacVirtualFolder('d:\Program Files (X86)\toto'));
-    Check(IsUacVirtualFolder('c:\windows'));
-    Check(IsUacVirtualFolder('c:\windows\toto'));
-    Check(not IsUacVirtualFolder('c:\program file'));
-    Check(not IsUacVirtualFolder('c:\program files other\toto'));
-    Check(not IsUacVirtualFolder('c:\windowstorage'));
-  end
-  else
-    Check(not IsUacVirtualFolder('c:\program files'));
   {$endif OSWINDOWS}
 end;
 

@@ -5555,7 +5555,7 @@ begin
                   end;
               end;
             HTTP_NOTFOUND:
-              if (siz < 0) and
+              if (siz < 0) and // siz=-1 if the requested resource was a folder
                  not (psoNoFolderHtmlIndex in fSettings.Server.Options) then
               begin
                 // return the folder files info as cached HTML
