@@ -404,11 +404,11 @@ type
   // - warning: does not exactly match winnt.h WELL_KNOWN_SID_TYPE enumeration
   TWellKnownSid = (
     wksNull,                                      // S-1-0-0
-    wksWorld,                                     // S-1-1-0      WD
+    wksWorld,                                     // S-1-1-0       WD
     wksLocal,                                     // S-1-2-0
     wksConsoleLogon,                              // S-1-2-1
-    wksCreatorOwner,                              // S-1-3-0      CO
-    wksCreatorGroup,                              // S-1-3-1      CG
+    wksCreatorOwner,                              // S-1-3-0       CO
+    wksCreatorGroup,                              // S-1-3-1       CG
     wksCreatorOwnerServer,                        // S-1-3-2
     wksCreatorGroupServer,                        // S-1-3-3
     wksIntegrityUntrusted,                        // S-1-16-0
@@ -710,6 +710,7 @@ type
   TSecAces = array of TSecAce;
 
   /// high-level cross-platform support of Windows Security Descriptors
+  // - can load and export Windows SD as self-relative binary or SDDL text
   {$ifdef USERECORDWITHMETHODS}
   TSecDesc = record
   {$else}
@@ -726,6 +727,8 @@ type
     Sacl: TSecAces;
     /// control flags of this Security Descriptor
     Flags: TSecControls;
+    /// remove any previous content
+    procedure Clear;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
@@ -6823,7 +6826,34 @@ const
   ACE_OBJECT_TYPE_PRESENT = 1;
   ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
 
-function ToAces(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
+function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
+begin
+  result := (p <> nil) and
+            (len > SizeOf(TSD)) and
+            (PSD(p)^.Revision = 1) and
+            (PSD(p)^.Sbz1 = 0) and
+            (scSelfRelative in PSD(p)^.Control) and
+            (PSD(p)^.Owner < len) and
+            (cardinal(SidLength(@p[PSD(p)^.Owner])) + PSD(p)^.Owner <= len) and
+            (PSD(p)^.Group < len) and
+            (cardinal(SidLength(@p[PSD(p)^.Group])) + PSD(p)^.Group  <= len) and
+            (PSD(p)^.Sacl < len) and
+            (PSD(p)^.Dacl < len) and
+            ((PSD(p)^.Dacl <> 0) = (scDaclPresent in PSD(p)^.Control)) and
+            ((PSD(p)^.Dacl = 0) or
+             (PACL(@p[PSD(p)^.Dacl])^.AclSize + PSD(p)^.Dacl <= len)) and
+            ((PSD(p)^.Sacl <> 0) = (scSaclPresent in PSD(p)^.Control)) and
+            ((PSD(p)^.Sacl = 0) or
+             (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
+end;
+
+procedure TSecDesc.Clear;
+begin
+  Finalize(self);
+  Flags := [];
+end;
+
+function BinToAcl(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
 var
   hdr: PACL;
   ace: PACE;
@@ -6893,27 +6923,6 @@ begin
   result := true;
 end;
 
-function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
-begin
-  result := (p <> nil) and
-            (len > SizeOf(TSD)) and
-            (PSD(p)^.Revision = 1) and
-            (PSD(p)^.Sbz1 = 0) and
-            (scSelfRelative in PSD(p)^.Control) and
-            (PSD(p)^.Owner < len) and
-            (cardinal(SidLength(@p[PSD(p)^.Owner])) + PSD(p)^.Owner <= len) and
-            (PSD(p)^.Group < len) and
-            (cardinal(SidLength(@p[PSD(p)^.Group])) + PSD(p)^.Group  <= len) and
-            (PSD(p)^.Sacl < len) and
-            (PSD(p)^.Dacl < len) and
-            ((PSD(p)^.Dacl <> 0) = (scDaclPresent in PSD(p)^.Control)) and
-            ((PSD(p)^.Dacl = 0) or
-             (PACL(@p[PSD(p)^.Dacl])^.AclSize + PSD(p)^.Dacl <= len)) and
-            ((PSD(p)^.Sacl <> 0) = (scSaclPresent in PSD(p)^.Control)) and
-            ((PSD(p)^.Sacl = 0) or
-             (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
-end;
-
 function TSecDesc.FromBinary(const Bin: RawSecurityDescriptor): boolean;
 begin
   result := FromBinary(pointer(Bin), length(Bin));
@@ -6921,15 +6930,15 @@ end;
 
 function TSecDesc.FromBinary(p: PByteArray; len: cardinal): boolean;
 begin
-  Finalize(self);
+  Clear;
   result := false;
   if not IsValidSecurityDescriptor(p, len) then
     exit;
   ToRawSid(@p[PSD(p)^.Owner], Owner);
   ToRawSid(@p[PSD(p)^.Group], Group);
   Flags := PSD(p)^.Control;
-  result := ToAces(p, PSD(p)^.Dacl, Dacl) and
-            ToAces(p, PSD(p)^.Sacl, Sacl);
+  result := BinToAcl(p, PSD(p)^.Dacl, Dacl) and
+            BinToAcl(p, PSD(p)^.Sacl, Sacl);
 end;
 
 function AclToBin(p: PAnsiChar; const ace: TSecAces): PtrInt;

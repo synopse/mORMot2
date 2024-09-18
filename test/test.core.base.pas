@@ -6415,6 +6415,7 @@ begin
   Check(KnownSidToSddl(wksSelf) = 'PS');
   Check(KnownSidToSddl(wksLocalSystem) = 'SY');
   Check(KnownSidToSddl(wksBuiltinAdministrators) = 'BA');
+  Check(KnownSidToSddl(wksBuiltinNetworkConfigurationOperators) = 'NO');
   Check(KnownSidToSddl(wksBuiltinPerfLoggingUsers) = 'LU');
   Check(KnownSidToSddl(wksBuiltinEventLogReadersGroup) = 'ER');
   Check(KnownSidToSddl(wksBuiltinAccessControlAssistanceOperators) = 'AA');
@@ -6437,7 +6438,7 @@ begin
     Check(sd.FromBinary(bin));
     CheckEqual(length(sd.Dacl), 4);
     CheckEqual(length(sd.Sacl), 0);
-    CheckEqual(sd.ToText, SD_TXT[i]);
+    CheckEqual(sd.ToText, SD_TXT[i], 'ToText');
     SecurityDescriptorToText(pointer(bin), length(bin), u); // OS API on Windows
     CheckEqual(u, SD_TXT[i]);
     saved := sd.ToBinary;
