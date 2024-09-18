@@ -735,8 +735,11 @@ type
     function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
     /// encode this Security Descriptor into a self-relative binary buffer
     function ToBinary: RawSecurityDescriptor;
-    /// encode this Security Descriptor into its standard textual representation
-    // - i.e. following Security Descriptor Definition Language (SDDL)
+    /// decode a Security Descriptor from its SDDL textual representation
+    function FromText(p: PUtf8Char): boolean; overload;
+    /// decode a Security Descriptor from its SDDL textual representation
+    function FromText(const SddlText: RawUtf8): boolean; overload;
+    /// encode this Security Descriptor into its SDDL textual representation
     function ToText: RawUtf8;
   end;
 
@@ -7108,7 +7111,36 @@ begin
   AppendShort(tmp, s);
 end;
 
-const // some cross-platform definition of 32-bit Windows file access rights
+function SddlNextSid(var p: PUtf8Char; var sid: RawSid): boolean;
+var
+  u: RawUtf8;
+  i: PtrInt;
+  s: PUtf8Char;
+begin
+  s := p;
+  if PWord(s)^ = ord('S') + ord('-') shl 8 then
+  begin
+    repeat
+      inc(s);
+    until not (s^ in ['0' .. '9', '-']);
+    FastSetString(u, p, s - p);
+    p := s;
+    result := TextToRawSid(u, sid);
+    exit;
+  end;
+  result := false;
+  if not (p^ in ['A' .. 'Z']) then
+     exit;
+  i := WordScanIndex(@WKS_SDDL, ord(wksLastSddl) * 2 + 2, PWord(p)^);
+  if i <= 0 then
+    exit;
+  inc(p, 2);
+  sid := KnownRawSid(TWellKnownSid(i));
+  result := true;
+end;
+
+
+const // some cross-platform definitions of main 32-bit Windows access rights
   FILE_ALL_ACCESS      = $f0000 or $100000 or $1FF;
   FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
   FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
@@ -7126,6 +7158,203 @@ const // some cross-platform definition of 32-bit Windows file access rights
     'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');
   RIGHTS_SDDL: array[0 .. high(RIGHTS_UINT32)] of string[2] = (
     'FA', 'FR', 'FW', 'FX');
+
+function SddlNextPart(var p: PUtf8Char; out u: shortstring): boolean;
+var
+  s: PUtf8Char;
+begin
+  s := p;
+  while s^ = ' ' do
+    inc(s);
+  p := s;
+  while not (s^ in [#0, ';', ')']) do
+    inc(s);
+  SetString(u, p, s - p);
+  result := s^ = ';';
+  p := s;
+end;
+
+function SddlNextTwo(var p: PUtf8Char; out u: shortstring): boolean;
+var
+  s: PUtf8Char;
+begin
+  result := false;
+  s := p;
+  while s^ = ' ' do
+    inc(s);
+  if not (s[0] in ['A' .. 'Z']) or
+     not (s[1] in ['A' .. 'Z']) then
+    exit;
+  u[0] := #2;
+  PWord(@u[1])^ := PWord(s)^;
+  p := s + 2;
+  result := true;
+end;
+
+function SddlNextGuid(var p: PUtf8Char; out uuid: TGuid): boolean;
+var
+  u: shortstring;
+begin
+  result := SddlNextPart(p, u) and
+            ((u[0] = #0) or
+             TextToUuid([u], uuid)); // use RTL
+  inc(p);
+end;
+
+function SddlNextAce(var p: PUtf8Char; var ace: TSecAce): boolean;
+var
+  u: shortstring;
+  t: TSecAceType;
+  f: TSecAceFlag;
+  a: TSecAccess;
+  int, err: integer;
+  i: PtrInt;
+begin
+  result := false;
+  ace.AceType := satUnknown;
+  if not SddlNextPart(p, u) or
+     not (u[0] in [#1, #2]) then
+    exit;
+  for t := low(t) to high(t) do
+    if SAT_SDDL[t] = u then
+    begin
+      ace.AceType := t;
+      break;
+    end;
+  if ace.AceType = satUnknown then
+    exit;
+  inc(p);
+  while p^ <> ';' do
+  begin
+    if not SddlNextTwo(p, u) then
+      exit;
+    for f := low(f) to high(f) do
+      if SAF_SDDL[f] = u then
+      begin
+        include(ace.Flags, f);
+        break;
+      end;
+  end;
+  inc(p);
+  while p^ <> ';' do
+  begin
+    if PWord(p)^ = ord('0') + ord('x') shl 8 then
+    begin
+      if not SddlNextPart(p, u) then
+        exit;
+      val({$ifdef UNICODE}string{$endif}(u), int, err); // RTL handles 0x###
+      if err <> 0 then
+        exit;
+      PInteger(@ace.Mask)^ := int;
+      break;
+    end;
+    if not SddlNextTwo(p, u) then
+      exit;
+    int := 0;
+    for i := 0 to high(RIGHTS_SDDL) do
+      if RIGHTS_SDDL[i] = u then
+      begin
+        int := RIGHTS_UINT32[i];
+        break;
+      end;
+    if int = 0 then
+      for a := low(a) to high(a) do
+        if SAM_SDDL[a] = u then
+        begin
+          int := 16 shl ord(a);
+          break;
+        end;
+    if int = 0 then
+      exit; // unrecognized
+    PInteger(@ace.Mask)^ := PInteger(@ace.Mask)^ or int;
+  end;
+  if ace.AceType in satObject then
+  begin
+    inc(p);
+    if not SddlNextGuid(p, ace.ObjectType) or
+       not SddlNextGuid(p, ace.InheritedObjectType) then
+      exit;
+  end
+  else if PCardinal(p)^ and $ffffff = ord(';') + ord(';') shl 8 + ord(';') shl 16 then
+    inc(p, 3)
+  else
+    exit; // common types should have ;;; here
+  result := SddlNextSid(p, ace.Sid);
+end;
+
+function TSecDesc.FromText(p: PUtf8Char): boolean;
+
+  function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
+  begin
+    result := false;
+    if p^ = 'P' then
+    begin
+      include(Flags, pr);
+      inc(p);
+    end;
+    if PWord(p)^ = ord('A') + ord('R') shl 8 then
+    begin
+      include(Flags, ar);
+      inc(p, 2);
+    end;
+    if PWord(p)^ = ord('A') + ord('I') shl 8 then
+    begin
+      include(Flags, ai);
+      inc(p, 2);
+    end;
+    if p^ <> '(' then
+      exit;
+    repeat
+      inc(p);
+      SetLength(aces, length(aces) + 1);
+      if not SddlNextAce(p, aces[high(aces)]) then
+        exit;
+      if p^ <> ')' then
+        exit;
+      inc(p);
+    until p^ <> '(';
+    result := true;
+  end;
+
+begin
+  Clear;
+  result := false;
+  if p = nil then
+    exit;
+  repeat
+    while p^ = ' ' do
+      inc(p);
+    if p[1] <> ':' then
+      exit;
+    inc(p, 2);
+    case p[-2] of
+      'O':
+        if not SddlNextSid(p, Owner) then
+          exit;
+      'G':
+        if not SddlNextSid(p, Group) then
+          exit;
+      'D':
+        if not NextAces(Dacl,
+                scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit) then
+          exit;
+      'S':
+        if not NextAces(Sacl,
+                 scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit) then
+          exit;
+    else
+      exit;
+    end;
+    while p^ = ' ' do
+      inc(p);
+  until p^ = #0;
+  result := true;
+end;
+
+function TSecDesc.FromText(const SddlText: RawUtf8): boolean;
+begin
+  result := FromText(pointer(SddlText));
+end;
 
 procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
 var

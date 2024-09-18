@@ -6391,7 +6391,7 @@ begin
 end;
 
 const
-  // some reference SecurityDescriptor, exported from several Windows OS revisions
+  // some reference SecurityDescriptor, exported from several Windows VMs
   SD_B64: array[0..2] of RawUtf8 = (
     'AQAEgBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACCi6YoI/P2Y4qnMj/rAwAAAQUAAAAAAAUVAAAA' +
     'goumKCPz9mOKpzI/AQIAAAIAcAAEAAAAAAAYAP8BHwABAgAAAAAABSAAAAAgAgAAAAAUAP8BHwABAQAA' +
@@ -6452,6 +6452,8 @@ begin
     bin := Base64ToBin(SD_B64[i]);
     Check(bin <> '', 'b64');
     Check(IsValidSecurityDescriptor(pointer(bin), length(bin)), 'bin');
+    sd.Clear;
+    CheckEqual(sd.ToText, '', 'clear');
     Check(sd.FromBinary(bin));
     CheckEqual(length(sd.Dacl), 4);
     CheckEqual(length(sd.Sacl), 0);
@@ -6461,6 +6463,10 @@ begin
     saved := sd.ToBinary;
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saved');
     Check(saved = bin, 'ToBinary');
+    Check(not sd.FromText(''));
+    CheckEqual(sd.ToText, '', 'fromnil');
+    Check(sd.FromText(u), 'fromu');
+    Check(sd.ToBinary = saved, 'fromsaved');
   end;
 end;
 
