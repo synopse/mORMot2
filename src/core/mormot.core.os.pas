@@ -504,6 +504,35 @@ type
   /// define a set of well-known SID
   TWellKnownSids = set of TWellKnownSid;
 
+  /// define a list of well-known domain relative sub-authority RID values
+  TWellKnownRid = (
+    wkrGroupReadOnly,                // DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS RO
+    wkrUserAdmin,                    // DOMAIN_USER_RID_ADMIN  LA
+    wkrUserGuest,                    // DOMAIN_USER_RID_GUEST  LG
+    wkrServiceKrbtgt,                // DOMAIN_USER_RID_KRBTGT
+    wkrGroupAdmins,                  // DOMAIN_GROUP_RID_ADMINS DA
+    wkrGroupUsers,                   // DOMAIN_GROUP_RID_USERS DU
+    wkrGroupGuests,                  // DOMAIN_GROUP_RID_GUESTS DG
+    wkrGroupComputers,               // DOMAIN_GROUP_RID_COMPUTERS DC
+    wkrGroupControllers,             // DOMAIN_GROUP_RID_CONTROLLERS DD
+    wkrGroupCertAdmins,              // DOMAIN_GROUP_RID_CERT_ADMINS     CA
+    wkrGroupSchemaAdmins,            // DOMAIN_GROUP_RID_SCHEMA_ADMINS   SA
+    wkrGroupEntrepriseAdmins,        // DOMAIN_GROUP_RID_ENTERPRISE_ADMINS EA
+    wkrGroupPolicyAdmins,            // DOMAIN_GROUP_RID_POLICY_ADMINS  PA
+    wkrGroupReadOnlyControllers,     // DOMAIN_GROUP_RID_READONLY_CONTROLLERS
+    wkrGroupCloneableControllers,    // DOMAIN_GROUP_RID_CLONEABLE_CONTROLLERS CN
+    wkrGroupProtectedUsers,          // DOMAIN_GROUP_RID_PROTECTED_USERS AP
+    wkrGroupKeyAdmins,               // DOMAIN_GROUP_RID_KEY_ADMINS  KA
+    wkrGroupEntrepriseKeyAdmins,     // DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK
+    wkrSecurityMandatoryLow,         // SECURITY_MANDATORY_LOW_RID    LW
+    wkrSecurityMandatoryMedium,      // SECURITY_MANDATORY_MEDIUM_RID ME
+    wkrSecurityMandatoryMediumPlus,  // SECURITY_MANDATORY_MEDIUM_PLUS_RID MP
+    wkrSecurityMandatoryHigh,        // SECURITY_MANDATORY_HIGH_RID   HI
+    wkrSecurityMandatorySystem);     // SECURITY_MANDATORY_SYSTEM_RID SI
+    
+  /// define a set of well-known RID
+  TWellKnownRids = set of TWellKnownRid;
+
   /// custom binary buffer type used as convenient Windows SID storage
   RawSid = type RawByteString;
 
@@ -564,11 +593,11 @@ function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
 
 /// returns a Security IDentifier of a well-known SID as binary
 // - is using an internal cache for the returned RawSid instances
-function KnownRawSid(wks: TWellKnownSid): RawSid;
+function KnownRawSid(wks: TWellKnownSid): RawSid; overload;
 
 /// returns a Security IDentifier of a well-known SID as standard text
 // - e.g. wksBuiltinAdministrators as 'S-1-5-32-544'
-function KnownSidToText(wks: TWellKnownSid): PShortString;
+function KnownSidToText(wks: TWellKnownSid): PShortString; overload;
 
 /// recognize most well-known SID from a Security IDentifier binary buffer
 // - returns wksNull if the supplied buffer was not recognized
@@ -580,6 +609,15 @@ function SidToKnown(const text: RawUtf8): TWellKnownSid; overload;
 
 /// recognize some well-known SIDs from the supplied SID dynamic array
 function SidToKnownGroups(const sids: PSids): TWellKnownSids;
+
+/// returns a Security IDentifier of a well-known RID as binary
+// - the Domain is expected to be in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' layout
+function KnownRawSid(wkr: TWellKnownRid; const Domain: RawUtf8): RawSid; overload;
+
+/// returns a Security IDentifier of a well-known RID as standard text
+// - the Domain is expected to be in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' layout
+// - e.g. wkrUserAdmin as 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx-500'
+function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8; overload;
 
 const // some time conversion constants with Milli/Micro/NanoSec resolution
   SecsPerHour  = SecsPerMin * MinsPerHour; // missing in oldest Delphi
@@ -6781,38 +6819,25 @@ begin
   end;
 end;
 
-{ TODO: include those domain-specific RID values as TWellKnownRid ?
+const
+  WKR_RID: array[TWellKnownRid] of cardinal = (
+    $1f2, $1f4, $1f5, $1f6, $200, $201, $202, $203, $204, $205, $206, $207,
+    $208, $209, $20a, $20d, $20e, $20f, $1000, $2000, $2100, $3000, $4000);
+  MIN: array[boolean] of string[1] = ('-', '');
 
-  DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS   RO  0x000001F2
-  DOMAIN_USER_RID_ADMIN  LA  0x000001F4
-  DOMAIN_USER_RID_GUEST  LG  0x000001F5
-  DOMAIN_GROUP_RID_ADMINS DA 0x00000200
-  DOMAIN_GROUP_RID_USERS DU 0x00000201
-  DOMAIN_GROUP_RID_GUESTS DG 0x00000202
-  DOMAIN_GROUP_RID_COMPUTERS DC 0x00000203
-  DOMAIN_GROUP_RID_CONTROLLERS DD 0x00000204
-  DOMAIN_GROUP_RID_CERT_ADMINS     CA   0x00000205
-  DOMAIN_GROUP_RID_SCHEMA_ADMINS   SA   0x00000206
-  DOMAIN_GROUP_RID_ENTERPRISE_ADMINS EA 0x00000207
-  DOMAIN_GROUP_RID_POLICY_ADMINS  PA    0x00000208
-  DOMAIN_GROUP_RID_CLONEABLE_CONTROLLERS CN 0x0000020A
-  DOMAIN_GROUP_RID_PROTECTED_USERS AP  0x0000020D
-  DOMAIN_GROUP_RID_KEY_ADMINS  KA   0x0000020E
-  DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK  0x0000020F
+function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8;
+begin
+  if Domain <> '' then
+    _fmt('%s%s%d', [Domain, MIN[Domain[length(Domain)] = '-'], WKR_RID[wkr]], result)
+  else
+    result := '';
+end;
 
-  SECURITY_MANDATORY_LOW_RID    LW  0x00001000
-  SECURITY_MANDATORY_MEDIUM_RID ME  0x00002000
-  SECURITY_MANDATORY_MEDIUM_PLUS_RID MP  0x00002100
-  SECURITY_MANDATORY_HIGH_RID   HI  0X00003000
-  SECURITY_MANDATORY_SYSTEM_RID SI  0x00004000
-  SECURITY_MANDATORY_PROTECTED_PROCESS_RID   0x00005000
+function KnownRawSid(wkr: TWellKnownRid; const Domain: RawUtf8): RawSid;
+begin
+  TextToRawSid(KnownSidToText(wkr, Domain), result);
+end;
 
-  SECURITY_LOCAL_SERVICE_RID         LS
-  SECURITY_NETWORK_SERVICE_RID       NS
-  SECURITY_CREATOR_OWNER_RIGHTS_RID  OW
-  SECURITY_AUTHENTICATION_SERVICE_ASSERTED_RID SS
-  SECURITY_USERMODEDRIVERHOST_ID_BASE_RID UD
-}
 
 { TSecDesc }
 
