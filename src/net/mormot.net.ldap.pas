@@ -3023,7 +3023,7 @@ const
     'owner',                       // atOwner
     'groupType',                   // atGroupType
     'primaryGroupID',              // atPrimaryGroupID
-    'ntSecurityDescriptor',        // atNTSecurityDescriptor
+    'nTSecurityDescriptor',        // atNTSecurityDescriptor
     'objectSid',                   // atObjectSid
     'objectGUID',                  // atObjectGuid
     'logonCount',                  // atLogonCount
