@@ -6967,7 +6967,7 @@ begin
         a^.AceType := satUnknown; // unsupported
       if sid <> nil then
       begin
-        sidlen := SidLength(sid) + 8;
+        sidlen := SidLength(sid) + (PAnsiChar(sid) - pointer(ace));
         opaquelen := integer(ace^.AceSize) - sidlen;
         if opaquelen < 0 then
           exit;
@@ -6996,8 +6996,10 @@ begin
   result := false;
   if not IsValidSecurityDescriptor(p, len) then
     exit;
-  ToRawSid(@p[PSD(p)^.Owner], Owner);
-  ToRawSid(@p[PSD(p)^.Group], Group);
+  if PSD(p)^.Owner <> 0 then
+    ToRawSid(@p[PSD(p)^.Owner], Owner);
+  if PSD(p)^.Group <> 0 then
+    ToRawSid(@p[PSD(p)^.Group], Group);
   Flags := PSD(p)^.Control;
   result := BinToAcl(p, PSD(p)^.Dacl, Dacl) and
             BinToAcl(p, PSD(p)^.Sacl, Sacl);
@@ -7087,12 +7089,18 @@ begin
   hdr^.Revision := 1;
   hdr^.Control := Flags + [scSelfRelative];
   inc(PSD(p));
-  hdr^.Owner := p - pointer(result);
-  MoveFast(pointer(Owner)^, p^, length(Owner));
-  inc(p, length(Owner));
-  hdr^.Group := p - pointer(result);
-  MoveFast(pointer(Group)^, p^, length(Group));
-  inc(p, length(Group));
+  if Owner <> '' then
+  begin
+    hdr^.Owner := p - pointer(result);
+    MoveFast(pointer(Owner)^, p^, length(Owner));
+    inc(p, length(Owner));
+  end;
+  if Group <> '' then
+  begin
+    hdr^.Group := p - pointer(result);
+    MoveFast(pointer(Group)^, p^, length(Group));
+    inc(p, length(Group));
+  end;
   if Sacl <> nil then
   begin
     include(hdr^.Control, scSaclPresent);
@@ -7398,6 +7406,10 @@ begin
     while p^ = ' ' do
       inc(p);
   until p^ = #0;
+  if Dacl <> nil then
+    include(Flags, scDaclPresent);
+  if Sacl <> nil then
+    include(Flags, scSaclPresent);
   result := true;
 end;
 
