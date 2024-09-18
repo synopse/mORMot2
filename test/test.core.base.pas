@@ -6391,8 +6391,21 @@ begin
 end;
 
 const
-  // some reference SecurityDescriptor, exported from several Windows VMs
-  SD_B64: array[0..2] of RawUtf8 = (
+  // some reference Security Descriptor self-relative buffers
+  SD_B64: array[0..6] of RawUtf8 = (
+    // https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
+    'AQAUgCgBAAA4AQAAFAAAADAAAAACABwAAQAAAALAFAArAA0AAQEAAAAAAAEAAAAABAD4AAcAAAAAABQA' +
+    'PwAPAAEBAAAAAAAFEgAAAAAAGAA/AA8AAQIAAAAAAAUgAAAAJAIAAAUALAADAAAAAQAAALp6lr/mDdAR' +
+    'ooUAqgAwSeIBAgAAAAAABSAAAAAkAgAABQAsAAMAAAABAAAAnHqWv+YN0BGihQCqADBJ4gECAAAAAAAF' +
+    'IAAAACQCAAAFACwAAwAAAAEAAAD/pKhtUg7QEaKGAKoAMEniAQIAAAAAAAUgAAAAJAIAAAUALAADAAAA' +
+    'AQAAAKh6lr/mDdARooUAqgAwSeIBAgAAAAAABSAAAAAmAgAAAAAUABQAAgABAQAAAAAABQsAAAABAgAA' +
+    'AAAABSAAAAAkAgAAAQEAAAAAAAUSAAAA',
+    'AQAEgDAAAABAAAAAAAAAABQAAAACABwAAQAAAAAAFAA/AA4QAQEAAAAAAAAAAAAAAQIAAAAAAAUgAAAA' +
+    'JAIAAAEBAAAAAAAFEgAAAA==',
+    'AQAEgAAAAAAAAAAAAAAAABQAAAACABwAAQAAAAAAFAAAAAAQAQEAAAAAAAUHAAAA',
+    'AQAEgBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAADRYBkx0xfaYIKt9RgBAgAAAQUAAAAAAAUVAAAA' +
+    '0WAZMdMX2mCCrfUYAAIAAAIALAABAAAAAAAkAP8BHwABBQAAAAAABRUAAADRYBkx0xfaYIKt9RgAAgAA',
+    // executable file access security descriptors, exported from several Windows VMs
     'AQAEgBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACCi6YoI/P2Y4qnMj/rAwAAAQUAAAAAAAUVAAAA' +
     'goumKCPz9mOKpzI/AQIAAAIAcAAEAAAAAAAYAP8BHwABAgAAAAAABSAAAAAgAgAAAAAUAP8BHwABAQAA' +
     'AAAABRIAAAAAACQA/wEfAAEFAAAAAAAFFQAAAIKLpigj8/ZjiqcyP+sDAAAAABgAqQASAAECAAAAAAAF' +
@@ -6404,6 +6417,15 @@ const
     'Aq1i5kjyMjsQYstG8AQIAAAIAYAAEAAAAABAYAP8BHwABAgAAAAAABSAAAAAgAgAAABAUAP8BHwABAQ' +
     'AAAAAABRIAAAAAEBgAqQASAAECAAAAAAAFIAAAACECAAAAEBQAvwETAAEBAAAAAAAFCwAAAA==');
   SD_TXT: array[0..high(SD_B64)] of RawUtf8 = (
+    'O:AOG:SYD:(A;;KA;;;SY)(A;;KA;;;AO)(OA;;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2' +
+    ';;AO)(OA;;CCDC;bf967a9c-0de6-11d0-a285-00aa003049e2;;AO)(OA;;CCDC;6da8a4ff-0e52-' +
+    '11d0-a286-00aa003049e2;;AO)(OA;;CCDC;bf967aa8-0de6-11d0-a285-00aa003049e2;;PO)(A' +
+    ';;LCRPRC;;;AU)S:(AU;SAFA;CCDCSWWPSDWDWO;;;WD)',
+    'O:AOG:SYD:(A;;CCDCLCSWRPWPRCWDWOGA;;;S-1-0-0)',
+    'D:(A;;GA;;;AN)',
+    'O:S-1-5-21-823746769-1624905683-418753922-513' +
+    'G:S-1-5-21-823746769-1624905683-418753922-512' +
+    'D:(A;;FA;;;S-1-5-21-823746769-1624905683-418753922-512)',
     'O:S-1-5-21-682003330-1677128483-1060284298-1003' +
     'G:S-1-5-21-682003330-1677128483-1060284298-513' +
     'D:(A;;FA;;;BA)(A;;FA;;;SY)' +
@@ -6420,11 +6442,10 @@ var
   i: PtrInt;
   c: TSecControls;
   bin, saved: RawSecurityDescriptor;
-  u: RawUtf8;
-  sd: TSecDesc;
-  mask: TSecAceAccessMask;
+  u, dom: RawUtf8;
+  sd, sd2: TSecDesc;
 begin
-  //for k := low(k) to high(k) do writeln(k, ' ', KnownSidToSddl(k));
+  // validate internal structures and types
   Check(KnownSidToSddl(wksNull) = '');
   Check(KnownSidToSddl(wksWorld) = 'WD');
   Check(KnownSidToSddl(wksLocal) = '');
@@ -6443,10 +6464,11 @@ begin
   CheckEqual(ord(scSelfRelative), 15);
   c := [scSelfRelative];
   CheckEqual(PWord(@c)^, $8000);
-  CheckEqual(ord(samGenericRead), 15, 'sam');
-  mask.Bits := 0;
-  mask.Flags := [];
-  CheckEqual(cardinal(mask), 0);
+  CheckEqual(ord(samGenericRead), 31, 'sam');
+  dom := 'S-1-5-21-823746769-1624905683-418753922';
+  CheckEqual(KnownSidToText(wkrUserAdmin, dom), dom + '-500');
+  CheckEqual(KnownSidToText(wkrSecurityMandatorySystem, dom), dom + '-16384');
+  // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
     bin := Base64ToBin(SD_B64[i]);
@@ -6455,19 +6477,37 @@ begin
     sd.Clear;
     CheckEqual(sd.ToText, '', 'clear');
     Check(sd.FromBinary(bin));
-    CheckEqual(length(sd.Dacl), 4);
-    CheckEqual(length(sd.Sacl), 0);
+    Check(sd.Dacl <> nil, 'dacl');
+    Check((sd.Sacl = nil) = (i <> 0), 'sacl');
     CheckEqual(sd.ToText, SD_TXT[i], 'ToText');
     SecurityDescriptorToText(pointer(bin), length(bin), u); // OS API on Windows
-    CheckEqual(u, SD_TXT[i]);
+    CheckEqual(u, SD_TXT[i], 'winapi1');
     saved := sd.ToBinary;
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saved');
-    Check(saved = bin, 'ToBinary');
-    Check(not sd.FromText(''));
-    CheckEqual(sd.ToText, '', 'fromnil');
-    Check(sd.FromText(u), 'fromu');
-    Check(sd.ToBinary = saved, 'fromsaved');
+    SecurityDescriptorToText(pointer(saved), length(saved), u); // OS API on Windows
+    CheckEqual(u, SD_TXT[i], 'winapi2');
+    if i >= 3 then // serialization offsets seem not consistent
+      Check(saved = bin, 'ToBinary');
+    Check(not sd2.FromText(''));
+    CheckEqual(sd2.ToText, '', 'fromnil');
+    Check(sd2.FromText(u), 'fromu');
+    CheckEqual(sd2.ToText, u, 'fromutou');
+    Check(sd.Compare(sd2));
+    Check(sd2.Compare(sd));
+    bin := sd2.ToBinary;
+    Check(bin = saved, 'saved2');
   end;
+  // validate parsing RID in text (e.g. DU,DA)
+  Check(not sd.FromText('O:DUG:DAD:(A;;FA;;;DA)'), 'dom0');
+  Check(sd.FromText('O:DUG:DAD:(A;;FA;;;DA)', dom), 'dom1');
+  u := sd.ToText;
+  CheckEqual(u, FormatUtf8('O:%-513G:%-512D:(A;;FA;;;%-512)', [dom, dom, dom]));
+  CheckEqual(u, SD_TXT[3], 'domasref');
+  u := sd.ToText(dom);
+  CheckEqual(u, 'O:DUG:DAD:(A;;FA;;;DA)', 'rid');
+  saved := sd.ToBinary;
+  CheckHash(saved, $3B028A48, 'dombin');
+  Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saveddom');
 end;
 
 function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
