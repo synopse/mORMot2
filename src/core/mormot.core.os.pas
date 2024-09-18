@@ -6860,7 +6860,7 @@ begin
   result := true;
   if Domain = '' then
     exit; // no Domain involved: continue
-  result := TextToSid(pointer(Domain), tmp) and
+  result := TextToSid(pointer(Domain), tmp) and // expects S-1-5-21-xx-xx-xx
             (tmp.SubAuthorityCount = 4) and
             (tmp.SubAuthority[0] = 21) and
             (PWord(@tmp.IdentifierAuthority)^ = 0) and
@@ -6868,7 +6868,7 @@ begin
   if not result then
     exit; // this Domain text is no valid domain SID
   tmp.SubAuthorityCount := 5; // reserve place for WKR_RID[wkr] trailer
-  ToRawSid(@tmp, Dom);
+  ToRawSid(@tmp, Dom);        // output Dom as S-1-5-21-xx-xx-xx-RID
 end;
 
 
@@ -7237,11 +7237,12 @@ begin
   k := SidToKnown(sid);
   c := $2020;
   if k in wksWithSddl then
-    c := PWordArray(@SID_SDDL)^[ord(k)];
-  if (dom <> nil) and
-     (sid^.SubAuthorityCount = 5) and
-     (sid^.SubAuthority[0] = 21) and
-     CompareMem(dom, sid, SID_MINLEN + 4 shl 2) then // match the domain
+    c := PWordArray(@SID_SDDL)^[ord(k)]
+  else if (k = wksNull) and
+          (dom <> nil) and
+          (sid^.SubAuthorityCount = 5) and
+          (sid^.SubAuthority[0] = 21) and
+          CompareMem(dom, sid, SID_MINLEN + 4 shl 2) then // match the domain
     for r := low(r) to high(r) do
       if WKR_RID[r] = sid^.SubAuthority[4] then
       begin
