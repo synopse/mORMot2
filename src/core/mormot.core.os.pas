@@ -691,6 +691,7 @@ type
     /// high-level supported ACE kinds
     AceType: TSecAceType;
     /// the raw ACE identifier - typically = ord(AceType)
+    // - if you force this type, ensure you set AceType=satUnknown before saving
     RawType: byte;
     // the ACE flags
     Flags: TSecAceFlags;
@@ -729,7 +730,9 @@ type
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
-    /// decode this Security Descriptor into its standard textual representation
+    /// encode this Security Descriptor into a self-relative binary buffer
+    function ToBinary: RawSecurityDescriptor;
+    /// encode this Security Descriptor into its standard textual representation
     // - i.e. following Security Descriptor Definition Language (SDDL)
     function ToText: RawUtf8;
   end;
@@ -6795,7 +6798,7 @@ type
     // ACE header
     AceType: byte;
     AceFlags: TSecAceFlags;
-    AceSize: word;
+    AceSize: word; // include ACE header + whole body
     // ACE body
     Mask: TSecAceAccessMask;
     case integer of
@@ -6815,6 +6818,10 @@ type
     Dacl: cardinal;
   end;
   PSD = ^TSD;
+
+const
+  ACE_OBJECT_TYPE_PRESENT = 1;
+  ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
 
 function ToAces(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
 var
@@ -6853,12 +6860,12 @@ begin
       else if a^.AceType in satObject then
       begin
         sid := @ace^.ObjectStart;
-        if ace^.ObjectFlags and 1 <> 0 then // ACE_OBJECT_TYPE_PRESENT
+        if ace^.ObjectFlags and ACE_OBJECT_TYPE_PRESENT <> 0 then
         begin
           a^.ObjectType := PGuid(sid)^;
           inc(PGuid(sid));
         end;
-        if ace^.ObjectFlags and 2 <> 0 then // ACE_INHERITED_OBJECT_TYPE_PRESENT
+        if ace^.ObjectFlags and ACE_INHERITED_OBJECT_TYPE_PRESENT <> 0 then
         begin
           a^.InheritedObjectType := PGuid(sid)^;
           inc(PGuid(sid));
@@ -6907,6 +6914,11 @@ begin
              (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
 end;
 
+function TSecDesc.FromBinary(const Bin: RawSecurityDescriptor): boolean;
+begin
+  result := FromBinary(pointer(Bin), length(Bin));
+end;
+
 function TSecDesc.FromBinary(p: PByteArray; len: cardinal): boolean;
 begin
   Finalize(self);
@@ -6920,9 +6932,110 @@ begin
             ToAces(p, PSD(p)^.Sacl, Sacl);
 end;
 
-function TSecDesc.FromBinary(const Bin: RawSecurityDescriptor): boolean;
+function AclToBin(p: PAnsiChar; const ace: TSecAces): PtrInt;
+var
+  hdr: PACL;
+  e: PACE;
+  a: ^TSecAce;
+  f: cardinal;
+  pf: PCardinal;
+  i: PtrInt;
 begin
-  result := FromBinary(pointer(Bin), length(Bin));
+  hdr := pointer(p); // hdr=nil below if we just want the length
+  if ace <> nil then
+  begin
+    inc(PACL(p));
+    a := pointer(ace);
+    for i := 0 to length(ace) - 1 do
+    begin
+      e := pointer(p);
+      inc(p, 8); // ACE header + Mask
+      if a^.AceType in satObject then
+      begin
+        pf := pointer(p);
+        inc(PCardinal(p));
+        f := 0;
+        if not IsNullGuid(a^.ObjectType) then
+        begin
+          f := ACE_OBJECT_TYPE_PRESENT;
+          if hdr <> nil then
+            PGuid(p)^ := a^.ObjectType;
+          inc(PGuid(p));
+        end;
+        if not IsNullGuid(a^.InheritedObjectType) then
+        begin
+          f := f or ACE_INHERITED_OBJECT_TYPE_PRESENT;
+          if hdr <> nil then
+            PGuid(p)^ := a^.InheritedObjectType;
+          inc(PGuid(p));
+        end;
+        if hdr <> nil then
+          pf^ := f;
+      end;
+      if hdr <> nil then
+        MoveFast(pointer(a^.Sid)^, p^, length(a^.Sid));
+      inc(p, length(a^.Sid));
+      if hdr <> nil then
+        MoveFast(pointer(a^.Opaque)^, p^, length(a^.Opaque));
+      inc(p, length(a^.Opaque));
+      if hdr <> nil then
+      begin
+        if a^.AceType < satUnknown then
+          e^.AceType := ord(a^.AceType)
+        else
+          e^.AceType := a^.RawType;
+        e^.AceFlags := a^.Flags;
+        e^.AceSize := p - pointer(e);
+        e^.Mask := a^.Mask;
+      end;
+      inc(a);
+    end;
+    if hdr <> nil then
+    begin
+      hdr^.AclRevision := 2;
+      hdr^.Sbz1 := 0;
+      hdr^.AceCount := length(ace);
+      hdr^.Sbz2 := 0;
+      hdr^.AclSize := p - pointer(hdr);
+    end;
+  end;
+  result := p - pointer(hdr);
+end;
+
+function TSecDesc.ToBinary: RawSecurityDescriptor;
+var
+  p: PAnsiChar;
+  hdr: PSD;
+begin
+  FastSetRawByteString(RawByteString(result), nil,
+    SizeOf(hdr^) + length(Owner) + length(Group) +
+    AclToBin(nil, Sacl) + AclToBin(nil, Dacl));
+  p := pointer(result);
+  hdr := pointer(p);
+  FillCharFast(hdr^, SizeOf(hdr^), 0);
+  hdr^.Revision := 1;
+  hdr^.Control := Flags + [scSelfRelative];
+  inc(PSD(p));
+  hdr^.Owner := p - pointer(result);
+  MoveFast(pointer(Owner)^, p^, length(Owner));
+  inc(p, length(Owner));
+  hdr^.Group := p - pointer(result);
+  MoveFast(pointer(Group)^, p^, length(Group));
+  inc(p, length(Group));
+  if Sacl <> nil then
+  begin
+    include(hdr^.Control, scSaclPresent);
+    hdr^.Sacl := p - pointer(result);
+    inc(p, AclToBin(p, Sacl));
+  end;
+  if Dacl <> nil then
+  begin
+    include(hdr^.Control, scDaclPresent);
+    hdr^.Dacl := p - pointer(result);
+    inc(p, AclToBin(p, Dacl));
+  end;
+  if p - pointer(result) <> length(result) then
+    raise EOSException.Create('TSecDesc.ToBinary'); // paranoid
 end;
 
 const
