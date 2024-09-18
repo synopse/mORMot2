@@ -165,11 +165,11 @@ end;
 
 function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
 var
-  tmp: RawUtf8; // should be able to convert into itself, i.e. ndr=pointer(text)
+  decoder: TSecDesc;
 begin
-  ToHumanHex(tmp, sd, len); // fallback on POSIX
-  text := tmp;
-  result := true;
+  result := decoder.FromBinary(sd, len); // decode self-relative binary buffer
+  if result then
+    text := decoder.ToText; // our SDDL emitter
 end;
 
 

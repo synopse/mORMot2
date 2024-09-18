@@ -757,7 +757,7 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 /// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
 // - returns true if the conversion succeeded
 // - this function is able to convert into itself, i.e. allows sd=pointer(text)
-// - on Linux, will return true and call ToHumanHex()
+// - on Linux, will use our TSecDesc decoder/encoder
 // - on Windows, will call the OS API to return a SDDL representaiton
 function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
 
@@ -6776,15 +6776,13 @@ end;
   SECURITY_CREATOR_OWNER_RIGHTS_RID  OW
   SECURITY_AUTHENTICATION_SERVICE_ASSERTED_RID SS
   SECURITY_USERMODEDRIVERHOST_ID_BASE_RID UD
-
-  SECURITY_WRITE_RESTRICTED_CODE_RID  S-1-5-33  WR
 }
 
 { TSecDesc }
 
 type
   // Access Control List header
-  TACL = record
+  TACL = packed record
     AclRevision: byte;
     Sbz1: byte;
     AclSize: word; // including TACL header + all ACEs
@@ -6793,11 +6791,12 @@ type
   end;
   PACL = ^TACL;
   // Access Control Entry
-  TACE = record
+  TACE = packed record
     // ACE header
     AceType: byte;
     AceFlags: TSecAceFlags;
     AceSize: word;
+    // ACE body
     Mask: TSecAceAccessMask;
     case integer of
       0: (CommonSid: cardinal);
@@ -6806,11 +6805,11 @@ type
   end;
   PACE = ^TACE;
   // struct _SECURITY_DESCRIPTOR in self-relative state
-  TSD = record
+  TSD = packed record
     Revision: byte;
     Sbz1: byte;
     Control: TSecControls;
-    Owner: cardinal; // not pointer, but self-relative position
+    Owner: cardinal; // not pointers, but self-relative position
     Group: cardinal;
     Sacl: cardinal;
     Dacl: cardinal;

@@ -6402,7 +6402,8 @@ procedure TTestCoreBase._SDDL;
 var
   i: PtrInt;
   c: TSecControls;
-  secdesc: RawSecurityDescriptor;
+  bin: RawSecurityDescriptor;
+  u: RawUtf8;
   sd: TSecDesc;
   mask: TSecAceAccessMask;
 begin
@@ -6430,13 +6431,15 @@ begin
   CheckEqual(cardinal(mask), 0);
   for i := 0 to high(SD_B64) do
   begin
-    secdesc := Base64ToBin(SD_B64[i]);
-    Check(secdesc <> '');
-    Check(IsValidSecurityDescriptor(pointer(secdesc), length(secdesc)));
-    Check(sd.FromBinary(secdesc));
+    bin := Base64ToBin(SD_B64[i]);
+    Check(bin <> '');
+    Check(IsValidSecurityDescriptor(pointer(bin), length(bin)));
+    Check(sd.FromBinary(bin));
     CheckEqual(length(sd.Dacl), 4);
     CheckEqual(length(sd.Sacl), 0);
     CheckEqual(sd.ToText, SD_TXT[i]);
+    SecurityDescriptorToText(pointer(bin), length(bin), u); // OS API on Windows
+    CheckEqual(u, SD_TXT[i]);
   end;
 end;
 
