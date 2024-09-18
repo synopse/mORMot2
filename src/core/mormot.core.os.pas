@@ -778,9 +778,12 @@ type
     /// encode this Security Descriptor into a self-relative binary buffer
     function ToBinary: RawSecurityDescriptor;
     /// decode a Security Descriptor from its SDDL textual representation
-    function FromText(p: PUtf8Char): boolean; overload;
+    function FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean; overload;
     /// decode a Security Descriptor from its SDDL textual representation
-    function FromText(const SddlText: RawUtf8): boolean; overload;
+    // - could also recognize SDDL RID placeholders, with the specified
+    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' layout
+    function FromText(const SddlText: RawUtf8;
+      const RidDomain: RawUtf8 = ''): boolean; overload;
     /// encode this Security Descriptor into its SDDL textual representation
     function ToText: RawUtf8;
   end;
@@ -7145,42 +7148,13 @@ end;
 const
   wksLastSddl = wksBuiltinWriteRestrictedCode;
   wksWithSddl = [wksWorld .. wksLastSddl];
-  WKS_SDDL: array[0.. ord(wksLastSddl) * 2 + 1] of AnsiChar =
+  SID_SDDL: array[1 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2] of AnsiChar =
     '  WD    COCG                                    NU  ' +
     'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
-    '      ISCY      ERCDRAES  HAAA        WR';
+    '      ISCY      ERCDRAES  HAAA        WR' +      // TWellKnownSid
+    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI'; // TWellKnownRid
 
-function KnownSidToSddl(wks: TWellKnownSid): TShort8;
-begin
-  result[0] := #0; // no need to optimize: only used for regression tests
-  if (wks in wksWithSddl) and
-     (PWordArray(@WKS_SDDL)^[ord(wks)] <> $2020) then
-    SetString(result, PAnsiChar(@PWordArray(@WKS_SDDL)^[ord(wks)]), 2);
-end;
-
-procedure SddlAppendSid(var s: shortstring; sid: PSid);
-var
-  k: TWellKnownSid;
-  c: cardinal;
-  tmp: shortstring;
-begin
-  if sid = nil then
-    exit;
-  k := SidToKnown(sid);
-  if k in wksWithSddl then
-  begin
-    c := PWordArray(@WKS_SDDL)^[ord(k)];
-    if c <> $2020 then
-    begin
-      AppendShortBuffer(@c, 2, s);
-      exit;
-    end;
-  end;
-  SidToTextShort(sid, tmp);
-  AppendShort(tmp, s);
-end;
-
-function SddlNextSid(var p: PUtf8Char; var sid: RawSid): boolean;
+function SddlNextSid(var p: PUtf8Char; var sid: RawSid; const dom: RawUtf8): boolean;
 var
   u: RawUtf8;
   i: PtrInt;
@@ -7200,12 +7174,47 @@ begin
   result := false;
   if not (p^ in ['A' .. 'Z']) then
      exit;
-  i := WordScanIndex(@WKS_SDDL, ord(wksLastSddl) * 2 + 2, PWord(p)^);
+  i := WordScanIndex(@SID_SDDL, SizeOf(SID_SDDL) shr 1, PWord(p)^);
   if i <= 0 then
     exit;
   inc(p, 2);
-  sid := KnownRawSid(TWellKnownSid(i));
+  if i <= ord(wksLastSddl) then
+    sid := KnownRawSid(TWellKnownSid(i))
+  else if dom = '' then
+    exit // no RID support
+  else
+    sid := KnownRawSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom);
   result := true;
+end;
+
+function KnownSidToSddl(wks: TWellKnownSid): TShort8;
+begin
+  result[0] := #0; // no need to optimize: only used for regression tests
+  if (wks in wksWithSddl) and
+     (PWordArray(@SID_SDDL)^[ord(wks)] <> $2020) then
+    SetString(result, PAnsiChar(@PWordArray(@SID_SDDL)^[ord(wks)]), 2);
+end;
+
+procedure SddlAppendSid(var s: shortstring; sid: PSid);
+var
+  k: TWellKnownSid;
+  c: cardinal;
+  tmp: shortstring;
+begin
+  if sid = nil then
+    exit;
+  k := SidToKnown(sid);
+  if k in wksWithSddl then
+  begin
+    c := PWordArray(@SID_SDDL)^[ord(k)];
+    if c <> $2020 then
+    begin
+      AppendShortBuffer(@c, 2, s);
+      exit;
+    end;
+  end;
+  SidToTextShort(sid, tmp);
+  AppendShort(tmp, s);
 end;
 
 type
@@ -7229,14 +7238,14 @@ const
     'FA', 'FR', 'FW', 'FX', 'KA', 'KR', 'KW', 'KX');
 
   // some cross-platform definitions of main 32-bit Windows access rights
-  FILE_ALL_ACCESS      = $f0000 or $100000 or $1FF;
-  FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
-  FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
-  FILE_GENERIC_EXECUTE = $20000 or $0080 or $0020 or $100000;
-  KEY_ALL_ACCESS       = $F003F;
-  KEY_READ             = $20019;
-  KEY_WRITE            = $20006;
-  KEY_EXECUTE          = $20019;
+  FILE_ALL_ACCESS      = $001f01ff;
+  FILE_GENERIC_READ    = $00120089;
+  FILE_GENERIC_WRITE   = $00120116;
+  FILE_GENERIC_EXECUTE = $001200a0;
+  KEY_ALL_ACCESS       = $000f003f;
+  KEY_READ             = $00020019;
+  KEY_WRITE            = $00020006;
+  KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
   SAR_MASK: array[TSecAccessRight] of cardinal = (
     FILE_ALL_ACCESS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE,
     KEY_ALL_ACCESS, KEY_READ, KEY_WRITE, KEY_EXECUTE);
@@ -7283,7 +7292,7 @@ begin
   inc(p);
 end;
 
-function SddlNextAce(var p: PUtf8Char; var ace: TSecAce): boolean;
+function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; const dom: RawUtf8): boolean;
 var
   u: shortstring;
   t: TSecAceType;
@@ -7362,10 +7371,10 @@ begin
     inc(p, 3)
   else
     exit; // common types should have ;;; here
-  result := SddlNextSid(p, ace.Sid); // entries always end with a SID
+  result := SddlNextSid(p, ace.Sid, dom); // entries always end with a SID/RID
 end;
 
-function TSecDesc.FromText(p: PUtf8Char): boolean;
+function TSecDesc.FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean;
 
   function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
   begin
@@ -7390,7 +7399,7 @@ function TSecDesc.FromText(p: PUtf8Char): boolean;
     repeat
       inc(p);
       SetLength(aces, length(aces) + 1);
-      if not SddlNextAce(p, aces[high(aces)]) then
+      if not SddlNextAce(p, aces[high(aces)], RidDomain) then
         exit;
       if p^ <> ')' then
         exit;
@@ -7412,10 +7421,10 @@ begin
     inc(p, 2);
     case p[-2] of
       'O':
-        if not SddlNextSid(p, Owner) then
+        if not SddlNextSid(p, Owner, RidDomain) then
           exit;
       'G':
-        if not SddlNextSid(p, Group) then
+        if not SddlNextSid(p, Group, RidDomain) then
           exit;
       'D':
         if not NextAces(Dacl,
@@ -7438,9 +7447,9 @@ begin
   result := true;
 end;
 
-function TSecDesc.FromText(const SddlText: RawUtf8): boolean;
+function TSecDesc.FromText(const SddlText, RidDomain: RawUtf8): boolean;
 begin
-  result := FromText(pointer(SddlText));
+  result := FromText(pointer(SddlText), RidDomain);
 end;
 
 procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
