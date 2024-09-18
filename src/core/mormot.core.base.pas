@@ -887,10 +887,10 @@ procedure AppendShortChar(chr: AnsiChar; var dest: ShortString);
 /// simple concatenation of hexadecimal binary buffer into a shorstring
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
-/// simple concatenation of an integer as hexadecimal into a shorstring
+/// simple concatenation of an integer as lowercase hexadecimal into a shorstring
 procedure AppendShortIntHex(value: PtrUInt; var dest: ShortString);
 
-/// simple concatenation of a byte as hexadecimal into a shorstring
+/// simple concatenation of a byte as uppercase hexadecimal into a shorstring
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
 
 /// simple concatenation of a ShortString text into a shorstring
@@ -4887,15 +4887,16 @@ var
   tmp: array[0..23] of AnsiChar;
   i: PtrInt;
 begin
-  for i := (POINTERBYTES * 2) - 1 downto 0 do
-  begin
-    tmp[i] := HexCharsLower[value and 15];
+  i := POINTERBYTES * 2;
+  repeat
+    tmp[i - 1] := HexCharsLower[value and 15];
     value := value shr 4;
-  end;
-  i := 0;
-  while (i < (POINTERBYTES * 2) - 1) and  // trim left 0
-        (tmp[i] = '0') do
-    inc(i);
+    tmp[i - 2] := HexCharsLower[value and 15];
+    dec(i, 2);
+    if i = 0 then
+      break;
+    value := value shr 4;
+  until value = 0;
   AppendShortTemp24(@tmp[i], @tmp[POINTERBYTES * 2], @dest);
 end;
 

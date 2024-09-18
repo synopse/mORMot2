@@ -4409,6 +4409,20 @@ begin
   Check(xxHash32(0, 'ABBREVIATIONS', 13) = 3058487595);
   Check(xxHash32(0, 'LORD', 4) = 3395586315);
   Check(xxHash32(0, 'MICROINSTRUCTION''S', 18) = 1576115228);
+  a[0] := #0;
+  AppendShortIntHex(0, a);
+  Check(a = '00');
+  AppendShortIntHex(1, a);
+  Check(a = '0001');
+  AppendShortIntHex(255, a);
+  Check(a = '0001ff');
+  AppendShortIntHex($12345, a);
+  Check(a = '0001ff012345');
+  a[0] := #0;
+  AppendShortIntHex(PtrUInt(-1), a);
+  CheckEqual(length(a), POINTERBYTES * 2);
+  for i := 1 to length(a) do
+    Check(a[1] = 'f');
   for i := -10000 to 10000 do
     Check(GetInteger(Pointer(Int32ToUtf8(i))) = i);
   for i := 0 to 10000 do
@@ -4522,6 +4536,9 @@ begin
     Check(SysUtils.IntToStr(j) = string(a));
     Check(format('%d', [j]) = string(a));
     Check(format('%.8x', [j]) = IntToHex(j, 8));
+    a[0] := #0;
+    AppendShortIntHex(j, a);
+    CheckEqual(RawUtf8(a), RawUtf8(PointerToHexShort(pointer(PtrInt(j)))));
     case i of
       9990:
         d := 1E110;
