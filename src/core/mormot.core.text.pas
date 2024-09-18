@@ -2293,6 +2293,7 @@ procedure Int64ToHexShort(aInt64: Int64; out result: TShort16); overload;
 // - use internally BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
 function Int64ToHexShort(aInt64: Int64): TShort16; overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast conversion for up to 256-bit of little-endian input into non-zero hexa
 // - Len should be <= 32 bytes, to fit in a TShort64 result
@@ -2300,7 +2301,7 @@ function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 function ToHexShort(P: pointer; Len: PtrInt): TShort64;
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
-// - use internally DisplayMinChars() and BinToHexDisplay()
+// - use internally DisplayMinChars() and BinToHexDisplayLower()
 function Int64ToHexLower(aInt64: Int64): RawUtf8; overload;
 
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
@@ -9971,12 +9972,6 @@ begin
   result := CardinalToHex(crc32c(0, pointer(str), length(str)));
 end;
 
-function Int64ToHexShort(aInt64: Int64): TShort16;
-begin
-  result[0] := AnsiChar(SizeOf(aInt64) * 2);
-  BinToHexDisplay(@aInt64, @result[1], SizeOf(aInt64));
-end;
-
 function ToHexShort(P: pointer; Len: PtrInt): TShort64;
 begin
   if Len = 0 then
@@ -9997,13 +9992,18 @@ var
 begin
   L := DisplayMinChars(@aInt64, SizeOf(Int64));
   FastSetString(result, L * 2);
-  BinToHexDisplay(@aInt64, pointer(result), L);
+  BinToHexDisplayLower(@aInt64, pointer(result), L);
 end;
 
 procedure Int64ToHexShort(aInt64: Int64; out result: TShort16);
 begin
   result[0] := AnsiChar(SizeOf(aInt64) * 2);
   BinToHexDisplay(@aInt64, @result[1], SizeOf(aInt64));
+end;
+
+function Int64ToHexShort(aInt64: Int64): TShort16;
+begin
+  Int64ToHexShort(aInt64, result);
 end;
 
 function Int64ToHexString(aInt64: Int64): string;
