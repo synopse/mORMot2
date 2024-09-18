@@ -6272,9 +6272,9 @@ begin
      CheckFailed(CompressSynLZ(raw.Data, false) <> '', '_REFSMB synlz') then
     exit;
   PCardinal(@raw)^ := $010003ff;
-  CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
   bak := PByte(@_SmbiosDecodeUuid)^;
   _SmbiosDecodeUuid := sduVersion; // consistent UUID decoding on all platforms
+  CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
   Check(DecodeSmbiosInfo(raw, dec), 'DecodeSmbiosInfo');
   PByte(@_SmbiosDecodeUuid)^ := bak;
   CheckAgainst(dec, os);
