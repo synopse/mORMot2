@@ -1820,7 +1820,7 @@ procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overl
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
 /// return a function/method location according to the supplied code address
-// - returns the address as hexadecimal by default, e.g. '004cb765'
+// - returns the address as hexadecimal by default, e.g. '4cb765'
 // - if mormot.core.log.pas is defined in the project, will redirect to
 // TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
 // return filename, symbol name and line number (if any) as plain text, e.g.
@@ -6330,6 +6330,29 @@ begin
   result[ord(result[0])] := 'B';
 end;
 
+{$ifdef ISDELPHI} // missing convenient RTL function in Delphi
+function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
+begin
+  try
+    uuid := StringToGUID(s);
+    result := true;
+  except
+    result := false;
+  end;
+end;
+{$endif ISDELPHI}
+
+function TextToUuid(const text: array of const; out uuid: TGuid): boolean;
+begin
+  result := TryStringToGUID(format('{%s}', text), uuid); // use RTL
+end;
+
+function UuidToText(const u: TGuid): RawUtf8; // seldom used in this unit
+begin
+  result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
+end;
+
+
 const
   SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
 
@@ -6751,7 +6774,7 @@ begin
   end;
 end;
 
-{ TODO: include those domain-specific RID values as TWellKnownRid
+{ TODO: include those domain-specific RID values as TWellKnownRid ?
 
   DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS   RO  0x000001F2
   DOMAIN_USER_RID_ADMIN  LA  0x000001F4
@@ -9898,12 +9921,9 @@ begin
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
-var
-  i: PtrInt;
 begin // return the address as hexadecimal - hexstr() is not available on Delphi
   result[0] := #0;
-  for i := SizeOf(aAddress) - 1 downto 0 do
-    AppendShortByteHex(PByteArray(aAddress)[i], result);
+  AppendShortIntHex(PtrUInt(aAddress), result);
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 var
@@ -10167,18 +10187,6 @@ begin
   result := _Smbios[info];
 end;
 
-{$ifdef ISDELPHI} // missing convenient RTL function in Delphi
-function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
-begin
-  try
-    uuid := StringToGUID(s);
-    result := true;
-  except
-    result := false;
-  end;
-end;
-{$endif ISDELPHI}
-
 procedure GetComputerUuid(out uuid: TGuid; disable: TGetComputerUuid);
 var
   n, i: PtrInt;
@@ -10201,7 +10209,7 @@ begin
     ComputeGetSmbios; // maybe from local SMB_CACHE file for non-root
   if not (gcuSmbios in disable) and
      (_Smbios[sbiUuid] <> '') and
-     TryStringToGUID('{' + string(_Smbios[sbiUuid]) + '}', uuid) then
+     TextToUuid([_Smbios[sbiUuid]], uuid) then // use RTL
     exit;
   // did we already compute (and persist) this UUID?
   if disable = [] then // we persist a fully-qualified UUID only
