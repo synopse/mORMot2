@@ -7113,19 +7113,26 @@ const // some cross-platform definition of 32-bit Windows file access rights
   FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
   FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
   FILE_GENERIC_EXECUTE = $20000 or $0080 or $0020 or $100000;
+  RIGHTS_UINT32: array[0 .. 3] of cardinal = (
+    FILE_ALL_ACCESS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE);
 
   SAT_SDDL: array[TSecAceType] of string[2] = (
     'A', 'D', 'AU', 'AL', '', 'OA', 'OD', 'OU', 'OL', 'XA', 'XD', 'ZA', '',
     'XU', '', '', '', 'ML', 'RA', 'SP', 'TL', 'FL', '');
   SAF_SDDL: array[TSecAceFlag] of string[2] = (
     'OI', 'CI', 'NP', 'IO', 'ID', '', 'SA', 'FA');
-  {SAM_SDDL: array[TSecAccess] of string[2] = (
-    'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');}
+  samWithSddl = [samDelete .. samWriteOwner, samGenericAll .. samGenericRead];
+  SAM_SDDL: array[TSecAccess] of string[2] = (
+    'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');
+  RIGHTS_SDDL: array[0 .. high(RIGHTS_UINT32)] of string[2] = (
+    'FA', 'FR', 'FW', 'FX');
 
 procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
 var
   f: TSecAceFlag;
+  a: TSecAccess;
   c: cardinal;
+  i: PtrInt;
 begin
   AppendShort(SAT_SDDL[ace.AceType], s);
   AppendShortChar(';', s);
@@ -7135,20 +7142,21 @@ begin
   AppendShortChar(';', s);
   c := cardinal(ace.Mask);
   if c <> 0 then
-    if c = FILE_ALL_ACCESS then
-      AppendShort('FA', s)
-    else if c = FILE_GENERIC_READ then
-      AppendShort('FR', s)
-    else if c = FILE_GENERIC_WRITE then
-      AppendShort('FW', s)
-    else if c = FILE_GENERIC_EXECUTE then
-      AppendShort('FX', s)
-    else
+  begin
+    i := IntegerScanIndex(@RIGHTS_UINT32, length(RIGHTS_UINT32), c);
+    if i >= 0 then
+      AppendShort(RIGHTS_SDDL[i], s)
+    else if (ace.Mask.Bits <> 0) or
+            (ace.Mask.Flags - samWithSddl <> []) then
     begin
       AppendShort('0x', s);
       AppendShortIntHex(c, s);
-      // TODO: recognize SAM_SDDL
-    end;
+    end
+    else
+      for a := low(a) to high(a) do
+        if a in ace.Mask.Flags then
+          AppendShort(SAM_SDDL[a], s)
+  end;
   if ace.AceType in satObject then
   begin
     AppendShortChar(';', s);
