@@ -7072,24 +7072,18 @@ end;
 
 const
   wksLastSddl = wksBuiltinWriteRestrictedCode;
+  wksWithSddl = [wksWorld .. wksLastSddl];
   WKS_SDDL: array[0.. ord(wksLastSddl) * 2 + 1] of AnsiChar =
     '  WD    COCG                                    NU  ' +
     'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
     '      ISCY      ERCDRAES  HAAA        WR';
 
 function KnownSidToSddl(wks: TWellKnownSid): TShort8;
-var
-  c: cardinal;
 begin
-  result[0] := #0;
-  if (wks = wksNull) or
-     (wks > wksLastSddl) then
-    exit;
-  c := PWordArray(@WKS_SDDL)^[ord(wks)];
-  if c = $2020 then
-    exit;
-  result[0] := #2;
-  PWord(@result[1])^ := c;
+  result[0] := #0; // no need to optimize: only used for regression tests
+  if (wks in wksWithSddl) and
+     (PWordArray(@WKS_SDDL)^[ord(wks)] <> $2020) then
+    SetString(result, PAnsiChar(@PWordArray(@WKS_SDDL)^[ord(wks)]), 2);
 end;
 
 procedure SddlAppendSid(var s: shortstring; sid: PSid);
@@ -7101,8 +7095,7 @@ begin
   if sid = nil then
     exit;
   k := SidToKnown(sid);
-  if (k <> wksNull) and
-     (k <= wksLastSddl) then
+  if k in wksWithSddl then
   begin
     c := PWordArray(@WKS_SDDL)^[ord(k)];
     if c <> $2020 then
@@ -7128,11 +7121,6 @@ const // some cross-platform definition of 32-bit Windows file access rights
     'OI', 'CI', 'NP', 'IO', 'ID', '', 'SA', 'FA');
   {SAM_SDDL: array[TSecAccess] of string[2] = (
     'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');}
-
-function UuidToText(const u: TGuid): RawUtf8;
-begin
-  result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
-end;
 
 procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
 var
@@ -7214,11 +7202,17 @@ var
 
 begin
   result := '';
-  tmp := 'O:';
-  SddlAppendSid(tmp, pointer(Owner));
-  AppendShort('G:', tmp);
-  SddlAppendSid(tmp, pointer(Group));
-  AppendTmp;
+  if Owner <> '' then
+  begin
+    tmp := 'O:';
+    SddlAppendSid(tmp, pointer(Owner));
+  end;
+  if Group <> '' then
+  begin
+    AppendShort('G:', tmp);
+    SddlAppendSid(tmp, pointer(Group));
+    AppendTmp;
+  end;
   tmp := 'D:';
   AppendAces(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
   tmp := 'S:';
