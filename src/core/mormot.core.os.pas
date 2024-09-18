@@ -600,21 +600,31 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
 
 type
-  /// standard and generic access rights in TSecAceAccessMask.Flags
+  /// standard and generic access rights in TSecAce.Mask
   TSecAccess = (
-    samDelete,
-    samReadControl,
-    samWriteDac,
-    samWriteOwner,
+    samCreateChild,          // CC
+    samDeleteChild,          // DC
+    samListChildren,         // LC
+    samSelfWrite,            // SW
+    samReadProp,             // RP
+    samWriteProp,            // WP
+    samDeleteTree,           // DT
+    samListObject,           // LO
+    samControlAccess,        // CR
+    sam9, sam10, sam11, sam12, sam13, sam14, sam15,
+    samDelete,               // SD
+    samReadControl,          // RC
+    samWriteDac,             // WD
+    samWriteOwner,           // WO
     samSynchronize,
     sam21, sam22, sam23,
     samAccessSystemSecurity,
     samMaximumAllowed,
     sam26, sam27,
-    samGenericAll,
-    samGenericExecute,
-    samGenericWrite,
-    samGenericRead);
+    samGenericAll,           // GA
+    samGenericExecute,       // GX
+    samGenericWrite,         // GW
+    samGenericRead);         // GR
   TSecAccessMask = set of TSecAccess;
 
   /// custom binary buffer type used as Windows self-relative Security Descriptor
@@ -678,14 +688,6 @@ type
   /// high-level supported ACE flags in TSecAce.Flags
   TSecAceFlags = set of TSecAceFlag;
 
-  /// 32-bit to define standard, specific and generic rights in ACEs
-  TSecAceAccessMask = record
-    /// contains the access mask specific to this object type
-    Bits: word;
-    /// standard and generic rights
-    Flags: TSecAccessMask;
-  end;
-
   /// define one discretionary/system access control, as stored in TSecDesc.Dacl[]
   TSecAce = record
     /// high-level supported ACE kinds
@@ -696,7 +698,7 @@ type
     // the ACE flags
     Flags: TSecAceFlags;
     /// contains the associated access mask
-    Mask: TSecAceAccessMask;
+    Mask: TSecAccessMask;
     /// contains an associated SID
     Sid: RawSid;
     /// some optional opaque callback/resource data, stored after the Sid
@@ -6829,7 +6831,7 @@ type
     AceFlags: TSecAceFlags;
     AceSize: word; // include ACE header + whole body
     // ACE body
-    Mask: TSecAceAccessMask;
+    Mask: TSecAccessMask;
     case integer of
       0: (CommonSid: cardinal);
       1: (ObjectFlags: cardinal;
@@ -7139,25 +7141,38 @@ begin
   result := true;
 end;
 
+type
+  TSecAccessRight = (
+    sarFileAll, sarFileRead, sarFileWrite, sarFileExecute,
+    sarKeyAll,  sarKeyRead,  sarKeyWrite,  sarKeyExecute);
 
-const // some cross-platform definitions of main 32-bit Windows access rights
-  FILE_ALL_ACCESS      = $f0000 or $100000 or $1FF;
-  FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
-  FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
-  FILE_GENERIC_EXECUTE = $20000 or $0080 or $0020 or $100000;
-  RIGHTS_UINT32: array[0 .. 3] of cardinal = (
-    FILE_ALL_ACCESS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE);
-
+const
+  // SDDL standard identifiers
   SAT_SDDL: array[TSecAceType] of string[2] = (
     'A', 'D', 'AU', 'AL', '', 'OA', 'OD', 'OU', 'OL', 'XA', 'XD', 'ZA', '',
     'XU', '', '', '', 'ML', 'RA', 'SP', 'TL', 'FL', '');
   SAF_SDDL: array[TSecAceFlag] of string[2] = (
     'OI', 'CI', 'NP', 'IO', 'ID', '', 'SA', 'FA');
-  samWithSddl = [samDelete .. samWriteOwner, samGenericAll .. samGenericRead];
+  samWithSddl = [samCreateChild .. samControlAccess,
+                 samDelete .. samWriteOwner, samGenericAll .. samGenericRead];
   SAM_SDDL: array[TSecAccess] of string[2] = (
+    'CC', 'DC', 'LC', 'SW', 'RP', 'WP', 'DT', 'LO', 'CR', '', '', '', '', '', '', '',
     'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');
-  RIGHTS_SDDL: array[0 .. high(RIGHTS_UINT32)] of string[2] = (
-    'FA', 'FR', 'FW', 'FX');
+  SAR_SDDL: array[TSecAccessRight] of string[2] = (
+    'FA', 'FR', 'FW', 'FX', 'KA', 'KR', 'KW', 'KX');
+
+  // some cross-platform definitions of main 32-bit Windows access rights
+  FILE_ALL_ACCESS      = $f0000 or $100000 or $1FF;
+  FILE_GENERIC_READ    = $20000 or $0001 or $0080 or $0008 or $100000;
+  FILE_GENERIC_WRITE   = $20000 or $0002 or $0100 or $0010 or $0004 or $100000;
+  FILE_GENERIC_EXECUTE = $20000 or $0080 or $0020 or $100000;
+  KEY_ALL_ACCESS       = $F003F;
+  KEY_READ             = $20019;
+  KEY_WRITE            = $20006;
+  KEY_EXECUTE          = $20019;
+  SAR_MASK: array[TSecAccessRight] of cardinal = (
+    FILE_ALL_ACCESS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE,
+    KEY_ALL_ACCESS, KEY_READ, KEY_WRITE, KEY_EXECUTE);
 
 function SddlNextPart(var p: PUtf8Char; out u: shortstring): boolean;
 var
@@ -7207,8 +7222,8 @@ var
   t: TSecAceType;
   f: TSecAceFlag;
   a: TSecAccess;
-  int, err: integer;
-  i: PtrInt;
+  r: TSecAccessRight;
+  mask, err: integer;
 begin
   result := false;
   ace.AceType := satUnknown;
@@ -7223,6 +7238,7 @@ begin
     end;
   if ace.AceType = satUnknown then
     exit;
+  ace.RawType := ord(ace.AceType);
   inc(p);
   while p^ <> ';' do
   begin
@@ -7242,31 +7258,31 @@ begin
     begin
       if not SddlNextPart(p, u) then
         exit;
-      val({$ifdef UNICODE}string{$endif}(u), int, err); // RTL handles 0x###
+      val({$ifdef UNICODE}string{$endif}(u), mask, err); // RTL handles 0x###
       if err <> 0 then
         exit;
-      PInteger(@ace.Mask)^ := int;
+      PInteger(@ace.Mask)^ := mask;
       break;
     end;
     if not SddlNextTwo(p, u) then
       exit;
-    int := 0;
-    for i := 0 to high(RIGHTS_SDDL) do
-      if RIGHTS_SDDL[i] = u then
+    mask := 0;
+    for r := low(r) to high(r) do
+      if SAR_SDDL[r] = u then
       begin
-        int := RIGHTS_UINT32[i];
+        mask := SAR_MASK[r];
         break;
       end;
-    if int = 0 then
+    if mask = 0 then
       for a := low(a) to high(a) do
         if SAM_SDDL[a] = u then
         begin
-          int := 16 shl ord(a);
+          mask := 1 shl ord(a);
           break;
         end;
-    if int = 0 then
+    if mask = 0 then
       exit; // unrecognized
-    PInteger(@ace.Mask)^ := PInteger(@ace.Mask)^ or int;
+    PInteger(@ace.Mask)^ := PInteger(@ace.Mask)^ or mask;
   end;
   if ace.AceType in satObject then
   begin
@@ -7279,7 +7295,7 @@ begin
     inc(p, 3)
   else
     exit; // common types should have ;;; here
-  result := SddlNextSid(p, ace.Sid);
+  result := SddlNextSid(p, ace.Sid); // entries always end with a SID
 end;
 
 function TSecDesc.FromText(p: PUtf8Char): boolean;
@@ -7372,18 +7388,17 @@ begin
   c := cardinal(ace.Mask);
   if c <> 0 then
   begin
-    i := IntegerScanIndex(@RIGHTS_UINT32, length(RIGHTS_UINT32), c);
+    i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), c);
     if i >= 0 then
-      AppendShort(RIGHTS_SDDL[i], s)
-    else if (ace.Mask.Bits <> 0) or
-            (ace.Mask.Flags - samWithSddl <> []) then
+      AppendShort(SAR_SDDL[TSecAccessRight(i)], s)
+    else if ace.Mask - samWithSddl <> [] then
     begin
-      AppendShort('0x', s);
+      AppendShort('0x', s); // we don't have enough tokens
       AppendShortIntHex(c, s);
     end
     else
       for a := low(a) to high(a) do
-        if a in ace.Mask.Flags then
+        if a in ace.Mask then
           AppendShort(SAM_SDDL[a], s)
   end;
   if ace.AceType in satObject then
