@@ -6520,7 +6520,7 @@ begin
         ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24) then
     exit;
   inc(P, 4);
-  if not (P^ in ['1'..'9']) then
+  if not (P^ in ['0'..'9']) then
     exit;
   PInt64(@sid)^ := 1;
   PCardinal(@sid.IdentifierAuthority[2])^ := bswap32(GetNextUInt32(P));
