@@ -781,11 +781,13 @@ type
     function FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean; overload;
     /// decode a Security Descriptor from its SDDL textual representation
     // - could also recognize SDDL RID placeholders, with the specified
-    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' layout
+    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
     function FromText(const SddlText: RawUtf8;
       const RidDomain: RawUtf8 = ''): boolean; overload;
     /// encode this Security Descriptor into its SDDL textual representation
-    function ToText: RawUtf8;
+    // - could also generate SDDL RID placeholders, from the specified
+    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
+    function ToText(const RidDomain: RawUtf8 = ''): RawUtf8;
   end;
 
 const
@@ -6828,6 +6830,8 @@ const
     $208, $209, $20a, $20d, $20e, $20f, $1000, $2000, $2100, $3000, $4000);
   MIN: array[boolean] of string[1] = ('-', '');
 
+// text-oriented RID functions - not used in code below
+
 function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8;
 begin
   if Domain <> '' then
@@ -6839,6 +6843,32 @@ end;
 function KnownRawSid(wkr: TWellKnownRid; const Domain: RawUtf8): RawSid;
 begin
   TextToRawSid(KnownSidToText(wkr, Domain), result);
+end;
+
+// faster binary-oriented RID internal functions - used in code below
+
+procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
+begin
+  FastSetRawByteString(RawByteString(result), pointer(dom), SID_MINLEN + 5 * 4);
+  PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
+end;
+
+function TryDomainTextToSid(const Domain: RawUtf8; var Dom: RawSid): boolean;
+var
+  tmp: TSid;
+begin
+  result := true;
+  if Domain = '' then
+    exit; // no Domain involved: continue
+  result := TextToSid(pointer(Domain), tmp) and
+            (tmp.SubAuthorityCount = 4) and
+            (tmp.SubAuthority[0] = 21) and
+            (PWord(@tmp.IdentifierAuthority)^ = 0) and
+            (PCardinal(@tmp.IdentifierAuthority[2])^ = $05000000);
+  if not result then
+    exit; // this Domain text is no valid domain SID
+  tmp.SubAuthorityCount := 5; // reserve place for WKR_RID[wkr] trailer
+  ToRawSid(@tmp, Dom);
 end;
 
 
@@ -7154,7 +7184,7 @@ const
     '      ISCY      ERCDRAES  HAAA        WR' +      // TWellKnownSid
     'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI'; // TWellKnownRid
 
-function SddlNextSid(var p: PUtf8Char; var sid: RawSid; const dom: RawUtf8): boolean;
+function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
   u: RawUtf8;
   i: PtrInt;
@@ -7180,10 +7210,10 @@ begin
   inc(p, 2);
   if i <= ord(wksLastSddl) then
     sid := KnownRawSid(TWellKnownSid(i))
-  else if dom = '' then
+  else if dom = nil then
     exit // no RID support
   else
-    sid := KnownRawSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom);
+    KnownRidSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom, sid);
   result := true;
 end;
 
@@ -7195,26 +7225,36 @@ begin
     SetString(result, PAnsiChar(@PWordArray(@SID_SDDL)^[ord(wks)]), 2);
 end;
 
-procedure SddlAppendSid(var s: shortstring; sid: PSid);
+procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
 var
   k: TWellKnownSid;
+  r: TWellKnownRid;
   c: cardinal;
   tmp: shortstring;
 begin
   if sid = nil then
     exit;
   k := SidToKnown(sid);
+  c := $2020;
   if k in wksWithSddl then
-  begin
     c := PWordArray(@SID_SDDL)^[ord(k)];
-    if c <> $2020 then
-    begin
-      AppendShortBuffer(@c, 2, s);
-      exit;
-    end;
+  if (dom <> nil) and
+     (sid^.SubAuthorityCount = 5) and
+     (sid^.SubAuthority[0] = 21) and
+     CompareMem(dom, sid, SID_MINLEN + 4 shl 2) then // match the domain
+    for r := low(r) to high(r) do
+      if WKR_RID[r] = sid^.SubAuthority[4] then
+      begin
+        c := PWordArray(@SID_SDDL)^[ord(r) + (ord(wksLastSddl) + 1)];
+        break;
+      end;
+  if c <> $2020 then
+    AppendShortBuffer(@c, 2, s)
+  else
+  begin
+    SidToTextShort(sid, tmp);
+    AppendShort(tmp, s);
   end;
-  SidToTextShort(sid, tmp);
-  AppendShort(tmp, s);
 end;
 
 type
@@ -7292,7 +7332,7 @@ begin
   inc(p);
 end;
 
-function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; const dom: RawUtf8): boolean;
+function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; dom: PSid): boolean;
 var
   u: shortstring;
   t: TSecAceType;
@@ -7375,6 +7415,8 @@ begin
 end;
 
 function TSecDesc.FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean;
+var
+  dom: RawSid;
 
   function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
   begin
@@ -7399,7 +7441,7 @@ function TSecDesc.FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean;
     repeat
       inc(p);
       SetLength(aces, length(aces) + 1);
-      if not SddlNextAce(p, aces[high(aces)], RidDomain) then
+      if not SddlNextAce(p, aces[high(aces)], pointer(dom)) then
         exit;
       if p^ <> ')' then
         exit;
@@ -7411,7 +7453,8 @@ function TSecDesc.FromText(p: PUtf8Char; const RidDomain: RawUtf8): boolean;
 begin
   Clear;
   result := false;
-  if p = nil then
+  if (p = nil) or
+     not TryDomainTextToSid(RidDomain, dom) then
     exit;
   repeat
     while p^ = ' ' do
@@ -7421,10 +7464,10 @@ begin
     inc(p, 2);
     case p[-2] of
       'O':
-        if not SddlNextSid(p, Owner, RidDomain) then
+        if not SddlNextSid(p, Owner, pointer(dom)) then
           exit;
       'G':
-        if not SddlNextSid(p, Group, RidDomain) then
+        if not SddlNextSid(p, Group, pointer(dom)) then
           exit;
       'D':
         if not NextAces(Dacl,
@@ -7452,7 +7495,7 @@ begin
   result := FromText(pointer(SddlText), RidDomain);
 end;
 
-procedure SddlAppendAce(var s: shortstring; const ace: TSecAce);
+procedure SddlAppendAce(var s: shortstring; const ace: TSecAce; dom: PSid);
 var
   f: TSecAceFlag;
   a: TSecAccess;
@@ -7493,12 +7536,13 @@ begin
   end
   else
     AppendShort(';;;', s);
-  SddlAppendSid(s, pointer(ace.Sid));
+  SddlAppendSid(s, pointer(ace.Sid), dom);
 end;
 
-function TSecDesc.ToText: RawUtf8;
+function TSecDesc.ToText(const RidDomain: RawUtf8): RawUtf8;
 var
   tmp: shortstring;
+  dom: RawSid;
 
   procedure AppendTmp;
   var
@@ -7525,7 +7569,7 @@ var
       if SAT_SDDL[aces[i].AceType][0] <> #0 then
       begin
         AppendShortChar('(', tmp);
-        SddlAppendAce(tmp, aces[i]);
+        SddlAppendAce(tmp, aces[i], pointer(dom));
         AppendShortChar(')', tmp);
         AppendTmp;
         tmp[0] := #0;
@@ -7534,15 +7578,17 @@ var
 
 begin
   result := '';
+  if not TryDomainTextToSid(RidDomain, dom) then
+    exit;
   if Owner <> '' then
   begin
     tmp := 'O:';
-    SddlAppendSid(tmp, pointer(Owner));
+    SddlAppendSid(tmp, pointer(Owner), pointer(dom));
   end;
   if Group <> '' then
   begin
     AppendShort('G:', tmp);
-    SddlAppendSid(tmp, pointer(Group));
+    SddlAppendSid(tmp, pointer(Group), pointer(dom));
     AppendTmp;
   end;
   tmp := 'D:';
