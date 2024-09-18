@@ -731,6 +731,8 @@ type
     Flags: TSecControls;
     /// remove any previous content
     procedure Clear;
+    /// compare the fields of this instance with another
+    function Compare(const sd: TSecDesc): boolean;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
@@ -6878,7 +6880,39 @@ end;
 procedure TSecDesc.Clear;
 begin
   Finalize(self);
-  Flags := [];
+  Flags := [scSelfRelative];
+end;
+
+function AceCompare(const a, b: TSecAce): boolean;
+begin
+  result := (a.AceType = b.AceType) and
+            (a.RawType = b.RawType) and
+            (a.Flags = b.Flags) and
+            (a.Mask = b.Mask) and
+            (a.Sid = b.Sid) and
+            (a.Opaque = b.Opaque) and
+            IsEqualGuid(a.ObjectType, b.ObjectType) and
+            IsEqualGuid(a.InheritedObjectType, b.InheritedObjectType);
+end;
+
+function TSecDesc.Compare(const sd: TSecDesc): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if (Owner <> sd.Owner) or
+     (Group <> sd.Group) or
+     (Flags <> sd.Flags) or
+     (length(Dacl) <> length(sd.Dacl)) or
+     (length(Sacl) <> length(sd.Sacl)) then
+    exit;
+  for i := 0 to high(Dacl) do
+    if not AceCompare(Dacl[i], sd.Dacl[i]) then
+      exit;
+  for i := 0 to high(Sacl) do
+    if not AceCompare(Sacl[i], sd.Sacl[i]) then
+      exit;
+  result := true;
 end;
 
 function BinToAcl(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
