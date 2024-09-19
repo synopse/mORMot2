@@ -4390,9 +4390,9 @@ type
     // - defined in protected section for better inlining and to fix a Delphi
     // compiler bug about warning a missing Windows unit in the uses classes
     procedure RWLock(context: TRWLockContext);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     procedure RWUnLock(context: TRWLockContext);
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
   public
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
