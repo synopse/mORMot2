@@ -36,6 +36,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,
@@ -524,7 +525,7 @@ type
     saSha3S128,
     saSha3S256);
 
-  /// JSON-serialization ready object as used by TSynSigner.Pbkdf2() overloaded methods
+  /// JSON-serializable object as used by TSynSigner.Pbkdf2() overloaded methods
   // - default value for unspecified parameters will be SHAKE_128 with
   // rounds=1000 and a fixed salt
   // - a typical (extended) JSON to supply to TSynSigner.Pbkdf2() may be
@@ -10189,11 +10190,67 @@ begin
 end;
 
 
+procedure _JL_RawSid(Data: PRawSid; var Ctxt: TJsonParserContext);
+var
+  tmp: TSid; // maximum size possible on stack (1032 bytes)
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.Value = nil then // null
+      Data^ := ''
+    else if not Ctxt.WasString or
+       not TextToSid(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, tmp) then
+      Ctxt.Valid := false
+    else
+      ToRawSid(@tmp, Data^);
+end;
+
+procedure _JS_RawSid(Data: PSid; const Ctxt: TJsonSaveContext);
+var
+  tmp: shortstring;
+begin
+  Ctxt.W.Add('"');
+  Data := PPointer(Data)^;
+  if Data <> nil then
+  begin
+    SidToTextShort(Data, tmp); // fast enough
+    Ctxt.W.AddShort(tmp);
+  end;
+  Ctxt.W.AddDirect('"');
+end;
+
+procedure _JL_SD(Data: PRawSecurityDescriptor; var Ctxt: TJsonParserContext);
+var
+  tmp: TSecDesc;
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.Value = nil then // null
+      Data^ := ''
+    else if not Ctxt.WasString or
+       not tmp.FromText(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value) then
+      Ctxt.Valid := false
+    else
+      Data^ := tmp.ToBinary;
+end;
+
+procedure _JS_SD(Data: PRawSecurityDescriptor; const Ctxt: TJsonSaveContext);
+var
+  tmp: TSecDesc;
+begin
+  Ctxt.W.Add('"');
+  if (Data^ <> '') and
+     tmp.FromBinary(Data^) then
+    Ctxt.W.AddJsonEscape(pointer(tmp.ToText)); // write as JSON string of SDDL
+  Ctxt.W.AddDirect('"');
+end;
+
 procedure InitializeUnit;
 begin
+  // register proper JSON serialization of security related types
   Rtti.RegisterType(TypeInfo(TSignAlgo));
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
+  TRttiJson.RegisterCustomSerializers(TypeInfo(RawSid), @_JL_RawSid, @_JS_RawSid);
+  TRttiJson.RegisterCustomSerializers(TypeInfo(RawSecurityDescriptor), @_JL_SD, @_JS_SD);
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
   CreateDummyCertificate := _CreateDummyCertificate;
   {$ifdef OSWINDOWS}
