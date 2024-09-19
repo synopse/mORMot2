@@ -6609,7 +6609,7 @@ begin
   inc(P, 4);
   if not (P^ in ['0'..'9']) then
     exit;
-  PInt64(@sid)^ := 1;
+  PInt64(@sid)^ := 1; // initialize TSid structure
   PCardinal(@sid.IdentifierAuthority[2])^ := bswap32(GetNextUInt32(P));
   while P^ in ['0'..'9'] do
   begin
@@ -6945,9 +6945,11 @@ var
   i: PtrInt;
   tmp: TSid;
 begin
+  while p^ = ' ' do
+    inc(p);
   if PCardinal(p)^ = SID_REV32 then
   begin
-    result := TextToSid(p, tmp);
+    result := TextToSid(p, tmp); // parse e.g. S-1-5-32-544
     if result then
       FastSetRawByteString(RawByteString(sid), @tmp, SidLength(@tmp));
     exit;
@@ -6957,14 +6959,14 @@ begin
     exit;
   i := WordScanIndex(@SID_SDDL, SizeOf(SID_SDDL) shr 1, PWord(p)^);
   if i <= 0 then
-    exit;
-  inc(p, 2);
-  if i <= ord(wksLastSddl) then
+    exit
+  else if i <= ord(wksLastSddl) then
     KnownRawSid(TWellKnownSid(i), sid)
   else if dom = nil then
     exit // no RID support
   else
     KnownRidSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom, sid);
+  inc(p, 2);
   result := true;
 end;
 
@@ -7383,7 +7385,9 @@ begin
   result := SddlNextPart(p, u) and
             ((u[0] = #0) or
              TextToUuid([u], uuid)); // use RTL
-  inc(p);
+  repeat
+    inc(p);
+  until p^ <> ' ';
 end;
 
 function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
@@ -7431,7 +7435,9 @@ begin
   end;
   if p^ <> ';' then
     exit;
-  inc(p);
+  repeat
+    inc(p);
+  until p^ <> ' ';
   while p^ <> ';' do
   begin
     if not SddlNextTwo(p, u) then
@@ -7443,7 +7449,9 @@ begin
         break;
       end;
   end;
-  inc(p);
+  repeat
+    inc(p);
+  until p^ <> ' ';
   while p^ <> ';' do
   begin
     if PWord(p)^ = ord('0') + ord('x') shl 8 then
@@ -7471,18 +7479,14 @@ begin
       exit; // unrecognized
     PInteger(@ace.Mask)^ := PInteger(@ace.Mask)^ or mask;
   end;
-  if ace.AceType in satObject then
-  begin
+  repeat
     inc(p);
-    if not SddlNextGuid(p, ace.ObjectType) or
-       not SddlNextGuid(p, ace.InheritedObjectType) then
-      exit;
-  end
-  else if PCardinal(p)^ and $ffffff = ord(';') + ord(';') shl 8 + ord(';') shl 16 then
-    inc(p, 3)
-  else
-    exit; // common types should have ;;; here
-  result := SddlNextSid(p, ace.Sid, dom); // entries always end with a SID/RID
+  until p^ <> ' ';
+  if not SddlNextGuid(p, ace.ObjectType) or
+     not SddlNextGuid(p, ace.InheritedObjectType) or // satObject or nothing
+     not SddlNextSid(p, ace.Sid, dom) then // entries always end with a SID/RID
+    exit;
+  result := p^ = ')'; // ACE should end with a parenthesis
 end;
 
 function TSecDesc.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
@@ -7512,9 +7516,7 @@ function TSecDesc.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): bool
       SetLength(aces, length(aces) + 1);
       if not SddlNextAce(p, aces[high(aces)], dom) then
         exit;
-      if p^ <> ')' then
-        exit;
-      inc(p);
+      inc(p); // p^ = ')'
     until p^ <> '(';
     result := true;
   end;
