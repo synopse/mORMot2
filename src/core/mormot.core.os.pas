@@ -582,7 +582,8 @@ function RawSidToText(const sid: RawSid): RawUtf8;
 
 /// parse a Security IDentifier text, following the standard representation
 // - won't support hexadecimal IdentifierAuthority, i.e. S-1-0x######-....
-function TextToSid(P: PUtf8Char; out sid: TSid): boolean;
+// - will parse the input text buffer in-place, and return the next position
+function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
 
 /// parse a Security IDentifier text, following the standard representation
 function TextToRawSid(const text: RawUtf8): RawSid; overload;
@@ -6407,6 +6408,7 @@ end;
 
 const
   SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
+  SID_REV32 = ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24;
 
 function SidLength(sid: PSid): PtrInt;
 begin
@@ -6557,12 +6559,11 @@ begin
     inc(P);
 end;
 
-function TextToSid(P: PUtf8Char; out sid: TSid): boolean;
+function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
 begin
   result := false;
   if (P = nil) or
-     (PCardinal(P)^ <>
-        ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24) then
+     (PCardinal(P)^ <> SID_REV32) then
     exit;
   inc(P, 4);
   if not (P^ in ['0'..'9']) then
@@ -6576,7 +6577,7 @@ begin
     if sid.SubAuthorityCount = 0 then
       exit; // avoid any overflow
   end;
-  result := P^ = #0
+  result := true; // P^ is likely to be #0
 end;
 
 function TextToRawSid(const text: RawUtf8): RawSid;
@@ -6587,10 +6588,12 @@ end;
 function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean;
 var
   tmp: TSid; // maximum size possible on stack (1032 bytes)
+  p: PUtf8Char;
 begin
-  result := TextToSid(pointer(text), tmp);
+  p := pointer(text);
+  result := TextToSid(p, tmp) and (p^ = #0);
   if result then
-    ToRawSid(@tmp, sid)
+    ToRawSid(@tmp, sid);
 end;
 
 var
@@ -6805,8 +6808,10 @@ end;
 function SidToKnown(const text: RawUtf8): TWellKnownSid;
 var
   sid: TSid;
+  p: PUtf8Char;
 begin
-  if TextToSid(pointer(text), sid) then
+  p := pointer(text);
+  if TextToSid(p, sid) and (p^ = #0) then
     result := SidToKnown(@sid)
   else
     result := wksNull;
@@ -7494,6 +7499,9 @@ begin
 end;
 
 function TSecDesc.FromText(const SddlText, RidDomain: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+  dom: RawSid;
 begin
   result := FromText(pointer(SddlText), RidDomain);
 end;

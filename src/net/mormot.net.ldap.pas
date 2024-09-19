@@ -6519,10 +6519,15 @@ procedure TBasicAuthServerKerberos.AllowGroupBySid(const GroupSid: TRawUtf8DynAr
 var
   i: PtrInt;
   sid: TSid;
+  p: PUtf8Char;
 begin
   for i := 0 to high(GroupSid) do
-    if TextToSid(pointer(GroupSid[i]), sid) then
+  begin
+    p := pointer(GroupSid[i]);
+    if TextToSid(p, sid) and
+       (p^ = #0) then
       AddRawSid(fGroupSid, @sid);
+  end;
 end;
 
 procedure TBasicAuthServerKerberos.AllowGroupBySid(const GroupSidCsv: RawUtf8);

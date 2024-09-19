@@ -3424,8 +3424,11 @@ end;
 function CurrentUserHasGroup(const sid: RawUtf8; wtt: TWinTokenType): boolean;
 var
   s: TSid;
+  p: PUtf8Char;
 begin
-  result := TextToSid(pointer(sid), s) and
+  p := pointer(sid);
+  result := TextToSid(p, s) and
+            (p^ = #0) and
             CurrentUserHasGroup(@s, wtt);
 end;
 
