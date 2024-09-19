@@ -926,7 +926,6 @@ procedure ClassToText(C: TClass; var result: RawUtf8);
 function ToText(C: TClass): RawUtf8; overload;
   {$ifdef HASSAFEINLINE}inline;{$endif}
 
-
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
@@ -1001,12 +1000,9 @@ procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
-
 type
   TSqlRawBlob = RawBlob;
-
 {$endif PUREMORMOT2}
-
 
 
 { ************ Numbers (floats and integers) Low-level Definitions }

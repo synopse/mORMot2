@@ -5849,7 +5849,7 @@ begin
 end;
 {$endif ISDELPHI}
 
-function UuidToText(const u: TGuid): RawUtf8; // seldom used in this unit
+procedure UuidToText(const u: TGuid; var result: RawUtf8); // seldom used in this unit
 begin
   result := RawUtf8(LowerCase(copy(GUIDToString(u), 2, 36)));
 end;
@@ -8849,7 +8849,7 @@ begin
       exit;
   end;
   GetComputerUuid(u, disable);
-  result := UuidToText(u);
+  UuidToText(u, result);
   if disable <> [] then
     exit; // cache fully-qualified UUID only
   GlobalLock;
@@ -8883,7 +8883,7 @@ begin
     uid.D2 := swap(uid.D2);
     uid.D3 := swap(uid.D3);
   end;
-  dest := UuidToText(uid);
+  UuidToText(uid, dest);
 end;
 
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;

@@ -2351,7 +2351,8 @@ function OctToBin(const Oct: RawUtf8): RawByteString; overload;
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
-function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+function GuidToText(P: PUtf8Char; guid: PByteArray; tab: PWordArray = nil): PUtf8Char;
 
 /// convert a TGuid into 38 chars encoded { text } as RawUtf8
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
@@ -10272,13 +10273,13 @@ begin
   end;
 end;
 
-function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+function GuidToText(P: PUtf8Char; guid: PByteArray; tab: PWordArray): PUtf8Char;
 var
   i: PtrInt;
-  tab: PWordArray;
 begin
   // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-  tab := @TwoDigitsHexWB;
+  if tab = nil then
+    tab := @TwoDigitsHexWB;
   for i := 3 downto 0 do
   begin
     PWord(P)^ := tab[guid[i]];
