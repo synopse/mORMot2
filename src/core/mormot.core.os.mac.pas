@@ -7,7 +7,7 @@ unit mormot.core.os.mac;
   *****************************************************************************
 
    MacOS API calls for FPC, as injected to mormot.core.os.pas
-  - Gather MacOS Specific Operating System Information
+   - Gather MacOS Specific Operating System Information
   
    This unit uses MacOSAll and link several toolkits, so is not included
    in mormot.core.os.pas to reduce executable size, but inject these methods

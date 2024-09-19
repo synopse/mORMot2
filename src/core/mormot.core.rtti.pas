@@ -47,6 +47,7 @@ uses
   typinfo,  // use official RTL for accurate layouts (especially FPC unaligned)
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.unicode,
   mormot.core.text; // ESynException, and text process (e.g. for enums)
 
@@ -1640,11 +1641,12 @@ function GetDisplayNameFromClass(C: TClass): RawUtf8;
 // - return RTL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
-/// defined here to avoid circular dependency in mormot.core.os.pas
+{ defined here to avoid circular dependency in mormot.core.os.pas }
 function ToText(cmd: TParseCommands): ShortString; overload;
 
-/// defined here to avoid circular dependency in mormot.core.os.pas
+{ defined here to avoid circular dependency in mormot.core.os.security.pas }
 function ToText(w: TWellKnownSid): PShortString; overload;
+function ToText(w: TWellKnownRid): PShortString; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -5041,6 +5043,11 @@ end;
 function ToText(w: TWellKnownSid): PShortString;
 begin
   result := GetEnumName(TypeInfo(TWellKnownSid), ord(w));
+end;
+
+function ToText(w: TWellKnownRid): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TWellKnownRid), ord(w));
 end;
 
 

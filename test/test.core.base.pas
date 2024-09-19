@@ -12,6 +12,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
@@ -6466,20 +6467,20 @@ var
   p: PUtf8Char;
 begin
   // validate internal structures and types
-  Check(KnownSidToSddl(wksNull) = '');
-  Check(KnownSidToSddl(wksWorld) = 'WD');
-  Check(KnownSidToSddl(wksLocal) = '');
-  Check(KnownSidToSddl(wksNetwork) = 'NU');
-  Check(KnownSidToSddl(wksSelf) = 'PS');
-  Check(KnownSidToSddl(wksLocalSystem) = 'SY');
-  Check(KnownSidToSddl(wksBuiltinAdministrators) = 'BA');
-  Check(KnownSidToSddl(wksBuiltinNetworkConfigurationOperators) = 'NO');
-  Check(KnownSidToSddl(wksBuiltinPerfLoggingUsers) = 'LU');
-  Check(KnownSidToSddl(wksBuiltinEventLogReadersGroup) = 'ER');
-  Check(KnownSidToSddl(wksBuiltinAccessControlAssistanceOperators) = 'AA');
-  Check(KnownSidToSddl(wksBuiltinWriteRestrictedCode) = 'WR');
-  Check(KnownSidToSddl(wksCapabilityInternetClient) = '');
-  Check(KnownSidToSddl(high(TWellKnownSid)) = '');
+  CheckEqual(KnownSidToSddl(wksNull), '');
+  CheckEqual(KnownSidToSddl(wksWorld), 'WD');
+  CheckEqual(KnownSidToSddl(wksLocal), '');
+  CheckEqual(KnownSidToSddl(wksNetwork), 'NU');
+  CheckEqual(KnownSidToSddl(wksSelf), 'PS');
+  CheckEqual(KnownSidToSddl(wksLocalSystem), 'SY');
+  CheckEqual(KnownSidToSddl(wksBuiltinAdministrators), 'BA');
+  CheckEqual(KnownSidToSddl(wksBuiltinNetworkConfigurationOperators), 'NO');
+  CheckEqual(KnownSidToSddl(wksBuiltinPerfLoggingUsers), 'LU');
+  CheckEqual(KnownSidToSddl(wksBuiltinEventLogReadersGroup), 'ER');
+  CheckEqual(KnownSidToSddl(wksBuiltinAccessControlAssistanceOperators), 'AA');
+  CheckEqual(KnownSidToSddl(wksBuiltinWriteRestrictedCode), 'WR');
+  CheckEqual(KnownSidToSddl(wksCapabilityInternetClient), '');
+  CheckEqual(KnownSidToSddl(high(TWellKnownSid)), '');
   CheckEqual(ord(scDaclAutoInheritReq), 8);
   CheckEqual(ord(scSelfRelative), 15);
   c := [scSelfRelative];

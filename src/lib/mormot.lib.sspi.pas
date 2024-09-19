@@ -34,7 +34,8 @@ uses
   sysutils,
   classes,
   mormot.core.base,
-  mormot.core.os;
+  mormot.core.os,
+  mormot.core.os.security;
   // since we use it from mormot.net.sock, we avoid mormot.core.unicode
 
 

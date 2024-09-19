@@ -28,6 +28,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.data,
   mormot.core.threads,
   mormot.core.unicode,

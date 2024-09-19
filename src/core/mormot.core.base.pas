@@ -4853,6 +4853,7 @@ begin
 end;
 
 procedure AppendShortTemp(value, temp: PAnsiChar; dest: PAnsiChar);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   AppendShortBuffer(value, temp - value, dest);
 end;

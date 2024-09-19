@@ -3128,11 +3128,6 @@ type
   end;
   PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
 
-  TOKEN_USER = record
-    User: SID_AND_ATTRIBUTES;
-  end;
-  PTOKEN_USER = ^TOKEN_USER;
-
   TOKEN_GROUPS = record
     GroupCount: DWord;
     Groups: array [0..0] of SID_AND_ATTRIBUTES;
@@ -3151,15 +3146,11 @@ function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger
   lpName: PAnsiChar; var cbName: DWord): BOOL;
     stdcall; external advapi32;
 
-function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
-  var cchName: DWord; ReferencedDomainName: PAnsiChar;
-  var cchReferencedDomainName: DWord; var peUse: DWord): BOOL;
-    stdcall; external advapi32;
-
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
   const NewState: TOKEN_PRIVILEGES; BufferLength: DWord;
   PreviousState: PTokenPrivileges; ReturnLength: PDWord): BOOL;
     stdcall; external advapi32;
+
 
 function IsSystemFolder(const Folder: TFileName): boolean;
 begin
@@ -3262,249 +3253,13 @@ begin
     result := 0;
 end;
 
-function RawTokenSid(tok: THandle; var buf: TSynTempBuffer): PSid;
-begin
-  if RawTokenGetInfo(tok, TokenUser, buf) >= SizeOf(TOKEN_USER) then
-    result := PSid(PTOKEN_USER(buf.buf)^.User.Sid) // within buf.buf/len
-  else
-    result := nil;
-end;
 
-function CurrentSid(wtt: TWinTokenType; name, domain: PRawUtf8): RawUtf8;
-var
-  sid: RawSid;
-begin
-  CurrentRawSid(sid, wtt, name, domain);
-  result := RawSidToText(sid);
-end;
-
-procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType;
-  name, domain: PRawUtf8);
-var
-  h: THandle;
-  p: PSid;
-  n, d: RawUtf8;
-  tmp: TSynTempBuffer;
-begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  p := RawTokenSid(h, tmp);
-  if p <> nil then
-  begin
-    ToRawSid(p, sid);
-    if (name <> nil) or
-       (domain <> nil) then
-    begin
-      LookupSid(p, n, d);
-      if name <> nil then
-        name^ := n;
-      if domain <> nil then
-        domain^ := d;
-    end;
-  end;
-  tmp.Done;
-  CloseHandle(h);
-end;
+{ TSynWindowsPrivileges }
 
 function ToText(p: TWinSystemPrivilege): PShortString;
 begin
   result := @_WSP[p];
 end;
-
-function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
-var
-  nfo: PTokenGroups;
-  i: PtrInt;
-begin
-  result := nil;
-  if RawTokenGetInfo(tok, TokenGroups, buf) < SizeOf({%H-}nfo^) then
-    exit;
-  nfo := buf.buf;
-  if nfo.GroupCount = 0 then
-    exit;
-  SetLength(result, nfo.GroupCount);
-  for i := 0 to nfo.GroupCount - 1 do
-    result[i] := pointer(nfo.Groups[i].Sid); // within buf.buf/len
-end;
-
-function TokenGroupsText(tok: THandle): TRawUtf8DynArray;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := SidsToText(RawTokenGroups(tok, tmp));
-  tmp.Done;
-end;
-
-function TokenHasGroup(tok: THandle; sid: PSid): boolean;
-var
-  tmp: TSynTempBuffer;
-  i: PtrInt;
-begin
-  result := false;
-  if (sid <> nil) and
-     (RawTokenGetInfo(tok, TokenGroups, tmp) <> 0) then
-    with PTokenGroups(tmp.buf)^ do
-      for i := 0 to GroupCount - 1 do
-        if SidCompare(pointer(Groups[i].Sid), sid) = 0 then
-        begin
-          result := true;
-          break;
-        end;
-  tmp.Done;
-end;
-
-function TokenHasAnyGroup(tok: THandle; const sid: RawSidDynArray): boolean;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := HasAnySid(RawTokenGroups(tok, tmp), sid);
-  tmp.Done;
-end;
-
-function CurrentGroups(wtt: TWinTokenType; var tmp: TSynTempBuffer): PSids;
-var
-  h: THandle;
-begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := RawTokenGroups(h, tmp);
-  CloseHandle(h);
-end;
-
-function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := SidsToText(CurrentGroups(wtt, tmp));
-  tmp.Done;
-end;
-
-function CurrentKnownGroups(wtt: TWinTokenType): TWellKnownSids;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := SidToKnownGroups(CurrentGroups(wtt, tmp));
-  tmp.Done;
-end;
-
-function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
-var
-  h: THandle;
-begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := TokenHasGroup(h, sid);
-  CloseHandle(h);
-end;
-
-function CurrentUserHasGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
-begin
-  result := (wks <> wksNull) and
-            CurrentUserHasGroup(pointer(KnownRawSid(wks)), wtt);
-end;
-
-function CurrentUserHasGroup(const sid: RawUtf8; wtt: TWinTokenType): boolean;
-var
-  s: TSid;
-  p: PUtf8Char;
-begin
-  p := pointer(sid);
-  result := TextToSid(p, s) and
-            (p^ = #0) and
-            CurrentUserHasGroup(@s, wtt);
-end;
-
-function CurrentUserHasAnyGroup(const sid: RawSidDynArray; wtt: TWinTokenType): boolean;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := HasAnySid(CurrentGroups(wtt, tmp), sid);
-  tmp.Done;
-end;
-
-function CurrentUserHasGroup(const name, domain, server: RawUtf8;
-  wtt: TWinTokenType): boolean;
-var
-  i: PtrInt;
-  sids: PSids;
-  n, d: RawUtf8;
-  tmp: TSynTempBuffer;
-begin
-  result := false;
-  sids := CurrentGroups(wtt, tmp);
-  for i := 0 to length(sids) - 1 do
-    if (SidToKnown(sids[i]) = wksNull) and
-       (LookupSid(sids[i], n, d, server) = stTypeGroup) then
-      if PropNameEquals(n, name) and
-         ((domain = '') or
-          PropNameEquals(d, domain)) then
-      begin
-        result := true;
-        break;
-      end;
-  tmp.Done;
-end;
-
-function CurrentUserIsAdmin: boolean;
-begin
-  result := CurrentUserHasGroup(wksBuiltinAdministrators);
-end;
-
-function LookupSid(sid: PSid; out name, domain: RawUtf8;
-  const server: RawUtf8): TSidType;
-var
-  n, d: array[byte] of WideChar;
-  s: TSynTempBuffer;
-  nl, dl, use: cardinal;
-begin
-  result := stUndefined;
-  if sid = nil then
-    exit;
-  nl := SizeOf(n);
-  dl := SizeOf(d);
-  if LookupAccountSidW(
-       Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
-  begin
-    Win32PWideCharToUtf8(@n, name);
-    Win32PWideCharToUtf8(@d, domain);
-    if use <= byte(high(TSidType)) then
-      result := TSidType(use);
-  end;
-  s.Done;
-end;
-
-function LookupSid(const sid: RawUtf8; out name, domain: RawUtf8;
-  const server: RawUtf8): TSidType;
-var
-  s: TSid;
-  p: PUtf8Char;
-begin
-  p := pointer(sid);
-  if TextToSid(p, s) and
-     (p^ = #0) then
-    result := LookupSid(@s, name, domain, server)
-  else
-    result := stUndefined;
-end;
-
-function LookupToken(tok: THandle; out name, domain: RawUtf8;
-  const server: RawUtf8): boolean;
-var
-  tmp: TSynTempBuffer;
-begin
-  result := LookupSid(RawTokenSid(tok, tmp) ,name, domain, server) <> stUndefined;
-  tmp.Done;
-end;
-
-function LookupToken(tok: THandle; const server: RawUtf8): RawUtf8;
-var
-  name, domain: RawUtf8;
-begin
-  if LookupToken(tok, name, domain, server) then
-    result := domain + '\' + name
-  else
-    result := '';
-end;
-
-
-{ TSynWindowsPrivileges }
 
 procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType;
   aLoadPrivileges: boolean);
