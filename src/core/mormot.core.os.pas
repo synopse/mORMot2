@@ -7340,6 +7340,18 @@ begin
   inc(p);
 end;
 
+function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
+var
+  u: shortstring;
+  err: integer;
+begin
+  result := false;
+  if not SddlNextPart(p, u) then
+    exit;
+  val({$ifdef UNICODE}string{$endif}(u), c, err); // RTL handles 0x###
+  result := err = 0;
+end;
+
 function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; dom: PSid): boolean;
 var
   u: shortstring;
@@ -7347,22 +7359,32 @@ var
   f: TSecAceFlag;
   a: TSecAccess;
   r: TSecAccessRight;
-  mask, err: integer;
+  mask: integer;
 begin
   result := false;
   ace.AceType := satUnknown;
-  if not SddlNextPart(p, u) or
-     not (u[0] in [#1, #2]) then
+  if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
+    if SddlNextInteger(p, mask) then
+      ace.RawType := mask
+    else
+      exit
+  else
+  begin
+    if not SddlNextPart(p, u) or
+       not (u[0] in [#1, #2]) then
+      exit;
+    for t := low(t) to high(t) do
+      if SAT_SDDL[t] = u then
+      begin
+        ace.AceType := t;
+        break;
+      end;
+    if ace.AceType = satUnknown then
+      exit;
+    ace.RawType := ord(ace.AceType);
+  end;
+  if p^ <> ';' then
     exit;
-  for t := low(t) to high(t) do
-    if SAT_SDDL[t] = u then
-    begin
-      ace.AceType := t;
-      break;
-    end;
-  if ace.AceType = satUnknown then
-    exit;
-  ace.RawType := ord(ace.AceType);
   inc(p);
   while p^ <> ';' do
   begin
@@ -7379,15 +7401,10 @@ begin
   while p^ <> ';' do
   begin
     if PWord(p)^ = ord('0') + ord('x') shl 8 then
-    begin
-      if not SddlNextPart(p, u) then
+      if SddlNextInteger(p, PInteger(@ace.Mask)^) then
+        break // we got the mask as a 32-bit hexadecimal value
+      else
         exit;
-      val({$ifdef UNICODE}string{$endif}(u), mask, err); // RTL handles 0x###
-      if err <> 0 then
-        exit;
-      PInteger(@ace.Mask)^ := mask;
-      break;
-    end;
     if not SddlNextTwo(p, u) then
       exit;
     mask := 0;
@@ -7513,7 +7530,13 @@ var
   c: cardinal;
   i: PtrInt;
 begin
-  AppendShort(SAT_SDDL[ace.AceType], s);
+  if SAT_SDDL[ace.AceType][0] <> #0 then
+    AppendShort(SAT_SDDL[ace.AceType], s)
+  else
+  begin
+    AppendShortTwoChars('0x', @s);
+    AppendShortIntHex(ace.RawType, s); // fallback to lower hex - paranoid
+  end;
   AppendShortChar(';', @s);
   for f := low(f) to high(f) do
     if f in ace.Flags then
@@ -7577,14 +7600,13 @@ var
     if ai in Flags then
       AppendShortTwoChars('AI', @tmp);
     for i := 0 to length(aces) - 1 do
-      if SAT_SDDL[aces[i].AceType][0] <> #0 then
-      begin
-        AppendShortChar('(', @tmp);
-        SddlAppendAce(tmp, aces[i], pointer(dom));
-        AppendShortChar(')', @tmp);
-        AppendTmp;
-        tmp[0] := #0;
-      end;
+    begin
+      AppendShortChar('(', @tmp);
+      SddlAppendAce(tmp, aces[i], pointer(dom));
+      AppendShortChar(')', @tmp);
+      AppendTmp;
+      tmp[0] := #0;
+    end;
   end;
 
 begin
