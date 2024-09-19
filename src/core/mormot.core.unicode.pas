@@ -8,6 +8,7 @@ unit mormot.core.unicode;
 
    Efficient Unicode Conversion Classes shared by all framework units
    - UTF-8 Efficient Encoding / Decoding
+   - Cross-Platform Charset and CodePage Support
    - UTF-8 / UTF-16 / Ansi Conversion Classes
    - Text File Loading with BOM/Unicode Support
    - Low-Level String Conversion Functions
@@ -267,6 +268,41 @@ function Utf8TruncatedLength(text: PAnsiChar;
 // - end the parsing at first #13 or #10 character
 function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 
+
+{ ************** Cross-Platform Charset and CodePage Support }
+
+const
+  ANSI_CHARSET        = 0;
+  DEFAULT_CHARSET     = 1;
+  SYMBOL_CHARSET      = 2;
+  SHIFTJIS_CHARSET    = 128;
+  HANGEUL_CHARSET     = 129;
+  JOHAB_CHARSET       = 130;
+  GB2312_CHARSET      = 134;
+  CHINESEBIG5_CHARSET = 136;
+  GREEK_CHARSET       = 161;
+  TURKISH_CHARSET     = 162;
+  VIETNAMESE_CHARSET  = 163;
+  HEBREW_CHARSET      = 177;
+  ARABIC_CHARSET      = 178;
+  BALTIC_CHARSET      = 186;
+  RUSSIAN_CHARSET     = 204;
+  THAI_CHARSET        = 222;
+  EASTEUROPE_CHARSET  = 238;
+  OEM_CHARSET         = 255;
+
+/// convert a char set to a code page
+function CharSetToCodePage(CharSet: integer): cardinal;
+
+/// convert a code page to a char set
+function CodePageToCharSet(CodePage: cardinal): integer;
+
+/// return a code page number into human-friendly text
+function CodePageToText(aCodePage: cardinal): TShort16;
+
+/// check if a code page is known to be of fixed width, i.e. not MBCS
+// - i.e. will be implemented as a TSynAnsiFixedWidth
+function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 
 
 { **************** UTF-8 / UTF-16 / Ansi Conversion Classes }
@@ -557,7 +593,6 @@ type
       SourceChars: cardinal): PAnsiChar; override;
   end;
 
-
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
   // - this instance is global and instantied during the whole program life time
@@ -578,13 +613,6 @@ var
 
   /// global TSynAnsiConvert instance with no encoding (RawByteString/RawBlob)
   RawByteStringConvert: TSynAnsiFixedWidth;
-
-/// check if a code page is known to be of fixed width, i.e. not MBCS
-// - i.e. will be implemented as a TSynAnsiFixedWidth
-function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
-
-/// return a code page number into human-friendly text
-function CodePageToText(aCodePage: cardinal): TShort16;
 
 
 { *************** Text File Loading with BOM/Unicode Support }
@@ -3283,6 +3311,95 @@ begin
 end;
 
 
+{ ************** Cross-Platform Charset and CodePage Support }
+
+function CharSetToCodePage(CharSet: integer): cardinal;
+begin
+  case CharSet of
+    SHIFTJIS_CHARSET:
+      result := 932;
+    HANGEUL_CHARSET:
+      result := 949;
+    GB2312_CHARSET:
+      result := 936;
+    HEBREW_CHARSET:
+      result := 1255;
+    ARABIC_CHARSET:
+      result := 1256;
+    GREEK_CHARSET:
+      result := 1253;
+    TURKISH_CHARSET:
+      result := 1254;
+    VIETNAMESE_CHARSET:
+      result := 1258;
+    THAI_CHARSET:
+      result := 874;
+    EASTEUROPE_CHARSET:
+      result := 1250;
+    RUSSIAN_CHARSET:
+      result := 1251;
+    BALTIC_CHARSET:
+      result := 1257;
+  else
+    result := CP_WINANSI; // default ANSI_CHARSET = iso-8859-1 = windows-1252
+  end;
+end;
+
+function CodePageToCharSet(CodePage: cardinal): integer;
+begin
+  case CodePage of
+    932:
+      result := SHIFTJIS_CHARSET;
+    949:
+      result := HANGEUL_CHARSET;
+    936:
+      result := GB2312_CHARSET;
+    1255:
+      result := HEBREW_CHARSET;
+    1256:
+      result := ARABIC_CHARSET;
+    1253:
+      result := GREEK_CHARSET;
+    1254:
+      result := TURKISH_CHARSET;
+    1258:
+      result := VIETNAMESE_CHARSET;
+    874:
+      result := THAI_CHARSET;
+    1250:
+      result := EASTEUROPE_CHARSET;
+    1251:
+      result := RUSSIAN_CHARSET;
+    1257:
+      result := BALTIC_CHARSET;
+  else
+    result := ANSI_CHARSET; // default is iso-8859-1 = windows-1252
+  end;
+end;
+
+function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
+begin
+  result := ((aCodePage >= 1250) and
+             (aCodePage <= 1258)) or
+            (aCodePage = CP_LATIN1) or
+            (aCodePage >= CP_RAWBLOB);
+end;
+
+function CodePageToText(aCodePage: cardinal): TShort16;
+begin
+  case aCodePage of
+    CP_UTF8:
+      result := 'utf8';
+    CODEPAGE_US:
+      result := 'WinAnsi';
+  else
+    begin
+      PCardinal(@result)^ := 2 + ord('c') shl 8 + ord('p') shl 16;
+      AppendShortCardinal(aCodePage, result);
+    end;
+  end;
+end;
+
 
 { **************** UTF-8 / Unicode / Ansi Conversion Classes }
 
@@ -4350,30 +4467,6 @@ function TSynAnsiUtf16.Utf8BufferToAnsi(Dest: PAnsiChar;
   Source: PUtf8Char; SourceChars: cardinal): PAnsiChar;
 begin
   result := Dest + Utf8ToWideChar(PWideChar(Dest), Source, SourceChars, true);
-end;
-
-
-function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
-begin
-  result := ((aCodePage >= 1250) and
-             (aCodePage <= 1258)) or
-            (aCodePage = CP_LATIN1) or
-            (aCodePage >= CP_RAWBLOB);
-end;
-
-function CodePageToText(aCodePage: cardinal): TShort16;
-begin
-  case aCodePage of
-    CP_UTF8:
-      result := 'utf8';
-    CODEPAGE_US:
-      result := 'WinAnsi';
-  else
-    begin
-      PCardinal(@result)^ := 2 + ord('c') shl 8 + ord('p') shl 16;
-      AppendShortCardinal(aCodePage, result);
-    end;
-  end;
 end;
 
 

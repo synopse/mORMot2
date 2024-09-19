@@ -39,7 +39,6 @@ Cross-platform functions shared by all framework units
 - Gather Operating System Information
 - Operating System Specific Types (e.g. `TWinRegistry`)
 - Unicode, Time, File, Console, Library process
-- Cross-Platform Charset and CodePage Support
 - Per Class Properties O(1) Lookup via `vmtAutoTable` Slot (e.g. for RTTI cache)
 - `TSynLocker`/`TSynLocked` and Low-Level Threading Features
 - Unix Daemon and Windows Service Support
@@ -59,6 +58,7 @@ This unit uses MacOSAll and link several toolkits, so was not included in `mormo
 
 Efficient Unicode Conversion Classes shared by all framework units
 - UTF-8 Efficient Encoding / Decoding
+- Cross-Platform Charset and CodePage Support
 - UTF-8 / UTF-16 / Ansi Conversion Classes
 - Text File Loading with BOM/Unicode Support
 - Low-Level String Conversion Functions
