@@ -2738,6 +2738,8 @@ type
     /// try to load the CryptoApi on this system
     function Available: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// wrapper around ConvertSecurityDescriptorToStringSecurityDescriptorA()
+    function SecurityDescriptorToText(sd: pointer; out text: RawUtf8): boolean;
   end;
 
 const

@@ -6496,6 +6496,10 @@ begin
     Check(IsValidSecurityDescriptor(pointer(bin), length(bin)), 'bin');
     Check(SecurityDescriptorToText(bin, u), 'sdtt1');
     CheckEqual(u, SD_TXT[i]);
+    {$ifdef OSWINDOWS} // validate against the OS API
+    Check(CryptoApi.SecurityDescriptorToText(pointer(bin), u), 'winapi1');
+    CheckEqual(u, SD_TXT[i], 'winapi2');
+    {$endif OSWINDOWS}
     sd.Clear;
     CheckEqual(sd.ToText, '', 'clear');
     Check(sd.FromBinary(bin));
@@ -6506,6 +6510,10 @@ begin
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saved');
     Check(SecurityDescriptorToText(saved, u), 'sdtt2');
     CheckEqual(u, SD_TXT[i]);
+    {$ifdef OSWINDOWS}
+    Check(CryptoApi.SecurityDescriptorToText(pointer(saved), u), 'winapi3');
+    CheckEqual(u, SD_TXT[i], 'winapi4');
+    {$endif OSWINDOWS}
     if i >= 3 then // serialization offsets seem not consistent
       Check(saved = bin, 'ToBinary');
     Check(not sd2.FromText(''));

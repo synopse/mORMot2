@@ -3943,6 +3943,27 @@ begin
   end;
 end;
 
+const
+  SDDL_REVISION_1 = 1;
+  ALL_INFO = OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or
+             DACL_SECURITY_INFORMATION  or SACL_SECURITY_INFORMATION;
+
+function TWinCryptoApi.SecurityDescriptorToText(sd: pointer; out text: RawUtf8): boolean;
+var
+  txt: PAnsiChar;
+begin
+  result := false;
+  txt := nil;
+  if (sd = nil) or
+     not Available or
+     not ConvertSecurityDescriptorToStringSecurityDescriptorA(
+       sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
+    exit;
+  FastSetString(text, txt, StrLen(txt));
+  LocalFree(HLOCAL(txt));
+  result := true;
+end;
+
 type
   {$ifdef FPC}
   {$packrecords C} // mandatory under Win64
