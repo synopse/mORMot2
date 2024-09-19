@@ -6436,6 +6436,18 @@ const
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001' +
     'G:S-1-5-21-2461620395-3297676348-3167859224-513' +
     'D:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
+  DOM_TXT: array[3..high(SD_B64)] of RawUtf8 = (
+    'S-1-5-21-823746769-1624905683-418753922',
+    'S-1-5-21-682003330-1677128483-1060284298',
+    'S-1-5-21-823746769-1624905683-418753922',
+    'S-1-5-21-2461620395-3297676348-3167859224');
+  RID_TXT: array[3..high(SD_B64)] of RawUtf8 = (
+    'O:DUG:DAD:(A;;FA;;;DA)',
+    'O:S-1-5-21-682003330-1677128483-1060284298-1003G:DUD:(A;;FA;;;BA)(A;;FA;;;SY)' +
+    '(A;;FA;;;S-1-5-21-682003330-1677128483-1060284298-1003)(A;;0x1200a9;;;BU)',
+    'O:BAG:DUD:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
+    'O:S-1-5-21-2461620395-3297676348-3167859224-1001G:DUD:AI(A;ID;FA;;;BA)' +
+    '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
 
 procedure TTestCoreBase._SDDL;
 var
@@ -6443,7 +6455,9 @@ var
   c: TSecControls;
   bin, saved: RawSecurityDescriptor;
   u, dom: RawUtf8;
+  domsid: RawSid;
   sd, sd2: TSecDesc;
+  p: PUtf8Char;
 begin
   // validate internal structures and types
   Check(KnownSidToSddl(wksNull) = '');
@@ -6492,22 +6506,37 @@ begin
     CheckEqual(sd2.ToText, '', 'fromnil');
     Check(sd2.FromText(u), 'fromu');
     CheckEqual(sd2.ToText, u, 'fromutou');
-    Check(sd.Compare(sd2));
-    Check(sd2.Compare(sd));
+    Check(sd.IsEqual(sd2));
+    Check(sd2.IsEqual(sd));
     bin := sd2.ToBinary;
     Check(bin = saved, 'saved2');
   end;
   // validate parsing RID in text (e.g. DU,DA)
-  Check(not sd.FromText('O:DUG:DAD:(A;;FA;;;DA)'), 'dom0');
-  Check(sd.FromText('O:DUG:DAD:(A;;FA;;;DA)', dom), 'dom1');
+  Check(not sd.FromText(RID_TXT[3]), 'dom0');
+  Check(sd.FromText(RID_TXT[3], dom), 'dom1');
   u := sd.ToText;
   CheckEqual(u, FormatUtf8('O:%-513G:%-512D:(A;;FA;;;%-512)', [dom, dom, dom]));
   CheckEqual(u, SD_TXT[3], 'domasref');
   u := sd.ToText(dom);
-  CheckEqual(u, 'O:DUG:DAD:(A;;FA;;;DA)', 'rid');
+  CheckEqual(u, RID_TXT[3], 'rid');
   saved := sd.ToBinary;
   CheckHash(saved, $3B028A48, 'dombin');
   Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saveddom');
+  Check(TryDomainTextToSid(dom, domsid));
+  u := 'rid';
+  sd.AppendAsText(u, pointer(domsid));
+  CheckEqual(u, 'ridO:DUG:DAD:(A;;FA;;;DA)');
+  for i := low(DOM_TXT) to high(DOM_TXT) do
+  begin
+    Check(TryDomainTextToSid(DOM_TXT[i], domsid));
+    Check(sd.FromText(SD_TXT[i]));
+    u := '';
+    sd.AppendAsText(u, pointer(domsid));
+    CheckEqual(u, RID_TXT[i]);
+    p := pointer(u);
+    Check(sd2.FromText(p, pointer(domsid)));
+    Check(sd.IsEqual(sd2));
+  end;
 end;
 
 function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;

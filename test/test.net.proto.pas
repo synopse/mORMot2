@@ -1036,22 +1036,22 @@ begin
             AddConsole('%% = % search=%', [one.Settings.TargetHost, txt,
               one.NetbiosDN, one.SearchResult.Count]);
             for k := 0 to one.SearchResult.Count - 1 do
-              begin
-                res := one.SearchResult.Items[k];
-                Check(res.ObjectName <> '', 'objectName');
-                Check(res[atDistinguishedName] <> '', 'distinguishedName');
-                sid := '';
-                if res.CopyObjectSid(sid) then
-                  Check(sid <> '');
-                FillZero(guid);
-                Check(res.CopyObjectGUID(guid), 'objectGUID');
-                Check(not IsNullGuid(guid));
-                CheckEqual(res.CanonicalName, DNToCN(res.ObjectName));
-                Check(IdemPropNameU(res.Attributes[atCommonName], 'users'), 'cn');
-                Check(res.Attributes.GetByName('name') <> '', 'name');
-                Check(res.Attributes.SystemFlags <> [], 'sf');
-              end;
-              //writeln(one.SearchResult.Dump);
+            begin
+              res := one.SearchResult.Items[k];
+              Check(res.ObjectName <> '', 'objectName');
+              Check(res[atDistinguishedName] <> '', 'distinguishedName');
+              sid := '';
+              if res.CopyObjectSid(sid) then
+                Check(sid <> '');
+              FillZero(guid);
+              Check(res.CopyObjectGUID(guid), 'objectGUID');
+              Check(not IsNullGuid(guid));
+              CheckEqual(res.CanonicalName, DNToCN(res.ObjectName));
+              Check(IdemPropNameU(res.Attributes[atCommonName], 'users'), 'cn');
+              Check(res.Attributes.GetByName('name') <> '', 'name');
+              Check(res.Attributes.SystemFlags <> [], 'sf');
+            end;
+            //writeln(one.SearchResult.Dump);
           except
             on E: Exception do
               Check(false, E.Message);
