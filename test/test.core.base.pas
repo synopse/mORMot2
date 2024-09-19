@@ -6448,6 +6448,12 @@ const
     'O:BAG:DUD:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001G:DUD:AI(A;ID;FA;;;BA)' +
     '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
+  COND_TXT: array[0..2] of RawUtf8 = (
+    'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
+      '@User.Division ==" Sales")))',
+    'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
+    'D:(XA;;FR;;;WD;(Member_of {SID(Smartcard_SID), SID(BO)} ' +
+      '&& @Device.Bitlocker))(A;ID;FA;;;SY)');
 
 procedure TTestCoreBase._SDDL;
 var
@@ -6504,6 +6510,7 @@ begin
       Check(saved = bin, 'ToBinary');
     Check(not sd2.FromText(''));
     CheckEqual(sd2.ToText, '', 'fromnil');
+    Check(not sd.IsEqual(sd2));
     Check(sd2.FromText(u), 'fromu');
     CheckEqual(sd2.ToText, u, 'fromutou');
     Check(sd.IsEqual(sd2));
@@ -6513,7 +6520,9 @@ begin
   end;
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
-  Check(sd.FromText(RID_TXT[3], dom), 'dom1');
+  Check(not sd.IsEqual(sd2));
+  Check(sd.FromText('O:DUG:DAD:(A; ;FA; ;; DA)', dom), 'dom1');
+  Check(not sd.IsEqual(sd2));
   u := sd.ToText;
   CheckEqual(u, FormatUtf8('O:%-513G:%-512D:(A;;FA;;;%-512)', [dom, dom, dom]));
   CheckEqual(u, SD_TXT[3], 'domasref');
@@ -6536,6 +6545,22 @@ begin
     p := pointer(u);
     Check(sd2.FromText(p, pointer(domsid)));
     Check(sd.IsEqual(sd2));
+  end;
+  // validate conditional ACEs
+  for i := 0 to high(COND_TXT) do
+  begin
+    Check(sd.FromText(COND_TXT[i]));
+    Check(length(sd.Dacl) in [1, 2]);
+    CheckEqual(length(sd.Sacl), 0);
+    Check(sd.Dacl[0].AceType = satCallbackAccessAllowed);
+    if not CheckFailed(sd.Dacl[0].Opaque <> '') then
+      Check(sd.Dacl[0].Opaque[1] = '(');
+    CheckEqual(sd.ToText, COND_TXT[i]);
+    saved := sd.ToBinary;
+    Check(saved <> '');
+    Check(sd2.FromBinary(saved));
+    Check(sd.IsEqual(sd2));
+    CheckEqual(sd2.ToText, COND_TXT[i]);
   end;
 end;
 
