@@ -1296,6 +1296,8 @@ type
     actCortexA720,
     actCortexX4,
     actNeoverseV3,
+    actCortextX925,
+    actCortextA725,
     actNeoverseN3);
   /// a set of recognized ARM/AARCH64 CPU types
   TArmCpuTypes = set of TArmCpuType;
@@ -7739,6 +7741,8 @@ const
     $0d81,  // actCortexA720
     $0d82,  // actCortexX4
     $0d84,  // actNeoverseV3
+    $0d85,  // actCortextX925
+    $0d87,  // actCortextA725
     $0d8e); // actNeoverseN3
 
   ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
@@ -7777,7 +7781,9 @@ const
      'Neoverse-V1', 'Cortex-A78', 'Cortex-A78AE', 'Cortex-X1', 'Cortex-510',
      'Cortex-710', 'Cortex-X2', 'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
      'Cortex-X1C', 'Cortex-A715', 'Cortex-X3', 'Neoverse-V2', 'Cortex-A520',
-     'Cortex-A720', 'Cortex-X4', 'Neoverse-V3', 'Neoverse-N3');
+     'Cortex-A720', 'Cortex-X4', 'Neoverse-V3', 'Cortex-X925', 'Cortex-A725',
+     'Neoverse-N3');
+
   ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
       '',
       'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
