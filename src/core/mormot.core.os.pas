@@ -777,6 +777,8 @@ type
     /// contains an associated SID
     Sid: RawSid;
     /// some optional opaque callback/resource data, stored after the Sid
+    // - e.g. is a conditional expression string for satConditional ACEs like
+    // '(@User.Project Any_of @Resource.Project)'
     Opaque: RawByteString;
     /// the associated Object Type GUID (satObject only)
     ObjectType: TGuid;
@@ -842,6 +844,8 @@ const
                satObjectAudit, satObjectAlarm,
                satCallbackObjectAccessAllowed, satCallbackObjectAccessDenied,
                satCallbackObjectAudit, satCallbackObjectAlarm];
+  satConditional = [satCallbackAccessAllowed, satCallbackAccessDenied,
+               satCallbackObjectAccessAllowed, satCallbackObjectAccessDenied];
   safInheritanceFlags = [safObjectInherit, safContainerInherit,
                          safNoPropagateInherit, safInheritOnly];
   safAuditFlags = [safSuccessfulAccess, safFailedAccess];
@@ -7409,7 +7413,8 @@ var
   f: TSecAceFlag;
   a: TSecAccess;
   r: TSecAccessRight;
-  mask: integer;
+  s: PUtf8Char;
+  mask, parent: integer;
 begin
   result := false;
   ace.AceType := satUnknown;
@@ -7486,6 +7491,35 @@ begin
      not SddlNextGuid(p, ace.InheritedObjectType) or // satObject or nothing
      not SddlNextSid(p, ace.Sid, dom) then // entries always end with a SID/RID
     exit;
+  if p^ = ';' then // optional additional/opaque parameter
+  begin
+    repeat
+      inc(p);
+    until p^ <> ' ';
+    parent := 0;
+    s := p;
+    if (ace.AceType in satConditional) and
+       (s^ = '(') then // conditional ACE expression
+      repeat
+        case s^ of
+          #0:
+            exit; // premature end
+          '(':
+            inc(parent); // count nested parenthesis
+          ')':
+            if parent = 0 then
+              break // ending ACE parenthesis
+            else
+              dec(parent);
+        end;
+        inc(s);
+      until false
+    else
+      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
+        inc(s);
+    FastSetString(RawUtf8(ace.Opaque), p, s - p);
+    p := s;
+  end;
   result := p^ = ')'; // ACE should end with a parenthesis
 end;
 
@@ -7618,6 +7652,13 @@ begin
   else
     AppendShort(';;;', s);
   SddlAppendSid(s, pointer(ace.Sid), dom);
+  if ace.Opaque = '' then
+    exit;
+  AppendShortChar(';', @s);
+  if StrLen(pointer(ace.Opaque)) = length(ace.Opaque) then
+    AppendShortAnsi7String(ace.Opaque, s) // e.g. conditional ACE expression
+  else
+    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s);
 end;
 
 function TSecDesc.ToText(const RidDomain: RawUtf8): RawUtf8;
