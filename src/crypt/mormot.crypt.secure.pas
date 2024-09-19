@@ -8257,7 +8257,7 @@ begin
     result := '';
     for cu := low(cu) to high(cu) do
       if cu in u then
-        AppendShortBuffer(@CU_TEXT[cu], 2, result);
+        AppendShortTwoChars(@CU_TEXT[cu], @result);
   end
   else
     GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);

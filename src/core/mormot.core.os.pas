@@ -6331,7 +6331,7 @@ begin
     Code := 999; // ensure stay in TShort47
   result[0] := #0;
   AppendShortCardinal(Code, result);
-  AppendShortChar(' ', result);
+  AppendShortChar(' ', @result);
   AppendShortAnsi7String(StatusCodeToText(Code)^, result);
 end;
 
@@ -6458,7 +6458,7 @@ begin // faster than ConvertSidToStringSidA(), and cross-platform
   end;
   for i := 0 to PtrInt(sid^.SubAuthorityCount) - 1 do
   begin
-    AppendShortChar('-', result);
+    AppendShortChar('-', @result);
     AppendShortCardinal(sid^.SubAuthority[i], result);
   end;
 end;
@@ -7506,36 +7506,36 @@ var
   i: PtrInt;
 begin
   AppendShort(SAT_SDDL[ace.AceType], s);
-  AppendShortChar(';', s);
+  AppendShortChar(';', @s);
   for f := low(f) to high(f) do
     if f in ace.Flags then
       AppendShort(SAF_SDDL[f], s);
-  AppendShortChar(';', s);
+  AppendShortChar(';', @s);
   c := cardinal(ace.Mask);
   if c <> 0 then
   begin
     i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), c);
     if i >= 0 then
-      AppendShort(SAR_SDDL[TSecAccessRight(i)], s)
+      AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
     else if ace.Mask - samWithSddl <> [] then
     begin
-      AppendShort('0x', s); // we don't have enough tokens
-      AppendShortIntHex(c, s);
+      AppendShortTwoChars('0x', @s); // we don't have the tokens it needs
+      AppendShortIntHex(c, s);       // store as @x##### hexadecimal
     end
     else
       for a := low(a) to high(a) do
         if a in ace.Mask then
-          AppendShort(SAM_SDDL[a], s)
+          AppendShortTwoChars(@SAM_SDDL[a][1], @s)
   end;
   if ace.AceType in satObject then
   begin
-    AppendShortChar(';', s);
+    AppendShortChar(';', @s);
     if not IsNullGuid(ace.ObjectType) then
       AppendShortAnsi7String(UuidToText(ace.ObjectType), s);
-    AppendShortChar(';', s);
+    AppendShortChar(';', @s);
     if not IsNullGuid(ace.InheritedObjectType) then
       AppendShortAnsi7String(UuidToText(ace.InheritedObjectType), s);
-    AppendShortChar(';', s);
+    AppendShortChar(';', @s);
   end
   else
     AppendShort(';;;', s);
@@ -7563,17 +7563,17 @@ var
     if aces = nil then
       exit;
     if p in Flags then
-      AppendShortChar('P', tmp);
+      AppendShortChar('P', @tmp);
     if ar in Flags then
-      AppendShort('AR', tmp);
+      AppendShortTwoChars('AR', @tmp);
     if ai in Flags then
-      AppendShort('AI', tmp);
+      AppendShortTwoChars('AI', @tmp);
     for i := 0 to length(aces) - 1 do
       if SAT_SDDL[aces[i].AceType][0] <> #0 then
       begin
-        AppendShortChar('(', tmp);
+        AppendShortChar('(', @tmp);
         SddlAppendAce(tmp, aces[i], pointer(dom));
-        AppendShortChar(')', tmp);
+        AppendShortChar(')', @tmp);
         AppendTmp;
         tmp[0] := #0;
       end;
@@ -7590,7 +7590,7 @@ begin
   end;
   if Group <> '' then
   begin
-    AppendShort('G:', tmp);
+    AppendShortTwoChars('G:', @tmp);
     SddlAppendSid(tmp, pointer(Group), pointer(dom));
     AppendTmp;
   end;

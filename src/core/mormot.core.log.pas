@@ -2157,7 +2157,7 @@ begin
   s[0] := #0;
   while read.NextByteSafe(@c) and
         ({%H-}c <> #0) do
-    AppendShortChar(c, s);
+    AppendShortChar(c, @s);
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2404,7 +2404,7 @@ begin
     else if Pos('\', s) > 0 then
       c := '\';
     if s[ord(s[0])] <> c then
-      AppendShortChar(c, s);
+      AppendShortChar(c, @s);
     AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
   until false;
   filesn := 0;
@@ -2620,7 +2620,7 @@ begin
           s := debug.fSymbols.NewPtr;
           if (typname <> '') and
              (typname[ord(typname[0])] <> '.') then
-            AppendShortChar('.', typname);
+            AppendShortChar('.', @typname);
           // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
           if header64.version < 3 then
             ShortStringToAnsi7String(lowercase(typname + name), s^.name);
@@ -3534,11 +3534,11 @@ begin
   if (s < 0) and
      (u < 0) then
      exit;
-  AppendShortChar(' ', result);
+  AppendShortChar(' ', @result);
   if u >= 0 then
   begin
     AppendShortAnsi7String(Units[u].FileName, result);
-    AppendShortChar(' ', result);
+    AppendShortChar(' ', @result);
   end
   else
     result[0] := #0;
@@ -3546,9 +3546,9 @@ begin
     AppendShortAnsi7String(Symbols[s].Name, result);
   if line > 0 then
   begin
-    AppendShort(' (', result);
+    AppendShortTwoChars(' (', @result);
     AppendShortCardinal(line, result);
-    AppendShortChar(')', result);
+    AppendShortChar(')', @result);
   end;
 end;
 

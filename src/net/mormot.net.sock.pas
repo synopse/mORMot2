@@ -2402,7 +2402,7 @@ begin
   end;
   if withport then
   begin
-    AppendShortChar(':', result);
+    AppendShortChar(':', @result);
     AppendShortCardinal(port, result);
   end;
 end;
@@ -3237,7 +3237,7 @@ begin
     exit;
   ip4 := ip4 and netmask4;
   IP4Short(@ip4, result);
-  AppendShortChar('/', result);
+  AppendShortChar('/', @result);
   AppendShortCardinal(w, result);
 end;
 

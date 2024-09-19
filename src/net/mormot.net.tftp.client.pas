@@ -344,25 +344,25 @@ begin
     toOck:
       if len <= 0 then
         // 'RRQ filename' / 'WRQ filename' / 'OACK option'
-        AppendShortBuffer(@frame.Header, StrLen(@frame.Header), result)
+        AppendShortBuffer(@frame.Header, StrLen(@frame.Header), @result)
       else
       begin
         // all options will be included with #0 terminated (logged as space)
         if len > 240 then
           len := 240; // ensure at least beginning of frame is logged
-        AppendShortBuffer(@frame.Header, len, result);
+        AppendShortBuffer(@frame.Header, len, @result);
       end;
     toDat,
     toAck:
       begin
         /// 'DAT #123,len' / 'ACK #123'
-        AppendShortChar('#', result);
+        AppendShortChar('#', @result);
         AppendShortCardinal(seq, result);
         dec(len, SizeOf(Frame.Sequence));
         if (len >= 0) and
            (c = toDat) then
         begin
-          AppendShortChar(',', result);
+          AppendShortChar(',', @result);
           AppendShortCardinal(len, result);
         end;
       end;
@@ -371,10 +371,10 @@ begin
         AppendShortCardinal(seq, result);
         if seq <= ord(teLast) then
         begin
-          AppendShort(' (', result);
+          AppendShortTwoChars(' (', @result);
           AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, result);
-          AppendShort(') ', result);
-          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), result)
+          AppendShortTwoChars(') ', @result);
+          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), @result)
         end;
       end;
   end;
