@@ -6494,18 +6494,18 @@ begin
     bin := Base64ToBin(SD_B64[i]);
     Check(bin <> '', 'b64');
     Check(IsValidSecurityDescriptor(pointer(bin), length(bin)), 'bin');
+    Check(SecurityDescriptorToText(bin, u), 'sdtt1');
+    CheckEqual(u, SD_TXT[i]);
     sd.Clear;
     CheckEqual(sd.ToText, '', 'clear');
     Check(sd.FromBinary(bin));
     Check(sd.Dacl <> nil, 'dacl');
     Check((sd.Sacl = nil) = (i <> 0), 'sacl');
     CheckEqual(sd.ToText, SD_TXT[i], 'ToText');
-    SecurityDescriptorToText(pointer(bin), length(bin), u); // OS API on Windows
-    CheckEqual(u, SD_TXT[i], 'winapi1');
     saved := sd.ToBinary;
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saved');
-    SecurityDescriptorToText(pointer(saved), length(saved), u); // OS API on Windows
-    CheckEqual(u, SD_TXT[i], 'winapi2');
+    Check(SecurityDescriptorToText(saved, u), 'sdtt2');
+    CheckEqual(u, SD_TXT[i]);
     if i >= 3 then // serialization offsets seem not consistent
       Check(saved = bin, 'ToBinary');
     Check(not sd2.FromText(''));
@@ -6558,6 +6558,7 @@ begin
     CheckEqual(sd.ToText, COND_TXT[i]);
     saved := sd.ToBinary;
     Check(saved <> '');
+    Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'savcond');
     Check(sd2.FromBinary(saved));
     Check(sd.IsEqual(sd2));
     CheckEqual(sd2.ToText, COND_TXT[i]);

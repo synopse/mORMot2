@@ -857,11 +857,14 @@ function KnownSidToSddl(wks: TWellKnownSid): TShort8; // for unit tests only
 function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 
 /// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
+// - will wrap our TSecDesc binary decoder / SDDL encoder on all platforms
 // - returns true if the conversion succeeded
-// - this function is able to convert into itself, i.e. allows sd=pointer(text)
-// - on Linux, will use our TSecDesc decoder/encoder
-// - on Windows, will call the OS API to return a SDDL representaiton
-function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
+// - function is able to convert itself, i.e. allows pointer(sd)=pointer(text)
+// - could also generate SDDL RID placeholders, if dom binary is supplied,
+// e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+// - on Windows, you can call native CryptoApi.SecurityDescriptorToText()
+function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
+  var text: RawUtf8; dom: PSid = nil): boolean;
 
 
 { ****************** Gather Operating System Information }
@@ -7079,6 +7082,18 @@ begin
             ((PSD(p)^.Sacl <> 0) = (scSaclPresent in PSD(p)^.Control)) and
             ((PSD(p)^.Sacl = 0) or
              (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
+end;
+
+function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
+  var text: RawUtf8; dom: PSid): boolean;
+var
+  tmp: TSecDesc;
+begin
+  result := tmp.FromBinary(sd);
+  if not result then
+    exit;
+  FastAssignNew(text);
+  tmp.AppendAsText(text, dom);
 end;
 
 procedure TSecDesc.Clear;

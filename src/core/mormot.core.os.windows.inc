@@ -2360,27 +2360,6 @@ begin
     RandomBytes(pointer(Buffer), Len);
 end;
 
-const
-  SDDL_REVISION_1 = 1;
-  ALL_INFO = OWNER_SECURITY_INFORMATION or GROUP_SECURITY_INFORMATION or
-             DACL_SECURITY_INFORMATION  or SACL_SECURITY_INFORMATION;
-
-function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
-var
-  txt: PAnsiChar;
-begin
-  txt := nil;
-  result := false;
-  if (sd = nil) or
-     not CryptoApi.Available or
-     not CryptoApi.ConvertSecurityDescriptorToStringSecurityDescriptorA(
-       sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
-    exit;
-  FastSetString(text, txt, StrLen(txt));
-  LocalFree(HLOCAL(txt));
-  result := true;
-end;
-
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self, SizeOf(self), 0);

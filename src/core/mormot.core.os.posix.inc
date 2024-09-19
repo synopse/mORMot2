@@ -163,15 +163,6 @@ begin
   result := RawUtf8(format(Fmt, Args)); // good enough (seldom called)
 end;
 
-function SecurityDescriptorToText(sd: pointer; len: PtrInt; var text: RawUtf8): boolean;
-var
-  decoder: TSecDesc;
-begin
-  result := decoder.FromBinary(sd, len); // decode self-relative binary buffer
-  if result then
-    text := decoder.ToText; // our SDDL emitter
-end;
-
 
 { ****************** Unicode, Time, File process }
 

@@ -3143,8 +3143,8 @@ begin
         exit;
       end;
     atsSecurityDescriptor:
-      if SecurityDescriptorToText(pointer(s), length(s), s) then
-        exit; // use WinAPI or hexa representation
+      if SecurityDescriptorToText(s, s) then // use our TSecDesc wrapper
+        exit;
     atsFileTime: // 64-bit FileTime
       begin
         ft := GetQWord(pointer(s), err);
