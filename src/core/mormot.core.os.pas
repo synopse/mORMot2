@@ -6956,6 +6956,8 @@ begin
     result := TextToSid(p, tmp); // parse e.g. S-1-5-32-544
     if result then
       FastSetRawByteString(RawByteString(sid), @tmp, SidLength(@tmp));
+    while p^ = ' ' do
+      inc(p);
     exit;
   end;
   result := false;
@@ -6971,6 +6973,8 @@ begin
   else
     KnownRidSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom, sid);
   inc(p, 2);
+  while p^ = ' ' do
+    inc(p);
   result := true;
 end;
 
@@ -7358,9 +7362,11 @@ begin
   while s^ = ' ' do
     inc(s);
   p := s;
-  while not (s^ in [#0, ';', ')']) do
+  while not (s^ in [#0, ' ', ';', ')']) do
     inc(s);
   SetString(u, p, s - p);
+  while s^ = ' ' do
+    inc(s);
   result := s^ = ';';
   p := s;
 end;
@@ -7378,7 +7384,10 @@ begin
     exit;
   u[0] := #2;
   PWord(@u[1])^ := PWord(s)^;
-  p := s + 2;
+  inc(s, 2);
+  while s^ = ' ' do
+    inc(s);
+  p := s;
   result := true;
 end;
 
@@ -7418,6 +7427,8 @@ var
 begin
   result := false;
   ace.AceType := satUnknown;
+  while p^ = ' ' do
+    inc(p);
   if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
     if SddlNextInteger(p, mask) then
       ace.RawType := mask
@@ -7528,21 +7539,29 @@ function TSecDesc.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): bool
   function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
   begin
     result := false;
+    while p^ = ' ' do
+      inc(p);
     if p^ = 'P' then
     begin
       include(Flags, pr);
       inc(p);
     end;
+    while p^ = ' ' do
+      inc(p);
     if PWord(p)^ = ord('A') + ord('R') shl 8 then
     begin
       include(Flags, ar);
       inc(p, 2);
     end;
+    while p^ = ' ' do
+      inc(p);
     if PWord(p)^ = ord('A') + ord('I') shl 8 then
     begin
       include(Flags, ai);
       inc(p, 2);
     end;
+    while p^ = ' ' do
+      inc(p);
     if p^ <> '(' then
       exit;
     repeat

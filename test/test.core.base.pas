@@ -6521,7 +6521,7 @@ begin
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
   Check(not sd.IsEqual(sd2));
-  Check(sd.FromText('O:DUG:DAD:(A; ;FA; ;; DA)', dom), 'dom1');
+  Check(sd.FromText(' O: DU G: DA D: ( A ; ; FA ; ; ; DA ) ', dom), 'dom1');
   Check(not sd.IsEqual(sd2));
   u := sd.ToText;
   CheckEqual(u, FormatUtf8('O:%-513G:%-512D:(A;;FA;;;%-512)', [dom, dom, dom]));
