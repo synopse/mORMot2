@@ -1936,6 +1936,10 @@ type
     // - replace deprecated TTextWriter.RegisterCustomJSONSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
+    /// register some custom functions for JSON serialization of a given class
+    // - more simple than TOnRttiJsonRead and TOnRttiJsonWrite event callbacks
+    class function RegisterCustomSerializers(Info: PRttiInfo;
+      Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText() or RegisterCustomEnumValues()
     class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
@@ -10373,9 +10377,9 @@ var
   C: TClass;
   n: integer;
 begin
-  // set Name and Flags from Props[]
+  // 1. set TRttiCustom properties, e.g. Name and Flags from Props[]
   inherited SetParserType(aParser, aParserComplex);
-  // set comparison functions
+  // 2. set comparison functions depending on the actual type
   fCompare[true]  := RTTI_COMPARE[true][Kind];  // generic comparison
   fCompare[false] := RTTI_COMPARE[false][Kind];
   if rcfHasRttiOrd in fCache.Flags then
@@ -10423,7 +10427,7 @@ begin
     fCompare[true] := @_BC_Default;
     fCompare[false] := @_BC_Default;
   end;
-  // set class serialization and initialization
+  // 3. set JSON serialization depending on the actual type
   if aParser = ptClass then
   begin
     // default JSON serialization of published props
@@ -10976,7 +10980,6 @@ begin
   end;
 end;
 
-
 procedure TRttiJson.RawSaveJson(Data: pointer; const Ctxt: TJsonSaveContext);
 begin
   TRttiJsonSave(fJsonSave)(Data, Ctxt);
@@ -11001,6 +11004,14 @@ begin
   result.fJsonReader := TMethod(Reader);
   if result.Kind <> rkDynArray then // Reader/Writer are for items, not array
     result.SetParserType(result.Parser, result.ParserComplex);
+end;
+
+class function TRttiJson.RegisterCustomSerializers(Info: PRttiInfo;
+  Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson;
+begin
+  result := Rtti.RegisterType(Info) as TRttiJson;
+  result.fJsonLoad := @Reader;
+  result.fJsonSave := @Writer;
 end;
 
 class function TRttiJson.RegisterCustomSerializerClass(ObjectClass: TClass;
