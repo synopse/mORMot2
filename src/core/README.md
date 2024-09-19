@@ -60,8 +60,8 @@ This unit uses MacOSAll and link several toolkits, so was not included in `mormo
 
 Cross-Platform Operating System Security Definitions
 - Security IDentifier (SID) Definitions
-- Security Descriptor Definition Language (SDDL) Definitions
 - Discretionary Access Control List (DACL) Definitions
+- Security Descriptor Definition Language (SDDL) Definitions
 - Windows API Specific Security Types and Functions
 
 Even if most of those security definitions comes from the Windows/AD world, our framework (re)implemented them in a cross-platform way.

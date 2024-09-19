@@ -8,8 +8,8 @@ unit mormot.core.os.security;
 
   Cross-Platform Operating System Security Definitions
   - Security IDentifier (SID) Definitions
-  - Security Descriptor Definition Language (SDDL) Definitions
   - Discretionary Access Control List (DACL) Definitions
+  - Security Descriptor Definition Language (SDDL) Definitions
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -185,6 +185,7 @@ type
 
   /// custom binary buffer type used as convenient Windows SID storage
   RawSid = type RawByteString;
+  PRawSid = ^RawSid;
 
   /// a dynamic array of binary SID storage buffers
   RawSidDynArray = array of RawSid;
@@ -292,24 +293,6 @@ function SameDomain(a, b: PSid): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 
-{ ****************** Security Descriptor Definition Language (SDDL) Definitions }
-
-/// append a binary SID in its SDDL text form
-// - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
-// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
-// S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
-
-/// parse a SID from its SDDL text form into its binary buffer
-// - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
-// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
-// 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
-function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
-
-function KnownSidToSddl(wks: TWellKnownSid): RawUtf8; // for unit tests only
-
-
-
 { ****************** Discretionary Access Control List (DACL) Definitions }
 
 type
@@ -324,22 +307,42 @@ type
     samDeleteTree,           // DT
     samListObject,           // LO
     samControlAccess,        // CR
-    sam9, sam10, sam11, sam12, sam13, sam14, sam15,
+    sam9,
+    sam10,
+    sam11,
+    sam12,
+    sam13,
+    sam14,
+    sam15,
     samDelete,               // SD
     samReadControl,          // RC
     samWriteDac,             // WD
     samWriteOwner,           // WO
     samSynchronize,
-    sam21, sam22, sam23,
+    sam21,
+    sam22,
+    sam23,
     samAccessSystemSecurity,
     samMaximumAllowed,
-    sam26, sam27,
+    sam26,
+    sam27,
     samGenericAll,           // GA
     samGenericExecute,       // GX
     samGenericWrite,         // GW
     samGenericRead);         // GR
   /// 32-bit standard and generic access rights in TSecAce.Mask
   TSecAccessMask = set of TSecAccess;
+
+  /// TSecAce.Mask constant values with their own SDDL identifier
+  TSecAccessRight = (
+    sarFileAll,
+    sarFileRead,
+    sarFileWrite,
+    sarFileExecute,
+    sarKeyAll,
+    sarKeyRead,
+    sarKeyWrite,
+    sarKeyExecute);
 
   /// custom binary buffer type used as Windows self-relative Security Descriptor
   RawSecurityDescriptor = type RawByteString;
@@ -351,7 +354,8 @@ type
     scDaclDefaulted,
     scSaclPresent,
     scSaclDefaulted,
-    sc6, sc7,
+    sc6,
+    sc7,
     scDaclAutoInheritReq,
     scSaclAutoInheritReq,
     scDaclAutoInherit,
@@ -475,20 +479,74 @@ type
   end;
 
 const
-  satCommon = [satAccessAllowed, satAccessDenied, satAudit,  satAlarm,
-               satCallbackAccessAllowed, satCallbackAccessDenied,
-               satCallbackAudit,  satCallbackAlarm,
-               satMandatoryLabel, satResourceAttribute,
-               satScoppedPolicy,  satAccessFilter];
-  satObject = [satObjectAccessAllowed, satObjectAccessDenied,
-               satObjectAudit, satObjectAlarm,
-               satCallbackObjectAccessAllowed, satCallbackObjectAccessDenied,
-               satCallbackObjectAudit, satCallbackObjectAlarm];
-  satConditional = [satCallbackAccessAllowed, satCallbackAccessDenied,
-               satCallbackObjectAccessAllowed, satCallbackObjectAccessDenied];
-  safInheritanceFlags = [safObjectInherit, safContainerInherit,
-                         safNoPropagateInherit, safInheritOnly];
-  safAuditFlags = [safSuccessfulAccess, safFailedAccess];
+  /// the ACE which have just a Mask and SID in their definition
+  satCommon = [
+    satAccessAllowed,
+    satAccessDenied,
+    satAudit,
+    satAlarm,
+    satCallbackAccessAllowed,
+    satCallbackAccessDenied,
+    satCallbackAudit,
+    satCallbackAlarm,
+    satMandatoryLabel,
+    satResourceAttribute,
+    satScoppedPolicy,
+    satAccessFilter];
+
+  /// the ACE which have a Mask, SID and Object UUIDs in their definition
+  satObject = [
+    satObjectAccessAllowed,
+    satObjectAccessDenied,
+    satObjectAudit,
+    satObjectAlarm,
+    satCallbackObjectAccessAllowed,
+    satCallbackObjectAccessDenied,
+    satCallbackObjectAudit,
+    satCallbackObjectAlarm];
+
+  /// the ACE which have a conditional expression as TSecAce.Opaque member
+  satConditional = [
+    satCallbackAccessAllowed,
+    satCallbackAccessDenied,
+    satCallbackObjectAccessAllowed,
+    satCallbackObjectAccessDenied];
+
+  /// defined in TSecAce.Flags for an ACE which has inheritance
+  safInheritanceFlags = [
+    safObjectInherit,
+    safContainerInherit,
+    safNoPropagateInherit,
+    safInheritOnly];
+
+  /// defined in TSecAce.Flags for an ACE which refers to audit
+  safAuditFlags = [
+    safSuccessfulAccess,
+    safFailedAccess];
+
+  {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
+
+  SAR_FILE_ALL_ACCESS      = $001f01ff;
+  SAR_FILE_GENERIC_READ    = $00120089;
+  SAR_FILE_GENERIC_WRITE   = $00120116;
+  SAR_FILE_GENERIC_EXECUTE = $001200a0;
+
+  SAR_KEY_ALL_ACCESS       = $000f003f;
+  SAR_KEY_READ             = $00020019;
+  SAR_KEY_WRITE            = $00020006;
+  SAR_KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
+
+  /// match the TSecAce.Mask constant values with their own SDDL identifier
+  SAR_MASK: array[TSecAccessRight] of cardinal = (
+    SAR_FILE_ALL_ACCESS,       // sarFileAll
+    SAR_FILE_GENERIC_READ,     // sarFileRead
+    SAR_FILE_GENERIC_WRITE,    // sarFileWrite
+    SAR_FILE_GENERIC_EXECUTE,  // sarFileExecute
+    SAR_KEY_ALL_ACCESS,        // sarKeyAll
+    SAR_KEY_READ,              // sarKeyRead
+    SAR_KEY_WRITE,             // sarKeyWrite
+    SAR_KEY_EXECUTE);          // sarKeyExecute
+
 
 /// check the conformity of a self-relative binary Security Descriptor buffer
 // - only check the TSecDesc main fields consistency
@@ -497,12 +555,130 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 /// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
 // - will wrap our TSecDesc binary decoder / SDDL encoder on all platforms
 // - returns true if the conversion succeeded
-// - function is able to convert itself, i.e. allows pointer(sd)=pointer(text)
+// - returns false, and don't change the text value on rendering error
+// - function is able to convert the value itself, i.e. allows @sd = @text
 // - could also generate SDDL RID placeholders, if dom binary is supplied,
 // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
 // - on Windows, you can call native CryptoApi.SecurityDescriptorToText()
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid = nil): boolean;
+
+
+{ ****************** Security Descriptor Definition Language (SDDL) Definitions }
+
+/// append a binary SID in its SDDL text form
+// - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
+// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
+// S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
+
+/// parse a SID from its SDDL text form into its binary buffer
+// - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
+// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
+// 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
+function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
+
+// defined for unit tests only
+function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
+
+
+const
+  /// the last TWellKnownSid item which has a SDDL identifier
+  wksLastSddl = wksBuiltinWriteRestrictedCode;
+
+  /// allow to quickly check if a TWellKnownSid has a SDDL identifier
+  wksWithSddl = [wksWorld .. wksLastSddl];
+
+  /// allow to quickly check if a TSecAccess has a SDDL identifier
+  samWithSddl = [samCreateChild .. samControlAccess,
+                 samDelete .. samWriteOwner,
+                 samGenericAll .. samGenericRead];
+
+
+  { SDDL standard identifiers use string[3] for 32-bit efficient alignment }
+
+  /// define how ACE kinds in TSecAce.AceType are stored as SDDL
+  SAT_SDDL: array[TSecAceType] of string[3] = (
+    'A',   // satAccessAllowed
+    'D',   // satAccessDenied
+    'AU',  // satAudit
+    'AL',  // satAlarm
+    '',    // satCompoundAllowed
+    'OA',  // satObjectAccessAllowed
+    'OD',  // satObjectAccessDenied
+    'OU',  // satObjectAudit
+    'OL',  // satObjectAlarm
+    'XA',  // satCallbackAccessAllowed
+    'XD',  // satCallbackAccessDenied
+    'ZA',  // satCallbackObjectAccessAllowed
+    '',    // satCallbackObjectAccessDenied
+    'XU',  // satCallbackAudit
+    '',    // satCallbackAlarm
+    '',    // satCallbackObjectAudit
+    '',    // satCallbackObjectAlarm
+    'ML',  // satMandatoryLabel
+    'RA',  // satResourceAttribute
+    'SP',  // satScoppedPolicy
+    'TL',  // satProcessTrustLabel
+    'FL',  // satAccessFilter
+    '');   // satUnknown
+
+  /// define how ACE flags in TSecAce.Flags are stored as SDDL
+  SAF_SDDL: array[TSecAceFlag] of string[3] = (
+    'OI',  // safObjectInherit
+    'CI',  // safContainerInherit
+    'NP',  // safNoPropagateInherit
+    'IO',  // safInheritOnly
+    'ID',  // safInherited
+    '',    // saf5
+    'SA',  // safSuccessfulAccess
+    'FA'); // safFailedAccess
+
+  /// define how ACE access rights bits in TSecAce.Mask are stored as SDDL
+  SAM_SDDL: array[TSecAccess] of string[3] = (
+    'CC',  // samCreateChild
+    'DC',  // samDeleteChild
+    'LC',  // samListChildren
+    'SW',  // samSelfWrite
+    'RP',  // samReadProp
+    'WP',  // samWriteProp
+    'DT',  // samDeleteTree
+    'LO',  // samListObject
+    'CR',  // samControlAccess
+    '',    // sam9
+    '',    // sam10
+    '',    // sam11
+    '',    // sam12
+    '',    // sam13
+    '',    // sam14
+    '',    // sam15
+    'SD',  // samDelete
+    'RC',  // samReadControl
+    'WD',  // samWriteDac
+    'WO',  // samWriteOwner
+    '',    // samSynchronize
+    '',    // sam21
+    '',    // sam22
+    '',    // sam23
+    '',    // samAccessSystemSecurity
+    '',    // samMaximumAllowed
+    '',    // sam26
+    '',    // sam27
+    'GA',  // samGenericAll
+    'GX',  // samGenericExecute
+    'GW',  // samGenericWrite
+    'GR'); // samGenericRead
+
+  /// define how full 32-bit ACE access rights in TSecAce.Mask are stored as SDDL
+  SAR_SDDL: array[TSecAccessRight] of string[3] = (
+    'FA',  //  sarFileAll
+    'FR',  //  sarFileRead
+    'FW',  //  sarFileWrite
+    'FX',  //  sarFileExecute
+    'KA',  //  sarKeyAll
+    'KR',  //  sarKeyRead
+    'KW',  //  sarKeyWrite
+    'KX'); //  sarKeyExecute
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -618,7 +794,7 @@ uses
 {$endif OSWINDOWS}
 
 
-{ some general wrapper functions, to avoid dependencies to mormot.core.text }
+{ some shared functions to avoid dependencies to mormot.core.text }
 
 function GetNextUInt32(var P: PUtf8Char): cardinal;
 var
@@ -1098,9 +1274,31 @@ begin
 end;
 
 const
+  // the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
   WKR_RID: array[TWellKnownRid] of word = (
-    $1f2, $1f4, $1f5, $1f6, $200, $201, $202, $203, $204, $205, $206, $207,
-    $208, $209, $20a, $20d, $20e, $20f, $1000, $2000, $2100, $3000, $4000);
+    $1f2,    // wkrGroupReadOnly
+    $1f4,    // wkrUserAdmin
+    $1f5,    // wkrUserGuest
+    $1f6,    // wkrServiceKrbtgt
+    $200,    // wkrGroupAdmins
+    $201,    // wkrGroupUsers
+    $202,    // wkrGroupGuests
+    $203,    // wkrGroupComputers
+    $204,    // wkrGroupControllers
+    $205,    // wkrGroupCertAdmins
+    $206,    // wkrGroupSchemaAdmins
+    $207,    // wkrGroupEntrepriseAdmins
+    $208,    // wkrGroupPolicyAdmins
+    $209,    // wkrGroupReadOnlyControllers
+    $20a,    // wkrGroupCloneableControllers
+    $20d,    // wkrGroupProtectedUsers
+    $20e,    // wkrGroupKeyAdmins
+    $20f,    // wkrGroupEntrepriseKeyAdmins
+    $1000,   // wkrSecurityMandatoryLow
+    $2000,   // wkrSecurityMandatoryMedium
+    $2100,   // wkrSecurityMandatoryMediumPlus
+    $3000,   // wkrSecurityMandatoryHigh
+    $4000);  // wkrSecurityMandatorySystem
 
 function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8;
 begin
@@ -1120,23 +1318,25 @@ begin
 end;
 
 function SameDomain(a, b: PSid): boolean;
-begin // both values are exepceted to be in a S-1-5-21-xx-xx-xx-RID layout
+begin // both values are expected to be in a S-1-5-21-xx-xx-xx-RID layout
   result := (PInt64Array(a)[0] = PInt64Array(b)[0]) and // rev+count+auth
             (PInt64Array(a)[1] = PInt64Array(b)[1]) and // auth[0..1]
             (PInt64Array(a)[2] = PInt64Array(b)[2]);    // auth[2..3]
+            // so auth[4] will contain any RID
 end;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) Definitions }
 
 const
-  wksLastSddl = wksBuiltinWriteRestrictedCode;
-  wksWithSddl = [wksWorld .. wksLastSddl];
+  // defined as a packed array of chars for fast SSE2 brute force search
   SID_SDDL: array[1 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2] of AnsiChar =
+    // TWellKnownSid
     '  WD    COCG                                    NU  ' +
     'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
-    '      ISCY      ERCDRAES  HAAA        WR' +      // TWellKnownSid
-    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI'; // TWellKnownRid
+    '      ISCY      ERCDRAES  HAAA        WR' +
+    // TWellKnownRid
+    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI';
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
@@ -1271,39 +1471,6 @@ begin
   val({$ifdef UNICODE}string{$endif}(u), c, err); // RTL handles 0x###
   result := err = 0;
 end;
-
-type
-  TSecAccessRight = (
-    sarFileAll, sarFileRead, sarFileWrite, sarFileExecute,
-    sarKeyAll,  sarKeyRead,  sarKeyWrite,  sarKeyExecute);
-
-const
-  // SDDL standard identifiers - use string[3] for 32-bit efficient alignment
-  SAT_SDDL: array[TSecAceType] of string[3] = (
-    'A', 'D', 'AU', 'AL', '', 'OA', 'OD', 'OU', 'OL', 'XA', 'XD', 'ZA', '',
-    'XU', '', '', '', 'ML', 'RA', 'SP', 'TL', 'FL', '');
-  SAF_SDDL: array[TSecAceFlag] of string[3] = (
-    'OI', 'CI', 'NP', 'IO', 'ID', '', 'SA', 'FA');
-  samWithSddl = [samCreateChild .. samControlAccess,
-                 samDelete .. samWriteOwner, samGenericAll .. samGenericRead];
-  SAM_SDDL: array[TSecAccess] of string[3] = (
-    'CC', 'DC', 'LC', 'SW', 'RP', 'WP', 'DT', 'LO', 'CR', '', '', '', '', '', '', '',
-    'SD', 'RC', 'WD', 'WO', '', '', '', '', '', '', '', '', 'GA', 'GX', 'GW', 'GR');
-  SAR_SDDL: array[TSecAccessRight] of string[3] = (
-    'FA', 'FR', 'FW', 'FX', 'KA', 'KR', 'KW', 'KX');
-
-  // some cross-platform definitions of main 32-bit Windows access rights
-  FILE_ALL_ACCESS      = $001f01ff;
-  FILE_GENERIC_READ    = $00120089;
-  FILE_GENERIC_WRITE   = $00120116;
-  FILE_GENERIC_EXECUTE = $001200a0;
-  KEY_ALL_ACCESS       = $000f003f;
-  KEY_READ             = $00020019;
-  KEY_WRITE            = $00020006;
-  KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
-  SAR_MASK: array[TSecAccessRight] of cardinal = (
-    FILE_ALL_ACCESS, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE,
-    KEY_ALL_ACCESS, KEY_READ, KEY_WRITE, KEY_EXECUTE);
 
 function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; dom: PSid): boolean;
 var
@@ -1498,6 +1665,7 @@ type
     Dacl: cardinal;
   end;
   PSD = ^TSD;
+
   // map the Access Control List header
   TACL = packed record
     AclRevision: byte;
@@ -1507,6 +1675,7 @@ type
     Sbz2: word;
   end;
   PACL = ^TACL;
+
   // map one Access Control Entry
   TACE = packed record
     // ACE header
