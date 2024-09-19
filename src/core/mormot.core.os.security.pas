@@ -33,6 +33,15 @@ uses
 { ****************** Security IDentifier (SID) Definitions }
 
 type
+  /// custom binary buffer type used as convenient Windows SID storage
+  // - mormot.crypt.secure will recognize this type and serialize its standard
+  // text as a JSON string
+  RawSid = type RawByteString;
+  PRawSid = ^RawSid;
+
+  /// a dynamic array of binary SID storage buffers
+  RawSidDynArray = array of RawSid;
+
   /// Security IDentifier (SID) Authority, encoded as 48-bit binary
   TSidAuth = array[0..5] of byte;
   PSidAuth = ^TSidAuth;
@@ -49,6 +58,75 @@ type
   PSid = ^TSid;
   PSids = array of PSid;
 
+
+/// a wrapper around MemCmp() on two Security IDentifier binary buffers
+// - will first compare by length, then by content
+function SidCompare(a, b: PSid): integer;
+
+/// compute the actual binary length of a Security IDentifier buffer, in bytes
+function SidLength(sid: PSid): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// allocate a RawSid instance from a PSid raw handler
+procedure ToRawSid(sid: PSid; out result: RawSid);
+
+/// check if a RawSid binary buffer has the expected length of a valid SID
+function IsValidRawSid(const sid: RawSid): boolean;
+
+/// search within SID dynamic array for a given SID
+function HasSid(const sids: PSids; sid: PSid): boolean;
+
+/// search within SID dynamic array for a given dynamic array of SID buffers
+function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
+
+/// append a SID buffer pointer to a dynamic array of SID buffers
+procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
+
+/// convert a Security IDentifier as text, following the standard representation
+procedure SidToTextShort(sid: PSid; var result: shortstring);
+
+/// convert a Security IDentifier as text, following the standard representation
+function SidToText(sid: PSid): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a Security IDentifier as text, following the standard representation
+// - this function is able to convert into itself, i.e. allows sid=pointer(text)
+procedure SidToText(sid: PSid; var text: RawUtf8); overload;
+
+/// convert several Security IDentifier as text dynamic array
+function SidsToText(sids: PSids): TRawUtf8DynArray;
+
+/// convert a Security IDentifier as text, following the standard representation
+function RawSidToText(const sid: RawSid): RawUtf8;
+
+/// parse a Security IDentifier text, following the standard representation
+// - won't support hexadecimal 48-bit IdentifierAuthority, i.e. S-1-0x######-..
+// - will parse the input text buffer in-place, and return the next position
+function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
+
+/// parse a Security IDentifier text, following the standard representation
+function TextToRawSid(const text: RawUtf8): RawSid; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// parse a Security IDentifier text, following the standard representation
+function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
+
+/// decode a domain SID text into a generic binary RID value
+// - returns true if Domain is '', or is in its 'S-1-5-21-xx-xx-xx' domain form
+// - will also accepts any 'S-1-5-21-xx-xx-xx-yyy' form, e.g. the current user SID
+// - if a domain SID, Dom binary buffer will contain a S-1-5-21-xx-xx-xx-0 value,
+// ready to be used with KnownRidSid(), SidSameDomain(), SddlAppendSid(),
+// SddlNextSid() or TSecDesc.AppendAsText functions
+function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
+
+/// quickly check if two binary SID buffers domain do overlap
+// - one of the values should be a domain SID in S-1-5-21-xx-xx-xx-RID layout,
+// typically from TryDomainTextToSid() output
+function SidSameDomain(a, b: PSid): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+
+type
   /// define a list of well-known Security IDentifier (SID) groups
   // - for instance, wksBuiltinAdministrators is set for local administrators
   // - warning: does not exactly match winnt.h WELL_KNOWN_SID_TYPE enumeration
@@ -183,66 +261,6 @@ type
   /// define a set of well-known RID
   TWellKnownRids = set of TWellKnownRid;
 
-  /// custom binary buffer type used as convenient Windows SID storage
-  RawSid = type RawByteString;
-  PRawSid = ^RawSid;
-
-  /// a dynamic array of binary SID storage buffers
-  RawSidDynArray = array of RawSid;
-
-
-/// a wrapper around MemCmp() on two Security IDentifier binary buffers
-// - will first compare by length, then by content
-function SidCompare(a, b: PSid): integer;
-
-/// compute the actual binary length of a Security IDentifier buffer, in bytes
-function SidLength(sid: PSid): PtrInt;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// allocate a RawSid instance from a PSid raw handler
-procedure ToRawSid(sid: PSid; out result: RawSid);
-
-/// check if a RawSid binary buffer has the expected length of a valid SID
-function IsValidRawSid(const sid: RawSid): boolean;
-
-/// search within SID dynamic array for a given SID
-function HasSid(const sids: PSids; sid: PSid): boolean;
-
-/// search within SID dynamic array for a given dynamic array of SID buffers
-function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
-
-/// append a SID buffer pointer to a dynamic array of SID buffers
-procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
-
-/// convert a Security IDentifier as text, following the standard representation
-procedure SidToTextShort(sid: PSid; var result: shortstring);
-
-/// convert a Security IDentifier as text, following the standard representation
-function SidToText(sid: PSid): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// convert a Security IDentifier as text, following the standard representation
-// - this function is able to convert into itself, i.e. allows sid=pointer(text)
-procedure SidToText(sid: PSid; var text: RawUtf8); overload;
-
-/// convert several Security IDentifier as text dynamic array
-function SidsToText(sids: PSids): TRawUtf8DynArray;
-
-/// convert a Security IDentifier as text, following the standard representation
-function RawSidToText(const sid: RawSid): RawUtf8;
-
-/// parse a Security IDentifier text, following the standard representation
-// - won't support hexadecimal 48-bit IdentifierAuthority, i.e. S-1-0x######-..
-// - will parse the input text buffer in-place, and return the next position
-function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
-
-/// parse a Security IDentifier text, following the standard representation
-function TextToRawSid(const text: RawUtf8): RawSid; overload;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// parse a Security IDentifier text, following the standard representation
-function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
-
 /// returns a Security IDentifier of a well-known SID as binary
 // - is using an internal cache for the returned RawSid instances
 function KnownRawSid(wks: TWellKnownSid): RawSid; overload;
@@ -275,27 +293,20 @@ function KnownRawSid(wkr: TWellKnownRid; const Domain: RawUtf8): RawSid; overloa
 // - e.g. wkrUserAdmin as 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx-500'
 function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8; overload;
 
-/// decode a domain SID text into a generic binary RID value
-// - returns true if Domain is '', or is in its 'S-1-5-21-xx-xx-xx' domain form
-// - will also accepts any 'S-1-5-21-xx-xx-xx-yyy' form, e.g. the current user SID
-// - if a domain SID, Dom binary buffer will contain a S-1-5-21-xx-xx-xx-0 value,
-// ready to be used with KnownRidSid(), SameDomain(), SddlAppendSid(),
-// SddlNextSid() or TSecDesc.AppendAsText functions
-function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
-
 /// compute a binary SID from a decoded binary Domain and a well-known RID
 // - more efficient than KnownRawSid() overload and KnownSidToText()
 procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
-
-/// quickly check if two binary SID buffers domain do overlap
-// - one the values should be a domain SID in S-1-5-21-xx-xx-xx-RID layout
-function SameDomain(a, b: PSid): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
 
 
 { ****************** Discretionary Access Control List (DACL) Definitions }
 
 type
+  /// custom binary buffer type used as Windows self-relative Security Descriptor
+  // - mormot.crypt.secure will recognize this type and serialize its SDDL
+  // text as a JSON string
+  RawSecurityDescriptor = type RawByteString;
+  PRawSecurityDescriptor = ^RawSecurityDescriptor;
+
   /// standard and generic access rights in TSecAce.Mask
   TSecAccess = (
     samCreateChild,          // CC
@@ -343,9 +354,6 @@ type
     sarKeyRead,
     sarKeyWrite,
     sarKeyExecute);
-
-  /// custom binary buffer type used as Windows self-relative Security Descriptor
-  RawSecurityDescriptor = type RawByteString;
 
   TSecControl = (
     scOwnerDefaulted,
@@ -594,8 +602,7 @@ const
                  samDelete .. samWriteOwner,
                  samGenericAll .. samGenericRead];
 
-
-  { SDDL standard identifiers use string[3] for 32-bit efficient alignment }
+  { SDDL standard identifiers using string[3] for efficient 32-bit alignment }
 
   /// define how ACE kinds in TSecAce.AceType are stored as SDDL
   SAT_SDDL: array[TSecAceType] of string[3] = (
@@ -1010,6 +1017,37 @@ begin
     ToRawSid(@tmp, sid);
 end;
 
+function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
+var
+  tmp: TSid;
+  p: PUtf8Char;
+begin
+  result := true;
+  if Domain = '' then
+    exit; // no Domain involved: continue
+  p := pointer(Domain);
+  result := TextToSid(p, tmp) and // expects S-1-5-21-xx-xx-xx[-rid]
+            (p^ = #0) and
+            (tmp.SubAuthorityCount in [4, 5]) and // allow domain or rid
+            (tmp.SubAuthority[0] = 21) and
+            (PWord(@tmp.IdentifierAuthority)^ = 0) and
+            (PCardinal(@tmp.IdentifierAuthority[2])^ = $05000000);
+  if not result then
+    exit; // this Domain text is no valid domain SID
+  tmp.SubAuthorityCount := 5; // reserve place for WKR_RID[wkr] trailer
+  tmp.SubAuthority[4] := 0;
+  ToRawSid(@tmp, Dom);        // output Dom as S-1-5-21-xx-xx-xx-RID
+end;
+
+function SidSameDomain(a, b: PSid): boolean;
+begin // both values are expected to be in a S-1-5-21-xx-xx-xx-RID layout
+  result := (PInt64Array(a)[0] = PInt64Array(b)[0]) and // rev+count+auth
+            (PInt64Array(a)[1] = PInt64Array(b)[1]) and // auth[0..1]
+            (PInt64Array(a)[2] = PInt64Array(b)[2]);    // auth[2..3]
+            // so auth[4] will contain any RID
+end;
+
+
 var
   KNOWN_SID_SAFE: TLightLock; // lighter than GlobalLock/GlobalUnLock
   KNOWN_SID: array[TWellKnownSid] of RawSid;
@@ -1251,28 +1289,6 @@ begin
   end;
 end;
 
-function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
-var
-  tmp: TSid;
-  p: PUtf8Char;
-begin
-  result := true;
-  if Domain = '' then
-    exit; // no Domain involved: continue
-  p := pointer(Domain);
-  result := TextToSid(p, tmp) and // expects S-1-5-21-xx-xx-xx[-rid]
-            (p^ = #0) and
-            (tmp.SubAuthorityCount in [4, 5]) and // allow domain or rid
-            (tmp.SubAuthority[0] = 21) and
-            (PWord(@tmp.IdentifierAuthority)^ = 0) and
-            (PCardinal(@tmp.IdentifierAuthority[2])^ = $05000000);
-  if not result then
-    exit; // this Domain text is no valid domain SID
-  tmp.SubAuthorityCount := 5; // reserve place for WKR_RID[wkr] trailer
-  tmp.SubAuthority[4] := 0;
-  ToRawSid(@tmp, Dom);        // output Dom as S-1-5-21-xx-xx-xx-RID
-end;
-
 const
   // the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
   WKR_RID: array[TWellKnownRid] of word = (
@@ -1315,14 +1331,6 @@ procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
 begin
   FastSetRawByteString(RawByteString(result), pointer(dom), SID_MINLEN + 5 * 4);
   PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
-end;
-
-function SameDomain(a, b: PSid): boolean;
-begin // both values are expected to be in a S-1-5-21-xx-xx-xx-RID layout
-  result := (PInt64Array(a)[0] = PInt64Array(b)[0]) and // rev+count+auth
-            (PInt64Array(a)[1] = PInt64Array(b)[1]) and // auth[0..1]
-            (PInt64Array(a)[2] = PInt64Array(b)[2]);    // auth[2..3]
-            // so auth[4] will contain any RID
 end;
 
 
@@ -1395,7 +1403,7 @@ begin
     c := PWordArray(@SID_SDDL)^[ord(k)]
   else if (k = wksNull) and
           (dom <> nil) and
-          SameDomain(sid, dom) and
+          SidSameDomain(sid, dom) and
           (sid^.SubAuthority[4] <= $4000{WKR_RID[high(WKR_RID)]}) then
   begin
     i := WordScanIndex(@WKR_RID, length(WKR_RID), sid^.SubAuthority[4]);
