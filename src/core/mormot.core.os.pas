@@ -771,7 +771,7 @@ type
     /// remove any previous content
     procedure Clear;
     /// compare the fields of this instance with another
-    function Compare(const sd: TSecDesc): boolean;
+    function IsEqual(const sd: TSecDesc): boolean;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
@@ -6960,7 +6960,7 @@ begin
             IsEqualGuid(a.InheritedObjectType, b.InheritedObjectType);
 end;
 
-function TSecDesc.Compare(const sd: TSecDesc): boolean;
+function TSecDesc.IsEqual(const sd: TSecDesc): boolean;
 var
   i: PtrInt;
 begin
