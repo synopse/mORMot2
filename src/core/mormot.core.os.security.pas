@@ -17,6 +17,8 @@ unit mormot.core.os.security;
   This low-level unit only refers to mormot.core.base and mormot.core.os.
 
   *****************************************************************************
+
+    TODO: proper ACE conditional expression binary + SDDL support
 }
 
 interface
@@ -415,6 +417,10 @@ type
   /// high-level supported ACE flags in TSecAce.Flags
   TSecAceFlags = set of TSecAceFlag;
 
+  /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
+  TSecAceScope = (
+    sasDacl,
+    sasSacl);
 
   {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
 
@@ -461,6 +467,11 @@ type
     function ToBinary(dest: PAnsiChar): PtrInt;
     /// decode a self-relative binary buffer into this (cleared) entry
     function FromBinary(p, max: PByte): boolean;
+    /// user-friendly set the properties of this ACE
+    // - SID and Mask are supplied in their regular / SDDL text form
+    // - returns true on success - i.e. if all input params were correct
+    function Fill(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
+      dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -480,6 +491,8 @@ type
   {$else}
   TSecurityDescriptor = object
   {$endif USERECORDWITHMETHODS}
+  private
+    function InternalAdd(scope: TSecAceScope; out dest: PSecAcl): PSecAce;
   public
     /// the owner security identifier (SID)
     Owner: RawSid;
@@ -517,6 +530,18 @@ type
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
     procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
+    /// add one new ACE to the DACL (or SACL)
+    // - SID and Mask are supplied in their regular / SDDL text form
+    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
+    // - return nil on sidText/maskSddl parsing error, or the newly added entry
+    function Add(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
+      dom: PSid = nil; const condExp: RawUtf8 = ''; scope: TSecAceScope = sasDacl;
+      saf: TSecAceFlags = []): PSecAce; overload;
+    /// add one new ACE to the DACL (or SACL) from SDDL text
+    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
+    // - return nil on sddl input text parsing error, or the newly added entry
+    function Add(const sddl: RawUtf8; dom: PSid = nil;
+      scope: TSecAceScope = sasDacl): PSecAce; overload;
   end;
 
   {$A+}
@@ -1694,6 +1719,27 @@ begin
             IsEqualGuid(InheritedObjectType, ace.InheritedObjectType);
 end;
 
+function TSecAce.Fill(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
+  dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
+var
+  p: PUtf8Char;
+begin
+  Clear;
+  result := false;
+  if sat = satUnknown then
+    exit;
+  p := pointer(sidText);
+  if not SddlNextSid(p, Sid, dom) then
+    exit;
+  p := pointer(maskSddl);
+  if not SddlNextMask(p, Mask) then
+    exit;
+  AceType := sat;
+  RawType := ord(sat) + 1;
+  Flags := saf;
+  result := true;
+end;
+
 procedure TSecAce.AppendAsText(var s: ShortString; dom: PSid);
 var
   f: TSecAceFlag;
@@ -2217,6 +2263,51 @@ begin
   AppendAcl(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
   tmp := 'S:';
   AppendAcl(Sacl, scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit);
+end;
+
+function TSecurityDescriptor.InternalAdd(scope: TSecAceScope;
+  out dest: PSecAcl): PSecAce;
+var
+  n: PtrInt;
+begin
+  dest := @Dacl;
+  if scope = sasSacl then
+    dest := @Sacl;
+  n := length(dest^);
+  SetLength(dest^, n + 1); // append
+  result := @dest^[n];
+end;
+
+function TSecurityDescriptor.Add(sat: TSecAceType;
+  const sidText, maskSddl: RawUtf8; dom: PSid; const condExp: RawUtf8;
+  scope: TSecAceScope; saf: TSecAceFlags): PSecAce;
+var
+  dest: PSecAcl;
+begin
+  result := InternalAdd(scope, dest);
+  if result^.Fill(sat, sidText, maskSddl, dom, condExp, saf) then
+    exit; // succes
+  SetLength(dest^, length(dest^) - 1); // remove
+  result := nil;
+end;
+
+function TSecurityDescriptor.Add(const sddl: RawUtf8; dom: PSid;
+  scope: TSecAceScope): PSecAce;
+var
+  p: PUtf8Char;
+  dest: PSecAcl;
+begin
+  result := nil;
+  p := pointer(sddl);
+  if (p = nil) or
+     (p^ <> '(') then
+    exit;
+  inc(p);
+  result := InternalAdd(scope, dest);
+  if result^.FromText(p, dom) then
+    exit;
+  SetLength(dest^, length(dest^) - 1);
+  result := nil;
 end;
 
 
