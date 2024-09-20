@@ -3602,6 +3602,16 @@ function AsnDump(const Value: TAsnObject): RawUtf8;
 
 
 
+/// serialize a TSecurityDescriptor instance into JSON
+// - here to avoid dependency of mormot.core.os.security to mormot.core.json
+function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
+
+/// unserialize a TSecurityDescriptor instance from JSON
+// - here to avoid dependency of mormot.core.os.security to mormot.core.json
+function SecurityDescriptorFromJson(const Json: RawUtf8;
+  out SD: TSecurityDescriptor): boolean;
+
+
 implementation
 
 uses
@@ -9847,7 +9857,7 @@ end;
 
 procedure _JL_RawSid(Data: PRawSid; var Ctxt: TJsonParserContext);
 var
-  tmp: TSid; // maximum size possible on stack (1032 bytes)
+  tmp: TSid;
 begin
   if Ctxt.ParseNext then
     if Ctxt.Value = nil then // null
@@ -9898,14 +9908,57 @@ begin
   Ctxt.W.AddDirect('"');
 end;
 
+procedure _JL_Mask(Data: PSecAccessMask; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.ParseNext then
+    if Ctxt.Value = nil then // null
+      Data^ := []
+    else
+      Ctxt.Valid := Ctxt.WasString and
+        SddlNextMask(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value, Data^);
+end;
+
+procedure _JS_Mask(Data: PSecAccessMask; const Ctxt: TJsonSaveContext);
+var
+  tmp: shortstring;
+begin
+  Ctxt.W.Add('"');
+  tmp[0] := #0;
+  SddlAppendMask(tmp, Data^);
+  Ctxt.W.AddShort(tmp);
+  Ctxt.W.AddDirect('"');
+end;
+
+function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
+begin
+  SaveJson(SD, TypeInfo(TSecurityDescriptor), [twoIgnoreDefaultInRecord,
+    twoEnumSetsAsTextInRecord, twoTrimLeftEnumSets], result);
+end;
+
+function SecurityDescriptorFromJson(const Json: RawUtf8;
+  out SD: TSecurityDescriptor): boolean;
+begin
+  result := RecordLoadJson(SD, Json, TypeInfo(TSecurityDescriptor));
+end;
+
+const
+  _TSynSignerParams = 'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer';
+  _TSecAce = 'type:TSecAceType flags:TSecAceFlags raw:word mask:TSecAccessMask ' +
+    'sid:RawSid opaque:RawUtf8 obj,inh:TGuid';
+  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAces flags:TSecControls';
+
 procedure InitializeUnit;
 begin
   // register proper JSON serialization of security related types
-  Rtti.RegisterType(TypeInfo(TSignAlgo));
-  Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
-    'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
-  TRttiJson.RegisterCustomSerializers(TypeInfo(RawSid), @_JL_RawSid, @_JS_RawSid);
-  TRttiJson.RegisterCustomSerializers(TypeInfo(RawSecurityDescriptor), @_JL_SD, @_JS_SD);
+  Rtti.RegisterTypes([TypeInfo(TSignAlgo), TypeInfo(TSecAceType),
+    TypeInfo(TSecAceFlags), TypeInfo(TSecAccessMask), TypeInfo(TSecControls)]);
+  Rtti.RegisterFromText(TypeInfo(TSynSignerParams), _TSynSignerParams);
+  TRttiJson.RegisterCustomSerializers([
+    TypeInfo(RawSid),                @_JL_RawSid, @_JS_RawSid,
+    TypeInfo(RawSecurityDescriptor), @_JL_SD,     @_JS_SD,
+    TypeInfo(TSecAccessMask),        @_JL_Mask,   @_JS_Mask]);
+  Rtti.RegisterFromText(TypeInfo(TSecAces), _TSecAce);
+  Rtti.RegisterFromText(TypeInfo(TSecurityDescriptor), _TSecurityDescriptor);
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
   {$ifdef OSWINDOWS}
   X509Parse := @WinX509Parse; // use mormot.lib.sspi.pas WinCertDecode()

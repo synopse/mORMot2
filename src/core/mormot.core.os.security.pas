@@ -453,6 +453,8 @@ type
 
   /// high-level cross-platform support of one Windows Security Descriptor
   // - can be loaded and exported as self-relative binary or SDDL text
+  // - JSON is supported via SecurityDescriptorToJson() and
+  // SecurityDescriptorFromJson() from mormot.crypt.secure
   {$ifdef USERECORDWITHMETHODS}
   TSecurityDescriptor = record
   {$else}
@@ -527,11 +529,14 @@ const
     satCallbackObjectAlarm];
 
   /// the ACE which have a conditional expression as TSecAce.Opaque member
+  // - see MS-DTYP OpenSpecs 2.4.4.17
   satConditional = [
     satCallbackAccessAllowed,
     satCallbackAccessDenied,
+    satCallbackAudit,
     satCallbackObjectAccessAllowed,
-    satCallbackObjectAccessDenied];
+    satCallbackObjectAccessDenied,
+    satCallbackObjectAudit];
 
   /// defined in TSecAce.Flags for an ACE which has inheritance
   safInheritanceFlags = [
