@@ -6461,7 +6461,7 @@ var
   i: PtrInt;
   c: TSecControls;
   bin, saved: RawSecurityDescriptor;
-  u, dom: RawUtf8;
+  u, dom, json: RawUtf8;
   domsid: RawSid;
   sd, sd2: TSecurityDescriptor;
   p: PUtf8Char;
@@ -6526,6 +6526,11 @@ begin
     Check(sd2.IsEqual(sd));
     bin := sd2.ToBinary;
     Check(bin = saved, 'saved2');
+    json := SecurityDescriptorToJson(sd);
+    Check(IsValidJson(json), 'savejson');
+    sd2.Clear;
+    Check(SecurityDescriptorFromJson(json, sd2), 'loadjson');
+    Check(sd.IsEqual(sd2));
   end;
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
