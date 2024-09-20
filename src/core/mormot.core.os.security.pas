@@ -18,7 +18,8 @@ unit mormot.core.os.security;
 
   *****************************************************************************
 
-    TODO: proper ACE conditional expression binary + SDDL support
+    TODO: proper ACE conditional expression binary + SDDL support: 2.4.4.17.1
+    at https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
 }
 
 interface
@@ -343,6 +344,7 @@ type
     samGenericExecute,       // GX
     samGenericWrite,         // GW
     samGenericRead);         // GR
+
   /// 32-bit standard and generic access rights in TSecAce.Mask
   TSecAccessMask = set of TSecAccess;
   PSecAccessMask = ^TSecAccessMask;
@@ -689,14 +691,6 @@ const
   /// the last TWellKnownSid item which has a SDDL identifier
   wksLastSddl = wksBuiltinWriteRestrictedCode;
 
-  /// allow to quickly check if a TWellKnownSid may have a SDDL identifier
-  wksWithSddl = [wksWorld .. wksLastSddl];
-
-  /// allow to quickly check if a TSecAccess has a SDDL identifier
-  samWithSddl = [samCreateChild .. samControlAccess,
-                 samDelete .. samWriteOwner,
-                 samGenericAll .. samGenericRead];
-
   { SDDL standard identifiers using string[3] for efficient 32-bit alignment }
 
   /// define how ACE kinds in TSecAce.AceType are stored as SDDL
@@ -781,6 +775,18 @@ const
     'KR',  //  sarKeyRead
     'KW',  //  sarKeyWrite
     'KX'); //  sarKeyExecute
+
+var
+  { sets filled during unit initialization from actual code constants }
+
+  /// allow to quickly check if a TWellKnownSid has a SDDL identifier
+  wksWithSddl: TWellKnownSids;
+
+  /// allow to quickly check if a TWellKnownRid has a SDDL identifier
+  wkrWithSddl: TWellKnownRids;
+
+  /// allow to quickly check if a TSecAccess has a SDDL identifier
+  samWithSddl: TSecAccessMask;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -1433,13 +1439,15 @@ end;
 
 const
   // defined as a packed array of chars for fast SSE2 brute force search
-  SID_SDDL: array[1 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2] of AnsiChar =
+  SID_SDDL: array[0 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2 - 1] of AnsiChar =
     // TWellKnownSid
     '  WD    COCG                                    NU  ' +
     'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
-    '      ISCY      ERCDRAES  HAAA        WR' +
+    '      ISCY      ERCDRAES  HAAA        WR' +  // WR = wksLastSddl
     // TWellKnownRid
     'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI';
+var
+  SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
@@ -1478,32 +1486,31 @@ end;
 procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 var
   k: TWellKnownSid;
-  c: cardinal;
-  i: PtrInt;
+  r: TWellKnownRid;
   tmp: ShortString;
 begin
   if sid = nil then
     exit;
   k := SidToKnown(sid);
-  c := $2020;
   if k in wksWithSddl then
-    c := PWordArray(@SID_SDDL)^[ord(k)]
+  begin
+    AppendShortTwoChars(@SID_SDDLW[ord(k)], @s);
+    exit;
+  end
   else if (k = wksNull) and
           (dom <> nil) and
           SidSameDomain(sid, dom) and
-          (sid^.SubAuthority[4] <= $4000{WKR_RID[high(WKR_RID)]}) then
+          (sid^.SubAuthority[4] <= $4000) then
   begin
-    i := WordScanIndex(@WKR_RID, length(WKR_RID), sid^.SubAuthority[4]);
-    if i >= 0 then // found a TWellKnownRid
-      c := PWordArray(@SID_SDDL)^[i + (ord(wksLastSddl) + 1)];
+    r := TWellKnownRid(WordScanIndex(@WKR_RID, length(WKR_RID), sid^.SubAuthority[4]));
+    if r in wkrWithSddl then
+    begin
+      AppendShortTwoChars(@SID_SDDLW[(ord(wksLastSddl) + 1) + ord(r)], @s);
+      exit;
+    end
   end;
-  if c <> $2020 then
-    AppendShortTwoChars(@c, @s)
-  else
-  begin
-    SidToTextShort(sid, tmp);
-    AppendShort(tmp, s);
-  end;
+  SidToTextShort(sid, tmp);
+  AppendShort(tmp, s);
 end;
 
 function SddlNextPart(var p: PUtf8Char; out u: ShortString): boolean;
@@ -1557,7 +1564,7 @@ end;
 
 function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
 var
-  u: {$ifdef UNICODE}string{$else}ShortString{$endif};
+  u: ShortString;
   err: integer;
   s: PUtf8Char;
 begin
@@ -1566,7 +1573,7 @@ begin
     inc(s);
   until s^ in [#0, ';'];
   SetString(u, PAnsiChar(p), s - p);
-  val(u, c, err); // RTL handles 0x###
+  val({$ifdef UNICODE}string{$endif}(u), c, err); // RTL handles 0x###
   result := err = 0;
   p := s;
 end;
@@ -1627,7 +1634,7 @@ begin
     AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
   else if mask - samWithSddl <> [] then
   begin
-    AppendShortTwoChars('0x', @s);        // we don't have the tokens it needs
+    AppendShortTwoChars('0x', @s);        // we don't have all tokens it needs
     AppendShortIntHex(cardinal(mask), s); // store as @x##### hexadecimal
   end
   else
@@ -1687,9 +1694,8 @@ end;
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
 begin
   FastAssignNew(result); // no need to optimize: only used for regression tests
-  if (wks in wksWithSddl) and
-     (PWordArray(@SID_SDDL)^[ord(wks)] <> $2020) then
-    FastSetString(result, @PWordArray(@SID_SDDL)^[ord(wks)], 2);
+  if wks in wksWithSddl then
+    FastSetString(result, @SID_SDDLW[ord(wks)], 2);
 end;
 
 
@@ -2277,7 +2283,7 @@ var
   acl: PSecAcl;
   i: Ptrint;
 begin
-  tmp := SCOPE_SDDL[scope];
+  PCardinal(@tmp)^ := PCardinal(@SCOPE_SDDL[scope])^;
   if SCOPE_P[scope] in Flags then
     AppendShortChar('P', @tmp);
   if SCOPE_AR[scope] in Flags then
@@ -2707,6 +2713,34 @@ end;
 
 {$endif OSWINDOWS}
 
+procedure InitializeUnit;
+var
+  wks: TWellKnownSid;
+  wkr: TWellKnownRid;
+  sam: TSecAccess;
+  w: PWord;
+begin
+  w := @SID_SDDLW;
+  for wks := low(wks) to wksLastSddl do
+  begin
+    if w^ <> $2020 then
+      include(wksWithSddl, wks);
+    inc(w);
+  end;
+  for wkr := low(wkr) to high(wkr) do
+  begin
+    if w^ <> $2020 then
+      include(wkrWithSddl, wkr);
+    inc(w);
+  end;
+  for sam := low(sam) to high(sam) do
+    if SAM_SDDL[sam][0] <> #0  then
+      include(samWithSddl, sam);
+end;
+
+
+initialization
+  InitializeUnit;
 
 end.
 
