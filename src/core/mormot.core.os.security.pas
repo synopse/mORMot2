@@ -415,8 +415,16 @@ type
   /// high-level supported ACE flags in TSecAce.Flags
   TSecAceFlags = set of TSecAceFlag;
 
-  /// define one discretionary/system access control, as stored in TSecDesc.Dacl[]
-  TSecAce = packed record
+
+  {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
+
+  /// define one discretionary/system access control, as stored in TSecurityDescriptor.Dacl[]
+  {$ifdef USERECORDWITHMETHODS}
+  TSecAce = record
+  {$else}
+  TSecAce = object
+  {$endif USERECORDWITHMETHODS}
+  public
     /// high-level supported ACE kinds
     AceType: TSecAceType;
     // the ACE flags
@@ -437,6 +445,8 @@ type
     ObjectType: TGuid;
     /// the inherited Object Type GUID  (satObject only)
     InheritedObjectType: TGuid;
+    /// compare the fields of this instance with another
+    function IsEqual(const ace: TSecAce): boolean;
   end;
   /// define a discretionary access control list (DACL)
   TSecAces = array of TSecAce;
@@ -486,6 +496,8 @@ type
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
     procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
   end;
+
+  {$A+}
 
 const
   /// the ACE which have just a Mask and SID in their definition
@@ -1911,16 +1923,16 @@ end;
 
 { TSecAce }
 
-function AceCompare(const a, b: TSecAce): boolean;
+function TSecAce.IsEqual(const ace: TSecAce): boolean;
 begin
-  result := (a.AceType = b.AceType) and
-            (a.RawType = b.RawType) and
-            (a.Flags = b.Flags) and
-            (a.Mask = b.Mask) and
-            (a.Sid = b.Sid) and
-            (a.Opaque = b.Opaque) and
-            IsEqualGuid(a.ObjectType, b.ObjectType) and
-            IsEqualGuid(a.InheritedObjectType, b.InheritedObjectType);
+  result := (AceType = ace.AceType) and
+            (RawType = ace.RawType) and
+            (Flags = ace.Flags) and
+            (Mask = ace.Mask) and
+            (Sid = ace.Sid) and
+            (Opaque = ace.Opaque) and
+            IsEqualGuid(ObjectType, ace.ObjectType) and
+            IsEqualGuid(InheritedObjectType, ace.InheritedObjectType);
 end;
 
 
@@ -1944,10 +1956,10 @@ begin
      (length(Sacl) <> length(sd.Sacl)) then
     exit;
   for i := 0 to high(Dacl) do
-    if not AceCompare(Dacl[i], sd.Dacl[i]) then
+    if not Dacl[i].IsEqual(sd.Dacl[i]) then
       exit;
   for i := 0 to high(Sacl) do
-    if not AceCompare(Sacl[i], sd.Sacl[i]) then
+    if not Sacl[i].IsEqual(sd.Sacl[i]) then
       exit;
   result := true;
 end;
