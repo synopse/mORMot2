@@ -6458,7 +6458,7 @@ const
 
 procedure TTestCoreBase._SDDL;
 var
-  i: PtrInt;
+  i, j: PtrInt;
   c: TSecControls;
   bin, saved: RawSecurityDescriptor;
   u, dom, json: RawUtf8;
@@ -6492,6 +6492,7 @@ begin
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
+    // high-level IsValidSecurityDescriptor() and SecurityDescriptorToText()
     bin := Base64ToBin(SD_B64[i]);
     Check(bin <> '', 'b64');
     Check(IsValidSecurityDescriptor(pointer(bin), length(bin)), 'bin');
@@ -6501,6 +6502,7 @@ begin
     Check(CryptoApi.SecurityDescriptorToText(pointer(bin), u), 'winapi1');
     CheckEqual(u, SD_TXT[i], 'winapi2');
     {$endif OSWINDOWS}
+    // TSecurityDescriptor binary load and export as SDDL or binary
     sd.Clear;
     CheckEqual(sd.ToText, '', 'clear');
     Check(sd.FromBinary(bin));
@@ -6517,6 +6519,7 @@ begin
     {$endif OSWINDOWS}
     if i >= 3 then // serialization offsets seem not consistent
       Check(saved = bin, 'ToBinary');
+    // TSecurityDescriptor load from SDDL into another instance
     Check(not sd2.FromText(''));
     CheckEqual(sd2.ToText, '', 'fromnil');
     Check(not sd.IsEqual(sd2));
@@ -6526,19 +6529,27 @@ begin
     Check(sd2.IsEqual(sd));
     bin := sd2.ToBinary;
     Check(bin = saved, 'saved2');
+    // TSecurityDescriptor JSON
     json := SecurityDescriptorToJson(sd);
     Check(IsValidJson(json), 'savejson');
     sd2.Clear;
     Check(SecurityDescriptorFromJson(json, sd2), 'loadjson');
     Check(sd.IsEqual(sd2));
+    // TSecurityDescriptor.Add and Delete high-level methods
     if sd.Sacl <> nil then
       continue;
     Check(sd.Add('(A;;KA;;;SY)') <> nil);
-    u := u + '(A;;KA;;;SY)';
-    CheckEqual(sd.ToText, u);
+    CheckEqual(sd.ToText, u + '(A;;KA;;;SY)');
     Check(sd.Add(satCallbackAudit, 'AU', 'KR') <> nil);
-    u := u + '(XU;;KR;;;AU)';
+    CheckEqual(sd.ToText, u + '(A;;KA;;;SY)(XU;;KR;;;AU)');
+    sd.Delete(100);
+    sd.Delete(length(sd.Dacl) - 2);
+    CheckEqual(sd.ToText, u + '(XU;;KR;;;AU)');
+    sd.Delete(length(sd.Dacl) - 1);
     CheckEqual(sd.ToText, u);
+    for j := 1 to length(sd.Dacl) do
+      sd.Delete(0);
+    Check(sd.Dacl = nil);
   end;
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
@@ -6557,6 +6568,7 @@ begin
   u := 'rid';
   sd.AppendAsText(u, pointer(domsid));
   CheckEqual(u, 'ridO:DUG:DAD:(A;;FA;;;DA)');
+  // RID reference material with several domains
   for i := low(DOM_TXT) to high(DOM_TXT) do
   begin
     Check(TryDomainTextToSid(DOM_TXT[i], domsid));

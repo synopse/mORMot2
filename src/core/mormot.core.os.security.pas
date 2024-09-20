@@ -542,6 +542,8 @@ type
     // - return nil on sddl input text parsing error, or the newly added entry
     function Add(const sddl: RawUtf8; dom: PSid = nil;
       scope: TSecAceScope = sasDacl): PSecAce; overload;
+    /// delete one ACE from the DACL (or SACL)
+    procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
   end;
 
   {$A+}
@@ -2308,6 +2310,25 @@ begin
     exit;
   SetLength(dest^, length(dest^) - 1);
   result := nil;
+end;
+
+procedure TSecurityDescriptor.Delete(index: PtrUInt; scope: TSecAceScope);
+var
+  dest: PSecAcl;
+  n: PtrUInt;
+begin
+  dest := @Dacl;
+  if scope = sasSacl then
+    dest := @Sacl;
+  n := length(dest^);
+  if index >= n then
+    exit;
+  Finalize(dest^[index]);
+  dec(n);
+  if n = 0 then
+    dest^ := nil
+  else
+    DynArrayFakeDelete(dest^, index, n, SizeOf(dest^[0]));
 end;
 
 
