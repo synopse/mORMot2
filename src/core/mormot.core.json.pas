@@ -1936,10 +1936,14 @@ type
     // - replace deprecated TTextWriter.RegisterCustomJSONSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
       const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
-    /// register some custom functions for JSON serialization of a given class
+    /// register some custom functions for JSON serialization of a given type
     // - more simple than TOnRttiJsonRead and TOnRttiJsonWrite event callbacks
     class function RegisterCustomSerializers(Info: PRttiInfo;
-      Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson;
+      Reader: TRttiJsonLoad; Writer: TRttiJsonSave): TRttiJson; overload;
+    /// register some custom functions for JSON serialization of several types
+    // - expects the parameters as PRttiInfo / TRttiJsonLoad / TRttiJsonSave trios
+    class procedure RegisterCustomSerializers(
+      const InfoReaderWriterTrios: array of pointer); overload;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText() or RegisterCustomEnumValues()
     class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
@@ -11014,6 +11018,19 @@ begin
   result.fJsonSave := @Writer;
 end;
 
+class procedure TRttiJson.RegisterCustomSerializers(
+  const InfoReaderWriterTrios: array of pointer);
+var
+  i, n: PtrUInt;
+begin
+  n := length(InfoReaderWriterTrios);
+  if (n <> 0) and
+     (n mod 3 = 0) then
+    for i := 0 to (n div 3) - 1 do
+      RegisterCustomSerializers(InfoReaderWriterTrios[i * 3],
+        InfoReaderWriterTrios[i * 3 + 1], InfoReaderWriterTrios[i * 3 + 2]);
+end;
+
 class function TRttiJson.RegisterCustomSerializerClass(ObjectClass: TClass;
   const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJson;
 begin
@@ -11081,7 +11098,7 @@ end;
 class procedure TRttiJson.RegisterCustomEnumValues(
   const EnumSetTextTrios: array of pointer);
 var
-  i, n: PtrInt;
+  i, n: PtrUInt;
 begin
   n := length(EnumSetTextTrios);
   if (n <> 0) and
