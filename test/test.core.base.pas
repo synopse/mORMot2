@@ -6523,10 +6523,14 @@ begin
     // TSecurityDescriptor binary load and export as SDDL or binary
     sd.Clear;
     CheckEqual(sd.ToText, '', 'clear');
+    Check(sd.Flags = [scSelfRelative]);
     Check(sd.FromBinary(bin));
     Check(sd.Dacl <> nil, 'dacl');
+    Check(scSelfRelative in sd.Flags);
     Check((sd.Sacl = nil) = (i <> 0), 'sacl');
     CheckEqual(sd.ToText, SD_TXT[i], 'ToText');
+    Check(sd.Dacl[0].Opaque = '');
+    Check(sd.Dacl[0].ConditionalExpression = '');
     saved := sd.ToBinary;
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saved');
     Check(SecurityDescriptorToText(saved, u), 'sdtt2');
@@ -6553,9 +6557,21 @@ begin
     sd2.Clear;
     Check(SecurityDescriptorFromJson(json, sd2), 'loadjson');
     Check(sd.IsEqual(sd2));
+    Check(scSelfRelative in sd2.Flags);
     // TSecurityDescriptor.Add and Delete high-level methods
+    Check(scDaclPresent in sd.Flags);
     if sd.Sacl <> nil then
+    begin
+      Check(scSaclPresent in sd.Flags);
       continue;
+    end;
+    Check(not (scSaclPresent in sd.Flags));
+    Check(sd.Add('') = nil);
+    Check(sd.IsEqual(sd2));
+    Check(sd.Add('(toto;;;;)') = nil);
+    Check(sd.Add('(D;;;;;SY)') = nil);
+    Check(sd.Add('(A;;;;;SY)') = nil);
+    Check(sd.IsEqual(sd2));
     Check(sd.Add('(A;;KA;;;SY)') <> nil);
     Check(not sd.IsEqual(sd2));
     CheckEqual(sd.ToText, u + '(A;;KA;;;SY)');
@@ -6569,9 +6585,14 @@ begin
     CheckEqual(sd.ToText, u);
     Check(sd.IsEqual(sd2));
     Check(sd.ToBinary = saved);
+    Check(scDaclPresent in sd.Flags);
     for j := 1 to length(sd.Dacl) do
       sd.Delete(0);
     Check(sd.Dacl = nil);
+    Check(not (scDaclPresent in sd.Flags));
+    Check(sd.Add('(A;;KA;;;SY)') <> nil);
+    Check(PosEx('(A;;KA;;;SY)', sd.ToText) <> 0);
+    Check(scDaclPresent in sd.Flags);
   end;
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
@@ -6616,7 +6637,12 @@ begin
     CheckEqual(length(sd.Sacl), 0);
     Check(sd.Dacl[0].AceType = satCallbackAccessAllowed);
     if not CheckFailed(sd.Dacl[0].Opaque <> '') then
-      Check(sd.Dacl[0].Opaque[1] = '(');
+    begin
+      u := sd.Dacl[0].ConditionalExpression;
+      Check(u <> '');
+      Check(u[1] = '(');
+      Check(u[length(u)] = ')');
+    end;
     CheckEqual(sd.ToText, COND_TXT[i]);
     saved := sd.ToBinary;
     Check(saved <> '');
