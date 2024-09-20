@@ -2603,10 +2603,10 @@ type
     // - is called by FillPrepareMany() to retrieve the JSON of the corresponding
     // request: so you could use this method to retrieve directly the same
     // information, ready to be transmitted (e.g. as RawJson) to a client
-    function EnginePrepareMany(const aClient: IRestOrm;
+    procedure EnginePrepareMany(const aClient: IRestOrm;
       const aFormatSQLJoin: RawUtf8;
       const aParamsSQLJoin, aBoundsSQLJoin: array of const;
-      out ObjectsClass: TOrmClassDynArray; out SQL: RawUtf8): RawUtf8;
+      out ObjectsClass: TOrmClassDynArray; out SQL, Json: RawUtf8);
     /// fill all published properties of an object from a TOrmTable prepared row
     // - FillPrepare() must have been called before
     // - if Dest is nil, this object values are filled
@@ -7811,9 +7811,9 @@ end;
   {$warnings off} // avoid paranoid Delphi 2007 warning
 {$endif ISDELPHI20062007}
 
-function TOrm.EnginePrepareMany(const aClient: IRestOrm;
+procedure TOrm.EnginePrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8; const aParamsSQLJoin, aBoundsSQLJoin: array of const;
-  out ObjectsClass: TOrmClassDynArray; out SQL: RawUtf8): RawUtf8;
+  out ObjectsClass: TOrmClassDynArray; out SQL, Json: RawUtf8);
 var
   aSqlFields, aSqlFrom, aSqlWhere, aSqlJoin: RawUtf8;
   aField: string[3];
@@ -7919,7 +7919,6 @@ var
   end;
 
 begin
-  result := '';
   FillClose; // so that no further FillOne will work
   if (self = nil) or
      (aClient = nil) then
@@ -8051,8 +8050,8 @@ begin
     SQL := SQL + ' and (' + FormatSql(aSqlWhere, [], aBoundsSQLJoin) + ')';
   end;
   // execute SQL statement and retrieve the matching data
-  result := aClient.ExecuteJson([], SQL);
-  if result <> '' then // prepare Fill mapping on success - see FillPrepareMany()
+  Json := aClient.ExecuteJson([], SQL);
+  if Json <> '' then // prepare Fill mapping on success - see FillPrepareMany()
     for i := 0 to SqlFieldsCount - 1 do
       with SqlFields[i] do
         fFill.AddMap(Instance, prop, i);
@@ -8071,12 +8070,12 @@ var
   T: TOrmTable;
 begin
   result := false;
-  json := EnginePrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin,
-    aBoundsSQLJoin, ObjectsClass, sql);
+  EnginePrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin,
+    aBoundsSQLJoin, ObjectsClass, sql, json);
   if json = '' then
     exit;
   T := TOrmTableJson.CreateFromTables(ObjectsClass, sql, json,
-    {ownJSON=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1);
+    {ownJSON=}(GetRefCount(json) = 1));
   if (T = nil) or
      (T.fData = nil) then
   begin

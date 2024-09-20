@@ -1244,7 +1244,7 @@ begin
   json := EngineList(t, sql, false, nil);
   if json <> '' then
     result := TOrmTableJson.CreateFromTables([Table], sql, json,
-      {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1)
+      {ownjson=}(GetRefCount(json) = 1))
 end;
 
 function TRestOrm.MultiFieldValues(Table: TOrmClass;
@@ -1795,7 +1795,7 @@ begin
   json := ExecuteJson(Tables, SQL, false, nil);
   if json <> '' then
     result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
-      {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1)
+      {ownjson=}(GetRefCount(json) = 1))
   else
     result := nil;
 end;
@@ -2609,7 +2609,7 @@ begin
       else
       try
         t := TOrmTableJson.CreateFromTables([Table], Sql, Json,
-          {ownjson=}PStrCnt(PAnsiChar(pointer(json)) - _STRCNT)^ = 1);
+          {ownjson=}(GetRefCount(Json) = 1));
         try
           t.ToObjArray(t, Table);
         finally

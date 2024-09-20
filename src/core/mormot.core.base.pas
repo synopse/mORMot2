@@ -851,6 +851,11 @@ procedure FastAssignUtf8(var dest: RawUtf8; var src: RawByteString);
 function GetCodePage(const s: RawByteString): cardinal; inline;
 {$endif HASCODEPAGE}
 
+/// retrieve the code page of a string
+// - StringRefCount() is not available on oldest Delphi
+function GetRefCount(const s: RawByteString): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// initialize a RawByteString, ensuring returned "aligned" pointer
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
@@ -4644,6 +4649,13 @@ begin
   pointer(src) := nil; // was assigned with no ref-counting involved
 end;
 {$endif HASCODEPAGE}
+
+function GetRefCount(const s: RawByteString): PtrInt;
+begin
+  result := PtrUInt(pointer(s));
+  if result <> 0 then
+    result := PStrCnt(PtrUInt(result) - _STRCNT)^;
+end;
 
 procedure FakeLength(var s: RawUtf8; len: PtrInt);
 var
