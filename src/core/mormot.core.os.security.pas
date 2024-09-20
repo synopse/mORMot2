@@ -83,7 +83,7 @@ function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
 procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 
 /// convert a Security IDentifier as text, following the standard representation
-procedure SidToTextShort(sid: PSid; var result: shortstring);
+procedure SidToTextShort(sid: PSid; var result: ShortString);
 
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
@@ -418,7 +418,7 @@ type
 
   {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
 
-  /// define one discretionary/system access control, as stored in TSecurityDescriptor.Dacl[]
+  /// define one discretionary/system access entry (ACE)
   {$ifdef USERECORDWITHMETHODS}
   TSecAce = record
   {$else}
@@ -435,7 +435,7 @@ type
     RawType: word;
     /// contains the associated 32-bit access mask
     Mask: TSecAccessMask;
-    /// contains an associated SID
+    /// contains an associated SID, in its raw binary content
     Sid: RawSid;
     /// some optional opaque callback/resource data, stored after the Sid
     // - e.g. is a conditional expression string for satConditional ACEs like
@@ -445,11 +445,31 @@ type
     ObjectType: TGuid;
     /// the inherited Object Type GUID  (satObject only)
     InheritedObjectType: TGuid;
+    /// remove any previous content
+    procedure Clear;
     /// compare the fields of this instance with another
     function IsEqual(const ace: TSecAce): boolean;
+    /// append this entry as SDDL text into an existing buffer
+    // - could also generate SDDL RID placeholders, if dom binary is supplied,
+    // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+    procedure AppendAsText(var s: ShortString; dom: PSid);
+    /// decode a SDDL ACE textual representation into this (cleared) entry
+    function FromText(var p: PUtf8Char; dom: PSid): boolean;
+    /// encode this entry into a self-relative binary buffer
+    // - returns the output length in bytes
+    // - if dest is nil, will compute the length but won't write anything
+    function ToBinary(dest: PAnsiChar): PtrInt;
+    /// decode a self-relative binary buffer into this (cleared) entry
+    function FromBinary(p, max: PByte): boolean;
   end;
-  /// define a discretionary access control list (DACL)
-  TSecAces = array of TSecAce;
+
+  /// pointer to one ACE of the TSecurityDescriptor ACL
+  PSecAce = ^TSecAce;
+
+  /// define a discretionary/system access control list (DACL)
+  // - as stored in TSecurityDescriptor Dacl[] Sacl[] access control lists (ACL)
+  TSecAcl = array of TSecAce;
+  PSecAcl = ^TSecAcl;
 
   /// high-level cross-platform support of one Windows Security Descriptor
   // - can be loaded and exported as self-relative binary or SDDL text
@@ -466,9 +486,9 @@ type
     /// the primary group SID
     Group: RawSid;
     /// discretionary access control list
-    Dacl: TSecAces;
+    Dacl: TSecAcl;
     /// system access control list
-    Sacl: TSecAces;
+    Sacl: TSecAcl;
     /// control flags of this Security Descriptor
     Flags: TSecControls;
     /// remove any previous content
@@ -596,7 +616,7 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
 // - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
 // - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
 // S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
+procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 
 /// parse a SID from its SDDL text form into its binary buffer
 // - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
@@ -608,7 +628,7 @@ function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
 
 /// append a TSecAce.Mask 32-bit value in its SDDL text form
-procedure SddlAppendMask(var s: shortstring; mask: TSecAccessMask);
+procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
@@ -858,12 +878,12 @@ begin
 end;
 {$endif ISDELPHI}
 
-function TextToUuid(const text: shortstring; out uuid: TGuid): boolean;
+function TextToUuid(const text: ShortString; out uuid: TGuid): boolean;
 begin // sub-function to avoid temp string on the stack
   result := TryStringToGUID('{' + string(text) + '}', uuid); // RTL fast enough
 end;
 
-procedure AppendShortUuid(const u: TGuid; var s: shortstring);
+procedure AppendShortUuid(const u: TGuid; var s: ShortString);
 begin // sub-function to avoid temp string on the stack
   AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
 end;
@@ -899,7 +919,7 @@ begin
     FastSetRawByteString(RawByteString(result), sid, SidLength(sid));
 end;
 
-procedure SidToTextShort(sid: PSid; var result: shortstring);
+procedure SidToTextShort(sid: PSid; var result: ShortString);
 var
   a: PSidAuth;
   i: PtrInt;
@@ -937,7 +957,7 @@ end;
 
 procedure SidToText(sid: PSid; var text: RawUtf8);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   SidToTextShort(sid, tmp);
   FastSetString(text, @tmp[1], ord(tmp[0]));
@@ -1412,12 +1432,12 @@ begin
     FastSetString(result, @PWordArray(@SID_SDDL)^[ord(wks)], 2);
 end;
 
-procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
+procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 var
   k: TWellKnownSid;
   c: cardinal;
   i: PtrInt;
-  tmp: shortstring;
+  tmp: ShortString;
 begin
   if sid = nil then
     exit;
@@ -1443,7 +1463,7 @@ begin
   end;
 end;
 
-function SddlNextPart(var p: PUtf8Char; out u: shortstring): boolean;
+function SddlNextPart(var p: PUtf8Char; out u: ShortString): boolean;
 var
   s: PUtf8Char;
 begin
@@ -1460,7 +1480,7 @@ begin
   p := s;
 end;
 
-function SddlNextTwo(var p: PUtf8Char; out u: shortstring): boolean;
+function SddlNextTwo(var p: PUtf8Char; out u: ShortString): boolean;
 var
   s: PUtf8Char;
 begin
@@ -1482,7 +1502,7 @@ end;
 
 function SddlNextGuid(var p: PUtf8Char; out uuid: TGuid): boolean;
 var
-  u: shortstring;
+  u: ShortString;
 begin
   result := SddlNextPart(p, u) and
             ((u[0] = #0) or
@@ -1494,7 +1514,7 @@ end;
 
 function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
 var
-  u: {$ifdef UNICODE}string{$else}shortstring{$endif};
+  u: {$ifdef UNICODE}string{$else}ShortString{$endif};
   err: integer;
   s: PUtf8Char;
 begin
@@ -1552,97 +1572,7 @@ begin
   result := true;
 end;
 
-function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; dom: PSid): boolean;
-var
-  u: shortstring;
-  t: TSecAceType;
-  f: TSecAceFlag;
-  s: PUtf8Char;
-  mask, parent: integer;
-begin
-  result := false;
-  while p^ = ' ' do
-    inc(p);
-  if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
-    if SddlNextInteger(p, mask) then
-      ace.RawType := mask
-    else
-      exit
-  else
-  begin
-    if not SddlNextPart(p, u) or
-       not (u[0] in [#1, #2]) then
-      exit;
-    for t := succ(low(t)) to high(t) do
-      if SAT_SDDL[t] = u then
-      begin
-        ace.AceType := t;
-        break;
-      end;
-    if ace.AceType = satUnknown then
-      exit;
-    ace.RawType := ord(ace.AceType) - 1;
-  end;
-  if p^ <> ';' then
-    exit;
-  repeat
-    inc(p);
-  until p^ <> ' ';
-  while p^ <> ';' do
-  begin
-    if not SddlNextTwo(p, u) then
-      exit;
-    for f := low(f) to high(f) do
-      if SAF_SDDL[f] = u then
-      begin
-        include(ace.Flags, f);
-        break;
-      end;
-  end;
-  inc(p);
-  if not SddlNextMask(p, ace.Mask) or
-     (p^ <> ';') then
-    exit;
-  repeat
-    inc(p);
-  until p^ <> ' ';
-  if not SddlNextGuid(p, ace.ObjectType) or
-     not SddlNextGuid(p, ace.InheritedObjectType) or // satObject or nothing
-     not SddlNextSid(p, ace.Sid, dom) then // entries always end with a SID/RID
-    exit;
-  if p^ = ';' then // optional additional/opaque parameter
-  begin
-    repeat
-      inc(p);
-    until p^ <> ' ';
-    parent := 0;
-    s := p;
-    if (ace.AceType in satConditional) and
-       (s^ = '(') then // conditional ACE expression
-      repeat
-        case s^ of
-          #0:
-            exit; // premature end
-          '(':
-            inc(parent); // count nested parenthesis
-          ')':
-            if parent = 0 then
-              break // ending ACE parenthesis
-            else
-              dec(parent);
-        end;
-        inc(s);
-      until false
-    else
-      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
-        inc(s);
-    FastSetString(RawUtf8(ace.Opaque), p, s - p);
-    p := s;
-  end;
-  result := p^ = ')'; // ACE should end with a parenthesis
-end;
-
-procedure SddlAppendMask(var s: shortstring; mask: TSecAccessMask);
+procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 var
   a: TSecAccess;
   i: PtrInt;
@@ -1661,45 +1591,6 @@ begin
     for a := low(a) to high(a) do
       if a in mask then
         AppendShortTwoChars(@SAM_SDDL[a][1], @s); // store as SDDL pairs
-end;
-
-procedure SddlAppendAce(var s: shortstring; const ace: TSecAce; dom: PSid);
-var
-  f: TSecAceFlag;
-begin
-  if SAT_SDDL[ace.AceType][0] <> #0 then
-    AppendShort(SAT_SDDL[ace.AceType], s)
-  else
-  begin
-    AppendShortTwoChars('0x', @s);
-    AppendShortIntHex(ace.RawType, s); // fallback to lower hex - paranoid
-  end;
-  AppendShortChar(';', @s);
-  for f := low(f) to high(f) do
-    if f in ace.Flags then
-      AppendShort(SAF_SDDL[f], s);
-  AppendShortChar(';', @s);
-  SddlAppendMask(s, ace.Mask);
-  if ace.AceType in satObject then
-  begin
-    AppendShortChar(';', @s);
-    if not IsNullGuid(ace.ObjectType) then
-      AppendShortUuid(ace.ObjectType, s);
-    AppendShortChar(';', @s);
-    if not IsNullGuid(ace.InheritedObjectType) then
-      AppendShortUuid(ace.InheritedObjectType, s);
-    AppendShortChar(';', @s);
-  end
-  else
-    AppendShort(';;;', s);
-  SddlAppendSid(s, pointer(ace.Sid), dom);
-  if ace.Opaque = '' then
-    exit;
-  AppendShortChar(';', @s);
-  if StrLen(pointer(ace.Opaque)) = length(ace.Opaque) then // true text
-    AppendShortAnsi7String(ace.Opaque, s) // e.g. conditional ACE expression
-  else
-    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // paranoid
 end;
 
 
@@ -1783,150 +1674,13 @@ begin
 end;
 
 
-{ TSecAces }
-
-function BinToAcl(p: PByteArray; offset: cardinal; var res: TSecAces): boolean;
-var
-  hdr: PACL;
-  ace: PACE;
-  i, opaquelen, sidlen: integer;
-  max: PtrUInt;
-  sid: pointer;
-  a: ^TSecAce;
-begin
-  result := offset = 0;
-  if result then
-    exit; // no DACL/SACL
-  hdr := @p[offset];
-  if (hdr^.Sbz1 <> 0) or
-     not (hdr^.AclRevision in [2, 4]) then
-    exit;
-  if hdr^.AceCount <> 0 then
-  begin
-    max := PtrUInt(@p[offset + hdr^.AclSize]);
-    SetLength(res, hdr^.AceCount);
-    a := pointer(res);
-    ace := @p[offset + SizeOf(hdr^)];
-    for i := 1 to hdr^.AceCount do
-    begin
-      // unserialize each entry
-      if PtrUInt(ace) + ace^.AceSize > max then
-        exit; // avoid buffer overflow
-      a^.RawType := ace^.AceType;
-      a^.AceType := TSecAceType(ace^.AceType + 1); // range is checked below
-      a^.Flags := ace^.AceFlags;
-      a^.Mask := ace^.Mask;
-      sid := nil;
-      if a^.AceType in satCommon then
-        sid := @ace^.CommonSid
-      else if a^.AceType in satObject then
-      begin
-        sid := @ace^.ObjectStart;
-        if ace^.ObjectFlags and ACE_OBJECT_TYPE_PRESENT <> 0 then
-        begin
-          a^.ObjectType := PGuid(sid)^;
-          inc(PGuid(sid));
-        end;
-        if ace^.ObjectFlags and ACE_INHERITED_OBJECT_TYPE_PRESENT <> 0 then
-        begin
-          a^.InheritedObjectType := PGuid(sid)^;
-          inc(PGuid(sid));
-        end;
-      end
-      else if a^.AceType > high(TSecAceType) then
-        a^.AceType := satUnknown; // unsupported
-      if sid <> nil then
-      begin
-        sidlen := SidLength(sid) + (PAnsiChar(sid) - pointer(ace));
-        opaquelen := integer(ace^.AceSize) - sidlen;
-        if opaquelen < 0 then
-          exit;
-        ToRawSid(sid, a^.Sid);
-        if opaquelen <> 0 then
-        begin
-          inc(PByte(sid), sidlen - 8);
-          FastSetRawByteString(a^.Opaque, sid, opaquelen);
-        end;
-      end;
-      inc(PByte(ace), ace^.AceSize);
-      inc(a);
-    end;
-  end;
-  result := true;
-end;
-
-function AclToBin(p: PAnsiChar; const ace: TSecAces): PtrInt;
-var
-  hdr: PACL;
-  e: PACE;
-  a: ^TSecAce;
-  f: cardinal;
-  pf: PCardinal;
-  i: PtrInt;
-begin
-  hdr := pointer(p); // hdr=nil below if we just want the length
-  if ace <> nil then
-  begin
-    inc(PACL(p));
-    a := pointer(ace);
-    for i := 0 to length(ace) - 1 do
-    begin
-      e := pointer(p);
-      inc(p, 8); // ACE header + Mask
-      if a^.AceType in satObject then
-      begin
-        pf := pointer(p);
-        inc(PCardinal(p));
-        f := 0;
-        if not IsNullGuid(a^.ObjectType) then
-        begin
-          f := ACE_OBJECT_TYPE_PRESENT;
-          if hdr <> nil then
-            PGuid(p)^ := a^.ObjectType;
-          inc(PGuid(p));
-        end;
-        if not IsNullGuid(a^.InheritedObjectType) then
-        begin
-          f := f or ACE_INHERITED_OBJECT_TYPE_PRESENT;
-          if hdr <> nil then
-            PGuid(p)^ := a^.InheritedObjectType;
-          inc(PGuid(p));
-        end;
-        if hdr <> nil then
-          pf^ := f;
-      end;
-      if hdr <> nil then
-        MoveFast(pointer(a^.Sid)^, p^, length(a^.Sid));
-      inc(p, length(a^.Sid));
-      if hdr <> nil then
-        MoveFast(pointer(a^.Opaque)^, p^, length(a^.Opaque));
-      inc(p, length(a^.Opaque));
-      if hdr <> nil then
-      begin
-        if a^.AceType <> satUnknown then
-          e^.AceType := ord(a^.AceType) - 1
-        else
-          e^.AceType := a^.RawType;
-        e^.AceFlags := a^.Flags;
-        e^.AceSize := p - pointer(e);
-        e^.Mask := a^.Mask;
-      end;
-      inc(a);
-    end;
-    if hdr <> nil then
-    begin
-      hdr^.AclRevision := 2;
-      hdr^.Sbz1 := 0;
-      hdr^.AceCount := length(ace);
-      hdr^.Sbz2 := 0;
-      hdr^.AclSize := p - pointer(hdr);
-    end;
-  end;
-  result := p - pointer(hdr);
-end;
-
-
 { TSecAce }
+
+procedure TSecAce.Clear;
+begin
+  Finalize(self);
+  FillCharFast(self, SizeOf(self), 0);
+end;
 
 function TSecAce.IsEqual(const ace: TSecAce): boolean;
 begin
@@ -1938,6 +1692,300 @@ begin
             (Opaque = ace.Opaque) and
             IsEqualGuid(ObjectType, ace.ObjectType) and
             IsEqualGuid(InheritedObjectType, ace.InheritedObjectType);
+end;
+
+procedure TSecAce.AppendAsText(var s: ShortString; dom: PSid);
+var
+  f: TSecAceFlag;
+begin
+  AppendShortChar('(', @s);
+  if SAT_SDDL[AceType][0] <> #0 then
+    AppendShort(SAT_SDDL[AceType], s)
+  else
+  begin
+    AppendShortTwoChars('0x', @s);
+    AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
+  end;
+  AppendShortChar(';', @s);
+  for f := low(f) to high(f) do
+    if f in Flags then
+      AppendShort(SAF_SDDL[f], s);
+  AppendShortChar(';', @s);
+  SddlAppendMask(s, Mask);
+  if AceType in satObject then
+  begin
+    AppendShortChar(';', @s);
+    if not IsNullGuid(ObjectType) then
+      AppendShortUuid(ObjectType, s);
+    AppendShortChar(';', @s);
+    if not IsNullGuid(InheritedObjectType) then
+      AppendShortUuid(InheritedObjectType, s);
+    AppendShortChar(';', @s);
+  end
+  else
+    AppendShort(';;;', s);
+  SddlAppendSid(s, pointer(Sid), dom);
+  if Opaque <> '' then
+  begin
+    AppendShortChar(';', @s);
+    if StrLen(pointer(Opaque)) = length(Opaque) then // true text
+      AppendShortAnsi7String(Opaque, s) // e.g. conditional ACE expression
+    else
+      AppendShortHex(pointer(Opaque), length(Opaque), s); // paranoid
+  end;
+  AppendShortChar(')', @s);
+end;
+
+function TSecAce.FromText(var p: PUtf8Char; dom: PSid): boolean;
+var
+  u: ShortString;
+  t: TSecAceType;
+  f: TSecAceFlag;
+  s: PUtf8Char;
+  i, parent: integer;
+begin
+  result := false;
+  while p^ = ' ' do
+    inc(p);
+  if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
+    if SddlNextInteger(p, i) then
+      RawType := i
+    else
+      exit
+  else
+  begin
+    if not SddlNextPart(p, u) or
+       not (u[0] in [#1, #2]) then
+      exit;
+    for t := succ(low(t)) to high(t) do
+      if SAT_SDDL[t] = u then
+      begin
+        AceType := t;
+        break;
+      end;
+    if AceType = satUnknown then
+      exit;
+    RawType := ord(AceType) - 1;
+  end;
+  if p^ <> ';' then
+    exit;
+  repeat
+    inc(p);
+  until p^ <> ' ';
+  while p^ <> ';' do
+  begin
+    if not SddlNextTwo(p, u) then
+      exit;
+    for f := low(f) to high(f) do
+      if SAF_SDDL[f] = u then
+      begin
+        include(Flags, f);
+        break;
+      end;
+  end;
+  inc(p);
+  if not SddlNextMask(p, Mask) or
+     (p^ <> ';') then
+    exit;
+  repeat
+    inc(p);
+  until p^ <> ' ';
+  if not SddlNextGuid(p, ObjectType) or
+     not SddlNextGuid(p, InheritedObjectType) or // satObject or nothing
+     not SddlNextSid(p, Sid, dom) then // entries always end with a SID/RID
+    exit;
+  if p^ = ';' then // optional additional/opaque parameter
+  begin
+    repeat
+      inc(p);
+    until p^ <> ' ';
+    parent := 0;
+    s := p;
+    if (AceType in satConditional) and
+       (s^ = '(') then // conditional ACE expression
+      repeat
+        case s^ of
+          #0:
+            exit; // premature end
+          '(':
+            inc(parent); // count nested parenthesis
+          ')':
+            if parent = 0 then
+              break // ending ACE parenthesis
+            else
+              dec(parent);
+        end;
+        inc(s);
+      until false
+    else
+      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
+        inc(s);
+    FastSetString(RawUtf8(Opaque), p, s - p);
+    p := s;
+  end;
+  result := p^ = ')'; // ACE should end with a parenthesis
+end;
+
+function TSecAce.ToBinary(dest: PAnsiChar): PtrInt;
+var
+  hdr: PACE; // ACE binary header
+  f: cardinal;
+  pf: PCardinal;
+begin
+  hdr := pointer(dest);
+  inc(dest, 8); // ACE header + Mask
+  if AceType in satObject then
+  begin
+    pf := pointer(dest);
+    inc(PCardinal(dest));
+    f := 0;
+    if not IsNullGuid(ObjectType) then
+    begin
+      f := ACE_OBJECT_TYPE_PRESENT;
+      if hdr <> nil then
+        PGuid(dest)^ := ObjectType;
+      inc(PGuid(dest));
+    end;
+    if not IsNullGuid(InheritedObjectType) then
+    begin
+      f := f or ACE_INHERITED_OBJECT_TYPE_PRESENT;
+      if hdr <> nil then
+        PGuid(dest)^ := InheritedObjectType;
+      inc(PGuid(dest));
+    end;
+    if hdr <> nil then
+      pf^ := f;
+  end;
+  if hdr <> nil then
+    MoveFast(pointer(Sid)^, dest^, length(Sid));
+  inc(dest, length(Sid));
+  if hdr <> nil then
+    MoveFast(pointer(Opaque)^, dest^, length(Opaque));
+  inc(dest, length(Opaque));
+  result := dest - pointer(hdr);
+  if hdr = nil then
+    exit; // nothing to write
+  if AceType <> satUnknown then
+    hdr^.AceType := ord(AceType) - 1
+  else
+    hdr^.AceType := RawType;
+  hdr^.AceFlags := Flags;
+  hdr^.AceSize := dest - pointer(hdr);
+  hdr^.Mask := Mask;
+end;
+
+function TSecAce.FromBinary(p, max: PByte): boolean;
+var
+  ace: PACE;
+  opaquelen, sidlen: integer;
+  psid: pointer;
+begin
+  result := false;
+  ace := pointer(p);
+  if (max <> nil) and
+     (PtrUInt(ace) + ace^.AceSize > PtrUInt(max)) then
+    exit; // avoid buffer overflow
+  RawType := ace^.AceType;
+  AceType := TSecAceType(ace^.AceType + 1); // range is checked below
+  Flags := ace^.AceFlags;
+  Mask := ace^.Mask;
+  psid := nil;
+  if AceType in satCommon then
+    psid := @ace^.CommonSid
+  else if AceType in satObject then
+  begin
+    psid := @ace^.ObjectStart;
+    if ace^.ObjectFlags and ACE_OBJECT_TYPE_PRESENT <> 0 then
+    begin
+      ObjectType := PGuid(psid)^;
+      inc(PGuid(psid));
+    end;
+    if ace^.ObjectFlags and ACE_INHERITED_OBJECT_TYPE_PRESENT <> 0 then
+    begin
+      InheritedObjectType := PGuid(psid)^;
+      inc(PGuid(psid));
+    end;
+  end
+  else if AceType > high(TSecAceType) then
+    AceType := satUnknown; // unsupported or out of range RawType
+  if psid = nil then
+    exit;
+  sidlen := SidLength(psid) + (PAnsiChar(psid) - pointer(ace));
+  opaquelen := integer(ace^.AceSize) - sidlen;
+  if opaquelen < 0 then
+    exit; // invalid SidLength()
+  ToRawSid(psid, Sid);
+  result := true;
+  if opaquelen = 0 then
+    exit;
+  inc(PByte(psid), sidlen - 8);
+  FastSetRawByteString(Opaque, psid, opaquelen);
+end;
+
+
+{ TSecAcl }
+
+function BinToSecAcl(p: PByteArray; offset: cardinal; var res: TSecAcl): boolean;
+var
+  hdr: PACL;
+  ace: PACE;
+  max: pointer;
+  a: ^TSecAce;
+  i: integer;
+begin
+  result := offset = 0;
+  if result then
+    exit; // no DACL/SACL
+  hdr := @p[offset];
+  if (hdr^.Sbz1 <> 0) or
+     not (hdr^.AclRevision in [2, 4]) then
+    exit;
+  if hdr^.AceCount <> 0 then
+  begin
+    max := @p[offset + hdr^.AclSize];
+    SetLength(res, hdr^.AceCount);
+    a := pointer(res);
+    ace := @p[offset + SizeOf(hdr^)];
+    for i := 1 to hdr^.AceCount do
+    begin
+      if not a^.FromBinary(pointer(ace), max) then
+        exit;
+      inc(PByte(ace), ace^.AceSize);
+      inc(a);
+    end;
+  end;
+  result := true;
+end;
+
+function SecAclToBin(p: PAnsiChar; const ace: TSecAcl): PtrInt;
+var
+  hdr: PACL;
+  a: ^TSecAce;
+  i, len: PtrInt;
+begin
+  result := 0;
+  if ace = nil then
+    exit;
+  hdr := pointer(p);
+  result := SizeOf(hdr^);
+  if hdr <> nil then // need to write ACL header
+    inc(p, result);
+  a := pointer(ace);
+  for i := 0 to length(ace) - 1 do
+  begin
+    len := a^.ToBinary(p);
+    inc(result, len);
+    if hdr <> nil then
+      inc(p, len);
+    inc(a);
+  end;
+  if hdr = nil then
+    exit;
+  hdr^.AclRevision := 2;
+  hdr^.Sbz1 := 0;
+  hdr^.AceCount := length(ace);
+  hdr^.Sbz2 := 0;
+  hdr^.AclSize := result;
 end;
 
 
@@ -1985,8 +2033,8 @@ begin
   if PSD(p)^.Group <> 0 then
     ToRawSid(@p[PSD(p)^.Group], Group);
   Flags := PSD(p)^.Control;
-  result := BinToAcl(p, PSD(p)^.Dacl, Dacl) and
-            BinToAcl(p, PSD(p)^.Sacl, Sacl);
+  result := BinToSecAcl(p, PSD(p)^.Dacl, Dacl) and
+            BinToSecAcl(p, PSD(p)^.Sacl, Sacl);
 end;
 
 function TSecurityDescriptor.ToBinary: RawSecurityDescriptor;
@@ -1996,7 +2044,7 @@ var
 begin
   FastSetRawByteString(RawByteString(result), nil,
     SizeOf(hdr^) + length(Owner) + length(Group) +
-    AclToBin(nil, Sacl) + AclToBin(nil, Dacl));
+    SecAclToBin(nil, Sacl) + SecAclToBin(nil, Dacl));
   p := pointer(result);
   hdr := pointer(p);
   FillCharFast(hdr^, SizeOf(hdr^), 0);
@@ -2019,13 +2067,13 @@ begin
   begin
     include(hdr^.Control, scSaclPresent);
     hdr^.Sacl := p - pointer(result);
-    inc(p, AclToBin(p, Sacl));
+    inc(p, SecAclToBin(p, Sacl));
   end;
   if Dacl <> nil then
   begin
     include(hdr^.Control, scDaclPresent);
     hdr^.Dacl := p - pointer(result);
-    inc(p, AclToBin(p, Dacl));
+    inc(p, SecAclToBin(p, Dacl));
   end;
   if p - pointer(result) <> length(result) then
     raise EOSException.Create('TSecurityDescriptor.ToBinary'); // paranoid
@@ -2033,7 +2081,7 @@ end;
 
 function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
 
-  function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
+  function NextAcl(var aces: TSecAcl; pr, ar, ai: TSecControl): boolean;
   begin
     result := false;
     while p^ = ' ' do
@@ -2064,7 +2112,7 @@ function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: Ansi
     repeat
       inc(p);
       SetLength(aces, length(aces) + 1);
-      if not SddlNextAce(p, aces[high(aces)], dom) then
+      if not aces[high(aces)].FromText(p, dom) then
         exit;
       inc(p); // p^ = ')'
     until p^ <> '(';
@@ -2090,11 +2138,11 @@ begin
         if not SddlNextSid(p, Group, dom) then
           exit;
       'D':
-        if not NextAces(Dacl,
+        if not NextAcl(Dacl,
                 scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit) then
           exit;
       'S':
-        if not NextAces(Sacl,
+        if not NextAcl(Sacl,
                  scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit) then
           exit;
     else
@@ -2131,18 +2179,9 @@ end;
 
 procedure TSecurityDescriptor.AppendAsText(var result: RawUtf8; dom: PSid);
 var
-  tmp: shortstring;
+  tmp: ShortString;
 
-  procedure AppendTmp;
-  var
-    n: PtrInt;
-  begin
-    n := length(result);
-    SetLength(result, n + ord(tmp[0]));
-    MoveFast(tmp[1], PByteArray(result)[n], ord(tmp[0]));
-  end;
-
-  procedure AppendAces(const aces: TSecAces; p, ar, ai: TSecControl);
+  procedure AppendAcl(const aces: TSecAcl; p, ar, ai: TSecControl);
   var
     i: Ptrint;
   begin
@@ -2156,10 +2195,8 @@ var
       AppendShortTwoChars('AI', @tmp);
     for i := 0 to length(aces) - 1 do
     begin
-      AppendShortChar('(', @tmp);
-      SddlAppendAce(tmp, aces[i], dom);
-      AppendShortChar(')', @tmp);
-      AppendTmp;
+      aces[i].AppendAsText(tmp, dom);
+      AppendShortToUtf8(tmp, result);
       tmp[0] := #0;
     end;
   end;
@@ -2174,12 +2211,12 @@ begin
   begin
     AppendShortTwoChars('G:', @tmp);
     SddlAppendSid(tmp, pointer(Group), dom);
-    AppendTmp;
+    AppendShortToUtf8(tmp, result);
   end;
   tmp := 'D:';
-  AppendAces(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
+  AppendAcl(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
   tmp := 'S:';
-  AppendAces(Sacl, scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit);
+  AppendAcl(Sacl, scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit);
 end;
 
 

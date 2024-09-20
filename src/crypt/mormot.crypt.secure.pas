@@ -9945,7 +9945,7 @@ const
   _TSynSignerParams = 'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer';
   _TSecAce = 'type:TSecAceType flags:TSecAceFlags raw:word mask:TSecAccessMask ' +
     'sid:RawSid opaque:RawUtf8 obj,inh:TGuid';
-  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAces flags:TSecControls';
+  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl flags:TSecControls';
 
 procedure InitializeUnit;
 begin
@@ -9957,7 +9957,7 @@ begin
     TypeInfo(RawSid),                @_JL_RawSid, @_JS_RawSid,
     TypeInfo(RawSecurityDescriptor), @_JL_SD,     @_JS_SD,
     TypeInfo(TSecAccessMask),        @_JL_Mask,   @_JS_Mask]);
-  Rtti.RegisterFromText(TypeInfo(TSecAces), _TSecAce);
+  Rtti.RegisterFromText(TypeInfo(TSecAcl), _TSecAce);
   Rtti.RegisterFromText(TypeInfo(TSecurityDescriptor), _TSecurityDescriptor);
   // Rnd/Sign/Hash/Cipher/Asym/Cert/Store are registered in GlobalCryptAlgoInit
   {$ifdef OSWINDOWS}
