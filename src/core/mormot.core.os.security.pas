@@ -470,8 +470,16 @@ type
     /// user-friendly set the properties of this ACE
     // - SID and Mask are supplied in their regular / SDDL text form
     // - returns true on success - i.e. if all input params were correct
-    function Fill(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
+    function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
       dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
+    /// get the associated SID, in its SDDL text, optionally with a RID domain
+    function SidText(dom: PSid = nil): RawUtf8; overload;
+    /// set the associated SID, in its SDDL text, optionally with a RID domain
+    function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
+    /// get the associated access mask, in its SDDL text format
+    function MaskText: RawUtf8; overload;
+    /// set the associated access mask, in its SDDL text format
+    function MaskText(const maskSddl: RawUtf8): boolean; overload;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -531,13 +539,15 @@ type
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
     procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
     /// add one new ACE to the DACL (or SACL)
-    // - SID and Mask are supplied in their regular / SDDL text form
+    // - SID and Mask are supplied in their regular / SDDL text form, with
+    // dom optionally able to recognize SDDL RID placeholders
     // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
     // - return nil on sidText/maskSddl parsing error, or the newly added entry
     function Add(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
       dom: PSid = nil; const condExp: RawUtf8 = ''; scope: TSecAceScope = sasDacl;
       saf: TSecAceFlags = []): PSecAce; overload;
     /// add one new ACE to the DACL (or SACL) from SDDL text
+    // - dom <> nil would enable SDDL RID placeholders recognition
     // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
     // - return nil on sddl input text parsing error, or the newly added entry
     function Add(const sddl: RawUtf8; dom: PSid = nil;
@@ -1721,20 +1731,48 @@ begin
             IsEqualGuid(InheritedObjectType, ace.InheritedObjectType);
 end;
 
-function TSecAce.Fill(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
-  dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
+function TSecAce.SidText(dom: PSid): RawUtf8;
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  SddlAppendSid(s, pointer(sid), dom);
+  ShortStringToAnsi7String(s, result);
+end;
+
+function TSecAce.SidText(const sidSddl: RawUtf8; dom: PSid): boolean;
 var
   p: PUtf8Char;
 begin
+  p := pointer(sidSddl);
+  result := SddlNextSid(p, Sid, dom);
+end;
+
+function TSecAce.MaskText: RawUtf8;
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  SddlAppendMask(s, Mask);
+  ShortStringToAnsi7String(s, result);
+end;
+
+function TSecAce.MaskText(const maskSddl: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := pointer(maskSddl);
+  result := SddlNextMask(p, Mask);
+end;
+
+function TSecAce.Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
+  dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
+begin
   Clear;
   result := false;
-  if sat = satUnknown then
-    exit;
-  p := pointer(sidText);
-  if not SddlNextSid(p, Sid, dom) then
-    exit;
-  p := pointer(maskSddl);
-  if not SddlNextMask(p, Mask) then
+  if (sat = satUnknown) or
+     not SidText(sidSddl, dom) or
+     not MaskText(maskSddl) then
     exit;
   AceType := sat;
   RawType := ord(sat) + 1;
@@ -2288,8 +2326,8 @@ var
 begin
   result := InternalAdd(scope, dest);
   if result^.Fill(sat, sidText, maskSddl, dom, condExp, saf) then
-    exit; // succes
-  SetLength(dest^, length(dest^) - 1); // remove
+    exit; // success
+  SetLength(dest^, length(dest^) - 1); // abort
   result := nil;
 end;
 
@@ -2307,8 +2345,8 @@ begin
   inc(p);
   result := InternalAdd(scope, dest);
   if result^.FromText(p, dom) then
-    exit;
-  SetLength(dest^, length(dest^) - 1);
+    exit; // success
+  SetLength(dest^, length(dest^) - 1); // abort
   result := nil;
 end;
 

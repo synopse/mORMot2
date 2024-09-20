@@ -6539,14 +6539,18 @@ begin
     if sd.Sacl <> nil then
       continue;
     Check(sd.Add('(A;;KA;;;SY)') <> nil);
+    Check(not sd.IsEqual(sd2));
     CheckEqual(sd.ToText, u + '(A;;KA;;;SY)');
     Check(sd.Add(satCallbackAudit, 'AU', 'KR') <> nil);
     CheckEqual(sd.ToText, u + '(A;;KA;;;SY)(XU;;KR;;;AU)');
     sd.Delete(100);
     sd.Delete(length(sd.Dacl) - 2);
     CheckEqual(sd.ToText, u + '(XU;;KR;;;AU)');
+    Check(not sd.IsEqual(sd2));
     sd.Delete(length(sd.Dacl) - 1);
     CheckEqual(sd.ToText, u);
+    Check(sd.IsEqual(sd2));
+    Check(sd.ToBinary = saved);
     for j := 1 to length(sd.Dacl) do
       sd.Delete(0);
     Check(sd.Dacl = nil);
@@ -6568,6 +6572,12 @@ begin
   u := 'rid';
   sd.AppendAsText(u, pointer(domsid));
   CheckEqual(u, 'ridO:DUG:DAD:(A;;FA;;;DA)');
+  CheckEqual(sd.Dacl[0].SidText, dom + '-512');
+  CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DA');
+  CheckEqual(sd.Dacl[0].MaskText, 'FA');
+  Check(sd.Dacl[0].SidText('DU', pointer(domsid)));
+  CheckEqual(sd.Dacl[0].SidText, dom + '-513');
+  CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DU');
   // RID reference material with several domains
   for i := low(DOM_TXT) to high(DOM_TXT) do
   begin
