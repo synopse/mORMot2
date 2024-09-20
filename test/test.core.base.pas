@@ -3308,45 +3308,63 @@ var
   tmp: RawUtf8;
   vs: TRawUtf8DynArray;
   timer: TPrecisionTimer;
+
+  procedure DoOne(const u: RawUtf8);
+  var
+    local: RawUtf8; // will force dec(RefCnt) when leaving DoOne()
+  begin
+    local := int.Unique(u);
+    CheckEqual(local, u);
+  end;
+
 const
   MAX = 500000;
   ONESIZE = 32; // assume each SmallUInt32Utf8[] uses 32 heap bytes
   DIRSIZE = ONESIZE * (MAX + 1);
   INTSIZE = ONESIZE * 512;
 begin
-  {$ifndef HASINLINE} // inlining induces optimizations which trigger Clean
   int := TRawUtf8Interning.Create(1);
   try
-    check(int.Count = 0);
-    check(int.Unique('test') = 'test');
-    check(int.Count = 1);
-    check(int.Unique('test') = 'test');
-    check(int.Count = 1);
-    check(int.Clean = 0);
-    check(int.Unique('single') = 'single');
-    check(int.Count = 2);
-    check(int.Clean = 1);
-    check(int.Count = 1);
-    check(int.Clean = 0);
-    check(int.Count = 1);
-    check(int.Unique('single1') = 'single1');
-    check(int.Count = 2);
-    check(int.Unique('test2') = 'test2');
-    check(int.Count = 3);
-    check(int.Unique('test2') = 'test2');
-    check(int.Count = 3);
-    check(int.Unique('single2') = 'single2');
-    check(int.Count = 4);
-    check(int.Clean = 2);
-    check(int.Count = 2);
+    CheckEqual(int.Count, 0);
+    DoOne('test');
+    CheckEqual(int.Count, 1);
+    DoOne('test');
+    CheckEqual(int.Count, 1);
+    CheckEqual(int.Clean, 1);
+    DoOne('single');
+    CheckEqual(int.Count, 1);
+    CheckEqual(int.Clean, 1);
+    CheckEqual(int.Count, 0);
+    CheckEqual(int.Clean, 0);
+    CheckEqual(int.Count, 0);
+    DoOne('single1');
+    CheckEqual(int.Count, 1);
+    DoOne('single1');
+    CheckEqual(int.Count, 1);
+    DoOne('test2');
+    CheckEqual(int.Count, 2);
+    DoOne('test2');
+    CheckEqual(int.Count, 2);
+    DoOne('single2');
+    CheckEqual(int.Count, 3);
+    CheckEqual(int.Clean, 3);
+    CheckEqual(int.Count, 0);
+    int.Unique(tmp, 'kept', 4);
+    CheckEqual(tmp, 'kept');
+    CheckEqual(GetRefCount(tmp), 2);
+    CheckEqual(int.Count, 1);
+    CheckEqual(int.Clean, 0);
+    CheckEqual(int.Count, 1);
+    tmp := '';
+    CheckEqual(int.Clean, 1);
+    CheckEqual(int.Count, 0);
     int.Clear;
-    check(int.Count = 0);
-    check(int.Clean = 0);
-    check(int.Count = 0);
+    CheckEqual(int.Count, 0);
+    CheckEqual(int.Clean, 0);
+    CheckEqual(int.Count, 0);
   finally
     int.Free;
   end;
-  {$endif HASINLINE}
   int := TRawUtf8Interning.Create(16);
   try
     for i := 0 to MAX do
