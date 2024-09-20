@@ -377,6 +377,7 @@ type
 
   /// high-level supported ACE kinds in TSecAce.AceType
   TSecAceType = (
+    satUnknown,
     satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
     satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
     satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
@@ -398,8 +399,7 @@ type
     satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
     satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
     satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
-    satAccessFilter,                  // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
-    satUnknown);                      //    22 unknown = for internal use
+    satAccessFilter);                  // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
 
   /// high-level supported ACE flags in TSecAce.Flags
   TSecAceFlag = (
@@ -429,7 +429,7 @@ type
     AceType: TSecAceType;
     // the ACE flags
     Flags: TSecAceFlags;
-    /// the raw ACE identifier - typically = ord(AceType)
+    /// the raw ACE identifier - typically = ord(AceType) - 1
     // - if you force this type, ensure you set AceType=satUnknown before saving
     // - defined as word for proper alignment
     RawType: word;
@@ -625,6 +625,7 @@ const
 
   /// define how ACE kinds in TSecAce.AceType are stored as SDDL
   SAT_SDDL: array[TSecAceType] of string[3] = (
+    '',    // satUnknown
     'A',   // satAccessAllowed
     'D',   // satAccessDenied
     'AU',  // satAudit
@@ -646,8 +647,7 @@ const
     'RA',  // satResourceAttribute
     'SP',  // satScoppedPolicy
     'TL',  // satProcessTrustLabel
-    'FL',  // satAccessFilter
-    '');   // satUnknown
+    'FL'); // satAccessFilter
 
   /// define how ACE flags in TSecAce.Flags are stored as SDDL
   SAF_SDDL: array[TSecAceFlag] of string[3] = (
@@ -1576,7 +1576,7 @@ begin
       end;
     if ace.AceType = satUnknown then
       exit;
-    ace.RawType := ord(ace.AceType);
+    ace.RawType := ord(ace.AceType) - 1;
   end;
   if p^ <> ';' then
     exit;
@@ -1808,7 +1808,7 @@ begin
       if PtrUInt(ace) + ace^.AceSize > max then
         exit; // avoid buffer overflow
       a^.RawType := ace^.AceType;
-      a^.AceType := TSecAceType(ace^.AceType);
+      a^.AceType := TSecAceType(ace^.AceType + 1); // range is checked below
       a^.Flags := ace^.AceFlags;
       a^.Mask := ace^.Mask;
       sid := nil;
@@ -1828,7 +1828,7 @@ begin
           inc(PGuid(sid));
         end;
       end
-      else if a^.AceType >= satUnknown then
+      else if a^.AceType > high(TSecAceType) then
         a^.AceType := satUnknown; // unsupported
       if sid <> nil then
       begin
@@ -1898,8 +1898,8 @@ begin
       inc(p, length(a^.Opaque));
       if hdr <> nil then
       begin
-        if a^.AceType < satUnknown then
-          e^.AceType := ord(a^.AceType)
+        if a^.AceType <> satUnknown then
+          e^.AceType := ord(a^.AceType) - 1
         else
           e^.AceType := a^.RawType;
         e^.AceFlags := a^.Flags;
