@@ -504,8 +504,10 @@ type
   TSecurityDescriptor = object
   {$endif USERECORDWITHMETHODS}
   private
-    function InternalAdd(scope: TSecAceScope; out dest: PSecAcl): PSecAce;
-    function InternalAdded(scope: TSecAceScope; ace: PSecAce; dest: PSecAcl;
+    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): boolean;
+    procedure AclToText(var sddl: RawUtf8; dom: PSid; scope: TSecAceScope);
+    function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
+    function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
       success: boolean): PSecAce;
   public
     /// the owner security identifier (SID)
@@ -655,23 +657,29 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
 
 { ****************** Security Descriptor Definition Language (SDDL) Definitions }
 
-/// append a binary SID in its SDDL text form
-// - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
-// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
-// S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
-
 /// parse a SID from its SDDL text form into its binary buffer
 // - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
 // - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
 // 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 
+/// append a binary SID in its SDDL text form
+// - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
+// - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
+// S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
+
 /// parse a TSecAce.Mask 32-bit value from its SDDL text
 function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
 
 /// append a TSecAce.Mask 32-bit value in its SDDL text form
 procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
+
+/// parse a TSecAce.Opaque value from its SDDL text
+function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
+
+/// append a TSecAce.Opaque value in its SDDL text form
+procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
@@ -681,7 +689,7 @@ const
   /// the last TWellKnownSid item which has a SDDL identifier
   wksLastSddl = wksBuiltinWriteRestrictedCode;
 
-  /// allow to quickly check if a TWellKnownSid has a SDDL identifier
+  /// allow to quickly check if a TWellKnownSid may have a SDDL identifier
   wksWithSddl = [wksWorld .. wksLastSddl];
 
   /// allow to quickly check if a TSecAccess has a SDDL identifier
@@ -1467,14 +1475,6 @@ begin
   result := true;
 end;
 
-function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
-begin
-  FastAssignNew(result); // no need to optimize: only used for regression tests
-  if (wks in wksWithSddl) and
-     (PWordArray(@SID_SDDL)^[ord(wks)] <> $2020) then
-    FastSetString(result, @PWordArray(@SID_SDDL)^[ord(wks)], 2);
-end;
-
 procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 var
   k: TWellKnownSid;
@@ -1682,6 +1682,14 @@ begin
     AppendShortAnsi7String(ace.Opaque, s) // e.g. conditional ACE expression
   else
     AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // paranoid
+end;
+
+function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
+begin
+  FastAssignNew(result); // no need to optimize: only used for regression tests
+  if (wks in wksWithSddl) and
+     (PWordArray(@SID_SDDL)^[ord(wks)] <> $2020) then
+    FastSetString(result, @PWordArray(@SID_SDDL)^[ord(wks)], 2);
 end;
 
 
@@ -2210,46 +2218,84 @@ begin
     raise EOSException.Create('TSecurityDescriptor.ToBinary'); // paranoid
 end;
 
-function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
+const
+  SCOPE_SDDL: array[TSecAceScope] of string[3] = (
+    'D:', 'S:');
+  SCOPE_P: array[TSecAceScope] of TSecControl = (
+    scDaclProtected, scSaclProtected);
+  SCOPE_AR: array[TSecAceScope] of TSecControl = (
+    scDaclAutoInheritReq, scSaclAutoInheritReq);
+  SCOPE_AI: array[TSecAceScope] of TSecControl = (
+    scDaclAutoInherit, scSaclAutoInherit);
+  SCOPE_FLAG: array[TSecAceScope] of TSecControl = (
+    scDaclPresent, scSaclPresent);
 
-  function NextAcl(var aces: TSecAcl; pr, ar, ai: TSecControl): boolean;
+function TSecurityDescriptor.NextAclFromText(var p: PUtf8Char; dom: PSid;
+  scope: TSecAceScope): boolean;
+var
+  acl: PSecAcl;
+begin
+  result := false;
+  while p^ = ' ' do
+    inc(p);
+  if p^ = 'P' then
   begin
-    result := false;
-    while p^ = ' ' do
-      inc(p);
-    if p^ = 'P' then
-    begin
-      include(Flags, pr);
-      inc(p);
-    end;
-    while p^ = ' ' do
-      inc(p);
-    if PWord(p)^ = ord('A') + ord('R') shl 8 then
-    begin
-      include(Flags, ar);
-      inc(p, 2);
-    end;
-    while p^ = ' ' do
-      inc(p);
-    if PWord(p)^ = ord('A') + ord('I') shl 8 then
-    begin
-      include(Flags, ai);
-      inc(p, 2);
-    end;
-    while p^ = ' ' do
-      inc(p);
-    if p^ <> '(' then
-      exit;
-    repeat
-      inc(p);
-      SetLength(aces, length(aces) + 1);
-      if not aces[high(aces)].FromText(p, dom) then
-        exit;
-      inc(p); // p^ = ')'
-    until p^ <> '(';
-    result := true;
+    include(Flags, SCOPE_P[scope]);
+    inc(p);
   end;
+  while p^ = ' ' do
+    inc(p);
+  if PWord(p)^ = ord('A') + ord('R') shl 8 then
+  begin
+    include(Flags, SCOPE_AR[scope]);
+    inc(p, 2);
+  end;
+  while p^ = ' ' do
+    inc(p);
+  if PWord(p)^ = ord('A') + ord('I') shl 8 then
+  begin
+    include(Flags, SCOPE_AI[scope]);
+    inc(p, 2);
+  end;
+  while p^ = ' ' do
+    inc(p);
+  if p^ <> '(' then
+    exit;
+  repeat
+    inc(p);
+    if not InternalAdd(scope, acl).FromText(p, dom) then
+      exit;
+    inc(p); // p^ = ')'
+  until p^ <> '(';
+  result := true;
+end;
 
+procedure TSecurityDescriptor.AclToText(var sddl: RawUtf8;
+  dom: PSid; scope: TSecAceScope);
+var
+  tmp: ShortString;
+  acl: PSecAcl;
+  i: Ptrint;
+begin
+  tmp := SCOPE_SDDL[scope];
+  if SCOPE_P[scope] in Flags then
+    AppendShortChar('P', @tmp);
+  if SCOPE_AR[scope] in Flags then
+    AppendShortTwoChars('AR', @tmp);
+  if SCOPE_AI[scope] in Flags then
+    AppendShortTwoChars('AI', @tmp);
+  acl := @Dacl;
+  if scope = sasSacl then
+    acl := @Sacl;
+  for i := 0 to length(acl^) - 1 do
+  begin
+    acl^[i].AppendAsText(tmp, dom);
+    AppendShortToUtf8(tmp, sddl);
+    tmp[0] := #0;
+  end;
+end;
+
+function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
 begin
   Clear;
   result := false;
@@ -2269,12 +2315,10 @@ begin
         if not SddlNextSid(p, Group, dom) then
           exit;
       'D':
-        if not NextAcl(Dacl,
-                scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit) then
+        if not NextAclFromText(p, dom, sasDacl) then
           exit;
       'S':
-        if not NextAcl(Sacl,
-                 scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit) then
+        if not NextAclFromText(p, dom, sasSacl) then
           exit;
     else
       exit;
@@ -2311,28 +2355,8 @@ end;
 procedure TSecurityDescriptor.AppendAsText(var result: RawUtf8; dom: PSid);
 var
   tmp: ShortString;
-
-  procedure AppendAcl(const aces: TSecAcl; p, ar, ai: TSecControl);
-  var
-    i: Ptrint;
-  begin
-    if aces = nil then
-      exit;
-    if p in Flags then
-      AppendShortChar('P', @tmp);
-    if ar in Flags then
-      AppendShortTwoChars('AR', @tmp);
-    if ai in Flags then
-      AppendShortTwoChars('AI', @tmp);
-    for i := 0 to length(aces) - 1 do
-    begin
-      aces[i].AppendAsText(tmp, dom);
-      AppendShortToUtf8(tmp, result);
-      tmp[0] := #0;
-    end;
-  end;
-
 begin
+  tmp[0] := #0;
   if Owner <> '' then
   begin
     tmp := 'O:';
@@ -2342,33 +2366,27 @@ begin
   begin
     AppendShortTwoChars('G:', @tmp);
     SddlAppendSid(tmp, pointer(Group), dom);
-    AppendShortToUtf8(tmp, result);
   end;
-  tmp := 'D:';
-  AppendAcl(Dacl, scDaclProtected, scDaclAutoInheritReq, scDaclAutoInherit);
-  tmp := 'S:';
-  AppendAcl(Sacl, scSaclProtected, scSaclAutoInheritReq, scSaclAutoInherit);
+  AppendShortToUtf8(tmp, result);
+  AclToText(result, dom, sasDacl);
+  AclToText(result, dom, sasSacl);
 end;
 
 function TSecurityDescriptor.InternalAdd(scope: TSecAceScope;
-  out dest: PSecAcl): PSecAce;
+  out acl: PSecAcl): PSecAce;
 var
   n: PtrInt;
 begin
-  dest := @Dacl;
+  acl := @Dacl;
   if scope = sasSacl then
-    dest := @Sacl;
-  n := length(dest^);
-  SetLength(dest^, n + 1); // append
-  result := @dest^[n];
+    acl := @Sacl;
+  n := length(acl^);
+  SetLength(acl^, n + 1); // append
+  result := @acl^[n];
 end;
 
-const
-  SCOPE_FLAG: array[TSecAceScope] of TSecControl = (
-    scDaclPresent, scSaclPresent);
-
 function TSecurityDescriptor.InternalAdded(scope: TSecAceScope; ace: PSecAce;
-  dest: PSecAcl; success: boolean): PSecAce;
+  acl: PSecAcl; success: boolean): PSecAce;
 begin
   if success then
   begin
@@ -2377,8 +2395,8 @@ begin
   end
   else
   begin
-    SetLength(dest^, length(dest^) - 1); // abort
-    if dest^ = nil then
+    SetLength(acl^, length(acl^) - 1); // abort
+    if acl^ = nil then
       exclude(Flags, SCOPE_FLAG[scope]);
     result := nil;
   end;
@@ -2388,10 +2406,10 @@ function TSecurityDescriptor.Add(sat: TSecAceType;
   const sidText, maskSddl: RawUtf8; dom: PSid; const condExp: RawUtf8;
   scope: TSecAceScope; saf: TSecAceFlags): PSecAce;
 var
-  dest: PSecAcl;
+  acl: PSecAcl;
 begin
-  result := InternalAdd(scope, dest);
-  result := InternalAdded(scope, result, dest,
+  result := InternalAdd(scope, acl);
+  result := InternalAdded(scope, result, acl,
     result^.Fill(sat, sidText, maskSddl, dom, condExp, saf));
 end;
 
@@ -2399,7 +2417,7 @@ function TSecurityDescriptor.Add(const sddl: RawUtf8; dom: PSid;
   scope: TSecAceScope): PSecAce;
 var
   p: PUtf8Char;
-  dest: PSecAcl;
+  acl: PSecAcl;
 begin
   result := nil;
   p := pointer(sddl);
@@ -2407,8 +2425,8 @@ begin
      (p^ <> '(') then
     exit;
   inc(p);
-  result := InternalAdd(scope, dest);
-  result := InternalAdded(scope, result, dest, result^.FromText(p, dom));
+  result := InternalAdd(scope, acl);
+  result := InternalAdded(scope, result, acl, result^.FromText(p, dom));
 end;
 
 procedure TSecurityDescriptor.Delete(index: PtrUInt; scope: TSecAceScope);
