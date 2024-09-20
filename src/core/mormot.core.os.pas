@@ -1820,7 +1820,7 @@ type
   /// define which WinAPI token is to be retrieved
   // - define the execution context, i.e. if the token is used for the current
   // process or the current thread
-  // - used e.g. by TSynWindowsPrivileges or CurrentSid()
+  // - used e.g. by TSynWindowsPrivileges or mormot.core.os.security
   TWinTokenType = (
     wttProcess,
     wttThread);

@@ -8,8 +8,8 @@ unit mormot.core.os.security;
 
   Cross-Platform Operating System Security Definitions
   - Security IDentifier (SID) Definitions
-  - Discretionary Access Control List (DACL) Definitions
-  - Security Descriptor Definition Language (SDDL) Definitions
+  - Access Control List (DACL/SACL) Definitions
+  - Security Descriptor Definition Language (SDDL)
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -301,7 +301,7 @@ function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8; ove
 procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
 
 
-{ ****************** Discretionary Access Control List (DACL) Definitions }
+{ ****************** Access Control List (DACL/SACL) Definitions }
 
 type
   /// custom binary buffer type used as Windows self-relative Security Descriptor
@@ -657,7 +657,7 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid = nil): boolean;
 
 
-{ ****************** Security Descriptor Definition Language (SDDL) Definitions }
+{ ****************** Security Descriptor Definition Language (SDDL) }
 
 /// parse a SID from its SDDL text form into its binary buffer
 // - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
@@ -832,11 +832,11 @@ function TokenHasAnyGroup(tok: THandle; const sid: RawSidDynArray): boolean;
 // - e.g. 'S-1-5-21-823746769-1624905683-418753922-1000'
 // - optionally returning the name and domain via LookupSid()
 function CurrentSid(wtt: TWinTokenType = wttProcess;
-  name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8; overload;
+  name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8;
 
 /// return the SID of the current user, from process or thread, as raw binary
 procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
-  name: PRawUtf8 = nil; domain: PRawUtf8 = nil); overload;
+  name: PRawUtf8 = nil; domain: PRawUtf8 = nil);
 
 /// return the SID of the current user groups, from process or thread, as text
 function CurrentGroupsSid(wtt: TWinTokenType = wttProcess): TRawUtf8DynArray;
@@ -1435,7 +1435,7 @@ begin
 end;
 
 
-{ ****************** Security Descriptor Definition Language (SDDL) Definitions }
+{ ****************** Security Descriptor Definition Language (SDDL) }
 
 const
   // defined as a packed array of chars for fast SSE2 brute force search
@@ -1699,7 +1699,7 @@ begin
 end;
 
 
-{ ****************** Discretionary Access Control List (DACL) Definitions }
+{ ****************** Access Control List (DACL/SACL) Definitions }
 
 { low-level self-relative Security Descriptor buffer data structures }
 
@@ -2713,6 +2713,7 @@ end;
 
 {$endif OSWINDOWS}
 
+
 procedure InitializeUnit;
 var
   wks: TWellKnownSid;
@@ -2737,7 +2738,6 @@ begin
     if SAM_SDDL[sam][0] <> #0  then
       include(samWithSddl, sam);
 end;
-
 
 initialization
   InitializeUnit;
