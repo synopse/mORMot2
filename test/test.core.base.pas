@@ -6531,6 +6531,14 @@ begin
     sd2.Clear;
     Check(SecurityDescriptorFromJson(json, sd2), 'loadjson');
     Check(sd.IsEqual(sd2));
+    if sd.Sacl <> nil then
+      continue;
+    Check(sd.Add('(A;;KA;;;SY)') <> nil);
+    u := u + '(A;;KA;;;SY)';
+    CheckEqual(sd.ToText, u);
+    Check(sd.Add(satCallbackAudit, 'AU', 'KR') <> nil);
+    u := u + '(XU;;KR;;;AU)';
+    CheckEqual(sd.ToText, u);
   end;
   // validate parsing RID in text (e.g. DU,DA)
   Check(not sd.FromText(RID_TXT[3]), 'dom0');
