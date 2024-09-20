@@ -116,7 +116,7 @@ function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
 // - will also accepts any 'S-1-5-21-xx-xx-xx-yyy' form, e.g. the current user SID
 // - if a domain SID, Dom binary buffer will contain a S-1-5-21-xx-xx-xx-0 value,
 // ready to be used with KnownRidSid(), SidSameDomain(), SddlAppendSid(),
-// SddlNextSid() or TSecDesc.AppendAsText functions
+// SddlNextSid() or TSecurityDescriptor.AppendAsText functions
 function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
 
 /// quickly check if two binary SID buffers domain do overlap
@@ -440,12 +440,12 @@ type
   /// define a discretionary access control list (DACL)
   TSecAces = array of TSecAce;
 
-  /// high-level cross-platform support of Windows Security Descriptors
-  // - can load and export Windows SD as self-relative binary or SDDL text
+  /// high-level cross-platform support of one Windows Security Descriptor
+  // - can be loaded and exported as self-relative binary or SDDL text
   {$ifdef USERECORDWITHMETHODS}
-  TSecDesc = record
+  TSecurityDescriptor = record
   {$else}
-  TSecDesc = object
+  TSecurityDescriptor = object
   {$endif USERECORDWITHMETHODS}
   public
     /// the owner security identifier (SID)
@@ -461,7 +461,7 @@ type
     /// remove any previous content
     procedure Clear;
     /// compare the fields of this instance with another
-    function IsEqual(const sd: TSecDesc): boolean;
+    function IsEqual(const sd: TSecurityDescriptor): boolean;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
@@ -557,11 +557,11 @@ const
 
 
 /// check the conformity of a self-relative binary Security Descriptor buffer
-// - only check the TSecDesc main fields consistency
+// - only check the TSecurityDescriptor main fields consistency
 function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 
 /// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
-// - will wrap our TSecDesc binary decoder / SDDL encoder on all platforms
+// - will wrap our TSecurityDescriptor binary decoder / SDDL encoder on all platforms
 // - returns true if the conversion succeeded
 // - returns false, and don't change the text value on rendering error
 // - function is able to convert the value itself, i.e. allows @sd = @text
@@ -1727,7 +1727,7 @@ end;
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid): boolean;
 var
-  tmp: TSecDesc;
+  tmp: TSecurityDescriptor;
 begin
   result := tmp.FromBinary(sd);
   if not result then
@@ -1895,15 +1895,15 @@ begin
 end;
 
 
-{ TSecDesc }
+{ TSecurityDescriptor }
 
-procedure TSecDesc.Clear;
+procedure TSecurityDescriptor.Clear;
 begin
   Finalize(self);
   Flags := [scSelfRelative];
 end;
 
-function TSecDesc.IsEqual(const sd: TSecDesc): boolean;
+function TSecurityDescriptor.IsEqual(const sd: TSecurityDescriptor): boolean;
 var
   i: PtrInt;
 begin
@@ -1923,12 +1923,12 @@ begin
   result := true;
 end;
 
-function TSecDesc.FromBinary(const Bin: RawSecurityDescriptor): boolean;
+function TSecurityDescriptor.FromBinary(const Bin: RawSecurityDescriptor): boolean;
 begin
   result := FromBinary(pointer(Bin), length(Bin));
 end;
 
-function TSecDesc.FromBinary(p: PByteArray; len: cardinal): boolean;
+function TSecurityDescriptor.FromBinary(p: PByteArray; len: cardinal): boolean;
 begin
   Clear;
   result := false;
@@ -1943,7 +1943,7 @@ begin
             BinToAcl(p, PSD(p)^.Sacl, Sacl);
 end;
 
-function TSecDesc.ToBinary: RawSecurityDescriptor;
+function TSecurityDescriptor.ToBinary: RawSecurityDescriptor;
 var
   p: PAnsiChar;
   hdr: PSD;
@@ -1982,10 +1982,10 @@ begin
     inc(p, AclToBin(p, Dacl));
   end;
   if p - pointer(result) <> length(result) then
-    raise EOSException.Create('TSecDesc.ToBinary'); // paranoid
+    raise EOSException.Create('TSecurityDescriptor.ToBinary'); // paranoid
 end;
 
-function TSecDesc.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
+function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
 
   function NextAces(var aces: TSecAces; pr, ar, ai: TSecControl): boolean;
   begin
@@ -2064,7 +2064,7 @@ begin
   result := true;
 end;
 
-function TSecDesc.FromText(const SddlText, RidDomain: RawUtf8): boolean;
+function TSecurityDescriptor.FromText(const SddlText, RidDomain: RawUtf8): boolean;
 var
   p: PUtf8Char;
   dom: RawSid;
@@ -2074,7 +2074,7 @@ begin
             FromText(p, pointer(dom));
 end;
 
-function TSecDesc.ToText(const RidDomain: RawUtf8): RawUtf8;
+function TSecurityDescriptor.ToText(const RidDomain: RawUtf8): RawUtf8;
 var
   dom: RawSid;
 begin
@@ -2083,7 +2083,7 @@ begin
     AppendAsText(result, pointer(dom));
 end;
 
-procedure TSecDesc.AppendAsText(var result: RawUtf8; dom: PSid);
+procedure TSecurityDescriptor.AppendAsText(var result: RawUtf8; dom: PSid);
 var
   tmp: shortstring;
 

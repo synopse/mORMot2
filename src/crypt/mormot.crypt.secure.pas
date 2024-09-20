@@ -9875,7 +9875,7 @@ end;
 
 procedure _JL_SD(Data: PRawSecurityDescriptor; var Ctxt: TJsonParserContext);
 var
-  tmp: TSecDesc;
+  tmp: TSecurityDescriptor;
 begin
   if Ctxt.ParseNext then
     if Ctxt.Value = nil then // null
@@ -9889,7 +9889,7 @@ end;
 
 procedure _JS_SD(Data: PRawSecurityDescriptor; const Ctxt: TJsonSaveContext);
 var
-  tmp: TSecDesc;
+  tmp: TSecurityDescriptor;
 begin
   Ctxt.W.Add('"');
   if (Data^ <> '') and

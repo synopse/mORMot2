@@ -3144,7 +3144,7 @@ begin
         exit;
       end;
     atsSecurityDescriptor:
-      if SecurityDescriptorToText(s, s) then // use our TSecDesc wrapper
+      if SecurityDescriptorToText(s, s) then // use our TSecurityDescriptor wrapper
         exit;
     atsFileTime: // 64-bit FileTime
       begin

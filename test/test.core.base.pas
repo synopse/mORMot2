@@ -6463,7 +6463,7 @@ var
   bin, saved: RawSecurityDescriptor;
   u, dom: RawUtf8;
   domsid: RawSid;
-  sd, sd2: TSecDesc;
+  sd, sd2: TSecurityDescriptor;
   p: PUtf8Char;
 begin
   // validate internal structures and types
