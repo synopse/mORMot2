@@ -501,6 +501,8 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     function InternalAdd(scope: TSecAceScope; out dest: PSecAcl): PSecAce;
+    function InternalAdded(scope: TSecAceScope; ace: PSecAce; dest: PSecAcl;
+      success: boolean): PSecAce;
   public
     /// the owner security identifier (SID)
     Owner: RawSid;
@@ -2318,6 +2320,27 @@ begin
   result := @dest^[n];
 end;
 
+const
+  SCOPE_FLAG: array[TSecAceScope] of TSecControl = (
+    scDaclPresent, scSaclPresent);
+
+function TSecurityDescriptor.InternalAdded(scope: TSecAceScope; ace: PSecAce;
+  dest: PSecAcl; success: boolean): PSecAce;
+begin
+  if success then
+  begin
+    include(Flags, SCOPE_FLAG[scope]);
+    result := ace;
+  end
+  else
+  begin
+    SetLength(dest^, length(dest^) - 1); // abort
+    if dest^ = nil then
+      exclude(Flags, SCOPE_FLAG[scope]);
+    result := nil;
+  end;
+end;
+
 function TSecurityDescriptor.Add(sat: TSecAceType;
   const sidText, maskSddl: RawUtf8; dom: PSid; const condExp: RawUtf8;
   scope: TSecAceScope; saf: TSecAceFlags): PSecAce;
@@ -2325,10 +2348,8 @@ var
   dest: PSecAcl;
 begin
   result := InternalAdd(scope, dest);
-  if result^.Fill(sat, sidText, maskSddl, dom, condExp, saf) then
-    exit; // success
-  SetLength(dest^, length(dest^) - 1); // abort
-  result := nil;
+  result := InternalAdded(scope, result, dest,
+    result^.Fill(sat, sidText, maskSddl, dom, condExp, saf));
 end;
 
 function TSecurityDescriptor.Add(const sddl: RawUtf8; dom: PSid;
@@ -2344,10 +2365,7 @@ begin
     exit;
   inc(p);
   result := InternalAdd(scope, dest);
-  if result^.FromText(p, dom) then
-    exit; // success
-  SetLength(dest^, length(dest^) - 1); // abort
-  result := nil;
+  result := InternalAdded(scope, result, dest, result^.FromText(p, dom));
 end;
 
 procedure TSecurityDescriptor.Delete(index: PtrUInt; scope: TSecAceScope);
@@ -2364,7 +2382,10 @@ begin
   Finalize(dest^[index]);
   dec(n);
   if n = 0 then
-    dest^ := nil
+  begin
+    dest^ := nil;
+    exclude(Flags, SCOPE_FLAG[scope]);
+  end
   else
     DynArrayFakeDelete(dest^, index, n, SizeOf(dest^[0]));
 end;
