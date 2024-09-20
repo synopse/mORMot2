@@ -343,6 +343,7 @@ type
     samGenericRead);         // GR
   /// 32-bit standard and generic access rights in TSecAce.Mask
   TSecAccessMask = set of TSecAccess;
+  PSecAccessMask = ^TSecAccessMask;
 
   /// TSecAce.Mask constant values with their own SDDL identifier
   TSecAccessRight = (
@@ -585,6 +586,12 @@ procedure SddlAppendSid(var s: shortstring; sid, dom: PSid);
 // - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
 // 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
+
+/// parse a TSecAce.Mask 32-bit value from its SDDL text
+function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
+
+/// append a TSecAce.Mask 32-bit value in its SDDL text form
+procedure SddlAppendMask(var s: shortstring; mask: TSecAccessMask);
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
@@ -1470,14 +1477,62 @@ end;
 
 function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
 var
-  u: shortstring;
+  u: {$ifdef UNICODE}string{$else}shortstring{$endif};
   err: integer;
+  s: PUtf8Char;
 begin
-  result := false;
-  if not SddlNextPart(p, u) then
-    exit;
-  val({$ifdef UNICODE}string{$endif}(u), c, err); // RTL handles 0x###
+  s := p; // p^ is '0x####'
+  repeat
+    inc(s);
+  until s^ in [#0, ';'];
+  SetString(u, PAnsiChar(p), s - p);
+  val(u, c, err); // RTL handles 0x###
   result := err = 0;
+  p := s;
+end;
+
+function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
+var
+  r: TSecAccessRight;
+  a: TSecAccess;
+  m: integer absolute mask;
+  one: integer;
+  u: string[2];
+begin
+  result := (p = nil);
+  if result then
+    exit;
+  m := 0;
+  while p^ = ' ' do
+    inc(p);
+  while not (p^ in [#0, ';']) do
+  begin
+    if PWord(p)^ = ord('0') + ord('x') shl 8 then
+      if SddlNextInteger(p, m) then
+        break // we got the mask as a 32-bit hexadecimal value
+      else
+        exit;
+    if not SddlNextTwo(p, u) then
+      exit;
+    one := 0;
+    for r := low(r) to high(r) do
+      if SAR_SDDL[r] = u then
+      begin
+        one := SAR_MASK[r];
+        break;
+      end;
+    if one = 0 then
+      for a := low(a) to high(a) do
+        if SAM_SDDL[a] = u then
+        begin
+          one := 1 shl ord(a);
+          break;
+        end;
+    if one = 0 then
+      exit; // unrecognized
+    m := m or one;
+  end;
+  result := true;
 end;
 
 function SddlNextAce(var p: PUtf8Char; var ace: TSecAce; dom: PSid): boolean;
@@ -1485,13 +1540,10 @@ var
   u: shortstring;
   t: TSecAceType;
   f: TSecAceFlag;
-  a: TSecAccess;
-  r: TSecAccessRight;
   s: PUtf8Char;
   mask, parent: integer;
 begin
   result := false;
-  ace.AceType := satUnknown;
   while p^ = ' ' do
     inc(p);
   if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
@@ -1504,7 +1556,7 @@ begin
     if not SddlNextPart(p, u) or
        not (u[0] in [#1, #2]) then
       exit;
-    for t := low(t) to high(t) do
+    for t := succ(low(t)) to high(t) do
       if SAT_SDDL[t] = u then
       begin
         ace.AceType := t;
@@ -1530,36 +1582,10 @@ begin
         break;
       end;
   end;
-  repeat
-    inc(p);
-  until p^ <> ' ';
-  while p^ <> ';' do
-  begin
-    if PWord(p)^ = ord('0') + ord('x') shl 8 then
-      if SddlNextInteger(p, PInteger(@ace.Mask)^) then
-        break // we got the mask as a 32-bit hexadecimal value
-      else
-        exit;
-    if not SddlNextTwo(p, u) then
-      exit;
-    mask := 0;
-    for r := low(r) to high(r) do
-      if SAR_SDDL[r] = u then
-      begin
-        mask := SAR_MASK[r];
-        break;
-      end;
-    if mask = 0 then
-      for a := low(a) to high(a) do
-        if SAM_SDDL[a] = u then
-        begin
-          mask := 1 shl ord(a);
-          break;
-        end;
-    if mask = 0 then
-      exit; // unrecognized
-    PInteger(@ace.Mask)^ := PInteger(@ace.Mask)^ or mask;
-  end;
+  inc(p);
+  if not SddlNextMask(p, ace.Mask) or
+     (p^ <> ';') then
+    exit;
   repeat
     inc(p);
   until p^ <> ' ';
@@ -1599,12 +1625,30 @@ begin
   result := p^ = ')'; // ACE should end with a parenthesis
 end;
 
+procedure SddlAppendMask(var s: shortstring; mask: TSecAccessMask);
+var
+  a: TSecAccess;
+  i: PtrInt;
+begin
+  if cardinal(mask) = 0 then
+    exit;
+  i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), cardinal(mask));
+  if i >= 0 then
+    AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
+  else if mask - samWithSddl <> [] then
+  begin
+    AppendShortTwoChars('0x', @s);        // we don't have the tokens it needs
+    AppendShortIntHex(cardinal(mask), s); // store as @x##### hexadecimal
+  end
+  else
+    for a := low(a) to high(a) do
+      if a in mask then
+        AppendShortTwoChars(@SAM_SDDL[a][1], @s); // store as SDDL pairs
+end;
+
 procedure SddlAppendAce(var s: shortstring; const ace: TSecAce; dom: PSid);
 var
   f: TSecAceFlag;
-  a: TSecAccess;
-  c: cardinal;
-  i: PtrInt;
 begin
   if SAT_SDDL[ace.AceType][0] <> #0 then
     AppendShort(SAT_SDDL[ace.AceType], s)
@@ -1618,22 +1662,7 @@ begin
     if f in ace.Flags then
       AppendShort(SAF_SDDL[f], s);
   AppendShortChar(';', @s);
-  c := cardinal(ace.Mask);
-  if c <> 0 then
-  begin
-    i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), c);
-    if i >= 0 then
-      AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
-    else if ace.Mask - samWithSddl <> [] then
-    begin
-      AppendShortTwoChars('0x', @s); // we don't have the tokens it needs
-      AppendShortIntHex(c, s);       // store as @x##### hexadecimal
-    end
-    else
-      for a := low(a) to high(a) do
-        if a in ace.Mask then
-          AppendShortTwoChars(@SAM_SDDL[a][1], @s)
-  end;
+  SddlAppendMask(s, ace.Mask);
   if ace.AceType in satObject then
   begin
     AppendShortChar(';', @s);
