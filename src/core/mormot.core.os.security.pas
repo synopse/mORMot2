@@ -480,6 +480,10 @@ type
     function MaskText: RawUtf8; overload;
     /// set the associated access mask, in its SDDL text format
     function MaskText(const maskSddl: RawUtf8): boolean; overload;
+    /// get the ACE conditional expression, as stored in Opaque binary
+    function ConditionalExpression: RawUtf8; overload;
+    /// parse a ACE conditional expression, and assign it to Opaque binary
+    function ConditionalExpression(const condExp: RawUtf8): boolean; overload;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -1575,10 +1579,10 @@ var
   one: integer;
   u: string[2];
 begin
-  result := (p = nil);
-  if result then
-    exit;
+  result := false;
   m := 0;
+  if p = nil then
+    exit;
   while p^ = ' ' do
     inc(p);
   while not (p^ in [#0, ';']) do
@@ -1608,7 +1612,7 @@ begin
       exit; // unrecognized
     m := m or one;
   end;
-  result := true;
+  result := m <> 0;
 end;
 
 procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
@@ -1630,6 +1634,54 @@ begin
     for a := low(a) to high(a) do
       if a in mask then
         AppendShortTwoChars(@SAM_SDDL[a][1], @s); // store as SDDL pairs
+end;
+
+function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
+var
+  s: PUtf8Char;
+  parent: integer;
+begin
+  result := false;
+  if p <> nil then
+    while p^ = ' ' do
+      inc(p);
+  s := p;
+  if s <> nil then
+  begin
+    parent := 0;
+    if (ace.AceType in satConditional) and
+       (s^ = '(') then // conditional ACE expression
+      repeat
+        case s^ of
+          #0:
+            exit; // premature end
+          '(':
+            inc(parent); // count nested parenthesis
+          ')':
+            if parent = 0 then
+              break // ending ACE parenthesis
+            else
+              dec(parent);
+        end;
+        inc(s);
+      until false
+    else
+      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
+        inc(s);
+  end;
+  FastSetString(RawUtf8(ace.Opaque), p, s - p);
+  p := s;
+  result := true;
+end;
+
+procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
+begin
+  if ace.Opaque = '' then
+    exit;
+  if StrLen(pointer(ace.Opaque)) = length(ace.Opaque) then // true text
+    AppendShortAnsi7String(ace.Opaque, s) // e.g. conditional ACE expression
+  else
+    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // paranoid
 end;
 
 
@@ -1767,6 +1819,23 @@ begin
   result := SddlNextMask(p, Mask);
 end;
 
+function TSecAce.ConditionalExpression: RawUtf8;
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  SddlAppendOpaque(s, self);
+  ShortStringToAnsi7String(s, result);
+end;
+
+function TSecAce.ConditionalExpression(const condExp: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := pointer(condExp);
+  result := SddlNextOpaque(p, self);
+end;
+
 function TSecAce.Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
   dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
 begin
@@ -1774,7 +1843,8 @@ begin
   result := false;
   if (sat = satUnknown) or
      not SidText(sidSddl, dom) or
-     not MaskText(maskSddl) then
+     not MaskText(maskSddl) or
+     not ConditionalExpression(condExp) then
     exit;
   AceType := sat;
   RawType := ord(sat) + 1;
@@ -1816,10 +1886,7 @@ begin
   if Opaque <> '' then
   begin
     AppendShortChar(';', @s);
-    if StrLen(pointer(Opaque)) = length(Opaque) then // true text
-      AppendShortAnsi7String(Opaque, s) // e.g. conditional ACE expression
-    else
-      AppendShortHex(pointer(Opaque), length(Opaque), s); // paranoid
+    SddlAppendOpaque(s, self);
   end;
   AppendShortChar(')', @s);
 end;
@@ -1829,8 +1896,7 @@ var
   u: ShortString;
   t: TSecAceType;
   f: TSecAceFlag;
-  s: PUtf8Char;
-  i, parent: integer;
+  i: integer;
 begin
   result := false;
   while p^ = ' ' do
@@ -1884,32 +1950,9 @@ begin
     exit;
   if p^ = ';' then // optional additional/opaque parameter
   begin
-    repeat
-      inc(p);
-    until p^ <> ' ';
-    parent := 0;
-    s := p;
-    if (AceType in satConditional) and
-       (s^ = '(') then // conditional ACE expression
-      repeat
-        case s^ of
-          #0:
-            exit; // premature end
-          '(':
-            inc(parent); // count nested parenthesis
-          ')':
-            if parent = 0 then
-              break // ending ACE parenthesis
-            else
-              dec(parent);
-        end;
-        inc(s);
-      until false
-    else
-      while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
-        inc(s);
-    FastSetString(RawUtf8(Opaque), p, s - p);
-    p := s;
+    inc(p);
+    if not SddlNextOpaque(p, self) then
+      exit;
   end;
   result := p^ = ')'; // ACE should end with a parenthesis
 end;
