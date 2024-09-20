@@ -4667,13 +4667,15 @@ begin
     exit;
   end;
   c := aText[aTextLen];
-  aText[aTextLen] := #0; // input buffer may not be #0 terminated
+  if c <> #0 then // write only if needed - avoid GPF from constant string
+    aText[aTextLen] := #0; // input buffer may not be #0 terminated
   i := fHash.Values.Hasher.FindOrNewComp(aTextHash, @aText, @SortDynArrayPUtf8Char);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
     fSafe.ReadUnLock;
-    aText[aTextLen] := c;
+    if c <> #0 then
+      aText[aTextLen] := c;
     exit;
   end;
   fSafe.ReadUnLock;
@@ -4686,7 +4688,8 @@ begin
     FastSetString(fHash.Value[i], aText, aTextLen); // new value to the pool
   aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
-  aText[aTextLen] := c;
+  if c <> #0 then
+    aText[aTextLen] := c;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
