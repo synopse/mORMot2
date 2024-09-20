@@ -3715,8 +3715,10 @@ begin
             if t^.RefCount <> 0 then
               exit; // nested transaction
             dec(n);
-            MoveFast(fSharedTransactions[i + 1], t^, (n - i) * SizeOf(t^));
-            SetLength(fSharedTransactions, n);
+            if n = 0 then
+              fSharedTransactions := nil
+            else
+              DynArrayFakeDelete(fSharedTransactions, i, n, SizeOf(t^));
             found := true;
           end;
           break;

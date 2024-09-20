@@ -1555,11 +1555,10 @@ begin
   // slightly faster than a TDynArray which would release the memory
   List[i].payload := '';
   dec(Count);
-  if i < Count then
-  begin
-    MoveFast(List[i + 1], List[i], (Count - i) * SizeOf(List[i]));
-    pointer(List[Count].payload) := nil;
-  end;
+  if i >= Count then
+    exit;
+  MoveFast(List[i + 1], List[i], (Count - i) * SizeOf(List[i]));
+  pointer(List[Count].payload) := nil;
 end;
 
 

@@ -3800,14 +3800,15 @@ begin
     if Reason = crrNotRevoked then
     begin
       // remove from CRL list
-      c := pointer(fCrl);
       dec(n);
+      c := pointer(fCrl);
       for i := 0 to n do
         if IsEqual(c^.Serial, Serial) then
         begin
-          if n > i then
-            MoveFast(fCrl[i + 1], fCrl[i], (n - i) * SizeOf(fCrl[i]));
-          SetLength(fCrl, n);
+          if n = 0 then
+            fCrl := nil
+          else
+            DynArrayFakeDelete(fCrl, i, n, SizeOf(c^));
           result := true;
           break;
         end

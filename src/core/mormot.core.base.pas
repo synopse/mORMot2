@@ -690,6 +690,12 @@ const
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
 
+/// low-level deletion of one dynmaic array item
+// - Last=high(Values) should be > 0 - caller should set Values := nil for Last<=0
+// - caller should have made Finalize(Values[Index]) before calling
+// - used e.g. by TSecurityDescriptor.Delete()
+procedure DynArrayFakeDelete(var Values; Index, Last, ValueSize: PtrUInt);
+
 {$ifndef CPUARM}
 type
   /// used as ToByte() to properly truncate any integer into 8-bit
@@ -6479,6 +6485,18 @@ begin
   PDALen(PAnsiChar(arr) - _DALEN)^ := len - _DAOFF;
 end;
 
+procedure DynArrayFakeDelete(var Values; Index, Last, ValueSize: PtrUInt);
+var
+  p: PAnsiChar;
+begin // ensured (Last > 0) and (Index <= Last) and made Finalize(Values[Index])
+  DynArrayFakeLength(pointer(Values), Last); // dec(length) in header no realloc
+  dec(Last, Index);
+  if Last = 0 then
+    exit; // nothing to move
+  p := PAnsiChar(Values) + Index * ValueSize;
+  MoveFast(p[ValueSize], p[0], Last * ValueSize);
+end;
+
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
 
 function TDynArrayRec.GetLength: TDALen;
@@ -9343,14 +9361,16 @@ end;
 procedure MultiEventRemove(var EventList; Index: PtrInt);
 var
   events: TMethodDynArray absolute EventList;
-  max: PtrInt;
+  max: PtrUInt;
 begin
   max := length(events);
-  if PtrUInt(Index) >= PtrUInt(max) then
+  if PtrUInt(Index) < max then
     exit;
   dec(max);
-  MoveFast(events[Index + 1], events[Index], (max - Index) * SizeOf(TMethod));
-  SetLength(events, max);
+  if max = 0 then
+    events := nil
+  else
+    DynArrayFakeDelete(events, Index, max, SizeOf(TMethod));
 end;
 
 procedure MultiEventMerge(var DestList; const ToBeAddedList);

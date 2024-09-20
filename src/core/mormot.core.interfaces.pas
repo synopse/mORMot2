@@ -5173,9 +5173,8 @@ begin
   fSafe.WriteLock;
   try
     last := length(fEntry) - 1;
+    e := pointer(fEntry);
     for i := 0 to last do
-    begin
-      e := @fEntry[i];
       if e^.TypeInfo = aInterface then
       begin
         if e^.Instance = nil then
@@ -5183,12 +5182,14 @@ begin
             '%.Delete(%) does not match an instance, but a class',
             [self, aInterface^.RawName]);
         e^.Instance := nil; // avoid GPF
-        if last > i then
-          MoveFast(fEntry[i + 1], fEntry[i], (last - i) * SizeOf(fEntry[i]));
-        SetLength(fEntry, last);
+        if last = 0 then
+          fEntry := nil
+        else
+          DynArrayFakeDelete(fEntry, i, last, SizeOf(e^));
         exit;
-      end;
-    end;
+      end
+      else
+        inc(e);
   finally
     fSafe.WriteUnLock;
   end;

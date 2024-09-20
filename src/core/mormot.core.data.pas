@@ -7407,7 +7407,7 @@ end;
 function TDynArray.Delete(aIndex: PtrInt): boolean;
 var
   n: PtrInt;
-  s, len: PtrUInt;
+  siz, tomove: PtrUInt;
   P: PAnsiChar;
   wassorted: boolean;
 begin
@@ -7420,19 +7420,19 @@ begin
   if PDACnt(PAnsiChar(fValue^) - _DACNT)^ > 1 then
     InternalSetLength(n, n); // unique
   dec(n);
-  s := fInfo.Cache.ItemSize;
-  P := PAnsiChar(fValue^) + PtrUInt(aIndex) * s;
+  siz := fInfo.Cache.ItemSize;
+  P := PAnsiChar(fValue^) + PtrUInt(aIndex) * siz;
   if (fInfo.ArrayRtti <> nil) and
      not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
-  len := n - aIndex;
-  if len <> 0 then
+  tomove := n - aIndex;
+  if tomove <> 0 then
   begin
-    len := len * s;
-    MoveFast(P[s], P[0], len);
-    inc(P, len);
+    tomove := tomove * siz;
+    MoveFast(P[siz], P[0], tomove);
+    inc(P, tomove);
   end;
-  FillCharFast(P^, s, 0);
+  FillCharFast(P^, siz, 0);
   wassorted := fSorted;
   SetCount(n); // won't reallocate
   fSorted := wassorted; // deletion won't change the order
