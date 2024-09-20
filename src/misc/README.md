@@ -20,4 +20,5 @@ Warning: this unit is just in early draft state - nothing works yet. ;)
 
 *PE COFF* File Reader, as used for windows executables or libraries (.exe, .dll)
 - Low-Level PE Encoding Structures  
-- High-Level PE (.exe, .dll...) File Reader  
+- High-Level PE (.exe, .dll...) File Reader
+- Windows Executable Digital Signature Stuffing

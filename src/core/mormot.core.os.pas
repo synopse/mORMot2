@@ -1567,6 +1567,14 @@ function GetSystemStoreAsPem(
 function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean = false; now: cardinal = 0): RawUtf8;
 
+var
+  /// low-level function used by StuffExeCertificate() in mormot.misc.pecoff.pas
+  // - properly implemented by mormot.crypt.openssl.pas, but mormot.misc.pecoff
+  // has its own stand-alone version using a pre-generated fixed certificate
+  // - warning: the Marker should have no 0 byte within
+  CreateDummyCertificate: function(const Stuff, CertName: RawUtf8;
+    Marker: cardinal): RawByteString;
+
 type
   /// the raw SMBIOS information as filled by GetRawSmbios
   // - first 4 bytes are $010003ff on POSIX if read from /var/tmp/.synopse.smb

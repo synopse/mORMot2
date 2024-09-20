@@ -48,7 +48,6 @@ Authentication and Security types shared by all framework units.
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
 - Basic ASN.1 Support
-- Windows Executable Digital Signature Stuffing
 
 ### mormot.crypt.ecc256r1
 
