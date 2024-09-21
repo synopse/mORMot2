@@ -474,13 +474,13 @@ type
     // - returns true on success - i.e. if all input params were correct
     function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
       dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
-    /// get the associated SID, in its SDDL text, optionally with a RID domain
+    /// get the associated SID, as SDDL text, optionally with a RID domain
     function SidText(dom: PSid = nil): RawUtf8; overload;
-    /// set the associated SID, in its SDDL text, optionally with a RID domain
+    /// set the associated SID, as SDDL text, optionally with a RID domain
     function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
-    /// get the associated access mask, in its SDDL text format
+    /// get the associated access mask, as SDDL text format
     function MaskText: RawUtf8; overload;
-    /// set the associated access mask, in its SDDL text format
+    /// set the associated access mask, as SDDL text format
     function MaskText(const maskSddl: RawUtf8): boolean; overload;
     /// get the ACE conditional expression, as stored in Opaque binary
     function ConditionalExpression: RawUtf8; overload;
@@ -665,7 +665,7 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
 // 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 
-/// append a binary SID in its SDDL text form
+/// append a binary SID as SDDL text form
 // - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
 // - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
 // S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
@@ -674,23 +674,21 @@ procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 /// parse a TSecAce.Mask 32-bit value from its SDDL text
 function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
 
-/// append a TSecAce.Mask 32-bit value in its SDDL text form
+/// append a TSecAce.Mask 32-bit value as SDDL text form
 procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 
 /// parse a TSecAce.Opaque value from its SDDL text
 function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
 
-/// append a TSecAce.Opaque value in its SDDL text form
+/// append a TSecAce.Opaque value as SDDL text form
 procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
+function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
 
 
 const
-  /// the last TWellKnownSid item which has a SDDL identifier
-  wksLastSddl = wksBuiltinWriteRestrictedCode;
-
   { SDDL standard identifiers using string[3] for efficient 32-bit alignment }
 
   /// define how ACE kinds in TSecAce.AceType are stored as SDDL
@@ -1438,6 +1436,9 @@ end;
 { ****************** Security Descriptor Definition Language (SDDL) }
 
 const
+  /// the last TWellKnownSid item which has a SDDL identifier
+  wksLastSddl = wksBuiltinWriteRestrictedCode;
+
   // defined as a packed array of chars for fast SSE2 brute force search
   SID_SDDL: array[0 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2 - 1] of AnsiChar =
     // TWellKnownSid
@@ -1447,7 +1448,7 @@ const
     // TWellKnownRid
     'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI';
 var
-  SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
+  SID_SDDLW: packed array[byte] of word absolute SID_SDDL; // for fast lookup
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
@@ -1696,6 +1697,13 @@ begin
   FastAssignNew(result); // no need to optimize: only used for regression tests
   if wks in wksWithSddl then
     FastSetString(result, @SID_SDDLW[ord(wks)], 2);
+end;
+
+function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
+begin
+  FastAssignNew(result);
+  if wkr in wkrWithSddl then
+    FastSetString(result, @SID_SDDLW[(ord(wksLastSddl) + 1) + ord(wkr)], 2);
 end;
 
 
