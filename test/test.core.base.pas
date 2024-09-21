@@ -6478,6 +6478,8 @@ procedure TTestCoreBase._SDDL;
 var
   i, j: PtrInt;
   c: TSecControls;
+  k: TWellKnownSid;
+  r: TWellKnownRid;
   bin, saved: RawSecurityDescriptor;
   u, dom, json: RawUtf8;
   domsid: RawSid;
@@ -6499,6 +6501,10 @@ begin
   CheckEqual(KnownSidToSddl(wksBuiltinWriteRestrictedCode), 'WR');
   CheckEqual(KnownSidToSddl(wksCapabilityInternetClient), '');
   CheckEqual(KnownSidToSddl(high(TWellKnownSid)), '');
+  for k := low(k) to high(k) do
+    Check((KnownSidToSddl(k) <> '') = (k in wksWithSddl));
+  for r := low(r) to high(r) do
+    Check((KnownRidToSddl(r) <> '') = (r in wkrWithSddl));
   CheckEqual(ord(scDaclAutoInheritReq), 8);
   CheckEqual(ord(scSelfRelative), 15);
   c := [scSelfRelative];
