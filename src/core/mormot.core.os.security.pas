@@ -921,28 +921,6 @@ begin
     inc(P);
 end;
 
-{$ifdef ISDELPHI} // missing convenient RTL function in Delphi
-function TryStringToGUID(const s: string; var uuid: TGuid): boolean;
-begin
-  try
-    uuid := StringToGUID(s);
-    result := true;
-  except
-    result := false;
-  end;
-end;
-{$endif ISDELPHI}
-
-function TextToUuid(const text: ShortString; out uuid: TGuid): boolean;
-begin // sub-function to avoid temp string on the stack
-  result := TryStringToGUID('{' + string(text) + '}', uuid); // RTL fast enough
-end;
-
-procedure AppendShortUuid(const u: TGuid; var s: ShortString);
-begin // sub-function to avoid temp string on the stack
-  AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
-end;
-
 
 { ****************** Security IDentifier (SID) Definitions }
 
@@ -1557,7 +1535,7 @@ var
 begin
   result := SddlNextPart(p, u) and
             ((u[0] = #0) or
-             TextToUuid(u, uuid)); // use RTL
+             ShortToUuid(u, uuid)); // use RTL or mormot.core.text
   repeat
     inc(p);
   until p^ <> ' ';
@@ -1896,7 +1874,7 @@ begin
   begin
     AppendShortChar(';', @s);
     if not IsNullGuid(ObjectType) then
-      AppendShortUuid(ObjectType, s);
+      AppendShortUuid(ObjectType, s); // RTL or mormot.core.text
     AppendShortChar(';', @s);
     if not IsNullGuid(InheritedObjectType) then
       AppendShortUuid(InheritedObjectType, s);
