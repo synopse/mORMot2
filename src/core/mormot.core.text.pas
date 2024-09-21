@@ -10524,6 +10524,20 @@ begin
   end;
 end;
 
+function _ShortToUuid(const text: ShortString; out uuid: TGuid): boolean;
+begin
+  result := (text[0] = #36) and
+            (TextToGuid(@text[1], @uuid) <> nil);
+end;
+
+procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
+begin
+  if ord(s[0]) > 255 - 36 then
+    exit;
+  GuidToText(@s[ord(s[0]) + 1], @u, @TwoDigitsHexWBLower);
+  inc(s[0], 36);
+end;
+
 function StreamToRawByteString(aStream: TStream; aSize: Int64;
   aCodePage: integer): RawByteString;
 var
@@ -10705,6 +10719,8 @@ begin
     if c in [#0, '&', '"'] then
       HTML_ESC[hfWithinAttributes, c] := v;
   end;
+  ShortToUuid := _ShortToUuid;
+  AppendShortUuid := _AppendShortUuid;
   _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
   _VariantSaveJson := __VariantSaveJson;
   TextWriterSharedStream := TRawByteStringStream.Create;

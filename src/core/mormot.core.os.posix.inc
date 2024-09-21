@@ -504,12 +504,12 @@ var
   err: SizeInt;
 begin
   if CodePage = CP_UTF8 then
-    exit(UnicodeToUtf8(A, W, LW));
+    exit(UnicodeToUtf8(A, W, LW)); // FPC RTL is fast enough for UTF-8
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
     exit(WideToAnsiRTL(CodePage, W, A, LW, LA)); // fallback to cwstring/iconv
   err := 0;
-  result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+  result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err); // more accurate ICU
   if result < 0 then
     result := 0;
   icu.ucnv_close(cnv);
@@ -521,7 +521,7 @@ var
 begin
   if icu.IsAvailable then
   begin
-    // call the accurate ICU library
+    // call the more accurate ICU library
     err := 0;
     result := icu.u_strToUpper(W, WLen, W, WLen, nil, err);
   end
