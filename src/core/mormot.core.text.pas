@@ -641,7 +641,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    procedure Add(Value: PGuid; QuotedChar: AnsiChar = #0); overload;
+    // - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+    procedure Add(Value: PGuid; QuotedChar: AnsiChar = #0; tab: PWordArray = nil); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
@@ -2367,12 +2368,15 @@ function ToUtf8(const guid: TGuid): RawUtf8; overload;
 
 /// convert a TGuid into 36 chars encoded text as RawUtf8
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
-procedure ToUtf8(const guid: TGuid; var text: RawUtf8); overload;
+// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+procedure ToUtf8(const guid: TGuid; var text: RawUtf8; tab: PWordArray = nil); overload;
 
 /// convert one or several TGuid into 36 chars encoded CSV text
 // - will return e.g.
 // ! '3F2504E0-4F89-11D3-9A0C-0305E82C3301,C595476E-73D1-4B9C-9725-308C4A72DEC8'
-function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ','): RawUtf8;
+// - you can set tab = @TwoDigitsHexWBLower to force a lowercase output
+function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar = ',';
+  tab: PWordArray = nil): RawUtf8;
 
 /// convert a TGuid into into 38 chars encoded { text } as RTL string
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
@@ -4402,7 +4406,7 @@ begin
     B^ := '0';
 end;
 
-procedure TTextWriter.Add(Value: PGuid; QuotedChar: AnsiChar);
+procedure TTextWriter.Add(Value: PGuid; QuotedChar: AnsiChar; tab: PWordArray);
 begin
   if BEnd - B <= 38 then
     FlushToStream;
@@ -4412,7 +4416,7 @@ begin
     B^ := QuotedChar;
     inc(B);
   end;
-  B := GuidToText(B, pointer(Value));
+  B := GuidToText(B, pointer(Value), tab);
   if QuotedChar <> #0 then
     B^ := QuotedChar
   else
@@ -7829,7 +7833,7 @@ begin
   VariantToUtf8(V, result, wasString);
 end;
 
-function ToUtf8(const V: TVarData): RawUtf8; overload;
+function ToUtf8(const V: TVarData): RawUtf8;
 var
   wasString: boolean;
 begin
@@ -10279,7 +10283,7 @@ var
 begin
   // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   if tab = nil then
-    tab := @TwoDigitsHexWB;
+    tab := @TwoDigitsHexWB; // uppercased hexa by default (as for GUID)
   for i := 3 downto 0 do
   begin
     PWord(P)^ := tab[guid[i]];
@@ -10323,13 +10327,14 @@ begin
   ToUtf8(guid, result);
 end;
 
-procedure ToUtf8(const guid: TGuid; var text: RawUtf8); overload;
+procedure ToUtf8(const guid: TGuid; var text: RawUtf8; tab: PWordArray);
 begin
   FastSetString(text, 36);
-  GuidToText(pointer(text), @guid);
+  GuidToText(pointer(text), @guid, tab);
 end;
 
-function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar): RawUtf8;
+function GuidArrayToCsv(const guid: array of TGuid; SepChar: AnsiChar;
+  tab: PWordArray): RawUtf8;
 var
   n: integer;
   g: PGuid;
@@ -10343,7 +10348,7 @@ begin
   g := @guid[0];
   p := pointer(result);
   repeat
-    GuidToText(p, pointer(g));
+    GuidToText(p, pointer(g), tab);
     dec(n);
     if n = 0 then
       exit;
