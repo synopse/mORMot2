@@ -1034,7 +1034,7 @@ type
     /// access any attribute value from its known type
     // - calls GetReadable(0) to read, or Add(aoReplaceValue) to write
     // - returns empty string if not found
-    // - is defined as the default property for conveniency
+    // - is defined as the default property for convenience
     property Attr[AttributeType: TLdapAttributeType]: RawUtf8
       read Get write SetAttr; default;
     /// access to the internal list of TLdapAttribute objects
@@ -1144,7 +1144,7 @@ type
     /// access any attribute value from its known type
     // - calls GetReadable(0) on the found attribute
     // - returns empty string if not found
-    // - is defined as the default property for conveniency
+    // - is defined as the default property for convenience
     property Attr[AttributeType: TLdapAttributeType]: RawUtf8
       read GetAttr; default;
     /// copy the 'objectSid' attribute if present

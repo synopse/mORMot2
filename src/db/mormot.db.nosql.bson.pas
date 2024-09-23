@@ -613,7 +613,7 @@ type
     // - since the result won't store any data but points to the original binary
     // content, the supplied Name/Value instances should remain available as long as
     // you will access to the result content
-    // - aName here is just for conveniency, and could be left void
+    // - aName here is just for convenience, and could be left void
     // - supplied aTemp variable will be used for temporary storage, private to
     // this initialized TBsonElement
     procedure FromVariant(const aName: RawUtf8; const aValue: Variant;

@@ -2313,7 +2313,7 @@ type
     // (BLOB e.g.)
     // - format is 'VALUES ('VAL1', 'VAL2')' if all columns values are available
     // - is not used by the ORM (do not use prepared statements) - only here
-    // for conveniency
+    // for convenience
     function GetSqlValues: RawUtf8;
     /// return the UTF-8 encoded SQL source to UPDATE the values contained
     // in the current published fields of a TOrm child
@@ -2321,7 +2321,7 @@ type
     // BLOB fields are ignored (use direct access via dedicated methods instead)
     // - format is 'COL1='VAL1', COL2='VAL2''
     // - is not used by the ORM (do not use prepared statements) - only here
-    // for conveniency
+    // for convenience
     function GetSqlSet: RawUtf8;
     /// return the UTF-8 encoded JSON objects for the values of this TOrm
     // - layout and fields should have been set at TOrmWriter construction:
