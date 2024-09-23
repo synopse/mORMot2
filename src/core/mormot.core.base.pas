@@ -4904,20 +4904,24 @@ end;
 
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 var
-  dlen, v: PtrInt;
+  dlen, v: PtrUInt;
+  tab: PAnsiChar;
 begin
   dlen := ord(dest[0]);
   if (len > 0) and
      (dlen + len * 2 < 254) then
+  begin
+    tab := @HexCharsLower;
     repeat
       v := value^;
       inc(value);
-      dest[dlen + 1] := HexCharsLower[v shr 4];
+      dest[dlen + 1] := tab[v shr 4];
       inc(dlen, 2);
       v := v and $0f;
-      dest[dlen] := HexCharsLower[v];
+      dest[dlen] := tab[v];
       dec(len);
     until len = 0;
+  end;
   dest[0] := AnsiChar(dlen);
 end;
 
