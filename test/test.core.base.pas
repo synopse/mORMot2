@@ -6506,6 +6506,21 @@ const
     'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
     'D:(XA;;FR;;;WD;(Member_of {SID(Smartcard_SID), SID(BO)} ' +
       '&& @Device.Bitlocker))(A;ID;FA;;;SY)');
+  // [MS-DTYP] 2.4.4.17.9 Examples: Conditional Expression Binary Representation
+  ARTX_HEX: array[0..2] of RawUtf8 = (
+    '61727478f80a0000005400690074006c00650010040000005600500080000000',
+    '61727478f91200000073006d006100720074006300610072006400' +
+    '040100000000000000030280fb0e0000006d0061006e006100670065006400' +
+    '040100000000000000030280a1fa080000006400650070007400' +
+    '5018000000100a000000530061006c006500730010040000004800520088a0' +
+    '00000000000000000000000000',
+    '61727478f91c00000063006c0065006100720061006e00630065004c006500760065006c00' +
+    'fa220000007200650071007500690072006500640043006c0065006100720061006e0063006500' +
+    '85501500000051100000000102000000000005200000002002000089a1000000');
+  ARTX_TXT: array[0..high(ARTX_HEX)] of RawUtf8 = (
+    '(Title=="VP")',
+    '(((@User.smartcard==1) || (@Device.managed==1)) && (@Resource.dept Any_of{"Sales","HR"}))',
+    '((@User.clearanceLevel>=@Resource.requiredClearance) || (Member_of{SID(BA)}))');
 
 procedure TTestCoreBase._SDDL;
 var
@@ -6517,6 +6532,7 @@ var
   u, dom, json: RawUtf8;
   domsid: RawSid;
   sd, sd2: TSecurityDescriptor;
+  tree: TAceTree;
   p: PUtf8Char;
 begin
   // validate internal structures and types
@@ -6667,6 +6683,22 @@ begin
     p := pointer(u);
     Check(sd2.FromText(p, pointer(domsid)));
     Check(sd.IsEqual(sd2));
+  end;
+  // validate conditional ACEs binary
+  for i := 0 to high(ARTX_HEX) do
+  begin
+    Check(not tree.Init(''));
+    CheckEqual(tree.Count, 0);
+    CheckEqual(tree.ToText, '');
+    bin := mormot.core.text.HexToBin(ARTX_HEX[i]);
+    Check(bin <> '');
+    Check(tree.Init(bin));
+    CheckEqual(tree.Count, 0);
+    CheckEqual(tree.ToText, '');
+    Check(tree.FromBinary);
+    Check(tree.Count > 0);
+    u := tree.ToText;
+    CheckEqual(u, ARTX_TXT[i]);
   end;
   // validate conditional ACEs
   for i := 0 to high(COND_TXT) do
