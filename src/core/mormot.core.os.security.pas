@@ -694,7 +694,7 @@ type
   TAceTree = record
   private
     function AddNode(position: cardinal; left, right: byte): boolean;
-    procedure NodeText(index: byte; var u: RawUtf8);
+    procedure BinaryNodeText(index: byte; var u: RawUtf8);
   public
     /// the associated input storage
     // - typically maps an TSecAce.Opaque buffer or a RawUtf8 SDDL text
@@ -703,14 +703,19 @@ type
     StorageSize: cardinal;
     /// number of TAceTreeNode stored in Tokens[] and Stack[]
     Count: byte;
+    /// true after FromBinary, false after FromText
+    StorageIsBinary: boolean;
     /// stores the actual tree of this conditional expression
     Stack: array[0 .. MAX_TREE_NODE] of TAceTreeNode;
     /// initialize the Storage with some binary or SDDL text input
     // - caller should then call FromBinary or FromSddl
     function Init(const Input: RawByteString): boolean;
-    /// fill Stack[] from a binary conditional ACE
+    /// fill Stack[] nodes from a binary conditional ACE
+    // - this process is very fast, and requires no memory allocation
     function FromBinary: boolean;
-    /// compute the SDDL text of the stored Stack[]
+    /// compute the SDDL conditional ACE text of the stored Stack[]
+    // - use a simple recursive algorithm, with temporary RawUtf8 allocations
+    // - the tree should have been filled from previous FromBinary() call
     function ToText: RawUtf8;
   end;
 
@@ -1961,7 +1966,7 @@ function TAceTree.AddNode(position: cardinal; left, right: byte): boolean;
 var
   n: PAceTreeNode;
 begin
-  result := (Count < MAX_TREE_NODE) and
+  result := (Count < high(Stack)) and
             (position < StorageSize);
   if not result then
     exit;
@@ -1979,6 +1984,7 @@ var
   st: array[0 .. 31] of byte; // local stack of last few operands
 begin
   result := false;
+  StorageIsBinary := true;
   if (Storage = nil) or
      (StorageSize and 3 <> 0) or // should be DWORD-aligned
      (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
@@ -2029,7 +2035,7 @@ begin
             (stCount = 1); // should end with no pending operand
 end;
 
-procedure TAceTree.NodeText(index: byte; var u: RawUtf8);
+procedure TAceTree.BinaryNodeText(index: byte; var u: RawUtf8);
 var
   n: PAceTreeNode;
   v: PRawAceLiteral;
@@ -2044,9 +2050,9 @@ begin
   l := nil;
   r := nil;
   if n^.Left < Count then
-    NodeText(n^.Left, RawUtf8(l));
+    BinaryNodeText(n^.Left, RawUtf8(l));
   if n^.Right < Count then
-    NodeText(n^.Right, RawUtf8(r));
+    BinaryNodeText(n^.Right, RawUtf8(r));
   v := @Storage[n^.Position];
   if l <> nil then
     if r <> nil then
@@ -2059,7 +2065,10 @@ end;
 
 function TAceTree.ToText: RawUtf8;
 begin
-  NodeText(Count - 1, result); // recursive generation
+  if StorageIsBinary then
+    BinaryNodeText(Count - 1, result) // simple recursive generation
+  else
+    FastSetString(result, Storage, StorageSize);
 end;
 
 
