@@ -40,6 +40,9 @@ uses
 { ****************** Security IDentifier (SID) Definitions }
 
 type
+  /// exception class raised by this unit
+  EOSSecurity = class(ExceptionWithProps);
+
   /// custom binary buffer type used as convenient Windows SID storage
   // - mormot.crypt.secure will recognize this type and serialize its standard
   // text as a JSON string
@@ -548,15 +551,19 @@ type
     scsNone      = 3);
 
 const
-  /// literal ACE token types
-  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
-  sctLiteral = [
-    sctPadding .. sctSid];
-
   /// literal integer ACE token types
   // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
   sctInt = [
     sctInt8 .. sctInt64];
+
+  /// literal ACE token types
+  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
+  sctLiteral =
+    sctInt + [
+      sctUnicode,
+      sctOctetString,
+      sctComposite,
+      sctSid];
 
   /// unary relational operator ACE token types
   // - operand type must be either a SID literal, or a composite, each of
@@ -609,6 +616,15 @@ const
     sctResourceAttribute,
     sctDeviceAttribute];
 
+  /// operands ACE token types
+  sctOperand = sctLiteral + sctAttribute;
+
+  /// single-operand ACE token types
+  sctUnary = sctUnaryOperator + sctUnaryLogicalOperator;
+
+  /// dual-operand ACE token types
+  sctBinary = sctBinaryOperator + sctBinaryLogicalOperator;
+
 type
   /// internal type used for TRawAceLiteral.Int
   TRawAceLiteralInt = packed record
@@ -657,7 +673,7 @@ const
   // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
   ACE_CONDITION_SIGNATURE = $78747261;
 
-  ACE_OBJECT_TYPE_PRESENT = 1;
+  ACE_OBJECT_TYPE_PRESENT           = 1;
   ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
 
   {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
@@ -1012,13 +1028,13 @@ const
 
   /// define how a sctAttribute is stored as SDDL
   ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of string[10] = (
-   '@',           // sctLocalAttribute
+   '',            // sctLocalAttribute
    '@User.',      // sctUserAttribute
    '@Resource.',  // sctResourceAttribute
    '@Device.');   // sctDeviceAttribute
 
 var
-  { sets filled during unit initialization from actual code constants }
+  { globals filled during unit initialization from actual code constants }
 
   /// allow to quickly check if a TWellKnownSid has a SDDL identifier
   wksWithSddl: TWellKnownSids;
@@ -2602,7 +2618,7 @@ begin
     inc(p, SecAclToBin(p, Dacl));
   end;
   if p - pointer(result) <> length(result) then
-    raise EOSException.Create('TSecurityDescriptor.ToBinary'); // paranoid
+    raise EOSSecurity.Create('TSecurityDescriptor.ToBinary'); // paranoid
 end;
 
 const
