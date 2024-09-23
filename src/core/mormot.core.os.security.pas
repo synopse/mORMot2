@@ -14,6 +14,8 @@ unit mormot.core.os.security;
 
   Even if most of those security definitions comes from the Windows/AD world,
     our framework (re)implemented them in a cross-platform way.
+  Most definitions below refers to the official Windows Open Specifications
+    document, named [MS-DTYP] in comments below.
   This low-level unit only refers to mormot.core.base and mormot.core.os.
 
   *****************************************************************************
@@ -46,12 +48,14 @@ type
   RawSidDynArray = array of RawSid;
 
   /// Security IDentifier (SID) Authority, encoded as 48-bit binary
+  // - see [MS-DTYP] 2.4.1 SID_IDENTIFIER_AUTHORITY
   TSidAuth = array[0..5] of byte;
   PSidAuth = ^TSidAuth;
 
   /// Security IDentifier (SID) binary format, as retrieved e.g. by Windows API
   // - this definition is not detailed on oldest Delphi, and not available on
   // POSIX, whereas it makes sense to also have it, e.g. for server process
+  // - see [MS-DTYP] 2.4.2 SID
   TSid = packed record
     Revision: byte;
     SubAuthorityCount: byte;
@@ -345,21 +349,28 @@ type
     samGenericWrite,         // GW
     samGenericRead);         // GR
 
-  /// 32-bit standard and generic access rights in TSecAce.Mask
+  /// 32-bit standard and generic access rights in TRawAce/TSecAce.Mask
+  // - see [MS-DTYP] 2.4.3 ACCESS_MASK
+  // - TSecAccessRight defines specific sets for files or registry keys
   TSecAccessMask = set of TSecAccess;
   PSecAccessMask = ^TSecAccessMask;
 
   /// TSecAce.Mask constant values with their own SDDL identifier
+  // - i.e. TSecAccessMask sets which are commonly used togethers
+  // - sarFile* for files, sarKey* for registry keys, and also services
+  // - note that sarKeyExecute and sarKeyRead have the actual same 32-bit value
   TSecAccessRight = (
-    sarFileAll,
-    sarFileRead,
-    sarFileWrite,
-    sarFileExecute,
-    sarKeyAll,
-    sarKeyRead,
-    sarKeyWrite,
-    sarKeyExecute);
+    sarFileAll,             // FA
+    sarFileRead,            // FR
+    sarFileWrite,           // FW
+    sarFileExecute,         // FX
+    sarKeyAll,              // KA
+    sarKeyRead,             // KR
+    sarKeyWrite,            // KW
+    sarKeyExecute);         // KE
 
+  /// flags to specify control access to TSecurityDescriptor
+  // - see e.g. [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
   TSecControl = (
     scOwnerDefaulted,
     scGroupDefaulted,
@@ -367,8 +378,8 @@ type
     scDaclDefaulted,
     scSaclPresent,
     scSaclDefaulted,
-    sc6,
-    sc7,
+    scDaclTrusted,
+    scServerSecurity,
     scDaclAutoInheritReq,
     scSaclAutoInheritReq,
     scDaclAutoInherit,
@@ -377,9 +388,32 @@ type
     scSaclProtected,
     scRmControlValid,
     scSelfRelative);
+  /// TSecurityDescriptor.Controls to specify control access
   TSecControls = set of TSecControl;
 
   /// high-level supported ACE kinds in TSecAce.AceType
+  // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
+  // - satAccessAllowed/satAccessDenied allows or denies access to an object
+  // for a specific trustee identified by a security identifier (SID)
+  // - satAudit causes an audit message to be logged when a specified trustee
+  // (identified by a SID) attempts to gain access to an object
+  // - satObjectAccessAllowed/satObjectAccessDenied define an ACE that controls
+  // allowed/denied access to an object, a property set, or property: in addition
+  // to the access rights and SID, it includes object GUIDs and inheritance flags
+  // - satCallbackAccessAllowed/satCallbackAccessDenied allows or denies access
+  // to an object for a specific trustee identified by a SID, with optional
+  // application data, typically a conditional ACE expression
+  // - satMandatoryLabel defines an ACE for the SACL that specifies the
+  // mandatory access level and policy for a securable object - masks values
+  // are samMandatoryLabelNoWriteUp, samMandatoryLabelNoReadUp and
+  // samMandatoryLabelNoExecuteUp
+  // - satResourceAttribute defines an ACE for the specification of a resource
+  // attribute associated with an object, i.e. is is used in conditional ACEs in
+  // specifying access or audit policy for the resource - ending with a [MS-DTYP]
+  // 2.4.10.1 CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 resource attribute structure
+  // - satScoppedPolicy defines an ACE for the purpose of applying a central
+  // access policy to the resource: Mask is 0, and ends with a [MS-GPCAP] 3.2.1.1
+  // CentralAccessPoliciesList structure
   TSecAceType = (
     satUnknown,
     satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
@@ -445,9 +479,11 @@ type
     Mask: TSecAccessMask;
     /// contains an associated SID, in its raw binary content
     Sid: RawSid;
-    /// some optional opaque callback/resource data, stored after the Sid
-    // - e.g. is a conditional expression string for satConditional ACEs like
-    // '(@User.Project Any_of @Resource.Project)'
+    /// some optional opaque callback/resource binary data, stored after the Sid
+    // - e.g. is a conditional expression binary for satConditional ACEs like
+    // '(@User.Project Any_of @Resource.Project)', or for satResourceAttribute
+    // is a CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 struct
+    // - may end with up to 3 zero bytes, for DWORD ACE binary alignment
     Opaque: RawByteString;
     /// the associated Object Type GUID (satObject only)
     ObjectType: TGuid;
@@ -584,7 +620,7 @@ const
     satScoppedPolicy,
     satAccessFilter];
 
-  /// the ACE which have a Mask, SID and Object UUIDs in their definition
+  /// the ACE which have a samObject Mask, SID and Object UUIDs in their definition
   satObject = [
     satObjectAccessAllowed,
     satObjectAccessDenied,
@@ -596,7 +632,9 @@ const
     satCallbackObjectAlarm];
 
   /// the ACE which have a conditional expression as TSecAce.Opaque member
-  // - see MS-DTYP OpenSpecs 2.4.4.17
+  // - see [MS-DTYP] 2.4.4.17
+  // - the associated conditional expression is encoded in a binary format
+  // in the TSecAce.Opaque
   satConditional = [
     satCallbackAccessAllowed,
     satCallbackAccessDenied,
@@ -604,6 +642,16 @@ const
     satCallbackObjectAccessAllowed,
     satCallbackObjectAccessDenied,
     satCallbackObjectAudit];
+
+  /// specifies the user rights allowed by satObject ACE
+  // - see e.g. [MS-DTYP] 2.4.4.3 ACCESS_ALLOWED_OBJECT_ACE
+  samObject = [
+    samCreateChild,
+    samDeleteChild,
+    samSelfWrite,
+    samReadProp,
+    samWriteProp,
+    samControlAccess];
 
   /// defined in TSecAce.Flags for an ACE which has inheritance
   safInheritanceFlags = [
