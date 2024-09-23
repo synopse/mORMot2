@@ -929,7 +929,19 @@ function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
 // - see [MS-DTYP] 2.5.1.2.2 @Prefixed Attribute Name Form and
 // [MS-DTYP] 2.5.1.1 SDDL Syntax
 // - returns true on success, false if the input is not (yet) supported
-function SddlAppendLiteral(var s: ShortString; v: PRawAceLiteral): boolean;
+function SddlAppendOperand(var s: ShortString; v: PRawAceLiteral): boolean;
+
+/// return the SDDL text form of a binary ACE literal or attribute
+// - just a wrapper around SddlAppendLiteral()
+procedure SddlOperandToText(v: PRawAceLiteral; out u: RawUtf8);
+
+/// return the SDDL text form of a binary ACE unary operator
+// - and free the l supplied variable
+procedure SddlUnaryToText(tok: TSecConditionalToken; var l, u: RawUtf8);
+
+/// return the SDDL text form of a binary ACE binary operator
+// - and free the l and r supplied variables
+procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 
 /// append a TSecAce.Opaque value as SDDL text form
 procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
@@ -1033,6 +1045,60 @@ const
    '@Resource.',  // sctResourceAttribute
    '@Device.');   // sctDeviceAttribute
 
+  SDDL_OPER: array[1 .. 23] of TSecConditionalToken = (
+    sctEqual,
+    sctNotEqual,
+    sctLessThan,
+    sctLessThanOrEqual,
+    sctGreaterThan,
+    sctGreaterThanOrEqual,
+    sctContains,
+    sctExists,
+    sctAnyOf,
+    sctMemberOf,
+    sctDeviceMemberOf,
+    sctMemberOfAny,
+    sctDeviceMemberOfAny,
+    sctNotExists,
+    sctNotContains,
+    sctNotAnyOf,
+    sctNotMemberOf,
+    sctNotDeviceMemberOf,
+    sctNotMemberOfAny,
+    sctNotDeviceMemberOfAny,
+    sctAnd,
+    sctOr,
+    sctNot);
+
+  /// define how a sctOperand is stored as SDDL
+  // - used e.g. with SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
+  // - see [MS-DTYPE] 2.4.4.17.6 and 2.4.4.17.7
+  SDDL_OPER_TXT: array[0 .. high(SDDL_OPER)] of RawUtf8 = (
+    '',
+    '==',                       // sctEqual
+    '!=',                       // sctNotEqual
+    '<',                        // sctLessThan
+    '<=',                       // sctLessThanOrEqual
+    '>',                        // sctGreaterThan
+    '>=',                       // sctGreaterThanOrEqual
+    ' Contains',                // sctContains
+    'Exists',                   // sctExists
+    ' Any_of',                  // sctAnyOf
+    'Member_of',                // sctMemberOf
+    'Device_Member_of',         // sctDeviceMemberOf
+    'Member_of_Any',            // sctMemberOfAny
+    'Device_Member_of_Any',     // sctDeviceMemberOfAny
+    'Not_Exists',               // sctNotExists
+    ' Not_Contains',            // sctNotContains
+    ' Not_Any_of',              // sctNotAnyOf
+    'Not_Member_of',            // sctNotMemberOf
+    'Not_Device_Member_of',     // sctNotDeviceMemberOf
+    'Not_Member_of_Any',        // sctNotMemberOfAny
+    'Not_Device_Member_of_Any', // sctNotDeviceMemberOfAny
+    ' && ',                     // sctAnd
+    ' || ',                     // sctOr
+    '!');                       // sctNot
+
 var
   { globals filled during unit initialization from actual code constants }
 
@@ -1044,6 +1110,9 @@ var
 
   /// allow to quickly check if a TSecAccess has a SDDL identifier
   samWithSddl: TSecAccessMask;
+
+  /// O(1) lookup table used as SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
+  SDDL_OPER_INDEX: array[TSecConditionalToken] of byte;
 
 
 { ****************** TSecurityDescriptor Wrapper Object }
@@ -2088,10 +2157,37 @@ begin
     AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // hexadecimal
 end;
 
-function SddlAppendLiteral(var s: ShortString; v: PRawAceLiteral): boolean;
+procedure SddlOperandToText(v: PRawAceLiteral; out u: RawUtf8);
+var
+  s: ShortString;
+begin
+  s[0] := #0;
+  if SddlAppendOperand(s, v) then
+    FastSetString(u, @s[1], ord(s[0]));
+end;
+
+procedure SddlUnaryToText(tok: TSecConditionalToken; var l, u: RawUtf8);
+begin
+  // e.g. '(Member_of{SID(BA)})'
+  u := '(' + SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]] + l + ')';
+  FastAssignNew(l);
+end;
+
+procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
+begin
+  // e.g. '(Title=="VP")'
+  // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
+  u := '(' + l + SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]] + r + ')';
+  FastAssignNew(l);
+  FastAssignNew(r);
+end;
+
+function SddlAppendOperand(var s: ShortString; v: PRawAceLiteral): boolean;
 var
   utf8: shortstring;
   max: pointer;
+  c: PRawAceLiteral;
+  singleComposite: boolean;
   i: PtrInt;
 begin
   result := true;
@@ -2153,23 +2249,28 @@ begin
         result := false;
         if v^.CompositeBytes = 0 then
           exit; // should not be void
-        AppendShortChar('{', @s);
+        c := @v.Composite;
+        singleComposite :=
+          (c^.Token <> sctSid) and
+          (v^.CompositeBytes = AceTokenLength(c));
+        if not singleComposite then
+          AppendShortChar('{', @s);
         max := @v^.Composite[v^.CompositeBytes];
-        v := @v^.Composite;
         repeat
-          if (v^.Token in sctAttribute) or
-             not SddlAppendLiteral(s, v) then
+          if (c^.Token in sctAttribute) or
+             not SddlAppendOperand(s, c) then
             exit; // unsupported or truncated/overflow content
-          inc(PByte(v), AceTokenLength(v));
-          if PtrUInt(v) >= PtrUInt(max) then
+          inc(PByte(c), AceTokenLength(c));
+          if PtrUInt(c) >= PtrUInt(max) then
             break;
           AppendShortChar(',', @s);
         until false;
-        AppendShortChar('}', @s);
+        if not singleComposite then
+          AppendShortChar('}', @s);
         result := true;
       end;
     sctSid:
-      if v^.SidBytes >= SidLength(@v^.Sid) then
+      if PtrInt(v^.SidBytes) >= SidLength(@v^.Sid) then
       begin
         AppendShort('SID(', s);
         SddlAppendSid(s, @v^.Sid, {domain=}nil);
@@ -3116,6 +3217,7 @@ var
   wks: TWellKnownSid;
   wkr: TWellKnownRid;
   sam: TSecAccess;
+  i: PtrInt;
   w: PWord;
 begin
   w := @SID_SDDLW;
@@ -3134,6 +3236,8 @@ begin
   for sam := low(sam) to high(sam) do
     if SAM_SDDL[sam][0] <> #0  then
       include(samWithSddl, sam);
+  for i := low(SDDL_OPER) to high(SDDL_OPER) do
+    SDDL_OPER_INDEX[SDDL_OPER[i]] := i;
 end;
 
 initialization
