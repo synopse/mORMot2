@@ -490,7 +490,173 @@ type
     sarKeyWrite,            // KW
     sarKeyExecute);         // KE
 
+  /// binary conditional ACE token types
+  // - as sctLiteral, sctRelationalOperator, sctLogicalOperator and sctAttribute
+  // - see [MS-DTYP] 2.4.4.17.4 and following
+  TSecConditionalToken = (
+    sctPadding              = $00,
+    sctInt8                 = $01,
+    sctInt16                = $02,
+    sctInt32                = $03,
+    sctInt64                = $04,
+    sctUnicode              = $10,
+    sctOctetString          = $18,
+    sctComposite            = $50,
+    sctSid                  = $51,
+    sctEqual                = $80,
+    sctNotEqual             = $81,
+    sctLessThan             = $82,
+    sctLessThanOrEqual      = $83,
+    sctGreaterThan          = $84,
+    sctGreaterThanOrEqual   = $85,
+    sctContains             = $86,
+    sctExists               = $87,
+    sctAnyOf                = $88,
+    sctMemberOf             = $89,
+    sctDeviceMemberOf       = $8a,
+    sctMemberOfAny          = $8b,
+    sctDeviceMemberOfAny    = $8c,
+    sctNotExists            = $8d,
+    sctNotContains          = $8e,
+    sctNotAnyOf             = $8f,
+    sctNotMemberOf          = $90,
+    sctNotDeviceMemberOf    = $91,
+    sctNotMemberOfAny       = $92,
+    sctNotDeviceMemberOfAny = $93,
+    sctAnd                  = $a0,
+    sctOr                   = $a1,
+    sctNot                  = $a2,
+    sctLocalAttribute       = $f8,
+    sctUserAttribute        = $f9,
+    sctResourceAttribute    = $fa,
+    sctDeviceAttribute      = $fb);
+
+  /// binary conditional ACE integer base indicator for SDDL/display purposes
+  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
+  TSecConditionalBase = (
+    scbUndefined   = 0,
+    scbOctal       = 1,
+    scbDecimal     = 2,
+    scbHexadecimal = 3);
+
+  /// binary conditional ACE integer sign indicator for SDDL/display purposes
+  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
+  TSecConditionalSign = (
+    scsUndefined = 0,
+    scsPositive  = 1,
+    scsNegative  = 2,
+    scsNone      = 3);
+
 const
+  /// literal ACE token types
+  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
+  sctLiteral = [
+    sctPadding .. sctSid];
+
+  /// literal integer ACE token types
+  // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
+  sctInt = [
+    sctInt8 .. sctInt64];
+
+  /// unary relational operator ACE token types
+  // - operand type must be either a SID literal, or a composite, each of
+  // whose elements is a SID literal
+  // - see [MS-DTYP] 2.4.4.17.6 Relational Operator Tokens
+  sctUnaryOperator = [
+    sctMemberOf .. sctDeviceMemberOfAny,
+    sctNotMemberOf .. sctNotDeviceMemberOfAny];
+
+  /// binary relational operator ACE token types
+  // - expects two operands, left-hand-side (LHS - in simple or @Prefixed form)
+  // and right-hand-side (RHS - in @Prefixed form or literal)
+  // - see [MS-DTYP] 2.4.4.17.6 Relational Operator Tokens
+  sctBinaryOperator = [
+    sctEqual .. sctContains,
+    sctAnyOf,
+    sctNotContains,
+    sctNotAnyOf];
+
+  /// relational operator ACE token types
+  // - see [MS-DTYP] 2.4.4.17.6 Relational Operator Tokens
+  sctRelationalOperator = sctUnaryOperator + sctBinaryOperator;
+
+  /// unary logical operator ACE token types
+  // - see [MS-DTYP] 2.4.4.17.7 Logical Operator Tokens
+  sctUnaryLogicalOperator = [
+    sctExists,
+    sctNotExists,
+    sctNot];
+
+  /// binary logical operator ACE token types
+  // - see [MS-DTYP] 2.4.4.17.7 Logical Operator Tokens
+  sctBinaryLogicalOperator = [
+    sctAnd,
+    sctOr];
+
+  /// logical operator ACE token types
+  // - operand type must be conditional expressions and/or expression terms:
+  // a sctLiteral operand would return an error
+  // - see [MS-DTYP] 2.4.4.17.7 Logical Operator Tokens
+  sctLogicalOperator = sctUnaryLogicalOperator + sctBinaryLogicalOperator;
+
+  /// attribute ACE token types
+  // - attributes can be associated with local environments, users, resources,
+  // or devices
+  // - see [MS-DTYP] 2.4.4.17.8 Attribute Tokens
+  sctAttribute = [
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute];
+
+type
+  /// internal type used for TRawAceLiteral.Int
+  TRawAceLiteralInt = packed record
+    Value: Int64;
+    Sign: TSecConditionalSign;
+    Base: TSecConditionalBase;
+  end;
+
+  /// token binary serialization for satConditional ACE literals and attributes
+  // - the TSecAce.Opaque binary field starts with 'artx' ACE_CONDITION_SIGNATURE
+  // and a series of entries, describing an expression tree in reverse Polish order
+  // - only literals and attributes do appear here, because operands appear
+  // before the operator in reverse Polish order, so are already on the stack
+  // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
+  TRawAceLiteral = packed record
+    case Token: TSecConditionalToken of
+      sctInt8,
+      sctInt16,
+      sctInt32,
+      sctInt64: (
+        Int: TRawAceLiteralInt);
+      sctUnicode,
+      sctLocalAttribute,
+      sctUserAttribute,
+      sctResourceAttribute,
+      sctDeviceAttribute: (
+        UnicodeBytes: cardinal;
+        Unicode: array[byte] of WideChar);
+      sctOctetString: (
+        OctetBytes: cardinal;
+        Octet: array[byte] of byte);
+      sctComposite: (
+        CompositeBytes: cardinal;
+        Composite: array[byte] of byte);
+      sctSid: (
+        SidBytes: cardinal;
+        Sid: TSid);
+  end;
+  PRawAceLiteral = ^TRawAceLiteral;
+
+/// compute the length in bytes of an ACE token binary entry
+function AceTokenLength(v: PRawAceLiteral): PtrUInt;
+
+const
+  /// 'artx' prefix to identify a conditional ACE binary buffer
+  // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
+  ACE_CONDITION_SIGNATURE = $78747261;
+
   ACE_OBJECT_TYPE_PRESENT = 1;
   ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
 
@@ -1605,6 +1771,30 @@ begin
   hdr^.AceCount := length(ace);
   hdr^.Sbz2 := 0;
   hdr^.AclSize := result;
+end;
+
+function AceTokenLength(v: PRawAceLiteral): PtrUInt;
+begin
+  result := SizeOf(v^.Token);
+  case v^.Token of
+    sctInt8,
+    sctInt16,
+    sctInt32,
+    sctInt64:
+      inc(result, SizeOf(v^.Int));
+    sctUnicode,
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute:
+      inc(result, SizeOf(v^.UnicodeBytes) + v^.UnicodeBytes);
+    sctOctetString:
+      inc(result, SizeOf(v^.OctetBytes) + v^.OctetBytes);
+    sctComposite:
+      inc(result, SizeOf(v^.CompositeBytes) + v^.CompositeBytes);
+    sctSid:
+      inc(result, SizeOf(v^.SidBytes) + v^.SidBytes);
+  end;
 end;
 
 
