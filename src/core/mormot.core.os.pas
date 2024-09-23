@@ -3903,12 +3903,6 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 
 {$else}
 
-/// internal function to avoid linking mormot.core.buffers.pas
-function PosixParseHex32(p: PAnsiChar): integer;
-
-/// internal function to avoid linking mormot.core.buffers.pas
-procedure ParseHex(p: PAnsiChar; b: PByte; n: integer);
-
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
 function WaitReadPending(fd, timeout: integer): boolean;
 

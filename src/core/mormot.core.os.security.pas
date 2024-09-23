@@ -900,28 +900,6 @@ uses
 {$endif OSWINDOWS}
 
 
-{ some shared functions to avoid dependencies to mormot.core.text }
-
-function GetNextUInt32(var P: PUtf8Char): cardinal;
-var
-  c: cardinal;
-begin
-  result := 0;
-  if P = nil then
-    exit;
-  repeat
-    c := ord(P^) - 48;
-    if c > 9 then
-      break
-    else
-      result := result * 10 + c;
-    inc(P);
-  until false;
-  while P^ in ['.', '-', ' '] do
-    inc(P);
-end;
-
-
 { ****************** Security IDentifier (SID) Definitions }
 
 const
@@ -1055,6 +1033,25 @@ begin
     result := SidToText(pointer(sid))
   else
     result := '';
+end;
+
+function GetNextUInt32(var P: PUtf8Char): cardinal;
+var
+  c: cardinal;
+begin
+  result := 0;
+  if P = nil then
+    exit;
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break
+    else
+      result := result * 10 + c;
+    inc(P);
+  until false;
+  while P^ in ['.', '-', ' '] do
+    inc(P);
 end;
 
 function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
@@ -1541,20 +1538,13 @@ begin
   until p^ <> ' ';
 end;
 
-function SddlNextInteger(var p: PUtf8Char; out c: integer): boolean;
-var
-  u: ShortString;
-  err: integer;
-  s: PUtf8Char;
+function SddlNext0xInteger(var p: PUtf8Char; out c: integer): boolean;
 begin
-  s := p; // p^ is '0x####'
+  c := ParseHex0x(p); // p^ is '0x####'
   repeat
-    inc(s);
-  until s^ in [#0, ';'];
-  SetString(u, PAnsiChar(p), s - p);
-  val({$ifdef UNICODE}string{$endif}(u), c, err); // RTL handles 0x###
-  result := err = 0;
-  p := s;
+    inc(p);
+  until p^ in [#0, ';'];
+  result := c <> 0;
 end;
 
 function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
@@ -1574,7 +1564,7 @@ begin
   while not (p^ in [#0, ';']) do
   begin
     if PWord(p)^ = ord('0') + ord('x') shl 8 then
-      if SddlNextInteger(p, m) then
+      if SddlNext0xInteger(p, m) then
         break // we got the mask as a 32-bit hexadecimal value
       else
         exit;
@@ -1902,7 +1892,7 @@ begin
   while p^ = ' ' do
     inc(p);
   if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
-    if SddlNextInteger(p, i) then
+    if SddlNext0xInteger(p, i) then
       RawType := i
     else
       exit

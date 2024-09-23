@@ -1004,6 +1004,17 @@ function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integ
 // - slow function, here to avoid linking mormot.core.datetime
 function DateTimeToIsoString(dt: TDateTime): string;
 
+/// parse a '0x#####' buffer context into a 32-bit binary
+// - jump trailing '0x', then ends at first non hexadecimal character
+// - internal function to avoid linking mormot.core.buffers.pas
+function ParseHex0x(p: PAnsiChar): cardinal;
+
+/// parse an hexadecimal buffer into its raw binary
+// - parse up to n chars from p^, ending in case of not hexadecimal char
+// - caller should ensure p<>nil and b<>nil and n>0
+// - internal function to avoid linking mormot.core.buffers.pas
+function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
+
 /// convert a binary into its human-friendly per-byte hexadecimal lowercase text
 // - returns e.g. '12:50:b6:1e:c6:aa', i.e. the DN/MAC format
 // - used e.g. in mormot.lib.openssl11 and mormot.net.sock
@@ -5180,6 +5191,69 @@ begin
   DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
+function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := ord(c);
+  case c of
+    '0'..'9':
+      dec(result, ord('0'));
+    'A'..'Z':
+      dec(result, ord('A') - 10);
+    'a'..'z':
+      dec(result, ord('a') - 10);
+  else
+    result := -1;
+  end;
+end;
+
+function ParseHex0x(p: PAnsiChar): cardinal;
+var
+  v0, v1: integer;
+begin
+  result := 0;
+  if p = nil then
+    exit;
+  while p^ <> 'x' do
+    if p^ = #0 then
+      exit
+    else
+      inc(p);
+  repeat
+    inc(p); // points to trailing 'x' at start
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+    begin
+      result := (result shl 4) or cardinal(v0); // only one char left
+      break;
+    end;
+    result := (result shl 8) or (cardinal(v0) shl 4) or cardinal(v1);
+  until false;
+end;
+
+function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
+var
+  v0, v1: integer;
+begin
+  repeat
+    v0 := Hex2Dec(p^);
+    if v0 < 0 then
+      break; // not in '0'..'9','a'..'f'
+    inc(p);
+    v1 := Hex2Dec(p^);
+    if v1 < 0 then
+      break;
+    inc(p);
+    b^ := (v0 shl 4) or v1;
+    inc(b);
+    dec(n);
+  until n = 0;
+  result := p;
+end;
+
 procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer; reverse: boolean);
 var
   p: PAnsiChar;
@@ -5212,6 +5286,7 @@ begin
       inc(bin);
   until false;
 end;
+
 
 { TObjectWithProps}
 
