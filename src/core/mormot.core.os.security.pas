@@ -625,6 +625,16 @@ const
   /// dual-operand ACE token types
   sctBinary = sctBinaryOperator + sctBinaryLogicalOperator;
 
+  /// maximum depth of the TAceTree resolution
+  // - should be <= 255 to match the TAceTreeNode index fields as byte
+  // - 192 nodes seems fair enough for realistic ACE conditional expressions
+  MAX_TREE_NODE = 191;
+
+  /// maximum length, in bytes, of a TAceTree input binary or SDDL text
+  // - absolute maximum is below 64KB (in TRawAce.AceSize)
+  // - 8KB of conditional expression is consistent with the MAX_TREE_NODE limit
+  MAX_TREE_BYTES = 8 shl 10;
+
 type
   /// internal type used for TRawAceLiteral.Int
   TRawAceLiteralInt = packed record
@@ -664,6 +674,45 @@ type
         Sid: TSid);
   end;
   PRawAceLiteral = ^TRawAceLiteral;
+
+  /// define one node in the TAceTree.Stack
+  // - here pointers are just 8-bit indexes to the main TAceTree.Tokens[]
+  TAceTreeNode = packed record
+    /// position of this node in the input binary or text
+    Position: word;
+    /// index of the left or single operand
+    Left: byte;
+    /// index of the right operand
+    Right: byte;
+  end;
+  /// points to one node in the TAceTree.Stack
+  PAceTreeNode = ^TAceTreeNode;
+
+  /// store a processing tree of a conditional ACE
+  // - used for conversion between binary and SDDL formats, or execution
+  // - can easily be allocated on stack for efficient process
+  TAceTree = record
+  private
+    function AddNode(position: cardinal; left, right: byte): boolean;
+    procedure NodeText(index: byte; var u: RawUtf8);
+  public
+    /// the associated input storage
+    // - typically maps an TSecAce.Opaque buffer or a RawUtf8 SDDL text
+    Storage: PUtf8Char;
+    /// number of bytes in Storage
+    StorageSize: cardinal;
+    /// number of TAceTreeNode stored in Tokens[] and Stack[]
+    Count: byte;
+    /// stores the actual tree of this conditional expression
+    Stack: array[0 .. MAX_TREE_NODE] of TAceTreeNode;
+    /// initialize the Storage with some binary or SDDL text input
+    // - caller should then call FromBinary or FromSddl
+    function Init(const Input: RawByteString): boolean;
+    /// fill Stack[] from a binary conditional ACE
+    function FromBinary: boolean;
+    /// compute the SDDL text of the stored Stack[]
+    function ToText: RawUtf8;
+  end;
 
 /// compute the length in bytes of an ACE token binary entry
 function AceTokenLength(v: PRawAceLiteral): PtrUInt;
@@ -1894,6 +1943,123 @@ begin
     sctSid:
       inc(result, SizeOf(v^.SidBytes) + v^.SidBytes);
   end;
+end;
+
+
+{ TAceTree }
+
+function TAceTree.Init(const Input: RawByteString): boolean;
+begin
+  Storage := pointer(Input);
+  StorageSize := length(Input);
+  Count := 0;
+  result := (Storage <> nil) and
+            (StorageSize < MAX_TREE_BYTES);
+end;
+
+function TAceTree.AddNode(position: cardinal; left, right: byte): boolean;
+var
+  n: PAceTreeNode;
+begin
+  result := (Count < MAX_TREE_NODE) and
+            (position < StorageSize);
+  if not result then
+    exit;
+  n := @Stack[Count];
+  n^.Position := position;
+  n^.Left := left;
+  n^.Right := right;
+  inc(Count);
+end;
+
+function TAceTree.FromBinary: boolean;
+var
+  v: PRawAceLiteral;
+  position, len, stCount: PtrUInt;
+  st: array[0 .. 31] of byte; // local stack of last few operands
+begin
+  result := false;
+  if (Storage = nil) or
+     (StorageSize and 3 <> 0) or // should be DWORD-aligned
+     (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
+    exit;
+  stCount := 0;
+  position := 4; // tokens start after 'artx' header
+  repeat
+    v := @Storage[position];
+    len := AceTokenLength(v);
+    if (position + len > StorageSize) or // overflow
+       (ord(v^.Token) > ord(high(v^.Token))) then // clearly invalid
+      exit;
+    if v^.Token <> sctPadding then
+    begin
+      // parse the next non-void operand or operation
+      if v^.Token in sctOperand then
+      begin
+        if not AddNode(position, 255, 255) then
+          exit;
+      end
+      else if v^.Token in sctUnary then
+      begin
+        if stCount < 1 then
+          exit;
+        dec(stCount); // unstack one operand
+        if not AddNode(position, st[stCount], 255) then
+          exit;
+      end
+      else if v^.Token in sctBinary then
+      begin
+        if stCount < 2 then
+          exit;
+        dec(stCount, 2); // unstack two operands
+        if not AddNode(position, st[stCount], st[stCount + 1]) then
+          exit;
+      end
+      else
+        exit; // invalid token
+      // stack this operand
+      if stCount > high(st) then
+        exit; // paranoid
+      st[stCount] := Count - 1;
+      inc(stCount);
+    end;
+    inc(position, len);
+  until position = StorageSize;
+  result := (Count > 0) and
+            (stCount = 1); // should end with no pending operand
+end;
+
+procedure TAceTree.NodeText(index: byte; var u: RawUtf8);
+var
+  n: PAceTreeNode;
+  v: PRawAceLiteral;
+  l, r: pointer; // store actual RawUtf8 variables
+begin
+  if index >= Count then
+  begin
+    FastAssignNew(u);
+    exit;
+  end;
+  n := @Stack[index];
+  l := nil;
+  r := nil;
+  if n^.Left < Count then
+    NodeText(n^.Left, RawUtf8(l));
+  if n^.Right < Count then
+    NodeText(n^.Right, RawUtf8(r));
+  v := @Storage[n^.Position];
+  if l <> nil then
+    if r <> nil then
+      SddlBinaryToText(v^.Token, RawUtf8(l), RawUtf8(r), u)
+    else
+      SddlUnaryToText(v^.Token, RawUtf8(l), u)
+  else
+    SddlOperandToText(v, u);
+end;
+
+function TAceTree.ToText: RawUtf8;
+begin
+  NodeText(Count - 1, result); // recursive generation
 end;
 
 
