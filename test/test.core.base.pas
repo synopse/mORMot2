@@ -4443,8 +4443,8 @@ begin
   AppendShortIntHex($12345, a);
   Check(a = '0001ff012345');
   a[0] := #0;
-  AppendShortIntHex(PtrUInt(-1), a);
-  CheckEqual(length(a), POINTERBYTES * 2);
+  AppendShortIntHex(Int64(-1), a);
+  CheckEqual(length(a), SizeOf(Int64) * 2);
   for i := 1 to length(a) do
     Check(a[1] = 'f');
   for i := -10000 to 10000 do
@@ -4560,9 +4560,12 @@ begin
     Check(SysUtils.IntToStr(j) = string(a));
     Check(format('%d', [j]) = string(a));
     Check(format('%.8x', [j]) = IntToHex(j, 8));
-    a[0] := #0;
-    AppendShortIntHex(j, a);
-    CheckEqual(RawUtf8(a), RawUtf8(PointerToHexShort(pointer(PtrInt(j)))));
+    if j >= 0 then
+    begin
+      a[0] := #0;
+      AppendShortIntHex(j, a);
+      CheckEqual(RawUtf8(a), RawUtf8(PointerToHexShort(pointer(PtrInt(j)))));
+    end;
     case i of
       9990:
         d := 1E110;
@@ -6694,8 +6697,6 @@ begin
   result := IdemPropNameUSameLenNotNull(pointer(s1), pointer(s2), len);
 end;
 
-{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
-// [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestCoreBase._IdemPropName;
 const
   abcde: PUtf8Char = 'ABcdE';
@@ -6813,7 +6814,6 @@ begin
   Check(PosExChar('B', 'AB') = 2, 'ABC');
   Check(PosExChar('C', 'ABC') = 3, 'ABC');
 end;
-{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TTestCoreBase._TSynCache;
 var

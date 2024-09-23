@@ -5443,7 +5443,7 @@ begin
   end;
   if fSettings.Format <> prev then
     err := Parse(fSettings.Format);
-  if err <> '' then
+  if {%H-}err <> '' then
     EHttpLogger.RaiseUtf8('%.SetSettings Format: % in [%]',
       [self, err, fSettings.Format]);
 end;
