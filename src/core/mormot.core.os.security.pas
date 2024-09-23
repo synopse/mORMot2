@@ -909,8 +909,15 @@ procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 /// parse a TSecAce.Opaque value from its SDDL text
 function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
 
+/// append a binary ACE literal or attribute as SDDL text form
+// - see [MS-DTYP] 2.5.1.2.2 @Prefixed Attribute Name Form and
+// [MS-DTYP] 2.5.1.1 SDDL Syntax
+// - returns true on success, false if the input is not (yet) supported
+function SddlAppendLiteral(var s: ShortString; v: PRawAceLiteral): boolean;
+
 /// append a TSecAce.Opaque value as SDDL text form
 procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
+
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
@@ -1002,6 +1009,13 @@ const
     'KR',  //  sarKeyRead
     'KW',  //  sarKeyWrite
     'KX'); //  sarKeyExecute
+
+  /// define how a sctAttribute is stored as SDDL
+  ATTR_SDDL: array[sctLocalAttribute .. sctDeviceAttribute] of string[10] = (
+   '@',           // sctLocalAttribute
+   '@User.',      // sctUserAttribute
+   '@Resource.',  // sctResourceAttribute
+   '@Device.');   // sctDeviceAttribute
 
 var
   { sets filled during unit initialization from actual code constants }
@@ -2056,6 +2070,100 @@ begin
     AppendShortAnsi7String(ace.Opaque, s) // conditional ACE expression
   else
     AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // hexadecimal
+end;
+
+function SddlAppendLiteral(var s: ShortString; v: PRawAceLiteral): boolean;
+var
+  utf8: shortstring;
+  max: pointer;
+  i: PtrInt;
+begin
+  result := true;
+  case v^.Token of
+    sctInt8,
+    sctInt16,
+    sctInt32,
+    sctInt64:
+      if v^.Int.Base <> scbDecimal then // scbOctal does fallback to hexa
+      begin
+        AppendShortTwoChars('0x', @s);
+        AppendShortIntHex(v^.Int.Value, s);
+      end
+      else if v^.Int.Sign = scsNegative then
+        AppendShortInt64(v^.Int.Value, s)
+      else
+        AppendShortQWord(v^.Int.Value, s);
+    sctUnicode:
+      begin
+        AppendShortChar('"', @s);
+        Unicode_WideToShort(@v^.Unicode, v^.UnicodeBytes shr 1, CP_UTF8, utf8);
+        if ord(s[0]) + ord(utf8[0]) > 250 then
+          result := false // we don't like to be truncated
+        else
+          AppendShort(utf8, s);
+        AppendShortChar('"', @s);
+      end;
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute:
+      begin
+        AppendShort(ATTR_SDDL[v^.Token], s);
+        Unicode_WideToShort(@v^.Unicode, v^.UnicodeBytes shr 1, CP_UTF8, utf8);
+        for i := 1 to ord(utf8[0]) do
+          if ord(s[0]) > 250 then
+            result := false
+          else if PosExChar(utf8[i], '!"&()<=>|%') <> 0 then  // see attr-char2
+          begin
+            AppendShort('%00', s); // needs escape
+            AppendShortByteHex(ord(utf8[i]), s);
+          end
+          else
+          begin
+            inc(s[0]);
+            s[ord(s[0])] := utf8[i];
+          end;
+      end;
+    sctOctetString:
+      begin
+        AppendShortChar('#', @s);
+        if ord(s[0]) + v^.OctetBytes shl 1 > 250 then
+          result := false // we don't like to be truncated
+        else
+          AppendShortHex(@v^.Octet, v^.OctetBytes, s);
+      end;
+    sctComposite: // e.g. '{"Sales","HR"}'
+      begin
+        result := false;
+        if v^.CompositeBytes = 0 then
+          exit; // should not be void
+        AppendShortChar('{', @s);
+        max := @v^.Composite[v^.CompositeBytes];
+        v := @v^.Composite;
+        repeat
+          if (v^.Token in sctAttribute) or
+             not SddlAppendLiteral(s, v) then
+            exit; // unsupported or truncated/overflow content
+          inc(PByte(v), AceTokenLength(v));
+          if PtrUInt(v) >= PtrUInt(max) then
+            break;
+          AppendShortChar(',', @s);
+        until false;
+        AppendShortChar('}', @s);
+        result := true;
+      end;
+    sctSid:
+      if v^.SidBytes >= SidLength(@v^.Sid) then
+      begin
+        AppendShort('SID(', s);
+        SddlAppendSid(s, @v^.Sid, {domain=}nil);
+        AppendShortChar(')', @s);
+      end
+      else
+        exit; // should not be void
+  else
+    result := false; // unsupported content
+  end;
 end;
 
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
