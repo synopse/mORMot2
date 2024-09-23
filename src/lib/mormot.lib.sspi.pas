@@ -1579,7 +1579,7 @@ begin
   FillcharFast(Cert, SizeOf(Cert), 0);
   nfo := Ctxt^.pCertInfo;
   with nfo^.SerialNumber do
-    ToHumanHexReverse(Cert.Serial, pbData, cbData);
+    ToHumanHex(Cert.Serial, pointer(pbData), cbData, {reverse=}true);
   ku := 0;
   if CertGetIntendedKeyUsage(X509_ASN_ENCODING, nfo, @ku, SizeOf(ku)) then
     for u := low(WIN_CERT_USAGE) to high(WIN_CERT_USAGE) do
@@ -1615,9 +1615,9 @@ begin
       Win32PWideCharToUtf8(tmp.buf, Cert.Name);
   end;
   with nfo^.IssuerUniqueId do
-    ToHumanHex(Cert.IssuerID, pbData, cbData);
+    ToHumanHex(Cert.IssuerID, pointer(pbData), cbData);
   with nfo^.SubjectUniqueId do
-    ToHumanHex(Cert.SubjectID, pbData, cbData);
+    ToHumanHex(Cert.SubjectID, pointer(pbData), cbData);
   Cert.NotBefore := FileTimeToDateTime(nfo^.NotBefore);
   Cert.NotAfter  := FileTimeToDateTime(nfo^.NotAfter);
   Cert.Algorithm := nfo^.SignatureAlgorithm.pszObjId;
@@ -1645,7 +1645,7 @@ begin
     begin
       OID := pszObjId;
       Critical := fCritical;
-      ToHumanHex(Value, Blob.pbData, Blob.cbData);
+      ToHumanHex(Value, pointer(Blob.pbData), Blob.cbData);
       if (OID = '2.5.29.19') and
          (PosEx('01:ff', Value) <> 0) then
         include(Cert.Usage, wkuCA) // X509v3 Basic Constraints: CA:TRUE

@@ -1007,10 +1007,8 @@ function DateTimeToIsoString(dt: TDateTime): string;
 /// convert a binary into its human-friendly per-byte hexadecimal lowercase text
 // - returns e.g. '12:50:b6:1e:c6:aa', i.e. the DN/MAC format
 // - used e.g. in mormot.lib.openssl11 and mormot.net.sock
-procedure ToHumanHex(var result: RawUtf8; bin: PByteArray; len: PtrInt);
-
-/// convert a binary into its human-friendly hexadecimal in reverse order
-procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer;
+  reverse: boolean = false);
 
 // backward compatibility types redirections
 {$ifndef PUREMORMOT2}
@@ -5182,10 +5180,10 @@ begin
   DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
-procedure ToHumanHex(var result: RawUtf8; bin: PByteArray; len: PtrInt);
+procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: integer; reverse: boolean);
 var
   p: PAnsiChar;
-  i, c: PtrInt;
+  c: PtrInt;
   tab: PAnsichar;
 begin
   if len <= 0 then
@@ -5194,48 +5192,24 @@ begin
     exit;
   end;
   FastSetString(result, (len * 3) - 1);
-  dec(len);
   tab := @HexCharsLower;
   p := pointer(result);
-  i := 0;
+  if reverse then
+    inc(bin, len - 1);
   repeat
-    c := bin[i];
+    c := bin^;
     p[0] := tab[c shr 4];
     c := c and 15;
     p[1] := tab[c];
-    if i = len then
+    dec(len);
+    if len = 0 then
       break;
     p[2] := ':'; // to please (most) human limited hexadecimal capabilities
     inc(p, 3);
-    inc(i);
-  until false;
-end;
-
-procedure ToHumanHexReverse(var result: RawUtf8; bin: PByteArray; len: PtrInt);
-var
-  p: PAnsiChar;
-  i, c: PtrInt;
-  tab: PAnsichar;
-begin
-  if len <= 0 then
-  begin
-    result := '';
-    exit;
-  end;
-  FastSetString(result, (len * 3) - 1);
-  tab := @HexCharsLower;
-  p := pointer(result);
-  i := len;
-  repeat
-    dec(i);
-    c := bin[i];
-    p[0] := tab[c shr 4];
-    c := c and 15;
-    p[1] := tab[c];
-    if i = 0 then
-      break;
-    p[2] := ':';
-    inc(p, 3);
+    if reverse then
+      dec(bin)
+    else
+      inc(bin);
   until false;
 end;
 
