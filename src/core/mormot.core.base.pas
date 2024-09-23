@@ -888,8 +888,11 @@ procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortStrin
 /// simple concatenation of a 32-bit unsigned integer as text into a shorstring
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
-/// simple concatenation of a 64-bit integer as text into a shorstring
+/// simple concatenation of a signed 64-bit integer as text into a shorstring
 procedure AppendShortInt64(value: Int64; var dest: ShortString);
+
+/// simple concatenation of an unsigned 64-bit integer as text into a shorstring
+procedure AppendShortQWord(value: QWord; var dest: ShortString);
 
 /// simple concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
@@ -910,7 +913,7 @@ procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
 /// simple concatenation of an integer as lowercase hexadecimal into a shorstring
-procedure AppendShortIntHex(value: PtrUInt; var dest: ShortString);
+procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
 /// simple concatenation of a byte as uppercase hexadecimal into a shorstring
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
@@ -919,7 +922,6 @@ procedure AppendShortByteHex(value: byte; var dest: ShortString);
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 
 /// simple concatenation of an ANSI-7 AnsiString into a shorstring
-// - if Len is < 0, will use StrLen(buf)
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 
 /// simple concatenation of a ShortString text into a RawUtf8
@@ -4925,12 +4927,12 @@ begin
   dest[0] := AnsiChar(dlen);
 end;
 
-procedure AppendShortIntHex(value: PtrUInt; var dest: ShortString);
+procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 var
   tmp: array[0..23] of AnsiChar;
   i: PtrInt;
 begin
-  i := POINTERBYTES * 2;
+  i := SizeOf(value) * 2;
   repeat
     tmp[i - 1] := HexCharsLower[value and 15];
     value := value shr 4;
@@ -4940,7 +4942,7 @@ begin
       break;
     value := value shr 4;
   until value = 0;
-  AppendShortTemp(@tmp[i], @tmp[POINTERBYTES * 2], @dest);
+  AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest);
 end;
 
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
@@ -4955,6 +4957,13 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   AppendShortTemp(StrInt64(@tmp[23], value), @tmp[23], @dest);
+end;
+
+procedure AppendShortQWord(value: QWord; var dest: ShortString);
+var
+  tmp: array[0..23] of AnsiChar;
+begin
+  AppendShortTemp(StrUInt64(@tmp[23], value), @tmp[23], @dest);
 end;
 
 procedure AppendShortToUtf8(const src: ShortString; var dest: RawUtf8);
