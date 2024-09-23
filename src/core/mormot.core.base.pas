@@ -910,7 +910,7 @@ procedure AppendShortBuffer(buf: PAnsiChar; len: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// simple concatenation of hexadecimal binary buffer into a shorstring
-procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
 
 /// simple concatenation of an integer as lowercase hexadecimal into a shorstring
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
@@ -4904,7 +4904,7 @@ begin
   dest[0] := AnsiChar(len);
 end;
 
-procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
+procedure AppendShortHex(value: PByte; len: PtrUInt; var dest: ShortString);
 var
   dlen, v: PtrUInt;
   tab: PAnsiChar;
