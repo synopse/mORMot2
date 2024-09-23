@@ -2029,7 +2029,7 @@ end;
 
 function SddlNext0xInteger(var p: PUtf8Char; out c: integer): boolean;
 begin
-  c := ParseHex0x(p); // p^ is '0x####'
+  c := ParseHex0x(PAnsiChar(p)); // p^ is '0x####'
   repeat
     inc(p);
   until p^ in [#0, ';'];
@@ -2138,7 +2138,8 @@ begin
       while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
         inc(s);
       FastSetRawByteString(ace.Opaque, nil, (s - p) shr 1);
-      if ParseHex(p, pointer(ace.Opaque), length(ace.Opaque)) <> s then
+      if ParseHex(PAnsiChar(p),
+           pointer(ace.Opaque), length(ace.Opaque)) <> PAnsiChar(s) then
         exit;
     end;
   end;
