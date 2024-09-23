@@ -2929,6 +2929,7 @@ function Unicode_WideToAnsi(
 
 /// conversion of some UTF-16 buffer into a temporary Ansi ShortString
 // - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
+// - calls IsAnsiCompatibleW() first to quickly handle any ASCII-7 output
 procedure Unicode_WideToShort(
   W: PWideChar; LW, CodePage: PtrInt; var res: ShortString);
 
@@ -6189,10 +6190,11 @@ var
 begin
   if LW <= 0 then
     res[0] := #0
-  else if (LW <= 255) and
-          IsAnsiCompatibleW(W, LW) then
+  else if IsAnsiCompatibleW(W, LW) then
   begin
     // fast handling of pure ASCII-7 content (very common case)
+    if LW > 255 then
+      LW := 255;
     res[0] := AnsiChar(LW);
     i := 1;
     repeat
