@@ -1827,6 +1827,7 @@ begin
     parent := 0;
     if (ace.AceType in satConditional) and
        (s^ = '(') then // conditional ACE expression
+    begin
       repeat
         case s^ of
           #0:
@@ -1840,12 +1841,18 @@ begin
               dec(parent);
         end;
         inc(s);
-      until false
-    else
+      until false;
+      FastSetString(RawUtf8(ace.Opaque), p, s - p);
+    end
+    else // fallback to hexadecimal output
+    begin
       while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
         inc(s);
+      FastSetRawByteString(ace.Opaque, nil, (s - p) shr 1);
+      if ParseHex(p, pointer(ace.Opaque), length(ace.Opaque)) <> s then
+        exit;
+    end;
   end;
-  FastSetString(RawUtf8(ace.Opaque), p, s - p);
   p := s;
   result := true;
 end;
@@ -1854,10 +1861,11 @@ procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
 begin
   if ace.Opaque = '' then
     exit;
-  if StrLen(pointer(ace.Opaque)) = length(ace.Opaque) then // true text
-    AppendShortAnsi7String(ace.Opaque, s) // e.g. conditional ACE expression
+  if (ace.AceType in satConditional) and
+     (ace.Opaque[1] = '(') then
+    AppendShortAnsi7String(ace.Opaque, s) // conditional ACE expression
   else
-    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // paranoid
+    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // hexadecimal
 end;
 
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
