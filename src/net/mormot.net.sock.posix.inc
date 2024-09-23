@@ -977,7 +977,7 @@ begin
         fn := '/sys/class/net/' + SR.Name;
         f := StringFromFile(fn + '/flags', {nosize=}true);
         if (length(f) > 2) and // e.g. '0x40' or '0x1043'
-           (PosixParseHex32(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
+           (ParseHex0x(pointer(f)) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then
         begin
           f := TrimU(StringFromFile(fn + '/address', {nosize=}true));
           if f <> '' then

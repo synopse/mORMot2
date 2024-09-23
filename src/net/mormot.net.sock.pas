@@ -3444,7 +3444,7 @@ end;
 
 function MacToText(mac: PByteArray): RawUtf8;
 begin
-  ToHumanHex(result, mac, 6);
+  ToHumanHex(result, pointer(mac), 6);
 end;
 
 function MacTextFromHex(const Hex: RawUtf8): RawUtf8;

@@ -2572,6 +2572,11 @@ begin
   CheckEqual(MacTextFromHex('123'), '');
   CheckEqual(MacTextFromHex('1234'), '12:34');
   CheckEqual(MacTextFromHex('12345'), '');
+  ToHumanHex(x, @Guid, SizeOf(guid));
+  CheckEqual(x, 'd3:46:a6:c9:61:9c:b7:4c:bf:cd:ee:25:22:c8:f6:33');
+  CheckEqual(MacTextFromHex(mormot.core.text.BinToHex(@Guid, SizeOf(guid))), x);
+  ToHumanHex(x, @Guid, SizeOf(guid), {reverse=}true);
+  CheckEqual(x, '33:f6:c8:22:25:ee:cd:bf:4c:b7:9c:61:c9:a6:46:d3');
   x := 'c9:a6:46:d3:9c:61:4c:b7:bf:cd:ee:25:22:c8:f6:33';
   CheckEqual(MacTextFromHex(s), x);
   CheckEqual(MacTextFromHex(UpperCase(s)), x);
