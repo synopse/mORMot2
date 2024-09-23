@@ -6416,62 +6416,87 @@ end;
 
 const
   // some reference Security Descriptor self-relative buffers
-  SD_B64: array[0..6] of RawUtf8 = (
+  SD_B64: array[0..7] of RawUtf8 = (
+    // 0 [MS-DTYP] 2.5.1.4 SDDL String to Binary Example
+    'AQAUsJAAAACgAAAAFAAAADAAAAACABwAAQAAAAKAFAAAAACAAQEAAAAAAAEAAAAAAgBgAAQAAAAAAxgA' +
+    'AAAAoAECAAAAAAAFIAAAACECAAAAAxgAAAAAEAECAAAAAAAFIAAAACACAAAAAxQAAAAAEAEBAAAAAAAF' +
+    'EgAAAAADFAAAAAAQAQEAAAAAAAMAAAAAAQIAAAAAAAUgAAAAIAIAAAECAAAAAAAFIAAAACACAAA=',
     // https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
+    // 1
     'AQAUgCgBAAA4AQAAFAAAADAAAAACABwAAQAAAALAFAArAA0AAQEAAAAAAAEAAAAABAD4AAcAAAAAABQA' +
     'PwAPAAEBAAAAAAAFEgAAAAAAGAA/AA8AAQIAAAAAAAUgAAAAJAIAAAUALAADAAAAAQAAALp6lr/mDdAR' +
     'ooUAqgAwSeIBAgAAAAAABSAAAAAkAgAABQAsAAMAAAABAAAAnHqWv+YN0BGihQCqADBJ4gECAAAAAAAF' +
     'IAAAACQCAAAFACwAAwAAAAEAAAD/pKhtUg7QEaKGAKoAMEniAQIAAAAAAAUgAAAAJAIAAAUALAADAAAA' +
     'AQAAAKh6lr/mDdARooUAqgAwSeIBAgAAAAAABSAAAAAmAgAAAAAUABQAAgABAQAAAAAABQsAAAABAgAA' +
     'AAAABSAAAAAkAgAAAQEAAAAAAAUSAAAA',
+    // 2
     'AQAEgDAAAABAAAAAAAAAABQAAAACABwAAQAAAAAAFAA/AA4QAQEAAAAAAAAAAAAAAQIAAAAAAAUgAAAA' +
     'JAIAAAEBAAAAAAAFEgAAAA==',
+    // 3
     'AQAEgAAAAAAAAAAAAAAAABQAAAACABwAAQAAAAAAFAAAAAAQAQEAAAAAAAUHAAAA',
+    // 4
     'AQAEgBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAADRYBkx0xfaYIKt9RgBAgAAAQUAAAAAAAUVAAAA' +
     '0WAZMdMX2mCCrfUYAAIAAAIALAABAAAAAAAkAP8BHwABBQAAAAAABRUAAADRYBkx0xfaYIKt9RgAAgAA',
     // executable file access security descriptors, exported from several Windows VMs
+    // 5 WinXP
     'AQAEgBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACCi6YoI/P2Y4qnMj/rAwAAAQUAAAAAAAUVAAAA' +
     'goumKCPz9mOKpzI/AQIAAAIAcAAEAAAAAAAYAP8BHwABAgAAAAAABSAAAAAgAgAAAAAUAP8BHwABAQAA' +
     'AAAABRIAAAAAACQA/wEfAAEFAAAAAAAFFQAAAIKLpigj8/ZjiqcyP+sDAAAAABgAqQASAAECAAAAAAAF' +
     'IAAAACECAAA=',
+    // 6 Win7
     'AQAEhBQAAAAkAAAAAAAAAEAAAAABAgAAAAAABSAAAAAgAgAAAQUAAAAAAAUVAAAA0WAZMdMX2mCCrfUY' +
     'AQIAAAIAYAAEAAAAABAYAP8BHwABAgAAAAAABSAAAAAgAgAAABAUAP8BHwABAQAAAAAABRIAAAAAEBgA' +
     'qQASAAECAAAAAAAFIAAAACECAAAAEBQAvwETAAEBAAAAAAAFCwAAAA==',
+    // 7 Win10
     'AQAEhBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACrWLmSPIyOxBiy0bzpAwAAAQUAAAAAAAUVAAA' +
     'Aq1i5kjyMjsQYstG8AQIAAAIAYAAEAAAAABAYAP8BHwABAgAAAAAABSAAAAAgAgAAABAUAP8BHwABAQ' +
     'AAAAAABRIAAAAAEBgAqQASAAECAAAAAAAFIAAAACECAAAAEBQAvwETAAEBAAAAAAAFCwAAAA==');
+  // the expected SDDL export of those binary buffers
   SD_TXT: array[0..high(SD_B64)] of RawUtf8 = (
+    // 0
+    'O:BAG:BAD:P(A;OICI;GXGR;;;BU)(A;OICI;GA;;;BA)(A;OICI;GA;;;SY)(A;OICI;GA;;;CO)' +
+    'S:P(AU;FA;GR;;;WD)',
+    // 1
     'O:AOG:SYD:(A;;KA;;;SY)(A;;KA;;;AO)(OA;;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2' +
     ';;AO)(OA;;CCDC;bf967a9c-0de6-11d0-a285-00aa003049e2;;AO)(OA;;CCDC;6da8a4ff-0e52-' +
     '11d0-a286-00aa003049e2;;AO)(OA;;CCDC;bf967aa8-0de6-11d0-a285-00aa003049e2;;PO)(A' +
     ';;LCRPRC;;;AU)S:(AU;SAFA;CCDCSWWPSDWDWO;;;WD)',
+    // 2
     'O:AOG:SYD:(A;;CCDCLCSWRPWPRCWDWOGA;;;S-1-0-0)',
+    // 3
     'D:(A;;GA;;;AN)',
+    // 4
     'O:S-1-5-21-823746769-1624905683-418753922-513' +
     'G:S-1-5-21-823746769-1624905683-418753922-512' +
     'D:(A;;FA;;;S-1-5-21-823746769-1624905683-418753922-512)',
+    // 5
     'O:S-1-5-21-682003330-1677128483-1060284298-1003' +
     'G:S-1-5-21-682003330-1677128483-1060284298-513' +
     'D:(A;;FA;;;BA)(A;;FA;;;SY)' +
       '(A;;FA;;;S-1-5-21-682003330-1677128483-1060284298-1003)(A;;0x1200a9;;;BU)',
+    // 6
     'O:BA' +
     'G:S-1-5-21-823746769-1624905683-418753922-513' +
     'D:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
+    // 7
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001' +
     'G:S-1-5-21-2461620395-3297676348-3167859224-513' +
     'D:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
-  DOM_TXT: array[3..high(SD_B64)] of RawUtf8 = (
-    'S-1-5-21-823746769-1624905683-418753922',
-    'S-1-5-21-682003330-1677128483-1060284298',
-    'S-1-5-21-823746769-1624905683-418753922',
-    'S-1-5-21-2461620395-3297676348-3167859224');
-  RID_TXT: array[3..high(SD_B64)] of RawUtf8 = (
+  // the Domain SID to be used for RID recognition
+  DOM_TXT: array[4..high(SD_B64)] of RawUtf8 = (
+    'S-1-5-21-823746769-1624905683-418753922',    // 4
+    'S-1-5-21-682003330-1677128483-1060284298',   // 5
+    'S-1-5-21-823746769-1624905683-418753922',    // 6
+    'S-1-5-21-2461620395-3297676348-3167859224'); // 7
+  // the SDDL with proper RID recognition
+  RID_TXT: array[4..high(SD_B64)] of RawUtf8 = (
     'O:DUG:DAD:(A;;FA;;;DA)',
     'O:S-1-5-21-682003330-1677128483-1060284298-1003G:DUD:(A;;FA;;;BA)(A;;FA;;;SY)' +
     '(A;;FA;;;S-1-5-21-682003330-1677128483-1060284298-1003)(A;;0x1200a9;;;BU)',
     'O:BAG:DUD:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001G:DUD:AI(A;ID;FA;;;BA)' +
     '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
+  // some ACE conditional expressions
   COND_TXT: array[0..2] of RawUtf8 = (
     'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
       '@User.Division ==" Sales")))',
@@ -6538,7 +6563,7 @@ begin
     Check(sd.FromBinary(bin));
     Check(sd.Dacl <> nil, 'dacl');
     Check(scSelfRelative in sd.Flags);
-    Check((sd.Sacl = nil) = (i <> 0), 'sacl');
+    Check((sd.Sacl = nil) = (i > 1), 'sacl');
     CheckEqual(sd.ToText, SD_TXT[i], 'ToText');
     Check(sd.Dacl[0].Opaque = '');
     Check(sd.Dacl[0].ConditionalExpression = '');
@@ -6606,15 +6631,15 @@ begin
     Check(scDaclPresent in sd.Flags);
   end;
   // validate parsing RID in text (e.g. DU,DA)
-  Check(not sd.FromText(RID_TXT[3]), 'dom0');
+  Check(not sd.FromText(RID_TXT[4]), 'dom0');
   Check(not sd.IsEqual(sd2));
   Check(sd.FromText(' O: DU G: DA D: ( A ; ; FA ; ; ; DA ) ', dom), 'dom1');
   Check(not sd.IsEqual(sd2));
   u := sd.ToText;
   CheckEqual(u, FormatUtf8('O:%-513G:%-512D:(A;;FA;;;%-512)', [dom, dom, dom]));
-  CheckEqual(u, SD_TXT[3], 'domasref');
+  CheckEqual(u, SD_TXT[4], 'domasref');
   u := sd.ToText(dom);
-  CheckEqual(u, RID_TXT[3], 'rid');
+  CheckEqual(u, RID_TXT[4], 'rid');
   saved := sd.ToBinary;
   CheckHash(saved, $3B028A48, 'dombin');
   Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saveddom');
