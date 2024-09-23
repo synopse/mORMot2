@@ -8,8 +8,10 @@ unit mormot.core.os.security;
 
   Cross-Platform Operating System Security Definitions
   - Security IDentifier (SID) Definitions
+  - Security Descriptor Self-Relative Binary Structures
   - Access Control List (DACL/SACL) Definitions
   - Security Descriptor Definition Language (SDDL)
+  - TSecurityDescriptor Wrapper Object
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -304,17 +306,120 @@ function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8; ove
 // - more efficient than KnownRawSid() overload and KnownSidToText()
 procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
 
+const
+  /// the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
+  WKR_RID: array[TWellKnownRid] of word = (
+    $1f2,    // wkrGroupReadOnly
+    $1f4,    // wkrUserAdmin
+    $1f5,    // wkrUserGuest
+    $1f6,    // wkrServiceKrbtgt
+    $200,    // wkrGroupAdmins
+    $201,    // wkrGroupUsers
+    $202,    // wkrGroupGuests
+    $203,    // wkrGroupComputers
+    $204,    // wkrGroupControllers
+    $205,    // wkrGroupCertAdmins
+    $206,    // wkrGroupSchemaAdmins
+    $207,    // wkrGroupEntrepriseAdmins
+    $208,    // wkrGroupPolicyAdmins
+    $209,    // wkrGroupReadOnlyControllers
+    $20a,    // wkrGroupCloneableControllers
+    $20d,    // wkrGroupProtectedUsers
+    $20e,    // wkrGroupKeyAdmins
+    $20f,    // wkrGroupEntrepriseKeyAdmins
+    $1000,   // wkrSecurityMandatoryLow
+    $2000,   // wkrSecurityMandatoryMedium
+    $2100,   // wkrSecurityMandatoryMediumPlus
+    $3000,   // wkrSecurityMandatoryHigh
+    $4000);  // wkrSecurityMandatorySystem
 
-{ ****************** Access Control List (DACL/SACL) Definitions }
+
+{ ****************** Security Descriptor Self-Relative Binary Structures }
 
 type
-  /// custom binary buffer type used as Windows self-relative Security Descriptor
-  // - mormot.crypt.secure will recognize this type and serialize its SDDL
-  // text as a JSON string
-  RawSecurityDescriptor = type RawByteString;
-  PRawSecurityDescriptor = ^RawSecurityDescriptor;
+  /// flags to specify control access to TSecurityDescriptor
+  // - see e.g. [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
+  TSecControl = (
+    scOwnerDefaulted,
+    scGroupDefaulted,
+    scDaclPresent,
+    scDaclDefaulted,
+    scSaclPresent,
+    scSaclDefaulted,
+    scDaclTrusted,
+    scServerSecurity,
+    scDaclAutoInheritReq,
+    scSaclAutoInheritReq,
+    scDaclAutoInherit,
+    scSaclAutoInherit,
+    scDaclProtected,
+    scSaclProtected,
+    scRmControlValid,
+    scSelfRelative);
+  /// TSecurityDescriptor.Controls to specify control access
+  TSecControls = set of TSecControl;
+
+  // map the _SECURITY_DESCRIPTOR struct in self-relative state
+  // - see [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
+  TRawSD = packed record
+    Revision: byte;
+    Sbz1: byte;
+    Control: TSecControls;
+    Owner: cardinal; // not pointers, but self-relative position
+    Group: cardinal;
+    Sacl: cardinal;
+    Dacl: cardinal;
+  end;
+  PRawSD = ^TRawSD;
+
+  // map the Access Control List header
+  // - see [MS-DTYP] 2.4.5.1 ACL--RPC Representation
+  TRawAcl = packed record
+    AclRevision: byte;
+    Sbz1: byte;
+    AclSize: word; // including TRawAcl header + all ACEs
+    AceCount: word;
+    Sbz2: word;
+  end;
+  PRawAcl = ^TRawAcl;
+
+  /// high-level supported ACE flags in TSecAce.Flags
+  // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
+  // - safObjectInherit: non-container child objects inherit the ACE as an
+  // effective ACE
+  // - safContainerInherit: child objects that are containers, such as directories,
+  // inherit the ACE as an effective ACE
+  // - safNoPropagateInherit: If the ACE is inherited by a child object, the
+  // system clears the safObjectInherit and safContainerInherit flags in the
+  // inherited ACE. This prevents the ACE from being inherited by subsequent
+  // generations of objects.
+  // - safInheritOnly indicates an inherit-only ACE, which does not control
+  // access to the object to which it is attached. If this flag is not set,
+  // the ACE is an effective ACE that controls access to the object to which
+  // it is attached
+  // - safInherited is used to indicate that the ACE was inherited
+  // - safSuccessfulAccess is used with system-audit ACEs in a SACL to generate
+  // audit messages for successful access attempts
+  // - safFailedAccess is used with system-audit ACEs in a system access
+  // control list (SACL) to generate audit messages for failed access attempts
+  TSecAceFlag = (
+    safObjectInherit,        // OI
+    safContainerInherit,     // CI
+    safNoPropagateInherit,   // NP
+    safInheritOnly,          // IO
+    safInherited,            // ID
+    saf5,
+    safSuccessfulAccess,     // SA
+    safFailedAccess);        // FA
+
+  /// high-level supported ACE flags in TSecAce.Flags
+  TSecAceFlags = set of TSecAceFlag;
 
   /// standard and generic access rights in TSecAce.Mask
+  // - see [MS-DTYP] 2.4.3 ACCESS_MASK
+  // - well defined set of files or keys flags are defined as TSecAccessRight
+  // - other sets of rights will be identified by those individual values
+  // -
   TSecAccess = (
     samCreateChild,          // CC
     samDeleteChild,          // DC
@@ -355,7 +460,23 @@ type
   TSecAccessMask = set of TSecAccess;
   PSecAccessMask = ^TSecAccessMask;
 
-  /// TSecAce.Mask constant values with their own SDDL identifier
+  // map one Access Control Entry
+  // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
+  TRawAce = packed record
+    // ACE header
+    AceType: byte;  // typically equals ord(TSecAceType) - 1
+    AceFlags: TSecAceFlags;
+    AceSize: word; // include ACE header + whole body
+    // ACE body
+    Mask: TSecAccessMask;
+    case integer of
+      0: (CommonSid: cardinal);
+      1: (ObjectFlags: cardinal;
+          ObjectStart: cardinal);
+  end;
+  PRawAce = ^TRawAce;
+
+  /// TRawAce/TSecAce.Mask constant values with their own SDDL identifier
   // - i.e. TSecAccessMask sets which are commonly used togethers
   // - sarFile* for files, sarKey* for registry keys, and also services
   // - note that sarKeyExecute and sarKeyRead have the actual same 32-bit value
@@ -369,28 +490,57 @@ type
     sarKeyWrite,            // KW
     sarKeyExecute);         // KE
 
-  /// flags to specify control access to TSecurityDescriptor
-  // - see e.g. [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
-  TSecControl = (
-    scOwnerDefaulted,
-    scGroupDefaulted,
-    scDaclPresent,
-    scDaclDefaulted,
-    scSaclPresent,
-    scSaclDefaulted,
-    scDaclTrusted,
-    scServerSecurity,
-    scDaclAutoInheritReq,
-    scSaclAutoInheritReq,
-    scDaclAutoInherit,
-    scSaclAutoInherit,
-    scDaclProtected,
-    scSaclProtected,
-    scRmControlValid,
-    scSelfRelative);
-  /// TSecurityDescriptor.Controls to specify control access
-  TSecControls = set of TSecControl;
+const
+  ACE_OBJECT_TYPE_PRESENT = 1;
+  ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
 
+  {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
+
+  SAR_FILE_ALL_ACCESS      = $001f01ff;
+  SAR_FILE_GENERIC_READ    = $00120089;
+  SAR_FILE_GENERIC_WRITE   = $00120116;
+  SAR_FILE_GENERIC_EXECUTE = $001200a0;
+
+  SAR_KEY_ALL_ACCESS       = $000f003f;
+  SAR_KEY_READ             = $00020019;
+  SAR_KEY_WRITE            = $00020006;
+  SAR_KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
+
+  /// match the TSecAce.Mask constant values with their own SDDL identifier
+  SAR_MASK: array[TSecAccessRight] of cardinal = (
+    SAR_FILE_ALL_ACCESS,       // sarFileAll
+    SAR_FILE_GENERIC_READ,     // sarFileRead
+    SAR_FILE_GENERIC_WRITE,    // sarFileWrite
+    SAR_FILE_GENERIC_EXECUTE,  // sarFileExecute
+    SAR_KEY_ALL_ACCESS,        // sarKeyAll
+    SAR_KEY_READ,              // sarKeyRead
+    SAR_KEY_WRITE,             // sarKeyWrite
+    SAR_KEY_EXECUTE);          // sarKeyExecute = sarKeyRead
+
+  /// specifies the user rights allowed by satObject ACE
+  // - see e.g. [MS-DTYP] 2.4.4.3 ACCESS_ALLOWED_OBJECT_ACE
+  samObject = [
+    samCreateChild,
+    samDeleteChild,
+    samSelfWrite,
+    samReadProp,
+    samWriteProp,
+    samControlAccess];
+
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot write to the object
+  samMandatoryLabelNoWriteUp   = samCreateChild;
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot read the object
+  samMandatoryLabelNoReadUp    = samDeleteChild;
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot execute the object
+  samMandatoryLabelNoExecuteUp = samListChildren;
+
+
+{ ****************** Access Control List (DACL/SACL) Definitions }
+
+type
   /// high-level supported ACE kinds in TSecAce.AceType
   // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
   // - satAccessAllowed/satAccessDenied allows or denies access to an object
@@ -437,21 +587,7 @@ type
     satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
     satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
     satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
-    satAccessFilter);                  // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
-
-  /// high-level supported ACE flags in TSecAce.Flags
-  TSecAceFlag = (
-    safObjectInherit,        // OI
-    safContainerInherit,     // CI
-    safNoPropagateInherit,   // NP
-    safInheritOnly,          // IO
-    safInherited,            // ID
-    saf5,
-    safSuccessfulAccess,     // SA
-    safFailedAccess);        // FA
-
-  /// high-level supported ACE flags in TSecAce.Flags
-  TSecAceFlags = set of TSecAceFlag;
+    satAccessFilter);                 // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
 
   /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
   TSecAceScope = (
@@ -532,78 +668,6 @@ type
   TSecAcl = array of TSecAce;
   PSecAcl = ^TSecAcl;
 
-  /// high-level cross-platform support of one Windows Security Descriptor
-  // - can be loaded and exported as self-relative binary or SDDL text
-  // - JSON is supported via SecurityDescriptorToJson() and
-  // SecurityDescriptorFromJson() from mormot.crypt.secure
-  {$ifdef USERECORDWITHMETHODS}
-  TSecurityDescriptor = record
-  {$else}
-  TSecurityDescriptor = object
-  {$endif USERECORDWITHMETHODS}
-  private
-    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): boolean;
-    procedure AclToText(var sddl: RawUtf8; dom: PSid; scope: TSecAceScope);
-    function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
-    function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
-      success: boolean): PSecAce;
-  public
-    /// the owner security identifier (SID)
-    Owner: RawSid;
-    /// the primary group SID
-    Group: RawSid;
-    /// discretionary access control list
-    Dacl: TSecAcl;
-    /// system access control list
-    Sacl: TSecAcl;
-    /// control flags of this Security Descriptor
-    Flags: TSecControls;
-    /// remove any previous content
-    procedure Clear;
-    /// compare the fields of this instance with another
-    function IsEqual(const sd: TSecurityDescriptor): boolean;
-    /// decode a self-relative binary Security Descriptor buffer
-    function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
-    /// decode a self-relative binary Security Descriptor buffer
-    function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
-    /// encode this Security Descriptor into a self-relative binary buffer
-    function ToBinary: RawSecurityDescriptor;
-    /// decode a Security Descriptor from its SDDL textual representation
-    // - could also recognize SDDL RID placeholders, with the specified
-    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
-    function FromText(const SddlText: RawUtf8;
-      const RidDomain: RawUtf8 = ''): boolean; overload;
-    /// decode a Security Descriptor from its SDDL textual representation
-    function FromText(var p: PUtf8Char; dom: PSid = nil;
-      endchar: AnsiChar = #0): boolean; overload;
-    /// encode this Security Descriptor into its SDDL textual representation
-    // - could also generate SDDL RID placeholders, from the specified
-    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
-    function ToText(const RidDomain: RawUtf8 = ''): RawUtf8;
-    /// append this Security Descriptor as SDDL text into an existing buffer
-    // - could also generate SDDL RID placeholders, if dom binary is supplied,
-    // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
-    /// add one new ACE to the DACL (or SACL)
-    // - SID and Mask are supplied in their regular / SDDL text form, with
-    // dom optionally able to recognize SDDL RID placeholders
-    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
-    // - return nil on sidText/maskSddl parsing error, or the newly added entry
-    function Add(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
-      dom: PSid = nil; const condExp: RawUtf8 = ''; scope: TSecAceScope = sasDacl;
-      saf: TSecAceFlags = []): PSecAce; overload;
-    /// add one new ACE to the DACL (or SACL) from SDDL text
-    // - dom <> nil would enable SDDL RID placeholders recognition
-    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
-    // - return nil on sddl input text parsing error, or the newly added entry
-    function Add(const sddl: RawUtf8; dom: PSid = nil;
-      scope: TSecAceScope = sasDacl): PSecAce; overload;
-    /// delete one ACE from the DACL (or SACL)
-    procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
-  end;
-
-  {$A+}
-
 const
   /// the ACE which have just a Mask and SID in their definition
   satCommon = [
@@ -643,16 +707,6 @@ const
     satCallbackObjectAccessDenied,
     satCallbackObjectAudit];
 
-  /// specifies the user rights allowed by satObject ACE
-  // - see e.g. [MS-DTYP] 2.4.4.3 ACCESS_ALLOWED_OBJECT_ACE
-  samObject = [
-    samCreateChild,
-    samDeleteChild,
-    samSelfWrite,
-    samReadProp,
-    samWriteProp,
-    samControlAccess];
-
   /// defined in TSecAce.Flags for an ACE which has inheritance
   safInheritanceFlags = [
     safObjectInherit,
@@ -664,45 +718,6 @@ const
   safAuditFlags = [
     safSuccessfulAccess,
     safFailedAccess];
-
-  {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
-
-  SAR_FILE_ALL_ACCESS      = $001f01ff;
-  SAR_FILE_GENERIC_READ    = $00120089;
-  SAR_FILE_GENERIC_WRITE   = $00120116;
-  SAR_FILE_GENERIC_EXECUTE = $001200a0;
-
-  SAR_KEY_ALL_ACCESS       = $000f003f;
-  SAR_KEY_READ             = $00020019;
-  SAR_KEY_WRITE            = $00020006;
-  SAR_KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
-
-  /// match the TSecAce.Mask constant values with their own SDDL identifier
-  SAR_MASK: array[TSecAccessRight] of cardinal = (
-    SAR_FILE_ALL_ACCESS,       // sarFileAll
-    SAR_FILE_GENERIC_READ,     // sarFileRead
-    SAR_FILE_GENERIC_WRITE,    // sarFileWrite
-    SAR_FILE_GENERIC_EXECUTE,  // sarFileExecute
-    SAR_KEY_ALL_ACCESS,        // sarKeyAll
-    SAR_KEY_READ,              // sarKeyRead
-    SAR_KEY_WRITE,             // sarKeyWrite
-    SAR_KEY_EXECUTE);          // sarKeyExecute
-
-
-/// check the conformity of a self-relative binary Security Descriptor buffer
-// - only check the TSecurityDescriptor main fields consistency
-function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
-
-/// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
-// - will wrap our TSecurityDescriptor binary decoder / SDDL encoder on all platforms
-// - returns true if the conversion succeeded
-// - returns false, and don't change the text value on rendering error
-// - function is able to convert the value itself, i.e. allows @sd = @text
-// - could also generate SDDL RID placeholders, if dom binary is supplied,
-// e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-// - on Windows, you can call native CryptoApi.SecurityDescriptorToText()
-function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
-  var text: RawUtf8; dom: PSid = nil): boolean;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -833,6 +848,104 @@ var
 
   /// allow to quickly check if a TSecAccess has a SDDL identifier
   samWithSddl: TSecAccessMask;
+
+
+{ ****************** TSecurityDescriptor Wrapper Object }
+
+type
+  /// custom binary buffer type used as Windows self-relative Security Descriptor
+  // - mormot.crypt.secure will recognize this type and serialize its SDDL
+  // text as a JSON string
+  RawSecurityDescriptor = type RawByteString;
+  PRawSecurityDescriptor = ^RawSecurityDescriptor;
+
+  /// high-level cross-platform support of one Windows Security Descriptor
+  // - can be loaded and exported as self-relative binary or SDDL text
+  // - JSON is supported via SecurityDescriptorToJson() and
+  // SecurityDescriptorFromJson() from mormot.crypt.secure
+  // - high level wrapper of [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
+  {$ifdef USERECORDWITHMETHODS}
+  TSecurityDescriptor = record
+  {$else}
+  TSecurityDescriptor = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): boolean;
+    procedure AclToText(var sddl: RawUtf8; dom: PSid; scope: TSecAceScope);
+    function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
+    function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
+      success: boolean): PSecAce;
+  public
+    /// the owner security identifier (SID)
+    Owner: RawSid;
+    /// the primary group SID
+    Group: RawSid;
+    /// discretionary access control list
+    Dacl: TSecAcl;
+    /// system access control list
+    Sacl: TSecAcl;
+    /// control flags of this Security Descriptor
+    Flags: TSecControls;
+    /// remove any previous content
+    procedure Clear;
+    /// compare the fields of this instance with another
+    function IsEqual(const sd: TSecurityDescriptor): boolean;
+    /// decode a self-relative binary Security Descriptor buffer
+    function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
+    /// decode a self-relative binary Security Descriptor buffer
+    function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
+    /// encode this Security Descriptor into a self-relative binary buffer
+    function ToBinary: RawSecurityDescriptor;
+    /// decode a Security Descriptor from its SDDL textual representation
+    // - could also recognize SDDL RID placeholders, with the specified
+    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
+    function FromText(const SddlText: RawUtf8;
+      const RidDomain: RawUtf8 = ''): boolean; overload;
+    /// decode a Security Descriptor from its SDDL textual representation
+    function FromText(var p: PUtf8Char; dom: PSid = nil;
+      endchar: AnsiChar = #0): boolean; overload;
+    /// encode this Security Descriptor into its SDDL textual representation
+    // - could also generate SDDL RID placeholders, from the specified
+    // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
+    function ToText(const RidDomain: RawUtf8 = ''): RawUtf8;
+    /// append this Security Descriptor as SDDL text into an existing buffer
+    // - could also generate SDDL RID placeholders, if dom binary is supplied,
+    // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+    procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
+    /// add one new ACE to the DACL (or SACL)
+    // - SID and Mask are supplied in their regular / SDDL text form, with
+    // dom optionally able to recognize SDDL RID placeholders
+    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
+    // - return nil on sidText/maskSddl parsing error, or the newly added entry
+    function Add(sat: TSecAceType; const sidText, maskSddl: RawUtf8;
+      dom: PSid = nil; const condExp: RawUtf8 = ''; scope: TSecAceScope = sasDacl;
+      saf: TSecAceFlags = []): PSecAce; overload;
+    /// add one new ACE to the DACL (or SACL) from SDDL text
+    // - dom <> nil would enable SDDL RID placeholders recognition
+    // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
+    // - return nil on sddl input text parsing error, or the newly added entry
+    function Add(const sddl: RawUtf8; dom: PSid = nil;
+      scope: TSecAceScope = sasDacl): PSecAce; overload;
+    /// delete one ACE from the DACL (or SACL)
+    procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
+  end;
+
+  {$A+}
+
+/// check the conformity of a self-relative binary Security Descriptor buffer
+// - only check the TSecurityDescriptor main fields consistency
+function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
+
+/// convert a self-relative Security Descriptor buffer as text (SDDL or hexa)
+// - will wrap our TSecurityDescriptor binary decoder / SDDL encoder on all platforms
+// - returns true if the conversion succeeded
+// - returns false, and don't change the text value on rendering error
+// - function is able to convert the value itself, i.e. allows @sd = @text
+// - could also generate SDDL RID placeholders, if dom binary is supplied,
+// e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+// - on Windows, you can call native CryptoApi.SecurityDescriptorToText()
+function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
+  var text: RawUtf8; dom: PSid = nil): boolean;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -1411,33 +1524,6 @@ begin
   end;
 end;
 
-const
-  // the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
-  WKR_RID: array[TWellKnownRid] of word = (
-    $1f2,    // wkrGroupReadOnly
-    $1f4,    // wkrUserAdmin
-    $1f5,    // wkrUserGuest
-    $1f6,    // wkrServiceKrbtgt
-    $200,    // wkrGroupAdmins
-    $201,    // wkrGroupUsers
-    $202,    // wkrGroupGuests
-    $203,    // wkrGroupComputers
-    $204,    // wkrGroupControllers
-    $205,    // wkrGroupCertAdmins
-    $206,    // wkrGroupSchemaAdmins
-    $207,    // wkrGroupEntrepriseAdmins
-    $208,    // wkrGroupPolicyAdmins
-    $209,    // wkrGroupReadOnlyControllers
-    $20a,    // wkrGroupCloneableControllers
-    $20d,    // wkrGroupProtectedUsers
-    $20e,    // wkrGroupKeyAdmins
-    $20f,    // wkrGroupEntrepriseKeyAdmins
-    $1000,   // wkrSecurityMandatoryLow
-    $2000,   // wkrSecurityMandatoryMedium
-    $2100,   // wkrSecurityMandatoryMediumPlus
-    $3000,   // wkrSecurityMandatoryHigh
-    $4000);  // wkrSecurityMandatorySystem
-
 function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8;
 begin
   SidToText(pointer(KnownRawSid(wkr, Domain)), result);
@@ -1453,6 +1539,72 @@ procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
 begin
   FastSetRawByteString(RawByteString(result), pointer(dom), SID_MINLEN + 5 * 4);
   PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
+end;
+
+
+{ ****************** Security Descriptor Self-Relative Binary Structures }
+
+function BinToSecAcl(p: PByteArray; offset: cardinal; var res: TSecAcl): boolean;
+var
+  hdr: PRawAcl;
+  ace: PRawAce;
+  max: pointer;
+  a: ^TSecAce;
+  i: integer;
+begin
+  result := offset = 0;
+  if result then
+    exit; // no DACL/SACL
+  hdr := @p[offset];
+  if (hdr^.Sbz1 <> 0) or
+     not (hdr^.AclRevision in [2, 4]) then
+    exit;
+  if hdr^.AceCount <> 0 then
+  begin
+    max := @p[offset + hdr^.AclSize];
+    SetLength(res, hdr^.AceCount);
+    a := pointer(res);
+    ace := @p[offset + SizeOf(hdr^)];
+    for i := 1 to hdr^.AceCount do
+    begin
+      if not a^.FromBinary(pointer(ace), max) then
+        exit;
+      inc(PByte(ace), ace^.AceSize);
+      inc(a);
+    end;
+  end;
+  result := true;
+end;
+
+function SecAclToBin(p: PAnsiChar; const ace: TSecAcl): PtrInt;
+var
+  hdr: PRawAcl;
+  a: ^TSecAce;
+  i, len: PtrInt;
+begin
+  result := 0;
+  if ace = nil then
+    exit;
+  hdr := pointer(p);
+  result := SizeOf(hdr^);
+  if hdr <> nil then // need to write ACL header
+    inc(p, result);
+  a := pointer(ace);
+  for i := 0 to length(ace) - 1 do
+  begin
+    len := a^.ToBinary(p);
+    inc(result, len);
+    if hdr <> nil then
+      inc(p, len);
+    inc(a);
+  end;
+  if hdr = nil then
+    exit;
+  hdr^.AclRevision := 2;
+  hdr^.Sbz1 := 0;
+  hdr^.AceCount := length(ace);
+  hdr^.Sbz2 := 0;
+  hdr^.AclSize := result;
 end;
 
 
@@ -1725,84 +1877,6 @@ end;
 
 { ****************** Access Control List (DACL/SACL) Definitions }
 
-{ low-level self-relative Security Descriptor buffer data structures }
-
-type
-  // map the _SECURITY_DESCRIPTOR struct in self-relative state
-  TSD = packed record
-    Revision: byte;
-    Sbz1: byte;
-    Control: TSecControls;
-    Owner: cardinal; // not pointers, but self-relative position
-    Group: cardinal;
-    Sacl: cardinal;
-    Dacl: cardinal;
-  end;
-  PSD = ^TSD;
-
-  // map the Access Control List header
-  TACL = packed record
-    AclRevision: byte;
-    Sbz1: byte;
-    AclSize: word; // including TACL header + all ACEs
-    AceCount: word;
-    Sbz2: word;
-  end;
-  PACL = ^TACL;
-
-  // map one Access Control Entry
-  TACE = packed record
-    // ACE header
-    AceType: byte;
-    AceFlags: TSecAceFlags;
-    AceSize: word; // include ACE header + whole body
-    // ACE body
-    Mask: TSecAccessMask;
-    case integer of
-      0: (CommonSid: cardinal);
-      1: (ObjectFlags: cardinal;
-          ObjectStart: cardinal);
-  end;
-  PACE = ^TACE;
-
-const
-  ACE_OBJECT_TYPE_PRESENT = 1;
-  ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
-
-function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
-begin
-  result := (p <> nil) and
-            (len > SizeOf(TSD)) and
-            (PSD(p)^.Revision = 1) and
-            (PSD(p)^.Sbz1 = 0) and
-            (scSelfRelative in PSD(p)^.Control) and
-            (PSD(p)^.Owner < len) and
-            (cardinal(SidLength(@p[PSD(p)^.Owner])) + PSD(p)^.Owner <= len) and
-            (PSD(p)^.Group < len) and
-            (cardinal(SidLength(@p[PSD(p)^.Group])) + PSD(p)^.Group  <= len) and
-            (PSD(p)^.Sacl < len) and
-            (PSD(p)^.Dacl < len) and
-            ((PSD(p)^.Dacl <> 0) = (scDaclPresent in PSD(p)^.Control)) and
-            ((PSD(p)^.Dacl = 0) or
-             (PACL(@p[PSD(p)^.Dacl])^.AclSize + PSD(p)^.Dacl <= len)) and
-            ((PSD(p)^.Sacl <> 0) = (scSaclPresent in PSD(p)^.Control)) and
-            ((PSD(p)^.Sacl = 0) or
-             (PACL(@p[PSD(p)^.Sacl])^.AclSize + PSD(p)^.Sacl <= len));
-end;
-
-function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
-  var text: RawUtf8; dom: PSid): boolean;
-var
-  tmp: TSecurityDescriptor;
-begin
-  result := tmp.FromBinary(sd);
-  if not result then
-    exit;
-  FastAssignNew(text);
-  tmp.AppendAsText(text, dom);
-end;
-
-
 { TSecAce }
 
 procedure TSecAce.Clear;
@@ -1997,7 +2071,7 @@ end;
 
 function TSecAce.ToBinary(dest: PAnsiChar): PtrInt;
 var
-  hdr: PACE; // ACE binary header
+  hdr: PRawAce; // ACE binary header
   f: cardinal;
   pf: PCardinal;
 begin
@@ -2045,7 +2119,7 @@ end;
 
 function TSecAce.FromBinary(p, max: PByte): boolean;
 var
-  ace: PACE;
+  ace: PRawAce;
   opaquelen, sidlen: integer;
   psid: pointer;
 begin
@@ -2092,69 +2166,46 @@ begin
 end;
 
 
-{ TSecAcl }
+{ ****************** TSecurityDescriptor Wrapper Object }
 
-function BinToSecAcl(p: PByteArray; offset: cardinal; var res: TSecAcl): boolean;
-var
-  hdr: PACL;
-  ace: PACE;
-  max: pointer;
-  a: ^TSecAce;
-  i: integer;
+function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 begin
-  result := offset = 0;
-  if result then
-    exit; // no DACL/SACL
-  hdr := @p[offset];
-  if (hdr^.Sbz1 <> 0) or
-     not (hdr^.AclRevision in [2, 4]) then
-    exit;
-  if hdr^.AceCount <> 0 then
-  begin
-    max := @p[offset + hdr^.AclSize];
-    SetLength(res, hdr^.AceCount);
-    a := pointer(res);
-    ace := @p[offset + SizeOf(hdr^)];
-    for i := 1 to hdr^.AceCount do
-    begin
-      if not a^.FromBinary(pointer(ace), max) then
-        exit;
-      inc(PByte(ace), ace^.AceSize);
-      inc(a);
-    end;
-  end;
-  result := true;
+  result :=
+    // main buffer coherency
+    (p <> nil) and
+    (len > SizeOf(TRawSD)) and
+    // header
+    (PRawSD(p)^.Revision = 1) and
+    (PRawSD(p)^.Sbz1 = 0) and
+    (scSelfRelative in PRawSD(p)^.Control) and
+    // owner SID consistency
+    (PRawSD(p)^.Owner < len) and
+    (cardinal(SidLength(@p[PRawSD(p)^.Owner])) + PRawSD(p)^.Owner <= len) and
+    // group SID consistency
+    (PRawSD(p)^.Group < len) and
+    (cardinal(SidLength(@p[PRawSD(p)^.Group])) + PRawSD(p)^.Group  <= len) and
+    // DACL consistency
+    (PRawSD(p)^.Dacl < len) and
+    ((PRawSD(p)^.Dacl <> 0) = (scDaclPresent in PRawSD(p)^.Control)) and
+    ((PRawSD(p)^.Dacl = 0) or
+     (PRawAcl(@p[PRawSD(p)^.Dacl])^.AclSize + PRawSD(p)^.Dacl <= len)) and
+    // SACL consistency
+     (PRawSD(p)^.Sacl < len) and
+    ((PRawSD(p)^.Sacl <> 0) = (scSaclPresent in PRawSD(p)^.Control)) and
+    ((PRawSD(p)^.Sacl = 0) or
+     (PRawAcl(@p[PRawSD(p)^.Sacl])^.AclSize + PRawSD(p)^.Sacl <= len));
 end;
 
-function SecAclToBin(p: PAnsiChar; const ace: TSecAcl): PtrInt;
+function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
+  var text: RawUtf8; dom: PSid): boolean;
 var
-  hdr: PACL;
-  a: ^TSecAce;
-  i, len: PtrInt;
+  tmp: TSecurityDescriptor;
 begin
-  result := 0;
-  if ace = nil then
+  result := tmp.FromBinary(sd);
+  if not result then
     exit;
-  hdr := pointer(p);
-  result := SizeOf(hdr^);
-  if hdr <> nil then // need to write ACL header
-    inc(p, result);
-  a := pointer(ace);
-  for i := 0 to length(ace) - 1 do
-  begin
-    len := a^.ToBinary(p);
-    inc(result, len);
-    if hdr <> nil then
-      inc(p, len);
-    inc(a);
-  end;
-  if hdr = nil then
-    exit;
-  hdr^.AclRevision := 2;
-  hdr^.Sbz1 := 0;
-  hdr^.AceCount := length(ace);
-  hdr^.Sbz2 := 0;
-  hdr^.AclSize := result;
+  FastAssignNew(text);
+  tmp.AppendAsText(text, dom);
 end;
 
 
@@ -2197,19 +2248,19 @@ begin
   result := false;
   if not IsValidSecurityDescriptor(p, len) then
     exit;
-  if PSD(p)^.Owner <> 0 then
-    ToRawSid(@p[PSD(p)^.Owner], Owner);
-  if PSD(p)^.Group <> 0 then
-    ToRawSid(@p[PSD(p)^.Group], Group);
-  Flags := PSD(p)^.Control;
-  result := BinToSecAcl(p, PSD(p)^.Dacl, Dacl) and
-            BinToSecAcl(p, PSD(p)^.Sacl, Sacl);
+  if PRawSD(p)^.Owner <> 0 then
+    ToRawSid(@p[PRawSD(p)^.Owner], Owner);
+  if PRawSD(p)^.Group <> 0 then
+    ToRawSid(@p[PRawSD(p)^.Group], Group);
+  Flags := PRawSD(p)^.Control;
+  result := BinToSecAcl(p, PRawSD(p)^.Sacl, Sacl) and
+            BinToSecAcl(p, PRawSD(p)^.Dacl, Dacl);
 end;
 
 function TSecurityDescriptor.ToBinary: RawSecurityDescriptor;
 var
   p: PAnsiChar;
-  hdr: PSD;
+  hdr: PRawSD;
 begin
   FastSetRawByteString(RawByteString(result), nil,
     SizeOf(hdr^) + length(Owner) + length(Group) +
@@ -2219,7 +2270,7 @@ begin
   FillCharFast(hdr^, SizeOf(hdr^), 0);
   hdr^.Revision := 1;
   hdr^.Control := Flags + [scSelfRelative];
-  inc(PSD(p));
+  inc(PRawSD(p));
   if Owner <> '' then
   begin
     hdr^.Owner := p - pointer(result);

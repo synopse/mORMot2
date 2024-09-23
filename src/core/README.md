@@ -60,12 +60,14 @@ This unit uses MacOSAll and link several toolkits, so was not included in `mormo
 
 Cross-Platform Operating System Security Definitions
 - Security IDentifier (SID) Definitions
+- Security Descriptor Self-Relative Binary Structures
 - Access Control List (DACL/SACL) Definitions
 - Security Descriptor Definition Language (SDDL)
+- `TSecurityDescriptor` Wrapper Object
 - Windows API Specific Security Types and Functions
 
 Even if most of those security definitions comes from the Windows/AD world, our framework (re)implemented them in a cross-platform way.
-
+Implementation follows and refers to the official `[MS-DTYP]` Windows Open Specifications document.
 This low-level unit only refers to `mormot.core.base.pas` and `mormot.core.os.pas`.
 
 ### mormot.core.unicode
