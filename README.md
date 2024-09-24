@@ -23,6 +23,11 @@ You can find more about *mORMot 2* in:
 - the [Source Code `src` sub-folder](src);
 - the [Old mORMot 1 Documentation](https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html) which still mostly apply to the new version - especially the design/conceptual parts.
 
+To discuss about *mORMot*, in addition to [our official forum](https://synopse.info/forum), you can join:
+- the [mORMot Telegram group](https://t.me/synopse_mormot);
+- the [mORMot Discord server](https://discord.gg/BcmcpY6afj).
+Those discussion groups are not managed by Synopse, but by some *mORMot 2* users: thanks a lot to them!
+
 If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/synopse/mORMot2/blob/master/DONATE.md) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)
 
 ## Presentation

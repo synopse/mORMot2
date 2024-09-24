@@ -16,12 +16,14 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Alfred Glaenzer (alf)
 - Andre Heider (dhewg)
 - Andreas Leroux (andreaslrx)
+- ANouri (for the Telegram group)
 - ASiwon
 - Aweste
 - Bas Schouten
 - BigStar
 - BugsDigger
 - Cheemeng
+- Coldzer0 (for the Discord server)
 - CoMPi
 - Damien (ddemars)
 - Darian Miller
@@ -87,6 +89,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - SSoftPro
 - Stefan (itSDS)
 - Svetozar Belic (transmogrifix)
+- Thomas Prud'homme (osvegn)
 - Ti Hory (tihorygit)
 - Tino Teuber
 - TTomas (tom)
