@@ -703,8 +703,8 @@ type
     StorageSize: cardinal;
     /// number of TAceTreeNode stored in Tokens[] and Stack[]
     Count: byte;
-    /// true after FromBinary, false after FromText
-    StorageIsBinary: boolean;
+    /// set after FromBinary(), or after FromText()
+    StorageForm: (isNone, isBinary, isText);
     /// stores the actual tree of this conditional expression
     Stack: array[0 .. MAX_TREE_NODE] of TAceTreeNode;
     /// initialize the Storage with some binary or SDDL text input
@@ -713,9 +713,12 @@ type
     /// fill Stack[] nodes from a binary conditional ACE
     // - this process is very fast, and requires no memory allocation
     function FromBinary: boolean;
+    /// save the internal Stack[] nodes into a binary conditional ACE
+    function ToBinary: RawByteString;
+    /// fill Stack[] nodes from a SDDL conditional ACE text
+    function FromText: boolean;
     /// compute the SDDL conditional ACE text of the stored Stack[]
     // - use a simple recursive algorithm, with temporary RawUtf8 allocations
-    // - the tree should have been filled from previous FromBinary() call
     function ToText: RawUtf8;
   end;
 
@@ -1928,25 +1931,23 @@ end;
 
 function AceTokenLength(v: PRawAceLiteral): PtrUInt;
 begin
-  result := SizeOf(v^.Token);
   case v^.Token of
     sctInt8,
     sctInt16,
     sctInt32,
     sctInt64:
-      inc(result, SizeOf(v^.Int));
-    sctUnicode,
+      result := SizeOf(v^.Token) + SizeOf(v^.Int);
+    sctUnicode,     // need to append UnicodeBytes
     sctLocalAttribute,
     sctUserAttribute,
     sctResourceAttribute,
-    sctDeviceAttribute:
-      inc(result, SizeOf(v^.UnicodeBytes) + v^.UnicodeBytes);
-    sctOctetString:
-      inc(result, SizeOf(v^.OctetBytes) + v^.OctetBytes);
-    sctComposite:
-      inc(result, SizeOf(v^.CompositeBytes) + v^.CompositeBytes);
-    sctSid:
-      inc(result, SizeOf(v^.SidBytes) + v^.SidBytes);
+    sctDeviceAttribute,
+    sctOctetString, // OctetBytes     = UnicodeBytes
+    sctComposite,   // CompositeBytes = UnicodeBytes
+    sctSid:         // SidBytes       = UnicodeBytes
+      result := v^.UnicodeBytes + (SizeOf(v^.Token) + SizeOf(v^.UnicodeBytes));
+  else
+    result := SizeOf(v^.Token);
   end;
 end;
 
@@ -1958,6 +1959,7 @@ begin
   Storage := pointer(Input);
   StorageSize := length(Input);
   Count := 0;
+  StorageForm := isNone;
   result := (Storage <> nil) and
             (StorageSize < MAX_TREE_BYTES);
 end;
@@ -1984,7 +1986,6 @@ var
   st: array[0 .. 31] of byte; // local stack of last few operands
 begin
   result := false;
-  StorageIsBinary := true;
   if (Storage = nil) or
      (StorageSize and 3 <> 0) or // should be DWORD-aligned
      (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
@@ -2033,6 +2034,8 @@ begin
   until position = StorageSize;
   result := (Count > 0) and
             (stCount = 1); // should end with no pending operand
+  if result then
+    StorageForm := isBinary;
 end;
 
 procedure TAceTree.BinaryNodeText(index: byte; var u: RawUtf8);
@@ -2063,12 +2066,41 @@ begin
     SddlOperandToText(v, u);
 end;
 
+function TAceTree.FromText: boolean;
+begin
+  result := false;
+  StorageForm := isText;
+  if (Storage = nil) or
+     (Storage[0] <> '(') or
+     (Storage[StorageSize - 1] <> ')') or
+     (cardinal(StrLen(Storage)) <> StorageSize) then
+    exit; // not a valid SDDL text input for sure
+  //TODO: SDDL parsing
+  if result then
+    StorageForm := isText;
+end;
+
+function TAceTree.ToBinary: RawByteString;
+begin
+  case StorageForm of
+    isBinary:
+      FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
+    //TODO: isText
+  else
+    FastAssignNew(result);
+  end;
+end;
+
 function TAceTree.ToText: RawUtf8;
 begin
-  if StorageIsBinary then
-    BinaryNodeText(Count - 1, result) // simple recursive generation
+  case StorageForm of
+    isBinary:
+      BinaryNodeText(Count - 1, result); // simple recursive generation
+    isText:
+      FastSetString(result, Storage, StorageSize); // retrieve FromText() value
   else
-    FastSetString(result, Storage, StorageSize);
+    FastAssignNew(result);
+  end;
 end;
 
 
