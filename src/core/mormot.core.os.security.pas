@@ -694,6 +694,7 @@ type
   // - can easily be allocated on stack for efficient process
   TAceTree = record
   private
+    function AddBinaryNode(position, left, right: cardinal): boolean;
     function AddNode(position: cardinal; left, right: byte): boolean;
     procedure BinaryNodeText(index: byte; var u: RawUtf8);
   public
@@ -1965,7 +1966,7 @@ begin
             (StorageSize < MAX_TREE_BYTES);
 end;
 
-function TAceTree.AddNode(position: cardinal; left, right: byte): boolean;
+function TAceTree.AddBinaryNode(position, left, right: cardinal): boolean;
 var
   n: PAceTreeNode;
 begin
@@ -2004,7 +2005,7 @@ begin
       // parse the next non-void operand or operation
       if v^.Token in sctOperand then
       begin
-        if not AddNode(position, 255, 255) then
+        if not AddBinaryNode(position, 255, 255) then
           exit;
       end
       else if v^.Token in sctUnary then
@@ -2012,7 +2013,7 @@ begin
         if stCount < 1 then
           exit;
         dec(stCount); // unstack one operand
-        if not AddNode(position, st[stCount], 255) then
+        if not AddBinaryNode(position, st[stCount], 255) then
           exit;
       end
       else if v^.Token in sctBinary then
@@ -2020,7 +2021,7 @@ begin
         if stCount < 2 then
           exit;
         dec(stCount, 2); // unstack two operands
-        if not AddNode(position, st[stCount], st[stCount + 1]) then
+        if not AddBinaryNode(position, st[stCount], st[stCount + 1]) then
           exit;
       end
       else
@@ -2486,9 +2487,14 @@ begin
         if v^.CompositeBytes = 0 then
           exit; // should not be void
         c := @v.Composite;
-        singleComposite :=
-          (c^.Token <> sctSid) and
-          (v^.CompositeBytes = AceTokenLength(c));
+        singleComposite := v^.CompositeBytes = AceTokenLength(c);
+        if singleComposite then
+          if c^.Token = sctSid then
+            // e.g. '(Member_of{SID(BA)}))'
+            singleComposite := false
+          else
+            // e.g. '(@User.Project Any_of 1)'
+            AppendShortChar(' ', @s);
         if not singleComposite then
           AppendShortChar('{', @s);
         max := @v^.Composite[v^.CompositeBytes];
