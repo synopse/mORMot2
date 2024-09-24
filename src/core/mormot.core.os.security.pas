@@ -2107,7 +2107,7 @@ end;
 function TAceTree.TextParse(var p: PUtf8Char;
   out tok: TSecConditionalToken): integer;
 var
-  op, i, l, r: integer;
+  op, i, {l,} r: integer;
   parent: boolean;
 begin
   result := -1;
@@ -2126,7 +2126,7 @@ begin
   if tok in sctOperand then
   begin
     // XX binop YY
-    l := i;
+    //l := i;
     op := TextParse(p, tok);
     if (op < 0) or
        not (tok in sctBinary) then
