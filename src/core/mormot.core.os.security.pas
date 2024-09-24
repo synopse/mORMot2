@@ -695,8 +695,10 @@ type
   TAceTree = record
   private
     function AddBinaryNode(position, left, right: cardinal): boolean;
-    function AddNode(position: cardinal; left, right: byte): boolean;
+    function AddTextNode(position, len: cardinal; tok: TSecConditionalToken): boolean;
     procedure BinaryNodeText(index: byte; var u: RawUtf8);
+    function TextParseNode(var p: PUtf8Char; out tok: TSecConditionalToken): integer;
+    function TextParse(var p: PUtf8Char; out tok: TSecConditionalToken): integer;
   public
     /// the associated input storage
     // - typically maps an TSecAce.Opaque buffer or a RawUtf8 SDDL text
@@ -709,6 +711,10 @@ type
     StorageForm: (isNone, isBinary, isText);
     /// stores the actual tree of this conditional expression
     Stack: array[0 .. MAX_TREE_NODE] of TAceTreeNode;
+    /// the recognized token after FromText SDDL parsing
+    TextToken: array[0 .. MAX_TREE_NODE] of TSecConditionalToken;
+    /// the recognized operand length after FromText SDDL parsing
+    TextLen: array[0 .. MAX_TREE_NODE] of byte;
     /// initialize the Storage with some binary or SDDL text input
     // - caller should then call FromBinary or FromSddl
     function Init(const Input: RawByteString): boolean;
@@ -1985,6 +1991,16 @@ begin
   inc(Count);
 end;
 
+function TAceTree.AddTextNode(position, len: cardinal;
+  tok: TSecConditionalToken): boolean;
+begin
+  result := AddBinaryNode(position, 255, 255);
+  if not result then
+    exit;
+  TextToken[Count - 1] := tok;
+  TextLen[Count - 1] := len;
+end;
+
 function TAceTree.FromBinary: boolean;
 var
   v: PRawAceLiteral;
@@ -2072,7 +2088,71 @@ begin
     SddlOperandToText(v, u);
 end;
 
+function TAceTree.TextParseNode(var p: PUtf8Char;
+  out tok: TSecConditionalToken): integer;
+var
+  s: PUtf8Char;
+begin
+  result := -1;
+  while p^ = ' ' do
+    inc(p);
+  s := p;
+  tok := SddlNextOperand(p);
+  if (tok = sctPadding) or // error parsing
+     not AddTextNode(p - Storage, p - s, tok) then
+    exit;
+  result := Count - 1;
+end;
+
+function TAceTree.TextParse(var p: PUtf8Char;
+  out tok: TSecConditionalToken): integer;
+var
+  op, i, l, r: integer;
+  parent: boolean;
+begin
+  result := -1;
+  parent := false;
+  while p^ = ' ' do
+    inc(p);
+  if p^ = '(' then
+  begin
+    parent := true;
+    inc(p);
+  end;
+  op := -1;
+  i := TextParseNode(p, tok);
+  if i < 0 then
+    exit;
+  if tok in sctOperand then
+  begin
+    // XX binop YY
+    l := i;
+    op := TextParse(p, tok);
+    if (op < 0) or
+       not (tok in sctBinary) then
+      exit;
+    r := TextParse(p, tok);
+    if r < 0 then
+      exit;
+
+  end;
+
+  // to be continued
+
+  while p^ = ' ' do
+    inc(p);
+  if parent then
+    if p^ <> ')' then
+      exit
+    else
+      inc(p);
+  result := op;
+end;
+
 function TAceTree.FromText: boolean;
+var
+  p: PUtf8Char;
+  tok: TSecConditionalToken;
 begin
   result := false;
   StorageForm := isText;
@@ -2081,9 +2161,12 @@ begin
      (Storage[StorageSize - 1] <> ')') or
      (cardinal(StrLen(Storage)) <> StorageSize) then
     exit; // not a valid SDDL text input for sure
-  //TODO: SDDL parsing
-  if result then
-    StorageForm := isText;
+  p := Storage;
+  if (TextParse(p, tok) < 0) or
+     (p^ <> #0) then
+    exit;
+  result := true;
+  StorageForm := isText;
 end;
 
 function TAceTree.ToBinary: RawByteString;
