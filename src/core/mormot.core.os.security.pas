@@ -1005,6 +1005,10 @@ procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 /// append a TSecAce.Opaque value as SDDL text form
 procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
 
+/// parse the next conditional ACE token from its SDDL text
+// - see [MS-DTYP] 2.5.1.1 SDDL Syntax
+function SddlNextOperand(var p: PUtf8Char): TSecConditionalToken;
+
 
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
@@ -2523,6 +2527,148 @@ begin
   else
     result := false; // unsupported content
   end;
+end;
+
+function SddlNextOperand(var p: PUtf8Char): TSecConditionalToken;
+var
+  s: PUtf8Char;
+  i: PtrInt;
+  sct: TSecConditionalToken;
+begin
+  result := sctPadding; // unknown
+  s := p;
+  case s^ of
+    '-', '0' .. '9':
+      begin
+        p := s;
+        repeat
+          inc(s);
+        until not (s^ in ['0' .. '9']);
+        result := sctInt64;
+      end;
+    '"':
+      begin
+        repeat
+          inc(s);
+          if s^ = #0 then
+            exit;
+        until s^ = '"'; // nested double quotes support is not needed
+        inc(s);
+        result := sctUnicode;
+      end;
+    '#':
+      begin
+        p := s;
+        repeat
+          inc(s);
+        until not (s^ in ['#', '0' .. '9', 'A' .. 'Z', 'a' .. 'z']);
+        result := sctOctetString;
+      end;
+    '{':
+       begin
+         inc(s);
+         result := sctComposite;
+         // note: caller should handle final '}'
+       end;
+    'S', 's':
+      begin
+        if PCardinal(s)^ and $ffdfdfdf <>
+             ord('S') + ord('I') shl 8 + ord('D') shl 16 + ord('(') shl 24 then
+          exit;
+        inc(s, 4);
+        result := sctSid;
+      end;
+    '=':
+      begin
+        if s[1] <> '=' then
+          exit;
+        inc(s, 2);
+        result := sctEqual;
+      end;
+    '!':
+      if s[1] = '=' then
+      begin
+        inc(s, 2);
+        result := sctNotEqual;
+      end
+      else
+      begin
+        inc(s);
+        result := sctNot;
+      end;
+    '<':
+      if s[1] = '=' then
+      begin
+        inc(s, 2);
+        result := sctLessThanOrEqual;
+      end
+      else
+      begin
+        inc(s);
+        result := sctLessThan;
+      end;
+    '>':
+      if s[1] = '=' then
+      begin
+        inc(s, 2);
+        result := sctGreaterThanOrEqual;
+      end
+      else
+      begin
+        inc(s);
+        result := sctGreaterThan;
+      end;
+    'A', 'a', 'C', 'c', 'D', 'd', 'E', 'e', 'M', 'm', 'N', 'n':
+      begin
+        repeat
+          inc(s);
+        until not (s^ in ['A' ..'Z', 'a' .. 'z', '_']);
+        for i := SDDL_OPER_INDEX[sctContains] to
+                 SDDL_OPER_INDEX[sctNotDeviceMemberOfAny] do
+          if PropNameEquals(@SDDL_OPER_TXT[i], PAnsiChar(p), s - p) then
+          begin
+            result := SDDL_OPER[i];
+            break;
+          end;
+      end;
+    '&':
+      begin
+        if s[1] <> '&' then
+          exit;
+        inc(s, 2);
+        result := sctAnd;
+      end;
+    '|':
+      begin
+        if s[1] <> '|' then
+          exit;
+        inc(s, 2);
+        result := sctOr;
+      end;
+    '@':
+      begin
+        repeat
+          inc(s);
+          if s^ = #0 then
+            exit;
+        until s^ = '.';
+        inc(s);
+        for sct := sctUserAttribute to sctDeviceAttribute do
+          if PropNameEquals(@ATTR_SDDL[sct], PAnsiChar(p), s - p) then
+          begin
+            result := sct;
+            break;
+          end;
+        if result = sctPadding then
+          exit; // unknown @Reference.
+        p := s;
+        while not (s^ in [#0, ' ', '!', '=', '<', '>']) do
+          inc(s);
+        if s = p then
+          exit; // no attribute name
+      end;
+  end;
+  p := s;
 end;
 
 
