@@ -954,21 +954,25 @@ var
 function GetClassParent(C: TClass): TClass;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// case-insensitive comparison of two shortstrings only containing ASCII 7-bit
+/// case-insensitive comparison of two text buffers only containing ASCII 7-bit
+// - this is the actual comparison function called by its overloads
 // - use e.g. with RTTI property names values only including A..Z,0..9,_ chars
 // - will make the "XOR AND $DF" trick to quickly test A-Z / a-z characters
 // - behavior is undefined with UTF-8 encoding (some false positive may occur)
-// - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
-// comparison with other kind of input variables
-function PropNameEquals(P1, P2: PShortString): boolean; overload;
+// - see IdemPropName/IdemPropNameU functions in mormot.core.unicode for similar
+// comparison functions with other kind of input variables
+function PropNameEquals(P1, P2: PAnsiChar; P1Len, P2Len: PtrInt): boolean; overload;
   {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 
+/// case-insensitive comparison of two shortstrings only containing ASCII 7-bit
+function PropNameEquals(P1, P2: PShortString): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// case-insensitive comparison of two text buffers only containing ASCII 7-bit
+function PropNameEquals(P1: PShortString; P2: PAnsiChar; P2Len: PtrInt): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// case-insensitive comparison of two RawUtf8 only containing ASCII 7-bit
-// - use e.g. with RTTI property names values only including A..Z,0..9,_ chars
-// - will make the "XOR AND $DF" trick to quickly test A-Z / a-z characters
-// - behavior is undefined with UTF-8 encoding (some false positive may occur)
-// - see IdemPropName/IdemPropNameU functions in mormot.core.text for a similar
-// comparison with other kind of input variables
 function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 
 /// raw internal method as published by FindNonVoid[false]
@@ -5019,70 +5023,47 @@ begin
   {$endif HASDIRECTTYPEINFO}
 end;
 
-function PropNameEquals(P1, P2: PShortString): boolean;
-var
-  l: PtrInt;
+function PropNameEquals(P1, P2: PAnsiChar; P1Len, P2Len: PtrInt): boolean;
 label
   zero;
 begin
-  l := ord(P1^[0]);
-  if l <> ord(P2^[0]) then
+  if P1Len <> P2Len then
     goto zero;
-  inc(PByte(P1));
-  inc(PByte(P2));
-  l := PtrInt(@PByteArray(P1)[l - SizeOf(cardinal)]); // 32-bit end
-  if l >= PtrInt(PtrUInt(P1)) then
+  P2Len := PtrInt(@PByteArray(P1)[P2Len - SizeOf(cardinal)]); // 32-bit end
+  if P2Len >= PtrInt(PtrUInt(P1)) then
     repeat // case-insensitive compare 4 bytes per loop
       if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf <> 0 then
         goto zero;
       inc(PCardinal(P1));
       inc(PCardinal(P2));
-    until l < PtrInt(PtrUInt(P1));
-  inc(PCardinal(l));
+    until P2Len < PtrInt(PtrUInt(P1));
+  inc(PCardinal(P2Len));
   dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < l then
+  if PtrInt(PtrUInt(P1)) < P2Len then
     repeat
       if (PByte(P1)^ xor PByteArray(P2)[PtrUInt(P1)]) and $df <> 0 then
         goto zero;
       inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= l;
+    until PtrInt(PtrUInt(P1)) >= P2Len;
   result := true;
   exit;
 zero:
   result := false;
 end;
 
-function PropNameEquals(const P1, P2: RawUtf8): boolean;
-var
-  l, _1, _2: PtrInt;
-label
-  zero;
+function PropNameEquals(P1, P2: PShortString): boolean;
 begin
-  l := length(P1);
-  if l <> length(P2) then
-    goto zero;
-  _1 := PtrUInt(P1);
-  _2 := PtrUInt(P2);
-  l := PtrInt(@PByteArray(_1)[l - SizeOf(cardinal)]); // 32-bit end
-  if l >= _1 then
-    repeat // case-insensitive compare 4 bytes per loop
-      if (PCardinal(_1)^ xor PCardinal(_2)^) and $dfdfdfdf <> 0 then
-        goto zero;
-      inc(PCardinal(_1));
-      inc(PCardinal(_2));
-    until l < _1;
-  inc(PCardinal(l));
-  dec(_2, _1);
-  if _1 < l then
-    repeat
-      if (PByte(_1)^ xor PByteArray(_2)[PtrUInt(_1)]) and $df <> 0 then
-        goto zero;
-      inc(PByte(_1));
-    until _1 >= l;
-  result := true;
-  exit;
-zero:
-  result := false;
+  result := PropNameEquals(@P1^[1], @P2^[1], ord(P1^[0]), ord(P2^[0]));
+end;
+
+function PropNameEquals(P1: PShortString; P2: PAnsiChar; P2Len: PtrInt): boolean;
+begin
+  result := PropNameEquals(@P1^[1], P2, ord(P1^[0]), P2Len);
+end;
+
+function PropNameEquals(const P1, P2: RawUtf8): boolean;
+begin
+  result := PropNameEquals(pointer(P1), pointer(P2), length(P1), length(P2));
 end;
 
 {$ifdef HASINLINE} // defined here for proper inlining
