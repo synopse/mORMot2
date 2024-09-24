@@ -22,7 +22,8 @@ unit mormot.core.os.security;
 
   *****************************************************************************
 
-    TODO: proper ACE conditional expression binary + SDDL support: 2.4.4.17.1
+    TODO: - proper ACE conditional expression binary + SDDL support: 2.4.4.17.1
+          - resources attributes
     at https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
 }
 
@@ -1138,20 +1139,20 @@ const
     '<=',                       // sctLessThanOrEqual
     '>',                        // sctGreaterThan
     '>=',                       // sctGreaterThanOrEqual
-    ' Contains',                // sctContains
+    'Contains',                 // sctContains = 7
     'Exists',                   // sctExists
-    ' Any_of',                  // sctAnyOf
+    'Any_of',                   // sctAnyOf
     'Member_of',                // sctMemberOf
     'Device_Member_of',         // sctDeviceMemberOf
     'Member_of_Any',            // sctMemberOfAny
     'Device_Member_of_Any',     // sctDeviceMemberOfAny
     'Not_Exists',               // sctNotExists
-    ' Not_Contains',            // sctNotContains
-    ' Not_Any_of',              // sctNotAnyOf
+    'Not_Contains',             // sctNotContains
+    'Not_Any_of',               // sctNotAnyOf
     'Not_Member_of',            // sctNotMemberOf
     'Not_Device_Member_of',     // sctNotDeviceMemberOf
     'Not_Member_of_Any',        // sctNotMemberOfAny
-    'Not_Device_Member_of_Any', // sctNotDeviceMemberOfAny
+    'Not_Device_Member_of_Any', // sctNotDeviceMemberOfAny = 20
     ' && ',                     // sctAnd
     ' || ',                     // sctOr
     '!');                       // sctNot
@@ -2059,9 +2060,9 @@ begin
   v := @Storage[n^.Position];
   if l <> nil then
     if r <> nil then
-      SddlBinaryToText(v^.Token, RawUtf8(l), RawUtf8(r), u)
+      SddlBinaryToText(v^.Token, RawUtf8(l), RawUtf8(r), u) // and release l+r
     else
-      SddlUnaryToText(v^.Token, RawUtf8(l), u)
+      SddlUnaryToText(v^.Token, RawUtf8(l), u) // and release l
   else
     SddlOperandToText(v, u);
 end;
@@ -2097,7 +2098,7 @@ begin
     isBinary:
       BinaryNodeText(Count - 1, result); // simple recursive generation
     isText:
-      FastSetString(result, Storage, StorageSize); // retrieve FromText() value
+      FastSetString(result, Storage, StorageSize); // return FromText() value
   else
     FastAssignNew(result);
   end;
@@ -2120,6 +2121,20 @@ const
     'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI';
 var
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL; // for fast lookup
+
+function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
+begin
+  FastAssignNew(result); // no need to optimize: only used for regression tests
+  if wks in wksWithSddl then
+    FastSetString(result, @SID_SDDLW[ord(wks)], 2);
+end;
+
+function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
+begin
+  FastAssignNew(result);
+  if wkr in wkrWithSddl then
+    FastSetString(result, @SID_SDDLW[(ord(wksLastSddl) + 1) + ord(wkr)], 2);
+end;
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
@@ -2375,18 +2390,31 @@ begin
 end;
 
 procedure SddlUnaryToText(tok: TSecConditionalToken; var l, u: RawUtf8);
+var
+  op: PRawUtf8;
 begin
-  // e.g. '(Member_of{SID(BA)})'
-  u := '(' + SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]] + l + ')';
-  FastAssignNew(l);
+  op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
+  if tok = sctNot then
+    // inner parenth for '!(..)'
+    u := op^ + '(' + l + ')'
+  else
+    // e.g. '(Member_of{SID(BA)})'
+    u := '(' + op^ + l + ')';
+  FastAssignNew(l); // release param
 end;
 
 procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
+var
+  op: PRawUtf8;
 begin
-  // e.g. '(Title=="VP")'
-  // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
-  u := '(' + l + SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]] + r + ')';
-  FastAssignNew(l);
+  op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
+  if tok in [sctContains, sctAnyOf, sctNotContains, sctNotAnyOf] then
+    // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
+    u := '(' + l + ' ' + op^ + r + ')'
+  else
+    // e.g. '(Title=="VP")'
+    u := '(' + l + op^ + r + ')';
+  FastAssignNew(l); // release params
   FastAssignNew(r);
 end;
 
@@ -2489,20 +2517,6 @@ begin
   else
     result := false; // unsupported content
   end;
-end;
-
-function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
-begin
-  FastAssignNew(result); // no need to optimize: only used for regression tests
-  if wks in wksWithSddl then
-    FastSetString(result, @SID_SDDLW[ord(wks)], 2);
-end;
-
-function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
-begin
-  FastAssignNew(result);
-  if wkr in wkrWithSddl then
-    FastSetString(result, @SID_SDDLW[(ord(wksLastSddl) + 1) + ord(wkr)], 2);
 end;
 
 
