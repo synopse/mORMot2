@@ -4060,12 +4060,12 @@ begin
       entOr:
         begin
           dec(st);
-          st[-1] := AnsiChar(boolean(st[0]) or boolean(st[-1]));
-        end; { TODO : optimize TExprParser OR when left member is already TRUE? }
+          st[-1] := AnsiChar(ord(st[0]) or ord(st[-1]));
+        end;
       entAnd:
         begin
           dec(st);
-          st[-1] := AnsiChar(boolean(st[0]) and boolean(st[-1]));
+          st[-1] := AnsiChar(ord(st[0]) and ord(st[-1]));
         end;
     end;
     n := n.Next;
