@@ -975,6 +975,10 @@ function PropNameEquals(P1: PShortString; P2: PAnsiChar; P2Len: PtrInt): boolean
 /// case-insensitive comparison of two RawUtf8 only containing ASCII 7-bit
 function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 
+/// case-insensitive comparison of a RawUtf8 only containing ASCII 7-bit
+function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// raw internal method as published by FindNonVoid[false]
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
@@ -5064,6 +5068,11 @@ end;
 function PropNameEquals(const P1, P2: RawUtf8): boolean;
 begin
   result := PropNameEquals(pointer(P1), pointer(P2), length(P1), length(P2));
+end;
+
+function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolean;
+begin
+  result := PropNameEquals(pointer(P1), P2, length(P1), P2Len);
 end;
 
 {$ifdef HASINLINE} // defined here for proper inlining
