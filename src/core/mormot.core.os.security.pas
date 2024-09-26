@@ -493,10 +493,11 @@ type
     sarKeyWrite,            // KW
     sarKeyExecute);         // KE
 
-  /// binary conditional ACE token types
-  // - as sctLiteral, sctRelationalOperator, sctLogicalOperator and sctAttribute
-  // - tokens >= sctInternalFinal are never serialized, but used during internal
-  // SDDL text parsing
+  /// token types for the conditional ACE binary storage
+  // - the conditional ACE is stored as a binary tree of value/operator nodes
+  // - mainly as sctLiteral, sctAttribute or sctOperator tokens
+  // - tokens >= sctInternalFinal are never serialized, but used internally
+  // during SddlNextOperand() SDDL text parsing
   // - see [MS-DTYP] 2.4.4.17.4 and following
   TSecConditionalToken = (
     sctPadding              = $00,
@@ -535,6 +536,7 @@ type
     sctUserAttribute        = $f9,
     sctResourceAttribute    = $fa,
     sctDeviceAttribute      = $fb,
+    // internal tokens - never serialized into binary
     sctInternalFinal        = $fc,
     sctInternalParenthOpen  = $fe,
     sctInternalParenthClose = $ff);
@@ -646,8 +648,11 @@ const
 type
   /// internal type used for TRawAceLiteral.Int
   TRawAceLiteralInt = packed record
+    /// the actual value is always stored as 64-bit little-endian
     Value: Int64;
+    /// can customize the sign when serialized as SDDL text
     Sign: TSecConditionalSign;
+    /// can customize the base when serialized as SDDL text
     Base: TSecConditionalBase;
   end;
 
@@ -764,7 +769,6 @@ type
     TextCurrent: PUtf8Char;
     TokenCurrent: TSecConditionalToken;
     Root: byte;
-    Error: TAceTextTreeParse;
     function ParseNextToken: integer;
     function ParseExpr: integer;
     function ParseFactor: integer;
@@ -778,13 +782,20 @@ type
     StorageSize: cardinal;
     /// number of TAceTreeNode stored in Tokens[] and Stack[]
     Count: byte;
+    /// actual status after FromText() or ToBinary processing
+    Error: TAceTextTreeParse;
     /// stores the actual tree of this conditional expression
     Nodes: array[0 .. MAX_TREE_NODE] of TAceTextTreeNode;
     /// fill Nodes[] tree from a SDDL text conditional ACE
+    // - not all input will be parsed during this initial step: only the
+    // global parsing is done, not detailed Unicode or composite parsing
     function FromText(const Input: RawUtf8): TAceTextTreeParse;
     /// save the internal Stack[] nodes into a SDDL text conditional ACE
     function ToText: RawUtf8;
     /// compute the binary conditional ACE of the stored Stack[]
+    // - will also parse the nested Unicode or composite expressions from
+    // the SDDL input, so this method could set Error = atpInvalidContent
+    // and return ''
     function ToBinary: RawByteString;
   end;
 
@@ -2402,7 +2413,7 @@ begin
       end
   else
     if not (node.Token in sctOperator) then
-      exit; // unexpected token
+      exit; // unexpected single-byte token
   end;
   AppendShortToUtf8(tmp, RawUtf8(bin));
   result := true;
@@ -2417,14 +2428,14 @@ begin
     exit;
   n := @Nodes[node];
   if n^.Token >= sctInternalFinal then
-    exit;
+    exit; // paranoid
   if n^.Left <> 255 then
     if not AppendBinary(bin, n^.Left) then
       exit;
   if n^.Right <> 255 then
     if not AppendBinary(bin, n^.Right) then
       exit;
-  result := RawAppendBinary(bin, n^);
+  result := RawAppendBinary(bin, n^); // stored in reverse Polish order
 end;
 
 function TAceTextTree.ToBinary: RawByteString;
