@@ -22,9 +22,8 @@ unit mormot.core.os.security;
 
   *****************************************************************************
 
-    TODO: - proper ACE conditional expression binary + SDDL support: 2.4.4.17.1
-          - resources attributes
-    at https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
+    REF: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
+    TODO: resources attributes
 }
 
 interface
@@ -496,6 +495,8 @@ type
 
   /// binary conditional ACE token types
   // - as sctLiteral, sctRelationalOperator, sctLogicalOperator and sctAttribute
+  // - tokens >= sctInternalFinal are never serialized, but used during internal
+  // SDDL text parsing
   // - see [MS-DTYP] 2.4.4.17.4 and following
   TSecConditionalToken = (
     sctPadding              = $00,
@@ -533,7 +534,10 @@ type
     sctLocalAttribute       = $f8,
     sctUserAttribute        = $f9,
     sctResourceAttribute    = $fa,
-    sctDeviceAttribute      = $fb);
+    sctDeviceAttribute      = $fb,
+    sctInternalFinal        = $fc,
+    sctInternalParenthOpen  = $fe,
+    sctInternalParenthClose = $ff);
 
   /// binary conditional ACE integer base indicator for SDDL/display purposes
   // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
@@ -626,8 +630,11 @@ const
   /// dual-operand ACE token types
   sctBinary = sctBinaryOperator + sctBinaryLogicalOperator;
 
-  /// maximum depth of the TAceTree resolution
-  // - should be <= 255 to match the TAceTreeNode index fields as byte
+  /// operator ACE tokens
+  sctOperator = sctUnary + sctBinary;
+
+  /// maximum depth of the TAceBinaryTree/TAceTextTree resolution
+  // - should be <= 255 to match the nodes index fields as byte
   // - 192 nodes seems fair enough for realistic ACE conditional expressions
   MAX_TREE_NODE = 191;
 
@@ -1013,6 +1020,7 @@ procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
 
 /// parse the next conditional ACE token from its SDDL text
 // - see [MS-DTYP] 2.5.1.1 SDDL Syntax
+// - identify some internal "fake" tokens >= sctInternalFinal
 function SddlNextOperand(var p: PUtf8Char): TSecConditionalToken;
 
 
@@ -1114,6 +1122,7 @@ const
    '@Resource.',  // sctResourceAttribute
    '@Device.');   // sctDeviceAttribute
 
+  /// lookup of sctOperator tokens, for SDDL_OPER_TXT[] and SDDL_OPER_INDEX[]
   SDDL_OPER: array[1 .. 23] of TSecConditionalToken = (
     sctEqual,
     sctNotEqual,
@@ -1139,7 +1148,7 @@ const
     sctOr,
     sctNot);
 
-  /// define how a sctOperand is stored as SDDL
+  /// define how a sctOperator is stored as SDDL
   // - used e.g. with SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
   // - see [MS-DTYPE] 2.4.4.17.6 and 2.4.4.17.7
   SDDL_OPER_TXT: array[0 .. high(SDDL_OPER)] of RawUtf8 = (
@@ -1167,6 +1176,9 @@ const
     ' && ',                     // sctAnd
     ' || ',                     // sctOr
     '!');                       // sctNot
+
+  /// used during SDDL parsing to stop identifier names
+  SDDL_END_IDENT = [#0 .. ' ', '=', '!', '<', '>', '{', '(', ')'];
 
 var
   { globals filled during unit initialization from actual code constants }
@@ -2621,9 +2633,10 @@ begin
   result := sctPadding; // unknown
   s := p;
   case s^ of
+    #0:
+      result := sctInternalFinal;
     '-', '0' .. '9':
       begin
-        p := s;
         repeat
           inc(s);
         until not (s^ in ['0' .. '9']);
@@ -2641,7 +2654,6 @@ begin
       end;
     '#':
       begin
-        p := s;
         repeat
           inc(s);
         until not (s^ in ['#', '0' .. '9', 'A' .. 'Z', 'a' .. 'z']);
@@ -2649,18 +2661,14 @@ begin
       end;
     '{':
        begin
+         repeat
+           inc(s);
+           if s^ = #0 then
+             exit;
+         until s^ = '}';
          inc(s);
          result := sctComposite;
-         // note: caller should handle final '}'
        end;
-    'S', 's':
-      begin
-        if PCardinal(s)^ and $ffdfdfdf <>
-             ord('S') + ord('I') shl 8 + ord('D') shl 16 + ord('(') shl 24 then
-          exit;
-        inc(s, 4);
-        result := sctSid;
-      end;
     '=':
       begin
         if s[1] <> '=' then
@@ -2701,18 +2709,36 @@ begin
         inc(s);
         result := sctGreaterThan;
       end;
-    'A', 'a', 'C', 'c', 'D', 'd', 'E', 'e', 'M', 'm', 'N', 'n':
+    'A' .. 'Z',
+    'a' .. 'z',
+    #$80 .. #$ff:
       begin
+        result := sctLocalAttribute;
         repeat
           inc(s);
-        until not (s^ in ['A' ..'Z', 'a' .. 'z', '_']);
-        for i := SDDL_OPER_INDEX[sctContains] to
-                 SDDL_OPER_INDEX[sctNotDeviceMemberOfAny] do
-          if PropNameEquals(@SDDL_OPER_TXT[i], PAnsiChar(p), s - p) then
-          begin
-            result := SDDL_OPER[i];
-            break;
-          end;
+        until s^ in SDDL_END_IDENT;
+        case p^ of
+          'A', 'C', 'D', 'E', 'M', 'N', 'a', 'c', 'd', 'e', 'm', 'n':
+            for i := SDDL_OPER_INDEX[sctContains] to
+                     SDDL_OPER_INDEX[sctNotDeviceMemberOfAny] do
+              if PropNameEquals(SDDL_OPER_TXT[i], PAnsiChar(p), s - p) then
+              begin
+                result := SDDL_OPER[i];
+                break;
+              end;
+          'S', 's': // e.g. 'SID(BA)'
+            if PCardinal(p)^ and $ffdfdfdf =
+                 ord('S') + ord('I') shl 8 + ord('D') shl 16 + ord('(') shl 24 then
+            begin
+              repeat
+                inc(s);
+                if s^ = #0 then
+                  exit;
+              until s^ = ')';
+              inc(s);
+              result := sctSid;
+            end;
+        end;
       end;
     '&':
       begin
@@ -2745,10 +2771,21 @@ begin
         if result = sctPadding then
           exit; // unknown @Reference.
         p := s;
-        while not (s^ in [#0, ' ', '!', '=', '<', '>']) do
+        while not (s^ in SDDL_END_IDENT) do
           inc(s);
         if s = p then
           exit; // no attribute name
+      end;
+    // for internal SDDL text parsing use only
+    '(':
+      begin
+        inc(s);
+        result := sctInternalParenthOpen;
+      end;
+    ')':
+      begin
+        inc(s);
+        result := sctInternalParenthClose;
       end;
   end;
   p := s;
