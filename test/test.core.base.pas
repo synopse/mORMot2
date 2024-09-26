@@ -6512,8 +6512,7 @@ const
     '61727478f91200000073006d006100720074006300610072006400' +
     '040100000000000000030280fb0e0000006d0061006e006100670065006400' +
     '040100000000000000030280a1fa080000006400650070007400' +
-    '5018000000100a000000530061006c006500730010040000004800520088a0' +
-    '00000000000000000000000000',
+    '5018000000100a000000530061006c006500730010040000004800520088a000',
     '61727478f91c00000063006c0065006100720061006e00630065004c006500760065006c00' +
     'fa220000007200650071007500690072006500640043006c0065006100720061006e0063006500' +
     '85501500000051100000000102000000000005200000002002000089a1000000');
@@ -6532,7 +6531,9 @@ var
   u, dom, json: RawUtf8;
   domsid: RawSid;
   sd, sd2: TSecurityDescriptor;
-  tree: TAceTree;
+  bintree: TAceBinaryTree;
+  sddltree: TAceTextTree;
+  atp: TAceTextTreeParse;
   p: PUtf8Char;
 begin
   // validate internal structures and types
@@ -6687,18 +6688,21 @@ begin
   // validate conditional ACEs binary
   for i := 0 to high(ARTX_HEX) do
   begin
-    Check(not tree.Init(''));
-    CheckEqual(tree.Count, 0);
-    CheckEqual(tree.ToText, '');
     bin := mormot.core.text.HexToBin(ARTX_HEX[i]);
     Check(bin <> '');
-    Check(tree.Init(bin));
-    CheckEqual(tree.Count, 0);
-    CheckEqual(tree.ToText, '');
-    Check(tree.FromBinary);
-    Check(tree.Count > 0);
-    u := tree.ToText;
-    CheckEqual(u, ARTX_TXT[i]);
+    Check(bintree.FromBinary(bin));
+    Check(bintree.Count > 0);
+    u := bintree.ToText;
+    CheckEqual(u, ARTX_TXT[i], 'artx1');
+    atp := sddltree.FromText(u);
+    Check(atp = atpSuccess);
+    saved := sddltree.ToBinary;
+    CheckEqual(length(saved), length(bin), '2binl');
+    Check(saved = bin, '2bin');
+    Check(bintree.FromBinary(saved), 'artx2');
+    Check(bintree.Count > 0);
+    u := bintree.ToText;
+    CheckEqual(u, ARTX_TXT[i], 'artx3');
   end;
   // validate conditional ACEs
   for i := 0 to high(COND_TXT) do
