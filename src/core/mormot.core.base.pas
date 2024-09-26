@@ -1021,6 +1021,7 @@ function ParseHex0x(p: PAnsiChar): cardinal;
 
 /// parse an hexadecimal buffer into its raw binary
 // - parse up to n chars from p^, ending in case of not hexadecimal char
+// - any '#' char in the input buffer will be handled as '0'
 // - caller should ensure p<>nil and b<>nil and n>0
 // - internal function to avoid linking mormot.core.buffers.pas
 function ParseHex(p: PAnsiChar; b: PByte; n: integer): PAnsiChar;
@@ -5198,6 +5199,8 @@ function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}
 begin
   result := ord(c);
   case c of
+    '#':
+      result := 0; // handle # as 0 char within an hexadecimal buffer
     '0'..'9':
       dec(result, ord('0'));
     'A'..'Z':
