@@ -26,6 +26,7 @@ You can find more about *mORMot 2* in:
 To discuss about *mORMot*, in addition to [our official forum](https://synopse.info/forum), you can join:
 - the [mORMot Telegram group](https://t.me/synopse_mormot);
 - the [mORMot Discord server](https://discord.gg/BcmcpY6afj).
+
 Those discussion groups are not managed by Synopse, but by some *mORMot 2* users: thanks a lot to them!
 
 If you find it worth using, please consider [sponsoring mORMot 2 dev](https://github.com/synopse/mORMot2/blob/master/DONATE.md) if you can - and even better through [sharing your own commits](https://github.com/synopse/mORMot2/pulls). :-)

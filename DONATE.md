@@ -4,7 +4,7 @@
 
 ## Adopt a mORMot !
 
-The first mean of help for any Open Source project is to use and contribute to it.
+The first mean of help for any Open Source project is to [share your own commits](https://github.com/synopse/mORMot2/pulls).
 
 Do not be shy: a lot of code within our projects has been committed by external contributors. Let's make this great Open Source adventure continue!
 
