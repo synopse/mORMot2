@@ -3697,7 +3697,7 @@ end;
 function TRttiInfo.SetEnumSize: PtrInt;
 begin
   // PTypeData(@self)^.SetSize on ISFPC32 fails fails from base enum type
-  result := SetEnumType^.SizeInStorageAsSet; // compute from MaxValue
+  result := SetEnumType^.SizeInStorageAsSet; // safely computed from MaxValue
 end;
 
 function TRttiInfo.DynArrayItemSize: PtrInt;

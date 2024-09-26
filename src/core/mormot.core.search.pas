@@ -575,7 +575,7 @@ type
     fWords: array of TExprNodeWordAbstract;
     fWordCount: integer;
     fNoWordIsAnd: boolean;
-    fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
+    fFoundStack: array[byte] of AnsiChar; // simple stack-based virtual machine
     procedure ParseNextCurrentWord; virtual; abstract;
     function ParseExpr: TExprNode;
     function ParseFactor: TExprNode;
@@ -3915,7 +3915,8 @@ begin
       result.Append(TExprNode.Create(entOr));
     exit;
   end
-  else if fNoWordIsAnd and result.Append(ParseExpr) then
+  else if fNoWordIsAnd and
+          result.Append(ParseExpr) then
     // 'w1 w2' = 'w1 & w2'
     result.Append(TExprNode.Create(entAnd));
 end;
@@ -4008,7 +4009,8 @@ begin
               break;
             end;
           end;
-        entOr, entAnd:
+        entOr,
+        entAnd:
           dec(depth);
       end;
       n := n.Next;
@@ -4041,7 +4043,7 @@ end;
 function TParserAbstract.Execute: boolean;
 var
   n: TExprNode;
-  st: PBoolean;
+  st: PAnsiChar;
 begin
   // code below compiles very efficiently on FPC/x86-64
   st := @fFoundStack;
@@ -4050,25 +4052,25 @@ begin
     case n.NodeType of
       entWord:
         begin
-          st^ := TExprNodeWordAbstract(n).fFound;
+          st[0] := AnsiChar(TExprNodeWordAbstract(n).fFound);
           inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
         end;
       entNot:
-        PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
+        st[-1] := AnsiChar(ord(st[-1]) xor 1);
       entOr:
         begin
           dec(st);
-          PAnsiChar(st)[-1] := AnsiChar(st^ or boolean(PAnsiChar(st)[-1]));
-        end; { TODO : optimize TExprParser OR when left member is already TRUE }
+          st[-1] := AnsiChar(boolean(st[0]) or boolean(st[-1]));
+        end; { TODO : optimize TExprParser OR when left member is already TRUE? }
       entAnd:
         begin
           dec(st);
-          PAnsiChar(st)[-1] := AnsiChar(st^ and boolean(PAnsiChar(st)[-1]));
+          st[-1] := AnsiChar(boolean(st[0]) and boolean(st[-1]));
         end;
     end;
     n := n.Next;
   until n = nil;
-  result := boolean(PAnsiChar(st)[-1]);
+  result := boolean(st[-1]);
 end;
 
 
