@@ -2930,8 +2930,8 @@ function Unicode_WideToAnsi(
 /// conversion of some UTF-16 buffer into a temporary Ansi ShortString
 // - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
 // - calls IsAnsiCompatibleW() first to quickly handle any ASCII-7 output
-procedure Unicode_WideToShort(
-  W: PWideChar; LW, CodePage: PtrInt; var res: ShortString);
+procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt;
+  var res: ShortString);
 
 /// compatibility function, wrapping Win32 API CharUpperBuffW()
 // - on POSIX, use the ICU library, or fallback to 'a'..'z' conversion only
@@ -2944,6 +2944,12 @@ function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
 // - raw function called by LowerCaseUnicode() from mormot.core.unicode unit
 function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
   {$ifdef OSWINDOWS} stdcall; {$endif}
+
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// - returns dest.buf as PWideChar result, and dest.len as length in WideChars
+// - caller should always call Dest.Done to release any (unlikely) allocated memory
+function Unicode_ToUtf8(Text: PUtf8Char; TextLen: PtrInt;
+  var Dest: TSynTempBuffer): PWideChar;
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -3891,10 +3897,9 @@ procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-// - returns dest.buf as PWideChar result, and dest.len as length
-// - caller should always call dest.Done to release (unlikely) temporary memory
-function Utf8ToWin32PWideChar(const Text: RawUtf8;
-  var dest: TSynTempBuffer): PWideChar;
+// - just a wrapper around Unicode_ToUtf8() over a temporary buffer
+// - caller should always call d.Done to release any (unlikely) allocated memory
+function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 
 /// ask the Operating System to convert a file URL to a local file path
 // - only Windows has a such a PathCreateFromUrlW() API
@@ -6209,6 +6214,38 @@ begin
     // use WinAPI, ICU or cwstring/RTL for accurate conversion
     res[0] := AnsiChar(
       Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
+end;
+
+function Unicode_ToUtf8(Text: PUtf8Char; TextLen: PtrInt;
+  var Dest: TSynTempBuffer): PWideChar;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if Text = nil then
+    TextLen := 0;
+  Dest.Init(TextLen * 2); // maximum absolute UTF-16 size in bytes (pure ASCII)
+  if Dest.len = 0 then
+    exit;
+  result := Dest.buf;
+  if IsAnsiCompatible(pointer(Text), TextLen) then // fastest optimistic way
+  begin
+    Dest.len := TextLen;
+    for i := 0 to TextLen - 1 do
+      PWordArray(result)[i] := PByteArray(Text)[i];
+    result[Dest.len] := #0; // Text[TextLen] may not be #0
+  end
+  else // use the RTL to perform the UTF-8 to UTF-16 conversion
+  begin
+    Dest.len := Utf8ToUnicode(result, Dest.Len + 16, pointer(Text), TextLen);
+    if Dest.len <= 0 then
+      Dest.len := 0
+    else
+    begin
+      dec(Dest.len); // Utf8ToUnicode() returned length includes trailing #0
+      result[Dest.len] := #0; // missing on FPC
+    end;
+  end;
 end;
 
 function NowUtc: TDateTime;

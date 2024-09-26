@@ -164,34 +164,9 @@ begin
     Win32PWideCharToUtf8(P, StrLenW(P), res);
 end;
 
-function Utf8ToWin32PWideChar(const Text: RawUtf8;
-  var dest: TSynTempBuffer): PWideChar;
-var
-  TextLen, i: PtrInt;
+function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 begin
-  result := nil;
-  TextLen := length(Text);
-  dest.Init(TextLen * 2);
-  if dest.len = 0 then
-    exit;
-  result := dest.buf;
-  if IsAnsiCompatible(PAnsiChar(pointer(Text)), TextLen) then
-  begin
-    dest.len := TextLen;
-    for i := 0 to TextLen do // include trailing #0
-      PWordArray(result)[i] := PByteArray(Text)[i];
-  end
-  else
-  begin
-    dest.len := Utf8ToUnicode(result, dest.Len + 16, pointer(Text), TextLen);
-    if dest.len <= 0 then
-      dest.len := 0
-    else
-    begin
-      dec(dest.len); // Utf8ToUnicode() returned length includes trailing #0
-      result[dest.len] := #0; // missing on FPC
-    end;
-  end;
+  result := Unicode_ToUtf8(pointer(u), length(u), d); // call the RTL
 end;
 
 const
