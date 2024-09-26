@@ -2151,9 +2151,8 @@ type
   PRttiCustomProp = ^TRttiCustomProp;
   PPRttiCustomProp = ^PRttiCustomProp;
 
-  /// variant-like value as returned by TRttiCustomProp.GetRttiVarData
-  // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex
-  // (handled in TJsonWriter.AddVariant/AddRttiVarData methods)
+  /// raw internal value type with RTTI - should not be used in normal user code
+  // - defines the result of TRttiCustomProp.GetRttiVarData internal method
   // - simple values (integers, floats, strings or variant) are set into Data
   // - rkEnumeration, rkSet, rkDynArray, rkClass, rkInterface, rkRecord and
   // rkObject are stored as varAny/PropValue pointer to the field value (for
@@ -2169,7 +2168,7 @@ type
     varUnknown: (
       VType: cardinal);    // maps DataType + NeedsClear + PropValueIsInstance
     varVariant: (
-      Data: TVarData);
+      Data: TVarData);     // stored as a regular variant
     varAny: (
       DataType: word;      // matches TVarData.VType
       NeedsClear: boolean;
@@ -2251,18 +2250,6 @@ type
     procedure GetRttiVarDataGetter(Instance: TObject; rvd: PRttiVarData);
     function CompareValueComplex(Data, Other: pointer;
       OtherRtti: PRttiCustomProp; CaseInsensitive: boolean): integer;
-    /// retrieve any field value into a custom/non-standard TRttiVarData mapping
-    // - this method was made private since it is for internal use only
-    // - TRttiVarData may contain non-standard varAny for rkEnumeration/rkDynArray,
-    // so you should NOT use this TRttiVarData as a plain variant, e.g. calling
-    // SetValueVariant(RVD.Data) or transtyping variant(RVD)
-    // - works if Prop is defined or not, calling any getter method if needed
-    // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex
-    // (handled in TJsonWriter.AddVariant/AddRttiVarData methods)
-    // - TRttiVarData contains additional non-standard RTTI Info and clear flag:
-    // ! if RVD.NeedsClear then VarClearProc(RVD.Data);
-    procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
-      {$ifdef HASINLINE}inline;{$endif}
   public
     /// contains standard TypeInfo/PRttiInfo of this field/property
     // - for instance, Value.Size contains its memory size in bytes
@@ -2313,6 +2300,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// compare two properties values with proper getter method call
     // - is likely to call Value.ValueCompare() which requires mormot.core.json
+    // - may call our internal GetRttiVarData() on complex types
     function CompareValue(Data, Other: pointer; const OtherRtti: TRttiCustomProp;
       CaseInsensitive: boolean): integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2326,6 +2314,18 @@ type
       Options: TTextWriterWriteObjectOptions; K: TTextWriterKind = twNone);
     /// a wrapper calling AddValueJson()
     procedure GetValueJson(Data: pointer; out Result: RawUtf8);
+    /// raw internal RTTI-aware value getter - never called in normal user code
+    // - used internally by TRttiCustomProp.AddValueJson/CompareValueComplex,
+    // as handled in TJsonWriter.AddVariant/AddRttiVarData methods, to retrieve
+    // any field value into our *non-standard* TRttiVarData mapping
+    // - TRttiVarData may contain non-standard varAny for rkEnumeration/rkDynArray,
+    // so you should NOT use this TRttiVarData as a plain variant, e.g. calling
+    // SetValueVariant(RVD.Data) or transtyping variant(RVD)
+    // - works if Prop is defined or not, calling any getter method if needed
+    // - TRttiVarData contains additional non-standard RTTI Info and clear flag:
+    // ! if RVD.NeedsClear then VarClearProc(RVD.Data);
+    procedure GetRttiVarData(Data: pointer; out RVD: TRttiVarData);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// store information about the properties/fields of a given TypeInfo/PRttiInfo
