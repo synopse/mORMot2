@@ -638,7 +638,7 @@ const
   // - 192 nodes seems fair enough for realistic ACE conditional expressions
   MAX_TREE_NODE = 191;
 
-  /// maximum length, in bytes, of a TAceTree input binary or SDDL text
+  /// maximum length, in bytes, of a TAceBinaryTree/TAceTextTree binary/text input
   // - absolute maximum is below 64KB (in TRawAce.AceSize)
   // - 8KB of conditional expression is consistent with the MAX_TREE_NODE limit
   MAX_TREE_BYTES = 8 shl 10;
@@ -683,9 +683,9 @@ type
   end;
   PRawAceLiteral = ^TRawAceLiteral;
 
-  /// define one node in the TAceTree.Stack
-  // - here pointers are just 8-bit indexes to the main TAceTree.Tokens[]
-  TAceTreeNode = packed record
+  /// define one node in the TAceBinaryTree.Nodes
+  // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[]
+  TAceBinaryTreeNode = packed record
     /// position of this node in the input binary or text
     Position: word;
     /// index of the left or single operand
@@ -693,45 +693,34 @@ type
     /// index of the right operand
     Right: byte;
   end;
-  /// points to one node in the TAceTree.Stack
-  PAceTreeNode = ^TAceTreeNode;
+  /// points to one node in the TAceBinaryTree.Nodes
+  PAceBinaryTreeNode = ^TAceBinaryTreeNode;
 
-  /// store a processing tree of a conditional ACE
-  // - used for conversion between binary and SDDL formats, or execution
+  /// store a processing tree of a conditional ACE in binary format
+  // - used for conversion from binary to SDDL text format, or execution
   // - can easily be allocated on stack for efficient process
-  TAceTree = record
+  {$ifdef USERECORDWITHMETHODS}
+  TAceBinaryTree = record
+  {$else}
+  TAceBinaryTree = object
+  {$endif USERECORDWITHMETHODS}
   private
-    function AddBinaryNode(position, left, right: cardinal): boolean;
-    function AddTextNode(position, len: cardinal; tok: TSecConditionalToken): boolean;
-    procedure BinaryNodeText(index: byte; var u: RawUtf8);
-    function TextParseNode(var p: PUtf8Char; out tok: TSecConditionalToken): integer;
-    function TextParse(var p: PUtf8Char; out tok: TSecConditionalToken): integer;
+    function AddNode(position, left, right: cardinal): boolean;
+    procedure GetNodeText(index: byte; var u: RawUtf8);
   public
-    /// the associated input storage
-    // - typically maps an TSecAce.Opaque buffer or a RawUtf8 SDDL text
+    /// the associated input storage, typically mapping an TSecAce.Opaque buffer
     Storage: PUtf8Char;
     /// number of bytes in Storage
     StorageSize: cardinal;
     /// number of TAceTreeNode stored in Tokens[] and Stack[]
     Count: byte;
-    /// set after FromBinary(), or after FromText()
-    StorageForm: (isNone, isBinary, isText);
     /// stores the actual tree of this conditional expression
-    Stack: array[0 .. MAX_TREE_NODE] of TAceTreeNode;
-    /// the recognized token after FromText SDDL parsing
-    TextToken: array[0 .. MAX_TREE_NODE] of TSecConditionalToken;
-    /// the recognized operand length after FromText SDDL parsing
-    TextLen: array[0 .. MAX_TREE_NODE] of byte;
-    /// initialize the Storage with some binary or SDDL text input
-    // - caller should then call FromBinary or FromSddl
-    function Init(const Input: RawByteString): boolean;
-    /// fill Stack[] nodes from a binary conditional ACE
+    Nodes: array[0 .. MAX_TREE_NODE] of TAceBinaryTreeNode;
+    /// fill Nodes[] tree from a binary conditional ACE
     // - this process is very fast, and requires no memory allocation
-    function FromBinary: boolean;
+    function FromBinary(const Input: RawByteString): boolean;
     /// save the internal Stack[] nodes into a binary conditional ACE
     function ToBinary: RawByteString;
-    /// fill Stack[] nodes from a SDDL conditional ACE text
-    function FromText: boolean;
     /// compute the SDDL conditional ACE text of the stored Stack[]
     // - use a simple recursive algorithm, with temporary RawUtf8 allocations
     function ToText: RawUtf8;
@@ -1976,52 +1965,21 @@ begin
 end;
 
 
-{ TAceTree }
+{ TAceBinaryTree }
 
-function TAceTree.Init(const Input: RawByteString): boolean;
-begin
-  Storage := pointer(Input);
-  StorageSize := length(Input);
-  Count := 0;
-  StorageForm := isNone;
-  result := (Storage <> nil) and
-            (StorageSize < MAX_TREE_BYTES);
-end;
-
-function TAceTree.AddBinaryNode(position, left, right: cardinal): boolean;
-var
-  n: PAceTreeNode;
-begin
-  result := (Count < high(Stack)) and
-            (position < StorageSize);
-  if not result then
-    exit;
-  n := @Stack[Count];
-  n^.Position := position;
-  n^.Left := left;
-  n^.Right := right;
-  inc(Count);
-end;
-
-function TAceTree.AddTextNode(position, len: cardinal;
-  tok: TSecConditionalToken): boolean;
-begin
-  result := AddBinaryNode(position, 255, 255);
-  if not result then
-    exit;
-  TextToken[Count - 1] := tok;
-  TextLen[Count - 1] := len;
-end;
-
-function TAceTree.FromBinary: boolean;
+function TAceBinaryTree.FromBinary(const Input: RawByteString): boolean;
 var
   v: PRawAceLiteral;
   position, len, stCount: PtrUInt;
   st: array[0 .. 31] of byte; // local stack of last few operands
 begin
   result := false;
+  Storage := pointer(Input);
+  StorageSize := length(Input);
+  Count := 0;
   if (Storage = nil) or
      (StorageSize and 3 <> 0) or // should be DWORD-aligned
+     (StorageSize >= MAX_TREE_BYTES) or
      (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
     exit;
   stCount := 0;
@@ -2029,15 +1987,14 @@ begin
   repeat
     v := @Storage[position];
     len := AceTokenLength(v);
-    if (position + len > StorageSize) or // overflow
-       (ord(v^.Token) > ord(high(v^.Token))) then // clearly invalid
+    if (position + len > StorageSize) then // overflow
       exit;
     if v^.Token <> sctPadding then
     begin
       // parse the next non-void operand or operation
       if v^.Token in sctOperand then
       begin
-        if not AddBinaryNode(position, 255, 255) then
+        if not AddNode(position, 255, 255) then
           exit;
       end
       else if v^.Token in sctUnary then
@@ -2045,7 +2002,7 @@ begin
         if stCount < 1 then
           exit;
         dec(stCount); // unstack one operand
-        if not AddBinaryNode(position, st[stCount], 255) then
+        if not AddNode(position, st[stCount], 255) then
           exit;
       end
       else if v^.Token in sctBinary then
@@ -2053,7 +2010,7 @@ begin
         if stCount < 2 then
           exit;
         dec(stCount, 2); // unstack two operands
-        if not AddBinaryNode(position, st[stCount], st[stCount + 1]) then
+        if not AddNode(position, st[stCount], st[stCount + 1]) then
           exit;
       end
       else
@@ -2068,13 +2025,26 @@ begin
   until position = StorageSize;
   result := (Count > 0) and
             (stCount = 1); // should end with no pending operand
-  if result then
-    StorageForm := isBinary;
 end;
 
-procedure TAceTree.BinaryNodeText(index: byte; var u: RawUtf8);
+function TAceBinaryTree.AddNode(position, left, right: cardinal): boolean;
 var
-  n: PAceTreeNode;
+  n: PAceBinaryTreeNode;
+begin
+  result := (Count < high(Nodes)) and
+            (position < StorageSize);
+  if not result then
+    exit;
+  n := @Nodes[Count];
+  n^.Position := position;
+  n^.Left := left;
+  n^.Right := right;
+  inc(Count);
+end;
+
+procedure TAceBinaryTree.GetNodeText(index: byte; var u: RawUtf8);
+var
+  n: PAceBinaryTreeNode;
   v: PRawAceLiteral;
   l, r: pointer; // store actual RawUtf8 variables
 begin
@@ -2083,13 +2053,13 @@ begin
     FastAssignNew(u);
     exit;
   end;
-  n := @Stack[index];
+  n := @Nodes[index];
   l := nil;
   r := nil;
   if n^.Left < Count then
-    BinaryNodeText(n^.Left, RawUtf8(l));
+    GetNodeText(n^.Left, RawUtf8(l));
   if n^.Right < Count then
-    BinaryNodeText(n^.Right, RawUtf8(r));
+    GetNodeText(n^.Right, RawUtf8(r));
   v := @Storage[n^.Position];
   if l <> nil then
     if r <> nil then
@@ -2100,24 +2070,20 @@ begin
     SddlOperandToText(v, u);
 end;
 
-function TAceTree.TextParseNode(var p: PUtf8Char;
-  out tok: TSecConditionalToken): integer;
-var
-  s: PUtf8Char;
+function TAceBinaryTree.ToBinary: RawByteString;
 begin
-  result := -1;
-  while p^ = ' ' do
-    inc(p);
-  s := p;
-  tok := SddlNextOperand(p);
-  if (tok = sctPadding) or // error parsing
-     not AddTextNode(p - Storage, p - s, tok) then
-    exit;
-  result := Count - 1;
+  FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
 end;
 
-function TAceTree.TextParse(var p: PUtf8Char;
-  out tok: TSecConditionalToken): integer;
+function TAceBinaryTree.ToText: RawUtf8;
+begin
+  GetNodeText(Count - 1, result); // simple recursive generation
+end;
+
+
+{ TAceTextTree }
+
+function TAceTextTree.ParseNextToken: integer;
 var
   op, i, {l,} r: integer;
   parent: boolean;
