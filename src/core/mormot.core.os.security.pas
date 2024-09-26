@@ -726,6 +726,69 @@ type
     function ToText: RawUtf8;
   end;
 
+  /// define one node in the TAceTextTree.Nodes
+  // - here pointers are just 8-bit indexes to the main TAceTextTree.Nodes[]
+  TAceTextTreeNode = packed record
+    /// position of this node in the input binary or text
+    Position: word;
+    /// actual recognized token
+    Token: TSecConditionalToken;
+    /// index of the left or single operand
+    Left: byte;
+    /// index of the right operand
+    Right: byte;
+    /// number of UTF-8 bytes parsed at Position
+    Length: byte;
+  end;
+
+  /// result of TAceTextTree.FromText SDDL parsing method
+  TAceTextTreeParse = (
+    atpSuccess,
+    atpNoExpression,
+    atpTooManyExpressions,
+    atpMissingParenthesis,
+    atpMissingFinal,
+    atpTooBigExpression,
+    atpInvalidExpression,
+    atpInvalidContent);
+
+  /// store a processing tree of a conditional ACE in binary format
+  // - used for conversion from SDDL text to binary format, or execution
+  // - can easily be allocated on stack for efficient process
+  {$ifdef USERECORDWITHMETHODS}
+  TAceTextTree = record
+  {$else}
+  TAceTextTree = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    TextCurrent: PUtf8Char;
+    TokenCurrent: TSecConditionalToken;
+    Root: byte;
+    Error: TAceTextTreeParse;
+    function ParseNextToken: integer;
+    function ParseExpr: integer;
+    function ParseFactor: integer;
+    function AppendBinary(var bin: RawByteString; node: integer): boolean;
+    function RawAppendBinary(var bin: RawByteString;
+      const node: TAceTextTreeNode): boolean;
+  public
+    /// the associated SDDL text input storage
+    Storage: PUtf8Char;
+    /// number of bytes in Storage
+    StorageSize: cardinal;
+    /// number of TAceTreeNode stored in Tokens[] and Stack[]
+    Count: byte;
+    /// stores the actual tree of this conditional expression
+    Nodes: array[0 .. MAX_TREE_NODE] of TAceTextTreeNode;
+    /// fill Nodes[] tree from a SDDL text conditional ACE
+    function FromText(const Input: RawUtf8): TAceTextTreeParse;
+    /// save the internal Stack[] nodes into a SDDL text conditional ACE
+    function ToText: RawUtf8;
+    /// compute the binary conditional ACE of the stored Stack[]
+    function ToBinary: RawByteString;
+  end;
+
+
 /// compute the length in bytes of an ACE token binary entry
 function AceTokenLength(v: PRawAceLiteral): PtrUInt;
 
@@ -2085,89 +2148,313 @@ end;
 
 function TAceTextTree.ParseNextToken: integer;
 var
-  op, i, {l,} r: integer;
-  parent: boolean;
+  start: PUtf8Char;
+  len: PtrInt;
 begin
   result := -1;
-  parent := false;
-  while p^ = ' ' do
-    inc(p);
-  if p^ = '(' then
+  if Count = MAX_TREE_NODE then
   begin
-    parent := true;
-    inc(p);
-  end;
-  op := -1;
-  i := TextParseNode(p, tok);
-  if i < 0 then
+    Error := atpTooManyExpressions;
     exit;
-  if tok in sctOperand then
-  begin
-    // XX binop YY
-    //l := i;
-    op := TextParse(p, tok);
-    if (op < 0) or
-       not (tok in sctBinary) then
-      exit;
-    r := TextParse(p, tok);
-    if r < 0 then
-      exit;
-
   end;
-
-  // to be continued
-
-  while p^ = ' ' do
-    inc(p);
-  if parent then
-    if p^ <> ')' then
-      exit
-    else
-      inc(p);
-  result := op;
+  start := TextCurrent;
+  while start^ = ' ' do
+    inc(start);
+  TextCurrent := start;
+  TokenCurrent := SddlNextOperand(TextCurrent);
+  len := TextCurrent - start;
+  if len > 255 then
+  begin
+    Error := atpTooBigExpression;
+    exit;
+  end;
+  case TokenCurrent of
+    sctPadding:  // error parsing
+      Error := atpInvalidExpression;
+    sctInternalFinal .. high(TSecConditionalToken):
+      ; // no need to add to Nodes[]
+  else
+    with Nodes[Count] do
+    begin
+      Token := TokenCurrent;
+      Position:= start - Storage;
+      Length := len;
+      Left := 255;
+      Right := 255;
+      result := Count;
+      inc(Count);
+    end;
+  end;
 end;
 
-function TAceTree.FromText: boolean;
+function TAceTextTree.ParseExpr: integer;
 var
-  p: PUtf8Char;
-  tok: TSecConditionalToken;
+  op, r: integer;
 begin
-  result := false;
-  StorageForm := isText;
+  result := ParseFactor;
+  ParseNextToken;
+  if (Error <> atpSuccess) or
+     (TokenCurrent in [sctInternalFinal, sctInternalParenthClose]) then
+    exit;
+  if TokenCurrent in sctBinary then
+  begin
+    op := Count - 1;
+    ParseNextToken;
+    r := ParseExpr;
+    if r >= 0 then
+    begin
+      with Nodes[op] do
+      begin
+        Left := result;
+        Right := r;
+      end;
+      result := op;
+    end;
+  end;
+end;
+
+function TAceTextTree.ParseFactor: integer;
+var
+  op: integer;
+begin
+  result := -1;
+  if Error = atpSuccess then
+    case TokenCurrent of
+      sctPadding:
+        Error := atpMissingFinal;
+      sctInternalParenthOpen:
+        begin
+          ParseNextToken;
+          result := ParseExpr;
+          if Error = atpSuccess then
+            if TokenCurrent <> sctInternalParenthClose then
+              Error := atpMissingParenthesis;
+        end;
+    else
+      if TokenCurrent in sctUnary then
+      begin
+        op := Count - 1;
+        result := ParseNextToken;
+        if result < 0 then
+          exit;
+        result := ParseFactor;
+        if Error <> atpSuccess then
+          exit;
+        Nodes[op].Left := result;
+        result := op;
+      end
+      else
+        result := Count - 1;
+    end;
+end;
+
+function TAceTextTree.FromText(const Input: RawUtf8): TAceTextTreeParse;
+begin
+  result := atpNoExpression;
+  Storage := pointer(Input);
+  StorageSize := length(Input);
+  Count := 0;
   if (Storage = nil) or
      (Storage[0] <> '(') or
      (Storage[StorageSize - 1] <> ')') or
+     (StorageSize >= MAX_TREE_BYTES) or
      (cardinal(StrLen(Storage)) <> StorageSize) then
     exit; // not a valid SDDL text input for sure
-  p := Storage;
-  if (TextParse(p, tok) < 0) or
-     (p^ <> #0) then
-    exit;
+  TextCurrent := Storage;
+  TokenCurrent := sctPadding;
+  Error := atpSuccess;
+  ParseNextToken;
+  Root := ParseExpr;
+  result := Error;
+end;
+
+function TAceTextTree.RawAppendBinary(var bin: RawByteString;
+  const node: TAceTextTreeNode): boolean;
+
+  procedure DoBytes(b: pointer; blen: PtrInt);
+  var
+    dl: PtrInt;
+    v: PRawAceLiteral;
+  begin
+    if blen = 0 then
+      exit; // no such token could have length = 0
+    dl := length(bin);
+    SetLength(bin, dl + 5 + blen);
+    v := @PByteArray(bin)[dl];
+    v^.Token := node.Token;
+    v^.UnicodeBytes := blen;        // also v^.CompositeBytes/v^.SidBytes
+    MoveFast(b^, v^.Unicode, blen); // also v^.Composite/v^.Sid
+    result := true; // success
+  end;
+
+  procedure DoUnicode(p: PUtf8Char);
+  var
+    tmpw: TSynTempBuffer;
+    l: PtrInt;
+    w: PWideChar;
+  begin
+    l := node.Length;
+    case node.Token of
+      sctUnicode:
+        begin
+          inc(p);
+          dec(l, 2); // trim "xxxx"
+        end;
+     sctUserAttribute,
+     sctResourceAttribute,
+     sctDeviceAttribute:
+       begin
+         l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing @User.
+         inc(p, l);
+         l := node.Length - l;
+       end;
+    end;
+    w := Unicode_ToUtf8(p, l, tmpw);
+    if w = nil then
+      exit; // invalid UTF-8 input
+    DoBytes(w, tmpw.len * 2); // length in bytes
+    tmpw.Done; // paranoid, since node.Length <= 255
+  end;
+
+  procedure DoComposite(p: PUtf8Char);
+  var
+    s: PUtf8Char;
+    one: TAceTextTreeNode;
+    data: RawByteString;
+  begin
+    s := p + 1; // ignore trailing {
+    repeat
+      while s^ = ' ' do
+        inc(s);
+      one.Position := s - Storage;
+      p := s;
+      one.Token := SddlNextOperand(p);
+      one.Length := p - s;
+      if not (one.Token in sctLiteral) or
+         not RawAppendBinary(data, one) then // allow recursive {..,{..}}
+        exit;
+      s := p;
+      while s^ = ' ' do
+        inc(s);
+      if s^ = '}' then
+        break
+      else if s^ <> ',' then
+        exit;
+      inc(s);
+    until false;
+    DoBytes(pointer(data), length(data));
+  end;
+
+  procedure DoSid(p: PUtf8Char);
+  var
+    sid: RawSid;
+  begin
+    inc(p, 4); // ignore trailing SID(
+    if SddlNextSid(p, sid, nil) then
+      DoBytes(pointer(sid), length(sid));
+  end;
+
+var
+  tmp: ShortString;
+  v: PRawAceLiteral;
+  p: PUtf8Char;
+begin
+  result := false;
+  tmp[0] := #1;
+  v := @tmp[1];
+  v^.Token := node.Token;
+  p := Storage + node.Position;
+  case node.Token of
+    sctInt64:
+      begin
+        v^.Int.Value := GetInt64(p);
+        v^.Int.Sign := scsNone;
+        if v^.Int.Value < 0 then
+          v^.Int.Sign := scsNegative;
+        v^.Int.Base := scbDecimal;
+        inc(tmp[0], SizeOf(v^.Int));
+      end;
+    sctUnicode,
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute:
+      begin
+        DoUnicode(p);
+        exit;
+      end;
+    sctOctetString:
+      begin
+        inc(p); // ignore trailing #
+        v^.OctetBytes :=
+          (ParseHex(PAnsiChar(p), @v^.Octet, node.Length shr 1) - p) shr 1;
+        inc(tmp[0], 4 + v^.OctetBytes); // hex is up to 255 bytes, so bin < 128
+      end;
+    sctComposite:  // e.g. '{"Sales","HR"}'
+      begin
+        DoComposite(p);
+        exit;
+      end;
+    sctSid: // e.g. 'SID(BA)'
+      begin
+        DoSid(p);
+        exit;
+      end
+  else
+    if not (node.Token in sctOperator) then
+      exit; // unexpected token
+  end;
+  AppendShortToUtf8(tmp, RawUtf8(bin));
   result := true;
-  StorageForm := isText;
 end;
 
-function TAceTree.ToBinary: RawByteString;
+function TAceTextTree.AppendBinary(var bin: RawByteString; node: integer): boolean;
+var
+  n: ^TAceTextTreeNode;
 begin
-  case StorageForm of
-    isBinary:
-      FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
-    //TODO: isText
-  else
-    FastAssignNew(result);
-  end;
+  result := false;
+  if cardinal(node) > cardinal(Count) then
+    exit;
+  n := @Nodes[node];
+  if n^.Token >= sctInternalFinal then
+    exit;
+  if n^.Left <> 255 then
+    if not AppendBinary(bin, n^.Left) then
+      exit;
+  if n^.Right <> 255 then
+    if not AppendBinary(bin, n^.Right) then
+      exit;
+  result := RawAppendBinary(bin, n^);
 end;
 
-function TAceTree.ToText: RawUtf8;
+function TAceTextTree.ToBinary: RawByteString;
+var
+  l: PtrUInt;
+  tmp: string[3];
 begin
-  case StorageForm of
-    isBinary:
-      BinaryNodeText(Count - 1, result); // simple recursive generation
-    isText:
-      FastSetString(result, Storage, StorageSize); // return FromText() value
-  else
-    FastAssignNew(result);
+  result := '';
+  if (Count = 0) or
+     (Error <> atpSuccess) or
+     (Root >= Count) then
+    exit;
+  FastSetRawByteString(result, nil, 4);
+  PCardinal(result)^ := ACE_CONDITION_SIGNATURE;
+  if not AppendBinary(result, Root) then // recursive generation
+  begin
+    Error := atpInvalidContent;
+    result := ''; // input content is not valid
+    exit;
   end;
+  l := length(result) and 3;
+  if l = 0 then
+    exit;
+  PCardinal(@tmp)^ := 4 - l;
+  AppendShortToUtf8(tmp, RawUtf8(result)); // should be DWORD-padded with zeros
+end;
+
+function TAceTextTree.ToText: RawUtf8;
+begin
+  FastSetString(result, Storage, StorageSize); // FromText() value
 end;
 
 
