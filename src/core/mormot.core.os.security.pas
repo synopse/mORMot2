@@ -613,6 +613,7 @@ type
     atpInvalidUuid,
     atpNoExpression,
     atpTooManyExpressions,
+    atpTooManyParenthesis,
     atpMissingParenthesis,
     atpMissingFinal,
     atpTooBigExpression,
@@ -1018,10 +1019,10 @@ type
     TextCurrent: PUtf8Char;
     TokenCurrent: TSecConditionalToken;
     Root: byte;
+    ParentCount: byte;
     function AddNode(position, len: cardinal): integer;
     function ParseNextToken: integer;
     function ParseExpr: integer;
-    function ParseFactor: integer;
     function AppendBinary(var bin: RawByteString; node: integer): boolean;
     function RawAppendBinary(var bin: RawByteString;
       const node: TAceTextTreeNode): boolean;
@@ -3141,62 +3142,103 @@ end;
 
 function TAceTextTree.ParseExpr: integer;
 var
-  op, r: integer;
-begin
-  result := ParseFactor;
-  ParseNextToken;
-  if (Error <> atpSuccess) or
-     (TokenCurrent in [sctInternalFinal, sctInternalParenthClose]) then
-    exit;
-  if TokenCurrent in sctBinary then
-  begin
-    op := Count - 1;
-    ParseNextToken;
-    r := ParseExpr;
-    if r < 0 then
-      exit;
-    with Nodes[op] do
-    begin
-      Left := result;
-      Right := r;
-    end;
-    result := op;
-  end;
-end;
-
-function TAceTextTree.ParseFactor: integer;
-var
-  op: integer;
+  t, l, r: integer;
 begin
   result := -1;
-  if Error = atpSuccess then
+  t := ParseNextToken;
+  while Error = atpSuccess do
+  begin
     case TokenCurrent of
-      sctPadding:
-        Error := atpMissingFinal;
+      sctInternalFinal:
+        exit;
       sctInternalParenthOpen:
+        if ParentCount = 255 then
+          Error := atpTooManyParenthesis
+        else
+        begin
+          inc(ParentCount);
+          result := ParseExpr;
+        end;
+      sctInternalParenthClose:
+        if ParentCount = 0 then
+          Error := atpMissingParenthesis
+        else
+        begin
+          dec(ParentCount);
+          exit;
+        end;
+      sctNot: // !( .... ) token has always parenthesis
+        if ParentCount = 255 then
+          Error := atpTooManyParenthesis
+        else
         begin
           ParseNextToken;
-          result := ParseExpr;
-          if Error = atpSuccess then
-            if TokenCurrent <> sctInternalParenthClose then
-              Error := atpMissingParenthesis;
+          if TokenCurrent <> sctInternalParenthOpen then
+            Error := atpMissingParenthesis
+          else
+          begin
+            result := t;
+            inc(ParentCount);
+            Nodes[t].Left := ParseExpr;
+          end;
         end;
     else
       if TokenCurrent in sctUnary then
       begin
-        op := Count - 1;
-        result := ParseNextToken;
-        if result < 0 then
-          exit;
-        result := ParseFactor;
-        if Error <> atpSuccess then
-          exit;
-        Nodes[op].Left := result;
-        result := op;
+        result := t;
+        l := ParseNextToken; // sctAttribute, sctSid or sctComposite
+        if l < 0 then
+          Error := atpInvalidExpression
+        else
+          Nodes[t].Left := l;
       end
+      else if TokenCurrent in sctLiteral + sctAttribute then
+      begin
+        l := t;
+        result := ParseNextToken;
+        r := -1;
+        if TokenCurrent in sctBinaryOperator then
+          r := ParseNextToken // sctAttribute, sctSid or sctComposite
+        else if TokenCurrent in sctBinaryLogicalOperator then
+          r := ParseExpr     // could be another expression
+        else if TokenCurrent in [sctInternalFinal, sctInternalParenthClose] then
+        begin
+          result := t;       // e.g. '&& @Device.Bitlocker'
+          continue;
+        end
+        else
+          Error := atpInvalidExpression;
+        if (Error = atpSuccess) and
+           (r >= 0) then
+          with Nodes[result] do
+          begin
+            Left := l;
+            Right := r;
+          end;
+      end else if TokenCurrent in sctBinaryLogicalOperator then
+        if result < 0 then
+          Error := atpInvalidExpression
+        else
+        begin
+          l := result;
+          r := ParseExpr;
+          result := t;
+          if (Error = atpSuccess) and
+             (r >= 0) then
+            with Nodes[result] do
+            begin
+              Left := l;
+              Right := r;
+            end;
+        end
       else
-        result := Count - 1;
+        Error := atpInvalidExpression;
     end;
+    if (TokenCurrent = sctInternalFinal) or
+       (Error <> atpSuccess) then
+      break;
+    t := ParseNextToken;
+  end;
 end;
 
 function TAceTextTree.FromText(const Input: RawUtf8): TAceTextParse;
@@ -3207,9 +3249,13 @@ begin
 end;
 
 function TAceTextTree.FromText: TAceTextParse;
+var
+  r: integer;
 begin
   result := atpNoExpression;
+  Root := 255;
   Count := 0;
+  ParentCount := 0;
   if (Storage = nil) or
      (Storage[0] <> '(') or
      (Storage[StorageSize - 1] <> ')') or
@@ -3219,8 +3265,13 @@ begin
   TextCurrent := Storage;
   TokenCurrent := sctPadding;
   Error := atpSuccess;
-  ParseNextToken;
-  Root := ParseExpr;
+  r := ParseExpr;
+  Root := r;
+  if Error = atpSuccess then
+    if r < 0 then
+      Error := atpInvalidExpression
+    else if ParentCount <> 0 then
+      Error := atpMissingParenthesis;
   result := Error;
 end;
 
