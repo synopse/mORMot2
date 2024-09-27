@@ -602,6 +602,28 @@ type
     sasDacl,
     sasSacl);
 
+  /// result of TSecurityDescriptor.FromText and other SDDL parsing methods
+  TAceTextParse = (
+    atpSuccess,
+    atpInvalidOwner,
+    atpInvalidGroup,
+    atpInvalidType,
+    atpInvalidFlags,
+    atpInvalidMask,
+    atpInvalidUuid,
+    atpNoExpression,
+    atpTooManyExpressions,
+    atpMissingParenthesis,
+    atpMissingFinal,
+    atpTooBigExpression,
+    atpMissingExpression,
+    atpUnexpectedToken,
+    atpInvalidExpression,
+    atpInvalidComposite,
+    atpInvalidUnicode,
+    atpInvalidSid,
+    atpInvalidContent);
+
   {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
 
   /// define one discretionary/system access entry (ACE)
@@ -642,7 +664,7 @@ type
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
     procedure AppendAsText(var s: ShortString; var sddl: RawUtf8; dom: PSid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
-    function FromText(var p: PUtf8Char; dom: PSid): boolean;
+    function FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
     /// encode this entry into a self-relative binary buffer
     // - returns the output length in bytes
     // - if dest is nil, will compute the length but won't write anything
@@ -664,8 +686,8 @@ type
     function MaskText(const maskSddl: RawUtf8): boolean; overload;
     /// get the ACE conditional expression, as stored in Opaque binary
     function ConditionalExpression: RawUtf8; overload;
-    /// parse a ACE conditional expression, and assign it to Opaque binary
-    function ConditionalExpression(const condExp: RawUtf8): boolean; overload;
+    /// parse a ACE conditional expression, and assign it to the Opaque binary
+    function ConditionalExpression(const condExp: RawUtf8): TAceTextParse; overload;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -984,22 +1006,6 @@ type
     Length: byte;
   end;
 
-  /// result of TAceTextTree.FromText SDDL parsing method
-  TAceTextTreeParse = (
-    atpSuccess,
-    atpNoExpression,
-    atpTooManyExpressions,
-    atpMissingParenthesis,
-    atpMissingFinal,
-    atpTooBigExpression,
-    atpMissingExpression,
-    atpUnexpectedToken,
-    atpInvalidExpression,
-    atpInvalidComposite,
-    atpInvalidUnicode,
-    atpInvalidSid,
-    atpInvalidContent);
-
   /// store a processing tree of a conditional ACE in binary format
   // - used for conversion from SDDL text to binary format, or execution
   // - can easily be allocated on stack for efficient process
@@ -1027,16 +1033,16 @@ type
     /// number of TAceTreeNode stored in Tokens[] and Stack[]
     Count: byte;
     /// actual status after FromText() or ToBinary processing
-    Error: TAceTextTreeParse;
+    Error: TAceTextParse;
     /// stores the actual tree of this conditional expression
     Nodes: array[0 .. MAX_TREE_NODE] of TAceTextTreeNode;
     /// fill Nodes[] tree from a SDDL text conditional ACE
     // - not all input will be parsed during this initial step: only the
     // global parsing is done, not detailed Unicode or composite parsing
-    function FromText(const Input: RawUtf8): TAceTextTreeParse; overload;
+    function FromText(const Input: RawUtf8): TAceTextParse; overload;
     /// fill Nodes[] tree from a SDDL text conditional ACE
     // - Storage/StorageSize should have been set before calling
-    function FromText: TAceTextTreeParse; overload;
+    function FromText: TAceTextParse; overload;
     /// save the internal Stack[] nodes into a SDDL text conditional ACE
     function ToText: RawUtf8;
     /// compute the binary conditional ACE of the stored Stack[]
@@ -1071,7 +1077,7 @@ procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 
 /// parse a TSecAce.Opaque value from its SDDL text
 // - use a TAceTextTree for the SDDL parsing
-function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
+function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): TAceTextParse;
 
 /// append a binary ACE literal or attribute as SDDL text form
 // - see [MS-DTYP] 2.5.1.2.2 @Prefixed Attribute Name Form and
@@ -1293,7 +1299,7 @@ type
   TSecurityDescriptor = object
   {$endif USERECORDWITHMETHODS}
   private
-    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): boolean;
+    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): TAceTextParse;
     procedure AclToText(var sddl: RawUtf8; dom: PSid; scope: TSecAceScope);
     function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
     function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
@@ -1323,10 +1329,10 @@ type
     // - could also recognize SDDL RID placeholders, with the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
     function FromText(const SddlText: RawUtf8;
-      const RidDomain: RawUtf8 = ''): boolean; overload;
+      const RidDomain: RawUtf8 = ''): TAceTextParse; overload;
     /// decode a Security Descriptor from its SDDL textual representation
     function FromText(var p: PUtf8Char; dom: PSid = nil;
-      endchar: AnsiChar = #0): boolean; overload;
+      endchar: AnsiChar = #0): TAceTextParse; overload;
     /// encode this Security Descriptor into its SDDL textual representation
     // - could also generate SDDL RID placeholders, from the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
@@ -2249,13 +2255,13 @@ begin
         AppendShortTwoChars(@SAM_SDDL[a][1], @s); // store as SDDL pairs
 end;
 
-function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
+function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): TAceTextParse;
 var
   s: PUtf8Char;
   parent: integer;
   tree: TAceTextTree;
 begin
-  result := false;
+  ace.Opaque := '';
   if p <> nil then
     while p^ = ' ' do
       inc(p);
@@ -2266,6 +2272,7 @@ begin
     if (ace.AceType in satConditional) and
        (s^ = '(') then // conditional ACE expression
     begin
+      result := atpMissingFinal;
       repeat
         case s^ of
           #0:
@@ -2291,20 +2298,24 @@ begin
       if tree.FromText = atpSuccess then
         ace.Opaque := tree.ToBinary;
       if ace.Opaque = '' then
+      begin
+        result := tree.Error; // return the detailed parsing error
         exit;
+      end;
     end
     else // fallback to hexadecimal output
     begin
       while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
         inc(s);
       FastSetRawByteString(ace.Opaque, nil, (s - p) shr 1);
+      result := atpInvalidContent;
       if ParseHex(PAnsiChar(p),
            pointer(ace.Opaque), length(ace.Opaque)) <> PAnsiChar(s) then
         exit;
     end;
   end;
   p := s;
-  result := true;
+  result := atpSuccess;
 end;
 
 procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce);
@@ -2698,7 +2709,7 @@ begin
   SddlAppendOpaque(result, self);
 end;
 
-function TSecAce.ConditionalExpression(const condExp: RawUtf8): boolean;
+function TSecAce.ConditionalExpression(const condExp: RawUtf8): TAceTextParse;
 var
   p: PUtf8Char;
 begin
@@ -2714,7 +2725,7 @@ begin
   if (sat = satUnknown) or
      not SidText(sidSddl, dom) or
      not MaskText(maskSddl) or
-     not ConditionalExpression(condExp) then
+     (ConditionalExpression(condExp) <> atpSuccess) then
     exit;
   AceType := sat;
   RawType := ord(sat) + 1;
@@ -2765,14 +2776,14 @@ begin
   s[0] := #0;
 end;
 
-function TSecAce.FromText(var p: PUtf8Char; dom: PSid): boolean;
+function TSecAce.FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
 var
   u: ShortString;
   t: TSecAceType;
   f: TSecAceFlag;
   i: integer;
 begin
-  result := false;
+  result := atpInvalidType;
   while p^ = ' ' do
     inc(p);
   if PWord(p)^ = ord('0') + ord('x') shl 8 then // our own fallback format
@@ -2800,6 +2811,7 @@ begin
   repeat
     inc(p);
   until p^ <> ' ';
+  result := atpInvalidFlags;
   while p^ <> ';' do
   begin
     if not SddlNextTwo(p, u) then
@@ -2812,23 +2824,30 @@ begin
       end;
   end;
   inc(p);
+  result := atpInvalidMask;
   if not SddlNextMask(p, Mask) or
      (p^ <> ';') then
     exit;
   repeat
     inc(p);
   until p^ <> ' ';
+  result := atpInvalidUuid;
   if not SddlNextGuid(p, ObjectType) or
-     not SddlNextGuid(p, InheritedObjectType) or // satObject or nothing
-     not SddlNextSid(p, Sid, dom) then // entries always end with a SID/RID
+     not SddlNextGuid(p, InheritedObjectType) then // satObject or nothing
+    exit;
+  result := atpInvalidSid;
+  if not SddlNextSid(p, Sid, dom) then // entries always end with a SID/RID
     exit;
   if p^ = ';' then // optional additional/opaque parameter
   begin
     inc(p);
-    if not SddlNextOpaque(p, self) then
+    result := SddlNextOpaque(p, self);
+    if result <> atpSuccess then
       exit;
   end;
-  result := p^ = ')'; // ACE should end with a parenthesis
+  result := atpMissingParenthesis;
+  if p^ = ')' then // ACE should end with a parenthesis
+    result := atpSuccess;
 end;
 
 function TSecAce.ToBinary(dest: PAnsiChar): PtrInt;
@@ -3180,14 +3199,14 @@ begin
     end;
 end;
 
-function TAceTextTree.FromText(const Input: RawUtf8): TAceTextTreeParse;
+function TAceTextTree.FromText(const Input: RawUtf8): TAceTextParse;
 begin
   Storage := pointer(Input);
   StorageSize := length(Input);
   result := FromText;
 end;
 
-function TAceTextTree.FromText: TAceTextTreeParse;
+function TAceTextTree.FromText: TAceTextParse;
 begin
   result := atpNoExpression;
   Count := 0;
@@ -3556,11 +3575,10 @@ const
     scDaclPresent, scSaclPresent);
 
 function TSecurityDescriptor.NextAclFromText(var p: PUtf8Char; dom: PSid;
-  scope: TSecAceScope): boolean;
+  scope: TSecAceScope): TAceTextParse;
 var
   acl: PSecAcl;
 begin
-  result := false;
   while p^ = ' ' do
     inc(p);
   if p^ = 'P' then
@@ -3584,15 +3602,16 @@ begin
   end;
   while p^ = ' ' do
     inc(p);
+  result := atpMissingParenthesis;
   if p^ <> '(' then
     exit;
   repeat
     inc(p);
-    if not InternalAdd(scope, acl).FromText(p, dom) then
+    result := InternalAdd(scope, acl).FromText(p, dom);
+    if result <> atpSuccess then
       exit;
     inc(p); // p^ = ')'
   until p^ <> '(';
-  result := true;
 end;
 
 procedure TSecurityDescriptor.AclToText(var sddl: RawUtf8;
@@ -3616,34 +3635,37 @@ begin
     acl^[i].AppendAsText(tmp, sddl, dom);
 end;
 
-function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
+function TSecurityDescriptor.FromText(var p: PUtf8Char;
+  dom: PSid; endchar: AnsiChar): TAceTextParse;
 begin
   Clear;
-  result := false;
+  result := atpMissingExpression;
   if p = nil then
     exit;
   repeat
     while p^ = ' ' do
       inc(p);
+    result := atpMissingExpression;
     if p[1] <> ':' then
       exit;
     inc(p, 2);
+    result := atpSuccess;
     case p[-2] of
       'O':
         if not SddlNextSid(p, Owner, dom) then
-          exit;
+          result := atpInvalidOwner;
       'G':
         if not SddlNextSid(p, Group, dom) then
-          exit;
+          result := atpInvalidGroup;
       'D':
-        if not NextAclFromText(p, dom, sasDacl) then
-          exit;
+        result := NextAclFromText(p, dom, sasDacl);
       'S':
-        if not NextAclFromText(p, dom, sasSacl) then
-          exit;
+        result := NextAclFromText(p, dom, sasSacl);
     else
-      exit;
+      result := atpInvalidContent;
     end;
+    if result <> atpSuccess then
+      exit;
     while p^ = ' ' do
       inc(p);
   until (p^ = #0) or (p^ = endchar);
@@ -3651,17 +3673,18 @@ begin
     include(Flags, scDaclPresent);
   if Sacl <> nil then
     include(Flags, scSaclPresent);
-  result := true;
 end;
 
-function TSecurityDescriptor.FromText(const SddlText, RidDomain: RawUtf8): boolean;
+function TSecurityDescriptor.FromText(
+  const SddlText, RidDomain: RawUtf8): TAceTextParse;
 var
   p: PUtf8Char;
   dom: RawSid;
 begin
   p := pointer(SddlText);
-  result := TryDomainTextToSid(RidDomain, dom) and
-            FromText(p, pointer(dom));
+  result := atpInvalidSid;
+  if TryDomainTextToSid(RidDomain, dom) then
+    result := FromText(p, pointer(dom));
 end;
 
 function TSecurityDescriptor.ToText(const RidDomain: RawUtf8): RawUtf8;
@@ -3747,7 +3770,8 @@ begin
     exit;
   inc(p);
   result := InternalAdd(scope, acl);
-  result := InternalAdded(scope, result, acl, result^.FromText(p, dom));
+  result := InternalAdded(scope, result, acl,
+    result^.FromText(p, dom) = atpSuccess);
 end;
 
 procedure TSecurityDescriptor.Delete(index: PtrUInt; scope: TSecAceScope);
