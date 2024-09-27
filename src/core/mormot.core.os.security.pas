@@ -3402,7 +3402,7 @@ begin
       end;
     sctOctetString:
       begin
-        inc(p); // ignore trailing '#'
+        inc(PAnsiChar(p)); // ignore trailing '#'
         v^.OctetBytes := (ParseHex(p, @v^.Octet, node.Length shr 1) - p) shr 1;
         tmp[0] := AnsiChar(5 + v^.OctetBytes); // hex is < 255, so bin < 128
         result := true;
