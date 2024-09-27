@@ -1033,7 +1033,10 @@ type
     /// fill Nodes[] tree from a SDDL text conditional ACE
     // - not all input will be parsed during this initial step: only the
     // global parsing is done, not detailed Unicode or composite parsing
-    function FromText(const Input: RawUtf8): TAceTextTreeParse;
+    function FromText(const Input: RawUtf8): TAceTextTreeParse; overload;
+    /// fill Nodes[] tree from a SDDL text conditional ACE
+    // - Storage/StorageSize should have been set before calling
+    function FromText: TAceTextTreeParse; overload;
     /// save the internal Stack[] nodes into a SDDL text conditional ACE
     function ToText: RawUtf8;
     /// compute the binary conditional ACE of the stored Stack[]
@@ -3158,15 +3161,20 @@ end;
 
 function TAceTextTree.FromText(const Input: RawUtf8): TAceTextTreeParse;
 begin
-  result := atpNoExpression;
   Storage := pointer(Input);
   StorageSize := length(Input);
+  result := FromText;
+end;
+
+function TAceTextTree.FromText: TAceTextTreeParse;
+begin
+  result := atpNoExpression;
   Count := 0;
   if (Storage = nil) or
      (Storage[0] <> '(') or
      (Storage[StorageSize - 1] <> ')') or
      (StorageSize >= MAX_TREE_BYTES) or
-     (cardinal(StrLen(Storage)) <> StorageSize) then
+     (cardinal(StrLen(Storage)) < StorageSize) then
     exit; // not a valid SDDL text input for sure
   TextCurrent := Storage;
   TokenCurrent := sctPadding;
