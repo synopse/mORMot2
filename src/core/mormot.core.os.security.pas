@@ -640,7 +640,7 @@ type
     /// append this entry as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var s: ShortString; dom: PSid);
+    procedure AppendAsText(var s: ShortString; var sddl: RawUtf8; dom: PSid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
     function FromText(var p: PUtf8Char; dom: PSid): boolean;
     /// encode this entry into a self-relative binary buffer
@@ -1070,6 +1070,7 @@ function SddlNextMask(var p: PUtf8Char; var mask: TSecAccessMask): boolean;
 procedure SddlAppendMask(var s: ShortString; mask: TSecAccessMask);
 
 /// parse a TSecAce.Opaque value from its SDDL text
+// - use a TAceTextTree for the SDDL parsing
 function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
 
 /// append a binary ACE literal or attribute as SDDL text form
@@ -1091,7 +1092,8 @@ procedure SddlUnaryToText(tok: TSecConditionalToken; var l, u: RawUtf8);
 procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 
 /// append a TSecAce.Opaque value as SDDL text form
-procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
+// - use a TAceBinaryTree for the binary to SDDL processing
+procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce);
 
 /// parse the next conditional ACE token from its SDDL text
 // - see [MS-DTYP] 2.5.1.1 SDDL Syntax
@@ -2251,6 +2253,7 @@ function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): boolean;
 var
   s: PUtf8Char;
   parent: integer;
+  tree: TAceTextTree;
 begin
   result := false;
   if p <> nil then
@@ -2269,6 +2272,12 @@ begin
             exit; // premature end
           '(':
             inc(parent); // count nested parenthesis
+          '"':
+            repeat
+              inc(s);
+              if s^ = #0 then
+                exit;
+            until s^ = '"'; // ignore any ( ) within "unicode" blocks
           ')':
             if parent = 0 then
               break // ending ACE parenthesis
@@ -2277,7 +2286,12 @@ begin
         end;
         inc(s);
       until false;
-      FastSetString(RawUtf8(ace.Opaque), p, s - p);
+      tree.Storage := p;
+      tree.StorageSize := s - p;
+      if tree.FromText = atpSuccess then
+        ace.Opaque := tree.ToBinary;
+      if ace.Opaque = '' then
+        exit;
     end
     else // fallback to hexadecimal output
     begin
@@ -2293,15 +2307,21 @@ begin
   result := true;
 end;
 
-procedure SddlAppendOpaque(var s: ShortString; const ace: TSecAce);
+procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce);
+var
+  tree: TAceBinaryTree;
+  tmp: shortstring absolute tree;
 begin
-  if ace.Opaque = '' then
-    exit;
-  if (ace.AceType in satConditional) and
-     (ace.Opaque[1] = '(') then
-    AppendShortAnsi7String(ace.Opaque, s) // conditional ACE expression
-  else
-    AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), s); // hexadecimal
+  if ace.Opaque <> '' then
+    if (ace.AceType in satConditional) and
+       tree.FromBinary(ace.Opaque) then // conditional ACE expression
+      s := s + tree.ToText
+    else
+    begin
+      tmp[0] := #0; // fallback to hexadecimal
+      AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), tmp);
+      AppendShortToUtf8(tmp, s);
+    end;
 end;
 
 procedure SddlOperandToText(v: PRawAceLiteral; out u: RawUtf8);
@@ -2673,12 +2693,9 @@ begin
 end;
 
 function TSecAce.ConditionalExpression: RawUtf8;
-var
-  s: ShortString;
 begin
-  s[0] := #0;
-  SddlAppendOpaque(s, self);
-  ShortStringToAnsi7String(s, result);
+  result := '';
+  SddlAppendOpaque(result, self);
 end;
 
 function TSecAce.ConditionalExpression(const condExp: RawUtf8): boolean;
@@ -2705,7 +2722,7 @@ begin
   result := true;
 end;
 
-procedure TSecAce.AppendAsText(var s: ShortString; dom: PSid);
+procedure TSecAce.AppendAsText(var s: ShortString; var sddl: RawUtf8; dom: PSid);
 var
   f: TSecAceFlag;
 begin
@@ -2739,9 +2756,13 @@ begin
   if Opaque <> '' then
   begin
     AppendShortChar(';', @s);
-    SddlAppendOpaque(s, self);
+    AppendShortToUtf8(s, sddl);
+    s[0] := #0;
+    SddlAppendOpaque(sddl, self); // direct write conditional expression in sddl
   end;
   AppendShortChar(')', @s);
+  AppendShortToUtf8(s, sddl);
+  s[0] := #0;
 end;
 
 function TSecAce.FromText(var p: PUtf8Char; dom: PSid): boolean;
@@ -3592,11 +3613,7 @@ begin
   if scope = sasSacl then
     acl := @Sacl;
   for i := 0 to length(acl^) - 1 do
-  begin
-    acl^[i].AppendAsText(tmp, dom);
-    AppendShortToUtf8(tmp, sddl);
-    tmp[0] := #0;
-  end;
+    acl^[i].AppendAsText(tmp, sddl, dom);
 end;
 
 function TSecurityDescriptor.FromText(var p: PUtf8Char; dom: PSid; endchar: AnsiChar): boolean;
