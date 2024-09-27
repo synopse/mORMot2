@@ -5111,7 +5111,7 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  sock := SocketOpen(Server, Port, TLS);
+  sock := SocketOpen(Server, Port, TLS, nil, nil, {ignorecerterror=}TLS);
   if sock <> nil then
   try
     sock.CreateSockIn; // we use SockIn for readln in Expect()
