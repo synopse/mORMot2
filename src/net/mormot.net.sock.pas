@@ -5150,7 +5150,7 @@ begin
   fSocketLayer := aLayer;
   fSocketFamily := nfUnknown;
   fWasBind := doBind;
-  if {%H-}PtrInt(aSock)<=0 then
+  if {%H-}PtrInt(aSock) <= 0 then
   begin
     // OPEN or BIND mode -> create the socket
     fServer := aServer;

@@ -9891,7 +9891,8 @@ begin
     if Ctxt.Value = nil then // null
       Data^ := ''
     else if not Ctxt.WasString or
-       not tmp.FromText(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}Value) then
+            (tmp.FromText(Ctxt.{$ifdef USERECORDWITHMETHODS}Get.{$endif}
+               Value) <> atpSuccess) then
       Ctxt.Valid := false
     else
       Data^ := tmp.ToBinary;
