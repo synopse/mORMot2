@@ -3320,7 +3320,7 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
      sctResourceAttribute,
      sctDeviceAttribute:
        begin
-         l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing @User.
+         l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing '@User.'
          inc(p, l);
          l := node.Length - l;
        end;
@@ -3341,7 +3341,7 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
     one: TAceTextTreeNode;
     data: RawByteString;
   begin
-    s := p + 1; // ignore trailing {
+    s := p + 1; // ignore trailing '{'
     repeat
       while s^ = ' ' do
         inc(s);
@@ -3371,7 +3371,7 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
   var
     sid: RawSid;
   begin
-    inc(p, 4); // ignore trailing SID(
+    inc(p, 4); // ignore trailing 'SID(' chars
     if SddlNextSid(p, sid, nil) then
       DoBytes(pointer(sid), length(sid))
     else
@@ -3381,14 +3381,15 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
 var
   tmp: ShortString;
   v: PRawAceLiteral;
-  p: PUtf8Char;
+  p: pointer;
 begin
   result := false;
-  tmp[0] := #1;
+  tmp[0] := #0;
   v := @tmp[1];
   v^.Token := node.Token;
   p := Storage + node.Position;
   case node.Token of
+    // sctLiteral
     sctInt64:
       begin
         v^.Int.Value := GetInt64(p);
@@ -3396,43 +3397,38 @@ begin
         if v^.Int.Value < 0 then
           v^.Int.Sign := scsNegative;
         v^.Int.Base := scbDecimal;
-        inc(tmp[0], SizeOf(v^.Int));
+        tmp[0] := AnsiChar(SizeOf(v^.Int) + SizeOf(v^.Token));
+        result := true;
       end;
+    sctOctetString:
+      begin
+        inc(p); // ignore trailing '#'
+        v^.OctetBytes := (ParseHex(p, @v^.Octet, node.Length shr 1) - p) shr 1;
+        tmp[0] := AnsiChar(5 + v^.OctetBytes); // hex is < 255, so bin < 128
+        result := true;
+      end;
+    sctComposite:  // e.g. '{"Sales","HR"}'
+      DoComposite(p);
+    sctSid:        // e.g. 'SID(BA)'
+      DoSid(p);
     sctUnicode,
+    // sctAttribute
     sctLocalAttribute,
     sctUserAttribute,
     sctResourceAttribute,
     sctDeviceAttribute:
-      begin
-        DoUnicode(p);
-        exit;
-      end;
-    sctOctetString:
-      begin
-        inc(p); // ignore trailing #
-        v^.OctetBytes :=
-          (ParseHex(PAnsiChar(p), @v^.Octet, node.Length shr 1) - p) shr 1;
-        inc(tmp[0], 4 + v^.OctetBytes); // hex is up to 255 bytes, so bin < 128
-      end;
-    sctComposite:  // e.g. '{"Sales","HR"}'
-      begin
-        DoComposite(p);
-        exit;
-      end;
-    sctSid: // e.g. 'SID(BA)'
-      begin
-        DoSid(p);
-        exit;
-      end
+      DoUnicode(p);
   else
-    if not (node.Token in sctOperator) then // expect only single-byte token
+    if node.Token in sctOperator then // expect only single-byte token here
     begin
+      tmp[0] := #1;
+      result := true;
+    end
+    else
       Error := atpUnexpectedToken;
-      exit;
-    end;
   end;
-  AppendShortToUtf8(tmp, RawUtf8(bin));
-  result := true;
+  if tmp[0] <> #0 then
+    AppendShortToUtf8(tmp, RawUtf8(bin));
 end;
 
 function TAceTextTree.AppendBinary(var bin: RawByteString; node: integer): boolean;
