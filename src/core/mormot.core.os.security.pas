@@ -754,7 +754,12 @@ type
     atpMissingParenthesis,
     atpMissingFinal,
     atpTooBigExpression,
+    atpMissingExpression,
+    atpUnexpectedToken,
     atpInvalidExpression,
+    atpInvalidComposite,
+    atpInvalidUnicode,
+    atpInvalidSid,
     atpInvalidContent);
 
   /// store a processing tree of a conditional ACE in binary format
@@ -769,6 +774,7 @@ type
     TextCurrent: PUtf8Char;
     TokenCurrent: TSecConditionalToken;
     Root: byte;
+    function AddNode(position, len: cardinal): integer;
     function ParseNextToken: integer;
     function ParseExpr: integer;
     function ParseFactor: integer;
@@ -793,9 +799,8 @@ type
     /// save the internal Stack[] nodes into a SDDL text conditional ACE
     function ToText: RawUtf8;
     /// compute the binary conditional ACE of the stored Stack[]
-    // - will also parse the nested Unicode or composite expressions from
-    // the SDDL input, so this method could set Error = atpInvalidContent
-    // and return ''
+    // - will also parse the nested Unicode or composite expressions from the
+    // SDDL input, so this method could also set Error and return ''
     function ToBinary: RawByteString;
   end;
 
@@ -2157,6 +2162,20 @@ end;
 
 { TAceTextTree }
 
+function TAceTextTree.AddNode(position, len: cardinal): integer;
+var
+  n: ^TAceTextTreeNode;
+begin
+  n := @Nodes[Count];
+  n^.Token := TokenCurrent;
+  n^.Position := position;
+  n^.Length := len;
+  n^.Left := 255;
+  n^.Right := 255;
+  result := Count;
+  inc(Count);
+end;
+
 function TAceTextTree.ParseNextToken: integer;
 var
   start: PUtf8Char;
@@ -2288,7 +2307,10 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
     v: PRawAceLiteral;
   begin
     if blen = 0 then
+    begin
+      Error := atpMissingExpression;
       exit; // no such token could have length = 0
+    end;
     dl := length(bin);
     SetLength(bin, dl + 5 + blen);
     v := @PByteArray(bin)[dl];
@@ -2322,7 +2344,10 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
     end;
     w := Unicode_ToUtf8(p, l, tmpw);
     if w = nil then
+    begin
+      Error := atpInvalidUnicode;
       exit; // invalid UTF-8 input
+    end;
     DoBytes(w, tmpw.len * 2); // length in bytes
     tmpw.Done; // paranoid, since node.Length <= 255
   end;
@@ -2350,7 +2375,10 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
       if s^ = '}' then
         break
       else if s^ <> ',' then
+      begin
+        Error := atpInvalidComposite;
         exit;
+      end;
       inc(s);
     until false;
     DoBytes(pointer(data), length(data));
@@ -2362,7 +2390,9 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
   begin
     inc(p, 4); // ignore trailing SID(
     if SddlNextSid(p, sid, nil) then
-      DoBytes(pointer(sid), length(sid));
+      DoBytes(pointer(sid), length(sid))
+    else
+      Error := atpInvalidSid;
   end;
 
 var
@@ -2412,8 +2442,11 @@ begin
         exit;
       end
   else
-    if not (node.Token in sctOperator) then
-      exit; // unexpected single-byte token
+    if not (node.Token in sctOperator) then // expect only single-byte token
+    begin
+      Error := atpUnexpectedToken;
+      exit;
+    end;
   end;
   AppendShortToUtf8(tmp, RawUtf8(bin));
   result := true;
@@ -2452,7 +2485,8 @@ begin
   PCardinal(result)^ := ACE_CONDITION_SIGNATURE;
   if not AppendBinary(result, Root) then // recursive generation
   begin
-    Error := atpInvalidContent;
+    if Error = atpSuccess then
+      Error := atpInvalidContent;
     result := ''; // input content is not valid
     exit;
   end;

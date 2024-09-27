@@ -62,6 +62,7 @@ Cross-Platform Operating System Security Definitions
 - Security IDentifier (SID) Definitions
 - Security Descriptor Self-Relative Binary Structures
 - Access Control List (DACL/SACL) Definitions
+- Conditional ACE Expressions SDDL and Binary Support
 - Security Descriptor Definition Language (SDDL)
 - `TSecurityDescriptor` Wrapper Object
 - Windows API Specific Security Types and Functions
