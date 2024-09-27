@@ -2365,8 +2365,13 @@ var
 begin
   op := @SDDL_OPER_TXT[SDDL_OPER_INDEX[tok]];
   if tok in [sctContains, sctAnyOf, sctNotContains, sctNotAnyOf] then
-    // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
-    u := '(' + l + ' ' + op^ + r + ')'
+    if (r <> '') and
+       (r[1] <> '{') then
+      // e.g. '(@User.Project Any_of @Resource.Project)'
+      u := '(' + l + ' ' + op^ + ' ' + r + ')'
+    else
+      // e.g. '(@Resource.dept Any_of{"Sales","HR"})'
+      u := '(' + l + ' ' + op^ + r + ')'
   else
     // e.g. '(Title=="VP")'
     u := '(' + l + op^ + r + ')';
@@ -3283,10 +3288,11 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
     dl: PtrInt;
     v: PRawAceLiteral;
   begin
-    if blen = 0 then
+    if (blen = 0) and
+       (node.Token <> sctUnicode) then
     begin
-      Error := atpMissingExpression;
-      exit; // no such token could have length = 0
+      Error := atpMissingExpression; // those tokens could not have length = 0
+      exit;
     end;
     dl := length(bin);
     SetLength(bin, dl + 5 + blen);
