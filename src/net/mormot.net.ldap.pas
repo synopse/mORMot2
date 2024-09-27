@@ -1888,6 +1888,7 @@ type
       read fSearchCookie write fSearchCookie;
     /// the optional security flags to include in the response
     // - default [] means no atNTSecurityDescriptor
+    // - you can set e.g. lsfMain to retrieve main Security Descriptor fields
     // - if not [], append a LDAP_SERVER_SD_FLAGS_OID control to each Search(),
     // so that atNTSecurityDescriptor will contain the specified flags
     property SearchSDFlags: TLdapSearchSDFlags
@@ -1995,6 +1996,14 @@ type
     property CacheTimeoutSeconds: integer
       read fCacheTimeoutSeconds write fCacheTimeoutSeconds;
   end;
+
+const
+  /// common possible value for TLdapClient.SearchSDFlags
+  // - lsfSaclSecurityInformation is not included because it is likely to be not
+  // available for the client, and would void the atNTSecurityDescriptor field
+  lsfMain = [lsfOwnerSecurityInformation,
+             lsfGroupSecurityInformation,
+             lsfDaclSecurityInformation];
 
 
 { **************** HTTP BASIC Authentication via LDAP or Kerberos }
