@@ -1939,7 +1939,8 @@ type
 // - useful to easily catch any exception, and provide a custom TNetTlsContext
 // - aTunnel could be populated from mormot.net.client GetSystemProxyUri()
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean = false;
-  aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil): TCrtSocket;
+  aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil;
+  aTlsIgnoreCertError: boolean = false): TCrtSocket;
 
 
 { ********* NTP / SNTP Protocol Client }
@@ -6106,8 +6107,19 @@ end;
 
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aTLSContext: PNetTlsContext; aTunnel: PUri): TCrtSocket;
+  aTLSContext: PNetTlsContext; aTunnel: PUri;
+  aTlsIgnoreCertError: boolean): TCrtSocket;
+var
+  c: TNetTlsContext;
 begin
+  if aTls and
+     (aTLSContext = nil) and
+     aTlsIgnoreCertError then
+  begin
+    InitNetTlsContext(c);
+    c.IgnoreCertificateErrors := true;
+    aTLSContext := @c;
+  end;
   try
     result := TCrtSocket.Open(
       aServer, aPort, nlTcp, 10000, aTLS, aTLSContext, aTunnel);
