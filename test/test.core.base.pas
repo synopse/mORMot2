@@ -6499,13 +6499,6 @@ const
     'O:BAG:DUD:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001G:DUD:AI(A;ID;FA;;;BA)' +
     '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
-  // some ACE conditional expressions
-  COND_TXT: array[0..2] of RawUtf8 = (
-    'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
-      '@User.Division ==" Sales")))',
-    'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
-    'D:(XA;;FR;;;WD;(Member_of {SID(Smartcard_SID), SID(BO)} ' +
-      '&& @Device.Bitlocker))(A;ID;FA;;;SY)');
   // [MS-DTYP] 2.4.4.17.9 Examples: Conditional Expression Binary Representation
   ARTX_HEX: array[0..2] of RawUtf8 = (
     '61727478f80a0000005400690074006c00650010040000005600500080000000',
@@ -6520,6 +6513,18 @@ const
     '(Title=="VP")',
     '(((@User.smartcard==1) || (@Device.managed==1)) && (@Resource.dept Any_of{"Sales","HR"}))',
     '((@User.clearanceLevel>=@Resource.requiredClearance) || (Member_of{SID(BA)}))');
+  // some ACE conditional expressions
+  COND_TXT: array[0..2] of RawUtf8 = (
+    'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
+      '@User.Division ==" Sales")))',
+    'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
+    'D:(XA;;FR;;;WD;(Member_of{SID(S-1-3-4),SID(BO)} && @Device.Bitlocker))(A;ID;FA;;;SY)');
+  // our SDDL output always add parenthesis on binary expressions
+  COND_EXP: array[0..2] of RawUtf8 = (
+    'D:(XA;;FX;;;WD;((@User.Title=="PM") && ((@User.Division=="Finance") || ' +
+      '(@User.Division==" Sales"))))',
+    'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
+    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-3-4),SID(BO)}) && @Device.Bitlocker))(A;ID;FA;;;SY)');
 
 procedure TTestCoreBase._SDDL;
 var
@@ -6709,8 +6714,7 @@ begin
     CheckEqual(u, ARTX_TXT[i], 'artx3');
   end;
   // validate conditional ACEs
-exit;
-  for i := 2 to high(COND_TXT) do
+  for i := 0 to high(COND_TXT) do
   begin
     atp := sd.FromText(COND_TXT[i]);
     Check(atp = atpSuccess);
@@ -6724,13 +6728,14 @@ exit;
       Check(u[1] = '(');
       Check(u[length(u)] = ')');
     end;
-    CheckEqual(sd.ToText, COND_TXT[i]);
+    u := sd.ToText;
+    CheckEqual(u, COND_EXP[i]);
     saved := sd.ToBinary;
     Check(saved <> '');
     Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'savcond');
     Check(sd2.FromBinary(saved));
     Check(sd.IsEqual(sd2));
-    CheckEqual(sd2.ToText, COND_TXT[i]);
+    CheckEqual(sd2.ToText, u);
   end;
 end;
 

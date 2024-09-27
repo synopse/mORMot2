@@ -1729,7 +1729,7 @@ type
     // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
     // the client-side cache content
     constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
-      aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
+      aTimeoutSeconds: integer = 15 * 60; const aToken: RawUtf8 = '';
       aOnlyUseClientSocket: boolean = ONLY_CLIENT_SOCKET); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
     // - you may use LoadFromUri() to connect to a new server
