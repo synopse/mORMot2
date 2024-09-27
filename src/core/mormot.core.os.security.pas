@@ -10,6 +10,7 @@ unit mormot.core.os.security;
   - Security IDentifier (SID) Definitions
   - Security Descriptor Self-Relative Binary Structures
   - Access Control List (DACL/SACL) Definitions
+  - Conditional ACE Expressions SDDL and Binary Support
   - Security Descriptor Definition Language (SDDL)
   - TSecurityDescriptor Wrapper Object
   - Windows API Specific Security Types and Functions
@@ -493,6 +494,243 @@ type
     sarKeyWrite,            // KW
     sarKeyExecute);         // KE
 
+const
+  /// 'artx' prefix to identify a conditional ACE binary buffer
+  // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
+  ACE_CONDITION_SIGNATURE = $78747261;
+
+  ACE_OBJECT_TYPE_PRESENT           = 1;
+  ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
+
+  {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
+
+  SAR_FILE_ALL_ACCESS      = $001f01ff;
+  SAR_FILE_GENERIC_READ    = $00120089;
+  SAR_FILE_GENERIC_WRITE   = $00120116;
+  SAR_FILE_GENERIC_EXECUTE = $001200a0;
+
+  SAR_KEY_ALL_ACCESS       = $000f003f;
+  SAR_KEY_READ             = $00020019;
+  SAR_KEY_WRITE            = $00020006;
+  SAR_KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
+
+  /// match the TSecAce.Mask constant values with their own SDDL identifier
+  SAR_MASK: array[TSecAccessRight] of cardinal = (
+    SAR_FILE_ALL_ACCESS,       // sarFileAll
+    SAR_FILE_GENERIC_READ,     // sarFileRead
+    SAR_FILE_GENERIC_WRITE,    // sarFileWrite
+    SAR_FILE_GENERIC_EXECUTE,  // sarFileExecute
+    SAR_KEY_ALL_ACCESS,        // sarKeyAll
+    SAR_KEY_READ,              // sarKeyRead
+    SAR_KEY_WRITE,             // sarKeyWrite
+    SAR_KEY_EXECUTE);          // sarKeyExecute = sarKeyRead
+
+  /// specifies the user rights allowed by satObject ACE
+  // - see e.g. [MS-DTYP] 2.4.4.3 ACCESS_ALLOWED_OBJECT_ACE
+  samObject = [
+    samCreateChild,
+    samDeleteChild,
+    samSelfWrite,
+    samReadProp,
+    samWriteProp,
+    samControlAccess];
+
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot write to the object
+  samMandatoryLabelNoWriteUp   = samCreateChild;
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot read the object
+  samMandatoryLabelNoReadUp    = samDeleteChild;
+  /// alias for satMandatoryLabel so that a principal with a lower mandatory
+  // level than the object cannot execute the object
+  samMandatoryLabelNoExecuteUp = samListChildren;
+
+
+{ ****************** Access Control List (DACL/SACL) Definitions }
+
+type
+  /// high-level supported ACE kinds in TSecAce.AceType
+  // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
+  // - satAccessAllowed/satAccessDenied allows or denies access to an object
+  // for a specific trustee identified by a security identifier (SID)
+  // - satAudit causes an audit message to be logged when a specified trustee
+  // (identified by a SID) attempts to gain access to an object
+  // - satObjectAccessAllowed/satObjectAccessDenied define an ACE that controls
+  // allowed/denied access to an object, a property set, or property: in addition
+  // to the access rights and SID, it includes object GUIDs and inheritance flags
+  // - satCallbackAccessAllowed/satCallbackAccessDenied allows or denies access
+  // to an object for a specific trustee identified by a SID, with optional
+  // application data, typically a conditional ACE expression
+  // - satMandatoryLabel defines an ACE for the SACL that specifies the
+  // mandatory access level and policy for a securable object - masks values
+  // are samMandatoryLabelNoWriteUp, samMandatoryLabelNoReadUp and
+  // samMandatoryLabelNoExecuteUp
+  // - satResourceAttribute defines an ACE for the specification of a resource
+  // attribute associated with an object, i.e. is is used in conditional ACEs in
+  // specifying access or audit policy for the resource - ending with a [MS-DTYP]
+  // 2.4.10.1 CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 resource attribute structure
+  // - satScoppedPolicy defines an ACE for the purpose of applying a central
+  // access policy to the resource: Mask is 0, and ends with a [MS-GPCAP] 3.2.1.1
+  // CentralAccessPoliciesList structure
+  TSecAceType = (
+    satUnknown,
+    satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
+    satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
+    satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
+    satAlarm,                         // AL 3  SYSTEM_ALARM_ACE_TYPE
+    satCompoundAllowed,               //    4  ACCESS_ALLOWED_COMPOUND_ACE_TYPE
+    satObjectAccessAllowed,           // OA 5  ACCESS_ALLOWED_OBJECT_ACE_TYPE
+    satObjectAccessDenied,            // OD 6  ACCESS_DENIED_OBJECT_ACE_TYPE
+    satObjectAudit,                   // OU 7  SYSTEM_AUDIT_OBJECT_ACE_TYPE
+    satObjectAlarm,                   // OL 8  SYSTEM_ALARM_OBJECT_ACE_TYPE
+    satCallbackAccessAllowed,         // XA 9  ACCESS_ALLOWED_CALLBACK_ACE_TYPE
+    satCallbackAccessDenied,          // XD 10 ACCESS_DENIED_CALLBACK_ACE_TYPE
+    satCallbackObjectAccessAllowed,   // ZA 11 ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAccessDenied,    //    12 ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackAudit,                 // XU 13 SYSTEM_AUDIT_CALLBACK_ACE_TYPE
+    satCallbackAlarm,                 //    14 SYSTEM_ALARM_CALLBACK_ACE_TYPE
+    satCallbackObjectAudit,           //    15 SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
+    satCallbackObjectAlarm,           //    16 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
+    satMandatoryLabel,                // ML 17 SYSTEM_MANDATORY_LABEL_ACE_TYPE
+    satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
+    satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
+    satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
+    satAccessFilter);                 // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
+
+  /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
+  TSecAceScope = (
+    sasDacl,
+    sasSacl);
+
+  {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
+
+  /// define one discretionary/system access entry (ACE)
+  {$ifdef USERECORDWITHMETHODS}
+  TSecAce = record
+  {$else}
+  TSecAce = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// high-level supported ACE kinds
+    AceType: TSecAceType;
+    // the ACE flags
+    Flags: TSecAceFlags;
+    /// the raw ACE identifier - typically = ord(AceType) - 1
+    // - if you force this type, ensure you set AceType=satUnknown before saving
+    // - defined as word for proper alignment
+    RawType: word;
+    /// contains the associated 32-bit access mask
+    Mask: TSecAccessMask;
+    /// contains an associated SID, in its raw binary content
+    Sid: RawSid;
+    /// some optional opaque callback/resource binary data, stored after the Sid
+    // - e.g. is a conditional expression binary for satConditional ACEs like
+    // '(@User.Project Any_of @Resource.Project)', or for satResourceAttribute
+    // is a CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 struct
+    // - may end with up to 3 zero bytes, for DWORD ACE binary alignment
+    Opaque: RawByteString;
+    /// the associated Object Type GUID (satObject only)
+    ObjectType: TGuid;
+    /// the inherited Object Type GUID  (satObject only)
+    InheritedObjectType: TGuid;
+    /// remove any previous content
+    procedure Clear;
+    /// compare the fields of this instance with another
+    function IsEqual(const ace: TSecAce): boolean;
+    /// append this entry as SDDL text into an existing buffer
+    // - could also generate SDDL RID placeholders, if dom binary is supplied,
+    // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+    procedure AppendAsText(var s: ShortString; dom: PSid);
+    /// decode a SDDL ACE textual representation into this (cleared) entry
+    function FromText(var p: PUtf8Char; dom: PSid): boolean;
+    /// encode this entry into a self-relative binary buffer
+    // - returns the output length in bytes
+    // - if dest is nil, will compute the length but won't write anything
+    function ToBinary(dest: PAnsiChar): PtrInt;
+    /// decode a self-relative binary buffer into this (cleared) entry
+    function FromBinary(p, max: PByte): boolean;
+    /// user-friendly set the properties of this ACE
+    // - SID and Mask are supplied in their regular / SDDL text form
+    // - returns true on success - i.e. if all input params were correct
+    function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
+      dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
+    /// get the associated SID, as SDDL text, optionally with a RID domain
+    function SidText(dom: PSid = nil): RawUtf8; overload;
+    /// set the associated SID, as SDDL text, optionally with a RID domain
+    function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
+    /// get the associated access mask, as SDDL text format
+    function MaskText: RawUtf8; overload;
+    /// set the associated access mask, as SDDL text format
+    function MaskText(const maskSddl: RawUtf8): boolean; overload;
+    /// get the ACE conditional expression, as stored in Opaque binary
+    function ConditionalExpression: RawUtf8; overload;
+    /// parse a ACE conditional expression, and assign it to Opaque binary
+    function ConditionalExpression(const condExp: RawUtf8): boolean; overload;
+  end;
+
+  /// pointer to one ACE of the TSecurityDescriptor ACL
+  PSecAce = ^TSecAce;
+
+  /// define a discretionary/system access control list (DACL)
+  // - as stored in TSecurityDescriptor Dacl[] Sacl[] access control lists (ACL)
+  TSecAcl = array of TSecAce;
+  PSecAcl = ^TSecAcl;
+
+const
+  /// the ACE which have just a Mask and SID in their definition
+  satCommon = [
+    satAccessAllowed,
+    satAccessDenied,
+    satAudit,
+    satAlarm,
+    satCallbackAccessAllowed,
+    satCallbackAccessDenied,
+    satCallbackAudit,
+    satCallbackAlarm,
+    satMandatoryLabel,
+    satResourceAttribute,
+    satScoppedPolicy,
+    satAccessFilter];
+
+  /// the ACE which have a samObject Mask, SID and Object UUIDs in their definition
+  satObject = [
+    satObjectAccessAllowed,
+    satObjectAccessDenied,
+    satObjectAudit,
+    satObjectAlarm,
+    satCallbackObjectAccessAllowed,
+    satCallbackObjectAccessDenied,
+    satCallbackObjectAudit,
+    satCallbackObjectAlarm];
+
+  /// the ACE which have a conditional expression as TSecAce.Opaque member
+  // - see [MS-DTYP] 2.4.4.17
+  // - the associated conditional expression is encoded in a binary format
+  // in the TSecAce.Opaque
+  satConditional = [
+    satCallbackAccessAllowed,
+    satCallbackAccessDenied,
+    satCallbackAudit,
+    satCallbackObjectAccessAllowed,
+    satCallbackObjectAccessDenied,
+    satCallbackObjectAudit];
+
+  /// defined in TSecAce.Flags for an ACE which has inheritance
+  safInheritanceFlags = [
+    safObjectInherit,
+    safContainerInherit,
+    safNoPropagateInherit,
+    safInheritOnly];
+
+  /// defined in TSecAce.Flags for an ACE which refers to audit
+  safAuditFlags = [
+    safSuccessfulAccess,
+    safFailedAccess];
+
+
+{ ******************* Conditional ACE Expressions SDDL and Binary Support }
+
+type
   /// token types for the conditional ACE binary storage
   // - the conditional ACE is stored as a binary tree of value/operator nodes
   // - mainly as sctLiteral, sctAttribute or sctOperator tokens
@@ -804,242 +1042,8 @@ type
     function ToBinary: RawByteString;
   end;
 
-
 /// compute the length in bytes of an ACE token binary entry
 function AceTokenLength(v: PRawAceLiteral): PtrUInt;
-
-const
-  /// 'artx' prefix to identify a conditional ACE binary buffer
-  // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
-  ACE_CONDITION_SIGNATURE = $78747261;
-
-  ACE_OBJECT_TYPE_PRESENT           = 1;
-  ACE_INHERITED_OBJECT_TYPE_PRESENT = 2;
-
-  {  cross-platform definitions of TSecAccessRight 32-bit Windows access rights }
-
-  SAR_FILE_ALL_ACCESS      = $001f01ff;
-  SAR_FILE_GENERIC_READ    = $00120089;
-  SAR_FILE_GENERIC_WRITE   = $00120116;
-  SAR_FILE_GENERIC_EXECUTE = $001200a0;
-
-  SAR_KEY_ALL_ACCESS       = $000f003f;
-  SAR_KEY_READ             = $00020019;
-  SAR_KEY_WRITE            = $00020006;
-  SAR_KEY_EXECUTE          = $00020019; // note that KEY_EXECUTE = KEY_READ
-
-  /// match the TSecAce.Mask constant values with their own SDDL identifier
-  SAR_MASK: array[TSecAccessRight] of cardinal = (
-    SAR_FILE_ALL_ACCESS,       // sarFileAll
-    SAR_FILE_GENERIC_READ,     // sarFileRead
-    SAR_FILE_GENERIC_WRITE,    // sarFileWrite
-    SAR_FILE_GENERIC_EXECUTE,  // sarFileExecute
-    SAR_KEY_ALL_ACCESS,        // sarKeyAll
-    SAR_KEY_READ,              // sarKeyRead
-    SAR_KEY_WRITE,             // sarKeyWrite
-    SAR_KEY_EXECUTE);          // sarKeyExecute = sarKeyRead
-
-  /// specifies the user rights allowed by satObject ACE
-  // - see e.g. [MS-DTYP] 2.4.4.3 ACCESS_ALLOWED_OBJECT_ACE
-  samObject = [
-    samCreateChild,
-    samDeleteChild,
-    samSelfWrite,
-    samReadProp,
-    samWriteProp,
-    samControlAccess];
-
-  /// alias for satMandatoryLabel so that a principal with a lower mandatory
-  // level than the object cannot write to the object
-  samMandatoryLabelNoWriteUp   = samCreateChild;
-  /// alias for satMandatoryLabel so that a principal with a lower mandatory
-  // level than the object cannot read the object
-  samMandatoryLabelNoReadUp    = samDeleteChild;
-  /// alias for satMandatoryLabel so that a principal with a lower mandatory
-  // level than the object cannot execute the object
-  samMandatoryLabelNoExecuteUp = samListChildren;
-
-
-{ ****************** Access Control List (DACL/SACL) Definitions }
-
-type
-  /// high-level supported ACE kinds in TSecAce.AceType
-  // - see [MS-DTYP] 2.4.4.1 ACE_HEADER
-  // - satAccessAllowed/satAccessDenied allows or denies access to an object
-  // for a specific trustee identified by a security identifier (SID)
-  // - satAudit causes an audit message to be logged when a specified trustee
-  // (identified by a SID) attempts to gain access to an object
-  // - satObjectAccessAllowed/satObjectAccessDenied define an ACE that controls
-  // allowed/denied access to an object, a property set, or property: in addition
-  // to the access rights and SID, it includes object GUIDs and inheritance flags
-  // - satCallbackAccessAllowed/satCallbackAccessDenied allows or denies access
-  // to an object for a specific trustee identified by a SID, with optional
-  // application data, typically a conditional ACE expression
-  // - satMandatoryLabel defines an ACE for the SACL that specifies the
-  // mandatory access level and policy for a securable object - masks values
-  // are samMandatoryLabelNoWriteUp, samMandatoryLabelNoReadUp and
-  // samMandatoryLabelNoExecuteUp
-  // - satResourceAttribute defines an ACE for the specification of a resource
-  // attribute associated with an object, i.e. is is used in conditional ACEs in
-  // specifying access or audit policy for the resource - ending with a [MS-DTYP]
-  // 2.4.10.1 CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 resource attribute structure
-  // - satScoppedPolicy defines an ACE for the purpose of applying a central
-  // access policy to the resource: Mask is 0, and ends with a [MS-GPCAP] 3.2.1.1
-  // CentralAccessPoliciesList structure
-  TSecAceType = (
-    satUnknown,
-    satAccessAllowed,                 // A  0  ACCESS_ALLOWED_ACE_TYPE
-    satAccessDenied,                  // D  1  ACCESS_DENIED_ACE_TYPE
-    satAudit,                         // AU 2  SYSTEM_AUDIT_ACE_TYPE
-    satAlarm,                         // AL 3  SYSTEM_ALARM_ACE_TYPE
-    satCompoundAllowed,               //    4  ACCESS_ALLOWED_COMPOUND_ACE_TYPE
-    satObjectAccessAllowed,           // OA 5  ACCESS_ALLOWED_OBJECT_ACE_TYPE
-    satObjectAccessDenied,            // OD 6  ACCESS_DENIED_OBJECT_ACE_TYPE
-    satObjectAudit,                   // OU 7  SYSTEM_AUDIT_OBJECT_ACE_TYPE
-    satObjectAlarm,                   // OL 8  SYSTEM_ALARM_OBJECT_ACE_TYPE
-    satCallbackAccessAllowed,         // XA 9  ACCESS_ALLOWED_CALLBACK_ACE_TYPE
-    satCallbackAccessDenied,          // XD 10 ACCESS_DENIED_CALLBACK_ACE_TYPE
-    satCallbackObjectAccessAllowed,   // ZA 11 ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAccessDenied,    //    12 ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackAudit,                 // XU 13 SYSTEM_AUDIT_CALLBACK_ACE_TYPE
-    satCallbackAlarm,                 //    14 SYSTEM_ALARM_CALLBACK_ACE_TYPE
-    satCallbackObjectAudit,           //    15 SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE
-    satCallbackObjectAlarm,           //    16 SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE
-    satMandatoryLabel,                // ML 17 SYSTEM_MANDATORY_LABEL_ACE_TYPE
-    satResourceAttribute,             // RA 18 SYSTEM_RESOURCE_ATTRIBUTE_ACE_TYPE
-    satScoppedPolicy,                 // SP 19 SYSTEM_SCOPED_POLICY_ID_ACE_TYPE
-    satProcessTrustLabel,             // TL 20 SYSTEM_PROCESS_TRUST_LABEL_ACE_TYPE
-    satAccessFilter);                 // FL 21 SYSTEM_ACCESS_FILTER_ACE_TYPE
-
-  /// define one TSecurityDescriptor Dacl[] or Sacl[] access control list (ACL)
-  TSecAceScope = (
-    sasDacl,
-    sasSacl);
-
-  {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
-
-  /// define one discretionary/system access entry (ACE)
-  {$ifdef USERECORDWITHMETHODS}
-  TSecAce = record
-  {$else}
-  TSecAce = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// high-level supported ACE kinds
-    AceType: TSecAceType;
-    // the ACE flags
-    Flags: TSecAceFlags;
-    /// the raw ACE identifier - typically = ord(AceType) - 1
-    // - if you force this type, ensure you set AceType=satUnknown before saving
-    // - defined as word for proper alignment
-    RawType: word;
-    /// contains the associated 32-bit access mask
-    Mask: TSecAccessMask;
-    /// contains an associated SID, in its raw binary content
-    Sid: RawSid;
-    /// some optional opaque callback/resource binary data, stored after the Sid
-    // - e.g. is a conditional expression binary for satConditional ACEs like
-    // '(@User.Project Any_of @Resource.Project)', or for satResourceAttribute
-    // is a CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 struct
-    // - may end with up to 3 zero bytes, for DWORD ACE binary alignment
-    Opaque: RawByteString;
-    /// the associated Object Type GUID (satObject only)
-    ObjectType: TGuid;
-    /// the inherited Object Type GUID  (satObject only)
-    InheritedObjectType: TGuid;
-    /// remove any previous content
-    procedure Clear;
-    /// compare the fields of this instance with another
-    function IsEqual(const ace: TSecAce): boolean;
-    /// append this entry as SDDL text into an existing buffer
-    // - could also generate SDDL RID placeholders, if dom binary is supplied,
-    // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var s: ShortString; dom: PSid);
-    /// decode a SDDL ACE textual representation into this (cleared) entry
-    function FromText(var p: PUtf8Char; dom: PSid): boolean;
-    /// encode this entry into a self-relative binary buffer
-    // - returns the output length in bytes
-    // - if dest is nil, will compute the length but won't write anything
-    function ToBinary(dest: PAnsiChar): PtrInt;
-    /// decode a self-relative binary buffer into this (cleared) entry
-    function FromBinary(p, max: PByte): boolean;
-    /// user-friendly set the properties of this ACE
-    // - SID and Mask are supplied in their regular / SDDL text form
-    // - returns true on success - i.e. if all input params were correct
-    function Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
-      dom: PSid = nil; const condExp: RawUtf8 = ''; saf: TSecAceFlags = []): boolean;
-    /// get the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(dom: PSid = nil): RawUtf8; overload;
-    /// set the associated SID, as SDDL text, optionally with a RID domain
-    function SidText(const sidSddl: RawUtf8; dom: PSid = nil): boolean; overload;
-    /// get the associated access mask, as SDDL text format
-    function MaskText: RawUtf8; overload;
-    /// set the associated access mask, as SDDL text format
-    function MaskText(const maskSddl: RawUtf8): boolean; overload;
-    /// get the ACE conditional expression, as stored in Opaque binary
-    function ConditionalExpression: RawUtf8; overload;
-    /// parse a ACE conditional expression, and assign it to Opaque binary
-    function ConditionalExpression(const condExp: RawUtf8): boolean; overload;
-  end;
-
-  /// pointer to one ACE of the TSecurityDescriptor ACL
-  PSecAce = ^TSecAce;
-
-  /// define a discretionary/system access control list (DACL)
-  // - as stored in TSecurityDescriptor Dacl[] Sacl[] access control lists (ACL)
-  TSecAcl = array of TSecAce;
-  PSecAcl = ^TSecAcl;
-
-const
-  /// the ACE which have just a Mask and SID in their definition
-  satCommon = [
-    satAccessAllowed,
-    satAccessDenied,
-    satAudit,
-    satAlarm,
-    satCallbackAccessAllowed,
-    satCallbackAccessDenied,
-    satCallbackAudit,
-    satCallbackAlarm,
-    satMandatoryLabel,
-    satResourceAttribute,
-    satScoppedPolicy,
-    satAccessFilter];
-
-  /// the ACE which have a samObject Mask, SID and Object UUIDs in their definition
-  satObject = [
-    satObjectAccessAllowed,
-    satObjectAccessDenied,
-    satObjectAudit,
-    satObjectAlarm,
-    satCallbackObjectAccessAllowed,
-    satCallbackObjectAccessDenied,
-    satCallbackObjectAudit,
-    satCallbackObjectAlarm];
-
-  /// the ACE which have a conditional expression as TSecAce.Opaque member
-  // - see [MS-DTYP] 2.4.4.17
-  // - the associated conditional expression is encoded in a binary format
-  // in the TSecAce.Opaque
-  satConditional = [
-    satCallbackAccessAllowed,
-    satCallbackAccessDenied,
-    satCallbackAudit,
-    satCallbackObjectAccessAllowed,
-    satCallbackObjectAccessDenied,
-    satCallbackObjectAudit];
-
-  /// defined in TSecAce.Flags for an ACE which has inheritance
-  safInheritanceFlags = [
-    safObjectInherit,
-    safContainerInherit,
-    safNoPropagateInherit,
-    safInheritOnly];
-
-  /// defined in TSecAce.Flags for an ACE which refers to audit
-  safAuditFlags = [
-    safSuccessfulAccess,
-    safFailedAccess];
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -2021,487 +2025,6 @@ begin
   hdr^.AclSize := result;
 end;
 
-function AceTokenLength(v: PRawAceLiteral): PtrUInt;
-begin
-  case v^.Token of
-    sctInt8,
-    sctInt16,
-    sctInt32,
-    sctInt64:
-      result := SizeOf(v^.Token) + SizeOf(v^.Int);
-    sctUnicode,     // need to append UnicodeBytes
-    sctLocalAttribute,
-    sctUserAttribute,
-    sctResourceAttribute,
-    sctDeviceAttribute,
-    sctOctetString, // OctetBytes     = UnicodeBytes
-    sctComposite,   // CompositeBytes = UnicodeBytes
-    sctSid:         // SidBytes       = UnicodeBytes
-      result := v^.UnicodeBytes + (SizeOf(v^.Token) + SizeOf(v^.UnicodeBytes));
-  else
-    result := SizeOf(v^.Token);
-  end;
-end;
-
-
-{ TAceBinaryTree }
-
-function TAceBinaryTree.FromBinary(const Input: RawByteString): boolean;
-var
-  v: PRawAceLiteral;
-  position, len, stCount: PtrUInt;
-  st: array[0 .. 31] of byte; // local stack of last few operands
-begin
-  result := false;
-  Storage := pointer(Input);
-  StorageSize := length(Input);
-  Count := 0;
-  if (Storage = nil) or
-     (StorageSize and 3 <> 0) or // should be DWORD-aligned
-     (StorageSize >= MAX_TREE_BYTES) or
-     (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
-    exit;
-  stCount := 0;
-  position := 4; // tokens start after 'artx' header
-  repeat
-    v := @Storage[position];
-    len := AceTokenLength(v);
-    if (position + len > StorageSize) then // overflow
-      exit;
-    if v^.Token <> sctPadding then
-    begin
-      // parse the next non-void operand or operation
-      if v^.Token in sctOperand then
-      begin
-        if not AddNode(position, 255, 255) then
-          exit;
-      end
-      else if v^.Token in sctUnary then
-      begin
-        if stCount < 1 then
-          exit;
-        dec(stCount); // unstack one operand
-        if not AddNode(position, st[stCount], 255) then
-          exit;
-      end
-      else if v^.Token in sctBinary then
-      begin
-        if stCount < 2 then
-          exit;
-        dec(stCount, 2); // unstack two operands
-        if not AddNode(position, st[stCount], st[stCount + 1]) then
-          exit;
-      end
-      else
-        exit; // invalid token
-      // stack this operand
-      if stCount > high(st) then
-        exit; // paranoid
-      st[stCount] := Count - 1;
-      inc(stCount);
-    end;
-    inc(position, len);
-  until position = StorageSize;
-  result := (Count > 0) and
-            (stCount = 1); // should end with no pending operand
-end;
-
-function TAceBinaryTree.AddNode(position, left, right: cardinal): boolean;
-var
-  n: PAceBinaryTreeNode;
-begin
-  result := (Count < high(Nodes)) and
-            (position < StorageSize);
-  if not result then
-    exit;
-  n := @Nodes[Count];
-  n^.Position := position;
-  n^.Left := left;
-  n^.Right := right;
-  inc(Count);
-end;
-
-procedure TAceBinaryTree.GetNodeText(index: byte; var u: RawUtf8);
-var
-  n: PAceBinaryTreeNode;
-  v: PRawAceLiteral;
-  l, r: pointer; // store actual RawUtf8 variables
-begin
-  if index >= Count then
-  begin
-    FastAssignNew(u);
-    exit;
-  end;
-  n := @Nodes[index];
-  l := nil;
-  r := nil;
-  if n^.Left < Count then
-    GetNodeText(n^.Left, RawUtf8(l));
-  if n^.Right < Count then
-    GetNodeText(n^.Right, RawUtf8(r));
-  v := @Storage[n^.Position];
-  if l <> nil then
-    if r <> nil then
-      SddlBinaryToText(v^.Token, RawUtf8(l), RawUtf8(r), u) // and release l+r
-    else
-      SddlUnaryToText(v^.Token, RawUtf8(l), u) // and release l
-  else
-    SddlOperandToText(v, u);
-end;
-
-function TAceBinaryTree.ToBinary: RawByteString;
-begin
-  FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
-end;
-
-function TAceBinaryTree.ToText: RawUtf8;
-begin
-  GetNodeText(Count - 1, result); // simple recursive generation
-end;
-
-
-{ TAceTextTree }
-
-function TAceTextTree.AddNode(position, len: cardinal): integer;
-var
-  n: ^TAceTextTreeNode;
-begin
-  n := @Nodes[Count];
-  n^.Token := TokenCurrent;
-  n^.Position := position;
-  n^.Length := len;
-  n^.Left := 255;
-  n^.Right := 255;
-  result := Count;
-  inc(Count);
-end;
-
-function TAceTextTree.ParseNextToken: integer;
-var
-  start: PUtf8Char;
-  len: PtrInt;
-begin
-  result := -1;
-  if Count = MAX_TREE_NODE then
-  begin
-    Error := atpTooManyExpressions;
-    exit;
-  end;
-  start := TextCurrent;
-  while start^ = ' ' do
-    inc(start);
-  TextCurrent := start;
-  TokenCurrent := SddlNextOperand(TextCurrent);
-  len := TextCurrent - start;
-  if len > 255 then
-  begin
-    Error := atpTooBigExpression;
-    exit;
-  end;
-  case TokenCurrent of
-    sctPadding:  // error parsing
-      Error := atpInvalidExpression;
-    sctInternalFinal .. high(TSecConditionalToken):
-      ; // no need to add to Nodes[]
-  else
-    with Nodes[Count] do
-    begin
-      Token := TokenCurrent;
-      Position:= start - Storage;
-      Length := len;
-      Left := 255;
-      Right := 255;
-      result := Count;
-      inc(Count);
-    end;
-  end;
-end;
-
-function TAceTextTree.ParseExpr: integer;
-var
-  op, r: integer;
-begin
-  result := ParseFactor;
-  ParseNextToken;
-  if (Error <> atpSuccess) or
-     (TokenCurrent in [sctInternalFinal, sctInternalParenthClose]) then
-    exit;
-  if TokenCurrent in sctBinary then
-  begin
-    op := Count - 1;
-    ParseNextToken;
-    r := ParseExpr;
-    if r >= 0 then
-    begin
-      with Nodes[op] do
-      begin
-        Left := result;
-        Right := r;
-      end;
-      result := op;
-    end;
-  end;
-end;
-
-function TAceTextTree.ParseFactor: integer;
-var
-  op: integer;
-begin
-  result := -1;
-  if Error = atpSuccess then
-    case TokenCurrent of
-      sctPadding:
-        Error := atpMissingFinal;
-      sctInternalParenthOpen:
-        begin
-          ParseNextToken;
-          result := ParseExpr;
-          if Error = atpSuccess then
-            if TokenCurrent <> sctInternalParenthClose then
-              Error := atpMissingParenthesis;
-        end;
-    else
-      if TokenCurrent in sctUnary then
-      begin
-        op := Count - 1;
-        result := ParseNextToken;
-        if result < 0 then
-          exit;
-        result := ParseFactor;
-        if Error <> atpSuccess then
-          exit;
-        Nodes[op].Left := result;
-        result := op;
-      end
-      else
-        result := Count - 1;
-    end;
-end;
-
-function TAceTextTree.FromText(const Input: RawUtf8): TAceTextTreeParse;
-begin
-  result := atpNoExpression;
-  Storage := pointer(Input);
-  StorageSize := length(Input);
-  Count := 0;
-  if (Storage = nil) or
-     (Storage[0] <> '(') or
-     (Storage[StorageSize - 1] <> ')') or
-     (StorageSize >= MAX_TREE_BYTES) or
-     (cardinal(StrLen(Storage)) <> StorageSize) then
-    exit; // not a valid SDDL text input for sure
-  TextCurrent := Storage;
-  TokenCurrent := sctPadding;
-  Error := atpSuccess;
-  ParseNextToken;
-  Root := ParseExpr;
-  result := Error;
-end;
-
-function TAceTextTree.RawAppendBinary(var bin: RawByteString;
-  const node: TAceTextTreeNode): boolean;
-
-  procedure DoBytes(b: pointer; blen: PtrInt);
-  var
-    dl: PtrInt;
-    v: PRawAceLiteral;
-  begin
-    if blen = 0 then
-    begin
-      Error := atpMissingExpression;
-      exit; // no such token could have length = 0
-    end;
-    dl := length(bin);
-    SetLength(bin, dl + 5 + blen);
-    v := @PByteArray(bin)[dl];
-    v^.Token := node.Token;
-    v^.UnicodeBytes := blen;        // also v^.CompositeBytes/v^.SidBytes
-    MoveFast(b^, v^.Unicode, blen); // also v^.Composite/v^.Sid
-    result := true; // success
-  end;
-
-  procedure DoUnicode(p: PUtf8Char);
-  var
-    tmpw: TSynTempBuffer;
-    l: PtrInt;
-    w: PWideChar;
-  begin
-    l := node.Length;
-    case node.Token of
-      sctUnicode:
-        begin
-          inc(p);
-          dec(l, 2); // trim "xxxx"
-        end;
-     sctUserAttribute,
-     sctResourceAttribute,
-     sctDeviceAttribute:
-       begin
-         l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing @User.
-         inc(p, l);
-         l := node.Length - l;
-       end;
-    end;
-    w := Unicode_ToUtf8(p, l, tmpw);
-    if w = nil then
-    begin
-      Error := atpInvalidUnicode;
-      exit; // invalid UTF-8 input
-    end;
-    DoBytes(w, tmpw.len * 2); // length in bytes
-    tmpw.Done; // paranoid, since node.Length <= 255
-  end;
-
-  procedure DoComposite(p: PUtf8Char);
-  var
-    s: PUtf8Char;
-    one: TAceTextTreeNode;
-    data: RawByteString;
-  begin
-    s := p + 1; // ignore trailing {
-    repeat
-      while s^ = ' ' do
-        inc(s);
-      one.Position := s - Storage;
-      p := s;
-      one.Token := SddlNextOperand(p);
-      one.Length := p - s;
-      if not (one.Token in sctLiteral) or
-         not RawAppendBinary(data, one) then // allow recursive {..,{..}}
-        exit;
-      s := p;
-      while s^ = ' ' do
-        inc(s);
-      if s^ = '}' then
-        break
-      else if s^ <> ',' then
-      begin
-        Error := atpInvalidComposite;
-        exit;
-      end;
-      inc(s);
-    until false;
-    DoBytes(pointer(data), length(data));
-  end;
-
-  procedure DoSid(p: PUtf8Char);
-  var
-    sid: RawSid;
-  begin
-    inc(p, 4); // ignore trailing SID(
-    if SddlNextSid(p, sid, nil) then
-      DoBytes(pointer(sid), length(sid))
-    else
-      Error := atpInvalidSid;
-  end;
-
-var
-  tmp: ShortString;
-  v: PRawAceLiteral;
-  p: PUtf8Char;
-begin
-  result := false;
-  tmp[0] := #1;
-  v := @tmp[1];
-  v^.Token := node.Token;
-  p := Storage + node.Position;
-  case node.Token of
-    sctInt64:
-      begin
-        v^.Int.Value := GetInt64(p);
-        v^.Int.Sign := scsNone;
-        if v^.Int.Value < 0 then
-          v^.Int.Sign := scsNegative;
-        v^.Int.Base := scbDecimal;
-        inc(tmp[0], SizeOf(v^.Int));
-      end;
-    sctUnicode,
-    sctLocalAttribute,
-    sctUserAttribute,
-    sctResourceAttribute,
-    sctDeviceAttribute:
-      begin
-        DoUnicode(p);
-        exit;
-      end;
-    sctOctetString:
-      begin
-        inc(p); // ignore trailing #
-        v^.OctetBytes :=
-          (ParseHex(PAnsiChar(p), @v^.Octet, node.Length shr 1) - p) shr 1;
-        inc(tmp[0], 4 + v^.OctetBytes); // hex is up to 255 bytes, so bin < 128
-      end;
-    sctComposite:  // e.g. '{"Sales","HR"}'
-      begin
-        DoComposite(p);
-        exit;
-      end;
-    sctSid: // e.g. 'SID(BA)'
-      begin
-        DoSid(p);
-        exit;
-      end
-  else
-    if not (node.Token in sctOperator) then // expect only single-byte token
-    begin
-      Error := atpUnexpectedToken;
-      exit;
-    end;
-  end;
-  AppendShortToUtf8(tmp, RawUtf8(bin));
-  result := true;
-end;
-
-function TAceTextTree.AppendBinary(var bin: RawByteString; node: integer): boolean;
-var
-  n: ^TAceTextTreeNode;
-begin
-  result := false;
-  if cardinal(node) > cardinal(Count) then
-    exit;
-  n := @Nodes[node];
-  if n^.Token >= sctInternalFinal then
-    exit; // paranoid
-  if n^.Left <> 255 then
-    if not AppendBinary(bin, n^.Left) then
-      exit;
-  if n^.Right <> 255 then
-    if not AppendBinary(bin, n^.Right) then
-      exit;
-  result := RawAppendBinary(bin, n^); // stored in reverse Polish order
-end;
-
-function TAceTextTree.ToBinary: RawByteString;
-var
-  l: PtrUInt;
-  tmp: string[3];
-begin
-  result := '';
-  if (Count = 0) or
-     (Error <> atpSuccess) or
-     (Root >= Count) then
-    exit;
-  FastSetRawByteString(result, nil, 4);
-  PCardinal(result)^ := ACE_CONDITION_SIGNATURE;
-  if not AppendBinary(result, Root) then // recursive generation
-  begin
-    if Error = atpSuccess then
-      Error := atpInvalidContent;
-    result := ''; // input content is not valid
-    exit;
-  end;
-  l := length(result) and 3;
-  if l = 0 then
-    exit;
-  PCardinal(@tmp)^ := 4 - l;
-  AppendShortToUtf8(tmp, RawUtf8(result)); // should be DWORD-padded with zeros
-end;
-
-function TAceTextTree.ToText: RawUtf8;
-begin
-  FastSetString(result, Storage, StorageSize); // FromText() value
-end;
-
 
 { ****************** Security Descriptor Definition Language (SDDL) }
 
@@ -3378,6 +2901,483 @@ begin
     exit;
   inc(PByte(psid), sidlen - 8);
   FastSetRawByteString(Opaque, psid, opaquelen);
+end;
+
+
+{ ******************* Conditional ACE Expressions SDDL and Binary Support }
+
+function AceTokenLength(v: PRawAceLiteral): PtrUInt;
+begin
+  case v^.Token of
+    sctInt8,
+    sctInt16,
+    sctInt32,
+    sctInt64:
+      result := SizeOf(v^.Token) + SizeOf(v^.Int);
+    sctUnicode,     // need to append UnicodeBytes
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute,
+    sctOctetString, // OctetBytes     = UnicodeBytes
+    sctComposite,   // CompositeBytes = UnicodeBytes
+    sctSid:         // SidBytes       = UnicodeBytes
+      result := v^.UnicodeBytes + (SizeOf(v^.Token) + SizeOf(v^.UnicodeBytes));
+  else
+    result := SizeOf(v^.Token);
+  end;
+end;
+
+
+{ TAceBinaryTree }
+
+function TAceBinaryTree.FromBinary(const Input: RawByteString): boolean;
+var
+  v: PRawAceLiteral;
+  position, len, stCount: PtrUInt;
+  st: array[0 .. 31] of byte; // local stack of last few operands
+begin
+  result := false;
+  Storage := pointer(Input);
+  StorageSize := length(Input);
+  Count := 0;
+  if (Storage = nil) or
+     (StorageSize and 3 <> 0) or // should be DWORD-aligned
+     (StorageSize >= MAX_TREE_BYTES) or
+     (PCardinal(Storage)^ <> ACE_CONDITION_SIGNATURE) then
+    exit;
+  stCount := 0;
+  position := 4; // tokens start after 'artx' header
+  repeat
+    v := @Storage[position];
+    len := AceTokenLength(v);
+    if (position + len > StorageSize) then // overflow
+      exit;
+    if v^.Token <> sctPadding then
+    begin
+      // parse the next non-void operand or operation
+      if v^.Token in sctOperand then
+      begin
+        if not AddNode(position, 255, 255) then
+          exit;
+      end
+      else if v^.Token in sctUnary then
+      begin
+        if stCount < 1 then
+          exit;
+        dec(stCount); // unstack one operand
+        if not AddNode(position, st[stCount], 255) then
+          exit;
+      end
+      else if v^.Token in sctBinary then
+      begin
+        if stCount < 2 then
+          exit;
+        dec(stCount, 2); // unstack two operands
+        if not AddNode(position, st[stCount], st[stCount + 1]) then
+          exit;
+      end
+      else
+        exit; // invalid token
+      // stack this operand
+      if stCount > high(st) then
+        exit; // paranoid
+      st[stCount] := Count - 1;
+      inc(stCount);
+    end;
+    inc(position, len);
+  until position = StorageSize;
+  result := (Count > 0) and
+            (stCount = 1); // should end with no pending operand
+end;
+
+function TAceBinaryTree.AddNode(position, left, right: cardinal): boolean;
+var
+  n: PAceBinaryTreeNode;
+begin
+  result := (Count < high(Nodes)) and
+            (position < StorageSize);
+  if not result then
+    exit;
+  n := @Nodes[Count];
+  n^.Position := position;
+  n^.Left := left;
+  n^.Right := right;
+  inc(Count);
+end;
+
+procedure TAceBinaryTree.GetNodeText(index: byte; var u: RawUtf8);
+var
+  n: PAceBinaryTreeNode;
+  v: PRawAceLiteral;
+  l, r: pointer; // store actual RawUtf8 variables
+begin
+  if index >= Count then
+  begin
+    FastAssignNew(u);
+    exit;
+  end;
+  n := @Nodes[index];
+  l := nil;
+  r := nil;
+  if n^.Left < Count then
+    GetNodeText(n^.Left, RawUtf8(l));
+  if n^.Right < Count then
+    GetNodeText(n^.Right, RawUtf8(r));
+  v := @Storage[n^.Position];
+  if l <> nil then
+    if r <> nil then
+      SddlBinaryToText(v^.Token, RawUtf8(l), RawUtf8(r), u) // and release l+r
+    else
+      SddlUnaryToText(v^.Token, RawUtf8(l), u) // and release l
+  else
+    SddlOperandToText(v, u);
+end;
+
+function TAceBinaryTree.ToBinary: RawByteString;
+begin
+  FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
+end;
+
+function TAceBinaryTree.ToText: RawUtf8;
+begin
+  GetNodeText(Count - 1, result); // simple recursive generation
+end;
+
+
+{ TAceTextTree }
+
+function TAceTextTree.AddNode(position, len: cardinal): integer;
+var
+  n: ^TAceTextTreeNode;
+begin
+  n := @Nodes[Count];
+  n^.Token := TokenCurrent;
+  n^.Position := position;
+  n^.Length := len;
+  n^.Left := 255;
+  n^.Right := 255;
+  result := Count;
+  inc(Count);
+end;
+
+function TAceTextTree.ParseNextToken: integer;
+var
+  start: PUtf8Char;
+  len: PtrUInt;
+begin
+  result := -1;
+  if Count = MAX_TREE_NODE then
+  begin
+    Error := atpTooManyExpressions;
+    exit;
+  end;
+  start := TextCurrent;
+  while start^ = ' ' do
+    inc(start);
+  TextCurrent := start;
+  if PtrUInt(start - Storage) >= StorageSize then // reached of input text
+  begin
+    TokenCurrent := sctInternalFinal; // SDDL may be within another expression
+    exit;
+  end;
+  TokenCurrent := SddlNextOperand(TextCurrent);
+  len := TextCurrent - start;
+  if len > 255 then
+    Error := atpTooBigExpression
+  else
+    case TokenCurrent of
+      sctPadding:  // error parsing
+        Error := atpInvalidExpression;
+      sctInternalFinal .. high(TSecConditionalToken):
+        ; // internal tokens are never serialized nor added to Nodes[]
+    else
+      result := AddNode(start - Storage, len);
+    end;
+end;
+
+function TAceTextTree.ParseExpr: integer;
+var
+  op, r: integer;
+begin
+  result := ParseFactor;
+  ParseNextToken;
+  if (Error <> atpSuccess) or
+     (TokenCurrent in [sctInternalFinal, sctInternalParenthClose]) then
+    exit;
+  if TokenCurrent in sctBinary then
+  begin
+    op := Count - 1;
+    ParseNextToken;
+    r := ParseExpr;
+    if r < 0 then
+      exit;
+    with Nodes[op] do
+    begin
+      Left := result;
+      Right := r;
+    end;
+    result := op;
+  end;
+end;
+
+function TAceTextTree.ParseFactor: integer;
+var
+  op: integer;
+begin
+  result := -1;
+  if Error = atpSuccess then
+    case TokenCurrent of
+      sctPadding:
+        Error := atpMissingFinal;
+      sctInternalParenthOpen:
+        begin
+          ParseNextToken;
+          result := ParseExpr;
+          if Error = atpSuccess then
+            if TokenCurrent <> sctInternalParenthClose then
+              Error := atpMissingParenthesis;
+        end;
+    else
+      if TokenCurrent in sctUnary then
+      begin
+        op := Count - 1;
+        result := ParseNextToken;
+        if result < 0 then
+          exit;
+        result := ParseFactor;
+        if Error <> atpSuccess then
+          exit;
+        Nodes[op].Left := result;
+        result := op;
+      end
+      else
+        result := Count - 1;
+    end;
+end;
+
+function TAceTextTree.FromText(const Input: RawUtf8): TAceTextTreeParse;
+begin
+  result := atpNoExpression;
+  Storage := pointer(Input);
+  StorageSize := length(Input);
+  Count := 0;
+  if (Storage = nil) or
+     (Storage[0] <> '(') or
+     (Storage[StorageSize - 1] <> ')') or
+     (StorageSize >= MAX_TREE_BYTES) or
+     (cardinal(StrLen(Storage)) <> StorageSize) then
+    exit; // not a valid SDDL text input for sure
+  TextCurrent := Storage;
+  TokenCurrent := sctPadding;
+  Error := atpSuccess;
+  ParseNextToken;
+  Root := ParseExpr;
+  result := Error;
+end;
+
+function TAceTextTree.RawAppendBinary(var bin: RawByteString;
+  const node: TAceTextTreeNode): boolean;
+
+  procedure DoBytes(b: pointer; blen: PtrInt);
+  var
+    dl: PtrInt;
+    v: PRawAceLiteral;
+  begin
+    if blen = 0 then
+    begin
+      Error := atpMissingExpression;
+      exit; // no such token could have length = 0
+    end;
+    dl := length(bin);
+    SetLength(bin, dl + 5 + blen);
+    v := @PByteArray(bin)[dl];
+    v^.Token := node.Token;
+    v^.UnicodeBytes := blen;        // also v^.CompositeBytes/v^.SidBytes
+    MoveFast(b^, v^.Unicode, blen); // also v^.Composite/v^.Sid
+    result := true; // success
+  end;
+
+  procedure DoUnicode(p: PUtf8Char);
+  var
+    tmpw: TSynTempBuffer;
+    l: PtrInt;
+    w: PWideChar;
+  begin
+    l := node.Length;
+    case node.Token of
+      sctUnicode:
+        begin
+          inc(p);
+          dec(l, 2); // trim "xxxx"
+        end;
+     sctUserAttribute,
+     sctResourceAttribute,
+     sctDeviceAttribute:
+       begin
+         l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing @User.
+         inc(p, l);
+         l := node.Length - l;
+       end;
+    end;
+    w := Unicode_ToUtf8(p, l, tmpw);
+    if w = nil then
+    begin
+      Error := atpInvalidUnicode;
+      exit; // invalid UTF-8 input
+    end;
+    DoBytes(w, tmpw.len * 2); // length in bytes
+    tmpw.Done; // paranoid, since node.Length <= 255
+  end;
+
+  procedure DoComposite(p: PUtf8Char);
+  var
+    s: PUtf8Char;
+    one: TAceTextTreeNode;
+    data: RawByteString;
+  begin
+    s := p + 1; // ignore trailing {
+    repeat
+      while s^ = ' ' do
+        inc(s);
+      one.Position := s - Storage;
+      p := s;
+      one.Token := SddlNextOperand(p);
+      one.Length := p - s;
+      if not (one.Token in sctLiteral) or
+         not RawAppendBinary(data, one) then // allow recursive {..,{..}}
+        exit;
+      s := p;
+      while s^ = ' ' do
+        inc(s);
+      if s^ = '}' then
+        break
+      else if s^ <> ',' then
+      begin
+        Error := atpInvalidComposite;
+        exit;
+      end;
+      inc(s);
+    until false;
+    DoBytes(pointer(data), length(data));
+  end;
+
+  procedure DoSid(p: PUtf8Char);
+  var
+    sid: RawSid;
+  begin
+    inc(p, 4); // ignore trailing SID(
+    if SddlNextSid(p, sid, nil) then
+      DoBytes(pointer(sid), length(sid))
+    else
+      Error := atpInvalidSid;
+  end;
+
+var
+  tmp: ShortString;
+  v: PRawAceLiteral;
+  p: PUtf8Char;
+begin
+  result := false;
+  tmp[0] := #1;
+  v := @tmp[1];
+  v^.Token := node.Token;
+  p := Storage + node.Position;
+  case node.Token of
+    sctInt64:
+      begin
+        v^.Int.Value := GetInt64(p);
+        v^.Int.Sign := scsNone;
+        if v^.Int.Value < 0 then
+          v^.Int.Sign := scsNegative;
+        v^.Int.Base := scbDecimal;
+        inc(tmp[0], SizeOf(v^.Int));
+      end;
+    sctUnicode,
+    sctLocalAttribute,
+    sctUserAttribute,
+    sctResourceAttribute,
+    sctDeviceAttribute:
+      begin
+        DoUnicode(p);
+        exit;
+      end;
+    sctOctetString:
+      begin
+        inc(p); // ignore trailing #
+        v^.OctetBytes :=
+          (ParseHex(PAnsiChar(p), @v^.Octet, node.Length shr 1) - p) shr 1;
+        inc(tmp[0], 4 + v^.OctetBytes); // hex is up to 255 bytes, so bin < 128
+      end;
+    sctComposite:  // e.g. '{"Sales","HR"}'
+      begin
+        DoComposite(p);
+        exit;
+      end;
+    sctSid: // e.g. 'SID(BA)'
+      begin
+        DoSid(p);
+        exit;
+      end
+  else
+    if not (node.Token in sctOperator) then // expect only single-byte token
+    begin
+      Error := atpUnexpectedToken;
+      exit;
+    end;
+  end;
+  AppendShortToUtf8(tmp, RawUtf8(bin));
+  result := true;
+end;
+
+function TAceTextTree.AppendBinary(var bin: RawByteString; node: integer): boolean;
+var
+  n: ^TAceTextTreeNode;
+begin
+  result := false;
+  if cardinal(node) > cardinal(Count) then
+    exit;
+  n := @Nodes[node];
+  if n^.Token >= sctInternalFinal then
+    exit; // paranoid
+  if n^.Left <> 255 then
+    if not AppendBinary(bin, n^.Left) then
+      exit;
+  if n^.Right <> 255 then
+    if not AppendBinary(bin, n^.Right) then
+      exit;
+  result := RawAppendBinary(bin, n^); // stored in reverse Polish order
+end;
+
+function TAceTextTree.ToBinary: RawByteString;
+var
+  l: PtrUInt;
+  tmp: string[3];
+begin
+  result := '';
+  if (Count = 0) or
+     (Error <> atpSuccess) or
+     (Root >= Count) then
+    exit;
+  FastSetRawByteString(result, nil, 4);
+  PCardinal(result)^ := ACE_CONDITION_SIGNATURE;
+  if not AppendBinary(result, Root) then // recursive generation
+  begin
+    if Error = atpSuccess then
+      Error := atpInvalidContent; // if no Error was specified
+    result := ''; // input content is not valid
+    exit;
+  end;
+  l := length(result) and 3;
+  if l = 0 then
+    exit;
+  PCardinal(@tmp)^ := 4 - l;
+  AppendShortToUtf8(tmp, RawUtf8(result)); // should be DWORD-padded with zeros
+end;
+
+function TAceTextTree.ToText: RawUtf8;
+begin
+  FastSetString(result, Storage, StorageSize); // FromText() value
 end;
 
 
