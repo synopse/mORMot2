@@ -23,8 +23,8 @@ unit mormot.core.os.security;
 
   *****************************************************************************
 
-    REF: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
-    TODO: resources attributes
+  MS-DTYP: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp
+  TODO: resources attributes - see [MS-DTYP] 2.4.10.1
 }
 
 interface
@@ -699,6 +699,8 @@ type
   TSecAcl = array of TSecAce;
   PSecAcl = ^TSecAcl;
 
+  {$A+}
+
 const
   /// the ACE which have just a Mask and SID in their definition
   satCommon = [
@@ -1288,6 +1290,9 @@ type
   // text as a JSON string
   RawSecurityDescriptor = type RawByteString;
   PRawSecurityDescriptor = ^RawSecurityDescriptor;
+
+
+  {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
 
   /// high-level cross-platform support of one Windows Security Descriptor
   // - can be loaded and exported as self-relative binary or SDDL text
