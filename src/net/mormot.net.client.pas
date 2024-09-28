@@ -1823,7 +1823,8 @@ type
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers: RawUtf8 = ''; const User: RawUtf8 = '';
   const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
-  const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false): boolean; overload;
+  const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false;
+  TLSIgnoreCertError: boolean = false): boolean; overload;
 
 /// send an email using the SMTP protocol via a TSmtpConnection definition
 // - retry true on success
@@ -1837,7 +1838,7 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
   const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
-  TLS: boolean = false): boolean; overload;
+  TLS: boolean = false; TLSIgnoreCertError: boolean = false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -5061,19 +5062,19 @@ end;
 
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
-  const Headers, TextCharSet: RawUtf8; TLS: boolean): boolean;
+  const Headers, TextCharSet: RawUtf8; TLS, TLSIgnoreCertError: boolean): boolean;
 begin
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    TLS or (Server.Port = '465') or (Server.Port = '587'));
+    TLS or (Server.Port = '465') or (Server.Port = '587'), TLSIgnoreCertError);
 end;
 
 {$I-}
 
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
-  TLS: boolean): boolean;
+  TLS, TLSIgnoreCertError: boolean): boolean;
 var
   sock: TCrtSocket;
 
@@ -5111,7 +5112,7 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  sock := SocketOpen(Server, Port, TLS, nil, nil, {ignorecerterror=}TLS);
+  sock := SocketOpen(Server, Port, TLS, nil, nil, TLSIgnoreCertError);
   if sock <> nil then
   try
     sock.CreateSockIn; // we use SockIn for readln in Expect()
