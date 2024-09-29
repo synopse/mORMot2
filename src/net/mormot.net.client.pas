@@ -1351,6 +1351,9 @@ type
     function Body: RawByteString;
     /// returns the HTTP status code after the last Request() call
     function Status: integer;
+    /// returns an additional error message after the last Request() call
+    // - is '' on success, or is typically an exception text with its message
+    function LastError: string;
     /// returns the HTTP headers as returned by a previous call to Request()
     function Headers: RawUtf8;
     /// retrieve a HTTP header text value after the last Request() call
@@ -1367,6 +1370,7 @@ type
     // last request values
     fUri, fHeaders: RawUtf8;
     fBody: RawByteString;
+    fLastError: string;
     fStatus: integer;
   public
     /// finalize the connection
@@ -1388,6 +1392,7 @@ type
     function Body: RawByteString;
     function Status: integer;
     function Headers: RawUtf8;
+    function LastError: string;
     function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
     function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
@@ -4374,6 +4379,11 @@ begin
   result := fStatus;
 end;
 
+function THttpClientAbstract.LastError: string;
+begin
+  result := fLastError;
+end;
+
 function THttpClientAbstract.Headers: RawUtf8;
 begin
   result := fHeaders;
@@ -4500,6 +4510,10 @@ function TSimpleHttpClient.Request(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataMimeType: RawUtf8; KeepAlive: cardinal): integer;
 begin
+  // reset status
+  fLastError := '';
+  fStatus := 0;
+  // do the request
   result := 0;
   try
     RawConnect(Uri); // raise an exception on connection issue
@@ -4520,7 +4534,12 @@ begin
     if KeepAlive = 0 then
       Close; // force HTTP/1.0 scheme
   except
-    Close; // keeping result = 0
+    on E: Exception do
+    begin
+      FormatString('% % raised % [%]',
+        [Method, Uri.URI, E, E.Message], fLastError);
+      Close; // keeping result = 0
+    end;
   end;
   fStatus := result;
 end;
