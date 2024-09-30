@@ -1034,8 +1034,8 @@ type
     function AddNode(position, len: cardinal): integer;
     function ParseNextToken: integer;
     function ParseExpr: integer;
-    function AppendBinary(var bin: RawByteString; node: integer): boolean;
-    function RawAppendBinary(var bin: RawByteString;
+    function AppendBinary(var bin: TSynTempBuffer; node: integer): boolean;
+    function RawAppendBinary(var bin: TSynTempBuffer;
       const node: TAceTextTreeNode): boolean;
   public
     /// the associated SDDL text input storage
@@ -3321,12 +3321,11 @@ begin
   result := Error;
 end;
 
-function TAceTextTree.RawAppendBinary(var bin: RawByteString;
+function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
   const node: TAceTextTreeNode): boolean;
 
   procedure DoBytes(b: pointer; blen: PtrInt);
   var
-    dl: PtrInt;
     v: PRawAceLiteral;
   begin
     if (blen = 0) and
@@ -3335,13 +3334,58 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
       Error := atpMissingExpression; // those tokens could not have length = 0
       exit;
     end;
-    dl := length(bin);
-    SetLength(bin, dl + 5 + blen);
-    v := @PByteArray(bin)[dl];
+    v := bin.Add(5 + blen);
     v^.Token := node.Token;
     v^.UnicodeBytes := blen;        // also v^.CompositeBytes/v^.SidBytes
     MoveFast(b^, v^.Unicode, blen); // also v^.Composite/v^.Sid
     result := true; // success
+  end;
+
+  // sub-functions to have minimal stack usage on main RawAppendBinary()
+
+  procedure DoComposite(p: PUtf8Char);
+  var
+    s: PUtf8Char;
+    one: TAceTextTreeNode;
+    items: TSynTempBuffer;
+  begin
+    items.InitOnStack;
+    s := p + 1; // ignore trailing '{'
+    repeat
+      while s^ = ' ' do
+        inc(s);
+      one.Position := s - Storage;
+      p := s;
+      one.Token := SddlNextOperand(p);
+      one.Length := p - s;
+      if not (one.Token in sctLiteral) then
+        Error := atpInvalidComposite
+      else if not RawAppendBinary(items, one) then // allow recursive {..,{..}}
+        break;
+      s := p;
+      while s^ = ' ' do
+        inc(s);
+      if s^ = '}' then
+        break // end of sctComposite text block
+      else if s^ <> ',' then
+        Error := atpInvalidComposite
+      else
+        inc(s);
+    until Error <> atpSuccess;
+    if Error = atpSuccess then
+      DoBytes(items.buf, items.added);
+    items.Done;
+  end;
+
+  procedure DoSid(p: PUtf8Char);
+  var
+    sid: TSid;
+  begin
+    inc(p, 4); // ignore trailing 'SID(' chars
+    if SddlNextSid(p, sid, nil) then
+      DoBytes(@sid, SidLength(@sid))
+    else
+      Error := atpInvalidSid;
   end;
 
   procedure DoUnicode(p: PUtf8Char);
@@ -3355,105 +3399,63 @@ function TAceTextTree.RawAppendBinary(var bin: RawByteString;
       sctUnicode:
         begin
           inc(p);
-          dec(l, 2); // trim "xxxx"
+          dec(l, 2); // trim "...." double quotes
         end;
      sctUserAttribute,
      sctResourceAttribute,
      sctDeviceAttribute:
        begin
          l := ord(ATTR_SDDL[node.Token][0]); // ignore e.g. trailing '@User.'
-         inc(p, l);
+         inc(p, l); // no double quotes on identifiers
          l := node.Length - l;
        end;
     end;
     w := Unicode_ToUtf8(p, l, tmpw);
     if w = nil then
-    begin
-      Error := atpInvalidUnicode;
-      exit; // invalid UTF-8 input
-    end;
-    DoBytes(w, tmpw.len * 2); // length in bytes
+      Error := atpInvalidUnicode // invalid UTF-8 input
+    else
+      DoBytes(w, tmpw.len * 2);  // length in bytes
     tmpw.Done; // paranoid, since node.Length <= 255
   end;
 
-  procedure DoComposite(p: PUtf8Char);
-  var
-    s: PUtf8Char;
-    one: TAceTextTreeNode;
-    data: RawByteString;
-  begin
-    s := p + 1; // ignore trailing '{'
-    repeat
-      while s^ = ' ' do
-        inc(s);
-      one.Position := s - Storage;
-      p := s;
-      one.Token := SddlNextOperand(p);
-      one.Length := p - s;
-      if not (one.Token in sctLiteral) or
-         not RawAppendBinary(data, one) then // allow recursive {..,{..}}
-        exit;
-      s := p;
-      while s^ = ' ' do
-        inc(s);
-      if s^ = '}' then
-        break
-      else if s^ <> ',' then
-      begin
-        Error := atpInvalidComposite;
-        exit;
-      end;
-      inc(s);
-    until false;
-    DoBytes(pointer(data), length(data));
-  end;
-
-  procedure DoSid(p: PUtf8Char);
-  var
-    sid: RawSid;
-  begin
-    inc(p, 4); // ignore trailing 'SID(' chars
-    if SddlNextSid(p, sid, nil) then
-      DoBytes(pointer(sid), length(sid))
-    else
-      Error := atpInvalidSid;
-  end;
-
 var
-  tmp: ShortString;
   v: PRawAceLiteral;
   p: pointer;
+  b: PtrUInt;
 begin
   result := false;
-  tmp[0] := #0;
-  v := @tmp[1];
-  v^.Token := node.Token;
   p := Storage + node.Position;
   case node.Token of
-    // sctLiteral
+    // sctLiteral tokens
     sctInt64:
       begin
+        v := bin.Add(SizeOf(v^.Token) + SizeOf(v^.Int));
+        v^.Token := node.Token;
         v^.Int.Value := GetInt64(p);
         v^.Int.Sign := scsNone;
         if v^.Int.Value < 0 then
           v^.Int.Sign := scsNegative;
         v^.Int.Base := scbDecimal;
-        tmp[0] := AnsiChar(SizeOf(v^.Int) + SizeOf(v^.Token));
         result := true;
       end;
     sctOctetString:
       begin
+        b := node.Length shr 1;
+        v := bin.Add((SizeOf(v^.Token) + SizeOf(v^.OctetBytes)) + b);
+        v^.Token := node.Token;
         inc(PAnsiChar(p)); // ignore trailing '#'
-        v^.OctetBytes := (ParseHex(p, @v^.Octet, node.Length shr 1) - p) shr 1;
-        tmp[0] := AnsiChar(5 + v^.OctetBytes); // hex is < 255, so bin < 128
-        result := true;
+        v^.OctetBytes := ParseHex(p, @v^.Octet, b) - p;
+        if v^.OctetBytes = b then
+          result := true
+        else
+          Error := atpInvalidOctet;
       end;
     sctComposite:  // e.g. '{"Sales","HR"}'
       DoComposite(p);
     sctSid:        // e.g. 'SID(BA)'
       DoSid(p);
     sctUnicode,
-    // sctAttribute
+    // sctAttribute tokens
     sctLocalAttribute,
     sctUserAttribute,
     sctResourceAttribute,
@@ -3462,17 +3464,15 @@ begin
   else
     if node.Token in sctOperator then // expect only single-byte token here
     begin
-      tmp[0] := #1;
+      PSecConditionalToken(bin.Add(1))^ := node.Token;
       result := true;
     end
     else
       Error := atpUnexpectedToken;
   end;
-  if tmp[0] <> #0 then
-    AppendShortToUtf8(tmp, RawUtf8(bin));
 end;
 
-function TAceTextTree.AppendBinary(var bin: RawByteString; node: integer): boolean;
+function TAceTextTree.AppendBinary(var bin: TSynTempBuffer; node: integer): boolean;
 var
   n: ^TAceTextTreeNode;
 begin
@@ -3493,28 +3493,26 @@ end;
 
 function TAceTextTree.ToBinary: RawByteString;
 var
-  l: PtrUInt;
-  tmp: string[3];
+  pad: PtrUInt;
+  bin: TSynTempBuffer; // no temporary allocation needed
 begin
   result := '';
   if (Count = 0) or
      (Error <> atpSuccess) or
      (Root >= Count) then
     exit;
-  FastSetRawByteString(result, nil, 4);
-  PCardinal(result)^ := ACE_CONDITION_SIGNATURE;
-  if not AppendBinary(result, Root) then // recursive generation
+  bin.InitOnStack;
+  PCardinal(bin.Add(4))^ := ACE_CONDITION_SIGNATURE;
+  if AppendBinary(bin, Root) then // recursive generation
   begin
-    if Error = atpSuccess then
-      Error := atpInvalidContent; // if no Error was specified
-    result := ''; // input content is not valid
-    exit;
-  end;
-  l := length(result) and 3;
-  if l = 0 then
-    exit;
-  PCardinal(@tmp)^ := 4 - l;
-  AppendShortToUtf8(tmp, RawUtf8(result)); // should be DWORD-padded with zeros
+    pad := bin.added and 3;
+    if pad <> 0 then
+      PCardinal(bin.Add(4 - pad))^ := 0; // should be DWORD-padded with zeros
+    FastSetRawByteString(result, bin.buf, bin.added);
+  end
+  else if Error = atpSuccess then
+    Error := atpInvalidContent; // if no Error was specified
+  bin.Done;
 end;
 
 function TAceTextTree.ToText: RawUtf8;
