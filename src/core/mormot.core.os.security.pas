@@ -167,7 +167,7 @@ type
     wksIntegrityProtectedProcess,                 // S-1-16-20480
     wksIntegritySecureProcess,                    // S-1-16-28672
     wksAuthenticationAuthorityAsserted,           // S-1-18-1
-    wksAuthenticationServiceAsserted,             // S-1-18-2
+    wksAuthenticationServiceAsserted,             // S-1-18-2      SS
     wksAuthenticationFreshKeyAuth,                // S-1-18-3
     wksAuthenticationKeyTrust,                    // S-1-18-4
     wksAuthenticationKeyPropertyMfa,              // S-1-18-5
@@ -272,7 +272,8 @@ type
     wkrGroupProtectedUsers,          // DOMAIN_GROUP_RID_PROTECTED_USERS AP
     wkrGroupKeyAdmins,               // DOMAIN_GROUP_RID_KEY_ADMINS  KA
     wkrGroupEntrepriseKeyAdmins,     // DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK
-    wrkGroupRasServers);             // DOMAIN_ALIAS_RID_RAS_SERVERS RS
+    wrkGroupRasServers,              // DOMAIN_ALIAS_RID_RAS_SERVERS RS
+    wrkUserModeHwOperator);          // DOMAIN_ALIAS_RID_USER_MODE_HARDWARE_OPERATORS HO
 
   /// define a set of well-known RID
   TWellKnownRids = set of TWellKnownRid;
@@ -340,8 +341,9 @@ const
     $20d,    // AP wkrGroupProtectedUsers
     $20e,    // KA wkrGroupKeyAdmins
     $20f,    // EK wkrGroupEntrepriseKeyAdmins
-    $229);   // RS wrkGroupRasServers
-  WKR_RID_MAX = $229;
+    $229,    // RS wrkGroupRasServers
+    $248);   // HO wrkUserModeHwOperator
+  WKR_RID_MAX = $248;
 
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
@@ -1127,7 +1129,7 @@ function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
 function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
 function SddlToKnownSid(const sddl: RawUtf8; out wks: TWellKnownSid): boolean;
 function SddlToKnownRid(const sddl: RawUtf8; out wkr: TWellKnownRid): boolean;
-
+// see https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings
 
 const
   { SDDL standard identifiers using string[3] for efficient 32-bit alignment }
@@ -2110,11 +2112,11 @@ const
   // defined as a packed array of chars for fast SSE2 brute force search
   SID_SDDL: array[0 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2 - 1] of AnsiChar =
     // TWellKnownSid
-    '  WD    COCG    OW  LWMEMPHISI                    NU  IUSUAN  EDPSAURC' +
+    '  WD    COCG    OW  LWMEMPHISI      SS            NU  IUSUAN  EDPSAURC' +
     '        SYLSNS      BABUBGPUAOSOPOBORE  RURDNO  MULU      ISCY      ' +
     'ERCDRAESMSHAAARM      WRUD                        AC' + // AC = wksLastSddl
     // TWellKnownRid
-    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKRS';
+    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKRSHO';
   SID_RIDOFFSET = ord(wksLastSddl) + 1;
 var
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL; // for fast lookup
