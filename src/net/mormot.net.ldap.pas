@@ -750,7 +750,8 @@ function AttributeNameType(const AttrName: RawUtf8): TLdapAttributeType;
 // - as used by TLdapAttribute.GetReadable/GetAllReadable
 // - will detect SID, GUID, FileTime and text date/time known fields
 // - if s is not truly UTF-8 encoded, will return its hexadecimal representation
-procedure AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage);
+procedure AttributeValueMakeReadable(var s: RawUtf8;
+  ats: TLdapAttributeTypeStorage; dom: PSid = nil);
 
 /// convert a set of common Attribute Types into their array text representation
 // - by design, atUndefined would be excluded from the list
@@ -861,6 +862,7 @@ type
     roCommonNameAtRoot,
     roNoObjectName,
     roWithCanonicalName,
+    roNoSddlDomainRid,
     roRawValues,
     roRawBoolean,
     roRawUac,
@@ -878,9 +880,9 @@ type
     fKnownTypeStorage: TLdapAttributeTypeStorage;
     fObjectSidIsDomain: boolean;
     procedure SetVariantOne(var v: TVarData; const s: RawUtf8;
-      options: TLdapResultOptions);
+      options: TLdapResultOptions; dom: PSid);
     procedure SetVariantArray(var v: TDocVariantData;
-      options: TLdapResultOptions);
+      options: TLdapResultOptions; dom: PSid);
     function ToAsnSeq: TAsnObject;
   public
     /// initialize the attribute(s) storage
@@ -915,11 +917,12 @@ type
     // - return null if there is no value (self=nil or Count=0)
     // - if there is a single value, return it as a single variant text
     // - if Count > 0, return a TDocVariant array with all texts
-    function GetVariant(options: TLdapResultOptions = []): variant;
+    function GetVariant(options: TLdapResultOptions = []; dom: PSid = nil): variant;
     /// retrieve this attribute value(s) as a variant
     // - expects v to be fully zeroed (e.g. just allocated from a variant array)
     // - as called by GetVariant()
-    procedure SetNewVariant(var v: variant; options: TLdapResultOptions);
+    procedure SetNewVariant(var v: variant;
+      options: TLdapResultOptions; dom: PSid);
     /// search for a given value within this list
     function FindIndex(const aValue: RawByteString): PtrInt;
     /// add all attributes to a "dn: ###" entry of a ldif-content buffer
@@ -3146,7 +3149,8 @@ begin
   result := _AttributeNameType(_LdapIntern.Existing(AttrName)); // very fast
 end;
 
-procedure AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage);
+procedure AttributeValueMakeReadable(var s: RawUtf8;
+  ats: TLdapAttributeTypeStorage; dom: PSid);
 var
   ft: QWord;
   guid: TGuid;
@@ -3171,12 +3175,12 @@ begin
     atsGuid:
       if length(s) = SizeOf(TGuid) then // stored as binary GUID
       begin
-        guid := PGuid(s)^; // temp copy to avoid issues with s content
+        guid := PGuid(s)^; // temp copy since ToUtf8() overrides s itself
         ToUtf8(guid, s);  // e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
         exit;
       end;
     atsSecurityDescriptor:
-      if SecurityDescriptorToText(s, s) then // use our TSecurityDescriptor wrapper
+      if SecurityDescriptorToText(s, s, dom) then // TSecurityDescriptor wrapper
         exit;
     atsFileTime: // 64-bit FileTime
       begin
@@ -3629,7 +3633,7 @@ begin
 end;
 
 procedure TLdapAttribute.SetVariantOne(var v: TVarData; const s: RawUtf8;
-  options: TLdapResultOptions);
+  options: TLdapResultOptions; dom: PSid);
 var
   i: integer;
   uac: TUserAccountControls;
@@ -3735,37 +3739,38 @@ begin
   RawUtf8(v.VAny) := s;
   if not (fKnownTypeStorage in ATS_READABLE) and
      not (roRawValues in options) then
-    AttributeValueMakeReadable(RawUtf8(v.VAny), fKnownTypeStorage);
+    AttributeValueMakeReadable(RawUtf8(v.VAny), fKnownTypeStorage, dom);
 end;
 
 procedure TLdapAttribute.SetVariantArray(var v: TDocVariantData;
-  options: TLdapResultOptions);
+  options: TLdapResultOptions; dom: PSid);
 var
   i: PtrInt;
 begin // avoid implit try..finally in TLdapAttribute.GetVariant
   v.InitFast(fCount, dvArray);
   v.SetCount(fCount);
   for i := 0 to fCount - 1 do
-    SetVariantOne(PVarData(@v.Values[i])^, fList[i], options);
+    SetVariantOne(PVarData(@v.Values[i])^, fList[i], options, dom);
 end;
 
-procedure TLdapAttribute.SetNewVariant(var v: variant; options: TLdapResultOptions);
+procedure TLdapAttribute.SetNewVariant(var v: variant;
+  options: TLdapResultOptions; dom: PSid);
 begin
   if fCount = 1 then
-    SetVariantOne(TVarData(v), fList[0], options)
+    SetVariantOne(TVarData(v), fList[0], options, dom)
   else if fKnownTypeStorage = atsRawUtf8 then
     TDocVariantData(v).InitArrayFrom(TRawUtf8DynArray(fList), JSON_FAST, fCount)
   else
-    SetVariantArray(TDocVariantData(v), options);
+    SetVariantArray(TDocVariantData(v), options, dom);
 end;
 
-function TLdapAttribute.GetVariant(options: TLdapResultOptions): variant;
+function TLdapAttribute.GetVariant(options: TLdapResultOptions; dom: PSid): variant;
 begin
   SetVariantNull(result);
   TVarData(result).VAny := nil; // as required by SetNewVariant()
   if (self <> nil) and
      (fCount > 0) then
-    SetNewVariant(result, options);
+    SetNewVariant(result, options, dom);
 end;
 
 function TLdapAttribute.ToAsnSeq: TAsnObject;
@@ -4311,6 +4316,7 @@ var
   i, j, k: PtrInt;
   res: TLdapResult;
   attr: ^TLdapAttribute;
+  dom: PSid;
   dc, ou, cn, lastdc: TRawUtf8DynArray;
   a: TDocVariantData;
   v, last: PDocVariantData;
@@ -4331,8 +4337,8 @@ begin
     ELdap.RaiseUtf8('%.AppendTo: roNoDCAtRoot, roObjectNameAtRoot, ' +
       'roObjectNameWithoutDCAtRoot, roCanonicalNameAtRoot and ' +
       'roCommonNameAtRoot are exclusive', [self]);
-  if (roRawValues in options) and
-     (options * [roRawBoolean .. roRawAccountType] <> []) then
+  if (roRawValues in Options) and
+     (Options * [roRawBoolean .. roRawAccountType] <> []) then
     ELdap.RaiseUtf8('%.AppendTo: roRawValues and other roRaw* options ' +
       'are exclusive', [self]);
   last := nil;
@@ -4375,27 +4381,30 @@ begin
       continue; // no attribute
     a.Init(mNameValue, dvObject);
     a.SetCount(res.Attributes.Count +
-               ord(not(roNoObjectName in options)) +
-               ord(roWithCanonicalName in options));
+               ord(not(roNoObjectName in Options)) +
+               ord(roWithCanonicalName in Options));
     a.Capacity := a.Count;
     k := 0;
-    if not(roNoObjectName in options) then
+    if not(roNoObjectName in Options) then
     begin
       a.Names[0] := sObjectName;
       RawUtf8ToVariant(res.ObjectName, a.Values[0]);
       inc(k);
     end;
-    if roWithCanonicalName in options then
+    if roWithCanonicalName in Options then
     begin
       a.Names[k] := sCanonicalName;
       RawUtf8ToVariant(ComputeCanonicalName, a.Values[k]);
       inc(k);
     end;
+    dom := nil;
+    if not(roNoSddlDomainRid in Options) then
+      dom := res.Attributes.Domain; // recognize known RID in this context
     attr := pointer(res.Attributes.Items);
     for j := k to k + res.Attributes.Count - 1 do
     begin
       a.Names[j] := attr^.AttributeName; // use TRawUtf8Interning
-      attr^.SetNewVariant(a.Values[j], options);
+      attr^.SetNewVariant(a.Values[j], Options, dom);
       inc(attr);
     end;
     if ObjectAttributeField = '*' then
