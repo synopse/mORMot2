@@ -87,7 +87,7 @@ type
   /// the decoded TCldapDomainInfo.RawFlags content
   TCldapDomainFlags = set of TCldapDomainFlag;
 
-  /// define the domain information returned by CldapGetDomainInfo(
+  /// the domain information returned by CldapGetDomainInfo(
   TCldapDomainInfo = record
     RawLogonType, RawFlags, NTVersion: cardinal;
     LogonType: TCldapDomainLogonType;
@@ -508,7 +508,7 @@ function RawLdapErrorString(ErrorCode: integer; out Enum: TLdapError): RawUtf8;
 function RawLdapTranslateFilter(const Filter: RawUtf8): TAsnObject;
 
 /// encode the ASN.1 binary for a LDAP_ASN1_SEARCH_REQUEST
-// - as used by CldapBroadcast() and TLdapClient.Search()
+// - as used by TLdapClient.Search and CldapGetDomainInfo/CldapBroadcast/CldapSortHosts
 function RawLdapSearch(const BaseDN: RawUtf8; TypesOnly: boolean;
   Filter: RawUtf8; const Attributes: array of RawUtf8;
   Scope: TLdapSearchScope = lssBaseObject; Aliases: TLdapSearchAliases = lsaAlways;
@@ -1458,9 +1458,9 @@ type
     fSearchSDFlags: TLdapSearchSDFlags;
     fSearchCookie: RawUtf8;
     fSearchResult: TLdapResultList;
-    fDefaultDN, fRootDN, fConfigDN: RawUtf8;
+    fDefaultDN, fRootDN, fConfigDN, fVendorName, fServiceName: RawUtf8;
     fNetbiosDN: RawUtf8;
-    fMechanisms, fControls, fExtensions: TRawUtf8DynArray;
+    fMechanisms, fControls, fExtensions, fNamingContexts: TRawUtf8DynArray;
     fSecContext: TSecContext;
     fBoundUser: RawUtf8;
     fSockBuffer: RawByteString;
@@ -1485,7 +1485,7 @@ type
     procedure GetByAccountType(AT: TSamAccountType; Uac, unUac: integer;
       const BaseDN, CustomFilter, Match: RawUtf8; Attribute: TLdapAttributeType;
       out Res: TRawUtf8DynArray; ObjectNames: PRawUtf8DynArray);
-    procedure RetrieveRootInfo;
+    procedure RetrieveRootDseInfo;
   public
     /// initialize this LDAP client instance
     constructor Create; overload; override;
@@ -1503,25 +1503,41 @@ type
     // - do nothing if was already connected
     function Connect(DiscoverMode: TLdapClientConnect = [lccCldap, lccTlsFirst];
       DelayMS: integer = 500): boolean;
-    /// the Root domain name of this LDAP server
+    /// the published "rootDomainNamingContext" attribute in the Root DSE
+    // - a typical value is e.g. 'DC=ad,DC=company,DC=it'
     // - use an internal cache for fast retrieval
     function RootDN: RawUtf8;
-    /// the Default domain name of this LDAP server
+    /// the published "defaultNamingContext" attribute in the Root DSE
     // - is the same as RootDN when domain isn't a subdomain
+    // - a typical value is e.g. 'DC=ad,DC=company,DC=it'
     // - use an internal cache for fast retrieval
     function DefaultDN(const BaseDN: RawUtf8 = ''): RawUtf8;
-    /// the Confirguration domain name of this LDAP server
+    /// the published "vendorName" attribute in the Root DSE
+    // - a typical value is e.g. 'Samba Team (https://www.samba.org)'
+    // - use an internal cache for fast retrieval
+    function VendorName: RawUtf8;
+    /// the published "ldapServiceName" attribute in the Root DSE
+    // - a typical value is e.g. 'ad.company.it:dc-main@AD.COMPANY.IT'
+    // - use an internal cache for fast retrieval
+    function ServiceName: RawUtf8;
+    /// the published "configurationNamingContext" attribute in the Root DSE
     // - use an internal cache for fast retrieval
     function ConfigDN: RawUtf8;
     /// the NETBIOS domain name, empty string if not found
+    // - retrieved from the CN=Partitions of this server's ConfigDN
     // - use an internal cache for fast retrieval
     function NetbiosDN: RawUtf8;
+    /// the published "namingContexts" attribute in the Root DSE
+    // - use an internal cache for fast retrieval
+    function NamingContexts: TRawUtf8DynArray;
     /// the authentication mechanisms supported on this LDAP server
     // - returns e.g. ['GSSAPI','GSS-SPNEGO','EXTERNAL','DIGEST-MD5']
+    // - from the published "supportedSASLMechanisms" attribute in the Root DSE
     // - use an internal cache for fast retrieval
     function Mechanisms: TRawUtf8DynArray;
     /// the controls supported on this LDAP server
     // - the OIDs are returned sorted, and de-duplicated
+    // - from the published "supportedControl" attribute in the Root DSE
     // - use an internal cache for fast retrieval
     function Controls: TRawUtf8DynArray;
     /// the LDAP v3 extensions supported on this LDAP server
@@ -2404,8 +2420,11 @@ begin
     req := Asn(ASN1_SEQ, [
              Asn(id),
              //Asn(''), // the RFC 1798 requires user, but MS AD does not :(
-             RawLdapSearch('', false, '*', ['dnsHostName',
-               'defaultNamingContext', 'ldapServiceName', 'vendorName'])
+             RawLdapSearch('', false, '*', [
+               'dnsHostName',
+               'defaultNamingContext',
+               'ldapServiceName',
+               'vendorName'])
            ]);
     sock.SetReceiveTimeout(TimeOutMS);
     QueryPerformanceMicroSeconds(start);
@@ -4795,7 +4814,7 @@ begin
   result := fNetbiosDN;
 end;
 
-procedure TLdapClient.RetrieveRootInfo;
+procedure TLdapClient.RetrieveRootDseInfo;
 var
   root: TLdapResult;
 begin
@@ -4804,24 +4823,30 @@ begin
   root := SearchObject('', '*', [
     'rootDomainNamingContext',
     'defaultNamingContext',
+    'namingContexts',
     'configurationNamingContext',
     'supportedSASLMechanisms',
     'supportedControl',
-    'supportedExtension']);
+    'supportedExtension',
+    'vendorName',
+    'ldapServiceName']);
   fRootDN := root.Attributes.GetByName('rootDomainNamingContext');
   fDefaultDN := root.Attributes.GetByName('defaultNamingContext');
+  fNamingContexts := root.Attributes.Find('namingContexts').GetAllReadable;
   fConfigDN := root.Attributes.GetByName('configurationNamingContext');
   fMechanisms := root.Attributes.Find('supportedSASLMechanisms').GetAllReadable;
   fControls := root.Attributes.Find('supportedControl').GetAllReadable;
   DeduplicateRawUtf8(fControls);
   fExtensions := root.Attributes.Find('supportedExtension').GetAllReadable;
   DeduplicateRawUtf8(fExtensions);
+  fVendorName := root.Attributes.GetByName('vendorName');
+  fServiceName := root.Attributes.GetByName('ldapServiceName');
 end;
 
 function TLdapClient.RootDN: RawUtf8;
 begin
   if fRootDN = '' then
-    RetrieveRootInfo;
+    RetrieveRootDseInfo;
   result := fRootDN;
 end;
 
@@ -4832,36 +4857,57 @@ begin
   else
   begin
     if fRootDN = '' then
-      RetrieveRootInfo;
+      RetrieveRootDseInfo;
     result := fDefaultDN;
   end;
+end;
+
+function TLdapClient.NamingContexts: TRawUtf8DynArray;
+begin
+  if fRootDN = '' then
+    RetrieveRootDseInfo;
+  result := fNamingContexts;
 end;
 
 function TLdapClient.ConfigDN: RawUtf8;
 begin
   if fRootDN = '' then
-    RetrieveRootInfo;
+    RetrieveRootDseInfo;
   result := fConfigDN;
+end;
+
+function TLdapClient.VendorName: RawUtf8;
+begin
+  if fRootDN = '' then
+    RetrieveRootDseInfo;
+  result := fVendorName;
+end;
+
+function TLdapClient.ServiceName: RawUtf8;
+begin
+  if fRootDN = '' then
+    RetrieveRootDseInfo;
+  result := fServiceName;
 end;
 
 function TLdapClient.Mechanisms: TRawUtf8DynArray;
 begin
   if fRootDN = '' then
-    RetrieveRootInfo;
+    RetrieveRootDseInfo;
   result := fMechanisms;
 end;
 
 function TLdapClient.Controls: TRawUtf8DynArray;
 begin
   if fRootDN = '' then
-    RetrieveRootInfo;
+    RetrieveRootDseInfo;
   result := fControls;
 end;
 
 function TLdapClient.Extensions: TRawUtf8DynArray;
 begin
   if fRootDN = '' then
-    RetrieveRootInfo;
+    RetrieveRootDseInfo;
   result := fExtensions;
 end;
 
