@@ -32,6 +32,9 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
+  {$ifdef OSWINDOWS}
+  Windows, // for Windows API Specific Security Types and Functions below
+  {$endif OSWINDOWS}
   sysutils,
   classes,
   mormot.core.base,
@@ -1129,7 +1132,6 @@ function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
 function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
 function SddlToKnownSid(const sddl: RawUtf8; out wks: TWellKnownSid): boolean;
 function SddlToKnownRid(const sddl: RawUtf8; out wkr: TWellKnownRid): boolean;
-// see https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings
 
 const
   { SDDL standard identifiers using string[3] for efficient 32-bit alignment }
@@ -1251,7 +1253,7 @@ const
     sctNot);
 
   /// define how a sctOperator is stored as SDDL
-  // - used e.g. with SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
+  // - used e.g. as SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
   // - see [MS-DTYPE] 2.4.4.17.6 and 2.4.4.17.7
   SDDL_OPER_TXT: array[0 .. high(SDDL_OPER)] of RawUtf8 = (
     '',
@@ -1294,7 +1296,7 @@ var
   /// allow to quickly check if a TSecAccess has a SDDL identifier
   samWithSddl: TSecAccessMask;
 
-  /// O(1) lookup table used as SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
+  /// O(1) lookup table used e.g. as SDDL_OPER_TXT[SDDL_OPER_INDEX[v^.Token]]
   SDDL_OPER_INDEX: array[TSecConditionalToken] of byte;
 
 {
@@ -1578,11 +1580,6 @@ function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overloa
 {$endif OSWINDOWS}
 
 implementation
-
-{$ifdef OSWINDOWS}
-uses
-  Windows; // for Windows API Specific Security Types and Functions below
-{$endif OSWINDOWS}
 
 
 { ****************** Security IDentifier (SID) Definitions }
