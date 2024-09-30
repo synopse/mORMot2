@@ -1125,6 +1125,8 @@ function SddlNextOperand(var p: PUtf8Char): TSecConditionalToken;
 // defined for unit tests only
 function KnownSidToSddl(wks: TWellKnownSid): RawUtf8;
 function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
+function SddlToKnownSid(const sddl: RawUtf8; out wks: TWellKnownSid): boolean;
+function SddlToKnownRid(const sddl: RawUtf8; out wkr: TWellKnownRid): boolean;
 
 
 const
@@ -2129,6 +2131,35 @@ begin
   FastAssignNew(result);
   if wkr in wkrWithSddl then
     FastSetString(result, @SID_SDDLW[SID_RIDOFFSET + ord(wkr)], 2);
+end;
+
+function SddlToKnownSid(const sddl: RawUtf8; out wks: TWellKnownSid): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if length(sddl) <> 2 then
+    exit;
+  i := WordScanIndex(@SID_SDDL, SizeOf(SID_SDDL) shr 1, PWord(sddl)^);
+  if (i <= 0) or
+     (i > ord(wksLastSddl)) then
+    exit;
+  wks := TWellKnownSid(i);
+  result := true;
+end;
+
+function SddlToKnownRid(const sddl: RawUtf8; out wkr: TWellKnownRid): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if length(sddl) <> 2 then
+    exit;
+  i := WordScanIndex(@SID_SDDL, SizeOf(SID_SDDL) shr 1, PWord(sddl)^) - SID_RIDOFFSET;
+  if i < 0 then
+    exit;
+  wkr := TWellKnownRid(i);
+  result := true;
 end;
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;

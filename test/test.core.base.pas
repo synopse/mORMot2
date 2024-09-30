@@ -6518,20 +6518,20 @@ const
     'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
       '@User.Division ==" Sales")))',
     'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
-    'D:(XA;;FR;;;WD;(Member_of{SID(S-1-3-4),SID(BO)} && @Device.Bitlocker))(A;ID;FA;;;SY)');
+    'D:(XA;;FR;;;WD;(Member_of{SID(S-1-3-7),SID(BO)} && @Device.Bitlocker))(A;ID;FA;;;SY)');
   // our SDDL output always add parenthesis on binary expressions
   COND_EXP: array[0..2] of RawUtf8 = (
     'D:(XA;;FX;;;WD;((@User.Title=="PM") && ((@User.Division=="Finance") || ' +
       '(@User.Division==" Sales"))))',
     'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
-    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-3-4),SID(BO)}) && @Device.Bitlocker))(A;ID;FA;;;SY)');
+    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-3-7),SID(BO)}) && @Device.Bitlocker))(A;ID;FA;;;SY)');
 
 procedure TTestCoreBase._SDDL;
 var
   i, j: PtrInt;
   c: TSecControls;
-  k: TWellKnownSid;
-  r: TWellKnownRid;
+  k, k2: TWellKnownSid;
+  r, r2: TWellKnownRid;
   bin, saved: RawSecurityDescriptor;
   u, dom, json: RawUtf8;
   domsid: RawSid;
@@ -6545,6 +6545,8 @@ begin
   CheckEqual(KnownSidToSddl(wksNull), '');
   CheckEqual(KnownSidToSddl(wksWorld), 'WD');
   CheckEqual(KnownSidToSddl(wksLocal), '');
+  CheckEqual(KnownSidToSddl(wksCreatorOwnerRights), 'OW');
+  CheckEqual(KnownSidToSddl(wksDialup), '');
   CheckEqual(KnownSidToSddl(wksNetwork), 'NU');
   CheckEqual(KnownSidToSddl(wksSelf), 'PS');
   CheckEqual(KnownSidToSddl(wksLocalSystem), 'SY');
@@ -6554,12 +6556,34 @@ begin
   CheckEqual(KnownSidToSddl(wksBuiltinEventLogReadersGroup), 'ER');
   CheckEqual(KnownSidToSddl(wksBuiltinAccessControlAssistanceOperators), 'AA');
   CheckEqual(KnownSidToSddl(wksBuiltinWriteRestrictedCode), 'WR');
+  CheckEqual(KnownSidToSddl(wksBuiltinUserModeDriver), 'UD');
+  CheckEqual(KnownSidToSddl(wksBuiltinAnyPackage), 'AC');
   CheckEqual(KnownSidToSddl(wksCapabilityInternetClient), '');
   CheckEqual(KnownSidToSddl(high(TWellKnownSid)), '');
   for k := low(k) to high(k) do
-    Check((KnownSidToSddl(k) <> '') = (k in wksWithSddl));
+  begin
+    u := KnownSidToSddl(k);
+    Check((u <> '') = (k in wksWithSddl));
+    Check(SddlToKnownSid(u, k2) = (u <> ''));
+    if u = '' then
+      continue;
+    CheckUtf8(k2 = k, u);
+    CheckUtf8(not SddlToKnownRid(u, r2), u);
+  end;
   for r := low(r) to high(r) do
-    Check((KnownRidToSddl(r) <> '') = (r in wkrWithSddl));
+  begin
+    u := KnownRidToSddl(r);
+    Check((u <> '') = (r in wkrWithSddl));
+    Check(SddlToKnownRid(u, r2) = (u <> ''));
+    if u = '' then
+      continue;
+    CheckUtf8(r2 = r, u);
+    CheckUtf8(not SddlToKnownSid(u, k2), u);
+  end;
+  CheckEqual(SizeOf(TSid)    and 3, 0, 'TSid    DWORD-aligned');
+  CheckEqual(SizeOf(TRawSD)  and 3, 0, 'TRawSD  DWORD-aligned');
+  CheckEqual(SizeOf(TRawAcl) and 3, 0, 'TRawAcl DWORD-aligned');
+  CheckEqual(SizeOf(TRawAce) and 3, 0, 'TRawAce DWORD-aligned');
   CheckEqual(ord(scDaclAutoInheritReq), 8);
   CheckEqual(ord(scSelfRelative), 15);
   c := [scSelfRelative];
@@ -6567,7 +6591,7 @@ begin
   CheckEqual(ord(samGenericRead), 31, 'sam');
   dom := 'S-1-5-21-823746769-1624905683-418753922';
   CheckEqual(KnownSidToText(wkrUserAdmin, dom), dom + '-500');
-  CheckEqual(KnownSidToText(wkrSecurityMandatorySystem, dom), dom + '-16384');
+  CheckEqual(KnownSidToText(wrkGroupRasServers, dom), dom + '-553');
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
