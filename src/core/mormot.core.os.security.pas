@@ -2003,17 +2003,17 @@ begin
     PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
 end;
 
-procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
-begin
-  FastSetRawByteString(RawByteString(result), pointer(dom), SID_MINLEN + 5 * 4);
-  PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
-end;
-
 procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: TSid);
 begin
-  if dom <> nil then // paranoid
-    MoveFast(dom^, result, SID_MINLEN + 5 * 4);
-  result.SubAuthority[4] := WKR_RID[wkr];
+  MoveFast(dom^, result, SID_MINLEN + 4 * 4); // copy domain fields
+  result.SubAuthorityCount := 5; // if dom was a pure domain SID, not a RID
+  result.SubAuthority[4] := WKR_RID[wkr]; // append the RID
+end;
+
+procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
+begin
+  FastNewRawByteString(RawByteString(result), SID_MINLEN + 5 * 4);
+  KnownRidSid(wkr, dom, PSid(result)^);
 end;
 
 
@@ -2359,7 +2359,7 @@ begin
     begin
       while not (s^ in [#0, ')']) do // retrieve everthing until ending ')'
         inc(s);
-      FastSetRawByteString(ace.Opaque, nil, (s - p) shr 1);
+      FastNewRawByteString(ace.Opaque, (s - p) shr 1);
       result := atpInvalidContent;
       if ParseHex(PAnsiChar(p),
            pointer(ace.Opaque), length(ace.Opaque)) <> PAnsiChar(s) then
@@ -3628,7 +3628,7 @@ var
   p: PAnsiChar;
   hdr: PRawSD;
 begin
-  FastSetRawByteString(RawByteString(result), nil,
+  FastNewRawByteString(RawByteString(result),
     SizeOf(hdr^) + length(Owner) + length(Group) +
     SecAclToBin(nil, Sacl) + SecAclToBin(nil, Dacl));
   p := pointer(result);
