@@ -6589,8 +6589,7 @@ begin
   end;
   DynArrayFakeLength(all, n);
   QuickSortRawUtf8(all, n);
-  u := RawUtf8ArrayToCsv(all, #10);
-  //ConsoleWrite(u);
+  u := RawUtf8ArrayToCsv(all, #10); //ConsoleWrite(u);
   CheckHash(u, $30EF8B6D, 'sid sddl list');
   CheckEqual(SizeOf(TSid)    and 3, 0, 'TSid    DWORD-aligned');
   CheckEqual(SizeOf(TRawSD)  and 3, 0, 'TRawSD  DWORD-aligned');
