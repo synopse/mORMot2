@@ -61,6 +61,7 @@ type
   /// Security IDentifier (SID) binary format, as retrieved e.g. by Windows API
   // - this definition is not detailed on oldest Delphi, and not available on
   // POSIX, whereas it makes sense to also have it, e.g. for server process
+  // - its maximum used length is 1032 bytes
   // - see [MS-DTYP] 2.4.2 SID
   TSid = packed record
     Revision: byte;
@@ -308,7 +309,10 @@ function KnownSidToText(wkr: TWellKnownRid; const Domain: RawUtf8): RawUtf8; ove
 
 /// compute a binary SID from a decoded binary Domain and a well-known RID
 // - more efficient than KnownRawSid() overload and KnownSidToText()
-procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid);
+procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: RawSid); overload;
+
+/// compute a static binary SID from a decoded binary Domain and a well-known RID
+procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: TSid); overload;
 
 const
   /// the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
@@ -623,6 +627,7 @@ type
     atpInvalidComposite,
     atpInvalidUnicode,
     atpInvalidSid,
+    atpInvalidOctet,
     atpInvalidContent);
 
   {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
@@ -1064,7 +1069,10 @@ function AceTokenLength(v: PRawAceLiteral): PtrUInt;
 // - recognize TWellKnownSid SDDL identifiers, e.g. 'WD' into S-1-1-0 (wksWorld)
 // - with optional TWellKnownRid recognition if dom binary is supplied, e.g.
 // 'DA' identifier into S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins)
-function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
+function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean; overload;
+
+/// parse a SID from its SDDL text form into its static binary buffer
+function SddlNextSid(var p: PUtf8Char; out sid: TSid; dom: PSid): boolean; overload;
 
 /// append a binary SID as SDDL text form
 // - recognize TWellKnownSid into SDDL text, e.g. S-1-1-0 (wksWorld) into 'WD'
@@ -1831,6 +1839,17 @@ begin
   sid := KNOWN_SID[wks];
 end;
 
+procedure KnownRawSid(wks: TWellKnownSid; var sid: TSid);
+var
+  s: PSid;
+begin
+  if (wks <> wksNull) and
+     (KNOWN_SID[wks] = '') then
+    ComputeKnownSid(wks);
+  s := pointer(KNOWN_SID[wks]);
+  MoveFast(s^, sid, SidLength(s));
+end;
+
 function KnownSidToText(wks: TWellKnownSid): PShortString;
 begin
   if (wks <> wksNull) and
@@ -1976,6 +1995,13 @@ begin
   PSid(result)^.SubAuthority[4] := WKR_RID[wkr];
 end;
 
+procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: TSid);
+begin
+  if dom <> nil then // paranoid
+    MoveFast(dom^, result, SID_MINLEN + 5 * 4);
+  result.SubAuthority[4] := WKR_RID[wkr];
+end;
+
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
 
@@ -2076,16 +2102,22 @@ end;
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
 var
-  i: PtrInt;
   tmp: TSid;
+begin
+  result := SddlNextSid(p, tmp, dom);
+  if result then
+    ToRawSid(@tmp, sid);
+end;
+
+function SddlNextSid(var p: PUtf8Char; out sid: TSid; dom: PSid): boolean;
+var
+  i: PtrInt;
 begin
   while p^ = ' ' do
     inc(p);
   if PCardinal(p)^ = SID_REV32 then
   begin
-    result := TextToSid(p, tmp); // parse e.g. S-1-5-32-544
-    if result then
-      FastSetRawByteString(RawByteString(sid), @tmp, SidLength(@tmp));
+    result := TextToSid(p, sid); // parse e.g. S-1-5-32-544
     while p^ = ' ' do
       inc(p);
     exit;
