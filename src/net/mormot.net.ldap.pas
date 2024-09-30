@@ -3789,13 +3789,17 @@ end;
 
 destructor TLdapAttributeList.Destroy;
 begin
-  Clear;
+  ObjArrayClear(fItems, fCount);
   inherited Destroy;
 end;
 
 procedure TLdapAttributeList.Clear;
 begin
   ObjArrayClear(fItems, fCount);
+  fCount := 0;
+  fLastFound := 0;
+  fKnownTypes := [];
+  FillCharFast(fIndexTypes, SizeOf(fIndexTypes), 0);
 end;
 
 function TLdapAttributeList.FindIndex(const AttributeName: RawUtf8): PtrInt;
