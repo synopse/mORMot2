@@ -975,7 +975,7 @@ end;
 
 function TIListParent.DoAddSorted(const value; wasadded: PBoolean): integer;
 begin
-  if fHasher = nil then
+  if fHasher <> nil then
     EIList.RaiseUtf8('%.AddSorted() is not allowed  with ' +
       'loCreateUniqueIndex: use Add()', [self]);
   result := fDynArray.FastLocateOrAddSorted(value, wasadded);
