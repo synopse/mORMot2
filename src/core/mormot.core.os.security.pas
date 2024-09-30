@@ -159,11 +159,11 @@ type
     wksCreatorGroupServer,                        // S-1-3-3
     wksCreatorOwnerRights,                        // S-1-3-4       OW
     wksIntegrityUntrusted,                        // S-1-16-0
-    wksIntegrityLow,                              // S-1-16-4096
-    wksIntegrityMedium,                           // S-1-16-8192
-    wksIntegrityMediumPlus,                       // S-1-16-8448
-    wksIntegrityHigh,                             // S-1-16-12288
-    wksIntegritySystem,                           // S-1-16-16384
+    wksIntegrityLow,                              // S-1-16-4096   LW
+    wksIntegrityMedium,                           // S-1-16-8192   ME
+    wksIntegrityMediumPlus,                       // S-1-16-8448   MP
+    wksIntegrityHigh,                             // S-1-16-12288  HI
+    wksIntegritySystem,                           // S-1-16-16384  SI
     wksIntegrityProtectedProcess,                 // S-1-16-20480
     wksIntegritySecureProcess,                    // S-1-16-28672
     wksAuthenticationAuthorityAsserted,           // S-1-18-1
@@ -180,7 +180,7 @@ type
     wksService,                                   // S-1-5-6       SU
     wksAnonymous,                                 // S-1-5-7       AN
     wksProxy,                                     // S-1-5-8
-    wksEnterpriseControllers,                     // S-1-5-9
+    wksEnterpriseControllers,                     // S-1-5-9       ED
     wksSelf,                                      // S-1-5-10      PS
     wksAuthenticatedUser,                         // S-1-5-11      AU
     wksRestrictedCode,                            // S-1-5-12      RC
@@ -189,8 +189,8 @@ type
     wksThisOrganisation,                          // S-1-5-15
     wksIisUser,                                   // S-1-5-17
     wksLocalSystem,                               // S-1-5-18      SY
-    wksLocalService,                              // S-1-5-19
-    wksNetworkService,                            // S-1-5-20
+    wksLocalService,                              // S-1-5-19      LS
+    wksNetworkService,                            // S-1-5-20      NS
     wksLocalAccount,                              // S-1-5-113
     wksLocalAccountAndAdministrator,              // S-1-5-114
     wksBuiltinDomain,                             // S-1-5-32
@@ -203,7 +203,7 @@ type
     wksBuiltinPrintOperators,                     // S-1-5-32-550  PO
     wksBuiltinBackupOperators,                    // S-1-5-32-551  BO
     wksBuiltinReplicator,                         // S-1-5-32-552  RE
-    wksBuiltinRasServers,                         // S-1-5-32-553  RS
+    wksBuiltinRasServers,                         // S-1-5-32-553
     wksBuiltinPreWindows2000CompatibleAccess,     // S-1-5-32-554  RU
     wksBuiltinRemoteDesktopUsers,                 // S-1-5-32-555  RD
     wksBuiltinNetworkConfigurationOperators,      // S-1-5-32-556  NO
@@ -222,10 +222,10 @@ type
     wksBuiltinCertSvcDComAccessGroup,             // S-1-5-32-574  CD
     wksBuiltinRdsRemoteAccessServers,             // S-1-5-32-575  RA
     wksBuiltinRdsEndpointServers,                 // S-1-5-32-576  ES
-    wksBuiltinRdsManagementServers,               // S-1-5-32-577
+    wksBuiltinRdsManagementServers,               // S-1-5-32-577  MS
     wksBuiltinHyperVAdmins,                       // S-1-5-32-578  HA
     wksBuiltinAccessControlAssistanceOperators,   // S-1-5-32-579  AA
-    wksBuiltinRemoteManagementUsers,              // S-1-5-32-580
+    wksBuiltinRemoteManagementUsers,              // S-1-5-32-580  RM
     wksBuiltinDefaultSystemManagedGroup,          // S-1-5-32-581
     wksBuiltinStorageReplicaAdmins,               // S-1-5-32-582
     wksBuiltinDeviceOwners,                       // S-1-5-32-583
@@ -243,7 +243,7 @@ type
     wksCapabilityRemovableStorage,                // S-1-15-3-10
     wksCapabilityAppointments,                    // S-1-15-3-11
     wksCapabilityContacts,                        // S-1-15-3-12
-    wksBuiltinAnyPackage,                         // S-1-15-2-1
+    wksBuiltinAnyPackage,                         // S-1-15-2-1    AC
     wksBuiltinAnyRestrictedPackage,               // S-1-15-2-2
     wksNtlmAuthentication,                        // S-1-5-64-10
     wksSChannelAuthentication,                    // S-1-5-64-14
@@ -272,11 +272,7 @@ type
     wkrGroupProtectedUsers,          // DOMAIN_GROUP_RID_PROTECTED_USERS AP
     wkrGroupKeyAdmins,               // DOMAIN_GROUP_RID_KEY_ADMINS  KA
     wkrGroupEntrepriseKeyAdmins,     // DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK
-    wkrSecurityMandatoryLow,         // SECURITY_MANDATORY_LOW_RID    LW
-    wkrSecurityMandatoryMedium,      // SECURITY_MANDATORY_MEDIUM_RID ME
-    wkrSecurityMandatoryMediumPlus,  // SECURITY_MANDATORY_MEDIUM_PLUS_RID MP
-    wkrSecurityMandatoryHigh,        // SECURITY_MANDATORY_HIGH_RID   HI
-    wkrSecurityMandatorySystem);     // SECURITY_MANDATORY_SYSTEM_RID SI
+    wrkGroupRasServers);             // DOMAIN_ALIAS_RID_RAS_SERVERS RS
 
   /// define a set of well-known RID
   TWellKnownRids = set of TWellKnownRid;
@@ -326,29 +322,26 @@ procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: TSid); overload
 const
   /// the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
   WKR_RID: array[TWellKnownRid] of word = (
-    $1f2,    // wkrGroupReadOnly
-    $1f4,    // wkrUserAdmin
-    $1f5,    // wkrUserGuest
-    $1f6,    // wkrServiceKrbtgt
-    $200,    // wkrGroupAdmins
-    $201,    // wkrGroupUsers
-    $202,    // wkrGroupGuests
-    $203,    // wkrGroupComputers
-    $204,    // wkrGroupControllers
-    $205,    // wkrGroupCertAdmins
-    $206,    // wkrGroupSchemaAdmins
-    $207,    // wkrGroupEntrepriseAdmins
-    $208,    // wkrGroupPolicyAdmins
-    $209,    // wkrGroupReadOnlyControllers
-    $20a,    // wkrGroupCloneableControllers
-    $20d,    // wkrGroupProtectedUsers
-    $20e,    // wkrGroupKeyAdmins
-    $20f,    // wkrGroupEntrepriseKeyAdmins
-    $1000,   // wkrSecurityMandatoryLow
-    $2000,   // wkrSecurityMandatoryMedium
-    $2100,   // wkrSecurityMandatoryMediumPlus
-    $3000,   // wkrSecurityMandatoryHigh
-    $4000);  // wkrSecurityMandatorySystem
+    $1f2,    // RO wkrGroupReadOnly
+    $1f4,    // LA wkrUserAdmin
+    $1f5,    // LG wkrUserGuest
+    $1f6,    //    wkrServiceKrbtgt
+    $200,    // DA wkrGroupAdmins
+    $201,    // DU wkrGroupUsers
+    $202,    // DG wkrGroupGuests
+    $203,    // DC wkrGroupComputers
+    $204,    // DD wkrGroupControllers
+    $205,    // CA wkrGroupCertAdmins
+    $206,    // SA wkrGroupSchemaAdmins
+    $207,    // EA wkrGroupEntrepriseAdmins
+    $208,    // PA wkrGroupPolicyAdmins
+    $209,    //    wkrGroupReadOnlyControllers
+    $20a,    // CN wkrGroupCloneableControllers
+    $20d,    // AP wkrGroupProtectedUsers
+    $20e,    // KA wkrGroupKeyAdmins
+    $20f,    // EK wkrGroupEntrepriseKeyAdmins
+    $229);   // RS wrkGroupRasServers
+  WKR_RID_MAX = $229;
 
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
@@ -2110,16 +2103,17 @@ end;
 
 const
   /// the last TWellKnownSid item which has a SDDL identifier
-  wksLastSddl = wksBuiltinWriteRestrictedCode;
+  wksLastSddl = wksBuiltinAnyPackage;
 
   // defined as a packed array of chars for fast SSE2 brute force search
   SID_SDDL: array[0 .. (ord(wksLastSddl) + ord(high(TWellKnownRid)) + 2) * 2 - 1] of AnsiChar =
     // TWellKnownSid
-    '  WD    COCG                                    NU  ' +
-    'IUSUAN    PSAURC        SY          BABUBGPUAOSOPOBORERSRURDNO  MULU' +
-    '      ISCY      ERCDRAES  HAAA        WR' +  // WR = wksLastSddl
+    '  WD    COCG    OW  LWMEMPHISI                    NU  IUSUAN  EDPSAURC' +
+    '        SYLSNS      BABUBGPUAOSOPOBORE  RURDNO  MULU      ISCY      ' +
+    'ERCDRAESMSHAAARM      WRUD                        AC' + // AC = wksLastSddl
     // TWellKnownRid
-    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKLWMEMPHISI';
+    'ROLALG  DADUDGDCDDCASAEAPA  CNAPKAEKRS';
+  SID_RIDOFFSET = ord(wksLastSddl) + 1;
 var
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL; // for fast lookup
 
@@ -2134,7 +2128,7 @@ function KnownRidToSddl(wkr: TWellKnownRid): RawUtf8;
 begin
   FastAssignNew(result);
   if wkr in wkrWithSddl then
-    FastSetString(result, @SID_SDDLW[(ord(wksLastSddl) + 1) + ord(wkr)], 2);
+    FastSetString(result, @SID_SDDLW[SID_RIDOFFSET + ord(wkr)], 2);
 end;
 
 function SddlNextSid(var p: PUtf8Char; var sid: RawSid; dom: PSid): boolean;
@@ -2170,7 +2164,7 @@ begin
   else if dom = nil then
     exit // no RID support
   else
-    KnownRidSid(TWellKnownRid(i - (ord(wksLastSddl) + 1)), dom, sid);
+    KnownRidSid(TWellKnownRid(i - SID_RIDOFFSET), dom, sid);
   inc(p, 2);
   while p^ = ' ' do
     inc(p);
@@ -2194,12 +2188,12 @@ begin
   else if (k = wksNull) and
           (dom <> nil) and
           SidSameDomain(sid, dom) and
-          (sid^.SubAuthority[4] <= $4000) then
+          (sid^.SubAuthority[4] <= WKR_RID_MAX) then
   begin
     r := TWellKnownRid(WordScanIndex(@WKR_RID, length(WKR_RID), sid^.SubAuthority[4]));
     if r in wkrWithSddl then
     begin
-      AppendShortTwoChars(@SID_SDDLW[(ord(wksLastSddl) + 1) + ord(r)], @s);
+      AppendShortTwoChars(@SID_SDDLW[SID_RIDOFFSET + ord(r)], @s);
       exit;
     end
   end;
@@ -2826,9 +2820,10 @@ begin
     AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
   end;
   AppendShortChar(';', @s);
-  for f := low(f) to high(f) do
-    if f in Flags then
-      AppendShort(SAF_SDDL[f], s);
+  if Flags <> [] then
+    for f := low(f) to high(f) do
+      if f in Flags then
+        AppendShort(SAF_SDDL[f], s);
   AppendShortChar(';', @s);
   SddlAppendMask(s, Mask);
   if AceType in satObject then
