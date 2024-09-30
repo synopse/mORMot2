@@ -6534,6 +6534,8 @@ var
   r, r2: TWellKnownRid;
   bin, saved: RawSecurityDescriptor;
   u, dom, json: RawUtf8;
+  all: TRawUtf8DynArray;
+  n: integer;
   domsid: RawSid;
   sd, sd2: TSecurityDescriptor;
   bintree: TAceBinaryTree;
@@ -6558,8 +6560,11 @@ begin
   CheckEqual(KnownSidToSddl(wksBuiltinWriteRestrictedCode), 'WR');
   CheckEqual(KnownSidToSddl(wksBuiltinUserModeDriver), 'UD');
   CheckEqual(KnownSidToSddl(wksBuiltinAnyPackage), 'AC');
+  CheckEqual(KnownSidToSddl(wksAuthenticationServiceAsserted), 'SS');
   CheckEqual(KnownSidToSddl(wksCapabilityInternetClient), '');
   CheckEqual(KnownSidToSddl(high(TWellKnownSid)), '');
+  CheckEqual(KnownRidToSddl(wrkUserModeHwOperator), 'HO');
+  n := 0;
   for k := low(k) to high(k) do
   begin
     u := KnownSidToSddl(k);
@@ -6569,6 +6574,7 @@ begin
       continue;
     CheckUtf8(k2 = k, u);
     CheckUtf8(not SddlToKnownRid(u, r2), u);
+    AddRawUtf8(all, n, FormatUtf8('% = %', [u, ToText(k)^]));
   end;
   for r := low(r) to high(r) do
   begin
@@ -6579,7 +6585,13 @@ begin
       continue;
     CheckUtf8(r2 = r, u);
     CheckUtf8(not SddlToKnownSid(u, k2), u);
+    AddRawUtf8(all, n, FormatUtf8('% = %', [u, ToText(r)^]));
   end;
+  DynArrayFakeLength(all, n);
+  QuickSortRawUtf8(all, n);
+  u := RawUtf8ArrayToCsv(all, #10);
+  //ConsoleWrite(u);
+  CheckHash(u, $30EF8B6D, 'sid sddl list');
   CheckEqual(SizeOf(TSid)    and 3, 0, 'TSid    DWORD-aligned');
   CheckEqual(SizeOf(TRawSD)  and 3, 0, 'TRawSD  DWORD-aligned');
   CheckEqual(SizeOf(TRawAcl) and 3, 0, 'TRawAcl DWORD-aligned');
