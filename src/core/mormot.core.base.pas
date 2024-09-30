@@ -3255,9 +3255,13 @@ type
   {$else}
   TSynTempBuffer = object
   {$endif USERECORDWITHMETHODS}
+  private
+    procedure AddRealloc(new: PtrInt);
   public
     /// the text/binary length, in bytes, excluding the trailing #0
-    len: PtrInt;
+    len: integer;
+    /// how many bytes have been stored with Add()/AddShort() overloaded methods
+    added: integer;
     /// where the text/binary is available (and any Source has been copied)
     // - equals nil if len=0
     buf: pointer;
@@ -3276,12 +3280,11 @@ type
     /// initialize a new temporary buffer of a given number of bytes
     // - also include ending #0 at SourceLen position
     function Init(SourceLen: PtrInt): pointer; overload;
-    /// initialize a temporary buffer with the length of the internal stack
+    /// initialize a local buffer, returning the buffer address for direct use
     function InitOnStack: pointer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// initialize the buffer returning the internal buffer size (4080 bytes)
-    // - also set len to the internal buffer size
-    // - could be used e.g. for an API call, first trying with plain temp.Init
+    /// initialize a local buffer, returning the internal buffer size (4080 bytes)
+    // - could be used e.g. for an OS API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
     // temp.Init(expectedsize) if the API returns an insufficient buffer error
     function Init: integer; overload;
@@ -3302,6 +3305,24 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUtf8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUtf8); overload;
+    /// prepare to append some bytes to the internal buffer
+    // - returns the destination buffer where l bytes should be written
+    function Add(l: PtrInt): pointer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append some bytes to the internal buffer
+    // - making a buffer reallocation if needed
+    procedure Add(p: pointer; l: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append some bytes to the internal buffer
+    // - making a buffer reallocation if needed
+    procedure Add(const s: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append some bytes to the internal buffer
+    // - making a buffer reallocation if needed
+    procedure AddShort(const s: ShortString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// finalize the Add() temporary storage, and create a RawByteString from it
+    procedure Done(var Dest; CodePage: cardinal = CP_RAWBYTESTRING); overload;
   end;
   PSynTempBuffer = ^TSynTempBuffer;
 
@@ -10849,6 +10870,7 @@ end;
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: PtrInt);
 begin
   len := SourceLen;
+  added := 0;
   if SourceLen <= 0 then
     buf := nil
   else
@@ -10869,6 +10891,7 @@ function TSynTempBuffer.InitOnStack: pointer;
 begin
   buf := @tmp;
   len := SizeOf(tmp);
+  added := 0;
   result := @tmp;
 end;
 
@@ -10886,6 +10909,7 @@ end;
 function TSynTempBuffer.Init(SourceLen: PtrInt): pointer;
 begin
   len := SourceLen;
+  added := 0;
   if SourceLen <= 0 then
     buf := nil
   else
@@ -10901,6 +10925,7 @@ end;
 
 function TSynTempBuffer.Init: integer;
 begin
+  added := 0;
   buf := @tmp;
   result := SizeOf(tmp) - 16; // set to maximum safe size, which is 4080 bytes
   len := result;
@@ -10947,6 +10972,59 @@ begin
     Dest := ''
   else
     FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
+  if (buf <> @tmp) and
+     (buf <> nil) then
+    FreeMem(buf);
+end;
+
+procedure TSynTempBuffer.AddRealloc(new: PtrInt);
+begin
+  len := NextGrow(new);
+  if buf = @tmp then
+  begin
+    GetMem(buf, len);
+    MoveFast(tmp, buf^, added);
+  end
+  else
+    ReAllocMem(buf, len);
+end;
+
+function TSynTempBuffer.Add(l: PtrInt): pointer;
+var
+  new: PtrInt;
+begin
+  new := PtrInt(added) + l + 4; // +4 to allow adding an ending #0 e.g.
+  if new > len then // len is capacity here
+    AddRealloc(new);
+  result := PAnsiChar(buf) + added;
+  inc(added, l);
+end;
+
+procedure TSynTempBuffer.Add(p: pointer; l: PtrInt);
+begin
+  if l > 0 then
+    MoveFast(p^, Add(l)^, l);
+end;
+
+procedure TSynTempBuffer.Add(const s: RawByteString);
+var
+  l: PtrInt;
+begin
+  if pointer(s) = nil then
+    exit;
+  l := PStrLen(PtrUInt(s) - _STRLEN)^;
+  MoveFast(pointer(s)^, Add(l)^, l);
+end;
+
+procedure TSynTempBuffer.AddShort(const s: ShortString);
+begin
+  if s[0] <> #0 then
+    MoveFast(s[1], Add(ord(s[0]))^, ord(s[0]));
+end;
+
+procedure TSynTempBuffer.Done(var Dest; CodePage: cardinal);
+begin
+  FastSetStringCP(Dest, buf, added, CodePage);
   if (buf <> @tmp) and
      (buf <> nil) then
     FreeMem(buf);
