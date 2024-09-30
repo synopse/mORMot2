@@ -157,6 +157,7 @@ type
     wksCreatorGroup,                              // S-1-3-1       CG
     wksCreatorOwnerServer,                        // S-1-3-2
     wksCreatorGroupServer,                        // S-1-3-3
+    wksCreatorOwnerRights,                        // S-1-3-4       OW
     wksIntegrityUntrusted,                        // S-1-16-0
     wksIntegrityLow,                              // S-1-16-4096
     wksIntegrityMedium,                           // S-1-16-8192
@@ -229,6 +230,7 @@ type
     wksBuiltinStorageReplicaAdmins,               // S-1-5-32-582
     wksBuiltinDeviceOwners,                       // S-1-5-32-583
     wksBuiltinWriteRestrictedCode,                // S-1-5-33      WR
+    wksBuiltinUserModeDriver,                     // S-1-5-84-0-0-0-0-0 UD
     wksCapabilityInternetClient,                  // S-1-15-3-1
     wksCapabilityInternetClientServer,            // S-1-15-3-2
     wksCapabilityPrivateNetworkClientServer,      // S-1-15-3-3
@@ -1064,6 +1066,7 @@ type
     /// compute the binary conditional ACE of the stored Stack[]
     // - will also parse the nested Unicode or composite expressions from the
     // SDDL input, so this method could also set Error and return ''
+    // - no temporary memory allocation is done during this process
     function ToBinary: RawByteString;
   end;
 
@@ -1764,7 +1767,7 @@ begin
     sid.IdentifierAuthority[5] := 2;
     sid.SubAuthority[0] := 1;
   end
-  else if wks <= wksCreatorGroupServer then
+  else if wks <= wksCreatorOwnerRights then
   begin // S-1-3-0
     sid.IdentifierAuthority[5] := 3;
     sid.SubAuthority[0] := ord(wks) - ord(wksCreatorOwner);
@@ -1794,6 +1797,16 @@ begin
       sid.SubAuthority[0] := ord(wks) - (ord(wksLocalAccount) - 113)
     else if wks = wksBuiltinWriteRestrictedCode then
       sid.SubAuthority[0] := 33
+    else if wks = wksBuiltinUserModeDriver then // S-1-5-84-0-0-0-0-0
+    begin
+      sid.SubAuthorityCount := 6;
+      sid.SubAuthority[0] := 84;
+      sid.SubAuthority[1] := 0;
+      sid.SubAuthority[2] := 0;
+      sid.SubAuthority[3] := 0;
+      sid.SubAuthority[4] := 0;
+      sid.SubAuthority[5] := 0;
+    end
     else
     begin
       sid.SubAuthority[0] := 32;
@@ -1900,7 +1913,7 @@ begin
             if c in [0 .. 1] then // S-1-2-x
               result := TWellKnownSid(ord(wksLocal) + c);
           3:
-            if c in [0 .. 3] then // S-1-3-x
+            if c in [0 .. 4] then // S-1-3-x
               result := TWellKnownSid(ord(wksCreatorOwner) + c);
           5:
             case c of // S-1-5-x
@@ -1962,6 +1975,16 @@ begin
                   result := TWellKnownSid(ord(pred(wksCapabilityInternetClient)) + c);
             end;
         end;
+      end;
+    6:
+      case sid.SubAuthority[0] of
+        84:
+          if (sid.SubAuthority[1] = 0) and
+             (sid.SubAuthority[2] = 0) and
+             (sid.SubAuthority[3] = 0) and
+             (sid.SubAuthority[4] = 0) and
+             (sid.SubAuthority[5] = 0) then
+           result := wksBuiltinUserModeDriver; // S-1-5-84-0-0-0-0-0
       end;
   end;
 end;
