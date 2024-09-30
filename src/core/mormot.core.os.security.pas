@@ -125,6 +125,10 @@ function TextToRawSid(const text: RawUtf8): RawSid; overload;
 /// parse a Security IDentifier text, following the standard representation
 function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
 
+/// quickly check if a SID is in 'S-1-5-21-xx-xx-xx-RID' domain form
+function SidIsDomain(s: PSid): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// decode a domain SID text into a generic binary RID value
 // - returns true if Domain is '', or is in its 'S-1-5-21-xx-xx-xx' domain form
 // - will also accepts any 'S-1-5-21-xx-xx-xx-yyy' form, e.g. the current user SID
@@ -1699,6 +1703,15 @@ begin
     ToRawSid(@tmp, sid);
 end;
 
+function SidIsDomain(s: PSid): boolean;
+begin
+  result := (s <> nil) and
+            (s^.SubAuthorityCount in [4, 5]) and // allow domain or rid
+            (s^.SubAuthority[0] = 21) and
+            (PWord(@s^.IdentifierAuthority)^ = 0) and
+            (PCardinal(@s^.IdentifierAuthority[2])^ = $05000000);
+end;
+
 function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
 var
   tmp: TSid;
@@ -1710,10 +1723,7 @@ begin
   p := pointer(Domain);
   result := TextToSid(p, tmp) and // expects S-1-5-21-xx-xx-xx[-rid]
             (p^ = #0) and
-            (tmp.SubAuthorityCount in [4, 5]) and // allow domain or rid
-            (tmp.SubAuthority[0] = 21) and
-            (PWord(@tmp.IdentifierAuthority)^ = 0) and
-            (PCardinal(@tmp.IdentifierAuthority[2])^ = $05000000);
+            SidIsDomain(@tmp);
   if not result then
     exit; // this Domain text is no valid domain SID
   tmp.SubAuthorityCount := 5; // reserve place for WKR_RID[wkr] trailer
