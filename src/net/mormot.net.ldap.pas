@@ -876,6 +876,7 @@ type
     fCount: integer;
     fKnownType: TLdapAttributeType;
     fKnownTypeStorage: TLdapAttributeTypeStorage;
+    fObjectSidIsDomain: boolean;
     procedure SetVariantOne(var v: TVarData; const s: RawUtf8;
       options: TLdapResultOptions);
     procedure SetVariantArray(var v: TDocVariantData;
@@ -1028,6 +1029,8 @@ type
     function GroupTypes: TGroupTypes;
     /// access atSystemFlags attribute value with proper decoding
     function SystemFlags: TSystemFlags;
+    /// return the atObjectSid, if it is in a 'S-1-5-21-xx-xx-xx-RID' domain form
+    function Domain: PSid;
     /// access atUserAccountControl attribute value with proper decoding/encoding
     property UserAccountControl: TUserAccountControls
       read GetUserAccountControl write SetUserAccountControl;
@@ -3518,6 +3521,7 @@ end;
 
 procedure TLdapAttribute.Add(const aValue: RawByteString; Option: TLdapAddOption);
 begin
+  // handle Add() options
   case Option of
     aoReplaceValue:
       if (fCount = 1) and
@@ -3532,6 +3536,12 @@ begin
       if FindIndex(aValue) >= 0 then
         exit;
   end;
+  // some type-specific process
+  case fKnownType of
+    atObjectSid:
+      fObjectSidIsDomain := SidIsDomain(pointer(aValue));
+  end;
+  // append to the internal list, with optional resize
   AddRawUtf8(TRawUtf8DynArray(fList), fCount, aValue);
   if Option <> aoAlwaysFast then
     DynArrayFakeLength(fList, fCount);
@@ -4012,6 +4022,18 @@ end;
 procedure TLdapAttributeList.SetUserAccountControl(Value: TUserAccountControls);
 begin
   Add(atUserAccountControl, ToUtf8(UserAccountControlsValue(Value)), aoReplaceValue);
+end;
+
+function TLdapAttributeList.Domain: PSid;
+var
+  a: TLdapAttribute;
+begin
+  a := Find(atObjectSid);
+  if (a = nil) or
+     not a.fObjectSidIsDomain then // checked once in TLdapAttribute.Add()
+    result := nil
+  else
+    result := pointer(a.fList[0]);
 end;
 
 
