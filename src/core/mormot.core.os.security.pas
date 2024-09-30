@@ -283,6 +283,9 @@ function KnownRawSid(wks: TWellKnownSid): RawSid; overload;
 /// returns a Security IDentifier of a well-known SID as binary
 procedure KnownRawSid(wks: TWellKnownSid; var sid: RawSid); overload;
 
+/// returns a Security IDentifier of a well-known SID as static binary buffer
+procedure KnownRawSid(wks: TWellKnownSid; var sid: TSid); overload;
+
 /// returns a Security IDentifier of a well-known SID as standard text
 // - e.g. wksBuiltinAdministrators as 'S-1-5-32-544'
 function KnownSidToText(wks: TWellKnownSid): PShortString; overload;
@@ -371,7 +374,7 @@ type
   // - see [MS-DTYP] 2.4.6 SECURITY_DESCRIPTOR
   TRawSD = packed record
     Revision: byte;
-    Sbz1: byte;
+    Sbz1: byte;      // always DWORD-aligned
     Control: TSecControls;
     Owner: cardinal; // not pointers, but self-relative position
     Group: cardinal;
@@ -387,7 +390,7 @@ type
     Sbz1: byte;
     AclSize: word; // including TRawAcl header + all ACEs
     AceCount: word;
-    Sbz2: word;
+    Sbz2: word;    // always DWORD-aligned
   end;
   PRawAcl = ^TRawAcl;
 
@@ -655,7 +658,7 @@ type
     // - e.g. is a conditional expression binary for satConditional ACEs like
     // '(@User.Project Any_of @Resource.Project)', or for satResourceAttribute
     // is a CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 struct
-    // - may end with up to 3 zero bytes, for DWORD ACE binary alignment
+    // - may end with up to 3 zero bytes, for binary DWORD alignment
     Opaque: RawByteString;
     /// the associated Object Type GUID (satObject only)
     ObjectType: TGuid;
@@ -808,6 +811,7 @@ type
     sctInternalFinal        = $fc,
     sctInternalParenthOpen  = $fe,
     sctInternalParenthClose = $ff);
+  PSecConditionalToken = ^TSecConditionalToken;
 
   /// binary conditional ACE integer base indicator for SDDL/display purposes
   // - see [MS-DTYP] 2.4.4.17.5 Literal Tokens
@@ -3107,7 +3111,7 @@ begin
   l := nil;
   r := nil;
   if n^.Left < Count then
-    GetNodeText(n^.Left, RawUtf8(l));
+    GetNodeText(n^.Left, RawUtf8(l)); // recursive resolution
   if n^.Right < Count then
     GetNodeText(n^.Right, RawUtf8(r));
   v := @Storage[n^.Position];
@@ -3527,6 +3531,7 @@ begin
     // main buffer coherency
     (p <> nil) and
     (len > SizeOf(TRawSD)) and
+    (len and 3 = 0) and // should be DWORD-aligned
     // header
     (PRawSD(p)^.Revision = 1) and
     (PRawSD(p)^.Sbz1 = 0) and
