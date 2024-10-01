@@ -97,11 +97,11 @@ begin
   p.NoResume := c.Option('&noresume',
      'disable auto-resume of interrupted partial download');
   p.Cache := c.Option('&cache', 'enable local Cache in --cachePath');
-  p.Peer := c.Option(['&peer'], 'enable peer Cache process - see --peer* params');
+  p.Peer := c.Option('&peer', 'enable peer Cache process - see --peer* params');
   p.TlsCertFile := c.ParamS('&tlsCert', 'optional client Certificate #filename');
-  logfolder := c.ParamS(['logFolder'],
+  logfolder := c.ParamS('logFolder',
      '#folder to be used for --log output', logfolder);
-  p.CacheFolder := c.ParamS(['cachePath'],
+  p.CacheFolder := c.ParamS('cachePath',
      '#folder to be used for local (not peer) --cache', p.CacheFolder);
   p.TlsIgnoreErrors  := c.Option('&weakTls', 'ignore TLS certificate errors');
   if c.Option('&log', 'enable logging in --logFolder') then
@@ -172,6 +172,7 @@ var
 begin
   try
     // initialize OpenSSL if needed
+    // - on Windows, define FORCE_OPENSSL conditional in your project option
     {$ifdef USE_OPENSSL}
     OpenSslInitialize;
     {$endif USE_OPENSSL}
