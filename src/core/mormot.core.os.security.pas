@@ -163,6 +163,7 @@ type
   /// define a list of well-known Security IDentifier (SID) groups
   // - for instance, wksBuiltinAdministrators is set for local administrators
   // - warning: does not exactly match winnt.h WELL_KNOWN_SID_TYPE enumeration
+  // - see [MS-DTYP] 2.4.2.4 Well-Known SID Structures
   TWellKnownSid = (
     wksNull,                                      // S-1-0-0
     wksWorld,                                     // S-1-1-0       WD
@@ -268,27 +269,30 @@ type
   TWellKnownSids = set of TWellKnownSid;
 
   /// define a list of well-known domain relative sub-authority RID values
+  // - see [MS-DTYP] 2.4.2.4 Well-Known SID Structures
   TWellKnownRid = (
-    wkrGroupReadOnly,                // DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS RO
-    wkrUserAdmin,                    // DOMAIN_USER_RID_ADMIN  LA
-    wkrUserGuest,                    // DOMAIN_USER_RID_GUEST  LG
-    wkrServiceKrbtgt,                // DOMAIN_USER_RID_KRBTGT
-    wkrGroupAdmins,                  // DOMAIN_GROUP_RID_ADMINS DA
-    wkrGroupUsers,                   // DOMAIN_GROUP_RID_USERS DU
-    wkrGroupGuests,                  // DOMAIN_GROUP_RID_GUESTS DG
-    wkrGroupComputers,               // DOMAIN_GROUP_RID_COMPUTERS DC
-    wkrGroupControllers,             // DOMAIN_GROUP_RID_CONTROLLERS DD
-    wkrGroupCertAdmins,              // DOMAIN_GROUP_RID_CERT_ADMINS     CA
-    wkrGroupSchemaAdmins,            // DOMAIN_GROUP_RID_SCHEMA_ADMINS   SA
-    wkrGroupEntrepriseAdmins,        // DOMAIN_GROUP_RID_ENTERPRISE_ADMINS EA
-    wkrGroupPolicyAdmins,            // DOMAIN_GROUP_RID_POLICY_ADMINS  PA
-    wkrGroupReadOnlyControllers,     // DOMAIN_GROUP_RID_READONLY_CONTROLLERS
-    wkrGroupCloneableControllers,    // DOMAIN_GROUP_RID_CLONEABLE_CONTROLLERS CN
-    wkrGroupProtectedUsers,          // DOMAIN_GROUP_RID_PROTECTED_USERS AP
-    wkrGroupKeyAdmins,               // DOMAIN_GROUP_RID_KEY_ADMINS  KA
-    wkrGroupEntrepriseKeyAdmins,     // DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK
-    wrkGroupRasServers,              // DOMAIN_ALIAS_RID_RAS_SERVERS RS
-    wrkUserModeHwOperator);          // DOMAIN_ALIAS_RID_USER_MODE_HARDWARE_OPERATORS HO
+    wkrGroupReadOnly,                  // DOMAIN_GROUP_RID_ENTERPRISE_READONLY_DOMAIN_CONTROLLERS RO
+    wkrUserAdmin,                      // DOMAIN_USER_RID_ADMIN  LA
+    wkrUserGuest,                      // DOMAIN_USER_RID_GUEST  LG
+    wkrServiceKrbtgt,                  // DOMAIN_USER_RID_KRBTGT
+    wkrGroupAdmins,                    // DOMAIN_GROUP_RID_ADMINS DA
+    wkrGroupUsers,                     // DOMAIN_GROUP_RID_USERS DU
+    wkrGroupGuests,                    // DOMAIN_GROUP_RID_GUESTS DG
+    wkrGroupComputers,                 // DOMAIN_GROUP_RID_COMPUTERS DC
+    wkrGroupControllers,               // DOMAIN_GROUP_RID_CONTROLLERS DD
+    wkrGroupCertAdmins,                // DOMAIN_GROUP_RID_CERT_ADMINS     CA
+    wkrGroupSchemaAdmins,              // DOMAIN_GROUP_RID_SCHEMA_ADMINS   SA
+    wkrGroupEntrepriseAdmins,          // DOMAIN_GROUP_RID_ENTERPRISE_ADMINS EA
+    wkrGroupPolicyAdmins,              // DOMAIN_GROUP_RID_POLICY_ADMINS  PA
+    wkrGroupReadOnlyControllers,       // DOMAIN_GROUP_RID_READONLY_CONTROLLERS
+    wkrGroupCloneableControllers,      // DOMAIN_GROUP_RID_CLONEABLE_CONTROLLERS CN
+    wkrGroupProtectedUsers,            // DOMAIN_GROUP_RID_PROTECTED_USERS AP
+    wkrGroupKeyAdmins,                 // DOMAIN_GROUP_RID_KEY_ADMINS  KA
+    wkrGroupEntrepriseKeyAdmins,       // DOMAIN_GROUP_RID_ENTERPRISE_KEY_ADMINS EK
+    wrkGroupRasServers,                // DOMAIN_ALIAS_RID_RAS_SERVERS RS
+    wrkAllowedRodcPasswordReplication, // ALLOWED_RODC_PASSWORD_REPLICATION_GROUP
+    wrkDeniedRodcPasswordReplication,  // DENIED_RODC_PASSWORD_REPLICATION_GROUP
+    wrkUserModeHwOperator);            // DOMAIN_ALIAS_RID_USER_MODE_HARDWARE_OPERATORS HO
 
   /// define a set of well-known RID
   TWellKnownRids = set of TWellKnownRid;
@@ -337,28 +341,33 @@ procedure KnownRidSid(wkr: TWellKnownRid; dom: PSid; var result: TSid); overload
 
 const
   /// the S-1-5-21-xx-xx-xx-RID trailer value of each known RID
+  // - see [MS-DTYP] 2.4.2.4 Well-Known SID Structures
   WKR_RID: array[TWellKnownRid] of word = (
-    $1f2,    // RO wkrGroupReadOnly
-    $1f4,    // LA wkrUserAdmin
-    $1f5,    // LG wkrUserGuest
-    $1f6,    //    wkrServiceKrbtgt
-    $200,    // DA wkrGroupAdmins
-    $201,    // DU wkrGroupUsers
-    $202,    // DG wkrGroupGuests
-    $203,    // DC wkrGroupComputers
-    $204,    // DD wkrGroupControllers
-    $205,    // CA wkrGroupCertAdmins
-    $206,    // SA wkrGroupSchemaAdmins
-    $207,    // EA wkrGroupEntrepriseAdmins
-    $208,    // PA wkrGroupPolicyAdmins
-    $209,    //    wkrGroupReadOnlyControllers
-    $20a,    // CN wkrGroupCloneableControllers
-    $20d,    // AP wkrGroupProtectedUsers
-    $20e,    // KA wkrGroupKeyAdmins
-    $20f,    // EK wkrGroupEntrepriseKeyAdmins
-    $229,    // RS wrkGroupRasServers
-    $248);   // HO wrkUserModeHwOperator
-  WKR_RID_MAX = $248;
+    498,    // $1f2  RO wkrGroupReadOnly
+    500,    // $1f4  LA wkrUserAdmin
+    501,    // $1f5  LG wkrUserGuest
+    502,    // $1f6     wkrServiceKrbtgt
+    512,    // $200  DA wkrGroupAdmins
+    513,    // $201  DU wkrGroupUsers
+    514,    // $202  DG wkrGroupGuests
+    515,    // $203  DC wkrGroupComputers
+    516,    // $204  DD wkrGroupControllers
+    517,    // $205  CA wkrGroupCertAdmins
+    518,    // $206  SA wkrGroupSchemaAdmins
+    519,    // $207  EA wkrGroupEntrepriseAdmins
+    520,    // $208  PA wkrGroupPolicyAdmins
+    521,    // $209     wkrGroupReadOnlyControllers
+    522,    // $20a  CN wkrGroupCloneableControllers
+    525,    // $20d  AP wkrGroupProtectedUsers
+    526,    // $20e  KA wkrGroupKeyAdmins
+    527,    // $20f  EK wkrGroupEntrepriseKeyAdmins
+    553,    // $229  RS wrkGroupRasServers
+    571,    // $23b     wrkAllowedRodcPasswordReplication
+    572,    // $23c     wrkDeniedRodcPasswordReplication
+    584);   // $248  HO wrkUserModeHwOperator
+
+  /// the maximum known RID value of S-1-5-21-xx-xx-xx-RID patterns
+  WKR_RID_MAX = 584;
 
 
 { ****************** Security Descriptor Self-Relative Binary Structures }
