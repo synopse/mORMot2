@@ -4917,7 +4917,7 @@ begin
 end;
 
 const
-  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexCharsUpper: array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
 procedure AppendShortByteHex(value: byte; var dest: ShortString);
@@ -4927,10 +4927,10 @@ begin
   len := ord(dest[0]);
   if len >= 254 then
     exit;
-  dest[len + 1] := HexChars[value shr 4];
+  dest[len + 1] := HexCharsUpper[value shr 4];
   inc(len, 2);
   value := value and $0f;
-  dest[len] := HexChars[value];
+  dest[len] := HexCharsUpper[value];
   dest[0] := AnsiChar(len);
 end;
 
@@ -4947,7 +4947,7 @@ begin
     repeat
       v := value^;
       inc(value);
-      dest[dlen + 1] := tab[v shr 4];
+      dest[dlen + 1] := tab[v shr 4]; // hexadecimal output in natural order
       inc(dlen, 2);
       v := v and $0f;
       dest[dlen] := tab[v];
@@ -4959,19 +4959,21 @@ end;
 
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 var
-  tmp: array[0..23] of AnsiChar;
+  tmp: array[0..23] of AnsiChar; // output in display/reversed order
   i: PtrInt;
+  tab: PAnsiChar;
 begin
   i := SizeOf(value) * 2;
+  tab := @HexCharsLower;
   repeat
-    tmp[i - 1] := HexCharsLower[value and 15];
+    tmp[i - 1] := tab[value and 15];
     value := value shr 4;
-    tmp[i - 2] := HexCharsLower[value and 15];
+    tmp[i - 2] := tab[value and 15];
     dec(i, 2);
     if i = 0 then
       break;
     value := value shr 4;
-  until value = 0;
+  until value = 0; // truncate to significant digits
   AppendShortTemp(@tmp[i], @tmp[SizeOf(value) * 2], @dest);
 end;
 
