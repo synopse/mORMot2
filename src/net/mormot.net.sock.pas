@@ -24,9 +24,7 @@ unit mormot.net.sock;
   *****************************************************************************
 
   Notes:
-    Oldest Delphis didn't include WinSock2.pas, so we defined our own.
-    Under POSIX, will redirect to the libc or regular FPC units.
-
+    OS-specific code is located in mormot.net.sock.windows/posix.inc files.
 }
 
 
@@ -408,6 +406,7 @@ function GetReachableNetAddr(const address, port: array of RawUtf8;
 
 var
   /// contains the raw Socket API version, as returned by the Operating System
+  // - equals e.g. 'Debian Linux 6.1.0 epoll'
   SocketApiVersion: RawUtf8;
 
   /// callback used by NewSocket() to resolve the host name as IPv4

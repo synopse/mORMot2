@@ -9877,7 +9877,8 @@ begin
   Data := PPointer(Data)^;
   if Data <> nil then
   begin
-    SidToTextShort(Data, tmp); // fast enough
+    tmp[0] := #0;
+    SidAppendShort(Data, tmp); // fast enough
     Ctxt.W.AddShort(tmp);
   end;
   Ctxt.W.AddDirect('"');

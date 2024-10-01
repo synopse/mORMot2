@@ -10525,13 +10525,13 @@ begin
 end;
 
 function _ShortToUuid(const text: ShortString; out uuid: TGuid): boolean;
-begin
+begin // much more efficient than default TryStringToGUID() in mormot.core.os
   result := (text[0] = #36) and
             (TextToGuid(@text[1], @uuid) <> nil);
 end;
 
 procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
-begin
+begin // much more efficient than default GUIDToString() in mormot.core.os
   if ord(s[0]) > 255 - 36 then
     exit;
   GuidToText(@s[ord(s[0]) + 1], @u, @TwoDigitsHexWBLower);
