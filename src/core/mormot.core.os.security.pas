@@ -141,6 +141,9 @@ function TextToRawSid(const text: RawUtf8): RawSid; overload;
 /// parse a Security IDentifier text, following the standard representation
 function TextToRawSid(const text: RawUtf8; out sid: RawSid): boolean; overload;
 
+/// parse several Security IDentifier text, following the standard representation
+function TextToRawSidArray(const text: array of RawUtf8; out sid: RawSidDynArray): boolean;
+
 /// quickly check if a SID is in 'S-1-5-21-xx-xx-xx-RID' domain form
 function SidIsDomain(s: PSid): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -166,6 +169,16 @@ function SidSameDomain(sid, dom: PSid): boolean;
 // - returns 0 if SID was not modified, or 1 if its domain part has been adjusted
 function SidReplaceDomain(OldDomain, NewDomain: PSid; maxRid: cardinal;
   var Sid: RawSid): integer;
+
+/// replace a any occurence of OldSid[] in Sid value by NewSid[]
+// - length(OldSid) should equal length(NewSid)
+function SidReplaceAny(const OldSid, NewSid: RawSidDynArray;
+  var Sid: RawSid): integer; overload;
+
+/// replace a any occurence of OldSid[] in Sid value by NewSid[]
+// - each length(OldSid[]) should equal length(NewSid[]) and also equal SidLen
+function SidReplaceAny(const OldSid, NewSid: RawSidDynArray;
+  var Sid: TSid; SidLen: PtrInt): integer; overload;
 
 
 type
@@ -733,8 +746,11 @@ type
     function ConditionalExpression(const condExp: RawUtf8;
       dom: PSid = nil): TAceTextParse; overload;
     /// replace all nested RID from one domain to another
-    // - also from any ACE conditional expression
+    // - also within any ACE conditional expression
     function ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
+    /// replace all nested SID from one set of values to another
+    // - also within any ACE conditional expression
+    function ReplaceAnySid(const OldSid, NewSid: RawSidDynArray): integer;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -1117,6 +1133,13 @@ function AceTokenLength(v: PRawAceOperand): PtrUInt;
 // - instead of using a temp TAceBinaryTree, we implemented a O(1) direct process
 // within the RawByteString binary buffer itself
 function AceReplaceDomain(olddom, newdom: PSid; maxRid: cardinal;
+  var opaque: RawByteString): integer;
+
+/// replace any occurence of old[] SID into new[] within a conditional ACE binary
+// - instead of using a temp TAceBinaryTree, we implemented a O(1) direct process
+// within the RawByteString binary buffer itself
+// - expects each length(old[]) = length(new[]) to be replaced in-place
+function AceReplaceAnySid(const old, new: RawSidDynArray;
   var opaque: RawByteString): integer;
 
 
@@ -1585,6 +1608,18 @@ type
     /// change all well-known RIDs for a given domain to another, from raw binary
     function ReplaceDomainRaw(OldDomain, NewDomain: PSid;
       maxRid: cardinal): integer;
+    /// change all occurrences of a given SID value
+    // - returns the number of entries changed in the input, including both
+    // Owner/Group and nested ACE (and conditionals)
+    // - returns -1 if OldSid/NewSid are no valid SID text, or with unequal length
+    function ReplaceSid(const OldSid, NewSid: RawUtf8): integer; overload;
+    /// change all occurrences of one or several given SID value(s)
+    // - returns the number of entries changed in the input, or -1 on invalid SID
+    // - each and every old/new SID lengths should match for in-place replacement
+    // of the Opaque binary content
+    function ReplaceSid(const OldSid, NewSid: array of RawUtf8): integer; overload;
+    /// change all occurrences of one or several given SID value(s)
+    function ReplaceSidRaw(const OldSid, NewSid: RawSidDynArray): integer; overload;
   end;
 
   {$A+}
@@ -1904,6 +1939,22 @@ begin
     ToRawSid(@tmp, sid);
 end;
 
+function TextToRawSidArray(const text: array of RawUtf8; out sid: RawSidDynArray): boolean;
+var
+  i, n: PtrInt;
+begin
+  n := length(Text);
+  SetLength(sid, n);
+  for i := 0 to n - 1 do
+    if not TextToRawSid(text[i], sid[i]) then
+    begin
+      sid := nil;
+      result := false;
+      exit;
+    end;
+  result := true;
+end;
+
 function SidIsDomain(s: PSid): boolean;
 begin
   result := (s <> nil) and
@@ -1955,6 +2006,39 @@ begin
     UniqueString(AnsiString(Sid)); // paranoid
   MoveFast(pointer(NewDomain)^, pointer(Sid)^, SID_DOMAINLEN); // overwrite
   result := 1;
+end;
+
+function SidReplaceAny(const OldSid, NewSid: RawSidDynArray; var Sid: RawSid): integer;
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(OldSid) - 1 do
+    if OldSid[i] = Sid then
+    begin
+      Sid := NewSid[i];
+      result := 1;
+      exit;
+    end;
+  result := 0;
+end;
+
+function SidReplaceAny(const OldSid, NewSid: RawSidDynArray;
+  var Sid: TSid; SidLen: PtrInt): integer;
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(OldSid) - 1 do
+    {$ifdef CPUX64}
+    if MemCmp(pointer(OldSid[i]), @Sid, SidLen) = 0 then // use SSE2 asm
+    {$else}
+    if CompareMem(pointer(OldSid[i]), @Sid, SidLen) then
+    {$endif CPUX64}
+    begin
+      MoveFast(pointer(NewSid[i])^, Sid, SidLen); // overwrite
+      result := 1;
+      exit;
+    end;
+  result := 0;
 end;
 
 var
@@ -2335,6 +2419,24 @@ begin
     inc(a);
   end;
 end;
+
+function AclReplaceAny(const OldSid, NewSid: RawSidDynArray;
+  var acl: TSecAcl): integer;
+var
+  a: ^TSecAce;
+  i: PtrInt;
+begin
+  result := 0;
+  if acl = nil then
+    exit;
+  a := pointer(acl);
+  for i := 1 to length(acl) do
+  begin
+    inc(result, a^.ReplaceAnySid(OldSid, NewSid));
+    inc(a);
+  end;
+end;
+
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -3077,6 +3179,14 @@ begin
     inc(result, AceReplaceDomain(old, new, maxRid, Opaque));
 end;
 
+function TSecAce.ReplaceAnySid(const OldSid, NewSid: RawSidDynArray): integer;
+begin
+  result := SidReplaceAny(OldSid, NewSid, Sid);
+  if (Opaque <> '') and
+     (PCardinal(Opaque)^ = ACE_CONDITION_SIGNATURE) then
+    inc(result, AceReplaceAnySid(OldSid, NewSid, Opaque));
+end;
+
 function TSecAce.Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
   dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
 begin
@@ -3362,20 +3472,67 @@ begin
         begin
           c := @v^.Composite;
           comp := v^.CompositeBytes;
-          repeat
-            clen := AceTokenLength(c);
-            if clen > comp then
-              exit;
-            if (c^.Token = sctSid) and
-               SidSameDomain(@c^.Sid, olddom) and
-               (c^.Sid.SubAuthority[4] <= maxRid) then
-            begin
-              MoveFast(newdom^, c^.Sid, SID_DOMAINLEN); // in-place overwrite
-              inc(result);
-            end;
-            inc(PByte(c), clen);
-            dec(comp, clen);
-          until comp = 0;
+          if comp <> 0 then
+            repeat
+              clen := AceTokenLength(c);
+              if clen > comp then
+                exit;
+              if (c^.Token = sctSid) and
+                 SidSameDomain(@c^.Sid, olddom) and
+                 (c^.Sid.SubAuthority[4] <= maxRid) then
+              begin
+                MoveFast(newdom^, c^.Sid, SID_DOMAINLEN); // in-place overwrite
+                inc(result);
+              end;
+              inc(PByte(c), clen);
+              dec(comp, clen);
+            until comp = 0;
+        end;
+    end;
+    inc(PByte(v), len);
+    dec(size, len);
+  until size = 0;
+end;
+
+function AceReplaceAnySid(const old, new: RawSidDynArray;
+  var opaque: RawByteString): integer;
+var
+  v, c: PRawAceOperand;
+  opaquesize, size, oldlen, len, comp, clen: PtrUInt;
+begin
+  result := 0;
+  opaquesize := length(opaque);
+  size := opaquesize;
+  if (old = nil) or
+     (size = 0) or
+     (size and 3 <> 0) or
+     (PCardinal(opaque)^ <> ACE_CONDITION_SIGNATURE) then
+    exit;
+  oldlen := length(old[0]); // all old[] should have the same length
+  v := @PCardinalArray(opaque)[1];
+  repeat
+    len := AceTokenLength(v);
+    if len > size then
+      exit; // avoid buffer overflow
+    case v^.Token of
+      sctSid:
+        if v^.SidBytes = oldlen then
+          inc(result, SidReplaceAny(old, new, v^.Sid, oldlen));
+      sctComposite: // check for any nested SID
+        begin
+          c := @v^.Composite;
+          comp := v^.CompositeBytes;
+          if comp <> 0 then
+            repeat
+              clen := AceTokenLength(c);
+              if clen > comp then
+                exit;
+              if (c^.Token = sctSid) and
+                 (c^.SidBytes = oldlen) then
+                inc(result, SidReplaceAny(old, new, c^.Sid, oldlen));
+              inc(PByte(c), clen);
+              dec(comp, clen);
+            until comp = 0;
         end;
     end;
     inc(PByte(v), len);
@@ -4284,6 +4441,39 @@ begin
               AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Sacl)
   else
     result := -1;
+end;
+
+function TSecurityDescriptor.ReplaceSid(const OldSid, NewSid: RawUtf8): integer;
+begin
+  result := ReplaceSid([OldSid], [NewSid]);
+end;
+
+function TSecurityDescriptor.ReplaceSid(const OldSid, NewSid: array of RawUtf8): integer;
+var
+  old, new: RawSidDynArray;
+begin
+  result := -1;
+  if (length(OldSid) <> length(NewSid)) or
+     not TextToRawSidArray(OldSid, old) or
+     not TextToRawSidArray(NewSid, new) then
+    exit;
+  result := ReplaceSidRaw(old, new)
+end;
+
+function TSecurityDescriptor.ReplaceSidRaw(const OldSid, NewSid: RawSidDynArray): integer;
+var
+  i: PtrInt;
+begin
+  result := -1;
+  if length(OldSid) <> length(NewSid) then
+    exit;
+  for i := 0 to length(OldSid) - 1 do
+    if length(OldSid[i]) <> length(NewSid[i]) then
+      exit; // old/new SID lengths should match for in-place Opaque replacement
+  result := SidReplaceAny(OldSid, NewSid, Owner) +
+            SidReplaceAny(OldSid, NewSid, Group) +
+            AclReplaceAny(OldSid, NewSid, Dacl) +
+            AclReplaceAny(OldSid, NewSid, Sacl);
 end;
 
 
