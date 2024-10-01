@@ -62,14 +62,9 @@ const
   CRYPTO_R_ODD_NUMBER_OF_DIGITS = 103;
   
   SSLEAY_VERSION_NUMBER = OPENSSL_VERSION_NUMBER; 
-  OPENSSL_VERSION = 0;
-  OPENSSL_CFLAGS = 1;
   SSLEAY_CFLAGS = OPENSSL_CFLAGS;
-  OPENSSL_BUILT_ON = 2;
   SSLEAY_BUILT_ON = OPENSSL_BUILT_ON;
-  OPENSSL_PLATFORM = 3;
   SSLEAY_PLATFORM = OPENSSL_PLATFORM;
-  OPENSSL_DIR = 4;
   SSLEAY_DIR = OPENSSL_DIR;
   
   CRYPTO_MEM_CHECK_OFF = $0;
@@ -1652,7 +1647,6 @@ const
   NID_id_mod_cmp2000 = 284;
   SN_info_access = 'authorityInfoAccess';
   LN_info_access = 'Authority Information Access';
-  NID_info_access = 177;
   SN_biometricInfo = 'biometricInfo';
   LN_biometricInfo = 'Biometric Info';
   NID_biometricInfo = 285;
@@ -2180,7 +2174,6 @@ const
   LN_subject_key_identifier = 'X509v3 Subject Key Identifier';
   SN_key_usage = 'keyUsage';
   LN_key_usage = 'X509v3 Key Usage';
-  NID_key_usage = 83;
   SN_private_key_usage_period = 'privateKeyUsagePeriod';
   LN_private_key_usage_period = 'X509v3 Private Key Usage Period';
   NID_private_key_usage_period = 84;
@@ -2190,7 +2183,6 @@ const
   LN_issuer_alt_name = 'X509v3 Issuer Alternative Name';
   SN_basic_constraints = 'basicConstraints';
   LN_basic_constraints = 'X509v3 Basic Constraints';
-  NID_basic_constraints = 87;
   SN_issuing_distribution_point = 'issuingDistributionPoint';
   LN_issuing_distribution_point = 'X509v3 Issuing Distribution Point';
   NID_issuing_distribution_point = 770;
@@ -2214,13 +2206,11 @@ const
   NID_policy_mappings = 747;
   SN_authority_key_identifier = 'authorityKeyIdentifier';
   LN_authority_key_identifier = 'X509v3 Authority Key Identifier';
-  NID_authority_key_identifier = 90;
   SN_policy_constraints = 'policyConstraints';
   LN_policy_constraints = 'X509v3 Policy Constraints';
   NID_policy_constraints = 401;
   SN_ext_key_usage = 'extendedKeyUsage';
   LN_ext_key_usage = 'X509v3 Extended Key Usage';
-  NID_ext_key_usage = 126;
   SN_freshest_crl = 'freshestCRL';
   LN_freshest_crl = 'X509v3 Freshest CRL';
   NID_freshest_crl = 857;
@@ -2268,7 +2258,6 @@ const
   NID_netscape_ssl_server_name = 77;
   SN_netscape_comment = 'nsComment';
   LN_netscape_comment = 'Netscape Comment';
-  NID_netscape_comment = 78;
   SN_netscape_cert_sequence = 'nsCertSequence';
   LN_netscape_cert_sequence = 'Netscape Certificate Sequence';
   NID_netscape_cert_sequence = 79;
@@ -5024,16 +5013,6 @@ const
   NS_SMIME_CA = $02;
   NS_OBJSIGN_CA = $01;
   NS_ANY_CA = NS_SSL_CA or NS_SMIME_CA or NS_OBJSIGN_CA;
-  
-  XKU_SSL_SERVER = $1;
-  XKU_SSL_CLIENT = $2;
-  XKU_SMIME = $4;
-  XKU_CODE_SIGN = $8;
-  XKU_SGC = $10;
-  XKU_OCSP_SIGN = $20;
-  XKU_TIMESTAMP = $40;
-  XKU_DVCS = $80;
-  XKU_ANYEKU = $100;
   
   X509V3_ADD_OP_MASK = $f;
   X509V3_ADD_DEFAULT = 0;
@@ -8574,8 +8553,6 @@ type
   PPx509_cert_aux_st = ^Px509_cert_aux_st;
   Px509_cinf_st = pointer;
   PPx509_cinf_st = ^Px509_cinf_st;
-  Pstack_st_X509 = pointer;
-  PPstack_st_X509 = ^Pstack_st_X509;
   Pstack_st_X509_TRUST = pointer;
   PPstack_st_X509_TRUST = ^Pstack_st_X509_TRUST;
   PX509_crl_info_st = pointer;
@@ -8596,7 +8573,6 @@ type
   PPstack_st_PKCS7_RECIP_INFO = ^Pstack_st_PKCS7_RECIP_INFO;
   Pstack_st_PKCS7 = pointer;
   PPstack_st_PKCS7 = ^Pstack_st_PKCS7;
-  Pstack_st_CONF_VALUE = pointer;
   PPstack_st_CONF_VALUE = ^Pstack_st_CONF_VALUE;
   Pconf_imodule_st = pointer;
   PPconf_imodule_st = ^Pconf_imodule_st;
@@ -8839,7 +8815,6 @@ type
   Ppkcs7_st = ^pkcs7_st;
   PCONF_VALUE = ^CONF_VALUE;
   PPCONF_VALUE = ^PCONF_VALUE;
-  Plhash_st_CONF_VALUE = ^lhash_st_CONF_VALUE;
   Pconf_method_st = ^conf_method_st;
   Pconf_st = ^conf_st;
   Pv3_ext_method = ^v3_ext_method;
@@ -8958,13 +8933,10 @@ type
   PPEC_KEY_METHOD = ^PEC_KEY_METHOD;
   PSSL_DANE = pointer;
   PPSSL_DANE = ^PSSL_DANE;
-  PX509_LOOKUP = pointer;
-  PPX509_LOOKUP = ^PX509_LOOKUP;
   PX509_SIG_INFO = pointer;
   PPX509_SIG_INFO = ^PX509_SIG_INFO;
   PPKCS8_PRIV_KEY_INFO = pointer;
   PPPKCS8_PRIV_KEY_INFO = ^PPKCS8_PRIV_KEY_INFO;
-  PX509V3_CTX = ^X509V3_CTX;
   PCONF = ^CONF;
   POPENSSL_INIT_SETTINGS = pointer;
   PPOPENSSL_INIT_SETTINGS = ^POPENSSL_INIT_SETTINGS;
@@ -9879,27 +9851,6 @@ type
     r2i: X509V3_EXT_R2I;
     usr_data: pointer;
   end;
-
-  X509V3_CONF_METHOD_st = record
-    get_string: function(db: pointer; section: PUtf8Char; value: PUtf8Char): PUtf8Char; cdecl;
-    get_section: function(db: pointer; section: PUtf8Char): Pstack_st_CONF_VALUE; cdecl;
-    free_string: procedure(db: pointer; _string: PUtf8Char); cdecl;
-    free_section: procedure(db: pointer; section: Pstack_st_CONF_VALUE); cdecl;
-  end;
-
-  X509V3_CONF_METHOD = X509V3_CONF_METHOD_st;
-  PX509V3_CONF_METHOD = ^X509V3_CONF_METHOD;
-
-  v3_ext_ctx = record
-    flags: integer;
-    issuer_cert: PX509;
-    subject_cert: PX509;
-    subject_req: PX509_REQ;
-    crl: PX509_CRL;
-    db_meth: PX509V3_CONF_METHOD;
-    db: pointer;
-  end;
-  X509V3_CTX = v3_ext_ctx;
 
   X509V3_EXT_METHOD = v3_ext_method;
   PX509V3_EXT_METHOD = ^X509V3_EXT_METHOD;
