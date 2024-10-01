@@ -1952,7 +1952,7 @@ begin
     exit;
   end;
   if GetRefCount(Sid) <> 1 then
-    UniqueString(Sid); // paranoid
+    UniqueString(AnsiString(Sid)); // paranoid
   MoveFast(pointer(NewDomain)^, pointer(Sid)^, SID_DOMAINLEN); // overwrite
   result := 1;
 end;
