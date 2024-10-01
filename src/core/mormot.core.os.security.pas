@@ -1579,6 +1579,10 @@ type
     function FromBinary(p: PByteArray; len: cardinal): boolean; overload;
     /// decode a self-relative binary Security Descriptor buffer
     function FromBinary(const Bin: RawSecurityDescriptor): boolean; overload;
+    /// decode a self-relative binary Security Descriptor buffer
+    // - this method will parse the binary but won't first validate its input
+    // because it has no len to supply to IsValidSecurityDescriptor()
+    function FromBinary(p: PByteArray): boolean; overload;
     /// encode this Security Descriptor into a self-relative binary buffer
     function ToBinary: RawSecurityDescriptor;
     /// decode a Security Descriptor from its SDDL textual representation
@@ -4144,8 +4148,15 @@ end;
 function TSecurityDescriptor.FromBinary(p: PByteArray; len: cardinal): boolean;
 begin
   Clear;
+  result := IsValidSecurityDescriptor(p, len) and
+            FromBinary(p);
+end;
+
+function TSecurityDescriptor.FromBinary(p: PByteArray): boolean;
+begin
+  Clear;
   result := false;
-  if not IsValidSecurityDescriptor(p, len) then
+  if p = nil then
     exit;
   if PRawSD(p)^.Owner <> 0 then
     ToRawSid(@p[PRawSD(p)^.Owner], Owner);
