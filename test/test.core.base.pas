@@ -6495,10 +6495,10 @@ const
   RID_TXT: array[4..high(SD_B64)] of RawUtf8 = (
     'O:DUG:DAD:(A;;FA;;;DA)',
     'O:S-1-5-21-682003330-1677128483-1060284298-1003G:DUD:(A;;FA;;;BA)(A;;FA;;;SY)' +
-    '(A;;FA;;;S-1-5-21-682003330-1677128483-1060284298-1003)(A;;0x1200a9;;;BU)',
+      '(A;;FA;;;S-1-5-21-682003330-1677128483-1060284298-1003)(A;;0x1200a9;;;BU)',
     'O:BAG:DUD:AI(A;ID;FA;;;BA)(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)',
     'O:S-1-5-21-2461620395-3297676348-3167859224-1001G:DUD:AI(A;ID;FA;;;BA)' +
-    '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
+      '(A;ID;FA;;;SY)(A;ID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)');
   // [MS-DTYP] 2.4.4.17.9 Examples: Conditional Expression Binary Representation
   ARTX_HEX: array[0..2] of RawUtf8 = (
     '61727478f80a0000005400690074006c00650010040000005600500080000000',
@@ -6533,7 +6533,7 @@ var
   k, k2: TWellKnownSid;
   r, r2: TWellKnownRid;
   bin, saved: RawSecurityDescriptor;
-  u, dom, json: RawUtf8;
+  u, u2, dom, dom2, json: RawUtf8;
   all: TRawUtf8DynArray;
   n: integer;
   domsid: RawSid;
@@ -6715,6 +6715,31 @@ begin
   Check(sd.Dacl[0].SidText('DU', pointer(domsid)));
   CheckEqual(sd.Dacl[0].SidText, dom + '-513');
   CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DU');
+  dom2 := 'S-1-5-21-237846769-6124905683-148753929';
+  Check(sd.FromBinary(saved));
+  Check(sd2.FromBinary(saved));
+  Check(sd.IsEqual(sd2));
+  u := sd.ToText(dom);
+  CheckEqual(u, RID_TXT[4], 'domsaved');
+  CheckEqual(sd.ReplaceDomain(dom, dom2), 3);
+  Check(not sd.IsEqual(sd2));
+  u := sd.ToText;
+  CheckNotEqual(u, SD_TXT[4], 'dom2a');
+  u2 := sd.ToText(dom);
+  CheckEqual(u, u2, 'dom2b');
+  u := sd.ToText(dom2);
+  CheckEqual(u, RID_TXT[4], 'dom2c');
+  CheckEqual(sd.ReplaceDomain(dom, dom2), 0);
+  u := sd.ToText(dom);
+  CheckEqual(u, u2, 'dom2d');
+  u := sd.ToText(dom2);
+  CheckEqual(u, RID_TXT[4], 'dom2e');
+  Check(not sd.IsEqual(sd2));
+  CheckEqual(sd.ReplaceDomain(dom2, dom), 3);
+  u := sd.ToText(dom);
+  CheckNotEqual(u, SD_TXT[4], 'dom2f');
+  CheckEqual(u, RID_TXT[4], 'dom2g');
+  Check(sd.IsEqual(sd2), 'dom2h');
   // RID reference material with several domains
   for i := low(DOM_TXT) to high(DOM_TXT) do
   begin

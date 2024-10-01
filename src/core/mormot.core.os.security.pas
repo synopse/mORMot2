@@ -1571,15 +1571,15 @@ type
       scope: TSecAceScope = sasDacl): PSecAce; overload;
     /// delete one ACE from the DACL (or SACL)
     procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
-    /// change all RIDs for a given domain to another
-    // - wrap TryDomainTextToSid() and the ReplaceDomainRaw() functions
+    /// change all well-known RIDs for a given domain to another
+    // - replace only well-known RID < WKR_RID_MAX, not any machine/user ID
+    // - just wrap TryDomainTextToSid() and the ReplaceDomainRaw() functions
     // - returns the number of entries changed in the input, including both
     // Owner/Group and nested ACE (and conditionals)
     // - returns -1 if OldDomain/NewDomain are no valid S-1-5-21-xx-xx-xx[-rid]
-    // - by default, will only replace well-known RID, not any machine/user ID
     function ReplaceDomain(const OldDomain, NewDomain: RawUtf8;
       maxRid: cardinal = WKR_RID_MAX): integer;
-    /// change all RIDs for a given domain to another, from raw binary
+    /// change all well-known RIDs for a given domain to another, from raw binary
     function ReplaceDomainRaw(OldDomain, NewDomain: PSid;
       maxRid: cardinal): integer;
   end;
