@@ -78,10 +78,12 @@ type
 const
   // some internal constants used for proper inlining (as required by Delphi)
   SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
+  SID_RIDLEN = SID_MINLEN + 5 * SizeOf(cardinal); // sid.SubAuthority[4] = RID
+  SID_DOMAINLEN = SID_RIDLEN - SizeOf(cardinal);  // exclude RID
   SID_REV32 = ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24;
-  SID_DOM_MASKSID = $00000401; // SubAuthorityCount = 4
-  SID_DOM_MASKRID = $00000501; // SubAuthorityCount = 5
-  SID_DOM_MASKAUT = $05000000; // IdentifierAuthority
+  SID_DOM_MASKSID = $00000401; // Revision = 1 and SubAuthorityCount = 4
+  SID_DOM_MASKRID = $00000501; // Revision = 1 and SubAuthorityCount = 5
+  SID_DOM_MASKAUT = $05000000; // IdentifierAuthority = S-1-5-xxx
 
 /// a wrapper around MemCmp() on two Security IDentifier binary buffers
 // - will first compare by length, then by content
@@ -157,6 +159,13 @@ function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
 // from TryDomainTextToSid() output
 function SidSameDomain(sid, dom: PSid): boolean;
   {$ifdef HASINLINE} inline; {$endif}
+
+/// check if a RID is part of OldDomain, then change it into NewDomain
+// - Sid should be in S-1-5-21-xx-xx-xx-RID layout
+// - OldDomain/NewDomain should be in S-1-5-21-xx-xx-xx[-RID] layout
+// - returns 0 if SID was not modified, or 1 if its domain part has been adjusted
+function SidReplaceDomain(OldDomain, NewDomain: PSid; maxRid: cardinal;
+  var Sid: RawSid): integer;
 
 
 type
@@ -1902,10 +1911,26 @@ end;
 function SidSameDomain(sid, dom: PSid): boolean;
 begin
   result := (PCardinal(sid)^ = SID_DOM_MASKRID) and         // rid
-            (PCardinalArray(sid)[1] = PCardinalArray(dom)[1]) and // S-1-5
+            (PCardinalArray(sid)[1] = SID_DOM_MASKAUT) and  // S-1-5
             (PInt64Array(sid)[1] = PInt64Array(dom)[1]) and // auth[0..1]
             (PInt64Array(sid)[2] = PInt64Array(dom)[2]);    // auth[2..3]
             // so sid.SubAuthority[4] will contain any RID
+end;
+
+function SidReplaceDomain(OldDomain, NewDomain: PSid; maxRid: cardinal;
+  var Sid: RawSid): integer;
+begin
+  if (length(Sid) <> SID_RIDLEN) or
+     not SidSameDomain(pointer(Sid), OldDomain) or
+     (PSid(Sid)^.SubAuthority[4] > maxRid) then
+  begin
+    result := 0;
+    exit;
+  end;
+  if GetRefCount(Sid) <> 1 then
+    UniqueString(Sid); // paranoid
+  MoveFast(pointer(NewDomain)^, pointer(Sid)^, SID_DOMAINLEN); // overwrite
+  result := 1;
 end;
 
 var
