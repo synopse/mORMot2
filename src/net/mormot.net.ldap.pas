@@ -965,8 +965,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetUserAccountControl: TUserAccountControls;
     procedure SetUserAccountControl(Value: TUserAccountControls);
-    function GetAccountType: TSamAccountType;
-    procedure SetAccountType(Value: TSamAccountType);
   public
     /// initialize the attribute list with some type/value pairs
     constructor Create(const Types: array of TLdapAttributeType;
@@ -1026,8 +1024,8 @@ type
     // - calls GetAllReadable on the found attribute
     function GetAll(AttributeType: TLdapAttributeType): TRawUtf8DynArray;
     /// access atSAMAccountType attribute value with proper decoding
-    property AccountType: TSamAccountType
-      read GetAccountType write SetAccountType;
+    // - should never be set, because it is defined by the AD at object creation
+    function AccountType: TSamAccountType;
     /// access atGroupType attribute value with proper decoding
     function GroupTypes: TGroupTypes;
     /// access atSystemFlags attribute value with proper decoding
@@ -4020,14 +4018,9 @@ begin
   Add(AttributeType, Value, aoReplaceValue);
 end;
 
-function TLdapAttributeList.GetAccountType: TSamAccountType;
+function TLdapAttributeList.AccountType: TSamAccountType;
 begin
   result := SamAccountTypeFromText(Get(atSAMAccountType));
-end;
-
-procedure TLdapAttributeList.SetAccountType(Value: TSamAccountType);
-begin
-  Add(atSAMAccountType, ToUtf8(SamAccountTypeValue(Value)), aoReplaceValue);
 end;
 
 function TLdapAttributeList.GroupTypes: TGroupTypes;
@@ -6084,7 +6077,7 @@ begin
     [atObjectClass, atCommonName, atName, atSAMAccountName],
     ['computer',    cSafe,        cSafe,  cSam]);
   try
-    attrs.AccountType        := satMachineAccount;
+    // attrs.AccountType should not be set, because it is defined by the AD
     attrs.UserAccountControl := UserAccount;
     if Password <> '' then
       attrs.AddUnicodePwd(Password);
