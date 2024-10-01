@@ -130,7 +130,7 @@ var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3, P, Len); // use RTL if complex
+  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len); // use RTL if complex
   if Len > 0 then
     dec(Len); // UnicodeToUtf8() result includes the null terminator
   FastSetString(res, tmp.buf, Len);
