@@ -814,6 +814,11 @@ const
     safSuccessfulAccess,
     safFailedAccess];
 
+/// compute a self-relative binary of a given ACL array
+// - as stored within a TSecurityDescriptor instance, and accepted by
+// low-level WinAPI SetSystemSecurityDescriptor() function
+function SecAclToBinary(const acl: TSecAcl): RawByteString;
+
 
 { ******************* Conditional ACE Expressions SDDL and Binary Support }
 
@@ -1763,6 +1768,55 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
 
 
+type
+  /// define the kind of resource access by GetFileSecurityDescriptor()
+  // - match the SE_OBJECT_TYPE low-level Windows definition
+  // - nrtFile is a relative, absolute or UNC file name e.g. 'c:\toto\titi.txt'
+  // - nrtService expects a local 'ServiceName' or '\\ComputerName\ServiceName'
+  // - nrtPrinter expects a local 'PrinterName' or '\\ComputerName\PrinterName'
+  // - nrtRegistryKey expects local 'CURRENT_USER\SomePath', 'MACHINE\SomePath',
+  // 'USERS\SomePath' or remote '\\ComputerName\CLASSES_ROOT\SomePath'
+  // - nrtNetworkShare is e.g. 'ShareName' or '\\ComputerName\ShareName'
+  // - nrtKernelObject are e.g. named semaphore, event, mutex or file mapping
+  // - nrtWindowObject is not applicable
+  // - nrtDsObject indicates a directory entry, in X.500 form, e.g.
+  // 'CN=SomeObject,OU=ou2,OU=ou1,DC=DomainName,DC=CompanyName,DC=com,O=internet'
+  // - nrtDsObjectAll indicates a directory entry and all its properties
+  TNamedResourceType = (
+    nrtUnknown,
+    nrtFile,
+    nrtService,
+    nrtPrinter,
+    nrtRegistryKey,
+    nrtNetworkShare,
+    nrtKernelObject,
+    nrtWindowObject,
+    nrtDsObject,
+    nrtDsObjectAll,
+    nrtProviderDefinedObjet,
+    nrtWmiGuidObject,
+    nrtWow64RegistryKey32,
+    nrtWow64RegistryKey64);
+
+/// retrieve the security descriptor information from a given file or named resource
+// - will also set the wspSecurity priviledge, unless privileges is [], e.g. to
+// reuse a single TSynWindowsPrivileges.Enable() instance between several calls
+function GetSystemSecurityDescriptor(const fn: TFileName;
+  out dest: TSecurityDescriptor;
+  info: TSecurityDescriptorInfos = [sdiOwner, sdiGroup, sdiDacl];
+  kind: TNamedResourceType = nrtFile;
+  privileges: TWinSystemPrivileges = [wspSecurity]): boolean;
+
+/// change the security descriptor information of a given file or named resource
+// - info covers the extend of dest fields to be updated in the system
+// - may require ownership to the resource, or the wspTakeOwnership privilege
+// - wspSecurity privilege may also be needed, e.g. for DACL
+function SetSystemSecurityDescriptor(const fn: TFileName;
+  const dest: TSecurityDescriptor;
+  info: TSecurityDescriptorInfos = [sdiOwner, sdiGroup, sdiDacl];
+  kind: TNamedResourceType = nrtFile;
+  privileges: TWinSystemPrivileges = [wspSecurity]): boolean;
+
 {$endif OSWINDOWS}
 
 implementation
@@ -2421,6 +2475,12 @@ begin
   hdr^.AceCount := length(acl);
   hdr^.Sbz2 := 0;
   hdr^.AclSize := result;
+end;
+
+function SecAclToBinary(const acl: TSecAcl): RawByteString;
+begin
+  FastNewRawByteString(result, SecAclToBin({dest=}nil, acl)); // allocate
+  SecAclToBin(pointer(result), acl); // fill
 end;
 
 function AclReplaceDomainRaw(old, new: PSid; maxRid: cardinal;
@@ -4780,6 +4840,79 @@ begin
     result := domain + '\' + name
   else
     result := '';
+end;
+
+
+function GetSystemSecurityDescriptor(const fn: TFileName;
+  out dest: TSecurityDescriptor; info: TSecurityDescriptorInfos;
+  kind: TNamedResourceType; privileges: TWinSystemPrivileges): boolean;
+var
+  tmp: TW32Temp;
+  priv: TSynWindowsPrivileges;
+  sd: PSECURITY_DESCRIPTOR;
+  bak: integer;
+begin
+  dest.Clear;
+  result := false;
+  if (info = []) or
+     (fn = '') then
+    exit;
+  if privileges <> [] then
+  begin
+    priv.Init;
+    priv.Enable(privileges);
+  end;
+  sd := nil;
+  result := GetNamedSecurityInfoW(
+    W32(fn, tmp), ord(kind), byte(info), nil, nil, nil, nil, sd) = 0;
+  bak := GetLastError;
+  if privileges <> [] then
+    priv.Done; // restore initial privileges ASAP
+  if result then
+    result := dest.FromBinary(pointer(sd)); // assume OS input is safe
+  if sd <> nil then
+    LocalFree(HLOCAL(sd));
+  if not result then
+    SetLastError(bak); // so that WinLastError / RaiseLastError would work
+end;
+
+function SetSystemSecurityDescriptor(const fn: TFileName;
+  const dest: TSecurityDescriptor; info: TSecurityDescriptorInfos;
+  kind: TNamedResourceType; privileges: TWinSystemPrivileges): boolean;
+var
+  tmp: TW32Temp;
+  priv: TSynWindowsPrivileges;
+  o, g, d, s: pointer;
+  bak: integer;
+begin
+  result := false;
+  if (info = []) or
+     (fn = '') then
+    exit;
+  if privileges <> [] then
+  begin
+    priv.Init;
+    priv.Enable(privileges);
+  end;
+  o := nil;
+  g := nil;
+  d := nil;
+  s := nil;
+  if sdiOwner in info then
+    o := pointer(dest.Owner);
+  if sdiGroup in info then
+    g := pointer(dest.Group);
+  if sdiDacl in info then
+    d := pointer(SecAclToBinary(dest.Dacl));
+  if sdiSacl in info then
+    s := pointer(SecAclToBinary(dest.Sacl));
+  result := SetNamedSecurityInfoW(
+    W32(fn, tmp), ord(kind), byte(info), o, g, d, s) = 0;
+  bak := GetLastError;
+  if privileges <> [] then
+    priv.Done; // restore initial privileges ASAP
+  if not result then
+    SetLastError(bak); // so that WinLastError / RaiseLastError would work
 end;
 
 {$endif OSWINDOWS}
