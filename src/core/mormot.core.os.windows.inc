@@ -3274,6 +3274,17 @@ begin
   result := true;
 end;
 
+function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivileges): boolean;
+var
+  p: TWinSystemPrivilege;
+begin
+  result := true;
+  for p := low(p) to high(p) do
+    if p in aPrivilege then
+      if not Enable(p) then
+        result := false; // notify an error at some point
+end;
+
 function TSynWindowsPrivileges.Disable(
   aPrivilege: TWinSystemPrivilege): boolean;
 begin

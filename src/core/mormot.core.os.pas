@@ -1853,7 +1853,11 @@ type
     /// enable privilege
     // - if aPrivilege is already enabled return true, if operation is not
     // possible (required privilege doesn't exist or API error) return false
-    function Enable(aPrivilege: TWinSystemPrivilege): boolean;
+    function Enable(aPrivilege: TWinSystemPrivilege): boolean; overload;
+    /// enable one or several privilege(s) from a set
+    // - if aPrivilege is already enabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Enable(aPrivilege: TWinSystemPrivileges): boolean; overload;
     /// disable privilege
     // - if aPrivilege is already disabled return true, if operation is not
     // possible (required privilege doesn't exist or API error) return false
