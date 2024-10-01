@@ -6518,13 +6518,15 @@ const
     'D:(XA;;FX;;;WD;(@User.Title=="PM" && (@User.Division=="Finance" || ' +
       '@User.Division ==" Sales")))',
     'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
-    'D:(XA;;FR;;;WD;(Member_of{SID(S-1-3-7),SID(BO)} && @Device.Bitlocker))(A;ID;FA;;;SY)');
+    'D:(XA;;FR;;;WD;(Member_of{SID(S-1-5-21-111-222-333-500),SID(BO)} && ' +
+      '@Device.Bitlocker))(A;ID;FA;;;SY)');
   // our SDDL output always add parenthesis on binary expressions
   COND_EXP: array[0..2] of RawUtf8 = (
     'D:(XA;;FX;;;WD;((@User.Title=="PM") && ((@User.Division=="Finance") || ' +
       '(@User.Division==" Sales"))))',
     'D:(XA;;FX;;;WD;(@User.Project Any_of @Resource.Project))(A;ID;FA;;;SY)',
-    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-3-7),SID(BO)}) && @Device.Bitlocker))(A;ID;FA;;;SY)');
+    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-5-21-111-222-333-500),SID(BO)}) && '+
+      '@Device.Bitlocker))(A;ID;FA;;;SY)');
 
 procedure TTestCoreBase._SDDL;
 var
@@ -6740,6 +6742,8 @@ begin
   CheckNotEqual(u, SD_TXT[4], 'dom2f');
   CheckEqual(u, RID_TXT[4], 'dom2g');
   Check(sd.IsEqual(sd2), 'dom2h');
+  CheckEqual(sd.ReplaceDomain(dom2, dom), 0);
+  Check(sd.IsEqual(sd2), 'dom2i');
   // RID reference material with several domains
   for i := low(DOM_TXT) to high(DOM_TXT) do
   begin
@@ -6797,6 +6801,18 @@ begin
     Check(sd.IsEqual(sd2));
     CheckEqual(sd2.ToText, u);
   end;
+  dom := 'S-1-5-21-111-222-333';
+  u := sd.ToText(dom);
+  CheckEqual(u, 'D:(XA;;FR;;;WD;((Member_of{SID(LA),SID(BO)}) && ' +
+    '@Device.Bitlocker))(A;ID;FA;;;SY)');
+  dom2 := 'S-1-5-21-1111-2222-3333';
+  CheckEqual(sd.ReplaceDomain(dom, dom2), 1);
+  u2 := sd.ToText;
+  CheckEqual(u2,
+    'D:(XA;;FR;;;WD;((Member_of{SID(S-1-5-21-1111-2222-3333-500),SID(BO)}) && '+
+    '@Device.Bitlocker))(A;ID;FA;;;SY)');
+  u2 := sd.ToText(dom2);
+  CheckEqual(u, u2);
 end;
 
 function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
