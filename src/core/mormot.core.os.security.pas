@@ -145,9 +145,10 @@ function SidIsDomain(s: PSid): boolean;
 function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
 
 /// quickly check if two binary SID buffers domain do overlap
-// - one of the values should be a domain SID in S-1-5-21-xx-xx-xx-RID layout,
-// typically from TryDomainTextToSid() output
-function SidSameDomain(a, b: PSid): boolean;
+// - sid should be a RID in S-1-5-21-xx-xx-xx-RID layout
+// - dom should be a domain SID in S-1-5-21-xx-xx-xx[-RID] layout, typically
+// from TryDomainTextToSid() output
+function SidSameDomain(sid, dom: PSid): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 
@@ -1663,6 +1664,9 @@ implementation
 const
   SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
   SID_REV32 = ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24;
+  SID_DOM_MASKSID = $00000401; // SubAuthorityCount = 4
+  SID_DOM_MASKRID = $00000501; // SubAuthorityCount = 5
+  SID_DOM_MASKAUT = $05000000; // IdentifierAuthority
 
 function SidLength(sid: PSid): PtrInt;
 begin
@@ -1856,10 +1860,10 @@ end;
 function SidIsDomain(s: PSid): boolean;
 begin
   result := (s <> nil) and
-            (s^.SubAuthorityCount in [4, 5]) and // allow domain or rid
+            ((PCardinal(s)^ = SID_DOM_MASKRID) or   // SubAuthorityCount in [4,5]
+             (PCardinal(s)^ = SID_DOM_MASKSID)) and // to allow domain or rid
             (s^.SubAuthority[0] = 21) and
-            (PWord(@s^.IdentifierAuthority)^ = 0) and
-            (PCardinal(@s^.IdentifierAuthority[2])^ = $05000000);
+            (PCardinalArray(s)[1] = SID_DOM_MASKAUT);
 end;
 
 function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
@@ -1881,14 +1885,14 @@ begin
   ToRawSid(@tmp, Dom);        // output Dom as S-1-5-21-xx-xx-xx-RID
 end;
 
-function SidSameDomain(a, b: PSid): boolean;
-begin // both values are expected to be in a S-1-5-21-xx-xx-xx-RID layout
-  result := (PInt64Array(a)[0] = PInt64Array(b)[0]) and // rev+count+auth
-            (PInt64Array(a)[1] = PInt64Array(b)[1]) and // auth[0..1]
-            (PInt64Array(a)[2] = PInt64Array(b)[2]);    // auth[2..3]
-            // so auth[4] will contain any RID
+function SidSameDomain(sid, dom: PSid): boolean;
+begin
+  result := (PCardinal(sid)^ = SID_DOM_MASKRID) and          // rid
+            (PCardinalArray(sid)[1] = PCardinalArray(dom)[1]) and // S-1-5
+            (PInt64Array(sid)[1] = PInt64Array(dom)[1]) and // auth[0..1]
+            (PInt64Array(sid)[2] = PInt64Array(dom)[2]);    // auth[2..3]
+            // so sid.auth[4] will contain any RID
 end;
-
 
 var
   KNOWN_SID_SAFE: TLightLock; // lighter than GlobalLock/GlobalUnLock
