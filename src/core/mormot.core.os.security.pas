@@ -99,8 +99,12 @@ function HasAnySid(const sids: PSids; const sid: RawSidDynArray): boolean;
 /// append a SID buffer pointer to a dynamic array of SID buffers
 procedure AddRawSid(var sids: RawSidDynArray; sid: PSid);
 
+/// append a SID as text, following the standard representation
+procedure SidAppendShort(sid: PSid; var s: ShortString);
+
 /// convert a Security IDentifier as text, following the standard representation
 procedure SidToTextShort(sid: PSid; var result: ShortString);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
@@ -1684,35 +1688,38 @@ begin
     FastSetRawByteString(RawByteString(result), sid, SidLength(sid));
 end;
 
-procedure SidToTextShort(sid: PSid; var result: ShortString);
+procedure SidAppendShort(sid: PSid; var s: ShortString);
 var
   a: PSidAuth;
   i: PtrInt;
 begin // faster than ConvertSidToStringSidA(), and cross-platform
   if (sid = nil ) or
-     (sid^.Revision <> 1) then
-  begin
-    result[0] := #0; // invalid SID
+     (sid^.Revision <> 1) then // invalid SID
     exit;
-  end;
   a := @sid^.IdentifierAuthority;
   if (a^[0] <> 0) or
      (a^[1] <> 0) then
   begin
-    result := 'S-1-0x'; // hexa 48-bit IdentifierAuthority, i.e. S-1-0x######-..
-    for i := 0 to 5 do
-      AppendShortByteHex(a^[i], result)
+    AppendShort('S-1-0x', s);
+    for i := 0 to 5 do // hexa 48-bit IdentifierAuthority, i.e. S-1-0x######-..
+      AppendShortByteHex(a^[i], s)
   end
   else
   begin
-    result := 'S-1-';
-    AppendShortCardinal(bswap32(PCardinal(@a^[2])^), result);
+    AppendShort('S-1-', s);
+    AppendShortCardinal(bswap32(PCardinal(@a^[2])^), s);
   end;
   for i := 0 to PtrInt(sid^.SubAuthorityCount) - 1 do
   begin
-    AppendShortChar('-', @result);
-    AppendShortCardinal(sid^.SubAuthority[i], result);
+    AppendShortChar('-', @s);
+    AppendShortCardinal(sid^.SubAuthority[i], s);
   end;
+end;
+
+procedure SidToTextShort(sid: PSid; var result: ShortString);
+begin
+  result[0] := #0;
+  SidAppendShort(sid, result);
 end;
 
 function SidToText(sid: PSid): RawUtf8;
@@ -1724,7 +1731,8 @@ procedure SidToText(sid: PSid; var text: RawUtf8);
 var
   tmp: ShortString;
 begin
-  SidToTextShort(sid, tmp);
+  tmp[0] := #0;
+  SidAppendShort(sid, tmp);
   FastSetString(text, @tmp[1], ord(tmp[0]));
 end;
 
@@ -2352,7 +2360,6 @@ procedure SddlAppendSid(var s: ShortString; sid, dom: PSid);
 var
   k: TWellKnownSid;
   i: PtrInt;
-  tmp: ShortString;
 begin
   if sid = nil then
     exit;
@@ -2360,7 +2367,7 @@ begin
   i := SDDL_WKS_INDEX[k];
   if i <> 0 then
   begin
-    AppendShortTwoChars(@SID_SDDLW[i - 1], @s);
+    AppendShortTwoChars(@SID_SDDLW[i - 1], @s); // e.g. WD SY
     exit;
   end
   else if (k = wksNull) and
@@ -2374,13 +2381,12 @@ begin
       i := SDDL_WKR_INDEX[TWellKnownRid(i)];
       if i <> 0 then
       begin
-        AppendShortTwoChars(@SID_SDDLW[i - 1], @s);
+        AppendShortTwoChars(@SID_SDDLW[i - 1], @s); // e.g. DA DU
         exit;
       end;
     end
   end;
-  SidToTextShort(sid, tmp);
-  AppendShort(tmp, s);
+  SidAppendShort(sid, s); // if not known, append as 'S-1-x....' standard text
 end;
 
 function SddlNextPart(var p: PUtf8Char; out u: ShortString): boolean;
