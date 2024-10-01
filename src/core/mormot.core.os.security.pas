@@ -731,6 +731,9 @@ type
     function ConditionalExpression: RawUtf8; overload;
     /// parse a ACE conditional expression, and assign it to the Opaque binary
     function ConditionalExpression(const condExp: RawUtf8): TAceTextParse; overload;
+    /// replace all nested RID from one domain to another
+    // - also from any ACE conditional expression
+    function ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
   end;
 
   /// pointer to one ACE of the TSecurityDescriptor ACL
@@ -1105,6 +1108,13 @@ type
 
 /// compute the length in bytes of an ACE token binary entry
 function AceTokenLength(v: PRawAceOperand): PtrUInt;
+
+/// check if any Sid within a conditional ACE binary is part of OldDomain,
+// then change it into NewDomain
+// - instead of using a temp TAceBinaryTree, we implemented a O(1) direct process
+// within the RawByteString binary buffer itself
+function AceReplaceDomain(olddom, newdom: PSid; maxRid: cardinal;
+  var opaque: RawByteString): integer;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -1561,6 +1571,17 @@ type
       scope: TSecAceScope = sasDacl): PSecAce; overload;
     /// delete one ACE from the DACL (or SACL)
     procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
+    /// change all RIDs for a given domain to another
+    // - wrap TryDomainTextToSid() and the ReplaceDomainRaw() functions
+    // - returns the number of entries changed in the input, including both
+    // Owner/Group and nested ACE (and conditionals)
+    // - returns -1 if OldDomain/NewDomain are no valid S-1-5-21-xx-xx-xx[-rid]
+    // - by default, will only replace well-known RID, not any machine/user ID
+    function ReplaceDomain(const OldDomain, NewDomain: RawUtf8;
+      maxRid: cardinal = WKR_RID_MAX): integer;
+    /// change all RIDs for a given domain to another, from raw binary
+    function ReplaceDomainRaw(OldDomain, NewDomain: PSid;
+      maxRid: cardinal): integer;
   end;
 
   {$A+}
@@ -2295,6 +2316,23 @@ begin
   hdr^.AclSize := result;
 end;
 
+function AclReplaceDomainRaw(old, new: PSid; maxRid: cardinal;
+  var acl: TSecAcl): integer;
+var
+  a: ^TSecAce;
+  i: PtrInt;
+begin
+  result := 0;
+  if acl = nil then
+    exit;
+  a := pointer(acl);
+  for i := 1 to length(acl) do
+  begin
+    inc(result, a^.ReplaceDomainRaw(old, new, maxRid));
+    inc(a);
+  end;
+end;
+
 
 { ****************** Security Descriptor Definition Language (SDDL) }
 
@@ -3027,6 +3065,14 @@ begin
   result := SddlNextOpaque(p, self);
 end;
 
+function TSecAce.ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
+begin
+  result := SidReplaceDomain(old, new, maxRid, Sid);
+  if (Opaque <> '') and
+     (PCardinal(Opaque)^ = ACE_CONDITION_SIGNATURE) then
+    inc(result, AceReplaceDomain(old, new, maxRid, Opaque));
+end;
+
 function TSecAce.Fill(sat: TSecAceType; const sidSddl, maskSddl: RawUtf8;
   dom: PSid; const condExp: RawUtf8; saf: TSecAceFlags): boolean;
 begin
@@ -3280,6 +3326,57 @@ begin
   else
     result := SizeOf(v^.Token);
   end;
+end;
+
+function AceReplaceDomain(olddom, newdom: PSid; maxRid: cardinal;
+  var opaque: RawByteString): integer;
+var
+  v, c: PRawAceOperand;
+  opaquesize, size, len, comp, clen: PtrUInt;
+begin
+  result := 0;
+  opaquesize := length(opaque);
+  size := opaquesize;
+  if (size = 0) or
+     (size and 3 <> 0) or
+     (PCardinal(opaque)^ <> ACE_CONDITION_SIGNATURE) then
+    exit;
+  v := @PCardinalArray(opaque)[1];
+  repeat
+    len := AceTokenLength(v);
+    if len > size then
+      exit; // avoid buffer overflow
+    case v^.Token of
+      sctSid:
+        if SidSameDomain(@v^.Sid, olddom) and
+           (v^.Sid.SubAuthority[4] <= maxRid) then
+        begin
+          MoveFast(newdom^, v^.Sid, SID_DOMAINLEN); // in-place overwrite
+          inc(result);
+        end;
+      sctComposite: // check for any nested SID
+        begin
+          c := @v^.Composite;
+          comp := v^.CompositeBytes;
+          repeat
+            clen := AceTokenLength(c);
+            if clen > comp then
+              exit;
+            if (c^.Token = sctSid) and
+               SidSameDomain(@c^.Sid, olddom) and
+               (c^.Sid.SubAuthority[4] <= maxRid) then
+            begin
+              MoveFast(newdom^, c^.Sid, SID_DOMAINLEN); // in-place overwrite
+              inc(result);
+            end;
+            inc(PByte(c), clen);
+            dec(comp, clen);
+          until comp = 0;
+        end;
+    end;
+    inc(PByte(v), len);
+    dec(size, len);
+  until size = 0;
 end;
 
 
@@ -4151,6 +4248,34 @@ begin
   end
   else
     DynArrayFakeDelete(dest^, index, n, SizeOf(dest^[0]));
+end;
+
+function TSecurityDescriptor.ReplaceDomain(const OldDomain, NewDomain: RawUtf8;
+  maxRid: cardinal): integer;
+var
+  old, new: RawSid;
+begin
+  if TryDomainTextToSid(OldDomain, old) and
+     TryDomainTextToSid(NewDomain, new) then
+     if OldDomain = NewDomain then
+       result := 0
+     else
+       result := ReplaceDomainRaw(pointer(old), pointer(new), maxRid)
+  else
+    result := -1;
+end;
+
+function TSecurityDescriptor.ReplaceDomainRaw(OldDomain, NewDomain: PSid;
+  maxRid: cardinal): integer;
+begin
+  if SidIsDomain(OldDomain) and
+     SidIsDomain(NewDomain) then
+    result := SidReplaceDomain(OldDomain, NewDomain, maxRid, Owner) +
+              SidReplaceDomain(OldDomain, NewDomain, maxRid, Group) +
+              AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Dacl) +
+              AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Sacl)
+  else
+    result := -1;
 end;
 
 
