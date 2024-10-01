@@ -23,7 +23,12 @@ unit mormot.lib.openssl11;
   *****************************************************************************
 
   Warning: on Windows, you need to define the USE_OPENSSL conditional in YOUR
-   project options to have this code actually link to the OpenSSL library.
+   project options to have this code actually link the OpenSSL library, or
+   FORCE_OPENSSL if you want to enable OpenSSL automatic loading.
+   Otherwise, it will fallback to the SChannel layer for TLS support.
+  We did not enable OpenSSL by default, because it is very likely that your
+   executable may find some obsolete dll in your Windows path, if it can't find
+   any suitable dll in its own folder.
 
   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
    to any restriction about the use of cryptographic software in your country.
@@ -31,12 +36,12 @@ unit mormot.lib.openssl11;
 
 
 {.$define OPENSSLFULLAPI}
-// define this conditional to publish the whole (huge) OpenSSL API
+// define this conditional to publish the whole (huge) OpenSSL API - unsupported
 // - as stored in mormot.lib.openssl11.full.inc separated file
 // - by default, only the API features needed by mORMot are published
 // - full API increases compilation time, but is kept as reference
 // - the full API libraries will be directly/statically linked, not dynamically:
-// if you have "cannot find -lcrypto" errors at linking, run the following:
+// if you have "cannot find -lcrypto" errors at linking, run e.g. the following:
 //     cd /usr/lib/x86_64-linux-gnu
 //     sudo ln -s libcrypto.so.1.1 libcrypto.so
 //     sudo ln -s libssl.so.1.1 libssl.so
@@ -9466,7 +9471,8 @@ begin // see GetNextItemTrimed() from mormot.core.text
   while not (S^ in [#0, Sep1, Sep2]) do
     inc(S);
   E := S;
-  while (E > P) and (E[-1] in [#1..' ']) do
+  while (E > P) and
+        (E[-1] in [#1..' ']) do
     dec(E); // trim right
   FastSetString(result, P, E - P);
   if S^ <> #0 then
@@ -9570,7 +9576,7 @@ end;
 function X509.IsSelfSigned: boolean;
 begin
   // X509 usually does not compare serial numbers nor SKID/AKID but the names
-  // in practice, OpenSSL self-signed certificates have SKID set but no AKID
+  // in practice, OpenSSL self-signed certificates have a SKID but no AKID
   result := (@self <> nil) and
       (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
 end;
@@ -10323,7 +10329,7 @@ end;
 
 const
   // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
-  SAFE_CIPHERLIST: array[ {aes=} boolean ] of PUtf8Char = (
+  SAFE_CIPHERLIST: array[ {hwaes=} boolean ] of PUtf8Char = (
     // without AES acceleration: prefer CHACHA20-POLY1305
     'ECDHE-ECDSA-CHACHA20-POLY1305:' +
     'ECDHE-RSA-CHACHA20-POLY1305:' +
