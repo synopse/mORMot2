@@ -4001,7 +4001,7 @@ procedure TTestCoreProcess._IDocAny;
 var
   l, l2, l3: IDocList;
   i, n, num: integer;
-  d: IDocDict;
+  d, d2: IDocDict;
   darr: IDocDictDynArray;
   json, key: RawUtf8;
   one: variant;
@@ -4267,6 +4267,10 @@ begin
   d := l2.D[0];
   {$endif HASIMPLICITOPERATOR}
   // validate IDocDict process
+  d2 := DocDict('{"FloatVal": 24.4}');
+  one := d2['FloatVal'];
+  CheckEqual(TVarData(one).VType, varCurrency, 'floatVal');
+  CheckEqual(d2.ToJson(jsonCompact), '{"FloatVal":24.4}');
   d.I['b'] := 7;
   d.Del('a');
   l2.Del(2);
