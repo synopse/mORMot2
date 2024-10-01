@@ -2239,21 +2239,21 @@ begin
   result := true;
 end;
 
-function SecAclToBin(p: PAnsiChar; const ace: TSecAcl): PtrInt;
+function SecAclToBin(p: PAnsiChar; const acl: TSecAcl): PtrInt;
 var
   hdr: PRawAcl;
   a: ^TSecAce;
   i, len: PtrInt;
 begin
   result := 0;
-  if ace = nil then
+  if acl = nil then
     exit;
   hdr := pointer(p);
   result := SizeOf(hdr^);
   if hdr <> nil then // need to write ACL header
     inc(p, result);
-  a := pointer(ace);
-  for i := 0 to length(ace) - 1 do
+  a := pointer(acl);
+  for i := 1 to length(acl) do
   begin
     len := a^.ToBinary(p);
     inc(result, len);
@@ -2265,7 +2265,7 @@ begin
     exit;
   hdr^.AclRevision := 2;
   hdr^.Sbz1 := 0;
-  hdr^.AceCount := length(ace);
+  hdr^.AceCount := length(acl);
   hdr^.Sbz2 := 0;
   hdr^.AclSize := result;
 end;
@@ -2658,10 +2658,9 @@ end;
 function SddlAppendOperand(var s: ShortString; v: PRawAceOperand): boolean;
 var
   utf8: shortstring;
-  max: pointer;
   c: PRawAceOperand;
   singleComposite: boolean;
-  i: PtrInt;
+  i, comp, clen: PtrUInt;
 begin
   result := true;
   case v^.Token of
@@ -2720,10 +2719,11 @@ begin
     sctComposite: // e.g. '{"Sales","HR"}'
       begin
         result := false;
-        if v^.CompositeBytes = 0 then
+        comp := v^.CompositeBytes;
+        if comp = 0 then
           exit; // should not be void
         c := @v.Composite;
-        singleComposite := v^.CompositeBytes = AceTokenLength(c);
+        singleComposite := comp = AceTokenLength(c);
         if singleComposite then
           if c^.Token = sctSid then
             // e.g. '(Member_of{SID(BA)}))'
@@ -2733,14 +2733,17 @@ begin
             AppendShortChar(' ', @s);
         if not singleComposite then
           AppendShortChar('{', @s);
-        max := @v^.Composite[v^.CompositeBytes];
         repeat
+          clen := AceTokenLength(c);
+          if clen > comp then
+            exit; // avoid buffer overflow
           if (c^.Token in sctAttribute) or
              not SddlAppendOperand(s, c) then
             exit; // unsupported or truncated/overflow content
-          inc(PByte(c), AceTokenLength(c));
-          if PtrUInt(c) >= PtrUInt(max) then
+          dec(comp, clen);
+          if comp = 0 then
             break;
+          inc(PByte(c), clen);
           AppendShortChar(',', @s);
         until false;
         if not singleComposite then
@@ -3277,7 +3280,7 @@ begin
   repeat
     v := @Storage[position];
     len := AceTokenLength(v);
-    if (position + len > StorageSize) then // overflow
+    if (position + len > StorageSize) then // avoid buffer overflow
       exit;
     if v^.Token <> sctPadding then
     begin
