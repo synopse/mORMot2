@@ -5070,6 +5070,13 @@ function OpenServiceManager(const TargetComputer, DatabaseName: RawUtf8;
 function OpenServiceInstance(hSCManager: SC_HANDLE; const ServiceName: RawUtf8;
   dwDesiredAccess: cardinal): SC_HANDLE;
 
+function GetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
+  SecurityInfo: cardinal; ppsidOwner, ppsidGroup, ppDacl, ppSacl: pointer;
+  var ppSecurityDescriptor: PSECURITY_DESCRIPTOR): DWORD; stdcall; external advapi32;
+function SetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
+  SecurityInfo: cardinal; psidOwner, psidGroup: pointer;
+  pDacl, pSacl: pointer): DWORD; stdcall; external advapi32;
+
 
 { *** high level classes to define and manage Windows Services }
 
