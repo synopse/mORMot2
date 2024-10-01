@@ -10,12 +10,17 @@ unit mormot.db.sql.zeos;
     -  TSqlDBZeosConnection* and TSqlDBZeosStatement Classes
 
   *****************************************************************************
+
+  On Lazarus, on [Error: Identifier not found "TSqlDBZeosConnectionProperties"]
+  compilation error, ensure you:
+    1) installed the proper Zeos package
+    2) undefined the NOSYNDBZEOS conditional in your mormot2 package
 }
 
 interface
 
 {$ifdef NOSYNDBZEOS}
-// NOSYNDBZEOS from mormot2.lpk Lazarus package > Custom Options > Defines
+// disable NOSYNDBZEOS from mormot2.lpk Lazarus package > Custom Options > Defines
 
 implementation // compile a void unit if NOSYNDBZEOS conditional is set
 
