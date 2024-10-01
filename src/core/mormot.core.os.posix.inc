@@ -473,7 +473,12 @@ var
   err: SizeInt;
 begin
   if CodePage = CP_UTF8 then
-    exit(Utf8ToUnicode(W, A, LA));
+  begin
+    result := Utf8ToUnicode(W, LW, A, LA); // FPC RTL is safe and fast enough
+    if result > 0 then
+      dec(result); // Utf8ToUnicode() returned length includes #0 terminator
+    exit;
+  end;
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
     exit(AnsiToWideRTL(CodePage, A, W, LA, LW)); // fallback to cwstring/iconv
@@ -504,7 +509,12 @@ var
   err: SizeInt;
 begin
   if CodePage = CP_UTF8 then
-    exit(UnicodeToUtf8(A, W, LW)); // FPC RTL is fast enough for UTF-8
+  begin
+    result := UnicodeToUtf8(A, LA, W, LW); // FPC RTL is fast enough for UTF-8
+    if result > 0 then
+      dec(result); // UnicodeToUtf8() result includes the #0 terminator
+    exit;
+  end;
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
     exit(WideToAnsiRTL(CodePage, W, A, LW, LA)); // fallback to cwstring/iconv
