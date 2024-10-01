@@ -9947,13 +9947,15 @@ const
   _TSynSignerParams = 'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer';
   _TSecAce = 'type:TSecAceType flags:TSecAceFlags raw:word mask:TSecAccessMask ' +
     'sid:RawSid opaque:RawUtf8 obj,inh:TGuid';
-  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl flags:TSecControls';
+  _TSecurityDescriptor = 'owner,group:RawSid dacl,sacl:TSecAcl ' +
+    'flags:TSecControls modified:TSecurityDescriptorInfos';
 
 procedure InitializeUnit;
 begin
   // register proper JSON serialization of security related types
   Rtti.RegisterTypes([TypeInfo(TSignAlgo), TypeInfo(TSecAceType),
-    TypeInfo(TSecAceFlags), TypeInfo(TSecAccessMask), TypeInfo(TSecControls)]);
+    TypeInfo(TSecAceFlags), TypeInfo(TSecAccessMask), TypeInfo(TSecControls),
+    TypeInfo(TSecurityDescriptorInfos)]);
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams), _TSynSignerParams);
   TRttiJson.RegisterCustomSerializers([
     TypeInfo(RawSid),                @_JL_RawSid, @_JS_RawSid,
