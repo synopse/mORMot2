@@ -728,9 +728,10 @@ type
     /// set the associated access mask, as SDDL text format
     function MaskText(const maskSddl: RawUtf8): boolean; overload;
     /// get the ACE conditional expression, as stored in Opaque binary
-    function ConditionalExpression: RawUtf8; overload;
+    function ConditionalExpression(dom: PSid = nil): RawUtf8; overload;
     /// parse a ACE conditional expression, and assign it to the Opaque binary
-    function ConditionalExpression(const condExp: RawUtf8): TAceTextParse; overload;
+    function ConditionalExpression(const condExp: RawUtf8;
+      dom: PSid = nil): TAceTextParse; overload;
     /// replace all nested RID from one domain to another
     // - also from any ACE conditional expression
     function ReplaceDomainRaw(old, new: PSid; maxRid: cardinal): integer;
@@ -1022,6 +1023,7 @@ type
   TAceBinaryTree = object
   {$endif USERECORDWITHMETHODS}
   private
+    ToTextDom: PSid;
     function AddNode(position, left, right: cardinal): boolean;
     procedure GetNodeText(index: byte; var u: RawUtf8);
   public
@@ -1041,7 +1043,7 @@ type
     function ToBinary: RawByteString;
     /// compute the SDDL conditional ACE text of the stored Stack[]
     // - use a simple recursive algorithm, with temporary RawUtf8 allocations
-    function ToText: RawUtf8;
+    function ToText(dom: PSid = nil): RawUtf8;
   end;
 
   /// define one node in the TAceTextTree.Nodes
@@ -1072,6 +1074,7 @@ type
     TokenCurrent: TSecConditionalToken;
     Root: byte;
     ParentCount: byte;
+    ToBinaryDom: PSid;
     function AddNode(position, len: cardinal): integer;
     function ParseNextToken: integer;
     function ParseExpr: integer;
@@ -1103,7 +1106,7 @@ type
     // - will also parse the nested Unicode or composite expressions from the
     // SDDL input, so this method could also set Error and return ''
     // - no temporary memory allocation is done during this process
-    function ToBinary: RawByteString;
+    function ToBinary(dom: PSid = nil): RawByteString;
   end;
 
 /// compute the length in bytes of an ACE token binary entry
@@ -1148,11 +1151,11 @@ function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): TAceTextParse;
 // - see [MS-DTYP] 2.5.1.2.2 @Prefixed Attribute Name Form and
 // [MS-DTYP] 2.5.1.1 SDDL Syntax
 // - returns true on success, false if the input is not (yet) supported
-function SddlAppendOperand(var s: ShortString; v: PRawAceOperand): boolean;
+function SddlAppendOperand(var s: ShortString; v: PRawAceOperand; dom: PSid): boolean;
 
 /// return the SDDL text form of a binary ACE literal or attribute
 // - just a wrapper around SddlAppendLiteral()
-procedure SddlOperandToText(v: PRawAceOperand; out u: RawUtf8);
+procedure SddlOperandToText(v: PRawAceOperand; dom: PSid; out u: RawUtf8);
 
 /// return the SDDL text form of a binary ACE unary operator
 // - and free the l supplied variable
@@ -1164,7 +1167,7 @@ procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 
 /// append a TSecAce.Opaque value as SDDL text form
 // - use a TAceBinaryTree for the binary to SDDL processing
-procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce);
+procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce; dom: PSid);
 
 /// parse the next conditional ACE token from its SDDL text
 // - see [MS-DTYP] 2.5.1.1 SDDL Syntax
@@ -2656,7 +2659,7 @@ begin
   result := atpSuccess;
 end;
 
-procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce);
+procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce; dom: PSid);
 var
   tree: TAceBinaryTree;
   tmp: shortstring absolute tree;
@@ -2665,7 +2668,7 @@ begin
     if (ace.AceType in satConditional) and
        tree.FromBinary(ace.Opaque) then
       // append conditional ACE expression using recursive SDDL generation
-      s := s + tree.ToText
+      s := s + tree.ToText(dom)
     else
     begin
       // fallback to hexadecimal (not standard, but working)
@@ -2675,12 +2678,12 @@ begin
     end;
 end;
 
-procedure SddlOperandToText(v: PRawAceOperand; out u: RawUtf8);
+procedure SddlOperandToText(v: PRawAceOperand; dom: PSid; out u: RawUtf8);
 var
   s: ShortString;
 begin
   s[0] := #0;
-  if SddlAppendOperand(s, v) then
+  if SddlAppendOperand(s, v, dom) then
     FastSetString(u, @s[1], ord(s[0]));
 end;
 
@@ -2718,7 +2721,7 @@ begin
   FastAssignNew(r);
 end;
 
-function SddlAppendOperand(var s: ShortString; v: PRawAceOperand): boolean;
+function SddlAppendOperand(var s: ShortString; v: PRawAceOperand; dom: PSid): boolean;
 var
   utf8: shortstring;
   c: PRawAceOperand;
@@ -2801,7 +2804,7 @@ begin
           if clen > comp then
             exit; // avoid buffer overflow
           if (c^.Token in sctAttribute) or
-             not SddlAppendOperand(s, c) then
+             not SddlAppendOperand(s, c, dom) then
             exit; // unsupported or truncated/overflow content
           dec(comp, clen);
           if comp = 0 then
@@ -2817,7 +2820,7 @@ begin
       if PtrInt(v^.SidBytes) >= SidLength(@v^.Sid) then
       begin
         AppendShort('SID(', s);
-        SddlAppendSid(s, @v^.Sid, {domain=}nil);
+        SddlAppendSid(s, @v^.Sid, dom);
         AppendShortChar(')', @s);
       end
       else
@@ -3051,13 +3054,14 @@ begin
   result := SddlNextMask(p, Mask);
 end;
 
-function TSecAce.ConditionalExpression: RawUtf8;
+function TSecAce.ConditionalExpression(dom: PSid): RawUtf8;
 begin
   result := '';
-  SddlAppendOpaque(result, self);
+  SddlAppendOpaque(result, self, dom);
 end;
 
-function TSecAce.ConditionalExpression(const condExp: RawUtf8): TAceTextParse;
+function TSecAce.ConditionalExpression(
+  const condExp: RawUtf8; dom: PSid): TAceTextParse;
 var
   p: PUtf8Char;
 begin
@@ -3126,7 +3130,7 @@ begin
     AppendShortChar(';', @s);
     AppendShortToUtf8(s, sddl);
     s[0] := #0;
-    SddlAppendOpaque(sddl, self); // direct write conditional expression in sddl
+    SddlAppendOpaque(sddl, self, dom); // direct write in sddl
   end;
   AppendShortChar(')', @s);
   AppendShortToUtf8(s, sddl);
@@ -3482,7 +3486,7 @@ begin
     else
       SddlUnaryToText(v^.Token, RawUtf8(l), u) // and release l
   else
-    SddlOperandToText(v, u);
+    SddlOperandToText(v, ToTextDom, u);
 end;
 
 function TAceBinaryTree.ToBinary: RawByteString;
@@ -3490,9 +3494,11 @@ begin
   FastSetRawByteString(result, Storage, StorageSize); // FromBinary() value
 end;
 
-function TAceBinaryTree.ToText: RawUtf8;
+function TAceBinaryTree.ToText(dom: PSid): RawUtf8;
 begin
+  ToTextDom := dom;
   GetNodeText(Count - 1, result); // simple recursive generation
+  ToTextDom := nil;
 end;
 
 
@@ -3743,7 +3749,7 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
     sid: TSid;
   begin
     inc(p, 4); // ignore trailing 'SID(' chars
-    if SddlNextSid(p, sid, nil) then
+    if SddlNextSid(p, sid, ToBinaryDom) then
       DoBytes(@sid, SidLength(@sid))
     else
       Error := atpInvalidSid;
@@ -3852,7 +3858,7 @@ begin
   result := RawAppendBinary(bin, n^); // stored in reverse Polish order
 end;
 
-function TAceTextTree.ToBinary: RawByteString;
+function TAceTextTree.ToBinary(dom: PSid): RawByteString;
 var
   pad: PtrUInt;
   bin: TSynTempBuffer; // no temporary allocation needed
@@ -3862,6 +3868,7 @@ begin
      (Error <> atpSuccess) or
      (Root >= Count) then
     exit;
+  ToBinaryDom := dom;
   bin.InitOnStack;
   PCardinal(bin.Add(4))^ := ACE_CONDITION_SIGNATURE;
   if AppendBinary(bin, Root) then // recursive generation
@@ -3874,6 +3881,7 @@ begin
   else if Error = atpSuccess then
     Error := atpInvalidContent; // if no Error was specified
   bin.Done;
+  ToBinaryDom := nil;
 end;
 
 function TAceTextTree.ToText: RawUtf8;
