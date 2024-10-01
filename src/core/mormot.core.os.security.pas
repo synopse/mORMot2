@@ -75,6 +75,13 @@ type
   PSid = ^TSid;
   PSids = array of PSid;
 
+const
+  // some internal constants used for proper inlining (as required by Delphi)
+  SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
+  SID_REV32 = ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24;
+  SID_DOM_MASKSID = $00000401; // SubAuthorityCount = 4
+  SID_DOM_MASKRID = $00000501; // SubAuthorityCount = 5
+  SID_DOM_MASKAUT = $05000000; // IdentifierAuthority
 
 /// a wrapper around MemCmp() on two Security IDentifier binary buffers
 // - will first compare by length, then by content
@@ -104,7 +111,7 @@ procedure SidAppendShort(sid: PSid; var s: ShortString);
 
 /// convert a Security IDentifier as text, following the standard representation
 procedure SidToTextShort(sid: PSid; var result: ShortString);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi doesn't suppport inlining shortstring :(
 
 /// convert a Security IDentifier as text, following the standard representation
 function SidToText(sid: PSid): RawUtf8; overload;
@@ -1666,13 +1673,6 @@ implementation
 
 { ****************** Security IDentifier (SID) Definitions }
 
-const
-  SID_MINLEN = SizeOf(TSidAuth) + 2; // = 8
-  SID_REV32 = ord('S') + ord('-') shl 8 + ord('1') shl 16 + ord('-') shl 24;
-  SID_DOM_MASKSID = $00000401; // SubAuthorityCount = 4
-  SID_DOM_MASKRID = $00000501; // SubAuthorityCount = 5
-  SID_DOM_MASKAUT = $05000000; // IdentifierAuthority
-
 function SidLength(sid: PSid): PtrInt;
 begin
   if sid = nil then
@@ -2591,11 +2591,13 @@ var
 begin
   if ace.Opaque <> '' then
     if (ace.AceType in satConditional) and
-       tree.FromBinary(ace.Opaque) then // conditional ACE expression
+       tree.FromBinary(ace.Opaque) then
+      // append conditional ACE expression using recursive SDDL generation
       s := s + tree.ToText
     else
     begin
-      tmp[0] := #0; // fallback to hexadecimal
+      // fallback to hexadecimal (not standard, but working)
+      tmp[0] := #0;
       AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), tmp);
       AppendShortToUtf8(tmp, s);
     end;
