@@ -1782,6 +1782,7 @@ type
   // - nrtDsObject indicates a directory entry, in X.500 form, e.g.
   // 'CN=SomeObject,OU=ou2,OU=ou1,DC=DomainName,DC=CompanyName,DC=com,O=internet'
   // - nrtDsObjectAll indicates a directory entry and all its properties
+  // - other fields are less used and somewhat undocumented
   TNamedResourceType = (
     nrtUnknown,
     nrtFile,
@@ -1808,12 +1809,12 @@ function GetSystemSecurityDescriptor(const fn: TFileName;
   privileges: TWinSystemPrivileges = [wspSecurity]): boolean;
 
 /// change the security descriptor information of a given file or named resource
-// - info covers the extend of dest fields to be updated in the system
+// - info covers the extent of dest fields to be updated in the system - its
+// default [] value will use dest.Modified flags
 // - may require ownership to the resource, or the wspTakeOwnership privilege
 // - wspSecurity privilege may also be needed, e.g. for DACL
 function SetSystemSecurityDescriptor(const fn: TFileName;
-  const dest: TSecurityDescriptor;
-  info: TSecurityDescriptorInfos = [sdiOwner, sdiGroup, sdiDacl];
+  const dest: TSecurityDescriptor; info: TSecurityDescriptorInfos = [];
   kind: TNamedResourceType = nrtFile;
   privileges: TWinSystemPrivileges = [wspSecurity]): boolean;
 
@@ -4886,6 +4887,8 @@ var
   bak: integer;
 begin
   result := false;
+  if info = [] then
+    info := dest.Modified;
   if (info = []) or
      (fn = '') then
     exit;
