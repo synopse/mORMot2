@@ -758,6 +758,7 @@ begin
     'OU=d..zaf(fds )da\,z \"\"((''\\/ df\3D\3Dez,OU=test_wapt,OU=computers,' +
     'OU=tranquilit,DC=ad,DC=tranquil,DC=it'),
     'ad.tranquil.it/tranquilit/computers/test_wapt/d\.\.zaf(fds )da,z ""((''\\\/ df==ez');
+  CheckEqual(DNToCN('dc=ad,dc=company,dc=it'), 'ad.company.it');
   CheckEqual(DNToCN('cn=foo, ou=bar'), '/bar/foo');
   CheckEqual(NormalizeDN('cn=foo, ou = bar'), 'CN=foo,OU=bar');
   // validate LDAP error recognition

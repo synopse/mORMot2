@@ -2661,7 +2661,9 @@ begin
   w := TTextWriter.CreateOwnedStream(tmp);
   try
     w.AddCsvStrings(dc, '.', -1, {reverse=}false);
-    w.AddDirect('/');
+    if (ou <> nil) or
+       (cn <> nil) then
+      w.AddDirect('/');
     if ou <> nil then
       w.AddCsvStrings(ou, '/', -1, {reverse=}true);
     if cn <> nil then
