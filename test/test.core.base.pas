@@ -187,9 +187,6 @@ type
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
   published
-    /// test the SecurityDescriptor / SDDL process
-    procedure _SDDL;
-  //public
     /// test the new RecordCopy() using our fast RTTI
     procedure _RecordCopy;
     /// test the TSynList class
@@ -269,6 +266,8 @@ type
     procedure DmiSmbios;
     /// test Security IDentifier (SID) process
     procedure _SID;
+    /// test the SecurityDescriptor / SDDL process
+    procedure _SDDL;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -6724,7 +6723,10 @@ begin
   Check(sd.IsEqual(sd2));
   u := sd.ToText(dom);
   CheckEqual(u, RID_TXT[4], 'domsaved');
+  Check(sd.Modified = []);
   CheckEqual(sd.ReplaceDomain(dom, dom2), 3);
+  Check(sd.Modified = [sdiOwner, sdiGroup, sdiDacl]);
+  sd.Modified := [];
   Check(not sd.IsEqual(sd2));
   u := sd.ToText;
   CheckNotEqual(u, SD_TXT[4], 'dom2a');
@@ -6732,25 +6734,34 @@ begin
   CheckEqual(u, u2, 'dom2b');
   u := sd.ToText(dom2);
   CheckEqual(u, RID_TXT[4], 'dom2c');
+  sd.Modified := [];
   CheckEqual(sd.ReplaceDomain(dom, dom2), 0);
+  Check(sd.Modified = []);
   u := sd.ToText(dom);
   CheckEqual(u, u2, 'dom2d');
   u := sd.ToText(dom2);
   CheckEqual(u, RID_TXT[4], 'dom2e');
   Check(not sd.IsEqual(sd2));
   CheckEqual(sd.ReplaceDomain(dom2, dom), 3);
+  Check(sd.Modified = [sdiOwner, sdiGroup, sdiDacl]);
   u := sd.ToText(dom);
   CheckNotEqual(u, SD_TXT[4], 'dom2f');
   CheckEqual(u, RID_TXT[4], 'dom2g');
   Check(sd.IsEqual(sd2), 'dom2h');
+  sd.Modified := [];
   CheckEqual(sd.ReplaceDomain(dom2, dom), 0);
+  Check(sd.Modified = []);
   Check(sd.IsEqual(sd2), 'dom2i');
   CheckEqual(sd.ReplaceSid(dom + '-512', dom + '-500'), 2, 'dom3a');
+  Check(sd.Modified = [sdiGroup, sdiDacl]);
   u := sd.ToText(dom);
   CheckEqual(u, 'O:DUG:LAD:(A;;FA;;;LA)');
   Check(not sd.IsEqual(sd2), 'dom3c');
+  sd.Modified := [];
   CheckEqual(sd.ReplaceSid(dom + '-501', dom + '-512'), 0, 'dom3d1');
+  Check(sd.Modified = []);
   CheckEqual(sd.ReplaceSid(dom + '-500', dom + '-512'), 2, 'dom3d2');
+  Check(sd.Modified = [sdiGroup, sdiDacl]);
   u := sd.ToText(dom);
   CheckEqual(u, RID_TXT[4]);
   Check(sd.IsEqual(sd2), 'dom3f');
@@ -6816,20 +6827,26 @@ begin
   CheckEqual(u, 'D:(XA;;FR;;;WD;((Member_of{SID(LA),SID(BO)}) && ' +
     '@Device.Bitlocker))(A;ID;FA;;;SY)');
   dom2 := 'S-1-5-21-1111-2222-3333';
+  sd.Modified := [];
   CheckEqual(sd.ReplaceDomain(dom, dom2), 1);
+  Check(sd.Modified = [sdiDacl]);
   u2 := sd.ToText;
   CheckEqual(u2,
     'D:(XA;;FR;;;WD;((Member_of{SID(S-1-5-21-1111-2222-3333-500),SID(BO)}) && '+
     '@Device.Bitlocker))(A;ID;FA;;;SY)');
   u2 := sd.ToText(dom2);
   CheckEqual(u, u2);
+  sd.Modified := [];
   CheckEqual(sd.ReplaceSid('S-1-5-21-1111-2222-3333-500',
     'S-1-5-21-111-222-333-512'), 1);
+  Check(sd.Modified = [sdiDacl]);
   u := sd.ToText(dom);
   CheckEqual(u, 'D:(XA;;FR;;;WD;((Member_of{SID(DA),SID(BO)}) && ' +
     '@Device.Bitlocker))(A;ID;FA;;;SY)');
+  sd.Modified := [];
   CheckEqual(sd.ReplaceSid('S-1-5-21-1111-2222-3333-500',
     'S-1-5-21-111-222-333-512'), 0);
+  Check(sd.Modified = []);
 end;
 
 function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
