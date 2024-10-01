@@ -6242,7 +6242,7 @@ begin
       Dest.len := 0
     else
     begin
-      dec(Dest.len); // Utf8ToUnicode() returned length includes trailing #0
+      dec(Dest.len); // Utf8ToUnicode() returned length includes #0 terminator
       result[Dest.len] := #0; // missing on FPC
     end;
   end;

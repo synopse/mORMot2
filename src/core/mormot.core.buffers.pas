@@ -168,7 +168,7 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
 // - caller should call Value.Done after use of the Value.buf memory
-// - this overloaded function would include a trailing #0, so Value.buf could
+// - this overloaded function would include a #0 terminator, so Value.buf could
 // be parsed as a valid PUtf8Char buffer (e.g. containing JSON)
 procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
 
@@ -1999,7 +1999,7 @@ function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 
 /// fast add text conversion of 0-999 integer value into a given buffer
 // - warning: it won't check that Value is in 0-999 range
-// - up to 4 bytes may be written to the buffer (including trailing #0)
+// - up to 4 bytes may be written to the buffer (including #0 terminator)
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -3441,7 +3441,7 @@ var
 begin
   len := FromVarUInt32(Source);
   Value.Init(Source, len);
-  PByteArray(Value.buf)[len] := 0; // include trailing #0
+  PByteArray(Value.buf)[len] := 0; // include #0 terminator
   inc(Source, len);
 end;
 
@@ -3463,7 +3463,7 @@ begin
     end;
   end;
   Value.Init(Source, len);
-  PByteArray(Value.buf)[len] := 0; // include trailing #0
+  PByteArray(Value.buf)[len] := 0; // include #0 terminator
   inc(Source, len);
   result := true;
 end;

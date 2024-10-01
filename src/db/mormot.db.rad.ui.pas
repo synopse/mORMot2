@@ -348,7 +348,7 @@ begin
         begin
           CurrentAnsiConvert.Utf8BufferToAnsi(data, len, tmp);
           len := length(tmp);
-          maxlen := Field.DataSize - 1; // without trailing #0
+          maxlen := Field.DataSize - 1; // without #0 terminator
           if len > maxlen then
             len := maxlen;
           MoveFast(pointer(tmp)^, dest^, len);

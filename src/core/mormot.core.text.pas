@@ -94,7 +94,7 @@ function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 
 /// return next CSV string from P, nil if no more
 // - output text would be trimmed from any left or right space
-// - will always append a trailing #0 - excluded from Dest length (0..254)
+// - will always append a #0 terminator - excluded from Dest length (0..254)
 procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString;
   Sep: AnsiChar = ',');
 
@@ -2773,11 +2773,11 @@ begin
         dec(len); // trim right space
       until len = 0;
     D[0] := AnsiChar(len);
-    D[len + 1] := #0; // trailing #0
+    D[len + 1] := #0; // #0 terminator
     P := S;
   end
   else
-    PCardinal(D)^ := 0 // Dest='' with trailing #0
+    PCardinal(D)^ := 0 // Dest='' with #0 terminator
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;

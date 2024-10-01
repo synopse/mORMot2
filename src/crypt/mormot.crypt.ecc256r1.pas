@@ -1681,7 +1681,7 @@ begin
   else
   begin
     tmp[0] := Issuer;
-    tmp[1][0] := 0; // add a trailing #0 as expected for trailing bits
+    tmp[1][0] := 0; // add a #0 terminator as expected for trailing bits
     result := BaudotToAscii(@tmp, SizeOf(Issuer));
     if result = '' then
       result := mormot.core.text.BinToHex(@Issuer, SizeOf(Issuer));

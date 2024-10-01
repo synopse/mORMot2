@@ -1319,7 +1319,7 @@ begin
       inc(S);
       inc(D);
     until S^ = #0;
-    D^ := #0; // include trailing #0
+    D^ := #0; // include #0 terminator
   end;
 end;
 
@@ -1460,7 +1460,7 @@ begin
               case VDBType of
                 SQLT_STR:
                   begin
-                    inc(oLength); // space for trailing #0
+                    inc(oLength); // space for #0 terminator
                     FastNewRawByteString(VData, oLength * fParamsArrayCount);
                     oData := pointer(VData); // in-place quote removal in text
                     oDataSTR := oData;

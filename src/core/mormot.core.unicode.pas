@@ -153,7 +153,7 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 /// convert a UTF-16 PWideChar buffer into a UTF-8 buffer
 // - replace system.UnicodeToUtf8 implementation, which is rather slow
 // since Delphi 2009+
-// - append a trailing #0 to the ending PUtf8Char, unless ccfNoTrailingZero is set
+// - append a #0 terminator to the ending PUtf8Char, unless ccfNoTrailingZero is set
 // - if ccfReplacementCharacterForUnmatchedSurrogate is set, this function will identify
 // unmatched surrogate pairs and replace them with UNICODE_REPLACEMENT_CHARACTER -
 // see https://en.wikipedia.org/wiki/Specials_(Unicode_block)
@@ -333,13 +333,13 @@ type
     /// direct conversion of a PAnsiChar buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
     // - this default implementation will use the Operating System APIs
-    // - will append a trailing #0 to the returned PWideChar, unless
+    // - will append a #0 terminator to the returned PWideChar, unless
     // NoTrailingZero is set
     function AnsiBufferToUnicode(Dest: PWideChar; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PWideChar; overload; virtual;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    // - will append a trailing #0 to the returned PUtf8Char, unless
+    // - will append a #0 terminator to the returned PUtf8Char, unless
     // NoTrailingZero is set
     // - this default implementation will use the Operating System APIs
     function AnsiBufferToUtf8(Dest: PUtf8Char; Source: PAnsiChar;
@@ -388,7 +388,7 @@ type
     {$endif PUREMORMOT2}
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
-    // - no trailing #0 is appended to the buffer
+    // - no #0 terminator is appended to the buffer
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; overload; virtual;
     /// convert any UTF-8 encoded buffer into Ansi Text
@@ -405,7 +405,7 @@ type
     function Utf8ToAnsi(const u: RawUtf8): RawByteString; virtual;
     /// direct conversion of a UTF-8 encoded string into a WinAnsi <2KB buffer
     // - will truncate the destination string to DestSize bytes (including the
-    // trailing #0), with a maximum handled size of 2048 bytes
+    // #0 terminator), with a maximum handled size of 2048 bytes
     // - returns the number of bytes stored in Dest^ (i.e. the position of #0)
     function Utf8ToAnsiBuffer2K(const S: RawUtf8;
       Dest: PAnsiChar; DestSize: integer): integer;
@@ -444,13 +444,13 @@ type
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
-    // - will append a trailing #0 to the returned PWideChar, unless
+    // - will append a #0 terminator to the returned PWideChar, unless
     // NoTrailingZero is set
     function AnsiBufferToUnicode(Dest: PWideChar; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PWideChar; override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    // - will append a trailing #0 to the returned PUtf8Char, unless
+    // - will append a #0 terminator to the returned PUtf8Char, unless
     // NoTrailingZero is set
     function AnsiBufferToUtf8(Dest: PUtf8Char; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUtf8Char; override;
@@ -468,7 +468,7 @@ type
       Source: PWideChar; SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
-    // - no trailing #0 is appended to the buffer
+    // - no #0 terminator is appended to the buffer
     // - non Ansi compatible characters are replaced as '?'
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; override;
@@ -512,13 +512,13 @@ type
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar UTF-8 buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
-    // - will append a trailing #0 to the returned PWideChar, unless
+    // - will append a #0 terminator to the returned PWideChar, unless
     // NoTrailingZero is set
     function AnsiBufferToUnicode(Dest: PWideChar; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PWideChar; override;
     /// direct conversion of a PAnsiChar UTF-8 buffer into a UTF-8 encoded buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    // - will append a trailing #0 to the returned PUtf8Char, unless
+    // - will append a #0 terminator to the returned PUtf8Char, unless
     // NoTrailingZero is set
     function AnsiBufferToUtf8(Dest: PUtf8Char; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUtf8Char; override;
@@ -538,7 +538,7 @@ type
       SourceChars: cardinal): RawByteString; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
-    // - no trailing #0 is appended to the buffer
+    // - no #0 terminator is appended to the buffer
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; override;
     /// convert any UTF-8 encoded buffer into Ansi Text
@@ -566,13 +566,13 @@ type
     constructor Create(aCodePage: cardinal); override;
     /// direct conversion of a PAnsiChar UTF-16 buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
-    // - will append a trailing #0 to the returned PWideChar, unless
+    // - will append a #0 terminator to the returned PWideChar, unless
     // NoTrailingZero is set
     function AnsiBufferToUnicode(Dest: PWideChar; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PWideChar; override;
     /// direct conversion of a PAnsiChar UTF-16 buffer into a UTF-8 encoded buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    // - will append a trailing #0 to the returned PUtf8Char, unless
+    // - will append a #0 terminator to the returned PUtf8Char, unless
     // NoTrailingZero is set
     function AnsiBufferToUtf8(Dest: PUtf8Char; Source: PAnsiChar;
       SourceChars: cardinal; NoTrailingZero: boolean = false): PUtf8Char; override;
@@ -588,7 +588,7 @@ type
       SourceChars: cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
-    // - no trailing #0 is appended to the buffer
+    // - no #0 terminator is appended to the buffer
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; override;
   end;

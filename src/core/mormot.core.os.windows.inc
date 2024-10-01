@@ -97,7 +97,7 @@ begin
     if (len < MAX_PATH) and
        IsAnsiCompatible(pointer(FileName), len) then
       // most common cases do not need any Unicode conversion
-      for i := 0 to len do // include trailing #0
+      for i := 0 to len do // include #0 terminator
         PWordArray(@Temp)[i] := PByteArray(FileName)[i]
     else
       // use a temporary SynUnicode variable for complex UTF-16 conversion
@@ -3057,7 +3057,7 @@ end;
 
 const
   _WSP: array[TWinSystemPrivilege] of string[32] = (
-    // note: string[32] to ensure there is a trailing #0 for all items
+    // note: string[32] to ensure there is a #0 terminator for all items
     'SeCreateTokenPrivilege',          // wspCreateToken
     'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
     'SeLockMemoryPrivilege',           // wspLockMemory

@@ -10292,7 +10292,7 @@ begin
     result := length(pwd);
     if result <> 0 then
       if size > result  then
-        MoveByOne(pointer(pwd), buf, result + 1) // +1 to include trailing #0
+        MoveByOne(pointer(pwd), buf, result + 1) // +1 to include #0 terminator
       else
         result := 0; // buf[0..size-1] is too small for this password -> abort
   except

@@ -3247,7 +3247,7 @@ type
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
-  // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
+  // - all Init() methods will allocate 16 more bytes, for a #0 terminator and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
   {$ifdef USERECORDWITHMETHODS}
@@ -3258,7 +3258,7 @@ type
   private
     procedure AddRealloc(new: PtrInt);
   public
-    /// the text/binary length, in bytes, excluding the trailing #0
+    /// the text/binary length, in bytes, excluding the #0 terminator
     len: integer;
     /// how many bytes have been stored with Add()/AddShort() overloaded methods
     added: integer;
@@ -10880,7 +10880,7 @@ begin
     if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
       buf := @tmp
     else
-      GetMem(buf, SourceLen + 16); // +16 for trailing #0 and for PInteger() parsing
+      GetMem(buf, SourceLen + 16); // +16 for #0 terminator and for PInteger() parsing
     if Source <> nil then
     begin
       MoveFast(Source^, buf^, len);
@@ -10919,7 +10919,7 @@ begin
     if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
       buf := @tmp
     else
-      GetMem(buf, SourceLen + 16); // +16 for trailing #0 and buffer overflow
+      GetMem(buf, SourceLen + 16); // +16 for #0 terminator and buffer overflow
     PPtrInt(PAnsiChar(buf) + SourceLen)^ := 0; // init last 4/8 bytes
   end;
   result := buf;

@@ -411,7 +411,7 @@ procedure TTftpContext.AppendTextToFrame(const Text: RawUtf8);
 var
   len: PtrInt;
 begin
-  len := length(Text) + 1; // include trailing #0
+  len := length(Text) + 1; // include #0 terminator
   if FrameLen + len > SizeOf(Frame^) then
     exit; // paranoid
   MoveFast(pointer(Text)^, PByteArray(Frame)[FrameLen], len);
@@ -455,7 +455,7 @@ begin
   ParseLen := len - SizeOf(Frame^.Opcode);
   if (ParseLen <= 0) or
      (ParseLen > SizeOf(Frame.Header)) or
-     (Frame^.Header[ParseLen - 1] <> 0) or // should end with a trailing #0
+     (Frame^.Header[ParseLen - 1] <> 0) or // should end with a #0 terminator
      not (OpCode in [toRrq, toWrq, toOck]) then
     exit;
   Parse := @Frame^.Header;
