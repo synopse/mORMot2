@@ -1525,6 +1525,19 @@ type
   RawSecurityDescriptor = type RawByteString;
   PRawSecurityDescriptor = ^RawSecurityDescriptor;
 
+  /// define the information stored in a TSecurityDescriptor
+  // - maps the TSecurityDescriptor Owner, Group, Dacl[] and Sacl[] properties
+  // - also matches OWNER_SECURITY_INFORMATION, GROUP_SECURITY_INFORMATION,
+  // DACL_SECURITY_INFORMATION and SACL_SECURITY_INFORMATION WinAPI flags
+  TSecurityDescriptorInfo = (
+   sdiOwner,
+   sdiGroup,
+   sdiDacl,
+   sdiSacl);
+
+  /// define the extend of information stored in a TSecurityDescriptor
+  // - used e.g. for the TSecurityDescriptor.Modified flags
+  TSecurityDescriptorInfos = set of TSecurityDescriptorInfo;
 
   {$A-} // both TSecAce and TSecurityDescriptor should be packed for JSON serialization
 
@@ -1555,6 +1568,9 @@ type
     Sacl: TSecAcl;
     /// control flags of this Security Descriptor
     Flags: TSecControls;
+    /// which fields have been modified by Add() or other write methods
+    // - can then be applied, e.g. on Windows, via SetSystemSecurityDescriptor()
+    Modified: TSecurityDescriptorInfos;
     /// remove any previous content
     procedure Clear;
     /// compare the fields of this instance with another
@@ -4097,6 +4113,7 @@ procedure TSecurityDescriptor.Clear;
 begin
   Finalize(self);
   Flags := [scSelfRelative];
+  Modified := [];
 end;
 
 function TSecurityDescriptor.IsEqual(const sd: TSecurityDescriptor): boolean;
@@ -4354,6 +4371,10 @@ begin
   if success then
   begin
     include(Flags, SCOPE_FLAG[scope]);
+    if scope = sasSacl then
+      include(Modified, sdiSacl)
+    else
+      include(Modified, sdiDacl);
     result := ace;
   end
   else
@@ -4413,6 +4434,10 @@ begin
   end
   else
     DynArrayFakeDelete(dest^, index, n, SizeOf(dest^[0]));
+  if scope = sasSacl then
+    include(Modified, sdiSacl)
+  else
+    include(Modified, sdiDacl);
 end;
 
 function TSecurityDescriptor.ReplaceDomain(const OldDomain, NewDomain: RawUtf8;
@@ -4430,17 +4455,32 @@ begin
     result := -1;
 end;
 
+procedure Apply(var modified: TSecurityDescriptorInfos;
+  sdi: TSecurityDescriptorInfo; var result: integer; new: integer);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if new = 0 then
+    exit;
+  inc(result, new);
+  include(modified, sdi);
+end;
+
 function TSecurityDescriptor.ReplaceDomainRaw(OldDomain, NewDomain: PSid;
   maxRid: cardinal): integer;
 begin
-  if SidIsDomain(OldDomain) and
-     SidIsDomain(NewDomain) then
-    result := SidReplaceDomain(OldDomain, NewDomain, maxRid, Owner) +
-              SidReplaceDomain(OldDomain, NewDomain, maxRid, Group) +
-              AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Dacl) +
-              AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Sacl)
-  else
-    result := -1;
+  result := -1;
+  if not SidIsDomain(OldDomain) or
+     not SidIsDomain(NewDomain) then
+    exit;
+  result := 0;
+  Apply(Modified, sdiOwner, result,
+    SidReplaceDomain(OldDomain, NewDomain, maxRid, Owner));
+  Apply(Modified, sdiGroup, result,
+    SidReplaceDomain(OldDomain, NewDomain, maxRid, Group));
+  Apply(Modified, sdiDacl, result,
+    AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Dacl));
+  Apply(Modified, sdiSacl, result,
+    AclReplaceDomainRaw(OldDomain, NewDomain, maxRid, Sacl));
 end;
 
 function TSecurityDescriptor.ReplaceSid(const OldSid, NewSid: RawUtf8): integer;
@@ -4470,10 +4510,11 @@ begin
   for i := 0 to length(OldSid) - 1 do
     if length(OldSid[i]) <> length(NewSid[i]) then
       exit; // old/new SID lengths should match for in-place Opaque replacement
-  result := SidReplaceAny(OldSid, NewSid, Owner) +
-            SidReplaceAny(OldSid, NewSid, Group) +
-            AclReplaceAny(OldSid, NewSid, Dacl) +
-            AclReplaceAny(OldSid, NewSid, Sacl);
+  result := 0;
+  Apply(Modified, sdiOwner, result, SidReplaceAny(OldSid, NewSid, Owner));
+  Apply(Modified, sdiGroup, result, SidReplaceAny(OldSid, NewSid, Group));
+  Apply(Modified, sdiDacl,  result, AclReplaceAny(OldSid, NewSid, Dacl));
+  Apply(Modified, sdiSacl,  result, AclReplaceAny(OldSid, NewSid, Sacl));
 end;
 
 
