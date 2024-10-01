@@ -776,6 +776,7 @@ type
   /// token types for the conditional ACE binary storage
   // - the conditional ACE is stored as a binary tree of value/operator nodes
   // - mainly as sctLiteral, sctAttribute or sctOperator tokens
+  // - TSecConditionalToken ordinal value is the stored ACE binary token byte
   // - tokens >= sctInternalFinal are never serialized, but used internally
   // during SddlNextOperand() SDDL text parsing
   // - see [MS-DTYP] 2.4.4.17.4 and following
@@ -927,8 +928,8 @@ const
   MAX_TREE_BYTES = 8 shl 10;
 
 type
-  /// internal type used for TRawAceLiteral.Int
-  TRawAceLiteralInt = packed record
+  /// internal type used for TRawAceOperand.Int
+  TRawAceOperandInt = packed record
     /// the actual value is always stored as 64-bit little-endian
     Value: Int64;
     /// can customize the sign when serialized as SDDL text
@@ -940,23 +941,17 @@ type
   /// token binary serialization for satConditional ACE literals and attributes
   // - the TSecAce.Opaque binary field starts with 'artx' ACE_CONDITION_SIGNATURE
   // and a series of entries, describing an expression tree in reverse Polish order
-  // - only literals and attributes do appear here, because operands appear
-  // before the operator in reverse Polish order, so are already on the stack
+  // - only sctOperand do have nested fields here, because sctOperator are stored
+  // as a single TSecConditionalToken byte on the binary stack
   // - see [MS-DTYP] 2.4.4.17.4 Conditional ACE Binary Formats
-  TRawAceLiteral = packed record
+  TRawAceOperand = packed record
     case Token: TSecConditionalToken of
+      // sctLiteral tokens
       sctInt8,
       sctInt16,
       sctInt32,
       sctInt64: (
-        Int: TRawAceLiteralInt);
-      sctUnicode,
-      sctLocalAttribute,
-      sctUserAttribute,
-      sctResourceAttribute,
-      sctDeviceAttribute: (
-        UnicodeBytes: cardinal;
-        Unicode: array[byte] of WideChar);
+        Int: TRawAceOperandInt);
       sctOctetString: (
         OctetBytes: cardinal;
         Octet: array[byte] of byte);
@@ -966,8 +961,16 @@ type
       sctSid: (
         SidBytes: cardinal;
         Sid: TSid);
+      sctUnicode,
+      // sctAttribute tokens
+      sctLocalAttribute,
+      sctUserAttribute,
+      sctResourceAttribute,
+      sctDeviceAttribute: (
+        UnicodeBytes: cardinal;
+        Unicode: array[byte] of WideChar);
   end;
-  PRawAceLiteral = ^TRawAceLiteral;
+  PRawAceOperand = ^TRawAceOperand;
 
   /// define one node in the TAceBinaryTree.Nodes
   // - here pointers are just 8-bit indexes to the main TAceBinaryTree.Nodes[]
@@ -1006,6 +1009,7 @@ type
     // - this process is very fast, and requires no memory allocation
     function FromBinary(const Input: RawByteString): boolean;
     /// save the internal Stack[] nodes into a binary conditional ACE
+    // - just return the Storage/StorageSize content
     function ToBinary: RawByteString;
     /// compute the SDDL conditional ACE text of the stored Stack[]
     // - use a simple recursive algorithm, with temporary RawUtf8 allocations
@@ -1028,7 +1032,7 @@ type
   end;
 
   /// store a processing tree of a conditional ACE in binary format
-  // - used for conversion from SDDL text to binary format, or execution
+  // - used for conversion from SDDL text to binary format
   // - can easily be allocated on stack for efficient process
   {$ifdef USERECORDWITHMETHODS}
   TAceTextTree = record
@@ -1065,6 +1069,7 @@ type
     // - Storage/StorageSize should have been set before calling
     function FromText: TAceTextParse; overload;
     /// save the internal Stack[] nodes into a SDDL text conditional ACE
+    // - just return the Storage/StorageSize content
     function ToText: RawUtf8;
     /// compute the binary conditional ACE of the stored Stack[]
     // - will also parse the nested Unicode or composite expressions from the
@@ -1074,7 +1079,7 @@ type
   end;
 
 /// compute the length in bytes of an ACE token binary entry
-function AceTokenLength(v: PRawAceLiteral): PtrUInt;
+function AceTokenLength(v: PRawAceOperand): PtrUInt;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -1108,11 +1113,11 @@ function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): TAceTextParse;
 // - see [MS-DTYP] 2.5.1.2.2 @Prefixed Attribute Name Form and
 // [MS-DTYP] 2.5.1.1 SDDL Syntax
 // - returns true on success, false if the input is not (yet) supported
-function SddlAppendOperand(var s: ShortString; v: PRawAceLiteral): boolean;
+function SddlAppendOperand(var s: ShortString; v: PRawAceOperand): boolean;
 
 /// return the SDDL text form of a binary ACE literal or attribute
 // - just a wrapper around SddlAppendLiteral()
-procedure SddlOperandToText(v: PRawAceLiteral; out u: RawUtf8);
+procedure SddlOperandToText(v: PRawAceOperand; out u: RawUtf8);
 
 /// return the SDDL text form of a binary ACE unary operator
 // - and free the l supplied variable
@@ -1289,7 +1294,7 @@ const
   /// used during SDDL parsing to stop identifier names
   SDDL_END_IDENT = [#0 .. ' ', '=', '!', '<', '>', '{', '(', ')'];
 
-  /// lookup table of SDDL identifiers over TWellKnownSid
+  /// lookup table of SDDL two-chars identifiers over TWellKnownSid
   SDDL_WKS: array[1..48] of TWellKnownSid = (
     wksWorld,                                     // S-1-1-0       WD
     wksCreatorOwner,                              // S-1-3-0       CO
@@ -1340,7 +1345,7 @@ const
     wksBuiltinUserModeDriver,                     // S-1-5-84-0-0-0-0-0 UD
     wksBuiltinAnyPackage);                        // S-1-15-2-1    AC
 
-  /// lookup table of SDDL identifiers over TWellKnownRid
+  /// lookup table of SDDL two-chars identifiers over TWellKnownRid
   SDDL_WKR: array[1..18] of TWellKnownRid = (
     wkrGroupReadOnly,                // RO
     wkrUserAdmin,                    // LA
@@ -1546,7 +1551,7 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 // - function is able to convert the value itself, i.e. allows @sd = @text
 // - could also generate SDDL RID placeholders, if dom binary is supplied,
 // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-// - on Windows, you can call native CryptoApi.SecurityDescriptorToText()
+// - on Windows, see also the native CryptoApi.SecurityDescriptorToText()
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid = nil): boolean;
 
@@ -1887,11 +1892,11 @@ end;
 
 function SidSameDomain(sid, dom: PSid): boolean;
 begin
-  result := (PCardinal(sid)^ = SID_DOM_MASKRID) and          // rid
+  result := (PCardinal(sid)^ = SID_DOM_MASKRID) and         // rid
             (PCardinalArray(sid)[1] = PCardinalArray(dom)[1]) and // S-1-5
             (PInt64Array(sid)[1] = PInt64Array(dom)[1]) and // auth[0..1]
             (PInt64Array(sid)[2] = PInt64Array(dom)[2]);    // auth[2..3]
-            // so sid.auth[4] will contain any RID
+            // so sid.SubAuthority[4] will contain any RID
 end;
 
 var
@@ -2596,7 +2601,7 @@ begin
     end;
 end;
 
-procedure SddlOperandToText(v: PRawAceLiteral; out u: RawUtf8);
+procedure SddlOperandToText(v: PRawAceOperand; out u: RawUtf8);
 var
   s: ShortString;
 begin
@@ -2639,11 +2644,11 @@ begin
   FastAssignNew(r);
 end;
 
-function SddlAppendOperand(var s: ShortString; v: PRawAceLiteral): boolean;
+function SddlAppendOperand(var s: ShortString; v: PRawAceOperand): boolean;
 var
   utf8: shortstring;
   max: pointer;
-  c: PRawAceLiteral;
+  c: PRawAceOperand;
   singleComposite: boolean;
   i: PtrInt;
 begin
@@ -3216,7 +3221,7 @@ end;
 
 { ******************* Conditional ACE Expressions SDDL and Binary Support }
 
-function AceTokenLength(v: PRawAceLiteral): PtrUInt;
+function AceTokenLength(v: PRawAceOperand): PtrUInt;
 begin
   case v^.Token of
     sctInt8,
@@ -3243,7 +3248,7 @@ end;
 
 function TAceBinaryTree.FromBinary(const Input: RawByteString): boolean;
 var
-  v: PRawAceLiteral;
+  v: PRawAceOperand;
   position, len, stCount: PtrUInt;
   st: array[0 .. 31] of byte; // local stack of last few operands
 begin
@@ -3319,7 +3324,7 @@ end;
 procedure TAceBinaryTree.GetNodeText(index: byte; var u: RawUtf8);
 var
   n: PAceBinaryTreeNode;
-  v: PRawAceLiteral;
+  v: PRawAceOperand;
   l, r: pointer; // store actual RawUtf8 variables
 begin
   if index >= Count then
@@ -3546,7 +3551,7 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
 
   procedure DoBytes(b: pointer; blen: PtrInt);
   var
-    v: PRawAceLiteral;
+    v: PRawAceOperand;
   begin
     if (blen = 0) and
        (node.Token <> sctUnicode) then
@@ -3561,7 +3566,7 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
     result := true; // success
   end;
 
-  // sub-functions to have minimal stack usage on main RawAppendBinary()
+  // sub-functions to minimize stack usage on recursive RawAppendBinary() calls
 
   procedure DoComposite(p: PUtf8Char);
   var
@@ -3639,7 +3644,7 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempBuffer;
   end;
 
 var
-  v: PRawAceLiteral;
+  v: PRawAceOperand;
   p: pointer;
   b: PtrUInt;
 begin
@@ -3766,7 +3771,7 @@ begin
     ((PRawSD(p)^.Dacl = 0) or
      (PRawAcl(@p[PRawSD(p)^.Dacl])^.AclSize + PRawSD(p)^.Dacl <= len)) and
     // SACL consistency
-     (PRawSD(p)^.Sacl < len) and
+    (PRawSD(p)^.Sacl < len) and
     ((PRawSD(p)^.Sacl <> 0) = (scSaclPresent in PRawSD(p)^.Control)) and
     ((PRawSD(p)^.Sacl = 0) or
      (PRawAcl(@p[PRawSD(p)^.Sacl])^.AclSize + PRawSD(p)^.Sacl <= len));
