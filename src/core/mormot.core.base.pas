@@ -3247,6 +3247,7 @@ type
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
+  // - can be used as string/buffer generator via Add/AddShort/Done methods
   // - all Init() methods will allocate 16 more bytes, for a #0 terminator and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
@@ -3259,6 +3260,7 @@ type
     procedure AddRealloc(new: PtrInt);
   public
     /// the text/binary length, in bytes, excluding the #0 terminator
+    // - is the current capacity when Add()/AddShort() are used
     len: integer;
     /// how many bytes have been stored with Add()/AddShort() overloaded methods
     added: integer;
@@ -4568,13 +4570,13 @@ begin
   if result < 8 then
     inc(result, 4) // faster for smaller capacity (called often)
   else if result <= 128 then
-    inc(result, 16)
+    inc(result, 16)           // increase by 16 bytes up to 128 bytes
   else if result < 8 shl 20 then
-    inc(result, result shr 2)
+    inc(result, result shr 2) // increase by 25% up to 8MB
   else if result < 128 shl 20 then
-    inc(result, result shr 3)
+    inc(result, result shr 3) // increase by 12.5% up to 128MB
   else
-    inc(result, 16 shl 20);
+    inc(result, 16 shl 20);   // increase by 16MB chunks
 end;
 
 {$ifndef FPC_ASMX64}
@@ -10869,6 +10871,10 @@ end;
 
 { TSynTempBuffer }
 
+const
+  // TSynTempBuffer allocates +16 bytes for #0 terminator and PInteger() parsing
+  SYNTEMPTRAIL = 16;
+
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: PtrInt);
 begin
   len := SourceLen;
@@ -10877,10 +10883,10 @@ begin
     buf := nil
   else
   begin
-    if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
+    if SourceLen <= SizeOf(tmp) - SYNTEMPTRAIL then // max internal tmp is 4080
       buf := @tmp
     else
-      GetMem(buf, SourceLen + 16); // +16 for #0 terminator and for PInteger() parsing
+      GetMem(buf, SourceLen + SYNTEMPTRAIL);
     if Source <> nil then
     begin
       MoveFast(Source^, buf^, len);
@@ -10916,10 +10922,10 @@ begin
     buf := nil
   else
   begin
-    if SourceLen <= SizeOf(tmp) - 16 then // max internal tmp is 4080 bytes
+    if SourceLen <= SizeOf(tmp) - SYNTEMPTRAIL then // max internal tmp is 4080
       buf := @tmp
     else
-      GetMem(buf, SourceLen + 16); // +16 for #0 terminator and buffer overflow
+      GetMem(buf, SourceLen + SYNTEMPTRAIL);
     PPtrInt(PAnsiChar(buf) + SourceLen)^ := 0; // init last 4/8 bytes
   end;
   result := buf;
@@ -10929,7 +10935,7 @@ function TSynTempBuffer.Init: integer;
 begin
   added := 0;
   buf := @tmp;
-  result := SizeOf(tmp) - 16; // set to maximum safe size, which is 4080 bytes
+  result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
   len := result;
 end;
 
@@ -10950,7 +10956,7 @@ end;
 function TSynTempBuffer.InitZero(ZeroLen: PtrInt): pointer;
 begin
   if ZeroLen = 0 then
-    ZeroLen := SizeOf(tmp) - 16;
+    ZeroLen := SizeOf(tmp) - SYNTEMPTRAIL;
   Init(ZeroLen);
   FillCharFast(buf^, ZeroLen, 0);
   result := buf;
@@ -10984,18 +10990,18 @@ begin
   len := NextGrow(new);
   if buf = @tmp then
   begin
-    GetMem(buf, len);
+    GetMem(buf, len + SYNTEMPTRAIL);
     MoveFast(tmp, buf^, added);
   end
   else
-    ReAllocMem(buf, len);
+    ReAllocMem(buf, len + SYNTEMPTRAIL);
 end;
 
 function TSynTempBuffer.Add(l: PtrInt): pointer;
 var
   new: PtrInt;
 begin
-  new := PtrInt(added) + l + 4; // +4 to allow adding an ending #0 e.g.
+  new := added + l;
   if new > len then // len is capacity here
     AddRealloc(new);
   result := PAnsiChar(buf) + added;
