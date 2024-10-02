@@ -876,8 +876,9 @@ end;
 
 function TOpenApiResponse.Schema(Parser: TOpenApiParser): POpenApiSchema;
 var
-  ref: RawUtf8;
+  ref, n: RawUtf8;
   c, o: PDocVariantData;
+  i: PtrInt;
 begin
   if @self = nil then
     result := nil
@@ -887,14 +888,19 @@ begin
     result := POpenApiSchema(Data.O['schema'])
   else
   begin
-    // we only support application/json in our wrapper classes
+    // we only support application/json (and some variations) here
     result := nil;
     c := Data.O['content'];
     c.Options := c.Options - [dvoNameCaseSensitive];
-    if c.GetAsObject(JSON_CONTENT_TYPE, o) or
-       c.GetAsObject('*/*', o) or
-       c.GetAsObject('application/jwt', o) then // seen in the wild :(
-      result := POpenApiSchema(o.O['schema']);
+    for i := 0 to c.Count - 1 do
+    begin
+      n := c.Names[i];
+      if IsContentTypeJson(pointer(n)) or
+         (n = '*/*') or
+         IdemPropNameU(n, 'application/jwt') then // exists in the wild :(
+        if _SafeObject(c.Values[i], o) then
+          result := POpenApiSchema(o.O['schema']);
+    end;
   end;
   if (result <> nil) and
      (result^.Data.Count = 0) then
