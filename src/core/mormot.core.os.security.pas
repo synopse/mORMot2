@@ -718,7 +718,7 @@ type
     /// append this entry as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var s: ShortString; var sddl: RawUtf8; dom: PSid);
+    procedure AppendAsText(var s: ShortString; var sddl: TSynTempBuffer; dom: PSid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
     function FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
     /// encode this entry into a self-relative binary buffer
@@ -1195,7 +1195,7 @@ procedure SddlBinaryToText(tok: TSecConditionalToken; var l, r, u: RawUtf8);
 
 /// append a TSecAce.Opaque value as SDDL text form
 // - use a TAceBinaryTree for the binary to SDDL processing
-procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce; dom: PSid);
+procedure SddlAppendOpaque(var s: TSynTempBuffer; const ace: TSecAce; dom: PSid);
 
 /// parse the next conditional ACE token from its SDDL text
 // - see [MS-DTYP] 2.5.1.1 SDDL Syntax
@@ -1558,7 +1558,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): TAceTextParse;
-    procedure AclToText(var sddl: RawUtf8; dom: PSid; scope: TSecAceScope);
+    procedure AclToText(var sddl: TSynTempBuffer; dom: PSid; scope: TSecAceScope);
     function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
     function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
       success: boolean): PSecAce;
@@ -1605,7 +1605,7 @@ type
     /// append this Security Descriptor as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var result: RawUtf8; dom: PSid = nil);
+    procedure AppendAsText(var sddl: TSynTempBuffer; dom: PSid = nil);
     /// add one new ACE to the DACL (or SACL)
     // - SID and Mask are supplied in their regular / SDDL text form, with
     // dom optionally able to recognize SDDL RID placeholders
@@ -2842,7 +2842,7 @@ begin
   result := atpSuccess;
 end;
 
-procedure SddlAppendOpaque(var s: RawUtf8; const ace: TSecAce; dom: PSid);
+procedure SddlAppendOpaque(var s: TSynTempBuffer; const ace: TSecAce; dom: PSid);
 var
   tree: TAceBinaryTree;
   tmp: shortstring absolute tree;
@@ -2851,13 +2851,13 @@ begin
     if (ace.AceType in satConditional) and
        tree.FromBinary(ace.Opaque) then
       // append conditional ACE expression using recursive SDDL generation
-      s := s + tree.ToText(dom)
+      s.Add(tree.ToText(dom))
     else
     begin
-      // fallback to hexadecimal (not standard, but working)
+      // fallback to hexadecimal (not standard, but good enough for display)
       tmp[0] := #0;
       AppendShortHex(pointer(ace.Opaque), length(ace.Opaque), tmp);
-      AppendShortToUtf8(tmp, s);
+      s.AddShort(tmp);
     end;
 end;
 
@@ -3238,9 +3238,12 @@ begin
 end;
 
 function TSecAce.ConditionalExpression(dom: PSid): RawUtf8;
+var
+  tmp: TSynTempBuffer;
 begin
-  result := '';
-  SddlAppendOpaque(result, self, dom);
+  tmp.InitOnStack;
+  SddlAppendOpaque(tmp, self, dom);
+  tmp.Done(result, CP_UTF8);
 end;
 
 function TSecAce.ConditionalExpression(
@@ -3284,7 +3287,7 @@ begin
   result := true;
 end;
 
-procedure TSecAce.AppendAsText(var s: ShortString; var sddl: RawUtf8; dom: PSid);
+procedure TSecAce.AppendAsText(var s: ShortString; var sddl: TSynTempBuffer; dom: PSid);
 var
   f: TSecAceFlag;
 begin
@@ -3319,12 +3322,12 @@ begin
   if Opaque <> '' then
   begin
     AppendShortChar(';', @s);
-    AppendShortToUtf8(s, sddl);
+    sddl.AddShort(s);
     s[0] := #0;
-    SddlAppendOpaque(sddl, self, dom); // direct write in sddl
+    SddlAppendOpaque(sddl, self, dom); // direct expression write in sddl
   end;
   AppendShortChar(')', @s);
-  AppendShortToUtf8(s, sddl);
+  sddl.AddShort(s);
   s[0] := #0;
 end;
 
@@ -3503,7 +3506,7 @@ end;
 
 function AceTokenLength(v: PRawAceOperand): PtrUInt;
 begin
-  case v^.Token of
+  case v^.Token of // literal or attribute
     sctInt8,
     sctInt16,
     sctInt32,
@@ -3519,7 +3522,7 @@ begin
     sctSid:         // SidBytes       = UnicodeBytes
       result := v^.UnicodeBytes + (SizeOf(v^.Token) + SizeOf(v^.UnicodeBytes));
   else
-    result := SizeOf(v^.Token);
+    result := SizeOf(v^.Token); // operation stored as a single token byte
   end;
 end;
 
@@ -4163,12 +4166,14 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
   var text: RawUtf8; dom: PSid): boolean;
 var
   tmp: TSecurityDescriptor;
+  buf: TSynTempBuffer;
 begin
   result := tmp.FromBinary(sd);
   if not result then
-    exit;
-  FastAssignNew(text);
-  tmp.AppendAsText(text, dom);
+    exit; // returns false, and don't change the text value on rendering error
+  buf.InitOnStack;
+  tmp.AppendAsText(buf, dom);
+  buf.Done(text, CP_UTF8);
 end;
 
 
@@ -4322,7 +4327,7 @@ begin
   until p^ <> '(';
 end;
 
-procedure TSecurityDescriptor.AclToText(var sddl: RawUtf8;
+procedure TSecurityDescriptor.AclToText(var sddl: TSynTempBuffer;
   dom: PSid; scope: TSecAceScope);
 var
   tmp: ShortString;
@@ -4398,13 +4403,17 @@ end;
 function TSecurityDescriptor.ToText(const RidDomain: RawUtf8): RawUtf8;
 var
   dom: RawSid;
+  tmp: TSynTempBuffer;
 begin
   result := '';
-  if TryDomainTextToSid(RidDomain, dom) then
-    AppendAsText(result, pointer(dom));
+  if not TryDomainTextToSid(RidDomain, dom) then
+    exit;
+  tmp.InitOnStack;
+  AppendAsText(tmp, pointer(dom));
+  tmp.Done(result, CP_UTF8);
 end;
 
-procedure TSecurityDescriptor.AppendAsText(var result: RawUtf8; dom: PSid);
+procedure TSecurityDescriptor.AppendAsText(var sddl: TSynTempBuffer; dom: PSid);
 var
   tmp: ShortString;
 begin
@@ -4419,9 +4428,9 @@ begin
     AppendShortTwoChars('G:', @tmp);
     SddlAppendSid(tmp, pointer(Group), dom);
   end;
-  AppendShortToUtf8(tmp, result);
-  AclToText(result, dom, sasDacl);
-  AclToText(result, dom, sasSacl);
+  sddl.AddShort(tmp);
+  AclToText(sddl, dom, sasDacl);
+  AclToText(sddl, dom, sasSacl);
 end;
 
 function TSecurityDescriptor.InternalAdd(scope: TSecAceScope;
