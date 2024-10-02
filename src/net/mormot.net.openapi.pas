@@ -323,6 +323,7 @@ type
     function IsBuiltin: boolean;
     function IsEnum: boolean;
     function IsRecord: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     property IsArray: boolean
       read fIsArray write SetArray;
 
@@ -383,7 +384,6 @@ type
   TPascalRecord = class(TPascalCustomType)
   private
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
-    fDependencies: TRawUtf8DynArray;
     fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
     fNeedsDummyField: boolean;
@@ -2506,60 +2506,31 @@ begin
     result := ParseRecordDefinition(aRecordName, aSchema);
 end;
 
-function HasDependencies(const Sources: TPascalRecordDynArray;
-  const Searched: TRawUtf8DynArray): boolean;
-var
-  found: boolean;
-  name: RawUtf8;
-  i, j: PtrInt;
-begin
-  result := false;
-  for i := 0 to high(Searched) do
-  begin
-    name := Searched[i];
-    found := false;
-    for j := 0 to high(Sources) do
-      if Sources[j].Name = name then
-      begin
-        found := true;
-        break;
-      end;
-    if not found then
-      exit;
-  end;
-  result := true;
-end;
-
 function TOpenApiParser.GetOrderedRecords: TPascalRecordDynArray;
 var
-  pending, missing: TPascalRecordDynArray;
   r: TPascalRecord;
-  i: PtrInt;
+  p: TPascalProperty;
+  n: integer;
+  i, j: PtrInt;
 begin
+  // check if not from cache
   result := fOrderedRecords;
   if result <> nil then
     exit;
-  // direct resolution
+  // compute the dependencies
+  n := 0;
   for i := 0 to fRecords.Count - 1 do
   begin
     r := fRecords.ObjectPtr[i];
-    if not Assigned(r.fDependencies) or
-           HasDependencies(result, r.fDependencies) then
-      ObjArrayAdd(result, r)
-    else
-      ObjArrayAdd(pending, r);
+    for j := 0 to r.fProperties.Count - 1 do
+    begin
+      p := r.fProperties.ObjectPtr[j];
+      if p.PropType.IsRecord then
+        ObjArrayAddOnce(result, p.PropType.CustomType, n);
+    end;
+    ObjArrayAddOnce(result, r, n); // if not already added
   end;
-  // nested resolution
-  while pending <> nil do
-  begin
-    missing := nil;
-    for i := 0 to high(pending) do
-      if HasDependencies(result, pending[i].fDependencies) then
-        ObjArrayAdd(result, pending[i])
-      else
-        ObjArrayAdd(missing, pending[i]);
-    pending := missing;
-  end;
+  SetLength(result, n);
   // store in cache
   fOrderedRecords := result;
 end;
