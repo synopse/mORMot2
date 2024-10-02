@@ -719,7 +719,9 @@ type
     /// append this entry as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var s: ShortString; var sddl: TSynTempBuffer; dom: PSid);
+    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    procedure AppendAsText(var s: ShortString; var sddl: TSynTempBuffer;
+      dom: PSid; uuid: TAppendShortUuid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
     function FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
     /// encode this entry into a self-relative binary buffer
@@ -1693,7 +1695,8 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): TAceTextParse;
-    procedure AclToText(var sddl: TSynTempBuffer; dom: PSid; scope: TSecAceScope);
+    procedure AclToText(var sddl: TSynTempBuffer; dom: PSid; uuid: TAppendShortUuid;
+      scope: TSecAceScope);
     function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
     function InternalAdded(scope: TSecAceScope; ace: PSecAce; acl: PSecAcl;
       success: boolean): PSecAce;
@@ -1736,11 +1739,15 @@ type
     /// encode this Security Descriptor into its SDDL textual representation
     // - could also generate SDDL RID placeholders, from the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
-    function ToText(const RidDomain: RawUtf8 = ''): RawUtf8;
+    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    function ToText(const RidDomain: RawUtf8 = '';
+      uuid: TAppendShortUuid = nil): RawUtf8;
     /// append this Security Descriptor as SDDL text into an existing buffer
     // - could also generate SDDL RID placeholders, if dom binary is supplied,
     // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
-    procedure AppendAsText(var sddl: TSynTempBuffer; dom: PSid = nil);
+    // - could also customize UUID values, e.g. with uuid = AppendShortKnownUuid
+    procedure AppendAsText(var sddl: TSynTempBuffer; dom: PSid = nil;
+      uuid: TAppendShortUuid = nil);
     /// add one new ACE to the DACL (or SACL)
     // - SID and Mask are supplied in their regular / SDDL text form, with
     // dom optionally able to recognize SDDL RID placeholders
@@ -1795,9 +1802,10 @@ function IsValidSecurityDescriptor(p: PByteArray; len: cardinal): boolean;
 // - function is able to convert the value itself, i.e. allows @sd = @text
 // - could also generate SDDL RID placeholders, if dom binary is supplied,
 // e.g. S-1-5-21-xx-xx-xx-512 (wkrGroupAdmins) into 'DA'
+// - you can customize the UUID ACE output e.g. with uuid = AppendShortKnownUuid
 // - on Windows, see also the native CryptoApi.SecurityDescriptorToText()
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
-  var text: RawUtf8; dom: PSid = nil): boolean;
+  var text: RawUtf8; dom: PSid = nil; uuid: TAppendShortUuid = nil): boolean;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -3441,7 +3449,8 @@ begin
   result := true;
 end;
 
-procedure TSecAce.AppendAsText(var s: ShortString; var sddl: TSynTempBuffer; dom: PSid);
+procedure TSecAce.AppendAsText(var s: ShortString; var sddl: TSynTempBuffer;
+  dom: PSid; uuid: TAppendShortUuid);
 var
   f: TSecAceFlag;
 begin
@@ -3464,10 +3473,10 @@ begin
   begin
     AppendShortChar(';', @s);
     if not IsNullGuid(ObjectType) then
-      AppendShortUuid(ObjectType, s); // RTL or mormot.core.text
+      uuid(ObjectType, s); // RTL or mormot.core.text
     AppendShortChar(';', @s);
     if not IsNullGuid(InheritedObjectType) then
-      AppendShortUuid(InheritedObjectType, s);
+      uuid(InheritedObjectType, s);
     AppendShortChar(';', @s);
   end
   else
@@ -4317,7 +4326,7 @@ begin
 end;
 
 function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
-  var text: RawUtf8; dom: PSid): boolean;
+  var text: RawUtf8; dom: PSid; uuid: TAppendShortUuid): boolean;
 var
   tmp: TSecurityDescriptor;
   buf: TSynTempBuffer;
@@ -4326,7 +4335,7 @@ begin
   if not result then
     exit; // returns false, and don't change the text value on rendering error
   buf.InitOnStack;
-  tmp.AppendAsText(buf, dom);
+  tmp.AppendAsText(buf, dom, uuid);
   buf.Done(text, CP_UTF8);
 end;
 
@@ -4482,7 +4491,7 @@ begin
 end;
 
 procedure TSecurityDescriptor.AclToText(var sddl: TSynTempBuffer;
-  dom: PSid; scope: TSecAceScope);
+  dom: PSid; uuid: TAppendShortUuid; scope: TSecAceScope);
 var
   tmp: ShortString;
   acl: PSecAcl;
@@ -4499,7 +4508,7 @@ begin
   if scope = sasSacl then
     acl := @Sacl;
   for i := 0 to length(acl^) - 1 do
-    acl^[i].AppendAsText(tmp, sddl, dom);
+    acl^[i].AppendAsText(tmp, sddl, dom, uuid);
 end;
 
 function TSecurityDescriptor.FromText(var p: PUtf8Char;
@@ -4554,7 +4563,8 @@ begin
     result := FromText(p, pointer(dom));
 end;
 
-function TSecurityDescriptor.ToText(const RidDomain: RawUtf8): RawUtf8;
+function TSecurityDescriptor.ToText(const RidDomain: RawUtf8;
+  uuid: TAppendShortUuid): RawUtf8;
 var
   dom: RawSid;
   tmp: TSynTempBuffer;
@@ -4563,11 +4573,12 @@ begin
   if not TryDomainTextToSid(RidDomain, dom) then
     exit;
   tmp.InitOnStack;
-  AppendAsText(tmp, pointer(dom));
+  AppendAsText(tmp, pointer(dom), uuid);
   tmp.Done(result, CP_UTF8);
 end;
 
-procedure TSecurityDescriptor.AppendAsText(var sddl: TSynTempBuffer; dom: PSid);
+procedure TSecurityDescriptor.AppendAsText(var sddl: TSynTempBuffer;
+  dom: PSid; uuid: TAppendShortUuid);
 var
   tmp: ShortString;
 begin
@@ -4583,8 +4594,10 @@ begin
     SddlAppendSid(tmp, pointer(Group), dom);
   end;
   sddl.AddShort(tmp);
-  AclToText(sddl, dom, sasDacl);
-  AclToText(sddl, dom, sasSacl);
+  if not Assigned(@uuid) then
+    uuid := @AppendShortUuid; // default append as UUID standard text
+  AclToText(sddl, dom, uuid, sasDacl);
+  AclToText(sddl, dom, uuid, sasSacl);
 end;
 
 function TSecurityDescriptor.InternalAdd(scope: TSecAceScope;
