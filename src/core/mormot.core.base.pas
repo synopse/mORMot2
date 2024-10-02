@@ -2896,14 +2896,11 @@ function CompareBuf(const P1, P2: RawByteString): integer;
 function EqualBuf(const P1, P2: RawByteString): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
-{$ifdef HASINLINE}
-function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean; inline;
-{$else}
 /// a CompareMem()-like function designed for small and fixed-sized content
 // - here, Length is expected to be a constant value - typically from SizeOf() -
 // so that inlining has better performance than calling the CompareMem() function
-var CompareMemFixed: function(P1, P2: pointer; Length: PtrInt): boolean = CompareMem;
-{$endif HASINLINE}
+function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// a CompareMem()-like function designed for small (a few bytes) content
 // - to be efficiently inlined in processing code
@@ -5143,40 +5140,6 @@ function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolea
 begin
   result := PropNameEquals(pointer(P1), P2, length(P1), P2Len);
 end;
-
-{$ifdef HASINLINE} // defined here for proper inlining
-function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
-label
-  zero;
-begin
-  // cut-down version of our pure pascal CompareMem() function
-  {$ifndef CPUX86}
-  result := false;
-  {$endif CPUX86}
-  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
-  if Length >= PtrInt(PtrUInt(P1)) then
-    repeat // compare one PtrInt per loop
-      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
-        goto zero;
-      inc(PPtrInt(P1));
-      inc(PPtrInt(P2));
-    until Length < PtrInt(PtrUInt(P1));
-  inc(Length, SizeOf(PtrInt));
-  dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < Length then
-    repeat
-      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
-        goto zero;
-      inc(PByte(P1));
-    until PtrInt(PtrUInt(P1)) >= Length;
-  result := true;
-  exit;
-zero:
-  {$ifdef CPUX86}
-  result := false;
-  {$endif CPUX86}
-end;
-{$endif HASINLINE}
 
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
@@ -11544,6 +11507,29 @@ end;
 function EqualBuf(const P1, P2: RawByteString): boolean;
 begin
   result := SortDynArrayRawByteString(P1, P2) = 0;
+end;
+
+function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
+begin
+  // cut-down version of our pure pascal CompareMem() function
+  result := false;
+  Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt)]);
+  if Length >= PtrInt(PtrUInt(P1)) then
+    repeat // compare one PtrInt per loop
+      if PPtrInt(P1)^ <> PPtrInt(P2)^ then
+        exit;
+      inc(PPtrInt(P1));
+      inc(PPtrInt(P2));
+    until Length < PtrInt(PtrUInt(P1));
+  inc(Length, SizeOf(PtrInt));
+  dec(PtrUInt(P2), PtrUInt(P1));
+  if PtrInt(PtrUInt(P1)) < Length then
+    repeat
+      if PByte(P1)^ <> PByteArray(P2)[PtrUInt(P1)] then
+        exit;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1)) >= Length;
+  result := true;
 end;
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
