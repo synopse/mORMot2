@@ -4557,8 +4557,8 @@ end;
 procedure RandomGuid(out result: TGuid);
 begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
   RandomBytes(@result, SizeOf(TGuid));
-  result.D3 := (result.D3 and $0FFF) + $4000; // version bits 12-15 = 4 (random)
-  result.D4[0] := byte(result.D4[0] and $3F) + $80; // reserved bits 6-7 = 1
+  PCardinal(@result.D3)^ := (PCardinal(@result.D3)^ and $ff3f0fff) + $00804000;
+  // version bits 12-15 = 4 (random) and reserved bits 6-7 = 1
 end;
 
 function NextGrow(capacity: integer): integer;
