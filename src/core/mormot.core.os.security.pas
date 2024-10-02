@@ -723,7 +723,7 @@ type
     procedure AppendAsText(var s: ShortString; var sddl: TSynTempBuffer;
       dom: PSid; uuid: TAppendShortUuid);
     /// decode a SDDL ACE textual representation into this (cleared) entry
-    function FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
+    function FromText(var p: PUtf8Char; dom: PSid; uuid: TShortToUuid): TAceTextParse;
     /// encode this entry into a self-relative binary buffer
     // - returns the output length in bytes
     // - if dest is nil, will compute the length but won't write anything
@@ -1728,7 +1728,8 @@ type
   TSecurityDescriptor = object
   {$endif USERECORDWITHMETHODS}
   private
-    function NextAclFromText(var p: PUtf8Char; dom: PSid; scope: TSecAceScope): TAceTextParse;
+    function NextAclFromText(var p: PUtf8Char; dom: PSid; uuid: TShortToUuid;
+      scope: TSecAceScope): TAceTextParse;
     procedure AclToText(var sddl: TSynTempBuffer; dom: PSid; uuid: TAppendShortUuid;
       scope: TSecAceScope);
     function InternalAdd(scope: TSecAceScope; out acl: PSecAcl): PSecAce;
@@ -1765,10 +1766,11 @@ type
     /// decode a Security Descriptor from its SDDL textual representation
     // - could also recognize SDDL RID placeholders, with the specified
     // RidDomain in its 'S-1-5-21-xxxxxx-xxxxxxx-xxxxxx' text form
+    // - recognize ldapDisplayName of TAdsKnownAttribute if uuid=@ShortToKnownUuid
     function FromText(const SddlText: RawUtf8;
-      const RidDomain: RawUtf8 = ''): TAceTextParse; overload;
+      const RidDomain: RawUtf8 = ''; uuid: TShortToUuid = nil): TAceTextParse; overload;
     /// decode a Security Descriptor from its SDDL textual representation
-    function FromText(var p: PUtf8Char; dom: PSid = nil;
+    function FromText(var p: PUtf8Char; dom: PSid = nil; uuid: TShortToUuid = nil;
       endchar: AnsiChar = #0): TAceTextParse; overload;
     /// encode this Security Descriptor into its SDDL textual representation
     // - could also generate SDDL RID placeholders, from the specified
@@ -1792,9 +1794,10 @@ type
       saf: TSecAceFlags = []): PSecAce; overload;
     /// add one new ACE to the DACL (or SACL) from SDDL text
     // - dom <> nil would enable SDDL RID placeholders recognition
+    // - recognize ldapDisplayName of TAdsKnownAttribute if uuid=@ShortToKnownUuid
     // - add to Dacl[] unless scope is sasSacl so it is added to Sacl[]
     // - return nil on sddl input text parsing error, or the newly added entry
-    function Add(const sddl: RawUtf8; dom: PSid = nil;
+    function Add(const sddl: RawUtf8; dom: PSid = nil; uuid: TShortToUuid = nil;
       scope: TSecAceScope = sasDacl): PSecAce; overload;
     /// delete one ACE from the DACL (or SACL)
     procedure Delete(index: PtrUInt; scope: TSecAceScope = sasDacl);
@@ -2918,13 +2921,13 @@ begin
   result := true;
 end;
 
-function SddlNextGuid(var p: PUtf8Char; out uuid: TGuid): boolean;
+function SddlNextUuid(var p: PUtf8Char; read: TShortToUuid; out uuid: TGuid): boolean;
 var
   u: ShortString;
 begin
   result := SddlNextPart(p, u) and
             ((u[0] = #0) or
-             ShortToUuid(u, uuid)); // use RTL or mormot.core.text
+             read(u, uuid)); // use RTL or mormot.core.text
   repeat
     inc(p);
   until p^ <> ' ';
@@ -3557,7 +3560,7 @@ begin
   s[0] := #0;
 end;
 
-function TSecAce.FromText(var p: PUtf8Char; dom: PSid): TAceTextParse;
+function TSecAce.FromText(var p: PUtf8Char; dom: PSid; uuid: TShortToUuid): TAceTextParse;
 var
   u: ShortString;
   t: TSecAceType;
@@ -3613,8 +3616,8 @@ begin
     inc(p);
   until p^ <> ' ';
   result := atpInvalidUuid;
-  if not SddlNextGuid(p, ObjectType) or
-     not SddlNextGuid(p, InheritedObjectType) then // satObject or nothing
+  if not SddlNextUuid(p, uuid, ObjectType) or
+     not SddlNextUuid(p, uuid, InheritedObjectType) then // satObject or nothing
     exit;
   result := atpInvalidSid;
   if not SddlNextSid(p, Sid, dom) then // entries always end with a SID/RID
@@ -4514,7 +4517,7 @@ const
     scDaclPresent, scSaclPresent);
 
 function TSecurityDescriptor.NextAclFromText(var p: PUtf8Char; dom: PSid;
-  scope: TSecAceScope): TAceTextParse;
+  uuid: TShortToUuid; scope: TSecAceScope): TAceTextParse;
 var
   acl: PSecAcl;
 begin
@@ -4546,7 +4549,7 @@ begin
     exit;
   repeat
     inc(p);
-    result := InternalAdd(scope, acl).FromText(p, dom);
+    result := InternalAdd(scope, acl).FromText(p, dom, uuid);
     if result <> atpSuccess then
       exit;
     inc(p); // p^ = ')'
@@ -4575,12 +4578,14 @@ begin
 end;
 
 function TSecurityDescriptor.FromText(var p: PUtf8Char;
-  dom: PSid; endchar: AnsiChar): TAceTextParse;
+  dom: PSid; uuid: TShortToUuid; endchar: AnsiChar): TAceTextParse;
 begin
   Clear;
   result := atpMissingExpression;
   if p = nil then
     exit;
+  if not Assigned(@uuid) then
+    uuid := @ShortToUuid; // default UUID standard text parsing
   repeat
     while p^ = ' ' do
       inc(p);
@@ -4597,9 +4602,9 @@ begin
         if not SddlNextSid(p, Group, dom) then
           result := atpInvalidGroup;
       'D':
-        result := NextAclFromText(p, dom, sasDacl);
+        result := NextAclFromText(p, dom, uuid, sasDacl);
       'S':
-        result := NextAclFromText(p, dom, sasSacl);
+        result := NextAclFromText(p, dom, uuid, sasSacl);
     else
       result := atpInvalidContent;
     end;
@@ -4615,7 +4620,7 @@ begin
 end;
 
 function TSecurityDescriptor.FromText(
-  const SddlText, RidDomain: RawUtf8): TAceTextParse;
+  const SddlText, RidDomain: RawUtf8; uuid: TShortToUuid): TAceTextParse;
 var
   p: PUtf8Char;
   dom: RawSid;
@@ -4623,7 +4628,7 @@ begin
   p := pointer(SddlText);
   result := atpInvalidSid;
   if TryDomainTextToSid(RidDomain, dom) then
-    result := FromText(p, pointer(dom));
+    result := FromText(p, pointer(dom), uuid);
 end;
 
 function TSecurityDescriptor.ToText(const RidDomain: RawUtf8;
@@ -4709,7 +4714,7 @@ begin
 end;
 
 function TSecurityDescriptor.Add(const sddl: RawUtf8; dom: PSid;
-  scope: TSecAceScope): PSecAce;
+  uuid: TShortToUuid; scope: TSecAceScope): PSecAce;
 var
   p: PUtf8Char;
   acl: PSecAcl;
@@ -4722,7 +4727,7 @@ begin
   inc(p);
   result := InternalAdd(scope, acl);
   result := InternalAdded(scope, result, acl,
-    result^.FromText(p, dom) = atpSuccess);
+    result^.FromText(p, dom, uuid) = atpSuccess);
 end;
 
 procedure TSecurityDescriptor.Delete(index: PtrUInt; scope: TSecAceScope);
