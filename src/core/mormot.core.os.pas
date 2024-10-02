@@ -3965,11 +3965,13 @@ function _oskb(Size: QWord): shortstring;
 type
   /// function prototype for AppendShortUuid()
   TAppendShortUuid = procedure(const u: TGuid; var s: ShortString);
+  /// function prototype for ShortToUuid()
+  TShortToUuid = function(const text: ShortString; out uuid: TGuid): boolean;
 
 var
   /// decode a '3F2504E0-4F89-11D3-9A0C-0305E82C3301' text into a TGuid
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
-  ShortToUuid: function(const text: ShortString; out uuid: TGuid): boolean;
+  ShortToUuid: TShortToUuid;
 
   /// append a TGuid into lower-cased '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it

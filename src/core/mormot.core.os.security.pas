@@ -1302,11 +1302,21 @@ const
 // - is implemented via O(log(n)) binary search within ordered ATTR_UUID[]
 function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 
+/// parse a UUID as text, recognizing TAdsKnownAttribute ATTR_TXT[] values
+function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
+
 /// append a UUID as text, recognizing TAdsKnownAttribute values
 // - can be used as TAppendShortUuid optional parameter for SDDL generation
 // functions, e.g. SecurityDescriptorToText()
 // - you can also define your own TAppendShortUuid function
+// - use fast O(log(n)) binary search in CPU L1 cache over ATTR_UUID[] items
 procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
+
+/// parse a UUID as text, recognizing UUID hexa or TAdsKnownAttribute values
+// - can be used as TShortToUuid optional parameter for SDDL parsing
+// - you can also define your own TShortToUuidfunction
+// - use O(n) case-insensitive brute force search over ATTR_TXT[] values
+function ShortToKnownUuid(const text: ShortString; out uuid: TGuid): boolean;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -2703,6 +2713,35 @@ begin
     AppendShortUuid(u, s) // append as regular UUID hexadecimal text
   else
     AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
+end;
+
+function TextToKnownAttribute(p: PUtf8Char; len: TStrLen): TAdsKnownAttribute;
+begin
+  if len < 4 then
+    result := kaNull
+  else
+    result := TAdsKnownAttribute(FindNonVoidRawUtf8I(
+      @ATTR_TXT[succ(kaNull)], p, len, length(ATTR_TXT) - 1) + 1);
+end;
+
+function ShortToKnownUuid(const text: ShortString; out uuid: TGuid): boolean;
+var
+  a: TAdsKnownAttribute;
+begin
+  result := false;
+  if text[0] >= #4 then
+    if text[0] = #36 then
+      // decode '3F2504E0-4F89-11D3-9A0C-0305E82C3301' standard encoding
+      result := ShortToUuid(text, uuid)
+    else
+    begin
+      // case-insensitive ATTR_TXT[] text search
+      a := TextToKnownAttribute(@text[1], ord(text[0]));
+      if a = kaNull then
+        exit;
+      uuid := ATTR_UUID[a];
+      result := true;
+    end;
 end;
 
 
