@@ -9059,7 +9059,7 @@ end;
 function IsContentTypeJson(ContentType: PUtf8Char): boolean;
 begin
   result := IdemPChar(ContentType, pointer(_CONTENT[2])) and
-            (IdemPPChar(ContentType + 12, @_CONTENT_APP) in [0 .. 2]);
+            (PtrUInt(IdemPPChar(ContentType + 12, @_CONTENT_APP)) <= 2);
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt;
