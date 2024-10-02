@@ -553,7 +553,7 @@ type
     fDtoUnitName, fClientUnitName, fClientClassName: RawUtf8;
     fOrderedRecords: TPascalRecordDynArray;
     function ParseRecordDefinition(const aDefinitionName: RawUtf8;
-      aSchema: POpenApiSchema): TPascalRecord;
+      aSchema: POpenApiSchema; aTemporary: boolean = false): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8; aPathItem: POpenApiPathItem);
     function NewPascalTypeFromSchema(aSchema: POpenApiSchema;
       aSchemaName: RawUtf8 = ''): TPascalType;
@@ -2222,7 +2222,7 @@ begin
     n := fSchemas^.Names[i];
     if s^.IsObject then
       if not fRecords.Exists(n) then // parse object once
-        fRecords.AddObject(n, ParseRecordDefinition(n, s));
+        ParseRecordDefinition(n, s);
   end;
   // parse all operations
   v := fSpecs.Paths;
@@ -2322,7 +2322,7 @@ begin
           break;
         if fmt = '' then
         begin
-          rectemp := ParseRecordDefinition(aSchemaName, aSchema);
+          rectemp := ParseRecordDefinition(aSchemaName, aSchema, {temp=}true);
           fmt := rectemp.ToRttiTextRepresentation; // just field names and types
           rectemp.Free;
         end;
@@ -2401,7 +2401,7 @@ begin
 end;
 
 function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8;
-  aSchema: POpenApiSchema): TPascalRecord;
+  aSchema: POpenApiSchema; aTemporary: boolean): TPascalRecord;
 var
   i, j: PtrInt;
   def: POpenApiSchemaDynArray;
@@ -2416,6 +2416,8 @@ begin
     EOpenApi.RaiseUtf8('%.ParseRecordDefinition: no % definition in schema',
       [self, aDefinitionName]);
   result := TPascalRecord.Create(self, aDefinitionName, aSchema);
+  if not aTemporary then
+    fRecords.AddObject(aDefinitionName, result); // allow recursive props
   // aggregate all needed information
   def := aSchema^.AllOf;
   if def = nil then
@@ -2484,10 +2486,8 @@ begin
     // #/definitions/NewPet -> NewPet
     aRecordName := SplitRight(aRecordName, '/');
   result := fRecords.GetObjectFrom(aRecordName);
-  if result <> nil then
-    exit;
-  result := ParseRecordDefinition(aRecordName, aSchema);
-  fRecords.AddObject(aRecordName, result);
+  if result = nil then
+    result := ParseRecordDefinition(aRecordName, aSchema);
 end;
 
 function HasDependencies(const Sources: TPascalRecordDynArray;
