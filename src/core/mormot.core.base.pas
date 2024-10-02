@@ -4574,12 +4574,12 @@ var
   v: PByteArray;
   cmp: integer;
 begin
-  Value := @Value[Size];
+  Value := @Value[Size]; // adjust for -Size below
   L := 0;
   if 0 <= R then
     repeat
       result := (L + R) shr 1;
-      v := @P^[result * Size + Size]; // inlined MemCmp()
+      v := @P^[result * Size + Size]; // inlined sort-optimized MemCmp()
       s := -Size;
       repeat
         cmp := v[s] - Value[s];
@@ -4587,7 +4587,7 @@ begin
           break; // first byte differs most of the time on sorted data
         inc(s);
         if s = 0 then
-          exit;
+          exit; // found whole Value[] bytes
       until false;
       {$ifdef CPUX86}
       if cmp < 0 then

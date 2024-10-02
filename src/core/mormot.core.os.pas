@@ -3962,6 +3962,10 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 // - will output the value as one number with one decimal and KB/MB/GB/TB suffix
 function _oskb(Size: QWord): shortstring;
 
+type
+  /// function prototype for AppendShortUuid()
+  TAppendShortUuid = procedure(const u: TGuid; var s: ShortString);
+
 var
   /// decode a '3F2504E0-4F89-11D3-9A0C-0305E82C3301' text into a TGuid
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
@@ -3969,7 +3973,7 @@ var
 
   /// append a TGuid into lower-cased '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
-  AppendShortUuid: procedure(const u: TGuid; var s: ShortString);
+  AppendShortUuid: TAppendShortUuid;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEM encoding
