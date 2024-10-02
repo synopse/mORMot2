@@ -296,6 +296,7 @@ type
 
   TPascalCustomType = class;
   TPascalParameter = class;
+  TPascalRecord = class;
 
   /// define any Pascal type, as basic type of custom type
   TPascalType = class
@@ -363,6 +364,7 @@ type
     constructor CreateFrom(aAnother: TPascalProperty);
     constructor CreateBuiltin(aParser: TOpenApiParser; const aName, aPascalName: RawUtf8;
       aBuiltInType: TOpenApiBuiltInType);
+    procedure ConvertToVariant;
     destructor Destroy; override;
     property PropType: TPascalType
       read fType;
@@ -1693,7 +1695,7 @@ constructor TPascalProperty.CreateBuiltin(aParser: TOpenApiParser;
   const aName, aPascalName: RawUtf8; aBuiltInType: TOpenApiBuiltInType);
 begin
   fParser := aParser;
-  fType := TPascalType.CreateBuiltin(aParser, aBuiltInType);
+  fType := TPascalType.CreateBuiltin(fParser, aBuiltInType);
   fTypeOwned := true;
   fName := aName;
   fPascalName := aPascalName;
@@ -1704,6 +1706,13 @@ begin
   if fTypeOwned then
     fType.Free;
   inherited Destroy;
+end;
+
+procedure TPascalProperty.ConvertToVariant;
+begin
+  if fTypeOwned then
+    fType.Free;
+  fType := TPascalType.CreateBuiltin(fParser, obtVariant);
 end;
 
 
@@ -2006,7 +2015,6 @@ var
   i: PtrInt;
   p: TPascalProperty;
   s: POpenApiSchema;
-  proptype: RawUtf8;
 begin
   if fProperties.Count = 0 then
   begin
@@ -2044,19 +2052,10 @@ begin
             '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
       end;
     end;
-    if p.PropType.CustomType = self then // nested definition
-      if p.PropType.IsArray then
-        // e.g. TGroup = record Groups: array of TGroup;
-        if opoGenerateOldDelphiCompatible in fParser.Options then
-          proptype := 'variant' // avoid 'Type is not yet completely defined'
-        else
-          proptype := p.PropType.ToPascalName({asfinal=}true, {norec=}true)
-      else
-        proptype := 'variant' // TGroup = record Another: TGroup;
-    else
-      proptype := p.PropType.ToPascalName;
     w.AddStrings([
-      fParser.fLineIndent, '  ', p.PascalName, ': ', proptype, ';', fParser.LineEnd]);
+      fParser.fLineIndent, '  ', p.PascalName, ': ',
+        p.PropType.ToPascalName({final=}true, {noarray=}p.PropType.CustomType = self),
+        ';', fParser.LineEnd]);
   end;
   if fNeedsDummyField then
     w.AddStrings([
@@ -2471,6 +2470,12 @@ begin
       begin
         n := v^.Names[j];
         p := TPascalProperty.CreateFromSchema(self, n, @v^.Values[j]);
+        if p.PropType.CustomType = result then // nested definition
+          // e.g. TGroup = record Another: TGroup; ...
+          //   or TGroup = record Groups: array of TGroup; ...
+          if (opoGenerateOldDelphiCompatible in fOptions) or
+             not p.PropType.IsArray then
+            p.ConvertToVariant; // fallback to JSON
         include(result.fTypes, p.fType.fBuiltInType);
         result.fProperties.AddObject(n, p, {raise=}false, {free=}nil, {replace=}true);
       end;
