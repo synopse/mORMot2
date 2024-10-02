@@ -1712,7 +1712,7 @@ procedure TPascalProperty.ConvertToVariant;
 begin
   if fTypeOwned then
     fType.Free;
-  fType := TPascalType.CreateBuiltin(fParser, obtVariant);
+  fType := TPascalType.CreateBuiltin(fParser, obtVariant); // e.g. a TDocVariant
 end;
 
 
@@ -2099,7 +2099,7 @@ begin
   else
     line[length(line)] := '''';
   Append(result, line, ';');
-  fRttiTextRepresentation := result;
+  fRttiTextRepresentation := result; // cached internally
 end;
 
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
@@ -2475,7 +2475,7 @@ begin
           //   or TGroup = record Groups: array of TGroup; ...
           if (opoGenerateOldDelphiCompatible in fOptions) or
              not p.PropType.IsArray then
-            p.ConvertToVariant; // fallback to JSON
+            p.ConvertToVariant; // fallback to TDocVariant/JSON
         include(result.fTypes, p.fType.fBuiltInType);
         result.fProperties.AddObject(n, p, {raise=}false, {free=}nil, {replace=}true);
       end;
@@ -2530,8 +2530,9 @@ begin
   begin
     p := TPascalProperty(r.fProperties.ObjectPtr[i]).PropType;
     if p.IsRecord and
-       (p.CustomType <> r) then
-      ResolveDependencies(p.CustomType as TPascalRecord, all); // recursive
+       (p.CustomType <> r) and
+       (ObjArrayFind(all, p.CustomType) < 0) then
+      ResolveDependencies(TPascalRecord(p.CustomType), all); // recursive
   end;
   ObjArrayAddOnce(all, r); // add eventually, if not already present
 end;
