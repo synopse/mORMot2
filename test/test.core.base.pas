@@ -6779,7 +6779,11 @@ begin
   end;
   // custom UUID values in SDDL text
   for a := low(a) to high(a) do
+  begin
     Check(UuidToKnownAttribute(ATTR_UUID[a]) = a); // O(log(n)) binary search
+    u := ATTR_TXT[a];
+    CheckUtf8(TextToKnownAttribute(pointer(u), length(u)) = a, u);
+  end;
   Check(sd.FromText(SD_TXT[1]) = atpSuccess, 'uuid');
   u := sd.ToText;
   CheckEqual(u, SD_TXT[1]);
@@ -6787,6 +6791,11 @@ begin
   CheckEqual(u, 'O:AOG:SYD:(A;;KA;;;SY)(A;;KA;;;AO)(OA;;CCDC;User;;AO)' +
     '(OA;;CCDC;Group;;AO)(OA;;CCDC;6da8a4ff-0e52-11d0-a286-00aa003049e2;;AO)' +
     '(OA;;CCDC;Print-Queue;;PO)(A;;LCRPRC;;;AU)S:(AU;SAFA;CCDCSWWPSDWDWO;;;WD)');
+  atp := sd2.FromText(u);
+  Check(atp = atpInvalidUuid, 'uuid1');
+  Check(not sd.IsEqual(sd2), 'uuid2');
+  Check(sd2.FromText(u, '', @ShortToKnownUuid) = atpSuccess, 'uuid3');
+  Check(sd.IsEqual(sd2), 'uuid4');
   // validate conditional ACEs reference binary
   for i := 0 to high(ARTX_HEX) do
   begin
