@@ -9058,7 +9058,7 @@ end;
 
 function IsContentTypeJson(ContentType: PUtf8Char): boolean;
 begin
-  result := IdemPChar(ContentType, _CONTENT[2]) and
+  result := IdemPChar(ContentType, pointer(_CONTENT[2])) and
             (IdemPPChar(ContentType + 12, @_CONTENT_APP) in [0 .. 2]);
 end;
 
