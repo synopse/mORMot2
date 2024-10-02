@@ -2067,8 +2067,6 @@ function StatusCodeToErrorMsg(Code: integer): RawUtf8;
 { **************** Hexadecimal Text And Binary Conversion }
 
 type
-  /// type of a lookup table used for fast hexadecimal conversion
-  THexToDualByte = packed array[0..511] of byte;
   /// type of a lookup table used for fast XML/HTML conversion
   TAnsiCharToByte = array[AnsiChar] of byte;
   PAnsiCharToByte = ^TAnsiCharToByte;
@@ -2080,12 +2078,13 @@ type
   PByteToWord = ^TByteToWord;
 
 var
-  /// a conversion table from hexa chars into binary data
-  // - [0..255] range maps the 0..15 binary, [256..511] maps 0..15 binary shl 4
+  /// conversion table from hexa chars into 0..15 binary data
   // - returns 255 for any character out of 0..9,A..Z,a..z range
   // - used e.g. by HexToBin() function
   // - is defined globally, since may be used from an inlined function
-  ConvertHexToBin: THexToDualByte;
+  ConvertHexToBin: TAnsiCharToByte;
+  /// conversion table from hexa chars into "shl 4" binary data
+  ConvertHexToShl: TAnsiCharToByte;
 
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
@@ -3642,19 +3641,11 @@ end;
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean; // for inlining
 var
   b, c: byte;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
 begin
   if Hex <> nil then
   begin
-    {$ifndef CPUX86NOTPIC}
-    tab := @ConvertHexToBin;
-    {$endif CPUX86NOTPIC}
-    b := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
-    c := tab[ord(Hex[1])];
+    b := ConvertHexToShl[Hex[0]];
+    c := ConvertHexToBin[Hex[1]];
     if (b <> 255) and
        (c <> 255) then
     begin
@@ -9635,15 +9626,15 @@ begin
   HexToBin(pointer(Hex), length(Hex), result);
 end;
 
-function HexaToByte(P: PUtf8Char; var Dest: byte; tab: PByteArray): boolean;
+function HexaToByte(P: PUtf8Char; var Dest: byte): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
   b, c: byte;
 begin
-  b := tab[Ord(P[0]) + 256]; // + 256 for shl 4
+  b := ConvertHexToShl[P[0]];
   if b <> 255 then
   begin
-    c := tab[Ord(P[1])];
+    c := ConvertHexToBin[P[1]];
     if c <> 255 then
     begin
       inc(b, c);
@@ -9659,7 +9650,6 @@ function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean;
 var
   len: PtrInt;
   h, p: PAnsiChar;
-  tab: PByteArray;
 begin
   Bin := '';
   result := false;
@@ -9669,11 +9659,10 @@ begin
   p := FastNewString(len shr 1, CP_RAWBYTESTRING); // shr 1 = maximum length
   pointer(Bin) := p;
   h := pointer(hex);
-  tab := @ConvertHexToBin;
   repeat
     while h^ = ' ' do
       inc(h);
-    if not HexaToByte(pointer(h), PByte(p)^, tab) then
+    if not HexaToByte(pointer(h), PByte(p)^) then
       break; // invalid 'xx' pair - may be len < 2
     inc(p);
     inc(h, 2);
@@ -9701,21 +9690,19 @@ end;
 function HumanHexCompare(a, b: PUtf8Char): integer;
 var
   ca, cb: byte;
-  tab: PByteArray;
 begin
   result := 0;
   if a <> b then
     if a <> nil then
       if b <> nil then
       begin
-        tab := @ConvertHexToBin;
         repeat
           while a^ = ' ' do
             inc(a);
           while b^ = ' ' do
             inc(b);
-          if not HexaToByte(pointer(a), ca{%H-}, tab) or
-             not HexaToByte(pointer(b), cb{%H-}, tab) then
+          if not HexaToByte(pointer(a), ca{%H-}) or
+             not HexaToByte(pointer(b), cb{%H-}) then
           begin
             result := ComparePointer(a, b); // consistent but not zero
             break;
@@ -10022,27 +10009,19 @@ end;
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 var
   b, c: byte;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
   if (Hex = nil) or
      (Bin = nil) then
     exit;
-  {$ifndef CPUX86NOTPIC}
-  tab := @ConvertHexToBin;
-  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
   begin
     inc(Bin, BinBytes - 1); // display = reverse order
     repeat
-      b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
+      b := ConvertHexToShl[Hex[0]];
       if b = 255 then
         exit;
-      c := tab[Ord(Hex[1])];
+      c := ConvertHexToBin[Hex[1]];
       if c = 255 then
         exit;
       Bin^ := b or c;
@@ -10077,25 +10056,18 @@ end;
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt): boolean;
 var
   b, c: byte;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
+  tab: PByteArray;
 begin
   result := false; // return false if any invalid char
   if Hex = nil then
     exit;
-  {$ifndef CPUX86NOTPIC}
-  tab := @ConvertHexToBin;
-  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     if Bin <> nil then
       repeat
-        b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
+        b := ConvertHexToShl[Hex[0]];
         if b = 255 then
           exit;
-        c := tab[Ord(Hex[1])];
+        c := ConvertHexToBin[Hex[1]];
         if c = 255 then
           exit;
         inc(Hex, 2);
@@ -10104,6 +10076,8 @@ begin
         dec(BinBytes);
       until BinBytes = 0
     else
+    begin
+      tab := @ConvertHexToBin;
       repeat // Bin=nil -> validate Hex^ input
         if (tab[Ord(Hex[0])] > 15) or
            (tab[Ord(Hex[1])] > 15) then
@@ -10111,25 +10085,18 @@ begin
         inc(Hex, 2);
         dec(BinBytes);
       until BinBytes = 0;
+    end;
   result := true; // conversion OK
 end;
 
 procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: PtrInt);
 var
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
   c: byte;
 begin
-  {$ifndef CPUX86NOTPIC}
-  tab := @ConvertHexToBin;
-  {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     repeat
-      c := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
-      c := tab[ord(Hex[1])] or c;
+      c := ConvertHexToShl[Hex[0]];
+      c := ConvertHexToBin[Hex[1]] or c;
       Bin^ := c;
       inc(Hex, 2);
       inc(Bin);
@@ -10145,8 +10112,8 @@ end;
 
 function HexToCharValid(Hex: PAnsiChar): boolean;
 begin
-  result := (ConvertHexToBin[Ord(Hex[0])] <= 15) and
-            (ConvertHexToBin[Ord(Hex[1])] <= 15);
+  result := (ConvertHexToBin[Hex[0]] <= 15) and
+            (ConvertHexToBin[Hex[1]] <= 15);
 end;
 
 function HexToCharValid(Hex: PAnsiChar; HexToBin: PByteArray): boolean;
@@ -10181,30 +10148,24 @@ end;
 function HexToWideChar(Hex: PUtf8Char): cardinal;
 var
   B: cardinal;
-  {$ifdef CPUX86NOTPIC}
-  tab: THexToDualByte absolute ConvertHexToBin;
-  {$else}
-  tab: PByteArray; // faster on PIC, ARM and x86_64
-  {$endif CPUX86NOTPIC}
+  tab: PAnsiCharToByte;
 begin
-  {$ifndef CPUX86NOTPIC}
   tab := @ConvertHexToBin;
-  {$endif CPUX86NOTPIC}
-  result := tab[ord(Hex[0])];
+  result := tab[Hex[0]];
   if result <= 15 then
   begin
     result := result shl 12;
-    B := tab[ord(Hex[1])];
+    B := tab[Hex[1]];
     if B <= 15 then
     begin
       B := B shl 8;
       inc(result, B);
-      B := tab[ord(Hex[2])];
+      B := tab[Hex[2]];
       if B <= 15 then
       begin
         B := B shl 4;
         inc(result, B);
-        B := tab[ord(Hex[3])];
+        B := tab[Hex[3]];
         if B <= 15 then
         begin
           inc(result, B);
@@ -10389,14 +10350,12 @@ end;
 function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
   i: PtrInt;
-  tab: PByteArray;
 begin
   // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := nil;
-  tab := @ConvertHexToBin;
   for i := 3 downto 0 do
   begin
-    if not HexaToByte(P, guid[i], tab) then
+    if not HexaToByte(P, guid[i]) then
       exit;
     inc(P, 2);
   end;
@@ -10405,23 +10364,23 @@ begin
   begin
     if P^ = '-' then // '-' separators are optional
       inc(P);
-    if not HexaToByte(P, guid[1], tab) or
-       not HexaToByte(P + 2, guid[0], tab) then
+    if not HexaToByte(P, guid[1]) or
+       not HexaToByte(P + 2, guid[0]) then
       exit;
     inc(P, 4);
     inc(PByte(guid), 2);
   end;
   if P^ = '-' then
     inc(P);
-  if not HexaToByte(P, guid[0], tab) or // in reverse order than the previous loop
-     not HexaToByte(P + 2, guid[1], tab) then
+  if not HexaToByte(P, guid[0]) or // in reverse order than the previous loop
+     not HexaToByte(P + 2, guid[1]) then
     exit;
   inc(P, 4);
   inc(PByte(guid), 2);
   if P^ = '-' then
     inc(P);
   for i := 0 to 5 do
-    if HexaToByte(P, guid[i], tab) then
+    if HexaToByte(P, guid[i]) then
       inc(P, 2)
     else
       exit;
@@ -10629,7 +10588,7 @@ var
   v: byte;
   c: AnsiChar;
   P: PAnsiChar;
-  B: PByteArray;
+  B, B4: PByteArray;
   tmp: array[0..15] of AnsiChar;
 begin
   // initialize internal lookup tables for various text conversions
@@ -10653,21 +10612,23 @@ begin
   for i := 0 to 199 do
     dec(PByteArray(@TwoDigitByteLookupW)[i], ord('0')); // '0'..'9' -> 0..9
   {$endif DOUBLETOSHORT_USEGRISU}
-  FillcharFast(ConvertHexToBin[0], SizeOf(ConvertHexToBin), 255); // all to 255
-  B := @ConvertHexToBin;
+  FillcharFast(ConvertHexToBin, SizeOf(ConvertHexToBin), 255); // all to 255
+  FillcharFast(ConvertHexToShl, SizeOf(ConvertHexToShl), 255);
+  B  := @ConvertHexToBin;
+  B4 := @ConvertHexToShl;
   v := 0;
   for i := ord('0') to ord('9') do
   begin
     B[i] := v;
-    B[i + 256] := v shl 4;
+    B4[i] := v shl 4;
     inc(v);
   end;
   for i := ord('A') to ord('F') do
   begin
     B[i] := v;
-    B[i + 256] := v shl 4;
+    B4[i] := v shl 4;
     B[i + (ord('a') - ord('A'))] := v;
-    B[i + (ord('a') - ord('A') + 256)] := v shl 4;
+    B4[i + (ord('a') - ord('A'))] := v shl 4;
     inc(v);
   end;
   for i := 0 to high(SmallUInt32Utf8) do

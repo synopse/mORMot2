@@ -3451,10 +3451,10 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
             exit; // avoid \#0 potential buffer overflow issue or control char
           // JSON_UNESCAPE_UTF16: decode '\u0123' UTF-16 into UTF-8
           // (inlined JsonUnicodeEscapeToUtf8() to optimize GetJsonField)
-          c4 := (ConvertHexToBin[ord(P[1])] shl 12) or
-                (ConvertHexToBin[ord(P[2])] shl 8) or
-                (ConvertHexToBin[ord(P[3])] shl 4) or
-                 ConvertHexToBin[ord(P[4])]; // optimistic conversion (no check)
+          c4 := (ConvertHexToBin[P[1]] shl 12) or
+                (ConvertHexToBin[P[2]] shl 8) or
+                (ConvertHexToBin[P[3]] shl 4) or
+                 ConvertHexToBin[P[4]]; // optimistic conversion (no check)
           inc(P, 5);
           case c4 of
             0: // \u0000 is an invalid value (at least in our framework)
@@ -3477,10 +3477,10 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt
               if PWord(P)^ = ord('\') + ord('u') shl 8 then
               begin
                 inc(P);
-                surrogate := (ConvertHexToBin[ord(P[1])] shl 12) or
-                             (ConvertHexToBin[ord(P[2])] shl 8) or
-                             (ConvertHexToBin[ord(P[3])] shl 4) or
-                              ConvertHexToBin[ord(P[4])];
+                surrogate := (ConvertHexToBin[P[1]] shl 12) or
+                             (ConvertHexToBin[P[2]] shl 8) or
+                             (ConvertHexToBin[P[3]] shl 4) or
+                              ConvertHexToBin[P[4]];
                 case c4 of // inlined Utf16CharToUtf8()
                   UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
                     c4 := ((c4 - UTF16_SURROGATE_OFFSET) shl 10) or

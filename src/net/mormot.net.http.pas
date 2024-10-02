@@ -2866,10 +2866,10 @@ begin
     while p^ = ' ' do
       inc(p); // trim left
     repeat
-      v0 := ConvertHexToBin[ord(p[0])];
+      v0 := ConvertHexToBin[p[0]];
       if v0 = 255 then
         break; // not in '0'..'9','a'..'f' -> trim right
-      v1 := ConvertHexToBin[ord(p[1])];
+      v1 := ConvertHexToBin[p[1]];
       inc(p);
       if v1 = 255 then
       begin
