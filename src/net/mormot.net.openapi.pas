@@ -516,7 +516,8 @@ type
   // {name}.api unit, containing both the needed DTOs and the client class
   // - opoGenerateStringType will generate plain string types instead of RawUtf8
   // - opoGenerateOldDelphiCompatible will generate a void/dummy managed field for
-  // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors
+  // Delphi 7/2007/2009 compatibility and avoid 'T... has no type info' errors,
+  // and also properly support Unicode or unfinished/nested record type definitions
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
@@ -1869,18 +1870,15 @@ begin
 end;
 
 function TPascalType.ToPascalName(AsFinalType, NoRecordArrayTypes: boolean): RawUtf8;
-var
-  finaltype: boolean;
 begin
   if Assigned(CustomType) then
   begin
     result := CustomType.PascalName;
     if not IsArray then
       exit;
-    finaltype := AsFinalType;
-    if NoRecordArrayTypes and AsFinalType and IsRecord then
-      finaltype := false;
-    result := CustomType.ToArrayTypeName(finaltype);
+    if AsFinalType and NoRecordArrayTypes and IsRecord then
+      AsFinalType := false;
+    result := CustomType.ToArrayTypeName(AsFinalType);
   end
   else
   begin
@@ -2008,6 +2006,7 @@ var
   i: PtrInt;
   p: TPascalProperty;
   s: POpenApiSchema;
+  proptype: RawUtf8;
 begin
   if fProperties.Count = 0 then
   begin
@@ -2045,8 +2044,19 @@ begin
             '  // - Pattern: ', s^.PatternAsText, fParser.LineEnd]);
       end;
     end;
-    w.AddStrings([fParser.fLineIndent, '  ', p.PascalName, ': ',
-      p.PropType.ToPascalName, ';', fParser.LineEnd]);
+    if p.PropType.CustomType = self then // nested definition
+      if p.PropType.IsArray then
+        // e.g. TGroup = record Groups: array of TGroup;
+        if opoGenerateOldDelphiCompatible in fParser.Options then
+          proptype := 'variant' // avoid 'Type is not yet completely defined'
+        else
+          proptype := p.PropType.ToPascalName({asfinal=}true, {norec=}true)
+      else
+        proptype := 'variant' // TGroup = record Another: TGroup;
+    else
+      proptype := p.PropType.ToPascalName;
+    w.AddStrings([
+      fParser.fLineIndent, '  ', p.PascalName, ': ', proptype, ';', fParser.LineEnd]);
   end;
   if fNeedsDummyField then
     w.AddStrings([
