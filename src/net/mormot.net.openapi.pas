@@ -2516,33 +2516,31 @@ begin
     result := ParseRecordDefinition(aRecordName, aSchema);
 end;
 
+procedure ResolveDependencies(r: TPascalRecord; var all: TPascalRecordDynArray);
+var
+  i: PtrInt;
+  p: TPascalType;
+begin
+  for i := 0 to r.fProperties.Count - 1 do
+  begin
+    p := TPascalProperty(r.fProperties.ObjectPtr[i]).PropType;
+    if p.IsRecord and
+       (p.CustomType <> r) then
+      ResolveDependencies(p.CustomType as TPascalRecord, all); // recursive
+  end;
+  ObjArrayAddOnce(all, r); // add eventually, if not already present
+end;
+
 function TOpenApiParser.GetOrderedRecords: TPascalRecordDynArray;
 var
-  r: TPascalRecord;
-  p: TPascalProperty;
-  n: integer;
-  i, j: PtrInt;
+  i: PtrInt;
 begin
-  // check if not from cache
-  result := fOrderedRecords;
+  result := fOrderedRecords; // first check if not already cached
   if result <> nil then
     exit;
-  // compute the dependencies
-  n := 0;
   for i := 0 to fRecords.Count - 1 do
-  begin
-    r := fRecords.ObjectPtr[i];
-    for j := 0 to r.fProperties.Count - 1 do
-    begin
-      p := r.fProperties.ObjectPtr[j];
-      if p.PropType.IsRecord then
-        ObjArrayAddOnce(result, p.PropType.CustomType, n);
-    end;
-    ObjArrayAddOnce(result, r, n); // if not already added
-  end;
-  SetLength(result, n);
-  // store in cache
-  fOrderedRecords := result;
+    ResolveDependencies(fRecords.ObjectPtr[i], result);
+  fOrderedRecords := result; // compute once
 end;
 
 function TOpenApiParser.GetOperationsByTag: TPascalOperationsByTagDynArray;
