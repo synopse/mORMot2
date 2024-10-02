@@ -442,6 +442,8 @@ type
   PInt64Array = ^TInt64Array;
   TQWordArray = array[ 0 .. MaxInt div SizeOf(QWord) - 1 ] of QWord;
   PQWordArray = ^TQWordArray;
+  TGuidArray = array[ 0 .. MaxInt div SizeOf(TGuid) - 1 ] of TGuid;
+  PGuidArray = ^TGuidArray;
   TPtrUIntArray = array[ 0 .. MaxInt div SizeOf(PtrUInt) - 1 ] of PtrUInt;
   PPtrUIntArray = ^TPtrUIntArray;
   THalfUIntArray = array[ 0 .. MaxInt div SizeOf(HalfUInt) - 1 ] of HalfUInt;
@@ -753,6 +755,9 @@ procedure RandomGuid(out result: TGuid); overload;
 /// compute a random UUid value from the RandomBytes() generator and RFC 4122
 function RandomGuid: TGuid; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast O(log(n)) binary search of a binary (e.g. TGuid) value in a sorted array
+function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 
 /// compute the new capacity when expanding an array of items
 // - handle tiny, small, medium, large and huge sizes properly to reduce
@@ -4563,6 +4568,44 @@ begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
   // version bits 12-15 = 4 (random) and reserved bits 6-7 = 1
 end;
 
+function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
+var
+  L, s: PtrInt;
+  v: PByteArray;
+  cmp: integer;
+begin
+  Value := @Value[Size];
+  L := 0;
+  if 0 <= R then
+    repeat
+      result := (L + R) shr 1;
+      v := @P^[result * Size + Size]; // inlined MemCmp()
+      s := -Size;
+      repeat
+        cmp := v[s] - Value[s];
+        if cmp <> 0 then
+          break; // first byte differs most of the time on sorted data
+        inc(s);
+        if s = 0 then
+          exit;
+      until false;
+      {$ifdef CPUX86}
+      if cmp < 0 then
+        L := result + 1
+      else
+        R := result - 1;
+      {$else}
+      s := result - 1;
+      inc(result);
+      if cmp < 0 then // compile as 2 branchless cmovl/cmovge on FPC
+        L := result
+      else
+        R := s;
+      {$endif CPUX86}
+    until L > R;
+  result := -1
+end;
+
 function NextGrow(capacity: integer): integer;
 begin
   // algorithm similar to TFPList.Expand for the increasing ranges
@@ -7257,7 +7300,7 @@ begin
     repeat
       result := (L + R) shr 1;
       v := P^[result];
-     if v = Value then
+      if v = Value then
         exit
       else if v < Value then
         L := result + 1
