@@ -4581,7 +4581,7 @@ begin
       repeat
         cmp := v[s] - Value[s];
         if cmp <> 0 then
-          break; // first byte differs most of the time on sorted data
+          break; // first byte(s) differs most of the time on sorted data
         inc(s);
         if s = 0 then
           exit; // found whole Value[] bytes
@@ -5144,17 +5144,37 @@ end;
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 var
-  p: PUtf8Char;
+  p1, p2, l: PUtf8Char;
+label
+  no;
 begin
-  // FPC does proper inlining in this loop
   result := 0;
-  repeat
-    p := n[result]; // all VName[]<>'' so p=n^<>nil
-    if (PStrLen(p - _STRLEN)^ = len) and
-       (p^ = PAnsiChar(name)^) and
-       ((len = 1) or
-        CompareMemFixed(p + 1, PAnsiChar(name) + 1, len - 1)) then
-      exit;
+  p2 := name;
+  repeat // inlined CompareMemFixed()
+    p1 := n[result]; // all VName[]<>'' so p1<>nil
+    if (PStrLen(p1 - _STRLEN)^ = len) and // same length
+       (p1^ = p2^) then // we can safely compare the first char
+    begin
+      if len = 1 then
+        exit;
+      l := @p1[len - SizeOf(PtrInt)];
+      inc(p1);
+      inc(p2);
+      dec(p2, PtrUInt(p1));
+      while PtrUInt(l) >= PtrUInt(p1) do // compare 4/8 bytes per loop
+        if PPtrInt(p1)^ <> PPtrInt(@p2[PtrUInt(p1)])^ then
+          goto no
+        else
+          inc(PPtrInt(p1));
+      inc(PPtrInt(l));
+      while PtrUInt(p1) < PtrUInt(l) do  // remaining bytes
+        if p1^ <> p2[PtrUInt(p1)] then
+          goto no
+        else
+          inc(PByte(p1));
+      exit; // match found
+no:   p2 := name;
+    end;
     inc(result);
     dec(count);
   until count = 0;
@@ -5172,16 +5192,16 @@ begin
   p2 := name;
   repeat // inlined IdemPropNameUSameLenNotNull(p, name, len)
     p1 := n[result]; // all VName[]<>'' so p1<>nil
-    if (PStrLen(p1 - _STRLEN)^ = len) and
-       ((ord(p1^) xor ord(p2^)) and $df = 0) then
+    if (PStrLen(p1 - _STRLEN)^ = len) and          // same length
+       ((ord(p1^) xor ord(p2^)) and $df = 0) then  // same first char
     begin
       if len = 1 then
         exit;
+      l := @p1[len - SizeOf(cardinal)];
       inc(p1);
       inc(p2);
-      l := @p1[len - (SizeOf(cardinal) + 1)];
       dec(p2, PtrUInt(p1));
-      while PtrUInt(l) >= PtrUInt(p1) do  // compare 4 Bytes per loop
+      while PtrUInt(l) >= PtrUInt(p1) do  // compare 4 bytes per loop
         if (PCardinal(p1)^ xor PCardinal(@p2[PtrUInt(p1)])^) and $dfdfdfdf <> 0 then
           goto no
         else
