@@ -6543,6 +6543,7 @@ var
   bintree: TAceBinaryTree;
   sddltree: TAceTextTree;
   atp: TAceTextParse;
+  a: TAdsKnownAttribute;
   p: PUtf8Char;
 begin
   // validate internal structures and types
@@ -6605,6 +6606,8 @@ begin
   dom := 'S-1-5-21-823746769-1624905683-418753922';
   CheckEqual(KnownSidToText(wkrUserAdmin, dom), dom + '-500');
   CheckEqual(KnownSidToText(wrkGroupRasServers, dom), dom + '-553');
+  for a := low(a) to high(a) do
+    Check(UuidToKnownAttribute(ATTR_GUID[a]) = a);
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
@@ -6653,6 +6656,7 @@ begin
     json := SecurityDescriptorToJson(sd);
     Check(IsValidJson(json), 'savejson');
     sd2.Clear;
+    Check(not sd.IsEqual(sd2));
     Check(SecurityDescriptorFromJson(json, sd2), 'loadjson');
     Check(sd.IsEqual(sd2));
     Check(scSelfRelative in sd2.Flags);
@@ -6708,9 +6712,6 @@ begin
   CheckHash(saved, $3B028A48, 'dombin');
   Check(IsValidSecurityDescriptor(pointer(saved), length(saved)), 'saveddom');
   Check(TryDomainTextToSid(dom, domsid));
-  u := 'rid';
-  sd.AppendAsText(u, pointer(domsid));
-  CheckEqual(u, 'ridO:DUG:DAD:(A;;FA;;;DA)');
   CheckEqual(sd.Dacl[0].SidText, dom + '-512');
   CheckEqual(sd.Dacl[0].SidText(pointer(domsid)), 'DA');
   CheckEqual(sd.Dacl[0].MaskText, 'FA');
@@ -6768,17 +6769,24 @@ begin
   // RID reference material with several domains
   for i := low(DOM_TXT) to high(DOM_TXT) do
   begin
-    Check(TryDomainTextToSid(DOM_TXT[i], domsid));
     atp := sd.FromText(SD_TXT[i]);
     Check(atp = atpSuccess);
-    u := '';
-    sd.AppendAsText(u, pointer(domsid));
+    u := sd.ToText(DOM_TXT[i]);
     CheckEqual(u, RID_TXT[i]);
+    Check(TryDomainTextToSid(DOM_TXT[i], domsid));
     p := pointer(u);
     atp := sd2.FromText(p, pointer(domsid));
     Check(atp = atpSuccess);
     Check(sd.IsEqual(sd2));
   end;
+  // custom UUID values in SDDL text
+  Check(sd.FromText(SD_TXT[1]) = atpSuccess, 'uuid');
+  u := sd.ToText;
+  CheckEqual(u, SD_TXT[1]);
+  u := sd.ToText('', AppendShortKnownUuid);
+  CheckEqual(u, 'O:AOG:SYD:(A;;KA;;;SY)(A;;KA;;;AO)(OA;;CCDC;User;;AO)' +
+    '(OA;;CCDC;Group;;AO)(OA;;CCDC;6da8a4ff-0e52-11d0-a286-00aa003049e2;;AO)' +
+    '(OA;;CCDC;Print-Queue;;PO)(A;;LCRPRC;;;AU)S:(AU;SAFA;CCDCSWWPSDWDWO;;;WD)');
   // validate conditional ACEs reference binary
   for i := 0 to high(ARTX_HEX) do
   begin
