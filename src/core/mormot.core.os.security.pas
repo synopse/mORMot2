@@ -1154,10 +1154,10 @@ function AceReplaceAnySid(const old, new: RawSidDynArray;
 { ****************** Active Directory Definitions }
 type
   /// some known Active Directory schema attributes
-  // - we embed a small list of attributes with their GUID for conveniency
+  // - we embed a small list of attributes with their UUID for conveniency
+  // - this enumeration is sorted by ATTR_UUID[] binary order
   // - [MS-ADA3] publishes a huge list of content, which is outside the scope
-  // of this unit
-  // - feel free to contribute, by adding missing attributes via pull requests
+  // of this unit - feel free to contribute, via some pull requests
   TAdsKnownAttribute = (
     kaNull,
     kaUserAccountRestrictions,
@@ -1166,27 +1166,35 @@ type
     kaInetOrgPerson,
     kaTerminalServer,
     kaTokenGroupsGlobalAndUniversal,
+    kaDsSetOwner,
     kaMemberShip,
     kaGeneralInformation,
     kaDnsHostName,
     kaDescription,
+    kaDomainAdministerServer,
     kaUserChangePassword,
     kaDisplayName,
     kaPublicInformation,
     kaSendAs,
     kaSendTo,
     kaReceiveAs,
+    kaDomainPassword,
     kaTerminalServerLicenseServer,
+    kaCertificateEnrollment,
     kaTokenGroups,
     kaUserForceChangePassword,
+    kaAllowedToAuthenticate,
+    kaUnexpirePassword,
     kaX509Cert,
     kaComputer,
     kaPersonalInformation,
     kaServicePrincipalName,
+    kaApplyGroupPolicy,
     kaMsTpmInformationForComputer,
     kaGroup,
     kaDsValidatedWriteComputer,
     kaPrintQueue,
+    kaAddGuid,
     kaEmailInformation,
     kaWebInformation,
     kaUser,
@@ -1199,7 +1207,7 @@ const
   /// the GUID of known Active Directory schema attributes
   // - this list is sorted at byte level for faster O(log(n)) binary search
   // - note that byte-level order does not follow the GUID hexa text order
-  ATTR_GUID: array[TAdsKnownAttribute] of TGuid = (
+  ATTR_UUID: array[TAdsKnownAttribute] of TGuid = (
     '{00000000-0000-0000-0000-000000000000}',  // kaNull
     '{4c164200-20c0-11d0-a768-00aa006e0529}',  // kaUserAccountRestrictions
     '{5b47d60f-6090-40b2-9f37-2a4de88f3063}',  // kaMsDsKeyCredentialLink
@@ -1207,27 +1215,35 @@ const
     '{4828cc14-1437-45bc-9b07-ad6f015e5f28}',  // kaInetOrgPerson
     '{6db69a1c-9422-11d1-aebd-0000f80367c1}',  // kaTerminalServer
     '{46a9b11d-60ae-405a-b7e8-ff8a58d456d2}',  // kaTokenGroupsGlobalAndUniversal
+    '{4125c71f-7fac-4ff0-bcb7-f09a41325286}',  // kaDsSetOwner
     '{bc0ac240-79a9-11d0-9020-00c04fc2d4cf}',  // kaMemberShip
     '{59ba2f42-79a2-11d0-9020-00c04fc2d3cf}',  // kaGeneralInformation
     '{72e39547-7b18-11d1-adef-00c04fd8d5cd}',  // kaDnsHostName
     '{bf967950-0de6-11d0-a285-00aa003049e2}',  // kaDescription
+    '{ab721a52-1e2f-11d0-9819-00aa0040529b}',  // kaDomainAdministerServer
     '{ab721a53-1e2f-11d0-9819-00aa0040529b}',  // kaUserChangePassword
     '{bf967953-0de6-11d0-a285-00aa003049e2}',  // kaDisplayName
     '{e48d0154-bcf8-11d1-8702-00c04fb96050}',  // kaPublicInformation
     '{ab721a54-1e2f-11d0-9819-00aa0040529b}',  // kaSendAs
     '{ab721a55-1e2f-11d0-9819-00aa0040529b}',  // kaSendTo
     '{ab721a56-1e2f-11d0-9819-00aa0040529b}',  // kaReceiveAs
+    '{c7407360-20bf-11d0-a768-00aa006e0529}',  // kaDomainPassword
     '{5805bc62-bdc9-4428-a5e2-856a0f4c185e}',  // kaTerminalServerLicenseServer
+    '{0e10c968-78fb-11d2-90d4-00c04f79dc55}',  // kaCertificateEnrollment
     '{b7c69e6d-2cc7-11d2-854e-00a0c983f608}',  // kaTokenGroups
     '{00299570-246d-11d0-a768-00aa006e0529}',  // kaUserForceChangePassword
+    '{68b1d179-0d15-4d4f-ab71-46152e79a7bc}',  // kaAllowedToAuthenticate
+    '{ccc2dc7d-a6ad-4a7a-8846-c04e3cc53501}',  // kaUnexpirePassword
     '{bf967a7f-0de6-11d0-a285-00aa003049e2}',  // kaX509Cert
     '{bf967a86-0de6-11d0-a285-00aa003049e2}',  // kaComputer
     '{77b5b886-944a-11d1-aebd-0000f80367c1}',  // kaPersonalInformation
     '{f3a64788-5306-11d1-a9c5-0000f80367c1}',  // kaServicePrincipalName
+    '{edacfd8f-ffb3-11d1-b41d-00a0c968f939}',  // kaApplyGroupPolicy
     '{ea1b7b93-5e48-46d5-bc6c-4df4fda78a35}',  // kaMsTpmInformationForComputer
     '{bf967a9c-0de6-11d0-a285-00aa003049e2}',  // kaGroup
     '{9b026da6-0d3c-465c-8bee-5199d7165cba}',  // kaDsValidatedWriteComputer
     '{bf967aa8-0de6-11d0-a285-00aa003049e2}',  // kaPrintQueue
+    '{440820ad-65b4-11d1-a3da-0000f875ae0d}',  // kaAddGuid
     '{e45795b2-9455-11d1-aebd-0000f80367c1}',  // kaEmailInformation
     '{e45795b3-9455-11d1-aebd-0000f80367c1}',  // kaWebInformation
     '{bf967aba-0de6-11d0-a285-00aa003049e2}',  // kaUser
@@ -1236,36 +1252,44 @@ const
     '{3f78c3e5-f79a-46bd-a0b8-9d18116ddc79}',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
     '{037088f8-0ae1-11d2-b422-00a0c968f939}'); // kaRasInformation
 
-  /// the ldapDisplayName of our known Active Directory schema attributes
+  /// the official ldapDisplayName of our known Active Directory schema attributes
   ATTR_TXT: array[TAdsKnownAttribute] of RawUtf8 = (
     '',                                        // kaNull
     'User-Account-Restrictions',               // kaUserAccountRestrictions
     'ms-DS-Key-Credential-Link',               // kaMsDsKeyCredentialLink
     'User-Login',                              // kaUserLogon
-     'inetOrgPerson',                          // kaInetOrgPerson
+    'inetOrgPerson',                           // kaInetOrgPerson
     'Terminal-Server',                         // kaTerminalServer
     'Token-Groups-Global-And-Universal',       // kaTokenGroupsGlobalAndUniversal
+    'DS-Set-Owner',                            // kaDsSetOwner
     'MemberShip',                              // kaMemberShip
     'General-Information',                     // kaGeneralInformation
     'DNS-Host-Name',                           // kaDnsHostName
     'Description',                             // kaDescription
+    'Domain-Administer-Server',                // kaDomainAdministerServer
     'User-Change-Password',                    // kaUserChangePassword
     'Display-Name',                            // kaDisplayName
     'Public-Information',                      // kaPublicInformation
     'Send-As',                                 // kaSendAs
     'Send-To',                                 // kaSendTo
     'Receive-As',                              // kaReceiveAs
+    'Domain-Password',                         // kaDomainPassword
     'Terminal-Server-License-Server',          // kaTerminalServerLicenseServer
+    'Certificate-Enrollment',                  // kaCertificateEnrollment
     'Token-Groups',                            // kaTokenGroups
     'User-Force-Change-Password',              // kaUserForceChangePassword
+    'Allowed-To-Authenticate',                 // kaAllowedToAuthenticate
+    'Unexpire-Password',                       // kaUnexpirePassword
     'X509-Cert',                               // kaX509Cert
     'Computer',                                // kaComputer
     'Personal-Information',                    // kaPersonalInformation
     'Service-Principal-Name',                  // kaServicePrincipalName
+    'Apply-Group-Policy',                      // kaApplyGroupPolicy
     'ms-TPM-Tpm-Information-For-Computer',     // kaMsTpmInformationForComputer
     'Group',                                   // kaGroup
     'DS-Validated-Write-Computer',             // kaDsValidatedWriteComputer
     'Print-Queue',                             // kaPrintQueue
+    'Add-GUID',                                // kaAddGuid
     'Email-Information',                       // kaEmailInformation
     'Web-Information',                         // kaWebInformation
     'User',                                    // kaUser
@@ -1275,8 +1299,8 @@ const
     'RAS-Information');                        // kaRasInformation
 
 /// search a known attribute from its UUID
-// - is implemented via O(log(n)) binary search within ordered ATTR_GUID[]
-function UuidToKnownAttribute(const guid: TGuid): TAdsKnownAttribute;
+// - is implemented via O(log(n)) binary search within ordered ATTR_UUID[]
+function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 
 /// append a UUID as text, recognizing TAdsKnownAttribute values
 // - can be used as TAppendShortUuid optional parameter for SDDL generation
@@ -2664,10 +2688,10 @@ end;
 
 { ****************** Active Directory Definitions }
 
-function UuidToKnownAttribute(const guid: TGuid): TAdsKnownAttribute;
+function UuidToKnownAttribute(const u: TGuid): TAdsKnownAttribute;
 begin
-  result := TAdsKnownAttribute(FastFindBinarySorted(@ATTR_GUID[succ(kaNull)],
-    @guid, SizeOf(guid), length(ATTR_GUID) - 2) + 1);
+  result := TAdsKnownAttribute(FastFindBinarySorted( // branchless O(log(n))
+    @ATTR_UUID[succ(kaNull)], @u, SizeOf(u), length(ATTR_UUID) - 2) + 1);
 end;
 
 procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);

@@ -4343,7 +4343,7 @@ begin
       'are exclusive', [self]);
   uuid := @AppendShortUuid;
   if (roSddlKnownUuid in Options) then
-    uuid := @AppendShortKnownUuid;
+    uuid := @AppendShortKnownUuid; // recognize TAdsKnownAttribute
   last := nil;
   for i := 0 to Count - 1 do
   begin

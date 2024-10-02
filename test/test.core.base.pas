@@ -6606,8 +6606,6 @@ begin
   dom := 'S-1-5-21-823746769-1624905683-418753922';
   CheckEqual(KnownSidToText(wkrUserAdmin, dom), dom + '-500');
   CheckEqual(KnownSidToText(wrkGroupRasServers, dom), dom + '-553');
-  for a := low(a) to high(a) do
-    Check(UuidToKnownAttribute(ATTR_GUID[a]) = a);
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
@@ -6780,6 +6778,8 @@ begin
     Check(sd.IsEqual(sd2));
   end;
   // custom UUID values in SDDL text
+  for a := low(a) to high(a) do
+    Check(UuidToKnownAttribute(ATTR_UUID[a]) = a); // O(log(n)) binary search
   Check(sd.FromText(SD_TXT[1]) = atpSuccess, 'uuid');
   u := sd.ToText;
   CheckEqual(u, SD_TXT[1]);

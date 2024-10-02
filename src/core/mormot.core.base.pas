@@ -4574,12 +4574,12 @@ var
   v: PByteArray;
   cmp: integer;
 begin
-  Value := @Value[Size]; // adjust for -Size below
+  Value := @Value[Size]; // adjust once for -Size below
   L := 0;
   if 0 <= R then
     repeat
       result := (L + R) shr 1;
-      v := @P^[result * Size + Size]; // inlined sort-optimized MemCmp()
+      v := @P^[(result + 1) * Size]; // inlined sort-optimized MemCmp()
       s := -Size;
       repeat
         cmp := v[s] - Value[s];
