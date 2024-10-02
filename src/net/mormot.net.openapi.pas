@@ -328,6 +328,8 @@ type
 
     property CustomType: TPascalCustomType
       read fCustomType;
+    property BuiltInType: TOpenApiBuiltInType
+      read fBuiltInType;
     property Schema: POpenApiSchema
       read GetSchema;
   end;
@@ -891,16 +893,22 @@ begin
     // we only support application/json (and some variations) here
     result := nil;
     c := Data.O['content'];
-    c.Options := c.Options - [dvoNameCaseSensitive];
     for i := 0 to c.Count - 1 do
-    begin
-      n := c.Names[i];
-      if IsContentTypeJson(pointer(n)) or
-         (n = '*/*') or
-         IdemPropNameU(n, 'application/jwt') then // exists in the wild :(
-        if _SafeObject(c.Values[i], o) then
-          result := POpenApiSchema(o.O['schema']);
-    end;
+      if result = nil then
+      begin
+        n := c.Names[i];
+        if IsContentTypeJson(pointer(n)) or
+           (n = '*/*') or
+           IdemPropNameU(n, 'application/jwt') then // exists in the wild :(
+          if _SafeObject(c.Values[i], o) then
+            result := POpenApiSchema(o.O['schema']);
+      end;
+    if result = nil then // allow fallback e.g. to text/plain schema:type:string
+      for i := 0 to c.Count - 1 do
+        if result = nil then
+          if IdemPChar(pointer(c.Names[i]), 'TEXT/PLAIN') and
+             _SafeObject(c.Values[i], o) then
+               result := POpenApiSchema(o.O['schema']);
   end;
   if (result <> nil) and
      (result^.Data.Count = 0) then
@@ -2116,8 +2124,10 @@ begin
   fErrorType := aParser.NewPascalTypeFromSchema(aResponse^.Schema(aParser));
   if Assigned(fErrorType.CustomType) then
     fName := fErrorType.CustomType.Name
+  else if fErrorType.BuiltInType = obtRawUtf8 then
+    fName := 'TextResponse'
   else
-    EOpenApi.RaiseUtf8('%.Create: no schema for %', [self, aResponse^.Data.ToJson]);
+    EOpenApi.RaiseUtf8('%.Create: unsupported schema for %', [self, aResponse^.Data.ToJson]);
   fErrorTypeName := fErrorType.ToPascalName;
   inherited Create(aParser);
   fPascalName[1] := 'E'; // Txxxx -> Exxxx
@@ -2153,8 +2163,14 @@ begin
     'constructor ', PascalName, '.CreateResp(const Format: RawUtf8;', fParser.LineEnd,
     '  const Args: array of const; const Resp: TJsonResponse);', fParser.LineEnd,
     'begin', fParser.LineEnd,
-    '  inherited CreateResp(Format, Args, Resp);', fParser.LineEnd,
-    '  LoadJson(fError, Resp.Content, TypeInfo(', fErrorTypeName,'));', fParser.LineEnd,
+    '  inherited CreateResp(Format, Args, Resp);', fParser.LineEnd]);
+  if fErrorType.BuiltInType = obtRawUtf8 then
+    w.AddString(
+      '  fError := Resp.Content;')
+  else
+    w.AddStrings([
+      '  LoadJson(fError, Resp.Content, TypeInfo(', fErrorTypeName,'));']);
+  w.AddStrings([fParser.LineEnd,
     'end;', fParser.LineEnd, fParser.LineEnd]);
 end;
 
