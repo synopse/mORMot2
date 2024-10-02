@@ -1647,6 +1647,7 @@ function ToText(cmd: TParseCommands): ShortString; overload;
 { defined here to avoid circular dependency in mormot.core.os.security.pas }
 function ToText(w: TWellKnownSid): PShortString; overload;
 function ToText(w: TWellKnownRid): PShortString; overload;
+function ToText(a: TAdsKnownAttribute): PShortString; overload;
 
 
 { ***************** IInvokable Interface RTTI }
@@ -5048,6 +5049,11 @@ end;
 function ToText(w: TWellKnownRid): PShortString;
 begin
   result := GetEnumName(TypeInfo(TWellKnownRid), ord(w));
+end;
+
+function ToText(a: TAdsKnownAttribute): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAdsKnownAttribute), ord(a));
 end;
 
 

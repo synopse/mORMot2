@@ -11,6 +11,7 @@ unit mormot.core.os.security;
   - Security Descriptor Self-Relative Binary Structures
   - Access Control List (DACL/SACL) Definitions
   - Conditional ACE Expressions SDDL and Binary Support
+  - Active Directory Definitions
   - Security Descriptor Definition Language (SDDL)
   - TSecurityDescriptor Wrapper Object
   - Windows API Specific Security Types and Functions
@@ -1146,6 +1147,140 @@ function AceReplaceDomain(olddom, newdom: PSid; maxRid: cardinal;
 // - expects each length(old[]) = length(new[]) to be replaced in-place
 function AceReplaceAnySid(const old, new: RawSidDynArray;
   var opaque: RawByteString): integer;
+
+
+{ ****************** Active Directory Definitions }
+type
+  /// some known Active Directory schema attributes
+  // - we embed a small list of attributes with their GUID for conveniency
+  // - [MS-ADA3] publishes a huge list of content, which is outside the scope
+  // of this unit
+  // - feel free to contribute, by adding missing attributes via pull requests
+  TAdsKnownAttribute = (
+    kaNull,
+    kaUserAccountRestrictions,
+    kaMsDsKeyCredentialLink,
+    kaUserLogon,
+    kaInetOrgPerson,
+    kaTerminalServer,
+    kaTokenGroupsGlobalAndUniversal,
+    kaMemberShip,
+    kaGeneralInformation,
+    kaDnsHostName,
+    kaDescription,
+    kaUserChangePassword,
+    kaDisplayName,
+    kaPublicInformation,
+    kaSendAs,
+    kaSendTo,
+    kaReceiveAs,
+    kaTerminalServerLicenseServer,
+    kaTokenGroups,
+    kaUserForceChangePassword,
+    kaX509Cert,
+    kaComputer,
+    kaPersonalInformation,
+    kaServicePrincipalName,
+    kaMsTpmInformationForComputer,
+    kaGroup,
+    kaDsValidatedWriteComputer,
+    kaPrintQueue,
+    kaEmailInformation,
+    kaWebInformation,
+    kaUser,
+    kaSamAccountName,
+    kaPrivateInformation,
+    kaMsDsAllowedToActOnBehalfOfOtherIdentity,
+    kaRasInformation);
+
+const
+  /// the GUID of known Active Directory schema attributes
+  // - this list is sorted at byte level for faster O(log(n)) binary search
+  // - note that byte-level order does not follow the GUID hexa text order
+  ATTR_GUID: array[TAdsKnownAttribute] of TGuid = (
+    '{00000000-0000-0000-0000-000000000000}',  // kaNull
+    '{4c164200-20c0-11d0-a768-00aa006e0529}',  // kaUserAccountRestrictions
+    '{5b47d60f-6090-40b2-9f37-2a4de88f3063}',  // kaMsDsKeyCredentialLink
+    '{5f202010-79a5-11d0-9020-00c04fc2d4cf}',  // kaUserLogon
+    '{4828cc14-1437-45bc-9b07-ad6f015e5f28}',  // kaInetOrgPerson
+    '{6db69a1c-9422-11d1-aebd-0000f80367c1}',  // kaTerminalServer
+    '{46a9b11d-60ae-405a-b7e8-ff8a58d456d2}',  // kaTokenGroupsGlobalAndUniversal
+    '{bc0ac240-79a9-11d0-9020-00c04fc2d4cf}',  // kaMemberShip
+    '{59ba2f42-79a2-11d0-9020-00c04fc2d3cf}',  // kaGeneralInformation
+    '{72e39547-7b18-11d1-adef-00c04fd8d5cd}',  // kaDnsHostName
+    '{bf967950-0de6-11d0-a285-00aa003049e2}',  // kaDescription
+    '{ab721a53-1e2f-11d0-9819-00aa0040529b}',  // kaUserChangePassword
+    '{bf967953-0de6-11d0-a285-00aa003049e2}',  // kaDisplayName
+    '{e48d0154-bcf8-11d1-8702-00c04fb96050}',  // kaPublicInformation
+    '{ab721a54-1e2f-11d0-9819-00aa0040529b}',  // kaSendAs
+    '{ab721a55-1e2f-11d0-9819-00aa0040529b}',  // kaSendTo
+    '{ab721a56-1e2f-11d0-9819-00aa0040529b}',  // kaReceiveAs
+    '{5805bc62-bdc9-4428-a5e2-856a0f4c185e}',  // kaTerminalServerLicenseServer
+    '{b7c69e6d-2cc7-11d2-854e-00a0c983f608}',  // kaTokenGroups
+    '{00299570-246d-11d0-a768-00aa006e0529}',  // kaUserForceChangePassword
+    '{bf967a7f-0de6-11d0-a285-00aa003049e2}',  // kaX509Cert
+    '{bf967a86-0de6-11d0-a285-00aa003049e2}',  // kaComputer
+    '{77b5b886-944a-11d1-aebd-0000f80367c1}',  // kaPersonalInformation
+    '{f3a64788-5306-11d1-a9c5-0000f80367c1}',  // kaServicePrincipalName
+    '{ea1b7b93-5e48-46d5-bc6c-4df4fda78a35}',  // kaMsTpmInformationForComputer
+    '{bf967a9c-0de6-11d0-a285-00aa003049e2}',  // kaGroup
+    '{9b026da6-0d3c-465c-8bee-5199d7165cba}',  // kaDsValidatedWriteComputer
+    '{bf967aa8-0de6-11d0-a285-00aa003049e2}',  // kaPrintQueue
+    '{e45795b2-9455-11d1-aebd-0000f80367c1}',  // kaEmailInformation
+    '{e45795b3-9455-11d1-aebd-0000f80367c1}',  // kaWebInformation
+    '{bf967aba-0de6-11d0-a285-00aa003049e2}',  // kaUser
+    '{3e0abfd0-126a-11d0-a060-00aa006c33ed}',  // kaSamAccountName
+    '{91e647de-d96f-4b70-9557-d63ff4f3ccd8}',  // kaPrivateInformation
+    '{3f78c3e5-f79a-46bd-a0b8-9d18116ddc79}',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
+    '{037088f8-0ae1-11d2-b422-00a0c968f939}'); // kaRasInformation
+
+  /// the ldapDisplayName of our known Active Directory schema attributes
+  ATTR_TXT: array[TAdsKnownAttribute] of RawUtf8 = (
+    '',                                        // kaNull
+    'User-Account-Restrictions',               // kaUserAccountRestrictions
+    'ms-DS-Key-Credential-Link',               // kaMsDsKeyCredentialLink
+    'User-Login',                              // kaUserLogon
+     'inetOrgPerson',                          // kaInetOrgPerson
+    'Terminal-Server',                         // kaTerminalServer
+    'Token-Groups-Global-And-Universal',       // kaTokenGroupsGlobalAndUniversal
+    'MemberShip',                              // kaMemberShip
+    'General-Information',                     // kaGeneralInformation
+    'DNS-Host-Name',                           // kaDnsHostName
+    'Description',                             // kaDescription
+    'User-Change-Password',                    // kaUserChangePassword
+    'Display-Name',                            // kaDisplayName
+    'Public-Information',                      // kaPublicInformation
+    'Send-As',                                 // kaSendAs
+    'Send-To',                                 // kaSendTo
+    'Receive-As',                              // kaReceiveAs
+    'Terminal-Server-License-Server',          // kaTerminalServerLicenseServer
+    'Token-Groups',                            // kaTokenGroups
+    'User-Force-Change-Password',              // kaUserForceChangePassword
+    'X509-Cert',                               // kaX509Cert
+    'Computer',                                // kaComputer
+    'Personal-Information',                    // kaPersonalInformation
+    'Service-Principal-Name',                  // kaServicePrincipalName
+    'ms-TPM-Tpm-Information-For-Computer',     // kaMsTpmInformationForComputer
+    'Group',                                   // kaGroup
+    'DS-Validated-Write-Computer',             // kaDsValidatedWriteComputer
+    'Print-Queue',                             // kaPrintQueue
+    'Email-Information',                       // kaEmailInformation
+    'Web-Information',                         // kaWebInformation
+    'User',                                    // kaUser
+    'SAM-Account-Name',                        // kaSamAccountName
+    'Private-Information',                     // kaPrivateInformation
+    'ms-DS-Allowed-To-Act-On-Behalf-Of-Other-Identity',  // kaMsDsAllowedToActOnBehalfOfOtherIdentity
+    'RAS-Information');                        // kaRasInformation
+
+/// search a known attribute from its UUID
+// - is implemented via O(log(n)) binary search within ordered ATTR_GUID[]
+function UuidToKnownAttribute(const guid: TGuid): TAdsKnownAttribute;
+
+/// append a UUID as text, recognizing TAdsKnownAttribute values
+// - can be used as TAppendShortUuid optional parameter for SDDL generation
+// functions, e.g. SecurityDescriptorToText()
+// - you can also define your own TAppendShortUuid function
+procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
@@ -2518,6 +2653,25 @@ begin
   end;
 end;
 
+
+{ ****************** Active Directory Definitions }
+
+function UuidToKnownAttribute(const guid: TGuid): TAdsKnownAttribute;
+begin
+  result := TAdsKnownAttribute(FastFindBinarySorted(@ATTR_GUID[succ(kaNull)],
+    @guid, SizeOf(guid), length(ATTR_GUID) - 2) + 1);
+end;
+
+procedure AppendShortKnownUuid(const u: TGuid; var s: ShortString);
+var
+  a: TAdsKnownAttribute;
+begin
+  a := UuidToKnownAttribute(u); // fast branchless O(log(n)) binary search
+  if a = kaNull then
+    AppendShortUuid(u, s) // append as regular UUID hexadecimal text
+  else
+    AppendShortAnsi7String(ATTR_TXT[a], s); // append the ldapDisplayName
+end;
 
 
 { ****************** Security Descriptor Definition Language (SDDL) }
