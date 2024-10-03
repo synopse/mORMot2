@@ -3108,25 +3108,31 @@ const
 
 var
   _LdapIntern: TRawUtf8Interning;
-  // allow fast linear search in L1 CPU cache
-  _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of pointer;
+  // allow fast linear search in L1 CPU cache of interned attribute names
+  // - 32-bit is enough to identify pointers, and leverage O(n) SSE2 asm
+  _LdapInternAll: array[0 .. length(_AttrTypeName) + length(_AttrTypeNameAlt) - 2] of cardinal;
   _LdapInternType: array[0 .. high(_LdapInternAll)] of TLdapAttributeType;
   sObjectName, sCanonicalName: RawUtf8;
 
 procedure InitializeUnit;
 var
   t: TLdapAttributeType;
-  i, n: PtrInt;
+  i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, {uncamel=}true);
   _LdapIntern := TRawUtf8Interning.Create;
   RegisterGlobalShutdownRelease(_LdapIntern);
   // register all our common Attribute Types names for quick search as pointer()
+  failed := -1;
   n := 0;
   for t := succ(low(t)) to high(t) do
     if _LdapIntern.Unique(AttrTypeName[t], _AttrTypeName[t]) then
     begin
-      _LdapInternAll[n] := pointer(AttrTypeName[t]);
+      {$ifdef CPU64}
+      if failed < 0 then
+        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeName[t]));
+      {$endif CPU64}
+      _LdapInternAll[n] := PtrUInt(AttrTypeName[t]); // truncated to 32-bit
       _LdapInternType[n] := t;
       inc(n);
     end
@@ -3135,17 +3141,23 @@ begin
   for i := 0 to high(_AttrTypeNameAlt) do
     if _LdapIntern.Unique(AttrTypeNameAlt[i], _AttrTypeNameAlt[i]) then
     begin
-      _LdapInternAll[n] := pointer(AttrTypeNameAlt[i]);
+      {$ifdef CPU64}
+      if failed < 0 then
+        failed := IntegerScanIndex(@_LdapInternAll, n, PtrUInt(AttrTypeNameAlt[i]));
+      {$endif CPU64}
+      _LdapInternAll[n] := PtrUInt(AttrTypeNameAlt[i]);
       _LdapInternType[n] := AttrTypeAltType[i];
       inc(n);
     end
     else
       ELdap.RaiseUtf8('dup alt %', [_AttrTypeNameAlt[i]]);
+  if failed >= 0 then // paranoid
+    ELdap.RaiseUtf8('32-bit pointer collision of %', [_LdapInternAll[failed]]);
   _LdapIntern.Unique(sObjectName, 'objectName');
   _LdapIntern.Unique(sCanonicalName, 'canonicalName');
 end;
 
-// internal function: fast O(n) search of AttrName interned pointer
+// internal function: O(n) search 32-bit-truncated of AttrName interned pointer
 function _AttributeNameType(AttrName: pointer): TLdapAttributeType;
 var
   i: PtrInt;
@@ -3153,7 +3165,7 @@ begin
   result := atUndefined;
   if AttrName = nil then
     exit;
-  i := PtrUIntScanIndex(@_LdapInternAll, length(_LdapInternAll), PtrUInt(AttrName));
+  i := IntegerScanIndex(@_LdapInternAll, length(_LdapInternAll), PtrUInt(AttrName));
   if i >= 0 then
     result := _LdapInternType[i];
 end;
